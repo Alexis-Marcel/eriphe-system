@@ -85,12 +85,21 @@ func TestResolveFolder(t *testing.T) {
 			t.Errorf("%s/%s: resolved to %q (%s)", c.share, c.path, f.rel, f.src)
 		}
 	}
-	// The node's own data, inside the root or holding it, is never shared.
+	// The node's own data is never reached, and a folder holding it is
+	// listed but never shared.
 	n.opt.root = filepath.Join(root, "Photos", "eriphe")
 	os.MkdirAll(n.opt.root, 0o700)
-	for _, p := range []string{"Photos", "Photos/eriphe", ""} {
-		if _, err := n.resolveFolder("data", p); err == nil || err.(*shareError).Code != "eriphe_data" {
-			t.Errorf("%q: %v, want eriphe_data", p, err)
+	if _, err := n.resolveFolder("data", "Photos/eriphe"); err == nil || err.(*shareError).Code != "eriphe_data" {
+		t.Errorf("Photos/eriphe: %v, want eriphe_data", err)
+	}
+	for _, p := range []string{"Photos", ""} {
+		f, err := n.resolveFolder("data", p)
+		if err != nil {
+			t.Errorf("%q: %v, want it listed", p, err)
+			continue
+		}
+		if err := n.shareable(f); err == nil || err.(*shareError).Code != "eriphe_data" {
+			t.Errorf("%q: shareable %v, want eriphe_data", p, err)
 		}
 	}
 }
