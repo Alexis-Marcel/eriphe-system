@@ -301,6 +301,19 @@ func (s *service) runOnce(ctx context.Context) error {
 
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
+	if target == "" && s.n.apple() {
+		// The container engine: its address, on its own network.
+		ip, err := s.n.appleAddress(ctx, serviceContainer(s.name), exited)
+		if err != nil {
+			s.n.stopServiceContainer(s.name)
+			if ctx.Err() != nil {
+				<-exited
+				return nil
+			}
+			return fail(err)
+		}
+		target = net.JoinHostPort(ip, strconv.Itoa(s.spec.Port))
+	}
 	if err := waitPort(ctx, target, exited); err != nil {
 		s.n.stopServiceContainer(s.name)
 		if ctx.Err() != nil {
@@ -375,6 +388,9 @@ func (n *node) serviceArgs(name string, spec serviceSpec) (args, env []string, t
 	}
 	if spec.Image == "" || strings.HasPrefix(spec.Image, "-") {
 		return nil, nil, "", fmt.Errorf("bad image %q", spec.Image)
+	}
+	if n.apple() {
+		return n.appleServiceArgs(name, spec, user, uid, gid)
 	}
 	args = []string{"run", "--rm", "--name", serviceContainer(name), "--label", "eriphe.service=" + name}
 	if spec.Transport == "stdio" {
@@ -482,6 +498,10 @@ func (n *node) removeStrayServices() {
 
 // removeLabelled removes the containers carrying a label, whatever its value.
 func (n *node) removeLabelled(label string) {
+	if n.apple() {
+		n.appleRemoveLabelled(label)
+		return
+	}
 	out, err := exec.Command(n.opt.docker, "ps", "-aq", "--filter", "label="+label).Output()
 	if err != nil || len(strings.TrimSpace(string(out))) == 0 {
 		return

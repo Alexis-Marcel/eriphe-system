@@ -68,6 +68,9 @@ func (n *node) networkConfig(name string) (subnets, gateways []string, err error
 // tasks must reach. Docker cannot make an existing network internal: one
 // that is not is reported, the tasks on it can still bypass the relay.
 func (n *node) ensureTaskNetwork() error {
+	if n.apple() {
+		return nil // one network per task, made when it starts (apple.go)
+	}
 	name := dockerNetwork(n.opt.taskNetwork)
 	if name == defaultBridge {
 		log.Printf("warning: tasks on Docker's default bridge have direct egress, the LAN included: give -task-network")
@@ -103,6 +106,11 @@ func (n *node) listenAddr(listen string) (string, error) {
 	}
 	if host != "" {
 		return listen, nil
+	}
+	if n.apple() {
+		// Each task's network comes and goes with it (apple.go): every
+		// address, and taskListener accepts only the tasks' networks.
+		return net.JoinHostPort("0.0.0.0", port), nil
 	}
 	subnets, _, err := n.networkConfig(n.opt.taskNetwork)
 	if err != nil {
@@ -153,6 +161,16 @@ var errSharedBridge = errors.New("an http service with egress would share Docker
 // networks (the brain) could resolve the node's name to its address on the
 // other one, where the listener is not bound: it gets the bound address.
 func (n *node) callbackFor(t *Task) string {
+	if n.apple() {
+		// The gateway of the task's own network is this Mac.
+		t.mu.Lock()
+		gw := t.gateway
+		t.mu.Unlock()
+		_, port, _ := net.SplitHostPort(n.opt.listenAddr)
+		if gw != "" && port != "" {
+			return "http://" + net.JoinHostPort(gw, port)
+		}
+	}
 	if t.Spec.SystemNetwork && n.opt.listenAddr != "" {
 		if host, _, err := net.SplitHostPort(n.opt.listenAddr); err == nil {
 			if ip := net.ParseIP(host); ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() {

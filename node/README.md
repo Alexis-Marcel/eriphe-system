@@ -67,9 +67,11 @@ machine" offers both addresses once remote access is ready.
 ## Install
 
 - **Linux, macOS**: `install/install.sh`, one command that brings its own container runtime
-  (Docker Engine on Linux; on macOS Lima and a Linux VM that sees no Mac folder, without Docker
-  Desktop) and runs the node as below, with a socket proxy; `--core-mode` installs eriphe-core
-  next to it. See `install/README.md`.
+  (Docker Engine on Linux; on a Mac with Apple silicon and macOS 26, Apple's container, the node on
+  the Mac itself, see [The container engine](#the-container-engine-a-mac); on other Macs Lima and
+  a Linux VM that sees no Mac folder, without Docker Desktop) and runs the node as below, with a
+  socket proxy where there is Docker; `--core-mode` installs eriphe-core next to it. See
+  `install/README.md`.
 
   ```sh
   curl -fsSL https://eriphe.com/install.sh | sh -s -- --core http://192.0.2.10:8800 --join-token <token> --name laptop
@@ -398,6 +400,124 @@ Every task container is started with:
   are under `-root`, and the user's folders lent to it (`folders`, see Shares), checked again at
   each start; never the Docker socket.
 
+## The container engine (a Mac)
+
+`-engine container` (env `ERIPHE_ENGINE=container`, what install.sh sets on a Mac with Apple
+silicon and macOS 26) runs each task with [Apple's container](https://github.com/apple/container)
+(1.6.1 or later) instead of Docker: eriphe-node runs on macOS itself, as the user, and every task
+is a micro-VM of its own (its own Linux kernel, started in about 0.75 s), with the same contract as
+a Docker task (`apple.go`). `-docker` is then the `container` CLI (default `container`; the
+LaunchAgent gives `/usr/local/bin/container`).
+
+| Docker task | `container run` |
+|---|---|
+| `-i --rm --name eriphe-task-<id> --label eriphe.task=<id>` | the same, and `--progress none` |
+| `--user 1000:1000`, `--cap-drop ALL`, `--read-only` | the same |
+| `--tmpfs /tmp:rw,exec,nosuid,nodev,size=2g` | the same |
+| `--pids-limit 1024` | `--ulimit nproc=1024` (per user in the VM, the task's only user) |
+| `--security-opt no-new-privileges` | none in container: with every capability dropped (the bounding set too), a setuid program gains none |
+| `--memory`, `--cpus` | `--memory`, `--cpus`; without `-task-cpus`, all the Mac's CPUs (container's own default is 4 CPUs and 1 GB) |
+| `-v <dir>:/work`, `/profile` | `--mount type=bind,source=<dir>,target=/work` (no comma in a path) |
+| `-v eriphe-cache:/cache` | `<root>/cache` mounted at `/cache`: a container volume belongs to root, the task's user could not write to it |
+| `--network eriphe-tasks`, `--add-host host.docker.internal:<gateway>` | `--network eriphe-task-<id>`, its own (below); the callback is its gateway's address |
+| `-e NAME`, `--entrypoint sh <image> -c …` | the same (`-e NAME` takes the value from the CLI's environment) |
+| `docker stop -t 10`, `docker rm -f` of strays | `container stop -t 10`, `container delete --force` of what carries `eriphe.task`, and the strays' networks |
+| `--group-add` of a folder's group, chown to UID 1000 | none: the Mac's file sharing shows every file of a mount as the task's user's, and what the task writes lands as the Mac user's |
+
+`GET /v1/node` says `"engine": "container"` and `engine_version` (`docker` is empty); the images
+are container's (`container image ls`), the runtimes the worker image's label.
+
+**Networks.** Each task gets a network of its own, `container network create --internal --label
+eriphe.task=<id> eriphe-task-<id>` (vmnet's host-only mode), deleted with the task: no route out,
+no DNS, and no other task on it (container has no `enable_icc`; a network per task is its
+equivalent, made in about 0.1 s). The Mac is its gateway, where the node's task listener and egress
+relay answer, so the agent's configuration and `HTTP_PROXY` name the gateway's address. A
+host-only network's bridge exists only while a container is on it: the listener and the relay bind
+every address (`0.0.0.0:8790`, `:8791`) and close at once any connection that comes neither from a
+task's network nor from the loopback (`taskListener`): the LAN never reaches them. The brain
+(`system_network`) stays on its own network too: it reaches eriphe-core through the node (no
+`self_url`), as every task. An http service without egress gets an internal network of its own as
+well (the node reaches it on its address; it does not reach the listener); with egress, a service
+is on container's default network (NAT), like Docker's default bridge.
+
+Checked on a Mac (`TestAppleLive`, below): a task reaches the listener and the relay; through the
+relay, the Internet and not the LAN; directly, neither the Internet, nor DNS, nor the LAN (the
+router), nor another task's address. This does not depend on macOS's "find devices on local
+networks" permission of `container-runtime-linux`: allowed, tasks still have no route to the LAN.
+
+What it does not stop: **a service of the Mac that listens on all its addresses is reachable from a
+task**, on the gateway or any address of the Mac (eriphe-core's 8800 and 8443 in core mode, file
+sharing, a development server, AirPlay…), as on WSL (see Networks). The node's own listener
+refuses what is not a task. Keeping the Mac's own services out would need a packet filter rule
+(pf) on the tasks' subnets, which needs root and is not done.
+
+**macOS's privacy, and the explorer.** Documents, the Desktop, Downloads, iCloud Drive and the
+clouds' folders are protected: a program reads them once the user allows it, the permission tied to
+the program's signature. eriphe-node is not signed with a Developer ID: each update would ask again
+(and a program that launchd starts waits for the answer). So the node never reads a shared place
+itself (`apple_explore.go`):
+
+- the listing (`GET /v1/shares/{share}/dirs`) and the checks run in a short-lived container, the
+  explorer: alpine, the place's root mounted read-only, no network, UID 1000, every capability
+  dropped, about 0.7 s. Paths are resolved there, so a symlink out of the root points nowhere it can
+  see (`outside`). Then the checks of Shares apply to what it reports: nothing hidden or sensitive on
+  the way, nor in the folder three levels down (`holds_sensitive`), not the node's own data
+  (`~/.eriphe`: hidden, and a folder holding it, the home, is listed but not shareable). The
+  places' paths are not even looked at when the node starts (`missing` is never set);
+- a task's folders are checked the same way when it starts, and `Eriphe/` is made by the explorer,
+  the folder mounted writable;
+- `~/Library` is never listed nor shared from a root that holds it (mail, messages, browsers' and
+  apps' data): iCloud Drive and `~/Library/CloudStorage/*` inside it are roots of their own.
+
+macOS asks once, for Apple's `container-runtime-linux`, the first time a protected folder is listed
+or mounted, and keeps the answer across Eriphe's updates. The first listing may wait for that answer
+past eriphe-core's timeout; the next one works.
+
+**Files in the cloud.** iCloud Drive and the File Provider clouds keep files "dataless" on a Mac
+that optimises its storage. A task cannot have them downloaded (a read in the container fails with
+EDEADLK); a read on the Mac does. Before a task starts, the node has the dataless files of its
+folders downloaded through Apple's own tools (`find -flags +dataless`, `stat`, `head -c 1`, which
+macOS lets into a protected folder where it would hold eriphe-node back), up to `-download-limit`
+(2 GB) for the task; beyond, the task fails and says to choose "Keep Downloaded" on the folder in
+the Finder.
+
+**The LAN, and the core relay.** macOS's local network privacy ([TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy))
+keeps a LaunchAgent off the LAN ("no route to host", checked: the loopback, the Internet and
+container's networks are not held back). It would ask only for a program it can identify by its
+signature, and an ad-hoc signed eriphe-node is another program after each update; the question
+also needs a bundle's `NSLocalNetworkUsageDescription`. What is allowed without asking is a
+program run as root. Checked on a Mac: a LaunchDaemon run as the user (`UserName`) is held back
+and asked about like an agent; one run as root, a binary never allowed before, reaches the LAN
+with no question. eriphe-node itself cannot be a daemon: Apple's container has its services in
+the user's session (the `gui/<uid>` launchd domain), and from a daemon its CLI gets "XPC
+connection error: Connection invalid". So a root LaunchDaemon, `org.eriphe.relay` (install.sh,
+not in core mode), does only the connections to eriphe-core (`corerelay.go`,
+`corerelay_unix.go`): `/usr/local/libexec/eriphe-relay core-relay -socket
+/var/run/eriphe/relay.sock -dir ~/.eriphe -owner <uid>`, from a copy of eriphe-node that only
+root can change (the node's own binary is the user's: root never runs it).
+
+- The node, given `ERIPHE_CORE_RELAY=<sock>`, sends `host:port` and a line break, then the
+  connection's bytes once the relay answers `ok`; TLS stays end to end, checked against the
+  pinned CA. The loopback is dialed directly, and so is everything when no relay answers.
+- The socket is in a folder of root's that no one else writes to, made 0600 from its creation,
+  then given to the user (`lchown`): only the user's programs reach the relay.
+- The relay dials only eriphe-core's addresses, read at each connection from the user's
+  `node/node.json` (`core`, `cores`, as JSON) and `node.env` (`ERIPHE_CORE='url,url'`, for the
+  join), as root reads a user's files: no symlink followed (`O_NOFOLLOW`, `node/` and the folder
+  checked with `lstat`), regular files owned by `-owner`, at most 64 KB, only http(s) URLs with a
+  host and a port, nothing else in them used, nothing of them logged. It takes nothing else from
+  the socket than that one line (at most 300 bytes, within 10 s), and refuses anything not in the
+  list: it is no way out for anything but the node's tunnel, assignments, reports and catalog
+  relay.
+- An update of eriphe-node does not change the relay (it needs root); running install.sh again
+  does (`sudo`), when the binaries differ. Its log is `/var/log/eriphe-relay.log`.
+
+`ERIPHE_LIVE_CONTAINER=1 ERIPHE_LIVE_LAN=<router>:80 go test -run AppleLive -v` runs real task
+containers on a Mac with container: hardening, the network checks above, and folders
+(`ERIPHE_LIVE_FOLDERS=a,b` of the home, the first read-only; `ERIPHE_LIVE_ICLOUD=<folder>` of iCloud
+Drive, `brctl evict` a file there first to see it downloaded); `ERIPHE_LIVE_IMAGE` for another image
+than alpine (the worker's).
+
 ## Shares (the user's folders)
 
 The places of this machine whose folders the user may give to Eriphe are declared on the node,
@@ -454,9 +574,10 @@ what changes in the folder between the check and the mount.
 
 **For other hosts** (the contract the Mac and Windows installers build on): declare the places with
 `-share` (or `ERIPHE_NODE_SHARES`) at paths the node and its Docker daemon both see, the same path
-for both; the node does the listing, the checks and the mounts. On macOS, a host-side helper mounts
-the chosen Mac folders into the VM (at a path such as `/mnt/mac/<name>`) and starts the node with
-`-share <name>=/mnt/mac/<name>`, and the VM's socket proxy allows bind mounts from there. On Windows,
+for both; the node does the listing, the checks and the mounts. On a Mac with Apple's container
+the node runs on the Mac and its places are Mac paths; the listing and the checks go through the
+explorer, see [The container engine](#the-container-engine-a-mac). A Mac in Lima's VM shares no
+folder. On Windows,
 the WSL distribution reaches a drive as `/mnt/<letter>/…` once mounted (automount is off today): the
 node there gets `-share <name>=/mnt/c/Users/<user>/Documents`, with no proxy in the way. Writes
 through such a mount follow its own owner mapping (virtiofs, 9p, DrvFs), not the setgid rule above.

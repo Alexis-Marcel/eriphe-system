@@ -64,8 +64,12 @@ type shareInfo struct {
 func (o options) shareList() []shareInfo {
 	out := []shareInfo{}
 	for name, s := range o.shares {
-		fi, err := os.Stat(s.Path)
-		out = append(out, shareInfo{Name: name, Writable: !s.ReadOnly, Missing: err != nil || !fi.IsDir()})
+		missing := false
+		if o.engine != engineContainer { // a Mac's places are never looked at by the node (apple_explore.go)
+			fi, err := os.Stat(s.Path)
+			missing = err != nil || !fi.IsDir()
+		}
+		out = append(out, shareInfo{Name: name, Writable: !s.ReadOnly, Missing: missing})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
@@ -162,6 +166,9 @@ func (n *node) resolveFolder(share, rel string) (*resolvedFolder, error) {
 			}
 		}
 	}
+	if private(rootReal, real) {
+		return nil, shareErr(http.StatusForbidden, "sensitive", "this folder is hidden or sensitive")
+	}
 	if fi, err := os.Stat(real); err != nil || !fi.IsDir() {
 		return nil, shareErr(http.StatusNotFound, "not_found", "no such folder")
 	}
@@ -254,6 +261,10 @@ func (n *node) shareRoutes(mux *http.ServeMux) {
 // many files it has, never what they hold. With check=1, it also says
 // whether the folder can be shared.
 func (n *node) handleShareDirs(w http.ResponseWriter, r *http.Request) {
+	if n.apple() {
+		n.appleShareDirs(w, r) // the node never reads a Mac's places itself
+		return
+	}
 	f, err := n.resolveFolder(r.PathValue("share"), r.URL.Query().Get("path"))
 	if err != nil {
 		writeShareError(w, err)
@@ -266,10 +277,11 @@ func (n *node) handleShareDirs(w http.ResponseWriter, r *http.Request) {
 	}
 	dirs, files := []string{}, 0
 	own := n.ownData()
+	rootReal, _ := filepath.EvalSymlinks(f.root.Path)
 	for _, e := range entries {
 		switch {
 		case e.IsDir(): // a symlink is not listed: only real directories
-			if !unlisted(e.Name()) && !within(own, filepath.Join(f.real, e.Name())) {
+			if !unlisted(e.Name()) && !private(rootReal, filepath.Join(f.real, e.Name())) && !within(own, filepath.Join(f.real, e.Name())) {
 				dirs = append(dirs, e.Name())
 			}
 		case e.Type().IsRegular():
@@ -331,6 +343,9 @@ func validFolderName(s string) bool {
 // stays the user's to open, change and delete), and the folders' groups
 // added to the task's user so that it reads what the group may.
 func (n *node) folderMounts(t *Task) ([]string, error) {
+	if n.apple() {
+		return n.appleFolderMounts(t)
+	}
 	var args []string
 	groups := map[int]bool{}
 	seen := map[string]bool{}

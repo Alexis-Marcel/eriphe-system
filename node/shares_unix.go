@@ -20,6 +20,9 @@ func ownerGID(p string) int {
 	return -1
 }
 
+// writableByUser tells whether eriphe-node's own user can write in p.
+func writableByUser(p string) bool { return syscall.Access(p, 2) == nil }
+
 // writableByTasks tells whether the tasks' user can write in a directory:
 // as its owner, through its group (other than root's, added to the task),
 // or as anyone.

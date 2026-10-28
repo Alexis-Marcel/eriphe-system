@@ -24,7 +24,10 @@ Contents: [First machine](#1-the-first-machine) · [Workspace](#2-open-the-works
 
 - **Linux**: Debian, Ubuntu, Raspberry Pi OS, Fedora, RHEL, CentOS, Alpine, Arch or openSUSE, on
   amd64 or arm64, with `curl` and root (through `sudo`). Docker is installed if missing.
-- **macOS** 13.5 or later, Apple silicon or Intel. No Docker Desktop, no Homebrew.
+- **macOS** 13.5 or later, Apple silicon or Intel. No Docker Desktop, no Homebrew. On Apple silicon
+  with macOS 26 or later, Eriphe runs on the Mac itself with Apple's `container` (installed if
+  missing) and macOS asks for your password (for that package, and for the LaunchDaemon a node
+  joining another machine gets); elsewhere in a Lima VM (see [What it installs](#what-it-installs)).
 - **Windows** 10 21H2 or later, or 11, Home or Pro, with virtualization on in the firmware, and an
   administrator PowerShell. WSL is installed if missing.
 - A few GB of disk for the images (the worker image is the large one), and an account with an
@@ -194,7 +197,8 @@ installer puts on the host side, does the rest, as root there:
 | | the updater | runs |
 |---|---|---|
 | Linux | `/opt/eriphe/update.sh`, run by `eriphe-update.service` (systemd) | when a request is dropped (`eriphe-update.path`), and every 10 minutes (`eriphe-update.timer`) |
-| macOS | the same, in the VM (Ubuntu, systemd): nothing more on the Mac | the same |
+| macOS with Apple's container | `~/.eriphe/update.sh`, run by the LaunchAgent `org.eriphe.update`: the new `eriphe-node` (and `eriphe-core`) taken from their images, restarted and checked, the previous ones kept in `~/.eriphe/update/previous.*` | when a request is dropped (`WatchPaths`), and every 10 minutes |
+| macOS in Lima's VM | the same as Linux, in the VM (Ubuntu, systemd): nothing more on the Mac | the same |
 | Windows | `/usr/local/bin/eriphe-update` in the distribution | every 20 s, a loop that the scheduled task starts with eriphe-node |
 
 How a request goes:
@@ -249,13 +253,19 @@ curl -fsSL https://eriphe.com/install.sh | sh -s -- --uninstall
   the `eriphe-cache` volume, Eriphe's images (every tag), the updater's systemd units,
   `/opt/eriphe` and `/var/lib/eriphe`. Docker Engine
   too if the script installed it and no other container is left; otherwise it stays.
-- macOS: the LaunchAgent, the VM and its disk, `~/.eriphe` (Lima included), and Lima's download
-  cache (`~/Library/Caches/lima`) unless another Lima is installed.
+- macOS with Apple's container: the LaunchAgents `org.eriphe.node`, `org.eriphe.core` and
+  `org.eriphe.update`, the LaunchDaemon `org.eriphe.relay` with its binary, socket folder and log
+  (with `sudo`), the task, service and explorer containers and their networks, Eriphe's images,
+  and `~/.eriphe`. Apple's `container` too if the script installed it (it notes so in
+  `~/.eriphe/container-installed`) and no other container is left; otherwise it stays.
+- macOS in Lima's VM: the LaunchAgent, the VM and its disk, `~/.eriphe` (Lima included), and
+  Lima's download cache (`~/Library/Caches/lima`) unless another Lima is installed.
 - Windows: the distribution and its disk, its scheduled task, and in core mode the port forwarding
   and firewall rule.
 
-In core mode this deletes eriphe-core's data (`/var/lib/eriphe/core`, in the VM on macOS, in the
-distribution on Windows): copy it out first to keep it.
+In core mode this deletes eriphe-core's data (`/var/lib/eriphe/core`; `~/.eriphe/core` on a Mac
+with Apple's container, in the VM with Lima, in the distribution on Windows): copy it out first to
+keep it.
 
 The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nodes/{name}`.
 
@@ -271,7 +281,7 @@ The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nod
 | `--core-mode` | `-CoreMode` | run eriphe-core here, and a local node joined to it |
 | `--version sha-<commit>` | `-Version sha-<commit>` | pin that version; `latest` follows the latest one again (see [the machines update themselves](#the-machines-update-themselves)) |
 | `--rollback` | `-Rollback` | go back to the version before the last update |
-| `--share NAME=/PATH[:ro]` | | a place of this machine whose folders may be given to Eriphe, repeatable (see [Folders](#folders)); Linux only for now |
+| `--share NAME=/PATH[:ro]` | | a place of this machine whose folders may be given to Eriphe, repeatable (see [Folders](#folders)); Linux, and a Mac with Apple's container (which shares its home, iCloud Drive and its cloud folders by itself) |
 | `--no-share` | | share no place any more |
 | `--uninstall` | `-Uninstall` | remove everything the script installed |
 | | `-Rejoin` | with a rejoin token: drop the node's identity and join again under `-Name` |
@@ -317,7 +327,34 @@ ship too old (the isolated gateway needs Docker 28). On Alpine, Arch and openSUS
 does not cover, it uses the distribution's packages. An existing Docker is kept as it is (rootless
 Docker is not supported: the proxy needs `/var/run/docker.sock`).
 
-**macOS**:
+**macOS on Apple silicon, macOS 26 or later**: no VM of Eriphe's. eriphe-node runs on the Mac as
+you, and each task is a micro-VM of Apple's container (node/README.md, The container engine).
+
+- [Apple's container](https://github.com/apple/container) 1.6.1, its official package, checked
+  against the SHA-256 written in the script and Apple's Developer ID signature, installed with
+  `sudo installer` (macOS asks for your password once) if it is missing or older; then
+  `container system start --enable-kernel-install` (its Linux kernel, without a question).
+- `~/.eriphe/bin/eriphe-node`, and in core mode `~/.eriphe/bin/eriphe-core`: the Mac builds that the
+  public images `ghcr.io/alexis-marcel/eriphe-node` and `eriphe-core` carry in
+  `/usr/local/share/eriphe/darwin-arm64/`, copied out by a short-lived container: no token, no
+  other download, the image's version. `~/.eriphe/node` is the node's root (`node.json`: its
+  identity), `~/.eriphe/core` eriphe-core's data.
+- the LaunchAgents `org.eriphe.node` (`~/.eriphe/start-node.sh`: container's services, then the node
+  with `~/.eriphe/node.env`), `org.eriphe.core` in core mode (eriphe-core on the Mac, ports 8800 and
+  8443 on every address), `org.eriphe.update` (the updater). Logs: `~/.eriphe/node.log`, `core.log`,
+  `update/update.log`.
+- when the node joins another machine's eriphe-core, the root LaunchDaemon `org.eriphe.relay`
+  (`/Library/LaunchDaemons`, `/usr/local/libexec/eriphe-relay`, written with `sudo`), the node's
+  way to eriphe-core on the LAN (see Troubleshooting, What macOS asks).
+- the places shared with Eriphe, by themselves: the home folder (`home`), iCloud Drive (`icloud`),
+  and each cloud folder of `~/Library/CloudStorage` (`googledrive`, `onedrive`, `dropbox`…), plus
+  the `--share` ones; `--no-share` shares none.
+
+A Mac installed with Lima stays with Lima when the script runs again: `--uninstall` first to move
+to Apple's container (in core mode, copy eriphe-core's data out of the VM first).
+`ERIPHE_MAC_LIMA=1` keeps a new install on Lima.
+
+**macOS, Intel or before macOS 26**:
 
 - [Lima](https://lima-vm.io) 2.2.1, the official release archive from GitHub, checked against the
   SHA-256 written in the script, in `~/.eriphe/lima`. Its VMs live in `~/.eriphe/vm` (not `~/.lima`:
@@ -360,8 +397,16 @@ curl -fsSL https://eriphe.com/install.sh | sh -s -- --core-mode --share shares=/
 - A task runs as UID 1000 with the folder's group added: it reads what that group (or anyone) may
   read. What it drops in `Eriphe/` belongs to UID 1000 and keeps the folder's group,
   group-writable (on a NAS, `users`: every account can open, change and delete it).
-- **macOS**: sharing a Mac folder is coming; `--share` is ignored there for now (the VM sees no Mac
-  folder). **Windows**: not yet.
+- **macOS with Apple's container**: the home, iCloud Drive and the cloud folders are shared by
+  themselves (see What it installs), `~/Library` excepted (mail, messages, the apps' settings):
+  iCloud Drive and the cloud folders inside it are places of their own. eriphe-node never opens
+  them itself: a short-lived container lists them (about 0.7 s a folder), and a task's container
+  mounts its folders, so macOS asks once, for Apple's `container-runtime-linux`, and the answer
+  outlives Eriphe's updates (node/README.md, The container engine). What a task writes in
+  `Eriphe/` is yours, as any file you make. Files kept only in iCloud Drive or a cloud folder are
+  downloaded on the Mac before the task starts, up to 2 GB per task (`-download-limit`); a bigger
+  folder fails the task with what to do: "Keep Downloaded" on it, in the Finder.
+- **macOS in Lima's VM**: `--share` is ignored (the VM sees no Mac folder). **Windows**: not yet.
 
 ## What the VM can and cannot see
 
@@ -372,7 +417,13 @@ machine around them shows depends on the OS:
 - **Linux**: no VM. The containers see the folders the node is given (`/var/lib/eriphe/node`, and
   the folders of the shared places a task is lent), not the rest of the host. The socket proxy
   refuses any other bind mount.
-- **macOS**: the VM is the boundary between Eriphe and the Mac.
+- **macOS with Apple's container**: each task is a micro-VM of its own, with its own kernel, that
+  sees only its folders (its task folder, the cache, the folders lent to it), on a network of its
+  own with no route out: not the LAN, not the Internet but through the node's relay, not the other
+  tasks. It does reach the Mac's own services that listen on all of its addresses (eriphe-core's
+  8800 and 8443 in core mode, a file share, a development server): see node/README.md, The
+  container engine.
+- **macOS in Lima's VM**: the VM is the boundary between Eriphe and the Mac.
   - **No Mac folder** is mounted: not your home, not `/Users`, not `/Volumes`. Lima's default home
     mount is off (`mounts: []`).
   - **No key of the Mac** goes in: Lima puts only its own key in the VM, not `~/.ssh/*.pub`, and
@@ -447,8 +498,36 @@ shares the `docker0` bridge and the iptables chains with this one's. Keep to one
 | | eriphe-node | eriphe-core (core mode) |
 |---|---|---|
 | Linux | `docker logs eriphe-node` | `docker logs eriphe-core` |
-| macOS | `LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker logs eriphe-node` | the same, `eriphe-core` |
+| macOS, Apple's container | `~/.eriphe/node.log` | `~/.eriphe/core.log` |
+| macOS, Lima | `LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker logs eriphe-node` | the same, `eriphe-core` |
 | Windows | `wsl -d eriphe -- tail /var/log/eriphe-node.log` | `wsl -d eriphe -- docker logs eriphe-core` |
+
+**What macOS asks, on a Mac with Apple's container.** Each once, for Apple's program, never for
+Eriphe's (so not again after an update):
+
+- "« container-runtime-linux » would like to access files in your Documents folder" (or the
+  Desktop, Downloads, iCloud Drive, a cloud folder): the first time a folder there is listed in the
+  workspace or given to a task. Allow it: refused, the listing fails, and so does the task (System
+  Settings → Privacy & Security → Files and Folders → container-runtime-linux, to allow it later).
+  The first listing may time out while the question waits; the next one works.
+- "« container-runtime-linux » would like to find devices on local networks": when a container on
+  container's default network (a service with egress) reaches the LAN. Tasks are on networks with
+  no route to the LAN: they reach none, whatever the answer.
+- In core mode, if the firewall is on, whether `eriphe-core` may accept incoming connections:
+  allow it, or the LAN cannot reach the workspace. Not signed by a Developer ID, it may be asked
+  again after an update.
+
+macOS also keeps a LaunchAgent off the LAN (Apple TN3179, local network privacy), and a daemon
+run as the user too; only root programs are allowed without asking, and eriphe-node cannot be one
+(Apple's container needs your session). So a node that joins an eriphe-core on the LAN gets a root
+LaunchDaemon, `/Library/LaunchDaemons/org.eriphe.relay.plist` (written with `sudo`: macOS asks for
+the password), that connects to eriphe-core for it and does nothing else: a copy of eriphe-node
+that only root can change (`/usr/local/libexec/eriphe-relay core-relay`), on a socket only you can
+open (`/var/run/eriphe/relay.sock`), to eriphe-core's addresses only, as your node's files say,
+read without following a symlink; TLS stays end to end between the node and eriphe-core
+(node/README.md, The container engine). No question from macOS, and none after updates. Running
+the install command again updates it (`sudo`). Its log is `/var/log/eriphe-relay.log`. In core
+mode there is none: eriphe-core is on the Mac.
 
 **macOS asks whether `limactl` may accept incoming connections** (core mode, first start): allow
 it, or the LAN cannot reach the workspace. Refused by mistake: System Settings → Network →
@@ -474,4 +553,4 @@ stops the join on purpose: copy it again from Settings → Machines.
 self-signed. Compare its fingerprint with the one in eriphe-core's log, then accept it.
 
 **Ports 8800 or 8443 are taken.** Core mode needs both on the machine; the script warns when
-something else listens there on a Mac. Free them, or run eriphe-core elsewhere.
+something else listens there on a Mac (and stops, with Apple's container). Free them, or run eriphe-core elsewhere.

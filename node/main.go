@@ -13,12 +13,15 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -28,29 +31,37 @@ import (
 var version = "dev"
 
 type options struct {
-	root        string            // where tasks and profiles live, as seen by eriphe-node
-	hostRoot    string            // the same directory as seen by the Docker daemon
-	image       string            // default worker image
-	network     string            // Docker network of services with egress, shared with eriphe-node (and eriphe-core on the NAS)
-	taskNetwork string            // Docker network of task containers, of their own
-	cacheVolume string            // Docker volume mounted at /cache in task containers
-	callbackURL string            // how task containers reach eriphe-node
-	listenAddr  string            // where the task listener is bound (set at start)
-	egressPort  string            // port of the egress relay, on the listener's host (empty: none)
-	docker      string            // docker CLI
-	labels      []string          // what the scheduler can ask for, e.g. gpu
-	install     string            // how the installers installed it: linux, macos or windows; empty by hand
-	alwaysOn    bool              // the machine never sleeps: eriphe-core puts the tools (services) here
-	volumes     map[string]string // named host folders offered to tasks, by name
-	shares      shareFlag         // roots the user may share folders from, by name (shares.go)
-	taskMemory  string            // memory limit of a task container (docker --memory), empty: none
-	taskCPUs    string            // CPU limit of a task container (docker --cpus), empty: none
+	root        string // where tasks and profiles live, as seen by eriphe-node
+	hostRoot    string // the same directory as seen by the Docker daemon
+	image       string // default worker image
+	network     string // Docker network of services with egress, shared with eriphe-node (and eriphe-core on the NAS)
+	taskNetwork string // Docker network of task containers, of their own
+	cacheVolume string // Docker volume mounted at /cache in task containers
+	callbackURL string // how task containers reach eriphe-node
+	listenAddr  string // where the task listener is bound (set at start)
+	egressPort  string // port of the egress relay, on the listener's host (empty: none)
+	docker      string // docker CLI, or Apple's container CLI with that engine
+	engine      string // what runs the tasks: docker, or container (Apple's, on a Mac: apple.go)
+	// With the container engine: what the node downloads at most, in bytes,
+	// of a task's folders kept in the cloud (iCloud Drive), before it starts.
+	downloadLimit int64
+	labels        []string          // what the scheduler can ask for, e.g. gpu
+	install       string            // how the installers installed it: linux, macos or windows; empty by hand
+	alwaysOn      bool              // the machine never sleeps: eriphe-core puts the tools (services) here
+	volumes       map[string]string // named host folders offered to tasks, by name
+	shares        shareFlag         // roots the user may share folders from, by name (shares.go)
+	taskMemory    string            // memory limit of a task container (docker --memory), empty: none
+	taskCPUs      string            // CPU limit of a task container (docker --cpus), empty: none
 	// Services (local MCP servers).
 	serviceMemory  string // memory limit of a service container, empty: none
 	serviceNetwork string // internal Docker network for http services without egress, empty: none
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "core-relay" {
+		runCoreRelay(os.Args[2:]) // a Mac's LaunchDaemon (corerelay.go)
+		return
+	}
 	core := flag.String("core", os.Getenv("ERIPHE_CORE"), "eriphe-core URL, or several separated by commas, preferred first, e.g. the local one then the remote one (env ERIPHE_CORE)")
 	joinToken := flag.String("join-token", os.Getenv("ERIPHE_JOIN_TOKEN"), "join token, for the first run (env ERIPHE_JOIN_TOKEN)")
 	caHashFlag := flag.String("ca-hash", os.Getenv("ERIPHE_CA_HASH"), "sha256:<hex> of eriphe-core's certificate authority, as join-token prints it: the node then reaches eriphe-core over TLS only, checked against it (env ERIPHE_CA_HASH)")
@@ -65,7 +76,9 @@ func main() {
 	flag.StringVar(&o.taskNetwork, "task-network", "eriphe-tasks", "Docker network for task containers, apart from eriphe-core and the services (created if missing)")
 	flag.StringVar(&o.cacheVolume, "cache-volume", "eriphe-cache", "Docker volume for the tasks' tool and package caches (empty: none)")
 	flag.StringVar(&o.callbackURL, "callback-url", "http://host.docker.internal:8790", "URL task containers use to reach this node")
-	flag.StringVar(&o.docker, "docker", "docker", "docker CLI")
+	flag.StringVar(&o.docker, "docker", "", "the engine's CLI (default: docker, or container with -engine container)")
+	flag.StringVar(&o.engine, "engine", envOr("ERIPHE_ENGINE", engineDocker), "what runs the tasks: docker, or container (Apple's container, on a Mac with Apple silicon and macOS 26: a micro-VM per task) (env ERIPHE_ENGINE)")
+	downloadLimit := flag.String("download-limit", "2g", "with -engine container: what the node downloads at most of a task's folders kept in the cloud (iCloud Drive) before it starts, e.g. 2g")
 	flag.StringVar(&o.taskMemory, "task-memory", "8g", "memory limit of each task container, e.g. 8g (empty: none)")
 	flag.StringVar(&o.taskCPUs, "task-cpus", "", "CPU limit of each task container, e.g. 4 (empty: all the machine's CPUs)")
 	flag.StringVar(&o.serviceMemory, "service-memory", "1g", "memory limit of each service container (empty: none)")
@@ -92,6 +105,20 @@ func main() {
 	}
 
 	var err error
+	switch o.engine {
+	case engineDocker, engineContainer:
+	default:
+		log.Fatalf("-engine %q: docker or container", o.engine)
+	}
+	if o.engine == engineContainer && runtime.GOOS != "darwin" {
+		log.Fatal("-engine container is Apple's container, on a Mac: use docker here")
+	}
+	if o.docker == "" {
+		o.docker = o.engine
+	}
+	if o.downloadLimit, err = parseBytes(*downloadLimit); err != nil {
+		log.Fatalf("-download-limit: %v", err)
+	}
 	if o.root, err = filepath.Abs(o.root); err != nil {
 		log.Fatal(err)
 	}
@@ -154,8 +181,21 @@ func main() {
 			log.Fatal(err)
 		}
 		_, n.opt.egressPort, _ = net.SplitHostPort(egressAddr)
-		relay := newEgressProxy(n.egressAuthorizer, selfTargets(o.callbackURL, addr), addr)
-		go func() { log.Fatal(http.ListenAndServe(egressAddr, relay)) }()
+		var relay *egressProxy
+		if n.apple() {
+			// The listener answers on the loopback too; a task names it by
+			// its network's gateway.
+			_, port, _ := net.SplitHostPort(addr)
+			relay = newEgressProxy(n.egressAuthorizer, nil, net.JoinHostPort("127.0.0.1", port))
+			relay.isSelf = func(hp string) bool { return n.nets.gateway(hp, port) }
+		} else {
+			relay = newEgressProxy(n.egressAuthorizer, selfTargets(o.callbackURL, addr), addr)
+		}
+		l, err := n.listenTasks(egressAddr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		go func() { log.Fatal(http.Serve(l, relay)) }()
 	}
 	api := http.NewServeMux()
 	n.routes(api)
@@ -172,9 +212,45 @@ func main() {
 			log.Printf("share %s: %s is not there now", sh.Name, o.shares[sh.Name].Path)
 		}
 	}
-	log.Printf("eriphe-node %s (%s), image %s, tasks on %s, services on %s, task listener on %s, egress relay on %s",
-		s.Name, version, o.image, dockerNetwork(o.taskNetwork), dockerNetwork(o.network), addr, orNone(egressAddr))
-	log.Fatal(http.ListenAndServe(addr, perm))
+	l, err := n.listenTasks(addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if n.apple() {
+		log.Printf("eriphe-node %s (%s), image %s, tasks with Apple's container, each on a network of its own, task listener on %s, egress relay on %s (tasks' networks only)",
+			s.Name, version, o.image, addr, orNone(egressAddr))
+	} else {
+		log.Printf("eriphe-node %s (%s), image %s, tasks on %s, services on %s, task listener on %s, egress relay on %s",
+			s.Name, version, o.image, dockerNetwork(o.taskNetwork), dockerNetwork(o.network), addr, orNone(egressAddr))
+	}
+	log.Fatal(http.Serve(l, perm))
+}
+
+// listenTasks listens for the task containers; with the container engine,
+// on every address but for the tasks' networks and the loopback only.
+func (n *node) listenTasks(addr string) (net.Listener, error) {
+	l, err := net.Listen("tcp", addr)
+	if err != nil || !n.apple() {
+		return l, err
+	}
+	return taskListener{l, &n.nets}, nil
+}
+
+// parseBytes reads a size such as 2g, 500m or 1024 (bytes).
+func parseBytes(s string) (int64, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	mult := int64(1)
+	for suffix, m := range map[string]int64{"k": 1 << 10, "m": 1 << 20, "g": 1 << 30, "t": 1 << 40} {
+		if v, ok := strings.CutSuffix(s, suffix); ok {
+			s, mult = v, m
+			break
+		}
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || v < 0 {
+		return 0, fmt.Errorf("%q: a size such as 2g or 500m", s)
+	}
+	return v * mult, nil
 }
 
 func envOr(key, def string) string {
