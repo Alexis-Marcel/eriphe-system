@@ -30,18 +30,20 @@
   <li class="tile">
     <div class="tile-head">
       <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{if .Online}}{{t "machines.online"}}{{else}}{{t "machines.offline"}}{{end}}</span>
-      <span class="tile-actions">
-      <form hx-post="/settings/machines/{{.Name}}/rejoin" hx-confirm="{{t "machines.rejoinconfirm"}}" hx-target="#join-result" hx-swap="innerHTML show:#add-title:top" class="inline">
-        <button class="link-btn" type="submit">{{t "machines.rejoin"}}</button>
-      </form>
-      <form hx-post="/settings/machines/{{.Name}}/forget" hx-confirm="{{t "machines.forgetconfirm"}}" class="inline">
-        <button class="link-btn" type="submit">{{t "machines.forget"}}</button>
-      </form>
-      </span>
+      <details class="kebab">
+        <summary aria-label="{{tf "machines.actions" .Name}}" title="{{tf "machines.actions" .Name}}"><span aria-hidden="true">⋯</span></summary>
+        <div class="kebab-menu">
+          <form hx-post="/settings/machines/{{.Name}}/rejoin" hx-confirm="{{t "machines.rejoinconfirm"}}" hx-target="#join-result" hx-swap="innerHTML show:#add-title:top">
+            <button type="submit">{{t "machines.rejoin"}}</button>
+          </form>
+          <form hx-post="/settings/machines/{{.Name}}/forget" hx-confirm="{{t "machines.forgetconfirm"}}">
+            <button type="submit" class="danger">{{t "machines.forget"}}</button>
+          </form>
+        </div>
+      </details>
     </div>
-    <h3 class="tile-title">{{template "i-server"}}{{.Name}}</h3>
+    <h3 class="tile-title">{{template "i-server"}}{{.Name}}{{if .AlwaysOn}} <span class="tag tag-accent badge-on" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</span>{{end}}</h3>
     {{if .System}}<p class="system" title="{{if .Arch}}{{.OS}}/{{.Arch}}{{end}}">{{t .System}}</p>{{end}}
-    {{if .AlwaysOn}}<p class="muted small" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</p>{{end}}
     <p class="muted small">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}}{{else}}&nbsp;{{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}}{{end}}</p>
     <div class="specs">
       {{if .CPUs}}<div class="spec"><b>{{.CPUs}}</b><span>CPU</span></div>{{end}}

@@ -335,3 +335,13 @@
     }
   });
 })();
+
+// A card's "⋯" menu closes when you click elsewhere or press Escape.
+document.addEventListener("click", (e) => {
+  document.querySelectorAll("details.kebab[open]").forEach((d) => {
+    if (!d.contains(e.target)) d.open = false;
+  });
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") document.querySelectorAll("details.kebab[open]").forEach((d) => { d.open = false; });
+});
