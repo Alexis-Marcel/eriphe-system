@@ -236,6 +236,34 @@ route, and the server's credential stays in eriphe-core (the node never sees it)
 reach every runtime the same way (see [ACP](#acp) and [Codex](#codex)); eriphe-core still lends
 them to `claude-code` tasks only.
 
+## Credentials on demand
+
+The task listener also serves `POST /v1/task/credential` (`credential.go`), with the task's own
+secret: `eriphe-cred` in the task asks it for a credential (`{protocol, host, path, access,
+tool}`), the node relays it to eriphe-core (`POST /v1/node/tasks/{id}/credential`, with the
+node's secret and certificate, like reports) and answers `{username, password, expires}`, or 403
+with the reason, or 404 when eriphe-core has no service for the host (git then goes on to another
+helper). When eriphe-core says the user must approve, the node asks a permission `Credential` of
+the task (the same flow, the same card in the workspace) and, once allowed, asks eriphe-core again.
+The tool waits meanwhile (up to the hour of any permission). See core/README.md, "Credentials on
+demand", for the decision and the GitHub App.
+
+Every task gets `ERIPHE_CRED_URL` (`<callback-url>/v1/task/credential`) and `ERIPHE_TASK_SECRET`.
+Its entrypoint makes git use the helper when it is there and the task has no `GH_TOKEN` identity:
+`GIT_CONFIG_COUNT=2`, `credential.helper=/opt/eriphe/bin/eriphe-cred`,
+`credential.useHttpPath=true`, before the clone (a private repository clones through it too).
+
+**`eriphe-cred`** (`cred/`, a module of its own, standard library only) is built into the node
+image: `/opt/eriphe/bin/eriphe-cred` for the image's architecture, with `/opt/eriphe/bin/gh` a
+link to it, and both Linux builds in `/usr/local/share/eriphe/linux-{amd64,arm64}/eriphe-cred`
+(for the Mac's tasks, which are Linux VMs). What lending it to tasks needs:
+
+- `/opt/eriphe/bin` mounted read-only in every task container (Docker and the container engine);
+- `/opt/eriphe/bin` **first** on the task's `PATH`, ahead of `/usr/bin`, so that `gh` is the
+  wrapper (it finds the real gh further on the `PATH`, skipping `/opt/eriphe/bin`);
+- nothing else: the git configuration is the entrypoint's, from the environment. An image without
+  `/opt/eriphe/bin/eriphe-cred` works as before, without credentials.
+
 ## Runtimes
 
 A task's `runtime` is the agent program the node drives in its container (`runtime.go`). All
