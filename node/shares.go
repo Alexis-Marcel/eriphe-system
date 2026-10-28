@@ -127,7 +127,9 @@ type resolvedFolder struct {
 
 // resolveFolder checks a path relative to a root: no "..", nothing hidden
 // or sensitive on the way, symlinks resolved and kept inside the root, a
-// directory, and none of eriphe-node's own data.
+// directory, and not inside eriphe-node's own data. A folder that holds
+// that data can be listed (the root of a NAS's shares does) but not shared:
+// see shareable.
 func (n *node) resolveFolder(share, rel string) (*resolvedFolder, error) {
 	root, ok := n.opt.shares[share]
 	if !ok {
@@ -163,8 +165,8 @@ func (n *node) resolveFolder(share, rel string) (*resolvedFolder, error) {
 	if fi, err := os.Stat(real); err != nil || !fi.IsDir() {
 		return nil, shareErr(http.StatusNotFound, "not_found", "no such folder")
 	}
-	if own := n.ownData(); own != "" && (within(real, own) || within(own, real)) {
-		return nil, shareErr(http.StatusForbidden, "eriphe_data", "this folder holds eriphe-node's own data")
+	if own := n.ownData(); own != "" && within(own, real) {
+		return nil, shareErr(http.StatusForbidden, "eriphe_data", "this folder is eriphe-node's own data")
 	}
 	return &resolvedFolder{root: root, real: real, src: filepath.Join(root.Path, filepath.FromSlash(relReal)), rel: relReal}, nil
 }
@@ -201,6 +203,15 @@ func (n *node) ownData() string {
 		return p
 	}
 	return n.opt.root
+}
+
+// shareable refuses a folder that holds eriphe-node's own data or something
+// sensitive: its content would go to a task whole.
+func (n *node) shareable(f *resolvedFolder) error {
+	if own := n.ownData(); own != "" && within(f.real, own) {
+		return shareErr(http.StatusForbidden, "eriphe_data", "this folder holds eriphe-node's own data")
+	}
+	return checkShareable(f.real)
 }
 
 // checkShareable refuses a folder that holds something sensitive, up to
@@ -254,10 +265,11 @@ func (n *node) handleShareDirs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dirs, files := []string{}, 0
+	own := n.ownData()
 	for _, e := range entries {
 		switch {
 		case e.IsDir(): // a symlink is not listed: only real directories
-			if !unlisted(e.Name()) {
+			if !unlisted(e.Name()) && !within(own, filepath.Join(f.real, e.Name())) {
 				dirs = append(dirs, e.Name())
 			}
 		case e.Type().IsRegular():
@@ -273,7 +285,7 @@ func (n *node) handleShareDirs(w http.ResponseWriter, r *http.Request) {
 		"truncated": truncated, "writable": !f.root.ReadOnly}
 	if r.URL.Query().Get("check") == "1" {
 		out["shareable"] = true
-		if err := checkShareable(f.real); err != nil {
+		if err := n.shareable(f); err != nil {
 			var se *shareError
 			errors.As(err, &se)
 			out["shareable"], out["code"], out["reason"] = false, se.Code, se.Msg
@@ -329,7 +341,7 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 		seen[strings.ToLower(tf.Name)] = true
 		f, err := n.resolveFolder(tf.Share, tf.Path)
 		if err == nil {
-			err = checkShareable(f.real)
+			err = n.shareable(f)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
