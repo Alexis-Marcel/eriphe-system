@@ -709,16 +709,30 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .advanced-opts[open] > summary { margin-bottom: 16px; }
 .advanced-opts h4 { font-size: .92rem; }
 
-/* A newer version is published: a dot in the navigation, a line that opens on how to update. */
+/* A newer version is published: a dot in the navigation, and on the machine a line, its button or its command. */
 .new-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; margin-left: -3px; }
 .tabbar .new-dot { position: absolute; top: 6px; left: calc(50% + 9px); margin: 0; }
-.update-notice > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 7px; color: var(--accent-text); font-size: .84rem; font-weight: 600; }
-.update-notice > summary::-webkit-details-marker { display: none; }
-.update-notice > summary::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.update-notice[open] { display: grid; gap: 10px; }
-.update-notice h4 { font-size: .84rem; }
-.update-core { display: grid; justify-items: center; margin-top: -6px; }
-.update-core .update-notice[open] { justify-self: stretch; }
+.update-available { display: inline-flex; align-items: center; gap: 7px; color: var(--accent-text); font-weight: 600; }
+.update-available .new-dot { margin: 0; }
+a.update-available:hover { text-decoration: none; opacity: .85; }
+.machine-update { display: grid; gap: 8px; justify-items: start; padding-top: 10px; border-top: 1px solid var(--border); }
+.machine-update p { margin: 0; }
+.machine-update .cmd, .machine-update .code { justify-self: stretch; }
+.machine-update .err-text { display: block; }
+.update-now { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.system { margin: -4px 0 0; font-size: .86rem; font-weight: 600; color: var(--muted); }
+#machines-advanced > .stack { padding: 0 22px 22px; }
+
+/* A switch: a checkbox that looks like one. */
+.switch { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.switch > span { display: grid; gap: 2px; }
+.switch b { font-size: .92rem; font-weight: 600; }
+.switch small { color: var(--muted); font-size: .8rem; }
+.switch input { appearance: none; -webkit-appearance: none; position: relative; width: 38px; height: 22px; margin: 0; flex: none; border-radius: 999px; background: var(--border-strong); cursor: pointer; transition: background .15s; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s; }
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { transform: translateX(16px); }
+.switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .env-rows { display: grid; gap: 8px; }
 .env-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto; gap: 8px; align-items: center; }
@@ -899,8 +913,7 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 .drive-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .drive-path { display: flex; align-items: center; gap: 8px; margin: 0; }
 
-/* Settings → Machines → Updates. */
-.update-list li { align-items: flex-start; flex-wrap: wrap; }
-.update-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.update-actions select { min-height: 32px; padding-top: 4px; padding-bottom: 4px; font-size: .84rem; }
-.accent-text { color: var(--accent-text); font-weight: 600; }
+/* Settings → Machines → Updates: eriphe-core's own line. */
+.update-core-row { display: grid; gap: 10px; padding: 14px 16px; border-radius: 14px; background: var(--surface-2); }
+.update-core-row .list-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.update-core-row .machine-update { border-top-color: var(--border-strong); }

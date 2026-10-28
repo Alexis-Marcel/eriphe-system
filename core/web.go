@@ -144,11 +144,12 @@ func (w *web) routes() http.Handler {
 	}))
 	mux.Handle("GET /settings/machines", w.auth(w.handleMachines))
 	mux.Handle("POST /settings/machines/join", w.auth(w.handleJoinCommand))
-	mux.Handle("POST /settings/machines/tls", w.auth(w.handleNodesTLS))
-	mux.Handle("POST /settings/updates/policy", w.auth(w.handleUpdatePolicy))
+	mux.Handle("POST /settings/updates/night", w.auth(w.handleNightUpdates))
 	mux.Handle("POST /settings/updates/request", w.auth(w.handleUpdateNow))
+	mux.Handle("POST /settings/updates/all", w.auth(w.handleUpdateAll))
 	mux.Handle("POST /settings/machines/{name}/forget", w.auth(w.handleForget))
 	mux.Handle("POST /settings/machines/{name}/rejoin", w.auth(w.handleRejoinCommand))
+	mux.Handle("GET /settings/home-assistant", w.auth(w.handleHomeAssistant))
 	mux.Handle("POST /settings/voice-token", w.auth(w.handleVoiceToken))
 	w.agentRoutes(mux) // web_agents.go
 	mux.Handle("GET /settings/tools", w.auth(w.handleTools))
@@ -254,19 +255,18 @@ type page struct {
 // updateNotice is what runs behind its latest version (updates.go), for
 // the discreet marks of the navigation and the account.
 type updateNotice struct {
-	Core     string // eriphe-core's latest version, when this one is behind
-	Commands []updateCommand
-	Nodes    bool // a machine is behind
+	Core  string // eriphe-core's latest version, when this one is behind
+	Nodes bool   // a machine is behind
 }
 
 func (w *web) updateNotice() updateNotice {
 	var n updateNotice
-	if _, p := w.c.updatePolicy(coreMachine); p != updateNever && w.c.updates.behind("eriphe-core", version) {
-		n.Core, n.Commands = w.c.updates.version("eriphe-core"), updateCommands(coreInstall)
+	if w.c.updates.behind("eriphe-core", version) {
+		n.Core = w.c.updates.version("eriphe-core")
 	}
 	nodes, _ := w.c.store.nodes()
 	for _, row := range nodes {
-		if _, p := w.c.updatePolicy("node:" + row.Name); p != updateNever && w.c.updates.behind("eriphe-node", parseInfo(row).Version) {
+		if w.c.updates.behind("eriphe-node", parseInfo(row).Version) {
 			n.Nodes = true
 			break
 		}

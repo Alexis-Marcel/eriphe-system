@@ -2,7 +2,7 @@
 <div class="settings">
   <nav class="settings-nav" aria-label="{{t "settings.title"}}">
     <h1 class="settings-title">{{t "settings.title"}}</h1>
-    <a href="/settings/machines" {{if eq .Tab "machines"}}aria-current="page"{{end}}>{{template "i-server"}}<span>{{t "settings.machines"}}</span>{{if .Updates.Nodes}}{{template "new-dot"}}{{end}}</a>
+    <a href="/settings/machines" {{if eq .Tab "machines"}}aria-current="page"{{end}}>{{template "i-server"}}<span>{{t "settings.machines"}}</span>{{if or .Updates.Core .Updates.Nodes}}{{template "new-dot"}}{{end}}</a>
     <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span></a>
     <a href="/settings/tools" {{if eq .Tab "tools"}}aria-current="page"{{end}}>{{template "i-plug"}}<span>{{t "settings.tools"}}</span></a>
     <a href="/settings/folders" {{if eq .Tab "folders"}}aria-current="page"{{end}}>{{template "i-folder"}}<span>{{t "settings.folders"}}</span></a>
@@ -13,7 +13,7 @@
   <div class="settings-body">
     {{if eq .Tab "machines"}}{{template "machines" .}}
     {{else if eq .Tab "agents"}}{{if eq .View "agent-form"}}{{template "agent-page" .}}{{else if eq .View "provider-form"}}{{template "provider-page" .}}{{else}}{{template "agents" .}}{{end}}
-    {{else if eq .Tab "tools"}}{{if eq .View "form"}}{{template "tool-page" .}}{{else if eq .View "gallery"}}{{template "tool-gallery" .}}{{else if eq .View "drive"}}{{template "drive-page" .}}{{else}}{{template "tools" .}}{{end}}
+    {{else if eq .Tab "tools"}}{{if eq .View "form"}}{{template "tool-page" .}}{{else if eq .View "gallery"}}{{template "tool-gallery" .}}{{else if eq .View "drive"}}{{template "drive-page" .}}{{else if eq .View "home-assistant"}}{{template "home-assistant" .}}{{else}}{{template "tools" .}}{{end}}
     {{else if eq .Tab "folders"}}{{template "folders" .}}
     {{else if eq .Tab "remote"}}{{template "remote" .}}
     {{else if eq .Tab "journal"}}{{template "journal" .}}
@@ -40,6 +40,7 @@
       </span>
     </div>
     <h3 class="tile-title">{{template "i-server"}}{{.Name}}</h3>
+    {{if .System}}<p class="system" title="{{if .Arch}}{{.OS}}/{{.Arch}}{{end}}">{{t .System}}</p>{{end}}
     {{if .AlwaysOn}}<p class="muted small" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</p>{{end}}
     <p class="muted small">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}}{{else}}&nbsp;{{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}}{{end}}</p>
     <div class="specs">
@@ -48,9 +49,9 @@
     </div>
     {{if .Runtimes}}<p class="chips" aria-label="{{t "machines.runtimes"}}">{{range .Runtimes}}<span class="tag">{{.}}</span>{{end}}</p>{{end}}
     {{if .Labels}}<p class="chips" aria-label="{{t "machines.labels"}}">{{range .Labels}}<span class="tag tag-accent">{{.}}</span>{{end}}</p>{{end}}
-    {{if .Version}}<p class="muted small">eriphe-node {{ver .Version}}</p>{{end}}
-    {{if .Latest}}{{template "update-notice" dict "ID" .Name "Latest" .Latest "Commands" .Commands}}{{end}}
-    {{if $.Data.CAHash}}<p class="muted small">{{if .CertExpires.IsZero}}{{t "machines.notls"}}{{else}}{{tf "machines.tls" (date .CertExpires)}}{{end}}</p>{{end}}
+    {{if .Version}}<p class="muted small mono">eriphe-node {{ver .Version}}</p>{{end}}
+    {{template "machine-update" .Update}}
+    {{if and $.Data.CAHash .CertExpires.IsZero}}<p class="muted small">{{t "machines.notls"}}</p>{{end}}
   </li>
 {{end}}
 </ul>
@@ -73,98 +74,77 @@
 </section>
 
 {{if .Data.CAHash}}
-<section class="panel" aria-labelledby="tls-title">
-  <h3 id="tls-title">{{template "i-check"}}{{t "machines.tlstitle"}}</h3>
-  <p class="muted">{{t "machines.tlslead"}}</p>
-  <div class="code"><pre id="ca-hash">{{.Data.CAHash}}</pre><button class="btn btn-soft sm" type="button" data-copy="ca-hash">{{t "machines.copy"}}</button></div>
-  {{if .Data.TLSOnly}}<p class="ok-note" role="status">{{t "machines.tlsonly"}}</p>
-  <form hx-post="/settings/machines/tls" hx-confirm="{{t "machines.tlsopenconfirm"}}">
-    <input type="hidden" name="tls_only" value="0">
-    <button class="btn btn-soft" type="submit">{{t "machines.tlsopen"}}</button>
-  </form>
-  {{else}}
-  {{if .Data.Plain}}<p class="muted small">{{tf "machines.tlsplain" .Data.Plain}}</p>{{end}}
-  <form hx-post="/settings/machines/tls" hx-confirm="{{t "machines.tlscloseconfirm"}}">
-    <input type="hidden" name="tls_only" value="1">
-    <button class="btn btn-soft" type="submit">{{t "machines.tlsclose"}}</button>
-  </form>
-  {{end}}
-</section>
+<details class="panel advanced" id="machines-advanced">
+  <summary><span class="adv-title">{{template "i-shield"}}{{t "machines.advanced"}}</span><span class="muted small">{{t "machines.advancedsummary"}}</span></summary>
+  <div class="stack">
+    <p class="muted">{{t "machines.tlslead"}}</p>
+    <div class="code"><pre id="ca-hash">{{.Data.CAHash}}</pre><button class="btn btn-soft sm" type="button" data-copy="ca-hash">{{t "machines.copy"}}</button></div>
+    {{if .Data.TLSOnly}}<p class="muted small">{{t "machines.tlsonly"}}</p>
+    {{else if .Data.Plain}}<p class="muted small">{{tf "machines.tlsplain" .Data.Plain}}</p>{{end}}
+  </div>
+</details>
+{{end}}
 {{end}}
 
-<section class="panel" aria-labelledby="voice-title">
-  <h3 id="voice-title">{{template "i-check"}}{{t "voice.title"}}</h3>
-  <p class="muted">{{t "voice.lead"}}</p>
-  {{if .Data.Voice}}<p class="muted small">{{t "voice.has"}}</p>{{end}}
-  <form hx-post="/settings/voice-token" hx-target="#voice-result" hx-swap="innerHTML"{{if .Data.Voice}} hx-confirm="{{t "voice.replaceconfirm"}}"{{end}}>
-    <button class="btn btn-soft" type="submit">{{if .Data.Voice}}{{t "voice.replace"}}{{else}}{{t "voice.create"}}{{end}}</button>
-  </form>
-  <div id="voice-result"></div>
-</section>
-{{end}}
-
-{{/* Settings → Machines → Updates (web_updates.go). */}}
+{{/* Settings → Machines → Updates (web_updates.go): eriphe-core's own, "Update all" and the switch for the night; each node's is on its card. */}}
 {{define "updates"}}
-<section class="panel" aria-labelledby="updates-title">
+<section class="panel" id="updates" aria-labelledby="updates-title">
   <h3 id="updates-title">{{template "i-branch"}}{{t "updates.title"}}</h3>
   <p class="muted">{{t "updates.lead"}}</p>
-  <form class="row-form row-form-2" hx-post="/settings/updates/policy" hx-trigger="change">
-    <input type="hidden" name="machine" value="">
-    <label class="field"><span>{{t "updates.all"}}</span>
-      <select name="policy">{{$p := .Policy}}{{range $k := (list "notify" "night" "never")}}<option value="{{$k}}" {{if eq $k $p}}selected{{end}}>{{t (printf "updates.policy.%s" $k)}}</option>{{end}}</select></label>
-  </form>
-  <ul class="list update-list">
-  {{range .Rows}}
-    <li>
-      <div class="list-main">
-        <b>{{.Name}}</b>
-        <span class="muted small mono">{{if .Version}}{{ver .Version}}{{else}}{{t "updates.noversion"}}{{end}}{{if .Pin}} · {{tf "updates.pinned" .Pin}}{{end}}</span>
-        <span class="small">{{template "update-state" .}}</span>
-      </div>
-      <div class="update-actions">
-        <form hx-post="/settings/updates/policy" hx-trigger="change">
-          <input type="hidden" name="machine" value="{{.Machine}}">
-          <label><span class="sr-only">{{tf "updates.policyfor" .Name}}</span>
-          <select name="policy">
-            <option value="" {{if not .Own}}selected{{end}}>{{tf "updates.policy.inherit" (t (printf "updates.policy.%s" $p))}}</option>
-            {{$own := .Own}}{{range $k := (list "notify" "night" "never")}}<option value="{{$k}}" {{if eq $k $own}}selected{{end}}>{{t (printf "updates.policy.%s" $k)}}</option>{{end}}
-          </select></label>
-        </form>
-        {{if .Updater}}{{if not .Pending}}
-        <form hx-post="/settings/updates/request" class="inline">
-          <input type="hidden" name="machine" value="{{.Machine}}"><input type="hidden" name="action" value="update">
-          <button class="btn btn-soft sm" type="submit" hx-disabled-elt="this" {{if and .CoreFirst (not .Core)}}disabled title="{{t "update.corefirst"}}"{{end}}>{{t "updates.now"}}</button>
-        </form>
-        <form hx-post="/settings/updates/request" hx-confirm="{{tf "updates.rollbackconfirm" .Name}}" class="inline">
-          <input type="hidden" name="machine" value="{{.Machine}}"><input type="hidden" name="action" value="rollback">
-          <button class="link-btn" type="submit">{{t "updates.rollback"}}</button>
-        </form>
-        {{end}}{{end}}
-      </div>
-    </li>
+  {{with index .Rows 0}}
+  <div class="update-core-row">
+    <div class="list-main">
+      <b>eriphe-core</b>
+      <span class="muted small mono">{{if .Version}}{{ver .Version}}{{else}}{{t "updates.noversion"}}{{end}}{{if .Pin}} · {{tf "updates.pinned" .Pin}}{{end}}</span>
+    </div>
+    {{template "machine-update" .}}
+  </div>
   {{end}}
-  </ul>
+  {{if gt .Behind 1}}
+  <form hx-post="/settings/updates/all" hx-confirm="{{t "updates.allconfirm"}}">
+    <button class="btn btn-primary" type="submit" hx-disabled-elt="this">{{t "updates.all"}}</button>
+  </form>
+  {{end}}
+  <label class="switch">
+    <input type="checkbox" role="switch" name="night" value="1" hx-post="/settings/updates/night" hx-trigger="change" {{if .Night}}checked{{end}}>
+    <span><b>{{t "updates.night"}}</b><small>{{t "updates.nighthint"}}</small></span>
+  </label>
+  <p class="muted small">{{t "updates.help"}}</p>
 </section>
+{{end}}
+
+{{/* A machine's update: where it stands, and the button, or the command to run on a machine without an updater. . is an updateRow. */}}
+{{define "machine-update"}}
+{{if or .Latest .Pending (and .Status (not (or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned") (eq .Status.Outcome "running"))))}}
+<div class="machine-update">
+  <p class="small">{{template "update-state" .}}</p>
+  {{if and .Latest (not .Pending)}}
+  {{if .Updater}}
+  <form hx-post="/settings/updates/request" class="update-now">
+    <input type="hidden" name="machine" value="{{.Machine}}">
+    <button class="btn btn-soft sm" type="submit" hx-disabled-elt="this" {{if and .CoreFirst (not .Core)}}disabled title="{{t "update.corefirst"}}"{{end}}>{{t "updates.now"}}</button>
+    {{if and .CoreFirst (not .Core)}}<span class="muted small" title="{{t "update.corefirst"}}">{{t "updates.aftercore"}}</span>{{end}}
+  </form>
+  {{else}}
+  <div class="cmd">
+    <p class="muted small">{{t "updates.manual"}}</p>
+    <div class="code"><pre id="update-{{.Machine}}">{{.Manual.Cmd}}</pre><button class="btn btn-soft sm" type="button" data-copy="update-{{.Machine}}">{{t "machines.copy"}}</button></div>
+  </div>
+  {{end}}
+  {{end}}
+</div>
+{{end}}
 {{end}}
 
 {{/* Where a machine's update stands. */}}
 {{define "update-state"}}
-{{- if not .Updater}}<span class="muted">{{t "updates.noupdater"}}</span>
-{{- else if .Pending}}{{if and .Status (eq .Status.ID .Pending.ID) (eq .Status.Outcome "running")}}{{t "updates.running"}}{{else if .Waiting}}{{t "updates.waiting"}}{{else}}{{t "updates.requested"}}{{end}}
-{{- else if .Status}}<span class="{{if or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned")}}muted{{else}}err-text{{end}}">{{if and (eq .Status.Action "rollback") (eq .Status.Outcome "ok")}}{{t "update.outcome.rollback_ok"}}{{else}}{{t (printf "update.outcome.%s" .Status.Outcome)}}{{end}}{{if .Status.To}} · {{ver .Status.To}}{{end}}{{if not .Status.At.IsZero}} · {{ago .Status.At}}{{end}}{{if and .Status.Message (ne .Status.Outcome "ok") (ne .Status.Outcome "current")}} — {{.Status.Message}}{{end}}</span>
+{{- if .Pending}}<span class="muted">{{if and .Status (eq .Status.ID .Pending.ID) (eq .Status.Outcome "running")}}{{t "updates.running"}}{{else if .Waiting}}{{t "updates.waiting"}}{{else}}{{t "updates.requested"}}{{end}}</span>
+{{- else if .Latest}}<span class="update-available" title="{{ver .Latest}}"><b class="new-dot" aria-hidden="true"></b>{{t "update.available"}}</span>
 {{- end}}
-{{- if and .Latest (not .Pending)}}{{if or .Status (not .Updater)}} · {{end}}<span class="accent-text">{{tf "updates.available" .Latest}}</span>{{end}}
+{{- if and .Status (not .Pending) (not (or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned") (eq .Status.Outcome "running")))}}
+<span class="err-text">{{t (printf "update.outcome.%s" .Status.Outcome)}}{{if not .Status.At.IsZero}} · {{ago .Status.At}}{{end}}{{if .Status.Message}} — {{.Status.Message}}{{end}}</span>
+{{- end}}
 {{end}}
-
-{{define "voice-token"}}{{with .Data}}
-<p class="ok-note" role="status">{{t "voice.once"}}</p>
-<div class="cmd">
-  <h4>{{t "voice.url"}}</h4>
-  <div class="code"><pre id="voice-url">{{.Core}}</pre><button class="btn btn-soft sm" type="button" data-copy="voice-url">{{t "machines.copy"}}</button></div>
-  <h4>{{t "voice.token"}}</h4>
-  <div class="code"><pre id="voice-tok">{{.Token}}</pre><button class="btn btn-soft sm" type="button" data-copy="voice-tok">{{t "machines.copy"}}</button></div>
-</div>
-{{end}}{{end}}
 
 {{define "join-result"}}{{with .Data}}
 {{if .Error}}<p class="alert" role="alert">{{t .Error}}</p>{{else}}
@@ -252,21 +232,7 @@
   </form>
 </section>
 <p class="muted small center">eriphe-core {{ver .Build}}</p>
-{{if .Updates.Core}}<div class="update-core">{{template "update-notice" dict "ID" "core" "Latest" .Updates.Core "Commands" .Updates.Commands}}</div>{{end}}
-{{end}}
-
-{{/* A newer version of a machine or of eriphe-core, and how to update it. */}}
-{{define "update-notice"}}
-<details class="update-notice">
-  <summary>{{t "update.available"}}</summary>
-  <p class="muted small">{{tf "update.lead" .Latest}}</p>
-  {{$id := .ID}}{{range $i, $c := .Commands}}
-  <div class="cmd">
-    <h4>{{t $c.Label}}</h4>
-    <div class="code"><pre id="update-{{$id}}-{{$i}}">{{$c.Cmd}}</pre><button class="btn btn-soft sm" type="button" data-copy="update-{{$id}}-{{$i}}">{{t "machines.copy"}}</button></div>
-  </div>
-  {{end}}
-</details>
+{{if .Updates.Core}}<p class="small center"><a class="update-available" href="/settings/machines#updates"><b class="new-dot" aria-hidden="true"></b>{{t "update.available"}}</a></p>{{end}}
 {{end}}
 
 {{define "password-result"}}<p class="{{if .Data.OK}}ok-note{{else}}alert{{end}}" role="status">{{t .Data.Msg}}</p>{{end}}

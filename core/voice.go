@@ -23,7 +23,7 @@ import (
 //	POST /v1/voice  {"text", "language", "conversation_id", "device_id", "satellite_id", "area"}
 //
 // The answer is NDJSON: {"delta": "…"} lines, then {"done": true, "text",
-// "continue"}. Home Assistant has its own token (Settings → Machines), which
+// "continue"}. Home Assistant has its own token (Settings → Tools → Home Assistant), which
 // can only talk to the brain.
 
 const (

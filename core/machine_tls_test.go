@@ -366,6 +366,8 @@ func TestNodeCertificateRevoked(t *testing.T) {
 // still connected without its certificate.
 func TestOldNodeMigrates(t *testing.T) {
 	tc := newTLSCore(t)
+	// An installation from before TLS: the plain path is still open.
+	tc.c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, nodesTLSOnlyKey)
 	secret := randomSecret()
 	if err := tc.c.store.registerNode("nas", hashSecret(secret)); err != nil {
 		t.Fatal(err)
@@ -437,8 +439,45 @@ func TestFirstCertificateWhenTLSOnly(t *testing.T) {
 	}
 }
 
-// The workspace's commands carry the CA's hash; the machines page shows it,
-// which machines have their certificate, and closes the plain path.
+// A new installation accepts machines over TLS only from the start; an
+// older one once every machine has its certificate, unless the API chose
+// to keep the plain path open.
+func TestAutoTLSOnly(t *testing.T) {
+	tc := newTLSCore(t)
+	if !tc.c.nodesTLSOnly() {
+		t.Fatal("a new installation accepts machines without TLS")
+	}
+
+	// An older installation, with a machine from before TLS.
+	tc.c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, nodesTLSOnlyKey)
+	tc.c.store.registerNode("nas", hashSecret("s"))
+	tc.c.store.registerNode("pc", hashSecret("p"))
+	tc.c.store.setNodeCert("pc", hashSecret("p"), "2a", time.Now().Add(time.Hour))
+	nodes, _ := tc.c.store.nodes()
+	tc.c.autoTLSOnly(nodes)
+	if tc.c.nodesTLSOnly() {
+		t.Fatal("closed while a machine has no certificate")
+	}
+	tc.c.store.setNodeCert("nas", hashSecret("s"), "1f", time.Now().Add(time.Hour))
+	nodes, _ = tc.c.store.nodes()
+	tc.c.autoTLSOnly(nodes)
+	if !tc.c.nodesTLSOnly() {
+		t.Fatal("still open once every machine has its certificate")
+	}
+
+	// The API's choice to keep it open stays.
+	if err := tc.c.setNodesTLSOnly(false); err != nil {
+		t.Fatal(err)
+	}
+	tc.c.autoTLSOnly(nodes)
+	if tc.c.nodesTLSOnly() {
+		t.Fatal("the API's choice was overridden")
+	}
+}
+
+// The workspace's commands carry the CA's hash; the machines page keeps it
+// under "Advanced", says which machines have no certificate, and has no
+// switch for the plain path any more.
 func TestWebMachinesTLS(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.c.startMachineTLS()
@@ -453,17 +492,18 @@ func TestWebMachinesTLS(t *testing.T) {
 	}
 	tw.c.store.registerNode("nas", hashSecret("s"))
 	_, body, _ = tw.do("GET", "/settings/machines", nil, nil)
-	if !strings.Contains(body, hash) || !strings.Contains(body, "Encore sans certificat : nas") {
+	i := strings.Index(body, `<details class="panel advanced" id="machines-advanced">`)
+	if i < 0 || !strings.Contains(body[i:], hash) || strings.Count(body, hash) != 1 || !strings.Contains(body, "Connexion non chiffrée") {
 		t.Fatalf("machines page:\n%s", body)
 	}
+	if strings.Contains(body, "N'accepter que les machines en TLS") || strings.Contains(body, "/settings/machines/tls") {
+		t.Fatal("the TLS switch is still there")
+	}
 	tw.c.store.setNodeCert("nas", hashSecret("s"), "1f", time.Now().Add(time.Hour))
-	if _, body, _ = tw.do("GET", "/settings/machines", nil, nil); !strings.Contains(body, "Connexion chiffrée") {
-		t.Fatal("a machine with its certificate is not shown so")
+	if _, body, _ = tw.do("GET", "/settings/machines", nil, nil); strings.Contains(body, "Connexion non chiffrée") {
+		t.Fatal("a machine with its certificate is shown without")
 	}
-	if code, _, _ := tw.post("/settings/machines/tls", url.Values{"tls_only": {"1"}}, csrf); code != http.StatusOK || !tw.c.nodesTLSOnly() {
-		t.Fatalf("close the plain path: %d", code)
-	}
-	if code, _, _ := tw.post("/settings/machines/tls", url.Values{"tls_only": {"0"}}, csrf); code != http.StatusOK || tw.c.nodesTLSOnly() {
-		t.Fatalf("open it again: %d", code)
+	if code, _, _ := tw.post("/settings/machines/tls", url.Values{"tls_only": {"0"}}, csrf); code == http.StatusOK {
+		t.Fatalf("the workspace still opens the plain path: %d", code)
 	}
 }

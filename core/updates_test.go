@@ -252,7 +252,7 @@ func TestWebUpdateNotice(t *testing.T) {
 
 	// No answer from the registry yet: nothing.
 	for _, path := range []string{"/settings/machines", "/settings/account"} {
-		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, "Nouvelle version disponible") {
+		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, "Mise à jour disponible") {
 			t.Errorf("GET %s tells of a new version before any check", path)
 		}
 	}
@@ -261,11 +261,12 @@ func TestWebUpdateNotice(t *testing.T) {
 	tw.c.updates = newUpdates(f.srv.URL)
 	tw.c.updates.check(context.Background())
 	_, body, _ := tw.do("GET", "/settings/machines", nil, nil)
-	if n := strings.Count(body, `<details class="update-notice">`); n != 1 {
-		t.Errorf("%d machines told to update, want pc alone", n)
+	// eriphe-core and pc are behind, neither has an updater: one command each, for its system.
+	if n := strings.Count(body, `<span class="update-available" title=`); n != 2 {
+		t.Errorf("%d machines told to update, want eriphe-core and pc", n)
 	}
-	for _, want := range []string{"Nouvelle version disponible", "La version 0.3.0", "curl -fsSL https://eriphe.com/install.sh | sh -s<",
-		`class="new-dot"`} {
+	for _, want := range []string{"Mise à jour disponible", "0.3.0", "curl -fsSL https://eriphe.com/install.sh | sh -s<",
+		"docker compose pull &amp;&amp; docker compose up -d", `class="new-dot"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/machines lacks %q", want)
 		}
@@ -274,7 +275,7 @@ func TestWebUpdateNotice(t *testing.T) {
 		t.Error("a macOS machine is given the Windows command")
 	}
 	_, body, _ = tw.do("GET", "/settings/account", nil, nil)
-	for _, want := range []string{"eriphe-core 0.1.0", "La version 0.2.0", "docker compose pull &amp;&amp; docker compose up -d"} {
+	for _, want := range []string{"eriphe-core 0.1.0", "Mise à jour disponible", `href="/settings/machines#updates"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/account lacks %q", want)
 		}
@@ -284,7 +285,7 @@ func TestWebUpdateNotice(t *testing.T) {
 	version = "dev"
 	tw.c.store.setNodeStatus("pc", true, []byte(`{"version":"0.3.0"}`))
 	for _, path := range []string{"/", "/settings/machines", "/settings/account"} {
-		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, "new-dot") || strings.Contains(body, "update-notice") {
+		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, "new-dot") || strings.Contains(body, "update-available") {
 			t.Errorf("GET %s tells of a new version with everything up to date", path)
 		}
 	}

@@ -36,6 +36,10 @@ type toolsPage struct {
 	Skipped map[string]string
 	Secrets secretsView
 	Waiting bool // a tool is starting: the list refreshes itself until it is up
+	// Home Assistant talks to Eriphe (its voice token) but Eriphe has no
+	// tool of it: its entry is still in the list (web_homeassistant.go).
+	VoiceOnly bool
+	Voice     bool // Home Assistant has a voice token
 }
 
 // presetOf finds what preset a catalog entry comes from, and the line that
@@ -44,6 +48,11 @@ func presetOf(lang string, s Server) (toolPreset, string) {
 	if !s.local() {
 		if p, ok := presetByURL(s.URL); ok {
 			return p, tr(lang, "preset."+p.ID+".title")
+		}
+		if homeAssistantURL(s.URL) {
+			p, _ := presetByID("home-assistant")
+			u, _ := url.Parse(s.URL)
+			return p, tr(lang, "preset.home-assistant.title") + " · " + u.Host
 		}
 		return toolPreset{}, ""
 	}
@@ -94,9 +103,14 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
 	v := toolsPage{Presets: toolPresets, Secrets: w.secrets("", false)}
 	conf := w.c.conf()
+	v.Voice = w.c.store.get(voiceTokenKey) != ""
+	v.VoiceOnly = v.Voice
 	for _, sv := range w.servers() {
 		t := toolView{serverView: sv, Source: sv.Source}
 		t.Preset, t.Detail = presetOf(lang, conf.Servers[sv.Name])
+		if t.Preset.ID == "home-assistant" {
+			v.VoiceOnly = false
+		}
 		t.Pending, t.Placed = startState(sv)
 		if t.Pending {
 			t.Problem = serviceProblem(lang, sv)

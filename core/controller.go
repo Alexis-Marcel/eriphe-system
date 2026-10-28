@@ -122,7 +122,9 @@ func (c *core) checkNodes(ctx context.Context) {
 	}
 	if nodes, err = c.store.nodes(); err == nil {
 		c.resolveUpdates(nodes) // machine_updates.go
+		c.autoTLSOnly(nodes)    // machine_tls.go
 	}
+	c.followUpdateAll()
 	c.autoUpdates(time.Now())
 	c.placeServices() // also when no node answers: a node gone too long loses its services
 }
