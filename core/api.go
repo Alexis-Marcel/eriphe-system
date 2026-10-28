@@ -16,6 +16,7 @@ func (c *core) taskRoutes(mux *http.ServeMux, token string) {
 	mux.Handle("GET /v1/tasks", bearer(token, http.HandlerFunc(c.handleTasks)))
 	mux.Handle("GET /v1/tasks/{id}", bearer(token, http.HandlerFunc(c.handleTask)))
 	mux.Handle("GET /v1/tasks/{id}/events", bearer(token, http.HandlerFunc(c.handleTaskEvents)))
+	mux.Handle("GET /v1/tasks/{id}/credentials", bearer(token, http.HandlerFunc(c.handleTaskCredentials)))
 	mux.Handle("POST /v1/tasks/{id}/answer", bearer(token, http.HandlerFunc(c.handleAnswer)))
 	mux.Handle("POST /v1/tasks/{id}/stop", bearer(token, http.HandlerFunc(c.handleStop)))
 }

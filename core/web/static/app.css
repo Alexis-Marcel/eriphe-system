@@ -442,6 +442,13 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .ev-answer.ok::before { border-color: var(--ok); }
 .ev-answer.no { color: var(--danger); }
 .ev-answer.no::before { border-color: var(--danger); }
+.ev-cred { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; color: var(--muted); }
+.ev-cred code { overflow-wrap: anywhere; min-width: 0; }
+.ev-cred.cred-allow::before { border-color: var(--ok); }
+.ev-cred.cred-deny::before { border-color: var(--danger); }
+.ev-cred.cred-ask::before { border-color: var(--warn-strong); }
+.cred-why { flex-basis: 100%; font-size: .8rem; }
+.plain-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .ev-error { color: var(--danger); }
 .ev-error::before { border-color: var(--danger); }
 .reply { display: grid; gap: 10px; padding: 14px; border-radius: 16px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--idle) 40%, var(--border)); }

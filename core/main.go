@@ -101,6 +101,7 @@ func main() {
 	mux.HandleFunc("GET /v1/node/assignments", c.handleAssignments)
 	mux.HandleFunc("POST /v1/node/tasks/{id}/report", c.handleReport)
 	mux.Handle("/v1/node/tasks/{id}/mcp/{server}", c.taskMCPHandler())
+	mux.HandleFunc("POST /v1/node/tasks/{id}/credential", c.handleTaskCredential) // credentials.go
 	mux.HandleFunc("POST /v1/node/services/{name}/report", c.handleServiceReport)
 	mux.HandleFunc("POST /v1/node/certificate", c.handleNodeCertificate)
 	mux.Handle("GET /v1/services", bearer(token, http.HandlerFunc(c.handleServices)))
