@@ -315,10 +315,18 @@
     if (tab.dataset.view === "chat") toBottom(false);
   });
 
+  // On a phone the settings tabs are a row of pills: the current one is
+  // brought to the middle of that row, and nothing else scrolls.
+  function centerTab() {
+    const nav = $(".settings-nav"), tab = $(".settings-nav a[aria-current]");
+    if (!nav || !tab || nav.scrollWidth <= nav.clientWidth) return;
+    const n = nav.getBoundingClientRect(), t = tab.getBoundingClientRect();
+    nav.scrollLeft += t.left + t.width / 2 - (n.left + n.width / 2);
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     toBottom(false);
-    const tab = $(".settings-nav a[aria-current]");
-    if (tab && tab.scrollIntoView) tab.scrollIntoView({ block: "nearest", inline: "center" });
+    centerTab();
     autosize($("#text"));
     badge();
     connect();

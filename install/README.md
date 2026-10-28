@@ -169,7 +169,8 @@ scripts that eriphe.com serves are the ones of the latest release too: the porta
 machine its eriphe-node version on its card. A few times a day it reads which version `latest` is on
 the registry: when a newer release is out, the
 workspace says "New version available" there, with the command that updates that machine (the
-installers tell eriphe-core and the node how they installed them, in `ERIPHE_INSTALL`; a compose
+installers tell eriphe-core and the node how they installed them, in `ERIPHE_INSTALL`; a node
+without it guesses: Windows in WSL, Linux on a Linux host, a compose project in a container; a compose
 project of your own gets `docker compose pull && docker compose up -d`). If an
 image cannot be pulled (offline) and a copy of it is already there, the script says so and goes on
 with that copy.
