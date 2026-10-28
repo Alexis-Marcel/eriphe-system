@@ -78,41 +78,41 @@ func (f *fakeRegistry) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 // The latest versions come from the images' labels, through the index or
-// a single image; a build is behind when it is another commit, never when
+// a single image; a build is behind when it is an older release, never when
 // it is a local one.
 func TestUpdatesLatestVersions(t *testing.T) {
 	for _, single := range []bool{false, true} {
-		f := newFakeRegistry(t, map[string]string{"eriphe-core": "sha-2222222", "eriphe-node": "sha-3333333"})
+		f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
 		f.single = single
 		u := newUpdates(f.srv.URL + "/")
 		u.check(context.Background())
-		if got := u.version("eriphe-core"); got != "sha-2222222" {
+		if got := u.version("eriphe-core"); got != "0.2.0" {
 			t.Fatalf("single %t: eriphe-core latest %q", single, got)
 		}
-		if got := u.version("eriphe-node"); got != "sha-3333333" {
+		if got := u.version("eriphe-node"); got != "0.3.0" {
 			t.Fatalf("single %t: eriphe-node latest %q", single, got)
 		}
 	}
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "sha-2222222", "eriphe-node": "sha-3333333"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
 	u := newUpdates(f.srv.URL)
 	u.check(context.Background())
 	for _, c := range []struct {
 		image, running string
 		behind         bool
 	}{
-		{"eriphe-core", "sha-1111111", true},
-		{"eriphe-core", "sha-2222222", false},
+		{"eriphe-core", "0.1.0", true},
+		{"eriphe-core", "0.2.0", false},
 		{"eriphe-core", "dev", false},
 		{"eriphe-node", "", false}, // an older node, without a version
-		{"eriphe-node", "sha-2222222", true},
-		{"eriphe-worker", "sha-1111111", false}, // not checked: unknown
+		{"eriphe-node", "0.2.0", true},
+		{"eriphe-worker", "0.1.0", false}, // not checked: unknown
 	} {
 		if got := u.behind(c.image, c.running); got != c.behind {
 			t.Errorf("behind(%s, %s) = %t", c.image, c.running, got)
 		}
 	}
 	// Before any check, and without updates at all, nothing is behind.
-	if newUpdates(f.srv.URL).behind("eriphe-core", "sha-1111111") || (*updates)(nil).behind("eriphe-core", "sha-1111111") {
+	if newUpdates(f.srv.URL).behind("eriphe-core", "0.1.0") || (*updates)(nil).behind("eriphe-core", "0.1.0") {
 		t.Error("behind with no latest version known")
 	}
 }
@@ -124,7 +124,7 @@ func TestUpdatesRegistryErrors(t *testing.T) {
 	log.SetOutput(&logs)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "sha-2222222", "eriphe-node": "sha-3333333"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
 	u := newUpdates(f.srv.URL)
 	u.check(context.Background())
 	f.down.Store(true)
@@ -133,7 +133,7 @@ func TestUpdatesRegistryErrors(t *testing.T) {
 	if n := strings.Count(logs.String(), "updates:"); n != 1 {
 		t.Fatalf("%d log lines for a registry down twice:\n%s", n, logs.String())
 	}
-	if u.version("eriphe-core") != "sha-2222222" || !u.behind("eriphe-node", "sha-1111111") {
+	if u.version("eriphe-core") != "0.2.0" || !u.behind("eriphe-node", "0.1.0") {
 		t.Error("the registry down, the last answer is lost")
 	}
 	f.down.Store(false)
@@ -186,9 +186,9 @@ func TestUpdateCommands(t *testing.T) {
 // to update it.
 func TestUpdatesAPI(t *testing.T) {
 	defer func(v string) { version = v }(version)
-	version = "sha-1111111"
+	version = "0.1.0"
 	c, _ := newTestAPI(t)
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "sha-2222222", "eriphe-node": "sha-3333333"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
 	c.updates = newUpdates(f.srv.URL)
 	c.updates.check(context.Background())
 	mux := http.NewServeMux()
@@ -197,9 +197,9 @@ func TestUpdatesAPI(t *testing.T) {
 	api := httptest.NewServer(mux)
 	t.Cleanup(api.Close)
 	c.store.registerNode("pc", "h")
-	c.store.setNodeStatus("pc", true, []byte(`{"version":"sha-1111111","install":"windows"}`))
+	c.store.setNodeStatus("pc", true, []byte(`{"version":"0.1.0","install":"windows"}`))
 	c.store.registerNode("nas", "h2")
-	c.store.setNodeStatus("nas", true, []byte(`{"version":"sha-3333333"}`))
+	c.store.setNodeStatus("nas", true, []byte(`{"version":"0.3.0"}`))
 
 	var nodes []struct {
 		Name     string   `json:"name"`
@@ -214,12 +214,12 @@ func TestUpdatesAPI(t *testing.T) {
 	for _, n := range nodes {
 		switch n.Name {
 		case "pc":
-			if !n.Behind || n.Version != "sha-1111111" || n.Latest != "sha-3333333" ||
+			if !n.Behind || n.Version != "0.1.0" || n.Latest != "0.3.0" ||
 				len(n.Commands) != 1 || !strings.Contains(n.Commands[0], "install.ps1") {
 				t.Errorf("pc: %+v", n)
 			}
 		case "nas":
-			if n.Behind || n.Commands != nil || n.Latest != "sha-3333333" {
+			if n.Behind || n.Commands != nil || n.Latest != "0.3.0" {
 				t.Errorf("nas: %+v", n)
 			}
 		}
@@ -232,8 +232,8 @@ func TestUpdatesAPI(t *testing.T) {
 	if code := call(t, api, "GET", "/v1/version", "", &v); code != 200 {
 		t.Fatalf("GET /v1/version: %d", code)
 	}
-	if !v.Core.Behind || v.Core.Version != "sha-1111111" || v.Core.Latest != "sha-2222222" || len(v.Core.Commands) == 0 ||
-		v.Node["latest"] != "sha-3333333" {
+	if !v.Core.Behind || v.Core.Version != "0.1.0" || v.Core.Latest != "0.2.0" || len(v.Core.Commands) == 0 ||
+		v.Node["latest"] != "0.3.0" {
 		t.Errorf("GET /v1/version: %+v", v)
 	}
 }
@@ -242,13 +242,13 @@ func TestUpdatesAPI(t *testing.T) {
 // machine's system; nothing when everything is up to date.
 func TestWebUpdateNotice(t *testing.T) {
 	defer func(v string) { version = v }(version)
-	version = "sha-1111111"
+	version = "0.1.0"
 	tw := newTestWeb(t)
 	tw.setup()
 	tw.c.store.registerNode("pc", "h")
-	tw.c.store.setNodeStatus("pc", true, []byte(`{"version":"sha-1111111","install":"macos"}`))
+	tw.c.store.setNodeStatus("pc", true, []byte(`{"version":"0.1.0","install":"macos"}`))
 	tw.c.store.registerNode("nas", "h2")
-	tw.c.store.setNodeStatus("nas", true, []byte(`{"version":"sha-3333333"}`))
+	tw.c.store.setNodeStatus("nas", true, []byte(`{"version":"0.3.0"}`))
 
 	// No answer from the registry yet: nothing.
 	for _, path := range []string{"/settings/machines", "/settings/account"} {
@@ -257,14 +257,14 @@ func TestWebUpdateNotice(t *testing.T) {
 		}
 	}
 
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "sha-2222222", "eriphe-node": "sha-3333333"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
 	tw.c.updates = newUpdates(f.srv.URL)
 	tw.c.updates.check(context.Background())
 	_, body, _ := tw.do("GET", "/settings/machines", nil, nil)
 	if n := strings.Count(body, `<details class="update-notice">`); n != 1 {
 		t.Errorf("%d machines told to update, want pc alone", n)
 	}
-	for _, want := range []string{"Nouvelle version disponible", "La version sha-3333333", "curl -fsSL https://eriphe.com/install.sh | sh -s<",
+	for _, want := range []string{"Nouvelle version disponible", "La version 0.3.0", "curl -fsSL https://eriphe.com/install.sh | sh -s<",
 		`class="new-dot"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/machines lacks %q", want)
@@ -274,7 +274,7 @@ func TestWebUpdateNotice(t *testing.T) {
 		t.Error("a macOS machine is given the Windows command")
 	}
 	_, body, _ = tw.do("GET", "/settings/account", nil, nil)
-	for _, want := range []string{"eriphe-core sha-1111111", "La version sha-2222222", "docker compose pull &amp;&amp; docker compose up -d"} {
+	for _, want := range []string{"eriphe-core 0.1.0", "La version 0.2.0", "docker compose pull &amp;&amp; docker compose up -d"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/account lacks %q", want)
 		}
@@ -282,7 +282,7 @@ func TestWebUpdateNotice(t *testing.T) {
 
 	// A local build never claims to be behind.
 	version = "dev"
-	tw.c.store.setNodeStatus("pc", true, []byte(`{"version":"sha-3333333"}`))
+	tw.c.store.setNodeStatus("pc", true, []byte(`{"version":"0.3.0"}`))
 	for _, path := range []string{"/", "/settings/machines", "/settings/account"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, "new-dot") || strings.Contains(body, "update-notice") {
 			t.Errorf("GET %s tells of a new version with everything up to date", path)

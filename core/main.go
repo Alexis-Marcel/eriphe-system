@@ -28,8 +28,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// version is set at build time (the image: sha-<commit>, the last commit
-// that changed it, see the Dockerfile and the README's "Versions").
+// version is set at build time (the image: X.Y.Z for a release,
+// X.Y.Z-dev+<commit> for a build of main, see the Dockerfile and the
+// README's "Versions").
 var version = "dev"
 
 func main() {

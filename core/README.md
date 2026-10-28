@@ -324,19 +324,28 @@ speaks the node's API through it. A node is online while its tunnel is up and an
 | `POST /v1/join-tokens?name=pc&ttl=24h` | new join token for `pc`, with `ca_hash`; `&rejoin=1` for a registered node (bearer token) |
 | `GET /v1/nodes` | registered nodes, with `cert_expires` once a node has its certificate, and `version`, `latest`, `update_available`, `update_commands` (bearer token) |
 | `GET /v1/version` | `{core: {version, latest, update_available, update_commands}, node: {latest}}`: the latest versions on the registry, empty while unknown (bearer token) |
-
-**Versions.** eriphe-core's and eriphe-node's version is `sha-<short commit>` of the last commit that
-changed what goes into the image: `core/` and `install/` for eriphe-core (its image ships the
-installers), `node/` for eriphe-node (CI, `.github/workflows/image.yml`). A rebuild with nothing new
-for an image keeps its version, so a commit elsewhere does not make a machine "behind". The binary
-has it (`-ldflags -X main.version`), and the image as the label `org.opencontainers.image.version`,
-which eriphe-core reads on the registry for `latest` (`updates.go`). A local build is `dev`. The
-images' `sha-<commit>` tags stay the commit built.
 | `DELETE /v1/nodes/{name}` | forget a node; its tasks become `lost`, its certificate is revoked (bearer token) |
 | `GET /v1/nodes/tls`, `PUT /v1/nodes/tls` | the CA's hash, whether nodes must use TLS, which have no certificate yet; `{"tls_only": true}` closes the plain path (bearer token) |
 | `POST /v1/nodes/join` | `{name, token}` → `{secret}` (join token for that name) |
 | `POST /v1/node/certificate` | `{csr}` (PEM) → `{ca, certificate, expires}` (node secret, and its certificate once it has one) |
 | `GET /v1/nodes/connect` | the tunnel (node secret, `Eriphe-Node: name`, and its certificate) |
+
+**Versions.** Releases are Git tags `vX.Y.Z` ([RELEASING.md](../RELEASING.md)). All the images of
+one CI build share its version (`.github/workflows/ci.yml`, job `version`):
+
+| Built from | Version | Image tags |
+|---|---|---|
+| a tag `v0.2.0` | `0.2.0` | `0.2.0`, `0.2`, `latest` |
+| a tag `v0.3.0-rc.1` (a prerelease) | `0.3.0-rc.1` | `0.3.0-rc.1` |
+| a push to `main` | `0.2.0-dev+<short commit>` (the last release, `0.0.0` before the first) | `edge`, `sha-<short commit>` |
+| your machine (`go build`, `docker build`) | `dev` | |
+
+The binary has it (`-ldflags -X main.version`), and the image as the label
+`org.opencontainers.image.version`, which eriphe-core reads on the registry for `latest`, the
+latest release (`updates.go`). A machine is behind when it runs a release older than that one
+(semver order, `version.go`), or a build from before the releases (`sha-<commit>`); a build of
+`main` or a local one never says so, as someone is testing it. The workspace shows `0.2.0`, and a
+build of `main` as `0.2.0-dev` with its commit in small.
 
 ### Updates of the machines
 

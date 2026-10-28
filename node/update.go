@@ -46,7 +46,9 @@ type updateRequest struct {
 
 var (
 	updateIDRe      = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
-	updateVersionRe = regexp.MustCompile(`^(sha-[0-9a-f]{7,40}|dev)?$`)
+	// A release (0.2.0), a build of main (0.2.0-dev+abc1234), a build from
+	// before the releases (sha-<commit>), a local one (dev), or none.
+	updateVersionRe = regexp.MustCompile(`^(sha-[0-9a-f]{7,40}|dev|(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})(-[0-9A-Za-z.-]{1,40})?(\+[0-9A-Za-z.-]{1,40})?)?$`)
 )
 
 func (u updateRequest) valid() bool {
@@ -143,6 +145,9 @@ func (u *updates) info() map[string]any {
 	out := map[string]any{"updater": up != nil}
 	if up != nil && up["pin"] != "" {
 		out["pin"] = up["pin"]
+	}
+	if up != nil && up["channel"] == "edge" {
+		out["channel"] = "edge"
 	}
 	if u.pending != nil {
 		out["waiting"] = u.pending.ID

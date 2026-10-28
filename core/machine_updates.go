@@ -59,7 +59,8 @@ var (
 // (node/update.go) or eriphe-core's data folder.
 type updaterInfo struct {
 	Updater   bool          `json:"updater"`
-	Pin       string        `json:"pin,omitempty"`       // the version it is pinned to
+	Pin       string        `json:"pin,omitempty"`       // the release it is pinned to
+	Channel   string        `json:"channel,omitempty"`   // edge: it follows main, not the releases
 	Waiting   string        `json:"waiting,omitempty"`   // a request waits for the tasks to end
 	Requested string        `json:"requested,omitempty"` // a request is with the updater
 	Status    *updateStatus `json:"status,omitempty"`    // how the last one went
@@ -155,7 +156,7 @@ func keyValues(path string) map[string]string {
 func (c *core) coreUpdater() updaterInfo {
 	dir := c.store.dir
 	up := keyValues(filepath.Join(dir, "updater"))
-	info := updaterInfo{Updater: up != nil, Pin: up["pin"]}
+	info := updaterInfo{Updater: up != nil, Pin: up["pin"], Channel: up["channel"]}
 	if _, err := os.Stat(filepath.Join(dir, "update-requested")); err == nil {
 		var r machineUpdate
 		if json.Unmarshal([]byte(c.store.get("update_request:"+coreMachine)), &r) == nil {
@@ -208,10 +209,10 @@ func newUpdateID() string {
 }
 
 // sameVersion tells whether a node runs eriphe-core's own build. Only
-// published builds (sha-<commit>) compare: a local one (dev) never asks
-// for an update.
+// published builds compare (a release, a build of main, or one from before
+// the releases): a local one (dev) never asks for an update.
 func sameVersion(node, core string) bool {
-	return !strings.HasPrefix(node, "sha-") || !strings.HasPrefix(core, "sha-") || node == core
+	return node == core || !publishedVersion(node) || !publishedVersion(core)
 }
 
 // requestUpdate asks a machine's updater to update (to the latest version,
@@ -265,7 +266,18 @@ func (c *core) nodeUpdateRequest(name string) *nodeUpdate {
 	if r == nil {
 		return nil
 	}
-	return &nodeUpdate{ID: r.ID, Action: r.Action, Core: version, Auto: r.Auto}
+	u := &nodeUpdate{ID: r.ID, Action: r.Action, Core: version, Auto: r.Auto}
+	// A node from before the releases (sha-<commit>) drops a request with a
+	// version it cannot read: without one, its updater takes latest.
+	if !legacyVersion(version) {
+		nodes, _ := c.store.nodes()
+		for _, n := range nodes {
+			if n.Name == name && legacyVersion(parseInfo(n).Version) {
+				u.Core = ""
+			}
+		}
+	}
+	return u
 }
 
 // resolveUpdates drops the requests that are done (the updater wrote their
