@@ -1541,7 +1541,8 @@ swap() {
   fi
   # Only what the new eriphe-node logs: the old one reconnects to a
   # restarted eriphe-core meanwhile.
-  since=$(cat "$E/node.log" 2>/dev/null | wc -c | tr -d " ")
+  since=$({ wc -c <"$E/node.log"; } 2>/dev/null | tr -d " ")
+  since=${since:-0}
   restart node
   healthy node "$since"
 }
@@ -1723,7 +1724,8 @@ native_up() {
 			printf '%s\n' "$JOIN_TOKEN" >"$E/join-token"
 		)
 	fi
-	since=$(cat "$E/node.log" 2>/dev/null | wc -c | tr -d " ")
+	since=$({ wc -c <"$E/node.log"; } 2>/dev/null | tr -d " ")
+	since=${since:-0}
 	load "$NODE_LABEL" "$(plist "$NODE_LABEL" keep "$E/node.log" /bin/sh "$E/start-node.sh")"
 	say "Waiting for eriphe-node..." >&2
 	i=0
