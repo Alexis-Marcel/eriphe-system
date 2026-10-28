@@ -34,8 +34,9 @@
 # Machines, Updates): an updater in the distribution, started with the node,
 # pulls the new image, swaps the binary (and eriphe-core's container), and
 # puts the previous one back if the node does not connect again. -Version
-# sha-<commit> pins a version (-Version latest follows the latest again);
-# -Rollback goes back to the version before the last update.
+# 0.2.0 pins a release, -Version edge follows main (testers), -Version
+# latest follows the releases again; -Rollback goes back to the version
+# before the last update.
 #
 # Tasks run on their own Docker network, eriphe-tasks, which the node
 # creates: they reach the node on its gateway, not one another nor the
@@ -50,7 +51,7 @@ param(
   [string] $Binary,          # a Linux eriphe-node binary, instead of the one in its image
   [string] $Distro = "eriphe",
   [switch] $Rejoin,          # join again under -Name, with a rejoin token (the old secret stops working)
-  [string] $Version,         # pin a version, sha-<commit>; latest follows the latest one again
+  [string] $Version,         # pin a release (0.2.0, or 0.2 for its fixes); edge follows main; latest the releases
   [switch] $Rollback,        # back to the version before the last update
   [switch] $Uninstall
 )
@@ -217,7 +218,10 @@ if ($Uninstall) {
 if ($Rejoin -and -not $JoinToken) { throw "-Rejoin needs -JoinToken (a rejoin token: eriphe-core join-token -name <name> -rejoin)" }
 if ($CoreMode -and $Core) { throw "-CoreMode runs eriphe-core here: leave -Core out" }
 if ($Binary -and -not (Test-Path $Binary)) { throw "no eriphe-node binary at $Binary" }
-if ($Version -and $Version -ne "latest" -and $Version -notmatch "^sha-[0-9a-f]{7,40}$") { throw "-Version: latest or sha-<commit>, e.g. sha-1234567" }
+if ($Version -match "^v[0-9]") { $Version = $Version.Substring(1) }
+if ($Version -and $Version -ne "latest" -and $Version -cnotmatch "^(edge|sha-[0-9a-f]{7,40}|(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?)?)$") {
+  throw "-Version: latest, edge, or a release such as 0.2.0 (0.2 for its fixes)"
+}
 
 # Back to the version before the last update, with the updater the install left.
 if ($Rollback) {
@@ -405,6 +409,25 @@ label() {
   esac
 }
 node_version() { cat "$BIN.version" 2>/dev/null || echo unknown; }
+# tag_of VERSION: the images' tag of a build: X.Y.Z for a release,
+# sha-<commit> for a build of main (X.Y.Z-dev+<commit>); none for a local one.
+tag_of() {
+  case $1 in
+    *-dev+*) t=sha-${1##*+} ;;
+    *+*) t= ;;
+    *) t=$1 ;;
+  esac
+  printf '%s' "$t" | grep -Eq '^(sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$' && printf '%s' "$t"
+}
+release() { printf '%s' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; }
+# newer A B: release A is newer than release B.
+newer() {
+  printf '%s %s\n' "$1" "$2" | awk '{ split($1, a, "."); split($2, b, ".")
+    for (i = 1; i <= 3; i++) { if (a[i] + 0 > b[i] + 0) exit 0; if (a[i] + 0 < b[i] + 0) exit 1 }
+    exit 1 }'
+}
+# pinned: on a release of its own choice (edge follows main instead).
+pinned() { [ -n "$PIN" ] && [ "$PIN" != edge ]; }
 
 # node_healthy SIZE: eriphe-node, restarted by eriphe-node-run, says it is
 # connected after byte SIZE of its log.
@@ -438,12 +461,12 @@ core_swap() {
   core_healthy
 }
 
-# pull_node [BUILD]: the binary of the latest (or pinned) eriphe-node, or
-# of eriphe-core's BUILD (sha-<commit>) on eriphe-core's machine, as
-# $BIN.new, and its version in $to.
+# pull_node [TAG]: the binary of eriphe-node at TAG, eriphe-core's build
+# (or, without, the latest, edge or pinned one), as $BIN.new, and its
+# version in $to.
 pull_node() {
   src=$NODE_IMAGE
-  case ${1:-}:$NODE_IMAGE in sha-*:*/eriphe-node:*) src=${NODE_IMAGE%:*}:$1 ;; esac
+  case ${1:-}:$NODE_IMAGE in ?*:*/eriphe-node:*) src=${NODE_IMAGE%:*}:$1 ;; esac
   docker pull -q "$src" >/tmp/eriphe-pull.log 2>&1 || { why="could not pull $src: $(tail -n 1 /tmp/eriphe-pull.log)"; return 1; }
   to=$(label "$src")
   c=$(docker create "$src") || { why="docker create failed"; return 1; }
@@ -453,24 +476,25 @@ pull_node() {
   chmod 755 "$BIN.new"
 }
 
-# update_node ID AUTO CORE [BUILD].
+# update_node ID AUTO CORE [TAG]: without TAG, eriphe-core's build (the tag
+# of CORE), unless pinned to a release.
 update_node() {
   id=$1 auto=$2 core=$3 from=$(node_version)
+  build=${4:-}
+  if [ -z "$build" ] && ! pinned; then build=$(tag_of "$core"); fi
   status node "$id" update running "" "$from" ""
-  pull_node "${4:-}" || { status node "$id" update failed "$why" "$from" ""; return; }
+  pull_node "$build" || { status node "$id" update failed "$why" "$from" ""; return; }
   if cmp -s "$BIN.new" "$BIN"; then
     rm -f "$BIN.new"
-    if [ -n "$PIN" ]; then status node "$id" update pinned "pinned to $PIN" "$from" "$to"; else status node "$id" update current "" "$from" "$to"; fi
+    if pinned; then status node "$id" update pinned "pinned to $PIN" "$from" "$to"; else status node "$id" update current "" "$from" "$to"; fi
     return
   fi
-  case $core:$to in
-    sha-*:sha-*)
-      if [ "$to" != "$core" ]; then
-        rm -f "$BIN.new"
-        status node "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
-        return
-      fi ;;
-  esac
+  # A node is never newer than eriphe-core (a release pinned here may be).
+  if release "$core" && release "$to" && newer "$to" "$core"; then
+    rm -f "$BIN.new"
+    status node "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
+    return
+  fi
   sum=$(sha256sum "$BIN.new" | cut -d ' ' -f 1)
   if [ "$auto" = 1 ] && grep -qx "$sum" "$STATE/failed" 2>/dev/null; then
     rm -f "$BIN.new"
@@ -526,14 +550,13 @@ update_core() {
   fi
   want=$(docker image inspect -f '{{.Id}}' "$CORE_IMAGE")
   to=$(label "$want")
-  # This machine's node: from the same build as eriphe-core, not its own
-  # latest, which may be half published.
-  match=
-  case $PIN:$to in :sha-*) match=$to ;; esac
+  # This machine's node: from the same build as eriphe-core (the tag of its
+  # version), not its own latest, which may be half published.
+  match=$(tag_of "$to")
   if [ "$want" = "$have" ]; then
     # eriphe-core is current: its node may not be.
     (update_node "$id-node" "$auto" "$to" "$match") # its own variables
-    if [ -n "$PIN" ]; then status core "$id" update pinned "pinned to $PIN" "$from" "$to"; else status core "$id" update current "" "$from" "$to"; fi
+    if pinned; then status core "$id" update pinned "pinned to $PIN" "$from" "$to"; else status core "$id" update current "" "$from" "$to"; fi
     return
   fi
   if [ "$auto" = 1 ] && grep -qx "$want" "$STATE/failed" 2>/dev/null; then
@@ -589,7 +612,7 @@ for target in core node; do
   id=$(field "$f" id) action=$(field "$f" action) core=$(field "$f" core) auto=$(field "$f" auto)
   rm -f "$f"
   printf '%s' "$id" | grep -Eq '^[a-z0-9-]{1,40}$' || { log "$target: a request without a valid id"; continue; }
-  printf '%s' "$core" | grep -Eq '^(sha-[0-9a-f]{7,40}|dev)?$' || core=
+  printf '%s' "$core" | grep -Eq '^(sha-[0-9a-f]{7,40}|dev|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)?$' || core=
   [ "$auto" = 1 ] || auto=0
   case $target:$action in
     core:update) update_core "$id" "$auto" ;;
@@ -694,8 +717,10 @@ $token = if ($Rejoin -or -not $joined) { $JoinToken } else { "" }
 # The updater works on these images; the files "updater" tell eriphe-core
 # and the node that it is there (not with -Binary: it would replace that one).
 $updater = if ($Binary) { "rm -f /var/lib/eriphe-node/updater /var/lib/eriphe-core/updater" } else {
-  $marks = "printf 'version=1\npin=%s\n' '$pin' > /var/lib/eriphe-node/updater"
-  if ($CoreMode) { $marks += "; printf 'version=1\npin=%s\n' '$pin' > /var/lib/eriphe-core/updater; chown 1993:1993 /var/lib/eriphe-core/updater" }
+  # pin: the release it stays on; channel: edge when it follows main.
+  $mark = if ($pin -eq "edge") { "printf 'version=1\npin=\nchannel=edge\n'" } else { "printf 'version=1\npin=%s\nchannel=\n' '$pin'" }
+  $marks = "$mark > /var/lib/eriphe-node/updater"
+  if ($CoreMode) { $marks += "; $mark > /var/lib/eriphe-core/updater; chown 1993:1993 /var/lib/eriphe-core/updater" }
   $marks
 }
 $version = if ($Binary) { "echo custom > /usr/local/bin/eriphe-node.version" } else { "mv /usr/local/bin/eriphe-node.version.new /usr/local/bin/eriphe-node.version" }

@@ -48,7 +48,7 @@
     </div>
     {{if .Runtimes}}<p class="chips" aria-label="{{t "machines.runtimes"}}">{{range .Runtimes}}<span class="tag">{{.}}</span>{{end}}</p>{{end}}
     {{if .Labels}}<p class="chips" aria-label="{{t "machines.labels"}}">{{range .Labels}}<span class="tag tag-accent">{{.}}</span>{{end}}</p>{{end}}
-    {{if .Version}}<p class="muted small">eriphe-node {{.Version}}</p>{{end}}
+    {{if .Version}}<p class="muted small">eriphe-node {{ver .Version}}</p>{{end}}
     {{if .Latest}}{{template "update-notice" dict "ID" .Name "Latest" .Latest "Commands" .Commands}}{{end}}
     {{if $.Data.CAHash}}<p class="muted small">{{if .CertExpires.IsZero}}{{t "machines.notls"}}{{else}}{{tf "machines.tls" (date .CertExpires)}}{{end}}</p>{{end}}
   </li>
@@ -118,7 +118,7 @@
     <li>
       <div class="list-main">
         <b>{{.Name}}</b>
-        <span class="muted small mono">{{if .Version}}{{.Version}}{{else}}{{t "updates.noversion"}}{{end}}{{if .Pin}} · {{tf "updates.pinned" .Pin}}{{end}}</span>
+        <span class="muted small mono">{{if .Version}}{{ver .Version}}{{else}}{{t "updates.noversion"}}{{end}}{{if .Pin}} · {{tf "updates.pinned" .Pin}}{{end}}</span>
         <span class="small">{{template "update-state" .}}</span>
       </div>
       <div class="update-actions">
@@ -151,7 +151,7 @@
 {{define "update-state"}}
 {{- if not .Updater}}<span class="muted">{{t "updates.noupdater"}}</span>
 {{- else if .Pending}}{{if and .Status (eq .Status.ID .Pending.ID) (eq .Status.Outcome "running")}}{{t "updates.running"}}{{else if .Waiting}}{{t "updates.waiting"}}{{else}}{{t "updates.requested"}}{{end}}
-{{- else if .Status}}<span class="{{if or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned")}}muted{{else}}err-text{{end}}">{{if and (eq .Status.Action "rollback") (eq .Status.Outcome "ok")}}{{t "update.outcome.rollback_ok"}}{{else}}{{t (printf "update.outcome.%s" .Status.Outcome)}}{{end}}{{if .Status.To}} · {{.Status.To}}{{end}}{{if not .Status.At.IsZero}} · {{ago .Status.At}}{{end}}{{if and .Status.Message (ne .Status.Outcome "ok") (ne .Status.Outcome "current")}} — {{.Status.Message}}{{end}}</span>
+{{- else if .Status}}<span class="{{if or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned")}}muted{{else}}err-text{{end}}">{{if and (eq .Status.Action "rollback") (eq .Status.Outcome "ok")}}{{t "update.outcome.rollback_ok"}}{{else}}{{t (printf "update.outcome.%s" .Status.Outcome)}}{{end}}{{if .Status.To}} · {{ver .Status.To}}{{end}}{{if not .Status.At.IsZero}} · {{ago .Status.At}}{{end}}{{if and .Status.Message (ne .Status.Outcome "ok") (ne .Status.Outcome "current")}} — {{.Status.Message}}{{end}}</span>
 {{- end}}
 {{- if and .Latest (not .Pending)}}{{if or .Status (not .Updater)}} · {{end}}<span class="accent-text">{{tf "updates.available" .Latest}}</span>{{end}}
 {{end}}
@@ -251,7 +251,7 @@
     <div id="password-result"></div>
   </form>
 </section>
-<p class="muted small center">{{tf "account.version" .Build}}</p>
+<p class="muted small center">eriphe-core {{ver .Build}}</p>
 {{if .Updates.Core}}<div class="update-core">{{template "update-notice" dict "ID" "core" "Latest" .Updates.Core "Commands" .Updates.Commands}}</div>{{end}}
 {{end}}
 

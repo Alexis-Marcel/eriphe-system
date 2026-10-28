@@ -13,13 +13,13 @@ import (
 	"time"
 )
 
-// newUpdateCore is an eriphe-core at sha-1111111 whose registry says the
+// newUpdateCore is an eriphe-core at 0.1.0 whose registry says the
 // latest eriphe-core is latestCore, with eriphe-core's own updater.
 func newUpdateCore(t *testing.T, latestCore string) *core {
 	t.Helper()
 	old := version
 	t.Cleanup(func() { version = old })
-	version = "sha-1111111"
+	version = "0.1.0"
 	c, _ := newTestAPI(t)
 	f := newFakeRegistry(t, map[string]string{"eriphe-core": latestCore, "eriphe-node": latestCore})
 	c.updates = newUpdates(f.srv.URL)
@@ -57,7 +57,7 @@ func assignmentUpdate(t *testing.T, c *core, name string) *nodeUpdate {
 
 // One choice for all machines, which each one can replace, and go back to.
 func TestUpdatePolicy(t *testing.T) {
-	c := newUpdateCore(t, "sha-1111111")
+	c := newUpdateCore(t, "0.1.0")
 	if own, eff := c.updatePolicy("node:pc"); own != "" || eff != updateNotify {
 		t.Fatalf("default: %q %q", own, eff)
 	}
@@ -89,9 +89,9 @@ func TestUpdatePolicy(t *testing.T) {
 // version as the most the node may get; no new task goes to the node
 // meanwhile; the updater's outcome ends it.
 func TestUpdateRequestFlow(t *testing.T) {
-	c := newUpdateCore(t, "sha-1111111")
-	setNode(t, c, "pc", `{"version":"sha-0000000","update":{"updater":true}}`)
-	setNode(t, c, "old", `{"version":"sha-0000000"}`)
+	c := newUpdateCore(t, "0.1.0")
+	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
+	setNode(t, c, "old", `{"version":"0.0.1"}`)
 	if _, err := c.requestUpdate("node:old", "update", false); !errors.Is(err, errNoUpdater) {
 		t.Fatalf("a node without updater: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestUpdateRequestFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	u := assignmentUpdate(t, c, "pc")
-	if u == nil || u.ID != r.ID || u.Action != "update" || u.Core != "sha-1111111" || u.Auto {
+	if u == nil || u.ID != r.ID || u.Action != "update" || u.Core != "0.1.0" || u.Auto {
 		t.Fatalf("assignment update = %+v", u)
 	}
 	if u := assignmentUpdate(t, c, "old"); u != nil {
@@ -117,13 +117,13 @@ func TestUpdateRequestFlow(t *testing.T) {
 	}
 
 	// The updater is at it, then done.
-	setNode(t, c, "pc", `{"version":"sha-0000000","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running"}}}`)
+	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running"}}}`)
 	nodes, _ = c.store.nodes()
 	c.resolveUpdates(nodes)
 	if c.pendingUpdate("node:pc") == nil {
 		t.Fatal("dropped while the updater is at it")
 	}
-	setNode(t, c, "pc", `{"version":"sha-1111111","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"ok","to":"sha-1111111"}}}`)
+	setNode(t, c, "pc", `{"version":"0.1.0","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"ok","to":"0.1.0"}}}`)
 	nodes, _ = c.store.nodes()
 	c.resolveUpdates(nodes)
 	if c.pendingUpdate("node:pc") != nil || assignmentUpdate(t, c, "pc") != nil {
@@ -151,8 +151,8 @@ func TestUpdateRequestFlow(t *testing.T) {
 // not updated (it would become newer than eriphe-core). eriphe-core's own
 // request goes to its data folder, for its updater.
 func TestUpdateCoreFirst(t *testing.T) {
-	c := newUpdateCore(t, "sha-2222222")
-	setNode(t, c, "pc", `{"version":"sha-0000000","update":{"updater":true}}`)
+	c := newUpdateCore(t, "0.2.0")
+	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
 	if _, err := c.requestUpdate("node:pc", "update", false); !errors.Is(err, errCoreFirst) {
 		t.Fatalf("node before eriphe-core: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestUpdateCoreFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(raw) != "id="+r.ID+"\naction=update\ncore=sha-1111111\nauto=0\n" {
+	if string(raw) != "id="+r.ID+"\naction=update\ncore=0.1.0\nauto=0\n" {
 		t.Fatalf("eriphe-core's request:\n%s", raw)
 	}
 	if up := c.coreUpdater(); up.Requested != r.ID {
@@ -177,12 +177,12 @@ func TestUpdateCoreFirst(t *testing.T) {
 	// Its updater wrote the outcome (eriphe-core restarted in between).
 	os.Remove(filepath.Join(c.store.dir, "update-requested"))
 	os.WriteFile(filepath.Join(c.store.dir, "update-status"),
-		[]byte("id="+r.ID+"\naction=update\noutcome=rolled_back\nmessage=eriphe-core does not answer\nfrom=sha-1111111\nto=sha-2222222\nat=1761620000\n"), 0o600)
+		[]byte("id="+r.ID+"\naction=update\noutcome=rolled_back\nmessage=eriphe-core does not answer\nfrom=0.1.0\nto=0.2.0\nat=1761620000\n"), 0o600)
 	c.resolveUpdates(nil)
 	if c.pendingUpdate(coreMachine) != nil {
 		t.Fatal("eriphe-core's request outlives its outcome")
 	}
-	if st := c.coreUpdater().Status; st == nil || st.Outcome != "rolled_back" || st.To != "sha-2222222" || st.At.IsZero() {
+	if st := c.coreUpdater().Status; st == nil || st.Outcome != "rolled_back" || st.To != "0.2.0" || st.At.IsZero() {
 		t.Fatalf("status = %+v", st)
 	}
 
@@ -195,9 +195,9 @@ func TestUpdateCoreFirst(t *testing.T) {
 // At night, for the machines set to it: eriphe-core first, the nodes after
 // it, each once a night, never one with a task at work nor a pinned one.
 func TestAutoUpdatesAtNight(t *testing.T) {
-	c := newUpdateCore(t, "sha-2222222")
+	c := newUpdateCore(t, "0.2.0")
 	c.setUpdatePolicy("", updateNight)
-	setNode(t, c, "pc", `{"version":"sha-0000000","update":{"updater":true}}`)
+	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
 	// The user's time zone: this configuration has none, so the machine's.
 	day := time.Date(2026, 10, 28, 14, 0, 0, 0, time.Local)
 	night := time.Date(2026, 10, 29, 3, 30, 0, 0, time.Local)
@@ -222,11 +222,11 @@ func TestAutoUpdatesAtNight(t *testing.T) {
 	}
 
 	// eriphe-core runs the latest version: the nodes now.
-	version = "sha-2222222"
-	setNode(t, c, "busy", `{"version":"sha-0000000","update":{"updater":true}}`)
-	setNode(t, c, "pinned", `{"version":"sha-0000000","update":{"updater":true,"pin":"sha-0000000"}}`)
-	setNode(t, c, "same", `{"version":"sha-2222222","update":{"updater":true}}`)
-	setNode(t, c, "mine", `{"version":"sha-0000000","update":{"updater":true}}`)
+	version = "0.2.0"
+	setNode(t, c, "busy", `{"version":"0.0.1","update":{"updater":true}}`)
+	setNode(t, c, "pinned", `{"version":"0.0.1","update":{"updater":true,"pin":"0.0.1"}}`)
+	setNode(t, c, "same", `{"version":"0.2.0","update":{"updater":true}}`)
+	setNode(t, c, "mine", `{"version":"0.0.1","update":{"updater":true}}`)
 	c.setUpdatePolicy("node:mine", updateNotify)
 	c.store.insertTask(&TaskRow{ID: "t1", Node: "busy", Runtime: "claude-code", State: stateRunning, Created: time.Now(), Updated: time.Now()})
 	c.autoUpdates(night.Add(20 * time.Minute))
@@ -256,16 +256,16 @@ func TestAutoUpdatesAtNight(t *testing.T) {
 // Settings → Machines: the choice, the button, and where each machine stands.
 func TestWebUpdates(t *testing.T) {
 	defer func(v string) { version = v }(version)
-	version = "sha-1111111"
+	version = "0.1.0"
 	tw := newTestWeb(t)
 	csrf := tw.setup()
 	h := map[string]string{"X-CSRF-Token": csrf, "HX-Request": "true"}
-	setNode(t, tw.c, "pc", `{"version":"sha-0000000","update":{"updater":true,"status":{"id":"u-1","outcome":"rolled_back","message":"eriphe-node did not connect","to":"sha-0000001","at":"2026-10-28T03:10:00Z"}}}`)
-	setNode(t, tw.c, "nas", `{"version":"sha-1111111"}`)
+	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"u-1","outcome":"rolled_back","message":"eriphe-node did not connect","to":"0.0.2","at":"2026-10-28T03:10:00Z"}}}`)
+	setNode(t, tw.c, "nas", `{"version":"0.1.0"}`)
 
 	_, body, _ := tw.do("GET", "/settings/machines", nil, nil)
 	for _, want := range []string{"Mises à jour", "Me prévenir", "Automatiquement la nuit", "Jamais",
-		"Échec, version précédente remise", "eriphe-node did not connect", "Version sha-1111111 disponible",
+		"Échec, version précédente remise", "eriphe-node did not connect", "Version 0.1.0 disponible",
 		"ne sait pas encore se mettre à jour"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/machines lacks %q", want)
@@ -297,8 +297,8 @@ func TestWebUpdates(t *testing.T) {
 
 	// Gone back, by the button: said as such.
 	tw.c.store.db.Exec(`DELETE FROM kv WHERE key LIKE 'update_request:%'`)
-	setNode(t, tw.c, "pc", `{"version":"sha-0000000","update":{"updater":true,"status":{"id":"u-2","action":"rollback","outcome":"ok","to":"sha-0000000"}}}`)
-	if _, body, _ = tw.do("GET", "/settings/machines", nil, nil); !strings.Contains(body, "Version précédente remise · sha-0000000") {
+	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"u-2","action":"rollback","outcome":"ok","to":"0.0.1"}}}`)
+	if _, body, _ = tw.do("GET", "/settings/machines", nil, nil); !strings.Contains(body, "Version précédente remise · 0.0.1") {
 		t.Error("a rollback does not show")
 	}
 }

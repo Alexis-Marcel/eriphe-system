@@ -25,8 +25,8 @@ import (
 	"strings"
 )
 
-// version is set at build time (the image: sha-<commit>, the last commit
-// that changed node/, see the Dockerfile),
+// version is set at build time (the image: X.Y.Z for a release,
+// X.Y.Z-dev+<commit> for a build of main, see core/README.md, Versions),
 // and reported to eriphe-core with what this machine offers.
 var version = "dev"
 

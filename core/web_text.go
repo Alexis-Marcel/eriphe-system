@@ -238,7 +238,6 @@ var webStrings = map[string]map[string]string{
 		"account.confirm":          "Confirme le nouveau mot de passe",
 		"account.save":             "Changer",
 		"account.changed":          "Mot de passe changé. Tes autres sessions sont fermées.",
-		"account.version":          "eriphe-core %s",
 		"update.available":         "Nouvelle version disponible",
 		"update.lead":              "La version %s est publiée. Lance cette commande sur la machine : les données et les réglages restent.",
 		"update.unix":              "Linux ou macOS, le script d'installation à nouveau",
@@ -474,7 +473,6 @@ var webStrings = map[string]map[string]string{
 		"account.confirm":          "Confirm the new password",
 		"account.save":             "Change",
 		"account.changed":          "Password changed. Your other sessions are closed.",
-		"account.version":          "eriphe-core %s",
 		"update.available":         "New version available",
 		"update.lead":              "Version %s is out. Run this command on the machine: its data and settings stay.",
 		"update.unix":              "Linux or macOS, the install script again",
@@ -515,6 +513,7 @@ func templateFuncs(lang string) template.FuncMap {
 			}
 			return t.Local().Format("02/01 15:04")
 		},
+		"ver":      displayVersion,
 		"date":     func(t time.Time) string { return t.Local().Format("02/01/2006 15:04") },
 		"iso":      func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
 		"md":       markdown,

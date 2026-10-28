@@ -17,17 +17,18 @@ import (
 )
 
 // "A new version is available": a few times a day, eriphe-core asks the
-// registry, anonymously, which version the images' `latest` tag is, and
-// compares it with its own and each node's. The images carry their version
-// as a label (org.opencontainers.image.version, from the Dockerfiles), the
-// same sha-<commit> as the binaries' (the last commit that changed the
-// image, see the README's "Versions"): the manifest of `latest` leads to the
-// image's configuration, which holds it. A digest would say that `latest`
-// changed, not which version it is, and eriphe-core does not know the
-// digest of the image it runs from. Versions are commits, not ordered: a
-// build is behind when it is a sha-<commit> other than latest's. A local
-// build (dev) never is. The registry unreachable, nothing is said: the last
-// answer stays, and the error is logged once.
+// registry, anonymously, which version the images' `latest` tag is (the
+// latest release), and compares it with its own and each node's. The images
+// carry their version as a label (org.opencontainers.image.version, from
+// the Dockerfiles), the same as the binaries' (see the README's
+// "Versions"): the manifest of `latest` leads to the image's configuration,
+// which holds it. A digest would say that `latest` changed, not which
+// version it is, and eriphe-core does not know the digest of the image it
+// runs from. A build is behind when it is a release older than latest's
+// (semver), or a build from before the releases (sha-<commit>); a build of
+// main (X.Y.Z-dev+<commit>) or a local one (dev) never is (version.go). The
+// registry unreachable, nothing is said: the last answer stays, and the
+// error is logged once.
 
 const (
 	registryURL    = "https://ghcr.io"
@@ -102,10 +103,10 @@ func (u *updates) version(image string) string {
 	return u.latest[image]
 }
 
-// behind tells whether a build of an image is older than its latest one.
+// behind tells whether a build of an image is older than its latest
+// release.
 func (u *updates) behind(image, running string) bool {
-	latest := u.version(image)
-	return strings.HasPrefix(running, "sha-") && strings.HasPrefix(latest, "sha-") && running != latest
+	return versionBehind(running, u.version(image))
 }
 
 const (

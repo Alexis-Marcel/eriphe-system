@@ -10,8 +10,10 @@
 #   # Update (the same command, or no option at all), or remove everything:
 #   curl -fsSL https://eriphe.com/install.sh | sh -s
 #   curl -fsSL https://eriphe.com/install.sh | sh -s -- --uninstall
-#   # Pin a version, or go back to the one before the last update:
-#   curl -fsSL https://eriphe.com/install.sh | sh -s -- --version sha-1234567
+#   # Pin a release, follow main (testers), or go back to the version before
+#   # the last update:
+#   curl -fsSL https://eriphe.com/install.sh | sh -s -- --version 0.2.0
+#   curl -fsSL https://eriphe.com/install.sh | sh -s -- --version edge
 #   curl -fsSL https://eriphe.com/install.sh | sh -s -- --rollback
 #
 # Linux: Docker Engine if it is missing, then a compose project in /opt/eriphe
@@ -40,8 +42,9 @@ LIMA_SHA256_x86_64=6b776e4bc41f358e6ee01fefcc78e2eb26f11635a0fcff632234af77a566c
 REGISTRY=ghcr.io/alexis-marcel
 PROXY_IMAGE=wollomatic/socket-proxy:1.13.2
 
-# images: the image references, at the pinned version (--version) or latest.
-# Fixed here, in the installation: eriphe-core never chooses them.
+# images: the image references, at the pinned version (--version: a release,
+# or edge for main) or latest, the latest release. Fixed here, in the
+# installation: eriphe-core never chooses them.
 images() {
 	tag=${PIN:-latest}
 	CORE_IMAGE=${ERIPHE_CORE_IMAGE:-$REGISTRY/eriphe-core:$tag}
@@ -82,7 +85,8 @@ Usage: curl -fsSL https://eriphe.com/install.sh | sh -s -- [options]
                       its cloud folders by itself; not in Lima's VM
   --no-share          share no place any more
   --core-mode         run eriphe-core here, with a node of its own
-  --version V         pin a version (sha-1234567), or latest to follow it again
+  --version V         pin a release (0.2.0, or 0.2 for its fixes), edge to
+                      follow main (testers), or latest: the releases again
   --rollback          go back to the version before the last update
   --uninstall         remove everything this script installed
   -h, --help          this help
@@ -201,12 +205,15 @@ parse_args() {
 	if [ "$MODE" = core ] && [ -n "$CORE_URL" ]; then
 		die "--core-mode runs eriphe-core here: --core is for joining another one"
 	fi
+	# A release (v0.2.0 is 0.2.0), its line (0.2: its latest fixes), edge
+	# (main), or a build of main (sha-<commit>).
 	case $PIN in
 	latest) PIN='' ;;
-	'') [ -z "$PIN_SET" ] || die "--version is latest or sha-<commit>" ;;
-	sha-*) printf '%s' "$PIN" | grep -Eq '^sha-[0-9a-f]{7,40}$' || die "--version is latest or sha-<commit>, e.g. sha-1234567" ;;
-	*) die "--version is latest or sha-<commit>, e.g. sha-1234567" ;;
+	'') [ -z "$PIN_SET" ] || die "--version is latest, edge, or a release such as 0.2.0" ;;
+	v[0-9]*) PIN=${PIN#v} ;;
 	esac
+	[ -z "$PIN" ] || printf '%s' "$PIN" | grep -Eq '^(edge|sha-[0-9a-f]{7,40}|(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?)?)$' ||
+		die "--version is latest, edge, or a release such as 0.2.0 (0.2 for its fixes), not $PIN"
 	if [ -n "$CA_HASH" ]; then
 		case $CA_HASH in
 		sha256:*) ;;
@@ -583,6 +590,25 @@ version() {
   esac
 }
 repo() { printf '%s' "${1%:*}"; }
+# tag_of VERSION: the images' tag of a build: X.Y.Z for a release,
+# sha-<commit> for a build of main (X.Y.Z-dev+<commit>); none for a local one.
+tag_of() {
+  case $1 in
+    *-dev+*) t=sha-${1##*+} ;;
+    *+*) t= ;;
+    *) t=$1 ;;
+  esac
+  printf '%s' "$t" | grep -Eq '^(sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$' && printf '%s' "$t"
+}
+release() { printf '%s' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; }
+# newer A B: release A is newer than release B.
+newer() {
+  printf '%s %s\n' "$1" "$2" | awk '{ split($1, a, "."); split($2, b, ".")
+    for (i = 1; i <= 3; i++) { if (a[i] + 0 > b[i] + 0) exit 0; if (a[i] + 0 < b[i] + 0) exit 1 }
+    exit 1 }'
+}
+# pinned: on a release of its own choice (edge follows main instead).
+pinned() { [ -n "$PIN" ] && [ "$PIN" != edge ]; }
 
 # current TARGET: "service ref id" of what runs now.
 current() {
@@ -672,15 +698,17 @@ update() {
   [ "$target" = core ] || main=node
   from=$(version "$(main_id "$before" "$main")")
   status "$target" "$id" update running "" "$from" ""
-  # eriphe-core's machine takes eriphe-core's latest build, and the node and
-  # worker of that same build (their sha-<commit> tag), not their own latest:
-  # latest may be half published, and the node is never newer than
-  # eriphe-core.
+  # eriphe-core's machine takes eriphe-core's build (latest, edge or the
+  # pinned one), and the node and worker of that same build (the tag of its
+  # version), not their own latest: latest may be half published, and the
+  # node is never newer than eriphe-core. A node alone takes eriphe-core's
+  # build too, unless it is pinned to a release.
   match=
+  if [ "$target" = node ] && ! pinned; then match=$(tag_of "$core"); fi
   for ref in $(printf '%s\n' "$before" | awk '{ print $2 }'); do
     src=$ref
     case $match:$ref in
-      sha-*:*/eriphe-node:* | sha-*:*/eriphe-worker:*) src=$(repo "$ref"):$match ;;
+      ?*:*/eriphe-node:* | ?*:*/eriphe-worker:*) src=$(repo "$ref"):$match ;;
     esac
     if ! out=$(docker pull -q "$src" 2>&1); then
       put "$before"
@@ -691,31 +719,27 @@ update() {
       docker tag "$src" "$ref"
       docker image rm "$src" >/dev/null 2>&1 || true
     fi
-    if [ "$target" = core ] && [ -z "$PIN" ] && [ -z "$match" ]; then
-      match=$(version "$(image_id "$ref")")
-      case $match in sha-*) ;; *) match= ;; esac
-    fi
+    case $target:$match:$ref in
+      core::*/eriphe-core:*) match=$(tag_of "$(version "$(image_id "$ref")")") ;;
+    esac
   done
   after=$(current "$target" | while read -r svc ref _; do echo "$svc $ref $(image_id "$ref")"; done)
   new=$(main_id "$after" "$main")
   to=$(version "$new")
   if [ "$after" = "$before" ]; then
-    if [ -n "$PIN" ]; then
+    if pinned; then
       status "$target" "$id" update pinned "pinned to $PIN" "$from" "$to"
     else
       status "$target" "$id" update current "" "$from" "$to"
     fi
     return
   fi
-  # A node is never newer than eriphe-core.
-  case $target:$core:$to in
-    node:sha-*:sha-*)
-      if [ "$to" != "$core" ]; then
-        put "$before"
-        status "$target" "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
-        return
-      fi ;;
-  esac
+  # A node is never newer than eriphe-core (a release pinned here may be).
+  if [ "$target" = node ] && release "$core" && release "$to" && newer "$to" "$core"; then
+    put "$before"
+    status "$target" "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
+    return
+  fi
   if [ "$auto" = 1 ] && grep -qx "$new" "$STATE/failed" 2>/dev/null; then
     put "$before"
     status "$target" "$id" update skipped "$to failed here before" "$from" "$to"
@@ -790,7 +814,7 @@ for target in core node; do
   id=$(field "$f" id) action=$(field "$f" action) core=$(field "$f" core) auto=$(field "$f" auto)
   rm -f "$f"
   printf '%s' "$id" | grep -Eq '^[a-z0-9-]{1,40}$' || { log "$target: a request without a valid id"; continue; }
-  printf '%s' "$core" | grep -Eq '^(sha-[0-9a-f]{7,40}|dev)?$' || core=
+  printf '%s' "$core" | grep -Eq '^(sha-[0-9a-f]{7,40}|dev|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)?$' || core=
   [ "$auto" = 1 ] || auto=0
   case $action in
     update) update "$target" "$id" "$auto" "$core" ;;
@@ -923,8 +947,11 @@ if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   chmod 644 /etc/systemd/system/eriphe-update.service /etc/systemd/system/eriphe-update.path /etc/systemd/system/eriphe-update.timer
   systemctl daemon-reload
   systemctl enable --now eriphe-update.path eriphe-update.timer >/dev/null 2>&1 || die "systemctl enable eriphe-update failed"
+  # pin: the release it stays on; channel: edge when it follows main.
+  pin=$PIN channel=
+  [ "$PIN" != edge ] || pin='' channel=edge
   for d in $marks; do
-    printf 'version=1\npin=%s\n' "$PIN" > "$d/updater"
+    printf 'version=1\npin=%s\nchannel=%s\n' "$pin" "$channel" > "$d/updater"
   done
   [ "$MODE" != core ] || chown "$CORE_UID:$CORE_UID" "$DATA/core/updater"
   echo "updater=1" >&3
@@ -1468,6 +1495,22 @@ label() {
     jq -r '[.[0].variants[]?.config.config.Labels["org.opencontainers.image.version"] // empty][0] // empty'
 }
 version() { cat "$E/bin/eriphe-$1.version" 2>/dev/null || echo dev; }
+# tag_of, release, newer, pinned: as the Linux updater's.
+tag_of() {
+  case $1 in
+    *-dev+*) t=sha-${1##*+} ;;
+    *+*) t= ;;
+    *) t=$1 ;;
+  esac
+  printf '%s' "$t" | grep -Eq '^(sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$' && printf '%s' "$t"
+}
+release() { printf '%s' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; }
+newer() {
+  printf '%s %s\n' "$1" "$2" | awk '{ split($1, a, "."); split($2, b, ".")
+    for (i = 1; i <= 3; i++) { if (a[i] + 0 > b[i] + 0) exit 0; if (a[i] + 0 < b[i] + 0) exit 1 }
+    exit 1 }'
+}
+pinned() { [ -n "$PIN" ] && [ "$PIN" != edge ]; }
 
 # fetch NAME IMAGE DIR: the image's Mac binary of NAME into DIR, with its version.
 fetch() {
@@ -1566,16 +1609,18 @@ update() {
   status "$target" "$id" update running "" "$from" ""
   new=$STATE/new
   rm -rf "$new"; mkdir -p "$new"
+  # The node (and worker) of eriphe-core's build: on eriphe-core's machine,
+  # the one just fetched; on a node alone, the one eriphe-core runs, unless
+  # it is pinned to a release.
   match=
+  if [ "$target" = node ] && ! pinned; then match=$(tag_of "$core"); fi
   for line in $(items "$target" | tr ' ' '='); do
     n=${line%%=*} ref=${line#*=}
     src=$ref
-    # eriphe-core's machine takes the node of eriphe-core's build.
     [ -z "$match" ] || [ "$n" != node ] || src=$(repo "$ref"):$match
     fetch "$n" "$src" "$new" || { status "$target" "$id" update failed "$why" "$from" ""; return; }
-    if [ "$n" = core ] && [ -z "$PIN" ]; then
-      match=$(cat "$new/eriphe-core.version")
-      case $match in sha-*) ;; *) match= ;; esac
+    if [ "$n" = core ]; then
+      match=$(tag_of "$(cat "$new/eriphe-core.version")")
     fi
   done
   to=$(cat "$new/eriphe-$target.version")
@@ -1585,20 +1630,18 @@ update() {
   done
   worker "$match"
   if [ -n "$same" ]; then
-    if [ -n "$PIN" ]; then
+    if pinned; then
       status "$target" "$id" update pinned "pinned to $PIN" "$from" "$to"
     else
       status "$target" "$id" update current "" "$from" "$to"
     fi
     return
   fi
-  case $target:$core:$to in
-    node:sha-*:sha-*)
-      if [ "$to" != "$core" ]; then
-        status "$target" "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
-        return
-      fi ;;
-  esac
+  # A node is never newer than eriphe-core (a release pinned here may be).
+  if [ "$target" = node ] && release "$core" && release "$to" && newer "$to" "$core"; then
+    status "$target" "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
+    return
+  fi
   if [ "$auto" = 1 ] && grep -qx "$to" "$STATE/failed" 2>/dev/null; then
     status "$target" "$id" update skipped "$to failed here before" "$from" "$to"
     return
@@ -1670,7 +1713,7 @@ for target in core node; do
   id=$(field "$f" id) action=$(field "$f" action) core=$(field "$f" core) auto=$(field "$f" auto)
   rm -f "$f"
   printf '%s' "$id" | grep -Eq '^[a-z0-9-]{1,40}$' || { log "$target: a request without a valid id"; continue; }
-  printf '%s' "$core" | grep -Eq '^(sha-[0-9a-f]{7,40}|dev)?$' || core=
+  printf '%s' "$core" | grep -Eq '^(sha-[0-9a-f]{7,40}|dev|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)?$' || core=
   [ "$auto" = 1 ] || auto=0
   case $action in
     update) update "$target" "$id" "$auto" "$core" ;;
@@ -1741,10 +1784,13 @@ native_up() {
 	# Joined: the node has its own secret, the token is used.
 	rm -f "$E/join-token"
 	tail -c +"$((since + 1))" "$E/node.log" | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-node: /' >&2
+	# pin: the release it stays on; channel: edge when it follows main.
+	pin=$PIN channel=
+	[ "$PIN" != edge ] || pin='' channel=edge
 	for d in node core; do
 		[ -d "$E/$d" ] || continue
 		[ "$d" = node ] || [ "$MODE" = core ] || continue
-		printf 'version=1\npin=%s\n' "$PIN" >"$E/$d/updater"
+		printf 'version=1\npin=%s\nchannel=%s\n' "$pin" "$channel" >"$E/$d/updater"
 	done
 	load "$UPDATE_LABEL" "$(plist "$UPDATE_LABEL" update "$E/update.log" /bin/sh "$E/update.sh")"
 	echo updater=1
@@ -1904,8 +1950,10 @@ main() {
 	else
 		say "eriphe-node runs here as $NAME and is connected to eriphe-core."
 	fi
-	if [ -n "$PIN" ]; then
-		say "Pinned to $PIN: it stays on that version (--version latest follows the latest one again)."
+	if [ "$PIN" = edge ]; then
+		say "On edge: it follows main, not the releases (--version latest follows the releases again)."
+	elif [ -n "$PIN" ]; then
+		say "Pinned to $PIN: it stays on that version (--version latest follows the releases again)."
 	elif printf '%s\n' "$out" | grep -qx 'updater=1'; then
 		say "It updates itself when eriphe-core asks (Settings, Machines, Updates)."
 	else

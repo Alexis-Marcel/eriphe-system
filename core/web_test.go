@@ -291,7 +291,7 @@ func fixtures(t *testing.T, c *core) {
 	t.Helper()
 	s := c.store
 	s.registerNode("box", "h")
-	s.setNodeStatus("box", true, []byte(`{"cpus":8,"memory_bytes":17179869184,"runtimes":["claude-code"],"labels":["gpu"],"version":"sha-7654321"}`))
+	s.setNodeStatus("box", true, []byte(`{"cpus":8,"memory_bytes":17179869184,"runtimes":["claude-code"],"labels":["gpu"],"version":"0.1.0-dev+7654321"}`))
 	s.registerNode("old", "h2")
 	for _, task := range []*TaskRow{
 		{ID: "t-run", Node: "box", Agent: "small", Runtime: "claude-code", Dir: "acme/site@fix-form", Prompt: "Fix the form", State: stateRunning},
@@ -335,7 +335,7 @@ func TestWebPagesRender(t *testing.T) {
 		"/tasks/t-run":       {"go test ./...", "Arrêter la tâche", "PR #7"},
 		"/tasks/t-idle":      {"Répondre à l&#39;agent", "Shall I send it?"},
 		"/tasks/t-perm":      {"d-perm-t-perm-p-1"},
-		"/settings/machines": {"box", "En ligne", "Hors ligne", "16 Go", "gpu", "eriphe-node sha-7654321"},
+		"/settings/machines": {"box", "En ligne", "Hors ligne", "16 Go", "gpu", `eriphe-node 0.1.0-dev <small class="mono">7654321</small>`},
 		"/settings/agents":   {"small", "quick things", "Par défaut", "Prêt"},
 		"/settings/tools":    {"github", "providers.p.secret", "Secrets avancés", "Home Assistant", "/settings/tools/new?preset=mail"},
 		"/settings/tools/new?preset=home-assistant": {"/api/mcp", `name="token"`, `value="bearer" checked`},

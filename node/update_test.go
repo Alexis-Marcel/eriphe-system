@@ -10,6 +10,21 @@ import (
 	"testing"
 )
 
+// eriphe-core's version is a release, a build of main, one from before the
+// releases, a local build, or none.
+func TestUpdateRequestVersions(t *testing.T) {
+	for _, v := range []string{"", "dev", "sha-1234567", "0.1.0", "12.3.40", "0.1.0-dev+d06ac28", "1.0.0-rc.1"} {
+		if !(updateRequest{ID: "u-1", Action: "update", Core: v}).valid() {
+			t.Errorf("refused: %q", v)
+		}
+	}
+	for _, v := range []string{"v0.1.0", "01.2.3", "0.1.0+", "0.1.0 x", "edge", "0.1.0-dev+a/b"} {
+		if (updateRequest{ID: "u-1", Action: "update", Core: v}).valid() {
+			t.Errorf("taken: %q", v)
+		}
+	}
+}
+
 func newUpdateNode(t *testing.T, updater bool) *node {
 	t.Helper()
 	root := t.TempDir()
@@ -65,6 +80,9 @@ func TestUpdateRequestChecks(t *testing.T) {
 		{ID: "u-1", Action: "install"},
 		{ID: "u-1", Action: "update", Core: "ghcr.io/evil/image:latest"},
 		{ID: "u-1", Action: "update", Core: "sha-12\nimage=x"},
+		{ID: "u-1", Action: "update", Core: "0.2.0\nimage=x"},
+		{ID: "u-1", Action: "update", Core: "0.2"},
+		{ID: "u-1", Action: "update", Core: "latest"},
 		{ID: "../x", Action: "update"},
 		{ID: "", Action: "rollback"},
 	} {

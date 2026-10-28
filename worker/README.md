@@ -6,8 +6,8 @@ entrypoint, command or health check of its own. Its `eriphe.runtimes` label
 (`claude-code,opencode,codex,acp`) tells the node which agents it has; `acp` is any other ACP agent,
 run by the command its agent gives (installed in this image, or in the agent's own image).
 
-Published by CI on every push to `main` as `ghcr.io/alexis-marcel/eriphe-worker:latest` and
-`:sha-<short sha>`, for linux/amd64 and linux/arm64 (each built on a native runner).
+Published by CI, for linux/amd64 and linux/arm64 (each built on a native runner): a release as
+`ghcr.io/alexis-marcel/eriphe-worker:latest` (and `:0.2.0`, `:0.2`), each push to `main` as `:edge` and `:sha-<short sha>` ([RELEASING.md](../RELEASING.md)).
 
 ## Inside
 

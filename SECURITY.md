@@ -10,12 +10,12 @@ reporting: the repository's **Security** tab → **Report a vulnerability**.
 
 Include what you found, how to reproduce it, which component it affects (eriphe-core, eriphe-node,
 the worker image, an installer, an MCP server, the Home Assistant integration) and the version
-(`sha-<commit>`, shown in Settings → Machines). You should get an answer as soon as possible, usually within a few days. Once a fix
+(such as `0.2.0`, shown in Settings → Machines). You should get an answer as soon as possible, usually within a few days. Once a fix
 is published, the advisory credits you unless you prefer otherwise.
 
 ## Supported versions
 
-Eriphe is alpha: only the latest images (`ghcr.io/alexis-marcel/eriphe-*:latest`) and the `main`
+Eriphe is alpha: only the latest release (`ghcr.io/alexis-marcel/eriphe-*:latest`, see RELEASING.md) and the `main`
 branch get fixes.
 
 ## Scope
