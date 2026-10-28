@@ -38,8 +38,10 @@ func (claudeCode) command(n *node, t *Task) ([]string, map[string]string) {
 	args := []string{"claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
 		"--mcp-config", string(mcpConfig), "--strict-mcp-config",
 		"--permission-prompt-tool", "mcp__eriphe_node__approve", "--permission-mode", "default",
-		// Commits and PRs made by Eriphe's workers carry no attribution line.
-		"--settings", `{"attribution":{"commit":"","pr":""}}`}
+		// Commits and PRs made by Eriphe's workers carry no attribution line,
+		// and its sessions never push to the account's phone: Eriphe decides
+		// when to tell its user, through its own channels.
+		"--settings", `{"attribution":{"commit":"","pr":""},"agentPushNotifEnabled":false,"inputNeededNotifEnabled":false,"remoteControlAtStartup":false}`}
 	if spec.Profile != "" {
 		// A resumed session takes the prompt it is started with, not the one
 		// recorded when it began (the brain's changes with each deploy).
