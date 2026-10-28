@@ -84,8 +84,8 @@ func main() {
 	flag.StringVar(&o.serviceMemory, "service-memory", "1g", "memory limit of each service container (empty: none)")
 	flag.StringVar(&o.serviceNetwork, "service-network", "", "internal Docker network, shared with the node, for http services without egress")
 	flag.BoolVar(&o.alwaysOn, "always-on", os.Getenv("ERIPHE_ALWAYS_ON") == "1", "this machine stays on, like the one eriphe-core runs on: tools go here first (env ERIPHE_ALWAYS_ON=1)")
-	// From install.sh and install.ps1: eriphe-core shows the command that updates this machine.
-	o.install = os.Getenv("ERIPHE_INSTALL")
+	// From install.sh and install.ps1, or guessed (install.go): eriphe-core shows the command that updates this machine.
+	o.install = installKind(thisHost())
 	labels := flag.String("labels", os.Getenv("ERIPHE_NODE_LABELS"), "comma-separated labels agents can require, e.g. gpu (env ERIPHE_NODE_LABELS)")
 	o.volumes = volumeFlag{}
 	if err := volumeFlag(o.volumes).Set(os.Getenv("ERIPHE_NODE_VOLUMES")); err != nil {
