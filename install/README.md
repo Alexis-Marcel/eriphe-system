@@ -162,10 +162,12 @@ written to disk). What is not given again is kept (address, name, labels, mode);
 `--labels`, `--core` (e.g. to add a second address) and `--ca-hash` replace the saved ones, and a
 joined node keeps its name. Changing between node and core mode needs an uninstall first.
 
-The images are published from `main`: `latest`, and `sha-<commit>` for each build. A version is
-the last commit that changed its image, so a rebuild with nothing new keeps it. eriphe-core shows
-its version in Settings → My workspace, and each machine its eriphe-node version on its card. A few
-times a day it reads which version `latest` is on the registry: when a newer one is out, the
+The images follow the releases ([RELEASING.md](../RELEASING.md)): `latest` is the latest one (also
+under `0.2.0` and `0.2`), and `edge` is the latest build of `main` (also under `sha-<commit>`). The
+scripts that eriphe.com serves are the ones of the latest release too: the portal copies them from
+`eriphe-core:latest`. eriphe-core shows its version in Settings → My workspace (`0.2.0`), and each
+machine its eriphe-node version on its card. A few times a day it reads which version `latest` is on
+the registry: when a newer release is out, the
 workspace says "New version available" there, with the command that updates that machine (the
 installers tell eriphe-core and the node how they installed them, in `ERIPHE_INSTALL`; a compose
 project of your own gets `docker compose pull && docker compose up -d`). If an
@@ -208,11 +210,12 @@ How a request goes:
    (`/var/lib/eriphe/node/update-requested`) once no task is at work. A request is `id`, `action`
    (`update` or `rollback`), `core` (eriphe-core's version) and `auto` (from the night); the
    updater reads these four values, checks them, and never runs the file.
-2. The updater pulls the images, at the pinned version or `latest`. On eriphe-core's machine, the
-   node and worker come from eriphe-core's build (their `sha-<commit>` tag), not their own
-   `latest`, which may be half published. For a node alone, an image whose version label is
-   another than eriphe-core's is refused ("refused": it would be newer than eriphe-core). Nothing
-   new: "current".
+2. The updater pulls the images: eriphe-core at `latest`, `edge` or the pinned release; the node
+   and worker of that same build (the tag of eriphe-core's version: `0.2.0`, or `sha-<commit>`
+   for a build of `main`), not their own `latest`, which may be half published (a tag not there
+   yet fails the update, and a later one takes it). A node alone takes eriphe-core's build the
+   same way, unless it is pinned to a release; a pinned release newer than eriphe-core's is
+   refused ("refused": a node is never newer than eriphe-core). Nothing new: "current".
 3. It recreates the containers, eriphe-core first, and checks them: eriphe-core answers on
    `/health`, eriphe-node says `connected to` again, within 3 minutes (Windows: the binary is
    swapped and eriphe-node restarted; eriphe-core's container recreated).
@@ -227,10 +230,19 @@ The previous images stay, tagged `eriphe-previous-core` or `eriphe-previous-node
 previous version", or `--rollback` (`-Rollback`) on the machine, puts them back, checks the same
 way, and keeps the replaced ones to go forward again.
 
-**A version of your choice.** `--version sha-1234567` (`-Version sha-1234567`) installs that build
-and stays on it: an update then says "pinned", and the night leaves it alone. `--version latest`
-follows the latest version again. The versions are on
-[GHCR](https://github.com/Alexis-Marcel?tab=packages) (`sha-<commit>` of `main`).
+**A version of your choice.** By default a machine follows `latest`, the releases.
+
+- `--version 0.2.0` (`-Version 0.2.0`) installs that release and stays on it: an update then says
+  "pinned", and the night leaves it alone. `--version 0.2` stays on the `0.2` line and takes its
+  fixes (`0.2.1`, …) when it updates.
+- `--version edge` follows `main`, for testers: each update takes its latest build. A build of
+  `main` is never told "New version available" (it is ahead, or someone is testing it): update it
+  with "Update now", or by running the command again. A node joined to it follows its build.
+- `--version latest` follows the releases again.
+
+The rollback works the same on all of them. The releases are on
+[GitHub](https://github.com/Alexis-Marcel/eriphe-system/releases), the images on
+[GHCR](https://github.com/Alexis-Marcel?tab=packages).
 
 **Installed before this.** A machine installed before the updaters gets one by running its install
 command once more (the same one, or `curl -fsSL https://eriphe.com/install.sh | sh -s`, or
@@ -279,7 +291,7 @@ The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nod
 | `--labels gpu,fast` | `-Labels 'gpu,fast'` | what agents can require of this node |
 | `--ca-hash sha256:<hex>` | `-CaHash sha256:<hex>` | eriphe-core's CA, to check its certificate (`ERIPHE_CA_HASH` of the node) |
 | `--core-mode` | `-CoreMode` | run eriphe-core here, and a local node joined to it |
-| `--version sha-<commit>` | `-Version sha-<commit>` | pin that version; `latest` follows the latest one again (see [the machines update themselves](#the-machines-update-themselves)) |
+| `--version 0.2.0` | `-Version 0.2.0` | pin that release (`0.2`: its line); `edge` follows `main`; `latest` the releases again (see [the machines update themselves](#the-machines-update-themselves)) |
 | `--rollback` | `-Rollback` | go back to the version before the last update |
 | `--share NAME=/PATH[:ro]` | | a place of this machine whose folders may be given to Eriphe, repeatable (see [Folders](#folders)); Linux, and a Mac with Apple's container (which shares its home, iCloud Drive and its cloud folders by itself) |
 | `--no-share` | | share no place any more |

@@ -20,6 +20,12 @@ runs the same.
 Go code is formatted with `gofmt`. Tests do not need network access or real accounts: providers and
 servers are faked.
 
+## Releases
+
+Merging to `main` publishes the images under `edge` only; users get a change with the next release,
+a `vX.Y.Z` tag cut by the maintainers ([RELEASING.md](RELEASING.md)). Note what users will notice in
+the pull request's title and description: the release notes are generated from them.
+
 ## Pull requests
 
 - One topic per pull request, with tests for what changes and the README of the component updated
