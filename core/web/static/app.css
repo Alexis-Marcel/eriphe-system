@@ -112,8 +112,14 @@ button { font: inherit; color: inherit; }
 
 /* Shell */
 
-body.shell { height: 100vh; height: 100dvh; display: grid; grid-template-rows: var(--topbar) 1fr; overflow: hidden; }
-body.shell > main { min-height: 0; overflow: auto; outline: none; }
+/* The page itself never scrolls: only main does. html keeps body's overflow
+   from passing to the viewport, and body clips what overflows it, so nothing
+   can make the document taller than the window and scroll the top bar away. */
+html.shell { height: 100%; overflow: hidden; }
+body.shell { position: relative; height: 100vh; height: 100dvh; display: grid; grid-template-rows: var(--topbar) 1fr; overflow: hidden; overflow: clip; }
+/* Positioned, so absolute descendants (.sr-only labels) scroll with the page
+   instead of sitting at their first place below the window. */
+body.shell > main { position: relative; min-height: 0; overflow: auto; outline: none; }
 body.nav-chat > main { overflow: hidden; }
 
 .topbar {

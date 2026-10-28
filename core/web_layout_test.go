@@ -43,3 +43,58 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		}
 	}
 }
+
+// Only main scrolls in the workspace: the document can never grow past the
+// window, whatever overflows inside it, so nothing can scroll the top bar and
+// the settings nav out of sight. The nav's pills are centred by scrolling
+// their own row, not with scrollIntoView, which scrolls every ancestor that
+// can scroll, the page included.
+func TestShellNeverScrolls(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	for _, path := range []string{"/settings/agents", "/settings/journal", "/memory"} {
+		if _, body, _ := tw.do("GET", path, nil, nil); !strings.Contains(body, `<html lang="fr" class="shell">`) {
+			t.Errorf("GET %s: the html element is not marked as the shell", path)
+		}
+	}
+	if _, body, _ := tw.do("GET", "/login", nil, nil); strings.Contains(body, `class="shell"`) {
+		t.Error("the login page is marked as the shell")
+	}
+
+	css, err := webFS.ReadFile("web/static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules := map[string][]string{}
+	for _, block := range strings.Split(string(css), "}") {
+		sel, decl, ok := strings.Cut(block, "{")
+		if !ok {
+			continue
+		}
+		if i := strings.LastIndex(sel, "*/"); i >= 0 {
+			sel = sel[i+2:]
+		}
+		sel = strings.TrimSpace(sel)
+		rules[sel] = append(rules[sel], decl)
+	}
+	for sel, want := range map[string][]string{
+		"html.shell":        {"overflow: hidden"},
+		"body.shell":        {"overflow: clip", "position: relative"},
+		"body.shell > main": {"position: relative", "overflow: auto"},
+	} {
+		decl := strings.Join(rules[sel], ";")
+		for _, w := range want {
+			if !strings.Contains(decl, w) {
+				t.Errorf("app.css: %s lacks %q", sel, w)
+			}
+		}
+	}
+
+	js, err := webFS.ReadFile("web/static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(js), "scrollIntoView") {
+		t.Error("app.js uses scrollIntoView, which can scroll the whole page")
+	}
+}
