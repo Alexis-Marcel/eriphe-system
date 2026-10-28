@@ -1,0 +1,53 @@
+# A pull request is squash-merged: its title becomes the commit on main, which
+# CI reads to release (RELEASING.md). Checks that it is a Conventional Commit
+# subject, and tells which release merging it makes.
+name: pr-title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The tags, for the last release.
+          fetch-depth: 0
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          COMMITS: ${{ github.event.pull_request.commits }}
+        run: |
+          if ! .github/scripts/release.sh title "$TITLE"; then
+            echo "::error title=Pull request title::\"$TITLE\" is not a Conventional Commit subject (see the log, and RELEASING.md)"
+            exit 1
+          fi
+          # GitHub proposes a one-commit pull request's commit subject, not its title, as the
+          # squash commit's subject: it must follow the convention too.
+          if [ "$COMMITS" -eq 1 ]; then
+            subject=$(git log -1 --format=%s "$HEAD")
+            if ! .github/scripts/release.sh title "$subject"; then
+              echo "::error title=Commit subject::This pull request's only commit, \"$subject\", becomes the squash commit: reword it as a Conventional Commit subject (see the log, and RELEASING.md)"
+              exit 1
+            fi
+          fi
+          [ "$BASE_REF" = main ] || exit 0
+          last=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' "$BASE" 2>/dev/null || true)
+          base=${last:-v0.0.0}
+          next=$({ .github/scripts/release.sh log "$last" "$BASE"; printf 'pr\037%s\n\036' "$TITLE"; } | .github/scripts/release.sh next "${base#v}")
+          if [ -n "$next" ]; then
+            echo "::notice title=Release::Merging this pull request releases v$next"
+          else
+            echo "::notice title=Release::Merging this pull request releases nothing by itself (the next release ships it)"
+          fi

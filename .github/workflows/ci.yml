@@ -3,33 +3,61 @@ name: ci
 on:
   push:
     branches: [main]
-    # A release (RELEASING.md): its images get X.Y.Z, X.Y and latest.
+    # A release by hand (RELEASING.md): its images get X.Y.Z, X.Y and latest.
     tags: ['v*']
   pull_request:
 
 permissions:
   contents: read
 
+# One run at a time per branch or tag: a push to main that releases has created its tag before
+# the next push's run reads the tags, so two pushes never release the same version. A pull
+# request's newer push cancels its older run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  # The version of this build and the tags its images get: vX.Y.Z (a tag
-  # push) is X.Y.Z, under X.Y.Z, X.Y and latest (a prerelease, vX.Y.Z-rc.N,
-  # under its own tag only); main is X.Y.Z-dev+<short sha>, X.Y.Z the last
-  # release (0.0.0 before the first), under edge and sha-<short sha>.
+  # The release script and its tests (.github/scripts, RELEASING.md).
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: shellcheck .github/scripts/*.sh
+      - run: sh .github/scripts/release_test.sh
+
+  # The version of this build, the tags its images get, and whether it is a release
+  # (RELEASING.md):
+  # - a tag vX.Y.Z pushed by hand: X.Y.Z, under X.Y.Z, X.Y and latest (a prerelease,
+  #   vX.Y.Z-rc.N, under its own tag only);
+  # - a push to main whose commits since the last release call for one (Conventional
+  #   Commits, .github/scripts/release.sh): the next version, the same way, which the
+  #   release job tags once the images are published;
+  # - otherwise X.Y.Z-dev+<short sha>, X.Y.Z the last release (0.0.0 before the first),
+  #   under edge and sha-<short sha>.
   version:
+    needs: scripts
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
       tags: ${{ steps.v.outputs.tags }}
       prerelease: ${{ steps.v.outputs.prerelease }}
+      release: ${{ steps.v.outputs.release }}
+      tag: ${{ steps.v.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
         with:
-          # The tags, for the last release, and main, for a release's commit.
+          # The tags, for the last release and the commits since, and main, for a release's
+          # commit.
           fetch-depth: 0
       - id: v
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
           short=${GITHUB_SHA::7}
-          pre=false
+          pre=false release=false tag=
+          # The last release (not a prerelease) at or before a commit.
+          stable() { git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' "$@" 2>/dev/null; }
           case $GITHUB_REF in
             refs/tags/v*)
               v=${GITHUB_REF_NAME#v}
@@ -42,23 +70,47 @@ jobs:
                 echo "::error::$GITHUB_REF_NAME is not on main"
                 exit 1
               fi
-              case $v in
-                *-*) tags=$v pre=true ;;
-                *) tags="$v ${v%.*} latest" ;;
-              esac
+              case $v in *-*) pre=true ;; esac
+              release=true tag=$GITHUB_REF_NAME
               ;;
             *)
-              last=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' HEAD 2>/dev/null || echo v0.0.0)
-              v="${last#v}-dev+$short"
-              tags="edge sha-$short"
+              last=$(stable HEAD || true)
+              base=${last:-v0.0.0}
+              v="${base#v}-dev+$short"
+              if [ "$EVENT" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+                if here=$(stable --exact-match HEAD); then
+                  # This commit is released already (a re-run of its release run, or a tag
+                  # pushed by hand): that release again, which the release job completes.
+                  v=${here#v} release=true tag=$here
+                else
+                  next=$(.github/scripts/release.sh log "$last" | .github/scripts/release.sh next "${base#v}")
+                  if [ -n "$next" ] && git rev-parse -q --verify "refs/tags/v$next" >/dev/null; then
+                    echo "::warning::v$next exists already, on another commit: no release"
+                  elif [ -n "$next" ]; then
+                    echo "::notice::The commits since $base release v$next"
+                    v=$next release=true tag=v$next
+                  else
+                    echo "::notice::No feat, fix, perf or breaking change since $base: no release"
+                  fi
+                fi
+              fi
               ;;
           esac
+          if [ "$release" = false ]; then
+            tags="edge sha-$short"
+          elif [ "$pre" = true ]; then
+            tags=$v
+          else
+            tags="$v ${v%.*} latest"
+          fi
           {
             echo "version=$v"
             echo "tags=$tags"
             echo "prerelease=$pre"
+            echo "release=$release"
+            echo "tag=$tag"
           } >> "$GITHUB_OUTPUT"
-          echo "version $v, tags $tags"
+          echo "version $v, tags $tags, release $release"
 
   node:
     runs-on: ubuntu-latest
@@ -249,24 +301,56 @@ jobs:
       tags: ${{ needs.version.outputs.tags }}
       version-arg: true
 
-  # A release: its notes, generated from the pull requests since the last
-  # one, once every image is published.
+  # A release, once every check passed and every image is published under its
+  # tags: the tag vX.Y.Z on this commit (unless pushed by hand), then the GitHub
+  # release, its notes grouped from the commits since the last release. Each
+  # step that is done already is skipped, so a failed run can be re-run. The
+  # tag is pushed with the workflow's token, which starts no other run.
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.version.outputs.release == 'true'
     needs: [version, core-image, node-image, worker, mail-image, calendar-image, files-image, install, cli]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - env:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Tag
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            at=$(git rev-parse "$TAG^{commit}")
+            if [ "$at" != "$GITHUB_SHA" ]; then
+              echo "::error::$TAG exists already, on $at"
+              exit 1
+            fi
+            echo "$TAG exists already"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$TAG" -m "Eriphe $VERSION" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+      - name: GitHub release
+        env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.version.outputs.tag }}
           PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "$TAG is released already"
             exit 0
           fi
-          set -- --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "$TAG"
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' "$TAG^" 2>/dev/null || true)
+          notes=$RUNNER_TEMP/notes.md
+          .github/scripts/release.sh log "$prev" "$TAG" | .github/scripts/release.sh notes > "$notes"
+          if [ -n "$prev" ]; then
+            printf '\n**Full changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$prev" "$TAG" >> "$notes"
+          fi
+          cat "$notes"
+          set -- --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --notes-file "$notes"
           if [ "$PRERELEASE" = true ]; then set -- "$@" --prerelease; else set -- "$@" --latest; fi
           gh release create "$TAG" "$@"
