@@ -49,6 +49,26 @@ func TestClaudeStreamFlag(t *testing.T) {
 	}
 }
 
+// Eriphe's sessions never push to the account's phone nor join Remote
+// Control: Eriphe decides when to tell its user.
+func TestClaudeNoDevicePush(t *testing.T) {
+	n := newNode(options{callbackURL: "http://eriphe-node:8790"})
+	args, _ := claudeCode{}.command(n, &Task{ID: "t-1"})
+	i := slices.Index(args, "--settings")
+	if i < 0 || i+1 >= len(args) {
+		t.Fatal("no --settings")
+	}
+	var settings map[string]any
+	if err := json.Unmarshal([]byte(args[i+1]), &settings); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"agentPushNotifEnabled", "inputNeededNotifEnabled", "remoteControlAtStartup"} {
+		if settings[key] != false {
+			t.Errorf("%s = %v, want false", key, settings[key])
+		}
+	}
+}
+
 // A persistent session takes today's prompt when resumed; the brain's
 // agent keeps no memory of its own.
 func TestClaudeBrainSession(t *testing.T) {
