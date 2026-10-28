@@ -330,14 +330,15 @@ speaks the node's API through it. A node is online while its tunnel is up and an
 | `POST /v1/node/certificate` | `{csr}` (PEM) → `{ca, certificate, expires}` (node secret, and its certificate once it has one) |
 | `GET /v1/nodes/connect` | the tunnel (node secret, `Eriphe-Node: name`, and its certificate) |
 
-**Versions.** Releases are Git tags `vX.Y.Z` ([RELEASING.md](../RELEASING.md)). All the images of
-one CI build share its version (`.github/workflows/ci.yml`, job `version`):
+**Versions.** Releases are Git tags `vX.Y.Z`, which CI creates from the Conventional Commits merged
+to `main` ([RELEASING.md](../RELEASING.md)). All the images of one CI build share its version
+(`.github/workflows/ci.yml`, job `version`):
 
 | Built from | Version | Image tags |
 |---|---|---|
-| a tag `v0.2.0` | `0.2.0` | `0.2.0`, `0.2`, `latest` |
+| a push to `main` that releases `0.2.0`, or a tag `v0.2.0` | `0.2.0` | `0.2.0`, `0.2`, `latest` |
 | a tag `v0.3.0-rc.1` (a prerelease) | `0.3.0-rc.1` | `0.3.0-rc.1` |
-| a push to `main` | `0.2.0-dev+<short commit>` (the last release, `0.0.0` before the first) | `edge`, `sha-<short commit>` |
+| a push to `main` that releases nothing | `0.2.0-dev+<short commit>` (the last release, `0.0.0` before the first) | `edge`, `sha-<short commit>` |
 | your machine (`go build`, `docker build`) | `dev` | |
 
 The binary has it (`-ldflags -X main.version`), and the image as the label
