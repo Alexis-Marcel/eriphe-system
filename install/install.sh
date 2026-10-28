@@ -1495,6 +1495,22 @@ label() {
     jq -r '[.[0].variants[]?.config.config.Labels["org.opencontainers.image.version"] // empty][0] // empty'
 }
 version() { cat "$E/bin/eriphe-$1.version" 2>/dev/null || echo dev; }
+# tag_of, release, newer, pinned: as the Linux updater's.
+tag_of() {
+  case $1 in
+    *-dev+*) t=sha-${1##*+} ;;
+    *+*) t= ;;
+    *) t=$1 ;;
+  esac
+  printf '%s' "$t" | grep -Eq '^(sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$' && printf '%s' "$t"
+}
+release() { printf '%s' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; }
+newer() {
+  printf '%s %s\n' "$1" "$2" | awk '{ split($1, a, "."); split($2, b, ".")
+    for (i = 1; i <= 3; i++) { if (a[i] + 0 > b[i] + 0) exit 0; if (a[i] + 0 < b[i] + 0) exit 1 }
+    exit 1 }'
+}
+pinned() { [ -n "$PIN" ] && [ "$PIN" != edge ]; }
 
 # fetch NAME IMAGE DIR: the image's Mac binary of NAME into DIR, with its version.
 fetch() {
@@ -1593,16 +1609,18 @@ update() {
   status "$target" "$id" update running "" "$from" ""
   new=$STATE/new
   rm -rf "$new"; mkdir -p "$new"
+  # The node (and worker) of eriphe-core's build: on eriphe-core's machine,
+  # the one just fetched; on a node alone, the one eriphe-core runs, unless
+  # it is pinned to a release.
   match=
+  if [ "$target" = node ] && ! pinned; then match=$(tag_of "$core"); fi
   for line in $(items "$target" | tr ' ' '='); do
     n=${line%%=*} ref=${line#*=}
     src=$ref
-    # eriphe-core's machine takes the node of eriphe-core's build.
     [ -z "$match" ] || [ "$n" != node ] || src=$(repo "$ref"):$match
     fetch "$n" "$src" "$new" || { status "$target" "$id" update failed "$why" "$from" ""; return; }
-    if [ "$n" = core ] && [ -z "$PIN" ]; then
-      match=$(cat "$new/eriphe-core.version")
-      case $match in sha-*) ;; *) match= ;; esac
+    if [ "$n" = core ]; then
+      match=$(tag_of "$(cat "$new/eriphe-core.version")")
     fi
   done
   to=$(cat "$new/eriphe-$target.version")
@@ -1612,20 +1630,18 @@ update() {
   done
   worker "$match"
   if [ -n "$same" ]; then
-    if [ -n "$PIN" ]; then
+    if pinned; then
       status "$target" "$id" update pinned "pinned to $PIN" "$from" "$to"
     else
       status "$target" "$id" update current "" "$from" "$to"
     fi
     return
   fi
-  case $target:$core:$to in
-    node:sha-*:sha-*)
-      if [ "$to" != "$core" ]; then
-        status "$target" "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
-        return
-      fi ;;
-  esac
+  # A node is never newer than eriphe-core (a release pinned here may be).
+  if [ "$target" = node ] && release "$core" && release "$to" && newer "$to" "$core"; then
+    status "$target" "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
+    return
+  fi
   if [ "$auto" = 1 ] && grep -qx "$to" "$STATE/failed" 2>/dev/null; then
     status "$target" "$id" update skipped "$to failed here before" "$from" "$to"
     return
@@ -1697,7 +1713,7 @@ for target in core node; do
   id=$(field "$f" id) action=$(field "$f" action) core=$(field "$f" core) auto=$(field "$f" auto)
   rm -f "$f"
   printf '%s' "$id" | grep -Eq '^[a-z0-9-]{1,40}$' || { log "$target: a request without a valid id"; continue; }
-  printf '%s' "$core" | grep -Eq '^(sha-[0-9a-f]{7,40}|dev)?$' || core=
+  printf '%s' "$core" | grep -Eq '^(sha-[0-9a-f]{7,40}|dev|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)?$' || core=
   [ "$auto" = 1 ] || auto=0
   case $action in
     update) update "$target" "$id" "$auto" "$core" ;;
@@ -1768,10 +1784,13 @@ native_up() {
 	# Joined: the node has its own secret, the token is used.
 	rm -f "$E/join-token"
 	tail -c +"$((since + 1))" "$E/node.log" | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-node: /' >&2
+	# pin: the release it stays on; channel: edge when it follows main.
+	pin=$PIN channel=
+	[ "$PIN" != edge ] || pin='' channel=edge
 	for d in node core; do
 		[ -d "$E/$d" ] || continue
 		[ "$d" = node ] || [ "$MODE" = core ] || continue
-		printf 'version=1\npin=%s\n' "$PIN" >"$E/$d/updater"
+		printf 'version=1\npin=%s\nchannel=%s\n' "$pin" "$channel" >"$E/$d/updater"
 	done
 	load "$UPDATE_LABEL" "$(plist "$UPDATE_LABEL" update "$E/update.log" /bin/sh "$E/update.sh")"
 	echo updater=1
