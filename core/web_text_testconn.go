@@ -1,0 +1,88 @@
+package main
+
+// The words of the tool form's connection test (web_testconn.go).
+
+func init() {
+	for lang, words := range testConnStrings {
+		for k, v := range words {
+			webStrings[lang][k] = v
+		}
+	}
+}
+
+var testConnStrings = map[string]map[string]string{
+	"fr": {
+		"tools.connectfailed":          "Le service n'a pas pu démarrer l'autorisation : %s",
+		"form.fixedurl":                "L'adresse du service, déjà connue : rien à changer d'habitude.",
+		"form.connectto":               "Se connecter à %s",
+		"form.connectservice":          "Se connecter au service",
+		"form.savenoconnect":           "Enregistrer sans se reconnecter",
+		"tools.connectedas":            "%s est connecté.",
+		"tools.notconnected.cancelled": "Connexion à « %s » annulée.",
+		"tools.notconnected.failed":    "La connexion à « %s » n'a pas abouti.",
+		"tools.notconnected.expired":   "La connexion à « %s » a expiré.",
+		"tools.pendingdropped":         "L'outil n'a pas été ajouté.",
+		"tools.pendingkept":            "L'outil garde sa version précédente.",
+		"test.button":                  "Tester la connexion",
+		"test.busy":                    "Test en cours…",
+		"test.ok":                      "Connexion réussie : %s, %d outils.",
+		"test.more":                    "et %d autres",
+		"test.oauth":                   "Le service répond et annonce OAuth (autorisation par %s) ; il faudra se connecter après l'ajout.",
+		"test.oauthopen":               "Le service répond sans demander d'autorisation : « Aucune » suffit peut-être.",
+		"test.oauthnometa":             "Le service demande une autorisation mais n'annonce pas OAuth (pas de métadonnées de ressource protégée) : essaie plutôt un jeton.",
+		"test.local":                   "Rien à tester avant l'enregistrement : le programme démarrera sur une de tes machines une fois l'outil enregistré, et son état s'affichera dans la liste.",
+		"test.nourl":                   "Indique l'adresse du service.",
+		"test.placeholder":             "Remplace <ip> dans l'adresse par celle du service.",
+		"test.badurl":                  "Adresse invalide : elle doit commencer par http:// ou https://.",
+		"test.nostored":                "Le jeton enregistré est illisible : colle-le à nouveau.",
+		"test.dns":                     "Nom introuvable : vérifie l'adresse (le nom du serveur n'existe pas pour le réseau d'Eriphe).",
+		"test.tls":                     "Problème de certificat TLS : le certificat du service n'est pas reconnu (autosigné, expiré ou pour un autre nom).",
+		"test.tlsmismatch":             "Le service ne parle pas HTTPS à cette adresse : essaie http://, ou vérifie le port.",
+		"test.unreachable":             "Adresse injoignable : le service ne répond pas (vérifie l'adresse, le port et qu'il est démarré).",
+		"test.timeout":                 "Délai dépassé : le service n'a pas répondu en 10 secondes.",
+		"test.denied":                  "Jeton refusé : le service n'accepte pas ce jeton (vérifie-le, ou ses droits).",
+		"test.needsauth":               "Le service demande une authentification : choisis « Jeton » ou « Autorisation ».",
+		"test.notfound":                "Adresse MCP introuvable (vérifie le chemin, ex. /api/mcp).",
+		"test.status":                  "Le service a répondu par une erreur %d.",
+		"test.notmcp":                  "Le service répond, mais ce n'est pas un serveur MCP à cette adresse (vérifie le chemin).",
+		"test.ratelimit":               "Trop d'essais : attends une minute avant de tester à nouveau.",
+		"form.badimage":                "Nom d'image invalide (ex. mcp/sequentialthinking ou ghcr.io/org/image:1.2).",
+	},
+	"en": {
+		"tools.connectfailed":          "The service could not start the authorization: %s",
+		"form.fixedurl":                "The service's address, already known: usually nothing to change.",
+		"form.connectto":               "Connect to %s",
+		"form.connectservice":          "Connect to the service",
+		"form.savenoconnect":           "Save without signing in again",
+		"tools.connectedas":            "%s is connected.",
+		"tools.notconnected.cancelled": "Connection to “%s” cancelled.",
+		"tools.notconnected.failed":    "The connection to “%s” did not go through.",
+		"tools.notconnected.expired":   "The connection to “%s” expired.",
+		"tools.pendingdropped":         "The tool was not added.",
+		"tools.pendingkept":            "The tool keeps its previous version.",
+		"test.button":                  "Test connection",
+		"test.busy":                    "Testing…",
+		"test.ok":                      "Connected: %s, %d tools.",
+		"test.more":                    "and %d more",
+		"test.oauth":                   "The service answers and advertises OAuth (authorization by %s); you will sign in after adding it.",
+		"test.oauthopen":               "The service answers without asking for an authorization: \"None\" may be enough.",
+		"test.oauthnometa":             "The service asks for an authorization but does not advertise OAuth (no protected resource metadata): try a token instead.",
+		"test.local":                   "Nothing to test before saving: the program starts on one of your machines once the tool is saved, and its status will show in the list.",
+		"test.nourl":                   "Enter the service's address.",
+		"test.placeholder":             "Replace <ip> in the address with the service's own.",
+		"test.badurl":                  "Invalid address: it must start with http:// or https://.",
+		"test.nostored":                "The stored token cannot be read: paste it again.",
+		"test.dns":                     "Name not found: check the address (the server's name does not exist for Eriphe's network).",
+		"test.tls":                     "TLS certificate problem: the service's certificate is not trusted (self-signed, expired or for another name).",
+		"test.tlsmismatch":             "The service does not speak HTTPS at this address: try http://, or check the port.",
+		"test.unreachable":             "Address unreachable: the service does not answer (check the address, the port and that it is running).",
+		"test.timeout":                 "Timed out: the service did not answer within 10 seconds.",
+		"test.denied":                  "Token refused: the service does not accept this token (check it, or its permissions).",
+		"test.needsauth":               "The service asks for authentication: choose \"Token\" or \"Authorization\".",
+		"test.notfound":                "MCP address not found (check the path, e.g. /api/mcp).",
+		"test.status":                  "The service answered with error %d.",
+		"test.notmcp":                  "The service answers, but there is no MCP server at this address (check the path).",
+		"test.ratelimit":               "Too many tries: wait a minute before testing again.",
+		"form.badimage":                "Invalid image name (e.g. mcp/sequentialthinking or ghcr.io/org/image:1.2).",
+	},
+}

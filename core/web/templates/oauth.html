@@ -1,0 +1,19 @@
+{{define "head"}}{{if .Data.Next}}<meta http-equiv="refresh" content="0;url={{.Data.Next}}">{{else if not .Data.Error}}<meta http-equiv="refresh" content="2;url=/settings/tools?connected={{urlquery .Data.Name}}">{{end}}{{end}}
+{{define "main"}}
+<div class="auth">
+  <div class="auth-glow" aria-hidden="true"></div>
+  <div class="auth-card oauth-card">
+    {{if .Data.Error}}
+    <span class="oauth-mark bad" aria-hidden="true">{{template "i-x"}}</span>
+    <h1>{{t "oauth.failed"}}</h1>
+    <p class="alert" role="alert">{{short .Data.Error 400}}</p>
+    <a class="btn btn-primary wide" href="{{or .Data.Back "/settings/tools"}}">{{t "oauth.back"}}</a>
+    {{else}}
+    <span class="oauth-mark" aria-hidden="true">{{template "i-check"}}</span>
+    <h1>{{tf "oauth.connected" .Data.Name}}</h1>
+    <p class="lead">{{tf "tools.connected" .Data.Tools}}</p>
+    <a class="btn btn-primary wide" href="/settings/tools?connected={{urlquery .Data.Name}}">{{t "oauth.back"}}</a>
+    {{end}}
+  </div>
+</div>
+{{end}}

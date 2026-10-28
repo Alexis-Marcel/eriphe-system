@@ -1,0 +1,55 @@
+{{/* The first-run wizard (web_welcome.go): the account is made, then the AI account, then the start. */}}
+{{define "main"}}{{with .Data}}
+<div class="auth welcome">
+  <div class="auth-glow" aria-hidden="true"></div>
+  <section class="auth-card welcome-card" aria-labelledby="welcome-title">
+    <span class="auth-mark" aria-hidden="true">{{template "logo"}}</span>
+    <h1 id="welcome-title">{{t "welcome.title"}}</h1>
+    <ol class="welcome-steps">
+      <li class="done">{{template "i-check"}}<span>{{t "welcome.step.account"}}</span></li>
+      <li class="{{if .Agent}}done{{else}}current{{end}}">{{if .Agent}}{{template "i-check"}}{{else}}<b>2</b>{{end}}<span>{{t "welcome.step.agent"}}</span></li>
+      <li class="{{if .Ready}}done{{else if .Agent}}current{{end}}">{{if .Ready}}{{template "i-check"}}{{else}}<b>3</b>{{end}}<span>{{t "welcome.step.start"}}</span></li>
+    </ol>
+    {{if .Form}}
+    <div class="stack">
+      <h2>{{t "welcome.agenttitle"}}</h2>
+      <p class="lead">{{t "welcome.agentlead"}}</p>
+      <div class="form-title">{{template "kind-mark" .Form.Kind.ID}}<h3>{{t (printf "kind.%s" .Form.Kind.ID)}}</h3></div>
+      <p class="muted small">{{t (printf "kind.%s.desc" .Form.Kind.ID)}}</p>
+    </div>
+    {{template "provider-form" (dict "Data" .Form)}}
+    <details class="welcome-kinds">
+      <summary>{{t "welcome.otherkind"}}</summary>
+      <ul class="presets">{{range .Kinds}}<li><a class="preset" href="/welcome?kind={{.ID}}">
+        {{template "kind-mark" .ID}}
+        <span class="preset-text"><b>{{t (printf "kind.%s" .ID)}}</b><small>{{t (printf "kind.%s.desc" .ID)}}</small></span>
+      </a></li>{{end}}</ul>
+    </details>
+    {{else}}
+    {{template "welcome-status" $}}
+    {{end}}
+    {{if not .Ready}}
+    <form method="post" action="/welcome/skip" class="welcome-skip">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <button class="btn btn-ghost" type="submit">{{t "welcome.skip"}}</button>
+    </form>
+    {{end}}
+  </section>
+</div>
+{{end}}{{end}}
+
+{{define "welcome-status"}}{{with .Data}}
+<div id="welcome-status" class="stack" {{if not .Ready}}hx-get="/welcome/status" hx-trigger="every 3s" hx-swap="outerHTML"{{end}} aria-live="polite">
+  <p class="ok-note">{{tf "welcome.agentok" .Model}}</p>
+  {{if .Ready}}
+  <p>{{t "welcome.ready"}}</p>
+  <a class="btn btn-primary wide" href="/">{{t "welcome.open"}}</a>
+  {{else if eq .Machines 0}}
+  <p class="notice">{{t "welcome.nomachine"}}</p>
+  <a class="btn btn-soft" href="/settings/machines">{{t "machines.add"}}</a>
+  {{else}}
+  <p class="notice"><span class="pulse-dot" aria-hidden="true"></span>{{t "welcome.starting"}}</p>
+  {{end}}
+  <p class="muted small">{{t "welcome.change"}}</p>
+</div>
+{{end}}{{end}}

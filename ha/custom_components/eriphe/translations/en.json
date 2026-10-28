@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Eriphe",
+        "description": "Home Assistant will hand eriphe-core every sentence it cannot handle locally.",
+        "data": {
+          "url": "URL",
+          "token": "Token"
+        },
+        "data_description": {
+          "url": "Address of eriphe-core on the local network, for example http://192.0.2.2:8800.",
+          "token": "The token eriphe-core gave for Home Assistant."
+        }
+      },
+      "reconfigure": {
+        "title": "Change Eriphe's connection",
+        "description": "Change eriphe-core's address or token.",
+        "data": {
+          "url": "URL",
+          "token": "Token"
+        },
+        "data_description": {
+          "url": "Address of eriphe-core on the local network, for example http://192.0.2.2:8800.",
+          "token": "The token eriphe-core gave for Home Assistant."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to eriphe-core.",
+      "invalid_auth": "eriphe-core refused the token.",
+      "invalid_url": "The URL must start with http:// or https://.",
+      "brain_unavailable": "eriphe-core is reachable but its brain is not available. Try again later.",
+      "unexpected_response": "The server answered, but not like eriphe-core.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "Eriphe is already configured.",
+      "single_instance_allowed": "Eriphe is already configured.",
+      "reconfigure_successful": "Eriphe's connection was changed."
+    }
+  }
+}

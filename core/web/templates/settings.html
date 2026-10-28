@@ -1,0 +1,288 @@
+{{define "main"}}
+<div class="settings">
+  <nav class="settings-nav" aria-label="{{t "settings.title"}}">
+    <h1 class="settings-title">{{t "settings.title"}}</h1>
+    <a href="/settings/machines" {{if eq .Tab "machines"}}aria-current="page"{{end}}>{{template "i-server"}}<span>{{t "settings.machines"}}</span>{{if .Updates.Nodes}}{{template "new-dot"}}{{end}}</a>
+    <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span></a>
+    <a href="/settings/tools" {{if eq .Tab "tools"}}aria-current="page"{{end}}>{{template "i-plug"}}<span>{{t "settings.tools"}}</span></a>
+    <a href="/settings/folders" {{if eq .Tab "folders"}}aria-current="page"{{end}}>{{template "i-folder"}}<span>{{t "settings.folders"}}</span></a>
+    <a href="/settings/remote" {{if eq .Tab "remote"}}aria-current="page"{{end}}>{{template "i-globe"}}<span>{{t "settings.remote"}}</span></a>
+    <a href="/settings/journal" {{if eq .Tab "journal"}}aria-current="page"{{end}}>{{template "i-list"}}<span>{{t "settings.journal"}}</span></a>
+    <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.account"}}</span>{{if .Updates.Core}}{{template "new-dot"}}{{end}}</a>
+  </nav>
+  <div class="settings-body">
+    {{if eq .Tab "machines"}}{{template "machines" .}}
+    {{else if eq .Tab "agents"}}{{if eq .View "agent-form"}}{{template "agent-page" .}}{{else if eq .View "provider-form"}}{{template "provider-page" .}}{{else}}{{template "agents" .}}{{end}}
+    {{else if eq .Tab "tools"}}{{if eq .View "form"}}{{template "tool-page" .}}{{else if eq .View "gallery"}}{{template "tool-gallery" .}}{{else if eq .View "drive"}}{{template "drive-page" .}}{{else}}{{template "tools" .}}{{end}}
+    {{else if eq .Tab "folders"}}{{template "folders" .}}
+    {{else if eq .Tab "remote"}}{{template "remote" .}}
+    {{else if eq .Tab "journal"}}{{template "journal" .}}
+    {{else}}{{template "account" .}}{{end}}
+  </div>
+</div>
+{{end}}
+
+{{define "machines"}}
+<header class="page-head"><h2>{{t "settings.machines"}}</h2><p>{{t "machines.lead"}}</p></header>
+{{if .Data.Nodes}}
+<ul class="grid">
+{{range .Data.Nodes}}
+  <li class="tile">
+    <div class="tile-head">
+      <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{if .Online}}{{t "machines.online"}}{{else}}{{t "machines.offline"}}{{end}}</span>
+      <span class="tile-actions">
+      <form hx-post="/settings/machines/{{.Name}}/rejoin" hx-confirm="{{t "machines.rejoinconfirm"}}" hx-target="#join-result" hx-swap="innerHTML show:#add-title:top" class="inline">
+        <button class="link-btn" type="submit">{{t "machines.rejoin"}}</button>
+      </form>
+      <form hx-post="/settings/machines/{{.Name}}/forget" hx-confirm="{{t "machines.forgetconfirm"}}" class="inline">
+        <button class="link-btn" type="submit">{{t "machines.forget"}}</button>
+      </form>
+      </span>
+    </div>
+    <h3 class="tile-title">{{template "i-server"}}{{.Name}}</h3>
+    {{if .AlwaysOn}}<p class="muted small" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</p>{{end}}
+    <p class="muted small">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}}{{else}}&nbsp;{{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}}{{end}}</p>
+    <div class="specs">
+      {{if .CPUs}}<div class="spec"><b>{{.CPUs}}</b><span>CPU</span></div>{{end}}
+      {{if .Memory}}<div class="spec"><b>{{size .Memory}}</b><span>RAM</span></div>{{end}}
+    </div>
+    {{if .Runtimes}}<p class="chips" aria-label="{{t "machines.runtimes"}}">{{range .Runtimes}}<span class="tag">{{.}}</span>{{end}}</p>{{end}}
+    {{if .Labels}}<p class="chips" aria-label="{{t "machines.labels"}}">{{range .Labels}}<span class="tag tag-accent">{{.}}</span>{{end}}</p>{{end}}
+    {{if .Version}}<p class="muted small">eriphe-node {{.Version}}</p>{{end}}
+    {{if .Latest}}{{template "update-notice" dict "ID" .Name "Latest" .Latest "Commands" .Commands}}{{end}}
+    {{if $.Data.CAHash}}<p class="muted small">{{if .CertExpires.IsZero}}{{t "machines.notls"}}{{else}}{{tf "machines.tls" (date .CertExpires)}}{{end}}</p>{{end}}
+  </li>
+{{end}}
+</ul>
+{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-server"}}</span><p>{{t "machines.none"}}</p></div>{{end}}
+
+{{template "updates" .Data.Updates}}
+
+<section class="panel" aria-labelledby="add-title">
+  <h3 id="add-title">{{template "i-plus"}}{{t "machines.add"}}</h3>
+  <p class="muted">{{t "machines.addlead"}}</p>
+  <form class="row-form" hx-post="/settings/machines/join" hx-target="#join-result" hx-swap="innerHTML">
+    <label class="field"><span>{{t "machines.name"}}</span>
+      <input type="text" name="name" required pattern="[a-z0-9][a-z0-9\-]{0,31}" maxlength="32" placeholder="pc" autocomplete="off" spellcheck="false" class="mono"></label>
+    <label class="field"><span>{{t "machines.labelsopt"}}</span>
+      <input type="text" name="labels" placeholder="gpu" autocomplete="off" spellcheck="false" class="mono"></label>
+    {{template "join-via" .Data.Remote}}
+    <button class="btn btn-primary" type="submit">{{t "machines.generate"}}</button>
+  </form>
+  <div id="join-result"></div>
+</section>
+
+{{if .Data.CAHash}}
+<section class="panel" aria-labelledby="tls-title">
+  <h3 id="tls-title">{{template "i-check"}}{{t "machines.tlstitle"}}</h3>
+  <p class="muted">{{t "machines.tlslead"}}</p>
+  <div class="code"><pre id="ca-hash">{{.Data.CAHash}}</pre><button class="btn btn-soft sm" type="button" data-copy="ca-hash">{{t "machines.copy"}}</button></div>
+  {{if .Data.TLSOnly}}<p class="ok-note" role="status">{{t "machines.tlsonly"}}</p>
+  <form hx-post="/settings/machines/tls" hx-confirm="{{t "machines.tlsopenconfirm"}}">
+    <input type="hidden" name="tls_only" value="0">
+    <button class="btn btn-soft" type="submit">{{t "machines.tlsopen"}}</button>
+  </form>
+  {{else}}
+  {{if .Data.Plain}}<p class="muted small">{{tf "machines.tlsplain" .Data.Plain}}</p>{{end}}
+  <form hx-post="/settings/machines/tls" hx-confirm="{{t "machines.tlscloseconfirm"}}">
+    <input type="hidden" name="tls_only" value="1">
+    <button class="btn btn-soft" type="submit">{{t "machines.tlsclose"}}</button>
+  </form>
+  {{end}}
+</section>
+{{end}}
+
+<section class="panel" aria-labelledby="voice-title">
+  <h3 id="voice-title">{{template "i-check"}}{{t "voice.title"}}</h3>
+  <p class="muted">{{t "voice.lead"}}</p>
+  {{if .Data.Voice}}<p class="muted small">{{t "voice.has"}}</p>{{end}}
+  <form hx-post="/settings/voice-token" hx-target="#voice-result" hx-swap="innerHTML"{{if .Data.Voice}} hx-confirm="{{t "voice.replaceconfirm"}}"{{end}}>
+    <button class="btn btn-soft" type="submit">{{if .Data.Voice}}{{t "voice.replace"}}{{else}}{{t "voice.create"}}{{end}}</button>
+  </form>
+  <div id="voice-result"></div>
+</section>
+{{end}}
+
+{{/* Settings → Machines → Updates (web_updates.go). */}}
+{{define "updates"}}
+<section class="panel" aria-labelledby="updates-title">
+  <h3 id="updates-title">{{template "i-branch"}}{{t "updates.title"}}</h3>
+  <p class="muted">{{t "updates.lead"}}</p>
+  <form class="row-form row-form-2" hx-post="/settings/updates/policy" hx-trigger="change">
+    <input type="hidden" name="machine" value="">
+    <label class="field"><span>{{t "updates.all"}}</span>
+      <select name="policy">{{$p := .Policy}}{{range $k := (list "notify" "night" "never")}}<option value="{{$k}}" {{if eq $k $p}}selected{{end}}>{{t (printf "updates.policy.%s" $k)}}</option>{{end}}</select></label>
+  </form>
+  <ul class="list update-list">
+  {{range .Rows}}
+    <li>
+      <div class="list-main">
+        <b>{{.Name}}</b>
+        <span class="muted small mono">{{if .Version}}{{.Version}}{{else}}{{t "updates.noversion"}}{{end}}{{if .Pin}} · {{tf "updates.pinned" .Pin}}{{end}}</span>
+        <span class="small">{{template "update-state" .}}</span>
+      </div>
+      <div class="update-actions">
+        <form hx-post="/settings/updates/policy" hx-trigger="change">
+          <input type="hidden" name="machine" value="{{.Machine}}">
+          <label><span class="sr-only">{{tf "updates.policyfor" .Name}}</span>
+          <select name="policy">
+            <option value="" {{if not .Own}}selected{{end}}>{{tf "updates.policy.inherit" (t (printf "updates.policy.%s" $p))}}</option>
+            {{$own := .Own}}{{range $k := (list "notify" "night" "never")}}<option value="{{$k}}" {{if eq $k $own}}selected{{end}}>{{t (printf "updates.policy.%s" $k)}}</option>{{end}}
+          </select></label>
+        </form>
+        {{if .Updater}}{{if not .Pending}}
+        <form hx-post="/settings/updates/request" class="inline">
+          <input type="hidden" name="machine" value="{{.Machine}}"><input type="hidden" name="action" value="update">
+          <button class="btn btn-soft sm" type="submit" hx-disabled-elt="this" {{if and .CoreFirst (not .Core)}}disabled title="{{t "update.corefirst"}}"{{end}}>{{t "updates.now"}}</button>
+        </form>
+        <form hx-post="/settings/updates/request" hx-confirm="{{tf "updates.rollbackconfirm" .Name}}" class="inline">
+          <input type="hidden" name="machine" value="{{.Machine}}"><input type="hidden" name="action" value="rollback">
+          <button class="link-btn" type="submit">{{t "updates.rollback"}}</button>
+        </form>
+        {{end}}{{end}}
+      </div>
+    </li>
+  {{end}}
+  </ul>
+</section>
+{{end}}
+
+{{/* Where a machine's update stands. */}}
+{{define "update-state"}}
+{{- if not .Updater}}<span class="muted">{{t "updates.noupdater"}}</span>
+{{- else if .Pending}}{{if and .Status (eq .Status.ID .Pending.ID) (eq .Status.Outcome "running")}}{{t "updates.running"}}{{else if .Waiting}}{{t "updates.waiting"}}{{else}}{{t "updates.requested"}}{{end}}
+{{- else if .Status}}<span class="{{if or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned")}}muted{{else}}err-text{{end}}">{{if and (eq .Status.Action "rollback") (eq .Status.Outcome "ok")}}{{t "update.outcome.rollback_ok"}}{{else}}{{t (printf "update.outcome.%s" .Status.Outcome)}}{{end}}{{if .Status.To}} · {{.Status.To}}{{end}}{{if not .Status.At.IsZero}} · {{ago .Status.At}}{{end}}{{if and .Status.Message (ne .Status.Outcome "ok") (ne .Status.Outcome "current")}} — {{.Status.Message}}{{end}}</span>
+{{- end}}
+{{- if and .Latest (not .Pending)}}{{if or .Status (not .Updater)}} · {{end}}<span class="accent-text">{{tf "updates.available" .Latest}}</span>{{end}}
+{{end}}
+
+{{define "voice-token"}}{{with .Data}}
+<p class="ok-note" role="status">{{t "voice.once"}}</p>
+<div class="cmd">
+  <h4>{{t "voice.url"}}</h4>
+  <div class="code"><pre id="voice-url">{{.Core}}</pre><button class="btn btn-soft sm" type="button" data-copy="voice-url">{{t "machines.copy"}}</button></div>
+  <h4>{{t "voice.token"}}</h4>
+  <div class="code"><pre id="voice-tok">{{.Token}}</pre><button class="btn btn-soft sm" type="button" data-copy="voice-tok">{{t "machines.copy"}}</button></div>
+</div>
+{{end}}{{end}}
+
+{{define "join-result"}}{{with .Data}}
+{{if .Error}}<p class="alert" role="alert">{{t .Error}}</p>{{else}}
+{{if .Rejoin}}<p class="alert" role="status">{{tf "machines.rejoinlead" .Name}}</p>{{end}}
+<p class="ok-note" role="status">{{tf "machines.expires" (date .Expires)}}</p>
+{{if .Local}}<p class="notice">{{t "machines.localurl"}}</p>{{end}}
+<div class="cmd">
+  <h4>{{t "machines.unix"}}</h4>
+  <p class="muted small">{{t "machines.unixlead"}}</p>
+  <div class="code"><pre id="cmd-sh">curl -fsSL https://eriphe.com/install.sh | sh -s -- --core {{.Core}} --join-token {{.Token}} --name {{.Name}}{{if .Labels}} --labels {{.Labels}}{{end}}{{if .CAHash}} --ca-hash {{.CAHash}}{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-sh">{{t "machines.copy"}}</button></div>
+</div>
+<div class="cmd">
+  <h4>{{t "machines.windows"}}</h4>
+  <p class="muted small">{{t "machines.windowslead"}}</p>
+  <div class="code"><pre id="cmd-ps">& ([scriptblock]::Create((irm https://eriphe.com/install.ps1))) -Core '{{.Core}}' -JoinToken {{.Token}} -Name {{.Name}}{{if .Labels}} -Labels '{{.Labels}}'{{end}}{{if .CAHash}} -CaHash {{.CAHash}}{{end}}{{if .Rejoin}} -Rejoin{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-ps">{{t "machines.copy"}}</button></div>
+</div>
+<details class="advanced-opts">
+  <summary>{{t "form.advanced"}}</summary>
+  <div class="stack">
+  <div class="cmd">
+    <h4>{{t "machines.linux"}}</h4>
+    <p class="muted small">{{t "machines.linuxlead"}}</p>
+    <div class="code"><pre id="cmd-compose">environment:
+  ERIPHE_CORE: {{.Core}}
+  ERIPHE_NODE_NAME: {{.Name}}{{if .Labels}}
+  ERIPHE_NODE_LABELS: {{.Labels}}{{end}}{{if .CAHash}}
+  ERIPHE_CA_HASH: {{.CAHash}}{{end}}
+  ERIPHE_JOIN_TOKEN: {{.Token}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-compose">{{t "machines.copy"}}</button></div>
+  </div>
+  <div class="cmd">
+    <h4>{{t "machines.binary"}}</h4>
+    <div class="code"><pre id="cmd-binary">eriphe-node -core {{.Core}} -join-token {{.Token}} -name {{.Name}}{{if .Labels}} -labels {{.Labels}}{{end}}{{if .CAHash}} -ca-hash {{.CAHash}}{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-binary">{{t "machines.copy"}}</button></div>
+  </div>
+  <div class="cmd">
+    <h4>{{t "machines.windowsfile"}}</h4>
+    <p class="muted small">{{t "machines.windowsfilelead"}}</p>
+    <div class="code"><pre id="cmd-windows">powershell -ExecutionPolicy Bypass -File .\install.ps1 -Core '{{.Core}}' -JoinToken {{.Token}} -Name {{.Name}}{{if .Labels}} -Labels '{{.Labels}}'{{end}}{{if .CAHash}} -CaHash {{.CAHash}}{{end}}{{if .Rejoin}} -Rejoin{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-windows">{{t "machines.copy"}}</button></div>
+  </div>
+  </div>
+</details>
+{{end}}{{end}}{{end}}
+
+{{define "journal"}}
+<header class="page-head"><h2>{{t "settings.journal"}}</h2><p>{{t "journal.lead"}}</p></header>
+{{if .Data.Rows}}
+<div class="table-wrap">
+<table class="journal">
+  <thead><tr><th scope="col">{{t "journal.when"}}</th><th scope="col">{{t "journal.decision"}}</th><th scope="col">{{t "journal.what"}}</th><th scope="col">{{t "journal.by"}}</th><th scope="col">{{t "journal.reason"}}</th></tr></thead>
+  <tbody>{{template "journal-rows" .}}</tbody>
+</table>
+</div>
+{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-list"}}</span><p>{{t "journal.none"}}</p></div>{{end}}
+{{end}}
+
+{{define "journal-rows"}}
+{{range .Data.Rows}}
+<tr>
+  <td data-label="{{t "journal.when"}}"><time datetime="{{iso .Time}}">{{date .Time}}</time><span class="muted small mono">{{.TaskID}}</span></td>
+  <td data-label="{{t "journal.decision"}}"><span class="tag {{if eq .Decision "allow"}}tag-ok{{else}}tag-no{{end}}">{{t (printf "decision.%s" .Decision)}}</span></td>
+  <td data-label="{{t "journal.what"}}"><span class="strong">{{.Tool}}</span><code class="subject">{{short .Subject 240}}</code></td>
+  <td data-label="{{t "journal.by"}}"><span class="by by-{{.By}}">{{t (printf "by.%s" .By)}}</span></td>
+  <td data-label="{{t "journal.reason"}}" class="muted">{{short .Reason 300}}</td>
+</tr>
+{{end}}
+{{if .Data.Next}}<tr id="journal-more"><td colspan="5"><button class="btn btn-soft" hx-get="/settings/journal?offset={{.Data.Next}}" hx-target="#journal-more" hx-swap="outerHTML">{{t "journal.more"}}</button></td></tr>{{end}}
+{{end}}
+
+{{define "account"}}
+<header class="page-head"><h2>{{t "settings.account"}}</h2><p>{{t "account.lead"}}</p></header>
+<section class="panel" aria-labelledby="lang-title">
+  <h3 id="lang-title">{{t "account.lang"}}</h3>
+  <form hx-post="/lang" class="segmented" role="group" aria-labelledby="lang-title">
+    <button type="submit" name="lang" value="fr" {{if eq .Lang "fr"}}aria-pressed="true"{{else}}aria-pressed="false"{{end}}>Français</button>
+    <button type="submit" name="lang" value="en" {{if eq .Lang "en"}}aria-pressed="true"{{else}}aria-pressed="false"{{end}}>English</button>
+  </form>
+</section>
+<section class="panel" aria-labelledby="pw-title">
+  <h3 id="pw-title">{{t "account.password"}}</h3>
+  <form class="stack-form" hx-post="/settings/password" hx-target="#password-result" data-reset>
+    <label class="field"><span>{{t "account.current"}}</span><input type="password" name="current" required autocomplete="current-password"></label>
+    <label class="field"><span>{{t "account.new"}}</span><input type="password" name="password" required minlength="10" autocomplete="new-password"></label>
+    <label class="field"><span>{{t "account.confirm"}}</span><input type="password" name="confirm" required minlength="10" autocomplete="new-password"></label>
+    <div class="actions"><button class="btn btn-primary" type="submit">{{t "account.save"}}</button></div>
+    <div id="password-result"></div>
+  </form>
+</section>
+<p class="muted small center">{{tf "account.version" .Build}}</p>
+{{if .Updates.Core}}<div class="update-core">{{template "update-notice" dict "ID" "core" "Latest" .Updates.Core "Commands" .Updates.Commands}}</div>{{end}}
+{{end}}
+
+{{/* A newer version of a machine or of eriphe-core, and how to update it. */}}
+{{define "update-notice"}}
+<details class="update-notice">
+  <summary>{{t "update.available"}}</summary>
+  <p class="muted small">{{tf "update.lead" .Latest}}</p>
+  {{$id := .ID}}{{range $i, $c := .Commands}}
+  <div class="cmd">
+    <h4>{{t $c.Label}}</h4>
+    <div class="code"><pre id="update-{{$id}}-{{$i}}">{{$c.Cmd}}</pre><button class="btn btn-soft sm" type="button" data-copy="update-{{$id}}-{{$i}}">{{t "machines.copy"}}</button></div>
+  </div>
+  {{end}}
+</details>
+{{end}}
+
+{{define "password-result"}}<p class="{{if .Data.OK}}ok-note{{else}}alert{{end}}" role="status">{{t .Data.Msg}}</p>{{end}}
+
+{{define "connect"}}{{with .Data}}
+{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>
+{{else if .AuthURL}}
+<ol class="steps">
+  <li><span>{{t "tools.step1"}}</span> <a class="btn btn-primary sm" href="{{.AuthURL}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{t "tools.open"}}</a></li>
+  <li><form class="paste" hx-post="/settings/servers/{{.Name}}/callback" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button">
+    <input type="hidden" name="flow" value="{{.Flow}}">
+    <label class="field"><span>{{t "tools.step2"}}</span>
+      <input type="text" name="url" required placeholder="http://127.0.0.1:…/callback?code=…" spellcheck="false" autocomplete="off" class="mono"></label>
+    <div class="actions"><button class="btn btn-soft sm" type="submit">{{t "tools.finish"}}</button></div>
+  </form></li>
+</ol>
+{{else if eq .Status "ready"}}<p class="ok-note" role="status">{{tf "tools.connected" .Tools}}</p>
+{{else}}<p class="notice">{{t (printf "server.%s" .Status)}}</p>{{end}}
+{{end}}{{end}}

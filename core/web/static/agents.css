@@ -1,0 +1,87 @@
+/* Settings → Agents: AI accounts and agents. Same tokens as app.css. */
+
+/* Each provider in its brand colour. */
+.kmark { width: 40px; height: 40px; border-radius: 12px; }
+.kmark svg { width: 21px; height: 21px; }
+.kmark-claude-subscription, .kmark-anthropic-api { background: #d97757; box-shadow: 0 6px 16px -8px #d97757; }
+.kmark-chatgpt-subscription, .kmark-openai-api { background: #10a37f; box-shadow: 0 6px 16px -8px #10a37f; }
+.kmark-google-api { background: linear-gradient(135deg, #4285f4 0%, #9b72cb 60%, #d96570 100%); box-shadow: 0 6px 16px -8px #4285f4; }
+.kmark-mistral-api { background: #fa520f; box-shadow: 0 6px 16px -8px #fa520f; }
+.kmark-openrouter-api { background: #6467f2; box-shadow: 0 6px 16px -8px #6467f2; }
+.btn .kmark { width: 22px; height: 22px; border-radius: 6px; box-shadow: none; background: rgba(255, 255, 255, .2); }
+.btn .kmark svg { width: 14px; height: 14px; }
+
+.tag-warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+
+/* Onboarding: how it works, then the kinds of account. */
+.onboard { gap: 18px; }
+.how { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.how li { display: grid; gap: 4px; align-content: start; padding: 14px; border-radius: 14px; background: var(--surface-2); font-size: .88rem; }
+.how b { font-size: .92rem; }
+.how span { color: var(--muted); line-height: 1.4; }
+.kind-groups { display: grid; gap: 18px; }
+.kind-group { display: grid; gap: 8px; }
+.kind-group h4 { font-size: .95rem; }
+.kind-group > p { margin: -4px 0 4px; }
+
+/* Agents. */
+.agent-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.agent-title > div { display: grid; gap: 1px; min-width: 0; }
+.agent-title h3 { font-size: 1.08rem; overflow-wrap: anywhere; }
+.agent-title p { margin: 0; }
+.agent-tile .kv dd { align-items: center; }
+.agent-tile .use { min-height: 2.6em; }
+
+.suggestions { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.suggestions form { display: block; height: 100%; }
+.suggestion {
+  width: 100%; height: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; text-align: left;
+  padding: 13px 14px; border-radius: 14px; border: 1px dashed var(--border-strong); background: transparent; color: var(--text); font: inherit; cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.suggestion:hover { border-style: solid; border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--surface-2); }
+.suggestion:disabled { cursor: progress; opacity: .7; }
+.sugg-plus { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-text); }
+.sugg-plus .i { width: 16px; height: 16px; }
+
+.roles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.role { display: grid; gap: 8px; align-content: start; padding: 16px; border-radius: 14px; background: var(--surface-2); }
+.role h4 { font-size: .95rem; }
+.role p { margin: 0; }
+.role .row-form-2 { grid-template-columns: minmax(0, 1fr) auto; }
+
+.prov-list li { justify-content: flex-start; align-items: flex-start; }
+.prov-list .list-main { flex: 1; }
+.prov-list .secret-actions { margin-left: auto; }
+.prov-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.prov-list .test-box { margin-top: 6px; }
+
+/* The provider form: who pays, how to get the key. */
+.bill { display: grid; gap: 8px; padding: 14px 16px; border-radius: 14px; font-size: .88rem; border: 1px solid var(--border); }
+.bill-subscription { background: color-mix(in srgb, var(--ok) 7%, var(--surface)); border-color: color-mix(in srgb, var(--ok) 25%, var(--border)); }
+.bill-usage { background: color-mix(in srgb, var(--warn-strong) 7%, var(--surface)); border-color: color-mix(in srgb, var(--warn-strong) 25%, var(--border)); }
+.bill > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; }
+.bill-k { font-weight: 650; color: var(--muted); }
+.provider-form .steps li { line-height: 1.45; }
+.provider-form .steps .code { margin-top: 8px; }
+.provider-form .steps .code pre { padding-right: 16px; }
+.preset-checks { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+
+.agent-form:not(:has(select[name=model] option[value=other]:checked)) .if-model-other { display: none; }
+
+/* The ChatGPT sign-in. */
+.login-box { display: grid; gap: 10px; justify-items: start; padding: 16px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); }
+.login-box p { margin: 0; overflow-wrap: anywhere; }
+.login-code { font-family: var(--mono); font-size: 1.6rem; font-weight: 700; letter-spacing: .12em; padding: 8px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-strong); user-select: all; }
+.pulse-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--accent); color: var(--accent); animation: pulse 1.6s infinite; vertical-align: middle; }
+
+@media (max-width: 860px) {
+  .how { grid-template-columns: 1fr; }
+  .roles { grid-template-columns: 1fr; }
+  .role .row-form-2 { grid-template-columns: 1fr; }
+  .prov-list li { flex-wrap: wrap; }
+  .prov-list .secret-actions { margin-left: 52px; justify-content: flex-start; }
+  .bill > div { grid-template-columns: 1fr; gap: 2px; }
+  .suggestions { grid-template-columns: 1fr; }
+}
+.agent-tile .kv dt { min-width: 64px; }

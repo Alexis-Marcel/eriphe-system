@@ -1,0 +1,52 @@
+{{/* The catalog's pages: tools and the advanced secrets (agents.html has the agents). */}}
+
+{{define "src-tag"}}{{if eq . "config"}}<span class="tag tag-lock" title="{{t "catalog.fromconfighint"}}">{{template "i-lock"}}{{t "catalog.fromconfig"}}</span>{{end}}{{end}}
+
+{{define "secrets-body"}}
+{{if .Flash}}<p class="{{if .OK}}ok-note{{else}}alert{{end}}" role="status">{{.Flash}}</p>{{end}}
+<p class="muted small">{{t "secrets.lead"}}</p>
+{{if not .Open}}<p class="alert">{{t "accounts.novault"}}</p>{{else}}
+{{if .Secrets}}
+<ul class="list secret-list">
+{{range .Secrets}}
+  <li>
+    <div class="list-main">
+      <span class="strong">{{if eq .Owner "server"}}{{tf "secrets.ofserver" .Of}} · {{t (printf "slot.%s" .Slot)}}{{else if eq .Owner "service"}}{{tf "secrets.ofserver" .Of}} · <span class="mono">{{.Slot}}</span>{{else if eq .Owner "provider"}}{{tf "secrets.ofprovider" .Of}} · {{t "slot.key"}}{{else if eq .Owner "config"}}{{t "secrets.ofconfig"}} · <span class="mono">{{.Of}}</span>{{else}}{{t "secrets.unused"}}{{end}}</span>
+      <span class="muted small"><code>{{.Name}}</code> · {{tf "accounts.updated" (ago .Updated)}}</span>
+    </div>
+    <div class="secret-actions">
+      <details class="replace"><summary class="link-btn">{{t "secrets.replace"}}</summary>
+        <form class="replace-form" hx-post="/settings/secrets" hx-target="#secrets" autocomplete="off">
+          <input type="hidden" name="name" value="{{.Name}}">
+          <input type="password" name="value" required autocomplete="new-password" aria-label="{{t "secrets.newvalue"}}" placeholder="{{t "secrets.newvalue"}}">
+          <button class="btn btn-soft sm" type="submit">{{t "form.save"}}</button>
+        </form>
+      </details>
+      <form hx-post="/settings/secrets/{{.Name}}/delete" hx-target="#secrets" hx-confirm="{{t "accounts.deleteconfirm"}}" class="inline">
+        <button class="link-btn danger" type="submit">{{t "accounts.delete"}}</button></form>
+    </div>
+  </li>
+{{end}}
+</ul>
+{{else}}<p class="muted">{{t "accounts.none"}}</p>{{end}}
+{{end}}
+{{if .Refs}}
+<h4>{{t "accounts.config"}}</h4>
+<p class="muted small">{{t "accounts.configlead"}}</p>
+<ul class="list">
+{{range .Refs}}
+  <li>
+    <div class="list-main"><span class="mono strong">{{.Field}}</span><span class="muted small">{{if .InVault}}<span class="tag {{if .Missing}}tag-no{{else}}tag-ok{{end}}">{{if .Missing}}{{t "secrets.missing"}}{{else}}{{t "accounts.invault"}}{{end}}</span>{{else}}<span class="tag">{{t "accounts.infile"}}</span>{{end}} <code>{{.Ref}}</code></span></div>
+    {{if and (not .InVault) $.Open}}<form hx-post="/settings/secrets/import" hx-target="#secrets" class="inline"><input type="hidden" name="field" value="{{.Field}}">
+      <button class="btn btn-soft sm" type="submit">{{t "accounts.import"}}</button></form>
+    {{else if and .Missing $.Open}}<form class="replace-form" hx-post="/settings/secrets" hx-target="#secrets" autocomplete="off">
+      <input type="hidden" name="name" value="{{trimvault .Ref}}">
+      <input type="password" name="value" required autocomplete="new-password" aria-label="{{t "secrets.newvalue"}}" placeholder="{{t "secrets.newvalue"}}">
+      <button class="btn btn-soft sm" type="submit">{{t "form.save"}}</button></form>{{end}}
+  </li>
+{{end}}
+</ul>
+{{end}}
+{{end}}
+
+{{define "secrets"}}{{template "secrets-body" .Data}}{{end}}

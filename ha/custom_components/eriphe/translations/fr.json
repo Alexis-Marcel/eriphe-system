@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Se connecter à Eriphe",
+        "description": "Home Assistant confiera à eriphe-core chaque phrase qu'il ne sait pas traiter localement.",
+        "data": {
+          "url": "URL",
+          "token": "Jeton"
+        },
+        "data_description": {
+          "url": "Adresse d'eriphe-core sur le réseau local, par exemple http://192.0.2.2:8800.",
+          "token": "Le jeton donné par eriphe-core pour Home Assistant."
+        }
+      },
+      "reconfigure": {
+        "title": "Modifier la connexion à Eriphe",
+        "description": "Modifier l'adresse ou le jeton d'eriphe-core.",
+        "data": {
+          "url": "URL",
+          "token": "Jeton"
+        },
+        "data_description": {
+          "url": "Adresse d'eriphe-core sur le réseau local, par exemple http://192.0.2.2:8800.",
+          "token": "Le jeton donné par eriphe-core pour Home Assistant."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de se connecter à eriphe-core.",
+      "invalid_auth": "eriphe-core a refusé le jeton.",
+      "invalid_url": "L'URL doit commencer par http:// ou https://.",
+      "brain_unavailable": "eriphe-core répond, mais son cerveau n'est pas disponible. Réessayez plus tard.",
+      "unexpected_response": "Le serveur a répondu, mais pas comme eriphe-core.",
+      "unknown": "Erreur inattendue."
+    },
+    "abort": {
+      "already_configured": "Eriphe est déjà configuré.",
+      "single_instance_allowed": "Eriphe est déjà configuré.",
+      "reconfigure_successful": "La connexion à Eriphe a été modifiée."
+    }
+  }
+}

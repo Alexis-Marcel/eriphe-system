@@ -1,0 +1,43 @@
+{{define "main"}}
+<div class="workspace" data-view="chat">
+  <section class="chat" aria-label="{{t "chat.label"}}" data-drop="{{t "chat.drop"}}">
+    <div class="chat-scroll" id="chat-scroll">
+      <div class="chat-inner">
+        {{if .Data.More}}<p class="earlier">{{t "chat.earlier"}}</p>{{end}}
+        {{if not .Data.Msgs}}
+        <div class="hello" id="hello">
+          <span class="hello-mark" aria-hidden="true">{{template "logo"}}</span>
+          <h1>{{tf "chat.hello" .User}}</h1>
+          <p>{{t "chat.empty"}}</p>
+          <ul class="examples">
+            <li><button type="button" class="example" data-example>{{t "chat.ex1"}}</button></li>
+            <li><button type="button" class="example" data-example>{{t "chat.ex2"}}</button></li>
+            <li><button type="button" class="example" data-example>{{t "chat.ex3"}}</button></li>
+          </ul>
+        </div>
+        {{end}}
+        <div id="messages" class="messages" data-last="{{.Data.LastSeq}}" role="log" aria-live="polite" aria-relevant="additions">
+          {{range .Data.Msgs}}{{template "message" .}}{{end}}
+        </div>
+        <div id="draft" class="draft"></div>
+        <div id="pending" class="pending" aria-live="polite">{{template "pending" .Data.Pending}}</div>
+      </div>
+    </div>
+    <form class="composer" id="composer" hx-post="/messages" hx-swap="none" hx-encoding="multipart/form-data" hx-disabled-elt="find .send" data-reset>
+      <div class="composer-files" id="composer-files" hidden></div>
+      <label class="attach" title="{{t "chat.attach"}}">
+        <input type="file" id="files" name="files" class="sr-only" multiple accept="image/*,application/pdf,text/plain,text/markdown,text/csv,.txt,.md,.markdown,.csv"
+          data-max="{{.Data.MaxFile}}" data-many="{{.Data.MaxFiles}}" data-toobig="{{t "chat.file.toobig"}}" data-toomany="{{t "chat.file.many"}}" data-remove="{{t "chat.file.remove"}}">
+        <span class="sr-only">{{t "chat.attach"}}</span>{{template "i-clip"}}
+      </label>
+      <label for="text" class="sr-only">{{t "chat.placeholder"}}</label>
+      <textarea id="text" name="text" rows="1" placeholder="{{t "chat.placeholder"}}" maxlength="20000" autocomplete="off" enterkeyhint="send"></textarea>
+      <button class="send" type="submit" aria-label="{{t "chat.send"}}" title="{{t "chat.send"}}">{{template "i-send"}}</button>
+    </form>
+  </section>
+  <aside class="side" id="tasks-panel" aria-label="{{t "tasks.label"}}">
+    <div id="tasks">{{template "tasks" .Data.Tasks}}</div>
+  </aside>
+  <div id="drawer" class="drawer" aria-live="polite"></div>
+</div>
+{{end}}

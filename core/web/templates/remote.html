@@ -1,0 +1,178 @@
+{{/* Settings → Remote access (web_remote.go). */}}
+
+{{define "i-globe"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.3 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.3-3.5-8.5s1.1-6.1 3.5-8.5z"/></svg>{{end}}
+{{define "i-phone"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/></svg>{{end}}
+{{define "i-home-add"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8.5v7M8.5 12h7"/></svg>{{end}}
+{{define "i-clock"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>{{end}}
+
+{{define "remote"}}
+<header class="page-head"><h2>{{t "settings.remote"}}</h2><p>{{t "remote.lead"}}</p></header>
+<div id="remote-live" class="remote-live" data-remote-live>{{template "remote-status" .}}</div>
+{{template "remote-advanced" .}}
+{{end}}
+
+{{define "remote-steps"}}
+<ol class="remote-steps" aria-label="{{t "remote.steps"}}">
+  {{$p := .Phase}}
+  <li class="{{if or (eq $p "login") (eq $p "approval") (eq $p "starting")}}is-current{{else}}is-done{{end}}"><b>1</b><span>{{t "remote.step.login"}}</span></li>
+  <li class="{{if eq $p "https"}}is-current{{else if eq $p "ready"}}is-done{{end}}"><b>2</b><span>{{t "remote.step.https"}}</span></li>
+  <li class="{{if eq $p "ready"}}is-current{{end}}"><b>3</b><span>{{t "remote.step.phone"}}</span></li>
+</ol>
+{{end}}
+
+{{define "remote-status"}}{{with .Data}}
+{{if eq .Phase "off"}}
+<section class="panel remote-hero" aria-labelledby="remote-off-title">
+  <span class="remote-art" aria-hidden="true">{{template "i-globe"}}</span>
+  <h3 id="remote-off-title">{{t "remote.off.title"}}</h3>
+  <p class="muted">{{t "remote.off.lead"}}</p>
+  <ul class="remote-points">
+    <li>{{template "i-shield"}}<span>{{t "remote.point.private"}}</span></li>
+    <li>{{template "i-lock"}}<span>{{t "remote.point.https"}}</span></li>
+    <li>{{template "i-phone"}}<span>{{t "remote.point.phone"}}</span></li>
+  </ul>
+  <form hx-post="/settings/remote/enable" hx-target="#remote-live" hx-disabled-elt="find button" class="actions">
+    <button class="btn btn-primary" type="submit">{{template "i-globe"}}{{t "remote.enable"}}</button>
+  </form>
+  <p class="muted small">{{t "remote.off.foot"}}</p>
+</section>
+{{else}}
+{{if and .Expiring (eq .Phase "ready")}}
+<div class="remote-banner {{if .Expired}}bad{{end}}" role="alert">
+  {{template "i-clock"}}
+  <div><b>{{if .Expired}}{{t "remote.expired"}}{{else}}{{tf "remote.expiring" (date .KeyExpiry)}}{{end}}</b>
+  <p>{{t "remote.expiringlead"}}</p></div>
+  {{if .AuthURL}}<a class="btn btn-primary sm" href="{{.AuthURL}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{t "remote.relogin.open"}}</a>
+  {{else}}<form hx-post="/settings/remote/relogin" hx-target="#remote-live" hx-disabled-elt="find button" class="inline"><button class="btn btn-primary sm" type="submit">{{t "remote.relogin"}}</button></form>{{end}}
+</div>
+{{end}}
+<section class="panel remote-card" aria-labelledby="remote-title">
+  <div class="panel-head">
+    <h3 id="remote-title">{{template "i-globe"}}{{t "settings.remote"}}</h3>
+    <span class="status {{if eq .Phase "ready"}}on{{else if eq .Phase "error"}}bad{{else}}wait{{end}}"><span class="led" aria-hidden="true"></span>{{t (printf "remote.phase.%s" .Phase)}}</span>
+  </div>
+  {{if ne .Phase "error"}}{{template "remote-steps" .}}{{end}}
+
+  {{if eq .Phase "starting"}}
+  <p class="remote-wait"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>{{t "remote.starting"}}</p>
+
+  {{else if eq .Phase "login"}}
+  <div class="remote-step">
+    <h4>{{t "remote.login.title"}}</h4>
+    <p>{{tf "remote.login.lead" .Hostname}}</p>
+    {{if .AuthURL}}
+    <div class="actions"><a class="btn btn-primary" href="{{.AuthURL}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{t "remote.login.button"}}</a></div>
+    {{else}}<p class="remote-wait"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>{{t "remote.login.waiting"}}</p>{{end}}
+    {{if .DefaultControl}}<p class="muted small">{{t "remote.login.account"}}</p>{{end}}
+    <p class="muted small">{{t "remote.live"}}</p>
+  </div>
+
+  {{else if eq .Phase "approval"}}
+  <div class="remote-step">
+    <h4>{{t "remote.approval.title"}}</h4>
+    <p>{{tf "remote.approval.lead" .Hostname}}</p>
+    {{if .DefaultControl}}<div class="actions"><a class="btn btn-soft" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{t "remote.approval.button"}}</a></div>{{end}}
+    <p class="muted small">{{t "remote.live"}}</p>
+  </div>
+
+  {{else if eq .Phase "https"}}
+  <div class="remote-step">
+    <h4>{{t "remote.https.title"}}</h4>
+    {{if not .MagicDNS}}
+    <p>{{t "remote.https.magicdns"}}</p>
+    {{if .DefaultControl}}<div class="actions"><a class="btn btn-soft" href="https://login.tailscale.com/admin/dns" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{t "remote.https.dnsbutton"}}</a></div>{{end}}
+    {{else if .HTTPSURL}}
+    <p>{{t "remote.https.lead"}}</p>
+    <div class="actions"><a class="btn btn-primary" href="{{.HTTPSURL}}" target="_blank" rel="noopener noreferrer">{{template "i-lock"}}{{t "remote.https.button"}}</a></div>
+    {{else}}
+    <p>{{t "remote.https.admin"}}</p>
+    {{if .HTTPSText}}<pre class="remote-text">{{.HTTPSText}}</pre>{{end}}
+    {{end}}
+    <p class="notice small">{{tf "remote.https.ct" .Name}}</p>
+    <p class="muted small">{{t "remote.live"}}</p>
+  </div>
+
+  {{else if eq .Phase "ready"}}
+  <div class="remote-ready">
+    <div class="remote-address">
+      <span class="muted small">{{t "remote.address"}}</span>
+      <div class="code"><pre id="remote-url">{{.URL}}</pre><button class="btn btn-soft sm" type="button" data-copy="remote-url">{{t "machines.copy"}}</button></div>
+      <p class="muted small">{{t "remote.addresslead"}}</p>
+      <dl class="kv remote-facts">
+        {{if .Tailnet}}<div><dt>{{t "remote.tailnet"}}</dt><dd class="mono">{{.Tailnet}}</dd></div>{{end}}
+        <div><dt>{{t "remote.expiry"}}</dt><dd>{{if .KeyExpiry.IsZero}}{{t "remote.noexpiry"}}{{else}}{{date .KeyExpiry}}{{end}}</dd></div>
+        <div><dt>{{t "remote.api"}}</dt><dd class="mono">{{.APIURL}}</dd></div>
+      </dl>
+    </div>
+    {{if .QR}}<figure class="remote-qr">{{.QR}}<figcaption class="muted small">{{t "remote.qr"}}</figcaption></figure>{{end}}
+  </div>
+  <div class="remote-howto">
+    <div class="remote-tip">
+      <h4>{{template "i-phone"}}{{t "remote.app.title"}}</h4>
+      <p class="muted small">{{t "remote.app.lead"}}</p>
+      <p class="actions"><a class="btn btn-ghost sm" href="https://apps.apple.com/app/tailscale/id1470499037" target="_blank" rel="noopener noreferrer">App Store</a>
+      <a class="btn btn-ghost sm" href="https://play.google.com/store/apps/details?id=com.tailscale.ipn" target="_blank" rel="noopener noreferrer">Google Play</a>
+      <a class="btn btn-ghost sm" href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer">{{t "remote.app.other"}}</a></p>
+    </div>
+    <div class="remote-tip">
+      <h4>{{template "i-home-add"}}{{t "remote.home.title"}}</h4>
+      <p class="muted small">{{t "remote.home.ios"}}</p>
+      <p class="muted small">{{t "remote.home.android"}}</p>
+    </div>
+  </div>
+
+  {{else if eq .Phase "error"}}
+  <p class="alert" role="alert">{{t "remote.error"}} <span class="mono small">{{short .Error 300}}</span></p>
+  <form hx-post="/settings/remote/retry" hx-target="#remote-live" hx-disabled-elt="find button" class="actions">
+    <button class="btn btn-soft" type="submit">{{t "remote.retry"}}</button>
+  </form>
+  {{end}}
+
+  <div class="tile-foot remote-foot">
+    <span class="muted small">{{if eq .Phase "ready"}}{{t "remote.foot.ready"}}{{else}}{{t "remote.foot"}}{{end}}</span>
+    <form hx-post="/settings/remote/disable" hx-target="#remote-live" hx-confirm="{{t "remote.disableconfirm"}}" class="inline">
+      <button class="link-btn danger" type="submit">{{t "remote.disable"}}</button>
+    </form>
+  </div>
+</section>
+{{end}}
+{{end}}{{end}}
+
+{{define "remote-advanced"}}{{with .Data}}
+<details class="panel remote-advanced" {{if or .ControlURL .HasAuthKey}}open{{end}}>
+  <summary><h3>{{template "i-settings"}}{{t "remote.advanced"}}</h3></summary>
+  <form class="stack-form" hx-post="/settings/remote/advanced" hx-target="#remote-advanced-result">
+    <label class="field"><span>{{t "remote.hostname"}}</span>
+      <input type="text" name="hostname" value="{{.Hostname}}" pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" autocomplete="off" spellcheck="false" class="mono">
+      <small>{{t "remote.hostnamehint"}}</small></label>
+    <label class="field"><span>{{t "remote.control"}}</span>
+      <input type="url" name="control_url" value="{{.ControlURL}}" placeholder="https://headscale.example.org" autocomplete="off" spellcheck="false" class="mono">
+      <small>{{t "remote.controlhint"}}</small></label>
+    <label class="field"><span>{{t "remote.authkey"}}</span>
+      <input type="password" name="authkey" placeholder="{{if .HasAuthKey}}{{t "remote.authkeyset"}}{{else}}tskey-auth-…{{end}}" autocomplete="off" spellcheck="false" class="mono" {{if not .HasVault}}disabled{{end}}>
+      <small>{{if .HasVault}}{{t "remote.authkeyhint"}}{{else}}{{t "remote.novault"}}{{end}}</small></label>
+    {{if .HasAuthKey}}<label class="check"><input type="checkbox" name="clear_authkey" value="1"><span>{{t "remote.authkeyclear"}}</span></label>{{end}}
+    <div class="actions"><button class="btn btn-primary" type="submit">{{t "remote.save"}}</button></div>
+    <div id="remote-advanced-result"></div>
+  </form>
+  <div class="remote-danger">
+    <div><b>{{t "remote.logout"}}</b><p class="muted small">{{t "remote.logoutlead"}}</p></div>
+    <form hx-post="/settings/remote/logout" hx-confirm="{{t "remote.logoutconfirm"}}" class="inline">
+      <button class="btn btn-danger-ghost sm" type="submit">{{t "remote.logout"}}</button>
+    </form>
+  </div>
+</details>
+{{end}}{{end}}
+
+{{define "remote-advanced-result"}}<p class="{{if .Data.OK}}ok-note{{else}}alert{{end}}" role="status">{{t .Data.Msg}}</p>{{end}}
+
+{{define "join-via"}}{{if .}}
+<fieldset class="choices span-all">
+  <legend>{{t "machines.via"}}</legend>
+  <div class="choice-row choice-row-3">
+    <label class="choice"><input type="radio" name="via" value="both" checked><b>{{t "machines.via.both"}}</b><small>{{t "machines.via.bothlead"}}</small></label>
+    <label class="choice"><input type="radio" name="via" value="lan"><b>{{t "machines.via.lan"}}</b><small>{{t "machines.via.lanlead"}}</small></label>
+    <label class="choice"><input type="radio" name="via" value="remote"><b>{{t "machines.via.remote"}}</b><small>{{.}}</small></label>
+  </div>
+</fieldset>
+{{end}}{{end}}

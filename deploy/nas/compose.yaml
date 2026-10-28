@@ -1,0 +1,108 @@
+# eriphe-core and the NAS's eriphe-node, with the node's Docker access going
+# through a socket proxy that only allows the calls eriphe-node makes.
+# Task containers are started on eriphe-tasks, an internal network of their
+# own that only eriphe-node joins besides them: they reach only the node, its
+# task listener (eriphe-node:8790) and its egress relay (eriphe-node:8791),
+# their one way to the Internet, which never dials the LAN. Not eriphe-core,
+# the local MCP services (on eriphe-system), the NAS nor the rest of the LAN. The proxy is on its own internal network, which only
+# eriphe-node joins.
+name: eriphe-system
+services:
+  core:
+    image: ghcr.io/alexis-marcel/eriphe-core
+    container_name: eriphe-core
+    restart: unless-stopped
+    command: ["-config", "/etc/eriphe/core.json"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # 8843 on the host: the workspace (8443 is often taken, e.g. by Unraid's nginx).
+    ports: ["8800:8800", "8843:8443"]
+    # Remote access (Settings → Remote access) needs nothing more: Tailscale runs in userspace,
+    # outbound only, with its state in ./core/tailscale (keep it out of backups that leave home).
+    volumes:
+      - ./core.json:/etc/eriphe/core.json:ro
+      - ./core:/data
+      - ./secrets:/secrets:ro
+    networks: [eriphe-system]
+
+  docker-proxy:
+    image: wollomatic/socket-proxy:1.13.2
+    container_name: eriphe-docker-proxy
+    restart: unless-stopped
+    # nobody, in the group that owns /var/run/docker.sock (281 on Unraid:
+    # `stat -c %g /var/run/docker.sock`).
+    user: "65534:281"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [eriphe-docker]
+    # ^ and $ are implied. V: optional API version prefix; ID: a container id or name.
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=eriphe-node
+      - -shutdowngracetime=5
+      - -watchdoginterval=0
+      # Bind mounts only from the node's root (task folders and profiles) and
+      # the place whose folders may be given to Eriphe (ERIPHE_NODE_SHARES).
+      - -allowbindmountfrom=/mnt/user/appdata/eriphe-system/node,/mnt/user
+      - -allowHEAD=(/v1\.[0-9]+)?/_ping
+      # version, network inspect bridge and eriphe-tasks, ps, images, and an image's labels (its runtimes)
+      - -allowGET=(/v1\.[0-9]+)?/(_ping|version|networks/(bridge|eriphe-tasks)|containers/json|images/json|images/[a-zA-Z0-9][a-zA-Z0-9_./:@-]*/json)
+      # run -i: create (pulling the image if needed), attach, start, wait; stop
+      - -allowPOST=(/v1\.[0-9]+)?/(containers/create|containers/[a-zA-Z0-9][a-zA-Z0-9_.-]*/(attach|start|wait|stop)|images/create)
+      # rm -f
+      - -allowDELETE=(/v1\.[0-9]+)?/containers/[a-zA-Z0-9][a-zA-Z0-9_.-]*
+
+  node:
+    image: ghcr.io/alexis-marcel/eriphe-node
+    container_name: eriphe-node
+    restart: unless-stopped
+    depends_on: [core, docker-proxy]
+    environment:
+      ERIPHE_CORE: http://eriphe-core:8800
+      ERIPHE_NODE_NAME: nas
+      DOCKER_HOST: tcp://eriphe-docker-proxy:2375
+      # Only for the first join: ERIPHE_JOIN_TOKEN=... docker compose up -d node
+      ERIPHE_JOIN_TOKEN: ${ERIPHE_JOIN_TOKEN:-}
+      # eriphe-core's CA for machines (Settings → Machines): the node checks it. Without it, the
+      # node pins the CA it gets at its first TLS upgrade.
+      ERIPHE_CA_HASH: ${ERIPHE_CA_HASH:-}
+      # The shares of the NAS, whose folders the user may give to Eriphe
+      # (Settings → Folders); appdata and the node's own root are never shared.
+      ERIPHE_NODE_SHARES: shares=/mnt/user
+    command: ["-root", "/mnt/user/appdata/eriphe-system/node",
+              "-network", "eriphe-system", "-task-network", "eriphe-tasks",
+              "-callback-url", "http://eriphe-node:8790",
+              "-image", "ghcr.io/alexis-marcel/eriphe-worker:latest",
+              "-task-memory", "8g", "-always-on"]
+    volumes:
+      # Same path inside and outside: the Docker daemon understands it as is.
+      - /mnt/user/appdata/eriphe-system/node:/mnt/user/appdata/eriphe-system/node
+      # The shares, at the same path: the node lists their directories,
+      # creates the Eriphe/ subfolder of a folder lent with the right to drop
+      # results, and mounts the folders into the tasks.
+      - /mnt/user:/mnt/user
+    # eriphe-system: eriphe-core, the services, and the node's own egress;
+    # eriphe-tasks: the tasks, which call it back as eriphe-node:8790 and go
+    # out through eriphe-node:8791 (both bind only there).
+    networks: [eriphe-system, eriphe-tasks, eriphe-docker]
+
+networks:
+  eriphe-system:
+    name: eriphe-system
+  # Internal: no route out, tasks go through the node's egress relay. Its
+  # bridge has no address on the NAS (isolated gateway, Docker 28+), so tasks
+  # cannot reach the NAS's own services (its web UI) on the gateway either.
+  # Containers can talk on it: the tasks must reach eriphe-node. Docker cannot
+  # change these on an existing network: see deploy/README.md to recreate it.
+  eriphe-tasks:
+    name: eriphe-tasks
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+  eriphe-docker:
+    name: eriphe-docker
+    internal: true

@@ -1,0 +1,86 @@
+/* Settings → Remote access, and the join form's choice of address. */
+
+.status.wait { color: var(--warn); }
+.status.wait .led { background: var(--warn-strong); box-shadow: 0 0 0 4px var(--warn-soft); animation: pulse 1.6s ease-in-out infinite; }
+.status.bad { color: var(--danger); }
+.status.bad .led { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
+@keyframes pulse { 50% { box-shadow: 0 0 0 7px transparent; } }
+
+.remote-live { display: grid; gap: 14px; }
+
+.remote-hero { justify-items: start; padding: 30px 28px; position: relative; overflow: hidden; }
+.remote-hero::after { content: ""; position: absolute; width: 360px; height: 360px; right: -140px; top: -170px; border-radius: 50%;
+  background: var(--grad); opacity: .10; filter: blur(30px); pointer-events: none; }
+.remote-hero h3 { font-size: 1.3rem; letter-spacing: -.02em; }
+.remote-art { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 18px; background: var(--grad); color: #fff;
+  box-shadow: 0 10px 26px -10px color-mix(in srgb, var(--accent) 80%, transparent); }
+.remote-art .i { width: 28px; height: 28px; stroke-width: 1.7; }
+.remote-points { list-style: none; margin: 4px 0 6px; padding: 0; display: grid; gap: 10px; }
+.remote-points li { display: flex; gap: 10px; align-items: center; font-size: .93rem; }
+.remote-points .i { color: var(--accent); }
+
+.remote-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
+.remote-steps li { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-radius: 12px; background: var(--surface-2); color: var(--faint); font-size: .86rem; font-weight: 600; min-width: 0; }
+.remote-steps li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remote-steps b { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border-radius: 50%; background: var(--surface); border: 1px solid var(--border-strong); font-size: .78rem; }
+.remote-steps li.is-current { background: var(--accent-soft); color: var(--accent-text); }
+.remote-steps li.is-current b { background: var(--grad); color: #fff; border-color: transparent; }
+.remote-steps li.is-done { color: var(--ok); }
+.remote-steps li.is-done b { background: var(--ok-soft); color: var(--ok); border-color: transparent; font-size: 0; }
+.remote-steps li.is-done b::before { content: "✓"; font-size: .8rem; }
+
+.remote-step { display: grid; gap: 12px; justify-items: start; padding: 4px 2px; }
+.remote-step h4 { font-size: 1.02rem; }
+.remote-step p { max-width: 64ch; }
+.remote-wait { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: .92rem; }
+.remote-text { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: .82rem; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+
+.remote-ready { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 22px; align-items: start; }
+.remote-address { display: grid; gap: 10px; min-width: 0; }
+.remote-address .code pre { font-size: .95rem; font-weight: 600; }
+.remote-facts { padding-top: 4px; }
+.remote-facts dt { min-width: 200px; }
+.remote-qr { margin: 0; display: grid; justify-items: center; gap: 8px; }
+.remote-qr .qr { width: 176px; height: 176px; border-radius: 16px; display: block; box-shadow: var(--shadow); border: 1px solid var(--border); }
+.remote-qr figcaption { max-width: 176px; text-align: center; }
+
+.remote-howto { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.remote-tip { display: grid; gap: 8px; align-content: start; padding: 16px; border-radius: 16px; background: var(--surface-2); }
+.remote-tip h4 { display: flex; align-items: center; gap: 8px; font-size: .95rem; }
+.remote-tip h4 .i { color: var(--accent); }
+.remote-tip .actions { gap: 8px; margin: 2px 0 0; }
+
+.remote-foot { justify-content: space-between; flex-wrap: wrap; }
+
+.remote-banner { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 16px; background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn-strong) 40%, transparent); color: var(--text); }
+.remote-banner > .i { color: var(--warn); width: 22px; height: 22px; }
+.remote-banner > div { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.remote-banner p { color: var(--muted); font-size: .86rem; }
+.remote-banner.bad { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.remote-banner.bad > .i { color: var(--danger); }
+
+.remote-advanced { gap: 0; }
+.remote-advanced[open] { gap: 14px; }
+.remote-advanced summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+.remote-advanced summary::-webkit-details-marker { display: none; }
+.remote-advanced summary::after { content: ""; width: 9px; height: 9px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); margin-right: 4px; transition: transform .2s; }
+.remote-advanced[open] summary::after { transform: rotate(-135deg); }
+.remote-danger { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid var(--border); }
+.remote-danger > div { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; }
+
+.row-form .span-all { grid-column: 1 / -1; }
+.row-form:has(.span-all) > .btn { grid-column: 1 / -1; justify-self: start; }
+
+@media (max-width: 860px) {
+  .remote-hero { padding: 24px 18px; }
+  .remote-ready { grid-template-columns: 1fr; }
+  .remote-qr { justify-self: center; }
+  .remote-howto { grid-template-columns: 1fr; }
+  .remote-steps { display: flex; }
+  .remote-steps li { padding: 8px; gap: 6px; font-size: .82rem; }
+  .remote-steps li.is-current { flex: 1; }
+  .remote-steps li:not(.is-current) span { display: none; }
+  .remote-facts dt { min-width: 0; width: 100%; }
+  .remote-banner { flex-direction: column; align-items: flex-start; }
+}

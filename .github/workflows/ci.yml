@@ -1,0 +1,186 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: node
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: node/go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+      - run: GOOS=windows go build ./...
+
+  core:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: core/go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+
+  core-image:
+    needs: core
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      image: eriphe-core
+      context: core
+      version-arg: true
+      # The installers ship in the image, for the portal (core/Dockerfile).
+      build-contexts: install=install
+      version-paths: install
+
+  node-image:
+    needs: node
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      image: eriphe-node
+      context: node
+      version-arg: true
+
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: sh install/lint.sh
+      - run: sh install/install.sh --help
+      - name: parse install.ps1
+        shell: pwsh
+        run: |
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/install/install.ps1", [ref]$null, [ref]$errors)
+          $errors | ForEach-Object { Write-Host "::error file=install/install.ps1,line=$($_.Extent.StartLineNumber)::$($_.Message)" }
+          if ($errors) { exit 1 }
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module PSScriptAnalyzer -Scope CurrentUser -Force }
+          $found = Invoke-ScriptAnalyzer -Path install/install.ps1 -Severity Error, Warning -ExcludeRule PSAvoidUsingWriteHost
+          $found | Format-Table -AutoSize Severity, Line, RuleName, Message | Out-String -Width 240 | Write-Host
+          if ($found | Where-Object Severity -eq Error) { exit 1 }
+
+  worker:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      image: eriphe-worker
+      context: worker
+
+  cli:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: cli/go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+
+  mail:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: servers/mail
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: servers/mail/go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: test -z "$(gofmt -l .)"
+
+  mail-image:
+    needs: mail
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      image: eriphe-mail
+      context: servers/mail
+      version-arg: true
+
+  calendar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: servers/calendar
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: servers/calendar/go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: test -z "$(gofmt -l .)"
+
+  calendar-image:
+    needs: calendar
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      image: eriphe-calendar
+      context: servers/calendar
+      version-arg: true
+
+  files:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: servers/files
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: servers/files/go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: test -z "$(gofmt -l .)"
+
+  files-image:
+    needs: files
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      image: eriphe-files
+      context: servers/files
+      version-arg: true

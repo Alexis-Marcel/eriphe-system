@@ -1,0 +1,27 @@
+{{define "main"}}
+<div class="auth">
+  <div class="auth-glow" aria-hidden="true"></div>
+  <form class="auth-card" method="post" action="{{if .Data.Setup}}/setup{{else}}/login{{end}}">
+    <span class="auth-mark" aria-hidden="true">{{template "logo"}}</span>
+    <h1>{{if .Data.Setup}}{{t "setup.title"}}{{else}}Eriphe{{end}}</h1>
+    <p class="lead">{{if .Data.Setup}}{{t "setup.lead"}}{{else}}{{t "login.lead"}}{{end}}</p>
+    {{if .Data.Error}}<p class="alert" role="alert">{{t .Data.Error}}</p>{{end}}
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    {{if .Data.Setup}}
+    <label class="field"><span>{{t "setup.code"}}</span>
+      <input type="text" name="code" required autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCD-EFGH" class="mono"></label>
+    <label class="field"><span>{{t "setup.password"}}</span>
+      <input type="password" name="password" required minlength="10" autocomplete="new-password" aria-describedby="pw-hint">
+      <small id="pw-hint">{{t "setup.hint"}}</small></label>
+    <label class="field"><span>{{t "setup.confirm"}}</span>
+      <input type="password" name="confirm" required minlength="10" autocomplete="new-password"></label>
+    <button class="btn btn-primary wide" type="submit">{{t "setup.submit"}}</button>
+    {{else}}
+    <label class="field"><span>{{t "login.password"}}</span>
+      <input type="password" name="password" required autocomplete="current-password" autofocus></label>
+    <button class="btn btn-primary wide" type="submit">{{t "login.submit"}}</button>
+    {{end}}
+    <p class="auth-foot">{{t "app.tagline"}}</p>
+  </form>
+</div>
+{{end}}

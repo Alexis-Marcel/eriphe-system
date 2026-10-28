@@ -1,0 +1,1047 @@
+# eriphe-core
+
+Eriphe's control plane (v0): it keeps the state of nodes and tasks in SQLite, schedules tasks on
+nodes, follows them, lends identities, and gives the brain its tools over MCP. One binary, with
+k8s-like modules: `store`, `api`/`mcp`, `scheduler`, controllers, `identity`.
+
+```sh
+go build -o eriphe-core .
+eriphe-core -data ./data         # no file: defaults, see First start
+eriphe-core -config core.json    # a configuration file, as below
+```
+
+## First start
+
+eriphe-core needs no configuration file. Without `-config` (or when the file it names does not
+exist), it runs on defaults with everything in its data directory, `-data` (env `ERIPHE_DATA`,
+`/data` by default: the image's volume):
+
+```sh
+docker run -d --name eriphe-core -v eriphe-data:/data -p 8800:8800 -p 8443:8443 ghcr.io/alexis-marcel/eriphe-core
+docker logs eriphe-core 2>&1 | grep -o 'setup code [A-Z0-9-]*'
+```
+
+At first start it makes what it lacks in the data directory, and reuses it after: the API token
+(`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`) and the
+workspace's self-signed certificate (`web-cert.pem`, `web-key.pem`). The API listens on
+`0.0.0.0:8800`, the workspace on `https://0.0.0.0:8443`, and the brain is on, with no agent yet.
+The image runs as UID 1993: a host folder mounted at `/data` must be writable by it (`chown
+1993:1993 <dir>`), a named volume is. `TZ` sets the time zone (`Europe/Paris` otherwise).
+
+Then, in the workspace: the setup code of the log (`web: no password yet: open https://…/setup
+with the setup code ABCD-EFGH`) creates the owner's password, and a short wizard connects the AI
+account Eriphe thinks with (a Claude subscription's `claude setup-token`, or any other kind of
+Settings → Agents, with its usual agents). The brain starts as soon as a machine has joined.
+Nothing else is on by default: no tool, no policy rule, no identity; the catalog's tools (Home
+Assistant, GitHub, mail…) are added from Settings → Tools.
+
+An installer gets a join token for the machine's own node without the workspace:
+
+```sh
+docker exec eriphe-core eriphe-core join-token -name pc -quiet   # prints the token alone
+```
+
+A configuration file is read as it always was: what it sets wins, and what it leaves out stays
+off (no `web`, no workspace; no `brain`, no brain). `brain.prompt_file` and `brain.self_url` are
+optional (see [The brain](#the-brain)).
+
+## Configuration file
+
+```json
+{
+  "listen": "0.0.0.0:8800",
+  "public_url": "http://192.0.2.10:8800",
+  "token_file": "core-token",
+  "db": "core.db",
+  "user": "Sam",
+  "providers": {
+    "anthropic":  {"kind": "claude-subscription", "secret": "/secrets/claude-oauth-token"},
+    "openrouter": {"kind": "openrouter-api", "secret": "/secrets/openrouter-api-key"}
+  },
+  "agents": {
+    "opus":   {"runtime": "claude-code", "provider": "anthropic", "model": "opus",
+               "use": "hard code, design, long tasks", "prefers": ["cpu", "memory"]},
+    "sonnet": {"runtime": "claude-code", "provider": "anthropic", "model": "sonnet", "use": "default"},
+    "haiku":  {"runtime": "claude-code", "provider": "anthropic", "model": "haiku", "use": "small quick tasks"},
+    "kimi":   {"runtime": "opencode", "provider": "openrouter", "model": "openrouter/moonshotai/kimi-k2",
+               "use": "a second opinion, or code for a model other than Claude"}
+  },
+  "default_agent": "sonnet",
+  "identities": {"github": {"env": "GH_TOKEN", "file": "/secrets/github-token"}},
+  "servers": {
+    "github": {"url": "https://api.githubcopilot.com/mcp/", "auth": {"bearer_file": "/secrets/github-mcp-token"},
+               "use": "GitHub: issues, pull requests, code search", "trust_annotations": true},
+    "home":   {"url": "http://192.0.2.20:8123/api/mcp", "auth": {"bearer_file": "/secrets/home-assistant-token"},
+               "use": "the house: lights, heating, sensors"},
+    "notion": {"url": "https://mcp.notion.com/mcp", "auth": {"oauth": {}}, "use": "notes and docs in Notion",
+               "trust_annotations": true}
+  },
+  "brain": {"agent": "opus", "prompt_file": "/etc/eriphe/brain-prompt.md", "self_url": "http://eriphe-core:8800/mcp",
+            "tools": ["github.get_*", "github.list_*", "github.search_*", "notion"]}
+}
+```
+
+`timezone` is the user's IANA time zone (`Europe/Paris` when empty): eriphe-core shows every time
+in it, tells the brain the current date and time in it at each turn, and gives it to tasks as `TZ`.
+
+## Providers and agents
+
+Two levels, like a Kubernetes RuntimeClass. A **provider** is where models are and the credential
+to reach them; its kind says which runtimes can use it and in which variable its secret is lent:
+
+| Kind | Runtimes | Variable |
+|---|---|---|
+| `claude-subscription` | `claude-code` | `CLAUDE_CODE_OAUTH_TOKEN` |
+| `chatgpt-subscription` | `codex` | `ERIPHE_CODEX_AUTH` (an `auth.json`, see [ChatGPT subscription](#chatgpt-subscription)) |
+| `anthropic-api` | `claude-code`, `opencode` | `ANTHROPIC_API_KEY` |
+| `openai-api` | `opencode` | `OPENAI_API_KEY` |
+| `google-api` | `opencode` | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| `mistral-api` | `opencode` | `MISTRAL_API_KEY` |
+| `openrouter-api` | `opencode` | `OPENROUTER_API_KEY` |
+| `custom-api` | `acp` | the provider's own `env` (for example `DASHSCOPE_API_KEY`); not a system variable |
+
+The `opencode` runtime (OpenCode driven over ACP, see `node/README.md`) reaches any of these with
+an API key; its `model` is OpenCode's `provider/model`, and the provider must be the agent's
+(`openai/…` for `openai-api`, `google/…`, `mistral/…`, `openrouter/…`, `anthropic/…`), which the
+configuration checks. `acp` is any other ACP agent (Goose, Qwen Code…): the agent gives its `command`, one argument per item (`["goose", "acp"]`), run as is in the worker
+image or the agent's `image`, never through a shell; it takes no `model`. An
+**agent** is what the brain picks for a task: a runtime, a provider, a model, an optional image, the
+node labels it needs (`needs`, for example `gpu`), what it would rather have (`prefers`: `cpu`, `memory`,
+or any node label), and `use`, which tells the brain when to pick it.
+The brain is an agent too (`brain.agent`, or Settings → Agents when the file names none): changing
+it restarts the brain once its turn is over, on its session if the harness is the same, or on a
+fresh one with the context pack. Its runtime must take MCP servers and a system prompt. The provider's credential is lent to each task, plus the
+`identities` the task asks for (for example `github`).
+
+**Harness cards.** What each runtime can do, as the node drives it, is one entry of `harnesses`
+(`harnesses.go`): MCP servers, how it takes a system prompt (a flag, developer instructions, an
+instructions file, or prepended to the prompt), streaming, a PDF or an image in a tool result, its
+own web search and fetch, resume, and whether it picks a model when none is named. The core asks
+the card, never the runtime's name. The models offered for a provider carry what they read and do
+(`vision`, `pdf`, `tools`, `context`, from models.dev); a model typed by hand gets its provider's
+`Unlisted` assumption. A new runtime is a card plus its name in the providers it can use.
+
+A Claude Pro or Max plan reaches Claude Code only (Anthropic refuses it in other programs); its
+credential is the token of `claude setup-token`, valid about a year. A ChatGPT Plus or Pro plan
+reaches Codex, OpenAI's agent. Google's Gemini plan no longer reaches these programs: Gemini needs
+an API key. API keys (Anthropic, OpenAI, Google, Mistral, OpenRouter) are billed by use.
+
+### ChatGPT subscription
+
+eriphe-core owns the ChatGPT sign-in, so that tasks never hold its refresh token (single use: two
+holders refreshing it would sign each other out):
+
+- **Sign-in.** Settings → Agents → Add an AI account → ChatGPT subscription starts OpenAI's
+  device code flow, the one `codex login --device-auth` uses (Codex's public client, issuer
+  `auth.openai.com`): the page shows a code and a link, the user types the code at OpenAI (device
+  code sign-in must be allowed in ChatGPT's security settings), eriphe-core polls for up to 15
+  minutes and exchanges the answer (PKCE) for tokens. One sign-in per workspace session at a time.
+- **Kept and refreshed here.** The tokens are the provider's credential, in the vault
+  (`provider.<name>.key`; a configuration file's ChatGPT provider must point at the vault too).
+  They are refreshed, one refresh at a time, when the access token has less than 2 hours left or
+  is a week old; the new refresh token is written to the vault before the new access token is
+  used. A refusal (the sign-in was revoked) fails the lend with "sign in again"; a passing failure
+  lends the current token while it is still valid.
+- **Lent to each task.** When a node fetches a task, eriphe-core lends an `auth.json` with the
+  access token, the ID token and the account, **no refresh token**, and `last_refresh` set to
+  now, so Codex does not refresh it (see `node/README.md` for where the node puts it). A task
+  that outlives its access token stops with an authentication error; a restart lends a fresh one.
+- Tokens are never logged (the log names a sign-in by the first characters of its random id), never
+  stored in a task's spec, never shown: the page shows the account's e-mail and plan only.
+  `ERIPHE_CHATGPT_ISSUER` points the sign-in at a fake OpenAI, for tests.
+
+Secrets stay in files (or the vault); identities are read when a task starts, sent to its node,
+and never stored or logged.
+
+## Dynamic catalog (workspace)
+
+Servers, providers and agents can also be added, edited and removed from the workspace (Settings →
+Tools, Settings → Agents) or the API, without touching the file and without a restart. They are kept
+in eriphe-core's database (`catalog` table) and merged with the configuration at runtime:
+
+- **The file wins.** Its entries show in the workspace as read-only ("défini dans la configuration")
+  and are refused on writes (409); a workspace entry never shadows one of them. The file must stand
+  on its own: workspace entries may use the file's providers, not the reverse. `default_agent`, if
+  the file sets it, is read-only; otherwise the workspace picks it (the first agent by name until
+  then). The brain's agent works the same way: `brain.agent` in the file is read-only;
+  without it, the workspace picks it (`PUT /v1/brain-agent`), else the default agent, else the first
+  one that can be the brain. `brain.tools` may name a server the
+  workspace adds later: it is left out of the brain's grant until it exists.
+- **Same checks.** Every change runs the configuration's own validation (`checkAgents`,
+  `checkServers`, the run specs of local servers) on the merged result, and is refused with its
+  reason if it fails. A stored entry that no longer checks at start (the file changed under it) is
+  left out, logged, and shown in the workspace.
+- **Live.** The merged configuration is an immutable snapshot, swapped whole on each change (the
+  many goroutines that read it never see half a change). Then the upstream pool connects new
+  servers, closes removed ones and starts changed ones over; local servers are registered again as
+  services; tasks waiting for a node are placed again; `list_tools` and `list_agents` show the new
+  state; and, with a brain, an event message in the conversation tells it what changed. A running
+  brain's own MCP servers are set when it starts: a tool added to `brain.tools` reaches it at its
+  next start.
+- **Secrets where they are used.** A workspace entry's credential (a bearer token, a provider key,
+  an OAuth client, a local server's secret variable) is typed in its own form, stored in the vault
+  under a name derived from the entry (`server.<name>.token`, `server.<name>.client-id`,
+  `provider.<name>.key`, `service.<name>.<env>`), never shown back ("défini — remplacer"), and
+  deleted with the entry or when it stops using it. Workspace entries refer to the vault only, never
+  to a file of eriphe-core's machine. Removing a server, or changing its URL or authentication, also
+  forgets its OAuth client and tokens.
+
+| Call (bearer token) | What |
+|---|---|
+| `GET /v1/catalog` | servers, providers, agents and the default agent, each with its `source` (`config` or `workspace`), and the entries left out at start |
+| `PUT /v1/servers/{name}` | a server as in the configuration, plus `{"secrets": {"token": "…"}}` (`token`, `client-id`, `client-secret`, `env:<NAME>`); `"auth": {}` with a token is a bearer |
+| `DELETE /v1/servers/{name}` | remove a workspace server |
+| `PUT /v1/providers/{name}` | `{"kind", "key"}` |
+| `DELETE /v1/providers/{name}` | refused (409) while an agent uses it |
+| `PUT /v1/agents/{name}` | an agent as in the configuration |
+| `DELETE /v1/agents/{name}` | remove a workspace agent |
+| `PUT /v1/default-agent` | `{"name"}`, unless the file sets it |
+
+`GET /v1/servers` gives each server's `source` too, and `eriphe servers` shows it.
+
+## Tool catalog
+
+`servers` lists the MCP servers tasks can be lent, like `agents` lists what runs them. eriphe-core
+holds their credentials and is the only one to reach them: **a task never sees a vendor token**.
+
+| Field | What |
+|---|---|
+| `url` | a remote server (streamable HTTP) |
+| `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"none": true}` |
+| `run` | instead of `url` and `auth`: a local server, a container a node runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
+| `use` | what it is for, for the brain |
+| `trust_annotations` | the server's own `readOnlyHint` counts for the policy (below); off by default |
+| `always_load` | its tools are loaded upfront by a harness that otherwise searches for them (Claude Code's tool search): one model round trip less before the first call; for a few tools needed fast, such as the house |
+| `timeout` | seconds for one tool call (600) |
+
+A name is lowercase letters, digits and dashes (it becomes `mcp__<name>__<tool>`).
+
+**Upstream pool.** eriphe-core keeps one MCP session per server, lists its tools and keeps them
+cached (refreshed on `tools/list_changed`), and reconnects with backoff (1 s to 5 min). A server is
+`connecting`, `ready`, `needs_auth` (OAuth: the user must connect it) or `error`.
+
+**Grants.** `run_task` takes `tools`: server names (all their tools) or `server.tool`, where the
+tool may hold `*` globs: `["notion", "github.get_*", "github.list_issues"]`. The grant is stored on
+the task. The brain's is `brain.tools` plus, without configuration, every read-only tool of the
+servers trusted for their annotations (see the brain). Catalog tools need an agent whose runtime
+takes MCP servers.
+
+**The path of a call.** When a node fetches a task, its assignment names the catalog servers of
+its grant (`spec.servers`), nothing else. The node gives the agent, for each, an MCP server at
+`<callback-url>/mcp/<server>` with the task's own secret, and relays its requests to eriphe-core
+at `/v1/node/tasks/{id}/mcp/{server}` with the node's secret (and certificate), over the same
+connection as its assignments and reports (so it works wherever they do: the NAS node on the Docker
+network, the PC node under WSL). eriphe-core serves there an MCP server built from the cached tools the grant
+covers (their own input schemas; `tools/list` shows only them, any other call is refused), and
+forwards each call upstream with the real credential. Tools only for now (no resources or
+prompts); a long call streams, within the server's `timeout`.
+
+**Tickets.** A call goes upstream only if its permission request was allowed (by the policy, the
+brain or the user) for that task, that tool and that exact input, within 30 minutes, once. An agent
+that found its task's secret (in its process list, say) cannot call a tool behind its own
+permission prompt.
+
+`list_tools` shows the brain the catalog: each server, its status, `use`, its tools (name, a
+short description, read-only by the server's own annotation), and the command that connects it
+when it needs an authorization. Descriptions come from the servers: they are marked untrusted.
+
+### OAuth and `eriphe connect`
+
+`{"oauth": {}}` follows the MCP authorization spec with the go-sdk's authorization code handler:
+protected resource metadata, authorization server metadata, a client (a Client ID Metadata
+Document if `client_metadata_url` is given and supported, else a pre-registered client
+`client_id_file`/`client_secret_file`, else dynamic registration), PKCE, the `resource`
+parameter, the `iss` check, refresh tokens (`offline_access` when advertised), and step-up on
+`insufficient_scope`. `scopes` replaces what the server advertises. A pre-registered client is
+registered at the provider with a loopback redirect, given as `redirect_uri`
+(`http://127.0.0.1:<port>/callback`).
+
+From the workspace, Connect sends the browser to the authorization page, which redirects back to
+the workspace's own `https://<workspace host>/oauth/callback`: no step to paste. That redirect is
+only for flows started from the workspace (the API's connect takes loopback redirects only), and
+the dynamic registration of such a flow registers it. The session cookie (`SameSite=Strict`) is
+not sent on the redirect from the vendor's site, so the flow is bound to the browser by a cookie of
+its own (`__Host-eriphe-oauth`, `SameSite=Lax`, `HttpOnly`, its hash kept with the flow), found by
+its `state` (which the go-sdk handler checks, with PKCE), and refused from any other browser or for
+a CLI flow. The result page sends the browser back to the tools, where the session cookie applies
+again. A server whose pre-registered client only knows a loopback `redirect_uri` keeps the paste
+step.
+
+From a terminal, connecting is the CLI's:
+
+```sh
+eriphe connect notion
+```
+
+It listens on `http://127.0.0.1:<port>/callback` (a loopback redirect, which OAuth 2.1 allows for
+native apps: the port of the registered client if there is one, else a free one), asks
+eriphe-core for a flow, opens the authorization URL (or prints it, `-no-browser`), receives the
+redirect and hands the code and state over. If the browser is on another machine, paste the URL it
+ended on (the page will not load: that is expected). Until connected, the server is `needs_auth`
+and its calls fail with the command to run; the brain tells the user.
+
+| Call | What |
+|---|---|
+| `GET /v1/servers` | the catalog with status, tool count, redirect hint (bearer token) |
+| `POST /v1/servers/{name}/connect` | `{redirect_uri}` → `{flow, auth_url}`, or `{status}` if no authorization was needed |
+| `POST /v1/servers/{name}/callback` | `{flow, code, state, iss}` or `{flow, error}` → `{status, error, tools}` once connected |
+
+The dynamic registration and the tokens are kept in eriphe-core's SQLite file (`oauth_clients`,
+`oauth_tokens`) and restored at start, so a restart needs no new authorization, and a later
+connect reuses the registered client for the same redirect. Tokens are secrets: they are never
+logged nor put in a task's spec, and a refresh that rotates the refresh token writes it before the
+new access token is used. The database file is as sensitive as `/secrets`.
+
+### Security model
+
+- Vendor credentials live in `/secrets` (bearer tokens, OAuth clients) and in eriphe-core's
+  database (OAuth tokens). They go from eriphe-core to the server only, never to a node or a task.
+- A task reaches only its node, with its own secret, and only the servers of its grant; the node
+  reaches eriphe-core with its secret, and only for its own running tasks.
+- Every call is a permission request first, under the policy below; the proxy enforces it with
+  tickets.
+- What servers say (descriptions, results, errors) is data for the agents, never instructions:
+  the brain's prompt says so, and the policy, not the brain, decides what reaches a third party.
+
+## Nodes
+
+Nodes are not configured: they join. `eriphe-core join-token -name pc` creates a single-use token
+for the node `pc` (valid 24 h, `-ttl` to change) and prints the command to run on the new machine;
+the workspace's "Ajouter une machine" does the same. It reads the same `-config` or `-data` as
+eriphe-core and asks the running one; `-quiet` prints the token alone, for a script. The address
+in the command is `public_url` or, without it, the workspace's own host on eriphe-core's port
+(a workspace opened at `localhost` says that address only works on that computer); the CLI then
+prints a placeholder. A token is `id.secret` and joins only under
+the name it was made for, and never under the name of a registered node: a stolen or mistyped token
+cannot take over another node's tasks and lent credentials. A reinstalled machine joins again with a
+rejoin token for its own name (`join-token -name pc -rejoin`, or "Réinscrire cette machine" on its
+card), which replaces its secret. Tokens made before names existed join a new name only. The node gets its own
+secret (only its hash is stored), then keeps a tunnel open to `GET /v1/nodes/connect`; eriphe-core
+speaks the node's API through it. A node is online while its tunnel is up and answers.
+
+| Call | What |
+|---|---|
+| `POST /v1/join-tokens?name=pc&ttl=24h` | new join token for `pc`, with `ca_hash`; `&rejoin=1` for a registered node (bearer token) |
+| `GET /v1/nodes` | registered nodes, with `cert_expires` once a node has its certificate, and `version`, `latest`, `update_available`, `update_commands` (bearer token) |
+| `GET /v1/version` | `{core: {version, latest, update_available, update_commands}, node: {latest}}`: the latest versions on the registry, empty while unknown (bearer token) |
+
+**Versions.** eriphe-core's and eriphe-node's version is `sha-<short commit>` of the last commit that
+changed what goes into the image: `core/` and `install/` for eriphe-core (its image ships the
+installers), `node/` for eriphe-node (CI, `.github/workflows/image.yml`). A rebuild with nothing new
+for an image keeps its version, so a commit elsewhere does not make a machine "behind". The binary
+has it (`-ldflags -X main.version`), and the image as the label `org.opencontainers.image.version`,
+which eriphe-core reads on the registry for `latest` (`updates.go`). A local build is `dev`. The
+images' `sha-<commit>` tags stay the commit built.
+| `DELETE /v1/nodes/{name}` | forget a node; its tasks become `lost`, its certificate is revoked (bearer token) |
+| `GET /v1/nodes/tls`, `PUT /v1/nodes/tls` | the CA's hash, whether nodes must use TLS, which have no certificate yet; `{"tls_only": true}` closes the plain path (bearer token) |
+| `POST /v1/nodes/join` | `{name, token}` → `{secret}` (join token for that name) |
+| `POST /v1/node/certificate` | `{csr}` (PEM) → `{ca, certificate, expires}` (node secret, and its certificate once it has one) |
+| `GET /v1/nodes/connect` | the tunnel (node secret, `Eriphe-Node: name`, and its certificate) |
+
+### Updates of the machines
+
+Each machine updates itself, with the updater its installer put on the host side
+(install/README.md, The machines update themselves); eriphe-core says when (`machine_updates.go`).
+Settings → Machines → Updates sets it for all machines and for each one: "Me prévenir" (the
+default: the workspace says a new version is out), "Automatiquement la nuit" (3:00 to 5:00 in
+`timezone`, once a night) or "Jamais", with "Mettre à jour maintenant" and "Revenir à la version
+précédente" on each machine. A request is "update" (to the latest version, or the one the machine
+is pinned to) or "rollback", never an image nor a command.
+
+The order is Kubernetes': eriphe-core's machine first (its request goes to `update-requested` in
+the data folder, for the updater; the outcome comes back in `update-status`); a node only once
+eriphe-core runs the latest version, in its assignments (`update`, with eriphe-core's version, the
+most the node may get), and the node waits for its tasks to end. While a node has a request, the
+scheduler treats it as offline: new tasks wait for it. A request not done within a day is dropped.
+A machine without updater (installed before, or by hand, as `deploy/nas/compose.yaml`) says so and
+gets no request.
+
+### TLS between machines
+
+Nodes reach eriphe-core over TLS, with a certificate authority for machines that eriphe-core makes
+at its first start, as kubeadm does for a cluster. It is not the workspace's certificate: it signs
+only eriphe-core's certificate for the nodes (for the name `eriphe-core`, which a node checks
+whatever address it dials) and one client certificate per node.
+
+- **Where.** `machine-ca.pem` and `machine-ca-key.pem` (0600) in the data folder, next to the
+  database. The key is a secret like the vault key. The CA lasts ten years and is never replaced
+  by itself: a CA file that does not load stops TLS for nodes (logged at start) rather than making
+  a new one, since every node pins it.
+- **One port.** The API port serves TLS and plain HTTP side by side: eriphe-core tells them apart by
+  the first byte a client sends (a TLS handshake starts with `0x16`). The CLI, Home Assistant, the
+  brain's MCP and every other API caller keep their plain `http://…:8800`; a node reaches the same
+  address as `https://…:8800`. On the tailnet, `:8800` keeps its Tailscale certificate and asks for
+  a node's certificate too.
+- **Joining.** The join command carries `-ca-hash sha256:<hex>`, the SHA-256 of the CA's public key
+  (like kubeadm's `--discovery-token-ca-cert-hash`): the node finds that CA in eriphe-core's TLS
+  handshake, pins it, and only then sends its join token. `eriphe-core join-token` and "Ajouter une
+  machine" print it, and Settings → Machines shows it.
+- **Client certificates (mTLS).** A node asks for its certificate with its secret
+  (`POST /v1/node/certificate`, with a certificate request: the key never leaves the node), valid
+  one year, and for a new one with its current one when a third of its life is left. A request
+  that presents a certificate needs the node's secret and its current certificate (or the one
+  before, while it moves to the new one): forgetting a node or letting it join again revokes it at
+  once, and drops its tunnel.
+- **Nodes that joined over plain HTTP.** An existing node (its secret only, in `node.json`) asks for
+  its certificate with its secret on its next connection, at the address it knows, pins the CA that
+  comes with it, and connects over TLS from then on: nothing to do on it but update it. That first
+  request trusts the network it crosses, as the plain join did; given `-ca-hash`, the node checks
+  the CA instead.
+- **Closing the plain path.** Once every node has its certificate (Settings → Machines lists those
+  still without one, `GET /v1/nodes/tls` too), "N'accepter que les machines en TLS" (or
+  `PUT /v1/nodes/tls {"tls_only": true}`) refuses nodes over plain HTTP and nodes without their
+  certificate, and drops the tunnels of those connected so. Joins then need TLS too. API callers
+  other than nodes are not affected.
+
+## MCP tools (`/mcp`, bearer token)
+
+| Tool | What |
+|---|---|
+| `list_agents` | agents, when to use each, and whether a node can run them now |
+| `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
+| `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
+| `run_task` | start a task: prompt, repo/ref/branch, agent (or the default), node (or let the scheduler choose), identities, catalog `tools`, the user's `folders` (see [Folders](#folders)) |
+| `list_folders` | the user's folders: name, machine (online or not), access (`read` or `drop`), where a task finds it |
+| `task_status` | state, the agent's last message, the pending permission; `wait` blocks until the task needs you |
+| `list_tasks` | recent tasks |
+| `answer_task` | allow or deny the pending permission, or reply to the agent's question |
+| `stop_task` | stop the agent |
+
+The scheduler takes the requested node if it is online and fits. Otherwise it works in two passes,
+like Kubernetes': it **filters** the online nodes that offer the agent's runtime and carry all its
+`needs` labels, then **scores** them: +1 per CPU if the agent prefers `cpu`, +1 per GiB of RAM if it
+prefers `memory`, +8 per preferred label the node carries, +2 if the agent's image (or the node's
+default image) is already pulled, -4 per active task. The highest score wins, ties by name.
+
+If no online node fits but a registered one would by what it last reported (a desktop that is off,
+say), the task is created `pending` with no `node` and a `pending_reason` ("waiting for a node that
+can run claude-code with gpu (offline: pc)"), so the brain sees it waits. Such tasks are scheduled
+again whenever a node comes online and every 15 seconds; stopping one stops it at once. If no
+registered node could ever run it, `run_task` fails. Nodes are checked every 15 seconds. Tasks that were active when eriphe-core stopped are
+followed again at start, and a disconnected node's tasks are followed again when it reconnects; a
+node that forgot a task marks it `lost`.
+
+## Permission policy
+
+Every permission request of a worker goes through a policy written in code before the brain hears
+of it, so that a prompt injection (a mail, a web page) cannot talk the brain into it:
+
+1. **built-in denials**, which no rule lifts: recursive `rm`, pushing to `main`/`master`, force
+   pushes, `git reset --hard` and history rewrites, reading secrets (`$GH_TOKEN`, `printenv`,
+   `/proc/*/environ`, Claude Code's `.credentials.json`, Codex's `auth.json`, `$ERIPHE_CODEX_AUTH`,
+   `$CODEX_HOME`…), writing outside `/work`. OpenCode's and Codex's requests (the `opencode` and
+   `codex` runtimes) come under Claude Code's tool names (`Bash`, `Edit`, `Write`, `WebFetch`…)
+   with the same inputs, so the same rules apply;
+2. the configuration's `policy.rules`, first match wins:
+   `{"tool": "Bash", "match": "^go test", "decision": "allow"}` (`tool` is a name, a glob such as
+   `mcp__*`, or names joined by `|`; `match` is a regular expression on the command, path or URL;
+   `decision` is `allow`, `deny` or `ask`);
+3. **built-in asks**, for what reaches a third party (merging, releasing, publishing, `ssh`, `curl
+   -X POST`, external MCP tools): only the user may answer, through the CLI; the brain is told to
+   relay them and its answer is refused. The exception: a tool of a catalog server with
+   `trust_annotations` that says it is read-only (`readOnlyHint`) is the brain's to judge;
+4. anything else is the brain's to judge.
+
+For an MCP tool (`mcp__<server>__<tool>`), `match` applies to the JSON of its input (keys sorted).
+Common safe reads, allowed without asking anyone:
+
+```json
+"policy": {"rules": [
+  {"tool": "mcp__github__get_*|mcp__github__list_*|mcp__github__search_*", "decision": "allow"},
+  {"tool": "mcp__home__GetLiveContext", "decision": "allow"},
+  {"tool": "mcp__notion__notion-search|mcp__notion__notion-fetch", "decision": "allow"},
+  {"tool": "mcp__github__create_pull_request", "match": "\"draft\":true", "decision": "allow"},
+  {"tool": "mcp__home__*", "decision": "ask", "reason": "agit sur la maison"}
+]}
+```
+
+Every decision (by the policy, the brain or the user) is kept in the `decisions` table.
+
+## The brain
+
+With a `brain` section in the config, eriphe-core keeps a permanent orchestrator alive: a long-lived
+task on a node (stable `profile`, so its session survives restarts), with only MCP tools
+(eriphe-core's own plus its grant from the catalog, `brain.tools`) and its standing instructions:
+`brain-prompt.md`, built into the binary, or the file `prompt_file` names instead.
+
+**How it reaches eriphe-core.** Without `self_url`, the brain's node relays eriphe-core's own MCP
+server to it as it relays a catalog server (`<callback-url>/mcp/eriphe-core`, with the task's
+secret; the node calls `/v1/node/tasks/{id}/mcp/eriphe-core` with its own): it works wherever the
+node reaches eriphe-core (the same machine, the LAN, the tailnet), with no address to configure,
+and the brain's container never holds eriphe-core's API token. Only the brain's task gets it.
+`self_url` (e.g. `http://eriphe-core:8800/mcp` when the brain shares a Docker network with
+eriphe-core) still makes the brain call that address directly with the API token, as before.
+
+**It reads by itself.** The brain is lent, with no configuration, every tool a server annotates
+`readOnlyHint` when the server is trusted for its annotations (`trust_annotations`: "lecture
+libre" in the workspace, the default of the mail and calendar presets), through its proxy like any
+task. These free reads are allowed in advance in its assignment (`allowed_tools`) and called
+without a ticket: no permission round trip, a decision on record all the same. A read named by a
+policy rule of the configuration is not free: it goes through the policy with its input. The list
+is computed when its node fetches the task, so a tool or server added later reaches the brain at
+its next start (the proxy itself follows the catalog at once); in eriphe-core's first minute, the
+brain waits for the trusted servers that are still connecting before it starts.
+
+Its other catalog tools (`brain.tools`) are not allowed in advance: each call goes through the
+policy like a worker's, except that what would be the brain's to judge is allowed, and a call
+without its permission is refused by the proxy. What is the user's waits for the user: eriphe-core says so in the conversation, and the brain's
+task shows in `GET /v1/tasks` (and the CLI) until the user allows or denies it. The brain's other
+permission requests are denied, but for the web.
+
+**The web.** The brain searches with its harness's own search: Claude Code's `WebSearch` is in its
+`allowed_tools`; Codex is held to `web_search = "cached"` by the node; OpenCode's `websearch` is
+denied (a harness without a search is told so in its standing instructions). Its page reader
+(`WebFetch`, OpenCode's `webfetch`) is not allowed in advance: each read is decided by eriphe-core
+(`brain_web.go`). A URL that is not http(s), carries credentials, or names this machine or the local
+network (localhost, a loopback, private, link-local or CGNAT IP, a name without a dot or under
+`.local`, `.lan`, `.internal`, `.home.arpa`…) is refused; a policy rule on `WebFetch` that denies or
+asks wins; on a clean turn the read is allowed; on a tainted turn it is the user's (told in the
+conversation), unless the URL is written in the user's own message of that turn. Reads asked
+together are judged on the taint before them. Every decision is logged (`brain: WebFetch …`) and
+kept in the decisions table. A read, like a search, taints the turn.
+
+`brain.mcp_servers` (servers given to the brain directly, with their token, and allowed without
+asking) still works but is deprecated: move each to `servers`, add it to `brain.tools`, and add
+policy rules for what the brain may use without asking. A `token_env` token must move to a file.
+
+It gets one turn per event: my messages (`POST /v1/messages {text}`) and what happens to its workers
+(a permission request, the end of a turn, a stop), several at once if they queued during a turn.
+`GET /v1/messages?after=N&wait=S` returns the conversation. Restarts back off from 5 s to 5 min, and a
+resume that keeps failing is dropped for a fresh session.
+
+eriphe-core, not the harness, holds the thread: the harness session (`--resume`) is only a cache.
+A fresh session (the first one, a dropped resume, a resume the node could not do, another harness)
+gets a context pack in its first turn, never in its system prompt: what waits for a decision, the
+tasks under way, the open commitments, the last day's episodes, and the last messages between the
+user and the brain, the newest kept, within about 8,000 tokens (`brain_context.go`). It is quoted
+data; events are left out, since they carry what tasks said. eriphe-core logs its size.
+
+## Voice (Home Assistant)
+
+Home Assistant's Assist pipeline keeps what it understands (simple commands of the house, handled
+locally) and hands the rest to Eriphe through its conversation agent (`../ha/`), which calls
+`POST /v1/voice` with its own token (Settings → Machines → Home Assistant; only its hash is kept,
+and it can do nothing else). The sentence joins the conversation like any of mine, marked with the
+room (`[Sam 12:00 #N · voix, Bureau]`), and the brain answers it in the same thread, short and
+without markdown. The answer comes back as NDJSON, `{"delta"}` lines then `{"done", "text",
+"continue"}`, from the brain's draft as it writes. Only what it says after reading the sentence
+counts. Without a word within 10 s (another turn, a long job), the voice answers « Je m'en occupe,
+je te préviens » and the answer stays in the conversation. A sentence from no device is an automation's
+(the morning brief), marked `Home Assistant`: it waits up to 80 s for the answer it sends on.
+
+## Google Drive (cloud Folders)
+
+A folder of the user's Google Drive becomes a Folder given to Eriphe: a name, the cloud as its
+source, and an access, `read` or `drop` (read, and drop results in its `Eriphe/` subfolder; the
+originals are never changed). Tasks reach it through `eriphe-files` (servers/files), a local
+server like eriphe-mail, which **enforces the folders itself**: it takes only the folder ids it was
+configured with and what is inside them (it walks each id's parents up through the Drive API),
+refuses everything else, and can only create files, in `Eriphe/`. eriphe-core runs the
+authorization, keeps the refresh token in the vault, and lends it to the service's environment on
+its node; it never enters a task or a task's spec.
+
+Settings → Tools → Google Drive (`/settings/drive`, `web_drive.go`, the logic in `cloud.go`):
+
+1. **Connect**: "Se connecter à Google Drive" sends the browser to Google; "Permettre à Eriphe de
+   déposer des résultats" asks for the scope that writes. The account comes back connected, and the
+   workspace creates the catalog server `fichiers` (image `ghcr.io/alexis-marcel/eriphe-files`,
+   `trust_annotations`: its reads are free, `write_file` is the user's to allow).
+2. **Choose**: once the service runs, the page browses the account's folders (My Drive, Shared with
+   me, shared drives) through the server's `browse_folders`, and each one is given "en lecture" or
+   "lecture + dépôt". The chosen folders are written in the service's `FILES_CONFIG`, which
+   restarts it; removing one, or changing its access, does the same.
+
+`browse_folders` is marked `_meta: {"eriphe/setup": true}`: the pool leaves such a tool out of a
+server's tools (`setupTool`, `listTools`), so no grant, no task and not the brain can see or call
+it; only the workspace calls it (`browseDrive`).
+
+### Scopes
+
+| Asked | When | Why |
+|---|---|---|
+| `https://www.googleapis.com/auth/drive.readonly` | "drop results" unticked | list, search and read inside the chosen folders, which can be any folder of the account, shared ones included |
+| `https://www.googleapis.com/auth/drive` | "drop results" ticked (the default) | the above, and create `Eriphe/` and new files inside a chosen folder |
+
+`drive.file` is not enough: it only reaches files the app created or that the user opened with
+Google's Picker, so it can neither list a folder the user already has nor create `Eriphe/` inside
+it. Both scopes kept are **restricted** at Google: an app that is not verified shows "Google
+hasn't verified this app" (the user goes through "Advanced") and is limited to 100 users, which is
+acceptable for now; verification (with a security assessment for restricted scopes) is for later.
+`drive` lets the token change anything in the Drive: eriphe-files has no call that does
+(only creations, only in `Eriphe/` of a `drop` folder). Reconnected read only, every folder falls
+back to `read`. `prompt=consent` and `access_type=offline` make Google give a refresh token at each
+connection.
+
+### The Eriphe app and the eriphe.com bounce
+
+Google wants a registered https redirect, and each installation has its own address. The Eriphe
+app, published once, registers `https://eriphe.com/oauth/callback`; the portal there only sends the
+browser on to the workspace named in the state, Home Assistant's way:
+
+```
+workspace → Google      PKCE (S256), state = e1.<base64url payload>.<base64url HMAC-SHA256>
+Google → eriphe.com     /oauth/callback?code&state
+eriphe.com → workspace  <origin>/oauth/callback?code&state   (nothing else; it stores nothing)
+workspace               checks the MAC, the expiry (15 min), the flow (used once), the browser's
+                        flow cookie, and that the origin is its own; exchanges the code with the
+                        client secret and the PKCE verifier
+```
+
+The payload is `{"w": "<workspace origin>", "n": "<flow id>", "x": <expiry>}`, the MAC under a key
+only this eriphe-core has (`cloud_state_key` in the store, made once): a state it did not make, or
+replayed, is refused at its callback. The portal reads the payload but cannot check the MAC (a key
+it shared with every eriphe-core would be in a public image): it keeps the open-redirect surface
+small instead, with the same rule as `bounceOrigin` here. It sends on only to an origin (no path,
+query or credentials) that is https to a private, loopback or Tailscale address (100.64.0.0/10,
+fd7a:115c:a1e0::/48), a local name (one label, `.local`, `.lan`, `.home`, `.internal`,
+`.home.arpa`, `.localdomain`, `.localhost`) or a tailnet name (`.ts.net`); or http to a loopback or
+private address only. It forwards only `code`, `state` (and `error` when Google sends one), at the
+fixed path `/oauth/callback`, never exchanges the code and keeps nothing. PKCE makes a code caught
+on the way useless without the verifier, which never leaves eriphe-core. A workspace reached at a
+public name (a reverse proxy of your own) is not bounced to: it uses its own Google client.
+
+The flow is bound to the browser like the other workspace flows (the `__Host-eriphe-oauth`
+cookie, its hash kept with the flow): another browser with the same link is refused.
+
+**Use my own Google client** (advanced): a "Web application" client created in your own Google
+Cloud project (Drive API on), with the workspace's own `https://<workspace>/oauth/callback` as its
+redirect: the page shows the exact URI. Its id and secret are typed in the form, go to Google and
+then, with the refresh token, to the vault; eriphe.com is not involved.
+
+### Where the Eriphe app's client secret lives
+
+In a file given to the installation, never in this repository and never in an image:
+`google-oauth.json` next to the database (the data directory: `/var/lib/eriphe/core` on Linux,
+`/data` in the container), or the file (or `vault:<name>`) named by `cloud.google_client_file`. It
+is the JSON the Google Cloud console downloads (`{"web": {"client_id", "client_secret", …}}`; the
+flat `{"client_id", "client_secret"}` also works). Without it, the page says the Eriphe app is not
+installed and offers the own-client form.
+
+```json
+"cloud": {"google_client_file": "/data/google-oauth.json", "bounce_url": "https://eriphe.com/oauth/callback"}
+```
+
+Why not in the image, injected at build from a GitHub Actions secret: the images are public, so
+anything in them is public, and Google treats the secret of a "Web application" client as
+confidential (only "Desktop" clients have a secret Google does not count as one, and those only
+take loopback redirects, which a workspace on another machine than the browser cannot use). A
+public secret would let anyone redeem, as "Eriphe", a code that reached them: with a link that
+starts a flow they made (their own PKCE verifier) and sends the code through the bounce, a user
+who accepts an unsolicited "Eriphe wants to access your Google Drive" would give that person their
+Drive. The portal's rule above narrows where a code can be sent, but cannot tell your workspace
+from another one on a tailnet (`*.ts.net` names can be made public with Tailscale Funnel). With
+the file, the secret is only as known as the installations it was handed to; rotating it (a new
+secret in the console, the file replaced) cuts the old one off. If the app later ships in the
+image for everyone, that risk is accepted with it: the decision is one line of `googleApp`.
+
+### Creating the Eriphe app in the Google Cloud console (once, by the maintainers)
+
+1. <https://console.cloud.google.com/projectcreate>: a project named `Eriphe`.
+2. APIs & Services → Library → **Google Drive API** → Enable.
+3. Google Auth Platform (APIs & Services → OAuth consent screen) → Get started: app name
+   `Eriphe`, a support email, audience **External**, a contact email; accept the policy; Create.
+4. Branding: home page `https://eriphe.com`, privacy policy `https://eriphe.com/…` (a page to
+   write before verification), authorized domain `eriphe.com`; the logo can wait (a logo requires
+   verification of the branding).
+5. Data Access → Add or remove scopes: `https://www.googleapis.com/auth/drive` and
+   `https://www.googleapis.com/auth/drive.readonly` (both listed as restricted) → Update → Save.
+6. Audience → Publishing status → **Publish app** → confirm: the status is "In production" (it
+   says verification is needed: do not submit it yet). In "Testing", refresh tokens expire after
+   7 days and only listed test users can sign in.
+7. Clients → Create client: type **Web application**, name `Eriphe`, authorized redirect URI
+   `https://eriphe.com/oauth/callback` (no JavaScript origin needed) → Create → **Download JSON**
+   at once (the secret is shown only at creation).
+8. Give that JSON to the installation as `google-oauth.json` in eriphe-core's data directory,
+   readable by eriphe-core's user (UID 1993), e.g. on Linux
+   `sudo install -o 1993 -g 1993 -m 600 client_secret_*.json /var/lib/eriphe/core/google-oauth.json`,
+   or `docker cp client_secret_*.json eriphe-core:/data/google-oauth.json && docker exec -u 0
+   eriphe-core chown 1993:1993 /data/google-oauth.json`. No restart is needed: it is read at each
+   connection. Never commit it.
+
+The portal's `/oauth/callback` must be deployed (eriphe repository) before the first connection.
+
+## Local MCP servers (services)
+
+A local MCP server runs as a long-lived container on a node, like a Kubernetes Deployment of one
+replica behind a Service: eriphe-core keeps what it should be and where, the node keeps its
+container running, and eriphe-core reaches it as a streamable HTTP MCP endpoint through the node's
+tunnel. It is a catalog server with `run` (a `RunSpec`, `services.go`) instead of `url` and `auth`;
+the pool reaches it through `dialService`, and grants, the policy and the per-task proxy treat it
+like any other server:
+
+```json
+"servers": {
+  "thinking": {"use": "think step by step", "run": {"image": "mcp/sequentialthinking", "transport": "stdio", "egress": false}},
+  "notes": {"use": "my notes", "run": {"image": "<your image>", "transport": "http", "port": 8080, "node": "nas", "volume": true,
+            "env": {"LOG_LEVEL": "info", "API_KEY": {"file": "/secrets/notes-key"}}}}
+}
+```
+
+`mcp/sequentialthinking` (Docker Hub's `mcp` namespace, Node.js, stdio, no environment) runs as is
+with the defaults. Not every image does: `mcp/time` keeps its Python interpreter under `/root`
+(mode 700) and only runs as root, which a service never does; such an image needs rebuilding.
+
+| Field | What |
+|---|---|
+| `image` | the server's image |
+| `transport` | `stdio` (the node holds its stdin and stdout) or `http` (it listens on `port`, MCP at `path`, `/mcp` by default) |
+| `args` | arguments after the image's entrypoint |
+| `env` | `"NAME": "literal"` or `"NAME": {"file": "/secrets/x"}` (or `{"file": "vault:<name>"}`): the secret is read when the node fetches the service, sent to it, never stored or logged |
+| `node`, `needs`, `prefers` | as for agents: pin a node, require labels, prefer `cpu`, `memory` or a label |
+| `volume` | a persistent `/data`, kept on its node in `<root>/services/<name>` |
+| `user` | `uid:gid` in numbers, `1000:1000` by default; never root |
+| `writable` | a writable root filesystem (read-only by default) |
+| `egress` | reach the network (default `true`); without it a stdio server gets `--network none` |
+
+The `services` table keeps each one's spec (without secrets), its hash, its node, desired state,
+state (`pending`, `starting`, `running`, `failed`, `stopped`), restarts and last error;
+`GET /v1/services` (bearer token) lists them. The scheduler places a service like a task, on
+online nodes that run services (new nodes say so in `GET /v1/node`), with `needs` and `prefers`,
+counting the node's services and tasks as its load. A node gone for 5 minutes loses its services
+to another node, unless they are pinned to it or keep a volume there: their data stays where it
+is, so they wait for their node. A forgotten node (`DELETE /v1/nodes/{name}`) loses them all.
+A changed spec starts the service over on its node, or elsewhere if the node no longer fits; a
+server left out of the configuration is removed, and its node stops it (the volume stays).
+
+Nodes receive their services in their assignments, as a `services` list next to `tasks` (old nodes
+ignore it), and report each one on `POST /v1/node/services/{name}/report`
+(`{state, restarts, error}`). A service whose secret cannot be read fails and is not sent.
+
+Credentials are lent, never stored: they are read at every fetch of the assignments, and the node
+restarts a service whose environment changed, its `/data` untouched. Rotating a file-backed
+password restarts the server with the new one at the next fetch; a token source lent by
+eriphe-core (an OAuth access token for XOAUTH2, refreshed by eriphe-core) fits the same place,
+as another kind of `env` value resolved in `lendService`.
+
+`c.dialService(ctx, name)` returns an `mcp.Transport` (a `StreamableClientTransport` to
+`http://node/v1/services/{name}/mcp` over the node's tunnel, with no timeout): the pool's
+`dialLocal`. When a node reports a service `running`, its upstream is woken instead of waiting
+for its backoff. It fails, with the reason, if the service is not
+placed, not `running`, or its node not connected; `serviceEndpoint` gives the `*http.Client` and
+URL instead. `registerServices(map[string]RunSpec)` sets the desired services; eriphe-core calls it
+at start with the catalog's `run` entries (unknown `run` fields are refused).
+
+## Folders
+
+The user's own folders, given to Eriphe ("Dossiers"). A folder is a name ("Clients"), a source (a
+machine and a path inside one of the places that machine shares, declared when it was installed:
+`--share NAME=/PATH`, see install/README.md; eriphe-core never sees a host path, only the place's
+name and a path relative to it) and a right: `read` (the default), or `drop`, read and drop results,
+which go only to the folder's `Eriphe/` subfolder. Originals are never changed nor deleted. Folders
+are in the database (`folders` table, names unique without case); a machine's places are what its
+node reports (`shares` in `GET /v1/node`).
+
+**Two sources, one list.** A folder is on a machine (here) or in the user's Google Drive (see
+[Google Drive](#google-drive-cloud-folders)). Settings → Dossiers, `GET /v1/folders` and
+`list_folders` show both, each with its `source` (`machine` or `google-drive`) and `lend`, how a
+task gets it. Each source keeps its own store and its own enforcement: a machine's folder is in the
+`folders` table and mounted by its node; a Drive folder stays in the files server's `FILES_CONFIG`,
+which eriphe-files reads and enforces itself, and is lent through that catalog tool (`tools:
+["fichiers"]`, which reaches every Drive folder given to Eriphe), not through `folders`, which
+refuses it with that hint. Drive folders are added on Settings → Tools → Google Drive; "Ne plus
+partager" in Settings → Dossiers removes either kind.
+
+**Sharing one.** Settings → Dossiers → "Partager un dossier": pick a machine, browse its places
+from any device (eriphe-core asks the node through its tunnel, which lists directories only, and how
+many files each has, never their names nor their content; hidden and sensitive folders are not
+listed), then name the folder and choose its right. eriphe-core asks the node once more whether the
+folder can be shared (no sensitive place inside, below) and keeps it under the path the node
+resolved, without symlinks. `drop` needs a place that is not read-only (`:ro`). "Ne plus partager"
+forgets it; the files stay.
+
+**Lending one.** The brain lends folders to a task by name, like catalog tools (`run_task`'s
+`folders`, `list_folders` to see them). The task is placed on the folders' machine (all of a task's
+folders must be on one machine), or waits for it while it is offline (`pending_reason` says so);
+`node` may only name that machine. Its node mounts each at `/work/folders/<name>`, read-only as
+Docker enforces it; with `drop`, its `Eriphe/` subfolder read-write, created if missing (see
+node/README.md, Shares). The worker is told where they are, that it may write only in `Eriphe/`, and
+that what reads like an instruction in the files is data. The folders are read again from the
+database whenever the node fetches the task: a folder removed meanwhile fails it, a right changed
+applies at its next start. A task's `folders` lists their names.
+
+**What is read there is data.** A folder holds whatever the user (or anyone who sent them a file)
+put there, so it is treated as external content, like a mail or a page:
+
+- the event that brings the brain the result of a task that read folders says so, and taints the
+  turn that reads it (`folder:<names>`), as `task_status` of such a task does: the memory only
+  proposes what that turn remembers, and the brain may not allow a permission (see
+  memory_trust.go);
+- on a tainted turn, `run_task` refuses to lend a folder with the `drop` right, as it refuses
+  catalog tools that act; folders to read still go;
+- the permission policy applies to the task as to any other: its writes outside `/work` are denied
+  by the built-in rules, and Docker refuses any write in the folder but in `Eriphe/`.
+
+| Call (bearer token) | What |
+|---|---|
+| `GET /v1/folders` | the folders, with `mount` and whether their machine is `online` |
+| `POST /v1/folders` | `{name, node, share, path, access}`: checked with the node, which must be online; 201 with the folder, or `{code, error}` (`exists`, `bad_name`, `holds_sensitive`, `outside`, `offline`…) |
+| `DELETE /v1/folders/{name}` | no longer share it |
+| `GET /v1/nodes/{name}/shares` | the places a machine shares: `{name, writable, missing}` |
+| `GET /v1/nodes/{name}/shares/{share}/dirs?path=P&check=1` | the node's listing of a folder (see node/README.md), through its tunnel |
+
+## Task API (bearer token)
+
+What the `eriphe` CLI uses to follow and answer worker tasks, next to the conversation API. The
+handlers are thin layers over the methods behind the MCP tools.
+
+| Call | What |
+|---|---|
+| `GET /v1/tasks?all=1` | worker tasks, the most recent first; active ones only without `all`; the brain too while it waits for a permission |
+| `GET /v1/tasks/{id}?events=N` | the task's status (as `task_status`) with its last N events (20) |
+| `GET /v1/tasks/{id}/events?after=N&wait=S` | events after seq N, waiting up to S seconds (max 120) for new ones; a finished task answers at once |
+| `POST /v1/tasks/{id}/answer` | `{reply, allow}`: allow or deny the pending permission (`allow` set), or reply to an idle task |
+| `POST /v1/tasks/{id}/stop` | stop the task's agent |
+
+An unknown task answers 404; a call the task's state does not allow (or that its node refuses)
+answers 409 with the reason.
+
+## Workspace (`web`)
+
+Eriphe's own interface, served by eriphe-core on its own HTTPS listener: the conversation with
+Eriphe in the middle, its tasks on the side as live cards (machine, agent, repository and branch,
+state, the pull request or document the agent mentioned), the permissions waiting for an answer
+inline in the conversation (Yes / No, with an optional reason for the agent), and the settings:
+machines (and the command that adds one), agents, accounts and tools (the vault), the folders
+given to Eriphe (see [Folders](#folders)), and the journal of decisions. Settings → Tools lists the catalog's servers with their status (ready, to connect,
+error, or waiting for a machine for a local one) and where each comes from, adds one from a list of
+presets (Home Assistant, GitHub, Linear, Notion, Mails, Agenda, Google Drive, or any online
+service or local image; Google Drive has its own page, see [Google Drive](#google-drive-cloud-folders)).
+A preset's form asks only what the owner decides: the credential (with the provider's own
+steps and link), the address when it differs per person, the name, what the tool is for, and what
+Eriphe may do without asking ("Lecture libre", which sets `trust_annotations`, or "Tout me
+demander"); the rest (a vendor's address, the authentication, timeouts, an OAuth client, how a
+local server runs) is under the advanced options. Mails and Agenda first ask which kind of account
+(Gmail, iCloud, Orange, Free, OVHcloud, Fastmail or any IMAP server; iCloud, Fastmail, Nextcloud or
+any CalDAV server) and run `eriphe-mail` and `eriphe-calendar` with its password; "Test the
+connection" tries that password (IMAP login, CalDAV PROPFIND). Outlook, Microsoft 365, Google
+Calendar and Microsoft calendars are shown as coming soon: they wait for eriphe-core to lend OAuth
+tokens to local servers. Linear and Notion open a short page (name, use, access), then "Se
+connecter à Linear" saves and signs in at once; the tool is added only once authorized. Settings →
+Tools also edits and removes the workspace's own tools, and connects again those that use OAuth
+(see [OAuth](#oauth-and-eriphe-connect)). A collapsed "Secrets avancés"
+section lists what the vault holds and what each secret belongs to, with replace and delete only,
+and the configuration's secret files to import. Settings → Agents shows the agents (model, account,
+whether a machine can run them now), the agents worth creating with the accounts (one click), the
+default agent and the brain's, and the AI accounts (providers). Adding an account starts from a
+card per kind, subscriptions first (Claude, ChatGPT) then API keys, each with who pays, its
+limits, its models and the steps to get its credential; "Test the key" lists the provider's models
+once with the key typed (OpenRouter also tells the credit left; a Claude subscription token is
+only checked for its shape, as Anthropic allows it in Claude Code only; a key pasted in the wrong
+card is caught), and the usual agents of the kind are created with it (Opus, Sonnet, Haiku for
+Claude; GPT models for ChatGPT; two well-known models for each API key). The agent form offers the
+account's models (another one can be typed; OpenCode's provider prefix is added), derives the
+program from the account, and keeps the machines' needs, preferences, image and program under
+"Options avancées" (see [Dynamic catalog](#dynamic-catalog-workspace)). It works
+on a phone, in French by default or in English, light or dark as the system is. Server-rendered pages (`web/templates`), [htmx](https://htmx.org) 2.0.4 vendored in
+`web/static/htmx.min.js` (SHA-256 `e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447`),
+Server-Sent Events for what changes; everything is embedded in the binary, with no build step.
+
+```json
+"web": {"listen": "0.0.0.0:8443", "hostnames": ["192.0.2.10", "server.local"], "lang": "fr"}
+```
+
+| Field | What |
+|---|---|
+| `listen` | the workspace's address, `0.0.0.0:8443` by default |
+| `cert_file`, `key_file` | a certificate to serve; without them, a self-signed one |
+| `hostnames` | names and addresses for the self-signed certificate, besides `public_url`'s host, the machine's name, `localhost` and its interfaces' addresses |
+| `lang` | `fr` (default) or `en`; each browser can switch in Settings |
+| `session_days` | how long a login lasts, 30 by default (a week without use ends it sooner) |
+
+**First start.** With no password yet, eriphe-core logs a one-time setup code:
+`web: no password yet: open https://…/setup with the setup code ABCD-EFGH`. Open the page, type
+the code and choose the password (10 characters at least). The password is stored as an
+argon2id hash; the code is no longer accepted once used. While the brain has no agent, the
+conversation leads to a wizard (`/welcome`): the AI account's form of Settings → Agents, a Claude
+subscription first, then the brain's start once a machine is online. "Plus tard" skips it.
+
+**Sessions.** A login sets a random session cookie (`__Host-eriphe`, `HttpOnly`, `Secure`,
+`SameSite=Strict`; only its SHA-256 is stored). Every POST carries the session's CSRF token (the
+`X-CSRF-Token` header that htmx sends, or a form field) and must come from the same origin.
+Logins are rate-limited per address: 5 failures from an address (an IPv6 /64 counts as one) in 15
+minutes refuse it for the rest of the window, attempts in flight included. There is no global
+lockout: past 20 failures from all addresses, every attempt waits longer first (250 ms more per
+failure, at most 5 s) but is still checked, so the owner gets in from their own address. At most two
+argon2 hashes are computed at once. Changing the password ends the other sessions.
+The bearer-token API is unchanged for the CLI and the nodes.
+
+**Headers.** A strict Content Security Policy (no inline script or style, no `eval`, `frame-ancestors
+'none'`), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, and HSTS when
+serving a configured certificate.
+
+**Certificate.** Without `cert_file`, eriphe-core creates a self-signed ECDSA certificate at first
+start (`web-cert.pem`, `web-key.pem` next to the database, the key 0600), logs its SHA-256
+fingerprint, and makes a new one when it nears its end (397 days) or misses a name. Browsers warn
+about it once; compare the fingerprint before accepting it. In a container the machine's own
+addresses are the container's: list the NAS's address and names in `hostnames` (or set
+`public_url`). An installable app (PWA) and push notifications need a certificate the phone
+trusts, either:
+
+- **Remote access** (below): eriphe-core gets its own certificate for its tailnet name, nothing to
+  renew;
+- **Tailscale on the host**: `tailscale cert <machine>.<tailnet>.ts.net` writes a Let's Encrypt certificate
+  for the machine's tailnet name; point `cert_file`/`key_file` at it and open the workspace at
+  that name (renew it every 90 days, e.g. from cron);
+- **an own CA** (e.g. `mkcert` or `step-ca`): install the CA's root on the phone and the
+  computers, issue a certificate for the NAS's name and address, and point `cert_file`/`key_file`
+  at it.
+
+The manifest (`/manifest.webmanifest`) and a service worker (`/sw.js`, static files only; it
+caches no page or data) are in place; push notifications are not yet.
+
+## Remote access (Tailscale)
+
+eriphe-core can join the owner's private Tailscale network (a *tailnet*) by itself, with an
+embedded Tailscale ([tsnet](https://tailscale.com/kb/1244/tsnet), BSD-3): the workspace and the
+API are then reachable from every device of that tailnet, at home and away, in HTTPS with a
+certificate browsers trust, and nothing is opened on the router. It is off by default and turned on
+from the workspace, **Settings → Remote access** (owner only):
+
+1. **Turn on remote access** starts Tailscale (machine name `eriphe` by default).
+2. **Log in to Tailscale** opens Tailscale's login page (a free account with Google, Apple or
+   Microsoft, or an existing one). If the tailnet approves devices, the page waits for it.
+3. **Enable HTTPS (once)**: a one-click consent page of Tailscale turns on HTTPS certificates in
+   the tailnet (MagicDNS must be on, as it is by default). Like every public certificate, the name
+   `eriphe.<tailnet>.ts.net` then appears in the public Certificate Transparency logs.
+4. **Ready**: the address `https://eriphe.<tailnet>.ts.net`, a QR code for the phone (drawn in Go,
+   no outside service), the links to install Tailscale on the phone, and how to add the workspace
+   to the home screen.
+
+The page follows the state live (an event stream). The setting is kept in the database and
+Tailscale starts again with eriphe-core. On the tailnet, eriphe-core serves:
+
+| Port | What |
+|---|---|
+| `443` | the workspace, with HSTS, only for its tailnet name (another `Host` is redirected or refused) |
+| `8800` | the API (nodes, CLI, MCP), HTTP/1.1, with the same certificate; a node presents its own (see TLS between machines) |
+
+The local listeners do not change. The certificate is fetched and renewed by tsnet on the
+handshakes (Let's Encrypt, via Tailscale). The OAuth redirect of a tool connected from the tailnet
+address is that address's `/oauth/callback`.
+
+**Key expiry.** A device logged in with the login link must log in again after 180 days (the
+tailnet's setting): the page shows the date, and a banner 14 days before with **Log in again**.
+To avoid it, give eriphe-core an auth key of a tag (below): tagged devices do not expire.
+
+**Advanced options.** The machine name; the **coordination server** for
+[Headscale](https://headscale.net) (its URL; changing it forgets the current identity; Headscale
+has no automatic certificates, so HTTPS stays at the HTTPS step unless the server provides them);
+an **auth key** (`tskey-auth-…`, or Headscale's pre-auth key), kept in the vault as
+`tailscale.authkey` and used at the next login only; **Log out of the tailnet**, which logs the
+device out at the coordination server, deletes its state and turns remote access off. **Turn off**
+keeps the identity, so turning it on again needs no login.
+
+**State and privacy.** Tailscale's state is in `tailscale/` next to the database (0700): it holds
+the device's private keys, so it is a secret like the vault key; never copy it into a repository
+or a backup that leaves the house. Userspace networking (no TUN device, no capability), so it runs
+in the read-only container with `cap_drop: ALL`; it only needs outgoing UDP and HTTPS. tsnet's
+log upload to Tailscale is turned off; its messages go to eriphe-core's log, with auth keys and
+login links removed (whoever opens a login link first decides which tailnet Eriphe joins: it is
+shown in the workspace only).
+
+**Security notes.**
+
+- Nothing is public: there is no Funnel. Only the devices of the tailnet reach eriphe-core, and
+  the workspace still asks for its password.
+- Restrict who reaches it with the tailnet's ACLs, e.g. a tag for eriphe-core and access for the
+  owner's devices only (use the tag's auth key so the device is tagged):
+
+  ```json
+  "tagOwners": {"tag:eriphe": ["autogroup:admin"]},
+  "grants": [{"src": ["autogroup:member"], "dst": ["tag:eriphe"], "ip": ["443", "8800"]}]
+  ```
+
+- A node away from home uses the operating system's Tailscale app and the tailnet address of the
+  API (see the node's README, several addresses).
+
+## Vault
+
+Secrets can live in eriphe-core's database, encrypted with AES-256-GCM (each value
+authenticated with its name), instead of files. The key comes from `ERIPHE_VAULT_KEY` (32 bytes
+in hex or base64) or from `vault_key_file` (default `vault.key` next to the database), created
+with mode 0600 at first start. Keep the key out of backups of the database, or with them in a
+safe place: without it the vault does not open. A key that does not open what the vault holds
+is refused at start (and the vault stays closed).
+
+Every field that names a secret file also takes `vault:<name>`: `token_file`, a provider's
+`secret`, an identity's `file`, a brain MCP server's `token_file`:
+
+```json
+"providers": {"openrouter": {"kind": "openrouter-api", "secret": "vault:openrouter"}}
+```
+
+The workspace's entries keep their secrets here, typed in their own forms (see
+[Dynamic catalog](#dynamic-catalog-workspace)). Settings → Tools → Secrets avancés lists what the
+vault holds and what each secret is for, replaces or deletes one, sets a `vault:` reference of the
+configuration that has no value yet, and copies a secret file of the configuration into the vault
+in a click (then replace its path with the `vault:` reference shown); the API does the same. Values
+are never shown back nor logged.
+
+| Call (bearer token) | What |
+|---|---|
+| `GET /v1/secrets` | names and dates, never values |
+| `PUT /v1/secrets/{name}` | `{value}` to set or replace, or `{file}` to import a file on eriphe-core's machine |
+| `DELETE /v1/secrets/{name}` | delete |
+
+## Memory
+
+Eriphe's own memory, separate from the vault, in `memory.db` next to the database (SQLite, full
+text search with FTS5, accents ignored). It points at the vault (`links`) rather than copying it.
+A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `commitment`,
+`lesson`), a subject (`owner`, `person:<slug>`, `client:<slug>`, `project:<name>`, `home`…),
+dates (`valid_from`, `valid_to` once no longer true; `occurred_at` for an episode; `due_at` and
+`state` for a commitment), where it comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`)
+and a trust level (`owner`, `first_party`, `external`). A change over time supersedes the old
+memory, which stays, dated; every change is in `memory_log`. Forgotten memories are purged after
+30 days.
+
+The brain's tools (on `/mcp`): `remember`, `recall` (any word matches, best first; boosts for the
+subject named and the profile; episodes fade with a 30-day half-life; current facts only unless
+`include_past` or `as_of`), `update_memory`, `forget`, `commitments`. Results are data, quoted.
+
+**Trust is enforced in code.** Only the user's own messages (`source_ref` naming a message of role
+`user`) create or change a profile, preference or lesson. A brain turn that called an external
+catalog tool (seen by the proxy, or in the turn's events for servers it reaches directly and the
+web tools) is tainted: what it remembers is only `proposed`, unless the user's message of that
+same turn asked for it. A tainted turn also cannot act: the brain's `answer_task` allowing a
+permission is refused and the request becomes the user's to answer, and `run_task` lending tools
+that are not all believed reads (a write, a server not trusted for its annotations) is refused;
+a task with reads only, or no catalog tool, still starts. The user's own message of that turn
+does not lift this. Only a delivery holding a user message starts a clean turn: a delivery of
+events only (a task's permission, its end) goes on with the current turn and its taint, since
+what the brain read is still in its context; so does a resumed brain session. Every write goes through a scanner: instructions to a model, invisible
+characters, credentials and links carrying tokens are refused; imperative wording not from the
+user is only proposed. Proposals wait in the workspace (Mémoire → À approuver).
+
+**The profile** is the pinned memories, at most 2,500 characters (enforced on write). It is
+appended to the brain's prompt when its session starts, and sent again, quoted, with its next
+messages whenever it changed. Claude Code's own auto-memory is turned off for the brain
+(`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`): one memory.
+
+**Extraction and journal.** Every night at `extract_at` (and once a busy day's conversation has
+been quiet `idle_minutes`), eriphe-core writes out the day's transcript (messages and finished
+tasks, each labelled with its trust) and starts a `memory` task (not listed, never the brain's)
+with a cheap agent and the memories it may touch. Its JSON answer (ADD, SUPERSEDE, NOOP, each
+citing a `source_ref` of the transcript) is checked and applied: episodes (the journal, one per
+conversation day and per finished task) and what comes from the user's words are active; what
+comes from tasks or external content, and preferences, are proposed; it never writes a profile
+or a lesson. One run per day and window; a failure is retried the next night. The same night
+run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable from the page).
+
+```json
+"memory": {
+  "db": "/data/memory.db",
+  "agent": "haiku",
+  "extract_at": "03:00",
+  "idle_minutes": 30,
+  "busy_day": 20,
+  "extraction": true,
+  "backup_dir": "/backups/memory",
+  "backup_keep": 14,
+  "trusted_servers": ["notes"]
+}
+```
+
+All keys are optional: `db` defaults to `memory.db` next to `db`, `agent` to the catalog's `haiku`
+if there is one, else the default agent; `trusted_servers` lists catalog servers whose results do
+not taint a turn (none by default).

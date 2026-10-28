@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Eriphe",
+        "description": "Home Assistant will hand eriphe-core every sentence it cannot handle locally.",
+        "data": {
+          "url": "[%key:common::config_flow::data::url%]",
+          "token": "[%key:common::config_flow::data::access_token%]"
+        },
+        "data_description": {
+          "url": "Address of eriphe-core on the local network, for example http://192.0.2.2:8800.",
+          "token": "The token eriphe-core gave for Home Assistant."
+        }
+      },
+      "reconfigure": {
+        "title": "Change Eriphe's connection",
+        "description": "Change eriphe-core's address or token.",
+        "data": {
+          "url": "[%key:common::config_flow::data::url%]",
+          "token": "[%key:common::config_flow::data::access_token%]"
+        },
+        "data_description": {
+          "url": "[%key:component::eriphe::config::step::user::data_description::url%]",
+          "token": "[%key:component::eriphe::config::step::user::data_description::token%]"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "invalid_url": "The URL must start with http:// or https://.",
+      "brain_unavailable": "eriphe-core is reachable but its brain is not available. Try again later.",
+      "unexpected_response": "The server answered, but not like eriphe-core.",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_service%]",
+      "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+    }
+  }
+}

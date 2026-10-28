@@ -1,0 +1,390 @@
+{{/* Settings → Agents: AI accounts (providers), agents, the default agent and the brain's. */}}
+
+{{define "provider-icon"}}{{/* . is a provider kind */}}
+{{if or (eq . "claude-subscription") (eq . "anthropic-api")}}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/></svg>
+{{else if or (eq . "openai-api") (eq . "chatgpt-subscription")}}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>
+{{else if eq . "google-api"}}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/></svg>
+{{else if eq . "mistral-api"}}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.143 3.429v3.428h-3.429v3.429h-3.428V6.857H6.857V3.43H3.43v13.714H0v3.428h10.286v-3.428H6.857v-3.429h3.429v3.429h3.429v-3.429h3.428v3.429h-3.428v3.428H24v-3.428h-3.43V3.429z"/></svg>
+{{else if eq . "openrouter-api"}}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.778 1.844v1.919q-.569-.026-1.138-.032-.708-.008-1.415.037c-1.93.126-4.023.728-6.149 2.237-2.911 2.066-2.731 1.95-4.14 2.75-.396.223-1.342.574-2.185.798-.841.225-1.753.333-1.751.333v4.229s.768.108 1.61.333c.842.224 1.789.575 2.185.799 1.41.798 1.228.683 4.14 2.75 2.126 1.509 4.22 2.11 6.148 2.236.88.058 1.716.041 2.555.005v1.918l7.222-4.168-7.222-4.17v2.176c-.86.038-1.611.065-2.278.021-1.364-.09-2.417-.357-3.979-1.465-2.244-1.593-2.866-2.027-3.68-2.508.889-.518 1.449-.906 3.822-2.59 1.56-1.109 2.614-1.377 3.978-1.466.667-.044 1.418-.017 2.278.02v2.176L24 6.014Z"/></svg>
+{{else}}{{template "i-key"}}{{end}}
+{{end}}
+
+{{define "kind-mark"}}<span class="mark preset-mark kmark kmark-{{.}}" aria-hidden="true">{{template "provider-icon" .}}</span>{{end}}
+
+{{define "bill-tag"}}{{if eq . "subscription"}}<span class="tag tag-ok">{{t "bill.subscription"}}</span>{{else if eq . "usage"}}<span class="tag tag-warn">{{t "bill.usage"}}</span>{{end}}{{end}}
+
+{{define "kind-cards"}}{{/* . is the list of provider kinds */}}
+<div class="kind-groups">
+  <div class="kind-group">
+    <h4>{{t "kinds.subs"}}</h4>
+    <p class="muted small">{{t "kinds.subslead"}}</p>
+    <ul class="presets">{{range .}}{{if eq .Billing "subscription"}}{{template "kind-card" .}}{{end}}{{end}}</ul>
+  </div>
+  <div class="kind-group">
+    <h4>{{t "kinds.keys"}}</h4>
+    <p class="muted small">{{t "kinds.keyslead"}}</p>
+    <ul class="presets">{{range .}}{{if eq .Billing "usage"}}{{template "kind-card" .}}{{end}}{{end}}</ul>
+  </div>
+</div>
+{{end}}
+
+{{define "kind-card"}}<li><a class="preset" href="/settings/providers/new?kind={{.ID}}">
+  {{template "kind-mark" .ID}}
+  <span class="preset-text"><b>{{t (printf "kind.%s" .ID)}}</b><small>{{t (printf "kind.%s.desc" .ID)}}</small></span>
+</a></li>{{end}}
+
+{{define "agents"}}{{with .Data}}
+<header class="page-head page-head-row">
+  <div><h2>{{t "settings.agents"}}</h2><p>{{t "agents.lead"}}</p></div>
+  {{if .Providers}}<a class="btn btn-primary" href="/settings/agents/new">{{template "i-plus"}}{{t "agents.add"}}</a>{{end}}
+</header>
+{{if .Flash}}<p class="ok-note" role="status">{{.Flash}}</p>{{end}}
+{{range $k, $why := .Skipped}}<p class="alert" role="alert">{{tf "catalog.skipped" $k}} <span class="small">{{short $why 200}}</span></p>{{end}}
+
+{{if not .Providers}}
+<section class="panel onboard" aria-labelledby="start-title">
+  <h3 id="start-title">{{template "i-key"}}{{t "agents.start"}}</h3>
+  <ol class="how">
+    <li><b>{{t "how.account"}}</b><span>{{t "how.accountdesc"}}</span></li>
+    <li><b>{{t "how.agents"}}</b><span>{{t "how.agentsdesc"}}</span></li>
+    <li><b>{{t "how.brain"}}</b><span>{{t "how.braindesc"}}</span></li>
+  </ol>
+  {{template "kind-cards" .Kinds}}
+</section>
+{{else}}
+
+{{if .Agents}}
+<ul class="grid agents-grid">
+{{range .Agents}}
+  <li class="tile agent-tile">
+    <div class="tile-head">
+      <span class="status {{if .Available}}on{{else}}off{{end}}" {{if not .Available}}title="{{t "agents.unavailablehint"}}"{{end}}><span class="led" aria-hidden="true"></span>{{if .Available}}{{t "agents.available"}}{{else}}{{t "agents.unavailable"}}{{end}}</span>
+      <span class="chips">{{if .Brain}}<span class="tag tag-brain">{{t "agents.brain"}}</span>{{end}}{{if .Default}}<span class="tag tag-accent">{{t "agents.default"}}</span>{{end}}</span>
+    </div>
+    <div class="agent-title">
+      {{template "kind-mark" .Kind}}
+      <div><h3 class="mono">{{.Name}}</h3><p class="muted small">{{.ModelLabel}}{{if not .Model}}{{t "agents.modeldefault"}}{{end}}</p></div>
+    </div>
+    <p class="use">{{.Use}}</p>
+    <dl class="kv">
+      <div><dt>{{t "agents.account"}}</dt><dd><span class="mono">{{.Provider}}</span>{{template "bill-tag" .Billing}}</dd></div>
+      {{if .Advanced}}<div><dt>{{t "agents.runtime"}}</dt><dd class="mono">{{.Runtime}}</dd></div>{{end}}
+      {{if .Needs}}<div><dt>{{t "agents.needs"}}</dt><dd>{{range .Needs}}<span class="tag tag-accent">{{.}}</span>{{end}}</dd></div>{{end}}
+      {{if .Prefers}}<div><dt>{{t "agents.prefers"}}</dt><dd>{{range .Prefers}}<span class="tag">{{.}}</span>{{end}}</dd></div>{{end}}
+    </dl>
+    <div class="tile-foot">
+      {{if eq .Source "workspace"}}
+      <a class="btn btn-ghost sm" href="/settings/agents/{{.Name}}/edit">{{t "catalog.edit"}}</a>
+      {{if not .Brain}}<form hx-post="/settings/agents/{{.Name}}/delete" hx-confirm="{{tf "agents.removeconfirm" .Name}}" class="inline">
+        <button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>{{end}}
+      {{else}}{{template "src-tag" .Source}}{{end}}
+    </div>
+  </li>
+{{end}}
+</ul>
+{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-bot"}}</span><p>{{t "agents.none"}}</p></div>{{end}}
+
+{{if .Suggested}}
+<section class="panel" aria-labelledby="sugg-title">
+  <h3 id="sugg-title">{{template "i-plus"}}{{t "agents.suggested"}}</h3>
+  <p class="muted">{{t "agents.suggestedlead"}}</p>
+  <ul class="suggestions">
+  {{range .Suggested}}
+    <li><form hx-post="/settings/agents/suggested" class="inline">
+      <input type="hidden" name="provider" value="{{.Provider}}"><input type="hidden" name="preset" value="{{.Preset}}">
+      <button type="submit" class="suggestion" hx-disabled-elt="this">
+        <span class="sugg-plus" aria-hidden="true">{{template "i-plus"}}</span>
+        <span class="preset-text"><b><span class="mono">{{.Name}}</span> · {{.Model}}</b><small>{{t .Use}} — {{tf "agents.with" .Provider}}</small></span>
+      </button></form></li>
+  {{end}}
+  </ul>
+</section>
+{{end}}
+
+<section class="panel" aria-labelledby="roles-title">
+  <h3 id="roles-title">{{template "i-check"}}{{t "agents.roles"}}</h3>
+  <div class="roles">
+    <div class="role">
+      <h4>{{t "agents.defaulttitle"}}</h4>
+      <p class="muted small">{{t "agents.defaultwhat"}}</p>
+      {{if eq .DefaultSource "config"}}
+      <p>{{tf "agents.defaultis" .Default}} {{template "src-tag" .DefaultSource}}</p>
+      {{else if .Agents}}
+      <form class="row-form row-form-2" hx-post="/settings/default-agent">
+        <label class="field"><span class="sr-only">{{t "agents.defaulttitle"}}</span>
+          <select name="agent" aria-label="{{t "agents.defaulttitle"}}">{{range .Agents}}<option value="{{.Name}}" {{if .Default}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select></label>
+        <button class="btn btn-soft" type="submit">{{t "form.save"}}</button>
+      </form>
+      {{else}}<p class="muted">{{t "agents.defaultnone"}}</p>{{end}}
+    </div>
+    <div class="role">
+      <h4>{{t "agents.braintitle"}}</h4>
+      <p class="muted small">{{t "agents.brainwhat"}}</p>
+      {{if not .BrainSource}}<p class="muted">{{t "agents.nobrain"}}</p>
+      {{else if eq .BrainSource "config"}}<p>{{tf "agents.brainis" .Brain}}{{if .BrainModel}} <span class="muted">({{.BrainModel}})</span>{{end}} {{template "src-tag" .BrainSource}}</p>
+      <p class="muted small">{{t "agents.brainchange"}}</p>
+      {{else if .BrainChoices}}
+      <form class="row-form row-form-2" hx-post="/settings/brain-agent" hx-confirm="{{t "agents.brainconfirm"}}">
+        <label class="field"><span class="sr-only">{{t "agents.braintitle"}}</span>
+          <select name="agent" aria-label="{{t "agents.braintitle"}}">{{range .BrainChoices}}<option value="{{.Name}}" {{if .Brain}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select></label>
+        <button class="btn btn-soft" type="submit" hx-disabled-elt="this">{{t "form.save"}}</button>
+      </form>
+      <p class="muted small">{{t "agents.brainswitch"}}</p>
+      {{else}}<p class="muted">{{t "agents.brainnone"}}</p>{{end}}
+    </div>
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="prov-title">
+  <div class="panel-head">
+    <h3 id="prov-title">{{template "i-key"}}{{t "providers.title"}}</h3>
+    <a class="btn btn-soft sm" href="/settings/providers/new">{{template "i-plus"}}{{t "providers.add"}}</a>
+  </div>
+  <p class="muted">{{t "providers.lead"}}</p>
+  <ul class="list prov-list">
+  {{range .Providers}}
+    <li>
+      {{template "kind-mark" .Kind}}
+      <div class="list-main">
+        <span class="prov-name"><span class="mono strong">{{.Name}}</span> <span class="muted small">{{t (printf "kind.%s" .Kind)}}</span> {{template "bill-tag" .Billing}}</span>
+        <span class="muted small">{{if .Agents}}{{tf "providers.usedby" (join .Agents ", ")}}{{else}}{{t "providers.unused"}}{{end}}</span>
+        <div id="ptest-{{.Name}}" class="test-box" aria-live="polite"></div>
+      </div>
+      <div class="secret-actions">
+        <button class="btn btn-ghost sm test-btn" type="button" hx-post="/settings/provider-test/{{.Name}}" hx-target="#ptest-{{.Name}}" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{t "test.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button>
+      {{if eq .Source "workspace"}}
+        <a class="btn btn-ghost sm" href="/settings/providers/{{.Name}}/edit">{{t "catalog.edit"}}</a>
+        {{if not .Agents}}<form hx-post="/settings/providers/{{.Name}}/delete" hx-confirm="{{tf "providers.removeconfirm" .Name}}" class="inline">
+          <button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>{{end}}
+      {{else}}{{template "src-tag" .Source}}{{end}}
+      </div>
+    </li>
+  {{end}}
+  </ul>
+</section>
+{{end}}
+{{end}}{{end}}
+
+{{define "agent-page"}}
+<header class="page-head">
+  <a class="back" href="/settings/agents">{{template "i-back"}}{{t "settings.agents"}}</a>
+  <h2>{{if .Data.Edit}}{{tf "agents.editof" .Data.Name}}{{else}}{{t "agents.add"}}{{end}}</h2>
+  <p>{{t "agents.formlead"}}</p>
+</header>
+{{template "agent-form" .}}
+{{end}}
+
+{{define "agent-form"}}{{with .Data}}
+<form class="panel tool-form agent-form" hx-post="{{if .Edit}}/settings/agents/{{.Name}}{{else}}/settings/agents{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  {{if .Brain}}<p class="notice">{{t "agents.brainwarn"}}</p>{{end}}
+  {{if not .Providers}}
+  <p class="notice">{{t "agents.noprovider"}}</p>
+  <p><a class="btn btn-primary" href="/settings/providers/new">{{template "i-plus"}}{{t "providers.add"}}</a></p>
+  {{else}}
+  <div class="form-grid">
+    <label class="field"><span>{{t "agents.account"}}</span>
+      <select name="provider" hx-get="{{if .Edit}}/settings/agents/{{.Name}}/edit{{else}}/settings/agents/new{{end}}?refresh=1" hx-include="closest form" hx-target="closest form" hx-swap="outerHTML" aria-describedby="ap-h">
+        {{range .Providers}}<option value="{{.Name}}" {{if eq .Name $.Data.Provider}}selected{{end}}>{{.Name}} · {{t (printf "kind.%s" .Kind)}}</option>{{end}}
+      </select>
+      <small id="ap-h">{{t (printf "bill.%s.short" .Kind.Billing)}} <a href="/settings/providers/new">{{t "agents.otheraccount"}}</a></small></label>
+    {{if eq .Runtime "acp"}}
+    <label class="field span-2"><span>{{t "agents.command"}}</span>
+      <textarea name="command" rows="3" spellcheck="false" autocapitalize="off" class="mono" placeholder="goose&#10;acp" aria-describedby="acmd-h">{{.Command}}</textarea>
+      <small id="acmd-h">{{t "agents.commandhint"}}</small></label>
+    {{else}}
+    <label class="field"><span>{{t "agents.model"}}</span>
+      <select name="model" aria-describedby="am-h">
+        {{if .AutoModel}}<option value="" {{if eq .Model ""}}selected{{end}}>{{tf "agents.modelauto" (t (printf "runtime.%s.name" .Runtime))}}</option>{{end}}
+        {{range .Models}}<option value="{{.ID}}" {{if eq .ID $.Data.Model}}selected{{end}}>{{.Label}} — {{t .Note}}</option>{{end}}
+        <option value="other" {{if eq .Model "other"}}selected{{end}}>{{t "agents.modelother"}}</option>
+      </select>
+      <small id="am-h">{{t "agents.modelhint"}}</small></label>
+    <label class="field span-2 if-model-other"><span>{{t "agents.modelname"}}</span>
+      <input type="text" name="model_other" value="{{.ModelOther}}" spellcheck="false" autocapitalize="off" class="mono" placeholder="{{t (printf "agents.modelph.%s" .Runtime)}}" aria-describedby="amo-h">
+      <small id="amo-h">{{t (printf "agents.modelotherhint.%s" .Runtime)}}</small></label>
+    {{end}}
+  </div>
+  <div class="form-grid name-row">
+    <label class="field"><span>{{t "form.name"}}</span>
+      <input type="text" name="name" value="{{.Name}}" {{if .Edit}}disabled{{end}} maxlength="32" spellcheck="false" autocapitalize="off" class="mono" placeholder="{{t "agents.nameph"}}" aria-describedby="an-h">
+      <small id="an-h">{{if .Edit}}{{t "agents.namefixed"}}{{else}}{{t "agents.namehint"}}{{end}}</small></label>
+    <label class="field span-2"><span>{{t "agents.use"}}</span>
+      <input type="text" name="use" value="{{.Use}}" maxlength="300" placeholder="{{t "agents.useplaceholder"}}" aria-describedby="au-h">
+      <small id="au-h">{{t "agents.usehint"}}</small></label>
+  </div>
+  {{if .CanDefault}}
+  <label class="check"><input type="checkbox" name="default" value="1" {{if .Default}}checked{{end}} {{if .IsDefault}}disabled{{end}}><span><b>{{t "agents.makedefault"}}</b><small>{{if .IsDefault}}{{t "agents.isdefault"}}{{else}}{{t "agents.defaultwhat"}}{{end}}</small></span></label>
+  {{if .IsDefault}}<input type="hidden" name="default" value="1">{{end}}
+  {{end}}
+  <details class="advanced-opts" {{if or .Needs .Prefers .Image .PrefCPU .PrefMem (ne .Runtime .Kind.Runtime)}}open{{end}}>
+    <summary>{{t "form.advanced"}}</summary>
+    <div class="stack">
+      <p class="muted small">{{t "agents.advlead"}}</p>
+      {{if gt (len .Runtimes) 1}}
+      <fieldset class="choices"><legend>{{t "agents.runtime"}}</legend>
+        <div class="choice-row">
+        {{range .Runtimes}}
+          <label class="choice"><input type="radio" name="runtime" value="{{.}}" {{if eq . $.Data.Runtime}}checked{{end}} hx-get="{{if $.Data.Edit}}/settings/agents/{{$.Data.Name}}/edit{{else}}/settings/agents/new{{end}}?refresh=1" hx-include="closest form" hx-target="closest form" hx-swap="outerHTML"><b>{{t (printf "runtime.%s.name" .)}}</b><small>{{t (printf "runtime.%s" .)}}</small></label>
+        {{end}}
+        </div>
+      </fieldset>
+      {{else}}
+      <input type="hidden" name="runtime" value="{{.Runtime}}">
+      <p class="small"><b>{{t "agents.runtime"}}</b> · {{t (printf "runtime.%s.name" .Runtime)}} — <span class="muted">{{t (printf "runtime.%s" .Runtime)}}</span></p>
+      {{end}}
+      <div class="checks">
+        <label class="check"><input type="checkbox" name="prefer_cpu" value="1" {{if .PrefCPU}}checked{{end}}><span><b>{{t "agents.prefcpu"}}</b><small>{{t "agents.prefcpuhint"}}</small></span></label>
+        <label class="check"><input type="checkbox" name="prefer_memory" value="1" {{if .PrefMem}}checked{{end}}><span><b>{{t "agents.prefmem"}}</b><small>{{t "agents.prefmemhint"}}</small></span></label>
+      </div>
+      <div class="form-grid">
+        <label class="field"><span>{{t "agents.needs"}}</span><input type="text" name="needs" value="{{.Needs}}" spellcheck="false" class="mono" placeholder="gpu"><small>{{t "agents.needshint"}}</small></label>
+        <label class="field"><span>{{t "agents.preflabels"}}</span><input type="text" name="prefers" value="{{.Prefers}}" spellcheck="false" class="mono" placeholder="fast-disk"><small>{{t "agents.preflabelshint"}}</small></label>
+        <label class="field span-2"><span>{{t "agents.image"}}</span><input type="text" name="image" value="{{.Image}}" spellcheck="false" class="mono" placeholder="ghcr.io/…"><small>{{t "agents.imagehint"}}</small></label>
+      </div>
+    </div>
+  </details>
+  <div class="actions form-actions">
+    <button class="btn btn-primary" type="submit">{{template "i-check"}}{{if .Edit}}{{t "form.save"}}{{else}}{{t "agents.create"}}{{end}}</button>
+    <a class="btn btn-ghost" href="/settings/agents">{{t "form.cancel"}}</a>
+  </div>
+  {{end}}
+</form>
+{{end}}{{end}}
+
+{{define "provider-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/agents">{{template "i-back"}}{{t "settings.agents"}}</a>
+  {{if .Gallery}}
+  <h2>{{t "providers.add"}}</h2>
+  <p>{{t "providers.gallerylead"}}</p>
+  {{else}}
+  <div class="form-title">{{template "kind-mark" .Kind.ID}}
+    <h2>{{if .Edit}}{{tf "providers.editof" .Name}}{{else}}{{t (printf "kind.%s" .Kind.ID)}}{{end}}</h2></div>
+  <p>{{t (printf "kind.%s.lead" .Kind.ID)}}</p>
+  {{end}}
+</header>
+{{if .Gallery}}{{template "kind-cards" .AllKinds}}{{end}}
+{{end}}{{if not .Data.Gallery}}{{template "provider-form" .}}{{end}}{{end}}
+
+{{define "provider-form"}}{{with .Data}}{{$k := .Kind.ID}}
+<form class="panel tool-form provider-form" id="provider-form" hx-post="{{if .Edit}}/settings/providers/{{.Name}}{{else}}/settings/providers{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
+  <input type="hidden" name="kind" value="{{$k}}">
+  {{if .Next}}<input type="hidden" name="next" value="{{.Next}}">{{end}}
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+
+  <div class="bill bill-{{.Kind.Billing}}">
+    <div><span class="bill-k">{{t "bill.who"}}</span><span>{{t (printf "kind.%s.pays" $k)}}</span></div>
+    <div><span class="bill-k">{{t "bill.limits"}}</span><span>{{t (printf "kind.%s.limits" $k)}}</span></div>
+    <div><span class="bill-k">{{t "bill.models"}}</span><span>{{t (printf "kind.%s.models" $k)}}</span></div>
+  </div>
+
+  {{if eq $k "chatgpt-subscription"}}
+  <div class="stack">
+    <h4>{{t "cglogin.title"}}</h4>
+    <ol class="steps">
+      <li>{{t "cglogin.step1"}} <a href="https://chatgpt.com/#settings/Security" target="_blank" rel="noopener noreferrer">chatgpt.com › {{t "cglogin.security"}}</a></li>
+      <li>{{t "cglogin.step2"}}</li>
+      <li>{{t "cglogin.step3"}}</li>
+    </ol>
+    <div id="login-box">{{if .Login}}{{template "login-box" .Login}}{{else}}{{template "login-start" .}}{{end}}</div>
+  </div>
+  {{else}}
+  <div class="stack">
+    <h4>{{t "steps.title"}}</h4>
+    {{template "provider-steps" $k}}
+    {{if .Kind.CustomEnv}}
+    <label class="field narrow-2"><span>{{t "providers.env"}}</span>
+      <input type="text" name="env" value="{{.Env}}" maxlength="64" spellcheck="false" autocapitalize="characters" class="mono" placeholder="OPENAI_API_KEY" aria-describedby="penv-h">
+      <small id="penv-h">{{t "providers.envhint"}}</small></label>
+    {{end}}
+    {{template "secret-field" dict "Name" "key" "Label" (t (printf "kind.%s.keylabel" $k)) "Hint" (t (printf "kind.%s.keyhint" $k)) "IsSet" .KeySet}}
+  </div>
+  {{end}}
+
+  {{if .Presets}}
+  <fieldset class="choices">
+    <legend>{{t "providers.presets"}}</legend>
+    <p class="muted small">{{t "providers.presetslead"}}</p>
+    <div class="checks preset-checks">
+    {{range .Presets}}
+      <label class="check"><input type="checkbox" name="preset" value="{{.Preset}}" {{if .Checked}}checked{{end}}><span><b><span class="mono">{{.Name}}</span> · {{.Model}}</b><small>{{if .Default}}<span class="tag tag-accent">{{t "agents.default"}}</span> {{end}}{{t .Use}}</small></span></label>
+    {{end}}
+    </div>
+  </fieldset>
+  {{else if .Agents}}
+  <p class="muted small">{{tf "providers.usedby" (join .Agents ", ")}}</p>
+  {{end}}
+
+  <details class="advanced-opts" {{if and .Error (not .Edit)}}open{{end}}>
+    <summary>{{t "form.advanced"}}</summary>
+    <label class="field narrow-2"><span>{{t "providers.name"}}</span>
+      <input type="text" name="name" value="{{.Name}}" {{if .Edit}}disabled{{end}} maxlength="32" spellcheck="false" autocapitalize="off" class="mono" aria-describedby="pn-h">
+      <small id="pn-h">{{t "providers.namehint"}}</small></label>
+  </details>
+
+  <div class="actions form-actions">
+    <button class="btn btn-primary" type="submit">{{template "i-check"}}{{if .Edit}}{{t "form.save"}}{{else}}{{t "providers.create"}}{{end}}</button>
+    {{if and (ne $k "chatgpt-subscription") (not .Kind.CustomEnv)}}<button class="btn btn-soft test-btn" type="button" hx-post="/settings/provider-test{{if .Edit}}/{{.Name}}{{end}}" hx-include="closest form" hx-target="#provider-test" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{t "ptest.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button>{{end}}
+    {{if not .Next}}<a class="btn btn-ghost" href="/settings/agents">{{t "form.cancel"}}</a>{{end}}
+  </div>
+  <div id="provider-test" class="test-box" aria-live="polite"></div>
+</form>
+{{end}}{{end}}
+
+{{define "provider-steps"}}{{/* . is a provider kind */}}
+<ol class="steps">
+{{if eq . "claude-subscription"}}
+  <li>{{t "steps.claude.1"}} <a href="https://code.claude.com/docs/en/setup" target="_blank" rel="noopener noreferrer">code.claude.com</a></li>
+  <li>{{t "steps.claude.2"}}<div class="code"><pre>claude setup-token</pre></div></li>
+  <li>{{t "steps.claude.3"}}</li>
+{{else if eq . "anthropic-api"}}
+  <li>{{t "steps.anthropic.1"}} <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">platform.claude.com</a></li>
+  <li>{{t "steps.anthropic.2"}}</li>
+  <li>{{t "steps.paste"}}</li>
+{{else if eq . "openai-api"}}
+  <li>{{t "steps.openai.1"}} <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">platform.openai.com</a></li>
+  <li>{{t "steps.openai.2"}}</li>
+  <li>{{t "steps.paste"}}</li>
+{{else if eq . "google-api"}}
+  <li>{{t "steps.google.1"}} <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com</a></li>
+  <li>{{t "steps.google.2"}}</li>
+  <li>{{t "steps.paste"}}</li>
+{{else if eq . "mistral-api"}}
+  <li>{{t "steps.mistral.1"}} <a href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener noreferrer">console.mistral.ai</a></li>
+  <li>{{t "steps.mistral.2"}}</li>
+  <li>{{t "steps.paste"}}</li>
+{{else if eq . "openrouter-api"}}
+  <li>{{t "steps.openrouter.1"}} <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">openrouter.ai</a></li>
+  <li>{{t "steps.openrouter.2"}}</li>
+  <li>{{t "steps.paste"}}</li>
+{{else if eq . "custom-api"}}
+  <li>{{t "steps.custom.1"}} <a href="https://agentclientprotocol.com/get-started/agents" target="_blank" rel="noopener noreferrer">agentclientprotocol.com</a></li>
+  <li>{{t "steps.custom.2"}}</li>
+  <li>{{t "steps.custom.3"}}</li>
+{{end}}
+</ol>
+{{end}}
+
+{{define "login-start"}}
+<button class="btn btn-primary" type="button" hx-post="/settings/chatgpt-login" hx-target="#login-box" hx-swap="innerHTML" hx-disabled-elt="this">{{template "kind-mark" "chatgpt-subscription"}}{{if .KeySet}}{{t "cglogin.again"}}{{else}}{{t "cglogin.start"}}{{end}}</button>
+{{if .KeySet}}<p class="muted small"><span class="set-pill">{{template "i-check"}}{{t "cglogin.connected"}}</span> {{t "cglogin.keep"}}</p>{{end}}
+{{end}}
+
+{{define "login-fragment"}}{{template "login-box" .Data}}{{end}}
+
+{{define "login-box"}}{{/* . is a loginView */}}
+{{if eq .State "pending"}}
+<div class="login-box" hx-get="/settings/chatgpt-login/{{.ID}}" hx-trigger="every 3s" hx-target="#login-box" hx-swap="innerHTML">
+  <p>{{t "cglogin.open"}} <a href="{{.URL}}" target="_blank" rel="noopener noreferrer" class="strong">{{.URL}}</a></p>
+  <p class="login-code" aria-label="{{t "cglogin.code"}}">{{.Code}}</p>
+  <p class="muted small"><span class="pulse-dot" aria-hidden="true"></span>{{tf "cglogin.waiting" .Minutes}}</p>
+</div>
+{{else if eq .State "done"}}
+<input type="hidden" name="login" value="{{.ID}}">
+<div class="test-result test-ok" role="status">{{template "i-check"}}<div class="test-body"><p>{{if .Who}}{{tf "cglogin.doneas" .Who}}{{if .Plan}} · {{tf "cglogin.plan" .Plan}}{{end}}{{else}}{{t "cglogin.done"}}{{end}}</p><p class="small">{{t "cglogin.donenext"}}</p></div></div>
+{{else}}
+<div class="test-result test-err" role="alert">{{template "i-x"}}<div class="test-body"><p>{{t (printf "cglogin.%s" .State)}}</p>{{if .Detail}}<p class="small test-detail">{{.Detail}}</p>{{end}}</div></div>
+<button class="btn btn-soft" type="button" hx-post="/settings/chatgpt-login" hx-target="#login-box" hx-swap="innerHTML" hx-disabled-elt="this">{{t "cglogin.retry"}}</button>
+{{end}}
+{{end}}

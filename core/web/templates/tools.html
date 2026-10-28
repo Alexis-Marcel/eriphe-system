@@ -1,0 +1,409 @@
+{{/* Tools: the list, the gallery of presets, the kind of account to pick, and a tool's form. */}}
+
+{{define "tools"}}{{with .Data}}
+<header class="page-head page-head-row">
+  <div><h2>{{t "settings.tools"}}</h2><p>{{t "tools.lead"}}</p></div>
+  <a class="btn btn-primary" href="/settings/tools/add">{{template "i-plus"}}{{t "tools.add"}}</a>
+</header>
+{{if .Flash}}<p class="ok-note" role="status">{{.Flash}}</p>{{end}}
+{{if .Alert}}<p class="alert" role="alert">{{.Alert}}</p>{{end}}
+{{range $name, $why := .Skipped}}<p class="alert" role="alert">{{tf "catalog.skipped" $name}} <span class="small">{{short $why 200}}</span></p>{{end}}
+{{if .Tools}}
+<ul class="tools" id="tools-list"{{if .Waiting}} hx-get="/settings/tools" hx-trigger="load delay:2s" hx-select="#tools-list" hx-swap="outerHTML"{{end}}>
+{{range .Tools}}
+  <li class="tool">
+    {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
+    {{else}}<span class="mark {{if eq .Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
+    <div class="tool-main">
+      <div class="tool-head">
+        <h3 class="mono">{{.Name}}</h3>
+        {{if .Pending}}<span class="chip srv-pending"><span class="pulse" aria-hidden="true"></span>{{if .Placed}}{{t "server.starting"}}{{else}}{{t "server.pending"}}{{end}}</span>
+        {{else}}<span class="chip srv-{{.Status}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "server.%s" .Status)}}</span>{{end}}
+        {{if eq .Status "ready"}}<span class="muted small">{{if eq .ToolCount 1}}{{t "tools.count1"}}{{else}}{{tf "tools.count" .ToolCount}}{{end}}</span>{{end}}
+        {{template "src-tag" .Source}}
+      </div>
+      {{if .Use}}<p class="use">{{.Use}}</p>{{end}}
+      <p class="muted small meta-line">
+        {{if .Detail}}{{.Detail}}{{else if eq .Kind "local"}}{{t "tools.local"}}{{else}}<span class="mono">{{.URL}}</span> · {{t (printf "auth.%s" .Auth)}}{{end}}
+        {{if eq .Kind "local"}}{{if .Node}} · {{.Node}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
+        · <span class="access-tag {{if .TrustAnnotations}}free{{end}}" title="{{if .TrustAnnotations}}{{t "access.readhint"}}{{else}}{{t "access.askhint"}}{{end}}">{{if .TrustAnnotations}}{{t "access.read"}}{{else}}{{t "access.ask"}}{{end}}</span>
+      </p>
+      {{if .Problem}}<p class="small err-text" title="{{short .Error 600}}">{{.Problem}}</p>
+      {{else if and .Pending (not .Placed)}}<p class="small muted" title="{{short .Error 600}}">{{t "tools.pendinghint"}}</p>
+      {{else if and .Error (ne .Status "ready")}}<p class="small err-text clamp" title="{{short .Error 600}}">{{short .Error 300}}</p>{{end}}
+      <div id="connect-{{.Name}}" class="connect-box"></div>
+    </div>
+    <div class="tool-actions">
+      {{if eq .Auth "oauth"}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline">
+        <button class="btn {{if eq .Status "ready"}}btn-soft{{else}}btn-primary{{end}} sm" type="submit">{{if eq .Status "ready"}}{{t "tools.reconnect"}}{{else}}{{t "tools.connect"}}{{end}}</button></form>{{end}}
+      {{if eq .Source "workspace"}}
+      <a class="btn btn-ghost sm" href="{{if eq .Preset.Form "drive"}}/settings/drive{{else}}/settings/tools/{{.Name}}/edit{{end}}">{{if eq .Preset.Form "drive"}}{{t "drive.folders"}}{{else}}{{t "catalog.edit"}}{{end}}</a>
+      <form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{tf "tools.removeconfirm" .Name}}" class="inline">
+        <button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
+      {{end}}
+    </div>
+  </li>
+{{end}}
+</ul>
+{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-plug"}}</span><p>{{t "tools.none"}}</p></div>{{end}}
+
+<section class="panel" id="add-tool" aria-labelledby="add-tool-title">
+  <h3 id="add-tool-title">{{template "i-plus"}}{{t "tools.add"}}</h3>
+  <p class="muted">{{t "tools.addlead"}}</p>
+  {{template "preset-tiles" .Presets}}
+</section>
+
+<details class="panel advanced" id="secrets-panel">
+  <summary><span class="adv-title">{{template "i-key"}}{{t "secrets.title"}}</span><span class="muted small">{{t "secrets.summary"}}</span></summary>
+  <div id="secrets" class="secrets">{{template "secrets-body" .Secrets}}</div>
+</details>
+{{end}}{{end}}
+
+{{define "preset-tiles"}}
+<ul class="presets">
+{{range .}}
+  <li><a class="preset preset-{{.ID}}" href="{{.Page}}">
+    <span class="mark preset-mark mark-{{.ID}}" aria-hidden="true">{{template "preset-icon" .ID}}</span>
+    <span class="preset-text"><b>{{t (printf "preset.%s.title" .ID)}}</b><small>{{t (printf "preset.%s.desc" .ID)}}</small></span>
+  </a></li>
+{{end}}
+</ul>
+{{end}}
+
+{{define "tool-gallery"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
+  <h2>{{t "tools.add"}}</h2>
+  <p>{{t "tools.addlead"}}</p>
+</header>
+{{template "preset-tiles" .Presets}}
+{{end}}{{end}}
+
+{{define "tool-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="{{if and .Choose .Edit}}/settings/tools/{{.Name}}/edit{{else if .Edit}}/settings/tools{{else if or .Mail.Provider .Calendar.Provider}}/settings/tools/new?preset={{.Preset.ID}}{{else}}/settings/tools/add{{end}}">{{template "i-back"}}{{if and (not .Edit) (not .Choose) (or .Mail.Provider .Calendar.Provider)}}{{t (printf "pick.%s.back" .Preset.Form)}}{{else if and .Choose .Edit}}{{tf "tools.editof" .Name}}{{else if .Edit}}{{t "settings.tools"}}{{else}}{{t "tools.add"}}{{end}}</a>
+  <div class="form-title">
+    {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
+    {{else}}<span class="mark {{if eq .Preset.Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
+    <h2>{{if .Edit}}{{tf "tools.editof" .Name}}{{else}}{{t (printf "preset.%s.title" .Preset.ID)}}{{end}}</h2>
+  </div>
+  {{if .Choose}}<p>{{t (printf "pick.%s.lead" .Preset.Form)}}</p>
+  {{else}}{{$help := printf "preset.%s.help" .Preset.ID}}{{if and (not .Edit) (has $help)}}<p>{{t $help}}</p>{{end}}{{end}}
+</header>
+{{if .Choose}}{{template "account-picker" .}}{{else}}{{template "tool-form" $}}{{end}}
+{{end}}{{end}}
+
+{{/* The kinds of mailbox or calendar account, each with its logo. */}}
+{{define "account-picker"}}
+<section class="panel picker">
+  <ul class="providers">
+  {{if eq .Preset.Form "mail"}}{{range .MailChoices}}
+    <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else}}<a class="provider{{if eq .ID $.Mail.Provider}} current{{end}}" href="{{$.PickURL}}{{.ID}}">{{end}}
+      <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "provider-icon" .ID}}</span>
+      <span class="provider-text"><b>{{t (printf "mailp.%s" .ID)}}</b><small>{{if .Soon}}<span class="soon-tag">{{t "pick.soon"}}</span>{{else}}{{t (printf "mailp.%s.domains" .ID)}}{{end}}</small></span>
+    {{if .Soon}}</div>{{else}}</a>{{end}}</li>
+  {{end}}{{else}}{{range .CalChoices}}
+    <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else}}<a class="provider{{if eq .ID $.Calendar.Provider}} current{{end}}" href="{{$.PickURL}}{{.ID}}">{{end}}
+      <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "provider-icon" .ID}}</span>
+      <span class="provider-text"><b>{{t (printf "calp.%s" .ID)}}</b><small>{{if .Soon}}<span class="soon-tag">{{t "pick.soon"}}</span>{{else}}{{t (printf "calp.%s.desc" .ID)}}{{end}}</small></span>
+    {{if .Soon}}</div>{{else}}</a>{{end}}</li>
+  {{end}}{{end}}
+  </ul>
+  <p class="muted small soon-why">{{t (printf "pick.%s.soonwhy" .Preset.Form)}}</p>
+</section>
+{{end}}
+
+{{define "secret-field"}}{{/* . is a dict: Name, Label, Hint, IsSet */}}
+<label class="field"><span>{{.Label}}</span>
+  <input type="password" name="{{.Name}}" autocomplete="new-password" spellcheck="false" {{if .IsSet}}placeholder="{{t "secret.setplaceholder"}}"{{end}} aria-describedby="{{.Name}}-h">
+  <small id="{{.Name}}-h">{{if .IsSet}}<span class="set-pill">{{template "i-check"}}{{t "secret.set"}}</span> {{t "secret.keep"}}{{else}}{{.Hint}}{{end}}</small></label>
+{{end}}
+
+{{/* How to get the credential: numbered steps and the provider's page. */}}
+{{define "howto"}}{{/* . is a dict: Title, Steps, Link, Note */}}{{if .Steps}}
+<div class="howto-box">
+  <h4>{{.Title}}</h4>
+  <ol>{{range .Steps}}<li>{{.}}</li>{{end}}</ol>
+  {{if .Link}}<a class="btn btn-soft sm" href="{{.Link}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{t "howto.open"}}</a>{{end}}
+  {{if .Note}}<p class="small muted">{{.Note}}</p>{{end}}
+</div>{{end}}{{end}}
+
+{{define "account-head"}}{{/* . is a dict: ID, Title, Note, Change */}}
+<div class="account-head">
+  <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "provider-icon" .ID}}</span>
+  <div class="account-text"><b>{{.Title}}</b>{{if .Note}}<small>{{.Note}}</small>{{end}}</div>
+  <a class="btn btn-ghost sm" href="{{.Change}}">{{t "pick.change"}}</a>
+</div>{{end}}
+
+{{define "name-field"}}<label class="field"><span>{{t "form.name"}}</span>
+      <input type="text" name="name" value="{{.Name}}" {{if .Edit}}disabled{{end}} maxlength="32" spellcheck="false" autocapitalize="off" class="mono" aria-describedby="tn-h">
+      <small id="tn-h">{{if .Edit}}{{t "form.namefixed"}}{{else}}{{t "form.namehint"}}{{end}}</small></label>{{end}}
+{{define "use-field"}}<label class="field span-2"><span>{{t "form.use"}}</span>
+      <input type="text" name="use" value="{{.Use}}" maxlength="300" aria-describedby="tu-h">
+      <small id="tu-h">{{t "form.usehint"}}</small></label>{{end}}
+{{define "url-field"}}<label class="field"><span>{{t "form.url"}}</span>
+      <input type="text" name="url" value="{{.URL}}" inputmode="url" spellcheck="false" class="mono" placeholder="{{tor (printf "preset.%s.urlplaceholder" .Preset.ID) "form.urlplaceholder"}}" aria-describedby="url-h">
+      <small id="url-h">{{if .Preset.FixedURL}}{{t "form.fixedurl"}}{{else if .Preset.AskURL}}{{t (printf "preset.%s.urlhint" .Preset.ID)}}{{else}}{{t "form.urlhint"}}{{end}}</small></label>{{end}}
+{{define "auth-choices"}}<fieldset class="choices"><legend>{{t "form.auth"}}</legend>
+      <div class="choice-row">
+        <label class="choice"><input type="radio" name="auth" value="none" {{if eq .Auth "none"}}checked{{end}}><b>{{t "form.authnone"}}</b><small>{{t "form.authnonehint"}}</small></label>
+        <label class="choice"><input type="radio" name="auth" value="bearer" {{if eq .Auth "bearer"}}checked{{end}}><b>{{t "form.authbearer"}}</b><small>{{t "form.authbearerhint"}}</small></label>
+        <label class="choice"><input type="radio" name="auth" value="oauth" {{if eq .Auth "oauth"}}checked{{end}}><b>{{t "form.authoauth"}}</b><small>{{t "form.authoauthhint"}}</small></label>
+      </div>
+    </fieldset>{{end}}
+
+{{/* What Eriphe may do with the tool without asking: trust_annotations. */}}
+{{define "access-choices"}}<fieldset class="choices access">
+    <legend>{{t "access.title"}}</legend>
+    <div class="choice-row">
+      <label class="choice"><input type="radio" name="access" value="read" {{if .Trust}}checked{{end}}><b>{{t "access.read"}}</b><small>{{tor (printf "access.read.%s" .Preset.ID) "access.read.generic"}}</small></label>
+      <label class="choice"><input type="radio" name="access" value="ask" {{if not .Trust}}checked{{end}}><b>{{t "access.ask"}}</b><small>{{t "access.askhint"}}</small></label>
+    </div>
+    <small class="muted">{{t "access.note"}}</small>
+  </fieldset>{{end}}
+
+{{define "mail-fields"}}{{$c := .Mail.Choice}}{{$id := $c.ID}}
+  <input type="hidden" name="mail_provider" value="{{$id}}">
+  {{template "account-head" dict "ID" $id "Title" (t (printf "mailp.%s" $id)) "Note" (t (printf "mailp.%s.note" $id)) "Change" (printf "%schoose" .PickURL)}}
+  {{if $c.Soon}}<p class="alert" role="alert">{{t (printf "mailp.%s.soonlong" $id)}}</p>{{end}}
+  {{if .Switched}}<p class="notice">{{t "form.switched"}}</p>{{end}}
+  <div class="form-grid">
+    <label class="field span-2"><span>{{t "mail.address"}}</span>
+      <input type="text" name="address" value="{{.Mail.Address}}" inputmode="email" autocomplete="email" spellcheck="false" placeholder="{{tor (printf "mailp.%s.placeholder" $id) "mailp.other.placeholder"}}"></label>
+    {{if eq $id "other"}}
+    <label class="field"><span>{{t "mail.imap"}}</span><input type="text" name="imap_host" value="{{.Mail.IMAPHost}}" spellcheck="false" autocapitalize="off" class="mono" placeholder="imap.exemple.fr"></label>
+    <label class="field"><span>{{t "mail.smtp"}}</span><input type="text" name="smtp_host" value="{{.Mail.SMTPHost}}" spellcheck="false" autocapitalize="off" class="mono" placeholder="smtp.exemple.fr"></label>
+    {{end}}
+    {{if $c.AppPass}}{{template "secret-field" dict "Name" "password" "Label" (t "mail.password") "Hint" (t "mail.passwordhint") "IsSet" .SecretSet}}
+    {{else}}{{template "secret-field" dict "Name" "password" "Label" (t "mail.boxpassword") "Hint" (tor (printf "mailp.%s.passwordhint" $id) "mail.boxpasswordhint") "IsSet" .SecretSet}}{{end}}
+  </div>
+  {{template "howto" dict "Title" (t (printf "mailp.%s.howtotitle" $id)) "Steps" (steps (printf "mailp.%s.steps" $id)) "Link" $c.Link "Note" (and $c.AppPass (t "mail.howto.safe"))}}
+{{end}}
+
+{{define "cal-fields"}}{{$c := .Calendar.Choice}}{{$id := $c.ID}}
+  <input type="hidden" name="cal_provider" value="{{$id}}">
+  {{template "account-head" dict "ID" $id "Title" (t (printf "calp.%s" $id)) "Note" (t (printf "calp.%s.desc" $id)) "Change" (printf "%schoose" .PickURL)}}
+  {{if .Switched}}<p class="notice">{{t "form.switched"}}</p>{{end}}
+  <div class="form-grid">
+    {{if $c.NeedsURL}}<label class="field span-2"><span>{{t "cal.url"}}</span><input type="text" name="cal_url" value="{{.Calendar.URL}}" inputmode="url" spellcheck="false" autocapitalize="off" class="mono" placeholder="{{t (printf "calp.%s.urlplaceholder" $id)}}" aria-describedby="cu-h"><small id="cu-h">{{t (printf "calp.%s.urlhint" $id)}}</small></label>{{end}}
+    <label class="field"><span>{{t (printf "calp.%s.user" $id)}}</span><input type="text" name="cal_user" value="{{.Calendar.Username}}" spellcheck="false" autocapitalize="off" autocomplete="username" placeholder="{{t (printf "calp.%s.userplaceholder" $id)}}"></label>
+    {{template "secret-field" dict "Name" "password" "Label" (t "cal.password") "Hint" (t "cal.passwordhint") "IsSet" .SecretSet}}
+  </div>
+  {{template "howto" dict "Title" (t "cal.howtotitle") "Steps" (steps (printf "calp.%s.steps" $id)) "Link" $c.Link "Note" ""}}
+{{end}}
+
+{{define "generic-fields"}}{{$c := .Preset.Compact}}
+  {{/* The preset says remote or local; an edit keeps it. */}}
+  <input type="hidden" name="kind" value="{{if eq .Kind "local"}}local{{else}}remote{{end}}">
+  <div class="if-remote stack">
+    {{if not .Preset.FixedURL}}{{template "url-field" .}}{{end}}
+    {{if not $c}}{{template "auth-choices" .}}{{end}}
+    <div class="if-bearer stack">
+      {{template "secret-field" dict "Name" "token" "Label" (t "form.token") "Hint" (tor (printf "preset.%s.tokenhint" .Preset.ID) "preset.remote.tokenhint") "IsSet" .TokenSet}}
+      {{if $c}}{{template "howto" dict "Title" (t "form.tokenhowto") "Steps" (steps (printf "preset.%s.steps" .Preset.ID)) "Link" (t (printf "preset.%s.link" .Preset.ID)) "Note" ""}}{{end}}
+    </div>
+    <p class="hint-box if-oauth">{{template "i-link"}}<span>{{if and .Service .Edit}}{{tf "form.oauthnoteedit" .Service}}{{else if .Service}}{{tf "form.oauthnoteto" .Service}}{{else}}{{t "form.oauthnote"}}{{end}}</span></p>
+  </div>
+  <div class="if-local stack">
+    <label class="field"><span>{{t "form.image"}}</span>
+      <input type="text" name="image" value="{{.Image}}" spellcheck="false" autocapitalize="off" class="mono" placeholder="mcp/sequentialthinking" aria-describedby="img-h">
+      <small id="img-h">{{t "form.imagehint"}}</small></label>
+  </div>
+{{end}}
+
+{{define "tool-form"}}{{with .Data}}{{$c := .Preset.Compact}}
+<form class="panel tool-form" id="tool-form" hx-post="{{if .Edit}}/settings/tools/{{.Name}}{{else}}/settings/tools{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
+  <input type="hidden" name="preset" value="{{.Preset.ID}}">
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+
+  {{if eq .Preset.Form "mail"}}{{template "mail-fields" .}}
+  {{else if eq .Preset.Form "calendar"}}{{template "cal-fields" .}}
+  {{else}}{{template "generic-fields" .}}{{end}}
+
+  <div class="form-grid name-row">{{template "name-field" .}}{{template "use-field" .}}</div>
+  {{template "access-choices" .}}
+
+  <details class="advanced-opts" {{if and .Error (not $c)}}open{{end}}>
+    <summary>{{t "form.advanced"}}</summary>
+    <div class="stack">
+      {{if eq .Preset.Form "mail"}}{{if eq .Mail.Provider "other"}}
+      <div class="form-grid">
+        <label class="field"><span>{{t "mail.imapport"}}</span><input type="text" name="imap_port" value="{{.Mail.IMAPPort}}" inputmode="numeric" placeholder="993"></label>
+        <label class="field"><span>{{t "mail.smtpport"}}</span><input type="text" name="smtp_port" value="{{.Mail.SMTPPort}}" inputmode="numeric" placeholder="465"><small>{{t "mail.smtpporthint"}}</small></label>
+        <label class="field span-2"><span>{{t "mail.username"}}</span><input type="text" name="mail_user" value="{{.Mail.Username}}" spellcheck="false" autocapitalize="off" placeholder="{{t "mail.usernameplaceholder"}}"></label>
+      </div>{{end}}
+      {{else if eq .Preset.Form "calendar"}}
+      <label class="field narrow-2"><span>{{t "cal.tz"}}</span><input type="text" name="timezone" value="{{.Calendar.Timezone}}" spellcheck="false" class="mono"><small>{{t "cal.tzhint"}}</small></label>
+      {{else if $c}}{{if .Preset.FixedURL}}{{template "url-field" .}}{{end}}{{template "auth-choices" .}}
+      {{end}}
+      <label class="field narrow"><span>{{t "form.timeout"}}</span><input type="text" name="timeout" value="{{.Timeout}}" inputmode="numeric" placeholder="600"><small>{{t "form.timeouthint"}}</small></label>
+      {{if eq .Preset.Form "generic"}}
+      <div class="if-remote if-oauth stack">
+        <h4>{{t "form.oauthclient"}}</h4>
+        <p class="muted small">{{t "form.oauthclienthint"}}</p>
+        <label class="field"><span>{{t "form.scopes"}}</span><input type="text" name="scopes" value="{{.Scopes}}" spellcheck="false" class="mono" placeholder="read write"></label>
+        <div class="form-grid">
+          {{template "secret-field" dict "Name" "client_id" "Label" (t "form.clientid") "Hint" "" "IsSet" .ClientIDSet}}
+          {{template "secret-field" dict "Name" "client_secret" "Label" (t "form.clientsecret") "Hint" "" "IsSet" .ClientSecretSet}}
+        </div>
+        {{if .ClientIDSet}}<label class="check"><input type="checkbox" name="forget_client" value="1"><span><b>{{t "form.forgetclient"}}</b></span></label>{{end}}
+        <label class="field"><span>{{t "form.cimd"}}</span><input type="text" name="client_metadata_url" value="{{.ClientMetadata}}" spellcheck="false" class="mono" placeholder="https://…/client.json"></label>
+      </div>
+      <div class="if-local stack">
+        <fieldset class="choices"><legend>{{t "form.transport"}}</legend>
+          <div class="choice-row">
+            <label class="choice"><input type="radio" name="transport" value="stdio" {{if ne .Transport "http"}}checked{{end}}><b>stdio</b><small>{{t "form.stdiohint"}}</small></label>
+            <label class="choice"><input type="radio" name="transport" value="http" {{if eq .Transport "http"}}checked{{end}}><b>HTTP</b><small>{{t "form.httphint"}}</small></label>
+          </div>
+        </fieldset>
+        <div class="form-grid if-http">
+          <label class="field"><span>{{t "form.port"}}</span><input type="text" name="port" value="{{.Port}}" inputmode="numeric" placeholder="8080"></label>
+          <label class="field"><span>{{t "form.path"}}</span><input type="text" name="path" value="{{.Path}}" class="mono" placeholder="/mcp"></label>
+        </div>
+        <label class="field"><span>{{t "form.args"}}</span><textarea name="args" rows="2" spellcheck="false" class="mono">{{.Args}}</textarea><small>{{t "form.argshint"}}</small></label>
+        <div class="field"><span>{{t "form.env"}}</span>
+          <input type="hidden" name="env_count" value="{{len .Env}}">
+          <div class="env-rows">
+          {{range $i, $e := .Env}}
+            <div class="env-row">
+              <input type="text" name="env_name_{{$i}}" value="{{$e.Name}}" placeholder="NOM" spellcheck="false" autocapitalize="characters" class="mono" aria-label="{{t "form.envname"}}">
+              <input type="{{if $e.Secret}}password{{else}}text{{end}}" name="env_value_{{$i}}" value="{{if not $e.Secret}}{{$e.Value}}{{end}}" {{if $e.IsSet}}placeholder="{{t "secret.setplaceholder"}}"{{end}} spellcheck="false" autocomplete="off" class="mono" aria-label="{{t "form.envvalue"}}">
+              <label class="check sm"><input type="checkbox" name="env_secret_{{$i}}" value="1" {{if $e.Secret}}checked{{end}}><span>{{t "form.envsecret"}}</span></label>
+            </div>
+          {{end}}
+          </div>
+          <small>{{t "form.envhint"}}</small>
+        </div>
+        <div class="checks">
+          <label class="check"><input type="checkbox" name="egress" value="1" {{if .Egress}}checked{{end}}><span><b>{{t "form.egress"}}</b><small>{{t "form.egresshint"}}</small></span></label>
+          <label class="check"><input type="checkbox" name="volume" value="1" {{if .Volume}}checked{{end}}><span><b>{{t "form.volume"}}</b><small>{{t "form.volumehint"}}</small></span></label>
+          <label class="check"><input type="checkbox" name="writable" value="1" {{if .Writable}}checked{{end}}><span><b>{{t "form.writable"}}</b><small>{{t "form.writablehint"}}</small></span></label>
+        </div>
+        <div class="form-grid">
+          <label class="field"><span>{{t "form.node"}}</span><input type="text" name="node" value="{{.Node}}" spellcheck="false" class="mono" placeholder="nas"></label>
+          <label class="field"><span>{{t "form.needs"}}</span><input type="text" name="needs" value="{{.Needs}}" spellcheck="false" class="mono" placeholder="gpu"></label>
+          <label class="field"><span>{{t "form.prefers"}}</span><input type="text" name="prefers" value="{{.Prefers}}" spellcheck="false" class="mono" placeholder="cpu, memory"></label>
+          <label class="field"><span>{{t "form.user"}}</span><input type="text" name="user" value="{{.User}}" spellcheck="false" class="mono" placeholder="1000:1000"></label>
+        </div>
+      </div>
+      {{end}}
+    </div>
+  </details>
+
+  <div class="actions form-actions">
+    {{/* With OAuth, the primary action saves and signs in at once. */}}
+    <button class="btn btn-primary if-oauth" type="submit" name="connect" value="1">{{template "i-link"}}{{if .Service}}{{tf "form.connectto" .Service}}{{else if .Edit}}{{tf "form.connectto" .Name}}{{else}}{{t "form.connectservice"}}{{end}}</button>
+    <button class="btn btn-primary save-btn{{if .OrigOAuth}} keep{{end}}" type="submit">{{template "i-check"}}<span class="lbl-plain">{{if .Edit}}{{t "form.save"}}{{else}}{{t "form.create"}}{{end}}</span>{{if .OrigOAuth}}<span class="lbl-oauth">{{t "form.savenoconnect"}}</span>{{end}}</button>
+    {{if .Testable}}<button class="btn btn-soft test-btn" type="button" hx-post="/settings/tool-test{{if .Edit}}/{{.Name}}{{end}}" hx-target="#tool-test" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{t "test.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button>{{end}}
+    <a class="btn btn-ghost" href="/settings/tools">{{t "form.cancel"}}</a>
+  </div>
+  <div id="tool-test" class="test-box" aria-live="polite"></div>
+</form>
+{{end}}{{end}}
+
+{{define "tool-test"}}{{with .Data}}
+<div class="test-result test-{{.State}}" role="status">
+  {{if eq .State "ok"}}{{template "i-check"}}{{else if eq .State "err"}}{{template "i-x"}}{{else}}{{template "i-server"}}{{end}}
+  <div class="test-body">
+    <p>{{.Text}}</p>
+    {{if .Tools}}<p class="test-tools">{{range .Tools}}<code>{{.}}</code>{{end}}{{if .More}}<span class="small">{{tf "test.more" .More}}</span>{{end}}</p>{{end}}
+    {{if .Detail}}<p class="small test-detail mono">{{.Detail}}</p>{{end}}
+  </div>
+</div>
+{{end}}{{end}}
+
+{{/* Google Drive: connect the account, then give folders to Eriphe (web_drive.go). */}}
+{{define "drive-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
+  <div class="form-title">
+    <span class="mark preset-mark mark-gdrive" aria-hidden="true">{{template "preset-icon" "gdrive"}}</span>
+    <h2>{{t "drive.title"}}</h2>
+  </div>
+  <p>{{t "drive.lead"}}</p>
+</header>
+<div id="drive-wrap" class="stack"{{if and .Mine (ne .Status "ready")}} hx-get="/settings/drive" hx-trigger="load delay:3s" hx-select="#drive-wrap" hx-swap="outerHTML"{{end}}>
+{{if .Connected}}<p class="ok-note" role="status">{{t "drive.connected"}}</p>{{end}}
+{{if and .Exists (not .Mine)}}<p class="alert" role="alert">{{tf "drive.taken" "fichiers"}}</p>
+{{else if .Exists}}
+{{template "drive-folders" .}}
+<section class="panel">
+  <h3>{{template "i-plus"}}{{t "drive.browse"}}</h3>
+  {{if eq .Status "ready"}}<div id="drive-browse" hx-get="/settings/drive/browse" hx-trigger="load" hx-swap="outerHTML"><p class="muted small">…</p></div>
+  {{else}}<p class="notice">{{t "drive.starting"}}</p>{{end}}
+</section>
+{{end}}
+<section class="panel">
+  <h3>{{template "i-link"}}{{if .Exists}}{{t "drive.reconnect"}}{{else}}{{t "drive.connect"}}{{end}}</h3>
+  <form class="stack" hx-post="/settings/drive/connect" hx-target="#drive-connect-result" hx-disabled-elt="find button[type=submit]">
+    {{if not .AppReady}}<p class="notice">{{t "drive.noapp"}}</p>{{else if not .OriginOK}}<p class="notice">{{tf "drive.badorigin" .Origin}}</p>{{end}}
+    <label class="check"><input type="checkbox" name="write" value="1" {{if or .CanWrite (not .Exists)}}checked{{end}}>
+      <span><b>{{t "drive.write"}}</b><small>{{t "drive.writehint"}}</small></span></label>
+    <details {{if not (and .AppReady .OriginOK)}}open{{end}}>
+      <summary>{{t "drive.own"}}</summary>
+      <div class="stack">
+        <label class="check"><input type="checkbox" name="own" value="1" {{if not (and .AppReady .OriginOK)}}checked{{end}}>
+          <span><b>{{t "drive.ownuse"}}</b><small>{{t "drive.ownhint"}} <span class="mono">{{.Callback}}</span></small></span></label>
+        <div class="form-grid">
+          <label class="field"><span>{{t "drive.clientid"}}</span><input type="text" name="client_id" spellcheck="false" autocomplete="off" class="mono"></label>
+          <label class="field"><span>{{t "drive.clientsecret"}}</span><input type="password" name="client_secret" autocomplete="new-password" spellcheck="false"></label>
+        </div>
+      </div>
+    </details>
+    <p class="small muted">{{t "drive.warning"}}</p>
+    <div id="drive-connect-result"></div>
+    <div class="actions"><button class="btn btn-primary" type="submit">{{if .Exists}}{{t "drive.reconnect"}}{{else}}{{t "drive.connect"}}{{end}}</button></div>
+  </form>
+</section>
+</div>
+{{end}}{{end}}
+
+{{define "drive-connect-result"}}{{with .Data}}{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}{{end}}{{end}}
+
+{{define "drive-folders-frag"}}{{template "drive-folders" .Data}}{{end}}
+
+{{/* . is the drive view. */}}
+{{define "drive-folders"}}{{$v := .}}
+<section class="panel" id="drive-folders">
+  <h3>{{template "i-check"}}{{t "drive.given"}}</h3>
+  {{if $v.Error}}<p class="alert" role="alert">{{$v.Error}}</p>{{end}}
+  {{if $v.Folders}}<ul class="drive-list">
+  {{range $v.Folders}}<li>
+    <span class="drive-name">{{.Name}}</span>
+    <span class="chip">{{t (printf "drive.access.%s" .Access)}}</span>
+    <span class="drive-actions">
+      {{if eq .Access "read"}}{{if $v.CanWrite}}<form hx-post="/settings/drive/folders" hx-target="#drive-folders" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="access" value="drop">
+        <button class="link-btn" type="submit">{{t "drive.allowwrite"}}</button></form>{{end}}
+      {{else}}<form hx-post="/settings/drive/folders" hx-target="#drive-folders" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="access" value="read">
+        <button class="link-btn" type="submit">{{t "drive.readonlybtn"}}</button></form>{{end}}
+      <form hx-post="/settings/drive/folders/remove" hx-target="#drive-folders" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="id" value="{{.ID}}"><button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
+    </span>
+  </li>{{end}}
+  </ul>{{else}}<p class="muted">{{t "drive.none"}}</p>{{end}}
+</section>
+{{end}}
+
+{{define "drive-browse"}}{{with .Data}}{{$b := .}}
+<div id="drive-browse" class="stack">
+  {{if .Parent}}<p class="drive-path"><button class="link-btn" type="button" hx-get="/settings/drive/browse" hx-target="#drive-browse" hx-swap="outerHTML">{{t "drive.top"}}</button> <b>{{.Name}}</b></p>{{end}}
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  <ul class="drive-list">
+  {{range .Folders}}<li>
+    <span class="drive-name">{{.Name}}</span>
+    <span class="drive-actions">
+      <button class="btn btn-ghost sm" type="button" hx-get="/settings/drive/browse?parent={{urlquery .ID}}&amp;name={{urlquery .Name}}" hx-target="#drive-browse" hx-swap="outerHTML">{{t "drive.open"}}</button>
+      {{if ne .ID "shared-with-me"}}{{with index $b.Given .ID}}<span class="chip">{{t (printf "drive.access.%s" .)}}</span>{{else}}
+      <form hx-post="/settings/drive/folders" hx-target="#drive-folders" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}">
+        <button class="btn btn-soft sm" type="submit" name="access" value="read">{{t "drive.give"}}</button>
+        {{if $b.CanWrite}}<button class="btn btn-soft sm" type="submit" name="access" value="drop">{{t "drive.givewrite"}}</button>{{end}}
+      </form>{{end}}{{end}}
+    </span>
+  </li>{{else}}<li class="muted small">{{t "drive.empty"}}</li>{{end}}
+  </ul>
+  {{if .Next}}<button class="btn btn-ghost sm" type="button" hx-get="/settings/drive/browse?parent={{urlquery .Parent}}&amp;name={{urlquery .Name}}&amp;page={{urlquery .Next}}" hx-target="#drive-browse" hx-swap="outerHTML">{{t "drive.more"}}</button>{{end}}
+</div>
+{{end}}{{end}}

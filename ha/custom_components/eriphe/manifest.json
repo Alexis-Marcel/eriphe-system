@@ -1,0 +1,12 @@
+{
+  "domain": "eriphe",
+  "name": "Eriphe",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["conversation"],
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

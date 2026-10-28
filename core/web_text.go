@@ -1,0 +1,729 @@
+package main
+
+import (
+	"fmt"
+	"html"
+	"html/template"
+	"net/url"
+	"regexp"
+	"strings"
+	"time"
+)
+
+// The workspace's words, in French first and English as an option, and the
+// helpers its templates use.
+
+var webStrings = map[string]map[string]string{
+	"fr": {
+		"app.tagline":              "Ton assistant, chez toi.",
+		"nav.chat":                 "Conversation",
+		"nav.tasks":                "Tâches",
+		"nav.settings":             "Réglages",
+		"nav.logout":               "Se déconnecter",
+		"nav.main":                 "Navigation principale",
+		"login.title":              "Connexion",
+		"login.lead":               "Entre ton mot de passe pour ouvrir ton espace.",
+		"login.password":           "Mot de passe",
+		"login.submit":             "Se connecter",
+		"setup.title":              "Bienvenue",
+		"setup.lead":               "Choisis le mot de passe de ton espace Eriphe. Le code d'installation est affiché dans le journal d'eriphe-core.",
+		"setup.code":               "Code d'installation",
+		"setup.password":           "Nouveau mot de passe",
+		"setup.confirm":            "Confirme le mot de passe",
+		"setup.hint":               "10 caractères au moins. Une phrase de quelques mots est idéale.",
+		"setup.submit":             "Créer mon espace",
+		"err.csrf":                 "La page a expiré : recharge-la et réessaie.",
+		"err.toomany":              "Trop d'essais. Réessaie dans un quart d'heure.",
+		"err.password":             "Mot de passe incorrect.",
+		"err.setupcode":            "Code d'installation incorrect.",
+		"err.short":                "Le mot de passe doit faire 10 caractères au moins.",
+		"err.mismatch":             "Les deux mots de passe ne sont pas identiques.",
+		"err.internal":             "Une erreur est survenue. Réessaie.",
+		"chat.label":               "Conversation avec Eriphe",
+		"chat.hello":               "Bonjour %s",
+		"chat.empty":               "Dis à Eriphe ce que tu veux faire. Il confie le travail à ses agents, sur tes machines, et te demande ton accord quand il le faut.",
+		"chat.ex1":                 "Corrige le bug de la page de contact sur mon site",
+		"chat.ex2":                 "Résume les nouveautés de mes projets cette semaine",
+		"chat.ex3":                 "Prépare un devis à partir de mes notes",
+		"chat.placeholder":         "Écris à Eriphe…",
+		"chat.send":                "Envoyer",
+		"chat.you":                 "Toi",
+		"chat.eriphe":              "Eriphe",
+		"chat.event":               "Événement",
+		"chat.thinking":            "Eriphe réfléchit…",
+		"chat.nobrain":             "Eriphe n'est pas encore configuré sur ce serveur : tes messages attendront qu'il le soit.",
+		"chat.brainoff":            "Eriphe n'est pas disponible pour l'instant : il lira tes messages dès son retour.",
+		"chat.offline":             "Connexion perdue. Nouvel essai…",
+		"chat.earlier":             "Messages plus anciens non affichés.",
+		"perm.title":               "Eriphe a besoin de ton accord",
+		"perm.yours":               "Cette décision te revient",
+		"perm.wants":               "veut utiliser",
+		"perm.reason":              "Raison (facultatif)",
+		"perm.reasonhint":          "Transmise à l'agent, par exemple pour lui proposer une autre façon de faire.",
+		"perm.allow":               "Oui, autoriser",
+		"perm.deny":                "Non, refuser",
+		"perm.allowed":             "Autorisé.",
+		"perm.denied":              "Refusé.",
+		"perm.changed":             "Cette demande a changé entre-temps.",
+		"perm.task":                "Voir la tâche",
+		"tasks.label":              "Tâches d'Eriphe",
+		"tasks.title":              "Tâches",
+		"tasks.none":               "Aucune tâche en cours. Quand Eriphe confie un travail à un agent, il apparaît ici.",
+		"tasks.done":               "Terminées récemment",
+		"tasks.waitnode":           "En attente d'une machine",
+		"tasks.needsyou":           "Attend ta réponse",
+		"tasks.open":               "Ouvrir la tâche",
+		"task.close":               "Fermer",
+		"task.prompt":              "Consigne",
+		"task.activity":            "Activité",
+		"task.noactivity":          "Rien encore.",
+		"task.reply":               "Répondre à l'agent",
+		"task.replyhint":           "L'agent a fini son tour. Ta réponse lui donne la suite.",
+		"task.replysend":           "Envoyer",
+		"task.sent":                "Message envoyé à l'agent.",
+		"task.stop":                "Arrêter la tâche",
+		"task.stopconfirm":         "Arrêter cette tâche ? L'agent s'arrête où il en est.",
+		"task.stopping":            "Arrêt demandé.",
+		"task.node":                "Machine",
+		"task.agent":               "Agent",
+		"task.repo":                "Dépôt",
+		"task.branch":              "Branche",
+		"task.ran":                 "a lancé",
+		"task.allowed":             "autorisé",
+		"task.denied":              "refusé",
+		"task.turnend":             "Tour terminé",
+		"task.error":               "Erreur",
+		"state.pending":            "En attente",
+		"state.running":            "En cours",
+		"state.waiting_permission": "Demande ton accord",
+		"state.idle":               "Tour terminé",
+		"state.stopped":            "Terminée",
+		"state.failed":             "Échouée",
+		"state.lost":               "Perdue",
+		"settings.title":           "Réglages",
+		"settings.machines":        "Machines",
+		"settings.agents":          "Agents",
+		"settings.accounts":        "Comptes et outils",
+		"settings.journal":         "Journal",
+		"settings.account":         "Mon espace",
+		"machines.lead":            "Les ordinateurs sur lesquels Eriphe fait travailler ses agents.",
+		"machines.none":            "Aucune machine pour l'instant. Ajoutes-en une pour qu'Eriphe puisse travailler.",
+		"machines.online":          "En ligne",
+		"machines.offline":         "Hors ligne",
+		"machines.seen":            "Vue %s",
+		"machines.cpus":            "%d processeurs",
+		"machines.memory":          "%s de mémoire",
+		"machines.runtimes":        "Programmes",
+		"machines.labels":          "Étiquettes",
+		"machines.alwayson":        "Toujours allumée · tes outils tournent ici",
+		"machines.alwaysonhint":    "Les outils comme les mails et l'agenda doivent répondre à toute heure : ils vont sur les machines qui ne s'éteignent pas.",
+		"machines.active":          "%d tâche(s) active(s)",
+		"machines.add":             "Ajouter une machine",
+		"machines.addlead":         "Donne-lui un nom court (lettres minuscules, chiffres, tirets), puis lance la commande affichée sur la machine. Le jeton ne sert qu'une fois, pour ce nom seulement, et expire dans 24 h.",
+		"machines.name":            "Nom de la machine",
+		"machines.labelsopt":       "Étiquettes (facultatif, ex. gpu)",
+		"machines.generate":        "Générer la commande",
+		"machines.badname":         "Le nom doit faire 1 à 32 caractères : lettres minuscules, chiffres et tirets.",
+		"machines.unix":            "Linux ou macOS",
+		"machines.unixlead":        "Dans un terminal sur la machine. Le script installe ce qu'il faut (Docker sous Linux, une machine virtuelle sous macOS) ; relancé, il met à jour.",
+		"machines.linux":           "Docker Compose (NAS, serveur)",
+		"machines.linuxlead":       "Dans le compose.yaml du nœud, puis docker compose up -d :",
+		"machines.binary":          "Programme seul (Linux ou macOS)",
+		"machines.windows":         "Windows",
+		"machines.windowslead":     "Dans un PowerShell administrateur. Le script installe WSL s'il manque ; relancé, il met à jour.",
+		"machines.windowsfile":     "Windows (script téléchargé)",
+		"machines.windowsfilelead": "Dans un PowerShell administrateur, à côté d'install.ps1 :",
+		"machines.expires":         "Jeton valable jusqu'au %s, une seule fois.",
+		"machines.copy":            "Copier",
+		"voice.title":              "Home Assistant (la voix)",
+		"voice.lead":               "Home Assistant transmet à Eriphe ce qu'il ne traite pas lui-même, et lit sa réponse. Crée un jeton, puis ajoute l'intégration « Eriphe » dans Home Assistant avec cette adresse et ce jeton. Il ne sert qu'à parler à Eriphe.",
+		"voice.has":                "Home Assistant a déjà un jeton. En créer un nouveau remplace l'ancien.",
+		"voice.create":             "Créer le jeton de Home Assistant",
+		"voice.replace":            "Remplacer le jeton",
+		"voice.replaceconfirm":     "Remplacer le jeton ? Home Assistant ne pourra plus parler à Eriphe tant que tu n'auras pas mis le nouveau.",
+		"voice.once":               "Copie le jeton maintenant : il ne sera plus affiché.",
+		"voice.url":                "Adresse d'eriphe-core",
+		"voice.token":              "Jeton",
+		"chat.via":                 "dit à voix haute",
+		"machines.copied":          "Copié",
+		"machines.forget":          "Oublier",
+		"machines.forgetconfirm":   "Oublier cette machine ? Ses tâches seront perdues et elle devra rejoindre à nouveau.",
+		"machines.rejoin":          "Réinscrire cette machine",
+		"machines.rejoinconfirm":   "Réinscrire cette machine ? Le jeton permet à une machine de reprendre ce nom, avec ses tâches et ses accès.",
+		"machines.rejoinlead":      "Jeton de réinscription pour %s. Si Eriphe est encore installé sur la machine, efface d'abord son identité : sous Linux ou macOS, lance le script avec --uninstall (ou supprime node.json dans le dossier du nœud) ; sous Windows, -Rejoin s'en charge. Puis lance la commande. L'ancien secret de la machine cessera de fonctionner.",
+		"machines.exists":          "Une machine porte déjà ce nom. Pour la réinstaller, utilise « Réinscrire cette machine » sur sa fiche.",
+		"machines.nonode":          "Aucune machine ne porte ce nom.",
+		"machines.tls":             "Connexion chiffrée · certificat jusqu'au %s",
+		"machines.notls":           "Connexion non chiffrée · passera en TLS d'elle-même à sa mise à jour",
+		"machines.tlstitle":        "Connexion des machines",
+		"machines.tlslead":         "Les machines parlent à Eriphe en TLS, avec un certificat chacune, signé par l'autorité de certification d'Eriphe. Les commandes d'ajout donnent son empreinte (-ca-hash) : la nouvelle machine vérifie qu'elle parle bien à Eriphe.",
+		"machines.tlsplain":        "Encore sans certificat : %s. Une machine à jour en obtient un d'elle-même à sa prochaine connexion.",
+		"machines.tlsclose":        "N'accepter que les machines en TLS",
+		"machines.tlscloseconfirm": "N'accepter que les machines en TLS ? Une machine sans certificat ne pourra plus se connecter tant qu'elle ne sera pas à jour ou réinscrite.",
+		"machines.tlsonly":         "Seules les machines en TLS, avec leur certificat, sont acceptées.",
+		"machines.tlsopen":         "Accepter aussi les machines sans TLS",
+		"machines.tlsopenconfirm":  "Accepter de nouveau les machines sans TLS ? Leur secret circulera en clair sur le réseau.",
+		"agents.lead":              "Les agents à qui Eriphe peut confier un travail. Ils se règlent dans la configuration d'eriphe-core.",
+		"agents.none":              "Aucun agent configuré.",
+		"agents.default":           "Par défaut",
+		"agents.available":         "Disponible",
+		"agents.unavailable":       "Aucune machine en ligne ne peut le lancer",
+		"agents.use":               "Quand",
+		"agents.needs":             "A besoin de",
+		"agents.prefers":           "Préfère",
+		"agents.model":             "Modèle",
+		"agents.runtime":           "Programme",
+		"accounts.lead":            "Les clés et jetons qu'Eriphe prête à ses agents. Ils sont chiffrés sur le serveur et ne sont jamais réaffichés.",
+		"accounts.vault":           "Coffre",
+		"accounts.none":            "Le coffre est vide.",
+		"accounts.updated":         "Modifié %s",
+		"accounts.ref":             "À utiliser dans la configuration :",
+		"accounts.add":             "Ajouter ou remplacer un secret",
+		"accounts.name":            "Nom",
+		"accounts.namehint":        "Lettres minuscules, chiffres, points, tirets, soulignés. Un nom existant est remplacé.",
+		"accounts.value":           "Valeur",
+		"accounts.valuehint":       "Collée ici, elle est chiffrée aussitôt et n'est plus jamais affichée.",
+		"accounts.save":            "Enregistrer",
+		"accounts.saved":           "Secret « %s » enregistré.",
+		"accounts.delete":          "Supprimer",
+		"accounts.deleteconfirm":   "Supprimer ce secret ? Ce qui l'utilise ne fonctionnera plus.",
+		"accounts.deleted":         "Secret supprimé.",
+		"accounts.novault":         "Le coffre n'est pas ouvert : voir le journal d'eriphe-core.",
+		"accounts.config":          "Secrets de la configuration",
+		"accounts.configlead":      "Où la configuration trouve chaque secret. Ceux qui sont encore dans un fichier peuvent être copiés dans le coffre ; remplace ensuite le chemin par la référence vault: indiquée.",
+		"accounts.infile":          "Fichier",
+		"accounts.invault":         "Coffre",
+		"accounts.import":          "Copier dans le coffre",
+		"accounts.imported":        "Copié dans le coffre sous « %s ». Remplace le chemin par %s dans la configuration.",
+		"accounts.tools":           "Outils connectés",
+		"accounts.toolslead":       "Les services en ligne (agenda, mails, documents…) qu'Eriphe peut utiliser, et s'ils répondent. Ceux qui demandent ton autorisation se connectent ici.",
+		"tools.none":               "Aucun outil dans la configuration.",
+		"tools.count":              "%d outils",
+		"tools.local":              "Sur une machine",
+		"tools.connect":            "Connecter",
+		"tools.reconnect":          "Reconnecter",
+		"tools.step1":              "Ouvre la page d'autorisation du service et accepte.",
+		"tools.open":               "Ouvrir",
+		"tools.step2":              "Ton navigateur arrive ensuite sur une page 127.0.0.1 qui ne s'affiche pas : copie son adresse et colle-la ici.",
+		"tools.finish":             "Terminer",
+		"tools.badurl":             "Ce n'est pas l'adresse attendue : elle contient code= et state=.",
+		"tools.connected":          "Connecté : %d outils disponibles.",
+		"server.ready":             "Connecté",
+		"server.connecting":        "Connexion…",
+		"server.needs_auth":        "À connecter",
+		"server.error":             "Erreur",
+		"auth.oauth":               "autorisation OAuth",
+		"auth.bearer":              "jeton",
+		"auth.none":                "sans authentification",
+		"auth.local":               "local",
+		"journal.lead":             "Toutes les décisions sur les demandes des agents : qui a autorisé ou refusé quoi.",
+		"journal.none":             "Aucune décision pour l'instant.",
+		"journal.when":             "Quand",
+		"journal.task":             "Tâche",
+		"journal.what":             "Demande",
+		"journal.decision":         "Décision",
+		"journal.by":               "Par",
+		"journal.reason":           "Raison",
+		"journal.more":             "Plus anciennes",
+		"decision.allow":           "Autorisé",
+		"decision.deny":            "Refusé",
+		"by.user":                  "Toi",
+		"by.brain":                 "Eriphe",
+		"by.policy":                "Règle",
+		"account.lead":             "Ta langue et ton mot de passe.",
+		"account.lang":             "Langue",
+		"account.password":         "Changer le mot de passe",
+		"account.current":          "Mot de passe actuel",
+		"account.new":              "Nouveau mot de passe",
+		"account.confirm":          "Confirme le nouveau mot de passe",
+		"account.save":             "Changer",
+		"account.changed":          "Mot de passe changé. Tes autres sessions sont fermées.",
+		"account.version":          "eriphe-core %s",
+		"update.available":         "Nouvelle version disponible",
+		"update.lead":              "La version %s est publiée. Lance cette commande sur la machine : les données et les réglages restent.",
+		"update.unix":              "Linux ou macOS, le script d'installation à nouveau",
+		"update.windows":           "Windows, dans un PowerShell administrateur",
+		"update.compose":           "Docker Compose, dans le dossier du projet",
+		"time.now":                 "à l'instant",
+		"time.min":                 "il y a %d min",
+		"time.hour":                "il y a %d h",
+		"time.day":                 "il y a %d j",
+		"time.never":               "jamais",
+	},
+	"en": {
+		"app.tagline":              "Your assistant, at home.",
+		"nav.chat":                 "Conversation",
+		"nav.tasks":                "Tasks",
+		"nav.settings":             "Settings",
+		"nav.logout":               "Log out",
+		"nav.main":                 "Main navigation",
+		"login.title":              "Log in",
+		"login.lead":               "Enter your password to open your workspace.",
+		"login.password":           "Password",
+		"login.submit":             "Log in",
+		"setup.title":              "Welcome",
+		"setup.lead":               "Choose the password of your Eriphe workspace. The setup code is printed in eriphe-core's log.",
+		"setup.code":               "Setup code",
+		"setup.password":           "New password",
+		"setup.confirm":            "Confirm the password",
+		"setup.hint":               "At least 10 characters. A phrase of a few words is ideal.",
+		"setup.submit":             "Create my workspace",
+		"err.csrf":                 "The page expired: reload it and try again.",
+		"err.toomany":              "Too many attempts. Try again in a quarter of an hour.",
+		"err.password":             "Wrong password.",
+		"err.setupcode":            "Wrong setup code.",
+		"err.short":                "The password must be at least 10 characters long.",
+		"err.mismatch":             "The two passwords differ.",
+		"err.internal":             "Something went wrong. Try again.",
+		"chat.label":               "Conversation with Eriphe",
+		"chat.hello":               "Hello %s",
+		"chat.empty":               "Tell Eriphe what you want done. It hands the work to its agents, on your machines, and asks for your go-ahead when needed.",
+		"chat.ex1":                 "Fix the contact page bug on my website",
+		"chat.ex2":                 "Sum up what changed in my projects this week",
+		"chat.ex3":                 "Draft a quote from my notes",
+		"chat.placeholder":         "Write to Eriphe…",
+		"chat.send":                "Send",
+		"chat.you":                 "You",
+		"chat.eriphe":              "Eriphe",
+		"chat.event":               "Event",
+		"chat.thinking":            "Eriphe is thinking…",
+		"chat.nobrain":             "Eriphe is not set up on this server yet: your messages will wait until it is.",
+		"chat.brainoff":            "Eriphe is not available right now: it will read your messages when it is back.",
+		"chat.offline":             "Connection lost. Retrying…",
+		"chat.earlier":             "Older messages are not shown.",
+		"perm.title":               "Eriphe needs your go-ahead",
+		"perm.yours":               "This decision is yours",
+		"perm.wants":               "wants to use",
+		"perm.reason":              "Reason (optional)",
+		"perm.reasonhint":          "Passed on to the agent, for instance to suggest another way.",
+		"perm.allow":               "Yes, allow",
+		"perm.deny":                "No, deny",
+		"perm.allowed":             "Allowed.",
+		"perm.denied":              "Denied.",
+		"perm.changed":             "This request has changed in the meantime.",
+		"perm.task":                "See the task",
+		"tasks.label":              "Eriphe's tasks",
+		"tasks.title":              "Tasks",
+		"tasks.none":               "No task going on. When Eriphe hands work to an agent, it shows up here.",
+		"tasks.done":               "Recently finished",
+		"tasks.waitnode":           "Waiting for a machine",
+		"tasks.needsyou":           "Waiting for you",
+		"tasks.open":               "Open the task",
+		"task.close":               "Close",
+		"task.prompt":              "Instructions",
+		"task.activity":            "Activity",
+		"task.noactivity":          "Nothing yet.",
+		"task.reply":               "Reply to the agent",
+		"task.replyhint":           "The agent's turn is over. Your reply tells it what comes next.",
+		"task.replysend":           "Send",
+		"task.sent":                "Message sent to the agent.",
+		"task.stop":                "Stop the task",
+		"task.stopconfirm":         "Stop this task? The agent stops where it is.",
+		"task.stopping":            "Stop requested.",
+		"task.node":                "Machine",
+		"task.agent":               "Agent",
+		"task.repo":                "Repository",
+		"task.branch":              "Branch",
+		"task.ran":                 "ran",
+		"task.allowed":             "allowed",
+		"task.denied":              "denied",
+		"task.turnend":             "Turn over",
+		"task.error":               "Error",
+		"state.pending":            "Pending",
+		"state.running":            "Running",
+		"state.waiting_permission": "Needs your go-ahead",
+		"state.idle":               "Turn over",
+		"state.stopped":            "Done",
+		"state.failed":             "Failed",
+		"state.lost":               "Lost",
+		"settings.title":           "Settings",
+		"settings.machines":        "Machines",
+		"settings.agents":          "Agents",
+		"settings.accounts":        "Accounts & tools",
+		"settings.journal":         "Journal",
+		"settings.account":         "My workspace",
+		"machines.lead":            "The computers Eriphe's agents work on.",
+		"machines.none":            "No machine yet. Add one so that Eriphe can work.",
+		"machines.online":          "Online",
+		"machines.offline":         "Offline",
+		"machines.seen":            "Seen %s",
+		"machines.cpus":            "%d CPUs",
+		"machines.memory":          "%s of memory",
+		"machines.runtimes":        "Programs",
+		"machines.labels":          "Labels",
+		"machines.alwayson":        "Always on · your tools run here",
+		"machines.alwaysonhint":    "Tools such as mail and calendar must answer at any hour: they go to the machines that never sleep.",
+		"machines.active":          "%d active task(s)",
+		"machines.add":             "Add a machine",
+		"machines.addlead":         "Give it a short name (lowercase letters, digits, dashes), then run the command shown on that machine. The token works once, for this name only, and expires in 24 h.",
+		"machines.name":            "Machine name",
+		"machines.labelsopt":       "Labels (optional, e.g. gpu)",
+		"machines.generate":        "Generate the command",
+		"machines.badname":         "The name is 1 to 32 characters: lowercase letters, digits and dashes.",
+		"machines.unix":            "Linux or macOS",
+		"machines.unixlead":        "In a terminal on the machine. The script installs what it needs (Docker on Linux, a virtual machine on macOS); run again, it updates.",
+		"machines.linux":           "Docker Compose (NAS, server)",
+		"machines.linuxlead":       "In the node's compose.yaml, then docker compose up -d:",
+		"machines.binary":          "Program only (Linux or macOS)",
+		"machines.windows":         "Windows",
+		"machines.windowslead":     "In an administrator PowerShell. The script installs WSL if it is missing; run again, it updates.",
+		"machines.windowsfile":     "Windows (downloaded script)",
+		"machines.windowsfilelead": "In an administrator PowerShell, next to install.ps1:",
+		"machines.expires":         "Token valid until %s, once.",
+		"machines.copy":            "Copy",
+		"voice.title":              "Home Assistant (voice)",
+		"voice.lead":               "Home Assistant hands Eriphe what it does not handle itself, and reads its answer. Create a token, then add the “Eriphe” integration in Home Assistant with this address and this token. It can only talk to Eriphe.",
+		"voice.has":                "Home Assistant has a token already. A new one replaces it.",
+		"voice.create":             "Create Home Assistant's token",
+		"voice.replace":            "Replace the token",
+		"voice.replaceconfirm":     "Replace the token? Home Assistant cannot talk to Eriphe until you set the new one.",
+		"voice.once":               "Copy the token now: it will not be shown again.",
+		"voice.url":                "eriphe-core's address",
+		"voice.token":              "Token",
+		"chat.via":                 "said aloud",
+		"machines.copied":          "Copied",
+		"machines.forget":          "Forget",
+		"machines.forgetconfirm":   "Forget this machine? Its tasks will be lost and it will have to join again.",
+		"machines.rejoin":          "Re-register this machine",
+		"machines.rejoinconfirm":   "Re-register this machine? The token lets a machine take over this name, with its tasks and access.",
+		"machines.rejoinlead":      "Re-registration token for %s. If Eriphe is still installed on the machine, clear its identity first: on Linux or macOS, run the script with --uninstall (or delete node.json in the node's folder); on Windows, -Rejoin does it. Then run the command. The machine's old secret will stop working.",
+		"machines.exists":          "A machine already has this name. To reinstall it, use \"Re-register this machine\" on its card.",
+		"machines.nonode":          "No machine has this name.",
+		"machines.tls":             "Encrypted connection · certificate until %s",
+		"machines.notls":           "Unencrypted connection · moves to TLS by itself once updated",
+		"machines.tlstitle":        "Machine connections",
+		"machines.tlslead":         "Machines talk to Eriphe over TLS, each with a certificate signed by Eriphe's certificate authority. The add commands carry its fingerprint (-ca-hash): the new machine checks that it talks to Eriphe.",
+		"machines.tlsplain":        "Still without a certificate: %s. An updated machine gets one by itself at its next connection.",
+		"machines.tlsclose":        "Accept machines over TLS only",
+		"machines.tlscloseconfirm": "Accept machines over TLS only? A machine without a certificate cannot connect until it is updated or re-registered.",
+		"machines.tlsonly":         "Only machines over TLS, with their certificate, are accepted.",
+		"machines.tlsopen":         "Accept machines without TLS too",
+		"machines.tlsopenconfirm":  "Accept machines without TLS again? Their secret will cross the network in clear.",
+		"agents.lead":              "The agents Eriphe can hand work to. They are set in eriphe-core's configuration.",
+		"agents.none":              "No agent configured.",
+		"agents.default":           "Default",
+		"agents.available":         "Available",
+		"agents.unavailable":       "No online machine can run it",
+		"agents.use":               "When",
+		"agents.needs":             "Needs",
+		"agents.prefers":           "Prefers",
+		"agents.model":             "Model",
+		"agents.runtime":           "Program",
+		"accounts.lead":            "The keys and tokens Eriphe lends its agents. They are encrypted on the server and never shown again.",
+		"accounts.vault":           "Vault",
+		"accounts.none":            "The vault is empty.",
+		"accounts.updated":         "Changed %s",
+		"accounts.ref":             "To use in the configuration:",
+		"accounts.add":             "Add or replace a secret",
+		"accounts.name":            "Name",
+		"accounts.namehint":        "Lowercase letters, digits, dots, dashes, underscores. An existing name is replaced.",
+		"accounts.value":           "Value",
+		"accounts.valuehint":       "Pasted here, it is encrypted at once and never shown again.",
+		"accounts.save":            "Save",
+		"accounts.saved":           "Secret “%s” saved.",
+		"accounts.delete":          "Delete",
+		"accounts.deleteconfirm":   "Delete this secret? What uses it will stop working.",
+		"accounts.deleted":         "Secret deleted.",
+		"accounts.novault":         "The vault is not open: see eriphe-core's log.",
+		"accounts.config":          "Secrets of the configuration",
+		"accounts.configlead":      "Where the configuration finds each secret. Those still in a file can be copied into the vault; then replace the path with the vault: reference shown.",
+		"accounts.infile":          "File",
+		"accounts.invault":         "Vault",
+		"accounts.import":          "Copy into the vault",
+		"accounts.imported":        "Copied into the vault as “%s”. Replace the path with %s in the configuration.",
+		"accounts.tools":           "Connected tools",
+		"accounts.toolslead":       "The online services (calendar, mail, documents…) Eriphe can use, and whether they answer. Those that need your authorization connect here.",
+		"tools.none":               "No tool in the configuration.",
+		"tools.count":              "%d tools",
+		"tools.local":              "On a machine",
+		"tools.connect":            "Connect",
+		"tools.reconnect":          "Reconnect",
+		"tools.step1":              "Open the service's authorization page and accept.",
+		"tools.open":               "Open",
+		"tools.step2":              "Your browser then lands on a 127.0.0.1 page that does not load: copy its address and paste it here.",
+		"tools.finish":             "Finish",
+		"tools.badurl":             "That is not the expected address: it holds code= and state=.",
+		"tools.connected":          "Connected: %d tools available.",
+		"server.ready":             "Connected",
+		"server.connecting":        "Connecting…",
+		"server.needs_auth":        "To connect",
+		"server.error":             "Error",
+		"auth.oauth":               "OAuth authorization",
+		"auth.bearer":              "token",
+		"auth.none":                "no authentication",
+		"auth.local":               "local",
+		"journal.lead":             "Every decision on the agents' requests: who allowed or denied what.",
+		"journal.none":             "No decision yet.",
+		"journal.when":             "When",
+		"journal.task":             "Task",
+		"journal.what":             "Request",
+		"journal.decision":         "Decision",
+		"journal.by":               "By",
+		"journal.reason":           "Reason",
+		"journal.more":             "Older",
+		"decision.allow":           "Allowed",
+		"decision.deny":            "Denied",
+		"by.user":                  "You",
+		"by.brain":                 "Eriphe",
+		"by.policy":                "Rule",
+		"account.lead":             "Your language and your password.",
+		"account.lang":             "Language",
+		"account.password":         "Change the password",
+		"account.current":          "Current password",
+		"account.new":              "New password",
+		"account.confirm":          "Confirm the new password",
+		"account.save":             "Change",
+		"account.changed":          "Password changed. Your other sessions are closed.",
+		"account.version":          "eriphe-core %s",
+		"update.available":         "New version available",
+		"update.lead":              "Version %s is out. Run this command on the machine: its data and settings stay.",
+		"update.unix":              "Linux or macOS, the install script again",
+		"update.windows":           "Windows, in an administrator PowerShell",
+		"update.compose":           "Docker Compose, in the project's folder",
+		"time.now":                 "just now",
+		"time.min":                 "%d min ago",
+		"time.hour":                "%d h ago",
+		"time.day":                 "%d d ago",
+		"time.never":               "never",
+	},
+}
+
+func tr(lang, key string) string {
+	if s, ok := webStrings[lang][key]; ok {
+		return s
+	}
+	if s, ok := webStrings["fr"][key]; ok {
+		return s
+	}
+	return key
+}
+
+// templateFuncs are the templates' helpers, in one language.
+func templateFuncs(lang string) template.FuncMap {
+	return template.FuncMap{
+		"t":  func(key string) string { return tr(lang, key) },
+		"tf": func(key string, args ...any) string { return fmt.Sprintf(tr(lang, key), args...) },
+		"ago": func(t time.Time) string {
+			return ago(lang, t, time.Now())
+		},
+		"clock": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			if time.Since(t) < 20*time.Hour {
+				return t.Local().Format("15:04")
+			}
+			return t.Local().Format("02/01 15:04")
+		},
+		"date":     func(t time.Time) string { return t.Local().Format("02/01/2006 15:04") },
+		"iso":      func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
+		"md":       markdown,
+		"short":    truncate,
+		"size":     func(b int64) string { return byteSize(lang, b) },
+		"filesize": func(b int64) string { return fileSize(lang, b) },
+		"join":     strings.Join,
+		"list":     func(s ...string) []string { return s },
+		"dict": func(kv ...any) map[string]any {
+			m := map[string]any{}
+			for i := 0; i+1 < len(kv); i += 2 {
+				m[fmt.Sprint(kv[i])] = kv[i+1]
+			}
+			return m
+		},
+		"trimvault": func(s string) string { return strings.TrimPrefix(s, vaultPrefix) },
+		// tor is the text of key, or of fallback when key has none.
+		"tor": func(key, fallback string) string {
+			if v := tr(lang, key); v != key {
+				return v
+			}
+			return tr(lang, fallback)
+		},
+		// steps are the lines of a text, or none when the key has no text.
+		"steps": func(key string) []string {
+			if v := tr(lang, key); v != key {
+				return strings.Split(v, "\n")
+			}
+			return nil
+		},
+		"has":      func(key string) bool { return tr(lang, key) != key },
+		"initial":  func(s string) string { return strings.ToUpper(string([]rune(s + "?")[:1])) },
+		"finished": finished,
+		"evsubject": func(data map[string]any) string {
+			tool, _ := data["name"].(string)
+			if tool == "" {
+				tool, _ = data["tool_name"].(string)
+			}
+			input, _ := data["input"].(map[string]any)
+			return subject(tool, input)
+		},
+		// browseurl is the folder explorer's address for a machine, a root and a path (web_folders.go).
+		"browseurl": func(kv ...string) string {
+			q := url.Values{}
+			for i := 0; i+1 < len(kv); i += 2 {
+				if kv[i+1] != "" {
+					q.Set(kv[i], kv[i+1])
+				}
+			}
+			return "/settings/folders/browse?" + q.Encode()
+		},
+	}
+}
+
+func ago(lang string, t, now time.Time) string {
+	if t.IsZero() || t.Unix() <= 0 {
+		return tr(lang, "time.never")
+	}
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return tr(lang, "time.now")
+	case d < time.Hour:
+		return fmt.Sprintf(tr(lang, "time.min"), int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf(tr(lang, "time.hour"), int(d.Hours()))
+	}
+	return fmt.Sprintf(tr(lang, "time.day"), int(d.Hours()/24))
+}
+
+func byteSize(lang string, b int64) string {
+	unit := "GB"
+	if lang == "fr" {
+		unit = "Go"
+	}
+	g := float64(b) / (1 << 30)
+	if g >= 10 {
+		return fmt.Sprintf("%.0f %s", g, unit)
+	}
+	s := fmt.Sprintf("%.1f %s", g, unit)
+	if lang == "fr" {
+		s = strings.Replace(s, ".", ",", 1)
+	}
+	return s
+}
+
+// markdown renders the little Markdown agents write: paragraphs, lists,
+// code blocks, inline code, bold, italics, headings and links. Everything
+// is escaped first; links are http(s) only.
+func markdown(src string) template.HTML {
+	var b strings.Builder
+	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
+	var para []string
+	list := ""
+	flush := func() {
+		if len(para) > 0 {
+			b.WriteString("<p>" + strings.Join(para, "<br>") + "</p>")
+			para = nil
+		}
+	}
+	closeList := func() {
+		if list != "" {
+			b.WriteString("</" + list + ">")
+			list = ""
+		}
+	}
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, "```"):
+			flush()
+			closeList()
+			var code []string
+			for i++; i < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i]), "```"); i++ {
+				code = append(code, html.EscapeString(lines[i]))
+			}
+			b.WriteString("<pre><code>" + strings.Join(code, "\n") + "</code></pre>")
+		case trimmed == "":
+			flush()
+			closeList()
+		case headingRe.MatchString(trimmed):
+			flush()
+			closeList()
+			m := headingRe.FindStringSubmatch(trimmed)
+			b.WriteString("<p class=\"md-h\">" + inline(m[2]) + "</p>")
+		case bulletRe.MatchString(line):
+			flush()
+			if list != "ul" {
+				closeList()
+				b.WriteString("<ul>")
+				list = "ul"
+			}
+			b.WriteString("<li>" + inline(bulletRe.FindStringSubmatch(line)[1]) + "</li>")
+		case numberRe.MatchString(line):
+			flush()
+			if list != "ol" {
+				closeList()
+				b.WriteString("<ol>")
+				list = "ol"
+			}
+			b.WriteString("<li>" + inline(numberRe.FindStringSubmatch(line)[1]) + "</li>")
+		default:
+			closeList()
+			para = append(para, inline(trimmed))
+		}
+	}
+	flush()
+	closeList()
+	return template.HTML(b.String())
+}
+
+var (
+	headingRe = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
+	bulletRe  = regexp.MustCompile(`^\s*[-*•]\s+(.*)$`)
+	numberRe  = regexp.MustCompile(`^\s*\d+[.)]\s+(.*)$`)
+	codeRe    = regexp.MustCompile("`([^`]+)`")
+	boldRe    = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+	italicRe  = regexp.MustCompile(`(^|[^*\w])\*([^*\s][^*]*)\*`)
+	mdLinkRe  = regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s)]+)\)`)
+	urlRe     = regexp.MustCompile(`https?://[^\s<>()\[\]"'` + "`" + `]+`)
+)
+
+// inline escapes a line and renders its inline Markdown. Code spans are
+// set aside first so nothing inside them is touched.
+func inline(s string) string {
+	var spans []string
+	s = codeRe.ReplaceAllStringFunc(s, func(m string) string {
+		spans = append(spans, "<code>"+html.EscapeString(m[1:len(m)-1])+"</code>")
+		return fmt.Sprintf("\x00%d\x00", len(spans)-1)
+	})
+	var links []string
+	keep := func(h string) string {
+		links = append(links, h)
+		return fmt.Sprintf("\x01%d\x01", len(links)-1)
+	}
+	s = mdLinkRe.ReplaceAllStringFunc(s, func(m string) string {
+		p := mdLinkRe.FindStringSubmatch(m)
+		return keep(link(p[2], html.EscapeString(p[1])))
+	})
+	s = urlRe.ReplaceAllStringFunc(s, func(m string) string {
+		u, tail := trimURL(m)
+		return keep(link(u, html.EscapeString(u))) + tail
+	})
+	s = html.EscapeString(s)
+	s = boldRe.ReplaceAllString(s, "<strong>$1</strong>")
+	s = italicRe.ReplaceAllString(s, "$1<em>$2</em>")
+	for i, h := range links {
+		s = strings.Replace(s, fmt.Sprintf("\x01%d\x01", i), h, 1)
+	}
+	for i, h := range spans {
+		s = strings.Replace(s, fmt.Sprintf("\x00%d\x00", i), h, 1)
+	}
+	return s
+}
+
+func trimURL(u string) (string, string) {
+	tail := ""
+	for len(u) > 0 && strings.ContainsRune(".,;:!?", rune(u[len(u)-1])) {
+		tail = u[len(u)-1:] + tail
+		u = u[:len(u)-1]
+	}
+	return u, tail
+}
+
+func link(u, text string) string {
+	p, err := url.Parse(u)
+	if err != nil || (p.Scheme != "http" && p.Scheme != "https") {
+		return text
+	}
+	return `<a href="` + html.EscapeString(p.String()) + `" target="_blank" rel="noopener noreferrer">` + text + `</a>`
+}
