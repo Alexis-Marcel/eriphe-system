@@ -74,7 +74,7 @@ machine" offers both addresses once remote access is ready.
   `install/README.md`.
 
   ```sh
-  curl -fsSL https://eriphe.com/install.sh | sh -s -- --core http://192.0.2.10:8800 --join-token <token> --name laptop
+  curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core http://192.0.2.10:8800 --join-token <token> --name laptop
   ```
 
 - **NAS** (or by hand on Linux): run the image with the root at the same path inside and outside, attached to the
@@ -88,7 +88,7 @@ machine" offers both addresses once remote access is ready.
   programs are not visible from it. `-CoreMode` runs eriphe-core there too.
 
   ```powershell
-  & ([scriptblock]::Create((irm https://eriphe.com/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token> -Name pc -Labels 'gpu' -CaHash sha256:<hex>
+  & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token> -Name pc -Labels 'gpu' -CaHash sha256:<hex>
   ```
 
   In this distribution eriphe-node runs as root next to dockerd, without a proxy: whoever takes

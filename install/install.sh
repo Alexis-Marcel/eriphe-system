@@ -3,18 +3,18 @@
 # nothing to install first, not even Docker.
 #
 #   # The first machine: eriphe-core here, with a node of its own:
-#   curl -fsSL https://eriphe.com/install.sh | sh -s -- --core-mode
+#   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core-mode
 #   # Another machine, joining it (the workspace's "Add a machine" gives the
 #   # whole command, token included):
-#   curl -fsSL https://eriphe.com/install.sh | sh -s -- --core http://192.0.2.10:8800 --join-token <token> --name laptop
+#   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core http://192.0.2.10:8800 --join-token <token> --name laptop
 #   # Update (the same command, or no option at all), or remove everything:
-#   curl -fsSL https://eriphe.com/install.sh | sh -s
-#   curl -fsSL https://eriphe.com/install.sh | sh -s -- --uninstall
+#   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s
+#   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --uninstall
 #   # Pin a release, follow main (testers), or go back to the version before
 #   # the last update:
-#   curl -fsSL https://eriphe.com/install.sh | sh -s -- --version 0.2.0
-#   curl -fsSL https://eriphe.com/install.sh | sh -s -- --version edge
-#   curl -fsSL https://eriphe.com/install.sh | sh -s -- --rollback
+#   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --version 0.2.0
+#   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --version edge
+#   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --rollback
 #
 # Linux: Docker Engine if it is missing, then a compose project in /opt/eriphe
 # (data in /var/lib/eriphe): a socket proxy that only allows the node's Docker
@@ -70,7 +70,7 @@ die() {
 
 usage() {
 	cat <<'EOF'
-Usage: curl -fsSL https://eriphe.com/install.sh | sh -s -- [options]
+Usage: curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- [options]
        sh install.sh [options]
 
   --core URL[,URL2]   eriphe-core to join, several addresses preferred first
@@ -94,7 +94,7 @@ Usage: curl -fsSL https://eriphe.com/install.sh | sh -s -- [options]
 Run again (with or without the options) to update: new images, same data and
 same node identity. Afterwards the machine updates itself when eriphe-core
 asks (Settings, Machines, Updates). "Add a machine" in the workspace gives the whole command.
-Guide: https://eriphe.com/install
+Guide: https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md
 EOF
 }
 

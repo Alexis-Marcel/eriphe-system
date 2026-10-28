@@ -83,9 +83,12 @@ GitHub release the same way; the next releases count from it.
   version available" on every machine running an older release; those set to update at night do
   it then (core/README.md, Versions; install/README.md, The machines update themselves). A build
   of `main` (`edge`) is never told to update.
-- **eriphe.com.** The portal copies the install scripts from `eriphe-core:latest`
-  (`/usr/share/eriphe/install/`): it serves those of the latest release once it is rebuilt on the
-  new image. Changes to `install/` on `main` reach eriphe.com only with a release.
+- **Install scripts.** The release job attaches `install/install.sh` and `install/install.ps1`, as
+  they are on the released commit, to the GitHub release, so
+  `https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh` (and
+  `install.ps1`) serves those of the latest release, and `releases/download/vX.Y.Z/install.sh`
+  those of one release. Changes to `install/` on `main` reach users only with a release.
+  (`eriphe.com/install.sh` only redirects there.)
 - **Pins.** `--version 0.2.0` stays there; `--version 0.2` takes `0.2.x` fixes.
 
 ## Something went wrong

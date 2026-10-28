@@ -153,9 +153,6 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       tags: ${{ needs.version.outputs.tags }}
       version-arg: true
-      # The installers ship in the image, for the portal (core/Dockerfile):
-      # eriphe.com serves the ones of eriphe-core:latest, the latest release.
-      build-contexts: install=install
 
   node-image:
     needs: [version, node]
@@ -303,9 +300,11 @@ jobs:
 
   # A release, once every check passed and every image is published under its
   # tags: the tag vX.Y.Z on this commit (unless pushed by hand), then the GitHub
-  # release, its notes grouped from the commits since the last release. Each
-  # step that is done already is skipped, so a failed run can be re-run. The
-  # tag is pushed with the workflow's token, which starts no other run.
+  # release, its notes grouped from the commits since the last release, and the
+  # install scripts attached to it (install/README.md). Each step that is done
+  # already is skipped, so a failed run can be re-run; the scripts are uploaded
+  # again every time. The tag is pushed with the workflow's token, which starts
+  # no other run.
   release:
     if: needs.version.outputs.release == 'true'
     needs: [version, core-image, node-image, worker, mail-image, calendar-image, files-image, install, cli]
@@ -315,6 +314,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # The released commit, so the scripts attached are the release's.
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Tag
         env:
@@ -354,3 +355,9 @@ jobs:
           set -- --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --notes-file "$notes"
           if [ "$PRERELEASE" = true ]; then set -- "$@" --prerelease; else set -- "$@" --latest; fi
           gh release create "$TAG" "$@"
+      # Served as releases/latest/download/install.sh (and install.ps1).
+      - name: Install scripts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: gh release upload "$TAG" install/install.sh install/install.ps1 --clobber --repo "$GITHUB_REPOSITORY"

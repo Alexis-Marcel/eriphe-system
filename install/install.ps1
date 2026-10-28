@@ -3,15 +3,15 @@
 # Windows, without anyone logged in. Run it from an administrator PowerShell,
 # straight from the web (parameters go through a script block):
 #
-#   & ([scriptblock]::Create((irm https://eriphe.com/install.ps1))) -CoreMode [-Name pc]
-#   & ([scriptblock]::Create((irm https://eriphe.com/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token> [-Name pc] [-Labels 'gpu'] [-CaHash sha256:<hex>]
+#   & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -CoreMode [-Name pc]
+#   & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token> [-Name pc] [-Labels 'gpu'] [-CaHash sha256:<hex>]
 #
 # or saved as a file:
 #
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1 -Core 'http://192.0.2.10:8800' -JoinToken <token>
 #
 # The first one runs eriphe-core here; "Add a machine" in the workspace gives
-# the second one, token included. Guide: https://eriphe.com/install
+# the second one, token included. Guide: https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md
 #
 # Two modes. A node (-Core, -JoinToken): eriphe-node joins an eriphe-core
 # that runs elsewhere. -CoreMode: eriphe-core runs here too, as a container
@@ -25,7 +25,7 @@
 #
 # Run it again to update eriphe-node (and eriphe-core) or the labels; the
 # node keeps its identity, and what is not given again is kept: a plain
-# `irm https://eriphe.com/install.ps1 | iex` updates. -Rejoin, with a rejoin
+# `irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex` updates. -Rejoin, with a rejoin
 # token for this name, drops that identity and joins again. -Uninstall removes the
 # distribution (the node's identity, and eriphe-core's data in core mode),
 # its scheduled task, and the port forwarding and firewall rule of core mode.

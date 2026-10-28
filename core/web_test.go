@@ -383,12 +383,12 @@ func TestWebAddMachine(t *testing.T) {
 	if code != 200 || m == nil {
 		t.Fatalf("join command: %d %s", code, body)
 	}
-	// The one-liners first, from eriphe.com; compose, the program alone and
+	// The one-liners first, from the latest GitHub release; compose, the program alone and
 	// the downloaded script under the advanced options.
 	for _, want := range []string{
-		"curl -fsSL https://eriphe.com/install.sh | sh -s -- --core http://",
+		"curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core http://",
 		" --join-token " + m[1] + " --name desk --labels gpu</pre>",
-		"& ([scriptblock]::Create((irm https://eriphe.com/install.ps1))) -Core 'http://",
+		"& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'http://",
 		"-JoinToken " + m[1] + " -Name desk -Labels 'gpu'</pre>",
 		"<summary>Options avancées</summary>",
 		"eriphe-node -core http://", "install.ps1 -Core 'http://", "ERIPHE_JOIN_TOKEN: " + m[1],
@@ -397,7 +397,7 @@ func TestWebAddMachine(t *testing.T) {
 			t.Errorf("join commands lack %q", want)
 		}
 	}
-	if strings.Index(body, "eriphe.com/install.sh") > strings.Index(body, "Options avancées") {
+	if strings.Index(body, "releases/latest/download/install.sh") > strings.Index(body, "Options avancées") {
 		t.Error("the one-liners are not first")
 	}
 	if strings.Contains(body, "-Rejoin") {

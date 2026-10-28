@@ -168,9 +168,9 @@ func TestUpdatesRegistryErrors(t *testing.T) {
 // The installers say how they installed a machine: its command comes back.
 func TestUpdateCommands(t *testing.T) {
 	for install, want := range map[string]string{
-		"linux":   "curl -fsSL https://eriphe.com/install.sh | sh -s",
-		"macos":   "curl -fsSL https://eriphe.com/install.sh | sh -s",
-		"windows": "irm https://eriphe.com/install.ps1 | iex",
+		"linux":   "curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s",
+		"macos":   "curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s",
+		"windows": "irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex",
 	} {
 		if got := updateCommands(install); len(got) != 1 || got[0].Cmd != want {
 			t.Errorf("%s: %v", install, got)
@@ -265,7 +265,7 @@ func TestWebUpdateNotice(t *testing.T) {
 	if n := strings.Count(body, `<span class="update-available" title=`); n != 2 {
 		t.Errorf("%d machines told to update, want eriphe-core and pc", n)
 	}
-	for _, want := range []string{"Mise à jour disponible", "0.3.0", "curl -fsSL https://eriphe.com/install.sh | sh -s<",
+	for _, want := range []string{"Mise à jour disponible", "0.3.0", "curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s<",
 		"docker compose pull &amp;&amp; docker compose up -d", `class="new-dot"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/machines lacks %q", want)
