@@ -292,7 +292,7 @@ func TestWebUpdates(t *testing.T) {
 		}
 	}
 	for _, gone := range []string{"Me prévenir", "Jamais", "Comme les autres", "Revenir à la version précédente", `value="node:nas"`,
-		"curl -fsSL https://eriphe.com/install.sh | sh -s</pre>"} {
+		"curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s</pre>"} {
 		if strings.Contains(body, gone) {
 			t.Errorf("GET /settings/machines still has %q", gone)
 		}

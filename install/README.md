@@ -1,10 +1,19 @@
 # Installing Eriphe
 
 One command installs Eriphe on a machine, and brings its own container runtime: nothing to install
-first, not even Docker. `install.sh` covers Linux and macOS, `install.ps1` Windows. Both are served
-at `https://eriphe.com/install.sh` and `https://eriphe.com/install.ps1` (a short guide in French
-is at [eriphe.com/install](https://eriphe.com/install)); they come from this folder, shipped in the
-`eriphe-core` image, which the portal copies them from.
+first, not even Docker. `install.sh` covers Linux and macOS, `install.ps1` Windows. Both come from
+this folder and are attached to every [GitHub release](https://github.com/Alexis-Marcel/eriphe-system/releases),
+so the latest release's are always at:
+
+- `https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh`
+- `https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1`
+
+GitHub answers these with a redirect to the asset, which `curl -L` (in `-fsSL`) and `irm` follow.
+The scripts of one release, e.g. to install it exactly as it was, are at
+`https://github.com/Alexis-Marcel/eriphe-system/releases/download/v0.2.0/install.sh` (and
+`install.ps1`). `https://eriphe.com/install.sh` and `https://eriphe.com/install.ps1` are only short
+aliases that redirect to the same GitHub addresses (the portal is maintained elsewhere); nothing
+here depends on them.
 
 Eriphe is two programs:
 
@@ -40,13 +49,13 @@ The first machine runs eriphe-core, with a node of its own (core mode).
 Linux or macOS:
 
 ```sh
-curl -fsSL https://eriphe.com/install.sh | sh -s -- --core-mode
+curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core-mode
 ```
 
 Windows, in an administrator PowerShell:
 
 ```powershell
-& ([scriptblock]::Create((irm https://eriphe.com/install.ps1))) -CoreMode
+& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -CoreMode
 ```
 
 The first install downloads the images (and on macOS an Ubuntu image of about 600 MB), so it takes a
@@ -85,11 +94,11 @@ filled in: eriphe-core's address, a join token (single use, for this name, valid
 fingerprint of eriphe-core's certificate authority. Run it on the new machine:
 
 ```sh
-curl -fsSL https://eriphe.com/install.sh | sh -s -- --core http://192.0.2.10:8800 --join-token <token> --name laptop --ca-hash sha256:<hex>
+curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core http://192.0.2.10:8800 --join-token <token> --name laptop --ca-hash sha256:<hex>
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://eriphe.com/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token> -Name pc -CaHash sha256:<hex>
+& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token> -Name pc -CaHash sha256:<hex>
 ```
 
 The machine then shows on Settings → Machines, with its eriphe-node version. Open the workspace with
@@ -149,11 +158,11 @@ Google" on the same page: create a "Web application" OAuth client in your own Go
 Run the same command again, or the script with no option:
 
 ```sh
-curl -fsSL https://eriphe.com/install.sh | sh -s
+curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s
 ```
 
 ```powershell
-irm https://eriphe.com/install.ps1 | iex
+irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
 
 It pulls the images again and recreates what changed; the data and the node's identity
@@ -164,8 +173,8 @@ joined node keeps its name. Changing between node and core mode needs an uninsta
 
 The images follow the releases ([RELEASING.md](../RELEASING.md)): `latest` is the latest one (also
 under `0.2.0` and `0.2`), and `edge` is the latest build of `main` (also under `sha-<commit>`). The
-scripts that eriphe.com serves are the ones of the latest release too: the portal copies them from
-`eriphe-core:latest`. eriphe-core shows its version in Settings → My workspace (`0.2.0`), and each
+scripts at `releases/latest/download/` are the ones of the latest release too: a change to
+`install/` on `main` reaches them only with a release. eriphe-core shows its version in Settings → My workspace (`0.2.0`), and each
 machine its eriphe-node version on its card. A few times a day it reads which version `latest` is on
 the registry: when a newer release is out, the
 workspace says "New version available" there, with the command that updates that machine (the
@@ -245,8 +254,8 @@ The rollback works the same on all of them. The releases are on
 [GHCR](https://github.com/Alexis-Marcel?tab=packages).
 
 **Installed before this.** A machine installed before the updaters gets one by running its install
-command once more (the same one, or `curl -fsSL https://eriphe.com/install.sh | sh -s`, or
-`irm https://eriphe.com/install.ps1 | iex`); until then its line says it cannot update itself.
+command once more (the same one, or `curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s`, or
+`irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex`); until then its line says it cannot update itself.
 Without systemd (Alpine, OpenRC), the script says so and the machine updates only by running the
 command again. A compose project of your own, as `deploy/nas/compose.yaml`, has no updater: keep it
 on "Never", and update it with `docker compose pull && docker compose up -d`.
@@ -254,11 +263,11 @@ on "Never", and update it with `docker compose pull && docker compose up -d`.
 ## Uninstall
 
 ```sh
-curl -fsSL https://eriphe.com/install.sh | sh -s -- --uninstall
+curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --uninstall
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://eriphe.com/install.ps1))) -Uninstall
+& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Uninstall
 ```
 
 - Linux: the compose project and its containers, the task and service containers, the networks,
@@ -392,9 +401,9 @@ and drop its results in the folder's `Eriphe/` subfolder. eriphe-core never sees
 the place's name and a path inside it. Nothing is shared unless you say so.
 
 ```sh
-curl -fsSL https://eriphe.com/install.sh | sh -s -- --share documents=/home/sam/Documents
+curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --share documents=/home/sam/Documents
 # a NAS (Unraid): its shares, appdata excepted
-curl -fsSL https://eriphe.com/install.sh | sh -s -- --core-mode --share shares=/mnt/user
+curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core-mode --share shares=/mnt/user
 ```
 
 - `NAME` is lowercase letters, digits, `-` or `_`; `PATH` an existing folder, absolute, without a

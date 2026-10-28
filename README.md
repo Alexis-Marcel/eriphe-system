@@ -36,13 +36,13 @@ French.
 On the machine that stays on (Linux or macOS):
 
 ```sh
-curl -fsSL https://eriphe.com/install.sh | sh -s -- --core-mode
+curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core-mode
 ```
 
 On Windows, in an administrator PowerShell:
 
 ```powershell
-& ([scriptblock]::Create((irm https://eriphe.com/install.ps1))) -CoreMode
+& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -CoreMode
 ```
 
 The installer brings its own container runtime. It ends with the workspace's address and a setup

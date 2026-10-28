@@ -222,8 +222,8 @@ type updateCommand struct {
 // the installer run again (it keeps its options), or the compose project
 // pulled again. Installed by hand, the machine gets all of them.
 func updateCommands(install string) []updateCommand {
-	unix := updateCommand{"update.unix", "curl -fsSL https://eriphe.com/install.sh | sh -s"}
-	windows := updateCommand{"update.windows", "irm https://eriphe.com/install.ps1 | iex"}
+	unix := updateCommand{"update.unix", "curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s"}
+	windows := updateCommand{"update.windows", "irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex"}
 	compose := updateCommand{"update.compose", "docker compose pull && docker compose up -d"}
 	switch install {
 	case "linux", "macos":

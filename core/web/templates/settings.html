@@ -156,12 +156,12 @@
 <div class="cmd">
   <h4>{{t "machines.unix"}}</h4>
   <p class="muted small">{{t "machines.unixlead"}}</p>
-  <div class="code"><pre id="cmd-sh">curl -fsSL https://eriphe.com/install.sh | sh -s -- --core {{.Core}} --join-token {{.Token}} --name {{.Name}}{{if .Labels}} --labels {{.Labels}}{{end}}{{if .CAHash}} --ca-hash {{.CAHash}}{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-sh">{{t "machines.copy"}}</button></div>
+  <div class="code"><pre id="cmd-sh">curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core {{.Core}} --join-token {{.Token}} --name {{.Name}}{{if .Labels}} --labels {{.Labels}}{{end}}{{if .CAHash}} --ca-hash {{.CAHash}}{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-sh">{{t "machines.copy"}}</button></div>
 </div>
 <div class="cmd">
   <h4>{{t "machines.windows"}}</h4>
   <p class="muted small">{{t "machines.windowslead"}}</p>
-  <div class="code"><pre id="cmd-ps">& ([scriptblock]::Create((irm https://eriphe.com/install.ps1))) -Core '{{.Core}}' -JoinToken {{.Token}} -Name {{.Name}}{{if .Labels}} -Labels '{{.Labels}}'{{end}}{{if .CAHash}} -CaHash {{.CAHash}}{{end}}{{if .Rejoin}} -Rejoin{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-ps">{{t "machines.copy"}}</button></div>
+  <div class="code"><pre id="cmd-ps">& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core '{{.Core}}' -JoinToken {{.Token}} -Name {{.Name}}{{if .Labels}} -Labels '{{.Labels}}'{{end}}{{if .CAHash}} -CaHash {{.CAHash}}{{end}}{{if .Rejoin}} -Rejoin{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-ps">{{t "machines.copy"}}</button></div>
 </div>
 <details class="advanced-opts">
   <summary>{{t "form.advanced"}}</summary>
