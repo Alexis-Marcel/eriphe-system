@@ -6,4 +6,6 @@ import "io/fs"
 
 func ownerGID(string) int { return -1 }
 
+func writableByUser(string) bool { return true }
+
 func writableByTasks(fi fs.FileInfo) bool { return fi.Mode().Perm()&0o200 != 0 }

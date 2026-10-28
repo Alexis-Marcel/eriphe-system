@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -202,7 +201,7 @@ func (t *tlsState) tlsConfig() *tls.Config {
 func (t *tlsState) newTransport(responseHeader time.Duration) *http.Transport {
 	return &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		DialContext:           dialCore,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: responseHeader,
 		TLSClientConfig:       t.tlsConfig(),

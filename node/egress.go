@@ -120,7 +120,10 @@ type egressProxy struct {
 	authorize func(id, secret string) (*egressTask, bool)
 	// self are the host:port a task reaches this node's task listener at
 	// (its callback URL): allowed, and dialed at listener.
-	self     map[string]bool
+	self map[string]bool
+	// isSelf tells whether host:port is the node too: with the container
+	// engine, the gateway of a task's network (apple.go).
+	isSelf   func(hostport string) bool
 	listener string
 	lookup   func(ctx context.Context, host string) ([]netip.Addr, error)
 	dialer   *net.Dialer // dials public addresses only (guardControl)
@@ -191,7 +194,7 @@ func (p *egressProxy) dial(ctx context.Context, t *egressTask, hostport string) 
 		return nil, &egressError{http.StatusBadRequest, "bad address " + hostport}
 	}
 	host = strings.TrimSuffix(strings.ToLower(host), ".")
-	if p.self[net.JoinHostPort(host, port)] {
+	if p.self[net.JoinHostPort(host, port)] || (p.isSelf != nil && p.isSelf(net.JoinHostPort(host, port))) {
 		// The node's own task listener: tasks reach it anyway.
 		var d net.Dialer
 		return d.DialContext(ctx, "tcp", p.listener)

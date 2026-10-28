@@ -83,6 +83,9 @@ func (n *node) bindMount(p, target string) ([]string, error) {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return nil, fmt.Errorf("refusing to mount %s: outside the node root %s", p, n.opt.root)
 	}
+	if n.apple() {
+		return appleMount(p, target, false)
+	}
 	return []string{"-v", n.hostPath(p) + ":" + target}, nil
 }
 
@@ -102,8 +105,66 @@ func (n *node) startContainer(t *Task, first string) error {
 	if err != nil {
 		return err
 	}
+	if n.apple() {
+		// Its own network first: the agent's configuration names its gateway.
+		if err := n.startTaskNetwork(t); err != nil {
+			return err
+		}
+	}
 	agentArgs, agentEnv := rt.command(n, t)
+	args, cmdEnv, err := n.taskRunArgs(t, agentArgs, agentEnv)
+	if err != nil {
+		n.endTaskNetwork(t)
+		return err
+	}
 
+	cmd := exec.Command(n.opt.docker, args...)
+	cmd.Env = cmdEnv
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		n.endTaskNetwork(t)
+		return err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		n.endTaskNetwork(t)
+		return err
+	}
+	stderr := &tailBuffer{}
+	cmd.Stderr = stderr
+	if err := cmd.Start(); err != nil {
+		n.endTaskNetwork(t)
+		return err
+	}
+	sess := rt.attach(t, stdin)
+	t.mu.Lock()
+	t.run = sess
+	t.mu.Unlock()
+	go func() {
+		err := sess.run(first, stdout)
+		if werr := cmd.Wait(); werr != nil {
+			err = werr
+		}
+		n.endTaskNetwork(t)
+		t.mu.Lock()
+		stopping := t.stopping
+		t.mu.Unlock()
+		if err != nil && !stopping {
+			t.emit("error", map[string]any{"message": err.Error(), "stderr": tail(stderr.String(), 2000)})
+			t.setState(stateFailed)
+			return
+		}
+		t.setState(stateStopped)
+	}()
+	return nil
+}
+
+// taskRunArgs is the command line of a task's container (`docker run`, or
+// `container run`, apple.go) and the environment of that command: the
+// task's own variables are passed by name (-e NAME), so their values never
+// appear on a command line.
+func (n *node) taskRunArgs(t *Task, agentArgs []string, agentEnv map[string]string) (args, cmdEnv []string, err error) {
+	spec := t.Spec
 	env := map[string]string{
 		"ERIPHE_REPO": repoURL(spec.Repo), "ERIPHE_REF": spec.Ref, "ERIPHE_BRANCH": spec.Branch, "ERIPHE_DIR": spec.Dir,
 		"GIT_AUTHOR_NAME": "Eriphe", "GIT_AUTHOR_EMAIL": "eriphe@eriphe.local",
@@ -135,20 +196,26 @@ func (n *node) startContainer(t *Task, first string) error {
 		}
 	}
 
-	// An image's own health check is for its standalone use, not for tasks.
-	args := []string{"run", "-i", "--rm", "--no-healthcheck", "--name", containerName(t), "--label", "eriphe.task=" + t.ID,
-		"--add-host", "host.docker.internal:" + n.hostGateway(n.opt.taskNetwork)}
-	args = append(args, hardening...)
-	args = append(args, n.resourceLimits()...)
-	// Their own network, never eriphe-core's nor the services' (network.go).
-	args = append(args, "--network", dockerNetwork(n.opt.taskNetwork))
-	if spec.SystemNetwork && n.opt.network != "" {
-		// The brain calls eriphe-core and its MCP servers by name; workers never do.
-		args = append(args, "--network", n.opt.network)
-	}
-	if n.opt.cacheVolume != "" {
-		// Tools and package caches, shared by the node's tasks.
-		args = append(args, "-v", n.opt.cacheVolume+":/cache")
+	if n.apple() {
+		if args, err = n.appleTaskArgs(t); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		// An image's own health check is for its standalone use, not for tasks.
+		args = []string{"run", "-i", "--rm", "--no-healthcheck", "--name", containerName(t), "--label", "eriphe.task=" + t.ID,
+			"--add-host", "host.docker.internal:" + n.hostGateway(n.opt.taskNetwork)}
+		args = append(args, hardening...)
+		args = append(args, n.resourceLimits()...)
+		// Their own network, never eriphe-core's nor the services' (network.go).
+		args = append(args, "--network", dockerNetwork(n.opt.taskNetwork))
+		if spec.SystemNetwork && n.opt.network != "" {
+			// The brain calls eriphe-core and its MCP servers by name; workers never do.
+			args = append(args, "--network", n.opt.network)
+		}
+		if n.opt.cacheVolume != "" {
+			// Tools and package caches, shared by the node's tasks.
+			args = append(args, "-v", n.opt.cacheVolume+":/cache")
+		}
 	}
 	// The workspace and the agent's config live in the task's folder, so a
 	// restarted container finds its work and resumes its session. A named
@@ -161,11 +228,13 @@ func (n *node) startContainer(t *Task, first string) error {
 	for _, m := range [][2]string{{work, "/work"}, {config, "/profile"}} {
 		mount, err := n.bindMount(m[0], m[1])
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		if err := os.MkdirAll(m[0], 0o700); err != nil {
-			return err
+			return nil, nil, err
 		}
+		// Docker: the task's user must own them. The container engine shows
+		// every shared file as the task's.
 		os.Chown(m[0], taskUID, taskGID)
 		args = append(args, mount...)
 	}
@@ -173,10 +242,10 @@ func (n *node) startContainer(t *Task, first string) error {
 	if len(spec.Folders) > 0 {
 		mounts, err := n.folderMounts(t)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		if err := os.MkdirAll(filepath.Join(work, "folders"), 0o700); err != nil {
-			return err
+			return nil, nil, err
 		}
 		os.Chown(filepath.Join(work, "folders"), taskUID, taskGID)
 		args = append(args, mounts...)
@@ -186,49 +255,14 @@ func (n *node) startContainer(t *Task, first string) error {
 		}
 		env["ERIPHE_FOLDERS"] = strings.Join(names, "\n")
 	}
-	cmdEnv := os.Environ()
+	cmdEnv = os.Environ()
 	for k, v := range env {
 		args = append(args, "-e", k)
 		cmdEnv = append(cmdEnv, k+"="+v)
 	}
 	args = append(args, "--entrypoint", "sh", spec.Image, "-c", entrypoint, "eriphe")
 	args = append(args, agentArgs...)
-
-	cmd := exec.Command(n.opt.docker, args...)
-	cmd.Env = cmdEnv
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	stderr := &tailBuffer{}
-	cmd.Stderr = stderr
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	sess := rt.attach(t, stdin)
-	t.mu.Lock()
-	t.run = sess
-	t.mu.Unlock()
-	go func() {
-		err := sess.run(first, stdout)
-		if werr := cmd.Wait(); werr != nil {
-			err = werr
-		}
-		t.mu.Lock()
-		stopping := t.stopping
-		t.mu.Unlock()
-		if err != nil && !stopping {
-			t.emit("error", map[string]any{"message": err.Error(), "stderr": tail(stderr.String(), 2000)})
-			t.setState(stateFailed)
-			return
-		}
-		t.setState(stateStopped)
-	}()
-	return nil
+	return args, cmdEnv, nil
 }
 
 // hostPath is a path under -root as the Docker daemon sees it.

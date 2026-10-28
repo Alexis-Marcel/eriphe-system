@@ -121,6 +121,10 @@ type Task struct {
 	mcpErr error
 
 	egressHosts map[string]bool // hosts the task went to through the relay, logged once each
+
+	// With the container engine (apple.go): the task's own network, and the
+	// node's address on it, where the task reaches the node.
+	network, gateway string
 }
 
 // emit records an event. Any event ends the draft: a text completes it,
@@ -184,6 +188,7 @@ type node struct {
 	retired  map[string]*service // unassigned services whose container is stopping
 	kick     chan struct{}       // something to deliver or report
 	upd      *updates            // eriphe-core's update request, for the updater (update.go)
+	nets     taskNets            // the tasks' networks, with the container engine (apple.go)
 }
 
 func newNode(o options) *node {
@@ -229,17 +234,31 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	runtimes := []string{}
-	out, err := exec.CommandContext(ctx, n.opt.docker, "version", "--format", "{{.Server.Version}}").Output()
-	if err == nil {
-		runtimes = imageRuntimes(ctx, n.opt.docker, n.opt.image)
+	var dockerVersion, engineVersion string
+	var images []string
+	if n.apple() {
+		// Apple's container: no Docker, its own version and images.
+		if engineVersion = appleVersion(ctx, n.opt.docker); engineVersion != "" {
+			runtimes = appleImageRuntimes(ctx, n.opt.docker, n.opt.image)
+		}
+		images = appleImages(ctx, n.opt.docker)
+	} else {
+		out, err := exec.CommandContext(ctx, n.opt.docker, "version", "--format", "{{.Server.Version}}").Output()
+		if err == nil {
+			dockerVersion = string(trimNL(out))
+			engineVersion = dockerVersion
+			runtimes = imageRuntimes(ctx, n.opt.docker, n.opt.image)
+		}
+		images = localImages(ctx, n.opt.docker)
 	}
 	active := n.running()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"os": runtime.GOOS, "arch": runtime.GOARCH, "cpus": runtime.NumCPU(),
-		"docker": string(trimNL(out)), "image": n.opt.image, "runtimes": runtimes, "labels": n.opt.labels,
+		"docker": dockerVersion, "engine": n.opt.engine, "engine_version": engineVersion,
+		"image": n.opt.image, "runtimes": runtimes, "labels": n.opt.labels,
 		"active_tasks": active, "memory_bytes": memoryBytes(), "volumes": n.opt.volumeNames(),
 		"shares": n.opt.shareList(),
-		"images": localImages(ctx, n.opt.docker), "services": err == nil,
+		"images": images, "services": engineVersion != "",
 		"always_on": n.opt.alwaysOn, "version": version, "install": n.opt.install,
 		"update": n.upd.info(),
 	})
