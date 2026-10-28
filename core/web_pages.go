@@ -389,6 +389,37 @@ type machineView struct {
 	System   string // its system in words, a key of web_text.go (system.*)
 	Arch     string
 	Update   updateRow // where its update stands (web_updates.go)
+	// What Eriphe sees there: the folders opened to it on this device, and
+	// whether it shares any root to open one from.
+	Folders []*Folder
+	Shares  bool
+	// What it can do there: put agents to work, if the node runs tasks.
+	Workers bool
+}
+
+// deviceViews are the devices' cards, in the order of nodes, with the
+// updates' rows they come from.
+func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, error) {
+	folders, err := w.c.store.folders()
+	if err != nil {
+		return nil, err
+	}
+	var out []machineView
+	for i, n := range nodes {
+		info := parseInfo(n)
+		active, _ := w.c.store.activeCount(n.Name)
+		m := machineView{NodeRow: n, CPUs: info.CPUs, Memory: info.Memory, Runtimes: info.Runtimes,
+			Labels: info.Labels, Active: active, AlwaysOn: info.AlwaysOn, Version: info.Version,
+			System: systemKey(nodeInstall(n, info), n.OS), Arch: n.Arch, Update: updates.Rows[i+1],
+			Shares: len(info.Shares) > 0, Workers: len(info.Runtimes) > 0}
+		for _, f := range folders {
+			if f.Node == n.Name {
+				m.Folders = append(m.Folders, f)
+			}
+		}
+		out = append(out, m)
+	}
+	return out, nil
 }
 
 func (w *web) handleMachines(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -398,20 +429,18 @@ func (w *web) handleMachines(rw http.ResponseWriter, r *http.Request, s *session
 		return
 	}
 	updates := w.updatesData(nodes)
-	var out []machineView
+	out, err := w.deviceViews(nodes, updates)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	var plain []string
-	for i, n := range nodes {
+	for _, n := range nodes {
 		if n.CertExpires.IsZero() {
 			plain = append(plain, n.Name)
 		}
-		info := parseInfo(n)
-		active, _ := w.c.store.activeCount(n.Name)
-		m := machineView{NodeRow: n, CPUs: info.CPUs, Memory: info.Memory, Runtimes: info.Runtimes,
-			Labels: info.Labels, Active: active, AlwaysOn: info.AlwaysOn, Version: info.Version,
-			System: systemKey(nodeInstall(n, info), n.OS), Arch: n.Arch, Update: updates.Rows[i+1]}
-		out = append(out, m)
 	}
-	w.render(rw, r, s, "settings", "", page{Title: "settings.machines", Nav: "settings", Tab: "machines",
+	w.render(rw, r, s, "settings", "", page{Title: "settings.machines", Nav: "settings", Tab: "devices",
 		Data: machinesData{Nodes: out, Remote: w.remoteCoreURL(), CAHash: w.c.caHash(), TLSOnly: w.c.nodesTLSOnly(),
 			Plain: strings.Join(plain, ", "), Updates: updates}})
 }

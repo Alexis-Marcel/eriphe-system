@@ -23,7 +23,7 @@ Eriphe is two programs:
   dials eriphe-core and needs no open port.
 
 Contents: [First machine](#1-the-first-machine) · [Workspace](#2-open-the-workspace) ·
-[Brain](#3-connect-the-brain) · [Add a machine](#4-add-a-machine) ·
+[Brain](#3-connect-the-brain) · [Connect a device](#4-connect-a-device) ·
 [Google Drive](#5-connect-google-drive-optional) · [Update](#update) ·
 [Uninstall](#uninstall) · [Options](#options) · [What it installs](#what-it-installs) ·
 [What the VM can and cannot see](#what-the-vm-can-and-cannot-see) · [Windows](#windows) ·
@@ -72,7 +72,7 @@ few minutes. It ends with the workspace's address on the LAN and a setup code:
 eriphe-core runs here, with node laptop.
   Workspace: https://192.0.2.10:8443
   Setup code: ABCD-EFGH (open https://192.0.2.10:8443/setup)
-  Other machines join it at http://192.0.2.10:8800 (Add a machine, in the workspace).
+  Other devices join it at http://192.0.2.10:8800 (Connect a device, in the workspace).
 ```
 
 ## 2. Open the workspace
@@ -93,9 +93,13 @@ OpenAI…). Eriphe creates the account's usual agents and starts as soon as a ma
 Nothing else is on by default: no tool, no rule, no remote access. The catalog's tools (GitHub,
 mail, calendar, Home Assistant…) are added from Settings → Accounts & tools.
 
-## 4. Add a machine
+## 4. Connect a device
 
-In the workspace, Settings → Machines → "Add a machine": give it a short name (lowercase letters,
+Connecting a device gives Eriphe access to it, so it can help with what is there: it sees only the
+folders you open to it (Settings → Folders), and puts agents to work there when the full install
+is possible, which is the default.
+
+In the workspace, Settings → Devices → "Connect a device": give it a short name (lowercase letters,
 digits, dashes) and, if you like, labels (`gpu`). The workspace prints the command with everything
 filled in: eriphe-core's address, a join token (single use, for this name, valid 24 h) and the
 fingerprint of eriphe-core's certificate authority. Run it on the new machine:
@@ -108,7 +112,12 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
 & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token> -Name pc -CaHash sha256:<hex>
 ```
 
-The machine then shows on Settings → Machines, with its eriphe-node version. Open the workspace with
+The device then shows on Settings → Devices, with what Eriphe sees and can do there, and its
+eriphe-node version. Its page (the "⋯" menu, "Details and log") keeps its access log: the folders
+listed, opened or lent to a task (with the right), the tasks run there, the results dropped in a
+folder's Eriphe/, for 90 days. "Cut access" in the same menu stops at once what Eriphe does there:
+its tasks stop, no work goes to it, its folders are neither listed nor lent, and its connection is
+refused until "Restore access". Nothing is uninstalled. Open the workspace with
 the machine's LAN address, not `localhost`, before you generate the command: the address in it is
 the one the browser used (or `public_url`), and `localhost` would only work on eriphe-core's own
 machine.
@@ -124,8 +133,8 @@ docker exec eriphe-core eriphe-core join-token -data /data -name laptop         
 wsl -d eriphe -- docker exec eriphe-core eriphe-core join-token -name pc         # Windows
 ```
 
-A machine that was reinstalled, or lost its identity, keeps its name with "Re-register this
-machine" on its card: that token lets it take its name over (on Windows, add `-Rejoin`).
+A device that was reinstalled, or lost its identity, keeps its name with "Re-register this
+device" on its card: that token lets it take its name over (on Windows, add `-Rejoin`).
 
 ## 5. Connect Google Drive (optional)
 
@@ -193,7 +202,7 @@ with that copy.
 
 ### The machines update themselves
 
-Once installed, a machine updates itself when eriphe-core asks, like Tailscale: Settings → Machines.
+Once installed, a machine updates itself when eriphe-core asks, like Tailscale: Settings → Devices.
 The workspace says when a machine is behind ("Update available"), with an **Update** button on
 that machine, **Update all** when several are behind, and one switch for all machines, **Update
 automatically at night** (off by default): between 3:00 and 5:00 (your time zone), once a night.
@@ -303,7 +312,7 @@ The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nod
 | `install.sh` | `install.ps1` | What |
 |---|---|---|
 | `--core URL[,URL2]` | `-Core '<url>[,<url2>]'` | the eriphe-core to join; several addresses, preferred first (see node/README.md, Join) |
-| `--join-token TOKEN` | `-JoinToken <token>` | from "Add a machine", or `eriphe-core join-token -name NAME`; first install only |
+| `--join-token TOKEN` | `-JoinToken <token>` | from "Connect a device", or `eriphe-core join-token -name NAME`; first install only |
 | `--name NAME` | `-Name <name>` | the node's name (default: the host name, lowercased) |
 | `--labels gpu,fast` | `-Labels 'gpu,fast'` | what agents can require of this node |
 | `--ca-hash sha256:<hex>` | `-CaHash sha256:<hex>` | eriphe-core's CA, to check its certificate (`ERIPHE_CA_HASH` of the node) |
@@ -577,7 +586,7 @@ The installers set this up themselves.
 **A machine does not join.** The token works once, for the name it was made for, for 24 h: make a
 new one. The address must be reachable from that machine (`curl http://<address>:8800/health`
 answers `ok`): not `localhost`, and port 8800 open on eriphe-core's machine. A wrong `--ca-hash`
-stops the join on purpose: copy it again from Settings → Machines.
+stops the join on purpose: copy it again from Settings → Devices.
 
 **The browser warns about the certificate.** Expected: the workspace's certificate is
 self-signed. Compare its fingerprint with the one in eriphe-core's log, then accept it.

@@ -592,10 +592,10 @@ func TestServiceProblem(t *testing.T) {
 	}
 	pull := `service agenda is failed on pc: exit status 125: Unable to find image 'x' locally
 docker: Error response from daemon: Head "https://ghcr.io/v2/x/manifests/latest": unauthorized`
-	if got := serviceProblem("fr", failed(pull)); got != "La machine pc n'a pas pu télécharger le programme de cet outil." {
+	if got := serviceProblem("fr", failed(pull)); got != "L'appareil pc n'a pas pu télécharger le programme de cet outil." {
 		t.Errorf("pull: %q", got)
 	}
-	if got := serviceProblem("fr", failed("exit status 1: panic")); !strings.Contains(got, "s'arrête sans cesse sur la machine pc") {
+	if got := serviceProblem("fr", failed("exit status 1: panic")); !strings.Contains(got, "s'arrête sans cesse sur l'appareil pc") {
 		t.Errorf("stopped: %q", got)
 	}
 	if got := serviceProblem("fr", serverView{serverInfo: serverInfo{Kind: "local"}, Node: "pc", Service: "starting"}); got != "" {

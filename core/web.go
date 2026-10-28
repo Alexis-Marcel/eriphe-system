@@ -140,9 +140,10 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /tasks/{id}/stop", w.auth(w.handleStop))
 
 	mux.Handle("GET /settings", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
-		http.Redirect(rw, r, "/settings/machines", http.StatusSeeOther)
+		http.Redirect(rw, r, "/settings/devices", http.StatusSeeOther)
 	}))
-	mux.Handle("GET /settings/machines", w.auth(w.handleMachines))
+	w.deviceRoutes(mux)                                            // web_devices.go
+	mux.Handle("GET /settings/machines", w.auth(w.handleMachines)) // its address before devices
 	mux.Handle("POST /settings/machines/join", w.auth(w.handleJoinCommand))
 	mux.Handle("POST /settings/updates/night", w.auth(w.handleNightUpdates))
 	mux.Handle("POST /settings/updates/request", w.auth(w.handleUpdateNow))

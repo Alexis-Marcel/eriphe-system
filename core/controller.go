@@ -174,6 +174,7 @@ func (c *core) placePending() {
 			if err == nil {
 				if ok, _ := c.store.assign(t.ID, name); ok {
 					log.Printf("task %s placed on %s", t.ID, name)
+					c.logPlaced(t, name)
 					placed = true
 				}
 				continue
@@ -243,6 +244,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if err != nil {
 		return nil, err
 	}
+	if r.Node != "" && c.store.nodeSuspended(r.Node) {
+		return nil, suspendedError(r.Node) // node_access.go
+	}
 	if machine != "" && r.Node != "" && r.Node != machine {
 		return nil, fmt.Errorf("the folders %s are on %s, not on %s: leave node empty", strings.Join(folderNames(folders), ", "), machine, r.Node)
 	}
@@ -282,6 +286,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	}
 	if err := c.store.insertTask(t); err != nil {
 		return nil, err
+	}
+	if name != "" {
+		c.logPlaced(t, name) // its access log (node_access.go)
 	}
 	spec := extra
 	spec.Runtime, spec.Prompt, spec.Dir, spec.Model = agent.Runtime, r.Prompt, r.Dir, agent.Model

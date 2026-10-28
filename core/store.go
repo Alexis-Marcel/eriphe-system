@@ -44,6 +44,8 @@ type NodeRow struct {
 	OS      string `json:"os,omitempty"`
 	Arch    string `json:"arch,omitempty"`
 	Install string `json:"install,omitempty"`
+	// Its access is cut (node_access.go): no work, no folder, no tunnel.
+	Suspended bool `json:"suspended,omitempty"`
 }
 
 type TaskRow struct {
@@ -151,6 +153,9 @@ func openStore(path string) (*Store, error) {
 	db.Exec(`ALTER TABLE nodes ADD COLUMN os TEXT NOT NULL DEFAULT ''`)
 	db.Exec(`ALTER TABLE nodes ADD COLUMN arch TEXT NOT NULL DEFAULT ''`)
 	db.Exec(`ALTER TABLE nodes ADD COLUMN install TEXT NOT NULL DEFAULT ''`)
+	// Added with "Cut access" (node_access.go): the device stays registered,
+	// and Eriphe neither reaches it nor lets it in.
+	db.Exec(`ALTER TABLE nodes ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0`)
 	// Updates had a choice for all machines and for each one (tell me, at
 	// night, never); now one switch, at night or not, for all of them
 	// (machine_updates.go). "At night" for all stays on; the rest goes.
@@ -260,7 +265,10 @@ func (s *Store) hasNode(name string) bool {
 }
 
 func (s *Store) deleteNode(name string) error {
-	_, err := s.db.Exec(`DELETE FROM nodes WHERE name = ?`, name)
+	if _, err := s.db.Exec(`DELETE FROM nodes WHERE name = ?`, name); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM node_log WHERE node = ?`, name) // its access log (node_access.go)
 	return err
 }
 
@@ -286,7 +294,7 @@ func (s *Store) setNodeStatus(name string, online bool, info []byte) error {
 }
 
 func (s *Store) nodes() ([]NodeRow, error) {
-	rows, err := s.db.Query(`SELECT name, online, COALESCE(info, ''), last_seen, cert_expires, os, arch, install FROM nodes ORDER BY name`)
+	rows, err := s.db.Query(`SELECT name, online, COALESCE(info, ''), last_seen, cert_expires, os, arch, install, suspended FROM nodes ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +304,7 @@ func (s *Store) nodes() ([]NodeRow, error) {
 		var n NodeRow
 		var info string
 		var seen, certExpires int64
-		if err := rows.Scan(&n.Name, &n.Online, &info, &seen, &certExpires, &n.OS, &n.Arch, &n.Install); err != nil {
+		if err := rows.Scan(&n.Name, &n.Online, &info, &seen, &certExpires, &n.OS, &n.Arch, &n.Install, &n.Suspended); err != nil {
 			return nil, err
 		}
 		if info != "" {

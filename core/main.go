@@ -87,7 +87,8 @@ func main() {
 	c.serverRoutes(mux, token)
 	c.catalogRoutes(mux, token)
 	c.vaultRoutes(mux, token)
-	c.folderRoutes(mux, token) // folders.go
+	c.folderRoutes(mux, token)     // folders.go
+	c.nodeAccessRoutes(mux, token) // node_access.go
 	mux.Handle("POST /v1/join-tokens", bearer(token, http.HandlerFunc(c.handleJoinToken)))
 	mux.Handle("GET /v1/nodes", bearer(token, http.HandlerFunc(c.handleNodes)))
 	mux.Handle("GET /v1/version", bearer(token, http.HandlerFunc(c.handleVersion)))
