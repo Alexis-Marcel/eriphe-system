@@ -208,10 +208,12 @@ func main() {
 	go n.prepareLoop()
 
 	// Only task containers call this listener, each with its own secret:
-	// their permission endpoint, and the relay to their catalog servers.
+	// their permission endpoint, the relay to their catalog servers, and
+	// their credentials on demand (credential.go).
 	perm := http.NewServeMux()
 	perm.Handle("/perm/{id}/mcp", n.permHandler())
 	perm.Handle("/mcp/{server}", n.relayHandler(s))
+	perm.Handle("POST "+credentialPath, n.credentialHandler(s))
 	for _, sh := range o.shareList() {
 		if sh.Missing {
 			log.Printf("share %s: %s is not there now", sh.Name, o.shares[sh.Name].Path)
