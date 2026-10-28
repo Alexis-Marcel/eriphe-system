@@ -1,7 +1,9 @@
 # Builds one image for linux/amd64 and linux/arm64, each on a native runner
-# (no emulation). On a push to main, each architecture is pushed by digest and
-# the merge job publishes them as one multi-arch manifest under the image's
-# tags. Pull requests build both architectures without pushing.
+# (no emulation). On a push (to main, or of a release tag), each
+# architecture is pushed by digest and the merge job publishes them as one
+# multi-arch manifest under the tags it is given (ci.yml's version job:
+# edge and sha-<short> for main; X.Y.Z, X.Y and latest for a release).
+# Pull requests build both architectures without pushing.
 name: image
 
 on:
@@ -15,16 +17,18 @@ on:
         description: Build context (the directory holding the Dockerfile)
         type: string
         required: true
+      version:
+        description: The build's version (0.2.0, or 0.2.0-dev+<short sha> for main), see RELEASING.md
+        type: string
+        required: true
+      tags:
+        description: The tags to publish, space-separated (e.g. "0.2.0 0.2 latest")
+        type: string
+        required: true
       version-arg:
-        description: >-
-          Pass VERSION=sha-<short sha> as a build argument, the sha being the last commit that
-          changed the build context (and version-paths): a rebuild with nothing new keeps its version
+        description: Pass VERSION=<version> as a build argument (the binary's and the image label's)
         type: boolean
         default: false
-      version-paths:
-        description: Other paths whose changes go into the image, space-separated (e.g. install)
-        type: string
-        default: ""
       build-contexts:
         description: Extra named build contexts, name=path per line (e.g. install=install)
         type: string
@@ -54,9 +58,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v5
-        with:
-          # The whole history, to find the last commit that changed the image.
-          fetch-depth: ${{ inputs.version-arg && '0' || '1' }}
       - uses: docker/setup-buildx-action@v4
       - if: env.PUSH == 'true'
         uses: docker/login-action@v4
@@ -64,29 +65,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The version (binary and image label) is the last commit that changed
-      # what goes into the image, not the commit built: eriphe-core tells
-      # when a machine is behind by it (core/updates.go).
-      - id: sha
-        env:
-          PATHS: ${{ inputs.context }} ${{ inputs.version-paths }}
-        run: |
-          if [ "${{ inputs.version-arg }}" = true ]; then
-            # shellcheck disable=SC2086 # one argument per path
-            last=$(git log -1 --format=%H -- $PATHS)
-            [ -n "$last" ] || { echo "no commit changed $PATHS" >&2; exit 1; }
-          else
-            last=$GITHUB_SHA
-          fi
-          echo "short=${last::7}" >> "$GITHUB_OUTPUT"
-          echo "version: sha-${last::7}"
       - id: build
         uses: docker/build-push-action@v7
         with:
           context: ${{ inputs.context }}
           platforms: linux/${{ matrix.arch }}
           build-contexts: ${{ inputs.build-contexts }}
-          build-args: ${{ inputs.version-arg && format('VERSION=sha-{0}', steps.sha.outputs.short) || '' }}
+          # eriphe-core tells when a machine is behind by it (core/updates.go).
+          build-args: ${{ inputs.version-arg && format('VERSION={0}', inputs.version) || '' }}
           outputs: ${{ env.PUSH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY_IMAGE) || '' }}
       - if: env.PUSH == 'true'
         env:
@@ -123,10 +109,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create the multi-arch manifest
         working-directory: ${{ runner.temp }}/digests
+        env:
+          TAGS: ${{ inputs.tags }}
         run: |
-          short="${GITHUB_SHA::7}"
-          docker buildx imagetools create \
-            -t "${REGISTRY_IMAGE}:latest" \
-            -t "${REGISTRY_IMAGE}:sha-${short}" \
-            $(printf "${REGISTRY_IMAGE}@sha256:%s " *)
-      - run: docker buildx imagetools inspect "${REGISTRY_IMAGE}:latest"
+          set --
+          for tag in $TAGS; do set -- "$@" -t "${REGISTRY_IMAGE}:${tag}"; done
+          [ $# -gt 0 ] || { echo "::error::no tag to publish"; exit 1; }
+          # shellcheck disable=SC2046 # one argument per digest
+          docker buildx imagetools create "$@" $(printf "${REGISTRY_IMAGE}@sha256:%s " *)
+      - env:
+          TAGS: ${{ inputs.tags }}
+        run: docker buildx imagetools inspect "${REGISTRY_IMAGE}:${TAGS%% *}"
