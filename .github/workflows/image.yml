@@ -2,7 +2,7 @@
 # (no emulation). On a push (to main, or of a release tag), each
 # architecture is pushed by digest and the merge job publishes them as one
 # multi-arch manifest under the tags it is given (ci.yml's version job:
-# edge and sha-<short> for main; X.Y.Z, X.Y and latest for a release).
+# X.Y.Z, X.Y and latest for a release; edge and sha-<short> otherwise).
 # Pull requests build both architectures without pushing.
 name: image
 
