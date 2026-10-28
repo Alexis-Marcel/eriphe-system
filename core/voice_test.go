@@ -146,10 +146,15 @@ func TestVoiceHolds(t *testing.T) {
 	}
 }
 
-// Settings → Machines makes Home Assistant's token, shown once.
+// Settings → Tools → Home Assistant makes Home Assistant's token, shown
+// once; Settings → Machines has no Home Assistant any more.
 func TestWebVoiceToken(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
-	if _, body, _ := tw.do("GET", "/settings/machines", nil, nil); !strings.Contains(body, `hx-post="/settings/voice-token"`) {
+	if _, body, _ := tw.do("GET", "/settings/machines", nil, nil); strings.Contains(body, "voice-token") || strings.Contains(body, "Home Assistant") {
+		t.Fatal("Home Assistant is still under Machines")
+	}
+	if _, body, _ := tw.do("GET", "/settings/home-assistant", nil, nil); !strings.Contains(body, `hx-post="/settings/voice-token"`) ||
+		!strings.Contains(body, "La voix de la maison parle à Eriphe") || !strings.Contains(body, "Eriphe pilote la maison") {
 		t.Fatal("no voice panel")
 	}
 	_, body, _ := tw.post("/settings/voice-token", nil, csrf)
@@ -162,7 +167,12 @@ func TestWebVoiceToken(t *testing.T) {
 	if !c.voiceTokenOK(req) {
 		t.Fatal("the token shown is not the one kept")
 	}
-	if _, body, _ := tw.do("GET", "/settings/machines", nil, nil); strings.Contains(body, tok) || !strings.Contains(body, "Remplacer le jeton") {
+	if _, body, _ := tw.do("GET", "/settings/home-assistant", nil, nil); strings.Contains(body, tok) || !strings.Contains(body, "Remplacer le jeton") {
 		t.Fatal("the token is shown again, or not known")
+	}
+	// Under Tools, Home Assistant has its entry even without its tool.
+	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, `href="/settings/home-assistant"`) ||
+		!strings.Contains(body, "Eriphe ne pilote pas encore la maison") {
+		t.Fatal("no Home Assistant entry under Tools")
 	}
 }

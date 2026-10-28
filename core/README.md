@@ -325,7 +325,7 @@ speaks the node's API through it. A node is online while its tunnel is up and an
 | `GET /v1/nodes` | registered nodes, with `cert_expires` once a node has its certificate, and `version`, `latest`, `update_available`, `update_commands` (bearer token) |
 | `GET /v1/version` | `{core: {version, latest, update_available, update_commands}, node: {latest}}`: the latest versions on the registry, empty while unknown (bearer token) |
 | `DELETE /v1/nodes/{name}` | forget a node; its tasks become `lost`, its certificate is revoked (bearer token) |
-| `GET /v1/nodes/tls`, `PUT /v1/nodes/tls` | the CA's hash, whether nodes must use TLS, which have no certificate yet; `{"tls_only": true}` closes the plain path (bearer token) |
+| `GET /v1/nodes/tls`, `PUT /v1/nodes/tls` | the CA's hash, whether nodes must use TLS, which have no certificate yet; advanced: `{"tls_only": false}` keeps the plain path open, `{"tls_only": true}` closes it (bearer token) |
 | `POST /v1/nodes/join` | `{name, token}` → `{secret}` (join token for that name) |
 | `POST /v1/node/certificate` | `{csr}` (PEM) → `{ca, certificate, expires}` (node secret, and its certificate once it has one) |
 | `GET /v1/nodes/connect` | the tunnel (node secret, `Eriphe-Node: name`, and its certificate) |
@@ -351,11 +351,16 @@ build of `main` as `0.2.0-dev` with its commit in small.
 
 Each machine updates itself, with the updater its installer put on the host side
 (install/README.md, The machines update themselves); eriphe-core says when (`machine_updates.go`).
-Settings → Machines → Updates sets it for all machines and for each one: "Me prévenir" (the
-default: the workspace says a new version is out), "Automatiquement la nuit" (3:00 to 5:00 in
-`timezone`, once a night) or "Jamais", with "Mettre à jour maintenant" and "Revenir à la version
-précédente" on each machine. A request is "update" (to the latest version, or the one the machine
-is pinned to) or "rollback", never an image nor a command.
+The workspace always says when a machine is behind (a dot, "Mise à jour disponible"), with one
+"Mettre à jour" button on each machine that has an updater, "Tout mettre à jour" when several are
+behind (eriphe-core first; the nodes follow once it runs the latest version), and one switch for
+all machines, "Mettre à jour automatiquement la nuit" (off by default; 3:00 to 5:00 in `timezone`,
+once a night). A machine without an updater shows the one command that updates it, for how it was
+installed. Going back to the previous version, or staying on one, is the install command's
+(`--rollback`, `--version`). A request is "update" (to the latest version, or the one the machine
+is pinned to) or "rollback" (left for the API and the tests), never an image nor a command. The
+choices of before, for all machines and for each one, are dropped at start; "at night" for all
+turns the switch on.
 
 The order is Kubernetes': eriphe-core's machine first (its request goes to `update-requested` in
 the data folder, for the updater; the outcome comes back in `update-status`); a node only once
@@ -384,7 +389,7 @@ whatever address it dials) and one client certificate per node.
 - **Joining.** The join command carries `-ca-hash sha256:<hex>`, the SHA-256 of the CA's public key
   (like kubeadm's `--discovery-token-ca-cert-hash`): the node finds that CA in eriphe-core's TLS
   handshake, pins it, and only then sends its join token. `eriphe-core join-token` and "Ajouter une
-  machine" print it, and Settings → Machines shows it.
+  machine" print it, and Settings → Machines → Avancé shows it, for a machine set up by hand.
 - **Client certificates (mTLS).** A node asks for its certificate with its secret
   (`POST /v1/node/certificate`, with a certificate request: the key never leaves the node), valid
   one year, and for a new one with its current one when a third of its life is left. A request
@@ -396,11 +401,13 @@ whatever address it dials) and one client certificate per node.
   comes with it, and connects over TLS from then on: nothing to do on it but update it. That first
   request trusts the network it crosses, as the plain join did; given `-ca-hash`, the node checks
   the CA instead.
-- **Closing the plain path.** Once every node has its certificate (Settings → Machines lists those
-  still without one, `GET /v1/nodes/tls` too), "N'accepter que les machines en TLS" (or
-  `PUT /v1/nodes/tls {"tls_only": true}`) refuses nodes over plain HTTP and nodes without their
-  certificate, and drops the tunnels of those connected so. Joins then need TLS too. API callers
-  other than nodes are not affected.
+- **Closing the plain path.** eriphe-core accepts nodes over TLS only, with their certificate: from
+  the start on a new installation, and on an older one by itself as soon as every node has its
+  certificate (logged; Settings → Machines marks those still without one, `GET /v1/nodes/tls`
+  lists them). It then refuses nodes over plain HTTP and nodes without their certificate, and drops
+  the tunnels of those connected so. Joins then need TLS too. API callers other than nodes are not
+  affected. `PUT /v1/nodes/tls {"tls_only": false}` is the advanced way out, to keep the plain path
+  open for a machine that cannot have its certificate yet; eriphe-core then leaves it so.
 
 ## MCP tools (`/mcp`, bearer token)
 
@@ -529,8 +536,9 @@ data; events are left out, since they carry what tasks said. eriphe-core logs it
 
 Home Assistant's Assist pipeline keeps what it understands (simple commands of the house, handled
 locally) and hands the rest to Eriphe through its conversation agent (`../ha/`), which calls
-`POST /v1/voice` with its own token (Settings → Machines → Home Assistant; only its hash is kept,
-and it can do nothing else). The sentence joins the conversation like any of mine, marked with the
+`POST /v1/voice` with its own token (Settings → Tools → Home Assistant, the page that has both
+ways: Eriphe driving the house through Home Assistant's MCP server, and the house's voice talking
+to Eriphe; only the token's hash is kept, and it can do nothing else). The sentence joins the conversation like any of mine, marked with the
 room (`[Sam 12:00 #N · voix, Bureau]`), and the brain answers it in the same thread, short and
 without markdown. The answer comes back as NDJSON, `{"delta"}` lines then `{"done", "text",
 "continue"}`, from the brain's draft as it writes. Only what it says after reading the sentence

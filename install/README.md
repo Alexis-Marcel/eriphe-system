@@ -176,14 +176,13 @@ with that copy.
 
 ### The machines update themselves
 
-Once installed, a machine updates itself when eriphe-core asks, like Tailscale: Settings → Machines
-→ Updates. For all machines, and for each one (else it does as the others):
-
-- **Tell me** (the default): the workspace says a new version is out; nothing changes by itself.
-- **Automatically at night**: between 3:00 and 5:00 (your time zone), once a night.
-- **Never**: no notice, no automatic update.
-
-Each machine also has **Update now** and **Go back to the previous version**. The order is
+Once installed, a machine updates itself when eriphe-core asks, like Tailscale: Settings → Machines.
+The workspace says when a machine is behind ("Update available"), with an **Update** button on
+that machine, **Update all** when several are behind, and one switch for all machines, **Update
+automatically at night** (off by default): between 3:00 and 5:00 (your time zone), once a night.
+A machine without an updater (a compose project of your own) shows the one command to run on it
+instead. To go back to the previous version or stay on one, run the install command again with
+`--rollback` or `--version <version>` (below). The order is
 Kubernetes': eriphe-core's machine first; a node only once eriphe-core runs the latest version (a
 node is never newer than eriphe-core), and only once none of its tasks is at work (an idle one,
 the brain between two turns included, resumes after the restart). While a node has a request, no

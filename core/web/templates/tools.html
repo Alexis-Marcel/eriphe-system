@@ -8,7 +8,7 @@
 {{if .Flash}}<p class="ok-note" role="status">{{.Flash}}</p>{{end}}
 {{if .Alert}}<p class="alert" role="alert">{{.Alert}}</p>{{end}}
 {{range $name, $why := .Skipped}}<p class="alert" role="alert">{{tf "catalog.skipped" $name}} <span class="small">{{short $why 200}}</span></p>{{end}}
-{{if .Tools}}
+{{if or .Tools .VoiceOnly}}
 <ul class="tools" id="tools-list"{{if .Waiting}} hx-get="/settings/tools" hx-trigger="load delay:2s" hx-select="#tools-list" hx-swap="outerHTML"{{end}}>
 {{range .Tools}}
   <li class="tool">
@@ -26,6 +26,7 @@
       <p class="muted small meta-line">
         {{if .Detail}}{{.Detail}}{{else if eq .Kind "local"}}{{t "tools.local"}}{{else}}<span class="mono">{{.URL}}</span> · {{t (printf "auth.%s" .Auth)}}{{end}}
         {{if eq .Kind "local"}}{{if .Node}} · {{.Node}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
+        {{if and (eq .Preset.ID "home-assistant") $.Data.Voice}} · {{t "ha.voiceon"}}{{end}}
         · <span class="access-tag {{if .TrustAnnotations}}free{{end}}" title="{{if .TrustAnnotations}}{{t "access.readhint"}}{{else}}{{t "access.askhint"}}{{end}}">{{if .TrustAnnotations}}{{t "access.read"}}{{else}}{{t "access.ask"}}{{end}}</span>
       </p>
       {{if .Problem}}<p class="small err-text" title="{{short .Error 600}}">{{.Problem}}</p>
@@ -36,12 +37,23 @@
     <div class="tool-actions">
       {{if eq .Auth "oauth"}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline">
         <button class="btn {{if eq .Status "ready"}}btn-soft{{else}}btn-primary{{end}} sm" type="submit">{{if eq .Status "ready"}}{{t "tools.reconnect"}}{{else}}{{t "tools.connect"}}{{end}}</button></form>{{end}}
+      {{if eq .Preset.ID "home-assistant"}}<a class="btn btn-ghost sm" href="/settings/home-assistant">{{t "ha.manage"}}</a>{{end}}
       {{if eq .Source "workspace"}}
-      <a class="btn btn-ghost sm" href="{{if eq .Preset.Form "drive"}}/settings/drive{{else}}/settings/tools/{{.Name}}/edit{{end}}">{{if eq .Preset.Form "drive"}}{{t "drive.folders"}}{{else}}{{t "catalog.edit"}}{{end}}</a>
+      {{if ne .Preset.ID "home-assistant"}}<a class="btn btn-ghost sm" href="{{if eq .Preset.Form "drive"}}/settings/drive{{else}}/settings/tools/{{.Name}}/edit{{end}}">{{if eq .Preset.Form "drive"}}{{t "drive.folders"}}{{else}}{{t "catalog.edit"}}{{end}}</a>{{end}}
       <form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{tf "tools.removeconfirm" .Name}}" class="inline">
         <button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
       {{end}}
     </div>
+  </li>
+{{end}}
+{{if .VoiceOnly}}
+  <li class="tool">
+    <span class="mark preset-mark mark-home-assistant" aria-hidden="true">{{template "preset-icon" "home-assistant"}}</span>
+    <div class="tool-main">
+      <div class="tool-head"><h3>{{t "preset.home-assistant.title"}}</h3></div>
+      <p class="muted small meta-line">{{t "ha.voiceonly"}}</p>
+    </div>
+    <div class="tool-actions"><a class="btn btn-ghost sm" href="/settings/home-assistant">{{t "ha.manage"}}</a></div>
   </li>
 {{end}}
 </ul>
@@ -405,5 +417,56 @@
   </li>{{else}}<li class="muted small">{{t "drive.empty"}}</li>{{end}}
   </ul>
   {{if .Next}}<button class="btn btn-ghost sm" type="button" hx-get="/settings/drive/browse?parent={{urlquery .Parent}}&amp;name={{urlquery .Name}}&amp;page={{urlquery .Next}}" hx-target="#drive-browse" hx-swap="outerHTML">{{t "drive.more"}}</button>{{end}}
+</div>
+{{end}}{{end}}
+
+{{/* Home Assistant, both ways (web_homeassistant.go): Eriphe drives the house, the house's voice talks to Eriphe. */}}
+{{define "home-assistant"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
+  <div class="form-title">
+    <span class="mark preset-mark mark-home-assistant" aria-hidden="true">{{template "preset-icon" "home-assistant"}}</span>
+    <h2>{{t "ha.title"}}</h2>
+  </div>
+  <p>{{t "ha.lead"}}</p>
+</header>
+<section class="panel" aria-labelledby="ha-drive-title">
+  <h3 id="ha-drive-title">{{template "i-plug"}}{{t "ha.drive"}}</h3>
+  <p class="muted">{{t "ha.drivelead"}}</p>
+  {{if .Tools}}
+  <ul class="list">
+  {{range .Tools}}
+    <li>
+      <div class="list-main">
+        <b class="mono">{{.Name}}</b>
+        <span class="muted small"><span class="chip srv-{{.Status}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "server.%s" .Status)}}</span> <span class="mono">{{.URL}}</span></span>
+      </div>
+      {{if eq .Source "workspace"}}<a class="btn btn-ghost sm" href="/settings/tools/{{.Name}}/edit">{{t "catalog.edit"}}</a>{{end}}
+    </li>
+  {{end}}
+  </ul>
+  {{else}}
+  <div class="actions"><a class="btn btn-primary" href="/settings/tools/new?preset=home-assistant">{{template "i-plus"}}{{t "ha.connect"}}</a></div>
+  {{end}}
+</section>
+<section class="panel" aria-labelledby="ha-voice-title">
+  <h3 id="ha-voice-title">{{template "i-chat"}}{{t "ha.voice"}}</h3>
+  <p class="muted">{{t "voice.lead"}}</p>
+  <p class="muted small">{{t "voice.only"}}</p>
+  {{if .Voice}}<p class="ok-note" role="status">{{t "voice.has"}}</p>{{end}}
+  <form hx-post="/settings/voice-token" hx-target="#voice-result" hx-swap="innerHTML"{{if .Voice}} hx-confirm="{{t "voice.replaceconfirm"}}"{{end}}>
+    <button class="btn {{if .Voice}}btn-soft{{else}}btn-primary{{end}}" type="submit">{{if .Voice}}{{t "voice.replace"}}{{else}}{{t "voice.create"}}{{end}}</button>
+  </form>
+  <div id="voice-result"></div>
+</section>
+{{end}}{{end}}
+
+{{define "voice-token"}}{{with .Data}}
+<p class="ok-note" role="status">{{t "voice.once"}}</p>
+<div class="cmd">
+  <h4>{{t "voice.url"}}</h4>
+  <div class="code"><pre id="voice-url">{{.Core}}</pre><button class="btn btn-soft sm" type="button" data-copy="voice-url">{{t "machines.copy"}}</button></div>
+  <h4>{{t "voice.token"}}</h4>
+  <div class="code"><pre id="voice-tok">{{.Token}}</pre><button class="btn btn-soft sm" type="button" data-copy="voice-tok">{{t "machines.copy"}}</button></div>
 </div>
 {{end}}{{end}}

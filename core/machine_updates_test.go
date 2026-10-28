@@ -55,33 +55,47 @@ func assignmentUpdate(t *testing.T, c *core, name string) *nodeUpdate {
 	return out.Update
 }
 
-// One choice for all machines, which each one can replace, and go back to.
-func TestUpdatePolicy(t *testing.T) {
+// One switch for all machines, off by default; the choices of before
+// (for all and for each machine) go, "at night for all" staying on.
+func TestNightUpdatesSwitch(t *testing.T) {
 	c := newUpdateCore(t, "0.1.0")
-	if own, eff := c.updatePolicy("node:pc"); own != "" || eff != updateNotify {
-		t.Fatalf("default: %q %q", own, eff)
+	if c.nightUpdates() {
+		t.Fatal("on by default")
 	}
-	if err := c.setUpdatePolicy("", updateNight); err != nil {
-		t.Fatal(err)
+	if err := c.setNightUpdates(true); err != nil || !c.nightUpdates() {
+		t.Fatalf("on: %v", err)
 	}
-	if _, eff := c.updatePolicy("node:pc"); eff != updateNight {
-		t.Fatalf("all at night: %q", eff)
+	if err := c.setNightUpdates(false); err != nil || c.nightUpdates() {
+		t.Fatalf("off: %v", err)
 	}
-	c.setUpdatePolicy("node:pc", updateNever)
-	if own, eff := c.updatePolicy("node:pc"); own != updateNever || eff != updateNever {
-		t.Fatalf("pc never: %q %q", own, eff)
-	}
-	if _, eff := c.updatePolicy(coreMachine); eff != updateNight {
-		t.Fatalf("core: %q", eff)
-	}
-	c.setUpdatePolicy("node:pc", "")
-	if own, eff := c.updatePolicy("node:pc"); own != "" || eff != updateNight {
-		t.Fatalf("pc back to all: %q %q", own, eff)
-	}
-	for _, bad := range [][2]string{{"", ""}, {"", "sometimes"}, {"node:pc", "always"}} {
-		if err := c.setUpdatePolicy(bad[0], bad[1]); err == nil {
-			t.Errorf("setUpdatePolicy(%q, %q) accepted", bad[0], bad[1])
+
+	for _, tc := range []struct {
+		all  string
+		want bool
+	}{{"night", true}, {"notify", false}, {"never", false}, {"", false}} {
+		path := filepath.Join(t.TempDir(), "core.db")
+		s, err := openStore(path)
+		if err != nil {
+			t.Fatal(err)
 		}
+		if tc.all != "" {
+			s.set("update_policy", tc.all)
+		}
+		s.set("update_policy:node:pc", "never")
+		s.set("update_policy:core", "night")
+		s.db.Close()
+		if s, err = openStore(path); err != nil {
+			t.Fatal(err)
+		}
+		if got := s.get(updateNightKey) == "1"; got != tc.want {
+			t.Errorf("%q for all: at night %t, want %t", tc.all, got, tc.want)
+		}
+		var left int
+		s.db.QueryRow(`SELECT COUNT(*) FROM kv WHERE key LIKE 'update_policy%'`).Scan(&left)
+		if left != 0 {
+			t.Errorf("%q for all: %d choices left", tc.all, left)
+		}
+		s.db.Close()
 	}
 }
 
@@ -192,16 +206,20 @@ func TestUpdateCoreFirst(t *testing.T) {
 	}
 }
 
-// At night, for the machines set to it: eriphe-core first, the nodes after
-// it, each once a night, never one with a task at work nor a pinned one.
+// At night, once the switch is on: eriphe-core first, the nodes after it,
+// each once a night, never one with a task at work nor a pinned one.
 func TestAutoUpdatesAtNight(t *testing.T) {
 	c := newUpdateCore(t, "0.2.0")
-	c.setUpdatePolicy("", updateNight)
 	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
 	// The user's time zone: this configuration has none, so the machine's.
 	day := time.Date(2026, 10, 28, 14, 0, 0, 0, time.Local)
 	night := time.Date(2026, 10, 29, 3, 30, 0, 0, time.Local)
 
+	c.autoUpdates(night)
+	if c.pendingUpdate(coreMachine) != nil {
+		t.Fatal("an automatic update with the switch off")
+	}
+	c.setNightUpdates(true)
 	c.autoUpdates(day)
 	if c.pendingUpdate(coreMachine) != nil || c.pendingUpdate("node:pc") != nil {
 		t.Fatal("an automatic update in the day")
@@ -226,14 +244,12 @@ func TestAutoUpdatesAtNight(t *testing.T) {
 	setNode(t, c, "busy", `{"version":"0.0.1","update":{"updater":true}}`)
 	setNode(t, c, "pinned", `{"version":"0.0.1","update":{"updater":true,"pin":"0.0.1"}}`)
 	setNode(t, c, "same", `{"version":"0.2.0","update":{"updater":true}}`)
-	setNode(t, c, "mine", `{"version":"0.0.1","update":{"updater":true}}`)
-	c.setUpdatePolicy("node:mine", updateNotify)
 	c.store.insertTask(&TaskRow{ID: "t1", Node: "busy", Runtime: "claude-code", State: stateRunning, Created: time.Now(), Updated: time.Now()})
 	c.autoUpdates(night.Add(20 * time.Minute))
 	if r := c.pendingUpdate("node:pc"); r == nil || !r.Auto {
 		t.Fatalf("pc not updated: %+v", r)
 	}
-	for _, n := range []string{"busy", "pinned", "same", "mine"} {
+	for _, n := range []string{"busy", "pinned", "same"} {
 		if c.pendingUpdate("node:"+n) != nil {
 			t.Errorf("%s updated automatically", n)
 		}
@@ -253,52 +269,131 @@ func TestAutoUpdatesAtNight(t *testing.T) {
 	}
 }
 
-// Settings → Machines: the choice, the button, and where each machine stands.
+// Settings → Machines: where each machine stands, one button per machine
+// behind, its command for one without an updater, and the switch.
 func TestWebUpdates(t *testing.T) {
 	defer func(v string) { version = v }(version)
 	version = "0.1.0"
 	tw := newTestWeb(t)
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.1.0", "eriphe-node": "0.1.0"})
+	tw.c.updates = newUpdates(f.srv.URL)
+	tw.c.updates.check(context.Background())
 	csrf := tw.setup()
 	h := map[string]string{"X-CSRF-Token": csrf, "HX-Request": "true"}
-	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"u-1","outcome":"rolled_back","message":"eriphe-node did not connect","to":"0.0.2","at":"2026-10-28T03:10:00Z"}}}`)
-	setNode(t, tw.c, "nas", `{"version":"0.1.0"}`)
+	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true,"status":{"id":"u-1","outcome":"rolled_back","message":"eriphe-node did not connect","to":"0.0.2","at":"2026-10-28T03:10:00Z"}}}`)
+	setNode(t, tw.c, "nas", `{"os":"linux","version":"0.0.1"}`)
 
 	_, body, _ := tw.do("GET", "/settings/machines", nil, nil)
-	for _, want := range []string{"Mises à jour", "Me prévenir", "Automatiquement la nuit", "Jamais",
-		"Échec, version précédente remise", "eriphe-node did not connect", "Version 0.1.0 disponible",
-		"ne sait pas encore se mettre à jour"} {
+	for _, want := range []string{"Mises à jour", "Mettre à jour automatiquement la nuit", "Mise à jour disponible",
+		"La mise à jour a échoué, version précédente remise", "eriphe-node did not connect",
+		`value="node:pc"`, "docker compose pull &amp;&amp; docker compose up -d", "--rollback"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/machines lacks %q", want)
 		}
 	}
+	for _, gone := range []string{"Me prévenir", "Jamais", "Comme les autres", "Revenir à la version précédente", `value="node:nas"`,
+		"curl -fsSL https://eriphe.com/install.sh | sh -s</pre>"} {
+		if strings.Contains(body, gone) {
+			t.Errorf("GET /settings/machines still has %q", gone)
+		}
+	}
 
-	if code, _, _ := tw.do("POST", "/settings/updates/policy", url.Values{"machine": {"node:pc"}, "policy": {"night"}}, h); code != 200 {
-		t.Fatalf("policy: %d", code)
+	if code, _, _ := tw.do("POST", "/settings/updates/night", url.Values{"night": {"1"}}, h); code != 200 || !tw.c.nightUpdates() {
+		t.Fatalf("switch on: %d", code)
 	}
-	if own, _ := tw.c.updatePolicy("node:pc"); own != updateNight {
-		t.Fatalf("pc's policy = %q", own)
+	if _, body, _ = tw.do("GET", "/settings/machines", nil, nil); !strings.Contains(body, `role="switch" name="night" value="1" hx-post="/settings/updates/night" hx-trigger="change" checked`) {
+		t.Error("the switch does not show on")
 	}
-	if code, _, _ := tw.do("POST", "/settings/updates/policy", url.Values{"machine": {"node:ghost"}, "policy": {"night"}}, h); code != 200 ||
-		tw.c.store.get("update_policy:node:ghost") != "" {
-		t.Fatal("a policy set for an unknown machine")
+	if tw.do("POST", "/settings/updates/night", url.Values{}, h); tw.c.nightUpdates() {
+		t.Fatal("switch off")
 	}
-	_, _, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}, "action": {"update"}}, h)
-	if r := tw.c.pendingUpdate("node:pc"); r == nil || r.Auto || hdr.Get("HX-Refresh") != "true" {
+
+	_, _, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
+	if r := tw.c.pendingUpdate("node:pc"); r == nil || r.Auto || r.Action != "update" || hdr.Get("HX-Refresh") != "true" {
 		t.Fatalf("update now: %+v %v", r, hdr)
 	}
 	_, body, _ = tw.do("GET", "/settings/machines", nil, nil)
 	if !strings.Contains(body, "Mise à jour demandée") {
 		t.Error("the request does not show")
 	}
-	_, _, hdr = tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:nas"}, "action": {"update"}}, h)
+	_, _, hdr = tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:nas"}}, h)
 	if tw.c.pendingUpdate("node:nas") != nil || !strings.Contains(hdr.Get("HX-Trigger"), "relance une fois") {
 		t.Fatalf("a machine without updater: %v", hdr)
 	}
+}
 
-	// Gone back, by the button: said as such.
-	tw.c.store.db.Exec(`DELETE FROM kv WHERE key LIKE 'update_request:%'`)
-	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"u-2","action":"rollback","outcome":"ok","to":"0.0.1"}}}`)
-	if _, body, _ = tw.do("GET", "/settings/machines", nil, nil); !strings.Contains(body, "Version précédente remise · 0.0.1") {
-		t.Error("a rollback does not show")
+// "Update all": eriphe-core first while it is behind, the nodes once it
+// runs the latest version; the nodes at once when it does already.
+func TestUpdateAll(t *testing.T) {
+	c := newUpdateCore(t, "0.2.0")
+	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
+	setNode(t, c, "laptop", `{"version":"0.0.1","update":{"updater":true}}`)
+	setNode(t, c, "nas", `{"version":"0.0.1"}`)
+	setNode(t, c, "same", `{"version":"0.2.0","update":{"updater":true}}`)
+
+	if n, err := c.updateAll(); err != nil || n != 1 || c.pendingUpdate(coreMachine) == nil || c.pendingUpdate("node:pc") != nil {
+		t.Fatalf("eriphe-core behind: %d %v", n, err)
+	}
+	c.followUpdateAll()
+	if c.pendingUpdate("node:pc") != nil {
+		t.Fatal("a node asked before eriphe-core updated")
+	}
+
+	// eriphe-core updated (and restarted): the nodes follow.
+	c.store.db.Exec(`DELETE FROM kv WHERE key = 'update_request:core'`)
+	version = "0.2.0"
+	c.followUpdateAll()
+	for _, n := range []string{"pc", "laptop"} {
+		if c.pendingUpdate("node:"+n) == nil {
+			t.Errorf("%s not asked", n)
+		}
+	}
+	for _, n := range []string{"nas", "same"} {
+		if c.pendingUpdate("node:"+n) != nil {
+			t.Errorf("%s asked", n)
+		}
+	}
+	if c.store.get(updateAllKey) != "" {
+		t.Error("update all still waiting")
+	}
+
+	c.store.db.Exec(`DELETE FROM kv WHERE key LIKE 'update_request:%'`)
+	if n, err := c.updateAll(); err != nil || n != 2 || c.pendingUpdate("node:laptop") == nil {
+		t.Fatalf("eriphe-core up to date: %d %v", n, err)
+	}
+}
+
+// Each machine's system in words, remembered while it is offline.
+func TestMachineSystem(t *testing.T) {
+	for _, tc := range []struct{ install, goos, want string }{
+		{"macos", "darwin", "system.macos-container"},
+		{"macos", "linux", "system.macos-lima"},
+		{"windows", "linux", "system.windows"},
+		{"linux", "linux", "system.linux"},
+		{"", "linux", "system.compose"},
+		{"", "darwin", "system.darwin"},
+		{"", "", ""},
+	} {
+		if got := systemKey(tc.install, tc.goos); got != tc.want {
+			t.Errorf("systemKey(%q, %q) = %q, want %q", tc.install, tc.goos, got, tc.want)
+		}
+	}
+
+	tw := newTestWeb(t)
+	tw.setup()
+	setNode(t, tw.c, "mac", `{"os":"darwin","arch":"arm64","install":"macos"}`)
+	setNode(t, tw.c, "nas", `{"os":"linux","arch":"amd64"}`)
+	tw.c.store.setNodeStatus("mac", false, nil)
+	// An offline machine keeps what it said last, even if a report without it came between.
+	tw.c.store.setNodeStatus("nas", true, []byte(`{"cpus":4}`))
+	nodes, _ := tw.c.store.nodes()
+	if len(nodes) != 2 || nodes[0].OS != "darwin" || nodes[0].Arch != "arm64" || nodes[0].Install != "macos" || nodes[1].OS != "linux" {
+		t.Fatalf("nodes = %+v", nodes)
+	}
+	_, body, _ := tw.do("GET", "/settings/machines", nil, nil)
+	for _, want := range []string{"macOS (Apple container)", "Linux (Docker Compose)"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("GET /settings/machines lacks %q", want)
+		}
 	}
 }

@@ -17,7 +17,8 @@ It is not in HACS yet: install it by hand.
 2. Restart Home Assistant.
 3. **Settings > Devices & services > Add integration > Eriphe**, then enter:
    - the URL of `eriphe-core` on the LAN, for example `http://192.0.2.2:8800`;
-   - the token `eriphe-core` gave for Home Assistant.
+   - the token `eriphe-core` gave for Home Assistant (in the workspace, Settings > Tools > Home
+     Assistant > "The house's voice talks to Eriphe", which also shows the URL to enter).
 
    The form checks both with an empty request, which `eriphe-core` answers 400 once the token is
    accepted. The URL and token can be changed later with **Reconfigure** on the integration.

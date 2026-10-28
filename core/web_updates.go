@@ -2,59 +2,79 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 )
 
-// Settings → Machines → Updates (machine_updates.go): when each machine
-// updates, a button to update it now, and one to go back to the version
-// before.
+// Settings → Machines → Updates (machine_updates.go): each machine's
+// version, a button to update the ones that are behind (or the command to
+// run, for a machine without an updater), "Update all", and one switch to
+// let them update by themselves at night.
 
 type updateRow struct {
-	Machine  string // core, or node:<name>
-	Name     string
-	Core     bool
-	Online   bool
-	Version  string
-	Latest   string // the latest version, when this one is behind
-	Own, Eff string // its own choice (empty: as all), and the one that applies
+	Machine string // core, or node:<name>
+	Name    string
+	Core    bool
+	Online  bool
+	Version string
+	Latest  string // the latest version, when this one is behind
 	updaterInfo
 	Pending   *machineUpdate
-	CoreFirst bool // a node, while eriphe-core is behind: eriphe-core goes first
+	CoreFirst bool          // a node, while eriphe-core is behind: eriphe-core goes first
+	Manual    updateCommand // the command that updates it by hand, without an updater
 }
 
 type updatesData struct {
-	Policy string // for all machines
+	Night  bool // the machines update by themselves at night
 	Rows   []updateRow
+	Behind int // machines behind that an updater can update now
 }
 
 func (w *web) updatesData(nodes []NodeRow) updatesData {
 	c := w.c
-	_, all := c.updatePolicy("")
-	d := updatesData{Policy: all}
-	own, eff := c.updatePolicy(coreMachine)
+	d := updatesData{Night: c.nightUpdates()}
+	coreBehind := c.updates.behind("eriphe-core", version)
 	row := updateRow{Machine: coreMachine, Name: "eriphe-core", Core: true, Online: true, Version: version,
-		Own: own, Eff: eff, updaterInfo: c.coreUpdater(), Pending: c.pendingUpdate(coreMachine)}
-	if c.updates.behind("eriphe-core", version) {
+		updaterInfo: c.coreUpdater(), Pending: c.pendingUpdate(coreMachine), Manual: manualUpdate(coreInstall)}
+	if coreBehind {
 		row.Latest = c.updates.version("eriphe-core")
 	}
-	d.Rows = append(d.Rows, row)
-	coreBehind := c.updates.behind("eriphe-core", version)
+	d.add(row)
 	for _, n := range nodes {
 		info := parseInfo(n)
 		m := "node:" + n.Name
-		own, eff := c.updatePolicy(m)
-		row := updateRow{Machine: m, Name: n.Name, Online: n.Online, Version: info.Version, Own: own, Eff: eff,
-			updaterInfo: info.Update, Pending: c.pendingUpdate(m), CoreFirst: coreBehind}
+		row := updateRow{Machine: m, Name: n.Name, Online: n.Online, Version: info.Version,
+			updaterInfo: info.Update, Pending: c.pendingUpdate(m), CoreFirst: coreBehind,
+			Manual: manualUpdate(nodeInstall(n, info))}
 		if c.updates.behind("eriphe-node", info.Version) {
 			row.Latest = c.updates.version("eriphe-node")
-		} else if !sameVersion(info.Version, version) {
-			row.Latest = version // eriphe-core's: where the node goes
+		} else if !coreBehind && c.updates.version("eriphe-core") != "" && !sameVersion(info.Version, version) {
+			row.Latest = version // eriphe-core's, the latest: where the node goes
 		}
-		d.Rows = append(d.Rows, row)
+		d.add(row)
+	}
+	if core := d.Rows[0]; core.Latest != "" && !core.Updater {
+		d.Behind = 0 // eriphe-core goes first, by its command: no button can do anything before
 	}
 	return d
+}
+
+func (d *updatesData) add(r updateRow) {
+	if r.Latest != "" && r.Updater && r.Pending == nil {
+		d.Behind++
+	}
+	d.Rows = append(d.Rows, r)
+}
+
+// nodeInstall is how a node was installed: as it reports it, or as it
+// last did while it is offline.
+func nodeInstall(n NodeRow, info nodeInfo) string {
+	if info.Install != "" || n.Install == "" {
+		return info.Install
+	}
+	return n.Install
 }
 
 // machineParam is the machine a form names, if it exists.
@@ -66,34 +86,26 @@ func (w *web) machineParam(m string) bool {
 	return ok && w.c.store.hasNode(name)
 }
 
-// handleUpdatePolicy sets when all machines (machine empty) or one update.
-func (w *web) handleUpdatePolicy(rw http.ResponseWriter, r *http.Request, s *session) {
-	lang := w.lang(r)
-	m, p := r.PostFormValue("machine"), r.PostFormValue("policy")
-	if m != "" && !w.machineParam(m) {
-		w.toast(rw, tr(lang, "machines.nonode"), false)
-		return
-	}
-	if err := w.c.setUpdatePolicy(m, p); err != nil {
+// handleNightUpdates turns the automatic updates at night on or off, for
+// all machines.
+func (w *web) handleNightUpdates(rw http.ResponseWriter, r *http.Request, s *session) {
+	on := r.PostFormValue("night") != ""
+	if err := w.c.setNightUpdates(on); err != nil {
 		w.toast(rw, err.Error(), false)
 		return
 	}
-	log.Printf("web: updates of %s: %s", orAll(m), orAll(p))
-	rw.Header().Set("HX-Refresh", "true")
-	rw.WriteHeader(http.StatusOK)
-}
-
-func orAll(s string) string {
-	if s == "" {
-		return "all"
+	log.Printf("web: automatic updates at night: %t", on)
+	msg := "updates.nightoff"
+	if on {
+		msg = "updates.nighton"
 	}
-	return s
+	w.toast(rw, tr(w.lang(r), msg), true)
 }
 
-// handleUpdateNow asks a machine's updater to update now, or to roll back.
+// handleUpdateNow asks a machine's updater to update now.
 func (w *web) handleUpdateNow(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
-	m, action := r.PostFormValue("machine"), r.PostFormValue("action")
+	m := r.PostFormValue("machine")
 	if !w.machineParam(m) {
 		w.toast(rw, tr(lang, "machines.nonode"), false)
 		return
@@ -102,14 +114,33 @@ func (w *web) handleUpdateNow(rw http.ResponseWriter, r *http.Request, s *sessio
 		w.toast(rw, tr(lang, "update.already"), false)
 		return
 	}
-	if _, err := w.c.requestUpdate(m, action, false); err != nil {
-		if errors.Is(err, errNoUpdater) || errors.Is(err, errCoreFirst) || errors.Is(err, errPinned) {
-			w.toast(rw, tr(lang, err.Error()), false)
-		} else {
-			w.toast(rw, err.Error(), false)
-		}
+	if _, err := w.c.requestUpdate(m, "update", false); err != nil {
+		w.updateError(rw, lang, err)
 		return
 	}
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)
+}
+
+// handleUpdateAll asks every machine behind to update, eriphe-core first.
+func (w *web) handleUpdateAll(rw http.ResponseWriter, r *http.Request, s *session) {
+	n, err := w.c.updateAll()
+	if err != nil {
+		w.updateError(rw, w.lang(r), err)
+		return
+	}
+	if n == 0 {
+		w.toast(rw, tr(w.lang(r), "updates.nothing"), false)
+		return
+	}
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusOK)
+}
+
+func (w *web) updateError(rw http.ResponseWriter, lang string, err error) {
+	if errors.Is(err, errNoUpdater) || errors.Is(err, errCoreFirst) || errors.Is(err, errPinned) {
+		w.toast(rw, tr(lang, err.Error()), false)
+		return
+	}
+	w.toast(rw, fmt.Sprint(err), false)
 }

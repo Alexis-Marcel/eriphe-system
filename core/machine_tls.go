@@ -45,7 +45,9 @@ import (
 //   - The API port serves TLS and plain HTTP side by side (sniffListener):
 //     the CLI, Home Assistant and the brain keep their plain HTTP, and a
 //     node that joined over plain HTTP moves to TLS by itself on the same
-//     address. nodesTLSOnlyKey then closes the plain path for nodes.
+//     address. nodesTLSOnlyKey then closes the plain path for nodes: from
+//     the start on a new installation, and on an older one as soon as
+//     every machine has its certificate.
 
 const (
 	machineCAFile    = "machine-ca.pem"
@@ -56,7 +58,10 @@ const (
 	machineServerName = "eriphe-core"
 	nodeCertLifetime  = 365 * 24 * time.Hour
 	// nodesTLSOnlyKey, when "1", refuses nodes over plain HTTP and nodes
-	// without their certificate.
+	// without their certificate. Unset, eriphe-core sets it by itself once
+	// every machine has its certificate (autoTLSOnly): at once on a new
+	// installation. "0" is the API's explicit choice to keep the plain path
+	// open (PUT /v1/nodes/tls), never changed by itself.
 	nodesTLSOnlyKey = "nodes_tls_only"
 )
 
@@ -409,8 +414,11 @@ func (c *core) handleNodeCertificate(w http.ResponseWriter, r *http.Request) {
 
 // handleNodesTLS shows the CA's hash and whether nodes must use TLS
 // (GET), or opens and closes the plain path for nodes (PUT
-// {"tls_only": true}, admin only). Closing it drops the tunnels of nodes
-// connected without their certificate.
+// {"tls_only": true}, admin only). It is an advanced setting: eriphe-core
+// closes the plain path by itself (autoTLSOnly), and the PUT only matters
+// to keep it open for a machine that cannot have its certificate yet.
+// Closing it drops the tunnels of nodes connected without their
+// certificate.
 func (c *core) handleNodesTLS(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPut {
 		var in struct {
@@ -443,7 +451,7 @@ func (c *core) setNodesTLSOnly(on bool) error {
 	if on && c.machines == nil {
 		return errors.New("eriphe-core has no certificate authority for machines")
 	}
-	v := ""
+	v := "0"
 	if on {
 		v = "1"
 	}
@@ -470,6 +478,30 @@ func (c *core) setNodesTLSOnly(on bool) error {
 	return nil
 }
 
+// autoTLSOnly closes the plain path for nodes once every registered machine
+// has its certificate, unless the API chose to keep it open: at once on a
+// new installation, which has none; after the last one moves to TLS on an
+// older one.
+func (c *core) autoTLSOnly(nodes []NodeRow) {
+	if c.machines == nil || c.store.get(nodesTLSOnlyKey) != "" {
+		return
+	}
+	for _, n := range nodes {
+		if n.CertExpires.IsZero() {
+			return
+		}
+	}
+	if err := c.setNodesTLSOnly(true); err != nil {
+		log.Printf("machines: %v", err)
+		return
+	}
+	if len(nodes) == 0 {
+		log.Printf("machines: TLS only, from the start")
+	} else {
+		log.Printf("machines: every machine has its certificate: TLS only from now on")
+	}
+}
+
 // caHash is the -ca-hash of join commands, empty without a CA.
 func (c *core) caHash() string {
 	if c.machines == nil {
@@ -488,6 +520,9 @@ func (c *core) startMachineTLS() {
 	}
 	c.machines = ca
 	log.Printf("machines: TLS for nodes on the API port, CA %s", ca.hash)
+	if nodes, err := c.store.nodes(); err == nil {
+		c.autoTLSOnly(nodes)
+	}
 }
 
 // apiListener is the API's listener: TLS for nodes and plain HTTP side by

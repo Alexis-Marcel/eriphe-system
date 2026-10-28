@@ -39,6 +39,11 @@ type NodeRow struct {
 	LastSeen time.Time       `json:"last_seen"`
 	// When its client certificate ends; zero while it has none (machine_tls.go).
 	CertExpires time.Time `json:"cert_expires,omitzero"`
+	// Its system as it last reported it, kept while it is offline: GOOS,
+	// GOARCH and how it was installed (ERIPHE_INSTALL; empty by hand).
+	OS      string `json:"os,omitempty"`
+	Arch    string `json:"arch,omitempty"`
+	Install string `json:"install,omitempty"`
 }
 
 type TaskRow struct {
@@ -141,6 +146,16 @@ func openStore(path string) (*Store, error) {
 	db.Exec(`ALTER TABLE nodes ADD COLUMN cert_serial TEXT NOT NULL DEFAULT ''`)
 	db.Exec(`ALTER TABLE nodes ADD COLUMN prev_serial TEXT NOT NULL DEFAULT ''`)
 	db.Exec(`ALTER TABLE nodes ADD COLUMN cert_expires INTEGER NOT NULL DEFAULT 0`)
+	// Added with the machine's system on its card: the last one it
+	// reported, kept while it is offline.
+	db.Exec(`ALTER TABLE nodes ADD COLUMN os TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE nodes ADD COLUMN arch TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE nodes ADD COLUMN install TEXT NOT NULL DEFAULT ''`)
+	// Updates had a choice for all machines and for each one (tell me, at
+	// night, never); now one switch, at night or not, for all of them
+	// (machine_updates.go). "At night" for all stays on; the rest goes.
+	db.Exec(`INSERT OR IGNORE INTO kv (key, value) SELECT 'update_night', '1' FROM kv WHERE key = 'update_policy' AND value = 'night'`)
+	db.Exec(`DELETE FROM kv WHERE key = 'update_policy' OR key LIKE 'update_policy:%'`)
 	return &Store{db: db, dir: filepath.Dir(path)}, nil
 }
 
@@ -253,6 +268,17 @@ func (s *Store) setNodeStatus(name string, online bool, info []byte) error {
 	if online {
 		_, err := s.db.Exec(`UPDATE nodes SET online = 1, info = ?, last_seen = ? WHERE name = ?`,
 			string(info), time.Now().Unix(), name)
+		if err != nil {
+			return err
+		}
+		var sys struct {
+			OS      string `json:"os"`
+			Arch    string `json:"arch"`
+			Install string `json:"install"`
+		}
+		if json.Unmarshal(info, &sys) == nil && sys.OS != "" {
+			_, err = s.db.Exec(`UPDATE nodes SET os = ?, arch = ?, install = ? WHERE name = ?`, sys.OS, sys.Arch, sys.Install, name)
+		}
 		return err
 	}
 	_, err := s.db.Exec(`UPDATE nodes SET online = 0 WHERE name = ?`, name)
@@ -260,7 +286,7 @@ func (s *Store) setNodeStatus(name string, online bool, info []byte) error {
 }
 
 func (s *Store) nodes() ([]NodeRow, error) {
-	rows, err := s.db.Query(`SELECT name, online, COALESCE(info, ''), last_seen, cert_expires FROM nodes ORDER BY name`)
+	rows, err := s.db.Query(`SELECT name, online, COALESCE(info, ''), last_seen, cert_expires, os, arch, install FROM nodes ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +296,7 @@ func (s *Store) nodes() ([]NodeRow, error) {
 		var n NodeRow
 		var info string
 		var seen, certExpires int64
-		if err := rows.Scan(&n.Name, &n.Online, &info, &seen, &certExpires); err != nil {
+		if err := rows.Scan(&n.Name, &n.Online, &info, &seen, &certExpires, &n.OS, &n.Arch, &n.Install); err != nil {
 			return nil, err
 		}
 		if info != "" {

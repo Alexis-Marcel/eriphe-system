@@ -62,8 +62,11 @@ var toolPresets = []toolPreset{
 
 // Page is where the preset's tile leads.
 func (p toolPreset) Page() string {
-	if p.Form == "drive" {
+	switch {
+	case p.Form == "drive":
 		return "/settings/drive"
+	case p.ID == "home-assistant":
+		return "/settings/home-assistant" // both ways: its tools, and its voice (web_homeassistant.go)
 	}
 	return "/settings/tools/new?preset=" + p.ID
 }

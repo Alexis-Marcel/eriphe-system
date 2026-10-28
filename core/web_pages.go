@@ -386,8 +386,9 @@ type machineView struct {
 	Active   int
 	AlwaysOn bool   // the tools run here
 	Version  string // its eriphe-node's
-	Latest   string // eriphe-node's latest version, when this one is behind
-	Commands []updateCommand
+	System   string // its system in words, a key of web_text.go (system.*)
+	Arch     string
+	Update   updateRow // where its update stands (web_updates.go)
 }
 
 func (w *web) handleMachines(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -396,65 +397,59 @@ func (w *web) handleMachines(rw http.ResponseWriter, r *http.Request, s *session
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	updates := w.updatesData(nodes)
 	var out []machineView
 	var plain []string
-	for _, n := range nodes {
+	for i, n := range nodes {
 		if n.CertExpires.IsZero() {
 			plain = append(plain, n.Name)
 		}
 		info := parseInfo(n)
 		active, _ := w.c.store.activeCount(n.Name)
 		m := machineView{NodeRow: n, CPUs: info.CPUs, Memory: info.Memory, Runtimes: info.Runtimes,
-			Labels: info.Labels, Active: active, AlwaysOn: info.AlwaysOn, Version: info.Version}
-		if _, p := w.c.updatePolicy("node:" + n.Name); p != updateNever && w.c.updates.behind("eriphe-node", info.Version) {
-			m.Latest, m.Commands = w.c.updates.version("eriphe-node"), updateCommands(info.Install)
-		}
+			Labels: info.Labels, Active: active, AlwaysOn: info.AlwaysOn, Version: info.Version,
+			System: systemKey(nodeInstall(n, info), n.OS), Arch: n.Arch, Update: updates.Rows[i+1]}
 		out = append(out, m)
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.machines", Nav: "settings", Tab: "machines",
-		Data: machinesData{Nodes: out, Remote: w.remoteCoreURL(), Voice: w.c.store.get(voiceTokenKey) != "",
-			CAHash: w.c.caHash(), TLSOnly: w.c.nodesTLSOnly(), Plain: strings.Join(plain, ", "),
-			Updates: w.updatesData(nodes)}})
+		Data: machinesData{Nodes: out, Remote: w.remoteCoreURL(), CAHash: w.c.caHash(), TLSOnly: w.c.nodesTLSOnly(),
+			Plain: strings.Join(plain, ", "), Updates: updates}})
+}
+
+// systemKey names a machine's system in words, from how it was installed
+// and the system its eriphe-node runs on: on a Mac, the node runs on macOS
+// itself with Apple's container, or in Lima's Linux VM; on Windows, in WSL;
+// installed by hand on Linux, it is a compose project of one's own (a NAS).
+// Empty while unknown (a machine that never reported it).
+func systemKey(install, goos string) string {
+	switch {
+	case install == "macos" && goos == "darwin":
+		return "system.macos-container"
+	case install == "macos":
+		return "system.macos-lima"
+	case install == "windows":
+		return "system.windows"
+	case install == "linux":
+		return "system.linux"
+	case goos == "linux":
+		return "system.compose"
+	case goos == "darwin":
+		return "system.darwin"
+	case goos == "windows":
+		return "system.windows-native"
+	}
+	return ""
 }
 
 type machinesData struct {
 	Nodes  []machineView
 	Remote string // eriphe-core's API on the tailnet, when remote access is ready
-	Voice  bool   // Home Assistant has a token (voice.go)
 	// TLS for machines (machine_tls.go): the CA's hash, whether the plain
 	// path is closed, and the machines still without their certificate.
 	CAHash  string
 	TLSOnly bool
 	Plain   string
 	Updates updatesData // web_updates.go
-}
-
-// handleNodesTLS closes or opens the plain path for machines.
-func (w *web) handleNodesTLS(rw http.ResponseWriter, r *http.Request, s *session) {
-	on := r.PostFormValue("tls_only") == "1"
-	if err := w.c.setNodesTLSOnly(on); err != nil {
-		w.toast(rw, err.Error(), false)
-		return
-	}
-	log.Printf("web: machines over TLS only: %t", on)
-	rw.Header().Set("HX-Refresh", "true")
-	rw.WriteHeader(http.StatusOK)
-}
-
-type voiceTokenView struct {
-	Token string
-	Core  string
-}
-
-// handleVoiceToken makes Home Assistant's token, shown once; a new one
-// replaces the previous one.
-func (w *web) handleVoiceToken(rw http.ResponseWriter, r *http.Request, s *session) {
-	tok, err := w.c.newVoiceToken()
-	if err != nil {
-		w.toast(rw, tr(w.lang(r), "err.internal"), false)
-		return
-	}
-	w.render(rw, r, s, "settings", "voice-token", page{Data: voiceTokenView{Token: tok, Core: w.coreURL(r)}})
 }
 
 type joinView struct {

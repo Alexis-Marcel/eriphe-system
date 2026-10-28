@@ -30,14 +30,17 @@ import (
 // same way, in its own root (node/update.go). In both places, the file
 // "updater" says there is one, and the version it is pinned to.
 //
-// When is the user's choice, for all machines and for each one: tell me
-// (the workspace says a new version is out, the default), automatically at
-// night, or never.
+// The workspace always says when a new version is out; one switch, for all
+// machines, lets them update by themselves at night (off by default).
+// Going back to the version before, or staying on one, is the install
+// command's (--rollback, --version): the request "rollback" stays for the
+// API and the tests.
 
 const (
-	updateNotify = "notify"
-	updateNight  = "night"
-	updateNever  = "never"
+	updateNightKey = "update_night" // "1": the machines update at night
+	// updateAllKey holds when "Update all" was asked while eriphe-core was
+	// behind: the nodes follow once it runs the latest version.
+	updateAllKey = "update_all"
 
 	coreMachine = "core" // eriphe-core's machine; a node is "node:<name>"
 
@@ -46,8 +49,6 @@ const (
 
 	requestTTL = 24 * time.Hour // a request not done by then is dropped
 )
-
-var updatePolicies = []string{updateNotify, updateNight, updateNever}
 
 var (
 	errNoUpdater = errors.New("update.noupdater")
@@ -95,44 +96,81 @@ type nodeUpdate struct {
 	Auto   bool   `json:"auto,omitempty"`
 }
 
-func validPolicy(p string) bool {
-	for _, q := range updatePolicies {
-		if p == q {
-			return true
-		}
-	}
-	return false
-}
+// nightUpdates tells whether the machines update by themselves at night.
+func (c *core) nightUpdates() bool { return c.store.get(updateNightKey) == "1" }
 
-// updatePolicy is a machine's own choice (empty: as all machines) and the
-// one that applies.
-func (c *core) updatePolicy(machine string) (own, eff string) {
-	own = c.store.get("update_policy:" + machine)
-	eff = own
-	if eff == "" {
-		eff = c.store.get("update_policy")
-	}
-	if !validPolicy(eff) {
-		eff = updateNotify
-	}
-	return own, eff
-}
-
-// setUpdatePolicy sets the choice for all machines (machine empty) or one;
-// for one, an empty policy goes back to the choice for all.
-func (c *core) setUpdatePolicy(machine, p string) error {
-	if p != "" && !validPolicy(p) || p == "" && machine == "" {
-		return fmt.Errorf("unknown update policy %q", p)
-	}
-	key := "update_policy"
-	if machine != "" {
-		key += ":" + machine
-	}
-	if p == "" {
-		_, err := c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, key)
+func (c *core) setNightUpdates(on bool) error {
+	if !on {
+		_, err := c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, updateNightKey)
 		return err
 	}
-	return c.store.set(key, p)
+	return c.store.set(updateNightKey, "1")
+}
+
+// manualUpdate is the one command that updates a machine by hand, for how
+// it was installed: its install command again (which also gives it an
+// updater), or the compose project's pull for one made by hand.
+func manualUpdate(install string) updateCommand {
+	return updateCommands(install)[0]
+}
+
+// updateAll asks every machine that is behind to update, eriphe-core's
+// first: while it is behind, only it is asked, and the nodes follow once it
+// runs the latest version (followUpdateAll). It says how many were asked.
+func (c *core) updateAll() (int, error) {
+	if c.updates.behind("eriphe-core", version) {
+		if c.pendingUpdate(coreMachine) == nil {
+			if _, err := c.requestUpdate(coreMachine, "update", false); err != nil {
+				return 0, err
+			}
+		}
+		return 1, c.store.set(updateAllKey, time.Now().UTC().Format(time.RFC3339))
+	}
+	return c.updateNodes(), nil
+}
+
+// updateNodes asks the nodes that run another version than eriphe-core's,
+// and have an updater, to update. A node at work waits for its tasks.
+func (c *core) updateNodes() int {
+	nodes, err := c.store.nodes()
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, row := range nodes {
+		info := parseInfo(row)
+		m := "node:" + row.Name
+		if !info.Update.Updater || c.pendingUpdate(m) != nil ||
+			!c.updates.behind("eriphe-node", info.Version) && sameVersion(info.Version, version) {
+			continue
+		}
+		if _, err := c.requestUpdate(m, "update", false); err != nil {
+			log.Printf("update: %s not asked: %v", m, err)
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// followUpdateAll asks the nodes once eriphe-core, asked first by "Update
+// all", runs the latest version; it gives up after a day.
+func (c *core) followUpdateAll() {
+	at := c.store.get(updateAllKey)
+	if at == "" {
+		return
+	}
+	t, err := time.Parse(time.RFC3339, at)
+	switch {
+	case err != nil || time.Since(t) > requestTTL:
+		log.Printf("update: the nodes were not updated: eriphe-core did not update within a day")
+	case c.updates.behind("eriphe-core", version) || c.pendingUpdate(coreMachine) != nil:
+		return
+	default:
+		log.Printf("update: eriphe-core is up to date, the nodes follow")
+		c.updateNodes()
+	}
+	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, updateAllKey)
 }
 
 // keyValues reads a file of key=value lines; nil if it is missing.
@@ -347,11 +385,14 @@ func (c *core) schedulable(nodes []NodeRow) []NodeRow {
 	return out
 }
 
-// autoUpdates runs at night for the machines set to update automatically:
+// autoUpdates runs at night once the machines update automatically:
 // eriphe-core's machine first; a node once eriphe-core runs the latest
 // version and the node runs another, and none of its tasks is at work.
 // Each machine is tried once a night.
 func (c *core) autoUpdates(now time.Time) {
+	if !c.nightUpdates() {
+		return
+	}
 	loc := c.conf().location
 	if loc == nil {
 		loc = time.Local
@@ -362,8 +403,7 @@ func (c *core) autoUpdates(now time.Time) {
 	}
 	night := local.Format("2006-01-02")
 	try := func(machine string) {
-		if _, eff := c.updatePolicy(machine); eff != updateNight || c.pendingUpdate(machine) != nil ||
-			c.store.get("update_auto:"+machine) == night {
+		if c.pendingUpdate(machine) != nil || c.store.get("update_auto:"+machine) == night {
 			return
 		}
 		c.store.set("update_auto:"+machine, night)
