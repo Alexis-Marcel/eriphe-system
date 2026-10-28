@@ -38,6 +38,8 @@ type pool struct {
 	dialLocal func(ctx context.Context, name string, run json.RawMessage) (mcp.Transport, error)
 	// http is the client for remote servers and their authorization servers.
 	http *http.Client
+	// appToken is the GitHub App's token for a server on it (github_app.go).
+	appToken func(ctx context.Context) (string, error)
 
 	mu      sync.Mutex
 	ctx     context.Context // set by run; servers added later start in it
@@ -165,6 +167,14 @@ func (p *pool) dialServer(ctx context.Context, u *upstream) (mcp.Transport, erro
 			return nil, err
 		}
 		t.HTTPClient = &http.Client{Transport: bearerTransport{token: tok, base: http.DefaultTransport}}
+	case "github-app":
+		if p.appToken == nil {
+			return nil, errors.New("no GitHub App here")
+		}
+		if _, err := p.appToken(ctx); err != nil {
+			return nil, err
+		}
+		t.HTTPClient = &http.Client{Transport: tokenTransport{source: p.appToken, base: http.DefaultTransport}}
 	case "oauth":
 		h, err := p.oauthHandler(u)
 		if err != nil {
