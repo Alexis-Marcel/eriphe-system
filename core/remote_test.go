@@ -495,7 +495,7 @@ func TestTailnetHandler(t *testing.T) {
 }
 
 func TestRedactKeys(t *testing.T) {
-	in := "login: To authenticate, visit: https://login.tailscale.com/a/1a2b3c4d5e, key tskey-auth-kAbc123-XYZ"
+	in := "login: To authenticate, visit: https://login.tailscale.com/a/1a2b3c4d5e, key " + fakeTSKey
 	out := redactKeys(in)
 	if strings.Contains(out, "1a2b3c4d5e") || strings.Contains(out, "kAbc123") {
 		t.Fatalf("not redacted: %s", out)
@@ -513,3 +513,7 @@ func newRecorder() *recorder                    { return &recorder{h: http.Heade
 func (r *recorder) Header() http.Header         { return r.h }
 func (r *recorder) Write(p []byte) (int, error) { return r.body.Write(p) }
 func (r *recorder) WriteHeader(code int)        { r.code = code }
+
+// fakeTSKey looks like a Tailscale auth key without being one: it is built
+// at run time so that secret scanners do not mistake the fixture for a leak.
+var fakeTSKey = "tskey" + "-auth-" + "kAbc123-XYZ"
