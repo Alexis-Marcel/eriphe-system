@@ -219,8 +219,9 @@ type updateCommand struct {
 }
 
 // updateCommands are the commands that update a machine installed one way:
-// the installer run again (it keeps its options), or the compose project
-// pulled again. Installed by hand, the machine gets all of them.
+// the installer run again (it keeps its options), the Eriphe container's
+// launcher (docker: install/eriphe-launcher), or the compose project pulled
+// again. Installed by hand, the machine gets all of them.
 func updateCommands(install string) []updateCommand {
 	unix := updateCommand{"update.unix", "curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s"}
 	windows := updateCommand{"update.windows", "irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex"}
@@ -230,6 +231,8 @@ func updateCommands(install string) []updateCommand {
 		return []updateCommand{unix}
 	case "windows":
 		return []updateCommand{windows}
+	case "docker":
+		return []updateCommand{{"update.docker", "docker exec eriphe eriphe-launcher update"}}
 	}
 	return []updateCommand{compose, unix, windows}
 }

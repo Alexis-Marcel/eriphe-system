@@ -171,6 +171,7 @@ func TestUpdateCommands(t *testing.T) {
 		"linux":   "curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s",
 		"macos":   "curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s",
 		"windows": "irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex",
+		"docker":  "docker exec eriphe eriphe-launcher update",
 	} {
 		if got := updateCommands(install); len(got) != 1 || got[0].Cmd != want {
 			t.Errorf("%s: %v", install, got)

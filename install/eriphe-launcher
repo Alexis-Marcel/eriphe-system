@@ -1,0 +1,459 @@
+#!/bin/sh
+# eriphe-launcher: Eriphe on a NAS or any Linux with Docker, from one
+# container (ghcr.io/alexis-marcel/eriphe, install/README.md, One container):
+#
+#   docker run -d --name eriphe --restart unless-stopped \
+#     -v /var/run/docker.sock:/var/run/docker.sock \
+#     -v /mnt/user/appdata/eriphe:/data \
+#     ghcr.io/alexis-marcel/eriphe
+#
+# It creates and keeps running the containers install.sh makes on a Linux
+# host, with install.sh's own functions (sourced): eriphe-core in core mode,
+# with no Docker access; eriphe-node, which reaches Docker only through the
+# socket proxy; the proxy; the task network. Their data is under /data, given
+# to them at its path on the host, which it reads from its own container.
+# It listens on no port and runs nothing else; it is their updater: it
+# applies eriphe-core's and the node's update requests as install.sh's
+# updater does, then updates itself.
+#
+#   eriphe-launcher run                 the container's command
+#   eriphe-launcher update              update now, as the workspace's Update
+#   eriphe-launcher rollback            back to the version before the last update
+#   eriphe-launcher uninstall [--data]  remove the containers it made (and the data)
+#   eriphe-launcher swap ID             (its own) replace container ID by one of this image
+set -eu
+
+ERIPHE_INSTALL_LIB=1
+# shellcheck source=install/install.sh
+. "${ERIPHE_LAUNCHER_LIB:-/usr/local/lib/eriphe/install.sh}"
+
+# What eriphe-launcher sees: /data, its compose project in /data/launcher.
+DATA=${ERIPHE_LAUNCHER_DATA:-/data}
+CONF=$DATA/launcher
+SOCK=/var/run/docker.sock
+LAUNCHER_REPO=${ERIPHE_LAUNCHER_REPO:-$REGISTRY/eriphe} # another for a test registry
+SWAP=eriphe-launcher-swap
+OS=Linux NATIVE='' INSTALL=docker
+MOUNTINFO=${ERIPHE_MOUNTINFO:-/proc/self/mountinfo}
+
+log() { printf '%s eriphe-launcher: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >&2; }
+dc() { docker compose -p eriphe --project-directory "$CONF" -f "$CONF/compose.yaml" --env-file "$CONF/.env" "$@"; }
+
+# default_name: the Docker host's name (the container's is its id).
+default_name() {
+	docker info -f '{{.Name}}' 2>/dev/null | cut -d . -f 1 | tr 'A-Z_' 'a-z-' | tr -cd 'a-z0-9-' | sed 's/^-*//; s/-*$//'
+}
+
+mount_source() {
+	docker inspect -f '{{range .Mounts}}{{if eq .Destination "'"$2"'"}}{{.Source}}{{end}}{{end}}' "$1"
+}
+
+# discover: this container (SELF, its image SELF_IMAGE under SELF_REF) and
+# the host paths of /data (HOST_DATA) and of the socket (HOST_SOCK).
+discover() {
+	id=$(sed -n 's|.*/containers/\([0-9a-f]\{64\}\)/.*|\1|p' "$MOUNTINFO" 2>/dev/null | head -n 1)
+	[ -n "$id" ] || id=$(hostname)
+	SELF=$(docker inspect -f '{{.Id}}' "$id" 2>/dev/null) ||
+		die "cannot see this container through Docker: give it the socket, -v $SOCK:$SOCK"
+	SELF_NAME=$(docker inspect -f '{{.Name}}' "$SELF" | sed 's|^/||')
+	SELF_IMAGE=$(docker inspect -f '{{.Image}}' "$SELF")
+	SELF_REF=$(docker inspect -f '{{.Config.Image}}' "$SELF")
+	HOST_SOCK=$(mount_source "$SELF" "$SOCK")
+	[ -n "$HOST_SOCK" ] || die "mount the Docker socket: -v $SOCK:$SOCK"
+	HOST_DATA=$(mount_source "$SELF" "$DATA")
+	[ -n "$HOST_DATA" ] || die "mount a folder of the host at $DATA, for Eriphe's data: -v /mnt/user/appdata/eriphe:$DATA"
+	case $HOST_DATA in
+	/ | *[!A-Za-z0-9/._-]*) die "$HOST_DATA: Eriphe's data folder is not / and has only letters, digits, /, ., _ or -" ;;
+	/*) ;;
+	*) die "$HOST_DATA is not an absolute path" ;;
+	esac
+}
+
+# ref_repo REF: REF without its tag or digest.
+ref_repo() {
+	r=${1%@*}
+	case ${r##*/} in
+	*:*) r=${r%:*} ;;
+	esac
+	printf '%s' "$r"
+}
+
+# ref_tag REF: its tag, latest when it has none.
+ref_tag() {
+	r=${1%@*}
+	case ${r##*/} in
+	*:*) printf '%s' "${r##*:}" ;;
+	*) printf latest ;;
+	esac
+}
+
+# version_tag VERSION: the images' tag of a build, as install.sh's updater:
+# X.Y.Z, sha-<commit> for a build of main; nothing for a local one.
+version_tag() {
+	case $1 in
+	*-dev+*) t=sha-${1##*+} ;;
+	*+*) t= ;;
+	*) t=$1 ;;
+	esac
+	printf '%s' "$t" | grep -Eq '^(sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$' && printf '%s' "$t"
+}
+
+# settings: install.sh's options, from the environment. They are the
+# container's settings: what is not given is not kept from a run before.
+settings() {
+	mode=${ERIPHE_MODE:-core}
+	saved=$(sed -n 's/^mode=//p' "$CONF/install.conf" 2>/dev/null || true)
+	if [ -n "$saved" ] && [ "$saved" != "$mode" ]; then
+		die "$HOST_DATA holds a $saved-mode install: ERIPHE_MODE=$mode needs another data folder (or eriphe-launcher uninstall --data first)"
+	fi
+	set --
+	case $mode in
+	core)
+		[ -z "${ERIPHE_CORE:-}" ] || die "ERIPHE_CORE is for ERIPHE_MODE=node: in core mode eriphe-core runs here"
+		set -- --core-mode
+		;;
+	node)
+		[ -n "${ERIPHE_CORE:-}" ] || die "ERIPHE_MODE=node joins an eriphe-core: give its address in ERIPHE_CORE (http://192.0.2.10:8800)"
+		[ -f "$DATA/node/node.json" ] || [ -n "${ERIPHE_JOIN_TOKEN:-}" ] ||
+			die "a new node needs ERIPHE_JOIN_TOKEN: the workspace's Connect a device gives it"
+		;;
+	*) die "ERIPHE_MODE is core or node, not $mode" ;;
+	esac
+	# The version: ERIPHE_VERSION, or this image's tag (eriphe:edge follows main).
+	pin=${ERIPHE_VERSION:-}
+	if [ -z "$pin" ]; then
+		pin=$(ref_tag "$SELF_REF")
+		printf '%s' "$pin" | grep -Eq '^(latest|edge|sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+(\.[0-9]+(-[0-9A-Za-z.-]+)?)?)$' || pin=latest
+	fi
+	set -- "$@" --version "$pin" --labels "${ERIPHE_NODE_LABELS:-}"
+	if [ -n "${ERIPHE_SHARES:-}" ]; then
+		set -- "$@" --share "$ERIPHE_SHARES"
+	else
+		set -- "$@" --no-share
+	fi
+	DATA=$HOST_DATA # check_shares refuses Eriphe's own folder as a share
+	parse_args "$@"
+	DATA=${CONF%/launcher}
+	WEB_PORT=${ERIPHE_WEB_PORT:-8443} API_PORT=${ERIPHE_API_PORT:-8800}
+	for p in "$WEB_PORT" "$API_PORT"; do
+		printf '%s' "$p" | grep -Eq '^[1-9][0-9]{0,4}$' && [ "$p" -le 65535 ] || die "a port is 1 to 65535, not $p"
+	done
+	[ "$WEB_PORT" != "$API_PORT" ] || die "ERIPHE_WEB_PORT and ERIPHE_API_PORT are the same port"
+}
+
+# check_places: each share is a folder of the host, which a short-lived
+# container of this image tells (the launcher does not see them).
+check_places() {
+	share_paths | sed 's/:ro$//' | while IFS= read -r p; do
+		[ -n "$p" ] || continue
+		docker run --rm --network none --entrypoint true \
+			--mount "type=bind,src=$p,dst=/place,readonly" "$SELF_IMAGE" >/dev/null 2>&1 ||
+			die "ERIPHE_SHARES: $p is not a folder of this machine"
+	done
+}
+
+# lan_address: the host's address on the LAN, from a short-lived container
+# on the host's network (this one has none of its own to tell).
+lan_address() {
+	if [ -n "${ERIPHE_ADDRESS:-}" ]; then
+		printf '%s' "$ERIPHE_ADDRESS"
+		return
+	fi
+	docker run --rm --network host --entrypoint ip "$SELF_IMAGE" route get 1.1.1.1 2>/dev/null |
+		sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n 1
+}
+
+uninstalled() { [ -f "$CONF/uninstalled" ]; }
+
+idle() {
+	while :; do
+		sleep 3600 &
+		wait $! || true
+	done
+}
+
+# run: the container's command. The stack as install.sh would make it, the
+# images pulled only when missing (an update is the updater's), then the
+# updater's loop.
+run() {
+	trap 'exit 0' TERM INT
+	discover
+	log "${ERIPHE_LAUNCHER_VERSION:-dev}, data in $HOST_DATA"
+	if uninstalled; then
+		log "Eriphe was uninstalled from here (eriphe-launcher uninstall): remove this container, or delete $HOST_DATA/launcher/uninstalled to install it again"
+		idle
+	fi
+	settings
+	check_places
+	mkdir -p "$CONF"
+	chmod 700 "$CONF"
+	INFO=$(host_docker)
+	settle
+	version=$(info docker_version)
+	isolated=1
+	if [ "${version%%.*}" -lt 28 ] 2>/dev/null; then
+		warn "Docker $version is older than 28: the tasks' network cannot hide this machine's own services (update Docker)"
+		isolated=0
+	fi
+	PULL=missing UPDATE_BY=loop
+	out=$(host_up "$(info docker_gid)" "$isolated")
+	summary "$out"
+	loop
+}
+
+summary() {
+	addr=$(lan_address)
+	addr=${addr:-<this machine>}
+	say ""
+	if [ "$MODE" = core ]; then
+		code=$(printf '%s\n' "$1" | sed -n 's/^setup_code=//p')
+		say "eriphe-core runs here, with node $NAME."
+		say "  Workspace: https://$addr:$WEB_PORT"
+		if [ -n "$code" ]; then
+			say "  First sign-in: open https://$addr:$WEB_PORT/setup and give the setup code $code"
+			say "  (it creates your password; the wizard that follows names your assistant and connects its AI account)."
+		else
+			say "  Already set up: sign in with your password."
+		fi
+		say "  Other devices join it at http://$addr:$API_PORT (Connect a device, in the workspace)."
+	else
+		say "eriphe-node runs here as $NAME and is connected to eriphe-core."
+	fi
+	if [ "$PIN" = edge ]; then
+		say "On edge: it follows main, not the releases (ERIPHE_VERSION=latest follows the releases)."
+	elif [ -n "$PIN" ]; then
+		say "Pinned to $PIN: it stays on that version (ERIPHE_VERSION=latest follows the releases)."
+	else
+		say "It updates itself when you click Update in the workspace (Settings, Devices)."
+	fi
+	if [ -n "$SHARES" ]; then
+		say "  Places shared with Eriphe: $(printf '%s' "$SHARES" | sed 's/=[^,]*//g; s/,/, /g') (Settings > Folders, in the workspace)."
+	else
+		say "  No place shared with Eriphe: set ERIPHE_SHARES (shares=/mnt/user) to give it folders."
+	fi
+	say "Logs: docker logs eriphe-core, docker logs eriphe-node, and this container's for the updates."
+}
+
+# loop: the updater, as install.sh's systemd units run it: when a request
+# is dropped.
+loop() {
+	log "waiting for update requests"
+	while :; do
+		tick
+		sleep "${ERIPHE_LAUNCHER_POLL:-5}" &
+		wait $! || true
+	done
+}
+
+# tick: the requests waiting, if any, then eriphe-launcher itself, last.
+tick() {
+	for t in core node; do
+		if [ -f "$DATA/$t/update-requested" ]; then
+			apply
+			[ -z "$SELF_TO" ] || self_update "$SELF_TO"
+			return
+		fi
+	done
+}
+
+status_of() { sed -n "s/^$2=//p" "$DATA/$1/update-status" 2>/dev/null | head -n 1; }
+
+# apply [rollback]: install.sh's updater on the requests waiting (or a
+# rollback), one at a time. SELF_TO is then the build eriphe-launcher is to
+# update itself to, once the machine's update went well: the version it
+# runs now (self_update, after).
+apply() {
+	SELF_TO=
+	exec 8>"$CONF/apply.lock"
+	! command -v flock >/dev/null 2>&1 || flock 8
+	before="core=$(status_of core id) node=$(status_of node id)"
+	sh "$CONF/update.sh" "$@" || log "the updater failed"
+	for t in core node; do
+		id=$(status_of "$t" id)
+		case "$before " in
+		*"$t=$id "*) continue ;; # not one of this run
+		esac
+		case $(status_of "$t" action):$(status_of "$t" outcome) in
+		update:ok | update:current | update:pinned) SELF_TO=$(status_of "$t" to) ;;
+		esac
+	done
+	exec 8>&-
+}
+
+# self_update VERSION: this image of the build VERSION, then this container
+# replaced by one of it (a container cannot recreate itself: a short-lived
+# one of the new image does, eriphe-launcher swap). Never newer than what it
+# runs, and only an official image (a local build stays as it is).
+self_update() {
+	tag=$(version_tag "$1") || return 0
+	if [ "$(ref_repo "$SELF_REF")" != "$LAUNCHER_REPO" ]; then
+		log "$SELF_REF is not $LAUNCHER_REPO: not updated"
+		return 0
+	fi
+	src=$LAUNCHER_REPO:$tag
+	if ! out=$(docker pull -q "$src" 2>&1); then
+		log "could not pull $src: $(printf '%s' "$out" | tail -n 1)"
+		return 0
+	fi
+	new=$(docker image inspect -f '{{.Id}}' "$src")
+	if [ "$src" != "$SELF_REF" ]; then
+		docker tag "$src" "$SELF_REF"
+		docker image rm "$src" >/dev/null 2>&1 || true
+	fi
+	[ "$new" != "$SELF_IMAGE" ] || return 0
+	log "updating itself to $tag"
+	docker rm -f "$SWAP" >/dev/null 2>&1 || true
+	docker run -d --rm --name "$SWAP" --network none --label eriphe.launcher=swap \
+		-v "$HOST_SOCK:$SOCK" "$new" swap "$SELF" >/dev/null ||
+		log "could not start $SWAP"
+}
+
+api() {
+	curl -sS --fail-with-body --unix-socket "$SOCK" -H 'Content-Type: application/json' "$@"
+}
+
+# create_body INSPECT IMAGE_CONFIG: what POST /containers/create takes to
+# make the container of INSPECT again from the image now under its
+# reference: its own settings, not what came from its old image (watchtower
+# does the same).
+create_body() {
+	printf '%s' "$1" | jq --argjson img "$2" '
+		.Id[0:12] as $short |
+		.Config + {
+			Env: [(.Config.Env // [])[] | select(. as $e | ($img.Env // []) | index([$e]) | not)],
+			Labels: ((.Config.Labels // {}) | with_entries(select(.value != ($img.Labels // {})[.key]))),
+			HostConfig: .HostConfig,
+			NetworkingConfig: {EndpointsConfig: ((.NetworkSettings.Networks // {}) | map_values(
+				{IPAMConfig, Aliases: ((.Aliases // []) | map(select(startswith($short) | not)))}))}
+		}
+		| if .Hostname == $short then del(.Hostname) else . end
+		| if .Cmd == $img.Cmd then del(.Cmd) else . end
+		| if .Entrypoint == $img.Entrypoint then del(.Entrypoint) else . end
+		| if .WorkingDir == $img.WorkingDir then del(.WorkingDir) else . end'
+}
+
+# swap OLD: OLD stopped, the same container made again from the image now
+# under its reference, and OLD removed once the new one runs; OLD back if
+# not.
+swap() {
+	old=$1
+	j=$(api "http://docker/containers/$old/json") || die "no container $old"
+	name=$(printf '%s' "$j" | jq -r '.Name | ltrimstr("/")')
+	ref=$(printf '%s' "$j" | jq -r .Config.Image)
+	oldimg=$(printf '%s' "$j" | jq -r .Image)
+	img=$(api "http://docker/images/$oldimg/json" | jq -c '.Config // {}') || img='{}'
+	body=$(create_body "$j" "$img" | jq --arg ref "$ref" '.Image = $ref')
+	log "replacing $name"
+	docker stop -t 30 "$old" >/dev/null
+	docker rename "$old" "$name-previous"
+	new=
+	if out=$(api -X POST -d "$body" "http://docker/containers/create?name=$name" 2>&1) &&
+		new=$(printf '%s' "$out" | jq -r .Id) && docker start "$new" >/dev/null; then
+		sleep "${ERIPHE_SWAP_CHECK:-15}"
+		if [ "$(docker inspect -f '{{.State.Running}} {{.State.Restarting}}' "$new" 2>/dev/null)" = "true false" ]; then
+			docker rm "$old" >/dev/null
+			docker image rm "$oldimg" >/dev/null 2>&1 || true
+			log "$name replaced"
+			return 0
+		fi
+		out="the new $name does not stay up"
+	fi
+	log "could not replace $name ($(printf '%s' "$out" | tail -n 1)): back to the previous one"
+	[ -z "$new" ] || docker rm -f "$new" >/dev/null 2>&1 || true
+	docker rename "$name-previous" "$name"
+	docker start "$old" >/dev/null
+	return 1
+}
+
+# request ACTION TARGET CORE: a request of the machine itself, as
+# eriphe-core's (install/README.md, The machines update themselves).
+request() {
+	printf 'id=local-%s\naction=%s\ncore=%s\nauto=0\n' "$(date +%s)" "$1" "$3" >"$DATA/$2/update-requested"
+}
+
+# local_update ACTION: an update (eriphe-core's machine first, then its
+# node, on eriphe-core's build) or a rollback, now.
+local_update() {
+	[ -f "$CONF/update.sh" ] || die "Eriphe is not installed here yet: the container's first start does it"
+	uninstalled && die "Eriphe was uninstalled from here"
+	discover
+	MODE=$(sed -n 's/^mode=//p' "$CONF/install.conf")
+	main=node to=
+	[ "$MODE" != core ] || main=core
+	if [ "$1" = rollback ]; then
+		apply rollback
+	else
+		request update "$main" ""
+		apply
+		to=$SELF_TO
+		if [ "$main" = core ] && [ -n "$to" ]; then
+			request update node "$to"
+			apply
+			to=${SELF_TO:-$to}
+		fi
+	fi
+	for t in core node; do
+		[ -f "$DATA/$t/update-status" ] || continue
+		say "$t: $(status_of "$t" action) $(status_of "$t" outcome)$(m=$(status_of "$t" message) && [ -n "$m" ] && printf ' (%s)' "$m")"
+		say "  from $(status_of "$t" from) to $(status_of "$t" to)"
+	done
+	# Last: this container is replaced, which ends this command.
+	[ "$1" = rollback ] || [ -z "$to" ] || self_update "$to"
+}
+
+# uninstall [--data]: install.sh --uninstall's work on what this container
+# made; its data stays unless --data. The container is then stopped, kept
+# from starting again, for you to remove.
+uninstall() {
+	purge=
+	case ${1:-} in
+	--data) purge=1 ;;
+	'') ;;
+	*) die "uninstall takes --data, to remove the data too" ;;
+	esac
+	discover
+	if [ -f "$CONF/compose.yaml" ]; then
+		say "Removing the containers..."
+		dc down --remove-orphans >/dev/null 2>&1 || true
+	fi
+	ids=$(docker ps -aq --filter label=eriphe.task; docker ps -aq --filter label=eriphe.service)
+	# shellcheck disable=SC2086 # one argument per id
+	[ -z "$ids" ] || docker rm -f $ids >/dev/null
+	docker network rm eriphe-tasks eriphe-system eriphe-docker >/dev/null 2>&1 || true
+	docker volume rm eriphe-cache >/dev/null 2>&1 || true
+	for repo in ${PROXY_IMAGE%:*} $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core; do
+		refs=$(docker images --format '{{.Repository}}:{{.Tag}}' "$repo" | grep -v ':<none>$' || true)
+		# shellcheck disable=SC2086 # one argument per image
+		[ -z "$refs" ] || docker image rm $refs >/dev/null 2>&1 || true
+	done
+	if [ -n "$purge" ]; then
+		say "Removing Eriphe's data ($HOST_DATA)..."
+		find "$DATA" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+	fi
+	mkdir -p "$CONF"
+	echo "eriphe-launcher uninstall, $(date)" >"$CONF/uninstalled"
+	say "Eriphe is removed. Remove this container now: docker rm -f $SELF_NAME (Unraid: Docker, $SELF_NAME, Remove)."
+	[ -n "$purge" ] || say "Its data stays in $HOST_DATA: delete the folder to remove it too."
+	say "The node stays known to eriphe-core: Forget it on its card if it joined another machine."
+	docker update --restart no "$SELF" >/dev/null 2>&1 || true
+	docker stop -t 2 "$SELF" >/dev/null 2>&1 || true
+}
+
+# The tests (launcher_test.sh) source it for its functions.
+[ -z "${ERIPHE_LAUNCHER_SOURCED:-}" ] || return 0
+
+case ${1:-run} in
+run) run ;;
+update) local_update update ;;
+rollback) local_update rollback ;;
+uninstall)
+	shift
+	uninstall "$@"
+	;;
+swap)
+	[ $# -eq 2 ] || die "swap takes the container to replace"
+	swap "$2"
+	;;
+-h | --help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' ;;
+*) die "unknown command $1 (run, update, rollback, uninstall)" ;;
+esac

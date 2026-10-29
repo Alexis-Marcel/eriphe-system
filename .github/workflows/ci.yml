@@ -191,6 +191,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: sh install/lint.sh
+      - run: sh install/launcher_test.sh
       - run: sh install/install.sh --help
       - name: parse install.ps1
         shell: pwsh
@@ -206,6 +207,21 @@ jobs:
           $found = Invoke-ScriptAnalyzer -Path install/install.ps1 -Severity Error, Warning -ExcludeRule PSAvoidUsingWriteHost
           $found | Format-Table -AutoSize Severity, Line, RuleName, Message | Out-String -Width 240 | Write-Host
           if ($found | Where-Object Severity -eq Error) { exit 1 }
+
+  # ghcr.io/alexis-marcel/eriphe: eriphe-launcher, Eriphe from one container, with
+  # install.sh's functions (install/README.md, One container).
+  launcher-image:
+    needs: [version, install]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      image: eriphe
+      context: install
+      version: ${{ needs.version.outputs.version }}
+      tags: ${{ needs.version.outputs.tags }}
+      version-arg: true
 
   # The image tasks start from, and one image per agent the node injects into it
   # (worker/README.md).
@@ -344,7 +360,7 @@ jobs:
   # no other run.
   release:
     if: needs.version.outputs.release == 'true'
-    needs: [version, core-image, node-image, worker, mail-image, calendar-image, files-image, install, cli]
+    needs: [version, core-image, node-image, launcher-image, worker, mail-image, calendar-image, files-image, install, cli]
     runs-on: ubuntu-latest
     permissions:
       contents: write

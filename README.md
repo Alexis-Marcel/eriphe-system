@@ -50,6 +50,14 @@ On Windows, in an administrator PowerShell:
 & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -CoreMode
 ```
 
+On a NAS or any Linux where Docker runs, start one container instead (on Unraid, its template
+`unraid/eriphe.xml`); it makes and updates Eriphe's own containers next to it:
+
+```sh
+docker run -d --name eriphe --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /mnt/user/appdata/eriphe:/data ghcr.io/alexis-marcel/eriphe
+```
+
 The installer brings its own container runtime. It ends with the workspace's address and a setup
 code; the workspace then walks you through the AI account and connecting other devices. The full
 guide, options and troubleshooting: [install/README.md](install/README.md).
@@ -107,7 +115,8 @@ and is responsible for using it within their provider's terms.
 | `core/` | eriphe-core: control plane, brain, workspace, API, memory |
 | `node/` | eriphe-node: runs tasks as containers on a machine |
 | `worker/` | the images of tasks: `eriphe-base`, which task containers start from, and one image per agent the node injects into it |
-| `install/` | `install.sh` (Linux, macOS) and `install.ps1` (Windows) |
+| `install/` | `install.sh` (Linux, macOS), `install.ps1` (Windows), and `eriphe-launcher`, the one-container install (`ghcr.io/alexis-marcel/eriphe`) |
+| `unraid/` | the Unraid template of that container |
 | `cli/` | `eriphe`: terminal UI and commands |
 | `servers/` | MCP servers: `mail`, `calendar`, `files` |
 | `ha/` | Home Assistant conversation agent |

@@ -370,6 +370,7 @@ func TestMachineSystem(t *testing.T) {
 		{"macos", "linux", "system.macos-lima"},
 		{"windows", "linux", "system.windows"},
 		{"linux", "linux", "system.linux"},
+		{"docker", "linux", "system.docker"},
 		{"", "linux", "system.compose"},
 		{"", "darwin", "system.darwin"},
 		{"", "", ""},

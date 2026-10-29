@@ -43,4 +43,10 @@ awk '/^cat > \/usr\/local\/bin\/eriphe-update <<.EOF.$/ { f = 1; next } f && /^E
 }
 shellcheck -s sh "$d/eriphe-update"
 sh -n "$d/eriphe-update"
-echo "install.sh, its ${n} host scripts, the ${w} it writes and install.ps1's updater are clean"
+# The launcher of the one-container install, which sources install.sh, and its tests.
+(
+	cd "$(dirname "$0")/.."
+	shellcheck -s sh -x install/eriphe-launcher install/launcher_test.sh
+	sh -n install/eriphe-launcher
+)
+echo "install.sh, its ${n} host scripts, the ${w} it writes, install.ps1's updater and eriphe-launcher are clean"

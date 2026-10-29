@@ -1,0 +1,4 @@
+# The launcher's image (install/Dockerfile) takes these two only.
+*
+!install.sh
+!eriphe-launcher

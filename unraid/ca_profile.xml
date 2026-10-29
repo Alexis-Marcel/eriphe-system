@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!-- Community Applications' profile of the repository: CA reads it at the root
+     of the repository it is given (unraid/README.md, Publishing). -->
+<CommunityApplications>
+  <Profile>Eriphe, a self-hosted personal assistant, installed from one container that creates and updates Eriphe's own containers. Support: GitHub issues of the project.</Profile>
+  <Icon>https://raw.githubusercontent.com/Alexis-Marcel/eriphe-system/main/core/web/static/icon-512.png</Icon>
+  <WebPage>https://github.com/Alexis-Marcel/eriphe-system</WebPage>
+</CommunityApplications>
