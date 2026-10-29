@@ -26,7 +26,7 @@ type Provider struct {
 
 // Agent is one choice the brain has for a task.
 type Agent struct {
-	Runtime  string `json:"runtime"`         // agent program in the worker image: claude-code, opencode, codex or acp
+	Runtime  string `json:"runtime"`         // agent program the node injects into the task: claude-code, opencode, codex, or acp (the image's own)
 	Provider string `json:"provider"`        // key of providers
 	Model    string `json:"model,omitempty"` // model name for the runtime (opencode: provider/model); empty for its default
 	Image    string `json:"image,omitempty"` // worker image; the node's default if empty

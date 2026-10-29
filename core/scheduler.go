@@ -35,17 +35,20 @@ func (p placement) String() string {
 
 // nodeInfo is what a node reports about itself (GET /v1/node).
 type nodeInfo struct {
-	CPUs     int         `json:"cpus"`
-	Memory   int64       `json:"memory_bytes"`
-	Image    string      `json:"image"` // its default worker image
-	Images   []string    `json:"images"`
-	Runtimes []string    `json:"runtimes"`
-	Labels   []string    `json:"labels"`
-	Services bool        `json:"services"`  // it runs local MCP servers
-	AlwaysOn bool        `json:"always_on"` // it never sleeps: the tools go there first
-	Version  string      `json:"version"`   // eriphe-node's; empty from an older one
-	Install  string      `json:"install"`   // how it was installed: linux, macos, windows, or empty (by hand)
-	Update   updaterInfo `json:"update"`    // its updater, from the installer (machine_updates.go)
+	CPUs     int      `json:"cpus"`
+	Memory   int64    `json:"memory_bytes"`
+	Image    string   `json:"image"` // its default worker image
+	Images   []string `json:"images"`
+	Runtimes []string `json:"runtimes"`
+	// The runtimes whose agent the node has unpacked: their tasks start at
+	// once (node/inject.go). None from an older node.
+	AgentsReady []string    `json:"agents_ready"`
+	Labels      []string    `json:"labels"`
+	Services    bool        `json:"services"`  // it runs local MCP servers
+	AlwaysOn    bool        `json:"always_on"` // it never sleeps: the tools go there first
+	Version     string      `json:"version"`   // eriphe-node's; empty from an older one
+	Install     string      `json:"install"`   // how it was installed: linux, macos, windows, or empty (by hand)
+	Update      updaterInfo `json:"update"`    // its updater, from the installer (machine_updates.go)
 	// The roots it shares folders from (node/shares.go); none from an older one.
 	Shares []nodeShare `json:"shares"`
 }
@@ -66,11 +69,12 @@ func (e *waitingError) Error() string { return e.reason }
 // online nodes that offer the runtime and carry every needed label. Each one
 // left then scores: +1 per CPU if the task prefers cpu, +1 per GiB of RAM if
 // it prefers memory, +8 per preferred label it carries, +2 if the task's
-// image is already there, and -4 per active task. The highest score wins;
-// ties go to the first name.
+// image is already there, +2 if its agent is unpacked there, and -4 per
+// active task. The highest score wins; ties go to the first name.
 const (
 	scoreLabel  = 8
 	scoreImage  = 2
+	scoreAgent  = 2
 	scoreActive = -4
 )
 
@@ -142,6 +146,9 @@ func score(info nodeInfo, p placement, load int) int {
 	}
 	if image != "" && slices.ContainsFunc(info.Images, func(i string) bool { return sameImage(i, image) }) {
 		s += scoreImage
+	}
+	if p.Runtime != "" && slices.Contains(info.AgentsReady, p.Runtime) {
+		s += scoreAgent
 	}
 	return s
 }
