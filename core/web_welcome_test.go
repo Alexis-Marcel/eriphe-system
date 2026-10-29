@@ -138,7 +138,8 @@ func TestWebWelcomeSkip(t *testing.T) {
 	if code, _, h := tw.do("POST", "/welcome/skip", url.Values{"csrf": {csrf}}, nil); code != http.StatusSeeOther || h.Get("Location") != "/" {
 		t.Fatalf("skip: %d %s", code, h.Get("Location"))
 	}
-	if code, _, _ := tw.do("GET", "/", nil, nil); code != http.StatusOK {
+	// It says the assistant has no AI yet, and leads back to the wizard.
+	if code, body, _ := tw.do("GET", "/", nil, nil); code != http.StatusOK || !strings.Contains(body, "pas encore d&#39;IA") || !strings.Contains(body, `href="/welcome"`) {
 		t.Fatalf("after skip: %d", code)
 	}
 	if code, _, _ := tw.do("GET", "/welcome", nil, nil); code != http.StatusOK {
