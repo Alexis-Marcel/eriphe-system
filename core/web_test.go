@@ -557,6 +557,20 @@ func TestMarkdownEscapes(t *testing.T) {
 	}
 }
 
+// A message may link to a page of the workspace, in the same tab; other
+// local paths and protocol-relative links stay text.
+func TestMarkdownWorkspaceLinks(t *testing.T) {
+	got := string(markdown("[Connecter un appareil](/settings/devices#connect), [m](/memory), [x](//evil.example/settings), [y](/logout), [z](/settingsx)"))
+	if !strings.Contains(got, `<a href="/settings/devices#connect">Connecter un appareil</a>`) || !strings.Contains(got, `<a href="/memory">m</a>`) {
+		t.Errorf("workspace links missing: %s", got)
+	}
+	for _, bad := range []string{"evil.example", `href="/logout"`, `href="/settingsx"`} {
+		if strings.Contains(got, bad) {
+			t.Errorf("markdown kept %q: %s", bad, got)
+		}
+	}
+}
+
 func TestSelfSignedCertificate(t *testing.T) {
 	dir := t.TempDir()
 	names := certNames([]string{"eriphe.home"}, "http://10.1.2.3:8800")
