@@ -345,3 +345,15 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") document.querySelectorAll("details.kebab[open]").forEach((d) => { d.open = false; });
 });
+
+// A button with data-dialog opens that <dialog> as a modal; its form
+// method="dialog" closes it, and so does a click on the backdrop.
+document.addEventListener("click", (e) => {
+  const opener = e.target.closest("[data-dialog]");
+  if (opener) {
+    const d = document.getElementById(opener.dataset.dialog);
+    if (d && typeof d.showModal === "function") d.showModal();
+    return;
+  }
+  if (e.target instanceof HTMLDialogElement && e.target.classList.contains("modal")) e.target.close();
+});
