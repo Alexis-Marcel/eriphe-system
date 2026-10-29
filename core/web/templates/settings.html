@@ -299,7 +299,7 @@ is shown again. . is a joinWait. */}}
 {{define "join-wait-fragment"}}{{template "join-wait" .Data}}{{end}}
 {{define "join-wait"}}
 {{if .Connected}}
-<div class="join-wait" id="join-wait">
+<div class="join-wait join-done" id="join-wait">
   <div class="test-result test-ok" role="status">{{template "i-check"}}<p>{{tf "devices.connected" .Name}}</p></div>
   <span hidden hx-get="/settings/devices" hx-trigger="load" hx-select="#devices-grid" hx-target="#devices-grid" hx-swap="outerHTML"></span>
   <form method="dialog"><button class="btn btn-primary" type="submit">{{t "devices.done"}}</button></form>

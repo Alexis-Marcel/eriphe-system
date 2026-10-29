@@ -69,7 +69,7 @@ func TestWebJoinWait(t *testing.T) {
 	tw.c.store.setNodeStatus("desk", true, []byte(`{}`))
 	for lang, want := range map[string][]string{"fr": {"desk est connecté", "Terminer"}, "en": {"desk is connected", "Done"}} {
 		body := waiting(lang)
-		for _, w := range append(want, `hx-select="#devices-grid"`, `method="dialog"`) {
+		for _, w := range append(want, `hx-select="#devices-grid"`, `method="dialog"`, "join-done") {
 			if !strings.Contains(body, w) {
 				t.Fatalf("%s, connected: no %q in\n%s", lang, w, body)
 			}

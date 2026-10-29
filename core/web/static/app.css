@@ -842,6 +842,8 @@ details.advanced[open] .adv-title::after { transform: rotate(-135deg); }
 .join-wait { display: grid; gap: 12px; justify-items: start; margin-top: 16px; }
 .join-wait p { margin: 0; }
 .join-wait .test-result { justify-self: stretch; }
+/* Once the device is connected, "Done" is the only way out (Escape and the backdrop still close). */
+.modal:has(.join-done) > .modal-actions { display: none; }
 .test-err { background: var(--danger-soft); color: var(--danger); }
 .test-info { background: var(--accent-soft); color: var(--accent-text); }
 .test-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 500; }
