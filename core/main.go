@@ -83,6 +83,7 @@ func main() {
 	mux.Handle("POST /v1/messages", bearer(token, http.HandlerFunc(c.handlePostMessage)))
 	mux.Handle("GET /v1/messages", bearer(token, http.HandlerFunc(c.handleGetMessages)))
 	mux.Handle("POST /v1/voice", http.HandlerFunc(c.handleVoice)) // Home Assistant's own token (voice.go)
+	mux.Handle("GET /v1/voice", http.HandlerFunc(c.handleVoiceInfo))
 	c.taskRoutes(mux, token)
 	c.serverRoutes(mux, token)
 	c.catalogRoutes(mux, token)

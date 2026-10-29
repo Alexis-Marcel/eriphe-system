@@ -13,7 +13,7 @@ import (
 // node never reads a shared place itself. The Mac's file sharing (virtiofs)
 // shows every file of a mounted folder as the task's user's, and what the
 // task writes lands as the Mac user's, the one eriphe-node runs as: no group
-// to add, no owner to give, and Eriphe/ is a plain folder of the user's.
+// to add, no owner to give, and the results folder is a plain folder of the user's.
 //
 // iCloud Drive (and the File Provider clouds: Google Drive for desktop,
 // OneDrive, Dropbox) keep files "dataless" on a Mac that optimises its
@@ -25,7 +25,7 @@ import (
 // Finder).
 
 // appleFolderMounts are the container run arguments that mount a task's
-// folders: each read-only, its Eriphe/ subfolder writable when lent with
+// folders: each read-only, its results subfolder writable when lent with
 // Write.
 func (n *node) appleFolderMounts(t *Task) ([]string, error) {
 	ctx := context.Background()
@@ -65,10 +65,14 @@ func (n *node) appleFolderMounts(t *Task) ([]string, error) {
 		if !tf.Write {
 			continue
 		}
-		if err := n.appleResults(ctx, f.real); err != nil {
+		use, err := n.appleResults(ctx, f.real, tf)
+		if err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
-		if mount, err = appleMount(filepath.Join(f.real, resultsDir), dst+"/"+resultsDir, false); err != nil {
+		if cur := tf.resultsName(); use != cur {
+			resultsConflict(t, tf, use)
+		}
+		if mount, err = appleMount(filepath.Join(f.real, use), dst+"/"+tf.resultsName(), false); err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		args = append(args, mount...)

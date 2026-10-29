@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -119,7 +120,7 @@ func (w *web) routes() http.Handler {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(files, 24*time.Hour)))
 	// The worker's scope is where it is served from: the root.
 	mux.Handle("GET /sw.js", http.StripPrefix("/", files))
-	mux.Handle("GET /manifest.webmanifest", http.StripPrefix("/", files))
+	mux.HandleFunc("GET /manifest.webmanifest", handleManifest)
 	mux.HandleFunc("GET /health", func(rw http.ResponseWriter, _ *http.Request) { rw.Write([]byte("ok\n")) })
 
 	mux.HandleFunc("GET /setup", w.handleSetupPage)
@@ -194,6 +195,24 @@ var (
 // assetVersion changes with the content of the static files, so a browser
 // fetches the new stylesheet and scripts after each update instead of
 // keeping the cached ones.
+// handleManifest serves the app's manifest with the assistant's name: the
+// installed app is called as the user calls it.
+func handleManifest(rw http.ResponseWriter, _ *http.Request) {
+	raw, err := fs.ReadFile(webFS, "web/static/manifest.webmanifest")
+	var m map[string]any
+	if err == nil {
+		err = json.Unmarshal(raw, &m)
+	}
+	if err != nil {
+		http.Error(rw, "no manifest", http.StatusInternalServerError)
+		return
+	}
+	m["name"], m["short_name"] = assistantName(), assistantName()
+	rw.Header().Set("Content-Type", "application/manifest+json")
+	rw.Header().Set("Cache-Control", "no-cache")
+	json.NewEncoder(rw).Encode(m)
+}
+
 func assetVersion() string {
 	assetOnce.Do(func() {
 		h := sha256.New()

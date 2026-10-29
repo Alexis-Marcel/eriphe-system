@@ -42,13 +42,14 @@ type nodeInfo struct {
 	Runtimes []string `json:"runtimes"`
 	// The runtimes whose agent the node has unpacked: their tasks start at
 	// once (node/inject.go). None from an older node.
-	AgentsReady []string    `json:"agents_ready"`
-	Labels      []string    `json:"labels"`
-	Services    bool        `json:"services"`  // it runs local MCP servers
-	AlwaysOn    bool        `json:"always_on"` // it never sleeps: the tools go there first
-	Version     string      `json:"version"`   // eriphe-node's; empty from an older one
-	Install     string      `json:"install"`   // how it was installed: linux, macos, windows, or empty (by hand)
-	Update      updaterInfo `json:"update"`    // its updater, from the installer (machine_updates.go)
+	AgentsReady  []string    `json:"agents_ready"`
+	Labels       []string    `json:"labels"`
+	Services     bool        `json:"services"`      // it runs local MCP servers
+	AlwaysOn     bool        `json:"always_on"`     // it never sleeps: the tools go there first
+	Version      string      `json:"version"`       // eriphe-node's; empty from an older one
+	ResultsNamed bool        `json:"results_named"` // it names the results folder as told (results_folder.go)
+	Install      string      `json:"install"`       // how it was installed: linux, macos, windows, or empty (by hand)
+	Update       updaterInfo `json:"update"`        // its updater, from the installer (machine_updates.go)
 	// The roots it shares folders from (node/shares.go); none from an older one.
 	Shares []nodeShare `json:"shares"`
 }

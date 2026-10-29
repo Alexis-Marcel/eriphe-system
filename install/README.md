@@ -84,11 +84,16 @@ page, the setup code creates the owner's password; it works once.
 
 ## 3. Connect the brain
 
-A short wizard (`/welcome`) follows: pick the AI account Eriphe thinks with. With a Claude
-subscription, run `claude setup-token` on any computer where Claude Code is installed and paste
-the token; "Use another account" takes a ChatGPT subscription or an API key (OpenRouter, Anthropic,
-OpenAI…). Eriphe creates the account's usual agents and starts as soon as a machine is online
-(the install already joined this one). Agents, tools and accounts are in Settings later.
+A short wizard (`/welcome`) follows. First, name your assistant: "Comment veux-tu appeler ton
+assistant ?" (What do you want to call your assistant?). Eriphe is the software's name; your
+assistant has the one you choose (1 to 32 letters, digits, spaces, apostrophes or dashes). It
+introduces itself by it, and the workspace, its tab title, the installed app and Home Assistant
+call it so. You can change it later in Settings →
+Agents. Then pick the AI account it thinks with, among all kinds shown side by side: a
+subscription (Claude: run `claude setup-token` on any computer where Claude Code is installed and
+paste the token; ChatGPT) or an API key (Anthropic, OpenAI, Google, Mistral, OpenRouter, or a custom
+agent). Eriphe creates the account's usual agents, and your assistant starts on this machine (the
+install already joined it as a device). Agents, tools and accounts are in Settings later.
 
 Nothing else is on by default: no tool, no rule, no remote access. The catalog's tools (GitHub,
 mail, calendar, Home Assistant…) are added from Settings → Accounts & tools.
@@ -440,7 +445,8 @@ to Apple's container (in core mode, copy eriphe-core's data out of the VM first)
 `--share NAME=/PATH` (repeatable) declares a place of this machine whose folders you may give to
 Eriphe, in the workspace (Settings → Folders → "Partager un dossier"): you browse its folders
 there from any device, name one ("Clients") and choose what Eriphe may do with it, read, or read
-and drop its results in the folder's `Eriphe/` subfolder. eriphe-core never sees the path, only
+and drop its results in the folder's results subfolder, named after your assistant (`Eriphe/` by
+default, `Jarvis/` if you called it Jarvis). eriphe-core never sees the path, only
 the place's name and a path inside it. Nothing is shared unless you say so.
 
 ```sh

@@ -58,26 +58,32 @@ async def test_user_flow(hass: HomeAssistant) -> None:
     )
     assert result["errors"] == {CONF_URL: "invalid_url"}
 
-    with patch(VALIDATE, return_value=None):
+    # The entry takes the name the user gave their assistant.
+    with patch(VALIDATE, return_value="Jarvis"):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_URL: URL + "/", CONF_TOKEN: " secret "}
         )
     assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "Jarvis"
     assert result["data"] == {CONF_URL: URL, CONF_TOKEN: "secret"}
 
 
 async def test_reconfigure(hass: HomeAssistant) -> None:
-    entry = MockConfigEntry(domain=DOMAIN, data={CONF_URL: URL, CONF_TOKEN: "old"})
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Eriphe", data={CONF_URL: URL, CONF_TOKEN: "old"}
+    )
     entry.add_to_hass(hass)
     result = await entry.start_reconfigure_flow(hass)
     assert result["type"] is FlowResultType.FORM
-    with patch(VALIDATE, return_value=None):
+    with patch(VALIDATE, return_value="Jarvis"):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_URL: "http://192.0.2.3:8800", CONF_TOKEN: "new"}
         )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert entry.data == {CONF_URL: "http://192.0.2.3:8800", CONF_TOKEN: "new"}
+    # Its name follows the one given in eriphe-core since.
+    assert entry.title == "Jarvis"
 
 
 @pytest.fixture
@@ -184,7 +190,9 @@ async def test_unreachable(hass: HomeAssistant, entry: MockConfigEntry) -> None:
         result = await conversation.async_converse(
             hass, "Bonjour", None, Context(), language="fr", agent_id=AGENT
         )
-    assert result.response.speech["plain"]["speech"] == FALLBACK_SPEECH
+    assert result.response.speech["plain"]["speech"] == FALLBACK_SPEECH.format(
+        name="Eriphe"
+    )
     assert result.continue_conversation is False
 
 

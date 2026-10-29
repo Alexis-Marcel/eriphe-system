@@ -140,7 +140,7 @@ func TestContextPackOnlyFresh(t *testing.T) {
 		t.Fatal("the session to resume is not kept")
 	}
 	task := startedBrain(t, c, false)
-	if !strings.HasPrefix(task.Prompt, "Eriphe démarre dans une session neuve") ||
+	if !strings.HasPrefix(task.Prompt, "Tu démarres dans une session neuve") ||
 		!strings.Contains(task.Prompt, "à Sam)") || !strings.Contains(task.Prompt, "Rappelle-moi le devis") {
 		t.Fatalf("fresh session got: %q", task.Prompt)
 	}

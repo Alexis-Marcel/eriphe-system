@@ -34,16 +34,24 @@ import (
 
 // explorerScript runs in the container: $1 the path relative to the root,
 // $2 "tree" to list the folder's entries three levels down too, or "results"
-// to make its Eriphe/ subfolder (the folder is then mounted at $F, writable).
+// to make its results subfolder (the folder is then mounted at $F, writable;
+// $1 is the results folder's name, $3… its former names, newest first: one
+// of them is renamed to $1 unless $1 is taken, then it stays in use).
 // It writes NUL-separated records: E code (refused), P path, D dirs…, F
 // count, T entries…; a list ends with an empty record. ERIPHE_R and ERIPHE_F
 // stand for /r and /f in the tests.
 const explorerScript = `set -u
 R=${ERIPHE_R:-/r} F=${ERIPHE_F:-/f}
 if [ "$2" = results ]; then
-  if [ -L "$F/Eriphe" ] || { [ -e "$F/Eriphe" ] && [ ! -d "$F/Eriphe" ]; }; then printf 'E\0notdir\0'; exit 0; fi
-  mkdir -p "$F/Eriphe" 2>/dev/null
-  if [ -d "$F/Eriphe" ] && [ -w "$F/Eriphe" ]; then printf 'P\0%s\0\0' "$F"; else printf 'E\0nowrite\0'; fi
+  cur=$1 use=$1; shift 2
+  for old in "$@"; do
+    [ "$old" != "$cur" ] && [ -d "$F/$old" ] && [ ! -L "$F/$old" ] || continue
+    if [ -e "$F/$cur" ] || [ -L "$F/$cur" ] || ! mv "$F/$old" "$F/$cur" 2>/dev/null; then use=$old; fi
+    break
+  done
+  if [ -L "$F/$use" ] || { [ -e "$F/$use" ] && [ ! -d "$F/$use" ]; }; then printf 'E\0notdir\0'; exit 0; fi
+  mkdir -p "$F/$use" 2>/dev/null
+  if [ -d "$F/$use" ] && [ -w "$F/$use" ]; then printf 'P\0%s\0%s\0' "$F" "$use"; else printf 'E\0nowrite\0'; fi
   exit 0
 fi
 p=$(realpath "$R/$1" 2>/dev/null) || { printf 'E\0not_found\0'; exit 0; }
@@ -137,9 +145,9 @@ func explorerRefusal(code string) error {
 	case "unreadable":
 		return shareErr(http.StatusForbidden, "unreadable", "this folder cannot be read")
 	case "notdir":
-		return fmt.Errorf("%s/ is not a folder", resultsDir)
+		return errors.New("the results folder is not a folder")
 	case "nowrite":
-		return fmt.Errorf("%s/ cannot be written", resultsDir)
+		return errors.New("the results folder cannot be written")
 	}
 	return shareErr(http.StatusNotFound, "not_found", "no such folder")
 }
@@ -257,23 +265,36 @@ func (n *node) appleShareDirs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// appleResults makes the folder's Eriphe/ through the explorer, the folder
-// mounted writable.
-func (n *node) appleResults(ctx context.Context, real string) error {
+// appleResults makes the folder's results subfolder through the explorer,
+// the folder mounted writable, a former one renamed (chooseResults): it
+// returns the one in use.
+func (n *node) appleResults(ctx context.Context, real string, tf TaskFolder) (string, error) {
 	mount, err := appleMount(real, "/f", false)
 	if err != nil {
-		return err
+		return "", err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	args := append([]string{"run", "--rm", "--progress", "none", "--network", "none", "--read-only",
 		"--user", fmt.Sprintf("%d:%d", taskUID, taskGID), "--cap-drop", "ALL", "--memory", "256m", "--cpus", "1",
 		"--label", "eriphe.explorer=1"}, mount...)
-	args = append(args, "--entrypoint", "sh", explorerImage, "-c", explorerScript, "sh", "", "results")
+	cur := tf.resultsName()
+	args = append(args, "--entrypoint", "sh", explorerImage, "-c", explorerScript, "sh", cur, "results")
+	for _, old := range tf.Former {
+		if validFolderName(old) && !strings.Contains(old, ",") {
+			args = append(args, old)
+		}
+	}
 	out, err := exec.CommandContext(ctx, n.opt.docker, args...).Output()
 	if err != nil {
-		return fmt.Errorf("cannot make %s/: %v", resultsDir, err)
+		return "", fmt.Errorf("cannot make %s/: %v", cur, err)
 	}
-	_, err = parseExploration(out)
-	return err
+	e, err := parseExploration(out)
+	if err != nil {
+		return "", err
+	}
+	if e.rel == "" || !validFolderName(e.rel) {
+		return cur, nil
+	}
+	return e.rel, nil
 }

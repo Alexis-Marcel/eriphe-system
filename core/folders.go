@@ -19,7 +19,7 @@ import (
 // a name ("Clients"), a source (a machine and a path inside one of the roots
 // that machine shares, set when it was installed: eriphe-core never sees a
 // host path, only the root's name and a path relative to it) and a right:
-// read, the default, or read and drop results, which go only to its Eriphe/
+// read, the default, or read and drop results, which go only to its results/
 // subfolder; the originals are never changed. The brain lends folders to a
 // task by name, like catalog tools: the task runs on the folder's machine
 // (or waits for it) and gets it mounted at /work/folders/<name>, read-only
@@ -29,7 +29,7 @@ import (
 
 const (
 	folderRead = "read" // read only
-	folderDrop = "drop" // read, and drop results in Eriphe/
+	folderDrop = "drop" // read, and drop results in its results subfolder (results_folder.go)
 )
 
 // Folder is one folder given to Eriphe.
@@ -344,6 +344,7 @@ func (c *core) specFolders(names string, resources []ResourceRef) ([]nodeFolder,
 		return nil, err
 	}
 	out := make([]nodeFolder, len(fs))
+	results, former := c.resultsName(), c.formerResults()
 	for i, f := range fs {
 		write := f.Access == folderDrop
 		if resources != nil {
@@ -352,6 +353,9 @@ func (c *core) specFolders(names string, resources []ResourceRef) ([]nodeFolder,
 			})
 		}
 		out[i] = nodeFolder{Name: f.Name, Share: f.Share, Path: f.Path, Write: write}
+		if write {
+			out[i].Results, out[i].Former = results, former
+		}
 	}
 	return out, nil
 }
@@ -362,18 +366,22 @@ type nodeFolder struct {
 	Share string `json:"share"`
 	Path  string `json:"path"`
 	Write bool   `json:"write,omitempty"`
+	// With write: the results subfolder's name, and its former ones,
+	// newest first (results_folder.go). An older node uses Eriphe/.
+	Results string   `json:"results,omitempty"`
+	Former  []string `json:"former,omitempty"`
 }
 
 // folderInstructions tell a worker where its folders are and what it may
 // do there.
-func folderInstructions(fs []*Folder) string {
+func folderInstructions(fs []*Folder, results string) string {
 	var b strings.Builder
 	b.WriteString("Folders of the user are mounted for you, read-only:")
 	drop := false
 	for _, f := range fs {
 		fmt.Fprintf(&b, "\n- %s", f.mountPath())
 		if f.Access == folderDrop {
-			fmt.Fprintf(&b, " (write your results in %s/Eriphe/, the only place you may write in it)", f.mountPath())
+			fmt.Fprintf(&b, " (write your results in %s, the only place you may write in it)", resultsPath(f, results))
 			drop = true
 		}
 	}
@@ -465,7 +473,7 @@ func lendHint(kind, name, access string) string {
 	raw, _ := json.Marshal(ResourceRef{Kind: kind, Ref: name, Access: accessRead})
 	hint := "run_task resources: [" + string(raw) + "]"
 	if access == folderDrop {
-		hint += `, or "access": "drop" to let the task add its results in its Eriphe/ subfolder`
+		hint += `, or "access": "drop" to let the task add its results in its results subfolder`
 	}
 	if kind == resDriveFolder {
 		hint += "; for now the task gets the " + filesServer + " tool, which reaches every Drive folder given to Eriphe, each with its own access"

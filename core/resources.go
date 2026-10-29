@@ -15,7 +15,7 @@ import (
 //	read < drop < write
 //
 // read only reads; drop also creates new files in an Eriphe-owned place
-// (a folder's Eriphe/ subfolder), never changing the originals; write
+// (a folder's results subfolder, results_folder.go), never changing the originals; write
 // changes the thing itself (for a repository: push). Each kind takes the
 // rights that make sense for it (resourceKinds), and an entry never gets
 // more than the user opened (a folder's own access).
@@ -65,7 +65,7 @@ var resourceKinds = map[string][]string{
 type ResourceRef struct {
 	Kind   string `json:"kind" jsonschema:"repo, folder, drive-folder, tool or file"`
 	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or drive-folder its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); file an attachment id (att_…)"`
-	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder and drive-folder: read, or drop to add results in its Eriphe/ subfolder (at most the folder's own access); tool: read or write, from the tools' annotations when empty; file: read. Default read"`
+	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder and drive-folder: read, or drop to add results in its results subfolder, named after the assistant (at most the folder's own access); tool: read or write, from the tools' annotations when empty; file: read. Default read"`
 	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create; with access write, the first push to it needs no approval"`
 	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
 	Dir    string `json:"dir,omitempty" jsonschema:"repo: the working directory inside the repository, if not its root"`

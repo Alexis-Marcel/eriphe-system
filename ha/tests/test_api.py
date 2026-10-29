@@ -37,10 +37,18 @@ async def _voice(request: web.Request) -> web.StreamResponse:
     return resp
 
 
-def _run(test):
+async def _name(request: web.Request) -> web.Response:
+    if request.headers.get("Authorization") != f"Bearer {TOKEN}":
+        return web.json_response({"error": "bad token"}, status=401)
+    return web.json_response({"name": "Jarvis"})
+
+
+def _run(test, named=True):
     async def main():
         app = web.Application()
         app.router.add_post("/v1/voice", _voice)
+        if named:
+            app.router.add_get("/v1/voice", _name)
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -57,9 +65,16 @@ def _run(test):
 
 def test_validate_accepts_400():
     async def test(session, url):
-        await api.EripheClient(session, url, TOKEN).async_validate()
+        assert await api.EripheClient(session, url, TOKEN).async_validate() == "Jarvis"
 
     _run(test)
+
+
+def test_name_of_an_older_core():
+    async def test(session, url):
+        assert await api.EripheClient(session, url, TOKEN).async_validate() == "Eriphe"
+
+    _run(test, named=False)
 
 
 def test_validate_rejects_bad_token():

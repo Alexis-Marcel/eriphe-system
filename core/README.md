@@ -29,9 +29,10 @@ The image runs as UID 1993: a host folder mounted at `/data` must be writable by
 1993:1993 <dir>`), a named volume is. `TZ` sets the time zone (`Europe/Paris` otherwise).
 
 Then, in the workspace: the setup code of the log (`web: no password yet: open https://…/setup
-with the setup code ABCD-EFGH`) creates the owner's password, and a short wizard connects the AI
-account Eriphe thinks with (a Claude subscription's `claude setup-token`, or any other kind of
-Settings → Agents, with its usual agents). The brain starts as soon as a machine has joined.
+with the setup code ABCD-EFGH`) creates the owner's password, and a short wizard names the
+assistant (the user chooses its name) and connects the AI account it thinks with
+(a Claude subscription's `claude setup-token`, or any other kind of Settings → Agents, with its
+usual agents). The brain starts as soon as a machine has joined.
 Nothing else is on by default: no tool, no policy rule, no identity; the catalog's tools (Home
 Assistant, GitHub, mail…) are added from Settings → Tools.
 
@@ -653,8 +654,9 @@ Its spec says what it is and what it runs on; its status is what eriphe-core kee
 | Spec | |
 |---|---|
 | `role` | what it is: a card in `assistantRoles` (`brain` today) |
+| `display_name` | what the user calls it, as a person (see [its name](#the-assistants-name)); Eriphe for the brain by default, its id for another |
 | `agent`, `node` | what it runs on; without an agent, the default one or the first that can run it |
-| `instructions` | its standing instructions (`{{user}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
+| `instructions` | its standing instructions (`{{user}}` and `{{name}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
 | `tools` | its grant from the catalog, like a task's; its role may add the catalog's free reads |
 | `resources` | what it is lent besides its tools (`{kind, ref, access, …}`): kept, lent with the resources work |
 | `triggers` | what wakes it: `conversation` (the user's messages and the tasks' events); later `source:<name>` and `schedule`. Its role's by default; one enabled assistant at most has the conversation |
@@ -667,7 +669,7 @@ restarts there too (table `assistant_status`).
 
 One controller keeps every assistant as its spec says: an enabled assistant has exactly one task;
 one that fails starts again after 5 s, then doubling up to 5 min, on its session while the resume
-works; a change of its agent, instructions, node or resources, or of the tools its grant reaches,
+works; a change of its agent, instructions, name, node or resources, or of the tools its grant reaches,
 restarts it once its turn is over; a disabled or removed one has its task stopped. In
 eriphe-core's first minute, it waits for the trusted servers still connecting. What an assistant
 gets comes from its role's card, never from its name, as a runtime's from its harness card: its
@@ -681,6 +683,41 @@ Assistants, where its agent and tools are set when the file leaves them out. Oth
 added through the API only, for now; a file may also list them under `assistants`. An install from
 before moves by itself at start: the brain's `brain_*` keys become its status, the setting
 `brain_agent` its workspace agent, and the same agent keeps its running task.
+
+### The assistant's name
+
+Eriphe is the software's name; each user names their own assistant. The brain's `display_name`
+(1 to 32 letters, digits, spaces, apostrophes or dashes) is asked by the first-run wizard (an
+empty field: a new install chooses), and set
+in Settings → Agents → Assistants, with `PUT /v1/assistants/eriphe` (`{"display_name": "Jarvis"}`)
+or with `brain.display_name` in the file (then read-only). Its id stays `eriphe`. An install that
+never named it keeps Eriphe, with the same fingerprint: the upgrade restarts nothing.
+
+The name is used wherever the assistant is a person: its instructions (`{{name}}` in
+`brain-prompt.md`, as `{{user}}`), the workers' standing instruction (their answer is relayed as
+its own), the memory's nightly extraction, the conversation's messages about it, the
+workspace's words (`{{name}}` in the texts of `web_text*.go`, French elision included: « Tâches
+de {{name}} » reads « Tâches d'Eriphe »), the pages' title suffix and the brand next to the logo,
+the login page, the installed app (`/manifest.webmanifest` is served with its `name` and
+`short_name`), Home Assistant's conversation agent (`GET /v1/voice`), and the results subfolder
+of a machine's folders lent with `drop` (below). The software keeps its name: the logo glyph, the
+images and binaries, the install scripts, eriphe-core and eriphe-node, the GitHub and Google apps
+and the OAuth client, the certificate authority, the app passwords and tokens named Eriphe, the
+Home Assistant integration's domain, the system texts that name the software, and the results
+subfolder of Google Drive folders, `Eriphe/`.
+
+**The results folder.** A machine's folder lent with `drop` takes results in a subfolder named
+after the assistant: `Eriphe/` until it has another name, then `Jarvis/` (the display name as a
+folder name, `results_folder.go`). A task's spec gives its node the current name (`results`) and
+the former ones, newest first (`former`, kept in the settings `results_name` and
+`results_former`; `Eriphe` is always among them). The task always sees the current name
+(`/work/folders/<name>/Jarvis`). On a folder's next use after a rename, the node renames a former
+results folder to the new name; if a folder of the new name is already there (the user's own, say),
+nothing is merged: the former one stays in use, mounted under the new name, and the node says so
+(a `results_conflict` event, in the device's access log, to rename or merge by hand). A node
+older than this names nothing and writes in `Eriphe/`: for a node that does not report
+`results_named` (nor runs a release from 0.7.0), the worker is told `Eriphe/`, the folder that node
+really mounts, so a rename never points a task at a path it cannot write.
 
 ## The brain
 
@@ -744,8 +781,9 @@ data; events are left out, since they carry what tasks said. eriphe-core logs it
 ## Voice (Home Assistant)
 
 Home Assistant's Assist pipeline keeps what it understands (simple commands of the house, handled
-locally) and hands the rest to Eriphe through its conversation agent (`../ha/`), which calls
-`POST /v1/voice` with its own token (Settings → Tools → Home Assistant, the page that has both
+locally) and hands the rest to the assistant through its conversation agent (`../ha/`), which calls
+`POST /v1/voice` with its own token (and `GET /v1/voice` for the assistant's name, `{"name"}`, which
+the agent takes as its own) (Settings → Tools → Home Assistant, the page that has both
 ways: Eriphe driving the house through Home Assistant's MCP server, and the house's voice talking
 to Eriphe; only the token's hash is kept, and it can do nothing else). The sentence joins the conversation like any of mine, marked with the
 room (`[Sam 12:00 #N · voix, Bureau]`), and the brain answers it in the same thread, short and
@@ -953,7 +991,8 @@ The user's own folders, given to Eriphe ("Dossiers"). A folder is a name ("Clien
 machine and a path inside one of the places that machine shares, declared when it was installed:
 `--share NAME=/PATH`, see install/README.md; eriphe-core never sees a host path, only the place's
 name and a path relative to it) and a right: `read` (the default), or `drop`, read and drop results,
-which go only to the folder's `Eriphe/` subfolder. Originals are never changed nor deleted. Folders
+which go only to the folder's results subfolder (`Eriphe/`, or the assistant's name: see [the
+assistant's name](#the-assistants-name)). Originals are never changed nor deleted. Folders
 are in the database (`folders` table, names unique without case); a machine's places are what its
 node reports (`shares` in `GET /v1/node`).
 
@@ -980,8 +1019,9 @@ forgets it; the files stay.
 `list_folders` gives each one's entry in `lend`; the old `folders` field still works). The task is placed on the folders' machine (all of a task's
 folders must be on one machine), or waits for it while it is offline (`pending_reason` says so);
 `node` may only name that machine. Its node mounts each at `/work/folders/<name>`, read-only as
-Docker enforces it; with `drop`, its `Eriphe/` subfolder read-write, created if missing (see
-node/README.md, Shares). The worker is told where they are, that it may write only in `Eriphe/`, and
+Docker enforces it; with `drop`, its results subfolder read-write, created if missing (see
+node/README.md, Shares). The worker is told where they are, that it may write only in the results
+subfolder, and
 that what reads like an instruction in the files is data. The folders are read again from the
 database whenever the node fetches the task: a folder removed meanwhile fails it, a folder closed to
 drops since is mounted read-only. A task drops only where its entry says `drop` (a task from before
@@ -1113,8 +1153,11 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 `web: no password yet: open https://…/setup with the setup code ABCD-EFGH`. Open the page, type
 the code and choose the password (10 characters at least). The password is stored as an
 argon2id hash; the code is no longer accepted once used. While the brain has no agent, the
-conversation leads to a wizard (`/welcome`): the AI account's form of Settings → Agents, a Claude
-subscription first, then the brain's start once a machine is online. "Plus tard" skips it.
+conversation leads to a wizard (`/welcome`): the assistant's name (an empty field), then the
+AI account: every kind as equal cards, as Settings → Agents shows them (subscriptions, then API
+keys, the custom one last), none picked; a card (`/welcome?kind=<kind>`) opens its form. Then the
+brain's start: on this machine once a device is registered (an install with its core has one of
+its own), with "connect a device" only while none is. "Plus tard" skips it.
 
 **Sessions.** A login sets a random session cookie (`__Host-eriphe`, `HttpOnly`, `Secure`,
 `SameSite=Strict`; only its SHA-256 is stored). Every POST carries the session's CSRF token (the

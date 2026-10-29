@@ -13,25 +13,26 @@
 
 {{define "bill-tag"}}{{if eq . "subscription"}}<span class="tag tag-ok">{{t "bill.subscription"}}</span>{{else if eq . "usage"}}<span class="tag tag-warn">{{t "bill.usage"}}</span>{{end}}{{end}}
 
-{{define "kind-cards"}}{{/* . is the list of provider kinds */}}
+{{define "kind-cards"}}{{/* .Kinds the provider kinds (custom last), .Base the page a card opens with ?kind= */}}
+{{$base := .Base}}
 <div class="kind-groups">
   <div class="kind-group">
     <h4>{{t "kinds.subs"}}</h4>
     <p class="muted small">{{t "kinds.subslead"}}</p>
-    <ul class="presets">{{range .}}{{if eq .Billing "subscription"}}{{template "kind-card" .}}{{end}}{{end}}</ul>
+    <ul class="presets">{{range .Kinds}}{{if eq .Billing "subscription"}}{{template "kind-card" (dict "Kind" . "Base" $base)}}{{end}}{{end}}</ul>
   </div>
   <div class="kind-group">
     <h4>{{t "kinds.keys"}}</h4>
     <p class="muted small">{{t "kinds.keyslead"}}</p>
-    <ul class="presets">{{range .}}{{if eq .Billing "usage"}}{{template "kind-card" .}}{{end}}{{end}}</ul>
+    <ul class="presets">{{range .Kinds}}{{if eq .Billing "usage"}}{{template "kind-card" (dict "Kind" . "Base" $base)}}{{end}}{{end}}</ul>
   </div>
 </div>
 {{end}}
 
-{{define "kind-card"}}<li><a class="preset" href="/settings/providers/new?kind={{.ID}}">
+{{define "kind-card"}}{{with .Kind}}<li><a class="preset" href="{{$.Base}}?kind={{.ID}}">
   {{template "kind-mark" .ID}}
   <span class="preset-text"><b>{{t (printf "kind.%s" .ID)}}</b><small>{{t (printf "kind.%s.desc" .ID)}}</small></span>
-</a></li>{{end}}
+</a></li>{{end}}{{end}}
 
 {{define "agents"}}{{with .Data}}
 <header class="page-head page-head-row">
@@ -49,7 +50,7 @@
     <li><b>{{t "how.agents"}}</b><span>{{t "how.agentsdesc"}}</span></li>
     <li><b>{{t "how.brain"}}</b><span>{{t "how.braindesc"}}</span></li>
   </ol>
-  {{template "kind-cards" .Kinds}}
+  {{template "kind-cards" (dict "Kinds" .Kinds "Base" "/settings/providers/new")}}
 </section>
 {{else}}
 
@@ -143,7 +144,7 @@
   {{range .Assistants}}
     <li class="assistant" id="assistant-{{.Name}}">
       <div class="tile-head">
-        <span class="assistant-name"><span class="mono strong">{{.Name}}</span> <span class="tag tag-brain">{{.RoleLabel}}</span>{{if .Spec.Disabled}} <span class="tag">{{t "assistants.disabled"}}</span>{{end}}</span>
+        <span class="assistant-name"><span class="strong">{{.DisplayName}}</span>{{if ne .DisplayName .Name}} <span class="mono muted small">{{.Name}}</span>{{end}} <span class="tag tag-brain">{{.RoleLabel}}</span>{{if .Spec.Disabled}} <span class="tag">{{t "assistants.disabled"}}</span>{{end}}</span>
         <span class="chips">{{range .Status.Conditions}}<span class="status {{if .Status}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{t (printf "assistants.cond.%s" .Type)}}</span>{{end}}</span>
       </div>
       <dl class="kv">
@@ -153,8 +154,11 @@
         <div><dt>{{t "assistants.lastturn"}}</dt><dd>{{if .Status.LastTurn}}{{ago .LastTurn}}{{else}}<span class="muted">{{t "time.never"}}</span>{{end}}</dd></div>
       </dl>
       {{if .Status.LastError}}<p class="alert small" role="alert">{{short .Status.LastError 300}}</p>{{end}}
-      {{if not (and .AgentLocked .ToolsLocked)}}
+      {{if not (and .AgentLocked .ToolsLocked .NameLocked)}}
       <form class="assistant-form" hx-post="/settings/assistants/{{.Name}}" hx-disabled-elt="find button[type=submit]">
+        {{if not .NameLocked}}<label class="field"><span>{{t "assistants.name"}}</span>
+          <input name="display_name" value="{{.DisplayName}}" required maxlength="32" autocomplete="off">
+          <small class="muted">{{t "assistants.namehint"}}</small></label>{{end}}
         {{if not .AgentLocked}}<label class="field"><span>{{t "assistants.agent"}}</span>
           <select name="agent">{{range .Choices}}<option value="{{.Name}}" {{if .Brain}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select></label>{{end}}
         {{if not .ToolsLocked}}<label class="field"><span>{{t "assistants.tools"}}</span>
@@ -298,7 +302,7 @@
   <p>{{t (printf "kind.%s.lead" .Kind.ID)}}</p>
   {{end}}
 </header>
-{{if .Gallery}}{{template "kind-cards" .AllKinds}}{{end}}
+{{if .Gallery}}{{template "kind-cards" (dict "Kinds" .AllKinds "Base" "/settings/providers/new")}}{{end}}
 {{end}}{{if not .Data.Gallery}}{{template "provider-form" .}}{{end}}{{end}}
 
 {{define "provider-form"}}{{with .Data}}{{$k := .Kind.ID}}

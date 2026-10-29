@@ -687,10 +687,19 @@ resolves and checks each again (a folder swapped for a symlink out of its place 
 task), then gives the container:
 
 - `--mount type=bind,src=<folder>,dst=/work/folders/<name>,readonly`;
-- with `write`, `--mount type=bind,src=<folder>/Eriphe,dst=/work/folders/<name>/Eriphe`, refused on
-  a `:ro` place. The node creates `Eriphe/` if it is missing: owned by UID 1000 in the folder's
-  group, mode 2775 (setgid: what is written there keeps the group). One already there must be a real
-  directory (a symlink named `Eriphe` is refused) that UID 1000 can write to;
+- with `write`, `--mount type=bind,src=<folder>/<results>,dst=/work/folders/<name>/<results>`,
+  refused on a `:ro` place. `<results>` is the results subfolder eriphe-core names after the
+  assistant (`results` in the folder's spec; `Eriphe` when it gives none). The node creates it if it
+  is missing: owned by UID 1000 in the folder's group, mode 2775 (setgid: what is written there
+  keeps the group). One already there must be a real directory (a symlink of that name is refused)
+  that UID 1000 can write to. After a rename of the assistant, the spec also lists the former names
+  (`former`, newest first): the first one there is renamed to the new name, on that first use; if
+  the new name is already taken, nothing is merged: the former folder stays in use, mounted at
+  `/work/folders/<name>/<results>`, and the task gets a `results_conflict` event (`folder`,
+  `kept`, `wanted`) that eriphe-core puts in the device's access log. The node says it names the
+  results folder with `results_named: true` in `GET /v1/node`, so eriphe-core tells the workers
+  of an older node `Eriphe/`. On a Mac the explorer does
+  the same (`results` mode);
 - `--group-add` of the folder's group and of `Eriphe/`'s (not root's), so the task reads what that
   group may, and `umask 002` in the container: what it writes is group-writable. On a NAS whose
   shares are `nobody:users`, the results are `1000:users`, mode 664, and every account in `users`

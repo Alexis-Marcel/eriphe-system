@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // Assistants are Eriphe's long-lived agents: each owns one task, as a
@@ -32,20 +34,24 @@ const (
 	kindAssistant = "assistant"
 
 	brainAssistant      = "eriphe" // the built-in assistant, of role brain
+	defaultDisplayName  = "Eriphe" // the brain's name, until the user gives it another
 	assistantRoleBrain  = "brain"
 	triggerConversation = "conversation" // the user's messages and what happens to the tasks
 )
 
 // Assistant is an assistant's spec.
 type Assistant struct {
-	Name     string `json:"-"`
-	Role     string `json:"role"`               // a card of assistantRoles
-	Disabled bool   `json:"disabled,omitempty"` // its task is stopped, and none started
-	Agent    string `json:"agent,omitempty"`    // empty: the first agent that can run it
-	Node     string `json:"node,omitempty"`     // its preferred node; empty lets the scheduler choose
+	Name string `json:"-"`
+	Role string `json:"role"` // a card of assistantRoles
+	// What the user calls it, as a person: in its instructions ({{name}})
+	// and in the workspace's words. Empty: Eriphe for the brain, else its id.
+	DisplayName string `json:"display_name,omitempty"`
+	Disabled    bool   `json:"disabled,omitempty"` // its task is stopped, and none started
+	Agent       string `json:"agent,omitempty"`    // empty: the first agent that can run it
+	Node        string `json:"node,omitempty"`     // its preferred node; empty lets the scheduler choose
 	// Its standing instructions: the role's built-in ones unless replaced,
 	// by text or, in the configuration file only, by a file. {{user}} is
-	// replaced by the user's name.
+	// replaced by the user's name, {{name}} by its own.
 	Instructions     string `json:"instructions,omitempty"`
 	InstructionsFile string `json:"instructions_file,omitempty"`
 	// Its grant from the catalog, like a task's: server names or
@@ -76,7 +82,48 @@ func (a Assistant) triggers() []string {
 
 func (a Assistant) has(trigger string) bool { return slices.Contains(a.triggers(), trigger) }
 
-// standingPrompt is its standing instructions, before {{user}} is replaced.
+// displayName is what the user calls it.
+func (a Assistant) displayName() string {
+	switch {
+	case a.DisplayName != "":
+		return a.DisplayName
+	case a.Role == assistantRoleBrain:
+		return defaultDisplayName
+	}
+	return a.Name
+}
+
+// assistantName is what the user calls their assistant, the one the
+// conversation goes to: the brain's display name, or Eriphe.
+func (c *Config) assistantName() string {
+	if b := c.brain(); b != nil {
+		return b.displayName()
+	}
+	if a, ok := c.Assistants[brainAssistant]; ok {
+		return a.displayName()
+	}
+	return defaultDisplayName
+}
+
+// A display name is short and speakable: 1 to 32 letters, digits, spaces,
+// apostrophes and dashes, starting with a letter or a digit.
+var displayNameRE = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{M}\p{N} '’-]*$`)
+
+// normalizeDisplayName trims a display name and folds its runs of spaces.
+func normalizeDisplayName(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+func checkDisplayName(s string) error {
+	if n := utf8.RuneCountInString(s); n == 0 || n > 32 || !displayNameRE.MatchString(s) {
+		return fmt.Errorf("display_name %q: 1 to 32 letters, digits, spaces, apostrophes or dashes", s)
+	}
+	return nil
+}
+
+func badDisplayName(n string, err error) error {
+	return &catalogError{http.StatusBadRequest, "assistants.badname", n, err}
+}
+
+// standingPrompt is its standing instructions, before {{user}} and {{name}} are replaced.
 func (a Assistant) standingPrompt() (string, error) {
 	switch {
 	case a.InstructionsFile != "":
@@ -90,7 +137,7 @@ func (a Assistant) standingPrompt() (string, error) {
 
 // assistant is the built-in assistant the file's brain section describes.
 func (b *BrainConfig) assistant() Assistant {
-	return Assistant{Name: brainAssistant, Role: assistantRoleBrain, Agent: b.Agent, Node: b.Node,
+	return Assistant{Name: brainAssistant, Role: assistantRoleBrain, DisplayName: b.DisplayName, Agent: b.Agent, Node: b.Node,
 		InstructionsFile: b.PromptFile, SelfURL: b.SelfURL, Tools: b.Tools, MCPServers: b.MCPServers}
 }
 
@@ -114,6 +161,9 @@ func fileAssistants(base *Config) map[string]Assistant {
 // file leaves out: a field the file sets is the file's.
 func overlay(file, ws Assistant) Assistant {
 	a := file
+	if a.DisplayName == "" {
+		a.DisplayName = ws.DisplayName
+	}
 	if a.Agent == "" {
 		a.Agent = ws.Agent
 	}
@@ -144,6 +194,8 @@ func readOnlyField(file, ws Assistant) string {
 	switch {
 	case ws.Role != "" && ws.Role != file.Role:
 		return "role"
+	case ws.DisplayName != "" && file.DisplayName != "" && ws.DisplayName != file.DisplayName:
+		return "display_name"
 	case ws.Agent != "" && file.Agent != "" && ws.Agent != file.Agent:
 		return "agent"
 	case ws.Node != "" && file.Node != "" && ws.Node != file.Node:
@@ -252,6 +304,11 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 	if _, ok := assistantRoles[a.Role]; !ok {
 		return fmt.Errorf("%s: unknown role %q", what, a.Role)
 	}
+	if a.DisplayName != "" {
+		if err := checkDisplayName(a.DisplayName); err != nil {
+			return fmt.Errorf("%s: %w", what, err)
+		}
+	}
 	for _, t := range a.Triggers {
 		if _, ok := assistantTriggers[t]; !ok {
 			return fmt.Errorf("%s: trigger %q is not supported (yet): conversation is", what, t)
@@ -324,6 +381,12 @@ func (c *core) putAssistantLocked(name string, a Assistant, event string) error 
 		return errInvalid(errors.New("instructions_file, self_url and mcp_servers belong to the configuration file"))
 	}
 	a.Name = name
+	a.DisplayName = normalizeDisplayName(a.DisplayName)
+	if a.DisplayName != "" {
+		if err := checkDisplayName(a.DisplayName); err != nil {
+			return badDisplayName(a.DisplayName, err)
+		}
+	}
 	file, inBase := fileAssistants(c.base)[name]
 	if inBase {
 		if f := readOnlyField(file, a); f != "" {
@@ -381,7 +444,7 @@ func (c *core) setBrainAgent(name string) error {
 	if _, inBase := fileAssistants(c.base)[b.Name]; !inBase {
 		ws.Role = b.Role
 	}
-	return c.putAssistantLocked(b.Name, ws, fmt.Sprintf("Catalogue : Eriphe réfléchit maintenant avec l'agent « %s » (%s).", name, a.Runtime))
+	return c.putAssistantLocked(b.Name, ws, fmt.Sprintf("Catalogue : %s réfléchit maintenant avec l'agent « %s » (%s).", b.displayName(), name, a.Runtime))
 }
 
 // assistantSource tells where an assistant comes from: config when the
@@ -413,7 +476,7 @@ func (c *core) fileSets(name string) map[string]bool {
 	if !ok {
 		return map[string]bool{}
 	}
-	return map[string]bool{"agent": file.Agent != "", "tools": len(file.Tools) > 0, "node": file.Node != "",
+	return map[string]bool{"agent": file.Agent != "", "tools": len(file.Tools) > 0, "node": file.Node != "", "display_name": file.DisplayName != "",
 		"instructions": file.Instructions != "" || file.InstructionsFile != ""}
 }
 

@@ -7,7 +7,9 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unicode/utf8"
 )
 
 // The workspace's words, in French first and English as an option, and the
@@ -26,7 +28,7 @@ var webStrings = map[string]map[string]string{
 		"login.password":           "Mot de passe",
 		"login.submit":             "Se connecter",
 		"setup.title":              "Bienvenue",
-		"setup.lead":               "Choisis le mot de passe de ton espace Eriphe. Le code d'installation est affiché dans le journal d'eriphe-core.",
+		"setup.lead":               "Choisis le mot de passe de ton espace. Le code d'installation est affiché dans le journal d'eriphe-core.",
 		"setup.code":               "Code d'installation",
 		"setup.password":           "Nouveau mot de passe",
 		"setup.confirm":            "Confirme le mot de passe",
@@ -39,23 +41,23 @@ var webStrings = map[string]map[string]string{
 		"err.short":                "Le mot de passe doit faire 10 caractères au moins.",
 		"err.mismatch":             "Les deux mots de passe ne sont pas identiques.",
 		"err.internal":             "Une erreur est survenue. Réessaie.",
-		"chat.label":               "Conversation avec Eriphe",
+		"chat.label":               "Conversation avec {{name}}",
 		"chat.hello":               "Bonjour %s",
-		"chat.empty":               "Dis à Eriphe ce que tu veux faire. Il confie le travail à ses agents, sur tes appareils, et te demande ton accord quand il le faut.",
+		"chat.empty":               "Dis à {{name}} ce que tu veux faire. Il confie le travail à ses agents, sur tes appareils, et te demande ton accord quand il le faut.",
 		"chat.ex1":                 "Corrige le bug de la page de contact sur mon site",
 		"chat.ex2":                 "Résume les nouveautés de mes projets cette semaine",
 		"chat.ex3":                 "Prépare un devis à partir de mes notes",
-		"chat.placeholder":         "Écris à Eriphe…",
+		"chat.placeholder":         "Écris à {{name}}…",
 		"chat.send":                "Envoyer",
 		"chat.you":                 "Toi",
-		"chat.eriphe":              "Eriphe",
+		"chat.eriphe":              "{{name}}",
 		"chat.event":               "Événement",
-		"chat.thinking":            "Eriphe réfléchit…",
-		"chat.nobrain":             "Eriphe n'est pas encore configuré sur ce serveur : tes messages attendront qu'il le soit.",
-		"chat.brainoff":            "Eriphe n'est pas disponible pour l'instant : il lira tes messages dès son retour.",
+		"chat.thinking":            "{{name}} réfléchit…",
+		"chat.nobrain":             "{{name}} n'est pas encore configuré sur ce serveur : tes messages attendront qu'il le soit.",
+		"chat.brainoff":            "{{name}} n'est pas disponible pour l'instant : il lira tes messages dès son retour.",
 		"chat.offline":             "Connexion perdue. Nouvel essai…",
 		"chat.earlier":             "Messages plus anciens non affichés.",
-		"perm.title":               "Eriphe a besoin de ton accord",
+		"perm.title":               "{{name}} a besoin de ton accord",
 		"perm.yours":               "Cette décision te revient",
 		"perm.wants":               "veut utiliser",
 		"perm.reason":              "Raison (facultatif)",
@@ -66,9 +68,9 @@ var webStrings = map[string]map[string]string{
 		"perm.denied":              "Refusé.",
 		"perm.changed":             "Cette demande a changé entre-temps.",
 		"perm.task":                "Voir la tâche",
-		"tasks.label":              "Tâches d'Eriphe",
+		"tasks.label":              "Tâches de {{name}}",
 		"tasks.title":              "Tâches",
-		"tasks.none":               "Aucune tâche en cours. Quand Eriphe confie un travail à un agent, il apparaît ici.",
+		"tasks.none":               "Aucune tâche en cours. Quand {{name}} confie un travail à un agent, il apparaît ici.",
 		"tasks.done":               "Terminées récemment",
 		"tasks.waitnode":           "En attente d'un appareil",
 		"tasks.needsyou":           "Attend ta réponse",
@@ -106,8 +108,8 @@ var webStrings = map[string]map[string]string{
 		"settings.accounts":        "Comptes et outils",
 		"settings.journal":         "Journal",
 		"settings.account":         "Mon espace",
-		"machines.lead":            "Les appareils que tu as connectés à Eriphe : il t'aide avec ce qui s'y trouve, et peut y faire travailler ses agents.",
-		"machines.none":            "Aucun appareil pour l'instant. Connectes-en un : Eriphe pourra t'aider avec ce qui s'y trouve.",
+		"machines.lead":            "Les appareils que tu as connectés à {{name}} : il t'aide avec ce qui s'y trouve, et peut y faire travailler ses agents.",
+		"machines.none":            "Aucun appareil pour l'instant. Connectes-en un : {{name}} pourra t'aider avec ce qui s'y trouve.",
 		"machines.online":          "En ligne",
 		"machines.offline":         "Hors ligne",
 		"machines.seen":            "Vu %s",
@@ -121,7 +123,7 @@ var webStrings = map[string]map[string]string{
 		"machines.active":          "%d tâche(s) active(s)",
 		"machines.add":             "Connecter un appareil",
 		"devices.addhint":          "Un NAS, un PC, un Mac ou un Raspberry : une commande à lancer dessus.",
-		"machines.addlead":         "Donne-lui un nom court (lettres minuscules, chiffres, tirets), puis lance la commande affichée sur l'appareil. Eriphe n'y verra que les dossiers que tu ouvriras. Le jeton ne sert qu'une fois, pour ce nom seulement, et expire dans 24 h.",
+		"machines.addlead":         "Donne-lui un nom court (lettres minuscules, chiffres, tirets), puis lance la commande affichée sur l'appareil. {{name}} n'y verra que les dossiers que tu ouvriras. Le jeton ne sert qu'une fois, pour ce nom seulement, et expire dans 24 h.",
 		"machines.name":            "Nom de l'appareil",
 		"machines.labelsopt":       "Étiquettes (facultatif, ex. gpu)",
 		"machines.generate":        "Générer la commande",
@@ -137,23 +139,23 @@ var webStrings = map[string]map[string]string{
 		"machines.windowsfilelead": "Dans un PowerShell administrateur, à côté d'install.ps1 :",
 		"machines.expires":         "Jeton valable jusqu'au %s, une seule fois.",
 		"machines.copy":            "Copier",
-		"voice.lead":               "La voix de Home Assistant (Assist) transmet à Eriphe ce qu'elle ne traite pas elle-même, et lit sa réponse à voix haute. Crée un jeton, puis ajoute l'intégration « Eriphe » dans Home Assistant avec cette adresse et ce jeton.",
-		"voice.only":               "Ce jeton ne sert qu'à parler au cerveau d'Eriphe : il n'ouvre ni les outils, ni les réglages.",
+		"voice.lead":               "La voix de Home Assistant (Assist) transmet à {{name}} ce qu'elle ne traite pas elle-même, et lit sa réponse à voix haute. Crée un jeton, puis ajoute l'intégration « Eriphe » dans Home Assistant avec cette adresse et ce jeton.",
+		"voice.only":               "Ce jeton ne sert qu'à parler au cerveau de {{name}} : il n'ouvre ni les outils, ni les réglages.",
 		"voice.has":                "Home Assistant a un jeton. En créer un nouveau remplace l'ancien.",
 		"voice.create":             "Créer le jeton de Home Assistant",
 		"voice.replace":            "Remplacer le jeton",
-		"voice.replaceconfirm":     "Remplacer le jeton ? Home Assistant ne pourra plus parler à Eriphe tant que tu n'auras pas mis le nouveau.",
+		"voice.replaceconfirm":     "Remplacer le jeton ? Home Assistant ne pourra plus parler à {{name}} tant que tu n'auras pas mis le nouveau.",
 		"voice.once":               "Copie le jeton maintenant : il ne sera plus affiché.",
 		"voice.url":                "L'adresse à donner à l'intégration Eriphe",
 		"voice.token":              "Jeton",
 		"ha.title":                 "Home Assistant",
-		"ha.lead":                  "Eriphe et ta maison, dans les deux sens.",
-		"ha.drive":                 "Eriphe pilote la maison",
-		"ha.drivelead":             "Eriphe lit l'état de la maison et agit dessus (lumières, chauffage, volets) par le serveur MCP de Home Assistant, avec un jeton d'accès longue durée.",
+		"ha.lead":                  "{{name}} et ta maison, dans les deux sens.",
+		"ha.drive":                 "{{name}} pilote la maison",
+		"ha.drivelead":             "{{name}} lit l'état de la maison et agit dessus (lumières, chauffage, volets) par le serveur MCP de Home Assistant, avec un jeton d'accès longue durée.",
 		"ha.connect":               "Connecter Home Assistant",
-		"ha.voice":                 "La voix de la maison parle à Eriphe",
+		"ha.voice":                 "La voix de la maison parle à {{name}}",
 		"ha.voiceon":               "voix branchée",
-		"ha.voiceonly":             "La voix de la maison parle à Eriphe. Eriphe ne pilote pas encore la maison.",
+		"ha.voiceonly":             "La voix de la maison parle à {{name}}. {{name}} ne pilote pas encore la maison.",
 		"ha.manage":                "Gérer",
 		"chat.via":                 "dit à voix haute",
 		"machines.copied":          "Copié",
@@ -177,7 +179,7 @@ var webStrings = map[string]map[string]string{
 		"system.compose":           "Linux (Docker Compose)",
 		"system.darwin":            "macOS",
 		"system.windows-native":    "Windows",
-		"agents.lead":              "Les agents à qui Eriphe peut confier un travail. Ils se règlent dans la configuration d'eriphe-core.",
+		"agents.lead":              "Les agents à qui {{name}} peut confier un travail. Ils se règlent dans la configuration d'eriphe-core.",
 		"agents.none":              "Aucun agent configuré.",
 		"agents.default":           "Par défaut",
 		"agents.available":         "Disponible",
@@ -187,7 +189,7 @@ var webStrings = map[string]map[string]string{
 		"agents.prefers":           "Préfère",
 		"agents.model":             "Modèle",
 		"agents.runtime":           "Programme",
-		"accounts.lead":            "Les clés et jetons qu'Eriphe prête à ses agents. Ils sont chiffrés sur le serveur et ne sont jamais réaffichés.",
+		"accounts.lead":            "Les clés et jetons que {{name}} prête à ses agents. Ils sont chiffrés sur le serveur et ne sont jamais réaffichés.",
 		"accounts.vault":           "Coffre",
 		"accounts.none":            "Le coffre est vide.",
 		"accounts.updated":         "Modifié %s",
@@ -210,7 +212,7 @@ var webStrings = map[string]map[string]string{
 		"accounts.import":          "Copier dans le coffre",
 		"accounts.imported":        "Copié dans le coffre sous « %s ». Remplace le chemin par %s dans la configuration.",
 		"accounts.tools":           "Outils connectés",
-		"accounts.toolslead":       "Les services en ligne (agenda, mails, documents…) qu'Eriphe peut utiliser, et s'ils répondent. Ceux qui demandent ton autorisation se connectent ici.",
+		"accounts.toolslead":       "Les services en ligne (agenda, mails, documents…) que {{name}} peut utiliser, et s'ils répondent. Ceux qui demandent ton autorisation se connectent ici.",
 		"tools.none":               "Aucun outil dans la configuration.",
 		"tools.count":              "%d outils",
 		"tools.local":              "Sur un appareil",
@@ -242,7 +244,7 @@ var webStrings = map[string]map[string]string{
 		"decision.allow":           "Autorisé",
 		"decision.deny":            "Refusé",
 		"by.user":                  "Toi",
-		"by.brain":                 "Eriphe",
+		"by.brain":                 "{{name}}",
 		"by.policy":                "Règle",
 		"account.lead":             "Ta langue et ton mot de passe.",
 		"account.lang":             "Langue",
@@ -274,7 +276,7 @@ var webStrings = map[string]map[string]string{
 		"login.password":           "Password",
 		"login.submit":             "Log in",
 		"setup.title":              "Welcome",
-		"setup.lead":               "Choose the password of your Eriphe workspace. The setup code is printed in eriphe-core's log.",
+		"setup.lead":               "Choose the password of your workspace. The setup code is printed in eriphe-core's log.",
 		"setup.code":               "Setup code",
 		"setup.password":           "New password",
 		"setup.confirm":            "Confirm the password",
@@ -287,23 +289,23 @@ var webStrings = map[string]map[string]string{
 		"err.short":                "The password must be at least 10 characters long.",
 		"err.mismatch":             "The two passwords differ.",
 		"err.internal":             "Something went wrong. Try again.",
-		"chat.label":               "Conversation with Eriphe",
+		"chat.label":               "Conversation with {{name}}",
 		"chat.hello":               "Hello %s",
-		"chat.empty":               "Tell Eriphe what you want done. It hands the work to its agents, on your devices, and asks for your go-ahead when needed.",
+		"chat.empty":               "Tell {{name}} what you want done. It hands the work to its agents, on your devices, and asks for your go-ahead when needed.",
 		"chat.ex1":                 "Fix the contact page bug on my website",
 		"chat.ex2":                 "Sum up what changed in my projects this week",
 		"chat.ex3":                 "Draft a quote from my notes",
-		"chat.placeholder":         "Write to Eriphe…",
+		"chat.placeholder":         "Write to {{name}}…",
 		"chat.send":                "Send",
 		"chat.you":                 "You",
-		"chat.eriphe":              "Eriphe",
+		"chat.eriphe":              "{{name}}",
 		"chat.event":               "Event",
-		"chat.thinking":            "Eriphe is thinking…",
-		"chat.nobrain":             "Eriphe is not set up on this server yet: your messages will wait until it is.",
-		"chat.brainoff":            "Eriphe is not available right now: it will read your messages when it is back.",
+		"chat.thinking":            "{{name}} is thinking…",
+		"chat.nobrain":             "{{name}} is not set up on this server yet: your messages will wait until it is.",
+		"chat.brainoff":            "{{name}} is not available right now: it will read your messages when it is back.",
 		"chat.offline":             "Connection lost. Retrying…",
 		"chat.earlier":             "Older messages are not shown.",
-		"perm.title":               "Eriphe needs your go-ahead",
+		"perm.title":               "{{name}} needs your go-ahead",
 		"perm.yours":               "This decision is yours",
 		"perm.wants":               "wants to use",
 		"perm.reason":              "Reason (optional)",
@@ -314,9 +316,9 @@ var webStrings = map[string]map[string]string{
 		"perm.denied":              "Denied.",
 		"perm.changed":             "This request has changed in the meantime.",
 		"perm.task":                "See the task",
-		"tasks.label":              "Eriphe's tasks",
+		"tasks.label":              "{{name}}'s tasks",
 		"tasks.title":              "Tasks",
-		"tasks.none":               "No task going on. When Eriphe hands work to an agent, it shows up here.",
+		"tasks.none":               "No task going on. When {{name}} hands work to an agent, it shows up here.",
 		"tasks.done":               "Recently finished",
 		"tasks.waitnode":           "Waiting for a device",
 		"tasks.needsyou":           "Waiting for you",
@@ -354,8 +356,8 @@ var webStrings = map[string]map[string]string{
 		"settings.accounts":        "Accounts & tools",
 		"settings.journal":         "Journal",
 		"settings.account":         "My workspace",
-		"machines.lead":            "The devices you connected to Eriphe: it helps you with what is on them, and can put its agents to work there.",
-		"machines.none":            "No device yet. Connect one, and Eriphe can help you with what is on it.",
+		"machines.lead":            "The devices you connected to {{name}}: it helps you with what is on them, and can put its agents to work there.",
+		"machines.none":            "No device yet. Connect one, and {{name}} can help you with what is on it.",
 		"machines.online":          "Online",
 		"machines.offline":         "Offline",
 		"machines.seen":            "Seen %s",
@@ -369,7 +371,7 @@ var webStrings = map[string]map[string]string{
 		"machines.active":          "%d active task(s)",
 		"machines.add":             "Connect a device",
 		"devices.addhint":          "A NAS, a PC, a Mac or a Raspberry: one command to run on it.",
-		"machines.addlead":         "Give it a short name (lowercase letters, digits, dashes), then run the command shown on that device. Eriphe will only see the folders you open to it. The token works once, for this name only, and expires in 24 h.",
+		"machines.addlead":         "Give it a short name (lowercase letters, digits, dashes), then run the command shown on that device. {{name}} will only see the folders you open to it. The token works once, for this name only, and expires in 24 h.",
 		"machines.name":            "Device name",
 		"machines.labelsopt":       "Labels (optional, e.g. gpu)",
 		"machines.generate":        "Generate the command",
@@ -385,23 +387,23 @@ var webStrings = map[string]map[string]string{
 		"machines.windowsfilelead": "In an administrator PowerShell, next to install.ps1:",
 		"machines.expires":         "Token valid until %s, once.",
 		"machines.copy":            "Copy",
-		"voice.lead":               "Home Assistant's voice (Assist) hands Eriphe what it does not handle itself, and reads its answer aloud. Create a token, then add the “Eriphe” integration in Home Assistant with this address and this token.",
-		"voice.only":               "This token can only talk to Eriphe's brain: it opens neither the tools nor the settings.",
+		"voice.lead":               "Home Assistant's voice (Assist) hands {{name}} what it does not handle itself, and reads its answer aloud. Create a token, then add the “Eriphe” integration in Home Assistant with this address and this token.",
+		"voice.only":               "This token can only talk to {{name}}'s brain: it opens neither the tools nor the settings.",
 		"voice.has":                "Home Assistant has a token. A new one replaces it.",
 		"voice.create":             "Create Home Assistant's token",
 		"voice.replace":            "Replace the token",
-		"voice.replaceconfirm":     "Replace the token? Home Assistant cannot talk to Eriphe until you set the new one.",
+		"voice.replaceconfirm":     "Replace the token? Home Assistant cannot talk to {{name}} until you set the new one.",
 		"voice.once":               "Copy the token now: it will not be shown again.",
 		"voice.url":                "The address to give the Eriphe integration",
 		"voice.token":              "Token",
 		"ha.title":                 "Home Assistant",
-		"ha.lead":                  "Eriphe and your house, both ways.",
-		"ha.drive":                 "Eriphe drives the house",
-		"ha.drivelead":             "Eriphe reads the state of the house and acts on it (lights, heating, shutters) through Home Assistant's MCP server, with a long-lived access token.",
+		"ha.lead":                  "{{name}} and your house, both ways.",
+		"ha.drive":                 "{{name}} drives the house",
+		"ha.drivelead":             "{{name}} reads the state of the house and acts on it (lights, heating, shutters) through Home Assistant's MCP server, with a long-lived access token.",
 		"ha.connect":               "Connect Home Assistant",
-		"ha.voice":                 "The house's voice talks to Eriphe",
+		"ha.voice":                 "The house's voice talks to {{name}}",
 		"ha.voiceon":               "voice on",
-		"ha.voiceonly":             "The house's voice talks to Eriphe. Eriphe does not drive the house yet.",
+		"ha.voiceonly":             "The house's voice talks to {{name}}. {{name}} does not drive the house yet.",
 		"ha.manage":                "Manage",
 		"chat.via":                 "said aloud",
 		"machines.copied":          "Copied",
@@ -425,7 +427,7 @@ var webStrings = map[string]map[string]string{
 		"system.compose":           "Linux (Docker Compose)",
 		"system.darwin":            "macOS",
 		"system.windows-native":    "Windows",
-		"agents.lead":              "The agents Eriphe can hand work to. They are set in eriphe-core's configuration.",
+		"agents.lead":              "The agents {{name}} can hand work to. They are set in eriphe-core's configuration.",
 		"agents.none":              "No agent configured.",
 		"agents.default":           "Default",
 		"agents.available":         "Available",
@@ -435,7 +437,7 @@ var webStrings = map[string]map[string]string{
 		"agents.prefers":           "Prefers",
 		"agents.model":             "Model",
 		"agents.runtime":           "Program",
-		"accounts.lead":            "The keys and tokens Eriphe lends its agents. They are encrypted on the server and never shown again.",
+		"accounts.lead":            "The keys and tokens {{name}} lends its agents. They are encrypted on the server and never shown again.",
 		"accounts.vault":           "Vault",
 		"accounts.none":            "The vault is empty.",
 		"accounts.updated":         "Changed %s",
@@ -458,7 +460,7 @@ var webStrings = map[string]map[string]string{
 		"accounts.import":          "Copy into the vault",
 		"accounts.imported":        "Copied into the vault as “%s”. Replace the path with %s in the configuration.",
 		"accounts.tools":           "Connected tools",
-		"accounts.toolslead":       "The online services (calendar, mail, documents…) Eriphe can use, and whether they answer. Those that need your authorization connect here.",
+		"accounts.toolslead":       "The online services (calendar, mail, documents…) {{name}} can use, and whether they answer. Those that need your authorization connect here.",
 		"tools.none":               "No tool in the configuration.",
 		"tools.count":              "%d tools",
 		"tools.local":              "On a device",
@@ -490,7 +492,7 @@ var webStrings = map[string]map[string]string{
 		"decision.allow":           "Allowed",
 		"decision.deny":            "Denied",
 		"by.user":                  "You",
-		"by.brain":                 "Eriphe",
+		"by.brain":                 "{{name}}",
 		"by.policy":                "Rule",
 		"account.lead":             "Your language and your password.",
 		"account.lang":             "Language",
@@ -512,21 +514,62 @@ var webStrings = map[string]map[string]string{
 	},
 }
 
+// tr is the text of key in lang, French when lang has none, the key when
+// neither has: with the assistant's name for {{name}}.
 func tr(lang, key string) string {
 	if s, ok := webStrings[lang][key]; ok {
-		return s
+		return withName(lang, s, assistantName())
 	}
 	if s, ok := webStrings["fr"][key]; ok {
-		return s
+		return withName("fr", s, assistantName())
 	}
 	return key
+}
+
+// The name the user gave their assistant, for the words that name it as a
+// person ({{name}}). Where the software is named, it stays Eriphe. One core
+// runs in a process, as one vault does (vault.go).
+var shownName atomic.Value
+
+func setAssistantName(n string) { shownName.Store(n) }
+
+func assistantName() string {
+	if n, _ := shownName.Load().(string); n != "" {
+		return n
+	}
+	return defaultDisplayName
+}
+
+// Before a vowel, French elides « de » and « que »: written « de {{name}} »,
+// it reads « d'Eriphe » or « de Jarvis ».
+var elidable = regexp.MustCompile(`\b(de|De|que|Que|jusque) \{\{name\}\}`)
+
+// withName puts the assistant's name in a text.
+func withName(lang, s, name string) string {
+	if !strings.Contains(s, "{{name}}") {
+		return s
+	}
+	if lang == "fr" && startsWithVowel(name) {
+		s = elidable.ReplaceAllStringFunc(s, func(m string) string {
+			w, _, _ := strings.Cut(m, " ")
+			return w[:len(w)-1] + "'{{name}}"
+		})
+	}
+	return strings.ReplaceAll(s, "{{name}}", name)
+}
+
+func startsWithVowel(s string) bool {
+	r, _ := utf8.DecodeRuneInString(strings.ToLower(s))
+	return strings.ContainsRune("aeiouyàâäéèêëîïôöùûüœæ", r)
 }
 
 // templateFuncs are the templates' helpers, in one language.
 func templateFuncs(lang string) template.FuncMap {
 	return template.FuncMap{
-		"t":  func(key string) string { return tr(lang, key) },
-		"tf": func(key string, args ...any) string { return fmt.Sprintf(tr(lang, key), args...) },
+		"t": func(key string) string { return tr(lang, key) },
+		// name is what the user calls their assistant: the pages' title and brand.
+		"name": assistantName,
+		"tf":   func(key string, args ...any) string { return fmt.Sprintf(tr(lang, key), args...) },
 		"ago": func(t time.Time) string {
 			return ago(lang, t, time.Now())
 		},

@@ -21,6 +21,7 @@ import (
 // it in the same thread, with the same memory and tools.
 //
 //	POST /v1/voice  {"text", "language", "conversation_id", "device_id", "satellite_id", "area"}
+//	GET  /v1/voice  {"name"}: what the user calls the assistant, for the agent's name
 //
 // The answer is NDJSON: {"delta": "…"} lines, then {"done": true, "text",
 // "continue"}. Home Assistant has its own token (Settings → Tools → Home Assistant), which
@@ -82,6 +83,15 @@ func voiceVia(area string, automation bool) string {
 		return "voix"
 	}
 	return "voix, " + area
+}
+
+// handleVoiceInfo tells Home Assistant the assistant's name.
+func (c *core) handleVoiceInfo(w http.ResponseWriter, r *http.Request) {
+	if !c.voiceTokenOK(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"name": c.conf().assistantName()})
 }
 
 func (c *core) handleVoice(w http.ResponseWriter, r *http.Request) {

@@ -20,6 +20,8 @@ type assistantCard struct {
 	AgentModel  string
 	FreeReads   bool // its role adds the catalog's free reads to its tools
 	AgentLocked bool // the file names its agent
+	NameLocked  bool // the file names it
+	DisplayName string
 	ToolsLocked bool // the file sets its tools
 	ToolsText   string
 	LastTurn    time.Time
@@ -33,7 +35,8 @@ func (w *web) assistantCards(r *http.Request, v agentsPage) []assistantCard {
 	for _, av := range w.c.assistantViews() {
 		sets := w.c.fileSets(av.Name)
 		card := assistantCard{assistantView: av, RoleLabel: av.Spec.Role, FreeReads: assistantRoles[av.Spec.Role].FreeReads,
-			AgentLocked: sets["agent"], ToolsLocked: sets["tools"], ToolsText: strings.Join(av.Spec.Tools, ", ")}
+			AgentLocked: sets["agent"], NameLocked: sets["display_name"], ToolsLocked: sets["tools"], ToolsText: strings.Join(av.Spec.Tools, ", "),
+			DisplayName: av.Spec.displayName()}
 		if l := tr(lang, "assistants.role."+av.Spec.Role); l != "assistants.role."+av.Spec.Role {
 			card.RoleLabel = l
 		}
@@ -74,7 +77,9 @@ func (w *web) handleSaveAssistant(rw http.ResponseWriter, r *http.Request, s *se
 		tools = splitTools(r.PostFormValue("tools"))
 	}
 	name := r.PathValue("name")
-	if err := w.c.editAssistant(name, r.PostFormValue("agent"), tools, r.PostForm.Has("tools")); err != nil {
+	e := assistantEdit{Agent: r.PostFormValue("agent"), Tools: tools, SetTools: r.PostForm.Has("tools"),
+		DisplayName: r.PostFormValue("display_name"), SetName: r.PostForm.Has("display_name")}
+	if err := w.c.editAssistant(name, e); err != nil {
 		w.toast(rw, w.formError(r, err), false)
 		return
 	}
@@ -83,9 +88,20 @@ func (w *web) handleSaveAssistant(rw http.ResponseWriter, r *http.Request, s *se
 	rw.WriteHeader(http.StatusOK)
 }
 
-// editAssistant sets what the workspace may of an assistant: its agent
-// and, if setTools, its tools; what the file sets stays the file's.
-func (c *core) editAssistant(name, agent string, tools []string, setTools bool) error {
+// assistantEdit is what Settings may change of an assistant: its agent,
+// its tools if SetTools, its name if SetName.
+type assistantEdit struct {
+	Agent       string
+	Tools       []string
+	SetTools    bool
+	DisplayName string
+	SetName     bool
+}
+
+// editAssistant sets what the workspace may of an assistant; what the
+// file sets stays the file's.
+func (c *core) editAssistant(name string, e assistantEdit) error {
+	agent, tools, setTools := e.Agent, e.Tools, e.SetTools
 	c.catalogMu.Lock()
 	defer c.catalogMu.Unlock()
 	cur, ok := c.conf().Assistants[name]
@@ -110,7 +126,7 @@ func (c *core) editAssistant(name, agent string, tools []string, setTools bool) 
 		}
 		ws.Agent = agent
 		if cur.has(triggerConversation) {
-			event = fmt.Sprintf("Catalogue : Eriphe réfléchit maintenant avec l'agent « %s » (%s).", agent, a.Runtime)
+			event = fmt.Sprintf("Catalogue : %s réfléchit maintenant avec l'agent « %s » (%s).", cur.displayName(), agent, a.Runtime)
 		}
 	}
 	if setTools {
@@ -120,6 +136,24 @@ func (c *core) editAssistant(name, agent string, tools []string, setTools bool) 
 			}
 		} else {
 			ws.Tools = tools
+		}
+	}
+	if e.SetName {
+		n := normalizeDisplayName(e.DisplayName)
+		if n == cur.displayName() {
+			n = ws.DisplayName // unchanged: an Eriphe left as it is stays the default
+		}
+		if inBase && file.DisplayName != "" {
+			if n != file.DisplayName && n != "" {
+				return errReadOnly("assistant", name+".display_name")
+			}
+		} else {
+			if n != "" {
+				if err := checkDisplayName(n); err != nil {
+					return badDisplayName(n, err)
+				}
+			}
+			ws.DisplayName = n
 		}
 	}
 	if !inBase && ws.Role == "" {

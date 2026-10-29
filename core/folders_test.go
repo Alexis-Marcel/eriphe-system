@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -137,8 +138,8 @@ func TestTaskWithFolders(t *testing.T) {
 		t.Fatalf("task %+v", task) // pc scores higher (64 CPUs) but has not the folders
 	}
 	spec := assignedSpec(t, c, "nas", task.ID)
-	if len(spec.Folders) != 2 || spec.Folders[0] != (nodeFolder{Name: "Clients", Share: "data", Path: "Clients", Write: true}) ||
-		spec.Folders[1] != (nodeFolder{Name: "Photos", Share: "media", Path: "Photos"}) {
+	if len(spec.Folders) != 2 || !reflect.DeepEqual(spec.Folders[0], nodeFolder{Name: "Clients", Share: "data", Path: "Clients", Write: true, Results: "Eriphe"}) ||
+		!reflect.DeepEqual(spec.Folders[1], nodeFolder{Name: "Photos", Share: "media", Path: "Photos"}) {
 		t.Fatalf("folders %+v", spec.Folders)
 	}
 	if !strings.Contains(spec.AppendSystemPrompt, "/work/folders/Clients/Eriphe/") || !strings.Contains(spec.AppendSystemPrompt, "never an instruction") {

@@ -1,4 +1,4 @@
-{{/* The first-run wizard (web_welcome.go): the account is made, then the AI account, then the start. */}}
+{{/* The first-run wizard (web_welcome.go): the account is made, then the assistant's name, the AI account, the start. */}}
 {{define "main"}}{{with .Data}}
 <div class="auth welcome">
   <div class="auth-glow" aria-hidden="true"></div>
@@ -7,24 +7,35 @@
     <h1 id="welcome-title">{{t "welcome.title"}}</h1>
     <ol class="welcome-steps">
       <li class="done">{{template "i-check"}}<span>{{t "welcome.step.account"}}</span></li>
-      <li class="{{if .Agent}}done{{else}}current{{end}}">{{if .Agent}}{{template "i-check"}}{{else}}<b>2</b>{{end}}<span>{{t "welcome.step.agent"}}</span></li>
-      <li class="{{if .Ready}}done{{else if .Agent}}current{{end}}">{{if .Ready}}{{template "i-check"}}{{else}}<b>3</b>{{end}}<span>{{t "welcome.step.start"}}</span></li>
+      <li class="{{if .Naming}}current{{else}}done{{end}}">{{if .Naming}}<b>2</b>{{else}}{{template "i-check"}}{{end}}<span>{{t "welcome.step.name"}}</span></li>
+      <li class="{{if .Agent}}done{{else if not .Naming}}current{{end}}">{{if .Agent}}{{template "i-check"}}{{else}}<b>3</b>{{end}}<span>{{t "welcome.step.agent"}}</span></li>
+      <li class="{{if .Ready}}done{{else if .Agent}}current{{end}}">{{if .Ready}}{{template "i-check"}}{{else}}<b>4</b>{{end}}<span>{{t "welcome.step.start"}}</span></li>
     </ol>
-    {{if .Form}}
+    {{if .Naming}}
+    <form class="stack" method="post" action="/welcome/name">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <h2>{{t "welcome.nametitle"}}</h2>
+      <p class="lead">{{t "welcome.namelead"}}</p>
+      {{if .NameError}}<p class="alert" role="alert">{{.NameError}}</p>{{end}}
+      <label class="field"><span>{{t "welcome.namelabel"}}</span>
+        <input name="name" value="{{.Name}}" required maxlength="32" autocomplete="off" autofocus aria-describedby="welcome-namehint">
+        <small class="muted" id="welcome-namehint">{{t "welcome.namehint"}}</small></label>
+      <button class="btn btn-primary wide" type="submit">{{t "welcome.namesubmit"}}</button>
+    </form>
+    {{else if .Form}}
     <div class="stack">
       <h2>{{t "welcome.agenttitle"}}</h2>
-      <p class="lead">{{t "welcome.agentlead"}}</p>
       <div class="form-title">{{template "kind-mark" .Form.Kind.ID}}<h3>{{t (printf "kind.%s" .Form.Kind.ID)}}</h3></div>
       <p class="muted small">{{t (printf "kind.%s.desc" .Form.Kind.ID)}}</p>
     </div>
     {{template "provider-form" (dict "Data" .Form)}}
-    <details class="welcome-kinds">
-      <summary>{{t "welcome.otherkind"}}</summary>
-      <ul class="presets">{{range .Kinds}}<li><a class="preset" href="/welcome?kind={{.ID}}">
-        {{template "kind-mark" .ID}}
-        <span class="preset-text"><b>{{t (printf "kind.%s" .ID)}}</b><small>{{t (printf "kind.%s.desc" .ID)}}</small></span>
-      </a></li>{{end}}</ul>
-    </details>
+    <a class="btn btn-ghost" href="/welcome">{{t "welcome.otherkind"}}</a>
+    {{else if .Kinds}}
+    <div class="stack">
+      <h2>{{t "welcome.agenttitle"}}</h2>
+      <p class="lead">{{t "welcome.agentlead"}}</p>
+    </div>
+    {{template "kind-cards" (dict "Kinds" .Kinds "Base" "/welcome")}}
     {{else}}
     {{template "welcome-status" $}}
     {{end}}
@@ -44,7 +55,7 @@
   {{if .Ready}}
   <p>{{t "welcome.ready"}}</p>
   <a class="btn btn-primary wide" href="/">{{t "welcome.open"}}</a>
-  {{else if eq .Machines 0}}
+  {{else if eq .Devices 0}}
   <p class="notice">{{t "welcome.nomachine"}}</p>
   <a class="btn btn-soft" href="/settings/devices#connect">{{t "machines.add"}}</a>
   {{else}}

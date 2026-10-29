@@ -118,14 +118,14 @@ func TestWorkerSystemPrompt(t *testing.T) {
 		json.Unmarshal([]byte(raw), &s)
 		return s
 	}
-	if s := spec("sonnet"); s.AppendSystemPrompt != workerVoice || s.Prompt != "count the lines" {
+	if s := spec("sonnet"); s.AppendSystemPrompt != workerVoice(defaultDisplayName) || s.Prompt != "count the lines" {
 		t.Errorf("claude-code: %+v", s)
 	}
-	if s := spec("kimi"); s.AppendSystemPrompt != workerVoice || s.Prompt != "count the lines" {
+	if s := spec("kimi"); s.AppendSystemPrompt != workerVoice(defaultDisplayName) || s.Prompt != "count the lines" {
 		t.Errorf("opencode: %+v", s)
 	}
 	withHarness(t, "opencode", func(h *harness) { h.SystemPrompt = promptPrepended })
-	if s := spec("kimi"); s.AppendSystemPrompt != "" || !strings.HasPrefix(s.Prompt, workerVoice+"\n\n") ||
+	if s := spec("kimi"); s.AppendSystemPrompt != "" || !strings.HasPrefix(s.Prompt, workerVoice(defaultDisplayName)+"\n\n") ||
 		!strings.HasSuffix(s.Prompt, "count the lines") {
 		t.Errorf("prepended: %+v", s)
 	}
