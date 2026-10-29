@@ -85,9 +85,10 @@ page, the setup code creates the owner's password; it works once.
 ## 3. Connect the brain
 
 A short wizard (`/welcome`) follows. First, name your assistant: "Comment veux-tu appeler ton
-assistant ?" (What do you want to call your assistant?). Eriphe is the software's name and the
-default; pick your own (1 to 32 letters, digits, spaces, apostrophes or dashes) and it introduces
-itself by it, in the workspace and through Home Assistant. You can change it later in Settings →
+assistant ?" (What do you want to call your assistant?). Eriphe is the software's name; your
+assistant has the one you choose (1 to 32 letters, digits, spaces, apostrophes or dashes). It
+introduces itself by it, and the workspace, its tab title, the installed app and Home Assistant
+call it so. You can change it later in Settings →
 Agents. Then pick the AI account it thinks with. With a Claude subscription, run `claude setup-token` on any computer where Claude Code is installed and paste
 the token; "Use another account" takes a ChatGPT subscription or an API key (OpenRouter, Anthropic,
 OpenAI…). Eriphe creates the account's usual agents, and your assistant starts as soon as a machine is online

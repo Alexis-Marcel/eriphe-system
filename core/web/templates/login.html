@@ -3,7 +3,7 @@
   <div class="auth-glow" aria-hidden="true"></div>
   <form class="auth-card" method="post" action="{{if .Data.Setup}}/setup{{else}}/login{{end}}">
     <span class="auth-mark" aria-hidden="true">{{template "logo"}}</span>
-    <h1>{{if .Data.Setup}}{{t "setup.title"}}{{else}}Eriphe{{end}}</h1>
+    <h1>{{if .Data.Setup}}{{t "setup.title"}}{{else}}{{name}}{{end}}</h1>
     <p class="lead">{{if .Data.Setup}}{{t "setup.lead"}}{{else}}{{t "login.lead"}}{{end}}</p>
     {{if .Data.Error}}<p class="alert" role="alert">{{t .Data.Error}}</p>{{end}}
     <input type="hidden" name="csrf" value="{{.CSRF}}">

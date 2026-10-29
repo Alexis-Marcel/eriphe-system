@@ -15,16 +15,19 @@ func TestWebWelcomeFlow(t *testing.T) {
 	if code, _, h := tw.do("GET", "/", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/welcome" {
 		t.Fatalf("the conversation without an agent: %d %s", code, h.Get("Location"))
 	}
-	// First its name: Eriphe unless the user picks another.
+	// First its name, which a new install chooses: the field starts empty.
 	_, body, _ := tw.do("GET", "/welcome", nil, nil)
-	for _, want := range []string{"Bienvenue dans Eriphe", "Comment veux-tu appeler ton assistant ?", `action="/welcome/name"`,
-		`name="name" value="Eriphe"`, "/welcome/skip"} {
+	for _, want := range []string{"Bienvenue chez toi", "Comment veux-tu appeler ton assistant ?", `action="/welcome/name"`,
+		`name="name" value="" required`, "Le nom que tu veux", "/welcome/skip"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the name step lacks %q", want)
 		}
 	}
-	if strings.Contains(body, `name="key"`) {
-		t.Error("the AI account comes before the name")
+	if strings.Contains(body, `name="key"`) || strings.Contains(body, "placeholder") {
+		t.Error("the AI account comes before the name, or a name is suggested")
+	}
+	if _, _, h := tw.post("/welcome/name", url.Values{"name": {""}}, csrf); h.Get("Location") != "" {
+		t.Fatal("no name went on")
 	}
 	if _, body, h := tw.post("/welcome/name", url.Values{"name": {"Jar<vis>"}}, csrf); h.Get("Location") != "" ||
 		!strings.Contains(body, "Ce nom ne convient pas") || !strings.Contains(body, `value="Jar&lt;vis&gt;"`) {

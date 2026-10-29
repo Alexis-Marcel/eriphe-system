@@ -143,12 +143,13 @@ func TestAssistantNameWords(t *testing.T) {
 		{"en", "devices.sees", "What Jarvis sees here"},
 		{"en", "tasks.label", "Jarvis's tasks"},
 		{"en", "ha.drive", "Jarvis drives the house"},
-		{"fr", "welcome.title", "Bienvenue dans Eriphe"},
-		{"en", "welcome.title", "Welcome to Eriphe"},
 	} {
 		if got := tr(c.lang, c.key); got != c.want {
 			t.Errorf("%s %s = %q, want %q", c.lang, c.key, got, c.want)
 		}
+	}
+	if got := tr("fr", "drive.noapp"); !strings.Contains(got, "L'application Eriphe pour Google") {
+		t.Errorf("the Google app is renamed: %q", got)
 	}
 	if got := tr("fr", "folders.access.droplead"); !strings.HasPrefix(got, "Jarvis lit") || !strings.Contains(got, "« Eriphe »") {
 		t.Errorf("the results folder keeps its name: %q", got)
@@ -179,8 +180,17 @@ func TestWebAssistantName(t *testing.T) {
 		t.Fatal("a bad name saved")
 	}
 	_, body, _ := tw.do("GET", "/", nil, nil)
-	if !strings.Contains(body, "Écris à Jarvis…") || !strings.Contains(body, "<title>") || !strings.Contains(body, "· Eriphe</title>") {
-		t.Fatalf("conversation: %s", truncate(body, 400))
+	for _, want := range []string{"Écris à Jarvis…", "<title>Conversation · Jarvis</title>", `content="Jarvis"`, "<span>Jarvis</span>"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("conversation lacks %q: %s", want, truncate(body, 400))
+		}
+	}
+	// The installed app is called so too.
+	code, raw, h := tw.do("GET", "/manifest.webmanifest", nil, nil)
+	var m map[string]any
+	if code != 200 || json.Unmarshal([]byte(raw), &m) != nil || m["name"] != "Jarvis" || m["short_name"] != "Jarvis" ||
+		m["start_url"] != "/" || !strings.Contains(h.Get("Content-Type"), "manifest+json") {
+		t.Fatalf("manifest: %d %s", code, raw)
 	}
 	tw.do("POST", "/lang", url.Values{"csrf": {csrf}, "lang": {"en"}}, nil)
 	if _, body, _ = tw.do("GET", "/", nil, nil); !strings.Contains(body, "Write to Jarvis…") {

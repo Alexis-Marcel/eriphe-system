@@ -28,7 +28,7 @@ var webStrings = map[string]map[string]string{
 		"login.password":           "Mot de passe",
 		"login.submit":             "Se connecter",
 		"setup.title":              "Bienvenue",
-		"setup.lead":               "Choisis le mot de passe de ton espace Eriphe. Le code d'installation est affiché dans le journal d'eriphe-core.",
+		"setup.lead":               "Choisis le mot de passe de ton espace. Le code d'installation est affiché dans le journal d'eriphe-core.",
 		"setup.code":               "Code d'installation",
 		"setup.password":           "Nouveau mot de passe",
 		"setup.confirm":            "Confirme le mot de passe",
@@ -276,7 +276,7 @@ var webStrings = map[string]map[string]string{
 		"login.password":           "Password",
 		"login.submit":             "Log in",
 		"setup.title":              "Welcome",
-		"setup.lead":               "Choose the password of your Eriphe workspace. The setup code is printed in eriphe-core's log.",
+		"setup.lead":               "Choose the password of your workspace. The setup code is printed in eriphe-core's log.",
 		"setup.code":               "Setup code",
 		"setup.password":           "New password",
 		"setup.confirm":            "Confirm the password",
@@ -566,8 +566,10 @@ func startsWithVowel(s string) bool {
 // templateFuncs are the templates' helpers, in one language.
 func templateFuncs(lang string) template.FuncMap {
 	return template.FuncMap{
-		"t":  func(key string) string { return tr(lang, key) },
-		"tf": func(key string, args ...any) string { return fmt.Sprintf(tr(lang, key), args...) },
+		"t": func(key string) string { return tr(lang, key) },
+		// name is what the user calls their assistant: the pages' title and brand.
+		"name": assistantName,
+		"tf":   func(key string, args ...any) string { return fmt.Sprintf(tr(lang, key), args...) },
 		"ago": func(t time.Time) string {
 			return ago(lang, t, time.Now())
 		},

@@ -30,7 +30,7 @@ The image runs as UID 1993: a host folder mounted at `/data` must be writable by
 
 Then, in the workspace: the setup code of the log (`web: no password yet: open https://…/setup
 with the setup code ABCD-EFGH`) creates the owner's password, and a short wizard names the
-assistant (Eriphe unless the user picks another name) and connects the AI account it thinks with
+assistant (the user chooses its name) and connects the AI account it thinks with
 (a Claude subscription's `claude setup-token`, or any other kind of Settings → Agents, with its
 usual agents). The brain starts as soon as a machine has joined.
 Nothing else is on by default: no tool, no policy rule, no identity; the catalog's tools (Home
@@ -687,7 +687,8 @@ before moves by itself at start: the brain's `brain_*` keys become its status, t
 ### The assistant's name
 
 Eriphe is the software's name; each user names their own assistant. The brain's `display_name`
-(1 to 32 letters, digits, spaces, apostrophes or dashes) is asked by the first-run wizard, and set
+(1 to 32 letters, digits, spaces, apostrophes or dashes) is asked by the first-run wizard (an
+empty field: a new install chooses), and set
 in Settings → Agents → Assistants, with `PUT /v1/assistants/eriphe` (`{"display_name": "Jarvis"}`)
 or with `brain.display_name` in the file (then read-only). Its id stays `eriphe`. An install that
 never named it keeps Eriphe, with the same fingerprint: the upgrade restarts nothing.
@@ -696,10 +697,13 @@ The name is used wherever the assistant is a person: its instructions (`{{name}}
 `brain-prompt.md`, as `{{user}}`), the workers' standing instruction (their answer is relayed as
 its own), the memory's nightly extraction, the conversation's messages about it, the
 workspace's words (`{{name}}` in the texts of `web_text*.go`, French elision included: « Tâches
-de {{name}} » reads « Tâches d'Eriphe »), and Home Assistant's conversation agent (`GET
-/v1/voice`). The software keeps its name: the page title and logo, the images and binaries,
-eriphe-core and eriphe-node, the GitHub and Google apps, the app passwords and tokens named
-Eriphe, the Home Assistant integration, and the results subfolder `Eriphe/`.
+de {{name}} » reads « Tâches d'Eriphe »), the pages' title suffix and the brand next to the logo,
+the login page, the installed app (`/manifest.webmanifest` is served with its `name` and
+`short_name`), and Home Assistant's conversation agent (`GET /v1/voice`). The software keeps its
+name: the logo glyph, the images and binaries, the install scripts, eriphe-core and eriphe-node,
+the GitHub and Google apps and the OAuth client, the certificate authority, the app passwords and
+tokens named Eriphe, the Home Assistant integration's domain, the system texts that name the
+software, and the results subfolder `Eriphe/`.
 
 ## The brain
 
@@ -1133,7 +1137,7 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 `web: no password yet: open https://…/setup with the setup code ABCD-EFGH`. Open the page, type
 the code and choose the password (10 characters at least). The password is stored as an
 argon2id hash; the code is no longer accepted once used. While the brain has no agent, the
-conversation leads to a wizard (`/welcome`): the assistant's name (Eriphe by default), then the
+conversation leads to a wizard (`/welcome`): the assistant's name (an empty field), then the
 AI account's form of Settings → Agents, a Claude subscription first, then the brain's start once a
 machine is online. "Plus tard" skips it.
 

@@ -70,7 +70,7 @@ func (w *web) handleWelcome(rw http.ResponseWriter, r *http.Request, s *session)
 	}
 	v := w.welcomeData(r)
 	if v.Agent == "" && w.c.store.get(welcomeNamed) == "" {
-		v.Naming, v.Name = true, w.c.conf().assistantName()
+		v.Naming = true // a new install chooses: the field starts empty
 	} else if v.Agent == "" {
 		k, ok := kindOf(r.URL.Query().Get("kind"))
 		if !ok {

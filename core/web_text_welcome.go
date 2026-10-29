@@ -12,13 +12,13 @@ func init() {
 
 var welcomeStrings = map[string]map[string]string{
 	"fr": {
-		"welcome.title":        "Bienvenue dans Eriphe",
+		"welcome.title":        "Bienvenue chez toi",
 		"welcome.step.account": "Ton espace est créé",
 		"welcome.step.name":    "Nomme ton assistant",
 		"welcome.nametitle":    "Comment veux-tu appeler ton assistant ?",
-		"welcome.namelead":     "C'est le nom sous lequel il se présente et que l'espace lui donne. Garde Eriphe ou choisis le tien : tu pourras le changer dans Réglages → Agents.",
+		"welcome.namelead":     "C'est le nom sous lequel il se présente, ici et à la maison. Tu pourras le changer dans Réglages → Agents.",
 		"welcome.namelabel":    "Son nom",
-		"welcome.namehint":     "1 à 32 caractères : lettres, chiffres, espaces, apostrophes ou tirets.",
+		"welcome.namehint":     "Le nom que tu veux : 1 à 32 caractères, lettres, chiffres, espaces, apostrophes ou tirets.",
 		"welcome.namebad":      "Ce nom ne convient pas : 1 à 32 caractères, lettres, chiffres, espaces, apostrophes ou tirets.",
 		"welcome.namesubmit":   "Continuer",
 		"welcome.step.agent":   "Relie l'IA de {{name}}",
@@ -36,13 +36,13 @@ var welcomeStrings = map[string]map[string]string{
 		"machines.localurl":    "Cette adresse ne marche que sur cet ordinateur. Pour un autre appareil, ouvre l'espace avec l'adresse de cet ordinateur sur le réseau (par exemple https://192.168.0.20:8443) et génère la commande à nouveau.",
 	},
 	"en": {
-		"welcome.title":        "Welcome to Eriphe",
+		"welcome.title":        "Welcome home",
 		"welcome.step.account": "Your workspace is ready",
 		"welcome.step.name":    "Name your assistant",
 		"welcome.nametitle":    "What do you want to call your assistant?",
-		"welcome.namelead":     "It is the name it introduces itself by, and the one the workspace gives it. Keep Eriphe or pick your own: you can change it in Settings → Agents.",
+		"welcome.namelead":     "It is the name it introduces itself by, here and at home. You can change it in Settings → Agents.",
 		"welcome.namelabel":    "Its name",
-		"welcome.namehint":     "1 to 32 characters: letters, digits, spaces, apostrophes or dashes.",
+		"welcome.namehint":     "The name you want: 1 to 32 characters, letters, digits, spaces, apostrophes or dashes.",
 		"welcome.namebad":      "This name does not work: 1 to 32 characters, letters, digits, spaces, apostrophes or dashes.",
 		"welcome.namesubmit":   "Continue",
 		"welcome.step.agent":   "Connect {{name}}'s AI",
