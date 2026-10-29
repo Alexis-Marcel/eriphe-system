@@ -181,6 +181,7 @@ func (w *web) routes() http.Handler {
 	w.remoteRoutes(mux)  // web_remote.go
 	w.driveRoutes(mux)   // web_drive.go
 	w.folderRoutes(mux)  // web_folders.go
+	w.githubRoutes(mux)  // web_github.go
 	w.welcomeRoutes(mux) // web_welcome.go
 	return w.headers(mux)
 }

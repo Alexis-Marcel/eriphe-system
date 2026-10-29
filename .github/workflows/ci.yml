@@ -129,6 +129,23 @@ jobs:
       - run: sudo "$(command -v go)" test -run HandBack -v .
       - run: GOOS=windows go build ./...
 
+  # eriphe-cred, the credential helper the node lends every task.
+  cred:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: node/cred
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: node/cred/go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+      - run: test -z "$(gofmt -l .)"
+      - run: GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null .
+
   core:
     runs-on: ubuntu-latest
     defaults:
@@ -157,7 +174,7 @@ jobs:
       version-arg: true
 
   node-image:
-    needs: [version, node]
+    needs: [version, node, cred]
     permissions:
       contents: read
       packages: write

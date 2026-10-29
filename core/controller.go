@@ -46,6 +46,9 @@ type core struct {
 
 	cloud cloudFlows // Google authorizations in progress (cloud.go)
 
+	github *githubClient // Eriphe's GitHub App (github_app.go)
+	creds  credCache     // credentials minted for tasks, while they last (credentials.go)
+
 	catalogMu sync.Mutex // one change of the catalog at a time
 	dyn       dynamicCatalog
 	skipped   map[string]string // workspace entries left out at start, and why
@@ -75,7 +78,9 @@ func newCore(cfg *Config, store *Store) *core {
 		raw, _ := json.Marshal(st)
 		store.set("brain_turn", string(raw))
 	}
+	c.github = newGitHubClient()
 	c.pool = newPool(store, m.Servers)
+	c.pool.appToken = c.github.toolToken // the GitHub tool on the app
 	// Local servers are services, reached on their node.
 	c.pool.dialLocal = func(ctx context.Context, name string, _ json.RawMessage) (mcp.Transport, error) {
 		return c.dialService(ctx, name)
@@ -211,7 +216,7 @@ type runRequest struct {
 	Dir        string   `json:"dir,omitempty" jsonschema:"working directory inside the container, if not the repository root"`
 	Agent      string   `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
 	Node       string   `json:"node,omitempty" jsonschema:"node name; empty lets the scheduler choose"`
-	Identities []string `json:"identities,omitempty" jsonschema:"other identities lent to the agent, e.g. github to push a branch or open a PR"`
+	Identities []string `json:"identities,omitempty" jsonschema:"legacy: long-lived credentials from the configuration file lent as is; to push or open a PR, lend the github tool instead (the task then asks for short-lived access to repo)"`
 	Tools      []string `json:"tools,omitempty" jsonschema:"catalog tools lent to the agent (see list_tools): a server name for all its tools, or server.tool with * globs, e.g. github.get_*"`
 	Folders    []string `json:"folders,omitempty" jsonschema:"the user's folders lent to the agent, by name (see list_folders), mounted at /work/folders/<name>; the task runs on their machine, so all must be on the same one"`
 }

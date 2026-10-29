@@ -273,11 +273,12 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 
 // taskDetail is a task's drawer.
 type taskDetail struct {
-	Card   taskCard
-	Events []EventRow
-	Perm   *permView
-	Flash  string
-	OK     bool
+	Card        taskCard
+	Events      []EventRow
+	Credentials []CredentialEntry // what it asked for (credentials.go)
+	Perm        *permView
+	Flash       string
+	OK          bool
 }
 
 func (w *web) detail(id string) (*taskDetail, error) {
@@ -286,6 +287,7 @@ func (w *web) detail(id string) (*taskDetail, error) {
 		return nil, err
 	}
 	d := &taskDetail{Card: w.card(st)}
+	d.Credentials, _ = w.c.store.credentialLog(id, 20)
 	for _, e := range st.Recent {
 		switch e.Type {
 		case "text", "tool_use", "permission", "permission_answer", "error":

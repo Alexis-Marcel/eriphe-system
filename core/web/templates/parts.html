@@ -124,6 +124,12 @@
 {{if .Card.Link}}<a class="btn btn-soft wide" href="{{.Card.Link}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{.Card.LinkLabel}}</a>{{end}}
 <details class="prompt"><summary>{{t "task.prompt"}}</summary><div class="prose">{{md .Card.Prompt}}</div></details>
 {{if .Perm}}{{template "permission" .Perm}}{{end}}
+{{if .Credentials}}<h3 class="section-label">{{t "cred.title"}}</h3>
+<ol class="timeline">{{range .Credentials}}
+  <li class="ev ev-cred cred-{{.Decision}}"><span class="ev-tag">{{template "i-key"}}{{t (printf "cred.%s" .Decision)}}</span><code>{{.Access}} {{.Host}}/{{.Repo}}</code>
+    <span class="muted small">{{.Tool}} · {{clock .Time}}{{if eq .By "user"}} · {{t "cred.byuser"}}{{end}}</span>
+    {{if .Fallback}}<span class="cred-why err-text">{{t "cred.fallback"}}</span>{{else if .Reason}}<span class="cred-why muted">{{short .Reason 200}}</span>{{end}}</li>
+{{end}}</ol>{{end}}
 <h3 class="section-label">{{t "task.activity"}}</h3>
 {{if .Events}}<ol class="timeline">{{range .Events}}
   {{if eq .Type "text"}}<li class="ev ev-text"><div class="prose">{{md (printf "%v" .Data.text)}}</div><time datetime="{{iso .Time}}">{{clock .Time}}</time></li>

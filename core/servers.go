@@ -39,10 +39,12 @@ type Server struct {
 }
 
 // ServerAuth is how eriphe-core authenticates to a remote server: exactly
-// one of a bearer token in a file, OAuth, or none.
+// one of a bearer token in a file, OAuth, Eriphe's GitHub App (an
+// installation token, refreshed; github_app.go), or none.
 type ServerAuth struct {
 	BearerFile string       `json:"bearer_file,omitempty"`
 	OAuth      *OAuthConfig `json:"oauth,omitempty"`
+	GitHubApp  bool         `json:"github_app,omitempty"`
 	None       bool         `json:"none,omitempty"`
 }
 
@@ -71,6 +73,8 @@ func (s Server) authKind() string {
 		return "oauth"
 	case s.Auth.BearerFile != "":
 		return "bearer"
+	case s.Auth.GitHubApp:
+		return "github-app"
 	default:
 		return "none"
 	}
@@ -110,16 +114,16 @@ func (c *Config) checkServers() error {
 		}
 		a := s.Auth
 		if a == nil {
-			return fmt.Errorf(`server %s: auth is required: {"bearer_file": ...}, {"oauth": {...}} or {"none": true}`, name)
+			return fmt.Errorf(`server %s: auth is required: {"bearer_file": ...}, {"oauth": {...}}, {"github_app": true} or {"none": true}`, name)
 		}
 		n := 0
-		for _, set := range []bool{a.BearerFile != "", a.OAuth != nil, a.None} {
+		for _, set := range []bool{a.BearerFile != "", a.OAuth != nil, a.GitHubApp, a.None} {
 			if set {
 				n++
 			}
 		}
 		if n != 1 {
-			return fmt.Errorf("server %s: auth is exactly one of bearer_file, oauth or none", name)
+			return fmt.Errorf("server %s: auth is exactly one of bearer_file, oauth, github_app or none", name)
 		}
 		if o := a.OAuth; o != nil {
 			if o.ClientSecretFile != "" && o.ClientIDFile == "" {

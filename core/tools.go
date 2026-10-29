@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -68,7 +69,12 @@ func newMCPServer(c *core) *mcp.Server {
 			if err := c.taintedFolders(in.Folders); err != nil {
 				return nil, err
 			}
-			return c.runTask(ctx, in)
+			t, err := c.runTask(ctx, in)
+			if tainted := c.turnTaint(); err == nil && len(tainted) > 0 {
+				// Started on a tainted turn: its writes ask me (credentials.go).
+				c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(tainted, ", "))
+			}
+			return t, err
 		})
 
 	type idIn struct {

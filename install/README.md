@@ -169,6 +169,31 @@ Google" on the same page: create a "Web application" OAuth client in your own Go
 (Google Drive API enabled), with the redirect URI the page shows
 (`https://<workspace>/oauth/callback`), and paste its ID and secret.
 
+## 6. Connect GitHub (optional)
+
+For tasks that clone private repositories, push branches or open pull requests, and for the
+GitHub tool: Settings → Tools → GitHub → **Créer l'app GitHub d'Eriphe**.
+
+1. Choose the end of the app's name ("Eriphe – <name>", unique on GitHub) and, if the app should
+   belong to an organization, its name. Click "Créer l'app GitHub d'Eriphe", then "Continuer sur
+   GitHub".
+2. On GitHub, check the name and click **Create GitHub App** for your account (or the
+   organization). GitHub sends you back to the workspace: the app is created and kept in Eriphe's
+   vault.
+3. Click **Installer sur des dépôts**, choose "Only select repositories" and the repositories
+   Eriphe may work on, then **Install**. GitHub sends you back to the page, which shows the
+   installation.
+4. Optional: **Brancher l'outil GitHub sur l'app**, so the GitHub tool (issues, pull requests, code
+   search) uses the same app instead of a personal token.
+
+Then a task lent the GitHub tool asks for its access when it needs it: one hour, the task's
+repository only, read freely, and the first push waits for your approval in the workspace. The
+task's details list every access it asked for. Without the app, a task gets the GitHub tool's
+token instead, which lasts and is not limited to one repository: the page warns about it.
+
+The app needs no public address: GitHub sends your browser back to the workspace at the address
+you opened it with. Nothing reaches eriphe-core from GitHub (no webhook).
+
 ## Update
 
 Run the same command again, or the script with no option:

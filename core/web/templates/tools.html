@@ -38,8 +38,9 @@
       {{if eq .Auth "oauth"}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline">
         <button class="btn {{if eq .Status "ready"}}btn-soft{{else}}btn-primary{{end}} sm" type="submit">{{if eq .Status "ready"}}{{t "tools.reconnect"}}{{else}}{{t "tools.connect"}}{{end}}</button></form>{{end}}
       {{if eq .Preset.ID "home-assistant"}}<a class="btn btn-ghost sm" href="/settings/home-assistant">{{t "ha.manage"}}</a>{{end}}
+      {{if eq .Preset.ID "github"}}<a class="btn {{if eq .Auth "github-app"}}btn-ghost{{else}}btn-soft{{end}} sm" href="/settings/github">{{if eq .Auth "github-app"}}{{t "github.manage"}}{{else}}{{t "github.create"}}{{end}}</a>{{end}}
       {{if eq .Source "workspace"}}
-      {{if ne .Preset.ID "home-assistant"}}<a class="btn btn-ghost sm" href="{{if eq .Preset.Form "drive"}}/settings/drive{{else}}/settings/tools/{{.Name}}/edit{{end}}">{{if eq .Preset.Form "drive"}}{{t "drive.folders"}}{{else}}{{t "catalog.edit"}}{{end}}</a>{{end}}
+      {{if and (ne .Preset.ID "home-assistant") (ne .Auth "github-app")}}<a class="btn btn-ghost sm" href="{{if eq .Preset.Form "drive"}}/settings/drive{{else}}/settings/tools/{{.Name}}/edit{{end}}">{{if eq .Preset.Form "drive"}}{{t "drive.folders"}}{{else}}{{t "catalog.edit"}}{{end}}</a>{{end}}
       <form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{tf "tools.removeconfirm" .Name}}" class="inline">
         <button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
       {{end}}
@@ -102,7 +103,78 @@
   {{if .Choose}}<p>{{t (printf "pick.%s.lead" .Preset.Form)}}</p>
   {{else}}{{$help := printf "preset.%s.help" .Preset.ID}}{{if and (not .Edit) (has $help)}}<p>{{t $help}}</p>{{end}}{{end}}
 </header>
+{{if and (eq .Preset.ID "github") (not .Choose)}}<p class="notice">{{t "github.formhint"}} <a href="/settings/github">{{t "github.create"}}</a></p>{{end}}
 {{if .Choose}}{{template "account-picker" .}}{{else}}{{template "tool-form" $}}{{end}}
+{{end}}{{end}}
+
+{{/* Eriphe's GitHub App (web_github.go). */}}
+{{define "github-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
+  <div class="form-title">
+    <span class="mark preset-mark mark-github" aria-hidden="true">{{template "preset-icon" "github"}}</span>
+    <h2>{{t "github.title"}}</h2>
+  </div>
+  <p>{{t "github.lead"}}</p>
+</header>
+<div class="stack">
+{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+{{if .Created}}<p class="ok-note" role="status">{{t "github.created"}}</p>{{end}}
+{{if .Installed}}<p class="ok-note" role="status">{{t "github.installed"}}</p>{{end}}
+{{if .App}}
+<section class="panel">
+  <h3>{{template "i-shield"}}{{.App.Name}}</h3>
+  <p class="muted small"><span class="mono">{{.App.Slug}}</span> · {{tf "github.owner" .App.Owner}}{{if .App.HTMLURL}} · <a href="{{.App.HTMLURL}}" target="_blank" rel="noopener noreferrer">{{t "github.onGitHub"}}</a>{{end}}</p>
+  <h4 class="section-label">{{t "github.installations"}}</h4>
+  {{if .InstallErr}}<p class="small err-text">{{short .InstallErr 300}}</p>
+  {{else if .Installations}}<ul class="plain-list">{{range .Installations}}<li><b>{{.Account.Login}}</b> <span class="muted small">· {{if eq .Selection "all"}}{{t "github.allrepos"}}{{else}}{{t "github.somerepos"}}{{end}}</span>{{if .HTMLURL}} · <a class="small" href="{{.HTMLURL}}" target="_blank" rel="noopener noreferrer">{{t "github.chooserepos"}}</a>{{end}}</li>{{end}}</ul>
+  {{else}}<p class="notice">{{t "github.notinstalled"}}</p>{{end}}
+  <div class="actions"><a class="btn btn-primary" href="{{.InstallURL}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{t "github.install"}}</a></div>
+</section>
+<section class="panel">
+  <h3>{{template "i-plug"}}{{t "github.tooltitle"}}</h3>
+  {{if eq .ToolAuth "github-app"}}<p class="ok-note">{{tf "github.toolonapp" .Tool}}</p>
+  {{else if .ToolReadOnly}}<p class="notice">{{tf "github.toolconfig" .Tool}}</p>
+  {{else}}<p class="muted">{{if .Tool}}{{tf "github.toolmove" .Tool}}{{else}}{{t "github.toolnew"}}{{end}}</p>
+  <form hx-post="/settings/github/tool" hx-disabled-elt="find button" class="actions"><button class="btn btn-soft" type="submit">{{t "github.tooluse"}}</button></form>{{end}}
+</section>
+<details class="panel advanced">
+  <summary><span class="adv-title">{{t "github.forget"}}</span></summary>
+  <p class="muted small">{{t "github.forgethint"}}</p>
+  <form hx-post="/settings/github/forget" hx-confirm="{{t "github.forgetconfirm"}}" class="actions"><button class="btn btn-danger-ghost" type="submit">{{t "github.forget"}}</button></form>
+</details>
+{{else}}
+{{if and .Tool (eq .ToolAuth "bearer")}}<p class="notice">{{t "github.fallback"}}</p>{{end}}
+<section class="panel">
+  <h3>{{template "i-plus"}}{{t "github.create"}}</h3>
+  <p class="muted">{{t "github.createlead"}}</p>
+  {{if not .Vault}}<p class="alert" role="alert">{{t "accounts.novault"}}</p>{{end}}
+  <form class="stack" method="post" action="/settings/github/create">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+    <div class="form-grid">
+      <label class="field"><span>{{t "github.suffix"}}</span><input type="text" name="suffix" value="{{.Suffix}}" maxlength="24" autocomplete="off" aria-describedby="gh-suffix-h"><small id="gh-suffix-h">{{t "github.suffixhint"}}</small></label>
+      <label class="field"><span>{{t "github.org"}}</span><input type="text" name="org" maxlength="39" autocomplete="off" spellcheck="false" class="mono" aria-describedby="gh-org-h"><small id="gh-org-h">{{t "github.orghint"}}</small></label>
+    </div>
+    <p class="small muted">{{t "github.perms"}}</p>
+    <div class="actions"><button class="btn btn-primary" type="submit"{{if not .Vault}} disabled{{end}}>{{t "github.create"}}</button></div>
+  </form>
+</section>
+{{end}}
+</div>
+{{end}}{{end}}
+
+{{/* The manifest, posted by the browser to GitHub. */}}
+{{define "github-post"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/github">{{template "i-back"}}{{t "github.title"}}</a>
+  <h2>{{t "github.posttitle"}}</h2>
+  <p>{{t "github.postlead"}}</p>
+</header>
+<form method="post" action="{{.PostURL}}" class="panel stack">
+  <input type="hidden" name="manifest" value="{{.Manifest}}">
+  <pre class="perm-subject"><code>{{.Manifest}}</code></pre>
+  <div class="actions"><button class="btn btn-primary" type="submit">{{template "i-link"}}{{t "github.continue"}}</button></div>
+</form>
 {{end}}{{end}}
 
 {{/* The kinds of mailbox or calendar account, each with its logo. */}}

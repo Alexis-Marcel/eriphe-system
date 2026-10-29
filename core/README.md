@@ -111,7 +111,14 @@ or any node label), and `use`, which tells the brain when to pick it.
 The brain is an agent too (`brain.agent`, or Settings → Agents when the file names none): changing
 it restarts the brain once its turn is over, on its session if the harness is the same, or on a
 fresh one with the context pack. Its runtime must take MCP servers and a system prompt. The provider's credential is lent to each task, plus the
-`identities` the task asks for (for example `github`).
+`identities` the task asks for (legacy, see below).
+
+**Identities (legacy).** `identities` in `core.json` name a file (or `vault:` secret) lent as is to a
+task that asks for it by name, as an environment variable (`{"github": {"env": "GH_TOKEN", "file":
+…}}`): a long-lived token inside the task. They still work, but tasks now get their access to
+GitHub through [credentials on demand](#credentials-on-demand): short-lived, for one repository,
+decided by the policy and logged. A task given a `GH_TOKEN` identity keeps its own way (git uses
+that token, eriphe-cred is not set up).
 
 **Harness cards.** What each runtime can do, as the node drives it, is one entry of `harnesses`
 (`harnesses.go`): MCP servers, how it takes a system prompt (a flag, developer instructions, an
@@ -207,7 +214,7 @@ holds their credentials and is the only one to reach them: **a task never sees a
 | Field | What |
 |---|---|
 | `url` | a remote server (streamable HTTP) |
-| `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"none": true}` |
+| `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"github_app": true}` (an installation token of Eriphe's GitHub App, refreshed before it ends: see [credentials on demand](#the-github-app)), `{"none": true}` |
 | `run` | instead of `url` and `auth`: a local server, a container a node runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
 | `use` | what it is for, for the brain |
 | `trust_annotations` | the server's own `readOnlyHint` counts for the policy (below); off by default |
@@ -300,6 +307,9 @@ new access token is used. The database file is as sensitive as `/secrets`.
   reaches eriphe-core with its secret, and only for its own running tasks.
 - Every call is a permission request first, under the policy below; the proxy enforces it with
   tickets.
+- git and gh in a task get [credentials on demand](#credentials-on-demand): a one-hour token for one
+  repository, decided by the policy, approved by the user for a first push, and logged; a vendor's
+  long-lived token is lent only as the flagged fallback, without a GitHub App.
 - What servers say (descriptions, results, errors) is data for the agents, never instructions:
   the brain's prompt says so, and the policy, not the brain, decides what reaches a third party.
 
@@ -480,6 +490,109 @@ Common safe reads, allowed without asking anyone:
 ```
 
 Every decision (by the policy, the brain or the user) is kept in the `decisions` table.
+
+## Credentials on demand
+
+A task asks for the access it needs when it needs it, through the standard extension points of
+its tools, and eriphe-core decides and mints a short-lived credential for that one thing: **no
+long-lived secret ever enters a task** (the study behind it: tasks adapt to what they need, and
+ask for their access the same way they install their tools).
+
+**The path of a request.** `eriphe-cred` (node/cred, a small static Go program) is in every task
+at `/opt/eriphe/bin`, with the injected agent (node/README.md, Injected programs). It is:
+
+- git's **credential helper**: the task's entrypoint sets `credential.helper=/opt/eriphe/bin/eriphe-cred`
+  and `credential.useHttpPath=true` (environment `GIT_CONFIG_*`, nothing written), so git names the
+  repository; git's protocol does not say whether it fetches or pushes, so eriphe-cred reads it
+  from the git command that started it (`push` writes, anything else reads);
+- **gh's wrapper**: also there as `gh`, ahead of the real one (the image's, or the one the agent
+  installs with apt), it asks for a token for the command's
+  repository (`-R`, `GH_REPO`, or the `origin` remote), read for `pr view`/`list`/`diff`/`checks`,
+  `issue view`/`list`, `api` with GET…, write otherwise, and runs the real gh with `GH_TOKEN` for
+  that one process.
+
+It posts `{protocol, host, path, access}` to the node's task listener
+(`<callback-url>/v1/task/credential`, with the task's own secret, as the permission endpoint);
+the node relays it to `POST /v1/node/tasks/{id}/credential` with its own secret and certificate.
+
+**The decision** (`decideCredential`, deny by default; first that applies):
+
+| | Answer |
+|---|---|
+| a host eriphe-core has no service for (anything but `github.com`, `api.github.com`) | none: git goes on to another helper, or none |
+| not `https`, no repository (git without `useHttpPath`), an access other than `read`/`write` | deny |
+| the brain | deny: it works through its tools |
+| the GitHub service is not lent to the task: no GitHub catalog server in its grant (`"github"`, or some of its tools such as `"github.get_*"`) | deny |
+| the first rule of `policy.credentials` that matches (host and repo globs, access) | its decision: `allow`, `ask` (once per task), `deny` |
+| no rule: the repository the task was asked to work on (`repo` of `run_task`) | read: allow; write: ask, the first time in the task |
+| no rule: another repository | deny |
+| a write allowed by a rule, by a task that read external content (an external catalog tool, a page, a web search) or was started on a tainted turn of the brain | ask |
+
+```json
+"policy": {"credentials": [
+  {"repo": "my-org/docs", "access": "read", "decision": "allow"},
+  {"repo": "me/site", "access": "write", "decision": "allow", "reason": "Eriphe publishes the site"},
+  {"repo": "my-org/infra*", "decision": "deny", "reason": "never from a task"}
+]}
+```
+
+**Approval.** "Ask" goes through the task's permission flow: the node asks a permission
+`Credential` (`write github.com/owner/repo`), which only the user may answer (the policy marks it
+so, the brain's answer is refused), on the approval card of the workspace like any other. The
+tool waits meanwhile. Once allowed, the approval holds for that repository (a write covers reads)
+for the rest of the task, and the node asks eriphe-core again, which mints.
+
+**The credential.** With [the GitHub App](#the-github-app), an installation token restricted to the
+one repository and the rights asked for, valid one hour: git reads `contents: read` or `write`; gh
+reads `contents`, `pull_requests`, `issues`, `checks`, or writes `pull_requests` and `issues`
+(never `contents: write`: a merge is not a task's). git gets `password_expiry_utc`; eriphe-core
+reuses a token for the same task and rights until ten minutes before it ends. Without the app, the
+GitHub tool's own bearer token is lent instead (**fallback**): long-lived and not limited to the
+repository, it is flagged in the log, in eriphe-core's log (`WARNING: long-lived token lent`) and in
+the task's details, and the Tools page says to create the app.
+
+**The log.** Every request is kept (`credential_log`: time, task, tool, host, repository, access,
+decision, by whom, source, reason), with the user's answers to the approvals, and shown in the
+task's details ("Accès demandés") and by `GET /v1/tasks/{id}/credentials`. Approvals are in
+`credential_grants`.
+
+**What it does not stop.** The token is in the task for the tool that asked (an hour, one
+repository): a task that leaks it leaks that much. The task's secret, which eriphe-cred uses, is
+in the task's environment (the egress relay's address already carries it): the agent could ask
+for a credential itself, which is no more than git can, and the policy denies reading it
+(`$ERIPHE_TASK_SECRET`) like the other secrets.
+
+### The GitHub App
+
+Each user creates **their own** GitHub App, in one click, from Settings → Tools → GitHub →
+"Créer l'app GitHub d'Eriphe" (GitHub's manifest flow, `web_github.go`):
+
+1. eriphe-core writes the manifest: name "Eriphe – <suffix>" (the user's name by default),
+   permissions `contents` write, `pull_requests` write, `issues` write, `metadata` read, `checks`
+   read, no webhook (`hook_attributes.active` false), private, `redirect_url`
+   `https://<workspace>/github-app/callback`, `setup_url` `https://<workspace>/github-app/installed`
+   (both lead the browser back to the page: GitHub's redirect does not carry the session cookie,
+   which is SameSite=Strict);
+2. the browser posts it to `github.com/settings/apps/new` (or an organization's
+   `/organizations/<org>/settings/apps/new`) with a state bound to it (the OAuth flow's cookie,
+   `__Host-eriphe-oauth`, SameSite=Lax; the page lets its form go to github.com);
+3. GitHub redirects the browser back with a code: the redirect is the browser's, so a workspace
+   on the LAN works, no public address or bounce is needed. eriphe-core checks the state and the
+   cookie (once, within an hour), exchanges the code (`POST /app-manifests/{code}/conversions`)
+   for the app's id, slug, private key, webhook secret and client, and keeps them in the vault as
+   one secret, `github-app`;
+4. the page then installs the app on the repositories Eriphe may work on
+   (`github.com/apps/<slug>/installations/new`) and shows where it is installed.
+
+Minting signs a JWT with the app's key (RS256, nine minutes), finds the installation of the
+repository (`GET /repos/{owner}/{repo}/installation`) and asks
+`POST /app/installations/{id}/access_tokens` with `repositories` and `permissions`.
+
+"Brancher l'outil GitHub sur l'app" puts the GitHub catalog tool on the same app
+(`{"auth": {"github_app": true}}`): an installation token of the owner's installation, with its
+repositories and rights, renewed five minutes before it ends. One GitHub connection for the tool
+and for git; the tool's former token is forgotten. A tool of the configuration file is changed in
+the file. "Oublier l'app" removes it from the vault (it stays on GitHub).
 
 ## The brain
 
@@ -846,6 +959,7 @@ handlers are thin layers over the methods behind the MCP tools.
 | `GET /v1/tasks?all=1` | worker tasks, the most recent first; active ones only without `all`; the brain too while it waits for a permission |
 | `GET /v1/tasks/{id}?events=N` | the task's status (as `task_status`) with its last N events (20) |
 | `GET /v1/tasks/{id}/events?after=N&wait=S` | events after seq N, waiting up to S seconds (max 120) for new ones; a finished task answers at once |
+| `GET /v1/tasks/{id}/credentials` | what the task asked for with [credentials on demand](#credentials-on-demand), the latest first: time, tool, host, repo, access, decision, by whom, source |
 | `POST /v1/tasks/{id}/answer` | `{reply, allow}`: allow or deny the pending permission (`allow` set), or reply to an idle task |
 | `POST /v1/tasks/{id}/stop` | stop the task's agent |
 

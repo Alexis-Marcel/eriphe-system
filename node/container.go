@@ -14,10 +14,12 @@ import (
 func containerName(t *Task) string { return "eriphe-task-" + t.ID }
 
 // The container puts the injected agent first in PATH, makes the cache's
-// apt directories, clones the repository if asked (once: /work is kept
-// across restarts; git is installed first if the image lacks it), makes
-// what it writes group-writable when it has folders (the user's group
-// shares them), then becomes the agent its runtime names. Nothing it prints
+// apt directories, makes git ask Eriphe for its credentials when
+// eriphe-cred is there (credential.go; a legacy GH_TOKEN identity keeps its
+// own way), clones the repository if asked (once: /work is kept across
+// restarts; git is installed first if the image lacks it), makes what it
+// writes group-writable when it has folders (the user's group shares
+// them), then becomes the agent its runtime names. Nothing it prints
 // before goes to stdout, the agent's channel.
 const entrypoint = `set -e
 case ":$PATH:" in *":` + injectDir + `/bin:"*) ;; *) export PATH="` + injectDir + `/bin:$PATH" ;; esac
@@ -25,6 +27,10 @@ if [ ! -w "${HOME:-/}" ]; then export HOME=/tmp/home; mkdir -p "$HOME"; fi
 if [ -w /cache ]; then mkdir -p /cache/apt/archives/partial /cache/apt/lists/partial 2>/dev/null || true; fi
 cd /work
 if [ -n "$ERIPHE_FOLDERS" ]; then umask 002; fi
+if [ -z "$GH_TOKEN" ] && [ -n "$ERIPHE_CRED_URL" ] && [ -x ` + injectDir + `/bin/eriphe-cred ]; then
+  export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=` + injectDir + `/bin/eriphe-cred \
+    GIT_CONFIG_KEY_1=credential.useHttpPath GIT_CONFIG_VALUE_1=true
+fi
 if [ -n "$ERIPHE_REPO" ] && [ ! -d repo ]; then
   if ! command -v git >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
     echo "eriphe: installing git" >&2
@@ -218,6 +224,9 @@ func (n *node) taskRunArgs(t *Task, agentArgs []string, agentEnv map[string]stri
 		env["TZ"] = spec.TZ // the agent's clock is the user's, not the node's
 	}
 	for k, v := range n.egressEnv(t) { // their only way out (egress.go)
+		env[k] = v
+	}
+	for k, v := range n.credentialEnv(t) { // where eriphe-cred asks (credential.go)
 		env[k] = v
 	}
 	// The env reaches the container through the docker CLI's own (-e NAME),

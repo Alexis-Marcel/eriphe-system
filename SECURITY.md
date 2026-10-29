@@ -26,6 +26,12 @@ actions the policy should have stopped. The design and its known limits are desc
 core/README.md (Security model, Permission policy), node/README.md and deploy/README.md (What the
 proxy does not stop).
 
+Credentials in tasks: a task never holds a long-lived secret but the legacy `identities` and,
+without a GitHub App, the GitHub tool's token (flagged). It gets one-hour tokens limited to one
+repository and the rights asked for, through git's credential helper and gh's wrapper, decided by
+eriphe-core's policy (core/README.md, Credentials on demand). A way to get a token for a repository
+or a right the policy would not lend, or to approve a first push without the user, is in scope.
+
 Out of scope: the terms or behaviour of the AI providers and agents themselves (Claude Code,
 Codex, OpenCode), and attacks that need the owner's own credentials or root on a machine running
 Eriphe.

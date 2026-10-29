@@ -50,9 +50,14 @@ type Rule struct {
 
 type Policy struct {
 	Rules []Rule `json:"rules,omitempty"`
+	// Credentials are the rules of credentials on demand (credentials.go).
+	Credentials []CredentialRule `json:"credentials,omitempty"`
 }
 
 func (p *Policy) compile() error {
+	if err := checkCredentialRules(p.Credentials); err != nil {
+		return err
+	}
 	for i := range p.Rules {
 		r := &p.Rules[i]
 		if r.Tool == "" {
@@ -78,7 +83,7 @@ func rule(tool, match, decision, reason string) Rule {
 
 const (
 	shellBoundary = `(^|[;&|(]\s*|\s)` // the start of a command in a shell line
-	secretVars    = `CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|GH_TOKEN|GITHUB_TOKEN|OPENAI_API_KEY|GOOGLE_GENERATIVE_AI_API_KEY|MISTRAL_API_KEY|OPENROUTER_API_KEY|ERIPHE_CODEX_AUTH|CODEX_HOME`
+	secretVars    = `CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|GH_TOKEN|GITHUB_TOKEN|OPENAI_API_KEY|GOOGLE_GENERATIVE_AI_API_KEY|MISTRAL_API_KEY|OPENROUTER_API_KEY|ERIPHE_CODEX_AUTH|CODEX_HOME|ERIPHE_TASK_SECRET`
 )
 
 var builtinDeny = []Rule{
@@ -104,6 +109,10 @@ var builtinAsk = []Rule{
 // subject is what a tool acts on, which rules match against: for an MCP
 // tool, the JSON of its input.
 func subject(tool string, input map[string]any) string {
+	if tool == credentialTool {
+		// "write github.com/owner/repo": what the user approves.
+		return fmt.Sprintf("%v %v/%v", input["access"], input["host"], input["repo"])
+	}
 	if strings.HasPrefix(tool, "mcp__") {
 		if input == nil {
 			input = map[string]any{}
@@ -207,6 +216,13 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 		pid := fmt.Sprint(e.Data["id"])
 		tool := fmt.Sprint(e.Data["tool_name"])
 		input, _ := e.Data["input"].(map[string]any)
+		if tool == credentialTool {
+			// A credential the policy could not lend alone: the user's.
+			reason, _ := input["reason"].(string)
+			c.store.markUserOnly(id, pid, orStr(reason, "lends access to a repository"))
+			left = true
+			continue
+		}
 		decision, reason := c.decide(tool, input)
 		switch decision {
 		case decideAllow, decideDeny:
@@ -245,6 +261,9 @@ func (s *Store) recordDecision(taskID, pid, tool string, input map[string]any, d
 	s.logDecision(taskID, pid, tool, input, decision, by, reason)
 	if decision == decideAllow && strings.HasPrefix(tool, "mcp__") {
 		s.addTicket(taskID, tool, input)
+	}
+	if tool == credentialTool {
+		s.credentialAnswered(taskID, input, decision, by, reason) // credentials.go
 	}
 }
 
