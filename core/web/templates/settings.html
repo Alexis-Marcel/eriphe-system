@@ -37,7 +37,7 @@
     {{template "device-sees" .}}
     {{template "device-can" .}}
     <div class="device-foot">
-      <p class="muted small">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}}{{else}}{{t "machines.online"}}{{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}}{{end}}{{if .Version}} · <span class="mono">eriphe-node {{ver .Version}}</span>{{end}}</p>
+      <p class="muted small device-version">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}} · {{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}} · {{end}}{{if .Version}}<span class="mono">eriphe-node {{ver .Version}}</span>{{if and .Update .Update.Latest (not .Update.Pending)}} <span class="mono">→ {{ver .Update.Latest}}</span>{{end}}{{end}}</p>
       {{template "machine-update" .Update}}
       {{if and $.Data.CAHash .CertExpires.IsZero}}<p class="muted small">{{t "machines.notls"}}</p>{{end}}
     </div>
@@ -222,16 +222,19 @@
   <p class="small">{{template "update-state" .}}</p>
   {{if and .Latest (not .Pending)}}
   {{if .Updater}}
-  <form hx-post="/settings/updates/request" class="update-now">
+  <form hx-post="/settings/updates/request" class="update-now inline-update">
     <input type="hidden" name="machine" value="{{.Machine}}">
     <button class="btn btn-soft sm" type="submit" hx-disabled-elt="this" {{if and .CoreFirst (not .Core)}}disabled title="{{t "update.corefirst"}}"{{end}}>{{t "updates.now"}}</button>
     {{if and .CoreFirst (not .Core)}}<span class="muted small" title="{{t "update.corefirst"}}">{{t "updates.aftercore"}}</span>{{end}}
   </form>
   {{else}}
-  <div class="cmd">
-    <p class="muted small">{{t "updates.manual"}}</p>
-    <div class="code"><pre id="update-{{.Machine}}">{{.Manual.Cmd}}</pre><button class="btn btn-soft sm" type="button" data-copy="update-{{.Machine}}">{{t "machines.copy"}}</button></div>
-  </div>
+  <button class="btn btn-soft sm inline-update" type="button" data-dialog="update-dlg-{{.Machine}}">{{t "updates.now"}}</button>
+  <dialog class="modal" id="update-dlg-{{.Machine}}" aria-labelledby="update-dlg-{{.Machine}}-title">
+    <h3 id="update-dlg-{{.Machine}}-title">{{tf "updates.dlgtitle" .Machine}}</h3>
+    <p class="muted">{{t "updates.manual"}}</p>
+    <div class="code one-line"><pre id="update-{{.Machine}}">{{.Manual.Cmd}}</pre><button class="btn btn-soft sm" type="button" data-copy="update-{{.Machine}}">{{t "machines.copy"}}</button></div>
+    <form method="dialog" class="modal-actions"><button class="btn" type="submit">{{t "updates.close"}}</button></form>
+  </dialog>
   {{end}}
   {{end}}
 </div>
