@@ -24,7 +24,7 @@
 
 {{define "machines"}}
 <header class="page-head"><h2>{{t "settings.machines"}}</h2><p>{{t "machines.lead"}}</p></header>
-<ul class="grid devices">
+<ul class="grid devices" id="devices-grid">
 {{range .Data.Nodes}}
   <li class="tile device{{if .Suspended}} is-cut{{end}}">
     <div class="tile-head">
@@ -47,7 +47,7 @@
 
 {{template "updates" .Data.Updates}}
 
-<dialog class="modal modal-wide" id="connect-dlg" aria-labelledby="add-title" data-focus-on-open="join-name">
+<dialog class="modal modal-wide" id="connect-dlg" aria-labelledby="add-title" data-focus-on-open="join-name" data-reset-on-close>
   <h3 id="add-title">{{t "machines.add"}}</h3>
   <p class="muted">{{t "machines.addlead"}}</p>
   <form class="row-form" hx-post="/settings/devices/join" hx-target="#join-result" hx-swap="innerHTML">
@@ -58,7 +58,7 @@
     {{template "join-via" .Data.Remote}}
     <button class="btn btn-primary" type="submit">{{t "machines.generate"}}</button>
   </form>
-  <div id="join-result"></div>
+  <div id="join-result" data-clear-on-close></div>
   <form method="dialog" class="modal-actions"><button class="btn" type="submit">{{t "updates.close"}}</button></form>
 </dialog>
 
@@ -290,7 +290,26 @@
   </div>
   </div>
 </details>
+{{template "join-wait" .Wait}}
 {{end}}{{end}}{{end}}
+
+{{/* Under the commands, the dialog waits for the device to connect with its
+token (web_devices.go), asking every 2 s until it has; then the grid behind
+is shown again. . is a joinWait. */}}
+{{define "join-wait-fragment"}}{{template "join-wait" .Data}}{{end}}
+{{define "join-wait"}}
+{{if .Connected}}
+<div class="join-wait join-done" id="join-wait">
+  <div class="test-result test-ok" role="status">{{template "i-check"}}<p>{{tf "devices.connected" .Name}}</p></div>
+  <span hidden hx-get="/settings/devices" hx-trigger="load" hx-select="#devices-grid" hx-target="#devices-grid" hx-swap="outerHTML"></span>
+  <form method="dialog"><button class="btn btn-primary" type="submit">{{t "devices.done"}}</button></form>
+</div>
+{{else}}
+<div class="join-wait" id="join-wait" hx-get="/settings/devices/{{.Name}}/wait?token={{.ID}}" hx-trigger="every 2s" hx-swap="outerHTML">
+  <p class="muted small" role="status"><span class="pulse-dot" aria-hidden="true"></span>{{tf "devices.waiting" .Name}}</p>
+</div>
+{{end}}
+{{end}}
 
 {{define "journal"}}
 <header class="page-head"><h2>{{t "settings.journal"}}</h2><p>{{t "journal.lead"}}</p></header>

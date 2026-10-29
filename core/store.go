@@ -185,6 +185,14 @@ func (s *Store) addJoinToken(hash string, t joinToken) error {
 	return err
 }
 
+// joinTokenUnused says whether the join token named id is still there to
+// join with: neither used nor expired.
+func (s *Store) joinTokenUnused(id string) bool {
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM join_tokens WHERE id = ? AND expires >= ?`, id, time.Now().Unix()).Scan(&n)
+	return n > 0
+}
+
 var (
 	errJoinToken  = errors.New("invalid or expired join token")
 	errJoinName   = errors.New("this join token is for another node name")
