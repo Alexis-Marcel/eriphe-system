@@ -16,7 +16,7 @@ func TestAgentsConfig(t *testing.T) {
 		Agents:       map[string]Agent{"sonnet": {Runtime: "claude-code", Provider: "anthropic", Model: "sonnet"}},
 		DefaultAgent: "sonnet",
 	}
-	if err := cfg.checkAgents(); err != nil {
+	if err := checkAll(cfg); err != nil {
 		t.Fatal(err)
 	}
 	name, a, err := cfg.agent("")
@@ -34,7 +34,7 @@ func TestAgentsConfig(t *testing.T) {
 	// OpenCode with an API key, in the variable of its provider.
 	cfg.Providers["openrouter"] = Provider{Kind: "openrouter-api", Secret: secret}
 	cfg.Agents["kimi"] = Agent{Runtime: "opencode", Provider: "openrouter", Model: "openrouter/moonshotai/kimi-k2"}
-	if err := cfg.checkAgents(); err != nil {
+	if err := checkAll(cfg); err != nil {
 		t.Fatal(err)
 	}
 	if env, err := cfg.lendAgent(cfg.Agents["kimi"]); err != nil || env["OPENROUTER_API_KEY"] != "tok" || len(env) != 1 {
@@ -77,7 +77,7 @@ func TestAgentsConfig(t *testing.T) {
 		c.Providers = map[string]Provider{"anthropic": cfg.Providers["anthropic"]}
 		c.Agents = map[string]Agent{"sonnet": cfg.Agents["sonnet"]}
 		b.edit(&c)
-		if err := c.checkAgents(); err == nil || !strings.Contains(err.Error(), b.want) {
+		if err := checkAll(&c); err == nil || !strings.Contains(err.Error(), b.want) {
 			t.Errorf("%s: %v", b.name, err)
 		}
 		restoreHarnesses()
@@ -87,7 +87,7 @@ func TestAgentsConfig(t *testing.T) {
 	cfg.Providers["oa"] = Provider{Kind: "openai-api", Secret: secret}
 	cfg.Agents["gpt"] = Agent{Runtime: "opencode", Provider: "oa", Model: "openai/gpt-5"}
 	cfg.Brain = &BrainConfig{Agent: "gpt"}
-	if err := cfg.checkAgents(); err != nil {
+	if err := checkAll(cfg); err != nil {
 		t.Fatalf("brain on opencode: %v", err)
 	}
 }
@@ -110,7 +110,7 @@ func TestACPAgentsConfig(t *testing.T) {
 		}
 	}
 	cfg := good()
-	if err := cfg.checkAgents(); err != nil {
+	if err := checkAll(cfg); err != nil {
 		t.Fatal(err)
 	}
 	if env, err := cfg.lendAgent(cfg.Agents["qwen"]); err != nil || env["DASHSCOPE_API_KEY"] != "tok" || len(env) != 1 {
@@ -167,7 +167,7 @@ func TestACPAgentsConfig(t *testing.T) {
 	for _, b := range bad {
 		c := good()
 		b.edit(c)
-		if err := c.checkAgents(); err == nil || !strings.Contains(err.Error(), b.want) {
+		if err := checkAll(c); err == nil || !strings.Contains(err.Error(), b.want) {
 			t.Errorf("%s: %v", b.name, err)
 		}
 	}

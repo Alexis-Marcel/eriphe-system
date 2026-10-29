@@ -198,10 +198,10 @@ func (w *web) pendingPermission(st *taskStatus) map[string]any {
 
 // brainState tells whether the brain is set up, at work, or away.
 func (w *web) brainState() string {
-	if w.c.conf().Brain == nil {
+	if w.c.conf().brain() == nil {
 		return "none"
 	}
-	id := w.c.store.get("brain_task")
+	id := w.c.brainTaskID()
 	if id == "" {
 		return "off"
 	}

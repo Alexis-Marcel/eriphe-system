@@ -43,20 +43,21 @@ func TestServersConfig(t *testing.T) {
 		}
 	}
 	// The brain may name a tool the workspace adds later: left out until then.
+	checkBrain := func() error { return mergeCatalog(cfg, newDynamic()).checkAssistants() }
 	cfg.Brain.Tools = []string{"mail", "github.get_*"}
-	if err := cfg.checkServers(); err != nil {
+	if err := checkBrain(); err != nil {
 		t.Errorf("brain.tools with a server not yet in the catalog: %v", err)
 	}
-	if got := cfg.brainTools(); len(got) != 1 || got[0] != "github.get_*" {
-		t.Errorf("brainTools = %v", got)
+	if got := cfg.assistantTools(cfg.Brain.assistant()); len(got) != 1 || got[0] != "github.get_*" {
+		t.Errorf("assistantTools = %v", got)
 	}
 	cfg.Brain.Tools = []string{"mail.[x"}
-	if err := cfg.checkServers(); err == nil {
+	if err := checkBrain(); err == nil {
 		t.Error("brain.tools with a bad glob accepted")
 	}
 	cfg.Brain.Tools = nil
 	cfg.Brain.MCPServers = map[string]MCPServer{"github": {URL: "https://x"}}
-	if err := cfg.checkServers(); err == nil {
+	if err := checkBrain(); err == nil {
 		t.Error("a server both in servers and brain.mcp_servers accepted")
 	}
 }

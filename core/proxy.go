@@ -50,9 +50,9 @@ func (c *core) taskMCPHandler() http.Handler {
 		}
 		server := r.PathValue("server")
 		if server == selfServer {
-			// eriphe-core's own tools, for the brain only and without
-			// self_url: what the bearer token gives at /mcp.
-			if t.Kind != "brain" || c.conf().Brain == nil || c.conf().Brain.SelfURL != "" || c.self == nil {
+			// eriphe-core's own tools, for an assistant whose role has them,
+			// without self_url: what the bearer token gives at /mcp.
+			if a, r, ok := c.assistantOf(t); !ok || !r.SelfTools || a.SelfURL != "" || c.self == nil {
 				http.Error(w, "this task has no access to "+server, http.StatusForbidden)
 				return
 			}
@@ -69,31 +69,25 @@ func (c *core) taskMCPHandler() http.Handler {
 	})
 }
 
-// taskGrant is what a task may use of the catalog: the brain's comes from
-// the configuration and the catalog (brainGrant), a worker's from run_task.
+// taskGrant is what a task may use of the catalog: an assistant's comes
+// from its spec and the catalog (assistantGrant), a worker's from run_task.
 func (c *core) taskGrant(t *TaskRow) []string {
-	if t.Kind == "brain" {
-		return c.brainGrant()
+	if a, _, ok := c.assistantOf(t); ok {
+		return c.assistantGrant(a)
+	}
+	if isRoleKind(t.Kind) {
+		return nil // an assistant's task none owns any more
 	}
 	return splitGrant(t.Tools)
 }
 
-// brainGrant is what the brain may use of the catalog: what brain.tools
-// grants and, without any configuration, every tool a server says is
-// read-only when the server is believed for its annotations (my "reads
-// free", our own mail and calendar). It is computed on each use: a tool the
-// catalog lists later is in it at once, for the proxy.
+// brainGrant is what the brain may use of the catalog (assistantGrant).
 func (c *core) brainGrant() []string {
-	if c.conf().Brain == nil {
+	b := c.conf().brain()
+	if b == nil {
 		return nil
 	}
-	out := c.conf().brainTools()
-	for _, r := range c.believedReads() {
-		if g := r.server + "." + globEscape(r.tool); !slices.Contains(out, g) {
-			out = append(out, g)
-		}
-	}
-	return out
+	return c.assistantGrant(*b)
 }
 
 type catalogTool struct{ server, tool string }
@@ -132,12 +126,20 @@ func (c *core) freeRead(claudeName string) bool {
 	return c.pool.readOnly(claudeName) && !c.conf().Policy.names(claudeName)
 }
 
-// brainFreeReads are the Claude Code names of the brain's free reads: its
-// node allows them in advance, so they never wait for a permission.
-func (c *core) brainFreeReads() []string {
-	if c.conf().Brain == nil {
-		return nil
+// readsFreely tells whether a task is an assistant's whose role reads freely.
+func (c *core) readsFreely(taskID string) bool {
+	n := c.assistantOwning(taskID)
+	if n == "" {
+		return false
 	}
+	a, ok := c.conf().Assistants[n]
+	return ok && assistantRoles[a.Role].FreeReads
+}
+
+// brainFreeReads are the Claude Code names of the free reads: the node of
+// an assistant that reads freely allows them in advance, so they never
+// wait for a permission.
+func (c *core) brainFreeReads() []string {
 	var out []string
 	for _, r := range c.believedReads() {
 		if name := claudeToolName(r.server, r.tool); c.freeRead(name) && !slices.Contains(out, name) {
@@ -230,7 +232,7 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	claude := claudeToolName(u.name, tool)
 	switch {
 	case c.store.useTicket(taskID, claude, input):
-	case taskID != "" && taskID == c.store.get("brain_task") && c.freeRead(claude):
+	case c.readsFreely(taskID) && c.freeRead(claude):
 		// The brain reads freely: no permission round trip, a decision on record all the same.
 		c.store.logDecision(taskID, "", claude, input, decideAllow, byPolicy, "lecture libre du cerveau")
 	default:

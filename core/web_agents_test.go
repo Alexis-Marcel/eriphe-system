@@ -334,19 +334,19 @@ func TestWebBrainAgent(t *testing.T) {
 		t.Fatalf("no brain menu: %s", body)
 	}
 	other := "sonnet"
-	if c.conf().Brain.Agent == other {
+	if c.conf().brain().Agent == other {
 		other = "opus"
 	}
 	if _, body, h := tw.post("/settings/brain-agent", url.Values{"agent": {other}}, csrf); h.Get("HX-Redirect") != "/settings/agents?brain=1" {
 		t.Fatalf("brain agent refused: %s", body)
 	}
-	if c.conf().Brain.Agent != other {
-		t.Fatalf("brain agent = %q", c.conf().Brain.Agent)
+	if c.conf().brain().Agent != other {
+		t.Fatalf("brain agent = %q", c.conf().brain().Agent)
 	}
 	if _, body, _ := tw.do("GET", "/settings/agents?brain=1", nil, nil); !strings.Contains(body, "Eriphe réfléchit maintenant avec l&#39;agent « "+other+" »") {
 		t.Fatalf("no flash: %s", body)
 	}
-	if _, _, h := tw.post("/settings/brain-agent", url.Values{"agent": {"nobody"}}, csrf); h.Get("HX-Redirect") != "" || c.conf().Brain.Agent != other {
-		t.Fatalf("an unknown agent taken: %q", c.conf().Brain.Agent)
+	if _, _, h := tw.post("/settings/brain-agent", url.Values{"agent": {"nobody"}}, csrf); h.Get("HX-Redirect") != "" || c.conf().brain().Agent != other {
+		t.Fatalf("an unknown agent taken: %q", c.conf().brain().Agent)
 	}
 }

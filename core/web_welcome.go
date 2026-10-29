@@ -21,7 +21,7 @@ func (w *web) welcomeRoutes(mux *http.ServeMux) {
 // needsWelcome tells whether the conversation should lead to the wizard:
 // a brain without an agent, and a wizard not skipped.
 func (w *web) needsWelcome() bool {
-	b := w.c.conf().Brain
+	b := w.c.conf().brain()
 	return b != nil && b.Agent == "" && w.c.store.get(welcomeSkipped) == ""
 }
 
@@ -38,8 +38,8 @@ type welcomeView struct {
 func (w *web) welcomeData(r *http.Request) welcomeView {
 	m := w.c.conf()
 	var v welcomeView
-	if m.Brain != nil && m.Brain.Agent != "" {
-		v.Agent = m.Brain.Agent
+	if b := m.brain(); b != nil && b.Agent != "" {
+		v.Agent = b.Agent
 		a := m.Agents[v.Agent]
 		v.Model = modelLabel(m.Providers[a.Provider].Kind, a.Runtime, a.Model)
 	}
@@ -56,7 +56,7 @@ func (w *web) welcomeData(r *http.Request) welcomeView {
 }
 
 func (w *web) handleWelcome(rw http.ResponseWriter, r *http.Request, s *session) {
-	if w.c.conf().Brain == nil {
+	if w.c.conf().brain() == nil {
 		http.Redirect(rw, r, "/", http.StatusSeeOther)
 		return
 	}

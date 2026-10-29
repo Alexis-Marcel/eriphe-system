@@ -2,19 +2,14 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // The brain is Eriphe's permanent orchestrator: a long-lived task on a node,
@@ -29,7 +24,7 @@ func (c *core) notifyBrain(id, state string) {
 	if c.memoryTaskChanged(id, state) {
 		return // the memory's own tasks are eriphe-core's (memory_extract.go)
 	}
-	if c.conf().Brain == nil {
+	if c.conf().brain() == nil {
 		return
 	}
 	st, err := c.status(id, 0)
@@ -105,146 +100,105 @@ func truncate(s string, n int) string {
 	return s
 }
 
-// runBrain keeps the brain alive and feeds it, one turn at a time.
-func (c *core) runBrain(ctx context.Context, token string) {
-	if c.conf().Brain == nil {
-		return
+// The brain's card: Eriphe's orchestrator, with eriphe-core's own tools,
+// its free reads and the web, on the system network, streaming what it
+// writes; what it asks for is decided by brainPermission.
+func init() {
+	assistantRoles[assistantRoleBrain] = assistantRole{
+		Prompt: brainPrompt, StartPrompt: brainStartPrompt, Triggers: []string{triggerConversation},
+		Profile: "brain", SelfTools: true, FreeReads: true, Network: true, Streams: true,
+		// Its harness's web search is allowed (brain_web.go); its page
+		// reader is not: each read is decided in brainPermission.
+		AllowedTools: []string{"WebSearch"}, NoWebSearch: noWebSearchLine,
+		instructions: func(c *core, _ Assistant, prompt string) string {
+			// The profile, from the memory: data about the user, quoted.
+			if profile := c.profileBlock(false); profile != "" {
+				prompt += "\n\n" + profile + "\n"
+			}
+			return prompt
+		},
+		firstPrompt: func(c *core, _ Assistant, resume bool) string { return c.brainFirstPrompt(resume) },
+		started:     (*core).brainStarted,
+		permission:  func(c *core, ctx context.Context, _ Assistant, t *TaskRow) error { return c.brainPermission(ctx, t) },
+		failing: func(c *core, _ Assistant) {
+			c.store.addMessage(roleBrain, "(Eriphe n'arrive pas à démarrer : voir le journal d'eriphe-core.)", true)
+		},
 	}
-	tick := time.NewTicker(2 * time.Second)
-	defer tick.Stop()
-	for ctx.Err() == nil {
-		// Read each time: the workspace may give it another agent.
-		if err := c.tendBrain(ctx, c.conf().Brain, token); err != nil {
-			log.Printf("brain: %v", err)
-		}
-		select {
-		case <-ctx.Done():
-		case <-c.inbox:
-		case <-tick.C:
-		}
+	assistantTriggers[triggerConversation] = assistantTrigger{
+		relay:   func(c *core, a Assistant, t *TaskRow) { c.relayBrainOutput(a, t) },
+		wrote:   func(c *core, a Assistant, t *TaskRow, events bool, draft string) { c.brainWrote(a, t, events, draft) },
+		deliver: (*core).deliverConversation,
 	}
 }
 
-func (c *core) tendBrain(ctx context.Context, b *BrainConfig, token string) error {
-	id := c.store.get("brain_task")
-	var t *TaskRow
-	if id != "" {
-		t, _ = c.store.task(id)
+// brainStarted resets what the conversation keeps of the brain's task:
+// its draft, and its turn. A resumed session still holds what the
+// previous task read: its turn goes on, as tainted.
+func (c *core) brainStarted(_ Assistant, _ *TaskRow, resumed bool) {
+	var carried []string
+	if resumed {
+		carried = c.turnTaint() // read from the previous task: its status still names it
 	}
-	if t == nil || finished(t.State) {
-		if b.Agent == "" {
-			return nil // no agent can be the brain yet: the workspace adds one
-		}
-		if c.catalogSettling() {
-			return nil // its free reads are fixed when it starts: let the catalog list them first
-		}
-		// Wait between restarts: 5 s, then doubling up to 5 min.
-		var next int64
-		fmt.Sscan(c.store.get("brain_next_start"), &next)
-		if time.Now().Unix() < next {
-			return nil
-		}
-		fails := 0
-		fmt.Sscan(c.store.get("brain_failures"), &fails)
-		if t != nil && t.State == stateFailed {
-			fails++
-		} else {
-			fails = 0
-		}
-		c.store.set("brain_failures", fmt.Sprint(fails))
-		delay := min(5*time.Second<<min(fails, 6), 5*time.Minute)
-		c.store.set("brain_next_start", fmt.Sprint(time.Now().Add(delay).Unix()))
-		if fails == 3 {
-			c.store.addMessage(roleBrain, "(Eriphe n'arrive pas à démarrer : voir le journal d'eriphe-core.)", true)
-		}
-		// A resume that keeps failing is dropped: better a fresh session than none.
-		resume := t != nil && fails < 2
-		return c.startBrain(ctx, b, token, t, resume)
+	c.draft.set("", c.store.lastMessageSeq())
+	if resumed {
+		c.turn.goOn(0, 0, 0, carried)
+	} else {
+		c.turn.start(0, 0, 0)
 	}
-	c.relayBrainOutput(t)
-	c.noteBrainSession(t)
-	if t.SessionID != "" && t.SessionID != c.store.get("brain_session") {
-		c.store.set("brain_session", t.SessionID)
-		c.store.set("brain_session_runtime", t.Runtime) // a session is its harness's own
-	}
-	// Only a turn that went through clears the failures: an agent that
-	// cannot start may still say it is idle before it exits.
-	if t.State == stateIdle && c.store.get("brain_failures") != "0" && c.lastTurnOK(t.ID) {
-		c.store.set("brain_failures", "0")
-	}
+}
 
-	switch t.State {
-	case stateWaitingPermission:
-		return c.brainPermission(ctx, t)
-	case stateIdle:
-		// Its agent lists its tools once: a tool added or changed since needs a
-		// new one, on the same session, before it reads what is waiting.
-		if h, was := c.brainToolsHash(), c.store.get("brain_tools"); h != "" && h != was {
-			if was == "" { // started before it was kept
-				c.store.set("brain_tools", h)
-			} else {
-				log.Printf("brain: its tools changed, restarting task %s", t.ID)
-				return c.stopByBrain(ctx, t.ID)
-			}
-		}
-		// Another agent, or the same one changed: the next turn is the new one's.
-		if h, was := c.brainAgentHash(b), c.store.get("brain_agent"); h != was {
-			if was == "" { // started before it was kept
-				c.store.set("brain_agent", h)
-			} else {
-				log.Printf("brain: its agent changed to %s, restarting task %s", b.Agent, t.ID)
-				return c.stopByBrain(ctx, t.ID)
-			}
-		}
-		msgs, err := c.store.undelivered()
-		if err != nil || len(msgs) == 0 {
-			return err
-		}
-		parts := []string{nowLine(time.Now())}
-		for _, m := range msgs {
-			who := c.conf().User
-			if m.Role == roleEvent {
-				who = "événement"
-			}
-			// #N is the message's reference, which the memory tools cite.
-			ref := fmt.Sprintf("#%d", m.Seq)
-			if m.Via != "" {
-				ref += " · " + m.Via
-			}
-			parts = append(parts, fmt.Sprintf("[%s %s %s] %s", who, m.Time.Local().Format("15:04"), ref, m.Text)+attachmentLines(m.Attachments))
-		}
-		profile, hash := c.profileForDelivery()
-		if profile != "" {
-			parts = append([]string{profile}, parts...)
-		}
-		pack := c.packForDelivery()
-		if pack != "" {
-			parts = append([]string{pack}, parts...)
-		}
-		// Only a message of mine starts a clean turn: events alone go on with this one.
-		if slices.ContainsFunc(msgs, func(m Message) bool { return m.Role == roleUser }) {
-			c.turn.start(msgs[0].Seq, msgs[len(msgs)-1].Seq, t.LastSeq)
-		} else {
-			c.turn.goOn(msgs[0].Seq, msgs[len(msgs)-1].Seq, t.LastSeq, c.turnTaint())
-		}
-		for _, m := range msgs {
-			if why := c.store.get(taintKey(m.Seq)); why != "" {
-				c.turn.taint(why) // a task's result read from the user's folders
-			}
-		}
-		c.store.set("brain_quiet", "")
-		if _, err := c.answer(ctx, t.ID, "", strings.Join(parts, "\n\n"), nil, byUser); err != nil {
-			return err
-		}
-		if hash != "" {
-			c.store.set("brain_profile", hash)
-		}
-		if pack != "" {
-			c.store.set("brain_pack_due", "")
-		}
-		return c.store.markDelivered(msgs[len(msgs)-1].Seq)
+// deliverConversation gives an idle assistant what waits in the
+// conversation: my messages and the events, in one turn.
+func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow) (bool, error) {
+	msgs, err := c.store.undelivered()
+	if err != nil || len(msgs) == 0 {
+		return false, err
 	}
-	return nil
+	parts := []string{nowLine(time.Now())}
+	for _, m := range msgs {
+		who := c.conf().User
+		if m.Role == roleEvent {
+			who = "événement"
+		}
+		// #N is the message's reference, which the memory tools cite.
+		ref := fmt.Sprintf("#%d", m.Seq)
+		if m.Via != "" {
+			ref += " · " + m.Via
+		}
+		parts = append(parts, fmt.Sprintf("[%s %s %s] %s", who, m.Time.Local().Format("15:04"), ref, m.Text)+attachmentLines(m.Attachments))
+	}
+	profile, hash := c.profileForDelivery()
+	if profile != "" {
+		parts = append([]string{profile}, parts...)
+	}
+	pack := c.packForDelivery(a)
+	if pack != "" {
+		parts = append([]string{pack}, parts...)
+	}
+	// Only a message of mine starts a clean turn: events alone go on with this one.
+	if slices.ContainsFunc(msgs, func(m Message) bool { return m.Role == roleUser }) {
+		c.turn.start(msgs[0].Seq, msgs[len(msgs)-1].Seq, t.LastSeq)
+	} else {
+		c.turn.goOn(msgs[0].Seq, msgs[len(msgs)-1].Seq, t.LastSeq, c.turnTaint())
+	}
+	for _, m := range msgs {
+		if why := c.store.get(taintKey(m.Seq)); why != "" {
+			c.turn.taint(why) // a task's result read from the user's folders
+		}
+	}
+	c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Quiet = false })
+	if _, err := c.answer(ctx, t.ID, "", strings.Join(parts, "\n\n"), nil, byUser); err != nil {
+		return false, err
+	}
+	c.updateAssistant(a.Name, func(st *AssistantStatus) {
+		if hash != "" {
+			st.Profile = hash
+		}
+		if pack != "" {
+			st.PackDue = false
+		}
+	})
+	return true, c.store.markDelivered(msgs[len(msgs)-1].Seq)
 }
 
 // brainPermission answers what the brain asks for. Its free reads never
@@ -328,15 +282,15 @@ func (c *core) catalogSettling() bool {
 }
 
 // relayBrainOutput copies what the brain says into the conversation.
-func (c *core) relayBrainOutput(t *TaskRow) {
+func (c *core) relayBrainOutput(a Assistant, t *TaskRow) {
 	c.relayMu.Lock()
 	defer c.relayMu.Unlock()
-	c.copyBrainOutput(t)
+	c.copyBrainOutput(a, t)
 }
 
-func (c *core) copyBrainOutput(t *TaskRow) {
-	done := 0
-	fmt.Sscan(c.store.get("brain_seen_seq"), &done)
+func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
+	st := c.assistantStatus(a.Name)
+	done := st.SeenSeq
 	events, err := c.store.events(t.ID, 500)
 	if err != nil {
 		return
@@ -348,7 +302,7 @@ func (c *core) copyBrainOutput(t *TaskRow) {
 		}
 		last = e.Seq
 		// Its answer to the start prompt ("Prêt.") is not news for the conversation.
-		if e.Type == "text" && c.store.get("brain_quiet") == "" {
+		if e.Type == "text" && !st.Quiet {
 			if text, _ := e.Data["text"].(string); strings.TrimSpace(text) != "" {
 				c.store.addMessage(roleBrain, text, true)
 			}
@@ -360,158 +314,17 @@ func (c *core) copyBrainOutput(t *TaskRow) {
 		}
 	}
 	if last != done {
-		c.store.set("brain_seen_seq", fmt.Sprint(last))
+		c.updateAssistant(a.Name, func(st *AssistantStatus) { st.SeenSeq = last })
 	}
-}
-
-// startBrain starts the brain task, resuming its previous session if any.
-func (c *core) startBrain(ctx context.Context, b *BrainConfig, token string, previous *TaskRow, resume bool) error {
-	raw, err := b.standingPrompt()
-	if err != nil {
-		return fmt.Errorf("prompt: %w", err)
-	}
-	prompt := strings.ReplaceAll(raw, "{{user}}", c.conf().User)
-	// The profile, from the memory: data about the user, quoted.
-	// What its harness cannot do on the web, from its card (harnesses.go).
-	if _, a, err := c.conf().agent(b.Agent); err == nil && !harnessOf(a.Runtime).BuiltinWebSearch {
-		prompt += "\n\n" + noWebSearchLine + "\n"
-	}
-	if profile := c.profileBlock(false); profile != "" {
-		prompt += "\n\n" + profile + "\n"
-	}
-	// Its catalog tools are not allowed in advance, but for its free reads,
-	// added when its node fetches the task: the others go through the
-	// policy (brainPermission). The deprecated mcp_servers still are.
-	// Its harness's web search is allowed too (brain_web.go); its page
-	// reader is not: each read is decided in brainPermission.
-	allowed := []string{"mcp__eriphe-core", "WebSearch"}
-	for name := range b.MCPServers {
-		allowed = append(allowed, "mcp__"+name)
-	}
-	// A stable profile on the node keeps the session's transcript between brain tasks.
-	// Its MCP servers carry tokens: they are added when its node fetches the task.
-	extra := nodeTaskSpec{AppendSystemPrompt: prompt, AllowedTools: allowed, Profile: "brain", NoAgentMemory: true}
-	// Another harness cannot resume this one's session: the context pack
-	// carries the thread over instead (brain_context.go).
-	_, agent, _ := c.conf().agent(b.Agent)
-	runtime := c.store.get("brain_session_runtime")
-	if runtime == "" {
-		runtime = "claude-code" // sessions kept before their harness was
-	}
-	if session := c.store.get("brain_session"); resume && session != "" && runtime == agent.Runtime {
-		extra.Resume = session
-	}
-	// A resumed session still holds what the previous task read.
-	var carried []string
-	if extra.Resume != "" {
-		carried = c.turnTaint()
-	}
-	t, err := c.startTask(ctx, "brain", runRequest{Prompt: c.brainFirstPrompt(extra.Resume != ""), Node: b.Node,
-		Agent: b.Agent, Tools: c.conf().brainTools()}, extra)
-	if err != nil {
-		return err
-	}
-	c.store.set("brain_task", t.ID)
-	c.draft.set("", c.store.lastMessageSeq())
-	tools := c.brainToolsHash()
-	if tools == "" {
-		tools = "unready" // a server it reaches is down: restart once it is back
-	}
-	c.store.set("brain_tools", tools)
-	c.store.set("brain_agent", c.brainAgentHash(b))
-	c.store.set("brain_seen_seq", "0")
-	c.store.set("brain_quiet", "1") // until its first delivery
-	c.store.set("brain_profile", c.profileHash())
-	c.store.set("brain_resume", extra.Resume) // checked against the session it reports
-	c.store.set("brain_pack_due", "")         // a fresh session has it in its first turn
-	if extra.Resume != "" {
-		c.turn.goOn(0, 0, 0, carried)
-	} else {
-		c.turn.start(0, 0, 0)
-	}
-	log.Printf("brain: started task %s on %s (resume=%v)", t.ID, b.Node, extra.Resume != "")
-	return nil
-}
-
-// brainAgentHash fingerprints the brain's agent: its name and its spec.
-func (c *core) brainAgentHash(b *BrainConfig) string {
-	h := sha256.New()
-	json.NewEncoder(h).Encode([]any{b.Agent, c.conf().Agents[b.Agent]})
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-// brainToolsHash fingerprints what the brain's agent gets of the catalog:
-// its grant, and the tools of the servers it reaches. It is "" while one of
-// them is not ready, not to restart the brain for a passing outage, and
-// while the catalog settles at start, when its grant is not whole yet.
-func (c *core) brainToolsHash() string {
-	if c.catalogSettling() {
-		return ""
-	}
-	grant := c.brainGrant()
-	h := sha256.New()
-	json.NewEncoder(h).Encode(grant)
-	for _, name := range c.specServers(&TaskRow{Kind: "brain"}) {
-		u := c.pool.get(name)
-		if u == nil {
-			return ""
-		}
-		status, _, tools := u.snapshot()
-		if status != statusReady {
-			return ""
-		}
-		tools = slices.Clone(tools)
-		slices.SortFunc(tools, func(a, b *mcp.Tool) int { return strings.Compare(a.Name, b.Name) })
-		fmt.Fprintln(h, name)
-		json.NewEncoder(h).Encode(tools)
-	}
-	return hex.EncodeToString(h.Sum(nil))
 }
 
 //go:embed brain-prompt.md
 var brainPrompt string
 
-// standingPrompt is the brain's standing instructions: the file's, or the
-// built-in ones.
-func (b *BrainConfig) standingPrompt() (string, error) {
-	if b.PromptFile == "" {
-		return brainPrompt, nil
-	}
-	raw, err := os.ReadFile(b.PromptFile)
-	return string(raw), err
-}
-
-// selfServer is eriphe-core's own MCP server, as its node relays it to the
-// brain when the configuration gives no self_url (taskMCPHandler).
+// selfServer is eriphe-core's own MCP server, as its node relays it to an
+// assistant whose role has it, when the configuration gives no self_url
+// (taskMCPHandler).
 const selfServer = "eriphe-core"
-
-// brainServers are the brain's MCP servers, with their tokens: eriphe-core's
-// own, at self_url, and the ones listed in the configuration. Without
-// self_url, eriphe-core's own goes through the node (spec.Servers): the
-// node reaches eriphe-core wherever it is, and the brain holds no token.
-func (c *core) brainServers() (map[string]any, error) {
-	b := c.conf().Brain
-	servers := map[string]any{}
-	if b.SelfURL != "" {
-		servers[selfServer] = map[string]any{
-			"type": "http", "url": b.SelfURL, "headers": map[string]string{"Authorization": "Bearer " + c.token}}
-	}
-	for name, srv := range b.MCPServers {
-		def := map[string]any{"type": "http", "url": srv.URL}
-		switch {
-		case srv.TokenFile != "":
-			tok, err := readSecret(srv.TokenFile)
-			if err != nil {
-				return nil, fmt.Errorf("mcp %s: %w", name, err)
-			}
-			def["headers"] = map[string]string{"Authorization": "Bearer " + tok}
-		case srv.TokenEnv != "":
-			def["headers"] = map[string]string{"Authorization": "Bearer ${" + srv.TokenEnv + "}"}
-		}
-		servers[name] = def
-	}
-	return servers, nil
-}
 
 // Conversation API: what the CLI and other surfaces use.
 func (c *core) handlePostMessage(w http.ResponseWriter, r *http.Request) {

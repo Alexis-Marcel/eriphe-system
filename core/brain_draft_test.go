@@ -25,7 +25,7 @@ func TestBrainDraftReport(t *testing.T) {
 	store.registerNode("pc", hashSecret("node-secret"))
 	store.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateRunning, Node: "pc"})
 	store.insertTask(&TaskRow{ID: "t-work", Kind: "worker", Runtime: "claude-code", State: stateRunning, Node: "pc"})
-	store.set("brain_task", "t-brain")
+	setBrainTask(c, "t-brain")
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/node/tasks/{id}/report", c.handleReport)
 	srv := httptest.NewServer(mux)
@@ -92,7 +92,7 @@ func TestBrainDraftReport(t *testing.T) {
 	}
 	// The brain's loop finds nothing more to copy.
 	bt, _ := store.task("t-brain")
-	c.relayBrainOutput(bt)
+	c.relayBrainOutput(theBrain(c), bt)
 	if msgs := brainMessages(); len(msgs) != 1 {
 		t.Fatalf("copied twice: %q", msgs)
 	}

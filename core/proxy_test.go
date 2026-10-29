@@ -317,7 +317,7 @@ func TestListServers(t *testing.T) {
 // refused.
 func TestBrainCatalogPermission(t *testing.T) {
 	c := newCatalogCore(t)
-	c.conf().Brain = &BrainConfig{Tools: []string{"github"}}
+	setBrain(c, &BrainConfig{Tools: []string{"github"}})
 	ctx := context.Background()
 	ask := func(id, tool string, input map[string]any) *TaskRow {
 		c.store.insertTask(&TaskRow{ID: id, Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateWaitingPermission})
@@ -376,7 +376,7 @@ func TestBrainGrant(t *testing.T) {
 	if g := c.brainGrant(); g != nil {
 		t.Fatalf("no brain, grant = %v", g)
 	}
-	c.conf().Brain = &BrainConfig{}
+	setBrain(c, &BrainConfig{})
 	// notes.read says it is read-only, but notes is not believed; create_issue writes.
 	if g := strings.Join(c.brainGrant(), ","); g != "github.get_issue" {
 		t.Fatalf("grant = %s", g)
@@ -384,7 +384,7 @@ func TestBrainGrant(t *testing.T) {
 	if g := strings.Join(c.brainFreeReads(), ","); g != "mcp__github__get_issue" {
 		t.Fatalf("free reads = %s", g)
 	}
-	c.conf().Brain.Tools = []string{"notes", "github.get_issue", "mail"}
+	editBrain(c, func(a *Assistant) { a.Tools = []string{"notes", "github.get_issue", "mail"} })
 	if g := strings.Join(c.brainGrant(), ","); g != "notes,github.get_issue" {
 		t.Fatalf("grant with brain.tools = %s", g)
 	}
@@ -411,14 +411,14 @@ func TestBrainRestartsOnToolChange(t *testing.T) {
 	c := newCatalogCore(t)
 	gh := c.pool.get("github")
 	waitStatus(t, gh, statusReady)
-	c.conf().Brain = &BrainConfig{Agent: "sonnet"}
+	setBrain(c, &BrainConfig{Agent: "sonnet"})
 	ctx := context.Background()
 	c.store.insertTask(&TaskRow{ID: "b-1", Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateIdle})
-	c.store.set("brain_task", "b-1")
-	c.store.set("brain_tools", c.brainToolsHash())
+	setBrainTask(c, "b-1")
+	setBrainStatus(c, func(st *AssistantStatus) { st.ToolsHash = c.assistantToolsHash(theBrain(c)) })
 	restarted := func() bool {
 		t.Helper()
-		if err := c.tendBrain(ctx, c.conf().Brain, "tok"); err != nil {
+		if err := tendBrain(ctx, c); err != nil {
 			t.Fatal(err)
 		}
 		return c.store.get("brain_stopped:b-1") != ""
@@ -446,9 +446,9 @@ func TestBrainRestartsOnToolChange(t *testing.T) {
 // write is refused even when brain.tools lends it, until it is allowed.
 func TestBrainFreeReadProxy(t *testing.T) {
 	c := newCatalogCore(t)
-	c.conf().Brain = &BrainConfig{}
+	setBrain(c, &BrainConfig{})
 	c.store.insertTask(&TaskRow{ID: "b-1", Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateRunning})
-	c.store.set("brain_task", "b-1")
+	setBrainTask(c, "b-1")
 	c.turn.start(1, 1, 0)
 	ctx := context.Background()
 	cs := connectTo(t, c.taskServer("b-1", c.brainGrant(), "github"))
@@ -471,7 +471,7 @@ func TestBrainFreeReadProxy(t *testing.T) {
 		t.Fatalf("write outside the grant = %+v", out)
 	}
 	// Lent by brain.tools, a write still needs its permission.
-	c.conf().Brain.Tools = []string{"github"}
+	editBrain(c, func(a *Assistant) { a.Tools = []string{"github"} })
 	all := connectTo(t, c.taskServer("b-1", c.brainGrant(), "github"))
 	out, _ = all.CallTool(ctx, &mcp.CallToolParams{Name: "create_issue", Arguments: map[string]any{"title": "x"}})
 	if !out.IsError || !strings.Contains(resultText(out), "not allowed") {
@@ -489,7 +489,7 @@ func TestBrainFreeReadProxy(t *testing.T) {
 // never asks for them, and loads a server marked always_load upfront.
 func TestBrainAssignmentFreeReads(t *testing.T) {
 	c := newCatalogCore(t)
-	c.conf().Brain = &BrainConfig{}
+	setBrain(c, &BrainConfig{})
 	gh := c.conf().Servers["github"]
 	gh.AlwaysLoad = true
 	c.conf().Servers["github"] = gh
@@ -518,7 +518,7 @@ func TestBrainAssignmentFreeReads(t *testing.T) {
 		t.Fatalf("brain spec = %+v", spec)
 	}
 	// With it, the brain calls that address with the token, as before.
-	c.conf().Brain.SelfURL = "http://core.example.org:8800/mcp"
+	editBrain(c, func(a *Assistant) { a.SelfURL = "http://core.example.org:8800/mcp" })
 	w = httptest.NewRecorder()
 	c.handleAssignments(w, req)
 	json.Unmarshal(w.Body.Bytes(), &out)
@@ -533,7 +533,7 @@ func TestBrainAssignmentFreeReads(t *testing.T) {
 // and to no other task.
 func TestSelfServerRelay(t *testing.T) {
 	c := newCatalogCore(t)
-	c.conf().Brain = &BrainConfig{}
+	setBrain(c, &BrainConfig{})
 	c.self = newMCPServer(c)
 	c.store.registerNode("pc", hashSecret("node-secret"))
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "pc", Runtime: "claude-code", State: stateRunning})
@@ -559,7 +559,7 @@ func TestSelfServerRelay(t *testing.T) {
 	if _, err := session("t-1"); err == nil {
 		t.Fatal("a worker reached eriphe-core's own tools")
 	}
-	c.conf().Brain.SelfURL = "http://core.example.org:8800/mcp"
+	editBrain(c, func(a *Assistant) { a.SelfURL = "http://core.example.org:8800/mcp" })
 	if _, err := session("b-1"); err == nil {
 		t.Fatal("relayed although the brain has self_url")
 	}
@@ -571,11 +571,11 @@ func TestSelfServerRelay(t *testing.T) {
 func TestTaintedTurnLimitsActions(t *testing.T) {
 	c := newCatalogCore(t)
 	c.conf().User = "Sam"
-	c.conf().Brain = &BrainConfig{}
+	setBrain(c, &BrainConfig{})
 	c.store.registerNode("pc", hashSecret("node-secret"))
 	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	c.store.insertTask(&TaskRow{ID: "b-1", Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateRunning})
-	c.store.set("brain_task", "b-1")
+	setBrainTask(c, "b-1")
 	ctx := context.Background()
 	wait := func(id, pid string) {
 		c.store.insertTask(&TaskRow{ID: id, Node: "pc", Runtime: "claude-code", State: stateWaitingPermission})
@@ -634,15 +634,15 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 func TestBrainRestartsOnAgentChange(t *testing.T) {
 	c := newCatalogCore(t)
 	waitStatus(t, c.pool.get("github"), statusReady)
-	c.conf().Brain = &BrainConfig{Agent: "sonnet"}
+	setBrain(c, &BrainConfig{Agent: "sonnet"})
 	ctx := context.Background()
 	c.store.insertTask(&TaskRow{ID: "b-1", Node: "pc", Kind: "brain", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})
-	c.store.set("brain_task", "b-1")
-	c.store.set("brain_tools", c.brainToolsHash())
-	c.store.set("brain_agent", c.brainAgentHash(c.conf().Brain))
+	setBrainTask(c, "b-1")
+	setBrainStatus(c, func(st *AssistantStatus) { st.ToolsHash = c.assistantToolsHash(theBrain(c)) })
+	setBrainStatus(c, func(st *AssistantStatus) { st.SpecHash = c.assistantSpecHash(theBrain(c)) })
 	tend := func() bool {
 		t.Helper()
-		if err := c.tendBrain(ctx, c.conf().Brain, "tok"); err != nil {
+		if err := tendBrain(ctx, c); err != nil {
 			t.Fatal(err)
 		}
 		return c.store.get("brain_stopped:b-1") != ""
@@ -650,7 +650,7 @@ func TestBrainRestartsOnAgentChange(t *testing.T) {
 	if tend() {
 		t.Fatal("restarted on the same agent")
 	}
-	c.conf().Brain.Agent = "kimi"
+	editBrain(c, func(a *Assistant) { a.Agent = "kimi" })
 	if !tend() {
 		t.Fatal("not restarted on another agent")
 	}
@@ -663,20 +663,20 @@ func TestBrainWaitsForTheCatalogAtStart(t *testing.T) {
 	c := newCatalogCore(t)
 	gh := c.pool.get("github")
 	waitStatus(t, gh, statusReady)
-	c.conf().Brain = &BrainConfig{Agent: "sonnet"}
+	setBrain(c, &BrainConfig{Agent: "sonnet"})
 	ctx := context.Background()
 	c.store.insertTask(&TaskRow{ID: "b-1", Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateIdle})
-	c.store.set("brain_task", "b-1")
-	c.store.set("brain_tools", c.brainToolsHash())
-	c.store.set("brain_agent", c.brainAgentHash(c.conf().Brain))
+	setBrainTask(c, "b-1")
+	setBrainStatus(c, func(st *AssistantStatus) { st.ToolsHash = c.assistantToolsHash(theBrain(c)) })
+	setBrainStatus(c, func(st *AssistantStatus) { st.SpecHash = c.assistantSpecHash(theBrain(c)) })
 	gh.mu.Lock()
 	gh.status = statusError // its node is not connected yet
 	gh.mu.Unlock()
-	if c.tendBrain(ctx, c.conf().Brain, "tok"); c.store.get("brain_stopped:b-1") != "" {
+	if tendBrain(ctx, c); c.store.get("brain_stopped:b-1") != "" {
 		t.Fatal("restarted on a catalog still settling")
 	}
 	c.store.updateTask("b-1", map[string]any{"state": stateStopped})
-	if c.tendBrain(ctx, c.conf().Brain, "tok"); c.store.get("brain_task") != "b-1" {
+	if tendBrain(ctx, c); brainStatus(c).Task != "b-1" {
 		t.Fatal("started before the catalog settled")
 	}
 	c.started = time.Now().Add(-2 * time.Minute)

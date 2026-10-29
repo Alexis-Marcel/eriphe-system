@@ -322,10 +322,11 @@ func (c *core) readAttachment(in readAttachmentIn) (*mcp.CallToolResult, error) 
 // Otherwise it gets the text.
 func (c *core) brainReadsPDF() bool {
 	m := c.conf()
-	if m.Brain == nil {
+	b := m.brain()
+	if b == nil {
 		return false
 	}
-	_, a, err := m.agent(m.Brain.Agent)
+	_, a, err := m.agent(b.Agent)
 	return err == nil && harnessOf(a.Runtime).PDFInToolResult &&
 		modelCard(m.Providers[a.Provider].Kind, a.Runtime, a.Model).PDF
 }

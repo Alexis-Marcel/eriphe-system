@@ -23,7 +23,7 @@ import (
 // change goes through the configuration's own checks on the merged result,
 // then applies live: the upstream pool adds, drops or reconnects servers,
 // local servers are registered again as services, and the scheduler, the
-// brain's tools and list_tools/list_agents read the new snapshot.
+// assistants' tools and list_tools/list_agents read the new snapshot.
 //
 // The merged configuration is an immutable snapshot (core.conf), swapped
 // whole on every change: the many goroutines that read it never see a half
@@ -50,7 +50,9 @@ const (
 	sourceWorkspace = "workspace"
 
 	settingDefaultAgent = "default_agent"
-	settingBrainAgent   = "brain_agent"
+	// Before the brain was an assistant: its agent, now the workspace's
+	// edit of the assistant eriphe (loadCatalog moves it).
+	settingBrainAgent = "brain_agent"
 )
 
 // dynamicCatalog is what the workspace added.
@@ -59,16 +61,18 @@ type dynamicCatalog struct {
 	Providers    map[string]Provider
 	Agents       map[string]Agent
 	DefaultAgent string // a preference, when the configuration sets none
-	BrainAgent   string // the brain's agent, when the configuration names none
+	// The workspace's assistants, and its edits of the file's (assistants.go).
+	Assistants map[string]Assistant
 }
 
 func newDynamic() dynamicCatalog {
-	return dynamicCatalog{Servers: map[string]Server{}, Providers: map[string]Provider{}, Agents: map[string]Agent{}}
+	return dynamicCatalog{Servers: map[string]Server{}, Providers: map[string]Provider{}, Agents: map[string]Agent{},
+		Assistants: map[string]Assistant{}}
 }
 
 func (d dynamicCatalog) clone() dynamicCatalog {
 	return dynamicCatalog{Servers: maps.Clone(d.Servers), Providers: maps.Clone(d.Providers),
-		Agents: maps.Clone(d.Agents), DefaultAgent: d.DefaultAgent, BrainAgent: d.BrainAgent}
+		Agents: maps.Clone(d.Agents), DefaultAgent: d.DefaultAgent, Assistants: maps.Clone(d.Assistants)}
 }
 
 type catalogRow struct {
@@ -120,9 +124,9 @@ func (s *Store) forgetOAuth(server string) {
 
 // mergeCatalog is the configuration with the workspace's entries added.
 // Without a default agent in the file, the workspace's preference is used,
-// or else the first agent by name. Without a brain agent in the file, the
-// workspace's choice is used, or else the default agent, or the first one
-// that can be the brain.
+// or else the first agent by name. The assistants are the file's (its
+// brain section among them) with the workspace's edits, and the
+// workspace's own (mergeAssistants).
 func mergeCatalog(base *Config, d dynamicCatalog) *Config {
 	m := *base
 	m.Servers = maps.Clone(base.Servers)
@@ -161,26 +165,14 @@ func mergeCatalog(base *Config, d dynamicCatalog) *Config {
 			}
 		}
 	}
-	if base.Brain != nil && base.Brain.Agent == "" {
-		b := *base.Brain
-		b.Agent = d.BrainAgent
-		if _, ok := m.Agents[b.Agent]; !ok {
-			b.Agent = ""
-			for _, n := range append([]string{m.DefaultAgent}, slices.Sorted(maps.Keys(m.Agents))...) {
-				if a, ok := m.Agents[n]; ok && harnessOf(a.Runtime).canBeBrain() {
-					b.Agent = n
-					break
-				}
-			}
-		}
-		m.Brain = &b
-	}
+	m.Assistants = mergeAssistants(base, &m, d)
+	m.Brain = nil // the file's, now the assistant eriphe: read conf().brain()
 	m.runSpecs = nil
 	return &m
 }
 
 // validateLoading is validate while the workspace's entries are loaded one
-// by one: the brain's agent may be one of those not loaded yet.
+// by one: an assistant's agent may be one of those not loaded yet.
 func (m *Config) validateLoading() error {
 	m.fileOnly = true
 	defer func() { m.fileOnly = false }()
@@ -194,6 +186,9 @@ func (m *Config) validate() error {
 		return err
 	}
 	if err := m.checkServers(); err != nil {
+		return err
+	}
+	if err := m.checkAssistants(); err != nil {
 		return err
 	}
 	specs, err := m.localServers()
@@ -387,7 +382,8 @@ func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string)
 		log.Printf("catalog: %v", err)
 		return d, skipped
 	}
-	order := map[string]int{kindSetting: 0, kindProvider: 1, kindAgent: 2, kindServer: 3}
+	order := map[string]int{kindSetting: 0, kindProvider: 1, kindAgent: 2, kindServer: 3, kindAssistant: 4}
+	brainAgent := "" // the setting of before the brain was an assistant
 	sort.SliceStable(rows, func(i, j int) bool { return order[rows[i].Kind] < order[rows[j].Kind] })
 	for _, r := range rows {
 		try := d.clone()
@@ -398,9 +394,14 @@ func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string)
 			case settingDefaultAgent:
 				json.Unmarshal(r.Spec, &d.DefaultAgent)
 			case settingBrainAgent:
-				json.Unmarshal(r.Spec, &d.BrainAgent)
+				json.Unmarshal(r.Spec, &brainAgent)
 			}
 			continue
+		case kindAssistant:
+			var a Assistant
+			if err = json.Unmarshal(r.Spec, &a); err == nil {
+				try.Assistants[r.Name] = a
+			}
 		case kindProvider:
 			var p Provider
 			if err = json.Unmarshal(r.Spec, &p); err == nil {
@@ -438,6 +439,7 @@ func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string)
 		}
 		d = try
 	}
+	migrateBrainAgent(base, store, &d, brainAgent)
 	return d, skipped
 }
 
@@ -531,7 +533,7 @@ func (c *core) commit(d dynamicCatalog, ch change) error {
 	c.dropOrphanSecrets(d)
 	if ch.event != "" {
 		log.Printf("catalog: %s", ch.event)
-		if m.Brain != nil {
+		if m.brain() != nil {
 			c.store.addMessage(roleEvent, ch.event, false)
 			c.ping()
 		}
@@ -734,8 +736,13 @@ func (c *core) deleteAgent(name string) error {
 	if _, ok := c.dyn.Agents[name]; !ok {
 		return errNotFound(kindAgent, name)
 	}
-	if b := c.conf().Brain; b != nil && b.Agent == name {
+	if b := c.conf().brain(); b != nil && b.Agent == name {
 		return &catalogError{http.StatusConflict, "catalog.brainagent", name, fmt.Errorf("agent %s runs the brain", name)}
+	}
+	for an, a := range c.conf().Assistants {
+		if a.Agent == name {
+			return &catalogError{http.StatusConflict, "catalog.inuse", an, fmt.Errorf("agent %s runs the assistant %s", name, an)}
+		}
 	}
 	d := c.dyn.clone()
 	delete(d.Agents, name)
@@ -760,27 +767,24 @@ func (c *core) setDefaultAgent(name string) error {
 		event: fmt.Sprintf("Catalogue : l'agent par défaut est maintenant « %s ».", name)})
 }
 
-// setBrainAgent picks the agent the brain runs, unless the configuration
-// file names it. The brain restarts on it once its turn is over (brain.go).
-func (c *core) setBrainAgent(name string) error {
-	c.catalogMu.Lock()
-	defer c.catalogMu.Unlock()
-	if c.base.Brain == nil {
-		return &catalogError{http.StatusConflict, "catalog.nobrain", name, errors.New("no brain in the configuration file")}
+// migrateBrainAgent moves the brain's agent of before it was an assistant
+// (the setting brain_agent) to the workspace's edit of the assistant
+// eriphe, unless it has one.
+func migrateBrainAgent(base *Config, store *Store, d *dynamicCatalog, agent string) {
+	if agent == "" {
+		return
 	}
-	if c.base.Brain.Agent != "" {
-		return errReadOnly("brain.agent", c.base.Brain.Agent)
+	defer store.deleteCatalog(kindSetting, settingBrainAgent)
+	file, ok := fileAssistants(base)[brainAssistant]
+	if ws, done := d.Assistants[brainAssistant]; !ok || file.Agent != "" || (done && ws.Agent != "") {
+		return // no brain, or its agent is the file's, or already moved
 	}
-	a, ok := c.conf().Agents[name]
-	if !ok {
-		return errNotFound(kindAgent, name)
+	ws := d.Assistants[brainAssistant]
+	ws.Agent = agent
+	if err := store.putCatalog(kindAssistant, brainAssistant, ws); err != nil {
+		log.Printf("catalog: brain_agent: %v", err)
+		return
 	}
-	if !harnessOf(a.Runtime).canBeBrain() {
-		return &catalogError{http.StatusUnprocessableEntity, "catalog.notbrain", name,
-			fmt.Errorf("agent %s runs %s, the brain needs a runtime that takes MCP servers and a system prompt", name, a.Runtime)}
-	}
-	d := c.dyn.clone()
-	d.BrainAgent = name
-	return c.commit(d, change{persist: func() error { return c.store.putCatalog(kindSetting, settingBrainAgent, name) },
-		event: fmt.Sprintf("Catalogue : Eriphe réfléchit maintenant avec l'agent « %s » (%s).", name, a.Runtime)})
+	d.Assistants[brainAssistant] = ws
+	log.Printf("catalog: the brain's agent %s moved to the assistant %s", agent, brainAssistant)
 }

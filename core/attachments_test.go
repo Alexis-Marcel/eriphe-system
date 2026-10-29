@@ -344,6 +344,7 @@ func TestReadAttachmentText(t *testing.T) {
 
 func TestReadAttachmentPDFAndUnknown(t *testing.T) {
 	c, _ := testMemoryCore(t)
+	setBrain(c, nil) // no brain: its text
 	a := attach(t, c, "invoice.pdf", minimalPDF("Invoice 42 from Example Org"))
 	res := callReadAttachment(t, c, map[string]any{"id": a.ID})
 	got := res.Content[0].(*mcp.TextContent).Text
@@ -355,7 +356,7 @@ func TestReadAttachmentPDFAndUnknown(t *testing.T) {
 		"or": {Kind: "openrouter-api"}}
 	c.conf().Agents = map[string]Agent{"opus": {Runtime: "claude-code", Provider: "claude"}, "gpt": {Runtime: "codex", Provider: "chatgpt"},
 		"kimi": {Runtime: "opencode", Provider: "or", Model: "openrouter/moonshotai/kimi-k3.1-pro"}}
-	c.conf().Brain = &BrainConfig{Agent: "opus"}
+	setBrain(c, &BrainConfig{Agent: "opus"})
 	res = callReadAttachment(t, c, map[string]any{"id": a.ID})
 	if r, ok := res.Content[len(res.Content)-1].(*mcp.EmbeddedResource); res.IsError || !ok ||
 		r.Resource.MIMEType != "application/pdf" || !bytes.Equal(r.Resource.Blob, minimalPDF("Invoice 42 from Example Org")) {
@@ -365,18 +366,18 @@ func TestReadAttachmentPDFAndUnknown(t *testing.T) {
 	if got := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(got, "Invoice 42") {
 		t.Fatalf("as text: %s", got)
 	}
-	c.conf().Brain.Agent = "gpt"
+	editBrain(c, func(a *Assistant) { a.Agent = "gpt" })
 	res = callReadAttachment(t, c, map[string]any{"id": a.ID})
 	if _, ok := res.Content[0].(*mcp.TextContent); !ok || len(res.Content) != 1 {
 		t.Fatalf("codex brain: %+v", res.Content)
 	}
 	// OpenCode passes a PDF on, but this model does not read one.
-	c.conf().Brain.Agent = "kimi"
+	editBrain(c, func(a *Assistant) { a.Agent = "kimi" })
 	res = callReadAttachment(t, c, map[string]any{"id": a.ID})
 	if _, ok := res.Content[0].(*mcp.TextContent); !ok || len(res.Content) != 1 {
 		t.Fatalf("brain on a model without PDF: %+v", res.Content)
 	}
-	c.conf().Brain = nil
+	setBrain(c, nil)
 
 	broken := attach(t, c, "broken.pdf", []byte("%PDF-1.4\nnot really"))
 	if res := callReadAttachment(t, c, map[string]any{"id": broken.ID}); !res.IsError {

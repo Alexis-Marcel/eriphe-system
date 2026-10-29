@@ -155,7 +155,7 @@ func TestOldConfigUnchanged(t *testing.T) {
 		strings.Join(b.Tools, ",") != "docs" {
 		t.Fatalf("brain = %+v", b)
 	}
-	if got, err := b.standingPrompt(); err != nil || got != "Mes consignes pour {{user}}" {
+	if got, err := b.assistant().standingPrompt(); err != nil || got != "Mes consignes pour {{user}}" {
 		t.Fatalf("prompt file = %q, %v", got, err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "data")); err == nil {
@@ -166,11 +166,11 @@ func TestOldConfigUnchanged(t *testing.T) {
 // Without prompt_file, the brain gets the instructions built in.
 func TestBuiltinBrainPrompt(t *testing.T) {
 	raw, _ := os.ReadFile("brain-prompt.md")
-	got, err := (&BrainConfig{}).standingPrompt()
+	got, err := (&BrainConfig{}).assistant().standingPrompt()
 	if err != nil || got != string(raw) || !strings.Contains(got, "{{user}}") {
 		t.Fatalf("built-in prompt = %q, %v", truncate(got, 80), err)
 	}
-	if _, err := (&BrainConfig{PromptFile: "/nonexistent/brain.md"}).standingPrompt(); err == nil {
+	if _, err := (&BrainConfig{PromptFile: "/nonexistent/brain.md"}).assistant().standingPrompt(); err == nil {
 		t.Fatal("a missing prompt file is not an error")
 	}
 }

@@ -129,25 +129,11 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 					spec.AlwaysLoad = append(spec.AlwaysLoad, s)
 				}
 			}
-			if a.Kind == "brain" {
-				spec.SystemNetwork = true
-				spec.Stream = true
-				// One memory: eriphe-core's, not Claude Code's own.
-				if spec.Identity == nil {
-					spec.Identity = map[string]string{}
-				}
-				spec.Identity["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
-				// Its free reads, as the catalog lists them now: allowed in
-				// advance, they never wait for a permission. The node reads
-				// them when the brain starts.
-				spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), c.brainFreeReads()...)
-				spec.MCPServers, err = c.brainServers()
-				if err != nil {
-					log.Printf("brain: %v", err)
+			// An assistant's task: what its role's card gives it (assistant_controller.go).
+			if isRoleKind(a.Kind) {
+				if err := c.fetchAssistant(&TaskRow{ID: a.ID, Kind: a.Kind}, &spec); err != nil {
+					log.Printf("%s: %v", a.Kind, err)
 					continue
-				}
-				if c.conf().Brain.SelfURL == "" {
-					spec.Servers = append(spec.Servers, selfServer) // relayed by its node
 				}
 			}
 		}
@@ -236,8 +222,13 @@ func (c *core) handleReport(w http.ResponseWriter, r *http.Request) {
 		}
 		c.logResults(t, in.Events) // its access log (node_access.go)
 	}
-	if id == c.store.get("brain_task") {
-		c.brainWrote(t, len(in.Events) > 0, in.Draft)
+	isAssistant := c.isAssistantTask(id)
+	if owner, ok := c.reportingAssistant(id); ok {
+		for _, tr := range owner.triggers() {
+			if h := assistantTriggers[tr].wrote; h != nil {
+				h(c, owner, t, len(in.Events) > 0, in.Draft)
+			}
+		}
 	}
 	// The policy answers what it decides before anyone hears of it.
 	forBrain := c.applyPolicy(id, in.Events)
@@ -263,12 +254,12 @@ func (c *core) handleReport(w http.ResponseWriter, r *http.Request) {
 		if finished(s) {
 			c.bump() // the task leaves its node's assignments
 		}
-		if id == c.store.get("brain_task") {
+		if isAssistant {
 			c.ping()
 		} else if s != stateWaitingPermission {
 			c.notifyBrain(id, s)
 		}
-	} else if len(in.Events) > 0 && id == c.store.get("brain_task") {
+	} else if len(in.Events) > 0 && isAssistant {
 		c.ping()
 	}
 	if forBrain {

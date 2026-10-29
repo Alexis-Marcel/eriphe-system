@@ -101,7 +101,7 @@ func (c *core) handleVoice(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "text is required", http.StatusBadRequest)
 		return
 	}
-	if c.conf().Brain == nil || c.conf().Brain.Agent == "" {
+	if b := c.conf().brain(); b == nil || b.Agent == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no brain on this server"})
 		return
 	}
@@ -191,7 +191,7 @@ func (c *core) delivered(seq int) bool {
 }
 
 func (c *core) brainIdle() bool {
-	t, err := c.store.task(c.store.get("brain_task"))
+	t, err := c.store.task(c.brainTaskID())
 	return err == nil && t.State == stateIdle
 }
 

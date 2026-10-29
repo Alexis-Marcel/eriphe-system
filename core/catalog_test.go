@@ -424,13 +424,13 @@ func TestCatalogAPI(t *testing.T) {
 // The brain hears of what changed.
 func TestCatalogTellsTheBrain(t *testing.T) {
 	c := newDynamicCore(t, func(cfg *Config) { cfg.Brain = &BrainConfig{Agent: "sonnet", Tools: []string{"notion"}} })
-	if got := c.conf().brainTools(); len(got) != 0 {
+	if got := c.conf().assistantTools(theBrain(c.core)); len(got) != 0 {
 		t.Fatalf("brain tools before = %v", got)
 	}
 	if err := c.putServer(putCreate, "notion", Server{URL: "https://mcp.notion.com/mcp", Auth: &ServerAuth{OAuth: &OAuthConfig{}}, Use: "notes"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := c.conf().brainTools(); len(got) != 1 || got[0] != "notion" {
+	if got := c.conf().assistantTools(theBrain(c.core)); len(got) != 1 || got[0] != "notion" {
 		t.Fatalf("brain tools after = %v", got)
 	}
 	msgs, _ := c.store.messagesAfter(0, 10)
@@ -445,7 +445,7 @@ func TestCatalogTellsTheBrain(t *testing.T) {
 // be the brain, an unknown agent or the brain's own removal are refused.
 func TestCatalogBrainAgent(t *testing.T) {
 	c := newDynamicCore(t, func(cfg *Config) { cfg.Brain = &BrainConfig{Node: "nas"} })
-	if a := c.conf().Brain.Agent; a != "sonnet" {
+	if a := c.conf().brain().Agent; a != "sonnet" {
 		t.Fatalf("brain agent = %q, want the default one", a)
 	}
 	if err := c.putProvider(putCreate, "or", Provider{Kind: "openrouter-api"}, "sk-or-1"); err != nil {
@@ -458,7 +458,7 @@ func TestCatalogBrainAgent(t *testing.T) {
 	if err := c.setBrainAgent("free"); err != nil {
 		t.Fatal(err)
 	}
-	if a := c.conf().Brain.Agent; a != "free" || c.base.Brain.Agent != "" {
+	if a := c.conf().brain().Agent; a != "free" || c.base.Brain.Agent != "" {
 		t.Fatalf("brain agent = %q, file's = %q", a, c.base.Brain.Agent)
 	}
 	wantKey(t, c.deleteAgent("free"), "catalog.brainagent")
@@ -466,7 +466,7 @@ func TestCatalogBrainAgent(t *testing.T) {
 		t.Fatalf("catalog = %q %q", v.BrainAgent, v.BrainSource)
 	}
 	again := startDynamicCore(t, c.base, c.store)
-	if a := again.conf().Brain.Agent; a != "free" || len(again.skipped) != 0 {
+	if a := again.conf().brain().Agent; a != "free" || len(again.skipped) != 0 {
 		t.Fatalf("after a restart: %q, left out %v", a, again.skipped)
 	}
 

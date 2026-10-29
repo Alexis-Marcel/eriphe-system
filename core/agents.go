@@ -100,20 +100,7 @@ func (c *Config) checkAgents() error {
 	if _, ok := c.Agents[c.DefaultAgent]; !ok {
 		return fmt.Errorf("default_agent %q is not an agent", c.DefaultAgent)
 	}
-	if c.Brain != nil && c.Brain.Agent != "" { // none: the brain waits for one
-		a, ok := c.Agents[c.Brain.Agent]
-		if !ok && c.fileOnly {
-			return nil // it may be one of the workspace's, not loaded yet: the brain says so if it is missing
-		}
-		if !ok {
-			return fmt.Errorf("brain: agent %q is not an agent", c.Brain.Agent)
-		}
-		// Its tools are MCP servers, its prompt standing instructions.
-		if !harnessOf(a.Runtime).canBeBrain() {
-			return fmt.Errorf("brain: agent %q runs %s, the brain needs a runtime that takes MCP servers and a system prompt", c.Brain.Agent, a.Runtime)
-		}
-	}
-	return nil
+	return nil // the assistants' agents are checkAssistants'
 }
 
 // agent returns the named agent, or the default one.

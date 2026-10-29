@@ -20,7 +20,7 @@ import (
 //	PUT    /v1/agents/{name}        an agent as in the configuration
 //	DELETE /v1/agents/{name}
 //	PUT    /v1/default-agent        {"name"}
-//	PUT    /v1/brain-agent          {"name"}
+//	PUT    /v1/brain-agent          {"name"}: the agent of the assistant eriphe (assistants.go)
 
 func (c *core) catalogRoutes(mux *http.ServeMux, token string) {
 	mux.Handle("GET /v1/catalog", bearer(token, http.HandlerFunc(c.handleCatalog)))
@@ -73,11 +73,8 @@ func (c *core) catalog() catalogView {
 	if c.base.DefaultAgent != "" {
 		v.DefaultSource = sourceConfig
 	}
-	if m.Brain != nil {
-		v.BrainAgent, v.BrainSource = m.Brain.Agent, sourceWorkspace
-		if c.base.Brain.Agent != "" {
-			v.BrainSource = sourceConfig
-		}
+	if b := m.brain(); b != nil {
+		v.BrainAgent, v.BrainSource = b.Agent, c.brainAgentSource(b.Name)
 	}
 	return v
 }

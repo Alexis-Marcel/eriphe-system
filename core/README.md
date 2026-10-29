@@ -173,8 +173,10 @@ in eriphe-core's database (`catalog` table) and merged with the configuration at
   the file sets it, is read-only; otherwise the workspace picks it (the first agent by name until
   then). The brain's agent works the same way: `brain.agent` in the file is read-only;
   without it, the workspace picks it (`PUT /v1/brain-agent`), else the default agent, else the first
-  one that can be the brain. `brain.tools` may name a server the
-  workspace adds later: it is left out of the brain's grant until it exists.
+  one that can be the brain. The same holds for its tools and the other fields of the
+  [assistants](#assistants): what the file sets is read-only, the workspace sets the rest.
+  `brain.tools` may name a server the workspace adds later: it is left out of the brain's grant
+  until it exists.
 - **Same checks.** Every change runs the configuration's own validation (`checkAgents`,
   `checkServers`, the run specs of local servers) on the merged result, and is refused with its
   reason if it fails. A stored entry that no longer checks at start (the file changed under it) is
@@ -204,6 +206,9 @@ in eriphe-core's database (`catalog` table) and merged with the configuration at
 | `PUT /v1/agents/{name}` | an agent as in the configuration |
 | `DELETE /v1/agents/{name}` | remove a workspace agent |
 | `PUT /v1/default-agent` | `{"name"}`, unless the file sets it |
+| `GET /v1/assistants[/{name}]` | the [assistants](#assistants), with their spec, source and status |
+| `PUT /v1/assistants/{name}` | an assistant's spec; for one of the file's, what the file leaves out |
+| `DELETE /v1/assistants/{name}` | remove a workspace assistant (or the workspace's edits of one of the file's) |
 
 `GET /v1/servers` gives each server's `source` too, and `eriphe servers` shows it.
 
@@ -639,6 +644,43 @@ repository (`GET /repos/{owner}/{repo}/installation`) and asks
 repositories and rights, renewed five minutes before it ends. One GitHub connection for the tool
 and for git; the tool's former token is forgotten. A tool of the configuration file is changed in
 the file. "Oublier l'app" removes it from the vault (it stays on GitHub).
+
+## Assistants
+
+An assistant is a long-lived agent that owns one task, as a Kubernetes Deployment owns its Pod.
+Its spec says what it is and what it runs on; its status is what eriphe-core keeps of its task:
+
+| Spec | |
+|---|---|
+| `role` | what it is: a card in `assistantRoles` (`brain` today) |
+| `agent`, `node` | what it runs on; without an agent, the default one or the first that can run it |
+| `instructions` | its standing instructions (`{{user}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
+| `tools` | its grant from the catalog, like a task's; its role may add the catalog's free reads |
+| `resources` | what it is lent besides its tools (`{kind, ref, access, …}`): kept, lent with the resources work |
+| `triggers` | what wakes it: `conversation` (the user's messages and the tasks' events); later `source:<name>` and `schedule`. Its role's by default; one enabled assistant at most has the conversation |
+| `disabled` | its task is stopped, and none started |
+| `self_url`, `mcp_servers` | the file only (see the brain) |
+
+The status (`GET /v1/assistants`) has its conditions `Running`, `Busy` and `Ready`, its current
+task, the agent it runs, its session, its last turn and its last error; the controller keeps its
+restarts there too (table `assistant_status`).
+
+One controller keeps every assistant as its spec says: an enabled assistant has exactly one task;
+one that fails starts again after 5 s, then doubling up to 5 min, on its session while the resume
+works; a change of its agent, instructions, node or resources, or of the tools its grant reaches,
+restarts it once its turn is over; a disabled or removed one has its task stopped. In
+eriphe-core's first minute, it waits for the trusted servers still connecting. What an assistant
+gets comes from its role's card, never from its name, as a runtime's from its harness card: its
+self tools (eriphe-core's MCP), its free reads, the system network, streaming, the harness tools
+allowed in advance, its node profile, its first turn and its approval path. What wakes it and
+where its words go come from its triggers' cards.
+
+The brain is the built-in assistant `eriphe`, of role `brain`: the `brain` section of the file is
+its spec (read-only like the file's other entries), and Settings → Agents shows it under
+Assistants, where its agent and tools are set when the file leaves them out. Other assistants are
+added through the API only, for now; a file may also list them under `assistants`. An install from
+before moves by itself at start: the brain's `brain_*` keys become its status, the setting
+`brain_agent` its workspace agent, and the same agent keeps its running task.
 
 ## The brain
 

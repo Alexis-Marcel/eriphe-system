@@ -45,11 +45,11 @@ func (d *brainDraft) get() (string, int, <-chan struct{}) {
 
 // brainWrote takes what the brain's node reports: the whole messages among
 // its new events first, then the draft that follows them.
-func (c *core) brainWrote(t *TaskRow, events bool, draft string) {
+func (c *core) brainWrote(a Assistant, t *TaskRow, events bool, draft string) {
 	c.relayMu.Lock()
 	defer c.relayMu.Unlock()
 	if events {
-		c.copyBrainOutput(t)
+		c.copyBrainOutput(a, t)
 	}
 	c.draft.set(draft, c.store.lastMessageSeq())
 }

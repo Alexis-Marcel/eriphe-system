@@ -145,8 +145,8 @@ func (c *core) packTasks() (decisions, tasks []string) {
 	}
 	for i := len(ts) - 1; i >= 0; i-- { // the oldest first
 		t := ts[i]
-		if t.Kind == "brain" {
-			continue // a brain task's leftover: this session is a new one
+		if isRoleKind(t.Kind) {
+			continue // an assistant's task (a brain task's leftover: this session is a new one)
 		}
 		node := t.Node
 		if node == "" {
@@ -236,28 +236,9 @@ func (c *core) brainFirstPrompt(resume bool) string {
 const brainFreshPrompt = "Eriphe démarre dans une session neuve. Lis tes consignes et l'état du fil ci-dessous. " +
 	"Si une permission t'attend (pas celles qui reviennent à %s), réponds-y avec answer_task ; ne fais rien d'autre pour l'instant, puis réponds seulement « Prêt. »."
 
-// A resume can also fall through on the node, which then opens a new
-// session (ACP, Codex) with the start prompt alone. eriphe-core sees it by
-// the session the task reports: another than the one it asked for. The
-// pack then goes with the brain's next delivery.
-
-// noteBrainSession compares the session the brain's task reports with the
-// one it was started to resume.
-func (c *core) noteBrainSession(t *TaskRow) {
-	want := c.store.get("brain_resume")
-	if t.SessionID == "" || want == "" {
-		return
-	}
-	c.store.set("brain_resume", "")
-	if t.SessionID != want {
-		log.Printf("brain: session %s not resumed, %s is a new one: the context pack goes with the next delivery", want, t.SessionID)
-		c.store.set("brain_pack_due", "1")
-	}
-}
-
 // packForDelivery is the pack owed to a session that was not resumed, if any.
-func (c *core) packForDelivery() string {
-	if c.store.get("brain_pack_due") == "" {
+func (c *core) packForDelivery(a Assistant) string {
+	if !c.assistantStatus(a.Name).PackDue {
 		return ""
 	}
 	pack, st := c.contextPack()

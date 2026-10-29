@@ -57,7 +57,8 @@ type core struct {
 	nodes   map[string]*nodeClient // by name, created when first needed
 	rev     int64                  // bumped whenever an assignment or an inbox changes
 	changed chan struct{}          // closed and replaced on every bump
-	inbox   chan struct{}          // pinged when the brain has something to read
+	inbox   chan struct{}          // pinged when an assistant has something to read
+	asst    assistantStatuses      // what the assistant controller keeps (assistants.go)
 }
 
 func newCore(cfg *Config, store *Store) *core {
@@ -73,7 +74,8 @@ func newCore(cfg *Config, store *Store) *core {
 		m.validate()
 	}
 	c.snap.Store(m)
-	c.turn.load(store.get("brain_turn"), store.get("brain_task") != "")
+	c.loadAssistants()
+	c.turn.load(store.get("brain_turn"), c.brainTaskID() != "")
 	c.turn.keep = func(st brainTurnState) {
 		raw, _ := json.Marshal(st)
 		store.set("brain_turn", string(raw))
@@ -462,7 +464,8 @@ func (c *core) stop(ctx context.Context, id string) error {
 	return nil
 }
 
-// stopByBrain is stop for the brain, which is not told of the end it asked for.
+// stopByBrain is stop for the brain, which is not told of the end it asked
+// for; the assistant controller stops its own tasks with it too.
 func (c *core) stopByBrain(ctx context.Context, id string) error {
 	if err := c.stop(ctx, id); err != nil {
 		return err
