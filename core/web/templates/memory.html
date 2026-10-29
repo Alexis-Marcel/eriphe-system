@@ -80,7 +80,7 @@
 <div class="mem-list" id="mem-list">
 {{range .Items}}{{template "mem-card" .}}{{end}}
 </div>
-{{if not .Items}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-memory"}}</span><p>{{if or .Q .Kind .Subject}}{{t "mem.nomatch"}}{{else}}{{t "mem.none"}}{{end}}</p></div>{{end}}
+{{if not .Items}}{{if or .Q .Kind .Subject .Past (not .About)}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-memory"}}</span><p>{{if or .Q .Kind .Subject}}{{t "mem.nomatch"}}{{else}}{{t "mem.none"}}{{end}}</p></div>{{end}}{{end}}
 {{end}}
 
 {{/* What the assistant knows about me: the profile and what is about me
@@ -177,26 +177,26 @@
   {{if .SourceText}}<blockquote class="mem-source"><span class="who who-{{.SourceWho}}">{{t (printf "who.%s" .SourceWho)}}</span> {{.SourceText}}{{if .SourceLink}} <a href="{{.SourceLink}}">↗</a>{{end}}</blockquote>{{end}}
   {{if .FlagList}}<p class="chips">{{range .FlagList}}<span class="tag tag-no">{{t (printf "mem.flag.%s" .)}}</span>{{end}}</p>{{end}}
   <div class="mem-actions">
-    <button class="btn btn-primary sm" hx-post="/memory/{{.ID}}/approve" hx-target="closest .mem" hx-swap="outerHTML">{{template "i-check"}}{{t "mem.approve"}}</button>
-    <button class="btn btn-ghost sm" hx-post="/memory/{{.ID}}/reject" hx-target="closest .mem" hx-swap="outerHTML">{{template "i-x"}}{{t "mem.reject"}}</button>
-    <button class="link-btn" hx-get="/memory/{{.ID}}/edit" hx-target="closest .mem" hx-swap="outerHTML">{{t "mem.edit"}}</button>
+    <button class="btn btn-primary sm" hx-post="/memory/{{.ID}}/approve" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{template "i-check"}}{{t "mem.approve"}}</button>
+    <button class="btn btn-ghost sm" hx-post="/memory/{{.ID}}/reject" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{template "i-x"}}{{t "mem.reject"}}</button>
+    <button class="link-btn" hx-get="/memory/{{.ID}}/edit" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.edit"}}</button>
   </div>
   {{else if eq .Status "deleted"}}
-  <div class="mem-actions"><button class="btn btn-soft sm" hx-post="/memory/{{.ID}}/restore" hx-target="closest .mem" hx-swap="outerHTML">{{t "mem.restore"}}</button></div>
+  <div class="mem-actions"><button class="btn btn-soft sm" hx-post="/memory/{{.ID}}/restore" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.restore"}}</button></div>
   {{else}}
   <div class="mem-actions">
     {{if and (eq .Kind "commitment") (eq .State "open")}}
-    <button class="btn btn-soft sm" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"done"}' hx-target="closest .mem" hx-swap="outerHTML">{{template "i-check"}}{{t "mem.done"}}</button>
-    <button class="link-btn" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"dropped"}' hx-target="closest .mem" hx-swap="outerHTML">{{t "mem.drop"}}</button>
+    <button class="btn btn-soft sm" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"done"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{template "i-check"}}{{t "mem.done"}}</button>
+    <button class="link-btn" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"dropped"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.drop"}}</button>
     {{else if eq .Kind "commitment"}}
-    <button class="link-btn" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"open"}' hx-target="closest .mem" hx-swap="outerHTML">{{t "mem.reopen"}}</button>
+    <button class="link-btn" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"open"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.reopen"}}</button>
     {{end}}
-    <button class="link-btn" hx-get="/memory/{{.ID}}/edit" hx-target="closest .mem" hx-swap="outerHTML">{{t "mem.edit"}}</button>
-    {{if not .Past}}{{if .Pinned}}{{if ne .Kind "profile"}}<button class="link-btn" hx-post="/memory/{{.ID}}/pin" hx-vals='{"pin":"0"}' hx-target="closest .mem" hx-swap="outerHTML">{{t "mem.unpin"}}</button>{{end}}
-    {{else}}<button class="link-btn" hx-post="/memory/{{.ID}}/pin" hx-vals='{"pin":"1"}' hx-target="closest .mem" hx-swap="outerHTML">{{t "mem.pin"}}</button>{{end}}{{end}}
-    {{if ne .Kind "episode"}}<button class="link-btn" hx-post="/memory/{{.ID}}/obsolete" hx-target="closest .mem" hx-swap="outerHTML">{{if .Past}}{{t "mem.current"}}{{else}}{{t "mem.obsolete"}}{{end}}</button>{{end}}
-    <button class="link-btn" hx-get="/memory/{{.ID}}/history" hx-target="next .mem-hist">{{t "mem.history"}}</button>
-    <button class="link-btn danger push" hx-post="/memory/{{.ID}}/forget" hx-confirm="{{t "mem.forgetconfirm"}}" hx-target="closest .mem" hx-swap="outerHTML">{{t "mem.forget"}}</button>
+    <button class="link-btn" hx-get="/memory/{{.ID}}/edit" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.edit"}}</button>
+    {{if not .Past}}{{if .Pinned}}{{if ne .Kind "profile"}}<button class="link-btn" hx-post="/memory/{{.ID}}/pin" hx-vals='{"pin":"0"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.unpin"}}</button>{{end}}
+    {{else}}<button class="link-btn" hx-post="/memory/{{.ID}}/pin" hx-vals='{"pin":"1"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.pin"}}</button>{{end}}{{end}}
+    {{if ne .Kind "episode"}}<button class="link-btn" hx-post="/memory/{{.ID}}/obsolete" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{if .Past}}{{t "mem.current"}}{{else}}{{t "mem.obsolete"}}{{end}}</button>{{end}}
+    <button class="link-btn" hx-get="/memory/{{.ID}}/history" hx-target="#hist-{{.ID}}">{{t "mem.history"}}</button>
+    <button class="link-btn danger push" hx-post="/memory/{{.ID}}/forget" hx-confirm="{{t "mem.forgetconfirm"}}" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.forget"}}</button>
   </div>
   {{end}}
   <div class="mem-hist" id="hist-{{.ID}}"></div>
@@ -205,7 +205,7 @@
 
 {{define "mem-edit"}}
 <article class="mem editing k-{{.Kind}}" id="mem-{{.ID}}">
-  <form class="mem-form" hx-post="/memory/{{.ID}}" hx-target="closest .mem" hx-swap="outerHTML">
+  <form class="mem-form" hx-post="/memory/{{.ID}}" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">
     {{if .Error}}<p class="alert span2" role="alert">{{.Error}}</p>{{end}}
     <label class="field span2"><span>{{t "mem.text"}}</span><textarea name="text" rows="3" required maxlength="4000">{{.Text}}</textarea></label>
     <label class="field"><span>{{t "mem.kind"}}</span><select name="kind">{{$k := .Kind}}{{range .Kinds}}<option value="{{.}}" {{if eq . $k}}selected{{end}}>{{t (printf "kind.%s" .)}}</option>{{end}}</select></label>
@@ -214,7 +214,7 @@
 {{end}}</textarea></label>
     <label class="field"><span>{{t "mem.due"}}</span><input type="date" name="due" value="{{if not .DueAt.IsZero}}{{.DueAt.Local.Format "2006-01-02"}}{{end}}"></label>
     <div class="mem-form-end span2">
-      <button class="btn btn-ghost" type="button" hx-get="/memory/{{.ID}}/card" hx-target="closest .mem" hx-swap="outerHTML">{{t "mem.cancel"}}</button>
+      <button class="btn btn-ghost" type="button" hx-get="/memory/{{.ID}}/card" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.cancel"}}</button>
       <button class="btn btn-primary" type="submit">{{t "mem.save"}}</button>
     </div>
   </form>

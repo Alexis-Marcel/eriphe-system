@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -129,7 +130,7 @@ func TestMemoryAboutAndInterview(t *testing.T) {
 	sec := about(body)
 	for _, want := range []string{"Ce que Jarvis sait de toi", "Faire l&#39;interview", `hx-post="/memory/interview"`,
 		"Sam est menuisier à son compte", "Sam habite 1 rue de l&#39;Exemple", `hx-post="/memory/` + itoa(int(plain.ID)) + `/pin"`,
-		`hx-post="/memory/` + itoa(int(pinned.ID)) + `/forget"`, `hx-get="/memory/` + itoa(int(plain.ID)) + `/edit" hx-target="closest .mem"`} {
+		`hx-post="/memory/` + itoa(int(pinned.ID)) + `/forget"`, `hx-get="/memory/` + itoa(int(plain.ID)) + `/edit" hx-target="#mem-` + itoa(int(plain.ID)) + `"`} {
 		if !strings.Contains(sec, want) {
 			t.Errorf("the section lacks %q", want)
 		}
@@ -139,6 +140,29 @@ func TestMemoryAboutAndInterview(t *testing.T) {
 	}
 	if strings.Contains(sec, "Léa") || strings.Contains(sec, "chantier") {
 		t.Error("the section shows what is not about the user")
+	}
+	// Each memory once on the page: the list below leaves out the section's,
+	// which a search or a filter still finds.
+	for _, x := range []*Memory{pinned, plain} {
+		if n := strings.Count(body, `id="mem-`+itoa(int(x.ID))+`"`); n != 1 {
+			t.Errorf("memory %d shown %d times", x.ID, n)
+		}
+	}
+	ids := map[string]int{}
+	for _, id := range regexp.MustCompile(`id="mem-\d+"`).FindAllString(body, -1) {
+		if ids[id]++; ids[id] > 1 {
+			t.Errorf("%s twice on the page", id)
+		}
+	}
+	if len(ids) != 4 { // every memory, each once
+		t.Errorf("ids on the page: %v", ids)
+	}
+	for _, path := range []string{"/memory?q=menuisier", "/memory?subject=owner", "/memory?kind=profile"} {
+		_, b, _ := tw.do("GET", path, nil, nil)
+		list := b[strings.Index(b, `id="mem-list"`):]
+		if !strings.Contains(list, `id="mem-`+itoa(int(pinned.ID))+`"`) {
+			t.Errorf("%s: the list does not find the section's memory", path)
+		}
 	}
 	if _, body, _ := tw.do("GET", "/memory?view=profile", nil, nil); strings.Contains(body, `id="mem-about"`) {
 		t.Error("the section on another view")

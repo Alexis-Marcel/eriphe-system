@@ -1332,7 +1332,8 @@ user is only proposed. Proposals wait in the workspace (Mémoire → À approuve
 **What it knows about the user.** The Memory page opens on "Ce que Jarvis sait de toi" (the
 assistant's name): the profile and the other current memories about the user (subject `owner`,
 episodes and commitments aside), the pinned ones first and marked, with the cards' usual actions,
-and the button that does the [first-run interview](#workspace-web) again.
+and the button that does the [first-run interview](#workspace-web) again. The list below leaves them out
+(each memory shows once); a search or a filter finds them there too.
 
 **The profile** is the pinned memories, at most 2,500 characters (enforced on write). It is
 appended to the brain's prompt when its session starts, and sent again, quoted, with its next

@@ -190,11 +190,15 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 	w.memoryCounts(&p)
 	var err error
 	var xs []*Memory
+	shown := map[int64]bool{} // in the section above: not again in the list
 	switch p.View {
 	case "all":
 		if about, err := m.aboutOwner(); err == nil {
 			for _, x := range about {
 				p.About = append(p.About, w.memCard(x, false))
+				if p.Q == "" && p.Kind == "" && p.Subject == "" && !p.Past {
+					shown[x.ID] = true
+				}
 			}
 		}
 		b := w.c.conf().brain()
@@ -238,6 +242,9 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 		return
 	}
 	for _, x := range xs {
+		if shown[x.ID] {
+			continue
+		}
 		card := w.memCard(x, p.View == "inbox")
 		if p.View == "journal" {
 			day := time.Date(x.OccurredAt.Year(), x.OccurredAt.Month(), x.OccurredAt.Day(), 0, 0, 0, 0, time.Local)
