@@ -397,6 +397,7 @@ type machineView struct {
 	System   string // its system in words, a key of web_text.go (system.*)
 	Arch     string
 	Update   updateRow // where its update stands (web_updates.go)
+	NoTLS    bool      // it connects without its certificate yet, while machines have TLS (machine_tls.go)
 	// What Eriphe sees there: the folders opened to it on this device, and
 	// whether it shares any root to open one from.
 	Folders []*Folder
@@ -412,6 +413,7 @@ func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, 
 	if err != nil {
 		return nil, err
 	}
+	tls := w.c.caHash() != ""
 	var out []machineView
 	for i, n := range nodes {
 		info := parseInfo(n)
@@ -419,7 +421,7 @@ func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, 
 		m := machineView{NodeRow: n, CPUs: info.CPUs, Memory: info.Memory, Runtimes: info.Runtimes,
 			Labels: info.Labels, Active: active, AlwaysOn: info.AlwaysOn, Version: info.Version,
 			System: systemKey(nodeInstall(n, info), n.OS), Arch: n.Arch, Update: updates.Rows[i+1],
-			Shares: len(info.Shares) > 0, Workers: len(info.Runtimes) > 0}
+			Shares: len(info.Shares) > 0, Workers: len(info.Runtimes) > 0, NoTLS: tls && n.CertExpires.IsZero()}
 		for _, f := range folders {
 			if f.Node == n.Name {
 				m.Folders = append(m.Folders, f)

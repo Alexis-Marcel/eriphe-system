@@ -35,11 +35,7 @@
     {{if .Suspended}}<p class="cut-note">{{t "devices.cutlead"}}</p>{{end}}
     {{template "device-sees" .}}
     {{template "device-can" .}}
-    <div class="device-foot">
-      <p class="muted small device-version">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}} · {{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}} · {{end}}{{if .Version}}<span class="mono">eriphe-node {{ver .Version}}</span>{{if and .Update .Update.Latest (not .Update.Pending)}} <span class="mono">→ {{ver .Update.Latest}}</span>{{end}}{{end}}</p>
-      {{template "machine-update" .Update}}
-      {{if and $.Data.CAHash .CertExpires.IsZero}}<p class="muted small">{{t "machines.notls"}}</p>{{end}}
-    </div>
+    {{template "device-foot" .}}
   </li>
 {{end}}
   <li class="tile tile-add"><button type="button" data-dialog="connect-dlg"><span class="tile-add-icon" aria-hidden="true">{{template "i-plus"}}</span><b>{{t "machines.add"}}</b><span class="muted small">{{if .Data.Nodes}}{{t "devices.addhint"}}{{else}}{{t "machines.none"}}{{end}}</span></button></li>
@@ -74,6 +70,23 @@
 </details>
 {{end}}
 {{end}}
+
+{{/* A device card's foot: its version and its update. While an update is
+pending, it asks every few seconds where it stands (handleUpdateState) and
+is swapped whole, until the request is done; app.js keeps it quiet, and
+gives up, while eriphe-core does not answer. . is a machineView. */}}
+{{define "device-foot-fragment"}}{{template "device-foot" .Data}}{{end}}
+{{define "device-foot"}}
+<div class="device-foot" id="device-foot-{{.Name}}"{{with .Update.Pending}} hx-get="/settings/devices/{{$.Name}}/update?id={{.ID}}" {{template "update-poll" $.Update}}{{end}}>
+  <p class="muted small device-version">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}} · {{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}} · {{end}}{{if .Version}}<span class="mono">eriphe-node {{ver .Version}}</span>{{if and .Update.Latest (not .Update.Pending)}} <span class="mono">→ {{ver .Update.Latest}}</span>{{end}}{{end}}</p>
+  {{template "machine-update" .Update}}
+  {{if .NoTLS}}<p class="muted small">{{t "machines.notls"}}</p>{{end}}
+</div>
+{{end}}
+
+{{/* The polling of an update's state, on the element it swaps: slower while
+the request waits for the tasks to end. . is an updateRow with a request. */}}
+{{define "update-poll"}}hx-trigger="every {{if .Waiting}}10s{{else}}3s{{end}}" hx-swap="outerHTML" hx-request='{"timeout": 8000}' data-update-poll data-update-lost="{{t "updates.lost"}}"{{end}}
 
 {{/* A device's status: online, offline, or its access cut. . is a machineView. */}}
 {{define "device-status"}}
@@ -193,15 +206,7 @@
 <section class="panel" id="updates" aria-labelledby="updates-title">
   <h3 id="updates-title">{{template "i-branch"}}{{t "updates.title"}}</h3>
   <p class="muted">{{t "updates.lead"}}</p>
-  {{with index .Rows 0}}
-  <div class="update-core-row">
-    <div class="list-main">
-      <b>eriphe-core</b>
-      <span class="muted small mono">{{if .Version}}{{ver .Version}}{{else}}{{t "updates.noversion"}}{{end}}{{if .Pin}} · {{tf "updates.pinned" .Pin}}{{end}}</span>
-    </div>
-    {{template "machine-update" .}}
-  </div>
-  {{end}}
+  {{template "core-update" index .Rows 0}}
   {{if gt .Behind 1}}
   <form hx-post="/settings/updates/all" hx-confirm="{{t "updates.allconfirm"}}">
     <button class="btn btn-primary" type="submit" hx-disabled-elt="this">{{t "updates.all"}}</button>
@@ -215,14 +220,29 @@
 </section>
 {{end}}
 
+{{/* eriphe-core's row, which follows its update as a card does. Once done,
+eriphe-core runs its new version, and the cards are shown again: the nodes
+can follow it. . is an updateRow. */}}
+{{define "core-update-fragment"}}{{template "core-update" .Data}}{{end}}
+{{define "core-update"}}
+<div class="update-core-row" id="update-core"{{with .Pending}} hx-get="/settings/updates/core?id={{.ID}}" {{template "update-poll" $}}{{end}}>
+  <div class="list-main">
+    <b>eriphe-core</b>
+    <span class="muted small mono">{{if .Version}}{{ver .Version}}{{else}}{{t "updates.noversion"}}{{end}}{{if .Pin}} · {{tf "updates.pinned" .Pin}}{{end}}</span>
+  </div>
+  {{template "machine-update" .}}
+  {{if .Done}}<span hidden hx-get="/settings/devices" hx-trigger="load" hx-select="#devices-grid" hx-target="#devices-grid" hx-swap="outerHTML"></span>{{end}}
+</div>
+{{end}}
+
 {{/* A machine's update: where it stands, and the button, or the command to run on a machine without an updater. . is an updateRow. */}}
 {{define "machine-update"}}
-{{if or .Latest .Pending (and .Status (not (or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned") (eq .Status.Outcome "running"))))}}
+{{if or .Latest .Pending .Done (and .Status (not (or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned") (eq .Status.Outcome "running"))))}}
 <div class="machine-update">
   <p class="small">{{template "update-state" .}}</p>
   {{if and .Latest (not .Pending)}}
   {{if .Updater}}
-  <form hx-post="/settings/updates/request" class="update-now inline-update">
+  <form hx-post="/settings/updates/request" class="update-now inline-update" hx-target="closest {{if .Core}}.update-core-row{{else}}.device-foot{{end}}" hx-swap="outerHTML">
     <input type="hidden" name="machine" value="{{.Machine}}">
     <button class="btn btn-soft sm" type="submit" hx-disabled-elt="this" {{if and .CoreFirst (not .Core)}}disabled title="{{t "update.corefirst"}}"{{end}}>{{t "updates.now"}}</button>
     {{if and .CoreFirst (not .Core)}}<span class="muted small" title="{{t "update.corefirst"}}">{{t "updates.aftercore"}}</span>{{end}}
@@ -243,7 +263,8 @@
 
 {{/* Where a machine's update stands. */}}
 {{define "update-state"}}
-{{- if .Pending}}<span class="muted">{{if and .Status (eq .Status.ID .Pending.ID) (eq .Status.Outcome "running")}}{{t "updates.running"}}{{else if .Waiting}}{{t "updates.waiting"}}{{else}}{{t "updates.requested"}}{{end}}</span>
+{{- if .Pending}}<span class="muted" role="status"><span class="pulse-dot" aria-hidden="true"></span>{{if and .Status (eq .Status.ID .Pending.ID) (eq .Status.Outcome "running")}}{{t "updates.running"}}{{else if .Waiting}}{{t "updates.waiting"}}{{else}}{{t "updates.requested"}}{{end}}</span>
+{{- else if and .Done (or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned"))}}<span class="update-done" role="status">{{template "i-check"}}{{t (printf "update.outcome.%s" .Status.Outcome)}}</span>
 {{- else if .Latest}}<span class="update-available" title="{{ver .Latest}}"><b class="new-dot" aria-hidden="true"></b>{{t "update.available"}}</span>
 {{- end}}
 {{- if and .Status (not .Pending) (not (or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned") (eq .Status.Outcome "running")))}}

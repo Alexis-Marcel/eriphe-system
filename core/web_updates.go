@@ -24,6 +24,9 @@ type updateRow struct {
 	Pending   *machineUpdate
 	CoreFirst bool          // a node, while eriphe-core is behind: eriphe-core goes first
 	Manual    updateCommand // the command that updates it by hand, without an updater
+	// Done: the request the page follows has just ended (handleUpdateState),
+	// and its outcome shows once.
+	Done bool
 }
 
 type updatesData struct {
@@ -62,6 +65,11 @@ func (w *web) updatesData(nodes []NodeRow) updatesData {
 }
 
 func (d *updatesData) add(r updateRow) {
+	// The updater wrote how the request went: it is done, even before
+	// resolveUpdates drops it.
+	if p, st := r.Pending, r.Status; p != nil && st != nil && st.ID == p.ID && st.Outcome != "running" {
+		r.Pending = nil
+	}
 	if r.Latest != "" && r.Updater && r.Pending == nil {
 		d.Behind++
 	}
@@ -118,8 +126,49 @@ func (w *web) handleUpdateNow(rw http.ResponseWriter, r *http.Request, s *sessio
 		w.updateError(rw, lang, err)
 		return
 	}
-	rw.Header().Set("HX-Refresh", "true")
-	rw.WriteHeader(http.StatusOK)
+	w.updateState(rw, r, s, m, "")
+}
+
+// handleUpdateState is where a machine's update stands, for its card (or
+// eriphe-core's row) to follow it: the page asks every few seconds while a
+// request is pending, and the answer stops asking once it is done. id is
+// the request the page follows, whose outcome then shows once.
+func (w *web) handleUpdateState(rw http.ResponseWriter, r *http.Request, s *session) {
+	m := coreMachine
+	if name := r.PathValue("name"); name != "" {
+		m = "node:" + name
+	}
+	w.updateState(rw, r, s, m, r.URL.Query().Get("id"))
+}
+
+func (w *web) updateState(rw http.ResponseWriter, r *http.Request, s *session, m, follow string) {
+	nodes, err := w.c.store.nodes()
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	d := w.updatesData(nodes)
+	for i := range d.Rows {
+		if row := &d.Rows[i]; follow != "" && row.Pending == nil && row.Status != nil && row.Status.ID == follow {
+			row.Done = true
+		}
+	}
+	if m == coreMachine {
+		w.render(rw, r, s, "settings", "core-update-fragment", page{Data: d.Rows[0]})
+		return
+	}
+	views, err := w.deviceViews(nodes, d)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for _, v := range views {
+		if "node:"+v.Name == m {
+			w.render(rw, r, s, "settings", "device-foot-fragment", page{Data: v})
+			return
+		}
+	}
+	http.NotFound(rw, r)
 }
 
 // handleUpdateAll asks every machine behind to update, eriphe-core first.
