@@ -357,3 +357,12 @@ document.addEventListener("click", (e) => {
   }
   if (e.target instanceof HTMLDialogElement && e.target.classList.contains("modal")) e.target.close();
 });
+
+// A link with data-focus scrolls to its target and puts the cursor in that
+// field, e.g. "Connect a device" to the name of the new device.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-focus]");
+  if (!a) return;
+  const field = document.getElementById(a.dataset.focus);
+  if (field) setTimeout(() => field.focus({ preventScroll: true }), 300);
+});
