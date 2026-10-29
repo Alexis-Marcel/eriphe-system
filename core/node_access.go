@@ -148,8 +148,8 @@ func (c *core) logNode(node string, e NodeLogEntry) {
 
 // logPlaced records a task given to a device, with the folders lent to it.
 func (c *core) logPlaced(t *TaskRow, node string) {
-	if t.Kind == "brain" {
-		return // Eriphe itself, not a task it gives out
+	if isRoleKind(t.Kind) {
+		return // an assistant: Eriphe itself, not a task it gives out
 	}
 	c.logNode(node, NodeLogEntry{Kind: logTask, Task: t.ID, Detail: t.Agent})
 	for _, name := range splitNames(t.Folders) {
@@ -234,7 +234,7 @@ func (c *core) suspendNode(name string) error {
 	c.logNode(name, NodeLogEntry{Kind: logCut})
 	log.Printf("node %s: access cut (%d task(s) stopped)", name, len(tasks))
 	for _, t := range tasks {
-		if t.kind != "brain" {
+		if !isRoleKind(t.kind) {
 			c.notifyBrain(t.id, stateStopped)
 		}
 	}

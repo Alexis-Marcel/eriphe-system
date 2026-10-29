@@ -38,7 +38,7 @@ func TestWebWelcomeFlow(t *testing.T) {
 	if h.Get("HX-Redirect") != "/welcome" {
 		t.Fatalf("saved: %q %s", h.Get("HX-Redirect"), body)
 	}
-	if b := c.conf().Brain; b.Agent != "sonnet" || len(c.conf().Agents) != 3 {
+	if b := c.conf().brain(); b.Agent != "sonnet" || len(c.conf().Agents) != 3 {
 		t.Fatalf("brain agent %q, agents %v", b.Agent, c.conf().Agents)
 	}
 	if code, _, _ := tw.do("GET", "/", nil, nil); code != http.StatusOK {
@@ -57,7 +57,7 @@ func TestWebWelcomeFlow(t *testing.T) {
 		t.Fatalf("starting: %s", body)
 	}
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "pc", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})
-	c.store.set("brain_task", "b-1")
+	setBrainTask(c.core, "b-1")
 	_, body, _ = tw.do("GET", "/welcome/status", nil, nil)
 	if !strings.Contains(body, "Eriphe est prêt") || !strings.Contains(body, `href="/"`) || strings.Contains(body, "hx-trigger") {
 		t.Fatalf("ready: %s", body)

@@ -247,7 +247,7 @@ func (t *brainTurn) snapshot() (from, to, eventSeq int, tainted []string) {
 
 // brainCalledCatalog is the proxy's hook: the brain called a catalog tool.
 func (c *core) brainCalledCatalog(taskID, server, tool string) {
-	if taskID == "" || taskID != c.store.get("brain_task") {
+	if taskID == "" || taskID != c.brainTaskID() {
 		return
 	}
 	if containsStr(c.conf().memoryConfig().TrustedServers, server) {
@@ -270,7 +270,7 @@ func (c *core) turnTaint() []string {
 func (c *core) turnTaintBut(pending map[string]int) []string {
 	pending = maps.Clone(pending)
 	_, _, eventSeq, tainted := c.turn.snapshot()
-	id := c.store.get("brain_task")
+	id := c.brainTaskID()
 	if id == "" {
 		return tainted
 	}

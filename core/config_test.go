@@ -54,11 +54,11 @@ func TestBrainAgentFromWorkspace(t *testing.T) {
 		t.Fatalf("a workspace agent refused by the file check: %v", err)
 	}
 	c.Agents["free"] = Agent{Runtime: "opencode", Provider: "anthropic", Model: "anthropic/claude-sonnet"}
-	if err := c.checkAgents(); err != nil && strings.Contains(err.Error(), "is not an agent") {
+	if err := checkAll(c); err != nil && strings.Contains(err.Error(), "is not an agent") {
 		t.Fatalf("with the catalog: %v", err)
 	}
 	delete(c.Agents, "free")
-	if err := c.checkAgents(); err == nil || !strings.Contains(err.Error(), "is not an agent") {
+	if err := checkAll(c); err == nil || !strings.Contains(err.Error(), "is not an agent") {
 		t.Fatalf("unknown everywhere: %v", err)
 	}
 }

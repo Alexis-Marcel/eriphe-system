@@ -205,8 +205,8 @@ func (p *Policy) rules() []Rule {
 // policy decides, and marks those only the user may answer. It returns true
 // when some request is left for the brain (or, through it, the user).
 func (c *core) applyPolicy(id string, events []EventRow) bool {
-	if id == c.store.get("brain_task") {
-		return false
+	if c.isAssistantTask(id) {
+		return false // its role's approval path answers it (assistant_controller.go)
 	}
 	left := false
 	for _, e := range events {

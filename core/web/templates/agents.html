@@ -135,6 +135,40 @@
   </div>
 </section>
 
+{{if .Assistants}}
+<section class="panel" aria-labelledby="asst-title">
+  <h3 id="asst-title">{{template "i-bot"}}{{t "assistants.title"}}</h3>
+  <p class="muted">{{t "assistants.lead"}}</p>
+  <ul class="assistants">
+  {{range .Assistants}}
+    <li class="assistant" id="assistant-{{.Name}}">
+      <div class="tile-head">
+        <span class="assistant-name"><span class="mono strong">{{.Name}}</span> <span class="tag tag-brain">{{.RoleLabel}}</span>{{if .Spec.Disabled}} <span class="tag">{{t "assistants.disabled"}}</span>{{end}}</span>
+        <span class="chips">{{range .Status.Conditions}}<span class="status {{if .Status}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{t (printf "assistants.cond.%s" .Type)}}</span>{{end}}</span>
+      </div>
+      <dl class="kv">
+        <div><dt>{{t "assistants.agent"}}</dt><dd>{{if .Spec.Agent}}<span class="mono">{{.Spec.Agent}}</span>{{if .AgentModel}} <span class="muted small">{{.AgentModel}}</span>{{end}}{{else}}<span class="muted">{{t "assistants.noagent"}}</span>{{end}}{{if .AgentLocked}} {{template "src-tag" "config"}}{{end}}</dd></div>
+        <div><dt>{{t "assistants.tools"}}</dt><dd>{{range .Spec.Tools}}<span class="tag mono">{{.}}</span>{{end}}{{if .FreeReads}}<span class="muted small">{{if .Spec.Tools}}{{t "assistants.plusfree"}}{{else}}{{t "assistants.onlyfree"}}{{end}}</span>{{else if not .Spec.Tools}}<span class="muted small">{{t "assistants.notools"}}</span>{{end}}{{if .ToolsLocked}} {{template "src-tag" "config"}}{{end}}</dd></div>
+        {{if .Status.Task}}<div><dt>{{t "assistants.task"}}</dt><dd><a class="mono" href="/tasks/{{.Status.Task}}">{{.Status.Task}}</a>{{if .Status.State}} <span class="muted small">{{.Status.State}}</span>{{end}}</dd></div>{{end}}
+        <div><dt>{{t "assistants.lastturn"}}</dt><dd>{{if .Status.LastTurn}}{{ago .LastTurn}}{{else}}<span class="muted">{{t "time.never"}}</span>{{end}}</dd></div>
+      </dl>
+      {{if .Status.LastError}}<p class="alert small" role="alert">{{short .Status.LastError 300}}</p>{{end}}
+      {{if not (and .AgentLocked .ToolsLocked)}}
+      <form class="assistant-form" hx-post="/settings/assistants/{{.Name}}" hx-disabled-elt="find button[type=submit]">
+        {{if not .AgentLocked}}<label class="field"><span>{{t "assistants.agent"}}</span>
+          <select name="agent">{{range .Choices}}<option value="{{.Name}}" {{if .Brain}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select></label>{{end}}
+        {{if not .ToolsLocked}}<label class="field"><span>{{t "assistants.tools"}}</span>
+          <input name="tools" value="{{.ToolsText}}" placeholder="{{t "assistants.toolsplaceholder"}}" spellcheck="false" autocomplete="off">
+          <small class="muted">{{t "assistants.toolshint"}}</small></label>{{end}}
+        <button class="btn btn-soft" type="submit">{{t "form.save"}}</button>
+      </form>
+      {{end}}
+    </li>
+  {{end}}
+  </ul>
+</section>
+{{end}}
+
 <section class="panel" aria-labelledby="prov-title">
   <div class="panel-head">
     <h3 id="prov-title">{{template "i-key"}}{{t "providers.title"}}</h3>

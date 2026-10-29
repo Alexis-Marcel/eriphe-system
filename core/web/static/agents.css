@@ -50,6 +50,15 @@
 .role p { margin: 0; }
 .role .row-form-2 { grid-template-columns: minmax(0, 1fr) auto; }
 
+.assistants { display: grid; gap: 12px; list-style: none; margin: 0; padding: 0; }
+.assistant { display: grid; gap: 10px; padding: 16px; border-radius: 14px; background: var(--surface-2); }
+.assistant .tile-head { flex-wrap: wrap; gap: 8px; }
+.assistant-name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.assistant .chips { display: inline-flex; flex-wrap: wrap; gap: 12px; }
+.assistant .kv dd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.assistant .alert { margin: 0; overflow-wrap: anywhere; }
+.assistant-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: 12px; align-items: end; }
+
 .prov-list li { justify-content: flex-start; align-items: flex-start; }
 .prov-list .list-main { flex: 1; }
 .prov-list .secret-actions { margin-left: auto; }
@@ -78,6 +87,7 @@
 @media (max-width: 860px) {
   .how { grid-template-columns: 1fr; }
   .roles { grid-template-columns: 1fr; }
+  .assistant-form { grid-template-columns: 1fr; }
   .role .row-form-2 { grid-template-columns: 1fr; }
   .prov-list li { flex-wrap: wrap; }
   .prov-list .secret-actions { margin-left: 52px; justify-content: flex-start; }

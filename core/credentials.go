@@ -210,7 +210,7 @@ func decideCredential(p *Policy, req credRequest, f credFacts) credDecision {
 		return deny("only https")
 	case d.Repo == "":
 		return deny("which repository? git must name it (credential.useHttpPath=true)")
-	case f.Kind == "brain":
+	case isRoleKind(f.Kind):
 		return deny("the brain works through its tools, not with git")
 	case !f.Lent:
 		return deny("no GitHub repository is lent to this task: lend it one (run_task's resources, {kind: repo})")

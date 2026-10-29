@@ -28,8 +28,12 @@ type Config struct {
 	// The agent of a task that names none.
 	DefaultAgent string              `json:"default_agent"`
 	Identities   map[string]Identity `json:"identities"` // other credentials a task can borrow, e.g. github
-	Brain        *BrainConfig        `json:"brain,omitempty"`
-	Policy       *Policy             `json:"policy,omitempty"` // permission rules, on top of the built-in ones
+	// The brain: the built-in assistant eriphe (assistants.go). Only the
+	// file's: the merged configuration has it in Assistants.
+	Brain *BrainConfig `json:"brain,omitempty"`
+	// Other long-lived assistants, by name (assistants.go).
+	Assistants map[string]Assistant `json:"assistants,omitempty"`
+	Policy     *Policy              `json:"policy,omitempty"` // permission rules, on top of the built-in ones
 	// The tool catalog: MCP servers tasks reach through eriphe-core (servers.go).
 	Servers map[string]Server `json:"servers,omitempty"`
 	// Cloud storage accounts: where the Eriphe app's OAuth client is (cloud.go).
@@ -48,6 +52,7 @@ type Config struct {
 
 // BrainConfig describes the permanent orchestrator: a long-lived task on a
 // node that only has MCP tools (eriphe-core's own, plus the servers listed).
+// It is the spec of the built-in assistant eriphe (assistants.go).
 type BrainConfig struct {
 	Node  string `json:"node,omitempty"`  // empty lets the scheduler choose
 	Agent string `json:"agent,omitempty"` // empty lets the workspace choose (catalog.go)
@@ -203,6 +208,9 @@ func (c *Config) complete(where string) error {
 	}
 	if c.Brain != nil && len(c.Brain.MCPServers) > 0 {
 		log.Printf("%s: brain.mcp_servers is deprecated: move them to servers and brain.tools", where)
+	}
+	if err := c.checkFileAssistants(); err != nil {
+		return fmt.Errorf("%s: %w", where, err)
 	}
 	if c.Policy != nil {
 		if err := c.Policy.compile(); err != nil {

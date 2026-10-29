@@ -28,7 +28,7 @@ func testMemoryCore(t *testing.T) (*core, *fakeClock) {
 		Providers: map[string]Provider{"p": {Kind: "claude-subscription", Secret: secret}},
 		Agents: map[string]Agent{"small": {Runtime: "claude-code", Provider: "p", Use: "quick things"},
 			"haiku": {Runtime: "claude-code", Provider: "p", Use: "cheap"}},
-		Memory: &MemoryConfig{TrustedServers: []string{"vault"}}}
+		Memory: &MemoryConfig{TrustedServers: []string{"vault"}}, Brain: &BrainConfig{}}
 	c := newCore(cfg, s)
 	// A node that has gone offline: tasks wait for it.
 	s.registerNode("nas", hashSecret("a"))
@@ -37,7 +37,7 @@ func testMemoryCore(t *testing.T) (*core, *fakeClock) {
 	m, clock := testMemory(t)
 	c.mem = m
 	s.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateIdle, Prompt: "brain"})
-	s.set("brain_task", "t-brain")
+	setBrainTask(c, "t-brain")
 	return c, clock
 }
 
@@ -258,7 +258,7 @@ func TestProfileInjection(t *testing.T) {
 	if !strings.HasPrefix(b, "[mémoire] Profil mis à jour") {
 		t.Fatalf("delivery: %q", b)
 	}
-	c.store.set("brain_profile", hash)
+	setBrainStatus(c, func(st *AssistantStatus) { st.Profile = hash })
 	if b, _ = c.profileForDelivery(); b != "" {
 		t.Fatalf("delivered twice: %q", b)
 	}
@@ -270,11 +270,11 @@ func TestProfileInjection(t *testing.T) {
 
 func TestBrainTurnDelivery(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	c.conf().Brain = &BrainConfig{Agent: "small"}
+	setBrain(c, &BrainConfig{Agent: "small"})
 	mustAdd(t, c.mem, &Memory{Kind: kindProfile, Text: "Sam vit à Lille"})
 	seq, _ := c.store.addMessage(roleUser, "Salut", false)
 	c.brainCalledCatalog("t-brain", "mail", "x") // from a previous turn
-	if err := c.tendBrain(context.Background(), c.conf().Brain, "tok"); err != nil {
+	if err := tendBrain(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
 	from, to, _, tainted := c.turn.snapshot()
@@ -296,12 +296,12 @@ func TestBrainTurnDelivery(t *testing.T) {
 // starts a clean turn.
 func TestTaintCarriesOverEvents(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	c.conf().Brain = &BrainConfig{Agent: "small"}
+	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
 	deliver := func() {
 		t.Helper()
 		c.store.updateTask("t-brain", map[string]any{"state": stateIdle})
-		if err := c.tendBrain(ctx, c.conf().Brain, "tok"); err != nil {
+		if err := tendBrain(ctx, c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -418,8 +418,8 @@ func TestTurnTaintReadsEveryEvent(t *testing.T) {
 // what it says once a message is delivered is copied.
 func TestBrainStartReplyQuiet(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	c.conf().Brain = &BrainConfig{Agent: "small"}
-	c.store.set("brain_quiet", "1")
+	setBrain(c, &BrainConfig{Agent: "small"})
+	setBrainStatus(c, func(st *AssistantStatus) { st.Quiet = true })
 	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Prêt."}}})
 	brainSaid := func() []string {
 		msgs, _ := c.store.messagesAfter(0, 100)
@@ -432,17 +432,17 @@ func TestBrainStartReplyQuiet(t *testing.T) {
 		return out
 	}
 	t0, _ := c.store.task("t-brain")
-	c.relayBrainOutput(t0)
+	c.relayBrainOutput(theBrain(c), t0)
 	if got := brainSaid(); len(got) != 0 {
 		t.Fatalf("start reply copied: %v", got)
 	}
 	c.store.addMessage(roleUser, "Salut", false)
-	if err := c.tendBrain(context.Background(), c.conf().Brain, "tok"); err != nil {
+	if err := tendBrain(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
 	c.store.addEvents("t-brain", []EventRow{{Seq: 2, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Bonjour Sam"}}})
 	t1, _ := c.store.task("t-brain")
-	c.relayBrainOutput(t1)
+	c.relayBrainOutput(theBrain(c), t1)
 	if got := brainSaid(); strings.Join(got, "|") != "Bonjour Sam" {
 		t.Fatalf("brain said %v", got)
 	}

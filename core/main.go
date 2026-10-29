@@ -86,6 +86,7 @@ func main() {
 	c.taskRoutes(mux, token)
 	c.serverRoutes(mux, token)
 	c.catalogRoutes(mux, token)
+	c.assistantRoutes(mux, token) // assistants.go
 	c.vaultRoutes(mux, token)
 	c.folderRoutes(mux, token)     // folders.go
 	c.nodeAccessRoutes(mux, token) // node_access.go
@@ -111,7 +112,7 @@ func main() {
 	if c.machines != nil {
 		c.remote.clientCAs = c.machines.pool
 	}
-	go c.runBrain(context.Background(), token)
+	go c.runAssistants(context.Background(), token)
 	go c.runMemory(context.Background())
 	go c.updates.run(context.Background())
 	if cfg.Web != nil {

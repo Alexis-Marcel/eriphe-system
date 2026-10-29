@@ -30,6 +30,7 @@ func (w *web) agentRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/agents/{name}/delete", w.auth(w.handleDeleteAgent))
 	mux.Handle("POST /settings/default-agent", w.auth(w.handleDefaultAgent))
 	mux.Handle("POST /settings/brain-agent", w.auth(w.handleBrainAgent))
+	mux.Handle("POST /settings/assistants/{name}", w.auth(w.handleSaveAssistant)) // web_assistants.go
 	mux.Handle("GET /settings/providers/new", w.auth(w.handleNewProvider))
 	mux.Handle("POST /settings/providers", w.auth(w.handleSaveProvider))
 	mux.Handle("POST /settings/provider-test", w.auth(w.handleTestProvider))
@@ -81,6 +82,7 @@ type agentsPage struct {
 	BrainModel    string
 	BrainSource   string      // config when the file names the brain's agent
 	BrainChoices  []agentView // the agents that can be the brain
+	Assistants    []assistantCard
 	Flash         string
 	Skipped       map[string]string
 }
@@ -91,11 +93,8 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 	if w.c.base.DefaultAgent != "" {
 		v.DefaultSource = sourceConfig
 	}
-	if m.Brain != nil {
-		v.Brain, v.BrainSource = m.Brain.Agent, sourceWorkspace
-		if w.c.base.Brain.Agent != "" {
-			v.BrainSource = sourceConfig
-		}
+	if b := m.brain(); b != nil {
+		v.Brain, v.BrainSource = b.Agent, w.c.brainAgentSource(b.Name)
 	}
 	infos, _ := w.c.listAgents()
 	for _, a := range infos {
@@ -162,7 +161,10 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 		v.Flash = fmt.Sprintf(tr(lang, "agents.defaultset"), m.DefaultAgent)
 	case q.Get("brain") != "":
 		v.Flash = fmt.Sprintf(tr(lang, "agents.brainset"), v.Brain)
+	case q.Get("assistant") != "" && m.Assistants[q.Get("assistant")].Name != "":
+		v.Flash = fmt.Sprintf(tr(lang, "assistants.saved"), q.Get("assistant"))
 	}
+	v.Assistants = w.assistantCards(r, v)
 	return v
 }
 
@@ -319,7 +321,7 @@ func (w *web) handleEditAgent(rw http.ResponseWriter, r *http.Request, s *sessio
 		http.Redirect(rw, r, "/settings/agents", http.StatusSeeOther)
 		return
 	}
-	isBrain := m.Brain != nil && m.Brain.Agent == name
+	isBrain := m.brain() != nil && m.brain().Agent == name
 	if q := r.URL.Query(); q.Has("refresh") {
 		f := readAgentForm(q)
 		f.Edit, f.Name, f.IsDefault, f.Brain, f.refresh = true, name, m.DefaultAgent == name, isBrain, true
@@ -370,7 +372,7 @@ func (w *web) handleSaveAgent(rw http.ResponseWriter, r *http.Request, s *sessio
 		mode, f.Name, f.Edit = putUpdate, n, true
 		m := w.c.conf()
 		f.IsDefault = m.DefaultAgent == n
-		f.Brain = m.Brain != nil && m.Brain.Agent == n
+		f.Brain = m.brain() != nil && m.brain().Agent == n
 	}
 	w.complete(&f)
 	model := f.Model

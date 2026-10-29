@@ -364,7 +364,7 @@ func (c *core) profileForDelivery() (block, hash string) {
 		return "", ""
 	}
 	hash = c.profileHash()
-	if hash == c.store.get("brain_profile") {
+	if b := c.conf().brain(); b != nil && hash == c.assistantStatus(b.Name).Profile {
 		return "", hash
 	}
 	return c.profileBlock(true), hash

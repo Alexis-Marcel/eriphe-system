@@ -166,7 +166,7 @@ func TestBrainWebSpec(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	spec := func() nodeTaskSpec {
 		var raw string
-		c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, c.store.get("brain_task")).Scan(&raw)
+		c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, brainStatus(c).Task).Scan(&raw)
 		var s nodeTaskSpec
 		json.Unmarshal([]byte(raw), &s)
 		return s

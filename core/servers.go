@@ -139,22 +139,7 @@ func (c *Config) checkServers() error {
 			}
 		}
 	}
-	if c.Brain != nil {
-		for name := range c.Brain.MCPServers {
-			if _, ok := c.Servers[name]; ok {
-				return fmt.Errorf("brain: mcp_servers.%s is also in servers: keep only the catalog entry", name)
-			}
-		}
-		// The brain may be granted a tool added in the workspace: an
-		// unknown server is checked for its form only, and left out until
-		// it exists (brainTools).
-		for _, g := range c.Brain.Tools {
-			if err := checkGrantEntry(g); err != nil {
-				return fmt.Errorf("brain.tools: %w", err)
-			}
-		}
-	}
-	return nil
+	return nil // the assistants' grants are checkAssistants'
 }
 
 // loopbackRedirect accepts the redirect of a native app: http on the IPv4
@@ -204,22 +189,6 @@ func checkGrantEntry(g string) error {
 		}
 	}
 	return nil
-}
-
-// brainTools is the brain's grant, without the servers the catalog does
-// not have (yet).
-func (c *Config) brainTools() []string {
-	if c.Brain == nil {
-		return nil
-	}
-	var out []string
-	for _, g := range c.Brain.Tools {
-		server, _, _ := strings.Cut(strings.TrimSpace(g), ".")
-		if _, ok := c.Servers[server]; ok {
-			out = append(out, strings.TrimSpace(g))
-		}
-	}
-	return out
 }
 
 // grantServers are the servers a grant touches.

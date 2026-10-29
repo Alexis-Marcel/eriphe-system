@@ -111,17 +111,16 @@ func TestContextPackBudget(t *testing.T) {
 	}
 }
 
-// startedBrain starts the brain as tendBrain would and returns its first turn.
+// startedBrain starts the brain as the controller would and returns its first turn.
 func startedBrain(t *testing.T, c *core, resume bool) *TaskRow {
 	t.Helper()
 	prompt := filepath.Join(t.TempDir(), "brain-prompt.md")
 	os.WriteFile(prompt, []byte("Consignes pour {{user}}"), 0o600)
-	b := &BrainConfig{Agent: "small", PromptFile: prompt}
-	c.conf().Brain = b
-	if err := c.startBrain(context.Background(), b, "tok", nil, resume); err != nil {
+	setBrain(c, &BrainConfig{Agent: "small", PromptFile: prompt})
+	if err := c.startAssistant(context.Background(), theBrain(c), assistantRoles[assistantRoleBrain], "tok", resume); err != nil {
 		t.Fatal(err)
 	}
-	task, err := c.store.task(c.store.get("brain_task"))
+	task, err := c.store.task(brainStatus(c).Task)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,11 +132,11 @@ func startedBrain(t *testing.T, c *core, resume bool) *TaskRow {
 func TestContextPackOnlyFresh(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	say(t, c, roleUser, "Rappelle-moi le devis", true)
-	c.store.set("brain_session", "s-1")
+	setBrainStatus(c, func(st *AssistantStatus) { st.Session = "s-1" })
 	if task := startedBrain(t, c, true); task.Prompt != brainStartPrompt {
 		t.Fatalf("resumed session got: %q", task.Prompt)
 	}
-	if c.store.get("brain_resume") != "s-1" {
+	if brainStatus(c).Resume != "s-1" {
 		t.Fatal("the session to resume is not kept")
 	}
 	task := startedBrain(t, c, false)
@@ -145,7 +144,7 @@ func TestContextPackOnlyFresh(t *testing.T) {
 		!strings.Contains(task.Prompt, "à Sam)") || !strings.Contains(task.Prompt, "Rappelle-moi le devis") {
 		t.Fatalf("fresh session got: %q", task.Prompt)
 	}
-	if c.store.get("brain_resume") != "" {
+	if brainStatus(c).Resume != "" {
 		t.Fatal("a fresh session is checked for a resume")
 	}
 	// A clean turn: the pack quotes only my messages and the brain's.
@@ -158,14 +157,14 @@ func TestContextPackOnlyFresh(t *testing.T) {
 // the pack with its next delivery, once; a resumed one never does.
 func TestContextPackAfterNodeFallback(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	c.conf().Brain = &BrainConfig{Agent: "small"}
+	setBrain(c, &BrainConfig{Agent: "small"})
 	say(t, c, roleUser, "Ancien fil", true)
 	deliver := func(session, text string) string {
 		t.Helper()
 		c.store.updateTask("t-brain", map[string]any{"state": stateIdle, "session_id": session})
 		c.store.db.Exec(`UPDATE inbox SET acked = 1`)
 		say(t, c, roleUser, text, false)
-		if err := c.tendBrain(context.Background(), c.conf().Brain, "tok"); err != nil {
+		if err := tendBrain(context.Background(), c); err != nil {
 			t.Fatal(err)
 		}
 		items, _ := c.store.inbox("t-brain")
@@ -175,11 +174,11 @@ func TestContextPackAfterNodeFallback(t *testing.T) {
 		got, _ := items[0].Data["text"].(string)
 		return got
 	}
-	c.store.set("brain_resume", "s-1")
+	setBrainStatus(c, func(st *AssistantStatus) { st.Resume = "s-1" })
 	if got := deliver("s-1", "Bonjour"); strings.Contains(got, "Ancien fil") {
 		t.Fatalf("resumed session got the pack: %q", got)
 	}
-	c.store.set("brain_resume", "s-1")
+	setBrainStatus(c, func(st *AssistantStatus) { st.Resume = "s-1" })
 	got := deliver("s-2", "Tu es là ?")
 	if !strings.Contains(got, "session neuve") || !strings.Contains(got, "Ancien fil") || !strings.Contains(got, "] Tu es là ?") {
 		t.Fatalf("new session without the pack: %q", got)
@@ -196,13 +195,13 @@ func TestContextPackAfterNodeFallback(t *testing.T) {
 // with the pack.
 func TestBrainSessionOfAnotherHarness(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	c.store.set("brain_session", "ses_other")
-	c.store.set("brain_session_runtime", "opencode")
-	if task := startedBrain(t, c, true); task.Prompt == brainStartPrompt || c.store.get("brain_resume") != "" {
+	setBrainStatus(c, func(st *AssistantStatus) { st.Session = "ses_other" })
+	setBrainStatus(c, func(st *AssistantStatus) { st.SessionRuntime = "opencode" })
+	if task := startedBrain(t, c, true); task.Prompt == brainStartPrompt || brainStatus(c).Resume != "" {
 		t.Fatalf("resumed another harness's session: %q", task.Prompt)
 	}
-	c.store.set("brain_session_runtime", "claude-code")
-	if task := startedBrain(t, c, true); task.Prompt != brainStartPrompt || c.store.get("brain_resume") != "ses_other" {
+	setBrainStatus(c, func(st *AssistantStatus) { st.SessionRuntime = "claude-code" })
+	if task := startedBrain(t, c, true); task.Prompt != brainStartPrompt || brainStatus(c).Resume != "ses_other" {
 		t.Fatalf("its own session not resumed: %q", task.Prompt)
 	}
 }
@@ -211,7 +210,7 @@ func TestBrainSessionOfAnotherHarness(t *testing.T) {
 // its failures: the resume is dropped after two.
 func TestBrainFailuresNotClearedByAFailedTurn(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	c.store.set("brain_failures", "1")
+	setBrainStatus(c, func(st *AssistantStatus) { st.Failures = 1 })
 	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "error_during_execution"}}})
 	if c.lastTurnOK("t-brain") {
 		t.Fatal("a failed turn counted as ok")
