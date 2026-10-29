@@ -15,7 +15,7 @@ runs the same.
 | `node/` | the same, plus `GOOS=windows go build ./...` |
 | `install/` | `sh install/lint.sh` (needs `shellcheck`) |
 | `.github/scripts/` (releases) | `sh .github/scripts/release_test.sh` |
-| `worker/`, and the images | `docker build -t eriphe-worker:dev worker` (the same for `core/`, `node/` and the servers) |
+| `worker/`, and the images | `docker build -t eriphe-base:dev worker/base`, `docker build -t eriphe-agent-claude:dev worker/agents/claude` (the same for `core/`, `node/` and the servers) |
 | `ha/` | `python3 -m pytest ha/tests`; the Home Assistant tests are in [ha/README.md](ha/README.md) |
 
 Go code is formatted with `gofmt`. Tests do not need network access or real accounts: providers and

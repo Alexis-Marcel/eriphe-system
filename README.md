@@ -58,8 +58,8 @@ Eriphe is designed like a small Kubernetes:
   credentials, serves the workspace and the API, and runs the **brain**, a long-lived agent session
   that talks with you and has MCP tools to start and steer tasks.
 - **eriphe-node** ([node/](node/README.md)) is the kubelet: on every machine Eriphe may work on, it
-  joins eriphe-core, then runs each task as a container from the worker image
-  ([worker/](worker/README.md)) and relays its events.
+  joins eriphe-core, then runs each task as a container from the base image, with the agent
+  injected ([worker/](worker/README.md)), and relays its events.
 - **The catalog**: tools are MCP servers, remote (with OAuth or a token) or run as local services
   on a node: [servers/mail](servers/mail/README.md), [servers/calendar](servers/calendar/README.md),
   [servers/files](servers/files/README.md), or any MCP image.
@@ -98,7 +98,7 @@ and is responsible for using it within their provider's terms.
 |---|---|
 | `core/` | eriphe-core: control plane, brain, workspace, API, memory |
 | `node/` | eriphe-node: runs tasks as containers on a machine |
-| `worker/` | eriphe-worker: the image task containers start from |
+| `worker/` | the images of tasks: `eriphe-base`, which task containers start from, and one image per agent the node injects into it |
 | `install/` | `install.sh` (Linux, macOS) and `install.ps1` (Windows) |
 | `cli/` | `eriphe`: terminal UI and commands |
 | `servers/` | MCP servers: `mail`, `calendar`, `files` |

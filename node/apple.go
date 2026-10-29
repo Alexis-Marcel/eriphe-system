@@ -22,8 +22,9 @@ import (
 // on a Mac with Apple silicon and macOS 26, where eriphe-node runs on macOS
 // itself. Every task is a micro-VM of its own, started with
 // `container run`, with the same contract as a Docker task (container.go):
-// the worker image, the task's folders, its user, a read-only root, no
-// capability, its resource limits, its stdin and stdout for the agent.
+// the worker image, the injected agent, the task's folders, root with only
+// three file capabilities, its resource limits, its stdin and stdout for
+// the agent.
 //
 // Its network: each task gets one of its own, `container network create
 // --internal` (vmnet's host-only mode): no route out, no DNS, nothing of the
@@ -33,8 +34,8 @@ import (
 // connection only from a task's network (or the loopback): taskListener.
 //
 // What Docker does and this does not: --security-opt no-new-privileges (no
-// such option: with every capability dropped, even a setuid program gains
-// none), --pids-limit (an nproc rlimit instead), --add-host (the callback is
+// such option: with every capability dropped from the bounding set but
+// three, a setuid program gains no other), --pids-limit (an nproc rlimit instead), --add-host (the callback is
 // the gateway's address), --group-add (the Mac's file sharing maps every
 // file to the task's user), named volumes (the cache is a folder of the
 // node's root).
@@ -47,12 +48,13 @@ const (
 // apple tells whether this node runs its tasks with Apple's container.
 func (n *node) apple() bool { return n.opt.engine == engineContainer }
 
-// appleHardening is the container engine's version of hardening.
+// appleHardening is the container engine's version of hardening: root
+// with the same three file capabilities, in a micro-VM of its own.
 var appleHardening = []string{
-	"--user", fmt.Sprintf("%d:%d", taskUID, taskGID),
+	"--user", "0:0",
 	"--cap-drop", "ALL",
+	"--cap-add", "CAP_CHOWN", "--cap-add", "CAP_DAC_OVERRIDE", "--cap-add", "CAP_FOWNER",
 	"--ulimit", "nproc=1024",
-	"--read-only",
 	"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=2g",
 }
 
@@ -418,13 +420,6 @@ type appleImage struct {
 	Config struct {
 		Name string `json:"name"`
 	} `json:"configuration"`
-	Variants []struct {
-		Config struct {
-			Config struct {
-				Labels map[string]string `json:"Labels"`
-			} `json:"config"`
-		} `json:"config"`
-	} `json:"variants"`
 }
 
 // appleImages lists the images the container tool has, as repo:tag.
@@ -442,27 +437,4 @@ func appleImages(ctx context.Context, cli string) []string {
 		}
 	}
 	return images
-}
-
-// appleImageRuntimes reads an image's eriphe.runtimes label.
-func appleImageRuntimes(ctx context.Context, cli, image string) []string {
-	out, err := exec.CommandContext(ctx, cli, "image", "inspect", image).Output()
-	var list []appleImage
-	if err == nil {
-		json.Unmarshal(out, &list)
-	}
-	var runtimes []string
-	for _, im := range list {
-		for _, v := range im.Variants {
-			if l := v.Config.Config.Labels["eriphe.runtimes"]; l != "" {
-				for _, r := range strings.Split(l, ",") {
-					if r = strings.TrimSpace(r); r != "" {
-						runtimes = append(runtimes, r)
-					}
-				}
-				return runtimes
-			}
-		}
-	}
-	return []string{"claude-code"}
 }

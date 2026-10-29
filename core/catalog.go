@@ -548,6 +548,9 @@ func (c *core) applyCatalog(m *Config) {
 		log.Printf("catalog: services: %v", err)
 	}
 	c.placePending()
+	if c.changed != nil {
+		c.bump() // the nodes get ready for the agents as they are now (nodePrepare)
+	}
 }
 
 // dropOrphanSecrets deletes the vault secrets of workspace entries that no

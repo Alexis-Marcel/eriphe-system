@@ -125,6 +125,8 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
+      # What a root task leaves in Eriphe/ goes back to its owner: needs root.
+      - run: sudo "$(command -v go)" test -run HandBack -v .
       - run: GOOS=windows go build ./...
 
   core:
@@ -188,15 +190,33 @@ jobs:
           $found | Format-Table -AutoSize Severity, Line, RuleName, Message | Out-String -Width 240 | Write-Host
           if ($found | Where-Object Severity -eq Error) { exit 1 }
 
+  # The image tasks start from, and one image per agent the node injects into it
+  # (worker/README.md).
   worker:
     needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Also as eriphe-worker, the image it replaces: the updaters of the machines
+          # installed before pull it (install/README.md).
+          - image: eriphe-base
+            context: worker/base
+            aliases: eriphe-worker
+          - image: eriphe-agent-claude
+            context: worker/agents/claude
+          - image: eriphe-agent-codex
+            context: worker/agents/codex
+          - image: eriphe-agent-opencode
+            context: worker/agents/opencode
     permissions:
       contents: read
       packages: write
     uses: ./.github/workflows/image.yml
     with:
-      image: eriphe-worker
-      context: worker
+      image: ${{ matrix.image }}
+      context: ${{ matrix.context }}
+      aliases: ${{ matrix.aliases || '' }}
       version: ${{ needs.version.outputs.version }}
       tags: ${{ needs.version.outputs.tags }}
 

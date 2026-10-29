@@ -122,6 +122,12 @@ type Task struct {
 
 	egressHosts map[string]bool // hosts the task went to through the relay, logged once each
 
+	// The agent's directory mounted at /opt/eriphe while the container runs
+	// (inject.go), and the Eriphe/ folders it writes to (handback.go).
+	agentDir  string
+	results   []string
+	onTurnEnd func()
+
 	// With the container engine (apple.go): the task's own network, and the
 	// node's address on it, where the task reaches the node.
 	network, gateway string
@@ -134,10 +140,13 @@ func (t *Task) emit(typ string, data map[string]any) {
 	t.seq++
 	t.events = append(t.events, Event{Seq: t.seq, Time: time.Now(), Type: typ, Data: data})
 	t.draft = ""
-	notify := t.onChange
+	notify, turnEnd := t.onChange, t.onTurnEnd
 	t.mu.Unlock()
 	if notify != nil {
 		notify()
+	}
+	if typ == "turn_end" && turnEnd != nil {
+		go turnEnd()
 	}
 }
 
@@ -189,11 +198,13 @@ type node struct {
 	kick     chan struct{}       // something to deliver or report
 	upd      *updates            // eriphe-core's update request, for the updater (update.go)
 	nets     taskNets            // the tasks' networks, with the container engine (apple.go)
+	agents   *agentStore         // the agents injected into tasks (inject.go)
+	prep     preparer            // what eriphe-core wants ready on this node
 }
 
 func newNode(o options) *node {
 	return &node{opt: o, tasks: map[string]*Task{}, services: map[string]*service{}, retired: map[string]*service{}, kick: make(chan struct{}, 1),
-		upd: &updates{root: o.root}}
+		upd: &updates{root: o.root}, agents: newAgentStore(o.root, o.taskBin), prep: preparer{wake: make(chan struct{}, 1)}}
 }
 
 func (n *node) poke() {
@@ -239,7 +250,7 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 	if n.apple() {
 		// Apple's container: no Docker, its own version and images.
 		if engineVersion = appleVersion(ctx, n.opt.docker); engineVersion != "" {
-			runtimes = appleImageRuntimes(ctx, n.opt.docker, n.opt.image)
+			runtimes = injectedRuntimes
 		}
 		images = appleImages(ctx, n.opt.docker)
 	} else {
@@ -247,7 +258,7 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			dockerVersion = string(trimNL(out))
 			engineVersion = dockerVersion
-			runtimes = imageRuntimes(ctx, n.opt.docker, n.opt.image)
+			runtimes = injectedRuntimes
 		}
 		images = localImages(ctx, n.opt.docker)
 	}
@@ -261,6 +272,8 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		"images": images, "services": engineVersion != "",
 		"always_on": n.opt.alwaysOn, "version": version, "install": n.opt.install,
 		"update": n.upd.info(),
+		// The agents unpacked here: a task of theirs starts at once (inject.go).
+		"agents_ready": n.agents.readyRuntimes(),
 	})
 }
 

@@ -58,24 +58,6 @@ func localImages(ctx context.Context, docker string) []string {
 	return images
 }
 
-// imageRuntimes are the runtimes a worker image offers, from its
-// eriphe.runtimes label. An image without it, or not pulled yet, is taken
-// for the first worker images: Claude Code only.
-func imageRuntimes(ctx context.Context, docker, image string) []string {
-	out, err := exec.CommandContext(ctx, docker, "image", "inspect", "--format",
-		`{{index .Config.Labels "eriphe.runtimes"}}`, image).Output()
-	var list []string
-	for _, r := range strings.Split(strings.TrimSpace(string(out)), ",") {
-		if r = strings.TrimSpace(r); err == nil && r != "" {
-			list = append(list, r)
-		}
-	}
-	if len(list) == 0 {
-		return []string{"claude-code"}
-	}
-	return list
-}
-
 // volumeNames are the names of the folders offered to tasks; never their paths.
 func (o options) volumeNames() []string {
 	names := []string{}

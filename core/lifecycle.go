@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 )
@@ -162,12 +164,43 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	resp := map[string]any{"rev": current, "tasks": out, "services": services}
+	resp := map[string]any{"rev": current, "tasks": out, "services": services, "prepare": c.nodePrepare(name)}
 	// Nodes from before updates ignore it (machine_updates.go).
 	if u := c.nodeUpdateRequest(name); u != nil {
 		resp["update"] = u
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// nodePrepare is what a node gets ready before any task asks for it: the
+// runtimes of the configured agents it could run (it carries their needed
+// labels) and the images they name. The node unpacks those agents and pulls
+// those images, with its default image, in the background; an agent no one
+// configured is never downloaded.
+func (c *core) nodePrepare(name string) map[string][]string {
+	var labels []string
+	if nodes, err := c.store.nodes(); err == nil {
+		for _, n := range nodes {
+			if n.Name == name {
+				labels = parseInfo(n).Labels
+			}
+		}
+	}
+	runtimes, images := []string{}, []string{}
+	for _, a := range c.conf().Agents {
+		if slices.ContainsFunc(a.Needs, func(l string) bool { return !slices.Contains(labels, l) }) {
+			continue
+		}
+		if !slices.Contains(runtimes, a.Runtime) {
+			runtimes = append(runtimes, a.Runtime)
+		}
+		if a.Image != "" && !slices.Contains(images, a.Image) {
+			images = append(images, a.Image)
+		}
+	}
+	sort.Strings(runtimes)
+	sort.Strings(images)
+	return map[string][]string{"runtimes": runtimes, "images": images}
 }
 
 // nodeReport is what a node says about one of its tasks.

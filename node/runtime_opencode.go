@@ -75,6 +75,7 @@ func opencodeSetup(t *Task) map[string]string {
 	env := map[string]string{
 		"OPENCODE_CONFIG_CONTENT":         string(raw),
 		"OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+		"OPENCODE_DISABLE_AUTOUPDATE":     "1",
 		"XDG_DATA_HOME":                   "/profile/data",
 		"XDG_STATE_HOME":                  "/profile/state",
 	}

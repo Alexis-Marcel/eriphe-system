@@ -73,10 +73,11 @@ services:
       # The shares of the NAS, whose folders the user may give to Eriphe
       # (Settings → Folders); appdata and the node's own root are never shared.
       ERIPHE_NODE_SHARES: shares=/mnt/user
+    # Tasks start from eriphe-base of the node's own version, the agents
+    # injected; the node downloads those eriphe-core uses (node/README.md, Agents).
     command: ["-root", "/mnt/user/appdata/eriphe-system/node",
               "-network", "eriphe-system", "-task-network", "eriphe-tasks",
               "-callback-url", "http://eriphe-node:8790",
-              "-image", "ghcr.io/alexis-marcel/eriphe-worker:latest",
               "-task-memory", "8g", "-always-on"]
     volumes:
       # Same path inside and outside: the Docker daemon understands it as is.

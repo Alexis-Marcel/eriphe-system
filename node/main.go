@@ -34,6 +34,8 @@ type options struct {
 	root        string // where tasks and profiles live, as seen by eriphe-node
 	hostRoot    string // the same directory as seen by the Docker daemon
 	image       string // default worker image
+	agentImage  string // image of each agent package, {agent} for its name (inject.go); empty: none injected
+	taskBin     string // the node's own programs for tasks, by platform (inject.go)
 	network     string // Docker network of services with egress, shared with eriphe-node (and eriphe-core on the NAS)
 	taskNetwork string // Docker network of task containers, of their own
 	cacheVolume string // Docker volume mounted at /cache in task containers
@@ -71,7 +73,9 @@ func main() {
 	var o options
 	flag.StringVar(&o.root, "root", envOr("ERIPHE_ROOT", "data"), "directory for the node's state and task profiles (env ERIPHE_ROOT)")
 	flag.StringVar(&o.hostRoot, "host-root", "", "the -root directory as the Docker daemon sees it (default: same path)")
-	flag.StringVar(&o.image, "image", "ghcr.io/alexis-marcel/eriphe-worker:latest", "default worker image")
+	flag.StringVar(&o.image, "image", "ghcr.io/alexis-marcel/eriphe-base:"+imageTag(version), "default worker image, the one tasks start from (the agent is injected)")
+	flag.StringVar(&o.agentImage, "agent-image", envOr("ERIPHE_AGENT_IMAGE", "ghcr.io/alexis-marcel/eriphe-agent-{agent}:"+imageTag(version)), "image of each agent injected into tasks, {agent} for claude, codex or opencode (env ERIPHE_AGENT_IMAGE)")
+	flag.StringVar(&o.taskBin, "task-bin", envOr("ERIPHE_TASK_BIN", "/usr/local/share/eriphe/task-bin"), "the node's programs for tasks: linux-<arch>/ in it is copied into every task's /opt/eriphe/bin (env ERIPHE_TASK_BIN)")
 	flag.StringVar(&o.network, "network", "", "Docker network for services with egress, shared with this node (empty: Docker's default bridge)")
 	flag.StringVar(&o.taskNetwork, "task-network", "eriphe-tasks", "Docker network for task containers, apart from eriphe-core and the services (created if missing)")
 	flag.StringVar(&o.cacheVolume, "cache-volume", "eriphe-cache", "Docker volume for the tasks' tool and package caches (empty: none)")
@@ -125,7 +129,7 @@ func main() {
 	if o.hostRoot == "" {
 		o.hostRoot = o.root
 	}
-	for _, d := range []string{"profiles", "tasks", "services"} {
+	for _, d := range []string{"profiles", "tasks", "services", "agents"} {
 		if err := os.MkdirAll(filepath.Join(o.root, d), 0o700); err != nil {
 			log.Fatal(err)
 		}
@@ -201,6 +205,7 @@ func main() {
 	n.routes(api)
 	go serve(s, api)
 	go n.sync(s)
+	go n.prepareLoop()
 
 	// Only task containers call this listener, each with its own secret:
 	// their permission endpoint, and the relay to their catalog servers.

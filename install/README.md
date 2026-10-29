@@ -39,8 +39,15 @@ Contents: [First machine](#1-the-first-machine) · [Workspace](#2-open-the-works
   joining another machine gets); elsewhere in a Lima VM (see [What it installs](#what-it-installs)).
 - **Windows** 10 21H2 or later, or 11, Home or Pro, with virtualization on in the firmware, and an
   administrator PowerShell. WSL is installed if missing.
-- A few GB of disk for the images (the worker image is the large one), and an account with an
-  AI provider: a Claude subscription is the simplest (or ChatGPT, or an API key).
+- A few GB of disk for the images and what tasks install, and an account with an AI provider: a
+  Claude subscription is the simplest (or ChatGPT, or an API key).
+
+**What each machine downloads.** The installer pulls eriphe-node (and eriphe-core in core mode)
+and the base image tasks start from, `eriphe-base` (114 MB). Then each node downloads, in the
+background, the agents eriphe-core has configured, and only those: Claude Code 127 MB, Codex 112
+MB, OpenCode 77 MB (amd64; about the same on arm64). With Claude Code alone, 241 MB for the tasks
+instead of 633 MB with the former `eriphe-worker`. What a task installs (apt packages, Python and
+npm packages) is kept in the machine's cache for the next one ([worker/README.md](../worker/README.md)).
 
 ## 1. The first machine
 
@@ -200,7 +207,8 @@ new task starts on it: the tasks wait for it.
 
 eriphe-core never names an image nor a command: it can only ask "update" (to the latest version,
 or the pinned one) or "rollback". The images are the ones the installer wrote down
-(`ghcr.io/alexis-marcel/eriphe-core`, `eriphe-node`, `eriphe-worker`). Neither eriphe-core nor the
+(`ghcr.io/alexis-marcel/eriphe-core`, `eriphe-node`, `eriphe-base`; the node downloads the agents
+of its own version itself, see node/README.md, Agents). Neither eriphe-core nor the
 node gets any new right (the socket proxy allows the node exactly what it did, see
 deploy/README.md): each only writes a short file in its own data folder. An **updater**, which the
 installer puts on the host side, does the rest, as root there:
@@ -220,7 +228,7 @@ How a request goes:
    (`update` or `rollback`), `core` (eriphe-core's version) and `auto` (from the night); the
    updater reads these four values, checks them, and never runs the file.
 2. The updater pulls the images: eriphe-core at `latest`, `edge` or the pinned release; the node
-   and worker of that same build (the tag of eriphe-core's version: `0.2.0`, or `sha-<commit>`
+   and base image of that same build (the tag of eriphe-core's version: `0.2.0`, or `sha-<commit>`
    for a build of `main`), not their own `latest`, which may be half published (a tag not there
    yet fails the update, and a later one takes it). A node alone takes eriphe-core's build the
    same way, unless it is pinned to a release; a pinned release newer than eriphe-core's is
@@ -311,8 +319,9 @@ The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nod
 
 In PowerShell a comma makes a list: quote `-Core` and `-Labels` when they hold one.
 
-`ERIPHE_CORE_IMAGE`, `ERIPHE_NODE_IMAGE`, `ERIPHE_WORKER_IMAGE` replace the images
-(`ghcr.io/alexis-marcel/eriphe-*:latest`; `install.ps1` reads the first two); `ERIPHE_VM_CPUS` (4),
+`ERIPHE_CORE_IMAGE`, `ERIPHE_NODE_IMAGE`, `ERIPHE_WORKER_IMAGE` (the base image tasks start from,
+`eriphe-base`) replace the images (`ghcr.io/alexis-marcel/eriphe-*:latest`; `install.ps1` reads the
+first two); `ERIPHE_AGENT_IMAGE` the agents' (node/README.md, Agents); `ERIPHE_VM_CPUS` (4),
 `ERIPHE_VM_MEMORY` (`4GiB`) and `ERIPHE_VM_DISK` (`60GiB`) size the macOS VM when it is created.
 On Linux the script runs as root (through `sudo` when needed); on macOS as yourself, not root.
 

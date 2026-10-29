@@ -59,8 +59,8 @@ requests. Settings → Machines → Updates says the NAS cannot update itself an
 it to "Jamais" there so that it gives no notice either, and update it by hand:
 `docker compose pull && docker compose up -d` in `/mnt/user/appdata/eriphe-system` (eriphe-core
 first, then the node). The images have no tag here, so they are `latest`, the latest release
-([RELEASING.md](../RELEASING.md)); write `:edge` on the three of them (the worker in the node's
-`-image` too) to follow `main`, or `:0.2.0` to stay on a release. It gets an updater, and updates
+([RELEASING.md](../RELEASING.md)); write `:edge` on the three of them to follow `main`, or
+`:0.2.0` to stay on a release (the node takes the base image and the agents of its own version). It gets an updater, and updates
 itself, once it is installed with `install.sh --core-mode` instead (Unraid has no systemd: not
 yet).
 

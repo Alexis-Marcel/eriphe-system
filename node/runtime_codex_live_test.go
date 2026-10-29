@@ -22,7 +22,7 @@ import (
 // checks that "untrusted" asks before every command under Codex's
 // "danger-full-access", and that the lent auth.json stays off the disk.
 //
-//	ERIPHE_LIVE_IMAGE=eriphe-worker:dev go test -run CodexLive -v
+//	ERIPHE_LIVE_IMAGE=eriphe-base:dev ERIPHE_LIVE_AGENT_IMAGE=localhost:5001/eriphe-agent-{agent}:dev go test -run CodexLive -v
 //
 // ERIPHE_LIVE_HOST is how a container reaches this machine, if not as
 // host.docker.internal (OrbStack: host.orb.internal).
@@ -43,7 +43,7 @@ func TestCodexLive(t *testing.T) {
 	t.Cleanup(func() { codexExtra = nil })
 
 	root, _ := filepath.EvalSymlinks(t.TempDir())
-	n := newNode(options{root: root, hostRoot: root, docker: "docker"})
+	n := newNode(options{root: root, hostRoot: root, docker: "docker", agentImage: os.Getenv("ERIPHE_LIVE_AGENT_IMAGE")})
 	dir := filepath.Join(root, "tasks", "live")
 	claims, _ := json.Marshal(map[string]any{"exp": time.Now().Add(time.Hour).Unix()})
 	jwt := "e30." + base64.RawURLEncoding.EncodeToString(claims) + ".sig"

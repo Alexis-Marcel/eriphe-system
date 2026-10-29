@@ -428,7 +428,14 @@ The scheduler takes the requested node if it is online and fits. Otherwise it wo
 like Kubernetes': it **filters** the online nodes that offer the agent's runtime and carry all its
 `needs` labels, then **scores** them: +1 per CPU if the agent prefers `cpu`, +1 per GiB of RAM if it
 prefers `memory`, +8 per preferred label the node carries, +2 if the agent's image (or the node's
-default image) is already pulled, -4 per active task. The highest score wins, ties by name.
+default image) is already pulled, +2 if the node has the agent's runtime unpacked (`agents_ready`),
+-4 per active task. The highest score wins, ties by name.
+
+**Ready in advance.** Each node's assignments carry `prepare`: `{runtimes, images}`, the runtimes
+of the configured agents the node could run (it carries their `needs`) and the images they name.
+The node unpacks those agents and pulls those images (and its default one) in the background, at
+its first assignments and whenever the list changes: a change of the catalog wakes every node
+(node/README.md, Agents). An agent no one configured is never downloaded anywhere.
 
 If no online node fits but a registered one would by what it last reported (a desktop that is off,
 say), the task is created `pending` with no `node` and a `pending_reason` ("waiting for a node that

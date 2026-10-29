@@ -74,7 +74,9 @@ func TestAppleTaskArgs(t *testing.T) {
 	for _, want := range [][]string{
 		{"run", "-i", "--rm", "--progress", "none", "--name", "eriphe-task-t-1"}, {"--label", "eriphe.task=t-1"},
 		{"--network", "eriphe-task-t-1"},
-		{"--user", "1000:1000"}, {"--cap-drop", "ALL"}, {"--ulimit", "nproc=1024"}, {"--read-only"},
+		{"--user", "0:0"}, {"--cap-drop", "ALL"},
+		{"--cap-add", "CAP_CHOWN", "--cap-add", "CAP_DAC_OVERRIDE", "--cap-add", "CAP_FOWNER"}, {"--ulimit", "nproc=1024"},
+		{"--mount", "type=bind,source=" + filepath.Join(root, "agents", "none") + ",target=/opt/eriphe,readonly"},
 		{"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=2g"},
 		{"--memory", "8g"}, {"--cpus", strconv.Itoa(runtime.NumCPU())},
 		{"--mount", "type=bind,source=" + filepath.Join(root, "cache") + ",target=/cache"},

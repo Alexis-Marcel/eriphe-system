@@ -346,7 +346,7 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 	if n.apple() {
 		return n.appleFolderMounts(t)
 	}
-	var args []string
+	var args, results []string
 	groups := map[int]bool{}
 	seen := map[string]bool{}
 	for _, tf := range t.Spec.Folders {
@@ -380,7 +380,12 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 			groups[gid] = true
 		}
 		args = append(args, "--mount", mountSpec("type=bind", "src="+filepath.Join(f.src, resultsDir), "dst="+dst+"/"+resultsDir))
+		results = append(results, filepath.Join(f.real, resultsDir))
 	}
+	// What the task writes there as root goes back to Eriphe/'s owner (handback.go).
+	t.mu.Lock()
+	t.results = results
+	t.mu.Unlock()
 	gids := []int{}
 	for g := range groups {
 		if g != taskGID {
