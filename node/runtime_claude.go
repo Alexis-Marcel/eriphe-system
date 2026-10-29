@@ -71,6 +71,8 @@ func (claudeCode) command(n *node, t *Task) ([]string, map[string]string) {
 		"MCP_TOOL_TIMEOUT": "3600000",
 		// No usage statistics, error reports or update checks leave the task.
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+		// The injected binary is read-only: updates come from a new package.
+		"DISABLE_AUTOUPDATER": "1",
 	}
 	if spec.NoAgentMemory {
 		env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"

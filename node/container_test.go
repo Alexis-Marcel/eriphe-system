@@ -53,8 +53,13 @@ func testStartContainerArgs(t *testing.T, rt string) {
 	raw, _ := os.ReadFile(argsFile)
 	args := strings.Split(string(raw), "\n")
 	for _, want := range [][]string{
-		{"--user", "1000:1000"}, {"--cap-drop", "ALL"}, {"--security-opt", "no-new-privileges"},
-		{"--pids-limit", "1024"}, {"--read-only"}, {"--memory", "8g"}, {"--cpus", "2"},
+		// Root, with only the three file capabilities dpkg and the mounts need.
+		{"--user", "0:0"}, {"--cap-drop", "ALL"},
+		{"--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER"},
+		{"--security-opt", "no-new-privileges"},
+		{"--pids-limit", "1024"}, {"--memory", "8g"}, {"--cpus", "2"},
+		// The agent, read-only (none injected here: no -agent-image).
+		{"--mount", "type=bind,src=" + filepath.Join(root, "agents", "none") + ",dst=/opt/eriphe,readonly"},
 		{"-v", filepath.Join(root, "tasks", "t-1", "work") + ":/work"},
 		{"eriphe", map[string]string{"claude-code": "claude", "opencode": "sh"}[rt]},
 		{"--network", "eriphe-tasks"}, {"--add-host", "host.docker.internal:172.17.0.1"},
@@ -70,6 +75,10 @@ func testStartContainerArgs(t *testing.T, rt string) {
 		if !found {
 			t.Errorf("missing %v in %v", want, args)
 		}
+	}
+	// Its root filesystem is its own: the agent installs packages there.
+	if slices.Contains(args, "--read-only") {
+		t.Errorf("a read-only root filesystem: %v", args)
 	}
 }
 

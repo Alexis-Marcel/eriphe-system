@@ -1,8 +1,9 @@
 # eriphe-node
 
 Runs Eriphe's tasks on one machine, like a kubelet: every task is a container started from a worker
-image (`ghcr.io/alexis-marcel/eriphe-worker` by default, built from `worker/`), in which the agent works. eriphe-node
-relays its progress, questions and permission requests to eriphe-core.
+image (`ghcr.io/alexis-marcel/eriphe-base` by default, built from `worker/base/`), into which the
+node injects the agent (see [Agents](#agents)) and in which the agent works. eriphe-node relays its
+progress, questions and permission requests to eriphe-core.
 
 The node dials eriphe-core and keeps that connection open; eriphe-core sends its requests back
 through it (a yamux tunnel over an HTTP upgrade). The node needs no open port and works behind NAT
@@ -103,7 +104,8 @@ machine" offers both addresses once remote access is ready.
 
 `GET /v1/node` is what the scheduler knows of the machine, and keeps while it is offline: its CPUs,
 total memory (`/proc/meminfo` on Linux and WSL, `sysctl` on macOS, absent elsewhere), runtimes,
-labels, the images already pulled (a task whose image is there starts sooner), and its volumes.
+labels, the images already pulled and the agents already unpacked (`agents_ready`: a task whose
+image and agent are there starts sooner), and its volumes.
 
 Labels (`-labels gpu,fast`, env `ERIPHE_NODE_LABELS`) are free words agents can require (`needs`)
 or prefer (`prefers`). Volumes are named host folders the node offers to tasks:
@@ -135,7 +137,7 @@ eriphe-core offers no update.
 
 | Call | What |
 |---|---|
-| `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `shares`, `images` (up to 50 local `repo:tag`), active tasks |
+| `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `shares`, `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks |
 | `GET /v1/shares` | the places this machine shares folders from: `[{name, writable, missing}]` |
 | `GET /v1/shares/{share}/dirs?path=P&check=1` | the directories of a folder of a place (see Shares) |
 | `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, identity?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex` or `acp` (with `command`) |
@@ -210,7 +212,11 @@ otherwise). The relay:
   `task t-1: egress to github.com`.
 
 What honors the variables (checked through the relay): curl, git, npm, Node's `fetch` (with
-`NODE_USE_ENV_PROXY`), Claude Code, Codex, OpenCode (Bun), mise, uv and pip. A program that ignores
+`NODE_USE_ENV_PROXY`), Claude Code, Codex, OpenCode (Bun), apt (Debian's mirrors over plain HTTP,
+forwarded), uv and pip. A task's installs go out the same way: with the default rule
+(`internet`) every public mirror is reachable; an agent restricted by `allow` needs the hosts of
+what it installs, e.g. `deb.debian.org`, `pypi.org` and `files.pythonhosted.org`,
+`registry.npmjs.org`, `github.com` and `*.githubusercontent.com`. A program that ignores
 them fails closed: no route, no DNS for outside names. The brain (`system_network`) gets no proxy:
 it is also on the services' network, which has egress, and calls its MCP servers directly.
 `-egress-listen ""` turns the relay off (tasks then reach only the node).
@@ -235,8 +241,8 @@ them to `claude-code` tasks only.
 A task's `runtime` is the agent program the node drives in its container (`runtime.go`). All
 write the same events (`text`, `tool_use`, `permission`, `permission_answer`, `turn_end`, `state`,
 `error`, `restart`), and all send every permission request to eriphe-core through the task's
-inbox. `GET /v1/node` reports the runtimes of the default image, from its `eriphe.runtimes` label
-(an image without it, or not pulled yet, counts as `claude-code` only).
+inbox. The node injects the agent of `claude-code`, `opencode` and `codex` into any image (see
+[Agents](#agents)), so `GET /v1/node` reports these and `acp` once its engine answers.
 
 - `claude-code` (`runtime_claude.go`): `claude -p` in stream-json mode. Permission requests go
   through an MCP tool served by the node (`approve`, on `/perm/{id}/mcp`). The session id is
@@ -254,11 +260,11 @@ inbox. `GET /v1/node` reports the runtimes of the default image, from its `eriph
   protocol (JSON-RPC 2.0 without the `jsonrpc` member, one message per line), for a ChatGPT
   subscription. See [Codex](#codex).
 
-The container clones `repo` if given. If the image has `mise` and the workspace has `mise.toml`,
-`.mise.toml` or `.tool-versions`, the container runs `mise install` first; a failure is reported on
-stderr and the task goes on. Then it runs the runtime's command. Identities (for example
-`CLAUDE_CODE_OAUTH_TOKEN`, `OPENROUTER_API_KEY`, `GH_TOKEN`) are passed as environment variables,
-never on a command line.
+The container puts `/opt/eriphe/bin` first in `PATH`, clones `repo` if given (installing git with
+apt first when the image has none), then runs the runtime's command. Nothing else is set up for a
+repository (no `mise install`, no devcontainer): the agent installs what it needs (see Task
+containers). Identities (for example `CLAUDE_CODE_OAUTH_TOKEN`, `OPENROUTER_API_KEY`, `GH_TOKEN`)
+are passed as environment variables, never on a command line.
 
 ### ACP
 
@@ -369,37 +375,120 @@ app-server. `CODEX_HOME` is in `/profile`, so a restarted task resumes its threa
 never reaches the node's disk. Codex is started with `cli_auth_credentials_store="file"`, no
 update check, no analytics or feedback.
 
-`ERIPHE_LIVE_IMAGE=eriphe-worker:dev go test -run CodexLive -v` runs the real Codex of an image,
+`ERIPHE_LIVE_IMAGE=eriphe-base:dev ERIPHE_LIVE_AGENT_IMAGE=localhost:5001/eriphe-agent-{agent}:dev go test -run CodexLive -v`
+runs the real Codex, injected into an image (from a local registry, see worker/README.md) and
 hardened as every task, against a fake OpenAI Responses API on the machine (no ChatGPT plan
 needed; `ERIPHE_LIVE_HOST=host.orb.internal` with OrbStack): an allowed command, a denied one,
 a restart that resumes the thread, and the auth.json left off the disk.
 
-`ERIPHE_LIVE_IMAGE=eriphe-worker:dev go test -run Live -v` runs the real OpenCode of an image on
+The same with `-run OpenCodeLive` (and `ERIPHE_LIVE_CACHE=<volume>`) runs the real OpenCode on
 one of its free models (`ERIPHE_LIVE_MODEL`, default `opencode/big-pickle`; no account needed):
 two turns with an allowed command and a denied write, a restart and a loaded session.
 
 Every task container mounts the Docker volume `eriphe-cache` at `/cache` (`-cache-volume`, empty to
-disable): the worker image keeps its tools and package caches there, so they are downloaded once
-per node.
+disable): the base image keeps apt's, uv's, npm's and pip's caches there (worker/README.md, Cache),
+so a package is downloaded once per node.
 
 ## Task containers
 
 Every task container is started with:
 
-- `--user 1000:1000`, the worker image's user, whatever the image says: a task never runs as
-  root, and the task's folders, which the node gives to UID 1000, stay writable. An image built
-  for another UID, or that needs root at run time (`apt-get`), does not fit.
-- `--cap-drop ALL`, `--security-opt no-new-privileges`, `--pids-limit 1024`.
-- `--read-only`, with a tmpfs at `/tmp` (2 GB, exec allowed for builds and test binaries; it counts
-  towards the memory limit). If `HOME` cannot be written (the worker image's `/home/claude` is on
-  the read-only root), the entrypoint moves it to `/tmp/home`. The writable places are `/tmp`,
-  `/work` (task folder), `/profile` (agent config) and `/cache` (volume).
+- `--user 0:0`: the agent is root in its container, whatever the image says, so that it installs
+  what the task needs (`apt-get install`, `uv`, `npm -g`) in a container thrown away with the task.
+  The root filesystem is writable (no `--read-only`): what is installed goes with the container.
+- `--cap-drop ALL`, then only `--cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER`:
+  - CHOWN and FOWNER are what dpkg needs: a package's files belong to its own users and groups
+    (checked: without them, `openssh-client`, `cron`, `man-db` or `build-essential` fail; with
+    them, those and `git`, `imagemagick`, `postgresql-client`, `sudo` install);
+  - DAC_OVERRIDE lets root read and write what is mounted as its owner did: the task's folders
+    from before (UID 1000), a user's folder lent to it whose files are theirs only;
+  - not SETUID nor SETGID: apt runs as root, without its `_apt` sandbox user
+    (`APT::Sandbox::User "root"` in the base image); nor any network capability (no raw sockets,
+    no binding below 1024, no change to the container's network), MKNOD, SYS_CHROOT, KILL,
+    SETFCAP or the others Docker gives by default.
+- `--security-opt no-new-privileges`, `--pids-limit 1024`.
+- a tmpfs at `/tmp` (2 GB, exec allowed for builds and test binaries; it counts towards the
+  memory limit).
 - `--memory` from `-task-memory` (default `8g`, empty for none) and `--cpus` from `-task-cpus`
   (default empty: all the machine's CPUs).
 - no host mount but the task's `work` and `agent` folders (or its profile), refused unless they
-  are under `-root`, and the user's folders lent to it (`folders`, see Shares), checked again at
-  each start; never the Docker socket.
+  are under `-root`, the agent (read-only, see Agents), and the user's folders lent to it
+  (`folders`, see Shares): read-only, but their `Eriphe/`; checked again at each start; never the
+  Docker socket.
 
+Root in the container is not root of the machine: no capability but those three, no new privilege,
+the internal network and the egress relay as the only way out (Networks, Egress), nothing of the
+machine mounted but what is listed above. The task's folders stay the node's (0700, under the
+node's root): what a task leaves there, a setuid program included, no user of the machine reaches.
+The folders lent to it are the user's, so what it writes in their `Eriphe/` is **handed back**
+(`handback.go`): at the end of each turn, every minute while the task runs, and when its container
+is gone, every entry there owned by root goes to the owner of `Eriphe/` (UID 1000 when the node
+made it), and any file with a setuid or setgid bit loses it. The walk goes through file
+descriptors and never follows a symbolic link (a link is changed itself), so a task changing the
+tree meanwhile cannot point it elsewhere. On a NAS whose shares are `nobody:users`, the results
+are `1000:users`, mode 664, as before. Apple's container needs none of it: the Mac's file sharing
+writes everything as the Mac's user.
+
+Disk: a task's root filesystem has no size limit of its own (Docker's overlay2 has none without
+XFS quotas), like `/work` before it.
+
+## Agents
+
+The agent is not in the task's image: the node injects it (`inject.go`). Each agent is an image of
+its own (`ghcr.io/alexis-marcel/eriphe-agent-claude`, `-codex`, `-opencode`, see
+worker/README.md) holding only its binary at `/opt/eriphe/bin/<agent>`. The node:
+
+1. reads the image's manifest for `linux/<its arch>` from the registry itself (an anonymous token
+   when the registry asks for one; `registry.go`), not through Docker: it works the same behind
+   the NAS's socket proxy, which lets it read no image's files, and with Apple's container;
+2. downloads its layers, checks each against its digest, and unpacks what is under `/opt/eriphe`
+   into `<root>/agents/<agent>/<manifest digest>/`: directories and regular files only (a link, a
+   device, a whiteout or a path out of it fails the package), never a setuid bit; `current`
+   names the version a task takes;
+3. mounts that directory read-only at `/opt/eriphe` in the task's container (`--mount
+   type=bind,src=…,dst=/opt/eriphe,readonly`, or container's `--mount
+   type=bind,source=…,target=/opt/eriphe,readonly`); the entrypoint puts `/opt/eriphe/bin` first
+   in `PATH` (the base image has it there already);
+4. removes the older versions no running task uses.
+
+`-agent-image` names the images, `{agent}` for `claude`, `codex` or `opencode` (default
+`ghcr.io/alexis-marcel/eriphe-agent-{agent}:<tag>`, env `ERIPHE_AGENT_IMAGE`); the tag, and the
+default `-image`'s, are the node's own build: its version for a release, `sha-<commit>` for a
+build of `main`, `latest` for a build by hand. Empty, no agent is injected (the image must have
+it, as `eriphe-worker` had). An `acp` task gets no agent: its command comes from its image.
+
+**Ready in advance.** Each assignments answer carries `prepare` (`core/README.md`): the runtimes of
+the agents configured in eriphe-core that this node could run (it carries their needed labels),
+and the images they name. At the first answer, whenever that list changes, and every 6 hours (a
+newer image under the same tag), the node pulls the default image and those images
+(`docker pull`, `container image pull`) and unpacks those agents, in the background. An agent that
+no configured agent uses is never downloaded. A task whose agent is unpacked starts at once,
+without asking the registry (also offline); otherwise its container starts once the node has
+unpacked it (the task stays `running` meanwhile). `agents_ready` in `GET /v1/node` tells the
+scheduler, which prefers such a node (`core/scheduler.go`). An eriphe-core from before sends no
+`prepare`: the node pulls its default image only, and unpacks an agent at its first task.
+
+### Injected programs (`/opt/eriphe/bin`)
+
+`/opt/eriphe/bin` is read-only in every task, first in `PATH` (before `/usr/local/bin` and the
+system's), and holds the agent's binary and the node's own programs for tasks, such as
+`eriphe-cred`. The contract for such a program:
+
+- it is a Linux executable, static or for glibc, for the node's architecture (the tasks'): `amd64`
+  or `arm64`;
+- it is in `<-task-bin>/linux-<arch>/` on the node (`-task-bin`, env `ERIPHE_TASK_BIN`, default
+  `/usr/local/share/eriphe/task-bin`: in the node's image, e.g.
+  `/usr/local/share/eriphe/task-bin/linux-amd64/eriphe-cred`; on a Mac, a folder given by
+  install.sh);
+- at each task's start the node copies every regular file there (a name of lowercase letters,
+  digits, `-` and `_`; no link, nothing hidden) into the `bin/` of the agent's directory, mode
+  0755, by a rename when its content changed, so a running task keeps the one it started with. A
+  task without an agent (`acp`) gets them alone, from `<root>/agents/none/`;
+- a program there runs as the task's root, with the task's environment and network: it is reached
+  by name (`eriphe-cred`), and talks to the node through the listener (`ERIPHE_*` variables the
+  node sets for it), never through a file of the host.
+
+## The container engine (a Mac)
 ## The container engine (a Mac)
 
 `-engine container` (env `ERIPHE_ENGINE=container`, what install.sh sets on a Mac with Apple
@@ -412,20 +501,21 @@ LaunchAgent gives `/usr/local/bin/container`).
 | Docker task | `container run` |
 |---|---|
 | `-i --rm --name eriphe-task-<id> --label eriphe.task=<id>` | the same, and `--progress none` |
-| `--user 1000:1000`, `--cap-drop ALL`, `--read-only` | the same |
+| `--user 0:0`, `--cap-drop ALL`, `--cap-add CHOWN` (`DAC_OVERRIDE`, `FOWNER`) | the same, as `CAP_CHOWN`… |
 | `--tmpfs /tmp:rw,exec,nosuid,nodev,size=2g` | the same |
 | `--pids-limit 1024` | `--ulimit nproc=1024` (per user in the VM, the task's only user) |
-| `--security-opt no-new-privileges` | none in container: with every capability dropped (the bounding set too), a setuid program gains none |
+| `--security-opt no-new-privileges` | none in container: with every capability dropped from the bounding set but those three, a setuid program gains no other |
 | `--memory`, `--cpus` | `--memory`, `--cpus`; without `-task-cpus`, all the Mac's CPUs (container's own default is 4 CPUs and 1 GB) |
 | `-v <dir>:/work`, `/profile` | `--mount type=bind,source=<dir>,target=/work` (no comma in a path) |
-| `-v eriphe-cache:/cache` | `<root>/cache` mounted at `/cache`: a container volume belongs to root, the task's user could not write to it |
+| `-v eriphe-cache:/cache` | `<root>/cache` mounted at `/cache` |
+| `--mount type=bind,src=<root>/agents/…,dst=/opt/eriphe,readonly` | `--mount type=bind,source=…,target=/opt/eriphe,readonly` |
 | `--network eriphe-tasks`, `--add-host host.docker.internal:<gateway>` | `--network eriphe-task-<id>`, its own (below); the callback is its gateway's address |
 | `-e NAME`, `--entrypoint sh <image> -c …` | the same (`-e NAME` takes the value from the CLI's environment) |
 | `docker stop -t 10`, `docker rm -f` of strays | `container stop -t 10`, `container delete --force` of what carries `eriphe.task`, and the strays' networks |
-| `--group-add` of a folder's group, chown to UID 1000 | none: the Mac's file sharing shows every file of a mount as the task's user's, and what the task writes lands as the Mac user's |
+| `--group-add` of a folder's group, results handed back to Eriphe/'s owner | none: what the task writes lands as the Mac user's (checked: a root task's results are the Mac user's) |
 
 `GET /v1/node` says `"engine": "container"` and `engine_version` (`docker` is empty); the images
-are container's (`container image ls`), the runtimes the worker image's label.
+are container's (`container image ls`), the runtimes those the node injects.
 
 **Networks.** Each task gets a network of its own, `container network create --internal --label
 eriphe.task=<id> eriphe-task-<id>` (vmnet's host-only mode), deleted with the task: no route out,
@@ -518,6 +608,17 @@ containers on a Mac with container: hardening, the network checks above, and fol
 Drive, `brctl evict` a file there first to see it downloaded); `ERIPHE_LIVE_IMAGE` for another image
 than alpine (the worker's).
 
+`go test -run InjectLive` checks a task end to end with its agent injected, twice: Claude Code's
+`claude --version` from `/opt/eriphe/bin`, read-only; root, with a writable root filesystem;
+`apt-get install imagemagick` through the relay, the second time from the cache; a folder lent
+read-only but its `Eriphe/`, whose results end up its owner's; the listener and the relay reached,
+nothing else (no Internet, DNS nor LAN directly, no LAN through the relay). `TestAppleInjectLive`
+with Apple's container on a Mac (`ERIPHE_LIVE_CONTAINER=1 ERIPHE_LIVE_IMAGE=<base>
+ERIPHE_LIVE_AGENT_IMAGE=<agents> ERIPHE_LIVE_LAN=<router>:80`), `TestInjectLive` with Docker in the
+NAS's layout: the test in a container with the docker CLI and socket, on an internal task network
+and one with egress, a share at the same path for it and the daemon (`ERIPHE_LIVE_DOCKER=1`, and
+`ERIPHE_LIVE_SHARE`, `ERIPHE_LIVE_SELF`, `ERIPHE_LIVE_TASK_NETWORK`, see the test).
+
 ## Shares (the user's folders)
 
 The places of this machine whose folders the user may give to Eriphe are declared on the node,
@@ -597,7 +698,7 @@ reaches (`service_mcp.go`). `GET /v1/node` says `"services": true` when Docker a
   has run for 2 minutes; there is no maximum. It is reported `failed` with stderr's tail meanwhile.
 - A new spec, or a new value of its environment (a rotated secret), restarts it once the old
   container is gone. Unassigned, it is stopped (`docker stop`); its folder stays.
-- Hardened like a task: `--user` (the service's, `1000:1000` by default, never root),
+- Hardened: `--user` (the service's, `1000:1000` by default, never root),
   `--cap-drop ALL`, `--security-opt no-new-privileges`, `--pids-limit 256`, `--read-only` unless
   `writable`, a tmpfs at `/tmp` (256 MB), `--memory` from `-service-memory` (default `1g`). Its
   only host mount is `/data` from `<root>/services/<name>` if it has a `volume`, given to its

@@ -97,6 +97,7 @@ func (n *node) sync(s *state) {
 			Tasks    []assignment        `json:"tasks"`
 			Services []serviceAssignment `json:"services"` // none from an eriphe-core without services
 			Update   *updateRequest      `json:"update"`   // none from an eriphe-core without updates
+			Prepare  *prepareSpec        `json:"prepare"`  // what to have ready (inject.go); none from an older eriphe-core
 		}
 		err := c.do(context.Background(), http.MethodGet, fmt.Sprintf("/v1/node/assignments?rev=%d&wait=30", rev), nil, &out)
 		if err != nil {
@@ -109,6 +110,7 @@ func (n *node) sync(s *state) {
 		rev = out.Rev
 		n.reconcile(out.Tasks)
 		n.reconcileServices(out.Services)
+		n.wanted(out.Prepare)
 		if n.upd.request(out.Update) {
 			n.poke()
 		}
@@ -223,10 +225,13 @@ func (n *node) launch(a assignment) {
 		t.emit("restart", map[string]any{"restarts": t.restarts})
 	}
 	t.emit("state", map[string]any{"state": stateRunning})
-	if err := n.startContainer(t, first); err != nil {
-		t.emit("error", map[string]any{"message": err.Error()})
-		t.setState(stateFailed)
-	}
+	// In the background: its agent may have to be downloaded first.
+	go func() {
+		if err := n.startContainer(t, first); err != nil {
+			t.emit("error", map[string]any{"message": err.Error()})
+			t.setState(stateFailed)
+		}
+	}()
 }
 
 // save writes what the task must remember if it has to restart.

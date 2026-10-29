@@ -162,7 +162,8 @@ done
 		}
 	}
 	t.Logf("probe:\n%s", raw)
-	want := map[string]string{"uid": "1000", "rootfs_write": "no", "tmp_write": "yes", "work_write": "yes", "cache_write": "yes",
+	// Root, on a root filesystem of its own (the agent installs packages there).
+	want := map[string]string{"uid": "0", "rootfs_write": "yes", "tmp_write": "yes", "work_write": "yes", "cache_write": "yes",
 		"listener": "yes", "relay_internet": "yes", "relay_lan": "no", "direct_internet": "no", "direct_dns": "no",
 		"direct_lan": "no", "other_task": "no"}
 	for _, f := range folders {

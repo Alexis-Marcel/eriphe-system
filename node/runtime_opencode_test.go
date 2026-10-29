@@ -8,11 +8,12 @@ import (
 	"time"
 )
 
-// TestOpenCodeLive runs the real OpenCode of a worker image, hardened as
-// every task, on one of OpenCode's free models: two turns with an allowed
-// command and a denied write, then a restart that loads the session.
+// TestOpenCodeLive runs the real OpenCode, injected into a worker image
+// and hardened as every task, on one of OpenCode's free models: two turns
+// with an allowed command and a denied write, then a restart that loads
+// the session.
 //
-//	ERIPHE_LIVE_IMAGE=eriphe-worker:dev go test -run Live -v
+//	ERIPHE_LIVE_IMAGE=eriphe-base:dev ERIPHE_LIVE_AGENT_IMAGE=localhost:5001/eriphe-agent-{agent}:dev go test -run OpenCodeLive -v
 func TestOpenCodeLive(t *testing.T) {
 	image := os.Getenv("ERIPHE_LIVE_IMAGE")
 	if image == "" {
@@ -20,7 +21,8 @@ func TestOpenCodeLive(t *testing.T) {
 	}
 	model := envOr("ERIPHE_LIVE_MODEL", "opencode/big-pickle")
 	root, _ := filepath.EvalSymlinks(t.TempDir())
-	n := newNode(options{root: root, hostRoot: root, docker: "docker", cacheVolume: os.Getenv("ERIPHE_LIVE_CACHE")})
+	n := newNode(options{root: root, hostRoot: root, docker: "docker", cacheVolume: os.Getenv("ERIPHE_LIVE_CACHE"),
+		agentImage: os.Getenv("ERIPHE_LIVE_AGENT_IMAGE")})
 	dir := filepath.Join(root, "tasks", "live")
 	spec := TaskSpec{Runtime: "opencode", Image: image, Model: model,
 		Prompt: "Use the bash tool to run exactly `echo hi > a.txt`. Then use the write tool to create b.txt containing x. " +
