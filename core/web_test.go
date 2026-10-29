@@ -406,8 +406,9 @@ func TestWebAddMachine(t *testing.T) {
 	for _, want := range []string{
 		"curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core http://",
 		" --join-token " + m[1] + " --name desk --labels gpu</pre>",
-		"& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'http://",
-		"-JoinToken " + m[1] + " -Name desk -Labels 'gpu'</pre>",
+		"<pre id=\"cmd-ps\">$env:ERIPHE_CORE='http://",
+		"; $env:ERIPHE_JOIN_TOKEN='" + m[1] + "'; $env:ERIPHE_NODE_NAME='desk'; $env:ERIPHE_NODE_LABELS='gpu';",
+		" irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex</pre>",
 		"<summary>Options avancées</summary>",
 		"eriphe-node -core http://", "install.ps1 -Core 'http://", "ERIPHE_JOIN_TOKEN: " + m[1],
 	} {

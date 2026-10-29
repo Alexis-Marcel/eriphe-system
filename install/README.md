@@ -64,7 +64,7 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
 Windows, in an administrator PowerShell:
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -CoreMode
+$env:ERIPHE_CORE_MODE='1'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
 
 The first install downloads the images (and on macOS an Ubuntu image of about 600 MB), so it takes a
@@ -189,7 +189,7 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token> -Name pc -CaHash sha256:<hex>
+$env:ERIPHE_CORE='http://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
 
 The device then shows on Settings → Devices, with what Eriphe sees and can do there, and its
@@ -390,7 +390,7 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Uninstall
+$env:ERIPHE_UNINSTALL='1'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
 
 - Linux: the compose project and its containers, the task and service containers, the networks,
@@ -594,12 +594,22 @@ machine around them shows depends on the OS:
 `install.ps1` creates its own WSL distribution, `eriphe` (Alpine, Docker Engine, eriphe-node),
 without Docker Desktop, and a scheduled task that starts it with Windows, logged in or not.
 
-`irm <url> | iex` takes no parameters: they go through a script block, as in the commands above.
-Saved as a file, the same parameters follow it:
+`irm <url> | iex` takes no parameters: they go in `ERIPHE_*` variables, as in the commands above.
+Each parameter has its own: `-Core` `ERIPHE_CORE`, `-JoinToken` `ERIPHE_JOIN_TOKEN`, `-Name`
+`ERIPHE_NODE_NAME`, `-Labels` `ERIPHE_NODE_LABELS`, `-CaHash` `ERIPHE_CA_HASH`, `-Version`
+`ERIPHE_VERSION`, `-Distro` `ERIPHE_DISTRO`, and `-CoreMode`, `-Rejoin`, `-Rollback`,
+`-Uninstall` `ERIPHE_CORE_MODE`, `ERIPHE_REJOIN`, `ERIPHE_ROLLBACK`, `ERIPHE_UNINSTALL` set to `1`.
+The script clears them once read, so that a later run in the same window does not take them again.
+An unknown `ERIPHE_*` variable, like an unknown parameter, stops it before it does anything.
+
+The parameters themselves work through a script block, or with the script saved as a file:
 
 ```powershell
+& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token>
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -Core 'http://192.0.2.10:8800' -JoinToken <token>
 ```
+
+A parameter given wins over its variable.
 
 **Core mode** (`-CoreMode`): eriphe-core runs as a container in the distribution, with its data in
 `/var/lib/eriphe-core` there and no configuration file, and this machine's node joins it by itself.
@@ -607,8 +617,9 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -Core 'http://192.0.2.10:
 **WSL missing.** The script installs it (`wsl --install --no-distribution`). When Windows needs a
 reboot for it, the script saves itself and its parameters in `%ProgramData%\eriphe-node\resume`
 (administrators only) and registers a task, "Eriphe install (eriphe)", that runs it again at the
-next logon of the same user, in a window; that run removes the task and the copy. Under a bare
-`irm | iex` there is no script text to save: run the command again after the reboot.
+next logon of the same user, in a window (`powershell -File`, the parameters after it); that run
+removes the task and the copy. Under `irm | iex` there is no script text to save: the copy is
+downloaded again from the latest release.
 
 **eriphe-node** comes from its image: dockerd pulls `ghcr.io/alexis-marcel/eriphe-node` in the
 distribution and the binary is copied out of it (`docker create`, `docker cp`). The running node is
@@ -622,15 +633,19 @@ that only Windows' localhost reaches. Windows forwards ports 8800 (API, nodes) a
 (workspace) to the distribution's address with `netsh interface portproxy`, and a firewall rule,
 "Eriphe core (eriphe)", lets them in from private and domain networks. The distribution's address
 changes when WSL restarts, so the scheduled task sets the forwarding again before each start of
-the distribution. Mirrored networking (`networkingMode=mirrored` in `.wslconfig`) would avoid the
+the distribution: it runs `%ProgramData%\eriphe-node\boot\eriphe.ps1` (administrators only),
+which forwards the ports and then starts the node. Mirrored networking (`networkingMode=mirrored` in `.wslconfig`) would avoid the
 forwarding but it is a setting for all of the user's distributions, it needs Windows 11 22H2 or
 later, and it applies only after `wsl --shutdown`, so the script does not turn it on. When it is
 already on, the script adds no forwarding (the Hyper-V firewall may then need a rule:
 `New-NetFirewallHyperVRule`).
 
 **The scheduled task** ("Eriphe node", or "Eriphe node (<distribution>)") starts at boot as the
-installing user without a session (S4U), and starts the distribution again 5 s after it stops
-(a `wsl --shutdown` included); stop it with `Stop-ScheduledTask`. Inside, a loop restarts
+installing user without a session (S4U). It runs `wsl.exe -d eriphe -u root --exec
+/usr/local/bin/eriphe-node-run` (in core mode without mirrored networking, the forwarding script
+above), at boot and every minute: a run that is still going is left alone, so the distribution
+starts again within a minute after it stops (a `wsl --shutdown` included). Stop it with
+`Disable-ScheduledTask`, then `Stop-ScheduledTask`. Inside, a loop restarts
 eriphe-node, and another runs the updater (`eriphe-update`, every 20 s): it pulls eriphe-node's
 image, swaps the binary (the previous one stays in `/var/lib/eriphe-update`), and in core mode
 recreates eriphe-core's container (`eriphe-core-run`), as the install does.

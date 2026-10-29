@@ -47,7 +47,7 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
 On Windows, in an administrator PowerShell:
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -CoreMode
+$env:ERIPHE_CORE_MODE='1'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
 
 On a NAS or any Linux where Docker runs, start one container instead (on Unraid, its template

@@ -1,14 +1,25 @@
 # Installs Eriphe on Windows in its own WSL distribution, with Docker Engine
 # inside: no Docker Desktop, nothing to install first, and it starts with
 # Windows, without anyone logged in. Run it from an administrator PowerShell,
-# straight from the web (parameters go through a script block):
+# straight from the web, its parameters in ERIPHE_* variables (irm | iex
+# takes none):
 #
-#   & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -CoreMode [-Name pc]
+#   $env:ERIPHE_CORE_MODE='1'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
+#   $env:ERIPHE_CORE='http://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
+#
+# or with parameters, through a script block or saved as a file:
+#
 #   & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token> [-Name pc] [-Labels 'gpu'] [-CaHash sha256:<hex>]
-#
-# or saved as a file:
-#
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1 -Core 'http://192.0.2.10:8800' -JoinToken <token>
+#
+# Each parameter has its variable: -Core ERIPHE_CORE, -JoinToken
+# ERIPHE_JOIN_TOKEN, -Name ERIPHE_NODE_NAME, -Labels ERIPHE_NODE_LABELS,
+# -CaHash ERIPHE_CA_HASH, -Version ERIPHE_VERSION, -Distro ERIPHE_DISTRO,
+# and the switches -CoreMode, -Rejoin, -Rollback and -Uninstall
+# ERIPHE_CORE_MODE, ERIPHE_REJOIN, ERIPHE_ROLLBACK and ERIPHE_UNINSTALL,
+# set to 1. A parameter given wins over its variable; the script clears
+# them, so that a later run does not take them again. An unknown parameter
+# or ERIPHE_* variable stops it before it does anything.
 #
 # The first one runs eriphe-core here; "Add a machine" in the workspace gives
 # the second one, token included. Guide: https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md
@@ -41,6 +52,7 @@
 # Tasks run on their own Docker network, eriphe-tasks, which the node
 # creates: they reach the node on its gateway, not one another nor the
 # services on the default bridge.
+[CmdletBinding()]
 param(
   [string] $Core,            # eriphe-core's address(es), comma-separated, preferred first
   [string] $JoinToken,
@@ -56,6 +68,27 @@ param(
   [switch] $Uninstall
 )
 $ErrorActionPreference = "Stop"
+$bound = @{} + $PSBoundParameters
+# The parameters' ERIPHE_* variables (see above), read once and cleared.
+$fromEnv = @{
+  ERIPHE_CORE = "Core"; ERIPHE_JOIN_TOKEN = "JoinToken"; ERIPHE_NODE_NAME = "Name"; ERIPHE_NODE_LABELS = "Labels"
+  ERIPHE_CA_HASH = "CaHash"; ERIPHE_VERSION = "Version"; ERIPHE_DISTRO = "Distro"
+  ERIPHE_CORE_MODE = "CoreMode"; ERIPHE_REJOIN = "Rejoin"; ERIPHE_ROLLBACK = "Rollback"; ERIPHE_UNINSTALL = "Uninstall"
+}
+foreach ($v in @(Get-ChildItem Env: | Where-Object Name -like "ERIPHE_*")) {
+  if ($v.Name -in "ERIPHE_NODE_IMAGE", "ERIPHE_CORE_IMAGE") { continue }
+  $p = $fromEnv[$v.Name]
+  if (-not $p) { throw "unknown variable $($v.Name) (known: $(($fromEnv.Keys | Sort-Object) -join ', '))" }
+  Remove-Item "Env:$($v.Name)"
+  if ($bound.ContainsKey($p)) { continue }
+  if ($p -in "CoreMode", "Rejoin", "Rollback", "Uninstall") {
+    if ($v.Value -ne "1") { throw "$($v.Name): 1, or leave it out" }
+    $bound[$p] = [switch] $true
+  } else {
+    $bound[$p] = $v.Value
+  }
+  Set-Variable -Name $p -Value $bound[$p]
+}
 $ProgressPreference = "SilentlyContinue"   # Windows PowerShell's progress bar slows downloads down
 $env:WSL_UTF8 = "1"
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -83,14 +116,21 @@ if ($Distro -eq "eriphe") {
 }
 $resumeTask = "Eriphe install ($Distro)"
 $rule = "Eriphe core ($Distro)"
-# This script's own text, for the resume after a reboot (empty under a bare iex).
+# What the scheduled task runs in core mode, forwarding included (step 7).
+$bootDir = Join-Path $home_ "boot"
+$boot = Join-Path $bootDir "$Distro.ps1"
+# This script's own text, for the resume after a reboot (none under irm | iex:
+# it is downloaded again from its release).
 $self = $MyInvocation.MyCommand.ScriptBlock
+$selfUrl = "https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1"
 
 function Invoke-InDistro([string] $script) {
-  # Sent as base64, so no quoting or line ending gets in the way. Returns
-  # what the script prints; its errors go to the console.
-  $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($script -replace "`r", "")))
-  $out = wsl.exe -d $Distro -u root -- sh -c "echo $b64 | base64 -d | sh -e"
+  # Read by sh on its stdin, in UTF-8, with Unix line endings: in braces, so
+  # that sh reads it whole before it runs, and its commands read nothing of
+  # it. PowerShell ends what it pipes with a CRLF: a last comment line takes
+  # it. Returns what the script prints; its errors go to the console.
+  $OutputEncoding = New-Object Text.UTF8Encoding $false
+  $out = "{`n$($script -replace "`r", '')`n} </dev/null`n#" | wsl.exe -d $Distro -u root -- sh -e
   if ($LASTEXITCODE -ne 0) { $out | Write-Host; throw "the setup in WSL failed ($LASTEXITCODE)" }
   $out
 }
@@ -108,21 +148,22 @@ function Test-Distro {
 # After a reboot that WSL needs, the same install, with the same parameters,
 # at the next logon of this user, in a window that shows how it goes.
 function Register-Resume {
-  if (-not $self -or $self.ToString() -notmatch "function Register-Resume") { return $false }
   $dir = Join-Path $home_ "resume"
   New-Item -ItemType Directory -Force $dir | Out-Null
   # Only administrators and SYSTEM: this script runs elevated.
   icacls.exe $dir /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" | Out-Null
   $file = Join-Path $dir "install.ps1"
-  Set-Content -Path $file -Value $self.ToString() -Encoding UTF8
+  if ($self -and $self.ToString() -match "function Register-Resume") {
+    Set-Content -Path $file -Value $self.ToString() -Encoding UTF8
+  } else {
+    try { Invoke-WebRequest $selfUrl -OutFile $file -UseBasicParsing } catch { return $false }
+  }
   $argv = foreach ($p in $bound.GetEnumerator()) {
     if ($p.Value -is [switch]) { if ($p.Value) { "-$($p.Key)" } }
-    else { "-$($p.Key) '$($p.Value -replace "'", "''")'" }
+    else { "-$($p.Key) `"$($p.Value -replace '"', '\"')`"" }
   }
-  $command = "& '$file' $($argv -join ' ')"
-  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
   $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand $encoded"
+  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -NoExit -File `"$file`" $($argv -join ' ')"
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $me
   $principal = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Highest
   Register-ScheduledTask -TaskName $resumeTask -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
@@ -190,14 +231,16 @@ function Get-LanAddress {
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
   [Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) { throw "run this from an administrator PowerShell" }
-$bound = @{} + $PSBoundParameters
 
 if ($Uninstall) {
   Unregister-Resume
   if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
+    Disable-ScheduledTask -TaskName $task | Out-Null
     Stop-ScheduledTask -TaskName $task
     Unregister-ScheduledTask -TaskName $task -Confirm:$false
   }
+  Remove-Item $boot -Force -ErrorAction SilentlyContinue
+  if (-not (Get-ChildItem $bootDir -ErrorAction SilentlyContinue)) { Remove-Item $bootDir -Force -ErrorAction SilentlyContinue }
   $wasCore = $false
   if ((Test-Wsl) -and (Test-Distro)) {
     $wasCore = (wsl.exe -d $Distro -u root -- sh -c "grep -qx ERIPHE_INSTALL_MODE=core /etc/eriphe-node.env && echo yes") -eq "yes"
@@ -687,28 +730,35 @@ exit 1
   # The node turns this address to TLS by itself once eriphe-core offers it.
   $Core = "http://127.0.0.1:8800"
   if (-not $joined -or $Rejoin) {
-    $joinArgs = "-name $Name -quiet"
+    $joinArgs = "-name $Name"
     if ($Rejoin) { $joinArgs += " -rejoin" }
-    # -quiet prints the token alone; eriphe-core may still be starting. On the
-    # loopback the node needs no CA hash: it pins the CA of its first exchange.
-    $JoinToken = Invoke-InDistro @"
+    # It prints the command that joins a node, with the token and eriphe-core's
+    # CA (-ca-hash); eriphe-core may still be starting. A new eriphe-core
+    # accepts machines over TLS only, from the start: the node joins with its
+    # CA's hash, kept for the next runs.
+    $joining = Invoke-InDistro @"
 for i in `$(seq 30); do
-  if t=`$(docker exec eriphe-core eriphe-core join-token $joinArgs 2>/tmp/join.log) && [ -n "`$t" ]; then echo "`$t"; exit 0; fi
+  if t=`$(docker exec eriphe-core eriphe-core join-token $joinArgs 2>/tmp/join.log | grep -e ' -join-token ') && [ -n "`$t" ]; then echo "`$t"; exit 0; fi
   sleep 2
 done
 cat /tmp/join.log >&2
 exit 1
 "@ | Select-Object -Last 1
-    if (-not $JoinToken) { throw "no join token from eriphe-core" }
-    $JoinToken = $JoinToken.Trim()
+    if ($joining -notmatch " -join-token (\S+)") { throw "no join token from eriphe-core" }
+    $JoinToken = $Matches[1]
+    if ($joining -match " -ca-hash (sha256:[0-9a-f]+)") { $CaHash = $Matches[1] }
   }
 } else {
   Remove-CorePorts
 }
 
 # 6. Stop the node, put the new binary in place, and its settings; the join
-# token only matters until the node has joined.
-Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
+# token only matters until the node has joined. Disabled first, so that it
+# does not start again meanwhile (step 7 registers it again, enabled).
+if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
+  Disable-ScheduledTask -TaskName $task | Out-Null
+  Stop-ScheduledTask -TaskName $task
+}
 Invoke-InDistro "pkill -f /usr/local/bin/eriphe-node-run || true; pkill -x eriphe-node || true" | Out-Null
 $mode = if ($CoreMode) { "core" } else { "node" }
 $alwaysOn = if ($CoreMode) { "ERIPHE_ALWAYS_ON=1" } else { "" }
@@ -728,6 +778,7 @@ Invoke-InDistro @"
 mv /usr/local/bin/eriphe-node.new /usr/local/bin/eriphe-node
 $version
 umask 077
+mkdir -p /var/lib/eriphe-node
 $forget
 cat > /etc/eriphe-update.conf <<'EOF'
 MODE='$mode' PIN='$pin'
@@ -747,29 +798,36 @@ $alwaysOn
 EOF
 "@ | Out-Null
 
-# 7. Start at boot, logged in or not, and start again if WSL stops. In core
-# mode, the ports are forwarded again first: the distribution's address
-# changes with every start of WSL.
+# 7. Start at boot, logged in or not, and start again if WSL stops: the task
+# runs eriphe-node-run (which restarts the node) in the distribution, at
+# boot and every minute from now on, which starts it again once it has ended
+# (a running one is left as it is). In core mode, the ports are forwarded first, by a script
+# of its own: the distribution's address changes with every start of WSL.
 $mirrored = Test-Mirrored
-$forward = ""
+$run = "-d $Distro -u root --exec /usr/local/bin/eriphe-node-run"
 if ($CoreMode -and -not $mirrored) {
-  $forward = @"
-  `$ip = wsl.exe -d $Distro -u root --exec /usr/local/bin/eriphe-addr
-  if (`$ip) { foreach (`$p in $($corePorts -join ', ')) { netsh.exe interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=`$p connectaddress=`$ip connectport=`$p | Out-Null } }
-"@
+  New-Item -ItemType Directory -Force $bootDir | Out-Null
+  # Only administrators and SYSTEM: the task runs it elevated.
+  icacls.exe $bootDir /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" | Out-Null
+  Set-Content -Path $boot -Encoding UTF8 -Value @"
+# Run by the scheduled task "$task" (install.ps1): forwards eriphe-core's
+# ports to the distribution's address, then runs eriphe-node there.
+`$ip = wsl.exe -d $Distro -u root --exec /usr/local/bin/eriphe-addr
+if (`$ip) {
+  foreach (`$p in $($corePorts -join ', ')) {
+    netsh.exe interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=`$p connectaddress=`$ip connectport=`$p | Out-Null
+  }
 }
-$loop = @"
-`$env:WSL_UTF8 = '1'
-while (`$true) {
-$forward
-  wsl.exe -d $Distro -u root --exec /usr/local/bin/eriphe-node-run
-  Start-Sleep -Seconds 5
-}
+wsl.exe $run
 "@
-$encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($loop))
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand $encoded"
-$trigger = New-ScheduledTaskTrigger -AtStartup
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
+  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$boot`""
+} else {
+  Remove-Item $boot -Force -ErrorAction SilentlyContinue
+  $action = New-ScheduledTaskAction -Execute "wsl.exe" -Argument $run
+}
+$trigger = @((New-ScheduledTaskTrigger -AtStartup),
+  (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)))
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew `
   -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
 $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Highest
 Register-ScheduledTask -TaskName $task -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
