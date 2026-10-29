@@ -209,7 +209,7 @@ func TestToolTestOAuth(t *testing.T) {
 func TestToolTestLocal(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
 	form := url.Values{"preset": {"local"}, "name": {"think"}, "kind": {"local"}, "image": {"mcp/sequentialthinking"}, "transport": {"stdio"}, "egress": {"1"}}
-	if body := testTool(t, tw, csrf, "/settings/tool-test", form); !strings.Contains(body, "démarrera sur une de tes machines") || !strings.Contains(body, "test-info") {
+	if body := testTool(t, tw, csrf, "/settings/tool-test", form); !strings.Contains(body, "démarrera sur un de tes appareils") || !strings.Contains(body, "test-info") {
 		t.Fatalf("local: %s", body)
 	}
 	form.Set("image", "Not/An_Image::")

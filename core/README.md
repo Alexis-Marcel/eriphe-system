@@ -307,14 +307,14 @@ new access token is used. The database file is as sensitive as `/secrets`.
 
 Nodes are not configured: they join. `eriphe-core join-token -name pc` creates a single-use token
 for the node `pc` (valid 24 h, `-ttl` to change) and prints the command to run on the new machine;
-the workspace's "Ajouter une machine" does the same. It reads the same `-config` or `-data` as
+the workspace's "Connecter un appareil" does the same. It reads the same `-config` or `-data` as
 eriphe-core and asks the running one; `-quiet` prints the token alone, for a script. The address
 in the command is `public_url` or, without it, the workspace's own host on eriphe-core's port
 (a workspace opened at `localhost` says that address only works on that computer); the CLI then
 prints a placeholder. A token is `id.secret` and joins only under
 the name it was made for, and never under the name of a registered node: a stolen or mistyped token
 cannot take over another node's tasks and lent credentials. A reinstalled machine joins again with a
-rejoin token for its own name (`join-token -name pc -rejoin`, or "Réinscrire cette machine" on its
+rejoin token for its own name (`join-token -name pc -rejoin`, or "Réinscrire cet appareil" on its
 card), which replaces its secret. Tokens made before names existed join a new name only. The node gets its own
 secret (only its hash is stored), then keeps a tunnel open to `GET /v1/nodes/connect`; eriphe-core
 speaks the node's API through it. A node is online while its tunnel is up and answers.
@@ -390,7 +390,7 @@ whatever address it dials) and one client certificate per node.
 - **Joining.** The join command carries `-ca-hash sha256:<hex>`, the SHA-256 of the CA's public key
   (like kubeadm's `--discovery-token-ca-cert-hash`): the node finds that CA in eriphe-core's TLS
   handshake, pins it, and only then sends its join token. `eriphe-core join-token` and "Ajouter une
-  machine" print it, and Settings → Machines → Avancé shows it, for a machine set up by hand.
+  machine" print it, and Settings → Appareils → Avancé shows it, for a machine set up by hand.
 - **Client certificates (mTLS).** A node asks for its certificate with its secret
   (`POST /v1/node/certificate`, with a certificate request: the key never leaves the node), valid
   one year, and for a new one with its current one when a third of its life is left. A request
@@ -404,7 +404,7 @@ whatever address it dials) and one client certificate per node.
   the CA instead.
 - **Closing the plain path.** eriphe-core accepts nodes over TLS only, with their certificate: from
   the start on a new installation, and on an older one by itself as soon as every node has its
-  certificate (logged; Settings → Machines marks those still without one, `GET /v1/nodes/tls`
+  certificate (logged; Settings → Appareils marks those still without one, `GET /v1/nodes/tls`
   lists them). It then refuses nodes over plain HTTP and nodes without their certificate, and drops
   the tunnels of those connected so. Joins then need TLS too. API callers other than nodes are not
   affected. `PUT /v1/nodes/tls {"tls_only": false}` is the advanced way out, to keep the plain path
@@ -804,6 +804,38 @@ put there, so it is treated as external content, like a mail or a page:
 | `GET /v1/nodes/{name}/shares` | the places a machine shares: `{name, writable, missing}` |
 | `GET /v1/nodes/{name}/shares/{share}/dirs?path=P&check=1` | the node's listing of a folder (see node/README.md), through its tunnel |
 
+## Devices: what Eriphe sees and does there
+
+Connecting a device gives Eriphe access to it, so it can help with what is there; letting agents
+work on it is an extra (a node that reports runtimes). Settings → Appareils shows, for each device,
+first what Eriphe sees there (its Folders, with their right, or "Rien d'ouvert" and a link to share
+one), then what it can do there ("Faire travailler des agents", oui or non, its system, its CPUs,
+memory, runtimes and labels), then its status and update, as before (`web_pages.go`,
+`web_devices.go`). The addresses under `/settings/machines` still lead there.
+
+**Access log.** eriphe-core records what it did on each device (`node_access.go`, `node_log`
+table): a folder listed (`list`, with `share:/path`), a folder opened or closed (`share`,
+`unshare`), a task run there (`task`, with its agent; the brain itself is not logged), a folder
+lent to a task (`lend`, with its right), a file a task wrote in a folder's `Eriphe/` (`result`,
+from the file tools Claude Code reports), and access cut or restored (`cut`, `restore`). The same
+entry again within 10 minutes is not repeated; entries are kept 90 days, at most 2000 per device,
+and go with the device when it is forgotten. A device's page (`/settings/devices/<name>`) shows
+the last ones, 50 at a time.
+
+**Cut access.** "Couper l'accès" (the card's "⋯" menu, or the device's page, after a confirmation)
+suspends the device at once, without uninstalling anything: its active tasks are stopped (they
+cannot report any more), no new task is placed there (by name, by the scheduler, or for its
+folders), its folders are neither listed, opened nor lent, its movable services go to another
+device, its tunnel is dropped, and the node is refused (403 on `connect`, and on every node call)
+until "Rétablir l'accès". Its registration, secret, certificate and folders stay; it reconnects by
+itself once access is restored.
+
+| Call (bearer token) | What |
+|---|---|
+| `GET /v1/nodes/{name}/log?limit=N&before=ID` | `{node, suspended, log: [{id, time, kind, task, folder, access, detail}]}`, newest first (100, up to 500) |
+| `POST /v1/nodes/{name}/suspend` | cut access |
+| `POST /v1/nodes/{name}/resume` | restore access |
+
 ## Task API (bearer token)
 
 What the `eriphe` CLI uses to follow and answer worker tasks, next to the conversation API. The
@@ -826,7 +858,7 @@ Eriphe's own interface, served by eriphe-core on its own HTTPS listener: the con
 Eriphe in the middle, its tasks on the side as live cards (machine, agent, repository and branch,
 state, the pull request or document the agent mentioned), the permissions waiting for an answer
 inline in the conversation (Yes / No, with an optional reason for the agent), and the settings:
-machines (and the command that adds one), agents, accounts and tools (the vault), the folders
+devices (what Eriphe sees and does on each, and the command that connects one), agents, accounts and tools (the vault), the folders
 given to Eriphe (see [Folders](#folders)), and the journal of decisions. Settings → Tools lists the catalog's servers with their status (ready, to connect,
 error, or waiting for a machine for a local one) and where each comes from, adds one from a list of
 presets (Home Assistant, GitHub, Linear, Notion, Mails, Agenda, Google Drive, or any online

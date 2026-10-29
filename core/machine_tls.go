@@ -337,6 +337,9 @@ func (c *core) authNode(r *http.Request) (string, int, error) {
 	if name == "" || !c.store.checkNode(name, hashSecret(secret)) {
 		return name, http.StatusUnauthorized, errors.New("unauthorized")
 	}
+	if c.store.nodeSuspended(name) {
+		return name, http.StatusForbidden, errNodeSuspended // node_access.go
+	}
 	if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 		leaf := r.TLS.PeerCertificates[0]
 		// Both listeners verify a given certificate against the CA; a chain

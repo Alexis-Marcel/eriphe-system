@@ -275,7 +275,7 @@ func TestWebUpdateNotice(t *testing.T) {
 		t.Error("a macOS machine is given the Windows command")
 	}
 	_, body, _ = tw.do("GET", "/settings/account", nil, nil)
-	for _, want := range []string{"eriphe-core 0.1.0", "Mise à jour disponible", `href="/settings/machines#updates"`} {
+	for _, want := range []string{"eriphe-core 0.1.0", "Mise à jour disponible", `href="/settings/devices#updates"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/account lacks %q", want)
 		}

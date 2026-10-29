@@ -234,6 +234,7 @@ func (c *core) handleReport(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		c.logResults(t, in.Events) // its access log (node_access.go)
 	}
 	if id == c.store.get("brain_task") {
 		c.brainWrote(t, len(in.Events) > 0, in.Draft)

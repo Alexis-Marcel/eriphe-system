@@ -210,7 +210,7 @@ if ($Uninstall) {
     Write-Host "The distribution $Distro, with eriphe-core and its data, and its scheduled task are removed."
   } else {
     Write-Host "The distribution $Distro and its scheduled task are removed."
-    Write-Host "eriphe-core still knows the node: remove it under Machines in the workspace (or DELETE /v1/nodes/<name>)."
+    Write-Host "eriphe-core still knows the node: remove it under Settings, Devices in the workspace (or DELETE /v1/nodes/<name>)."
   }
   return
 }
@@ -807,7 +807,7 @@ if ($CoreMode) {
   Write-Host ""
   Write-Host "eriphe-core runs here. Workspace: https://${lan}:8443"
   if ($setup) { Write-Host "Setup code (to choose the workspace's password): $setup" }
-  Write-Host "Other machines join it at http://${lan}:8800, with a token from:"
+  Write-Host "Other devices join it at http://${lan}:8800 (Connect a device, in the workspace), or with a token from:"
   Write-Host "  wsl -d $Distro -- docker exec eriphe-core eriphe-core join-token -name <name>"
   if (Get-NetConnectionProfile | Where-Object NetworkCategory -eq "Public") {
     Write-Host "This network is Public: the firewall lets the LAN in on Private networks only (Set-NetConnectionProfile -NetworkCategory Private)."

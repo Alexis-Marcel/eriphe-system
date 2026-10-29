@@ -931,7 +931,56 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 .drive-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .drive-path { display: flex; align-items: center; gap: 8px; margin: 0; }
 
-/* Settings → Machines → Updates: eriphe-core's own line. */
+/* Settings → Devices → Updates: eriphe-core's own line. */
 .update-core-row { display: grid; gap: 10px; padding: 14px 16px; border-radius: 14px; background: var(--surface-2); }
 .update-core-row .list-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .update-core-row .machine-update { border-top-color: var(--border-strong); }
+
+/* Settings → Devices: each card says first what Eriphe sees and can do
+   there; the specs come after, smaller. The foot (activity, version,
+   update) sits at the bottom, so the cards of a row line up. */
+.tile.device { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tile-title a { color: inherit; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tile-title a:hover { text-decoration: underline; }
+.status.cut { color: var(--danger); }
+.status.cut .led { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
+.tile.device.is-cut { border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.is-cut .device-part { opacity: .55; }
+.cut-note { margin: 0; padding: 8px 12px; border-radius: 10px; font-size: .84rem; color: var(--danger); background: var(--danger-soft); }
+.device-part { display: grid; gap: 8px; align-content: start; padding-top: 12px; border-top: 1px solid var(--border); min-width: 0; }
+.device-part h4 { margin: 0; display: flex; align-items: center; gap: 7px; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.device-part h4 .i { width: 15px; height: 15px; color: var(--accent); }
+.device-folders { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.device-folders li { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.device-folders a { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font-weight: 600; color: var(--text); }
+.device-folders a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-folders .i { width: 16px; height: 16px; color: var(--muted); }
+.device-folders .tag { flex: none; }
+.device-none { margin: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; font-size: .9rem; }
+.device-none a { display: inline-flex; align-items: center; gap: 4px; font-size: .86rem; font-weight: 600; }
+.device-none a .i { width: 15px; height: 15px; }
+.device-fact { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .92rem; font-weight: 600; }
+.device-specs { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.device-specs p, .device-specs .system { margin: 0; }
+.device-specs .system { font-size: .82rem; }
+.device-specs .tag { padding: 1px 7px; font-size: .7rem; }
+.device-foot { margin-top: auto; display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.device-foot p { margin: 0; }
+.device-foot .machine-update { padding-top: 0; border-top: 0; }
+.kebab-menu a { display: block; padding: 8px 10px; border-radius: 8px; color: inherit; font-size: .88rem; }
+.kebab-menu a:hover { background: var(--surface-2); text-decoration: none; }
+.folder-device { color: inherit; }
+
+/* Settings → Devices → one device. */
+.device-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.device-detail { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 14px; }
+.device-detail .device-part { padding-top: 0; border-top: 0; }
+.device-access { justify-items: start; }
+.device-access.is-cut { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.device-log { display: grid; gap: 10px; }
+.device-log h3 { display: flex; align-items: center; gap: 9px; font-size: 1.06rem; margin: 0; }
+.device-log h3 .i { color: var(--accent); }
+.device-log > p { margin: -4px 0 0; }
+.log-folder { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; }
+.log-folder .i { width: 15px; height: 15px; color: var(--muted); }
+#device-log-more td { text-align: center; }

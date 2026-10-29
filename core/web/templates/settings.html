@@ -2,7 +2,7 @@
 <div class="settings">
   <nav class="settings-nav" aria-label="{{t "settings.title"}}">
     <h1 class="settings-title">{{t "settings.title"}}</h1>
-    <a href="/settings/machines" {{if eq .Tab "machines"}}aria-current="page"{{end}}>{{template "i-server"}}<span>{{t "settings.machines"}}</span>{{if or .Updates.Core .Updates.Nodes}}{{template "new-dot"}}{{end}}</a>
+    <a href="/settings/devices" {{if eq .Tab "devices"}}aria-current="page"{{end}}>{{template "i-device"}}<span>{{t "settings.machines"}}</span>{{if or .Updates.Core .Updates.Nodes}}{{template "new-dot"}}{{end}}</a>
     <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span></a>
     <a href="/settings/tools" {{if eq .Tab "tools"}}aria-current="page"{{end}}>{{template "i-plug"}}<span>{{t "settings.tools"}}</span></a>
     <a href="/settings/folders" {{if eq .Tab "folders"}}aria-current="page"{{end}}>{{template "i-folder"}}<span>{{t "settings.folders"}}</span></a>
@@ -11,7 +11,7 @@
     <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.account"}}</span>{{if .Updates.Core}}{{template "new-dot"}}{{end}}</a>
   </nav>
   <div class="settings-body">
-    {{if eq .Tab "machines"}}{{template "machines" .}}
+    {{if eq .Tab "devices"}}{{if eq .View "device"}}{{template "device" .}}{{else}}{{template "machines" .}}{{end}}
     {{else if eq .Tab "agents"}}{{if eq .View "agent-form"}}{{template "agent-page" .}}{{else if eq .View "provider-form"}}{{template "provider-page" .}}{{else}}{{template "agents" .}}{{end}}
     {{else if eq .Tab "tools"}}{{if eq .View "form"}}{{template "tool-page" .}}{{else if eq .View "gallery"}}{{template "tool-gallery" .}}{{else if eq .View "drive"}}{{template "drive-page" .}}{{else if eq .View "home-assistant"}}{{template "home-assistant" .}}{{else}}{{template "tools" .}}{{end}}
     {{else if eq .Tab "folders"}}{{template "folders" .}}
@@ -25,46 +25,33 @@
 {{define "machines"}}
 <header class="page-head"><h2>{{t "settings.machines"}}</h2><p>{{t "machines.lead"}}</p></header>
 {{if .Data.Nodes}}
-<ul class="grid">
+<ul class="grid devices">
 {{range .Data.Nodes}}
-  <li class="tile">
+  <li class="tile device{{if .Suspended}} is-cut{{end}}">
     <div class="tile-head">
-      <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{if .Online}}{{t "machines.online"}}{{else}}{{t "machines.offline"}}{{end}}</span>
-      <details class="kebab">
-        <summary aria-label="{{tf "machines.actions" .Name}}" title="{{tf "machines.actions" .Name}}"><span aria-hidden="true">⋯</span></summary>
-        <div class="kebab-menu">
-          <form hx-post="/settings/machines/{{.Name}}/rejoin" hx-confirm="{{t "machines.rejoinconfirm"}}" hx-target="#join-result" hx-swap="innerHTML show:#add-title:top">
-            <button type="submit">{{t "machines.rejoin"}}</button>
-          </form>
-          <form hx-post="/settings/machines/{{.Name}}/forget" hx-confirm="{{t "machines.forgetconfirm"}}">
-            <button type="submit" class="danger">{{t "machines.forget"}}</button>
-          </form>
-        </div>
-      </details>
+      {{template "device-status" .}}
+      {{template "device-menu" .}}
     </div>
-    <h3 class="tile-title">{{template "i-server"}}{{.Name}}{{if .AlwaysOn}} <span class="tag tag-accent badge-on" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</span>{{end}}</h3>
-    {{if .System}}<p class="system" title="{{if .Arch}}{{.OS}}/{{.Arch}}{{end}}">{{t .System}}</p>{{end}}
-    <p class="muted small">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}}{{else}}&nbsp;{{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}}{{end}}</p>
-    <div class="specs">
-      {{if .CPUs}}<div class="spec"><b>{{.CPUs}}</b><span>CPU</span></div>{{end}}
-      {{if .Memory}}<div class="spec"><b>{{size .Memory}}</b><span>RAM</span></div>{{end}}
+    <h3 class="tile-title">{{template "i-device"}}<a href="/settings/devices/{{.Name}}">{{.Name}}</a>{{if .AlwaysOn}} <span class="tag tag-accent badge-on" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</span>{{end}}</h3>
+    {{if .Suspended}}<p class="cut-note">{{t "devices.cutlead"}}</p>{{end}}
+    {{template "device-sees" .}}
+    {{template "device-can" .}}
+    <div class="device-foot">
+      <p class="muted small">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}}{{else}}{{t "machines.online"}}{{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}}{{end}}{{if .Version}} · <span class="mono">eriphe-node {{ver .Version}}</span>{{end}}</p>
+      {{template "machine-update" .Update}}
+      {{if and $.Data.CAHash .CertExpires.IsZero}}<p class="muted small">{{t "machines.notls"}}</p>{{end}}
     </div>
-    {{if .Runtimes}}<p class="chips" aria-label="{{t "machines.runtimes"}}">{{range .Runtimes}}<span class="tag">{{.}}</span>{{end}}</p>{{end}}
-    {{if .Labels}}<p class="chips" aria-label="{{t "machines.labels"}}">{{range .Labels}}<span class="tag tag-accent">{{.}}</span>{{end}}</p>{{end}}
-    {{if .Version}}<p class="muted small mono">eriphe-node {{ver .Version}}</p>{{end}}
-    {{template "machine-update" .Update}}
-    {{if and $.Data.CAHash .CertExpires.IsZero}}<p class="muted small">{{t "machines.notls"}}</p>{{end}}
   </li>
 {{end}}
 </ul>
-{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-server"}}</span><p>{{t "machines.none"}}</p></div>{{end}}
+{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-device"}}</span><p>{{t "machines.none"}}</p></div>{{end}}
 
 {{template "updates" .Data.Updates}}
 
 <section class="panel" aria-labelledby="add-title">
   <h3 id="add-title">{{template "i-plus"}}{{t "machines.add"}}</h3>
   <p class="muted">{{t "machines.addlead"}}</p>
-  <form class="row-form" hx-post="/settings/machines/join" hx-target="#join-result" hx-swap="innerHTML">
+  <form class="row-form" hx-post="/settings/devices/join" hx-target="#join-result" hx-swap="innerHTML">
     <label class="field"><span>{{t "machines.name"}}</span>
       <input type="text" name="name" required pattern="[a-z0-9][a-z0-9\-]{0,31}" maxlength="32" placeholder="pc" autocomplete="off" spellcheck="false" class="mono"></label>
     <label class="field"><span>{{t "machines.labelsopt"}}</span>
@@ -88,7 +75,120 @@
 {{end}}
 {{end}}
 
-{{/* Settings → Machines → Updates (web_updates.go): eriphe-core's own, "Update all" and the switch for the night; each node's is on its card. */}}
+{{/* A device's status: online, offline, or its access cut. . is a machineView. */}}
+{{define "device-status"}}
+{{- if .Suspended}}<span class="status cut"><span class="led" aria-hidden="true"></span>{{t "devices.cut"}}</span>
+{{- else}}<span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{if .Online}}{{t "machines.online"}}{{else}}{{t "machines.offline"}}{{end}}</span>{{end}}
+{{- end}}
+
+{{/* A device's "⋯" menu. */}}
+{{define "device-menu"}}
+<details class="kebab">
+  <summary aria-label="{{tf "machines.actions" .Name}}" title="{{tf "machines.actions" .Name}}"><span aria-hidden="true">⋯</span></summary>
+  <div class="kebab-menu">
+    <a href="/settings/devices/{{.Name}}">{{t "devices.open"}}</a>
+    {{if .Suspended}}
+    <form hx-post="/settings/devices/{{.Name}}/resume">
+      <button type="submit">{{t "devices.restore"}}</button>
+    </form>
+    {{else}}
+    <form hx-post="/settings/devices/{{.Name}}/suspend" hx-confirm="{{tf "devices.cutconfirm" .Name}}">
+      <button type="submit" class="danger">{{t "devices.cutaction"}}</button>
+    </form>
+    {{end}}
+    <form hx-post="/settings/devices/{{.Name}}/rejoin" hx-confirm="{{t "machines.rejoinconfirm"}}" hx-target="#join-result" hx-swap="innerHTML show:#add-title:top">
+      <button type="submit">{{t "machines.rejoin"}}</button>
+    </form>
+    <form hx-post="/settings/devices/{{.Name}}/forget" hx-confirm="{{t "machines.forgetconfirm"}}">
+      <button type="submit" class="danger">{{t "machines.forget"}}</button>
+    </form>
+  </div>
+</details>
+{{end}}
+
+{{/* What Eriphe sees on a device: the folders opened to it there. */}}
+{{define "device-sees"}}
+<section class="device-part" aria-labelledby="sees-{{.Name}}">
+  <h4 id="sees-{{.Name}}">{{template "i-eye"}}{{t "devices.sees"}}</h4>
+  {{if .Folders}}
+  <ul class="device-folders">
+    {{range .Folders}}<li><a href="/settings/folders">{{template "i-folder"}}<span>{{.Name}}</span></a><span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "devices.access.%s" .Access)}}</span></li>{{end}}
+  </ul>
+  {{else}}
+  <p class="device-none"><span class="muted">{{t "devices.seesnone"}}</span>{{if not .Suspended}}<a href="/settings/folders?node={{.Name}}">{{template "i-plus"}}{{t "devices.sharefolder"}}</a>{{end}}</p>
+  {{end}}
+</section>
+{{end}}
+
+{{/* What Eriphe can do on a device: put agents to work there, then its system and specs, secondary. */}}
+{{define "device-can"}}
+<section class="device-part" aria-labelledby="can-{{.Name}}">
+  <h4 id="can-{{.Name}}">{{template "i-bot"}}{{t "devices.can"}}</h4>
+  <p class="device-fact"><span>{{t "devices.agents"}}</span>{{if and .Workers (not .Suspended)}}<b class="tag tag-ok">{{t "devices.yes"}}</b>{{else}}<b class="tag" title="{{t "devices.agentsnohint"}}">{{t "devices.no"}}</b>{{end}}</p>
+  <div class="device-specs">
+    {{if .System}}<p class="system" title="{{if .Arch}}{{.OS}}/{{.Arch}}{{end}}">{{t .System}}</p>{{end}}
+    {{if or .CPUs .Memory}}<p class="muted small">{{if .CPUs}}{{.CPUs}} CPU{{end}}{{if and .CPUs .Memory}} · {{end}}{{if .Memory}}{{size .Memory}} RAM{{end}}</p>{{end}}
+    {{if or .Runtimes .Labels}}<p class="chips">{{range .Runtimes}}<span class="tag" title="{{t "machines.runtimes"}}">{{.}}</span>{{end}}{{range .Labels}}<span class="tag tag-accent" title="{{t "machines.labels"}}">{{.}}</span>{{end}}</p>{{end}}
+  </div>
+</section>
+{{end}}
+
+{{/* Settings → Devices → one device: what Eriphe sees and can do there, its access, and its access log (web_devices.go). */}}
+{{define "device"}}{{with .Data}}{{with .Device}}
+<header class="page-head">
+  <a class="back" href="/settings/devices">{{template "i-back"}}{{t "settings.machines"}}</a>
+  <div class="device-title">
+    <h2>{{.Name}}</h2>
+    {{template "device-status" .}}
+    {{if .AlwaysOn}}<span class="tag tag-accent" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</span>{{end}}
+  </div>
+  <p>{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}}{{else}}{{t "machines.online"}}{{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}}{{end}}{{if .Version}} · <span class="mono">eriphe-node {{ver .Version}}</span>{{end}}</p>
+</header>
+<div class="device-detail">
+  <div class="panel">{{template "device-sees" .}}</div>
+  <div class="panel">{{template "device-can" .}}</div>
+</div>
+<section class="panel device-access{{if .Suspended}} is-cut{{end}}" aria-labelledby="access-title">
+  <h3 id="access-title">{{template "i-shield"}}{{if .Suspended}}{{t "devices.cut"}}{{else}}{{t "devices.access"}}{{end}}</h3>
+  <p class="muted">{{if .Suspended}}{{t "devices.cutlead"}}{{else}}{{t "devices.accesslead"}}{{end}}</p>
+  {{if .Suspended}}
+  <form hx-post="/settings/devices/{{.Name}}/resume"><button class="btn btn-primary" type="submit">{{t "devices.restore"}}</button></form>
+  {{else}}
+  <form hx-post="/settings/devices/{{.Name}}/suspend" hx-confirm="{{tf "devices.cutconfirm" .Name}}"><button class="btn btn-danger-ghost" type="submit">{{t "devices.cutaction"}}</button></form>
+  {{end}}
+</section>
+{{end}}
+<section class="device-log" aria-labelledby="log-title">
+  <h3 id="log-title">{{template "i-list"}}{{t "devices.log"}}</h3>
+  <p class="muted small">{{t "devices.loglead"}}</p>
+  {{if .Log}}
+  <div class="table-wrap">
+  <table class="journal">
+    <thead><tr><th scope="col">{{t "journal.when"}}</th><th scope="col">{{t "devices.logwhat"}}</th><th scope="col">{{t "devices.logdetail"}}</th></tr></thead>
+    <tbody>{{template "device-log-rows" $}}</tbody>
+  </table>
+  </div>
+  {{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-list"}}</span><p>{{t "devices.lognone"}}</p></div>{{end}}
+</section>
+{{end}}{{end}}
+
+{{define "device-log-rows"}}{{with .Data}}
+{{range .Log}}
+<tr>
+  <td data-label="{{t "journal.when"}}"><time datetime="{{iso .Time}}">{{date .Time}}</time></td>
+  <td data-label="{{t "devices.logwhat"}}"><span class="strong">{{t (printf "devices.log.%s" .Kind)}}</span></td>
+  <td data-label="{{t "devices.logdetail"}}" class="log-detail">
+    {{- if .Folder}}<span class="log-folder">{{template "i-folder"}}{{.Folder}}</span>{{end}}
+    {{- if .Access}} <span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "devices.access.%s" .Access)}}</span>{{end}}
+    {{- if .Task}} <a class="mono" href="/tasks/{{.Task}}">{{.Task}}</a>{{end}}
+    {{- if .Detail}} <code class="subject">{{.Detail}}</code>{{end}}
+  </td>
+</tr>
+{{end}}
+{{if .Next}}<tr id="device-log-more"><td colspan="3"><button class="btn btn-soft" hx-get="/settings/devices/{{.Device.Name}}?before={{.Next}}" hx-target="#device-log-more" hx-swap="outerHTML">{{t "journal.more"}}</button></td></tr>{{end}}
+{{end}}{{end}}
+
+{{/* Settings → Devices → Updates (web_updates.go): eriphe-core's own, "Update all" and the switch for the night; each node's is on its card. */}}
 {{define "updates"}}
 <section class="panel" id="updates" aria-labelledby="updates-title">
   <h3 id="updates-title">{{template "i-branch"}}{{t "updates.title"}}</h3>
@@ -234,7 +334,7 @@
   </form>
 </section>
 <p class="muted small center">eriphe-core {{ver .Build}}</p>
-{{if .Updates.Core}}<p class="small center"><a class="update-available" href="/settings/machines#updates"><b class="new-dot" aria-hidden="true"></b>{{t "update.available"}}</a></p>{{end}}
+{{if .Updates.Core}}<p class="small center"><a class="update-available" href="/settings/devices#updates"><b class="new-dot" aria-hidden="true"></b>{{t "update.available"}}</a></p>{{end}}
 {{end}}
 
 {{define "password-result"}}<p class="{{if .Data.OK}}ok-note{{else}}alert{{end}}" role="status">{{t .Data.Msg}}</p>{{end}}

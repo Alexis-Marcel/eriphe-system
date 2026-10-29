@@ -5,7 +5,7 @@
 {{range .Data.Folders}}
   <li class="tile">
     <div class="tile-head">
-      <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{if eq .Source "google-drive"}}Google Drive{{else}}{{.Node}}{{end}}</span>
+      <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{if eq .Source "google-drive"}}Google Drive{{else}}<a class="folder-device" href="/settings/devices/{{.Node}}">{{.Node}}</a>{{end}}</span>
       <span class="tile-actions">
       <form hx-post="/settings/folders/delete" hx-confirm="{{tf "folders.deleteconfirm" .Name}}" class="inline">
         <input type="hidden" name="source" value="{{.Source}}">
@@ -28,9 +28,9 @@
   <p class="muted">{{t "folders.sharelead"}}</p>
   {{if .Data.Machines}}
   <label class="field"><span>{{t "folders.machine"}}</span>
-    <select name="node" hx-get="/settings/folders/browse" hx-target="#explorer" hx-swap="innerHTML">
+    <select name="node" hx-get="/settings/folders/browse" hx-target="#explorer" hx-swap="innerHTML"{{if .Data.Pick}} hx-trigger="load, change"{{end}}>
       <option value="">{{t "folders.pickmachine"}}</option>
-      {{range .Data.Machines}}<option value="{{.Name}}" {{if not .Online}}disabled{{end}}>{{.Name}}{{if not .Online}} · {{t "machines.offline"}}{{end}}</option>{{end}}
+      {{range .Data.Machines}}<option value="{{.Name}}" {{if not .Online}}disabled{{end}}{{if eq .Name $.Data.Pick}} selected{{end}}>{{.Name}}{{if not .Online}} · {{t "machines.offline"}}{{end}}</option>{{end}}
     </select></label>
   <div id="explorer" class="explorer" aria-live="polite"></div>
   {{else}}

@@ -47,13 +47,13 @@ func TestWebWelcomeFlow(t *testing.T) {
 
 	// No machine yet, then one, then the brain at work.
 	_, body, _ = tw.do("GET", "/welcome", nil, nil)
-	if !strings.Contains(body, "Eriphe réfléchit avec Claude Sonnet") || !strings.Contains(body, "attend une machine") ||
+	if !strings.Contains(body, "Eriphe réfléchit avec Claude Sonnet") || !strings.Contains(body, "attend un appareil") ||
 		!strings.Contains(body, `hx-get="/welcome/status"`) || strings.Contains(body, `name="key"`) {
 		t.Fatalf("waiting for a machine: %s", body)
 	}
 	c.store.registerNode("pc", hashSecret("s"))
 	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
-	if _, body, _ = tw.do("GET", "/welcome/status", nil, nil); !strings.Contains(body, "Eriphe démarre sur ta machine") {
+	if _, body, _ = tw.do("GET", "/welcome/status", nil, nil); !strings.Contains(body, "Eriphe démarre sur ton appareil") {
 		t.Fatalf("starting: %s", body)
 	}
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "pc", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})

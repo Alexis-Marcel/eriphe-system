@@ -46,7 +46,7 @@
   <a class="btn btn-primary wide" href="/">{{t "welcome.open"}}</a>
   {{else if eq .Machines 0}}
   <p class="notice">{{t "welcome.nomachine"}}</p>
-  <a class="btn btn-soft" href="/settings/machines">{{t "machines.add"}}</a>
+  <a class="btn btn-soft" href="/settings/devices#add-title">{{t "machines.add"}}</a>
   {{else}}
   <p class="notice"><span class="pulse-dot" aria-hidden="true"></span>{{t "welcome.starting"}}</p>
   {{end}}

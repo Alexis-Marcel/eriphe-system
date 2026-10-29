@@ -166,6 +166,9 @@ type nodeShare struct {
 // browse asks a machine, through its tunnel, for the directories of a
 // folder; with check, whether it can be shared.
 func (c *core) browse(ctx context.Context, node, share, path string, check bool) (*dirListing, error) {
+	if c.store.nodeSuspended(node) {
+		return nil, &folderError{Code: "suspended", Msg: suspendedError(node).Error()} // node_access.go
+	}
 	n := c.node(node)
 	if !n.connected() {
 		return nil, &folderError{Code: "offline", Msg: "machine " + node + " is offline"}
@@ -194,6 +197,9 @@ func (c *core) browse(ctx context.Context, node, share, path string, check bool)
 	}
 	if out.Dirs == nil {
 		out.Dirs = []string{}
+	}
+	if !check { // a check is part of opening a folder, logged as that
+		c.logNode(node, NodeLogEntry{Kind: logList, Detail: share + ":/" + out.Path})
 	}
 	return &out, nil
 }
@@ -243,7 +249,21 @@ func (c *core) addFolder(ctx context.Context, f Folder) (*Folder, error) {
 	if err := c.store.addFolder(&f); err != nil {
 		return nil, err
 	}
+	c.logNode(f.Node, NodeLogEntry{Kind: logShare, Folder: f.Name, Access: f.Access, Detail: f.Share + ":/" + f.Path})
 	return &f, nil
+}
+
+// removeFolder closes a folder of a machine to Eriphe again.
+func (c *core) removeFolder(name string) error {
+	f, err := c.store.folder(name)
+	if err != nil {
+		return err
+	}
+	if err := c.store.deleteFolder(f.Name); err != nil {
+		return err
+	}
+	c.logNode(f.Node, NodeLogEntry{Kind: logUnshare, Folder: f.Name, Access: f.Access, Detail: f.Share + ":/" + f.Path})
+	return nil
 }
 
 func orStr(s, def string) string {
@@ -268,6 +288,9 @@ func (c *core) folderGrant(names []string) ([]*Folder, string, error) {
 		}
 		if slices.ContainsFunc(out, func(g *Folder) bool { return strings.EqualFold(g.Name, f.Name) }) {
 			continue
+		}
+		if c.store.nodeSuspended(f.Node) {
+			return nil, "", fmt.Errorf("folder %q is not lent: %w", f.Name, suspendedError(f.Node)) // node_access.go
 		}
 		if node != "" && f.Node != node {
 			return nil, "", fmt.Errorf("folders %s and %s are on different machines (%s, %s): one task gets the folders of one machine",
@@ -477,7 +500,7 @@ func (c *core) folderRoutes(mux *http.ServeMux, token string) {
 		writeJSON(w, http.StatusCreated, f)
 	})))
 	mux.Handle("DELETE /v1/folders/{name}", bearer(token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := c.store.deleteFolder(r.PathValue("name")); err != nil {
+		if err := c.removeFolder(r.PathValue("name")); err != nil {
 			folderHTTPError(w, err)
 			return
 		}
@@ -513,7 +536,7 @@ func folderHTTPError(w http.ResponseWriter, err error) {
 	case errors.As(err, &fe):
 		status := http.StatusBadRequest
 		switch fe.Code {
-		case "offline", "unavailable", "old_node":
+		case "offline", "unavailable", "old_node", "suspended":
 			status = http.StatusServiceUnavailable
 		case "exists":
 			status = http.StatusConflict

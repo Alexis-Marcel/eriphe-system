@@ -373,10 +373,14 @@ func (c *core) updating(name string) bool {
 }
 
 // schedulable marks the nodes being updated as offline for the scheduler:
-// a task then waits for them rather than starting there.
+// a task then waits for them rather than starting there. A node whose
+// access is cut is left out.
 func (c *core) schedulable(nodes []NodeRow) []NodeRow {
 	var out []NodeRow
 	for _, n := range nodes {
+		if n.Suspended {
+			continue // its access is cut: no work goes there (node_access.go)
+		}
 		if n.Online && c.updating(n.Name) {
 			n.Online = false
 		}

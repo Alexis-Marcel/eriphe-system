@@ -31,6 +31,7 @@ type foldersData struct {
 	Folders  []folderView
 	Machines []folderMachine // those that share a root
 	Others   []string        // online machines that share none
+	Pick     string          // the machine to open the explorer on (?node=, from its card)
 }
 
 func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -45,8 +46,15 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 		return
 	}
 	d := foldersData{Folders: fs}
+	pick := r.URL.Query().Get("node")
 	for _, n := range nodes {
+		if n.Suspended {
+			continue // its access is cut (node_access.go)
+		}
 		if shares := parseInfo(n).Shares; len(shares) > 0 {
+			if n.Name == pick && n.Online {
+				d.Pick = pick
+			}
 			d.Machines = append(d.Machines, folderMachine{Name: n.Name, Online: n.Online, Shares: shares})
 		} else if n.Online {
 			d.Others = append(d.Others, n.Name)
@@ -119,7 +127,7 @@ func folderErrorKey(err error) string {
 	if errors.As(err, &fe) {
 		switch fe.Code {
 		case "offline", "unknown_share", "invalid_path", "not_found", "outside", "sensitive", "eriphe_data",
-			"unavailable", "unreadable", "holds_sensitive", "old_node", "bad_name", "bad_access", "exists", "read_only_share":
+			"unavailable", "unreadable", "holds_sensitive", "old_node", "suspended", "bad_name", "bad_access", "exists", "read_only_share":
 			return "folders.err." + fe.Code
 		}
 	}
@@ -150,7 +158,7 @@ func (w *web) handleDeleteFolder(rw http.ResponseWriter, r *http.Request, s *ses
 			err = errNoFolder
 		}
 	} else {
-		err = w.c.store.deleteFolder(name)
+		err = w.c.removeFolder(name)
 	}
 	if err != nil {
 		w.toast(rw, tr(w.lang(r), "folders.err.gone"), false)

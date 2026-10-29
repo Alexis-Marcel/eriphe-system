@@ -93,7 +93,7 @@ Usage: curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest
 
 Run again (with or without the options) to update: new images, same data and
 same node identity. Afterwards the machine updates itself when eriphe-core
-asks (Settings, Machines, Updates). "Add a machine" in the workspace gives the whole command.
+asks (Settings, Devices, Updates). "Connect a device" in the workspace gives the whole command.
 Guide: https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md
 EOF
 }
@@ -1871,7 +1871,7 @@ main() {
 		else
 			host_uninstall
 		fi
-		say "Eriphe is removed from this machine. Delete its node in eriphe-core's workspace (Machines) if it had one."
+		say "Eriphe is removed from this machine. Forget it in eriphe-core's workspace (Settings, Devices) if it had one."
 		return
 	fi
 
@@ -1946,7 +1946,7 @@ main() {
 		else
 			say "  Already set up: sign in with your password."
 		fi
-		say "  Other machines join it at http://${addr:-<this machine>}:8800 (Add a machine, in the workspace)."
+		say "  Other devices join it at http://${addr:-<this machine>}:8800 (Connect a device, in the workspace)."
 	else
 		say "eriphe-node runs here as $NAME and is connected to eriphe-core."
 	fi
@@ -1955,7 +1955,7 @@ main() {
 	elif [ -n "$PIN" ]; then
 		say "Pinned to $PIN: it stays on that version (--version latest follows the releases again)."
 	elif printf '%s\n' "$out" | grep -qx 'updater=1'; then
-		say "It updates itself when eriphe-core asks (Settings, Machines, Updates)."
+		say "It updates itself when eriphe-core asks (Settings, Devices, Updates)."
 	else
 		warn "no systemd here: this machine does not update itself; run this command again to update it"
 	fi

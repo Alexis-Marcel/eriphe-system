@@ -355,6 +355,8 @@ func (c *core) placeServices() {
 				// A tool on a machine that sleeps, now that one that does not can take it.
 			case !known:
 				// The node was forgotten: its services, volumes or not, go elsewhere.
+			case n.Suspended && r.Spec.Node == "" && !r.Spec.Volume:
+				// Its access is cut (node_access.go): what can move goes now.
 			case r.Spec.Node != "" || r.Spec.Volume:
 				continue // it waits for its node
 			case time.Since(n.LastSeen) < serviceNodeGrace:

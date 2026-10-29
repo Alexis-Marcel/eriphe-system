@@ -12,7 +12,8 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	for _, tc := range []struct{ path, tab string }{
-		{"/settings/machines", "machines"},
+		{"/settings/devices", "devices"},
+		{"/settings/machines", "devices"},
 		{"/settings/agents", "agents"},
 		{"/settings/agents/new", "agents"},
 		{"/settings/providers/new", "agents"},

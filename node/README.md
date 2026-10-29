@@ -46,7 +46,7 @@ asks for its certificate with its secret and moves to TLS by itself (against an 
 which gives none, it stays on plain HTTP). Given `-ca-hash` then, it checks the CA it receives
 against it; given a `-ca-hash` that is not the CA it already pinned, it refuses to start.
 To join again under the same name (a reinstalled machine), delete `node.json` and use a rejoin token
-(`eriphe-core join-token -name pc -rejoin`, or "Réinscrire cette machine" in the workspace): a plain
+(`eriphe-core join-token -name pc -rejoin`, or "Réinscrire cet appareil" in the workspace): a plain
 join token never replaces a registered node. `DELETE /v1/nodes/{name}` on eriphe-core forgets a node.
 
 **Several addresses.** `-core` (or `ERIPHE_CORE`) takes several addresses separated by commas,
@@ -62,8 +62,8 @@ skipped), uses it for everything, and, when it is on a later one, checks every 2
 an earlier one answers again and moves back there: a laptop works at home and away. `node.json`
 keeps them in `cores` (`core` stays the first one, so an older node.json still works and an older
 version still reads the new one). Given again on a later run, `-core` replaces the saved
-addresses, e.g. to add the remote one to a machine that already joined. The workspace's "Add a
-machine" offers both addresses once remote access is ready.
+addresses, e.g. to add the remote one to a machine that already joined. The workspace's "Connect a
+device" offers both addresses once remote access is ready.
 
 ## Install
 

@@ -228,7 +228,7 @@ func TestWebFolders(t *testing.T) {
 		t.Fatalf("page: %d %s", code, body)
 	}
 	code, body, _ = tw.do("GET", "/settings/folders/browse?node=nas", nil, nil)
-	if code != 200 || !strings.Contains(body, `hx-get="/settings/folders/browse?node=nas&amp;share=data"`) || !strings.Contains(body, "En lecture seule sur cette machine") {
+	if code != 200 || !strings.Contains(body, `hx-get="/settings/folders/browse?node=nas&amp;share=data"`) || !strings.Contains(body, "En lecture seule sur cet appareil") {
 		t.Fatalf("roots: %d %s", code, body)
 	}
 	code, body, _ = tw.do("GET", "/settings/folders/browse?node=nas&share=data&path=Clients", nil, nil)
