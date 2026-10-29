@@ -1005,6 +1005,15 @@ func (m *memStore) profile() ([]*Memory, error) {
 		`CASE kind WHEN 'profile' THEN 0 WHEN 'preference' THEN 1 WHEN 'lesson' THEN 2 ELSE 3 END, id`, 200)
 }
 
+// aboutOwner is what the assistant knows about the user: the profile (its
+// pinned memories) and the other current memories about them (subject
+// owner), the pinned ones first. Episodes and commitments are not.
+func (m *memStore) aboutOwner() ([]*Memory, error) {
+	return m.list(`status = 'active' AND (valid_to IS NULL OR valid_to > ?) AND kind NOT IN ('episode', 'commitment')
+		AND (pinned = 1 OR subject = 'owner')`, []any{m.now().Unix()},
+		`pinned DESC, CASE kind WHEN 'profile' THEN 0 WHEN 'preference' THEN 1 WHEN 'lesson' THEN 2 ELSE 3 END, id`, 100)
+}
+
 // logEntry is one change of a memory.
 type logEntry struct {
 	Seq    int64

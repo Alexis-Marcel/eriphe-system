@@ -495,6 +495,13 @@ func (s *Store) messagesAfter(after, limit int) ([]Message, error) {
 	return s.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE seq > ? ORDER BY seq LIMIT ?`, after, limit)
 }
 
+// hasBrainMessage tells whether the brain has ever written in the conversation.
+func (s *Store) hasBrainMessage() bool {
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE role = ? LIMIT 1`, roleBrain).Scan(&n)
+	return n > 0
+}
+
 func (s *Store) lastMessageSeq() int {
 	var n int
 	s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages`).Scan(&n)
@@ -528,6 +535,16 @@ func (s *Store) get(key string) string {
 	var v string
 	s.db.QueryRow(`SELECT value FROM kv WHERE key = ?`, key).Scan(&v)
 	return v
+}
+
+// swap sets key to value only while it holds old, and tells whether it did.
+func (s *Store) swap(key, old, value string) bool {
+	res, err := s.db.Exec(`UPDATE kv SET value = ? WHERE key = ? AND value = ?`, value, key, old)
+	if err != nil {
+		return false
+	}
+	n, _ := res.RowsAffected()
+	return n == 1
 }
 
 func (s *Store) set(key, value string) error {

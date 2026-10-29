@@ -8,6 +8,7 @@
     {{if not .Off}}<a class="btn btn-ghost sm" href="/memory/export.jsonl" download aria-label="{{t "mem.export"}}">{{template "i-download"}}{{t "mem.export"}}</a>{{end}}
   </header>
   {{if .Off}}<p class="alert">{{t "mem.off"}}</p>{{else}}
+  {{if eq .View "all"}}{{template "mem-about" .}}{{end}}
   {{template "mem-stats" .}}
   <nav class="mem-tabs" aria-label="{{t "nav.memory"}}">
     <a href="/memory" {{if eq .View "all"}}aria-current="page"{{end}}>{{t "mem.view.all"}}</a>
@@ -79,7 +80,22 @@
 <div class="mem-list" id="mem-list">
 {{range .Items}}{{template "mem-card" .}}{{end}}
 </div>
-{{if not .Items}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-memory"}}</span><p>{{if or .Q .Kind .Subject}}{{t "mem.nomatch"}}{{else}}{{t "mem.none"}}{{end}}</p></div>{{end}}
+{{if not .Items}}{{if or .Q .Kind .Subject .Past (not .About)}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-memory"}}</span><p>{{if or .Q .Kind .Subject}}{{t "mem.nomatch"}}{{else}}{{t "mem.none"}}{{end}}</p></div>{{end}}{{end}}
+{{end}}
+
+{{/* What the assistant knows about me: the profile and what is about me
+(subject owner), the pinned first, with the cards' usual actions. */}}
+{{define "mem-about"}}
+<section class="panel mem-about" id="mem-about" aria-labelledby="mem-about-t">
+  <header class="mem-about-head">
+    <div><h2 id="mem-about-t">{{t "mem.about"}}</h2><p class="muted small">{{t "mem.aboutlead"}}</p></div>
+    {{if .Interview}}<form hx-post="/memory/interview" hx-disabled-elt="find button" class="inline">
+      <button class="btn btn-soft sm" type="submit">{{template "i-chat"}}{{t "mem.interview"}}</button>
+    </form>{{end}}
+  </header>
+  {{if .About}}<div class="mem-list">{{range .About}}{{template "mem-card" .}}{{end}}</div>
+  {{else}}<p class="muted">{{if .Interview}}{{t "mem.aboutnone"}}{{else}}{{t "mem.aboutnobrain"}}{{end}}</p>{{end}}
+</section>
 {{end}}
 
 {{define "mem-inbox"}}
