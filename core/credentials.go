@@ -23,16 +23,22 @@ import (
 //
 //	POST /v1/node/tasks/{id}/credential   {protocol, host, path, access, tool}   (node secret)
 //
-// eriphe-core decides, deny by default (decideCredential): the service must
-// be lent to the task, the repository allowed (by default, the one the task
-// was asked to work on; policy.credentials adds or removes some), and a
-// write needs the user's approval the first time (a permission only the
-// user answers, shown in the workspace like any other) or whenever the
-// task read external content. Then it mints a short-lived credential for
-// that one repository and those rights only: a GitHub App installation
-// token, one hour (github_app.go); without the app, the GitHub tool's own
-// token, with a warning. Every request is logged (credential_log) and shown
-// in the task's details. No long-lived secret is ever lent to a task.
+// eriphe-core decides, deny by default (decideCredential): the repository
+// must be lent to the task, as a repo resource (resources.go;
+// policy.credentials adds or removes some), with enough access. A write
+// needs the user's approval the first time (a permission only the user
+// answers, shown in the workspace like any other), unless the user's own
+// turn lent the repository for write on a declared branch, and whenever
+// the task read external content. Then it mints a short-lived credential
+// for that one repository and those rights only: a GitHub App installation
+// token, one hour (github_app.go). Without the app, the GitHub tool's own
+// token, long-lived and not limited to the repository: the user approves
+// it first. Every request is logged (credential_log) and shown in the
+// task's details.
+//
+// A task from before resources has none kept: its repository is the one it
+// was asked to work on (spec.Repo), lent for read, and the service is lent
+// when its grant names the GitHub tool (githubLent), as it was then.
 
 // credentialTool is the permission a credential asks for; only the user
 // may answer it.
@@ -157,11 +163,30 @@ func githubRepo(raw string) string {
 
 // credFacts is what the decision needs to know of the task.
 type credFacts struct {
-	Kind    string   // worker or brain
-	Repo    string   // the repository it was asked to work on, owner/name, or ""
-	Lent    bool     // the service is lent to it
-	Tainted []string // why it may have been talked into something, if it may
-	Granted func(repo, access string) bool
+	Kind    string      // worker or brain
+	Repos   []repoGrant // the GitHub repositories lent to it
+	Lent    bool        // the service is lent to it
+	Tainted []string    // why it may have been talked into something, if it may
+	// Fallback: there is no GitHub App, so what would be lent is the
+	// GitHub tool's own token, long-lived and good for every repository.
+	Fallback bool
+	Granted  func(repo, access string) bool
+}
+
+// repoGrant is a GitHub repository lent to a task: owner/name, its access
+// (read or write) and its declared work branch.
+type repoGrant struct {
+	Repo, Access, Branch string
+}
+
+// covering is the repository grant for repo, if any.
+func covering(repos []repoGrant, repo string) *repoGrant {
+	for i := range repos {
+		if strings.EqualFold(repos[i].Repo, repo) {
+			return &repos[i]
+		}
+	}
+	return nil
 }
 
 // credDecision is the policy's answer: allow, deny, ask, or none.
@@ -188,7 +213,7 @@ func decideCredential(p *Policy, req credRequest, f credFacts) credDecision {
 	case f.Kind == "brain":
 		return deny("the brain works through its tools, not with git")
 	case !f.Lent:
-		return deny("the GitHub service is not lent to this task: lend it the github tool (run_task's tools)")
+		return deny("no GitHub repository is lent to this task: lend it one (run_task's resources, {kind: repo})")
 	}
 	ask := false
 	d.Reason = "the task's own repository"
@@ -210,15 +235,31 @@ func decideCredential(p *Policy, req credRequest, f credFacts) credDecision {
 			d.Reason = orStr(r.Reason, "allowed by the policy")
 		}
 	} else {
-		if f.Repo == "" || !strings.EqualFold(f.Repo, d.Repo) {
+		g := covering(f.Repos, d.Repo)
+		switch {
+		case g == nil:
 			return deny(d.Repo + " is not the repository this task was asked to work on")
-		}
-		if req.Access == accessWrite {
+		case req.Access != accessWrite:
+		case g.Access == accessWrite && g.Branch != "" && orStr(req.Tool, "git") == "git":
+			// Lent for write on a branch by my own (untainted) turn: that was
+			// my approval of the first push. A push elsewhere asks (policy.go).
+			d.Reason = "lent for write to " + d.Repo + " on " + g.Branch
+		case g.Access == accessWrite:
 			ask, d.Reason = true, "first push to "+d.Repo+" in this task"
+		default:
+			ask, d.Reason = true, "first push to "+d.Repo+" in this task (lent for read)"
 		}
 	}
 	if req.Access == accessWrite && !ask && len(f.Tainted) > 0 {
 		ask, d.Reason = true, "the task read external content ("+strings.Join(f.Tainted, ", ")+")"
+	}
+	if f.Fallback {
+		why := "no GitHub App: the GitHub tool's own long-lived token, not limited to " + d.Repo
+		if ask {
+			d.Reason += "; " + why
+		} else {
+			ask, d.Reason = true, why
+		}
 	}
 	if ask {
 		if f.Granted == nil || !f.Granted(d.Repo, req.Access) {
@@ -253,10 +294,17 @@ func (c *core) handleTaskCredential(w http.ResponseWriter, r *http.Request) {
 // credential decides a request, mints the credential if allowed, and logs it.
 func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) credAnswer {
 	tool := orStr(req.Tool, "git")
-	spec, _ := c.store.taskSpec(t.ID)
-	facts := credFacts{Kind: t.Kind, Repo: githubRepo(spec.Repo), Lent: c.githubLent(t), Tainted: c.taskTaint(t),
+	facts := credFacts{Kind: t.Kind, Tainted: c.taskTaint(t),
 		Granted: func(repo, access string) bool { return c.store.credentialGranted(t.ID, "github", repo, access) }}
+	facts.Repos, facts.Lent = c.taskRepos(t)
+	_, appErr := loadGitHubApp()
+	facts.Fallback = appErr == errNoGitHubApp
 	d := decideCredential(c.conf().Policy, req, facts)
+	if d.Decision == decideAsk && facts.Fallback {
+		if _, err := c.githubToolToken(); err != nil {
+			d.Decision, d.Reason = decideDeny, "GitHub is not connected for git: create Eriphe's GitHub App in Settings → Tools → GitHub"
+		}
+	}
 	a := credAnswer{Decision: d.Decision, Reason: d.Reason}
 	source := ""
 	switch d.Decision {
@@ -278,6 +326,26 @@ func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) cred
 	log.Printf("credential: task %s %s %s %s/%s: %s (%s)%s", t.ID, tool, req.Access, d.Host, d.Repo, a.Decision, a.Reason,
 		map[bool]string{true: " WARNING: long-lived token lent", false: ""}[source == sourceToolToken])
 	return a
+}
+
+// taskRepos are the GitHub repositories lent to a task, and whether the
+// service is: its repo resources; for a task from before resources, the
+// repository it was asked to work on, for read, lent with the GitHub tool.
+func (c *core) taskRepos(t *TaskRow) ([]repoGrant, bool) {
+	var out []repoGrant
+	if t.Resources != nil {
+		for _, e := range t.Resources {
+			if r := githubRepo(e.Ref); e.Kind == resRepo && r != "" {
+				out = append(out, repoGrant{Repo: r, Access: e.Access, Branch: e.Branch})
+			}
+		}
+		return out, len(out) > 0
+	}
+	spec, _ := c.store.taskSpec(t.ID)
+	if r := githubRepo(spec.Repo); r != "" {
+		out = append(out, repoGrant{Repo: r, Access: accessRead, Branch: spec.Branch})
+	}
+	return out, c.githubLent(t)
 }
 
 // githubLent tells whether the GitHub service is lent to a task: its grant

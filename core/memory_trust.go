@@ -22,7 +22,7 @@ import (
 //   - a brain turn that called an external catalog tool is tainted: what it
 //     remembers is only proposed, unless my own message of that turn asked
 //     for it; nor may it allow a permission or lend a task tools that act
-//     (taintedAllow, taintedRun);
+//     (taintedAllow, taintedResources);
 //   - only my own words create or change lessons, preferences and the
 //     profile (source_ref names my message, checked against its role);
 //   - every write goes through the scanner: instructions to the model,
@@ -333,20 +333,6 @@ func (c *core) taintedAllow(taskID, pid string) error {
 	c.store.markUserOnly(taskID, pid, why)
 	return fmt.Errorf("not allowed: this turn read external content (%s), so allowing is %s's decision now: "+
 		"the request is forwarded to %s, relay it in one line and do not retry", strings.Join(tainted, ", "), c.conf().User, c.conf().User)
-}
-
-// taintedRun refuses, during a tainted turn, a task lent catalog tools
-// that may act; a task with believed reads only, or none, still starts.
-func (c *core) taintedRun(grant []string) error {
-	tainted := c.turnTaint()
-	if len(tainted) == 0 {
-		return nil
-	}
-	if acting := c.actingGrant(grant); len(acting) > 0 {
-		return fmt.Errorf("refused: this turn read external content (%s), and the task would be lent tools that act (%s): "+
-			"ask %s first, and launch it in the turn of their answer", strings.Join(tainted, ", "), strings.Join(acting, ", "), c.conf().User)
-	}
-	return nil
 }
 
 // ownerMessage reads a message I wrote, from a source_ref "msg:N" (or "#N").

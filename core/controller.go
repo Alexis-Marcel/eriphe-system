@@ -209,16 +209,19 @@ func newTaskID() string {
 }
 
 type runRequest struct {
-	Prompt     string   `json:"prompt" jsonschema:"what the agent must do, self-contained: it does not see this conversation"`
-	Repo       string   `json:"repo,omitempty" jsonschema:"repository to clone into the task's container: owner/name on GitHub or a git URL"`
-	Ref        string   `json:"ref,omitempty" jsonschema:"branch or tag to start from; default branch if empty"`
-	Branch     string   `json:"branch,omitempty" jsonschema:"work branch to create for this task"`
-	Dir        string   `json:"dir,omitempty" jsonschema:"working directory inside the container, if not the repository root"`
-	Agent      string   `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
-	Node       string   `json:"node,omitempty" jsonschema:"node name; empty lets the scheduler choose"`
-	Identities []string `json:"identities,omitempty" jsonschema:"legacy: long-lived credentials from the configuration file lent as is; to push or open a PR, lend the github tool instead (the task then asks for short-lived access to repo)"`
-	Tools      []string `json:"tools,omitempty" jsonschema:"catalog tools lent to the agent (see list_tools): a server name for all its tools, or server.tool with * globs, e.g. github.get_*"`
-	Folders    []string `json:"folders,omitempty" jsonschema:"the user's folders lent to the agent, by name (see list_folders), mounted at /work/folders/<name>; the task runs on their machine, so all must be on the same one"`
+	Prompt    string        `json:"prompt" jsonschema:"what the agent must do, self-contained: it does not see this conversation"`
+	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository cloned into /work/repo (repo, with branch, base, dir), the user's folders (folder, drive-folder; see list_folders), catalog tools (tool; see list_tools); only what it needs, with the least access"`
+	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
+	Node      string        `json:"node,omitempty" jsonschema:"node name; empty lets the scheduler choose"`
+
+	// The old fields, read into resources (normalizeResources).
+	Repo       string   `json:"repo,omitempty" jsonschema:"legacy: use resources {kind: repo}"`
+	Ref        string   `json:"ref,omitempty" jsonschema:"legacy: use resources {kind: repo, base}"`
+	Branch     string   `json:"branch,omitempty" jsonschema:"legacy: use resources {kind: repo, branch}"`
+	Dir        string   `json:"dir,omitempty" jsonschema:"legacy: use resources {kind: repo, dir}"`
+	Tools      []string `json:"tools,omitempty" jsonschema:"legacy: use resources {kind: tool}"`
+	Folders    []string `json:"folders,omitempty" jsonschema:"legacy: use resources {kind: folder}"`
+	Identities []string `json:"identities,omitempty" jsonschema:"legacy, do not use: long-lived credentials from the configuration file; a repo resource gets short-lived access instead"`
 }
 
 // workerVoice is a worker's standing instruction: its last message reaches
@@ -245,10 +248,11 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if err != nil {
 		return nil, err
 	}
-	folders, machine, err := c.folderGrant(r.Folders)
+	lent, err := c.resolveRequest(r) // resources.go
 	if err != nil {
 		return nil, err
 	}
+	folders, machine := lent.Folders, lent.Machine
 	if r.Node != "" && c.store.nodeSuspended(r.Node) {
 		return nil, suspendedError(r.Node) // node_access.go
 	}
@@ -265,10 +269,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if err != nil {
 		return nil, err
 	}
-	grant, err := c.conf().checkGrant(r.Tools)
-	if err != nil {
-		return nil, err
-	}
+	grant := lent.Grant
 	if len(grant) > 0 && !harnessOf(agent.Runtime).MCP {
 		return nil, fmt.Errorf("agent %s runs %s: catalog tools need a runtime that takes MCP servers", agentName, agent.Runtime)
 	}
@@ -276,16 +277,21 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if _, err := c.lend(kind, agentName, strings.Join(r.Identities, ",")); err != nil {
 		return nil, err
 	}
-	where := r.Dir
-	if r.Repo != "" {
-		where = r.Repo
-		if r.Branch != "" {
-			where += "@" + r.Branch
+	// The node still gets the spec fields of before, derived from the resources.
+	dir, repo, base, branch := r.Dir, "", "", ""
+	if lent.Repo != nil {
+		dir, repo, base, branch = orStr(lent.Repo.Dir, r.Dir), lent.Repo.Ref, lent.Repo.Base, lent.Repo.Branch
+	}
+	where := dir
+	if repo != "" {
+		where = repo
+		if branch != "" {
+			where += "@" + branch
 		}
 	}
 	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model,
 		Identity: strings.Join(r.Identities, ","), Dir: where, Prompt: r.Prompt, State: statePending,
-		Kind: kind, Tools: strings.Join(grant, ","), Folders: strings.Join(folderNames(folders), ",")}
+		Kind: kind, Tools: strings.Join(grant, ","), Folders: lent.folderNames(), Resources: lent.List}
 	if waiting != nil {
 		t.PendingReason = waiting.reason
 	}
@@ -296,8 +302,8 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		c.logPlaced(t, name) // its access log (node_access.go)
 	}
 	spec := extra
-	spec.Runtime, spec.Prompt, spec.Dir, spec.Model = agent.Runtime, r.Prompt, r.Dir, agent.Model
-	spec.Repo, spec.Ref, spec.Branch, spec.Image = r.Repo, r.Ref, r.Branch, agent.Image
+	spec.Runtime, spec.Prompt, spec.Dir, spec.Model = agent.Runtime, r.Prompt, dir, agent.Model
+	spec.Repo, spec.Ref, spec.Branch, spec.Image = repo, base, branch, agent.Image
 	spec.Command = agent.Command
 	spec.Identity, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the node fetches the task
 	spec.Folders = nil                                                                 // the same
