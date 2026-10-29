@@ -23,7 +23,7 @@
 {{end}}
 
 {{define "machines"}}
-<header class="page-head page-head-action"><div><h2>{{t "settings.machines"}}</h2><p>{{t "machines.lead"}}</p></div><a class="btn" href="#add-title" data-focus="join-name">{{template "i-plus"}}{{t "machines.add"}}</a></header>
+<header class="page-head"><h2>{{t "settings.machines"}}</h2><p>{{t "machines.lead"}}</p></header>
 <ul class="grid devices">
 {{range .Data.Nodes}}
   <li class="tile device{{if .Suspended}} is-cut{{end}}">
@@ -42,13 +42,13 @@
     </div>
   </li>
 {{end}}
-  <li class="tile tile-add"><a href="#add-title" data-focus="join-name"><span class="tile-add-icon" aria-hidden="true">{{template "i-plus"}}</span><b>{{t "machines.add"}}</b><span class="muted small">{{if .Data.Nodes}}{{t "devices.addhint"}}{{else}}{{t "machines.none"}}{{end}}</span></a></li>
+  <li class="tile tile-add"><button type="button" data-dialog="connect-dlg"><span class="tile-add-icon" aria-hidden="true">{{template "i-plus"}}</span><b>{{t "machines.add"}}</b><span class="muted small">{{if .Data.Nodes}}{{t "devices.addhint"}}{{else}}{{t "machines.none"}}{{end}}</span></button></li>
 </ul>
 
 {{template "updates" .Data.Updates}}
 
-<section class="panel" aria-labelledby="add-title">
-  <h3 id="add-title">{{template "i-plus"}}{{t "machines.add"}}</h3>
+<dialog class="modal modal-wide" id="connect-dlg" aria-labelledby="add-title" data-focus-on-open="join-name">
+  <h3 id="add-title">{{t "machines.add"}}</h3>
   <p class="muted">{{t "machines.addlead"}}</p>
   <form class="row-form" hx-post="/settings/devices/join" hx-target="#join-result" hx-swap="innerHTML">
     <label class="field"><span>{{t "machines.name"}}</span>
@@ -59,7 +59,8 @@
     <button class="btn btn-primary" type="submit">{{t "machines.generate"}}</button>
   </form>
   <div id="join-result"></div>
-</section>
+  <form method="dialog" class="modal-actions"><button class="btn" type="submit">{{t "updates.close"}}</button></form>
+</dialog>
 
 {{if .Data.CAHash}}
 <details class="panel advanced" id="machines-advanced">
@@ -95,7 +96,7 @@
       <button type="submit" class="danger">{{t "devices.cutaction"}}</button>
     </form>
     {{end}}
-    <form hx-post="/settings/devices/{{.Name}}/rejoin" hx-confirm="{{t "machines.rejoinconfirm"}}" hx-target="#join-result" hx-swap="innerHTML show:#add-title:top">
+    <form hx-post="/settings/devices/{{.Name}}/rejoin" hx-confirm="{{t "machines.rejoinconfirm"}}" hx-target="#join-result" hx-swap="innerHTML">
       <button type="submit">{{t "machines.rejoin"}}</button>
     </form>
     <form hx-post="/settings/devices/{{.Name}}/forget" hx-confirm="{{t "machines.forgetconfirm"}}">
