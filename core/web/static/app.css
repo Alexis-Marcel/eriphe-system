@@ -746,9 +746,10 @@ a.update-available:hover { text-decoration: none; opacity: .85; }
 .device-foot .machine-update .inline-update { justify-self: end; }
 dialog.modal { width: min(560px, calc(100vw - 32px)); padding: 22px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--text); box-shadow: 0 24px 64px rgba(0,0,0,.35); }
 dialog.modal::backdrop { background: rgba(10, 12, 20, .55); }
-dialog.modal[open] { display: grid; gap: 14px; }
+dialog.modal[open] { display: grid; gap: 14px; align-content: start; height: fit-content; max-height: calc(100dvh - 32px); overflow: auto; }
 dialog.modal h3, dialog.modal p { margin: 0; }
-.modal-actions { display: flex; justify-content: flex-end; margin: 0; }
+.modal-actions { display: flex; justify-content: flex-end; align-items: center; margin: 0; }
+.modal-actions .btn { height: auto; }
 .code.one-line pre { white-space: pre; overflow-x: auto; word-break: normal; overflow-wrap: normal; }
 .machine-update p { margin: 0; }
 .machine-update .cmd, .machine-update .code { justify-self: stretch; }
