@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -463,6 +464,8 @@ func systemKey(install, goos string) string {
 		return "system.windows"
 	case install == "linux":
 		return "system.linux"
+	case install == "docker":
+		return "system.docker"
 	case goos == "linux":
 		return "system.compose"
 	case goos == "darwin":
@@ -507,12 +510,16 @@ func loopbackURL(s string) bool {
 }
 
 // coreURL is how a new machine reaches eriphe-core: public_url, or this
-// host on eriphe-core's port.
+// host on eriphe-core's port, or on the one its container is published on
+// (ERIPHE_API_PORT, which the Eriphe container's launcher sets).
 func (w *web) coreURL(r *http.Request) string {
 	if w.c.conf().PublicURL != "" {
 		return strings.TrimSuffix(w.c.conf().PublicURL, "/")
 	}
 	_, port, _ := net.SplitHostPort(w.c.conf().Listen)
+	if p := publishedAPIPort(); p != "" {
+		port = p
+	}
 	host := r.Host
 	if h, _, err := net.SplitHostPort(r.Host); err == nil {
 		host = h
@@ -521,6 +528,16 @@ func (w *web) coreURL(r *http.Request) string {
 		host = "[" + host + "]"
 	}
 	return "http://" + host + ":" + port
+}
+
+// publishedAPIPort is ERIPHE_API_PORT, when it is a port: the host's port
+// eriphe-core's container is published on, when it is not its own.
+func publishedAPIPort() string {
+	p := os.Getenv("ERIPHE_API_PORT")
+	if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 || strconv.Itoa(n) != p {
+		return ""
+	}
+	return p
 }
 
 var labelsRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*(,[a-z0-9][a-z0-9-]*)*$`)

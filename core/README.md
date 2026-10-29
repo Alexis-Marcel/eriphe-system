@@ -375,7 +375,8 @@ The workspace always says when a machine is behind (a dot, "Mise à jour disponi
 behind (eriphe-core first; the nodes follow once it runs the latest version), and one switch for
 all machines, "Mettre à jour automatiquement la nuit" (off by default; 3:00 to 5:00 in `timezone`,
 once a night). A machine without an updater shows the one command that updates it, for how it was
-installed. Going back to the previous version, or staying on one, is the install command's
+installed (`ERIPHE_INSTALL`: `linux`, `macos`, `windows`, or `docker` for the one-container
+install, whose launcher is the updater: `docker exec eriphe eriphe-launcher update`). Going back to the previous version, or staying on one, is the install command's
 (`--rollback`, `--version`). A request is "update" (to the latest version, or the one the machine
 is pinned to) or "rollback" (left for the API and the tests), never an image nor a command. The
 choices of before, for all machines and for each one, are dropped at start; "at night" for all

@@ -61,8 +61,9 @@ it to "Jamais" there so that it gives no notice either, and update it by hand:
 first, then the node). The images have no tag here, so they are `latest`, the latest release
 ([RELEASING.md](../RELEASING.md)); write `:edge` on the three of them to follow `main`, or
 `:0.2.0` to stay on a release (the node takes the base image and the agents of its own version). It gets an updater, and updates
-itself, once it is installed with `install.sh --core-mode` instead (Unraid has no systemd: not
-yet).
+itself, once it is installed with `install.sh --core-mode` instead, or, on Unraid or any NAS with
+Docker, with the one container `ghcr.io/alexis-marcel/eriphe` (install/README.md, One container),
+which makes this same stack and updates it.
 
 ### Setting it up
 

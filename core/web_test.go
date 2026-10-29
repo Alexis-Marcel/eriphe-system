@@ -7,6 +7,7 @@ import (
 	"errors"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -372,6 +373,23 @@ func TestWebPagesRender(t *testing.T) {
 	tw.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "lang", Value: "en", Path: "/"}})
 	if _, body, _ := tw.do("GET", "/", nil, nil); !strings.Contains(body, "This decision is yours") || !strings.Contains(body, `lang="en"`) {
 		t.Error("the English page is not in English")
+	}
+}
+
+// In the Eriphe container (install/eriphe-launcher), eriphe-core's API may be
+// published on another port of the host: the join command gives that one.
+func TestJoinCommandPublishedPort(t *testing.T) {
+	tw := newTestWeb(t)
+	csrf := tw.setup()
+	u, _ := url.Parse(tw.srv.URL)
+	host := u.Hostname()
+	_, own, _ := net.SplitHostPort(tw.c.conf().Listen)
+	for env, want := range map[string]string{"18800": ":18800 ", "": ":" + own + " ", "80a": ":" + own + " ", "70000": ":" + own + " "} {
+		t.Setenv("ERIPHE_API_PORT", env)
+		_, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"desk" + strings.ToLower(env)}}, csrf)
+		if !strings.Contains(body, "--core http://"+host+want) {
+			t.Errorf("ERIPHE_API_PORT=%q: no --core http://%s%s in the join command", env, host, want)
+		}
 	}
 }
 

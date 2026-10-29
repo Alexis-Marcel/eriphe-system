@@ -373,9 +373,12 @@ EOF
 }
 
 # compose_yaml: the compose project, as deploy/nas/compose.yaml with this
-# machine's paths and Docker group.
+# machine's paths and Docker group. HOST_DATA is the data folder as Docker
+# sees it when this runs in a container (eriphe-launcher, which sees it at
+# /data); API_PORT and WEB_PORT the ports eriphe-core is published on.
 compose_yaml() {
 	gid=$1 isolated=$2
+	data=${HOST_DATA:-$DATA}
 	cat <<EOF
 # Written by install.sh: run it again rather than editing this file.
 # The node reaches Docker only through the socket proxy, which allows the
@@ -396,12 +399,17 @@ EOF
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    ports: ["8800:8800", "8443:8443"]
+    ports: ["${API_PORT:-8800}:8800", "${WEB_PORT:-8443}:8443"]
     environment:
       # The workspace shows the command that updates it.
       ERIPHE_INSTALL: $INSTALL
+EOF
+		# The join commands give the port the API is published on.
+		[ -z "${API_PORT:-}" ] || [ "$API_PORT" = 8800 ] || printf '      ERIPHE_API_PORT: "%s"\n' "$API_PORT"
+		[ -z "${TZ:-}" ] || printf '      TZ: %s\n' "$(q "$TZ")"
+		cat <<EOF
     volumes:
-      - $DATA/core:/data
+      - $data/core:/data
     networks: [eriphe-system]
 
 EOF
@@ -424,7 +432,7 @@ EOF
       - -allowfrom=eriphe-node
       - -shutdowngracetime=5
       - -watchdoginterval=0
-      - -allowbindmountfrom=$DATA/node$(share_paths | sed 's/:ro$//' | tr '\n' ',' | sed 's/,$//; s/^./,&/')
+      - -allowbindmountfrom=$data/node$(share_paths | sed 's/:ro$//' | tr '\n' ',' | sed 's/,$//; s/^./,&/')
       - -allowHEAD=(/v1\.[0-9]+)?/_ping
       - -allowGET=(/v1\.[0-9]+)?/(_ping|version|networks/(bridge|eriphe-tasks)|containers/json|images/json|images/[a-zA-Z0-9][a-zA-Z0-9_./:@-]*/json)
       - -allowPOST=(/v1\.[0-9]+)?/(containers/create|containers/[a-zA-Z0-9][a-zA-Z0-9_.-]*/(attach|start|wait|stop)|images/create)
@@ -452,13 +460,13 @@ EOF
       ERIPHE_JOIN_TOKEN: \${ERIPHE_JOIN_TOKEN:-}
       ERIPHE_INSTALL: $INSTALL
       DOCKER_HOST: tcp://eriphe-docker-proxy:2375
-    command: ["-root", "$DATA/node",
+    command: ["-root", "$data/node",
               "-network", "eriphe-system", "-task-network", "eriphe-tasks",
               "-callback-url", "http://eriphe-node:8790",
               "-image", "$WORKER_IMAGE"$([ "$MODE" = core ] && printf ', "-always-on"')]
     volumes:
       # Same path inside and outside: the Docker daemon understands it as is.
-      - $DATA/node:$DATA/node
+      - $data/node:$data/node
 EOF
 	share_paths | while IFS= read -r p; do
 		case $p in
@@ -545,7 +553,7 @@ updater_sh() {
 # eriphe-node (install/README.md, Updates). Run by eriphe-update.service.
 set -u
 # shellcheck disable=SC1091
-. /opt/eriphe/update.conf
+. "$(dirname "$0")/update.conf"
 STATE=$DATA/update
 HEALTH=${ERIPHE_UPDATE_HEALTH:-180} # seconds a recreated eriphe-node has to connect again
 mkdir -p "$STATE"
@@ -847,13 +855,18 @@ host_up() {
 	{
 		prelude
 		printf 'JOIN_TOKEN=%s\n' "$(q "$JOIN_TOKEN")"
-		printf 'SHARE_PATHS=%s\n' "$(q "$(share_paths | sed 's/:ro$//' | tr '\n' ' ')")"
+		# In eriphe-launcher's container the shares are not here: it checks them itself.
+		printf 'SHARE_PATHS=%s\n' "$(q "$([ -n "${HOST_DATA:-}" ] || share_paths | sed 's/:ro$//' | tr '\n' ' ')")"
 		printf 'COMPOSE=%s\n' "$(compose_yaml "$1" "$2" | b64)"
 		printf 'ENVF=%s\n' "$(env_file | b64)"
 		printf 'INSTALL_CONF=%s\n' "$(install_conf | b64)"
 		printf 'UPDATE_CONF=%s\n' "$(updater_conf | b64)"
 		printf 'UPDATE_SH=%s\n' "$(updater_sh | b64)"
 		printf 'PIN=%s\n' "$(q "$PIN")"
+		# PULL=missing pulls only the images not here yet (eriphe-launcher's
+		# start: updates go through the updater); UPDATE_BY=loop: the updater is
+		# eriphe-launcher's loop, not systemd.
+		printf 'PULL=%s UPDATE_BY=%s\n' "$(q "${PULL:-always}")" "$(q "${UPDATE_BY:-systemd}")"
 		updater_units
 		cat <<'EOF'
 # Progress on stderr; stdout carries only key=value lines.
@@ -875,6 +888,7 @@ put "$CONF/.env" "$ENVF"
 put "$CONF/install.conf" "$INSTALL_CONF"
 
 for img in $IMAGES; do
+  if [ "$PULL" = missing ] && docker image inspect "$img" >/dev/null 2>&1; then continue; fi
   echo "Pulling $img..."
   if ! out=$(docker pull "$img" 2>&1); then
     out=$(printf '%s\n' "$out" | tail -n 1)
@@ -891,9 +905,11 @@ if [ ! -f "$DATA/node/node.json" ] && [ "$MODE" = core ]; then
   up core docker-proxy
   echo "Waiting for eriphe-core..."
   i=0
-  # -quiet prints the token alone; it fails until eriphe-core answers.
-  until JOIN_TOKEN=$(docker exec eriphe-core eriphe-core join-token -data /data -name "$NODE_NAME" -quiet 2>/dev/null |
-      tr -d '[:space:]') && [ -n "$JOIN_TOKEN" ]; do
+  # It prints the command that joins a node, with the token and eriphe-core's
+  # CA (-ca-hash); it fails until eriphe-core answers.
+  until joining=$(docker exec eriphe-core eriphe-core join-token -data /data -name "$NODE_NAME" 2>/dev/null) &&
+      JOIN_TOKEN=$(printf '%s\n' "$joining" | sed -n 's/.* -join-token \([^ ]*\).*/\1/p' | tail -n 1) &&
+      [ -n "$JOIN_TOKEN" ]; do
     i=$((i + 1))
     if [ $i -gt 60 ]; then
       docker logs --tail 20 eriphe-core >&2
@@ -901,6 +917,13 @@ if [ ! -f "$DATA/node/node.json" ] && [ "$MODE" = core ]; then
     fi
     sleep 2
   done
+  # A new eriphe-core accepts machines over TLS only, from the start: the
+  # node joins with its CA's hash, kept for the next runs.
+  ca=$(printf '%s\n' "$joining" | sed -n 's/.* -ca-hash \(sha256:[0-9a-f]*\).*/\1/p' | tail -n 1)
+  if [ -n "$ca" ]; then
+    sed "s/^ERIPHE_CA_HASH=.*/ERIPHE_CA_HASH='$ca'/" "$CONF/.env" >"$CONF/.env.new" && mv "$CONF/.env.new" "$CONF/.env"
+    sed "s/^ca_hash=.*/ca_hash=$ca/" "$CONF/install.conf" >"$CONF/install.conf.new" && mv "$CONF/install.conf.new" "$CONF/install.conf"
+  fi
 fi
 connected() {
   echo "Waiting for eriphe-node..."
@@ -940,25 +963,30 @@ put "$CONF/update.sh" "$UPDATE_SH"
 chmod 700 "$CONF/update.sh"
 marks="$DATA/node"
 [ "$MODE" = core ] && marks="$marks $DATA/core"
-if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+# pin: the release it stays on; channel: edge when it follows main.
+pin=$PIN channel=
+[ "$PIN" != edge ] || pin='' channel=edge
+updater=0
+if [ "$UPDATE_BY" = loop ]; then
+  updater=1
+elif command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+  updater=1
   put /etc/systemd/system/eriphe-update.service "$UNIT_SERVICE"
   put /etc/systemd/system/eriphe-update.path "$UNIT_PATH"
   put /etc/systemd/system/eriphe-update.timer "$UNIT_TIMER"
   chmod 644 /etc/systemd/system/eriphe-update.service /etc/systemd/system/eriphe-update.path /etc/systemd/system/eriphe-update.timer
   systemctl daemon-reload
   systemctl enable --now eriphe-update.path eriphe-update.timer >/dev/null 2>&1 || die "systemctl enable eriphe-update failed"
-  # pin: the release it stays on; channel: edge when it follows main.
-  pin=$PIN channel=
-  [ "$PIN" != edge ] || pin='' channel=edge
-  for d in $marks; do
-    printf 'version=1\npin=%s\nchannel=%s\n' "$pin" "$channel" > "$d/updater"
-  done
-  [ "$MODE" != core ] || chown "$CORE_UID:$CORE_UID" "$DATA/core/updater"
-  echo "updater=1" >&3
-else
-  for d in $marks; do rm -f "$d/updater"; done
-  echo "updater=0" >&3
 fi
+for d in $marks; do
+  if [ $updater = 1 ]; then
+    printf 'version=1\npin=%s\nchannel=%s\n' "$pin" "$channel" > "$d/updater"
+  else
+    rm -f "$d/updater"
+  fi
+done
+[ $updater = 0 ] || [ "$MODE" != core ] || chown "$CORE_UID:$CORE_UID" "$DATA/core/updater"
+echo "updater=$updater" >&3
 EOF
 	} | on_host
 }
@@ -2003,4 +2031,5 @@ main() {
 	fi
 }
 
-main "$@"
+# eriphe-launcher sources this file for its functions (install/eriphe-launcher).
+[ -n "${ERIPHE_INSTALL_LIB:-}" ] || main "$@"

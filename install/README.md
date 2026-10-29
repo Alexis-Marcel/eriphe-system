@@ -22,7 +22,9 @@ Eriphe is two programs:
 - **eriphe-node**, on every machine Eriphe's agents work on, eriphe-core's own included. A node
   dials eriphe-core and needs no open port.
 
-Contents: [First machine](#1-the-first-machine) · [Workspace](#2-open-the-workspace) ·
+Contents: [First machine](#1-the-first-machine) ·
+[One container (NAS, any Linux with Docker)](#one-container-nas-any-linux-with-docker) ·
+[Workspace](#2-open-the-workspace) ·
 [Brain](#3-connect-the-brain) · [Connect a device](#4-connect-a-device) ·
 [Google Drive](#5-connect-google-drive-optional) · [Update](#update) ·
 [Uninstall](#uninstall) · [Options](#options) · [What it installs](#what-it-installs) ·
@@ -74,6 +76,79 @@ eriphe-core runs here, with node laptop.
   Setup code: ABCD-EFGH (open https://192.0.2.10:8443/setup)
   Other devices join it at http://192.0.2.10:8800 (Connect a device, in the workspace).
 ```
+
+### One container (NAS, any Linux with Docker)
+
+On a NAS (Unraid, Synology, TrueNAS, a Raspberry Pi with Docker…) or any Linux where Docker
+already runs, Eriphe also installs by starting one container, `ghcr.io/alexis-marcel/eriphe`
+(amd64, arm64), with the Docker socket and one data folder:
+
+```sh
+docker run -d --name eriphe --restart unless-stopped \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /mnt/user/appdata/eriphe:/data \
+  -e ERIPHE_SHARES=shares=/mnt/user \
+  ghcr.io/alexis-marcel/eriphe
+docker logs -f eriphe
+```
+
+On Unraid, the template `unraid/eriphe.xml` does the same from the Docker page
+([unraid/README.md](../unraid/README.md)).
+
+This container is the **launcher** (`install/eriphe-launcher`). It makes and keeps running the same
+containers as `install.sh` on a Linux host, with `install.sh`'s own functions: `eriphe-core` (no
+Docker access), `eriphe-node` (Docker only through the socket proxy), `eriphe-docker-proxy`, and
+the networks `eriphe-system`, `eriphe-tasks`, `eriphe-docker` (see [What it
+installs](#what-it-installs)). Core and node stay separate containers. The launcher itself listens on
+no port, is on no network of Eriphe's (tasks cannot reach it), and runs nothing else: it starts
+them, then waits for update requests. It does not even need a network of its own (`--network
+none` works).
+
+- **Data.** Everything lives in the folder mounted at `/data`: `core/` (eriphe-core's data, owned
+  by UID 1993), `node/` (the node's root, `node.json` its identity), `launcher/` (the compose
+  project, `install.conf`, the updater), `update/` (the updater's log and the previous versions).
+  The other containers need the folder's path on the host for their bind mounts: the launcher reads
+  it from its own container, through the socket (`docker inspect`, the source of `/data`). A named
+  volume works too.
+- **First start.** It pulls the images, starts eriphe-core, joins its node to it (with the join
+  token and the CA's hash eriphe-core gives), and its log (`docker logs eriphe`) ends as
+  `install.sh`'s: the workspace's address and the setup code, then the `/welcome` wizard ([Open
+  the workspace](#2-open-the-workspace)). Later starts pull only what is missing: a restart
+  never updates anything.
+- **Updates.** The machine shows as self-updating in Settings → Devices ("Linux (Eriphe
+  container)"): its **Update** works as on Linux. eriphe-core and the node drop their request in
+  their data folders; the launcher's loop (every 5 s) runs `install.sh`'s updater on it (pull,
+  eriphe-core first and checked, then the node, the previous images back if a check fails, a node
+  never newer than eriphe-core), then updates **itself, last**: it pulls `eriphe` of the build the
+  machine now runs (`0.9.0`, or `sha-<commit>` on edge), tags it under its own reference, and a
+  short-lived container of the new image (`eriphe-launcher-swap`, no network) replaces the
+  launcher's container by one with the same settings (puts the old one back if the new one does not
+  stay up). By hand: `docker exec eriphe eriphe-launcher update`, or `rollback`.
+- **Uninstall.** `docker exec eriphe eriphe-launcher uninstall` removes the containers it made, the
+  task and service containers, the networks, the `eriphe-cache` volume and Eriphe's images; the
+  data folder stays (`uninstall --data` empties it too). It then stops the launcher and keeps it
+  from starting again (a mark, `launcher/uninstalled`): remove it with `docker rm -f eriphe` (on
+  Unraid, Docker → eriphe → Remove), and its image.
+
+Its settings are environment variables, read at each start (not kept from the start before, but
+for the node's name once joined):
+
+| Variable | Default | What |
+|---|---|---|
+| `ERIPHE_MODE` | `core` | `core`: eriphe-core here, with a node of its own; `node`: join another eriphe-core |
+| `ERIPHE_SHARES` | none | places whose folders may be given to Eriphe, `NAME=/PATH[:ro]` comma-separated, host paths (`shares=/mnt/user`), as `--share` ([Folders](#folders)); each is checked on the host by a short-lived container |
+| `ERIPHE_WEB_PORT` | `8443` | the workspace's port on the host |
+| `ERIPHE_API_PORT` | `8800` | eriphe-core's port on the host, for the other devices (the join commands give it) |
+| `ERIPHE_VERSION` | the image's tag | `latest` (the releases), `edge` (main), or a release `0.8.0` / `0.8`, as `--version`; `ghcr.io/alexis-marcel/eriphe:edge` follows main by itself |
+| `ERIPHE_NODE_NAME` | the Docker host's name | the node's name |
+| `ERIPHE_NODE_LABELS` | none | as `--labels` |
+| `ERIPHE_CORE`, `ERIPHE_JOIN_TOKEN`, `ERIPHE_CA_HASH` | | node mode: from "Connect a device" (the token only matters at the first start) |
+| `ERIPHE_ADDRESS` | found | the host's address, for the log only |
+| `TZ` | | eriphe-core's time zone |
+
+A data folder installed in one mode stays in it: another mode needs another folder, or
+`uninstall --data` first. `install.sh` stays the way on a Linux machine without Docker (it
+installs it), on macOS and on Windows.
 
 ## 2. Open the workspace
 
@@ -258,6 +333,7 @@ installer puts on the host side, does the rest, as root there:
 | macOS with Apple's container | `~/.eriphe/update.sh`, run by the LaunchAgent `org.eriphe.update`: the new `eriphe-node` (and `eriphe-core`) taken from their images, restarted and checked, the previous ones kept in `~/.eriphe/update/previous.*` | when a request is dropped (`WatchPaths`), and every 10 minutes |
 | macOS in Lima's VM | the same as Linux, in the VM (Ubuntu, systemd): nothing more on the Mac | the same |
 | Windows | `/usr/local/bin/eriphe-update` in the distribution | every 20 s, a loop that the scheduled task starts with eriphe-node |
+| One container | `install.sh`'s updater, in `/data/launcher/update.sh`, run by the launcher, which then updates itself ([One container](#one-container-nas-any-linux-with-docker)) | when a request is dropped (it looks every 5 s) |
 
 How a request goes:
 
@@ -328,6 +404,8 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
   `~/.eriphe/container-installed`) and no other container is left; otherwise it stays.
 - macOS in Lima's VM: the LaunchAgent, the VM and its disk, `~/.eriphe` (Lima included), and
   Lima's download cache (`~/Library/Caches/lima`) unless another Lima is installed.
+- One container: `docker exec eriphe eriphe-launcher uninstall [--data]`, then `docker rm -f
+  eriphe` ([One container](#one-container-nas-any-linux-with-docker)).
 - Windows: the distribution and its disk, its scheduled task, and in core mode the port forwarding
   and firewall rule.
 
@@ -378,8 +456,10 @@ a NAS:
   place at the same path (read-only for a `:ro` one), told to it in `ERIPHE_NODE_SHARES`.
 - `eriphe-core` in core mode: read-only, no capability, its data in `/var/lib/eriphe/core` (owned
   by its UID, 1993), ports 8800 (API, nodes) and 8443 (workspace, HTTPS). It starts with no
-  configuration file; the script gets the local node's join token with
-  `eriphe-core join-token -name <name> -quiet` and reads the setup code from its log.
+  configuration file; the script gets the local node's join token and eriphe-core's CA hash
+  from `eriphe-core join-token -name <name>` (a new eriphe-core accepts machines over TLS only,
+  from the start: the node joins with `ERIPHE_CA_HASH`, kept in `.env`), and reads the setup
+  code from its log.
 - the networks: `eriphe-tasks` (internal, isolated gateway with Docker 28 or later: the tasks reach
   only the node), `eriphe-system` (eriphe-core and the services), `eriphe-docker` (the proxy).
 - the updater, outside the compose project: `/opt/eriphe/update.sh` and `update.conf` (the images
