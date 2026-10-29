@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 )
 
@@ -16,6 +17,7 @@ func (w *web) deviceRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/devices", w.auth(w.handleMachines))
 	mux.Handle("POST /settings/devices/join", w.auth(w.handleJoinCommand))
 	mux.Handle("GET /settings/devices/{name}", w.auth(w.handleDevice))
+	mux.Handle("GET /settings/devices/{name}/wait", w.auth(w.handleJoinWait))
 	mux.Handle("GET /settings/machines/{name}", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
 		http.Redirect(rw, r, "/settings/devices/"+r.PathValue("name"), http.StatusSeeOther)
 	}))
@@ -75,6 +77,37 @@ func (w *web) handleDevice(rw http.ResponseWriter, r *http.Request, s *session) 
 		return
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.machines", Nav: "settings", Tab: "devices", View: "device", Data: d})
+}
+
+// joinWait is the connect dialog waiting for a device: its name, and the id
+// of the join token it was given (never the token itself).
+type joinWait struct {
+	Name      string
+	ID        string
+	Connected bool
+}
+
+var joinTokenID = regexp.MustCompile(`^[0-9a-f]{16}$`)
+
+// handleJoinWait tells the connect dialog whether the device it gave a join
+// token to has connected: it joined with that token and is online.
+func (w *web) handleJoinWait(rw http.ResponseWriter, r *http.Request, s *session) {
+	v := joinWait{Name: r.PathValue("name"), ID: r.URL.Query().Get("token")}
+	if !nodeName.MatchString(v.Name) || !joinTokenID.MatchString(v.ID) {
+		http.NotFound(rw, r)
+		return
+	}
+	if !w.c.store.joinTokenUnused(v.ID) {
+		nodes, err := w.c.store.nodes()
+		if err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		for _, n := range nodes {
+			v.Connected = v.Connected || n.Name == v.Name && n.Online
+		}
+	}
+	w.render(rw, r, s, "settings", "join-wait-fragment", page{Data: v})
 }
 
 // handleDeviceAccess cuts a device's access, or restores it.

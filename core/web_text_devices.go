@@ -45,6 +45,9 @@ var deviceStrings = map[string]map[string]string{
 		"devices.log.results_conflict": "Résultats laissés dans l'ancien dossier : un dossier au nouveau nom existe déjà. Renomme ou fusionne-les à la main.",
 		"devices.log.cut":              "Accès coupé",
 		"devices.log.restore":          "Accès rétabli",
+		"devices.waiting":              "En attente de %s…",
+		"devices.connected":            "%s est connecté",
+		"devices.done":                 "Terminer",
 		"folders.err.suspended":        "L'accès à cet appareil est coupé : rétablis-le dans Réglages → Appareils.",
 	},
 	"en": {
@@ -80,6 +83,9 @@ var deviceStrings = map[string]map[string]string{
 		"devices.log.results_conflict": "Results left in the former folder: a folder with the new name is already there. Rename or merge them by hand.",
 		"devices.log.cut":              "Access cut",
 		"devices.log.restore":          "Access restored",
+		"devices.waiting":              "Waiting for %s…",
+		"devices.connected":            "%s is connected",
+		"devices.done":                 "Done",
 		"folders.err.suspended":        "Access to this device is cut: restore it in Settings → Devices.",
 	},
 }
