@@ -679,7 +679,7 @@ func byteSize(lang string, b int64) string {
 
 // markdown renders the little Markdown agents write: paragraphs, lists,
 // code blocks, inline code, bold, italics, headings and links. Everything
-// is escaped first; links are http(s) only.
+// is escaped first; links are http(s), or a page of the workspace.
 func markdown(src string) template.HTML {
 	var b strings.Builder
 	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
@@ -750,7 +750,7 @@ var (
 	codeRe    = regexp.MustCompile("`([^`]+)`")
 	boldRe    = regexp.MustCompile(`\*\*([^*]+)\*\*`)
 	italicRe  = regexp.MustCompile(`(^|[^*\w])\*([^*\s][^*]*)\*`)
-	mdLinkRe  = regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s)]+)\)`)
+	mdLinkRe  = regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s)]+|/[^\s)]*)\)`)
 	urlRe     = regexp.MustCompile(`https?://[^\s<>()\[\]"'` + "`" + `]+`)
 )
 
@@ -796,7 +796,22 @@ func trimURL(u string) (string, string) {
 	return u, tail
 }
 
+// workspacePages are the pages a message may link to inside the workspace,
+// e.g. [Connecter un appareil](/settings/devices#connect): they open in the
+// same tab. Anything else that is not http(s) stays plain text.
+var workspacePages = []string{"/settings", "/memory", "/tasks/", "/welcome"}
+
 func link(u, text string) string {
+	if strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") && !strings.Contains(u, "\\") {
+		if p, err := url.Parse(u); err == nil && p.Scheme == "" && p.Host == "" {
+			for _, w := range workspacePages {
+				if p.Path == w || strings.HasPrefix(p.Path, strings.TrimSuffix(w, "/")+"/") {
+					return `<a href="` + html.EscapeString(p.String()) + `">` + text + `</a>`
+				}
+			}
+		}
+		return text
+	}
 	p, err := url.Parse(u)
 	if err != nil || (p.Scheme != "http" && p.Scheme != "https") {
 		return text
