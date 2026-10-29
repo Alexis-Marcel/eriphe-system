@@ -50,7 +50,7 @@ func (osEnv) realGh() (string, error) {
 		}
 		return p, nil
 	}
-	return "", errors.New("gh is not installed in this task")
+	return "", errors.New("gh is not installed in this task: install it (apt-get install -y gh), then run gh again; Eriphe gives it its token")
 }
 
 func (osEnv) originURL() string {
@@ -72,7 +72,7 @@ func runGh(args []string, c *client, e ghEnv) int {
 	argv := append([]string{"gh"}, args...)
 	env := e.environ()
 	// A token given by hand, or no Eriphe here: gh as it is.
-	if e.getenv("GH_TOKEN") != "" || e.getenv("GITHUB_TOKEN") != "" || !c.configured() {
+	if e.getenv("GH_TOKEN") != "" || e.getenv("GITHUB_TOKEN") != "" || !c.configured() || ghLocal(args) {
 		return runExec(e, gh, argv, env)
 	}
 	repo := ghRepo(args, e)
@@ -110,6 +110,14 @@ func runExec(e ghEnv, path string, argv, env []string) int {
 
 // ghRepo is the repository a gh command is about.
 func ghRepo(args []string, e ghEnv) string {
+	// gh api repos/OWNER/NAME/…: the repository of its endpoint.
+	if words := ghWords(args); len(words) > 1 && words[0] == "api" {
+		if p := strings.Split(strings.TrimPrefix(words[1], "/"), "/"); len(p) >= 3 && p[0] == "repos" {
+			if r := repoOfURL(p[1] + "/" + p[2]); r != "" {
+				return r
+			}
+		}
+	}
 	for i, a := range args {
 		if a == "--" {
 			break
@@ -143,12 +151,13 @@ var ghReads = map[string][]string{
 	"status":   nil,
 }
 
-// ghAccess tells whether a gh command reads or writes.
-func ghAccess(args []string) string {
+// ghWords are a gh command's words, without its options.
+func ghWords(args []string) []string {
 	var words []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if a == "-R" || a == "--repo" {
+		if a == "-R" || a == "--repo" || a == "-X" || a == "--method" || a == "-f" || a == "-F" || a == "-H" ||
+			a == "--field" || a == "--raw-field" || a == "--header" || a == "--input" || a == "-q" || a == "--jq" {
 			i++
 			continue
 		}
@@ -156,6 +165,31 @@ func ghAccess(args []string) string {
 			words = append(words, a)
 		}
 	}
+	return words
+}
+
+// ghLocal: a gh command that calls no API (its version, help, its own
+// settings), which needs no token.
+func ghLocal(args []string) bool {
+	for _, a := range args {
+		if a == "--version" || a == "--help" || a == "-h" {
+			return true
+		}
+	}
+	words := ghWords(args)
+	if len(words) == 0 {
+		return true
+	}
+	switch words[0] {
+	case "version", "help", "completion", "alias", "config", "auth":
+		return true
+	}
+	return false
+}
+
+// ghAccess tells whether a gh command reads or writes.
+func ghAccess(args []string) string {
+	words := ghWords(args)
 	if len(words) == 0 {
 		return "read"
 	}

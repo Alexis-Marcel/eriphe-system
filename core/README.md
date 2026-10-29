@@ -499,13 +499,14 @@ long-lived secret ever enters a task** (the study behind it: tasks adapt to what
 ask for their access the same way they install their tools).
 
 **The path of a request.** `eriphe-cred` (node/cred, a small static Go program) is in every task
-at `/opt/eriphe/bin`, lent read-only by the node. It is:
+at `/opt/eriphe/bin`, with the injected agent (node/README.md, Injected programs). It is:
 
 - git's **credential helper**: the task's entrypoint sets `credential.helper=/opt/eriphe/bin/eriphe-cred`
   and `credential.useHttpPath=true` (environment `GIT_CONFIG_*`, nothing written), so git names the
   repository; git's protocol does not say whether it fetches or pushes, so eriphe-cred reads it
   from the git command that started it (`push` writes, anything else reads);
-- **gh's wrapper**: installed as `gh` ahead of the real one, it asks for a token for the command's
+- **gh's wrapper**: also there as `gh`, ahead of the real one (the image's, or the one the agent
+  installs with apt), it asks for a token for the command's
   repository (`-R`, `GH_REPO`, or the `origin` remote), read for `pr view`/`list`/`diff`/`checks`,
   `issue view`/`list`, `api` with GET…, write otherwise, and runs the real gh with `GH_TOKEN` for
   that one process.

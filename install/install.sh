@@ -1387,7 +1387,9 @@ if [ ! -f "$ERIPHE_ROOT/node.json" ] && [ -f "$E/join-token" ]; then
 	ERIPHE_JOIN_TOKEN=$(cat "$E/join-token")
 	export ERIPHE_JOIN_TOKEN
 fi
-exec "$E/bin/eriphe-node" -docker "$CONTAINER" -image "$ERIPHE_WORKER_IMAGE"
+# The node's programs for tasks (eriphe-cred), Linux builds for the tasks'
+# VMs, taken from its image with it.
+exec "$E/bin/eriphe-node" -docker "$CONTAINER" -image "$ERIPHE_WORKER_IMAGE" -task-bin "$E/bin/task-bin"
 EOF
 }
 
@@ -1535,6 +1537,18 @@ fetch() {
   chmod 755 "$t/eriphe-$1"
   mv "$t/eriphe-$1" "$3/eriphe-$1"
   rm -rf "$t"
+  # The node's programs for tasks, built for Linux: the tasks are Linux VMs.
+  # An image from before them has none.
+  if [ "$1" = node ]; then
+    t=$(mktemp -d "$STATE/fetch.XXXXXX")
+    if "$CONTAINER" run --rm --progress none --entrypoint cp --mount "type=bind,source=$t,target=/out" \
+        "$2" -R /usr/local/share/eriphe/task-bin/linux-arm64 /out/ >/dev/null 2>&1 && [ -d "$t/linux-arm64" ]; then
+      rm -rf "$3/task-bin"
+      mkdir -p "$3/task-bin"
+      mv "$t/linux-arm64" "$3/task-bin/"
+    fi
+    rm -rf "$t"
+  fi
   v=$(label "$2")
   echo "${v:-dev}" >"$3/eriphe-$1.version"
 }
@@ -1577,6 +1591,12 @@ swap() {
     cp -p "$E/bin/eriphe-$n" "$E/bin/eriphe-$n.version" "$STATE/swap/" 2>/dev/null
     cp -p "$2/eriphe-$n" "$E/bin/eriphe-$n.new" && mv "$E/bin/eriphe-$n.new" "$E/bin/eriphe-$n"
     cp -p "$2/eriphe-$n.version" "$E/bin/"
+    # The node's programs for tasks go with it.
+    if [ "$n" = node ] && [ -d "$2/task-bin" ]; then
+      [ ! -d "$E/bin/task-bin" ] || cp -Rp "$E/bin/task-bin" "$STATE/swap/"
+      rm -rf "$E/bin/task-bin.new"
+      cp -Rp "$2/task-bin" "$E/bin/task-bin.new" && rm -rf "$E/bin/task-bin" && mv "$E/bin/task-bin.new" "$E/bin/task-bin"
+    fi
   done
   if [ "$1" = core ]; then
     restart core

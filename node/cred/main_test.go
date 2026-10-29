@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -219,6 +221,19 @@ func TestGhGetsATokenForItsRepo(t *testing.T) {
 		t.Fatalf("ran %v with %v", e.ran, e.env)
 	}
 
+	// gh api names its repository in its endpoint.
+	runGh([]string{"api", "repos/someone/thing/pulls", "--jq", ".[].title"}, c, e)
+	if last := f.got[len(f.got)-1]; last.Path != "someone/thing" || last.Access != "read" {
+		t.Fatalf("gh api asked %+v", last)
+	}
+	// Its version or help need no token.
+	n := len(f.got)
+	runGh([]string{"--version"}, c, e)
+	runGh([]string{"pr", "create", "--help"}, c, e)
+	if len(f.got) != n || e.ran[2] != "pr" {
+		t.Fatalf("asked for gh's help: %+v", f.got[n:])
+	}
+
 	// -R wins over the remote; a read asks for read.
 	runGh([]string{"pr", "view", "12", "-R", "other/thing"}, c, e)
 	if last := f.got[len(f.got)-1]; last.Path != "other/thing" || last.Access != "read" {
@@ -275,5 +290,25 @@ func TestAskErrors(t *testing.T) {
 	var refused *refusedError
 	if err == nil || errors.As(err, &refused) || !strings.Contains(err.Error(), "core unreachable") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// The wrapper, copied as gh ahead of the real one, finds the real one
+// further on the PATH (installed later by apt, say), never itself.
+func TestRealGhSkipsTheWrapper(t *testing.T) {
+	self, _ := os.Executable()
+	selfDir := filepath.Dir(self)
+	if err := os.WriteFile(filepath.Join(selfDir, "gh"), []byte("copy"), 0o755); err != nil {
+		t.Skip("cannot write next to the test binary")
+	}
+	t.Cleanup(func() { os.Remove(filepath.Join(selfDir, "gh")) })
+	usr := t.TempDir()
+	t.Setenv("PATH", selfDir+string(os.PathListSeparator)+usr)
+	if _, err := (osEnv{}).realGh(); err == nil || !strings.Contains(err.Error(), "apt-get install") {
+		t.Fatalf("no real gh yet: %v", err)
+	}
+	os.WriteFile(filepath.Join(usr, "gh"), []byte("#!/bin/sh\n"), 0o755)
+	if p, err := (osEnv{}).realGh(); err != nil || p != filepath.Join(usr, "gh") {
+		t.Fatalf("real gh %q %v", p, err)
 	}
 }
