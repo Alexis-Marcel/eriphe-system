@@ -349,7 +349,9 @@ func untarInjected(r io.Reader, dst string) error {
 	}
 }
 
-// prune removes the package's other versions that no running task uses.
+// prune removes the package's other versions that no running task uses,
+// and what an interrupted download left (one package downloads at a time:
+// the caller's own is renamed already).
 func (s *agentStore) prune(pkg, keep string) {
 	entries, err := os.ReadDir(filepath.Join(s.dir, pkg))
 	if err != nil {
@@ -360,9 +362,6 @@ func (s *agentStore) prune(pkg, keep string) {
 	for _, e := range entries {
 		d := filepath.Join(s.dir, pkg, e.Name())
 		if !e.IsDir() || d == keep || s.inUse[d] > 0 || (!validDigestDir(e.Name()) && !strings.HasPrefix(e.Name(), ".tmp-")) {
-			continue
-		}
-		if strings.HasPrefix(e.Name(), ".tmp-") && s.inflight[pkg] != nil {
 			continue
 		}
 		os.RemoveAll(d)
