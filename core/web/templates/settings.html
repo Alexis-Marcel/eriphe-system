@@ -23,8 +23,7 @@
 {{end}}
 
 {{define "machines"}}
-<header class="page-head"><h2>{{t "settings.machines"}}</h2><p>{{t "machines.lead"}}</p></header>
-{{if .Data.Nodes}}
+<header class="page-head page-head-action"><div><h2>{{t "settings.machines"}}</h2><p>{{t "machines.lead"}}</p></div><a class="btn" href="#add-title" data-focus="join-name">{{template "i-plus"}}{{t "machines.add"}}</a></header>
 <ul class="grid devices">
 {{range .Data.Nodes}}
   <li class="tile device{{if .Suspended}} is-cut{{end}}">
@@ -43,8 +42,8 @@
     </div>
   </li>
 {{end}}
+  <li class="tile tile-add"><a href="#add-title" data-focus="join-name"><span class="tile-add-icon" aria-hidden="true">{{template "i-plus"}}</span><b>{{t "machines.add"}}</b><span class="muted small">{{if .Data.Nodes}}{{t "devices.addhint"}}{{else}}{{t "machines.none"}}{{end}}</span></a></li>
 </ul>
-{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-device"}}</span><p>{{t "machines.none"}}</p></div>{{end}}
 
 {{template "updates" .Data.Updates}}
 
@@ -53,7 +52,7 @@
   <p class="muted">{{t "machines.addlead"}}</p>
   <form class="row-form" hx-post="/settings/devices/join" hx-target="#join-result" hx-swap="innerHTML">
     <label class="field"><span>{{t "machines.name"}}</span>
-      <input type="text" name="name" required pattern="[a-z0-9][a-z0-9\-]{0,31}" maxlength="32" placeholder="pc" autocomplete="off" spellcheck="false" class="mono"></label>
+      <input type="text" id="join-name" name="name" required pattern="[a-z0-9][a-z0-9\-]{0,31}" maxlength="32" placeholder="pc" autocomplete="off" spellcheck="false" class="mono"></label>
     <label class="field"><span>{{t "machines.labelsopt"}}</span>
       <input type="text" name="labels" placeholder="gpu" autocomplete="off" spellcheck="false" class="mono"></label>
     {{template "join-via" .Data.Remote}}
