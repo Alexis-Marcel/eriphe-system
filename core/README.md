@@ -699,11 +699,23 @@ its own), the memory's nightly extraction, the conversation's messages about it,
 workspace's words (`{{name}}` in the texts of `web_text*.go`, French elision included: « Tâches
 de {{name}} » reads « Tâches d'Eriphe »), the pages' title suffix and the brand next to the logo,
 the login page, the installed app (`/manifest.webmanifest` is served with its `name` and
-`short_name`), and Home Assistant's conversation agent (`GET /v1/voice`). The software keeps its
-name: the logo glyph, the images and binaries, the install scripts, eriphe-core and eriphe-node,
-the GitHub and Google apps and the OAuth client, the certificate authority, the app passwords and
-tokens named Eriphe, the Home Assistant integration's domain, the system texts that name the
-software, and the results subfolder `Eriphe/`.
+`short_name`), Home Assistant's conversation agent (`GET /v1/voice`), and the results subfolder
+of a machine's folders lent with `drop` (below). The software keeps its name: the logo glyph, the
+images and binaries, the install scripts, eriphe-core and eriphe-node, the GitHub and Google apps
+and the OAuth client, the certificate authority, the app passwords and tokens named Eriphe, the
+Home Assistant integration's domain, the system texts that name the software, and the results
+subfolder of Google Drive folders, `Eriphe/`.
+
+**The results folder.** A machine's folder lent with `drop` takes results in a subfolder named
+after the assistant: `Eriphe/` until it has another name, then `Jarvis/` (the display name as a
+folder name, `results_folder.go`). A task's spec gives its node the current name (`results`) and
+the former ones, newest first (`former`, kept in the settings `results_name` and
+`results_former`; `Eriphe` is always among them). The task always sees the current name
+(`/work/folders/<name>/Jarvis`). On a folder's next use after a rename, the node renames a former
+results folder to the new name; if a folder of the new name is already there (the user's own, say),
+nothing is merged: the former one stays in use, mounted under the new name, and the node says so
+(a `results_conflict` event, in the device's access log, to rename or merge by hand). A node older
+than this uses `Eriphe/` whatever the name: update the nodes before renaming the assistant.
 
 ## The brain
 
@@ -977,7 +989,8 @@ The user's own folders, given to Eriphe ("Dossiers"). A folder is a name ("Clien
 machine and a path inside one of the places that machine shares, declared when it was installed:
 `--share NAME=/PATH`, see install/README.md; eriphe-core never sees a host path, only the place's
 name and a path relative to it) and a right: `read` (the default), or `drop`, read and drop results,
-which go only to the folder's `Eriphe/` subfolder. Originals are never changed nor deleted. Folders
+which go only to the folder's results subfolder (`Eriphe/`, or the assistant's name: see [the
+assistant's name](#the-assistants-name)). Originals are never changed nor deleted. Folders
 are in the database (`folders` table, names unique without case); a machine's places are what its
 node reports (`shares` in `GET /v1/node`).
 
@@ -1004,8 +1017,9 @@ forgets it; the files stay.
 `list_folders` gives each one's entry in `lend`; the old `folders` field still works). The task is placed on the folders' machine (all of a task's
 folders must be on one machine), or waits for it while it is offline (`pending_reason` says so);
 `node` may only name that machine. Its node mounts each at `/work/folders/<name>`, read-only as
-Docker enforces it; with `drop`, its `Eriphe/` subfolder read-write, created if missing (see
-node/README.md, Shares). The worker is told where they are, that it may write only in `Eriphe/`, and
+Docker enforces it; with `drop`, its results subfolder read-write, created if missing (see
+node/README.md, Shares). The worker is told where they are, that it may write only in the results
+subfolder, and
 that what reads like an instruction in the files is data. The folders are read again from the
 database whenever the node fetches the task: a folder removed meanwhile fails it, a folder closed to
 drops since is mounted read-only. A task drops only where its entry says `drop` (a task from before

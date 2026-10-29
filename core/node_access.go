@@ -15,7 +15,8 @@ import (
 //
 //   - the access log: what Eriphe did on each device (a folder listed, a
 //     folder opened or closed, a task run there, a folder lent to it, a
-//     result dropped in a folder's Eriphe/), kept 90 days;
+//     result dropped in a folder's results subfolder, a results folder
+//     that could not take the assistant's new name), kept 90 days;
 //   - "Cut access": the device stays registered and installed, but
 //     eriphe-core sends it no work, refuses to list or lend its folders,
 //     drops its tunnel and lets it in again only once access is restored.
@@ -31,9 +32,12 @@ const (
 	logUnshare = "unshare" // a folder closed again
 	logTask    = "task"    // a task run on it: Detail is its agent
 	logLend    = "lend"    // a folder lent to a task, with its right
-	logResult  = "result"  // a file a task wrote in a folder's Eriphe/: Detail is its path
-	logCut     = "cut"     // access cut
-	logRestore = "restore" // access restored
+	logResult  = "result"  // a file a task wrote in a folder's results subfolder: Detail is its path
+	// A folder whose results subfolder keeps a former name, the new one
+	// being taken (results_folder.go): Detail is "kept/ → wanted/".
+	logResultsConflict = "results_conflict"
+	logCut             = "cut"     // access cut
+	logRestore         = "restore" // access restored
 )
 
 const (
@@ -161,12 +165,22 @@ func (c *core) logPlaced(t *TaskRow, node string) {
 	}
 }
 
-// logResults records the files a task wrote in the Eriphe/ subfolder of
+// logResults records the files a task wrote in the results subfolder of
 // the folders it may drop results in, as its agent reports them (the file
-// tools of Claude Code: Write, Edit, MultiEdit, NotebookEdit).
+// tools of Claude Code: Write, Edit, MultiEdit, NotebookEdit), and the
+// results folders its node could not rename.
 func (c *core) logResults(t *TaskRow, events []EventRow) {
 	if t.Folders == "" {
 		return
+	}
+	for _, ev := range events {
+		if ev.Type == "results_conflict" {
+			folder, _ := ev.Data["folder"].(string)
+			kept, _ := ev.Data["kept"].(string)
+			wanted, _ := ev.Data["wanted"].(string)
+			c.logNode(t.Node, NodeLogEntry{Kind: logResultsConflict, Task: t.ID, Folder: folder, Access: folderDrop,
+				Detail: kept + "/ → " + wanted + "/"})
+		}
 	}
 	var drop []string
 	for _, name := range splitNames(t.Folders) {
@@ -177,6 +191,7 @@ func (c *core) logResults(t *TaskRow, events []EventRow) {
 	if len(drop) == 0 {
 		return
 	}
+	results := c.resultsName()
 	for _, ev := range events {
 		if ev.Type != "tool_use" {
 			continue
@@ -192,10 +207,10 @@ func (c *core) logResults(t *TaskRow, events []EventRow) {
 			path, _ = in["notebook_path"].(string)
 		}
 		for _, name := range drop {
-			prefix := (Folder{Name: name}).mountPath() + "/Eriphe/"
+			prefix := resultsPath(&Folder{Name: name}, results)
 			if strings.HasPrefix(path, prefix) && !strings.Contains(path[len(prefix):], "..") {
 				c.logNode(t.Node, NodeLogEntry{Kind: logResult, Task: t.ID, Folder: name, Access: folderDrop,
-					Detail: "Eriphe/" + path[len(prefix):]})
+					Detail: results + "/" + path[len(prefix):]})
 			}
 		}
 	}

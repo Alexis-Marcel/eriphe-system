@@ -151,8 +151,8 @@ func TestAssistantNameWords(t *testing.T) {
 	if got := tr("fr", "drive.noapp"); !strings.Contains(got, "L'application Eriphe pour Google") {
 		t.Errorf("the Google app is renamed: %q", got)
 	}
-	if got := tr("fr", "folders.access.droplead"); !strings.HasPrefix(got, "Jarvis lit") || !strings.Contains(got, "« Eriphe »") {
-		t.Errorf("the results folder keeps its name: %q", got)
+	if got := tr("fr", "folders.access.droplead"); !strings.HasPrefix(got, "Jarvis lit") || !strings.Contains(got, "« Jarvis »") {
+		t.Errorf("the results folder is not named after it: %q", got)
 	}
 	setAssistantName("Alfred")
 	if got := tr("fr", "tasks.label"); got != "Tâches d'Alfred" {

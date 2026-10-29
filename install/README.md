@@ -444,7 +444,8 @@ to Apple's container (in core mode, copy eriphe-core's data out of the VM first)
 `--share NAME=/PATH` (repeatable) declares a place of this machine whose folders you may give to
 Eriphe, in the workspace (Settings → Folders → "Partager un dossier"): you browse its folders
 there from any device, name one ("Clients") and choose what Eriphe may do with it, read, or read
-and drop its results in the folder's `Eriphe/` subfolder. eriphe-core never sees the path, only
+and drop its results in the folder's results subfolder, named after your assistant (`Eriphe/` by
+default, `Jarvis/` if you called it Jarvis). eriphe-core never sees the path, only
 the place's name and a path inside it. Nothing is shared unless you say so.
 
 ```sh

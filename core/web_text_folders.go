@@ -13,7 +13,7 @@ func init() {
 var folderStrings = map[string]map[string]string{
 	"fr": {
 		"settings.folders":            "Dossiers",
-		"folders.lead":                "Les dossiers de tes appareils que tu ouvres à {{name}} : il ne voit rien d'autre. Une tâche à qui {{name}} prête un dossier le lit sur son appareil, sans jamais modifier ni supprimer tes fichiers ; avec le droit de dépôt, elle range ses résultats dans son sous-dossier « Eriphe ».",
+		"folders.lead":                "Les dossiers de tes appareils que tu ouvres à {{name}} : il ne voit rien d'autre. Une tâche à qui {{name}} prête un dossier le lit sur son appareil, sans jamais modifier ni supprimer tes fichiers ; avec le droit de dépôt, elle range ses résultats dans son sous-dossier « {{name}} ».",
 		"folders.drive":               "Dans ton Google Drive",
 		"folders.drivelend":           "Lu par les tâches à qui {{name}} prête l'outil Google Drive.",
 		"folders.adddrive":            "Donner un dossier de Google Drive…",
@@ -25,7 +25,7 @@ var folderStrings = map[string]map[string]string{
 		"folders.access.read":         "Lecture",
 		"folders.access.readlead":     "{{name}} lit les fichiers, sans rien y écrire.",
 		"folders.access.drop":         "Lecture et dépôt des résultats",
-		"folders.access.droplead":     "{{name}} lit les fichiers et dépose ses résultats dans le sous-dossier « Eriphe », créé si besoin. Tes originaux ne sont jamais modifiés.",
+		"folders.access.droplead":     "{{name}} lit les fichiers et dépose ses résultats dans le sous-dossier « {{name}} », créé si besoin. Tes originaux ne sont jamais modifiés.",
 		"folders.share":               "Partager un dossier",
 		"folders.sharelead":           "Choisis un appareil, puis parcours ses dossiers. Seuls les emplacements prévus à son installation sont visibles, jamais les dossiers sensibles (clés, mots de passe, réglages).",
 		"folders.machine":             "Appareil",
@@ -61,7 +61,7 @@ var folderStrings = map[string]map[string]string{
 	},
 	"en": {
 		"settings.folders":            "Folders",
-		"folders.lead":                "The folders of your devices you open to {{name}}: it sees nothing else. A task {{name}} lends a folder reads it on its device, and never changes or deletes your files; with the right to drop results, it puts them in its \"Eriphe\" subfolder.",
+		"folders.lead":                "The folders of your devices you open to {{name}}: it sees nothing else. A task {{name}} lends a folder reads it on its device, and never changes or deletes your files; with the right to drop results, it puts them in its \"{{name}}\" subfolder.",
 		"folders.drive":               "In your Google Drive",
 		"folders.drivelend":           "Read by the tasks {{name}} lends the Google Drive tool.",
 		"folders.adddrive":            "Give a Google Drive folder…",
@@ -73,7 +73,7 @@ var folderStrings = map[string]map[string]string{
 		"folders.access.read":         "Read",
 		"folders.access.readlead":     "{{name}} reads the files and writes nothing there.",
 		"folders.access.drop":         "Read and drop results",
-		"folders.access.droplead":     "{{name}} reads the files and drops its results in the \"Eriphe\" subfolder, created if needed. Your originals are never changed.",
+		"folders.access.droplead":     "{{name}} reads the files and drops its results in the \"{{name}}\" subfolder, created if needed. Your originals are never changed.",
 		"folders.share":               "Share a folder",
 		"folders.sharelead":           "Pick a device, then browse its folders. Only the places set when it was installed show, never sensitive folders (keys, passwords, settings).",
 		"folders.machine":             "Device",

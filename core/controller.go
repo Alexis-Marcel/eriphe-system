@@ -75,6 +75,7 @@ func newCore(cfg *Config, store *Store) *core {
 	}
 	c.snap.Store(m)
 	setAssistantName(m.assistantName())
+	c.noteResultsName(m)
 	c.loadAssistants()
 	c.turn.load(store.get("brain_turn"), c.brainTaskID() != "")
 	c.turn.keep = func(st brainTurnState) {
@@ -313,7 +314,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	spec.Identity, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the node fetches the task
 	spec.Folders = nil                                                                 // the same
 	if len(folders) > 0 {
-		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders))
+		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders, c.resultsName()))
 	}
 	if kind == "worker" && !harnessOf(agent.Runtime).takesSystemPrompt() {
 		// It takes no system prompt: it reads it first.

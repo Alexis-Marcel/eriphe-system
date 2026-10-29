@@ -320,11 +320,57 @@ type TaskFolder struct {
 	Name  string `json:"name"`
 	Share string `json:"share"`           // the root
 	Path  string `json:"path"`            // relative to it
-	Write bool   `json:"write,omitempty"` // results may be dropped in its Eriphe/ subfolder
+	Write bool   `json:"write,omitempty"` // results may be dropped in its results subfolder
+	// With Write: the results subfolder's name (the assistant's), and its
+	// former names, newest first. Empty from an older eriphe-core: Eriphe.
+	Results string   `json:"results,omitempty"`
+	Former  []string `json:"former,omitempty"`
 }
 
-// resultsDir is where a task may write in a folder lent with Write.
+// resultsDir is where a task may write in a folder lent with Write, until
+// eriphe-core names it after the assistant.
 const resultsDir = "Eriphe"
+
+// resultsName is the folder's results subfolder, as the task sees it.
+func (tf TaskFolder) resultsName() string {
+	if validFolderName(tf.Results) && !strings.Contains(tf.Results, ",") {
+		return tf.Results
+	}
+	return resultsDir
+}
+
+// chooseResults picks the results subfolder of a folder lent with Write,
+// the folder at dir: the current name, made by ensureResults if missing.
+// A former results folder there is renamed to it, on its first use under
+// the new name. When the new name is already taken, nothing is merged: the
+// former one stays in use, and kept names it, to be said.
+func chooseResults(dir, cur string, former []string) (use, kept string) {
+	isDir := func(name string) bool {
+		fi, err := os.Lstat(filepath.Join(dir, name))
+		return err == nil && fi.IsDir() && fi.Mode()&fs.ModeSymlink == 0
+	}
+	_, err := os.Lstat(filepath.Join(dir, cur))
+	taken := err == nil
+	for _, old := range former {
+		if old == cur || !validFolderName(old) || !isDir(old) {
+			continue
+		}
+		if !taken && renameResults(filepath.Join(dir, old), filepath.Join(dir, cur)) == nil {
+			return cur, ""
+		}
+		return old, old
+	}
+	return cur, ""
+}
+
+// renameResults renames a results folder (tests replace it).
+var renameResults = os.Rename
+
+// resultsConflict says that a folder's results stay under a former name.
+func resultsConflict(t *Task, tf TaskFolder, kept string) {
+	t.emit("results_conflict", map[string]any{"folder": tf.Name, "kept": kept, "wanted": tf.resultsName(),
+		"message": fmt.Sprintf("folder %s: %s/ is already there, the results stay in %s/", tf.Name, tf.resultsName(), kept)})
+}
 
 // chownResults gives the results folder to the tasks' user (tests replace it).
 var chownResults = os.Lchown
@@ -338,7 +384,7 @@ func validFolderName(s string) bool {
 }
 
 // folderMounts are the docker run arguments that mount a task's folders:
-// each read-only, its Eriphe/ subfolder writable when lent with Write
+// each read-only, its results subfolder writable when lent with Write
 // (created if missing, in the folder's group, so that what the task writes
 // stays the user's to open, change and delete), and the folders' groups
 // added to the task's user so that it reads what the group may.
@@ -372,17 +418,23 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 		if f.root.ReadOnly {
 			return nil, fmt.Errorf("folder %s: its root %s is read-only on this machine", tf.Name, tf.Share)
 		}
-		gid, err := ensureResults(filepath.Join(f.real, resultsDir), ownerGID(f.real))
+		// The task sees it under the current name, whichever is used here.
+		cur := tf.resultsName()
+		use, kept := chooseResults(f.real, cur, tf.Former)
+		if kept != "" {
+			resultsConflict(t, tf, kept)
+		}
+		gid, err := ensureResults(filepath.Join(f.real, use), ownerGID(f.real))
 		if err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		if gid > 0 {
 			groups[gid] = true
 		}
-		args = append(args, "--mount", mountSpec("type=bind", "src="+filepath.Join(f.src, resultsDir), "dst="+dst+"/"+resultsDir))
-		results = append(results, filepath.Join(f.real, resultsDir))
+		args = append(args, "--mount", mountSpec("type=bind", "src="+filepath.Join(f.src, use), "dst="+dst+"/"+cur))
+		results = append(results, filepath.Join(f.real, use))
 	}
-	// What the task writes there as root goes back to Eriphe/'s owner (handback.go).
+	// What the task writes there as root goes back to the results folder's owner (handback.go).
 	t.mu.Lock()
 	t.results = results
 	t.mu.Unlock()
@@ -409,23 +461,24 @@ func mountSpec(fields ...string) string {
 	return strings.TrimSuffix(b.String(), "\n")
 }
 
-// ensureResults makes the Eriphe/ subfolder if it is missing: owned by the
+// ensureResults makes the results subfolder if it is missing: owned by the
 // tasks' user, in the folder's group, group-writable and setgid (what is
 // written there keeps the group). One already there must be a real
 // directory the tasks' user can write to, as its owner, through its group
 // (added to the task) or as anyone. It returns its group.
 func ensureResults(p string, gid int) (int, error) {
+	name := filepath.Base(p)
 	fi, err := os.Lstat(p)
 	if errors.Is(err, fs.ErrNotExist) {
 		if err := os.Mkdir(p, 0o775); err != nil {
-			return 0, fmt.Errorf("cannot create %s/: %w", resultsDir, err)
+			return 0, fmt.Errorf("cannot create %s/: %w", name, err)
 		}
 		// setgid while the directory is still in the node's group: a
 		// directory keeps it through chown, but a chmod after would drop it
 		// (the node is not in the folder's group, nor has CAP_FSETID).
 		os.Chmod(p, 0o775|fs.ModeSetgid)
 		if err := chownResults(p, taskUID, gid); err != nil {
-			return 0, fmt.Errorf("cannot give %s/ to the tasks' user: %w", resultsDir, err)
+			return 0, fmt.Errorf("cannot give %s/ to the tasks' user: %w", name, err)
 		}
 		fi, err = os.Lstat(p)
 	}
@@ -433,10 +486,10 @@ func ensureResults(p string, gid int) (int, error) {
 		return 0, err
 	}
 	if !fi.IsDir() || fi.Mode()&fs.ModeSymlink != 0 {
-		return 0, fmt.Errorf("%s/ is not a folder", resultsDir)
+		return 0, fmt.Errorf("%s/ is not a folder", name)
 	}
 	if !writableByTasks(fi) {
-		return 0, fmt.Errorf("%s/ cannot be written by the tasks' user (UID %d)", resultsDir, taskUID)
+		return 0, fmt.Errorf("%s/ cannot be written by the tasks' user (UID %d)", name, taskUID)
 	}
 	return ownerGID(p), nil
 }

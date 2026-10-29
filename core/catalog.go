@@ -544,6 +544,7 @@ func (c *core) commit(d dynamicCatalog, ch change) error {
 // applyCatalog makes the running parts follow a new snapshot.
 func (c *core) applyCatalog(m *Config) {
 	setAssistantName(m.assistantName())
+	c.noteResultsName(m)
 	if c.pool != nil {
 		c.pool.sync(m.Servers)
 	}
