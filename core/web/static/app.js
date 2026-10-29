@@ -28,9 +28,41 @@
   document.addEventListener("htmx:responseError", (e) => {
     const xhr = e.detail.xhr;
     if (xhr.status === 401) return; // HX-Redirect to the login page
+    if (updatePoll(e)) return pollFailed(e);
     toast((xhr.responseText || "Erreur").trim().slice(0, 200), "error");
   });
-  document.addEventListener("htmx:sendError", () => toast(document.body.dataset.lang === "en" ? "Network error" : "Erreur réseau", "error"));
+  document.addEventListener("htmx:sendError", (e) => {
+    if (updatePoll(e)) return pollFailed(e);
+    toast(document.body.dataset.lang === "en" ? "Network error" : "Erreur réseau", "error");
+  });
+  document.addEventListener("htmx:timeout", (e) => updatePoll(e) && pollFailed(e));
+
+  // A card following an update (data-update-poll, settings.html) asks again,
+  // quietly, while eriphe-core does not answer: it restarts when its own
+  // machine updates. After 10 minutes without an answer, the card stops
+  // asking and says to reload the page.
+  const pollGiveUp = 10 * 60 * 1000;
+  function updatePoll(e) {
+    const elt = e.detail && e.detail.elt;
+    return elt && elt.closest ? elt.closest("[data-update-poll]") : null;
+  }
+  function pollFailed(e) {
+    const el = updatePoll(e);
+    const since = Number(el.dataset.failSince) || Date.now();
+    el.dataset.failSince = since;
+    if (Date.now() - since < pollGiveUp) return;
+    // htmx polls an element while it is in the page: a copy without its
+    // attributes takes its place.
+    const still = el.cloneNode(true);
+    ["hx-get", "hx-trigger", "hx-swap", "hx-request", "data-update-poll", "data-fail-since"].forEach((a) => still.removeAttribute(a));
+    still.classList.remove("htmx-request");
+    const state = $(".machine-update > p", still);
+    if (state) {
+      state.className = "small muted";
+      state.textContent = el.dataset.updateLost;
+    }
+    el.replaceWith(still);
+  }
 
   // Forms marked data-reset are cleared once sent; a permission card fades.
   document.addEventListener("htmx:afterRequest", (e) => {

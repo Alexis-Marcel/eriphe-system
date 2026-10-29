@@ -308,9 +308,9 @@ func TestWebUpdates(t *testing.T) {
 		t.Fatal("switch off")
 	}
 
-	_, _, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
-	if r := tw.c.pendingUpdate("node:pc"); r == nil || r.Auto || r.Action != "update" || hdr.Get("HX-Refresh") != "true" {
-		t.Fatalf("update now: %+v %v", r, hdr)
+	_, body, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
+	if r := tw.c.pendingUpdate("node:pc"); r == nil || r.Auto || r.Action != "update" || !strings.Contains(body, `id="device-foot-pc"`) {
+		t.Fatalf("update now: %+v %v\n%s", r, hdr, body)
 	}
 	_, body, _ = tw.do("GET", "/settings/machines", nil, nil)
 	if !strings.Contains(body, "Mise à jour demandée") {

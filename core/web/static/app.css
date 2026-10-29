@@ -741,6 +741,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .tabbar .new-dot { position: absolute; top: 6px; left: calc(50% + 9px); margin: 0; }
 .update-available { display: inline-flex; align-items: center; gap: 7px; color: var(--accent-text); font-weight: 600; }
 .update-available .new-dot { margin: 0; }
+.update-done { display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 600; }
 a.update-available:hover { text-decoration: none; opacity: .85; }
 .machine-update { display: grid; gap: 8px; justify-items: start; padding-top: 10px; border-top: 1px solid var(--border); }
 .device-foot .machine-update { padding-top: 0; border-top: 0; grid-template-columns: 1fr auto; align-items: center; justify-items: stretch; }

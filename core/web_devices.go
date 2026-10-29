@@ -18,6 +18,7 @@ func (w *web) deviceRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/devices/join", w.auth(w.handleJoinCommand))
 	mux.Handle("GET /settings/devices/{name}", w.auth(w.handleDevice))
 	mux.Handle("GET /settings/devices/{name}/wait", w.auth(w.handleJoinWait))
+	mux.Handle("GET /settings/devices/{name}/update", w.auth(w.handleUpdateState)) // web_updates.go
 	mux.Handle("GET /settings/machines/{name}", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
 		http.Redirect(rw, r, "/settings/devices/"+r.PathValue("name"), http.StatusSeeOther)
 	}))

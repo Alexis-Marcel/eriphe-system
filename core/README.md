@@ -390,6 +390,14 @@ scheduler treats it as offline: new tasks wait for it. A request not done within
 A machine without updater (installed before, or by hand, as `deploy/nas/compose.yaml`) says so and
 gets no request.
 
+While a request is pending, the device's card (or eriphe-core's row) follows it without a reload:
+it asks `GET /settings/devices/{name}/update?id=<request>` (`/settings/updates/core` for
+eriphe-core) every 3 s, 10 s while the request waits for the tasks, and is swapped whole: asked,
+under way, then the new version and "À jour", or how it failed, and it stops asking. A request
+counts as done as soon as the updater wrote its outcome. While eriphe-core restarts for its own
+update, the card keeps asking quietly (`app.js`), the session staying valid as it is kept in the
+database; after 10 minutes without an answer it stops and says to reload the page.
+
 ### TLS between machines
 
 Nodes reach eriphe-core over TLS, with a certificate authority for machines that eriphe-core makes

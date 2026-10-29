@@ -148,6 +148,7 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /settings/machines/join", w.auth(w.handleJoinCommand))
 	mux.Handle("POST /settings/updates/night", w.auth(w.handleNightUpdates))
 	mux.Handle("POST /settings/updates/request", w.auth(w.handleUpdateNow))
+	mux.Handle("GET /settings/updates/core", w.auth(w.handleUpdateState))
 	mux.Handle("POST /settings/updates/all", w.auth(w.handleUpdateAll))
 	mux.Handle("POST /settings/machines/{name}/forget", w.auth(w.handleForget))
 	mux.Handle("POST /settings/machines/{name}/rejoin", w.auth(w.handleRejoinCommand))
