@@ -175,8 +175,8 @@ idle() {
 }
 
 # run: the container's command. The stack as install.sh would make it, the
-# images pulled only when missing (an update is the updater's), then the
-# updater's loop.
+# images pulled on the first install and afterwards only when missing (an
+# update is the updater's), then the updater's loop.
 run() {
 	trap 'exit 0' TERM INT
 	discover
@@ -197,7 +197,10 @@ run() {
 		warn "Docker $version is older than 28: the tasks' network cannot hide this machine's own services (update Docker)"
 		isolated=0
 	fi
+	# A first install takes the current images, even if older ones with the
+	# same tag are already on this machine; a restart never updates.
 	PULL=missing UPDATE_BY=loop
+	[ -f "$CONF/install.conf" ] || PULL=always
 	out=$(host_up "$(info docker_gid)" "$isolated")
 	summary "$out"
 	loop
