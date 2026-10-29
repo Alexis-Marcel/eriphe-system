@@ -10,7 +10,7 @@ on:
   workflow_call:
     inputs:
       image:
-        description: Image name under ghcr.io/alexis-marcel (e.g. eriphe-worker)
+        description: Image name under ghcr.io/alexis-marcel (e.g. eriphe-base)
         type: string
         required: true
       context:
@@ -29,6 +29,10 @@ on:
         description: Pass VERSION=<version> as a build argument (the binary's and the image label's)
         type: boolean
         default: false
+      aliases:
+        description: Other image names under ghcr.io/alexis-marcel that get the same tags (e.g. eriphe-worker)
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -112,6 +116,17 @@ jobs:
           [ $# -gt 0 ] || { echo "::error::no tag to publish"; exit 1; }
           # shellcheck disable=SC2046 # one argument per digest
           docker buildx imagetools create "$@" $(printf "${REGISTRY_IMAGE}@sha256:%s " *)
+      # The same manifest under each alias, from the image just published.
+      - if: inputs.aliases != ''
+        env:
+          TAGS: ${{ inputs.tags }}
+          ALIASES: ${{ inputs.aliases }}
+        run: |
+          for alias in $ALIASES; do
+            set --
+            for tag in $TAGS; do set -- "$@" -t "ghcr.io/alexis-marcel/${alias}:${tag}"; done
+            docker buildx imagetools create "$@" "${REGISTRY_IMAGE}:${TAGS%% *}"
+          done
       - env:
           TAGS: ${{ inputs.tags }}
         run: docker buildx imagetools inspect "${REGISTRY_IMAGE}:${TAGS%% *}"

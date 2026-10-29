@@ -49,7 +49,7 @@ images() {
 	tag=${PIN:-latest}
 	CORE_IMAGE=${ERIPHE_CORE_IMAGE:-$REGISTRY/eriphe-core:$tag}
 	NODE_IMAGE=${ERIPHE_NODE_IMAGE:-$REGISTRY/eriphe-node:$tag}
-	WORKER_IMAGE=${ERIPHE_WORKER_IMAGE:-$REGISTRY/eriphe-worker:$tag}
+	WORKER_IMAGE=${ERIPHE_WORKER_IMAGE:-$REGISTRY/eriphe-base:$tag}
 }
 
 # On the Linux machine Eriphe runs on: this one, or the VM on macOS.
@@ -127,7 +127,7 @@ set -eu
 CONF=$(q "$CONF") DATA=$(q "$DATA") CORE_UID=$CORE_UID
 MODE=$(q "${MODE:-}") NODE_NAME=$(q "${NAME:-}")
 IMAGES=$(q "$PROXY_IMAGE ${NODE_IMAGE:-} ${WORKER_IMAGE:-}$([ "${MODE:-}" = core ] && printf ' %s' "${CORE_IMAGE:-}")")
-ALL_REPOS=$(q "${PROXY_IMAGE%:*} $REGISTRY/eriphe-node $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
+ALL_REPOS=$(q "${PROXY_IMAGE%:*} $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
 EOF
 	cat <<'EOF'
 die() { printf 'eriphe: %s\n' "$*" >&2; exit 1; }
@@ -708,7 +708,7 @@ update() {
   for ref in $(printf '%s\n' "$before" | awk '{ print $2 }'); do
     src=$ref
     case $match:$ref in
-      ?*:*/eriphe-node:* | ?*:*/eriphe-worker:*) src=$(repo "$ref"):$match ;;
+      ?*:*/eriphe-node:* | ?*:*/eriphe-base:* | ?*:*/eriphe-worker:*) src=$(repo "$ref"):$match ;;
     esac
     if ! out=$(docker pull -q "$src" 2>&1); then
       put "$before"
