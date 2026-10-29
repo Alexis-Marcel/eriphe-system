@@ -34,12 +34,13 @@ type welcomeView struct {
 	Naming    bool   // the first step: what to call the assistant
 	Name      string // its name, or the one typed
 	NameError string
-	Agent     string        // the brain's agent, once there is one
-	Model     string        // its model, as the agents page names it
-	Form      *providerForm // the account form, while there is no agent
-	Kinds     []providerKind
-	Machines  int    // online
-	Brain     string // brainState: "" or thinking once it runs
+	Agent     string         // the brain's agent, once there is one
+	Model     string         // its model, as the agents page names it
+	Form      *providerForm  // the account form, once its kind is picked
+	Kinds     []providerKind // the kinds to pick from, while there is no agent
+	Machines  int            // online
+	Devices   int            // registered: an install with its core has its own
+	Brain     string         // brainState: "" or thinking once it runs
 	Ready     bool
 }
 
@@ -53,6 +54,7 @@ func (w *web) welcomeData(r *http.Request) welcomeView {
 	}
 	if nodes, err := w.c.store.nodes(); err == nil {
 		for _, n := range nodes {
+			v.Devices++
 			if n.Online {
 				v.Machines++
 			}
@@ -72,19 +74,15 @@ func (w *web) handleWelcome(rw http.ResponseWriter, r *http.Request, s *session)
 	if v.Agent == "" && w.c.store.get(welcomeNamed) == "" {
 		v.Naming = true // a new install chooses: the field starts empty
 	} else if v.Agent == "" {
-		k, ok := kindOf(r.URL.Query().Get("kind"))
-		if !ok {
-			k, _ = kindOf("claude-subscription")
-		}
-		m := w.c.conf()
-		f := providerForm{Kind: k, Next: "welcome", AllKinds: providerKinds,
-			Name: defaultProviderName(k.ID, func(n string) bool { _, ok := m.Providers[n]; return ok })}
-		f.Presets = w.presetChoices(k, f.Name, nil)
-		v.Form = &f
-		for _, o := range providerKinds {
-			if o.ID != k.ID && o.ID != "custom-api" {
-				v.Kinds = append(v.Kinds, o)
-			}
+		// Every kind of account, as equal choices, none picked: one picked
+		// (?kind=) shows its form.
+		v.Kinds = providerKinds
+		if k, ok := kindOf(r.URL.Query().Get("kind")); ok {
+			m := w.c.conf()
+			f := providerForm{Kind: k, Next: "welcome", AllKinds: providerKinds,
+				Name: defaultProviderName(k.ID, func(n string) bool { _, ok := m.Providers[n]; return ok })}
+			f.Presets = w.presetChoices(k, f.Name, nil)
+			v.Form = &f
 		}
 	}
 	w.render(rw, r, s, "welcome", "", page{Title: "welcome.title", Tab: "agents", Data: v})

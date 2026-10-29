@@ -714,8 +714,10 @@ the former ones, newest first (`former`, kept in the settings `results_name` and
 (`/work/folders/<name>/Jarvis`). On a folder's next use after a rename, the node renames a former
 results folder to the new name; if a folder of the new name is already there (the user's own, say),
 nothing is merged: the former one stays in use, mounted under the new name, and the node says so
-(a `results_conflict` event, in the device's access log, to rename or merge by hand). A node older
-than this uses `Eriphe/` whatever the name: update the nodes before renaming the assistant.
+(a `results_conflict` event, in the device's access log, to rename or merge by hand). A node
+older than this names nothing and writes in `Eriphe/`: for a node that does not report
+`results_named` (nor runs a release from 0.7.0), the worker is told `Eriphe/`, the folder that node
+really mounts, so a rename never points a task at a path it cannot write.
 
 ## The brain
 
@@ -1152,8 +1154,10 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 the code and choose the password (10 characters at least). The password is stored as an
 argon2id hash; the code is no longer accepted once used. While the brain has no agent, the
 conversation leads to a wizard (`/welcome`): the assistant's name (an empty field), then the
-AI account's form of Settings → Agents, a Claude subscription first, then the brain's start once a
-machine is online. "Plus tard" skips it.
+AI account: every kind as equal cards, as Settings → Agents shows them (subscriptions, then API
+keys, the custom one last), none picked; a card (`/welcome?kind=<kind>`) opens its form. Then the
+brain's start: on this machine once a device is registered (an install with its core has one of
+its own), with "connect a device" only while none is. "Plus tard" skips it.
 
 **Sessions.** A login sets a random session cookie (`__Host-eriphe`, `HttpOnly`, `Secure`,
 `SameSite=Strict`; only its SHA-256 is stored). Every POST carries the session's CSRF token (the

@@ -43,12 +43,30 @@ func TestWebWelcomeFlow(t *testing.T) {
 		t.Fatalf("brain = %+v", b)
 	}
 
-	// Then the AI account.
+	// Then the AI account: every kind, as equal choices, none picked;
+	// subscriptions first, then the API keys, the custom one last.
 	_, body, _ = tw.do("GET", "/welcome", nil, nil)
-	for _, want := range []string{"Relie l&#39;IA de Jarvis", "Avec quelle IA Jarvis réfléchit-il ?", "claude setup-token", `name="key"`,
-		`name="next" value="welcome"`, `name="kind" value="claude-subscription"`, "/welcome?kind=chatgpt-subscription", "/welcome/skip"} {
+	for _, want := range []string{"Relie l&#39;IA de Jarvis", "Avec quelle IA Jarvis réfléchit-il ?", "Un abonnement", "Une clé API", "/welcome/skip"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the wizard lacks %q", want)
+		}
+	}
+	last := -1
+	for _, k := range []string{"claude-subscription", "chatgpt-subscription", "anthropic-api", "openrouter-api", "custom-api"} {
+		i := strings.Index(body, `href="/welcome?kind=`+k+`"`)
+		if i < 0 || i < last {
+			t.Errorf("the kind %s is missing or out of order", k)
+		}
+		last = i
+	}
+	if strings.Contains(body, `name="key"`) || strings.Contains(body, "<details") {
+		t.Error("a kind is picked in advance, or some are hidden")
+	}
+	// Picked, its form; the others one click away.
+	_, body, _ = tw.do("GET", "/welcome?kind=claude-subscription", nil, nil)
+	for _, want := range []string{"claude setup-token", `name="key"`, `name="next" value="welcome"`, `name="kind" value="claude-subscription"`, `href="/welcome"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the form lacks %q", want)
 		}
 	}
 	if strings.Contains(body, `href="/settings/agents">Annuler`) {
@@ -75,15 +93,20 @@ func TestWebWelcomeFlow(t *testing.T) {
 		t.Fatalf("the conversation once the brain has an agent: %d", code)
 	}
 
-	// No machine yet, then one, then the brain at work.
+	// No device at all, then this machine's own (an install with its core
+	// has one): it starts here, offline or not, without a device to connect.
 	_, body, _ = tw.do("GET", "/welcome", nil, nil)
 	if !strings.Contains(body, "Jarvis réfléchit avec Claude Sonnet") || !strings.Contains(body, "attend un appareil") ||
 		!strings.Contains(body, `hx-get="/welcome/status"`) || strings.Contains(body, `name="key"`) {
 		t.Fatalf("waiting for a machine: %s", body)
 	}
 	c.store.registerNode("pc", hashSecret("s"))
+	if _, body, _ = tw.do("GET", "/welcome/status", nil, nil); !strings.Contains(body, "Jarvis démarre sur cette machine") ||
+		strings.Contains(body, "/settings/devices") {
+		t.Fatalf("registered, not online yet: %s", body)
+	}
 	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
-	if _, body, _ = tw.do("GET", "/welcome/status", nil, nil); !strings.Contains(body, "Jarvis démarre sur ton appareil") {
+	if _, body, _ = tw.do("GET", "/welcome/status", nil, nil); !strings.Contains(body, "Jarvis démarre sur cette machine") {
 		t.Fatalf("starting: %s", body)
 	}
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "pc", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})
@@ -104,7 +127,7 @@ func TestWebWelcomeKeepsEriphe(t *testing.T) {
 	if b := c.conf().brain(); b.DisplayName != "" || c.conf().assistantName() != "Eriphe" {
 		t.Fatalf("brain = %+v", b)
 	}
-	if _, body, _ := tw.do("GET", "/welcome", nil, nil); !strings.Contains(body, `name="key"`) || !strings.Contains(body, "Relie l&#39;IA d&#39;Eriphe") {
+	if _, body, _ := tw.do("GET", "/welcome", nil, nil); !strings.Contains(body, "/welcome?kind=claude-subscription") || !strings.Contains(body, "Relie l&#39;IA d&#39;Eriphe") {
 		t.Fatal("the name step again")
 	}
 }

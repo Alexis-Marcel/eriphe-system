@@ -89,10 +89,11 @@ assistant ?" (What do you want to call your assistant?). Eriphe is the software'
 assistant has the one you choose (1 to 32 letters, digits, spaces, apostrophes or dashes). It
 introduces itself by it, and the workspace, its tab title, the installed app and Home Assistant
 call it so. You can change it later in Settings →
-Agents. Then pick the AI account it thinks with. With a Claude subscription, run `claude setup-token` on any computer where Claude Code is installed and paste
-the token; "Use another account" takes a ChatGPT subscription or an API key (OpenRouter, Anthropic,
-OpenAI…). Eriphe creates the account's usual agents, and your assistant starts as soon as a machine is online
-(the install already joined this one). Agents, tools and accounts are in Settings later.
+Agents. Then pick the AI account it thinks with, among all kinds shown side by side: a
+subscription (Claude: run `claude setup-token` on any computer where Claude Code is installed and
+paste the token; ChatGPT) or an API key (Anthropic, OpenAI, Google, Mistral, OpenRouter, or a custom
+agent). Eriphe creates the account's usual agents, and your assistant starts on this machine (the
+install already joined it as a device). Agents, tools and accounts are in Settings later.
 
 Nothing else is on by default: no tool, no rule, no remote access. The catalog's tools (GitHub,
 mail, calendar, Home Assistant…) are added from Settings → Accounts & tools.

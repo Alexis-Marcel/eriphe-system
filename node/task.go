@@ -274,6 +274,8 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		"update": n.upd.info(),
 		// The agents unpacked here: a task of theirs starts at once (inject.go).
 		"agents_ready": n.agents.readyRuntimes(),
+		// It names a folder's results subfolder as eriphe-core says (shares.go).
+		"results_named": true,
 	})
 }
 

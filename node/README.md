@@ -696,7 +696,9 @@ task), then gives the container:
   (`former`, newest first): the first one there is renamed to the new name, on that first use; if
   the new name is already taken, nothing is merged: the former folder stays in use, mounted at
   `/work/folders/<name>/<results>`, and the task gets a `results_conflict` event (`folder`,
-  `kept`, `wanted`) that eriphe-core puts in the device's access log. On a Mac the explorer does
+  `kept`, `wanted`) that eriphe-core puts in the device's access log. The node says it names the
+  results folder with `results_named: true` in `GET /v1/node`, so eriphe-core tells the workers
+  of an older node `Eriphe/`. On a Mac the explorer does
   the same (`results` mode);
 - `--group-add` of the folder's group and of `Eriphe/`'s (not root's), so the task reads what that
   group may, and `umask 002` in the container: what it writes is group-writable. On a NAS whose

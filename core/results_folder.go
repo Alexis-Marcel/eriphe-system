@@ -84,6 +84,38 @@ func (c *core) noteResultsName(m *Config) {
 	c.store.set(resultsNameKey, cur)
 }
 
+// resultsNamedSince is the first release of eriphe-node that names the
+// results folder as eriphe-core says; a build of main says it with
+// results_named in its info.
+const resultsNamedSince = "0.7.0"
+
+// nodeNamesResults tells whether a node names the results folder as told:
+// an older one writes in Eriphe/ whatever the name.
+func nodeNamesResults(info nodeInfo) bool {
+	if info.ResultsNamed {
+		return true
+	}
+	v, ok := parseVersion(info.Version)
+	since, _ := parseVersion(resultsNamedSince)
+	return ok && !v.dev() && v.compare(since) >= 0
+}
+
+// resultsOn is the results folder's name on a node: the assistant's, or
+// Eriphe on a node too old to name it (the folder it really writes), so
+// that a worker is never told a path its node does not mount.
+func (c *core) resultsOn(node string) string {
+	nodes, _ := c.store.nodes()
+	for _, n := range nodes {
+		if n.Name == node {
+			if nodeNamesResults(parseInfo(n)) {
+				return c.resultsName()
+			}
+			return defaultResults
+		}
+	}
+	return defaultResults
+}
+
 // resultsPath is where a worker writes its results in a folder.
 func resultsPath(f *Folder, results string) string {
 	return fmt.Sprintf("%s/%s/", f.mountPath(), results)

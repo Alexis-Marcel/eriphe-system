@@ -25,18 +25,17 @@
     {{else if .Form}}
     <div class="stack">
       <h2>{{t "welcome.agenttitle"}}</h2>
-      <p class="lead">{{t "welcome.agentlead"}}</p>
       <div class="form-title">{{template "kind-mark" .Form.Kind.ID}}<h3>{{t (printf "kind.%s" .Form.Kind.ID)}}</h3></div>
       <p class="muted small">{{t (printf "kind.%s.desc" .Form.Kind.ID)}}</p>
     </div>
     {{template "provider-form" (dict "Data" .Form)}}
-    <details class="welcome-kinds">
-      <summary>{{t "welcome.otherkind"}}</summary>
-      <ul class="presets">{{range .Kinds}}<li><a class="preset" href="/welcome?kind={{.ID}}">
-        {{template "kind-mark" .ID}}
-        <span class="preset-text"><b>{{t (printf "kind.%s" .ID)}}</b><small>{{t (printf "kind.%s.desc" .ID)}}</small></span>
-      </a></li>{{end}}</ul>
-    </details>
+    <a class="btn btn-ghost" href="/welcome">{{t "welcome.otherkind"}}</a>
+    {{else if .Kinds}}
+    <div class="stack">
+      <h2>{{t "welcome.agenttitle"}}</h2>
+      <p class="lead">{{t "welcome.agentlead"}}</p>
+    </div>
+    {{template "kind-cards" (dict "Kinds" .Kinds "Base" "/welcome")}}
     {{else}}
     {{template "welcome-status" $}}
     {{end}}
@@ -56,7 +55,7 @@
   {{if .Ready}}
   <p>{{t "welcome.ready"}}</p>
   <a class="btn btn-primary wide" href="/">{{t "welcome.open"}}</a>
-  {{else if eq .Machines 0}}
+  {{else if eq .Devices 0}}
   <p class="notice">{{t "welcome.nomachine"}}</p>
   <a class="btn btn-soft" href="/settings/devices#connect">{{t "machines.add"}}</a>
   {{else}}
