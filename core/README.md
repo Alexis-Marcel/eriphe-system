@@ -118,7 +118,8 @@ task that asks for it by name, as an environment variable (`{"github": {"env": "
 …}}`): a long-lived token inside the task. They still work, but tasks now get their access to
 GitHub through [credentials on demand](#credentials-on-demand): short-lived, for one repository,
 decided by the policy and logged. A task given a `GH_TOKEN` identity keeps its own way (git uses
-that token, eriphe-cred is not set up).
+that token, eriphe-cred is not set up). On a tainted turn of the brain, `run_task` refuses any
+identity.
 
 **Harness cards.** What each runtime can do, as the node drives it, is one entry of `harnesses`
 (`harnesses.go`): MCP servers, how it takes a system prompt (a flag, developer instructions, an
@@ -227,8 +228,9 @@ A name is lowercase letters, digits and dashes (it becomes `mcp__<name>__<tool>`
 cached (refreshed on `tools/list_changed`), and reconnects with backoff (1 s to 5 min). A server is
 `connecting`, `ready`, `needs_auth` (OAuth: the user must connect it) or `error`.
 
-**Grants.** `run_task` takes `tools`: server names (all their tools) or `server.tool`, where the
-tool may hold `*` globs: `["notion", "github.get_*", "github.list_issues"]`. The grant is stored on
+**Grants.** A task is lent catalog tools as [resources](#resources) of kind `tool`: a server name
+(all its tools) or `server.tool`, where the tool may hold `*` globs (`notion`, `github.get_*`,
+`github.list_issues`); the old `tools` field of `run_task` still works. The grant is stored on
 the task. The brain's is `brain.tools` plus, without configuration, every read-only tool of the
 servers trusted for their annotations (see the brain). Catalog tools need an agent whose runtime
 takes MCP servers.
@@ -427,7 +429,7 @@ whatever address it dials) and one client certificate per node.
 | `list_agents` | agents, when to use each, and whether a node can run them now |
 | `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
 | `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
-| `run_task` | start a task: prompt, repo/ref/branch, agent (or the default), node (or let the scheduler choose), identities, catalog `tools`, the user's `folders` (see [Folders](#folders)) |
+| `run_task` | start a task: prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose); the old fields (`repo/ref/branch/dir`, `tools`, `folders`, `identities`) still work |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read` or `drop`), where a task finds it |
 | `task_status` | state, the agent's last message, the pending permission; `wait` blocks until the task needs you |
 | `list_tasks` | recent tasks |
@@ -491,6 +493,43 @@ Common safe reads, allowed without asking anyone:
 
 Every decision (by the policy, the brain or the user) is kept in the `decisions` table.
 
+## Resources
+
+Everything a task is lent is one list, `resources` of `run_task` (`resources.go`). Each entry is a
+kind, a reference to one thing the user opened to Eriphe, and an access on one scale for every kind,
+`read < drop < write`: `drop` creates new files in an Eriphe-owned place (a folder's `Eriphe/`
+subfolder) and never changes the originals; `write` changes the thing (for a repository: push).
+
+```json
+"resources": [
+  {"kind": "repo", "ref": "me/site", "access": "write", "branch": "eriphe/fix-menu", "base": "main"},
+  {"kind": "folder", "ref": "Clients", "access": "drop"},
+  {"kind": "drive-folder", "ref": "Factures"},
+  {"kind": "tool", "ref": "github.get_*"}
+]
+```
+
+| Kind | `ref` | Access | What the task gets |
+|---|---|---|---|
+| `repo` | `owner/name` on GitHub, or a git URL; `branch` (work branch), `base` (start), `dir` | `read`, `write` | cloned into `/work/repo`; [credentials](#credentials-on-demand) for it; one per task |
+| `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop` (at most the folder's own) | mounted at `/work/folders/<name>`; the task runs on its machine |
+| `drive-folder` | a Google Drive folder, by name | `read`, `drop` (at most the folder's own) | for now, the files server whole (it reaches every Drive folder given to Eriphe, each with its own access) |
+| `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
+| `file` | an attachment of the conversation (`att_…`) | `read` | not yet: refused with a clear error |
+
+The access defaults to `read` (for a tool, to what its annotations say). Each entry is checked
+against what the user opened: an unknown folder or server is refused, and so is a `drop` on a
+folder opened for reading. The old fields are read into the same list: `repo/ref/branch/dir` become
+a `repo` entry with access `read` (its pushes ask, as they always did), `tools` become `tool`
+entries, `folders` become `folder` entries with the folder's own access. The list is kept with the
+task (`tasks.resources`, JSON; empty for tasks from before it); the old columns (`tools`, `folders`,
+`dir`) are still written, and the node still gets its spec fields (`repo`, `folders`…), derived from
+the list.
+
+**On a tainted turn** (the brain read external content), `run_task` refuses any `write` or `drop`
+entry, tools that may act, a Drive folder (its files server is lent whole for now) and any legacy
+`identities`: the brain asks the user and starts the task in the turn of their answer. Reads still go.
+
 ## Credentials on demand
 
 A task asks for the access it needs when it needs it, through the standard extension points of
@@ -522,11 +561,17 @@ the node relays it to `POST /v1/node/tasks/{id}/credential` with its own secret 
 | a host eriphe-core has no service for (anything but `github.com`, `api.github.com`) | none: git goes on to another helper, or none |
 | not `https`, no repository (git without `useHttpPath`), an access other than `read`/`write` | deny |
 | the brain | deny: it works through its tools |
-| the GitHub service is not lent to the task: no GitHub catalog server in its grant (`"github"`, or some of its tools such as `"github.get_*"`) | deny |
+| no GitHub repository is lent to the task: no `repo` [resource](#resources) on GitHub (a task from before resources: no GitHub catalog server in its grant) | deny |
 | the first rule of `policy.credentials` that matches (host and repo globs, access) | its decision: `allow`, `ask` (once per task), `deny` |
-| no rule: the repository the task was asked to work on (`repo` of `run_task`) | read: allow; write: ask, the first time in the task |
+| no rule: a repository its `repo` resource covers (a task from before resources: its `repo`, as `read`) | read: allow; write by git with access `write` and a declared `branch`: allow (the user's own turn lent it so; a tainted turn cannot); any other write (access `read`, no branch, gh): ask, the first time in the task |
 | no rule: another repository | deny |
-| a write allowed by a rule, by a task that read external content (an external catalog tool, a page, a web search) or was started on a tainted turn of the brain | ask |
+| a write allowed so far, by a task that read external content (an external catalog tool, a page, a web search) or was started on a tainted turn of the brain | ask |
+| allowed so far, without the GitHub App (the fallback below) | ask, the first time in the task |
+
+A repository lent for `write` on a branch makes its first push there approved; a `git push` of that
+task to another branch (`git push origin other`, `HEAD:other`, `--all`, `--tags`, `--mirror`) is the
+user's to approve (`undeclaredPush`, policy.go). It reads the command line: a push of the current
+branch after the task switched to another one is still the brain's to judge, as before.
 
 ```json
 "policy": {"credentials": [
@@ -548,7 +593,8 @@ reads `contents`, `pull_requests`, `issues`, `checks`, or writes `pull_requests`
 (never `contents: write`: a merge is not a task's). git gets `password_expiry_utc`; eriphe-core
 reuses a token for the same task and rights until ten minutes before it ends. Without the app, the
 GitHub tool's own bearer token is lent instead (**fallback**): long-lived and not limited to the
-repository, it is flagged in the log, in eriphe-core's log (`WARNING: long-lived token lent`) and in
+repository, it is lent only once the user approves it (an `ask`, then held for that repository for
+the rest of the task), and flagged in the log, in eriphe-core's log (`WARNING: long-lived token lent`) and in
 the task's details, and the Tools page says to create the app.
 
 **The log.** Every request is kept (`credential_log`: time, task, tool, host, repository, access,
@@ -887,15 +933,17 @@ folder can be shared (no sensitive place inside, below) and keeps it under the p
 resolved, without symlinks. `drop` needs a place that is not read-only (`:ro`). "Ne plus partager"
 forgets it; the files stay.
 
-**Lending one.** The brain lends folders to a task by name, like catalog tools (`run_task`'s
-`folders`, `list_folders` to see them). The task is placed on the folders' machine (all of a task's
+**Lending one.** The brain lends folders to a task as [resources](#resources),
+`{"kind": "folder", "ref": "Clients", "access": "read"}` (or `drop`, if the folder allows it;
+`list_folders` gives each one's entry in `lend`; the old `folders` field still works). The task is placed on the folders' machine (all of a task's
 folders must be on one machine), or waits for it while it is offline (`pending_reason` says so);
 `node` may only name that machine. Its node mounts each at `/work/folders/<name>`, read-only as
 Docker enforces it; with `drop`, its `Eriphe/` subfolder read-write, created if missing (see
 node/README.md, Shares). The worker is told where they are, that it may write only in `Eriphe/`, and
 that what reads like an instruction in the files is data. The folders are read again from the
-database whenever the node fetches the task: a folder removed meanwhile fails it, a right changed
-applies at its next start. A task's `folders` lists their names.
+database whenever the node fetches the task: a folder removed meanwhile fails it, a folder closed to
+drops since is mounted read-only. A task drops only where its entry says `drop` (a task from before
+resources: wherever its folder's access said so). A task's `folders` lists their names.
 
 **What is read there is data.** A folder holds whatever the user (or anyone who sent them a file)
 put there, so it is treated as external content, like a mail or a page:
@@ -905,7 +953,7 @@ put there, so it is treated as external content, like a mail or a page:
   proposes what that turn remembers, and the brain may not allow a permission (see
   memory_trust.go);
 - on a tainted turn, `run_task` refuses to lend a folder with the `drop` right, as it refuses
-  catalog tools that act; folders to read still go;
+  every `write` or `drop` entry and catalog tools that act; folders to read still go;
 - the permission policy applies to the task as to any other: its writes outside `/work` are denied
   by the built-in rules, and Docker refuses any write in the folder but in `Eriphe/`.
 

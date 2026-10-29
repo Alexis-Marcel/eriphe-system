@@ -282,7 +282,7 @@ func (c *core) folderGrant(names []string) ([]*Folder, string, error) {
 		f, err := c.store.folder(strings.TrimSpace(name))
 		if err != nil {
 			if c.driveFolder(name) != nil {
-				return nil, "", fmt.Errorf("folder %q is in Google Drive: lend the catalog tool %s (tools) instead, not folders", name, filesServer)
+				return nil, "", fmt.Errorf("folder %q is in Google Drive: lend it as {kind: drive-folder, ref: %q}", name, name)
 			}
 			return nil, "", fmt.Errorf("folder %q: unknown (see list_folders)", name)
 		}
@@ -332,8 +332,10 @@ func folderNames(fs []*Folder) []string {
 
 // specFolders are a task's folders as its node mounts them, read again
 // from the store when the node fetches the task: a folder removed meanwhile
-// fails the task, and a right changed since applies to its next start.
-func (c *core) specFolders(names string) ([]nodeFolder, error) {
+// fails the task, and a folder closed to drops since is mounted read-only.
+// A task with resources may drop only where its entry says drop; one from
+// before them, wherever its folder's access says it.
+func (c *core) specFolders(names string, resources []ResourceRef) ([]nodeFolder, error) {
 	if names == "" {
 		return nil, nil
 	}
@@ -343,7 +345,13 @@ func (c *core) specFolders(names string) ([]nodeFolder, error) {
 	}
 	out := make([]nodeFolder, len(fs))
 	for i, f := range fs {
-		out[i] = nodeFolder{Name: f.Name, Share: f.Share, Path: f.Path, Write: f.Access == folderDrop}
+		write := f.Access == folderDrop
+		if resources != nil {
+			write = write && slices.ContainsFunc(resources, func(e ResourceRef) bool {
+				return e.Kind == resFolder && strings.EqualFold(e.Ref, f.Name) && e.Access == accessDrop
+			})
+		}
+		out[i] = nodeFolder{Name: f.Name, Share: f.Share, Path: f.Path, Write: write}
 	}
 	return out, nil
 }
@@ -374,30 +382,6 @@ func folderInstructions(fs []*Folder) string {
 		b.WriteString(" Never try to change, move or delete the originals.")
 	}
 	return b.String()
-}
-
-// taintedFolders refuses, during a tainted turn, a task that would drop
-// results in a folder: writing is acting. Read-only folders still go.
-func (c *core) taintedFolders(names []string) error {
-	tainted := c.turnTaint()
-	if len(tainted) == 0 || len(names) == 0 {
-		return nil
-	}
-	fs, _, err := c.folderGrant(names)
-	if err != nil {
-		return err
-	}
-	var drop []string
-	for _, f := range fs {
-		if f.Access == folderDrop {
-			drop = append(drop, f.Name)
-		}
-	}
-	if len(drop) > 0 {
-		return fmt.Errorf("refused: this turn read external content (%s), and the task could write in the folders %s: "+
-			"ask %s first, and launch it in the turn of their answer", strings.Join(tainted, ", "), strings.Join(drop, ", "), c.conf().User)
-	}
-	return nil
 }
 
 // folderTaint is the taint of reading what a task found in its folders.
@@ -460,7 +444,7 @@ func (c *core) folderViews() ([]folderView, error) {
 	out := make([]folderView, 0, len(fs))
 	for _, f := range fs {
 		out = append(out, folderView{Folder: f, Source: sourceMachine, Mount: f.mountPath(), Online: online[f.Node],
-			Lend: "run_task folders: [\"" + f.Name + "\"]"})
+			Lend: lendHint(resFolder, f.Name, f.Access)})
 	}
 	ready := false
 	if u := c.pool.get(filesServer); u != nil {
@@ -469,10 +453,24 @@ func (c *core) folderViews() ([]folderView, error) {
 	}
 	for _, d := range c.cloudFolders() {
 		out = append(out, folderView{Folder: &Folder{Name: d.Name, Access: d.Access}, Source: sourceDrive, Online: ready,
-			Drive: d.ID, Lend: "run_task tools: [\"" + filesServer + "\"] (it reaches every Drive folder given to Eriphe)"})
+			Drive: d.ID, Lend: lendHint(resDriveFolder, d.Name, orStr(d.Access, folderRead))})
 	}
 	slices.SortStableFunc(out, func(a, b folderView) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
 	return out, nil
+}
+
+// lendHint tells the brain how to lend a folder: one entry of run_task's
+// resources.
+func lendHint(kind, name, access string) string {
+	raw, _ := json.Marshal(ResourceRef{Kind: kind, Ref: name, Access: accessRead})
+	hint := "run_task resources: [" + string(raw) + "]"
+	if access == folderDrop {
+		hint += `, or "access": "drop" to let the task add its results in its Eriphe/ subfolder`
+	}
+	if kind == resDriveFolder {
+		hint += "; for now the task gets the " + filesServer + " tool, which reaches every Drive folder given to Eriphe, each with its own access"
+	}
+	return hint
 }
 
 // The folder API (bearer token), for the CLI and scripts: the same methods

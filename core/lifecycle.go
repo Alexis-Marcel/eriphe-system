@@ -110,7 +110,7 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 			}
 			spec.Identity = env
 			spec.TZ = c.conf().TimeZone
-			if spec.Folders, err = c.specFolders(a.Folders); err != nil {
+			if spec.Folders, err = c.specFolders(a.Folders, a.Resources); err != nil {
 				// A folder was removed (or moved) under the task.
 				log.Printf("task %s fails: %v", a.ID, err)
 				c.store.updateTask(a.ID, map[string]any{"state": stateFailed})

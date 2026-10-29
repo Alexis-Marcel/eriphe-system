@@ -191,15 +191,19 @@ func TestFolderTaint(t *testing.T) {
 	ctx := context.Background()
 	c.addFolder(ctx, Folder{Name: "Clients", Node: "nas", Share: "data", Path: "Clients", Access: folderDrop})
 	c.addFolder(ctx, Folder{Name: "Photos", Node: "nas", Share: "media", Path: "Photos"})
-	if err := c.taintedFolders([]string{"Clients"}); err != nil {
+	if err := c.taintedResources(runRequest{Folders: []string{"Clients"}}); err != nil {
 		t.Fatalf("clean turn: %v", err)
 	}
 	c.turn.taint("gmail.read")
-	if err := c.taintedFolders([]string{"Photos"}); err != nil {
+	if err := c.taintedResources(runRequest{Folders: []string{"Photos"}}); err != nil {
 		t.Fatalf("read-only folder on a tainted turn: %v", err)
 	}
-	if err := c.taintedFolders([]string{"Photos", "Clients"}); err == nil || !strings.Contains(err.Error(), "Clients") {
+	if err := c.taintedResources(runRequest{Folders: []string{"Photos", "Clients"}}); err == nil || !strings.Contains(err.Error(), "Clients") {
 		t.Fatalf("drop folder on a tainted turn: %v", err)
+	}
+	// Lent for reading only, a drop folder still goes.
+	if err := c.taintedResources(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessRead}}}); err != nil {
+		t.Fatalf("drop folder lent read on a tainted turn: %v", err)
 	}
 
 	c.base.Brain = &BrainConfig{}

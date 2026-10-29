@@ -21,7 +21,8 @@ func TestDecideCredential(t *testing.T) {
 			return false
 		}
 	}
-	worker := credFacts{Kind: "worker", Repo: "owner/repo", Lent: true}
+	own := []repoGrant{{Repo: "owner/repo", Access: accessRead}}
+	worker := credFacts{Kind: "worker", Repos: own, Lent: true}
 	rules := &Policy{Credentials: []CredentialRule{
 		{Repo: "owner/docs", Access: accessRead, Decision: decideAllow},
 		{Repo: "owner/site", Decision: decideAllow, Reason: "the site is Eriphe's to publish"},
@@ -40,32 +41,32 @@ func TestDecideCredential(t *testing.T) {
 		{"case does not matter", nil, credRequest{Host: "github.com", Path: "Owner/Repo.git", Access: "read"}, worker, decideAllow, ""},
 		{"first push asks", nil, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "write"}, worker, decideAsk, "first push"},
 		{"approved push", nil, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "write"},
-			credFacts{Kind: "worker", Repo: "owner/repo", Lent: true, Granted: granted("owner/repo@write")}, decideAllow, "approved"},
+			credFacts{Kind: "worker", Repos: own, Lent: true, Granted: granted("owner/repo@write")}, decideAllow, "approved"},
 		{"a read approval is not a write", nil, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "write"},
-			credFacts{Kind: "worker", Repo: "owner/repo", Lent: true, Granted: granted("owner/repo@read")}, decideAsk, ""},
+			credFacts{Kind: "worker", Repos: own, Lent: true, Granted: granted("owner/repo@read")}, decideAsk, ""},
 		{"gh on the API host", nil, credRequest{Host: "api.github.com", Path: "owner/repo", Access: "read", Tool: "gh"}, worker, decideAllow, ""},
 		{"another repo", nil, credRequest{Host: "github.com", Path: "owner/other.git", Access: "read"}, worker, decideDeny, "not the repository"},
 		{"no repo for the task", nil, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read"},
 			credFacts{Kind: "worker", Lent: true}, decideDeny, "not the repository"},
 		{"not lent", nil, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read"},
-			credFacts{Kind: "worker", Repo: "owner/repo"}, decideDeny, "not lent"},
+			credFacts{Kind: "worker", Repos: own}, decideDeny, "no GitHub repository"},
 		{"the brain", nil, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read"},
-			credFacts{Kind: "brain", Repo: "owner/repo", Lent: true}, decideDeny, "brain"},
+			credFacts{Kind: "brain", Repos: own, Lent: true}, decideDeny, "brain"},
 		{"no path", nil, credRequest{Host: "github.com", Access: "read"}, worker, decideDeny, "useHttpPath"},
 		{"bad access", nil, credRequest{Host: "github.com", Path: "owner/repo", Access: "admin"}, worker, decideDeny, "read or write"},
 		{"not https", nil, credRequest{Protocol: "http", Host: "github.com", Path: "owner/repo", Access: "read"}, worker, decideDeny, "https"},
 		{"unknown host", nil, credRequest{Host: "gitlab.com", Path: "owner/repo", Access: "read"}, worker, "none", "gitlab.com"},
 		{"tainted read", nil, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read"},
-			credFacts{Kind: "worker", Repo: "owner/repo", Lent: true, Tainted: []string{"WebFetch"}}, decideAllow, ""},
+			credFacts{Kind: "worker", Repos: own, Lent: true, Tainted: []string{"WebFetch"}}, decideAllow, ""},
 		{"rule allows a read elsewhere", rules, credRequest{Host: "github.com", Path: "owner/docs.git", Access: "read"}, worker, decideAllow, "policy"},
 		{"that rule is for reads only", rules, credRequest{Host: "github.com", Path: "owner/docs.git", Access: "write"}, worker, decideDeny, "not the repository"},
 		{"rule allows a write", rules, credRequest{Host: "github.com", Path: "owner/site.git", Access: "write"}, worker, decideAllow, "publish"},
 		{"tainted write asks despite the rule", rules, credRequest{Host: "github.com", Path: "owner/site.git", Access: "write"},
-			credFacts{Kind: "worker", Repo: "owner/repo", Lent: true, Tainted: []string{"mcp__mail__read"}}, decideAsk, "external content"},
+			credFacts{Kind: "worker", Repos: own, Lent: true, Tainted: []string{"mcp__mail__read"}}, decideAsk, "external content"},
 		{"rule denies", rules, credRequest{Host: "github.com", Path: "owner/secret-keys.git", Access: "read"}, worker, decideDeny, "never"},
 		{"rule asks for a read", rules, credRequest{Host: "github.com", Path: "owner/infra.git", Access: "read"}, worker, decideAsk, "policy asks"},
 		{"rules still need the service lent", rules, credRequest{Host: "github.com", Path: "owner/docs.git", Access: "read"},
-			credFacts{Kind: "worker", Repo: "owner/repo"}, decideDeny, "not lent"},
+			credFacts{Kind: "worker", Repos: own}, decideDeny, "no GitHub repository"},
 	}
 	for _, c := range cases {
 		d := decideCredential(c.policy, c.req, c.facts)
@@ -138,15 +139,29 @@ func credCore(t *testing.T, tools string) (*core, *TaskRow) {
 	return c, task
 }
 
+// Without the GitHub App, the tool's long-lived token is lent only once the
+// user approves it.
 func TestCredentialFallbackToolToken(t *testing.T) {
 	c, task := credCore(t, "github.get_*")
-	a := c.credential(context.Background(), task, credRequest{Protocol: "https", Host: "github.com", Path: "owner/repo.git", Access: "read", Tool: "git"})
+	read := credRequest{Protocol: "https", Host: "github.com", Path: "owner/repo.git", Access: "read", Tool: "git"}
+	a := c.credential(context.Background(), task, read)
+	if a.Decision != decideAsk || a.Password != "" || !strings.Contains(a.Reason, "no GitHub App") || a.Permission["repo"] != "owner/repo" {
+		t.Fatalf("fallback asks: %+v", a)
+	}
+	c.store.credentialAnswered(task.ID, a.Permission, decideAllow, byUser, "")
+	a = c.credential(context.Background(), task, read)
 	if a.Decision != decideAllow || a.Password != "github_pat_long_lived" || a.Username != "x-access-token" || !strings.Contains(a.Reason, "fallback") {
 		t.Fatalf("fallback: %+v", a)
 	}
 	log, _ := c.store.credentialLog(task.ID, 10)
-	if len(log) != 1 || !log[0].Fallback() || log[0].Repo != "owner/repo" || log[0].Decision != decideAllow {
+	if len(log) != 3 || !log[0].Fallback() || log[0].Repo != "owner/repo" || log[0].Decision != decideAllow || log[2].Decision != decideAsk {
 		t.Fatalf("log %+v", log)
+	}
+	// With no token to fall back on either, it is refused without asking.
+	c.store.db.Exec(`DELETE FROM credential_grants`)
+	currentVault().remove("server.github.token")
+	if a := c.credential(context.Background(), task, read); a.Decision != decideDeny || !strings.Contains(a.Reason, "GitHub App") {
+		t.Fatalf("nothing to lend: %+v", a)
 	}
 }
 
@@ -222,6 +237,7 @@ func TestCredentialApprovalFlow(t *testing.T) {
 // rule allows it; and a task started on a tainted turn is tainted.
 func TestCredentialTaintedTask(t *testing.T) {
 	c, task := credCore(t, "github")
+	withApp(t, c, newFakeGitHub(t))
 	c.base.Policy = &Policy{Credentials: []CredentialRule{{Repo: "owner/repo", Decision: decideAllow}}}
 	c.snap.Load().Policy = c.base.Policy
 	ctx := context.Background()
@@ -268,6 +284,7 @@ func TestCredentialEndpointNeedsTheNode(t *testing.T) {
 // The task's details show what it asked for, and the fallback's warning.
 func TestCredentialsInTaskDetails(t *testing.T) {
 	c, task := credCore(t, "github")
+	c.store.credentialAnswered(task.ID, map[string]any{"host": "github.com", "repo": "owner/repo", "access": "read"}, decideAllow, byUser, "")
 	c.credential(context.Background(), task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read", Tool: "git"})
 	c.credential(context.Background(), task, credRequest{Host: "github.com", Path: "owner/other.git", Access: "read", Tool: "git"})
 	tw := newTestWebFor(t, c)
