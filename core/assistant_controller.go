@@ -239,7 +239,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	if err != nil {
 		return fmt.Errorf("prompt: %w", err)
 	}
-	prompt := strings.ReplaceAll(raw, "{{user}}", c.conf().User)
+	prompt := standingInstructions(raw, c.conf().User, a.displayName())
 	// What its harness cannot do on the web, from its card (harnesses.go).
 	if _, ag, err := c.conf().agent(a.Agent); err == nil && r.NoWebSearch != "" && !harnessOf(ag.Runtime).BuiltinWebSearch {
 		prompt += "\n\n" + r.NoWebSearch + "\n"
@@ -337,8 +337,20 @@ func (c *core) noteSession(a Assistant, t *TaskRow) {
 // Its tools are assistantToolsHash's.
 func (c *core) assistantSpecHash(a Assistant) string {
 	h := sha256.New()
-	json.NewEncoder(h).Encode([]any{a.Agent, c.conf().Agents[a.Agent], a.Instructions, a.InstructionsFile, a.Node, a.Resources})
+	spec := []any{a.Agent, c.conf().Agents[a.Agent], a.Instructions, a.InstructionsFile, a.Node, a.Resources}
+	// Its name is in its instructions: another restarts it. Eriphe, the
+	// name it had before it could have another, keeps the fingerprint.
+	if n := a.displayName(); a.Role == assistantRoleBrain && n != defaultDisplayName || a.Role != assistantRoleBrain && n != a.Name {
+		spec = append(spec, n)
+	}
+	json.NewEncoder(h).Encode(spec)
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// standingInstructions are an assistant's instructions with the user's
+// name for {{user}} and its own for {{name}}.
+func standingInstructions(raw, user, name string) string {
+	return strings.NewReplacer("{{user}}", user, "{{name}}", name).Replace(raw)
 }
 
 // legacyAgentHash is the fingerprint the brain kept before it was an

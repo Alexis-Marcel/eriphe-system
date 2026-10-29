@@ -16,7 +16,7 @@ import (
 // with only MCP tools. eriphe-core gives it one turn per event: my messages,
 // and what happens to its workers. It never polls.
 
-const brainStartPrompt = "Eriphe démarre. Lis tes consignes, ne fais rien d'autre pour l'instant et réponds seulement « Prêt. »."
+const brainStartPrompt = "Tu démarres. Lis tes consignes, ne fais rien d'autre pour l'instant et réponds seulement « Prêt. »."
 
 // notifyBrain queues an event for the brain when a worker task changes state
 // in a way that may need it.
@@ -121,7 +121,7 @@ func init() {
 		started:     (*core).brainStarted,
 		permission:  func(c *core, ctx context.Context, _ Assistant, t *TaskRow) error { return c.brainPermission(ctx, t) },
 		failing: func(c *core, _ Assistant) {
-			c.store.addMessage(roleBrain, "(Eriphe n'arrive pas à démarrer : voir le journal d'eriphe-core.)", true)
+			c.store.addMessage(roleBrain, "("+c.conf().assistantName()+" n'arrive pas à démarrer : voir le journal d'eriphe-core.)", true)
 		},
 	}
 	assistantTriggers[triggerConversation] = assistantTrigger{
@@ -245,8 +245,8 @@ func (c *core) brainPermissionOne(ctx context.Context, t *TaskRow, p map[string]
 		case decideAsk:
 			c.store.markUserOnly(t.ID, pid, reason)
 			raw, _ := json.Marshal(input)
-			c.store.addMessage(roleBrain, fmt.Sprintf("(Eriphe veut utiliser %s %s : %s. Autorise ou refuse dans `eriphe`, tâche %s.)",
-				tool, truncate(string(raw), 400), reason, t.ID), true)
+			c.store.addMessage(roleBrain, fmt.Sprintf("(%s veut utiliser %s %s : %s. Autorise ou refuse dans `eriphe`, tâche %s.)",
+				c.conf().assistantName(), tool, truncate(string(raw), 400), reason, t.ID), true)
 			return nil
 		case decideDeny:
 			no := false
@@ -259,7 +259,7 @@ func (c *core) brainPermissionOne(ctx context.Context, t *TaskRow, p map[string]
 		}
 	}
 	no := false
-	_, err := c.answer(ctx, t.ID, pid, "Eriphe (l'orchestrateur) n'utilise que ses outils MCP : délègue ce travail avec run_task.", &no, byPolicy)
+	_, err := c.answer(ctx, t.ID, pid, "L'orchestrateur n'utilise que ses outils MCP : délègue ce travail avec run_task.", &no, byPolicy)
 	return err
 }
 
@@ -309,7 +309,7 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 		}
 		if e.Type == "turn_end" {
 			if bad, _ := e.Data["auth_error"].(bool); bad {
-				c.store.addMessage(roleBrain, "(Eriphe n'arrive pas à s'authentifier : vérifie le fournisseur de son agent.)", true)
+				c.store.addMessage(roleBrain, "("+c.conf().assistantName()+" n'arrive pas à s'authentifier : vérifie le fournisseur de son agent.)", true)
 			}
 		}
 	}

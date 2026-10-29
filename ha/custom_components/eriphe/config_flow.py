@@ -23,7 +23,7 @@ from .api import (
     InvalidAuth,
     UnexpectedResponse,
 )
-from .const import DOMAIN
+from .const import DEFAULT_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,9 +40,14 @@ SCHEMA = vol.Schema(
 
 
 class EripheConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Set up Eriphe, or change its URL and token."""
+    """Set up Eriphe, or change its URL and token.
+
+    The entry, and the conversation agent's device, take the name the user
+    gave their assistant in eriphe-core: read again on Reconfigure.
+    """
 
     VERSION = 1
+    _name = DEFAULT_NAME
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -53,7 +58,7 @@ class EripheConfigFlow(ConfigFlow, domain=DOMAIN):
             data, errors = await self._async_check(user_input)
             if not errors:
                 self._async_abort_entries_match({CONF_URL: data[CONF_URL]})
-                return self.async_create_entry(title="Eriphe", data=data)
+                return self.async_create_entry(title=self._name, data=data)
         return self.async_show_form(
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(SCHEMA, user_input),
@@ -69,7 +74,9 @@ class EripheConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             data, errors = await self._async_check(user_input)
             if not errors:
-                return self.async_update_reload_and_abort(entry, data_updates=data)
+                return self.async_update_reload_and_abort(
+                    entry, title=self._name, data_updates=data
+                )
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=self.add_suggested_values_to_schema(
@@ -93,7 +100,7 @@ class EripheConfigFlow(ConfigFlow, domain=DOMAIN):
             async_get_clientsession(self.hass), data[CONF_URL], data[CONF_TOKEN]
         )
         try:
-            await client.async_validate()
+            self._name = await client.async_validate() or DEFAULT_NAME
         except CannotConnect:
             return data, {"base": "cannot_connect"}
         except InvalidAuth:

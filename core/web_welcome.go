@@ -4,17 +4,22 @@ import (
 	"net/http"
 )
 
-// The first-run wizard, after the owner's account: connect the AI account
-// the brain thinks with (the provider form of Settings → Agents, its usual
-// agents created with it), then wait for a machine and the brain to start.
+// The first-run wizard, after the owner's account: name the assistant,
+// connect the AI account it thinks with (the provider form of Settings →
+// Agents, its usual agents created with it), then wait for a machine and
+// the brain to start.
 // The conversation leads here while the brain has no agent, until the
 // owner skips it.
 
-const welcomeSkipped = "welcome_skipped"
+const (
+	welcomeSkipped = "welcome_skipped"
+	welcomeNamed   = "welcome_named" // the name step is done
+)
 
 func (w *web) welcomeRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /welcome", w.auth(w.handleWelcome))
 	mux.Handle("GET /welcome/status", w.auth(w.handleWelcomeStatus))
+	mux.Handle("POST /welcome/name", w.auth(w.handleWelcomeName))
 	mux.Handle("POST /welcome/skip", w.auth(w.handleWelcomeSkip))
 }
 
@@ -26,13 +31,16 @@ func (w *web) needsWelcome() bool {
 }
 
 type welcomeView struct {
-	Agent    string        // the brain's agent, once there is one
-	Model    string        // its model, as the agents page names it
-	Form     *providerForm // the account form, while there is no agent
-	Kinds    []providerKind
-	Machines int    // online
-	Brain    string // brainState: "" or thinking once it runs
-	Ready    bool
+	Naming    bool   // the first step: what to call the assistant
+	Name      string // its name, or the one typed
+	NameError string
+	Agent     string        // the brain's agent, once there is one
+	Model     string        // its model, as the agents page names it
+	Form      *providerForm // the account form, while there is no agent
+	Kinds     []providerKind
+	Machines  int    // online
+	Brain     string // brainState: "" or thinking once it runs
+	Ready     bool
 }
 
 func (w *web) welcomeData(r *http.Request) welcomeView {
@@ -61,7 +69,9 @@ func (w *web) handleWelcome(rw http.ResponseWriter, r *http.Request, s *session)
 		return
 	}
 	v := w.welcomeData(r)
-	if v.Agent == "" {
+	if v.Agent == "" && w.c.store.get(welcomeNamed) == "" {
+		v.Naming, v.Name = true, w.c.conf().assistantName()
+	} else if v.Agent == "" {
 		k, ok := kindOf(r.URL.Query().Get("kind"))
 		if !ok {
 			k, _ = kindOf("claude-subscription")
@@ -78,6 +88,31 @@ func (w *web) handleWelcome(rw http.ResponseWriter, r *http.Request, s *session)
 		}
 	}
 	w.render(rw, r, s, "welcome", "", page{Title: "welcome.title", Tab: "agents", Data: v})
+}
+
+// handleWelcomeName names the assistant, then goes on to its AI account.
+func (w *web) handleWelcomeName(rw http.ResponseWriter, r *http.Request, s *session) {
+	b := w.c.conf().brain()
+	if b == nil {
+		http.Redirect(rw, r, "/", http.StatusSeeOther)
+		return
+	}
+	name := normalizeDisplayName(r.PostFormValue("name"))
+	problem := ""
+	if checkDisplayName(name) != nil {
+		problem = tr(w.lang(r), "welcome.namebad")
+	} else if err := w.c.editAssistant(b.Name, assistantEdit{DisplayName: name, SetName: true}); err != nil {
+		problem = w.formError(r, err)
+	}
+	if problem != "" {
+		v := w.welcomeData(r)
+		v.Naming, v.Name, v.NameError = true, name, problem
+		w.render(rw, r, s, "welcome", "", page{Title: "welcome.title", Tab: "agents", Data: v})
+		return
+	}
+	w.c.ping() // a brain already running restarts with its name
+	w.c.store.set(welcomeNamed, "1")
+	http.Redirect(rw, r, "/welcome", http.StatusSeeOther)
 }
 
 // handleWelcomeStatus is the wizard's last step, polled until the brain runs.

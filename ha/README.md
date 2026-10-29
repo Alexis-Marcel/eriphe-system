@@ -21,9 +21,12 @@ It is not in HACS yet: install it by hand.
      Assistant > "The house's voice talks to Eriphe", which also shows the URL to enter).
 
    The form checks both with an empty request, which `eriphe-core` answers 400 once the token is
-   accepted. The URL and token can be changed later with **Reconfigure** on the integration.
+   accepted, then reads the name you gave your assistant (`GET /v1/voice`, `{"name": "Jarvis"}`):
+   the entry and the conversation agent take it (Eriphe with an `eriphe-core` older than the name).
+   The URL and token can be changed later with **Reconfigure** on the integration, which also
+   reads the name again after a rename (the agent's entity id stays as it was).
 4. **Settings > Voice assistants**, open the Assist pipeline (or create one), set **Conversation
-   agent** to **Eriphe**, and keep **Prefer handling commands locally** on.
+   agent** to your assistant (**Eriphe** by default), and keep **Prefer handling commands locally** on.
 
 ## What it sends
 
@@ -43,8 +46,8 @@ device Home Assistant passed). Empty fields are left out.
 `eriphe-core` answers NDJSON: `{"delta": "..."}` lines, streamed into the chat log as they come,
 then `{"done": true, "text": "...", "continue": false}`. `continue` decides whether the satellite
 listens again. If `eriphe-core` cannot be reached, refuses the token or has no brain available, the
-agent says "Je n'arrive pas à joindre Eriphe." instead of failing; if the stream breaks after a
-partial answer, it adds "La connexion avec Eriphe a été coupée.".
+agent says "Je n'arrive pas à joindre Eriphe." (with your assistant's name) instead of failing; if
+the stream breaks after a partial answer, it adds "La connexion avec Eriphe a été coupée.".
 
 ## Develop
 

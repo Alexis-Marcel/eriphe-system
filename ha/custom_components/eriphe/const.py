@@ -7,7 +7,12 @@ DOMAIN = "eriphe"
 
 VOICE_PATH = "/v1/voice"
 
-# Spoken when eriphe-core cannot be reached or fails before saying anything.
-FALLBACK_SPEECH = "Je n'arrive pas à joindre Eriphe."
+# The assistant's name until eriphe-core gives the one the user chose (GET
+# VOICE_PATH): the entry's title, the agent's device name.
+DEFAULT_NAME = "Eriphe"
+
+# Spoken when eriphe-core cannot be reached or fails before saying anything;
+# {name} is the assistant's.
+FALLBACK_SPEECH = "Je n'arrive pas à joindre {name}."
 # Spoken after a partial answer when the stream breaks before its end.
-INTERRUPTED_SPEECH = " La connexion avec Eriphe a été coupée."
+INTERRUPTED_SPEECH = " La connexion avec {name} a été coupée."

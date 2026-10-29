@@ -233,7 +233,7 @@ func (c *core) brainFirstPrompt(resume bool) string {
 
 // brainFreshPrompt opens a fresh session: what waits for the brain alone
 // would otherwise wait for a turn that may not come.
-const brainFreshPrompt = "Eriphe démarre dans une session neuve. Lis tes consignes et l'état du fil ci-dessous. " +
+const brainFreshPrompt = "Tu démarres dans une session neuve. Lis tes consignes et l'état du fil ci-dessous. " +
 	"Si une permission t'attend (pas celles qui reviennent à %s), réponds-y avec answer_task ; ne fais rien d'autre pour l'instant, puis réponds seulement « Prêt. »."
 
 // packForDelivery is the pack owed to a session that was not resumed, if any.

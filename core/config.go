@@ -56,8 +56,12 @@ type Config struct {
 type BrainConfig struct {
 	Node  string `json:"node,omitempty"`  // empty lets the scheduler choose
 	Agent string `json:"agent,omitempty"` // empty lets the workspace choose (catalog.go)
+	// What the user calls the assistant; empty lets the workspace choose
+	// (Eriphe until then).
+	DisplayName string `json:"display_name,omitempty"`
 	// Its standing instructions: brain-prompt.md, built in, unless a file
-	// replaces them. {{user}} is replaced by the user's name.
+	// replaces them. {{user}} is replaced by the user's name, {{name}} by
+	// the assistant's.
 	PromptFile string `json:"prompt_file,omitempty"`
 	// eriphe-core's MCP URL as seen from the brain's node. Without it, the
 	// brain reaches eriphe-core through its node, as it reaches the catalog.

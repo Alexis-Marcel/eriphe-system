@@ -72,7 +72,7 @@ func (c *core) brainFetch(ctx context.Context, t *TaskRow, pid string, input map
 	}
 	if tainted := c.turnTaintBut(pending); len(tainted) > 0 {
 		if !c.ownerWroteURL(raw) {
-			return c.brainFetchAsk(t, pid, raw, "Eriphe a lu un contenu extérieur dans ce tour ("+strings.Join(tainted, ", ")+")")
+			return c.brainFetchAsk(t, pid, raw, c.conf().assistantName()+" a lu un contenu extérieur dans ce tour ("+strings.Join(tainted, ", ")+")")
 		}
 		log.Printf("brain: WebFetch %s allowed on a tainted turn: the URL is in the user's message", truncate(raw, 200))
 	} else {
@@ -87,8 +87,8 @@ func (c *core) brainFetch(ctx context.Context, t *TaskRow, pid string, input map
 func (c *core) brainFetchAsk(t *TaskRow, pid, raw, reason string) error {
 	log.Printf("brain: WebFetch %s is the user's decision: %s", truncate(raw, 200), reason)
 	c.store.markUserOnly(t.ID, pid, reason)
-	c.store.addMessage(roleBrain, fmt.Sprintf("(Eriphe veut lire la page %s : %s. Autorise ou refuse dans `eriphe`, tâche %s.)",
-		truncate(raw, 400), reason, t.ID), true)
+	c.store.addMessage(roleBrain, fmt.Sprintf("(%s veut lire la page %s : %s. Autorise ou refuse dans `eriphe`, tâche %s.)",
+		c.conf().assistantName(), truncate(raw, 400), reason, t.ID), true)
 	return nil
 }
 

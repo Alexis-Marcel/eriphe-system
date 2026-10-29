@@ -74,6 +74,7 @@ func newCore(cfg *Config, store *Store) *core {
 		m.validate()
 	}
 	c.snap.Store(m)
+	setAssistantName(m.assistantName())
 	c.loadAssistants()
 	c.turn.load(store.get("brain_turn"), c.brainTaskID() != "")
 	c.turn.keep = func(st brainTurnState) {
@@ -227,13 +228,15 @@ type runRequest struct {
 }
 
 // workerVoice is a worker's standing instruction: its last message reaches
-// me, so it speaks like Eriphe.
-const workerVoice = "Your final message is relayed to the user as Eriphe's. Write it in the language of your instructions; " +
-	"in French, use tutoiement (« tu »), never « vous ». Be concise: the result, without preamble."
+// the user through the assistant they named, so it speaks like it.
+func workerVoice(name string) string {
+	return "Your final message is relayed to the user as " + name + "'s. Write it in the language of your instructions; " +
+		"in French, use tutoiement (« tu »), never « vous ». Be concise: the result, without preamble."
+}
 
 // runTask schedules a worker task, sends it to its node and starts following it.
 func (c *core) runTask(ctx context.Context, r runRequest) (*TaskRow, error) {
-	return c.startTask(ctx, "worker", r, nodeTaskSpec{AppendSystemPrompt: workerVoice})
+	return c.startTask(ctx, "worker", r, nodeTaskSpec{AppendSystemPrompt: workerVoice(c.conf().assistantName())})
 }
 
 // startTask is runTask for any kind of task; extra carries the fields only

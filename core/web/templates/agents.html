@@ -143,7 +143,7 @@
   {{range .Assistants}}
     <li class="assistant" id="assistant-{{.Name}}">
       <div class="tile-head">
-        <span class="assistant-name"><span class="mono strong">{{.Name}}</span> <span class="tag tag-brain">{{.RoleLabel}}</span>{{if .Spec.Disabled}} <span class="tag">{{t "assistants.disabled"}}</span>{{end}}</span>
+        <span class="assistant-name"><span class="strong">{{.DisplayName}}</span>{{if ne .DisplayName .Name}} <span class="mono muted small">{{.Name}}</span>{{end}} <span class="tag tag-brain">{{.RoleLabel}}</span>{{if .Spec.Disabled}} <span class="tag">{{t "assistants.disabled"}}</span>{{end}}</span>
         <span class="chips">{{range .Status.Conditions}}<span class="status {{if .Status}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{t (printf "assistants.cond.%s" .Type)}}</span>{{end}}</span>
       </div>
       <dl class="kv">
@@ -153,8 +153,11 @@
         <div><dt>{{t "assistants.lastturn"}}</dt><dd>{{if .Status.LastTurn}}{{ago .LastTurn}}{{else}}<span class="muted">{{t "time.never"}}</span>{{end}}</dd></div>
       </dl>
       {{if .Status.LastError}}<p class="alert small" role="alert">{{short .Status.LastError 300}}</p>{{end}}
-      {{if not (and .AgentLocked .ToolsLocked)}}
+      {{if not (and .AgentLocked .ToolsLocked .NameLocked)}}
       <form class="assistant-form" hx-post="/settings/assistants/{{.Name}}" hx-disabled-elt="find button[type=submit]">
+        {{if not .NameLocked}}<label class="field"><span>{{t "assistants.name"}}</span>
+          <input name="display_name" value="{{.DisplayName}}" required maxlength="32" autocomplete="off">
+          <small class="muted">{{t "assistants.namehint"}}</small></label>{{end}}
         {{if not .AgentLocked}}<label class="field"><span>{{t "assistants.agent"}}</span>
           <select name="agent">{{range .Choices}}<option value="{{.Name}}" {{if .Brain}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select></label>{{end}}
         {{if not .ToolsLocked}}<label class="field"><span>{{t "assistants.tools"}}</span>

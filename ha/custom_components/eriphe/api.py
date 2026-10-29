@@ -12,7 +12,7 @@ from typing import Any
 
 import aiohttp
 
-from .const import VOICE_PATH
+from .const import DEFAULT_NAME, VOICE_PATH
 from .stream import Event, StreamError, iter_events
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,8 +52,8 @@ class EripheClient:
         self._url = url.rstrip("/") + VOICE_PATH
         self._headers = {"Authorization": f"Bearer {token}"}
 
-    async def async_validate(self) -> None:
-        """Check the URL and the token with a request eriphe-core must refuse.
+    async def async_validate(self) -> str:
+        """Check the URL and the token, and return the assistant's name.
 
         An empty text is answered 400 once the token is accepted, so 400 means
         "reachable and authorized".
@@ -65,12 +65,33 @@ class EripheClient:
                 headers=self._headers,
                 timeout=VALIDATE_TIMEOUT,
             ) as resp:
-                if resp.status == 400:
-                    return
-                await _raise_for_status(resp)
-                raise UnexpectedResponse(f"unexpected status {resp.status}")
+                if resp.status != 400:
+                    await _raise_for_status(resp)
+                    raise UnexpectedResponse(f"unexpected status {resp.status}")
         except (aiohttp.ClientError, TimeoutError) as err:
             raise CannotConnect(str(err) or type(err).__name__) from err
+        return await self.async_name()
+
+    async def async_name(self) -> str:
+        """Return what the user calls their assistant, or Eriphe.
+
+        An eriphe-core without the name (older than it) or that fails to
+        give it leaves the default.
+        """
+        try:
+            async with self._session.get(
+                self._url, headers=self._headers, timeout=VALIDATE_TIMEOUT
+            ) as resp:
+                if resp.status != 200:
+                    return DEFAULT_NAME
+                body = await resp.json(content_type=None)
+        except (aiohttp.ClientError, TimeoutError, ValueError) as err:
+            _LOGGER.debug("No assistant name from eriphe-core: %s", err)
+            return DEFAULT_NAME
+        name = body.get("name") if isinstance(body, dict) else None
+        if isinstance(name, str) and name.strip():
+            return name.strip()[:32]
+        return DEFAULT_NAME
 
     async def async_voice(self, body: dict[str, Any]) -> AsyncIterator[Event]:
         """Send a sentence and yield the answer's events as they arrive."""

@@ -21,7 +21,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import EripheConfigEntry
 from .api import EripheError
-from .const import DOMAIN, FALLBACK_SPEECH, INTERRUPTED_SPEECH
+from .const import DEFAULT_NAME, DOMAIN, FALLBACK_SPEECH, INTERRUPTED_SPEECH
 from .stream import Delta, build_request
 
 _LOGGER = logging.getLogger(__name__)
@@ -125,7 +125,8 @@ class EripheConversationEntity(conversation.ConversationEntity):
                         _LOGGER.debug("Final text differs from the deltas, kept")
         except EripheError as err:
             _LOGGER.warning("Eriphe could not answer: %s", err)
-            yield {"content": INTERRUPTED_SPEECH if said else FALLBACK_SPEECH}
+            speech = INTERRUPTED_SPEECH if said else FALLBACK_SPEECH
+            yield {"content": speech.format(name=self._entry.title or DEFAULT_NAME)}
 
 
 @callback

@@ -7,15 +7,42 @@ import (
 	"testing"
 )
 
-// The first run: the account, then the AI account the brain thinks with,
-// then the brain starts once a machine is there.
+// The first run: the account, then the assistant's name, then the AI
+// account it thinks with, then it starts once a machine is there.
 func TestWebWelcomeFlow(t *testing.T) {
+	keepName(t)
 	tw, c, csrf := catalogWeb(t, func(cfg *Config) { noAgents(cfg); cfg.Brain = &BrainConfig{} })
 	if code, _, h := tw.do("GET", "/", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/welcome" {
 		t.Fatalf("the conversation without an agent: %d %s", code, h.Get("Location"))
 	}
+	// First its name: Eriphe unless the user picks another.
 	_, body, _ := tw.do("GET", "/welcome", nil, nil)
-	for _, want := range []string{"Bienvenue dans Eriphe", "Ton espace est créé", "claude setup-token", `name="key"`,
+	for _, want := range []string{"Bienvenue dans Eriphe", "Comment veux-tu appeler ton assistant ?", `action="/welcome/name"`,
+		`name="name" value="Eriphe"`, "/welcome/skip"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the name step lacks %q", want)
+		}
+	}
+	if strings.Contains(body, `name="key"`) {
+		t.Error("the AI account comes before the name")
+	}
+	if _, body, h := tw.post("/welcome/name", url.Values{"name": {"Jar<vis>"}}, csrf); h.Get("Location") != "" ||
+		!strings.Contains(body, "Ce nom ne convient pas") || !strings.Contains(body, `value="Jar&lt;vis&gt;"`) {
+		t.Fatalf("a bad name: %s %s", h.Get("Location"), body)
+	}
+	if c.conf().assistantName() != "Eriphe" {
+		t.Fatal("a bad name was kept")
+	}
+	if code, _, h := tw.post("/welcome/name", url.Values{"name": {" Jarvis "}}, csrf); code != http.StatusSeeOther || h.Get("Location") != "/welcome" {
+		t.Fatalf("named: %d %s", code, h.Get("Location"))
+	}
+	if b := c.conf().brain(); b.Name != brainAssistant || b.DisplayName != "Jarvis" {
+		t.Fatalf("brain = %+v", b)
+	}
+
+	// Then the AI account.
+	_, body, _ = tw.do("GET", "/welcome", nil, nil)
+	for _, want := range []string{"Relie l&#39;IA de Jarvis", "Avec quelle IA Jarvis réfléchit-il ?", "claude setup-token", `name="key"`,
 		`name="next" value="welcome"`, `name="kind" value="claude-subscription"`, "/welcome?kind=chatgpt-subscription", "/welcome/skip"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the wizard lacks %q", want)
@@ -47,20 +74,35 @@ func TestWebWelcomeFlow(t *testing.T) {
 
 	// No machine yet, then one, then the brain at work.
 	_, body, _ = tw.do("GET", "/welcome", nil, nil)
-	if !strings.Contains(body, "Eriphe réfléchit avec Claude Sonnet") || !strings.Contains(body, "attend un appareil") ||
+	if !strings.Contains(body, "Jarvis réfléchit avec Claude Sonnet") || !strings.Contains(body, "attend un appareil") ||
 		!strings.Contains(body, `hx-get="/welcome/status"`) || strings.Contains(body, `name="key"`) {
 		t.Fatalf("waiting for a machine: %s", body)
 	}
 	c.store.registerNode("pc", hashSecret("s"))
 	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
-	if _, body, _ = tw.do("GET", "/welcome/status", nil, nil); !strings.Contains(body, "Eriphe démarre sur ton appareil") {
+	if _, body, _ = tw.do("GET", "/welcome/status", nil, nil); !strings.Contains(body, "Jarvis démarre sur ton appareil") {
 		t.Fatalf("starting: %s", body)
 	}
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "pc", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})
 	setBrainTask(c.core, "b-1")
 	_, body, _ = tw.do("GET", "/welcome/status", nil, nil)
-	if !strings.Contains(body, "Eriphe est prêt") || !strings.Contains(body, `href="/"`) || strings.Contains(body, "hx-trigger") {
+	if !strings.Contains(body, "Jarvis est prêt") || !strings.Contains(body, `href="/"`) || strings.Contains(body, "hx-trigger") {
 		t.Fatalf("ready: %s", body)
+	}
+}
+
+// Keeping Eriphe leaves the default: nothing set, nothing restarted.
+func TestWebWelcomeKeepsEriphe(t *testing.T) {
+	keepName(t)
+	tw, c, csrf := catalogWeb(t, func(cfg *Config) { noAgents(cfg); cfg.Brain = &BrainConfig{} })
+	if code, _, h := tw.post("/welcome/name", url.Values{"name": {"Eriphe"}}, csrf); code != http.StatusSeeOther || h.Get("Location") != "/welcome" {
+		t.Fatalf("named: %d %s", code, h.Get("Location"))
+	}
+	if b := c.conf().brain(); b.DisplayName != "" || c.conf().assistantName() != "Eriphe" {
+		t.Fatalf("brain = %+v", b)
+	}
+	if _, body, _ := tw.do("GET", "/welcome", nil, nil); !strings.Contains(body, `name="key"`) || !strings.Contains(body, "Relie l&#39;IA d&#39;Eriphe") {
+		t.Fatal("the name step again")
 	}
 }
 

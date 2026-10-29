@@ -329,7 +329,7 @@ func (c *core) taintedAllow(taskID, pid string) error {
 	if len(tainted) == 0 {
 		return nil
 	}
-	why := "Eriphe a lu un contenu extérieur dans ce tour (" + strings.Join(tainted, ", ") + ")"
+	why := c.conf().assistantName() + " a lu un contenu extérieur dans ce tour (" + strings.Join(tainted, ", ") + ")"
 	c.store.markUserOnly(taskID, pid, why)
 	return fmt.Errorf("not allowed: this turn read external content (%s), so allowing is %s's decision now: "+
 		"the request is forwarded to %s, relay it in one line and do not retry", strings.Join(tainted, ", "), c.conf().User, c.conf().User)

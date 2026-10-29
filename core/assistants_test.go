@@ -73,7 +73,7 @@ func TestBrainIsAnAssistant(t *testing.T) {
 	if err != nil || task.Kind != "brain" || task.Agent != "sonnet" || st.Agent != "sonnet" || !st.Quiet || st.SpecHash == "" || st.ToolsHash == "" {
 		t.Fatalf("task = %+v, status = %+v, %v", task, st, err)
 	}
-	if !strings.HasPrefix(task.Prompt, "Eriphe démarre dans une session neuve") {
+	if !strings.HasPrefix(task.Prompt, "Tu démarres dans une session neuve") {
 		t.Fatalf("first turn = %q", task.Prompt)
 	}
 	spec, err := c.store.taskSpec(task.ID)
@@ -124,7 +124,7 @@ func TestAssistantSpecHashRestart(t *testing.T) {
 	if c.store.get("brain_stopped:"+next) != "" {
 		t.Fatal("restarted before its tools changed")
 	}
-	if err := c.editAssistant(brainAssistant, "", []string{"docs"}, true); err != nil {
+	if err := c.editAssistant(brainAssistant, assistantEdit{Tools: []string{"docs"}, SetTools: true}); err != nil {
 		t.Fatal(err)
 	}
 	if c.tendAssistants(ctx, "tok"); c.store.get("brain_stopped:"+next) == "" {
@@ -210,7 +210,7 @@ func TestAssistantFileReadOnly(t *testing.T) {
 	wantKey(t, c.putAssistant(brainAssistant, Assistant{Instructions: "y"}), "catalog.readonly")
 	wantKey(t, c.putAssistant(brainAssistant, Assistant{Role: roleTest}), "catalog.readonly")
 	wantKey(t, c.setBrainAgent("sonnet"), "catalog.readonly")
-	wantKey(t, c.editAssistant(brainAssistant, "", []string{"mail"}, true), "catalog.readonly")
+	wantKey(t, c.editAssistant(brainAssistant, assistantEdit{Tools: []string{"mail"}, SetTools: true}), "catalog.readonly")
 	wantKey(t, c.deleteAssistant(brainAssistant), "catalog.readonly")
 	// Files and tokens are the file's.
 	for _, a := range []Assistant{{Role: roleTest, InstructionsFile: "/etc/passwd"}, {Role: roleTest, SelfURL: "http://x/mcp"},
