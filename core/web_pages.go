@@ -501,6 +501,7 @@ type joinView struct {
 	Local   bool // the address is this computer's own: another one cannot use it
 	Expires time.Time
 	CAHash  string // the machines' CA, which the new machine pins (machine_tls.go)
+	Wait    joinWait
 }
 
 // loopbackURL tells whether an address names this computer only.
@@ -581,6 +582,7 @@ func (w *web) joinResult(rw http.ResponseWriter, r *http.Request, s *session, v 
 	if v.Error == "" {
 		v.Token, v.Core, v.Expires, v.CAHash = token, w.joinCoreURL(r, r.PostFormValue("via")), expires, w.c.caHash()
 		v.Local = loopbackURL(strings.Split(v.Core, ",")[0])
+		v.Wait = joinWait{Name: v.Name, ID: strings.SplitN(token, ".", 2)[0]}
 		log.Printf("web: join token for %s (rejoin: %t)", v.Name, v.Rejoin)
 	}
 	w.render(rw, r, s, "settings", "join-result", page{Data: v})

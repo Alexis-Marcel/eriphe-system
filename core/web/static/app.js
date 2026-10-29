@@ -380,6 +380,15 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   const d = e.target.closest && e.target.closest("dialog.modal");
   if (d && !d.open) d.showModal();
 });
+// A dialog marked data-reset-on-close starts fresh when it is opened again:
+// closed in any way, its forms are reset and its data-clear-on-close parts
+// emptied, which also ends the connect dialog's waiting for the device.
+document.addEventListener("close", (e) => {
+  const d = e.target;
+  if (!(d instanceof HTMLDialogElement) || !d.hasAttribute("data-reset-on-close")) return;
+  d.querySelectorAll("form").forEach((f) => f.reset());
+  d.querySelectorAll("[data-clear-on-close]").forEach((el) => { el.textContent = ""; });
+}, true);
 if (location.hash === "#connect") {
   const d = document.getElementById("connect-dlg");
   if (d) openDialog(d);

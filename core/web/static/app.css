@@ -544,6 +544,8 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: none; } 40% { opacity: 1; transform: translateY(-2px); } }
+/* A discreet dot that pulses while something is awaited. */
+.pulse-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--accent); color: var(--accent); animation: pulse 1.6s infinite; vertical-align: middle; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 currentColor; } 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
 @media (prefers-reduced-motion: reduce) {
@@ -837,6 +839,11 @@ details.advanced[open] .adv-title::after { transform: rotate(-135deg); }
 .test-result p { margin: 0; }
 .test-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .test-ok { background: var(--ok-soft); color: var(--ok); }
+.join-wait { display: grid; gap: 12px; justify-items: start; margin-top: 16px; }
+.join-wait p { margin: 0; }
+.join-wait .test-result { justify-self: stretch; }
+/* Once the device is connected, "Done" is the only way out (Escape and the backdrop still close). */
+.modal:has(.join-done) > .modal-actions { display: none; }
 .test-err { background: var(--danger-soft); color: var(--danger); }
 .test-info { background: var(--accent-soft); color: var(--accent-text); }
 .test-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 500; }
