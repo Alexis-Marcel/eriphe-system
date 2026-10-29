@@ -139,7 +139,9 @@ printf 'id=a1\naction=update\ncore=\nauto=0\n' >"$T/data/core/update-requested"
 OUTCOME=ok run_in 'discover; tick' >/dev/null
 u=$(grep -n '^update.sh' "$T/calls" | cut -d : -f 1)
 p=$(grep -n '^pull -q ghcr.io/alexis-marcel/eriphe:0.8.0' "$T/calls" | cut -d : -f 1)
-[ -n "$u" ] && [ -n "$p" ] && [ "$u" -lt "$p" ] || fail "update order: the machine's update, then the launcher's pull ($(tr '\n' '|' <"$T/calls"))"
+if [ -z "$u" ] || [ -z "$p" ] || [ "$u" -gt "$p" ]; then
+	fail "update order: the machine's update, then the launcher's pull ($(tr '\n' '|' <"$T/calls"))"
+fi
 has "$T/calls" "tag ghcr.io/alexis-marcel/eriphe:0.8.0 ghcr.io/alexis-marcel/eriphe:latest" "the new launcher under its reference"
 has "$T/calls" "run -d --rm --name eriphe-launcher-swap --network none --label eriphe.launcher=swap -v /var/run/docker.sock:/var/run/docker.sock sha256:new swap $ID" "the swap"
 # Nothing waiting: nothing done.

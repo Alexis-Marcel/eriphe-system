@@ -136,7 +136,9 @@ settings() {
 	DATA=${CONF%/launcher}
 	WEB_PORT=${ERIPHE_WEB_PORT:-8443} API_PORT=${ERIPHE_API_PORT:-8800}
 	for p in "$WEB_PORT" "$API_PORT"; do
-		printf '%s' "$p" | grep -Eq '^[1-9][0-9]{0,4}$' && [ "$p" -le 65535 ] || die "a port is 1 to 65535, not $p"
+		if ! printf '%s' "$p" | grep -Eq '^[1-9][0-9]{0,4}$' || [ "$p" -gt 65535 ]; then
+			die "a port is 1 to 65535, not $p"
+		fi
 	done
 	[ "$WEB_PORT" != "$API_PORT" ] || die "ERIPHE_WEB_PORT and ERIPHE_API_PORT are the same port"
 }
