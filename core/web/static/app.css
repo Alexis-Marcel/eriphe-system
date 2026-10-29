@@ -960,6 +960,9 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 .update-core-row { display: grid; gap: 10px; padding: 14px 16px; border-radius: 14px; background: var(--surface-2); }
 .update-core-row .list-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .update-core-row .machine-update { border-top-color: var(--border-strong); }
+.update-check { display: inline-flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; }
+.update-check .link-btn { color: var(--accent-text); font-weight: 600; font-size: .86rem; }
+.update-check .link-btn:disabled { opacity: .6; cursor: progress; }
 
 /* Settings → Devices: each card says first what Eriphe sees and can do
    there; the specs come after, smaller. The foot (activity, version,

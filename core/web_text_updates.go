@@ -13,6 +13,9 @@ func init() {
 var updatesStrings = map[string]map[string]string{
 	"fr": {
 		"updates.title":                  "Mises à jour",
+		"updates.check":                  "Vérifier maintenant",
+		"updates.checkedat":              "Vérifié à %s",
+		"updates.checkwait":              "Déjà vérifié il y a moins d'une minute.",
 		"updates.lead":                   "Chaque appareil se met à jour lui-même : eriphe-core d'abord, puis les autres appareils, jamais pendant qu'une tâche travaille. Si un appareil ne revient pas après sa mise à jour, il reprend sa version précédente.",
 		"updates.all":                    "Tout mettre à jour",
 		"updates.allconfirm":             "Mettre à jour tous les appareils ? eriphe-core d'abord, puis les autres, chacun une fois ses tâches finies.",
@@ -51,6 +54,9 @@ var updatesStrings = map[string]map[string]string{
 	},
 	"en": {
 		"updates.title":                  "Updates",
+		"updates.check":                  "Check now",
+		"updates.checkedat":              "Checked at %s",
+		"updates.checkwait":              "Already checked less than a minute ago.",
 		"updates.lead":                   "Each device updates itself: eriphe-core first, then the other devices, never while a task is at work. A device that does not come back after its update goes back to its previous version.",
 		"updates.all":                    "Update all",
 		"updates.allconfirm":             "Update all devices? eriphe-core first, then the others, each once its tasks are done.",

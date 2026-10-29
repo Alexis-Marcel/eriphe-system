@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // Settings → Machines → Updates (machine_updates.go): each machine's
@@ -30,14 +31,15 @@ type updateRow struct {
 }
 
 type updatesData struct {
-	Night  bool // the machines update by themselves at night
-	Rows   []updateRow
-	Behind int // machines behind that an updater can update now
+	Night   bool      // the machines update by themselves at night
+	Checked time.Time // when the latest versions were last asked
+	Rows    []updateRow
+	Behind  int // machines behind that an updater can update now
 }
 
 func (w *web) updatesData(nodes []NodeRow) updatesData {
 	c := w.c
-	d := updatesData{Night: c.nightUpdates()}
+	d := updatesData{Night: c.nightUpdates(), Checked: c.updates.checked()}
 	coreBehind := c.updates.behind("eriphe-core", version)
 	row := updateRow{Machine: coreMachine, Name: "eriphe-core", Core: true, Online: true, Version: version,
 		updaterInfo: c.coreUpdater(), Pending: c.pendingUpdate(coreMachine), Manual: manualUpdate(coreInstall)}
@@ -169,6 +171,30 @@ func (w *web) updateState(rw http.ResponseWriter, r *http.Request, s *session, m
 		}
 	}
 	http.NotFound(rw, r)
+}
+
+// handleCheckUpdates asks the registry now for the latest versions, once
+// a minute at most, and answers with the updates panel. A new latest
+// version reloads the page: the devices' cards say it too.
+func (w *web) handleCheckUpdates(rw http.ResponseWriter, r *http.Request, s *session) {
+	before := [2]string{w.c.updates.version("eriphe-core"), w.c.updates.version("eriphe-node")}
+	if !w.c.updates.checkNow(r.Context()) {
+		rw.Header().Set("HX-Trigger", hxTrigger(tr(w.lang(r), "updates.checkwait"), false, false))
+		rw.Header().Set("HX-Reswap", "none")
+		rw.WriteHeader(http.StatusTooManyRequests)
+		return
+	}
+	if [2]string{w.c.updates.version("eriphe-core"), w.c.updates.version("eriphe-node")} != before {
+		rw.Header().Set("HX-Refresh", "true")
+		rw.WriteHeader(http.StatusOK)
+		return
+	}
+	nodes, err := w.c.store.nodes()
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.render(rw, r, s, "settings", "updates-fragment", page{Data: w.updatesData(nodes)})
 }
 
 // handleUpdateAll asks every machine behind to update, eriphe-core first.

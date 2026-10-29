@@ -67,7 +67,7 @@ func TestWebProviderWithPresets(t *testing.T) {
 	}
 	_, body, _ = tw.do("GET", "/settings/agents?created=claude", nil, nil)
 	for _, want := range []string{"Compte « claude » ajouté. 2 agents créés", "Claude Sonnet", "Agents conseillés", `name="preset" value="opus"`,
-		"Le cerveau d&#39;Eriphe", "Comptes IA"} {
+		"Eriphe, ton cerveau", "Comptes IA"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("agents page lacks %q", want)
 		}

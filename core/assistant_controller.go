@@ -26,13 +26,15 @@ import (
 // assistantRole is a role's card: what an assistant of that role gets and
 // does. A new role is one more card (brain.go has the brain's).
 type assistantRole struct {
+	// What its assistants may do (assistantPowers): checked where it is
+	// decided, never read from a name.
+	Powers      []string
 	Prompt      string   // its built-in standing instructions
 	StartPrompt string   // its first turn, unless firstPrompt gives it
 	Triggers    []string // its triggers when its spec names none
 	// The node profile that keeps its sessions between its tasks;
 	// assistant-<name> by default.
 	Profile      string
-	SelfTools    bool     // eriphe-core's own MCP tools (selfServer)
 	FreeReads    bool     // the catalog's believed reads: in its grant, allowed in advance
 	Network      bool     // the system network: it reaches eriphe-core by name
 	Streams      bool     // its text as it is written, for its triggers' wrote
@@ -51,6 +53,43 @@ type assistantRole struct {
 
 // assistantRoles by name. Each card registers itself (init).
 var assistantRoles = map[string]assistantRole{}
+
+// What a role's assistants may do.
+const (
+	// It speaks to the user: what it writes goes to the conversation.
+	powerTalksToUser = "talksToUser"
+	// It may have the conversation trigger: the user's messages and the
+	// tasks' events. One enabled assistant at most has it.
+	powerReceivesConversation = "receivesConversation"
+	// It has eriphe-core's own MCP tools (selfServer): it starts, follows
+	// and stops tasks, and reads and writes the memory.
+	powerLaunchesTasks = "launchesTasks"
+	// It lends the tasks it starts their resources (run_task's).
+	powerLendsResources = "lendsResources"
+)
+
+var assistantPowers = []string{powerTalksToUser, powerReceivesConversation, powerLaunchesTasks, powerLendsResources}
+
+func (r assistantRole) can(power string) bool { return slices.Contains(r.Powers, power) }
+
+// check tells whether a role's powers hold together: what hears the
+// conversation answers in it, and only what starts tasks lends to them.
+func (r assistantRole) check() error {
+	for _, p := range r.Powers {
+		if !slices.Contains(assistantPowers, p) {
+			return fmt.Errorf("unknown power %q", p)
+		}
+	}
+	switch {
+	case r.can(powerReceivesConversation) && !r.can(powerTalksToUser):
+		return fmt.Errorf("%s needs %s", powerReceivesConversation, powerTalksToUser)
+	case r.can(powerLendsResources) && !r.can(powerLaunchesTasks):
+		return fmt.Errorf("%s needs %s", powerLendsResources, powerLaunchesTasks)
+	case slices.Contains(r.Triggers, triggerConversation) && !r.can(powerReceivesConversation):
+		return fmt.Errorf("the %s trigger needs %s", triggerConversation, powerReceivesConversation)
+	}
+	return nil
+}
 
 // assistantTrigger is a trigger's card: what it brings an assistant at
 // idle, and where what the assistant says goes.
@@ -251,7 +290,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	// added when its node fetches the task: the others go through its
 	// approval path. The deprecated mcp_servers still are.
 	var allowed []string
-	if r.SelfTools {
+	if r.can(powerLaunchesTasks) {
 		allowed = append(allowed, "mcp__"+selfServer)
 	}
 	allowed = append(allowed, r.AllowedTools...)
@@ -411,13 +450,13 @@ func (c *core) assistantGrant(a Assistant) []string {
 }
 
 // assistantServers are an assistant's MCP servers, with their tokens:
-// eriphe-core's own at self_url, if its role has it, and the ones the file
+// eriphe-core's own at self_url, if its role launches tasks, and the ones the file
 // lists. Without self_url, eriphe-core's own goes through the node
 // (spec.Servers): the node reaches eriphe-core wherever it is, and the
 // assistant holds no token.
 func (c *core) assistantServers(a Assistant, r assistantRole) (map[string]any, error) {
 	servers := map[string]any{}
-	if r.SelfTools && a.SelfURL != "" {
+	if r.can(powerLaunchesTasks) && a.SelfURL != "" {
 		servers[selfServer] = map[string]any{
 			"type": "http", "url": a.SelfURL, "headers": map[string]string{"Authorization": "Bearer " + c.token}}
 	}
@@ -471,7 +510,7 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 	if spec.MCPServers, err = c.assistantServers(a, r); err != nil {
 		return err
 	}
-	if r.SelfTools && a.SelfURL == "" {
+	if r.can(powerLaunchesTasks) && a.SelfURL == "" {
 		spec.Servers = append(spec.Servers, selfServer) // relayed by its node
 	}
 	return nil

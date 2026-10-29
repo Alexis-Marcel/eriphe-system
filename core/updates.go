@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// "A new version is available": a few times a day, eriphe-core asks the
+// "A new version is available": every hour, eriphe-core asks the
 // registry, anonymously, which version the images' `latest` tag is (the
 // latest release), and compares it with its own and each node's. The images
 // carry their version as a label (org.opencontainers.image.version, from
@@ -28,13 +28,15 @@ import (
 // (semver), or a build from before the releases (sha-<commit>); a build of
 // main (X.Y.Z-dev+<commit>) or a local one (dev) never is (version.go). The
 // registry unreachable, nothing is said: the last answer stays, and the
-// error is logged once.
+// error is logged once. Settings → Devices may also check now, once a
+// minute at most (checkNow).
 
 const (
 	registryURL    = "https://ghcr.io"
 	registryOwner  = "alexis-marcel"
 	versionLabel   = "org.opencontainers.image.version"
-	updateEvery    = 6 * time.Hour
+	updateEvery    = time.Hour
+	checkNowEvery  = time.Minute // a check asked from the workspace, at most
 	updateTimeout  = 10 * time.Second
 	maxRegistryDoc = 1 << 20
 )
@@ -49,6 +51,8 @@ type updates struct {
 	mu     sync.Mutex
 	latest map[string]string // image → the version of its latest tag
 	failed bool              // the last check failed (logged once)
+	at     time.Time         // when the last check ended
+	asked  time.Time         // when the workspace last asked for one (checkNow)
 }
 
 func newUpdates(base string) *updates {
@@ -56,7 +60,7 @@ func newUpdates(base string) *updates {
 		latest: map[string]string{}}
 }
 
-// run checks at start, without holding it up, then every few hours.
+// run checks at start, without holding it up, then every hour.
 func (u *updates) run(ctx context.Context) {
 	u.check(ctx)
 	t := time.NewTicker(updateEvery)
@@ -91,6 +95,31 @@ func (u *updates) check(ctx context.Context) {
 		log.Printf("updates: cannot read the latest versions (not logged again until a check works): %v", errors.Join(errs...))
 	}
 	u.failed = len(errs) > 0
+	u.at = time.Now()
+}
+
+// checkNow checks at once, unless the workspace asked less than a minute
+// ago: false then, and nothing is asked of the registry.
+func (u *updates) checkNow(ctx context.Context) bool {
+	u.mu.Lock()
+	if !u.asked.IsZero() && time.Since(u.asked) < checkNowEvery {
+		u.mu.Unlock()
+		return false
+	}
+	u.asked = time.Now()
+	u.mu.Unlock()
+	u.check(ctx)
+	return true
+}
+
+// checked is when the last check ended, zero before any.
+func (u *updates) checked() time.Time {
+	if u == nil {
+		return time.Time{}
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.at
 }
 
 // version is the latest version of an image, empty while unknown.
