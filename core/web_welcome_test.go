@@ -17,8 +17,8 @@ func TestWebWelcomeFlow(t *testing.T) {
 	}
 	// First its name, which a new install chooses: the field starts empty.
 	_, body, _ := tw.do("GET", "/welcome", nil, nil)
-	for _, want := range []string{"Bienvenue chez toi", "Comment veux-tu appeler ton assistant ?", `action="/welcome/name"`,
-		`name="name" value="" required`, "Le nom que tu veux", "/welcome/skip"} {
+	for _, want := range []string{"Bienvenue", "Comment veux-tu appeler ton assistant ?", `action="/welcome/name"`,
+		`name="name" value="" required`, "Jusqu&#39;à 32 caractères.", "/welcome/skip"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the name step lacks %q", want)
 		}
@@ -46,7 +46,7 @@ func TestWebWelcomeFlow(t *testing.T) {
 	// Then the AI account: every kind, as equal choices, none picked;
 	// subscriptions first, then the API keys, the custom one last.
 	_, body, _ = tw.do("GET", "/welcome", nil, nil)
-	for _, want := range []string{"Relie l&#39;IA de Jarvis", "Avec quelle IA Jarvis réfléchit-il ?", "Un abonnement", "Une clé API", "/welcome/skip"} {
+	for _, want := range []string{"Son IA", "Avec quelle IA Jarvis réfléchit-il ?", "Un abonnement", "Une clé API", "/welcome/skip"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the wizard lacks %q", want)
 		}
@@ -127,7 +127,7 @@ func TestWebWelcomeKeepsEriphe(t *testing.T) {
 	if b := c.conf().brain(); b.DisplayName != "" || c.conf().assistantName() != "Eriphe" {
 		t.Fatalf("brain = %+v", b)
 	}
-	if _, body, _ := tw.do("GET", "/welcome", nil, nil); !strings.Contains(body, "/welcome?kind=claude-subscription") || !strings.Contains(body, "Relie l&#39;IA d&#39;Eriphe") {
+	if _, body, _ := tw.do("GET", "/welcome", nil, nil); !strings.Contains(body, "/welcome?kind=claude-subscription") || !strings.Contains(body, "Avec quelle IA Eriphe") {
 		t.Fatal("the name step again")
 	}
 }

@@ -5,11 +5,11 @@
   <section class="auth-card welcome-card" aria-labelledby="welcome-title">
     <span class="auth-mark" aria-hidden="true">{{template "logo"}}</span>
     <h1 id="welcome-title">{{t "welcome.title"}}</h1>
-    <ol class="welcome-steps">
-      <li class="done">{{template "i-check"}}<span>{{t "welcome.step.account"}}</span></li>
-      <li class="{{if .Naming}}current{{else}}done{{end}}">{{if .Naming}}<b>2</b>{{else}}{{template "i-check"}}{{end}}<span>{{t "welcome.step.name"}}</span></li>
-      <li class="{{if .Agent}}done{{else if not .Naming}}current{{end}}">{{if .Agent}}{{template "i-check"}}{{else}}<b>3</b>{{end}}<span>{{t "welcome.step.agent"}}</span></li>
-      <li class="{{if .Ready}}done{{else if .Agent}}current{{end}}">{{if .Ready}}{{template "i-check"}}{{else}}<b>4</b>{{end}}<span>{{t "welcome.step.start"}}</span></li>
+    <ol class="welcome-steps" aria-label="{{t "welcome.steps"}}">
+      <li class="done"><span>{{t "welcome.step.account"}}</span></li>
+      <li class="{{if .Naming}}current{{else}}done{{end}}"{{if .Naming}} aria-current="step"{{end}}><span>{{t "welcome.step.name"}}</span></li>
+      <li class="{{if .Agent}}done{{else if not .Naming}}current{{end}}"{{if and (not .Agent) (not .Naming)}} aria-current="step"{{end}}><span>{{t "welcome.step.agent"}}</span></li>
+      <li class="{{if .Ready}}done{{else if .Agent}}current{{end}}"{{if and .Agent (not .Ready)}} aria-current="step"{{end}}><span>{{t "welcome.step.start"}}</span></li>
     </ol>
     {{if .Naming}}
     <form class="stack" method="post" action="/welcome/name">
@@ -18,7 +18,7 @@
       <p class="lead">{{t "welcome.namelead"}}</p>
       {{if .NameError}}<p class="alert" role="alert">{{.NameError}}</p>{{end}}
       <label class="field"><span>{{t "welcome.namelabel"}}</span>
-        <input name="name" value="{{.Name}}" required maxlength="32" autocomplete="off" autofocus aria-describedby="welcome-namehint">
+        <input type="text" name="name" value="{{.Name}}" required maxlength="32" autocomplete="off" autofocus aria-describedby="welcome-namehint">
         <small class="muted" id="welcome-namehint">{{t "welcome.namehint"}}</small></label>
       <button class="btn btn-primary wide" type="submit">{{t "welcome.namesubmit"}}</button>
     </form>
@@ -42,7 +42,7 @@
     {{if not .Ready}}
     <form method="post" action="/welcome/skip" class="welcome-skip">
       <input type="hidden" name="csrf" value="{{$.CSRF}}">
-      <button class="btn btn-ghost" type="submit">{{t "welcome.skip"}}</button>
+      <button class="link-btn" type="submit">{{t "welcome.skip"}}</button>
     </form>
     {{end}}
   </section>

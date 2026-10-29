@@ -207,17 +207,17 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .welcome-card h2 { font-size: 1.2rem; }
 .welcome-card .lead { margin-top: 0; }
 .welcome-card .provider-form { padding: 0; border: 0; background: none; box-shadow: none; }
-.welcome-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.welcome-steps li { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px;
-  background: var(--surface-2); color: var(--muted); font-size: .86rem; font-weight: 550; }
-.welcome-steps li > b, .welcome-steps li > .i { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
-  background: var(--border); font-size: .76rem; }
-.welcome-steps li.current { background: var(--accent-soft); color: var(--accent-text); }
-.welcome-steps li.current > b { background: var(--grad); color: var(--accent-ink); }
-.welcome-steps li.done { color: var(--ok); }
-.welcome-steps li.done > .i { background: var(--ok-soft); padding: 3px; }
+.welcome-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.welcome-steps li { display: grid; gap: 8px; margin: 0; color: var(--muted); font-size: .8rem; font-weight: 550; }
+.welcome-steps li::before { content: ""; height: 4px; border-radius: 999px; background: var(--border); }
+.welcome-steps li.done::before, .welcome-steps li.current::before { background: var(--grad); }
+.welcome-steps li.done { color: var(--text); }
+.welcome-steps li.current { color: var(--accent-text); }
+@media (max-width: 520px) { .welcome-steps li:not(.current) span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } }
 .welcome-kinds summary { cursor: pointer; color: var(--accent-text); font-weight: 550; margin-bottom: 10px; }
 .welcome-skip { justify-self: center; }
+.link-btn { padding: 4px 8px; border: 0; background: none; color: var(--muted); font: inherit; font-size: .9rem; cursor: pointer; border-radius: 8px; }
+.link-btn:hover { color: var(--text); text-decoration: underline; }
 
 /* Workspace */
 
