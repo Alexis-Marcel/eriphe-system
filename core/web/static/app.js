@@ -352,7 +352,7 @@ document.addEventListener("click", (e) => {
   const opener = e.target.closest("[data-dialog]");
   if (opener) {
     const d = document.getElementById(opener.dataset.dialog);
-    if (d && typeof d.showModal === "function") d.showModal();
+    if (d && typeof d.showModal === "function") openDialog(d);
     return;
   }
   if (e.target instanceof HTMLDialogElement && e.target.classList.contains("modal")) e.target.close();
@@ -366,3 +366,21 @@ document.addEventListener("click", (e) => {
   const field = document.getElementById(a.dataset.focus);
   if (field) setTimeout(() => field.focus({ preventScroll: true }), 300);
 });
+
+function openDialog(d) {
+  if (!d.open) d.showModal();
+  const field = d.dataset.focusOnOpen && document.getElementById(d.dataset.focusOnOpen);
+  if (field) field.focus();
+}
+
+// A result swapped into a dialog that is closed (re-registering a device
+// from its menu fills the connect dialog) opens it; #connect in the address
+// (from the welcome page) opens the connect dialog too.
+document.body.addEventListener("htmx:afterSwap", (e) => {
+  const d = e.target.closest && e.target.closest("dialog.modal");
+  if (d && !d.open) d.showModal();
+});
+if (location.hash === "#connect") {
+  const d = document.getElementById("connect-dlg");
+  if (d) openDialog(d);
+}
