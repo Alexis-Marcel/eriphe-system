@@ -229,8 +229,8 @@
   {{else}}
   <button class="btn btn-soft sm inline-update" type="button" data-dialog="update-dlg-{{.Machine}}">{{t "updates.now"}}</button>
   <dialog class="modal" id="update-dlg-{{.Machine}}" aria-labelledby="update-dlg-{{.Machine}}-title">
-    <h3 id="update-dlg-{{.Machine}}-title">{{tf "updates.dlgtitle" .Machine}}</h3>
-    <p class="muted">{{t "updates.manual"}}</p>
+    <h3 id="update-dlg-{{.Machine}}-title">{{tf "updates.dlgtitle" .Name}}</h3>
+    <p class="muted">{{if eq .Manual.Label "update.compose"}}{{t "updates.manualcompose"}}{{else}}{{t "updates.manual"}}{{end}}</p>
     <div class="code one-line"><pre id="update-{{.Machine}}">{{.Manual.Cmd}}</pre><button class="btn btn-soft sm" type="button" data-copy="update-{{.Machine}}">{{t "machines.copy"}}</button></div>
     <form method="dialog" class="modal-actions"><button class="btn" type="submit">{{t "updates.close"}}</button></form>
   </dialog>
