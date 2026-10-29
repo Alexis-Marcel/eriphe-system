@@ -76,6 +76,7 @@ func newCore(cfg *Config, store *Store) *core {
 	c.snap.Store(m)
 	setAssistantName(m.assistantName())
 	c.noteResultsName(m)
+	c.noteFirstRun(m)
 	c.loadAssistants()
 	c.turn.load(store.get("brain_turn"), c.brainTaskID() != "")
 	c.turn.keep = func(st brainTurnState) {

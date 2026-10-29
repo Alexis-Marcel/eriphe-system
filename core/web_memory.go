@@ -22,6 +22,7 @@ func (w *web) memoryRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /memory/export.jsonl", w.auth(w.handleMemoryExport))
 	mux.Handle("POST /memory", w.auth(w.handleMemoryAdd))
 	mux.Handle("POST /memory/extract", w.auth(w.handleMemoryExtract))
+	mux.Handle("POST /memory/interview", w.auth(w.handleMemoryInterview))
 	mux.Handle("GET /memory/{id}/card", w.auth(w.handleMemoryCard))
 	mux.Handle("GET /memory/{id}/edit", w.auth(w.handleMemoryEditForm))
 	mux.Handle("GET /memory/{id}/history", w.auth(w.handleMemoryHistory))
@@ -78,6 +79,8 @@ type memoryPage struct {
 	Runs        []extractionRun
 	Agent       string
 	Now         time.Time
+	About       []memCard // what the assistant knows about me, pinned first
+	Interview   bool      // a brain to do the interview again
 }
 
 type kindLink struct {
@@ -189,6 +192,13 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 	var xs []*Memory
 	switch p.View {
 	case "all":
+		if about, err := m.aboutOwner(); err == nil {
+			for _, x := range about {
+				p.About = append(p.About, w.memCard(x, false))
+			}
+		}
+		b := w.c.conf().brain()
+		p.Interview = b != nil && b.Agent != ""
 		rq := recallQuery{Query: p.Q, Subject: p.Subject, IncludePast: p.Past, Limit: 100}
 		if p.Kind != "" {
 			rq.Kinds = []string{p.Kind}
@@ -240,6 +250,20 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 		p.Items = append(p.Items, card)
 	}
 	w.render(rw, r, s, "memory", "", page{Title: "nav.memory", Nav: "memory", Data: p})
+}
+
+// handleMemoryInterview asks the assistant for the first-run interview
+// again (first_run.go), and opens the conversation where it begins.
+func (w *web) handleMemoryInterview(rw http.ResponseWriter, r *http.Request, s *session) {
+	if b := w.c.conf().brain(); b == nil || b.Agent == "" {
+		http.Error(rw, tr(w.lang(r), "chat.nobrain"), http.StatusConflict)
+		return
+	}
+	if err := w.c.offerInterview(); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	redirect(rw, r, "/")
 }
 
 func (w *web) subjects() []string {
@@ -618,6 +642,11 @@ var memoryStrings = map[string]map[string]string{
 	"fr": {
 		"nav.memory":           "Mémoire",
 		"mem.lead":             "Ce que {{name}} retient de toi et de tes journées. Tout est ici : corrige, épingle, oublie.",
+		"mem.about":            "Ce que {{name}} sait de toi",
+		"mem.aboutlead":        "Ce qui est épinglé lui sert dans chaque conversation ; le reste, il le retrouve quand il en a besoin.",
+		"mem.aboutnone":        "Rien encore. Une courte interview, cinq minutes, et {{name}} saura l'essentiel.",
+		"mem.aboutnobrain":     "Rien encore : {{name}} pourra te poser quelques questions dès qu'il sera configuré.",
+		"mem.interview":        "Faire l'interview",
 		"mem.off":              "La mémoire de {{name}} n'a pas pu s'ouvrir : voir le journal d'eriphe-core.",
 		"mem.export":           "Exporter",
 		"mem.view.all":         "Souvenirs",
@@ -749,6 +778,11 @@ var memoryStrings = map[string]map[string]string{
 	"en": {
 		"nav.memory":           "Memory",
 		"mem.lead":             "What {{name}} remembers about you and your days. It is all here: correct, pin, forget.",
+		"mem.about":            "What {{name}} knows about you",
+		"mem.aboutlead":        "What is pinned helps in every conversation; the rest, {{name}} looks up when needed.",
+		"mem.aboutnone":        "Nothing yet. A short interview, five minutes, and {{name}} will know the essentials.",
+		"mem.aboutnobrain":     "Nothing yet: {{name}} can ask you a few questions once it is set up.",
+		"mem.interview":        "Do the interview",
 		"mem.off":              "{{name}}'s memory could not open: see eriphe-core's log.",
 		"mem.export":           "Export",
 		"mem.view.all":         "Memories",

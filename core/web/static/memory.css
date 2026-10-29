@@ -175,6 +175,10 @@
 /* Profile */
 
 .profile-panel { gap: 10px; }
+.mem-about { display: grid; gap: 12px; }
+.mem-about-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.mem-about-head h2 { margin: 0; font-size: 1.05rem; }
+.mem-about-head p { margin: 4px 0 0; }
 .budget { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 18px; }
 .budget-num b { font-size: 1.8rem; letter-spacing: -.03em; }
 .budget-num span { color: var(--muted); font-weight: 600; margin-left: 4px; }

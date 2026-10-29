@@ -224,6 +224,7 @@ func (w *web) handleHome(rw http.ResponseWriter, r *http.Request, s *session) {
 		http.Redirect(rw, r, "/welcome", http.StatusSeeOther)
 		return
 	}
+	w.c.firstRun() // first_run.go: once, after the wizard
 	last := w.c.store.lastMessageSeq()
 	msgs, err := w.c.store.messagesAfter(max(0, last-shownMessages), shownMessages)
 	if err != nil {

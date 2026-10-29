@@ -1159,6 +1159,18 @@ keys, the custom one last), none picked; a card (`/welcome?kind=<kind>`) opens i
 brain's start: on this machine once a device is registered (an install with its core has one of
 its own), with "connect a device" only while none is. "Plus tard" skips it.
 
+**The first-run interview.** Once the brain has an agent and the wizard is over, the first time
+the conversation opens, eriphe-core gives the brain one turn marked `premier lancement`
+(`[Sam 12:00 #N · premier lancement]`, not shown in the conversation; `first_run.go`), and the
+brain writes first: it offers a short interview, which the user may skip (`brain-prompt.md`,
+« Premier lancement »). What it learns goes to its memory, cited from the user's answers: who they
+are, what they expect and how to talk to them pinned to the profile; their address, devices and
+household as ordinary memories, recalled when needed. The setting `first_run` (`due`, then
+`done`) makes it fire once per install; an install that, at the first start of this release,
+already has a conversation or a brain with an agent is `done` at once, and so is one whose brain
+has already written. The Memory page asks for it again ("Faire l'interview", `POST
+/memory/interview`), as does asking the assistant in the conversation.
+
 **Sessions.** A login sets a random session cookie (`__Host-eriphe`, `HttpOnly`, `Secure`,
 `SameSite=Strict`; only its SHA-256 is stored). Every POST carries the session's CSRF token (the
 `X-CSRF-Token` header that htmx sends, or a form field) and must come from the same origin.
@@ -1316,6 +1328,11 @@ events only (a task's permission, its end) goes on with the current turn and its
 what the brain read is still in its context; so does a resumed brain session. Every write goes through a scanner: instructions to a model, invisible
 characters, credentials and links carrying tokens are refused; imperative wording not from the
 user is only proposed. Proposals wait in the workspace (Mémoire → À approuver).
+
+**What it knows about the user.** The Memory page opens on "Ce que Jarvis sait de toi" (the
+assistant's name): the profile and the other current memories about the user (subject `owner`,
+episodes and commitments aside), the pinned ones first and marked, with the cards' usual actions,
+and the button that does the [first-run interview](#workspace-web) again.
 
 **The profile** is the pinned memories, at most 2,500 characters (enforced on write). It is
 appended to the brain's prompt when its session starts, and sent again, quoted, with its next

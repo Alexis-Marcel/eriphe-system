@@ -28,6 +28,7 @@
 
 {{define "message"}}{{if eq .Role "event"}}
 <div class="msg msg-event" id="m{{.Seq}}"><span class="dot"></span><p>{{short .Text 220}}</p><time datetime="{{iso .Time}}">{{clock .Time}}</time></div>
+{{else if .Hidden}}
 {{else if eq .Role "user"}}
 <div class="msg msg-user" id="m{{.Seq}}">{{if .Attachments}}<div class="msg-body">{{template "attachments" .Attachments}}{{if .Text}}<div class="bubble">{{md .Text}}</div>{{end}}</div>{{else}}<div class="bubble">{{md .Text}}</div>{{end}}<time datetime="{{iso .Time}}">{{if .Via}}<span class="via" title="{{t "chat.via"}}">{{.Via}} · </span>{{end}}{{clock .Time}}</time></div>
 {{else}}
