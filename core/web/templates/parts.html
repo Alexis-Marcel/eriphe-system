@@ -44,6 +44,7 @@
 {{range .Perms}}{{template "permission" .}}{{end}}
 {{if eq .Brain "thinking"}}<div class="msg msg-brain thinking"><span class="avatar" aria-hidden="true">{{template "logo"}}</span><div class="bubble"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="sr-only">{{t "chat.thinking"}}</span></div></div>
 {{else if eq .Brain "none"}}<p class="notice">{{t "chat.nobrain"}}</p>
+{{else if eq .Brain "noai"}}<p class="notice">{{t "chat.noai"}} <a href="/welcome">{{t "chat.noai.link"}}</a></p>
 {{else if eq .Brain "off"}}<p class="notice">{{t "chat.brainoff"}}</p>{{end}}
 {{end}}
 
