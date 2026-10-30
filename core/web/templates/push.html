@@ -1,0 +1,55 @@
+{{/* Settings → App & notifications (web_push.go): install the workspace as an
+     app, and turn on the notifications of this device. app.js does the
+     browser's part: it tells what this browser can do, asks for the
+     permission on a tap, subscribes and sends the subscription. */}}
+
+{{define "i-bell"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>{{end}}
+{{define "i-phone"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>{{end}}
+
+{{define "notifications"}}
+<header class="page-head"><h2>{{t "settings.notifications"}}</h2><p>{{t "push.lead"}}</p></header>
+
+<section class="panel app-install" aria-labelledby="install-title" data-install>
+  <div class="panel-head">
+    <h3 id="install-title">{{template "i-phone"}}{{t "install.title"}}</h3>
+    <span class="tag tag-ok" data-installed hidden>{{t "install.done"}}</span>
+  </div>
+  <p class="muted" data-install-lead>{{t "install.lead"}}</p>
+  <div class="actions" data-install-prompt hidden><button class="btn btn-primary" type="button" data-install-button>{{template "i-plus"}}{{t "install.button"}}</button></div>
+  <ul class="install-how">
+    <li data-platform="ios"><b>iPhone, iPad</b><span>{{t "install.ios"}}</span></li>
+    <li data-platform="android"><b>Android</b><span>{{t "install.android"}}</span></li>
+    <li data-platform="desktop"><b>{{t "install.computer"}}</b><span>{{t "install.desktop"}}</span></li>
+  </ul>
+</section>
+
+<section class="panel" aria-labelledby="push-title" id="push" data-push-key="{{.Data.Key}}"
+  data-msg-unsupported="{{t "push.unsupported"}}" data-msg-insecure="{{t "push.insecure"}}" data-msg-ios="{{t "push.ios"}}"
+  data-msg-denied="{{t "push.denied"}}" data-msg-failed="{{t "push.failed"}}" data-msg-off="{{t "push.off"}}">
+  <h3 id="push-title">{{template "i-bell"}}{{t "push.title"}}</h3>
+  <label class="switch">
+    <input type="checkbox" id="push-toggle" disabled aria-describedby="push-state">
+    <span><b>{{t "push.toggle"}}</b><small>{{t "push.toggle.hint"}}</small></span>
+  </label>
+  <p class="small muted" id="push-state" role="status">{{if .Data.Off}}{{t "push.off"}}{{end}}</p>
+  <form class="actions" id="push-test" hx-post="/push/test" hx-swap="none" hx-disabled-elt="find button" hidden>
+    <input type="hidden" name="id" id="push-test-id">
+    <button class="btn btn-soft sm" type="submit">{{template "i-bell"}}{{t "push.test"}}</button>
+  </form>
+  <p class="small muted">{{t "push.ioshint"}}</p>
+</section>
+
+<section class="panel" aria-labelledby="push-devices-title">
+  <h3 id="push-devices-title">{{t "push.devices"}}</h3>
+  <div id="push-devices">{{template "push-devices" .}}</div>
+</section>
+{{end}}
+
+{{define "push-devices"}}
+{{if .Data.Devices}}<ul class="list push-list">{{range .Data.Devices}}
+  <li data-push-id="{{.ID}}">
+    <div class="list-main"><span class="strong">{{.Label}} <span class="tag tag-accent" data-this-device hidden>{{t "push.this"}}</span></span><span class="small muted">{{tf "push.since" (date .Created)}}</span></div>
+    <button class="btn btn-ghost sm" type="button" hx-post="/push/unsubscribe" hx-vals='{"id": "{{.ID}}"}' hx-target="#push-devices" aria-label="{{t "push.remove"}} {{.Label}}">{{template "i-x"}}{{t "push.remove"}}</button>
+  </li>{{end}}
+</ul>{{else}}<p class="muted small">{{t "push.none"}}</p>{{end}}
+{{end}}

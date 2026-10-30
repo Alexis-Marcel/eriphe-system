@@ -2,18 +2,20 @@
 <html lang="{{.Lang}}"{{if .Nav}} class="shell"{{end}}>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>{{if .Title}}{{t .Title}} · {{end}}{{name}}</title>
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#f6f6fb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d0e14" media="(prefers-color-scheme: dark)">
 <meta name="csrf-token" content="{{.CSRF}}">
 <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"historyCacheSize":0,"selfRequestsOnly":true}'>
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="{{name}}">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/app.css?v={{.Version}}">
 {{if eq .Nav "memory"}}<link rel="stylesheet" href="/static/memory.css?v={{.Version}}">{{end}}
 {{if eq .Nav "settings"}}<link rel="stylesheet" href="/static/remote.css?v={{.Version}}">{{end}}

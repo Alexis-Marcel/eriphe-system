@@ -88,6 +88,7 @@ func newWeb(c *core, cfg WebConfig) (*web, error) {
 	if !w.hasOwner() {
 		w.setup = setupCode()
 	}
+	w.startPush() // web_push.go
 	return w, nil
 }
 
@@ -100,12 +101,12 @@ func (w *web) parse() error {
 	}
 	for _, f := range files {
 		name := strings.TrimSuffix(filepath.Base(f), ".html")
-		if name == "layout" || name == "parts" || name == "catalog" || name == "tools" || name == "agents" || name == "remote" || name == "folders" {
+		if name == "layout" || name == "parts" || name == "catalog" || name == "tools" || name == "agents" || name == "remote" || name == "folders" || name == "push" {
 			continue
 		}
 		t, err := template.New(name).Funcs(templateFuncs("fr")).ParseFS(webFS,
 			"web/templates/layout.html", "web/templates/parts.html", "web/templates/catalog.html", "web/templates/tools.html",
-			"web/templates/agents.html", "web/templates/remote.html", "web/templates/folders.html", f)
+			"web/templates/agents.html", "web/templates/remote.html", "web/templates/folders.html", "web/templates/push.html", f)
 		if err != nil {
 			return err
 		}
@@ -134,8 +135,8 @@ func (w *web) routes() http.Handler {
 	files := http.FileServerFS(static)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(files, 24*time.Hour)))
 	// The worker's scope is where it is served from: the root.
-	mux.Handle("GET /sw.js", http.StripPrefix("/", files))
-	mux.HandleFunc("GET /manifest.webmanifest", handleManifest)
+	mux.HandleFunc("GET /sw.js", handleServiceWorker)
+	mux.HandleFunc("GET /manifest.webmanifest", w.handleManifest)
 	mux.HandleFunc("GET /health", func(rw http.ResponseWriter, _ *http.Request) { rw.Write([]byte("ok\n")) })
 
 	mux.HandleFunc("GET /setup", w.handleSetupPage)
@@ -208,6 +209,7 @@ func (w *web) routes() http.Handler {
 	w.folderRoutes(mux)  // web_folders.go
 	w.githubRoutes(mux)  // web_github.go
 	w.welcomeRoutes(mux) // web_welcome.go
+	w.pushRoutes(mux)    // web_push.go
 	return w.headers(mux)
 }
 
@@ -216,12 +218,10 @@ var (
 	assetHash string
 )
 
-// assetVersion changes with the content of the static files, so a browser
-// fetches the new stylesheet and scripts after each update instead of
-// keeping the cached ones.
 // handleManifest serves the app's manifest with the assistant's name: the
-// installed app is called as the user calls it.
-func handleManifest(rw http.ResponseWriter, _ *http.Request) {
+// installed app is called as the user calls it. The browser fetches it
+// without the session's cookies: it is in the workspace's language.
+func (w *web) handleManifest(rw http.ResponseWriter, _ *http.Request) {
 	raw, err := fs.ReadFile(webFS, "web/static/manifest.webmanifest")
 	var m map[string]any
 	if err == nil {
@@ -232,11 +232,28 @@ func handleManifest(rw http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	m["name"], m["short_name"] = assistantName(), assistantName()
+	m["lang"], m["description"] = w.cfg.Lang, tr(w.cfg.Lang, "app.tagline")
 	rw.Header().Set("Content-Type", "application/manifest+json")
 	rw.Header().Set("Cache-Control", "no-cache")
 	json.NewEncoder(rw).Encode(m)
 }
 
+// handleServiceWorker serves the worker with the static files' version in
+// it: each update of the workspace installs a new worker, with a fresh cache.
+func handleServiceWorker(rw http.ResponseWriter, _ *http.Request) {
+	raw, err := fs.ReadFile(webFS, "web/static/sw.js")
+	if err != nil {
+		http.Error(rw, "no worker", http.StatusInternalServerError)
+		return
+	}
+	rw.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	rw.Header().Set("Cache-Control", "no-cache")
+	rw.Write(bytes.Replace(raw, []byte("__VERSION__"), []byte(assetVersion()), 1))
+}
+
+// assetVersion changes with the content of the static files, so a browser
+// fetches the new stylesheet and scripts after each update instead of
+// keeping the cached ones.
 func assetVersion() string {
 	assetOnce.Do(func() {
 		h := sha256.New()
@@ -389,6 +406,7 @@ func (c *core) serveWeb(cfg *Config) error {
 		log.Printf("web: no password yet: open https://%s/setup with the setup code %s", w.cfg.Listen, w.setup)
 	}
 	handler := w.routes()
+	go w.followWaiting(nil) // push notifications of what waits for the user (web_push.go)
 	if c.remote != nil {
 		// The same workspace on the tailnet, once remote access is on (remote.go).
 		c.remote.setWorkspace(tailnetHandler(c.remote.name, handler))

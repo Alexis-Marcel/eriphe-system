@@ -356,14 +356,42 @@
     nav.scrollLeft += t.left + t.width / 2 - (n.left + n.width / 2);
   }
 
+  // An address can point into the conversation: a task's drawer (?task=,
+  // from a notification), a permission or a message (#perm-…, #m12).
+  function pointed() {
+    const task = new URLSearchParams(location.search).get("task");
+    if (task && $("#drawer")) {
+      htmx.ajax("GET", "/tasks/" + encodeURIComponent(task), { target: "#drawer", swap: "innerHTML" });
+      history.replaceState(null, "", "/" + location.hash);
+    }
+    const id = decodeURIComponent(location.hash.slice(1));
+    const el = id && /^(perm-|m\d)/.test(id) && document.getElementById(id);
+    if (el) {
+      // The conversation scrolls to it on its own, never the page.
+      const s = scroller();
+      if (s && s.contains(el)) {
+        const r = el.getBoundingClientRect(), b = s.getBoundingClientRect();
+        s.scrollTop += r.top - b.top - Math.max(0, (b.height - r.height) / 2);
+      }
+      el.classList.add("pointed");
+      setTimeout(() => el.classList.remove("pointed"), 2400);
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     toBottom(false);
     centerTab();
     autosize($("#text"));
     badge();
     connect();
+    pointed();
     if ("serviceWorker" in navigator && window.isSecureContext) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      window.eripheWorker = navigator.serviceWorker.register("/sw.js").catch(() => null);
+      // A notification clicked while this window is open, and not yet
+      // controlled by the worker: it asks the page to go there.
+      navigator.serviceWorker.addEventListener("message", (e) => {
+        if (e.data && e.data.type === "open" && typeof e.data.url === "string" && new URL(e.data.url).origin === location.origin) location.href = e.data.url;
+      });
     }
   });
 })();
@@ -425,3 +453,186 @@ if (location.hash === "#connect") {
   const d = document.getElementById("connect-dlg");
   if (d) openDialog(d);
 }
+
+// The workspace on a phone, installed or not: the keyboard, whether the
+// user is looking (for the notifications), installing the app and the
+// notifications of this device (Settings → App & notifications).
+(function () {
+  "use strict";
+
+  const $ = (sel, root) => (root || document).querySelector(sel);
+  const csrf = () => ($('meta[name="csrf-token"]') || {}).content || "";
+  const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  // The keyboard. Chrome on Android shrinks the page for it (the viewport's
+  // interactive-widget); Safari on iOS lays it over the page instead: the
+  // page follows the visible part, so the composer stays above the
+  // keyboard, and the tab bar steps aside while it is open.
+  const vv = window.visualViewport;
+  if (vv && document.documentElement.classList.contains("shell")) {
+    const root = document.documentElement;
+    let raf = 0;
+    const fit = () => {
+      raf = 0;
+      const kb = window.innerHeight - vv.height > 120;
+      root.classList.toggle("kb", kb);
+      if (kb) {
+        root.style.setProperty("--app-h", vv.height + "px");
+        if (window.scrollY) window.scrollTo(0, 0);
+        // Writing in the composer: the newest messages stay in sight.
+        const s = document.getElementById("chat-scroll");
+        if (s && document.activeElement && document.activeElement.id === "text") s.scrollTop = s.scrollHeight;
+      } else {
+        root.style.removeProperty("--app-h");
+      }
+    };
+    const later = () => { if (!raf) raf = requestAnimationFrame(fit); };
+    vv.addEventListener("resize", later);
+    vv.addEventListener("scroll", later);
+  }
+
+  // Whether the user is looking: a tab tells eriphe-core when it comes in
+  // front or leaves, and every 20 s while it is in front. Nothing is pushed
+  // to the devices meanwhile (push.go).
+  if (document.body && document.body.classList.contains("shell") && csrf()) {
+    const tab = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    let last = null, at = 0;
+    const front = () => document.visibilityState === "visible" && document.hasFocus();
+    const tell = (force) => {
+      const f = front();
+      if (!force && f === last && (!f || Date.now() - at < 20000)) return;
+      last = f;
+      at = Date.now();
+      const body = new URLSearchParams({ tab: tab, front: f ? "1" : "0", csrf: csrf() });
+      fetch("/presence", { method: "POST", body: body, credentials: "same-origin", keepalive: true,
+        headers: { "X-CSRF-Token": csrf() } }).catch(() => {});
+    };
+    ["focus", "blur", "pageshow"].forEach((ev) => window.addEventListener(ev, () => tell(false)));
+    document.addEventListener("visibilitychange", () => tell(false));
+    window.addEventListener("pagehide", () => {
+      if (navigator.sendBeacon) navigator.sendBeacon("/presence", new URLSearchParams({ tab: tab, front: "0", csrf: csrf() }));
+    });
+    setInterval(() => { if (front()) tell(true); }, 20000);
+    tell(true);
+  }
+
+  // Installing the app: Chrome and Edge offer their own prompt, the others
+  // are told how.
+  let installEvent = null;
+  window.addEventListener("beforeinstallprompt", (e) => { installEvent = e; showInstall(); });
+  window.addEventListener("appinstalled", () => { installEvent = null; showInstall(); });
+  function showInstall() {
+    const box = $("[data-install]");
+    if (!box) return;
+    const done = standalone();
+    $("[data-installed]", box).hidden = !done;
+    $("[data-install-prompt]", box).hidden = done || !installEvent;
+    $("[data-install-lead]", box).hidden = done;
+    const here = isIOS() ? "ios" : /Android/.test(navigator.userAgent) ? "android" : "desktop";
+    box.querySelectorAll("[data-platform]").forEach((li) => {
+      li.hidden = done || li.dataset.platform !== here;
+      li.classList.toggle("current", li.dataset.platform === here);
+    });
+  }
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("[data-install-button]") || !installEvent) return;
+    installEvent.prompt();
+    installEvent.userChoice.finally(() => { installEvent = null; showInstall(); });
+  });
+
+  // The notifications of this device.
+  const b64 = (s) => {
+    const raw = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  };
+  // A subscription's id is its endpoint's hash, as eriphe-core computes it (pushID).
+  async function pushID(endpoint) {
+    const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint)));
+    return Array.from(h.slice(0, 16), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  const sameKey = (sub, key) => {
+    const k = sub.options && sub.options.applicationServerKey;
+    if (!k) return true;
+    const a = new Uint8Array(k), b = b64(key);
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  };
+
+  async function setupPush() {
+    const box = $("#push");
+    if (!box) return;
+    const toggle = $("#push-toggle"), state = $("#push-state"), test = $("#push-test");
+    const say = (msg) => { state.textContent = msg || ""; };
+    const key = box.dataset.pushKey;
+    if (!key) return say(box.dataset.msgOff);
+    if (!window.isSecureContext) return say(box.dataset.msgInsecure);
+    if (isIOS() && !standalone()) return say(box.dataset.msgIos);
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return say(box.dataset.msgUnsupported);
+    const reg = await (window.eripheWorker || navigator.serviceWorker.register("/sw.js"));
+    if (!reg) return say(box.dataset.msgUnsupported);
+    let sub = await reg.pushManager.getSubscription();
+    let id = "";
+
+    // The switch is on when this browser's subscription is in the list.
+    async function mark() {
+      id = sub ? await pushID(sub.endpoint) : "";
+      let listed = false;
+      document.querySelectorAll("#push-devices [data-push-id]").forEach((li) => {
+        const mine = li.dataset.pushId === id;
+        listed = listed || mine;
+        $("[data-this-device]", li).hidden = !mine;
+      });
+      toggle.checked = !!sub && listed;
+      test.hidden = !toggle.checked;
+      $("#push-test-id").value = toggle.checked ? id : "";
+      if (Notification.permission === "denied") say(box.dataset.msgDenied);
+      else say("");
+    }
+    async function devices(r) {
+      if (!r.ok) throw new Error(await r.text());
+      const list = $("#push-devices");
+      list.innerHTML = await r.text();
+      htmx.process(list);
+    }
+    const post = (path, body, type) => fetch(path, { method: "POST", body: body, credentials: "same-origin",
+      headers: { "X-CSRF-Token": csrf(), "Content-Type": type } });
+
+    toggle.addEventListener("change", async () => {
+      toggle.disabled = true;
+      try {
+        if (toggle.checked) {
+          const perm = await Notification.requestPermission();
+          if (perm !== "granted") {
+            toggle.checked = false;
+            say(perm === "denied" ? box.dataset.msgDenied : "");
+            return;
+          }
+          sub = await reg.pushManager.getSubscription();
+          if (sub && !sameKey(sub, key)) { await sub.unsubscribe(); sub = null; }
+          if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
+          const body = Object.assign(sub.toJSON(), { app: standalone() });
+          await devices(await post("/push/subscribe", JSON.stringify(body), "application/json"));
+        } else {
+          const gone = id;
+          if (sub) await sub.unsubscribe();
+          sub = null;
+          if (gone) await devices(await post("/push/unsubscribe", new URLSearchParams({ id: gone }), "application/x-www-form-urlencoded"));
+        }
+      } catch (err) {
+        say(box.dataset.msgFailed);
+      } finally {
+        await mark().catch(() => {});
+        toggle.disabled = false;
+      }
+    });
+    // The list changed (a device removed from it): this one may be gone.
+    document.body.addEventListener("htmx:afterSwap", (e) => { if (e.target.id === "push-devices") mark(); });
+    await mark();
+    toggle.disabled = false;
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    showInstall();
+    setupPush().catch(() => {});
+  });
+})();

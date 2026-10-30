@@ -7,6 +7,7 @@
     <a href="/settings/tools" {{if eq .Tab "tools"}}aria-current="page"{{end}}>{{template "i-plug"}}<span>{{t "settings.tools"}}</span></a>
     <a href="/settings/folders" {{if eq .Tab "folders"}}aria-current="page"{{end}}>{{template "i-folder"}}<span>{{t "settings.folders"}}</span></a>
     <a href="/settings/remote" {{if eq .Tab "remote"}}aria-current="page"{{end}}>{{template "i-globe"}}<span>{{t "settings.remote"}}</span></a>
+    <a href="/settings/notifications" {{if eq .Tab "notifications"}}aria-current="page"{{end}}>{{template "i-bell"}}<span>{{t "settings.notifications"}}</span></a>
     <a href="/settings/journal" {{if eq .Tab "journal"}}aria-current="page"{{end}}>{{template "i-list"}}<span>{{t "settings.journal"}}</span></a>
     <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.account"}}</span>{{if .Updates.Core}}{{template "new-dot"}}{{end}}</a>
   </nav>
@@ -16,6 +17,7 @@
     {{else if eq .Tab "tools"}}{{if eq .View "form"}}{{template "tool-page" .}}{{else if eq .View "gallery"}}{{template "tool-gallery" .}}{{else if eq .View "drive"}}{{template "drive-page" .}}{{else if eq .View "github"}}{{template "github-page" .}}{{else if eq .View "github-post"}}{{template "github-post" .}}{{else if eq .View "home-assistant"}}{{template "home-assistant" .}}{{else}}{{template "tools" .}}{{end}}
     {{else if eq .Tab "folders"}}{{template "folders" .}}
     {{else if eq .Tab "remote"}}{{template "remote" .}}
+    {{else if eq .Tab "notifications"}}{{template "notifications" .}}
     {{else if eq .Tab "journal"}}{{template "journal" .}}
     {{else}}{{template "account" .}}{{end}}
   </div>
