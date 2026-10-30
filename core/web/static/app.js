@@ -348,6 +348,12 @@
     if (tab.dataset.view === "chat") toBottom(false);
   });
 
+  // Tâches from another page comes back to the conversation on its tasks.
+  if (location.hash === "#tasks-panel" && $(".workspace")) {
+    $(".workspace").dataset.view = "tasks";
+    $$(".tabbar [data-view]").forEach((a) => a.toggleAttribute("aria-current", a.dataset.view === "tasks"));
+  }
+
   // On a phone the settings tabs are a row of pills: the current one is
   // brought to the middle of that row, and nothing else scrolls.
   function centerTab() {
