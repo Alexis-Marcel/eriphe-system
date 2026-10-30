@@ -625,6 +625,27 @@ func templateFuncs(lang string) template.FuncMap {
 			}
 			return nil
 		},
+		// problem words a raw error that happened where (problems.go):
+		// brain, brain-start, task, tool or account.
+		"problem": func(where string, raw any) problem {
+			s := ""
+			if raw != nil {
+				s = fmt.Sprint(raw)
+			}
+			if where == "brain-start" {
+				p := explain(lang, whereBrain, s)
+				if p.Cause == causeUnknown {
+					p.Text = tr(lang, "problem.brain.start")
+				}
+				return p
+			}
+			return explain(lang, where, s)
+		},
+		// evfail is the raw words of an event that says a turn failed, or "".
+		"evfail": func(e EventRow) string {
+			raw, _ := turnFailure(e)
+			return raw
+		},
 		"has":      func(key string) bool { return tr(lang, key) != key },
 		"logo":     presetLogo,
 		"initial":  func(s string) string { return strings.ToUpper(string([]rune(s + "?")[:1])) },

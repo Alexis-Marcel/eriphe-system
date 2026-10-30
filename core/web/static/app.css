@@ -254,6 +254,35 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .msg-event p { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-align: center; }
 .msg-event .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-strong); flex: none; }
 .msg-event time { align-self: center; }
+.msg-event a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+
+/* The brain could not answer: an error card, never its raw error as a message. */
+.msg-error {
+  position: relative; gap: 12px; align-items: flex-start; padding: 16px 18px; border-radius: 20px; margin-right: 8%;
+  background: var(--surface); border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  box-shadow: 0 10px 30px -16px color-mix(in srgb, var(--danger) 50%, transparent); overflow: hidden;
+}
+.msg-error::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--danger); }
+.msg-error .err-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 11px; background: var(--danger-soft); color: var(--danger); flex: none; }
+.msg-error h3 { font-size: 1rem; }
+.msg-error .problem-text { color: var(--text); }
+.msg-error .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.msg-error time { align-self: flex-start; }
+
+/* An error, one way everywhere (problems.go). */
+.problem { display: grid; gap: 4px; min-width: 0; }
+.problem-text { color: var(--danger); overflow-wrap: anywhere; }
+.problem-text a { color: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+.problem-soft .problem-text { color: var(--muted); }
+.problem-details summary { cursor: pointer; color: var(--muted); font-size: .8rem; font-weight: 600; width: fit-content; }
+.problem-details code { display: block; margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); color: var(--muted);
+  font-size: .78rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 14em; overflow-y: auto; }
+.alert-box { padding: 11px 14px; border-radius: 12px; background: var(--danger-soft); font-size: .9rem; }
+.alert-box .problem-details code { background: var(--surface); }
+.status.health { color: var(--danger); white-space: nowrap; }
+.status.health .led { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
+.status.health-unverified { color: var(--warn); }
+.status.health-unverified .led { background: var(--warn-strong); box-shadow: 0 0 0 4px var(--warn-soft); }
 
 .bubble p + p, .prose p + p { margin-top: .6em; }
 .bubble ul, .bubble ol, .prose ul, .prose ol { margin: .4em 0; padding-left: 1.3em; }

@@ -167,6 +167,7 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /messages", http.MaxBytesHandler(w.auth(w.handleSend), maxAttachments*maxAttachmentSize+1<<20))
 	mux.Handle("GET /attachments/{id}", w.auth(w.handleAttachment))
 	mux.Handle("GET /tasks/{id}", w.auth(w.handleTask))
+	mux.Handle("POST /brain/retry", w.auth(w.handleBrainRetry))
 	mux.Handle("POST /tasks/{id}/answer", w.auth(w.handleAnswer))
 	mux.Handle("POST /tasks/{id}/reply", w.auth(w.handleReply))
 	mux.Handle("POST /tasks/{id}/stop", w.auth(w.handleStop))

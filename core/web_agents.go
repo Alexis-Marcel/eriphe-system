@@ -47,6 +47,23 @@ type providerView struct {
 	Agents             []string
 	InVault            bool
 	Suggested          []suggestion // agents worth creating with it, not there yet
+	Health             *healthView  // what is wrong with its key; nil when nothing is known to be
+}
+
+// healthView is an account's real state, as its card and its agents' show it.
+type healthView struct {
+	Label   string // refused, unverified or down (providerHealth.label)
+	Tested  bool   // found by a test of the key, not by its use
+	Problem problem
+}
+
+// health words what is known to be wrong with an account, or nil.
+func (w *web) health(lang, provider string) *healthView {
+	h := w.c.providerHealth(provider)
+	if h == nil {
+		return nil
+	}
+	return &healthView{Label: h.label(), Tested: h.Tested, Problem: explainCause(lang, whereAccount, h.Cause, h.Raw)}
 }
 
 // suggestion is a preset agent offered for a provider.
@@ -68,7 +85,8 @@ type agentView struct {
 	Image      string
 	Source     string
 	Brain      bool
-	Advanced   bool // it needs or prefers something of the machines
+	Advanced   bool        // it needs or prefers something of the machines
+	Health     *healthView // its account's key does not work: it says so, not "Ready"
 }
 
 type agentsPage struct {
@@ -86,6 +104,7 @@ type agentsPage struct {
 	Helpers       []assistantCard // its assistants
 	AgentCount    int             // the agents it may give a task to (list_agents)
 	Flash         string
+	Warn          string // the account just saved has a key that did not pass its test
 	Skipped       map[string]string
 }
 
@@ -98,6 +117,11 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 	if b := m.brainEntry(); b != nil {
 		v.Brain, v.BrainSource = b.Agent, w.c.brainAgentSource(b.Name)
 	}
+	lang := w.lang(r)
+	healths := map[string]*healthView{}
+	for n := range m.Providers {
+		healths[n] = w.health(lang, n)
+	}
 	infos, _ := w.c.listAgents()
 	for _, a := range infos {
 		spec := m.Agents[a.Name]
@@ -105,7 +129,8 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 		k, _ := kindOf(kind)
 		av := agentView{agentInfo: a, Provider: spec.Provider, Kind: kind, Billing: k.Billing, Image: spec.Image,
 			ModelLabel: modelLabel(kind, a.Runtime, a.Model), Source: w.c.source(kindAgent, a.Name), Brain: a.Name == v.Brain,
-			Advanced: len(a.Needs) > 0 || len(a.Prefers) > 0 || spec.Image != "" || a.Runtime != k.Runtime()}
+			Advanced: len(a.Needs) > 0 || len(a.Prefers) > 0 || spec.Image != "" || a.Runtime != k.Runtime(),
+			Health:   healths[spec.Provider]}
 		if av.Brain {
 			v.BrainModel = av.ModelLabel
 		}
@@ -130,7 +155,8 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 	for _, n := range slices.Sorted(maps.Keys(m.Providers)) {
 		p := m.Providers[n]
 		k, _ := kindOf(p.Kind)
-		pv := providerView{Name: n, Kind: p.Kind, Billing: k.Billing, Source: w.c.source(kindProvider, n), InVault: strings.HasPrefix(p.Secret, vaultPrefix)}
+		pv := providerView{Name: n, Kind: p.Kind, Billing: k.Billing, Source: w.c.source(kindProvider, n), InVault: strings.HasPrefix(p.Secret, vaultPrefix),
+			Health: healths[n]}
 		for an, a := range m.Agents {
 			if a.Provider == n {
 				pv.Agents = append(pv.Agents, an)
@@ -146,9 +172,19 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 			v.Skipped[k] = why
 		}
 	}
-	lang := w.lang(r)
 	q := r.URL.Query()
+	// A key saved that did not pass its test: said at once, not only on its card.
+	bad := func(key, name string) bool {
+		h := healths[name]
+		if h == nil || !h.Tested || w.c.source(kindProvider, name) == "" {
+			return false
+		}
+		v.Warn = fmt.Sprintf(tr(lang, key), name, h.Problem.Text)
+		return true
+	}
 	switch {
+	case q.Get("saved") != "" && bad("providers.savedbad", q.Get("saved")):
+	case q.Get("created") != "" && bad("providers.createdbad", q.Get("created")):
 	case q.Get("saved") != "" && (w.c.source(kindAgent, q.Get("saved")) != "" || w.c.source(kindProvider, q.Get("saved")) != ""):
 		v.Flash = fmt.Sprintf(tr(lang, "agents.saved"), q.Get("saved"))
 	case q.Get("created") != "" && w.c.source(kindProvider, q.Get("created")) != "":
@@ -690,6 +726,13 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		return
 	}
 	log.Printf("web: provider %s saved", f.Name)
+	// A new key is tried as "Test" would: one that fails is kept, but the
+	// account and its agents say so (provider_health.go).
+	if _, checkable := checkEndpoints[f.Kind.ID]; checkable && strings.TrimSpace(key) != "" {
+		v := checkProvider(r.Context(), lang, f.Kind.ID, key)
+		log.Printf("web: provider %s checked on save: %s", f.Name, v.State) // never the key
+		w.c.testedHealth(f.Name, v)
+	}
 	switch {
 	case f.Next == "welcome" && !f.Edit:
 		rw.Header().Set("HX-Redirect", "/welcome")
@@ -707,6 +750,7 @@ func (w *web) handleDeleteProvider(rw http.ResponseWriter, r *http.Request, s *s
 		w.toast(rw, w.formError(r, err), false)
 		return
 	}
+	w.c.clearProviderHealth(name)
 	log.Printf("web: provider %s removed", name)
 	rw.Header().Set("HX-Redirect", "/settings/agents?removed="+url.QueryEscape(name))
 	rw.WriteHeader(http.StatusOK)
@@ -723,6 +767,7 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		return
 	}
 	kind, key := r.PostFormValue("kind"), r.PostFormValue("key")
+	stored := false // the stored key is tried: what it gives is the account's state
 	if n := r.PathValue("name"); n != "" {
 		p, ok := w.c.conf().Providers[n]
 		if !ok {
@@ -740,11 +785,14 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 				show(testView{State: "err", Text: tr(lang, "ptest.nosecret")})
 				return
 			}
-			key = v
+			key, stored = v, true
 		}
 	}
 	v := checkProvider(r.Context(), lang, kind, key)
 	log.Printf("web: provider test (%s): %s", kind, v.State) // never the key
+	if _, checkable := checkEndpoints[kind]; stored && checkable {
+		w.c.testedHealth(r.PathValue("name"), v)
+	}
 	show(v)
 }
 

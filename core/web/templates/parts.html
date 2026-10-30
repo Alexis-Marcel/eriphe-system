@@ -26,14 +26,35 @@
 {{define "i-lock"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/></svg>{{end}}
 {{define "i-back"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>{{end}}
 
-{{define "message"}}{{if eq .Role "event"}}
-<div class="msg msg-event" id="m{{.Seq}}"><span class="dot"></span><p>{{short .Text 220}}</p><time datetime="{{iso .Time}}">{{clock .Time}}</time></div>
+{{define "message"}}{{if eq .Role "event"}}{{with .Notice}}
+<div class="msg msg-event" id="m{{$.Seq}}"><span class="dot"></span><p>{{tf .Key .Title}} <a href="/tasks/{{.Task}}" hx-get="/tasks/{{.Task}}" hx-target="#drawer" hx-swap="innerHTML">{{t "event.task.see"}}</a></p><time datetime="{{iso $.Time}}">{{clock $.Time}}</time></div>
+{{end}}{{else if eq .Role "error"}}{{template "brain-error" .}}
 {{else if .Hidden}}
 {{else if eq .Role "user"}}
 <div class="msg msg-user" id="m{{.Seq}}">{{if .Attachments}}<div class="msg-body">{{template "attachments" .Attachments}}{{if .Text}}<div class="bubble">{{md .Text}}</div>{{end}}</div>{{else}}<div class="bubble">{{md .Text}}</div>{{end}}<time datetime="{{iso .Time}}">{{if .Via}}<span class="via" title="{{t "chat.via"}}">{{.Via}} · </span>{{end}}{{clock .Time}}</time></div>
 {{else}}
 <div class="msg msg-brain" id="m{{.Seq}}"><span class="avatar" aria-hidden="true">{{template "logo"}}</span><div class="msg-body"><span class="sr-only">{{t "chat.eriphe"}} :</span><div class="bubble">{{md .Text}}</div><time datetime="{{iso .Time}}">{{clock .Time}}</time></div></div>
 {{end}}{{end}}
+
+{{/* An error, one way everywhere (problems.go): the sentence, what to do, and the raw text folded in Details. . is a problem. */}}
+{{define "problem"}}<div class="problem{{if .Soft}} problem-soft{{end}}"><p class="problem-text">{{.Text}}{{if .Href}} <a href="{{.Href}}">{{.Action}}</a>{{end}}</p>{{if .Detail}}<details class="problem-details"><summary>{{t "problem.details"}}</summary><code>{{short .Detail 1200}}</code></details>{{end}}</div>{{end}}
+
+{{/* The assistant could not answer, or cannot start: an error card, never its raw error as its message. */}}
+{{define "brain-error"}}{{$p := problem "brain" .Text}}{{if eq .Via "start"}}{{$p = problem "brain-start" .Text}}{{end}}
+<section class="msg msg-error" id="m{{.Seq}}" role="alert" aria-labelledby="m{{.Seq}}-t">
+  <span class="err-icon" aria-hidden="true">{{template "i-x"}}</span>
+  <div class="msg-body">
+    <h3 id="m{{.Seq}}-t">{{if eq .Via "start"}}{{t "chat.error.starttitle"}}{{else}}{{t "chat.error.title"}}{{end}}</h3>
+    <p class="problem-text">{{$p.Text}}</p>
+    <div class="actions">
+      <a class="btn btn-soft sm" href="{{$p.Href}}">{{template "i-key"}}{{$p.Action}}</a>
+      <form hx-post="/brain/retry" hx-swap="none" hx-disabled-elt="find button" class="inline"><button class="btn btn-primary sm" type="submit">{{t "problem.retry"}}</button></form>
+    </div>
+    {{if $p.Detail}}<details class="problem-details"><summary>{{t "problem.details"}}</summary><code>{{short $p.Detail 1200}}</code></details>{{end}}
+    <time datetime="{{iso .Time}}">{{clock .Time}}</time>
+  </div>
+</section>
+{{end}}
 
 {{/* The brain's message being written: nothing at all without one, for :empty. */}}
 {{define "draft"}}{{if .}}<div class="msg msg-brain msg-draft"><span class="avatar" aria-hidden="true">{{template "logo"}}</span><div class="msg-body"><div class="bubble">{{md .}}</div></div></div>{{end}}{{end}}
@@ -123,7 +144,7 @@
   {{if .Card.Repo}}<div><dt>{{t "task.repo"}}</dt><dd class="mono">{{.Card.Repo}}</dd></div>{{end}}
   {{if .Card.Branch}}<div><dt>{{t "task.branch"}}</dt><dd class="mono">{{.Card.Branch}}</dd></div>{{end}}
 </dl>
-{{if .Card.PendingReason}}<p class="notice">{{.Card.PendingReason}}</p>{{end}}
+{{if .Card.PendingReason}}{{if .Card.Finished}}<div class="alert-box">{{template "problem" (problem "task" .Card.PendingReason)}}</div>{{else}}<p class="notice">{{.Card.PendingReason}}</p>{{end}}{{end}}
 {{if .Card.Link}}<a class="btn btn-soft wide" href="{{.Card.Link}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{.Card.LinkLabel}}</a>{{end}}
 <details class="prompt"><summary>{{t "task.prompt"}}</summary><div class="prose">{{md .Card.Prompt}}</div></details>
 {{if .Perm}}{{template "permission" .Perm}}{{end}}
@@ -134,12 +155,12 @@
     {{if .Fallback}}<span class="cred-why err-text">{{t "cred.fallback"}}</span>{{else if .Reason}}<span class="cred-why muted">{{short .Reason 200}}</span>{{end}}</li>
 {{end}}</ol>{{end}}
 <h3 class="section-label">{{t "task.activity"}}</h3>
-{{if .Events}}<ol class="timeline">{{range .Events}}
-  {{if eq .Type "text"}}<li class="ev ev-text"><div class="prose">{{md (printf "%v" .Data.text)}}</div><time datetime="{{iso .Time}}">{{clock .Time}}</time></li>
+{{if .Events}}<ol class="timeline">{{range .Events}}{{$fail := evfail .}}
+  {{if and (eq .Type "text") (not $fail)}}<li class="ev ev-text"><div class="prose">{{md (printf "%v" .Data.text)}}</div><time datetime="{{iso .Time}}">{{clock .Time}}</time></li>
   {{else if eq .Type "tool_use"}}<li class="ev ev-tool"><span class="ev-tag">{{.Data.name}}</span><code>{{short (evsubject .Data) 160}}</code></li>
   {{else if eq .Type "permission"}}<li class="ev ev-perm"><span class="ev-tag">{{template "i-shield"}}{{.Data.tool_name}}</span><code>{{short (evsubject .Data) 160}}</code></li>
   {{else if eq .Type "permission_answer"}}<li class="ev ev-answer {{if .Data.allow}}ok{{else}}no{{end}}">{{if .Data.allow}}{{template "i-check"}}{{t "task.allowed"}}{{else}}{{template "i-x"}}{{t "task.denied"}}{{end}}{{with .Data.message}} — {{short (printf "%v" .) 200}}{{end}}</li>
-  {{else}}<li class="ev ev-error"><span class="ev-tag">{{t "task.error"}}</span>{{short (printf "%v" (or .Data.message .Data.error .Data.subtype)) 300}}</li>{{end}}
+  {{else}}<li class="ev ev-error"><span class="ev-tag">{{t "task.error"}}</span>{{template "problem" (problem "task" (or $fail .Data.error .Data.subtype))}}</li>{{end}}
 {{end}}</ol>{{else}}<p class="muted">{{t "task.noactivity"}}</p>{{end}}
 {{if eq .Card.State "idle"}}
 <form class="reply" hx-post="/tasks/{{.Card.ID}}/reply" data-reset hx-disabled-elt="find button">

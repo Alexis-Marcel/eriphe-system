@@ -40,6 +40,7 @@ type testView struct {
 	Tools  []string // the first tools
 	More   int      // how many others
 	Detail string   // the technical cause, for an unclassified failure
+	Cause  string   // a failure's cause (problems.go), when it is known
 }
 
 // testLimiter allows a few tests per session and minute.
