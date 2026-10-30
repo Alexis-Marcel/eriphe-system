@@ -738,6 +738,9 @@ function lit(name) {
   const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
+  // Installed (home screen): app.css sizes the shell on the large viewport.
+  if (standalone()) document.documentElement.classList.add("app");
+
   // The keyboard. Chrome on Android shrinks the page for it (the viewport's
   // interactive-widget); Safari on iOS lays it over the page instead: the
   // page follows the visible part, so the composer stays above the
