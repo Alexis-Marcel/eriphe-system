@@ -832,11 +832,13 @@ its node; it never enters a task or a task's spec.
 
 Settings → Tools → Google Drive (`/settings/drive`, `web_drive.go`, the logic in `cloud.go`):
 
-1. **Connect**: "Se connecter à Google Drive" sends the browser to Google; "Permettre à Eriphe de
+1. **Your Google app**: the guide, then the client JSON (or id and secret) of the user's own
+   Google app ([below](#your-own-google-app)), kept in the vault.
+2. **Connect**: "Connecter Google Drive" sends the browser to Google; "Permettre à Eriphe de
    déposer des résultats" asks for the scope that writes. The account comes back connected, and the
    workspace creates the catalog server `fichiers` (image `ghcr.io/alexis-marcel/eriphe-files`,
    `trust_annotations`: its reads are free, `write_file` is the user's to allow).
-2. **Choose**: once the service runs, the page browses the account's folders (My Drive, Shared with
+3. **Choose**: once the service runs, the page browses the account's folders (My Drive, Shared with
    me, shared drives) through the server's `browse_folders`, and each one is given "en lecture" or
    "lecture + dépôt". The chosen folders are written in the service's `FILES_CONFIG`, which
    restarts it; removing one, or changing its access, does the same.
@@ -855,26 +857,35 @@ it; only the workspace calls it (`browseDrive`).
 `drive.file` is not enough: it only reaches files the app created or that the user opened with
 Google's Picker, so it can neither list a folder the user already has nor create `Eriphe/` inside
 it. Both scopes kept are **restricted** at Google: an app that is not verified shows "Google
-hasn't verified this app" (the user goes through "Advanced") and is limited to 100 users, which is
-acceptable for now; verification (with a security assessment for restricted scopes) is for later.
+hasn't verified this app" (the user goes through "Advanced") and is limited to 100 users, which
+is no limit for a user's own app.
 `drive` lets the token change anything in the Drive: eriphe-files has no call that does
 (only creations, only in `Eriphe/` of a `drop` folder). Reconnected read only, every folder falls
 back to `read`. `prompt=consent` and `access_type=offline` make Google give a refresh token at each
 connection.
 
-### The Eriphe app and the relay
+### Your own Google app
 
-Google wants a registered https redirect, and each installation has its own address. The Eriphe
-app, published once, registers a single one, the **relay**: a static page of this repository
-(`pages/`), published by GitHub Pages at
-`https://alexis-marcel.github.io/eriphe-system/oauth/callback/`. In the browser, it only sends on
-to the workspace named in the state, Home Assistant's way (my.home-assistant.io); no Eriphe
-server, and no server of the maintainers, is in the path:
+There is no shared Eriphe app: each user creates **their own** Google OAuth client once, the Home
+Assistant way, and the page guides them through Google's console in a few minutes (the same steps
+in [docs/google-drive.md](../docs/google-drive.md)). Nobody else holds its secret, there is no
+user cap or verification to share with strangers, and no server of the maintainers is in the path.
+
+The client is a **Web application** client of the user's Google Cloud project (Drive API on, an
+External audience with the user as test user, or published), with one authorized redirect URI:
+the workspace's own `<origin>/oauth/callback`, where `<origin>` is the address the browser
+reaches the workspace at (`web.origin`); the page shows it with a Copy button. Its id and secret
+are given on the page, as the JSON the console downloads (`{"web": {"client_id",
+"client_secret", "redirect_uris", …}}`, the flat `{"client_id", "client_secret"}` also works) or
+typed, and kept in the vault as one secret, `google-drive-client` (`PUT /v1/secrets/
+google-drive-client` sets it too); the secret is never shown back or logged. A Desktop client
+(`{"installed": …}`) is refused: Google sends it only to loopback redirects. A JSON whose
+`redirect_uris` lack this workspace's URI is kept, with a warning.
 
 ```
-workspace → Google      PKCE (S256), state = e1.<base64url payload>.<base64url HMAC-SHA256>
-Google → relay          …/eriphe-system/oauth/callback/?code&state
-relay → workspace       <origin>/oauth/callback?code&state   (location.replace; nothing else, nothing kept)
+workspace → Google      PKCE (S256), state = e1.<base64url payload>.<base64url HMAC-SHA256>,
+                        redirect_uri = <origin>/oauth/callback
+Google → workspace      <origin>/oauth/callback?code&state   (in the browser)
 workspace               checks the MAC, the expiry (15 min), the flow (used once), the browser's
                         flow cookie, and that the origin is its own; exchanges the code with the
                         client secret and the PKCE verifier
@@ -882,99 +893,48 @@ workspace               checks the MAC, the expiry (15 min), the flow (used once
 
 The payload is `{"w": "<workspace origin>", "n": "<flow id>", "x": <expiry>}`, the MAC under a key
 only this eriphe-core has (`cloud_state_key` in the store, made once): a state it did not make, or
-replayed, is refused at its callback. The relay reads the payload but cannot check the MAC (a key
-it shared with every eriphe-core would be public): it checks the state's shape, that it expires
-within the hour, and the origin, with the same rule as `bounceOrigin` here (both read their cases
-from `pages/origins.json`). It sends on only to an origin exactly as a browser writes it (no path,
-query, credentials or default port), **https to any host name or address**, or http to a
-loopback or private address (`localhost`, 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16,
-100.64/10, `::1`, fc00::/7, fe80::/10) only. It forwards only `code`, `state` (or `error` when
-Google sends one), at the fixed path `/oauth/callback`, never exchanges the code and keeps
-nothing; the page loads no other script, has a strict Content Security Policy and sends no
-referrer. A workspace on the home network, on the tailnet, or behind your own domain and reverse
-proxy (`https://ia.example.org`) is all bounced to.
+replayed, is refused at its callback. The flow is bound to the browser like the other workspace
+flows (the `__Host-eriphe-oauth` cookie, its hash kept with the flow): another browser with the
+same link is refused. The refresh token goes to the vault with the client id and secret, which
+eriphe-files needs to refresh it.
 
-Why any https origin, and not only home and tailnet addresses: a code is worth nothing without
-the PKCE verifier and the flow cookie of the eriphe-core that made the state, and without the
-Eriphe app's client secret. The one thing a list would narrow is a holder of that secret phishing
-someone with a flow of their own (below), and a list cannot stop it: `*.ts.net` names, which a
-list has to allow, can be made public with Tailscale Funnel. A list would only shut out
-self-hosters with their own domain. What it costs: the relay is a redirect, from a github.io page,
-to any https site's `/oauth/callback`, for whoever crafts a fresh state.
+### Addresses Google takes
 
-The flow is bound to the browser like the other workspace flows (the `__Host-eriphe-oauth`
-cookie, its hash kept with the flow): another browser with the same link is refused.
+Google checks an authorized redirect URI against its
+[validation rules](https://developers.google.com/identity/protocols/oauth2/web-server#uri-validation):
+https (http only for localhost), no raw IP address (loopback ones aside), and a host whose
+top-level domain is on the public suffix list. `googleOrigin` applies them to the workspace's
+origin (`publicsuffix`, ICANN section; `home.arpa` counts as local): a workspace opened at
+`https://192.168.1.2:8443` or `https://eriphe.local` cannot connect Drive, and the page says so
+instead of showing the guide, with what to do:
 
-**Use my own Google client** (advanced): a "Web application" client created in your own Google
-Cloud project (Drive API on), with the workspace's own `https://<workspace>/oauth/callback` as its
-redirect: the page shows the exact URI. Its id and secret are typed in the form, go to Google and
-then, with the refresh token, to the vault; the relay is not involved. It is also the way for a
-workspace reached over plain http at a public name, which the relay refuses.
+- turn on **Remote access** (Tailscale gives `https://<name>.<tailnet>.ts.net`, which Google takes;
+  when it is on, the page links to itself at that address);
+- or put Eriphe behind the user's own domain (`https://eriphe.example.org`);
+- or, with no Google app at all, "Google Drive for desktop" on an always-on computer, its synced
+  folder given as a folder of that machine ([Folders](#folders)).
 
-### Where the Eriphe app's client secret lives
+`startDrive` refuses such an origin too (`drive.origin.ip`, `drive.origin.local`,
+`drive.origin.http`).
 
-In a file given to the installation, never in this repository and never in an image:
-`google-oauth.json` next to the database (the data directory: `/var/lib/eriphe/core` on Linux,
-`/data` in the container), or the file (or `vault:<name>`) named by `cloud.google_client_file`. It
-is the JSON the Google Cloud console downloads (`{"web": {"client_id", "client_secret", …}}`; the
-flat `{"client_id", "client_secret"}` also works). Without it, the page says the Eriphe app is not
-installed and offers the own-client form.
+### Testing or In production
 
-```json
-"cloud": {"google_client_file": "/data/google-oauth.json", "bounce_url": "https://alexis-marcel.github.io/eriphe-system/oauth/callback/"}
-```
+In the console's Audience, a **Testing** app only takes its test users (up to 100), and Google
+expires a test user's authorization, refresh token included, seven days after consent
+([Manage App Audience](https://support.google.com/cloud/answer/15549945),
+[refresh token expiration](https://developers.google.com/identity/protocols/oauth2#expiration)):
+Drive must be connected again every week. **Published** ("In production"), that expiry does not
+apply; the app being unverified, Google shows its unverified-app warning before the consent and
+caps it at 100 users, and an app for personal use (fewer than 100 users) may stay unverified
+([personal use](https://support.google.com/cloud/answer/13464323)). The page says both, to be
+checked in the console.
 
-Why not in the image, injected at build from a GitHub Actions secret: the images are public, so
-anything in them is public, and Google treats the secret of a "Web application" client as
-confidential (only "Desktop" clients have a secret Google does not count as one, and those only
-take loopback redirects, which a workspace on another machine than the browser cannot use). A
-public secret would let anyone redeem, as "Eriphe", a code that reached them: with a link that
-starts a flow they made (their own PKCE verifier) and sends the code through the bounce, a user
-who accepts an unsolicited "Eriphe wants to access your Google Drive" would give that person their
-Drive. The relay's rule above does not stop that: it cannot tell your workspace from anyone
-else's. With
-the file, the secret is only as known as the installations it was handed to; rotating it (a new
-secret in the console, the file replaced) cuts the old one off. If the app later ships in the
-image for everyone, that risk is accepted with it: the decision is one line of `googleApp`.
+### Older configurations
 
-### Creating the Eriphe app in the Google Cloud console (once, by the maintainers)
-
-Google's rules and console change: what is marked *check* below is what was understood when this
-was written, to confirm at creation time.
-
-1. <https://console.cloud.google.com/projectcreate>: a project named `Eriphe`.
-2. APIs & Services → Library → **Google Drive API** → Enable.
-3. Google Auth Platform (APIs & Services → OAuth consent screen) → Get started: app name
-   `Eriphe`, a support email, audience **External**, a contact email; accept the policy; Create.
-4. Branding: home page and privacy policy (pages to write before verification; they can live on
-   the same GitHub Pages site, under `pages/site/`), authorized domain `alexis-marcel.github.io`.
-   *Check*: a redirect URI's domain must be an authorized domain, and Google may ask to prove you
-   own it (Search Console); `github.io` is a public suffix, so the authorized domain is the
-   user's own `alexis-marcel.github.io`. The logo can wait (*check*: a logo requires verification
-   of the branding).
-5. Data Access → Add or remove scopes: `https://www.googleapis.com/auth/drive` and
-   `https://www.googleapis.com/auth/drive.readonly` (both listed as restricted) → Update → Save.
-6. Audience → Publishing status. *Check* the limits of each status at creation time:
-   - **Testing**: only the test users listed there can sign in (*check*: up to 100), and their
-     refresh tokens expire after 7 days, so Drive has to be connected again every week.
-   - **In production** (Publish app → confirm): anyone can sign in, but an unverified app shows
-     "Google hasn't verified this app" (through "Advanced") and has a cap on new users (*check*:
-     100). Removing both takes Google's verification, which for restricted scopes such as `drive`
-     includes a security assessment (*check* its scope and cost); do not submit it yet.
-7. Clients → Create client: type **Web application**, name `Eriphe`, authorized redirect URI
-   exactly `https://alexis-marcel.github.io/eriphe-system/oauth/callback/` (with the final slash,
-   the URL GitHub Pages serves the page at; no JavaScript origin needed) → Create → **Download
-   JSON** at once (the secret is shown only at creation).
-8. Give that JSON to the installation as `google-oauth.json` in eriphe-core's data directory,
-   readable by eriphe-core's user (UID 1993), e.g. on Linux
-   `sudo install -o 1993 -g 1993 -m 600 client_secret_*.json /var/lib/eriphe/core/google-oauth.json`,
-   or `docker cp client_secret_*.json eriphe-core:/data/google-oauth.json && docker exec -u 0
-   eriphe-core chown 1993:1993 /data/google-oauth.json`. No restart is needed: it is read at each
-   connection. Never commit it.
-
-The relay is published by `.github/workflows/pages.yml` from `main` (repository Settings → Pages,
-source "GitHub Actions"); its tests (`node --test` in `pages/`) run in CI. A fork that publishes its
-own app registers its own Pages URL and sets `cloud.bounce_url` to it.
+Versions before this one used a shared Eriphe app and a sign-in relay on GitHub Pages; both are
+gone. `cloud.google_client_file` and `cloud.bounce_url` still load and are ignored, with a line in
+the log at start (`legacyCloud`); a Drive connected through the shared app keeps its token for as
+long as that app's client exists.
 
 ## Local MCP servers (services)
 

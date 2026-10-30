@@ -14,14 +14,13 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/net/publicsuffix"
 	"golang.org/x/oauth2"
 )
 
@@ -31,29 +30,26 @@ import (
 // the refresh token in the vault and lends it to the files service on its
 // node, like a password: it never enters a task.
 //
-// Google wants a registered https redirect, and each installation has its
-// own address: the Eriphe app, published once, registers the relay, a
-// static page of this repository on GitHub Pages (pages/), which only
-// bounces the browser to the workspace named in the state (the Home
-// Assistant way, my.home-assistant.io):
+// Each user brings their own Google app, as with Home Assistant: an OAuth
+// client "Web application" they create once in their Google Cloud project,
+// with the workspace's own https://<workspace>/oauth/callback as its
+// redirect. The page guides them through it (web_drive.go,
+// docs/google-drive.md); the client id and secret are kept in the vault
+// (googleClientVault), never shown back:
 //
 //	workspace → Google (PKCE, state = e1.<payload>.<mac>)
-//	Google → https://alexis-marcel.github.io/eriphe-system/oauth/callback/?code&state
-//	relay → <workspace>/oauth/callback?code&state   (in the browser; nothing else, nothing kept)
+//	Google → <workspace>/oauth/callback?code&state   (in the browser)
 //	workspace: checks the state's MAC, the flow and the browser's cookie,
 //	           exchanges the code with the client secret and the PKCE verifier
 //
 // The state's payload is the workspace's origin, a random flow id and an
 // expiry, signed with HMAC-SHA256 under a key only this eriphe-core has: a
-// state it did not make, or one replayed, is refused here. The relay can
-// read the payload but not check the MAC (no shared key could stay secret
-// in a public page): it holds the origin to the shape of a workspace
-// address instead (bounceOrigin), the same rule as here, and forwards only
-// code and state.
+// state it did not make, or one replayed, is refused here.
 //
-// "Use my own Google client" skips the relay: the client id and secret
-// typed in the workspace, registered at Google with the workspace's own
-// https://<workspace>/oauth/callback.
+// Google takes a redirect only at an https address whose host is a name
+// ending in a public top-level domain (or localhost): googleOrigin tells a
+// workspace reached at a raw IP address or at a .local name, which cannot
+// connect Drive, and the page says what to do instead.
 
 const (
 	filesServer    = "fichiers"
@@ -62,11 +58,11 @@ const (
 	driveTokenEnv  = "FILES_GOOGLE_TOKEN"
 	driveAccount   = "google"
 
-	defaultBounce   = "https://alexis-marcel.github.io/eriphe-system/oauth/callback/"
-	googleAppFile   = "google-oauth.json" // next to the database, by default
-	stateVersion    = "e1"
-	stateKeyName    = "cloud_state_key"
-	cloudFlowExpiry = 15 * time.Minute
+	googleClientVault = "google-drive-client" // the user's own client, in the vault
+	googleClientIDEnd = ".apps.googleusercontent.com"
+	stateVersion      = "e1"
+	stateKeyName      = "cloud_state_key"
+	cloudFlowExpiry   = 15 * time.Minute
 
 	scopeDrive         = "https://www.googleapis.com/auth/drive"
 	scopeDriveReadonly = "https://www.googleapis.com/auth/drive.readonly"
@@ -82,63 +78,135 @@ var googleOAuth = oauth2.Endpoint{
 // cloudHTTP exchanges codes; tests replace it.
 var cloudHTTP = &http.Client{Timeout: 30 * time.Second}
 
-// CloudConfig is where the Eriphe app's OAuth client is. Its secret is
-// never in the repository or in an image: the file is given to the
-// installation (see core/README.md, "Google Drive").
+// CloudConfig is what an older configuration may still carry, from when
+// Eriphe had a shared Google app behind a sign-in relay: both fields are
+// read and ignored (legacyCloud says so at start). A Drive connected
+// through that app keeps working until its client is deleted; connecting
+// again takes the user's own app.
 type CloudConfig struct {
-	// GoogleClientFile is the client JSON the Google Cloud console
-	// downloads ({"web": {"client_id", "client_secret", ...}}), or
-	// vault:<name>. Default google-oauth.json next to the database.
 	GoogleClientFile string `json:"google_client_file,omitempty"`
-	// BounceURL is the redirect registered for that client, which bounces
-	// to the workspace: the relay on GitHub Pages (defaultBounce) unless
-	// the client registers another one.
-	BounceURL string `json:"bounce_url,omitempty"`
+	BounceURL        string `json:"bounce_url,omitempty"`
 }
 
+// legacyCloud is the log line for a configuration that still names the
+// shared app, or "".
+func (c *Config) legacyCloud() string {
+	if c.Cloud == nil || (c.Cloud.GoogleClientFile == "" && c.Cloud.BounceURL == "") {
+		return ""
+	}
+	return "cloud: google_client_file and bounce_url are not used any more: connect Google Drive with your own Google app (Settings → Tools → Google Drive)"
+}
+
+// oauthApp is an OAuth client: the user's own Google app.
 type oauthApp struct {
 	ID     string `json:"client_id"`
 	Secret string `json:"client_secret"`
 }
 
-// googleApp reads the Eriphe app's client.
-func (c *core) googleApp() (oauthApp, error) {
-	file := ""
-	if cc := c.base.Cloud; cc != nil {
-		file = cc.GoogleClientFile
+var errNoGoogleClient = errors.New("no Google client")
+
+// googleClient reads the user's Google app from the vault.
+func googleClient() (oauthApp, error) {
+	v := currentVault()
+	if v == nil {
+		return oauthApp{}, errNoVault
 	}
-	if file == "" {
-		file = filepath.Join(filepath.Dir(c.base.DB), googleAppFile)
+	raw, err := v.get(googleClientVault)
+	if errors.Is(err, errNoSecret) {
+		return oauthApp{}, errNoGoogleClient
 	}
-	raw, err := readSecret(file)
 	if err != nil {
 		return oauthApp{}, err
 	}
-	var doc struct {
-		Web       *oauthApp `json:"web"`
-		Installed *oauthApp `json:"installed"`
-		oauthApp
-	}
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
-		return oauthApp{}, fmt.Errorf("%s: not a client JSON", file)
-	}
-	app := doc.oauthApp
-	if doc.Web != nil {
-		app = *doc.Web
-	} else if doc.Installed != nil {
-		app = *doc.Installed
-	}
-	if app.ID == "" || app.Secret == "" {
-		return oauthApp{}, fmt.Errorf("%s: client_id and client_secret are required", file)
+	var app oauthApp
+	if json.Unmarshal([]byte(raw), &app) != nil || app.ID == "" || app.Secret == "" {
+		return oauthApp{}, errNoGoogleClient
 	}
 	return app, nil
 }
 
-func (c *core) bounceURL() string {
-	if cc := c.base.Cloud; cc != nil && cc.BounceURL != "" {
-		return cc.BounceURL
+func storeGoogleClient(app oauthApp) error {
+	v := currentVault()
+	if v == nil {
+		return errNoVault
 	}
-	return defaultBounce
+	raw, _ := json.Marshal(app)
+	return v.set(googleClientVault, string(raw))
+}
+
+// parseGoogleClient reads the client JSON the Google Cloud console
+// downloads: {"web": {"client_id", "client_secret", "redirect_uris", …}}
+// (the flat {"client_id", "client_secret"} also works). A Desktop client
+// ({"installed": …}) is refused: Google takes only loopback redirects for
+// it, which a workspace cannot use. It also returns the redirect URIs the
+// file lists, if any.
+func parseGoogleClient(raw []byte) (oauthApp, []string, error) {
+	type client struct {
+		oauthApp
+		RedirectURIs []string `json:"redirect_uris"`
+	}
+	var doc struct {
+		Web       *client `json:"web"`
+		Installed *client `json:"installed"`
+		client
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return oauthApp{}, nil, &catalogError{http.StatusBadRequest, "drive.badjson", "", errors.New("not a client JSON")}
+	}
+	if doc.Installed != nil {
+		return oauthApp{}, nil, &catalogError{http.StatusBadRequest, "drive.desktop", "", errors.New("a Desktop client: create a Web application client")}
+	}
+	c := doc.client
+	if doc.Web != nil {
+		c = *doc.Web
+	}
+	app, err := checkGoogleClient(c.ID, c.Secret)
+	return app, c.RedirectURIs, err
+}
+
+// checkGoogleClient checks a client id and secret as typed.
+func checkGoogleClient(id, secret string) (oauthApp, error) {
+	app := oauthApp{ID: strings.TrimSpace(id), Secret: strings.TrimSpace(secret)}
+	if app.ID == "" || app.Secret == "" {
+		return oauthApp{}, &catalogError{http.StatusBadRequest, "drive.ownmissing", "", errors.New("the client id and secret are required")}
+	}
+	if !strings.HasSuffix(app.ID, googleClientIDEnd) || strings.ContainsAny(app.ID+app.Secret, " \t\r\n\"'<>") || len(app.ID)+len(app.Secret) > 512 {
+		return oauthApp{}, &catalogError{http.StatusBadRequest, "drive.badclient", "", errors.New("not a Google client id and secret")}
+	}
+	return app, nil
+}
+
+// googleOrigin says why Google would refuse <origin>/oauth/callback as an
+// authorized redirect URI, or "" if it takes it (developers.google.com/
+// identity/protocols/oauth2/web-server, "Redirect URI validation rules"):
+// "ip" for a raw IP address other than a loopback one, "local" for a name
+// whose top-level domain is not a public one (eriphe.local, nas.lan, a
+// single label), "http" for plain http except to localhost.
+func googleOrigin(origin string) string {
+	u, err := url.Parse(origin)
+	if err != nil || u.Hostname() == "" {
+		return "local"
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if ip, err := netip.ParseAddr(host); err == nil {
+		if ip.IsLoopback() {
+			return ""
+		}
+		return "ip"
+	}
+	if host == "localhost" {
+		return ""
+	}
+	labels := strings.Split(host, ".")
+	tld := labels[len(labels)-1]
+	if suffix, icann := publicsuffix.PublicSuffix(tld); len(labels) < 2 || !icann || suffix != tld ||
+		host == "home.arpa" || strings.HasSuffix(host, ".home.arpa") {
+		return "local"
+	}
+	if u.Scheme != "https" {
+		return "http"
+	}
+	return ""
 }
 
 // The state.
@@ -195,54 +263,6 @@ func openState(key []byte, s string, now time.Time) (statePayload, error) {
 // isCloudState tells a state of ours from a state of the go-sdk's flows.
 func isCloudState(s string) bool { return strings.HasPrefix(s, stateVersion+".") }
 
-// bounceOrigin is the rule the relay applies to the address it bounces to
-// (pages/oauth/callback/relay.js, the same rule): the origin of a
-// workspace, exactly as a browser writes it. https to any host name or
-// address (a workspace behind its owner's own domain and proxy as well as
-// one on the home network or the tailnet); http only to a loopback or
-// private address, or localhost. The relay forwards only code, state (or
-// error) and only to /oauth/callback: a code is worth nothing without the
-// PKCE verifier and the flow cookie of the workspace that made the state,
-// nor without the Eriphe app's client secret (core/README.md, "The Eriphe
-// app and the bounce").
-func bounceOrigin(s string) bool {
-	u, err := url.Parse(s)
-	if err != nil || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" ||
-		len(s) > 255 || s != strings.ToLower(s) {
-		return false
-	}
-	host := u.Hostname()
-	if host == "" || (u.Port() != "" && !portRe.MatchString(u.Port())) || u.Port() == map[string]string{"https": "443", "http": "80"}[u.Scheme] {
-		return false
-	}
-	ip, err := netip.ParseAddr(host)
-	isIP := err == nil
-	// An address as a browser writes it (::ffff:a.b.c.d is ::ffff:xxxx:xxxx there).
-	if isIP && (ip.String() != host || ip.Zone() != "" || ip.Is4In6() || ip.Is4() == strings.HasPrefix(u.Host, "[")) {
-		return false
-	}
-	private := isIP && (ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || cgnat.Contains(ip))
-	switch u.Scheme {
-	case "http":
-		return private || host == "localhost"
-	case "https":
-		if isIP {
-			return true
-		}
-		labels := strings.Split(host, ".")
-		return hostRe.MatchString(host) && !numericLabel.MatchString(labels[len(labels)-1])
-	}
-	return false
-}
-
-var (
-	portRe = regexp.MustCompile(`^[1-9][0-9]{0,4}$`)
-	hostRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
-	// A last label that makes a browser read the name as an IPv4 address
-	// (2130706433, 0x7f000001, a.1), which it rewrites or refuses.
-	numericLabel = regexp.MustCompile(`^(0x[0-9a-f]*|[0-9]+)$`)
-)
-
 // The flows.
 
 type cloudFlow struct {
@@ -250,7 +270,6 @@ type cloudFlow struct {
 	verifier string
 	binding  string // hash of the browser's flow cookie
 	config   *oauth2.Config
-	own      bool // the user's own client, stored with the token
 	lang     string
 	expires  time.Time
 }
@@ -288,32 +307,26 @@ func (f *cloudFlows) take(id string) *cloudFlow {
 
 // driveConnect is what the workspace's Connect asks.
 type driveConnect struct {
-	Origin  string    // the workspace, as the browser reaches it
-	Binding string    // hash of the browser's flow cookie
-	Write   bool      // ask for the scope that also creates files
-	Own     *oauthApp // the user's own client, or nil for the Eriphe app
-	Lang    string    // the words of the tool's use, if it is created
+	Origin  string // the workspace, as the browser reaches it
+	Binding string // hash of the browser's flow cookie
+	Write   bool   // ask for the scope that also creates files
+	Lang    string // the words of the tool's use, if it is created
 }
 
 // startDrive starts a Google authorization and returns where to send the
 // browser.
 func (c *core) startDrive(in driveConnect) (string, error) {
-	app, redirect := oauthApp{}, ""
-	if in.Own != nil {
-		app, redirect = *in.Own, in.Origin+"/oauth/callback"
-		if app.ID == "" || app.Secret == "" {
-			return "", &catalogError{http.StatusBadRequest, "drive.ownmissing", "", errors.New("the client id and secret are required")}
-		}
-	} else {
-		var err error
-		if app, err = c.googleApp(); err != nil {
-			return "", &catalogError{http.StatusServiceUnavailable, "drive.noapp", "", err}
-		}
-		if !bounceOrigin(in.Origin) {
-			return "", &catalogError{http.StatusBadRequest, "drive.badorigin", in.Origin, errors.New("the sign-in relay only sends back to an https origin, or http to a private address")}
-		}
-		redirect = c.bounceURL()
+	app, err := googleClient()
+	if errors.Is(err, errNoGoogleClient) {
+		return "", &catalogError{http.StatusBadRequest, "drive.noclient", "", err}
 	}
+	if err != nil {
+		return "", err
+	}
+	if why := googleOrigin(in.Origin); why != "" {
+		return "", &catalogError{http.StatusBadRequest, "drive.origin." + why, in.Origin, errors.New("Google takes no redirect to " + in.Origin)}
+	}
+	redirect := in.Origin + "/oauth/callback"
 	scope := scopeDriveReadonly
 	if in.Write {
 		scope = scopeDrive
@@ -321,7 +334,7 @@ func (c *core) startDrive(in driveConnect) (string, error) {
 	cfg := &oauth2.Config{ClientID: app.ID, ClientSecret: app.Secret, Endpoint: googleOAuth, RedirectURL: redirect, Scopes: []string{scope}}
 	nonce := randomToken(18)
 	fl := &cloudFlow{origin: in.Origin, verifier: oauth2.GenerateVerifier(), binding: in.Binding, config: cfg,
-		own: in.Own != nil, lang: in.Lang, expires: time.Now().Add(cloudFlowExpiry)}
+		lang: in.Lang, expires: time.Now().Add(cloudFlowExpiry)}
 	c.cloud.put(nonce, fl)
 	state := signState(c.stateKey(), statePayload{Origin: in.Origin, Nonce: nonce, Expires: fl.expires.Unix()})
 	// prompt=consent: Google gives a refresh token at every consent, not only the first.
