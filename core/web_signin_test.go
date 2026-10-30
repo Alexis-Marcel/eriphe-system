@@ -535,11 +535,18 @@ func TestSigninSettings(t *testing.T) {
 	csrf := tw.setup()
 	f := newFakeIssuer(t)
 	tw.w.sso.client = f.srv.Client()
-	form := url.Values{"mode": {modeOIDC}, "external_url": {tw.srv.URL}, "local_password": {"1"},
+	form := url.Values{"mode": {modeOIDC}, "local_password": {"1"},
 		"oidc_issuer": {f.srv.URL}, "oidc_client_id": {"eriphe"}, "oidc_secret": {"client-secret-value"}, "oidc_subs": {"owner-sub"}}
 
 	if _, body, _ := tw.post("/settings/signin/issuer", form, csrf); !strings.Contains(body, f.srv.URL+"/authorize") {
 		t.Fatalf("issuer test: %s", body)
+	}
+	// The provider's mode needs the workspace's address, set apart.
+	if _, body, _ := tw.post("/settings/signin", form, csrf); !strings.Contains(body, "adresse de l&#39;espace") {
+		t.Fatalf("oidc without an address: %s", body)
+	}
+	if _, body, _ := tw.post("/settings/address", url.Values{"external_url": {tw.srv.URL + "/"}}, csrf); !strings.Contains(body, "Enregistré") || tw.w.address() != tw.srv.URL {
+		t.Fatalf("address: %s", body)
 	}
 	if _, body, _ := tw.post("/settings/signin", form, csrf); !strings.Contains(body, "abord la connexion") || tw.w.signin().cfg.mode() != modePassword {
 		t.Fatalf("oidc without a test: %s", body)
@@ -590,13 +597,22 @@ func TestSigninSettings(t *testing.T) {
 		t.Fatalf("changed allowlist without a test: %s", body)
 	}
 	// The proxy, from here (not the proxy) without the password: refused.
-	proxy := url.Values{"mode": {modeProxy}, "proxy_trusted": {"10.9.9.9"}, "proxy_users": {"owner"}}
+	proxy := url.Values{"mode": {modeProxy}, "proxy_users": {"owner"}}
+	if _, body, _ := tw.post("/settings/signin", proxy, csrf); !strings.Contains(body, "proxies de confiance") {
+		t.Fatalf("proxy without trusted proxies: %s", body)
+	}
+	if _, body, _ := tw.post("/settings/address", url.Values{"external_url": {tw.srv.URL}, "trusted": {"10.9.9.9"}}, csrf); !strings.Contains(body, "Enregistré") {
+		t.Fatalf("trusted proxies: %s", body)
+	}
 	if _, body, _ := tw.post("/settings/signin", proxy, csrf); !strings.Contains(body, "mettrait dehors") || tw.w.signin().cfg.mode() != modeOIDC {
 		t.Fatalf("proxy that locks out: %s", body)
 	}
 	proxy.Set("local_password", "1")
 	if _, body, _ := tw.post("/settings/signin", proxy, csrf); !strings.Contains(body, "enregistrée") || tw.w.signin().cfg.mode() != modeProxy {
 		t.Fatalf("proxy with the password kept: %s", body)
+	}
+	if si := tw.w.signin(); si.cfg.ExternalURL != tw.srv.URL || len(si.cfg.Proxy.Trusted) != 1 {
+		t.Fatalf("the sign-in lost the address or the proxies: %+v", si.cfg)
 	}
 	if code, _, _ := tw.do("GET", "/settings/account", nil, nil); code != http.StatusOK {
 		t.Fatalf("after the switch to the proxy: %d", code)
@@ -667,7 +683,7 @@ func TestSigninPageModes(t *testing.T) {
 	tw, _ := oidcWeb(t, modeOIDC, nil)
 	_, body, _ := tw.do("GET", "/settings/account", nil, nil)
 	for _, want := range []string{`value="oidc" checked`, `class="choices if-oidc"`, `class="choices if-proxy"`,
-		`class="choices if-delegated"`, `class="warn-note if-none"`, `name="oidc_issuer"`, `name="proxy_trusted"`,
+		`class="choices if-delegated"`, `class="warn-note if-none"`, `name="oidc_issuer"`, `name="trusted"`, `name="external_url"`,
 		`name="unauthorized_url"`, `name="local_password"`, "Proxy qui authentifie", "(OpenID Connect)"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page lacks %s", want)

@@ -1223,6 +1223,7 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 | `lang` | `fr` (default) or `en`; each browser can switch in Settings |
 | `session_days` | how long a login lasts, 30 by default (a week without use ends it sooner) |
 | `auth` | how one signs in: see [Signing in](#signing-in); without it, Settings → Account says |
+| `external_url` | the workspace's address, e.g. `https://eriphe.example.org`: see [the reverse proxy guide](../docs/reverse-proxy.md); `auth.external_url` works too, this one wins |
 
 **First start.** With no password yet, eriphe-core logs a one-time setup code:
 `web: no password yet: open https://…/setup with the setup code ABCD-EFGH`. Open the page, type
@@ -1335,14 +1336,14 @@ in the vault (`vault:workspace-oidc`) and never shown back.
 | Field of `web.auth` | What |
 |---|---|
 | `mode` | `password` (default), `oidc`, `proxy` or `none` |
-| `external_url` | where the workspace is reached; the provider's redirect, and an origin the forms may come from behind a proxy that changes the host |
+| `external_url` | the workspace's address (Settings → Account → Adresse de l'espace): the provider's redirect, the tools' and Google Drive's OAuth redirect, and an origin the forms may come from behind a proxy that changes the host |
 | `unauthorized_url` | where visitors who may not enter go; the private page without it |
 | `no_local_password` | `true`: no password from the local network in `oidc` and `proxy` modes |
 | `oidc.issuer`, `oidc.client_id` | the provider's issuer (exactly as it announces it, trailing slash included) and the client |
 | `oidc.client_secret_file` | a file, or `vault:<name>`; none for a public client |
 | `oidc.allowed_subs`, `oidc.allowed_emails` | who may enter; at least one is needed |
 | `oidc.button` | `true`: a sign-in button rather than going to the provider at once |
-| `proxy.header`, `proxy.trusted`, `proxy.users` | the user's header (`Remote-User`), the proxy's addresses or CIDRs, who may enter |
+| `proxy.header`, `proxy.trusted`, `proxy.users` | the user's header (`Remote-User`), the trusted proxies' addresses or CIDRs (for every mode: see below), who may enter |
 
 **With Authentik.** Applications → Create with provider: an **OAuth2/OpenID** provider,
 confidential client, redirect URI `https://eriphe.example.org/auth/callback` (strict), the scopes
@@ -1353,9 +1354,30 @@ hash of the user by default) to allow; an email counts only if Authentik sends
 `email_verified: true`. Bind the application to your user or group, so the others are stopped
 at Authentik already.
 
-**Behind a reverse proxy.** The workspace serves HTTPS itself (port 8443): point the proxy at
-`https://eriphe-core:8443`, trusting the self-signed certificate (Traefik's
-`serversTransport` with `insecureSkipVerify`, or its fingerprint), and set `external_url`.
+**Behind a reverse proxy.** The workspace serves HTTPS itself (port 8443): point the proxy at `https://eriphe-core:8443`,
+trusting the self-signed certificate (Traefik's `serversTransport` with `insecureSkipVerify`, or
+its fingerprint), and set the workspace's address. The [reverse proxy guide](../docs/reverse-proxy.md)
+has Traefik, Nginx Proxy Manager and Caddy.
+
+- **The workspace's address** (Settings → Account → Adresse de l'espace, or `web.external_url` /
+  `web.auth.external_url`, one value): the provider's sign-in comes back to it, the tools' and
+  Google Drive's OAuth redirect URI is `<address>/oauth/callback`, and forms sent from it are the
+  workspace's own. A sign-in or an authorization started from another address (the LAN one)
+  would come back without its cookie: the provider's sign-in goes to the address first, and
+  Connect says to open the workspace there. Without an address, the page's own, as before; the
+  panel shows the tailnet's when remote access is on.
+- **Trusted proxies** (the same panel; `web.auth.proxy.trusted`, one list with the proxy
+  sign-in's): from these addresses only, `X-Forwarded-For` gives the browser's address (the last
+  hop that is not a trusted proxy, for the login limiter), and `X-Forwarded-Proto` and
+  `X-Forwarded-Host` the origin the browser used (the forms' check). From anywhere else these
+  headers are never believed. The password from the local network still never counts through a
+  proxy (above).
+- **The devices** keep talking to eriphe-core on port 8800, not through the proxy. The panel's
+  *second address for the devices* (e.g. the NAS's Tailscale address, `http://100.64.0.2:8800`)
+  goes into the "Connect a device" commands after the local one, as remote access's address does
+  (`--core LOCAL,SECOND`; every installer takes the list). A device already connected takes it
+  when its install command runs again with `--core LOCAL,SECOND` and no token.
+
 Logging out with a provider shows the sign-in page with its button: going to the provider at
 once would sign you in again; sign out at the provider too to end that session.
 

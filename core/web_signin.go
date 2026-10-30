@@ -43,7 +43,8 @@ type AuthConfig struct {
 	Mode string `json:"mode,omitempty"` // password (default), oidc, proxy or none
 	// Where the workspace is reached, e.g. https://eriphe.example.org: the
 	// provider sends the browser back to <external_url>/auth/callback, and
-	// forms sent from that address are the workspace's own.
+	// forms sent from that address are the workspace's own. It is the
+	// workspace's address for everything else too (web_address.go).
 	ExternalURL string      `json:"external_url,omitempty"`
 	OIDC        OIDCConfig  `json:"oidc,omitzero"`
 	Proxy       ProxyConfig `json:"proxy,omitzero"`
@@ -67,9 +68,11 @@ type OIDCConfig struct {
 }
 
 type ProxyConfig struct {
-	Header  string   `json:"header,omitempty"`  // Remote-User by default
-	Trusted []string `json:"trusted,omitempty"` // the proxy's addresses or CIDRs
-	Users   []string `json:"users,omitempty"`   // who may enter
+	Header string `json:"header,omitempty"` // Remote-User by default
+	// The proxy's addresses or CIDRs: the trusted proxies of the whole
+	// workspace, whose X-Forwarded-* headers are believed (web_address.go).
+	Trusted []string `json:"trusted,omitempty"`
+	Users   []string `json:"users,omitempty"` // who may enter
 }
 
 // authErr is a settings error: its key words it in the workspace, its
@@ -180,9 +183,7 @@ func newSignin(a AuthConfig, locked bool) (*signin, error) {
 	}
 	si := &signin{cfg: a, locked: locked}
 	si.trusted, _ = parsePrefixes(a.Proxy.Trusted)
-	if u, err := url.Parse(a.ExternalURL); err == nil && u.Host != "" {
-		si.origin = strings.ToLower(u.Scheme + "://" + u.Host)
-	}
+	si.origin = originOf(a.ExternalURL)
 	return si, nil
 }
 
@@ -207,6 +208,9 @@ func (w *web) signin() *signin {
 		err = json.Unmarshal([]byte(raw), &a)
 	}
 	if err == nil {
+		if w.cfg.ExternalURL != "" {
+			a.ExternalURL = w.cfg.ExternalURL // the configuration file's address wins
+		}
 		si, err = newSignin(a, false)
 	}
 	if err != nil {
@@ -270,15 +274,7 @@ func fromLocalNetwork(r *http.Request) bool {
 // fromProxy is true when the request comes straight from a declared proxy.
 func (si *signin) fromProxy(r *http.Request) bool {
 	a, ok := hostAddr(r.RemoteAddr)
-	if !ok {
-		return false
-	}
-	for _, p := range si.trusted {
-		if p.Contains(a) {
-			return true
-		}
-	}
-	return false
+	return ok && si.trusts(a)
 }
 
 // proxyUser is the user a declared proxy passes, when they may enter.

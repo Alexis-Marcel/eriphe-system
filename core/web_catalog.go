@@ -145,11 +145,6 @@ func (w *web) oauthBinding(rw http.ResponseWriter, r *http.Request) string {
 	return hashToken(value)
 }
 
-// callbackURL is the workspace's own redirect, at the address the browser uses.
-func (w *web) callbackURL(r *http.Request) string {
-	return "https://" + r.Host + "/oauth/callback"
-}
-
 type oauthDone struct {
 	Next   string // a pending tool: where the page goes at once
 	Back   string // where the button leads; the tools by default

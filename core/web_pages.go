@@ -466,7 +466,7 @@ func (w *web) handleMachines(rw http.ResponseWriter, r *http.Request, s *session
 		}
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.machines", Nav: "settings", Tab: "devices",
-		Data: machinesData{Nodes: out, Remote: w.remoteCoreURL(), CAHash: w.c.caHash(), TLSOnly: w.c.nodesTLSOnly(),
+		Data: machinesData{Nodes: out, Remote: strings.Join(w.awayCoreURLs(), ", "), CAHash: w.c.caHash(), TLSOnly: w.c.nodesTLSOnly(),
 			Plain: strings.Join(plain, ", "), Updates: updates}})
 }
 
@@ -499,7 +499,7 @@ func systemKey(install, goos string) string {
 
 type machinesData struct {
 	Nodes  []machineView
-	Remote string // eriphe-core's API on the tailnet, when remote access is ready
+	Remote string // eriphe-core's addresses away from home: the second one, the tailnet's
 	// TLS for machines (machine_tls.go): the CA's hash, whether the plain
 	// path is closed, and the machines still without their certificate.
 	CAHash  string
@@ -735,11 +735,12 @@ func (w *web) handleJournal(rw http.ResponseWriter, r *http.Request, s *session)
 // vault holds, to replace or delete (each is typed in its own tool's page).
 type accountPage struct {
 	signinView
+	Address addressView // web_address.go
 	Secrets secretsView
 }
 
 func (w *web) handleAccount(rw http.ResponseWriter, r *http.Request, s *session) {
-	v := accountPage{signinView: w.signinView(r), Secrets: w.secrets("", false)}
+	v := accountPage{signinView: w.signinView(r), Address: w.addressView(r), Secrets: w.secrets("", false)}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.account", Nav: "settings", Tab: "account", Data: v})
 }
 

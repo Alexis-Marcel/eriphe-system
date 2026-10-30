@@ -187,6 +187,11 @@ func (w *web) handleSSOStart(rw http.ResponseWriter, r *http.Request) {
 		http.Redirect(rw, r, "/login", http.StatusSeeOther)
 		return
 	}
+	if a := w.elsewhere(r); a != "" {
+		// The flow's cookie must be where the provider sends the browser back.
+		http.Redirect(rw, r, a+"/auth/login", http.StatusFound)
+		return
+	}
 	secret, err := clientSecret(si.cfg)
 	var to string
 	if err == nil {

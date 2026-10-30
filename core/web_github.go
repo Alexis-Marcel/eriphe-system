@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -142,6 +143,12 @@ func (w *web) handleGitHubCreate(rw http.ResponseWriter, r *http.Request, s *ses
 	org := strings.TrimSpace(r.PostFormValue("org"))
 	if org != "" && !githubLogin.MatchString(org) {
 		v.Error = tr(w.lang(r), "github.badorg")
+		w.render(rw, r, s, "settings", "", page{Title: "github.title", Nav: "settings", Tab: "tools", View: "github", Data: v})
+		return
+	}
+	if a := w.elsewhere(r); a != "" {
+		// GitHub sends the browser back to the address, where this one's cookie is not.
+		v.Error = fmt.Sprintf(tr(w.lang(r), "address.elsewhere"), a)
 		w.render(rw, r, s, "settings", "", page{Title: "github.title", Nav: "settings", Tab: "tools", View: "github", Data: v})
 		return
 	}

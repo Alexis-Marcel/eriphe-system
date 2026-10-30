@@ -74,13 +74,13 @@ func signinForm(r *http.Request, old AuthConfig) (AuthConfig, string) {
 	v := func(k string) string { return strings.TrimSpace(r.PostFormValue(k)) }
 	a := AuthConfig{
 		Mode:            v("mode"),
-		ExternalURL:     strings.TrimRight(v("external_url"), "/"),
+		ExternalURL:     old.ExternalURL, // the workspace's address, set apart (web_address.go)
 		UnauthorizedURL: v("unauthorized_url"),
 		NoLocalPassword: r.PostFormValue("local_password") != "1",
 		OIDC: OIDCConfig{Issuer: v("oidc_issuer"), ClientID: v("oidc_client_id"), ClientSecretFile: old.OIDC.ClientSecretFile,
 			AllowedSubs: lines(r.PostFormValue("oidc_subs")), AllowedEmails: lines(r.PostFormValue("oidc_emails")),
 			Button: r.PostFormValue("oidc_button") == "1"},
-		Proxy: ProxyConfig{Header: v("proxy_header"), Trusted: lines(r.PostFormValue("proxy_trusted")),
+		Proxy: ProxyConfig{Header: v("proxy_header"), Trusted: old.Proxy.Trusted, // the trusted proxies, with the address
 			Users: lines(r.PostFormValue("proxy_users"))},
 	}
 	if a.Proxy.Header == defaultProxyHeader {
@@ -218,6 +218,12 @@ func (w *web) handleTrySignin(rw http.ResponseWriter, r *http.Request, s *sessio
 	try.Mode = modeOIDC // what the provider's mode needs
 	if err := try.check(); err != nil {
 		w.signinMsg(rw, r, s, false, w.authErrText(r, err))
+		return
+	}
+	if addr := w.elsewhere(r); addr != "" {
+		// The provider sends the browser back to the address: this
+		// session's cookie is not there.
+		w.signinMsg(rw, r, s, false, fmt.Sprintf(tr(lang, "address.elsewhere"), addr))
 		return
 	}
 	secret := typed

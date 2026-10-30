@@ -26,7 +26,8 @@ local address, the Google Drive page says so and offers:
    `https://<name>.<tailnet>.ts.net` address with a real certificate, which Google takes. Open the
    Google Drive page at that address and follow the steps from there.
 2. **Your own domain**: put Eriphe behind your reverse proxy at, for instance,
-   `https://eriphe.example.org`.
+   `https://eriphe.example.org`, and set it as the workspace address ([reverse proxy
+   guide](reverse-proxy.md)): the redirect URI is then `https://eriphe.example.org/oauth/callback`.
 3. **No Google app at all**: install "Google Drive for desktop" on an always-on computer where
    Eriphe is installed, and give its synced Google Drive folder as a folder of that computer
    (Settings → Folders). Eriphe then sees those files like any local folder.
