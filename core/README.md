@@ -1182,10 +1182,10 @@ open the conversation does not show the assistant as thinking. Errors are shown 
 the raw text folded. Settings → Tools lists the catalog's servers with their status (ready, to connect,
 error, or waiting for a machine for a local one) and where each comes from, adds one from a list of
 presets, a catalog by category with a search (tasks and notes, mail and calendar, files, meetings,
-design, development, websites, payments, automation, home): Home Assistant, GitHub, Mails, Agenda,
-Google Drive (its own page, see [Google Drive](#google-drive-cloud-folders)), and some forty
+design, development, websites, social networks and newsletters, payments, automation, home): Home Assistant, GitHub, Mails, Agenda,
+Google Drive (its own page, see [Google Drive](#google-drive-cloud-folders)), and some fifty
 services that host their own MCP server and register Eriphe as an OAuth client on the fly, like
-Linear (Notion, Todoist, TickTick, Evernote, Fastmail, Calendly, Dropbox, Granola, Canva, Miro,
+Linear (Notion, Todoist, TickTick, Evernote, Fastmail, Calendly, Dropbox, Granola, Canva, Miro, Buffer, Kit,
 Cloudflare, Sentry, Vercel, Supabase, Stripe, Zapier… the list is `core/presets_online.go`, each
 checked against its public OAuth metadata). A tile says when the service can give a read-only
 token, when it needs a paid plan or is in beta, and when a tool already comes from it. "Autre

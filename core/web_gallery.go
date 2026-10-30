@@ -51,6 +51,12 @@ var presetKeywords = map[string]string{
 	"local":          "docker image programme program",
 }
 
+// categoryKeywords are more words every preset of a category is found by:
+// the networks the social tools reach.
+var categoryKeywords = map[string]string{
+	"social": "linkedin instagram facebook x twitter threads tiktok youtube bluesky mastodon substack newsletter post publier",
+}
+
 // addedPresets are the presets the workspace's tools come from.
 func (w *web) addedPresets(lang string) map[string]bool {
 	added := map[string]bool{}
@@ -68,6 +74,9 @@ func (w *web) tile(lang string, p toolPreset, added map[string]bool) presetTile 
 		words = append(words, tr(lang, "cat."+p.Category))
 	}
 	if k := presetKeywords[p.ID]; k != "" {
+		words = append(words, k)
+	}
+	if k := categoryKeywords[p.Category]; k != "" {
 		words = append(words, k)
 	}
 	return presetTile{toolPreset: p, Added: added[p.ID], Search: strings.ToLower(strings.Join(words, " "))}

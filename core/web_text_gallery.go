@@ -21,6 +21,7 @@ var galleryStrings = map[string]map[string]string{
 		"cat.design":           "Design",
 		"cat.dev":              "Développement",
 		"cat.web":              "Sites & clients",
+		"cat.social":           "Réseaux & newsletters",
 		"cat.finance":          "Paiements & finance",
 		"cat.automation":       "Automatisation",
 		"cat.home":             "Maison",
@@ -46,6 +47,7 @@ var galleryStrings = map[string]map[string]string{
 		"gallery.soon":         "Pas encore possible",
 		"gallery.soon.app":     "Figma, Slack, Asana, HubSpot, Box, Discord, Google Workspace, Microsoft 365 : il faut créer une app chez eux. Google Drive passe par sa propre fiche, plus haut.",
 		"gallery.soon.clients": "Jira et Confluence (Atlassian), ClickUp : ils n'acceptent que des clients qu'ils ont approuvés.",
+		"gallery.soon.social":  "LinkedIn, Instagram, Facebook, X, TikTok en direct : pas de serveur ouvert, ils passent par Buffer (ou un autre outil de Réseaux & newsletters). Articles Substack, Medium, Reddit : pas possible.",
 		"gallery.soon.other":   "Square n'a qu'un ancien protocole ; GitLab n'est pas encore vérifié. Avec une clé ou un jeton, « Autre service en ligne » les ajoute quand même.",
 		"access.readsonly":     "Ce service ne fait que lire : rien ne peut y être écrit.",
 
@@ -91,6 +93,7 @@ var galleryStrings = map[string]map[string]string{
 		"cat.design":           "Design",
 		"cat.dev":              "Development",
 		"cat.web":              "Websites & customers",
+		"cat.social":           "Social & newsletters",
 		"cat.finance":          "Payments & finance",
 		"cat.automation":       "Automation",
 		"cat.home":             "Home",
@@ -116,6 +119,7 @@ var galleryStrings = map[string]map[string]string{
 		"gallery.soon":         "Not possible yet",
 		"gallery.soon.app":     "Figma, Slack, Asana, HubSpot, Box, Discord, Google Workspace, Microsoft 365: an app must be made at their place. Google Drive has its own tile, above.",
 		"gallery.soon.clients": "Jira and Confluence (Atlassian), ClickUp: they take only clients they approved.",
+		"gallery.soon.social":  "LinkedIn, Instagram, Facebook, X, TikTok directly: no open server, they go through Buffer (or another tool of Social & newsletters). Substack articles, Medium, Reddit: not possible.",
 		"gallery.soon.other":   "Square has an old protocol only; GitLab is not checked yet. With a key or a token, \"Other online service\" adds them anyway.",
 		"access.readsonly":     "This service only reads: nothing can be written there.",
 
