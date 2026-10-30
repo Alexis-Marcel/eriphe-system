@@ -11,6 +11,7 @@
 {{if .Flash}}<p class="ok-note" role="status">{{.Flash}}</p>{{end}}
 {{if .Alert}}<p class="alert" role="alert">{{.Alert}}</p>{{end}}
 {{range $name, $why := .Skipped}}<p class="alert" role="alert">{{tf "catalog.skipped" $name}} <span class="small">{{short $why 200}}</span></p>{{end}}
+<div id="tools-body">
 {{if or .Tools .VoiceOnly}}
 <ul class="tools" id="tools-list"{{if .Waiting}} hx-get="/settings/tools" hx-trigger="load delay:2s" hx-select="#tools-list" hx-swap="outerHTML"{{end}}>
 {{range .Tools}}
@@ -46,7 +47,8 @@
       {{if eq .Preset.ID "github"}}<a class="btn {{if eq .Auth "github-app"}}btn-ghost{{else}}btn-soft{{end}} sm" href="/settings/github">{{if eq .Auth "github-app"}}{{t "github.manage"}}{{else}}{{t "github.create"}}{{end}}</a>{{end}}
       <a class="btn btn-ghost sm" href="/settings/tools/{{.Name}}/access">{{t "access.manage"}}</a>
       {{if eq .Source "workspace"}}
-      {{if and (ne .Preset.ID "home-assistant") (ne .Auth "github-app")}}<a class="btn btn-ghost sm" href="{{if eq .Preset.Form "drive"}}/settings/drive{{else}}/settings/tools/{{.Name}}/edit{{end}}">{{if eq .Preset.Form "drive"}}{{t "drive.folders"}}{{else}}{{t "catalog.edit"}}{{end}}</a>{{end}}
+      {{if and (ne .Preset.ID "home-assistant") (ne .Auth "github-app")}}{{if eq .Preset.Form "drive"}}<a class="btn btn-ghost sm" href="/settings/drive">{{t "drive.folders"}}</a>
+      {{else}}<a class="btn btn-ghost sm" href="/settings/tools/{{.Name}}/edit" data-step-open="add-dlg" data-hash="edit/{{.Name}}">{{t "catalog.edit"}}</a>{{end}}{{end}}
       <form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{tf "tools.removeconfirm" .Name}}" class="inline">
         <button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
       {{end}}
@@ -65,13 +67,19 @@
 {{end}}
 </ul>
 {{else}}<div class="empty tools-empty"><span class="empty-art" aria-hidden="true">{{template "i-plug"}}</span><p>{{t "tools.empty"}}</p>{{template "add-tool-btn"}}</div>{{end}}
+</div>
 
+{{/* Two steps: the search, then the tool picked, loaded in #tool-step
+     (web_tools_dialog.go, app.js). */}}
 <dialog class="modal finder-dlg" id="add-dlg" aria-labelledby="add-dlg-title" data-focus-on-open="finder-q">
+  <div class="add-pick" data-step-pick>
   <div class="finder-top">
     <h3 id="add-dlg-title">{{t "tools.add"}}</h3>
-    <form method="dialog"><button class="icon-btn" type="submit" aria-label="{{t "gallery.close"}}" title="{{t "gallery.close"}}">{{template "i-x"}}</button></form>
+    {{template "dlg-close"}}
   </div>
   {{template "tool-finder" .Gallery}}
+  </div>
+  <div class="add-step" id="tool-step" hidden></div>
 </dialog>
 {{end}}{{end}}
 
@@ -114,7 +122,7 @@
 
 {{/* One tile of the gallery. . is a presetTile. */}}
 {{define "finder-tile"}}{{$desc := t (printf "preset.%s.desc" .ID)}}
-  <li data-search="{{.Search}}"><a class="ftile preset-{{.ID}}" href="{{.Page}}" title="{{$desc}}">
+  <li data-search="{{.Search}}"><a class="ftile preset-{{.ID}}" href="{{.Page}}" data-step="{{.StepURL}}" data-hash="add/{{.ID}}" title="{{$desc}}">
     <span class="mark preset-mark mark-{{.ID}}" aria-hidden="true">{{template "preset-icon" .ID}}</span>
     <span class="ftile-text">
       <span class="ftile-name"><b>{{t (printf "preset.%s.title" .ID)}}</b>
@@ -147,13 +155,33 @@
   </div>
   <p>{{t "discover.lead"}}</p>
 </header>
+{{template "discover-form" $}}
+{{end}}{{end}}
+
+{{/* "Autre service" as a step of the dialog. */}}
+{{define "discover-step"}}
+<div class="step" data-hash="add/remote">
+  {{template "step-top" dict "Back" "/settings/tools/add" "Hash" "add"}}
+  <div class="step-body">
+    <div class="form-title">
+      <span class="mark preset-mark mark-remote" aria-hidden="true">{{template "preset-icon" "remote"}}</span>
+      <h3 id="step-title">{{t "preset.remote.title"}}</h3>
+    </div>
+    <p class="step-lead">{{t "discover.lead"}}</p>
+    {{template "discover-form" .}}
+  </div>
+</div>
+{{end}}
+
+{{/* The address to look at, and what was found. . is the page. */}}
+{{define "discover-form"}}{{with .Data}}
 <form class="panel stack" method="post" action="/settings/tools/add/other" hx-post="/settings/tools/add/other" hx-target="#discover-result" hx-swap="innerHTML" hx-disabled-elt="find button" hx-indicator="find button">
   <input type="hidden" name="csrf" value="{{$.CSRF}}">
   <label class="field"><span>{{t "form.url"}}</span>
     <input type="text" name="url" value="{{.URL}}" inputmode="url" spellcheck="false" autocapitalize="off" class="mono" placeholder="https://mcp.example.com/mcp" required aria-describedby="disc-h">
     <small id="disc-h">{{t "discover.hint"}}</small></label>
   <div class="actions"><button class="btn btn-primary busy-btn" type="submit">{{template "i-plug"}}<span class="when-idle">{{t "discover.go"}}</span><span class="when-busy">{{t "discover.busy"}}</span></button>
-    <a class="btn btn-ghost" href="{{.FormURL "none"}}">{{t "discover.manual"}}</a></div>
+    <a class="btn btn-ghost" href="{{.FormURL "none"}}" data-step data-hash="add/remote/form">{{t "discover.manual"}}</a></div>
 </form>
 <div id="discover-result" aria-live="polite">{{template "discover-body" .}}</div>
 {{end}}{{end}}
@@ -165,7 +193,7 @@
 {{else}}{{with .Found}}
 <section class="panel stack discover-found reach-{{.Reach}}">
   <h3>{{t (printf "discover.%s" .Reach)}}</h3>
-  {{if .Preset.ID}}<p class="notice">{{tf "discover.preset" (t (printf "preset.%s.title" .Preset.ID))}} <a href="{{.Preset.Page}}">{{t "discover.usepreset"}}</a></p>{{end}}
+  {{if .Preset.ID}}<p class="notice">{{tf "discover.preset" (t (printf "preset.%s.title" .Preset.ID))}} <a href="{{.Preset.Page}}" data-step="{{.Preset.StepURL}}" data-hash="add/{{.Preset.ID}}">{{t "discover.usepreset"}}</a></p>{{end}}
   <p>{{t (printf "discover.%s.lead" .Reach)}}</p>
   {{if or (eq .Reach "oauth") (eq .Reach "app")}}
   <ul class="plain-list found-list">
@@ -177,10 +205,10 @@
   </ul>{{end}}
   {{if .Detail}}<p class="muted small clamp" title="{{short .Detail 600}}">{{short .Detail 200}}</p>{{end}}
   <div class="actions">
-  {{if eq .Reach "open"}}<a class="btn btn-primary" href="{{$.FormURL "none"}}">{{template "i-plus"}}{{t "discover.add"}}</a>
-  {{else if eq .Reach "oauth"}}<a class="btn btn-primary" href="{{$.FormURL "oauth"}}">{{template "i-link"}}{{t "discover.connect"}}</a>
-  {{else if or (eq .Reach "app") (eq .Reach "token") (eq .Reach "refused")}}<a class="btn btn-primary" href="{{$.FormURL "bearer"}}">{{template "i-key"}}{{t "discover.token"}}</a>
-    {{if eq .Reach "app"}}<a class="btn btn-soft" href="{{$.FormURL "oauth"}}">{{t "discover.client"}}</a>{{end}}
+  {{if eq .Reach "open"}}<a class="btn btn-primary" href="{{$.FormURL "none"}}" data-step data-hash="add/remote/form">{{template "i-plus"}}{{t "discover.add"}}</a>
+  {{else if eq .Reach "oauth"}}<a class="btn btn-primary" href="{{$.FormURL "oauth"}}" data-step data-hash="add/remote/form">{{template "i-link"}}{{t "discover.connect"}}</a>
+  {{else if or (eq .Reach "app") (eq .Reach "token") (eq .Reach "refused")}}<a class="btn btn-primary" href="{{$.FormURL "bearer"}}" data-step data-hash="add/remote/form">{{template "i-key"}}{{t "discover.token"}}</a>
+    {{if eq .Reach "app"}}<a class="btn btn-soft" href="{{$.FormURL "oauth"}}" data-step data-hash="add/remote/form">{{t "discover.client"}}</a>{{end}}
   {{end}}
   </div>
 </section>
@@ -188,7 +216,7 @@
 
 {{define "tool-page"}}{{with .Data}}
 <header class="page-head">
-  <a class="back" href="{{if and .Choose .Edit}}/settings/tools/{{.Name}}/edit{{else if .Edit}}/settings/tools{{else if or .Mail.Provider .Calendar.Provider}}/settings/tools/new?preset={{.Preset.ID}}{{else}}/settings/tools/add{{end}}">{{template "i-back"}}{{if and (not .Edit) (not .Choose) (or .Mail.Provider .Calendar.Provider)}}{{t (printf "pick.%s.back" .Preset.Form)}}{{else if and .Choose .Edit}}{{tf "tools.editof" .Name}}{{else if .Edit}}{{t "settings.tools"}}{{else}}{{t "tools.add"}}{{end}}</a>
+  <a class="back" href="{{.BackURL}}">{{template "i-back"}}{{if and (not .Edit) (not .Choose) (or .Mail.Provider .Calendar.Provider)}}{{t (printf "pick.%s.back" .Preset.Form)}}{{else if and .Choose .Edit}}{{tf "tools.editof" .Name}}{{else if .Edit}}{{t "settings.tools"}}{{else}}{{t "tools.add"}}{{end}}</a>
   <div class="form-title">
     {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
     {{else}}<span class="mark {{if eq .Preset.Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
@@ -197,9 +225,109 @@
   {{if .Choose}}<p>{{t (printf "pick.%s.lead" .Preset.Form)}}</p>
   {{else}}{{$help := printf "preset.%s.help" .Preset.ID}}{{if and (not .Edit) (has $help)}}<p>{{t $help}}</p>{{end}}{{end}}
 </header>
-{{if and (eq .Preset.ID "github") (not .Choose)}}<p class="notice">{{t "github.formhint"}} <a href="/settings/github">{{t "github.create"}}</a></p>{{end}}
+{{template "tool-hints" .}}
 {{if .Choose}}{{template "account-picker" .}}{{else}}{{template "tool-form" $}}
 {{with .AccessView}}<section class="panel stack">{{template "token-note" .}}</section>{{template "allowed-actions" .}}{{end}}{{end}}
+{{end}}{{end}}
+
+{{/* What a preset's form adds about its own page. . is a toolForm. */}}
+{{define "tool-hints"}}{{if not .Choose}}
+{{if eq .Preset.ID "github"}}<p class="notice">{{t "github.formhint"}} <a href="/settings/github">{{t "github.create"}}</a></p>{{end}}
+{{if and (eq .Preset.ID "home-assistant") .InDialog}}<p class="notice">{{t "ha.formhint"}} <a href="/settings/home-assistant">{{t "ha.formlink"}}</a></p>{{end}}
+{{end}}{{end}}
+
+{{/* The close button of the tools page's dialog. */}}
+{{define "dlg-close"}}<form method="dialog"><button class="icon-btn" type="submit" aria-label="{{t "gallery.close"}}" title="{{t "gallery.close"}}">{{template "i-x"}}</button></form>{{end}}
+
+{{/* The top of a step of the dialog: back (none when empty), and close. . is a dict: Back, Hash. */}}
+{{define "step-top"}}<div class="finder-top step-top">
+  {{if .Back}}<a class="step-back" href="{{.Back}}" data-step-back data-hash="{{.Hash}}">{{template "i-back"}}{{t "step.back"}}</a>{{else}}<span></span>{{end}}
+  {{template "dlg-close"}}
+</div>{{end}}
+
+{{/* A tool's form, or its kinds of account, as the second step of the dialog. . is the page; .Data a toolForm. */}}
+{{define "tool-step"}}{{with .Data}}
+<div class="step" data-hash="{{.Hash}}">
+  {{if and .Edit (not .Choose)}}{{template "step-top" dict "Back" "" "Hash" ""}}{{else}}{{template "step-top" dict "Back" .BackURL "Hash" .BackHash}}{{end}}
+  <div class="step-body">
+    <div class="form-title">
+      {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
+      {{else}}<span class="mark" aria-hidden="true">{{initial .Name}}</span>{{end}}
+      <h3 id="step-title">{{if .Edit}}{{tf "tools.editof" .Name}}{{else}}{{t (printf "preset.%s.title" .Preset.ID)}}{{end}}</h3>
+    </div>
+    {{if .Choose}}<p class="step-lead">{{t (printf "pick.%s.lead" .Preset.Form)}}</p>
+    {{else}}{{$help := printf "preset.%s.help" .Preset.ID}}{{if and (not .Edit) (has $help)}}<p class="step-lead">{{t $help}}</p>{{end}}{{end}}
+    {{template "tool-hints" .}}
+    {{if .Choose}}{{template "account-picker" .}}{{else}}{{template "tool-form" $}}{{end}}
+  </div>
+</div>
+{{end}}{{end}}
+
+{{/* Google Drive's step: what it takes, then its page. . is a driveStep. */}}
+{{define "drive-step"}}{{with .Data}}
+<div class="step" data-hash="add/gdrive">
+  {{template "step-top" dict "Back" "/settings/tools/add" "Hash" "add"}}
+  <div class="step-body">
+    <div class="form-title">
+      <span class="mark preset-mark mark-gdrive" aria-hidden="true">{{template "preset-icon" "gdrive"}}</span>
+      <h3 id="step-title">{{t "drive.title"}}</h3>
+    </div>
+    <p class="step-lead">{{t "drive.lead"}}</p>
+    <section class="panel stack">
+      <p>{{t "drivestep.needs"}}</p>
+      <p class="muted small">{{t "drivestep.page"}}</p>
+      <div class="actions"><a class="btn btn-primary" href="/settings/drive">{{if .Added}}{{t "drivestep.manage"}}{{else}}{{t "drivestep.go"}}{{end}}</a></div>
+    </section>
+  </div>
+</div>
+{{end}}{{end}}
+
+{{/* On the way to an OAuth service: app.js follows the link (data-go). . is a leavingStep. */}}
+{{define "tool-leaving"}}{{with .Data}}
+<div class="step" data-hash="add/{{.Preset.ID}}">
+  {{template "step-top" dict "Back" "" "Hash" ""}}
+  <div class="step-body">
+    <div class="form-title">
+      {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
+      {{else}}<span class="mark" aria-hidden="true">{{initial .Name}}</span>{{end}}
+      <h3 id="step-title">{{tf "leaving.title" .Service}}</h3>
+    </div>
+    <div class="test-result test-start tool-status" role="status"><span class="pulse" aria-hidden="true"></span>
+      <div class="test-body"><p>{{tf "leaving.lead" .Service}}</p></div></div>
+    <div class="actions"><a class="btn btn-primary" href="{{.AuthURL}}" data-go>{{template "i-link"}}{{tf "leaving.go" .Service}}</a></div>
+  </div>
+</div>
+{{end}}{{end}}
+
+{{/* After a save: the tool, and its status as it comes up. . is an addedStep. */}}
+{{define "tool-added"}}{{with .Data}}
+<div class="step" data-hash="added/{{.Name}}" data-tool-saved>
+  {{template "step-top" dict "Back" "" "Hash" ""}}
+  <div class="step-body">
+    <div class="form-title">
+      {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
+      {{else}}<span class="mark" aria-hidden="true">{{initial .Name}}</span>{{end}}
+      <h3 id="step-title">{{if .Edit}}{{tf "added.titleedit" .Name}}{{else}}{{tf "added.title" .Name}}{{end}}</h3>
+    </div>
+    {{template "tool-status-line" .Status}}
+    <div class="actions"><form method="dialog"><button class="btn btn-primary" type="submit">{{template "i-check"}}{{t "added.done"}}</button></form></div>
+  </div>
+</div>
+{{end}}{{end}}
+
+{{define "tool-status"}}{{template "tool-status-line" .Data}}{{end}}
+
+{{/* A tool's status, asked again until it settles. . is a toolStatus. */}}
+{{define "tool-status-line"}}{{with .}}
+<div class="test-result test-{{.State}} tool-status" id="tool-status" role="status"{{if .Poll}} hx-get="/settings/tools/{{.Name}}/status" hx-trigger="load delay:{{.Poll}}" hx-swap="outerHTML"{{end}}>
+  {{if eq .State "ok"}}{{template "i-check"}}{{else if eq .State "err"}}{{template "i-x"}}{{else}}<span class="pulse" aria-hidden="true"></span>{{end}}
+  <div class="test-body">
+    <p>{{.Text}}</p>
+    {{if .Hint}}<p class="small">{{.Hint}}</p>{{end}}
+    {{if .Detail}}<details class="small"><summary>{{t "added.details"}}</summary><p class="mono test-detail">{{short .Detail 600}}</p></details>{{end}}
+    {{if .Edit}}<p><a class="btn btn-soft sm" href="/settings/tools/{{.Name}}/edit" data-step data-hash="edit/{{.Name}}">{{t "added.edit"}}</a></p>{{end}}
+  </div>
+</div>
 {{end}}{{end}}
 
 {{/* Eriphe's GitHub App (web_github.go). */}}
@@ -277,12 +405,12 @@
 <section class="panel picker">
   <ul class="providers">
   {{if eq .Preset.Form "mail"}}{{range .MailChoices}}
-    <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else}}<a class="provider{{if eq .ID $.Mail.Provider}} current{{end}}" href="{{$.PickURL}}{{.ID}}">{{end}}
+    <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else}}<a class="provider{{if eq .ID $.Mail.Provider}} current{{end}}" href="{{$.PickURL}}{{.ID}}" data-step data-hash="{{$.StepHash .ID}}">{{end}}
       <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "provider-icon" .ID}}</span>
       <span class="provider-text"><b>{{t (printf "mailp.%s" .ID)}}</b><small>{{if .Soon}}<span class="soon-tag">{{t "pick.soon"}}</span>{{else}}{{t (printf "mailp.%s.domains" .ID)}}{{end}}</small></span>
     {{if .Soon}}</div>{{else}}</a>{{end}}</li>
   {{end}}{{else}}{{range .CalChoices}}
-    <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else}}<a class="provider{{if eq .ID $.Calendar.Provider}} current{{end}}" href="{{$.PickURL}}{{.ID}}">{{end}}
+    <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else}}<a class="provider{{if eq .ID $.Calendar.Provider}} current{{end}}" href="{{$.PickURL}}{{.ID}}" data-step data-hash="{{$.StepHash .ID}}">{{end}}
       <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "provider-icon" .ID}}</span>
       <span class="provider-text"><b>{{t (printf "calp.%s" .ID)}}</b><small>{{if .Soon}}<span class="soon-tag">{{t "pick.soon"}}</span>{{else}}{{t (printf "calp.%s.desc" .ID)}}{{end}}</small></span>
     {{if .Soon}}</div>{{else}}</a>{{end}}</li>
@@ -307,11 +435,11 @@
   {{if .Note}}<p class="small muted">{{.Note}}</p>{{end}}
 </div>{{end}}{{end}}
 
-{{define "account-head"}}{{/* . is a dict: ID, Title, Note, Change */}}
+{{define "account-head"}}{{/* . is a dict: ID, Title, Note, Change, Hash */}}
 <div class="account-head">
   <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "provider-icon" .ID}}</span>
   <div class="account-text"><b>{{.Title}}</b>{{if .Note}}<small>{{.Note}}</small>{{end}}</div>
-  <a class="btn btn-ghost sm" href="{{.Change}}">{{t "pick.change"}}</a>
+  <a class="btn btn-ghost sm" href="{{.Change}}" data-step data-hash="{{.Hash}}">{{t "pick.change"}}</a>
 </div>{{end}}
 
 {{define "name-field"}}<label class="field"><span>{{t "form.name"}}</span>
@@ -397,7 +525,7 @@
 
 {{define "mail-fields"}}{{$c := .Mail.Choice}}{{$id := $c.ID}}
   <input type="hidden" name="mail_provider" value="{{$id}}">
-  {{template "account-head" dict "ID" $id "Title" (t (printf "mailp.%s" $id)) "Note" (t (printf "mailp.%s.note" $id)) "Change" (printf "%schoose" .PickURL)}}
+  {{template "account-head" dict "ID" $id "Title" (t (printf "mailp.%s" $id)) "Note" (t (printf "mailp.%s.note" $id)) "Change" (printf "%schoose" .PickURL) "Hash" (.StepHash "choose")}}
   {{if $c.Soon}}<p class="alert" role="alert">{{t (printf "mailp.%s.soonlong" $id)}}</p>{{end}}
   {{if .Switched}}<p class="notice">{{t "form.switched"}}</p>{{end}}
   <div class="form-grid">
@@ -415,7 +543,7 @@
 
 {{define "cal-fields"}}{{$c := .Calendar.Choice}}{{$id := $c.ID}}
   <input type="hidden" name="cal_provider" value="{{$id}}">
-  {{template "account-head" dict "ID" $id "Title" (t (printf "calp.%s" $id)) "Note" (t (printf "calp.%s.desc" $id)) "Change" (printf "%schoose" .PickURL)}}
+  {{template "account-head" dict "ID" $id "Title" (t (printf "calp.%s" $id)) "Note" (t (printf "calp.%s.desc" $id)) "Change" (printf "%schoose" .PickURL) "Hash" (.StepHash "choose")}}
   {{if .Switched}}<p class="notice">{{t "form.switched"}}</p>{{end}}
   <div class="form-grid">
     {{if $c.NeedsURL}}<label class="field span-2"><span>{{t "cal.url"}}</span><input type="text" name="cal_url" value="{{.Calendar.URL}}" inputmode="url" spellcheck="false" autocapitalize="off" class="mono" placeholder="{{t (printf "calp.%s.urlplaceholder" $id)}}" aria-describedby="cu-h"><small id="cu-h">{{t (printf "calp.%s.urlhint" $id)}}</small></label>{{end}}
@@ -447,6 +575,7 @@
 {{define "tool-form"}}{{with .Data}}{{$c := .Preset.Compact}}
 <form class="panel tool-form" id="tool-form" hx-post="{{if .Edit}}/settings/tools/{{.Name}}{{else}}/settings/tools{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
   <input type="hidden" name="preset" value="{{.Preset.ID}}">
+  {{if .InDialog}}<input type="hidden" name="dialog" value="1">{{end}}
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
 
   {{if eq .Preset.Form "mail"}}{{template "mail-fields" .}}
@@ -529,7 +658,7 @@
     <button class="btn btn-primary if-oauth" type="submit" name="connect" value="1">{{template "i-link"}}{{if .Service}}{{tf "form.connectto" .Service}}{{else if .Edit}}{{tf "form.connectto" .Name}}{{else}}{{t "form.connectservice"}}{{end}}</button>
     <button class="btn btn-primary save-btn{{if .OrigOAuth}} keep{{end}}" type="submit">{{template "i-check"}}<span class="lbl-plain">{{if .Edit}}{{t "form.save"}}{{else}}{{t "form.create"}}{{end}}</span>{{if .OrigOAuth}}<span class="lbl-oauth">{{t "form.savenoconnect"}}</span>{{end}}</button>
     {{if .Testable}}<button class="btn btn-soft test-btn" type="button" hx-post="/settings/tool-test{{if .Edit}}/{{.Name}}{{end}}" hx-target="#tool-test" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{t "test.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button>{{end}}
-    <a class="btn btn-ghost" href="/settings/tools">{{t "form.cancel"}}</a>
+    <a class="btn btn-ghost" href="/settings/tools"{{if .InDialog}} data-step-close{{end}}>{{t "form.cancel"}}</a>
   </div>
   <div id="tool-test" class="test-box" aria-live="polite"></div>
 </form>

@@ -798,6 +798,32 @@ dialog.modal.finder-dlg[open] { display: flex; flex-direction: column; height: m
   .finder-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 2px 16px; }
   .finder-dlg .finder-results { padding: 14px 16px max(18px, env(safe-area-inset-bottom)); }
 }
+/* Its second step: the tool picked, in place of the search; the dialog
+   narrows to the form and fits a short step. */
+.add-pick, .add-step, .add-step .step { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.add-pick[hidden], .add-step[hidden] { display: none; }
+dialog.modal.finder-dlg.on-step { width: min(760px, calc(100vw - 32px)); }
+dialog.modal.finder-dlg.on-step[open] { height: fit-content; max-height: min(760px, calc(100dvh - 32px)); }
+.on-step .add-step, .on-step .add-step .step, .on-step .step-body { flex: 0 1 auto; }
+.step-back { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: .9rem; font-weight: 600; margin-left: -4px; padding: 4px; border-radius: 8px; }
+.step-back .i { width: 16px; height: 16px; }
+.step-back:hover { color: var(--text); text-decoration: none; }
+.step-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 16px; align-content: start; padding: 10px 22px 22px; animation: rise .18s ease-out; }
+.step-body > .form-title h3 { font-size: 1.2rem; }
+.step-body h3:focus { outline: none; }
+.step-lead { color: var(--muted); }
+.step-body > .tool-form.panel, .step-body > .picker.panel { padding: 0; border: 0; background: none; box-shadow: none; }
+.step-body > .actions { justify-content: flex-end; }
+.step-body > .actions form { margin: 0; }
+.tool-status > .pulse { flex: none; width: 8px; height: 8px; margin: 6px 5px 0; border-radius: 50%; background: currentColor; animation: pulse 1.6s infinite; }
+.tool-status.test-result { animation: none; } /* asked again and again: no rise each time */
+.tool-status details summary { cursor: pointer; }
+.test-start { background: var(--accent-soft); color: var(--accent-text); }
+.test-wait { background: var(--surface-2); color: var(--muted); }
+@media (max-width: 860px) {
+  dialog.modal.finder-dlg.on-step, dialog.modal.finder-dlg.on-step[open] { width: 100vw; height: 100dvh; max-height: 100dvh; }
+  .step-body { padding: 10px 16px max(18px, env(safe-area-inset-bottom)); }
+}
 .found-list li { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; overflow-wrap: anywhere; }
 .found-list .i { width: 14px; height: 14px; color: var(--ok); flex: none; align-self: center; }
 .discover-found h3 { font-size: 1.05rem; }

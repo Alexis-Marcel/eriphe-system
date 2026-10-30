@@ -145,5 +145,8 @@ func (w *web) handleDiscover(rw http.ResponseWriter, r *http.Request, s *session
 			v.URL, v.Found, v.Name = d.URL, &d, guessName(d.Host())
 		}
 	}
+	if r.Method == http.MethodGet && inDialog(r) {
+		block = "discover-step" // a step of the tools page's dialog (web_tools_dialog.go)
+	}
 	w.render(rw, r, s, "settings", block, page{Title: "discover.title", Nav: "settings", Tab: "tools", View: "discover", Data: v})
 }
