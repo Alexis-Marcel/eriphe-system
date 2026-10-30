@@ -21,6 +21,7 @@ const brainStartPrompt = "Tu démarres. Lis tes consignes, ne fais rien d'autre 
 // notifyBrain queues an event for the brain when a worker task changes state
 // in a way that may need it.
 func (c *core) notifyBrain(id, state string) {
+	c.pushTaskEnded(id, state) // and on the user's devices (push.go)
 	if c.memoryTaskChanged(id, state) {
 		return // the memory's own tasks are eriphe-core's (memory_extract.go)
 	}

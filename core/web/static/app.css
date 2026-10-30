@@ -1019,3 +1019,59 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 dialog.modal-wide { width: min(760px, calc(100vw - 32px)); }
 .tile-add-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 999px; background: var(--surface-2); color: var(--accent); }
 .tile-add-icon .i { width: 22px; height: 22px; }
+
+/* On a phone, installed or not. */
+
+[hidden] { display: none !important; }
+html { -webkit-tap-highlight-color: transparent; }
+a, button, label, summary, select, input, textarea { touch-action: manipulation; }
+main, .chat-scroll, .drawer-scroll, dialog.modal { overscroll-behavior: contain; }
+
+/* The installed app draws under the status bar and around the notch: the
+   bars keep their content out of those edges. */
+.topbar { padding-top: env(safe-area-inset-top); padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+body.shell { grid-template-rows: calc(var(--topbar) + env(safe-area-inset-top)) 1fr; }
+.auth { padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+.drawer-head { padding-top: max(16px, env(safe-area-inset-top)); }
+.drawer-scroll { padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+/* Its parts keep their height when the activity is long. */
+.drawer-scroll > * { flex-shrink: 0; }
+.toasts { top: calc(var(--topbar) + env(safe-area-inset-top) + 14px); }
+dialog.modal[open] { max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+
+/* What a notification points to, for a moment. */
+.pointed { animation: pointed 2.4s ease-out; border-radius: 18px; }
+@keyframes pointed { 0%, 40% { box-shadow: 0 0 0 4px var(--accent-soft), 0 0 0 1px var(--accent); } 100% { box-shadow: none; } }
+
+@media (max-width: 860px) {
+  body.shell { grid-template-rows: calc(var(--topbar) + env(safe-area-inset-top)) minmax(0, 1fr) auto; }
+  .topbar { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  .tabbar { padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
+  .tabbar a { min-height: 48px; }
+  .settings, .chat-inner { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  /* 16px at least: Safari zooms into a smaller field when it gets the focus. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select { font-size: 16px !important; }
+  .icon-btn { width: 42px; height: 42px; }
+  .drawer-panel { width: 100%; border-left: 0; }
+  dialog.modal { width: calc(100vw - 24px); padding: 20px 18px; }
+  .toasts { left: 12px; right: 12px; transform: none; }
+  .toast { max-width: 100%; }
+
+  /* The keyboard is open: the page is what remains visible above it, and
+     the tab bar steps aside (app.js). */
+  html.kb body.shell { height: var(--app-h, 100dvh); }
+  html.kb .tabbar { display: none; }
+  html.kb .composer { margin-bottom: 8px; }
+}
+
+/* Settings → App & notifications */
+
+.app-install h3, #push h3 { display: flex; align-items: center; gap: 9px; }
+.app-install h3 .i, #push h3 .i { color: var(--accent); }
+.install-how { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.install-how li { display: grid; gap: 2px; padding: 10px 14px; border-radius: 12px; background: var(--surface-2); font-size: .9rem; }
+.install-how li b { font-size: .84rem; }
+.install-how li span { color: var(--muted); }
+.install-how li.current { background: var(--accent-soft); }
+.push-list li { flex-wrap: wrap; }
+#push-state:empty { display: none; }

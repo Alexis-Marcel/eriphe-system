@@ -25,6 +25,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/drive", "tools"},
 		{"/settings/folders", "folders"},
 		{"/settings/remote", "remote"},
+		{"/settings/notifications", "notifications"},
 		{"/settings/journal", "journal"},
 		{"/settings/account", "account"},
 	} {

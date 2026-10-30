@@ -1155,7 +1155,7 @@ Eriphe in the middle, its tasks on the side as live cards (machine, agent, repos
 state, the pull request or document the agent mentioned), the permissions waiting for an answer
 inline in the conversation (Yes / No, with an optional reason for the agent), and the settings:
 devices (what Eriphe sees and does on each, and the command that connects one), agents, accounts and tools (the vault), the folders
-given to Eriphe (see [Folders](#folders)), and the journal of decisions. Settings → Tools lists the catalog's servers with their status (ready, to connect,
+given to Eriphe (see [Folders](#folders)), the app and the notifications of this device (below), and the journal of decisions. Settings → Tools lists the catalog's servers with their status (ready, to connect,
 error, or waiting for a machine for a local one) and where each comes from, adds one from a list of
 presets (Home Assistant, GitHub, Linear, Notion, Mails, Agenda, Google Drive, or any online
 service or local image; Google Drive has its own page, see [Google Drive](#google-drive-cloud-folders)).
@@ -1335,8 +1335,42 @@ trusts, either:
   computers, issue a certificate for the NAS's name and address, and point `cert_file`/`key_file`
   at it.
 
-The manifest (`/manifest.webmanifest`) and a service worker (`/sw.js`, static files only; it
-caches no page or data) are in place; push notifications are not yet.
+**On a phone, as an app.** The workspace installs as an app (PWA): its manifest
+(`/manifest.webmanifest`) carries the assistant's name, its icons (maskable and monochrome
+included), `display: standalone`, `start_url` and `scope` `/`; the pages add the Apple touch icon
+and meta tags. Installed, it draws under the status bar and around the notch, and keeps its bars
+out of the safe areas; fields are 16 px at least on a phone (Safari zooms into smaller ones); the
+composer stays above the keyboard (Chrome resizes the page for it, `interactive-widget`; on iOS the
+page follows the visible viewport and the tab bar steps aside). The service worker (`/sw.js`,
+served with the static files' version so that each update brings a fresh cache) keeps the static
+files only: versioned ones cache first, the others network first; a page is always fetched, and
+offline a small static page says so. No page, action or event stream is ever cached.
+Settings → App & notifications tells how to install it on this device (iPhone, Android or a
+computer), with the browser's own prompt when Chrome or Edge offers one.
+
+**Notifications.** Standard Web Push (RFC 8030, encrypted per RFC 8291, signed with VAPID per RFC
+8292; `push.go`, with [webpush-go](https://github.com/SherClockHolmes/webpush-go)). eriphe-core
+makes its VAPID key pair at first start (`push-vapid.key` in the data folder, 0600, never logged)
+and gives the public key to the page (`GET /push/key`, or the page's own attribute). In Settings →
+App & notifications, the switch "Me prévenir sur cet appareil" asks the browser's permission, then
+subscribes and sends the subscription (`POST /push/subscribe`; `POST /push/unsubscribe` removes
+one); the page lists the devices notified, each with a remove button and "cet appareil" on the
+one in hand, and sends a test to it. Two things are pushed, titled with the assistant's name, in
+the language the device used:
+
+| When | Text | A tap opens |
+|---|---|---|
+| a worker task finished its turn, or failed (or was lost) | « Tâche finie : <title> », « La tâche « <title> » a échoué » | the conversation with that task's drawer (`/?task=<id>`) |
+| a permission waits for the user (one that is theirs, or any while the assistant is away), or the assistant ended a message on a question | « <Name> attend ta réponse : <tool and command, or the question> » | the conversation, at that permission or message |
+
+Each is pushed once, and not at all while a workspace tab is visible and focused: every open tab
+tells eriphe-core when it comes in front or leaves (`POST /presence`, and every 20 s while in
+front; a tab silent for 45 s no longer counts). Everything goes through one function (`tell`),
+for what else will notify later. A push service that answers 404 or 410 has the subscription
+removed. The service worker shows the notification and, on a tap, focuses an open workspace window
+and takes it there, or opens one, on the workspace's own origin. Push needs a trusted HTTPS origin
+(see the certificate above); on iPhone and iPad it reaches the installed app only (iOS 16.4 or
+later), while Android and computers receive it in the browser too.
 
 ## Remote access (Tailscale)
 

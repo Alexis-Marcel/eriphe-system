@@ -313,6 +313,9 @@ func (w *web) detail(id string) (*taskDetail, error) {
 }
 
 func (w *web) handleTask(rw http.ResponseWriter, r *http.Request, s *session) {
+	if taskLink(rw, r) {
+		return
+	}
 	d, err := w.detail(r.PathValue("id"))
 	if err != nil {
 		taskError(rw, err)

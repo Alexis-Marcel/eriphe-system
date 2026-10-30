@@ -46,6 +46,8 @@ type core struct {
 
 	cloud cloudFlows // Google authorizations in progress (cloud.go)
 
+	push *pusher // notifications on the user's devices (push.go); nil without the workspace
+
 	github *githubClient // Eriphe's GitHub App (github_app.go)
 	creds  credCache     // credentials minted for tasks, while they last (credentials.go)
 

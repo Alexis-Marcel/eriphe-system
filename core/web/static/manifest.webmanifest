@@ -1,17 +1,22 @@
 {
+  "id": "/",
   "name": "Eriphe",
   "short_name": "Eriphe",
   "description": "Ton assistant, chez toi.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#f6f6fb",
-  "theme_color": "#5b5bf6",
+  "theme_color": "#f6f6fb",
   "lang": "fr",
+  "dir": "ltr",
+  "categories": ["productivity", "utilities"],
   "icons": [
-    {"src": "/static/icon.svg", "type": "image/svg+xml", "sizes": "any"},
-    {"src": "/static/icon-192.png", "type": "image/png", "sizes": "192x192"},
-    {"src": "/static/icon-512.png", "type": "image/png", "sizes": "512x512"},
-    {"src": "/static/icon-maskable-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable"}
+    {"src": "/static/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any"},
+    {"src": "/static/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any"},
+    {"src": "/static/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any"},
+    {"src": "/static/icon-maskable-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable"},
+    {"src": "/static/badge-96.png", "type": "image/png", "sizes": "96x96", "purpose": "monochrome"}
   ]
 }
