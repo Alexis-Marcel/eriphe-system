@@ -280,12 +280,12 @@ can follow it. . is an updateRow. */}}
 <div class="cmd">
   <h4>{{t "machines.unix"}}</h4>
   <p class="muted small">{{t "machines.unixlead"}}</p>
-  <div class="code"><pre id="cmd-sh">curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core {{.Core}} --join-token {{.Token}} --name {{.Name}}{{if .Labels}} --labels {{.Labels}}{{end}}{{if .CAHash}} --ca-hash {{.CAHash}}{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-sh">{{t "machines.copy"}}</button></div>
+  <div class="code"><pre id="cmd-sh">curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core {{.Core}} --join-token {{.Token}} --name {{.Name}}{{if .Labels}} --labels {{.Labels}}{{end}}{{if .CAHash}} --ca-hash {{.CAHash}}{{end}}{{if .Assistant}} --assistant-name '{{.Assistant}}'{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-sh">{{t "machines.copy"}}</button></div>
 </div>
 <div class="cmd">
   <h4>{{t "machines.windows"}}</h4>
   <p class="muted small">{{t "machines.windowslead"}}</p>
-  <div class="code"><pre id="cmd-ps">$env:ERIPHE_CORE='{{.Core}}'; $env:ERIPHE_JOIN_TOKEN='{{.Token}}'; $env:ERIPHE_NODE_NAME='{{.Name}}';{{if .Labels}} $env:ERIPHE_NODE_LABELS='{{.Labels}}';{{end}}{{if .CAHash}} $env:ERIPHE_CA_HASH='{{.CAHash}}';{{end}}{{if .Rejoin}} $env:ERIPHE_REJOIN='1';{{end}} irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-ps">{{t "machines.copy"}}</button></div>
+  <div class="code"><pre id="cmd-ps">$env:ERIPHE_CORE='{{.Core}}'; $env:ERIPHE_JOIN_TOKEN='{{.Token}}'; $env:ERIPHE_NODE_NAME='{{.Name}}';{{if .Labels}} $env:ERIPHE_NODE_LABELS='{{.Labels}}';{{end}}{{if .CAHash}} $env:ERIPHE_CA_HASH='{{.CAHash}}';{{end}}{{if .Rejoin}} $env:ERIPHE_REJOIN='1';{{end}}{{if .Assistant}} $env:ERIPHE_ASSISTANT_NAME='{{.Assistant}}';{{end}} irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-ps">{{t "machines.copy"}}</button></div>
 </div>
 <details class="advanced-opts">
   <summary>{{t "form.advanced"}}</summary>
@@ -298,7 +298,8 @@ can follow it. . is an updateRow. */}}
   ERIPHE_NODE_NAME: {{.Name}}{{if .Labels}}
   ERIPHE_NODE_LABELS: {{.Labels}}{{end}}{{if .CAHash}}
   ERIPHE_CA_HASH: {{.CAHash}}{{end}}
-  ERIPHE_JOIN_TOKEN: {{.Token}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-compose">{{t "machines.copy"}}</button></div>
+  ERIPHE_JOIN_TOKEN: {{.Token}}{{if .Assistant}}
+  ERIPHE_ASSISTANT_NAME: "{{.Assistant}}"{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-compose">{{t "machines.copy"}}</button></div>
   </div>
   <div class="cmd">
     <h4>{{t "machines.binary"}}</h4>
@@ -307,7 +308,7 @@ can follow it. . is an updateRow. */}}
   <div class="cmd">
     <h4>{{t "machines.windowsfile"}}</h4>
     <p class="muted small">{{t "machines.windowsfilelead"}}</p>
-    <div class="code"><pre id="cmd-windows">powershell -ExecutionPolicy Bypass -File .\install.ps1 -Core '{{.Core}}' -JoinToken {{.Token}} -Name {{.Name}}{{if .Labels}} -Labels '{{.Labels}}'{{end}}{{if .CAHash}} -CaHash {{.CAHash}}{{end}}{{if .Rejoin}} -Rejoin{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-windows">{{t "machines.copy"}}</button></div>
+    <div class="code"><pre id="cmd-windows">powershell -ExecutionPolicy Bypass -File .\install.ps1 -Core '{{.Core}}' -JoinToken {{.Token}} -Name {{.Name}}{{if .Labels}} -Labels '{{.Labels}}'{{end}}{{if .CAHash}} -CaHash {{.CAHash}}{{end}}{{if .Rejoin}} -Rejoin{{end}}{{if .Assistant}} -AssistantName '{{.Assistant}}'{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-windows">{{t "machines.copy"}}</button></div>
   </div>
   </div>
 </details>
