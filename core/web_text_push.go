@@ -13,6 +13,8 @@ func init() {
 var pushStrings = map[string]map[string]string{
 	"fr": {
 		"settings.notifications": "Appli et notifications",
+		"screen.title":           "Détails de l'écran",
+		"screen.summary":         "Pour comprendre un souci d'affichage sur cet appareil.",
 		"push.lead":              "Installe {{name}} sur ton téléphone comme une appli, et laisse-le te prévenir quand une tâche se termine ou qu'il attend ta réponse.",
 		"install.title":          "Installer l'appli",
 		"install.done":           "Installée",
@@ -47,6 +49,8 @@ var pushStrings = map[string]map[string]string{
 	},
 	"en": {
 		"settings.notifications": "App & notifications",
+		"screen.title":           "Screen details",
+		"screen.summary":         "To understand a display issue on this device.",
 		"push.lead":              "Install {{name}} on your phone as an app, and let it tell you when a task ends or when it waits for your answer.",
 		"install.title":          "Install the app",
 		"install.done":           "Installed",
