@@ -738,6 +738,9 @@ function lit(name) {
   const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
+  // Installed (home screen): app.css sizes the shell on the large viewport.
+  if (standalone()) document.documentElement.classList.add("app");
+
   // The keyboard. Chrome on Android shrinks the page for it (the viewport's
   // interactive-widget); Safari on iOS lays it over the page instead: the
   // page follows the visible part, so the composer stays above the
@@ -974,4 +977,35 @@ function lit(name) {
     showInstall();
     setupPush().catch(() => {});
   });
+})();
+
+// Settings → Appli et notifications → Détails de l'écran: what this device
+// reports about its screen, to understand a display issue.
+(() => {
+  const out = document.getElementById("screen-details");
+  if (!out) return;
+  const probe = (v) => {
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;top:0;left:0;width:0;visibility:hidden;height:" + v;
+    document.body.appendChild(d);
+    const h = d.getBoundingClientRect().height;
+    d.remove();
+    return Math.round(h);
+  };
+  const show = () => {
+    const vv = window.visualViewport;
+    out.textContent = [
+      "standalone: " + (matchMedia("(display-mode: standalone)").matches || navigator.standalone === true),
+      "screen: " + screen.width + " x " + screen.height,
+      "inner: " + innerWidth + " x " + innerHeight,
+      "visualViewport: " + (vv ? Math.round(vv.width) + " x " + Math.round(vv.height) : "-"),
+      "html: " + document.documentElement.clientHeight + ", body: " + Math.round(document.body.getBoundingClientRect().height),
+      "100vh: " + probe("100vh") + ", 100dvh: " + probe("100dvh") + ", 100lvh: " + probe("100lvh") + ", 100svh: " + probe("100svh"),
+      "safe-area top/bottom: " + probe("env(safe-area-inset-top)") + " / " + probe("env(safe-area-inset-bottom)"),
+      "devicePixelRatio: " + devicePixelRatio,
+      navigator.userAgent,
+    ].join("\n");
+  };
+  show();
+  addEventListener("resize", show);
 })();

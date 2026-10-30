@@ -1253,11 +1253,11 @@ dialog.modal[open] { max-height: calc(100dvh - 32px - env(safe-area-inset-top) -
 /* Installed on a phone (iOS standalone): 100dvh can stop short of the screen's
    bottom and leave an empty band under the tab bar; pin the shell to the
    screen instead (the tab bar keeps the home indicator's inset). */
-@media (display-mode: standalone) {
-  body.shell { position: fixed; inset: 0; height: auto; }
-}
-/* Installed: what iOS leaves below the page (some iOS 26 versions end a
-   standalone page short of the screen) takes the tab bar's colour. */
-@media (display-mode: standalone) {
-  html.shell { background: var(--surface); }
-}
+
+/* Installed on an iPhone, 100% and 100dvh stop a status bar short of the
+   screen (measured on iOS 26: screen 852, 100dvh 793 = 852 - the 59 px top
+   inset, 100lvh 852): the shell takes the large viewport instead. The
+   keyboard's own height (html.kb) still wins. */
+html.app.shell:not(.kb), html.app.shell:not(.kb) body.shell { height: 100lvh; }
+
+#screen-details { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
