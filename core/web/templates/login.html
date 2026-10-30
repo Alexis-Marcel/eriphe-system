@@ -1,10 +1,17 @@
 {{define "main"}}
 <div class="auth">
   <div class="auth-glow" aria-hidden="true"></div>
+  {{if .Data.Private}}
+  <div class="auth-card">
+    <span class="auth-mark" aria-hidden="true">{{template "logo"}}</span>
+    <h1>{{t "private.title"}}</h1>
+    <p class="lead">{{t "private.lead"}}</p>
+  </div>
+  {{else}}
   <form class="auth-card" method="post" action="{{if .Data.Setup}}/setup{{else}}/login{{end}}">
     <span class="auth-mark" aria-hidden="true">{{template "logo"}}</span>
     <h1>{{if .Data.Setup}}{{t "setup.title"}}{{else}}{{name}}{{end}}</h1>
-    <p class="lead">{{if .Data.Setup}}{{t "setup.lead"}}{{else}}{{t "login.lead"}}{{end}}</p>
+    <p class="lead">{{if .Data.Setup}}{{t "setup.lead"}}{{else if and .Data.SSO (not .Data.Password)}}{{t "login.ssolead"}}{{else}}{{t "login.lead"}}{{end}}</p>
     {{if .Data.Error}}<p class="alert" role="alert">{{t .Data.Error}}</p>{{end}}
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     {{if .Data.Setup}}
@@ -17,11 +24,16 @@
       <input type="password" name="confirm" required minlength="10" autocomplete="new-password"></label>
     <button class="btn btn-primary wide" type="submit">{{t "setup.submit"}}</button>
     {{else}}
+    {{if .Data.SSO}}<a class="btn {{if .Data.Password}}btn-soft{{else}}btn-primary{{end}} wide" href="/auth/login">{{template "i-shield"}}{{t "login.sso"}}</a>{{end}}
+    {{if .Data.Password}}
     <label class="field"><span>{{t "login.password"}}</span>
-      <input type="password" name="password" required autocomplete="current-password" autofocus></label>
+      <input type="password" name="password" required autocomplete="current-password" {{if not .Data.SSO}}autofocus{{end}}></label>
     <button class="btn btn-primary wide" type="submit">{{t "login.submit"}}</button>
+    {{else if .Data.NoOwner}}<a class="small center" href="/setup">{{t "login.nopassword"}}</a>
+    {{end}}
     {{end}}
     <p class="auth-foot">{{t "app.tagline"}}</p>
   </form>
+  {{end}}
 </div>
 {{end}}

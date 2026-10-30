@@ -8,6 +8,10 @@
     <h1>{{t "oauth.failed"}}</h1>
     <p class="alert" role="alert">{{short .Data.Error 400}}</p>
     <a class="btn btn-primary wide" href="{{or .Data.Back "/settings/tools"}}">{{t "oauth.back"}}</a>
+    {{else if .Data.Moving}}
+    <span class="auth-mark" aria-hidden="true">{{template "logo"}}</span>
+    <p class="lead">{{t "sso.moving"}}</p>
+    <a class="btn btn-primary wide" href="{{.Data.Next}}">{{t "sso.continue"}}</a>
     {{else}}
     <span class="oauth-mark" aria-hidden="true">{{template "i-check"}}</span>
     <h1>{{tf "oauth.connected" .Data.Name}}</h1>

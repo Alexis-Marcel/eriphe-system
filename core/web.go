@@ -37,6 +37,8 @@ type WebConfig struct {
 	Hostnames   []string `json:"hostnames,omitempty"`
 	Lang        string   `json:"lang,omitempty"`         // fr (default) or en
 	SessionDays int      `json:"session_days,omitempty"` // how long a login lasts, 30 by default
+	// How one signs in (web_signin.go); without it, Settings → Account says.
+	Auth *AuthConfig `json:"auth,omitempty"`
 }
 
 type web struct {
@@ -50,6 +52,12 @@ type web struct {
 	trusted   bool         // served with a certificate of the configuration: HSTS
 	sessions  time.Duration
 	idle      time.Duration
+
+	fileAuth *signin // the configuration file's sign-in, if it has one
+	authMu   sync.Mutex
+	authRaw  string  // the workspace's sign-in settings, as stored
+	authCur  *signin // and read
+	sso      *ssoState
 
 	mu   sync.Mutex
 	wake chan struct{} // closed and replaced when something happens here
@@ -66,7 +74,14 @@ func newWeb(c *core, cfg WebConfig) (*web, error) {
 		cfg.SessionDays = 30
 	}
 	w := &web{c: c, cfg: cfg, now: time.Now, limiter: newLoginLimiter(), testLimit: newTestLimiter(), wake: make(chan struct{}),
-		trusted: cfg.CertFile != "", sessions: time.Duration(cfg.SessionDays) * 24 * time.Hour, idle: 7 * 24 * time.Hour}
+		trusted: cfg.CertFile != "", sessions: time.Duration(cfg.SessionDays) * 24 * time.Hour, idle: 7 * 24 * time.Hour,
+		sso: newSSOState()}
+	if cfg.Auth != nil {
+		var err error
+		if w.fileAuth, err = newSignin(*cfg.Auth, true); err != nil {
+			return nil, err
+		}
+	}
 	if err := w.parse(); err != nil {
 		return nil, err
 	}
@@ -128,6 +143,10 @@ func (w *web) routes() http.Handler {
 	mux.HandleFunc("GET /login", w.handleLoginPage)
 	mux.HandleFunc("POST /login", w.handleLogin)
 	mux.Handle("POST /logout", w.auth(w.handleLogout))
+	// The provider's sign-in (web_oidc.go); the callback comes from its
+	// site, without the session cookie: the flow's own cookie binds it.
+	mux.HandleFunc("GET /auth/login", w.handleSSOStart)
+	mux.HandleFunc("GET /auth/callback", w.handleSSOCallback)
 	mux.Handle("POST /lang", w.auth(w.handleLang))
 
 	mux.Handle("GET /{$}", w.auth(w.handleHome))
@@ -180,6 +199,9 @@ func (w *web) routes() http.Handler {
 	mux.Handle("GET /settings/journal", w.auth(w.handleJournal))
 	mux.Handle("GET /settings/account", w.auth(w.handleAccount))
 	mux.Handle("POST /settings/password", w.auth(w.handlePassword))
+	mux.Handle("POST /settings/signin", w.auth(w.handleSaveSignin)) // web_signin_settings.go
+	mux.Handle("POST /settings/signin/issuer", w.auth(w.handleTestIssuer))
+	mux.Handle("POST /settings/signin/try", w.auth(w.handleTrySignin))
 	w.memoryRoutes(mux)  // web_memory.go
 	w.remoteRoutes(mux)  // web_remote.go
 	w.driveRoutes(mux)   // web_drive.go
@@ -359,6 +381,9 @@ func (c *core) serveWeb(cfg *Config) error {
 	cert, err := w.certificate(cfg)
 	if err != nil {
 		return fmt.Errorf("certificate: %w", err)
+	}
+	if si := w.signin(); si.cfg.mode() != modePassword {
+		log.Printf("web: sign-in: %s (eriphe-core auth reset goes back to the password)", si.cfg.mode())
 	}
 	if w.setup != "" {
 		log.Printf("web: no password yet: open https://%s/setup with the setup code %s", w.cfg.Listen, w.setup)

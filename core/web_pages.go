@@ -699,7 +699,7 @@ func (w *web) handleJournal(rw http.ResponseWriter, r *http.Request, s *session)
 }
 
 func (w *web) handleAccount(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "", page{Title: "settings.account", Nav: "settings", Tab: "account"})
+	w.render(rw, r, s, "settings", "", page{Title: "settings.account", Nav: "settings", Tab: "account", Data: w.signinView(r)})
 }
 
 // handleLang keeps the language in a cookie and reloads the page.

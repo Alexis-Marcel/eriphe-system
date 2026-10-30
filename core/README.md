@@ -1174,6 +1174,7 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 | `hostnames` | names and addresses for the self-signed certificate, besides `public_url`'s host, the machine's name, `localhost` and its interfaces' addresses |
 | `lang` | `fr` (default) or `en`; each browser can switch in Settings |
 | `session_days` | how long a login lasts, 30 by default (a week without use ends it sooner) |
+| `auth` | how one signs in: see [Signing in](#signing-in); without it, Settings → Account says |
 
 **First start.** With no password yet, eriphe-core logs a one-time setup code:
 `web: no password yet: open https://…/setup with the setup code ABCD-EFGH`. Open the page, type
@@ -1206,6 +1207,86 @@ lockout: past 20 failures from all addresses, every attempt waits longer first (
 failure, at most 5 s) but is still checked, so the owner gets in from their own address. At most two
 argon2 hashes are computed at once. Changing the password ends the other sessions.
 The bearer-token API is unchanged for the CLI and the nodes.
+
+### Signing in
+
+The workspace has one owner; how they sign in is set in Settings → Account → Connexion, or in
+the configuration file's `web.auth`, which then wins (the page shows the settings with a
+configuration tag and cannot change them).
+
+| Mode | |
+|---|---|
+| **Password** (`password`, default) | The owner's password, created with the setup code at first start. |
+| **Identity provider** (`oidc`) | Any OpenID Connect provider (Authentik, Authelia, Keycloak, PocketID…). Give its issuer, the client ID and secret, the workspace's address (`external_url`, e.g. `https://eriphe.example.org`), and who may enter: the provider's account ids (`allowed_subs`) and/or emails it says are verified (`allowed_emails`). Redirect URI: `<external_url>/auth/callback`. Authorization code flow with PKCE (S256), state and nonce; the ID token's signature, issuer, audience and expiry are checked ([go-oidc](https://github.com/coreos/go-oidc)). Signed-out visitors go to the provider at once, unless `oidc.button` asks for a sign-in button. |
+| **Reverse proxy** (`proxy`) | The proxy signs in and passes the user in `Remote-User` (or `proxy.header`). The header is believed only from the proxy's addresses (`proxy.trusted`, addresses or CIDRs), and for the users listed (`proxy.users`); it is needed on every request. |
+| **None** (`none`) | No sign-in at all: only for a machine nobody but you can reach. |
+
+**Visitors who may not enter** (an account the provider signed in but that is not allowed, a
+request without the proxy's user, with another user, or from an address that is not the
+proxy's) are sent to `unauthorized_url` when it is set (e.g. `https://www.example.org`), and
+otherwise see a page "Cet espace est privé" / "This workspace is private".
+
+**Always a way back in.** In `oidc` and `proxy` modes the password still opens the workspace
+from the local network: the browser's address and every hop in `X-Forwarded-For` and
+`X-Real-Ip` must be private, loopback, link-local or Tailscale (100.64.0.0/10, fd7a:…), the
+request must not come from a declared proxy, and a request with a `Forwarded` header never
+counts. `no_local_password` turns that off. And from the machine:
+
+```sh
+docker exec eriphe-core eriphe-core auth reset    # or: eriphe-core auth reset -config core.json
+```
+
+sets the workspace's mode back to the password (its other settings stay) for the running
+eriphe-core at once. When `web.auth` is in the configuration file, change its mode there.
+
+> Your proxy must add `X-Forwarded-For` (Traefik, Caddy and nginx's `proxy_add_x_forwarded_for`
+> do). If the workspace is published on the internet without a proxy, turn the local password
+> off: Docker's port publishing may show every visitor with a private address.
+
+**Changing the mode keeps you in.** Settings → Account → Connexion: "Tester" reads the
+provider's discovery document; "Essayer la connexion" signs in once at the provider with the
+settings of the form, and tells who it signed in (with their `sub`, to copy into the allowed
+accounts). The identity provider's mode can be saved only after that test passed as an allowed
+account, with the same settings; the proxy's only from a page that comes through the proxy as an
+allowed user, or while the password stays usable from where you are. The client secret is kept
+in the vault (`vault:workspace-oidc`) and never shown back.
+
+```json
+"web": {"auth": {
+  "mode": "oidc",
+  "external_url": "https://eriphe.example.org",
+  "unauthorized_url": "https://www.example.org",
+  "oidc": {"issuer": "https://auth.example.org/application/o/eriphe/", "client_id": "eriphe",
+           "client_secret_file": "vault:workspace-oidc", "allowed_emails": ["me@example.org"]}
+}}
+```
+
+| Field of `web.auth` | What |
+|---|---|
+| `mode` | `password` (default), `oidc`, `proxy` or `none` |
+| `external_url` | where the workspace is reached; the provider's redirect, and an origin the forms may come from behind a proxy that changes the host |
+| `unauthorized_url` | where visitors who may not enter go; the private page without it |
+| `no_local_password` | `true`: no password from the local network in `oidc` and `proxy` modes |
+| `oidc.issuer`, `oidc.client_id` | the provider's issuer (exactly as it announces it, trailing slash included) and the client |
+| `oidc.client_secret_file` | a file, or `vault:<name>`; none for a public client |
+| `oidc.allowed_subs`, `oidc.allowed_emails` | who may enter; at least one is needed |
+| `oidc.button` | `true`: a sign-in button rather than going to the provider at once |
+| `proxy.header`, `proxy.trusted`, `proxy.users` | the user's header (`Remote-User`), the proxy's addresses or CIDRs, who may enter |
+
+**With Authentik.** Applications → Create with provider: an **OAuth2/OpenID** provider,
+confidential client, redirect URI `https://eriphe.example.org/auth/callback` (strict), the scopes
+`openid`, `email` and `profile`, signed with a certificate (RS256). The issuer is
+`https://auth.example.org/application/o/<application slug>/`. Copy the client ID and secret into
+the form, "Tester", then "Essayer la connexion": its message gives your `sub` (Authentik's is a
+hash of the user by default) to allow; an email counts only if Authentik sends
+`email_verified: true`. Bind the application to your user or group, so the others are stopped
+at Authentik already.
+
+**Behind a reverse proxy.** The workspace serves HTTPS itself (port 8443): point the proxy at
+`https://eriphe-core:8443`, trusting the self-signed certificate (Traefik's
+`serversTransport` with `insecureSkipVerify`, or its fingerprint), and set `external_url`.
+Logging out with a provider shows the sign-in page with its button: going to the provider at
+once would sign you in again; sign out at the provider too to end that session.
 
 **Headers.** A strict Content Security Policy (no inline script or style, no `eval`, `frame-ancestors
 'none'`), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, and HSTS when

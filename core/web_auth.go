@@ -23,7 +23,9 @@ import (
 // with a setup code printed in eriphe-core's log (whoever reaches the page
 // first cannot take the house), and kept as an argon2id hash. A login opens
 // a session: a random cookie (only its hash is stored), HttpOnly, Secure and
-// SameSite=Strict, with its own CSRF token that every POST carries.
+// SameSite=Strict, with its own CSRF token that every POST carries. Other
+// ways in (a provider, a proxy, none) are in web_signin.go; they open the
+// same sessions, marked with how they were opened.
 
 const webAuthSchema = `CREATE TABLE IF NOT EXISTS web_owner (
   id INTEGER PRIMARY KEY CHECK (id = 1), hash TEXT NOT NULL, updated INTEGER NOT NULL);
@@ -133,16 +135,17 @@ func (w *web) setPassword(pw string) error {
 type session struct {
 	ID   string // the hash of the cookie
 	CSRF string
+	Via  string // how it was opened: password, oidc, proxy or none
 }
 
-func (w *web) newSession(rw http.ResponseWriter) (*session, error) {
+func (w *web) newSession(rw http.ResponseWriter, via string) (*session, error) {
 	token := randomToken(32)
-	s := &session{ID: hashToken(token), CSRF: randomToken(24)}
+	s := &session{ID: hashToken(token), CSRF: randomToken(24), Via: via}
 	now := w.now()
 	expires := now.Add(w.sessions)
 	w.c.store.db.Exec(`DELETE FROM web_sessions WHERE expires < ? OR seen < ?`, now.Unix(), now.Add(-w.idle).Unix())
-	if _, err := w.c.store.db.Exec(`INSERT INTO web_sessions (id, csrf, created, seen, expires) VALUES (?, ?, ?, ?, ?)`,
-		s.ID, s.CSRF, now.Unix(), now.Unix(), expires.Unix()); err != nil {
+	if _, err := w.c.store.db.Exec(`INSERT INTO web_sessions (id, csrf, created, seen, expires, via) VALUES (?, ?, ?, ?, ?, ?)`,
+		s.ID, s.CSRF, now.Unix(), now.Unix(), expires.Unix(), via); err != nil {
 		return nil, err
 	}
 	http.SetCookie(rw, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", Expires: expires,
@@ -159,7 +162,7 @@ func (w *web) session(r *http.Request) *session {
 	}
 	s := &session{ID: hashToken(c.Value)}
 	var seen, expires int64
-	err = w.c.store.db.QueryRow(`SELECT csrf, seen, expires FROM web_sessions WHERE id = ?`, s.ID).Scan(&s.CSRF, &seen, &expires)
+	err = w.c.store.db.QueryRow(`SELECT csrf, seen, expires, via FROM web_sessions WHERE id = ?`, s.ID).Scan(&s.CSRF, &seen, &expires, &s.Via)
 	if err != nil {
 		return nil
 	}
@@ -190,14 +193,20 @@ func redirect(rw http.ResponseWriter, r *http.Request, to string) {
 	http.Redirect(rw, r, to, http.StatusSeeOther)
 }
 
-// sameOrigin refuses a request a browser sent from another site.
-func sameOrigin(r *http.Request) bool {
+// sameOrigin refuses a request a browser sent from another site. Behind a
+// proxy that changes the host, the settings' external URL is the
+// workspace's own origin too.
+func (w *web) sameOrigin(r *http.Request) bool {
 	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 		return false
 	}
 	if o := r.Header.Get("Origin"); o != "" {
 		u, err := url.Parse(o)
-		if err != nil || u.Host != r.Host {
+		if err != nil {
+			return false
+		}
+		ext := w.signin().origin
+		if u.Host != r.Host && (ext == "" || strings.ToLower(u.Scheme+"://"+u.Host) != ext) {
 			return false
 		}
 	}
@@ -206,29 +215,39 @@ func sameOrigin(r *http.Request) bool {
 
 type authed func(http.ResponseWriter, *http.Request, *session)
 
-// auth lets only the owner's session in, and checks the CSRF token of
-// everything but GET.
+// auth lets only the owner in, as the sign-in mode says (web_signin.go),
+// and checks the CSRF token of everything but GET.
 func (w *web) auth(h authed) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		if !w.hasOwner() {
+		si := w.signin()
+		s := w.session(r)
+		switch v, via := w.decide(r, s, si); v {
+		case toSetup:
 			redirect(rw, r, "/setup")
 			return
-		}
-		s := w.session(r)
-		if s == nil {
+		case toLogin:
 			if r.URL.Path == "/events" {
 				http.Error(rw, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 			redirect(rw, r, "/login")
 			return
+		case unwelcome:
+			w.refuse(rw, r, si)
+			return
+		case admitNew:
+			var err error
+			if s, err = w.newSession(rw, via); err != nil {
+				http.Error(rw, "no session", http.StatusInternalServerError)
+				return
+			}
 		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			got := r.Header.Get("X-CSRF-Token")
 			if got == "" {
 				got = r.PostFormValue("csrf")
 			}
-			if !sameOrigin(r) || subtle.ConstantTimeCompare([]byte(got), []byte(s.CSRF)) != 1 {
+			if !w.sameOrigin(r) || subtle.ConstantTimeCompare([]byte(got), []byte(s.CSRF)) != 1 {
 				http.Error(rw, "invalid CSRF token", http.StatusForbidden)
 				return
 			}
@@ -249,18 +268,51 @@ func (w *web) preToken(rw http.ResponseWriter, r *http.Request) string {
 	return v
 }
 
-func checkPreToken(r *http.Request) bool {
+func (w *web) checkPreToken(r *http.Request) bool {
 	c, err := r.Cookie(preCookie)
 	got := r.PostFormValue("csrf")
-	return err == nil && got != "" && sameOrigin(r) && subtle.ConstantTimeCompare([]byte(c.Value), []byte(got)) == 1
+	return err == nil && got != "" && w.sameOrigin(r) && subtle.ConstantTimeCompare([]byte(c.Value), []byte(got)) == 1
 }
 
 type authForm struct {
-	Error string
-	Setup bool
+	Error    string
+	Setup    bool
+	SSO      bool // the provider's button
+	Password bool // the password's form
+	NoOwner  bool // the password could be used here, but there is none yet
+	Private  bool // the page for those who may not enter
+}
+
+// loginForm is what the sign-in page offers this request.
+func (w *web) loginForm(r *http.Request, si *signin) authForm {
+	f := authForm{SSO: si.cfg.mode() == modeOIDC}
+	if si.passwordHere(r) {
+		f.Password, f.NoOwner = w.hasOwner(), !w.hasOwner()
+	}
+	return f
+}
+
+// passwordPages tells whether the password's pages are for this request,
+// and answers it otherwise.
+func (w *web) passwordPages(rw http.ResponseWriter, r *http.Request, si *signin) bool {
+	if si.passwordHere(r) {
+		return true
+	}
+	switch si.cfg.mode() {
+	case modeNone:
+		http.Redirect(rw, r, "/", http.StatusSeeOther)
+	case modeOIDC:
+		w.loginFailed(rw, r, si, http.StatusForbidden, "err.nopassword")
+	default:
+		w.refuse(rw, r, si)
+	}
+	return false
 }
 
 func (w *web) handleSetupPage(rw http.ResponseWriter, r *http.Request) {
+	if !w.passwordPages(rw, r, w.signin()) {
+		return
+	}
 	if w.hasOwner() {
 		http.Redirect(rw, r, "/login", http.StatusSeeOther)
 		return
@@ -269,6 +321,9 @@ func (w *web) handleSetupPage(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (w *web) handleSetup(rw http.ResponseWriter, r *http.Request) {
+	if !w.passwordPages(rw, r, w.signin()) {
+		return
+	}
 	if w.hasOwner() {
 		http.Redirect(rw, r, "/login", http.StatusSeeOther)
 		return
@@ -278,7 +333,7 @@ func (w *web) handleSetup(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(status)
 		w.render(rw, r, &session{CSRF: csrf}, "login", "", page{Title: "setup.title", Data: authForm{Setup: true, Error: msg}})
 	}
-	if !checkPreToken(r) {
+	if !w.checkPreToken(r) {
 		fail(http.StatusForbidden, "err.csrf")
 		return
 	}
@@ -306,36 +361,54 @@ func (w *web) handleSetup(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.setup = ""
-	if _, err := w.newSession(rw); err != nil {
+	if _, err := w.newSession(rw, viaPassword); err != nil {
 		fail(http.StatusInternalServerError, "err.internal")
 		return
 	}
 	http.Redirect(rw, r, "/", http.StatusSeeOther)
 }
 
+// handleLoginPage offers what opens the workspace from here: the password,
+// the provider (at once, unless the password is offered too, the settings
+// ask for a button, or the owner just signed out), or neither.
 func (w *web) handleLoginPage(rw http.ResponseWriter, r *http.Request) {
-	if !w.hasOwner() {
-		http.Redirect(rw, r, "/setup", http.StatusSeeOther)
-		return
-	}
-	if w.session(r) != nil {
+	si := w.signin()
+	switch v, _ := w.decide(r, w.session(r), si); v {
+	case admit, admitNew:
 		http.Redirect(rw, r, "/", http.StatusSeeOther)
 		return
+	case toSetup:
+		http.Redirect(rw, r, "/setup", http.StatusSeeOther)
+		return
+	case unwelcome:
+		w.refuse(rw, r, si)
+		return
 	}
-	w.render(rw, r, &session{CSRF: w.preToken(rw, r)}, "login", "", page{Title: "login.title", Data: authForm{}})
+	f := w.loginForm(r, si)
+	if f.SSO && !f.Password && !f.NoOwner && !si.cfg.OIDC.Button && r.URL.Query().Get("out") == "" {
+		http.Redirect(rw, r, "/auth/login", http.StatusSeeOther)
+		return
+	}
+	w.render(rw, r, &session{CSRF: w.preToken(rw, r)}, "login", "", page{Title: "login.title", Data: f})
 }
 
 func (w *web) handleLogin(rw http.ResponseWriter, r *http.Request) {
+	si := w.signin()
+	if !w.passwordPages(rw, r, si) {
+		return
+	}
 	if !w.hasOwner() {
 		http.Redirect(rw, r, "/setup", http.StatusSeeOther)
 		return
 	}
 	csrf := w.preToken(rw, r)
 	fail := func(status int, msg string) {
+		f := w.loginForm(r, si)
+		f.Error = msg
 		rw.WriteHeader(status)
-		w.render(rw, r, &session{CSRF: csrf}, "login", "", page{Title: "login.title", Data: authForm{Error: msg}})
+		w.render(rw, r, &session{CSRF: csrf}, "login", "", page{Title: "login.title", Data: f})
 	}
-	if !checkPreToken(r) {
+	if !w.checkPreToken(r) {
 		fail(http.StatusForbidden, "err.csrf")
 		return
 	}
@@ -347,20 +420,26 @@ func (w *web) handleLogin(rw http.ResponseWriter, r *http.Request) {
 		fail(http.StatusUnauthorized, "err.password")
 		return
 	}
-	if _, err := w.newSession(rw); err != nil {
+	if _, err := w.newSession(rw, viaPassword); err != nil {
 		fail(http.StatusInternalServerError, "err.internal")
 		return
 	}
 	http.Redirect(rw, r, "/", http.StatusSeeOther)
 }
 
+// handleLogout ends the session. With a provider, the sign-in page then
+// waits for a click: going there at once would sign the owner in again.
 func (w *web) handleLogout(rw http.ResponseWriter, r *http.Request, s *session) {
 	w.endSession(rw, s)
+	to := "/login"
+	if w.signin().cfg.mode() == modeOIDC {
+		to = "/login?out=1"
+	}
 	if r.Header.Get("HX-Request") != "" {
-		rw.Header().Set("HX-Redirect", "/login")
+		rw.Header().Set("HX-Redirect", to)
 		return
 	}
-	http.Redirect(rw, r, "/login", http.StatusSeeOther)
+	http.Redirect(rw, r, to, http.StatusSeeOther)
 }
 
 // handlePassword changes the password, and ends every other session.

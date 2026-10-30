@@ -216,6 +216,11 @@ func (c *Config) complete(where string) error {
 	if err := c.checkFileAssistants(); err != nil {
 		return fmt.Errorf("%s: %w", where, err)
 	}
+	if c.Web != nil && c.Web.Auth != nil {
+		if err := c.Web.Auth.check(); err != nil {
+			return fmt.Errorf("%s: %w", where, err)
+		}
+	}
 	if c.Policy != nil {
 		if err := c.Policy.compile(); err != nil {
 			return fmt.Errorf("%s: %w", where, err)
