@@ -443,7 +443,10 @@
 </form>
 {{end}}{{end}}
 
-{{define "tool-test"}}{{with .Data}}
+{{define "tool-test"}}{{template "test-line" .Data}}{{end}}
+
+{{/* . is a testView: one line of a connection test. */}}
+{{define "test-line"}}{{with .}}
 <div class="test-result test-{{.State}}" role="status">
   {{if eq .State "ok"}}{{template "i-check"}}{{else if eq .State "err"}}{{template "i-x"}}{{else}}{{template "i-server"}}{{end}}
   <div class="test-body">
@@ -465,6 +468,22 @@
   <p>{{t "drive.lead"}}</p>
 </header>
 {{template "drive-wrap" .}}
+<section class="panel">
+  <h3>{{template "i-plug"}}{{t "drive.test.title"}}</h3>
+  <p class="small muted">{{t "drive.test.lead"}}</p>
+  <div class="actions"><button class="btn btn-soft test-btn" type="button" hx-post="/settings/drive/test" hx-target="#drive-test" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{t "test.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button></div>
+  <div id="drive-test" class="test-box stack" aria-live="polite"></div>
+</section>
+{{end}}{{end}}
+
+{{/* The Google Drive test's lines (web_drive_check.go), and Reconnect when the authorization is gone. */}}
+{{define "drive-test"}}{{with .Data}}
+{{range .Lines}}{{template "test-line" .}}{{end}}
+{{if .Reconnect}}<form hx-post="/settings/drive/connect" hx-target="#drive-test-reconnect" hx-disabled-elt="find button[type=submit]">
+  {{if .Write}}<input type="hidden" name="write" value="1">{{end}}
+  <div id="drive-test-reconnect"></div>
+  <div class="actions"><button class="btn btn-primary" type="submit">{{template "i-link"}}{{t "drive.reconnect"}}</button></div>
+</form>{{end}}
 {{end}}{{end}}
 
 {{define "drive-wrap-frag"}}{{template "drive-wrap" .Data}}{{end}}

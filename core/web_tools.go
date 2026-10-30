@@ -120,7 +120,9 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 			t.Problem = serviceProblem(lang, sv)
 		}
 		v.Tools = append(v.Tools, t)
-		v.Waiting = v.Waiting || t.Placed
+		// a server being placed or still connecting (e.g. just authorized):
+		// the list refreshes itself until it settles
+		v.Waiting = v.Waiting || t.Placed || sv.Status == statusConnecting
 	}
 	q := r.URL.Query()
 	if n := q.Get("saved"); n != "" && w.c.source(kindServer, n) != "" {
