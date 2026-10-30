@@ -215,7 +215,8 @@ func (w *web) brainState() string {
 	switch {
 	case err != nil || finished(t.State) || t.State == statePending:
 		return "off"
-	case t.State == stateRunning:
+	case t.State == stateRunning && w.c.brainErrorOpen() == 0:
+		// After a failure, its error card says it all: no endless "thinking".
 		return "thinking"
 	}
 	return ""
@@ -237,6 +238,7 @@ func (w *web) handleHome(rw http.ResponseWriter, r *http.Request, s *session) {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.dress(msgs)
 	tasks, perms, err := w.tasksAndPerms()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
@@ -276,6 +278,13 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 	w.c.ping()
 	w.notify()
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// handleBrainRetry is an error card's "Try again" (brain_errors.go).
+func (w *web) handleBrainRetry(rw http.ResponseWriter, r *http.Request, s *session) {
+	w.c.retryBrain()
+	w.notify()
+	w.toast(rw, tr(w.lang(r), "chat.error.retried"), true)
 }
 
 // taskDetail is a task's drawer.

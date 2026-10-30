@@ -40,10 +40,13 @@
 <section class="panel brain-card" id="assistant-{{.Name}}" aria-labelledby="brain-title">
   <div class="brain-head">
     <h3 id="brain-title">{{template "i-bot"}}{{t "agents.braintitle"}}</h3>
-    {{template "plain-status" .Plain}}
+    {{/* Its agent's account does not work: it says so, not "Available". */}}
+    {{$health := false}}{{range $.Page.Agents}}{{if and .Brain .Health}}{{$health = .Health}}{{end}}{{end}}
+    {{with $health}}<span class="status health health-{{.Label}}" role="status" title="{{.Problem.Text}}"><span class="led" aria-hidden="true"></span>{{t (printf "health.%s" .Label)}}</span>
+    {{else}}{{template "plain-status" .Plain}}{{end}}
   </div>
   <p class="muted">{{t "agents.brainwhat"}}</p>
-  {{if .Status.LastError}}<p class="alert small" role="alert">{{short .Status.LastError 300}}</p>{{end}}
+  {{with .Status.LastError}}<div class="alert-box" role="alert">{{template "problem" (problem "brain" .)}}</div>{{end}}
   <form class="brain-form" hx-post="/settings/brain-agent" hx-disabled-elt="find button[type=submit]" autocomplete="off">
     <div class="field">
       <label for="brain-name">{{t "assistants.name"}}</label>
@@ -90,6 +93,7 @@
   {{if .Providers}}<a class="btn btn-primary" href="/settings/agents/new">{{template "i-plus"}}{{t "agents.add"}}</a>{{end}}
 </header>
 {{if .Flash}}<p class="ok-note" role="status">{{.Flash}}</p>{{end}}
+{{if .Warn}}<p class="alert" role="alert">{{.Warn}}</p>{{end}}
 {{range $k, $why := .Skipped}}<p class="alert" role="alert">{{tf "catalog.skipped" $k}} <span class="small">{{short $why 200}}</span></p>{{end}}
 
 {{if not .Providers}}
@@ -109,7 +113,8 @@
 {{range .Agents}}
   <li class="tile agent-tile">
     <div class="tile-head">
-      <span class="status {{if .Available}}on{{else}}off{{end}}" {{if not .Available}}title="{{t "agents.unavailablehint"}}"{{end}}><span class="led" aria-hidden="true"></span>{{if .Available}}{{t "agents.available"}}{{else}}{{t "agents.unavailable"}}{{end}}</span>
+      {{if .Health}}<span class="status health health-{{.Health.Label}}" title="{{.Health.Problem.Text}}"><span class="led" aria-hidden="true"></span>{{t (printf "health.%s" .Health.Label)}}</span>
+      {{else}}<span class="status {{if .Available}}on{{else}}off{{end}}" {{if not .Available}}title="{{t "agents.unavailablehint"}}"{{end}}><span class="led" aria-hidden="true"></span>{{if .Available}}{{t "agents.available"}}{{else}}{{t "agents.unavailable"}}{{end}}</span>{{end}}
       <span class="chips">{{if .Brain}}<span class="tag tag-brain">{{t "agents.brain"}}</span>{{end}}{{if .Default}}<span class="tag tag-accent">{{t "agents.default"}}</span>{{end}}</span>
     </div>
     <div class="agent-title">
@@ -117,6 +122,7 @@
       <div><h3 class="mono">{{.Name}}</h3><p class="muted small">{{.ModelLabel}}{{if not .Model}}{{t "agents.modeldefault"}}{{end}}</p></div>
     </div>
     <p class="use">{{.Use}}</p>
+    {{with .Health}}{{template "problem" .Problem}}{{end}}
     <dl class="kv">
       <div><dt>{{t "agents.account"}}</dt><dd><span class="mono">{{.Provider}}</span>{{template "bill-tag" .Billing}}</dd></div>
       {{if .Advanced}}<div><dt>{{t "agents.runtime"}}</dt><dd class="mono">{{.Runtime}}</dd></div>{{end}}
@@ -186,7 +192,7 @@
         {{template "plain-status" .Plain}}
       </div>
       {{if .ReportsTo}}<p class="muted small reports-to">{{tf "assistants.reportsto" .ReportsTo}}</p>{{end}}
-      {{if .Status.LastError}}<p class="alert small" role="alert">{{short .Status.LastError 300}}</p>{{end}}
+      {{with .Status.LastError}}<div class="alert-box" role="alert">{{template "problem" (problem "task" .)}}</div>{{end}}
       <dl class="kv">
         <div><dt>{{t "assistants.agent"}}</dt><dd>{{if .Spec.Agent}}<span class="mono">{{.Spec.Agent}}</span>{{if .AgentModel}} <span class="muted small">{{.AgentModel}}</span>{{end}}{{else}}<span class="muted">{{t "assistants.noagent"}}</span>{{end}}{{if .AgentLocked}} {{template "src-tag" "config"}}{{end}}</dd></div>
         <div><dt>{{t "assistants.tools"}}</dt><dd>{{range .Spec.Tools}}<span class="tag mono">{{.}}</span>{{end}}{{if .FreeReads}}<span class="muted small">{{if .Spec.Tools}}{{t "assistants.plusfree"}}{{else}}{{t "assistants.onlyfree"}}{{end}}</span>{{else if not .Spec.Tools}}<span class="muted small">{{t "assistants.notools"}}</span>{{end}}{{if .ToolsLocked}} {{template "src-tag" "config"}}{{end}}</dd></div>
@@ -223,8 +229,9 @@
     <li>
       {{template "kind-mark" .Kind}}
       <div class="list-main">
-        <span class="prov-name"><span class="mono strong">{{.Name}}</span> <span class="muted small">{{t (printf "kind.%s" .Kind)}}</span> {{template "bill-tag" .Billing}}</span>
+        <span class="prov-name"><span class="mono strong">{{.Name}}</span> <span class="muted small">{{t (printf "kind.%s" .Kind)}}</span> {{template "bill-tag" .Billing}}{{with .Health}} <span class="status health health-{{.Label}}"><span class="led" aria-hidden="true"></span>{{t (printf "health.%s" .Label)}}</span>{{end}}</span>
         <span class="muted small">{{if .Agents}}{{tf "providers.usedby" (join .Agents ", ")}}{{else}}{{t "providers.unused"}}{{end}}</span>
+        {{with .Health}}{{template "problem" .Problem}}{{end}}
         <div id="ptest-{{.Name}}" class="test-box" aria-live="polite"></div>
       </div>
       <div class="secret-actions">

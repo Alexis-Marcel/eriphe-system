@@ -150,6 +150,34 @@ type nopCloser struct{ io.Writer }
 
 func (nopCloser) Close() error { return nil }
 
+// An API error comes as the agent's text from a model of its own, and a
+// result that is an error although its subtype says success: both are
+// marked, so that eriphe-core never shows it as the agent's answer.
+func TestClaudeAPIError(t *testing.T) {
+	task := &Task{ID: "t-1", perms: map[string]*permission{}}
+	agentOut, fromAgent := io.Pipe()
+	s := claudeCode{}.attach(task, nopCloser{io.Discard})
+	done := make(chan error, 1)
+	go func() { done <- s.run("hello", agentOut) }()
+	for _, line := range []string{
+		`{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"API Error: Connection refused (ECONNREFUSED)"}]},"session_id":"s-1","parent_tool_use_id":null}`,
+		`{"type":"result","subtype":"success","is_error":true,"result":"API Error: Connection refused (ECONNREFUSED)","session_id":"s-1"}`,
+	} {
+		fromAgent.Write([]byte(line + "\n"))
+	}
+	fromAgent.Close()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	text, end := eventsOf(task, "text"), eventsOf(task, "turn_end")
+	if len(text) != 1 || text[0].Data["error"] != true {
+		t.Errorf("text = %+v", text)
+	}
+	if len(end) != 1 || end[0].Data["is_error"] != true {
+		t.Errorf("turn_end = %+v", end)
+	}
+}
+
 // The draft goes with the report, and a new draft alone is worth one.
 func TestReportDraft(t *testing.T) {
 	var mu sync.Mutex

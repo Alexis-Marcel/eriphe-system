@@ -44,7 +44,10 @@ func misplaced(kind, key string) string {
 
 func checkProvider(ctx context.Context, lang, kind, key string) testView {
 	key = strings.TrimSpace(key)
-	bad := func(k string, args ...any) testView { return testView{State: "err", Text: trf(lang, k, args...)} }
+	// A refusal is the key's, unless it says otherwise.
+	bad := func(k string, args ...any) testView {
+		return testView{State: "err", Text: trf(lang, k, args...), Cause: causeAuth}
+	}
 	if key == "" {
 		return bad("ptest.nokey")
 	}
@@ -78,14 +81,16 @@ func checkProvider(ctx context.Context, lang, kind, key string) testView {
 	}
 	resp, err := (&http.Client{Transport: testTransport()}).Do(req)
 	if err != nil {
-		if k := netErrorKey(err); k != "" {
-			return bad(k)
-		}
-		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
-			return bad("test.timeout")
-		}
 		v := bad("test.unreachable")
-		v.Detail = truncate(err.Error(), 200)
+		switch k := netErrorKey(err); {
+		case k != "":
+			v = bad(k)
+		case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
+			v = bad("test.timeout")
+		default:
+			v.Detail = truncate(err.Error(), 200)
+		}
+		v.Cause = causeNetwork // the key is not known to be wrong
 		return v
 	}
 	defer resp.Body.Close()
@@ -97,9 +102,13 @@ func checkProvider(ctx context.Context, lang, kind, key string) testView {
 		resp.StatusCode == http.StatusBadRequest && kind == "google-api":
 		return bad("ptest.denied")
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusPaymentRequired:
-		return bad("ptest.quota")
+		v := bad("ptest.quota")
+		v.Cause = causeQuota
+		return v
 	}
-	return bad("test.status", resp.StatusCode)
+	v := bad("test.status", resp.StatusCode)
+	v.Cause, v.Detail = causeServer, resp.Status
+	return v
 }
 
 // credit is what OpenRouter says of the key's spending limit.

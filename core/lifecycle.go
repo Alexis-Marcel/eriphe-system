@@ -220,7 +220,8 @@ func (c *core) handleReport(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		c.logResults(t, in.Events) // its access log (node_access.go)
+		c.logResults(t, in.Events)      // its access log (node_access.go)
+		c.noteAgentHealth(t, in.Events) // its account's real state (provider_health.go)
 	}
 	isAssistant := c.isAssistantTask(id)
 	if owner, ok := c.reportingAssistant(id); ok {

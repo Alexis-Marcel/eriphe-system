@@ -131,11 +131,19 @@ func (c *claudeSession) run(first string, stdout io.Reader) error {
 		case "assistant":
 			msg, _ := ev["message"].(map[string]any)
 			blocks, _ := msg["content"].([]any)
+			// An API error comes as the agent's own text ("API Error: …"),
+			// from a model of its own: it is marked so that it is never
+			// shown as the agent's answer.
+			apiError := ev["error"] != nil && ev["error"] != "" || msg["model"] == "<synthetic>"
 			for _, b := range blocks {
 				bm, _ := b.(map[string]any)
 				switch bm["type"] {
 				case "text":
-					t.emit("text", map[string]any{"text": bm["text"]})
+					data := map[string]any{"text": bm["text"]}
+					if apiError {
+						data["error"] = true
+					}
+					t.emit("text", data)
 				case "tool_use":
 					t.emit("tool_use", map[string]any{"name": bm["name"], "input": bm["input"]})
 				}
@@ -143,6 +151,9 @@ func (c *claudeSession) run(first string, stdout io.Reader) error {
 		case "result":
 			text, _ := ev["result"].(string)
 			data := map[string]any{"subtype": ev["subtype"], "result": text, "denials": ev["permission_denials"]}
+			if isErr, _ := ev["is_error"].(bool); isErr {
+				data["is_error"] = true // an API error still ends with subtype "success"
+			}
 			// An auth failure still ends with subtype "success".
 			if strings.Contains(text, "Failed to authenticate") || strings.Contains(text, "Invalid API key") ||
 				strings.Contains(text, "Please run /login") {

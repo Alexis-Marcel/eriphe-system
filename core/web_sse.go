@@ -47,6 +47,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		fresh := err == nil && len(msgs) > 0
 		if fresh {
 			var b strings.Builder
+			w.dress(msgs)
 			for _, m := range msgs {
 				html, err := w.fragment(lang, "home", "message", m)
 				if err != nil {

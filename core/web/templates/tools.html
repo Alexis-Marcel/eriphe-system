@@ -35,9 +35,9 @@
         {{if .Allowed}} · <a class="muted" href="/settings/tools/{{.Name}}/access#allowed-{{.Name}}">{{if eq .Allowed 1}}{{t "allowed.count1"}}{{else}}{{tf "allowed.count" .Allowed}}{{end}}</a>{{end}}
       </p>
       {{if .Scope.Reconnect}}<p class="small notice-line">{{tf "access.reconnect" .Name}}{{if eq .Preset.Form "drive"}} <a href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</p>{{end}}
-      {{if .Problem}}<p class="small err-text" title="{{short .Error 600}}">{{.Problem}}</p>
-      {{else if and .Pending (not .Placed)}}<p class="small muted" title="{{short .Error 600}}">{{t "tools.pendinghint"}}</p>
-      {{else if and .Error (ne .Status "ready")}}<p class="small err-text clamp" title="{{short .Error 600}}">{{short .Error 300}}</p>{{end}}
+      {{if .Problem}}<div class="problem small"><p class="problem-text">{{.Problem}}</p>{{with .Error}}<details class="problem-details"><summary>{{t "problem.details"}}</summary><code>{{short . 1200}}</code></details>{{end}}</div>
+      {{else if .Pending}}<p class="small muted">{{if .Placed}}{{t "problem.tool.pending"}}{{else}}{{t "tools.pendinghint"}}{{end}}</p>
+      {{else if and .Error (ne .Status "ready")}}<div class="small">{{template "problem" (problem "tool" .Error)}}</div>{{end}}
       <div id="connect-{{.Name}}" class="connect-box"></div>
     </div>
     <div class="tool-actions">
