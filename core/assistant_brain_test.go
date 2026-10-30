@@ -115,8 +115,9 @@ func TestWebBrainCard(t *testing.T) {
 		`<details class="advanced-opts brain-details">`, "Détails techniques", "Outils en plus", "les lectures libres du catalogue",
 		"Les assistants d&#39;Eriphe", "Aucun pour l&#39;instant. Ce seront des aides")
 	hasNone(t, "brain card", body, `hx-post="/settings/assistants/eriphe"`, `class="assistant"`, "Running", "assistants.")
-	if i, j := strings.Index(body, "ton cerveau"), strings.Index(body, `class="grid agents-grid"`); i < 0 || j < 0 || i > j {
-		t.Fatal("the brain is not at the top")
+	// After the agents it chooses from.
+	if i, j := strings.Index(body, "ton cerveau"), strings.Index(body, `class="grid agents-grid"`); i < 0 || j < 0 || i < j {
+		t.Fatal("the brain is not after the agents")
 	}
 	if strings.Count(body, `select id="brain-agent"`) != 1 || strings.Count(body, `hx-post="/settings/brain-agent"`) != 1 {
 		t.Fatal("the brain's agent chosen in more than one place")
