@@ -16,10 +16,14 @@ Read these first and keep to them for the whole session.
 1. **Never ask for a secret in the chat.** Passwords, the setup code, Claude's `setup-token`, API
    keys, ChatGPT sign-in codes, join tokens, OAuth client secrets: the person types or pastes
    them **themselves**, in the browser (the workspace) or in their own terminal. If they paste one
-   into the chat anyway, tell them so and do not repeat it.
+   into the chat anyway, tell them so and do not repeat it. **Never run `claude setup-token`
+   yourself**, in your shell or any shell whose output you read: the token it prints would land in
+   this conversation. Guide the person to run it in their own terminal and paste the token in the
+   workspace only (§5).
 2. **Never weaken the computer's security.** Do not turn off Windows Defender, an antivirus, the
    firewall, Gatekeeper or macOS's System Integrity Protection (SIP), and do not tell the person to.
-   Answer the operating system's questions the way this page says, nothing more.
+   Answer the operating system's questions the way this page says, nothing more. Never add a
+   Defender exclusion either: when Windows blocks the installer, see §4C.
 3. **Never expose Eriphe to the internet.** No port forwarding on the router, no public tunnel
    (ngrok, Cloudflare Tunnel, a public reverse proxy), no `0.0.0.0` firewall openings to the
    internet. For access away from home, use Eriphe's built-in **Remote access** (Tailscale, §7),
@@ -75,7 +79,7 @@ Pick the first line that matches:
 |---|---|---|
 | A NAS or Linux machine where **Docker already runs** (Unraid, Synology, TrueNAS, a Pi with Docker) | that machine | §4D, one container (Unraid: its template) |
 | An always-on **Linux** machine without Docker (mini-PC, server, Raspberry Pi) | that machine | §4B, `install.sh --core-mode` |
-| Only a **Mac** | that Mac, set to never sleep and kept logged in | §4A, `install.sh --core-mode` |
+| Only a **Mac** | that Mac, set to never sleep and kept logged in (tell the person: Eriphe runs on a Mac only while their session is open; an always-on machine is a better home) | §4A, `install.sh --core-mode` |
 | Only a **Windows** PC | that PC, set to never sleep | §4C, `install.ps1` with `ERIPHE_CORE_MODE` |
 
 Then every **other** device is connected from the workspace (§6): never with `--core-mode` again.
@@ -88,8 +92,13 @@ Requirements (the installer checks them and says so if one is missing):
   with Apple's `container`; otherwise in a small Linux VM (Lima), downloaded by the installer.
 - **Windows** 10 21H2 or later, or 11 (Home or Pro), with virtualization turned on in the firmware.
   WSL is installed if missing (it may need one restart).
-- A few GB of free disk, and ports **8443** (workspace) and **8800** (devices) free on the home
-  machine.
+- A few GB of free disk, and two free ports on the home machine: **8443** (workspace) and **8800**
+  (devices) by default. The installers check them before installing anything; if one is taken,
+  they name the program and the option to use: `--web-port 9443` / `--api-port 9800` with
+  `install.sh`, `-WebPort 9443` / `-ApiPort 9800` (or `$env:ERIPHE_WEB_PORT='9443'`,
+  `$env:ERIPHE_API_PORT='9800'` before `irm | iex`) with `install.ps1`, `-e ERIPHE_WEB_PORT=9443`
+  / `-e ERIPHE_API_PORT=9800` for the one container. The ports are kept for later runs, and the
+  commands of "Connect a device" use the API's port. Use the address and port the installer prints.
 
 ## 4. Install on the home machine
 
@@ -132,8 +141,10 @@ Requirements (the installer checks them and says so if one is missing):
 
    followed by "Good to know" notes and the `Logs:` line. Go to §5.
 5. Keep the Mac awake: System Settings → Energy (or Battery → Options) → prevent automatic sleeping
-   when the display is off. Eriphe starts when the person logs in: after a restart, someone must
-   log in for it to run.
+   when the display is off. Eriphe on a Mac runs **only while that user's session is open**: it
+   starts at login and stops at logout, and after a restart someone must log in for it to run (the
+   installer says so too). Say it plainly, and recommend an always-on machine (NAS, mini-PC) as
+   Eriphe's home if they have or plan one.
 
 ### 4B. Linux machine (no Docker yet, or Docker installed by hand)
 
@@ -164,6 +175,25 @@ Requirements (the installer checks them and says so if one is missing):
    $env:ERIPHE_CORE_MODE='1'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
    ```
 
+   **If Windows blocks it.** Microsoft Defender, SmartScreen or a policy may stop `irm … | iex`:
+   red text such as "This script contains malicious content and has been blocked by your
+   antivirus software" or "running scripts is disabled on this system", or a Defender
+   notification that a threat was blocked. Do **not** turn Defender off, do not add an exclusion,
+   and do not touch the PC's security settings. Instead:
+   1. The person downloads `install.ps1` from the
+      [latest release](https://github.com/Alexis-Marcel/eriphe-system/releases/latest) in their
+      browser (it lands in Downloads), opens it in Notepad and reads it (you can explain it).
+   2. In the administrator PowerShell, with the same parameters as the variables
+      (`ERIPHE_CORE_MODE='1'` is `-CoreMode`, `ERIPHE_WEB_PORT` is `-WebPort`, …):
+
+      ```powershell
+      cd $HOME\Downloads
+      powershell -ExecutionPolicy Bypass -File .\install.ps1 -CoreMode
+      ```
+
+      `-ExecutionPolicy Bypass` is for that run only.
+   3. If Defender blocks or quarantines the file too, stop, and have the person open an issue
+      (<https://github.com/Alexis-Marcel/eriphe-system/issues>) with the message it shows.
 3. If WSL was missing, it is installed, and the installer may print "Windows needs to restart to
    finish preparing Eriphe. Restart it: the installation carries on by itself when you sign in
    again." The person restarts and signs in as the **same user**; a window opens and the install
@@ -213,8 +243,7 @@ docker logs -f eriphe
 
 - The data folder and the shares are **paths on the host**, and the data folder must not be inside
   a share.
-- Port 8443 or 8800 taken: add `-e ERIPHE_WEB_PORT=9443` (or `-e ERIPHE_API_PORT=9800`). These two
-  variables exist for this container only, not for `install.sh`.
+- Port 8443 or 8800 taken: add `-e ERIPHE_WEB_PORT=9443` (or `-e ERIPHE_API_PORT=9800`).
 - Expected end of `docker logs eriphe`: "Done: Eriphe runs on this machine. To finish, open this
   address in your browser and give the setup code:", the address, the setup code, and "Good to
   know: then the browser asks you to name your assistant and connect its AI account." Stop
@@ -235,17 +264,25 @@ From another device of the home network, the same with the home machine's addres
 `127.0.0.1`. If the first works and the second does not from elsewhere, see §10 (firewall, Public
 network, macOS prompt).
 
-**The setup code**, if it scrolled away or the person lost it (it is valid until the password is
-created; a restart of eriphe-core makes a new one, and the latest one counts):
+**The setup code**, if it scrolled away or the person lost it: it stays the same until the
+password is created, and running the installer again prints it again. Or:
 
 | Home machine | Command |
 |---|---|
-| Linux, one container (§4D) | `docker logs eriphe-core 2>&1 \| grep -o 'setup code [A-Z0-9-]*' \| tail -n 1` |
-| Mac with Apple's container (macOS 26+, Apple silicon) | `grep -o 'setup code [A-Z0-9-]*' ~/.eriphe/core.log \| tail -n 1` |
-| Mac with Lima (Intel, or before macOS 26) | `LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker logs eriphe-core 2>&1 \| grep -o 'setup code [A-Z0-9-]*' \| tail -n 1` |
-| Windows | `wsl -d eriphe -- docker logs eriphe-core 2>&1 \| Select-String 'setup code'` |
+| Linux, one container (§4D) | `sudo docker exec eriphe-core eriphe-core auth setup-code` |
+| Mac with Apple's container (macOS 26+, Apple silicon) | `~/.eriphe/bin/eriphe-core auth setup-code -data ~/.eriphe/core` |
+| Mac with Lima (Intel, or before macOS 26) | `LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker exec eriphe-core eriphe-core auth setup-code` |
+| Windows | `wsl -d eriphe -u root -- docker exec eriphe-core eriphe-core auth setup-code` |
 
-Ask the person to run it and read the code **themselves**; they type it in the browser.
+Ask the person to run it and read the code **themselves**; they type it in the browser. Once the
+password exists, the command says so and the installer says "Open https://… and sign in
+(forgotten password: …)".
+
+**A forgotten password**: the same commands with `auth password-reset` instead of `auth
+setup-code` forget the workspace's password, sign every browser out, keep everything else (the
+assistant, its memory, devices, accounts) and print a new setup code; the person then opens
+`https://<address>:<port>/setup` and chooses a new password. Root on the home machine is the
+owner: this needs no other proof. The person runs it in their own terminal.
 
 ## 5. Finish in the browser (the person does this)
 
@@ -263,8 +300,9 @@ Guide them; do not ask them to tell you the code, the password or any key.
    Careful people can compare the certificate's SHA-256 fingerprint with the line
    `web: … SHA-256 fingerprint …` in eriphe-core's log first.
 3. **Setup page**: they type the setup code and choose the workspace's password (10 characters at
-   least). The code works once. The workspace is in French by default; English is in Réglages →
-   Mon espace → Langue (Settings → My workspace → Language).
+   least). The code works once. The workspace follows the browser's language (French, or English
+   for any other); each browser can change it in Réglages → Mon espace → Langue (Settings → My
+   workspace → Language). Name menus in both languages when you guide the person.
 4. **Name the assistant**: "Comment veux-tu appeler ton assistant ?" (What do you want to call your
    assistant?). Any name of 1 to 32 letters, digits, spaces, apostrophes or dashes. Eriphe is the
    software's name; the assistant has theirs. It can be changed later (Settings → Agents).
@@ -273,8 +311,11 @@ Guide them; do not ask them to tell you the code, the password or any key.
      **their own** terminal window (not one you, the assistant, can read): install Claude Code
      if it is missing (Anthropic's instructions: <https://docs.anthropic.com/en/docs/claude-code>),
      run `claude setup-token`, sign in in the browser it opens, and copy the token it prints into
-     the workspace's field. If you are Claude Code yourself, do not run `claude setup-token` in
-     your own shell: its output would land in this conversation.
+     the workspace's field. **You never run `claude setup-token`**, not in your own shell nor in
+     one whose output you read: the token would land in this conversation. The workspace warns
+     the person too: « Ne colle pas ce jeton dans une conversation avec une IA » (do not paste
+     this token into a conversation with an AI). If they paste it into the chat anyway, tell them
+     to make a new one (`claude setup-token` again) and use only that.
    - **ChatGPT subscription**: the page shows a code and a link; they open the link, sign in at
      OpenAI and type the code. If OpenAI refuses, "device code" sign-in must be allowed in
      ChatGPT's security settings.
@@ -334,7 +375,7 @@ For each other computer (or a second NAS):
   → App & notifications explains it for iPhone and Android). It installs as an app with
   notifications. Nothing is opened on the router. The phone app needs this trusted address: at
   the self-signed `https://192.0.2.10:8443` it works in the browser only.
-- **Tools** (mail, calendars, Home Assistant, GitHub, any MCP server): Settings → Accounts & tools.
+- **Tools** (mail, calendars, Home Assistant, GitHub, any MCP server): Settings → Tools.
   Each one asks the person to approve access at the service (OAuth) or to paste a token there:
   they do it, in the workspace.
 - **Google Drive** needs the person's own Google app, created once in their Google Cloud console:
@@ -389,7 +430,8 @@ device stays listed in the workspace: "Forget" it on its card.
 
 | What happens | What to do |
 |---|---|
-| "… already listens on port 8443 (or 8800) of this Mac", or Docker says the port is already allocated | Something else uses the port. On a NAS or Linux with Docker, use the one container (§4D) with `ERIPHE_WEB_PORT` / `ERIPHE_API_PORT`. Otherwise, free the port (find the program: `sudo lsof -nP -iTCP:8443 -sTCP:LISTEN`) or make another machine Eriphe's home. `install.sh` and `install.ps1` always use 8443 and 8800. |
+| "… already uses port 8443 (or 8800) of this computer, which Eriphe needs", or Docker says the port is already allocated | Another program uses the port. Run the same command again with the option the message names: `--web-port 9443` / `--api-port 9800` (`install.sh`), `-WebPort 9443` / `-ApiPort 9800` (`install.ps1`), `-e ERIPHE_WEB_PORT=9443` / `-e ERIPHE_API_PORT=9800` (the one container). Or free the port (find the program: `sudo lsof -nP -iTCP:8443 -sTCP:LISTEN`). Then use the address and port the installer prints. |
+| The person forgot the workspace's password | The `auth password-reset` command of §4 (Check the install), run by the person on the home machine: it prints a new setup code for `/setup`; nothing else is lost. |
 | Windows: "Eriphe needs an administrator PowerShell" | Open Terminal (Admin) as in §4C and paste the line again. |
 | Windows: Defender or SmartScreen blocks the script | Do not turn Defender off. Download `install.ps1` from the [latest release](https://github.com/Alexis-Marcel/eriphe-system/releases/latest), let the person check it, and run it from an administrator PowerShell with `powershell -ExecutionPolicy Bypass -File .\install.ps1 -CoreMode` (or the other parameters, see [install/README.md, Windows](../install/README.md#windows)). If Defender quarantines a file, open an issue rather than adding exclusions. |
 | Windows: "Windows needs to restart…" | Restart, sign in as the same user: the install carries on in a window. If it does not, paste the same line again. |

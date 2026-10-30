@@ -15,7 +15,9 @@
 # Each parameter has its variable: -Core ERIPHE_CORE, -JoinToken
 # ERIPHE_JOIN_TOKEN, -Name ERIPHE_NODE_NAME, -Labels ERIPHE_NODE_LABELS,
 # -CaHash ERIPHE_CA_HASH, -Version ERIPHE_VERSION, -Distro ERIPHE_DISTRO,
-# -AssistantName ERIPHE_ASSISTANT_NAME (only for what it prints), and the
+# -AssistantName ERIPHE_ASSISTANT_NAME (only for what it prints), -WebPort
+# ERIPHE_WEB_PORT and -ApiPort ERIPHE_API_PORT (core mode: the workspace's
+# port, 8443, and the one other devices join on, 8800; kept), and the
 # switches -CoreMode, -Rejoin, -Rollback and -Uninstall
 # ERIPHE_CORE_MODE, ERIPHE_REJOIN, ERIPHE_ROLLBACK and ERIPHE_UNINSTALL,
 # set to 1. A parameter given wins over its variable; the script clears
@@ -67,7 +69,9 @@ param(
   [string] $Version,         # pin a release (0.2.0, or 0.2 for its fixes); edge follows main; latest the releases
   [switch] $Rollback,        # back to the version before the last update
   [switch] $Uninstall,
-  [string] $AssistantName    # the assistant's name, for what this script prints
+  [string] $AssistantName,   # the assistant's name, for what this script prints
+  [string] $WebPort,         # core mode: the workspace's port (default 8443, kept for the next runs)
+  [string] $ApiPort          # core mode: the port other devices join on (default 8800, kept)
 )
 $ErrorActionPreference = "Stop"
 $bound = @{} + $PSBoundParameters
@@ -75,6 +79,7 @@ $bound = @{} + $PSBoundParameters
 $fromEnv = @{
   ERIPHE_CORE = "Core"; ERIPHE_JOIN_TOKEN = "JoinToken"; ERIPHE_NODE_NAME = "Name"; ERIPHE_NODE_LABELS = "Labels"
   ERIPHE_CA_HASH = "CaHash"; ERIPHE_VERSION = "Version"; ERIPHE_DISTRO = "Distro"; ERIPHE_ASSISTANT_NAME = "AssistantName"
+  ERIPHE_WEB_PORT = "WebPort"; ERIPHE_API_PORT = "ApiPort"
   ERIPHE_CORE_MODE = "CoreMode"; ERIPHE_REJOIN = "Rejoin"; ERIPHE_ROLLBACK = "Rollback"; ERIPHE_UNINSTALL = "Uninstall"
 }
 foreach ($v in @(Get-ChildItem Env: | Where-Object Name -like "ERIPHE_*")) {
@@ -105,7 +110,7 @@ $alpine = @{
 # are read); replaced by ERIPHE_NODE_IMAGE and ERIPHE_CORE_IMAGE, as with
 # install.sh. eriphe-core never chooses them.
 $registry = "ghcr.io/alexis-marcel"
-$corePorts = 8800, 8443          # API (nodes, join), workspace
+$corePorts = 8800, 8443          # API (nodes, join), workspace: -ApiPort and -WebPort, or kept
 $home_ = Join-Path $env:ProgramData "eriphe-node"
 # The first distribution keeps the names it always had; another one (-Distro)
 # gets its own, so that both can live side by side.
@@ -334,6 +339,26 @@ function Remove-CorePorts {
   }
 }
 
+# The ports eriphe-core's container is published on, as an earlier core-mode
+# install left them (API, WEB; none before they could be chosen).
+function Get-SavedPorts {
+  $ports = @{}
+  if ((Test-Wsl) -and (Test-Distro)) {
+    wsl.exe -d $Distro -u root -- sh -c "cat /etc/eriphe-core.ports 2>/dev/null; true" | ForEach-Object {
+      if ($_ -match "^(API|WEB)_PORT=([0-9]+)$") { $ports[$Matches[1]] = [int] $Matches[2] }
+    }
+  }
+  $ports
+}
+
+# Who listens on a port of this PC: a program's name, or nothing.
+function Get-PortUser([int] $port) {
+  $c = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $c) { return $null }
+  $p = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
+  if ($p) { $p.ProcessName } else { "another program" }
+}
+
 function Get-LanAddress {
   $route = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
     Sort-Object { $_.RouteMetric + $_.InterfaceMetric } | Select-Object -First 1
@@ -358,6 +383,8 @@ $here = "this PC"
 if ($Uninstall) {
   Write-Out "Removing Eriphe from $here"
   Write-Out
+  $sp = Get-SavedPorts
+  if ($sp["API"] -and $sp["WEB"]) { $corePorts = $sp["API"], $sp["WEB"] }
   Unregister-Resume
   if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
     Disable-ScheduledTask -TaskName $task | Out-Null
@@ -379,7 +406,7 @@ if ($Uninstall) {
   if ($wasCore) {
     Write-Out "Eriphe and its data were removed from $here."
   } else {
-    Write-Para "Eriphe was removed from $here. If it was connected to Eriphe on another computer, forget it there too: Settings > Devices, in your browser."
+    Write-Para "Eriphe was removed from $here. If it was connected to Eriphe on another computer, forget it there too: R$([char]0xE9)glages > Appareils (Settings > Devices), in your browser."
   }
   Write-GoodToKnow
   return
@@ -411,6 +438,35 @@ cat "`$dir/update-status"
   Write-Out "Logs: wsl -d $Distro -- tail /var/log/eriphe-update.log"
   return
 }
+
+# eriphe-core's ports (core mode): given, or kept from the last run, or 8800
+# and 8443. Checked before anything is installed: another program on one of
+# them is said plainly, with the parameter that chooses another.
+if (($WebPort -or $ApiPort) -and $Core) { throw "-WebPort and -ApiPort are for -CoreMode: a node opens no port" }
+foreach ($p in @($WebPort, $ApiPort)) {
+  if ($p -and ($p -notmatch "^[1-9][0-9]{0,4}$" -or [int] $p -gt 65535)) { throw "a port is 1 to 65535, not $p" }
+}
+$hadDistro = (Test-Wsl) -and (Test-Distro)
+$savedPorts = Get-SavedPorts
+$oldPorts = if ($savedPorts["API"] -and $savedPorts["WEB"]) { @($savedPorts["API"], $savedPorts["WEB"]) } else { @(8800, 8443) }
+$apiPort_ = if ($ApiPort) { [int] $ApiPort } else { $oldPorts[0] }
+$webPort_ = if ($WebPort) { [int] $WebPort } else { $oldPorts[1] }
+if ($apiPort_ -eq $webPort_) { throw "the workspace and the API need two ports, not $webPort_ twice (-WebPort, -ApiPort)" }
+$corePorts = $apiPort_, $webPort_
+if ($CoreMode -or $WebPort -or $ApiPort) {
+  foreach ($p in @(@($webPort_, "-WebPort", "ERIPHE_WEB_PORT", 9443), @($apiPort_, "-ApiPort", "ERIPHE_API_PORT", 9800))) {
+    # This PC forwards Eriphe's own ports already (an earlier install).
+    if ($hadDistro -and $oldPorts -contains $p[0]) { continue }
+    $who = Get-PortUser $p[0]
+    if ($who) {
+      throw "$who already uses port $($p[0]) of $here, which Eriphe needs. Run the same command again with $($p[1]) $($p[3]) (with irm | iex: `$env:$($p[2])='$($p[3])'), or another free port, or stop that program"
+    }
+  }
+}
+# The workspace's menus, named in French and in English: the workspace
+# speaks the browser's language.
+$devicesMenu = "R$([char]0xE9)glages > Appareils (Settings > Devices)"
+$connectMenu = "R$([char]0xE9)glages > Appareils > Connecter un appareil (Settings > Devices > Connect a device)"
 
 $updating = $false
 if ($JoinToken -and -not $CoreMode) {
@@ -543,11 +599,13 @@ ip -4 addr show eth0 | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -n 1
 EOF
 cat > /usr/local/bin/eriphe-core-run <<'EOF'
 #!/bin/sh
-# eriphe-core's container, from the image given (install.ps1, eriphe-update).
+# eriphe-core's container, from the image given (install.ps1, eriphe-update),
+# on the ports of /etc/eriphe-core.ports (-ApiPort, -WebPort).
+[ ! -f /etc/eriphe-core.ports ] || . /etc/eriphe-core.ports
 docker rm -f eriphe-core >/dev/null 2>&1 || true
 docker run -d --name eriphe-core --restart unless-stopped --read-only --cap-drop ALL \
   --security-opt no-new-privileges:true -v /var/lib/eriphe-core:/data -e ERIPHE_INSTALL=windows \
-  -p 8800:8800 -p 8443:8443 "$1" >/dev/null
+  -p "${API_PORT:-8800}:8800" -p "${WEB_PORT:-8443}:8443" -e "ERIPHE_API_PORT=${API_PORT:-8800}" "$1" >/dev/null
 EOF
 cat > /usr/local/bin/eriphe-update-loop <<'EOF'
 #!/bin/sh
@@ -641,7 +699,9 @@ node_swap() {
 
 core_healthy() {
   i=0
-  until wget -q -O /dev/null http://127.0.0.1:8800/health 2>/dev/null; do
+  # shellcheck disable=SC1091
+  [ ! -f /etc/eriphe-core.ports ] || . /etc/eriphe-core.ports
+  until wget -q -O /dev/null "http://127.0.0.1:${API_PORT:-8800}/health" 2>/dev/null; do
     i=$((i + 2)); [ $i -lt "$HEALTH" ] || { why="eriphe-core does not answer"; return 1; }
     sleep 2
   done
@@ -878,19 +938,22 @@ chmod 700 /var/lib/eriphe-core
 pull $coreImage
 want=`$(docker image inspect -f '{{.Id}}' $coreImage)
 have=`$(docker inspect -f '{{.Image}}' eriphe-core 2>/dev/null || true)
+# Its ports: recreated on others.
+printf 'API_PORT=%s\nWEB_PORT=%s\n' $apiPort_ $webPort_ > /tmp/eriphe-core.ports
+if ! cmp -s /tmp/eriphe-core.ports /etc/eriphe-core.ports; then mv /tmp/eriphe-core.ports /etc/eriphe-core.ports; have=; else rm /tmp/eriphe-core.ports; fi
 if [ "`$want" != "`$have" ]; then
   eriphe-core-run $coreImage
   docker image prune -f >/dev/null
 else
   docker start eriphe-core >/dev/null
 fi
-for i in `$(seq 60); do wget -q -O /dev/null http://127.0.0.1:8800/health 2>/dev/null && exit 0; sleep 1; done
+for i in `$(seq 60); do wget -q -O /dev/null http://127.0.0.1:$apiPort_/health 2>/dev/null && exit 0; sleep 1; done
 docker logs --tail 20 eriphe-core >&2
-echo "eriphe: Eriphe did not start (eriphe-core does not answer on :8800): run the command again" >&2
+echo "eriphe: Eriphe did not start (eriphe-core does not answer on :$apiPort_): run the command again" >&2
 exit 1
 "@ | Out-Null
   # The node turns this address to TLS by itself once eriphe-core offers it.
-  $Core = "http://127.0.0.1:8800"
+  $Core = "http://127.0.0.1:$apiPort_"
   if (-not $joined -or $Rejoin) {
     $joinArgs = "-name $Name"
     if ($Rejoin) { $joinArgs += " -rejoin" }
@@ -997,6 +1060,13 @@ $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIden
 Register-ScheduledTask -TaskName $task -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
 
 if ($CoreMode) {
+  # Other ports than the last run's: its forwarding and firewall rule go.
+  if ($hadDistro -and (Compare-Object $oldPorts $corePorts)) {
+    $keep = $corePorts
+    $corePorts = $oldPorts
+    Remove-CorePorts
+    $corePorts = $keep
+  }
   if (-not (Get-NetFirewallRule -Name $rule -ErrorAction SilentlyContinue)) {
     New-NetFirewallRule -Name $rule -DisplayName $rule -Description "eriphe-core in WSL ($Distro): its API and workspace" `
       -Direction Inbound -Protocol TCP -LocalPort $corePorts -Action Allow -Profile Private, Domain | Out-Null
@@ -1031,26 +1101,33 @@ if ($updating) {
 if ($CoreMode) {
   $lan = Get-LanAddress
   if (-not $lan) { $lan = "<this-pc>" }
-  $setup = wsl.exe -d $Distro -u root -- sh -c "docker logs eriphe-core 2>&1 | sed -n 's/.*setup code \([A-Za-z0-9-]*\).*/\1/p' | tail -n 1"
+  # The setup code, while there is no password (kept until it is used); an
+  # older eriphe-core has no auth setup-code: its log says it.
+  $setup = Invoke-InDistro @'
+if code=$(docker exec eriphe-core eriphe-core auth setup-code 2>/tmp/setup-code.err); then
+  printf '%s\n' "$code"
+elif ! grep -q 'has a password' /tmp/setup-code.err; then
+  docker logs eriphe-core 2>&1 | sed -n 's/.*setup code \([A-Za-z0-9-]*\).*/\1/p' | tail -n 1
+fi
+rm -f /tmp/setup-code.err
+'@ | Select-Object -Last 1
+  $done = if ($updating) { "" } else { "Done: Eriphe runs on $here. " }
   if ($setup) {
-    $done = if ($updating) { "" } else { "Done: Eriphe runs on $here. " }
     Write-Para "${done}To finish, open this address in your browser and give the setup code:"
     Write-Out
-    Write-Out "  https://${lan}:8443/setup"
+    Write-Out "  https://${lan}:${webPort_}/setup"
     Write-Out "  Setup code: $setup"
-  } elseif ($updating) {
-    Write-Out "Workspace: https://${lan}:8443"
   } else {
-    Write-Para "Done: Eriphe runs on $here. Open https://${lan}:8443 in your browser and sign in."
+    Write-Para "${done}Open https://${lan}:${webPort_} in your browser and sign in (forgotten password: wsl -d $Distro -u root -- docker exec eriphe-core eriphe-core auth password-reset)."
   }
-  if (-not $updating) { Add-Notice "to connect your other computers, open Settings > Devices > Connect a device in your browser." }
+  if (-not $updating) { Add-Notice "to connect your other computers, open $connectMenu in your browser." }
   if (Get-NetConnectionProfile | Where-Object NetworkCategory -eq "Public") {
     Add-Notice "this network is set to Public, so other devices cannot reach $here. In Windows Settings > Network & internet, set it to Private."
   }
 } elseif (-not $joined) {
-  Write-Para "Installed, but $here is not connected to $name_ yet: it keeps trying. If it does not appear in Devices in your browser within a few minutes, check that the computer Eriphe runs on is on, and see the logs."
+  Write-Para "Installed, but $here is not connected to $name_ yet: it keeps trying. If it does not appear in $devicesMenu in your browser within a few minutes, check that the computer Eriphe runs on is on, and see the logs."
 } elseif (-not $updating) {
-  Write-Para "Done: $here is connected to $name_. Go back to your browser: it now appears in Devices."
+  Write-Para "Done: $here is connected to $name_. Go back to your browser: it now appears in $devicesMenu."
 }
 if ($pin -eq "edge") {
   Add-Notice "it follows main, the version in development (-Version latest follows the releases again)."

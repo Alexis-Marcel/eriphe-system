@@ -218,6 +218,62 @@ run_in 'uninstall --data' >/dev/null
 [ "$(cd "$T/data" && find . -mindepth 1 | sort | tr '\n' ' ')" = "./launcher ./launcher/uninstalled " ] ||
 	fail "uninstall --data leaves $(cd "$T/data" && find . -mindepth 1)"
 
+# ---- install.sh's ports: options, kept, and free before anything is installed
+
+# installer CMD: a shell with install.sh's functions, as on Linux.
+installer() { sh -c "ERIPHE_INSTALL_LIB=1; . '$here/install.sh'; OS=Linux NATIVE= HERE='this computer'; $1" 2>&1 || true; }
+out=$(installer 'parse_args --core-mode --web-port 9443 --api-port=9800; INFO=; settle; echo "$WEB_PORT $API_PORT"; install_conf')
+case $out in "9443 9800"*"web_port=9443"*"api_port=9800"*) ;; *) fail "port options: $out" ;; esac
+# Kept from the earlier install when not given; 8443 and 8800 otherwise.
+out=$(installer 'parse_args --core-mode; INFO="saved_web_port=9443"; settle; echo "$WEB_PORT $API_PORT"')
+[ "$out" = "9443 8800" ] || fail "saved ports: $out"
+out=$(ERIPHE_WEB_PORT=7443 installer 'parse_args --core-mode; INFO=; settle; echo "$WEB_PORT $API_PORT"')
+[ "$out" = "7443 8800" ] || fail "ERIPHE_WEB_PORT: $out"
+for bad in "--web-port 0" "--web-port 70000" "--api-port x" "--web-port 8800" "--core http://192.0.2.10:8800 --api-port 9800"; do
+	out=$(installer "parse_args --core-mode $bad && INFO= && settle && echo passed")
+	case $out in *passed*) fail "port options take $bad" ;; esac
+done
+compose=$(installer 'parse_args --core-mode --api-port 9800 --web-port 9443; INFO=; settle; MODE=core CORE_IMAGE=c NODE_IMAGE=n WORKER_IMAGE=w INSTALL=linux; compose_yaml 100 1')
+case $compose in *'ports: ["9800:8800", "9443:8443"]'*'ERIPHE_API_PORT: "9800"'*) ;; *) fail "compose with other ports: $compose" ;; esac
+# A fake listener: ss names the program on a port.
+mkdir -p "$T/ss"
+cat >"$T/ss/ss" <<'EOF'
+#!/bin/sh
+case $* in
+*":8443"*) echo 'LISTEN 0 511 0.0.0.0:8443 0.0.0.0:* users:(("nginx",pid=42,fd=6))' ;;
+*":8800"*) echo 'LISTEN 0 4096 0.0.0.0:8800 0.0.0.0:* users:(("docker-proxy",pid=7,fd=4))' ;;
+*":9800"*) echo 'LISTEN 0 4096 0.0.0.0:9800 0.0.0.0:*' ;;
+esac
+EOF
+chmod +x "$T/ss/ss"
+ports() { PATH="$T/ss:$PATH" installer "WEB_PORT=$1 API_PORT=$2; ports_free '$3'; echo free"; }
+out=$(ports 8443 8801 "")
+case $out in *"nginx already uses port 8443 of this computer"*"--web-port 9443"*) ;; *) fail "a taken port: $out" ;; esac
+out=$(ports 9443 9800 "")
+case $out in *"another program already uses port 9800"*"--api-port 9800"*) ;; *) fail "a port taken by someone unnamed: $out" ;; esac
+out=$(ports 9443 8800 "docker-proxy a program")
+[ "$out" = free ] || fail "Eriphe's own port, on an update: $out"
+out=$(ports 9443 8801 "")
+[ "$out" = free ] || fail "free ports: $out"
+# A real listener, where python3 is: port_user sees it.
+if command -v python3 >/dev/null 2>&1; then
+	python3 -c 'import socket, sys, time
+s = socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(1)
+open(sys.argv[1], "w").write(str(s.getsockname()[1])); time.sleep(20)' "$T/port" &
+listener=$!
+i=0
+while [ ! -s "$T/port" ] && [ $i -lt 50 ]; do
+	i=$((i + 1))
+	sleep 0.1
+done
+p=$(cat "$T/port")
+os=$(uname -s)
+out=$(sh -c "ERIPHE_INSTALL_LIB=1; . '$here/install.sh'; OS=$os HERE=here; port_user $p" 2>&1)
+[ -n "$out" ] || fail "a listener on port $p is not seen"
+kill "$listener" 2>/dev/null || true
+wait "$listener" 2>/dev/null || true
+fi
+
 if [ "$fails" -gt 0 ]; then
 	echo "launcher_test.sh: $fails failed" >&2
 	exit 1

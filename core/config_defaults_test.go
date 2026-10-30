@@ -8,6 +8,24 @@ import (
 	"testing"
 )
 
+// ERIPHE_API_LISTEN and ERIPHE_WEB_LISTEN move eriphe-core's ports, without
+// a configuration file.
+func TestDefaultListenFromEnv(t *testing.T) {
+	t.Setenv("ERIPHE_API_LISTEN", "0.0.0.0:9800")
+	t.Setenv("ERIPHE_WEB_LISTEN", "0.0.0.0:9443")
+	cfg, err := defaultConfig(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Listen != "0.0.0.0:9800" || cfg.Web.Listen != "0.0.0.0:9443" {
+		t.Fatalf("listen %s, web %s", cfg.Listen, cfg.Web.Listen)
+	}
+	t.Setenv("ERIPHE_WEB_LISTEN", "9443")
+	if _, err := defaultConfig(t.TempDir()); err == nil {
+		t.Fatal("a port without an address is taken")
+	}
+}
+
 // startOnDefaults opens what main opens, on defaults in dir: the
 // configuration, the store, the vault and the workspace's certificate.
 func startOnDefaults(t *testing.T, dir string) (*Config, *web) {
@@ -48,8 +66,8 @@ func TestStartOnEmptyDataDir(t *testing.T) {
 	if cfg.Policy != nil || len(cfg.Servers) != 0 || len(cfg.Agents) != 0 || len(cfg.Identities) != 0 {
 		t.Fatalf("defaults that are someone's own: %+v", cfg)
 	}
-	if w.cfg.Listen != "0.0.0.0:8443" || w.setup == "" {
-		t.Fatalf("workspace on %s, setup code %q", w.cfg.Listen, w.setup)
+	if w.cfg.Listen != "0.0.0.0:8443" || w.setupCode() == "" {
+		t.Fatalf("workspace on %s, setup code %q", w.cfg.Listen, w.setupCode())
 	}
 	files := map[string][]byte{}
 	for _, name := range []string{"core-token", "core.db", "vault.key", "web-cert.pem", "web-key.pem"} {

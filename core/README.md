@@ -18,13 +18,15 @@ exist), it runs on defaults with everything in its data directory, `-data` (env 
 
 ```sh
 docker run -d --name eriphe-core -v eriphe-data:/data -p 8800:8800 -p 8443:8443 ghcr.io/alexis-marcel/eriphe-core
-docker logs eriphe-core 2>&1 | grep -o 'setup code [A-Z0-9-]*'
+docker exec eriphe-core eriphe-core auth setup-code    # the setup code, while there is no password
 ```
 
 At first start it makes what it lacks in the data directory, and reuses it after: the API token
 (`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`) and the
 workspace's self-signed certificate (`web-cert.pem`, `web-key.pem`). The API listens on
-`0.0.0.0:8800`, the workspace on `https://0.0.0.0:8443`, and the brain is on, with no agent yet.
+`0.0.0.0:8800`, the workspace on `https://0.0.0.0:8443` (`ERIPHE_API_LISTEN` and `ERIPHE_WEB_LISTEN`,
+e.g. `0.0.0.0:9443`, move them, as `install.sh --api-port`, `--web-port` does on a Mac), and the
+brain is on, with no agent yet.
 The image runs as UID 1993: a host folder mounted at `/data` must be writable by it (`chown
 1993:1993 <dir>`), a named volume is. `TZ` sets the time zone (`Europe/Paris` otherwise).
 
@@ -1236,15 +1238,16 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 | `listen` | the workspace's address, `0.0.0.0:8443` by default |
 | `cert_file`, `key_file` | a certificate to serve; without them, a self-signed one |
 | `hostnames` | names and addresses for the self-signed certificate, besides `public_url`'s host, the machine's name, `localhost` and its interfaces' addresses |
-| `lang` | `fr` (default) or `en`; each browser can switch in Settings |
+| `lang` | `fr` or `en`; without it, the browser's language (`Accept-Language`: French when it prefers French, English otherwise); each browser can switch in Settings, which wins |
 | `session_days` | how long a login lasts, 30 by default (a week without use ends it sooner) |
 | `auth` | how one signs in: see [Signing in](#signing-in); without it, Settings → Account says |
 | `external_url` | the workspace's address, e.g. `https://eriphe.example.org`: see [the reverse proxy guide](../docs/reverse-proxy.md); `auth.external_url` works too, this one wins |
 
 **First start.** With no password yet, eriphe-core logs a one-time setup code:
-`web: no password yet: open https://…/setup with the setup code ABCD-EFGH`. Open the page, type
-the code and choose the password (10 characters at least). The password is stored as an
-argon2id hash; the code is no longer accepted once used. While the brain has no agent, the
+`web: no password yet: open https://…/setup with the setup code ABCD-EFGH`. The code is kept in the
+database: the same one at every start until it is used, and `eriphe-core auth setup-code` prints it.
+Open the page, type the code and choose the password (10 characters at least). The password is
+stored as an argon2id hash; the code is no longer accepted once used. While the brain has no agent, the
 conversation leads to a wizard (`/welcome`): the assistant's name (an empty field), then the
 AI account: every kind as equal cards, as Settings → Agents shows them (subscriptions, then API
 keys, the custom one last), none picked; a card (`/welcome?kind=<kind>`) opens its form. Then the
@@ -1303,6 +1306,17 @@ docker exec eriphe-core eriphe-core auth reset    # or: eriphe-core auth reset -
 
 sets the workspace's mode back to the password (its other settings stay) for the running
 eriphe-core at once. When `web.auth` is in the configuration file, change its mode there.
+
+**A forgotten password.** Root on the host is the owner:
+
+```sh
+docker exec eriphe-core eriphe-core auth password-reset   # or: eriphe-core auth password-reset -data dir
+```
+
+forgets the owner's password and ends every session of the workspace, keeps everything else (the
+sign-in settings, the assistant, its memory, devices, accounts), and prints a new setup code; the
+running eriphe-core asks for it at `/setup` from the next request. `eriphe-core auth setup-code`
+prints the setup code while there is no password, and fails once there is one.
 
 **From the machine, too.** Whoever is root on the host owns the workspace, so the identity
 provider can also be set up there, without the page's test sign-in:
@@ -1537,7 +1551,7 @@ Every field that names a secret file also takes `vault:<name>`: `token_file`, a 
 ```
 
 The workspace's entries keep their secrets here, typed in their own forms (see
-[Dynamic catalog](#dynamic-catalog-workspace)). Settings → Tools → Secrets avancés lists what the
+[Dynamic catalog](#dynamic-catalog-workspace)). Settings → My workspace → "Clés et mots de passe enregistrés" lists what the
 vault holds and what each secret is for, replaces or deletes one, sets a `vault:` reference of the
 configuration that has no value yet, and copies a secret file of the configuration into the vault
 in a click (then replace its path with the `vault:` reference shown); the API does the same. Values

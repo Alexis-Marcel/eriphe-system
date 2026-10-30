@@ -21,7 +21,7 @@ computers are then connected to it from the workspace, Eriphe's web page.
 |---|---|---|---|
 | A NAS with Docker (Unraid, Synology…), or an always-on mini-PC or server | the NAS, mini-PC or server | on a NAS: [one container](#quick-start) (on Unraid, [its template](unraid/README.md)); on a Linux mini-PC or server: the Linux command | "Connect a device" in the workspace |
 | Only a Windows PC | that PC, set to never sleep | the [Windows command](#quick-start), in an administrator PowerShell | "Connect a device" in the workspace |
-| Only a Mac | that Mac, set to never sleep | the [macOS command](#quick-start), in Terminal | "Connect a device" in the workspace |
+| Only a Mac | that Mac, set to never sleep and left logged in (Eriphe runs there only while your session is open) | the [macOS command](#quick-start), in Terminal | "Connect a device" in the workspace |
 | A Linux server | that server | the [Linux command](#quick-start) | "Connect a device" in the workspace |
 
 The installer brings everything it needs and ends with an address and a setup code. Then:
@@ -29,8 +29,8 @@ The installer brings everything it needs and ends with an address and a setup co
 1. Open the address in a browser, accept the certificate warning (expected), and type the setup code to choose your password.
 2. Name your assistant and connect its AI account (a Claude or ChatGPT subscription, or an API key).
 3. Answer (or skip) the short first-run interview: the assistant writes first.
-4. Connect your other devices: Settings → Devices → "Connect a device" gives a command to run on each.
-5. Add tools (mail, calendar, Google Drive…) in Settings → Accounts & tools, and install the phone app through Settings → Remote access.
+4. Connect your other devices: Réglages › Appareils › « Connecter un appareil » (Settings › Devices › "Connect a device") gives a command to run on each.
+5. Add tools (mail, calendar, Google Drive…) in Settings → Tools, and install the phone app through Settings → Remote access.
 
 All the details, options and fixes: [install/README.md](install/README.md).
 
@@ -43,9 +43,10 @@ what to ask you, which commands to run, what you do yourself, and the safety rul
 
 ## Status
 
-Alpha, single user: expect rough edges, breaking changes and missing documentation. The workspace is in French by default, with an English
-translation (`"lang": "en"`, or per browser in Settings); the brain's built-in instructions are in
-French.
+Alpha, single user: expect rough edges, breaking changes and missing documentation. The workspace
+is in French and English: it follows the browser's language (French, or English for any other),
+unless `"lang"` is set in the configuration, and each browser can choose in Settings; the brain's
+built-in instructions are in French.
 
 ## What works today
 
@@ -79,17 +80,35 @@ On Windows, in an administrator PowerShell:
 $env:ERIPHE_CORE_MODE='1'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
 
-On a NAS or any Linux where Docker runs, start one container instead (on Unraid, its template
-`unraid/eriphe.xml`); it makes and updates Eriphe's own containers next to it:
+On a NAS or any Linux where Docker runs, start one container instead; it makes and updates
+Eriphe's own containers next to it. `/srv/eriphe` is its data folder (any folder of the host;
+on Unraid, use its template `unraid/eriphe.xml`, which keeps it in `/mnt/user/appdata/eriphe`):
 
 ```sh
 docker run -d --name eriphe --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock \
-  -v /mnt/user/appdata/eriphe:/data ghcr.io/alexis-marcel/eriphe
+  -v /srv/eriphe:/data ghcr.io/alexis-marcel/eriphe
 ```
 
 The installer brings its own container runtime. It ends with the workspace's address and a setup
 code; the workspace then walks you through the AI account and connecting other devices. The full
 guide, options and troubleshooting: [install/README.md](install/README.md).
+
+### Troubleshooting
+
+- **Port 8443 or 8800 taken**: the installer says so before installing anything; run it again with
+  `--web-port 9443 --api-port 9800` (Windows: `-WebPort 9443 -ApiPort 9800`; the one container:
+  `-e ERIPHE_WEB_PORT=9443 -e ERIPHE_API_PORT=9800`).
+- **Forgotten password**: on Eriphe's machine, `eriphe-core auth password-reset` forgets it (and
+  signs every browser out), keeps everything else, and prints a new setup code for `/setup`. In
+  core mode on Linux: `sudo docker exec eriphe-core eriphe-core auth password-reset`; the command
+  for each system is in [install/README.md](install/README.md#forgotten-password).
+- **Lost setup code**: run the installer again, or `eriphe-core auth setup-code` (`docker exec
+  eriphe-core eriphe-core auth setup-code`): the code stays the same until it is used.
+- **Windows blocks `irm | iex`** (Defender, SmartScreen): never turn Defender off; download
+  `install.ps1` from the release and run it as a file
+  ([install/README.md, Windows](install/README.md#windows)).
+- **A Mac as home**: Eriphe runs there only while your session is open; an always-on machine (a
+  NAS, a mini-PC) is a better home.
 
 ## Architecture
 
