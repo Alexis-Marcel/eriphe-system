@@ -321,7 +321,9 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 			}
 		case e.Type == "text" && !st.Quiet:
 			// Its answer to the start prompt ("Prêt.") is not news for the conversation.
-			if text, _ := e.Data["text"].(string); strings.TrimSpace(text) != "" {
+			// quietReply: its answer to a note that asks nothing of the
+			// user (a tool added…) stays out of the conversation.
+			if text, _ := e.Data["text"].(string); strings.TrimSpace(text) != "" && !quietReply(text) {
 				c.store.addMessage(roleBrain, text, true)
 			}
 		}
@@ -407,4 +409,12 @@ func (c *core) lastTurnOK(id string) bool {
 		}
 	}
 	return false
+}
+
+// quietMark is what the brain answers to a note that asks nothing of the
+// user (brain-prompt.md): nothing is shown.
+const quietMark = "[rien]"
+
+func quietReply(text string) bool {
+	return strings.TrimSpace(strings.Trim(strings.TrimSpace(text), "`")) == quietMark
 }
