@@ -36,7 +36,7 @@ type Config struct {
 	Policy     *Policy              `json:"policy,omitempty"` // permission rules, on top of the built-in ones
 	// The tool catalog: MCP servers tasks reach through eriphe-core (servers.go).
 	Servers map[string]Server `json:"servers,omitempty"`
-	// Cloud storage accounts: where the Eriphe app's OAuth client is (cloud.go).
+	// Ignored: the shared Google app of older versions (cloud.go, legacyCloud).
 	Cloud *CloudConfig `json:"cloud,omitempty"`
 
 	// The run specs of the catalog's local servers, by name (services.go).

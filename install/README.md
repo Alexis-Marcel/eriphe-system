@@ -248,34 +248,23 @@ device" on its card: that token lets it take its name over (on Windows, add `-Re
 
 To give Eriphe folders of a Google Drive: Settings → Tools → Add a tool → **Google Drive**.
 
-1. "Se connecter à Google Drive" opens Google's page. Tick "Permettre à Eriphe de déposer des
+1. Create your own Google app, once: the page lists the steps in the Google Cloud console and shows
+   the exact redirect URI to paste (`https://<workspace>/oauth/callback`), with a Copy button; then
+   give it the JSON the console downloads (or the client ID and secret). The same steps, with
+   Google's rules and sources: [docs/google-drive.md](../docs/google-drive.md).
+2. "Connecter Google Drive" opens Google's page. Tick "Permettre à Eriphe de déposer des
    résultats" first if Eriphe may add files (always in an `Eriphe` subfolder of the folders you
-   allow; it never changes or deletes yours); without it, Eriphe only reads.
-2. Google may say "Google hasn't verified this app": the Eriphe app is not verified yet. Click
-   "Advanced", then "Go to Eriphe", and allow the access to Drive.
+   allow; it never changes or deletes yours); without it, Eriphe only reads. Google says "Google
+   hasn't verified this app": it is your own app. Click "Advanced", then "Go to Eriphe".
 3. Back in the workspace, wait a few seconds for the Files server to start on a machine, then open
    the folders and give each one "en lecture" or "lecture + dépôt". Eriphe sees only those folders
    and what is inside them.
 
-This goes through `https://eriphe.com/oauth/callback`, which only sends your browser back to your
-workspace (see core/README.md, "Google Drive"), and needs the Eriphe app's client file,
-`google-oauth.json`, in eriphe-core's data directory; whoever installed Eriphe gives it to you,
-it is never in the images. To put it there (readable by eriphe-core's user, UID 1993):
-
-```sh
-sudo install -o 1993 -g 1993 -m 600 google-oauth.json /var/lib/eriphe/core/google-oauth.json      # Linux
-LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl copy google-oauth.json eriphe:/tmp/google-oauth.json   # macOS, then:
-LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo install -o 1993 -g 1993 -m 600 /tmp/google-oauth.json /var/lib/eriphe/core/google-oauth.json
-```
-
-```powershell
-wsl -d eriphe -- sudo install -o 1993 -g 1993 -m 600 /mnt/c/Users/<you>/Downloads/google-oauth.json /var/lib/eriphe/core/google-oauth.json
-```
-
-Without the file, or with a workspace reached at a public name, open "Utiliser mon propre client
-Google" on the same page: create a "Web application" OAuth client in your own Google Cloud project
-(Google Drive API enabled), with the redirect URI the page shows
-(`https://<workspace>/oauth/callback`), and paste its ID and secret.
+Google only sends back to an https address whose name ends in a public domain: a workspace opened
+at an IP address (`https://192.168.1.2:8443`) or at `eriphe.local` cannot connect Drive. Turn on
+Remote access in Settings (an `https://<name>.<tailnet>.ts.net` address) or use your own
+domain; or, with nothing to set up, install "Google Drive for desktop" on an always-on machine and
+give its Google Drive folder in [Folders](#folders).
 
 ## 6. Connect GitHub (optional)
 

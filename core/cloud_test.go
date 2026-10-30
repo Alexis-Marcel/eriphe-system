@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -51,27 +54,60 @@ func TestStateSignature(t *testing.T) {
 	}
 }
 
-// TestBounceOrigin holds bounceOrigin to the relay's own cases
-// (pages/origins.json, which pages/relay.test.js reads too).
-func TestBounceOrigin(t *testing.T) {
-	raw, err := os.ReadFile("../pages/origins.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var cases struct{ Allowed, Refused []string }
-	if err := json.Unmarshal(raw, &cases); err != nil || len(cases.Allowed) == 0 || len(cases.Refused) == 0 {
-		t.Fatalf("origins.json: %v", err)
-	}
-	for _, s := range cases.Allowed {
-		if !bounceOrigin(s) {
-			t.Errorf("%q refused", s)
+// TestGoogleOrigin holds googleOrigin to Google's rules for an authorized
+// redirect URI: https, no raw IP address (loopback ones aside), a host
+// ending in a public top-level domain.
+func TestGoogleOrigin(t *testing.T) {
+	for origin, want := range map[string]string{
+		"https://eriphe.example.org":         "",
+		"https://eriphe.example.org:8443":    "",
+		"https://eriphe.tail1234.ts.net":     "",
+		"https://ia.example.fr":              "",
+		"https://localhost:8443":             "",
+		"https://127.0.0.1:8443":             "",
+		"https://[::1]:8443":                 "",
+		"http://localhost:8800":              "",
+		"https://192.168.1.2:8443":           "ip",
+		"https://100.101.102.103":            "ip",
+		"https://[fd7a:115c:a1e0::1]":        "ip",
+		"https://8.8.8.8":                    "ip",
+		"https://eriphe.local:8443":          "local",
+		"https://nas.lan":                    "local",
+		"https://eriphe":                     "local",
+		"https://eriphe.home.arpa":           "local",
+		"https://eriphe.internal":            "local",
+		"http://eriphe.example.org":          "http",
+		"http://192.168.1.2:8800":            "ip",
+		"http://eriphe.local":                "local",
+		"https://Eriphe.Example.ORG.":        "",
+		"https://eriphe.example.invalidtld0": "local",
+	} {
+		if got := googleOrigin(origin); got != want {
+			t.Errorf("%s: %q, want %q", origin, got, want)
 		}
 	}
-	for _, s := range cases.Refused {
-		if bounceOrigin(s) {
-			t.Errorf("%q allowed", s)
-		}
+}
+
+func TestParseGoogleClient(t *testing.T) {
+	const id, secret = "123-abc.apps.googleusercontent.com", "GOCSPX-the-secret"
+	app, uris, err := parseGoogleClient([]byte(`{"web":{"client_id":"` + id + `","project_id":"eriphe","auth_uri":"https://accounts.google.com/o/oauth2/auth",` +
+		`"client_secret":"` + secret + `","redirect_uris":["https://eriphe.example.org/oauth/callback"]}}`))
+	if err != nil || app != (oauthApp{ID: id, Secret: secret}) || len(uris) != 1 || uris[0] != "https://eriphe.example.org/oauth/callback" {
+		t.Fatalf("web: %+v %v %v", app, uris, err)
 	}
+	if app, _, err := parseGoogleClient([]byte(` {"client_id":" ` + id + ` ","client_secret":"` + secret + `"}`)); err != nil || app.ID != id {
+		t.Fatalf("flat: %+v %v", app, err)
+	}
+	_, _, err = parseGoogleClient([]byte(`{"installed":{"client_id":"` + id + `","client_secret":"` + secret + `","redirect_uris":["http://localhost"]}}`))
+	wantKey(t, err, "drive.desktop")
+	_, _, err = parseGoogleClient([]byte(`client_id=x`))
+	wantKey(t, err, "drive.badjson")
+	_, _, err = parseGoogleClient([]byte(`{"web":{"client_id":"` + id + `"}}`))
+	wantKey(t, err, "drive.ownmissing")
+	_, err = checkGoogleClient(secret, id) // swapped
+	wantKey(t, err, "drive.badclient")
+	_, err = checkGoogleClient(id, "two words")
+	wantKey(t, err, "drive.badclient")
 }
 
 // fakeGoogle is Google's authorization server for the code exchange.
@@ -133,34 +169,6 @@ func (g *fakeGoogle) authorize(t *testing.T, authURL string) (state string) {
 	return q.Get("state")
 }
 
-// fakePortal is the relay's bounce as the page does it
-// (pages/site/oauth/callback/relay.js): only to the origin in the state,
-// and only code and state.
-func fakePortal(t *testing.T) *httptest.Server {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		parts := strings.Split(q.Get("state"), ".")
-		var p statePayload
-		if len(parts) == 3 && parts[0] == stateVersion {
-			raw, _ := base64.RawURLEncoding.DecodeString(parts[1])
-			json.Unmarshal(raw, &p)
-		}
-		if r.URL.Path != "/oauth/callback" || !bounceOrigin(p.Origin) || (q.Get("code") == "") == (q.Get("error") == "") {
-			http.Error(w, "bad", http.StatusBadRequest)
-			return
-		}
-		out := url.Values{"state": {q.Get("state")}}
-		if q.Get("code") != "" {
-			out.Set("code", q.Get("code"))
-		} else {
-			out.Set("error", q.Get("error"))
-		}
-		http.Redirect(w, r, p.Origin+"/oauth/callback?"+out.Encode(), http.StatusFound)
-	}))
-	t.Cleanup(srv.Close)
-	return srv
-}
-
 // filesCore is a workspace whose fichiers server is a fake eriphe-files.
 func filesCore(t *testing.T, mutate func(*Config)) (*testWeb, *catalogCore, string) {
 	t.Helper()
@@ -176,9 +184,7 @@ func filesCore(t *testing.T, mutate func(*Config)) (*testWeb, *catalogCore, stri
 	}
 	setVault(v)
 	t.Cleanup(func() { setVault(nil) })
-	app := filepath.Join(dir, "google-oauth.json")
-	os.WriteFile(app, []byte(`{"web":{"client_id":"eriphe-app","client_secret":"app-secret","redirect_uris":["https://alexis-marcel.github.io/eriphe-system/oauth/callback/"]}}`), 0o600)
-	cfg := &Config{DB: filepath.Join(dir, "core.db"), Cloud: &CloudConfig{},
+	cfg := &Config{DB: filepath.Join(dir, "core.db"),
 		Providers:    map[string]Provider{"anthropic": {Kind: "claude-subscription", Secret: "/secrets/claude"}},
 		Agents:       map[string]Agent{"sonnet": {Runtime: "claude-code", Provider: "anthropic", Use: "default"}},
 		DefaultAgent: "sonnet"}
@@ -214,20 +220,41 @@ func filesCore(t *testing.T, mutate func(*Config)) (*testWeb, *catalogCore, stri
 	return tw, cc, tw.setup()
 }
 
-// The whole bounce: the workspace sends the browser to Google with PKCE and
-// a signed state, Google to the relay, the relay back to the workspace,
-// which exchanges the code and gives the token to eriphe-files.
-func TestDriveBounceRoundTrip(t *testing.T) {
+const (
+	testClientID     = "123-abc.apps.googleusercontent.com"
+	testClientSecret = "GOCSPX-my-secret"
+)
+
+// The whole flow: the user's Google app saved, the workspace sends the
+// browser to Google with PKCE and a signed state, Google back to the
+// workspace, which exchanges the code and gives the token to eriphe-files.
+func TestDriveRoundTrip(t *testing.T) {
 	g := newFakeGoogle(t)
-	portal := fakePortal(t)
-	tw, c, csrf := filesCore(t, func(cfg *Config) { cfg.Cloud.BounceURL = portal.URL + "/oauth/callback" })
-	g.clientID, g.secret, g.redirect = "eriphe-app", "app-secret", portal.URL+"/oauth/callback"
+	tw, c, csrf := filesCore(t, nil)
+	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
 
 	if _, body, _ := tw.do("GET", "/settings/tools/add", nil, nil); !strings.Contains(body, `href="/settings/drive"`) {
 		t.Fatal("no Google Drive tile")
 	}
-	if code, body, _ := tw.do("GET", "/settings/drive", nil, nil); code != 200 || !strings.Contains(body, "Se connecter à Google Drive") ||
-		strings.Contains(body, "google-oauth.json") {
+	// No Google app yet: the guide, and no Connect.
+	if code, body, _ := tw.do("GET", "/settings/drive", nil, nil); code != 200 || !strings.Contains(body, "Crée ton app Google") ||
+		strings.Contains(body, `hx-post="/settings/drive/connect"`) {
+		t.Fatalf("drive page: %d %s", code, body)
+	}
+	_, body, _ := tw.post("/settings/drive/connect", nil, csrf)
+	if !strings.Contains(body, "Donne d&#39;abord") {
+		t.Fatalf("connect without an app: %s", body)
+	}
+	if _, body, _ := tw.post("/settings/drive/client", url.Values{"client_id": {testClientID}}, csrf); !strings.Contains(body, "tous deux nécessaires") {
+		t.Fatalf("no secret: %s", body)
+	}
+	code, body, _ := tw.post("/settings/drive/client", url.Values{"client_id": {testClientID}, "client_secret": {testClientSecret}}, csrf)
+	if code != 200 || !strings.Contains(body, "Ton app Google est enregistrée") || !strings.Contains(body, testClientID) ||
+		!strings.Contains(body, "Connecter Google Drive") || strings.Contains(body, testClientSecret) {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	if code, body, _ := tw.do("GET", "/settings/drive", nil, nil); code != 200 || strings.Contains(body, testClientSecret) ||
+		!strings.Contains(body, `hx-post="/settings/drive/connect"`) {
 		t.Fatalf("drive page: %d %s", code, body)
 	}
 	code, body, h := tw.post("/settings/drive/connect", url.Values{"write": {"1"}}, csrf)
@@ -244,18 +271,8 @@ func TestDriveBounceRoundTrip(t *testing.T) {
 		t.Fatalf("state %+v %v, want origin %s", p, err, tw.srv.URL)
 	}
 
-	// Google → the relay → the workspace, with nothing but code and state.
-	resp, err := tw.hc.Get(portal.URL + "/oauth/callback?code=the-code&state=" + url.QueryEscape(state) + "&scope=x&authuser=0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	back := resp.Header.Get("Location")
-	bu, _ := url.Parse(back)
-	if resp.StatusCode != http.StatusFound || !strings.HasPrefix(back, tw.srv.URL+"/oauth/callback?") ||
-		len(bu.Query()) != 2 || bu.Query().Get("state") != state {
-		t.Fatalf("bounce: %d %s", resp.StatusCode, back)
-	}
+	// Google → the workspace.
+	back := tw.srv.URL + "/oauth/callback?" + url.Values{"code": {"the-code"}, "state": {state}, "scope": {"x"}, "authuser": {"0"}}.Encode()
 	// The cookie of the flow is this browser's: another one is refused.
 	other := &testWeb{t: t, srv: tw.srv, hc: &http.Client{Transport: tw.hc.Transport}}
 	if code, _, _ := other.do("GET", strings.TrimPrefix(back, tw.srv.URL), nil, nil); code != http.StatusBadRequest {
@@ -292,7 +309,7 @@ func TestDriveBounceRoundTrip(t *testing.T) {
 	}
 	var tok map[string]string
 	json.Unmarshal([]byte(env[driveTokenEnv]), &tok)
-	if tok["refresh_token"] != "the-refresh" || tok["client_id"] != "eriphe-app" || tok["client_secret"] != "app-secret" {
+	if tok["refresh_token"] != "the-refresh" || tok["client_id"] != testClientID || tok["client_secret"] != testClientSecret {
 		t.Fatalf("token lent: %v", tok)
 	}
 	st := c.driveState()
@@ -360,39 +377,114 @@ func TestDriveBounceRoundTrip(t *testing.T) {
 	}
 }
 
-func TestDriveOwnClient(t *testing.T) {
-	g := newFakeGoogle(t)
-	tw, c, csrf := filesCore(t, func(cfg *Config) { cfg.Cloud.GoogleClientFile = "/nonexistent" })
-	if _, body, _ := tw.do("GET", "/settings/drive", nil, nil); !strings.Contains(body, "google-oauth.json") {
-		t.Fatal("no notice without the Eriphe app")
+// The Google app as the console's JSON, uploaded: kept in the vault, its
+// secret never shown back; a file that lacks this workspace's redirect URI
+// is kept with a warning.
+func TestDriveClientUpload(t *testing.T) {
+	tw, _, csrf := filesCore(t, nil)
+	callback := tw.srv.URL + "/oauth/callback"
+	_, body, _ := tw.do("GET", "/settings/drive", nil, nil)
+	if !strings.Contains(body, `<pre id="drive-callback">`+callback+`</pre>`) || !strings.Contains(body, `data-copy="drive-callback"`) ||
+		!strings.Contains(body, "Web application") || !strings.Contains(body, "Authorized redirect URIs") || !strings.Contains(body, "7 jours") {
+		t.Fatalf("guide: %s", body)
 	}
-	code, body, _ := tw.post("/settings/drive/connect", nil, csrf)
-	if code != 200 || !strings.Contains(body, "google-oauth.json") {
-		t.Fatalf("without the app: %s", body)
+	upload := func(file string) string {
+		t.Helper()
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		w, _ := mw.CreateFormFile("client_json", "client_secret_123.json")
+		w.Write([]byte(file))
+		mw.Close()
+		req, _ := http.NewRequest("POST", tw.srv.URL+"/settings/drive/client", &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		req.Header.Set("X-CSRF-Token", csrf)
+		req.Header.Set("HX-Request", "true")
+		resp, err := tw.hc.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		raw, _ := io.ReadAll(resp.Body)
+		return string(raw)
 	}
-	if _, body, _ := tw.post("/settings/drive/connect", url.Values{"own": {"1"}, "client_id": {"mine"}}, csrf); !strings.Contains(body, "tous deux nécessaires") {
-		t.Fatalf("no secret: %s", body)
+	if body := upload(`{"installed":{"client_id":"` + testClientID + `","client_secret":"` + testClientSecret + `"}}`); !strings.Contains(body, "Desktop app") {
+		t.Fatalf("desktop: %s", body)
 	}
-	g.clientID, g.secret, g.redirect, g.scope = "mine", "my-secret", tw.srv.URL+"/oauth/callback", scopeDriveReadonly
-	_, _, h := tw.post("/settings/drive/connect", url.Values{"own": {"1"}, "client_id": {"mine"}, "client_secret": {"my-secret"}}, csrf)
-	state := g.authorize(t, h.Get("HX-Redirect"))
-	if code, body, _ := tw.do("GET", "/oauth/callback?code=the-code&state="+url.QueryEscape(state), nil, nil); code != 200 ||
-		!strings.Contains(body, "connected=1") {
-		t.Fatalf("callback: %d %s", code, body)
+	if _, err := googleClient(); err != errNoGoogleClient {
+		t.Fatalf("a desktop client kept: %v", err)
 	}
-	spec, _ := decodeRun(c.conf().Servers[filesServer].Run)
-	env, _ := lendService(spec)
-	if !strings.Contains(env[driveTokenEnv], `"client_id":"mine"`) || c.driveState().CanWrite {
-		t.Fatalf("own client: %s", env[driveTokenEnv])
+	body = upload(`{"web":{"client_id":"` + testClientID + `","client_secret":"` + testClientSecret + `","redirect_uris":["https://other.example.org/oauth/callback"]}}`)
+	if !strings.Contains(body, "ne liste pas "+callback) || strings.Contains(body, testClientSecret) {
+		t.Fatalf("upload: %s", body)
+	}
+	body = upload(`{"web":{"client_id":"` + testClientID + `","client_secret":"` + testClientSecret + `","redirect_uris":["` + callback + `"]}}`)
+	if !strings.Contains(body, "Ton app Google est enregistrée") || strings.Contains(body, testClientSecret) {
+		t.Fatalf("upload: %s", body)
+	}
+	if app, err := googleClient(); err != nil || app != (oauthApp{ID: testClientID, Secret: testClientSecret}) {
+		t.Fatalf("vault: %+v %v", app, err)
+	}
+	if _, body, _ := tw.do("GET", "/settings/drive", nil, nil); strings.Contains(body, testClientSecret) || !strings.Contains(body, "jamais réaffiché") {
+		t.Fatalf("page: %s", body)
+	}
+}
+
+// A workspace Google cannot send back to says what to do instead.
+func TestDriveUnusableOrigin(t *testing.T) {
+	tw, c, _ := filesCore(t, nil)
+	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
+	for host, want := range map[string]string{
+		"192.168.1.2:8443": "Google n&#39;accepte pas d&#39;adresse IP",
+		"eriphe.local":     "un nom qui finit par un domaine public",
+	} {
+		req, _ := http.NewRequest("GET", tw.srv.URL+"/settings/drive", nil)
+		req.Host = host
+		for _, ck := range tw.hc.Jar.Cookies(req.URL) {
+			req.AddCookie(ck)
+		}
+		resp, err := (&http.Client{Transport: tw.hc.Transport}).Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		body := string(raw)
+		if !strings.Contains(body, want) || !strings.Contains(body, "https://"+host) || !strings.Contains(body, `href="/settings/remote"`) ||
+			!strings.Contains(body, "ts.net") || !strings.Contains(body, "Google Drive pour ordinateur") ||
+			!strings.Contains(body, `href="/settings/folders"`) || strings.Contains(body, `hx-post="/settings/drive/connect"`) {
+			t.Fatalf("%s: %s", host, body)
+		}
+	}
+	_, err := c.startDrive(driveConnect{Origin: "https://192.168.1.2:8443", Binding: "b"})
+	wantKey(t, err, "drive.origin.ip")
+	_, err = c.startDrive(driveConnect{Origin: "https://eriphe.local", Binding: "b"})
+	wantKey(t, err, "drive.origin.local")
+	_, err = c.startDrive(driveConnect{Origin: "http://eriphe.example.org", Binding: "b"})
+	wantKey(t, err, "drive.origin.http")
+}
+
+// An older configuration that names the shared app still loads.
+func TestLegacyCloudConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "core.json")
+	os.WriteFile(path, []byte(`{"token_file": "/secrets/t", "db": "`+filepath.Join(dir, "core.db")+`",
+		"cloud": {"google_client_file": "/data/google-oauth.json", "bounce_url": "https://relay.example.org/oauth/callback/"}}`), 0o600)
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(cfg.legacyCloud(), "own Google app") {
+		t.Fatalf("legacy: %q", cfg.legacyCloud())
+	}
+	if (&Config{}).legacyCloud() != "" {
+		t.Fatal("a log line without the old fields")
 	}
 }
 
 func TestDriveRefusals(t *testing.T) {
 	newFakeGoogle(t)
 	tw, c, _ := filesCore(t, nil)
-	// The relay does not bounce to an origin a browser would not write.
-	_, err := c.startDrive(driveConnect{Origin: "https://eriphe.example.com:443", Binding: "b"})
-	wantKey(t, err, "drive.badorigin")
+	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
 	// Denied at Google: nothing saved.
 	authURL, err := c.startDrive(driveConnect{Origin: tw.srv.URL, Binding: "b"})
 	if err != nil {
@@ -405,7 +497,7 @@ func TestDriveRefusals(t *testing.T) {
 		t.Fatal("saved after a refusal")
 	}
 	// A state for another workspace is refused here.
-	authURL, _ = c.startDrive(driveConnect{Origin: "https://192.168.0.9", Binding: "b"})
+	authURL, _ = c.startDrive(driveConnect{Origin: "https://eriphe.example.org", Binding: "b"})
 	u, _ = url.Parse(authURL)
 	if err := c.finishDrive(context.Background(), tw.srv.URL, u.Query().Get("state"), "the-code", "", "b"); err != errBadState {
 		t.Fatalf("other origin: %v", err)

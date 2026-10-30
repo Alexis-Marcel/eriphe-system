@@ -53,8 +53,8 @@ under that commit's subject, which must then follow the convention too.
   when its behaviour, options or API change.
 - Commit messages in a branch: short, in the present tense, saying what the change does; the
   Conventional Commits form is welcome but only the pull request's title counts.
-- Never commit credentials, tokens, personal configuration (`core.json`, `google-oauth.json`) or
-  data.
+- Never commit credentials, tokens, personal configuration (`core.json`, a Google
+  `client_secret_*.json`) or data.
 
 ## License
 
