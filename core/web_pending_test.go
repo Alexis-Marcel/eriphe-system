@@ -92,7 +92,7 @@ func addConnected(t *testing.T, tw *testWeb, c *core, f *fakeAS, csrf string) {
 	}
 	code, state := f.authorize(authURL)
 	status, body := callback(t, tw, "code="+code+"&state="+url.QueryEscape(state))
-	if status != 200 || !strings.Contains(body, `content="0;url=/settings/tools?connected=linear"`) {
+	if status != 200 || !strings.Contains(body, `content="0;url=/settings/tools?connected=linear#added/linear"`) {
 		t.Fatalf("callback: %d %s", status, body)
 	}
 	if _, ok := c.conf().Servers["linear"]; !ok {

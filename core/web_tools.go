@@ -200,6 +200,9 @@ type toolForm struct {
 	// An edit: how its credential follows the level, and its actions
 	// allowed without asking (web_access.go).
 	AccessView *toolAccess
+	// InDialog: the form is the second step of the tools page's dialog
+	// (web_tools_dialog.go), not a page of its own.
+	InDialog bool
 
 	Error string
 }
@@ -324,6 +327,7 @@ func readToolForm(r *http.Request) toolForm {
 			IMAPPort: v("imap_port"), SMTPPort: v("smtp_port"), Username: v("mail_user")},
 		Calendar: calendarForm{Provider: v("cal_provider"), URL: v("cal_url"), Username: v("cal_user"), Timezone: v("timezone")}}
 	f.Access = formAccess(v("access"), on("trust"))
+	f.InDialog = on("dialog")
 	if slug := slugName(f.Name); slug != "" {
 		f.Name = slug
 	}
@@ -476,6 +480,11 @@ func (f toolForm) server(r *http.Request, old *Server) (Server, credentials, err
 
 func (w *web) toolFormPage(rw http.ResponseWriter, r *http.Request, s *session, f toolForm) {
 	f.Service = serviceTitle(w.lang(r), f.Preset.ID, f.URL)
+	if inDialog(r) {
+		f.InDialog = true
+		w.render(rw, r, s, "settings", "tool-step", page{Data: f})
+		return
+	}
 	w.render(rw, r, s, "settings", "", page{Title: "tools.add", Nav: "settings", Tab: "tools", View: "form", Data: f})
 }
 
@@ -516,6 +525,10 @@ func (w *web) handleNewTool(rw http.ResponseWriter, r *http.Request, s *session)
 		p, _ = presetByID("remote")
 	}
 	if p.Form == "drive" {
+		if inDialog(r) {
+			w.render(rw, r, s, "settings", "drive-step", page{Data: driveStep{Added: w.addedPresets(w.lang(r))[p.ID]}})
+			return
+		}
 		http.Redirect(rw, r, p.Page(), http.StatusSeeOther)
 		return
 	}
@@ -637,7 +650,14 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 		log.Printf("web: tool %s pending its authorization", name)
 		if authURL == "" { // connected without one: saved
 			w.notify()
+			if f.InDialog {
+				w.addedStep(rw, r, s, name, f.Edit)
+				return
+			}
 			authURL = "/settings/tools?connected=" + url.QueryEscape(name)
+		} else if f.InDialog {
+			w.leavingStep(rw, r, s, f, authURL)
+			return
 		}
 		rw.Header().Set("HX-Redirect", authURL)
 		rw.WriteHeader(http.StatusOK)
@@ -649,6 +669,10 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 	}
 	log.Printf("web: tool %s saved", name)
 	w.notify()
+	if f.InDialog {
+		w.addedStep(rw, r, s, name, f.Edit)
+		return
+	}
 	rw.Header().Set("HX-Redirect", "/settings/tools?saved="+url.QueryEscape(name))
 	rw.WriteHeader(http.StatusOK)
 }

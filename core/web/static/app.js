@@ -454,17 +454,164 @@ if (location.hash === "#connect") {
   const d = document.getElementById("connect-dlg");
   if (d) openDialog(d);
 }
-// #add opens "Add a tool" on the tools page (/settings/tools#add); closed,
-// the address loses it, so a reload does not open it again.
+// "Add a tool" in two steps (tools.html, web_tools_dialog.go). A tile, a
+// kind of account or any link marked data-step loads its step into
+// #tool-step, in place of the search; "Modifier" (data-step-open) opens
+// the dialog on the tool's form. The address says which step (#add,
+// #add/mail, #edit/mail, #added/mail), the browser's Back goes to the step
+// before and, from the first one, closes the dialog; closed, the address
+// is as before, so a reload does not open it again. Once a tool is saved,
+// closing the dialog refreshes the list. Without this script, every step
+// is its own page.
 (function () {
   const d = document.getElementById("add-dlg");
   if (!d || typeof d.showModal !== "function") return;
-  const fromHash = () => { if (location.hash === "#add") openDialog(d); };
+  const pick = d.querySelector("[data-step-pick]");
+  const step = document.getElementById("tool-step");
+  let shown = ""; // the step shown, as in the address
+  let closing = false; // the dialog closed: the history goes back to the page
+  let loading = false;
+  let saved = false;
+  const depth = () => (history.state && history.state.addStep) || 0;
+  const withDialog = (u) => u + (u.includes("?") ? "&" : "?") + "dialog=1";
+  const plain = (e) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+
+  // The address of a step reached without its history (a reload, the way
+  // back from an OAuth service).
+  function urlOf(hash) {
+    const [kind, id] = hash.split("/");
+    if (!id) return null;
+    if (kind === "edit") return "/settings/tools/" + encodeURIComponent(id) + "/edit";
+    if (kind === "added") return "/settings/tools/" + encodeURIComponent(id) + "/added";
+    const tile = kind === "add" && pick.querySelector('a[data-hash="add/' + CSS.escape(id) + '"]');
+    return tile ? tile.dataset.step : null;
+  }
+
+  function showPick() {
+    step.hidden = true;
+    step.textContent = "";
+    pick.hidden = false;
+    d.classList.remove("on-step");
+    d.setAttribute("aria-labelledby", "add-dlg-title");
+    shown = "add";
+    if (!d.open) d.showModal();
+    const q = document.getElementById("finder-q");
+    if (q) q.focus();
+  }
+
+  // shows the step at url; mode says what the history gets: a new entry
+  // (push), this one replaced (replace), or nothing (it is already there).
+  function go(url, hash, mode) {
+    loading = true;
+    return htmx.ajax("GET", withDialog(url), { target: step, swap: "innerHTML" }).then(() => {
+      loading = false;
+      if (!step.firstElementChild) return;
+      pick.hidden = true;
+      step.hidden = false;
+      d.classList.add("on-step");
+      d.setAttribute("aria-labelledby", "step-title");
+      if (!d.open) d.showModal();
+      hash = hash || step.firstElementChild.dataset.hash; // the link's, else the step's own
+      const st = { addStep: depth() + (mode === "push" ? 1 : 0), url };
+      if (mode === "push") history.pushState(st, "", "#" + hash);
+      else if (mode === "replace") history.replaceState(st, "", "#" + hash);
+      shown = hash;
+      settle();
+    }, () => { loading = false; });
+  }
+
+  // after a step came in: its first field, a tool saved, a service to go to
+  function settle() {
+    step.scrollTop = 0;
+    saved = saved || !!step.querySelector("[data-tool-saved]");
+    const field = step.querySelector(".step-body input:not([type=hidden]):not([disabled]), .step-body .provider");
+    const fine = window.matchMedia("(pointer: fine)").matches; // no keyboard popping up on a phone
+    if (field && fine) field.focus({ preventScroll: true });
+    else { const t = document.getElementById("step-title"); if (t) { t.tabIndex = -1; t.focus({ preventScroll: true }); } }
+    const away = step.querySelector("a[data-go]");
+    if (away) setTimeout(() => { if (d.open && step.contains(away)) location.assign(away.href); }, 1200);
+  }
+
+  // A form of the step answered with another step (saved, on the way to
+  // a service): the address follows it.
+  document.body.addEventListener("htmx:afterSwap", (e) => {
+    if (e.target !== step || loading) return;
+    const h = step.firstElementChild && step.firstElementChild.dataset.hash;
+    if (h && h !== shown) {
+      history.replaceState({ addStep: depth(), url: urlOf(h) }, "", "#" + h);
+      shown = h;
+    }
+    settle();
+  });
+
+  function route() {
+    if (closing) { closing = false; return; }
+    const hash = decodeURIComponent(location.hash.slice(1));
+    if (!/^(add|edit|added)(\/|$)/.test(hash)) {
+      shown = "";
+      if (d.open) d.close();
+      return;
+    }
+    if (hash === shown && d.open) return; // popstate and hashchange both come
+    shown = hash;
+    if (hash === "add") return showPick();
+    const url = (history.state && history.state.url) || urlOf(hash);
+    if (!url) {
+      history.replaceState({ addStep: depth() }, "", "#add");
+      return showPick();
+    }
+    go(url, hash, "none");
+  }
+  window.addEventListener("popstate", route);
+  window.addEventListener("hashchange", route);
   // once the search is set up (setupFinder, below), so its field takes the focus
-  document.addEventListener("DOMContentLoaded", () => setTimeout(fromHash));
-  window.addEventListener("hashchange", fromHash);
+  document.addEventListener("DOMContentLoaded", () => setTimeout(route));
+
+  document.addEventListener("click", (e) => {
+    if (!plain(e)) return;
+    const open = e.target.closest('[data-dialog="add-dlg"]');
+    if (open) { // the global handler opens it; here, its address
+      history.pushState({ addStep: depth() + 1 }, "", "#add");
+      return showPick();
+    }
+    const edit = e.target.closest("a[data-step-open]");
+    if (edit) {
+      e.preventDefault();
+      return go(edit.getAttribute("href"), edit.dataset.hash, "push");
+    }
+    if (!d.contains(e.target)) return;
+    const back = e.target.closest("a[data-step-back]");
+    if (back) {
+      e.preventDefault();
+      if (depth() >= 2) return history.back();
+      if (back.dataset.hash === "add") {
+        history.replaceState({ addStep: depth() }, "", "#add");
+        return showPick();
+      }
+      return go(back.getAttribute("href"), back.dataset.hash, "replace");
+    }
+    if (e.target.closest("a[data-step-close]")) { e.preventDefault(); return d.close(); }
+    const a = e.target.closest("a[data-step]");
+    if (a) {
+      e.preventDefault();
+      go(a.dataset.step || a.getAttribute("href"), a.dataset.hash || shown, "push");
+    }
+  });
+
   d.addEventListener("close", () => {
-    if (location.hash === "#add") history.replaceState(null, "", location.pathname + location.search);
+    step.textContent = "";
+    step.hidden = true;
+    pick.hidden = false;
+    d.classList.remove("on-step");
+    d.setAttribute("aria-labelledby", "add-dlg-title");
+    shown = "";
+    const n = depth();
+    if (n > 0) { closing = true; history.go(-n); }
+    else if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    if (saved) {
+      saved = false;
+      htmx.ajax("GET", "/settings/tools", { target: "#tools-body", select: "#tools-body", swap: "outerHTML" });
+    }
   });
 })();
 
