@@ -169,7 +169,7 @@ body.nav-chat > main { overflow: hidden; }
 .field { display: grid; gap: 6px; }
 .field > span { font-size: .86rem; font-weight: 600; color: var(--text); }
 .field small { color: var(--muted); font-size: .8rem; }
-input[type=text], input[type=password], textarea {
+input[type=text], input[type=password], input[type=url], textarea {
   width: 100%; font: inherit; color: var(--text); background: var(--surface);
   border: 1px solid var(--border-strong); border-radius: 12px; padding: 10px 13px; min-height: 42px;
   transition: border-color .15s, box-shadow .15s;
@@ -789,6 +789,19 @@ dialog.modal h3, dialog.modal p { margin: 0; }
 .tool-form:not(:has(input[name=transport][value=http]:checked)) .if-http,
 .tool-form:not(:has(select[name=mail_provider] option[value=other]:checked)) .if-other,
 .tool-form:not(:has(input[name=cal_provider][value=nextcloud]:checked, input[name=cal_provider][value=caldav]:checked)) .if-caldav { display: none; }
+
+/* Settings → Account → Sign-in: only the chosen mode's settings show; the
+   others stay in the form, hidden, so it saves the same without JavaScript. */
+.signin-form:not(:has(input[name=mode][value=oidc]:checked)) .if-oidc,
+.signin-form:not(:has(input[name=mode][value=proxy]:checked)) .if-proxy,
+.signin-form:not(:has(input[name=mode][value=none]:checked)) .if-none,
+.signin-form:not(:has(input[name=mode][value=oidc]:checked, input[name=mode][value=proxy]:checked)) .if-delegated,
+.signin-form:has(input[name=mode][value=password]:checked) .unless-password { display: none; }
+.signin-form .if-oidc, .signin-form .if-proxy, .signin-form .if-delegated { gap: 12px; padding-top: 14px; border-top: 1px solid var(--border); }
+.signin-modes { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.field-with-btn { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.field-with-btn > .btn { min-height: 42px; }
+.warn-note { padding: 11px 14px; border-radius: 12px; background: var(--warn-soft); color: var(--warn); font-size: .9rem; font-weight: 550; border: 1px solid color-mix(in srgb, var(--warn-strong) 35%, transparent); }
 
 details.advanced { padding: 0; gap: 0; }
 details.advanced > summary { list-style: none; cursor: pointer; display: grid; gap: 4px; padding: 18px 22px; border-radius: 20px; }

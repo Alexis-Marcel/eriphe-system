@@ -124,20 +124,25 @@ func decodeKey(s string) ([]byte, error) {
 
 // startVault opens the vault of the configuration for readSecret.
 func startVault(cfg *Config, s *Store) error {
+	v, err := configVault(cfg, s)
+	if err != nil {
+		return err
+	}
+	setVault(v)
+	return nil
+}
+
+// configVault opens the vault of the configuration, with its key.
+func configVault(cfg *Config, s *Store) (*Vault, error) {
 	file := cfg.VaultKeyFile
 	if file == "" {
 		file = filepath.Join(filepath.Dir(cfg.DB), "vault.key")
 	}
 	key, err := vaultKey(file)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	v, err := openVault(s, key)
-	if err != nil {
-		return err
-	}
-	setVault(v)
-	return nil
+	return openVault(s, key)
 }
 
 // openVault opens the vault of store with key. A key that does not open what

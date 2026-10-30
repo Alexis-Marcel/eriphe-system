@@ -2,14 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"net/netip"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 )
@@ -25,8 +22,9 @@ import (
 // In oidc and proxy modes the password still opens the workspace from the
 // local network (private, loopback and Tailscale addresses, with no proxy
 // on the way), unless that is turned off; and `eriphe-core auth reset` goes
-// back to the password. The settings are the configuration file's web.auth,
-// which wins, or else the workspace's own (Settings → Account). Devices
+// back to the password (web_signin_cli.go). The settings are the
+// configuration file's web.auth, which wins, or else the workspace's own
+// (Settings → Account, or `eriphe-core auth oidc` from the machine). Devices
 // (mutual TLS) and API clients (tokens) do not go through any of this.
 
 const (
@@ -397,59 +395,4 @@ func (w *web) refuse(rw http.ResponseWriter, r *http.Request, si *signin) {
 	}
 	rw.WriteHeader(http.StatusForbidden)
 	w.render(rw, r, nil, "login", "", page{Title: "private.title", Data: authForm{Private: true}})
-}
-
-// authCommand is `eriphe-core auth reset`: back to the password, for when
-// the provider or the proxy keeps the owner out.
-func authCommand(args []string) {
-	if len(args) == 0 || args[0] != "reset" {
-		fmt.Fprintln(os.Stderr, "usage: eriphe-core auth reset [-config file | -data dir]\n\nSets the workspace's sign-in back to the password.")
-		os.Exit(2)
-	}
-	fs := flag.NewFlagSet("auth reset", flag.ExitOnError)
-	path := fs.String("config", "", "configuration file (without one, defaults in -data)")
-	data := fs.String("data", envOr("ERIPHE_DATA", defaultData), "eriphe-core's data directory, without a configuration file (env ERIPHE_DATA)")
-	fs.Parse(args[1:])
-	cfg, err := loadOrDefault(*path, *data)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if cfg.Web != nil && cfg.Web.Auth != nil {
-		log.Fatalf("%s sets web.auth: change its mode there, then restart eriphe-core", *path)
-	}
-	store, err := openStore(cfg.DB)
-	if err != nil {
-		log.Fatalf("store: %v", err)
-	}
-	was, err := resetSignin(store)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("The workspace's sign-in is the password again (it was %s). Open /login.\n", was)
-	var n int
-	store.db.QueryRow(`SELECT COUNT(*) FROM web_owner`).Scan(&n)
-	if n == 0 {
-		fmt.Println("There is no password yet: the setup code is in eriphe-core's log.")
-	}
-}
-
-// resetSignin sets the workspace's mode back to the password, keeping its
-// other settings, and returns the mode it had.
-func resetSignin(s *Store) (string, error) {
-	var a AuthConfig
-	if raw := s.get(authKey); raw != "" {
-		if err := json.Unmarshal([]byte(raw), &a); err != nil {
-			a = AuthConfig{}
-		}
-	}
-	was := a.mode()
-	a.Mode = modePassword
-	raw, err := json.Marshal(a)
-	if err != nil {
-		return "", err
-	}
-	if err := s.set(authKey, string(raw)); err != nil {
-		return "", errors.Join(errors.New("cannot save the sign-in settings"), err)
-	}
-	return was, nil
 }
