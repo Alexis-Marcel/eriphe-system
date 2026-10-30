@@ -12,6 +12,35 @@ you connect to it, and which hands longer work to agents running on them.
 - **Everything that lasts is outside the brain**, in open formats: MCP for tools, SQLite for state
   and memory, markdown for the brain's instructions.
 
+## Get started
+
+Eriphe lives on **one machine that stays on** (its home, which runs eriphe-core). Your other
+computers are then connected to it from the workspace, Eriphe's web page.
+
+| Your situation | Eriphe's home | Install there | Your other devices |
+|---|---|---|---|
+| A NAS with Docker (Unraid, Synology…), or an always-on mini-PC or server | the NAS, mini-PC or server | on a NAS: [one container](#quick-start) (on Unraid, [its template](unraid/README.md)); on a Linux mini-PC or server: the Linux command | "Connect a device" in the workspace |
+| Only a Windows PC | that PC, set to never sleep | the [Windows command](#quick-start), in an administrator PowerShell | "Connect a device" in the workspace |
+| Only a Mac | that Mac, set to never sleep | the [macOS command](#quick-start), in Terminal | "Connect a device" in the workspace |
+| A Linux server | that server | the [Linux command](#quick-start) | "Connect a device" in the workspace |
+
+The installer brings everything it needs and ends with an address and a setup code. Then:
+
+1. Open the address in a browser, accept the certificate warning (expected), and type the setup code to choose your password.
+2. Name your assistant and connect its AI account (a Claude or ChatGPT subscription, or an API key).
+3. Answer (or skip) the short first-run interview: the assistant writes first.
+4. Connect your other devices: Settings → Devices → "Connect a device" gives a command to run on each.
+5. Add tools (mail, calendar, Google Drive…) in Settings → Accounts & tools, and install the phone app through Settings → Remote access.
+
+All the details, options and fixes: [install/README.md](install/README.md).
+
+**Using an AI assistant?** Hand it this sentence:
+
+> Install Eriphe for me by following https://github.com/Alexis-Marcel/eriphe-system/blob/main/docs/install-with-an-ai.md
+
+It is a step-by-step runbook written for AI assistants ([docs/install-with-an-ai.md](docs/install-with-an-ai.md)):
+what to ask you, which commands to run, what you do yourself, and the safety rules it keeps.
+
 ## Status
 
 Alpha, single user: expect rough edges, breaking changes and missing documentation. The workspace is in French by default, with an English

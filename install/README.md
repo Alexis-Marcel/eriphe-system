@@ -1,5 +1,9 @@
 # Installing Eriphe
 
+> **Not a developer?** Start with the README's [Get started](../README.md#get-started): which
+> machine to install on, and the five steps after. Installing with an AI assistant: hand it
+> [docs/install-with-an-ai.md](../docs/install-with-an-ai.md). This page is the full reference.
+
 One command installs Eriphe on a machine, and brings its own container runtime: nothing to install
 first, not even Docker. `install.sh` covers Linux and macOS, `install.ps1` Windows. Both come from
 this folder and are attached to every [GitHub release](https://github.com/Alexis-Marcel/eriphe-system/releases),
@@ -22,14 +26,25 @@ Eriphe is two programs:
 - **eriphe-node**, on every machine Eriphe's agents work on, eriphe-core's own included. A node
   dials eriphe-core and needs no open port.
 
-Contents: [First machine](#1-the-first-machine) ·
-[One container (NAS, any Linux with Docker)](#one-container-nas-any-linux-with-docker) ·
-[Workspace](#2-open-the-workspace) ·
-[Brain](#3-connect-the-brain) · [Connect a device](#4-connect-a-device) ·
-[Google Drive](#5-connect-google-drive-optional) · [Update](#update) ·
-[Uninstall](#uninstall) · [Options](#options) · [What it installs](#what-it-installs) ·
-[What the VM can and cannot see](#what-the-vm-can-and-cannot-see) · [Windows](#windows) ·
-[Troubleshooting](#troubleshooting)
+## Contents
+
+- [What it needs](#what-it-needs)
+- [1. The first machine](#1-the-first-machine)
+  - [One container (NAS, any Linux with Docker)](#one-container-nas-any-linux-with-docker)
+- [2. Open the workspace](#2-open-the-workspace)
+- [3. Connect the brain](#3-connect-the-brain)
+- [4. Connect a device](#4-connect-a-device)
+- [5. Connect Google Drive (optional)](#5-connect-google-drive-optional)
+- [6. Connect GitHub (optional)](#6-connect-github-optional)
+- [Update](#update)
+  - [The machines update themselves](#the-machines-update-themselves)
+- [Uninstall](#uninstall)
+- [Options](#options)
+- [What it installs](#what-it-installs)
+- [Folders](#folders)
+- [What the VM can and cannot see](#what-the-vm-can-and-cannot-see)
+- [Windows](#windows)
+- [Troubleshooting](#troubleshooting)
 
 ## What it needs
 
