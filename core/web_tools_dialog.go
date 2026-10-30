@@ -9,8 +9,10 @@ import (
 // "Add a tool" in two steps, in the tools page's dialog: the search
 // (web_gallery.go), then the chosen tool's form loaded in its place with
 // htmx (?dialog=1), with a way back to the search. Once saved, the dialog
-// follows the tool until it is ready or says why not, instead of saying at
-// once that it can be used. An edit opens the same dialog on its form.
+// closes on the list, where the tool's row is lit and follows the tool
+// until it is ready or says why not, instead of saying at once that it can
+// be used. An edit opens the same dialog on its form, which also holds the
+// tool's access (its level, its credential, its allowed actions).
 // Without JavaScript, each step is its own page, as before (web_tools.go).
 //
 // Google Drive needs a long guide (an app of one's own in the Google Cloud
@@ -107,61 +109,42 @@ func (w *web) leavingStep(rw http.ResponseWriter, r *http.Request, s *session, f
 	w.render(rw, r, s, "settings", "tool-leaving", page{Data: v})
 }
 
-// addedStep is the step after a save: the tool, and a line that follows
-// it until it is up.
-type addedStep struct {
-	Name   string
-	Preset toolPreset
-	Edit   bool
-	Status toolStatus
+// toolSaved ends the dialog after a save: it closes, and the tools page
+// shows the list with the tool's row lit, at the top when it is new, and
+// following the tool until it is up (app.js, "tool-saved"). kind is added,
+// edited or connected; the toast says it.
+func (w *web) toolSaved(rw http.ResponseWriter, r *http.Request, name, kind string) {
+	ev := map[string]any{"name": name, "new": kind != "edited",
+		"message": fmt.Sprintf(tr(w.lang(r), "saved."+kind), name)}
+	rw.Header().Set("HX-Trigger", hxEvents(map[string]any{"tool-saved": ev}))
+	rw.Header().Set("HX-Reswap", "none")
+	rw.WriteHeader(http.StatusOK)
 }
 
-func (w *web) addedStep(rw http.ResponseWriter, r *http.Request, s *session, name string, edit bool) {
-	rw.Header().Set("HX-Retarget", "#tool-step")
-	rw.Header().Set("HX-Reswap", "innerHTML")
-	w.render(rw, r, s, "settings", "tool-added", page{Data: w.added(w.lang(r), name, edit)})
-}
-
-func (w *web) added(lang, name string, edit bool) addedStep {
-	v := addedStep{Name: name, Edit: edit, Status: w.toolStatus(lang, name)}
-	v.Preset, _ = presetOf(lang, w.c.conf().Servers[name])
-	return v
-}
-
-// handleToolAdded is the step after a save on its own (GET
-// /settings/tools/{name}/added): where the browser comes back to after an
-// OAuth service (#added/<name>). Without the dialog, the tools page says it.
+// handleToolAdded (GET /settings/tools/{name}/added) is the older way
+// back after a save: the list, with the tool's row followed.
 func (w *web) handleToolAdded(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
-	if !inDialog(r) || w.c.source(kindServer, name) == "" {
-		http.Redirect(rw, r, "/settings/tools?saved="+url.QueryEscape(name), http.StatusSeeOther)
+	if w.c.source(kindServer, name) == "" {
+		http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther)
 		return
 	}
-	w.render(rw, r, s, "settings", "tool-added", page{Data: w.added(w.lang(r), name, false)})
+	http.Redirect(rw, r, "/settings/tools?tool="+url.QueryEscape(name), http.StatusSeeOther)
 }
 
-// toolStatus is the line that follows a tool just saved: waiting for a
-// device, starting, ready, or why not and what to do.
+// toolStatus is the line that follows a tool just saved, in its row:
+// waiting for a device, starting, ready, or why not and what to do.
 type toolStatus struct {
 	Name   string
 	State  string // wait, start, ok (ready) or err
 	Text   string
 	Hint   string // what to do, when it is not ready
 	Detail string // the raw error, folded
-	Edit   bool   // offer to change the tool
+	Edit   bool   // changing the tool is the way out: its Modifier stands out
 	Poll   string // the delay before asking again; "" once it settled
 }
 
-func (w *web) toolStatus(lang, name string) toolStatus {
-	for _, sv := range w.servers() {
-		if sv.Name == name {
-			return statusOf(lang, sv)
-		}
-	}
-	return toolStatus{Name: name, State: "err", Text: fmt.Sprintf(tr(lang, "added.gone"), name)}
-}
-
-// statusOf words where a tool is: the line of the step after a save.
+// statusOf words where a tool is: the line of its row after a save.
 func statusOf(lang string, sv serverView) toolStatus {
 	v := toolStatus{Name: sv.Name, State: "err"}
 	v.Edit = sv.Source == sourceWorkspace
@@ -190,7 +173,20 @@ func statusOf(lang string, sv serverView) toolStatus {
 	return v
 }
 
-// handleToolStatus is the line alone, asked again until the tool settles.
-func (w *web) handleToolStatus(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "tool-status", page{Data: w.toolStatus(w.lang(r), r.PathValue("name"))})
+// handleToolRow is a followed tool's row alone (GET
+// /settings/tools/{name}/row), asked again until the tool settles.
+func (w *web) handleToolRow(rw http.ResponseWriter, r *http.Request, s *session) {
+	lang, name := w.lang(r), r.PathValue("name")
+	for _, sv := range w.servers() {
+		if sv.Name == name {
+			t := w.toolRow(lang, w.c.conf(), sv, w.c.store.get(voiceTokenKey) != "")
+			st := statusOf(lang, sv)
+			t.Follow = &st
+			w.render(rw, r, s, "settings", "tool-row-frag", page{Data: t})
+			return
+		}
+	}
+	// removed meanwhile: the list without it
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusOK)
 }

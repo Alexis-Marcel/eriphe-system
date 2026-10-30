@@ -92,7 +92,8 @@ func addConnected(t *testing.T, tw *testWeb, c *core, f *fakeAS, csrf string) {
 	}
 	code, state := f.authorize(authURL)
 	status, body := callback(t, tw, "code="+code+"&state="+url.QueryEscape(state))
-	if status != 200 || !strings.Contains(body, `content="0;url=/settings/tools?connected=linear#added/linear"`) {
+	// back to the list, the new tool's row followed and at the top
+	if status != 200 || !strings.Contains(html.UnescapeString(body), `content="0;url=/settings/tools?connected=linear&tool=linear&new=1"`) {
 		t.Fatalf("callback: %d %s", status, body)
 	}
 	if _, ok := c.conf().Servers["linear"]; !ok {
@@ -113,8 +114,9 @@ func TestPendingOAuthConnect(t *testing.T) {
 		t.Fatal("no connect button in the form")
 	}
 	addConnected(t, tw, c, f, csrf)
+	// connected: no standing Reconnect on its row
 	if _, body, _ := tw.do("GET", "/settings/tools?connected=linear", nil, nil); !strings.Contains(html.UnescapeString(body), "« linear » est connecté") ||
-		!strings.Contains(body, "srv-ready") || !strings.Contains(body, "/settings/servers/linear/connect") {
+		!strings.Contains(body, "srv-ready") || strings.Contains(body, "/settings/servers/linear/connect") {
 		t.Fatalf("tools page: %s", body)
 	}
 	// A plain save of the form, without connect, still goes through the
@@ -162,12 +164,14 @@ func TestPendingOAuthCancel(t *testing.T) {
 	if _, body, _ := tw.do("GET", "/settings/tools?notconnected=linear&why=cancelled&kept=1", nil, nil); !strings.Contains(html.UnescapeString(body), "garde sa version précédente") {
 		t.Fatal("no kept notice")
 	}
-	// The edit form of a server already on OAuth can save without signing in.
-	if _, body, _ := tw.do("GET", "/settings/tools/linear/edit", nil, nil); !strings.Contains(body, "Enregistrer sans se reconnecter") {
-		t.Fatal("no plain save on the edit form")
+	// The edit form of a server already on OAuth saves as it is: no
+	// "another account" button, no sign-in unless the level asks for it.
+	if _, body, _ := tw.do("GET", "/settings/tools/linear/edit", nil, nil); !strings.Contains(body, "tool-form orig-oauth") ||
+		!strings.Contains(body, "save-btn keep if-noreauth") || strings.Contains(body, "Se connecter à") {
+		t.Fatalf("edit form: %s", mainPart(t, body))
 	}
 	form.Del("connect")
-	if code, _, h := tw.post("/settings/tools/linear", form, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=linear" {
+	if code, _, h := tw.post("/settings/tools/linear", form, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=linear&tool=linear" {
 		t.Fatalf("plain save: %d %v", code, h)
 	}
 	if c.conf().Servers["linear"].Use != "changed" {
@@ -224,5 +228,46 @@ func TestPendingOAuthUnreachable(t *testing.T) {
 	noPending(t, c)
 	if _, ok := c.conf().Servers["gone"]; ok {
 		t.Fatal("saved")
+	}
+}
+
+// Changing the level of an OAuth tool asks for a token of that level only
+// where the stored one cannot serve it: the save button says "Save and
+// authorize" then, and saving goes to the service at once.
+func TestLevelChangeAuthorizes(t *testing.T) {
+	tw, c, f, csrf := pendingWeb(t)
+	f.scopes = []string{"read", "write"}
+	addConnected(t, tw, c, f, csrf) // everything asked: a token that writes
+	if got := c.store.get(tokenAccessKey("linear")); got != grantedWrite {
+		t.Fatalf("granted = %q", got)
+	}
+	_, body, _ := tw.do("GET", "/settings/tools/linear/edit", nil, nil)
+	if !strings.Contains(body, "tool-form orig-oauth reauth-read-only\"") || !strings.Contains(body, "Enregistrer et autoriser") {
+		t.Fatalf("edit form: %s", mainPart(t, body))
+	}
+	// another level that writes: saved as it is
+	form := oauthToolForm(f)
+	form.Del("connect")
+	form.Set("access", accessFree)
+	if code, _, h := tw.post("/settings/tools/linear", form, csrf); code != 200 || !strings.HasPrefix(h.Get("HX-Redirect"), "/settings/tools?saved=linear") {
+		t.Fatalf("free: %d %v", code, h)
+	}
+	if c.conf().Servers["linear"].level() != accessFree {
+		t.Fatal("free not saved")
+	}
+	// read only, even without the button's connect: off to the service
+	form.Set("access", accessReadOnly)
+	authURL := startConnectForm(t, tw, csrf, "/settings/tools/linear", form)
+	if c.conf().Servers["linear"].level() != accessFree {
+		t.Fatal("read only saved before its authorization")
+	}
+	code, state := f.authorize(authURL)
+	if status, body := callback(t, tw, "code="+code+"&state="+url.QueryEscape(state)); status != 200 ||
+		!strings.Contains(html.UnescapeString(body), "url=/settings/tools?connected=linear&tool=linear\"") {
+		t.Fatalf("callback: %d %s", status, body)
+	}
+	waitStatus(t, c.pool.get("linear"), statusReady)
+	if c.conf().Servers["linear"].level() != accessReadOnly || c.store.get(tokenAccessKey("linear")) != grantedRead {
+		t.Fatal("not read only on a read token")
 	}
 }

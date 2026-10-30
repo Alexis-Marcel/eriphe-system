@@ -199,7 +199,7 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /settings/tools/{name}", w.auth(w.handleSaveTool))
 	mux.Handle("POST /settings/tools/{name}/delete", w.auth(w.handleDeleteTool))
 	mux.Handle("GET /settings/tools/{name}/added", w.auth(w.handleToolAdded)) // web_tools_dialog.go
-	mux.Handle("GET /settings/tools/{name}/status", w.auth(w.handleToolStatus))
+	mux.Handle("GET /settings/tools/{name}/row", w.auth(w.handleToolRow))
 	mux.Handle("GET /settings/tools/{name}/access", w.auth(w.handleToolAccess)) // web_access.go
 	mux.Handle("POST /settings/tools/{name}/access", w.auth(w.handleSaveToolAccess))
 	mux.Handle("POST /settings/tools/{name}/allowed/delete", w.auth(w.handleForgetAction))

@@ -455,15 +455,76 @@ if (location.hash === "#connect") {
   const d = document.getElementById("connect-dlg");
   if (d) openDialog(d);
 }
+// reveal brings el into view by scrolling its nearest scrolling box, and
+// only that one (the dialog's step, the page's main): the browser's own
+// scrolling into view could move the whole shell. As little as needed, or
+// to its top with start.
+function reveal(el, start) {
+  let s = el.parentElement;
+  while (s && s !== document.body) {
+    const o = getComputedStyle(s).overflowY;
+    if ((o === "auto" || o === "scroll") && s.scrollHeight > s.clientHeight) break;
+    s = s.parentElement;
+  }
+  if (!s || s === document.body) return;
+  const r = el.getBoundingClientRect(), b = s.getBoundingClientRect();
+  let dy = 0;
+  if (start || r.height > b.height - 24) dy = r.top - b.top - 12;
+  else if (r.bottom > b.bottom - 12) dy = r.bottom - b.bottom + 12;
+  else if (r.top < b.top + 12) dy = r.top - b.top - 12;
+  if (dy) s.scrollBy({ top: dy, behavior: "smooth" });
+}
+
+// A connection test ("Tester la connexion", .test-btn): the button says
+// it is testing, for a moment at least even when the answer is at once,
+// its box empties meanwhile, and the result, which comes right under the
+// button, is then scrolled into view, in a dialog as on a long page.
+const testMin = 600;
+document.body.addEventListener("htmx:beforeRequest", (e) => {
+  const b = e.detail.elt;
+  if (!b || !b.matches || !b.matches(".test-btn")) return;
+  if (b.classList.contains("is-busy")) return e.preventDefault(); // one test at a time
+  b.classList.add("is-busy");
+  b.setAttribute("aria-disabled", "true");
+  b.dataset.t0 = Date.now();
+  const box = e.detail.target;
+  if (box) { box.textContent = ""; box.classList.add("is-waiting"); }
+});
+document.body.addEventListener("htmx:afterRequest", (e) => {
+  const b = e.detail.elt;
+  if (!b || !b.matches || !b.matches(".test-btn") || !b.classList.contains("is-busy")) return;
+  const box = e.detail.target;
+  setTimeout(() => {
+    b.classList.remove("is-busy");
+    b.removeAttribute("aria-disabled");
+    if (!box) return;
+    box.classList.remove("is-waiting");
+    if (box.firstElementChild) reveal(box);
+  }, Math.max(50, testMin - (Date.now() - Number(b.dataset.t0 || 0))));
+});
+
 // "Add a tool" in two steps (tools.html, web_tools_dialog.go). A tile, a
 // kind of account or any link marked data-step loads its step into
 // #tool-step, in place of the search; "Modifier" (data-step-open) opens
-// the dialog on the tool's form. The address says which step (#add,
-// #add/mail, #edit/mail, #added/mail), the browser's Back goes to the step
-// before and, from the first one, closes the dialog; closed, the address
-// is as before, so a reload does not open it again. Once a tool is saved,
-// closing the dialog refreshes the list. Without this script, every step
-// is its own page.
+// the dialog on the tool's form, scrolled to its data-scroll part if any.
+// The address says which step (#add, #add/mail, #edit/mail), the
+// browser's Back goes to the step before and, from the first one, closes
+// the dialog; closed, the address is as before, so a reload does not open
+// it again. Once a tool is saved ("tool-saved"), the dialog closes on the
+// list, where the tool's row is lit (a new one at the top) and follows it
+// until it is up, and a toast says it. Without this script, every step is
+// its own page.
+// lit brings a tool's row into view and lights it for a moment.
+function lit(name) {
+  const row = document.getElementById("tool-" + name);
+  if (!row) return;
+  row.classList.remove("pointed");
+  void row.offsetWidth; // the animation again, when it is lit twice
+  row.classList.add("pointed");
+  reveal(row);
+  setTimeout(() => row.classList.remove("pointed"), 2600);
+}
+
 (function () {
   const d = document.getElementById("add-dlg");
   if (!d || typeof d.showModal !== "function") return;
@@ -472,7 +533,7 @@ if (location.hash === "#connect") {
   let shown = ""; // the step shown, as in the address
   let closing = false; // the dialog closed: the history goes back to the page
   let loading = false;
-  let saved = false;
+  let follow = null; // the tool just saved, to show in the list once closed
   const depth = () => (history.state && history.state.addStep) || 0;
   const withDialog = (u) => u + (u.includes("?") ? "&" : "?") + "dialog=1";
   const plain = (e) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
@@ -483,7 +544,6 @@ if (location.hash === "#connect") {
     const [kind, id] = hash.split("/");
     if (!id) return null;
     if (kind === "edit") return "/settings/tools/" + encodeURIComponent(id) + "/edit";
-    if (kind === "added") return "/settings/tools/" + encodeURIComponent(id) + "/added";
     const tile = kind === "add" && pick.querySelector('a[data-hash="add/' + CSS.escape(id) + '"]');
     return tile ? tile.dataset.step : null;
   }
@@ -521,10 +581,9 @@ if (location.hash === "#connect") {
     }, () => { loading = false; });
   }
 
-  // after a step came in: its first field, a tool saved, a service to go to
+  // after a step came in: its first field, a service to go to
   function settle() {
     step.scrollTop = 0;
-    saved = saved || !!step.querySelector("[data-tool-saved]");
     const field = step.querySelector(".step-body input:not([type=hidden]):not([disabled]), .step-body .provider");
     const fine = window.matchMedia("(pointer: fine)").matches; // no keyboard popping up on a phone
     if (field && fine) field.focus({ preventScroll: true });
@@ -545,10 +604,31 @@ if (location.hash === "#connect") {
     settle();
   });
 
+  // The list with a tool's row lit, following the tool (?tool=).
+  function showTool(t) {
+    const u = "/settings/tools?tool=" + encodeURIComponent(t.name) + (t.new ? "&new=1" : "");
+    // lit once htmx has settled the rows, which puts their classes back
+    return htmx.ajax("GET", u, { target: "#tools-body", select: "#tools-body", swap: "outerHTML" })
+      .then(() => setTimeout(() => lit(t.name), htmx.config.defaultSettleDelay + 30));
+  }
+
   function route() {
-    if (closing) { closing = false; return; }
+    if (closing) {
+      // back at the page; when it was opened on a step (a link to
+      // #add/…), the address drops it, so the next event keeps it closed
+      closing = false;
+      if (/^#(add|edit|added)(\/|$)/.test(location.hash)) history.replaceState(null, "", location.pathname + location.search);
+      return;
+    }
     const hash = decodeURIComponent(location.hash.slice(1));
-    if (!/^(add|edit|added)(\/|$)/.test(hash)) {
+    // the older way back after a save (#added/<name>): the list, its row lit
+    const added = /^added\/(.+)$/.exec(hash);
+    if (added) {
+      history.replaceState(null, "", location.pathname + location.search);
+      if (d.open) { follow = { name: added[1] }; return d.close(); }
+      return showTool({ name: added[1] });
+    }
+    if (!/^(add|edit)(\/|$)/.test(hash)) {
       shown = "";
       if (d.open) d.close();
       return;
@@ -578,7 +658,11 @@ if (location.hash === "#connect") {
     const edit = e.target.closest("a[data-step-open]");
     if (edit) {
       e.preventDefault();
-      return go(edit.getAttribute("href"), edit.dataset.hash, "push");
+      const part = edit.dataset.scroll;
+      return go(edit.getAttribute("href").split("#")[0], edit.dataset.hash, "push").then(() => {
+        const el = part && document.getElementById(part);
+        if (el && step.contains(el)) reveal(el, true);
+      });
     }
     if (!d.contains(e.target)) return;
     const back = e.target.closest("a[data-step-back]");
@@ -609,10 +693,37 @@ if (location.hash === "#connect") {
     const n = depth();
     if (n > 0) { closing = true; history.go(-n); }
     else if (location.hash) history.replaceState(null, "", location.pathname + location.search);
-    if (saved) {
-      saved = false;
-      htmx.ajax("GET", "/settings/tools", { target: "#tools-body", select: "#tools-body", swap: "outerHTML" });
+    if (follow) {
+      const t = follow;
+      follow = null;
+      showTool(t);
     }
+  });
+
+  // A save in the dialog (web_tools_dialog.go, toolSaved): close on the list.
+  document.body.addEventListener("tool-saved", (e) => {
+    const t = e.detail || {};
+    if (!t.name) return;
+    if (t.message) document.dispatchEvent(new CustomEvent("toast", { detail: { message: t.message, kind: "ok" } }));
+    follow = t;
+    if (d.open) d.close();
+    else { follow = null; showTool(t); }
+  });
+
+  // Back from a save on a page of its own or from an OAuth service
+  // (?tool=): the row is lit, the flash becomes a toast, and the address
+  // drops what it said, so a reload shows the list as it is.
+  document.addEventListener("DOMContentLoaded", () => {
+    const q = new URLSearchParams(location.search);
+    const name = q.get("tool");
+    if (!name) return;
+    const flash = document.querySelector(".ok-note[data-toast]");
+    if (flash) {
+      document.dispatchEvent(new CustomEvent("toast", { detail: { message: flash.textContent.trim(), kind: "ok" } }));
+      flash.remove();
+    }
+    history.replaceState(history.state, "", location.pathname + location.hash);
+    lit(name);
   });
 })();
 

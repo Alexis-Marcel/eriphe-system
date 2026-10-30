@@ -621,6 +621,12 @@ func hxTrigger(msg string, ok, changed bool) string {
 	if changed {
 		v["memory-changed"] = true
 	}
+	return hxEvents(v)
+}
+
+// hxEvents is an HX-Trigger header of events and their details, every
+// non-ASCII character escaped.
+func hxEvents(v map[string]any) string {
 	raw, _ := json.Marshal(v)
 	var b strings.Builder
 	for _, r := range string(raw) {
