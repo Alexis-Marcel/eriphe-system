@@ -6,12 +6,15 @@ import (
 )
 
 // Every page of the settings renders inside the common layout: the top bar
-// with the main navigation, the settings' own navigation with its tab
-// marked, and the tab bar of the phone.
+// with its two buttons, Tâches and Réglages (current), the way back to the
+// conversation, and the settings' own navigation in four groups with its
+// entry marked. There is no tab bar and no main navigation any more.
 func TestSettingsTabsHaveLayout(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	for _, tc := range []struct{ path, tab string }{
+		{"/memory", "memory"},
+		{"/memory?view=inbox", "memory"},
 		{"/settings/devices", "devices"},
 		{"/settings/machines", "devices"},
 		{"/settings/agents", "agents"},
@@ -34,15 +37,102 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 			t.Errorf("GET %s: %d", tc.path, code)
 			continue
 		}
-		for _, want := range []string{`<header class="topbar">`, `<nav class="topnav"`, `<a href="/settings" aria-current="page">`,
-			`<nav class="settings-nav"`, `<a href="/settings/` + tc.tab + `" aria-current="page">`, `<nav class="tabbar"`} {
+		href := "/settings/" + tc.tab
+		if tc.tab == "memory" {
+			href = "/memory"
+		}
+		for _, want := range []string{`<header class="topbar">`, `<a class="back-home" href="/">`,
+			`id="tasks-btn" href="/#tasks-panel"`, `id="tasks-badge"`, `<a class="head-btn" href="/settings" aria-label="Réglages" title="Réglages" aria-current="page">`,
+			`<nav class="settings-nav"`, `<a href="` + href + `" aria-current="page">`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("GET %s lacks %q", tc.path, want)
 			}
 		}
-		if n := strings.Count(body, `aria-current="page">`); n != 3 { // the top bar, the tab bar, the settings
-			t.Errorf("GET %s: %d current links, want 3", tc.path, n)
+		for _, gone := range []string{`class="tabbar"`, `class="topnav"`} {
+			if strings.Contains(body, gone) {
+				t.Errorf("GET %s still has %q", tc.path, gone)
+			}
 		}
+		if n := strings.Count(body, `aria-current="page">`); n != 2 { // Réglages, and the entry
+			t.Errorf("GET %s: %d current links, want 2", tc.path, n)
+		}
+	}
+}
+
+// The settings open on their first entry, the memory, whose address stays
+// /memory: /settings/memory leads there, with its query.
+func TestSettingsOpenOnMemory(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	for path, want := range map[string]string{"/settings": "/memory", "/settings/memory?view=inbox": "/memory?view=inbox"} {
+		if code, _, h := tw.do("GET", path, nil, nil); code != 303 || h.Get("Location") != want {
+			t.Errorf("GET %s: %d to %q, want %q", path, code, h.Get("Location"), want)
+		}
+	}
+}
+
+// The settings' entries come in four groups, in this order, each under its
+// title; the memory is the first entry of the first.
+func TestSettingsNavGroups(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
+	nav := body[strings.Index(body, `<nav class="settings-nav"`):]
+	nav = nav[:strings.Index(nav, "</nav>")]
+	order := []string{"Assistant", `href="/memory"`, `href="/settings/agents"`,
+		"Connexions", `href="/settings/tools"`, `href="/settings/folders"`,
+		"Appareils &amp; accès", `href="/settings/devices"`, `href="/settings/remote"`, `href="/settings/notifications"`,
+		"Mon espace", `href="/settings/account"`, `href="/settings/journal"`}
+	at := 0
+	for _, want := range order {
+		i := strings.Index(nav[at:], want)
+		if i < 0 {
+			t.Fatalf("the nav lacks %q after its place, or has it out of order:\n%s", want, nav)
+		}
+		at += i + len(want)
+	}
+	if n := strings.Count(nav, `class="nav-group"`); n != 4 {
+		t.Errorf("%d groups, want 4", n)
+	}
+	if strings.Contains(nav, "attn-dot") {
+		t.Error("an entry is marked while nothing is wrong")
+	}
+}
+
+// The conversation is the one main screen: Tâches opens its panel in place,
+// and the panel can be closed (the phone's sheet).
+func TestHomeHeader(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	_, body, _ := tw.do("GET", "/", nil, nil)
+	for _, want := range []string{`<a class="brand" href="/"`, `id="tasks-btn" href="#tasks-panel" aria-controls="tasks-panel"`,
+		`<b class="badge" id="tasks-badge" hidden></b>`, `<a class="head-btn" href="/settings" aria-label="Réglages"`,
+		`<aside class="side" id="tasks-panel"`, `data-tasks-close`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("home lacks %q", want)
+		}
+	}
+	for _, gone := range []string{`class="tabbar"`, `class="topnav"`, `class="back-home"`, `aria-current="page"`} {
+		if strings.Contains(body, gone) {
+			t.Errorf("home still has %q", gone)
+		}
+	}
+	// Signing out is in My space now.
+	if _, body, _ := tw.do("GET", "/settings/account", nil, nil); !strings.Contains(body, `hx-post="/logout"`) {
+		t.Error("no way to sign out")
+	}
+}
+
+// A tool in error and a refused key mark their entries.
+func TestSettingsNavAttention(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	tw.c.setProviderHealth("p", providerHealth{Cause: causeAuth})
+	_, body, _ := tw.do("GET", "/settings/journal", nil, nil)
+	nav := body[strings.Index(body, `<nav class="settings-nav"`):]
+	agents := nav[strings.Index(nav, `href="/settings/agents"`):]
+	if !strings.Contains(agents[:strings.Index(agents, "</a>")], "attn-dot") {
+		t.Error("a refused key does not mark Agents")
 	}
 }
 

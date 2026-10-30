@@ -13,12 +13,17 @@ import (
 	"unicode/utf8"
 )
 
-// The workspace's Mémoire page: what Eriphe remembers, which I can search,
+// The workspace's Mémoire page, the first entry of the settings: what Eriphe remembers, which I can search,
 // correct, pin to the profile, mark obsolete, forget, and the proposals
 // waiting for my approval. What I write here is mine (trust owner).
 
 func (w *web) memoryRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /memory", w.auth(w.handleMemory))
+	// The memory is the settings' first entry; its address stays /memory.
+	mux.Handle("GET /settings/memory", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
+		u := url.URL{Path: "/memory", RawQuery: r.URL.RawQuery}
+		http.Redirect(rw, r, u.String(), http.StatusSeeOther)
+	}))
 	mux.Handle("GET /memory/export.jsonl", w.auth(w.handleMemoryExport))
 	mux.Handle("POST /memory", w.auth(w.handleMemoryAdd))
 	mux.Handle("POST /memory/extract", w.auth(w.handleMemoryExtract))
@@ -182,7 +187,7 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 	}
 	if w.c.mem == nil {
 		p.Off = true
-		w.render(rw, r, s, "memory", "", page{Title: "nav.memory", Nav: "memory", Data: p})
+		w.render(rw, r, s, "memory", "", page{Title: "nav.memory", Nav: "settings", Tab: "memory", Data: p})
 		return
 	}
 	m := w.c.mem
@@ -256,7 +261,7 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 		}
 		p.Items = append(p.Items, card)
 	}
-	w.render(rw, r, s, "memory", "", page{Title: "nav.memory", Nav: "memory", Data: p})
+	w.render(rw, r, s, "memory", "", page{Title: "nav.memory", Nav: "settings", Tab: "memory", Data: p})
 }
 
 // handleMemoryInterview asks the assistant for the first-run interview
@@ -656,6 +661,7 @@ var memoryStrings = map[string]map[string]string{
 		"nav.memory":           "Mémoire",
 		"mem.lead":             "Ce que {{name}} retient de toi et de tes journées. Tout est ici : corrige, épingle, oublie.",
 		"mem.about":            "Ce que {{name}} sait de toi",
+		"mem.essentials":       "L'essentiel",
 		"mem.aboutlead":        "Ce qui est épinglé lui sert dans chaque conversation ; le reste, il le retrouve quand il en a besoin.",
 		"mem.aboutnone":        "Rien encore. Une courte interview, cinq minutes, et {{name}} saura l'essentiel.",
 		"mem.aboutnobrain":     "Rien encore : {{name}} pourra te poser quelques questions dès qu'il sera configuré.",
@@ -792,6 +798,7 @@ var memoryStrings = map[string]map[string]string{
 		"nav.memory":           "Memory",
 		"mem.lead":             "What {{name}} remembers about you and your days. It is all here: correct, pin, forget.",
 		"mem.about":            "What {{name}} knows about you",
+		"mem.essentials":       "The essentials",
 		"mem.aboutlead":        "What is pinned helps in every conversation; the rest, {{name}} looks up when needed.",
 		"mem.aboutnone":        "Nothing yet. A short interview, five minutes, and {{name}} will know the essentials.",
 		"mem.aboutnobrain":     "Nothing yet: {{name}} can ask you a few questions once it is set up.",

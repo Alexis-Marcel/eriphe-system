@@ -288,7 +288,7 @@
     });
   }
 
-  // The tab bar's badge: active tasks, highlighted when one needs you.
+  // The Tâches button's badge: active tasks, highlighted when one needs you.
   function badge() {
     const b = $("#tasks-badge");
     if (!b) return;
@@ -337,21 +337,90 @@
     });
   });
 
-  // On a phone the workspace shows one view at a time.
-  document.addEventListener("click", (e) => {
-    const tab = e.target.closest(".tabbar [data-view]");
+  // Tâches, in the header. On a phone the tasks are a sheet over the
+  // conversation: it slides in, and closes with its button, Escape or the
+  // browser's back. On a wide screen they are the side panel, which the
+  // button hides or shows again (this browser remembers it). From another
+  // page, the button comes back to the conversation on its tasks.
+  const phone = () => matchMedia("(max-width: 860px)").matches;
+  const sideKey = "eriphe.tasks.hidden";
+  let sheetEntry = false; // opening the sheet added a step to the history
+  function tasksState() {
+    const ws = $(".workspace"), btn = $("#tasks-btn");
+    if (!ws || !btn) return;
+    const open = phone() ? ws.dataset.view === "tasks" : !ws.classList.contains("side-off");
+    btn.setAttribute("aria-expanded", String(open));
+  }
+  function openSheet(push) {
     const ws = $(".workspace");
-    if (!tab || !ws) return;
-    e.preventDefault();
-    ws.dataset.view = tab.dataset.view;
-    $$(".tabbar [data-view]").forEach((a) => a.toggleAttribute("aria-current", a === tab));
-    if (tab.dataset.view === "chat") toBottom(false);
+    ws.dataset.view = "tasks";
+    if (push) {
+      history.pushState(null, "", "#tasks-panel");
+      sheetEntry = true;
+    }
+    tasksState();
+    $("#tasks-panel").focus({ preventScroll: true });
+  }
+  function sheetClosed() {
+    $(".workspace").dataset.view = "chat";
+    tasksState();
+    $("#tasks-btn").focus({ preventScroll: true });
+  }
+  function closeSheet() {
+    if (sheetEntry) return history.back(); // popstate closes it
+    if (location.hash === "#tasks-panel") history.replaceState(null, "", location.pathname + location.search);
+    sheetClosed();
+  }
+  function showSide(show) {
+    $(".workspace").classList.toggle("side-off", !show);
+    try { show ? localStorage.removeItem(sideKey) : localStorage.setItem(sideKey, "1"); } catch (_) { /* private mode */ }
+    tasksState();
+    if (show) $("#tasks-panel").focus({ preventScroll: true });
+  }
+  document.addEventListener("click", (e) => {
+    const ws = $(".workspace");
+    if (!ws) return;
+    if (e.target.closest("#tasks-btn")) {
+      e.preventDefault();
+      if (!phone()) return showSide(ws.classList.contains("side-off"));
+      return ws.dataset.view === "tasks" ? closeSheet() : openSheet(true);
+    }
+    // its button, or the shade around it
+    if (e.target.closest("[data-tasks-close]") || (e.target === ws && ws.dataset.view === "tasks")) closeSheet();
   });
-
-  // Tâches from another page comes back to the conversation on its tasks.
-  if (location.hash === "#tasks-panel" && $(".workspace")) {
-    $(".workspace").dataset.view = "tasks";
-    $$(".tabbar [data-view]").forEach((a) => a.toggleAttribute("aria-current", a.dataset.view === "tasks"));
+  // Before the drawer's own Escape: the drawer, over the sheet, closes first.
+  document.addEventListener("keydown", (e) => {
+    const ws = $(".workspace");
+    if (e.key !== "Escape" || !ws || ws.dataset.view !== "tasks" || !phone()) return;
+    if (document.body.classList.contains("drawer-open") || $("dialog[open]")) return;
+    closeSheet();
+  }, true);
+  window.addEventListener("popstate", () => {
+    const ws = $(".workspace");
+    if (!ws || !phone()) return;
+    if (location.hash === "#tasks-panel") {
+      sheetEntry = true;
+      openSheet(false);
+    } else if (ws.dataset.view === "tasks") {
+      sheetEntry = false;
+      sheetClosed();
+    }
+  });
+  if ($(".workspace")) {
+    let hidden = false;
+    try { hidden = localStorage.getItem(sideKey) === "1"; } catch (_) { /* private mode */ }
+    if (location.hash === "#tasks-panel") {
+      if (phone()) openSheet(false);
+      else showSide(true);
+    } else if (hidden) {
+      $(".workspace").classList.add("side-off");
+    }
+    tasksState();
+    // A phone turned, a window widened: the button says what it now does.
+    matchMedia("(max-width: 860px)").addEventListener("change", () => {
+      if (!phone()) $(".workspace").dataset.view = "chat";
+      tasksState();
+    });
   }
 
   // On a phone the settings tabs are a row of pills: the current one is
@@ -750,7 +819,7 @@ function lit(name) {
   // The keyboard. Chrome on Android shrinks the page for it (the viewport's
   // interactive-widget); Safari on iOS lays it over the page instead: the
   // page follows the visible part, so the composer stays above the
-  // keyboard, and the tab bar steps aside while it is open.
+  // keyboard.
   const vv = window.visualViewport;
   if (vv && document.documentElement.classList.contains("shell")) {
     const root = document.documentElement;

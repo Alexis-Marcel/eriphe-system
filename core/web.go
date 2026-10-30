@@ -170,8 +170,9 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /tasks/{id}/reply", w.auth(w.handleReply))
 	mux.Handle("POST /tasks/{id}/stop", w.auth(w.handleStop))
 
+	// The settings open on their first entry, the memory (web_memory.go).
 	mux.Handle("GET /settings", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
-		http.Redirect(rw, r, "/settings/devices", http.StatusSeeOther)
+		http.Redirect(rw, r, "/memory", http.StatusSeeOther)
 	}))
 	w.deviceRoutes(mux)                                            // web_devices.go
 	mux.Handle("GET /settings/machines", w.auth(w.handleMachines)) // its address before devices
@@ -330,7 +331,35 @@ type page struct {
 	Version string // of the static files, for the browser's cache (assetVersion)
 	Build   string // eriphe-core's version
 	Updates updateNotice
+	Attn    attention // the settings' entries that need a look
 	Data    any
+}
+
+// attention marks the settings' entries where something is wrong: a tool
+// in error, an AI account whose key was refused.
+type attention struct {
+	Tools  bool
+	Agents bool
+}
+
+func (w *web) attention() attention {
+	var a attention
+	m := w.c.conf()
+	for name := range m.Servers {
+		if u := w.c.pool.get(name); u != nil {
+			if status, _, _ := u.snapshot(); status == statusError {
+				a.Tools = true
+				break
+			}
+		}
+	}
+	for name := range m.Providers {
+		if h := w.c.providerHealth(name); h != nil && h.Cause == causeAuth {
+			a.Agents = true
+			break
+		}
+	}
+	return a
 }
 
 // updateNotice is what runs behind its latest version (updates.go), for
@@ -367,6 +396,9 @@ func (w *web) render(rw http.ResponseWriter, r *http.Request, s *session, name, 
 	p.Build = version
 	if block == "" {
 		p.Updates = w.updateNotice()
+		if p.Nav == "settings" {
+			p.Attn = w.attention()
+		}
 	}
 	p.User = w.c.conf().User
 	if s != nil {
