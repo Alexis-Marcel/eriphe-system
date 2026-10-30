@@ -147,9 +147,16 @@ type githubClient struct {
 
 	flows githubFlows // the app's creations in progress (web_github.go)
 
-	mu      sync.Mutex
-	toolTok string // the GitHub tool's installation token, and when it ends
-	toolExp time.Time
+	mu sync.Mutex
+	// The GitHub tool's installation tokens: with all the app's rights, and
+	// with their reading only.
+	toolToks [2]cachedToken
+}
+
+// cachedToken is a token and when it ends.
+type cachedToken struct {
+	tok string
+	exp time.Time
 }
 
 func newGitHubClient() *githubClient {
@@ -282,10 +289,17 @@ func (g *githubClient) installations(ctx context.Context, app *githubApp) ([]git
 	return out, err
 }
 
+// githubReadPermissions are the app's rights, downscoped to reading: the
+// GitHub tool's token when the tool is read only.
+var githubReadPermissions = map[string]string{
+	"contents": "read", "pull_requests": "read", "issues": "read", "metadata": "read", "checks": "read",
+}
+
 // toolToken is the GitHub MCP tool's token on the app: an installation
 // token of the app owner's installation (or the only one), with all its
-// repositories and rights, renewed five minutes before it ends.
-func (g *githubClient) toolToken(ctx context.Context) (string, error) {
+// repositories, and all its rights or (readOnly) their reading only,
+// renewed five minutes before it ends.
+func (g *githubClient) toolToken(ctx context.Context, readOnly bool) (string, error) {
 	app, err := loadGitHubApp()
 	if err != nil {
 		if err == errNoGitHubApp {
@@ -295,8 +309,13 @@ func (g *githubClient) toolToken(ctx context.Context) (string, error) {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.toolTok != "" && g.toolExp.Sub(g.now()) > 5*time.Minute {
-		return g.toolTok, nil
+	slot := 0
+	var perms map[string]string
+	if readOnly {
+		slot, perms = 1, githubReadPermissions
+	}
+	if c := g.toolToks[slot]; c.tok != "" && c.exp.Sub(g.now()) > 5*time.Minute {
+		return c.tok, nil
 	}
 	list, err := g.installations(ctx, app)
 	if err != nil {
@@ -311,18 +330,18 @@ func (g *githubClient) toolToken(ctx context.Context) (string, error) {
 			inst = i.ID
 		}
 	}
-	tok, exp, err := g.installationToken(ctx, app, inst, nil, nil)
+	tok, exp, err := g.installationToken(ctx, app, inst, nil, perms)
 	if err != nil {
 		return "", err
 	}
-	g.toolTok, g.toolExp = tok, exp
+	g.toolToks[slot] = cachedToken{tok, exp}
 	return tok, nil
 }
 
-// forget drops the cached tool token (the app was removed or replaced).
+// forget drops the cached tool tokens (the app was removed or replaced).
 func (g *githubClient) forget() {
 	g.mu.Lock()
-	g.toolTok, g.toolExp = "", time.Time{}
+	g.toolToks = [2]cachedToken{}
 	g.mu.Unlock()
 }
 

@@ -175,6 +175,7 @@ type authFlow struct {
 	binding  string // workspace flows: hash of the browser's flow cookie
 
 	mu       sync.Mutex
+	granted  string          // what the scopes asked allow (access.go), once known
 	state    string          // the state of the authorization URL, once known
 	answered error           // once the redirect came: why another fetch fails
 	urls     chan string     // the authorization URL, once known
@@ -313,12 +314,28 @@ func (p *pool) oauthHandler(u *upstream) (*oauthGate, error) {
 			if err := p.store.saveOAuthToken(u.name, oc, t); err != nil {
 				return nil, err
 			}
+			flow.mu.Lock()
+			granted := flow.granted
+			flow.mu.Unlock()
+			if granted != "" {
+				p.store.set(tokenAccessKey(u.name), granted)
+			}
 			return p.persisting(ctx, u.name, oc, t, true), nil
 		},
 	}
-	if len(o.Scopes) > 0 {
-		scopes := o.Scopes
-		hcfg.ScopeFilter = func([]string) []string { return scopes }
+	// The scopes follow the server's access level where it advertises a
+	// read-only one; scopes of the configuration are asked as they are.
+	preset, _ := presetByURL(u.srv.URL)
+	level, fixed := u.srv.level(), o.Scopes
+	hcfg.ScopeFilter = func(found []string) []string {
+		if len(fixed) > 0 {
+			found = fixed
+		}
+		scopes, granted := scopesFor(preset.ID, level, found, len(fixed) > 0)
+		flow.mu.Lock()
+		flow.granted = granted
+		flow.mu.Unlock()
+		return scopes
 	}
 	if o.ClientMetadata != "" {
 		hcfg.ClientIDMetadataDocumentConfig = &auth.ClientIDMetadataDocumentConfig{URL: o.ClientMetadata}

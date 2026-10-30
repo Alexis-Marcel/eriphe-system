@@ -120,6 +120,7 @@ func (s *Store) deleteCatalog(kind, name string) error {
 func (s *Store) forgetOAuth(server string) {
 	s.db.Exec(`DELETE FROM oauth_tokens WHERE server = ?`, server)
 	s.db.Exec(`DELETE FROM oauth_clients WHERE server = ?`, server)
+	s.db.Exec(`DELETE FROM kv WHERE key = ?`, tokenAccessKey(server))
 }
 
 // mergeCatalog is the configuration with the workspace's entries added.
@@ -660,6 +661,7 @@ func (c *core) putServer(mode, name string, s Server, creds credentials) error {
 	}
 	if !inDyn {
 		c.store.forgetOAuth(name) // whatever an older server of this name left
+		c.store.forgetActions(name)
 	}
 	verb := "ajouté"
 	if inDyn {
@@ -681,8 +683,11 @@ func (c *core) deleteServer(name string) error {
 	d := c.dyn.clone()
 	delete(d.Servers, name)
 	return c.commit(d, change{forget: []string{name},
-		persist: func() error { return c.store.deleteCatalog(kindServer, name) },
-		event:   fmt.Sprintf("Catalogue : l'outil « %s » a été retiré depuis l'espace de travail ; ne le prête plus aux tâches.", name)})
+		persist: func() error {
+			c.store.forgetActions(name)
+			return c.store.deleteCatalog(kindServer, name)
+		},
+		event: fmt.Sprintf("Catalogue : l'outil « %s » a été retiré depuis l'espace de travail ; ne le prête plus aux tâches.", name)})
 }
 
 // putProvider adds or replaces a workspace provider; key, if given, is its

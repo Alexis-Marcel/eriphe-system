@@ -92,18 +92,19 @@ func (c *core) brainGrant() []string {
 
 type catalogTool struct{ server, tool string }
 
-// believedReads are the read-only tools of the servers trusted for their
-// annotations, as the pool lists them now.
-func (c *core) believedReads() []catalogTool {
+// freeTools are the tools Eriphe may call without the user, as the pool
+// lists them now: the read-only ones of the servers trusted for their
+// annotations, and every tool of a server whose access is free.
+func (c *core) freeTools() []catalogTool {
 	var out []catalogTool
 	for name := range c.conf().Servers {
 		u := c.pool.get(name)
-		if u == nil || !u.srv.TrustAnnotations {
+		if u == nil || !u.srv.trusts() {
 			continue
 		}
 		_, _, tools := u.snapshot()
 		for _, t := range tools {
-			if t.Annotations != nil && t.Annotations.ReadOnlyHint {
+			if u.srv.level() == accessFree || (t.Annotations != nil && t.Annotations.ReadOnlyHint) {
 				out = append(out, catalogTool{name, t.Name})
 			}
 		}
@@ -120,10 +121,11 @@ func globEscape(s string) string { return globChars.ReplaceAllString(s, `\$0`) }
 var globChars = regexp.MustCompile(`[\\*?\[]`)
 
 // freeRead tells whether the brain may call a catalog tool without asking:
-// read-only by a server believed for it, and named by no rule of my policy
-// (such a tool goes through the permission flow, with its input).
+// free by its server's access level (a read of a server believed for it,
+// or any tool of a free one), and named by no rule of my policy (such a
+// tool goes through the permission flow, with its input).
 func (c *core) freeRead(claudeName string) bool {
-	return c.pool.readOnly(claudeName) && !c.conf().Policy.names(claudeName)
+	return c.pool.facts(claudeName).free() && !c.conf().Policy.names(claudeName)
 }
 
 // readsFreely tells whether a task is an assistant's whose role reads freely.
@@ -141,7 +143,7 @@ func (c *core) readsFreely(taskID string) bool {
 // wait for a permission.
 func (c *core) brainFreeReads() []string {
 	var out []string
-	for _, r := range c.believedReads() {
+	for _, r := range c.freeTools() {
 		if name := claudeToolName(r.server, r.tool); c.freeRead(name) && !slices.Contains(out, name) {
 			out = append(out, name)
 		}
@@ -158,12 +160,14 @@ func (c *core) actingGrant(grant []string) []string {
 		g = strings.TrimSpace(g)
 		server, _, _ := strings.Cut(g, ".")
 		var tools []*mcp.Tool
+		var srv Server
 		if u := c.pool.get(server); u != nil {
 			_, _, tools = u.snapshot()
+			srv = u.srv
 		}
 		covered, acts := 0, false
 		for _, t := range tools {
-			if grantAllows([]string{g}, server, t.Name) {
+			if grantAllows([]string{g}, server, t.Name) && lends(srv, t) {
 				covered++
 				acts = acts || !c.pool.readOnly(claudeToolName(server, t.Name))
 			}
@@ -196,7 +200,7 @@ func (c *core) taskServer(taskID string, grant []string, server string) *mcp.Ser
 	}
 	_, _, tools := u.snapshot()
 	for _, tl := range tools {
-		if !grantAllows(grant, server, tl.Name) || !objectSchema(tl.InputSchema) {
+		if !grantAllows(grant, server, tl.Name) || !lends(u.srv, tl) || !objectSchema(tl.InputSchema) {
 			continue
 		}
 		cp := *tl
@@ -230,11 +234,18 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 		return toolError("arguments must be a JSON object")
 	}
 	claude := claudeToolName(u.name, tool)
+	f := c.pool.facts(claude)
 	switch {
+	case f.level == accessReadOnly && !f.read:
+		return toolError("this tool is read only in Eriphe: only its reads are lent")
 	case c.store.useTicket(taskID, claude, input):
 	case c.readsFreely(taskID) && c.freeRead(claude):
 		// The brain reads freely: no permission round trip, a decision on record all the same.
-		c.store.logDecision(taskID, "", claude, input, decideAllow, byPolicy, "lecture libre du cerveau")
+		why := "lecture libre du cerveau"
+		if !f.read {
+			why = "outil en accès libre"
+		}
+		c.store.logDecision(taskID, "", claude, input, decideAllow, byPolicy, why)
 	default:
 		return toolError("this call was not allowed through Eriphe's permissions: ask for it as usual")
 	}
@@ -304,7 +315,8 @@ type serverInfo struct {
 	Kind             string     `json:"kind"`   // remote or local
 	Source           string     `json:"source"` // config (the file) or workspace
 	URL              string     `json:"url,omitempty"`
-	Auth             string     `json:"auth"` // bearer, oauth, none or local
+	Auth             string     `json:"auth"`   // bearer, oauth, none or local
+	Access           string     `json:"access"` // what Eriphe may do on it (access.go)
 	TrustAnnotations bool       `json:"trust_annotations,omitempty"`
 	Status           string     `json:"status"`
 	Error            string     `json:"error,omitempty"`
@@ -329,7 +341,7 @@ func (c *core) listServers(only string, withTools bool) []serverInfo {
 			continue
 		}
 		info := serverInfo{Name: name, Use: s.Use, Kind: "remote", URL: s.URL, Auth: s.authKind(),
-			TrustAnnotations: s.TrustAnnotations, Status: statusConnecting, Source: sourceWorkspace}
+			Access: s.level(), TrustAnnotations: s.trusts(), Status: statusConnecting, Source: sourceWorkspace}
 		if _, ok := c.base.Servers[name]; ok {
 			info.Source = sourceConfig
 		}
@@ -345,6 +357,8 @@ func (c *core) listServers(only string, withTools bool) []serverInfo {
 		}
 		if u := c.pool.get(name); u != nil {
 			status, errText, tools := u.snapshot()
+			// Read only: its reads alone are shown, as they alone are lent.
+			tools = slices.DeleteFunc(slices.Clone(tools), func(t *mcp.Tool) bool { return !lends(s, t) })
 			info.Status, info.Error, info.ToolCount = status, truncate(errText, 300), len(tools)
 			if withTools {
 				for _, t := range tools {

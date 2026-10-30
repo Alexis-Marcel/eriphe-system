@@ -35,6 +35,17 @@ type fakeAS struct {
 	n             int
 	firstExpiry   int // expires_in of the token the code gives
 	onAccess      func(token string)
+	scopes        []string // its protected resource metadata's scopes_supported (read)
+	lastScope     string   // the scope of the last authorization URL
+}
+
+func (f *fakeAS) resourceScopes() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.scopes == nil {
+		return []string{"read"}
+	}
+	return f.scopes
 }
 
 func newFakeAS(t *testing.T) *fakeAS {
@@ -65,7 +76,7 @@ func newFakeAS(t *testing.T) *fakeAS {
 	})
 	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"resource": f.srv.URL + "/mcp", "authorization_servers": []string{f.srv.URL},
-			"scopes_supported": []string{"read"}})
+			"scopes_supported": f.resourceScopes()})
 	})
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"issuer": f.srv.URL, "authorization_endpoint": f.srv.URL + "/authorize",
@@ -136,7 +147,7 @@ func (f *fakeAS) authorize(authURL string) (code, state string) {
 		f.t.Fatalf("authorization URL = %s", authURL)
 	}
 	f.mu.Lock()
-	f.challenge, f.code = q.Get("code_challenge"), "code-1"
+	f.challenge, f.code, f.lastScope = q.Get("code_challenge"), "code-1", q.Get("scope")
 	f.mu.Unlock()
 	return "code-1", q.Get("state")
 }

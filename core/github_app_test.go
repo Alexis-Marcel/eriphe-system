@@ -196,26 +196,26 @@ func TestMintNotInstalled(t *testing.T) {
 func TestGitHubToolToken(t *testing.T) {
 	c, _ := credCore(t, "")
 	f := newFakeGitHub(t)
-	if _, err := c.github.toolToken(context.Background()); err == nil {
+	if _, err := c.github.toolToken(context.Background(), false); err == nil {
 		t.Fatal("a tool token without an app")
 	}
 	withApp(t, c, f)
-	tok, err := c.github.toolToken(context.Background())
+	tok, err := c.github.toolToken(context.Background(), false)
 	if err != nil || tok != "ghs_x" {
 		t.Fatalf("tool token %q %v", tok, err)
 	}
 	if raw, _ := json.Marshal(f.mints()[0]); string(raw) != `{}` {
 		t.Fatalf("asked with %s", raw)
 	}
-	tok, _ = c.github.toolToken(context.Background())
+	tok, _ = c.github.toolToken(context.Background(), false)
 	if tok != "ghs_x" || len(f.mints()) != 1 {
 		t.Fatalf("not reused: %q", tok)
 	}
 	// Three minutes left: a new one.
 	c.github.mu.Lock()
-	c.github.toolExp = time.Now().Add(3 * time.Minute)
+	c.github.toolToks[0].exp = time.Now().Add(3 * time.Minute)
 	c.github.mu.Unlock()
-	if tok, err := c.github.toolToken(context.Background()); err != nil || tok != "ghs_xx" || len(f.mints()) != 2 {
+	if tok, err := c.github.toolToken(context.Background(), false); err != nil || tok != "ghs_xx" || len(f.mints()) != 2 {
 		t.Fatalf("renewal: %q %v, %d mints", tok, err, len(f.mints()))
 	}
 }

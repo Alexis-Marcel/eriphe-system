@@ -15,11 +15,13 @@ import (
 //
 //  1. the built-in denials, which nothing overrides (mass deletion, pushing
 //     to main, rewriting history, reading secrets, writing outside /work);
-//  2. the rules of the configuration, first match wins;
-//  3. the built-in asks: what reaches a third party is the user's decision,
-//     including the tools of MCP servers, except the read-only tools of a
-//     catalog server trusted for its annotations, which the brain judges;
-//  4. anything else is for the brain to judge.
+//  2. a write tool of a catalog server set to read only (access.go);
+//  3. the rules of the configuration, first match wins, then the actions
+//     the user allowed for good ("Toujours autoriser");
+//  4. the built-in asks: what reaches a third party is the user's decision,
+//     including the tools of MCP servers, except what the server's access
+//     level leaves free (its reads, or everything), which the brain judges;
+//  5. anything else is for the brain to judge.
 //
 // Every decision, whoever takes it, is recorded in the decisions table.
 
@@ -160,25 +162,34 @@ var writeTools = map[string]bool{"Write": true, "Edit": true, "MultiEdit": true,
 
 // decide applies the policy to a permission request.
 func (p *Policy) decide(tool string, input map[string]any) (decision, reason string) {
-	return p.decideWith(tool, input, false)
+	return p.decideWith(tool, input, catalogFacts{}, nil)
 }
 
-// decideWith is decide knowing whether the tool is a read-only catalog tool
-// of a server trusted for its annotations.
-func (p *Policy) decideWith(tool string, input map[string]any, readOnly bool) (decision, reason string) {
+// decideWith is decide knowing what the catalog says of the tool (its
+// server's access level, whether it reads) and the actions the user allowed
+// for good (remembered, after the file's rules: access.go).
+func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, remembered []Rule) (decision, reason string) {
 	subj := subject(tool, input)
 	if writeTools[tool] && strings.HasPrefix(subj, "/") && subj != "/work" && !strings.HasPrefix(subj, "/work/") &&
 		!strings.HasPrefix(subj, "/tmp/") {
 		return decideDeny, "écrire hors du dossier de travail (/work) est interdit"
 	}
-	for _, set := range [][]Rule{builtinDeny, p.rules()} {
+	for _, r := range builtinDeny {
+		if r.matches(tool, subj) {
+			return r.Decision, r.Reason
+		}
+	}
+	if f.level == accessReadOnly && !f.read {
+		return decideDeny, "cet outil est en lecture seule : cette action n'est pas une lecture"
+	}
+	for _, set := range [][]Rule{p.rules(), remembered} {
 		for _, r := range set {
 			if r.matches(tool, subj) {
 				return r.Decision, r.Reason
 			}
 		}
 	}
-	if readOnly {
+	if f.free() {
 		return decideBrain, ""
 	}
 	for _, r := range builtinAsk {
@@ -191,7 +202,11 @@ func (p *Policy) decideWith(tool string, input map[string]any, readOnly bool) (d
 
 // decide applies the policy, with what the catalog knows of the tool.
 func (c *core) decide(tool string, input map[string]any) (decision, reason string) {
-	return c.conf().Policy.decideWith(tool, input, c.pool.readOnly(tool))
+	var remembered []Rule
+	if strings.HasPrefix(tool, "mcp__") {
+		remembered = c.store.allowedRules()
+	}
+	return c.conf().Policy.decideWith(tool, input, c.pool.facts(tool), remembered)
 }
 
 func (p *Policy) rules() []Rule {

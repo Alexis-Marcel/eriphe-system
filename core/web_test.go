@@ -342,7 +342,7 @@ func TestWebPagesRender(t *testing.T) {
 		"/settings/tools/new?preset=home-assistant": {"/api/mcp", `name="token"`, `value="bearer" checked`},
 		"/settings/tools/new?preset=mail":           {"provider=gmail", "provider=free", "provider=other", "Bientôt"},
 		"/settings/tools/new?preset=mail&provider=gmail": {`name="address"`, `name="password"`, "myaccount.google.com/apppasswords",
-			`name="mail_provider" value="gmail"`, `name="access" value="read" checked`},
+			`name="mail_provider" value="gmail"`, `name="access" value="reads" checked`},
 		"/settings/tools/new?preset=calendar":                 {"provider=icloud", "provider=nextcloud", "Google Agenda"},
 		"/settings/tools/new?preset=calendar&provider=icloud": {`name="cal_user"`, "Europe/Paris", "Mots de passe pour apps"},
 		"/settings/tools/new?preset=local":                    {`name="image"`, `name="env_name_0"`},

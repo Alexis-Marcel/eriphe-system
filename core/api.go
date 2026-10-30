@@ -84,18 +84,30 @@ func (c *core) handleTaskEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAnswer allows or denies a task's pending permission, or replies to
-// its question: {permission_id?, reply, allow}.
+// its question: {permission_id?, reply, allow, always?}. always allows a
+// catalog tool's action without asking from now on (access.go).
 func (c *core) handleAnswer(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		PermissionID string `json:"permission_id"`
 		Reply        string `json:"reply"`
 		Allow        *bool  `json:"allow"`
+		Always       bool   `json:"always"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
-	res, err := c.answer(r.Context(), r.PathValue("id"), in.PermissionID, in.Reply, in.Allow, byUser)
+	if in.Always && (in.Allow == nil || !*in.Allow) {
+		http.Error(w, "always goes with allow: true", http.StatusBadRequest)
+		return
+	}
+	var res string
+	var err error
+	if in.Always {
+		res, err = c.answerAlways(r.Context(), r.PathValue("id"), in.PermissionID, in.Reply)
+	} else {
+		res, err = c.answer(r.Context(), r.PathValue("id"), in.PermissionID, in.Reply, in.Allow, byUser)
+	}
 	if err != nil {
 		taskError(w, err)
 		return

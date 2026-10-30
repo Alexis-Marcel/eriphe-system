@@ -44,6 +44,7 @@ type permView struct {
 	Subject  string
 	UserOnly string
 	Where    string // an id prefix: the same request shows in the conversation and in its task
+	Always   bool   // "always allow this action" is offered: a catalog tool's (access.go)
 }
 
 type tasksData struct {
@@ -145,7 +146,7 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 			tool := fmt.Sprint(p["tool_name"])
 			pid := fmt.Sprint(p["id"])
 			perms = append(perms, permView{Task: card, ID: pid, Tool: tool, Subject: subject(tool, input),
-				UserOnly: w.c.store.userOnly(t.ID, pid)})
+				UserOnly: w.c.store.userOnly(t.ID, pid), Always: w.c.rememberable(tool)})
 		}
 	}
 	// What needs me first, then what works, then what waits.
@@ -307,7 +308,8 @@ func (w *web) detail(id string) (*taskDetail, error) {
 	if p := w.pendingPermission(st); p != nil {
 		input, _ := p["input"].(map[string]any)
 		tool, pid := fmt.Sprint(p["tool_name"]), fmt.Sprint(p["id"])
-		d.Perm = &permView{Task: d.Card, ID: pid, Tool: tool, Subject: subject(tool, input), UserOnly: w.c.store.userOnly(id, pid), Where: "d-"}
+		d.Perm = &permView{Task: d.Card, ID: pid, Tool: tool, Subject: subject(tool, input), UserOnly: w.c.store.userOnly(id, pid), Where: "d-",
+			Always: w.c.rememberable(tool)}
 	}
 	return d, nil
 }
@@ -331,7 +333,8 @@ func (w *web) handleTask(rw http.ResponseWriter, r *http.Request, s *session) {
 // handleAnswer allows or denies the pending permission shown, as me.
 func (w *web) handleAnswer(rw http.ResponseWriter, r *http.Request, s *session) {
 	id := r.PathValue("id")
-	allow := r.PostFormValue("allow") == "yes"
+	always := r.PostFormValue("allow") == "always" // and its action without asking from now on
+	allow := always || r.PostFormValue("allow") == "yes"
 	st, err := w.c.status(id, 0)
 	if err != nil {
 		taskError(rw, err)
@@ -343,13 +346,22 @@ func (w *web) handleAnswer(rw http.ResponseWriter, r *http.Request, s *session) 
 		w.toast(rw, tr(lang, "perm.changed"), false)
 		return
 	}
-	if _, err := w.c.answer(r.Context(), id, pid, strings.TrimSpace(r.PostFormValue("reason")), &allow, byUser); err != nil {
+	reason := strings.TrimSpace(r.PostFormValue("reason"))
+	if always {
+		_, err = w.c.answerAlways(r.Context(), id, pid, reason)
+	} else {
+		_, err = w.c.answer(r.Context(), id, pid, reason, &allow, byUser)
+	}
+	if err != nil {
 		w.toast(rw, err.Error(), false)
 		return
 	}
 	w.notify()
 	msg := tr(lang, "perm.denied")
-	if allow {
+	switch {
+	case always:
+		msg = tr(lang, "perm.remembered")
+	case allow:
 		msg = tr(lang, "perm.allowed")
 	}
 	w.toast(rw, msg, true)

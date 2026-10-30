@@ -26,6 +26,8 @@ type toolView struct {
 	Pending bool       // a local server whose service does not run yet
 	Placed  bool       // … but a machine has it and is starting it
 	Problem string     // why it does not start, in words; the raw error stays in Error
+	Scope   tokenScope // how its credential follows its access level (access.go)
+	Allowed int        // its actions allowed without asking
 }
 
 type toolsPage struct {
@@ -111,6 +113,8 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 		if t.Preset.ID == "home-assistant" {
 			v.VoiceOnly = false
 		}
+		t.Scope = w.c.tokenScope(sv.Name, conf.Servers[sv.Name])
+		t.Allowed = len(w.c.store.allowedActions(sv.Name))
 		t.Pending, t.Placed = startState(sv)
 		if t.Pending {
 			t.Problem = serviceProblem(lang, sv)
@@ -174,9 +178,9 @@ type toolForm struct {
 	TokenSet,
 	ClientIDSet, ClientSecretSet bool
 	Scopes, ClientMetadata string
-	// Trust is "what Eriphe may do without asking": true is "reads free,
-	// the rest asks me" (trust_annotations), false "ask me everything".
-	Trust   bool
+	// Access is what Eriphe may do on the tool (access.go): read-only,
+	// reads, free or ask.
+	Access  string
 	Timeout string
 	// Local servers.
 	Image, Transport, Port, Path, Args string
@@ -193,6 +197,9 @@ type toolForm struct {
 	// OAuth: the primary action connects; Service names whom to.
 	Service   string
 	OrigOAuth bool // an edit of a server already on OAuth: it can be saved without signing in again
+	// An edit: how its credential follows the level, and its actions
+	// allowed without asking (web_access.go).
+	AccessView *toolAccess
 
 	Error string
 }
@@ -228,7 +235,7 @@ func serviceTitle(lang, presetID, url string) string {
 
 // newToolForm is the form of a preset, for a new tool.
 func newToolForm(lang string, p toolPreset) toolForm {
-	f := toolForm{Preset: p, Name: p.Name, Kind: p.Kind, URL: p.URL, Auth: p.Auth, Trust: p.Trust,
+	f := toolForm{Preset: p, Name: p.Name, Kind: p.Kind, URL: p.URL, Auth: p.Auth, Access: p.level(),
 		Transport: transportStdio, Egress: true}
 	if f.Kind == "" {
 		f.Kind = "remote"
@@ -258,7 +265,7 @@ func padEnv(rows []envRow) []envRow {
 
 // toolFormOf fills the form from a workspace server, for an edit.
 func toolFormOf(name string, s Server) toolForm {
-	f := toolForm{Edit: true, Name: name, Use: s.Use, Trust: s.TrustAnnotations, Kind: "remote", URL: s.URL,
+	f := toolForm{Edit: true, Name: name, Use: s.Use, Access: s.level(), Kind: "remote", URL: s.URL,
 		Auth: s.authKind(), Transport: transportStdio, Egress: true}
 	f.Preset, _ = presetByID("remote")
 	if p, ok := presetByURL(s.URL); ok && !s.local() {
@@ -316,15 +323,7 @@ func readToolForm(r *http.Request) toolForm {
 		Mail: mailForm{Address: v("address"), Provider: v("mail_provider"), IMAPHost: v("imap_host"), SMTPHost: v("smtp_host"),
 			IMAPPort: v("imap_port"), SMTPPort: v("smtp_port"), Username: v("mail_user")},
 		Calendar: calendarForm{Provider: v("cal_provider"), URL: v("cal_url"), Username: v("cal_user"), Timezone: v("timezone")}}
-	// "access": read (reads free, the rest asks) or ask (everything asks);
-	// "trust" is the API's and older forms' word for the first.
-	switch v("access") {
-	case "read":
-		f.Trust = true
-	case "ask":
-	default:
-		f.Trust = on("trust")
-	}
+	f.Access = formAccess(v("access"), on("trust"))
 	if slug := slugName(f.Name); slug != "" {
 		f.Name = slug
 	}
@@ -345,7 +344,7 @@ func readToolForm(r *http.Request) toolForm {
 // is the entry being edited, whose secret references stay unless replaced.
 func (f toolForm) server(r *http.Request, old *Server) (Server, credentials, error) {
 	creds := credentials{}
-	s := Server{Use: f.Use, TrustAnnotations: f.Trust}
+	s := Server{Use: f.Use}.withLevel(f.Access)
 	if f.Use == "" {
 		return s, nil, errors.New("form.nouse")
 	}
@@ -540,6 +539,9 @@ func (w *web) handleEditTool(rw http.ResponseWriter, r *http.Request, s *session
 	f := toolFormOf(name, srv)
 	if p := r.URL.Query().Get("provider"); p != "" {
 		pickAccount(&f, p)
+	}
+	if v, ok := w.toolAccess(w.lang(r), name); ok {
+		f.AccessView = &v
 	}
 	w.toolFormPage(rw, r, s, f)
 }

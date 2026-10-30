@@ -169,5 +169,8 @@ func (s *Store) moveOAuth(from, to string) {
 		SELECT ?, client, token, updated FROM oauth_tokens WHERE server = ?`, to, from)
 	s.db.Exec(`INSERT OR REPLACE INTO oauth_clients (server, client_id, client_secret, redirect_uri, created)
 		SELECT ?, client_id, client_secret, redirect_uri, created FROM oauth_clients WHERE server = ?`, to, from)
+	if granted := s.get(tokenAccessKey(from)); granted != "" {
+		s.set(tokenAccessKey(to), granted)
+	}
 	s.forgetOAuth(from)
 }

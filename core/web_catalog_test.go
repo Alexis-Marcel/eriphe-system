@@ -105,9 +105,7 @@ func TestWebPresetsAreValid(t *testing.T) {
 		f := newToolForm("fr", p)
 		form := url.Values{"preset": {p.ID}, "name": {"p-" + p.ID}, "use": {f.Use}, "kind": {f.Kind}, "url": {f.URL}, "auth": {f.Auth},
 			"transport": {transportStdio}, "egress": {"1"}, "timezone": {"Europe/Paris"}}
-		if f.Trust {
-			form.Set("trust", "1")
-		}
+		form.Set("access", f.Access)
 		for k, v := range fills[p.ID] {
 			form[k] = v
 		}
@@ -117,7 +115,7 @@ func TestWebPresetsAreValid(t *testing.T) {
 			continue
 		}
 		srv := c.conf().Servers["p-"+p.ID]
-		if srv.Use == "" || srv.TrustAnnotations != p.Trust {
+		if srv.Use == "" || srv.TrustAnnotations != p.Trust || srv.level() != p.level() {
 			t.Errorf("preset %s: %+v", p.ID, srv)
 		}
 		if p.Kind == "remote" && (srv.URL == "" || srv.authKind() != p.Auth) {

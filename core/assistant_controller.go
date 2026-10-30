@@ -441,7 +441,7 @@ func (c *core) assistantGrant(a Assistant) []string {
 	if !assistantRoles[a.Role].FreeReads {
 		return out
 	}
-	for _, r := range c.believedReads() {
+	for _, r := range c.freeTools() {
 		if g := r.server + "." + globEscape(r.tool); !slices.Contains(out, g) {
 			out = append(out, g)
 		}

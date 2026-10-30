@@ -212,10 +212,10 @@ func (w *web) handleGitHubTool(rw http.ResponseWriter, r *http.Request, s *sessi
 		}
 	}
 	if name == "" {
-		name, srv = "github", Server{Use: tr(lang, "preset.github.use"), TrustAnnotations: true}
+		name, srv = "github", Server{Use: tr(lang, "preset.github.use")}.withLevel(accessReads)
 	}
 	if srv.local() || srv.URL == "" {
-		srv = Server{Use: srv.Use, TrustAnnotations: srv.TrustAnnotations, AlwaysLoad: srv.AlwaysLoad, Timeout: srv.Timeout}
+		srv = Server{Use: srv.Use, Access: srv.Access, TrustAnnotations: srv.TrustAnnotations, AlwaysLoad: srv.AlwaysLoad, Timeout: srv.Timeout}
 		srv.URL = "https://api.githubcopilot.com/mcp/"
 	}
 	if w.c.source(kindServer, name) == sourceConfig {
