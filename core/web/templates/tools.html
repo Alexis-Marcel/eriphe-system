@@ -396,7 +396,7 @@
 </div>
 {{end}}{{end}}
 
-{{/* Google Drive: connect the account, then give folders to Eriphe (web_drive.go). */}}
+{{/* Google Drive: the user's own Google app, the account's consent, then the folders given to Eriphe (web_drive.go). */}}
 {{define "drive-page"}}{{with .Data}}
 <header class="page-head">
   <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
@@ -406,6 +406,13 @@
   </div>
   <p>{{t "drive.lead"}}</p>
 </header>
+{{template "drive-wrap" .}}
+{{end}}{{end}}
+
+{{define "drive-wrap-frag"}}{{template "drive-wrap" .Data}}{{end}}
+
+{{/* . is the drive view. */}}
+{{define "drive-wrap"}}
 <div id="drive-wrap" class="stack"{{if and .Mine (ne .Status "ready")}} hx-get="/settings/drive" hx-trigger="load delay:3s" hx-select="#drive-wrap" hx-swap="outerHTML"{{end}}>
 {{if .Connected}}<p class="ok-note" role="status">{{t "drive.connected"}}</p>{{end}}
 {{if and .Exists (not .Mine)}}<p class="alert" role="alert">{{tf "drive.taken" "fichiers"}}</p>
@@ -417,30 +424,76 @@
   {{else}}<p class="notice">{{t "drive.starting"}}</p>{{end}}
 </section>
 {{end}}
+{{if .OriginWhy}}
+<section class="panel" id="drive-origin">
+  <h3>{{template "i-link"}}{{t "drive.origin.title"}}</h3>
+  <p class="alert" role="alert">{{tf (printf "drive.origin.%s" .OriginWhy) .Origin}}</p>
+  <p>{{t "drive.alt.lead"}}</p>
+  <ol class="steps">
+    {{if .Remote}}<li>{{t "drive.alt.remoteon"}} <a href="{{.Remote}}/settings/drive">{{.Remote}}</a></li>
+    {{else}}<li>{{t "drive.alt.remote"}} <a href="/settings/remote">{{t "drive.alt.remotelink"}}</a></li>{{end}}
+    <li>{{t "drive.alt.domain"}}</li>
+    <li>{{t "drive.alt.desktop"}} <a href="/settings/folders">{{t "drive.alt.folders"}}</a></li>
+  </ol>
+</section>
+{{else if .ClientID}}
 <section class="panel">
   <h3>{{template "i-link"}}{{if .Exists}}{{t "drive.reconnect"}}{{else}}{{t "drive.connect"}}{{end}}</h3>
+  {{template "drive-saved" .}}
+  <p class="small">{{t "drive.app"}} <span class="mono">{{.ClientID}}</span> · {{t "drive.secretkept"}}</p>
   <form class="stack" hx-post="/settings/drive/connect" hx-target="#drive-connect-result" hx-disabled-elt="find button[type=submit]">
-    {{if not .AppReady}}<p class="notice">{{t "drive.noapp"}}</p>{{else if not .OriginOK}}<p class="notice">{{tf "drive.badorigin" .Origin}}</p>{{end}}
     <label class="check"><input type="checkbox" name="write" value="1" {{if or .CanWrite (not .Exists)}}checked{{end}}>
       <span><b>{{t "drive.write"}}</b><small>{{t "drive.writehint"}}</small></span></label>
-    <details {{if not (and .AppReady .OriginOK)}}open{{end}}>
-      <summary>{{t "drive.own"}}</summary>
-      <div class="stack">
-        <label class="check"><input type="checkbox" name="own" value="1" {{if not (and .AppReady .OriginOK)}}checked{{end}}>
-          <span><b>{{t "drive.ownuse"}}</b><small>{{t "drive.ownhint"}} <span class="mono">{{.Callback}}</span></small></span></label>
-        <div class="form-grid">
-          <label class="field"><span>{{t "drive.clientid"}}</span><input type="text" name="client_id" spellcheck="false" autocomplete="off" class="mono"></label>
-          <label class="field"><span>{{t "drive.clientsecret"}}</span><input type="password" name="client_secret" autocomplete="new-password" spellcheck="false"></label>
-        </div>
-      </div>
-    </details>
     <p class="small muted">{{t "drive.warning"}}</p>
     <div id="drive-connect-result"></div>
     <div class="actions"><button class="btn btn-primary" type="submit">{{if .Exists}}{{t "drive.reconnect"}}{{else}}{{t "drive.connect"}}{{end}}</button></div>
   </form>
+  <details{{if .Error}} open{{end}}>
+    <summary>{{t "drive.replace"}}</summary>
+    <div class="stack">{{template "drive-guide" .}}{{template "drive-client-form" .}}</div>
+  </details>
 </section>
+{{else}}
+<section class="panel">
+  <h3>{{template "i-key"}}{{t "drive.guide.title"}}</h3>
+  <p>{{t "drive.guide.why"}}</p>
+  {{template "drive-guide" .}}
+  {{template "drive-client-form" .}}
+</section>
+{{end}}
 </div>
-{{end}}{{end}}
+{{end}}
+
+{{define "drive-saved"}}{{if eq .Saved "ok"}}<p class="ok-note" role="status">{{t "drive.saved"}}</p>
+{{else if .Saved}}<p class="notice" role="status">{{tf "drive.noredirect" .Saved}}</p>{{end}}{{end}}
+
+{{/* The steps in the Google Cloud console (docs/google-drive.md says the same). */}}
+{{define "drive-guide"}}
+<ol class="steps drive-guide">
+  <li>{{t "drive.step.project"}} <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener noreferrer">console.cloud.google.com › New project</a></li>
+  <li>{{t "drive.step.api"}} <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener noreferrer">Google Drive API</a></li>
+  <li>{{t "drive.step.branding"}} <a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener noreferrer">Google Auth Platform</a></li>
+  <li>{{t "drive.step.audience"}} <a href="https://console.cloud.google.com/auth/audience" target="_blank" rel="noopener noreferrer">Audience</a></li>
+  <li>{{t "drive.step.scopes"}} <a href="https://console.cloud.google.com/auth/scopes" target="_blank" rel="noopener noreferrer">Data access</a></li>
+  <li>{{t "drive.step.client"}} <a href="https://console.cloud.google.com/auth/clients/create" target="_blank" rel="noopener noreferrer">Clients › Create client</a>
+    <div class="code one-line"><pre id="drive-callback">{{.Callback}}</pre><button class="btn btn-soft sm" type="button" data-copy="drive-callback">{{t "machines.copy"}}</button></div></li>
+  <li>{{t "drive.step.secret"}}</li>
+</ol>
+<p class="small muted">{{t "drive.guide.check"}} <a href="https://support.google.com/cloud/answer/15549945" target="_blank" rel="noopener noreferrer">{{t "drive.guide.source"}}</a></p>
+{{end}}
+
+{{define "drive-client-form"}}
+<form class="stack" hx-post="/settings/drive/client" hx-encoding="multipart/form-data" hx-target="#drive-wrap" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
+  <label class="field"><span>{{t "drive.json"}}</span><input type="file" name="client_json" accept=".json,application/json"><small>{{t "drive.jsonhint"}}</small></label>
+  <p class="small muted">{{t "drive.or"}}</p>
+  <div class="form-grid">
+    <label class="field"><span>{{t "drive.clientid"}}</span><input type="text" name="client_id" spellcheck="false" autocomplete="off" class="mono" placeholder="….apps.googleusercontent.com"></label>
+    <label class="field"><span>{{t "drive.clientsecret"}}</span><input type="password" name="client_secret" autocomplete="new-password" spellcheck="false"></label>
+  </div>
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  <div class="actions"><button class="btn btn-primary" type="submit">{{t "drive.save"}}</button></div>
+</form>
+{{end}}
 
 {{define "drive-connect-result"}}{{with .Data}}{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}{{end}}{{end}}
 
