@@ -226,7 +226,7 @@ agent). Eriphe creates the account's usual agents, and your assistant starts on 
 install already joined it as a device). Agents, tools and accounts are in Settings later.
 
 Nothing else is on by default: no tool, no rule, no remote access. The catalog's tools (GitHub,
-mail, calendar, Home Assistant…) are added from Settings → Accounts & tools.
+mail, calendar, Home Assistant…) are added from Settings → Tools.
 
 ## 4. Connect a device
 
@@ -277,7 +277,7 @@ device" on its card: that token lets it take its name over (on Windows, add `-Re
 
 ## 5. Connect Google Drive (optional)
 
-To give Eriphe folders of a Google Drive: Settings → Accounts & tools → Add a tool → **Google Drive**.
+To give Eriphe folders of a Google Drive: Settings → Tools → Add a tool → **Google Drive**.
 
 1. Create your own Google app, once: the page lists the steps in the Google Cloud console and shows
    the exact redirect URI to paste (`https://<workspace>/oauth/callback`), with a Copy button; then
@@ -300,7 +300,7 @@ give its Google Drive folder in [Folders](#folders).
 ## 6. Connect GitHub (optional)
 
 For tasks that clone private repositories, push branches or open pull requests, and for the
-GitHub tool: Settings → Accounts & tools → GitHub → **Créer l'app GitHub d'Eriphe**.
+GitHub tool: Settings → Tools → GitHub → **Créer l'app GitHub d'Eriphe**.
 
 1. Choose the end of the app's name ("Eriphe – <name>", unique on GitHub) and, if the app should
    belong to an organization, its name. Click "Créer l'app GitHub d'Eriphe", then "Continuer sur

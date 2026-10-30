@@ -3,7 +3,7 @@
 Eriphe reaches Google Drive with **your own Google app**: an OAuth client you create once in your
 own Google Cloud project, like Home Assistant's Google integrations. Nobody else holds its key, and
 no Eriphe server is in the path: Google sends your browser straight back to your workspace. It
-takes a few minutes, once. Settings → Accounts & tools → Google Drive shows these same steps, with your
+takes a few minutes, once. Settings → Tools → Google Drive shows these same steps, with your
 workspace's exact redirect URI and a Copy button.
 
 Google's console changes; what follows is its English interface (Google Auth Platform) as of
@@ -56,7 +56,7 @@ local address, the Google Drive page says so and offers:
 7. **Keep the client**: Google shows the client ID and secret once
    ([Manage OAuth clients](https://support.google.com/cloud/answer/15549257): the secret is hashed
    afterwards, only its last four characters stay visible). Click **Download JSON**, or copy both.
-8. **In Eriphe**, Settings → Accounts & tools → Google Drive: give the downloaded `client_secret_….json`, or
+8. **In Eriphe**, Settings → Tools → Google Drive: give the downloaded `client_secret_….json`, or
    paste the client ID and secret → **Save my Google app**. The secret goes to the vault
    (`google-drive-client`) and is never shown again; "Replace my Google app" takes another one.
 9. **Connect Google Drive**: tick "Allow Eriphe to drop results" if Eriphe may add files (always in

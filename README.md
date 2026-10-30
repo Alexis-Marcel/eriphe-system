@@ -30,7 +30,7 @@ The installer brings everything it needs and ends with an address and a setup co
 2. Name your assistant and connect its AI account (a Claude or ChatGPT subscription, or an API key).
 3. Answer (or skip) the short first-run interview: the assistant writes first.
 4. Connect your other devices: Réglages › Appareils › « Connecter un appareil » (Settings › Devices › "Connect a device") gives a command to run on each.
-5. Add tools (mail, calendar, Google Drive…) in Settings → Accounts & tools, and install the phone app through Settings → Remote access.
+5. Add tools (mail, calendar, Google Drive…) in Settings → Tools, and install the phone app through Settings → Remote access.
 
 All the details, options and fixes: [install/README.md](install/README.md).
 

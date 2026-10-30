@@ -375,7 +375,7 @@ For each other computer (or a second NAS):
   → App & notifications explains it for iPhone and Android). It installs as an app with
   notifications. Nothing is opened on the router. The phone app needs this trusted address: at
   the self-signed `https://192.0.2.10:8443` it works in the browser only.
-- **Tools** (mail, calendars, Home Assistant, GitHub, any MCP server): Settings → Accounts & tools.
+- **Tools** (mail, calendars, Home Assistant, GitHub, any MCP server): Settings → Tools.
   Each one asks the person to approve access at the service (OAuth) or to paste a token there:
   they do it, in the workspace.
 - **Google Drive** needs the person's own Google app, created once in their Google Cloud console:
@@ -383,7 +383,7 @@ For each other computer (or a second NAS):
   opened at an IP address: turn on Remote access first and open the Google Drive page at the
   `ts.net` address. "Google hasn't verified this app" is expected (it is their own app):
   **Advanced** → **Go to Eriphe**.
-- **GitHub**: Settings → Accounts & tools → GitHub → "Créer l'app GitHub d'Eriphe" (see
+- **GitHub**: Settings → Tools → GitHub → "Créer l'app GitHub d'Eriphe" (see
   [install/README.md, Connect GitHub](../install/README.md#6-connect-github-optional)).
 - **Voice** through Home Assistant: [ha/README.md](../ha/README.md).
 
