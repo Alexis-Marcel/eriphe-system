@@ -37,6 +37,14 @@ type fakeAS struct {
 	onAccess      func(token string)
 	scopes        []string // its protected resource metadata's scopes_supported (read)
 	lastScope     string   // the scope of the last authorization URL
+	// Confidential clients only (Miro, Supabase): methods it advertises
+	// (nil: none, "": the field left out), and the registration refuses
+	// "none" and gives a secret the token endpoint wants.
+	secretOnly bool
+	methods    []string
+	omitMethod bool
+	regMethods []string // token_endpoint_auth_method of each registration
+	tokenAuth  string   // how the last token request authenticated: post, basic or none
 }
 
 func (f *fakeAS) resourceScopes() []string {
@@ -82,13 +90,23 @@ func newFakeAS(t *testing.T) *fakeAS {
 		writeJSON(w, 200, map[string]any{"issuer": f.srv.URL, "authorization_endpoint": f.srv.URL + "/authorize",
 			"token_endpoint": f.srv.URL + "/token", "registration_endpoint": f.srv.URL + "/register",
 			"response_types_supported": []string{"code"}, "grant_types_supported": []string{"authorization_code", "refresh_token"},
-			"code_challenge_methods_supported": []string{"S256"}, "token_endpoint_auth_methods_supported": []string{"none"},
+			"code_challenge_methods_supported": []string{"S256"}, "token_endpoint_auth_methods_supported": f.authMethods(),
 			"scopes_supported": []string{"read", "offline_access"}})
 	})
 	mux.HandleFunc("POST /register", func(w http.ResponseWriter, r *http.Request) {
 		var in map[string]any
 		json.NewDecoder(r.Body).Decode(&in)
 		f.mu.Lock()
+		method, _ := in["token_endpoint_auth_method"].(string)
+		f.regMethods = append(f.regMethods, method)
+		if f.secretOnly && method == "none" {
+			f.mu.Unlock()
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_client_metadata", "error_description": "public clients are not allowed"})
+			return
+		}
+		if f.secretOnly {
+			in["client_secret"] = "secret-1"
+		}
 		f.registrations++
 		f.redirects = nil
 		if list, ok := in["redirect_uris"].([]any); ok {
@@ -104,6 +122,20 @@ func newFakeAS(t *testing.T) *fakeAS {
 		r.ParseForm()
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		id, secret, basic := r.BasicAuth()
+		switch {
+		case basic:
+			f.tokenAuth = "basic"
+			r.Form.Set("client_id", id)
+		case r.Form.Get("client_secret") != "":
+			f.tokenAuth, secret = "post", r.Form.Get("client_secret")
+		default:
+			f.tokenAuth = "none"
+		}
+		if f.secretOnly && secret != "secret-1" {
+			writeJSON(w, 401, map[string]string{"error": "invalid_client"})
+			return
+		}
 		expiry := 3600
 		switch r.Form.Get("grant_type") {
 		case "authorization_code":
@@ -150,6 +182,18 @@ func (f *fakeAS) authorize(authURL string) (code, state string) {
 	f.challenge, f.code, f.lastScope = q.Get("code_challenge"), "code-1", q.Get("scope")
 	f.mu.Unlock()
 	return "code-1", q.Get("state")
+}
+
+func (f *fakeAS) authMethods() any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	switch {
+	case f.omitMethod:
+		return nil
+	case f.methods != nil:
+		return f.methods
+	}
+	return []string{"none"}
 }
 
 func (f *fakeAS) registered() []string {

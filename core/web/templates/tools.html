@@ -66,7 +66,8 @@
 <section class="panel" id="add-tool" aria-labelledby="add-tool-title">
   <h3 id="add-tool-title">{{template "i-plus"}}{{t "tools.add"}}</h3>
   <p class="muted">{{t "tools.addlead"}}</p>
-  {{template "preset-tiles" .Presets}}
+  <ul class="presets">{{range .Featured}}{{template "preset-tile" .}}{{end}}</ul>
+  <div class="actions"><a class="btn btn-soft" href="/settings/tools/add">{{tf "gallery.all" .Count}}</a></div>
 </section>
 
 <details class="panel advanced" id="secrets-panel">
@@ -75,15 +76,19 @@
 </details>
 {{end}}{{end}}
 
-{{define "preset-tiles"}}
-<ul class="presets">
-{{range .}}
-  <li><a class="preset preset-{{.ID}}" href="{{.Page}}">
+{{/* One tile of the gallery. . is a presetTile. */}}
+{{define "preset-tile"}}
+  <li{{if .Search}} data-search="{{.Search}}"{{end}}><a class="preset preset-{{.ID}}" href="{{.Page}}">
     <span class="mark preset-mark mark-{{.ID}}" aria-hidden="true">{{template "preset-icon" .ID}}</span>
-    <span class="preset-text"><b>{{t (printf "preset.%s.title" .ID)}}</b><small>{{t (printf "preset.%s.desc" .ID)}}</small></span>
+    <span class="preset-text"><b>{{t (printf "preset.%s.title" .ID)}}</b><small>{{t (printf "preset.%s.desc" .ID)}}</small>
+    {{if or .Added .Scoped .ReadsOnly .Open .Paid .Beta}}<span class="ptags">
+      {{if .Added}}<span class="ptag ptag-added">{{template "i-check"}}{{t "gallery.added"}}</span>{{end}}
+      {{if .ReadsOnly}}<span class="ptag">{{t "gallery.readsonly"}}</span>{{else if .Scoped}}<span class="ptag">{{t "gallery.readonly"}}</span>{{end}}
+      {{if .Open}}<span class="ptag">{{t "gallery.open"}}</span>{{end}}
+      {{if .Paid}}<span class="ptag ptag-warn">{{t "gallery.paid"}}</span>{{end}}
+      {{if .Beta}}<span class="ptag ptag-warn">{{t "gallery.beta"}}</span>{{end}}
+    </span>{{end}}</span>
   </a></li>
-{{end}}
-</ul>
 {{end}}
 
 {{define "tool-gallery"}}{{with .Data}}
@@ -92,8 +97,77 @@
   <h2>{{t "tools.add"}}</h2>
   <p>{{t "tools.addlead"}}</p>
 </header>
-{{template "preset-tiles" .Presets}}
+<div class="catalog-search" data-catalog-search hidden>
+  <label class="field"><span class="sr-only">{{t "gallery.search"}}</span>
+    <input type="search" name="q" placeholder="{{tf "gallery.searchph" .Count}}" aria-label="{{t "gallery.search"}}" autocomplete="off" spellcheck="false" aria-controls="catalog"></label>
+</div>
+<div class="catalog" id="catalog">
+{{range .Groups}}
+  <section class="catalog-cat" data-cat aria-labelledby="cat-{{.Cat}}">
+    <h3 id="cat-{{.Cat}}">{{t (printf "cat.%s" .Cat)}}</h3>
+    <ul class="presets">{{range .Tiles}}{{template "preset-tile" .}}{{end}}</ul>
+  </section>
+{{end}}
+  <p class="muted catalog-empty" id="catalog-empty" role="status" hidden>{{t "gallery.none"}}</p>
+  <section class="catalog-cat" aria-labelledby="cat-more">
+    <h3 id="cat-more">{{t "gallery.more"}}</h3>
+    <ul class="presets">{{range .Others}}{{template "preset-tile" .}}{{end}}</ul>
+  </section>
+  <aside class="notice catalog-soon" aria-labelledby="cat-soon">
+    <h3 id="cat-soon">{{t "gallery.soon"}}</h3>
+    <ul class="plain-list">{{range list "app" "clients" "other"}}<li>{{t (printf "gallery.soon.%s" .)}}</li>{{end}}</ul>
+  </aside>
+</div>
 {{end}}{{end}}
+
+{{/* "Autre service": an address, and what Eriphe found there (web_gallery.go). */}}
+{{define "discover-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/tools/add">{{template "i-back"}}{{t "tools.add"}}</a>
+  <div class="form-title">
+    <span class="mark preset-mark mark-remote" aria-hidden="true">{{template "preset-icon" "remote"}}</span>
+    <h2>{{t "preset.remote.title"}}</h2>
+  </div>
+  <p>{{t "discover.lead"}}</p>
+</header>
+<form class="panel stack" method="post" action="/settings/tools/add/other" hx-post="/settings/tools/add/other" hx-target="#discover-result" hx-swap="innerHTML" hx-disabled-elt="find button" hx-indicator="find button">
+  <input type="hidden" name="csrf" value="{{$.CSRF}}">
+  <label class="field"><span>{{t "form.url"}}</span>
+    <input type="text" name="url" value="{{.URL}}" inputmode="url" spellcheck="false" autocapitalize="off" class="mono" placeholder="https://mcp.example.com/mcp" required aria-describedby="disc-h">
+    <small id="disc-h">{{t "discover.hint"}}</small></label>
+  <div class="actions"><button class="btn btn-primary busy-btn" type="submit">{{template "i-plug"}}<span class="when-idle">{{t "discover.go"}}</span><span class="when-busy">{{t "discover.busy"}}</span></button>
+    <a class="btn btn-ghost" href="{{.FormURL "none"}}">{{t "discover.manual"}}</a></div>
+</form>
+<div id="discover-result" aria-live="polite">{{template "discover-body" .}}</div>
+{{end}}{{end}}
+
+{{define "discover-result"}}{{template "discover-body" .Data}}{{end}}
+
+{{/* . is a discoverPage. */}}
+{{define "discover-body"}}{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>
+{{else}}{{with .Found}}
+<section class="panel stack discover-found reach-{{.Reach}}">
+  <h3>{{t (printf "discover.%s" .Reach)}}</h3>
+  {{if .Preset.ID}}<p class="notice">{{tf "discover.preset" (t (printf "preset.%s.title" .Preset.ID))}} <a href="{{.Preset.Page}}">{{t "discover.usepreset"}}</a></p>{{end}}
+  <p>{{t (printf "discover.%s.lead" .Reach)}}</p>
+  {{if or (eq .Reach "oauth") (eq .Reach "app")}}
+  <ul class="plain-list found-list">
+    <li>{{if .DCR}}{{template "i-check"}}{{t "discover.dcr"}}{{else}}{{t "discover.nodcr"}}{{end}}</li>
+    {{if .CIMD}}<li>{{template "i-check"}}{{t "discover.cimd"}}</li>{{end}}
+    {{if .Secret}}<li>{{t "discover.secret"}}</li>{{end}}
+    <li>{{if .Scopes}}{{t "discover.scopes"}} <span class="mono small">{{join .Scopes " "}}</span>{{else}}{{t "discover.noscopes"}}{{end}}</li>
+    <li>{{if .ReadOnly}}{{template "i-check"}}{{t "discover.readonly"}} <span class="mono small">{{join .Read " "}}</span>{{else}}{{t "discover.noreadonly"}}{{end}}</li>
+  </ul>{{end}}
+  {{if .Detail}}<p class="muted small clamp" title="{{short .Detail 600}}">{{short .Detail 200}}</p>{{end}}
+  <div class="actions">
+  {{if eq .Reach "open"}}<a class="btn btn-primary" href="{{$.FormURL "none"}}">{{template "i-plus"}}{{t "discover.add"}}</a>
+  {{else if eq .Reach "oauth"}}<a class="btn btn-primary" href="{{$.FormURL "oauth"}}">{{template "i-link"}}{{t "discover.connect"}}</a>
+  {{else if or (eq .Reach "app") (eq .Reach "token") (eq .Reach "refused")}}<a class="btn btn-primary" href="{{$.FormURL "bearer"}}">{{template "i-key"}}{{t "discover.token"}}</a>
+    {{if eq .Reach "app"}}<a class="btn btn-soft" href="{{$.FormURL "oauth"}}">{{t "discover.client"}}</a>{{end}}
+  {{end}}
+  </div>
+</section>
+{{end}}{{end}}{{end}}
 
 {{define "tool-page"}}{{with .Data}}
 <header class="page-head">
@@ -364,6 +438,7 @@
 
   <div class="form-grid name-row">{{template "name-field" .}}{{template "use-field" .}}</div>
   {{template "access-choices" dict "Access" .Access "Preset" .Preset "Locked" false}}
+  {{if and (not .Edit) .Preset.Vendor}}<p class="muted small token-note">{{if .Preset.Scoped}}{{t "access.scoped.write"}}{{else if .Preset.ReadsOnly}}{{t "access.readsonly"}}{{else}}{{t "access.unscoped"}}{{end}}</p>{{end}}
 
   <details class="advanced-opts" {{if and .Error (not $c)}}open{{end}}>
     <summary>{{t "form.advanced"}}</summary>

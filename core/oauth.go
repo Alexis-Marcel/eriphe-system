@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -394,15 +395,38 @@ func transportOf(c *http.Client) http.RoundTripper {
 // registrationCapture keeps the answer of a dynamic client registration
 // (a JSON POST with redirect_uris), which the handler does not expose, so
 // that later flows reuse the client instead of registering again.
+//
+// It also fits the registration to the server: Eriphe asks to be a public
+// client (token_endpoint_auth_method "none"), which some servers do not
+// take (Miro, Supabase, Hugging Face advertise client secrets only). Then
+// it registers with client_secret_post or client_secret_basic, and the
+// secret the server gives is kept and sent to its token endpoint. The
+// methods are read from the authorization server's metadata as it passes.
+// Metadata is not always right (Miro's says "none" at one address and
+// secrets only at another): a server that refuses a public registration
+// is asked once more with a secret method, client_secret_basic by default
+// (RFC 7591).
 type registrationCapture struct {
 	base http.RoundTripper
 	save func(oauthClient)
+
+	mu      sync.Mutex
+	methods []string // token_endpoint_auth_methods_supported, once read
+}
+
+// secretMethod is how a client registers with a server that does not take
+// public clients, from its advertised methods.
+func secretMethod(methods []string) string {
+	for _, m := range []string{"client_secret_post", "client_secret_basic"} {
+		if slices.Contains(methods, m) {
+			return m
+		}
+	}
+	return ""
 }
 
 func (r *registrationCapture) RoundTrip(req *http.Request) (*http.Response, error) {
-	var sent struct {
-		RedirectURIs []string `json:"redirect_uris"`
-	}
+	var sent map[string]any
 	if req.Method == http.MethodPost && req.Body != nil && strings.Contains(req.Header.Get("Content-Type"), "json") {
 		body, err := io.ReadAll(req.Body)
 		req.Body.Close()
@@ -413,24 +437,78 @@ func (r *registrationCapture) RoundTrip(req *http.Request) (*http.Response, erro
 		req.Body = io.NopCloser(bytes.NewReader(body))
 		json.Unmarshal(body, &sent)
 	}
-	resp, err := r.base.RoundTrip(req)
-	if err != nil || len(sent.RedirectURIs) == 0 || resp.StatusCode >= 300 {
+	redirects, _ := sent["redirect_uris"].([]any)
+	if len(redirects) == 0 {
+		resp, err := r.base.RoundTrip(req)
+		if err == nil && req.Method == http.MethodGet && resp.StatusCode == http.StatusOK && strings.Contains(req.URL.Path, "/.well-known/") {
+			resp, err = r.readMethods(resp)
+		}
 		return resp, err
 	}
-	body, err := io.ReadAll(resp.Body)
+	// A registration.
+	r.mu.Lock()
+	methods := r.methods
+	r.mu.Unlock()
+	if sent["token_endpoint_auth_method"] == "none" && len(methods) > 0 && !slices.Contains(methods, "none") {
+		if m := secretMethod(methods); m != "" {
+			sent["token_endpoint_auth_method"] = m
+			req = withJSON(req, sent)
+		}
+	}
+	resp, err := r.base.RoundTrip(req)
+	if err == nil && resp.StatusCode == http.StatusBadRequest && sent["token_endpoint_auth_method"] == "none" {
+		resp.Body.Close()
+		sent["token_endpoint_auth_method"] = cmp.Or(secretMethod(methods), "client_secret_basic")
+		resp, err = r.base.RoundTrip(withJSON(req, sent))
+	}
+	if err != nil || resp.StatusCode >= 300 {
+		return resp, err
+	}
+	answer, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(answer))
+	var got struct {
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+	}
+	if json.Unmarshal(answer, &got) == nil && got.ClientID != "" {
+		r.save(oauthClient{ClientID: got.ClientID, ClientSecret: got.ClientSecret, RedirectURI: fmt.Sprint(redirects[0])})
+	}
+	return resp, nil
+}
+
+// readMethods notes the token endpoint's auth methods of an authorization
+// server's metadata, and hands the answer on unchanged.
+func (r *registrationCapture) readMethods(resp *http.Response) (*http.Response, error) {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(body))
-	var got struct {
-		ClientID     string `json:"client_id"`
-		ClientSecret string `json:"client_secret"`
+	var meta struct {
+		TokenEndpoint string   `json:"token_endpoint"`
+		Methods       []string `json:"token_endpoint_auth_methods_supported"`
 	}
-	if json.Unmarshal(body, &got) == nil && got.ClientID != "" {
-		r.save(oauthClient{ClientID: got.ClientID, ClientSecret: got.ClientSecret, RedirectURI: sent.RedirectURIs[0]})
+	if json.Unmarshal(body, &meta) == nil && meta.TokenEndpoint != "" {
+		r.mu.Lock()
+		r.methods = meta.Methods
+		r.mu.Unlock()
 	}
 	return resp, nil
+}
+
+// withJSON is a request with another JSON body.
+func withJSON(req *http.Request, v any) *http.Request {
+	body, _ := json.Marshal(v)
+	req = req.Clone(req.Context())
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
+	return req
 }
 
 // The connect API, behind the bearer token.

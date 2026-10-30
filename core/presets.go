@@ -27,6 +27,11 @@ type toolPreset struct {
 	Trust bool   // the default of "what Eriphe may do without asking": reads free
 	// The address differs per person (Home Assistant's host): the form asks for it.
 	AskURL bool
+	// The gallery: its category (presets_online.go) and its tags.
+	Category  string
+	Paid      bool // a paid plan of the service is needed
+	Beta      bool // the service's server is in beta
+	ReadsOnly bool // the service only reads
 }
 
 var toolPresets = []toolPreset{
@@ -67,9 +72,18 @@ func (p toolPreset) Page() string {
 		return "/settings/drive"
 	case p.ID == "home-assistant":
 		return "/settings/home-assistant" // both ways: its tools, and its voice (web_homeassistant.go)
+	case p.ID == "remote":
+		return "/settings/tools/add/other" // its address first: Eriphe finds how to sign in (discover.go)
 	}
 	return "/settings/tools/new?preset=" + p.ID
 }
+
+// Scoped tells a service whose OAuth scopes follow the access level: a
+// read-only token for "read only" (access.go).
+func (p toolPreset) Scoped() bool { _, ok := tokenScopes[p.ID]; return ok }
+
+// Open tells a vendor's server that answers without an account.
+func (p toolPreset) Open() bool { return p.FixedURL() && p.Auth == "none" }
 
 // FixedURL tells a vendor-hosted service, whose address is never asked.
 func (p toolPreset) FixedURL() bool { return p.Kind == "remote" && p.URL != "" && !p.AskURL }

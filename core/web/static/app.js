@@ -631,7 +631,38 @@ if (location.hash === "#connect") {
     toggle.disabled = false;
   }
 
+  // The tools gallery's search (tools.html): the tiles whose words hold
+  // every word typed, accents aside; a category without one is hidden.
+  // Without this script, the field stays hidden and every tile is shown.
+  function setupCatalog() {
+    const $ = (sel, root) => (root || document).querySelector(sel);
+    const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+    const box = $("[data-catalog-search]");
+    if (!box) return;
+    const input = $("input", box);
+    const fold = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const tiles = $$("[data-search]").map((li) => ({ li, words: fold(li.dataset.search) }));
+    const empty = $("#catalog-empty");
+    const apply = () => {
+      const want = fold(input.value).split(/\s+/).filter(Boolean);
+      let shown = 0;
+      tiles.forEach((t) => {
+        t.li.hidden = !want.every((w) => t.words.includes(w));
+        if (!t.li.hidden) shown++;
+      });
+      $$("[data-cat]").forEach((cat) => { cat.hidden = !$$("[data-search]", cat).some((li) => !li.hidden); });
+      if (empty) empty.hidden = shown > 0;
+    };
+    box.hidden = false;
+    input.addEventListener("input", apply);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && input.value) { input.value = ""; apply(); }
+    });
+    apply();
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
+    setupCatalog();
     showInstall();
     setupPush().catch(() => {});
   });
