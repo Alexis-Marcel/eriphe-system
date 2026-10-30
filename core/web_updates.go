@@ -128,8 +128,15 @@ func (w *web) handleUpdateNow(rw http.ResponseWriter, r *http.Request, s *sessio
 		w.updateError(rw, lang, err)
 		return
 	}
+	rw.Header().Set("HX-Trigger", updatesChanged)
 	w.updateState(rw, r, s, m, "")
 }
+
+// updatesChanged is the event of the answers after which the rest of the
+// updates' page asks again (update-follow, settings.html): a request made,
+// or one that has just ended. The other cards' latest versions and buttons,
+// and "Update all", follow them (eriphe-core first, the count).
+const updatesChanged = "updates-changed"
 
 // handleUpdateState is where a machine's update stands, for its card (or
 // eriphe-core's row) to follow it: the page asks every few seconds while a
@@ -153,6 +160,7 @@ func (w *web) updateState(rw http.ResponseWriter, r *http.Request, s *session, m
 	for i := range d.Rows {
 		if row := &d.Rows[i]; follow != "" && row.Pending == nil && row.Status != nil && row.Status.ID == follow {
 			row.Done = true
+			rw.Header().Set("HX-Trigger", updatesChanged)
 		}
 	}
 	if m == coreMachine {
@@ -195,6 +203,17 @@ func (w *web) handleCheckUpdates(rw http.ResponseWriter, r *http.Request, s *ses
 		return
 	}
 	w.render(rw, r, s, "settings", "updates-fragment", page{Data: w.updatesData(nodes)})
+}
+
+// handleUpdateAllButton is "Update all", for the page to follow the
+// requests made from the cards.
+func (w *web) handleUpdateAllButton(rw http.ResponseWriter, r *http.Request, s *session) {
+	nodes, err := w.c.store.nodes()
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.render(rw, r, s, "settings", "updates-all-fragment", page{Data: w.updatesData(nodes)})
 }
 
 // handleUpdateAll asks every machine behind to update, eriphe-core first.
