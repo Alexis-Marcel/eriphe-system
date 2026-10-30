@@ -1245,3 +1245,10 @@ dialog.modal[open] { max-height: calc(100dvh - 32px - env(safe-area-inset-top) -
 .install-how li.current { background: var(--accent-soft); }
 .push-list li { flex-wrap: wrap; }
 #push-state:empty { display: none; }
+
+/* Installed on a phone (iOS standalone): 100dvh can stop short of the screen's
+   bottom and leave an empty band under the tab bar; pin the shell to the
+   screen instead (the tab bar keeps the home indicator's inset). */
+@media (display-mode: standalone) {
+  body.shell { position: fixed; inset: 0; height: auto; }
+}
