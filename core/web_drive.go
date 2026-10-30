@@ -11,7 +11,7 @@ import (
 )
 
 // Settings → Tools → Google Drive: connect the account (the Eriphe app
-// through eriphe.com, or the user's own Google client), then browse its
+// through the sign-in relay, or the user's own Google client), then browse its
 // folders through eriphe-files and pick which become Folders, read only or
 // read and add results to their Eriphe/ subfolder (cloud.go).
 
@@ -19,7 +19,7 @@ type driveView struct {
 	driveState
 	Origin    string // this workspace, as the browser reaches it
 	AppReady  bool   // the Eriphe app's client is installed
-	OriginOK  bool   // eriphe.com bounces to this address
+	OriginOK  bool   // the relay bounces to this address
 	Callback  string // the redirect to register for an own client
 	Status    string // the files server's: ready, connecting…
 	Connected bool   // just back from Google
@@ -72,7 +72,7 @@ func (w *web) handleDriveConnect(rw http.ResponseWriter, r *http.Request, s *ses
 }
 
 // handleDriveCallback is the end of a Google authorization, at the
-// workspace's /oauth/callback (from eriphe.com's bounce, or from Google
+// workspace's /oauth/callback (from the relay's bounce, or from Google
 // for an own client).
 func (w *web) handleDriveCallback(rw http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
