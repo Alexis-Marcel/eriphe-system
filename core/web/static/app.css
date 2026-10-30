@@ -1252,7 +1252,8 @@ dialog.modal[open] { max-height: calc(100dvh - 32px - env(safe-area-inset-top) -
 @media (display-mode: standalone) {
   body.shell { position: fixed; inset: 0; height: auto; }
 }
-/* iOS, installed: the layout viewport can stop a status bar short of the
-   screen; app.js measures the screen and the shell takes its full height
-   (the keyboard's own height, html.kb, still wins). */
-html.ios-app:not(.kb) body.shell { bottom: auto; height: var(--full-h, 100dvh); }
+/* Installed: what iOS leaves below the page (some iOS 26 versions end a
+   standalone page short of the screen) takes the tab bar's colour. */
+@media (display-mode: standalone) {
+  html.shell { background: var(--surface); }
+}
