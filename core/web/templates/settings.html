@@ -76,10 +76,12 @@
 {{/* A device card's foot: its version and its update. While an update is
 pending, it asks every few seconds where it stands (handleUpdateState) and
 is swapped whole, until the request is done; app.js keeps it quiet, and
-gives up, while eriphe-core does not answer. . is a machineView. */}}
+gives up, while eriphe-core does not answer. Otherwise it asks again when
+an update of another machine is asked for or ends (update-follow), as its
+latest version and its button follow eriphe-core's. . is a machineView. */}}
 {{define "device-foot-fragment"}}{{template "device-foot" .Data}}{{end}}
 {{define "device-foot"}}
-<div class="device-foot" id="device-foot-{{.Name}}"{{with .Update.Pending}} hx-get="/settings/devices/{{$.Name}}/update?id={{.ID}}" {{template "update-poll" $.Update}}{{end}}>
+<div class="device-foot" id="device-foot-{{.Name}}"{{with .Update.Pending}} hx-get="/settings/devices/{{$.Name}}/update?id={{.ID}}" {{template "update-poll" $.Update}}{{else}} hx-get="/settings/devices/{{.Name}}/update" {{template "update-follow"}}{{end}}>
   <p class="muted small device-version">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}} · {{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}} · {{end}}{{if .Version}}<span class="mono">eriphe-node {{ver .Version}}</span>{{if and .Update.Latest (not .Update.Pending)}} <span class="mono">→ {{ver .Update.Latest}}</span>{{end}}{{end}}</p>
   {{template "machine-update" .Update}}
   {{if .NoTLS}}<p class="muted small">{{t "machines.notls"}}</p>{{end}}
@@ -89,6 +91,11 @@ gives up, while eriphe-core does not answer. . is a machineView. */}}
 {{/* The polling of an update's state, on the element it swaps: slower while
 the request waits for the tasks to end. . is an updateRow with a request. */}}
 {{define "update-poll"}}hx-trigger="every {{if .Waiting}}10s{{else}}3s{{end}}" hx-swap="outerHTML" hx-request='{"timeout": 8000}' data-update-poll data-update-lost="{{t "updates.lost"}}"{{end}}
+
+{{/* A part of the updates that follows no request of its own: it asks again
+once a request is made or ends, from any card (the answers that say so carry
+the updates-changed event, web_updates.go). */}}
+{{define "update-follow"}}hx-trigger="updates-changed from:body" hx-swap="outerHTML"{{end}}
 
 {{/* A device's status: online, offline, or its access cut. . is a machineView. */}}
 {{define "device-status"}}
@@ -216,11 +223,7 @@ the request waits for the tasks to end. . is an updateRow with a request. */}}
   </div>
   <p class="muted">{{t "updates.lead"}}</p>
   {{template "core-update" index .Rows 0}}
-  {{if gt .Behind 1}}
-  <form hx-post="/settings/updates/all" hx-confirm="{{t "updates.allconfirm"}}">
-    <button class="btn btn-primary" type="submit" hx-disabled-elt="this">{{t "updates.all"}}</button>
-  </form>
-  {{end}}
+  {{template "updates-all" .}}
   <label class="switch">
     <input type="checkbox" role="switch" name="night" value="1" hx-post="/settings/updates/night" hx-trigger="change" {{if .Night}}checked{{end}}>
     <span><b>{{t "updates.night"}}</b><small>{{t "updates.nighthint"}}</small></span>
@@ -229,18 +232,30 @@ the request waits for the tasks to end. . is an updateRow with a request. */}}
 </section>
 {{end}}
 
+{{/* "Update all", while more than one machine can be updated: it follows
+the requests made from the cards. . is an updatesData. */}}
+{{define "updates-all-fragment"}}{{template "updates-all" .Data}}{{end}}
+{{define "updates-all"}}
+<div class="updates-all" id="updates-all" hx-get="/settings/updates/all" {{template "update-follow"}}>
+  {{- if gt .Behind 1}}
+  <form hx-post="/settings/updates/all" hx-confirm="{{t "updates.allconfirm"}}">
+    <button class="btn btn-primary" type="submit" hx-disabled-elt="this">{{t "updates.all"}}</button>
+  </form>
+  {{- end -}}
+</div>
+{{end}}
+
 {{/* eriphe-core's row, which follows its update as a card does. Once done,
-eriphe-core runs its new version, and the cards are shown again: the nodes
-can follow it. . is an updateRow. */}}
+eriphe-core runs its new version, and the cards and "Update all" ask again
+(update-follow): the nodes can follow it. . is an updateRow. */}}
 {{define "core-update-fragment"}}{{template "core-update" .Data}}{{end}}
 {{define "core-update"}}
-<div class="update-core-row" id="update-core"{{with .Pending}} hx-get="/settings/updates/core?id={{.ID}}" {{template "update-poll" $}}{{end}}>
+<div class="update-core-row" id="update-core"{{with .Pending}} hx-get="/settings/updates/core?id={{.ID}}" {{template "update-poll" $}}{{else}} hx-get="/settings/updates/core" {{template "update-follow"}}{{end}}>
   <div class="list-main">
     <b>eriphe-core</b>
     <span class="muted small mono">{{if .Version}}{{ver .Version}}{{else}}{{t "updates.noversion"}}{{end}}{{if .Pin}} · {{tf "updates.pinned" .Pin}}{{end}}</span>
   </div>
   {{template "machine-update" .}}
-  {{if .Done}}<span hidden hx-get="/settings/devices" hx-trigger="load" hx-select="#devices-grid" hx-target="#devices-grid" hx-swap="outerHTML"></span>{{end}}
 </div>
 {{end}}
 
