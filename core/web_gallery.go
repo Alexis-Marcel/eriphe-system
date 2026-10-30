@@ -3,14 +3,15 @@ package main
 import (
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 )
 
-// "Add a tool": the catalog of presets by category, with a search that
-// filters the tiles in the browser (app.js; without it, all are shown),
-// and "Autre service", which looks at an address before adding it
-// (discover.go).
+// "Add a tool": a search over the catalog of presets, in a dialog of the
+// tools page and on its own page for a browser without JavaScript. While
+// nothing is searched it shows the popular ones, then every category; the
+// search and the category chips filter the tiles in the browser (app.js;
+// without it, all are shown). "Autre service" looks at an address before
+// adding it (discover.go).
 
 // presetTile is a preset in the gallery.
 type presetTile struct {
@@ -25,9 +26,29 @@ type presetGroup struct {
 }
 
 type galleryPage struct {
-	Groups []presetGroup
-	Others []presetTile // a server by its address, a local program
-	Count  int
+	Popular []presetTile // first, while nothing is searched
+	Groups  []presetGroup
+	Others  []presetTile // a local program, then a server by its address: always last
+	Count   int
+}
+
+// popularPresets open the gallery, before its categories.
+var popularPresets = []string{"mail", "calendar", "gdrive", "notion", "todoist", "home-assistant", "github", "linear"}
+
+// presetKeywords are more words a preset is found by: brands, and what it
+// does in both languages.
+var presetKeywords = map[string]string{
+	"mail":           "email e-mail courriel gmail outlook icloud proton imap smtp",
+	"calendar":       "calendrier calendar rendez-vous google icloud caldav nextcloud",
+	"gdrive":         "google docs sheets documents fichiers files",
+	"home-assistant": "domotique smart home lumieres lights",
+	"github":         "git code repos pull requests issues",
+	"linear":         "tickets issues projets",
+	"notion":         "notes wiki pages docs",
+	"todoist":        "todo to-do taches tasks",
+	"ticktick":       "todo to-do taches tasks",
+	"remote":         "mcp url adresse address",
+	"local":          "docker image programme program",
 }
 
 // addedPresets are the presets the workspace's tools come from.
@@ -42,13 +63,24 @@ func (w *web) addedPresets(lang string) map[string]bool {
 }
 
 func (w *web) tile(lang string, p toolPreset, added map[string]bool) presetTile {
-	words := []string{p.ID, tr(lang, "preset."+p.ID+".title"), tr(lang, "preset."+p.ID+".desc"), tr(lang, "cat."+p.Category)}
+	words := []string{p.ID, tr(lang, "preset."+p.ID+".title"), tr(lang, "preset."+p.ID+".desc")}
+	if p.Category != "" {
+		words = append(words, tr(lang, "cat."+p.Category))
+	}
+	if k := presetKeywords[p.ID]; k != "" {
+		words = append(words, k)
+	}
 	return presetTile{toolPreset: p, Added: added[p.ID], Search: strings.ToLower(strings.Join(words, " "))}
 }
 
 func (w *web) gallery(lang string) galleryPage {
 	added := w.addedPresets(lang)
 	var g galleryPage
+	for _, id := range popularPresets {
+		if p, ok := presetByID(id); ok {
+			g.Popular = append(g.Popular, w.tile(lang, p, added))
+		}
+	}
 	for _, cat := range toolCategories {
 		group := presetGroup{Cat: cat}
 		for _, p := range toolPresets {
@@ -61,31 +93,16 @@ func (w *web) gallery(lang string) galleryPage {
 			g.Count += len(group.Tiles)
 		}
 	}
-	for _, p := range toolPresets {
-		if p.Category == "" {
-			t := w.tile(lang, p, added)
-			t.Search = "" // always shown: what the search did not find
-			g.Others = append(g.Others, t)
+	for _, id := range []string{"local", "remote"} {
+		if p, ok := presetByID(id); ok {
+			g.Others = append(g.Others, w.tile(lang, p, added))
 		}
 	}
 	return g
 }
 
-// featuredPresets open the tools page's short list; the gallery has the rest.
-var featuredPresets = []string{"mail", "calendar", "gdrive", "home-assistant", "notion", "todoist"}
-
-func (w *web) featured(lang string) ([]presetTile, int) {
-	added := w.addedPresets(lang)
-	var out []presetTile
-	for _, id := range featuredPresets {
-		if p, ok := presetByID(id); ok {
-			out = append(out, w.tile(lang, p, added))
-		}
-	}
-	return out, len(slices.DeleteFunc(slices.Clone(toolPresets), func(p toolPreset) bool { return p.Category == "" }))
-}
-
-// handleGallery is "Add a tool": the tiles of the presets, by category.
+// handleGallery is "Add a tool" on its own page: what the tools page's
+// dialog holds, for a link from elsewhere and a browser without JavaScript.
 func (w *web) handleGallery(rw http.ResponseWriter, r *http.Request, s *session) {
 	w.render(rw, r, s, "settings", "", page{Title: "tools.add", Nav: "settings", Tab: "tools", View: "gallery", Data: w.gallery(w.lang(r))})
 }

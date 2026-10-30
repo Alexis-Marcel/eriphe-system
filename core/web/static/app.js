@@ -412,7 +412,8 @@ document.addEventListener("click", (e) => {
   const opener = e.target.closest("[data-dialog]");
   if (opener) {
     const d = document.getElementById(opener.dataset.dialog);
-    if (d && typeof d.showModal === "function") openDialog(d);
+    // A link opens the dialog in place of its page, when the page has it.
+    if (d && typeof d.showModal === "function") { e.preventDefault(); openDialog(d); }
     return;
   }
   if (e.target instanceof HTMLDialogElement && e.target.classList.contains("modal")) e.target.close();
@@ -453,6 +454,19 @@ if (location.hash === "#connect") {
   const d = document.getElementById("connect-dlg");
   if (d) openDialog(d);
 }
+// #add opens "Add a tool" on the tools page (/settings/tools#add); closed,
+// the address loses it, so a reload does not open it again.
+(function () {
+  const d = document.getElementById("add-dlg");
+  if (!d || typeof d.showModal !== "function") return;
+  const fromHash = () => { if (location.hash === "#add") openDialog(d); };
+  // once the search is set up (setupFinder, below), so its field takes the focus
+  document.addEventListener("DOMContentLoaded", () => setTimeout(fromHash));
+  window.addEventListener("hashchange", fromHash);
+  d.addEventListener("close", () => {
+    if (location.hash === "#add") history.replaceState(null, "", location.pathname + location.search);
+  });
+})();
 
 // The workspace on a phone, installed or not: the keyboard, whether the
 // user is looking (for the notifications), installing the app and the
@@ -631,38 +645,73 @@ if (location.hash === "#connect") {
     toggle.disabled = false;
   }
 
-  // The tools gallery's search (tools.html): the tiles whose words hold
-  // every word typed, accents aside; a category without one is hidden.
+  // "Add a tool" (tools.html, tool-finder): the tiles whose words hold every
+  // word typed, accents aside, in the category of the chip pressed. While
+  // nothing is searched or picked, the popular tiles come first; a category
+  // without a tile left is hidden, and with none at all the address of the
+  // service is offered. The arrows move between the tiles shown.
   // Without this script, the field stays hidden and every tile is shown.
-  function setupCatalog() {
+  function setupFinder(box) {
     const $ = (sel, root) => (root || document).querySelector(sel);
     const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
-    const box = $("[data-catalog-search]");
-    if (!box) return;
-    const input = $("input", box);
+    const input = $("input[type=search]", box);
+    const chips = $$("[data-chip]", box);
+    const popular = $("[data-popular]", box);
+    const groups = $$("[data-group]", box);
+    const none = $("[data-finder-none]", box);
+    const paste = $("[data-finder-paste]", box);
     const fold = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-    const tiles = $$("[data-search]").map((li) => ({ li, words: fold(li.dataset.search) }));
-    const empty = $("#catalog-empty");
+    const tiles = groups.flatMap((g) => $$("[data-search]", g).map((li) => ({ li, words: fold(li.dataset.search) })));
+    let cat = "";
     const apply = () => {
-      const want = fold(input.value).split(/\s+/).filter(Boolean);
+      const q = input.value.trim();
+      const want = fold(q).split(/\s+/).filter(Boolean);
+      tiles.forEach((t) => { t.li.hidden = !want.every((w) => t.words.includes(w)); });
       let shown = 0;
-      tiles.forEach((t) => {
-        t.li.hidden = !want.every((w) => t.words.includes(w));
-        if (!t.li.hidden) shown++;
+      groups.forEach((g) => {
+        const n = (cat === "" || g.dataset.group === cat) ? $$("[data-search]", g).filter((li) => !li.hidden).length : 0;
+        g.hidden = n === 0;
+        shown += n;
       });
-      $$("[data-cat]").forEach((cat) => { cat.hidden = !$$("[data-search]", cat).some((li) => !li.hidden); });
-      if (empty) empty.hidden = shown > 0;
+      popular.hidden = want.length > 0 || cat !== "";
+      none.hidden = shown > 0;
+      // what looks like an address goes along to "Autre service"
+      paste.href = "/settings/tools/add/other" + (/^\S+\.\S+$/.test(q) ? "?url=" + encodeURIComponent(q) : "");
     };
-    box.hidden = false;
+    const pick = (c) => {
+      cat = c;
+      chips.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.chip === c)));
+      apply();
+    };
+    chips.forEach((b) => b.addEventListener("click", () => pick(b.dataset.chip)));
     input.addEventListener("input", apply);
+    const visible = () => $$(".ftile", box).filter((a) => a.offsetParent !== null);
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && input.value) { input.value = ""; apply(); }
+      if (e.key === "Escape" && input.value && !box.closest("dialog")) { input.value = ""; apply(); }
+      if (e.key === "ArrowDown") { const v = visible(); if (v.length) { e.preventDefault(); v[0].focus(); } }
+      if (e.key === "Enter") { e.preventDefault(); const v = visible(); if (input.value.trim() && v.length) v[0].click(); }
     });
+    box.addEventListener("keydown", (e) => {
+      const a = e.target.closest && e.target.closest(".ftile");
+      if (!a || !["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+      const v = visible();
+      const i = v.indexOf(a);
+      const r = a.getBoundingClientRect();
+      // up and down: the tile of the next row nearest under or above
+      const row = (dir) => v.filter((b) => dir * (b.getBoundingClientRect().top - r.top) > 4)
+        .sort((x, y) => dir * (x.getBoundingClientRect().top - y.getBoundingClientRect().top) ||
+          Math.abs(x.getBoundingClientRect().left - r.left) - Math.abs(y.getBoundingClientRect().left - r.left))[0];
+      const next = { ArrowRight: v[i + 1], ArrowLeft: v[i - 1], ArrowDown: row(1), ArrowUp: row(-1) || input }[e.key];
+      if (next) { e.preventDefault(); next.focus(); }
+    });
+    const dlg = box.closest("dialog");
+    if (dlg) dlg.addEventListener("close", () => { input.value = ""; pick(""); });
+    $("[data-finder-bar]", box).hidden = false;
     apply();
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    setupCatalog();
+    document.querySelectorAll("[data-finder]").forEach(setupFinder);
     showInstall();
     setupPush().catch(() => {});
   });

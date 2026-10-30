@@ -338,7 +338,7 @@ func TestWebPagesRender(t *testing.T) {
 		"/tasks/t-perm":      {"d-perm-t-perm-p-1"},
 		"/settings/machines": {"box", "En ligne", "Hors ligne", "16 Go", "gpu", `eriphe-node 0.1.0-dev <small class="mono">7654321</small>`},
 		"/settings/agents":   {"small", "quick things", "Par défaut", "Prêt"},
-		"/settings/tools":    {"github", "providers.p.secret", "Secrets avancés", "Home Assistant", "/settings/tools/new?preset=mail"},
+		"/settings/tools":    {"github", "Home Assistant", "/settings/tools/new?preset=mail"},
 		"/settings/tools/new?preset=home-assistant": {"/api/mcp", `name="token"`, `value="bearer" checked`},
 		"/settings/tools/new?preset=mail":           {"provider=gmail", "provider=free", "provider=other", "Bientôt"},
 		"/settings/tools/new?preset=mail&provider=gmail": {`name="address"`, `name="password"`, "myaccount.google.com/apppasswords",
@@ -350,7 +350,7 @@ func TestWebPagesRender(t *testing.T) {
 		"/settings/providers/new":                             {"kind=claude-subscription", "kind=chatgpt-subscription"},
 		"/settings/providers/new?kind=claude-subscription":    {`name="key"`, "claude setup-token", `name="preset"`},
 		"/settings/journal":                                   {"git push origin main", "Règle", "Refusé"},
-		"/settings/account":                                   {"Français", "English", "eriphe-core " + version},
+		"/settings/account":                                   {"Français", "English", "eriphe-core " + version, "Clés et mots de passe enregistrés", "providers.p.secret"},
 	}
 	for path, wants := range pages {
 		code, body, _ := tw.do("GET", path, nil, nil)

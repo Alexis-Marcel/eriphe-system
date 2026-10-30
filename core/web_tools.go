@@ -31,14 +31,12 @@ type toolView struct {
 }
 
 type toolsPage struct {
-	Tools    []toolView
-	Featured []presetTile // the first tiles of the gallery (web_gallery.go)
-	Count    int          // and how many it has
-	Flash    string
-	Alert    string // a pending tool that was not connected
-	Skipped  map[string]string
-	Secrets  secretsView
-	Waiting  bool // a tool is starting: the list refreshes itself until it is up
+	Tools   []toolView
+	Gallery galleryPage // the "Add a tool" dialog (web_gallery.go)
+	Flash   string
+	Alert   string // a pending tool that was not connected
+	Skipped map[string]string
+	Waiting bool // a tool is starting: the list refreshes itself until it is up
 	// Home Assistant talks to Eriphe (its voice token) but Eriphe has no
 	// tool of it: its entry is still in the list (web_homeassistant.go).
 	VoiceOnly bool
@@ -104,7 +102,7 @@ func serviceProblem(lang string, sv serverView) string {
 
 func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
-	v := toolsPage{Secrets: w.secrets("", false)}
+	v := toolsPage{}
 	conf := w.c.conf()
 	v.Voice = w.c.store.get(voiceTokenKey) != ""
 	v.VoiceOnly = v.Voice
@@ -125,7 +123,7 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 		// the list refreshes itself until it settles
 		v.Waiting = v.Waiting || t.Placed || sv.Status == statusConnecting
 	}
-	v.Featured, v.Count = w.featured(lang)
+	v.Gallery = w.gallery(lang)
 	q := r.URL.Query()
 	if n := q.Get("saved"); n != "" && w.c.source(kindServer, n) != "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.saved"), n)

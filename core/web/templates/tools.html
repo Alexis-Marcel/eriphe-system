@@ -1,9 +1,12 @@
 {{/* Tools: the list, the gallery of presets, the kind of account to pick, and a tool's form. */}}
 
+{{/* The button that opens "Add a tool": the dialog with JavaScript, its own page without. */}}
+{{define "add-tool-btn"}}<a class="btn btn-primary" href="/settings/tools/add" data-dialog="add-dlg" aria-haspopup="dialog">{{template "i-plus"}}{{t "tools.add"}}</a>{{end}}
+
 {{define "tools"}}{{with .Data}}
 <header class="page-head page-head-row">
   <div><h2>{{t "settings.tools"}}</h2><p>{{t "tools.lead"}}</p></div>
-  <a class="btn btn-primary" href="/settings/tools/add">{{template "i-plus"}}{{t "tools.add"}}</a>
+  {{template "add-tool-btn"}}
 </header>
 {{if .Flash}}<p class="ok-note" role="status">{{.Flash}}</p>{{end}}
 {{if .Alert}}<p class="alert" role="alert">{{.Alert}}</p>{{end}}
@@ -61,33 +64,67 @@
   </li>
 {{end}}
 </ul>
-{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-plug"}}</span><p>{{t "tools.none"}}</p></div>{{end}}
+{{else}}<div class="empty tools-empty"><span class="empty-art" aria-hidden="true">{{template "i-plug"}}</span><p>{{t "tools.empty"}}</p>{{template "add-tool-btn"}}</div>{{end}}
 
-<section class="panel" id="add-tool" aria-labelledby="add-tool-title">
-  <h3 id="add-tool-title">{{template "i-plus"}}{{t "tools.add"}}</h3>
-  <p class="muted">{{t "tools.addlead"}}</p>
-  <ul class="presets">{{range .Featured}}{{template "preset-tile" .}}{{end}}</ul>
-  <div class="actions"><a class="btn btn-soft" href="/settings/tools/add">{{tf "gallery.all" .Count}}</a></div>
-</section>
-
-<details class="panel advanced" id="secrets-panel">
-  <summary><span class="adv-title">{{template "i-key"}}{{t "secrets.title"}}</span><span class="muted small">{{t "secrets.summary"}}</span></summary>
-  <div id="secrets" class="secrets">{{template "secrets-body" .Secrets}}</div>
-</details>
+<dialog class="modal finder-dlg" id="add-dlg" aria-labelledby="add-dlg-title" data-focus-on-open="finder-q">
+  <div class="finder-top">
+    <h3 id="add-dlg-title">{{t "tools.add"}}</h3>
+    <form method="dialog"><button class="icon-btn" type="submit" aria-label="{{t "gallery.close"}}" title="{{t "gallery.close"}}">{{template "i-x"}}</button></form>
+  </div>
+  {{template "tool-finder" .Gallery}}
+</dialog>
 {{end}}{{end}}
 
+{{/* "Add a tool": a search, the categories as chips, the popular tiles, then
+     each category. . is a galleryPage. Without JavaScript, the field and the
+     chips stay hidden and every tile is shown. */}}
+{{define "tool-finder"}}
+<div class="finder" data-finder>
+  <div class="finder-bar" data-finder-bar hidden>
+    <label class="finder-search"><span class="sr-only">{{t "gallery.search"}}</span>
+      <input type="search" id="finder-q" name="q" placeholder="{{tf "gallery.searchph" .Count}}" autocomplete="off" spellcheck="false" aria-controls="finder-results"></label>
+    <div class="finder-chips" role="group" aria-label="{{t "gallery.cats"}}">
+      <button type="button" class="fchip" data-chip="" aria-pressed="true">{{t "gallery.everything"}}</button>
+      {{range .Groups}}<button type="button" class="fchip" data-chip="{{.Cat}}" aria-pressed="false">{{t (printf "cat.%s" .Cat)}}</button>{{end}}
+    </div>
+  </div>
+  <div class="finder-results" id="finder-results">
+    <section class="finder-sec" data-popular aria-labelledby="fsec-popular">
+      <h4 id="fsec-popular">{{t "gallery.popular"}}</h4>
+      <ul class="ftiles">{{range .Popular}}{{template "finder-tile" .}}{{end}}</ul>
+    </section>
+    {{range .Groups}}
+    <section class="finder-sec" data-group="{{.Cat}}" aria-labelledby="fsec-{{.Cat}}">
+      <h4 id="fsec-{{.Cat}}">{{t (printf "cat.%s" .Cat)}}</h4>
+      <ul class="ftiles">{{range .Tiles}}{{template "finder-tile" .}}{{end}}</ul>
+    </section>
+    {{end}}
+    <p class="finder-none" data-finder-none role="status" hidden>{{t "gallery.notfound"}} <a href="/settings/tools/add/other" data-finder-paste>{{t "gallery.paste"}}</a></p>
+    <section class="finder-sec" aria-labelledby="fsec-more">
+      <h4 id="fsec-more">{{t "gallery.more"}}</h4>
+      <ul class="ftiles">{{range .Others}}{{template "finder-tile" .}}{{end}}</ul>
+    </section>
+    <details class="finder-soon">
+      <summary>{{t "gallery.soon"}}</summary>
+      <ul class="plain-list">{{range list "app" "clients" "other"}}<li>{{t (printf "gallery.soon.%s" .)}}</li>{{end}}</ul>
+    </details>
+  </div>
+</div>
+{{end}}
+
 {{/* One tile of the gallery. . is a presetTile. */}}
-{{define "preset-tile"}}
-  <li{{if .Search}} data-search="{{.Search}}"{{end}}><a class="preset preset-{{.ID}}" href="{{.Page}}">
+{{define "finder-tile"}}{{$desc := t (printf "preset.%s.desc" .ID)}}
+  <li data-search="{{.Search}}"><a class="ftile preset-{{.ID}}" href="{{.Page}}" title="{{$desc}}">
     <span class="mark preset-mark mark-{{.ID}}" aria-hidden="true">{{template "preset-icon" .ID}}</span>
-    <span class="preset-text"><b>{{t (printf "preset.%s.title" .ID)}}</b><small>{{t (printf "preset.%s.desc" .ID)}}</small>
-    {{if or .Added .Scoped .ReadsOnly .Open .Paid .Beta}}<span class="ptags">
-      {{if .Added}}<span class="ptag ptag-added">{{template "i-check"}}{{t "gallery.added"}}</span>{{end}}
-      {{if .ReadsOnly}}<span class="ptag">{{t "gallery.readsonly"}}</span>{{else if .Scoped}}<span class="ptag">{{t "gallery.readonly"}}</span>{{end}}
-      {{if .Open}}<span class="ptag">{{t "gallery.open"}}</span>{{end}}
-      {{if .Paid}}<span class="ptag ptag-warn">{{t "gallery.paid"}}</span>{{end}}
-      {{if .Beta}}<span class="ptag ptag-warn">{{t "gallery.beta"}}</span>{{end}}
-    </span>{{end}}</span>
+    <span class="ftile-text">
+      <span class="ftile-name"><b>{{t (printf "preset.%s.title" .ID)}}</b>
+        {{if .Added}}<span class="ftile-added" title="{{t "gallery.added"}}">{{template "i-check"}}<span class="sr-only">{{t "gallery.added"}}</span></span>{{end}}
+        {{if .ReadsOnly}}<span class="ftile-flag" title="{{t "gallery.readsonly"}}">{{template "i-lock"}}<span class="sr-only">{{t "gallery.readsonly"}}</span></span>
+        {{else if .Scoped}}<span class="ftile-flag" title="{{t "gallery.readonly"}}">{{template "i-lock"}}<span class="sr-only">{{t "gallery.readonly"}}</span></span>{{end}}
+      </span>
+      <small>{{$desc}}</small>
+    </span>
+    {{if or .Open .Paid .Beta}}<span class="ftile-tags">{{if .Open}}<span>{{t "gallery.open"}}</span>{{end}}{{if .Paid}}<span>{{t "gallery.paid"}}</span>{{end}}{{if .Beta}}<span>{{t "gallery.beta"}}</span>{{end}}</span>{{end}}
   </a></li>
 {{end}}
 
@@ -97,27 +134,7 @@
   <h2>{{t "tools.add"}}</h2>
   <p>{{t "tools.addlead"}}</p>
 </header>
-<div class="catalog-search" data-catalog-search hidden>
-  <label class="field"><span class="sr-only">{{t "gallery.search"}}</span>
-    <input type="search" name="q" placeholder="{{tf "gallery.searchph" .Count}}" aria-label="{{t "gallery.search"}}" autocomplete="off" spellcheck="false" aria-controls="catalog"></label>
-</div>
-<div class="catalog" id="catalog">
-{{range .Groups}}
-  <section class="catalog-cat" data-cat aria-labelledby="cat-{{.Cat}}">
-    <h3 id="cat-{{.Cat}}">{{t (printf "cat.%s" .Cat)}}</h3>
-    <ul class="presets">{{range .Tiles}}{{template "preset-tile" .}}{{end}}</ul>
-  </section>
-{{end}}
-  <p class="muted catalog-empty" id="catalog-empty" role="status" hidden>{{t "gallery.none"}}</p>
-  <section class="catalog-cat" aria-labelledby="cat-more">
-    <h3 id="cat-more">{{t "gallery.more"}}</h3>
-    <ul class="presets">{{range .Others}}{{template "preset-tile" .}}{{end}}</ul>
-  </section>
-  <aside class="notice catalog-soon" aria-labelledby="cat-soon">
-    <h3 id="cat-soon">{{t "gallery.soon"}}</h3>
-    <ul class="plain-list">{{range list "app" "clients" "other"}}<li>{{t (printf "gallery.soon.%s" .)}}</li>{{end}}</ul>
-  </aside>
-</div>
+{{template "tool-finder" .}}
 {{end}}{{end}}
 
 {{/* "Autre service": an address, and what Eriphe found there (web_gallery.go). */}}

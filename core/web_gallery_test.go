@@ -36,21 +36,92 @@ func advancedPart(t *testing.T, body string) string {
 	return body[i:]
 }
 
+// toolsList is the tools page above its "Add a tool" dialog.
+func toolsList(t *testing.T, body string) (list, dialog string) {
+	t.Helper()
+	i := strings.Index(body, `<dialog class="modal finder-dlg" id="add-dlg"`)
+	if i < 0 {
+		t.Fatal("no Add a tool dialog")
+	}
+	return body[:i], body[i:]
+}
+
+// The tools page lists the tools of the workspace only; "Add a tool" opens
+// a dialog with a search over every preset, and its own page without
+// JavaScript.
+func TestToolsPageAndAddDialog(t *testing.T) {
+	tw, _, _ := catalogWeb(t, nil)
+	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
+	list, dlg := toolsList(t, body)
+	if !strings.Contains(list, `href="/settings/tools/add" data-dialog="add-dlg"`) {
+		t.Error("Add a tool neither opens the dialog nor falls back to its page")
+	}
+	if !strings.Contains(list, `<h3 class="mono">docs</h3>`) {
+		t.Error("the tool of the workspace is not listed")
+	}
+	for _, not := range []string{"ftile", "preset-todoist", "presets"} {
+		if strings.Contains(list, not) {
+			t.Errorf("the tools list shows the presets (%s)", not)
+		}
+	}
+	for _, not := range []string{"secrets-panel", "Secrets avancés", "Clés et mots de passe enregistrés", `id="secrets"`} {
+		if strings.Contains(body, not) {
+			t.Errorf("the tools page shows the saved keys (%s)", not)
+		}
+	}
+	if !strings.Contains(dlg, `aria-labelledby="add-dlg-title"`) || !strings.Contains(dlg, `<h3 id="add-dlg-title">Ajouter un outil</h3>`) ||
+		!strings.Contains(dlg, `data-focus-on-open="finder-q"`) || !strings.Contains(dlg, `<span class="sr-only">Chercher un outil</span>`) {
+		t.Error("the dialog is not labelled, or its search has no label")
+	}
+	// Every preset, and a chip for every category.
+	for _, p := range toolPresets {
+		if !strings.Contains(dlg, `class="ftile preset-`+p.ID+`" href="`+p.Page()+`"`) {
+			t.Errorf("dialog: no tile for %s", p.ID)
+		}
+	}
+	for _, cat := range toolCategories {
+		if !strings.Contains(dlg, `data-chip="`+cat+`" aria-pressed="false"`) || !strings.Contains(dlg, `data-group="`+cat+`"`) {
+			t.Errorf("dialog: no category %s", cat)
+		}
+	}
+	if !strings.Contains(dlg, `data-chip="" aria-pressed="true">Tout</button>`) {
+		t.Error("no Tout chip")
+	}
+	// No tool yet: the empty state has the same button.
+	tw, _, _ = catalogWeb(t, func(c *Config) { c.Servers = nil })
+	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
+	list, _ = toolsList(t, body)
+	if !strings.Contains(list, "tools-empty") || strings.Count(list, `data-dialog="add-dlg"`) != 2 {
+		t.Error("the empty tools page does not offer Add a tool")
+	}
+}
+
 func TestGallery(t *testing.T) {
 	tw, _, csrf := catalogWeb(t, nil)
-	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, `href="/settings/tools/add"`) {
-		t.Fatal("Add a tool does not open the gallery")
+	// The old address of the gallery still works: the dialog's content on a page.
+	code, body, _ := tw.do("GET", "/settings/tools/add", nil, nil)
+	if code != 200 || !strings.Contains(body, "data-finder") || strings.Contains(body, `id="add-dlg"`) {
+		t.Fatalf("gallery page: %d", code)
 	}
-	_, body, _ := tw.do("GET", "/settings/tools/add", nil, nil)
+	if !strings.Contains(body, `data-finder-bar hidden`) || !strings.Contains(body, `type="search"`) {
+		t.Error("no search field, hidden until the script shows it")
+	}
 	at := -1
-	// The categories (headings) and their tiles, in order.
-	for _, want := range []string{"Tâches &amp; notes</h3>", "<b>Linear</b>", "<b>Notion</b>", "<b>Todoist</b>",
-		"Mail &amp; agenda</h3>", "<b>Mails</b>", "<b>Agenda</b>", "<b>Fastmail</b>", "Fichiers</h3>", "<b>Google Drive</b>", "<b>Dropbox</b>",
-		"Développement</h3>", "<b>GitHub</b>", "Maison</h3>", "<b>Home Assistant</b>", "Pas dans la liste ?</h3>",
-		"<b>Autre service en ligne</b>", "<b>Autre programme local</b>", "Pas encore possible</h3>"} {
-		i := strings.Index(body[at+1:], want)
+	// The popular ones, then the categories (headings) and their tiles, in
+	// order, and "Autre service" last.
+	var want []string
+	for _, id := range popularPresets {
+		want = append(want, `class="ftile preset-`+id+`"`)
+	}
+	want = append(want, "Tâches &amp; notes</h4>", "<b>Linear</b>", "<b>Notion</b>", "<b>Todoist</b>",
+		"Mail &amp; agenda</h4>", "<b>Mails</b>", "<b>Agenda</b>", "<b>Fastmail</b>", "Fichiers</h4>", "<b>Google Drive</b>", "<b>Dropbox</b>",
+		"Développement</h4>", "<b>GitHub</b>", "Maison</h4>", "<b>Home Assistant</b>",
+		`Pas trouvé ? <a href="/settings/tools/add/other" data-finder-paste>Colle son adresse</a>`, "Pas dans la liste ?</h4>",
+		"<b>Autre programme local</b>", "<b>Autre service en ligne</b>", "Pas encore possible</summary>")
+	for _, w := range want {
+		i := strings.Index(body[at+1:], w)
 		if i < 0 {
-			t.Fatalf("%s missing or out of order", want)
+			t.Fatalf("%s missing or out of order", w)
 		}
 		at += 1 + i
 	}
@@ -65,6 +136,24 @@ func TestGallery(t *testing.T) {
 	}
 	if code, _, _ := tw.post("/settings/tool-add/linear", nil, csrf); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
 		t.Errorf("the one-click route still answers: %d", code)
+	}
+}
+
+// The saved keys and passwords are on "Mon espace", folded, with a word on
+// what they are; replaced or deleted there.
+func TestAccountSecrets(t *testing.T) {
+	tw, _, _ := catalogWeb(t, nil)
+	_, body, _ := tw.do("GET", "/settings/account", nil, nil)
+	i := strings.Index(body, `<details class="panel advanced" id="secrets-panel">`)
+	if i < 0 {
+		t.Fatal("no saved keys on the account page")
+	}
+	if !strings.Contains(body[i:], "Clés et mots de passe enregistrés") || !strings.Contains(body[i:], `<div id="secrets" class="secrets">`) ||
+		!strings.Contains(body[i:], "gardé chiffré") {
+		t.Error("the saved keys' section")
+	}
+	if !strings.Contains(body, `name="lang" value="fr"`) || !strings.Contains(body, "signin-form") {
+		t.Error("the account page lost its sign-in")
 	}
 }
 

@@ -173,8 +173,8 @@ func TestWebLocalToolEnvSecrets(t *testing.T) {
 	if got, _ := readSecret("vault:service.notes.api_key"); got != "k-123" {
 		t.Fatal("env secret lost")
 	}
-	// The advanced secrets say what it belongs to, never its value.
-	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
+	// The saved keys (Mon espace) say what each belongs to, never its value.
+	_, body, _ = tw.do("GET", "/settings/account", nil, nil)
 	if !strings.Contains(body, "Outil « notes »") || !strings.Contains(body, "API_KEY") || strings.Contains(body, "k-123") {
 		t.Fatalf("secrets: %s", body)
 	}
