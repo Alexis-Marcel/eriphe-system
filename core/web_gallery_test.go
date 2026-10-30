@@ -238,9 +238,9 @@ func TestVendorPageThenConnect(t *testing.T) {
 		!strings.Contains(b, `name="access" value="ask" checked`) {
 		t.Fatalf("taken: %s", b)
 	}
-	// The edit: the name is fixed, the access can change without signing in again.
+	// The edit: the name is fixed, it saves without signing in again.
 	_, body, _ = tw.do("GET", "/settings/tools/linear-pro/edit", nil, nil)
-	if !strings.Contains(body, `name="name" value="linear-pro" disabled`) || !strings.Contains(body, "Enregistrer sans se reconnecter") {
+	if !strings.Contains(body, `name="name" value="linear-pro" disabled`) || !strings.Contains(body, "save-btn keep if-noreauth") {
 		t.Fatalf("edit: %s", mainPart(t, body))
 	}
 }
@@ -267,7 +267,7 @@ func TestAccessChoiceMapsToPolicy(t *testing.T) {
 	// Ask me everything: saved without signing in again.
 	form.Set("access", "ask")
 	form.Del("connect")
-	if code, _, h := tw.post("/settings/tools/linear", form, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=linear" {
+	if code, _, h := tw.post("/settings/tools/linear", form, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=linear&tool=linear" {
 		t.Fatalf("edit: %d %v", code, h)
 	}
 	waitStatus(t, c.pool.get("linear"), statusReady)
@@ -526,7 +526,7 @@ func TestAdvancedOptionsStillWork(t *testing.T) {
 	}
 	gh := url.Values{"preset": {"github"}, "name": {"github"}, "use": {"GitHub"}, "access": {"read"}, "kind": {"remote"},
 		"url": {"https://ghe.example.com/mcp/"}, "auth": {"bearer"}, "token": {"github_pat_x"}, "timeout": {"30"}}
-	if code, body, h := tw.post("/settings/tools", gh, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=github" {
+	if code, body, h := tw.post("/settings/tools", gh, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=github&tool=github&new=1" {
 		t.Fatalf("github save: %d %s", code, body)
 	}
 	if s := c.conf().Servers["github"]; s.URL != "https://ghe.example.com/mcp/" || s.Timeout != 30 || !s.TrustAnnotations {
@@ -547,7 +547,7 @@ func TestAdvancedOptionsStillWork(t *testing.T) {
 	// A name typed with capitals and spaces becomes a catalog name.
 	ha.Set("url", "http://192.168.0.10:8123/api/mcp")
 	ha.Set("name", "Ma Maison")
-	if code, _, h := tw.post("/settings/tools", ha, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=ma-maison" {
+	if code, _, h := tw.post("/settings/tools", ha, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=ma-maison&tool=ma-maison&new=1" {
 		t.Fatalf("name: %d %v", code, h)
 	}
 }

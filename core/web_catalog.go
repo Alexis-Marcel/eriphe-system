@@ -187,9 +187,12 @@ func (w *web) handleOAuthCallback(rw http.ResponseWriter, r *http.Request) {
 		v.Status, v.Tools = status, tools
 	}
 	if ps != nil {
-		// A pending tool: back to the list at once, saved or dropped.
-		// … where the dialog follows it until it is up (web_tools_dialog.go)
-		v.Next = "/settings/tools?connected=" + url.QueryEscape(ps.name) + "#added/" + url.PathEscape(ps.name)
+		// A pending tool: back to the list at once, saved or dropped,
+		// where its row follows it until it is up (web_tools_dialog.go).
+		v.Next = "/settings/tools?connected=" + url.QueryEscape(ps.name) + "&tool=" + url.QueryEscape(ps.name)
+		if ps.mode == putCreate {
+			v.Next += "&new=1"
+		}
 		if v.Error != "" || f.err != nil {
 			why := "failed"
 			if q.Get("error") == "access_denied" {

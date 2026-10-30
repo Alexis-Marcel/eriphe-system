@@ -8,52 +8,14 @@
   <div><h2>{{t "settings.tools"}}</h2><p>{{t "tools.lead"}}</p></div>
   {{template "add-tool-btn"}}
 </header>
-{{if .Flash}}<p class="ok-note" role="status">{{.Flash}}</p>{{end}}
+{{if .Flash}}<p class="ok-note" role="status"{{if .Follow}} data-toast{{end}}>{{.Flash}}</p>{{end}}
 {{if .Alert}}<p class="alert" role="alert">{{.Alert}}</p>{{end}}
 {{range $name, $why := .Skipped}}<p class="alert" role="alert">{{tf "catalog.skipped" $name}} <span class="small">{{short $why 200}}</span></p>{{end}}
 <div id="tools-body">
 {{if or .Tools .VoiceOnly}}
-<ul class="tools" id="tools-list"{{if .Waiting}} hx-get="/settings/tools" hx-trigger="load delay:2s" hx-select="#tools-list" hx-swap="outerHTML"{{end}}>
+<ul class="tools" id="tools-list"{{if .Waiting}} hx-get="{{.RefreshURL}}" hx-trigger="load delay:2s" hx-select="#tools-list" hx-swap="outerHTML"{{end}}>
 {{range .Tools}}
-  <li class="tool">
-    {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
-    {{else}}<span class="mark {{if eq .Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
-    <div class="tool-main">
-      <div class="tool-head">
-        <h3 class="mono">{{.Name}}</h3>
-        {{if .Pending}}<span class="chip srv-pending"><span class="pulse" aria-hidden="true"></span>{{if .Placed}}{{t "server.starting"}}{{else}}{{t "server.pending"}}{{end}}</span>
-        {{else}}<span class="chip srv-{{.Status}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "server.%s" .Status)}}</span>{{end}}
-        {{if eq .Status "ready"}}<span class="muted small">{{if eq .ToolCount 1}}{{t "tools.count1"}}{{else}}{{tf "tools.count" .ToolCount}}{{end}}</span>{{end}}
-        {{template "src-tag" .Source}}
-      </div>
-      {{if .Use}}<p class="use">{{.Use}}</p>{{end}}
-      <p class="muted small meta-line">
-        {{if .Detail}}{{.Detail}}{{else if eq .Kind "local"}}{{t "tools.local"}}{{else}}<span class="mono">{{.URL}}</span> · {{t (printf "auth.%s" .Auth)}}{{end}}
-        {{if eq .Kind "local"}}{{if .Node}} · {{.Node}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
-        {{if and (eq .Preset.ID "home-assistant") $.Data.Voice}} · {{t "ha.voiceon"}}{{end}}
-        · <a class="access-tag level-{{.Access}}" href="/settings/tools/{{.Name}}/access" title="{{t (printf "access.%s.hint" .Access)}}">{{t (printf "access.%s" .Access)}}</a>
-        {{if .Allowed}} · <a class="muted" href="/settings/tools/{{.Name}}/access#allowed-{{.Name}}">{{if eq .Allowed 1}}{{t "allowed.count1"}}{{else}}{{tf "allowed.count" .Allowed}}{{end}}</a>{{end}}
-      </p>
-      {{if .Scope.Reconnect}}<p class="small notice-line">{{tf "access.reconnect" .Name}}{{if eq .Preset.Form "drive"}} <a href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</p>{{end}}
-      {{if .Problem}}<div class="problem small"><p class="problem-text">{{.Problem}}</p>{{with .Error}}<details class="problem-details"><summary>{{t "problem.details"}}</summary><code>{{short . 1200}}</code></details>{{end}}</div>
-      {{else if .Pending}}<p class="small muted">{{if .Placed}}{{t "problem.tool.pending"}}{{else}}{{t "tools.pendinghint"}}{{end}}</p>
-      {{else if and .Error (ne .Status "ready")}}<div class="small">{{template "problem" (problem "tool" .Error)}}</div>{{end}}
-      <div id="connect-{{.Name}}" class="connect-box"></div>
-    </div>
-    <div class="tool-actions">
-      {{if eq .Auth "oauth"}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline">
-        <button class="btn {{if eq .Status "ready"}}btn-soft{{else}}btn-primary{{end}} sm" type="submit">{{if eq .Status "ready"}}{{t "tools.reconnect"}}{{else}}{{t "tools.connect"}}{{end}}</button></form>{{end}}
-      {{if eq .Preset.ID "home-assistant"}}<a class="btn btn-ghost sm" href="/settings/home-assistant">{{t "ha.manage"}}</a>{{end}}
-      {{if eq .Preset.ID "github"}}<a class="btn {{if eq .Auth "github-app"}}btn-ghost{{else}}btn-soft{{end}} sm" href="/settings/github">{{if eq .Auth "github-app"}}{{t "github.manage"}}{{else}}{{t "github.create"}}{{end}}</a>{{end}}
-      <a class="btn btn-ghost sm" href="/settings/tools/{{.Name}}/access">{{t "access.manage"}}</a>
-      {{if eq .Source "workspace"}}
-      {{if and (ne .Preset.ID "home-assistant") (ne .Auth "github-app")}}{{if eq .Preset.Form "drive"}}<a class="btn btn-ghost sm" href="/settings/drive">{{t "drive.folders"}}</a>
-      {{else}}<a class="btn btn-ghost sm" href="/settings/tools/{{.Name}}/edit" data-step-open="add-dlg" data-hash="edit/{{.Name}}">{{t "catalog.edit"}}</a>{{end}}{{end}}
-      <form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{tf "tools.removeconfirm" .Name}}" class="inline">
-        <button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
-      {{end}}
-    </div>
-  </li>
+  <li class="tool" id="tool-{{.Name}}">{{template "tool-row" .}}</li>
 {{end}}
 {{if .VoiceOnly}}
   <li class="tool">
@@ -82,6 +44,49 @@
   <div class="add-step" id="tool-step" hidden></div>
 </dialog>
 {{end}}{{end}}
+
+{{/* One tool of the list. . is a toolView; with .Follow, its row follows
+     the tool just saved and asks for itself again until it settles. */}}
+{{define "tool-row"}}
+    {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
+    {{else}}<span class="mark {{if eq .Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
+    <div class="tool-main">
+      <div class="tool-head">
+        <h3 class="mono">{{.Name}}</h3>
+        {{if .Pending}}<span class="chip srv-pending"><span class="pulse" aria-hidden="true"></span>{{if .Placed}}{{t "server.starting"}}{{else}}{{t "server.pending"}}{{end}}</span>
+        {{else}}<span class="chip srv-{{.Status}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "server.%s" .Status)}}</span>{{end}}
+        {{if eq .Status "ready"}}<span class="muted small">{{if eq .ToolCount 1}}{{t "tools.count1"}}{{else}}{{tf "tools.count" .ToolCount}}{{end}}</span>{{end}}
+        {{template "src-tag" .Source}}
+      </div>
+      {{if .Use}}<p class="use">{{.Use}}</p>{{end}}
+      <p class="muted small meta-line">
+        {{if .Detail}}{{.Detail}}{{else if eq .Kind "local"}}{{t "tools.local"}}{{else}}<span class="mono">{{.URL}}</span> · {{t (printf "auth.%s" .Auth)}}{{end}}
+        {{if eq .Kind "local"}}{{if .Node}} · {{.Node}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
+        {{if and (eq .Preset.ID "home-assistant") .Voice}} · {{t "ha.voiceon"}}{{end}}
+        · <a class="access-tag level-{{.Access}}" href="{{.AccessURL}}"{{if .Editable}} data-step-open="add-dlg" data-hash="edit/{{.Name}}" data-scroll="form-access"{{end}} title="{{t (printf "access.%s" .Access)}} — {{t (printf "access.%s.hint" .Access)}}">{{t (printf "access.%s.short" .Access)}}</a>
+        {{if .Allowed}} · <a class="muted" href="{{.AllowedURL}}"{{if .Editable}} data-step-open="add-dlg" data-hash="edit/{{.Name}}" data-scroll="allowed-{{.Name}}"{{end}}>{{if eq .Allowed 1}}{{t "allowed.count1"}}{{else}}{{tf "allowed.count" .Allowed}}{{end}}</a>{{end}}
+      </p>
+      {{if .Scope.Reconnect}}<p class="small notice-line">{{tf "access.reconnect" .Name}}{{if eq .Preset.Form "drive"}} <a href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</p>{{end}}
+      {{with .Follow}}{{template "tool-status-line" .}}
+      {{else}}{{if .Problem}}<div class="problem small"><p class="problem-text">{{.Problem}}</p>{{with .Error}}<details class="problem-details"><summary>{{t "problem.details"}}</summary><code>{{short . 1200}}</code></details>{{end}}</div>
+      {{else if .Pending}}<p class="small muted">{{if .Placed}}{{t "problem.tool.pending"}}{{else}}{{t "tools.pendinghint"}}{{end}}</p>
+      {{else if eq .SignIn "reconnect"}}<p class="small notice-line">{{t "tools.expired"}}</p>
+      {{else if eq .SignIn "connect"}}<p class="small muted">{{t "tools.notyet"}}</p>
+      {{else if and .Error (ne .Status "ready")}}<div class="small">{{template "problem" (problem "tool" .Error)}}</div>{{end}}{{end}}
+      <div id="connect-{{.Name}}" class="connect-box"></div>
+    </div>
+    <div class="tool-actions">
+      {{with .SignIn}}<form hx-post="/settings/servers/{{$.Name}}/connect" hx-target="#connect-{{$.Name}}" hx-disabled-elt="find button" class="inline">
+        <button class="btn btn-primary sm" type="submit">{{t (printf "tools.%s" .)}}</button></form>{{end}}
+      {{if eq .Preset.ID "home-assistant"}}<a class="btn btn-ghost sm" href="/settings/home-assistant">{{t "ha.manage"}}</a>{{end}}
+      {{if eq .Preset.ID "github"}}<a class="btn {{if eq .Auth "github-app"}}btn-ghost{{else}}btn-soft{{end}} sm" href="/settings/github">{{if eq .Auth "github-app"}}{{t "github.manage"}}{{else}}{{t "github.create"}}{{end}}</a>{{end}}
+      {{if and (eq .Preset.Form "drive") (eq .Source "workspace")}}<a class="btn btn-ghost sm" href="/settings/drive">{{t "drive.folders"}}</a>{{end}}
+      {{if .Editable}}<a class="btn {{if and .Follow .Follow.Edit}}btn-soft{{else}}btn-ghost{{end}} sm" href="/settings/tools/{{.Name}}/edit" data-step-open="add-dlg" data-hash="edit/{{.Name}}">{{t "catalog.edit"}}</a>{{end}}
+      {{if eq .Source "workspace"}}<form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{tf "tools.removeconfirm" .Name}}" class="inline">
+        <button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>{{end}}
+    </div>
+{{end}}
+{{define "tool-row-frag"}}{{template "tool-row" .Data}}{{end}}
 
 {{/* "Add a tool": a search, the categories as chips, the popular tiles, then
      each category. . is a galleryPage. Without JavaScript, the field and the
@@ -258,7 +263,8 @@
     {{if .Choose}}<p class="step-lead">{{t (printf "pick.%s.lead" .Preset.Form)}}</p>
     {{else}}{{$help := printf "preset.%s.help" .Preset.ID}}{{if and (not .Edit) (has $help)}}<p class="step-lead">{{t $help}}</p>{{end}}{{end}}
     {{template "tool-hints" .}}
-    {{if .Choose}}{{template "account-picker" .}}{{else}}{{template "tool-form" $}}{{end}}
+    {{if .Choose}}{{template "account-picker" .}}{{else}}{{template "tool-form" $}}
+    {{with .AccessView}}<section class="panel stack">{{template "token-note" .}}</section>{{template "allowed-actions" .}}{{end}}{{end}}
   </div>
 </div>
 {{end}}{{end}}
@@ -299,33 +305,14 @@
 </div>
 {{end}}{{end}}
 
-{{/* After a save: the tool, and its status as it comes up. . is an addedStep. */}}
-{{define "tool-added"}}{{with .Data}}
-<div class="step" data-hash="added/{{.Name}}" data-tool-saved>
-  {{template "step-top" dict "Back" "" "Hash" ""}}
-  <div class="step-body">
-    <div class="form-title">
-      {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
-      {{else}}<span class="mark" aria-hidden="true">{{initial .Name}}</span>{{end}}
-      <h3 id="step-title">{{if .Edit}}{{tf "added.titleedit" .Name}}{{else}}{{tf "added.title" .Name}}{{end}}</h3>
-    </div>
-    {{template "tool-status-line" .Status}}
-    <div class="actions"><form method="dialog"><button class="btn btn-primary" type="submit">{{template "i-check"}}{{t "added.done"}}</button></form></div>
-  </div>
-</div>
-{{end}}{{end}}
-
-{{define "tool-status"}}{{template "tool-status-line" .Data}}{{end}}
-
-{{/* A tool's status, asked again until it settles. . is a toolStatus. */}}
+{{/* A tool's status in its row, which asks for itself again until it settles. . is a toolStatus. */}}
 {{define "tool-status-line"}}{{with .}}
-<div class="test-result test-{{.State}} tool-status" id="tool-status" role="status"{{if .Poll}} hx-get="/settings/tools/{{.Name}}/status" hx-trigger="load delay:{{.Poll}}" hx-swap="outerHTML"{{end}}>
+<div class="test-result test-{{.State}} tool-status" role="status"{{if .Poll}} hx-get="/settings/tools/{{.Name}}/row" hx-trigger="load delay:{{.Poll}}" hx-target="closest li" hx-swap="innerHTML"{{end}}>
   {{if eq .State "ok"}}{{template "i-check"}}{{else if eq .State "err"}}{{template "i-x"}}{{else}}<span class="pulse" aria-hidden="true"></span>{{end}}
   <div class="test-body">
     <p>{{.Text}}</p>
     {{if .Hint}}<p class="small">{{.Hint}}</p>{{end}}
     {{if .Detail}}<details class="small"><summary>{{t "added.details"}}</summary><p class="mono test-detail">{{short .Detail 600}}</p></details>{{end}}
-    {{if .Edit}}<p><a class="btn btn-soft sm" href="/settings/tools/{{.Name}}/edit" data-step data-hash="edit/{{.Name}}">{{t "added.edit"}}</a></p>{{end}}
   </div>
 </div>
 {{end}}{{end}}
@@ -459,8 +446,8 @@
       </div>
     </fieldset>{{end}}
 
-{{/* What Eriphe may do on the tool (access.go). . is a dict: Access, Preset, Locked. */}}
-{{define "access-choices"}}<fieldset class="choices access" {{if .Locked}}disabled{{end}}>
+{{/* What Eriphe may do on the tool (access.go). . is a dict: Access, Preset, Locked, and ID, its anchor. */}}
+{{define "access-choices"}}<fieldset class="choices access"{{with .ID}} id="{{.}}"{{end}} {{if .Locked}}disabled{{end}}>
     <legend>{{t "access.title"}}</legend>
     <div class="choice-row signin-modes">
       {{range list "read-only" "reads" "free" "ask"}}<label class="choice level-{{.}}"><input type="radio" name="access" value="{{.}}" {{if eq . $.Access}}checked{{end}}><b>{{t (printf "access.%s" .)}}</b><small>{{if eq . "reads"}}{{tor (printf "access.reads.%s" $.Preset.ID) "access.reads.generic"}}{{else}}{{t (printf "access.%s.lead" .)}}{{end}}</small></label>{{end}}
@@ -469,18 +456,20 @@
     <small class="muted">{{t "access.note"}}</small>
   </fieldset>{{end}}
 
-{{/* How the tool's credential follows its level. . is a toolAccess. */}}
+{{/* How the tool's credential follows its level. . is a toolAccess. A
+     tool of the workspace signs in again by saving its form at a new
+     level; one of the configuration file, from here. */}}
 {{define "token-note"}}{{$s := .Scope}}
 {{if $s.Reconnect}}<div class="notice token-note"><p>{{tf "access.reconnect" .Name}}</p>
-  {{if eq .Auth "oauth"}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline"><button class="btn btn-primary sm" type="submit">{{t "tools.reconnect"}}</button></form>
+  {{if and (eq .Auth "oauth") .Locked}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline"><button class="btn btn-primary sm" type="submit">{{t "tools.reconnect"}}</button></form>
   {{else if eq .Preset.Form "drive"}}<a class="btn btn-primary sm" href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</div>
 {{else if $s.Shrink}}<div class="notice token-note"><p>{{t "access.shrink"}}</p>
-  {{if eq .Auth "oauth"}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline"><button class="btn btn-soft sm" type="submit">{{t "tools.reconnect"}}</button></form>
+  {{if and (eq .Auth "oauth") .Locked}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline"><button class="btn btn-soft sm" type="submit">{{t "tools.reconnect"}}</button></form>
   {{else if eq .Preset.Form "drive"}}<a class="btn btn-soft sm" href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</div>
 {{else if $s.Scoped}}<p class="muted small token-note">{{if eq .Access "read-only"}}{{t "access.scoped.read"}}{{else}}{{t "access.scoped.write"}}{{end}}</p>
 {{else if eq .Access "read-only"}}<p class="notice token-note">{{t "access.enforced"}}</p>
 {{else}}<p class="muted small token-note">{{t "access.unscoped"}}</p>{{end}}
-<div id="connect-{{.Name}}" class="connect-box"></div>
+{{if and (eq .Auth "oauth") .Locked}}<div id="connect-{{.Name}}" class="connect-box"></div>{{end}}
 {{end}}
 
 {{/* The actions allowed without asking. . is a toolAccess. */}}
@@ -563,7 +552,7 @@
       {{template "secret-field" dict "Name" "token" "Label" (t "form.token") "Hint" (tor (printf "preset.%s.tokenhint" .Preset.ID) "preset.remote.tokenhint") "IsSet" .TokenSet}}
       {{if $c}}{{template "howto" dict "Title" (t "form.tokenhowto") "Steps" (steps (printf "preset.%s.steps" .Preset.ID)) "Link" (t (printf "preset.%s.link" .Preset.ID)) "Note" ""}}{{end}}
     </div>
-    <p class="hint-box if-oauth">{{template "i-link"}}<span>{{if and .Service .Edit}}{{tf "form.oauthnoteedit" .Service}}{{else if .Service}}{{tf "form.oauthnoteto" .Service}}{{else}}{{t "form.oauthnote"}}{{end}}</span></p>
+    <p class="hint-box if-oauth{{if .OrigOAuth}} if-reauth{{end}}">{{template "i-link"}}<span>{{if and .Service .Edit}}{{tf "form.oauthnoteedit" .Service}}{{else if .Service}}{{tf "form.oauthnoteto" .Service}}{{else}}{{t "form.oauthnote"}}{{end}}</span></p>
   </div>
   <div class="if-local stack">
     <label class="field"><span>{{t "form.image"}}</span>
@@ -573,7 +562,7 @@
 {{end}}
 
 {{define "tool-form"}}{{with .Data}}{{$c := .Preset.Compact}}
-<form class="panel tool-form" id="tool-form" hx-post="{{if .Edit}}/settings/tools/{{.Name}}{{else}}/settings/tools{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
+<form class="panel tool-form{{if .OrigOAuth}} orig-oauth{{.ReauthClass}}{{end}}" id="tool-form" hx-post="{{if .Edit}}/settings/tools/{{.Name}}{{else}}/settings/tools{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
   <input type="hidden" name="preset" value="{{.Preset.ID}}">
   {{if .InDialog}}<input type="hidden" name="dialog" value="1">{{end}}
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
@@ -583,7 +572,7 @@
   {{else}}{{template "generic-fields" .}}{{end}}
 
   <div class="form-grid name-row">{{template "name-field" .}}{{template "use-field" .}}</div>
-  {{template "access-choices" dict "Access" .Access "Preset" .Preset "Locked" false}}
+  {{template "access-choices" dict "Access" .Access "Preset" .Preset "Locked" false "ID" "form-access"}}
   {{if and (not .Edit) .Preset.Vendor}}<p class="muted small token-note">{{if .Preset.Scoped}}{{t "access.scoped.write"}}{{else if .Preset.ReadsOnly}}{{t "access.readsonly"}}{{else}}{{t "access.unscoped"}}{{end}}</p>{{end}}
 
   <details class="advanced-opts" {{if and .Error (not $c)}}open{{end}}>
@@ -654,9 +643,11 @@
   </details>
 
   <div class="actions form-actions">
-    {{/* With OAuth, the primary action saves and signs in at once. */}}
-    <button class="btn btn-primary if-oauth" type="submit" name="connect" value="1">{{template "i-link"}}{{if .Service}}{{tf "form.connectto" .Service}}{{else if .Edit}}{{tf "form.connectto" .Name}}{{else}}{{t "form.connectservice"}}{{end}}</button>
-    <button class="btn btn-primary save-btn{{if .OrigOAuth}} keep{{end}}" type="submit">{{template "i-check"}}<span class="lbl-plain">{{if .Edit}}{{t "form.save"}}{{else}}{{t "form.create"}}{{end}}</span>{{if .OrigOAuth}}<span class="lbl-oauth">{{t "form.savenoconnect"}}</span>{{end}}</button>
+    {{/* With OAuth, the primary action saves and signs in at once. An edit
+         of a tool on OAuth signs in again only at a level its token
+         cannot serve (.Reauth, app.css): the button then says so. */}}
+    <button class="btn btn-primary if-oauth{{if .OrigOAuth}} if-reauth{{end}}" type="submit" name="connect" value="1">{{template "i-link"}}{{if .OrigOAuth}}{{t "form.saveauthorize"}}{{else if .Service}}{{tf "form.connectto" .Service}}{{else if .Edit}}{{tf "form.connectto" .Name}}{{else}}{{t "form.connectservice"}}{{end}}</button>
+    <button class="btn btn-primary save-btn{{if .OrigOAuth}} keep if-noreauth{{end}}" type="submit">{{template "i-check"}}{{if .Edit}}{{t "form.save"}}{{else}}{{t "form.create"}}{{end}}</button>
     {{if .Testable}}<button class="btn btn-soft test-btn" type="button" hx-post="/settings/tool-test{{if .Edit}}/{{.Name}}{{end}}" hx-target="#tool-test" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{t "test.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button>{{end}}
     <a class="btn btn-ghost" href="/settings/tools"{{if .InDialog}} data-step-close{{end}}>{{t "form.cancel"}}</a>
   </div>

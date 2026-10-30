@@ -3,6 +3,7 @@ package main
 import (
 	"html"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -136,12 +137,12 @@ func TestAddDialogSteps(t *testing.T) {
 }
 
 // "Modifier" opens the tool's form in the dialog directly: no way back to
-// the search, and the save stays in the dialog.
+// the search, its access in it, and the save closes the dialog on the list.
 func TestEditInDialog(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
 	form := url.Values{"preset": {"mail"}, "name": {"mails"}, "use": {"mails"}, "access": {"read"}, "mail_provider": {"gmail"},
 		"address": {"sam@gmail.com"}, "password": {"abcd efgh ijkl mnop"}}
-	if code, _, h := tw.post("/settings/tools", form, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=mails" {
+	if code, _, h := tw.post("/settings/tools", form, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=mails&tool=mails&new=1" {
 		t.Fatalf("save: %d %v", code, h)
 	}
 	code, body, _ := tw.step("/settings/tools/mails/edit")
@@ -162,15 +163,21 @@ func TestEditInDialog(t *testing.T) {
 	if !strings.Contains(body, `<a class="step-back" href="/settings/tools/mails/edit" data-step-back data-hash="edit/mails">`) {
 		t.Error("the kinds of account of an edit do not lead back to it")
 	}
-	// Saved from the dialog: the step that follows it, not a jump to the list.
+	// Its access is part of it: the level, the credential, the allowed actions.
+	_, body, _ = tw.step("/settings/tools/mails/edit")
+	if !strings.Contains(body, `fieldset class="choices access" id="form-access"`) || !strings.Contains(body, `id="allowed-mails"`) ||
+		!strings.Contains(body, "token-note") {
+		t.Errorf("no access in the edit: %s", body)
+	}
+	// Saved from the dialog: no step after it, the dialog closes on the list.
 	form.Set("use", "my mails")
 	form.Set("dialog", "1")
 	code, body, h := tw.post("/settings/tools/mails", form, csrf)
-	if code != 200 || h.Get("HX-Redirect") != "" || h.Get("HX-Retarget") != "#tool-step" || h.Get("HX-Reswap") != "innerHTML" {
-		t.Fatalf("save in the dialog: %d %v", code, h)
+	if code != 200 || h.Get("HX-Redirect") != "" || h.Get("HX-Retarget") != "" || h.Get("HX-Reswap") != "none" || body != "" {
+		t.Fatalf("save in the dialog: %d %v %s", code, h, body)
 	}
-	if !strings.Contains(body, `data-hash="added/mails" data-tool-saved`) || !strings.Contains(html.UnescapeString(body), "« mails » enregistré") {
-		t.Errorf("saved step: %s", body)
+	if got := h.Get("HX-Trigger"); got != `{"tool-saved":{"message":"\u00ab mails \u00bb modifi\u00e9","name":"mails","new":false}}` {
+		t.Errorf("saved event: %s", got)
 	}
 	if c.conf().Servers["mails"].Use != "my mails" {
 		t.Error("not saved")
@@ -183,40 +190,56 @@ func TestEditInDialog(t *testing.T) {
 	}
 }
 
-// Once saved, the dialog follows the tool until it is ready or says why
-// not; the line alone is asked again until then.
-func TestAddedFollowsTheTool(t *testing.T) {
+// Once saved, the dialog closes on the list, where the tool's row is lit
+// (a new one at the top) and follows it until it is ready or says why not:
+// the row alone is asked again until then.
+func TestSavedRowFollowsTheTool(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
 	form := url.Values{"preset": {"mail"}, "name": {"mails"}, "use": {"mails"}, "access": {"read"}, "mail_provider": {"gmail"},
 		"address": {"sam@gmail.com"}, "password": {"abcd efgh ijkl mnop"}, "dialog": {"1"}}
 	code, body, h := tw.post("/settings/tools", form, csrf)
-	if code != 200 || h.Get("HX-Retarget") != "#tool-step" {
-		t.Fatalf("save: %d %v", code, h)
+	if code != 200 || h.Get("HX-Reswap") != "none" || body != "" ||
+		h.Get("HX-Trigger") != `{"tool-saved":{"message":"\u00ab mails \u00bb ajout\u00e9","name":"mails","new":true}}` {
+		t.Fatalf("save: %d %v %s", code, h, body)
 	}
-	// (the test's core connects any tool at once: the states before are in TestStatusOf)
-	if b := html.UnescapeString(body); !strings.Contains(b, "« mails » ajouté") || !strings.Contains(body, `id="tool-status"`) ||
-		!strings.Contains(body, `data-hash="added/mails" data-tool-saved`) || !strings.Contains(body, "Terminé") {
-		t.Fatalf("saved step: %s", body)
+	if strings.Contains(body, "data-tool-saved") || strings.Contains(body, "Terminé") {
+		t.Fatal("a step after the save")
 	}
-	// A remote tool: ready, said once, no more asking.
+	// The list: the new tool first, its row following it.
 	waitStatus(t, c.pool.get("docs"), statusReady)
-	_, s, _ := tw.do("GET", "/settings/tools/docs/status", nil, map[string]string{"HX-Request": "true"})
-	if s = html.UnescapeString(s); !strings.Contains(s, "test-ok") || !strings.Contains(s, "Prêt — Eriphe peut l'utiliser.") || strings.Contains(s, "hx-get") {
+	_, list, _ := tw.do("GET", "/settings/tools?tool=mails&new=1", nil, nil)
+	first := strings.Index(list, `<li class="tool" id="tool-`)
+	if first < 0 || !strings.HasPrefix(list[first:], `<li class="tool" id="tool-mails">`) {
+		t.Fatalf("the new tool is not first: %s", mainPart(t, list))
+	}
+	row := list[first:]
+	row = row[:strings.Index(row, "</li>")]
+	if !strings.Contains(row, "tool-status") {
+		t.Errorf("the row does not follow the tool: %s", row)
+	}
+	if strings.Contains(list[strings.Index(list, `id="tool-docs"`):], "tool-status") {
+		t.Error("another row follows too")
+	}
+	// Ready: said once, no more asking.
+	_, s, _ := tw.do("GET", "/settings/tools/docs/row", nil, map[string]string{"HX-Request": "true"})
+	if s = html.UnescapeString(s); !strings.Contains(s, "test-ok") || !strings.Contains(s, "Prêt — Eriphe peut l'utiliser.") || strings.Contains(s, "hx-get") ||
+		!strings.Contains(s, "<h3 class=\"mono\">docs</h3>") {
 		t.Errorf("ready: %s", s)
 	}
-	_, s, _ = tw.do("GET", "/settings/tools/nope/status", nil, map[string]string{"HX-Request": "true"})
-	if !strings.Contains(html.UnescapeString(s), "« nope » n'existe plus") || strings.Contains(s, "hx-get") {
-		t.Errorf("gone: %s", s)
+	// Still coming up: the row asks for itself again, in place.
+	sv := serverView{serverInfo: serverInfo{Name: "mails", Kind: "local", Source: sourceWorkspace, Status: statusError}, Node: "pc", Service: "starting"}
+	st := statusOf("fr", sv)
+	rec := httptest.NewRecorder()
+	tw.w.render(rec, httptest.NewRequest("GET", "/", nil), nil, "settings", "tool-row-frag", page{Data: toolView{serverView: sv, Follow: &st}})
+	if b := rec.Body.String(); !strings.Contains(b, `hx-get="/settings/tools/mails/row" hx-trigger="load delay:1500ms" hx-target="closest li" hx-swap="innerHTML"`) {
+		t.Errorf("starting: %s", b)
 	}
-	// The step on its own, where an OAuth service brings the browser back;
-	// without the dialog, the tools page.
-	code, body, _ = tw.step("/settings/tools/docs/added")
-	if code != 200 {
-		t.Fatalf("added: %d", code)
+	if _, _, h := tw.do("GET", "/settings/tools/nope/row", nil, map[string]string{"HX-Request": "true"}); h.Get("HX-Refresh") != "true" {
+		t.Errorf("gone: %v", h)
 	}
-	wantStep(t, "added", body, "added/docs")
-	if code, _, h := tw.do("GET", "/settings/tools/docs/added", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/settings/tools?saved=docs" {
-		t.Errorf("added without the dialog: %d %s", code, h.Get("Location"))
+	// The older way back (#added/<name>, its step's address): the list.
+	if code, _, h := tw.do("GET", "/settings/tools/docs/added", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/settings/tools?tool=docs" {
+		t.Errorf("added: %d %s", code, h.Get("Location"))
 	}
 	// The list's flash no longer says it can be used at once.
 	_, page, _ := tw.do("GET", "/settings/tools?saved=mails", nil, nil)
@@ -265,7 +288,7 @@ func TestStatusOf(t *testing.T) {
 }
 
 // An OAuth tool from the dialog: a step on the way to the service, which
-// brings the browser back to the dialog following the tool.
+// brings the browser back to the list, the new tool's row first and lit.
 func TestOAuthFromDialog(t *testing.T) {
 	tw, c, f, csrf := pendingWeb(t)
 	form := oauthToolForm(f)
@@ -285,8 +308,36 @@ func TestOAuthFromDialog(t *testing.T) {
 	}
 	code2, state := f.authorize(authURL)
 	_, back := callback(t, tw, "code="+code2+"&state="+url.QueryEscape(state))
-	if !strings.Contains(back, `url=/settings/tools?connected=linear#added/linear`) {
+	if !strings.Contains(html.UnescapeString(back), `url=/settings/tools?connected=linear&tool=linear&new=1"`) {
 		t.Fatalf("back: %s", back)
 	}
 	waitStatus(t, c.pool.get("linear"), statusReady)
+	// the flash, a toast with the script; the row followed
+	_, page, _ := tw.do("GET", "/settings/tools?connected=linear&tool=linear&new=1", nil, nil)
+	if !strings.Contains(page, `role="status" data-toast>`) || !strings.Contains(page, `id="tool-linear">`) || !strings.Contains(page, "tool-status") {
+		t.Errorf("list after the service: %s", mainPart(t, page))
+	}
+}
+
+// A row signs in to an OAuth service only when it is needed: Connect when
+// it never was, Reconnect when the authorization expired or was revoked;
+// never a standing Reconnect.
+func TestRowSignIn(t *testing.T) {
+	row := func(auth, status string, token bool) toolView {
+		return toolView{serverView: serverView{serverInfo: serverInfo{Name: "t", Auth: auth, Status: status}}, Token: token}
+	}
+	for _, tc := range []struct {
+		v    toolView
+		want string
+	}{
+		{row("oauth", statusReady, true), ""},
+		{row("oauth", statusConnecting, true), ""},
+		{row("oauth", statusNeedsAuth, false), "connect"},
+		{row("oauth", statusNeedsAuth, true), "reconnect"},
+		{row("bearer", statusNeedsAuth, false), ""},
+	} {
+		if got := tc.v.SignIn(); got != tc.want {
+			t.Errorf("%s %s token=%v: %q, want %q", tc.v.Auth, tc.v.Status, tc.v.Token, got, tc.want)
+		}
+	}
 }

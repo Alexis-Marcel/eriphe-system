@@ -29,7 +29,7 @@ func TestWebAddToolWithToken(t *testing.T) {
 		t.Fatalf("no token: %d %s", code, body)
 	}
 	code, body, h := tw.post("/settings/tools", form, csrf)
-	if code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=maison" {
+	if code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=maison&tool=maison&new=1" {
 		t.Fatalf("save: %d %v %s", code, h, body)
 	}
 	srv := c.conf().Servers["maison"]

@@ -7,10 +7,11 @@ import (
 	"net/url"
 )
 
-// A tool's access page: what Eriphe may do on it, how its credential
-// follows, and the actions allowed without asking (access.go). Every tool
-// has one, those of the configuration file too: their level is the file's,
-// their allowed actions the workspace's.
+// A tool's access: what Eriphe may do on it, how its credential follows,
+// and the actions allowed without asking (access.go). A tool changed with
+// its form has them in it; the others have this page, those of the
+// configuration file too: their level is the file's, their allowed actions
+// the workspace's.
 
 // formAccess reads the access level a form posted: one of the levels;
 // "read" was the older forms' "reads free", and "trust" the API's.
@@ -64,9 +65,15 @@ func (w *web) toolAccess(lang, name string) (toolAccess, bool) {
 }
 
 func (w *web) handleToolAccess(rw http.ResponseWriter, r *http.Request, s *session) {
-	v, ok := w.toolAccess(w.lang(r), r.PathValue("name"))
+	name := r.PathValue("name")
+	v, ok := w.toolAccess(w.lang(r), name)
 	if !ok {
 		http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther)
+		return
+	}
+	// A tool changed with its form: its access is part of it.
+	if srv := w.c.conf().Servers[name]; editable(w.c.source(kindServer, name), v.Preset, srv.authKind()) {
+		http.Redirect(rw, r, "/settings/tools/"+url.PathEscape(name)+"/edit#form-access", http.StatusSeeOther)
 		return
 	}
 	v.Saved = r.URL.Query().Get("saved") != ""

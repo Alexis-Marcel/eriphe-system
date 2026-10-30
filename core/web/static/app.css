@@ -492,7 +492,7 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .settings-nav a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
 .settings-nav a[aria-current] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
 .settings-nav a[aria-current] .i { color: var(--accent); }
-.settings-body { display: grid; gap: 22px; align-content: start; max-width: 900px; }
+.settings-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-content: start; max-width: 900px; }
 .page-head { display: grid; gap: 6px; }
 .page-head h2 { font-size: 1.45rem; letter-spacing: -.025em; }
 .page-head p { color: var(--muted); max-width: 64ch; }
@@ -817,6 +817,7 @@ dialog.modal.finder-dlg.on-step[open] { height: fit-content; max-height: min(760
 .step-body > .actions form { margin: 0; }
 .tool-status > .pulse { flex: none; width: 8px; height: 8px; margin: 6px 5px 0; border-radius: 50%; background: currentColor; animation: pulse 1.6s infinite; }
 .tool-status.test-result { animation: none; } /* asked again and again: no rise each time */
+.tool-main > .tool-status { margin-top: 6px; }
 .tool-status details summary { cursor: pointer; }
 .test-start { background: var(--accent-soft); color: var(--accent-text); }
 .test-wait { background: var(--surface-2); color: var(--muted); }
@@ -986,10 +987,11 @@ details.advanced[open] .adv-title::after { transform: rotate(-135deg); }
 
 /* The tool form's connection test. */
 .test-btn .when-busy, .busy-btn .when-busy { display: none; }
-.test-btn.htmx-request .when-idle, .busy-btn.htmx-request .when-idle { display: none; }
-.test-btn.htmx-request .when-busy, .busy-btn.htmx-request .when-busy { display: inline; }
-.test-btn.htmx-request .i { animation: blink 1.2s infinite; }
-.test-box:empty { display: none; }
+.test-btn.htmx-request .when-idle, .test-btn.is-busy .when-idle, .busy-btn.htmx-request .when-idle { display: none; }
+.test-btn.htmx-request .when-busy, .test-btn.is-busy .when-busy, .busy-btn.htmx-request .when-busy { display: inline; }
+.test-btn.htmx-request .i, .test-btn.is-busy .i { animation: blink 1.2s infinite; }
+.test-btn.is-busy { opacity: .7; cursor: progress; pointer-events: none; }
+.test-box:empty, .test-box.is-waiting { display: none; }
 .test-result { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; font-size: .9rem; font-weight: 550; animation: rise .18s ease-out; }
 .test-result .i { width: 18px; height: 18px; flex: none; margin-top: 1px; }
 .test-result p { margin: 0; }
@@ -1006,13 +1008,16 @@ details.advanced[open] .adv-title::after { transform: rotate(-135deg); }
 .test-tools code { padding: 1px 7px; border-radius: 7px; background: color-mix(in srgb, currentColor 10%, transparent); font-size: .82rem; }
 .test-detail { opacity: .8; font-weight: 450; overflow-wrap: anywhere; }
 
-/* OAuth: "Connect to <service>" is the primary action; an edit of a
-   server already on OAuth can still be saved without signing in again. */
-.save-btn .lbl-oauth { display: none; }
+/* OAuth: "Connect to <service>" is the primary action. An edit of a
+   server already on OAuth saves as it is ("Save"), unless the level picked
+   needs another token (reauth-<level>, web_tools.go): then it is "Save
+   and authorize", and the note that the service will ask. */
 .tool-form:has(input[name=auth][value=oauth]:checked) .save-btn:not(.keep) { display: none; }
-.tool-form:has(input[name=auth][value=oauth]:checked) .save-btn.keep { background: var(--accent-soft); color: var(--accent-text); box-shadow: none; }
-.tool-form:has(input[name=auth][value=oauth]:checked) .save-btn.keep .lbl-plain { display: none; }
-.tool-form:has(input[name=auth][value=oauth]:checked) .save-btn.keep .lbl-oauth { display: inline; }
+.tool-form.orig-oauth:not(.reauth-read-only:has(input[name=access][value=read-only]:checked)):not(.reauth-reads:has(input[name=access][value=reads]:checked)):not(.reauth-free:has(input[name=access][value=free]:checked)):not(.reauth-ask:has(input[name=access][value=ask]:checked)) .if-reauth,
+.tool-form.reauth-read-only:has(input[name=auth][value=oauth]:checked):has(input[name=access][value=read-only]:checked) .if-noreauth,
+.tool-form.reauth-reads:has(input[name=auth][value=oauth]:checked):has(input[name=access][value=reads]:checked) .if-noreauth,
+.tool-form.reauth-free:has(input[name=auth][value=oauth]:checked):has(input[name=access][value=free]:checked) .if-noreauth,
+.tool-form.reauth-ask:has(input[name=auth][value=oauth]:checked):has(input[name=access][value=ask]:checked) .if-noreauth { display: none; }
 
 /* A one-click tile is a button: it looks like the other tiles. */
 button.preset { width: 100%; font: inherit; text-align: left; cursor: pointer; }

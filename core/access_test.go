@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"html"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -270,13 +271,22 @@ func TestWebChangeLevel(t *testing.T) {
 	if s := c.conf().Servers["linear"]; s.level() != accessReadOnly || s.authKind() != "oauth" {
 		t.Fatalf("saved %+v", s)
 	}
-	_, body, _ := tw.do("GET", "/settings/tools/linear/access?saved=1", nil, nil)
-	if b := html.UnescapeString(body); !strings.Contains(b, "Accès enregistré.") || !strings.Contains(b, "Le jeton permet plus : Eriphe s'en tient à la lecture.") ||
-		!strings.Contains(b, `value="read-only" checked`) {
-		t.Fatalf("page after save: %s", mainPart(t, body))
+	// A tool with a form has its access in it: the page leads there.
+	if code, _, h := tw.do("GET", "/settings/tools/linear/access?saved=1", nil, nil); code != http.StatusSeeOther ||
+		h.Get("Location") != "/settings/tools/linear/edit#form-access" {
+		t.Fatalf("access page: %d %s", code, h.Get("Location"))
 	}
-	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, "Lecture seule") {
-		t.Fatal("the tile does not show the level")
+	_, body, _ := tw.do("GET", "/settings/tools/linear/edit", nil, nil)
+	if b := html.UnescapeString(body); !strings.Contains(b, `id="form-access"`) || !strings.Contains(b, "Le jeton permet plus : Eriphe s'en tient à la lecture.") ||
+		!strings.Contains(b, `value="read-only" checked`) || !strings.Contains(b, `id="allowed-linear"`) {
+		t.Fatalf("form after save: %s", mainPart(t, body))
+	}
+	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
+	if !strings.Contains(body, ">Lecture seule</a>") || !strings.Contains(body, `href="/settings/tools/linear/edit#form-access" data-step-open="add-dlg"`) {
+		t.Fatal("the row does not show the level, or it does not lead to the form")
+	}
+	if strings.Contains(body, `href="/settings/tools/linear/access"`) {
+		t.Error("the row still has an Access button")
 	}
 	if _, _, h := tw.post("/settings/tools/linear/access", url.Values{"access": {"all"}}, csrf); h.Get("HX-Redirect") != "" {
 		t.Fatal("a bad level saved")

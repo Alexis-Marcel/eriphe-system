@@ -28,6 +28,51 @@ type toolView struct {
 	Problem string     // why it does not start, in words; the raw error stays in Error
 	Scope   tokenScope // how its credential follows its access level (access.go)
 	Allowed int        // its actions allowed without asking
+	Voice   bool       // Home Assistant's: it has a voice token
+	Token   bool       // OAuth: a credential is stored (it may have expired)
+	// Follow is the line that follows a tool just saved, in its row, until
+	// it is up or says why not (web_tools_dialog.go).
+	Follow *toolStatus
+}
+
+// Editable tells a tool changed with its form, in the dialog; the others
+// have a page of their own (Google Drive, Home Assistant, the GitHub App)
+// or are the configuration file's.
+func (t toolView) Editable() bool { return editable(t.Source, t.Preset, t.Auth) }
+
+func editable(source string, p toolPreset, auth string) bool {
+	return source == sourceWorkspace && p.ID != "home-assistant" && auth != "github-app" && p.Form != "drive"
+}
+
+// AccessURL is where the row's access level leads: the access part of the
+// tool's form, or its access page for a tool without one; AllowedURL, its
+// actions allowed without asking.
+func (t toolView) AccessURL() string {
+	if t.Editable() {
+		return "/settings/tools/" + t.Name + "/edit#form-access"
+	}
+	return "/settings/tools/" + t.Name + "/access"
+}
+
+func (t toolView) AllowedURL() string {
+	if t.Editable() {
+		return "/settings/tools/" + t.Name + "/edit#allowed-" + t.Name
+	}
+	return "/settings/tools/" + t.Name + "/access#allowed-" + t.Name
+}
+
+// SignIn is the row's way to sign in to an OAuth service, only when it
+// is needed: "connect" when it never was, "reconnect" when the
+// authorization expired, was revoked or lacks a right. Otherwise the
+// level, changed with the form, is what asks for a new token.
+func (t toolView) SignIn() string {
+	switch {
+	case t.Auth != "oauth" || t.Status != statusNeedsAuth:
+		return ""
+	case t.Token:
+		return "reconnect"
+	}
+	return "connect"
 }
 
 type toolsPage struct {
@@ -36,11 +81,26 @@ type toolsPage struct {
 	Flash   string
 	Alert   string // a pending tool that was not connected
 	Skipped map[string]string
-	Waiting bool // a tool is starting: the list refreshes itself until it is up
+	Waiting bool   // a tool is starting: the list refreshes itself until it is up
+	Follow  string // ?tool=: the tool just saved, its row followed and lit
+	New     bool   // ?new=1: … a new one, at the top of the list
 	// Home Assistant talks to Eriphe (its voice token) but Eriphe has no
 	// tool of it: its entry is still in the list (web_homeassistant.go).
 	VoiceOnly bool
 	Voice     bool // Home Assistant has a voice token
+}
+
+// RefreshURL is the list asking for itself again: the tool followed stays
+// followed, and at the top.
+func (v toolsPage) RefreshURL() string {
+	if v.Follow == "" {
+		return "/settings/tools"
+	}
+	u := "/settings/tools?tool=" + url.QueryEscape(v.Follow)
+	if v.New {
+		u += "&new=1"
+	}
+	return u
 }
 
 // presetOf finds what preset a catalog entry comes from, and the line that
@@ -106,25 +166,31 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 	conf := w.c.conf()
 	v.Voice = w.c.store.get(voiceTokenKey) != ""
 	v.VoiceOnly = v.Voice
+	q := r.URL.Query()
+	if n := q.Get("tool"); serverName.MatchString(n) && w.c.source(kindServer, n) != "" {
+		v.Follow, v.New = n, q.Get("new") != ""
+	}
 	for _, sv := range w.servers() {
-		t := toolView{serverView: sv, Source: sv.Source}
-		t.Preset, t.Detail = presetOf(lang, conf.Servers[sv.Name])
+		t := w.toolRow(lang, conf, sv, v.Voice)
 		if t.Preset.ID == "home-assistant" {
 			v.VoiceOnly = false
 		}
-		t.Scope = w.c.tokenScope(sv.Name, conf.Servers[sv.Name])
-		t.Allowed = len(w.c.store.allowedActions(sv.Name))
-		t.Pending, t.Placed = startState(sv)
-		if t.Pending {
-			t.Problem = serviceProblem(lang, sv)
+		if sv.Name == v.Follow {
+			st := statusOf(lang, sv)
+			t.Follow = &st
+			if v.New {
+				v.Tools = append([]toolView{t}, v.Tools...)
+				continue
+			}
+		} else {
+			// a server being placed or still connecting (e.g. just
+			// authorized): the list refreshes itself until it settles; the
+			// tool followed asks for its own row
+			v.Waiting = v.Waiting || t.Placed || sv.Status == statusConnecting
 		}
 		v.Tools = append(v.Tools, t)
-		// a server being placed or still connecting (e.g. just authorized):
-		// the list refreshes itself until it settles
-		v.Waiting = v.Waiting || t.Placed || sv.Status == statusConnecting
 	}
 	v.Gallery = w.gallery(lang)
-	q := r.URL.Query()
 	if n := q.Get("saved"); n != "" && w.c.source(kindServer, n) != "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.saved"), n)
 	}
@@ -155,6 +221,23 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 		}
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.tools", Nav: "settings", Tab: "tools", Data: v})
+}
+
+// toolRow is one tool of the list.
+func (w *web) toolRow(lang string, conf *Config, sv serverView, voice bool) toolView {
+	t := toolView{serverView: sv, Source: sv.Source, Voice: voice}
+	t.Preset, t.Detail = presetOf(lang, conf.Servers[sv.Name])
+	t.Scope = w.c.tokenScope(sv.Name, conf.Servers[sv.Name])
+	t.Allowed = len(w.c.store.allowedActions(sv.Name))
+	if sv.Auth == "oauth" {
+		_, tok, _ := w.c.store.oauthToken(sv.Name)
+		t.Token = tok != nil
+	}
+	t.Pending, t.Placed = startState(sv)
+	if t.Pending {
+		t.Problem = serviceProblem(lang, sv)
+	}
+	return t
 }
 
 // envRow is one environment variable of a local server, in the form.
@@ -197,6 +280,9 @@ type toolForm struct {
 	// OAuth: the primary action connects; Service names whom to.
 	Service   string
 	OrigOAuth bool // an edit of a server already on OAuth: it can be saved without signing in again
+	// … but not at these levels, which its stored credential cannot serve:
+	// saving at one signs in again, for a token of that level (Reauth).
+	Reauth []string
 	// An edit: how its credential follows the level, and its actions
 	// allowed without asking (web_access.go).
 	AccessView *toolAccess
@@ -205,6 +291,40 @@ type toolForm struct {
 	InDialog bool
 
 	Error string
+}
+
+// ReauthClass marks the form with the levels that sign in again, for the
+// save button to say so (app.css, .reauth-*).
+func (f toolForm) ReauthClass() string {
+	var b strings.Builder
+	for _, l := range f.Reauth {
+		b.WriteString(" reauth-" + l)
+	}
+	return b.String()
+}
+
+// reauthLevels are the levels an OAuth tool's stored credential cannot
+// serve as it is: none stored, a read-only token for a level that writes,
+// or a token that writes for read only when the service has read-only
+// tokens (access.go).
+func (w *web) reauthLevels(name string, s Server) []string {
+	if s.authKind() != "oauth" {
+		return nil
+	}
+	if _, tok, _ := w.c.store.oauthToken(name); tok == nil {
+		return accessLevels
+	}
+	t := w.c.tokenScope(name, s)
+	if !t.Scoped || t.Granted == "" {
+		return nil
+	}
+	var out []string
+	for _, l := range accessLevels {
+		if (l == accessReadOnly) != (t.Granted == grantedRead) {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // PickURL is where a kind of account picked from the list leads.
@@ -563,6 +683,7 @@ func (w *web) handleEditTool(rw http.ResponseWriter, r *http.Request, s *session
 	if v, ok := w.toolAccess(w.lang(r), name); ok {
 		f.AccessView = &v
 	}
+	f.Reauth = w.reauthLevels(name, srv)
 	w.toolFormPage(rw, r, s, f)
 }
 
@@ -591,7 +712,10 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 		if old != nil {
 			back := toolFormOf(name, *old)
 			f.TokenSet, f.ClientIDSet, f.ClientSecretSet = back.TokenSet, back.ClientIDSet, back.ClientSecretSet
-			f.OrigOAuth = back.OrigOAuth
+			f.OrigOAuth, f.Reauth = back.OrigOAuth, w.reauthLevels(name, *old)
+			if v, ok := w.toolAccess(w.lang(r), name); ok {
+				f.AccessView = &v
+			}
 			switch f.Preset.Form {
 			case "mail":
 				f.SecretSet = back.SecretSet && back.Mail.same(f.Mail)
@@ -637,7 +761,10 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 	// until the service authorizes Eriphe (pending.go). Only an edit of a
 	// server already on OAuth may be saved as is; a client that only knows a
 	// loopback redirect keeps the save-then-paste way.
-	plainSave := r.PostFormValue("connect") == "" && old != nil && old.authKind() == "oauth"
+	// A new level its credential cannot serve signs in again, for a token
+	// of that level.
+	plainSave := r.PostFormValue("connect") == "" && old != nil && old.authKind() == "oauth" &&
+		!slices.Contains(w.reauthLevels(name, *old), srv.level())
 	if srv.authKind() == "oauth" && srv.Auth.OAuth.RedirectURI == "" && !plainSave {
 		if !w.atAddress(rw, r) {
 			return
@@ -651,7 +778,7 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 		if authURL == "" { // connected without one: saved
 			w.notify()
 			if f.InDialog {
-				w.addedStep(rw, r, s, name, f.Edit)
+				w.toolSaved(rw, r, name, "connected")
 				return
 			}
 			authURL = "/settings/tools?connected=" + url.QueryEscape(name)
@@ -670,10 +797,15 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 	log.Printf("web: tool %s saved", name)
 	w.notify()
 	if f.InDialog {
-		w.addedStep(rw, r, s, name, f.Edit)
+		w.toolSaved(rw, r, name, map[bool]string{false: "added", true: "edited"}[f.Edit])
 		return
 	}
-	rw.Header().Set("HX-Redirect", "/settings/tools?saved="+url.QueryEscape(name))
+	// the list, the tool's row followed (web_tools_dialog.go)
+	next := "/settings/tools?saved=" + url.QueryEscape(name) + "&tool=" + url.QueryEscape(name)
+	if !f.Edit {
+		next += "&new=1"
+	}
+	rw.Header().Set("HX-Redirect", next)
 	rw.WriteHeader(http.StatusOK)
 }
 
