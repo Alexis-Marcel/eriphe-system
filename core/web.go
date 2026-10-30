@@ -178,7 +178,9 @@ func (w *web) routes() http.Handler {
 	w.agentRoutes(mux) // web_agents.go
 	mux.Handle("GET /settings/tools", w.auth(w.handleTools))
 	mux.Handle("GET /settings/tools/new", w.auth(w.handleNewTool))
-	mux.Handle("GET /settings/tools/add", w.auth(w.handleGallery))
+	mux.Handle("GET /settings/tools/add", w.auth(w.handleGallery)) // web_gallery.go
+	mux.Handle("GET /settings/tools/add/other", w.auth(w.handleDiscover))
+	mux.Handle("POST /settings/tools/add/other", w.auth(w.handleDiscover))
 	mux.Handle("POST /settings/tools", w.auth(w.handleSaveTool))
 	mux.Handle("GET /settings/tools/{name}/edit", w.auth(w.handleEditTool))
 	mux.Handle("POST /settings/tools/{name}", w.auth(w.handleSaveTool))

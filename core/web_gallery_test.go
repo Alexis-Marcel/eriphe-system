@@ -43,10 +43,14 @@ func TestGallery(t *testing.T) {
 	}
 	_, body, _ := tw.do("GET", "/settings/tools/add", nil, nil)
 	at := -1
-	for _, title := range []string{"Linear", "Notion", "GitHub", "Home Assistant", "Mails", "Agenda", "Autre service en ligne", "Autre programme local"} {
-		i := strings.Index(body[at+1:], "<b>"+title+"</b>")
+	// The categories (headings) and their tiles, in order.
+	for _, want := range []string{"Tâches &amp; notes</h3>", "<b>Linear</b>", "<b>Notion</b>", "<b>Todoist</b>",
+		"Mail &amp; agenda</h3>", "<b>Mails</b>", "<b>Agenda</b>", "<b>Fastmail</b>", "Fichiers</h3>", "<b>Google Drive</b>", "<b>Dropbox</b>",
+		"Développement</h3>", "<b>GitHub</b>", "Maison</h3>", "<b>Home Assistant</b>", "Pas dans la liste ?</h3>",
+		"<b>Autre service en ligne</b>", "<b>Autre programme local</b>", "Pas encore possible</h3>"} {
+		i := strings.Index(body[at+1:], want)
 		if i < 0 {
-			t.Fatalf("tile %s missing or out of order", title)
+			t.Fatalf("%s missing or out of order", want)
 		}
 		at += 1 + i
 	}

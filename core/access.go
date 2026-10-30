@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -223,13 +224,52 @@ func (c *core) answerAlways(ctx context.Context, id, permission, reply string) (
 // Scoped credentials. tokenScopes are the read-only and the full scopes of
 // a service by its preset, when its OAuth server advertises such scopes
 // (checked at each one's /.well-known/oauth-protected-resource, October
-// 2026). Another server advertising "read" and "write" is read the same
-// way; one that does not (Notion's "default") is not scoped: Eriphe holds
-// to the level itself.
-type scopeSet struct{ read, write []string }
+// 2026). byName: the scopes are the ones the server advertises, split by
+// their names (splitScopes), which keeps up with a vendor adding some.
+// Another server is split the same way; one whose scopes do not read as
+// reads and writes (Notion's "default", Stripe's "mcp") is not scoped:
+// Eriphe holds to the level itself.
+type scopeSet struct {
+	read, write []string
+	byName      bool
+}
 
 var tokenScopes = map[string]scopeSet{
 	"linear": {read: []string{"read"}, write: []string{"read", "write"}},
+	// Its MCP server advertises data:read_write only; data:read is the API's.
+	"todoist": {read: []string{"data:read"}, write: []string{"data:read_write"}},
+	// jobs and inference-api spend the account's credits: not a read.
+	"huggingface": {read: []string{"openid", "profile", "read-mcp", "read-repos"},
+		write: []string{"openid", "profile", "read-mcp", "read-repos", "contribute-repos", "jobs", "inference-api"}},
+	"airtable": {byName: true}, "calendly": {byName: true}, "canva": {byName: true}, "dropbox": {byName: true},
+	"evernote": {byName: true}, "gamma": {byName: true}, "jam": {byName: true}, "mem": {byName: true},
+	"mercury": {byName: true}, "miro": {byName: true}, "netlify": {byName: true}, "raindrop": {byName: true},
+	"ramp": {byName: true}, "readwise": {byName: true}, "sentry": {byName: true}, "supabase": {byName: true},
+	"ticktick": {byName: true},
+}
+
+// scopeVerbs are the words of a scope's name that make it more than a read
+// ("files.content.write", "transactions:request", "data:read_write").
+var scopeVerbs = []string{"write", "delete", "create", "edit", "update", "manage", "admin", "contribute",
+	"request", "generate", "revoke", "send", "execute"}
+
+// splitScopes reads advertised scopes as reads and writes by their names:
+// the reads are all but those naming a write. Not scoped when none names a
+// write, or all do.
+func splitScopes(found []string) (scopeSet, bool) {
+	var read []string
+	for _, s := range found {
+		words := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+			return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
+		})
+		if !slices.ContainsFunc(words, func(w string) bool { return slices.Contains(scopeVerbs, w) }) {
+			read = append(read, s)
+		}
+	}
+	if len(read) == 0 || len(read) == len(found) {
+		return scopeSet{}, false
+	}
+	return scopeSet{read: read, write: found}, true
 }
 
 // What a stored credential allows, kept with its OAuth token.
@@ -246,8 +286,8 @@ func tokenAccessKey(server string) string { return "server." + server + ".token-
 // the configuration's own scopes, asked as they are.
 func scopesFor(preset, level string, found []string, fixed bool) ([]string, string) {
 	set, known := tokenScopes[preset]
-	if !known && slices.Contains(found, "read") && slices.Contains(found, "write") {
-		set, known = scopeSet{read: slices.DeleteFunc(slices.Clone(found), func(s string) bool { return s == "write" }), write: found}, true
+	if !known || set.byName {
+		set, known = splitScopes(found)
 	}
 	switch {
 	case !known:

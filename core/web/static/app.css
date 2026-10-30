@@ -169,7 +169,7 @@ body.nav-chat > main { overflow: hidden; }
 .field { display: grid; gap: 6px; }
 .field > span { font-size: .86rem; font-weight: 600; color: var(--text); }
 .field small { color: var(--muted); font-size: .8rem; }
-input[type=text], input[type=password], input[type=url], textarea {
+input[type=text], input[type=password], input[type=url], input[type=search], textarea {
   width: 100%; font: inherit; color: var(--text); background: var(--surface);
   border: 1px solid var(--border-strong); border-radius: 12px; padding: 10px 13px; min-height: 42px;
   transition: border-color .15s, box-shadow .15s;
@@ -687,6 +687,57 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .mark-home-assistant { background: #18bcf2; box-shadow: 0 6px 16px -8px #18bcf2; }
 .mark-gdrive { background: #1a73e8; box-shadow: 0 6px 16px -8px #1a73e8; }
 @media (prefers-color-scheme: dark) { .mark-notion, .mark-github { background: #3a3a40; } }
+/* The online tools (presets_online.go): the brand colours of Simple Icons; a light one takes a dark logo. */
+.mark-airtable { background: #18bfff; box-shadow: 0 6px 16px -8px #18bfff; }
+.mark-calcom { background: #292929; box-shadow: 0 6px 16px -8px #292929; }
+.mark-calendly { background: #006bff; box-shadow: 0 6px 16px -8px #006bff; }
+.mark-canva { background: #00c4cc; box-shadow: 0 6px 16px -8px #00c4cc; }
+.mark-cloudflare { background: #f38020; box-shadow: 0 6px 16px -8px #f38020; }
+.mark-dropbox { background: #0061ff; box-shadow: 0 6px 16px -8px #0061ff; }
+.mark-evernote { background: #00a82d; box-shadow: 0 6px 16px -8px #00a82d; }
+.mark-huggingface { background: #ffd21e; box-shadow: 0 6px 16px -8px #ffd21e; color: #15161f; }
+.mark-intercom { background: #6afdef; box-shadow: 0 6px 16px -8px #6afdef; color: #15161f; }
+.mark-miro { background: #050038; box-shadow: 0 6px 16px -8px #050038; }
+.mark-netlify { background: #00c7b7; box-shadow: 0 6px 16px -8px #00c7b7; }
+.mark-paypal { background: #002991; box-shadow: 0 6px 16px -8px #002991; }
+.mark-sentry { background: #362d59; box-shadow: 0 6px 16px -8px #362d59; }
+.mark-strava { background: #fc4c02; box-shadow: 0 6px 16px -8px #fc4c02; }
+.mark-stripe { background: #635bff; box-shadow: 0 6px 16px -8px #635bff; }
+.mark-supabase { background: #3fcf8e; box-shadow: 0 6px 16px -8px #3fcf8e; color: #15161f; }
+.mark-ticktick { background: #4772fa; box-shadow: 0 6px 16px -8px #4772fa; }
+.mark-todoist { background: #e44332; box-shadow: 0 6px 16px -8px #e44332; }
+.mark-vercel { background: #000000; box-shadow: 0 6px 16px -8px #000000; }
+.mark-webflow { background: #146ef5; box-shadow: 0 6px 16px -8px #146ef5; }
+.mark-wix { background: #0c6efc; box-shadow: 0 6px 16px -8px #0c6efc; }
+.mark-zapier { background: #ff4f00; box-shadow: 0 6px 16px -8px #ff4f00; }
+@media (prefers-color-scheme: dark) { .mark-calcom, .mark-miro, .mark-vercel { background: #3a3a40; } }
+/* Without a logo in Simple Icons: a neutral letter mark. */
+.mark-attio, .mark-context7, .mark-exa, .mark-fastmail, .mark-fireflies, .mark-gamma, .mark-granola, .mark-jam,
+.mark-mem, .mark-mercury, .mark-monday, .mark-otter, .mark-ramp, .mark-raindrop, .mark-readwise, .mark-tldv {
+  background: linear-gradient(135deg, #64748b 0%, #3f4a5c 100%); box-shadow: 0 6px 16px -8px #3f4a5c;
+}
+
+/* The gallery: a search, the categories, the tags of a tile. */
+.catalog { display: grid; gap: 28px; }
+.catalog-cat { display: grid; gap: 10px; }
+.catalog-cat > h3 { font-size: .78rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.catalog-search { margin-bottom: 4px; }
+.catalog-search input { min-height: 46px; font-size: 1rem; padding-left: 42px; border-radius: 14px;
+  background: var(--surface) no-repeat 14px 50% / 18px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23767990' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E"); }
+.catalog-empty { margin: 0; }
+.ptags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.ptag { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 650;
+  line-height: 1.5; background: var(--accent-soft); color: var(--accent-text); white-space: nowrap; }
+.ptag .i { width: 11px; height: 11px; stroke: currentColor; stroke-width: 3; fill: none; }
+.ptag-added { background: var(--ok-soft); color: var(--ok); }
+.ptag-warn { background: var(--warn-soft); color: var(--warn); }
+.catalog-soon h3 { font-size: .92rem; color: var(--text); margin-bottom: 8px; }
+.catalog-soon ul { gap: 6px; }
+.found-list li { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; overflow-wrap: anywhere; }
+.found-list .i { width: 14px; height: 14px; color: var(--ok); flex: none; align-self: center; }
+.discover-found h3 { font-size: 1.05rem; }
+.reach-oauth h3, .reach-open h3 { color: var(--ok); }
+.reach-notmcp h3, .reach-unreachable h3, .reach-refused h3 { color: var(--danger); }
 
 .tool-form { gap: 20px; }
 .tool-form .field { align-content: start; }
@@ -843,9 +894,9 @@ details.advanced[open] .adv-title::after { transform: rotate(-135deg); }
 }
 
 /* The tool form's connection test. */
-.test-btn .when-busy { display: none; }
-.test-btn.htmx-request .when-idle { display: none; }
-.test-btn.htmx-request .when-busy { display: inline; }
+.test-btn .when-busy, .busy-btn .when-busy { display: none; }
+.test-btn.htmx-request .when-idle, .busy-btn.htmx-request .when-idle { display: none; }
+.test-btn.htmx-request .when-busy, .busy-btn.htmx-request .when-busy { display: inline; }
 .test-btn.htmx-request .i { animation: blink 1.2s infinite; }
 .test-box:empty { display: none; }
 .test-result { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; font-size: .9rem; font-weight: 550; animation: rise .18s ease-out; }

@@ -31,13 +31,14 @@ type toolView struct {
 }
 
 type toolsPage struct {
-	Tools   []toolView
-	Presets []toolPreset
-	Flash   string
-	Alert   string // a pending tool that was not connected
-	Skipped map[string]string
-	Secrets secretsView
-	Waiting bool // a tool is starting: the list refreshes itself until it is up
+	Tools    []toolView
+	Featured []presetTile // the first tiles of the gallery (web_gallery.go)
+	Count    int          // and how many it has
+	Flash    string
+	Alert    string // a pending tool that was not connected
+	Skipped  map[string]string
+	Secrets  secretsView
+	Waiting  bool // a tool is starting: the list refreshes itself until it is up
 	// Home Assistant talks to Eriphe (its voice token) but Eriphe has no
 	// tool of it: its entry is still in the list (web_homeassistant.go).
 	VoiceOnly bool
@@ -103,7 +104,7 @@ func serviceProblem(lang string, sv serverView) string {
 
 func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
-	v := toolsPage{Presets: toolPresets, Secrets: w.secrets("", false)}
+	v := toolsPage{Secrets: w.secrets("", false)}
 	conf := w.c.conf()
 	v.Voice = w.c.store.get(voiceTokenKey) != ""
 	v.VoiceOnly = v.Voice
@@ -124,6 +125,7 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 		// the list refreshes itself until it settles
 		v.Waiting = v.Waiting || t.Placed || sv.Status == statusConnecting
 	}
+	v.Featured, v.Count = w.featured(lang)
 	q := r.URL.Query()
 	if n := q.Get("saved"); n != "" && w.c.source(kindServer, n) != "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.saved"), n)
@@ -520,13 +522,20 @@ func (w *web) handleNewTool(rw http.ResponseWriter, r *http.Request, s *session)
 		return
 	}
 	f := newToolForm(w.lang(r), p)
+	if q := r.URL.Query(); p.ID == "remote" {
+		// From "Autre service": what Eriphe found at the address (web_gallery.go).
+		if q.Get("url") != "" {
+			f.URL = q.Get("url")
+		}
+		if a := q.Get("auth"); a == "none" || a == "bearer" || a == "oauth" {
+			f.Auth = a
+		}
+		if n := slugName(q.Get("name")); n != "" {
+			f.Name = n
+		}
+	}
 	pickAccount(&f, r.URL.Query().Get("provider"))
 	w.toolFormPage(rw, r, s, f)
-}
-
-// handleGallery is "Add a tool": the tiles of the presets.
-func (w *web) handleGallery(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "", page{Title: "tools.add", Nav: "settings", Tab: "tools", View: "gallery", Data: toolsPage{Presets: toolPresets}})
 }
 
 func (w *web) handleEditTool(rw http.ResponseWriter, r *http.Request, s *session) {

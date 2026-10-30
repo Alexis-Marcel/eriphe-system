@@ -266,7 +266,9 @@ when it needs an authorization. Descriptions come from the servers: they are mar
 `{"oauth": {}}` follows the MCP authorization spec with the go-sdk's authorization code handler:
 protected resource metadata, authorization server metadata, a client (a Client ID Metadata
 Document if `client_metadata_url` is given and supported, else a pre-registered client
-`client_id_file`/`client_secret_file`, else dynamic registration), PKCE, the `resource`
+`client_id_file`/`client_secret_file`, else dynamic registration, as a public client, or with
+`client_secret_post`/`client_secret_basic` and the secret it gets when the server takes no public
+client or refuses one), PKCE, the `resource`
 parameter, the `iss` check, refresh tokens (`offline_access` when advertised), and step-up on
 `insufficient_scope`. `scopes` replaces what the server advertises. A pre-registered client is
 registered at the provider with a loopback redirect, given as `redirect_uri`
@@ -544,10 +546,10 @@ asks for:
 
 | Tool | Read only | Otherwise |
 |---|---|---|
-| OAuth server advertising `read` and `write` (`scopes_supported` of its protected resource metadata; Linear, per preset table `tokenScopes`) | `read` (the advertised scopes without `write`) | `read write` |
+| OAuth server whose advertised scopes (`scopes_supported` of its protected resource metadata) split into reads and writes by their names: `write`, `delete`, `create`, `edit`, `update`, `manage`, `request`, `generate`… name a write (Linear, Calendly, Dropbox, Evernote, Airtable, Canva, Miro, Sentry, Supabase…; the preset table `tokenScopes` fixes Todoist's `data:read` and Hugging Face's) | the advertised scopes that name no write (`read`, `files.content.read`, `boards:read openid email`) | all the advertised scopes |
 | Google Drive | `drive.readonly` | `drive` (when "drop results" is ticked) |
 | GitHub tool on Eriphe's GitHub App | installation token with `contents`, `pull_requests`, `issues`, `metadata`, `checks` at `read` | the app's rights |
-| IMAP/CalDAV password, Home Assistant token, bearer token, OAuth without a read-only scope (Notion's `default`) | Eriphe holds to the level itself: "Le jeton permet plus : Eriphe s'en tient à la lecture" | |
+| IMAP/CalDAV password, Home Assistant token, bearer token, OAuth without a read-only scope (Notion's `default`, Stripe's `mcp`, Fastmail, where the consent screen chooses) | Eriphe holds to the level itself: "Le jeton permet plus : Eriphe s'en tient à la lecture" | |
 
 What an OAuth token was asked for is kept with it (`server.<name>.token-access`); a token from
 before the levels counts as full. Going down applies at once (Eriphe enforces it) and the page
@@ -1166,8 +1168,20 @@ inline in the conversation (Yes / No, with an optional reason for the agent), an
 devices (what Eriphe sees and does on each, and the command that connects one), agents, accounts and tools (the vault), the folders
 given to Eriphe (see [Folders](#folders)), the app and the notifications of this device (below), and the journal of decisions. Settings → Tools lists the catalog's servers with their status (ready, to connect,
 error, or waiting for a machine for a local one) and where each comes from, adds one from a list of
-presets (Home Assistant, GitHub, Linear, Notion, Mails, Agenda, Google Drive, or any online
-service or local image; Google Drive has its own page, see [Google Drive](#google-drive-cloud-folders)).
+presets, a catalog by category with a search (tasks and notes, mail and calendar, files, meetings,
+design, development, websites, payments, automation, home): Home Assistant, GitHub, Mails, Agenda,
+Google Drive (its own page, see [Google Drive](#google-drive-cloud-folders)), and some forty
+services that host their own MCP server and register Eriphe as an OAuth client on the fly, like
+Linear (Notion, Todoist, TickTick, Evernote, Fastmail, Calendly, Dropbox, Granola, Canva, Miro,
+Cloudflare, Sentry, Vercel, Supabase, Stripe, Zapier… the list is `core/presets_online.go`, each
+checked against its public OAuth metadata). A tile says when the service can give a read-only
+token, when it needs a paid plan or is in beta, and when a tool already comes from it. "Autre
+service en ligne" takes any MCP server's address and looks first (an initialize without a
+credential, then its protected resource and authorization server metadata): open, one-click
+sign-in (dynamic registration; a server that takes confidential clients only gets one with a
+secret, which Eriphe keeps), an app to make at the vendor, or a key to paste, with the scopes it
+asks and whether a read-only set exists; then the form comes filled. Services that need an app
+made at their place (Figma, Slack, Asana, Google, Microsoft 365…) are listed as not possible yet.
 A preset's form asks only what the owner decides: the credential (with the provider's own
 steps and link), the address when it differs per person, the name, what the tool is for, and what
 Eriphe may do on it (its [access level](#access-levels), four cards); the rest (a vendor's address, the authentication, timeouts, an OAuth client, how a
@@ -1176,7 +1190,7 @@ local server runs) is under the advanced options. Mails and Agenda first ask whi
 any CalDAV server) and run `eriphe-mail` and `eriphe-calendar` with its password; "Test the
 connection" tries that password (IMAP login, CalDAV PROPFIND). Outlook, Microsoft 365, Google
 Calendar and Microsoft calendars are shown as coming soon: they wait for eriphe-core to lend OAuth
-tokens to local servers. Linear and Notion open a short page (name, use, access), then "Se
+tokens to local servers. A vendor's OAuth service (Linear, Notion and the catalog's) opens a short page (name, use, access), then "Se
 connecter à Linear" saves and signs in at once; the tool is added only once authorized. Settings →
 Tools also edits and removes the workspace's own tools, and connects again those that use OAuth
 (see [OAuth](#oauth-and-eriphe-connect)). A collapsed "Secrets avancés"

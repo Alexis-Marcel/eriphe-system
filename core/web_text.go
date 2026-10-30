@@ -628,6 +628,7 @@ func templateFuncs(lang string) template.FuncMap {
 			return nil
 		},
 		"has":      func(key string) bool { return tr(lang, key) != key },
+		"logo":     presetLogo,
 		"initial":  func(s string) string { return strings.ToUpper(string([]rune(s + "?")[:1])) },
 		"finished": finished,
 		"evsubject": func(data map[string]any) string {

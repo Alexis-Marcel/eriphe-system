@@ -14,7 +14,7 @@
   <div class="settings-body">
     {{if eq .Tab "devices"}}{{if eq .View "device"}}{{template "device" .}}{{else}}{{template "machines" .}}{{end}}
     {{else if eq .Tab "agents"}}{{if eq .View "agent-form"}}{{template "agent-page" .}}{{else if eq .View "provider-form"}}{{template "provider-page" .}}{{else}}{{template "agents" .}}{{end}}
-    {{else if eq .Tab "tools"}}{{if eq .View "form"}}{{template "tool-page" .}}{{else if eq .View "gallery"}}{{template "tool-gallery" .}}{{else if eq .View "drive"}}{{template "drive-page" .}}{{else if eq .View "github"}}{{template "github-page" .}}{{else if eq .View "github-post"}}{{template "github-post" .}}{{else if eq .View "home-assistant"}}{{template "home-assistant" .}}{{else if eq .View "access"}}{{template "tool-access-page" .}}{{else}}{{template "tools" .}}{{end}}
+    {{else if eq .Tab "tools"}}{{if eq .View "form"}}{{template "tool-page" .}}{{else if eq .View "gallery"}}{{template "tool-gallery" .}}{{else if eq .View "discover"}}{{template "discover-page" .}}{{else if eq .View "drive"}}{{template "drive-page" .}}{{else if eq .View "github"}}{{template "github-page" .}}{{else if eq .View "github-post"}}{{template "github-post" .}}{{else if eq .View "home-assistant"}}{{template "home-assistant" .}}{{else if eq .View "access"}}{{template "tool-access-page" .}}{{else}}{{template "tools" .}}{{end}}
     {{else if eq .Tab "folders"}}{{template "folders" .}}
     {{else if eq .Tab "remote"}}{{template "remote" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
