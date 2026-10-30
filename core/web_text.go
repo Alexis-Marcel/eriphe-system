@@ -19,6 +19,7 @@ var webStrings = map[string]map[string]string{
 	"fr": {
 		"app.tagline":              "Ton assistant, chez toi.",
 		"nav.chat":                 "Conversation",
+		"nav.back":                 "Retour",
 		"nav.tasks":                "Tâches",
 		"nav.settings":             "Réglages",
 		"nav.logout":               "Se déconnecter",
@@ -281,6 +282,7 @@ var webStrings = map[string]map[string]string{
 	"en": {
 		"app.tagline":              "Your assistant, at home.",
 		"nav.chat":                 "Conversation",
+		"nav.back":                 "Back",
 		"nav.tasks":                "Tasks",
 		"nav.settings":             "Settings",
 		"nav.logout":               "Log out",

@@ -130,7 +130,9 @@ body.nav-chat > main { overflow: hidden; }
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.06rem; color: var(--text); letter-spacing: -.02em; }
 .brand:hover { text-decoration: none; }
-.back-home { display: none; }
+.back-home { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; margin-left: -10px; padding: 0 10px 0 4px; border-radius: 12px; color: var(--accent-text); font-weight: 600; }
+.back-home:hover { text-decoration: none; background: var(--surface-2); }
+.back-home .i { width: 22px; height: 22px; }
 .topbar-end { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 /* Tâches and Réglages: icon buttons, 44 px to touch. */
 .head-btn { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; color: var(--muted); }
@@ -602,9 +604,6 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
   :root { --topbar: 54px; }
   .topbar { padding: 0 12px 0 16px; }
   body:not(.nav-chat) .brand { display: none; }
-  .back-home { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; margin-left: -10px; padding: 0 10px 0 4px; border-radius: 12px; color: var(--accent-text); font-weight: 600; }
-  .back-home:hover { text-decoration: none; background: var(--surface-2); }
-  .back-home .i { width: 22px; height: 22px; }
 
   .workspace, .workspace.side-off { grid-template-columns: 1fr; }
   .workspace .side, .workspace.side-off .side {

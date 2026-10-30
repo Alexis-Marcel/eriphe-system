@@ -813,8 +813,18 @@ function lit(name) {
   const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
-  // Installed (home screen): app.css sizes the shell on the large viewport.
+  // Installed (home screen): app.css sizes the shell on the large viewport
+  // (early.js sets it before the first paint; this is the safety net).
   if (standalone()) document.documentElement.classList.add("app");
+
+  // Retour: back where you came from in the workspace, else the conversation.
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-back]");
+    if (!a) return;
+    let same = false;
+    try { same = document.referrer && new URL(document.referrer).origin === location.origin; } catch (_) {}
+    if (same && history.length > 1) { e.preventDefault(); history.back(); }
+  });
 
   // The keyboard. Chrome on Android shrinks the page for it (the viewport's
   // interactive-widget); Safari on iOS lays it over the page instead: the
