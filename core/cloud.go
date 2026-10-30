@@ -327,8 +327,9 @@ func (c *core) startDrive(in driveConnect) (string, error) {
 		return "", &catalogError{http.StatusBadRequest, "drive.origin." + why, in.Origin, errors.New("Google takes no redirect to " + in.Origin)}
 	}
 	redirect := in.Origin + "/oauth/callback"
+	// A read-only tool gets a read-only token, whatever the page asked.
 	scope := scopeDriveReadonly
-	if in.Write {
+	if srv, ok := c.conf().Servers[filesServer]; in.Write && (!ok || srv.level() != accessReadOnly) {
 		scope = scopeDrive
 	}
 	cfg := &oauth2.Config{ClientID: app.ID, ClientSecret: app.Secret, Endpoint: googleOAuth, RedirectURL: redirect, Scopes: []string{scope}}
@@ -482,7 +483,7 @@ func (c *core) putDrive(lang string, change func(*filesConfig), creds credential
 	mode := putUpdate
 	if !exists {
 		mode = putCreate
-		srv = Server{Use: tr(lang, "preset.gdrive.use"), TrustAnnotations: true}
+		srv = Server{Use: tr(lang, "preset.gdrive.use")}.withLevel(accessReads)
 	}
 	srv.Run = marshalRun(spec)
 	return c.putServer(mode, filesServer, srv, creds)

@@ -27,6 +27,10 @@ type Server struct {
 	// pool.dialLocal.
 	Run json.RawMessage `json:"run,omitempty"`
 	Use string          `json:"use"` // what it is for, for the brain
+	// Access is what Eriphe may do on it (access.go): read-only, reads (free
+	// reads, the rest on approval), ask (everything on approval) or free.
+	// Without it, trust_annotations says: true is reads, false ask.
+	Access string `json:"access,omitempty"`
 	// TrustAnnotations lets the server's own readOnlyHint count: a read-only
 	// tool of a trusted server is the brain's to allow, the others the user's.
 	TrustAnnotations bool `json:"trust_annotations,omitempty"`
@@ -97,6 +101,9 @@ func (c *Config) checkServers() error {
 		}
 		if s.Timeout < 0 {
 			return fmt.Errorf("server %s: bad timeout", name)
+		}
+		if !validAccess(s.Access) {
+			return fmt.Errorf("server %s: access is one of %s", name, strings.Join(accessLevels, ", "))
 		}
 		if s.local() {
 			if s.URL != "" || s.Auth != nil {

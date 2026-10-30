@@ -931,10 +931,19 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 .howto-box ol li::marker { color: var(--accent-text); font-weight: 700; }
 .howto-box p { margin: 0; }
 
-/* What Eriphe may do without asking, in the form and in the list. */
+/* What Eriphe may do on a tool, in the form and in the list (access.go). */
 .choices.access > small { font-size: .8rem; line-height: 1.4; }
-.access-tag { color: var(--muted); }
-.access-tag.free { color: var(--ok); font-weight: 600; }
+.access-tag { color: var(--muted); text-decoration: none; }
+.access-tag:hover { text-decoration: underline; }
+.access-tag.level-reads, .access-tag.level-read-only { color: var(--ok); font-weight: 600; }
+.access-tag.level-free { color: var(--warn); font-weight: 600; }
+.choice.level-free:has(input:checked) { border-color: var(--warn-strong); box-shadow: 0 0 0 3px var(--warn-soft); }
+.choices.access .free-warn { display: none; margin: 0; background: var(--warn-soft); color: var(--warn); }
+.choices.access:has(input[value="free"]:checked) .free-warn { display: block; }
+.notice-line { margin: 4px 0 0; color: var(--warn); }
+.token-note { margin: 0; }
+.token-note p { margin: 0 0 8px; }
+.allowed-list li { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
 
 /* Settings → Folders: the explorer of a machine's shared places. */
 .explorer { display: grid; gap: 12px; margin-top: 14px; }

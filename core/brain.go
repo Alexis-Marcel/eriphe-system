@@ -278,7 +278,7 @@ func (c *core) catalogSettling() bool {
 		return false
 	}
 	for name := range c.conf().Servers {
-		if u := c.pool.get(name); u != nil && u.srv.TrustAnnotations {
+		if u := c.pool.get(name); u != nil && u.srv.trusts() {
 			if status, _, _ := u.snapshot(); status != statusReady {
 				return true
 			}

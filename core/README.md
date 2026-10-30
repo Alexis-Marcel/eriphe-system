@@ -71,11 +71,11 @@ optional (see [The brain](#the-brain)).
   "identities": {"github": {"env": "GH_TOKEN", "file": "/secrets/github-token"}},
   "servers": {
     "github": {"url": "https://api.githubcopilot.com/mcp/", "auth": {"bearer_file": "/secrets/github-mcp-token"},
-               "use": "GitHub: issues, pull requests, code search", "trust_annotations": true},
+               "use": "GitHub: issues, pull requests, code search", "access": "reads"},
     "home":   {"url": "http://192.0.2.20:8123/api/mcp", "auth": {"bearer_file": "/secrets/home-assistant-token"},
                "use": "the house: lights, heating, sensors"},
     "notion": {"url": "https://mcp.notion.com/mcp", "auth": {"oauth": {}}, "use": "notes and docs in Notion",
-               "trust_annotations": true}
+               "access": "read-only"}
   },
   "brain": {"agent": "opus", "prompt_file": "/etc/eriphe/brain-prompt.md", "self_url": "http://eriphe-core:8800/mcp",
             "tools": ["github.get_*", "github.list_*", "github.search_*", "notion"]}
@@ -224,7 +224,8 @@ holds their credentials and is the only one to reach them: **a task never sees a
 | `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"github_app": true}` (an installation token of Eriphe's GitHub App, refreshed before it ends: see [credentials on demand](#the-github-app)), `{"none": true}` |
 | `run` | instead of `url` and `auth`: a local server, a container a node runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
 | `use` | what it is for, for the brain |
-| `trust_annotations` | the server's own `readOnlyHint` counts for the policy (below); off by default |
+| `access` | what Eriphe may do on it: `read-only`, `reads`, `free` or `ask` (see [access levels](#access-levels)); without it, `trust_annotations` says |
+| `trust_annotations` | the older word for it: `true` is `reads`, `false` (the default) `ask` |
 | `always_load` | its tools are loaded upfront by a harness that otherwise searches for them (Claude Code's tool search): one model round trip less before the first call; for a few tools needed fast, such as the house |
 | `timeout` | seconds for one tool call (600) |
 
@@ -488,10 +489,13 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    `{"tool": "Bash", "match": "^go test", "decision": "allow"}` (`tool` is a name, a glob such as
    `mcp__*`, or names joined by `|`; `match` is a regular expression on the command, path or URL;
    `decision` is `allow`, `deny` or `ask`);
+   then the actions the user allowed for good ("Toujours autoriser", [below](#access-levels)),
+   which the file's rules come before;
 3. **built-in asks**, for what reaches a third party (merging, releasing, publishing, `ssh`, `curl
    -X POST`, external MCP tools): only the user may answer, through the CLI; the brain is told to
-   relay them and its answer is refused. The exception: a tool of a catalog server with
-   `trust_annotations` that says it is read-only (`readOnlyHint`) is the brain's to judge;
+   relay them and its answer is refused. The exception: what a catalog server's
+   [access level](#access-levels) leaves free (a read, or any tool of a `free` server) is the
+   brain's to judge, and a write of a `read-only` server is denied before the rules;
 4. anything else is the brain's to judge.
 
 For an MCP tool (`mcp__<server>__<tool>`), `match` applies to the JSON of its input (keys sorted).
@@ -508,6 +512,49 @@ Common safe reads, allowed without asking anyone:
 ```
 
 Every decision (by the policy, the brain or the user) is kept in the `decisions` table.
+
+### Access levels
+
+Each catalog server has an access level (`access`, `access.go`): **what** Eriphe may do on it,
+kept apart from **how** its credential is scoped.
+
+| Level | Workspace | Reads | Writes |
+|---|---|---|---|
+| `read-only` | Lecture seule / Read only | free | not lent: not in `tools/list` of a task nor in `list_tools`, denied by the policy and refused by the proxy |
+| `reads` | Lecture libre, écriture sur accord / Free reads, writes on approval | free | the user's to approve |
+| `free` | Tout libre / Everything free | free | free (the brain judges a worker's; the brain's own are allowed in advance) |
+| `ask` | Tout sur accord / Everything on approval | the user's | the user's |
+
+A read is what the server itself marks `readOnlyHint`. `ask` is the former "Tout me demander":
+the server's annotations do not count. `reads` is the default of the presets; "Other…" (a server
+whose annotations nobody vouches for) starts on `ask`. An entry without `access` keeps its meaning:
+`trust_annotations: true` is `reads`, without it `ask`; the old form values (`read`, `trust`) are
+read the same way. Whatever the level, the built-in denials come first, then the file's rules.
+
+**Always allow.** A permission card for a catalog tool's action offers "Toujours autoriser" (the
+API: `POST /v1/tasks/{id}/answer` with `"allow": true, "always": true`): the request is allowed,
+and `server.tool` is allowed without asking from then on, for any input. These are rules kept in
+eriphe-core's database (`allowed_actions`), evaluated after the file's rules (which win) and never
+above a built-in denial or a `read-only` level (the card does not offer it there). Each tool's
+access page (Settings → Tools → Access, `/settings/tools/{name}/access`) lists them, with
+"Retirer"; removing a server forgets them.
+
+**Scoped credentials.** Where the service can scope its credential, the level decides what Eriphe
+asks for:
+
+| Tool | Read only | Otherwise |
+|---|---|---|
+| OAuth server advertising `read` and `write` (`scopes_supported` of its protected resource metadata; Linear, per preset table `tokenScopes`) | `read` (the advertised scopes without `write`) | `read write` |
+| Google Drive | `drive.readonly` | `drive` (when "drop results" is ticked) |
+| GitHub tool on Eriphe's GitHub App | installation token with `contents`, `pull_requests`, `issues`, `metadata`, `checks` at `read` | the app's rights |
+| IMAP/CalDAV password, Home Assistant token, bearer token, OAuth without a read-only scope (Notion's `default`) | Eriphe holds to the level itself: "Le jeton permet plus : Eriphe s'en tient à la lecture" | |
+
+What an OAuth token was asked for is kept with it (`server.<name>.token-access`); a token from
+before the levels counts as full. Going down applies at once (Eriphe enforces it) and the page
+offers to reconnect to really shrink the token; going up past what the stored token allows shows
+"Reconnecte <outil> pour autoriser l'écriture" with the Connect button (writes would fail with
+`insufficient_scope` until then). A GitHub App token follows at once (minted each hour); `scopes`
+in the configuration are asked as they are.
 
 ## Resources
 
@@ -761,8 +808,9 @@ and the brain's container never holds eriphe-core's API token. Only the brain's 
 eriphe-core) still makes the brain call that address directly with the API token, as before.
 
 **It reads by itself.** The brain is lent, with no configuration, every tool a server annotates
-`readOnlyHint` when the server is trusted for its annotations (`trust_annotations`: "lecture
-libre" in the workspace, the default of the mail and calendar presets), through its proxy like any
+`readOnlyHint` when the server is trusted for its annotations (any [access level](#access-levels)
+but `ask`; `reads` is the default of the presets), and every tool of a server whose access is
+`free`, through its proxy like any
 task. These free reads are allowed in advance in its assignment (`allowed_tools`) and called
 without a ticket: no permission round trip, a decision on record all the same. A read named by a
 policy rule of the configuration is not free: it goes through the policy with its input. The list
@@ -837,7 +885,8 @@ Settings → Tools → Google Drive (`/settings/drive`, `web_drive.go`, the logi
 2. **Connect**: "Connecter Google Drive" sends the browser to Google; "Permettre à Eriphe de
    déposer des résultats" asks for the scope that writes. The account comes back connected, and the
    workspace creates the catalog server `fichiers` (image `ghcr.io/alexis-marcel/eriphe-files`,
-   `trust_annotations`: its reads are free, `write_file` is the user's to allow).
+   access `reads`: its reads are free, `write_file` is the user's to allow). Set to read only,
+   the tool connects with `drive.readonly` whatever the box says.
 3. **Choose**: once the service runs, the page browses the account's folders (My Drive, Shared with
    me, shared drives) through the server's `browse_folders`, and each one is given "en lecture" or
    "lecture + dépôt". The chosen folders are written in the service's `FILES_CONFIG`, which
@@ -1121,8 +1170,7 @@ presets (Home Assistant, GitHub, Linear, Notion, Mails, Agenda, Google Drive, or
 service or local image; Google Drive has its own page, see [Google Drive](#google-drive-cloud-folders)).
 A preset's form asks only what the owner decides: the credential (with the provider's own
 steps and link), the address when it differs per person, the name, what the tool is for, and what
-Eriphe may do without asking ("Lecture libre", which sets `trust_annotations`, or "Tout me
-demander"); the rest (a vendor's address, the authentication, timeouts, an OAuth client, how a
+Eriphe may do on it (its [access level](#access-levels), four cards); the rest (a vendor's address, the authentication, timeouts, an OAuth client, how a
 local server runs) is under the advanced options. Mails and Agenda first ask which kind of account
 (Gmail, iCloud, Orange, Free, OVHcloud, Fastmail or any IMAP server; iCloud, Fastmail, Nextcloud or
 any CalDAV server) and run `eriphe-mail` and `eriphe-calendar` with its password; "Test the

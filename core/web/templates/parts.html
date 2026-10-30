@@ -71,6 +71,7 @@
     </details>
     <div class="actions">
       <button class="btn btn-primary" type="submit" name="allow" value="yes">{{template "i-check"}}{{t "perm.allow"}}</button>
+      {{if .Always}}<button class="btn btn-soft" type="submit" name="allow" value="always" title="{{t "perm.alwayshint"}}">{{t "perm.always"}}</button>{{end}}
       <button class="btn btn-ghost" type="submit" name="allow" value="no">{{template "i-x"}}{{t "perm.deny"}}</button>
     </div>
   </form>

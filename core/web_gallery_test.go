@@ -86,7 +86,7 @@ func TestVendorPageThenConnect(t *testing.T) {
 	_, body, _ := tw.do("GET", "/settings/tools/new?preset=linear", nil, nil)
 	main := html.UnescapeString(mainPart(t, body))
 	for _, want := range []string{`name="name" value="linear"`, `name="use" value="Linear : tickets, projets, cycles"`,
-		`name="access" value="read" checked`, `name="access" value="ask"`, "Se connecter à Linear", "Tu seras envoyé chez Linear"} {
+		`name="access" value="reads" checked`, `name="access" value="read-only"`, `name="access" value="free"`, `name="access" value="ask"`, "Lecture libre, écriture sur accord", "Tout libre", "Se connecter à Linear", "Tu seras envoyé chez Linear"} {
 		if !strings.Contains(main, want) && !strings.Contains(body, want) {
 			t.Errorf("linear page lacks %q", want)
 		}
@@ -189,7 +189,7 @@ func TestAccessChoiceMapsToPolicy(t *testing.T) {
 		t.Fatalf("built-in denial: %q", d)
 	}
 	// The list says it.
-	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, "Tout me demander") {
+	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, "Tout sur accord") {
 		t.Fatal("the list does not show the access")
 	}
 }
