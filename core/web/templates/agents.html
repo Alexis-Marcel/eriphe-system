@@ -104,12 +104,6 @@
 </section>
 {{else}}
 
-{{with .BrainCard}}{{template "brain-card" (dict "Card" . "Page" $.Data)}}{{else}}
-<section class="panel brain-card" aria-labelledby="brain-title">
-  <h3 id="brain-title">{{template "i-bot"}}{{t "agents.braintitle"}}</h3>
-  <p class="muted">{{t "agents.nobrain"}}</p>
-</section>
-{{end}}
 {{if .Agents}}
 <ul class="grid agents-grid">
 {{range .Agents}}
@@ -155,6 +149,13 @@
       </button></form></li>
   {{end}}
   </ul>
+</section>
+{{end}}
+
+{{with .BrainCard}}{{template "brain-card" (dict "Card" . "Page" $.Data)}}{{else}}
+<section class="panel brain-card" aria-labelledby="brain-title">
+  <h3 id="brain-title">{{template "i-bot"}}{{t "agents.braintitle"}}</h3>
+  <p class="muted">{{t "agents.nobrain"}}</p>
 </section>
 {{end}}
 
