@@ -147,6 +147,7 @@ func (n *node) startContainer(t *Task, first string) error {
 	defer func() {
 		if !started {
 			n.agents.release(agentDir)
+			removeRunFiles(t)
 		}
 	}()
 	if n.apple() {
@@ -156,6 +157,14 @@ func (n *node) startContainer(t *Task, first string) error {
 		}
 	}
 	agentArgs, agentEnv := rt.command(n, t)
+	var files map[string][]byte
+	if fr, ok := rt.(fileRuntime); ok {
+		files = fr.files(n, t)
+	}
+	if err := writeRunFiles(t, files); err != nil {
+		n.endTaskNetwork(t)
+		return err
+	}
 	args, cmdEnv, err := n.taskRunArgs(t, agentArgs, agentEnv)
 	if err != nil {
 		n.endTaskNetwork(t)
@@ -194,6 +203,7 @@ func (n *node) startContainer(t *Task, first string) error {
 			err = werr
 		}
 		close(done)
+		removeRunFiles(t)
 		n.agents.release(agentDir)
 		n.endTaskNetwork(t)
 		t.mu.Lock()
@@ -275,11 +285,21 @@ func (n *node) taskRunArgs(t *Task, agentArgs []string, agentEnv map[string]stri
 	agentDir := t.agentDir
 	t.mu.Unlock()
 	if agentDir != "" {
-		mount, err := n.injectMount(agentDir)
+		mount, err := n.readOnlyMount(agentDir, injectDir)
 		if err != nil {
 			return nil, nil, err
 		}
 		args = append(args, mount...)
+	}
+	// The files the runtime hands its agent, read-only (runfiles.go).
+	if t.dir != "" {
+		if _, err := os.Stat(runDir(t)); err == nil {
+			mount, err := n.readOnlyMount(runDir(t), runMount)
+			if err != nil {
+				return nil, nil, err
+			}
+			args = append(args, mount...)
+		}
 	}
 	// The workspace and the agent's config live in the task's folder, so a
 	// restarted container finds its work and resumes its session. A named
@@ -327,17 +347,17 @@ func (n *node) taskRunArgs(t *Task, agentArgs []string, agentEnv map[string]stri
 	return args, cmdEnv, nil
 }
 
-// injectMount mounts an agent's directory of the node's root read-only at
-// /opt/eriphe.
-func (n *node) injectMount(dir string) ([]string, error) {
+// readOnlyMount mounts a directory of the node's root read-only at target:
+// an agent's at /opt/eriphe, the task's run files at /run/eriphe.
+func (n *node) readOnlyMount(dir, target string) ([]string, error) {
 	rel, err := filepath.Rel(n.opt.root, dir)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return nil, fmt.Errorf("refusing to mount %s: outside the node root %s", dir, n.opt.root)
 	}
 	if n.apple() {
-		return appleMount(dir, injectDir, true)
+		return appleMount(dir, target, true)
 	}
-	return []string{"--mount", mountSpec("type=bind", "src="+n.hostPath(dir), "dst="+injectDir, "readonly")}, nil
+	return []string{"--mount", mountSpec("type=bind", "src="+n.hostPath(dir), "dst="+target, "readonly")}, nil
 }
 
 // hostPath is a path under -root as the Docker daemon sees it.

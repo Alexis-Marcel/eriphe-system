@@ -32,6 +32,15 @@ type session interface {
 	stop()
 }
 
+// A fileRuntime hands its agent files as well as a command line: what the
+// command line must not carry, since every user of the machine sees it (ps,
+// /proc), such as the task's secret or the system prompt. The node writes
+// them to the task's run directory, mounted read-only at runMount, and
+// deletes them when the container ends (runfiles.go).
+type fileRuntime interface {
+	files(n *node, t *Task) map[string][]byte
+}
+
 var runtimes = map[string]agentRuntime{
 	"claude-code": claudeCode{},
 	"opencode":    opencodeRuntime,

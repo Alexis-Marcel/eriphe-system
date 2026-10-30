@@ -14,7 +14,23 @@ import (
 // through the node's MCP tool approve (perm.go).
 type claudeCode struct{}
 
-func (claudeCode) command(n *node, t *Task) ([]string, map[string]string) {
+// The files Claude Code reads its configuration from, in the task's run
+// directory (runFiles): never on its command line, which every user of the
+// machine sees.
+const (
+	claudeMCP      = "mcp.json"
+	claudeSettings = "settings.json"
+	claudePrompt   = "system-prompt.md"
+)
+
+// Commits and PRs made by Eriphe's workers carry no attribution line, and
+// its sessions never push to the account's phone: Eriphe decides when to
+// tell its user, through its own channels.
+const claudeSettingsJSON = `{"attribution":{"commit":"","pr":""},"agentPushNotifEnabled":false,"inputNeededNotifEnabled":false,"remoteControlAtStartup":false}`
+
+// files are the task's MCP servers (with its secret), Claude Code's
+// settings and the system prompt to append.
+func (claudeCode) files(n *node, t *Task) map[string][]byte {
 	spec := t.Spec
 	perm := map[string]any{"type": "http", "url": n.callbackFor(t) + "/perm/" + t.ID + "/mcp",
 		"headers": map[string]string{"Authorization": "Bearer " + t.secret}}
@@ -34,14 +50,19 @@ func (claudeCode) command(n *node, t *Task) ([]string, map[string]string) {
 	}
 	servers["eriphe_node"] = perm
 	mcpConfig, _ := json.Marshal(map[string]any{"mcpServers": servers})
+	files := map[string][]byte{claudeMCP: mcpConfig, claudeSettings: []byte(claudeSettingsJSON)}
+	if spec.AppendSystemPrompt != "" {
+		files[claudePrompt] = []byte(spec.AppendSystemPrompt)
+	}
+	return files
+}
 
+func (claudeCode) command(n *node, t *Task) ([]string, map[string]string) {
+	spec := t.Spec
 	args := []string{"claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-		"--mcp-config", string(mcpConfig), "--strict-mcp-config",
+		"--mcp-config", runPath(claudeMCP), "--strict-mcp-config",
 		"--permission-prompt-tool", "mcp__eriphe_node__approve", "--permission-mode", "default",
-		// Commits and PRs made by Eriphe's workers carry no attribution line,
-		// and its sessions never push to the account's phone: Eriphe decides
-		// when to tell its user, through its own channels.
-		"--settings", `{"attribution":{"commit":"","pr":""},"agentPushNotifEnabled":false,"inputNeededNotifEnabled":false,"remoteControlAtStartup":false}`}
+		"--settings", runPath(claudeSettings)}
 	if spec.Profile != "" {
 		// A resumed session takes the prompt it is started with, not the one
 		// recorded when it began (the brain's changes with each deploy).
@@ -55,7 +76,7 @@ func (claudeCode) command(n *node, t *Task) ([]string, map[string]string) {
 		args = append(args, "--model", spec.Model)
 	}
 	if spec.AppendSystemPrompt != "" {
-		args = append(args, "--append-system-prompt", spec.AppendSystemPrompt)
+		args = append(args, "--append-system-prompt-file", runPath(claudePrompt))
 	}
 	if len(spec.AllowedTools) > 0 {
 		args = append(args, "--allowedTools", strings.Join(spec.AllowedTools, ","))

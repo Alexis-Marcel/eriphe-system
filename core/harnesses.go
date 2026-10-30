@@ -9,7 +9,7 @@ package main
 // How a harness takes standing instructions (a task's AppendSystemPrompt).
 const (
 	promptPrepended    = "prepended"    // it takes none: they are put before the task's prompt
-	promptFlag         = "flag"         // Claude Code's --append-system-prompt
+	promptFlag         = "flag"         // Claude Code's --append-system-prompt-file
 	promptDeveloper    = "developer"    // Codex's developerInstructions, on thread/start
 	promptInstructions = "instructions" // a file in OpenCode's instructions
 )

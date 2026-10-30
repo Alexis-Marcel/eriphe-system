@@ -275,6 +275,12 @@ inbox. The node injects the agent of `claude-code`, `opencode` and `codex` into 
 - `claude-code` (`runtime_claude.go`): `claude -p` in stream-json mode. Permission requests go
   through an MCP tool served by the node (`approve`, on `/perm/{id}/mcp`). The session id is
   Claude Code's, resumed with `--resume`.
+  Its MCP servers (with the task's secret), its settings and the system prompt it appends are
+  files, never arguments: a command line is any local user's to read (`ps`). The node writes
+  them to `<root>/tasks/<id>/run` (0700, files 0600), mounts it read-only at `/run/eriphe`, passes
+  `--mcp-config /run/eriphe/mcp.json`, `--settings /run/eriphe/settings.json` and
+  `--append-system-prompt-file /run/eriphe/system-prompt.md`, and deletes it when the container
+  ends (`runfiles.go`). The other runtimes get theirs over stdin or by variable name.
 - `opencode` (`runtime_acp.go`, `runtime_opencode.go`): `opencode acp`, driven over the Agent
   Client Protocol (JSON-RPC 2.0 on stdin and stdout), for models reached with an API key
   (OpenAI, Google, Mistral, OpenRouter, Anthropic). The ACP client is generic; only the command
@@ -537,6 +543,7 @@ LaunchAgent gives `/usr/local/bin/container`).
 | `-v <dir>:/work`, `/profile` | `--mount type=bind,source=<dir>,target=/work` (no comma in a path) |
 | `-v eriphe-cache:/cache` | `<root>/cache` mounted at `/cache` |
 | `--mount type=bind,src=<root>/agents/…,dst=/opt/eriphe,readonly` | `--mount type=bind,source=…,target=/opt/eriphe,readonly` |
+| `--mount type=bind,src=<root>/tasks/<id>/run,dst=/run/eriphe,readonly` | `--mount type=bind,source=…,target=/run/eriphe,readonly` |
 | `--network eriphe-tasks`, `--add-host host.docker.internal:<gateway>` | `--network eriphe-task-<id>`, its own (below); the callback is its gateway's address |
 | `-e NAME`, `--entrypoint sh <image> -c …` | the same (`-e NAME` takes the value from the CLI's environment) |
 | `docker stop -t 10`, `docker rm -f` of strays | `container stop -t 10`, `container delete --force` of what carries `eriphe.task`, and the strays' networks |
