@@ -440,9 +440,17 @@ func TestFromLocalNetwork(t *testing.T) {
 func TestOIDCPasswordFallback(t *testing.T) {
 	tw, _ := oidcWeb(t, modeOIDC, nil)
 	tw.signOut()
-	code, body, _ := tw.do("GET", "/login", nil, nil)
+	// The provider is the way in, even from the local network; the
+	// password is the fallback, one link away.
+	if code, _, h := tw.do("GET", "/login", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/auth/login" {
+		t.Fatalf("login page from the local network: %d %s", code, h.Get("Location"))
+	}
+	if _, body, _ := tw.do("GET", "/login?out=1", nil, nil); !strings.Contains(body, `href="/login?password=1"`) || strings.Contains(body, `name="password"`) {
+		t.Fatal("after signing out: the provider's button and the fallback link")
+	}
+	code, body, _ := tw.do("GET", "/login?password=1", nil, nil)
 	if code != http.StatusOK || !strings.Contains(body, `href="/auth/login"`) || !strings.Contains(body, `name="password"`) {
-		t.Fatalf("login page from the local network: %d", code)
+		t.Fatalf("the password fallback from the local network: %d", code)
 	}
 	tok := csrfField.FindStringSubmatch(body)[1]
 	if code, _, _ := tw.do("POST", "/login", url.Values{"csrf": {tok}, "password": {testPassword}},

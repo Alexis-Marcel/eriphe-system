@@ -15,6 +15,7 @@ var signinStrings = map[string]map[string]string{
 	"fr": {
 		"login.ssolead":              "Connecte-toi avec ton compte pour ouvrir ton espace.",
 		"login.sso":                  "Se connecter avec mon compte",
+		"login.usepassword":          "Utiliser le mot de passe de secours",
 		"login.nopassword":           "Créer le mot de passe de secours",
 		"private.title":              "Cet espace est privé",
 		"private.lead":               "Il n'est ouvert qu'à son propriétaire.",
@@ -94,6 +95,7 @@ var signinStrings = map[string]map[string]string{
 	"en": {
 		"login.ssolead":              "Sign in with your account to open your workspace.",
 		"login.sso":                  "Sign in with my account",
+		"login.usepassword":          "Use the fallback password",
 		"login.nopassword":           "Create the fallback password",
 		"private.title":              "This workspace is private",
 		"private.lead":               "It is open to its owner only.",
