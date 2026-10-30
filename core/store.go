@@ -455,12 +455,15 @@ func (s *Store) activeCount(node string) (int, error) {
 	return n, err
 }
 
-// Conversation roles: what I write, what the brain answers, and the events
-// eriphe-core reports to the brain.
+// Conversation roles: what I write, what the brain answers, the events
+// eriphe-core reports to the brain, and the brain's own failures (a turn
+// that failed, a start that keeps failing: brain_errors.go), which are the
+// user's to see and never the brain's to read.
 const (
 	roleUser  = "user"
 	roleBrain = "brain"
 	roleEvent = "event"
+	roleError = "error"
 )
 
 type Message struct {
@@ -468,10 +471,14 @@ type Message struct {
 	Time time.Time `json:"time"`
 	Role string    `json:"role"`
 	Text string    `json:"text"`
-	// Via is where I said it, when not in the workspace or the CLI: "voix, Bureau".
+	// Via is where I said it, when not in the workspace or the CLI: "voix,
+	// Bureau". For an error, where the brain failed: "turn" or "start".
 	Via string `json:"via,omitempty"`
 	// Attachments are the files of my message (attachments.go).
 	Attachments []Attachment `json:"attachments,omitempty"`
+	// Notice is what the workspace shows of an event: nil for the brain's
+	// own notes (web_notices.go).
+	Notice *eventNotice `json:"-"`
 }
 
 func (s *Store) addMessage(role, text string, delivered bool) (int64, error) {
@@ -489,7 +496,7 @@ func (s *Store) addMessageVia(role, text, via string, delivered bool) (int64, er
 
 // undelivered returns the messages and events waiting for the brain.
 func (s *Store) undelivered() ([]Message, error) {
-	return s.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE delivered = 0 AND role != 'brain' ORDER BY seq`)
+	return s.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE delivered = 0 AND role IN ('user', 'event') ORDER BY seq`)
 }
 
 // markDelivered also keeps the last message when the brain was given them:

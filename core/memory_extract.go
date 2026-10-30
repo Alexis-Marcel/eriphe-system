@@ -56,7 +56,7 @@ func dayBounds(day string) (time.Time, time.Time, error) {
 // transcript is the conversation and the finished tasks between from and to.
 func (c *core) transcript(from, to time.Time) ([]segment, error) {
 	var out []segment
-	rows, err := c.store.db.Query(`SELECT seq, time, role, text FROM messages WHERE time >= ? AND time < ? ORDER BY seq`,
+	rows, err := c.store.db.Query(`SELECT seq, time, role, text FROM messages WHERE time >= ? AND time < ? AND role != 'error' ORDER BY seq`,
 		from.Unix(), to.Unix())
 	if err != nil {
 		return nil, err

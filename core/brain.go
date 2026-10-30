@@ -66,7 +66,7 @@ func (c *core) notifyBrain(id, state string) {
 		if state == stateStopped && c.store.get("brain_stopped:"+t.ID) != "" {
 			return // the brain stopped it itself: nothing to tell
 		}
-		text = fmt.Sprintf("La tâche %s (nœud %s) est maintenant %s.", t.ID, t.Node, state)
+		text = fmt.Sprintf(taskEndedEvent, t.ID, t.Node, state)
 	default:
 		return
 	}
@@ -122,8 +122,8 @@ func init() {
 		firstPrompt: func(c *core, _ Assistant, resume bool) string { return c.brainFirstPrompt(resume) },
 		started:     (*core).brainStarted,
 		permission:  func(c *core, ctx context.Context, _ Assistant, t *TaskRow) error { return c.brainPermission(ctx, t) },
-		failing: func(c *core, _ Assistant) {
-			c.store.addMessage(roleBrain, "("+c.conf().assistantName()+" n'arrive pas à démarrer : voir le journal d'eriphe-core.)", true)
+		failing: func(c *core, a Assistant) {
+			c.brainFailed(c.lastFailure(c.assistantStatus(a.Name).Task), "start")
 		},
 	}
 	assistantTriggers[triggerConversation] = assistantTrigger{
@@ -302,22 +302,36 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 		return
 	}
 	last := done
+	failed := "" // the turn's failure, said once at its end
 	for _, e := range events {
 		if e.Seq <= done {
 			continue
 		}
 		last = e.Seq
-		// Its answer to the start prompt ("Prêt.") is not news for the conversation.
-		if e.Type == "text" && !st.Quiet {
+		raw, bad := turnFailure(e)
+		switch {
+		case e.Type == "error":
+			// The node's own notes (a session not resumed…) are not the turn's end.
+		case bad && e.Type == "text":
+			// A harness's error written as its answer is never shown as one.
+			failed = raw
+		case bad && e.Type == "turn_end":
+			if failed == "" {
+				failed = raw
+			}
+		case e.Type == "text" && !st.Quiet:
+			// Its answer to the start prompt ("Prêt.") is not news for the conversation.
 			if text, _ := e.Data["text"].(string); strings.TrimSpace(text) != "" {
 				c.store.addMessage(roleBrain, text, true)
 			}
 		}
-		if e.Type == "turn_end" {
-			if bad, _ := e.Data["auth_error"].(bool); bad {
-				c.store.addMessage(roleBrain, "("+c.conf().assistantName()+" n'arrive pas à s'authentifier : vérifie le fournisseur de son agent.)", true)
-			}
+		if e.Type == "turn_end" && failed != "" {
+			c.brainFailed(failed, "turn")
+			failed = ""
 		}
+	}
+	if failed != "" { // its turn's end is not there yet: one card all the same
+		c.brainFailed(failed, "turn")
 	}
 	if last != done {
 		c.updateAssistant(a.Name, func(st *AssistantStatus) { st.SeenSeq = last })

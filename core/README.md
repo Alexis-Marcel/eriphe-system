@@ -1166,7 +1166,18 @@ Eriphe in the middle, its tasks on the side as live cards (machine, agent, repos
 state, the pull request or document the agent mentioned), the permissions waiting for an answer
 inline in the conversation (Yes / No, with an optional reason for the agent), and the settings:
 devices (what Eriphe sees and does on each, and the command that connects one), agents, accounts and tools (the vault), the folders
-given to Eriphe (see [Folders](#folders)), the app and the notifications of this device (below), and the journal of decisions. Settings → Tools lists the catalog's servers with their status (ready, to connect,
+given to Eriphe (see [Folders](#folders)), the app and the notifications of this device (below), and the journal of decisions.
+The conversation shows the user's messages and the assistant's answers. The events given to the
+brain (a tool or an agent added, a task's turn over, a permission asked) are its notes and are not
+shown; a task that failed, was stopped or was lost is one short line that opens its drawer. When
+the brain fails (an API error its harness writes as its answer, a turn that ends on an error, a
+start that keeps failing), the conversation shows an error card instead, in the assistant's name:
+the likely cause in words (key refused, quota, model, network, passing outage), "Vérifier le
+compte IA", "Réessayer" (the turn that failed is given again, and a brain that is down starts at
+once) and the raw error under "Détails". One card stands for a run of failures, and while it is
+open the conversation does not show the assistant as thinking. Errors are shown one way everywhere
+(the brain, the tasks' drawers, the tools, the accounts: `problems.go`): a sentence, what to do,
+the raw text folded. Settings → Tools lists the catalog's servers with their status (ready, to connect,
 error, or waiting for a machine for a local one) and where each comes from, adds one from a list of
 presets, a catalog by category with a search (tasks and notes, mail and calendar, files, meetings,
 design, development, websites, payments, automation, home): Home Assistant, GitHub, Mails, Agenda,
@@ -1203,7 +1214,12 @@ limits, its models and the steps to get its credential; "Test the key" lists the
 once with the key typed (OpenRouter also tells the credit left; a Claude subscription token is
 only checked for its shape, as Anthropic allows it in Claude Code only; a key pasted in the wrong
 card is caught), and the usual agents of the kind are created with it (Opus, Sonnet, Haiku for
-Claude; GPT models for ChatGPT; two well-known models for each API key). The agent form offers the
+Claude; GPT models for ChatGPT; two well-known models for each API key). A key is tried again when
+it is saved: one that fails is kept, with a warning, and the account and its agents show "Clé
+refusée" (or "Non vérifiée" when the provider could not be reached) with the reason instead of
+"Prêt". An account error met in use (a key or token refused, a quota, a model the key cannot use,
+from a task or the brain) is kept on the account the same way, and cleared by the next turn of one
+of its agents that goes through, or a test of the stored key that passes. The agent form offers the
 account's models (another one can be typed; OpenCode's provider prefix is added), derives the
 program from the account, and keeps the machines' needs, preferences, image and program under
 "Options avancées" (see [Dynamic catalog](#dynamic-catalog-workspace)). It works

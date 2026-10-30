@@ -248,6 +248,7 @@
           draft.textContent = "";
         }
         box.appendChild(n);
+        htmx.process(n); // an error card's "Try again", a task line's link
       });
       box.dataset.last = e.lastEventId || box.dataset.last;
       const hello = $("#hello");
