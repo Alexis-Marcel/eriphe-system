@@ -16,6 +16,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<script src="/static/early.js?v={{.Version}}"></script>
 <link rel="stylesheet" href="/static/app.css?v={{.Version}}">
 {{if eq .Tab "memory"}}<link rel="stylesheet" href="/static/memory.css?v={{.Version}}">{{end}}
 {{if eq .Nav "settings"}}<link rel="stylesheet" href="/static/remote.css?v={{.Version}}">{{end}}
@@ -29,7 +30,7 @@
 <a class="skip" href="#main">{{if eq .Lang "en"}}Skip to content{{else}}Aller au contenu{{end}}</a>
 {{if .Nav}}
 <header class="topbar">
-  {{if ne .Nav "chat"}}<a class="back-home" href="/">{{template "i-back"}}<span>{{t "nav.chat"}}</span></a>{{end}}
+  {{if ne .Nav "chat"}}<a class="back-home" href="/" data-back>{{template "i-back"}}<span>{{t "nav.back"}}</span></a>{{end}}
   <a class="brand" href="/" aria-label="{{name}}">{{template "logo"}}<span>{{name}}</span></a>
   <div class="topbar-end">
     <span class="conn" id="conn" hidden role="status">{{t "chat.offline"}}</span>

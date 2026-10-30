@@ -41,7 +41,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		if tc.tab == "memory" {
 			href = "/memory"
 		}
-		for _, want := range []string{`<header class="topbar">`, `<a class="back-home" href="/">`,
+		for _, want := range []string{`<header class="topbar">`, `<a class="back-home" href="/" data-back>`,
 			`id="tasks-btn" href="/#tasks-panel"`, `id="tasks-badge"`, `<a class="head-btn" href="/settings" aria-label="Réglages" title="Réglages" aria-current="page">`,
 			`<nav class="settings-nav"`, `<a href="` + href + `" aria-current="page">`} {
 			if !strings.Contains(body, want) {
