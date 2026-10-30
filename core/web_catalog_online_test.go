@@ -117,11 +117,11 @@ func TestGalleryCatalog(t *testing.T) {
 		c.Servers["taches"] = Server{URL: "https://ai.todoist.net/mcp", Auth: &ServerAuth{OAuth: &OAuthConfig{}}, Use: "tâches"}
 	})
 	_, body, _ := tw.do("GET", "/settings/tools/add", nil, nil)
-	if !strings.Contains(body, `data-catalog-search hidden`) || !strings.Contains(body, `type="search"`) {
+	if !strings.Contains(body, `data-finder-bar hidden`) || !strings.Contains(body, `type="search"`) {
 		t.Error("no search field, hidden until the script shows it")
 	}
 	tile := func(id string) string {
-		i := strings.Index(body, `class="preset preset-`+id+`"`)
+		i := strings.Index(body, `class="ftile preset-`+id+`"`)
 		if i < 0 {
 			t.Fatalf("no tile %s", id)
 		}
@@ -147,7 +147,7 @@ func TestGalleryCatalog(t *testing.T) {
 			t.Errorf("tile %s: %s", id, tile(id))
 		}
 	}
-	if !strings.Contains(body, `data-search="todoist todoist tâches et projets dans todoist. tâches &amp; notes"`) {
+	if !strings.Contains(body, `data-search="todoist todoist tâches et projets dans todoist. tâches &amp; notes todo to-do taches tasks"`) {
 		t.Error("the search words of a tile")
 	}
 	for _, not := range []string{"Figma, Slack, Asana", "ClickUp"} {
@@ -158,10 +158,10 @@ func TestGalleryCatalog(t *testing.T) {
 			t.Error("a service that needs an app is in the catalog")
 		}
 	}
-	// The tools page shows a few and leads to all.
+	// The tools page has them all in its dialog, the added one marked.
 	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
-	if !strings.Contains(body, "preset-todoist") || strings.Contains(body, "preset-stripe") || !strings.Contains(body, "Voir les ") {
-		t.Error("the tools page's short list")
+	if _, dlg := toolsList(t, body); !strings.Contains(dlg, "preset-stripe") || !strings.Contains(dlg, `<span class="ftile-added" title="ajouté">`) {
+		t.Error("the tools page's dialog")
 	}
 	// A vendor's page says whether its token follows the level.
 	_, body, _ = tw.do("GET", "/settings/tools/new?preset=dropbox", nil, nil)

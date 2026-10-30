@@ -731,8 +731,16 @@ func (w *web) handleJournal(rw http.ResponseWriter, r *http.Request, s *session)
 	w.render(rw, r, s, "settings", block, page{Title: "settings.journal", Nav: "settings", Tab: "journal", Data: v})
 }
 
+// accountPage is "Mon espace": the sign-in, and the keys and passwords the
+// vault holds, to replace or delete (each is typed in its own tool's page).
+type accountPage struct {
+	signinView
+	Secrets secretsView
+}
+
 func (w *web) handleAccount(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "", page{Title: "settings.account", Nav: "settings", Tab: "account", Data: w.signinView(r)})
+	v := accountPage{signinView: w.signinView(r), Secrets: w.secrets("", false)}
+	w.render(rw, r, s, "settings", "", page{Title: "settings.account", Nav: "settings", Tab: "account", Data: v})
 }
 
 // handleLang keeps the language in a cookie and reloads the page.

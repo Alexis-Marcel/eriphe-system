@@ -14,7 +14,6 @@ var catalogStrings = map[string]map[string]string{
 	"fr": {
 		"settings.tools":              "Outils",
 		"tools.lead":                  "Les services et programmes que {{name}} peut utiliser et prêter à ses agents : ta maison, tes mails, ton agenda, tes outils de travail.",
-		"tools.none":                  "Aucun outil pour l'instant. Ajoutes-en un ci-dessous.",
 		"tools.add":                   "Ajouter un outil",
 		"tools.editof":                "Modifier « %s »",
 		"tools.saved":                 "Outil « %s » enregistré. {{name}} peut l'utiliser dès maintenant.",
@@ -130,8 +129,6 @@ var catalogStrings = map[string]map[string]string{
 		"preset.remote.tokenhint":     "La clé ou le jeton que le service t'a donné.",
 		"preset.local.title":          "Autre programme local",
 		"preset.local.desc":           "Une image Docker de serveur MCP, sur un de tes appareils.",
-		"secrets.title":               "Secrets avancés",
-		"secrets.summary":             "Ce que le coffre chiffré contient, et à quoi sert chaque secret.",
 		"secrets.lead":                "Les clés et mots de passe se saisissent dans chaque outil ou fournisseur. Ici, tu peux seulement en remplacer ou en supprimer un.",
 		"secrets.ofserver":            "Outil « %s »",
 		"secrets.ofprovider":          "Fournisseur « %s »",
@@ -154,7 +151,6 @@ var catalogStrings = map[string]map[string]string{
 	"en": {
 		"settings.tools":              "Tools",
 		"tools.lead":                  "The services and programs {{name}} can use and lend its agents: your home, your mail, your calendar, your work tools.",
-		"tools.none":                  "No tool yet. Add one below.",
 		"tools.add":                   "Add a tool",
 		"tools.editof":                "Edit “%s”",
 		"tools.saved":                 "Tool “%s” saved. {{name}} can use it now.",
@@ -270,8 +266,6 @@ var catalogStrings = map[string]map[string]string{
 		"preset.remote.tokenhint":     "The key or token the service gave you.",
 		"preset.local.title":          "Other local program",
 		"preset.local.desc":           "An MCP server's Docker image, on one of your devices.",
-		"secrets.title":               "Advanced secrets",
-		"secrets.summary":             "What the encrypted vault holds, and what each secret is for.",
 		"secrets.lead":                "Keys and passwords are typed in each tool or provider. Here you can only replace or delete one.",
 		"secrets.ofserver":            "Tool “%s”",
 		"secrets.ofprovider":          "Provider “%s”",

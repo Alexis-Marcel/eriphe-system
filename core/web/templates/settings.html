@@ -387,6 +387,10 @@ is shown again. . is a joinWait. */}}
     <div id="password-result"></div>
   </form>
 </section>
+<details class="panel advanced" id="secrets-panel">
+  <summary><span class="adv-title">{{template "i-key"}}{{t "account.secrets"}}</span><span class="muted small">{{t "account.secretslead"}}</span></summary>
+  <div id="secrets" class="secrets">{{template "secrets-body" .Data.Secrets}}</div>
+</details>
 <p class="muted small center">eriphe-core {{ver .Build}}</p>
 {{if .Updates.Core}}<p class="small center"><a class="update-available" href="/settings/devices#updates"><b class="new-dot" aria-hidden="true"></b>{{t "update.available"}}</a></p>{{end}}
 {{end}}
