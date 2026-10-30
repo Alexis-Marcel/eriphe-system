@@ -43,6 +43,11 @@
   <h3 id="push-devices-title">{{t "push.devices"}}</h3>
   <div id="push-devices">{{template "push-devices" .}}</div>
 </section>
+
+<details class="panel advanced">
+  <summary><span class="adv-title">{{t "screen.title"}}</span><span class="muted small">{{t "screen.summary"}}</span></summary>
+  <pre class="mono small" id="screen-details"></pre>
+</details>
 {{end}}
 
 {{define "push-devices"}}
