@@ -30,6 +30,7 @@
       <input type="password" name="password" required autocomplete="current-password" {{if not .Data.SSO}}autofocus{{end}}></label>
     <button class="btn btn-primary wide" type="submit">{{t "login.submit"}}</button>
     {{else if .Data.NoOwner}}<a class="small center" href="/setup">{{t "login.nopassword"}}</a>
+    {{else if .Data.PasswordLink}}<a class="small center muted" href="/login?password=1">{{t "login.usepassword"}}</a>
     {{end}}
     {{end}}
     <p class="auth-foot">{{t "app.tagline"}}</p>

@@ -281,6 +281,9 @@ type authForm struct {
 	Password bool // the password's form
 	NoOwner  bool // the password could be used here, but there is none yet
 	Private  bool // the page for those who may not enter
+	// PasswordLink: the password is the fallback here, behind a link,
+	// while the provider is the way in.
+	PasswordLink bool
 }
 
 // loginForm is what the sign-in page offers this request.
@@ -288,6 +291,10 @@ func (w *web) loginForm(r *http.Request, si *signin) authForm {
 	f := authForm{SSO: si.cfg.mode() == modeOIDC}
 	if si.passwordHere(r) {
 		f.Password, f.NoOwner = w.hasOwner(), !w.hasOwner()
+	}
+	// With a provider, the password is only the fallback: a link opens it.
+	if f.SSO && f.Password && r.URL.Query().Get("password") == "" {
+		f.Password, f.PasswordLink = false, true
 	}
 	return f
 }
@@ -368,9 +375,9 @@ func (w *web) handleSetup(rw http.ResponseWriter, r *http.Request) {
 	http.Redirect(rw, r, "/", http.StatusSeeOther)
 }
 
-// handleLoginPage offers what opens the workspace from here: the password,
-// the provider (at once, unless the password is offered too, the settings
-// ask for a button, or the owner just signed out), or neither.
+// handleLoginPage offers what opens the workspace from here: the provider
+// (at once, unless the settings ask for a button, the owner just signed out
+// or asked for the password fallback), the password, or neither.
 func (w *web) handleLoginPage(rw http.ResponseWriter, r *http.Request) {
 	si := w.signin()
 	switch v, _ := w.decide(r, w.session(r), si); v {
@@ -386,6 +393,8 @@ func (w *web) handleLoginPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	f := w.loginForm(r, si)
 	if f.SSO && !f.Password && !f.NoOwner && !si.cfg.OIDC.Button && r.URL.Query().Get("out") == "" {
+		// the password fallback stays one link away on the provider's
+		// error page and after signing out
 		http.Redirect(rw, r, "/auth/login", http.StatusSeeOther)
 		return
 	}
