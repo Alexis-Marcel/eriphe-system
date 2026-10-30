@@ -718,14 +718,17 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 @media (prefers-color-scheme: dark) { .mark-notion, .mark-github { background: #3a3a40; } }
 /* The online tools (presets_online.go): the brand colours of Simple Icons; a light one takes a dark logo. */
 .mark-airtable { background: #18bfff; box-shadow: 0 6px 16px -8px #18bfff; }
+.mark-buffer { background: #231f20; box-shadow: 0 6px 16px -8px #231f20; }
 .mark-calcom { background: #292929; box-shadow: 0 6px 16px -8px #292929; }
 .mark-calendly { background: #006bff; box-shadow: 0 6px 16px -8px #006bff; }
 .mark-canva { background: #00c4cc; box-shadow: 0 6px 16px -8px #00c4cc; }
 .mark-cloudflare { background: #f38020; box-shadow: 0 6px 16px -8px #f38020; }
 .mark-dropbox { background: #0061ff; box-shadow: 0 6px 16px -8px #0061ff; }
 .mark-evernote { background: #00a82d; box-shadow: 0 6px 16px -8px #00a82d; }
+.mark-hootsuite, .mark-hootsuite-inbox { background: #ff4c46; box-shadow: 0 6px 16px -8px #ff4c46; }
 .mark-huggingface { background: #ffd21e; box-shadow: 0 6px 16px -8px #ffd21e; color: #15161f; }
 .mark-intercom { background: #6afdef; box-shadow: 0 6px 16px -8px #6afdef; color: #15161f; }
+.mark-make { background: #6d00cc; box-shadow: 0 6px 16px -8px #6d00cc; }
 .mark-miro { background: #050038; box-shadow: 0 6px 16px -8px #050038; }
 .mark-netlify { background: #00c7b7; box-shadow: 0 6px 16px -8px #00c7b7; }
 .mark-paypal { background: #002991; box-shadow: 0 6px 16px -8px #002991; }
@@ -739,10 +742,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .mark-webflow { background: #146ef5; box-shadow: 0 6px 16px -8px #146ef5; }
 .mark-wix { background: #0c6efc; box-shadow: 0 6px 16px -8px #0c6efc; }
 .mark-zapier { background: #ff4f00; box-shadow: 0 6px 16px -8px #ff4f00; }
-@media (prefers-color-scheme: dark) { .mark-calcom, .mark-miro, .mark-vercel { background: #3a3a40; } }
+@media (prefers-color-scheme: dark) { .mark-buffer, .mark-calcom, .mark-miro, .mark-vercel { background: #3a3a40; } }
 /* Without a logo in Simple Icons: a neutral letter mark. */
-.mark-attio, .mark-context7, .mark-exa, .mark-fastmail, .mark-fireflies, .mark-gamma, .mark-granola, .mark-jam,
-.mark-mem, .mark-mercury, .mark-monday, .mark-otter, .mark-ramp, .mark-raindrop, .mark-readwise, .mark-tldv {
+.mark-attio, .mark-beehiiv, .mark-context7, .mark-exa, .mark-fastmail, .mark-fireflies, .mark-gamma, .mark-granola, .mark-jam,
+.mark-kit, .mark-mem, .mark-mercury, .mark-metricool, .mark-monday, .mark-otter, .mark-ramp, .mark-raindrop, .mark-readwise,
+.mark-tldv, .mark-typefully {
   background: linear-gradient(135deg, #64748b 0%, #3f4a5c 100%); box-shadow: 0 6px 16px -8px #3f4a5c;
 }
 

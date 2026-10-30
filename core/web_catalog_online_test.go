@@ -87,6 +87,11 @@ func TestOnlineCatalog(t *testing.T) {
 		{"mercury", []string{"read", "offline_access", "transactions:request", "transfers:request", "categories:create",
 			"categories:edit", "transactions:update", "budgets:manage"}, "[read offline_access]"},
 		{"todoist", []string{"data:read_write"}, "[data:read]"},
+		{"buffer", []string{"posts:read", "posts:write", "ideas:read", "ideas:write", "account:read", "account:write", "insights:read",
+			"engagements:read", "engagements:write", "snippets:read", "snippets:write", "channels:write"},
+			"[account:read posts:read ideas:read insights:read engagements:read]"},
+		{"metricool", []string{"mcp:read", "mcp:write"}, "[mcp:read]"},
+		{"beehiiv", []string{"read", "write", "openid", "email"}, "[read openid email]"},
 		{"huggingface", []string{"openid", "profile", "read-mcp", "read-repos", "jobs", "contribute-repos", "inference-api"},
 			"[openid profile read-mcp read-repos]"},
 	} {
@@ -102,7 +107,8 @@ func TestOnlineCatalog(t *testing.T) {
 	for _, tc := range []struct {
 		preset string
 		found  []string
-	}{{"stripe", []string{"mcp"}}, {"granola", []string{"mcp"}}, {"fastmail", []string{"https://www.fastmail.com/dev/mcp", "offline_access"}}} {
+	}{{"stripe", []string{"mcp"}}, {"granola", []string{"mcp"}}, {"fastmail", []string{"https://www.fastmail.com/dev/mcp", "offline_access"}},
+		{"typefully", []string{"full_access"}}, {"hootsuite", []string{"offline"}}, {"kit", []string{"public"}}, {"make", nil}} {
 		if _, granted := scopesFor(tc.preset, accessReadOnly, tc.found, false); granted != grantedNone {
 			t.Errorf("%s: %s", tc.preset, granted)
 		}
@@ -129,12 +135,15 @@ func TestGalleryCatalog(t *testing.T) {
 		return html.UnescapeString(body[i : i+j])
 	}
 	for id, want := range map[string][]string{
-		"todoist":  {"ajouté", "lecture seule possible"},
-		"evernote": {"payant", "lecture seule possible"},
-		"dropbox":  {"bêta"},
-		"exa":      {"sans compte"},
-		"strava":   {"ne fait que lire"},
-		"stripe":   {"Paiements, clients et factures Stripe."},
+		"todoist":   {"ajouté", "lecture seule possible"},
+		"evernote":  {"payant", "lecture seule possible"},
+		"dropbox":   {"bêta"},
+		"exa":       {"sans compte"},
+		"strava":    {"ne fait que lire"},
+		"stripe":    {"Paiements, clients et factures Stripe."},
+		"buffer":    {"lecture seule possible"},
+		"kit":       {"payant"},
+		"hootsuite": {"payant"},
 	} {
 		for _, w := range want {
 			if !strings.Contains(tile(id), w) {
@@ -150,7 +159,11 @@ func TestGalleryCatalog(t *testing.T) {
 	if !strings.Contains(body, `data-search="todoist todoist tâches et projets dans todoist. tâches &amp; notes todo to-do taches tasks"`) {
 		t.Error("the search words of a tile")
 	}
-	for _, not := range []string{"Figma, Slack, Asana", "ClickUp"} {
+	// A social tool is found by the networks it reaches.
+	if !strings.Contains(body, `data-search="buffer buffer posts, programmation, stats et commentaires, par buffer. réseaux &amp; newsletters linkedin instagram`) {
+		t.Error("the search words of a social tool")
+	}
+	for _, not := range []string{"Figma, Slack, Asana", "ClickUp", "Articles Substack, Medium, Reddit"} {
 		if !strings.Contains(body, not) {
 			t.Errorf("the services not possible yet lack %s", not)
 		}
@@ -168,6 +181,12 @@ func TestGalleryCatalog(t *testing.T) {
 	if !strings.Contains(html.UnescapeString(body), "Le jeton suit ce choix") || !strings.Contains(body, "Se connecter à Dropbox") ||
 		!strings.Contains(body, "bêta") {
 		t.Error("dropbox's page")
+	}
+	// Buffer's page names the networks it reaches.
+	_, body, _ = tw.do("GET", "/settings/tools/new?preset=buffer", nil, nil)
+	if b := html.UnescapeString(body); !strings.Contains(b, "atteint Instagram, Facebook, LinkedIn, X, Threads, TikTok, YouTube, Pinterest, Bluesky, Mastodon et les Notes Substack") ||
+		!strings.Contains(b, "Le jeton suit ce choix") || !strings.Contains(b, "Se connecter à Buffer") {
+		t.Error("buffer's page")
 	}
 	_, body, _ = tw.do("GET", "/settings/tools/new?preset=stripe", nil, nil)
 	if !strings.Contains(html.UnescapeString(body), "ne propose pas de jeton en lecture seule") {

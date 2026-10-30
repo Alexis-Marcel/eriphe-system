@@ -241,7 +241,12 @@ var tokenScopes = map[string]scopeSet{
 	// jobs and inference-api spend the account's credits: not a read.
 	"huggingface": {read: []string{"openid", "profile", "read-mcp", "read-repos"},
 		write: []string{"openid", "profile", "read-mcp", "read-repos", "contribute-repos", "jobs", "inference-api"}},
-	"airtable": {byName: true}, "calendly": {byName: true}, "canva": {byName: true}, "dropbox": {byName: true},
+	// Its read set has account:read: the channels of a post are the account's.
+	"buffer": {read: []string{"account:read", "posts:read", "ideas:read", "insights:read", "engagements:read"},
+		write: []string{"account:read", "posts:read", "posts:write", "ideas:read", "ideas:write", "insights:read",
+			"engagements:read", "engagements:write"}},
+	"metricool": {read: []string{"mcp:read"}, write: []string{"mcp:read", "mcp:write"}},
+	"airtable":  {byName: true}, "beehiiv": {byName: true}, "calendly": {byName: true}, "canva": {byName: true}, "dropbox": {byName: true},
 	"evernote": {byName: true}, "gamma": {byName: true}, "jam": {byName: true}, "mem": {byName: true},
 	"mercury": {byName: true}, "miro": {byName: true}, "netlify": {byName: true}, "raindrop": {byName: true},
 	"ramp": {byName: true}, "readwise": {byName: true}, "sentry": {byName: true}, "supabase": {byName: true},

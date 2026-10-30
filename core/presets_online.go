@@ -19,7 +19,7 @@ import (
 // possible"). Their address can still be given to "Autre service".
 
 // Categories of the gallery, in its order.
-var toolCategories = []string{"tasks", "mail", "files", "meetings", "design", "dev", "web", "finance", "automation", "home", "other"}
+var toolCategories = []string{"tasks", "mail", "files", "meetings", "design", "dev", "web", "social", "finance", "automation", "home", "other"}
 
 type onlineService struct {
 	id, title, url, cat string
@@ -140,6 +140,41 @@ var onlineServices = []onlineService{
 		fr: [3]string{"Ton CRM : contacts, entreprises, affaires.", "Attio : mes contacts et affaires"},
 		en: [3]string{"Your CRM: people, companies, deals.", "Attio: my contacts and deals"}},
 
+	// Social networks and newsletters. The networks themselves (LinkedIn,
+	// Meta, X, TikTok, YouTube) host no MCP server: these services post
+	// through their own approved apps.
+	{id: "buffer", title: "Buffer", url: "https://mcp.buffer.com/mcp", cat: "social",
+		fr: [3]string{"Posts, programmation, stats et commentaires, par Buffer.", "Buffer : mes posts, leurs stats et commentaires",
+			"Par ton compte Buffer, {{name}} atteint Instagram, Facebook, LinkedIn, X, Threads, TikTok, YouTube, Pinterest, Bluesky, Mastodon et les Notes Substack."},
+		en: [3]string{"Posts, scheduling, stats and comments, through Buffer.", "Buffer: my posts, their stats and comments",
+			"Through your Buffer account, {{name}} reaches Instagram, Facebook, LinkedIn, X, Threads, TikTok, YouTube, Pinterest, Bluesky, Mastodon and Substack Notes."}},
+	{id: "typefully", title: "Typefully", url: "https://mcp.typefully.com/mcp", cat: "social",
+		fr: [3]string{"Brouillons et posts pour X, LinkedIn, Threads, Bluesky, Mastodon.", "Typefully : mes brouillons et posts",
+			"Écrire ou programmer demande un abonnement Typefully payant."},
+		en: [3]string{"Drafts and posts for X, LinkedIn, Threads, Bluesky, Mastodon.", "Typefully: my drafts and posts",
+			"Writing or scheduling needs a paid Typefully plan."}},
+	{id: "hootsuite", title: "Hootsuite", url: "https://mcp.hootsuite.com/perch", cat: "social", paid: true,
+		fr: [3]string{"Publier et suivre les stats, par Hootsuite.", "Hootsuite : publier et suivre mes stats",
+			"Les commentaires et messages sont dans Hootsuite Inbox, un outil à part."},
+		en: [3]string{"Publish and follow the stats, through Hootsuite.", "Hootsuite: publish and follow my stats",
+			"Comments and messages are in Hootsuite Inbox, a tool of its own."}},
+	{id: "hootsuite-inbox", title: "Hootsuite Inbox", url: "https://mcp.hootsuite.com/nest", cat: "social", paid: true,
+		fr: [3]string{"Commentaires et messages de tes réseaux, par Hootsuite.", "Hootsuite Inbox : mes commentaires et messages"},
+		en: [3]string{"Comments and messages of your networks, through Hootsuite.", "Hootsuite Inbox: my comments and messages"}},
+	{id: "metricool", title: "Metricool", url: "https://ai.metricool.com/mcp", cat: "social",
+		fr: [3]string{"Programmation et stats de tes réseaux, par Metricool.", "Metricool : mes posts et stats"},
+		en: [3]string{"Scheduling and stats of your networks, through Metricool.", "Metricool: my posts and stats"}},
+	{id: "beehiiv", title: "Beehiiv", url: "https://mcp.beehiiv.com/mcp", cat: "social",
+		fr: [3]string{"Newsletter Beehiiv : posts, abonnés, stats.", "Beehiiv : ma newsletter, abonnés et stats",
+			"Le plan gratuit ne permet que de lire ; les brouillons demandent un plan payant. L'envoi se fait dans Beehiiv."},
+		en: [3]string{"Beehiiv newsletter: posts, subscribers, stats.", "Beehiiv: my newsletter, subscribers and stats",
+			"The free plan reads only; drafts need a paid plan. Sending is done in Beehiiv."}},
+	{id: "kit", title: "Kit", url: "https://app.kit.com/mcp", cat: "social", paid: true,
+		fr: [3]string{"Newsletter Kit (ConvertKit) : abonnés, envois, stats.", "Kit : ma newsletter, abonnés et envois",
+			"Plans Kit payants (Creator, Pro). L'envoi se confirme dans Kit."},
+		en: [3]string{"Kit (ConvertKit) newsletter: subscribers, broadcasts, stats.", "Kit: my newsletter, subscribers and broadcasts",
+			"Paid Kit plans (Creator, Pro). Sending is confirmed in Kit."}},
+
 	// Payments and finance.
 	{id: "stripe", title: "Stripe", url: "https://mcp.stripe.com", cat: "finance",
 		fr: [3]string{"Paiements, clients et factures Stripe.", "Stripe : paiements, clients et factures"},
@@ -158,6 +193,10 @@ var onlineServices = []onlineService{
 	{id: "zapier", title: "Zapier", url: "https://mcp.zapier.com/api/mcp/mcp", cat: "automation",
 		fr: [3]string{"Des actions dans des milliers d'applis, par Zapier.", "Zapier : des actions dans mes autres applis", "Les actions que {{name}} peut faire se choisissent chez Zapier."},
 		en: [3]string{"Actions in thousands of apps, through Zapier.", "Zapier: actions in my other apps", "The actions {{name}} may take are picked at Zapier."}},
+
+	{id: "make", title: "Make", url: "https://mcp.make.com/mcp", cat: "automation",
+		fr: [3]string{"Tes scénarios Make, lancés comme des actions.", "Make : lancer mes scénarios", "{{name}} voit les scénarios que tu lui donnes chez Make."},
+		en: [3]string{"Your Make scenarios, run as actions.", "Make: run my scenarios", "{{name}} sees the scenarios you give it at Make."}},
 
 	// Other.
 	{id: "strava", title: "Strava", url: "https://mcp.strava.com/mcp", cat: "other", readsOnly: true,

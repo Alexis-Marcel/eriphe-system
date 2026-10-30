@@ -115,7 +115,8 @@ func TestGallery(t *testing.T) {
 	}
 	want = append(want, "Tâches &amp; notes</h4>", "<b>Linear</b>", "<b>Notion</b>", "<b>Todoist</b>",
 		"Mail &amp; agenda</h4>", "<b>Mails</b>", "<b>Agenda</b>", "<b>Fastmail</b>", "Fichiers</h4>", "<b>Google Drive</b>", "<b>Dropbox</b>",
-		"Développement</h4>", "<b>GitHub</b>", "Maison</h4>", "<b>Home Assistant</b>",
+		"Développement</h4>", "<b>GitHub</b>", "Réseaux &amp; newsletters</h4>", "<b>Buffer</b>", "<b>Kit</b>",
+		"Automatisation</h4>", "<b>Zapier</b>", "<b>Make</b>", "Maison</h4>", "<b>Home Assistant</b>",
 		`Pas trouvé ? <a href="/settings/tools/add/other" data-finder-paste>Colle son adresse</a>`, "Pas dans la liste ?</h4>",
 		"<b>Autre programme local</b>", "<b>Autre service en ligne</b>", "Pas encore possible</summary>")
 	for _, w := range want {
