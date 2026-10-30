@@ -187,56 +187,70 @@ run() {
 	fi
 	settings
 	check_places
+	# A first install takes the current images, even if older ones with the
+	# same tag are already on this machine; a restart never updates.
+	PULL=missing UPDATE_BY=loop FIRST=''
+	[ -f "$CONF/install.conf" ] || PULL=always FIRST=1
 	mkdir -p "$CONF"
 	chmod 700 "$CONF"
-	INFO=$(host_docker)
+	say ""
+	if [ -n "$FIRST" ] && [ "$MODE" = node ]; then
+		say "Connecting this machine to $ASSISTANT"
+	elif [ -n "$FIRST" ]; then
+		say "Installing Eriphe on this machine"
+	else
+		say "Starting Eriphe on this machine"
+	fi
+	say ""
+	on_steps host_docker
+	INFO=$OUT
 	settle
 	version=$(info docker_version)
 	isolated=1
 	if [ "${version%%.*}" -lt 28 ] 2>/dev/null; then
-		warn "Docker $version is older than 28: the tasks' network cannot hide this machine's own services (update Docker)"
+		notice "Docker on this machine is older than version 28: update it, so that tasks cannot reach this machine's own services."
 		isolated=0
 	fi
-	# A first install takes the current images, even if older ones with the
-	# same tag are already on this machine; a restart never updates.
-	PULL=missing UPDATE_BY=loop
-	[ -f "$CONF/install.conf" ] || PULL=always
-	out=$(host_up "$(info docker_gid)" "$isolated")
-	summary "$out"
+	on_steps host_up "$(info docker_gid)" "$isolated"
+	summary "$OUT"
 	loop
 }
 
+# summary OUT: as install.sh's outcome, for this container's log.
 summary() {
 	addr=$(lan_address)
-	addr=${addr:-<this machine>}
+	addr=${addr:-<this-machine>}
 	say ""
 	if [ "$MODE" = core ]; then
 		code=$(printf '%s\n' "$1" | sed -n 's/^setup_code=//p')
-		say "eriphe-core runs here, with node $NAME."
-		say "  Workspace: https://$addr:$WEB_PORT"
 		if [ -n "$code" ]; then
-			say "  First sign-in: open https://$addr:$WEB_PORT/setup and give the setup code $code"
-			say "  (it creates your password; the wizard that follows names your assistant and connects its AI account)."
+			para "Done: Eriphe runs on this machine. To finish, open this address in your browser and give the setup code:"
+			say ""
+			say "  https://$addr:$WEB_PORT/setup"
+			say "  Setup code: $code"
+			notice "then the browser asks you to name your assistant and connect its AI account."
 		else
-			say "  Already set up: sign in with your password."
+			para "Eriphe runs on this machine: https://$addr:$WEB_PORT"
 		fi
-		say "  Other devices join it at http://$addr:$API_PORT (Connect a device, in the workspace)."
+		notice "to connect your other computers, open Settings > Devices > Connect a device in your browser."
+	elif [ -n "$FIRST" ]; then
+		para "Done: this machine is connected to $ASSISTANT. Go back to your browser: it now appears in Devices."
 	else
-		say "eriphe-node runs here as $NAME and is connected to eriphe-core."
+		para "This machine is connected to $ASSISTANT."
 	fi
 	if [ "$PIN" = edge ]; then
-		say "On edge: it follows main, not the releases (ERIPHE_VERSION=latest follows the releases)."
+		notice "it follows main, the version in development (ERIPHE_VERSION=latest follows the releases)."
 	elif [ -n "$PIN" ]; then
-		say "Pinned to $PIN: it stays on that version (ERIPHE_VERSION=latest follows the releases)."
-	else
-		say "It updates itself when you click Update in the workspace (Settings, Devices)."
+		notice "it stays on version $PIN (ERIPHE_VERSION=latest follows the releases)."
 	fi
-	if [ -n "$SHARES" ]; then
-		say "  Places shared with Eriphe: $(printf '%s' "$SHARES" | sed 's/=[^,]*//g; s/,/, /g') (Settings > Folders, in the workspace)."
-	else
-		say "  No place shared with Eriphe: set ERIPHE_SHARES (shares=/mnt/user) to give it folders."
-	fi
-	say "Logs: docker logs eriphe-core, docker logs eriphe-node, and this container's for the updates."
+	[ -n "$SHARES" ] ||
+		notice "Eriphe cannot open this machine's folders yet: set ERIPHE_SHARES (shares=/mnt/user) to give it some."
+	good_to_know
+	say ""
+	logs="docker logs eriphe-node"
+	[ "$MODE" != core ] || logs="docker logs eriphe-core, $logs"
+	say "Logs: $logs (updates: docker logs ${SELF_NAME:-eriphe})"
+	say ""
 }
 
 # loop: the updater, as install.sh's systemd units run it: when a request
@@ -399,8 +413,7 @@ local_update() {
 	fi
 	for t in core node; do
 		[ -f "$DATA/$t/update-status" ] || continue
-		say "$t: $(status_of "$t" action) $(status_of "$t" outcome)$(m=$(status_of "$t" message) && [ -n "$m" ] && printf ' (%s)' "$m")"
-		say "  from $(status_of "$t" from) to $(status_of "$t" to)"
+		say "eriphe-$t: $(show_status <"$DATA/$t/update-status")"
 	done
 	# Last: this container is replaced, which ends this command.
 	[ "$1" = rollback ] || [ -z "$to" ] || self_update "$to"
@@ -417,8 +430,10 @@ uninstall() {
 	*) die "uninstall takes --data, to remove the data too" ;;
 	esac
 	discover
+	say "Removing Eriphe from this machine"
+	say ""
 	if [ -f "$CONF/compose.yaml" ]; then
-		say "Removing the containers..."
+		note "Removing the containers..."
 		dc down --remove-orphans >/dev/null 2>&1 || true
 	fi
 	ids=$(docker ps -aq --filter label=eriphe.task; docker ps -aq --filter label=eriphe.service)
@@ -432,14 +447,22 @@ uninstall() {
 		[ -z "$refs" ] || docker image rm $refs >/dev/null 2>&1 || true
 	done
 	if [ -n "$purge" ]; then
-		say "Removing Eriphe's data ($HOST_DATA)..."
+		note "Removing Eriphe's data ($HOST_DATA)..."
 		find "$DATA" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 	fi
 	mkdir -p "$CONF"
 	echo "eriphe-launcher uninstall, $(date)" >"$CONF/uninstalled"
-	say "Eriphe is removed. Remove this container now: docker rm -f $SELF_NAME (Unraid: Docker, $SELF_NAME, Remove)."
-	[ -n "$purge" ] || say "Its data stays in $HOST_DATA: delete the folder to remove it too."
-	say "The node stays known to eriphe-core: Forget it on its card if it joined another machine."
+	step Removed
+	say ""
+	if [ -n "$purge" ]; then
+		say "Eriphe and its data were removed from this machine."
+	else
+		say "Eriphe was removed from this machine."
+		notice "its data stays in $HOST_DATA: delete that folder to remove it too."
+	fi
+	para "Last step: remove this container, docker rm -f $SELF_NAME (on Unraid: Docker, $SELF_NAME, Remove)."
+	notice "if it was connected to Eriphe on another computer, forget it there too: Settings > Devices, in your browser."
+	good_to_know
 	docker update --restart no "$SELF" >/dev/null 2>&1 || true
 	docker stop -t 2 "$SELF" >/dev/null 2>&1 || true
 }
