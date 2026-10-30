@@ -135,6 +135,8 @@ func openStore(path string) (*Store, error) {
 	// for one that is offline now.
 	db.Exec(`ALTER TABLE tasks ADD COLUMN pending_reason TEXT NOT NULL DEFAULT ''`)
 	db.Exec(`ALTER TABLE messages ADD COLUMN via TEXT NOT NULL DEFAULT ''`)
+	// Added with the sign-in modes: how a session was opened (web_signin.go).
+	db.Exec(`ALTER TABLE web_sessions ADD COLUMN via TEXT NOT NULL DEFAULT 'password'`)
 	// Added with the tool catalog: what a task may use of it.
 	db.Exec(`ALTER TABLE tasks ADD COLUMN tools TEXT NOT NULL DEFAULT ''`)
 	// Added with folders: the user's folders a task may read (folders.go).

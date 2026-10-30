@@ -7,6 +7,7 @@
 //	eriphe-core join-token -config core.json -name pc            # prints how to join a new node
 //	eriphe-core join-token -config core.json -name pc -rejoin    # lets node pc join again
 //	eriphe-core join-token -data /data -name pc -quiet           # prints the token alone
+//	eriphe-core auth reset                                       # the workspace's sign-in back to the password
 package main
 
 import (
@@ -36,6 +37,10 @@ var version = "dev"
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "join-token" {
 		joinTokenCommand(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "auth" {
+		authCommand(os.Args[2:]) // web_signin.go
 		return
 	}
 	path := flag.String("config", "", "configuration file (without one, defaults in -data)")

@@ -374,6 +374,7 @@ is shown again. . is a joinWait. */}}
     <button type="submit" name="lang" value="en" {{if eq .Lang "en"}}aria-pressed="true"{{else}}aria-pressed="false"{{end}}>English</button>
   </form>
 </section>
+{{template "signin" .Data}}
 <section class="panel" aria-labelledby="pw-title">
   <h3 id="pw-title">{{t "account.password"}}</h3>
   <form class="stack-form" hx-post="/settings/password" hx-target="#password-result" data-reset>
@@ -387,6 +388,63 @@ is shown again. . is a joinWait. */}}
 <p class="muted small center">eriphe-core {{ver .Build}}</p>
 {{if .Updates.Core}}<p class="small center"><a class="update-available" href="/settings/devices#updates"><b class="new-dot" aria-hidden="true"></b>{{t "update.available"}}</a></p>{{end}}
 {{end}}
+
+{{define "signin"}}
+<section class="panel" aria-labelledby="signin-title">
+  <h3 id="signin-title">{{t "signin.title"}}{{if .Locked}} {{template "src-tag" "config"}}{{end}}</h3>
+  <p class="muted small">{{t "signin.lead"}}</p>
+  {{if .Result}}<p class="{{if .TrialOK}}ok-note{{else}}alert{{end}}" role="status">{{if eq .Result "ok"}}{{tf "signin.trial.ok" .Who}}{{else if eq .Result "notallowed"}}{{tf "signin.trial.notallowed" .Who .Sub}}{{else}}{{t "signin.trial.failed"}}{{end}}</p>{{end}}
+  <form class="stack-form signin-form" hx-post="/settings/signin" hx-target="#signin-result">
+    <fieldset class="choices" {{if .Locked}}disabled{{end}}><legend>{{t "signin.mode"}}</legend>
+      <div class="choice-row">
+        {{range list "password" "oidc" "proxy" "none"}}<label class="choice"><input type="radio" name="mode" value="{{.}}" {{if eq . $.Mode}}checked{{end}}><b>{{t (printf "signin.mode.%s" .)}}</b><small>{{t (printf "signin.mode.%s.lead" .)}}</small></label>{{end}}
+      </div>
+    </fieldset>
+    <fieldset class="choices" {{if .Locked}}disabled{{end}}>
+      <label class="field"><span>{{t "signin.external"}}</span>
+        <input type="url" name="external_url" value="{{.Cfg.ExternalURL}}" placeholder="https://eriphe.example.org" spellcheck="false" autocomplete="off" class="mono" aria-describedby="ext-h">
+        <small id="ext-h">{{t "signin.externalhint"}}{{if .Callback}} <span class="mono">{{.Callback}}</span>{{end}}</small></label>
+      <label class="field"><span>{{t "signin.unauthorized"}}</span>
+        <input type="url" name="unauthorized_url" value="{{.Cfg.UnauthorizedURL}}" placeholder="https://www.example.org" spellcheck="false" autocomplete="off" class="mono" aria-describedby="unauth-h">
+        <small id="unauth-h">{{t "signin.unauthorizedhint"}}</small></label>
+      <label class="check"><input type="checkbox" name="local_password" value="1" {{if not .Cfg.NoLocalPassword}}checked{{end}}><span><b>{{t "signin.localpw"}}</b><small>{{t "signin.localpwhint"}}{{if .Local}} {{t "signin.youarelocal"}}{{end}}</small></span></label>
+    </fieldset>
+    <fieldset class="choices" {{if .Locked}}disabled{{end}}><legend>{{t "signin.oidc"}}</legend>
+      <label class="field"><span>{{t "signin.issuer"}}</span>
+        <input type="url" name="oidc_issuer" value="{{.Cfg.OIDC.Issuer}}" placeholder="https://auth.example.org/application/o/eriphe/" spellcheck="false" autocomplete="off" class="mono"></label>
+      <label class="field"><span>{{t "signin.clientid"}}</span>
+        <input type="text" name="oidc_client_id" value="{{.Cfg.OIDC.ClientID}}" spellcheck="false" autocomplete="off" class="mono"></label>
+      <label class="field"><span>{{t "signin.secret"}}</span>
+        <input type="password" name="oidc_secret" autocomplete="new-password" placeholder="{{if .HasSecret}}{{t "signin.secretkept"}}{{end}}" aria-describedby="secret-h">
+        <small id="secret-h">{{t "signin.secrethint"}}</small></label>
+      <label class="field"><span>{{t "signin.subs"}}</span>
+        <textarea name="oidc_subs" rows="2" spellcheck="false" autocapitalize="off" class="mono">{{.Subs}}</textarea></label>
+      <label class="field"><span>{{t "signin.emails"}}</span>
+        <textarea name="oidc_emails" rows="2" spellcheck="false" autocapitalize="off" class="mono" placeholder="me@example.org" aria-describedby="emails-h">{{.Emails}}</textarea>
+        <small id="emails-h">{{t "signin.emailshint"}}</small></label>
+      <label class="check"><input type="checkbox" name="oidc_button" value="1" {{if .Cfg.OIDC.Button}}checked{{end}}><span><b>{{t "signin.button"}}</b><small>{{t "signin.buttonhint"}}</small></span></label>
+    </fieldset>
+    <div class="actions">
+      <button class="btn btn-soft sm" type="button" hx-post="/settings/signin/issuer" hx-target="#signin-result">{{t "signin.test"}}</button>
+      <button class="btn btn-soft sm" type="button" hx-post="/settings/signin/try" hx-target="#signin-result">{{t "signin.try"}}</button>
+    </div>
+    <fieldset class="choices" {{if .Locked}}disabled{{end}}><legend>{{t "signin.proxy"}}</legend>
+      <label class="field"><span>{{t "signin.header"}}</span>
+        <input type="text" name="proxy_header" value="{{or .Cfg.Proxy.Header "Remote-User"}}" spellcheck="false" autocomplete="off" class="mono"></label>
+      <label class="field"><span>{{t "signin.trusted"}}</span>
+        <textarea name="proxy_trusted" rows="2" spellcheck="false" autocapitalize="off" class="mono" placeholder="172.18.0.0/16" aria-describedby="trusted-h">{{.Trusted}}</textarea>
+        <small id="trusted-h">{{t "signin.trustedhint"}}</small></label>
+      <label class="field"><span>{{t "signin.users"}}</span>
+        <textarea name="proxy_users" rows="2" spellcheck="false" autocapitalize="off" class="mono">{{.Users}}</textarea></label>
+    </fieldset>
+    <p class="muted small">{{t "signin.reset"}} <span class="mono">docker exec eriphe-core eriphe-core auth reset</span></p>
+    {{if not .Locked}}<div class="actions"><button class="btn btn-primary" type="submit">{{t "signin.save"}}</button></div>{{end}}
+    <div id="signin-result"></div>
+  </form>
+</section>
+{{end}}
+
+{{define "signin-result"}}<p class="{{if .Data.OK}}ok-note{{else}}alert{{end}}" role="status">{{.Data.Msg}}</p>{{end}}
 
 {{define "password-result"}}<p class="{{if .Data.OK}}ok-note{{else}}alert{{end}}" role="status">{{t .Data.Msg}}</p>{{end}}
 

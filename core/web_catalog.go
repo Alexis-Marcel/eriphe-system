@@ -157,6 +157,7 @@ type oauthDone struct {
 	Status string
 	Tools  int
 	Error  string
+	Moving bool // only on the way to Next (a sign-in, web_oidc.go)
 }
 
 func (w *web) handleOAuthCallback(rw http.ResponseWriter, r *http.Request) {
