@@ -52,22 +52,24 @@ func TestWebUpdateLive(t *testing.T) {
 	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
 
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
-	hasAll(t, "before", body, `id="device-foot-pc"`, `hx-target="closest .device-foot"`)
+	hasAll(t, "before", body, `id="device-foot-pc"`, `hx-target="closest .device-foot"`, follows("/settings/devices/pc/update"))
 	hasNone(t, "before", body, "data-update-poll")
 
-	// The button answers with the card's foot, which follows the request.
+	// The button answers with the card's foot, which follows the request,
+	// and tells the rest of the page to ask again.
 	code, body, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
 	r := tw.c.pendingUpdate("node:pc")
-	if code != http.StatusOK || r == nil || hdr.Get("HX-Refresh") != "" {
+	if code != http.StatusOK || r == nil || hdr.Get("HX-Refresh") != "" || hdr.Get("HX-Trigger") != "updates-changed" {
 		t.Fatalf("update now: %d %+v %v", code, r, hdr)
 	}
 	poll := `hx-get="/settings/devices/pc/update?id=` + r.ID + `"`
 	hasAll(t, "asked", body, `id="device-foot-pc"`, poll, `hx-trigger="every 3s"`, `hx-swap="outerHTML"`,
 		"data-update-poll", "Mise à jour demandée…", "pulse-dot", "eriphe-node 0.0.1")
 	hasNone(t, "asked", body, "Mise à jour disponible", "→ 0.1.0")
+	hasNone(t, "asked", body, "updates-changed from:body")
 	state := "/settings/devices/pc/update?id=" + r.ID
-	if _, body, _ = tw.do("GET", state, nil, h); !strings.Contains(body, poll) || !strings.Contains(body, "Mise à jour demandée…") {
-		t.Fatalf("pending:\n%s", body)
+	if _, body, hdr = tw.do("GET", state, nil, h); !strings.Contains(body, poll) || !strings.Contains(body, "Mise à jour demandée…") || hdr.Get("HX-Trigger") != "" {
+		t.Fatalf("pending: %v\n%s", hdr, body)
 	}
 	// The page opened while it is pending follows it too.
 	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
@@ -85,9 +87,16 @@ func TestWebUpdateLive(t *testing.T) {
 	// Done: the new version, once, and no more asking, even before
 	// resolveUpdates drops the request.
 	setNode(t, tw.c, "pc", `{"version":"0.1.0","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"ok","to":"0.1.0"}}}`)
-	_, body, _ = tw.do("GET", state, nil, h)
-	hasAll(t, "done", body, `id="device-foot-pc"`, "eriphe-node 0.1.0", "update-done", "À jour")
-	hasNone(t, "done", body, "data-update-poll", "hx-get", "Mise à jour disponible", "pulse-dot")
+	_, body, hdr = tw.do("GET", state, nil, h)
+	hasAll(t, "done", body, `id="device-foot-pc"`, "eriphe-node 0.1.0", "update-done", "À jour", follows("/settings/devices/pc/update"))
+	hasNone(t, "done", body, "data-update-poll", "?id=", "Mise à jour disponible", "pulse-dot")
+	if hdr.Get("HX-Trigger") != "updates-changed" {
+		t.Fatalf("done: the page is not told: %v", hdr)
+	}
+	// Asked again by the page, the card follows nothing more: no event.
+	if _, body, hdr = tw.do("GET", "/settings/devices/pc/update", nil, h); hdr.Get("HX-Trigger") != "" || strings.Contains(body, "update-done") {
+		t.Fatalf("followed again: %v\n%s", hdr, body)
+	}
 	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
 	hasNone(t, "page once done", body, "data-update-poll", "update-done")
 	tw.c.resolveUpdates(mustNodes(t, tw.c))
@@ -141,9 +150,58 @@ func TestWebUpdateLiveCore(t *testing.T) {
 	// eriphe-core restarted on its new version.
 	status("ok")
 	version = "0.2.0"
-	_, body, _ = tw.do("GET", state, nil, h)
-	hasAll(t, "done", body, `id="update-core"`, "0.2.0", "update-done", `hx-select="#devices-grid"`)
+	_, body, hdr := tw.do("GET", state, nil, h)
+	hasAll(t, "done", body, `id="update-core"`, "0.2.0", "update-done", follows("/settings/updates/core"))
 	hasNone(t, "done", body, "data-update-poll", "Mise à jour disponible")
+	// The cards and "Update all" ask again: the nodes can follow it.
+	if hdr.Get("HX-Trigger") != "updates-changed" {
+		t.Fatalf("done: the page is not told: %v", hdr)
+	}
+}
+
+// follows is how a part of the updates' page asks again when told.
+func follows(path string) string {
+	return `hx-get="` + path + `" hx-trigger="updates-changed from:body" hx-swap="outerHTML"`
+}
+
+// One card's request reaches the others and "Update all": eriphe-core's
+// update lets the nodes' buttons go, and each request made lowers the
+// count of "Update all", which goes once one machine is left.
+func TestWebUpdateOthersFollow(t *testing.T) {
+	tw, h := newUpdatesWeb(t)
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.2.0"})
+	tw.c.updates = newUpdates(f.srv.URL)
+	tw.c.updates.check(context.Background())
+	for _, n := range []string{"pc", "nas"} {
+		setNode(t, tw.c, n, `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true}}`)
+	}
+	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
+	hasAll(t, "page", body, follows("/settings/updates/all"), follows("/settings/updates/core"),
+		follows("/settings/devices/pc/update"), follows("/settings/devices/nas/update"), "Tout mettre à jour")
+
+	// While eriphe-core is behind, the nodes wait for it.
+	_, body, _ = tw.do("GET", "/settings/devices/pc/update", nil, h)
+	hasAll(t, "core first", body, "→ 0.2.0", "disabled title=")
+
+	// eriphe-core asked and done: the cards, asked again, let their buttons go.
+	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"core"}}, h)
+	r := tw.c.pendingUpdate(coreMachine)
+	os.WriteFile(filepath.Join(tw.c.store.dir, "update-status"), []byte("id="+r.ID+"\naction=update\noutcome=ok\n"), 0o600)
+	version = "0.2.0"
+	tw.c.resolveUpdates(mustNodes(t, tw.c))
+	_, body, _ = tw.do("GET", "/settings/devices/pc/update", nil, h)
+	hasAll(t, "after core", body, "→ 0.2.0", `value="node:pc"`)
+	hasNone(t, "after core", body, "disabled title=")
+	_, body, _ = tw.do("GET", "/settings/updates/all", nil, h)
+	hasAll(t, "two behind", body, `id="updates-all"`, "Tout mettre à jour", follows("/settings/updates/all"))
+
+	// One card asked: one machine left, no "Update all"; that card shows its request.
+	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
+	_, body, _ = tw.do("GET", "/settings/updates/all", nil, h)
+	hasAll(t, "one behind", body, `id="updates-all"`, follows("/settings/updates/all"))
+	hasNone(t, "one behind", body, "Tout mettre à jour")
+	_, body, _ = tw.do("GET", "/settings/devices/nas/update", nil, h)
+	hasAll(t, "the other card", body, "→ 0.2.0", `value="node:nas"`)
 }
 
 // Only a known device, and only with a session.
