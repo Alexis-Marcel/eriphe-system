@@ -8,6 +8,8 @@
 //	eriphe-core join-token -config core.json -name pc -rejoin    # lets node pc join again
 //	eriphe-core join-token -data /data -name pc -quiet           # prints the token alone
 //	eriphe-core auth reset                                       # the workspace's sign-in back to the password
+//	eriphe-core auth show                                        # how one signs in, without secrets
+//	eriphe-core auth oidc -issuer … -client-id … -client-secret-stdin -allow-sub …   # an identity provider
 package main
 
 import (

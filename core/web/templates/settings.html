@@ -396,41 +396,40 @@ is shown again. . is a joinWait. */}}
   <h3 id="signin-title">{{t "signin.title"}}{{if .Locked}} {{template "src-tag" "config"}}{{end}}</h3>
   <p class="muted small">{{t "signin.lead"}}</p>
   {{if .Result}}<p class="{{if .TrialOK}}ok-note{{else}}alert{{end}}" role="status">{{if eq .Result "ok"}}{{tf "signin.trial.ok" .Who}}{{else if eq .Result "notallowed"}}{{tf "signin.trial.notallowed" .Who .Sub}}{{else}}{{t "signin.trial.failed"}}{{end}}</p>{{end}}
+  {{/* Every field stays in the form, so it saves without JavaScript; the
+       CSS (app.css, .signin-form) shows only what the chosen mode needs. */}}
   <form class="stack-form signin-form" hx-post="/settings/signin" hx-target="#signin-result">
     <fieldset class="choices" {{if .Locked}}disabled{{end}}><legend>{{t "signin.mode"}}</legend>
-      <div class="choice-row">
+      <div class="choice-row signin-modes">
         {{range list "password" "oidc" "proxy" "none"}}<label class="choice"><input type="radio" name="mode" value="{{.}}" {{if eq . $.Mode}}checked{{end}}><b>{{t (printf "signin.mode.%s" .)}}</b><small>{{t (printf "signin.mode.%s.lead" .)}}</small></label>{{end}}
       </div>
     </fieldset>
-    <fieldset class="choices" {{if .Locked}}disabled{{end}}>
-      <label class="field"><span>{{t "signin.external"}}</span>
-        <input type="url" name="external_url" value="{{.Cfg.ExternalURL}}" placeholder="https://eriphe.example.org" spellcheck="false" autocomplete="off" class="mono" aria-describedby="ext-h">
-        <small id="ext-h">{{t "signin.externalhint"}}{{if .Callback}} <span class="mono">{{.Callback}}</span>{{end}}</small></label>
-      <label class="field"><span>{{t "signin.unauthorized"}}</span>
-        <input type="url" name="unauthorized_url" value="{{.Cfg.UnauthorizedURL}}" placeholder="https://www.example.org" spellcheck="false" autocomplete="off" class="mono" aria-describedby="unauth-h">
-        <small id="unauth-h">{{t "signin.unauthorizedhint"}}</small></label>
-      <label class="check"><input type="checkbox" name="local_password" value="1" {{if not .Cfg.NoLocalPassword}}checked{{end}}><span><b>{{t "signin.localpw"}}</b><small>{{t "signin.localpwhint"}}{{if .Local}} {{t "signin.youarelocal"}}{{end}}</small></span></label>
-    </fieldset>
-    <fieldset class="choices" {{if .Locked}}disabled{{end}}><legend>{{t "signin.oidc"}}</legend>
-      <label class="field"><span>{{t "signin.issuer"}}</span>
-        <input type="url" name="oidc_issuer" value="{{.Cfg.OIDC.Issuer}}" placeholder="https://auth.example.org/application/o/eriphe/" spellcheck="false" autocomplete="off" class="mono"></label>
+    <p class="warn-note if-none" role="note">{{t "signin.none.warn"}}</p>
+    <fieldset class="choices if-oidc" {{if .Locked}}disabled{{end}}><legend>{{t "signin.oidc"}}</legend>
+      <div class="field-with-btn">
+        <label class="field"><span>{{t "signin.issuer"}}</span>
+          <input type="url" name="oidc_issuer" value="{{.Cfg.OIDC.Issuer}}" placeholder="https://auth.example.org/application/o/eriphe/" spellcheck="false" autocomplete="off" class="mono"></label>
+        <button class="btn btn-soft sm" type="button" hx-post="/settings/signin/issuer" hx-target="#signin-result">{{t "signin.test"}}</button>
+      </div>
       <label class="field"><span>{{t "signin.clientid"}}</span>
         <input type="text" name="oidc_client_id" value="{{.Cfg.OIDC.ClientID}}" spellcheck="false" autocomplete="off" class="mono"></label>
       <label class="field"><span>{{t "signin.secret"}}</span>
         <input type="password" name="oidc_secret" autocomplete="new-password" placeholder="{{if .HasSecret}}{{t "signin.secretkept"}}{{end}}" aria-describedby="secret-h">
         <small id="secret-h">{{t "signin.secrethint"}}</small></label>
       <label class="field"><span>{{t "signin.subs"}}</span>
-        <textarea name="oidc_subs" rows="2" spellcheck="false" autocapitalize="off" class="mono">{{.Subs}}</textarea></label>
+        <textarea name="oidc_subs" rows="2" spellcheck="false" autocapitalize="off" class="mono" aria-describedby="subs-h">{{.Subs}}</textarea>
+        <small id="subs-h">{{t "signin.subshint"}}</small></label>
       <label class="field"><span>{{t "signin.emails"}}</span>
         <textarea name="oidc_emails" rows="2" spellcheck="false" autocapitalize="off" class="mono" placeholder="me@example.org" aria-describedby="emails-h">{{.Emails}}</textarea>
         <small id="emails-h">{{t "signin.emailshint"}}</small></label>
       <label class="check"><input type="checkbox" name="oidc_button" value="1" {{if .Cfg.OIDC.Button}}checked{{end}}><span><b>{{t "signin.button"}}</b><small>{{t "signin.buttonhint"}}</small></span></label>
+      <label class="field"><span>{{t "signin.external"}}</span>
+        <input type="url" name="external_url" value="{{.Cfg.ExternalURL}}" placeholder="https://eriphe.example.org" spellcheck="false" autocomplete="off" class="mono" aria-describedby="ext-h">
+        <small id="ext-h">{{t "signin.externalhint"}} <span class="mono">{{or .Callback "…/auth/callback"}}</span></small></label>
+      <div class="actions"><button class="btn btn-soft sm" type="button" hx-post="/settings/signin/try" hx-target="#signin-result" aria-describedby="try-h">{{t "signin.try"}}</button></div>
+      <small id="try-h" class="muted">{{t "signin.tryhint"}}</small>
     </fieldset>
-    <div class="actions">
-      <button class="btn btn-soft sm" type="button" hx-post="/settings/signin/issuer" hx-target="#signin-result">{{t "signin.test"}}</button>
-      <button class="btn btn-soft sm" type="button" hx-post="/settings/signin/try" hx-target="#signin-result">{{t "signin.try"}}</button>
-    </div>
-    <fieldset class="choices" {{if .Locked}}disabled{{end}}><legend>{{t "signin.proxy"}}</legend>
+    <fieldset class="choices if-proxy" {{if .Locked}}disabled{{end}}><legend>{{t "signin.proxy"}}</legend>
       <label class="field"><span>{{t "signin.header"}}</span>
         <input type="text" name="proxy_header" value="{{or .Cfg.Proxy.Header "Remote-User"}}" spellcheck="false" autocomplete="off" class="mono"></label>
       <label class="field"><span>{{t "signin.trusted"}}</span>
@@ -439,9 +438,15 @@ is shown again. . is a joinWait. */}}
       <label class="field"><span>{{t "signin.users"}}</span>
         <textarea name="proxy_users" rows="2" spellcheck="false" autocapitalize="off" class="mono">{{.Users}}</textarea></label>
     </fieldset>
-    <p class="muted small">{{t "signin.reset"}} <span class="mono">docker exec eriphe-core eriphe-core auth reset</span></p>
+    <fieldset class="choices if-delegated" {{if .Locked}}disabled{{end}}><legend>{{t "signin.common"}}</legend>
+      <label class="field"><span>{{t "signin.unauthorized"}}</span>
+        <input type="url" name="unauthorized_url" value="{{.Cfg.UnauthorizedURL}}" placeholder="https://www.example.org" spellcheck="false" autocomplete="off" class="mono" aria-describedby="unauth-h">
+        <small id="unauth-h">{{t "signin.unauthorizedhint"}}</small></label>
+      <label class="check"><input type="checkbox" name="local_password" value="1" {{if not .Cfg.NoLocalPassword}}checked{{end}}><span><b>{{t "signin.localpw"}}</b><small>{{t "signin.localpwhint"}}{{if .Local}} {{t "signin.youarelocal"}}{{end}}</small></span></label>
+    </fieldset>
+    <p class="muted small unless-password">{{t "signin.reset"}} <span class="mono">docker exec eriphe-core eriphe-core auth reset</span></p>
     {{if not .Locked}}<div class="actions"><button class="btn btn-primary" type="submit">{{t "signin.save"}}</button></div>{{end}}
-    <div id="signin-result"></div>
+    <div id="signin-result" aria-live="polite"></div>
   </form>
 </section>
 {{end}}

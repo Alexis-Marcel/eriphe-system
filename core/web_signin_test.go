@@ -652,3 +652,20 @@ func TestAuthResetCommand(t *testing.T) {
 		t.Fatalf("after the command: %+v", a)
 	}
 }
+
+// The page holds every mode's fields, so it saves without JavaScript; the
+// CSS shows only the chosen mode's (app.css, .signin-form).
+func TestSigninPageModes(t *testing.T) {
+	tw, _ := oidcWeb(t, modeOIDC, nil)
+	_, body, _ := tw.do("GET", "/settings/account", nil, nil)
+	for _, want := range []string{`value="oidc" checked`, `class="choices if-oidc"`, `class="choices if-proxy"`,
+		`class="choices if-delegated"`, `class="warn-note if-none"`, `name="oidc_issuer"`, `name="proxy_trusted"`,
+		`name="unauthorized_url"`, `name="local_password"`, "Proxy qui authentifie", "(OpenID Connect)"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %s", want)
+		}
+	}
+	if n := strings.Count(body, `name="mode"`); n != 4 {
+		t.Errorf("%d mode cards", n)
+	}
+}

@@ -1225,11 +1225,34 @@ docker exec eriphe-core eriphe-core auth reset    # or: eriphe-core auth reset -
 sets the workspace's mode back to the password (its other settings stay) for the running
 eriphe-core at once. When `web.auth` is in the configuration file, change its mode there.
 
+**From the machine, too.** Whoever is root on the host owns the workspace, so the identity
+provider can also be set up there, without the page's test sign-in:
+
+```sh
+printf %s "$CLIENT_SECRET" | docker exec -i eriphe-core eriphe-core auth oidc \
+  -issuer https://auth.example.org/application/o/eriphe/ -client-id eriphe -client-secret-stdin \
+  -allow-sub 1f2e3d4c -external-url https://eriphe.example.org
+docker exec eriphe-core eriphe-core auth show     # the mode and its settings, never a secret
+```
+
+`auth oidc` reads the provider's discovery document and changes nothing if it fails. The client
+secret is read from stdin only (never from the command line, never printed) and kept in the vault
+(`vault:workspace-oidc`), as the page does; the settings are stored as the page stores them, with
+the password kept from the local network, and the running eriphe-core uses them at once. It prints
+a one-line summary with the redirect URI to register at the provider. Options: `-allow-sub` and
+`-allow-email` (comma-separated, or given again; at least one of them), `-external-url` and
+`-unauthorized-url` (kept from before when not given), `-button` (a sign-in button rather than
+going to the provider at once), and `-data dir` or `-config file`. `auth oidc` and `auth reset`
+refuse a configuration file that sets `web.auth` (change it there); `auth show` then shows the
+file's settings, and says so.
+
 > Your proxy must add `X-Forwarded-For` (Traefik, Caddy and nginx's `proxy_add_x_forwarded_for`
 > do). If the workspace is published on the internet without a proxy, turn the local password
 > off: Docker's port publishing may show every visitor with a private address.
 
-**Changing the mode keeps you in.** Settings → Account → Connexion: "Tester" reads the
+**Changing the mode keeps you in.** Settings → Account → Connexion shows the four modes as
+cards, and below them only the chosen mode's settings (the others stay in the form, so it saves
+the same without JavaScript); "Aucune" shows a warning instead. "Tester" reads the
 provider's discovery document; "Essayer la connexion" signs in once at the provider with the
 settings of the form, and tells who it signed in (with their `sub`, to copy into the allowed
 accounts). The identity provider's mode can be saved only after that test passed as an allowed
