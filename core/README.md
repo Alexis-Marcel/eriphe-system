@@ -36,7 +36,7 @@ assistant (the user chooses its name) and connects the AI account it thinks with
 (a Claude subscription's `claude setup-token`, or any other kind of Settings → Agents, with its
 usual agents). The brain starts as soon as a machine has joined.
 Nothing else is on by default: no tool, no policy rule, no identity; the catalog's tools (Home
-Assistant, GitHub, mail…) are added from Settings → Tools.
+Assistant, GitHub, mail…) are added from Settings → Accounts & tools.
 
 An installer gets a join token for the machine's own node without the workspace:
 
@@ -540,7 +540,7 @@ API: `POST /v1/tasks/{id}/answer` with `"allow": true, "always": true`): the req
 and `server.tool` is allowed without asking from then on, for any input. These are rules kept in
 eriphe-core's database (`allowed_actions`), evaluated after the file's rules (which win) and never
 above a built-in denial or a `read-only` level (the card does not offer it there). Each tool's
-access page (Settings → Tools → Access, `/settings/tools/{name}/access`) lists them, with
+access page (Settings → Accounts & tools → Access, `/settings/tools/{name}/access`) lists them, with
 "Retirer"; removing a server forgets them.
 
 **Scoped credentials.** Where the service can scope its credential, the level decides what Eriphe
@@ -677,7 +677,7 @@ for a credential itself, which is no more than git can, and the policy denies re
 
 ### The GitHub App
 
-Each user creates **their own** GitHub App, in one click, from Settings → Tools → GitHub →
+Each user creates **their own** GitHub App, in one click, from Settings → Accounts & tools → GitHub →
 "Créer l'app GitHub d'Eriphe" (GitHub's manifest flow, `web_github.go`):
 
 1. eriphe-core writes the manifest: name "Eriphe – <suffix>" (the user's name by default),
@@ -861,7 +861,7 @@ data; events are left out, since they carry what tasks said. eriphe-core logs it
 Home Assistant's Assist pipeline keeps what it understands (simple commands of the house, handled
 locally) and hands the rest to the assistant through its conversation agent (`../ha/`), which calls
 `POST /v1/voice` with its own token (and `GET /v1/voice` for the assistant's name, `{"name"}`, which
-the agent takes as its own) (Settings → Tools → Home Assistant, the page that has both
+the agent takes as its own) (Settings → Accounts & tools → Home Assistant, the page that has both
 ways: Eriphe driving the house through Home Assistant's MCP server, and the house's voice talking
 to Eriphe; only the token's hash is kept, and it can do nothing else). The sentence joins the conversation like any of mine, marked with the
 room (`[Sam 12:00 #N · voix, Bureau]`), and the brain answers it in the same thread, short and
@@ -882,7 +882,7 @@ refuses everything else, and can only create files, in `Eriphe/`. eriphe-core ru
 authorization, keeps the refresh token in the vault, and lends it to the service's environment on
 its node; it never enters a task or a task's spec.
 
-Settings → Tools → Google Drive (`/settings/drive`, `web_drive.go`, the logic in `cloud.go`):
+Settings → Accounts & tools → Google Drive (`/settings/drive`, `web_drive.go`, the logic in `cloud.go`):
 
 1. **Your Google app**: the guide, then the client JSON (or id and secret) of the user's own
    Google app ([below](#your-own-google-app)), kept in the vault.
@@ -1068,7 +1068,7 @@ task gets it. Each source keeps its own store and its own enforcement: a machine
 `folders` table and mounted by its node; a Drive folder stays in the files server's `FILES_CONFIG`,
 which eriphe-files reads and enforces itself, and is lent through that catalog tool (`tools:
 ["fichiers"]`, which reaches every Drive folder given to Eriphe), not through `folders`, which
-refuses it with that hint. Drive folders are added on Settings → Tools → Google Drive; "Ne plus
+refuses it with that hint. Drive folders are added on Settings → Accounts & tools → Google Drive; "Ne plus
 partager" in Settings → Dossiers removes either kind.
 
 **Sharing one.** Settings → Dossiers → "Partager un dossier": pick a machine, browse its places
@@ -1179,7 +1179,7 @@ compte IA", "Réessayer" (the turn that failed is given again, and a brain that 
 once) and the raw error under "Détails". One card stands for a run of failures, and while it is
 open the conversation does not show the assistant as thinking. Errors are shown one way everywhere
 (the brain, the tasks' drawers, the tools, the accounts: `problems.go`): a sentence, what to do,
-the raw text folded. Settings → Tools lists the catalog's servers with their status (ready, to connect,
+the raw text folded. Settings → Accounts & tools lists the catalog's servers with their status (ready, to connect,
 error, or waiting for a machine for a local one) and where each comes from, adds one from a list of
 presets, a catalog by category with a search (tasks and notes, mail and calendar, files, meetings,
 design, development, websites, payments, automation, home): Home Assistant, GitHub, Mails, Agenda,
@@ -1551,7 +1551,7 @@ Every field that names a secret file also takes `vault:<name>`: `token_file`, a 
 ```
 
 The workspace's entries keep their secrets here, typed in their own forms (see
-[Dynamic catalog](#dynamic-catalog-workspace)). Settings → Tools → Secrets avancés lists what the
+[Dynamic catalog](#dynamic-catalog-workspace)). Settings → Accounts & tools → Secrets avancés lists what the
 vault holds and what each secret is for, replaces or deletes one, sets a `vault:` reference of the
 configuration that has no value yet, and copies a secret file of the configuration into the vault
 in a click (then replace its path with the `vault:` reference shown); the API does the same. Values
