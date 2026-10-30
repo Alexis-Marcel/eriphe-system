@@ -35,6 +35,7 @@ func (w *web) driveRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/drive", w.auth(w.handleDrive))
 	mux.Handle("POST /settings/drive/client", w.auth(w.handleDriveClient))
 	mux.Handle("POST /settings/drive/connect", w.auth(w.handleDriveConnect))
+	mux.Handle("POST /settings/drive/test", w.auth(w.handleDriveTest)) // web_drive_check.go
 	mux.Handle("GET /settings/drive/browse", w.auth(w.handleDriveBrowse))
 	mux.Handle("POST /settings/drive/folders", w.auth(w.handleDriveAdd))
 	mux.Handle("POST /settings/drive/folders/remove", w.auth(w.handleDriveRemove))

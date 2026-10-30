@@ -68,6 +68,21 @@ A Desktop client ("installed" in the JSON) is refused: Google sends it only to l
 which a workspace on another machine cannot use. If the uploaded JSON lists redirect URIs and not
 this workspace's, the page says so.
 
+## Test the connection
+
+**Test connection** on the Google Drive page checks, without going through Google's consent:
+
+- the workspace's address: one Google takes as a redirect;
+- the client ID and secret: a code exchange with a made-up code. Google checks the client before
+  the code: `invalid_client` means an unknown client or a wrong secret, `invalid_grant` means
+  Google knows the client (and refuses the made-up code, as expected);
+- the redirect URI: the authorization request a Connect would open, without following it. Google
+  answers a redirect URI the client does not list with `redirect_uri_mismatch`, before any
+  sign-in. Any other answer, the page says to check the URI in the console;
+- once connected: the stored authorization, refreshed, then the Drive account it is for. An
+  `invalid_grant` there is an authorization Google withdrew (the 7 days of Testing, or revoked):
+  **Reconnect**.
+
 ## Testing or In production
 
 To check in the console (Audience → Publishing status), as Google words it today:
