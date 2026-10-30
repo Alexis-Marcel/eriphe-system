@@ -51,7 +51,7 @@ type web struct {
 	pages     map[string]*template.Template
 	limiter   *loginLimiter
 	testLimit *testLimiter // the tool form's connection tests
-	setup     string       // the one-time code that creates the owner's password
+	langSet   bool         // web.lang is given: it wins over the browser's language
 	trusted   bool         // served with a certificate of the configuration: HSTS
 	sessions  time.Duration
 	idle      time.Duration
@@ -70,6 +70,7 @@ func newWeb(c *core, cfg WebConfig) (*web, error) {
 	if cfg.Listen == "" {
 		cfg.Listen = "0.0.0.0:8443"
 	}
+	langSet := cfg.Lang == "fr" || cfg.Lang == "en"
 	if cfg.Lang != "en" {
 		cfg.Lang = "fr"
 	}
@@ -78,7 +79,7 @@ func newWeb(c *core, cfg WebConfig) (*web, error) {
 	}
 	w := &web{c: c, cfg: cfg, now: time.Now, limiter: newLoginLimiter(), testLimit: newTestLimiter(), wake: make(chan struct{}),
 		trusted: cfg.CertFile != "", sessions: time.Duration(cfg.SessionDays) * 24 * time.Hour, idle: 7 * 24 * time.Hour,
-		sso: newSSOState()}
+		sso: newSSOState(), langSet: langSet}
 	w.cfg.ExternalURL = strings.TrimRight(strings.TrimSpace(cfg.ExternalURL), "/")
 	if err := (&AuthConfig{ExternalURL: w.cfg.ExternalURL}).check(); err != nil {
 		return nil, fmt.Errorf("web.external_url must be an https address without a path, e.g. https://eriphe.example.org")
@@ -95,9 +96,6 @@ func newWeb(c *core, cfg WebConfig) (*web, error) {
 	}
 	if err := w.parse(); err != nil {
 		return nil, err
-	}
-	if !w.hasOwner() {
-		w.setup = setupCode()
 	}
 	w.startPush() // web_push.go
 	return w, nil
@@ -403,11 +401,32 @@ func (w *web) fragment(lang, name, block string, data any) (string, error) {
 	return buf.String(), err
 }
 
+// lang is the request's language: the browser's own choice (Settings),
+// else web.lang, else the browser's language: French when it prefers
+// French, English when it prefers another one.
 func (w *web) lang(r *http.Request) string {
 	if c, err := r.Cookie("lang"); err == nil && (c.Value == "fr" || c.Value == "en") {
 		return c.Value
 	}
-	return w.cfg.Lang
+	if w.langSet {
+		return w.cfg.Lang
+	}
+	return acceptLang(r.Header.Get("Accept-Language"), w.cfg.Lang)
+}
+
+// acceptLang is fr when an Accept-Language header's first language is
+// French, en when it is another one, and def when it names none.
+func acceptLang(h, def string) string {
+	first, _, _ := strings.Cut(h, ",")
+	first, _, _ = strings.Cut(first, ";")
+	first = strings.ToLower(strings.TrimSpace(first))
+	switch {
+	case first == "" || first == "*":
+		return def
+	case first == "fr" || strings.HasPrefix(first, "fr-"):
+		return "fr"
+	}
+	return "en"
 }
 
 // serveWeb starts the workspace's HTTPS listener.
@@ -423,8 +442,8 @@ func (c *core) serveWeb(cfg *Config) error {
 	if si := w.signin(); si.cfg.mode() != modePassword {
 		log.Printf("web: sign-in: %s (eriphe-core auth reset goes back to the password)", si.cfg.mode())
 	}
-	if w.setup != "" {
-		log.Printf("web: no password yet: open https://%s/setup with the setup code %s", w.cfg.Listen, w.setup)
+	if code := w.setupCode(); code != "" {
+		log.Printf("web: no password yet: open https://%s/setup with the setup code %s", w.cfg.Listen, code)
 	}
 	handler := w.routes()
 	go w.followWaiting(nil) // push notifications of what waits for the user (web_push.go)

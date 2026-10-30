@@ -103,11 +103,23 @@ in your browser and give the setup code:
   https://192.0.2.10:8443/setup
   Setup code: ABCD-EFGH
 
-Good to know: to connect your other computers, open Settings >
-Devices > Connect a device in your browser.
+Good to know: to connect your other computers, open Réglages ›
+Appareils › Connecter un appareil (Settings › Devices › Connect a
+device) in your browser.
 
 Logs: docker logs eriphe-core, docker logs eriphe-node
 ```
+
+The workspace speaks the browser's language (French, or English for any other), so the installers
+name its menus in both. The setup code stays the same until it is used, and every run of the
+installer prints it again while there is no password; once there is one, the installer says to
+sign in instead, with the command for a [forgotten password](#forgotten-password).
+
+**Another port.** Core mode needs ports 8443 (the workspace) and 8800 (the API, for the other
+devices). The installer checks them before it installs anything and says which program holds one.
+Choose others with `--web-port 9443 --api-port 9800` (`-WebPort 9443 -ApiPort 9800` on Windows, or
+`$env:ERIPHE_WEB_PORT='9443'; $env:ERIPHE_API_PORT='9800'` before `irm | iex`); they are kept for
+the next runs, and the commands of "Connect a device" give the API's port.
 
 The installers show only that: a title, short steps, the outcome, what is good to know, and where
 the logs are. A password (`sudo`, macOS's) is asked once, after a sentence saying why. Everything
@@ -125,13 +137,14 @@ already runs, Eriphe also installs by starting one container, `ghcr.io/alexis-ma
 ```sh
 docker run -d --name eriphe --restart unless-stopped \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v /mnt/user/appdata/eriphe:/data \
-  -e ERIPHE_SHARES=shares=/mnt/user \
+  -v /srv/eriphe:/data \
+  -e ERIPHE_SHARES=documents=/srv/documents \
   ghcr.io/alexis-marcel/eriphe
 docker logs -f eriphe
 ```
 
-On Unraid, the template `unraid/eriphe.xml` does the same from the Docker page
+`/srv/eriphe` is Eriphe's data folder, any folder of the host (on Unraid `/mnt/user/appdata/eriphe`,
+with `ERIPHE_SHARES=shares=/mnt/user`; on Synology for instance `/volume1/docker/eriphe`). On Unraid, the template `unraid/eriphe.xml` does the same from the Docker page
 ([unraid/README.md](../unraid/README.md)).
 
 This container is the **launcher** (`install/eriphe-launcher`). It makes and keeps running the same
@@ -194,7 +207,9 @@ installs it), on macOS and on Windows.
 Open the address in a browser, from this machine or any other on the LAN. The workspace has its own
 self-signed certificate, so the browser warns the first time: accept it (its SHA-256 fingerprint is
 in eriphe-core's log, `web: new self-signed certificate … SHA-256 fingerprint …`). On the setup
-page, the setup code creates the owner's password; it works once.
+page, the setup code creates the owner's password; it works once. Until then it stays the same,
+across restarts, and `eriphe-core auth setup-code` prints it (`docker exec eriphe-core eriphe-core
+auth setup-code` in core mode on Linux, Windows' WSL or the one container).
 
 ## 3. Connect the brain
 
@@ -205,7 +220,8 @@ introduces itself by it, and the workspace, its tab title, the installed app and
 call it so. You can change it later in Settings →
 Agents. Then pick the AI account it thinks with, among all kinds shown side by side: a
 subscription (Claude: run `claude setup-token` on any computer where Claude Code is installed and
-paste the token; ChatGPT) or an API key (Anthropic, OpenAI, Google, Mistral, OpenRouter, or a custom
+paste the token into the workspace, and nowhere else: not in a conversation with an AI, which
+should never run that command for you either; ChatGPT) or an API key (Anthropic, OpenAI, Google, Mistral, OpenRouter, or a custom
 agent). Eriphe creates the account's usual agents, and your assistant starts on this machine (the
 install already joined it as a device). Agents, tools and accounts are in Settings later.
 
@@ -261,7 +277,7 @@ device" on its card: that token lets it take its name over (on Windows, add `-Re
 
 ## 5. Connect Google Drive (optional)
 
-To give Eriphe folders of a Google Drive: Settings → Tools → Add a tool → **Google Drive**.
+To give Eriphe folders of a Google Drive: Settings → Accounts & tools → Add a tool → **Google Drive**.
 
 1. Create your own Google app, once: the page lists the steps in the Google Cloud console and shows
    the exact redirect URI to paste (`https://<workspace>/oauth/callback`), with a Copy button; then
@@ -284,7 +300,7 @@ give its Google Drive folder in [Folders](#folders).
 ## 6. Connect GitHub (optional)
 
 For tasks that clone private repositories, push branches or open pull requests, and for the
-GitHub tool: Settings → Tools → GitHub → **Créer l'app GitHub d'Eriphe**.
+GitHub tool: Settings → Accounts & tools → GitHub → **Créer l'app GitHub d'Eriphe**.
 
 1. Choose the end of the app's name ("Eriphe – <name>", unique on GitHub) and, if the app should
    belong to an organization, its name. Click "Créer l'app GitHub d'Eriphe", then "Continuer sur
@@ -457,6 +473,8 @@ The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nod
 | `--labels gpu,fast` | `-Labels 'gpu,fast'` | what agents can require of this node |
 | `--ca-hash sha256:<hex>` | `-CaHash sha256:<hex>` | eriphe-core's CA, to check its certificate (`ERIPHE_CA_HASH` of the node) |
 | `--core-mode` | `-CoreMode` | run eriphe-core here, and a local node joined to it |
+| `--web-port 9443` | `-WebPort 9443` | core mode: the workspace's port (default 8443; env `ERIPHE_WEB_PORT`), kept for the next runs |
+| `--api-port 9800` | `-ApiPort 9800` | core mode: the port other devices join on (default 8800; env `ERIPHE_API_PORT`), kept; "Connect a device" gives it |
 | `--assistant-name NAME` | `-AssistantName <name>` | the assistant's name, only for what the script prints (default: Eriphe) |
 | `--version 0.2.0` | `-Version 0.2.0` | pin that release (`0.2`: its line); `edge` follows `main`; `latest` the releases again (see [the machines update themselves](#the-machines-update-themselves)) |
 | `--rollback` | `-Rollback` | go back to the version before the last update |
@@ -630,7 +648,7 @@ without Docker Desktop, and a scheduled task that starts it with Windows, logged
 `irm <url> | iex` takes no parameters: they go in `ERIPHE_*` variables, as in the commands above.
 Each parameter has its own: `-Core` `ERIPHE_CORE`, `-JoinToken` `ERIPHE_JOIN_TOKEN`, `-Name`
 `ERIPHE_NODE_NAME`, `-Labels` `ERIPHE_NODE_LABELS`, `-CaHash` `ERIPHE_CA_HASH`, `-Version`
-`ERIPHE_VERSION`, `-Distro` `ERIPHE_DISTRO`, `-AssistantName` `ERIPHE_ASSISTANT_NAME`, and `-CoreMode`, `-Rejoin`, `-Rollback`,
+`ERIPHE_VERSION`, `-Distro` `ERIPHE_DISTRO`, `-AssistantName` `ERIPHE_ASSISTANT_NAME`, `-WebPort` `ERIPHE_WEB_PORT`, `-ApiPort` `ERIPHE_API_PORT`, and `-CoreMode`, `-Rejoin`, `-Rollback`,
 `-Uninstall` `ERIPHE_CORE_MODE`, `ERIPHE_REJOIN`, `ERIPHE_ROLLBACK`, `ERIPHE_UNINSTALL` set to `1`.
 The script clears them once read, so that a later run in the same window does not take them again.
 An unknown `ERIPHE_*` variable, like an unknown parameter, stops it before it does anything.
@@ -643,6 +661,25 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -Core 'http://192.0.2.10:
 ```
 
 A parameter given wins over its variable.
+
+**When Windows blocks the command.** Microsoft Defender, SmartScreen or a company policy may stop
+`irm … | iex`: the window shows red text such as "This script contains malicious content and has
+been blocked by your antivirus software", "running scripts is disabled on this system", or a
+Defender notification that it blocked a threat. Do not turn Defender off nor add an exclusion.
+Instead, download `install.ps1` from the [latest release](https://github.com/Alexis-Marcel/eriphe-system/releases/latest)
+(the browser's download, into your Downloads folder), open it in Notepad and read it, then run it
+from an administrator PowerShell in that folder, with the same parameters as the variables you
+would have set:
+
+```powershell
+cd $HOME\Downloads
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -CoreMode
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -Core 'http://192.0.2.10:8800' -JoinToken <token> -Name pc
+```
+
+`-ExecutionPolicy Bypass` applies to that one run only. If Defender blocks the file too, stop
+there and [open an issue](https://github.com/Alexis-Marcel/eriphe-system/issues) with the message
+it shows (a false positive is reported to Microsoft from there).
 
 **Core mode** (`-CoreMode`): eriphe-core runs as a container in the distribution, with its data in
 `/var/lib/eriphe-core` there and no configuration file, and this machine's node joins it by itself.
@@ -662,7 +699,7 @@ stopped only once the new binary is there, so a failed pull changes nothing.
 again only when its image changed) and keeps the node's identity.
 
 **From the LAN to eriphe-core (core mode).** WSL 2 puts the distribution behind a NAT of its own
-that only Windows' localhost reaches. Windows forwards ports 8800 (API, nodes) and 8443
+that only Windows' localhost reaches. Windows forwards ports 8800 (API, nodes) and 8443 (or `-ApiPort`, `-WebPort`)
 (workspace) to the distribution's address with `netsh interface portproxy`, and a firewall rule,
 "Eriphe core (eriphe)", lets them in from private and domain networks. The distribution's address
 changes when WSL restarts, so the scheduled task sets the forwarding again before each start of
@@ -755,5 +792,30 @@ stops the join on purpose: copy it again from Settings → Devices.
 **The browser warns about the certificate.** Expected: the workspace's certificate is
 self-signed. Compare its fingerprint with the one in eriphe-core's log, then accept it.
 
-**Ports 8800 or 8443 are taken.** Core mode needs both on the machine; the script warns when
-something else listens there on a Mac (and stops, with Apple's container). Free them, or run eriphe-core elsewhere.
+**Ports 8800 or 8443 are taken.** Core mode needs both on the machine. The installers check them
+before they install anything and stop, naming the program that holds one: run the same command
+again with `--web-port 9443` and/or `--api-port 9800` (Windows: `-WebPort`, `-ApiPort`, or
+`ERIPHE_WEB_PORT`, `ERIPHE_API_PORT`; the one container: `-e ERIPHE_WEB_PORT=9443`), or free them.
+On a Mac in Lima's VM, the VM forwards the ports chosen; on Windows, the port forwarding and the
+firewall rule follow them.
+
+<a id="forgotten-password"></a>**Forgotten password.** On eriphe-core's machine (root on that
+machine is the owner), this forgets the workspace's password and signs every browser out, keeps
+everything else (the assistant, its memory, the devices, the accounts), and prints a new setup
+code; open `https://<address>:8443/setup` and choose a new password with it:
+
+| | |
+|---|---|
+| Linux | `sudo docker exec eriphe-core eriphe-core auth password-reset` |
+| the one container (NAS) | `docker exec eriphe-core eriphe-core auth password-reset` |
+| macOS, Apple's container | `~/.eriphe/bin/eriphe-core auth password-reset -data ~/.eriphe/core` |
+| macOS, Lima | `LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker exec eriphe-core eriphe-core auth password-reset` |
+| Windows | `wsl -d eriphe -u root -- docker exec eriphe-core eriphe-core auth password-reset` |
+
+The running eriphe-core asks for the new code at once; no restart. `eriphe-core auth setup-code`
+prints the code again while there is no password.
+
+**Eriphe on a Mac stops when you log out.** On macOS, Eriphe runs as LaunchAgents of the user who
+installed it: it starts when that user logs in and stops at logout (a restart waits for the login).
+That is fine for trying it, or on a Mac that stays logged in and awake; for an Eriphe that is
+always there, make an always-on machine its home (a NAS, a mini-PC, a server).

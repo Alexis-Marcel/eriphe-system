@@ -32,7 +32,7 @@ func TestWebAgentsOnboarding(t *testing.T) {
 		t.Error("the agent form does not send to the accounts first")
 	}
 	for kind, wants := range map[string][]string{
-		"claude-subscription":  {"claude setup-token", "environ un an", "sk-ant-oat", `value="opus"`, `value="sonnet"`, `value="haiku"`, "Abonnement"},
+		"claude-subscription":  {"claude setup-token", "environ un an", "Ne colle pas ce jeton dans une conversation avec une IA", "sk-ant-oat", `value="opus"`, `value="sonnet"`, `value="haiku"`, "Abonnement"},
 		"anthropic-api":        {"platform.claude.com", "sk-ant-api", "bill-usage"},
 		"openrouter-api":       {"openrouter.ai/settings/keys", `value="kimi"`, "Kimi K3.1 Pro"},
 		"chatgpt-subscription": {`hx-post="/settings/chatgpt-login" hx-target="#login-box" hx-swap="innerHTML"`, "code d&#39;appareil", `value="gpt"`},

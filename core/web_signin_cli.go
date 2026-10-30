@@ -18,6 +18,8 @@ import (
 //
 //	eriphe-core auth show                     # the mode and its settings, never a secret
 //	eriphe-core auth reset                    # back to the password
+//	eriphe-core auth password-reset           # forgotten password: a new setup code
+//	eriphe-core auth setup-code               # the setup code, while there is no password
 //	eriphe-core auth oidc -issuer … -client-id … -client-secret-stdin -allow-sub …
 //
 // They write what Settings → Account writes, in the same database: the
@@ -26,11 +28,16 @@ import (
 const authUsage = `usage:
   eriphe-core auth show  [-config file | -data dir]
   eriphe-core auth reset [-config file | -data dir]
+  eriphe-core auth password-reset [-config file | -data dir]
+  eriphe-core auth setup-code [-config file | -data dir]
   eriphe-core auth oidc  -issuer URL -client-id ID -client-secret-stdin -allow-sub S[,S] [-allow-email E[,E]]
                          [-external-url URL] [-unauthorized-url URL] [-button] [-config file | -data dir]
 
 show prints how one signs in to the workspace; reset sets it back to the password;
-oidc sets up an identity provider (the client secret is read from stdin).`
+password-reset forgets the password (a forgotten one) and its sessions, and prints
+a new setup code to choose another at /setup; setup-code prints the setup code
+while there is no password; oidc sets up an identity provider (the client secret
+is read from stdin).`
 
 // authCLI is what the commands read and write; the tests set them.
 type authCLI struct {
@@ -60,6 +67,10 @@ func (cli authCLI) run(args []string) error {
 		return cli.show(args[1:])
 	case "reset":
 		return cli.reset(args[1:])
+	case "password-reset":
+		return cli.passwordReset(args[1:])
+	case "setup-code":
+		return cli.setupCode(args[1:])
 	case "oidc":
 		return cli.oidc(args[1:])
 	}
@@ -126,11 +137,65 @@ func (cli authCLI) reset(args []string) error {
 		return err
 	}
 	fmt.Fprintf(cli.out, "The workspace's sign-in is the password again (it was %s). Open /login.\n", was)
-	var n int
-	store.db.QueryRow(`SELECT COUNT(*) FROM web_owner`).Scan(&n)
-	if n == 0 {
-		fmt.Fprintln(cli.out, "There is no password yet: the setup code is in eriphe-core's log.")
+	if code := pendingSetupCode(store); code != "" {
+		fmt.Fprintf(cli.out, "There is no password yet: open /setup with the setup code %s\n", code)
 	}
+	return nil
+}
+
+// passwordReset is the way back in for an owner who forgot the password:
+// root on the host is the owner. It forgets the password and every session
+// of the workspace, keeps everything else (the assistant, its memory, the
+// devices, the accounts), and makes a new setup code; the running
+// eriphe-core asks for it at /setup from the next request.
+func (cli authCLI) passwordReset(args []string) error {
+	fs, path, data := authFlags("password-reset")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	_, store, err := authStore(*path, *data)
+	if err != nil {
+		return err
+	}
+	defer store.db.Close()
+	code := newSetupCode()
+	tx, err := store.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{`DELETE FROM web_owner`, `DELETE FROM web_sessions`} {
+		if _, err := tx.Exec(q); err != nil {
+			return fmt.Errorf("cannot reset the password: %w", err)
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, setupKey, code); err != nil {
+		return fmt.Errorf("cannot reset the password: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("cannot reset the password: %w", err)
+	}
+	fmt.Fprintln(cli.out, "The workspace's password is forgotten, and every browser signed out; nothing else changed.")
+	fmt.Fprintf(cli.out, "Open the workspace at /setup (https://<its address>/setup) and choose a new password with the setup code %s\n", code)
+	return nil
+}
+
+// setupCode prints the setup code, while the owner has no password.
+func (cli authCLI) setupCode(args []string) error {
+	fs, path, data := authFlags("setup-code")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	_, store, err := authStore(*path, *data)
+	if err != nil {
+		return err
+	}
+	defer store.db.Close()
+	code := pendingSetupCode(store)
+	if code == "" {
+		return errors.New("the workspace has a password already: sign in at /login (forgotten: eriphe-core auth password-reset)")
+	}
+	fmt.Fprintln(cli.out, code)
 	return nil
 }
 

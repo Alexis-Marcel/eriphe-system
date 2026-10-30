@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,6 +126,19 @@ func defaultConfig(data string) (*Config, error) {
 	}
 	c := &Config{Listen: "0.0.0.0:8800", TokenFile: filepath.Join(data, "core-token"), DB: filepath.Join(data, "core.db"),
 		Web: &WebConfig{}, Brain: &BrainConfig{}}
+	// Other ports, for an eriphe-core that runs on the machine itself rather
+	// than in a container (install.sh --api-port, --web-port on a Mac).
+	for _, l := range []struct {
+		env string
+		to  *string
+	}{{"ERIPHE_API_LISTEN", &c.Listen}, {"ERIPHE_WEB_LISTEN", &c.Web.Listen}} {
+		if v := os.Getenv(l.env); v != "" {
+			if _, _, err := net.SplitHostPort(v); err != nil {
+				return nil, fmt.Errorf("%s=%s: give an address and a port, e.g. 0.0.0.0:9443", l.env, v)
+			}
+			*l.to = v
+		}
+	}
 	// The container's own zone, when it is given one.
 	if tz := os.Getenv("TZ"); tz != "" {
 		if _, err := time.LoadLocation(tz); err == nil {

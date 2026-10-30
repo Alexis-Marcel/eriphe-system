@@ -210,6 +210,10 @@ Usage: curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest
   --no-share          share no place any more
   --assistant-name N  the assistant's name, for what this script prints
   --core-mode         run eriphe-core here, with a node of its own
+  --web-port N        core mode: the workspace's port (default 8443, kept
+                      for the next runs; env ERIPHE_WEB_PORT)
+  --api-port N        core mode: the port other devices join on (default
+                      8800, kept; env ERIPHE_API_PORT)
   --version V         pin a release (0.2.0, or 0.2 for its fixes), edge to
                       follow main (testers), or latest: the releases again
   --rollback          go back to the version before the last update
@@ -268,6 +272,7 @@ parse_args() {
 	LABELS=${ERIPHE_NODE_LABELS:-}
 	CA_HASH=${ERIPHE_CA_HASH:-}
 	assistant=${ERIPHE_ASSISTANT_NAME:-}
+	WEB_PORT=${ERIPHE_WEB_PORT:-} API_PORT=${ERIPHE_API_PORT:-} PORT_OPT=''
 	[ -n "$LABELS" ] && LABELS_SET=1
 	while [ $# -gt 0 ]; do
 		case $1 in
@@ -279,9 +284,11 @@ parse_args() {
 			;;
 		esac
 		case $1 in
-		--core | --join-token | --name | --labels | --ca-hash | --version | --assistant-name)
+		--core | --join-token | --name | --labels | --ca-hash | --version | --assistant-name | --web-port | --api-port)
 			[ $# -ge 2 ] || die "$1 needs a value"
 			case $1 in
+			--web-port) WEB_PORT=$2 PORT_OPT=1 ;;
+			--api-port) API_PORT=$2 PORT_OPT=1 ;;
 			--assistant-name) assistant=$2 ;;
 			--core) CORE_URL=$2 ;;
 			--join-token) JOIN_TOKEN=$2 ;;
@@ -350,7 +357,52 @@ parse_args() {
 		*) die "--ca-hash is sha256:<hex>" ;;
 		esac
 	fi
+	# PORTS_SET: the ports were given, not kept from an earlier install.
+	PORTS_SET=$WEB_PORT$API_PORT
+	for p in $WEB_PORT $API_PORT; do
+		if ! printf '%s' "$p" | grep -Eq '^[1-9][0-9]{0,4}$' || [ "$p" -gt 65535 ]; then
+			die "a port is 1 to 65535, not $p"
+		fi
+	done
+	if [ "$MODE" = node ]; then
+		[ -z "$PORT_OPT" ] || die "--web-port and --api-port are for --core-mode: a node opens no port"
+		WEB_PORT='' API_PORT='' PORTS_SET=''
+	fi
 	check_shares
+}
+
+# check_ports: the workspace's and the API's ports differ.
+check_ports() {
+	[ "$WEB_PORT" != "$API_PORT" ] || die "the workspace and the API need two ports, not $WEB_PORT twice (--web-port, --api-port)"
+}
+
+# port_user PORT: the program that listens on PORT of this machine, if any
+# ("a program" when this user may not see which one); nothing if it is free.
+port_user() {
+	if [ "$OS" = Darwin ]; then
+		lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 {print $1; exit}'
+	elif command -v ss >/dev/null 2>&1; then
+		ss -Hltnp "sport = :$1" 2>/dev/null | head -n 1 | awk '{
+			if (match($0, /users:\(\("[^"]*"/)) print substr($0, RSTART + 9, RLENGTH - 10); else if (NF) print "a program" }'
+	else
+		hex=$(printf '%04X' "$1")
+		cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk -v p=":$hex" '$2 ~ p "$" && $4 == "0A" { print "a program"; exit }'
+	fi
+}
+
+# ports_free OURS: says plainly, before anything is installed, when another
+# program holds a port eriphe-core needs, and which option to use instead.
+# OURS: the name of what holds them for an earlier install of Eriphe here.
+ports_free() {
+	for p in "$WEB_PORT:--web-port:9443" "$API_PORT:--api-port:9800"; do
+		port=${p%%:*} opt=${p#*:} alt=${opt#*:} opt=${opt%:*}
+		[ -n "$port" ] || continue # not given, and kept from an earlier install
+		who=$(port_user "$port")
+		[ -n "$who" ] || continue
+		case " $1 " in *" $who "*) continue ;; esac
+		[ "$who" != "a program" ] || who="another program"
+		die "$who already uses port $port of $HERE, which Eriphe needs. Run the same command again with $opt $alt (or another free port), or stop that program"
+	done
 }
 
 # check_shares: each --share is name=/absolute/path[:ro], the name in
@@ -425,10 +477,14 @@ settle() {
 		notice "Eriphe cannot open this Mac's folders: that needs a Mac with Apple silicon and macOS 26."
 		SHARES=''
 	fi
+	[ -n "$WEB_PORT" ] || WEB_PORT=$(saved web_port)
+	[ -n "$API_PORT" ] || API_PORT=$(saved api_port)
+	WEB_PORT=${WEB_PORT:-8443} API_PORT=${API_PORT:-8800}
+	check_ports
 	if [ "$MODE" = core ]; then
 		CORE_URL=http://eriphe-core:8800
 		# eriphe-core on the Mac itself, next to the node.
-		[ -z "$NATIVE" ] || CORE_URL=http://127.0.0.1:8800
+		[ -z "$NATIVE" ] || CORE_URL=http://127.0.0.1:$API_PORT
 	fi
 	printf '%s' "$NAME" | grep -Eq '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$' ||
 		die "the node's name is lowercase letters, digits and dashes: --name pc"
@@ -654,6 +710,8 @@ labels=$LABELS
 ca_hash=$CA_HASH
 version=$PIN
 shares=$SHARES
+web_port=$WEB_PORT
+api_port=$API_PORT
 EOF
 }
 
@@ -1097,7 +1155,16 @@ fi
 docker logs eriphe-node 2>&1 | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-node: /'
 if [ "$MODE" = core ]; then
   echo "eriphe-step: Started"
-  code=$(docker logs eriphe-core 2>&1 | sed -n 's/.*with the setup code \([A-Za-z0-9-]*\).*/\1/p' | tail -n 1)
+  # The setup code, while there is no password (kept until it is used); an
+  # older eriphe-core has no auth setup-code: its log says it.
+  if code=$(docker exec eriphe-core eriphe-core auth setup-code 2>"$CONF/setup-code.err"); then
+    code=$(printf '%s' "$code" | tr -d '[:space:]')
+  elif grep -q 'has a password' "$CONF/setup-code.err"; then
+    code=
+  else
+    code=$(docker logs eriphe-core 2>&1 | sed -n 's/.*with the setup code \([A-Za-z0-9-]*\).*/\1/p' | tail -n 1)
+  fi
+  rm -f "$CONF/setup-code.err"
   echo "setup_code=$code" >&3
   c=eriphe-core
 else
@@ -1237,7 +1304,8 @@ lima_yaml() {
 	cat <<EOF
 # Written by install.sh. The VM Eriphe runs in: no folder of the Mac is
 # mounted, no SSH key nor agent of the Mac goes in. Only eriphe-core's ports
-# (8800, 8443), when it runs here, are forwarded, to every address of the Mac.
+# (8800 and 8443, or --api-port and --web-port), when it runs here, are
+# forwarded, to every address of the Mac.
 minimumLimaVersion: 2.0.0
 base: template:_images/ubuntu-24.04
 vmType: vz
@@ -1258,10 +1326,10 @@ ssh:
   forwardAgent: false
   forwardX11: false
 portForwards:
-- guestPort: 8800
+- guestPort: ${API_PORT:-8800}
   guestIP: 0.0.0.0
   hostIP: 0.0.0.0
-- guestPort: 8443
+- guestPort: ${WEB_PORT:-8443}
   guestIP: 0.0.0.0
   hostIP: 0.0.0.0
 - guestIP: 0.0.0.0
@@ -1276,6 +1344,12 @@ EOF
 }
 
 vm_status() { "$LIMACTL" list --format '{{.Status}}' "$VM" 2>/dev/null || true; }
+
+# lima_ports: the API's and the workspace's ports the VM forwards, as its
+# lima.yaml says ("8800 8443").
+lima_ports() {
+	sed -n 's/^- guestPort: \([0-9][0-9]*\)$/\1/p' "$LIMA_HOME/$VM/lima.yaml" 2>/dev/null | head -n 2 | tr '\n' ' ' | sed 's/ $//'
+}
 
 mac_lima() {
 	case $(uname -m) in
@@ -1316,6 +1390,15 @@ mac_vm() {
 		lima_yaml >"$ERIPHE_HOME/$VM.yaml"
 		"$LIMACTL" --tty=false create --name "$VM" "$ERIPHE_HOME/$VM.yaml" </dev/null ||
 			die "could not create Eriphe's virtual machine: run the command again"
+		status=Stopped
+	elif [ -n "$PORTS_SET" ] && [ "$(lima_ports)" != "$API_PORT $WEB_PORT" ]; then
+		# Other ports: the VM forwards them from its next start.
+		note "Forwarding ports $API_PORT and $WEB_PORT from the VM..."
+		[ "$status" != Running ] || "$LIMACTL" --tty=false stop "$VM" </dev/null
+		f=$LIMA_HOME/$VM/lima.yaml
+		awk -v a="$API_PORT" -v w="$WEB_PORT" '/^- guestPort: [0-9]+$/ && n < 2 { n++; print "- guestPort: " (n == 1 ? a : w); next } { print }' \
+			"$f" >"$f.new" && mv "$f.new" "$f"
+		lima_yaml >"$ERIPHE_HOME/$VM.yaml"
 		status=Stopped
 	fi
 	if [ "$status" != Running ]; then
@@ -1640,7 +1723,7 @@ unload() {
 mac_updater_conf() {
 	cat <<EOF
 # Written by install.sh: run it again rather than editing this file.
-E=$(q "$ERIPHE_HOME") CONTAINER=$(q "$CONTAINER") MODE=$(q "$MODE") PIN=$(q "$PIN")
+E=$(q "$ERIPHE_HOME") CONTAINER=$(q "$CONTAINER") MODE=$(q "$MODE") PIN=$(q "$PIN") API_PORT=$(q "$API_PORT")
 CORE_IMAGE=$(q "$CORE_IMAGE") NODE_IMAGE=$(q "$NODE_IMAGE") WORKER_IMAGE=$(q "$WORKER_IMAGE")
 EOF
 }
@@ -1772,7 +1855,7 @@ restart() { launchctl kickstart -k "gui/$(id -u)/org.eriphe.$1" >/dev/null 2>&1;
 healthy() {
   i=0
   if [ "$1" = core ]; then
-    until curl -fsk -o /dev/null https://127.0.0.1:8800/health || curl -fs -o /dev/null http://127.0.0.1:8800/health; do
+    until curl -fsk -o /dev/null "https://127.0.0.1:${API_PORT:-8800}/health" || curl -fs -o /dev/null "http://127.0.0.1:${API_PORT:-8800}/health"; do
       i=$((i + 2)); [ $i -lt "$HEALTH" ] || { why="eriphe-core does not answer"; return 1; }
       sleep 2
     done
@@ -1969,7 +2052,8 @@ native_up() {
 	step Downloaded
 
 	if [ "$MODE" = core ]; then
-		load "$CORE_LABEL" "$(plist "$CORE_LABEL" keep "$E/core.log" "$E/bin/eriphe-core" -data "$E/core")"
+		load "$CORE_LABEL" "$(plist "$CORE_LABEL" keep "$E/core.log" /usr/bin/env "ERIPHE_API_LISTEN=0.0.0.0:$API_PORT" \
+			"ERIPHE_WEB_LISTEN=0.0.0.0:$WEB_PORT" "$E/bin/eriphe-core" -data "$E/core")"
 		if [ ! -f "$E/node/node.json" ]; then
 			note "Waiting for eriphe-core..."
 			i=0
@@ -2022,7 +2106,13 @@ native_up() {
 	load "$UPDATE_LABEL" "$(plist "$UPDATE_LABEL" update "$E/update.log" /bin/sh "$E/update.sh")"
 	echo updater=1
 	if [ "$MODE" = core ]; then
-		echo "setup_code=$(sed -n 's/.*with the setup code \([A-Za-z0-9-]*\).*/\1/p' "$E/core.log" | tail -n 1)"
+		# The setup code, while there is no password (kept until it is used).
+		if code=$("$E/bin/eriphe-core" auth setup-code -data "$E/core" 2>"$E/setup-code.err"); then
+			echo "setup_code=$(printf '%s' "$code" | tr -d '[:space:]')"
+		elif ! grep -q 'has a password' "$E/setup-code.err"; then
+			echo "setup_code=$(sed -n 's/.*with the setup code \([A-Za-z0-9-]*\).*/\1/p' "$E/core.log" | tail -n 1)"
+		fi
+		rm -f "$E/setup-code.err"
 		echo "version=$(cat "$E/bin/eriphe-core.version" 2>/dev/null)"
 	else
 		echo "version=$(cat "$E/bin/eriphe-node.version" 2>/dev/null)"
@@ -2131,7 +2221,7 @@ do_uninstall() {
 	if [ "$was" = core ]; then
 		say "Eriphe and its data were removed from $HERE."
 	else
-		para "Eriphe was removed from $HERE. If it was connected to Eriphe on another computer, forget it there too: Settings > Devices, in your browser."
+		para "Eriphe was removed from $HERE. If it was connected to Eriphe on another computer, forget it there too: Réglages › Appareils (Settings › Devices), in your browser."
 	fi
 	good_to_know
 }
@@ -2171,17 +2261,42 @@ do_install() {
 		[ -n "$AUTO_SHARES" ] || AUTO_SHARES=1
 		[ -z "$NO_SHARE" ] || AUTO_SHARES=0
 		if [ "$MODE" = core ]; then
-			for port in 8800 8443; do
-				other=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 && $1 != "eriphe-co" {print $1; exit}')
-				[ -z "$other" ] || die "$other already listens on port $port of this Mac: eriphe-core needs it"
-			done
+			ports_free eriphe-co
 			before=$(cat "$ERIPHE_HOME/bin/eriphe-core.version" 2>/dev/null || true)
 		else
 			before=$(cat "$ERIPHE_HOME/bin/eriphe-node.version" 2>/dev/null || true)
 		fi
-	elif [ "$OS" = Darwin ]; then
-		major=$(sw_vers -productVersion | cut -d . -f 1)
-		[ "$major" -ge 13 ] || die "this Mac needs macOS 13.5 or later"
+	else
+		if [ "$OS" = Darwin ]; then
+			major=$(sw_vers -productVersion | cut -d . -f 1)
+			[ "$major" -ge 13 ] || die "this Mac needs macOS 13.5 or later"
+		fi
+		# The ports, free before anything is installed: on a new install in
+		# core mode, or when they change. The other ports, given or not, are
+		# the ones the VM forwards (on a Mac) or the saved ones (settle).
+		if [ "$OS" = Darwin ] && [ -n "$PORTS_SET" ]; then
+			now=$(lima_ports)
+			[ -n "$API_PORT" ] || API_PORT=${now%% *}
+			[ -n "$WEB_PORT" ] || WEB_PORT=${now##* }
+			API_PORT=${API_PORT:-8800} WEB_PORT=${WEB_PORT:-8443}
+			check_ports
+		fi
+		if [ -n "$PORTS_SET" ] || { [ "$MODE" = core ] && ! installed; }; then
+			web=$WEB_PORT api=$API_PORT
+			if ! installed; then
+				WEB_PORT=${WEB_PORT:-8443} API_PORT=${API_PORT:-8800}
+				check_ports
+			fi
+			if [ "$OS" = Darwin ]; then
+				ports_free limactl
+			elif installed; then
+				# Eriphe's own, through Docker; root's programs are not named to a user.
+				ports_free "docker-proxy a program"
+			else
+				ports_free ""
+			fi
+			WEB_PORT=$web API_PORT=$api
+		fi
 	fi
 
 	UPDATING=''
@@ -2229,12 +2344,26 @@ do_install() {
 		out=$OUT
 	fi
 	if [ "$OS" = Darwin ] && [ -z "$NATIVE" ] && [ "$MODE" = core ]; then
-		for port in 8800 8443; do
+		for port in "$API_PORT" "$WEB_PORT"; do
 			other=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 && $1 != "limactl" {print $1; exit}')
-			[ -z "$other" ] || notice "$other already uses port $port of this Mac: other devices cannot reach Eriphe on it."
+			[ -z "$other" ] || notice "$other already uses port $port of this Mac: other devices cannot reach Eriphe on it (--web-port and --api-port choose others)."
 		done
 	fi
 	outcome "$out"
+}
+
+# password_reset: the command that forgets a forgotten password here, and
+# prints a new setup code (eriphe-core auth password-reset).
+password_reset() {
+	if [ -n "$NATIVE" ]; then
+		printf '%s auth password-reset -data %s' "$(tilde "$ERIPHE_HOME/bin/eriphe-core")" "$(tilde "$ERIPHE_HOME/core")"
+	elif [ "$OS" = Darwin ]; then
+		printf 'LIMA_HOME=%s %s shell %s sudo docker exec eriphe-core eriphe-core auth password-reset' "$(tilde "$LIMA_HOME")" "$(tilde "$LIMACTL")" "$VM"
+	elif [ -n "${HOST_DATA:-}" ]; then
+		printf 'docker exec eriphe-core eriphe-core auth password-reset'
+	else
+		printf 'sudo docker exec eriphe-core eriphe-core auth password-reset'
+	fi
 }
 
 # outcome OUT: what was done, what to do next, where the logs are.
@@ -2259,16 +2388,18 @@ outcome() {
 			[ -n "$UPDATING" ] || done_="Done: Eriphe runs on $HERE. "
 			para "${done_}To finish, open this address in your browser and give the setup code:"
 			say ""
-			say "  https://$addr:8443/setup"
+			say "  https://$addr:$WEB_PORT/setup"
 			say "  Setup code: $code"
-		elif [ -n "$UPDATING" ]; then
-			say "Workspace: https://$addr:8443"
 		else
-			para "Done: Eriphe runs on $HERE. Open https://$addr:8443 in your browser and sign in."
+			done_=''
+			[ -n "$UPDATING" ] || done_="Done: Eriphe runs on $HERE. "
+			para "${done_}Open https://$addr:$WEB_PORT in your browser and sign in (forgotten password: $(password_reset))."
 		fi
-		[ -n "$UPDATING" ] || notice "to connect your other computers, open Settings > Devices > Connect a device in your browser."
+		[ -n "$UPDATING" ] || notice "to connect your other computers, open Réglages › Appareils › Connecter un appareil (Settings › Devices › Connect a device) in your browser."
+		[ "$OS" != Darwin ] || [ -n "$UPDATING" ] ||
+			notice "Eriphe runs on this Mac only while $(id -un) is logged in to it: it starts at login and stops at logout. For an Eriphe that is always there, prefer a machine that stays on (a NAS, a mini-PC, a server) as its home."
 	elif [ -z "$UPDATING" ]; then
-		para "Done: $HERE is connected to $ASSISTANT. Go back to your browser: it now appears in Devices."
+		para "Done: $HERE is connected to $ASSISTANT. Go back to your browser: it now appears in Appareils (Devices)."
 	fi
 	if [ "$PIN" = edge ]; then
 		notice "it follows main, the version in development (--version latest follows the releases again)."

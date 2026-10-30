@@ -448,6 +448,7 @@
   <li>{{t "steps.custom.3"}}</li>
 {{end}}
 </ol>
+{{if eq . "claude-subscription"}}<p class="alert" role="note">{{t "steps.claude.noai"}}</p>{{end}}
 {{end}}
 
 {{define "login-start"}}

@@ -100,7 +100,7 @@ func (tw *testWeb) formToken(path string) string {
 func (tw *testWeb) setup() string {
 	tw.t.Helper()
 	tok := tw.formToken("/setup")
-	code, _, h := tw.do("POST", "/setup", url.Values{"csrf": {tok}, "code": {tw.w.setup},
+	code, _, h := tw.do("POST", "/setup", url.Values{"csrf": {tok}, "code": {tw.w.setupCode()},
 		"password": {testPassword}, "confirm": {testPassword}}, nil)
 	if code != http.StatusSeeOther || h.Get("Location") != "/" {
 		tw.t.Fatalf("setup: %d %s", code, h.Get("Location"))
@@ -134,16 +134,16 @@ func TestWebSetupLoginLogout(t *testing.T) {
 		"password": {testPassword}, "confirm": {testPassword}}, nil); code != http.StatusUnauthorized {
 		t.Fatalf("wrong setup code: %d", code)
 	}
-	if code, _, _ := tw.do("POST", "/setup", url.Values{"csrf": {tok}, "code": {tw.w.setup},
+	if code, _, _ := tw.do("POST", "/setup", url.Values{"csrf": {tok}, "code": {tw.w.setupCode()},
 		"password": {"short"}, "confirm": {"short"}}, nil); code != http.StatusBadRequest {
 		t.Fatalf("short password: %d", code)
 	}
-	if code, _, _ := tw.do("POST", "/setup", url.Values{"csrf": {"forged"}, "code": {tw.w.setup},
+	if code, _, _ := tw.do("POST", "/setup", url.Values{"csrf": {"forged"}, "code": {tw.w.setupCode()},
 		"password": {testPassword}, "confirm": {testPassword}}, nil); code != http.StatusForbidden {
 		t.Fatalf("setup without CSRF: %d", code)
 	}
 	csrf := tw.setup()
-	if tw.w.setup != "" {
+	if tw.w.setupCode() != "" {
 		t.Fatal("the setup code still works after setup")
 	}
 	if hash := tw.w.ownerHash(); !strings.HasPrefix(hash, "$argon2id$") || strings.Contains(hash, testPassword) {
@@ -182,7 +182,7 @@ func TestWebSetupLoginLogout(t *testing.T) {
 func TestWebSessionCookieFlags(t *testing.T) {
 	tw := newTestWeb(t)
 	tok := tw.formToken("/setup")
-	_, _, h := tw.do("POST", "/setup", url.Values{"csrf": {tok}, "code": {tw.w.setup},
+	_, _, h := tw.do("POST", "/setup", url.Values{"csrf": {tok}, "code": {tw.w.setupCode()},
 		"password": {testPassword}, "confirm": {testPassword}}, nil)
 	var set string
 	for _, c := range h.Values("Set-Cookie") {

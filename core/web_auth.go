@@ -18,8 +18,10 @@ import (
 )
 
 // The workspace has one account, the owner's. Its password is created once,
-// with a setup code printed in eriphe-core's log (whoever reaches the page
-// first cannot take the house), and kept as an argon2id hash. A login opens
+// with a setup code printed in eriphe-core's log and by `eriphe-core auth
+// setup-code` (whoever reaches the page first cannot take the house; the
+// code stays the same until it is used), and kept as an argon2id hash.
+// `eriphe-core auth password-reset` forgets it and makes a new setup code. A login opens
 // a session: a random cookie (only its hash is stored), HttpOnly, Secure and
 // SameSite=Strict, with its own CSRF token that every POST carries. Other
 // ways in (a provider, a proxy, none) are in web_signin.go; they open the
@@ -96,9 +98,9 @@ func hashToken(s string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// setupCode is short enough to type from a log: 8 letters and digits
+// newSetupCode is short enough to type from a log: 8 letters and digits
 // without the ambiguous ones.
-func setupCode() string {
+func newSetupCode() string {
 	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 	b := make([]byte, 8)
 	rand.Read(b)
@@ -107,6 +109,26 @@ func setupCode() string {
 	}
 	return string(b[:4]) + "-" + string(b[4:])
 }
+
+// setupKey keeps the setup code while there is no password: the same code
+// across restarts, until it is used (or `eriphe-core auth password-reset`
+// makes a new one).
+const setupKey = "web.setup_code"
+
+// pendingSetupCode is the setup code while the owner has no password,
+// made the first time it is asked for; "" once there is a password.
+func pendingSetupCode(s *Store) string {
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM web_owner`).Scan(&n)
+	if n > 0 {
+		return ""
+	}
+	// Kept if another process made one first.
+	s.db.Exec(`INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`, setupKey, newSetupCode())
+	return s.get(setupKey)
+}
+
+func (w *web) setupCode() string { return pendingSetupCode(w.c.store) }
 
 func normalizeCode(s string) string {
 	return strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(s))
@@ -336,8 +358,9 @@ func (w *web) handleSetup(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code, pw := r.PostFormValue("code"), r.PostFormValue("password")
+	want := normalizeCode(w.setupCode())
 	switch ok, limited := w.guarded(r, func() bool {
-		return subtle.ConstantTimeCompare([]byte(normalizeCode(code)), []byte(normalizeCode(w.setup))) == 1
+		return want != "" && subtle.ConstantTimeCompare([]byte(normalizeCode(code)), []byte(want)) == 1
 	}); {
 	case limited:
 		fail(http.StatusTooManyRequests, "err.toomany")
@@ -358,7 +381,7 @@ func (w *web) handleSetup(rw http.ResponseWriter, r *http.Request) {
 		fail(http.StatusInternalServerError, "err.internal")
 		return
 	}
-	w.setup = ""
+	w.c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, setupKey)
 	if _, err := w.newSession(rw, viaPassword); err != nil {
 		fail(http.StatusInternalServerError, "err.internal")
 		return

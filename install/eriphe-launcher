@@ -61,7 +61,7 @@ discover() {
 	HOST_SOCK=$(mount_source "$SELF" "$SOCK")
 	[ -n "$HOST_SOCK" ] || die "mount the Docker socket: -v $SOCK:$SOCK"
 	HOST_DATA=$(mount_source "$SELF" "$DATA")
-	[ -n "$HOST_DATA" ] || die "mount a folder of the host at $DATA, for Eriphe's data: -v /mnt/user/appdata/eriphe:$DATA"
+	[ -n "$HOST_DATA" ] || die "mount a folder of the host at $DATA, for Eriphe's data: -v /srv/eriphe:$DATA (on Unraid /mnt/user/appdata/eriphe)"
 	case $HOST_DATA in
 	/ | *[!A-Za-z0-9/._-]*) die "$HOST_DATA: Eriphe's data folder is not / and has only letters, digits, /, ., _ or -" ;;
 	/*) ;;
@@ -230,11 +230,11 @@ summary() {
 			say "  Setup code: $code"
 			notice "then the browser asks you to name your assistant and connect its AI account."
 		else
-			para "Eriphe runs on this machine: https://$addr:$WEB_PORT"
+			para "Eriphe runs on this machine: open https://$addr:$WEB_PORT in your browser and sign in (forgotten password: $(password_reset))."
 		fi
-		notice "to connect your other computers, open Settings > Devices > Connect a device in your browser."
+		notice "to connect your other computers, open Réglages › Appareils › Connecter un appareil (Settings › Devices › Connect a device) in your browser."
 	elif [ -n "$FIRST" ]; then
-		para "Done: this machine is connected to $ASSISTANT. Go back to your browser: it now appears in Devices."
+		para "Done: this machine is connected to $ASSISTANT. Go back to your browser: it now appears in Appareils (Devices)."
 	else
 		para "This machine is connected to $ASSISTANT."
 	fi
@@ -461,7 +461,7 @@ uninstall() {
 		notice "its data stays in $HOST_DATA: delete that folder to remove it too."
 	fi
 	para "Last step: remove this container, docker rm -f $SELF_NAME (on Unraid: Docker, $SELF_NAME, Remove)."
-	notice "if it was connected to Eriphe on another computer, forget it there too: Settings > Devices, in your browser."
+	notice "if it was connected to Eriphe on another computer, forget it there too: Réglages › Appareils (Settings › Devices), in your browser."
 	good_to_know
 	docker update --restart no "$SELF" >/dev/null 2>&1 || true
 	docker stop -t 2 "$SELF" >/dev/null 2>&1 || true
