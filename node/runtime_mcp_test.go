@@ -43,11 +43,10 @@ func TestMCPServersFor(t *testing.T) {
 		t.Errorf("servers = %+v", servers)
 	}
 
-	args, _ := claudeCode{}.command(n, task)
 	var cfg struct {
 		MCPServers map[string]any `json:"mcpServers"`
 	}
-	json.Unmarshal([]byte(args[slices.Index(args, "--mcp-config")+1]), &cfg)
+	json.Unmarshal(claudeCode{}.files(n, task)[claudeMCP], &cfg)
 	var names []string
 	for _, s := range servers {
 		names = append(names, s.Name)
@@ -330,11 +329,10 @@ func TestClaudeAlwaysLoad(t *testing.T) {
 	task := mcpTask()
 	task.Spec.Servers = []string{"vault", "house"}
 	task.Spec.AlwaysLoad = []string{"house"}
-	args, _ := claudeCode{}.command(newNode(options{callbackURL: "http://eriphe-node:8790"}), task)
 	var cfg struct {
 		MCPServers map[string]map[string]any `json:"mcpServers"`
 	}
-	json.Unmarshal([]byte(args[slices.Index(args, "--mcp-config")+1]), &cfg)
+	json.Unmarshal(claudeCode{}.files(newNode(options{callbackURL: "http://eriphe-node:8790"}), task)[claudeMCP], &cfg)
 	if cfg.MCPServers["house"]["alwaysLoad"] != true || cfg.MCPServers["vault"]["alwaysLoad"] != nil {
 		t.Fatalf("servers = %v", cfg.MCPServers)
 	}

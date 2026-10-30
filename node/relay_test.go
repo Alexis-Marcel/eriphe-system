@@ -66,18 +66,13 @@ func TestRelay(t *testing.T) {
 func TestClaudeCatalogServers(t *testing.T) {
 	n := newNode(options{callbackURL: "http://eriphe-node:8790"})
 	task := &Task{ID: "t-1", secret: "task-secret", Spec: TaskSpec{Servers: []string{"github"}}}
-	args, _ := claudeCode{}.command(n, task)
 	var cfg struct {
 		MCPServers map[string]struct {
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers"`
 		} `json:"mcpServers"`
 	}
-	for i, a := range args {
-		if a == "--mcp-config" {
-			json.Unmarshal([]byte(args[i+1]), &cfg)
-		}
-	}
+	json.Unmarshal(claudeCode{}.files(n, task)[claudeMCP], &cfg)
 	gh := cfg.MCPServers["github"]
 	if gh.URL != "http://eriphe-node:8790/mcp/github" || gh.Headers["Authorization"] != "Bearer task-secret" {
 		t.Fatalf("mcp config = %+v", cfg)
