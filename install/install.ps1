@@ -15,7 +15,8 @@
 # Each parameter has its variable: -Core ERIPHE_CORE, -JoinToken
 # ERIPHE_JOIN_TOKEN, -Name ERIPHE_NODE_NAME, -Labels ERIPHE_NODE_LABELS,
 # -CaHash ERIPHE_CA_HASH, -Version ERIPHE_VERSION, -Distro ERIPHE_DISTRO,
-# and the switches -CoreMode, -Rejoin, -Rollback and -Uninstall
+# -AssistantName ERIPHE_ASSISTANT_NAME (only for what it prints), and the
+# switches -CoreMode, -Rejoin, -Rollback and -Uninstall
 # ERIPHE_CORE_MODE, ERIPHE_REJOIN, ERIPHE_ROLLBACK and ERIPHE_UNINSTALL,
 # set to 1. A parameter given wins over its variable; the script clears
 # them, so that a later run does not take them again. An unknown parameter
@@ -65,14 +66,15 @@ param(
   [switch] $Rejoin,          # join again under -Name, with a rejoin token (the old secret stops working)
   [string] $Version,         # pin a release (0.2.0, or 0.2 for its fixes); edge follows main; latest the releases
   [switch] $Rollback,        # back to the version before the last update
-  [switch] $Uninstall
+  [switch] $Uninstall,
+  [string] $AssistantName    # the assistant's name, for what this script prints
 )
 $ErrorActionPreference = "Stop"
 $bound = @{} + $PSBoundParameters
 # The parameters' ERIPHE_* variables (see above), read once and cleared.
 $fromEnv = @{
   ERIPHE_CORE = "Core"; ERIPHE_JOIN_TOKEN = "JoinToken"; ERIPHE_NODE_NAME = "Name"; ERIPHE_NODE_LABELS = "Labels"
-  ERIPHE_CA_HASH = "CaHash"; ERIPHE_VERSION = "Version"; ERIPHE_DISTRO = "Distro"
+  ERIPHE_CA_HASH = "CaHash"; ERIPHE_VERSION = "Version"; ERIPHE_DISTRO = "Distro"; ERIPHE_ASSISTANT_NAME = "AssistantName"
   ERIPHE_CORE_MODE = "CoreMode"; ERIPHE_REJOIN = "Rejoin"; ERIPHE_ROLLBACK = "Rollback"; ERIPHE_UNINSTALL = "Uninstall"
 }
 foreach ($v in @(Get-ChildItem Env: | Where-Object Name -like "ERIPHE_*")) {
@@ -124,14 +126,127 @@ $boot = Join-Path $bootDir "$Distro.ps1"
 $self = $MyInvocation.MyCommand.ScriptBlock
 $selfUrl = "https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1"
 
+# What it prints: a title, short steps, the outcome and where the logs are,
+# as install.sh. Everything else, the output of every command included, goes
+# to its log.
+$log = Join-Path $home_ "install.log"
+$name_ = ($AssistantName -replace "[\x00-\x1f]", "").Trim()
+if (-not $name_) { $name_ = "Eriphe" }
+# A check mark where the console can show it (Windows Terminal), a root sign
+# elsewhere: the old console's fonts lack the check mark.
+$check = if ($env:WT_SESSION) { [char]0x2713 } else { [char]0x221A }
+$notes = New-Object Collections.Generic.List[string]
+
+function Write-Log([string] $text) {
+  try { Add-Content -Path $log -Value $text -Encoding UTF8 } catch { $null = $_ }
+}
+
+function Write-Out([string] $text = "") {
+  Write-Host $text
+  Write-Log $text
+}
+
+# A paragraph, wrapped.
+function Write-Para([string] $text) {
+  $line = ""
+  foreach ($w in $text -split " ") {
+    if ($line -and ($line.Length + 1 + $w.Length) -gt 66) { Write-Out $line; $line = $w }
+    elseif ($line) { $line += " $w" } else { $line = $w }
+  }
+  if ($line) { Write-Out $line }
+}
+
+function Write-Step([string] $step) { Write-Out "  $check $step" }
+
+# Something to know, said after the outcome.
+function Add-Notice([string] $text) {
+  $notes.Add($text)
+  Write-Log "warning: $text"
+}
+
+function Write-GoodToKnow {
+  if ($notes.Count -eq 0) { return }
+  Write-Out
+  if ($notes.Count -eq 1) { Write-Para "Good to know: $($notes[0])"; return }
+  Write-Out "Good to know:"
+  foreach ($n in $notes) {
+    $n = $n.Substring(0, 1).ToUpper() + $n.Substring(1)
+    $first = $true
+    $line = ""
+    foreach ($w in $n -split " ") {
+      if ($line -and ($line.Length + 1 + $w.Length) -gt 62) {
+        if ($first) { Write-Out "  - $line" } else { Write-Out "    $line" }
+        $first = $false
+        $line = $w
+      } elseif ($line) { $line += " $w" } else { $line = $w }
+    }
+    if ($first) { Write-Out "  - $line" } else { Write-Out "    $line" }
+  }
+}
+
+# Runs a Windows command with its output, and the line it prints when it
+# went well ("The operation completed successfully."), in the log only.
+function Invoke-Quiet([scriptblock] $command) {
+  $ErrorActionPreference = "Continue"
+  & $command 2>&1 | ForEach-Object { Write-Log "$_" }
+}
+
+# How an update or a rollback went (update-status), in a sentence.
+function Get-StatusLine([string[]] $status) {
+  $s = @{}
+  foreach ($l in $status) { if ($l -match "^([a-z]+)=(.*)$") { $s[$Matches[1]] = $Matches[2] } }
+  $from, $to, $why = $s["from"], $s["to"], $s["message"]
+  switch ("$($s["action"]):$($s["outcome"])") {
+    "rollback:ok" { "Back to $to." }
+    "rollback:rollback_failed" { "Could not go back, nor to $from again: $why." }
+    default { "Could not go back to the previous version: $(if ($why) { $why } else { $s["outcome"] })." }
+  }
+}
+
+# A failure: what went wrong in a sentence, where the details are; the
+# script stops there (exit code 1 when run as a file).
+trap {
+  $m = $_.Exception.Message
+  Write-Log "error: $m"
+  Write-Log $_.ScriptStackTrace
+  if ($m -notmatch "[.!?]$") { $m += "." }
+  Write-Host ""
+  Write-Para "Something went wrong: $m"
+  if ($log -and (Test-Path $log)) {
+    Write-Host ""
+    Write-Host "Details: $log"
+  }
+  if ($PSCommandPath) { exit 1 }
+  return
+}
+
 function Invoke-InDistro([string] $script) {
   # Read by sh on its stdin, in UTF-8, with Unix line endings: in braces, so
   # that sh reads it whole before it runs, and its commands read nothing of
   # it. PowerShell ends what it pipes with a CRLF: a last comment line takes
   # it. Returns what the script prints; its errors go to the console.
+  # What it writes on stderr goes to the log; its last "eriphe: " line says
+  # what went wrong.
   $OutputEncoding = New-Object Text.UTF8Encoding $false
-  $out = "{`n$($script -replace "`r", '')`n} </dev/null`n#" | wsl.exe -d $Distro -u root -- sh -e
-  if ($LASTEXITCODE -ne 0) { $out | Write-Host; throw "the setup in WSL failed ($LASTEXITCODE)" }
+  $ErrorActionPreference = "Continue"
+  $all = "{`n$($script -replace "`r", '')`n} </dev/null`n#" | wsl.exe -d $Distro -u root -- sh -e 2>&1
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = "Stop"
+  $out = @()
+  $why = $null
+  foreach ($l in $all) {
+    if ($l -is [Management.Automation.ErrorRecord]) {
+      Write-Log "$l"
+      if ("$l" -match "^eriphe: (.+)$") { $why = $Matches[1] }
+    } else {
+      $out += $l
+    }
+  }
+  if ($code -ne 0) {
+    $out | ForEach-Object { Write-Log "$_" }
+    if ($why) { throw $why }
+    throw "the setup in WSL failed (exit code $code)"
+  }
   $out
 }
 
@@ -151,7 +266,7 @@ function Register-Resume {
   $dir = Join-Path $home_ "resume"
   New-Item -ItemType Directory -Force $dir | Out-Null
   # Only administrators and SYSTEM: this script runs elevated.
-  icacls.exe $dir /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" | Out-Null
+  Invoke-Quiet { icacls.exe $dir /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" }
   $file = Join-Path $dir "install.ps1"
   if ($self -and $self.ToString() -match "function Register-Resume") {
     Set-Content -Path $file -Value $self.ToString() -Encoding UTF8
@@ -185,12 +300,12 @@ function Install-Wsl {
   if ($vmp -eq "Enabled" -and (Test-Wsl)) { return $true }
   if ($vmp -eq "Enabled") {
     # The feature is there (after the reboot): WSL itself may still be missing.
-    wsl.exe --update
+    Invoke-Quiet { wsl.exe --update }
     if (Test-Wsl) { return $true }
   }
   if ($vmp -ne "EnablePending") {
-    Write-Host "Installing WSL..."
-    wsl.exe --install --no-distribution
+    Write-Log "Installing WSL..."
+    Invoke-Quiet { wsl.exe --install --no-distribution }
     if ($LASTEXITCODE -ne 0) {
       # An older wsl.exe, without --no-distribution: the features, then `wsl --update` after the reboot.
       Enable-WindowsOptionalFeature -Online -NoRestart -All -FeatureName VirtualMachinePlatform, Microsoft-Windows-Subsystem-Linux | Out-Null
@@ -215,7 +330,7 @@ function Test-Mirrored {
 function Remove-CorePorts {
   if (Get-NetFirewallRule -Name $rule -ErrorAction SilentlyContinue) {
     Remove-NetFirewallRule -Name $rule
-    foreach ($p in $corePorts) { netsh.exe interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=$p | Out-Null }
+    foreach ($p in $corePorts) { Invoke-Quiet { netsh.exe interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=$p } }
   }
 }
 
@@ -230,9 +345,19 @@ function Get-LanAddress {
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
   [Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $isAdmin) { throw "run this from an administrator PowerShell" }
+if (-not $isAdmin) {
+  Write-Host ""
+  Write-Para "Eriphe needs an administrator PowerShell: it installs for the whole PC. Right-click the Start button, choose Terminal (Admin) or Windows PowerShell (Admin) and answer Yes when Windows asks, then paste the command again."
+  if ($PSCommandPath) { exit 1 }
+  return
+}
+New-Item -ItemType Directory -Force $home_ | Out-Null
+Set-Content -Path $log -Value "install.ps1, $(Get-Date)" -Encoding UTF8
+$here = "this PC"
 
 if ($Uninstall) {
+  Write-Out "Removing Eriphe from $here"
+  Write-Out
   Unregister-Resume
   if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
     Disable-ScheduledTask -TaskName $task | Out-Null
@@ -244,17 +369,19 @@ if ($Uninstall) {
   $wasCore = $false
   if ((Test-Wsl) -and (Test-Distro)) {
     $wasCore = (wsl.exe -d $Distro -u root -- sh -c "grep -qx ERIPHE_INSTALL_MODE=core /etc/eriphe-node.env && echo yes") -eq "yes"
-    wsl.exe --unregister $Distro | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "wsl --unregister $Distro failed" }
+    Invoke-Quiet { wsl.exe --unregister $Distro }
+    if ($LASTEXITCODE -ne 0) { throw "Windows could not remove Eriphe's Linux system (wsl --unregister $Distro failed)" }
   }
   Remove-Item $wslDir -Recurse -Force -ErrorAction SilentlyContinue
   Remove-CorePorts
+  Write-Step "Removed"
+  Write-Out
   if ($wasCore) {
-    Write-Host "The distribution $Distro, with eriphe-core and its data, and its scheduled task are removed."
+    Write-Out "Eriphe and its data were removed from $here."
   } else {
-    Write-Host "The distribution $Distro and its scheduled task are removed."
-    Write-Host "eriphe-core still knows the node: remove it under Settings, Devices in the workspace (or DELETE /v1/nodes/<name>)."
+    Write-Para "Eriphe was removed from $here. If it was connected to Eriphe on another computer, forget it there too: Settings > Devices, in your browser."
   }
+  Write-GoodToKnow
   return
 }
 
@@ -268,24 +395,41 @@ if ($Version -and $Version -ne "latest" -and $Version -cnotmatch "^(edge|sha-[0-
 
 # Back to the version before the last update, with the updater the install left.
 if ($Rollback) {
-  if (-not ((Test-Wsl) -and (Test-Distro))) { throw "Eriphe is not installed here (no distribution $Distro)" }
-  Invoke-InDistro @"
-[ -x /usr/local/bin/eriphe-update ] || { echo "no updater here yet: run the install command once, without -Rollback" >&2; exit 1; }
-eriphe-dockerd
-eriphe-update rollback
+  Write-Out "Going back to the previous version on $here"
+  Write-Out
+  if (-not ((Test-Wsl) -and (Test-Distro))) { throw "Eriphe is not installed on $here" }
+  $status = Invoke-InDistro @"
+[ -x /usr/local/bin/eriphe-update ] || { echo "eriphe: no updater here yet: run the install command once, without -Rollback" >&2; exit 1; }
+eriphe-dockerd >&2
+eriphe-update rollback >&2
 dir=/var/lib/eriphe-node
 grep -qx ERIPHE_INSTALL_MODE=core /etc/eriphe-node.env && dir=/var/lib/eriphe-core
-sed -n 's/^outcome=//p; s/^message=\(..*\)/  \1/p; s/^from=\(..*\)/  from \1/p; s/^to=\(..*\)/  to \1/p' "`$dir/update-status"
-"@ | Write-Host
+cat "`$dir/update-status"
+"@
+  Write-Para (Get-StatusLine $status)
+  Write-Out
+  Write-Out "Logs: wsl -d $Distro -- tail /var/log/eriphe-update.log"
   return
 }
+
+$updating = $false
+if ($JoinToken -and -not $CoreMode) {
+  Write-Out "Connecting $here to $name_"
+} elseif ((Test-Wsl) -and (Test-Distro)) {
+  $updating = $true
+  Write-Out "Updating Eriphe on $here"
+} else {
+  Write-Out "Installing Eriphe on $here"
+}
+if (-not $updating) { Write-Out "It takes a few minutes the first time." }
+Write-Out
 
 # 1. WSL itself (one reboot, after which this script carries on by itself).
 if (-not (Install-Wsl)) {
   if (Register-Resume) {
-    Write-Host "WSL is being installed: reboot Windows, the install carries on by itself at the next logon."
+    Write-Para "Windows needs to restart to finish preparing Eriphe. Restart it: the installation carries on by itself when you sign in again."
   } else {
-    Write-Host "WSL is being installed: reboot Windows, then run this command again."
+    Write-Para "Windows needs to restart to finish preparing Eriphe. Restart it, then run this command again."
   }
   return
 }
@@ -329,18 +473,24 @@ if (-not $exists) {
   $arch = $env:PROCESSOR_ARCHITECTURE
   if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }
   if (-not $alpine.ContainsKey($arch)) { throw "unsupported processor: $arch" }
-  New-Item -ItemType Directory -Force $home_ | Out-Null
   $rootfs = Join-Path $home_ "alpine-minirootfs.tar.gz"
-  Invoke-WebRequest $alpine[$arch][0] -OutFile $rootfs -UseBasicParsing
+  try { Invoke-WebRequest $alpine[$arch][0] -OutFile $rootfs -UseBasicParsing }
+  catch { Write-Log "$_"; throw "could not download Eriphe: check this PC's Internet connection, then run the command again" }
   if ((Get-FileHash $rootfs -Algorithm SHA256).Hash -ne $alpine[$arch][1]) { throw "the Alpine archive does not match its checksum" }
-  wsl.exe --import $Distro $wslDir $rootfs --version 2
-  if ($LASTEXITCODE -ne 0) { throw "wsl --import failed (is virtualization turned on in the firmware?)" }
+  Invoke-Quiet { wsl.exe --import $Distro $wslDir $rootfs --version 2 }
+  if ($LASTEXITCODE -ne 0) {
+    throw "Windows could not create Eriphe's Linux system: turn on virtualization in the PC's firmware (BIOS or UEFI), then run the command again"
+  }
   Remove-Item $rootfs
 }
 
 # Its setup, again on every run so that an update brings the new scripts.
 $changed = Invoke-InDistro @'
-apk add --no-cache docker ca-certificates >/dev/null
+apk add --no-cache docker ca-certificates >/dev/null 2>/tmp/apk.log || {
+  cat /tmp/apk.log >&2
+  echo "eriphe: could not download Eriphe: check this PC's Internet connection, then run the command again" >&2
+  exit 1
+}
 # Windows stays out of reach of the tasks: no drives, no Windows programs.
 cat > /tmp/wsl.conf <<'EOF'
 [automount]
@@ -669,11 +819,21 @@ EOF
 chmod 755 /usr/local/bin/eriphe-dockerd /usr/local/bin/eriphe-node-run /usr/local/bin/eriphe-addr \
   /usr/local/bin/eriphe-core-run /usr/local/bin/eriphe-update-loop /usr/local/bin/eriphe-update
 '@
-if ($changed -contains "restart") { wsl.exe --terminate $Distro | Out-Null }
+if ($changed -contains "restart") { Invoke-Quiet { wsl.exe --terminate $Distro } }
 
 # 3. Docker Engine, for the images. The node keeps running until the new
 # binary is there: a failed pull leaves it as it was.
 Invoke-InDistro "eriphe-dockerd" | Out-Null
+# The version running, to say what an update changes.
+$versionOf = @'
+if grep -qx ERIPHE_INSTALL_MODE=core /etc/eriphe-node.env 2>/dev/null; then
+  docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' eriphe-core 2>/dev/null | sed 's/<no value>//'
+else
+  cat /usr/local/bin/eriphe-node.version 2>/dev/null
+fi
+true
+'@
+$before = if ($updating) { Invoke-InDistro $versionOf | Select-Object -Last 1 } else { "" }
 
 # Pulls an image, saying so when the registry refuses it.
 $pull = @'
@@ -681,6 +841,7 @@ pull() {
   if ! docker pull -q "$1" >/tmp/pull.log 2>&1; then
     cat /tmp/pull.log >&2
     grep -qiE 'denied|unauthorized|not found' /tmp/pull.log && echo "the registry refuses $1: it may not be public (yet)" >&2
+    echo "eriphe: could not download Eriphe: check this PC's Internet connection, then run the command again" >&2
     exit 3
   fi
 }
@@ -689,10 +850,10 @@ pull() {
 # 4. The binary, next to the running one: from its image, or given (through
 # stdin: the distribution does not see Windows' drives).
 if ($Binary) {
-  cmd.exe /c "wsl.exe -d $Distro -u root -- sh -c `"cat > /usr/local/bin/eriphe-node.new && chmod 755 /usr/local/bin/eriphe-node.new`" < `"$Binary`""
+  Invoke-Quiet { cmd.exe /c "wsl.exe -d $Distro -u root -- sh -c `"cat > /usr/local/bin/eriphe-node.new && chmod 755 /usr/local/bin/eriphe-node.new`" < `"$Binary`"" }
   if ($LASTEXITCODE -ne 0) { throw "copying eriphe-node failed" }
 } else {
-  Write-Host "Pulling $nodeImage..."
+  Write-Log "Pulling $nodeImage..."
   Invoke-InDistro @"
 $pull
 pull $nodeImage
@@ -708,7 +869,7 @@ chmod 755 /usr/local/bin/eriphe-node.new
 # 5. Core mode: eriphe-core as a container, its data in /var/lib/eriphe-core,
 # recreated when its image changes; the node joins it on the loopback.
 if ($CoreMode) {
-  Write-Host "Pulling $coreImage..."
+  Write-Log "Pulling $coreImage..."
   Invoke-InDistro @"
 $pull
 mkdir -p /var/lib/eriphe-core
@@ -724,7 +885,8 @@ else
   docker start eriphe-core >/dev/null
 fi
 for i in `$(seq 60); do wget -q -O /dev/null http://127.0.0.1:8800/health 2>/dev/null && exit 0; sleep 1; done
-echo "eriphe-core does not answer on :8800: wsl -d $Distro -- docker logs eriphe-core" >&2
+docker logs --tail 20 eriphe-core >&2
+echo "eriphe: Eriphe did not start (eriphe-core does not answer on :8800): run the command again" >&2
 exit 1
 "@ | Out-Null
   # The node turns this address to TLS by itself once eriphe-core offers it.
@@ -742,15 +904,17 @@ for i in `$(seq 30); do
   sleep 2
 done
 cat /tmp/join.log >&2
+echo "eriphe: Eriphe did not start (eriphe-core gives no join token): run the command again" >&2
 exit 1
 "@ | Select-Object -Last 1
-    if ($joining -notmatch " -join-token (\S+)") { throw "no join token from eriphe-core" }
+    if ($joining -notmatch " -join-token (\S+)") { throw "Eriphe did not start (eriphe-core gives no join token): run the command again" }
     $JoinToken = $Matches[1]
     if ($joining -match " -ca-hash (sha256:[0-9a-f]+)") { $CaHash = $Matches[1] }
   }
 } else {
   Remove-CorePorts
 }
+Write-Step "Downloaded"
 
 # 6. Stop the node, put the new binary in place, and its settings; the join
 # token only matters until the node has joined. Disabled first, so that it
@@ -808,7 +972,7 @@ $run = "-d $Distro -u root --exec /usr/local/bin/eriphe-node-run"
 if ($CoreMode -and -not $mirrored) {
   New-Item -ItemType Directory -Force $bootDir | Out-Null
   # Only administrators and SYSTEM: the task runs it elevated.
-  icacls.exe $bootDir /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" | Out-Null
+  Invoke-Quiet { icacls.exe $bootDir /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" }
   Set-Content -Path $boot -Encoding UTF8 -Value @"
 # Run by the scheduled task "$task" (install.ps1): forwards eriphe-core's
 # ports to the distribution's address, then runs eriphe-node there.
@@ -838,13 +1002,14 @@ if ($CoreMode) {
       -Direction Inbound -Protocol TCP -LocalPort $corePorts -Action Allow -Profile Private, Domain | Out-Null
   }
   if ($mirrored) {
-    Write-Host "Mirrored networking: if the LAN cannot reach ports $($corePorts -join ' and '), allow them in the Hyper-V firewall (New-NetFirewallHyperVRule)."
+    Add-Notice "with mirrored networking, if other devices cannot reach ports $($corePorts -join ' and '), allow them in the Hyper-V firewall (New-NetFirewallHyperVRule)."
   } else {
     $ip = wsl.exe -d $Distro -u root --exec /usr/local/bin/eriphe-addr
-    foreach ($p in $corePorts) { netsh.exe interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=$p connectaddress=$ip connectport=$p | Out-Null }
+    foreach ($p in $corePorts) { Invoke-Quiet { netsh.exe interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=$p connectaddress=$ip connectport=$p } }
   }
 }
 Start-ScheduledTask -TaskName $task
+Write-Step "Installed"
 
 # 8. Wait for the node to join, and say where things are.
 for ($i = 0; $i -lt 30; $i++) {
@@ -853,21 +1018,45 @@ for ($i = 0; $i -lt 30; $i++) {
   Start-Sleep -Seconds 2
 }
 if ($joined) {
-  Write-Host "eriphe-node is installed as '$Name' and starts with Windows."
-} else {
-  Write-Host "eriphe-node is installed as '$Name' and starts with Windows, but has not joined eriphe-core yet: see its log."
+  if ($CoreMode) { Write-Step "Started" } else { Write-Step "Connected" }
 }
-Write-Host "Logs: wsl -d $Distro -- tail /var/log/eriphe-node.log"
+Write-Log "eriphe-node is installed as '$Name' (joined: $joined)."
+$now = Invoke-InDistro $versionOf | Select-Object -Last 1
+Write-Out
+if ($updating) {
+  if (-not $now) { Write-Out "Updated." }
+  elseif ($now -eq $before) { Write-Out "Already up to date ($now)." }
+  else { Write-Out "Updated to $now." }
+}
 if ($CoreMode) {
   $lan = Get-LanAddress
-  if (-not $lan) { $lan = "<this machine>" }
+  if (-not $lan) { $lan = "<this-pc>" }
   $setup = wsl.exe -d $Distro -u root -- sh -c "docker logs eriphe-core 2>&1 | sed -n 's/.*setup code \([A-Za-z0-9-]*\).*/\1/p' | tail -n 1"
-  Write-Host ""
-  Write-Host "eriphe-core runs here. Workspace: https://${lan}:8443"
-  if ($setup) { Write-Host "Setup code (to choose the workspace's password): $setup" }
-  Write-Host "Other devices join it at http://${lan}:8800 (Connect a device, in the workspace), or with a token from:"
-  Write-Host "  wsl -d $Distro -- docker exec eriphe-core eriphe-core join-token -name <name>"
-  if (Get-NetConnectionProfile | Where-Object NetworkCategory -eq "Public") {
-    Write-Host "This network is Public: the firewall lets the LAN in on Private networks only (Set-NetConnectionProfile -NetworkCategory Private)."
+  if ($setup) {
+    $done = if ($updating) { "" } else { "Done: Eriphe runs on $here. " }
+    Write-Para "${done}To finish, open this address in your browser and give the setup code:"
+    Write-Out
+    Write-Out "  https://${lan}:8443/setup"
+    Write-Out "  Setup code: $setup"
+  } elseif ($updating) {
+    Write-Out "Workspace: https://${lan}:8443"
+  } else {
+    Write-Para "Done: Eriphe runs on $here. Open https://${lan}:8443 in your browser and sign in."
   }
+  if (-not $updating) { Add-Notice "to connect your other computers, open Settings > Devices > Connect a device in your browser." }
+  if (Get-NetConnectionProfile | Where-Object NetworkCategory -eq "Public") {
+    Add-Notice "this network is set to Public, so other devices cannot reach $here. In Windows Settings > Network & internet, set it to Private."
+  }
+} elseif (-not $joined) {
+  Write-Para "Installed, but $here is not connected to $name_ yet: it keeps trying. If it does not appear in Devices in your browser within a few minutes, check that the computer Eriphe runs on is on, and see the logs."
+} elseif (-not $updating) {
+  Write-Para "Done: $here is connected to $name_. Go back to your browser: it now appears in Devices."
 }
+if ($pin -eq "edge") {
+  Add-Notice "it follows main, the version in development (-Version latest follows the releases again)."
+} elseif ($pin) {
+  Add-Notice "it stays on version $pin (-Version latest follows the releases again)."
+}
+Write-GoodToKnow
+Write-Out
+Write-Out "Logs: wsl -d $Distro -- tail /var/log/eriphe-node.log"

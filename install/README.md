@@ -67,15 +67,39 @@ Windows, in an administrator PowerShell:
 $env:ERIPHE_CORE_MODE='1'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
 
-The first install downloads the images (and on macOS an Ubuntu image of about 600 MB), so it takes a
-few minutes. It ends with the workspace's address on the LAN and a setup code:
+The first install downloads the images (and on a Mac in Lima's VM an Ubuntu image of about 600 MB),
+so it takes a few minutes. It ends with the workspace's address on the LAN and a setup code:
 
 ```
-eriphe-core runs here, with node laptop.
-  Workspace: https://192.0.2.10:8443
-  Setup code: ABCD-EFGH (open https://192.0.2.10:8443/setup)
-  Other devices join it at http://192.0.2.10:8800 (Connect a device, in the workspace).
+Installing Eriphe on this computer
+It takes a few minutes the first time.
+
+This computer will ask for your password: it installs Eriphe for
+the whole computer.
+[sudo] password for you:
+
+  ✓ Downloaded
+  ✓ Installed
+  ✓ Started
+
+Done: Eriphe runs on this computer. To finish, open this address
+in your browser and give the setup code:
+
+  https://192.0.2.10:8443/setup
+  Setup code: ABCD-EFGH
+
+Good to know: to connect your other computers, open Settings >
+Devices > Connect a device in your browser.
+
+Logs: docker logs eriphe-core, docker logs eriphe-node
 ```
+
+The installers show only that: a title, short steps, the outcome, what is good to know, and where
+the logs are. A password (`sudo`, macOS's) is asked once, after a sentence saying why. Everything
+else, the output of each command included, goes to the install's log: `~/.eriphe/install.log` on a
+Mac, `/var/log/eriphe-install.log` on Linux (`~/.eriphe-install.log` without root),
+`C:\ProgramData\eriphe-node\install.log` on Windows. When something fails, the installer says what
+in a sentence, what to do, and points at that log; the exit code is 1.
 
 ### One container (NAS, any Linux with Docker)
 
@@ -191,6 +215,10 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
 ```powershell
 $env:ERIPHE_CORE='http://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
+
+Once you have named your assistant, the command also gives its name (`--assistant-name 'Jarvis'`,
+`ERIPHE_ASSISTANT_NAME`), for what the installer prints: "Connecting this Mac to Jarvis". A name
+with an apostrophe is left out, and the installer says Eriphe.
 
 The device then shows on Settings → Devices, with what Eriphe sees and can do there, and its
 eriphe-node version. Its page (the "⋯" menu, "Details and log") keeps its access log: the folders
@@ -425,6 +453,7 @@ The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nod
 | `--labels gpu,fast` | `-Labels 'gpu,fast'` | what agents can require of this node |
 | `--ca-hash sha256:<hex>` | `-CaHash sha256:<hex>` | eriphe-core's CA, to check its certificate (`ERIPHE_CA_HASH` of the node) |
 | `--core-mode` | `-CoreMode` | run eriphe-core here, and a local node joined to it |
+| `--assistant-name NAME` | `-AssistantName <name>` | the assistant's name, only for what the script prints (default: Eriphe) |
 | `--version 0.2.0` | `-Version 0.2.0` | pin that release (`0.2`: its line); `edge` follows `main`; `latest` the releases again (see [the machines update themselves](#the-machines-update-themselves)) |
 | `--rollback` | `-Rollback` | go back to the version before the last update |
 | `--share NAME=/PATH[:ro]` | | a place of this machine whose folders may be given to Eriphe, repeatable (see [Folders](#folders)); Linux, and a Mac with Apple's container (which shares its home, iCloud Drive and its cloud folders by itself) |
@@ -597,7 +626,7 @@ without Docker Desktop, and a scheduled task that starts it with Windows, logged
 `irm <url> | iex` takes no parameters: they go in `ERIPHE_*` variables, as in the commands above.
 Each parameter has its own: `-Core` `ERIPHE_CORE`, `-JoinToken` `ERIPHE_JOIN_TOKEN`, `-Name`
 `ERIPHE_NODE_NAME`, `-Labels` `ERIPHE_NODE_LABELS`, `-CaHash` `ERIPHE_CA_HASH`, `-Version`
-`ERIPHE_VERSION`, `-Distro` `ERIPHE_DISTRO`, and `-CoreMode`, `-Rejoin`, `-Rollback`,
+`ERIPHE_VERSION`, `-Distro` `ERIPHE_DISTRO`, `-AssistantName` `ERIPHE_ASSISTANT_NAME`, and `-CoreMode`, `-Rejoin`, `-Rollback`,
 `-Uninstall` `ERIPHE_CORE_MODE`, `ERIPHE_REJOIN`, `ERIPHE_ROLLBACK`, `ERIPHE_UNINSTALL` set to `1`.
 The script clears them once read, so that a later run in the same window does not take them again.
 An unknown `ERIPHE_*` variable, like an unknown parameter, stops it before it does anything.
@@ -666,6 +695,11 @@ shares the `docker0` bridge and the iptables chains with this one's. Keep to one
 | macOS, Apple's container | `~/.eriphe/node.log` | `~/.eriphe/core.log` |
 | macOS, Lima | `LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker logs eriphe-node` | the same, `eriphe-core` |
 | Windows | `wsl -d eriphe -- tail /var/log/eriphe-node.log` | `wsl -d eriphe -- docker logs eriphe-core` |
+
+The install itself, every command's output included, is in `~/.eriphe/install.log` (macOS),
+`/var/log/eriphe-install.log` (Linux; `~/.eriphe-install.log` when run without root), or
+`C:\ProgramData\eriphe-node\install.log` (Windows); an uninstall on a Mac writes
+`$TMPDIR/eriphe-uninstall.log`, as `~/.eriphe` goes.
 
 **What macOS asks, on a Mac with Apple's container.** Each once, for Apple's program, never for
 Eriphe's (so not again after an update):

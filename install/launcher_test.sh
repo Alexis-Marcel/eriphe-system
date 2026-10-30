@@ -171,7 +171,7 @@ echo ghcr.io/alexis-marcel/eriphe:latest >"$T/ref"
 reset
 OUTCOME=ok run_in 'local_update update' >"$T/out"
 [ "$(grep -c '^update.sh' "$T/calls")" = 2 ] || fail "local update: $(cat "$T/calls")"
-has "$T/out" "core: update ok" "local update"
+has "$T/out" "eriphe-core: Updated to 0.8.0." "local update"
 has "$T/calls" "run -d --rm --name eriphe-launcher-swap" "local update, then itself"
 
 # ---- its new container: its own settings, not its old image's

@@ -61,12 +61,136 @@ CORE_UID=1993 # eriphe-core's user in its image
 VM=eriphe
 AGENT_LABEL=org.eriphe.vm
 
-say() { printf '%s\n' "$*"; }
-warn() { printf 'eriphe: %s\n' "$*" >&2; }
+# What it prints. Run as the installer (main), it shows only what a person
+# needs: a title, short steps, the outcome and where the logs are (SCREEN,
+# file descriptors 5 and 6); everything else, the output of every command
+# included, goes to its log (LOG). eriphe-launcher, which sources this file,
+# prints it all to its container's log.
+SCREEN='' LOG='' NOTES='' ASSISTANT=Eriphe STEPPED=''
+say() {
+	if [ -n "$SCREEN" ]; then
+		printf '%s\n' "$*" >&5
+		printf '%s\n' "$*" >>"$LOG"
+	else
+		printf '%s\n' "$*"
+	fi
+}
+# para TEXT: TEXT as a paragraph, wrapped.
+para() { printf '%s\n' "$*" | fold -s -w 66 | sed 's/ *$//' | while IFS= read -r l; do say "$l"; done; }
+step() {
+	say "  ✓ $1"
+	STEPPED=1
+}
+# note TEXT: a detail, for the log only.
+note() { printf '%s\n' "$*" >&2; }
+warn() { printf 'eriphe: warning: %s\n' "$*" >&2; }
+# notice TEXT: something to know, said after the outcome (Good to know).
+notice() {
+	[ -z "$SCREEN" ] || warn "$*"
+	NOTES="$NOTES$*
+"
+}
 die() {
-	warn "$*"
+	printf 'eriphe: %s\n' "$*" >&2
+	if [ -n "$SCREEN" ]; then
+		m=$*
+		case $m in *[.!?]) ;; *) m=$m. ;; esac
+		{
+			say ""
+			para "Something went wrong: $m"
+			say ""
+			say "Details: $(tilde "$LOG")"
+		} 5>&6
+	fi
 	exit 1
 }
+tilde() {
+	case $1 in
+	"$HOME"/*) printf '~%s' "${1#"$HOME"}" ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+# good_to_know: the notices, after the outcome.
+good_to_know() {
+	[ -n "$NOTES" ] || return 0
+	say ""
+	if [ "$(printf '%s' "$NOTES" | wc -l)" -le 1 ]; then
+		para "Good to know: $(printf '%s' "$NOTES" | head -n 1)"
+		return
+	fi
+	say "Good to know:"
+	printf '%s' "$NOTES" | while IFS= read -r n; do
+		printf '%s\n' "$n" | awk '{ print toupper(substr($0, 1, 1)) substr($0, 2) }' | fold -s -w 62 | sed 's/ *$//' | {
+			IFS= read -r l && say "  - $l"
+			while IFS= read -r l; do say "    $l"; done
+		}
+	done
+}
+# need_root REASON: says why the password is asked, then asks it once
+# (sudo keeps it for a while), unless this runs as root or sudo has it.
+need_root() {
+	[ "$(id -u)" != 0 ] || return 0
+	command -v sudo >/dev/null 2>&1 || die "run this as root (there is no sudo here)"
+	sudo -n true 2>/dev/null && return 0
+	# Between the steps: apart from them.
+	[ -z "$STEPPED" ] || say ""
+	if [ "${OS:-}" = Darwin ]; then
+		para "macOS will ask for your Mac password: $1."
+	else
+		para "This computer will ask for your password: $1."
+	fi
+	# sudo reads the password from the terminal itself: stdin may be this script.
+	sudo -v || die "the password was not accepted: run the command again"
+	say ""
+}
+# on_steps CMD...: CMD, a host script: its output in the log, but the steps
+# it reports on stderr ("eriphe-step: Downloaded"), shown as checkmarked
+# lines; its stdout, key=value lines, in OUT. It stops on CMD's error, with
+# the last one it gave ("eriphe: ...").
+on_steps() {
+	t=$(mktemp)
+	{ if "$@" 2>&1 >"$t"; then echo eriphe-done; fi; } | while IFS= read -r l; do
+		case $l in
+		'eriphe-step: '*) step "${l#eriphe-step: }" ;;
+		eriphe-done) echo ok >"$t.ok" ;;
+		'eriphe: warning: '*) printf '%s\n' "$l" >&2 ;;
+		'eriphe: '*)
+			printf '%s\n' "$l" >&2
+			printf '%s\n' "${l#eriphe: }" >"$t.err"
+			;;
+		*) printf '%s\n' "$l" >&2 ;;
+		esac
+	done
+	OUT=$(cat "$t")
+	ok=$(cat "$t.ok" 2>/dev/null || true)
+	err=$(cat "$t.err" 2>/dev/null || true)
+	rm -f "$t" "$t.ok" "$t.err"
+	[ -z "$ok" ] || return 0
+	# eriphe-launcher: the error is in its log already.
+	[ -n "$SCREEN" ] || exit 1
+	die "${err:-the installation stopped}"
+}
+# status_line ACTION OUTCOME FROM TO MESSAGE: how an update or a rollback
+# went, in a sentence.
+status_line() {
+	case $1:$2 in
+	update:ok) echo "Updated to $4." ;;
+	update:current) echo "Already up to date${4:+ ($4)}." ;;
+	update:pinned) echo "Already on ${4:-the version it is pinned to}: it is pinned to that version." ;;
+	update:refused | update:skipped) echo "Not updated: $5." ;;
+	update:rolled_back) echo "Could not update to $4, so it went back to $3: $5." ;;
+	rollback:ok) echo "Back to $4." ;;
+	*:rollback_failed) echo "Could not $1, nor go back to $3: $5." ;;
+	update:*) echo "Could not update: ${5:-$2}." ;;
+	rollback:*) echo "Could not go back to the previous version: ${5:-$2}." ;;
+	esac
+}
+# show_status: status_line of an update-status file, on stdin.
+show_status() {
+	st=$(cat)
+	status_line "$(status_get action)" "$(status_get outcome)" "$(status_get from)" "$(status_get to)" "$(status_get message)"
+}
+status_get() { printf '%s\n' "$st" | sed -n "s/^$1=//p" | head -n 1; }
 
 usage() {
 	cat <<'EOF'
@@ -84,6 +208,7 @@ Usage: curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest
                       Apple's container shares its home, iCloud Drive and
                       its cloud folders by itself; not in Lima's VM
   --no-share          share no place any more
+  --assistant-name N  the assistant's name, for what this script prints
   --core-mode         run eriphe-core here, with a node of its own
   --version V         pin a release (0.2.0, or 0.2 for its fixes), edge to
                       follow main (testers), or latest: the releases again
@@ -105,7 +230,7 @@ as_root() {
 	if [ "$(id -u)" = 0 ]; then
 		"$@"
 	else
-		command -v sudo >/dev/null 2>&1 || die "run this as root (no sudo here)"
+		need_root "${ROOT_WHY:-it installs Eriphe for the whole computer}"
 		sudo "$@"
 	fi
 }
@@ -125,7 +250,7 @@ prelude() {
 	cat <<EOF
 set -eu
 CONF=$(q "$CONF") DATA=$(q "$DATA") CORE_UID=$CORE_UID
-MODE=$(q "${MODE:-}") NODE_NAME=$(q "${NAME:-}")
+MODE=$(q "${MODE:-}") NODE_NAME=$(q "${NAME:-}") ASSISTANT=$(q "$ASSISTANT")
 IMAGES=$(q "$PROXY_IMAGE ${NODE_IMAGE:-} ${WORKER_IMAGE:-}$([ "${MODE:-}" = core ] && printf ' %s' "${CORE_IMAGE:-}")")
 ALL_REPOS=$(q "${PROXY_IMAGE%:*} $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
 EOF
@@ -142,6 +267,7 @@ parse_args() {
 	NAME=${ERIPHE_NODE_NAME:-}
 	LABELS=${ERIPHE_NODE_LABELS:-}
 	CA_HASH=${ERIPHE_CA_HASH:-}
+	assistant=${ERIPHE_ASSISTANT_NAME:-}
 	[ -n "$LABELS" ] && LABELS_SET=1
 	while [ $# -gt 0 ]; do
 		case $1 in
@@ -153,9 +279,10 @@ parse_args() {
 			;;
 		esac
 		case $1 in
-		--core | --join-token | --name | --labels | --ca-hash | --version)
+		--core | --join-token | --name | --labels | --ca-hash | --version | --assistant-name)
 			[ $# -ge 2 ] || die "$1 needs a value"
 			case $1 in
+			--assistant-name) assistant=$2 ;;
 			--core) CORE_URL=$2 ;;
 			--join-token) JOIN_TOKEN=$2 ;;
 			--name) NAME=$2 ;;
@@ -196,6 +323,9 @@ parse_args() {
 	if [ -z "$MODE" ] && [ -n "$CORE_URL" ]; then
 		MODE=node
 	fi
+	# Printed only: no control character.
+	assistant=$(printf '%s' "$assistant" | tr -d '[:cntrl:]')
+	ASSISTANT=${assistant:-Eriphe}
 	for v in "$CORE_URL" "$JOIN_TOKEN" "$NAME" "$LABELS" "$CA_HASH" "$SHARES"; do
 		case $v in
 		*"'"* | *'"'* | *\\* | *'$'* | *' '* | *'
@@ -292,7 +422,7 @@ settle() {
 	[ -n "$SHARES_SET" ] || SHARES=$(saved shares)
 	if [ "$OS" = Darwin ] && [ -z "$NATIVE" ] && [ -n "$SHARES" ]; then
 		# The VM sees no Mac folder.
-		warn "Lima's VM sees no Mac folder: --share needs a Mac with Apple silicon and macOS 26"
+		notice "Eriphe cannot open this Mac's folders: that needs a Mac with Apple silicon and macOS 26."
 		SHARES=''
 	fi
 	if [ "$MODE" = core ]; then
@@ -306,7 +436,7 @@ settle() {
 	joined_as=$(info joined_as)
 	if [ -n "$joined" ]; then
 		if [ -n "$joined_as" ] && [ "$joined_as" != "$NAME" ]; then
-			warn "this node joined as $joined_as and keeps that name"
+			notice "this machine joined as $joined_as and keeps that name."
 			NAME=$joined_as
 		fi
 	elif [ "$MODE" = node ]; then
@@ -345,18 +475,19 @@ if ! command -v docker >/dev/null 2>&1; then
     esac
     mkdir -p "$CONF"
     touch "$CONF/docker-installed"
+    echo "eriphe-step: Docker installed"
   } >&2
 fi
 # Docker starts at boot; the containers restart with it.
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-  systemctl enable --now docker.service >/dev/null 2>&1 || die "systemctl enable docker failed"
+  systemctl enable --now docker.service >&2 || die "Docker does not start (systemctl enable docker failed)"
 elif command -v rc-update >/dev/null 2>&1; then
   rc-update add docker default >/dev/null 2>&1 || true
   rc-service docker start >/dev/null 2>&1 || true
 fi
 i=0
 until docker info >/dev/null 2>&1; do
-  i=$((i + 1)); [ $i -le 60 ] || die "Docker does not answer"; sleep 1
+  i=$((i + 1)); [ $i -le 60 ] || die "Docker does not start (docker info does not answer)"; sleep 1
 done
 docker compose version >/dev/null 2>&1 || die "Docker Compose is missing (the docker-compose-plugin package)"
 [ -S /var/run/docker.sock ] || die "no /var/run/docker.sock (rootless Docker is not supported)"
@@ -366,6 +497,10 @@ if [ -f "$DATA/node/node.json" ]; then
   echo joined=1
   echo "joined_as=$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$DATA/node/node.json" | head -n 1)"
 fi
+# The version running, to say what an update changes.
+c=eriphe-node
+[ "$(sed -n 's/^mode=//p' "$CONF/install.conf" 2>/dev/null)" = core ] && c=eriphe-core
+echo "running_version=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$c" 2>/dev/null | sed 's/<no value>//')"
 [ -f "$CONF/install.conf" ] && sed 's/^/saved_/' "$CONF/install.conf"
 true
 EOF
@@ -891,14 +1026,16 @@ for img in $IMAGES; do
   if [ "$PULL" = missing ] && docker image inspect "$img" >/dev/null 2>&1; then continue; fi
   echo "Pulling $img..."
   if ! out=$(docker pull "$img" 2>&1); then
+    printf '%s\n' "$out"
     out=$(printf '%s\n' "$out" | tail -n 1)
     if docker image inspect "$img" >/dev/null 2>&1; then
-      echo "eriphe: could not pull $img ($out): using the copy already here" >&2
+      echo "eriphe: warning: could not pull $img ($out): using the copy already here"
     else
-      die "could not pull $img: $out (is the image published, and public?)"
+      die "could not download Eriphe: check this computer's Internet connection, then run the command again"
     fi
   fi
 done
+echo "eriphe-step: Downloaded"
 
 up() { dc up -d --pull never --remove-orphans "$@"; }
 if [ ! -f "$DATA/node/node.json" ] && [ "$MODE" = core ]; then
@@ -912,8 +1049,8 @@ if [ ! -f "$DATA/node/node.json" ] && [ "$MODE" = core ]; then
       [ -n "$JOIN_TOKEN" ]; do
     i=$((i + 1))
     if [ $i -gt 60 ]; then
-      docker logs --tail 20 eriphe-core >&2
-      die "eriphe-core gives no join token (above: its log)"
+      docker logs --tail 20 eriphe-core
+      die "Eriphe did not start (eriphe-core gives no join token): run the command again"
     fi
     sleep 2
   done
@@ -933,17 +1070,23 @@ connected() {
     state=$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' eriphe-node 2>/dev/null || echo missing)
     case $state in
       "running 0") ;;
-      *) [ $i -lt 3 ] || { docker logs --tail 20 eriphe-node >&2; die "eriphe-node does not start ($state; above: its log)"; } ;;
+      *) [ $i -lt 3 ] || { docker logs --tail 20 eriphe-node; die "Eriphe did not start (eriphe-node: $state): run the command again"; } ;;
     esac
-    [ $i -le 90 ] || { docker logs --tail 20 eriphe-node >&2; die "eriphe-node is not connected after 3 minutes (above: its log)"; }
+    if [ $i -gt 90 ]; then
+      docker logs --tail 20 eriphe-node
+      [ "$MODE" = core ] && die "Eriphe did not start in 3 minutes: run the command again"
+      die "this computer could not connect to $ASSISTANT in 3 minutes: check that the computer Eriphe runs on is on, then run the command again"
+    fi
     sleep 2
   done
 }
 if [ -f "$DATA/node/node.json" ]; then
   up
+  echo "eriphe-step: Installed"
   connected
 else
   ERIPHE_JOIN_TOKEN=$JOIN_TOKEN up
+  echo "eriphe-step: Installed"
   connected
   # Joined: the node has its own secret. Recreated without the join token,
   # which stays nowhere, not even in the container's configuration.
@@ -953,9 +1096,15 @@ else
 fi
 docker logs eriphe-node 2>&1 | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-node: /'
 if [ "$MODE" = core ]; then
+  echo "eriphe-step: Started"
   code=$(docker logs eriphe-core 2>&1 | sed -n 's/.*with the setup code \([A-Za-z0-9-]*\).*/\1/p' | tail -n 1)
   echo "setup_code=$code" >&3
+  c=eriphe-core
+else
+  echo "eriphe-step: Connected"
+  c=eriphe-node
 fi
+echo "version=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$c" 2>/dev/null | sed 's/<no value>//')" >&3
 
 # The updater, and the word to eriphe-core and the node that it is there.
 put "$CONF/update.conf" "$UPDATE_CONF"
@@ -995,6 +1144,9 @@ host_uninstall() {
 	{
 		prelude
 		cat <<'EOF'
+# Progress on stderr; stdout carries only key=value lines.
+exec 3>&1 >&2
+echo "mode=$(sed -n 's/^mode=//p' "$CONF/install.conf" 2>/dev/null)" >&3
 if command -v systemctl >/dev/null 2>&1 && [ -f /etc/systemd/system/eriphe-update.path ]; then
   systemctl disable --now eriphe-update.path eriphe-update.timer eriphe-update.service >/dev/null 2>&1 || true
   rm -f /etc/systemd/system/eriphe-update.service /etc/systemd/system/eriphe-update.path /etc/systemd/system/eriphe-update.timer
@@ -1022,7 +1174,7 @@ installed=
 rm -rf "$CONF" "$DATA"
 if [ -n "$installed" ]; then
   if [ -n "$(docker ps -aq 2>/dev/null)" ]; then
-    echo "Docker Engine stays: other containers use it."
+    echo docker_kept=1 >&3
   else
     echo "Removing Docker Engine (installed for Eriphe)..."
     if command -v apt-get >/dev/null 2>&1; then
@@ -1047,6 +1199,7 @@ if [ -n "$installed" ]; then
     groupdel docker >/dev/null 2>&1 || true
   fi
 fi
+echo "eriphe-step: Removed"
 EOF
 	} | on_host
 }
@@ -1060,13 +1213,12 @@ host_rollback() {
 if [ ! -f "$CONF/update.sh" ]; then
   die "no updater here yet: run the install command once, without --rollback"
 fi
-sh "$CONF/update.sh" rollback
+sh "$CONF/update.sh" rollback >&2
 # shellcheck disable=SC1091
 MODE=$(. "$CONF/update.conf"; echo "$MODE")
 target=node
 [ "$MODE" = core ] && target=core
-echo "Rollback:"
-sed -n 's/^outcome=//p; s/^message=\(..*\)/  \1/p; s/^from=\(..*\)/  from \1/p; s/^to=\(..*\)/  to \1/p' "$DATA/$target/update-status"
+cat "$DATA/$target/update-status"
 EOF
 	} | on_host
 }
@@ -1134,10 +1286,11 @@ mac_lima() {
 	if [ -x "$LIMACTL" ] && [ "$("$LIMACTL" --version 2>/dev/null)" = "limactl version $LIMA_VERSION" ]; then
 		return
 	fi
-	say "Downloading Lima $LIMA_VERSION..."
+	note "Downloading Lima $LIMA_VERSION..."
 	tmp=$(mktemp -d)
-	curl -fL --progress-bar -o "$tmp/lima.tar.gz" \
-		"https://github.com/lima-vm/lima/releases/download/v$LIMA_VERSION/lima-$LIMA_VERSION-Darwin-$arch.tar.gz"
+	curl -fsSL -o "$tmp/lima.tar.gz" \
+		"https://github.com/lima-vm/lima/releases/download/v$LIMA_VERSION/lima-$LIMA_VERSION-Darwin-$arch.tar.gz" ||
+		die "could not download Lima: check this Mac's Internet connection, then run the command again"
 	got=$(shasum -a 256 "$tmp/lima.tar.gz" | cut -d ' ' -f 1)
 	if [ "$got" != "$sum" ]; then
 		rm -rf "$tmp"
@@ -1146,7 +1299,7 @@ mac_lima() {
 	mkdir -p "$tmp/lima"
 	tar -xzf "$tmp/lima.tar.gz" -C "$tmp/lima"
 	if [ -x "$LIMACTL" ] && [ "$(vm_status)" = Running ]; then
-		say "Stopping the VM to update Lima..."
+		note "Stopping the VM to update Lima..."
 		"$LIMACTL" --tty=false stop "$VM" </dev/null
 	fi
 	mkdir -p "$ERIPHE_HOME"
@@ -1159,14 +1312,16 @@ mac_vm() {
 	mkdir -p "$LIMA_HOME"
 	status=$(vm_status)
 	if [ -z "$status" ]; then
-		say "Creating the VM $VM (the first start downloads Ubuntu, about 600 MB)..."
+		note "Creating the VM $VM (the first start downloads Ubuntu, about 600 MB)..."
 		lima_yaml >"$ERIPHE_HOME/$VM.yaml"
-		"$LIMACTL" --tty=false create --name "$VM" "$ERIPHE_HOME/$VM.yaml" </dev/null
+		"$LIMACTL" --tty=false create --name "$VM" "$ERIPHE_HOME/$VM.yaml" </dev/null ||
+			die "could not create Eriphe's virtual machine: run the command again"
 		status=Stopped
 	fi
 	if [ "$status" != Running ]; then
-		say "Starting the VM $VM..."
-		"$LIMACTL" --tty=false start "$VM" </dev/null
+		note "Starting the VM $VM..."
+		"$LIMACTL" --tty=false start "$VM" </dev/null ||
+			die "Eriphe's virtual machine does not start: run the command again"
 	fi
 }
 
@@ -1211,7 +1366,7 @@ mac_uninstall() {
 	launchctl bootout "gui/$(id -u)/$AGENT_LABEL" >/dev/null 2>&1 || true
 	rm -f "$AGENT_PLIST"
 	if [ -x "$LIMACTL" ] && [ -n "$(vm_status)" ]; then
-		say "Deleting the VM $VM..."
+		note "Deleting the VM $VM..."
 		"$LIMACTL" --tty=false delete --force "$VM" </dev/null
 	fi
 	rm -rf "$ERIPHE_HOME"
@@ -1219,6 +1374,7 @@ mac_uninstall() {
 	if [ ! -d "$HOME/.lima" ] && ! command -v limactl >/dev/null 2>&1; then
 		rm -rf "$HOME/Library/Caches/lima"
 	fi
+	step Removed
 }
 
 # ---- macOS with Apple's container -----------------------------------------
@@ -1253,30 +1409,40 @@ version_ge() {
 		NR == 2 { for (i = 1; i <= 3; i++) { b = $i + 0; if (a[i] != b) exit !(a[i] > b) } }'
 }
 
+# container_current: Apple's container is here, CONTAINER_VERSION or later
+# (have: its version, if any).
+container_current() {
+	have=$("$CONTAINER" --version 2>/dev/null | sed -n 's/.*version \([0-9][0-9.]*\).*/\1/p')
+	[ -n "$have" ] && version_ge "$have" "$CONTAINER_VERSION"
+}
+
+CONTAINER_WHY="it installs a tool from Apple that Eriphe needs"
+
 # native_container installs Apple's container if it is missing or older than
 # CONTAINER_VERSION, from its signed package (sudo: macOS asks for the
 # password), and starts its services, with their Linux kernel.
 native_container() {
 	mkdir -p "$ERIPHE_HOME"
-	have=$("$CONTAINER" --version 2>/dev/null | sed -n 's/.*version \([0-9][0-9.]*\).*/\1/p')
-	if [ -z "$have" ] || ! version_ge "$have" "$CONTAINER_VERSION"; then
-		say "Installing Apple's container $CONTAINER_VERSION (macOS asks for your password)..."
+	if ! container_current; then
+		note "Installing Apple's container $CONTAINER_VERSION..."
+		need_root "$CONTAINER_WHY"
 		tmp=$(mktemp -d)
-		curl -fL --progress-bar -o "$tmp/container.pkg" \
-			"https://github.com/apple/container/releases/download/$CONTAINER_VERSION/container-$CONTAINER_VERSION-installer-signed.pkg"
+		curl -fsSL -o "$tmp/container.pkg" \
+			"https://github.com/apple/container/releases/download/$CONTAINER_VERSION/container-$CONTAINER_VERSION-installer-signed.pkg" ||
+			die "could not download Apple's container: check this Mac's Internet connection, then run the command again"
 		got=$(shasum -a 256 "$tmp/container.pkg" | cut -d ' ' -f 1)
 		if [ "$got" != "$CONTAINER_SHA256" ] ||
 			! pkgutil --check-signature "$tmp/container.pkg" | grep -q 'Developer ID Installer: Apple Inc'; then
 			rm -rf "$tmp"
 			die "Apple's container package does not match its checksum or Apple's signature"
 		fi
-		sudo installer -pkg "$tmp/container.pkg" -target / >/dev/null || die "the package of Apple's container did not install"
+		sudo installer -pkg "$tmp/container.pkg" -target / || die "the package of Apple's container did not install"
 		rm -rf "$tmp"
 		# Removed with Eriphe only if Eriphe brought it.
 		[ -n "$have" ] || touch "$ERIPHE_HOME/container-installed"
 	fi
-	"$CONTAINER" system start --enable-kernel-install </dev/null >/dev/null 2>&1 ||
-		die "Apple's container does not start: $CONTAINER system start"
+	"$CONTAINER" system start --enable-kernel-install </dev/null ||
+		die "Apple's container does not start ($CONTAINER system start): restart the Mac, then run the command again"
 }
 
 # native_info is what an earlier install left, as host_docker reports it.
@@ -1359,17 +1525,25 @@ relay_plist() {
 		-socket "$RELAY_SOCKET" -dir "$ERIPHE_HOME" -owner "$(id -u)"
 }
 
+# relay_loaded: the relay is installed and loaded (maybe from an older
+# binary).
+relay_loaded() {
+	[ -f "$RELAY_PLIST" ] && [ "$(cat "$RELAY_PLIST")" = "$(relay_plist)" ] &&
+		launchctl print "system/$RELAY_LABEL" >/dev/null 2>&1
+}
+
+RELAY_WHY="it lets Eriphe reach your other devices on your home network"
+
 # native_relay installs or updates the relay (sudo: macOS asks for the
 # password), unless it is there already as it should be: the same plist,
 # loaded, and the same binary as the node's.
 native_relay() {
 	new=$(relay_plist)
-	if [ -f "$RELAY_PLIST" ] && [ "$(cat "$RELAY_PLIST")" = "$new" ] &&
-		cmp -s "$RELAY_BIN" "$ERIPHE_HOME/bin/eriphe-node" &&
-		launchctl print "system/$RELAY_LABEL" >/dev/null 2>&1; then
+	if relay_loaded && cmp -s "$RELAY_BIN" "$ERIPHE_HOME/bin/eriphe-node"; then
 		return
 	fi
-	say "Installing the node's way to eriphe-core on the LAN (a LaunchDaemon; macOS asks for your password)..." >&2
+	note "Installing the node's way to eriphe-core on the LAN (the LaunchDaemon $RELAY_LABEL)..."
+	need_root "$RELAY_WHY"
 	tmp=$(mktemp)
 	printf '%s\n' "$new" >"$tmp"
 	sudo launchctl bootout "system/$RELAY_LABEL" >/dev/null 2>&1 || true
@@ -1384,7 +1558,7 @@ native_relay() {
 
 native_relay_uninstall() {
 	[ -f "$RELAY_PLIST" ] || [ -f "$RELAY_BIN" ] || return 0
-	say "Removing the node's LaunchDaemon (macOS asks for your password)..."
+	note "Removing the LaunchDaemon $RELAY_LABEL..."
 	sudo launchctl bootout "system/$RELAY_LABEL" >/dev/null 2>&1 || true
 	sudo rm -rf "$RELAY_PLIST" "$RELAY_BIN" "$(dirname "$RELAY_SOCKET")" /var/log/eriphe-relay.log
 }
@@ -1790,19 +1964,21 @@ native_up() {
 	# Stopped while their binaries change.
 	launchctl bootout "gui/$(id -u)/$NODE_LABEL" >/dev/null 2>&1 || true
 	[ "$MODE" != core ] || launchctl bootout "gui/$(id -u)/$CORE_LABEL" >/dev/null 2>&1 || true
-	sh "$E/update.sh" install >&2 || die "could not install the binaries (above)"
+	sh "$E/update.sh" install >&2 ||
+		die "could not download Eriphe: check this Mac's Internet connection, then run the command again"
+	step Downloaded
 
 	if [ "$MODE" = core ]; then
 		load "$CORE_LABEL" "$(plist "$CORE_LABEL" keep "$E/core.log" "$E/bin/eriphe-core" -data "$E/core")"
 		if [ ! -f "$E/node/node.json" ]; then
-			say "Waiting for eriphe-core..." >&2
+			note "Waiting for eriphe-core..."
 			i=0
 			until JOIN_TOKEN=$("$E/bin/eriphe-core" join-token -data "$E/core" -name "$NAME" -quiet 2>/dev/null | tr -d '[:space:]') &&
 				[ -n "$JOIN_TOKEN" ]; do
 				i=$((i + 1))
 				[ $i -le 60 ] || {
 					tail -n 20 "$E/core.log" >&2
-					die "eriphe-core gives no join token (above: its log)"
+					die "Eriphe did not start (eriphe-core gives no join token): run the command again"
 				}
 				sleep 2
 			done
@@ -1818,17 +1994,20 @@ native_up() {
 	since=$({ wc -c <"$E/node.log"; } 2>/dev/null | tr -d " ")
 	since=${since:-0}
 	load "$NODE_LABEL" "$(plist "$NODE_LABEL" keep "$E/node.log" /bin/sh "$E/start-node.sh")"
-	say "Waiting for eriphe-node..." >&2
+	step Installed
+	note "Waiting for eriphe-node..."
 	i=0
 	until tail -c +"$((since + 1))" "$E/node.log" 2>/dev/null | grep -q 'connected to '; do
 		i=$((i + 1))
 		[ $i -le 90 ] || {
 			rm -f "$E/join-token"
 			tail -n 20 "$E/node.log" >&2
-			die "eriphe-node is not connected after 3 minutes (above: its log)"
+			[ "$MODE" != core ] || die "Eriphe did not start in 3 minutes: run the command again"
+			die "this Mac could not connect to $ASSISTANT in 3 minutes: check that the computer Eriphe runs on is on, then run the command again"
 		}
 		sleep 2
 	done
+	if [ "$MODE" = core ]; then step Started; else step Connected; fi
 	# Joined: the node has its own secret, the token is used.
 	rm -f "$E/join-token"
 	tail -c +"$((since + 1))" "$E/node.log" | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-node: /' >&2
@@ -1844,6 +2023,9 @@ native_up() {
 	echo updater=1
 	if [ "$MODE" = core ]; then
 		echo "setup_code=$(sed -n 's/.*with the setup code \([A-Za-z0-9-]*\).*/\1/p' "$E/core.log" | tail -n 1)"
+		echo "version=$(cat "$E/bin/eriphe-core.version" 2>/dev/null)"
+	else
+		echo "version=$(cat "$E/bin/eriphe-node.version" 2>/dev/null)"
 	fi
 }
 
@@ -1855,7 +2037,7 @@ native_uninstall() {
 	for l in "$UPDATE_LABEL" "$NODE_LABEL" "$CORE_LABEL"; do unload "$l"; done
 	native_relay_uninstall
 	if [ -x "$CONTAINER" ] && "$CONTAINER" system status >/dev/null 2>&1; then
-		say "Removing Eriphe's containers..."
+		note "Removing Eriphe's containers..."
 		ids=$("$CONTAINER" ls -a --format json 2>/dev/null |
 			jq -r '.[] | select(.configuration.labels["eriphe.task"] != null or .configuration.labels["eriphe.service"] != null) | .configuration.id')
 		# shellcheck disable=SC2086 # one argument per id
@@ -1874,13 +2056,15 @@ native_uninstall() {
 	rm -rf "$E"
 	if [ -n "$installed" ]; then
 		if [ -n "$("$CONTAINER" ls -a -q 2>/dev/null)" ]; then
-			say "Apple's container stays: other containers use it."
+			notice "Apple's container tool stays on this Mac: other containers use it."
 		else
-			say "Removing Apple's container (installed for Eriphe; macOS asks for your password)..."
+			note "Removing Apple's container (installed for Eriphe)..."
 			"$CONTAINER" system stop >/dev/null 2>&1 || true
-			sudo /usr/local/bin/uninstall-container.sh -d >/dev/null || warn "could not remove Apple's container: sudo /usr/local/bin/uninstall-container.sh -d"
+			sudo /usr/local/bin/uninstall-container.sh -d ||
+				notice "Apple's container tool could not be removed: sudo /usr/local/bin/uninstall-container.sh -d removes it."
 		fi
 	fi
+	step Removed
 }
 
 lan_address() {
@@ -1894,57 +2078,93 @@ lan_address() {
 
 # ---- Main ---------------------------------------------------------------
 
-main() {
-	OS=$(uname -s)
-	case $OS in
-	Linux | Darwin) ;;
-	*) die "this installs on Linux and macOS (Windows: node/install/install.ps1)" ;;
-	esac
-	# Told to eriphe-core and the node: the workspace shows how to update.
-	INSTALL=linux
-	[ "$OS" = Darwin ] && INSTALL=macos
-	parse_args "$@"
-	NATIVE=''
-	if [ "$OS" = Darwin ]; then
-		[ "$(id -u)" != 0 ] || die "on macOS, run this as yourself, not root"
-		mac_setup
-		! mac_native || NATIVE=1
+# to_screen: from here on, the screen shows what say prints, and the log
+# (LOG) takes everything else.
+to_screen() {
+	if [ "$OS" = Darwin ] && [ -n "$UNINSTALL" ]; then
+		t=${TMPDIR:-/tmp}
+		LOG=${t%/}/eriphe-uninstall.log # ~/.eriphe goes
+	elif [ "$OS" = Darwin ]; then
+		LOG=$HOME/.eriphe/install.log
+	elif [ "$(id -u)" = 0 ]; then
+		LOG=/var/log/eriphe-install.log
+	else
+		LOG=$HOME/.eriphe-install.log
 	fi
+	(umask 077 && mkdir -p "$(dirname "$LOG")" && printf 'install.sh, %s\n' "$(date)" >"$LOG") ||
+		die "cannot write $LOG"
+	exec 5>&1 6>&2 >>"$LOG" 2>&1
+	SCREEN=1
+}
 
-	if [ -n "$UNINSTALL" ]; then
-		if [ "$OS" = Darwin ] && [ -f "$ERIPHE_HOME/native" ]; then
-			native_uninstall
-		elif [ "$OS" = Darwin ]; then
-			mac_uninstall
-		else
-			host_uninstall
+# installed: Eriphe is on this machine already.
+installed() {
+	if [ -n "$NATIVE" ]; then
+		[ -f "$ERIPHE_HOME/install.conf" ]
+	elif [ "$OS" = Darwin ]; then
+		[ -x "$LIMACTL" ] && [ -n "$(vm_status)" ]
+	else
+		[ -d "$CONF" ]
+	fi
+}
+
+do_uninstall() {
+	say "Removing Eriphe from $HERE"
+	say ""
+	was=''
+	if [ "$OS" = Darwin ] && [ -f "$ERIPHE_HOME/native" ]; then
+		was=$(sed -n 's/^mode=//p' "$ERIPHE_HOME/install.conf" 2>/dev/null || true)
+		if [ -f "$RELAY_PLIST" ] || [ -f "$RELAY_BIN" ] || [ -f "$ERIPHE_HOME/container-installed" ]; then
+			need_root "it removes what Eriphe installed for the whole Mac"
 		fi
-		say "Eriphe is removed from this machine. Forget it in eriphe-core's workspace (Settings, Devices) if it had one."
-		return
+		native_uninstall
+	elif [ "$OS" = Darwin ]; then
+		mac_uninstall
+	else
+		ROOT_WHY="it removes what Eriphe installed for the whole computer"
+		on_steps host_uninstall
+		was=$(printf '%s\n' "$OUT" | sed -n 's/^mode=//p')
+		! printf '%s\n' "$OUT" | grep -qx docker_kept=1 ||
+			notice "Docker stays on this computer: other containers use it."
 	fi
+	say ""
+	if [ "$was" = core ]; then
+		say "Eriphe and its data were removed from $HERE."
+	else
+		para "Eriphe was removed from $HERE. If it was connected to Eriphe on another computer, forget it there too: Settings > Devices, in your browser."
+	fi
+	good_to_know
+}
 
-	if [ -n "$ROLLBACK" ] && [ -n "$NATIVE" ]; then
+do_rollback() {
+	say "Going back to the previous version on $HERE"
+	say ""
+	if [ -n "$NATIVE" ]; then
 		[ -f "$ERIPHE_HOME/update.sh" ] || die "Eriphe is not installed on this Mac"
 		sh "$ERIPHE_HOME/update.sh" rollback
 		target=node
 		[ -d "$ERIPHE_HOME/core" ] && target=core
-		say "Rollback:"
-		sed -n 's/^outcome=//p; s/^message=\(..*\)/  \1/p; s/^from=\(..*\)/  from \1/p; s/^to=\(..*\)/  to \1/p' "$ERIPHE_HOME/$target/update-status"
-		return
-	fi
-	if [ -n "$ROLLBACK" ]; then
+		OUT=$(cat "$ERIPHE_HOME/$target/update-status")
+		logs=$ERIPHE_HOME/update/update.log
+	else
 		if [ "$OS" = Darwin ]; then
 			if [ ! -x "$LIMACTL" ] || [ -z "$(vm_status)" ]; then
 				die "Eriphe is not installed on this Mac"
 			fi
 			[ "$(vm_status)" = Running ] || "$LIMACTL" --tty=false start "$VM" </dev/null
 		fi
-		host_rollback
-		return
+		ROOT_WHY="it changes what Eriphe installed for the whole computer"
+		on_steps host_rollback
+		logs=$DATA/update/update.log
 	fi
+	para "$(printf '%s\n' "$OUT" | show_status)"
+	say ""
+	say "Logs: $(tilde "$logs")"
+}
 
+do_install() {
+	before=''
 	if [ -n "$NATIVE" ]; then
-		native_container
 		INFO=$(native_info)
 		settle
 		AUTO_SHARES=$(saved auto_shares)
@@ -1955,79 +2175,163 @@ main() {
 				other=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 && $1 != "eriphe-co" {print $1; exit}')
 				[ -z "$other" ] || die "$other already listens on port $port of this Mac: eriphe-core needs it"
 			done
+			before=$(cat "$ERIPHE_HOME/bin/eriphe-core.version" 2>/dev/null || true)
+		else
+			before=$(cat "$ERIPHE_HOME/bin/eriphe-node.version" 2>/dev/null || true)
 		fi
-		out=$(native_up)
 	elif [ "$OS" = Darwin ]; then
 		major=$(sw_vers -productVersion | cut -d . -f 1)
-		[ "$major" -ge 13 ] || die "macOS 13.5 or later is needed (Apple Virtualization)"
-		mac_lima
-		mac_vm
-		mac_agent
+		[ "$major" -ge 13 ] || die "this Mac needs macOS 13.5 or later"
 	fi
 
-	if [ -z "$NATIVE" ]; then
-		INFO=$(host_docker)
+	UPDATING=''
+	if [ -n "$JOIN_TOKEN" ] && [ "$MODE" != core ]; then
+		say "Connecting $HERE to $ASSISTANT"
+	elif installed; then
+		UPDATING=1
+		ROOT_WHY="it updates Eriphe, which is installed for the whole computer"
+		say "Updating Eriphe on $HERE"
+	else
+		say "Installing Eriphe on $HERE"
+	fi
+	[ -n "$UPDATING" ] || [ -n "$NATIVE" ] || say "It takes a few minutes the first time."
+	say ""
+
+	if [ -n "$NATIVE" ]; then
+		# The password, asked once, before the steps, when it is needed.
+		why=''
+		container_current || why=$CONTAINER_WHY
+		if [ "$MODE" != core ] && ! relay_loaded; then
+			why=${why:+$why, and }${RELAY_WHY#"${why:+it }"}
+		fi
+		[ -z "$why" ] || need_root "$why"
+		native_container
+		out=$(native_up)
+	else
+		if [ "$OS" = Darwin ]; then
+			mac_lima
+			mac_vm
+			mac_agent
+		elif ! command -v docker >/dev/null 2>&1; then
+			ROOT_WHY="it installs Eriphe for the whole computer, with Docker, which it needs"
+		fi
+		on_steps host_docker
+		INFO=$OUT
 		settle
+		before=$(info running_version)
 		version=$(info docker_version)
 		isolated=1
 		if [ "${version%%.*}" -lt 28 ] 2>/dev/null; then
-			warn "Docker $version is older than 28: the tasks' network cannot hide this machine's own services (update Docker)"
+			notice "Docker on this computer is older than version 28: update it, so that tasks cannot reach this computer's own services."
 			isolated=0
 		fi
-		out=$(host_up "$(info docker_gid)" "$isolated")
+		on_steps host_up "$(info docker_gid)" "$isolated"
+		out=$OUT
 	fi
 	if [ "$OS" = Darwin ] && [ -z "$NATIVE" ] && [ "$MODE" = core ]; then
 		for port in 8800 8443; do
 			other=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 && $1 != "limactl" {print $1; exit}')
-			[ -z "$other" ] || warn "$other already listens on port $port of this Mac: the VM's port $port cannot be forwarded"
+			[ -z "$other" ] || notice "$other already uses port $port of this Mac: other devices cannot reach Eriphe on it."
 		done
 	fi
+	outcome "$out"
+}
 
+# outcome OUT: what was done, what to do next, where the logs are.
+outcome() {
+	addr=$(lan_address)
+	addr=${addr:-<this-computer>}
+	code=$(printf '%s\n' "$1" | sed -n 's/^setup_code=//p')
+	now=$(printf '%s\n' "$1" | sed -n 's/^version=//p')
 	say ""
-	if [ "$MODE" = core ]; then
-		addr=$(lan_address)
-		code=$(printf '%s\n' "$out" | sed -n 's/^setup_code=//p')
-		say "eriphe-core runs here, with node $NAME."
-		say "  Workspace: https://${addr:-<this machine>}:8443"
-		if [ -n "$code" ]; then
-			say "  Setup code: $code (open https://${addr:-<this machine>}:8443/setup)"
+	if [ -n "$UPDATING" ]; then
+		if [ -z "$now" ]; then
+			say "Updated."
+		elif [ "$now" = "$before" ]; then
+			say "Already up to date ($now)."
 		else
-			say "  Already set up: sign in with your password."
+			say "Updated to $now."
 		fi
-		say "  Other devices join it at http://${addr:-<this machine>}:8800 (Connect a device, in the workspace)."
-	else
-		say "eriphe-node runs here as $NAME and is connected to eriphe-core."
+	fi
+	if [ "$MODE" = core ]; then
+		if [ -n "$code" ]; then
+			done_=''
+			[ -n "$UPDATING" ] || done_="Done: Eriphe runs on $HERE. "
+			para "${done_}To finish, open this address in your browser and give the setup code:"
+			say ""
+			say "  https://$addr:8443/setup"
+			say "  Setup code: $code"
+		elif [ -n "$UPDATING" ]; then
+			say "Workspace: https://$addr:8443"
+		else
+			para "Done: Eriphe runs on $HERE. Open https://$addr:8443 in your browser and sign in."
+		fi
+		[ -n "$UPDATING" ] || notice "to connect your other computers, open Settings > Devices > Connect a device in your browser."
+	elif [ -z "$UPDATING" ]; then
+		para "Done: $HERE is connected to $ASSISTANT. Go back to your browser: it now appears in Devices."
 	fi
 	if [ "$PIN" = edge ]; then
-		say "On edge: it follows main, not the releases (--version latest follows the releases again)."
+		notice "it follows main, the version in development (--version latest follows the releases again)."
 	elif [ -n "$PIN" ]; then
-		say "Pinned to $PIN: it stays on that version (--version latest follows the releases again)."
-	elif printf '%s\n' "$out" | grep -qx 'updater=1'; then
-		say "It updates itself when eriphe-core asks (Settings, Devices, Updates)."
-	else
-		warn "no systemd here: this machine does not update itself; run this command again to update it"
+		notice "it stays on version $PIN (--version latest follows the releases again)."
+	elif ! printf '%s\n' "$1" | grep -qx 'updater=1'; then
+		notice "this computer does not update itself (it has no systemd): run the same command again to update it."
 	fi
 	if [ -n "$NATIVE" ]; then
 		shared=$(mac_shares)
-		if [ -n "$shared" ]; then
-			say "  Places shared with Eriphe: $(printf '%s' "$shared" | sed 's/=[^,]*//g; s/,/, /g') (Settings > Folders, in the workspace)."
-			say "  The first time a folder of Documents, the Desktop or iCloud Drive goes to a task, macOS asks once to let"
-			say "  \"container-runtime-linux\" (Apple's) open it: allow it, or the task fails. It may also ask to let it find"
-			say "  devices on local networks: tasks reach none either way (node/README.md, The container engine)."
-		fi
+		note "Places shared with Eriphe: $(printf '%s' "$shared" | sed 's/=[^,]*//g; s/,/, /g')"
+		[ -n "$UPDATING" ] || [ -z "$shared" ] ||
+			notice "the first time a task opens Documents, the Desktop or iCloud Drive, macOS asks to allow \"container-runtime-linux\". Allow it."
 	elif [ -n "$SHARES" ]; then
-		say "  Places shared with Eriphe: $(printf '%s' "$SHARES" | sed 's/=[^,]*//g; s/,/, /g') (Settings > Folders, in the workspace)."
-	elif [ "$OS" = Linux ]; then
+		note "Places shared with Eriphe: $(printf '%s' "$SHARES" | sed 's/=[^,]*//g; s/,/, /g')"
+	elif [ "$OS" = Linux ] && [ -z "$UPDATING" ]; then
 		hint="--share documents=/home/<you>/Documents"
 		[ -d /mnt/user ] && hint="--share shares=/mnt/user"
-		say "  No place shared with Eriphe: run this again with $hint to give it folders."
+		notice "Eriphe sees none of this computer's folders yet. To give it one, run the command again with $hint."
 	fi
+	good_to_know
+	say ""
 	if [ -n "$NATIVE" ]; then
-		say "It runs on this Mac, each task in a micro-VM of Apple's container, started at login. Logs: $ERIPHE_HOME/node.log"
+		logs=$(tilde "$ERIPHE_HOME/node.log")
+		[ "$MODE" != core ] || logs="$(tilde "$ERIPHE_HOME/core.log"), $logs"
 	elif [ "$OS" = Darwin ]; then
-		say "It runs in the VM $VM, started at login. Logs: LIMA_HOME=$LIMA_HOME $LIMACTL shell $VM sudo docker logs eriphe-node"
+		logs="LIMA_HOME=$(tilde "$LIMA_HOME") $(tilde "$LIMACTL") shell $VM sudo docker logs eriphe-node"
 	else
-		say "It starts with Docker at boot. Logs: docker logs eriphe-node"
+		logs="docker logs eriphe-node"
+		[ "$MODE" != core ] || logs="docker logs eriphe-core, $logs"
+	fi
+	say "Logs: $logs"
+}
+
+main() {
+	OS=$(uname -s)
+	case $OS in
+	Linux | Darwin) ;;
+	*) die "this installs on Linux and macOS (Windows: install/install.ps1)" ;;
+	esac
+	# Told to eriphe-core and the node: the workspace shows how to update.
+	INSTALL=linux
+	[ "$OS" = Darwin ] && INSTALL=macos
+	parse_args "$@"
+	NATIVE=''
+	HERE="this computer"
+	if [ "$OS" = Darwin ]; then
+		[ "$(id -u)" != 0 ] || die "on macOS, run this as yourself, not root"
+		mac_setup
+		! mac_native || NATIVE=1
+		HERE="this Mac"
+	fi
+	if [ -z "$UNINSTALL$ROLLBACK$MODE" ] && ! installed; then
+		usage >&2
+		die "give --core and --join-token to join an eriphe-core, or --core-mode"
+	fi
+	to_screen
+	if [ -n "$UNINSTALL" ]; then
+		do_uninstall
+	elif [ -n "$ROLLBACK" ]; then
+		do_rollback
+	else
+		do_install
 	fi
 }
 
