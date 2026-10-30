@@ -738,22 +738,6 @@ function lit(name) {
   const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
-  // Installed on iOS: the page may be laid out a status bar short of the
-  // screen, leaving an empty band at the bottom; the shell takes the
-  // screen's height instead.
-  if (isIOS() && standalone() && document.documentElement.classList.contains("shell")) {
-    const root = document.documentElement;
-    root.classList.add("ios-app");
-    const full = () => {
-      const portrait = matchMedia("(orientation: portrait)").matches;
-      const h = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-      root.style.setProperty("--full-h", Math.max(h, window.innerHeight) + "px");
-    };
-    full();
-    addEventListener("resize", full);
-    addEventListener("orientationchange", full);
-  }
-
   // The keyboard. Chrome on Android shrinks the page for it (the viewport's
   // interactive-widget); Safari on iOS lays it over the page instead: the
   // page follows the visible part, so the composer stays above the
