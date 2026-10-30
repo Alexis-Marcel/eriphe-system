@@ -504,6 +504,23 @@ type joinView struct {
 	Expires time.Time
 	CAHash  string // the machines' CA, which the new machine pins (machine_tls.go)
 	Wait    joinWait
+	// The assistant's name, which the installers print ("Connecting this Mac
+	// to Jarvis"); empty for the default one, which they know.
+	Assistant string
+}
+
+// plainName is a display name the commands can give in single quotes, in sh
+// and in PowerShell: no apostrophe (PowerShell takes ’ for one too).
+var plainName = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{M}\p{N} -]*$`)
+
+// joinAssistant is the assistant's name for the join commands, or nothing:
+// the installers say Eriphe then.
+func joinAssistant() string {
+	n := assistantName()
+	if n == defaultDisplayName || !plainName.MatchString(n) {
+		return ""
+	}
+	return n
 }
 
 // loopbackURL tells whether an address names this computer only.
@@ -585,6 +602,7 @@ func (w *web) joinResult(rw http.ResponseWriter, r *http.Request, s *session, v 
 		v.Token, v.Core, v.Expires, v.CAHash = token, w.joinCoreURL(r, r.PostFormValue("via")), expires, w.c.caHash()
 		v.Local = loopbackURL(strings.Split(v.Core, ",")[0])
 		v.Wait = joinWait{Name: v.Name, ID: strings.SplitN(token, ".", 2)[0]}
+		v.Assistant = joinAssistant()
 		log.Printf("web: join token for %s (rejoin: %t)", v.Name, v.Rejoin)
 	}
 	w.render(rw, r, s, "settings", "join-result", page{Data: v})

@@ -393,6 +393,35 @@ func TestJoinCommandPublishedPort(t *testing.T) {
 	}
 }
 
+// The join commands give the installers the assistant's name, for what they
+// print; not the default one, nor one that single quotes cannot hold.
+func TestJoinCommandAssistantName(t *testing.T) {
+	tw := newTestWeb(t)
+	csrf := tw.setup()
+	t.Cleanup(func() { setAssistantName("") })
+	for i, c := range []struct {
+		name string
+		want bool
+	}{{"Jarvis", true}, {"Élise Dupont-Ray", true}, {"Eriphe", false}, {"Jo's", false}, {"Jo’s", false}} {
+		setAssistantName(c.name)
+		_, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"pc" + strconv.Itoa(i)}}, csrf)
+		body = html.UnescapeString(body)
+		for _, want := range []string{
+			" --assistant-name '" + c.name + "'</pre>",
+			" $env:ERIPHE_ASSISTANT_NAME='" + c.name + "'; irm ",
+			"  ERIPHE_ASSISTANT_NAME: \"" + c.name + "\"</pre>",
+			" -AssistantName '" + c.name + "'</pre>",
+		} {
+			if strings.Contains(body, want) != c.want {
+				t.Errorf("%q: %q in the join commands: %t", c.name, want, !c.want)
+			}
+		}
+		if !c.want && strings.Contains(body, "ASSISTANT_NAME") {
+			t.Errorf("%q: the join commands give a name", c.name)
+		}
+	}
+}
+
 func TestWebAddMachine(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
