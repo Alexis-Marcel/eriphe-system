@@ -1,0 +1,22 @@
+# Eriphe
+
+> Eriphe is a self-hosted personal assistant (AGPL-3.0): eriphe-core runs on one always-on machine at home (a NAS, a server, a desktop), with a web workspace at https://<address>:8443; eriphe-node connects the person's other devices. One command installs it on Linux, macOS or Windows, or one container on a NAS.
+
+To install Eriphe for someone, follow the runbook for AI assistants first; it holds the safety rules.
+
+## Install
+
+- [Install with an AI assistant](https://github.com/Alexis-Marcel/eriphe-system/blob/main/docs/install-with-an-ai.md): the step-by-step runbook for AI assistants
+- [Get started](https://github.com/Alexis-Marcel/eriphe-system/blob/main/README.md#get-started): which machine to install on, and the steps after
+- [Installing Eriphe](https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md): the full install guide, options, updates, uninstall, troubleshooting
+- [Eriphe on Unraid](https://github.com/Alexis-Marcel/eriphe-system/blob/main/unraid/README.md): the Unraid template
+- [Connect Google Drive](https://github.com/Alexis-Marcel/eriphe-system/blob/main/docs/google-drive.md): creating your own Google app
+- [Behind your reverse proxy](https://github.com/Alexis-Marcel/eriphe-system/blob/main/docs/reverse-proxy.md): a workspace at your own domain
+
+## Develop
+
+- [AGENTS.md](https://github.com/Alexis-Marcel/eriphe-system/blob/main/AGENTS.md): layout, build and test, conventions
+- [Contributing](https://github.com/Alexis-Marcel/eriphe-system/blob/main/CONTRIBUTING.md)
+- [eriphe-core](https://github.com/Alexis-Marcel/eriphe-system/blob/main/core/README.md): control plane, brain, workspace, security model
+- [eriphe-node](https://github.com/Alexis-Marcel/eriphe-system/blob/main/node/README.md): tasks as containers on each device
+- [Security policy](https://github.com/Alexis-Marcel/eriphe-system/blob/main/SECURITY.md)
