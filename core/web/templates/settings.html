@@ -202,9 +202,16 @@ the request waits for the tasks to end. . is an updateRow with a request. */}}
 {{end}}{{end}}
 
 {{/* Settings → Devices → Updates (web_updates.go): eriphe-core's own, "Update all" and the switch for the night; each node's is on its card. */}}
+{{define "updates-fragment"}}{{template "updates" .Data}}{{end}}
 {{define "updates"}}
 <section class="panel" id="updates" aria-labelledby="updates-title">
-  <h3 id="updates-title">{{template "i-branch"}}{{t "updates.title"}}</h3>
+  <div class="panel-head">
+    <h3 id="updates-title">{{template "i-branch"}}{{t "updates.title"}}</h3>
+    <form class="inline update-check" hx-post="/settings/updates/check" hx-target="#updates" hx-swap="outerHTML">
+      {{if not .Checked.IsZero}}<span class="muted small" role="status">{{tf "updates.checkedat" (.Checked.Local.Format "15:04")}}</span>{{end}}
+      <button class="link-btn small" type="submit" hx-disabled-elt="this">{{t "updates.check"}}</button>
+    </form>
+  </div>
   <p class="muted">{{t "updates.lead"}}</p>
   {{template "core-update" index .Rows 0}}
   {{if gt .Behind 1}}

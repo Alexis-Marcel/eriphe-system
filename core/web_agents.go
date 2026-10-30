@@ -80,9 +80,11 @@ type agentsPage struct {
 	DefaultSource string
 	Brain         string
 	BrainModel    string
-	BrainSource   string      // config when the file names the brain's agent
-	BrainChoices  []agentView // the agents that can be the brain
-	Assistants    []assistantCard
+	BrainSource   string          // config when the file names the brain's agent
+	BrainChoices  []agentView     // the agents that can be the brain
+	BrainCard     *assistantCard  // the brain, at the top; nil without one
+	Helpers       []assistantCard // its assistants
+	AgentCount    int             // the agents it may give a task to (list_agents)
 	Flash         string
 	Skipped       map[string]string
 }
@@ -93,7 +95,7 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 	if w.c.base.DefaultAgent != "" {
 		v.DefaultSource = sourceConfig
 	}
-	if b := m.brain(); b != nil {
+	if b := m.brainEntry(); b != nil {
 		v.Brain, v.BrainSource = b.Agent, w.c.brainAgentSource(b.Name)
 	}
 	infos, _ := w.c.listAgents()
@@ -159,12 +161,15 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 		v.Flash = fmt.Sprintf(tr(lang, "agents.removed"), q.Get("removed"))
 	case q.Get("default") != "":
 		v.Flash = fmt.Sprintf(tr(lang, "agents.defaultset"), m.DefaultAgent)
+	case q.Get("brain") == "saved":
+		v.Flash = tr(lang, "agents.brainsaved")
 	case q.Get("brain") != "":
 		v.Flash = fmt.Sprintf(tr(lang, "agents.brainset"), v.Brain)
 	case q.Get("assistant") != "" && m.Assistants[q.Get("assistant")].Name != "":
 		v.Flash = fmt.Sprintf(tr(lang, "assistants.saved"), q.Get("assistant"))
 	}
-	v.Assistants = w.assistantCards(r, v)
+	v.BrainCard, v.Helpers = w.brainCards(r, v)
+	v.AgentCount = len(m.Agents)
 	return v
 }
 
@@ -504,12 +509,25 @@ func (w *web) handleDefaultAgent(rw http.ResponseWriter, r *http.Request, s *ses
 	rw.WriteHeader(http.StatusOK)
 }
 
+// handleBrainAgent saves the brain's block: its name, the agent it thinks
+// with and its extra tools, as the form has them.
 func (w *web) handleBrainAgent(rw http.ResponseWriter, r *http.Request, s *session) {
-	if err := w.c.setBrainAgent(r.PostFormValue("agent")); err != nil {
+	e := editOf(r)
+	b := w.c.conf().brainEntry()
+	if b == nil {
+		w.toast(rw, w.formError(r, w.c.setBrainAgent(e.Agent)), false) // no brain: says so
+		return
+	}
+	if err := w.c.editAssistant(b.Name, e); err != nil {
 		w.toast(rw, w.formError(r, err), false)
 		return
 	}
-	rw.Header().Set("HX-Redirect", "/settings/agents?brain=1")
+	w.c.ping()
+	to := "/settings/agents?brain=saved"
+	if e.Agent != "" && e.Agent != b.Agent {
+		to = "/settings/agents?brain=1"
+	}
+	rw.Header().Set("HX-Redirect", to)
 	rw.WriteHeader(http.StatusOK)
 }
 

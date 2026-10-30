@@ -50,9 +50,9 @@ func (c *core) taskMCPHandler() http.Handler {
 		}
 		server := r.PathValue("server")
 		if server == selfServer {
-			// eriphe-core's own tools, for an assistant whose role has them,
+			// eriphe-core's own tools, for an assistant whose role launches tasks,
 			// without self_url: what the bearer token gives at /mcp.
-			if a, r, ok := c.assistantOf(t); !ok || !r.SelfTools || a.SelfURL != "" || c.self == nil {
+			if a, r, ok := c.assistantOf(t); !ok || !r.can(powerLaunchesTasks) || a.SelfURL != "" || c.self == nil {
 				http.Error(w, "this task has no access to "+server, http.StatusForbidden)
 				return
 			}

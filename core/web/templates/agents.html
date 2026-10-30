@@ -1,4 +1,4 @@
-{{/* Settings → Agents: AI accounts (providers), agents, the default agent and the brain's. */}}
+{{/* Settings → Agents: the brain, then the agents, the default agent, the brain's assistants and the AI accounts (providers). */}}
 
 {{define "provider-icon"}}{{/* . is a provider kind */}}
 {{if or (eq . "claude-subscription") (eq . "anthropic-api")}}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/></svg>
@@ -34,6 +34,56 @@
   <span class="preset-text"><b>{{t (printf "kind.%s" .ID)}}</b><small>{{t (printf "kind.%s.desc" .ID)}}</small></span>
 </a></li>{{end}}{{end}}
 
+{{define "plain-status"}}{{/* . is available, replying, stopped or noai (plainStatus) */}}<span class="status plain-status {{if or (eq . "available") (eq . "replying")}}on{{else}}off{{end}} is-{{.}}" role="status"><span class="led" aria-hidden="true"></span>{{t (printf "assistants.plain.%s" .)}}</span>{{end}}
+
+{{define "brain-card"}}{{/* .Card the brain's assistantCard, .Page the agents page */}}{{with .Card}}
+<section class="panel brain-card" id="assistant-{{.Name}}" aria-labelledby="brain-title">
+  <div class="brain-head">
+    <h3 id="brain-title">{{template "i-bot"}}{{t "agents.braintitle"}}</h3>
+    {{template "plain-status" .Plain}}
+  </div>
+  <p class="muted">{{t "agents.brainwhat"}}</p>
+  {{if .Status.LastError}}<p class="alert small" role="alert">{{short .Status.LastError 300}}</p>{{end}}
+  <form class="brain-form" hx-post="/settings/brain-agent" hx-disabled-elt="find button[type=submit]" autocomplete="off">
+    <div class="field">
+      <label for="brain-name">{{t "assistants.name"}}</label>
+      {{if .NameLocked}}<p id="brain-name"><span class="strong">{{.DisplayName}}</span> {{template "src-tag" "config"}}</p>
+      {{else}}<input type="text" id="brain-name" name="display_name" value="{{.DisplayName}}" required maxlength="32" aria-describedby="brain-name-h">
+      <small id="brain-name-h" class="muted">{{t "assistants.namehint"}}</small>{{end}}
+    </div>
+    <div class="field">
+      <label for="brain-agent">{{t "agents.thinkswith"}}</label>
+      {{if .AgentLocked}}<p id="brain-agent"><span class="mono">{{.Spec.Agent}}</span>{{if .AgentModel}} <span class="muted small">{{.AgentModel}}</span>{{end}} {{template "src-tag" "config"}}</p>
+      <small class="muted">{{t "agents.brainchange"}}</small>
+      {{else if .Choices}}<select id="brain-agent" name="agent" aria-describedby="brain-agent-h">{{range .Choices}}<option value="{{.Name}}" {{if .Brain}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select>
+      <small id="brain-agent-h" class="muted">{{t "agents.brainswitch"}}</small>
+      {{else}}<p class="muted" id="brain-agent">{{t "agents.brainnone"}}</p>{{end}}
+    </div>
+    <div class="field brain-tasks">
+      <span class="field-label">{{t "agents.itstasks"}}</span>
+      <p>{{if gt $.Page.AgentCount 1}}{{tf "agents.tasksmany" $.Page.AgentCount}}{{else if eq $.Page.AgentCount 1}}{{t "agents.tasksone"}}{{else}}{{t "agents.tasksnone"}}{{end}}</p>
+    </div>
+    <details class="advanced-opts brain-details">
+      <summary>{{t "agents.technical"}}</summary>
+      <div class="stack">
+        <dl class="kv">
+          <div><dt>{{t "assistants.task"}}</dt><dd>{{if .Status.Task}}<a class="mono" href="/tasks/{{.Status.Task}}">{{.Status.Task}}</a>{{if .Status.State}} <span class="muted small">{{.Status.State}}</span>{{end}}{{else}}<span class="muted">{{t "assistants.notask"}}</span>{{end}}</dd></div>
+          <div><dt>{{t "assistants.lastturn"}}</dt><dd>{{if .Status.LastTurn}}{{ago .LastTurn}}{{else}}<span class="muted">{{t "time.never"}}</span>{{end}}</dd></div>
+        </dl>
+        <div class="field">
+          <label for="brain-tools">{{t "agents.extratools"}}</label>
+          {{if .ToolsLocked}}<p id="brain-tools">{{range .Spec.Tools}}<span class="tag mono">{{.}}</span> {{end}}{{template "src-tag" "config"}}</p>
+          {{else}}<input type="text" id="brain-tools" name="tools" value="{{.ToolsText}}" placeholder="{{t "assistants.toolsplaceholder"}}" spellcheck="false" aria-describedby="brain-tools-h">
+          <small id="brain-tools-h" class="muted">{{t "assistants.toolshint"}}</small>{{end}}
+          {{if .FreeReads}}<small class="muted">{{t "agents.freereads"}}</small>{{end}}
+        </div>
+      </div>
+    </details>
+    {{if not (and .NameLocked .AgentLocked .ToolsLocked)}}<div class="form-actions"><button class="btn btn-primary" type="submit">{{t "form.save"}}</button></div>{{end}}
+  </form>
+</section>
+{{end}}{{end}}
+
 {{define "agents"}}{{with .Data}}
 <header class="page-head page-head-row">
   <div><h2>{{t "settings.agents"}}</h2><p>{{t "agents.lead"}}</p></div>
@@ -54,6 +104,12 @@
 </section>
 {{else}}
 
+{{with .BrainCard}}{{template "brain-card" (dict "Card" . "Page" $.Data)}}{{else}}
+<section class="panel brain-card" aria-labelledby="brain-title">
+  <h3 id="brain-title">{{template "i-bot"}}{{t "agents.braintitle"}}</h3>
+  <p class="muted">{{t "agents.nobrain"}}</p>
+</section>
+{{end}}
 {{if .Agents}}
 <ul class="grid agents-grid">
 {{range .Agents}}
@@ -102,74 +158,56 @@
 </section>
 {{end}}
 
-<section class="panel" aria-labelledby="roles-title">
-  <h3 id="roles-title">{{template "i-check"}}{{t "agents.roles"}}</h3>
-  <div class="roles">
-    <div class="role">
-      <h4>{{t "agents.defaulttitle"}}</h4>
-      <p class="muted small">{{t "agents.defaultwhat"}}</p>
-      {{if eq .DefaultSource "config"}}
-      <p>{{tf "agents.defaultis" .Default}} {{template "src-tag" .DefaultSource}}</p>
-      {{else if .Agents}}
-      <form class="row-form row-form-2" hx-post="/settings/default-agent">
-        <label class="field"><span class="sr-only">{{t "agents.defaulttitle"}}</span>
-          <select name="agent" aria-label="{{t "agents.defaulttitle"}}">{{range .Agents}}<option value="{{.Name}}" {{if .Default}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select></label>
-        <button class="btn btn-soft" type="submit">{{t "form.save"}}</button>
-      </form>
-      {{else}}<p class="muted">{{t "agents.defaultnone"}}</p>{{end}}
-    </div>
-    <div class="role">
-      <h4>{{t "agents.braintitle"}}</h4>
-      <p class="muted small">{{t "agents.brainwhat"}}</p>
-      {{if not .BrainSource}}<p class="muted">{{t "agents.nobrain"}}</p>
-      {{else if eq .BrainSource "config"}}<p>{{tf "agents.brainis" .Brain}}{{if .BrainModel}} <span class="muted">({{.BrainModel}})</span>{{end}} {{template "src-tag" .BrainSource}}</p>
-      <p class="muted small">{{t "agents.brainchange"}}</p>
-      {{else if .BrainChoices}}
-      <form class="row-form row-form-2" hx-post="/settings/brain-agent" hx-confirm="{{t "agents.brainconfirm"}}">
-        <label class="field"><span class="sr-only">{{t "agents.braintitle"}}</span>
-          <select name="agent" aria-label="{{t "agents.braintitle"}}">{{range .BrainChoices}}<option value="{{.Name}}" {{if .Brain}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select></label>
-        <button class="btn btn-soft" type="submit" hx-disabled-elt="this">{{t "form.save"}}</button>
-      </form>
-      <p class="muted small">{{t "agents.brainswitch"}}</p>
-      {{else}}<p class="muted">{{t "agents.brainnone"}}</p>{{end}}
-    </div>
-  </div>
+<section class="panel" aria-labelledby="default-title">
+  <h3 id="default-title">{{template "i-check"}}{{t "agents.defaulttitle"}}</h3>
+  <p class="muted">{{t "agents.defaultwhat"}}</p>
+  {{if eq .DefaultSource "config"}}
+  <p>{{tf "agents.defaultis" .Default}} {{template "src-tag" .DefaultSource}}</p>
+  {{else if .Agents}}
+  <form class="row-form row-form-2" hx-post="/settings/default-agent">
+    <label class="field"><span class="sr-only">{{t "agents.defaulttitle"}}</span>
+      <select name="agent" aria-label="{{t "agents.defaulttitle"}}">{{range .Agents}}<option value="{{.Name}}" {{if .Default}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select></label>
+    <button class="btn btn-soft" type="submit">{{t "form.save"}}</button>
+  </form>
+  {{else}}<p class="muted">{{t "agents.defaultnone"}}</p>{{end}}
 </section>
 
-{{if .Assistants}}
+{{if or .BrainCard .Helpers}}
 <section class="panel" aria-labelledby="asst-title">
   <h3 id="asst-title">{{template "i-bot"}}{{t "assistants.title"}}</h3>
+  {{if .Helpers}}
   <p class="muted">{{t "assistants.lead"}}</p>
   <ul class="assistants">
-  {{range .Assistants}}
+  {{range .Helpers}}
     <li class="assistant" id="assistant-{{.Name}}">
       <div class="tile-head">
-        <span class="assistant-name"><span class="strong">{{.DisplayName}}</span>{{if ne .DisplayName .Name}} <span class="mono muted small">{{.Name}}</span>{{end}} <span class="tag tag-brain">{{.RoleLabel}}</span>{{if .Spec.Disabled}} <span class="tag">{{t "assistants.disabled"}}</span>{{end}}</span>
-        <span class="chips">{{range .Status.Conditions}}<span class="status {{if .Status}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{t (printf "assistants.cond.%s" .Type)}}</span>{{end}}</span>
+        <span class="assistant-name"><span class="strong">{{.DisplayName}}</span>{{if ne .DisplayName .Name}} <span class="mono muted small">{{.Name}}</span>{{end}} <span class="tag">{{.RoleLabel}}</span></span>
+        {{template "plain-status" .Plain}}
       </div>
+      {{if .ReportsTo}}<p class="muted small reports-to">{{tf "assistants.reportsto" .ReportsTo}}</p>{{end}}
+      {{if .Status.LastError}}<p class="alert small" role="alert">{{short .Status.LastError 300}}</p>{{end}}
       <dl class="kv">
         <div><dt>{{t "assistants.agent"}}</dt><dd>{{if .Spec.Agent}}<span class="mono">{{.Spec.Agent}}</span>{{if .AgentModel}} <span class="muted small">{{.AgentModel}}</span>{{end}}{{else}}<span class="muted">{{t "assistants.noagent"}}</span>{{end}}{{if .AgentLocked}} {{template "src-tag" "config"}}{{end}}</dd></div>
         <div><dt>{{t "assistants.tools"}}</dt><dd>{{range .Spec.Tools}}<span class="tag mono">{{.}}</span>{{end}}{{if .FreeReads}}<span class="muted small">{{if .Spec.Tools}}{{t "assistants.plusfree"}}{{else}}{{t "assistants.onlyfree"}}{{end}}</span>{{else if not .Spec.Tools}}<span class="muted small">{{t "assistants.notools"}}</span>{{end}}{{if .ToolsLocked}} {{template "src-tag" "config"}}{{end}}</dd></div>
         {{if .Status.Task}}<div><dt>{{t "assistants.task"}}</dt><dd><a class="mono" href="/tasks/{{.Status.Task}}">{{.Status.Task}}</a>{{if .Status.State}} <span class="muted small">{{.Status.State}}</span>{{end}}</dd></div>{{end}}
         <div><dt>{{t "assistants.lastturn"}}</dt><dd>{{if .Status.LastTurn}}{{ago .LastTurn}}{{else}}<span class="muted">{{t "time.never"}}</span>{{end}}</dd></div>
       </dl>
-      {{if .Status.LastError}}<p class="alert small" role="alert">{{short .Status.LastError 300}}</p>{{end}}
       {{if not (and .AgentLocked .ToolsLocked .NameLocked)}}
       <form class="assistant-form" hx-post="/settings/assistants/{{.Name}}" hx-disabled-elt="find button[type=submit]">
         {{if not .NameLocked}}<label class="field"><span>{{t "assistants.name"}}</span>
-          <input name="display_name" value="{{.DisplayName}}" required maxlength="32" autocomplete="off">
-          <small class="muted">{{t "assistants.namehint"}}</small></label>{{end}}
+          <input type="text" name="display_name" value="{{.DisplayName}}" required maxlength="32" autocomplete="off"></label>{{end}}
         {{if not .AgentLocked}}<label class="field"><span>{{t "assistants.agent"}}</span>
           <select name="agent">{{range .Choices}}<option value="{{.Name}}" {{if .Brain}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select></label>{{end}}
         {{if not .ToolsLocked}}<label class="field"><span>{{t "assistants.tools"}}</span>
-          <input name="tools" value="{{.ToolsText}}" placeholder="{{t "assistants.toolsplaceholder"}}" spellcheck="false" autocomplete="off">
+          <input type="text" name="tools" value="{{.ToolsText}}" placeholder="{{t "assistants.toolsplaceholder"}}" spellcheck="false" autocomplete="off">
           <small class="muted">{{t "assistants.toolshint"}}</small></label>{{end}}
-        <button class="btn btn-soft" type="submit">{{t "form.save"}}</button>
+        <div class="form-actions"><button class="btn btn-soft" type="submit">{{t "form.save"}}</button></div>
       </form>
       {{end}}
     </li>
   {{end}}
   </ul>
+  {{else}}<p class="muted">{{t "assistants.none"}}</p>{{end}}
 </section>
 {{end}}
 

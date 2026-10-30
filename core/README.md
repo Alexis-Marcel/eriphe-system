@@ -361,7 +361,8 @@ to `main` ([RELEASING.md](../RELEASING.md)). All the images of one CI build shar
 
 The binary has it (`-ldflags -X main.version`), and the image as the label
 `org.opencontainers.image.version`, which eriphe-core reads on the registry for `latest`, the
-latest release (`updates.go`). A machine is behind when it runs a release older than that one
+latest release (`updates.go`), at start and then every hour; "Vérifier maintenant" in Settings →
+Devices → Updates asks at once (once a minute at most) and says when it last did. A machine is behind when it runs a release older than that one
 (semver order, `version.go`), or a build from before the releases (`sha-<commit>`); a build of
 `main` or a local one never says so, as someone is testing it. The workspace shows `0.2.0`, and a
 build of `main` as `0.2.0-dev` with its commit in small.
@@ -662,15 +663,28 @@ Its spec says what it is and what it runs on; its status is what eriphe-core kee
 
 | Spec | |
 |---|---|
-| `role` | what it is: a card in `assistantRoles` (`brain` today) |
+| `role` | what it is: a card in `assistantRoles` (`brain` today), with its powers (below) |
 | `display_name` | what the user calls it, as a person (see [its name](#the-assistants-name)); Eriphe for the brain by default, its id for another |
 | `agent`, `node` | what it runs on; without an agent, the default one or the first that can run it |
 | `instructions` | its standing instructions (`{{user}}` and `{{name}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
 | `tools` | its grant from the catalog, like a task's; its role may add the catalog's free reads |
 | `resources` | what it is lent besides its tools (`{kind, ref, access, …}`): kept, lent with the resources work |
-| `triggers` | what wakes it: `conversation` (the user's messages and the tasks' events); later `source:<name>` and `schedule`. Its role's by default; one enabled assistant at most has the conversation |
+| `triggers` | what wakes it: `conversation` (the user's messages and the tasks' events); later `source:<name>` and `schedule`. Its role's by default; the conversation only for a role that `receivesConversation`, and one enabled assistant at most has it |
+| `reports_to` | the assistant it reports to: the brain (the one with the conversation), the only one it may name; empty means the brain. The brain reports to no one |
 | `disabled` | its task is stopped, and none started |
 | `self_url`, `mcp_servers` | the file only (see the brain) |
+
+A role's card lists its powers, what its assistants may do; the code checks them where it decides,
+never a name:
+
+| Power | |
+|---|---|
+| `talksToUser` | what it writes goes to the conversation |
+| `receivesConversation` | it may have the `conversation` trigger (needs `talksToUser`) |
+| `launchesTasks` | eriphe-core's own MCP tools: it starts, follows and stops tasks, and reads and writes the memory |
+| `lendsResources` | it lends the tasks it starts their resources (needs `launchesTasks`) |
+
+The brain's role has all four; a role with none watches and reports, through its triggers.
 
 The status (`GET /v1/assistants`) has its conditions `Running`, `Busy` and `Ready`, its current
 task, the agent it runs, its session, its last turn and its last error; the controller keeps its
@@ -682,13 +696,16 @@ works; a change of its agent, instructions, name, node or resources, or of the t
 restarts it once its turn is over; a disabled or removed one has its task stopped. In
 eriphe-core's first minute, it waits for the trusted servers still connecting. What an assistant
 gets comes from its role's card, never from its name, as a runtime's from its harness card: its
-self tools (eriphe-core's MCP), its free reads, the system network, streaming, the harness tools
+powers (eriphe-core's own tools among them), its free reads, the system network, streaming, the harness tools
 allowed in advance, its node profile, its first turn and its approval path. What wakes it and
 where its words go come from its triggers' cards.
 
 The brain is the built-in assistant `eriphe`, of role `brain`: the `brain` section of the file is
-its spec (read-only like the file's other entries), and Settings → Agents shows it under
-Assistants, where its agent and tools are set when the file leaves them out. Other assistants are
+its spec (read-only like the file's other entries). Settings → Agents opens on it, as "the brain",
+never as an assistant: its name, how it is doing in plain words (available, replying, stopped, no
+AI chosen) and its last error, the agent it thinks with, the agents it hands tasks to, and in
+technical details its task, its last turn and its extra tools, each set there when the file leaves
+it out. Below, the brain's assistants, each saying whom it reports to. Other assistants are
 added through the API only, for now; a file may also list them under `assistants`. An install from
 before moves by itself at start: the brain's `brain_*` keys become its status, the setting
 `brain_agent` its workspace agent, and the same agent keeps its running task.
@@ -698,7 +715,7 @@ before moves by itself at start: the brain's `brain_*` keys become its status, t
 Eriphe is the software's name; each user names their own assistant. The brain's `display_name`
 (1 to 32 letters, digits, spaces, apostrophes or dashes) is asked by the first-run wizard (an
 empty field: a new install chooses), and set
-in Settings → Agents → Assistants, with `PUT /v1/assistants/eriphe` (`{"display_name": "Jarvis"}`)
+at the top of Settings → Agents, with `PUT /v1/assistants/eriphe` (`{"display_name": "Jarvis"}`)
 or with `brain.display_name` in the file (then read-only). Its id stays `eriphe`. An install that
 never named it keeps Eriphe, with the same fingerprint: the upgrade restarts nothing.
 

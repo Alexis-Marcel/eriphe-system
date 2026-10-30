@@ -150,6 +150,7 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /settings/updates/request", w.auth(w.handleUpdateNow))
 	mux.Handle("GET /settings/updates/core", w.auth(w.handleUpdateState))
 	mux.Handle("POST /settings/updates/all", w.auth(w.handleUpdateAll))
+	mux.Handle("POST /settings/updates/check", w.auth(w.handleCheckUpdates))
 	mux.Handle("POST /settings/machines/{name}/forget", w.auth(w.handleForget))
 	mux.Handle("POST /settings/machines/{name}/rejoin", w.auth(w.handleRejoinCommand))
 	mux.Handle("GET /settings/home-assistant", w.auth(w.handleHomeAssistant))

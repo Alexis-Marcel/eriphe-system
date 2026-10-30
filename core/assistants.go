@@ -64,6 +64,9 @@ type Assistant struct {
 	// What wakes it: conversation (the user's messages, the tasks' events).
 	// Later source:<name> and schedule. Empty: its role's.
 	Triggers []string `json:"triggers,omitempty"`
+	// The assistant it reports to: the brain, the only one it may name.
+	// Empty: the brain, for any but the brain.
+	ReportsTo string `json:"reports_to,omitempty"`
 
 	// The configuration file's only: eriphe-core's MCP URL as seen from its
 	// node (without it, its node relays eriphe-core's tools), and the
@@ -91,6 +94,35 @@ func (a Assistant) displayName() string {
 		return defaultDisplayName
 	}
 	return a.Name
+}
+
+// brainEntry is the brain's spec, enabled or not: the assistant with the
+// conversation trigger, or the built-in one; nil when there is none.
+func (c *Config) brainEntry() *Assistant {
+	if b := c.brain(); b != nil {
+		return b
+	}
+	for _, n := range slices.Sorted(maps.Keys(c.Assistants)) {
+		if a := c.Assistants[n]; a.has(triggerConversation) {
+			return &a
+		}
+	}
+	return nil
+}
+
+// reportsTo is the name of the assistant a reports to: its reports_to, or
+// the brain; "" for the brain itself, or when there is no brain.
+func (c *Config) reportsTo(a Assistant) string {
+	if a.has(triggerConversation) {
+		return ""
+	}
+	if a.ReportsTo != "" {
+		return a.ReportsTo
+	}
+	if b := c.brainEntry(); b != nil {
+		return b.Name
+	}
+	return ""
 }
 
 // assistantName is what the user calls their assistant, the one the
@@ -182,6 +214,9 @@ func overlay(file, ws Assistant) Assistant {
 	if len(a.Triggers) == 0 {
 		a.Triggers = ws.Triggers
 	}
+	if a.ReportsTo == "" {
+		a.ReportsTo = ws.ReportsTo
+	}
 	if !a.Disabled {
 		a.Disabled = ws.Disabled
 	}
@@ -208,6 +243,8 @@ func readOnlyField(file, ws Assistant) string {
 		return "resources"
 	case len(ws.Triggers) > 0 && len(file.Triggers) > 0 && !slices.Equal(ws.Triggers, file.Triggers):
 		return "triggers"
+	case ws.ReportsTo != "" && file.ReportsTo != "" && ws.ReportsTo != file.ReportsTo:
+		return "reports_to"
 	}
 	return ""
 }
@@ -290,6 +327,20 @@ func (c *Config) checkAssistants() error {
 			conversation = n
 		}
 	}
+	// One reports to the brain: the one with the conversation, enabled or not.
+	for _, n := range slices.Sorted(maps.Keys(c.Assistants)) {
+		a := c.Assistants[n]
+		if a.ReportsTo == "" {
+			continue
+		}
+		what := "assistant " + n
+		if a.has(triggerConversation) {
+			return fmt.Errorf("%s: reports_to %q: the brain reports to no assistant", what, a.ReportsTo)
+		}
+		if to, ok := c.Assistants[a.ReportsTo]; !ok || !to.has(triggerConversation) {
+			return fmt.Errorf("%s: reports_to %q: it reports to the brain, the assistant with the conversation", what, a.ReportsTo)
+		}
+	}
 	return nil
 }
 
@@ -301,8 +352,16 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 	if name == brainAssistant {
 		what = "brain" // as the file names it
 	}
-	if _, ok := assistantRoles[a.Role]; !ok {
+	r, ok := assistantRoles[a.Role]
+	if !ok {
 		return fmt.Errorf("%s: unknown role %q", what, a.Role)
+	}
+	if err := r.check(); err != nil {
+		return fmt.Errorf("%s: role %s: %w", what, a.Role, err)
+	}
+	// What hears the conversation is the brain: its role says it may.
+	if a.has(triggerConversation) && !r.can(powerReceivesConversation) {
+		return fmt.Errorf("%s: the %s trigger is for a role that receives the conversation, not %s", what, triggerConversation, a.Role)
 	}
 	if a.DisplayName != "" {
 		if err := checkDisplayName(a.DisplayName); err != nil {

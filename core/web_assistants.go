@@ -9,10 +9,11 @@ import (
 	"time"
 )
 
-// Settings → Agents → Assistants: the long-lived assistants, the brain
-// first, with their agent, their tools and how they are doing. The
-// workspace sets what the file leaves out of them; new ones come through
-// the API (assistants.go).
+// Settings → Agents: the brain at the top, in plain words (its name, the
+// agent it thinks with, how it is doing), then its own assistants, which
+// report to it. The brain is an assistant underneath, never shown as one.
+// The workspace sets what the file leaves out of them; new ones come
+// through the API (assistants.go).
 
 type assistantCard struct {
 	assistantView
@@ -26,6 +27,42 @@ type assistantCard struct {
 	ToolsText   string
 	LastTurn    time.Time
 	Choices     []agentView // the agents that can run it
+	Plain       string      // how it is doing, in plain words: available, replying, stopped or noai
+	ReportsTo   string      // the display name of the one it reports to; the brain's helpers only
+}
+
+// plainStatus is how an assistant is doing, as the page says it: no AI
+// chosen, stopped, replying or available.
+func plainStatus(v assistantView) string {
+	if v.Spec.Agent == "" {
+		return "noai"
+	}
+	on := map[string]bool{}
+	for _, c := range v.Status.Conditions {
+		on[c.Type] = c.Status
+	}
+	switch {
+	case v.Spec.Disabled || !on["Running"]:
+		return "stopped"
+	case on["Busy"]:
+		return "replying"
+	}
+	return "available"
+}
+
+// brainCards are the brain's card, nil without a brain, and its helpers':
+// the other assistants.
+func (w *web) brainCards(r *http.Request, v agentsPage) (*assistantCard, []assistantCard) {
+	var brain *assistantCard
+	var helpers []assistantCard
+	for _, c := range w.assistantCards(r, v) {
+		if c.Spec.has(triggerConversation) {
+			brain = &c
+		} else {
+			helpers = append(helpers, c)
+		}
+	}
+	return brain, helpers
 }
 
 func (w *web) assistantCards(r *http.Request, v agentsPage) []assistantCard {
@@ -36,7 +73,10 @@ func (w *web) assistantCards(r *http.Request, v agentsPage) []assistantCard {
 		sets := w.c.fileSets(av.Name)
 		card := assistantCard{assistantView: av, RoleLabel: av.Spec.Role, FreeReads: assistantRoles[av.Spec.Role].FreeReads,
 			AgentLocked: sets["agent"], NameLocked: sets["display_name"], ToolsLocked: sets["tools"], ToolsText: strings.Join(av.Spec.Tools, ", "),
-			DisplayName: av.Spec.displayName()}
+			DisplayName: av.Spec.displayName(), Plain: plainStatus(av)}
+		if to, ok := m.Assistants[m.reportsTo(av.Spec)]; ok {
+			card.ReportsTo = to.displayName()
+		}
 		if l := tr(lang, "assistants.role."+av.Spec.Role); l != "assistants.role."+av.Spec.Role {
 			card.RoleLabel = l
 		}
@@ -52,12 +92,6 @@ func (w *web) assistantCards(r *http.Request, v agentsPage) []assistantCard {
 		}
 		out = append(out, card)
 	}
-	// The brain first.
-	for i, c := range out {
-		if c.Spec.has(triggerConversation) && i > 0 {
-			out[0], out[i] = out[i], out[0]
-		}
-	}
 	return out
 }
 
@@ -70,16 +104,21 @@ func splitTools(s string) []string {
 	return out
 }
 
-func (w *web) handleSaveAssistant(rw http.ResponseWriter, r *http.Request, s *session) {
+// editOf is what an assistant's form sets: its agent, and its tools and
+// name when the form has them.
+func editOf(r *http.Request) assistantEdit {
 	r.ParseForm()
 	var tools []string
 	if r.PostForm.Has("tools") {
 		tools = splitTools(r.PostFormValue("tools"))
 	}
-	name := r.PathValue("name")
-	e := assistantEdit{Agent: r.PostFormValue("agent"), Tools: tools, SetTools: r.PostForm.Has("tools"),
+	return assistantEdit{Agent: r.PostFormValue("agent"), Tools: tools, SetTools: r.PostForm.Has("tools"),
 		DisplayName: r.PostFormValue("display_name"), SetName: r.PostForm.Has("display_name")}
-	if err := w.c.editAssistant(name, e); err != nil {
+}
+
+func (w *web) handleSaveAssistant(rw http.ResponseWriter, r *http.Request, s *session) {
+	name := r.PathValue("name")
+	if err := w.c.editAssistant(name, editOf(r)); err != nil {
 		w.toast(rw, w.formError(r, err), false)
 		return
 	}
