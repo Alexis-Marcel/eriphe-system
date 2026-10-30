@@ -39,6 +39,9 @@ type WebConfig struct {
 	SessionDays int      `json:"session_days,omitempty"` // how long a login lasts, 30 by default
 	// How one signs in (web_signin.go); without it, Settings → Account says.
 	Auth *AuthConfig `json:"auth,omitempty"`
+	// The workspace's address, e.g. https://eriphe.example.org behind a
+	// reverse proxy (web_address.go). auth.external_url works too; this wins.
+	ExternalURL string `json:"external_url,omitempty"`
 }
 
 type web struct {
@@ -76,9 +79,17 @@ func newWeb(c *core, cfg WebConfig) (*web, error) {
 	w := &web{c: c, cfg: cfg, now: time.Now, limiter: newLoginLimiter(), testLimit: newTestLimiter(), wake: make(chan struct{}),
 		trusted: cfg.CertFile != "", sessions: time.Duration(cfg.SessionDays) * 24 * time.Hour, idle: 7 * 24 * time.Hour,
 		sso: newSSOState()}
+	w.cfg.ExternalURL = strings.TrimRight(strings.TrimSpace(cfg.ExternalURL), "/")
+	if err := (&AuthConfig{ExternalURL: w.cfg.ExternalURL}).check(); err != nil {
+		return nil, fmt.Errorf("web.external_url must be an https address without a path, e.g. https://eriphe.example.org")
+	}
 	if cfg.Auth != nil {
+		a := *cfg.Auth
+		if w.cfg.ExternalURL != "" {
+			a.ExternalURL = w.cfg.ExternalURL
+		}
 		var err error
-		if w.fileAuth, err = newSignin(*cfg.Auth, true); err != nil {
+		if w.fileAuth, err = newSignin(a, true); err != nil {
 			return nil, err
 		}
 	}
@@ -205,7 +216,8 @@ func (w *web) routes() http.Handler {
 	mux.Handle("GET /settings/journal", w.auth(w.handleJournal))
 	mux.Handle("GET /settings/account", w.auth(w.handleAccount))
 	mux.Handle("POST /settings/password", w.auth(w.handlePassword))
-	mux.Handle("POST /settings/signin", w.auth(w.handleSaveSignin)) // web_signin_settings.go
+	mux.Handle("POST /settings/signin", w.auth(w.handleSaveSignin))   // web_signin_settings.go
+	mux.Handle("POST /settings/address", w.auth(w.handleSaveAddress)) // web_address.go
 	mux.Handle("POST /settings/signin/issuer", w.auth(w.handleTestIssuer))
 	mux.Handle("POST /settings/signin/try", w.auth(w.handleTrySignin))
 	w.memoryRoutes(mux)  // web_memory.go

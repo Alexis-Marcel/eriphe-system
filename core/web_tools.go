@@ -626,6 +626,9 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 	// loopback redirect keeps the save-then-paste way.
 	plainSave := r.PostFormValue("connect") == "" && old != nil && old.authKind() == "oauth"
 	if srv.authKind() == "oauth" && srv.Auth.OAuth.RedirectURI == "" && !plainSave {
+		if !w.atAddress(rw, r) {
+			return
+		}
 		authURL, err := w.c.startPending(r.Context(), mode, name, srv, creds, w.callbackURL(r), w.oauthBinding(rw, r))
 		if err != nil {
 			fail(connectError(err))

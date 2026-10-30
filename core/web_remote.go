@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -187,15 +188,30 @@ func (w *web) remoteCoreURL() string {
 	return ""
 }
 
-// joinCoreURL is the -core of a join command: the local address, the
-// tailnet's, or both (the node tries them in order: at home, then away).
-func (w *web) joinCoreURL(r *http.Request, via string) string {
-	lan, remote := w.coreURL(r), w.remoteCoreURL()
-	switch {
-	case remote == "" || via == "lan":
-		return lan
-	case via == "remote" || lan == remote:
-		return remote
+// awayCoreURLs are eriphe-core's addresses for a device away from home:
+// the second address of the settings (web_address.go), then the tailnet's
+// when remote access is ready.
+func (w *web) awayCoreURLs() []string {
+	var out []string
+	for _, u := range []string{w.deviceFallback(), w.remoteCoreURL()} {
+		if u != "" && !slices.Contains(out, u) {
+			out = append(out, u)
+		}
 	}
-	return lan + "," + remote
+	return out
+}
+
+// joinCoreURL is the -core of a join command: the local address, the
+// ones away from home, or all (the node tries them in order: at home, then
+// away). Every installer takes such a list, comma-separated.
+func (w *web) joinCoreURL(r *http.Request, via string) string {
+	lan := w.coreURL(r)
+	away := slices.DeleteFunc(w.awayCoreURLs(), func(u string) bool { return u == lan })
+	switch {
+	case len(away) == 0 || via == "lan":
+		return lan
+	case via == "remote":
+		return strings.Join(away, ",")
+	}
+	return lan + "," + strings.Join(away, ",")
 }

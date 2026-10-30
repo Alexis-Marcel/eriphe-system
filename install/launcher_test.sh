@@ -89,6 +89,11 @@ done
 out=$(launcher ERIPHE_MODE=node ERIPHE_CORE=http://192.0.2.10:8800 ERIPHE_JOIN_TOKEN=t ERIPHE_CA_HASH=sha256:00 \
 	sh -c ". '$here/eriphe-launcher'; discover; settings; INFO=; settle; echo \"\$MODE \$CORE_URL \$JOIN_TOKEN \$CA_HASH\"" 2>&1)
 [ "$out" = "node http://192.0.2.10:8800 t sha256:00" ] || fail "node mode: $out"
+# Several addresses of eriphe-core, preferred first (the connect commands
+# give the local one, then the one away from home): kept as a list.
+out=$(launcher ERIPHE_MODE=node ERIPHE_CORE=http://192.0.2.10:8800,https://eriphe.tail0000.ts.net:8800 ERIPHE_JOIN_TOKEN=t \
+	sh -c ". '$here/eriphe-launcher'; discover; settings; INFO=; settle; echo \"\$CORE_URL\"" 2>&1)
+[ "$out" = "http://192.0.2.10:8800,https://eriphe.tail0000.ts.net:8800" ] || fail "two addresses: $out"
 mkdir -p "$T/data/launcher"
 echo mode=core >"$T/data/launcher/install.conf"
 out=$(launcher ERIPHE_MODE=node ERIPHE_CORE=http://192.0.2.10:8800 ERIPHE_JOIN_TOKEN=t sh -c ". '$here/eriphe-launcher'; discover; settings" 2>&1) &&

@@ -76,6 +76,9 @@ func (w *web) handleServerConnect(rw http.ResponseWriter, r *http.Request, s *se
 	if o := oauthOf(srv); o != nil && o.RedirectURI != "" {
 		redirect = o.RedirectURI // the paste step
 	} else {
+		if !w.atAddress(rw, r) {
+			return
+		}
 		binding = w.oauthBinding(rw, r)
 	}
 	f, authURL, err := w.c.startConnect(r.Context(), name, redirect, binding)

@@ -8,10 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"net"
 	"net/http"
 	"net/netip"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -194,21 +192,14 @@ func redirect(rw http.ResponseWriter, r *http.Request, to string) {
 }
 
 // sameOrigin refuses a request a browser sent from another site. Behind a
-// proxy that changes the host, the settings' external URL is the
-// workspace's own origin too.
+// proxy that changes the host, the workspace's address, and the origin a
+// trusted proxy says, are its own origin too (web_address.go).
 func (w *web) sameOrigin(r *http.Request) bool {
 	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 		return false
 	}
-	if o := r.Header.Get("Origin"); o != "" {
-		u, err := url.Parse(o)
-		if err != nil {
-			return false
-		}
-		ext := w.signin().origin
-		if u.Host != r.Host && (ext == "" || strings.ToLower(u.Scheme+"://"+u.Host) != ext) {
-			return false
-		}
+	if o := r.Header.Get("Origin"); o != "" && !w.ownOrigin(r, o) {
+		return false
 	}
 	return true
 }
@@ -485,7 +476,7 @@ func (w *web) handlePassword(rw http.ResponseWriter, r *http.Request, s *session
 // limited when the address is over its limit, slowed down when many
 // attempts have failed lately, whatever their address.
 func (w *web) guarded(r *http.Request, check func() bool) (ok, limited bool) {
-	ip := clientIP(r)
+	ip := w.signin().clientIP(r) // behind a trusted proxy, the browser's
 	if !w.limiter.begin(ip, w.now()) {
 		return false, true
 	}
@@ -494,14 +485,6 @@ func (w *web) guarded(r *http.Request, check func() bool) (ok, limited bool) {
 	}
 	w.limiter.end(ip, w.now(), ok)
 	return ok, false
-}
-
-func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }
 
 // loginLimiter slows down password guessing without ever locking the owner

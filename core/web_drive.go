@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -39,11 +38,6 @@ func (w *web) driveRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/drive/browse", w.auth(w.handleDriveBrowse))
 	mux.Handle("POST /settings/drive/folders", w.auth(w.handleDriveAdd))
 	mux.Handle("POST /settings/drive/folders/remove", w.auth(w.handleDriveRemove))
-}
-
-// origin is the workspace's own address, as the browser reaches it.
-func (w *web) origin(r *http.Request) string {
-	return "https://" + strings.TrimSuffix(strings.ToLower(r.Host), ":443")
 }
 
 func (w *web) driveView(r *http.Request) driveView {
@@ -105,6 +99,9 @@ func (w *web) handleDriveClient(rw http.ResponseWriter, r *http.Request, s *sess
 }
 
 func (w *web) handleDriveConnect(rw http.ResponseWriter, r *http.Request, s *session) {
+	if !w.atAddress(rw, r) {
+		return
+	}
 	in := driveConnect{Origin: w.origin(r), Write: r.PostFormValue("write") != "", Lang: w.lang(r)}
 	in.Binding = w.oauthBinding(rw, r)
 	authURL, err := w.c.startDrive(in)
