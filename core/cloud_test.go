@@ -51,39 +51,25 @@ func TestStateSignature(t *testing.T) {
 	}
 }
 
+// TestBounceOrigin holds bounceOrigin to the relay's own cases
+// (pages/origins.json, which pages/relay.test.js reads too).
 func TestBounceOrigin(t *testing.T) {
-	for s, want := range map[string]bool{
-		"https://192.168.0.2:8443":           true,
-		"https://10.0.0.5":                   true,
-		"https://127.0.0.1:8800":             true,
-		"https://100.101.102.103":            true, // Tailscale
-		"https://[fd7a:115c:a1e0::1]:8443":   true,
-		"https://eriphe.tail1234.ts.net":     true,
-		"https://eriphe.local:8443":          true,
-		"https://nas":                        true,
-		"https://box.home.arpa":              true,
-		"http://192.168.0.2:8800":            true,
-		"http://127.0.0.1:8800":              true,
-		"http://localhost:8800":              true,
-		"https://example.com":                false, // a public name
-		"https://eriphe.com":                 false,
-		"https://8.8.8.8":                    false, // a public address
-		"http://eriphe.local":                false, // http only to an address
-		"http://example.com":                 false,
-		"https://0x7f000001":                 false, // read as an address
-		"https://2130706433":                 false,
-		"https://192.168.0.2/oauth/callback": false, // an origin only
-		"https://192.168.0.2?x=1":            false,
-		"https://user@192.168.0.2":           false,
-		"https://192.168.0.2#x":              false,
-		"javascript:alert(1)":                false,
-		"https://EVIL.local":                 false,
-		"https://192.168.0.2:0":              false,
-		"https://nas:443":                    false, // a browser's origin has no default port
-		"":                                   false,
-	} {
-		if got := bounceOrigin(s); got != want {
-			t.Errorf("%q: %v, want %v", s, got, want)
+	raw, err := os.ReadFile("../pages/origins.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases struct{ Allowed, Refused []string }
+	if err := json.Unmarshal(raw, &cases); err != nil || len(cases.Allowed) == 0 || len(cases.Refused) == 0 {
+		t.Fatalf("origins.json: %v", err)
+	}
+	for _, s := range cases.Allowed {
+		if !bounceOrigin(s) {
+			t.Errorf("%q refused", s)
+		}
+	}
+	for _, s := range cases.Refused {
+		if bounceOrigin(s) {
+			t.Errorf("%q allowed", s)
 		}
 	}
 }
@@ -147,9 +133,9 @@ func (g *fakeGoogle) authorize(t *testing.T, authURL string) (state string) {
 	return q.Get("state")
 }
 
-// fakePortal is eriphe.com's bounce as the portal does it
-// (eriphe/src/lib/server/oauth.ts): only to the origin in the state, and
-// only code and state.
+// fakePortal is the relay's bounce as the page does it
+// (pages/site/oauth/callback/relay.js): only to the origin in the state,
+// and only code and state.
 func fakePortal(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -191,7 +177,7 @@ func filesCore(t *testing.T, mutate func(*Config)) (*testWeb, *catalogCore, stri
 	setVault(v)
 	t.Cleanup(func() { setVault(nil) })
 	app := filepath.Join(dir, "google-oauth.json")
-	os.WriteFile(app, []byte(`{"web":{"client_id":"eriphe-app","client_secret":"app-secret","redirect_uris":["https://eriphe.com/oauth/callback"]}}`), 0o600)
+	os.WriteFile(app, []byte(`{"web":{"client_id":"eriphe-app","client_secret":"app-secret","redirect_uris":["https://alexis-marcel.github.io/eriphe-system/oauth/callback/"]}}`), 0o600)
 	cfg := &Config{DB: filepath.Join(dir, "core.db"), Cloud: &CloudConfig{},
 		Providers:    map[string]Provider{"anthropic": {Kind: "claude-subscription", Secret: "/secrets/claude"}},
 		Agents:       map[string]Agent{"sonnet": {Runtime: "claude-code", Provider: "anthropic", Use: "default"}},
@@ -229,7 +215,7 @@ func filesCore(t *testing.T, mutate func(*Config)) (*testWeb, *catalogCore, stri
 }
 
 // The whole bounce: the workspace sends the browser to Google with PKCE and
-// a signed state, Google to eriphe.com, the portal back to the workspace,
+// a signed state, Google to the relay, the relay back to the workspace,
 // which exchanges the code and gives the token to eriphe-files.
 func TestDriveBounceRoundTrip(t *testing.T) {
 	g := newFakeGoogle(t)
@@ -258,7 +244,7 @@ func TestDriveBounceRoundTrip(t *testing.T) {
 		t.Fatalf("state %+v %v, want origin %s", p, err, tw.srv.URL)
 	}
 
-	// Google → eriphe.com → the workspace, with nothing but code and state.
+	// Google → the relay → the workspace, with nothing but code and state.
 	resp, err := tw.hc.Get(portal.URL + "/oauth/callback?code=the-code&state=" + url.QueryEscape(state) + "&scope=x&authuser=0")
 	if err != nil {
 		t.Fatal(err)
@@ -404,8 +390,8 @@ func TestDriveOwnClient(t *testing.T) {
 func TestDriveRefusals(t *testing.T) {
 	newFakeGoogle(t)
 	tw, c, _ := filesCore(t, nil)
-	// eriphe.com does not bounce to a public address.
-	_, err := c.startDrive(driveConnect{Origin: "https://eriphe.example.com", Binding: "b"})
+	// The relay does not bounce to an origin a browser would not write.
+	_, err := c.startDrive(driveConnect{Origin: "https://eriphe.example.com:443", Binding: "b"})
 	wantKey(t, err, "drive.badorigin")
 	// Denied at Google: nothing saved.
 	authURL, err := c.startDrive(driveConnect{Origin: tw.srv.URL, Binding: "b"})

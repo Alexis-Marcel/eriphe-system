@@ -32,25 +32,26 @@ import (
 // node, like a password: it never enters a task.
 //
 // Google wants a registered https redirect, and each installation has its
-// own address: the Eriphe app, published once, registers
-// https://eriphe.com/oauth/callback, and the portal there only bounces the
-// browser to the workspace named in the state (the Home Assistant way):
+// own address: the Eriphe app, published once, registers the relay, a
+// static page of this repository on GitHub Pages (pages/), which only
+// bounces the browser to the workspace named in the state (the Home
+// Assistant way, my.home-assistant.io):
 //
 //	workspace → Google (PKCE, state = e1.<payload>.<mac>)
-//	Google → https://eriphe.com/oauth/callback?code&state
-//	portal → <workspace>/oauth/callback?code&state   (nothing else, nothing kept)
+//	Google → https://alexis-marcel.github.io/eriphe-system/oauth/callback/?code&state
+//	relay → <workspace>/oauth/callback?code&state   (in the browser; nothing else, nothing kept)
 //	workspace: checks the state's MAC, the flow and the browser's cookie,
 //	           exchanges the code with the client secret and the PKCE verifier
 //
 // The state's payload is the workspace's origin, a random flow id and an
 // expiry, signed with HMAC-SHA256 under a key only this eriphe-core has: a
-// state it did not make, or one replayed, is refused here. The portal can
+// state it did not make, or one replayed, is refused here. The relay can
 // read the payload but not check the MAC (no shared key could stay secret
-// in a public image): it holds the origin to the shape of a workspace
+// in a public page): it holds the origin to the shape of a workspace
 // address instead (bounceOrigin), the same rule as here, and forwards only
 // code and state.
 //
-// "Use my own Google client" skips the portal: the client id and secret
+// "Use my own Google client" skips the relay: the client id and secret
 // typed in the workspace, registered at Google with the workspace's own
 // https://<workspace>/oauth/callback.
 
@@ -61,7 +62,7 @@ const (
 	driveTokenEnv  = "FILES_GOOGLE_TOKEN"
 	driveAccount   = "google"
 
-	defaultBounce   = "https://eriphe.com/oauth/callback"
+	defaultBounce   = "https://alexis-marcel.github.io/eriphe-system/oauth/callback/"
 	googleAppFile   = "google-oauth.json" // next to the database, by default
 	stateVersion    = "e1"
 	stateKeyName    = "cloud_state_key"
@@ -90,7 +91,8 @@ type CloudConfig struct {
 	// vault:<name>. Default google-oauth.json next to the database.
 	GoogleClientFile string `json:"google_client_file,omitempty"`
 	// BounceURL is the redirect registered for that client, which bounces
-	// to the workspace: https://eriphe.com/oauth/callback.
+	// to the workspace: the relay on GitHub Pages (defaultBounce) unless
+	// the client registers another one.
 	BounceURL string `json:"bounce_url,omitempty"`
 }
 
@@ -193,12 +195,16 @@ func openState(key []byte, s string, now time.Time) (statePayload, error) {
 // isCloudState tells a state of ours from a state of the go-sdk's flows.
 func isCloudState(s string) bool { return strings.HasPrefix(s, stateVersion+".") }
 
-// bounceOrigin is the rule the portal applies to the address it bounces
-// to (eriphe/src/lib/server/oauth.ts, the same rule): the origin of a
-// workspace, which is on the home network or the tailnet. https to a
-// private, loopback or Tailscale address, or to a local name (one label,
-// .local, .lan, .home, .internal, .home.arpa, .localdomain, .localhost) or a
-// tailnet name (.ts.net); http only to a loopback or private address.
+// bounceOrigin is the rule the relay applies to the address it bounces to
+// (pages/oauth/callback/relay.js, the same rule): the origin of a
+// workspace, exactly as a browser writes it. https to any host name or
+// address (a workspace behind its owner's own domain and proxy as well as
+// one on the home network or the tailnet); http only to a loopback or
+// private address, or localhost. The relay forwards only code, state (or
+// error) and only to /oauth/callback: a code is worth nothing without the
+// PKCE verifier and the flow cookie of the workspace that made the state,
+// nor without the Eriphe app's client secret (core/README.md, "The Eriphe
+// app and the bounce").
 func bounceOrigin(s string) bool {
 	u, err := url.Parse(s)
 	if err != nil || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" ||
@@ -211,25 +217,20 @@ func bounceOrigin(s string) bool {
 	}
 	ip, err := netip.ParseAddr(host)
 	isIP := err == nil
-	private := isIP && (ip.Unmap().IsLoopback() || ip.Unmap().IsPrivate() || ip.Unmap().IsLinkLocalUnicast() || cgnat.Contains(ip.Unmap()))
+	// An address as a browser writes it (::ffff:a.b.c.d is ::ffff:xxxx:xxxx there).
+	if isIP && (ip.String() != host || ip.Zone() != "" || ip.Is4In6() || ip.Is4() == strings.HasPrefix(u.Host, "[")) {
+		return false
+	}
+	private := isIP && (ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || cgnat.Contains(ip))
 	switch u.Scheme {
 	case "http":
 		return private || host == "localhost"
 	case "https":
 		if isIP {
-			return private
-		}
-		if !hostRe.MatchString(host) || numericHost.MatchString(host) {
-			return false
-		}
-		if !strings.Contains(host, ".") {
 			return true
 		}
-		for _, suffix := range []string{".local", ".lan", ".home", ".internal", ".home.arpa", ".localdomain", ".localhost", ".ts.net"} {
-			if strings.HasSuffix(host, suffix) {
-				return true
-			}
-		}
+		labels := strings.Split(host, ".")
+		return hostRe.MatchString(host) && !numericLabel.MatchString(labels[len(labels)-1])
 	}
 	return false
 }
@@ -237,8 +238,9 @@ func bounceOrigin(s string) bool {
 var (
 	portRe = regexp.MustCompile(`^[1-9][0-9]{0,4}$`)
 	hostRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
-	// A name a browser reads as an IPv4 address (2130706433, 0x7f000001).
-	numericHost = regexp.MustCompile(`^(0x[0-9a-f]*|[0-9]+)$`)
+	// A last label that makes a browser read the name as an IPv4 address
+	// (2130706433, 0x7f000001, a.1), which it rewrites or refuses.
+	numericLabel = regexp.MustCompile(`^(0x[0-9a-f]*|[0-9]+)$`)
 )
 
 // The flows.
@@ -308,7 +310,7 @@ func (c *core) startDrive(in driveConnect) (string, error) {
 			return "", &catalogError{http.StatusServiceUnavailable, "drive.noapp", "", err}
 		}
 		if !bounceOrigin(in.Origin) {
-			return "", &catalogError{http.StatusBadRequest, "drive.badorigin", in.Origin, errors.New("eriphe.com only bounces to a workspace on the home network or the tailnet")}
+			return "", &catalogError{http.StatusBadRequest, "drive.badorigin", in.Origin, errors.New("the sign-in relay only sends back to an https origin, or http to a private address")}
 		}
 		redirect = c.bounceURL()
 	}
