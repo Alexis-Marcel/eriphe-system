@@ -35,7 +35,8 @@
       <button class="send" type="submit" aria-label="{{t "chat.send"}}" title="{{t "chat.send"}}">{{template "i-send"}}</button>
     </form>
   </section>
-  <aside class="side" id="tasks-panel" aria-label="{{t "tasks.label"}}">
+  <aside class="side" id="tasks-panel" aria-label="{{t "tasks.label"}}" tabindex="-1">
+    <button type="button" class="icon-btn side-close" data-tasks-close aria-label="{{t "tasks.close"}}" title="{{t "tasks.close"}}">{{template "i-x"}}</button>
     <div id="tasks">{{template "tasks" .Data.Tasks}}</div>
   </aside>
   <div id="drawer" class="drawer" aria-live="polite"></div>

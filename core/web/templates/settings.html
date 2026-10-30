@@ -1,16 +1,6 @@
 {{define "main"}}
 <div class="settings">
-  <nav class="settings-nav" aria-label="{{t "settings.title"}}">
-    <h1 class="settings-title">{{t "settings.title"}}</h1>
-    <a href="/settings/devices" {{if eq .Tab "devices"}}aria-current="page"{{end}}>{{template "i-device"}}<span>{{t "settings.machines"}}</span>{{if or .Updates.Core .Updates.Nodes}}{{template "new-dot"}}{{end}}</a>
-    <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span></a>
-    <a href="/settings/tools" {{if eq .Tab "tools"}}aria-current="page"{{end}}>{{template "i-plug"}}<span>{{t "settings.tools"}}</span></a>
-    <a href="/settings/folders" {{if eq .Tab "folders"}}aria-current="page"{{end}}>{{template "i-folder"}}<span>{{t "settings.folders"}}</span></a>
-    <a href="/settings/remote" {{if eq .Tab "remote"}}aria-current="page"{{end}}>{{template "i-globe"}}<span>{{t "settings.remote"}}</span></a>
-    <a href="/settings/notifications" {{if eq .Tab "notifications"}}aria-current="page"{{end}}>{{template "i-bell"}}<span>{{t "settings.notifications"}}</span></a>
-    <a href="/settings/journal" {{if eq .Tab "journal"}}aria-current="page"{{end}}>{{template "i-list"}}<span>{{t "settings.journal"}}</span></a>
-    <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.account"}}</span>{{if .Updates.Core}}{{template "new-dot"}}{{end}}</a>
-  </nav>
+  {{template "settings-nav" .}}
   <div class="settings-body">
     {{if eq .Tab "devices"}}{{if eq .View "device"}}{{template "device" .}}{{else}}{{template "machines" .}}{{end}}
     {{else if eq .Tab "agents"}}{{if eq .View "agent-form"}}{{template "agent-page" .}}{{else if eq .View "provider-form"}}{{template "provider-page" .}}{{else}}{{template "agents" .}}{{end}}
@@ -407,6 +397,10 @@ is shown again. . is a joinWait. */}}
   <summary><span class="adv-title">{{template "i-key"}}{{t "account.secrets"}}</span><span class="muted small">{{t "account.secretslead"}}</span></summary>
   <div id="secrets" class="secrets">{{template "secrets-body" .Data.Secrets}}</div>
 </details>
+<section class="panel logout-panel">
+  <div><h3>{{t "nav.logout"}}</h3><p class="muted small">{{t "account.logoutlead"}}</p></div>
+  <form hx-post="/logout" class="inline"><button class="btn btn-soft" type="submit">{{template "i-logout"}}{{t "nav.logout"}}</button></form>
+</section>
 <p class="muted small center">eriphe-core {{ver .Build}}</p>
 {{if .Updates.Core}}<p class="small center"><a class="update-available" href="/settings/devices#updates"><b class="new-dot" aria-hidden="true"></b>{{t "update.available"}}</a></p>{{end}}
 {{end}}

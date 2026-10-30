@@ -128,7 +128,11 @@ func TestMemoryAboutAndInterview(t *testing.T) {
 	}
 	_, body, _ := tw.do("GET", "/memory", nil, nil)
 	sec := about(body)
-	for _, want := range []string{"Ce que Jarvis sait de toi", "Faire l&#39;interview", `hx-post="/memory/interview"`,
+	// The page is titled so, in the settings; the section is the essentials.
+	if !strings.Contains(body, "<h2>Ce que Jarvis sait de toi</h2>") {
+		t.Error("the page lacks its title")
+	}
+	for _, want := range []string{"L&#39;essentiel", "Faire l&#39;interview", `hx-post="/memory/interview"`,
 		"Sam est menuisier à son compte", "Sam habite 1 rue de l&#39;Exemple", `hx-post="/memory/` + itoa(int(plain.ID)) + `/pin"`,
 		`hx-post="/memory/` + itoa(int(pinned.ID)) + `/forget"`, `hx-get="/memory/` + itoa(int(plain.ID)) + `/edit" hx-target="#mem-` + itoa(int(plain.ID)) + `"`} {
 		if !strings.Contains(sec, want) {
@@ -169,7 +173,7 @@ func TestMemoryAboutAndInterview(t *testing.T) {
 	}
 	tw.hc.Jar.SetCookies(mustURL(tw.srv.URL), []*http.Cookie{{Name: "lang", Value: "en"}})
 	_, body, _ = tw.do("GET", "/memory", nil, nil)
-	if sec := about(body); !strings.Contains(sec, "What Jarvis knows about you") || !strings.Contains(sec, "Do the interview") {
+	if sec := about(body); !strings.Contains(body, "<h2>What Jarvis knows about you</h2>") || !strings.Contains(sec, "The essentials") || !strings.Contains(sec, "Do the interview") {
 		t.Errorf("English: %s", sec)
 	}
 

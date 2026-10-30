@@ -1,7 +1,7 @@
 /* The Mémoire page: one colour per kind of memory, the same cards, chips
    and panels as the rest of the workspace. */
 
-.memory { --k: var(--accent); max-width: 980px; margin: 0 auto; padding: 30px 24px 72px; display: grid; gap: 20px; align-content: start; }
+.memory { --k: var(--accent); min-width: 0; display: grid; gap: 20px; align-content: start; }
 .k-profile { --k: #5b5bf6; }
 .k-preference { --k: #ec4899; }
 .k-fact { --k: #0284c7; }
@@ -26,7 +26,7 @@
 .mem-mark { display: grid; place-items: center; width: 52px; height: 52px; flex: none; border-radius: 16px; background: var(--grad); color: #fff;
   box-shadow: 0 10px 26px -10px color-mix(in srgb, var(--accent) 80%, transparent); }
 .mem-mark .i { width: 26px; height: 26px; stroke-width: 1.8; }
-.mem-title h1 { font-size: clamp(1.5rem, 3vw, 1.9rem); letter-spacing: -.03em; }
+.mem-title h2 { font-size: clamp(1.5rem, 3vw, 1.9rem); letter-spacing: -.03em; }
 .mem-title p { color: var(--muted); max-width: 60ch; margin-top: 2px; }
 .mem-hero .btn .i { width: 16px; height: 16px; }
 
@@ -177,7 +177,7 @@
 .profile-panel { gap: 10px; }
 .mem-about { display: grid; gap: 12px; }
 .mem-about-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.mem-about-head h2 { margin: 0; font-size: 1.05rem; }
+.mem-about-head h3 { margin: 0; font-size: 1.05rem; }
 .mem-about-head p { margin: 4px 0 0; }
 .budget { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 18px; }
 .budget-num b { font-size: 1.8rem; letter-spacing: -.03em; }
@@ -186,7 +186,7 @@
 .memory .done .mem-list { margin-top: 10px; }
 
 @media (max-width: 860px) {
-  .memory { padding: 18px 16px 40px; gap: 16px; }
+  .memory { gap: 16px; }
   .mem-mark { width: 44px; height: 44px; border-radius: 14px; }
   .mem-mark .i { width: 22px; height: 22px; }
   .mem-title { gap: 12px; align-items: flex-start; }

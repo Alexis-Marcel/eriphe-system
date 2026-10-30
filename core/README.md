@@ -1169,6 +1169,15 @@ state, the pull request or document the agent mentioned), the permissions waitin
 inline in the conversation (Yes / No, with an optional reason for the agent), and the settings:
 devices (what Eriphe sees and does on each, and the command that connects one), agents, accounts and tools (the vault), the folders
 given to Eriphe (see [Folders](#folders)), the app and the notifications of this device (below), and the journal of decisions.
+The conversation is the one main screen; the header has two buttons, Tâches (a badge counts the
+running tasks, and turns urgent when one waits for the user) and Réglages. On a wide screen Tâches
+hides or shows the side panel; on a phone it opens the tasks as a sheet over the conversation
+(closed by its button, Escape or the browser's back), and from any other page it comes back to
+the conversation on its tasks (`/#tasks-panel`). The settings come in four groups: Assistant (the
+memory, "Ce que Jarvis sait de toi", still at `/memory`, and the agents), Connexions (tools,
+folders), Appareils & accès (devices, remote access, app and notifications) and Mon espace
+(account, sign-out, journal); an entry is marked when it needs a look (an update, a tool in error,
+a refused key). On a phone the settings say the way back, "‹ Conversation".
 The conversation shows the user's messages and the assistant's answers. The events given to the
 brain (a tool or an agent added, a task's turn over, a permission asked) are its notes and are not
 shown; a task that failed, was stopped or was lost is one short line that opens its drawer. When
@@ -1438,7 +1447,7 @@ included), `display: standalone`, `start_url` and `scope` `/`; the pages add the
 and meta tags. Installed, it draws under the status bar and around the notch, and keeps its bars
 out of the safe areas; fields are 16 px at least on a phone (Safari zooms into smaller ones); the
 composer stays above the keyboard (Chrome resizes the page for it, `interactive-widget`; on iOS the
-page follows the visible viewport and the tab bar steps aside). The service worker (`/sw.js`,
+page follows the visible viewport). The service worker (`/sw.js`,
 served with the static files' version so that each update brings a fresh cache) keeps the static
 files only: versioned ones cache first, the others network first; a page is always fetched, and
 offline a small static page says so. No page, action or event stream is ever cached.
