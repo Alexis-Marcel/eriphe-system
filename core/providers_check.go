@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -134,4 +136,83 @@ func trf(lang, key string, args ...any) string {
 		return tr(lang, key)
 	}
 	return fmt.Sprintf(tr(lang, key), args...)
+}
+
+// selfHostedDial dials a self-hosted model server: the transport's own,
+// but for tests, whose fake answers on the loopback the form refuses.
+var selfHostedDial func(ctx context.Context, network, addr string) (net.Conn, error)
+
+// checkSelfHosted tries a self-hosted model server (Ollama, llama.cpp,
+// vLLM, LM Studio) as OpenCode will reach it: GET <base>/models, with its
+// key if it has one. It lists the models the server serves, to copy into
+// the form.
+func checkSelfHosted(ctx context.Context, lang, base, key string) testView {
+	key = strings.TrimSpace(key)
+	if checkBaseURL(base) != nil {
+		return testView{State: "err", Text: tr(lang, "providers.badbaseurl"), Cause: causeNetwork}
+	}
+	if !selfHostedKey(key) {
+		return testView{State: "err", Text: tr(lang, "providers.badkey"), Cause: causeAuth}
+	}
+	ctx, cancel := context.WithTimeout(ctx, testConnTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/models", nil)
+	if err != nil {
+		return testView{State: "err", Text: tr(lang, "providers.badbaseurl"), Cause: causeNetwork}
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	t := testTransport()
+	if selfHostedDial != nil {
+		t.DialContext = selfHostedDial
+	}
+	// A redirect is not followed: the key would go along.
+	client := &http.Client{Transport: t, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		v := testView{State: "err", Text: tr(lang, "ptest.selfunreachable"), Cause: causeNetwork}
+		switch k := netErrorKey(err); {
+		case k != "":
+			v.Text = tr(lang, k)
+		case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
+			v.Text = tr(lang, "test.timeout")
+		default:
+			v.Detail = truncate(err.Error(), 200)
+		}
+		return v
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		if key == "" {
+			return testView{State: "err", Text: tr(lang, "ptest.selfneedskey"), Cause: causeAuth}
+		}
+		return testView{State: "err", Text: tr(lang, "ptest.denied"), Cause: causeAuth}
+	case resp.StatusCode == http.StatusNotFound:
+		return testView{State: "err", Text: tr(lang, "ptest.selfnotfound"), Cause: causeServer, Detail: resp.Status}
+	case resp.StatusCode != http.StatusOK:
+		return testView{State: "err", Text: trf(lang, "test.status", resp.StatusCode), Cause: causeServer, Detail: resp.Status}
+	}
+	var out struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out) != nil {
+		return testView{State: "err", Text: tr(lang, "ptest.selfnotfound"), Cause: causeServer}
+	}
+	var ids []string
+	for _, m := range out.Data {
+		if checkModelIDs([]string{m.ID}) == nil && !slices.Contains(ids, m.ID) {
+			ids = append(ids, m.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return testView{State: "info", Text: tr(lang, "ptest.selfnomodels")}
+	}
+	const shown = 20
+	v := testView{State: "ok", Text: trf(lang, "ptest.selfok", len(ids)), Tools: ids[:min(len(ids), shown)]}
+	v.More = len(ids) - len(v.Tools)
+	return v
 }

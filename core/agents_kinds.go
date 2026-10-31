@@ -16,7 +16,13 @@ import (
 const (
 	billSubscription = "subscription" // the user's subscription, within its limits
 	billUsage        = "usage"        // by use, on the provider's bill
+	billSelfHosted   = "selfhosted"   // the user's own machine: nothing per request
 )
+
+// selfHostedKind is a model server the user runs (Ollama, llama.cpp, vLLM,
+// LM Studio), reached at its OpenAI-compatible /v1 address: its models are
+// the provider's own list (Provider.Models), not the kind's.
+const selfHostedKind = "openai-compatible"
 
 // modelChoice is a model offered in the agent form. ID is what the runtime
 // takes: an alias of Claude Code, or OpenCode's provider/model.
@@ -153,6 +159,10 @@ var providerKinds = []providerKind{
 			{"kimi", "openrouter/moonshotai/kimi-k3.1-pro", "preset.agent.kimi", true},
 			{"deepseek", "openrouter/deepseek/deepseek-v4-pro", "preset.agent.deepseek", false},
 		}},
+	// The user's own model server: an address, an optional key, the models
+	// it serves. Nothing is assumed of them but tool calling.
+	{ID: selfHostedKind, Billing: billSelfHosted, Name: "selfhosted", Runtimes: []string{"opencode"},
+		Env: "SELFHOSTED_API_KEY", ModelNS: "selfhosted", Unlisted: toolsOnlyCaps},
 	// Any credential, in the variable the user names, for an ACP agent of
 	// their choice: nothing is assumed of its models but tool calling.
 	{ID: "custom-api", Billing: billUsage, Name: "custom", Runtimes: []string{"acp"}, CustomEnv: true, Unlisted: toolsOnlyCaps},
@@ -172,7 +182,8 @@ func runtimesOf(kind string) []string {
 	return slices.Clone(k.Runtimes)
 }
 
-// modelLabel is the usual name of an agent's model, or the model itself.
+// modelLabel is the usual name of an agent's model, or the model itself
+// (a self-hosted one without its selfhosted/).
 func modelLabel(kind, runtime, model string) string {
 	k, _ := kindOf(kind)
 	for _, m := range k.Models[runtime] {
@@ -180,7 +191,21 @@ func modelLabel(kind, runtime, model string) string {
 			return m.Label
 		}
 	}
+	if kind == selfHostedKind {
+		return strings.TrimPrefix(model, k.ModelNS+"/")
+	}
 	return model
+}
+
+// selfHostedChoices are the models a self-hosted provider serves, as the
+// agent form offers them.
+func selfHostedChoices(p Provider) []modelChoice {
+	k, _ := kindOf(selfHostedKind)
+	var out []modelChoice
+	for _, m := range p.Models {
+		out = append(out, modelChoice{ID: k.ModelNS + "/" + m, Label: m, Note: "model.selfhosted", modelCaps: toolsOnlyCaps})
+	}
+	return out
 }
 
 // modelCard is what an agent's model reads and does: its choice's, or

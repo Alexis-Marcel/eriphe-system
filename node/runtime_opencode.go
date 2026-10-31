@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"net/url"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -70,6 +72,9 @@ func opencodeSetup(t *Task) map[string]string {
 			// get the code instead of the provider chosen.
 			cfg["disabled_providers"] = []string{"opencode"}
 		}
+		if p := selfHostedProvider(t); p != nil {
+			cfg["provider"] = map[string]any{selfHostedNS: p}
+		}
 	}
 	raw, _ := json.Marshal(cfg)
 	env := map[string]string{
@@ -87,6 +92,56 @@ func opencodeSetup(t *Task) map[string]string {
 		env["OPENCODE_DISABLE_CLAUDE_CODE"] = "1"
 	}
 	return env
+}
+
+// selfHostedNS is the OpenCode provider of a self-hosted model server: the
+// agent's model is selfhosted/<the server's model>.
+const selfHostedNS = "selfhosted"
+
+// selfHostedProvider is OpenCode's provider block for the task's
+// self-hosted model server (Ollama, llama.cpp, vLLM, LM Studio), through
+// its built-in @ai-sdk/openai-compatible: its address, the one model the
+// task uses, and its key as {env:…}, which OpenCode reads from the task's
+// environment so that it never sits in the configuration. OpenCode
+// substitutes {env:…} and {file:…} in the configuration's text: nothing
+// that could hold one, or end a JSON string, goes in. nil when the task
+// has no such server.
+func selfHostedProvider(t *Task) map[string]any {
+	ep := t.Spec.ModelEndpoint
+	model, ok := strings.CutPrefix(t.Spec.Model, selfHostedNS+"/")
+	if ep == nil || !ok || model == "" {
+		return nil
+	}
+	u, err := url.Parse(ep.BaseURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || !configSafe(ep.BaseURL) || !configSafe(model) {
+		return nil
+	}
+	// A model on a home machine can take long to answer a long prompt:
+	// 15 minutes a request, not OpenCode's 5.
+	options := map[string]any{"baseURL": ep.BaseURL, "timeout": 900000}
+	if ep.KeyEnv != "" && credentialVar.MatchString(ep.KeyEnv) && configSafe(t.Spec.Identity[ep.KeyEnv]) && t.Spec.Identity[ep.KeyEnv] != "" {
+		options["apiKey"] = "{env:" + ep.KeyEnv + "}"
+	}
+	return map[string]any{
+		"npm":     "@ai-sdk/openai-compatible",
+		"name":    "Self-hosted",
+		"options": options,
+		"models": map[string]any{model: map[string]any{
+			"name":      model,
+			"tool_call": true,
+		}},
+	}
+}
+
+// credentialVar is a variable name a key may be read from.
+var credentialVar = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
+
+// configSafe tells whether a value can go into OpenCode's configuration
+// text: no quote, backslash, brace nor control character.
+func configSafe(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool {
+		return r < ' ' || r == 0x7f || r == '"' || r == '\\' || r == '{' || r == '}'
+	})
 }
 
 // opencodeMCPPermissions asks for every tool of the task's MCP servers

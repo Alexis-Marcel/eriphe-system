@@ -3,9 +3,101 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
+
+// A self-hosted model server: no key needed, an address the tasks can
+// reach, and the task pointed at it with that one host:port let through.
+func TestSelfHostedConfig(t *testing.T) {
+	secret := filepath.Join(t.TempDir(), "key")
+	os.WriteFile(secret, []byte("k-123\n"), 0o600)
+	good := func() *Config {
+		return &Config{
+			Providers:    map[string]Provider{"ollama": {Kind: selfHostedKind, BaseURL: "http://192.0.2.10:11434/v1", Models: []string{"qwen3:8b"}}},
+			Agents:       map[string]Agent{"qwen": {Runtime: "opencode", Provider: "ollama", Model: "selfhosted/qwen3:8b"}},
+			DefaultAgent: "qwen",
+		}
+	}
+	cfg := good()
+	if err := checkAll(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if env, err := cfg.lendAgent(cfg.Agents["qwen"]); err != nil || len(env) != 0 {
+		t.Fatalf("lent without a key: %v, %v", env, err)
+	}
+	// The task: its address, and that host:port in a copy of its rule.
+	shared := defaultEgress()
+	spec := nodeTaskSpec{Egress: shared}
+	cfg.modelEndpoint("qwen", map[string]string{}, &spec)
+	if spec.ModelEndpoint == nil || spec.ModelEndpoint.BaseURL != "http://192.0.2.10:11434/v1" || spec.ModelEndpoint.KeyEnv != "" ||
+		!slices.Equal(spec.Egress.Endpoints, []string{"192.0.2.10:11434"}) || len(shared.Endpoints) != 0 {
+		t.Fatalf("spec %+v, egress %+v, shared %+v", spec.ModelEndpoint, spec.Egress, shared)
+	}
+	// With a key: its variable. The default port of https.
+	cfg.Providers["ollama"] = Provider{Kind: selfHostedKind, Secret: secret, BaseURL: "https://llm.example.org/v1"}
+	env, err := cfg.lendAgent(cfg.Agents["qwen"])
+	if err != nil || env["SELFHOSTED_API_KEY"] != "k-123" {
+		t.Fatalf("lent %v, %v", env, err)
+	}
+	spec = nodeTaskSpec{Egress: defaultEgress()}
+	cfg.modelEndpoint("qwen", env, &spec)
+	if spec.ModelEndpoint.KeyEnv != "SELFHOSTED_API_KEY" || !slices.Equal(spec.Egress.Endpoints, []string{"llm.example.org:443"}) {
+		t.Fatalf("spec %+v, egress %+v", spec.ModelEndpoint, spec.Egress)
+	}
+	// A task without egress gets no endpoint; another provider's agent nothing.
+	spec = nodeTaskSpec{Egress: &nodeEgress{Mode: "none"}}
+	cfg.modelEndpoint("qwen", env, &spec)
+	if len(spec.Egress.Endpoints) != 0 {
+		t.Errorf("mode none: %+v", spec.Egress)
+	}
+	cfg.Providers["or"] = Provider{Kind: "openrouter-api", Secret: secret}
+	cfg.Agents["kimi"] = Agent{Runtime: "opencode", Provider: "or", Model: "openrouter/kimi"}
+	spec = nodeTaskSpec{Egress: defaultEgress()}
+	if cfg.modelEndpoint("kimi", env, &spec); spec.ModelEndpoint != nil || len(spec.Egress.Endpoints) != 0 {
+		t.Errorf("openrouter: %+v %+v", spec.ModelEndpoint, spec.Egress)
+	}
+
+	for url, ok := range map[string]bool{
+		"http://192.0.2.10:11434/v1": true, "https://llm.example.org/v1": true, "http://[2001:db8::5]:8000/v1": true, "http://10.0.0.5:1234/v1": true,
+		"": false, "192.0.2.10:11434": false, "ftp://192.0.2.10/v1": false, "http://user:pw@192.0.2.10/v1": false,
+		"http://192.0.2.10/v1?x=1": false, "http://192.0.2.10/v1#f": false, "http://localhost:11434/v1": false,
+		"http://127.0.0.1:11434/v1": false, "http://[::1]:11434/v1": false, "http://169.254.169.254/v1": false,
+		"http://0.0.0.0:11434/v1": false, "http://224.0.0.1/v1": false, "http://192.0.2.10:99999/v1": false,
+		"http://192.0.2.10/{file:x}": false, "http://192.0.2.10/v1\"": false,
+	} {
+		c := good()
+		c.Providers["ollama"] = Provider{Kind: selfHostedKind, BaseURL: url}
+		if err := checkAll(c); (err == nil) != ok {
+			t.Errorf("base_url %q: %v", url, err)
+		}
+	}
+	bad := []struct {
+		name string
+		edit func(*Config)
+		want string
+	}{
+		{"a model with a space", func(c *Config) {
+			c.Providers["ollama"] = Provider{Kind: selfHostedKind, BaseURL: "http://192.0.2.10/v1", Models: []string{"qwen 3"}}
+		}, "not a model name"},
+		{"a model of another provider", func(c *Config) { c.Agents["qwen"] = Agent{Runtime: "opencode", Provider: "ollama", Model: "openai/x"} }, "selfhosted/<model>"},
+		{"claude code", func(c *Config) { c.Agents["qwen"] = Agent{Runtime: "claude-code", Provider: "ollama"} }, "cannot use"},
+		{"a base_url elsewhere", func(c *Config) {
+			c.Providers["or"] = Provider{Kind: "openrouter-api", Secret: secret, BaseURL: "http://192.0.2.10/v1"}
+		}, "only a self-hosted"},
+	}
+	for _, b := range bad {
+		c := good()
+		b.edit(c)
+		if err := checkAll(c); err == nil || !strings.Contains(err.Error(), b.want) {
+			t.Errorf("%s: %v", b.name, err)
+		}
+	}
+	if selfHostedKey(`a"b`) || selfHostedKey(`a\b`) || selfHostedKey("a\nb") || selfHostedKey("{env:HOME}") || !selfHostedKey("sk-local-123") {
+		t.Error("selfHostedKey")
+	}
+}
 
 func TestAgentsConfig(t *testing.T) {
 	dir := t.TempDir()

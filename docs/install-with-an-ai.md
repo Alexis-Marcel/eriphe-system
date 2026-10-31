@@ -53,7 +53,8 @@ Read these first and keep to them for the whole session.
   not even Docker.
 - The person needs an **AI account**: a Claude subscription (Pro or Max) is the simplest; a
   ChatGPT subscription (Plus or Pro) or an API key (Anthropic, OpenAI, Google, Mistral, OpenRouter)
-  work too.
+  work too, and so does a model the person runs on one of their own machines (Ollama, llama.cpp,
+  vLLM, LM Studio: "Modèle auto-hébergé", by its address on the network).
 
 ## 2. Ask the person first
 

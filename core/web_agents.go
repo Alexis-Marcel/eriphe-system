@@ -301,6 +301,9 @@ func (w *web) complete(f *agentForm) {
 		f.Runtime = f.Kind.Runtime()
 	}
 	f.Models = f.Kind.Models[f.Runtime]
+	if f.Kind.ID == selfHostedKind {
+		f.Models = selfHostedChoices(m.Providers[f.Provider])
+	}
 	f.AutoModel = harnessOf(f.Runtime).AutoModel
 	known := f.Model == modelOther || f.Model == "" && f.AutoModel ||
 		slices.ContainsFunc(f.Models, func(c modelChoice) bool { return c.ID == f.Model })
@@ -372,7 +375,11 @@ func (w *web) handleEditAgent(rw http.ResponseWriter, r *http.Request, s *sessio
 	f := agentForm{Edit: true, Name: name, Runtime: a.Runtime, Provider: a.Provider, Model: a.Model, Use: a.Use,
 		Needs: strings.Join(a.Needs, ", "), Image: a.Image, Command: strings.Join(a.Command, "\n"), IsDefault: m.DefaultAgent == name, Default: m.DefaultAgent == name, Brain: isBrain}
 	k, _ := kindOf(m.Providers[a.Provider].Kind)
-	if a.Model != "" && !slices.ContainsFunc(k.Models[a.Runtime], func(c modelChoice) bool { return c.ID == a.Model }) {
+	choices := k.Models[a.Runtime]
+	if k.ID == selfHostedKind {
+		choices = selfHostedChoices(m.Providers[a.Provider])
+	}
+	if a.Model != "" && !slices.ContainsFunc(choices, func(c modelChoice) bool { return c.ID == a.Model }) {
 		f.Model, f.ModelOther = modelOther, a.Model
 	}
 	var other []string
@@ -472,6 +479,19 @@ func (w *web) handleSaveAgent(rw http.ResponseWriter, r *http.Request, s *sessio
 	log.Printf("web: agent %s saved", f.Name)
 	rw.Header().Set("HX-Redirect", "/settings/agents?saved="+url.QueryEscape(f.Name))
 	rw.WriteHeader(http.StatusOK)
+}
+
+// modelLines reads a self-hosted server's models: one per line (or comma),
+// without a selfhosted/ typed by habit, each once.
+func modelLines(s string) []string {
+	var out []string
+	for _, l := range strings.FieldsFunc(s, func(r rune) bool { return r == '\n' || r == '\r' || r == ',' }) {
+		l = strings.TrimPrefix(strings.TrimSpace(l), "selfhosted/")
+		if l != "" && !slices.Contains(out, l) {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // commandLines reads an ACP agent's command: one argument per line, as
@@ -583,6 +603,8 @@ type providerForm struct {
 	Name     string
 	Kind     providerKind
 	Env      string // the variable of its credential, when the provider names it
+	BaseURL  string // a self-hosted model server's address
+	Models   string // the models it serves, one per line
 	KeySet   bool
 	Presets  []presetChoice
 	Login    *loginView // a ChatGPT sign-in going on or done (chatgpt.go)
@@ -639,7 +661,8 @@ func (w *web) handleEditProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	k, _ := kindOf(p.Kind)
 	agents := m.agentsOf(name)
 	sort.Strings(agents)
-	w.providerFormPage(rw, r, s, providerForm{Edit: true, Name: name, Kind: k, Env: p.Env, KeySet: p.Secret != "", Agents: agents}, "")
+	w.providerFormPage(rw, r, s, providerForm{Edit: true, Name: name, Kind: k, Env: p.Env, BaseURL: p.BaseURL, Models: strings.Join(p.Models, "\n"),
+		KeySet: p.Secret != "", Agents: agents}, "")
 }
 
 func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -670,6 +693,12 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		f.Env = strings.TrimSpace(r.PostFormValue("env"))
 		p.Env = f.Env
 	}
+	selfHosted := f.Kind.ID == selfHostedKind
+	if selfHosted {
+		f.BaseURL = strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
+		f.Models = r.PostFormValue("models")
+		p.BaseURL, p.Models = f.BaseURL, modelLines(f.Models)
+	}
 	checked := r.PostForm["preset"]
 	for _, ps := range f.Kind.Presets {
 		f.Presets = append(f.Presets, presetChoice{Preset: ps.Name, Checked: slices.Contains(checked, ps.Name)})
@@ -690,18 +719,45 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		err = errors.New("providers.nokind")
 	case f.Kind.ID == "chatgpt-subscription" && p.Secret == "" && key == "":
 		err = errors.New("cglogin.notyet")
-	case f.Kind.ID != "chatgpt-subscription" && strings.TrimSpace(key) == "" && p.Secret == "":
+	case f.Kind.ID != "chatgpt-subscription" && !selfHosted && strings.TrimSpace(key) == "" && p.Secret == "":
 		err = errors.New("form.nokey")
 	case f.Kind.CustomEnv && checkCredentialEnv(f.Env) != nil:
 		err = errors.New("providers.badenv")
+	case selfHosted && checkBaseURL(p.BaseURL) != nil:
+		err = errors.New("providers.badbaseurl")
+	case selfHosted && checkModelIDs(p.Models) != nil:
+		err = errors.New("providers.badmodels")
+	case selfHosted && !selfHostedKey(strings.TrimSpace(key)):
+		err = errors.New("providers.badkey")
 	default:
 		// A custom provider's key can be anyone's: its variable says whose.
-		if other := misplaced(f.Kind.ID, strings.TrimSpace(key)); key != "" && login == "" && other != "" && !f.Kind.CustomEnv {
+		// So can a self-hosted server's, which the user makes up.
+		if other := misplaced(f.Kind.ID, strings.TrimSpace(key)); key != "" && login == "" && other != "" && !f.Kind.CustomEnv && !selfHosted {
 			err = shownError(trf(lang, "ptest.misplaced", tr(lang, "kind."+other)))
 			break
 		}
 		agents := map[string]Agent{}
 		def := ""
+		if !f.Edit && selfHosted {
+			// One agent per model it serves, the first the default.
+			taken := func(n string) bool { _, ok := m.Agents[n]; _, mine := agents[n]; return ok || mine }
+			for _, model := range p.Models {
+				n := slug(model)
+				if n == "" {
+					n = "model"
+				}
+				if taken(n) {
+					n = slug(n + "-" + f.Name)
+				}
+				if taken(n) {
+					continue
+				}
+				agents[n] = Agent{Runtime: f.Kind.Runtime(), Provider: f.Name, Model: f.Kind.ModelNS + "/" + model, Use: trf(lang, "preset.agent.selfhosted", model)}
+				if def == "" {
+					def = n
+				}
+			}
+		}
 		if !f.Edit {
 			taken := func(n string) bool { _, ok := m.Agents[n]; _, mine := agents[n]; return ok || mine }
 			for _, ps := range f.Kind.Presets {
@@ -775,6 +831,23 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 			return
 		}
 		kind = p.Kind
+		if kind == selfHostedKind {
+			// The address of the form, else the stored one; the same for its key.
+			base := strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
+			if base == "" {
+				base = p.BaseURL
+			}
+			if strings.TrimSpace(key) == "" && p.Secret != "" {
+				if key, _ = readSecret(p.Secret); key == "" {
+					show(testView{State: "err", Text: tr(lang, "ptest.nosecret")})
+					return
+				}
+			}
+			v := checkSelfHosted(r.Context(), lang, base, key)
+			log.Printf("web: provider test (%s): %s", kind, v.State) // never the key
+			show(v)
+			return
+		}
 		if strings.TrimSpace(key) == "" {
 			if p.Kind == "chatgpt-subscription" {
 				show(w.checkChatGPT(r, n))
@@ -788,7 +861,12 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 			key, stored = v, true
 		}
 	}
-	v := checkProvider(r.Context(), lang, kind, key)
+	var v testView
+	if kind == selfHostedKind {
+		v = checkSelfHosted(r.Context(), lang, strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/"), key)
+	} else {
+		v = checkProvider(r.Context(), lang, kind, key)
+	}
 	log.Printf("web: provider test (%s): %s", kind, v.State) // never the key
 	if _, checkable := checkEndpoints[kind]; stored && checkable {
 		w.c.testedHealth(r.PathValue("name"), v)

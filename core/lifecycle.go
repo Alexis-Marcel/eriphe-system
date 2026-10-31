@@ -120,6 +120,7 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 			if spec.Egress == nil {
 				spec.Egress = defaultEgress()
 			}
+			c.conf().modelEndpoint(a.Agent, env, &spec)
 			// Its catalog servers, as the configuration has them now: the
 			// node points the task at itself for each, never at the server.
 			spec.Servers = c.specServers(&TaskRow{Kind: a.Kind, Tools: a.Tools})
