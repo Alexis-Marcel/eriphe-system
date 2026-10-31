@@ -475,7 +475,10 @@ $env:ERIPHE_UNINSTALL='1'; irm https://github.com/Alexis-Marcel/eriphe-system/re
   the `eriphe-cache` volume, Eriphe's images (every tag), the updater's systemd units,
   `/opt/eriphe`, `/var/lib/eriphe` and the install's log (`/var/log/eriphe-install.log`; the
   uninstall writes its own in `/tmp`). Docker Engine too, with its `docker` group, if the script
-  installed it and no other container is left; otherwise it stays.
+  installed it and no other container is left; otherwise it stays, the uninstall names the
+  containers that keep it, and the mark that Eriphe installed it stays too
+  (`/opt/eriphe.docker-installed`), so that `--uninstall` removes Docker once they are gone (and a
+  new install takes it back).
 - macOS with Apple's container: the LaunchAgents `org.eriphe.node`, `org.eriphe.core` and
   `org.eriphe.update`, the LaunchDaemon `org.eriphe.relay` with its binary, socket folder and log
   (with `sudo`), the task, service and explorer containers and their networks, Eriphe's images,
@@ -663,8 +666,9 @@ The address is the one eriphe-node reaches:
 
   ```sh
   docker run -d --name eriphe-ollama --restart unless-stopped --network eriphe-system \
+    -e OLLAMA_NUM_PARALLEL=2 -e OLLAMA_MAX_LOADED_MODELS=1 -e OLLAMA_CONTEXT_LENGTH=16384 \
     -v eriphe-ollama:/root/.ollama ollama/ollama
-  # with an NVIDIA card (NVIDIA Container Toolkit): add --gpus=all
+  # with an NVIDIA card (NVIDIA Container Toolkit): add --gpus=all; Ollama's settings below
   docker exec eriphe-ollama ollama pull qwen3:8b
   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --model-server http://eriphe-ollama:11434
   ```
@@ -676,14 +680,55 @@ The address is the one eriphe-node reaches:
 - **A Mac with Apple's container**: eriphe-node runs on the Mac itself: Ollama for macOS listens on
   `127.0.0.1:11434` by default, give `--model-server http://127.0.0.1:11434`. (A Mac in Lima's VM:
   the address the VM reaches, as on Linux.)
-- **Windows**: eriphe-node runs in the `eriphe` WSL distribution. With WSL's mirrored networking
-  (`networkingMode=mirrored` in `%UserProfile%\.wslconfig`), Ollama for Windows is at
-  `-ModelServer http://127.0.0.1:11434`.
+- **Windows**: eriphe-node runs in the `eriphe` WSL distribution, behind a NAT of its own by
+  default, where `127.0.0.1` is the distribution, not Windows. Ollama for Windows is at
+  `-ModelServer http://127.0.0.1:11434` once WSL uses **mirrored networking** (Windows 11 22H2 or
+  later):
 
-Ollama keeps a small context by default: for tool calling give it 16k to 32k tokens
-(`OLLAMA_CONTEXT_LENGTH=32768`, `-e OLLAMA_CONTEXT_LENGTH=32768` for the container). A server on
-your LAN at an address of its own can still be used without a device ("À une adresse"), but then
-it listens on the network.
+  1. Add to `%USERPROFILE%\.wslconfig` (create the file if it is not there; WSL reads it only in
+     the `[wsl2]` section):
+
+     ```ini
+     [wsl2]
+     networkingMode=mirrored
+     ```
+
+  2. Run `wsl --shutdown`: WSL reads the file only when it starts again. It stops every
+     distribution, and the setting applies to all of them, not only Eriphe's.
+  3. Run the install command again with `-ModelServer http://127.0.0.1:11434`.
+
+  Ollama for Windows runs in your session only: it starts when you log in and stops when you log
+  out, while eriphe-node runs at boot, logged in or not. Add Ollama to your startup programs
+  (Win+R, `shell:startup`, and put a shortcut to Ollama there), and stay logged in (a locked
+  screen is fine) whenever Eriphe should use it.
+
+At the end, the installer says whether the model server answers eriphe-node: "Lends the model
+server at … (answers: yes)". With "no", start the server or check the address; on Windows, with a
+loopback address and no mirrored networking, it says to turn it on.
+
+### Ollama's settings
+
+Ollama's defaults suit one person chatting, not Eriphe, which may send the assistant's turn and a
+task's at the same time, with long prompts (instructions and tools). Set, as environment variables
+of the server (`-e NAME=value` for the container; on Windows and macOS, in the user's environment
+variables, then quit and start Ollama again):
+
+| Variable | Value | Why |
+|---|---|---|
+| `OLLAMA_NUM_PARALLEL` | `2` or more | Two requests at once (the assistant and a task) instead of one waiting for the other, and timing out. |
+| `OLLAMA_MAX_LOADED_MODELS` | `1` | One model in memory: two would not fit beside each other on most cards. |
+| `OLLAMA_CONTEXT_LENGTH` | `16384` on a card with 8 GB | The context every request gets; tool calling needs 16k to 32k tokens. |
+| `OLLAMA_FLASH_ATTENTION` and `OLLAMA_KV_CACHE_TYPE` | `1` and `q8_0` | Halve the context's memory, so that 32k (`OLLAMA_CONTEXT_LENGTH=32768`) fits where 16k did. |
+
+Each parallel slot holds a whole context: two slots at 32k cost twice the memory of one. As a rule
+of thumb, a 7B or 8B model (4-bit) takes about 5 GB, plus 1 to 2 GB per slot of 32k with a `q8_0`
+cache (twice that without), depending on the model. On a card with 8 GB: 2 slots at 16k, or at 32k
+with flash attention and the `q8_0` cache. What does not fit on the card spills into the
+computer's memory and runs far slower: 16 GB of RAM is tight for one 7B model with 2 slots at 32k,
+next to Windows or a desktop.
+
+A server on your LAN at an address of its own can still be used without a device ("À une
+adresse"), but then it listens on the network.
 
 ## What the VM can and cannot see
 

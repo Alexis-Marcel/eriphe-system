@@ -420,12 +420,30 @@ For each other computer (or a second NAS):
    - Mac (Apple silicon, macOS 26): Ollama for macOS, then add `--model-server
      http://127.0.0.1:11434` to the join command.
    - Linux: once the device is installed, run Ollama next to it without publishing a port:
-     `docker run -d --name eriphe-ollama --restart unless-stopped --network eriphe-system -v
+     `docker run -d --name eriphe-ollama --restart unless-stopped --network eriphe-system -e
+     OLLAMA_NUM_PARALLEL=2 -e OLLAMA_MAX_LOADED_MODELS=1 -e OLLAMA_CONTEXT_LENGTH=16384 -v
      eriphe-ollama:/root/.ollama ollama/ollama` (add `--gpus=all` with an NVIDIA card and its
      container toolkit), `docker exec eriphe-ollama ollama pull qwen3:8b`, then run the install
      command again with `--model-server http://eriphe-ollama:11434`.
-   - Windows: Ollama for Windows, WSL's mirrored networking, and `-ModelServer
-     http://127.0.0.1:11434`.
+   - Windows (11 22H2 or later): Ollama for Windows, then WSL's mirrored networking, so that the
+     node in WSL reaches Windows' `127.0.0.1`: add `networkingMode=mirrored` under a `[wsl2]` line
+     in `%USERPROFILE%\.wslconfig` (create the file if needed), run `wsl --shutdown` (tell the
+     person first: it stops every WSL distribution, and the setting applies to all of them), then
+     run the install command again with `-ModelServer http://127.0.0.1:11434`. Ollama for Windows
+     runs only while the person is logged in, and the node runs without anyone logged in: have
+     them add Ollama to their startup programs (Win+R, `shell:startup`, a shortcut to Ollama).
+
+   The installer ends with "Lends the model server at … (answers: yes/no)". On "no", the server is
+   not running or the address is wrong; on Windows, the notice says what to fix (mirrored
+   networking, or starting Ollama).
+
+   Ollama's settings (environment variables of the server; `-e` on the container; on Windows and
+   macOS, the user's environment variables, then restart Ollama): `OLLAMA_NUM_PARALLEL=2` (the
+   assistant and a task at once), `OLLAMA_MAX_LOADED_MODELS=1`, and the context: 16k
+   (`OLLAMA_CONTEXT_LENGTH=16384`) on a graphics card with 8 GB, or 32k with
+   `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0`. Each slot holds a whole context;
+   with 16 GB of RAM, one 7B model with 2 slots at 32k is tight. Details: `install/README.md`,
+   Ollama's settings.
 
    Then the person, in the browser: Settings → Agents → Add an AI account → Modèle auto-hébergé →
    "Sur un de mes appareils", picks the device, "Tester le serveur", and the models. Pick a model

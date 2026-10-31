@@ -277,13 +277,51 @@ for a in 10.0.0.1 172.16.0.1 172.31.255.1 192.168.1.2 100.64.0.1 100.127.0.1 127
 	installer "public_address '$a' && echo yes" | grep -qx yes && fail "$a is public"
 done
 out=$(installer 'WEB_PORT=8443 API_PORT=8800; exposed_notice 203.0.113.5; printf "%s" "$NOTES"')
-case $out in *"203.0.113.5 is a public address"*"cloud provider's firewall"*"Tailscale"*"reverse proxy"*"DOCKER-USER"*"--bind 127.0.0.1"*"#eriphe-on-a-vps"*) ;; *) fail "the public address notice: $out" ;; esac
+case $out in *"203.0.113.5 is a public address"*"cloud provider's firewall"*"first setup through an SSH tunnel"*"ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes"*"Tailscale"*"reverse proxy"*"DOCKER-USER"*"--bind 127.0.0.1"*"#eriphe-on-a-vps"*) ;; *) fail "the public address notice: $out" ;; esac
 out=$(installer 'WEB_PORT=8443 API_PORT=8800; exposed_notice 192.168.1.2; exposed_notice 100.64.0.1; printf "notes=%s" "$NOTES"')
 [ "$out" = notes= ] || fail "a notice for a local address: $out"
 # On 127.0.0.1 (--bind): how to reach it, not a warning.
 out=$(installer 'WEB_PORT=8443 API_PORT=8800; exposed_notice 127.0.0.1; printf "%s" "$NOTES"')
-case $out in *"ssh -L 8443:127.0.0.1:8443"*"Tailscale"*) ;; *) fail "the notice on 127.0.0.1: $out" ;; esac
+case $out in *"ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes"*"Tailscale"*) ;; *) fail "the notice on 127.0.0.1: $out" ;; esac
 case $out in *"public address"*) fail "127.0.0.1 is called public: $out" ;; esac
+# On a public address, the first setup goes through an SSH tunnel.
+out=$(installer 'parse_args --core-mode; INFO=; settle; lan_address() { echo 203.0.113.5; }; UPDATING=; outcome "setup_code=ABCD-1234"')
+case $out in *"ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes <user>@203.0.113.5"*"https://127.0.0.1:8443/setup"*"ABCD-1234"*) ;; *) fail "the setup on a public address: $out" ;; esac
+case $out in *"https://203.0.113.5:8443/setup"*) fail "the setup over the Internet: $out" ;; esac
+out=$(installer 'parse_args --core-mode; INFO=; settle; lan_address() { echo 192.168.1.2; }; UPDATING=; outcome "setup_code=ABCD-1234"')
+case $out in *"https://192.168.1.2:8443/setup"*) ;; *) fail "the setup on a local address: $out" ;; esac
+
+# ---- printed paragraphs: wrapped between words, never in an address
+
+long=https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md#eriphe-on-a-vps
+out=$(installer "para 'The guide is here: $long, read it first.'")
+[ "$out" = "The guide is here:
+$long,
+read it first." ] || fail "an address wrapped: $out"
+out=$(installer "notice 'one: $long'; notice 'two'; good_to_know")
+case $out in *"  - One:
+    $long"*"  - Two"*) ;; *) fail "an address wrapped in a notice: $out" ;; esac
+
+# ---- the model server it lends
+
+for ok in http://eriphe-ollama:11434 'http://[fd00::5]:11434' https://models.example.org/v1; do
+	out=$(installer "parse_args --core https://192.0.2.10:8800 --join-token t --model-server '$ok' && INFO= && settle && echo passed")
+	case $out in *passed*) ;; *) fail "--model-server $ok refused: $out" ;; esac
+done
+for bad in http://127.0.0.1:11434 'http://[::1]:11434' 'http://[::1' 192.0.2.5:11434; do
+	out=$(installer "parse_args --core https://192.0.2.10:8800 --join-token t --model-server '$bad' && INFO= && settle && echo passed")
+	case $out in *passed*) fail "--model-server $bad accepted" ;; esac
+done
+out=$(installer 'MODEL_SERVER=http://eriphe-ollama:11434/v1/; models_url')
+[ "$out" = http://eriphe-ollama:11434/v1/models ] || fail "models URL: $out"
+out=$(installer 'MODEL_SERVER=http://eriphe-ollama:11434; model_server_line "model_server_answers=yes"; printf "notes=%s" "$NOTES"')
+[ "$out" = "
+Lends the model server at http://eriphe-ollama:11434 (answers: yes).
+notes=" ] || fail "the model server line: $out"
+out=$(installer 'MODEL_SERVER=http://eriphe-ollama:11434; model_server_line "model_server_answers=no"; printf "%s" "$NOTES"')
+case $out in *"(answers: no)."*"does not answer"*) ;; *) fail "a model server that does not answer: $out" ;; esac
+out=$(installer 'MODEL_SERVER=; model_server_line ""; echo end')
+[ "$out" = end ] || fail "a model server line without one: $out"
 
 # ---- eriphe-core's time zone: this machine's on a new install, never
 # changed on an older one, TZ first
