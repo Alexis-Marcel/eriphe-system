@@ -130,9 +130,6 @@ body.nav-chat > main { overflow: hidden; }
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.06rem; color: var(--text); letter-spacing: -.02em; }
 .brand:hover { text-decoration: none; }
-.back-home { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; margin-left: -10px; padding: 0 10px 0 4px; border-radius: 12px; color: var(--accent-text); font-weight: 600; }
-.back-home:hover { text-decoration: none; background: var(--surface-2); }
-.back-home .i { width: 22px; height: 22px; }
 .topbar-end { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 /* Tâches and Réglages: icon buttons, 44 px to touch. */
 .head-btn { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; color: var(--muted); }
@@ -498,12 +495,41 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .nav-group { display: grid; gap: 2px; }
 .nav-group-title { margin: 0 0 4px 12px; font-size: .72rem; font-weight: 650; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
 .attn-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); flex: none; margin-left: -3px; }
+.settings-head { display: flex; align-items: center; gap: 6px; }
 .settings-title { font-size: 1.5rem; margin: 0 0 0 10px; letter-spacing: -.03em; }
-.settings-nav a { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 12px; color: var(--muted); font-weight: 550; }
-.settings-nav a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
-.settings-nav a[aria-current] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
-.settings-nav a[aria-current] .i { color: var(--accent); }
+.settings-close { display: none; }
+.nav-group > a { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 12px; color: var(--muted); font-weight: 550; }
+.nav-group > a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.nav-group > a[aria-current] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
+.nav-group > a[aria-current] .i { color: var(--accent); }
+.nav-group > a .chev { display: none; }
+.settings-nav .to-chat { margin-left: 4px; }
 .settings-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-content: start; max-width: 900px; }
+.back.settings-up { display: none; }
+
+/* The settings' list alone (/settings): a phone's first level, a grouped
+   list of rows like a phone's own settings. A wide screen opens the first
+   entry instead (early.js); this is its fallback without JavaScript. */
+.settings.is-index { grid-template-columns: minmax(0, 600px); justify-content: center; }
+.is-index .settings-nav { position: static; gap: 24px; }
+.is-index .to-chat { display: none; }
+.is-index .settings-head { gap: 2px; }
+.is-index .settings-close { display: inline-grid; width: 44px; height: 44px; margin-left: -10px; color: var(--text); }
+.is-index .settings-title { margin: 0; font-size: 1.6rem; }
+.is-index .nav-group { gap: 0; }
+.is-index .nav-group-title { margin: 0 0 8px 16px; }
+.is-index .nav-group > a {
+  min-height: 54px; padding: 10px 14px 10px 12px; border-radius: 0; gap: 13px;
+  background: var(--surface); border: 1px solid var(--border); border-top: 0; color: var(--text); font-weight: 550;
+}
+.is-index .nav-group-title + a { border-top: 1px solid var(--border); border-radius: 16px 16px 0 0; }
+.is-index .nav-group > a:last-child { border-radius: 0 0 16px 16px; }
+.is-index .nav-group-title + a:last-child { border-radius: 16px; }
+.is-index .nav-group > a:hover { background: var(--surface-2); }
+.is-index .nav-group > a > .i:first-child { width: 32px; height: 32px; padding: 6px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); flex: none; }
+.is-index .nav-group > a > span { flex: 1; min-width: 0; }
+.is-index .nav-group > a .chev { display: block; width: 18px; height: 18px; color: var(--faint); flex: none; }
+.is-index .nav-group > a .attn-dot, .is-index .nav-group > a .new-dot { margin: 0; }
 .page-head { display: grid; gap: 6px; }
 .page-head h2 { font-size: 1.45rem; letter-spacing: -.025em; }
 .page-head p { color: var(--muted); max-width: 64ch; }
@@ -599,11 +625,10 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 }
 
 /* Phone: the conversation alone; the tasks are a sheet over it, and the
-   settings say the way back to it. */
+   settings go in two levels, their list then a page. */
 @media (max-width: 860px) {
   :root { --topbar: 54px; }
   .topbar { padding: 0 12px 0 16px; }
-  body:not(.nav-chat) .brand { display: none; }
 
   .workspace, .workspace.side-off { grid-template-columns: 1fr; }
   .workspace .side, .workspace.side-off .side {
@@ -624,14 +649,13 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
   .msg-brain { margin-right: 0; }
   .perm { margin-left: 0; }
 
-  .settings { grid-template-columns: 1fr; padding: 16px 16px max(40px, env(safe-area-inset-bottom)); gap: 18px; }
-  .settings-nav { position: static; display: flex; align-items: center; overflow-x: auto; gap: 6px; margin: 0 -16px; padding: 0 16px 4px; scrollbar-width: none; }
-  .settings-title { display: none; }
-  .nav-group { display: flex; align-items: center; gap: 6px; flex: none; }
-  .nav-group + .nav-group { margin-left: 6px; padding-left: 12px; border-left: 1px solid var(--border); }
-  .nav-group-title { margin: 0 2px 0 0; font-size: .66rem; white-space: nowrap; }
-  .settings-nav a { flex: none; padding: 8px 13px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-size: .88rem; }
-  .settings-nav a .i { width: 16px; height: 16px; }
+  /* Two levels: the list (/settings), then a page with its way up. */
+  .settings, .settings.is-index { grid-template-columns: minmax(0, 1fr); padding: 12px 16px max(40px, env(safe-area-inset-bottom)); gap: 18px; }
+  .settings:not(.is-index) .settings-nav { display: none; }
+  .settings-body { gap: 18px; }
+  .back.settings-up { display: inline-flex; }
+  .back { min-height: 44px; }
+  .settings-body > .back + * { margin-top: -14px; }
   .row-form { grid-template-columns: 1fr; }
   .panel { padding: 18px 16px; }
 
@@ -677,9 +701,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 
 .page-head-row { grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 16px; }
 .page-head-row > div { display: grid; gap: 6px; }
-.back { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: .88rem; font-weight: 600; justify-self: start; margin-left: -4px; }
-.back .i { width: 16px; height: 16px; }
-.back:hover { color: var(--text); text-decoration: none; }
+/* The one way back of the settings: up to the page above (‹ Outils), to
+   the list (‹ Réglages, phone), or to the conversation (sidebar). */
+.back { display: inline-flex; align-items: center; gap: 2px; justify-self: start; align-self: start; min-height: 34px; margin-left: -8px; padding: 0 10px 0 4px; border-radius: 10px; color: var(--accent-text); font-size: .92rem; font-weight: 600; }
+.back .i { width: 18px; height: 18px; }
+.back:hover { text-decoration: none; background: var(--surface-2); }
 .form-title { display: flex; align-items: center; gap: 12px; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 
@@ -764,6 +790,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 /* "Add a tool": a search, the categories as chips, compact tiles. In the
    tools page's dialog (full screen on a phone) or on its own page. */
 .tools-empty .btn { margin-top: 4px; }
+/* No tool yet: the empty state offers to add one; the header does not say it twice. */
+.settings-body:has(.tools-empty) > .page-head-row > .btn { display: none; }
 dialog.modal.finder-dlg { width: min(1000px, calc(100vw - 32px)); padding: 0; gap: 0; }
 dialog.modal.finder-dlg[open] { display: flex; flex-direction: column; height: min(760px, calc(100dvh - 32px)); overflow: hidden; }
 .finder-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 22px 0; }

@@ -13,7 +13,7 @@ func init() {
 var folderStrings = map[string]map[string]string{
 	"fr": {
 		"settings.folders":            "Dossiers",
-		"folders.lead":                "Les dossiers de tes appareils que tu ouvres à {{name}} : il ne voit rien d'autre. Une tâche à qui {{name}} prête un dossier le lit sur son appareil, sans jamais modifier ni supprimer tes fichiers ; avec le droit de dépôt, elle range ses résultats dans son sous-dossier « {{name}} ».",
+		"folders.lead":                "Les dossiers de tes appareils que tu ouvres à {{name}} : il ne voit rien d'autre, et ne modifie ni ne supprime jamais tes fichiers.",
 		"folders.drive":               "Dans ton Google Drive",
 		"folders.drivelend":           "Lu par les tâches à qui {{name}} prête l'outil Google Drive.",
 		"folders.adddrive":            "Donner un dossier de Google Drive…",
@@ -61,7 +61,7 @@ var folderStrings = map[string]map[string]string{
 	},
 	"en": {
 		"settings.folders":            "Folders",
-		"folders.lead":                "The folders of your devices you open to {{name}}: it sees nothing else. A task {{name}} lends a folder reads it on its device, and never changes or deletes your files; with the right to drop results, it puts them in its \"{{name}}\" subfolder.",
+		"folders.lead":                "The folders of your devices you open to {{name}}: it sees nothing else, and never changes or deletes your files.",
 		"folders.drive":               "In your Google Drive",
 		"folders.drivelend":           "Read by the tasks {{name}} lends the Google Drive tool.",
 		"folders.adddrive":            "Give a Google Drive folder…",

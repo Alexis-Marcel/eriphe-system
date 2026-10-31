@@ -19,7 +19,6 @@ var webStrings = map[string]map[string]string{
 	"fr": {
 		"app.tagline":              "Ton assistant, chez toi.",
 		"nav.chat":                 "Conversation",
-		"nav.back":                 "Retour",
 		"nav.tasks":                "Tâches",
 		"nav.settings":             "Réglages",
 		"nav.logout":               "Se déconnecter",
@@ -111,6 +110,7 @@ var webStrings = map[string]map[string]string{
 		"state.failed":             "Échouée",
 		"state.lost":               "Perdue",
 		"settings.title":           "Réglages",
+		"settings.close":           "Fermer les réglages",
 		"settings.machines":        "Appareils",
 		"settings.agents":          "Agents",
 		"settings.accounts":        "Comptes et outils",
@@ -283,7 +283,6 @@ var webStrings = map[string]map[string]string{
 	"en": {
 		"app.tagline":              "Your assistant, at home.",
 		"nav.chat":                 "Conversation",
-		"nav.back":                 "Back",
 		"nav.tasks":                "Tasks",
 		"nav.settings":             "Settings",
 		"nav.logout":               "Log out",
@@ -375,6 +374,7 @@ var webStrings = map[string]map[string]string{
 		"state.failed":             "Failed",
 		"state.lost":               "Lost",
 		"settings.title":           "Settings",
+		"settings.close":           "Close the settings",
 		"settings.machines":        "Devices",
 		"settings.agents":          "Agents",
 		"settings.accounts":        "Accounts & tools",

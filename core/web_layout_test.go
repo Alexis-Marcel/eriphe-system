@@ -5,32 +5,34 @@ import (
 	"testing"
 )
 
-// Every page of the settings renders inside the common layout: the top bar
-// with its two buttons, Tâches and Réglages (current), the way back to the
-// conversation, and the settings' own navigation in four groups with its
-// entry marked. There is no tab bar and no main navigation any more.
+// Every page of the settings renders inside the common layout: the same top
+// bar as the conversation (the name, Tâches, Réglages current) with no way
+// back in it, and the settings' own navigation in four groups with its entry
+// marked, under the way back to the conversation. The ways back follow the
+// pages: a page goes up to the list (/settings, seen on a phone), a sub-page
+// to its page, never to the browser's history.
 func TestSettingsTabsHaveLayout(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	for _, tc := range []struct{ path, tab string }{
-		{"/memory", "memory"},
-		{"/memory?view=inbox", "memory"},
-		{"/settings/devices", "devices"},
-		{"/settings/machines", "devices"},
-		{"/settings/agents", "agents"},
-		{"/settings/agents/new", "agents"},
-		{"/settings/providers/new", "agents"},
-		{"/settings/providers/new?kind=anthropic-api", "agents"},
-		{"/settings/tools", "tools"},
-		{"/settings/tools/add", "tools"},
-		{"/settings/tools/new?preset=home-assistant", "tools"},
-		{"/settings/home-assistant", "tools"},
-		{"/settings/drive", "tools"},
-		{"/settings/folders", "folders"},
-		{"/settings/remote", "remote"},
-		{"/settings/notifications", "notifications"},
-		{"/settings/journal", "journal"},
-		{"/settings/account", "account"},
+	for _, tc := range []struct{ path, tab, up string }{ // up: a sub-page's page
+		{"/memory", "memory", ""},
+		{"/memory?view=inbox", "memory", ""},
+		{"/settings/devices", "devices", ""},
+		{"/settings/machines", "devices", ""},
+		{"/settings/agents", "agents", ""},
+		{"/settings/agents/new", "agents", "/settings/agents"},
+		{"/settings/providers/new", "agents", "/settings/agents"},
+		{"/settings/providers/new?kind=anthropic-api", "agents", "/settings/agents"},
+		{"/settings/tools", "tools", ""},
+		{"/settings/tools/add", "tools", "/settings/tools"},
+		{"/settings/tools/new?preset=home-assistant", "tools", "/settings/tools"},
+		{"/settings/home-assistant", "tools", "/settings/tools"},
+		{"/settings/drive", "tools", "/settings/tools"},
+		{"/settings/folders", "folders", ""},
+		{"/settings/remote", "remote", ""},
+		{"/settings/notifications", "notifications", ""},
+		{"/settings/journal", "journal", ""},
+		{"/settings/account", "account", ""},
 	} {
 		code, body, _ := tw.do("GET", tc.path, nil, nil)
 		if code != 200 {
@@ -41,14 +43,14 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		if tc.tab == "memory" {
 			href = "/memory"
 		}
-		for _, want := range []string{`<header class="topbar">`, `<a class="back-home" href="/" data-back>`,
+		for _, want := range []string{`<header class="topbar">`, `<a class="brand" href="/"`,
 			`id="tasks-btn" href="/#tasks-panel"`, `id="tasks-badge"`, `<a class="head-btn" href="/settings" aria-label="Réglages" title="Réglages" aria-current="page">`,
-			`<nav class="settings-nav"`, `<a href="` + href + `" aria-current="page">`} {
+			`<nav class="settings-nav"`, `<a class="back to-chat" href="/">`, `<a href="` + href + `" aria-current="page">`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("GET %s lacks %q", tc.path, want)
 			}
 		}
-		for _, gone := range []string{`class="tabbar"`, `class="topnav"`} {
+		for _, gone := range []string{`class="tabbar"`, `class="topnav"`, `back-home`, `data-back`} {
 			if strings.Contains(body, gone) {
 				t.Errorf("GET %s still has %q", tc.path, gone)
 			}
@@ -56,18 +58,71 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		if n := strings.Count(body, `aria-current="page">`); n != 2 { // Réglages, and the entry
 			t.Errorf("GET %s: %d current links, want 2", tc.path, n)
 		}
+		up := `<a class="back settings-up" href="/settings">`
+		if tc.up == "" {
+			if !strings.Contains(body, `<div class="settings is-page">`) || !strings.Contains(body, up) {
+				t.Errorf("GET %s: a page without its way up to the list", tc.path)
+			}
+			continue
+		}
+		if !strings.Contains(body, `<div class="settings is-sub">`) || strings.Contains(body, up) {
+			t.Errorf("GET %s: a sub-page shown as a page", tc.path)
+		}
+		if !strings.Contains(body, `<a class="back" href="`+tc.up) {
+			t.Errorf("GET %s: no way up to %s", tc.path, tc.up)
+		}
 	}
 }
 
-// The settings open on their first entry, the memory, whose address stays
-// /memory: /settings/memory leads there, with its query.
-func TestSettingsOpenOnMemory(t *testing.T) {
+// /settings is the list of the settings alone, the first level on a phone:
+// its ✕ goes back to the conversation and no entry is current. A wide screen
+// opens the first entry in its place (early.js), without a step in the
+// history. /settings/memory leads to the memory, with its query.
+func TestSettingsList(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	for path, want := range map[string]string{"/settings": "/memory", "/settings/memory?view=inbox": "/memory?view=inbox"} {
-		if code, _, h := tw.do("GET", path, nil, nil); code != 303 || h.Get("Location") != want {
-			t.Errorf("GET %s: %d to %q, want %q", path, code, h.Get("Location"), want)
+	code, body, _ := tw.do("GET", "/settings", nil, nil)
+	if code != 200 {
+		t.Fatalf("GET /settings: %d", code)
+	}
+	for _, want := range []string{`<div class="settings is-index">`, `<nav class="settings-nav"`,
+		`<a class="icon-btn settings-close" href="/" aria-label="Fermer les réglages"`, `<h1 class="settings-title">Réglages</h1>`,
+		`<a href="/memory" >`, `<a href="/settings/journal" >`, `class="i chev"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the list lacks %q", want)
 		}
+	}
+	if strings.Contains(body, `class="settings-body"`) {
+		t.Error("the list has a page beside it")
+	}
+	if n := strings.Count(body, `aria-current="page">`); n != 1 { // Réglages only
+		t.Errorf("%d current links, want 1", n)
+	}
+	early, err := webFS.ReadFile("web/static/early.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(early), `location.pathname === "/settings"`) || !strings.Contains(string(early), `location.replace("/memory")`) {
+		t.Error("a wide screen does not open the first entry in place of the list")
+	}
+	if code, _, h := tw.do("GET", "/settings/memory?view=inbox", nil, nil); code != 303 || h.Get("Location") != "/memory?view=inbox" {
+		t.Errorf("GET /settings/memory: %d to %q", code, h.Get("Location"))
+	}
+}
+
+// No way back walks the browser's history: they are plain links to the page
+// above. The sidebar switches pages in place, so that the browser's Back
+// leaves the settings.
+func TestSettingsBackIsHierarchical(t *testing.T) {
+	js, err := webFS.ReadFile("web/static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(js), "data-back") {
+		t.Error("app.js still sends a way back to the history")
+	}
+	if !strings.Contains(string(js), `".settings:not(.is-index) .nav-group > a[href]"`) || !strings.Contains(string(js), "location.replace(a.href)") {
+		t.Error("the sidebar adds a step to the history for each page")
 	}
 }
 
@@ -138,9 +193,8 @@ func TestSettingsNavAttention(t *testing.T) {
 
 // Only main scrolls in the workspace: the document can never grow past the
 // window, whatever overflows inside it, so nothing can scroll the top bar and
-// the settings nav out of sight. The nav's pills are centred by scrolling
-// their own row, not with scrollIntoView, which scrolls every ancestor that
-// can scroll, the page included.
+// the settings nav out of sight. Nothing uses scrollIntoView, which scrolls
+// every ancestor that can scroll, the page included.
 func TestShellNeverScrolls(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()

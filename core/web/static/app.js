@@ -423,15 +423,6 @@
     });
   }
 
-  // On a phone the settings tabs are a row of pills: the current one is
-  // brought to the middle of that row, and nothing else scrolls.
-  function centerTab() {
-    const nav = $(".settings-nav"), tab = $(".settings-nav a[aria-current]");
-    if (!nav || !tab || nav.scrollWidth <= nav.clientWidth) return;
-    const n = nav.getBoundingClientRect(), t = tab.getBoundingClientRect();
-    nav.scrollLeft += t.left + t.width / 2 - (n.left + n.width / 2);
-  }
-
   // An address can point into the conversation: a task's drawer (?task=,
   // from a notification), a permission or a message (#perm-…, #m12).
   function pointed() {
@@ -456,7 +447,6 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     toBottom(false);
-    centerTab();
     autosize($("#text"));
     badge();
     connect();
@@ -817,13 +807,14 @@ function lit(name) {
   // (early.js sets it before the first paint; this is the safety net).
   if (standalone()) document.documentElement.classList.add("app");
 
-  // Retour: back where you came from in the workspace, else the conversation.
+  // The settings' sidebar (a wide screen) switches between their pages in
+  // place: the browser's Back leaves the settings instead of walking back
+  // through every page seen. The list of a phone (/settings) adds its step.
   document.addEventListener("click", (e) => {
-    const a = e.target.closest("a[data-back]");
-    if (!a) return;
-    let same = false;
-    try { same = document.referrer && new URL(document.referrer).origin === location.origin; } catch (_) {}
-    if (same && history.length > 1) { e.preventDefault(); history.back(); }
+    const a = e.target.closest(".settings:not(.is-index) .nav-group > a[href]");
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    location.replace(a.href);
   });
 
   // The keyboard. Chrome on Android shrinks the page for it (the viewport's

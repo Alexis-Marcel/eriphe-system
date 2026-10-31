@@ -30,7 +30,6 @@
 <a class="skip" href="#main">{{if eq .Lang "en"}}Skip to content{{else}}Aller au contenu{{end}}</a>
 {{if .Nav}}
 <header class="topbar">
-  {{if ne .Nav "chat"}}<a class="back-home" href="/" data-back>{{template "i-back"}}<span>{{t "nav.back"}}</span></a>{{end}}
   <a class="brand" href="/" aria-label="{{name}}">{{template "logo"}}<span>{{name}}</span></a>
   <div class="topbar-end">
     <span class="conn" id="conn" hidden role="status">{{t "chat.offline"}}</span>
