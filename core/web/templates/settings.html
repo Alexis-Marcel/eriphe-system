@@ -24,11 +24,12 @@
       {{template "device-status" .}}
       {{template "device-menu" .}}
     </div>
-    <h3 class="tile-title">{{template "i-device"}}<a href="/settings/devices/{{.Name}}">{{.Name}}</a>{{if .AlwaysOn}} <span class="tag tag-accent badge-on" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</span>{{end}}{{if .Model}} <span class="tag" title="{{t "machines.modelhint"}}">{{t "machines.model"}}</span>{{end}}</h3>
+    <h3 class="tile-title">{{template "i-device"}}<a href="/settings/devices/{{.Name}}" class="stretched">{{.Name}}</a>{{if .AlwaysOn}} <span class="tag tag-accent badge-on" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</span>{{end}}{{if .Model}} <span class="tag" title="{{t "machines.modelhint"}}">{{t "machines.model"}}</span>{{end}}</h3>
     {{if .Suspended}}<p class="cut-note">{{t "devices.cutlead"}}</p>{{end}}
     {{template "device-sees" .}}
     {{template "device-can" .}}
     {{template "device-foot" .}}
+    <span class="device-more" aria-hidden="true">{{t "devices.details"}} ›</span>
   </li>
 {{end}}
   <li class="tile tile-add"><button type="button" data-dialog="connect-dlg"><span class="tile-add-icon" aria-hidden="true">{{template "i-plus"}}</span><b>{{t "machines.add"}}</b><span class="muted small">{{if .Data.Nodes}}{{t "devices.addhint"}}{{else}}{{t "machines.none"}}{{end}}</span></button></li>
@@ -350,7 +351,7 @@ eriphe-core runs its new version, and the cards and "Update all" ask again
 {{if .Error}}<p class="alert" role="alert">{{t .Error}}</p>{{else}}
 {{if .Rejoin}}<p class="alert" role="status">{{tf "machines.rejoinlead" .Name}}</p>{{end}}
 <p class="ok-note" role="status">{{tf "machines.expires" (date .Expires)}}</p>
-{{if .Local}}<p class="notice">{{t "machines.localurl"}}</p>{{end}}
+{{if .Away}}<p class="notice">{{tf "machines.localaway" .Away}}</p>{{else if .Local}}<p class="notice">{{t "machines.localurl"}} <a href="/settings/account#device-fallback">{{t "machines.localset"}}</a></p>{{end}}
 <div class="cmd">
   <h4>{{t "machines.unix"}}</h4>
   <p class="muted small">{{t "machines.unixlead"}}</p>
@@ -482,7 +483,7 @@ second address (web_address.go). . is an addressView. */}}
         <small id="trusted-h">{{t "address.trustedhint"}} {{if .Proxied}}{{tf "address.proxied" .Client}}{{else}}{{tf "address.direct" .Client}}{{end}}</small></label>
     </fieldset>
     <label class="field"><span>{{t "address.fallback"}}</span>
-      <input type="url" name="device_fallback" value="{{.Fallback}}" placeholder="http://100.64.0.2:8800" spellcheck="false" autocomplete="off" class="mono" aria-describedby="fallback-h">
+      <input type="url" id="device-fallback" name="device_fallback" value="{{.Fallback}}" placeholder="http://100.64.0.2:8800" spellcheck="false" autocomplete="off" class="mono" aria-describedby="fallback-h">
       <small id="fallback-h">{{t "address.fallbackhint"}}</small></label>
     <div class="actions"><button class="btn btn-primary" type="submit">{{t "address.save"}}</button></div>
     <div id="address-result" aria-live="polite"></div>

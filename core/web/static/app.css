@@ -1181,9 +1181,17 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 /* Settings → Devices: each card says first what Eriphe sees and can do
    there; the specs come after, smaller. The foot (activity, version,
    update) sits at the bottom, so the cards of a row line up. */
-.tile.device { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tile.device { position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; transition: border-color .15s, box-shadow .15s; }
 .tile-title a { color: inherit; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.tile-title a:hover { text-decoration: underline; }
+/* The whole card opens the device's page: its name is a stretched link
+   (.stretched), and what the card holds that acts on its own (the menu,
+   the folder links, the update buttons) sits above it. */
+.tile.device:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+.tile.device:hover .tile-title a { text-decoration: underline; }
+.tile.device :is(.kebab, a:not(.stretched), button, form, [title]) { position: relative; z-index: 1; }
+.tile.device .kebab[open] { z-index: 30; }
+.device-more { align-self: flex-end; margin-top: -4px; font-size: .86rem; font-weight: 600; color: var(--accent-text); }
+.tile.device:hover .device-more { text-decoration: underline; }
 .status.cut { color: var(--danger); }
 .status.cut .led { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
 .tile.device.is-cut { border-color: color-mix(in srgb, var(--danger) 35%, transparent); }

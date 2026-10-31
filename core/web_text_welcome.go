@@ -34,7 +34,9 @@ var welcomeStrings = map[string]map[string]string{
 		"welcome.starting":     "{{name}} démarre sur cette machine… Cela prend une minute la première fois.",
 		"welcome.change":       "Tu pourras changer d'IA plus tard dans Réglages → Agents.",
 		"welcome.skip":         "Terminer plus tard",
-		"machines.localurl":    "Cette adresse ne marche que sur cet ordinateur. Pour un autre appareil, ouvre l'espace avec l'adresse de cet ordinateur sur le réseau (par exemple https://192.168.0.20:8443) et génère la commande à nouveau.",
+		"machines.localurl":    "Cette adresse ne marche que sur cet ordinateur : la page est ouverte par 127.0.0.1, sur la machine d'Eriphe ou par un tunnel SSH. Un autre appareil a besoin d'une adresse d'Eriphe qu'il peut joindre : donne-la comme « Seconde adresse pour les appareils » (par exemple l'adresse Tailscale du serveur, port 8800), puis génère la commande à nouveau. Chez toi, tu peux aussi ouvrir l'espace avec l'adresse de cet ordinateur sur le réseau (par exemple https://192.168.0.20:8443).",
+		"machines.localset":    "Seconde adresse pour les appareils ›",
+		"machines.localaway":   "La page est ouverte par 127.0.0.1, qui ne marche que sur cet ordinateur : un autre appareil joindra Eriphe par la seconde adresse que la commande donne, %s.",
 	},
 	"en": {
 		"welcome.title":        "Welcome",
@@ -59,6 +61,8 @@ var welcomeStrings = map[string]map[string]string{
 		"welcome.starting":     "{{name}} is starting on this machine… The first time takes a minute.",
 		"welcome.change":       "You can change the AI later in Settings → Agents.",
 		"welcome.skip":         "Finish later",
-		"machines.localurl":    "This address works on this computer only. For another device, open the workspace with this computer's address on the network (e.g. https://192.168.0.20:8443) and generate the command again.",
+		"machines.localurl":    "This address works on this computer only: the page is opened through 127.0.0.1, on Eriphe's machine or through an SSH tunnel. Another device needs an address of Eriphe it can reach: give it as the “Second address for the devices” (for example the server's Tailscale address, port 8800), then generate the command again. At home, you can also open the workspace with this computer's address on the network (e.g. https://192.168.0.20:8443).",
+		"machines.localset":    "Second address for the devices ›",
+		"machines.localaway":   "The page is opened through 127.0.0.1, which works on this computer only: another device will reach Eriphe at the second address the command gives, %s.",
 	},
 }

@@ -186,8 +186,13 @@ brain, through OpenCode:
   runs from the computer's memory, far slower: 16 GB of RAM is tight for one 7B model with 2 slots
   at 32k. Details and a rule of thumb: `install/README.md`, Ollama's settings.
 
-"Test the server" in the account form calls `GET <base_url>/models` (with `Authorization: Bearer`
-when a key is typed or stored), not following redirects, and lists the models it serves.
+The account form asks the server for its models (`POST /settings/provider-models`, `web_models.go`):
+`GET <base_url>/models` (with `Authorization: Bearer` when a key is typed or stored), not following
+redirects, as soon as a device is chosen or with "Détecter les modèles" for an address. They come
+as boxes to tick (the first ticked is the default agent of a new workspace), one agent created per
+model added; a save with none ticked lists them instead. A name can be typed by hand only when the
+server cannot be asked. On an edit, the models the server serves that the account does not use yet
+are offered as new.
 
 #### A model behind a node
 
@@ -235,8 +240,8 @@ the lending node → the server:               <model-server>/v1/{path}
 - Answers stream through as they come (`FlushInterval: -1` at every hop): a chat completion's
   server-sent events arrive token by token.
 - The lending machine must be connected: otherwise the task's request fails with `502` ("the
-  machine of the model … is not connected"). "Test the server" goes through the same tunnel
-  (`GET /v1/model/models`).
+  machine of the model … is not connected"). The form's list of models goes through the same
+  tunnel (`GET /v1/model/models`).
 
 ### ChatGPT subscription
 
@@ -1384,7 +1389,7 @@ and the configuration's secret files to import. Settings → Agents shows the ag
 whether a machine can run them now), the agents worth creating with the accounts (one click), the
 default agent and the brain's, and the AI accounts (providers). Adding an account starts from a
 card per kind, subscriptions first (Claude, ChatGPT), then API keys, then a self-hosted model
-server (its address, an optional key and its models; "Test the server" lists them), each with who pays, its
+server (on a device or at an address, an optional key, and its models, detected and ticked), each with who pays, its
 limits, its models and the steps to get its credential; "Test the key" lists the provider's models
 once with the key typed (OpenRouter also tells the credit left; a Claude subscription token is
 only checked for its shape, as Anthropic allows it in Claude Code only; a key pasted in the wrong

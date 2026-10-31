@@ -286,11 +286,14 @@ short:
 
    The installer prints `https://127.0.0.1:8443/setup` and a setup code.
 3. To reach the workspace the first time, the person opens an SSH tunnel **from their own
-   computer** (`ssh -L 8443:127.0.0.1:8443 <user>@<server>`), opens `https://127.0.0.1:8443/setup`
+   computer** (`ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes <user>@<server>`), opens `https://127.0.0.1:8443/setup`
    there, and goes on with §5.
 4. Then, right away, **Remote access** (§7, Tailscale): the workspace, the phone app and the other
    devices use the `https://<name>.<tailnet>.ts.net` address from then on; in "Connect a device",
-   the command with the remote address. No port is opened.
+   the command with the remote address. No port is opened. A command generated from the SSH tunnel
+   page says `--core https://127.0.0.1:8800`, which only the server can use: the workspace says so
+   and points to **Second address for the devices** (Settings → My workspace); generate the command
+   again once Remote access or that address is set.
 5. Their own domain behind a reverse proxy instead of Tailscale: the person sets it up themselves
    with [docs/reverse-proxy.md](reverse-proxy.md) (HTTPS and a sign-in in front); only the proxy's
    443 is opened. Port 8800 is opened only if devices join over the internet without Tailscale
@@ -446,7 +449,7 @@ For each other computer (or a second NAS):
    Ollama's settings.
 
    Then the person, in the browser: Settings → Agents → Add an AI account → Modèle auto-hébergé →
-   "Sur un de mes appareils", picks the device, "Tester le serveur", and the models. Pick a model
+   "Sur un de mes appareils", picks the device, and ticks the models it lists. Pick a model
    that calls tools (Qwen 3, Llama 3.1+).
 
 ## 7. Optional: the phone, away from home, tools

@@ -656,7 +656,7 @@ a home PC with a graphics card or a rented server, install Eriphe there as a dev
 network or the Internet, and you need no other account. Eriphe reaches it through the device's
 tunnel, the one it already has with eriphe-core, and your tasks and the assistant use it wherever
 they run. Then, in the workspace: Settings → Agents → Add an AI account → Modèle auto-hébergé →
-"Sur un de mes appareils", pick the device, "Tester le serveur" lists its models.
+"Sur un de mes appareils", pick the device, and tick the models it lists.
 
 The address is the one eriphe-node reaches:
 
@@ -868,7 +868,7 @@ installer notices a public address and says so at the end ("Good to know"). Befo
    SSH, and nothing else of Eriphe's by default:
    - **8443, the workspace**: never open to the world. Reach it one of these ways:
      - **Tailscale**, built in: Réglages › Accès à distance (Settings › Remote access), "Turn on"
-       and sign in, from an SSH tunnel the first time (`ssh -L 8443:127.0.0.1:8443 server`, then
+       and sign in, from an SSH tunnel the first time (`ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes user@server`, then
        `https://127.0.0.1:8443` on your computer). The workspace then has a
        `https://<name>.<tailnet>.ts.net` address with a real certificate, for your browser, the
        phone app and the devices, and nothing is opened on the server.
@@ -901,6 +901,13 @@ installer notices a public address and says so at the end ("Good to know"). Befo
 5. **Trust.** The provider has the server's disk: Eriphe's memory, conversations, the AI account's
    token, the tools' tokens and the vault's key are on it. Choose a provider you trust with that,
    or keep Eriphe at home.
+6. **Connecting a device from the SSH tunnel.** Opened at `https://127.0.0.1:8443`, "Connect a
+   device" can only build `--core https://127.0.0.1:8800`, which works on the server alone, and
+   says so. Give the devices an address they can reach first: turn on Remote access (its address
+   is added to the commands), or set **Second address for the devices** in Réglages › Mon espace
+   (Settings › My workspace; the server's Tailscale address, `http://100.x.y.z:8800`, or its public
+   name if 8800 is open), then generate the command again: it carries that address after the
+   loopback one, and the device uses it.
 
 ## Troubleshooting
 

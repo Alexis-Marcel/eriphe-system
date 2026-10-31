@@ -323,7 +323,10 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 			// Its answer to the start prompt ("Prêt.") is not news for the conversation.
 			// quietReply: its answer to a note that asks nothing of the
 			// user (a tool added…) stays out of the conversation.
-			if text, _ := e.Data["text"].(string); strings.TrimSpace(text) != "" && !quietReply(text) {
+			// toolCallText: a tool call written as its answer is not one either.
+			if text, _ := e.Data["text"].(string); toolCallText(text) {
+				c.brainToolCallText(text)
+			} else if strings.TrimSpace(text) != "" && !quietReply(text) {
 				c.store.addMessage(roleBrain, text, true)
 			}
 		}

@@ -51,5 +51,8 @@ func (c *core) brainWrote(a Assistant, t *TaskRow, events bool, draft string) {
 	if events {
 		c.copyBrainOutput(a, t)
 	}
+	if toolCallStart(draft) {
+		draft = "" // a tool call being written as text is not shown (brain_toolcall.go)
+	}
 	c.draft.set(draft, c.store.lastMessageSeq())
 }

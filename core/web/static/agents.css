@@ -90,6 +90,16 @@
 .provider-form:not(:has(input[name=where][value=node]:checked)) .if-where-node { display: none; }
 .provider-form:has(input[name=where][value=node]:checked) .if-where-address { display: none; }
 
+/* A self-hosted server's models, to tick (web_models.go). */
+.model-picker { display: grid; gap: 10px; padding: 14px 16px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); min-width: 0; }
+.model-picker > p, .model-picker > small { margin: 0; }
+.model-picker-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.model-picker-title { font-weight: 650; font-size: .92rem; }
+.model-checks { grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); gap: 10px 14px; }
+.model-checks b { overflow-wrap: anywhere; }
+.model-manual > summary { cursor: pointer; font-size: .86rem; font-weight: 600; color: var(--accent-text); }
+.model-manual .field { margin-top: 8px; }
+
 /* The ChatGPT sign-in. */
 .login-box { display: grid; gap: 10px; justify-items: start; padding: 16px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); }
 .login-box p { margin: 0; overflow-wrap: anywhere; }

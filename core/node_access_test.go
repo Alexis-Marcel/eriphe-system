@@ -227,7 +227,8 @@ func TestNodeAccessAPI(t *testing.T) {
 	}
 }
 
-// Settings → Devices: each card says what Eriphe sees and can do there;
+// Settings → Devices: each card says what Eriphe sees and can do there,
+// and opens the device's page as a whole (its name is a stretched link);
 // a device's page shows its log; cutting access shows on the card.
 func TestWebDevices(t *testing.T) {
 	c, _ := foldersCore(t)
@@ -238,7 +239,7 @@ func TestWebDevices(t *testing.T) {
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	for _, want := range []string{"Appareils", "Connecter un appareil", "Ce qu&#39;Eriphe voit ici", "Ce qu&#39;Eriphe peut faire ici",
 		"Faire travailler des agents", `<a href="/settings/folders">`, "Clients", "Lecture &#43; dépôt", "Rien d&#39;ouvert",
-		`href="/settings/folders?node=pc"`, `href="/settings/devices/nas"`, "Couper l&#39;accès", `hx-post="/settings/devices/nas/suspend"`} {
+		`href="/settings/folders?node=pc"`, `<a href="/settings/devices/nas" class="stretched">nas</a>`, `<span class="device-more" aria-hidden="true">Détails ›</span>`, "Couper l&#39;accès", `hx-post="/settings/devices/nas/suspend"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/devices lacks %q", want)
 		}

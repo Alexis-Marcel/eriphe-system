@@ -35,6 +35,8 @@ func (w *web) agentRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/providers", w.auth(w.handleSaveProvider))
 	mux.Handle("POST /settings/provider-test", w.auth(w.handleTestProvider))
 	mux.Handle("POST /settings/provider-test/{name}", w.auth(w.handleTestProvider))
+	mux.Handle("POST /settings/provider-models", w.auth(w.handleDetectModels)) // web_models.go
+	mux.Handle("POST /settings/provider-models/{name}", w.auth(w.handleDetectModels))
 	mux.Handle("GET /settings/providers/{name}/edit", w.auth(w.handleEditProvider))
 	mux.Handle("POST /settings/providers/{name}", w.auth(w.handleSaveProvider))
 	mux.Handle("POST /settings/providers/{name}/delete", w.auth(w.handleDeleteProvider))
@@ -190,8 +192,11 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 	case q.Get("created") != "" && w.c.source(kindProvider, q.Get("created")) != "":
 		n := len(m.agentsOf(q.Get("created")))
 		v.Flash = fmt.Sprintf(tr(lang, "providers.created"), q.Get("created"))
-		if n > 0 {
-			v.Flash += " " + fmt.Sprintf(tr(lang, "providers.createdagents"), n)
+		if key := "providers.createdagents"; n > 0 {
+			if n == 1 {
+				key = "providers.createdagent"
+			}
+			v.Flash += " " + fmt.Sprintf(tr(lang, key), n)
 		}
 	case q.Get("removed") != "" && serverName.MatchString(q.Get("removed")):
 		v.Flash = fmt.Sprintf(tr(lang, "agents.removed"), q.Get("removed"))
@@ -331,7 +336,11 @@ func (w *web) complete(f *agentForm) {
 
 func (w *web) agentFormPage(rw http.ResponseWriter, r *http.Request, s *session, f agentForm, block string) {
 	w.complete(&f)
-	w.render(rw, r, s, "settings", block, page{Title: "agents.add", Nav: "settings", Tab: "agents", View: "agent-form", Data: f})
+	title := "agents.add"
+	if f.Edit {
+		title = "agents.edit"
+	}
+	w.render(rw, r, s, "settings", block, page{Title: title, Nav: "settings", Tab: "agents", View: "agent-form", Data: f})
 }
 
 // readAgentForm reads the form, posted or sent again to follow a change of
@@ -602,9 +611,9 @@ type providerForm struct {
 	Edit    bool
 	Name    string
 	Kind    providerKind
-	Env     string // the variable of its credential, when the provider names it
-	BaseURL string // a self-hosted model server's address
-	Models  string // the models it serves, one per line
+	Env     string      // the variable of its credential, when the provider names it
+	BaseURL string      // a self-hosted model server's address
+	Picker  modelPicker // the models it serves, to tick (web_models.go)
 	// A self-hosted model server: on one of the user's devices ("node",
 	// Node lends it through its tunnel) or at an address ("address").
 	Where      string
@@ -634,11 +643,21 @@ func (w *web) providerFormPage(rw http.ResponseWriter, r *http.Request, s *sessi
 				f.Where = whereNode
 			}
 		}
+		if f.Edit {
+			f.Picker.Name = f.Name
+		}
+		// Its models are asked at once from a device, or from the server of
+		// an account being edited; an address waits for "Detect".
+		f.Picker.Auto = f.Picker.Result == nil && (f.Edit || f.Where == whereNode && len(f.ModelNodes) > 0)
 	}
 	if !f.Edit && f.Kind.ID != "" {
 		f.Presets = w.presetChoices(f.Kind, f.Name, f.Presets)
 	}
-	w.render(rw, r, s, "settings", block, page{Title: "providers.add", Nav: "settings", Tab: "agents", View: "provider-form", Data: f})
+	title := "providers.add"
+	if f.Edit {
+		title = "providers.edit"
+	}
+	w.render(rw, r, s, "settings", block, page{Title: title, Nav: "settings", Tab: "agents", View: "provider-form", Data: f})
 }
 
 // presetChoices are the agents offered with a new provider, checked unless
@@ -679,7 +698,7 @@ func (w *web) handleEditProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	k, _ := kindOf(p.Kind)
 	agents := m.agentsOf(name)
 	sort.Strings(agents)
-	w.providerFormPage(rw, r, s, providerForm{Edit: true, Name: name, Kind: k, Env: p.Env, BaseURL: p.BaseURL, Models: strings.Join(p.Models, "\n"),
+	w.providerFormPage(rw, r, s, providerForm{Edit: true, Name: name, Kind: k, Env: p.Env, BaseURL: p.BaseURL, Picker: modelPicker{Picks: pickModels(p.Models, nil, true, nil)},
 		Node: p.Node, KeySet: p.Secret != "", Agents: agents}, "")
 }
 
@@ -694,11 +713,13 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	mode := putCreate
 	p := Provider{Kind: f.Kind.ID}
 	m := w.c.conf()
+	var usedModels []string // the models of the account edited
 	if n := r.PathValue("name"); n != "" {
 		mode, f.Name, f.Edit = putUpdate, n, true
 		if old, ok := m.Providers[n]; ok && w.c.source(kindProvider, n) == sourceWorkspace {
 			// A provider keeps its kind: its agents' models are the kind's.
 			p.Kind, p.Secret, f.KeySet = old.Kind, old.Secret, old.Secret != ""
+			usedModels = old.Models
 			f.Kind, _ = kindOf(old.Kind)
 			p.Env = old.Env
 		}
@@ -714,9 +735,14 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	selfHosted := f.Kind.ID == selfHostedKind
 	if selfHosted {
 		f.BaseURL = strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
-		f.Models = r.PostFormValue("models")
 		f.Where, f.Node = r.PostFormValue("where"), r.PostFormValue("node")
-		p.Models = modelLines(f.Models)
+		// The models ticked, in their order, then those typed by hand.
+		ticked := postedTicks(r)
+		f.Picker = modelPicker{Manual: r.PostFormValue("models"), Picks: pickModels(usedModels, ticked, f.Edit, nil)}
+		if ticked == nil {
+			ticked = r.PostForm["model"] // without the list's marker, as an older page posts
+		}
+		p.Models = modelLines(strings.Join(append(slices.Clone(ticked), f.Picker.Manual), "\n"))
 		if f.Where == whereNode {
 			p.Node = f.Node
 		} else {
@@ -757,6 +783,19 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		err = errors.New("providers.badmodels")
 	case selfHosted && !selfHostedKey(strings.TrimSpace(key)):
 		err = errors.New("providers.badkey")
+	case selfHosted && len(p.Models) == 0:
+		// None ticked yet (a page without scripts, or a list not asked
+		// for): the server's are listed, to tick.
+		name := ""
+		if f.Edit {
+			name = f.Name
+		}
+		f.Picker.Result = w.askModels(r, s, name)
+		f.Picker.Picks = pickModels(usedModels, nil, f.Edit, f.Picker.Result)
+		err = errors.New("providers.pickmodels")
+		if v := f.Picker.Result; v != nil && v.State != "ok" {
+			err = errors.New("providers.nomodels")
+		}
 	default:
 		// A custom provider's key can be anyone's: its variable says whose.
 		// So can a self-hosted server's, which the user makes up.
@@ -766,10 +805,16 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		}
 		agents := map[string]Agent{}
 		def := ""
-		if !f.Edit && selfHosted {
-			// One agent per model it serves, the first the default.
+		if selfHosted {
+			// One agent per model it serves, the first the default; on an
+			// edit, one per model added.
 			taken := func(n string) bool { _, ok := m.Agents[n]; _, mine := agents[n]; return ok || mine }
 			for _, model := range p.Models {
+				if f.Edit && (slices.Contains(usedModels, model) || slices.ContainsFunc(f.Agents, func(a string) bool {
+					return m.Agents[a].Model == f.Kind.ModelNS+"/"+model
+				})) {
+					continue
+				}
 				n := slug(model)
 				if n == "" {
 					n = "model"
@@ -876,23 +921,10 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		kind = p.Kind
 		if kind == selfHostedKind {
 			// The address or device of the form, else the stored one; the same for its key.
-			base := strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
-			if base == "" {
-				base = p.BaseURL
-			}
-			node := r.PostFormValue("node")
-			if node == "" {
-				node = p.Node
-			}
-			if strings.TrimSpace(key) == "" && p.Secret != "" {
-				if key, _ = readSecret(p.Secret); key == "" {
-					show(testView{State: "err", Text: tr(lang, "ptest.nosecret")})
-					return
-				}
-			}
-			where := r.PostFormValue("where")
-			if where == "" && p.Node != "" {
-				where = whereNode
+			where, base, node, key, err := w.selfHostedTarget(r, n)
+			if err != nil {
+				show(testView{State: "err", Text: tr(lang, err.Error())})
+				return
 			}
 			v := w.checkSelfHostedForm(r, lang, where, base, node, key)
 			log.Printf("web: provider test (%s): %s", kind, v.State) // never the key
