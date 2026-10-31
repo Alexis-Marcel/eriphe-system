@@ -523,13 +523,16 @@ type machinesData struct {
 }
 
 type joinView struct {
-	Error   string
-	Name    string
-	Token   string
-	Core    string
-	Labels  string
-	Rejoin  bool // for a registered machine, to join again
-	Local   bool // the address is this computer's own: another one cannot use it
+	Error  string
+	Name   string
+	Token  string
+	Core   string
+	Labels string
+	Rejoin bool // for a registered machine, to join again
+	Local  bool // the address is this computer's own: another one cannot use it
+	// With Local, the command's address away from home, which another
+	// device uses (the devices' second address, or remote access's).
+	Away    string
 	Expires time.Time
 	CAHash  string // the machines' CA, which the new machine pins (machine_tls.go)
 	Wait    joinWait
@@ -629,7 +632,13 @@ func (w *web) joinResult(rw http.ResponseWriter, r *http.Request, s *session, v 
 	}
 	if v.Error == "" {
 		v.Token, v.Core, v.Expires, v.CAHash = token, w.joinCoreURL(r, r.PostFormValue("via")), expires, w.c.caHash()
-		v.Local = loopbackURL(strings.Split(v.Core, ",")[0])
+		// A page opened through an SSH tunnel (a cloud server) or on
+		// eriphe-core's own computer: another device needs an address it
+		// can reach, the devices' second address.
+		cores := strings.Split(v.Core, ",")
+		if v.Local = loopbackURL(cores[0]); v.Local && len(cores) > 1 {
+			v.Away = strings.Join(cores[1:], ", ")
+		}
 		v.Wait = joinWait{Name: v.Name, ID: strings.SplitN(token, ".", 2)[0]}
 		v.Assistant = joinAssistant()
 		log.Printf("web: join token for %s (rejoin: %t)", v.Name, v.Rejoin)

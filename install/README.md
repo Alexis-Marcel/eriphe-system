@@ -901,6 +901,13 @@ installer notices a public address and says so at the end ("Good to know"). Befo
 5. **Trust.** The provider has the server's disk: Eriphe's memory, conversations, the AI account's
    token, the tools' tokens and the vault's key are on it. Choose a provider you trust with that,
    or keep Eriphe at home.
+6. **Connecting a device from the SSH tunnel.** Opened at `https://127.0.0.1:8443`, "Connect a
+   device" can only build `--core https://127.0.0.1:8800`, which works on the server alone, and
+   says so. Give the devices an address they can reach first: turn on Remote access (its address
+   is added to the commands), or set **Second address for the devices** in Réglages › Mon espace
+   (Settings › My workspace; the server's Tailscale address, `http://100.x.y.z:8800`, or its public
+   name if 8800 is open), then generate the command again: it carries that address after the
+   loopback one, and the device uses it.
 
 ## Troubleshooting
 
