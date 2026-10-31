@@ -729,6 +729,7 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	}
 	key := r.PostFormValue("key")
 	var err error
+	var tested *testView // the new key's test, once it is tried
 	login := ""
 	if f.Kind.ID == "chatgpt-subscription" {
 		// The credential is the sign-in's, not a pasted key.
@@ -763,6 +764,20 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		if other := misplaced(f.Kind.ID, strings.TrimSpace(key)); key != "" && login == "" && other != "" && !f.Kind.CustomEnv && !selfHosted {
 			err = shownError(trf(lang, "ptest.misplaced", tr(lang, "kind."+other)))
 			break
+		}
+		// A new key is tried as "Test" would before it is saved. One the
+		// provider refuses is not saved: the form says so and stays. One
+		// that could not be tried (no network, the provider's own error)
+		// is saved, and the account and its agents say so
+		// (provider_health.go).
+		if _, checkable := checkEndpoints[f.Kind.ID]; checkable && strings.TrimSpace(key) != "" {
+			v := checkProvider(r.Context(), lang, f.Kind.ID, key)
+			log.Printf("web: provider %s checked on save: %s", f.Name, v.State) // never the key
+			if v.State == "err" && v.Cause == causeAuth {
+				err = shownError(v.Text)
+				break
+			}
+			tested = &v
 		}
 		agents := map[string]Agent{}
 		def := ""
@@ -810,12 +825,8 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		return
 	}
 	log.Printf("web: provider %s saved", f.Name)
-	// A new key is tried as "Test" would: one that fails is kept, but the
-	// account and its agents say so (provider_health.go).
-	if _, checkable := checkEndpoints[f.Kind.ID]; checkable && strings.TrimSpace(key) != "" {
-		v := checkProvider(r.Context(), lang, f.Kind.ID, key)
-		log.Printf("web: provider %s checked on save: %s", f.Name, v.State) // never the key
-		w.c.testedHealth(f.Name, v)
+	if tested != nil {
+		w.c.testedHealth(f.Name, *tested)
 	}
 	switch {
 	case f.Next == "welcome" && !f.Edit:
