@@ -513,7 +513,7 @@ once from a device, or with "Detect" from an address. . is a modelPicker. */}}
 <div class="model-picker" id="model-picker"{{if .Auto}} hx-post="{{$url}}" hx-trigger="load" hx-include="closest form" hx-target="this" hx-swap="outerHTML"{{end}}>
   <div class="model-picker-head">
     <span class="model-picker-title" id="mp-title">{{t "providers.models"}}</span>
-    <button class="btn btn-soft sm test-btn" type="button" hx-post="{{$url}}" hx-include="closest form" hx-target="#model-picker" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{if or .Result .Picks}}{{t "models.refresh"}}{{else}}{{t "models.detect"}}{{end}}</span><span class="when-busy">{{t "models.detecting"}}</span></button>
+    <button class="btn btn-soft sm busy-btn" type="button" hx-post="{{$url}}" hx-include="closest form" hx-target="#model-picker" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{if or .Result .Picks}}{{t "models.refresh"}}{{else}}{{t "models.detect"}}{{end}}</span><span class="when-busy">{{t "models.detecting"}}</span></button>
   </div>
   {{with .Result}}{{if eq .State "ok"}}<p class="muted small" role="status">{{.Text}}</p>{{else}}{{template "test-line" .}}{{end}}{{end}}
   {{if .Picks}}
