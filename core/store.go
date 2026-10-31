@@ -46,6 +46,9 @@ type NodeRow struct {
 	Install string `json:"install,omitempty"`
 	// Its access is cut (node_access.go): no work, no folder, no tunnel.
 	Suspended bool `json:"suspended,omitempty"`
+	// Asleep: away, but it comes back by itself (node_sleep.go). Not
+	// stored: set where it is shown.
+	Asleep bool `json:"asleep,omitempty"`
 }
 
 type TaskRow struct {

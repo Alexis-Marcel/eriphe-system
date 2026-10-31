@@ -205,6 +205,7 @@ func (c *core) attach(name string, session *yamux.Session, withCert bool) {
 	}
 	log.Printf("node %s connected from %s, %s", name, session.RemoteAddr(), how)
 	go func() {
+		c.noteConnect(name, time.Now()) // node_sleep.go
 		c.refreshNode(context.Background(), n)
 		<-session.CloseChan()
 		n.mu.Lock()

@@ -88,9 +88,10 @@ once a request is made or ends, from any card (the answers that say so carry
 the updates-changed event, web_updates.go). */}}
 {{define "update-follow"}}hx-trigger="updates-changed from:body" hx-swap="outerHTML"{{end}}
 
-{{/* A device's status: online, offline, or its access cut. . is a machineView. */}}
+{{/* A device's status: online, asleep, offline, or its access cut. . is a machineView. */}}
 {{define "device-status"}}
 {{- if .Suspended}}<span class="status cut"><span class="led" aria-hidden="true"></span>{{t "devices.cut"}}</span>
+{{- else if .Asleep}}<span class="status asleep" title="{{t "machines.asleephint"}}"><span class="led" aria-hidden="true"></span>{{t "machines.asleep"}}</span>
 {{- else}}<span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{if .Online}}{{t "machines.online"}}{{else}}{{t "machines.offline"}}{{end}}</span>{{end}}
 {{- end}}
 

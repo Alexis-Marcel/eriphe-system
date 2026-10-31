@@ -133,6 +133,24 @@ update themselves):
 `updater` (an install from before, or a node set up by hand) the node writes nothing and
 eriphe-core offers no update.
 
+## Sleep
+
+While at least one task is at work (its agent running a turn), the node keeps the machine out of
+system sleep, and lets it sleep again once none is: a laptop no longer cuts a task short by going
+to sleep. A task waiting for a permission or for the user does not hold it: its container waits
+through the sleep. `GET /v1/node` reports how as `keeps_awake`.
+
+| Where the node runs | What holds the machine |
+|---|---|
+| macOS, Apple's container (the node on the Mac itself) | `caffeinate -i -s -w <node's pid>`: no idle sleep, and no system sleep while on AC power. On battery macOS may still sleep, and closing the lid always does |
+| Linux, in its container (`install.sh`) | the node writes `<root>/awake` while it holds the machine; `eriphe-awake.path` (systemd, on the host) then runs `systemd-inhibit --what=sleep:idle` until the file is gone. Without systemd, nothing |
+| Linux, by hand on a system with systemd | `systemd-inhibit`, run by the node itself |
+| Windows (WSL) | `<root>/awake` too; the distribution starts no Windows program, so the scheduled task "Eriphe awake" looks every 30 s and calls `SetThreadExecutionState(ES_CONTINUOUS \| ES_SYSTEM_REQUIRED)` while the file is there |
+| macOS in Lima's VM | nothing: the VM's systemd holds the VM, not the Mac |
+
+A machine installed before this gets the host's part (`eriphe-awake`, "Eriphe awake") by running
+its install command again; the node's own part comes with its update.
+
 ## API (through the tunnel)
 
 | Call | What |

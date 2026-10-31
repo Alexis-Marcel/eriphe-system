@@ -1039,6 +1039,10 @@ UNIT_PATH=$(printf '%s\n' "[Unit]" "Description=Eriphe updater: a request from e
 		"Unit=eriphe-update.service" "" "[Install]" "WantedBy=multi-user.target" | b64)
 UNIT_TIMER=$(printf '%s\n' "[Unit]" "Description=Eriphe updater: a request missed" "" "[Timer]" \
 		"OnBootSec=2min" "OnUnitInactiveSec=10min" "Unit=eriphe-update.service" "" "[Install]" "WantedBy=timers.target" | b64)
+UNIT_AWAKE_SERVICE=$(printf '%s\n' "[Unit]" "Description=Eriphe: no sleep while a task is at work" "" "[Service]" "Type=simple" \
+		"ExecStart=/usr/bin/systemd-inhibit --what=sleep:idle --who=Eriphe \"--why=A task is at work\" --mode=block /bin/sh -c 'while [ -e \"$DATA/node/awake\" ]; do sleep 10; done'" | b64)
+UNIT_AWAKE_PATH=$(printf '%s\n' "[Unit]" "Description=Eriphe: a task at work keeps the machine awake (eriphe-node writes awake)" "" "[Path]" \
+		"PathExists=$DATA/node/awake" "Unit=eriphe-awake.service" "" "[Install]" "WantedBy=multi-user.target" | b64)
 EOF
 }
 
@@ -1193,6 +1197,15 @@ elif command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   chmod 644 /etc/systemd/system/eriphe-update.service /etc/systemd/system/eriphe-update.path /etc/systemd/system/eriphe-update.timer
   systemctl daemon-reload
   systemctl enable --now eriphe-update.path eriphe-update.timer >/dev/null 2>&1 || die "systemctl enable eriphe-update failed"
+  # No sleep while a task is at work: the node, in its container, writes
+  # $DATA/node/awake meanwhile (node/README.md, Sleep).
+  if [ -x /usr/bin/systemd-inhibit ]; then
+    put /etc/systemd/system/eriphe-awake.service "$UNIT_AWAKE_SERVICE"
+    put /etc/systemd/system/eriphe-awake.path "$UNIT_AWAKE_PATH"
+    chmod 644 /etc/systemd/system/eriphe-awake.service /etc/systemd/system/eriphe-awake.path
+    systemctl daemon-reload
+    systemctl enable --now eriphe-awake.path >/dev/null 2>&1 || echo "Eriphe cannot keep this machine awake during a task (systemctl enable eriphe-awake.path failed)"
+  fi
 fi
 for d in $marks; do
   if [ $updater = 1 ]; then
@@ -1217,6 +1230,8 @@ echo "mode=$(sed -n 's/^mode=//p' "$CONF/install.conf" 2>/dev/null)" >&3
 if command -v systemctl >/dev/null 2>&1 && [ -f /etc/systemd/system/eriphe-update.path ]; then
   systemctl disable --now eriphe-update.path eriphe-update.timer eriphe-update.service >/dev/null 2>&1 || true
   rm -f /etc/systemd/system/eriphe-update.service /etc/systemd/system/eriphe-update.path /etc/systemd/system/eriphe-update.timer
+  systemctl disable --now eriphe-awake.path eriphe-awake.service >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/eriphe-awake.service /etc/systemd/system/eriphe-awake.path
   systemctl daemon-reload
 fi
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
