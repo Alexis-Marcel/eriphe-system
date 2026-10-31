@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -156,5 +157,130 @@ func TestTaskAnswerAndStop(t *testing.T) {
 	}
 	if code := call(t, srv, "POST", "/v1/tasks/nope/stop", "", nil); code != 404 {
 		t.Fatalf("unknown task stop: %d", code)
+	}
+}
+
+// The conversation API: a message posted wakes the brain; reading returns
+// what follows ?after=, at once or, with ?wait=, when something comes.
+func TestConversationAPI(t *testing.T) {
+	s, err := openStore(filepath.Join(t.TempDir(), "core.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := newCore(&Config{}, s)
+	mux := http.NewServeMux()
+	mux.Handle("POST /v1/messages", bearer("secret", http.HandlerFunc(c.handlePostMessage)))
+	mux.Handle("GET /v1/messages", bearer("secret", http.HandlerFunc(c.handleGetMessages)))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	for _, body := range []string{`{"text":"  "}`, `{`} {
+		if code := call(t, srv, "POST", "/v1/messages", body, nil); code != http.StatusBadRequest {
+			t.Fatalf("post %s: %d", body, code)
+		}
+	}
+	var posted struct{ Seq int }
+	if code := call(t, srv, "POST", "/v1/messages", `{"text":"hello"}`, &posted); code != http.StatusAccepted || posted.Seq != 1 {
+		t.Fatalf("post: %d %+v", code, posted)
+	}
+	select {
+	case <-c.inbox:
+	default:
+		t.Fatal("the brain was not woken")
+	}
+
+	var msgs []Message
+	if code := call(t, srv, "GET", "/v1/messages?after=0", "", &msgs); code != 200 || len(msgs) != 1 || msgs[0].Text != "hello" || msgs[0].Role != roleUser {
+		t.Fatalf("get: %d %+v", code, msgs)
+	}
+	// Nothing new and no wait: an empty list, not null.
+	msgs = nil
+	if code := call(t, srv, "GET", "/v1/messages?after=1", "", &msgs); code != 200 || msgs == nil || len(msgs) != 0 {
+		t.Fatalf("nothing new: %d %+v", code, msgs)
+	}
+	// Waiting: the next message ends the wait.
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		s.addMessage(roleUser, "later", false)
+	}()
+	start := time.Now()
+	if code := call(t, srv, "GET", "/v1/messages?after=1&wait=10", "", &msgs); code != 200 || len(msgs) != 1 || msgs[0].Text != "later" || time.Since(start) > 5*time.Second {
+		t.Fatalf("wait: %d %+v after %s", code, msgs, time.Since(start))
+	}
+	if code := call(t, srv, "GET", "/v1/messages", "", nil); code != 200 {
+		t.Fatalf("without after: %d", code)
+	}
+	s.db.Close()
+	if code := call(t, srv, "GET", "/v1/messages", "", nil); code != http.StatusInternalServerError {
+		t.Fatalf("store closed: %d", code)
+	}
+}
+
+// waitForChange (task_status's wait) returns once the task has moved and
+// waits for an answer, when it ends, or at the deadline.
+func TestWaitForChange(t *testing.T) {
+	c, _ := newTestAPI(t)
+	ctx := context.Background()
+	quick := func(id string, d time.Duration) time.Duration {
+		start := time.Now()
+		c.waitForChange(ctx, id, d)
+		return time.Since(start)
+	}
+	if d := quick("nope", time.Minute); d > time.Second {
+		t.Fatalf("unknown task: %s", d)
+	}
+	addTask(t, c, "t-failed", stateFailed)
+	if d := quick("t-failed", time.Minute); d > time.Second {
+		t.Fatalf("ended task: %s", d)
+	}
+	addTask(t, c, "t-idle", stateIdle)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		c.store.addEvents("t-idle", []EventRow{{Seq: 1, Time: time.Now(), Type: "text"}})
+	}()
+	if d := quick("t-idle", time.Minute); d > 5*time.Second {
+		t.Fatalf("moved: %s", d)
+	}
+	// Running, not moving: until the deadline.
+	addTask(t, c, "t-running", stateRunning)
+	if d := quick("t-running", 1500*time.Millisecond); d < 1500*time.Millisecond || d > 5*time.Second {
+		t.Fatalf("deadline: %s", d)
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	start := time.Now()
+	if c.waitForChange(cancelled, "t-running", time.Minute); time.Since(start) > time.Second {
+		t.Fatal("a cancelled wait went on")
+	}
+}
+
+// lastFailure: the last error the task reported, else why it never ran.
+func TestLastFailure(t *testing.T) {
+	c, _ := newTestAPI(t)
+	if got := c.lastFailure(""); got != "" {
+		t.Fatalf("no task: %q", got)
+	}
+	if got := c.lastFailure("nope"); got != "" {
+		t.Fatalf("unknown task: %q", got)
+	}
+	c.store.insertTask(&TaskRow{ID: "t-pending", Node: "pc", Agent: "sonnet", Runtime: "claude-code", Prompt: "do",
+		State: statePending, PendingReason: "no machine can run it"})
+	if got := c.lastFailure("t-pending"); got != "no machine can run it" {
+		t.Fatalf("pending: %q", got)
+	}
+	addTask(t, c, "t-1", stateIdle)
+	now := time.Now()
+	c.store.addEvents("t-1", []EventRow{
+		{Seq: 1, Time: now, Type: "turn_end", Data: map[string]any{"subtype": "error_during_execution", "result": "first failure"}},
+		{Seq: 2, Time: now, Type: "text", Data: map[string]any{"text": "all good"}},
+		{Seq: 3, Time: now, Type: "turn_end", Data: map[string]any{"subtype": "error_during_execution", "result": "last failure"}},
+		{Seq: 4, Time: now, Type: "turn_end", Data: map[string]any{"subtype": "success", "result": "done"}},
+	})
+	if got := c.lastFailure("t-1"); got != "last failure" {
+		t.Fatalf("events: %q", got)
+	}
+	addTask(t, c, "t-2", stateIdle)
+	if got := c.lastFailure("t-2"); got != "" {
+		t.Fatalf("no failure: %q", got)
 	}
 }
