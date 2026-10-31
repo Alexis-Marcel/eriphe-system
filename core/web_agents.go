@@ -125,6 +125,26 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 	for n := range m.Providers {
 		healths[n] = w.health(lang, n)
 	}
+	w.addAgentViews(m, &v, healths)
+	for _, n := range slices.Sorted(maps.Keys(m.Providers)) {
+		pv := w.providerViewOf(m, n, healths[n])
+		v.Suggested = append(v.Suggested, pv.Suggested...)
+		v.Providers = append(v.Providers, pv)
+	}
+	for k, why := range w.c.skippedEntries() {
+		if !strings.HasPrefix(k, kindServer+"/") {
+			v.Skipped[k] = why
+		}
+	}
+	v.Flash, v.Warn = w.agentsFlash(r.URL.Query(), lang, m, v.Brain, healths)
+	v.BrainCard, v.Helpers = w.brainCards(r, v)
+	v.AgentCount = len(m.Agents)
+	return v
+}
+
+// addAgentViews lists the agents, the brain's first, then the default,
+// then by name, and those that can be the brain.
+func (w *web) addAgentViews(m *Config, v *agentsPage, healths map[string]*healthView) {
 	infos, _ := w.c.listAgents()
 	for _, a := range infos {
 		spec := m.Agents[a.Name]
@@ -155,64 +175,68 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 		}
 		return rank(v.Agents[i]) < rank(v.Agents[j])
 	})
-	for _, n := range slices.Sorted(maps.Keys(m.Providers)) {
-		p := m.Providers[n]
-		k, _ := kindOf(p.Kind)
-		pv := providerView{Name: n, Kind: p.Kind, Billing: k.Billing, Source: w.c.source(kindProvider, n), InVault: strings.HasPrefix(p.Secret, vaultPrefix),
-			Health: healths[n]}
-		for an, a := range m.Agents {
-			if a.Provider == n {
-				pv.Agents = append(pv.Agents, an)
-			}
-		}
-		sort.Strings(pv.Agents)
-		pv.Suggested = suggestionsFor(m, n)
-		v.Suggested = append(v.Suggested, pv.Suggested...)
-		v.Providers = append(v.Providers, pv)
-	}
-	for k, why := range w.c.skippedEntries() {
-		if !strings.HasPrefix(k, kindServer+"/") {
-			v.Skipped[k] = why
+}
+
+// providerViewOf is an account's card: its agents, and the presets it
+// does not run yet.
+func (w *web) providerViewOf(m *Config, n string, health *healthView) providerView {
+	p := m.Providers[n]
+	k, _ := kindOf(p.Kind)
+	pv := providerView{Name: n, Kind: p.Kind, Billing: k.Billing, Source: w.c.source(kindProvider, n), InVault: strings.HasPrefix(p.Secret, vaultPrefix),
+		Health: health}
+	for an, a := range m.Agents {
+		if a.Provider == n {
+			pv.Agents = append(pv.Agents, an)
 		}
 	}
-	q := r.URL.Query()
-	// A key saved that did not pass its test: said at once, not only on its card.
+	sort.Strings(pv.Agents)
+	pv.Suggested = suggestionsFor(m, n)
+	return pv
+}
+
+// agentsFlash is what the page says of the action just done (?saved=,
+// ?created=, …): a flash, or a warning for a key saved that did not pass
+// its test, said at once, not only on its card.
+func (w *web) agentsFlash(q url.Values, lang string, m *Config, brain string, healths map[string]*healthView) (flash, warn string) {
 	bad := func(key, name string) bool {
 		h := healths[name]
 		if h == nil || !h.Tested || w.c.source(kindProvider, name) == "" {
 			return false
 		}
-		v.Warn = fmt.Sprintf(tr(lang, key), name, h.Problem.Text)
+		warn = fmt.Sprintf(tr(lang, key), name, h.Problem.Text)
 		return true
 	}
 	switch {
 	case q.Get("saved") != "" && bad("providers.savedbad", q.Get("saved")):
 	case q.Get("created") != "" && bad("providers.createdbad", q.Get("created")):
 	case q.Get("saved") != "" && (w.c.source(kindAgent, q.Get("saved")) != "" || w.c.source(kindProvider, q.Get("saved")) != ""):
-		v.Flash = fmt.Sprintf(tr(lang, "agents.saved"), q.Get("saved"))
+		flash = fmt.Sprintf(tr(lang, "agents.saved"), q.Get("saved"))
 	case q.Get("created") != "" && w.c.source(kindProvider, q.Get("created")) != "":
-		n := len(m.agentsOf(q.Get("created")))
-		v.Flash = fmt.Sprintf(tr(lang, "providers.created"), q.Get("created"))
-		if key := "providers.createdagents"; n > 0 {
-			if n == 1 {
-				key = "providers.createdagent"
-			}
-			v.Flash += " " + fmt.Sprintf(tr(lang, key), n)
-		}
+		flash = createdFlash(lang, q.Get("created"), len(m.agentsOf(q.Get("created"))))
 	case q.Get("removed") != "" && serverName.MatchString(q.Get("removed")):
-		v.Flash = fmt.Sprintf(tr(lang, "agents.removed"), q.Get("removed"))
+		flash = fmt.Sprintf(tr(lang, "agents.removed"), q.Get("removed"))
 	case q.Get("default") != "":
-		v.Flash = fmt.Sprintf(tr(lang, "agents.defaultset"), m.DefaultAgent)
+		flash = fmt.Sprintf(tr(lang, "agents.defaultset"), m.DefaultAgent)
 	case q.Get("brain") == "saved":
-		v.Flash = tr(lang, "agents.brainsaved")
+		flash = tr(lang, "agents.brainsaved")
 	case q.Get("brain") != "":
-		v.Flash = fmt.Sprintf(tr(lang, "agents.brainset"), v.Brain)
+		flash = fmt.Sprintf(tr(lang, "agents.brainset"), brain)
 	case q.Get("assistant") != "" && m.Assistants[q.Get("assistant")].Name != "":
-		v.Flash = fmt.Sprintf(tr(lang, "assistants.saved"), q.Get("assistant"))
+		flash = fmt.Sprintf(tr(lang, "assistants.saved"), q.Get("assistant"))
 	}
-	v.BrainCard, v.Helpers = w.brainCards(r, v)
-	v.AgentCount = len(m.Agents)
-	return v
+	return flash, warn
+}
+
+// createdFlash says an account was added, with the n agents it brought.
+func createdFlash(lang, provider string, n int) string {
+	flash := fmt.Sprintf(tr(lang, "providers.created"), provider)
+	if key := "providers.createdagents"; n > 0 {
+		if n == 1 {
+			key = "providers.createdagent"
+		}
+		flash += " " + fmt.Sprintf(tr(lang, key), n)
+	}
+	return flash
 }
 
 func (m *Config) agentsOf(provider string) []string {
@@ -703,167 +727,33 @@ func (w *web) handleEditProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		Node: p.Node, KeySet: p.Secret != "", Agents: agents}, "")
 }
 
+// providerPost is the provider form as posted: the form to show again, the
+// provider it saves, and what saving it needs.
+type providerPost struct {
+	f          providerForm
+	p          Provider
+	mode       string
+	usedModels []string // the models of the account edited
+	checked    []string // the presets ticked
+	key        string   // the new key, or the ChatGPT sign-in's token
+	login      string   // the ChatGPT sign-in, if any
+}
+
+func (pp *providerPost) selfHosted() bool { return pp.f.Kind.ID == selfHostedKind }
+
 func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *session) {
 	r.ParseForm()
 	lang := w.lang(r)
-	f := providerForm{Name: strings.ToLower(strings.TrimSpace(r.PostFormValue("name")))}
-	f.Kind, _ = kindOf(r.PostFormValue("kind"))
-	if r.PostFormValue("next") == "welcome" {
-		f.Next = "welcome"
-	}
-	mode := putCreate
-	p := Provider{Kind: f.Kind.ID}
 	m := w.c.conf()
-	var usedModels []string // the models of the account edited
-	if n := r.PathValue("name"); n != "" {
-		mode, f.Name, f.Edit = putUpdate, n, true
-		if old, ok := m.Providers[n]; ok && w.c.source(kindProvider, n) == sourceWorkspace {
-			// A provider keeps its kind: its agents' models are the kind's.
-			p.Kind, p.Secret, f.KeySet = old.Kind, old.Secret, old.Secret != ""
-			usedModels = old.Models
-			f.Kind, _ = kindOf(old.Kind)
-			p.Env = old.Env
-		}
-		f.Agents = m.agentsOf(n)
-		sort.Strings(f.Agents)
-	} else if f.Name == "" {
-		f.Name = defaultProviderName(f.Kind.ID, func(n string) bool { _, ok := m.Providers[n]; return ok })
-	}
-	if f.Kind.CustomEnv {
-		f.Env = strings.TrimSpace(r.PostFormValue("env"))
-		p.Env = f.Env
-	}
-	selfHosted := f.Kind.ID == selfHostedKind
-	if selfHosted {
-		f.BaseURL = strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
-		f.Where, f.Node = r.PostFormValue("where"), r.PostFormValue("node")
-		// The models ticked, in their order, then those typed by hand.
-		ticked := postedTicks(r)
-		f.Picker = modelPicker{Manual: r.PostFormValue("models"), Picks: pickModels(usedModels, ticked, f.Edit, nil)}
-		if ticked == nil {
-			ticked = r.PostForm["model"] // without the list's marker, as an older page posts
-		}
-		p.Models = modelLines(strings.Join(append(slices.Clone(ticked), f.Picker.Manual), "\n"))
-		if f.Where == whereNode {
-			p.Node = f.Node
-		} else {
-			f.Where, p.BaseURL = whereAddress, f.BaseURL
-		}
-	}
-	checked := r.PostForm["preset"]
-	for _, ps := range f.Kind.Presets {
-		f.Presets = append(f.Presets, presetChoice{Preset: ps.Name, Checked: slices.Contains(checked, ps.Name)})
-	}
-	key := r.PostFormValue("key")
-	var err error
+	pp := w.readProviderForm(r, s, m)
 	var tested *testView // the new key's test, once it is tried
-	login := ""
-	if f.Kind.ID == "chatgpt-subscription" {
-		// The credential is the sign-in's, not a pasted key.
-		login, key = r.PostFormValue("login"), ""
-		f.Login = chatgptLogins.status(login, s.ID)
-		if tok, ok := chatgptLogins.tokens(login, s.ID); ok {
-			key = tok
-		}
+	err := w.providerFormError(r, s, m, pp)
+	if err == nil {
+		tested, err = w.saveProviderForm(r, lang, m, pp)
 	}
-	switch {
-	case f.Kind.ID == "":
-		err = errors.New("providers.nokind")
-	case f.Kind.ID == "chatgpt-subscription" && p.Secret == "" && key == "":
-		err = errors.New("cglogin.notyet")
-	case f.Kind.ID != "chatgpt-subscription" && !selfHosted && strings.TrimSpace(key) == "" && p.Secret == "":
-		err = errors.New("form.nokey")
-	case f.Kind.CustomEnv && checkCredentialEnv(f.Env) != nil:
-		err = errors.New("providers.badenv")
-	case selfHosted && f.Where == whereNode && !w.c.lendsModel(p.Node, m.Providers[f.Name].Node):
-		err = errors.New("providers.nonode")
-	case selfHosted && p.Node == "" && checkBaseURL(p.BaseURL) != nil:
-		err = errors.New("providers.badbaseurl")
-	case selfHosted && clearToInternet(p.BaseURL):
-		err = errors.New("providers.clearbaseurl")
-	case selfHosted && checkModelIDs(p.Models) != nil:
-		err = errors.New("providers.badmodels")
-	case selfHosted && !selfHostedKey(strings.TrimSpace(key)):
-		err = errors.New("providers.badkey")
-	case selfHosted && len(p.Models) == 0:
-		// None ticked yet (a page without scripts, or a list not asked
-		// for): the server's are listed, to tick.
-		name := ""
-		if f.Edit {
-			name = f.Name
-		}
-		f.Picker.Result = w.askModels(r, s, name)
-		f.Picker.Picks = pickModels(usedModels, nil, f.Edit, f.Picker.Result)
-		err = errors.New("providers.pickmodels")
-		if v := f.Picker.Result; v != nil && v.State != "ok" {
-			err = errors.New("providers.nomodels")
-		}
-	default:
-		// A custom provider's key can be anyone's: its variable says whose.
-		// So can a self-hosted server's, which the user makes up.
-		if other := misplaced(f.Kind.ID, strings.TrimSpace(key)); key != "" && login == "" && other != "" && !f.Kind.CustomEnv && !selfHosted {
-			err = shownError(trf(lang, "ptest.misplaced", tr(lang, "kind."+other)))
-			break
-		}
-		// A new key is tried as "Test" would before it is saved. One the
-		// provider refuses is not saved: the form says so and stays. One
-		// that could not be tried (no network, the provider's own error)
-		// is saved, and the account and its agents say so
-		// (provider_health.go).
-		if _, checkable := checkEndpoints[f.Kind.ID]; checkable && strings.TrimSpace(key) != "" {
-			v := checkProvider(r.Context(), lang, f.Kind.ID, key)
-			log.Printf("web: provider %s checked on save: %s", f.Name, v.State) // never the key
-			if v.State == "err" && v.Cause == causeAuth {
-				err = shownError(v.Text)
-				break
-			}
-			tested = &v
-		}
-		agents := map[string]Agent{}
-		def := ""
-		if selfHosted {
-			// One agent per model it serves, the first the default; on an
-			// edit, one per model added.
-			taken := func(n string) bool { _, ok := m.Agents[n]; _, mine := agents[n]; return ok || mine }
-			for _, model := range p.Models {
-				if f.Edit && (slices.Contains(usedModels, model) || slices.ContainsFunc(f.Agents, func(a string) bool {
-					return m.Agents[a].Model == f.Kind.ModelNS+"/"+model
-				})) {
-					continue
-				}
-				n := slug(model)
-				if n == "" {
-					n = "model"
-				}
-				if taken(n) {
-					n = slug(n + "-" + f.Name)
-				}
-				if taken(n) {
-					continue
-				}
-				agents[n] = Agent{Runtime: f.Kind.Runtime(), Provider: f.Name, Model: f.Kind.ModelNS + "/" + model, Use: trf(lang, "preset.agent.selfhosted", model)}
-				if def == "" {
-					def = n
-				}
-			}
-		}
-		if !f.Edit {
-			taken := func(n string) bool { _, ok := m.Agents[n]; _, mine := agents[n]; return ok || mine }
-			for _, ps := range f.Kind.Presets {
-				if !slices.Contains(checked, ps.Name) {
-					continue
-				}
-				n := presetName(ps, f.Name, taken)
-				agents[n] = presetAgent(lang, f.Kind, f.Name, ps)
-				if ps.Default {
-					def = n
-				}
-			}
-		}
-		err = w.c.putProviderAgents(mode, f.Name, p, key, agents, def)
-	}
-	if err == nil && login != "" {
-		chatgptLogins.drop(login)
+	f := pp.f
+	if err == nil && pp.login != "" {
+		chatgptLogins.drop(pp.login)
 	}
 	if err != nil {
 		f.Error = w.agentError(r, err)
@@ -883,6 +773,196 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		rw.Header().Set("HX-Redirect", "/settings/agents?created="+url.QueryEscape(f.Name))
 	}
 	rw.WriteHeader(http.StatusOK)
+}
+
+// readProviderForm reads the provider form: a new account, or the edit of
+// a workspace one, which keeps its kind, key and variable.
+func (w *web) readProviderForm(r *http.Request, s *session, m *Config) *providerPost {
+	pp := &providerPost{f: providerForm{Name: strings.ToLower(strings.TrimSpace(r.PostFormValue("name")))}, mode: putCreate}
+	f := &pp.f
+	f.Kind, _ = kindOf(r.PostFormValue("kind"))
+	if r.PostFormValue("next") == "welcome" {
+		f.Next = "welcome"
+	}
+	pp.p = Provider{Kind: f.Kind.ID}
+	if n := r.PathValue("name"); n != "" {
+		pp.mode, f.Name, f.Edit = putUpdate, n, true
+		if old, ok := m.Providers[n]; ok && w.c.source(kindProvider, n) == sourceWorkspace {
+			// A provider keeps its kind: its agents' models are the kind's.
+			pp.p.Kind, pp.p.Secret, f.KeySet = old.Kind, old.Secret, old.Secret != ""
+			pp.usedModels = old.Models
+			f.Kind, _ = kindOf(old.Kind)
+			pp.p.Env = old.Env
+		}
+		f.Agents = m.agentsOf(n)
+		sort.Strings(f.Agents)
+	} else if f.Name == "" {
+		f.Name = defaultProviderName(f.Kind.ID, func(n string) bool { _, ok := m.Providers[n]; return ok })
+	}
+	if f.Kind.CustomEnv {
+		f.Env = strings.TrimSpace(r.PostFormValue("env"))
+		pp.p.Env = f.Env
+	}
+	if pp.selfHosted() {
+		readSelfHostedForm(r, pp)
+	}
+	pp.checked = r.PostForm["preset"]
+	for _, ps := range f.Kind.Presets {
+		f.Presets = append(f.Presets, presetChoice{Preset: ps.Name, Checked: slices.Contains(pp.checked, ps.Name)})
+	}
+	pp.key = r.PostFormValue("key")
+	if f.Kind.ID == "chatgpt-subscription" {
+		// The credential is the sign-in's, not a pasted key.
+		pp.login, pp.key = r.PostFormValue("login"), ""
+		f.Login = chatgptLogins.status(pp.login, s.ID)
+		if tok, ok := chatgptLogins.tokens(pp.login, s.ID); ok {
+			pp.key = tok
+		}
+	}
+	return pp
+}
+
+// readSelfHostedForm reads where a self-hosted model server is, and the
+// models it serves: those ticked, in their order, then those typed by hand.
+func readSelfHostedForm(r *http.Request, pp *providerPost) {
+	f := &pp.f
+	f.BaseURL = strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
+	f.Where, f.Node = r.PostFormValue("where"), r.PostFormValue("node")
+	ticked := postedTicks(r)
+	f.Picker = modelPicker{Manual: r.PostFormValue("models"), Picks: pickModels(pp.usedModels, ticked, f.Edit, nil)}
+	if ticked == nil {
+		ticked = r.PostForm["model"] // without the list's marker, as an older page posts
+	}
+	pp.p.Models = modelLines(strings.Join(append(slices.Clone(ticked), f.Picker.Manual), "\n"))
+	if f.Where == whereNode {
+		pp.p.Node = f.Node
+	} else {
+		f.Where, pp.p.BaseURL = whereAddress, f.BaseURL
+	}
+}
+
+// providerFormError is what the form lacks or gets wrong before anything
+// is tried, as a text key, or nil.
+func (w *web) providerFormError(r *http.Request, s *session, m *Config, pp *providerPost) error {
+	f, p, key, selfHosted := &pp.f, pp.p, pp.key, pp.selfHosted()
+	switch {
+	case f.Kind.ID == "":
+		return errors.New("providers.nokind")
+	case f.Kind.ID == "chatgpt-subscription" && p.Secret == "" && key == "":
+		return errors.New("cglogin.notyet")
+	case f.Kind.ID != "chatgpt-subscription" && !selfHosted && strings.TrimSpace(key) == "" && p.Secret == "":
+		return errors.New("form.nokey")
+	case f.Kind.CustomEnv && checkCredentialEnv(f.Env) != nil:
+		return errors.New("providers.badenv")
+	case !selfHosted:
+		return nil
+	case f.Where == whereNode && !w.c.lendsModel(p.Node, m.Providers[f.Name].Node):
+		return errors.New("providers.nonode")
+	case p.Node == "" && checkBaseURL(p.BaseURL) != nil:
+		return errors.New("providers.badbaseurl")
+	case clearToInternet(p.BaseURL):
+		return errors.New("providers.clearbaseurl")
+	case checkModelIDs(p.Models) != nil:
+		return errors.New("providers.badmodels")
+	case !selfHostedKey(strings.TrimSpace(key)):
+		return errors.New("providers.badkey")
+	case len(p.Models) == 0:
+		// None ticked yet (a page without scripts, or a list not asked
+		// for): the server's are listed, to tick.
+		name := ""
+		if f.Edit {
+			name = f.Name
+		}
+		f.Picker.Result = w.askModels(r, s, name)
+		f.Picker.Picks = pickModels(pp.usedModels, nil, f.Edit, f.Picker.Result)
+		if v := f.Picker.Result; v != nil && v.State != "ok" {
+			return errors.New("providers.nomodels")
+		}
+		return errors.New("providers.pickmodels")
+	}
+	return nil
+}
+
+// saveProviderForm tries a new key, then saves the provider with the
+// agents it brings. It returns the key's test, when it was tried.
+func (w *web) saveProviderForm(r *http.Request, lang string, m *Config, pp *providerPost) (*testView, error) {
+	f, key := &pp.f, pp.key
+	// A custom provider's key can be anyone's: its variable says whose.
+	// So can a self-hosted server's, which the user makes up.
+	if other := misplaced(f.Kind.ID, strings.TrimSpace(key)); key != "" && pp.login == "" && other != "" && !f.Kind.CustomEnv && !pp.selfHosted() {
+		return nil, shownError(trf(lang, "ptest.misplaced", tr(lang, "kind."+other)))
+	}
+	// A new key is tried as "Test" would before it is saved. One the
+	// provider refuses is not saved: the form says so and stays. One
+	// that could not be tried (no network, the provider's own error)
+	// is saved, and the account and its agents say so
+	// (provider_health.go).
+	var tested *testView
+	if _, checkable := checkEndpoints[f.Kind.ID]; checkable && strings.TrimSpace(key) != "" {
+		v := checkProvider(r.Context(), lang, f.Kind.ID, key)
+		log.Printf("web: provider %s checked on save: %s", f.Name, v.State) // never the key
+		if v.State == "err" && v.Cause == causeAuth {
+			return nil, shownError(v.Text)
+		}
+		tested = &v
+	}
+	agents := map[string]Agent{}
+	taken := func(n string) bool { _, ok := m.Agents[n]; _, mine := agents[n]; return ok || mine }
+	def := ""
+	if pp.selfHosted() {
+		def = selfHostedAgents(lang, m, pp, agents, taken)
+	}
+	if !f.Edit {
+		if d := presetAgents(lang, pp, agents, taken); d != "" {
+			def = d
+		}
+	}
+	return tested, w.c.putProviderAgents(pp.mode, f.Name, pp.p, key, agents, def)
+}
+
+// selfHostedAgents adds one agent per model a self-hosted server serves
+// (on an edit, per model added) and returns the first, the default.
+func selfHostedAgents(lang string, m *Config, pp *providerPost, agents map[string]Agent, taken func(string) bool) string {
+	f, def := &pp.f, ""
+	for _, model := range pp.p.Models {
+		if f.Edit && (slices.Contains(pp.usedModels, model) || slices.ContainsFunc(f.Agents, func(a string) bool {
+			return m.Agents[a].Model == f.Kind.ModelNS+"/"+model
+		})) {
+			continue
+		}
+		n := slug(model)
+		if n == "" {
+			n = "model"
+		}
+		if taken(n) {
+			n = slug(n + "-" + f.Name)
+		}
+		if taken(n) {
+			continue
+		}
+		agents[n] = Agent{Runtime: f.Kind.Runtime(), Provider: f.Name, Model: f.Kind.ModelNS + "/" + model, Use: trf(lang, "preset.agent.selfhosted", model)}
+		if def == "" {
+			def = n
+		}
+	}
+	return def
+}
+
+// presetAgents adds the agents of the presets ticked, and returns the
+// default one among them, or "".
+func presetAgents(lang string, pp *providerPost, agents map[string]Agent, taken func(string) bool) string {
+	def := ""
+	for _, ps := range pp.f.Kind.Presets {
+		if !slices.Contains(pp.checked, ps.Name) {
+			continue
+		}
+		n := presetName(ps, pp.f.Name, taken)
+		agents[n] = presetAgent(lang, pp.f.Kind, pp.f.Name, ps)
+		if ps.Default {
+			def = n
+		}
+	}
+	return def
 }
 
 func (w *web) handleDeleteProvider(rw http.ResponseWriter, r *http.Request, s *session) {
