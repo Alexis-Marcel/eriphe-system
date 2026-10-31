@@ -796,8 +796,6 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .mark-cloudinary { background: #3448c5; box-shadow: 0 6px 16px -8px #3448c5; }
 .mark-contentful { background: #2478cc; box-shadow: 0 6px 16px -8px #2478cc; }
 .mark-datadog { background: #632ca6; box-shadow: 0 6px 16px -8px #632ca6; }
-.mark-digitalocean { background: #0080ff; box-shadow: 0 6px 16px -8px #0080ff; }
-.mark-egnyte { background: #00968f; box-shadow: 0 6px 16px -8px #00968f; }
 .mark-grafana { background: #f46800; box-shadow: 0 6px 16px -8px #f46800; }
 .mark-helpscout { background: #1292ee; box-shadow: 0 6px 16px -8px #1292ee; }
 .mark-ifttt { background: #000000; box-shadow: 0 6px 16px -8px #000000; }
@@ -816,7 +814,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .mark-attio, .mark-beehiiv, .mark-context7, .mark-exa, .mark-fastmail, .mark-fireflies, .mark-gamma, .mark-granola, .mark-jam,
 .mark-kit, .mark-mem, .mark-mercury, .mark-metricool, .mark-monday, .mark-otter, .mark-ramp, .mark-raindrop, .mark-readwise,
 .mark-tldv, .mark-typefully, .mark-capacities, .mark-close, .mark-craft, .mark-fathom, .mark-jotform, .mark-lucid, .mark-neon,
-.mark-pandadoc, .mark-pennylane, .mark-qonto, .mark-readai, .mark-slite, .mark-sunsama, .mark-whimsical,
+.mark-pandadoc, .mark-qonto, .mark-readai, .mark-slite, .mark-sunsama, .mark-whimsical,
 .mark-amplitude, .mark-apify, .mark-axiom, .mark-circle, .mark-grain, .mark-guru, .mark-hex, .mark-honeycomb, .mark-kajabi,
 .mark-klaviyo, .mark-leadpages, .mark-lovable, .mark-mailerlite, .mark-padlet, .mark-plain, .mark-typesense, .mark-wave {
   background: linear-gradient(135deg, #64748b 0%, #3f4a5c 100%); box-shadow: 0 6px 16px -8px #3f4a5c;

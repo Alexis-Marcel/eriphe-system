@@ -138,12 +138,11 @@ func TestOnlineCatalog(t *testing.T) {
 	}{{"stripe", []string{"mcp"}}, {"granola", []string{"mcp"}}, {"fastmail", []string{"https://www.fastmail.com/dev/mcp", "offline_access"}},
 		{"typefully", []string{"full_access"}}, {"hootsuite", []string{"offline"}}, {"kit", []string{"public"}}, {"make", nil},
 		{"basecamp", []string{"mcp", "full"}}, {"coda", []string{"mcp:all"}}, {"readai", []string{"mcp:execute"}}, {"square", nil},
-		{"pennylane", []string{"mcp:account:read", "mcp:customer_invoice:read", "mcp:private_api"}},
 		{"railway", []string{"workspace:member"}}, {"ifttt", []string{"mcp"}}, {"baserow", []string{"mcp"}}, {"guru", []string{"default"}},
 		{"padlet", []string{"mcp"}}, {"apify", []string{"full_api_access"}}, {"similarweb", []string{"read"}}, {"sanity", []string{"global"}},
 		{"helpscout", []string{"helpscout"}}, {"plain", []string{"openid", "offline_access"}},
 		{"cloudinary", []string{"openid", "profile", "email", "offline_access", "asset_management", "upload", "media_generation"}},
-		{"datadog", nil}, {"paddle", nil}, {"digitalocean", nil}, {"planetscale", nil}, {"axiom", nil}, {"hex", nil}, {"egnyte", nil},
+		{"datadog", nil}, {"paddle", nil}, {"planetscale", nil}, {"axiom", nil}, {"hex", nil},
 		{"postman", nil}, {"contentful", nil}, {"klaviyo", nil}, {"mailerlite", nil}, {"grain", nil}, {"bitly", nil}} {
 		if _, granted := scopesFor(tc.preset, accessReadOnly, tc.found, false); granted != grantedNone {
 			t.Errorf("%s: %s", tc.preset, granted)
