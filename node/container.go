@@ -224,6 +224,36 @@ func (n *node) startContainer(t *Task, first string) error {
 // task's own variables are passed by name (-e NAME), so their values never
 // appear on a command line.
 func (n *node) taskRunArgs(t *Task, agentArgs []string, agentEnv map[string]string) (args, cmdEnv []string, err error) {
+	env := n.taskEnv(t, agentEnv)
+	if n.apple() {
+		if args, err = n.appleTaskArgs(t); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		args = n.dockerTaskArgs(t)
+	}
+	mounts, err := n.taskMounts(t)
+	if err != nil {
+		return nil, nil, err
+	}
+	args = append(args, mounts...)
+	if len(t.Spec.Folders) > 0 {
+		env["ERIPHE_FOLDERS"] = folderNames(t.Spec.Folders)
+	}
+	cmdEnv = os.Environ()
+	for k, v := range env {
+		args = append(args, "-e", k)
+		cmdEnv = append(cmdEnv, k+"="+v)
+	}
+	args = append(args, "--entrypoint", "sh", t.Spec.Image, "-c", entrypoint, "eriphe")
+	args = append(args, agentArgs...)
+	return args, cmdEnv, nil
+}
+
+// taskEnv is the environment of a task's container: what the entrypoint
+// reads, the node's own variables, then the agent's, then the identity
+// eriphe-core lends it, each over the ones before.
+func (n *node) taskEnv(t *Task, agentEnv map[string]string) map[string]string {
 	spec := t.Spec
 	env := map[string]string{
 		"ERIPHE_REPO": repoURL(spec.Repo), "ERIPHE_REF": spec.Ref, "ERIPHE_BRANCH": spec.Branch, "ERIPHE_DIR": spec.Dir,
@@ -258,93 +288,116 @@ func (n *node) taskRunArgs(t *Task, agentArgs []string, agentEnv map[string]stri
 			env[k] = v
 		}
 	}
+	return env
+}
 
-	if n.apple() {
-		if args, err = n.appleTaskArgs(t); err != nil {
-			return nil, nil, err
-		}
-	} else {
-		// An image's own health check is for its standalone use, not for tasks.
-		args = []string{"run", "-i", "--rm", "--no-healthcheck", "--name", containerName(t), "--label", "eriphe.task=" + t.ID,
-			"--add-host", "host.docker.internal:" + n.hostGateway(n.opt.taskNetwork)}
-		args = append(args, hardening...)
-		args = append(args, n.resourceLimits()...)
-		// Their own network, never eriphe-core's nor the services' (network.go).
-		args = append(args, "--network", dockerNetwork(n.opt.taskNetwork))
-		if spec.SystemNetwork && n.opt.network != "" {
-			// The brain calls eriphe-core and its MCP servers by name; workers never do.
-			args = append(args, "--network", n.opt.network)
-		}
-		if n.opt.cacheVolume != "" {
-			// Tools and package caches, shared by the node's tasks.
-			args = append(args, "-v", n.opt.cacheVolume+":/cache")
-		}
+// dockerTaskArgs is the start of a task's `docker run`: the container, its
+// hardening and limits, its networks and the shared cache.
+func (n *node) dockerTaskArgs(t *Task) []string {
+	// An image's own health check is for its standalone use, not for tasks.
+	args := []string{"run", "-i", "--rm", "--no-healthcheck", "--name", containerName(t), "--label", "eriphe.task=" + t.ID,
+		"--add-host", "host.docker.internal:" + n.hostGateway(n.opt.taskNetwork)}
+	args = append(args, hardening...)
+	args = append(args, n.resourceLimits()...)
+	// Their own network, never eriphe-core's nor the services' (network.go).
+	args = append(args, "--network", dockerNetwork(n.opt.taskNetwork))
+	if t.Spec.SystemNetwork && n.opt.network != "" {
+		// The brain calls eriphe-core and its MCP servers by name; workers never do.
+		args = append(args, "--network", n.opt.network)
 	}
-	// The agent and the node's helpers, read-only (inject.go).
+	if n.opt.cacheVolume != "" {
+		// Tools and package caches, shared by the node's tasks.
+		args = append(args, "-v", n.opt.cacheVolume+":/cache")
+	}
+	return args
+}
+
+// taskMounts is what a task's container mounts: its agent and run files
+// read-only, its workspace and agent config, and the folders lent to it.
+func (n *node) taskMounts(t *Task) ([]string, error) {
+	args, err := n.injectedMounts(t)
+	if err != nil {
+		return nil, err
+	}
+	work, err := n.workMounts(t)
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, work...)
+	// The folders of this machine lent to it, checked again now.
+	if len(t.Spec.Folders) > 0 {
+		mounts, err := n.folderMounts(t)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.MkdirAll(filepath.Join(t.dir, "work", "folders"), 0o700); err != nil {
+			return nil, err
+		}
+		args = append(args, mounts...)
+	}
+	return args, nil
+}
+
+// injectedMounts mounts, read-only, the agent and the node's helpers
+// (inject.go), and the files the runtime hands its agent (runfiles.go).
+func (n *node) injectedMounts(t *Task) ([]string, error) {
+	var args []string
 	t.mu.Lock()
 	agentDir := t.agentDir
 	t.mu.Unlock()
 	if agentDir != "" {
 		mount, err := n.readOnlyMount(agentDir, injectDir)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		args = append(args, mount...)
 	}
-	// The files the runtime hands its agent, read-only (runfiles.go).
 	if t.dir != "" {
 		if _, err := os.Stat(runDir(t)); err == nil {
 			mount, err := n.readOnlyMount(runDir(t), runMount)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			args = append(args, mount...)
 		}
 	}
-	// The workspace and the agent's config live in the task's folder, so a
-	// restarted container finds its work and resumes its session. A named
-	// profile is shared between tasks instead (the brain's).
+	return args, nil
+}
+
+// workMounts mounts the workspace and the agent's config, which live in
+// the task's folder, so a restarted container finds its work and resumes
+// its session. A named profile is shared between tasks instead (the
+// brain's).
+func (n *node) workMounts(t *Task) ([]string, error) {
+	var args []string
 	work := filepath.Join(t.dir, "work")
 	config := filepath.Join(t.dir, "agent")
-	if spec.Profile != "" {
-		config = filepath.Join(n.opt.root, "profiles", spec.Profile)
+	if t.Spec.Profile != "" {
+		config = filepath.Join(n.opt.root, "profiles", t.Spec.Profile)
 	}
 	for _, m := range [][2]string{{work, "/work"}, {config, "/profile"}} {
 		mount, err := n.bindMount(m[0], m[1])
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		// The node's own, 0700: no user of the machine reaches what a root
 		// task leaves there. Root in the container writes to it anyway.
 		if err := os.MkdirAll(m[0], 0o700); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		args = append(args, mount...)
 	}
-	// The folders of this machine lent to it, checked again now.
-	if len(spec.Folders) > 0 {
-		mounts, err := n.folderMounts(t)
-		if err != nil {
-			return nil, nil, err
-		}
-		if err := os.MkdirAll(filepath.Join(work, "folders"), 0o700); err != nil {
-			return nil, nil, err
-		}
-		args = append(args, mounts...)
-		names := make([]string, len(spec.Folders))
-		for i, f := range spec.Folders {
-			names[i] = f.Name
-		}
-		env["ERIPHE_FOLDERS"] = strings.Join(names, "\n")
+	return args, nil
+}
+
+// folderNames is ERIPHE_FOLDERS, the names of the folders lent to a task,
+// one per line.
+func folderNames(folders []TaskFolder) string {
+	names := make([]string, len(folders))
+	for i, f := range folders {
+		names[i] = f.Name
 	}
-	cmdEnv = os.Environ()
-	for k, v := range env {
-		args = append(args, "-e", k)
-		cmdEnv = append(cmdEnv, k+"="+v)
-	}
-	args = append(args, "--entrypoint", "sh", spec.Image, "-c", entrypoint, "eriphe")
-	args = append(args, agentArgs...)
-	return args, cmdEnv, nil
+	return strings.Join(names, "\n")
 }
 
 // readOnlyMount mounts a directory of the node's root read-only at target:
