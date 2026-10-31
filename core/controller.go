@@ -322,6 +322,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	spec.Runtime, spec.Prompt, spec.Dir, spec.Model = agent.Runtime, r.Prompt, dir, agent.Model
 	spec.Repo, spec.Ref, spec.Branch, spec.Image = repo, base, branch, agent.Image
 	spec.Command = agent.Command
+	spec.RepoSkills = c.repoSkills(ctx, lent.Repo)
 	spec.Identity, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the node fetches the task
 	spec.Folders = nil                                                                 // the same
 	if len(folders) > 0 {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 // runMount is where a task container finds the files its runtime hands its
@@ -32,10 +33,15 @@ func writeRunFiles(t *Task, files map[string][]byte) error {
 		return err
 	}
 	for name, data := range files {
-		if name != filepath.Base(name) || name == "." || name == ".." {
+		if !runFileName(name) {
 			return fmt.Errorf("bad run file name %q", name)
 		}
-		f, err := os.OpenFile(filepath.Join(dir, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if sub, _, ok := strings.Cut(name, "/"); ok {
+			if err := os.MkdirAll(filepath.Join(dir, sub), 0o700); err != nil {
+				return err
+			}
+		}
+		f, err := os.OpenFile(filepath.Join(dir, filepath.FromSlash(name)), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err != nil {
 			return err
 		}
@@ -49,6 +55,25 @@ func writeRunFiles(t *Task, files map[string][]byte) error {
 	}
 	return nil
 }
+
+// runFileName is a run file's name: a file, or a file in one subdirectory
+// ("claude-managed/managed-settings.json"), never out of the run directory.
+func runFileName(name string) bool {
+	parts := strings.Split(name, "/")
+	if len(parts) > 2 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" || p == "." || p == ".." || p != filepath.Base(p) {
+			return false
+		}
+	}
+	return true
+}
+
+// runSubMounts are run subdirectories mounted on their own, read-only, at
+// the place their agent reads them.
+var runSubMounts = map[string]string{claudeManaged: claudeManagedMount}
 
 // removeRunFiles deletes the task's run files once its container is gone.
 func removeRunFiles(t *Task) {

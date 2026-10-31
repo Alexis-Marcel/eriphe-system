@@ -77,6 +77,11 @@ func (codexRuntime) command(n *node, t *Task) ([]string, map[string]string) {
 	for _, c := range append(codexConfig, codexExtra...) {
 		args = append(args, "-c", c)
 	}
+	if repoSkillsOff(t.Spec) {
+		// No skill catalog in the model's context: the repository's
+		// .agents/skills are not offered (skills.go).
+		args = append(args, "-c", "skills.include_instructions=false")
+	}
 	return args, map[string]string{"NO_COLOR": "1", "RUST_LOG": "warn"}
 }
 

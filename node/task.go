@@ -53,6 +53,9 @@ type TaskSpec struct {
 	SystemNetwork      bool           `json:"system_network,omitempty"`       // the brain: also on eriphe-core's network, to reach its tools
 	Stream             bool           `json:"stream,omitempty"`               // report the text being written as a draft
 	NoAgentMemory      bool           `json:"no_agent_memory,omitempty"`      // the agent's own memory and instruction files are off
+	// RepoSkills: the agent may load the skills its repository carries;
+	// they stay off otherwise (skills.go).
+	RepoSkills bool `json:"repo_skills,omitempty"`
 
 	// Folders of this machine lent to the task, mounted at
 	// /work/folders/<name> (shares.go).

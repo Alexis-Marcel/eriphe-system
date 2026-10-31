@@ -519,6 +519,32 @@ Every task container mounts the Docker volume `eriphe-cache` at `/cache` (`-cach
 disable): the base image keeps apt's, uv's, npm's and pip's caches there (worker/README.md, Cache),
 so a package is downloaded once per node.
 
+### Agent skills
+
+A skill ([agentskills.io](https://agentskills.io/specification)) is a folder with a `SKILL.md`,
+instructions and often scripts, which the agents load by themselves from their configuration and
+from the repository they work in (`skills.go`). Two rules hold for every runtime:
+
+- **A repository's own skills** (`.claude/skills`, `.agents/skills`, `.opencode/skills`) load
+  only when the spec says `repo_skills: true`: eriphe-core sets it for the user's own repository,
+  or one lent with `trust_skills`. Otherwise, and always for the brain (`no_agent_memory`), they
+  stay off.
+- **A skill never approves a tool.** Claude Code would run the tools a skill lists in its
+  `allowed-tools` without asking, even with `-p`. The node writes the task a managed settings file,
+  `<run>/claude-managed/managed-settings.json`, mounted read-only at `/etc/claude-code`, with
+  `allowManagedPermissionRulesOnly: true`: Claude Code then takes permission rules from it only
+  (the spec's `allowed_tools` are its `permissions.allow`), and ignores `--allowedTools`, the user's,
+  the project's and `--settings` rules, and the `allowed-tools` of project, user and `--add-dir`
+  skills (Claude Code 2.1.282 or later). Anything else asks through `approve`. OpenCode and Codex
+  do not read `allowed-tools`: their permission requests stay the node's.
+
+| Runtime | Skills off |
+|---|---|
+| `claude-code` | `--disable-slash-commands` (no skill, no `Skill` tool), and `disableSkillShellExecution` in the managed settings |
+| `opencode` | `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` (`.claude/skills` and `.agents/skills`, the repository's and the home's); `.opencode/skills` are off with the project's configuration (`OPENCODE_DISABLE_PROJECT_CONFIG`); the brain also gets `permission.skill: deny` |
+| `codex` | `-c skills.include_instructions=false`: no skill catalog in the model's context |
+| `acp` | nothing: a custom agent's own |
+
 ## Task containers
 
 Every task container is started with:

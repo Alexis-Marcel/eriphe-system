@@ -50,7 +50,8 @@ func (claudeCode) files(n *node, t *Task) map[string][]byte {
 	}
 	servers["eriphe_node"] = perm
 	mcpConfig, _ := json.Marshal(map[string]any{"mcpServers": servers})
-	files := map[string][]byte{claudeMCP: mcpConfig, claudeSettings: []byte(claudeSettingsJSON)}
+	files := map[string][]byte{claudeMCP: mcpConfig, claudeSettings: []byte(claudeSettingsJSON),
+		claudeManaged + "/managed-settings.json": claudeManagedSettings(spec)}
 	if spec.AppendSystemPrompt != "" {
 		files[claudePrompt] = []byte(spec.AppendSystemPrompt)
 	}
@@ -79,7 +80,14 @@ func (claudeCode) command(n *node, t *Task) ([]string, map[string]string) {
 		args = append(args, "--append-system-prompt-file", runPath(claudePrompt))
 	}
 	if len(spec.AllowedTools) > 0 {
+		// Claude Code ignores it under the managed settings, whose allow
+		// rules carry the same tools (skills.go).
 		args = append(args, "--allowedTools", strings.Join(spec.AllowedTools, ","))
+	}
+	if repoSkillsOff(spec) {
+		// No skill and no Skill tool: those of a repository not vouched
+		// for, or the brain's (skills.go).
+		args = append(args, "--disable-slash-commands")
 	}
 	if resume := t.SessionID; resume != "" {
 		args = append(args, "--resume", resume)
