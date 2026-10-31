@@ -256,6 +256,19 @@ var tokenScopes = map[string]scopeSet{
 	"akiflow": {byName: true}, "capacities": {byName: true}, "close": {byName: true}, "mural": {byName: true},
 	"neon": {byName: true}, "pandadoc": {byName: true}, "posthog": {byName: true}, "qonto": {byName: true},
 	"slite": {byName: true}, "sunsama": {byName: true}, "typeform": {byName: true}, "whimsical": {byName: true},
+	"amplitude": {byName: true}, "circle": {byName: true}, "grafana": {byName: true}, "honeycomb": {byName: true},
+	"leadpages": {byName: true}, "lovable": {byName: true}, "mintlify": {byName: true}, "wave": {byName: true},
+	// publish names no verb; the theme and the account's users, which Kajabi
+	// keeps off by default, are left out of the full set.
+	"kajabi": {read: []string{"read"}, write: []string{"read", "write:content", "write:commerce", "write:contacts",
+		"write:community", "write:emails", "write:automations", "publish"}},
+	// Its restart, configure and full_access scopes name no verb. The full set
+	// is the one its server asks for, without cluster deletion or billing.
+	"typesense": {read: []string{"clusters:read", "metrics:read", "backups:read", "search_insights:read", "data:view", "data:search"},
+		write: []string{"clusters:read", "metrics:read", "backups:read", "clusters:create", "clusters:configure", "clusters:restart",
+			"cluster_parameters:manage", "search_insights:read", "data:view", "data:search", "data:full_access", "data:manage_synonyms",
+			"data:manage_overrides", "data:manage_presets", "data:manage_stopwords", "data:manage_stemming", "data:manage_analytics_rules",
+			"data:manage_conversation_models", "data:manage_natural_language_models"}},
 }
 
 // scopeVerbs are the words of a scope's name that make it more than a read
