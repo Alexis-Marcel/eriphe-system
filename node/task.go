@@ -61,6 +61,17 @@ type TaskSpec struct {
 	// Where the task may connect, enforced by the egress relay (egress.go);
 	// none given: the public Internet.
 	Egress *EgressRule `json:"egress,omitempty"`
+
+	// A self-hosted model server the agent uses (OpenCode, a selfhosted/
+	// model): its address, reachable through Egress.Endpoints.
+	ModelEndpoint *ModelEndpoint `json:"model_endpoint,omitempty"`
+}
+
+// ModelEndpoint is a self-hosted, OpenAI-compatible model server: its /v1
+// address and the variable of Identity that carries its key, if any.
+type ModelEndpoint struct {
+	BaseURL string `json:"base_url"`
+	KeyEnv  string `json:"key_env,omitempty"`
 }
 
 // Event is one line of what happened in a task, in order.

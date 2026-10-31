@@ -3,10 +3,14 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
+	"net/url"
 	"path"
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -22,6 +26,10 @@ type Provider struct {
 	// Env is the variable that carries it, for a kind that lets the
 	// provider name it (custom-api); the kind's otherwise.
 	Env string `json:"env,omitempty"`
+	// A self-hosted model server (openai-compatible): its /v1 address and
+	// the models it serves. Neither is secret; its key, if any, is.
+	BaseURL string   `json:"base_url,omitempty"`
+	Models  []string `json:"models,omitempty"`
 }
 
 // Agent is one choice the brain has for a task.
@@ -49,8 +57,18 @@ func (c *Config) checkAgents() error {
 		if _, ok := kindOf(p.Kind); !ok {
 			return fmt.Errorf("provider %s: unknown kind %q", name, p.Kind)
 		}
-		if p.Secret == "" {
+		if p.Kind == selfHostedKind {
+			// Its key is optional: a model server on the LAN often has none.
+			if err := checkBaseURL(p.BaseURL); err != nil {
+				return fmt.Errorf("provider %s: %w", name, err)
+			}
+			if err := checkModelIDs(p.Models); err != nil {
+				return fmt.Errorf("provider %s: %w", name, err)
+			}
+		} else if p.Secret == "" {
 			return fmt.Errorf("provider %s: secret is required", name)
+		} else if p.BaseURL != "" || len(p.Models) > 0 {
+			return fmt.Errorf("provider %s: only a self-hosted model server (%s) takes base_url and models", name, selfHostedKind)
 		}
 		if k, _ := kindOf(p.Kind); k.CustomEnv {
 			if err := checkCredentialEnv(p.Env); err != nil {
@@ -125,6 +143,9 @@ func (c *Config) lendAgent(a Agent) (map[string]string, error) {
 		}
 		return env, nil
 	}
+	if p.Secret == "" {
+		return map[string]string{}, nil // a self-hosted model server without a key
+	}
 	v, err := readSecret(p.Secret)
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", a.Provider, err)
@@ -134,6 +155,123 @@ func (c *Config) lendAgent(a Agent) (map[string]string, error) {
 		return map[string]string{p.Env: v}, nil
 	}
 	return map[string]string{k.Env: v}, nil
+}
+
+// modelEndpoint points a task whose agent uses a self-hosted model server
+// at it: its address and key variable for OpenCode, and that one host:port
+// added to its egress rule, which its relay lets through even on the LAN.
+// A task without egress gets none. env is what lendAgent lent.
+func (c *Config) modelEndpoint(agentName string, env map[string]string, spec *nodeTaskSpec) {
+	_, a, err := c.agent(agentName)
+	if err != nil {
+		return
+	}
+	p := c.Providers[a.Provider]
+	if p.Kind != selfHostedKind || a.Runtime != "opencode" {
+		return
+	}
+	k, _ := kindOf(selfHostedKind)
+	ep := &nodeModelEndpoint{BaseURL: p.BaseURL}
+	if _, ok := env[k.Env]; ok {
+		ep.KeyEnv = k.Env
+	}
+	spec.ModelEndpoint = ep
+	hostport, ok := endpointHostPort(p.BaseURL)
+	if !ok || spec.Egress == nil || spec.Egress.Mode == "none" {
+		return
+	}
+	// The rule may be shared with the stored spec: a copy is changed.
+	e := *spec.Egress
+	e.Allow = slices.Clone(e.Allow)
+	if !slices.Contains(e.Endpoints, hostport) {
+		e.Endpoints = append(slices.Clone(e.Endpoints), hostport)
+	}
+	spec.Egress = &e
+}
+
+// checkBaseURL tells whether a self-hosted model server's address can be
+// used: http(s), a host, no credentials, query nor fragment, and a host
+// the tasks can reach. Tasks run in containers, where the loopback is not
+// the model server's machine, and a link-local address is the cloud's
+// metadata: the user gives the machine's LAN address or a public host.
+func checkBaseURL(raw string) error {
+	if raw == "" {
+		return errors.New("a self-hosted model server needs its base_url (http://192.0.2.10:11434/v1)")
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Opaque != "" {
+		return fmt.Errorf("base_url %q is not an http(s) address", raw)
+	}
+	if u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.ContainsAny(raw, "# ") || strings.ContainsFunc(raw, func(r rune) bool { return !configSafe(r) }) {
+		return fmt.Errorf("base_url %q: an address without credentials, query or fragment", raw)
+	}
+	if p := u.Port(); p != "" {
+		if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("base_url %q: bad port", raw)
+		}
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return fmt.Errorf("base_url %q: tasks run in containers, where localhost is not the model server's machine; give its address on the network", raw)
+	}
+	if a, err := netip.ParseAddr(host); err == nil && !reachableEndpoint(a) {
+		return fmt.Errorf("base_url %q: %s cannot be a model server's address (loopback, link-local, multicast or unspecified); give the machine's address on the network", raw, host)
+	}
+	return nil
+}
+
+// reachableEndpoint tells whether an address may be a model server's: any
+// unicast address, private ones included, but not the loopback, link-local
+// (169.254.169.254 is the cloud's metadata), multicast, unspecified nor
+// "this network" ones.
+func reachableEndpoint(a netip.Addr) bool {
+	a = a.Unmap()
+	return a.IsValid() && a.IsGlobalUnicast() && !(a.Is4() && a.As4()[0] == 0)
+}
+
+// endpointHostPort is the host:port a base URL connects to.
+func endpointHostPort(raw string) (string, bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() == "" {
+		return "", false
+	}
+	port := u.Port()
+	if port == "" {
+		port = "80"
+		if u.Scheme == "https" {
+			port = "443"
+		}
+	}
+	return net.JoinHostPort(strings.ToLower(strings.TrimSuffix(u.Hostname(), ".")), port), true
+}
+
+// checkModelIDs tells whether a self-hosted server's models can be named:
+// one word each, as the server lists them (qwen3:8b, org/model).
+func checkModelIDs(models []string) error {
+	if len(models) > 64 {
+		return errors.New("more than 64 models")
+	}
+	for _, m := range models {
+		if m == "" || len(m) > 200 || strings.ContainsFunc(m, func(r rune) bool { return r <= ' ' || !configSafe(r) }) {
+			return fmt.Errorf("model %q is not a model name (one word, as the server lists it)", m)
+		}
+	}
+	return nil
+}
+
+// selfHostedKey tells whether a self-hosted server's key can be lent: OpenCode
+// substitutes it into its configuration's text ({env:…}), where a quote, a
+// backslash, a brace or a control character would not stay a key.
+func selfHostedKey(key string) bool {
+	return !strings.ContainsFunc(key, func(r rune) bool { return !configSafe(r) })
+}
+
+// configSafe tells whether a character of a self-hosted server's address,
+// model or key can go into OpenCode's configuration text: not a quote nor
+// a backslash (they end a JSON string), not a brace (OpenCode expands
+// {env:…} and {file:…}), not a control character.
+func configSafe(r rune) bool {
+	return r >= ' ' && r != 0x7f && r != '"' && r != '\\' && r != '{' && r != '}'
 }
 
 // credentialEnv is a variable name as a provider may give it: capitals, digits

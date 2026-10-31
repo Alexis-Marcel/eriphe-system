@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,5 +96,69 @@ func TestOpenCodeLive(t *testing.T) {
 	task.run.stop()
 	for !finished(task.state()) {
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// A self-hosted model server: OpenCode's openai-compatible provider, at its
+// address, with its key read from the task's environment, never written in
+// the configuration.
+func TestOpenCodeSelfHosted(t *testing.T) {
+	type provider struct {
+		NPM     string         `json:"npm"`
+		Options map[string]any `json:"options"`
+		Models  map[string]struct {
+			Name     string `json:"name"`
+			ToolCall bool   `json:"tool_call"`
+		} `json:"models"`
+	}
+	config := func(spec TaskSpec) (map[string]provider, []string, string) {
+		t.Helper()
+		env := opencodeSetup(&Task{Spec: spec})
+		var cfg struct {
+			Model    string              `json:"model"`
+			Provider map[string]provider `json:"provider"`
+			Disabled []string            `json:"disabled_providers"`
+		}
+		if err := json.Unmarshal([]byte(env["OPENCODE_CONFIG_CONTENT"]), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		return cfg.Provider, cfg.Disabled, env["OPENCODE_CONFIG_CONTENT"]
+	}
+	spec := TaskSpec{Model: "selfhosted/qwen3:8b", Identity: map[string]string{"SELFHOSTED_API_KEY": "k-123"},
+		ModelEndpoint: &ModelEndpoint{BaseURL: "http://192.0.2.10:11434/v1", KeyEnv: "SELFHOSTED_API_KEY"}}
+	prov, disabled, raw := config(spec)
+	p, ok := prov["selfhosted"]
+	if !ok || p.NPM != "@ai-sdk/openai-compatible" || p.Options["baseURL"] != "http://192.0.2.10:11434/v1" ||
+		p.Options["apiKey"] != "{env:SELFHOSTED_API_KEY}" || !p.Models["qwen3:8b"].ToolCall || len(p.Models) != 1 {
+		t.Fatalf("provider %+v", prov)
+	}
+	if len(disabled) != 1 || disabled[0] != "opencode" {
+		t.Errorf("disabled %v", disabled)
+	}
+	if strings.Contains(raw, "k-123") {
+		t.Error("the key is in the configuration")
+	}
+	// No key: no apiKey.
+	spec.Identity, spec.ModelEndpoint.KeyEnv = nil, ""
+	if prov, _, _ := config(spec); prov["selfhosted"].Options["apiKey"] != nil {
+		t.Errorf("apiKey without a key: %+v", prov)
+	}
+	// A key OpenCode could not read as one stays out.
+	spec.Identity, spec.ModelEndpoint.KeyEnv = map[string]string{"SELFHOSTED_API_KEY": `a"b`}, "SELFHOSTED_API_KEY"
+	if prov, _, _ := config(spec); prov["selfhosted"].Options["apiKey"] != nil {
+		t.Errorf("a key with a quote: %+v", prov)
+	}
+	// Another provider's model, an address OpenCode would expand, a model
+	// with a brace: no block.
+	for _, s := range []TaskSpec{
+		{Model: "openrouter/x", ModelEndpoint: &ModelEndpoint{BaseURL: "http://192.0.2.10:11434/v1"}},
+		{Model: "selfhosted/x", ModelEndpoint: &ModelEndpoint{BaseURL: "http://192.0.2.10/{file:/etc/passwd}"}},
+		{Model: "selfhosted/{env:HOME}", ModelEndpoint: &ModelEndpoint{BaseURL: "http://192.0.2.10:11434/v1"}},
+		{Model: "selfhosted/x", ModelEndpoint: &ModelEndpoint{BaseURL: "file:///etc/passwd"}},
+		{Model: "selfhosted/x"},
+	} {
+		if prov, _, _ := config(s); prov != nil {
+			t.Errorf("%+v: provider %+v", s, prov)
+		}
 	}
 }

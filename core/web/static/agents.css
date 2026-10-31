@@ -8,6 +8,7 @@
 .kmark-google-api { background: linear-gradient(135deg, #4285f4 0%, #9b72cb 60%, #d96570 100%); box-shadow: 0 6px 16px -8px #4285f4; }
 .kmark-mistral-api { background: #fa520f; box-shadow: 0 6px 16px -8px #fa520f; }
 .kmark-openrouter-api { background: #6467f2; box-shadow: 0 6px 16px -8px #6467f2; }
+.kmark-openai-compatible { background: #0f766e; box-shadow: 0 6px 16px -8px #0f766e; }
 .btn .kmark { width: 22px; height: 22px; border-radius: 6px; box-shadow: none; background: rgba(255, 255, 255, .2); }
 .btn .kmark svg { width: 14px; height: 14px; }
 
@@ -77,6 +78,7 @@
 .bill { display: grid; gap: 8px; padding: 14px 16px; border-radius: 14px; font-size: .88rem; border: 1px solid var(--border); }
 .bill-subscription { background: color-mix(in srgb, var(--ok) 7%, var(--surface)); border-color: color-mix(in srgb, var(--ok) 25%, var(--border)); }
 .bill-usage { background: color-mix(in srgb, var(--warn-strong) 7%, var(--surface)); border-color: color-mix(in srgb, var(--warn-strong) 25%, var(--border)); }
+.bill-selfhosted { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 22%, var(--border)); }
 .bill > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; }
 .bill-k { font-weight: 650; color: var(--muted); }
 .provider-form .steps li { line-height: 1.45; }

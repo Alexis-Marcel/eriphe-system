@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -60,13 +61,15 @@ func TestHostAllowed(t *testing.T) {
 // testRelay is a relay with a fake resolver, whose public addresses all
 // lead to upstream, and one task, t-1, with secret s.
 type testRelay struct {
-	p       *egressProxy
-	srv     *httptest.Server
-	mu      sync.Mutex
-	dialed  []string
-	logs    []string
-	rule    EgressRule
-	lookups int
+	p      *egressProxy
+	srv    *httptest.Server
+	mu     sync.Mutex
+	dialed []string
+	// endpointDialed are the addresses dialed as a declared model server.
+	endpointDialed []string
+	logs           []string
+	rule           EgressRule
+	lookups        int
 }
 
 func newTestRelay(t *testing.T, upstream string, resolve func(n int, host string) []string) *testRelay {
@@ -105,6 +108,13 @@ func newTestRelay(t *testing.T, upstream string, resolve func(n int, host string
 	r.p.dialPublic = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		r.mu.Lock()
 		r.dialed = append(r.dialed, addr)
+		r.mu.Unlock()
+		var d net.Dialer
+		return d.DialContext(ctx, network, upstream)
+	}
+	r.p.dialEndpoint = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		r.mu.Lock()
+		r.endpointDialed = append(r.endpointDialed, addr)
 		r.mu.Unlock()
 		var d net.Dialer
 		return d.DialContext(ctx, network, upstream)
@@ -307,6 +317,71 @@ func TestEgressRules(t *testing.T) {
 	r.rule = EgressRule{Mode: egressNone}
 	if code, _, _ := r.connect(t, "github.com:443", auth); code != http.StatusForbidden {
 		t.Errorf("mode none: %d", code)
+	}
+}
+
+// A self-hosted model server on the LAN: its declared host:port is
+// reachable, and nothing else of the LAN, not even another port of it.
+func TestEgressModelServer(t *testing.T) {
+	r := newTestRelay(t, upstreamServer(t).Listener.Addr().String(), func(_ int, host string) []string {
+		switch host {
+		case "llm.lan":
+			return []string{"192.168.1.20"}
+		case "evil.lan":
+			return []string{"127.0.0.1", "169.254.169.254"}
+		}
+		return []string{"140.82.121.4"}
+	})
+	auth := basic("t-1", "s")
+	r.rule = EgressRule{Mode: egressInternet, Endpoints: []string{"192.168.1.20:11434", "LLM.lan.:8000", "evil.lan:80",
+		"127.0.0.1:11434", "169.254.169.254:80", "[fe80::1]:11434", "0.0.0.0:11434", "224.0.0.1:11434"}}
+	// The declared server, by address and by name, CONNECT and plain HTTP.
+	if code, _, _ := r.connect(t, "192.168.1.20:11434", auth); code != http.StatusOK {
+		t.Errorf("declared address: %d", code)
+	}
+	if code, _, _ := r.connect(t, "llm.lan:8000", auth); code != http.StatusOK {
+		t.Errorf("declared name: %d", code)
+	}
+	resp := proxyGet(t, r, "http://192.168.1.20:11434/v1/models", auth)
+	if b := body(resp); resp.StatusCode != http.StatusOK || !strings.Contains(b, "upstream host=192.168.1.20:11434") {
+		t.Errorf("plain http: %d %s", resp.StatusCode, b)
+	}
+	if want := []string{"192.168.1.20:11434", "192.168.1.20:8000", "192.168.1.20:11434"}; !slices.Equal(r.endpointDialed, want) {
+		t.Errorf("dialed %v, want %v", r.endpointDialed, want)
+	}
+	// Another port of the same machine, another machine of the LAN, the
+	// name on another port, and declared addresses that are the node
+	// itself, the cloud's metadata, unspecified or multicast: refused.
+	for _, target := range []string{"192.168.1.20:22", "192.168.1.20:443", "192.168.1.21:11434", "192.168.1.1:80", "llm.lan:11434",
+		"evil.lan:80", "127.0.0.1:11434", "169.254.169.254:80", "[fe80::1]:11434", "0.0.0.0:11434", "224.0.0.1:11434"} {
+		if code, _, _ := r.connect(t, target, auth); code != http.StatusForbidden {
+			t.Errorf("CONNECT %s: %d", target, code)
+		}
+	}
+	if resp := proxyGet(t, r, "http://169.254.169.254/latest/meta-data/", auth); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("plain metadata: %d", resp.StatusCode)
+	}
+	if len(r.endpointDialed) != 3 || len(r.dialed) != 0 {
+		t.Errorf("dialed %v, as endpoints %v", r.dialed, r.endpointDialed)
+	}
+	// Endpoints are not an allowlist: the rest of the Internet is as before.
+	if code, _, _ := r.connect(t, "github.com:443", auth); code != http.StatusOK {
+		t.Errorf("internet: %d", code)
+	}
+	// A task without egress reaches no model server either.
+	r.rule.Mode = egressNone
+	if code, _, _ := r.connect(t, "192.168.1.20:11434", auth); code != http.StatusForbidden {
+		t.Errorf("mode none: %d", code)
+	}
+}
+
+func TestEndpointControl(t *testing.T) {
+	for addr, ok := range map[string]bool{"192.168.1.20:11434": true, "10.0.0.5:8000": true, "140.82.121.4:443": true, "[fd00::5]:8000": true,
+		"127.0.0.1:11434": false, "[::1]:11434": false, "169.254.169.254:80": false, "[fe80::1]:80": false, "0.0.0.0:80": false,
+		"0.1.2.3:80": false, "224.0.0.1:80": false, "255.255.255.255:80": false, "[::]:80": false, "[::ffff:127.0.0.1]:80": false} {
+		if err := endpointControl("tcp", addr, nil); (err == nil) != ok {
+			t.Errorf("%s: %v", addr, err)
+		}
 	}
 }
 

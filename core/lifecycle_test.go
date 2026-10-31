@@ -146,3 +146,52 @@ func TestDeclarativeLifecycle(t *testing.T) {
 }
 
 func jsonInt(n int64) string { raw, _ := json.Marshal(n); return string(raw) }
+
+// A task of an agent on a self-hosted model server gets its address and
+// that one host:port in its egress rule, when its node fetches it.
+func TestSelfHostedAssignment(t *testing.T) {
+	dir := t.TempDir()
+	store, err := openStore(filepath.Join(dir, "core.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{
+		Providers:    map[string]Provider{"ollama": {Kind: selfHostedKind, BaseURL: "http://192.0.2.10:11434/v1", Models: []string{"qwen3:8b"}}},
+		Agents:       map[string]Agent{"qwen": {Runtime: "opencode", Provider: "ollama", Model: "selfhosted/qwen3:8b"}},
+		DefaultAgent: "qwen",
+	}
+	if err := checkAll(cfg); err != nil {
+		t.Fatal(err)
+	}
+	c := newCore(cfg, store)
+	store.registerNode("pc", hashSecret("node-secret"))
+	store.setNodeStatus("pc", true, []byte(`{"runtimes":["opencode"]}`))
+	task, err := c.runTask(context.Background(), runRequest{Prompt: "summarize"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("GET", "/v1/node/assignments?rev=0&wait=0", nil)
+	req.Header.Set("Authorization", "Bearer node-secret")
+	req.Header.Set("Eriphe-Node", "pc")
+	rec := httptest.NewRecorder()
+	c.handleAssignments(rec, req)
+	var a struct {
+		Tasks []nodeAssignment `json:"tasks"`
+	}
+	json.NewDecoder(rec.Body).Decode(&a)
+	if len(a.Tasks) != 1 {
+		t.Fatalf("assignments: %s", rec.Body)
+	}
+	spec := a.Tasks[0].Spec
+	if spec.Model != "selfhosted/qwen3:8b" || spec.ModelEndpoint == nil || spec.ModelEndpoint.BaseURL != "http://192.0.2.10:11434/v1" ||
+		spec.ModelEndpoint.KeyEnv != "" || len(spec.Identity) != 0 || spec.Egress == nil || spec.Egress.Mode != "internet" ||
+		len(spec.Egress.Endpoints) != 1 || spec.Egress.Endpoints[0] != "192.0.2.10:11434" {
+		t.Fatalf("spec %+v, endpoint %+v, egress %+v", spec, spec.ModelEndpoint, spec.Egress)
+	}
+	// Read at each fetch, never stored with the task.
+	var stored string
+	store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, task.ID).Scan(&stored)
+	if strings.Contains(stored, "11434") {
+		t.Errorf("stored spec %s", stored)
+	}
+}
