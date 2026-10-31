@@ -656,7 +656,7 @@ a home PC with a graphics card or a rented server, install Eriphe there as a dev
 network or the Internet, and you need no other account. Eriphe reaches it through the device's
 tunnel, the one it already has with eriphe-core, and your tasks and the assistant use it wherever
 they run. Then, in the workspace: Settings → Agents → Add an AI account → Modèle auto-hébergé →
-"Sur un de mes appareils", pick the device, "Tester le serveur" lists its models.
+"Sur un de mes appareils", pick the device, and tick the models it lists.
 
 The address is the one eriphe-node reaches:
 

@@ -381,7 +381,7 @@
   </div>
   {{else}}
   <div class="stack">
-    <h4>{{t "steps.title"}}</h4>
+    {{if ne $k "openai-compatible"}}<h4>{{t "steps.title"}}</h4>{{end}}
     {{template "provider-steps" $k}}
     {{if .Kind.CustomEnv}}
     <label class="field narrow-2"><span>{{t "providers.env"}}</span>
@@ -389,7 +389,7 @@
       <small id="penv-h">{{t "providers.envhint"}}</small></label>
     {{end}}
     {{if eq $k "openai-compatible"}}
-    <fieldset class="choices model-where">
+    <fieldset class="choices model-where" hx-post="/settings/provider-models{{if .Edit}}/{{.Name}}{{end}}" hx-trigger="change" hx-include="closest form" hx-vals='{"reset": "1"}' hx-target="#model-picker" hx-swap="outerHTML">
       <legend>{{t "providers.where"}}</legend>
       <div class="choice-row">
         <label class="choice"><input type="radio" name="where" value="node" {{if eq .Where "node"}}checked{{end}}><b>{{t "providers.where.node"}}</b><small>{{t "providers.where.nodelead"}}</small></label>
@@ -399,7 +399,7 @@
     <div class="if-where-node stack">
       {{if .ModelNodes}}
       <label class="field narrow-2"><span>{{t "providers.node"}}</span>
-        <select name="node" aria-describedby="pnode-h">{{$node := .Node}}{{range .ModelNodes}}<option value="{{.}}" {{if eq . $node}}selected{{end}}>{{.}}</option>{{end}}</select>
+        <select name="node" aria-describedby="pnode-h" hx-post="/settings/provider-models{{if .Edit}}/{{.Name}}{{end}}" hx-trigger="change" hx-include="closest form" hx-vals='{"reset": "1"}' hx-target="#model-picker" hx-swap="outerHTML">{{$node := .Node}}{{range .ModelNodes}}<option value="{{.}}" {{if eq . $node}}selected{{end}}>{{.}}</option>{{end}}</select>
         <small id="pnode-h">{{t "providers.nodehint"}}</small></label>
       {{else}}
       <p class="muted small">{{t "providers.nomodelnode"}}</p>
@@ -410,11 +410,7 @@
       <small id="pbu-h">{{t "providers.baseurlhint"}}</small></label>
     {{end}}
     {{template "secret-field" dict "Name" "key" "Label" (t (printf "kind.%s.keylabel" $k)) "Hint" (t (printf "kind.%s.keyhint" $k)) "IsSet" .KeySet}}
-    {{if eq $k "openai-compatible"}}
-    <label class="field"><span>{{t "providers.models"}}</span>
-      <textarea name="models" rows="3" spellcheck="false" autocapitalize="off" class="mono" placeholder="qwen3:8b&#10;llama3.1:8b" aria-describedby="pm-h">{{.Models}}</textarea>
-      <small id="pm-h">{{if .Edit}}{{t "providers.modelsedithint"}}{{else}}{{t "providers.modelshint"}}{{end}}</small></label>
-    {{end}}
+    {{if eq $k "openai-compatible"}}{{template "model-picker" .Picker}}{{end}}
   </div>
   {{end}}
 
@@ -441,7 +437,7 @@
 
   <div class="actions form-actions">
     <button class="btn btn-primary" type="submit">{{template "i-check"}}{{if .Edit}}{{t "form.save"}}{{else}}{{t "providers.create"}}{{end}}</button>
-    {{if and (ne $k "chatgpt-subscription") (not .Kind.CustomEnv)}}<button class="btn btn-soft test-btn" type="button" hx-post="/settings/provider-test{{if .Edit}}/{{.Name}}{{end}}" hx-include="closest form" hx-target="#provider-test" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{if eq $k "openai-compatible"}}{{t "ptest.selfbutton"}}{{else}}{{t "ptest.button"}}{{end}}</span><span class="when-busy">{{t "test.busy"}}</span></button>{{end}}
+    {{if and (ne $k "chatgpt-subscription") (ne $k "openai-compatible") (not .Kind.CustomEnv)}}<button class="btn btn-soft test-btn" type="button" hx-post="/settings/provider-test{{if .Edit}}/{{.Name}}{{end}}" hx-include="closest form" hx-target="#provider-test" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{t "ptest.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button>{{end}}
     {{if not .Next}}<a class="btn btn-ghost" href="/settings/agents">{{t "form.cancel"}}</a>{{end}}
   </div>
   <div id="provider-test" class="test-box" aria-live="polite"></div>
@@ -508,4 +504,34 @@
 <div class="test-result test-err" role="alert">{{template "i-x"}}<div class="test-body"><p>{{t (printf "cglogin.%s" .State)}}</p>{{if .Detail}}<p class="small test-detail">{{.Detail}}</p>{{end}}</div></div>
 <button class="btn btn-soft" type="button" hx-post="/settings/chatgpt-login" hx-target="#login-box" hx-swap="innerHTML" hx-disabled-elt="this">{{t "cglogin.retry"}}</button>
 {{end}}
+{{end}}
+
+{{/* A self-hosted model server's models, to tick (web_models.go): asked at
+once from a device, or with "Detect" from an address. . is a modelPicker. */}}
+{{define "model-picker-fragment"}}{{template "model-picker" .Data}}{{end}}
+{{define "model-picker"}}{{$url := "/settings/provider-models"}}{{with .Name}}{{$url = printf "/settings/provider-models/%s" .}}{{end}}
+<div class="model-picker" id="model-picker"{{if .Auto}} hx-post="{{$url}}" hx-trigger="load" hx-include="closest form" hx-target="this" hx-swap="outerHTML"{{end}}>
+  <div class="model-picker-head">
+    <span class="model-picker-title" id="mp-title">{{t "providers.models"}}</span>
+    <button class="btn btn-soft sm test-btn" type="button" hx-post="{{$url}}" hx-include="closest form" hx-target="#model-picker" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{if or .Result .Picks}}{{t "models.refresh"}}{{else}}{{t "models.detect"}}{{end}}</span><span class="when-busy">{{t "models.detecting"}}</span></button>
+  </div>
+  {{with .Result}}{{if eq .State "ok"}}<p class="muted small" role="status">{{.Text}}</p>{{else}}{{template "test-line" .}}{{end}}{{end}}
+  {{if .Picks}}
+  <input type="hidden" name="picked" value="1">
+  <div class="checks model-checks" role="group" aria-labelledby="mp-title" aria-describedby="mp-h">
+    {{range .Picks}}<label class="check"><input type="checkbox" name="model" value="{{.ID}}" {{if .Checked}}checked{{end}}><span><b class="mono">{{.ID}}</b>{{if .New}}<small><span class="tag tag-accent">{{t "models.new"}}</span></small>{{else if .Gone}}<small>{{t "models.gone"}}</small>{{end}}</span></label>{{end}}
+  </div>
+  <small class="muted" id="mp-h">{{t "models.pickhint"}}</small>
+  {{else if not .Result}}
+  <p class="muted small">{{if .Auto}}<span class="pulse-dot" aria-hidden="true"></span>{{t "models.asking"}}{{else}}{{t "models.detectlead"}}{{end}}</p>
+  {{end}}
+  {{if .ManualOpen}}
+  <details class="model-manual"{{if .Manual}} open{{end}}>
+    <summary>{{t "models.manual"}}</summary>
+    <label class="field"><span class="sr-only">{{t "models.manual"}}</span>
+      <input type="text" name="models" value="{{.Manual}}" maxlength="500" spellcheck="false" autocapitalize="off" class="mono" placeholder="qwen3:8b, llama3.1:8b" aria-describedby="mm-h">
+      <small id="mm-h">{{t "models.manualhint"}}</small></label>
+  </details>
+  {{end}}
+</div>
 {{end}}

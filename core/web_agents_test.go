@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -216,9 +217,16 @@ func TestWebSelfHosted(t *testing.T) {
 		t.Error("the gallery lacks the self-hosted card")
 	}
 	_, body, _ = tw.do("GET", "/settings/providers/new?kind=openai-compatible", nil, nil)
-	for _, want := range []string{`name="base_url"`, `name="models"`, "Clé (facultative)", "Tester le serveur", "bill-selfhosted", "ollama.com"} {
+	for _, want := range []string{`name="base_url"`, `id="model-picker"`, "Détecter les modèles", "Clé (facultative)", "bill-selfhosted", "ollama.com",
+		"un nom en https:// avec une clé", "http://eriphe-ollama:11434"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("form lacks %q", want)
+		}
+	}
+	// No key to get, no server to test apart from its models: no names to type either.
+	for _, not := range []string{"Comment obtenir la clé", "Tester le serveur", `name="models"`, "--with-ollama"} {
+		if strings.Contains(body, not) {
+			t.Errorf("form has %q", not)
 		}
 	}
 	base := "http://192.168.1.10:11434/v1"
@@ -293,6 +301,108 @@ func TestWebSelfHosted(t *testing.T) {
 	}
 	if p := c.conf().Providers["selfhosted"]; !slices.Equal(p.Models, []string{"qwen3:8b"}) || p.Kind != selfHostedKind {
 		t.Fatalf("edited %+v", p)
+	}
+}
+
+// The models of a self-hosted server are detected and ticked, not typed:
+// listed from its /v1/models, the first ticked on a new account; listed on
+// a save that ticked none (a page without scripts); offered as new on an
+// edit, which creates an agent for each model added; typed by hand only
+// when the server cannot be asked.
+func TestWebSelfHostedPicker(t *testing.T) {
+	var mu sync.Mutex
+	served := `{"data":[{"id":"qwen3:8b"},{"id":"llama3.1:8b"}]}`
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if served == "" {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.Write([]byte(served))
+	}))
+	defer fake.Close()
+	selfHostedDial = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, network, fake.Listener.Addr().String())
+	}
+	t.Cleanup(func() { selfHostedDial = nil })
+	tw, c, csrf := catalogWeb(t, noAgents)
+	base := "http://192.168.1.10:11434/v1"
+
+	// An address typed: nothing asked until there is one, then its models.
+	if _, b, _ := tw.post("/settings/provider-models", url.Values{"kind": {selfHostedKind}, "where": {"address"}}, csrf); !strings.Contains(b, "Détecter les modèles") || strings.Contains(b, `name="model"`) {
+		t.Errorf("no address: %s", b)
+	}
+	_, b, _ := tw.post("/settings/provider-models", url.Values{"kind": {selfHostedKind}, "where": {"address"}, "base_url": {base}}, csrf)
+	for _, want := range []string{"2 modèle(s)", `name="model" value="qwen3:8b" checked`, `name="model" value="llama3.1:8b" >`, `name="picked" value="1"`, "Rafraîchir"} {
+		if !strings.Contains(b, want) {
+			t.Errorf("detected models lack %q: %s", want, b)
+		}
+	}
+	// Refreshed, the ticks stay; a new address starts over.
+	_, b, _ = tw.post("/settings/provider-models", url.Values{"base_url": {base}, "picked": {"1"}, "model": {"llama3.1:8b"}}, csrf)
+	if !strings.Contains(b, `value="qwen3:8b" >`) || !strings.Contains(b, `value="llama3.1:8b" checked`) {
+		t.Errorf("refreshed: %s", b)
+	}
+	_, b, _ = tw.post("/settings/provider-models", url.Values{"base_url": {base}, "picked": {"1"}, "model": {"llama3.1:8b"}, "reset": {"1"}}, csrf)
+	if !strings.Contains(b, `value="qwen3:8b" checked`) {
+		t.Errorf("reset: %s", b)
+	}
+
+	// Saved with none ticked: the list, to tick.
+	_, b, h := tw.post("/settings/providers", url.Values{"kind": {selfHostedKind}, "where": {"address"}, "base_url": {base}}, csrf)
+	if h.Get("HX-Redirect") != "" || !strings.Contains(b, "Coche les modèles") || !strings.Contains(b, `value="llama3.1:8b"`) {
+		t.Fatalf("saved without models: %s", b)
+	}
+	_, b, h = tw.post("/settings/providers", url.Values{"kind": {selfHostedKind}, "where": {"address"}, "base_url": {base}, "picked": {"1"}, "model": {"qwen3:8b"}}, csrf)
+	if h.Get("HX-Redirect") != "/settings/agents?created=selfhosted" {
+		t.Fatalf("refused: %s", b)
+	}
+	if p := c.conf().Providers["selfhosted"]; !slices.Equal(p.Models, []string{"qwen3:8b"}) {
+		t.Fatalf("provider %+v", p)
+	}
+	if _, b, _ := tw.do("GET", "/settings/agents?created=selfhosted", nil, nil); !strings.Contains(b, "1 agent créé avec lui") {
+		t.Error("the flash lacks its singular")
+	}
+
+	// Its edit page: titled so, its models ticked, asked again at once.
+	_, b, _ = tw.do("GET", "/settings/providers/selfhosted/edit", nil, nil)
+	for _, want := range []string{"<title>Modifier un compte IA", `value="qwen3:8b" checked`, `hx-post="/settings/provider-models/selfhosted" hx-trigger="load"`} {
+		if !strings.Contains(b, want) {
+			t.Errorf("edit page lacks %q", want)
+		}
+	}
+	mu.Lock()
+	served = `{"data":[{"id":"qwen3:8b"},{"id":"llama3.1:8b"},{"id":"mistral:7b"}]}`
+	mu.Unlock()
+	_, b, _ = tw.post("/settings/provider-models/selfhosted", url.Values{}, csrf)
+	if !strings.Contains(b, `value="qwen3:8b" checked`) || !strings.Contains(b, `value="mistral:7b" >`) || strings.Count(b, "Nouveau") != 2 {
+		t.Errorf("edit's models: %s", b)
+	}
+	_, b, h = tw.post("/settings/providers/selfhosted", url.Values{"where": {"address"}, "base_url": {base}, "picked": {"1"}, "model": {"qwen3:8b", "mistral:7b"}}, csrf)
+	if h.Get("HX-Redirect") == "" {
+		t.Fatalf("edit refused: %s", b)
+	}
+	m := c.conf()
+	if p := m.Providers["selfhosted"]; !slices.Equal(p.Models, []string{"qwen3:8b", "mistral:7b"}) || p.BaseURL != base {
+		t.Fatalf("edited %+v", p)
+	}
+	if a := m.Agents["mistral-7b"]; a.Model != "selfhosted/mistral:7b" || len(m.agentsOf("selfhosted")) != 2 {
+		t.Fatalf("agents %+v", m.Agents)
+	}
+
+	// The server down: a model it no longer lists stays, and a name can be typed.
+	mu.Lock()
+	served = ""
+	mu.Unlock()
+	_, b, _ = tw.post("/settings/provider-models/selfhosted", url.Values{}, csrf)
+	if !strings.Contains(b, "Ajouter un nom à la main") || !strings.Contains(b, `value="mistral:7b" checked`) || !strings.Contains(b, "test-err") {
+		t.Errorf("server down: %s", b)
+	}
+	_, b, _ = tw.post("/settings/providers", url.Values{"kind": {selfHostedKind}, "name": {"other"}, "where": {"address"}, "base_url": {base}}, csrf)
+	if !strings.Contains(b, "ajoute un nom à la main") || !strings.Contains(b, `name="models"`) {
+		t.Errorf("saved with the server down: %s", b)
 	}
 }
 

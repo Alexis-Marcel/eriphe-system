@@ -248,7 +248,7 @@ func selfHostedModels(lang, key string, resp *http.Response) testView {
 		return testView{State: "info", Text: tr(lang, "ptest.selfnomodels")}
 	}
 	const shown = 20
-	v := testView{State: "ok", Text: trf(lang, "ptest.selfok", len(ids)), Tools: ids[:min(len(ids), shown)]}
+	v := testView{State: "ok", Text: trf(lang, "ptest.selfok", len(ids)), Tools: ids[:min(len(ids), shown)], Models: ids}
 	v.More = len(ids) - len(v.Tools)
 	return v
 }

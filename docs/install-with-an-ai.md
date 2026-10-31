@@ -446,7 +446,7 @@ For each other computer (or a second NAS):
    Ollama's settings.
 
    Then the person, in the browser: Settings → Agents → Add an AI account → Modèle auto-hébergé →
-   "Sur un de mes appareils", picks the device, "Tester le serveur", and the models. Pick a model
+   "Sur un de mes appareils", picks the device, and ticks the models it lists. Pick a model
    that calls tools (Qwen 3, Llama 3.1+).
 
 ## 7. Optional: the phone, away from home, tools

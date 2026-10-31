@@ -39,6 +39,7 @@ type testView struct {
 	Text   string
 	Tools  []string // the first tools
 	More   int      // how many others
+	Models []string // a self-hosted model server's models, all of them
 	Detail string   // the technical cause, for an unclassified failure
 	Cause  string   // a failure's cause (problems.go), when it is known
 }

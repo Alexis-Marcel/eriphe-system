@@ -252,8 +252,13 @@ func TestWebModelNode(t *testing.T) {
 	model, _ := fakeModel(t, next)
 	attachModelNode(t, c.core, "gpu", model)
 	_, body, _ = tw.do("GET", "/settings/providers/new?kind=openai-compatible", nil, nil)
-	if !strings.Contains(body, `<option value="gpu"`) || !strings.Contains(body, `name="where" value="node" checked`) {
+	if !strings.Contains(body, `<option value="gpu"`) || !strings.Contains(body, `name="where" value="node" checked`) ||
+		!strings.Contains(body, `hx-post="/settings/provider-models" hx-trigger="load"`) {
 		t.Errorf("form with a device: %s", body)
+	}
+	// The device chosen, its models are listed at once.
+	if _, b, _ := tw.post("/settings/provider-models", url.Values{"kind": {selfHostedKind}, "where": {"node"}, "node": {"gpu"}}, csrf); !strings.Contains(b, `name="model" value="qwen3:8b" checked`) {
+		t.Errorf("models through the device: %s", b)
 	}
 	form := url.Values{"kind": {selfHostedKind}, "where": {"node"}, "node": {"gpu"}}
 	if _, b, _ := tw.post("/settings/provider-test", form, csrf); !strings.Contains(b, "2 modèle(s)") || !strings.Contains(b, "<code>qwen3:8b</code>") {
