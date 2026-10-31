@@ -1334,3 +1334,25 @@ html.app.shell:not(.kb), html.app.shell:not(.kb) body.shell { height: 100lvh; }
 .logout-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .logout-panel h3 { margin: 0; }
 .logout-panel .btn .i { width: 17px; height: 17px; }
+
+/* Settings → Skills (skills.html) */
+.tag-warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.tag-script { background: var(--danger-soft); color: var(--danger); border-color: transparent; font-family: var(--mono); }
+.skill .skill-desc { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.skill-pick { display: flex; flex-wrap: wrap; gap: 10px; }
+.skill-pick .btn { cursor: pointer; }
+.skill-pick .btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.skill-md, pre.diff { margin: 0; padding: 14px 16px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); font-size: .82rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 520px; overflow: auto; }
+pre.diff .d { display: block; }
+pre.diff .add { background: var(--ok-soft); color: var(--ok); }
+pre.diff .del { background: var(--danger-soft); color: var(--danger); }
+pre.diff .gap { color: var(--muted); }
+.skill-diff { border-top: 1px solid var(--border); padding: 10px 0; }
+.skill-diff summary { cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.skill-diff pre { margin-top: 10px; }
+.skill-files { list-style: none; margin: 0; padding: 0; }
+.skill-files li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.skill-files li .mono { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.skill-files li.is-script .mono { color: var(--danger); font-weight: 600; }
+.skill-review { border-color: color-mix(in srgb, var(--warn-strong) 40%, var(--border)); }
+.skill-review .form-actions { display: flex; flex-wrap: wrap; gap: 10px; }

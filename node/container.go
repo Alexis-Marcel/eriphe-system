@@ -165,6 +165,7 @@ func (n *node) startContainer(t *Task, first string) error {
 		n.endTaskNetwork(t)
 		return err
 	}
+	n.mountSkills(t) // skills_user.go
 	args, cmdEnv, err := n.taskRunArgs(t, agentArgs, agentEnv)
 	if err != nil {
 		n.endTaskNetwork(t)

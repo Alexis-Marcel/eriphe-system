@@ -1,0 +1,110 @@
+{{/* Settings → Skills (web_skills.go). */}}
+{{define "i-skill"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.3 4.7 5.2.8-3.8 3.6.9 5.2L12 15.4l-4.6 2.4.9-5.2-3.8-3.6 5.2-.8z"/></svg>{{end}}
+
+{{define "skills"}}
+<header class="page-head"><h2>{{t "settings.skills"}}</h2><p>{{t "skills.lead"}}</p></header>
+{{if .Data}}
+<ul class="grid">
+{{range .Data}}
+  <li class="tile skill{{if not .Active}} is-cut{{end}}">
+    <div class="tile-head">
+      {{if .Pending}}<span class="tag tag-warn">{{if .Approved}}{{t "skills.updatewaits"}}{{else}}{{t "skills.waits"}}{{end}}</span>
+      {{else if .Enabled}}<span class="tag tag-ok">{{t "skills.on"}}</span>
+      {{else}}<span class="tag">{{t "skills.off"}}</span>{{end}}
+      {{if .HasScripts}}<span class="tag tag-script" title="{{t "skills.scriptshint"}}">{{t "skills.scripts"}}</span>{{end}}
+    </div>
+    <h3 class="tile-title">{{template "i-skill"}}<a href="/settings/skills/{{.Name}}" class="stretched mono">{{.Name}}</a></h3>
+    <p class="muted small skill-desc">{{.Description}}</p>
+    <p class="muted small">{{tf "skills.files" .Files}}</p>
+  </li>
+{{end}}
+</ul>
+{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-skill"}}</span><p>{{t "skills.none"}}</p></div>{{end}}
+
+<section class="panel" aria-labelledby="skill-add-title">
+  <h3 id="skill-add-title">{{template "i-plus"}}{{t "skills.add"}}</h3>
+  <p class="muted">{{t "skills.addlead"}}</p>
+  <form class="stack-form skill-upload" hx-post="/settings/skills" hx-encoding="multipart/form-data" hx-target="#skill-result" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]" data-skill-upload>
+    <input type="hidden" name="paths" value="">
+    <div class="skill-pick">
+      <label class="btn btn-soft"><input class="sr-only" type="file" name="files" webkitdirectory multiple data-skill-folder>{{template "i-folder"}}{{t "skills.pickfolder"}}</label>
+      <label class="btn btn-soft"><input class="sr-only" type="file" name="files" accept=".zip,application/zip" data-skill-zip>{{t "skills.pickzip"}}</label>
+    </div>
+    <p class="muted small" data-skill-picked data-picked="{{t "skills.picked"}}" aria-live="polite"></p>
+    <div class="form-actions"><button class="btn btn-primary" type="submit" disabled data-skill-send>{{t "skills.read"}}</button></div>
+    <div id="skill-result"></div>
+  </form>
+  <p class="muted small">{{t "skills.safety"}}</p>
+</section>
+{{end}}
+
+{{define "skill-page"}}{{with .Data}}
+<a class="back" href="/settings/skills">{{template "i-back"}}{{t "settings.skills"}}</a>
+<header class="page-head">
+  <h2 class="mono">{{.Skill.Name}}</h2>
+  <p>{{.Shown.Manifest.Description}}</p>
+</header>
+
+{{if .Skill.Pending}}
+<section class="panel skill-review" aria-labelledby="review-title">
+  <h3 id="review-title">{{if .Update}}{{t "skills.review.update"}}{{else}}{{t "skills.review.new"}}{{end}}</h3>
+  <p class="muted">{{if .Update}}{{t "skills.review.updatelead"}}{{else}}{{t "skills.review.newlead"}}{{end}}</p>
+  {{if .Scripts}}<p class="warn-note">{{tf "skills.review.scripts" .Scripts}}</p>{{end}}
+  {{if .Shown.Manifest.AllowedTools}}<p class="muted small">{{tf "skills.allowedtools" .Shown.Manifest.AllowedTools}}</p>{{end}}
+  <div class="form-actions">
+    <form hx-post="/settings/skills/{{.Skill.Name}}/approve" class="inline">
+      <input type="hidden" name="sha" value="{{.Shown.SHA}}">
+      <button class="btn btn-primary" type="submit">{{if .Update}}{{t "skills.approveupdate"}}{{else}}{{t "skills.approve"}}{{end}}</button>
+    </form>
+    <form hx-post="/settings/skills/{{.Skill.Name}}/reject" class="inline">
+      <button class="btn btn-soft" type="submit">{{if .Update}}{{t "skills.keepold"}}{{else}}{{t "skills.reject"}}{{end}}</button>
+    </form>
+  </div>
+  <p class="muted small mono">{{tf "skills.version" .Shown.Short}}</p>
+</section>
+{{else}}
+<section class="panel" aria-labelledby="state-title">
+  <h3 id="state-title" class="sr-only">{{t "skills.state"}}</h3>
+  <label class="switch">
+    <input type="checkbox" role="switch" name="on" value="1" hx-post="/settings/skills/{{.Skill.Name}}/enable" hx-trigger="change" {{if .Skill.Enabled}}checked{{end}}>
+    <span><b>{{t "skills.enabled"}}</b><small>{{t "skills.enabledhint"}}</small></span>
+  </label>
+  <p class="muted small mono">{{tf "skills.version" .Shown.Short}}</p>
+</section>
+{{end}}
+
+{{if .Diff}}
+<section class="panel" aria-labelledby="diff-title">
+  <h3 id="diff-title">{{if .Update}}{{t "skills.diff"}}{{else}}{{t "skills.content"}}{{end}}</h3>
+  {{range .Diff}}
+  <details class="skill-diff" {{if or .Script (eq .Path "SKILL.md")}}open{{end}}>
+    <summary><span class="mono">{{.Path}}</span> <span class="tag{{if eq .Status "removed"}} tag-no{{else if eq .Status "added"}} tag-ok{{end}}">{{t (printf "skills.status.%s" .Status)}}</span>{{if .Script}} <span class="tag tag-script">{{t "skills.script"}}</span>{{end}}</summary>
+    {{if .Binary}}<p class="muted small">{{t "skills.binary"}}</p>
+    {{else if and .Lines (not $.Data.Update)}}<pre class="skill-md">{{range .Lines}}{{.Text}}
+{{end}}</pre>
+    {{else if .Lines}}<pre class="diff">{{range .Lines}}<span class="d{{if eq .Op "+"}} add{{else if eq .Op "-"}} del{{else if eq .Op "…"}} gap{{end}}">{{.Op}} {{.Text}}</span>{{end}}</pre>{{end}}
+  </details>
+  {{end}}
+</section>
+{{else}}
+<section class="panel" aria-labelledby="md-title">
+  <h3 id="md-title" class="mono">SKILL.md</h3>
+  <pre class="skill-md">{{.SkillMD}}</pre>
+</section>
+{{end}}
+
+<section class="panel" aria-labelledby="files-title">
+  <h3 id="files-title">{{tf "skills.files" (len .Files)}}</h3>
+  <ul class="skill-files">
+    {{range .Files}}<li{{if .Script}} class="is-script"{{end}}><span class="mono">{{.Path}}</span><span class="muted small">{{.Human}}</span>{{if .Script}}<span class="tag tag-script">{{t "skills.script"}}</span>{{end}}</li>{{end}}
+  </ul>
+  {{if .Scripts}}<p class="muted small">{{t "skills.scriptsrun"}}</p>{{end}}
+</section>
+
+<section class="panel danger-zone" aria-labelledby="del-title">
+  <h3 id="del-title">{{t "skills.delete"}}</h3>
+  <form hx-post="/settings/skills/{{.Skill.Name}}/delete" hx-confirm="{{tf "skills.deleteconfirm" .Skill.Name}}" class="inline">
+    <button class="btn btn-danger-ghost" type="submit">{{t "skills.delete"}}</button>
+  </form>
+</section>
+{{end}}{{end}}

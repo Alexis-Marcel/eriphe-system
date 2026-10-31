@@ -38,7 +38,9 @@ type codexRuntime struct{}
 
 // codexStart writes the lent auth.json and starts the app-server. CODEX_HOME
 // is in /profile, so a restarted task finds its threads; the auth.json in it
-// is a link to /tmp, so the token never reaches the node's disk.
+// is a link to /tmp, so the token never reaches the node's disk. The user's
+// skills, when the task has them, are a user skills folder of Codex's,
+// $CODEX_HOME/skills/eriphe (skills_user.go).
 const codexStart = `umask 077
 export CODEX_HOME=/profile/codex
 mkdir -p "$CODEX_HOME" /tmp/eriphe-codex
@@ -47,6 +49,12 @@ if [ -n "$ERIPHE_CODEX_AUTH" ]; then
   ln -sfn /tmp/eriphe-codex/auth.json "$CODEX_HOME/auth.json"
 fi
 unset ERIPHE_CODEX_AUTH
+if [ -d ` + skillsDirPath + ` ]; then
+  mkdir -p "$CODEX_HOME/skills"
+  ln -sfn ` + skillsDirPath + ` "$CODEX_HOME/skills/eriphe"
+else
+  rm -f "$CODEX_HOME/skills/eriphe"
+fi
 exec codex app-server "$@"`
 
 // codexConfig is what Codex is told at start, as -c key=value (TOML values).

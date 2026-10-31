@@ -159,6 +159,7 @@ func main() {
 	api := http.NewServeMux()
 	n.routes(api)
 	go serve(s, api)
+	n.skillFetch = s.fetchSkill // skills.go
 	go n.sync(s)
 	go n.prepareLoop()
 

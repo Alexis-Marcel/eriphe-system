@@ -107,6 +107,9 @@ type nodeTaskSpec struct {
 	// RepoSkills: the agent loads the skills its repository carries (the
 	// user's own repository, or one trusted); off otherwise (repo_skills.go).
 	RepoSkills bool `json:"repo_skills,omitempty"`
+	// The user's skills, approved and on when the task started: its node
+	// fetches and mounts them (skills_tasks.go).
+	Skills []nodeSkill `json:"skills,omitempty"`
 
 	// The user's folders lent to the task, mounted by its node (folders.go).
 	Folders []nodeFolder `json:"folders,omitempty"`

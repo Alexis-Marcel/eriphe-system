@@ -30,6 +30,9 @@ import "encoding/json"
 //	Codex        skills.include_instructions=false: no skill catalog in
 //	             the model's context
 //	ACP          nothing to load: a custom agent's own business
+//
+// The user's own skills, approved in eriphe-core, are another matter:
+// skills_user.go.
 
 // repoSkillsOff tells whether the skills the task's repository carries
 // must stay off: a repository eriphe-core did not vouch for. The brain's

@@ -56,6 +56,9 @@ type TaskSpec struct {
 	// RepoSkills: the agent may load the skills its repository carries;
 	// they stay off otherwise (skills.go).
 	RepoSkills bool `json:"repo_skills,omitempty"`
+	// The user's skills, by name and hash: the node fetches, checks and
+	// mounts them (skills.go).
+	Skills []TaskSkill `json:"skills,omitempty"`
 
 	// Folders of this machine lent to the task, mounted at
 	// /work/folders/<name> (shares.go).
@@ -224,6 +227,8 @@ type node struct {
 	agents   *agentStore         // the agents injected into tasks (inject.go)
 	prep     preparer            // what eriphe-core wants ready on this node
 	awake    *keepAwake          // the machine out of sleep while a task works (awake.go)
+	// skillFetch gets a task's skill from eriphe-core (skills.go).
+	skillFetch func(ctx context.Context, taskID, sha string) ([]byte, error)
 }
 
 func newNode(o options) *node {
