@@ -332,15 +332,21 @@ function Install-Wsl {
   if ($vmp -eq "Enabled" -and (Test-Wsl)) { return $true }
   if ($vmp -eq "Enabled") {
     # The feature is there (after the reboot): WSL itself may still be missing.
+    Write-Para "Windows is downloading WSL, the Linux layer Eriphe runs in. It can take several minutes: leave this window open."
     Invoke-Quiet { wsl.exe --update }
     if (Test-Wsl) { return $true }
   }
   if ($vmp -ne "EnablePending") {
-    Write-Log "Installing WSL..."
+    # Long and silent on a new PC (Windows finishes its own updates first):
+    # said before it starts, so that the window does not look stuck.
+    Write-Para "Windows is turning on WSL, the Linux layer Eriphe runs in. On a new PC it can take a quarter of an hour: leave this window open."
     Invoke-Quiet { wsl.exe --install --no-distribution }
     if ($LASTEXITCODE -ne 0) {
       # An older wsl.exe, without --no-distribution: the features, then `wsl --update` after the reboot.
-      Enable-WindowsOptionalFeature -Online -NoRestart -All -FeatureName VirtualMachinePlatform, Microsoft-Windows-Subsystem-Linux | Out-Null
+      # Its warning that the restart is left for later goes to the log: the
+      # script says so itself.
+      Enable-WindowsOptionalFeature -Online -NoRestart -All -FeatureName VirtualMachinePlatform, Microsoft-Windows-Subsystem-Linux -WarningAction SilentlyContinue -WarningVariable warned | Out-Null
+      $warned | ForEach-Object { Write-Log "$_" }
     }
     $vmp = (Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform).State
     if ($vmp -eq "Enabled" -and (Test-Wsl)) { return $true }
