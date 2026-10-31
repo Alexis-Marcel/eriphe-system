@@ -138,7 +138,8 @@ func (c *core) checkNodes(ctx context.Context) {
 	}
 	c.followUpdateAll()
 	c.autoUpdates(time.Now())
-	c.placeServices() // also when no node answers: a node gone too long loses its services
+	c.replaceStranded() // placement.go
+	c.placeServices()   // also when no node answers: a node gone too long loses its services
 }
 
 // refreshNode records whether a node answers, and what it offers. A node
@@ -176,16 +177,15 @@ func (c *core) placePending() {
 	}
 	placed := false
 	for _, t := range tasks {
-		_, agent, err := c.conf().agent(t.Agent)
+		p, err := c.placementOf(t) // placement.go
 		if err == nil {
 			var name string
-			var folders []*Folder
-			if folders, _, err = c.folderGrant(splitNames(t.Folders)); err == nil {
-				name, err = schedule(c.schedulable(nodes), "", c.taskPlacement(agent, folders), c.store.activeCount)
-			}
+			ready := c.schedulable(nodes)
+			name, err = schedule(ready, "", p, c.store.activeCount)
 			if err == nil {
 				if ok, _ := c.store.assign(t.ID, name); ok {
 					log.Printf("task %s placed on %s", t.ID, name)
+					noteFallback(t.ID, t.Kind, name, ready, p)
 					c.logPlaced(t, name)
 					placed = true
 				}
@@ -269,8 +269,12 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		return nil, fmt.Errorf("the folders %s are on %s, not on %s: leave node empty", strings.Join(folderNames(folders), ", "), machine, r.Node)
 	}
 	// No online node may fit yet: the task then waits, without a node, for
-	// one that would (see placePending).
-	name, err := schedule(c.schedulable(nodes), r.Node, c.taskPlacement(agent, folders), c.store.activeCount)
+	// one that would (see placePending). An assistant someone waits on
+	// lives on an always-on node (placement.go).
+	p := c.taskPlacement(agent, folders)
+	p.Resident = residentKind(kind)
+	ready := c.schedulable(nodes)
+	name, err := schedule(ready, r.Node, p, c.store.activeCount)
 	var waiting *waitingError
 	if errors.As(err, &waiting) {
 		name, err = "", nil
@@ -300,7 +304,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	}
 	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model,
 		Identity: strings.Join(r.Identities, ","), Dir: where, Prompt: r.Prompt, State: statePending,
-		Kind: kind, Tools: strings.Join(grant, ","), Folders: lent.folderNames(), Resources: lent.List}
+		Kind: kind, Tools: strings.Join(grant, ","), Folders: lent.folderNames(), Resources: lent.List, Pinned: r.Node != ""}
 	if waiting != nil {
 		t.PendingReason = waiting.reason
 	}
@@ -309,6 +313,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	}
 	if name != "" {
 		c.logPlaced(t, name) // its access log (node_access.go)
+		if r.Node == "" {
+			noteFallback(t.ID, kind, name, ready, p)
+		}
 	}
 	spec := extra
 	spec.Runtime, spec.Prompt, spec.Dir, spec.Model = agent.Runtime, r.Prompt, dir, agent.Model

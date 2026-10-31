@@ -87,6 +87,38 @@ func (s *Store) assign(id, node string) (bool, error) {
 	return n == 1, err
 }
 
+// stranded returns the tasks given a node that has not started them, and
+// not pinned to it: they may be placed again (placement.go).
+func (s *Store) stranded() ([]*TaskRow, error) {
+	rows, err := s.db.Query(`SELECT ` + taskColumns + ` FROM tasks
+		WHERE node != '' AND state = 'pending' AND desired = 'running' AND pinned = 0 ORDER BY created`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*TaskRow
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// unassign takes a task not started yet from its node, to be placed
+// again, unless it moved meanwhile: true if it did.
+func (s *Store) unassign(id, node, reason string) (bool, error) {
+	res, err := s.db.Exec(`UPDATE tasks SET node = '', pending_reason = ?, updated = ?
+		WHERE id = ? AND node = ? AND state = 'pending' AND desired = 'running'`, reason, time.Now().Unix(), id, node)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
 // InboxItem is something a task's node must deliver to its agent.
 type InboxItem struct {
 	Seq  int            `json:"seq"`

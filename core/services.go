@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -305,12 +306,7 @@ func serviceNodes(nodes []NodeRow, p placement, avoid string) []NodeRow {
 // steadyOnline reports whether an online always-on node, other than the
 // one to avoid, can run p.
 func steadyOnline(nodes []NodeRow, p placement, avoid string) bool {
-	for _, n := range nodes {
-		if n.Name != avoid && n.Online && p.fits(n) && parseInfo(n).AlwaysOn {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(steadyNodes(nodes, p), func(n NodeRow) bool { return n.Name != avoid })
 }
 
 // avoided is the node a service kept failing on, if any.

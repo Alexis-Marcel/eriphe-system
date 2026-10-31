@@ -17,6 +17,9 @@ type placement struct {
 	Image   string   // worker image; the node's default if empty
 	Machine string   // the only node that fits: the one with the task's folders (folders.go)
 	Shares  []string // roots that node must share from
+	// Resident: an assistant that someone waits on (placement.go). Hard
+	// rule: an online always-on node that fits, if there is one.
+	Resident bool
 }
 
 func (p placement) String() string {
@@ -80,8 +83,9 @@ const (
 )
 
 // schedule picks the node for a task: the requested one if it is online and
-// fits, otherwise the best scoring node. If none is online but one would
-// fit, it returns a *waitingError.
+// fits, otherwise the best scoring node; for a resident task, the best of
+// the online always-on nodes that fit when there is one. If none is online
+// but one would fit, it returns a *waitingError.
 func schedule(nodes []NodeRow, want string, p placement, active func(string) (int, error)) (string, error) {
 	if want != "" {
 		for _, n := range nodes {
@@ -97,6 +101,11 @@ func schedule(nodes []NodeRow, want string, p placement, active func(string) (in
 			return n.Name, nil
 		}
 		return "", fmt.Errorf("unknown node %s", want)
+	}
+	if p.Resident {
+		if steady := steadyNodes(nodes, p); len(steady) > 0 {
+			nodes = steady
+		}
 	}
 	nodes = slices.Clone(nodes)
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].Name < nodes[j].Name })

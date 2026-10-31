@@ -177,6 +177,13 @@ type brainTurnState struct {
 	Tainted  []string `json:"tainted,omitempty"`
 }
 
+// span is the seqs of the messages delivered in this turn; 0, 0 if none.
+func (t *brainTurn) span() (int, int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.from, t.to
+}
+
 // taintUnknown taints a brain's turn that eriphe-core cannot tell about,
 // started before it was kept: until my next message, it is as if it read
 // something.

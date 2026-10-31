@@ -464,6 +464,22 @@ prefers `memory`, +8 per preferred label the node carries, +2 if the agent's ima
 default image) is already pulled, +2 if the node has the agent's runtime unpacked (`agents_ready`),
 -4 per active task. The highest score wins, ties by name.
 
+**Placement classes** (`placement.go`), like Kubernetes' hard rules and preferences; none is a
+setting:
+
+- **Resident**: an assistant that talks to the user or is woken by events (the brain first). Hard
+  rule: an online node started with `-always-on` (the machine eriphe-core runs on) that fits, the
+  best other node only when none does (the log says why). If its node has been offline for 30
+  seconds and another online node can take it, it moves; if it runs on a node that may sleep and an
+  always-on one can take it, it moves there between two turns. Moving starts a fresh session with
+  the context pack: the thread is eriphe-core's, and a message its old node never received is
+  delivered again.
+- **Bound**: a task with the user's folders goes to the node that has them, and waits for it.
+- **The others**: the scores above. A task its node has not started yet is placed again after that
+  node has been offline for 5 minutes; a running task keeps its node.
+
+A node given by hand (`node` of `run_task`, or an assistant's) always wins: such a task never moves.
+
 **Ready in advance.** Each node's assignments carry `prepare`: `{runtimes, images}`, the runtimes
 of the configured agents the node could run (it carries their `needs`) and the images they name.
 The node unpacks those agents and pulls those images (and its default one) in the background, at
