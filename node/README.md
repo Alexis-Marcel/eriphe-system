@@ -250,6 +250,15 @@ otherwise). The relay:
   (`169.254.169.254` included), CGNAT `100.64.0.0/10`, ULA `fc00::/7`, multicast, unspecified,
   NAT64/6to4 or other special ranges. It dials the address it checked, and checks it again on the
   socket, so DNS rebinding gains nothing;
+- lets a task whose agent uses a self-hosted model server reach that server, and nothing else of
+  the LAN: eriphe-core adds its `host:port` to the rule's `endpoints` (`["192.0.2.10:11434"]`)
+  when the node fetches the task. Only a target that is exactly a declared `host:port` (the name
+  or address as declared, the same port) is let through, on any port and even at a private
+  address, and only with the mode `internet` (not `none`; `allow` does not restrict it). Its name
+  is resolved by the relay, which still refuses loopback (the node itself), link-local (the cloud's
+  metadata included), multicast and unspecified addresses, and dials the very address it checked
+  (checked again on the socket). Another port of the same machine, or another machine of the LAN,
+  is refused as before;
 - lets a task reach the node's own listener through it (for a client that ignores `NO_PROXY`);
 - logs the first connection of a task to each host, allowed or refused:
   `task t-1: egress to github.com`.
@@ -396,6 +405,18 @@ than OpenCode's own, OpenCode's free models are disabled, so the code never goes
 plugins or MCP servers that run without asking, or send the key elsewhere. Sessions live in
 `/profile` (`XDG_DATA_HOME=/profile/data`, `XDG_STATE_HOME=/profile/state`), so a restarted task
 loads its own. The key comes from the agent's provider, in the variable OpenCode reads.
+
+**A self-hosted model server** (Ollama, llama.cpp, vLLM, LM Studio): a task whose `model` is
+`selfhosted/<model>` comes with `model_endpoint` (`{"base_url": "http://192.0.2.10:11434/v1",
+"key_env": "SELFHOSTED_API_KEY"}`, `key_env` only when the server has a key). The config then
+declares a provider `selfhosted` on OpenCode's built-in `@ai-sdk/openai-compatible`: `baseURL`, a
+15-minute request `timeout` (a home machine can be slow), the one model with `tool_call`, and,
+with a key, `"apiKey": "{env:SELFHOSTED_API_KEY}"`, which OpenCode reads from the task's
+environment: the key is never written in the config. OpenCode substitutes `{env:…}` and `{file:…}`
+in the config's text, so an address, model or key holding a brace, a quote, a backslash or a
+control character gets no provider block (eriphe-core refuses them when saved). The server is
+reached through the egress relay, at the one `host:port` of its address (see Egress); plain
+`http://` goes through the relay's forward path, as OpenCode honors `HTTP_PROXY`.
 
 OpenCode takes no system prompt over ACP: `append_system_prompt` is passed by name as
 `ERIPHE_INSTRUCTIONS` to the command, which writes it to `/tmp/eriphe/instructions.md` (the tmpfs),

@@ -101,6 +101,7 @@ to reach them; its kind says which runtimes can use it and in which variable its
 | `google-api` | `opencode` | `GOOGLE_GENERATIVE_AI_API_KEY` |
 | `mistral-api` | `opencode` | `MISTRAL_API_KEY` |
 | `openrouter-api` | `opencode` | `OPENROUTER_API_KEY` |
+| `openai-compatible` | `opencode` | `SELFHOSTED_API_KEY`, optional (see [Self-hosted model server](#self-hosted-model-server)) |
 | `custom-api` | `acp` | the provider's own `env` (for example `DASHSCOPE_API_KEY`); not a system variable |
 
 The `opencode` runtime (OpenCode driven over ACP, see `node/README.md`) reaches any of these with
@@ -136,6 +137,43 @@ A Claude Pro or Max plan reaches Claude Code only (Anthropic refuses it in other
 credential is the token of `claude setup-token`, valid about a year. A ChatGPT Plus or Pro plan
 reaches Codex, OpenAI's agent. Google's Gemini plan no longer reaches these programs: Gemini needs
 an API key. API keys (Anthropic, OpenAI, Google, Mistral, OpenRouter) are billed by use.
+
+### Self-hosted model server
+
+A provider of kind `openai-compatible` ("Modèle auto-hébergé" in the workspace) is a model server
+the user runs on one of their machines (Ollama, llama.cpp's `llama-server`, vLLM, LM Studio),
+reached at its OpenAI-compatible `/v1` address and used like any other model, for tasks and the
+brain, through OpenCode:
+
+```json
+"providers": {"ollama": {"kind": "openai-compatible", "base_url": "http://192.0.2.10:11434/v1",
+                         "models": ["qwen3:8b", "llama3.1:8b"]}},
+"agents": {"qwen": {"runtime": "opencode", "provider": "ollama", "model": "selfhosted/qwen3:8b",
+                    "use": "private documents, nothing leaves the house"}}
+```
+
+- `base_url` is `http(s)://host[:port]/v1`, without credentials, query or fragment. Tasks run in
+  containers, so the host is the machine's address on the network (or a public name), never
+  `localhost`, a loopback, link-local (`169.254.169.254`), multicast or unspecified address. The
+  server must listen on the network (Ollama: `OLLAMA_HOST=0.0.0.0`).
+- `secret` (the key) is optional: Ollama has none; vLLM (`--api-key`) or LM Studio may. It is lent
+  as `SELFHOSTED_API_KEY` and OpenCode reads it from the environment (`{env:…}`), never from its
+  config. A key with a quote, a backslash, a brace or a control character is refused.
+- `models` are the server's model names, one word each (`qwen3:8b`, `org/model`): the agent form
+  offers them, and the workspace creates one agent per model when the account is added (the first
+  the default when there is none). An agent's `model` is `selfhosted/<model>`.
+- When a node fetches a task of such an agent, eriphe-core adds `model_endpoint` (`base_url`, and
+  `key_env` with a key) to its spec and that one `host:port` to a copy of its egress rule
+  (`endpoints`): the node's relay lets the task reach that server, even on the LAN or another
+  port, and nothing else of the LAN (`node/README.md`, Egress). A task without egress (`none`)
+  gets no endpoint.
+- Nothing is assumed of the models but tool calling. Pick one made for it (Qwen 3, Llama 3.1+,
+  Mistral…), and give it enough context: Ollama's default is small, and its documentation
+  recommends 16k to 32k tokens for tool calling (`OLLAMA_CONTEXT_LENGTH=32768`, or `num_ctx` in a
+  Modelfile).
+
+"Test the server" in the account form calls `GET <base_url>/models` (with `Authorization: Bearer`
+when a key is typed or stored), not following redirects, and lists the models it serves.
 
 ### ChatGPT subscription
 
@@ -1272,7 +1310,8 @@ section lists what the vault holds and what each secret belongs to, with replace
 and the configuration's secret files to import. Settings → Agents shows the agents (model, account,
 whether a machine can run them now), the agents worth creating with the accounts (one click), the
 default agent and the brain's, and the AI accounts (providers). Adding an account starts from a
-card per kind, subscriptions first (Claude, ChatGPT) then API keys, each with who pays, its
+card per kind, subscriptions first (Claude, ChatGPT), then API keys, then a self-hosted model
+server (its address, an optional key and its models; "Test the server" lists them), each with who pays, its
 limits, its models and the steps to get its credential; "Test the key" lists the provider's models
 once with the key typed (OpenRouter also tells the credit left; a Claude subscription token is
 only checked for its shape, as Anthropic allows it in Claude Code only; a key pasted in the wrong

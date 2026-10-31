@@ -36,6 +36,11 @@ import (
 type EgressRule struct {
 	Mode  string   `json:"mode"`            // "internet" (the default: public addresses only) or "none"
 	Allow []string `json:"allow,omitempty"` // if set, only these hosts: "github.com", "*.npmjs.org" (subdomains)
+	// Endpoints are the host:port of the task's self-hosted model server
+	// ("192.0.2.10:11434"): with the mode internet, each is reachable even
+	// on the LAN or another port, but only that very host and port, and
+	// never at a loopback, link-local, multicast or unspecified address.
+	Endpoints []string `json:"endpoints,omitempty"`
 }
 
 const (
@@ -81,6 +86,24 @@ func publicAddr(a netip.Addr) bool {
 }
 
 var errNotPublic = errors.New("not a public address")
+
+// endpointAddr tells whether a declared model server may be dialed at an
+// address: a unicast one, private included, but never the loopback (the
+// node itself), link-local (169.254.169.254, the cloud's metadata),
+// multicast, unspecified, broadcast nor "this network".
+func endpointAddr(a netip.Addr) bool {
+	a = a.Unmap()
+	return a.IsValid() && a.IsGlobalUnicast() && !(a.Is4() && a.As4()[0] == 0)
+}
+
+// endpointControl is guardControl for a declared model server's address.
+func endpointControl(_, address string, _ syscall.RawConn) error {
+	ap, err := netip.ParseAddrPort(address)
+	if err != nil || !endpointAddr(ap.Addr()) {
+		return fmt.Errorf("%s: not a model server's address", address)
+	}
+	return nil
+}
 
 // guardControl refuses, at the socket, any connection to a non-public
 // address: the last check, whatever resolved the name.
@@ -129,7 +152,10 @@ type egressProxy struct {
 	dialer   *net.Dialer // dials public addresses only (guardControl)
 	// dialPublic dials a checked address: dialer.DialContext, but for tests.
 	dialPublic func(ctx context.Context, network, addr string) (net.Conn, error)
-	logf       func(format string, args ...any)
+	// dialEndpoint dials a checked address of a declared model server
+	// (endpointControl), but for tests.
+	dialEndpoint func(ctx context.Context, network, addr string) (net.Conn, error)
+	logf         func(format string, args ...any)
 }
 
 func newEgressProxy(authorize func(id, secret string) (*egressTask, bool), self []string, listener string) *egressProxy {
@@ -142,6 +168,7 @@ func newEgressProxy(authorize func(id, secret string) (*egressTask, bool), self 
 		logf:   log.Printf,
 	}
 	p.dialPublic = p.dialer.DialContext
+	p.dialEndpoint = (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second, Control: endpointControl}).DialContext
 	for _, s := range self {
 		p.self[strings.ToLower(s)] = true
 	}
@@ -199,6 +226,9 @@ func (p *egressProxy) dial(ctx context.Context, t *egressTask, hostport string) 
 		var d net.Dialer
 		return d.DialContext(ctx, "tcp", p.listener)
 	}
+	if t.isEndpoint(host, port) {
+		return p.dialModelServer(ctx, t, host, port)
+	}
 	if err := p.check(t, host, port); err != nil {
 		p.note(t, host, err)
 		return nil, err
@@ -230,6 +260,56 @@ func (p *egressProxy) dial(ctx context.Context, t *egressTask, hostport string) 
 		last = err
 	}
 	return nil, &egressError{http.StatusBadGateway, fmt.Sprintf("cannot reach %s: %v", hostport, last)}
+}
+
+// isEndpoint tells whether host:port is exactly a model server the task's
+// rule declares, with the mode internet: no other host, no other port.
+func (t *egressTask) isEndpoint(host, port string) bool {
+	if t.rule.Mode != egressInternet && t.rule.Mode != "" {
+		return false
+	}
+	target := net.JoinHostPort(host, port)
+	for _, e := range t.rule.Endpoints {
+		h, p, err := net.SplitHostPort(strings.TrimSpace(e))
+		if err == nil && net.JoinHostPort(strings.TrimSuffix(strings.ToLower(h), "."), p) == target {
+			return true
+		}
+	}
+	return false
+}
+
+// dialModelServer connects to the task's declared model server, which may
+// be on the LAN: its name resolved here, the addresses the node itself,
+// link-local (cloud metadata), multicast or unspecified left out, and the
+// very address checked dialed.
+func (p *egressProxy) dialModelServer(ctx context.Context, t *egressTask, host, port string) (net.Conn, error) {
+	var addrs []netip.Addr
+	if a, err := netip.ParseAddr(host); err == nil {
+		addrs = []netip.Addr{a}
+	} else if addrs, err = p.lookup(ctx, host); err != nil {
+		return nil, &egressError{http.StatusBadGateway, fmt.Sprintf("cannot resolve %s: %v", host, err)}
+	}
+	var ok []netip.Addr
+	for _, a := range addrs {
+		if endpointAddr(a) {
+			ok = append(ok, a.Unmap())
+		}
+	}
+	if len(ok) == 0 {
+		err := refused("%s is not a model server's address (loopback, link-local, multicast or unspecified)", host)
+		p.note(t, host, err)
+		return nil, err
+	}
+	p.note(t, host, nil)
+	var last error
+	for _, a := range ok {
+		c, err := p.dialEndpoint(ctx, "tcp", netip.AddrPortFrom(a, mustPort(port)).String())
+		if err == nil {
+			return c, nil
+		}
+		last = err
+	}
+	return nil, &egressError{http.StatusBadGateway, fmt.Sprintf("cannot reach %s: %v", net.JoinHostPort(host, port), last)}
 }
 
 func mustPort(port string) uint16 {

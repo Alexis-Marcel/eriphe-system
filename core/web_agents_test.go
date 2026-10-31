@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -183,6 +184,107 @@ func TestWebProviderTest(t *testing.T) {
 	c.putProvider(putCreate, "or", Provider{Kind: "openrouter-api"}, "sk-or-good")
 	if b := try("/settings/provider-test/or", url.Values{}); !strings.Contains(b, "La clé fonctionne") {
 		t.Errorf("stored key: %s", b)
+	}
+}
+
+// A self-hosted model server: its card, "Test the server" listing its
+// models from a fake /v1/models, one agent per model on creation, and the
+// agent form offering them.
+func TestWebSelfHosted(t *testing.T) {
+	var auth, path string
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth, path = r.Header.Get("Authorization"), r.URL.Path
+		if auth != "" && auth != "Bearer sk-local" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Write([]byte(`{"object":"list","data":[{"id":"qwen3:8b","object":"model"},{"id":"llama3.1:8b","object":"model"}]}`))
+	}))
+	defer fake.Close()
+	// The form's address is on the LAN; the fake answers on the loopback.
+	var dialed string
+	selfHostedDial = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		dialed = addr
+		var d net.Dialer
+		return d.DialContext(ctx, network, fake.Listener.Addr().String())
+	}
+	t.Cleanup(func() { selfHostedDial = nil })
+
+	tw, c, csrf := catalogWeb(t, noAgents)
+	_, body, _ := tw.do("GET", "/settings/providers/new", nil, nil)
+	if !strings.Contains(body, "kind=openai-compatible") || !strings.Contains(body, "Ton propre serveur") {
+		t.Error("the gallery lacks the self-hosted card")
+	}
+	_, body, _ = tw.do("GET", "/settings/providers/new?kind=openai-compatible", nil, nil)
+	for _, want := range []string{`name="base_url"`, `name="models"`, "Clé (facultative)", "Tester le serveur", "bill-selfhosted", "ollama.com"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("form lacks %q", want)
+		}
+	}
+	base := "http://192.0.2.10:11434/v1"
+	try := func(form url.Values) string {
+		form.Set("kind", selfHostedKind)
+		_, body, _ := tw.post("/settings/provider-test", form, csrf)
+		return body
+	}
+	if b := try(url.Values{"base_url": {base + "/"}}); !strings.Contains(b, "2 modèle(s)") || !strings.Contains(b, "<code>qwen3:8b</code>") ||
+		auth != "" || path != "/v1/models" || dialed != "192.0.2.10:11434" {
+		t.Errorf("no key: %s (auth %q, path %q, dialed %q)", b, auth, path, dialed)
+	}
+	if b := try(url.Values{"base_url": {base}, "key": {"sk-local"}}); !strings.Contains(b, "2 modèle(s)") || auth != "Bearer sk-local" {
+		t.Errorf("key: %s (auth %q)", b, auth)
+	}
+	if b := try(url.Values{"base_url": {base}, "key": {"sk-wrong"}}); !strings.Contains(b, "Clé refusée") {
+		t.Errorf("wrong key: %s", b)
+	}
+	dialed = ""
+	for _, bad := range []string{"http://localhost:11434/v1", "http://127.0.0.1:11434/v1", "http://169.254.169.254/v1"} {
+		if b := try(url.Values{"base_url": {bad}}); !strings.Contains(b, "Cette adresse ne convient pas") || dialed != "" {
+			t.Errorf("%s: %s (dialed %q)", bad, b, dialed)
+		}
+	}
+
+	// Saved: no key, its models, one agent each, the first the default.
+	save := url.Values{"kind": {selfHostedKind}, "base_url": {base}, "models": {"qwen3:8b\nllama3.1:8b\n"}}
+	if _, body, _ := tw.post("/settings/providers", url.Values{"kind": {selfHostedKind}, "base_url": {"http://127.0.0.1:11434/v1"}}, csrf); !strings.Contains(body, "Cette adresse ne convient pas") {
+		t.Fatalf("loopback saved: %s", body)
+	}
+	if _, body, _ := tw.post("/settings/providers", url.Values{"kind": {selfHostedKind}, "base_url": {base}, "key": {`a"b`}}, csrf); !strings.Contains(body, "guillemet") {
+		t.Fatalf("a key with a quote saved: %s", body)
+	}
+	_, body, h := tw.post("/settings/providers", save, csrf)
+	if h.Get("HX-Redirect") != "/settings/agents?created=selfhosted" {
+		t.Fatalf("refused: %s", body)
+	}
+	m := c.conf()
+	p := m.Providers["selfhosted"]
+	if p.Secret != "" || p.BaseURL != base || !slices.Equal(p.Models, []string{"qwen3:8b", "llama3.1:8b"}) {
+		t.Fatalf("provider %+v", p)
+	}
+	if a := m.Agents["qwen3-8b"]; a.Model != "selfhosted/qwen3:8b" || a.Runtime != "opencode" || m.DefaultAgent != "qwen3-8b" ||
+		m.Agents["llama3-1-8b"].Model != "selfhosted/llama3.1:8b" {
+		t.Fatalf("agents %+v, default %q", m.Agents, m.DefaultAgent)
+	}
+	_, body, _ = tw.do("GET", "/settings/agents", nil, nil)
+	if !strings.Contains(body, "Auto-hébergé") || !strings.Contains(body, "qwen3:8b") {
+		t.Error("agents page lacks the self-hosted account")
+	}
+	// The stored address is tested when the form leaves it.
+	auth = "x"
+	if _, b, _ := tw.post("/settings/provider-test/selfhosted", url.Values{}, csrf); !strings.Contains(b, "2 modèle(s)") || auth != "" {
+		t.Errorf("stored: %s", b)
+	}
+	// The agent form offers its models.
+	_, body, _ = tw.do("GET", "/settings/agents/new?refresh=1&provider=selfhosted", nil, map[string]string{"HX-Request": "true"})
+	if !strings.Contains(body, `value="selfhosted/qwen3:8b"`) || !strings.Contains(body, `value="selfhosted/llama3.1:8b"`) {
+		t.Errorf("agent form: %s", body)
+	}
+	// An edit keeps the kind and changes the models.
+	if _, body, h := tw.post("/settings/providers/selfhosted", url.Values{"base_url": {base}, "models": {"qwen3:8b"}}, csrf); h.Get("HX-Redirect") == "" {
+		t.Fatalf("edit: %s", body)
+	}
+	if p := c.conf().Providers["selfhosted"]; !slices.Equal(p.Models, []string{"qwen3:8b"}) || p.Kind != selfHostedKind {
+		t.Fatalf("edited %+v", p)
 	}
 }
 

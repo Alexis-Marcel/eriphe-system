@@ -110,14 +110,28 @@ type nodeTaskSpec struct {
 
 	// Where the task may connect: the node's egress relay enforces it.
 	Egress *nodeEgress `json:"egress,omitempty"`
+
+	// The self-hosted model server of the task's agent (OpenCode), set
+	// when the node fetches the task; its address is in Egress.Endpoints.
+	ModelEndpoint *nodeModelEndpoint `json:"model_endpoint,omitempty"`
+}
+
+// nodeModelEndpoint is where a self-hosted model server answers, and the
+// variable of Identity that carries its key, if it has one.
+type nodeModelEndpoint struct {
+	BaseURL string `json:"base_url"`
+	KeyEnv  string `json:"key_env,omitempty"`
 }
 
 // nodeEgress is a task's egress rule, like a Kubernetes NetworkPolicy:
 // "internet" (public addresses only, never the LAN) or "none", and when
-// Allow is set, only those hosts ("github.com", "*.npmjs.org").
+// Allow is set, only those hosts ("github.com", "*.npmjs.org"). Endpoints
+// are host:port the task may reach even on the LAN or another port: its
+// self-hosted model server's, nothing else.
 type nodeEgress struct {
-	Mode  string   `json:"mode"`
-	Allow []string `json:"allow,omitempty"`
+	Mode      string   `json:"mode"`
+	Allow     []string `json:"allow,omitempty"`
+	Endpoints []string `json:"endpoints,omitempty"`
 }
 
 // defaultEgress is every task's rule for now: the public Internet.
