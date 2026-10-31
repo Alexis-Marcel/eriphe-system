@@ -24,10 +24,13 @@ Read these first and keep to them for the whole session.
    firewall, Gatekeeper or macOS's System Integrity Protection (SIP), and do not tell the person to.
    Answer the operating system's questions the way this page says, nothing more. Never add a
    Defender exclusion either: when Windows blocks the installer, see §4C.
-3. **Never expose Eriphe to the internet.** No port forwarding on the router, no public tunnel
-   (ngrok, Cloudflare Tunnel, a public reverse proxy), no `0.0.0.0` firewall openings to the
-   internet. For access away from home, use Eriphe's built-in **Remote access** (Tailscale, §7),
-   which opens nothing.
+3. **Never open Eriphe's workspace to the internet yourself.** No port forwarding on the router, no
+   public tunnel (ngrok, Cloudflare Tunnel), no firewall opening of port 8443 to the internet. For
+   access away from home, use Eriphe's built-in **Remote access** (Tailscale, §7), which opens
+   nothing. A **server rented in the cloud** (a VPS, which has a public address) is a fine home
+   only the safe way of §4E: the provider's firewall closes everything but SSH (and 8800 only if
+   devices join over the internet), and the workspace is reached through Tailscale or the person's
+   own domain behind a reverse proxy that they set up and sign in to.
 4. **Run only commands from this page or from the workspace**, and only after reading them. Do
    not pipe other scripts into a shell. Prefer the documented one-liners over hand-made steps.
 5. **One eriphe-node per machine.** Do not install Eriphe a second time on a machine that already
@@ -82,6 +85,7 @@ Pick the first line that matches:
 | An always-on **Linux** machine without Docker (mini-PC, server, Raspberry Pi) | that machine | §4B, `install.sh --core-mode` |
 | Only a **Mac** | that Mac, set to never sleep and kept logged in (tell the person: Eriphe runs on a Mac only while their session is open; an always-on machine is a better home) | §4A, `install.sh --core-mode` |
 | Only a **Windows** PC | that PC, set to never sleep | §4C, `install.ps1` with `ERIPHE_CORE_MODE` |
+| A **server rented in the cloud** (a VPS: Hetzner, Scaleway, OVHcloud…) | that server | §4E, `install.sh --core-mode --bind 127.0.0.1`, then Tailscale |
 
 Then every **other** device is connected from the workspace (§6): never with `--core-mode` again.
 
@@ -264,6 +268,35 @@ docker logs -f eriphe
 - The containers it makes (eriphe-core, eriphe-node, eriphe-docker-proxy) show without a template:
   leave them alone, the launcher recreates them on updates.
 
+### 4E. A server rented in the cloud (VPS)
+
+A VPS has a public address: whatever listens on it is reachable from the whole internet. Follow
+[install/README.md, Eriphe on a VPS](../install/README.md#eriphe-on-a-vps) with the person; in
+short:
+
+1. **Before installing**, the person closes everything but SSH in the **provider's firewall** (the
+   firewall of the provider's web console, in front of the server). Do not rely on UFW: it does not
+   filter the ports Docker publishes. Do not open 8443 to the internet, ever.
+2. They install with Eriphe's ports on the server's loopback only:
+
+   ```sh
+   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core-mode --bind 127.0.0.1
+   ```
+
+   The installer prints `https://127.0.0.1:8443/setup` and a setup code.
+3. To reach the workspace the first time, the person opens an SSH tunnel **from their own
+   computer** (`ssh -L 8443:127.0.0.1:8443 <user>@<server>`), opens `https://127.0.0.1:8443/setup`
+   there, and goes on with §5.
+4. Then, right away, **Remote access** (§7, Tailscale): the workspace, the phone app and the other
+   devices use the `https://<name>.<tailnet>.ts.net` address from then on; in "Connect a device",
+   the command with the remote address. No port is opened.
+5. Their own domain behind a reverse proxy instead of Tailscale: the person sets it up themselves
+   with [docs/reverse-proxy.md](reverse-proxy.md) (HTTPS and a sign-in in front); only the proxy's
+   443 is opened. Port 8800 is opened only if devices join over the internet without Tailscale
+   (devices use mutual TLS there).
+6. Tell the person: the hosting provider has access to the server's disk, so to Eriphe's memory,
+   conversations and tokens. If that is not acceptable, a machine at home is the better home.
+
 ### Check the install
 
 On the home machine, both must succeed (on Windows, use `curl.exe`, not `curl`):
@@ -358,11 +391,11 @@ For each other computer (or a second NAS):
    They look like this (do not type these; the real ones come from the workspace):
 
    ```sh
-   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core http://192.0.2.10:8800 --join-token <token> --name laptop --ca-hash sha256:<hex>
+   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core https://192.0.2.10:8800 --join-token <token> --name laptop --ca-hash sha256:<hex>
    ```
 
    ```powershell
-   $env:ERIPHE_CORE='http://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
+   $env:ERIPHE_CORE='https://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
    ```
 
    A NAS with Docker joins with the one container of §4D in node mode: `ERIPHE_MODE=node`,

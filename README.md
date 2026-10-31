@@ -22,7 +22,7 @@ computers are then connected to it from the workspace, Eriphe's web page.
 | A NAS with Docker (Unraid, Synology…), or an always-on mini-PC or server | the NAS, mini-PC or server | on a NAS: [one container](#quick-start) (on Unraid, [its template](unraid/README.md)); on a Linux mini-PC or server: the Linux command | "Connect a device" in the workspace |
 | Only a Windows PC | that PC, set to never sleep | the [Windows command](#quick-start), in an administrator PowerShell | "Connect a device" in the workspace |
 | Only a Mac | that Mac, set to never sleep and left logged in (Eriphe runs there only while your session is open) | the [macOS command](#quick-start), in Terminal | "Connect a device" in the workspace |
-| A Linux server | that server | the [Linux command](#quick-start) | "Connect a device" in the workspace |
+| A Linux server (rented in the cloud: read [Eriphe on a VPS](install/README.md#eriphe-on-a-vps) first) | that server | the [Linux command](#quick-start) | "Connect a device" in the workspace |
 
 The installer brings everything it needs and ends with an address and a setup code. Then:
 

@@ -5,7 +5,7 @@
 # takes none):
 #
 #   $env:ERIPHE_CORE_MODE='1'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
-#   $env:ERIPHE_CORE='http://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
+#   $env:ERIPHE_CORE='https://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 #
 # or with parameters, through a script block or saved as a file:
 #
@@ -701,7 +701,7 @@ cat > /usr/local/bin/eriphe-core-run <<'EOF'
 docker rm -f eriphe-core >/dev/null 2>&1 || true
 docker run -d --name eriphe-core --restart unless-stopped --read-only --cap-drop ALL \
   --security-opt no-new-privileges:true -v /var/lib/eriphe-core:/data -e ERIPHE_INSTALL=windows \
-  -p "${API_PORT:-8800}:8800" -p "${WEB_PORT:-8443}:8443" -e "ERIPHE_API_PORT=${API_PORT:-8800}" "$1" >/dev/null
+  -p "0.0.0.0:${API_PORT:-8800}:8800" -p "0.0.0.0:${WEB_PORT:-8443}:8443" -e "ERIPHE_API_PORT=${API_PORT:-8800}" "$1" >/dev/null
 EOF
 cat > /usr/local/bin/eriphe-update-loop <<'EOF'
 #!/bin/sh

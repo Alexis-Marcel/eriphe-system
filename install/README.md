@@ -44,6 +44,7 @@ Eriphe is two programs:
 - [Folders](#folders)
 - [What the VM can and cannot see](#what-the-vm-can-and-cannot-see)
 - [Windows](#windows)
+- [Eriphe on a VPS](#eriphe-on-a-vps)
 - [Troubleshooting](#troubleshooting)
 
 ## What it needs
@@ -121,6 +122,20 @@ Choose others with `--web-port 9443 --api-port 9800` (`-WebPort 9443 -ApiPort 98
 `$env:ERIPHE_WEB_PORT='9443'; $env:ERIPHE_API_PORT='9800'` before `irm | iex`); they are kept for
 the next runs, and the commands of "Connect a device" give the API's port.
 
+**IPv4, every address.** On Linux (and the one container) eriphe-core's two ports are published on
+every IPv4 address of the machine (`0.0.0.0`), not on IPv6: on `[::]`, Docker's userland proxy
+would hand eriphe-core every IPv6 client with the address of Docker's bridge instead of its own,
+and eriphe-core could no longer tell the local network from the Internet, nor one client from
+another for its sign-in limits. `--bind 127.0.0.1` (or one address of the machine; `ERIPHE_BIND`
+for the one container) narrows them further, for a workspace reached only through Tailscale or a
+reverse proxy on the machine. On a server with a public address the installer says so: read
+[Eriphe on a VPS](#eriphe-on-a-vps).
+
+**Time zone.** A new install gives eriphe-core this machine's time zone (`timedatectl`,
+`/etc/timezone` or `/etc/localtime`; on a Mac, the Mac's), kept in `install.conf` for the next
+runs; `… | TZ=America/Montreal sh -s -- --core-mode` chooses another. An install made before keeps the zone it
+had (Europe/Paris unless `TZ` was given).
+
 The installers show only that: a title, short steps, the outcome, what is good to know, and where
 the logs are. A password (`sudo`, macOS's) is asked once, after a sentence saying why. Everything
 else, the output of each command included, goes to the install's log: `~/.eriphe/install.log` on a
@@ -191,12 +206,13 @@ for the node's name once joined):
 | `ERIPHE_SHARES` | none | places whose folders may be given to Eriphe, `NAME=/PATH[:ro]` comma-separated, host paths (`shares=/mnt/user`), as `--share` ([Folders](#folders)); each is checked on the host by a short-lived container |
 | `ERIPHE_WEB_PORT` | `8443` | the workspace's port on the host |
 | `ERIPHE_API_PORT` | `8800` | eriphe-core's port on the host, for the other devices (the join commands give it) |
+| `ERIPHE_BIND` | every IPv4 address | the host's IPv4 address the two ports listen on, as `--bind` (`127.0.0.1`: only through Tailscale or a reverse proxy on the host) |
 | `ERIPHE_VERSION` | the image's tag | `latest` (the releases), `edge` (main), or a release `0.8.0` / `0.8`, as `--version`; `ghcr.io/alexis-marcel/eriphe:edge` follows main by itself |
 | `ERIPHE_NODE_NAME` | the Docker host's name | the node's name |
 | `ERIPHE_NODE_LABELS` | none | as `--labels` |
 | `ERIPHE_CORE`, `ERIPHE_JOIN_TOKEN`, `ERIPHE_CA_HASH` | | node mode: from "Connect a device" (the token only matters at the first start) |
 | `ERIPHE_ADDRESS` | found | the host's address, for the log only |
-| `TZ` | | eriphe-core's time zone |
+| `TZ` | | eriphe-core's time zone (Unraid gives the server's; without it, Europe/Paris) |
 
 A data folder installed in one mode stays in it: another mode needs another folder, or
 `uninstall --data` first. `install.sh` stays the way on a Linux machine without Docker (it
@@ -240,11 +256,11 @@ filled in: eriphe-core's address, a join token (single use, for this name, valid
 fingerprint of eriphe-core's certificate authority. Run it on the new machine:
 
 ```sh
-curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core http://192.0.2.10:8800 --join-token <token> --name laptop --ca-hash sha256:<hex>
+curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core https://192.0.2.10:8800 --join-token <token> --name laptop --ca-hash sha256:<hex>
 ```
 
 ```powershell
-$env:ERIPHE_CORE='http://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
+$env:ERIPHE_CORE='https://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
 
 Once you have named your assistant, the command also gives its name (`--assistant-name 'Jarvis'`,
@@ -455,8 +471,9 @@ $env:ERIPHE_UNINSTALL='1'; irm https://github.com/Alexis-Marcel/eriphe-system/re
 
 - Linux: the compose project and its containers, the task and service containers, the networks,
   the `eriphe-cache` volume, Eriphe's images (every tag), the updater's systemd units,
-  `/opt/eriphe` and `/var/lib/eriphe`. Docker Engine
-  too if the script installed it and no other container is left; otherwise it stays.
+  `/opt/eriphe`, `/var/lib/eriphe` and the install's log (`/var/log/eriphe-install.log`; the
+  uninstall writes its own in `/tmp`). Docker Engine too, with its `docker` group, if the script
+  installed it and no other container is left; otherwise it stays.
 - macOS with Apple's container: the LaunchAgents `org.eriphe.node`, `org.eriphe.core` and
   `org.eriphe.update`, the LaunchDaemon `org.eriphe.relay` with its binary, socket folder and log
   (with `sudo`), the task, service and explorer containers and their networks, Eriphe's images,
@@ -487,6 +504,7 @@ The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nod
 | `--core-mode` | `-CoreMode` | run eriphe-core here, and a local node joined to it |
 | `--web-port 9443` | `-WebPort 9443` | core mode: the workspace's port (default 8443; env `ERIPHE_WEB_PORT`), kept for the next runs |
 | `--api-port 9800` | `-ApiPort 9800` | core mode: the port other devices join on (default 8800; env `ERIPHE_API_PORT`), kept; "Connect a device" gives it |
+| `--bind 127.0.0.1` | | core mode on Linux: the IPv4 address of the machine both ports listen on (default every IPv4 address, `0.0.0.0`; env `ERIPHE_BIND`), kept; `--bind 0.0.0.0` goes back to every address ([Eriphe on a VPS](#eriphe-on-a-vps)) |
 | `--assistant-name NAME` | `-AssistantName <name>` | the assistant's name, only for what the script prints (default: Eriphe) |
 | `--version 0.2.0` | `-Version 0.2.0` | pin that release (`0.2`: its line); `edge` follows `main`; `latest` the releases again (see [the machines update themselves](#the-machines-update-themselves)) |
 | `--rollback` | `-Rollback` | go back to the version before the last update |
@@ -748,6 +766,52 @@ reaches WSL by itself (`/dev/dxg`); the installer adds nothing for it to the dis
 
 All WSL 2 distributions share one network namespace: another distribution running its own dockerd
 shares the `docker0` bridge and the iptables chains with this one's. Keep to one.
+
+## Eriphe on a VPS
+
+Eriphe's home can be a server rented in the cloud (a VPS) rather than a machine at home: the same
+`install.sh --core-mode`. The difference is that such a server has a public address, so whatever
+listens on it is reachable from the whole Internet, and that the provider runs the machine. The
+installer notices a public address and says so at the end ("Good to know"). Before you use it:
+
+1. **Close the ports in the provider's firewall** (Hetzner, Scaleway, OVHcloud, AWS security
+   groups, DigitalOcean…: the firewall of the provider's console, in front of the server). Allow
+   SSH, and nothing else of Eriphe's by default:
+   - **8443, the workspace**: never open to the world. Reach it one of these ways:
+     - **Tailscale**, built in: Réglages › Accès à distance (Settings › Remote access), "Turn on"
+       and sign in, from an SSH tunnel the first time (`ssh -L 8443:127.0.0.1:8443 server`, then
+       `https://127.0.0.1:8443` on your computer). The workspace then has a
+       `https://<name>.<tailnet>.ts.net` address with a real certificate, for your browser, the
+       phone app and the devices, and nothing is opened on the server.
+     - **Your own domain behind a reverse proxy** with HTTPS (Caddy, nginx, Traefik), signed in
+       through your identity provider or the proxy's own login: [docs/reverse-proxy.md](../docs/reverse-proxy.md).
+       Open only the proxy's 443.
+   - **8800, the API**: open it only if devices join over the Internet rather than over Tailscale.
+     Devices talk to it over TLS with a certificate each (mutual TLS, pinned with `--ca-hash`), so
+     it is safe to open for them. Other callers of the API (the `eriphe` CLI, Home Assistant, an MCP
+     client) send its token: from outside the local network they use the tailnet address
+     (`https://<name>.<tailnet>.ts.net:8800`, a trusted certificate) or your proxy, never plain
+     `http://` over the Internet, which eriphe-core refuses from a public address.
+2. **`--bind 127.0.0.1`** when everything goes through Tailscale (its own connection, not the
+   ports) or a reverse proxy on the same server: the ports are then not on the public address at
+   all, whatever the firewalls say. Run the install command again with it; it is kept.
+3. **UFW does not protect Docker's ports.** Docker writes its own iptables rules ahead of UFW's
+   (and of firewalld's), so `ufw deny 8443` does not close a port Docker publishes. Use the
+   provider's firewall, `--bind`, or Docker's `DOCKER-USER` chain, which it keeps for you, e.g. on
+   the public card `eth0` (persist it with your distribution's iptables service):
+
+   ```sh
+   sudo iptables -I DOCKER-USER -i eth0 -p tcp -m conntrack --ctorigdstport 8443 -j DROP
+   sudo iptables -I DOCKER-USER -i eth0 -p tcp -m conntrack --ctorigdstport 8800 -j DROP
+   ```
+
+4. **IPv6.** eriphe-core's ports are published on IPv4 only ([1. The first
+   machine](#1-the-first-machine)): on an IPv6-only server they are not reachable directly; use
+   Tailscale or a reverse proxy on the server, which answers on IPv6 and reaches eriphe-core on
+   `127.0.0.1`.
+5. **Trust.** The provider has the server's disk: Eriphe's memory, conversations, the AI account's
+   token, the tools' tokens and the vault's key are on it. Choose a provider you trust with that,
+   or keep Eriphe at home.
 
 ## Troubleshooting
 

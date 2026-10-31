@@ -9,8 +9,8 @@ If a person asked you to install Eriphe (not to change its code), stop here and 
 [docs/install-with-an-ai.md](docs/install-with-an-ai.md) step by step. It says what to ask them,
 which commands to run on each system, what they must do themselves, and the safety rules you must
 keep (never ask for a password, token or key in the chat; never disable antivirus, firewall or
-SIP; never expose Eriphe to the internet). You do not need to build anything: the installers
-download released images.
+SIP; never open the workspace to the internet yourself: on a cloud server, only the safe path it
+describes). You do not need to build anything: the installers download released images.
 
 ## Contributing to the code
 
