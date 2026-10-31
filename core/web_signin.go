@@ -100,21 +100,25 @@ func (a *AuthConfig) header() string {
 // check tells whether the settings hold: their fields' form always, what
 // the mode needs only in that mode.
 func (a *AuthConfig) check() error {
+	if err := a.checkFields(); err != nil {
+		return err
+	}
+	return a.checkMode()
+}
+
+// checkFields checks the form of each field set.
+func (a *AuthConfig) checkFields() error {
 	if a.ExternalURL != "" {
 		u, err := url.Parse(a.ExternalURL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || strings.Trim(u.Path, "/") != "" || u.RawQuery != "" {
 			return authErr{"externalurl", "external_url must be an https address without a path, e.g. https://eriphe.example.org"}
 		}
 	}
-	if a.UnauthorizedURL != "" {
-		if u, err := url.Parse(a.UnauthorizedURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			return authErr{"unauthorizedurl", "unauthorized_url must be a full address, e.g. https://www.example.org"}
-		}
+	if a.UnauthorizedURL != "" && !fullURL(a.UnauthorizedURL) {
+		return authErr{"unauthorizedurl", "unauthorized_url must be a full address, e.g. https://www.example.org"}
 	}
-	if a.OIDC.Issuer != "" {
-		if u, err := url.Parse(a.OIDC.Issuer); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			return authErr{"issuer", "oidc.issuer must be the provider's address, e.g. https://auth.example.org/application/o/eriphe/"}
-		}
+	if a.OIDC.Issuer != "" && !fullURL(a.OIDC.Issuer) {
+		return authErr{"issuer", "oidc.issuer must be the provider's address, e.g. https://auth.example.org/application/o/eriphe/"}
 	}
 	if a.Proxy.Header != "" && !headerName.MatchString(a.Proxy.Header) {
 		return authErr{"header", "proxy.header must be a header name, e.g. Remote-User"}
@@ -122,6 +126,17 @@ func (a *AuthConfig) check() error {
 	if _, err := parsePrefixes(a.Proxy.Trusted); err != nil {
 		return authErr{"trusted", "proxy.trusted: " + err.Error()}
 	}
+	return nil
+}
+
+// fullURL tells whether s is an http or https address with a host.
+func fullURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != ""
+}
+
+// checkMode checks that the mode has what it needs.
+func (a *AuthConfig) checkMode() error {
 	switch a.mode() {
 	case modePassword, modeNone:
 	case modeOIDC:

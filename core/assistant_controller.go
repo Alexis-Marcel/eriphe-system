@@ -166,37 +166,62 @@ func (c *core) tendAssistant(ctx context.Context, a Assistant, token string) err
 		return nil
 	}
 	if t == nil || finished(t.State) {
-		if a.Agent == "" {
-			return nil // no agent can run it yet: the workspace adds one
-		}
-		if c.catalogSettling() {
-			return nil // its free reads are fixed when it starts: let the catalog list them first
-		}
-		// Wait between restarts: 5 s, then doubling up to 5 min.
-		if time.Now().Unix() < st.NextStart {
-			return nil
-		}
-		fails := st.Failures
-		if t != nil && t.State == stateFailed {
-			fails++
-		} else {
-			fails = 0
-		}
-		delay := min(5*time.Second<<min(fails, 6), 5*time.Minute)
-		c.updateAssistant(a.Name, func(st *AssistantStatus) {
-			st.Failures, st.NextStart = fails, time.Now().Add(delay).Unix()
-		})
-		if fails == 3 && r.failing != nil {
-			r.failing(c, a)
-		}
-		// A resume that keeps failing is dropped: better a fresh session than none.
-		resume := t != nil && fails < 2
-		return c.startAssistant(ctx, a, r, token, resume)
+		return c.restartAssistant(ctx, a, r, st, t, token)
 	}
 	// Its node gone, or an always-on one free for it: it moves (placement.go).
 	if c.moveResident(a, r, t) {
 		return nil
 	}
+	c.followAssistant(a, st, t)
+	switch t.State {
+	case stateWaitingPermission:
+		if r.permission == nil {
+			return c.refuseAll(ctx, t)
+		}
+		return r.permission(c, ctx, a, t)
+	case stateIdle:
+		if stop, err := c.restartIfChanged(ctx, a, t); stop {
+			return err
+		}
+		return c.deliverAssistant(ctx, a, t)
+	}
+	return nil
+}
+
+// restartAssistant starts an assistant whose task is gone or ended, once
+// its agent and the catalog are there, waiting between restarts: 5 s, then
+// doubling up to 5 min.
+func (c *core) restartAssistant(ctx context.Context, a Assistant, r assistantRole, st AssistantStatus, t *TaskRow, token string) error {
+	if a.Agent == "" {
+		return nil // no agent can run it yet: the workspace adds one
+	}
+	if c.catalogSettling() {
+		return nil // its free reads are fixed when it starts: let the catalog list them first
+	}
+	if time.Now().Unix() < st.NextStart {
+		return nil
+	}
+	fails := st.Failures
+	if t != nil && t.State == stateFailed {
+		fails++
+	} else {
+		fails = 0
+	}
+	delay := min(5*time.Second<<min(fails, 6), 5*time.Minute)
+	c.updateAssistant(a.Name, func(st *AssistantStatus) {
+		st.Failures, st.NextStart = fails, time.Now().Add(delay).Unix()
+	})
+	if fails == 3 && r.failing != nil {
+		r.failing(c, a)
+	}
+	// A resume that keeps failing is dropped: better a fresh session than none.
+	resume := t != nil && fails < 2
+	return c.startAssistant(ctx, a, r, token, resume)
+}
+
+// followAssistant keeps up with a running assistant's task: its triggers'
+// relays, its session, and its failures once a turn went through.
+func (c *core) followAssistant(a Assistant, st AssistantStatus, t *TaskRow) {
 	for _, tr := range a.triggers() {
 		if h := assistantTriggers[tr].relay; h != nil {
 			h(c, a, t)
@@ -211,47 +236,49 @@ func (c *core) tendAssistant(ctx context.Context, a Assistant, token string) err
 	if t.State == stateIdle && c.assistantStatus(a.Name).Failures != 0 && c.lastTurnOK(t.ID) {
 		c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Failures, st.LastError = 0, "" })
 	}
+}
 
-	switch t.State {
-	case stateWaitingPermission:
-		if r.permission == nil {
-			return c.refuseAll(ctx, t)
+// restartIfChanged stops an idle assistant's task when its tools or its
+// spec changed since it started (stop true), so that it starts again.
+func (c *core) restartIfChanged(ctx context.Context, a Assistant, t *TaskRow) (stop bool, err error) {
+	// Its agent lists its tools once: a tool added or changed since needs a
+	// new one, on the same session, before it reads what is waiting.
+	if h, was := c.assistantToolsHash(a), c.assistantStatus(a.Name).ToolsHash; h != "" && h != was {
+		if was == "" { // started before it was kept
+			c.updateAssistant(a.Name, func(st *AssistantStatus) { st.ToolsHash = h })
+		} else {
+			log.Printf("%s: its tools changed, restarting task %s", c.assistantLog(a), t.ID)
+			return true, c.stopByBrain(ctx, t.ID)
 		}
-		return r.permission(c, ctx, a, t)
-	case stateIdle:
-		// Its agent lists its tools once: a tool added or changed since needs a
-		// new one, on the same session, before it reads what is waiting.
-		if h, was := c.assistantToolsHash(a), c.assistantStatus(a.Name).ToolsHash; h != "" && h != was {
-			if was == "" { // started before it was kept
-				c.updateAssistant(a.Name, func(st *AssistantStatus) { st.ToolsHash = h })
-			} else {
-				log.Printf("%s: its tools changed, restarting task %s", c.assistantLog(a), t.ID)
-				return c.stopByBrain(ctx, t.ID)
-			}
+	}
+	// Another agent, or the same one changed, or other instructions:
+	// the next turn is the new spec's.
+	if h, was := c.assistantSpecHash(a), c.assistantStatus(a.Name).SpecHash; h != was {
+		if was == "" { // started before it was kept
+			c.updateAssistant(a.Name, func(st *AssistantStatus) { st.SpecHash = h })
+		} else {
+			log.Printf("%s: its agent changed to %s, restarting task %s", c.assistantLog(a), a.Agent, t.ID)
+			return true, c.stopByBrain(ctx, t.ID)
 		}
-		// Another agent, or the same one changed, or other instructions:
-		// the next turn is the new spec's.
-		if h, was := c.assistantSpecHash(a), c.assistantStatus(a.Name).SpecHash; h != was {
-			if was == "" { // started before it was kept
-				c.updateAssistant(a.Name, func(st *AssistantStatus) { st.SpecHash = h })
-			} else {
-				log.Printf("%s: its agent changed to %s, restarting task %s", c.assistantLog(a), a.Agent, t.ID)
-				return c.stopByBrain(ctx, t.ID)
-			}
+	}
+	return false, nil
+}
+
+// deliverAssistant gives an idle assistant what its triggers have for it:
+// one turn at a time.
+func (c *core) deliverAssistant(ctx context.Context, a Assistant, t *TaskRow) error {
+	for _, tr := range a.triggers() {
+		h := assistantTriggers[tr].deliver
+		if h == nil {
+			continue
 		}
-		for _, tr := range a.triggers() {
-			h := assistantTriggers[tr].deliver
-			if h == nil {
-				continue
-			}
-			started, err := h(c, ctx, a, t)
-			if err != nil {
-				return err
-			}
-			if started {
-				c.updateAssistant(a.Name, func(st *AssistantStatus) { st.LastTurn = time.Now().Unix() })
-				break // one turn at a time
-			}
+		started, err := h(c, ctx, a, t)
+		if err != nil {
+			return err
+		}
+		if started {
+			c.updateAssistant(a.Name, func(st *AssistantStatus) { st.LastTurn = time.Now().Unix() })
+			return nil
 		}
 	}
 	return nil

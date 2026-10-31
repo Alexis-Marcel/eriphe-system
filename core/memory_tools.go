@@ -246,41 +246,15 @@ func (c *core) brainUpdate(in updateIn) (map[string]any, error) {
 	if old.Status == memProposed || old.Status == memDeleted {
 		return nil, fmt.Errorf("memory %d is %s: only the user changes it, in the workspace", in.ID, old.Status)
 	}
-	p := memoryPatch{Text: in.Text, Subject: in.Subject, Links: in.Links, Pinned: in.Pinned}
-	if in.State != "" {
-		p.State = &in.State
-	}
-	if in.ValidTo != "" {
-		t := c.mem.now()
-		if in.ValidTo != "now" {
-			if t, err = parseWhen(in.ValidTo); err != nil {
-				return nil, err
-			}
-		}
-		p.ValidTo = &t
-	}
-	if in.DueAt != "" {
-		t, err := parseWhen(in.DueAt)
-		if err != nil {
-			return nil, err
-		}
-		p.DueAt = &t
-	}
-	var parts []string
-	if in.Text != nil {
-		parts = append(parts, *in.Text)
-	}
-	if in.Subject != nil {
-		parts = append(parts, *in.Subject)
-	}
-	if in.Links != nil {
-		parts = append(parts, strings.Join(*in.Links, "\n"))
+	p, err := c.updatePatch(in)
+	if err != nil {
+		return nil, err
 	}
 	kind := old.Kind
 	if in.Pinned != nil {
 		kind = kindProfile // the profile is the user's
 	}
-	d, err := c.decideBrainWrite(kind, in.SourceRef, scanMemoryText(parts...))
+	d, err := c.decideBrainWrite(kind, in.SourceRef, scanMemoryText(in.texts()...))
 	if err != nil {
 		return nil, err
 	}
@@ -295,6 +269,48 @@ func (c *core) brainUpdate(in updateIn) (map[string]any, error) {
 		return nil, err
 	}
 	return map[string]any{"memory": viewMemory(x, c.mem.now())}, nil
+}
+
+// updatePatch is the change an update asks for; valid_to "now" ends the
+// memory at once.
+func (c *core) updatePatch(in updateIn) (memoryPatch, error) {
+	p := memoryPatch{Text: in.Text, Subject: in.Subject, Links: in.Links, Pinned: in.Pinned}
+	if in.State != "" {
+		p.State = &in.State
+	}
+	if in.ValidTo != "" {
+		t := c.mem.now()
+		if in.ValidTo != "now" {
+			var err error
+			if t, err = parseWhen(in.ValidTo); err != nil {
+				return p, err
+			}
+		}
+		p.ValidTo = &t
+	}
+	if in.DueAt != "" {
+		t, err := parseWhen(in.DueAt)
+		if err != nil {
+			return p, err
+		}
+		p.DueAt = &t
+	}
+	return p, nil
+}
+
+// texts are the words an update writes, for the scanner.
+func (in updateIn) texts() []string {
+	var parts []string
+	if in.Text != nil {
+		parts = append(parts, *in.Text)
+	}
+	if in.Subject != nil {
+		parts = append(parts, *in.Subject)
+	}
+	if in.Links != nil {
+		parts = append(parts, strings.Join(*in.Links, "\n"))
+	}
+	return parts
 }
 
 func (c *core) brainForget(in forgetIn) (map[string]any, error) {

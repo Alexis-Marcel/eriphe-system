@@ -149,14 +149,7 @@ func (w *web) testCalendar(r *http.Request, f toolForm, old *Server) testView {
 	req.Header.Set("Depth", "0")
 	req.Header.Set("Content-Type", "application/xml; charset=utf-8")
 	req.SetBasicAuth(f.Calendar.Username, pw)
-	hc := &http.Client{Transport: testTransport(), CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) > 3 || req.URL.Scheme != "https" || req.URL.Host != via[0].URL.Host {
-			return http.ErrUseLastResponse
-		}
-		req.SetBasicAuth(f.Calendar.Username, pw) // the same server's own redirect (/.well-known)
-		return nil
-	}}
-	resp, err := hc.Do(req)
+	resp, err := davClient(f.Calendar.Username, pw).Do(req)
 	if err != nil {
 		if key := netErrorKey(err); key != "" {
 			return testView{State: "err", Text: tr(lang, key)}
@@ -165,13 +158,30 @@ func (w *web) testCalendar(r *http.Request, f toolForm, old *Server) testView {
 	}
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	resp.Body.Close()
-	switch {
-	case resp.StatusCode == http.StatusMultiStatus || resp.StatusCode == http.StatusOK:
-		return testView{State: "ok", Text: fmt.Sprintf(tr(lang, "test.calok"), f.Calendar.Username)}
-	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+	return calendarAnswer(lang, f.Calendar.Username, resp.StatusCode)
+}
+
+// davClient asks a CalDAV server, following only the same server's own
+// https redirects (/.well-known), with the account's credentials.
+func davClient(user, pw string) *http.Client {
+	return &http.Client{Transport: testTransport(), CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) > 3 || req.URL.Scheme != "https" || req.URL.Host != via[0].URL.Host {
+			return http.ErrUseLastResponse
+		}
+		req.SetBasicAuth(user, pw) // the same server's own redirect (/.well-known)
+		return nil
+	}}
+}
+
+// calendarAnswer words a CalDAV server's answer to the test's PROPFIND.
+func calendarAnswer(lang, user string, status int) testView {
+	switch status {
+	case http.StatusMultiStatus, http.StatusOK:
+		return testView{State: "ok", Text: fmt.Sprintf(tr(lang, "test.calok"), user)}
+	case http.StatusUnauthorized, http.StatusForbidden:
 		return testView{State: "err", Text: tr(lang, "test.caldenied")}
-	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed:
+	case http.StatusNotFound, http.StatusMethodNotAllowed:
 		return testView{State: "err", Text: tr(lang, "test.calnotfound")}
 	}
-	return testView{State: "err", Text: fmt.Sprintf(tr(lang, "test.status"), resp.StatusCode)}
+	return testView{State: "err", Text: fmt.Sprintf(tr(lang, "test.status"), status)}
 }

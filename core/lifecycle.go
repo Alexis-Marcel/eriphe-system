@@ -237,21 +237,35 @@ func (c *core) handleReport(w http.ResponseWriter, r *http.Request) {
 	if in.Delivered > 0 {
 		c.store.ackInbox(id, in.Delivered)
 	}
+	fields := c.reportedFields(t, in)
+	if len(fields) > 0 {
+		c.store.updateTask(id, fields)
+	}
+	c.announceReport(id, fields, len(in.Events) > 0, isAssistant, forBrain)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// reportedFields are what a report changes of its task: its session, and
+// its state unless it has ended. A task answered by eriphe-core stays
+// running until the node has the answer.
+func (c *core) reportedFields(t *TaskRow, in nodeReport) map[string]any {
 	fields := map[string]any{}
 	if in.SessionID != "" && in.SessionID != t.SessionID {
 		fields["session_id"] = in.SessionID
 	}
-	// A task answered by eriphe-core stays running until the node has the answer.
 	state := in.State
-	if state == stateIdle && t.State == stateRunning && c.hasUndelivered(id) {
+	if state == stateIdle && t.State == stateRunning && c.hasUndelivered(t.ID) {
 		state = stateRunning
 	}
 	if state != "" && state != t.State && !finished(t.State) {
 		fields["state"] = state
 	}
-	if len(fields) > 0 {
-		c.store.updateTask(id, fields)
-	}
+	return fields
+}
+
+// announceReport tells who needs it of a report: the node, the assistants,
+// and the brain.
+func (c *core) announceReport(id string, fields map[string]any, events, isAssistant, forBrain bool) {
 	if s, ok := fields["state"].(string); ok {
 		if finished(s) {
 			c.bump() // the task leaves its node's assignments
@@ -261,16 +275,15 @@ func (c *core) handleReport(w http.ResponseWriter, r *http.Request) {
 		} else if s != stateWaitingPermission {
 			c.notifyBrain(id, s)
 		}
-	} else if len(in.Events) > 0 && isAssistant {
+	} else if events && isAssistant {
 		c.ping()
 	}
 	if forBrain {
 		c.notifyBrain(id, stateWaitingPermission)
 	}
-	if len(in.Events) > 0 {
+	if events {
 		c.bump() // the policy may have answered: wake the node
 	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (c *core) hasUndelivered(id string) bool {

@@ -58,71 +58,13 @@ func (a Agent) placement() placement {
 
 func (c *Config) checkAgents() error {
 	for name, p := range c.Providers {
-		if _, ok := kindOf(p.Kind); !ok {
-			return fmt.Errorf("provider %s: unknown kind %q", name, p.Kind)
-		}
-		if p.Kind == selfHostedKind {
-			// Its key is optional: a model server on the LAN often has none.
-			switch {
-			case p.Node != "" && p.BaseURL != "":
-				return fmt.Errorf("provider %s: base_url or node, not both", name)
-			case p.Node != "":
-				if !nodeName.MatchString(p.Node) {
-					return fmt.Errorf("provider %s: bad node %q", name, p.Node)
-				}
-			default:
-				if err := checkBaseURL(p.BaseURL); err != nil {
-					return fmt.Errorf("provider %s: %w", name, err)
-				}
-			}
-			if err := checkModelIDs(p.Models); err != nil {
-				return fmt.Errorf("provider %s: %w", name, err)
-			}
-		} else if p.Secret == "" {
-			return fmt.Errorf("provider %s: secret is required", name)
-		} else if p.BaseURL != "" || len(p.Models) > 0 || p.Node != "" {
-			return fmt.Errorf("provider %s: only a self-hosted model server (%s) takes base_url, node and models", name, selfHostedKind)
-		}
-		if k, _ := kindOf(p.Kind); k.CustomEnv {
-			if err := checkCredentialEnv(p.Env); err != nil {
-				return fmt.Errorf("provider %s: %w", name, err)
-			}
-		} else if p.Env != "" {
-			return fmt.Errorf("provider %s: a %s provider's variable is %s, it takes no env", name, p.Kind, k.Env)
-		}
-		// Its sign-in is refreshed, and the new tokens kept: in the vault.
-		if p.Kind == "chatgpt-subscription" && !strings.HasPrefix(p.Secret, vaultPrefix) {
-			return fmt.Errorf("provider %s: a ChatGPT subscription is signed in from the workspace, its secret is vault:<name>", name)
+		if err := checkProviderEntry(name, p); err != nil {
+			return err
 		}
 	}
 	for name, a := range c.Agents {
-		p, ok := c.Providers[a.Provider]
-		if !ok {
-			return fmt.Errorf("agent %s: unknown provider %q", name, a.Provider)
-		}
-		k, _ := kindOf(p.Kind)
-		if !slices.Contains(k.Runtimes, a.Runtime) {
-			return fmt.Errorf("agent %s: runtime %q cannot use a %s provider", name, a.Runtime, p.Kind)
-		}
-		// OpenCode picks the key by the model's provider: they must agree.
-		if want := k.ModelNS + "/"; harnessOf(a.Runtime).ProviderModels && !strings.HasPrefix(a.Model, want) {
-			return fmt.Errorf("agent %s: an %s model with a %s provider is %s<model>, not %q", name, a.Runtime, p.Kind, want, a.Model)
-		}
-		if a.Runtime == "acp" {
-			if err := checkACPCommand(a.Command); err != nil {
-				return fmt.Errorf("agent %s: %w", name, err)
-			}
-			if a.Model != "" {
-				return fmt.Errorf("agent %s: an ACP agent runs the model of its own settings or command, not %q", name, a.Model)
-			}
-		} else if len(a.Command) > 0 {
-			return fmt.Errorf("agent %s: only an acp agent takes a command, not a %s one", name, a.Runtime)
-		}
-		for _, pref := range a.Prefers {
-			// Labels are free text, but a preference is one word.
-			if pref == "" || strings.ContainsAny(pref, " ,") {
-				return fmt.Errorf("agent %s: bad preference %q (cpu, memory or a node label)", name, pref)
-			}
+		if err := c.checkAgentEntry(name, a); err != nil {
+			return err
 		}
 	}
 	if len(c.Agents) == 0 {
@@ -132,6 +74,86 @@ func (c *Config) checkAgents() error {
 		return fmt.Errorf("default_agent %q is not an agent", c.DefaultAgent)
 	}
 	return nil // the assistants' agents are checkAssistants'
+}
+
+// checkProviderEntry checks one provider of the configuration.
+func checkProviderEntry(name string, p Provider) error {
+	k, ok := kindOf(p.Kind)
+	if !ok {
+		return fmt.Errorf("provider %s: unknown kind %q", name, p.Kind)
+	}
+	if p.Kind == selfHostedKind {
+		if err := checkSelfHostedProvider(p); err != nil {
+			return fmt.Errorf("provider %s: %w", name, err)
+		}
+	} else if p.Secret == "" {
+		return fmt.Errorf("provider %s: secret is required", name)
+	} else if p.BaseURL != "" || len(p.Models) > 0 || p.Node != "" {
+		return fmt.Errorf("provider %s: only a self-hosted model server (%s) takes base_url, node and models", name, selfHostedKind)
+	}
+	if k.CustomEnv {
+		if err := checkCredentialEnv(p.Env); err != nil {
+			return fmt.Errorf("provider %s: %w", name, err)
+		}
+	} else if p.Env != "" {
+		return fmt.Errorf("provider %s: a %s provider's variable is %s, it takes no env", name, p.Kind, k.Env)
+	}
+	// Its sign-in is refreshed, and the new tokens kept: in the vault.
+	if p.Kind == "chatgpt-subscription" && !strings.HasPrefix(p.Secret, vaultPrefix) {
+		return fmt.Errorf("provider %s: a ChatGPT subscription is signed in from the workspace, its secret is vault:<name>", name)
+	}
+	return nil
+}
+
+// checkSelfHostedProvider checks where a self-hosted model server is, and
+// its models. Its key is optional: a model server on the LAN often has none.
+func checkSelfHostedProvider(p Provider) error {
+	switch {
+	case p.Node != "" && p.BaseURL != "":
+		return errors.New("base_url or node, not both")
+	case p.Node != "":
+		if !nodeName.MatchString(p.Node) {
+			return fmt.Errorf("bad node %q", p.Node)
+		}
+	default:
+		if err := checkBaseURL(p.BaseURL); err != nil {
+			return err
+		}
+	}
+	return checkModelIDs(p.Models)
+}
+
+// checkAgentEntry checks one agent of the configuration against its provider.
+func (c *Config) checkAgentEntry(name string, a Agent) error {
+	p, ok := c.Providers[a.Provider]
+	if !ok {
+		return fmt.Errorf("agent %s: unknown provider %q", name, a.Provider)
+	}
+	k, _ := kindOf(p.Kind)
+	if !slices.Contains(k.Runtimes, a.Runtime) {
+		return fmt.Errorf("agent %s: runtime %q cannot use a %s provider", name, a.Runtime, p.Kind)
+	}
+	// OpenCode picks the key by the model's provider: they must agree.
+	if want := k.ModelNS + "/"; harnessOf(a.Runtime).ProviderModels && !strings.HasPrefix(a.Model, want) {
+		return fmt.Errorf("agent %s: an %s model with a %s provider is %s<model>, not %q", name, a.Runtime, p.Kind, want, a.Model)
+	}
+	if a.Runtime == "acp" {
+		if err := checkACPCommand(a.Command); err != nil {
+			return fmt.Errorf("agent %s: %w", name, err)
+		}
+		if a.Model != "" {
+			return fmt.Errorf("agent %s: an ACP agent runs the model of its own settings or command, not %q", name, a.Model)
+		}
+	} else if len(a.Command) > 0 {
+		return fmt.Errorf("agent %s: only an acp agent takes a command, not a %s one", name, a.Runtime)
+	}
+	for _, pref := range a.Prefers {
+		// Labels are free text, but a preference is one word.
+		if pref == "" || strings.ContainsAny(pref, " ,") {
+			return fmt.Errorf("agent %s: bad preference %q (cpu, memory or a node label)", name, pref)
+		}
+	}
+	return nil
 }
 
 // agent returns the named agent, or the default one.
