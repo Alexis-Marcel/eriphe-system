@@ -234,8 +234,16 @@ function Invoke-InDistro([string] $script) {
   # what went wrong.
   $OutputEncoding = New-Object Text.UTF8Encoding $false
   $ErrorActionPreference = "Continue"
-  $all = "{`n$($script -replace "`r", '')`n} </dev/null`n#" | wsl.exe -d $Distro -u root -- sh -e 2>&1
-  $code = $LASTEXITCODE
+  # WSL's service may time out starting the distribution (Wsl/Service/
+  # CreateInstance/ERROR_TIMEOUT), right after an uninstall or on a slow PC:
+  # the script did not run then, and is given once more.
+  for ($try = 1; $try -le 2; $try++) {
+    $all = "{`n$($script -replace "`r", '')`n} </dev/null`n#" | wsl.exe -d $Distro -u root -- sh -e 2>&1
+    $code = $LASTEXITCODE
+    if ($code -eq 0 -or "$all" -notmatch "Wsl/Service/\S*ERROR_TIMEOUT") { break }
+    Write-Log "$all"
+    Start-Sleep -Seconds 5
+  }
   $ErrorActionPreference = "Stop"
   $out = @()
   $why = $null
@@ -250,6 +258,8 @@ function Invoke-InDistro([string] $script) {
   if ($code -ne 0) {
     $out | ForEach-Object { Write-Log "$_" }
     if ($why) { throw $why }
+    # WSL's own error code, when WSL itself failed.
+    if ("$all" -match "(Wsl/[A-Za-z0-9_/]+)") { throw "WSL failed ($($Matches[1])): restart the PC, then run the command again" }
     throw "the setup in WSL failed (exit code $code)"
   }
   $out
@@ -533,9 +543,24 @@ if (-not $exists) {
   try { Invoke-WebRequest $alpine[$arch][0] -OutFile $rootfs -UseBasicParsing }
   catch { Write-Log "$_"; throw "could not download Eriphe: check this PC's Internet connection, then run the command again" }
   if ((Get-FileHash $rootfs -Algorithm SHA256).Hash -ne $alpine[$arch][1]) { throw "the Alpine archive does not match its checksum" }
-  Invoke-Quiet { wsl.exe --import $Distro $wslDir $rootfs --version 2 }
-  if ($LASTEXITCODE -ne 0) {
-    throw "Windows could not create Eriphe's Linux system: turn on virtualization in the PC's firmware (BIOS or UEFI), then run the command again"
+  # Tried twice: WSL's service may time out (Wsl/Service/RegisterDistro/
+  # ERROR_TIMEOUT), right after an uninstall or on a slow PC. Only WSL's error
+  # codes, which are not translated, say that virtualization is off.
+  for ($try = 1; $try -le 2; $try++) {
+    $out = @(& { $ErrorActionPreference = "Continue"; wsl.exe --import $Distro $wslDir $rootfs --version 2 2>&1 } | ForEach-Object { "$_" })
+    $code = $LASTEXITCODE
+    $out | ForEach-Object { Write-Log $_ }
+    if ($code -eq 0) { break }
+    if (Test-Distro) { Invoke-Quiet { wsl.exe --unregister $Distro } }
+    Start-Sleep -Seconds 5
+  }
+  if ($code -ne 0) {
+    if ("$out" -match "HCS_E_HYPERV_NOT_INSTALLED|HCS_E_SERVICE_NOT_AVAILABLE|0x80370102") {
+      throw "Windows could not create Eriphe's Linux system: turn on virtualization in the PC's firmware (BIOS or UEFI), then run the command again"
+    }
+    $err = "$out" -replace "^.*?(Wsl/[A-Za-z0-9_/]+).*$", '$1'
+    if ($err -notmatch "^Wsl/") { $err = "exit code $code" }
+    throw "Windows could not create Eriphe's Linux system ($err): restart the PC, then run the command again"
   }
   Remove-Item $rootfs
 }
