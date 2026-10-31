@@ -359,6 +359,30 @@ func TestServiceBackoff(t *testing.T) {
 	}
 }
 
+// An http container that exits before it opens its port, or before the
+// container engine gives it an address, fails with what it printed.
+func TestServiceHTTPNeverUp(t *testing.T) {
+	docker, _ := fakeDocker(t, "fail")
+	apple, _ := fakeCLI(t, `case "$1" in
+ls) printf '[]' ;;
+run) echo boom >&2; exit 1 ;;
+esac`)
+	for _, tc := range []struct {
+		opt  options
+		want string
+	}{
+		{options{docker: docker, taskNetwork: "eriphe-tasks"}, "exit status 1: boom"},
+		{options{docker: apple, engine: engineContainer}, "the container exited before it had an address: boom"},
+	} {
+		tc.opt.root = t.TempDir()
+		n := newNode(tc.opt)
+		s := &service{name: "web", n: n, spec: serviceSpec{Image: "web", Transport: "http", Port: 8080, Egress: true}}
+		if err := s.runOnce(context.Background()); err == nil || err.Error() != tc.want {
+			t.Errorf("%s: %v, want %q", tc.opt.engine, err, tc.want)
+		}
+	}
+}
+
 // ERIPHE_LIVE_SERVICE_IMAGE=mcp/time go test -run LiveService -v runs a real
 // stdio MCP server image through the reconciler and the bridge, with the
 // local Docker.

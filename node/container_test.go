@@ -131,3 +131,41 @@ func waitFor(t *testing.T, ok func() bool) {
 	}
 	t.Fatal("timed out")
 }
+
+// A task's environment: the node's variables, then the agent's, then its
+// identity over both; git uses a lent GH_TOKEN; the docker CLI reaches a
+// tcp:// daemon directly.
+func TestTaskEnv(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "tcp://192.0.2.7:2375")
+	n := newNode(options{callbackURL: "http://eriphe-node:8790", listenAddr: "172.17.0.2:8790", egressPort: "8791"})
+	task := &Task{ID: "t-1", secret: "s3cret", Spec: TaskSpec{Repo: "x/y", TZ: "Europe/Paris",
+		Identity: map[string]string{"GH_TOKEN": "tok", "MODEL": "from-identity"}}}
+	env := n.taskEnv(task, map[string]string{"MODEL": "from-agent", "AGENT": "a"})
+	for k, want := range map[string]string{
+		"ERIPHE_REPO": "https://github.com/x/y.git", "TZ": "Europe/Paris", "AGENT": "a", "MODEL": "from-identity",
+		"GH_TOKEN": "tok", "GIT_CONFIG_KEY_0": "credential.helper", "ERIPHE_TASK_SECRET": "s3cret",
+		"NO_PROXY": "eriphe-node,localhost,127.0.0.1,172.17.0.2,192.0.2.7",
+	} {
+		if env[k] != want {
+			t.Errorf("%s=%q, want %q", k, env[k], want)
+		}
+	}
+	if env["no_proxy"] != env["NO_PROXY"] {
+		t.Errorf("no_proxy=%q", env["no_proxy"])
+	}
+
+	// No relay, no GH_TOKEN: neither the proxy nor git's helper.
+	env = newNode(options{}).taskEnv(&Task{ID: "t-2"}, nil)
+	if _, ok := env["NO_PROXY"]; ok {
+		t.Errorf("NO_PROXY without a relay: %q", env["NO_PROXY"])
+	}
+	if _, ok := env["GIT_CONFIG_COUNT"]; ok {
+		t.Error("git's helper without GH_TOKEN")
+	}
+}
+
+func TestFolderNames(t *testing.T) {
+	if got := folderNames([]TaskFolder{{Name: "docs"}, {Name: "photos"}}); got != "docs\nphotos" {
+		t.Errorf("got %q", got)
+	}
+}

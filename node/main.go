@@ -114,71 +114,21 @@ func main() {
 	flag.Var(o.shares, "share", "root the user may share folders from, name=/path, or name=/path:ro where results may not be dropped; the same path for this node and the Docker daemon; repeatable (env ERIPHE_NODE_SHARES: name=path,name2=path2:ro)")
 	flag.Var(volumeFlag(o.volumes), "volume", "host folder offered to tasks, name=/host/path, repeatable (env ERIPHE_NODE_VOLUMES: name=path,name2=path2)")
 	flag.Parse()
-	for _, l := range strings.Split(*labels, ",") {
-		if l = strings.TrimSpace(l); l != "" {
-			o.labels = append(o.labels, l)
-		}
-	}
+	o.labels = parseLabels(*labels)
 
-	var err error
-	if o.modelServer, err = parseModelServer(*modelServer); err != nil {
+	if err := o.complete(*modelServer, *downloadLimit, runtime.GOOS); err != nil {
 		log.Fatal(err)
 	}
-	switch o.engine {
-	case engineDocker, engineContainer:
-	default:
-		log.Fatalf("-engine %q: docker or container", o.engine)
-	}
-	if o.engine == engineContainer && runtime.GOOS != "darwin" {
-		log.Fatal("-engine container is Apple's container, on a Mac: use docker here")
-	}
-	if o.docker == "" {
-		o.docker = o.engine
-	}
-	if o.downloadLimit, err = parseBytes(*downloadLimit); err != nil {
-		log.Fatalf("-download-limit: %v", err)
-	}
-	if o.root, err = filepath.Abs(o.root); err != nil {
+	if err := makeRoot(o.root); err != nil {
 		log.Fatal(err)
 	}
-	if o.hostRoot == "" {
-		o.hostRoot = o.root
-	}
-	for _, d := range []string{"profiles", "tasks", "services", "agents"} {
-		if err := os.MkdirAll(filepath.Join(o.root, d), 0o700); err != nil {
-			log.Fatal(err)
-		}
-	}
-
 	pin, err := parseCAHash(*caHashFlag)
 	if err != nil {
 		log.Fatal(err)
 	}
-	statePath := filepath.Join(o.root, "node.json")
-	s, err := loadState(statePath)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		if *core == "" || *joinToken == "" {
-			log.Fatal("this node has not joined yet: give -core and -join-token (from `eriphe-core join-token`)")
-		}
-		if s, err = join(statePath, parseCores(*core), *name, *joinToken, pin); err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("joined %s as %s", s.urls()[0], s.Name)
-	case err != nil:
+	s, err := loadOrJoin(filepath.Join(o.root, "node.json"), *core, *joinToken, *name, pin)
+	if err != nil {
 		log.Fatal(err)
-	default:
-		s.path = statePath
-		if err := s.loadTLS(pin); err != nil {
-			log.Fatal(err)
-		}
-		if s.setURLs(parseCores(*core)) {
-			// Given again, the addresses replace the saved ones (e.g. to add the remote one).
-			if err := s.save(statePath); err != nil {
-				log.Fatal(err)
-			}
-			log.Printf("eriphe-core addresses: %s", strings.Join(s.urls(), ", "))
-		}
 	}
 	go s.renewLoop()
 	if o.wake, err = wakeSettings(thisHost(), *wakeMAC, *wakeBroadcast, s.urls()); err != nil {
@@ -199,22 +149,9 @@ func main() {
 	n.opt.listenAddr = addr
 	var egressAddr string
 	if *egressListen != "" {
-		if egressAddr, err = egressListenAddr(*egressListen, addr); err != nil {
-			log.Fatal(err)
-		}
-		_, n.opt.egressPort, _ = net.SplitHostPort(egressAddr)
 		var relay *egressProxy
-		if n.apple() {
-			// The listener answers on the loopback too; a task names it by
-			// its network's gateway.
-			_, port, _ := net.SplitHostPort(addr)
-			relay = newEgressProxy(n.egressAuthorizer, nil, net.JoinHostPort("127.0.0.1", port))
-			relay.isSelf = func(hp string) bool { return n.nets.gateway(hp, port) }
-		} else {
-			relay = newEgressProxy(n.egressAuthorizer, selfTargets(o.callbackURL, addr), addr)
-		}
-		l, err := n.listenTasks(egressAddr)
-		if err != nil {
+		var l net.Listener
+		if relay, l, egressAddr, err = n.egressRelay(*egressListen, addr); err != nil {
 			log.Fatal(err)
 		}
 		go func() { log.Fatal(http.Serve(l, relay)) }()
@@ -225,14 +162,7 @@ func main() {
 	go n.sync(s)
 	go n.prepareLoop()
 
-	// Only task containers call this listener, each with its own secret:
-	// their permission endpoint, the relay to their catalog servers, and
-	// their credentials on demand (credential.go).
-	perm := http.NewServeMux()
-	perm.Handle("/perm/{id}/mcp", n.permHandler())
-	perm.Handle("/mcp/{server}", n.relayHandler(s))
-	perm.Handle("/model/v1/{path...}", n.modelRelayHandler(s))
-	perm.Handle("POST "+credentialPath, n.credentialHandler(s))
+	perm := n.taskRoutes(s)
 	for _, sh := range o.shareList() {
 		if sh.Missing {
 			log.Printf("share %s: %s is not there now", sh.Name, o.shares[sh.Name].Path)
@@ -242,14 +172,136 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if n.apple() {
-		log.Printf("eriphe-node %s (%s), image %s, tasks with Apple's container, each on a network of its own, task listener on %s, egress relay on %s (tasks' networks only)",
-			s.Name, version, o.image, addr, orNone(egressAddr))
-	} else {
-		log.Printf("eriphe-node %s (%s), image %s, tasks on %s, services on %s, task listener on %s, egress relay on %s",
-			s.Name, version, o.image, dockerNetwork(o.taskNetwork), dockerNetwork(o.network), addr, orNone(egressAddr))
-	}
+	log.Print(n.startMessage(s.Name, addr, egressAddr))
 	log.Fatal(http.Serve(l, perm))
+}
+
+// parseLabels reads -labels: comma-separated, blanks ignored.
+func parseLabels(s string) []string {
+	var labels []string
+	for _, l := range strings.Split(s, ",") {
+		if l = strings.TrimSpace(l); l != "" {
+			labels = append(labels, l)
+		}
+	}
+	return labels
+}
+
+// complete checks the options read from the flags and fills in their
+// defaults: the engine (Apple's container on a Mac only) and its CLI, the
+// download limit, the model server, an absolute root.
+func (o *options) complete(modelServer, downloadLimit, goos string) error {
+	var err error
+	if o.modelServer, err = parseModelServer(modelServer); err != nil {
+		return err
+	}
+	switch o.engine {
+	case engineDocker, engineContainer:
+	default:
+		return fmt.Errorf("-engine %q: docker or container", o.engine)
+	}
+	if o.engine == engineContainer && goos != "darwin" {
+		return errors.New("-engine container is Apple's container, on a Mac: use docker here")
+	}
+	if o.docker == "" {
+		o.docker = o.engine
+	}
+	if o.downloadLimit, err = parseBytes(downloadLimit); err != nil {
+		return fmt.Errorf("-download-limit: %v", err)
+	}
+	if o.root, err = filepath.Abs(o.root); err != nil {
+		return err
+	}
+	if o.hostRoot == "" {
+		o.hostRoot = o.root
+	}
+	return nil
+}
+
+// makeRoot makes the node's directories under root, its own only.
+func makeRoot(root string) error {
+	for _, d := range []string{"profiles", "tasks", "services", "agents"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// loadOrJoin loads the node's saved state, or joins eriphe-core with a token
+// the first time. Addresses given again replace the saved ones (e.g. to add
+// the remote one).
+func loadOrJoin(statePath, core, joinToken, name, pin string) (*state, error) {
+	s, err := loadState(statePath)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		if core == "" || joinToken == "" {
+			return nil, errors.New("this node has not joined yet: give -core and -join-token (from `eriphe-core join-token`)")
+		}
+		if s, err = join(statePath, parseCores(core), name, joinToken, pin); err != nil {
+			return nil, err
+		}
+		log.Printf("joined %s as %s", s.urls()[0], s.Name)
+		return s, nil
+	case err != nil:
+		return nil, err
+	}
+	s.path = statePath
+	if err := s.loadTLS(pin); err != nil {
+		return nil, err
+	}
+	if s.setURLs(parseCores(core)) {
+		if err := s.save(statePath); err != nil {
+			return nil, err
+		}
+		log.Printf("eriphe-core addresses: %s", strings.Join(s.urls(), ", "))
+	}
+	return s, nil
+}
+
+// egressRelay listens for the egress relay, at listen (-egress-listen) or,
+// without a host, on the task listener's (addr), and says where.
+func (n *node) egressRelay(listen, addr string) (relay *egressProxy, l net.Listener, egressAddr string, err error) {
+	if egressAddr, err = egressListenAddr(listen, addr); err != nil {
+		return nil, nil, "", err
+	}
+	_, n.opt.egressPort, _ = net.SplitHostPort(egressAddr)
+	if n.apple() {
+		// The listener answers on the loopback too; a task names it by
+		// its network's gateway.
+		_, port, _ := net.SplitHostPort(addr)
+		relay = newEgressProxy(n.egressAuthorizer, nil, net.JoinHostPort("127.0.0.1", port))
+		relay.isSelf = func(hp string) bool { return n.nets.gateway(hp, port) }
+	} else {
+		relay = newEgressProxy(n.egressAuthorizer, selfTargets(n.opt.callbackURL, addr), addr)
+	}
+	if l, err = n.listenTasks(egressAddr); err != nil {
+		return nil, nil, "", err
+	}
+	return relay, l, egressAddr, nil
+}
+
+// taskRoutes is the task listener's API. Only task containers call it,
+// each with its own secret: their permission endpoint, the relay to their
+// catalog servers, and their credentials on demand (credential.go).
+func (n *node) taskRoutes(s *state) *http.ServeMux {
+	perm := http.NewServeMux()
+	perm.Handle("/perm/{id}/mcp", n.permHandler())
+	perm.Handle("/mcp/{server}", n.relayHandler(s))
+	perm.Handle("/model/v1/{path...}", n.modelRelayHandler(s))
+	perm.Handle("POST "+credentialPath, n.credentialHandler(s))
+	return perm
+}
+
+// startMessage is what the node logs once it is up.
+func (n *node) startMessage(name, addr, egressAddr string) string {
+	o := n.opt
+	if n.apple() {
+		return fmt.Sprintf("eriphe-node %s (%s), image %s, tasks with Apple's container, each on a network of its own, task listener on %s, egress relay on %s (tasks' networks only)",
+			name, version, o.image, addr, orNone(egressAddr))
+	}
+	return fmt.Sprintf("eriphe-node %s (%s), image %s, tasks on %s, services on %s, task listener on %s, egress relay on %s",
+		name, version, o.image, dockerNetwork(o.taskNetwork), dockerNetwork(o.network), addr, orNone(egressAddr))
 }
 
 // listenTasks listens for the task containers; with the container engine,

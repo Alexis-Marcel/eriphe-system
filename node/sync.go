@@ -299,20 +299,26 @@ func (n *node) reportLoop(c *coreClient) {
 		case <-n.kick:
 		case <-tick.C:
 		}
-		n.mu.Lock()
-		list := make([]*Task, 0, len(n.tasks))
-		for _, t := range n.tasks {
-			list = append(list, t)
-		}
-		n.mu.Unlock()
-		for _, t := range list {
-			n.deliver(t)
-			n.report(c, t)
-		}
-		n.reportServices(c)
-		n.upd.handOver(n.running())
-		n.awake.set(n.working())
+		n.reportOnce(c)
 	}
+}
+
+// reportOnce delivers and reports what changed in every task and service,
+// then lets the updater and the machine's sleep know how busy it is.
+func (n *node) reportOnce(c *coreClient) {
+	n.mu.Lock()
+	list := make([]*Task, 0, len(n.tasks))
+	for _, t := range n.tasks {
+		list = append(list, t)
+	}
+	n.mu.Unlock()
+	for _, t := range list {
+		n.deliver(t)
+		n.report(c, t)
+	}
+	n.reportServices(c)
+	n.upd.handOver(n.running())
+	n.awake.set(n.working())
 }
 
 func (n *node) report(c *coreClient, t *Task) {
