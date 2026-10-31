@@ -1395,9 +1395,10 @@ once with the key typed (OpenRouter also tells the credit left; a Claude subscri
 only checked for its shape, as Anthropic allows it in Claude Code only; a key pasted in the wrong
 card is caught), and the usual agents of the kind are created with it (Opus, Sonnet, Haiku for
 Claude; GPT models for ChatGPT; two well-known models for each API key). A key is tried again when
-it is saved: one that fails is kept, with a warning, and the account and its agents show "Clé
-refusée" (or "Non vérifiée" when the provider could not be reached) with the reason instead of
-"Prêt". An account error met in use (a key or token refused, a quota, a model the key cannot use,
+it is saved, in Settings as in the first-run wizard: one the provider refuses is not saved, and
+the form stays with "Clé refusée"; one that could not be checked (the provider unreachable or in
+error) is kept, with a warning, and the account and its agents show "Non vérifiée" with the reason
+instead of "Prêt" (a test of the stored key that is refused shows "Clé refusée"). An account error met in use (a key or token refused, a quota, a model the key cannot use,
 from a task or the brain) is kept on the account the same way, and cleared by the next turn of one
 of its agents that goes through, or a test of the stored key that passes. The agent form offers the
 account's models (another one can be typed; OpenCode's provider prefix is added), derives the

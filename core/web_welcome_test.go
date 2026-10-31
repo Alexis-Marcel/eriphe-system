@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -114,6 +115,54 @@ func TestWebWelcomeFlow(t *testing.T) {
 	_, body, _ = tw.do("GET", "/welcome/status", nil, nil)
 	if !strings.Contains(body, "Jarvis est prêt") || !strings.Contains(body, `href="/"`) || strings.Contains(body, "hx-trigger") {
 		t.Fatalf("ready: %s", body)
+	}
+}
+
+// A key the provider refuses stays in the wizard's AI step, with the error
+// and the field, "Finish later" still there: nothing is saved and the
+// assistant is not "ready". A provider that cannot be reached does not
+// hold it back.
+func TestWebWelcomeRefusedKey(t *testing.T) {
+	keepName(t)
+	status := http.StatusUnauthorized
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			return
+		}
+		w.Write([]byte(`{"data":[]}`))
+	}))
+	defer fake.Close()
+	old := checkEndpoints["anthropic-api"]
+	checkEndpoints["anthropic-api"] = fake.URL
+	t.Cleanup(func() { checkEndpoints["anthropic-api"] = old })
+
+	tw, c, csrf := catalogWeb(t, func(cfg *Config) { noAgents(cfg); cfg.Brain = &BrainConfig{} })
+	tw.post("/welcome/name", url.Values{"name": {"Sam"}}, csrf)
+	form := url.Values{"kind": {"anthropic-api"}, "next": {"welcome"}, "key": {"sk-ant-api03-" + strings.Repeat("x", 40)}, "preset": {"sonnet"}}
+	_, body, h := tw.post("/settings/providers", form, csrf)
+	if h.Get("HX-Redirect") != "" {
+		t.Fatalf("a refused key went on to %q", h.Get("HX-Redirect"))
+	}
+	for _, want := range []string{"Clé refusée", `name="key"`, `name="next" value="welcome"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the refused form lacks %q: %s", want, body)
+		}
+	}
+	if b := c.conf().brain(); b.Agent != "" || len(c.conf().Providers) != 0 || len(c.conf().Agents) != 0 {
+		t.Fatalf("a refused key was saved: brain %+v, providers %v", b, c.conf().Providers)
+	}
+	if _, body, _ := tw.do("GET", "/welcome", nil, nil); strings.Contains(body, "est prêt") || !strings.Contains(body, "/welcome/skip") {
+		t.Fatalf("the wizard after a refused key: %s", body)
+	}
+
+	// Not reachable: saved, the account says it could not be checked.
+	checkEndpoints["anthropic-api"] = "http://127.0.0.1:1/"
+	if _, body, h := tw.post("/settings/providers", form, csrf); h.Get("HX-Redirect") != "/welcome" {
+		t.Fatalf("an unchecked key: %q %s", h.Get("HX-Redirect"), body)
+	}
+	if h := c.providerHealth("anthropic"); h == nil || h.Cause != causeNetwork {
+		t.Fatalf("health = %+v", h)
 	}
 }
 

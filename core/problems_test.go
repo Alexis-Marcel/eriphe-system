@@ -244,14 +244,15 @@ func TestProviderHealthFromUse(t *testing.T) {
 	}
 }
 
-// A key refused by the test when the account is saved is kept, with a
-// warning, and the account and its agents say "Key refused"; a test of
-// the stored key that passes clears it.
+// A key the provider refuses when the account is saved is not saved: the
+// form says so and stays, new account or not. One that could not be tried
+// is saved, with a warning. A test of the stored key that fails makes the
+// account and its agents say "Key refused"; one that passes clears it.
 func TestProviderSavedWithRefusedKey(t *testing.T) {
-	good := false
+	status := http.StatusUnauthorized
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !good {
-			w.WriteHeader(http.StatusUnauthorized)
+		if status != http.StatusOK {
+			w.WriteHeader(status)
 			return
 		}
 		w.Write([]byte(`{"data":{}}`))
@@ -263,14 +264,48 @@ func TestProviderSavedWithRefusedKey(t *testing.T) {
 
 	tw, c, csrf := catalogWeb(t, noAgents)
 	_, body, h := tw.post("/settings/providers", url.Values{"kind": {"openrouter-api"}, "key": {"sk-or-v1-bad"}, "preset": {"kimi"}}, csrf)
+	if h.Get("HX-Redirect") != "" || !strings.Contains(body, "Clé refusée") || !strings.Contains(body, `name="key"`) {
+		t.Fatalf("a refused key went on: %v %s", h, body)
+	}
+	if _, ok := c.conf().Providers["openrouter"]; ok || len(c.conf().Agents) != 0 || c.providerHealth("openrouter") != nil {
+		t.Fatalf("a refused key was saved: %v %v", c.conf().Providers, c.conf().Agents)
+	}
+
+	// The provider's own error is not the key's: saved, and it says so.
+	status = http.StatusInternalServerError
+	_, body, h = tw.post("/settings/providers", url.Values{"kind": {"openrouter-api"}, "key": {"sk-or-v1-good"}, "preset": {"kimi"}}, csrf)
 	if h.Get("HX-Redirect") != "/settings/agents?created=openrouter" {
 		t.Fatalf("save: %v %s", h, body)
+	}
+	if h := c.providerHealth("openrouter"); h == nil || !h.Tested || h.Cause != causeServer {
+		t.Fatalf("health = %+v", h)
+	}
+	_, body, _ = tw.do("GET", "/settings/agents?created=openrouter", nil, nil)
+	for _, want := range []string{"n&#39;a pas passé le test", "Non vérifiée"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("agents page lacks %q", want)
+		}
+	}
+	secret := c.conf().Providers["openrouter"].Secret
+
+	// A refused key does not replace the stored one either.
+	status = http.StatusUnauthorized
+	_, body, h = tw.post("/settings/providers/openrouter", url.Values{"kind": {"openrouter-api"}, "key": {"sk-or-v1-bad"}}, csrf)
+	if h.Get("HX-Redirect") != "" || !strings.Contains(body, "Clé refusée") {
+		t.Fatalf("a refused key replaced the stored one: %v %s", h, body)
+	}
+	if c.conf().Providers["openrouter"].Secret != secret {
+		t.Fatal("the stored key changed")
+	}
+
+	if _, b, _ := tw.post("/settings/provider-test/openrouter", url.Values{}, csrf); !strings.Contains(b, "Clé refusée") {
+		t.Fatalf("test: %s", b)
 	}
 	if h := c.providerHealth("openrouter"); h == nil || !h.Tested || h.Cause != causeAuth {
 		t.Fatalf("health = %+v", h)
 	}
-	_, body, _ = tw.do("GET", "/settings/agents?created=openrouter", nil, nil)
-	for _, want := range []string{"n&#39;a pas passé le test", "La clé a été refusée", "health-refused", "Clé refusée"} {
+	_, body, _ = tw.do("GET", "/settings/agents", nil, nil)
+	for _, want := range []string{"La clé a été refusée", "health-refused", "Clé refusée"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("agents page lacks %q", want)
 		}
@@ -278,7 +313,7 @@ func TestProviderSavedWithRefusedKey(t *testing.T) {
 	if strings.Count(body, "Clé refusée") < 2 {
 		t.Error("the account and its agent should both say so")
 	}
-	good = true
+	status = http.StatusOK
 	if _, b, _ := tw.post("/settings/provider-test/openrouter", url.Values{}, csrf); !strings.Contains(b, "La clé fonctionne") {
 		t.Fatalf("test: %s", b)
 	}
