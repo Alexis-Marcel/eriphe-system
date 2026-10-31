@@ -467,7 +467,6 @@ func readToolForm(r *http.Request) toolForm {
 // server builds the catalog entry and its credentials from the form; old
 // is the entry being edited, whose secret references stay unless replaced.
 func (f toolForm) server(r *http.Request, old *Server) (Server, credentials, error) {
-	creds := credentials{}
 	s := Server{Use: f.Use}.withLevel(f.Access)
 	if f.Use == "" {
 		return s, nil, errors.New("form.nouse")
@@ -485,100 +484,142 @@ func (f toolForm) server(r *http.Request, old *Server) (Server, credentials, err
 			oldSpec = &spec
 		}
 	}
-	switch f.Preset.Form {
-	case "mail", "calendar":
-		var spec RunSpec
-		var err error
-		env, moved := mailSecretEnv, false
-		if f.Preset.Form == "mail" {
-			if err = f.Mail.normalize(oldSpec); err == nil {
-				spec, err = f.Mail.run(oldSpec)
-			}
-			if prev, ok := mailFormOf(deref(oldSpec)); ok {
-				moved = !prev.same(f.Mail)
-			}
-		} else {
-			env = calSecretEnv
-			if err = f.Calendar.normalize(); err == nil {
-				spec, err = f.Calendar.run(oldSpec)
-			}
-			if prev, ok := calendarFormOf(deref(oldSpec)); ok {
-				moved = !prev.same(f.Calendar)
-			}
+	switch {
+	case f.Preset.Form == "mail" || f.Preset.Form == "calendar":
+		return f.accountServer(r, s, oldSpec)
+	case f.Kind == "local":
+		return f.localServer(r, s, oldSpec)
+	}
+	return f.remoteServer(r, s, old)
+}
+
+// accountServer is a mail or calendar tool: its server's run, and the
+// account's password.
+func (f toolForm) accountServer(r *http.Request, s Server, oldSpec *RunSpec) (Server, credentials, error) {
+	spec, env, moved, err := f.accountRun(oldSpec)
+	if err != nil {
+		return s, nil, err
+	}
+	// Another mailbox or calendar account: the old password is not its own.
+	pw := accountPassword(r, f)
+	if strings.TrimSpace(pw) == "" && (spec.Env[env].File == "" || moved) {
+		if moved {
+			return s, nil, errors.New("form.newpassword")
 		}
+		return s, nil, errors.New("form.nopassword")
+	}
+	s.Run = marshalRun(spec)
+	return s, credentials{"env:" + env: pw}, nil
+}
+
+// accountRun is the run of a mail or calendar tool, the variable of its
+// password, and whether it is another account than the one edited.
+func (f toolForm) accountRun(oldSpec *RunSpec) (spec RunSpec, env string, moved bool, err error) {
+	if f.Preset.Form == "mail" {
+		if err = f.Mail.normalize(oldSpec); err == nil {
+			spec, err = f.Mail.run(oldSpec)
+		}
+		if prev, ok := mailFormOf(deref(oldSpec)); ok {
+			moved = !prev.same(f.Mail)
+		}
+		return spec, mailSecretEnv, moved, err
+	}
+	if err = f.Calendar.normalize(); err == nil {
+		spec, err = f.Calendar.run(oldSpec)
+	}
+	if prev, ok := calendarFormOf(deref(oldSpec)); ok {
+		moved = !prev.same(f.Calendar)
+	}
+	return spec, calSecretEnv, moved, err
+}
+
+// localServer is a server run on a node, from its image.
+func (f toolForm) localServer(r *http.Request, s Server, oldSpec *RunSpec) (Server, credentials, error) {
+	spec := RunSpec{Image: f.Image, Transport: f.Transport, Path: f.Path, Node: f.Node,
+		Needs: words(f.Needs), Prefers: words(f.Prefers), User: f.User, Volume: f.Volume, Writable: f.Writable}
+	egress := f.Egress
+	spec.Egress = &egress
+	if f.Port != "" {
+		p, err := strconv.Atoi(f.Port)
 		if err != nil {
-			return s, nil, err
+			return s, nil, errors.New("form.badport")
 		}
-		// Another mailbox or calendar account: the old password is not its own.
-		pw := accountPassword(r, f)
-		if strings.TrimSpace(pw) == "" && (spec.Env[env].File == "" || moved) {
-			if moved {
-				return s, nil, errors.New("form.newpassword")
-			}
-			return s, nil, errors.New("form.nopassword")
-		}
-		creds["env:"+env] = pw
-		s.Run = marshalRun(spec)
-		return s, creds, nil
+		spec.Port = p
 	}
-	if f.Kind == "local" {
-		spec := RunSpec{Image: f.Image, Transport: f.Transport, Path: f.Path, Node: f.Node,
-			Needs: words(f.Needs), Prefers: words(f.Prefers), User: f.User, Volume: f.Volume, Writable: f.Writable}
-		egress := f.Egress
-		spec.Egress = &egress
-		if f.Port != "" {
-			p, err := strconv.Atoi(f.Port)
-			if err != nil {
-				return s, nil, errors.New("form.badport")
-			}
-			spec.Port = p
+	for _, a := range strings.Split(f.Args, "\n") {
+		if a = strings.TrimSpace(a); a != "" {
+			spec.Args = append(spec.Args, a)
 		}
-		for _, a := range strings.Split(f.Args, "\n") {
-			if a = strings.TrimSpace(a); a != "" {
-				spec.Args = append(spec.Args, a)
-			}
-		}
-		if spec.Transport != transportHTTP {
-			spec.Port, spec.Path = 0, ""
-		}
-		spec.Env = map[string]EnvValue{}
-		for _, e := range f.Env {
-			if !e.Secret {
-				spec.Env[e.Name] = EnvValue{Value: e.Value}
-				continue
-			}
-			value := r.PostFormValue(fmt.Sprintf("env_value_%d", e.index))
-			if strings.TrimSpace(value) != "" {
-				creds["env:"+e.Name] = value
-				spec.Env[e.Name] = EnvValue{File: "vault:pending"} // replaced by the catalog
-				continue
-			}
-			if oldSpec != nil && oldSpec.Env[e.Name].File != "" {
-				spec.Env[e.Name] = oldSpec.Env[e.Name]
-				continue
-			}
-			return s, nil, fmt.Errorf("form.nosecret")
-		}
-		s.Run = marshalRun(spec)
-		return s, creds, nil
 	}
+	if spec.Transport != transportHTTP {
+		spec.Port, spec.Path = 0, ""
+	}
+	creds := credentials{}
+	env, err := f.localEnv(r, oldSpec, creds)
+	if err != nil {
+		return s, nil, err
+	}
+	spec.Env = env
+	s.Run = marshalRun(spec)
+	return s, creds, nil
+}
+
+// localEnv is a local server's environment. A secret typed goes to creds;
+// one left empty keeps the edited server's, and is required otherwise.
+func (f toolForm) localEnv(r *http.Request, oldSpec *RunSpec, creds credentials) (map[string]EnvValue, error) {
+	env := map[string]EnvValue{}
+	for _, e := range f.Env {
+		if !e.Secret {
+			env[e.Name] = EnvValue{Value: e.Value}
+			continue
+		}
+		value := r.PostFormValue(fmt.Sprintf("env_value_%d", e.index))
+		if strings.TrimSpace(value) != "" {
+			creds["env:"+e.Name] = value
+			env[e.Name] = EnvValue{File: "vault:pending"} // replaced by the catalog
+			continue
+		}
+		if oldSpec != nil && oldSpec.Env[e.Name].File != "" {
+			env[e.Name] = oldSpec.Env[e.Name]
+			continue
+		}
+		return nil, fmt.Errorf("form.nosecret")
+	}
+	return env, nil
+}
+
+// remoteServer is a server at an address, with its authentication.
+func (f toolForm) remoteServer(r *http.Request, s Server, old *Server) (Server, credentials, error) {
 	s.URL = f.URL
 	if u, err := url.Parse(f.URL); f.URL == "" {
 		return s, nil, errors.New("form.nourl")
 	} else if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.ContainsAny(f.URL, "<>") {
 		return s, nil, errors.New("form.badurl")
 	}
+	creds := credentials{}
+	var err error
+	s.Auth, err = f.remoteAuth(r, old, creds)
+	if err != nil {
+		return s, nil, err
+	}
+	return s, creds, nil
+}
+
+// remoteAuth is a remote server's authentication, its credentials put in
+// creds. The edited server's token or OAuth client stays unless replaced.
+func (f toolForm) remoteAuth(r *http.Request, old *Server, creds credentials) (*ServerAuth, error) {
 	switch f.Auth {
 	case "bearer":
-		s.Auth = &ServerAuth{}
+		a := &ServerAuth{}
 		if old != nil && old.Auth != nil && old.Auth.BearerFile != "" {
-			s.Auth.BearerFile = old.Auth.BearerFile
+			a.BearerFile = old.Auth.BearerFile
 		}
 		tok := r.PostFormValue("token")
-		if strings.TrimSpace(tok) == "" && s.Auth.BearerFile == "" {
-			return s, nil, errors.New("form.notoken")
+		if strings.TrimSpace(tok) == "" && a.BearerFile == "" {
+			return a, errors.New("form.notoken")
 		}
 		creds["token"] = tok
+		return a, nil
 	case "oauth":
 		o := &OAuthConfig{Scopes: words(f.Scopes), ClientMetadata: f.ClientMetadata}
 		if old != nil && old.Auth != nil && old.Auth.OAuth != nil {
@@ -587,15 +628,13 @@ func (f toolForm) server(r *http.Request, old *Server) (Server, credentials, err
 		if r.PostFormValue("forget_client") != "" {
 			o.ClientIDFile, o.ClientSecretFile = "", ""
 		}
-		s.Auth = &ServerAuth{OAuth: o}
 		creds["client-id"], creds["client-secret"] = r.PostFormValue("client_id"), r.PostFormValue("client_secret")
 		if strings.TrimSpace(creds["client-secret"]) != "" && strings.TrimSpace(creds["client-id"]) == "" && o.ClientIDFile == "" {
-			return s, nil, errors.New("form.noclientid")
+			return &ServerAuth{OAuth: o}, errors.New("form.noclientid")
 		}
-	default:
-		s.Auth = &ServerAuth{None: true}
+		return &ServerAuth{OAuth: o}, nil
 	}
-	return s, creds, nil
+	return &ServerAuth{None: true}, nil
 }
 
 func (w *web) toolFormPage(rw http.ResponseWriter, r *http.Request, s *session, f toolForm) {
@@ -707,39 +746,7 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 			old = &srv
 		}
 	}
-	fail := func(err error) {
-		f.Error = w.formError(r, err)
-		if old != nil {
-			back := toolFormOf(name, *old)
-			f.TokenSet, f.ClientIDSet, f.ClientSecretSet = back.TokenSet, back.ClientIDSet, back.ClientSecretSet
-			f.OrigOAuth, f.Reauth = back.OrigOAuth, w.reauthLevels(name, *old)
-			if v, ok := w.toolAccess(w.lang(r), name); ok {
-				f.AccessView = &v
-			}
-			switch f.Preset.Form {
-			case "mail":
-				f.SecretSet = back.SecretSet && back.Mail.same(f.Mail)
-			case "calendar":
-				f.SecretSet = back.SecretSet && back.Calendar.same(f.Calendar)
-			}
-			f.Switched = !f.SecretSet && back.SecretSet
-			for i := range f.Env {
-				for _, o := range back.Env {
-					if o.Name == f.Env[i].Name && f.Env[i].Secret {
-						f.Env[i].IsSet, f.Env[i].Value = o.IsSet, ""
-					}
-				}
-			}
-		}
-		for i := range f.Env {
-			if f.Env[i].Secret {
-				f.Env[i].Value = "" // a secret is never sent back
-			}
-		}
-		f.Env = padEnv(f.Env)
-		f.Service = serviceTitle(w.lang(r), f.Preset.ID, f.URL)
-		w.render(rw, r, s, "settings", "tool-form", page{Data: f})
-	}
+	fail := func(err error) { w.toolFormAgain(rw, r, s, f, name, old, err) }
 	if mode == putUpdate && old == nil {
 		if w.c.source(kindServer, name) == sourceConfig {
 			fail(errReadOnly(kindServer, name))
@@ -766,28 +773,7 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 	plainSave := r.PostFormValue("connect") == "" && old != nil && old.authKind() == "oauth" &&
 		!slices.Contains(w.reauthLevels(name, *old), srv.level())
 	if srv.authKind() == "oauth" && srv.Auth.OAuth.RedirectURI == "" && !plainSave {
-		if !w.atAddress(rw, r) {
-			return
-		}
-		authURL, err := w.c.startPending(r.Context(), mode, name, srv, creds, w.callbackURL(r), w.oauthBinding(rw, r))
-		if err != nil {
-			fail(connectError(err))
-			return
-		}
-		log.Printf("web: tool %s pending its authorization", name)
-		if authURL == "" { // connected without one: saved
-			w.notify()
-			if f.InDialog {
-				w.toolSaved(rw, r, name, "connected")
-				return
-			}
-			authURL = "/settings/tools?connected=" + url.QueryEscape(name)
-		} else if f.InDialog {
-			w.leavingStep(rw, r, s, f, authURL)
-			return
-		}
-		rw.Header().Set("HX-Redirect", authURL)
-		rw.WriteHeader(http.StatusOK)
+		w.connectTool(rw, r, s, f, mode, name, srv, creds, fail)
 		return
 	}
 	if err := w.c.putServer(mode, name, srv, creds); err != nil {
@@ -807,6 +793,75 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 	}
 	rw.Header().Set("HX-Redirect", next)
 	rw.WriteHeader(http.StatusOK)
+}
+
+// connectTool saves an OAuth tool by signing in: it stays pending until
+// the service authorizes Eriphe, unless it connects without a consent.
+func (w *web) connectTool(rw http.ResponseWriter, r *http.Request, s *session, f toolForm, mode, name string, srv Server, creds credentials, fail func(error)) {
+	if !w.atAddress(rw, r) {
+		return
+	}
+	authURL, err := w.c.startPending(r.Context(), mode, name, srv, creds, w.callbackURL(r), w.oauthBinding(rw, r))
+	if err != nil {
+		fail(connectError(err))
+		return
+	}
+	log.Printf("web: tool %s pending its authorization", name)
+	if authURL == "" { // connected without one: saved
+		w.notify()
+		if f.InDialog {
+			w.toolSaved(rw, r, name, "connected")
+			return
+		}
+		authURL = "/settings/tools?connected=" + url.QueryEscape(name)
+	} else if f.InDialog {
+		w.leavingStep(rw, r, s, f, authURL)
+		return
+	}
+	rw.Header().Set("HX-Redirect", authURL)
+	rw.WriteHeader(http.StatusOK)
+}
+
+// toolFormAgain shows a refused tool form again, with why. On an edit, it
+// says again which secrets the tool has; a secret typed is never sent back.
+func (w *web) toolFormAgain(rw http.ResponseWriter, r *http.Request, s *session, f toolForm, name string, old *Server, err error) {
+	f.Error = w.formError(r, err)
+	if old != nil {
+		w.keepToolSecrets(r, &f, name, *old)
+	}
+	for i := range f.Env {
+		if f.Env[i].Secret {
+			f.Env[i].Value = "" // a secret is never sent back
+		}
+	}
+	f.Env = padEnv(f.Env)
+	f.Service = serviceTitle(w.lang(r), f.Preset.ID, f.URL)
+	w.render(rw, r, s, "settings", "tool-form", page{Data: f})
+}
+
+// keepToolSecrets marks, on the form of an edit, the secrets the tool
+// already has, and its access and sign-in state.
+func (w *web) keepToolSecrets(r *http.Request, f *toolForm, name string, old Server) {
+	back := toolFormOf(name, old)
+	f.TokenSet, f.ClientIDSet, f.ClientSecretSet = back.TokenSet, back.ClientIDSet, back.ClientSecretSet
+	f.OrigOAuth, f.Reauth = back.OrigOAuth, w.reauthLevels(name, old)
+	if v, ok := w.toolAccess(w.lang(r), name); ok {
+		f.AccessView = &v
+	}
+	switch f.Preset.Form {
+	case "mail":
+		f.SecretSet = back.SecretSet && back.Mail.same(f.Mail)
+	case "calendar":
+		f.SecretSet = back.SecretSet && back.Calendar.same(f.Calendar)
+	}
+	f.Switched = !f.SecretSet && back.SecretSet
+	for i := range f.Env {
+		for _, o := range back.Env {
+			if o.Name == f.Env[i].Name && f.Env[i].Secret {
+				f.Env[i].IsSet, f.Env[i].Value = o.IsSet, ""
+			}
+		}
+	}
 }
 
 func (w *web) handleDeleteTool(rw http.ResponseWriter, r *http.Request, s *session) {
