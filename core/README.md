@@ -720,7 +720,7 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 
 | Kind | `ref` | Access | What the task gets |
 |---|---|---|---|
-| `repo` | `owner/name` on GitHub, or a git URL; `branch` (work branch), `base` (start), `dir` | `read`, `write` | cloned into `/work/repo`; [credentials](#credentials-on-demand) for it; one per task |
+| `repo` | `owner/name` on GitHub, or a git URL; `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` | cloned into `/work/repo`; [credentials](#credentials-on-demand) for it; its skills if it is the user's own or trusted (below); one per task |
 | `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop` (at most the folder's own) | mounted at `/work/folders/<name>`; the task runs on its machine |
 | `drive-folder` | a Google Drive folder, by name | `read`, `drop` (at most the folder's own) | for now, the files server whole (it reaches every Drive folder given to Eriphe, each with its own access) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
@@ -735,9 +735,18 @@ task (`tasks.resources`, JSON; empty for tasks from before it); the old columns 
 `dir`) are still written, and the node still gets its spec fields (`repo`, `folders`…), derived from
 the list.
 
+**A repository's skills** (`.claude/skills`, `.agents/skills`, `.opencode/skills`: instructions
+and scripts its agents load by themselves) load only from the user's own repositories
+(`repo_skills.go`): with the GitHub App, one it is installed on; without it, one the GitHub tool's
+token may push to. Anything else (another host, someone else's repository, GitHub not reachable)
+keeps them off, unless the entry says `"trust_skills": true`. The node gets the answer as the
+spec's `repo_skills` and turns them off per agent (node/README.md, Agent skills); whatever loads,
+a skill never approves a tool by itself.
+
 **On a tainted turn** (the brain read external content), `run_task` refuses any `write` or `drop`
-entry, tools that may act, a Drive folder (its files server is lent whole for now) and any legacy
-`identities`: the brain asks the user and starts the task in the turn of their answer. Reads still go.
+entry, `trust_skills`, tools that may act, a Drive folder (its files server is lent whole for now)
+and any legacy `identities`: the brain asks the user and starts the task in the turn of their
+answer. Reads still go.
 
 ## Credentials on demand
 

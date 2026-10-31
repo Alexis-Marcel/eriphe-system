@@ -43,6 +43,7 @@ func TestNormalizeResources(t *testing.T) {
 		"takes access read or write": {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Access: "drop"}}},
 		"takes access read, not":     {Resources: []ResourceRef{{Kind: "file", Ref: "att_x", Access: "write"}}},
 		"a repo's only":              {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", Branch: "x"}}},
+		"trust_skills are a repo":    {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", TrustSkills: true}}},
 		"one repository per task":    {Repo: "o/a", Resources: []ResourceRef{{Kind: "repo", Ref: "o/b"}}},
 		"not a branch name":          {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Branch: "--force"}}},
 		"inside the repository":      {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Dir: "../etc"}}},
@@ -315,6 +316,7 @@ func TestTaintedResources(t *testing.T) {
 		{Tools: []string{"github"}},
 		{Tools: []string{"notes"}}, // read-only by its word, not believed
 		{Resources: []ResourceRef{{Kind: resDriveFolder, Ref: "Factures"}}},
+		{Resources: []ResourceRef{{Kind: resRepo, Ref: "someone/tool", TrustSkills: true}}},
 	}
 	allowed := []runRequest{
 		{},

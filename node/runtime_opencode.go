@@ -36,6 +36,9 @@ func opencodeSetup(t *Task) map[string]string {
 	// Its page reads are asked, so that eriphe-core decides each; its web
 	// search, through a third party (Exa or Parallel), is off for now.
 	permission := map[string]string{"edit": "ask", "bash": "ask", "webfetch": "ask", "websearch": "deny"}
+	if t.Spec.NoAgentMemory {
+		permission["skill"] = "deny" // the brain loads no skill of its own (skills.go)
+	}
 	for k, v := range opencodeMCPPermissions(t) {
 		permission[k] = v
 	}
@@ -98,6 +101,11 @@ func opencodeSetup(t *Task) map[string]string {
 	if t.Spec.NoAgentMemory {
 		// Neither ~/.claude/CLAUDE.md nor Claude Code's skills.
 		env["OPENCODE_DISABLE_CLAUDE_CODE"] = "1"
+	}
+	if repoSkillsOff(t.Spec) {
+		// No .claude/skills nor .agents/skills, the repository's or the
+		// home's; its .opencode/skills are off with its configuration.
+		env["OPENCODE_DISABLE_EXTERNAL_SKILLS"] = "1"
 	}
 	return env
 }

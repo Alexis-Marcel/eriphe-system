@@ -359,6 +359,17 @@ func (n *node) injectedMounts(t *Task) ([]string, error) {
 				return nil, err
 			}
 			args = append(args, mount...)
+			for sub, target := range runSubMounts {
+				dir := filepath.Join(runDir(t), sub)
+				if _, err := os.Stat(dir); err != nil {
+					continue
+				}
+				mount, err := n.readOnlyMount(dir, target)
+				if err != nil {
+					return nil, err
+				}
+				args = append(args, mount...)
+			}
 		}
 	}
 	return args, nil

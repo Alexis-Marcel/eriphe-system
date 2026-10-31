@@ -83,6 +83,14 @@ func testNoSecrets(t *testing.T, engine, rt string) {
 		if !hasSeq(args, "--mount", mount) {
 			t.Errorf("run files not mounted read-only (%s): %v", mount, args)
 		}
+		managed := filepath.Join(dir, claudeManaged)
+		mount = mountSpec("type=bind", "src="+managed, "dst="+claudeManagedMount, "readonly")
+		if engine == engineContainer {
+			mount = "type=bind,source=" + managed + ",target=" + claudeManagedMount + ",readonly"
+		}
+		if !hasSeq(args, "--mount", mount) {
+			t.Errorf("managed settings not mounted read-only (%s): %v", mount, args)
+		}
 		for _, want := range [][]string{{"--mcp-config", runPath(claudeMCP)}, {"--settings", runPath(claudeSettings)},
 			{"--append-system-prompt-file", runPath(claudePrompt)}} {
 			if !hasSeq(args, want...) {
@@ -129,10 +137,17 @@ func TestWriteRunFiles(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(runDir(task), "old")); !os.IsNotExist(err) {
 		t.Error("an earlier run's file is left")
 	}
-	for _, bad := range []string{"../x", "a/b", "..", "."} {
+	for _, bad := range []string{"../x", "a/b/c", "a/..", "/x", "a/", "..", "."} {
 		if err := writeRunFiles(task, map[string][]byte{bad: nil}); err == nil {
 			t.Errorf("%q written", bad)
 		}
+	}
+	// One subdirectory, of the node's own.
+	if err := writeRunFiles(task, map[string][]byte{"sub/f": []byte("z")}); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(filepath.Join(runDir(task), "sub")); err != nil || runtime.GOOS != "windows" && fi.Mode().Perm() != 0o700 {
+		t.Errorf("subdirectory: %v, %v", fi, err)
 	}
 	if err := writeRunFiles(task, nil); err != nil {
 		t.Fatal(err)

@@ -69,6 +69,9 @@ type ResourceRef struct {
 	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create; with access write, the first push to it needs no approval"`
 	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
 	Dir    string `json:"dir,omitempty" jsonschema:"repo: the working directory inside the repository, if not its root"`
+	// TrustSkills loads the agent skills a repository carries even when it
+	// is not the user's own (repo_skills.go).
+	TrustSkills bool `json:"trust_skills,omitempty" jsonschema:"repo: also load the agent skills the repository carries (.claude/skills, .agents/skills, .opencode/skills) when it is not the user's own; the user's own repositories load theirs anyway. Only for a repository the user said they trust"`
 }
 
 // key tells two entries for the same thing apart from different ones.
@@ -97,7 +100,8 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 	for i, in := range r.Resources {
 		e := ResourceRef{Kind: strings.ToLower(strings.TrimSpace(in.Kind)), Ref: strings.TrimSpace(in.Ref),
 			Access: strings.ToLower(strings.TrimSpace(in.Access)),
-			Branch: strings.TrimSpace(in.Branch), Base: strings.TrimSpace(in.Base), Dir: strings.TrimSpace(in.Dir)}
+			Branch: strings.TrimSpace(in.Branch), Base: strings.TrimSpace(in.Base), Dir: strings.TrimSpace(in.Dir),
+			TrustSkills: in.TrustSkills}
 		rights, ok := resourceKinds[e.Kind]
 		if !ok {
 			return nil, fmt.Errorf("resource %d: kind %q is not one of repo, folder, drive-folder, tool, file", i+1, in.Kind)
@@ -108,8 +112,8 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 		if e.Access != "" && !slices.Contains(rights, e.Access) {
 			return nil, fmt.Errorf("resource %s: a %s takes access %s, not %q", e.Ref, e.Kind, strings.Join(rights, " or "), e.Access)
 		}
-		if e.Kind != resRepo && (e.Branch != "" || e.Base != "" || e.Dir != "") {
-			return nil, fmt.Errorf("resource %s: branch, base and dir are a repo's only", e.Ref)
+		if e.Kind != resRepo && (e.Branch != "" || e.Base != "" || e.Dir != "" || e.TrustSkills) {
+			return nil, fmt.Errorf("resource %s: branch, base, dir and trust_skills are a repo's only", e.Ref)
 		}
 		if e.Access == "" && e.Kind != resTool {
 			e.Access = accessRead // least privilege; a tool's comes from its annotations
@@ -235,6 +239,7 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 			if accessRank[e.Access] > accessRank[out.List[i].Access] {
 				out.List[i].Access = e.Access
 			}
+			out.List[i].TrustSkills = out.List[i].TrustSkills || e.TrustSkills
 		} else {
 			out.List = append(out.List, e)
 		}
@@ -325,6 +330,11 @@ func (c *core) taintedResources(r runRequest) error {
 	}
 	var writes, acting []string
 	for _, e := range lent.List {
+		if e.TrustSkills {
+			// A repository's skills are instructions and scripts: trusting
+			// them is the user's call, not a turn's that read someone else's words.
+			return refuse("the skills of " + e.Ref + " (trust_skills)")
+		}
 		switch {
 		case e.Access == accessWrite || e.Access == accessDrop:
 			writes = append(writes, e.String())
