@@ -141,7 +141,7 @@ func (c *core) updateNodes() int {
 		info := parseInfo(row)
 		m := "node:" + row.Name
 		if !info.Update.Updater || c.pendingUpdate(m) != nil ||
-			!c.updates.behind("eriphe-node", info.Version) && sameVersion(info.Version, version) {
+			!c.updates.behind("eriphe-node", info.Version) && !nodeBehindCore(info.Version, version) {
 			continue
 		}
 		if _, err := c.requestUpdate(m, "update", false); err != nil {
@@ -251,6 +251,28 @@ func newUpdateID() string {
 // the releases): a local one (dev) never asks for an update.
 func sameVersion(node, core string) bool {
 	return node == core || !publishedVersion(node) || !publishedVersion(core)
+}
+
+// nodeBehindCore tells whether a node runs an older build than
+// eriphe-core's, which it then goes to: never a newer one (a node updated
+// before eriphe-core), which would be a downgrade. Two builds of main of the
+// same version cannot be ordered: the node follows eriphe-core's.
+func nodeBehindCore(node, core string) bool {
+	if sameVersion(node, core) {
+		return false
+	}
+	if legacyVersion(node) {
+		return true
+	}
+	if legacyVersion(core) {
+		return false
+	}
+	n, ok := parseVersion(node)
+	c, ok2 := parseVersion(core)
+	if !ok || !ok2 {
+		return false
+	}
+	return n.compare(c) <= 0
 }
 
 // requestUpdate asks a machine's updater to update (to the latest version,
@@ -427,7 +449,7 @@ func (c *core) autoUpdates(now time.Time) {
 	}
 	for _, n := range nodes {
 		info := parseInfo(n)
-		if !n.Online || !info.Update.Updater || info.Update.Pin != "" || sameVersion(info.Version, version) {
+		if !n.Online || !info.Update.Updater || info.Update.Pin != "" || !nodeBehindCore(info.Version, version) {
 			continue
 		}
 		if active, err := c.store.activeCount(n.Name); err != nil || active > 0 {

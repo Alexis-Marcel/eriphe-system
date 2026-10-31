@@ -41,6 +41,12 @@ func main() {
 		joinTokenCommand(os.Args[2:])
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "remote-address" {
+		if err := remoteAddressCommand(os.Stdout, os.Args[2:]); err != nil {
+			log.Fatal(err) // remote.go
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "auth" {
 		authCommand(os.Args[2:]) // web_signin.go
 		return

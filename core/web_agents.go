@@ -6,6 +6,7 @@ import (
 	"log"
 	"maps"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"path"
 	"regexp"
@@ -908,8 +909,36 @@ func (w *web) checkSelfHostedForm(r *http.Request, lang, where, base, node, key 
 	if where == whereNode {
 		return w.c.checkNodeModel(r.Context(), lang, node, key)
 	}
-	return checkSelfHosted(r.Context(), lang, base, key)
+	v := checkSelfHosted(r.Context(), lang, base, key)
+	if v.State == "err" && v.Cause == causeNetwork && tailnetURL(base) {
+		// eriphe-core's own calls (and its tasks') do not go through the
+		// built-in Tailscale: it only receives. Say so, rather than a
+		// bare "unreachable".
+		key := "ptest.tailnetnoroute"
+		if rv, ok := w.c.remote.ready(); ok || rv.Enabled {
+			key = "ptest.tailnetbuiltin"
+		}
+		v.Text = tr(lang, key)
+	}
+	return v
 }
+
+// tailnetURL tells whether a model server's address is on a tailnet: a
+// Tailscale address (100.64.0.0/10) or a MagicDNS name (….ts.net).
+func tailnetURL(base string) bool {
+	u, err := url.Parse(base)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	if strings.HasSuffix(host, ".ts.net") {
+		return true
+	}
+	a, err := netip.ParseAddr(host)
+	return err == nil && tailnetPrefix.Contains(a.Unmap())
+}
+
+var tailnetPrefix = netip.MustParsePrefix("100.64.0.0/10")
 
 // handleTestProvider tries the key of the form (POST /settings/provider-test),
 // or the stored one of a provider (POST /settings/provider-test/{name})

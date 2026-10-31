@@ -107,6 +107,14 @@ func (t *tsNet) GetCertificate(hi *tls.ClientHelloInfo) (*tls.Certificate, error
 	return t.lc.GetCertificate(hi)
 }
 
+func (t *tsNet) PrepareCert(ctx context.Context, domain string) error {
+	if t.lc == nil {
+		return errNotStarted
+	}
+	_, _, err := t.lc.CertPair(ctx, domain)
+	return err
+}
+
 func (t *tsNet) StartLogin(ctx context.Context) error {
 	if t.lc == nil {
 		return errNotStarted

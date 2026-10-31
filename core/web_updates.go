@@ -55,7 +55,7 @@ func (w *web) updatesData(nodes []NodeRow) updatesData {
 			Manual: manualUpdate(nodeInstall(n, info))}
 		if c.updates.behind("eriphe-node", info.Version) {
 			row.Latest = c.updates.version("eriphe-node")
-		} else if !coreBehind && c.updates.version("eriphe-core") != "" && !sameVersion(info.Version, version) {
+		} else if !coreBehind && c.updates.version("eriphe-core") != "" && nodeBehindCore(info.Version, version) {
 			row.Latest = version // eriphe-core's, the latest: where the node goes
 		}
 		d.add(row)

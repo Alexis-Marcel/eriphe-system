@@ -15,7 +15,7 @@
 <ol class="remote-steps" aria-label="{{t "remote.steps"}}">
   {{$p := .Phase}}
   <li class="{{if or (eq $p "login") (eq $p "approval") (eq $p "starting")}}is-current{{else}}is-done{{end}}"><b>1</b><span>{{t "remote.step.login"}}</span></li>
-  <li class="{{if eq $p "https"}}is-current{{else if eq $p "ready"}}is-done{{end}}"><b>2</b><span>{{t "remote.step.https"}}</span></li>
+  <li class="{{if or (eq $p "https") (eq $p "cert")}}is-current{{else if eq $p "ready"}}is-done{{end}}"><b>2</b><span>{{t "remote.step.https"}}</span></li>
   <li class="{{if eq $p "ready"}}is-current{{end}}"><b>3</b><span>{{t "remote.step.phone"}}</span></li>
 </ol>
 {{end}}
@@ -32,7 +32,7 @@
 <section class="panel remote-hero" aria-labelledby="remote-off-title">
   <span class="remote-art" aria-hidden="true">{{template "i-globe"}}</span>
   <h3 id="remote-off-title">{{t "remote.off.title"}}</h3>
-  <p class="muted">{{if .Exposed}}{{t "remote.off.exposedlead"}}{{else}}{{t "remote.off.lead"}}{{end}}</p>
+  <p class="muted">{{if .Exposed}}{{t "remote.off.exposedlead"}}{{else if .Loopback}}{{t "remote.off.looplead"}}{{else}}{{t "remote.off.lead"}}{{end}}</p>
   <ul class="remote-points">
     <li>{{template "i-shield"}}<span>{{if .Exposed}}{{t "remote.point.privateexposed"}}{{else}}{{t "remote.point.private"}}{{end}}</span></li>
     <li>{{template "i-lock"}}<span>{{t "remote.point.https"}}</span></li>
@@ -99,6 +99,13 @@
     <p class="muted small">{{t "remote.live"}}</p>
   </div>
 
+  {{else if eq .Phase "cert"}}
+  <div class="remote-step">
+    <h4>{{t "remote.cert.title"}}</h4>
+    <p class="remote-wait"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>{{tf "remote.cert.lead" .Name}}</p>
+    <p class="muted small">{{t "remote.live"}}</p>
+  </div>
+
   {{else if eq .Phase "ready"}}
   <div class="remote-ready">
     <div class="remote-address">
@@ -151,7 +158,7 @@
   <form class="stack-form" hx-post="/settings/remote/advanced" hx-target="#remote-advanced-result">
     <label class="field"><span>{{t "remote.hostname"}}</span>
       <input type="text" name="hostname" value="{{.Hostname}}" pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" autocomplete="off" spellcheck="false" class="mono">
-      <small>{{t "remote.hostnamehint"}}</small></label>
+      <small>{{tf "remote.hostnamehint" .Hostname}}</small></label>
     <label class="field"><span>{{t "remote.control"}}</span>
       <input type="url" name="control_url" value="{{.ControlURL}}" placeholder="https://headscale.example.org" autocomplete="off" spellcheck="false" class="mono">
       <small>{{t "remote.controlhint"}}</small></label>
@@ -164,14 +171,15 @@
   </form>
   <div class="remote-danger">
     <div><b>{{t "remote.logout"}}</b><p class="muted small">{{t "remote.logoutlead"}}</p></div>
-    <form hx-post="/settings/remote/logout" hx-confirm="{{t "remote.logoutconfirm"}}" class="inline">
+    <form hx-post="/settings/remote/logout" hx-confirm="{{t "remote.logoutconfirm"}}" hx-target="#remote-logout-result" hx-disabled-elt="find button" class="inline">
       <button class="btn btn-danger-ghost sm" type="submit">{{t "remote.logout"}}</button>
     </form>
   </div>
+  <div id="remote-logout-result"></div>
 </details>
 {{end}}{{end}}
 
-{{define "remote-advanced-result"}}<p class="{{if .Data.OK}}ok-note{{else}}alert{{end}}" role="status">{{t .Data.Msg}}</p>{{end}}
+{{define "remote-advanced-result"}}<p class="{{if .Data.OK}}ok-note{{else}}alert{{end}}" role="status">{{with .Data.Text}}{{.}}{{else}}{{t .Data.Msg}}{{end}}</p>{{end}}
 
 {{define "join-via"}}{{if .}}
 <fieldset class="choices span-all">

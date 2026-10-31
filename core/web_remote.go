@@ -38,6 +38,21 @@ type remotePage struct {
 	QR       template.HTML
 	HasVault bool
 	Exposed  string // the public address this page was reached at, or from: the workspace is on the internet
+	Loopback bool   // the page was opened at 127.0.0.1: on Eriphe's machine, or through an SSH tunnel
+}
+
+// loopbackAt tells whether r reached the workspace at a loopback address
+// (127.0.0.1, localhost): on its own machine, or through an SSH tunnel.
+func (w *web) loopbackAt(r *http.Request) bool {
+	u, err := url.Parse(w.signin().requestOrigin(r))
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(u.Hostname(), "localhost") {
+		return true
+	}
+	a, ok := hostAddr(u.Hostname())
+	return ok && a.IsLoopback()
 }
 
 // exposedAt is the public address r reached the workspace at (the address
@@ -61,7 +76,7 @@ func (w *web) exposedAt(r *http.Request) string {
 }
 
 func (w *web) remotePage(r *http.Request) remotePage {
-	p := remotePage{HasVault: currentVault() != nil, Exposed: w.exposedAt(r)}
+	p := remotePage{HasVault: currentVault() != nil, Exposed: w.exposedAt(r), Loopback: w.loopbackAt(r)}
 	if w.c.remote == nil {
 		return p
 	}
@@ -194,8 +209,21 @@ func (w *web) handleRemoteLogout(rw http.ResponseWriter, r *http.Request, s *ses
 		w.toast(rw, tr(w.lang(r), "remote.unavailable"), false)
 		return
 	}
-	if err := w.c.remote.logout(r.Context()); err != nil {
+	err := w.c.remote.logout(r.Context())
+	if err != nil {
 		log.Printf("web: remote: logout: %v", err)
+	}
+	msg := func(text string) {
+		w.render(rw, r, s, "settings", "remote-advanced-result", page{Data: map[string]any{"Text": text, "OK": false}})
+	}
+	switch {
+	case errors.Is(err, errLogoutUnconfirmed):
+		// Forgotten here, but maybe still listed in the tailnet: say where to remove it.
+		msg(trf(w.lang(r), "remote.logoutunconfirmed", w.c.remote.current().Hostname))
+		return
+	case err != nil:
+		msg(tr(w.lang(r), "err.internal"))
+		return
 	}
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)
@@ -230,16 +258,39 @@ func (w *web) awayCoreURLs() []string {
 // first request: the local address says https:// (the join token never
 // crosses in clear), on the same port.
 func (w *web) joinCoreURL(r *http.Request, via string) string {
+	lan, away := w.joinAddresses(r)
+	switch {
+	case lan == "" || via == "remote" && len(away) > 0:
+		return strings.Join(away, ",")
+	case len(away) == 0 || via == "lan":
+		return lan
+	}
+	return lan + "," + strings.Join(away, ",")
+}
+
+// lanCoreURL is the address the page was opened at, as a join command
+// gives it: in https:// with the machines' CA.
+func (w *web) lanCoreURL(r *http.Request) string {
 	lan := w.coreURL(r)
-	away := slices.DeleteFunc(w.awayCoreURLs(), func(u string) bool { return u == lan })
 	if rest, ok := strings.CutPrefix(lan, "http://"); ok && w.c.caHash() != "" {
 		lan = "https://" + rest
 	}
-	switch {
-	case len(away) == 0 || via == "lan":
-		return lan
-	case via == "remote":
-		return strings.Join(away, ",")
+	return lan
+}
+
+// joinAddresses are the local address and the ones away from home, for a
+// join command. The page opened at an address away from home (the
+// tailnet's), there is no distinct local one: lan is empty.
+func (w *web) joinAddresses(r *http.Request) (lan string, away []string) {
+	lan, away = w.lanCoreURL(r), w.awayCoreURLs()
+	host := func(raw string) string {
+		if u, err := url.Parse(raw); err == nil {
+			return strings.ToLower(u.Hostname())
+		}
+		return raw
 	}
-	return lan + "," + strings.Join(away, ",")
+	if slices.ContainsFunc(away, func(u string) bool { return host(u) == host(lan) }) {
+		return "", away
+	}
+	return lan, away
 }

@@ -36,7 +36,10 @@ const (
 	registryOwner  = "alexis-marcel"
 	versionLabel   = "org.opencontainers.image.version"
 	updateEvery    = time.Hour
-	checkNowEvery  = time.Minute // a check asked from the workspace, at most
+	updateTick     = 5 * time.Minute  // how often run looks whether a check is due
+	updateRetry    = 5 * time.Minute  // after a failed check
+	updateStale    = 15 * time.Minute // Settings → Devices opened: checked again in the background
+	checkNowEvery  = time.Minute      // a check asked from the workspace, at most
 	updateTimeout  = 10 * time.Second
 	maxRegistryDoc = 1 << 20
 )
@@ -53,6 +56,8 @@ type updates struct {
 	failed bool              // the last check failed (logged once)
 	at     time.Time         // when the last check ended
 	asked  time.Time         // when the workspace last asked for one (checkNow)
+	// refreshing: a background check of refreshStale is under way.
+	refreshing bool
 }
 
 func newUpdates(base string) *updates {
@@ -60,19 +65,59 @@ func newUpdates(base string) *updates {
 		latest: map[string]string{}}
 }
 
-// run checks at start, without holding it up, then every hour.
+// run checks at start, without holding it up, then every hour (every five
+// minutes after a failure). The hour is the wall clock's: a ticker of an
+// hour stalls while the machine (a VM, WSL) sleeps, and the answer would
+// stay hours old.
 func (u *updates) run(ctx context.Context) {
 	u.check(ctx)
-	t := time.NewTicker(updateEvery)
+	t := time.NewTicker(updateTick)
 	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			u.check(ctx)
+			if u.due(time.Now()) {
+				u.check(ctx)
+			}
 		}
 	}
+}
+
+// due tells whether a check is due at now.
+func (u *updates) due(now time.Time) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	every := updateEvery
+	if u.failed {
+		every = updateRetry
+	}
+	return u.at.IsZero() || now.Round(0).Sub(u.at.Round(0)) >= every
+}
+
+// refreshStale checks again in the background when the last answer is
+// older than updateStale (Settings → Devices opened): a release published
+// since shows at the next visit, without waiting for the hour.
+func (u *updates) refreshStale(ctx context.Context) {
+	if u == nil {
+		return
+	}
+	u.mu.Lock()
+	stale := !u.at.IsZero() && time.Now().Round(0).Sub(u.at.Round(0)) >= updateStale && !u.refreshing
+	if stale {
+		u.refreshing = true
+	}
+	u.mu.Unlock()
+	if !stale {
+		return
+	}
+	go func() {
+		u.check(ctx)
+		u.mu.Lock()
+		u.refreshing = false
+		u.mu.Unlock()
+	}()
 }
 
 func (u *updates) check(ctx context.Context) {

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 )
 
@@ -568,5 +569,34 @@ func TestWebBrainAgent(t *testing.T) {
 	}
 	if _, _, h := tw.post("/settings/brain-agent", url.Values{"agent": {"nobody"}}, csrf); h.Get("HX-Redirect") != "" || c.conf().brain().Agent != other {
 		t.Fatalf("an unknown agent taken: %q", c.conf().brain().Agent)
+	}
+}
+
+// A model server at a Tailscale address that eriphe-core cannot reach: the
+// built-in remote access only receives, and the error says so.
+func TestSelfHostedTailnetAddress(t *testing.T) {
+	selfHostedDial = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return nil, &net.OpError{Op: "dial", Net: network, Err: syscall.EHOSTUNREACH}
+	}
+	t.Cleanup(func() { selfHostedDial = nil })
+	tw, _, csrf := catalogWeb(t, noAgents)
+	try := func(base string) string {
+		_, body, _ := tw.post("/settings/provider-test", url.Values{"kind": {selfHostedKind}, "where": {"address"}, "base_url": {base}}, csrf)
+		return body
+	}
+	if b := try("http://100.101.102.103:11434/v1"); !strings.Contains(b, "pas de route vers ton réseau Tailscale") || !strings.Contains(b, "Sur un de mes appareils") {
+		t.Errorf("tailnet address, no route: %s", b)
+	}
+	h := newRemoteHarness(t, "")
+	tw.c.remote = h.r
+	h.r.enable()
+	if b := try("http://pc.tail1234.ts.net:11434/v1"); !strings.Contains(b, "ne fait que recevoir") {
+		t.Errorf("tailnet name, built-in remote access: %s", b)
+	}
+	if b := try("http://192.168.1.10:11434/v1"); strings.Contains(b, "Tailscale") {
+		t.Errorf("LAN address: %s", b)
+	}
+	if !tailnetURL("http://100.64.0.1/v1") || tailnetURL("http://100.128.0.1/v1") || tailnetURL("https://llm.example.org/v1") {
+		t.Error("tailnetURL")
 	}
 }

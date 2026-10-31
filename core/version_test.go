@@ -158,3 +158,25 @@ func TestNodeUpdateRequestLegacyNode(t *testing.T) {
 		t.Errorf("new node: %+v", u)
 	}
 }
+
+func TestNodeBehindCore(t *testing.T) {
+	for _, c := range []struct {
+		node, core string
+		behind     bool
+	}{
+		{"0.1.0", "0.1.0", false},
+		{"0.1.0", "0.2.0", true},
+		{"0.2.0", "0.1.0", false}, // updated before eriphe-core: no downgrade
+		{"0.2.0-dev+aaaaaaa", "0.1.0", false},
+		{"0.1.0-dev+aaaaaaa", "0.1.0", true},
+		{"0.1.0-dev+aaaaaaa", "0.1.0-dev+bbbbbbb", true}, // cannot be ordered: follow eriphe-core
+		{"sha-d06ac28", "0.1.0", true},
+		{"0.1.0", "sha-d06ac28", false},
+		{"dev", "0.1.0", false},
+		{"0.1.0", "dev", false},
+	} {
+		if got := nodeBehindCore(c.node, c.core); got != c.behind {
+			t.Errorf("nodeBehindCore(%q, %q) = %t", c.node, c.core, got)
+		}
+	}
+}

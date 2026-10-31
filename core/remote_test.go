@@ -35,6 +35,9 @@ type fakeTailnet struct {
 	started   bool
 	closed    bool
 	loggedOut bool
+	logoutErr error
+	certFor   []string      // the domains PrepareCert was asked for
+	certGate  chan struct{} // when set, PrepareCert waits for it
 	cert      tls.Certificate
 	lns       map[string]net.Listener
 }
@@ -86,6 +89,21 @@ func (f *fakeTailnet) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, er
 	return &f.cert, nil
 }
 
+func (f *fakeTailnet) PrepareCert(ctx context.Context, domain string) error {
+	f.mu.Lock()
+	f.certFor = append(f.certFor, domain)
+	gate := f.certGate
+	f.mu.Unlock()
+	if gate != nil {
+		select {
+		case <-gate:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
 func (f *fakeTailnet) StartLogin(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -97,7 +115,7 @@ func (f *fakeTailnet) Logout(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.loggedOut = true
-	return nil
+	return f.logoutErr
 }
 
 func (f *fakeTailnet) Close() error {
@@ -171,7 +189,7 @@ func (h *remoteHarness) newRemote(api http.Handler) *remoteAccess {
 		defer h.mu.Unlock()
 		f := &fakeTailnet{opts: o, cert: cert, st: tsStatus{Backend: "NeedsLogin", AuthURL: "https://login.tailscale.com/a/abc123"}}
 		if h.next != nil {
-			f.st, f.https, f.httpsURL = h.next.st, h.next.https, h.next.httpsURL
+			f.st, f.https, f.httpsURL, f.certGate, f.logoutErr = h.next.st, h.next.https, h.next.httpsURL, h.next.certGate, h.next.logoutErr
 		}
 		h.fakes = append(h.fakes, f)
 		return f, nil
@@ -463,6 +481,117 @@ func TestRemoteLogout(t *testing.T) {
 	}
 	if raw := h.store.get(remoteKey); !strings.Contains(raw, `"enabled":false`) {
 		t.Fatalf("stored: %s", raw)
+	}
+}
+
+// Logging out while remote access is off starts tsnet on the saved state,
+// without the auth key, to log out at the coordination server; the saved
+// key goes too.
+func TestRemoteLogoutWhileOff(t *testing.T) {
+	h := newRemoteHarness(t, "")
+	key := "tskey-auth-abc"
+	h.r.authKey = func() string { return key }
+	forgot := 0
+	h.r.forgetKey = func() error { forgot++; key = ""; return nil }
+	h.r.enable()
+	h.phase(phaseLogin)
+	if o := h.fake().opts; o.AuthKey != "tskey-auth-abc" {
+		t.Fatalf("no key for a new identity: %+v", o)
+	}
+	// tsnet saved its state, not logged in yet: the key is still given.
+	os.WriteFile(filepath.Join(h.r.dir, remoteStateFile), []byte("{}"), 0o600)
+	h.r.retry()
+	h.phase(phaseLogin)
+	if o := h.fake().opts; o.AuthKey != "tskey-auth-abc" {
+		t.Fatalf("no key before the first login: %+v", o)
+	}
+	// Logged in: the key is not given again.
+	h.fake().set(func(f *fakeTailnet) { f.st = running(false, time.Time{}) })
+	h.phase(phaseHTTPS)
+	h.wait("joined", func(remoteView) bool { return strings.Contains(h.store.get(remoteKey), `"joined":true`) })
+	h.r.retry()
+	h.phase(phaseLogin)
+	if o := h.fake().opts; o.AuthKey != "" {
+		t.Fatalf("key given with a saved identity: %+v", o)
+	}
+	if err := h.r.disable(); err != nil {
+		t.Fatal(err)
+	}
+	before := len(h.fakes)
+	if err := h.r.logout(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.fakes) != before+1 {
+		t.Fatalf("tsnet not started to log out: %d tailnets", len(h.fakes))
+	}
+	f := h.fake()
+	if !f.started || !f.loggedOut || !f.closed || f.opts.AuthKey != "" {
+		t.Fatalf("logout while off: %+v", f)
+	}
+	if _, err := os.Stat(h.r.dir); !os.IsNotExist(err) {
+		t.Fatalf("state kept: %v", err)
+	}
+	if forgot != 1 {
+		t.Fatalf("auth key forgotten %d times", forgot)
+	}
+	if v := h.r.current(); v.Phase != phaseOff || v.Enabled {
+		t.Fatalf("after logout: %+v", v)
+	}
+	// Nothing saved: nothing to start.
+	if err := h.r.logout(context.Background()); err != nil || len(h.fakes) != before+1 {
+		t.Fatalf("logout without state: %v, %d tailnets", err, len(h.fakes))
+	}
+}
+
+// A logout the coordination server does not confirm still forgets the
+// identity, and says so.
+func TestRemoteLogoutUnconfirmed(t *testing.T) {
+	h := newRemoteHarness(t, "")
+	h.next = &fakeTailnet{st: tsStatus{Backend: "NeedsLogin"}, logoutErr: errors.New("no route to the control server")}
+	h.r.enable()
+	h.phase(phaseLogin)
+	err := h.r.logout(context.Background())
+	if !errors.Is(err, errLogoutUnconfirmed) {
+		t.Fatalf("unconfirmed logout: %v", err)
+	}
+	if _, err := os.Stat(h.r.dir); !os.IsNotExist(err) {
+		t.Fatalf("state kept: %v", err)
+	}
+}
+
+// Ready is said once the certificate is there: the first visit does not
+// wait for its issue.
+func TestRemoteCertBeforeReady(t *testing.T) {
+	h := newRemoteHarness(t, "")
+	h.r.setWorkspace(http.NotFoundHandler())
+	gate := make(chan struct{})
+	h.next = &fakeTailnet{st: running(true, time.Time{}), certGate: gate}
+	h.r.enable()
+	v := h.phase(phaseCert)
+	if v.Listening || v.Name != testTSName {
+		t.Fatalf("cert phase: %+v", v)
+	}
+	time.Sleep(30 * time.Millisecond)
+	f := h.fake()
+	f.set(func(f *fakeTailnet) {
+		if len(f.certFor) != 1 || f.certFor[0] != testTSName {
+			t.Errorf("certificate asked for %v", f.certFor)
+		}
+	})
+	if v := h.r.current(); v.Phase != phaseCert {
+		t.Fatalf("ready before the certificate: %+v", v)
+	}
+	close(gate)
+	h.wait("ready and listening", func(v remoteView) bool { return v.Phase == phaseReady && v.Listening })
+	// Its name is kept for the installers.
+	var buf strings.Builder
+	h.r.shutdown()
+	if err := remoteAddressCommand(&buf, []string{"-data", filepath.Dir(h.db)}); err != nil || buf.String() != "https://"+testTSName+"\n" {
+		t.Fatalf("remote-address: %q %v", buf.String(), err)
+	}
+	h.r.disable()
+	if err := remoteAddressCommand(&buf, []string{"-data", filepath.Dir(h.db)}); !errors.Is(err, errNoRemoteAddress) {
+		t.Fatalf("remote-address while off: %v", err)
 	}
 }
 

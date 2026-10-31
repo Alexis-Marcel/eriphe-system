@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -40,6 +41,9 @@ type tailnet interface {
 	QueryHTTPS(ctx context.Context) (enabled bool, url, text string, err error)
 	Listen(addr string) (net.Listener, error) // on the tailnet only
 	GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error)
+	// PrepareCert gets the tailnet's certificate for domain (issued on
+	// the first call, which can take a while; cached afterwards).
+	PrepareCert(ctx context.Context, domain string) error
 	StartLogin(ctx context.Context) error
 	Logout(ctx context.Context) error
 	Close() error
@@ -70,6 +74,12 @@ type remoteSettings struct {
 	Enabled    bool   `json:"enabled"`
 	Hostname   string `json:"hostname,omitempty"`
 	ControlURL string `json:"control_url,omitempty"`
+	// Name is the tailnet name last served (eriphe.tail1234.ts.net), for
+	// the installers to print it (eriphe-core remote-address).
+	Name string `json:"name,omitempty"`
+	// Joined: the saved identity has logged in (tsnet ran): the auth key
+	// is not given again.
+	Joined bool `json:"joined,omitempty"`
 }
 
 const (
@@ -78,6 +88,10 @@ const (
 	defaultRemoteHost = "eriphe"
 	remoteExpiryWarn  = 14 * 24 * time.Hour
 	remoteAPIPort     = "8800"
+	// How long logging out may take, tsnet started for it included.
+	remoteLogoutTimeout = 30 * time.Second
+	// The state tsnet keeps in its directory: there is an identity.
+	remoteStateFile = "tailscaled.state"
 )
 
 var hostnameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -96,6 +110,7 @@ const (
 	phaseLogin    = "login"    // waiting for the owner to log in with the AuthURL
 	phaseApproval = "approval" // logged in, waiting for an admin to approve the device
 	phaseHTTPS    = "https"    // running, HTTPS certificates not enabled in the tailnet
+	phaseCert     = "cert"     // HTTPS enabled, the certificate being issued
 	phaseReady    = "ready"
 	phaseError    = "error"
 )
@@ -147,6 +162,7 @@ type remoteAccess struct {
 	now        func() time.Time
 	every      func(phase string) time.Duration // how often to poll tsnet's status
 	authKey    func() string                    // from the vault
+	forgetKey  func() error                     // removes it from the vault
 	logf       func(format string, args ...any)
 	// The machines' CA (machine_tls.go): the API asks nodes for their
 	// certificate of it, without requiring one. Nil: it asks for none.
@@ -173,6 +189,16 @@ func newRemoteAccess(store *Store, dbPath string, api http.Handler) *remoteAcces
 				return k
 			}
 			return ""
+		},
+		forgetKey: func() error {
+			v := currentVault()
+			if v == nil {
+				return errors.New("the vault is closed")
+			}
+			if err := v.remove(remoteAuthKeyName); err != nil && !errors.Is(err, errNoSecret) {
+				return err
+			}
+			return nil
 		},
 		every: func(phase string) time.Duration {
 			switch phase {
@@ -297,30 +323,88 @@ func (r *remoteAccess) disable() error {
 	return err
 }
 
+// errLogoutUnconfirmed: the identity is forgotten, but the coordination
+// server did not confirm the logout: the device may still be listed in the
+// tailnet, to remove there.
+var errLogoutUnconfirmed = errors.New("the tailnet did not confirm the logout")
+
 // logout leaves the tailnet: the device is logged out at the coordination
-// server, and its state wiped. Remote access is off afterwards.
+// server, and its state wiped, with the saved auth key: Eriphe forgets its
+// identity. Remote access is off afterwards. When remote access is already
+// off, tsnet is started for the time of the logout, without the key.
 func (r *remoteAccess) logout(ctx context.Context) error {
 	r.mu.Lock()
 	ts := r.ts
-	r.settings.Enabled = false
+	r.settings.Enabled, r.settings.Name, r.settings.Joined = false, "", false
 	err := r.save()
 	r.mu.Unlock()
+	lctx, cancel := context.WithTimeout(ctx, remoteLogoutTimeout)
+	defer cancel()
+	var lerr error
 	if ts != nil {
-		lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		if lerr := ts.Logout(lctx); lerr != nil {
-			r.logf("remote: logout: %v", lerr)
-		}
-		cancel()
+		lerr = ts.Logout(lctx)
 	}
 	r.shutdown()
+	if ts == nil && r.hasState() {
+		lerr = r.logoutStopped(lctx)
+	}
+	if lerr != nil {
+		r.logf("remote: logout: %v", lerr)
+	}
 	if rerr := os.RemoveAll(r.dir); rerr != nil && err == nil {
 		err = rerr
+	}
+	if r.authKey() != "" {
+		if kerr := r.forgetKey(); kerr != nil {
+			r.logf("remote: logout: the auth key stays in the vault: %v", kerr)
+			if err == nil {
+				err = kerr
+			}
+		}
 	}
 	r.mu.Lock()
 	r.setViewLocked(r.baseView())
 	r.mu.Unlock()
 	r.logf("remote: logged out of the tailnet, state removed")
+	if err == nil && lerr != nil {
+		err = fmt.Errorf("%w: %v", errLogoutUnconfirmed, lerr)
+	}
 	return err
+}
+
+// hasState tells whether tsnet has an identity saved.
+func (r *remoteAccess) hasState() bool {
+	_, err := os.Stat(filepath.Join(r.dir, remoteStateFile))
+	return err == nil
+}
+
+// logoutStopped starts tsnet on the saved state, without the auth key,
+// only to log it out at the coordination server.
+func (r *remoteAccess) logoutStopped(ctx context.Context) error {
+	r.mu.Lock()
+	opts := tailnetOptions{Dir: r.dir, Hostname: r.settings.hostname(), ControlURL: r.settings.ControlURL, Logf: r.logf}
+	r.mu.Unlock()
+	ts, err := r.newTailnet(opts)
+	if err != nil {
+		return err
+	}
+	defer ts.Close()
+	if err := ts.Start(); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	// The backend reads its state first: NoState until then.
+	for {
+		st, err := ts.Status(ctx)
+		if err == nil && st.Backend != "" && st.Backend != "NoState" {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(r.every(phaseStarting)):
+		}
+	}
+	return ts.Logout(ctx)
 }
 
 // relogin asks for a new login URL, before the key expires.
@@ -371,6 +455,12 @@ func (r *remoteAccess) configure(hostname, controlURL string) error {
 		hostname = ""
 	}
 	r.settings.Hostname, r.settings.ControlURL = hostname, controlURL
+	if changed {
+		r.settings.Name = ""
+	}
+	if changedControl {
+		r.settings.Joined = false
+	}
 	err := r.save()
 	running := r.ts != nil
 	r.mu.Unlock()
@@ -405,8 +495,12 @@ func (r *remoteAccess) startLocked() {
 	done := make(chan struct{})
 	r.stop, r.done = cancel, done
 	r.setViewLocked(remoteView{Phase: phaseStarting})
-	opts := tailnetOptions{Dir: r.dir, Hostname: r.settings.hostname(), ControlURL: r.settings.ControlURL,
-		AuthKey: r.authKey(), Logf: r.logf}
+	opts := tailnetOptions{Dir: r.dir, Hostname: r.settings.hostname(), ControlURL: r.settings.ControlURL, Logf: r.logf}
+	// The key logs in a new identity only: with one that has logged in,
+	// tsnet has no use for it, and says so at every start.
+	if !r.settings.Joined || !r.hasState() {
+		opts.AuthKey = r.authKey()
+	}
 	go r.watch(ctx, done, opts)
 }
 
@@ -466,6 +560,13 @@ func (r *remoteAccess) watch(ctx context.Context, done chan struct{}, opts tailn
 		url, text string
 		asked     time.Time
 	}
+	// The certificate, asked once HTTPS is on, before saying ready: its
+	// first issue takes a while, and the first visit would hang meanwhile.
+	var cert struct {
+		ok, busy bool
+		asked    time.Time
+	}
+	certDone := make(chan error, 1)
 	started := r.now()
 	for {
 		sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -514,7 +615,30 @@ func (r *remoteAccess) watch(ctx context.Context, done chan struct{}, opts tailn
 				v.HTTPSURL, v.HTTPSText = https.url, https.text
 				break
 			}
-			v.Phase = phaseReady
+			if !cert.ok {
+				select {
+				case err := <-certDone:
+					cert.busy = false
+					if err != nil {
+						r.logf("remote: certificate: %v", err)
+					} else {
+						cert.ok = true
+					}
+				default:
+				}
+			}
+			if !cert.ok && !cert.busy && r.now().Sub(cert.asked) > 10*time.Second {
+				cert.busy, cert.asked = true, r.now()
+				go func(name string) {
+					cctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+					defer cancel()
+					certDone <- ts.PrepareCert(cctx, name)
+				}(st.DNSName)
+			}
+			v.Phase = phaseCert
+			if cert.ok {
+				v.Phase = phaseReady
+			}
 		}
 		if v.Phase == phaseReady {
 			if err := r.listen(ts); err != nil {
@@ -528,6 +652,16 @@ func (r *remoteAccess) watch(ctx context.Context, done chan struct{}, opts tailn
 			r.setViewLocked(v)
 			if prev != v.Phase {
 				r.logf("remote: %s", v.Phase)
+			}
+			joined := err == nil && st.Backend == "Running"
+			if joined && !r.settings.Joined || v.Phase == phaseReady && r.settings.Name != v.Name {
+				r.settings.Joined = r.settings.Joined || joined
+				if v.Phase == phaseReady {
+					r.settings.Name = v.Name
+				}
+				if err := r.save(); err != nil {
+					r.logf("remote: %v", err)
+				}
 			}
 		}
 		r.mu.Unlock()
@@ -664,4 +798,33 @@ var (
 func redactKeys(s string) string {
 	s = tsKeyRe.ReplaceAllString(s, "tskey-REDACTED")
 	return tsLoginRe.ReplaceAllString(s, "<login link, shown in the workspace>")
+}
+
+// errNoRemoteAddress: remote access is off, or was never ready.
+var errNoRemoteAddress = errors.New("remote access is off, or not ready yet")
+
+// remoteAddressCommand is `eriphe-core remote-address [-config file | -data
+// dir]`: the workspace's address on the tailnet, when remote access is on,
+// for the installers to print it when they run again.
+func remoteAddressCommand(out io.Writer, args []string) error {
+	fs, path, data := authFlags("remote-address")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	_, store, err := authStore(*path, *data)
+	if err != nil {
+		return err
+	}
+	defer store.db.Close()
+	var s remoteSettings
+	if raw := store.get(remoteKey); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &s); err != nil {
+			return err
+		}
+	}
+	if !s.Enabled || s.Name == "" {
+		return errNoRemoteAddress
+	}
+	_, err = fmt.Fprintln(out, "https://"+s.Name)
+	return err
 }

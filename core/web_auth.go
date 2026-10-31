@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -297,6 +298,30 @@ type authForm struct {
 	// PasswordLink: the password is the fallback here, behind a link,
 	// while the provider is the way in.
 	PasswordLink bool
+}
+
+// SetupCmd is the command that prints the setup code again, on Eriphe's
+// machine, as it was installed.
+func (authForm) SetupCmd() string { return setupCodeCommand(coreInstall, runtime.GOOS) }
+
+// setupCodeCommand is `eriphe-core auth setup-code` as it runs on the
+// machine of an install (ERIPHE_INSTALL): in eriphe-core's container on
+// Linux (or the one container), in WSL's on Windows; on a Mac, the binary
+// itself with Apple's container (eriphe-core runs on macOS), or in Lima's
+// VM. Installed by hand, the bare command.
+func setupCodeCommand(install, goos string) string {
+	const cmd = "eriphe-core auth setup-code"
+	switch {
+	case install == "linux" || install == "docker":
+		return "sudo docker exec eriphe-core " + cmd
+	case install == "windows":
+		return "wsl -d eriphe -u root -- docker exec eriphe-core " + cmd
+	case install == "macos" && goos == "darwin":
+		return "~/.eriphe/bin/" + cmd + " -data ~/.eriphe/core"
+	case install == "macos":
+		return "LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker exec eriphe-core " + cmd
+	}
+	return cmd
 }
 
 // loginForm is what the sign-in page offers this request.
