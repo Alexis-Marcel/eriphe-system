@@ -232,12 +232,15 @@ summary() {
 	say ""
 	if [ "$MODE" = core ]; then
 		code=$(printf '%s\n' "$1" | sed -n 's/^setup_code=//p')
+		REMOTE_URL=$(printf '%s\n' "$1" | sed -n 's/^remote=//p')
 		if [ -n "$code" ]; then
 			para "Done: Eriphe runs on this machine. To finish, open this address in your browser and give the setup code:"
 			say ""
 			say "  https://$addr:$WEB_PORT/setup"
 			say "  Setup code: $code"
 			notice "then the browser asks you to name your assistant and connect its AI account."
+		elif [ -n "$REMOTE_URL" ]; then
+			para "Eriphe runs on this machine: open $REMOTE_URL in your browser, from a device on your Tailscale network, and sign in (forgotten password: $(password_reset))."
 		else
 			para "Eriphe runs on this machine: open https://$addr:$WEB_PORT in your browser and sign in (forgotten password: $(password_reset))."
 		fi

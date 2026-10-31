@@ -114,8 +114,11 @@ Logs: docker logs eriphe-core, docker logs eriphe-node
 
 The workspace speaks the browser's language (French, or English for any other), so the installers
 name its menus in both. The setup code stays the same until it is used, and every run of the
-installer prints it again while there is no password; once there is one, the installer says to
-sign in instead, with the command for a [forgotten password](#forgotten-password).
+installer prints it again while there is no password (on the screen only: the install's log says it
+was printed, not what it is); once there is one, the installer says to sign in instead, with the
+command for a [forgotten password](#forgotten-password). With remote access on (Settings → Remote
+access), it gives the tailnet address (`https://eriphe.<tailnet>.ts.net`) to sign in at, rather
+than the SSH tunnel of a server bound to `127.0.0.1`.
 
 **Another port.** Core mode needs ports 8443 (the workspace) and 8800 (the API, for the other
 devices). The installer checks them before it installs anything and says which program holds one.
@@ -141,8 +144,11 @@ The installers show only that: a title, short steps, the outcome, what is good t
 the logs are. A password (`sudo`, macOS's) is asked once, after a sentence saying why. Everything
 else, the output of each command included, goes to the install's log: `~/.eriphe/install.log` on a
 Mac, `/var/log/eriphe-install.log` on Linux (`~/.eriphe-install.log` without root),
-`C:\ProgramData\eriphe-node\install.log` on Windows. When something fails, the installer says what
-in a sentence, what to do, and points at that log; the exit code is 1.
+`C:\ProgramData\eriphe-node\install.log` on Windows (readable by administrators and SYSTEM
+only). When something fails, the installer says what in a sentence, what to do, and points at that
+log; the exit code is 1. On Windows in core mode, the installer waits up to three minutes for the
+PC's own device to start after eriphe-core; on a slow PC it may still be starting then, and the
+installer says it will appear in Settings → Devices.
 
 ### One container (NAS, any Linux with Docker)
 
@@ -868,7 +874,7 @@ installer notices a public address and says so at the end ("Good to know"). Befo
    SSH, and nothing else of Eriphe's by default:
    - **8443, the workspace**: never open to the world. Reach it one of these ways:
      - **Tailscale**, built in: Réglages › Accès à distance (Settings › Remote access), "Turn on"
-       and sign in, from an SSH tunnel the first time (`ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes user@server`, then
+       and sign in, from an SSH tunnel the first time (`ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes <user>@<server>`, then
        `https://127.0.0.1:8443` on your computer). The workspace then has a
        `https://<name>.<tailnet>.ts.net` address with a real certificate, for your browser, the
        phone app and the devices, and nothing is opened on the server.

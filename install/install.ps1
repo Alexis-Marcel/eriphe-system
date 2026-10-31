@@ -163,6 +163,13 @@ function Write-Out([string] $text = "") {
   Write-Log $text
 }
 
+# A line ending with a secret (the setup code): on the screen only; the log
+# says it was printed.
+function Write-Secret([string] $text, [string] $secret) {
+  Write-Host "$text$secret"
+  Write-Log "$text(printed on the screen, not logged)"
+}
+
 # A paragraph, wrapped.
 function Write-Para([string] $text) {
   $line = ""
@@ -494,6 +501,8 @@ if (-not $isAdmin) {
 }
 New-Item -ItemType Directory -Force $home_ | Out-Null
 Set-Content -Path $log -Value "install.ps1, $(Get-Date)" -Encoding UTF8
+# The log, as boot\: administrators and SYSTEM only, not every user of the PC.
+Invoke-Quiet { icacls.exe $log /inheritance:r /grant:r "*S-1-5-32-544:F" "*S-1-5-18:F" }
 $here = "this PC"
 
 if ($Uninstall) {
@@ -1258,8 +1267,10 @@ Start-ScheduledTask -TaskName $task
 Start-ScheduledTask -TaskName $awakeTask
 Write-Step "Installed"
 
-# 8. Wait for the node to join, and say where things are.
-for ($i = 0; $i -lt 30; $i++) {
+# 8. Wait for the node to join, and say where things are. In core mode it
+# starts after eriphe-core, which can take minutes on a slow PC.
+$tries = if ($CoreMode) { 90 } else { 30 }
+for ($i = 0; $i -lt $tries; $i++) {
   $joined = (wsl.exe -d $Distro -u root -- sh -c "test -f /var/lib/eriphe-node/node.json && pgrep -x eriphe-node >/dev/null && echo yes") -eq "yes"
   if ($joined) { break }
   Start-Sleep -Seconds 2
@@ -1288,15 +1299,23 @@ elif ! grep -q 'has a password' /tmp/setup-code.err; then
 fi
 rm -f /tmp/setup-code.err
 '@ | Select-Object -Last 1
+  # The tailnet's address, when remote access is on (none from an older eriphe-core).
+  $remote = Invoke-InDistro "docker exec eriphe-core eriphe-core remote-address 2>/dev/null" | Select-Object -Last 1
+  if ($remote -notmatch "^https://[A-Za-z0-9.-]+$") { $remote = "" }
   $done = if ($updating) { "" } else { "Done: Eriphe runs on $here. " }
   if ($setup) {
     Write-Para "${done}To finish, open this address in your browser and give the setup code:"
     Write-Out
     Write-Out "  https://${lan}:${webPort_}/setup"
-    Write-Out "  Setup code: $setup"
+    Write-Secret "  Setup code: " $setup
+  } elseif ($remote) {
+    # Remote access on: its address works from every device of the tailnet.
+    Write-Para "${done}Open $remote in your browser, from a device on your Tailscale network, and sign in (forgotten password: wsl -d $Distro -u root -- docker exec eriphe-core eriphe-core auth password-reset)."
+    Write-Para "On the local network: https://${lan}:${webPort_}"
   } else {
     Write-Para "${done}Open https://${lan}:${webPort_} in your browser and sign in (forgotten password: wsl -d $Distro -u root -- docker exec eriphe-core eriphe-core auth password-reset)."
   }
+  if (-not $joined) { Add-Notice "this PC's eriphe-node is still starting: it will appear in $devicesMenu in a few minutes." }
   if (-not $updating) { Add-Notice "to connect your other computers, open $connectMenu in your browser." }
   if (Get-NetConnectionProfile | Where-Object NetworkCategory -eq "Public") {
     Add-Notice "this network is set to Public, so other devices cannot reach $here. In Windows Settings > Network & internet, set it to Private."
