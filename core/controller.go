@@ -30,6 +30,7 @@ type core struct {
 	started time.Time // when this eriphe-core started (the brain waits for the catalog, brain.go)
 
 	remote *remoteAccess // remote access over the tailnet (remote.go); nil in tests
+	wg     *wgAccess     // remote access through eriphe-core's own WireGuard network (wireguard.go); nil until the workspace starts
 
 	machines *machineCA // the machines' certificate authority (machine_tls.go); nil without one
 

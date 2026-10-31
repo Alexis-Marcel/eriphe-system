@@ -17,7 +17,8 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     # 8843 on the host: the workspace (8443 is often taken, e.g. by Unraid's nginx).
-    ports: ["8800:8800", "8843:8443"]
+    # 51820/udp: the WireGuard network (Settings → Remote access), silent unless it is on.
+    ports: ["8800:8800", "8843:8443", "51820:51820/udp"]
     # Remote access (Settings → Remote access) needs nothing more: Tailscale runs in userspace,
     # outbound only, with its state in ./core/tailscale (keep it out of backups that leave home).
     volumes:

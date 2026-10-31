@@ -9,6 +9,7 @@
 <header class="page-head"><h2>{{t "settings.remote"}}</h2><p>{{t "remote.lead"}}</p></header>
 <div id="remote-live" class="remote-live" data-remote-live>{{template "remote-status" .}}</div>
 {{template "remote-advanced" .}}
+{{template "wg-mount"}}{{/* the WireGuard network: wireguard.html */}}
 {{end}}
 
 {{define "remote-steps"}}

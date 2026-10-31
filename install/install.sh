@@ -590,7 +590,8 @@ EOF
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    ports: ["${API_PORT:-8800}:8800", "${WEB_PORT:-8443}:8443"]
+    # 51820/udp: the WireGuard network of Settings → Remote access; silent unless it is on.
+    ports: ["${API_PORT:-8800}:8800", "${WEB_PORT:-8443}:8443", "51820:51820/udp"]
     environment:
       # The workspace shows the command that updates it.
       ERIPHE_INSTALL: $INSTALL
@@ -1400,6 +1401,10 @@ portForwards:
 - guestPort: ${WEB_PORT:-8443}
   guestIP: 0.0.0.0
   hostIP: 0.0.0.0
+- guestPortRange: [51820, 51820]
+  guestIP: 0.0.0.0
+  hostIP: 0.0.0.0
+  proto: udp
 - guestIP: 0.0.0.0
   guestPortRange: [1, 65535]
   proto: any

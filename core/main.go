@@ -45,6 +45,10 @@ func main() {
 		authCommand(os.Args[2:]) // web_signin.go
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "wireguard" {
+		wireguardCommand(os.Args[2:]) // wireguard_cli.go
+		return
+	}
 	path := flag.String("config", "", "configuration file (without one, defaults in -data)")
 	data := flag.String("data", envOr("ERIPHE_DATA", defaultData), "where eriphe-core keeps its files without a configuration file (env ERIPHE_DATA)")
 	flag.Parse()
