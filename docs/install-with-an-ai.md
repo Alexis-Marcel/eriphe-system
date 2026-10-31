@@ -199,6 +199,15 @@ Requirements (the installer checks them and says so if one is missing):
    again." The person restarts and signs in as the **same user**; a window opens and the install
    goes on. If it says "Restart it, then run this command again", they restart and paste the same
    line again in an administrator PowerShell.
+
+   **On a PC set up recently, tell the person it is long, and that it is normal.** Windows is often
+   still installing its own updates, and turning WSL on waits for them: on a modest mini-PC the
+   whole install can take an hour or more, with quiet stretches of 20 minutes where the window
+   shows nothing new. The restart may apply Windows updates first ("Update progress…"). After
+   signing in, a blue PowerShell window opens and may stay empty for a few minutes before
+   "Installing Eriphe on this PC" shows. A "Windows Subsystem for Linux" welcome window may open
+   too: it can be closed, Eriphe does not need it. Ask them not to close the PowerShell window and
+   to wait for "Done" or "Something went wrong".
 4. "Windows could not create Eriphe's Linux system: turn on virtualization…": virtualization is off
    in the PC's firmware (BIOS/UEFI). Explain how to reach the firmware settings for their PC brand
    (often a key at boot: Del, F2, F10) and the setting's usual names (Intel VT-x, Intel
@@ -207,7 +216,10 @@ Requirements (the installer checks them and says so if one is missing):
    give the setup code:", the address, the code, then
    `Logs: wsl -d eriphe -- tail /var/log/eriphe-node.log`.
 6. If a "Good to know" note says the network is set to **Public**: Windows Settings → Network &
-   internet → the connection → **Private**. Otherwise the other devices cannot reach Eriphe.
+   internet → the connection → **Private** (in French: Paramètres → Réseau et Internet → Ethernet
+   or Wi-Fi → Type de profil réseau → **Réseau privé**). Otherwise the other devices cannot reach
+   Eriphe, not even the browser of §5. Public is what a newly installed Windows chooses, so expect
+   it on a new PC.
 7. Keep the PC awake: Settings → System → Power → Screen and sleep → "put my device to sleep" →
    **Never** (when plugged in). Eriphe starts with Windows, even before anyone logs in.
 
@@ -435,6 +447,7 @@ device stays listed in the workspace: "Forget" it on its card.
 | Windows: "Eriphe needs an administrator PowerShell" | Open Terminal (Admin) as in §4C and paste the line again. |
 | Windows: Defender or SmartScreen blocks the script | Do not turn Defender off. Download `install.ps1` from the [latest release](https://github.com/Alexis-Marcel/eriphe-system/releases/latest), let the person check it, and run it from an administrator PowerShell with `powershell -ExecutionPolicy Bypass -File .\install.ps1 -CoreMode` (or the other parameters, see [install/README.md, Windows](../install/README.md#windows)). If Defender quarantines a file, open an issue rather than adding exclusions. |
 | Windows: "Windows needs to restart…" | Restart, sign in as the same user: the install carries on in a window. If it does not, paste the same line again. |
+| Windows: the window shows nothing new for a long time | On a recent PC, Windows installs its own updates first and WSL waits for them (§4C step 3): wait. The progress is in `C:\ProgramData\eriphe-node\install.log`; Task Manager shows `wsl.exe`, `msiexec.exe` or `DismHost.exe` at work. |
 | Windows: "…turn on virtualization in the PC's firmware" | §4C step 4. |
 | Windows: other devices cannot reach the workspace | Set the network to Private (§4C step 6). |
 | macOS: a folder listing fails or a task cannot read Documents | The "container-runtime-linux" prompt was refused: System Settings → Privacy & Security → Files and Folders → container-runtime-linux → allow. The first listing may time out while the question waits; the next one works. |

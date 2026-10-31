@@ -684,7 +684,10 @@ it shows (a false positive is reported to Microsoft from there).
 **Core mode** (`-CoreMode`): eriphe-core runs as a container in the distribution, with its data in
 `/var/lib/eriphe-core` there and no configuration file, and this machine's node joins it by itself.
 
-**WSL missing.** The script installs it (`wsl --install --no-distribution`). When Windows needs a
+**WSL missing.** The script installs it (`wsl --install --no-distribution`, or on a Windows whose
+`wsl.exe` refuses it, the Windows features and then `wsl --update` after the restart). On a PC set
+up recently this is the long part: Windows finishes its own updates first, and the whole install
+can take an hour on a modest mini-PC. When Windows needs a
 reboot for it, the script saves itself and its parameters in `%ProgramData%\eriphe-node\resume`
 (administrators only) and registers a task, "Eriphe install (eriphe)", that runs it again at the
 next logon of the same user, in a window (`powershell -File`, the parameters after it); that run
