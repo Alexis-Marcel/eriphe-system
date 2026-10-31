@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -149,5 +150,28 @@ func TestArgonConcurrencyCap(t *testing.T) {
 	}
 	if !checkPassword(hash, "correct horse") {
 		t.Fatal("the right password is refused")
+	}
+}
+
+func TestSetupCodeCommand(t *testing.T) {
+	for _, c := range [][3]string{
+		{"linux", "linux", "sudo docker exec eriphe-core eriphe-core auth setup-code"},
+		{"docker", "linux", "sudo docker exec eriphe-core eriphe-core auth setup-code"},
+		{"windows", "linux", "wsl -d eriphe -u root -- docker exec eriphe-core eriphe-core auth setup-code"},
+		{"macos", "darwin", "~/.eriphe/bin/eriphe-core auth setup-code -data ~/.eriphe/core"},
+		{"macos", "linux", "LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker exec eriphe-core eriphe-core auth setup-code"},
+		{"", "linux", "eriphe-core auth setup-code"},
+	} {
+		if got := setupCodeCommand(c[0], c[1]); got != c[2] {
+			t.Errorf("setupCodeCommand(%q, %q) = %q", c[0], c[1], got)
+		}
+	}
+	old := coreInstall
+	t.Cleanup(func() { coreInstall = old })
+	coreInstall = "windows"
+	tw := newTestWeb(t)
+	_, body, _ := tw.do("GET", "/setup", nil, nil)
+	if !strings.Contains(body, "wsl -d eriphe -u root -- docker exec eriphe-core eriphe-core auth setup-code") {
+		t.Fatalf("setup page:\n%s", body)
 	}
 }

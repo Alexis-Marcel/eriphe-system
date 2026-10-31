@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newUpdatesWeb is a workspace at 0.1.0, the latest eriphe-core and
@@ -257,4 +258,38 @@ func mustNodes(t *testing.T, c *core) []NodeRow {
 		t.Fatal(err)
 	}
 	return nodes
+}
+
+// A device newer than eriphe-core (updated first, the registry's answer
+// not yet renewed) is offered no update: it would be a downgrade.
+func TestWebUpdateNoDowngrade(t *testing.T) {
+	tw, _ := newUpdatesWeb(t)
+	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.2.0","update":{"updater":true}}`)
+	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
+	hasNone(t, "newer device", body, "→ 0.1.0", `name="machine" value="node:pc"`)
+	if n := tw.c.updateNodes(); n != 0 {
+		t.Fatalf("%d nodes asked to go back", n)
+	}
+}
+
+// The latest versions are checked again by the wall clock, sooner after a
+// failure, and in the background when the devices page finds them old.
+func TestUpdatesDue(t *testing.T) {
+	u := newUpdates("http://127.0.0.1:1")
+	now := time.Now()
+	if !u.due(now) {
+		t.Fatal("never checked: not due")
+	}
+	u.at = now.Add(-30 * time.Minute)
+	if u.due(now) {
+		t.Fatal("due after half an hour")
+	}
+	u.failed = true
+	if !u.due(now) {
+		t.Fatal("a failed check is not tried again within the hour")
+	}
+	u.failed = false
+	if !u.due(now.Add(31 * time.Minute)) {
+		t.Fatal("not due after an hour")
+	}
 }

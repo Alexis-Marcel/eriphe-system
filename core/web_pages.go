@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -473,14 +474,21 @@ func (w *web) handleMachines(rw http.ResponseWriter, r *http.Request, s *session
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.c.updates.refreshStale(context.Background())
 	var plain []string
 	for _, n := range nodes {
 		if n.CertExpires.IsZero() {
 			plain = append(plain, n.Name)
 		}
 	}
+	// The choice of address, when there is one: opened at the tailnet's
+	// address, there is no other to give.
+	remote := ""
+	if lan, away := w.joinAddresses(r); lan != "" {
+		remote = strings.Join(away, ", ")
+	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.machines", Nav: "settings", Tab: "devices",
-		Data: machinesData{Nodes: out, Remote: strings.Join(w.awayCoreURLs(), ", "), CAHash: w.c.caHash(), TLSOnly: w.c.nodesTLSOnly(),
+		Data: machinesData{Nodes: out, Remote: remote, CAHash: w.c.caHash(), TLSOnly: w.c.nodesTLSOnly(),
 			Plain: strings.Join(plain, ", "), Updates: updates}})
 }
 

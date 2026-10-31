@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -42,6 +44,11 @@ func TestWebRemoteExposed(t *testing.T) {
 	if body := get("https://192.168.1.2:8443/settings/remote", "192.168.1.20:5000"); strings.Contains(body, "répond sur Internet") ||
 		!strings.Contains(body, "ne répond que sur ton réseau local") {
 		t.Fatalf("local page:\n%s", body)
+	}
+	// Through an SSH tunnel (a server in the cloud): no local network to speak of.
+	if body := get("https://127.0.0.1:8443/settings/remote", "172.17.0.1:5000"); strings.Contains(body, "ton réseau local") ||
+		!strings.Contains(body, "par un tunnel SSH") {
+		t.Fatalf("page through a tunnel:\n%s", body)
 	}
 	for _, c := range [][2]string{{"https://203.0.113.5:8443/settings/remote", "192.168.1.20:5000"}, {"https://192.168.1.2:8443/settings/remote", "203.0.113.9:5000"}} {
 		body := get(c[0], c[1])
@@ -189,6 +196,76 @@ func TestWebRemoteOrigin(t *testing.T) {
 	_, _, hd := tw.do("GET", "/login", nil, nil)
 	if hd.Get("Strict-Transport-Security") != "" {
 		t.Fatal("HSTS on the self-signed listener")
+	}
+}
+
+// Opened at the tailnet's address, "Connect a device" has no other
+// address to offer: no choice, and the address once in the command.
+func TestWebRemoteJoinAtTailnetAddress(t *testing.T) {
+	tw, h, csrf := newRemoteWeb(t)
+	h.r.enable()
+	h.phase(phaseLogin)
+	h.fake().set(func(f *fakeTailnet) { f.st = running(true, time.Time{}) })
+	h.phase(phaseReady)
+	handler := tailnetHandler(h.r.name, tw.w.routes())
+	u, _ := url.Parse(tw.srv.URL)
+	do := func(method, path string, form url.Values) string {
+		var body io.Reader
+		if form != nil {
+			body = strings.NewReader(form.Encode())
+		}
+		req := httptest.NewRequest(method, "https://"+testTSName+path, body)
+		req.Host = testTSName
+		if form != nil {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Origin", "https://"+testTSName)
+			req.Header.Set("X-CSRF-Token", csrf)
+			req.Header.Set("HX-Request", "true")
+		}
+		for _, c := range tw.hc.Jar.Cookies(u) {
+			req.AddCookie(c)
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s %s: %d", method, path, rec.Code)
+		}
+		return rec.Body.String()
+	}
+	if body := do("GET", "/settings/machines", nil); strings.Contains(body, `name="via"`) {
+		t.Fatal("a choice of address at the tailnet's address")
+	}
+	for _, via := range []string{"", "both", "lan", "remote"} {
+		body := do("POST", "/settings/machines/join", url.Values{"name": {"laptop"}, "via": {via}})
+		if n := strings.Count(body, "ERIPHE_CORE: https://"+testTSName+":8800\n"); n != 1 || strings.Contains(body, "http://"+testTSName) {
+			t.Fatalf("join via %q at the tailnet address (%d):\n%s", via, n, body)
+		}
+	}
+}
+
+// Logging out says plainly when Tailscale did not confirm it; the
+// hostname hint follows the name chosen; the certificate's wait shows.
+func TestWebRemoteLogoutAndTexts(t *testing.T) {
+	tw, h, csrf := newRemoteWeb(t)
+	if err := h.r.configure("maison", ""); err != nil {
+		t.Fatal(err)
+	}
+	_, body, _ := tw.do("GET", "/settings/remote", nil, nil)
+	if !strings.Contains(body, "(maison.…ts.net)") || strings.Contains(body, "(eriphe.…ts.net)") {
+		t.Fatalf("hostname hint:\n%s", body)
+	}
+	gate := make(chan struct{})
+	defer close(gate)
+	h.next = &fakeTailnet{st: running(true, time.Time{}), certGate: gate, logoutErr: errors.New("timeout")}
+	h.r.enable()
+	h.phase(phaseCert)
+	_, body, _ = tw.do("GET", "/settings/remote", nil, nil)
+	if !strings.Contains(body, "Certificat en préparation") || strings.Contains(body, `id="remote-url"`) {
+		t.Fatalf("cert phase:\n%s", body)
+	}
+	code, body, hd := tw.post("/settings/remote/logout", nil, csrf)
+	if code != 200 || hd.Get("HX-Refresh") != "" || !strings.Contains(body, "n&#39;a pas confirmé") || !strings.Contains(body, "« maison »") {
+		t.Fatalf("unconfirmed logout: %d %v\n%s", code, hd, body)
 	}
 }
 

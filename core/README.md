@@ -472,7 +472,9 @@ to `main` ([RELEASING.md](../RELEASING.md)). All the images of one CI build shar
 
 The binary has it (`-ldflags -X main.version`), and the image as the label
 `org.opencontainers.image.version`, which eriphe-core reads on the registry for `latest`, the
-latest release (`updates.go`), at start and then every hour; "Vérifier maintenant" in Settings →
+latest release (`updates.go`), at start and then every hour of the wall clock (every five minutes
+after a failure; a machine that slept checks when it wakes); Settings → Devices, opened with an
+answer older than 15 minutes, asks again in the background; "Vérifier maintenant" in Settings →
 Devices → Updates asks at once (once a minute at most) and says when it last did. A machine is behind when it runs a release older than that one
 (semver order, `version.go`), or a build from before the releases (`sha-<commit>`); a build of
 `main` or a local one never says so, as someone is testing it. The workspace shows `0.2.0`, and a
@@ -1668,7 +1670,9 @@ from the workspace, **Settings → Remote access** (owner only):
    Microsoft, or an existing one). If the tailnet approves devices, the page waits for it.
 3. **Enable HTTPS (once)**: a one-click consent page of Tailscale turns on HTTPS certificates in
    the tailnet (MagicDNS must be on, as it is by default). Like every public certificate, the name
-   `eriphe.<tailnet>.ts.net` then appears in the public Certificate Transparency logs.
+   `eriphe.<tailnet>.ts.net` then appears in the public Certificate Transparency logs. The page
+   then says "Preparing the certificate" while Tailscale issues it (up to a minute the first
+   time): the address shows once it is there, so the first visit does not hang.
 4. **Ready**: the address `https://eriphe.<tailnet>.ts.net`, a QR code for the phone (drawn in Go,
    no outside service), the links to install Tailscale on the phone, and how to add the workspace
    to the home screen.
@@ -1699,9 +1703,16 @@ To avoid it, give eriphe-core an auth key of a tag (below): tagged devices do no
 [Headscale](https://headscale.net) (its URL; changing it forgets the current identity; Headscale
 has no automatic certificates, so HTTPS stays at the HTTPS step unless the server provides them);
 an **auth key** (`tskey-auth-…`, or Headscale's pre-auth key), kept in the vault as
-`tailscale.authkey` and used at the next login only; **Log out of the tailnet**, which logs the
-device out at the coordination server, deletes its state and turns remote access off. **Turn off**
-keeps the identity, so turning it on again needs no login.
+`tailscale.authkey` and given to tsnet only until the identity has logged in once (a new login);
+**Log out of the tailnet**, which logs the device out at the coordination server (with remote
+access off, tsnet is started for that, without the key, 30 seconds at most), deletes its state and
+the saved auth key, and turns remote access off; if the coordination server does not confirm it,
+the page says to remove the device in Tailscale's console. **Turn off** keeps the identity, so
+turning it on again needs no login.
+
+`eriphe-core remote-address [-config file | -data dir]` prints the workspace's tailnet address
+(`https://eriphe.<tailnet>.ts.net`) while remote access is on and has been ready once, and fails
+otherwise: the installers print it when they run again.
 
 **State and privacy.** Tailscale's state is in `tailscale/` next to the database (0700): it holds
 the device's private keys, so it is a secret like the vault key; never copy it into a repository
@@ -1725,6 +1736,10 @@ shown in the workspace only).
 
 - A node away from home uses the operating system's Tailscale app and the tailnet address of the
   API (see the node's README, several addresses).
+- The embedded Tailscale only **receives**: eriphe-core's own outgoing calls, and its tasks', do
+  not go through it. A model server at a tailnet address (`100.x`, `….ts.net`) is reachable only
+  when the host itself runs Tailscale; otherwise the provider's test says so. Lend it from a device
+  instead ("On one of my devices"), which needs no route.
 
 ## Vault
 
