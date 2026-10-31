@@ -6,7 +6,7 @@
 // token from `eriphe-core join-token`; later runs reuse the saved secret and
 // certificate.
 //
-//	eriphe-node -core http://nas:8800 -join-token <token> -name pc -ca-hash sha256:<hex>
+//	eriphe-node -core https://nas:8800 -join-token <token> -name pc -ca-hash sha256:<hex>
 //	eriphe-node
 package main
 

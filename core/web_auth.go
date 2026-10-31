@@ -516,6 +516,9 @@ func (w *web) guarded(r *http.Request, check func() bool) (ok, limited bool) {
 // so parallel requests cannot go past the limit. Globally: past 20 failures
 // in the window, from all addresses, every attempt waits longer (up to a few
 // seconds), but is still checked: an owner on another address gets in.
+// Connections from the gateway, which may stand for many clients
+// (client_addr.go), count together, apart, with a larger allowance: one of
+// them cannot lock the others out with a few tries.
 type loginLimiter struct {
 	mu       sync.Mutex
 	byIP     map[string][]time.Time
@@ -523,6 +526,7 @@ type loginLimiter struct {
 	all      []time.Time
 	window   time.Duration
 	perIP    int
+	perGate  int           // the gateway's allowance
 	slowFrom int           // global failures in the window before attempts slow down
 	step     time.Duration // added wait per failure past slowFrom
 	maxWait  time.Duration
@@ -532,12 +536,19 @@ type loginLimiter struct {
 
 func newLoginLimiter() *loginLimiter {
 	return &loginLimiter{byIP: map[string][]time.Time{}, inflight: map[string]int{}, window: 15 * time.Minute,
-		perIP: 5, slowFrom: 20, step: 250 * time.Millisecond, maxWait: 5 * time.Second, maxAll: 10000, maxIPs: 10000}
+		perIP: 5, perGate: 20, slowFrom: 20, step: 250 * time.Millisecond, maxWait: 5 * time.Second, maxAll: 10000, maxIPs: 10000}
 }
 
-// limitKey is the address an attempt counts against: the IP, or its /64.
+// gatewayKey is the gateway's own key: whoever comes through it.
+const gatewayKey = "gateway"
+
+// limitKey is the address an attempt counts against: the IP, or its /64,
+// or the gateway's key.
 func limitKey(ip string) string {
 	a, err := netip.ParseAddr(ip)
+	if err == nil && viaGateway(a) {
+		return gatewayKey
+	}
 	if err != nil || a.Unmap().Is4() {
 		return ip
 	}
@@ -565,7 +576,11 @@ func (l *loginLimiter) begin(ip string, now time.Time) bool {
 	if len(l.byIP[key]) == 0 {
 		delete(l.byIP, key)
 	}
-	if len(l.byIP[key])+l.inflight[key] >= l.perIP {
+	limit := l.perIP
+	if key == gatewayKey {
+		limit = l.perGate
+	}
+	if len(l.byIP[key])+l.inflight[key] >= limit {
 		return false
 	}
 	l.inflight[key]++

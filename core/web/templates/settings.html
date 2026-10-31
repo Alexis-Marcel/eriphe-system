@@ -73,7 +73,7 @@ latest version and its button follow eriphe-core's. . is a machineView. */}}
 {{define "device-foot-fragment"}}{{template "device-foot" .Data}}{{end}}
 {{define "device-foot"}}
 <div class="device-foot" id="device-foot-{{.Name}}"{{with .Update.Pending}} hx-get="/settings/devices/{{$.Name}}/update?id={{.ID}}" {{template "update-poll" $.Update}}{{else}} hx-get="/settings/devices/{{.Name}}/update" {{template "update-follow"}}{{end}}>
-  <p class="muted small device-version">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}} · {{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}} · {{end}}{{if .Version}}<span class="mono">eriphe-node {{ver .Version}}</span>{{if and .Update.Latest (not .Update.Pending)}} <span class="mono">→ {{ver .Update.Latest}}</span>{{end}}{{end}}</p>
+  <p class="muted small device-version">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}} · {{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}} · {{end}}{{if .Version}}<span class="mono">eriphe-node {{ver .Version}}</span>{{if and .Update.Latest (not .Update.Pending)}} <span class="mono">→ {{ver .Update.Latest}}</span>{{end}}{{end}}{{if .Update.Pin}} · {{tf "updates.pinned" .Update.Pin}}{{end}}</p>
   {{template "machine-update" .Update}}
   {{if .NoTLS}}<p class="muted small">{{t "machines.notls"}}</p>{{end}}
 </div>
@@ -504,7 +504,7 @@ second address (web_address.go). . is an addressView. */}}
         {{range list "password" "oidc" "proxy" "none"}}<label class="choice"><input type="radio" name="mode" value="{{.}}" {{if eq . $.Mode}}checked{{end}}><b>{{t (printf "signin.mode.%s" .)}}</b><small>{{t (printf "signin.mode.%s.lead" .)}}</small></label>{{end}}
       </div>
     </fieldset>
-    <p class="warn-note if-none" role="note">{{t "signin.none.warn"}}</p>
+    <p class="warn-note if-none" role="note">{{t "signin.none.warn"}}{{if and (not .Local) (ne .Mode "none")}} {{t "signin.none.notlocal"}}{{end}}</p>
     <fieldset class="choices if-oidc" {{if .Locked}}disabled{{end}}><legend>{{t "signin.oidc"}}</legend>
       <div class="field-with-btn">
         <label class="field"><span>{{t "signin.issuer"}}</span>

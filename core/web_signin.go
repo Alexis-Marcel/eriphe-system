@@ -247,9 +247,14 @@ func hostAddr(s string) (netip.Addr, bool) {
 
 // fromLocalNetwork is true when the browser and every proxy on the way
 // (X-Forwarded-For, X-Real-Ip) have local addresses. A proxy that speaks
-// RFC 7239's Forwarded is not read: such a request is not local.
+// RFC 7239's Forwarded is not read: such a request is not local. Nor is a
+// connection from the gateway, which may have been relayed for anyone
+// (client_addr.go).
 func fromLocalNetwork(r *http.Request) bool {
 	if r.Header.Get("Forwarded") != "" {
+		return false
+	}
+	if a, ok := hostAddr(r.RemoteAddr); !ok || viaGateway(a) {
 		return false
 	}
 	addrs := []string{r.RemoteAddr}

@@ -18,6 +18,7 @@ import (
 //
 //	eriphe-core auth show                     # the mode and its settings, never a secret
 //	eriphe-core auth reset                    # back to the password
+//	eriphe-core auth none                     # no sign-in (a machine nobody else reaches)
 //	eriphe-core auth password-reset           # forgotten password: a new setup code
 //	eriphe-core auth setup-code               # the setup code, while there is no password
 //	eriphe-core auth oidc -issuer … -client-id … -client-secret-stdin -allow-sub …
@@ -28,12 +29,14 @@ import (
 const authUsage = `usage:
   eriphe-core auth show  [-config file | -data dir]
   eriphe-core auth reset [-config file | -data dir]
+  eriphe-core auth none  [-config file | -data dir]
   eriphe-core auth password-reset [-config file | -data dir]
   eriphe-core auth setup-code [-config file | -data dir]
   eriphe-core auth oidc  -issuer URL -client-id ID -client-secret-stdin -allow-sub S[,S] [-allow-email E[,E]]
                          [-external-url URL] [-unauthorized-url URL] [-button] [-config file | -data dir]
 
 show prints how one signs in to the workspace; reset sets it back to the password;
+none turns sign-in off (only for a machine nobody else can reach);
 password-reset forgets the password (a forgotten one) and its sessions, and prints
 a new setup code to choose another at /setup; setup-code prints the setup code
 while there is no password; oidc sets up an identity provider (the client secret
@@ -67,6 +70,8 @@ func (cli authCLI) run(args []string) error {
 		return cli.show(args[1:])
 	case "reset":
 		return cli.reset(args[1:])
+	case "none":
+		return cli.none(args[1:])
 	case "password-reset":
 		return cli.passwordReset(args[1:])
 	case "setup-code":
@@ -201,6 +206,32 @@ func (cli authCLI) setupCode(args []string) error {
 
 // resetSignin sets the workspace's mode back to the password, keeping its
 // other settings, and returns the mode it had.
+// none turns the workspace's sign-in off. The page allows it only from the
+// local network; on the machine, whoever is root owns the workspace anyway.
+func (cli authCLI) none(args []string) error {
+	fs, path, data := authFlags("none")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cfg, store, err := authStore(*path, *data)
+	if err != nil {
+		return err
+	}
+	defer store.db.Close()
+	if fileAuth(cfg) != nil {
+		return fmt.Errorf("%s sets web.auth: change its mode there, then restart eriphe-core", *path)
+	}
+	a := storedSignin(store)
+	was := a.mode()
+	a.Mode = modeNone
+	if err := saveStoredSignin(store, a); err != nil {
+		return err
+	}
+	fmt.Fprintf(cli.out, "The workspace has no sign-in any more (it was %s): whoever reaches its address gets in.\n", was)
+	fmt.Fprintln(cli.out, "Back to the password: eriphe-core auth reset")
+	return nil
+}
+
 func resetSignin(s *Store) (string, error) {
 	a := storedSignin(s)
 	was := a.mode()

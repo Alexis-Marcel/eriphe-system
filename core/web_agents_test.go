@@ -221,14 +221,14 @@ func TestWebSelfHosted(t *testing.T) {
 			t.Errorf("form lacks %q", want)
 		}
 	}
-	base := "http://192.0.2.10:11434/v1"
+	base := "http://192.168.1.10:11434/v1"
 	try := func(form url.Values) string {
 		form.Set("kind", selfHostedKind)
 		_, body, _ := tw.post("/settings/provider-test", form, csrf)
 		return body
 	}
 	if b := try(url.Values{"base_url": {base + "/"}}); !strings.Contains(b, "2 modèle(s)") || !strings.Contains(b, "<code>qwen3:8b</code>") ||
-		auth != "" || path != "/v1/models" || dialed != "192.0.2.10:11434" {
+		auth != "" || path != "/v1/models" || dialed != "192.168.1.10:11434" {
 		t.Errorf("no key: %s (auth %q, path %q, dialed %q)", b, auth, path, dialed)
 	}
 	if b := try(url.Values{"base_url": {base}, "key": {"sk-local"}}); !strings.Contains(b, "2 modèle(s)") || auth != "Bearer sk-local" {
@@ -246,6 +246,14 @@ func TestWebSelfHosted(t *testing.T) {
 
 	// Saved: no key, its models, one agent each, the first the default.
 	save := url.Values{"kind": {selfHostedKind}, "base_url": {base}, "models": {"qwen3:8b\nllama3.1:8b\n"}}
+	// Plain HTTP to a public address: prompts in clear, a server open to all.
+	if _, body, _ := tw.post("/settings/providers", url.Values{"kind": {selfHostedKind}, "base_url": {"http://203.0.113.7:11434/v1"}, "models": {"qwen3:8b"}}, csrf); !strings.Contains(body, "Internet en clair") {
+		t.Fatalf("plain http to a public address: %s", body)
+	}
+	if !clearToInternet("http://[2001:db8::7]:11434/v1") || clearToInternet("https://203.0.113.7/v1") || clearToInternet("http://192.168.1.7:11434/v1") ||
+		clearToInternet("http://100.92.1.2:11434/v1") || clearToInternet("http://ollama.example.org/v1") {
+		t.Fatal("clearToInternet")
+	}
 	if _, body, _ := tw.post("/settings/providers", url.Values{"kind": {selfHostedKind}, "base_url": {"http://127.0.0.1:11434/v1"}}, csrf); !strings.Contains(body, "Cette adresse ne convient pas") {
 		t.Fatalf("loopback saved: %s", body)
 	}

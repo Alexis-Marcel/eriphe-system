@@ -20,7 +20,7 @@ eriphe-core join-token -config core.json -name pc   # single use, for pc only, v
 Then on the new machine, once:
 
 ```sh
-eriphe-node -core http://nas:8800 -join-token <token> -name pc -ca-hash sha256:<hex>
+eriphe-node -core https://nas:8800 -join-token <token> -name pc -ca-hash sha256:<hex>
 ```
 
 The node saves its own secret in `<root>/node.json`; later runs need no flag. Every flag also reads
@@ -89,7 +89,7 @@ device" offers both addresses once remote access is ready.
   programs are not visible from it. `-CoreMode` runs eriphe-core there too.
 
   ```powershell
-  & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'http://192.0.2.10:8800' -JoinToken <token> -Name pc -Labels 'gpu' -CaHash sha256:<hex>
+  & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'https://192.0.2.10:8800' -JoinToken <token> -Name pc -Labels 'gpu' -CaHash sha256:<hex>
   ```
 
   In this distribution eriphe-node runs as root next to dockerd, without a proxy: whoever takes

@@ -21,6 +21,37 @@ func newRemoteWeb(t *testing.T) (*testWeb, *remoteHarness, string) {
 	return tw, h, tw.setup()
 }
 
+// Opened at a public address, or from one, the page does not say the
+// workspace only answers on the local network: it says the truth.
+func TestWebRemoteExposed(t *testing.T) {
+	tw, _, _ := newRemoteWeb(t)
+	u, _ := url.Parse(tw.srv.URL)
+	get := func(target, addr string) string {
+		req := httptest.NewRequest("GET", target, nil)
+		req.RemoteAddr = addr
+		for _, c := range tw.hc.Jar.Cookies(u) {
+			req.AddCookie(c)
+		}
+		rec := httptest.NewRecorder()
+		tw.w.routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s from %s: %d", target, addr, rec.Code)
+		}
+		return rec.Body.String()
+	}
+	if body := get("https://192.168.1.2:8443/settings/remote", "192.168.1.20:5000"); strings.Contains(body, "répond sur Internet") ||
+		!strings.Contains(body, "ne répond que sur ton réseau local") {
+		t.Fatalf("local page:\n%s", body)
+	}
+	for _, c := range [][2]string{{"https://203.0.113.5:8443/settings/remote", "192.168.1.20:5000"}, {"https://192.168.1.2:8443/settings/remote", "203.0.113.9:5000"}} {
+		body := get(c[0], c[1])
+		if !strings.Contains(body, "répond sur Internet") || strings.Contains(body, "ne répond que sur ton réseau local") ||
+			strings.Contains(body, "rien n&#39;est exposé") || !strings.Contains(body, "#eriphe-on-a-vps") {
+			t.Fatalf("%s from %s:\n%s", c[0], c[1], body)
+		}
+	}
+}
+
 func TestWebRemotePages(t *testing.T) {
 	tw, h, csrf := newRemoteWeb(t)
 	code, body, _ := tw.do("GET", "/settings/remote", nil, nil)
