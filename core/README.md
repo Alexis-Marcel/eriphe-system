@@ -182,6 +182,43 @@ brain, through OpenCode:
 "Test the server" in the account form calls `GET <base_url>/models` (with `Authorization: Bearer`
 when a key is typed or stored), not following redirects, and lists the models it serves.
 
+#### A model behind a node
+
+The server can also stay on its machine, listening on that machine only, a home PC or a rented
+server, with no port opened and no account elsewhere: eriphe-node runs there with
+`-model-server http://127.0.0.1:11434` (the installers' `--model-server`, `-ModelServer` on
+Windows), and the provider names that node in place of an address:
+
+```json
+"providers": {"gpu": {"kind": "openai-compatible", "node": "gpu-box", "models": ["qwen3:8b"]}}
+```
+
+In the workspace: Add an AI account → Modèle auto-hébergé → "Sur un de mes appareils", then the
+device (the ones whose node reports `model_server`; Settings → Devices tags them "Prête un
+modèle"). `node` and `base_url` exclude each other. The path (`model_relay.go`):
+
+```
+task (any node, the brain too) → its node:   <callback>/model/v1/{path}   (the task's secret)
+its node → eriphe-core:                      /v1/node/tasks/{id}/model/{path}  (node secret, mTLS)
+eriphe-core → the lending node:              /v1/model/{path}   (that node's tunnel)
+the lending node → the server:               <model-server>/v1/{path}
+```
+
+- eriphe-core relays only for a task that runs on the calling node, is not finished, and whose
+  agent (OpenCode) uses a provider with `node`; only `GET` and `POST`, only paths under `/v1`
+  (`..`, even escaped, is refused here and again by the lending node, so Ollama's own `/api`,
+  with pull and delete, stays out of reach); bodies up to 64 MiB. The task's and the node's
+  secrets stop here: the server gets the provider's key (`secret`), if any, which is never lent
+  to a task.
+- The task's spec carries `model_endpoint: {"relay": true}`, no address and no key; its egress
+  rule is unchanged (its node is reached directly, as for its catalog servers), so it works with
+  egress `none` too.
+- Answers stream through as they come (`FlushInterval: -1` at every hop): a chat completion's
+  server-sent events arrive token by token.
+- The lending machine must be connected: otherwise the task's request fails with `502` ("the
+  machine of the model … is not connected"). "Test the server" goes through the same tunnel
+  (`GET /v1/model/models`).
+
 ### ChatGPT subscription
 
 eriphe-core owns the ChatGPT sign-in, so that tasks never hold its refresh token (single use: two

@@ -114,6 +114,35 @@ Only their names are reported, never their paths; they are not mounted into task
 folders go through shares instead (see [Shares](#shares-the-users-folders)), which `shares` reports
 (`[{name, writable, missing}]`).
 
+### A model behind this node
+
+`-model-server http://127.0.0.1:11434` (env `ERIPHE_MODEL_SERVER`, the installers'
+`--model-server`) lends a model server of this machine (Ollama, llama.cpp's `llama-server`, vLLM,
+LM Studio) to Eriphe, as the node reaches it: the server keeps listening on this machine only, no
+port is opened, and the user needs no other account. `GET /v1/node` then says `model_server:
+true`, and eriphe-core reaches the server through the tunnel at `/v1/model/{path}`, which this
+node forwards to `<model-server>/v1/{path}` (a `/v1` given by habit is dropped):
+
+- only `GET` and `POST`, only under `/v1`: a `..`, even escaped, is refused, so Ollama's own
+  `/api` (pull, delete) stays out of reach. eriphe-core can name a path, never another address:
+  the node is no way into its network;
+- the answer streams as it comes; no time limit but 15 minutes for the first byte;
+- the request goes direct, never through a proxy of the environment; `Authorization` is the
+  server's key that eriphe-core adds, if the provider has one.
+
+A task whose agent uses such a model, on any node (the brain's too), has `model_endpoint:
+{"relay": true}`. OpenCode is pointed at its own node's task listener,
+`<callback>/model/v1`, with the task's secret as its key (`{env:ERIPHE_MODEL_TOKEN}`, never in
+its config); the node relays to eriphe-core at `/v1/node/tasks/{id}/model/{path}` with its own
+secret, as the catalog relay does, streaming, only for a running task whose spec says `relay`.
+eriphe-core checks the task's agent and goes on through the lending node's tunnel
+(`core/README.md`, A model behind a node).
+
+The address is the one this node reaches: `http://127.0.0.1:11434` where the node runs on the
+machine itself (a Mac with Apple's container; Windows' WSL distribution with mirrored networking).
+On Linux the node is a container: run Ollama next to it on its network, without publishing a port
+(`install/README.md`), and give `http://eriphe-ollama:11434`.
+
 ### Waking the machine (Wake-on-LAN)
 
 `GET /v1/node` also reports `wake: {macs, broadcast}`: the MAC address of the network card the
@@ -189,14 +218,15 @@ its install command again; the node's own part comes with its update.
 | `POST /v1/tasks/{id}/permissions/{pid}` | answer a permission request `{allow, message?}` |
 | `POST /v1/tasks/{id}/stop` | stop the agent |
 | `/v1/services/{name}/mcp` | a service's streamable HTTP MCP endpoint (see Services) |
+| `GET`/`POST /v1/model/{path}` | the model server it lends (`-model-server`): its `/v1/{path}`, streamed (see A model behind this node) |
 | `POST /v1/wake` | send another machine's Wake-on-LAN packets: `{macs, broadcast}` (see Waking the machine) |
 
 States: `running`, `waiting_permission`, `idle` (turn over: done or asking something, the
 orchestrator decides), `stopped`, `failed`.
 
 The only ports the node listens on are for its task containers, each with its own secret: the task
-listener (`-listen`, 8790), where a Claude Code task calls its permission endpoint `/perm/{id}/mcp`
-and its catalog servers at `/mcp/{server}`, and the egress relay (`-egress-listen`, 8791, see
+listener (`-listen`, 8790), where a Claude Code task calls its permission endpoint `/perm/{id}/mcp`,
+its catalog servers at `/mcp/{server}` and a model behind a node at `/model/v1/{path}`, and the egress relay (`-egress-listen`, 8791, see
 Egress). It binds only the node's address on the task network: its interface there when
 the node is a container on it (the NAS), the network's gateway when the node runs on the Docker
 host (WSL), or else the loopback (Docker Desktop). `-listen 10.0.0.2:8790` forces an address,
@@ -416,7 +446,9 @@ environment: the key is never written in the config. OpenCode substitutes `{env:
 in the config's text, so an address, model or key holding a brace, a quote, a backslash or a
 control character gets no provider block (eriphe-core refuses them when saved). The server is
 reached through the egress relay, at the one `host:port` of its address (see Egress); plain
-`http://` goes through the relay's forward path, as OpenCode honors `HTTP_PROXY`.
+`http://` goes through the relay's forward path, as OpenCode honors `HTTP_PROXY`. A model behind
+a node (`"relay": true`) has no address: `baseURL` is this node's `<callback>/model/v1`, and
+`apiKey` `{env:ERIPHE_MODEL_TOKEN}`, the task's own secret (see A model behind this node).
 
 OpenCode takes no system prompt over ACP: `append_system_prompt` is passed by name as
 `ERIPHE_INSTRUCTIONS` to the command, which writes it to `/tmp/eriphe/instructions.md` (the tmpfs),

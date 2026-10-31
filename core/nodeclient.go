@@ -117,10 +117,13 @@ type nodeTaskSpec struct {
 }
 
 // nodeModelEndpoint is where a self-hosted model server answers, and the
-// variable of Identity that carries its key, if it has one.
+// variable of Identity that carries its key, if it has one; or, with Relay,
+// that the server is behind a node: the task reaches it through its own
+// node and eriphe-core (model_relay.go).
 type nodeModelEndpoint struct {
-	BaseURL string `json:"base_url"`
+	BaseURL string `json:"base_url,omitempty"`
 	KeyEnv  string `json:"key_env,omitempty"`
+	Relay   bool   `json:"relay,omitempty"`
 }
 
 // nodeEgress is a task's egress rule, like a Kubernetes NetworkPolicy:

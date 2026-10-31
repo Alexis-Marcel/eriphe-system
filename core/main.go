@@ -113,6 +113,7 @@ func main() {
 	mux.HandleFunc("GET /v1/node/assignments", c.handleAssignments)
 	mux.HandleFunc("POST /v1/node/tasks/{id}/report", c.handleReport)
 	mux.Handle("/v1/node/tasks/{id}/mcp/{server}", c.taskMCPHandler())
+	mux.Handle("/v1/node/tasks/{id}/model/{path...}", c.taskModelHandler())       // model_relay.go
 	mux.HandleFunc("POST /v1/node/tasks/{id}/credential", c.handleTaskCredential) // credentials.go
 	mux.HandleFunc("POST /v1/node/services/{name}/report", c.handleServiceReport)
 	mux.HandleFunc("POST /v1/node/certificate", c.handleNodeCertificate)

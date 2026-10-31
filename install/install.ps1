@@ -17,7 +17,10 @@
 # -CaHash ERIPHE_CA_HASH, -Version ERIPHE_VERSION, -Distro ERIPHE_DISTRO,
 # -AssistantName ERIPHE_ASSISTANT_NAME (only for what it prints), -WebPort
 # ERIPHE_WEB_PORT and -ApiPort ERIPHE_API_PORT (core mode: the workspace's
-# port, 8443, and the one other devices join on, 8800; kept), and the
+# port, 8443, and the one other devices join on, 8800; kept), -ModelServer
+# ERIPHE_MODEL_SERVER (a model server this node lends through its tunnel, as
+# the node in WSL reaches it: http://127.0.0.1:11434 with WSL's mirrored
+# networking; none for none; kept), and the
 # switches -CoreMode, -Rejoin, -Rollback and -Uninstall
 # ERIPHE_CORE_MODE, ERIPHE_REJOIN, ERIPHE_ROLLBACK and ERIPHE_UNINSTALL,
 # set to 1. A parameter given wins over its variable; the script clears
@@ -71,7 +74,8 @@ param(
   [switch] $Uninstall,
   [string] $AssistantName,   # the assistant's name, for what this script prints
   [string] $WebPort,         # core mode: the workspace's port (default 8443, kept for the next runs)
-  [string] $ApiPort          # core mode: the port other devices join on (default 8800, kept)
+  [string] $ApiPort,         # core mode: the port other devices join on (default 8800, kept)
+  [string] $ModelServer      # a model server this node lends through its tunnel, as the node in WSL reaches it; "none" for none (kept)
 )
 $bound = @{} + $PSBoundParameters
 # This script's own text, for the resume after a reboot (none under irm | iex:
@@ -86,7 +90,7 @@ $ErrorActionPreference = "Stop"
 $fromEnv = @{
   ERIPHE_CORE = "Core"; ERIPHE_JOIN_TOKEN = "JoinToken"; ERIPHE_NODE_NAME = "Name"; ERIPHE_NODE_LABELS = "Labels"
   ERIPHE_CA_HASH = "CaHash"; ERIPHE_VERSION = "Version"; ERIPHE_DISTRO = "Distro"; ERIPHE_ASSISTANT_NAME = "AssistantName"
-  ERIPHE_WEB_PORT = "WebPort"; ERIPHE_API_PORT = "ApiPort"
+  ERIPHE_WEB_PORT = "WebPort"; ERIPHE_API_PORT = "ApiPort"; ERIPHE_MODEL_SERVER = "ModelServer"
   ERIPHE_CORE_MODE = "CoreMode"; ERIPHE_REJOIN = "Rejoin"; ERIPHE_ROLLBACK = "Rollback"; ERIPHE_UNINSTALL = "Uninstall"
 }
 foreach ($v in @(Get-ChildItem Env: | Where-Object Name -like "ERIPHE_*")) {
@@ -593,6 +597,11 @@ if (-not $bound.ContainsKey("Name")) {
 }
 if (-not $bound.ContainsKey("Labels")) { $Labels = $saved["ERIPHE_NODE_LABELS"] }
 if (-not $bound.ContainsKey("CaHash")) { $CaHash = $saved["ERIPHE_CA_HASH"] }
+if (-not $bound.ContainsKey("ModelServer")) { $ModelServer = $saved["ERIPHE_MODEL_SERVER"] }
+if ($ModelServer -eq "none") { $ModelServer = "" }
+if ($ModelServer -and $ModelServer -notmatch "^https?://[A-Za-z0-9._~-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$") {
+  throw "-ModelServer ${ModelServer}: the model server's address as the node in WSL reaches it, e.g. http://127.0.0.1:11434"
+}
 $pin = if ($bound.ContainsKey("Version")) { if ($Version -eq "latest") { "" } else { $Version } } else { $saved["ERIPHE_VERSION"] }
 $tag = if ($pin) { $pin } else { "latest" }
 $nodeImage = if ($env:ERIPHE_NODE_IMAGE) { $env:ERIPHE_NODE_IMAGE } else { "$registry/eriphe-node:$tag" }
@@ -1122,6 +1131,7 @@ ERIPHE_JOIN_TOKEN=$token
 ERIPHE_VERSION=$pin
 ERIPHE_WAKE_MAC=$wakeMac
 ERIPHE_WAKE_BROADCAST=$wakeBroadcast
+ERIPHE_MODEL_SERVER=$ModelServer
 $alwaysOn
 EOF
 "@ | Out-Null

@@ -156,6 +156,7 @@ the updates-changed event, web_updates.go). */}}
     <h2>{{.Name}}</h2>
     {{template "device-status" .}}
     {{if .AlwaysOn}}<span class="tag tag-accent" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</span>{{end}}
+    {{if .Model}}<span class="tag" title="{{t "machines.modelhint"}}">{{t "machines.model"}}</span>{{end}}
   </div>
   <p>{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}}{{else}}{{t "machines.online"}}{{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}}{{end}}{{if .Version}} · <span class="mono">eriphe-node {{ver .Version}}</span>{{end}}</p>
 </header>

@@ -58,6 +58,10 @@ type options struct {
 	// Services (local MCP servers).
 	serviceMemory  string // memory limit of a service container, empty: none
 	serviceNetwork string // internal Docker network for http services without egress, empty: none
+	// A model server on this machine (Ollama, llama.cpp, vLLM, LM Studio)
+	// that eriphe-core may reach through the tunnel: its root address, its
+	// /v1 API under it (model.go). Empty: none.
+	modelServer string
 }
 
 func main() {
@@ -97,6 +101,7 @@ func main() {
 	o.install = installKind(thisHost())
 	wakeMAC := flag.String("wake-mac", os.Getenv("ERIPHE_WAKE_MAC"), "MAC address(es) of this machine's network card, comma-separated, so that eriphe-core can wake it (Wake-on-LAN); default: the card it reaches eriphe-core through, when the node runs on the machine itself (env ERIPHE_WAKE_MAC)")
 	wakeBroadcast := flag.String("wake-broadcast", os.Getenv("ERIPHE_WAKE_BROADCAST"), "broadcast address of that card's network, e.g. 192.0.2.255 (env ERIPHE_WAKE_BROADCAST)")
+	modelServer := flag.String("model-server", os.Getenv("ERIPHE_MODEL_SERVER"), "a model server this node may lend to Eriphe through its tunnel (Ollama, llama.cpp, vLLM, LM Studio), as this node reaches it, e.g. http://127.0.0.1:11434; only its OpenAI-compatible /v1 API is reached, and no port is opened (env ERIPHE_MODEL_SERVER)")
 	labels := flag.String("labels", os.Getenv("ERIPHE_NODE_LABELS"), "comma-separated labels agents can require, e.g. gpu (env ERIPHE_NODE_LABELS)")
 	o.volumes = volumeFlag{}
 	if err := volumeFlag(o.volumes).Set(os.Getenv("ERIPHE_NODE_VOLUMES")); err != nil {
@@ -116,6 +121,9 @@ func main() {
 	}
 
 	var err error
+	if o.modelServer, err = parseModelServer(*modelServer); err != nil {
+		log.Fatal(err)
+	}
 	switch o.engine {
 	case engineDocker, engineContainer:
 	default:
@@ -223,6 +231,7 @@ func main() {
 	perm := http.NewServeMux()
 	perm.Handle("/perm/{id}/mcp", n.permHandler())
 	perm.Handle("/mcp/{server}", n.relayHandler(s))
+	perm.Handle("/model/v1/{path...}", n.modelRelayHandler(s))
 	perm.Handle("POST "+credentialPath, n.credentialHandler(s))
 	for _, sh := range o.shareList() {
 		if sh.Missing {

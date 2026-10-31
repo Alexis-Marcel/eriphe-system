@@ -599,24 +599,42 @@ type presetChoice struct {
 }
 
 type providerForm struct {
-	Edit     bool
-	Name     string
-	Kind     providerKind
-	Env      string // the variable of its credential, when the provider names it
-	BaseURL  string // a self-hosted model server's address
-	Models   string // the models it serves, one per line
-	KeySet   bool
-	Presets  []presetChoice
-	Login    *loginView // a ChatGPT sign-in going on or done (chatgpt.go)
-	Agents   []string   // the agents using it, on an edit
-	Error    string
-	Gallery  bool
-	AllKinds []providerKind
-	Next     string // "welcome" in the first-run wizard (web_welcome.go), which it goes back to
+	Edit    bool
+	Name    string
+	Kind    providerKind
+	Env     string // the variable of its credential, when the provider names it
+	BaseURL string // a self-hosted model server's address
+	Models  string // the models it serves, one per line
+	// A self-hosted model server: on one of the user's devices ("node",
+	// Node lends it through its tunnel) or at an address ("address").
+	Where      string
+	Node       string
+	ModelNodes []string // the devices that lend one (their -model-server)
+	KeySet     bool
+	Presets    []presetChoice
+	Login      *loginView // a ChatGPT sign-in going on or done (chatgpt.go)
+	Agents     []string   // the agents using it, on an edit
+	Error      string
+	Gallery    bool
+	AllKinds   []providerKind
+	Next       string // "welcome" in the first-run wizard (web_welcome.go), which it goes back to
 }
 
 func (w *web) providerFormPage(rw http.ResponseWriter, r *http.Request, s *session, f providerForm, block string) {
 	f.AllKinds = providerKinds
+	if f.Kind.ID == selfHostedKind {
+		f.ModelNodes = w.c.modelNodes()
+		if f.Node != "" && !slices.Contains(f.ModelNodes, f.Node) {
+			f.ModelNodes = append(f.ModelNodes, f.Node) // its device, even while it lends none
+		}
+		if f.Where == "" {
+			// A device that lends a model first: nothing to open on the network.
+			f.Where = whereAddress
+			if f.Node != "" || f.BaseURL == "" && len(f.ModelNodes) > 0 {
+				f.Where = whereNode
+			}
+		}
+	}
 	if !f.Edit && f.Kind.ID != "" {
 		f.Presets = w.presetChoices(f.Kind, f.Name, f.Presets)
 	}
@@ -662,7 +680,7 @@ func (w *web) handleEditProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	agents := m.agentsOf(name)
 	sort.Strings(agents)
 	w.providerFormPage(rw, r, s, providerForm{Edit: true, Name: name, Kind: k, Env: p.Env, BaseURL: p.BaseURL, Models: strings.Join(p.Models, "\n"),
-		KeySet: p.Secret != "", Agents: agents}, "")
+		Node: p.Node, KeySet: p.Secret != "", Agents: agents}, "")
 }
 
 func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -697,7 +715,13 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	if selfHosted {
 		f.BaseURL = strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
 		f.Models = r.PostFormValue("models")
-		p.BaseURL, p.Models = f.BaseURL, modelLines(f.Models)
+		f.Where, f.Node = r.PostFormValue("where"), r.PostFormValue("node")
+		p.Models = modelLines(f.Models)
+		if f.Where == whereNode {
+			p.Node = f.Node
+		} else {
+			f.Where, p.BaseURL = whereAddress, f.BaseURL
+		}
 	}
 	checked := r.PostForm["preset"]
 	for _, ps := range f.Kind.Presets {
@@ -723,7 +747,9 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		err = errors.New("form.nokey")
 	case f.Kind.CustomEnv && checkCredentialEnv(f.Env) != nil:
 		err = errors.New("providers.badenv")
-	case selfHosted && checkBaseURL(p.BaseURL) != nil:
+	case selfHosted && f.Where == whereNode && !w.c.lendsModel(p.Node, m.Providers[f.Name].Node):
+		err = errors.New("providers.nonode")
+	case selfHosted && p.Node == "" && checkBaseURL(p.BaseURL) != nil:
 		err = errors.New("providers.badbaseurl")
 	case selfHosted && clearToInternet(p.BaseURL):
 		err = errors.New("providers.clearbaseurl")
@@ -814,6 +840,21 @@ func (w *web) handleDeleteProvider(rw http.ResponseWriter, r *http.Request, s *s
 	rw.WriteHeader(http.StatusOK)
 }
 
+// Where a self-hosted model server is, in the provider form.
+const (
+	whereNode    = "node"    // on one of the user's devices, through its tunnel
+	whereAddress = "address" // at an address on the network
+)
+
+// checkSelfHostedForm tries a self-hosted model server as the form names
+// it: on a device, or at an address.
+func (w *web) checkSelfHostedForm(r *http.Request, lang, where, base, node, key string) testView {
+	if where == whereNode {
+		return w.c.checkNodeModel(r.Context(), lang, node, key)
+	}
+	return checkSelfHosted(r.Context(), lang, base, key)
+}
+
 // handleTestProvider tries the key of the form (POST /settings/provider-test),
 // or the stored one of a provider (POST /settings/provider-test/{name})
 // when none is typed.
@@ -834,10 +875,14 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		}
 		kind = p.Kind
 		if kind == selfHostedKind {
-			// The address of the form, else the stored one; the same for its key.
+			// The address or device of the form, else the stored one; the same for its key.
 			base := strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
 			if base == "" {
 				base = p.BaseURL
+			}
+			node := r.PostFormValue("node")
+			if node == "" {
+				node = p.Node
 			}
 			if strings.TrimSpace(key) == "" && p.Secret != "" {
 				if key, _ = readSecret(p.Secret); key == "" {
@@ -845,7 +890,11 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 					return
 				}
 			}
-			v := checkSelfHosted(r.Context(), lang, base, key)
+			where := r.PostFormValue("where")
+			if where == "" && p.Node != "" {
+				where = whereNode
+			}
+			v := w.checkSelfHostedForm(r, lang, where, base, node, key)
 			log.Printf("web: provider test (%s): %s", kind, v.State) // never the key
 			show(v)
 			return
@@ -865,7 +914,7 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	}
 	var v testView
 	if kind == selfHostedKind {
-		v = checkSelfHosted(r.Context(), lang, strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/"), key)
+		v = w.checkSelfHostedForm(r, lang, r.PostFormValue("where"), strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/"), r.PostFormValue("node"), key)
 	} else {
 		v = checkProvider(r.Context(), lang, kind, key)
 	}

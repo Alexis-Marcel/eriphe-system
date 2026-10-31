@@ -55,6 +55,9 @@ type nodeInfo struct {
 	Update       updaterInfo `json:"update"`        // its updater, from the installer (machine_updates.go)
 	// The roots it shares folders from (node/shares.go); none from an older one.
 	Shares []nodeShare `json:"shares"`
+	// It lends a model server through its tunnel (its -model-server,
+	// model_relay.go).
+	ModelServer bool `json:"model_server"`
 }
 
 func parseInfo(n NodeRow) nodeInfo {
