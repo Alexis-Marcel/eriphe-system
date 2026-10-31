@@ -151,6 +151,36 @@ func TestPrepareNow(t *testing.T) {
 	}
 }
 
+// The preparer waits for eriphe-core's first list, then prepares the latest.
+func TestPrepareWanted(t *testing.T) {
+	cli, dir := fakeCLI(t, "true")
+	n := newNode(options{root: t.TempDir(), docker: cli, image: "worker"})
+	n.prepareWanted()
+	if _, err := os.Stat(filepath.Join(dir, "calls")); err == nil {
+		t.Error("prepared before the first assignments")
+	}
+	n.wanted(&prepareSpec{Images: []string{"agent"}})
+	n.prepareWanted()
+	if got := fileLines(filepath.Join(dir, "calls")); !slices.Equal(got, []string{"pull -q agent", "pull -q worker"}) {
+		t.Errorf("calls %v", got)
+	}
+}
+
+// The images Docker has, without the untagged ones.
+func TestLocalImages(t *testing.T) {
+	cli, dir := fakeCLI(t, `printf 'alpine:3\n<none>:<none>\n\nghcr.io/x/y:1\n'`)
+	if got := localImages(context.Background(), cli); !slices.Equal(got, []string{"alpine:3", "ghcr.io/x/y:1"}) {
+		t.Errorf("got %v", got)
+	}
+	if calls := fileLines(filepath.Join(dir, "calls")); calls[0] != "images --format {{.Repository}}:{{.Tag}}" {
+		t.Errorf("calls %v", calls)
+	}
+	failing, _ := fakeCLI(t, "exit 1")
+	if got := localImages(context.Background(), failing); got == nil || len(got) != 0 {
+		t.Errorf("got %#v, want an empty list", got)
+	}
+}
+
 func TestVolumeFlag(t *testing.T) {
 	v := volumeFlag{}
 	if err := v.Set(" media=/mnt/media, ,docs=/srv/docs"); err != nil {

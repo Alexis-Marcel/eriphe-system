@@ -548,12 +548,17 @@ func (n *node) prepareLoop() {
 		case <-n.prep.wake:
 		case <-time.After(prepareEvery):
 		}
-		n.prep.mu.Lock()
-		want, seen := n.prep.want, n.prep.seen
-		n.prep.mu.Unlock()
-		if seen {
-			n.prepareNow(want)
-		}
+		n.prepareWanted()
+	}
+}
+
+// prepareWanted prepares eriphe-core's latest list, once it has sent one.
+func (n *node) prepareWanted() {
+	n.prep.mu.Lock()
+	want, seen := n.prep.want, n.prep.seen
+	n.prep.mu.Unlock()
+	if seen {
+		n.prepareNow(want)
 	}
 }
 

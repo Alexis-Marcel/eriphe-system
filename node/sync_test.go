@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,6 +13,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // agentRun is the run of a fake docker whose container is a Claude Code
@@ -354,5 +358,117 @@ func TestReportServices(t *testing.T) {
 		if count[p] != c {
 			t.Errorf("%s reported %d times, want %d", p, count[p], c)
 		}
+	}
+}
+
+// One round of the report loop: the inbox delivered, every task and
+// service reported, the machine held awake while a task works.
+func TestReportOnce(t *testing.T) {
+	var mu sync.Mutex
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	c := &coreClient{s: &state{Core: srv.URL, Name: "node-1", Secret: "s"}, http: srv.Client()}
+	root := t.TempDir()
+	n := newNode(options{root: root})
+	holds := 0
+	n.awake.hold = func() (func(), error) { holds++; return func() {}, nil }
+	run := &fakeSession{}
+	task := &Task{ID: "t-1", State: stateIdle, perms: map[string]*permission{}, run: run,
+		inbox: []inboxItem{{Seq: 1, Kind: "message", Data: map[string]any{"text": "go on"}}}}
+	n.adopt(task)
+	n.services["mail"] = &service{name: "mail", state: svcRunning}
+
+	n.reportOnce(c)
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(run.sent, []string{"go on"}) || task.state() != stateRunning {
+		t.Errorf("sent %v, state %s", run.sent, task.state())
+	}
+	slices.Sort(paths)
+	if !slices.Equal(paths, []string{"/v1/node/services/mail/report", "/v1/node/tasks/t-1/report"}) {
+		t.Errorf("reports %v", paths)
+	}
+	if holds != 1 {
+		t.Errorf("held %d times, want once", holds)
+	}
+}
+
+// bearer adds a task's secret to its requests.
+type bearer string
+
+func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer "+string(b))
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// The agent asks through its task's permission endpoint, with the task's
+// secret, and gets eriphe-core's answer, delivered from the inbox.
+func TestPermHandler(t *testing.T) {
+	n := newNode(options{})
+	task := &Task{ID: "t-1", State: stateRunning, secret: "s3cret", perms: map[string]*permission{}}
+	n.adopt(task)
+	mux := http.NewServeMux()
+	mux.Handle("/perm/{id}/mcp", n.permHandler())
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	for _, tc := range []struct{ path, secret string }{{"/perm/t-1/mcp", "wrong"}, {"/perm/t-2/mcp", "s3cret"}} {
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+tc.path, strings.NewReader("{}"))
+		req.Header.Set("Authorization", "Bearer "+tc.secret)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s with %q: %s", tc.path, tc.secret, resp.Status)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "agent"}, nil).Connect(ctx,
+		&mcp.StreamableClientTransport{Endpoint: srv.URL + "/perm/t-1/mcp", HTTPClient: &http.Client{Transport: bearer("s3cret")}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	for i, tc := range []struct {
+		answer map[string]any
+		want   string
+	}{
+		{map[string]any{"allow": true}, `{"behavior":"allow","updatedInput":{"command":"ls"}}`},
+		{map[string]any{"allow": false}, `{"behavior":"deny","message":"Denied."}`},
+		{map[string]any{"allow": false, "message": "Not there."}, `{"behavior":"deny","message":"Not there."}`},
+	} {
+		got := make(chan string, 1)
+		go func() {
+			text, err := callText(t, cs, "approve", map[string]any{"tool_name": "Bash", "input": map[string]any{"command": "ls"}})
+			if err != nil {
+				text = err.Error()
+			}
+			got <- text
+		}()
+		waitFor(t, func() bool { return task.state() == stateWaitingPermission })
+		task.mu.Lock()
+		var id string
+		for k := range task.perms {
+			id = k
+		}
+		tc.answer["id"] = id
+		task.inbox = append(task.inbox, inboxItem{Seq: i + 1, Kind: "permission", Data: tc.answer})
+		task.mu.Unlock()
+		n.deliver(task)
+		if text := <-got; text != tc.want {
+			t.Errorf("answer %q, want %q", text, tc.want)
+		}
+		waitFor(t, func() bool { return task.state() == stateRunning })
 	}
 }
