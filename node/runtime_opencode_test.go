@@ -135,8 +135,19 @@ func TestOpenCodeSelfHosted(t *testing.T) {
 	if len(disabled) != 1 || disabled[0] != "opencode" {
 		t.Errorf("disabled %v", disabled)
 	}
+	// Minutes to read a long prompt on a home machine: no 5-minute cut.
+	if p.Options["timeout"] != false || p.Options["headerTimeout"] != float64(1800000) || p.Options["chunkTimeout"] != float64(600000) {
+		t.Errorf("timeouts %v", p.Options)
+	}
 	if strings.Contains(raw, "k-123") {
 		t.Error("the key is in the configuration")
+	}
+	// Its model is in its configuration: no catalog fetched from models.dev.
+	if env := opencodeSetup(&Task{Spec: spec}); env["OPENCODE_DISABLE_MODELS_FETCH"] != "1" {
+		t.Error("the models catalog is still fetched")
+	}
+	if env := opencodeSetup(&Task{Spec: TaskSpec{Model: "openai/gpt-5"}}); env["OPENCODE_DISABLE_MODELS_FETCH"] != "" {
+		t.Error("a cloud model loses its catalog")
 	}
 	// No key: no apiKey.
 	spec.Identity, spec.ModelEndpoint.KeyEnv = nil, ""
