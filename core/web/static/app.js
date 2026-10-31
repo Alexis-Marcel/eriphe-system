@@ -1085,3 +1085,21 @@ function lit(name) {
   show();
   addEventListener("resize", show);
 })();
+
+// Settings → Skills (skills.html): a folder's files keep their paths (a
+// form sends a file's name only), and only the input picked last is sent.
+document.addEventListener("change", (e) => {
+  const input = e.target;
+  const form = input.closest && input.closest("[data-skill-upload]");
+  if (!form || input.type !== "file") return;
+  const folder = form.querySelector("[data-skill-folder]");
+  const zip = form.querySelector("[data-skill-zip]");
+  (input === folder ? zip : folder).value = "";
+  const files = Array.from(input.files || []);
+  form.querySelector("[name=paths]").value = JSON.stringify(input === folder ? files.map((f) => f.webkitRelativePath || f.name) : []);
+  const picked = form.querySelector("[data-skill-picked]");
+  picked.textContent = files.length ? picked.dataset.picked.replace("%d", files.length) : "";
+  form.querySelector("[data-skill-send]").disabled = files.length === 0;
+  const result = document.getElementById("skill-result");
+  if (result) result.textContent = "";
+});

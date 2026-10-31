@@ -240,6 +240,7 @@ The ways back follow the pages, never the browser's history. */}}
     <h2 class="nav-group-title" id="sg-assistant">{{t "settings.g.assistant"}}</h2>
     <a href="/memory" {{if eq .Tab "memory"}}aria-current="page"{{end}}>{{template "i-memory"}}<span>{{t "nav.memory"}}</span>{{template "chev"}}</a>
     <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span>{{if .Attn.Agents}}{{template "attn-dot"}}{{end}}{{template "chev"}}</a>
+    <a href="/settings/skills" {{if eq .Tab "skills"}}aria-current="page"{{end}}>{{template "i-skill"}}<span>{{t "settings.skills"}}</span>{{template "chev"}}</a>
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-connections">
     <h2 class="nav-group-title" id="sg-connections">{{t "settings.g.connections"}}</h2>

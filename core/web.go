@@ -110,12 +110,12 @@ func (w *web) parse() error {
 	}
 	for _, f := range files {
 		name := strings.TrimSuffix(filepath.Base(f), ".html")
-		if name == "layout" || name == "parts" || name == "catalog" || name == "tools" || name == "agents" || name == "remote" || name == "folders" || name == "push" {
+		if name == "layout" || name == "parts" || name == "catalog" || name == "tools" || name == "agents" || name == "remote" || name == "folders" || name == "push" || name == "skills" {
 			continue
 		}
 		t, err := template.New(name).Funcs(templateFuncs("fr")).ParseFS(webFS,
 			"web/templates/layout.html", "web/templates/parts.html", "web/templates/catalog.html", "web/templates/tools.html",
-			"web/templates/agents.html", "web/templates/remote.html", "web/templates/folders.html", "web/templates/push.html", f)
+			"web/templates/agents.html", "web/templates/remote.html", "web/templates/folders.html", "web/templates/push.html", "web/templates/skills.html", f)
 		if err != nil {
 			return err
 		}
@@ -229,6 +229,7 @@ func (w *web) routes() http.Handler {
 	w.remoteRoutes(mux)  // web_remote.go
 	w.driveRoutes(mux)   // web_drive.go
 	w.folderRoutes(mux)  // web_folders.go
+	w.skillRoutes(mux)   // web_skills.go
 	w.githubRoutes(mux)  // web_github.go
 	w.welcomeRoutes(mux) // web_welcome.go
 	w.pushRoutes(mux)    // web_push.go

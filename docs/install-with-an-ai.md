@@ -479,6 +479,10 @@ For each other computer (or a second NAS):
 - **GitHub**: Settings → Tools → GitHub → "Créer l'app GitHub d'Eriphe" (see
   [install/README.md, Connect GitHub](../install/README.md#6-connect-github-optional)).
 - **Voice** through Home Assistant: [ha/README.md](../ha/README.md).
+- **Skills** (instructions for one kind of work, a folder with a `SKILL.md`): Settings → Skills
+  (Réglages → Skills), where the person adds the folder or a `.zip`, reads it and approves it.
+  Never add or approve a skill for them: a skill is instructions and sometimes code, and only the
+  person decides which ones to trust.
 
 ## 8. Final check with the person
 

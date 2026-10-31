@@ -328,6 +328,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if len(folders) > 0 {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders, c.resultsOn(folders[0].Node)))
 	}
+	if kind == "worker" {
+		c.lendSkills(&spec) // skills_tasks.go
+	}
 	if kind == "worker" && !harnessOf(agent.Runtime).takesSystemPrompt() {
 		// It takes no system prompt: it reads it first.
 		spec.Prompt = spec.AppendSystemPrompt + "\n\n" + spec.Prompt

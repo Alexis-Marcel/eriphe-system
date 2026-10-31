@@ -545,6 +545,20 @@ from the repository they work in (`skills.go`). Two rules hold for every runtime
 | `codex` | `-c skills.include_instructions=false`: no skill catalog in the model's context |
 | `acp` | nothing: a custom agent's own |
 
+**The user's skills** (approved in eriphe-core, Settings → Skills) come as the spec's `skills`,
+the name and sha256 of each bundle (`skills_user.go`). Before the container starts, the node
+fetches each one (`GET /v1/node/tasks/{id}/skills/{sha256}`, with its own secret). It checks the
+hash and unpacks the regular files only, each inside the skill, into
+`<run>/skills/.claude/skills/<name>`, which is mounted read-only with the run files. A skill that
+cannot be fetched or does not match its hash is left out.
+
+| Runtime | Pointed at them |
+|---|---|
+| `claude-code` | `--add-dir /run/eriphe/skills` (not in a task where skills are off) |
+| `opencode` | `skills.paths: ["/run/eriphe/skills/.claude/skills"]`, which `OPENCODE_DISABLE_EXTERNAL_SKILLS` leaves alone |
+| `codex` | the command links `$CODEX_HOME/skills/eriphe` to that folder (a user skills folder of Codex's) |
+| `acp`, and the others where skills are off | eriphe-core lists them in the task's instructions |
+
 ## Task containers
 
 Every task container is started with:

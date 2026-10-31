@@ -68,6 +68,11 @@ func opencodeSetup(t *Task) map[string]string {
 	if len(instructions) > 0 {
 		cfg["instructions"] = instructions
 	}
+	if len(t.Spec.Skills) > 0 {
+		// The user's skills (skills_user.go): not turned off with the
+		// repository's, which OPENCODE_DISABLE_EXTERNAL_SKILLS covers.
+		cfg["skills"] = map[string]any{"paths": []string{skillsDirPath}}
+	}
 	if m := t.Spec.Model; m != "" {
 		cfg["model"] = m
 		if !strings.HasPrefix(m, "opencode/") {

@@ -88,6 +88,9 @@ func (claudeCode) command(n *node, t *Task) ([]string, map[string]string) {
 		// No skill and no Skill tool: those of a repository not vouched
 		// for, or the brain's (skills.go).
 		args = append(args, "--disable-slash-commands")
+	} else if len(spec.Skills) > 0 {
+		// The user's skills, in <dir>/.claude/skills (skills_user.go).
+		args = append(args, "--add-dir", skillsRoot)
 	}
 	if resume := t.SessionID; resume != "" {
 		args = append(args, "--resume", resume)

@@ -570,6 +570,8 @@ whatever address it dials) and one client certificate per node.
 | `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
 | `run_task` | start a task: prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose); the old fields (`repo/ref/branch/dir`, `tools`, `folders`, `identities`) still work |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read` or `drop`), where a task finds it |
+| `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
+| `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
 | `task_status` | state, the agent's last message, the pending permission; `wait` blocks until the task needs you |
 | `list_tasks` | recent tasks |
 | `answer_task` | allow or deny the pending permission, or reply to the agent's question |
@@ -747,6 +749,43 @@ a skill never approves a tool by itself.
 entry, `trust_skills`, tools that may act, a Drive folder (its files server is lent whole for now)
 and any legacy `identities`: the brain asks the user and starts the task in the turn of their
 answer. Reads still go.
+
+## Skills
+
+A skill ([agentskills.io](https://agentskills.io/specification)) is a folder with a `SKILL.md`
+(its `name` and `description`, then instructions) and maybe `scripts/`, `references/` and
+`assets/`. The user's skills live in eriphe-core (`skills.go`), and are managed in **Settings →
+Skills** (`web_skills.go`):
+
+- **Adding one**: a folder or a `.zip`, read in the browser and sent as files. eriphe-core checks
+  the paths (none out of the skill, no link), the limits (200 files, 2 MB each, 8 MB in all), and
+  the `SKILL.md`'s front matter. It drops the folder around the skill and the system's junk
+  (`.DS_Store`, `__MACOSX`).
+- **Storage**: each version is an immutable bundle, a tar of its files in a fixed form (sorted, no
+  dates or owners), kept in the database (`skill_bundles`) and named by its **sha256**. A skill
+  (`skills`) points at the version approved and at a version waiting for approval.
+- **Approving**: nothing reaches a task or the brain before the user has read the skill on its page
+  and approved it. The page shows its `SKILL.md` and its files, with the scripts marked (in
+  `scripts/`, executable, a script's extension, or not text). A skill's `allowed-tools` is shown
+  as ignored: Eriphe's permissions stay the only judge (node/README.md, Agent skills).
+- **A new version** (the same name, uploaded again) waits for approval with its diff against the
+  approved one, file by file. Tasks keep the approved version until the user approves the new one
+  (the hash they read is checked) or keeps the old one.
+- **On or off**, and **delete**. Bundles no skill points at any more are deleted.
+
+**In tasks.** Every worker task gets the skills that are approved and on when it starts, as its
+spec's `skills` (name and sha256 of each, `skills_tasks.go`). Its node fetches each bundle with its
+own secret (`GET /v1/node/tasks/{id}/skills/{sha256}`: only that task's, only on its node), checks
+the hash, and mounts them read-only at `/run/eriphe/skills/.claude/skills/<name>`. It points
+Claude Code, OpenCode and Codex at them. Scripts run in the task's container, under its permissions,
+like any other command. When the agent does not load them itself, eriphe-core lists them (name,
+description and path) in the task's instructions: an ACP agent, or Claude Code and Codex in a task
+on someone else's repository, where every skill is off.
+
+**For the brain**, skills are read, never loaded: `list_skills` and `read_skill` return their
+text (not their scripts), and a skill's scripts run in a task. Nothing of a skill enters the brain's
+privileged, long-lived container, whatever its runtime. A skill is the user's own, approved by them:
+reading one does not taint the turn.
 
 ## Credentials on demand
 
