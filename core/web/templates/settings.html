@@ -139,6 +139,7 @@ the updates-changed event, web_updates.go). */}}
 <section class="device-part" aria-labelledby="can-{{.Name}}">
   <h4 id="can-{{.Name}}">{{template "i-bot"}}{{t "devices.can"}}</h4>
   <p class="device-fact"><span>{{t "devices.agents"}}</span>{{if and .Workers (not .Suspended)}}<b class="tag tag-ok">{{t "devices.yes"}}</b>{{else}}<b class="tag" title="{{t "devices.agentsnohint"}}">{{t "devices.no"}}</b>{{end}}</p>
+  {{if .Wake.Can}}<p class="device-fact"><span>{{t "wake.fact"}}</span>{{if and .Wake.Allowed (not .Suspended)}}<b class="tag tag-ok">{{t "devices.yes"}}</b>{{else}}<b class="tag">{{t "devices.no"}}</b>{{end}}</p>{{end}}
   <div class="device-specs">
     {{if .System}}<p class="system" title="{{if .Arch}}{{.OS}}/{{.Arch}}{{end}}">{{t .System}}</p>{{end}}
     {{if or .CPUs .Memory}}<p class="muted small">{{if .CPUs}}{{.CPUs}} CPU{{end}}{{if and .CPUs .Memory}} · {{end}}{{if .Memory}}{{size .Memory}} RAM{{end}}</p>{{end}}
@@ -171,6 +172,7 @@ the updates-changed event, web_updates.go). */}}
   <form hx-post="/settings/devices/{{.Name}}/suspend" hx-confirm="{{tf "devices.cutconfirm" .Name}}"><button class="btn btn-danger-ghost" type="submit">{{t "devices.cutaction"}}</button></form>
   {{end}}
 </section>
+{{if and .Wake.Can (not .Suspended)}}{{template "device-wake" .}}{{end}}
 {{end}}
 <section class="device-log" aria-labelledby="log-title">
   <h3 id="log-title">{{template "i-list"}}{{t "devices.log"}}</h3>
@@ -201,6 +203,61 @@ the updates-changed event, web_updates.go). */}}
 {{end}}
 {{if .Next}}<tr id="device-log-more"><td colspan="3"><button class="btn btn-soft" hx-get="/settings/devices/{{.Device.Name}}?before={{.Next}}" hx-target="#device-log-more" hx-swap="outerHTML">{{t "journal.more"}}</button></td></tr>{{end}}
 {{end}}{{end}}
+
+{{/* A device's waking (web_wake.go): "Eriphe may wake this device", off by
+default; once on, "Wake now" while it is off, and how to get it ready. Not on
+the machine that stays on. . is a machineView. */}}
+{{define "device-wake"}}
+<section class="panel device-wake" aria-labelledby="wake-title">
+  <h3 id="wake-title">{{template "i-power"}}{{t "wake.title"}}</h3>
+  <label class="switch">
+    <input type="checkbox" role="switch" name="allow" value="1" hx-post="/settings/devices/{{.Name}}/wake/allow" hx-trigger="change" {{if .Wake.Allowed}}checked{{end}}>
+    <span><b>{{t "wake.allow"}}</b><small>{{t "wake.allowhint"}}</small></span>
+  </label>
+  {{if .Wake.Allowed}}
+  {{if not .Wake.MACs}}<p class="notice-line">{{t "wake.nomac"}}</p>
+  {{else}}
+  <div class="wake-now">
+    {{if .Online}}<p class="muted small">{{t "wake.isup"}}</p>
+    {{else}}<form hx-post="/settings/devices/{{.Name}}/wake" hx-target="#wake-state-{{.Name}}" hx-swap="outerHTML"><button class="btn btn-primary" type="submit" hx-disabled-elt="this">{{t "wake.now"}}</button></form>{{end}}
+    <div id="wake-state-{{.Name}}"></div>
+  </div>
+  <p class="muted small">{{t "wake.card"}} <span class="mono">{{range $i, $m := .Wake.MACs}}{{if $i}}, {{end}}{{$m}}{{end}}</span></p>
+  {{end}}
+  <details class="wake-guide"{{if not .Wake.MACs}} open{{end}}>
+    <summary>{{t "wake.guide"}}</summary>
+    <p class="muted small">{{t "wake.guidelead"}}</p>
+    <h4>{{t "wake.pc"}}</h4>
+    <ol>
+      <li>{{t "wake.pc1"}}</li>
+      <li>{{t "wake.pc2"}}</li>
+      <li>{{t "wake.pc3"}}</li>
+      <li>{{t "wake.pc4"}}</li>
+    </ol>
+    <h4>{{t "wake.macos"}}</h4>
+    <ol>
+      <li>{{t "wake.macos1"}}</li>
+      <li>{{t "wake.macos2"}}</li>
+    </ol>
+  </details>
+  {{end}}
+</section>
+{{end}}
+
+{{/* Where a "Wake now" stands: it asks every 5 seconds until the device is
+back, or wakeWait has passed. . is a wakeState. */}}
+{{define "wake-state-fragment"}}{{template "wake-state" .Data}}{{end}}
+{{define "wake-state"}}
+{{- if eq .State "back"}}
+<div id="wake-state-{{.Name}}" class="test-result test-ok" role="status">{{template "i-check"}}<p>{{tf "wake.back" .Name}}</p></div>
+{{- else if eq .State "late"}}
+<div id="wake-state-{{.Name}}" class="test-result wake-late" role="status"><p>{{tf "wake.late" .Name}}</p></div>
+{{- else}}
+<div id="wake-state-{{.Name}}" hx-get="/settings/devices/{{.Name}}/wake?since={{.Since}}" hx-trigger="every 5s" hx-swap="outerHTML">
+  <p class="muted small" role="status"><span class="pulse-dot" aria-hidden="true"></span>{{tf "wake.waiting" .Name}}</p>
+</div>
+{{- end}}
+{{end}}
 
 {{/* Settings → Devices → Updates (web_updates.go): eriphe-core's own, "Update all" and the switch for the night; each node's is on its card. */}}
 {{define "updates-fragment"}}{{template "updates" .Data}}{{end}}

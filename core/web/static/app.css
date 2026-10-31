@@ -1219,6 +1219,17 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 .device-detail .device-part { padding-top: 0; border-top: 0; }
 .device-access { justify-items: start; }
 .device-access.is-cut { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.device-wake { justify-items: start; }
+.device-wake .switch { justify-self: stretch; }
+.device-wake > p { margin: 0; }
+.wake-now { display: grid; gap: 10px; justify-items: start; }
+.wake-now p { margin: 0; }
+.wake-late { background: var(--warn-soft); color: var(--warn); }
+.wake-guide { justify-self: stretch; border-top: 1px solid var(--border); padding-top: 12px; }
+.wake-guide > summary { cursor: pointer; font-weight: 650; font-size: .92rem; }
+.wake-guide h4 { margin: 14px 0 4px; }
+.wake-guide ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; font-size: .9rem; }
+.wake-guide > p { margin: 8px 0 0; }
 .device-log { display: grid; gap: 10px; }
 .device-log h3 { display: flex; align-items: center; gap: 9px; font-size: 1.06rem; margin: 0; }
 .device-log h3 .i { color: var(--accent); }

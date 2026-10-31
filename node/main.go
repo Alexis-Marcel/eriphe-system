@@ -50,6 +50,7 @@ type options struct {
 	labels        []string          // what the scheduler can ask for, e.g. gpu
 	install       string            // how the installers installed it: linux, macos or windows; empty by hand
 	alwaysOn      bool              // the machine never sleeps: eriphe-core puts the tools (services) here
+	wake          wakeInfo          // how eriphe-core can wake this machine (wake.go)
 	volumes       map[string]string // named host folders offered to tasks, by name
 	shares        shareFlag         // roots the user may share folders from, by name (shares.go)
 	taskMemory    string            // memory limit of a task container (docker --memory), empty: none
@@ -62,6 +63,10 @@ type options struct {
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "core-relay" {
 		runCoreRelay(os.Args[2:]) // a Mac's LaunchDaemon (corerelay.go)
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "wake-send" {
+		runWakeSend(os.Args[2:]) // the short-lived container that wakes a machine (wake.go)
 		return
 	}
 	core := flag.String("core", os.Getenv("ERIPHE_CORE"), "eriphe-core URL, or several separated by commas, preferred first, e.g. the local one then the remote one (env ERIPHE_CORE)")
@@ -90,6 +95,8 @@ func main() {
 	flag.BoolVar(&o.alwaysOn, "always-on", os.Getenv("ERIPHE_ALWAYS_ON") == "1", "this machine stays on, like the one eriphe-core runs on: tools go here first (env ERIPHE_ALWAYS_ON=1)")
 	// From install.sh and install.ps1, or guessed (install.go): eriphe-core shows the command that updates this machine.
 	o.install = installKind(thisHost())
+	wakeMAC := flag.String("wake-mac", os.Getenv("ERIPHE_WAKE_MAC"), "MAC address(es) of this machine's network card, comma-separated, so that eriphe-core can wake it (Wake-on-LAN); default: the card it reaches eriphe-core through, when the node runs on the machine itself (env ERIPHE_WAKE_MAC)")
+	wakeBroadcast := flag.String("wake-broadcast", os.Getenv("ERIPHE_WAKE_BROADCAST"), "broadcast address of that card's network, e.g. 192.0.2.255 (env ERIPHE_WAKE_BROADCAST)")
 	labels := flag.String("labels", os.Getenv("ERIPHE_NODE_LABELS"), "comma-separated labels agents can require, e.g. gpu (env ERIPHE_NODE_LABELS)")
 	o.volumes = volumeFlag{}
 	if err := volumeFlag(o.volumes).Set(os.Getenv("ERIPHE_NODE_VOLUMES")); err != nil {
@@ -166,6 +173,9 @@ func main() {
 		}
 	}
 	go s.renewLoop()
+	if o.wake, err = wakeSettings(thisHost(), *wakeMAC, *wakeBroadcast, s.urls()); err != nil {
+		log.Fatal(err)
+	}
 
 	if err := checkNetworks(o); err != nil {
 		log.Fatal(err)

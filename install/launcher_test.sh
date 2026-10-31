@@ -35,6 +35,7 @@ case $* in
 "info -f {{.Name}}") echo Tower.local ;;
 "image inspect -f {{.Id}} "*) echo sha256:new ;;
 "run --rm --network none --entrypoint true --mount type=bind,src=/mnt/missing,"*) exit 1 ;;
+"run --rm --network host --entrypoint sh "*) printf '00:00:5e:00:53:01 192.0.2.255' ;;
 esac
 exit 0
 EOF
@@ -116,6 +117,14 @@ for want in "- /mnt/user/appdata/eriphe/core:/data" "- /mnt/user/appdata/eriphe/
 	has "$T/compose.yaml" "$want" compose
 done
 hasnt "$T/compose.yaml" "/data/node" "compose (the launcher's own path)"
+has "$T/compose.yaml" 'ERIPHE_WAKE_MAC: ${ERIPHE_WAKE_MAC:-}' "compose (the card to wake)"
+# The machine's network card, for Wake-on-LAN: read on the host's network,
+# by a short-lived container of this image, not this container's own.
+launcher ERIPHE_MODE=node ERIPHE_CORE=http://192.0.2.10:8800 ERIPHE_JOIN_TOKEN=t sh -c ". '$here/eriphe-launcher'; discover; settings; INFO=; settle
+	env_file" >"$T/env" 2>&1
+has "$T/env" "ERIPHE_WAKE_MAC='00:00:5e:00:53:01'" "the card's MAC"
+has "$T/env" "ERIPHE_WAKE_BROADCAST='192.0.2.255'" "the card's network"
+has "$T/calls" "run --rm --network host --entrypoint sh -e ERIPHE_INSTALL_LIB=1 -e CORE_URL=http://192.0.2.10:8800 sha256:old" "the card, from the host's network"
 # The node and eriphe-core never get the socket: only the proxy, read-only.
 [ "$(grep -c 'docker.sock:' "$T/compose.yaml")" = 1 ] || fail "the socket is given to more than the proxy"
 has "$T/compose.yaml" "/var/run/docker.sock:/var/run/docker.sock:ro" compose

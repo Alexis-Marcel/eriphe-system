@@ -261,6 +261,18 @@ the machine's LAN address, not `localhost`, before you generate the command: the
 the one the browser used (or `public_url`), and `localhost` would only work on eriphe-core's own
 machine.
 
+**Waking a device.** On a device's page, "Eriphe may wake this device" (off by default) lets Eriphe
+send it a Wake-on-LAN signal when a task needs it (its folders are there) and it is asleep, and
+gives a "Wake now" button that says whether it came back within 2 minutes. The installers record
+the device's network card for it (on Windows, the PC's own card, not WSL's). It works only on the
+home network, and only once the device accepts it: on a PC, Wake-on-LAN in the BIOS/UEFI and on
+the network adapter (Device Manager → the adapter → Power Management, and "Wake on Magic Packet"
+under Advanced), wired Ethernet rather than Wi-Fi, and Windows Fast Startup off to wake it from a
+full shutdown; on a Mac, System Settings → Energy → "Wake for network access", which wakes it from
+sleep, not from a full shutdown. The signal is sent by the machine that stays on (the NAS), from
+the host's network. A device installed before this option reports its card after running its
+install command again.
+
 Under "Advanced options" the workspace also gives the same settings for a node in an existing
 Docker Compose project (`ERIPHE_*` variables, as in `deploy/nas/compose.yaml`), for the eriphe-node
 program alone, and for a downloaded `install.ps1`.

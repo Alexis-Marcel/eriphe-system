@@ -387,6 +387,13 @@ For each other computer (or a second NAS):
   → App & notifications explains it for iPhone and Android). It installs as an app with
   notifications. Nothing is opened on the router. The phone app needs this trusted address: at
   the self-signed `https://192.0.2.10:8443` it works in the browser only.
+- **Waking a sleeping PC or Mac.** On the device's page in Settings → Devices (Réglages →
+  Appareils): "Eriphe may wake this device" (off by default). Eriphe then sends it a Wake-on-LAN
+  signal when a task needs it, and "Wake now" tries at once. The page lists what the person must
+  turn on themselves: Wake-on-LAN in the PC's BIOS/UEFI and on its network adapter (Device Manager
+  → Power Management, "Wake on Magic Packet"), a cable rather than Wi-Fi; on a Mac, System Settings
+  → Energy → "Wake for network access" (from sleep only). Home network only. Do not change BIOS
+  settings for them.
 - **Tools** (mail, calendars, Home Assistant, GitHub, any MCP server): Settings → Tools.
   Each one asks the person to approve access at the service (OAuth) or to paste a token there:
   they do it, in the workspace.
