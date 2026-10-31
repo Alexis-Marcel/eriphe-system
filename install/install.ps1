@@ -261,6 +261,19 @@ function Test-Wsl {
   $LASTEXITCODE -eq 0
 }
 
+# A file from the web. curl.exe (in Windows since 10 1803) gives up on a
+# transfer that stalls and tries again: on a new PC the network blinks when
+# WSL starts for the first time, and Invoke-WebRequest then waits for minutes.
+function Save-Download([string] $url, [string] $file) {
+  $curl = Join-Path $env:SystemRoot "System32\curl.exe"
+  if (-not (Test-Path $curl)) {
+    Invoke-WebRequest $url -OutFile $file -UseBasicParsing -TimeoutSec 300
+    return
+  }
+  Invoke-Quiet { & $curl -fsSL --connect-timeout 30 --speed-limit 1024 --speed-time 30 --retry 5 --retry-delay 2 -o $file $url }
+  if ($LASTEXITCODE -ne 0) { throw "curl.exe could not download $url (exit code $LASTEXITCODE)" }
+}
+
 function Test-Distro {
   @(wsl.exe --list --quiet | ForEach-Object { $_.Trim() }) -contains $Distro
 }
@@ -276,7 +289,7 @@ function Register-Resume {
   if ($self -and $self.ToString() -match "function Register-Resume") {
     Set-Content -Path $file -Value $self.ToString() -Encoding UTF8
   } else {
-    try { Invoke-WebRequest $selfUrl -OutFile $file -UseBasicParsing } catch { return $false }
+    try { Save-Download $selfUrl $file } catch { Write-Log "$_"; return $false }
   }
   $argv = foreach ($p in $bound.GetEnumerator()) {
     if ($p.Value -is [switch]) { if ($p.Value) { "-$($p.Key)" } }
@@ -530,7 +543,7 @@ if (-not $exists) {
   if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }
   if (-not $alpine.ContainsKey($arch)) { throw "unsupported processor: $arch" }
   $rootfs = Join-Path $home_ "alpine-minirootfs.tar.gz"
-  try { Invoke-WebRequest $alpine[$arch][0] -OutFile $rootfs -UseBasicParsing }
+  try { Save-Download $alpine[$arch][0] $rootfs }
   catch { Write-Log "$_"; throw "could not download Eriphe: check this PC's Internet connection, then run the command again" }
   if ((Get-FileHash $rootfs -Algorithm SHA256).Hash -ne $alpine[$arch][1]) { throw "the Alpine archive does not match its checksum" }
   Invoke-Quiet { wsl.exe --import $Distro $wslDir $rootfs --version 2 }
