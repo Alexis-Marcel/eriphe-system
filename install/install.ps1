@@ -73,8 +73,15 @@ param(
   [string] $WebPort,         # core mode: the workspace's port (default 8443, kept for the next runs)
   [string] $ApiPort          # core mode: the port other devices join on (default 8800, kept)
 )
-$ErrorActionPreference = "Stop"
 $bound = @{} + $PSBoundParameters
+# This script's own text, for the resume after a reboot (none under irm | iex:
+# it is downloaded again from its release).
+$self = $MyInvocation.MyCommand.ScriptBlock
+# The rest runs in a scope of its own: under irm | iex the script runs in the
+# person's window, which would keep its variables and preferences
+# ($ErrorActionPreference = "Stop") after it ends.
+& {
+$ErrorActionPreference = "Stop"
 # The parameters' ERIPHE_* variables (see above), read once and cleared.
 $fromEnv = @{
   ERIPHE_CORE = "Core"; ERIPHE_JOIN_TOKEN = "JoinToken"; ERIPHE_NODE_NAME = "Name"; ERIPHE_NODE_LABELS = "Labels"
@@ -126,9 +133,6 @@ $rule = "Eriphe core ($Distro)"
 # What the scheduled task runs in core mode, forwarding included (step 7).
 $bootDir = Join-Path $home_ "boot"
 $boot = Join-Path $bootDir "$Distro.ps1"
-# This script's own text, for the resume after a reboot (none under irm | iex:
-# it is downloaded again from its release).
-$self = $MyInvocation.MyCommand.ScriptBlock
 $selfUrl = "https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1"
 
 # What it prints: a title, short steps, the outcome and where the logs are,
@@ -1137,3 +1141,4 @@ if ($pin -eq "edge") {
 Write-GoodToKnow
 Write-Out
 Write-Out "Logs: wsl -d $Distro -- tail /var/log/eriphe-node.log"
+}
