@@ -87,6 +87,8 @@
 .preset-checks { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 
 .agent-form:not(:has(select[name=model] option[value=other]:checked)) .if-model-other { display: none; }
+.provider-form:not(:has(input[name=where][value=node]:checked)) .if-where-node { display: none; }
+.provider-form:has(input[name=where][value=node]:checked) .if-where-address { display: none; }
 
 /* The ChatGPT sign-in. */
 .login-box { display: grid; gap: 10px; justify-items: start; padding: 16px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); }

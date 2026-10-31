@@ -417,6 +417,7 @@ type machineView struct {
 	Labels   []string
 	Active   int
 	AlwaysOn bool   // the tools run here
+	Model    bool   // it lends a model server (model_relay.go)
 	Version  string // its eriphe-node's
 	System   string // its system in words, a key of web_text.go (system.*)
 	Arch     string
@@ -446,7 +447,7 @@ func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, 
 		n.Asleep = w.c.asleep(n)
 		active, _ := w.c.store.activeCount(n.Name)
 		m := machineView{NodeRow: n, CPUs: info.CPUs, Memory: info.Memory, Runtimes: info.Runtimes,
-			Labels: info.Labels, Active: active, AlwaysOn: info.AlwaysOn, Version: info.Version,
+			Labels: info.Labels, Active: active, AlwaysOn: info.AlwaysOn, Model: info.ModelServer, Version: info.Version,
 			System: systemKey(nodeInstall(n, info), n.OS), Arch: n.Arch, Update: updates.Rows[i+1],
 			Shares: len(info.Shares) > 0, Workers: len(info.Runtimes) > 0, NoTLS: tls && n.CertExpires.IsZero()}
 		m.Wake = w.wakeView(n, info)

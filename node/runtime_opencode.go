@@ -84,6 +84,9 @@ func opencodeSetup(t *Task) map[string]string {
 		"XDG_DATA_HOME":                   "/profile/data",
 		"XDG_STATE_HOME":                  "/profile/state",
 	}
+	if ep := t.Spec.ModelEndpoint; ep != nil && ep.Relay && t.secret != "" {
+		env[modelTokenEnv] = t.secret // its key to its node's model relay (model.go)
+	}
 	if t.Spec.AppendSystemPrompt != "" {
 		env[instructionsEnv] = t.Spec.AppendSystemPrompt
 	}
@@ -112,14 +115,24 @@ func selfHostedProvider(t *Task) map[string]any {
 	if ep == nil || !ok || model == "" {
 		return nil
 	}
-	u, err := url.Parse(ep.BaseURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || !configSafe(ep.BaseURL) || !configSafe(model) {
+	base := ep.BaseURL
+	if ep.Relay {
+		// Behind a node: through this node, with the task's own secret as
+		// the key (model.go); the server's real key, if any, stays with
+		// eriphe-core.
+		base = t.modelURL
+	}
+	u, err := url.Parse(base)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || !configSafe(base) || !configSafe(model) {
 		return nil
 	}
 	// A model on a home machine can take long to answer a long prompt:
 	// 15 minutes a request, not OpenCode's 5.
-	options := map[string]any{"baseURL": ep.BaseURL, "timeout": 900000}
-	if ep.KeyEnv != "" && credentialVar.MatchString(ep.KeyEnv) && configSafe(t.Spec.Identity[ep.KeyEnv]) && t.Spec.Identity[ep.KeyEnv] != "" {
+	options := map[string]any{"baseURL": base, "timeout": 900000}
+	switch {
+	case ep.Relay:
+		options["apiKey"] = "{env:" + modelTokenEnv + "}"
+	case ep.KeyEnv != "" && credentialVar.MatchString(ep.KeyEnv) && configSafe(t.Spec.Identity[ep.KeyEnv]) && t.Spec.Identity[ep.KeyEnv] != "":
 		options["apiKey"] = "{env:" + ep.KeyEnv + "}"
 	}
 	return map[string]any{

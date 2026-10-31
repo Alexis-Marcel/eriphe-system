@@ -42,6 +42,7 @@ Eriphe is two programs:
 - [Options](#options)
 - [What it installs](#what-it-installs)
 - [Folders](#folders)
+- [A model behind this machine](#a-model-behind-this-machine)
 - [What the VM can and cannot see](#what-the-vm-can-and-cannot-see)
 - [Windows](#windows)
 - [Eriphe on a VPS](#eriphe-on-a-vps)
@@ -210,6 +211,7 @@ for the node's name once joined):
 | `ERIPHE_VERSION` | the image's tag | `latest` (the releases), `edge` (main), or a release `0.8.0` / `0.8`, as `--version`; `ghcr.io/alexis-marcel/eriphe:edge` follows main by itself |
 | `ERIPHE_NODE_NAME` | the Docker host's name | the node's name |
 | `ERIPHE_NODE_LABELS` | none | as `--labels` |
+| `ERIPHE_MODEL_SERVER` | none | as `--model-server`: `http://eriphe-ollama:11434` for an Ollama container on `eriphe-system` ([A model behind this machine](#a-model-behind-this-machine)) |
 | `ERIPHE_CORE`, `ERIPHE_JOIN_TOKEN`, `ERIPHE_CA_HASH` | | node mode: from "Connect a device" (the token only matters at the first start) |
 | `ERIPHE_ADDRESS` | found | the host's address, for the log only |
 | `TZ` | | eriphe-core's time zone (Unraid gives the server's; without it, Europe/Paris) |
@@ -510,6 +512,8 @@ The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nod
 | `--rollback` | `-Rollback` | go back to the version before the last update |
 | `--share NAME=/PATH[:ro]` | | a place of this machine whose folders may be given to Eriphe, repeatable (see [Folders](#folders)); Linux, and a Mac with Apple's container (which shares its home, iCloud Drive and its cloud folders by itself) |
 | `--no-share` | | share no place any more |
+| `--model-server URL` | `-ModelServer <url>` | a model server this node lends to Eriphe through its tunnel, as the node reaches it, kept for the next runs (see [A model behind this machine](#a-model-behind-this-machine)); env `ERIPHE_MODEL_SERVER` |
+| `--no-model-server` | `-ModelServer none` | lend no model server any more |
 | `--uninstall` | `-Uninstall` | remove everything the script installed |
 | | `-Rejoin` | with a rejoin token: drop the node's identity and join again under `-Name` |
 | | `-Binary <path>` | a Linux eriphe-node binary, instead of the one in `ghcr.io/alexis-marcel/eriphe-node` |
@@ -640,6 +644,46 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
   downloaded on the Mac before the task starts, up to 2 GB per task (`-download-limit`); a bigger
   folder fails the task with what to do: "Keep Downloaded" on it, in the Finder.
 - **macOS in Lima's VM**: `--share` is ignored (the VM sees no Mac folder). **Windows**: not yet.
+
+## A model behind this machine
+
+To use your own model (Ollama, llama.cpp's `llama-server`, vLLM, LM Studio) on a machine of yours,
+a home PC with a graphics card or a rented server, install Eriphe there as a device and give it
+`--model-server`: the model server keeps listening on that machine only, nothing is opened to the
+network or the Internet, and you need no other account. Eriphe reaches it through the device's
+tunnel, the one it already has with eriphe-core, and your tasks and the assistant use it wherever
+they run. Then, in the workspace: Settings → Agents → Add an AI account → Modèle auto-hébergé →
+"Sur un de mes appareils", pick the device, "Tester le serveur" lists its models.
+
+The address is the one eriphe-node reaches:
+
+- **Linux** (and a NAS, the one-container install): eriphe-node is a container, so the machine's
+  `127.0.0.1` is not its own. Run Ollama as a container next to it, on Eriphe's network
+  `eriphe-system` (made by the install), **without publishing any port**, and give its name:
+
+  ```sh
+  docker run -d --name eriphe-ollama --restart unless-stopped --network eriphe-system \
+    -v eriphe-ollama:/root/.ollama ollama/ollama
+  # with an NVIDIA card (NVIDIA Container Toolkit): add --gpus=all
+  docker exec eriphe-ollama ollama pull qwen3:8b
+  curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --model-server http://eriphe-ollama:11434
+  ```
+
+  (on the one-container install, set `ERIPHE_MODEL_SERVER=http://eriphe-ollama:11434`). Only
+  eriphe-core and the node are on that network; tasks are not. The script refuses a loopback
+  address here, saying so. `--uninstall` leaves this container: `docker rm -f eriphe-ollama`
+  first.
+- **A Mac with Apple's container**: eriphe-node runs on the Mac itself: Ollama for macOS listens on
+  `127.0.0.1:11434` by default, give `--model-server http://127.0.0.1:11434`. (A Mac in Lima's VM:
+  the address the VM reaches, as on Linux.)
+- **Windows**: eriphe-node runs in the `eriphe` WSL distribution. With WSL's mirrored networking
+  (`networkingMode=mirrored` in `%UserProfile%\.wslconfig`), Ollama for Windows is at
+  `-ModelServer http://127.0.0.1:11434`.
+
+Ollama keeps a small context by default: for tool calling give it 16k to 32k tokens
+(`OLLAMA_CONTEXT_LENGTH=32768`, `-e OLLAMA_CONTEXT_LENGTH=32768` for the container). A server on
+your LAN at an address of its own can still be used without a device ("À une adresse"), but then
+it listens on the network.
 
 ## What the VM can and cannot see
 

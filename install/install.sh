@@ -208,6 +208,14 @@ Usage: curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest
                       Apple's container shares its home, iCloud Drive and
                       its cloud folders by itself; not in Lima's VM
   --no-share          share no place any more
+  --model-server URL  a model server (Ollama, llama.cpp, vLLM, LM Studio) this
+                      node lends to Eriphe through its tunnel, as the node
+                      reaches it: no port is opened. On a Mac with Apple's
+                      container, http://127.0.0.1:11434; on Linux the node
+                      is a container: http://eriphe-ollama:11434 for Ollama
+                      run next to it (install/README.md). Kept for the next
+                      runs; env ERIPHE_MODEL_SERVER
+  --no-model-server   lend no model server any more
   --assistant-name N  the assistant's name, for what this script prints
   --core-mode         run eriphe-core here, with a node of its own
   --web-port N        core mode: the workspace's port (default 8443, kept
@@ -279,8 +287,10 @@ parse_args() {
 	assistant=${ERIPHE_ASSISTANT_NAME:-}
 	WEB_PORT=${ERIPHE_WEB_PORT:-} API_PORT=${ERIPHE_API_PORT:-} PORT_OPT=''
 	BIND=${ERIPHE_BIND:-} BIND_OPT='' BIND_SET=''
+	MODEL_SERVER=${ERIPHE_MODEL_SERVER:-} MODEL_SET=''
 	[ -n "$LABELS" ] && LABELS_SET=1
 	[ -n "$BIND" ] && BIND_SET=1
+	[ -n "$MODEL_SERVER" ] && MODEL_SET=1
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--*=*)
@@ -291,10 +301,11 @@ parse_args() {
 			;;
 		esac
 		case $1 in
-		--core | --join-token | --name | --labels | --ca-hash | --version | --assistant-name | --web-port | --api-port | --bind)
+		--core | --join-token | --name | --labels | --ca-hash | --version | --assistant-name | --web-port | --api-port | --bind | --model-server)
 			[ $# -ge 2 ] || die "$1 needs a value"
 			case $1 in
 			--bind) BIND=$2 BIND_OPT=1 BIND_SET=1 ;;
+			--model-server) MODEL_SERVER=$2 MODEL_SET=1 ;;
 			--web-port) WEB_PORT=$2 PORT_OPT=1 ;;
 			--api-port) API_PORT=$2 PORT_OPT=1 ;;
 			--assistant-name) assistant=$2 ;;
@@ -314,6 +325,10 @@ parse_args() {
 			;;
 		--no-share)
 			SHARES='' SHARES_SET=1 NO_SHARE=1
+			shift
+			;;
+		--no-model-server)
+			MODEL_SERVER='' MODEL_SET=1
 			shift
 			;;
 		--core-mode)
@@ -341,7 +356,7 @@ parse_args() {
 	# Printed only: no control character.
 	assistant=$(printf '%s' "$assistant" | tr -d '[:cntrl:]')
 	ASSISTANT=${assistant:-Eriphe}
-	for v in "$CORE_URL" "$JOIN_TOKEN" "$NAME" "$LABELS" "$CA_HASH" "$SHARES"; do
+	for v in "$CORE_URL" "$JOIN_TOKEN" "$NAME" "$LABELS" "$CA_HASH" "$SHARES" "$MODEL_SERVER"; do
 		case $v in
 		*"'"* | *'"'* | *\\* | *'$'* | *' '* | *'
 '*) die "an option has a quote, a space, a \$ or a line break: $v" ;;
@@ -534,6 +549,21 @@ default_name() {
 saved() { printf '%s\n' "$INFO" | sed -n "s/^saved_$1=//p" | tail -n 1; }
 info() { printf '%s\n' "$INFO" | sed -n "s/^$1=//p" | tail -n 1; }
 
+# check_model_server: --model-server is an http(s) address, and one the node
+# can reach. On Linux, and in Lima's VM, the node is a container: its
+# loopback is its own, not the machine's.
+check_model_server() {
+	[ -n "$MODEL_SERVER" ] || return 0
+	printf '%s' "$MODEL_SERVER" | grep -Eq '^https?://[A-Za-z0-9._~-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$' ||
+		die "--model-server is the model server's address, e.g. http://127.0.0.1:11434"
+	[ -z "$NATIVE" ] || return 0
+	case $MODEL_SERVER in
+	*://localhost[:/]* | *://localhost | *://127.* | *://0.0.0.0*)
+		die "--model-server $MODEL_SERVER: here eriphe-node runs in a container, where $MODEL_SERVER is the container itself. Run Ollama next to it, on Eriphe's network (install/README.md, A model behind this machine), and give --model-server http://eriphe-ollama:11434"
+		;;
+	esac
+}
+
 # settle: merges the options with an earlier install's, once the host has
 # answered (INFO).
 settle() {
@@ -550,6 +580,8 @@ settle() {
 	[ -n "$NAME" ] || NAME=$(saved name)
 	[ -n "$NAME" ] || NAME=$(default_name)
 	[ -n "$LABELS_SET" ] || LABELS=$(saved labels)
+	[ -n "$MODEL_SET" ] || MODEL_SERVER=$(saved model_server)
+	check_model_server
 	[ -n "$CA_HASH" ] || CA_HASH=$(saved ca_hash)
 	[ -n "$PIN_SET" ] || PIN=$(saved version)
 	images
@@ -745,6 +777,8 @@ EOF
       ERIPHE_NODE_LABELS: \${ERIPHE_NODE_LABELS:-}
       # The places whose folders may be given to Eriphe (--share).
       ERIPHE_NODE_SHARES: \${ERIPHE_NODE_SHARES:-}
+      # The model server it lends through its tunnel (--model-server).
+      ERIPHE_MODEL_SERVER: \${ERIPHE_MODEL_SERVER:-}
       ERIPHE_CA_HASH: \${ERIPHE_CA_HASH:-}
       # Its network card, so that eriphe-core can wake it (wake_card).
       ERIPHE_WAKE_MAC: \${ERIPHE_WAKE_MAC:-}
@@ -848,6 +882,7 @@ ERIPHE_NODE_NAME='$NAME'
 ERIPHE_NODE_LABELS='$LABELS'
 ERIPHE_CA_HASH='$CA_HASH'
 ERIPHE_NODE_SHARES='$SHARES'
+ERIPHE_MODEL_SERVER='$MODEL_SERVER'
 ERIPHE_WAKE_MAC='$WAKE_MAC'
 ERIPHE_WAKE_BROADCAST='$WAKE_BROADCAST'
 EOF
@@ -862,6 +897,7 @@ labels=$LABELS
 ca_hash=$CA_HASH
 version=$PIN
 shares=$SHARES
+model_server=$MODEL_SERVER
 web_port=$WEB_PORT
 api_port=$API_PORT
 bind=${BIND:-}
@@ -1760,6 +1796,7 @@ ERIPHE_NODE_NAME=$(q "$NAME")
 ERIPHE_NODE_LABELS=$(q "$LABELS")
 ERIPHE_CA_HASH=$(q "$CA_HASH")
 ERIPHE_NODE_SHARES=$(q "$(mac_shares)")
+ERIPHE_MODEL_SERVER=$(q "$MODEL_SERVER")
 ERIPHE_ALWAYS_ON=$([ "$MODE" = core ] && echo 1)
 ERIPHE_WORKER_IMAGE=$(q "$WORKER_IMAGE")
 ERIPHE_CORE_RELAY=$([ "$MODE" = core ] || q "$RELAY_SOCKET")

@@ -36,6 +36,7 @@ func (r acpRuntime) command(n *node, t *Task) ([]string, map[string]string) {
 	t.mu.Lock()
 	t.mcp, t.mcpErr = servers, err
 	t.mu.Unlock()
+	t.modelURL = n.modelBase(t)
 	env := map[string]string{}
 	if r.setup != nil {
 		env = r.setup(t)

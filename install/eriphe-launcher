@@ -125,7 +125,7 @@ settings() {
 		pin=$(ref_tag "$SELF_REF")
 		printf '%s' "$pin" | grep -Eq '^(latest|edge|sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+(\.[0-9]+(-[0-9A-Za-z.-]+)?)?)$' || pin=latest
 	fi
-	set -- "$@" --version "$pin" --labels "${ERIPHE_NODE_LABELS:-}"
+	set -- "$@" --version "$pin" --labels "${ERIPHE_NODE_LABELS:-}" --model-server "${ERIPHE_MODEL_SERVER:-}"
 	if [ -n "${ERIPHE_SHARES:-}" ]; then
 		set -- "$@" --share "$ERIPHE_SHARES"
 	else

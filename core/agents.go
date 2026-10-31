@@ -30,6 +30,10 @@ type Provider struct {
 	// the models it serves. Neither is secret; its key, if any, is.
 	BaseURL string   `json:"base_url,omitempty"`
 	Models  []string `json:"models,omitempty"`
+	// Or the node that lends it (its -model-server), in place of BaseURL:
+	// the tasks reach it through eriphe-core and that node's tunnel, and
+	// its key, if any, never leaves eriphe-core (model_relay.go).
+	Node string `json:"node,omitempty"`
 }
 
 // Agent is one choice the brain has for a task.
@@ -59,16 +63,25 @@ func (c *Config) checkAgents() error {
 		}
 		if p.Kind == selfHostedKind {
 			// Its key is optional: a model server on the LAN often has none.
-			if err := checkBaseURL(p.BaseURL); err != nil {
-				return fmt.Errorf("provider %s: %w", name, err)
+			switch {
+			case p.Node != "" && p.BaseURL != "":
+				return fmt.Errorf("provider %s: base_url or node, not both", name)
+			case p.Node != "":
+				if !nodeName.MatchString(p.Node) {
+					return fmt.Errorf("provider %s: bad node %q", name, p.Node)
+				}
+			default:
+				if err := checkBaseURL(p.BaseURL); err != nil {
+					return fmt.Errorf("provider %s: %w", name, err)
+				}
 			}
 			if err := checkModelIDs(p.Models); err != nil {
 				return fmt.Errorf("provider %s: %w", name, err)
 			}
 		} else if p.Secret == "" {
 			return fmt.Errorf("provider %s: secret is required", name)
-		} else if p.BaseURL != "" || len(p.Models) > 0 {
-			return fmt.Errorf("provider %s: only a self-hosted model server (%s) takes base_url and models", name, selfHostedKind)
+		} else if p.BaseURL != "" || len(p.Models) > 0 || p.Node != "" {
+			return fmt.Errorf("provider %s: only a self-hosted model server (%s) takes base_url, node and models", name, selfHostedKind)
 		}
 		if k, _ := kindOf(p.Kind); k.CustomEnv {
 			if err := checkCredentialEnv(p.Env); err != nil {
@@ -143,8 +156,10 @@ func (c *Config) lendAgent(a Agent) (map[string]string, error) {
 		}
 		return env, nil
 	}
-	if p.Secret == "" {
-		return map[string]string{}, nil // a self-hosted model server without a key
+	if p.Secret == "" || p.Kind == selfHostedKind && p.Node != "" {
+		// A self-hosted model server without a key, or one behind a node,
+		// whose key eriphe-core adds on the way (model_relay.go).
+		return map[string]string{}, nil
 	}
 	v, err := readSecret(p.Secret)
 	if err != nil {
@@ -168,6 +183,12 @@ func (c *Config) modelEndpoint(agentName string, env map[string]string, spec *no
 	}
 	p := c.Providers[a.Provider]
 	if p.Kind != selfHostedKind || a.Runtime != "opencode" {
+		return
+	}
+	if p.Node != "" {
+		// Behind a node: through the task's own node and eriphe-core, never
+		// the network; its egress rule stays as it is.
+		spec.ModelEndpoint = &nodeModelEndpoint{Relay: true}
 		return
 	}
 	k, _ := kindOf(selfHostedKind)

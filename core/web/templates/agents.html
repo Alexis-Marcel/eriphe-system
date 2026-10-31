@@ -389,7 +389,23 @@
       <small id="penv-h">{{t "providers.envhint"}}</small></label>
     {{end}}
     {{if eq $k "openai-compatible"}}
-    <label class="field"><span>{{t "providers.baseurl"}}</span>
+    <fieldset class="choices model-where">
+      <legend>{{t "providers.where"}}</legend>
+      <div class="choice-row">
+        <label class="choice"><input type="radio" name="where" value="node" {{if eq .Where "node"}}checked{{end}}><b>{{t "providers.where.node"}}</b><small>{{t "providers.where.nodelead"}}</small></label>
+        <label class="choice"><input type="radio" name="where" value="address" {{if eq .Where "address"}}checked{{end}}><b>{{t "providers.where.address"}}</b><small>{{t "providers.where.addresslead"}}</small></label>
+      </div>
+    </fieldset>
+    <div class="if-where-node stack">
+      {{if .ModelNodes}}
+      <label class="field narrow-2"><span>{{t "providers.node"}}</span>
+        <select name="node" aria-describedby="pnode-h">{{$node := .Node}}{{range .ModelNodes}}<option value="{{.}}" {{if eq . $node}}selected{{end}}>{{.}}</option>{{end}}</select>
+        <small id="pnode-h">{{t "providers.nodehint"}}</small></label>
+      {{else}}
+      <p class="muted small">{{t "providers.nomodelnode"}}</p>
+      {{end}}
+    </div>
+    <label class="field if-where-address"><span>{{t "providers.baseurl"}}</span>
       <input type="url" name="base_url" value="{{.BaseURL}}" maxlength="300" spellcheck="false" autocapitalize="off" class="mono" placeholder="http://192.0.2.10:11434/v1" aria-describedby="pbu-h">
       <small id="pbu-h">{{t "providers.baseurlhint"}}</small></label>
     {{end}}

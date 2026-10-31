@@ -63,15 +63,20 @@ type TaskSpec struct {
 	Egress *EgressRule `json:"egress,omitempty"`
 
 	// A self-hosted model server the agent uses (OpenCode, a selfhosted/
-	// model): its address, reachable through Egress.Endpoints.
+	// model): its address, reachable through Egress.Endpoints, or one
+	// behind a node, reached through this node's task listener (model.go).
 	ModelEndpoint *ModelEndpoint `json:"model_endpoint,omitempty"`
 }
 
 // ModelEndpoint is a self-hosted, OpenAI-compatible model server: its /v1
-// address and the variable of Identity that carries its key, if any.
+// address and the variable of Identity that carries its key, if any. With
+// Relay, the server is behind one of the user's nodes: the task reaches it
+// at this node's /model/v1, with its own secret, and this node relays to
+// eriphe-core, which goes on through that node's tunnel (model.go).
 type ModelEndpoint struct {
-	BaseURL string `json:"base_url"`
+	BaseURL string `json:"base_url,omitempty"`
 	KeyEnv  string `json:"key_env,omitempty"`
+	Relay   bool   `json:"relay,omitempty"`
 }
 
 // Event is one line of what happened in a task, in order.
@@ -142,6 +147,10 @@ type Task struct {
 	// With the container engine (apple.go): the task's own network, and the
 	// node's address on it, where the task reaches the node.
 	network, gateway string
+
+	// With a model behind a node: where the task reaches it, this node's
+	// task listener (model.go), set when its agent starts.
+	modelURL string
 }
 
 // emit records an event. Any event ends the draft: a text completes it,
@@ -238,6 +247,7 @@ func (n *node) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/node", n.handleNode)
 	mux.HandleFunc("/v1/services/{name}/mcp", n.handleServiceMCP)
 	mux.HandleFunc("POST /v1/wake", n.handleWake)
+	mux.HandleFunc("/v1/model/{path...}", n.handleModel)
 	n.shareRoutes(mux)
 }
 
@@ -291,6 +301,8 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		"agents_ready": n.agents.readyRuntimes(),
 		// It names a folder's results subfolder as eriphe-core says (shares.go).
 		"results_named": true,
+		// A model server eriphe-core may reach through the tunnel (model.go).
+		"model_server": n.opt.modelServer != "",
 	})
 }
 

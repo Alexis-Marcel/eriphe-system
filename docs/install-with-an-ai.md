@@ -57,7 +57,8 @@ Read these first and keep to them for the whole session.
 - The person needs an **AI account**: a Claude subscription (Pro or Max) is the simplest; a
   ChatGPT subscription (Plus or Pro) or an API key (Anthropic, OpenAI, Google, Mistral, OpenRouter)
   work too, and so does a model the person runs on one of their own machines (Ollama, llama.cpp,
-  vLLM, LM Studio: "Modèle auto-hébergé", by its address on the network).
+  vLLM, LM Studio: "Modèle auto-hébergé"), best on a device of Eriphe that lends it (§6, step 6):
+  nothing to open on the network.
 
 ## 2. Ask the person first
 
@@ -411,6 +412,24 @@ For each other computer (or a second NAS):
 5. Folders: the person chooses what Eriphe may see in **Settings → Folders** ("Partager un
    dossier"): read only, or read and drop results in an `Eriphe/` subfolder. Nothing is shared
    until they do.
+6. **Their own model** (optional): if the person wants Eriphe to use a model on one of their
+   machines (a PC with a graphics card, a rented server), that machine joins as a device as above
+   and lends the model server with `--model-server` (`-ModelServer` on Windows). The server stays
+   on that machine; **never** make it listen on the network or open a port for it. Per system
+   (details: `install/README.md`, A model behind this machine):
+   - Mac (Apple silicon, macOS 26): Ollama for macOS, then add `--model-server
+     http://127.0.0.1:11434` to the join command.
+   - Linux: once the device is installed, run Ollama next to it without publishing a port:
+     `docker run -d --name eriphe-ollama --restart unless-stopped --network eriphe-system -v
+     eriphe-ollama:/root/.ollama ollama/ollama` (add `--gpus=all` with an NVIDIA card and its
+     container toolkit), `docker exec eriphe-ollama ollama pull qwen3:8b`, then run the install
+     command again with `--model-server http://eriphe-ollama:11434`.
+   - Windows: Ollama for Windows, WSL's mirrored networking, and `-ModelServer
+     http://127.0.0.1:11434`.
+
+   Then the person, in the browser: Settings → Agents → Add an AI account → Modèle auto-hébergé →
+   "Sur un de mes appareils", picks the device, "Tester le serveur", and the models. Pick a model
+   that calls tools (Qwen 3, Llama 3.1+).
 
 ## 7. Optional: the phone, away from home, tools
 

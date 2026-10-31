@@ -182,6 +182,42 @@ func checkSelfHosted(ctx context.Context, lang, base, key string) testView {
 		}
 		return v
 	}
+	return selfHostedModels(lang, key, resp)
+}
+
+// checkNodeModel tries the model server a node lends (its -model-server)
+// as the tasks will reach it, through the node's tunnel: GET /v1/models,
+// with the server's key if it has one.
+func (c *core) checkNodeModel(ctx context.Context, lang, node, key string) testView {
+	key = strings.TrimSpace(key)
+	if !nodeName.MatchString(node) {
+		return testView{State: "err", Text: tr(lang, "providers.nonode"), Cause: causeNetwork}
+	}
+	if !selfHostedKey(key) {
+		return testView{State: "err", Text: tr(lang, "providers.badkey"), Cause: causeAuth}
+	}
+	ctx, cancel := context.WithTimeout(ctx, testConnTimeout)
+	defer cancel()
+	resp, err := c.nodeModels(ctx, node, key)
+	switch {
+	case errors.Is(err, errOffline):
+		return testView{State: "err", Text: trf(lang, "ptest.nodeoffline", node), Cause: causeNetwork}
+	case err != nil:
+		v := testView{State: "err", Text: trf(lang, "ptest.nodeoffline", node), Cause: causeNetwork, Detail: truncate(err.Error(), 200)}
+		if ctx.Err() != nil {
+			v.Text = tr(lang, "test.timeout")
+		}
+		return v
+	case resp.StatusCode == http.StatusBadGateway:
+		resp.Body.Close()
+		return testView{State: "err", Text: trf(lang, "ptest.nodemodeldown", node), Cause: causeServer}
+	}
+	return selfHostedModels(lang, key, resp)
+}
+
+// selfHostedModels reads a model server's answer to GET /v1/models: the
+// models it serves, or why it does not.
+func selfHostedModels(lang, key string, resp *http.Response) testView {
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
