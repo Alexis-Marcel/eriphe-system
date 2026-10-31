@@ -195,6 +195,10 @@ func loadConfig(path string) (*Config, error) {
 
 // complete fills in what a configuration leaves out, and checks it. where
 // is what the errors name: the file, or "defaults".
+// unnamedUser is the user's name for the brain when the configuration gives
+// none: words for its prompts, not a name to greet them with.
+const unnamedUser = "l'utilisateur"
+
 func (c *Config) complete(where string) error {
 	if c.Listen == "" {
 		c.Listen = "127.0.0.1:8800"
@@ -203,7 +207,7 @@ func (c *Config) complete(where string) error {
 		c.DB = "eriphe-core.db"
 	}
 	if c.User == "" {
-		c.User = "l'utilisateur"
+		c.User = unnamedUser
 	}
 	if c.TimeZone == "" {
 		c.TimeZone = "Europe/Paris"

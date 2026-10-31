@@ -732,3 +732,20 @@ func TestWebConnectPaste(t *testing.T) {
 		t.Fatalf("callback: %s", body)
 	}
 }
+
+// Without a name in the configuration, the conversation greets the user
+// without the brain's placeholder for them.
+func TestHelloWithoutName(t *testing.T) {
+	for user, want := range map[string]string{"Sam": "<h1>Bonjour Sam</h1>", unnamedUser: "<h1>Bonjour</h1>"} {
+		s, err := openStore(filepath.Join(t.TempDir(), "core.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		tw := newTestWebFor(t, newCore(&Config{User: user, Listen: "127.0.0.1:8800"}, s))
+		tw.setup()
+		_, body, _ := tw.do("GET", "/", nil, map[string]string{"Accept-Language": "fr"})
+		if !strings.Contains(body, want) {
+			t.Errorf("user %q: no %q in the conversation", user, want)
+		}
+	}
+}
