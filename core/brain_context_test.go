@@ -220,3 +220,20 @@ func TestBrainFailuresNotClearedByAFailedTurn(t *testing.T) {
 		t.Fatal("a good turn not seen")
 	}
 }
+
+// A brain on a self-hosted model server gets a smaller pack: its window
+// is often small, and its instructions and tools fill half of it.
+func TestContextPackSelfHosted(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	for i := range 400 {
+		say(t, c, []string{roleUser, roleBrain}[i%2], fmt.Sprintf("message %04d ", i)+strings.Repeat("blabla ", 20), true)
+	}
+	if _, st := c.contextPack(); st.Chars < contextPackChars*9/10 {
+		t.Fatalf("a hosted model's pack: %d chars", st.Chars)
+	}
+	c.conf().Providers["p"] = Provider{Kind: selfHostedKind, BaseURL: "http://192.0.2.10:11434/v1"}
+	_, st := c.contextPack()
+	if limit := selfHostedPackTokens * charsPerToken; st.Chars > limit || st.Chars < limit*9/10 {
+		t.Fatalf("a self-hosted model's pack: %d chars, want about %d", st.Chars, limit)
+	}
+}
