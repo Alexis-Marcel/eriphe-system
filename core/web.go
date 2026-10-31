@@ -170,9 +170,11 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /tasks/{id}/reply", w.auth(w.handleReply))
 	mux.Handle("POST /tasks/{id}/stop", w.auth(w.handleStop))
 
-	// The settings open on their first entry, the memory (web_memory.go).
+	// The settings' list of entries: the first level on a phone. A wide
+	// screen has the list as its sidebar and opens the first entry, the
+	// memory, instead (early.js).
 	mux.Handle("GET /settings", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
-		http.Redirect(rw, r, "/memory", http.StatusSeeOther)
+		w.render(rw, r, s, "settings", "", page{Title: "settings.title", Nav: "settings", View: "index"})
 	}))
 	w.deviceRoutes(mux)                                            // web_devices.go
 	mux.Handle("GET /settings/machines", w.auth(w.handleMachines)) // its address before devices

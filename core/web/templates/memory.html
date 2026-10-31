@@ -1,7 +1,7 @@
 {{define "main"}}
-<div class="settings">
+<div class="settings {{template "settings-level" .}}">
   {{template "settings-nav" .}}
-  <div class="settings-body">{{template "memory-page" .Data}}</div>
+  <div class="settings-body">{{template "settings-up" .}}{{template "memory-page" .Data}}</div>
 </div>
 {{end}}
 

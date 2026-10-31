@@ -223,31 +223,48 @@
 
 {{/* The settings' own navigation, in four groups; every page of the
 settings has it, the memory's too. A dot marks an entry that needs a look:
-an update (Devices), a tool in error (Tools), a key refused (Agents). */}}
+an update (Devices), a tool in error (Tools), a key refused (Agents).
+On a wide screen it is the sidebar, under the way back to the conversation.
+On a phone it is the first level alone (/settings, View "index"): a grouped
+list that its ✕ closes; each page then has its way up to it (settings-up).
+The ways back follow the pages, never the browser's history. */}}
 {{define "settings-nav"}}
 <nav class="settings-nav" aria-label="{{t "settings.title"}}">
-  <h1 class="settings-title">{{t "settings.title"}}</h1>
+  <a class="back to-chat" href="/">{{template "i-back"}}{{t "nav.chat"}}</a>
+  <div class="settings-head">
+    <a class="icon-btn settings-close" href="/" aria-label="{{t "settings.close"}}" title="{{t "settings.close"}}">{{template "i-x"}}</a>
+    <h1 class="settings-title">{{t "settings.title"}}</h1>
+  </div>
   <div class="nav-group" role="group" aria-labelledby="sg-assistant">
     <h2 class="nav-group-title" id="sg-assistant">{{t "settings.g.assistant"}}</h2>
-    <a href="/memory" {{if eq .Tab "memory"}}aria-current="page"{{end}}>{{template "i-memory"}}<span>{{t "nav.memory"}}</span></a>
-    <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span>{{if .Attn.Agents}}{{template "attn-dot"}}{{end}}</a>
+    <a href="/memory" {{if eq .Tab "memory"}}aria-current="page"{{end}}>{{template "i-memory"}}<span>{{t "nav.memory"}}</span>{{template "chev"}}</a>
+    <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span>{{if .Attn.Agents}}{{template "attn-dot"}}{{end}}{{template "chev"}}</a>
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-connections">
     <h2 class="nav-group-title" id="sg-connections">{{t "settings.g.connections"}}</h2>
-    <a href="/settings/tools" {{if eq .Tab "tools"}}aria-current="page"{{end}}>{{template "i-plug"}}<span>{{t "settings.tools"}}</span>{{if .Attn.Tools}}{{template "attn-dot"}}{{end}}</a>
-    <a href="/settings/folders" {{if eq .Tab "folders"}}aria-current="page"{{end}}>{{template "i-folder"}}<span>{{t "settings.folders"}}</span></a>
+    <a href="/settings/tools" {{if eq .Tab "tools"}}aria-current="page"{{end}}>{{template "i-plug"}}<span>{{t "settings.tools"}}</span>{{if .Attn.Tools}}{{template "attn-dot"}}{{end}}{{template "chev"}}</a>
+    <a href="/settings/folders" {{if eq .Tab "folders"}}aria-current="page"{{end}}>{{template "i-folder"}}<span>{{t "settings.folders"}}</span>{{template "chev"}}</a>
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-devices">
     <h2 class="nav-group-title" id="sg-devices">{{t "settings.g.devices"}}</h2>
-    <a href="/settings/devices" {{if eq .Tab "devices"}}aria-current="page"{{end}}>{{template "i-device"}}<span>{{t "settings.machines"}}</span>{{if or .Updates.Core .Updates.Nodes}}{{template "new-dot"}}{{end}}</a>
-    <a href="/settings/remote" {{if eq .Tab "remote"}}aria-current="page"{{end}}>{{template "i-globe"}}<span>{{t "settings.remote"}}</span></a>
-    <a href="/settings/notifications" {{if eq .Tab "notifications"}}aria-current="page"{{end}}>{{template "i-bell"}}<span>{{t "settings.notifications"}}</span></a>
+    <a href="/settings/devices" {{if eq .Tab "devices"}}aria-current="page"{{end}}>{{template "i-device"}}<span>{{t "settings.machines"}}</span>{{if or .Updates.Core .Updates.Nodes}}{{template "new-dot"}}{{end}}{{template "chev"}}</a>
+    <a href="/settings/remote" {{if eq .Tab "remote"}}aria-current="page"{{end}}>{{template "i-globe"}}<span>{{t "settings.remote"}}</span>{{template "chev"}}</a>
+    <a href="/settings/notifications" {{if eq .Tab "notifications"}}aria-current="page"{{end}}>{{template "i-bell"}}<span>{{t "settings.notifications"}}</span>{{template "chev"}}</a>
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-space">
     <h2 class="nav-group-title" id="sg-space">{{t "settings.g.space"}}</h2>
-    <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.accountnav"}}</span></a>
-    <a href="/settings/journal" {{if eq .Tab "journal"}}aria-current="page"{{end}}>{{template "i-list"}}<span>{{t "settings.journal"}}</span></a>
+    <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.accountnav"}}</span>{{template "chev"}}</a>
+    <a href="/settings/journal" {{if eq .Tab "journal"}}aria-current="page"{{end}}>{{template "i-list"}}<span>{{t "settings.journal"}}</span>{{template "chev"}}</a>
   </div>
 </nav>
 {{end}}
+{{define "chev"}}<svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>{{end}}
+
+{{/* A settings page's way up to the list, seen on a phone only: a wide
+screen has the list beside the page. A sub-page has its own way up instead,
+to the page it belongs to (its .back). */}}
+{{define "settings-up"}}{{if not .View}}<a class="back settings-up" href="/settings">{{template "i-back"}}{{t "settings.title"}}</a>{{end}}{{end}}
+
+{{/* The level of the settings' frame: the list alone, a page, or a sub-page. */}}
+{{define "settings-level"}}{{if eq .View "index"}}is-index{{else if .View}}is-sub{{else}}is-page{{end}}{{end}}
 {{define "attn-dot"}}<b class="attn-dot" title="{{t "settings.attn"}}"><span class="sr-only">{{t "settings.attn"}}</span></b>{{end}}
