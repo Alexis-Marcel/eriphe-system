@@ -75,6 +75,16 @@ say() {
 		printf '%s\n' "$*"
 	fi
 }
+# say_secret TEXT SECRET: TEXT followed by SECRET on the screen; the log
+# says it was printed, without it (a setup code).
+say_secret() {
+	if [ -n "$SCREEN" ]; then
+		printf '%s%s\n' "$1" "$2" >&5
+		printf '%s(printed on the screen, not logged)\n' "$1" >>"$LOG"
+	else
+		printf '%s%s\n' "$1" "$2"
+	fi
+}
 # para TEXT: TEXT as a paragraph, wrapped.
 para() { printf '%s\n' "$*" | wrap 66 | while IFS= read -r l; do say "$l"; done; }
 # wrap WIDTH: its input wrapped at WIDTH, between words only: a word longer
@@ -468,6 +478,12 @@ host_tz() {
 	fi
 }
 
+# ssh_tunnel [HOST]: the SSH tunnel to the workspace, from one's own
+# computer: the same command everywhere.
+ssh_tunnel() {
+	printf 'ssh -L 127.0.0.1:%s:127.0.0.1:%s -o ExitOnForwardFailure=yes <user>@%s' "$WEB_PORT" "$WEB_PORT" "${1:-<server>}"
+}
+
 # exposed_notice ADDR [HOW]: what to do when the address the workspace is
 # printed with is public (a server rented in the cloud): it is reachable from
 # the Internet. HOW: how to listen on 127.0.0.1 only. On 127.0.0.1 (--bind),
@@ -475,12 +491,14 @@ host_tz() {
 exposed_notice() {
 	case $1 in
 	127.*)
-		notice "Eriphe listens on this machine's own address only (--bind): from another computer, open the workspace through an SSH tunnel (ssh -L 127.0.0.1:$WEB_PORT:127.0.0.1:$WEB_PORT -o ExitOnForwardFailure=yes <user>@<this-machine>, then https://127.0.0.1:$WEB_PORT), then turn on Tailscale in Réglages › Accès à distance (Settings › Remote access), or put it behind a reverse proxy on this machine."
+		# With remote access on, its address was printed: that is the way in.
+		[ -z "${REMOTE_URL:-}" ] || return 0
+		notice "Eriphe listens on this machine's own address only (--bind): from another computer, open the workspace through an SSH tunnel ($(ssh_tunnel), then https://127.0.0.1:$WEB_PORT), then turn on Tailscale in Réglages › Accès à distance (Settings › Remote access), or put it behind a reverse proxy on this machine."
 		return 0
 		;;
 	esac
 	public_address "$1" || return 0
-	notice "$1 is a public address: the workspace (port $WEB_PORT) and the API (port $API_PORT) can be reached from the Internet. Close them in your cloud provider's firewall. Do the first setup through an SSH tunnel from your computer, not over the Internet: ssh -L 127.0.0.1:$WEB_PORT:127.0.0.1:$WEB_PORT -o ExitOnForwardFailure=yes <user>@<this-server>, then https://127.0.0.1:$WEB_PORT/setup. Then open the workspace through Tailscale (Réglages › Accès à distance, Settings › Remote access) or your own domain behind a reverse proxy; open $API_PORT only if devices join over the Internet. UFW does not filter Docker's ports: use the DOCKER-USER chain, or ${2:-run this again with --bind 127.0.0.1}. Guide: https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md#eriphe-on-a-vps"
+	notice "$1 is a public address: the workspace (port $WEB_PORT) and the API (port $API_PORT) can be reached from the Internet. Close them in your cloud provider's firewall. Do the first setup through an SSH tunnel from your computer, not over the Internet: $(ssh_tunnel "$1"), then https://127.0.0.1:$WEB_PORT/setup. Then open the workspace through Tailscale (Réglages › Accès à distance, Settings › Remote access) or your own domain behind a reverse proxy; open $API_PORT only if devices join over the Internet. UFW does not filter Docker's ports: use the DOCKER-USER chain, or ${2:-run this again with --bind 127.0.0.1}. Guide: https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md#eriphe-on-a-vps"
 }
 
 # check_ports: the workspace's and the API's ports differ.
@@ -1416,6 +1434,9 @@ if [ "$MODE" = core ]; then
   fi
   rm -f "$CONF/setup-code.err"
   echo "setup_code=$code" >&3
+  # The tailnet's address, when remote access is on (an older eriphe-core
+  # has no remote-address: nothing then).
+  echo "remote=$(docker exec eriphe-core eriphe-core remote-address 2>/dev/null)" >&3
   c=eriphe-core
 else
   echo "eriphe-step: Connected"
@@ -2397,6 +2418,7 @@ native_up() {
 			echo "setup_code=$(sed -n 's/.*with the setup code \([A-Za-z0-9-]*\).*/\1/p' "$E/core.log" | tail -n 1)"
 		fi
 		rm -f "$E/setup-code.err"
+		echo "remote=$("$E/bin/eriphe-core" remote-address -data "$E/core" 2>/dev/null)"
 		echo "version=$(cat "$E/bin/eriphe-core.version" 2>/dev/null)"
 	else
 		echo "version=$(cat "$E/bin/eriphe-node.version" 2>/dev/null)"
@@ -2665,6 +2687,7 @@ outcome() {
 	[ -z "${BIND:-}" ] || addr=$BIND
 	addr=${addr:-<this-computer>}
 	code=$(printf '%s\n' "$1" | sed -n 's/^setup_code=//p')
+	REMOTE_URL=$(printf '%s\n' "$1" | sed -n 's/^remote=//p')
 	now=$(printf '%s\n' "$1" | sed -n 's/^version=//p')
 	say ""
 	if [ -n "$UPDATING" ]; then
@@ -2683,16 +2706,26 @@ outcome() {
 			[ -n "$UPDATING" ] || done_="Done: Eriphe runs on $HERE. "
 			para "${done_}To finish, open an SSH tunnel to this server from your computer, then this address in your browser, and give the setup code:"
 			say ""
-			say "  ssh -L 127.0.0.1:$WEB_PORT:127.0.0.1:$WEB_PORT -o ExitOnForwardFailure=yes <user>@$addr"
+			say "  $(ssh_tunnel "$addr")"
 			say "  https://127.0.0.1:$WEB_PORT/setup"
-			say "  Setup code: $code"
+			say_secret "  Setup code: " "$code"
 		elif [ -n "$code" ]; then
 			done_=''
 			[ -n "$UPDATING" ] || done_="Done: Eriphe runs on $HERE. "
 			para "${done_}To finish, open this address in your browser and give the setup code:"
 			say ""
 			say "  https://$addr:$WEB_PORT/setup"
-			say "  Setup code: $code"
+			say_secret "  Setup code: " "$code"
+		elif [ -n "$REMOTE_URL" ]; then
+			# Remote access on: its address works from every device of the
+			# tailnet, the local one only nearby (or through a tunnel).
+			done_=''
+			[ -n "$UPDATING" ] || done_="Done: Eriphe runs on $HERE. "
+			para "${done_}Open $REMOTE_URL in your browser, from a device on your Tailscale network, and sign in (forgotten password: $(password_reset))."
+			case $addr in
+			127.* | '<this-computer>') ;;
+			*) public_address "$addr" || para "On the local network: https://$addr:$WEB_PORT" ;;
+			esac
 		else
 			done_=''
 			[ -n "$UPDATING" ] || done_="Done: Eriphe runs on $HERE. "

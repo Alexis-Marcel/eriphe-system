@@ -290,6 +290,21 @@ case $out in *"ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes 
 case $out in *"https://203.0.113.5:8443/setup"*) fail "the setup over the Internet: $out" ;; esac
 out=$(installer 'parse_args --core-mode; INFO=; settle; lan_address() { echo 192.168.1.2; }; UPDATING=; outcome "setup_code=ABCD-1234"')
 case $out in *"https://192.168.1.2:8443/setup"*) ;; *) fail "the setup on a local address: $out" ;; esac
+# The same SSH tunnel everywhere.
+out=$(installer 'WEB_PORT=8443; ssh_tunnel; echo; ssh_tunnel 203.0.113.5')
+[ "$out" = "ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes <user>@<server>
+ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes <user>@203.0.113.5" ] || fail "ssh_tunnel: $out"
+# Run again with remote access on: its address, not only the SSH tunnel.
+out=$(installer 'parse_args --core-mode; INFO=; settle; BIND=127.0.0.1; UPDATING=1 before=0.1.0; outcome "setup_code=
+remote=https://eriphe.tail0000.ts.net
+version=0.1.0"; printf "%s" "$NOTES"')
+case $out in *"Open https://eriphe.tail0000.ts.net in your browser"*"Tailscale network"*) ;; *) fail "the tailnet address: $out" ;; esac
+case $out in *"ssh -L"*) fail "the SSH tunnel with remote access on: $out" ;; esac
+out=$(installer 'parse_args --core-mode; INFO=; settle; lan_address() { echo 192.168.1.2; }; UPDATING=1 before=; outcome "remote=https://eriphe.tail0000.ts.net"')
+case $out in *"https://eriphe.tail0000.ts.net"*"On the local network: https://192.168.1.2:8443"*) ;; *) fail "the tailnet and local addresses: $out" ;; esac
+# The setup code is printed, not logged.
+out=$(installer 'LOG=$(mktemp); SCREEN=1; exec 5>&1; say_secret "  Setup code: " ABCD-1234; echo "log: $(cat "$LOG")"; rm -f "$LOG"')
+case $out in *"  Setup code: ABCD-1234"*"log:   Setup code: (printed on the screen, not logged)") ;; *) fail "the setup code in the log: $out" ;; esac
 
 # ---- printed paragraphs: wrapped between words, never in an address
 
