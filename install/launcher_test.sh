@@ -112,7 +112,7 @@ launcher ERIPHE_SHARES=shares=/mnt/user ERIPHE_API_PORT=18800 TZ=Europe/Paris sh
 	compose_yaml 100 1" >"$T/compose.yaml" 2>&1
 for want in "- /mnt/user/appdata/eriphe/core:/data" "- /mnt/user/appdata/eriphe/node:/mnt/user/appdata/eriphe/node" \
 	'command: ["-root", "/mnt/user/appdata/eriphe/node",' "-allowbindmountfrom=/mnt/user/appdata/eriphe/node,/mnt/user" \
-	"- /mnt/user:/mnt/user" 'ports: ["18800:8800", "8443:8443"]' "ERIPHE_INSTALL: docker" 'ERIPHE_API_PORT: "18800"' \
+	"- /mnt/user:/mnt/user" 'ports: ["18800:8800", "8443:8443", "51820:51820/udp"]' "ERIPHE_INSTALL: docker" 'ERIPHE_API_PORT: "18800"' \
 	"TZ: 'Europe/Paris'" "image: ghcr.io/alexis-marcel/eriphe-core:latest" '"-always-on"' "user: \"65534:100\""; do
 	has "$T/compose.yaml" "$want" compose
 done
@@ -243,7 +243,7 @@ for bad in "--web-port 0" "--web-port 70000" "--api-port x" "--web-port 8800" "-
 	case $out in *passed*) fail "port options take $bad" ;; esac
 done
 compose=$(installer 'parse_args --core-mode --api-port 9800 --web-port 9443; INFO=; settle; MODE=core CORE_IMAGE=c NODE_IMAGE=n WORKER_IMAGE=w INSTALL=linux; compose_yaml 100 1')
-case $compose in *'ports: ["9800:8800", "9443:8443"]'*'ERIPHE_API_PORT: "9800"'*) ;; *) fail "compose with other ports: $compose" ;; esac
+case $compose in *'ports: ["9800:8800", "9443:8443", "51820:51820/udp"]'*'ERIPHE_API_PORT: "9800"'*) ;; *) fail "compose with other ports: $compose" ;; esac
 # A fake listener: ss names the program on a port.
 mkdir -p "$T/ss"
 cat >"$T/ss/ss" <<'EOF'

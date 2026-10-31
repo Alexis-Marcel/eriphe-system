@@ -701,7 +701,7 @@ cat > /usr/local/bin/eriphe-core-run <<'EOF'
 docker rm -f eriphe-core >/dev/null 2>&1 || true
 docker run -d --name eriphe-core --restart unless-stopped --read-only --cap-drop ALL \
   --security-opt no-new-privileges:true -v /var/lib/eriphe-core:/data -e ERIPHE_INSTALL=windows \
-  -p "${API_PORT:-8800}:8800" -p "${WEB_PORT:-8443}:8443" -e "ERIPHE_API_PORT=${API_PORT:-8800}" "$1" >/dev/null
+  -p "${API_PORT:-8800}:8800" -p "${WEB_PORT:-8443}:8443" -p 51820:51820/udp -e "ERIPHE_API_PORT=${API_PORT:-8800}" "$1" >/dev/null
 EOF
 cat > /usr/local/bin/eriphe-update-loop <<'EOF'
 #!/bin/sh

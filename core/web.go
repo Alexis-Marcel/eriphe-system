@@ -110,12 +110,12 @@ func (w *web) parse() error {
 	}
 	for _, f := range files {
 		name := strings.TrimSuffix(filepath.Base(f), ".html")
-		if name == "layout" || name == "parts" || name == "catalog" || name == "tools" || name == "agents" || name == "remote" || name == "folders" || name == "push" {
+		if name == "layout" || name == "parts" || name == "catalog" || name == "tools" || name == "agents" || name == "remote" || name == "folders" || name == "push" || name == "wireguard" {
 			continue
 		}
 		t, err := template.New(name).Funcs(templateFuncs("fr")).ParseFS(webFS,
 			"web/templates/layout.html", "web/templates/parts.html", "web/templates/catalog.html", "web/templates/tools.html",
-			"web/templates/agents.html", "web/templates/remote.html", "web/templates/folders.html", "web/templates/push.html", f)
+			"web/templates/agents.html", "web/templates/remote.html", "web/templates/folders.html", "web/templates/push.html", "web/templates/wireguard.html", f)
 		if err != nil {
 			return err
 		}
@@ -232,6 +232,8 @@ func (w *web) routes() http.Handler {
 	w.githubRoutes(mux)  // web_github.go
 	w.welcomeRoutes(mux) // web_welcome.go
 	w.pushRoutes(mux)    // web_push.go
+
+	w.wireguardRoutes(mux) // web_wireguard.go
 	return w.headers(mux)
 }
 
@@ -495,6 +497,10 @@ func (c *core) serveWeb(cfg *Config) error {
 		IdleTimeout:       2 * time.Minute,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}},
 		ErrorLog:          log.New(tlsNoise{}, "", 0),
+	}
+	if c.wireguardWeb(cfg, handler) { // wireguard.go
+		log.Printf("web: workspace served only inside the WireGuard network (eriphe-core wireguard open serves it on %s again)", w.cfg.Listen)
+		select {}
 	}
 	log.Printf("web: workspace on https://%s", w.cfg.Listen)
 	return srv.ListenAndServeTLS("", "")

@@ -6,6 +6,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY *.go brain-prompt.md ./
 COPY web ./web
+COPY wgnet ./wgnet
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /eriphe-core .
 # The Mac's own: on Apple silicon with macOS 26, install.sh --core-mode runs
@@ -25,5 +26,5 @@ ARG VERSION=dev
 LABEL org.opencontainers.image.version=$VERSION
 VOLUME /data
 USER 1993:1993
-EXPOSE 8800 8443
+EXPOSE 8800 8443 51820/udp
 ENTRYPOINT ["/usr/local/bin/eriphe-core"]

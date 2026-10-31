@@ -1634,6 +1634,39 @@ shown in the workspace only).
 - A node away from home uses the operating system's Tailscale app and the tailnet address of the
   API (see the node's README, several addresses).
 
+## Remote access (Eriphe's own WireGuard network)
+
+A way to reach the workspace from anywhere without a third-party account (prototype). Settings →
+Remote access → **Eriphe network (WireGuard)** turns it on (`wireguard.go`, `wgnet/`):
+
+- eriphe-core runs a WireGuard endpoint **in its own process**: wireguard-go in user space over
+  gVisor's network stack (`tun/netstack`). No root, no kernel module, no TUN device: it works in
+  the unprivileged, read-only container. It listens on **UDP 51820** (`ERIPHE_WG_PORT`), which every
+  installer publishes; the port answers nothing to a packet without a known key.
+- The network is a `/24` drawn at random in `10.0.0.0/8` the first time; eriphe-core is its `.1`.
+  Inside it, eriphe-core serves the workspace on `https://10.x.y.1` and, on `http://10.x.y.1`, a page
+  that installs its certificate authority. Nothing else listens there, and the stack does not
+  forward: a device reaches neither the other devices nor the host's networks.
+- **Add a phone or a computer** makes the device's keys and address and shows its configuration
+  once, as a QR code for the official WireGuard app and as a `.conf` file. It is a split tunnel
+  (`AllowedIPs` is eriphe-core's address only). The private key is kept nowhere; only the public key
+  is stored (kv `wireguard`). The list shows each device's last handshake; **Revoke** drops it at
+  once.
+- The devices dial **this server's public address** (asked, guessed from the browser's address
+  when it is a public one). On a VPS that works as is. At home the router must forward UDP 51820 to
+  the machine: there is no NAT traversal, unlike Tailscale.
+- **Certificate.** The workspace's certificate there comes from a CA of its own (`wireguard/ca.pem`),
+  not the machines' CA: name-constrained (critical) to the network's `/24` and `eriphe.internal`, so
+  a device that trusts it trusts it for nothing else. It is offered as an Apple configuration profile
+  (`.mobileconfig`, then Settings → General → About → Certificate Trust Settings on iOS) and as a
+  `.crt` for Windows and Android.
+- **Workspace through WireGuard only**, for a VPS: from the next start, the workspace is not served
+  on its usual port any more. It can only be turned on from a device connected through WireGuard;
+  `eriphe-core wireguard open` on the server turns it off (then restart), `eriphe-core wireguard
+  show` prints the state.
+- Files (in `<data>/wireguard/`, directory 0700): `private.key` (the server's key, 0600),
+  `ca-key.pem` (0600), `ca.pem`.
+
 ## Vault
 
 Secrets can live in eriphe-core's database, encrypted with AES-256-GCM (each value

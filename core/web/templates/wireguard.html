@@ -1,0 +1,128 @@
+{{/* Settings → Remote access → the WireGuard network (web_wireguard.go). */}}
+
+{{define "i-wg"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l7 3v5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9v-5z"/><path d="M9 11.5h6M9 14.5h4"/></svg>{{end}}
+{{define "i-wg-down"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/></svg>{{end}}
+
+{{define "wg-mount"}}<div id="wg" hx-get="/settings/remote/wireguard" hx-trigger="load" hx-swap="outerHTML"></div>{{end}}
+
+{{define "wg-section"}}{{with .Data}}
+<section id="wg" class="panel wg" aria-labelledby="wg-title">
+  <div class="panel-head">
+    <h3 id="wg-title">{{template "i-wg"}}{{t "wg.title"}}</h3>
+    <span class="status {{if .Running}}on{{else if .Error}}bad{{else}}wait{{end}}"><span class="led" aria-hidden="true"></span>{{if .Running}}{{t "wg.on"}}{{else if .Error}}{{t "wg.failed"}}{{else}}{{t "wg.off"}}{{end}}</span>
+  </div>
+  <p class="muted">{{t "wg.lead"}}</p>
+  {{if .Msg}}<p class="{{if .Bad}}alert{{else}}ok-note{{end}}" role="status">{{t .Msg}}</p>{{end}}
+
+  {{if not .Enabled}}
+  <ul class="remote-points">
+    <li>{{template "i-shield"}}<span>{{t "wg.point.account"}}</span></li>
+    <li>{{template "i-lock"}}<span>{{t "wg.point.silent"}}</span></li>
+    <li>{{template "i-phone"}}<span>{{t "wg.point.app"}}</span></li>
+  </ul>
+  <form class="stack-form" hx-post="/settings/remote/wireguard/enable" hx-target="#wg" hx-swap="outerHTML" hx-disabled-elt="find button">
+    <label class="field"><span>{{t "wg.endpoint"}}</span>
+      <input type="text" name="endpoint" value="{{.Guess}}" placeholder="203.0.113.7 / eriphe.example.org" autocomplete="off" spellcheck="false" class="mono">
+      <small>{{tf "wg.endpointhint" .Port}}</small></label>
+    <div class="actions"><button class="btn btn-primary" type="submit">{{template "i-wg"}}{{t "wg.enable"}}</button></div>
+  </form>
+  {{else}}
+  {{if .Error}}<p class="alert" role="alert">{{t "wg.err.start"}} <span class="mono small">{{short .Error 300}}</span></p>{{end}}
+  <dl class="kv remote-facts">
+    <div><dt>{{t "wg.address"}}</dt><dd class="mono">{{if .Address}}{{.Address}}{{else}}—{{end}}</dd></div>
+    <div><dt>{{t "wg.port"}}</dt><dd class="mono">UDP {{.Port}}</dd></div>
+    {{if .Fingerprint}}<div><dt>{{t "wg.fingerprint"}}</dt><dd class="mono small wg-fp">{{.Fingerprint}}</dd></div>{{end}}
+  </dl>
+  <form class="stack-form wg-endpoint" hx-post="/settings/remote/wireguard/endpoint" hx-target="#wg" hx-swap="outerHTML">
+    <label class="field"><span>{{t "wg.endpoint"}}</span>
+      <input type="text" name="endpoint" value="{{if .Endpoint}}{{.Endpoint}}{{else}}{{.Guess}}{{end}}" placeholder="203.0.113.7:{{.Port}}" required autocomplete="off" spellcheck="false" class="mono">
+      <small>{{tf "wg.endpointhint" .Port}}</small></label>
+    <div class="actions"><button class="btn btn-soft sm" type="submit">{{t "remote.save"}}</button></div>
+  </form>
+  <p class="notice small">{{tf "wg.nat" .Port}}</p>
+
+  {{with .New}}
+  <div class="wg-new" role="region" aria-label="{{t "wg.new.title"}}">
+    <h4>{{tf "wg.new.title" .Peer.Name}}</h4>
+    <p class="notice small">{{t "wg.new.once"}}</p>
+    <div class="remote-howto">
+      <div class="remote-tip">
+        <h4>1 · {{t "wg.new.step1"}}</h4>
+        <p class="muted small">{{t "wg.new.step1lead"}}</p>
+        {{if .QR}}<figure class="remote-qr">{{.QR}}</figure>{{end}}
+        <p class="actions"><a class="btn btn-ghost sm" href="{{.Conf}}" download="{{.File}}">{{template "i-wg-down"}}{{t "wg.new.conf"}}</a></p>
+        <p class="actions"><a class="btn btn-ghost sm" href="https://apps.apple.com/app/wireguard/id1441195209" target="_blank" rel="noopener noreferrer">App Store</a>
+        <a class="btn btn-ghost sm" href="https://play.google.com/store/apps/details?id=com.wireguard.android" target="_blank" rel="noopener noreferrer">Google Play</a>
+        <a class="btn btn-ghost sm" href="https://www.wireguard.com/install/" target="_blank" rel="noopener noreferrer">{{t "remote.app.other"}}</a></p>
+      </div>
+      <div class="remote-tip">
+        <h4>2 · {{t "wg.new.step2"}}</h4>
+        <p class="muted small">{{t "wg.new.step2lead"}}</p>
+        {{if .CAQR}}<figure class="remote-qr">{{.CAQR}}<figcaption class="muted small mono">{{.CAPage}}</figcaption></figure>{{end}}
+        <ol class="muted small wg-steps"><li>{{t "wg.ca.ios1"}}</li><li>{{t "wg.ca.ios2"}}</li><li>{{t "wg.ca.ios3"}}</li></ol>
+        <p class="muted small">{{t "wg.ca.android"}}</p>
+        <p class="muted small">{{t "wg.ca.windows"}}</p>
+      </div>
+      <div class="remote-tip">
+        <h4>3 · {{t "wg.new.step3"}}</h4>
+        <p class="muted small">{{t "wg.new.step3lead"}}</p>
+        <p class="muted small">{{t "remote.home.ios"}}</p>
+        <p class="muted small">{{t "wg.new.ondemand"}}</p>
+      </div>
+    </div>
+  </div>
+  {{end}}
+
+  <form class="wg-add" hx-post="/settings/remote/wireguard/peers" hx-target="#wg" hx-swap="outerHTML" hx-disabled-elt="find button">
+    <label class="field"><span>{{t "wg.peer.name"}}</span>
+      <input type="text" name="name" maxlength="60" placeholder="{{t "wg.peer.placeholder"}}" autocomplete="off"></label>
+    <button class="btn btn-primary" type="submit" {{if not .Running}}disabled{{end}}>{{template "i-plus"}}{{t "wg.add"}}</button>
+  </form>
+
+  {{template "wg-peers" .}}
+
+  <div class="wg-ca">
+    <b>{{t "wg.ca.title"}}</b>
+    <p class="muted small">{{t "wg.ca.desktop"}}</p>
+    <p class="actions"><a class="btn btn-ghost sm" href="/settings/remote/wireguard/eriphe.mobileconfig">{{template "i-wg-down"}}{{t "wg.ca.apple"}}</a>
+    <a class="btn btn-ghost sm" href="/settings/remote/wireguard/eriphe-ca.crt">{{template "i-wg-down"}}{{t "wg.ca.other"}}</a></p>
+  </div>
+
+  <div class="remote-danger">
+    <div><b>{{t "wg.only"}}</b><p class="muted small">{{if .WorkspaceOnly}}{{t "wg.only.onlead"}}{{else}}{{t "wg.only.lead"}}{{end}}{{if ne .WorkspaceOnly .OnlyAtRun}} {{t "wg.only.restart"}}{{end}}</p></div>
+    <form hx-post="/settings/remote/wireguard/only" hx-target="#wg" hx-swap="outerHTML" class="inline" {{if not .WorkspaceOnly}}hx-confirm="{{t "wg.only.confirm"}}"{{end}}>
+      <input type="hidden" name="on" value="{{if .WorkspaceOnly}}0{{else}}1{{end}}">
+      <button class="btn btn-soft sm" type="submit">{{if .WorkspaceOnly}}{{t "wg.only.off"}}{{else}}{{t "wg.only.on"}}{{end}}</button>
+    </form>
+  </div>
+
+  <div class="tile-foot remote-foot">
+    <span class="muted small">{{t "wg.foot"}}</span>
+    <form hx-post="/settings/remote/wireguard/disable" hx-target="#wg" hx-swap="outerHTML" hx-confirm="{{t "wg.disableconfirm"}}" class="inline">
+      <button class="link-btn danger" type="submit">{{t "wg.disable"}}</button>
+    </form>
+  </div>
+  {{end}}
+</section>
+{{end}}{{end}}
+
+{{define "wg-peers-frag"}}{{template "wg-peers" .Data}}{{end}}
+
+{{define "wg-peers"}}{{with .}}{{if .Enabled}}
+<div id="wg-peers" class="wg-peers" hx-get="/settings/remote/wireguard/peers" hx-trigger="every 10s" hx-swap="outerHTML">
+  {{if .Peers}}
+  <ul class="wg-list">
+    {{range .Peers}}
+    <li>
+      <span class="status {{if .Online}}on{{else}}wait{{end}}"><span class="led" aria-hidden="true"></span></span>
+      <div><b>{{.Name}}</b> <span class="mono small muted">{{.Address}}</span>
+        <p class="muted small">{{if .LastHandshake.IsZero}}{{t "wg.peer.never"}}{{else}}{{tf "wg.peer.seen" (ago .LastHandshake)}}{{end}}</p></div>
+      <form hx-post="/settings/remote/wireguard/peers/{{.Address}}/revoke" hx-target="#wg" hx-swap="outerHTML" hx-confirm="{{tf "wg.peer.revokeconfirm" .Name}}" class="inline">
+        <button class="btn btn-danger-ghost sm" type="submit">{{t "wg.peer.revoke"}}</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}<p class="muted small">{{t "wg.peer.none"}}</p>{{end}}
+</div>
+{{end}}{{end}}{{end}}
