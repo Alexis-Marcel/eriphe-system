@@ -725,6 +725,8 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		err = errors.New("providers.badenv")
 	case selfHosted && checkBaseURL(p.BaseURL) != nil:
 		err = errors.New("providers.badbaseurl")
+	case selfHosted && clearToInternet(p.BaseURL):
+		err = errors.New("providers.clearbaseurl")
 	case selfHosted && checkModelIDs(p.Models) != nil:
 		err = errors.New("providers.badmodels")
 	case selfHosted && !selfHostedKey(strings.TrimSpace(key)):

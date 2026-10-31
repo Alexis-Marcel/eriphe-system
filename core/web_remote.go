@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -36,10 +37,31 @@ type remotePage struct {
 	remoteView
 	QR       template.HTML
 	HasVault bool
+	Exposed  string // the public address this page was reached at, or from: the workspace is on the internet
 }
 
-func (w *web) remotePage() remotePage {
-	p := remotePage{HasVault: currentVault() != nil}
+// exposedAt is the public address r reached the workspace at (the address
+// typed in the browser), or came from, if any: then the workspace answers
+// on the internet, whatever its remote access says. Through a declared
+// proxy, the owner's own domain, only an address typed as such counts.
+func (w *web) exposedAt(r *http.Request) string {
+	si := w.signin()
+	if u, err := url.Parse(si.requestOrigin(r)); err == nil {
+		if a, ok := hostAddr(u.Hostname()); ok && publicAddr(a) {
+			return a.String()
+		}
+	}
+	if si.fromProxy(r) {
+		return ""
+	}
+	if a, ok := hostAddr(r.RemoteAddr); ok && publicAddr(a) {
+		return a.String()
+	}
+	return ""
+}
+
+func (w *web) remotePage(r *http.Request) remotePage {
+	p := remotePage{HasVault: currentVault() != nil, Exposed: w.exposedAt(r)}
 	if w.c.remote == nil {
 		return p
 	}
@@ -53,7 +75,7 @@ func (w *web) remotePage() remotePage {
 }
 
 func (w *web) handleRemote(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "", page{Title: "settings.remote", Nav: "settings", Tab: "remote", Data: w.remotePage()})
+	w.render(rw, r, s, "settings", "", page{Title: "settings.remote", Nav: "settings", Tab: "remote", Data: w.remotePage(r)})
 }
 
 // handleRemoteEvents sends the live part of the page whenever it changes.
@@ -75,7 +97,7 @@ func (w *web) handleRemoteEvents(rw http.ResponseWriter, r *http.Request, s *ses
 	quiet := time.Now()
 	for {
 		wake := w.c.remote.waker()
-		html, err := w.fragment(lang, "settings", "remote-status", page{Lang: lang, Data: w.remotePage()})
+		html, err := w.fragment(lang, "settings", "remote-status", page{Lang: lang, Data: w.remotePage(r)})
 		if err != nil {
 			log.Printf("web: remote-status: %v", err)
 			return
@@ -110,7 +132,7 @@ func (w *web) remoteAction(do func(*remoteAccess, *http.Request) error) authed {
 			w.toast(rw, tr(w.lang(r), "err.internal"), false)
 			return
 		}
-		w.render(rw, r, s, "settings", "remote-status", page{Data: w.remotePage()})
+		w.render(rw, r, s, "settings", "remote-status", page{Data: w.remotePage(r)})
 	}
 }
 
@@ -203,10 +225,16 @@ func (w *web) awayCoreURLs() []string {
 
 // joinCoreURL is the -core of a join command: the local address, the
 // ones away from home, or all (the node tries them in order: at home, then
-// away). Every installer takes such a list, comma-separated.
+// away). Every installer takes such a list, comma-separated. With the
+// machines' CA the command carries its hash and the node checks it from its
+// first request: the local address says https:// (the join token never
+// crosses in clear), on the same port.
 func (w *web) joinCoreURL(r *http.Request, via string) string {
 	lan := w.coreURL(r)
 	away := slices.DeleteFunc(w.awayCoreURLs(), func(u string) bool { return u == lan })
+	if rest, ok := strings.CutPrefix(lan, "http://"); ok && w.c.caHash() != "" {
+		lan = "https://" + rest
+	}
 	switch {
 	case len(away) == 0 || via == "lan":
 		return lan

@@ -45,6 +45,22 @@ func hasNone(t *testing.T, what, body string, gone ...string) {
 	}
 }
 
+// A device pinned to a release says so, and offers no update it would not
+// take; one pinned to a line still takes that line's fixes.
+func TestWebUpdatePinned(t *testing.T) {
+	tw, _ := newUpdatesWeb(t)
+	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true,"pin":"0.0.1"}}`)
+	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
+	hasAll(t, "pinned", body, "épinglée sur 0.0.1")
+	hasNone(t, "pinned", body, "Mise à jour disponible", "→ 0.1.0", `name="machine" value="node:pc"`)
+	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true,"pin":"0.1"}}`)
+	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
+	hasAll(t, "pinned to a line", body, "épinglée sur 0.1", "→ 0.1.0", `name="machine" value="node:pc"`)
+	if pinAllows("0.29.0", "0.29.1") || !pinAllows("v0.29", "0.29.3") || pinAllows("0.29", "0.30.0") || pinAllows("sha-abcdef1", "0.30.0") {
+		t.Fatal("pinAllows")
+	}
+}
+
 // A device's card follows its update: asked, under way, done, each time
 // from its foot, which asks again only while the request is pending.
 func TestWebUpdateLive(t *testing.T) {

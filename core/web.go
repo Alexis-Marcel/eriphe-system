@@ -373,12 +373,19 @@ type updateNotice struct {
 
 func (w *web) updateNotice() updateNotice {
 	var n updateNotice
-	if w.c.updates.behind("eriphe-core", version) {
-		n.Core = w.c.updates.version("eriphe-core")
+	// A pinned machine is not behind: it stays where it was put.
+	if latest := w.c.updates.version("eriphe-core"); w.c.updates.behind("eriphe-core", version) {
+		if pin := w.c.coreUpdater().Pin; pin == "" || pinAllows(pin, latest) {
+			n.Core = latest
+		}
 	}
 	nodes, _ := w.c.store.nodes()
 	for _, row := range nodes {
-		if w.c.updates.behind("eriphe-node", parseInfo(row).Version) {
+		info := parseInfo(row)
+		if pin := info.Update.Pin; pin != "" && !pinAllows(pin, w.c.updates.version("eriphe-node")) {
+			continue
+		}
+		if w.c.updates.behind("eriphe-node", info.Version) {
 			n.Nodes = true
 			break
 		}

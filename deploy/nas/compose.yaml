@@ -17,7 +17,9 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     # 8843 on the host: the workspace (8443 is often taken, e.g. by Unraid's nginx).
-    ports: ["8800:8800", "8843:8443"]
+    # IPv4 only: on [::], Docker's userland proxy would show every IPv6 client with the
+    # bridge's gateway address (install/README.md, Eriphe on a VPS).
+    ports: ["0.0.0.0:8800:8800", "0.0.0.0:8843:8443"]
     # Remote access (Settings → Remote access) needs nothing more: Tailscale runs in userspace,
     # outbound only, with its state in ./core/tailscale (keep it out of backups that leave home).
     volumes:

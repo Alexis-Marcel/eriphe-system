@@ -16,7 +16,10 @@ It is not in HACS yet: install it by hand.
    (so that `/config/custom_components/eriphe/manifest.json` exists).
 2. Restart Home Assistant.
 3. **Settings > Devices & services > Add integration > Eriphe**, then enter:
-   - the URL of `eriphe-core` on the LAN, for example `http://192.0.2.2:8800`;
+   - the URL of `eriphe-core` on the LAN, for example `http://192.0.2.2:8800` (plain HTTP is
+     for the local network and Tailscale only: `eriphe-core` refuses it from a public address, as
+     the token would cross the internet in clear; away from home, give its tailnet address,
+     `https://eriphe.<tailnet>.ts.net:8800`);
    - the token `eriphe-core` gave for Home Assistant (in the workspace, Settings > Tools > Home
      Assistant > "The house's voice talks to Eriphe", which also shows the URL to enter).
 

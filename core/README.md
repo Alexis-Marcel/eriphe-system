@@ -17,9 +17,13 @@ exist), it runs on defaults with everything in its data directory, `-data` (env 
 `/data` by default: the image's volume):
 
 ```sh
-docker run -d --name eriphe-core -v eriphe-data:/data -p 8800:8800 -p 8443:8443 ghcr.io/alexis-marcel/eriphe-core
+docker run -d --name eriphe-core -v eriphe-data:/data -p 0.0.0.0:8800:8800 -p 0.0.0.0:8443:8443 ghcr.io/alexis-marcel/eriphe-core
 docker exec eriphe-core eriphe-core auth setup-code    # the setup code, while there is no password
 ```
+
+The ports are published on IPv4 only: published on `[::]` too (Docker's default) without IPv6 on
+the container's network, Docker's userland proxy relays IPv6 clients, and eriphe-core sees them all
+with the bridge's gateway address.
 
 At first start it makes what it lacks in the data directory, and reuses it after: the API token
 (`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`) and the
@@ -155,7 +159,10 @@ brain, through OpenCode:
 - `base_url` is `http(s)://host[:port]/v1`, without credentials, query or fragment. Tasks run in
   containers, so the host is the machine's address on the network (or a public name), never
   `localhost`, a loopback, link-local (`169.254.169.254`), multicast or unspecified address. The
-  server must listen on the network (Ollama: `OLLAMA_HOST=0.0.0.0`).
+  server must listen on the network (Ollama: `OLLAMA_HOST=0.0.0.0`). The workspace's form refuses
+  plain `http://` to a public IP address: prompts would cross the internet in clear and the model
+  server would answer anyone. Put such a server behind `https://` with a key, or reach it over
+  Tailscale (its `100.x` address); `http://` is for the local network.
 - `secret` (the key) is optional: Ollama has none; vLLM (`--api-key`) or LM Studio may. It is lent
   as `SELFHOSTED_API_KEY` and OpenCode reads it from the environment (`{env:…}`), never from its
   config. A key with a quote, a backslash, a brace or a control character is refused.
@@ -422,7 +429,9 @@ once a night). A machine without an updater shows the one command that updates i
 installed (`ERIPHE_INSTALL`: `linux`, `macos`, `windows`, or `docker` for the one-container
 install, whose launcher is the updater: `docker exec eriphe eriphe-launcher update`). Going back to the previous version, or staying on one, is the install command's
 (`--rollback`, `--version`). A request is "update" (to the latest version, or the one the machine
-is pinned to) or "rollback" (left for the API and the tests), never an image nor a command. The
+is pinned to) or "rollback" (left for the API and the tests), never an image nor a command. A
+machine pinned to a release (`--version 0.29.0`) says "épinglée sur 0.29.0" and offers no update
+(nor a dot); one pinned to a line (`0.29`) still offers that line's fixes. The
 choices of before, for all machines and for each one, are dropped at start; "at night" for all
 turns the switch on.
 
@@ -454,10 +463,18 @@ whatever address it dials) and one client certificate per node.
   by itself: a CA file that does not load stops TLS for nodes (logged at start) rather than making
   a new one, since every node pins it.
 - **One port.** The API port serves TLS and plain HTTP side by side: eriphe-core tells them apart by
-  the first byte a client sends (a TLS handshake starts with `0x16`). The CLI, Home Assistant, the
-  brain's MCP and every other API caller keep their plain `http://…:8800`; a node reaches the same
-  address as `https://…:8800`. On the tailnet, `:8800` keeps its Tailscale certificate and asks for
-  a node's certificate too.
+  the first byte a client sends (a TLS handshake starts with `0x16`). On the local network, the CLI,
+  Home Assistant, the brain's MCP and every other API caller may keep their plain `http://…:8800`;
+  a node reaches the same address as `https://…:8800`, and the join commands say `https://` when
+  they carry `-ca-hash`. On the tailnet, `:8800` keeps its Tailscale certificate (publicly trusted:
+  the address to give the CLI or Home Assistant away from home) and asks for a node's certificate
+  too.
+- **No token in clear over the internet.** A call with the API's token (or Home Assistant's voice
+  token) over plain HTTP from a public address is refused (403): the token already crossed the
+  internet in clear, and a setup like that should fail at once rather than leak it at every call.
+  Plain HTTP stays open to private, loopback, link-local and Tailscale addresses (and to the
+  Docker gateway, which may be the host itself); TLS works from anywhere. Node requests (join,
+  tunnel, reports) are not affected: they are TLS once the node knows the CA.
 - **Joining.** The join command carries `-ca-hash sha256:<hex>`, the SHA-256 of the CA's public key
   (like kubeadm's `--discovery-token-ca-cert-hash`): the node finds that CA in eriphe-core's TLS
   handshake, pins it, and only then sends its join token. `eriphe-core join-token` and "Ajouter une
@@ -1372,7 +1389,12 @@ has already written. The Memory page asks for it again ("Faire l'interview", `PO
 Logins are rate-limited per address: 5 failures from an address (an IPv6 /64 counts as one) in 15
 minutes refuse it for the rest of the window, attempts in flight included. There is no global
 lockout: past 20 failures from all addresses, every attempt waits longer first (250 ms more per
-failure, at most 5 s) but is still checked, so the owner gets in from their own address. At most two
+failure, at most 5 s) but is still checked, so the owner gets in from their own address.
+Connections from eriphe-core's default gateway (in a container, the Docker bridge's: Docker's
+userland proxy shows the host's own localhost, a VM's port forwarder, and IPv6 clients of a port
+published on `[::]` with that address) may stand for anyone: they share one count of their own,
+with 20 failures, and never count as the local network (below). The installers publish the ports
+on IPv4 only, so that clients keep their own address. At most two
 argon2 hashes are computed at once. Changing the password ends the other sessions.
 The bearer-token API is unchanged for the CLI and the nodes.
 
@@ -1387,7 +1409,7 @@ configuration tag and cannot change them).
 | **Password** (`password`, default) | The owner's password, created with the setup code at first start. |
 | **Identity provider** (`oidc`) | Any OpenID Connect provider (Authentik, Authelia, Keycloak, PocketID…). Give its issuer, the client ID and secret, the workspace's address (`external_url`, e.g. `https://eriphe.example.org`), and who may enter: the provider's account ids (`allowed_subs`) and/or emails it says are verified (`allowed_emails`). Redirect URI: `<external_url>/auth/callback`. Authorization code flow with PKCE (S256), state and nonce; the ID token's signature, issuer, audience and expiry are checked ([go-oidc](https://github.com/coreos/go-oidc)). Signed-out visitors go to the provider at once, unless `oidc.button` asks for a sign-in button. |
 | **Reverse proxy** (`proxy`) | The proxy signs in and passes the user in `Remote-User` (or `proxy.header`). The header is believed only from the proxy's addresses (`proxy.trusted`, addresses or CIDRs), and for the users listed (`proxy.users`); it is needed on every request. |
-| **None** (`none`) | No sign-in at all: only for a machine nobody but you can reach. |
+| **None** (`none`) | No sign-in at all: only for a machine nobody but you can reach. The page lets you choose it only from the local network (not through a proxy); otherwise, on the machine: `docker exec eriphe-core eriphe-core auth none`. |
 
 **Visitors who may not enter** (an account the provider signed in but that is not allowed, a
 request without the proxy's user, with another user, or from an address that is not the
@@ -1396,9 +1418,9 @@ otherwise see a page "Cet espace est privé" / "This workspace is private".
 
 **Always a way back in.** In `oidc` and `proxy` modes the password still opens the workspace
 from the local network: the browser's address and every hop in `X-Forwarded-For` and
-`X-Real-Ip` must be private, loopback, link-local or Tailscale (100.64.0.0/10, fd7a:…), the
-request must not come from a declared proxy, and a request with a `Forwarded` header never
-counts. `no_local_password` turns that off. And from the machine:
+`X-Real-Ip` must be private, loopback, link-local or Tailscale (100.64.0.0/10, fd7a:…) and the
+browser's not eriphe-core's default gateway, the request must not come from a declared proxy, and
+a request with a `Forwarded` header never counts. `no_local_password` turns that off. And from the machine:
 
 ```sh
 docker exec eriphe-core eriphe-core auth reset    # or: eriphe-core auth reset -config core.json
@@ -1441,7 +1463,9 @@ file's settings, and says so.
 
 > Your proxy must add `X-Forwarded-For` (Traefik, Caddy and nginx's `proxy_add_x_forwarded_for`
 > do). If the workspace is published on the internet without a proxy, turn the local password
-> off: Docker's port publishing may show every visitor with a private address.
+> off: Docker's port publishing may show visitors with a private address (eriphe-core does not
+> count its gateway as local, but another relay on the way could hide them too). Better: do not
+> publish it on the internet at all (install/README.md, Eriphe on a VPS).
 
 **Changing the mode keeps you in.** Settings → Account → Connexion shows the four modes as
 cards, and below them only the chosen mode's settings (the others stay in the form, so it saves
@@ -1595,7 +1619,13 @@ Tailscale starts again with eriphe-core. On the tailnet, eriphe-core serves:
 | `443` | the workspace, with HSTS, only for its tailnet name (another `Host` is redirected or refused) |
 | `8800` | the API (nodes, CLI, MCP), HTTP/1.1, with the same certificate; a node presents its own (see TLS between machines) |
 
-The local listeners do not change. The certificate is fetched and renewed by tsnet on the
+The local listeners do not change: remote access adds the tailnet, it closes nothing. So when the
+page is opened at a public address, or from one (not through a declared proxy), it says so in a
+banner rather than "only on your local network", with what to do: close 8443 and 8800 in the
+hosting provider's firewall, then go through the tailnet or a domain behind a reverse proxy
+([install/README.md, Eriphe on a VPS](../install/README.md#eriphe-on-a-vps)).
+
+The certificate is fetched and renewed by tsnet on the
 handshakes (Let's Encrypt, via Tailscale). The OAuth redirect of a tool connected from the tailnet
 address is that address's `/oauth/callback`.
 

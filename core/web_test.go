@@ -393,6 +393,24 @@ func TestJoinCommandPublishedPort(t *testing.T) {
 	}
 }
 
+// With the machines' CA, the join commands say https://: the node checks
+// the CA (-ca-hash) from its first request, the join token never crosses in
+// clear.
+func TestJoinCommandHTTPSWithCA(t *testing.T) {
+	tw := newTestWeb(t)
+	csrf := tw.setup()
+	ca, err := newMachineCA(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tw.c.machines = ca
+	u, _ := url.Parse(tw.srv.URL)
+	_, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"desk"}}, csrf)
+	if !strings.Contains(body, "--core https://"+u.Hostname()+":") || !strings.Contains(body, ca.hash) {
+		t.Fatalf("join command: %s", body)
+	}
+}
+
 // The join commands give the installers the assistant's name, for what they
 // print; not the default one, nor one that single quotes cannot hold.
 func TestJoinCommandAssistantName(t *testing.T) {

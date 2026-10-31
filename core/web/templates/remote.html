@@ -21,13 +21,20 @@
 {{end}}
 
 {{define "remote-status"}}{{with .Data}}
+{{if .Exposed}}
+<div class="remote-banner bad" role="alert">
+  {{template "i-shield"}}
+  <div><b>{{tf "remote.exposed" .Exposed}}</b>
+  <p>{{t "remote.exposedlead"}} <a href="https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md#eriphe-on-a-vps" target="_blank" rel="noopener noreferrer">{{t "remote.exposedguide"}}</a></p></div>
+</div>
+{{end}}
 {{if eq .Phase "off"}}
 <section class="panel remote-hero" aria-labelledby="remote-off-title">
   <span class="remote-art" aria-hidden="true">{{template "i-globe"}}</span>
   <h3 id="remote-off-title">{{t "remote.off.title"}}</h3>
-  <p class="muted">{{t "remote.off.lead"}}</p>
+  <p class="muted">{{if .Exposed}}{{t "remote.off.exposedlead"}}{{else}}{{t "remote.off.lead"}}{{end}}</p>
   <ul class="remote-points">
-    <li>{{template "i-shield"}}<span>{{t "remote.point.private"}}</span></li>
+    <li>{{template "i-shield"}}<span>{{if .Exposed}}{{t "remote.point.privateexposed"}}{{else}}{{t "remote.point.private"}}{{end}}</span></li>
     <li>{{template "i-lock"}}<span>{{t "remote.point.https"}}</span></li>
     <li>{{template "i-phone"}}<span>{{t "remote.point.phone"}}</span></li>
   </ul>

@@ -66,7 +66,20 @@ func (w *web) updatesData(nodes []NodeRow) updatesData {
 	return d
 }
 
+// pinAllows tells whether a machine pinned to pin can go to version: a
+// line (0.29) takes its fixes, a release (0.29.0) or a build stays where it
+// is.
+func pinAllows(pin, version string) bool {
+	p, v := strings.TrimPrefix(pin, "v"), strings.TrimPrefix(version, "v")
+	return strings.Count(p, ".") == 1 && strings.HasPrefix(v, p+".")
+}
+
 func (d *updatesData) add(r updateRow) {
+	// A pinned machine offers no update it would not take: it says where
+	// it is pinned instead.
+	if r.Pin != "" && r.Latest != "" && !pinAllows(r.Pin, r.Latest) {
+		r.Latest = ""
+	}
 	// The updater wrote how the request went: it is done, even before
 	// resolveUpdates drops it.
 	if p, st := r.Pending, r.Status; p != nil && st != nil && st.ID == p.ID && st.Outcome != "running" {

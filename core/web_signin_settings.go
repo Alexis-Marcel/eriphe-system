@@ -131,6 +131,13 @@ func (w *web) handleSaveSignin(rw http.ResponseWriter, r *http.Request, s *sessi
 		w.signinMsg(rw, r, s, false, w.authErrText(r, err))
 		return
 	}
+	// No sign-in is only for a machine nobody else can reach: chosen from
+	// the local network, or on the machine itself (eriphe-core auth none),
+	// never from an address that may be anyone's.
+	if a.mode() == modeNone && si.cfg.mode() != modeNone && (!fromLocalNetwork(r) || si.fromProxy(r)) {
+		w.signinMsg(rw, r, s, false, tr(lang, "signin.none.notlocal"))
+		return
+	}
 	secret := typed
 	if secret == "" {
 		secret, _ = clientSecret(a)

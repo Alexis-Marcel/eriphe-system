@@ -95,6 +95,10 @@ func (c *core) handleVoiceInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *core) handleVoice(w http.ResponseWriter, r *http.Request) {
+	if clearFromInternet(r) {
+		http.Error(w, errClearFromInternet, http.StatusForbidden)
+		return
+	}
 	if !c.voiceTokenOK(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return

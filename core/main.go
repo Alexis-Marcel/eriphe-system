@@ -200,6 +200,9 @@ func joinTokenCommand(args []string) {
 	url := cfg.PublicURL
 	if url == "" {
 		url = "http://<this machine>:" + port
+		if out.CAHash != "" {
+			url = "https://<this machine>:" + port // the node checks the CA from its join on
+		}
 	}
 	where := "On the new machine:"
 	if *rejoin {
@@ -223,6 +226,10 @@ func joinQuery(name string, rejoin bool, ttl time.Duration) string {
 
 func bearer(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if clearFromInternet(r) {
+			http.Error(w, errClearFromInternet, http.StatusForbidden)
+			return
+		}
 		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

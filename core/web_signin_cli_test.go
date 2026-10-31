@@ -164,3 +164,24 @@ func TestAuthCommandsWithFileAuth(t *testing.T) {
 		t.Fatal("the workspace's settings were written")
 	}
 }
+
+// `auth none` turns sign-in off from the machine, keeping the other
+// settings; `auth reset` brings the password back.
+func TestAuthNoneCommand(t *testing.T) {
+	dir := t.TempDir()
+	s := cliStore(t, dir)
+	s.set(authKey, `{"mode":"password","proxy":{"trusted":["10.0.0.2"],"users":["owner"]}}`)
+	out, err := cliRun(t, nil, "", "none", "-data", dir)
+	if err != nil || !strings.Contains(out, "auth reset") {
+		t.Fatalf("auth none: %v %s", err, out)
+	}
+	if a := storedSignin(s); a.mode() != modeNone || len(a.Proxy.Trusted) != 1 {
+		t.Fatalf("stored: %+v", a)
+	}
+	if _, err := cliRun(t, nil, "", "reset", "-data", dir); err != nil {
+		t.Fatalf("reset after none: %v", err)
+	}
+	if a := storedSignin(s); a.mode() != modePassword {
+		t.Fatalf("after reset: %+v", a)
+	}
+}
