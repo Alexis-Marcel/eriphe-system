@@ -767,3 +767,57 @@ func TestHelloWithoutName(t *testing.T) {
 		}
 	}
 }
+
+// Changing the password asks for the current one, under the login limiter,
+// and ends every other session.
+func TestWebChangePassword(t *testing.T) {
+	tw := newTestWeb(t)
+	csrf := tw.setup()
+	// A second browser, signed in too.
+	other := &http.Client{Transport: tw.hc.Transport, CheckRedirect: tw.hc.CheckRedirect}
+	other.Jar, _ = cookiejar.New(nil)
+	second := &testWeb{t: t, w: tw.w, c: tw.c, srv: tw.srv, hc: other}
+	tok := second.formToken("/login")
+	if code, _, _ := second.do("POST", "/login", url.Values{"csrf": {tok}, "password": {testPassword}}, nil); code != http.StatusSeeOther {
+		t.Fatalf("second login: %d", code)
+	}
+
+	const next = "a brand new passphrase"
+	for _, c := range []struct {
+		form url.Values
+		want string
+	}{
+		{url.Values{"current": {"wrong"}, "password": {next}, "confirm": {next}}, "Mot de passe incorrect."},
+		{url.Values{"current": {testPassword}, "password": {"short"}, "confirm": {"short"}}, "10 caractères au moins"},
+		{url.Values{"current": {testPassword}, "password": {next}, "confirm": {next + "!"}}, "ne sont pas identiques"},
+	} {
+		if _, body, _ := tw.post("/settings/password", c.form, csrf); !strings.Contains(body, c.want) {
+			t.Fatalf("%v: %s", c.form, body)
+		}
+	}
+	if !checkPassword(tw.w.ownerHash(), testPassword) {
+		t.Fatal("the password changed on a refused form")
+	}
+	if code, _, _ := second.do("GET", "/settings/account", nil, nil); code != http.StatusOK {
+		t.Fatalf("second session before: %d", code)
+	}
+
+	_, body, _ := tw.post("/settings/password", url.Values{"current": {testPassword}, "password": {next}, "confirm": {next}}, csrf)
+	if !strings.Contains(body, "Mot de passe changé") || !checkPassword(tw.w.ownerHash(), next) {
+		t.Fatalf("change: %s", body)
+	}
+	if code, _, h := second.do("GET", "/settings/account", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/login" {
+		t.Fatalf("second session after: %d %s", code, h.Get("Location"))
+	}
+	tw.sessionToken() // this one is kept
+
+	// Guessing the current password is limited like a login.
+	limited := false
+	for i := 0; i < 6 && !limited; i++ {
+		_, body, _ := tw.post("/settings/password", url.Values{"current": {"guess"}, "password": {next}, "confirm": {next}}, csrf)
+		limited = strings.Contains(body, "Trop d&#39;essais")
+	}
+	if !limited {
+		t.Fatal("no limit on the current password")
+	}
+}

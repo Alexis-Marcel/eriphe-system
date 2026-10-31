@@ -3,6 +3,8 @@ package main
 import (
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -260,5 +262,35 @@ func TestWebSkippedEntryShown(t *testing.T) {
 	tw.setup()
 	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, "« broken » n&#39;a pas pu être chargé") {
 		t.Fatalf("skipped not shown: %s", body)
+	}
+}
+
+// Importing a secret file reads only a file the configuration names, and
+// never shows its value.
+func TestWebImportSecret(t *testing.T) {
+	dir := t.TempDir()
+	key := filepath.Join(dir, "claude")
+	os.WriteFile(key, []byte("sk-file-secret"), 0o600)
+	tw, _, csrf := catalogWeb(t, func(cfg *Config) {
+		cfg.Providers["anthropic"] = Provider{Kind: "claude-subscription", Secret: key}
+		cfg.Providers["gone"] = Provider{Kind: "claude-subscription", Secret: filepath.Join(dir, "missing")}
+	})
+	_, body, _ := tw.post("/settings/secrets/import", url.Values{"field": {"providers.anthropic.secret"}}, csrf)
+	if !strings.Contains(body, "Copié dans le coffre sous « anthropic »") || strings.Contains(body, "sk-file-secret") {
+		t.Fatalf("import: %s", body)
+	}
+	if got, _ := readSecret("vault:anthropic"); got != "sk-file-secret" {
+		t.Fatalf("vault: %q", got)
+	}
+	// A field the configuration does not name: nothing read.
+	if _, body, _ := tw.post("/settings/secrets/import", url.Values{"field": {"/etc/passwd"}}, csrf); !strings.Contains(body, "Une erreur est survenue") {
+		t.Fatalf("unknown field: %s", body)
+	}
+	if _, body, _ := tw.post("/settings/secrets/import", url.Values{"field": {"providers.gone.secret"}}, csrf); !strings.Contains(body, "missing") {
+		t.Fatalf("unreadable file: %s", body)
+	}
+	setVault(nil)
+	if _, body, _ := tw.post("/settings/secrets/import", url.Values{"field": {"providers.anthropic.secret"}}, csrf); !strings.Contains(body, "Le coffre n&#39;est pas ouvert") {
+		t.Fatalf("no vault: %s", body)
 	}
 }
