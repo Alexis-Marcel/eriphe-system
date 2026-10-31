@@ -71,6 +71,8 @@ type TaskRow struct {
 
 	// Resources is all it was lent (resources.go); nil for a task from before.
 	Resources []ResourceRef `json:"resources,omitempty"`
+	// Pinned: its node was chosen by hand, and it never moves.
+	Pinned bool `json:"pinned,omitempty"`
 }
 
 type EventRow struct {
@@ -164,6 +166,9 @@ func openStore(path string) (*Store, error) {
 	// Added with "Cut access" (node_access.go): the device stays registered,
 	// and Eriphe neither reaches it nor lets it in.
 	db.Exec(`ALTER TABLE nodes ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0`)
+	// Added with placement classes (placement.go): a task given its node
+	// by hand stays bound to it.
+	db.Exec(`ALTER TABLE tasks ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`)
 	// Updates had a choice for all machines and for each one (tell me, at
 	// night, never); now one switch, at night or not, for all of them
 	// (machine_updates.go). "At night" for all stays on; the rest goes.
@@ -341,9 +346,9 @@ func (s *Store) insertTask(t *TaskRow) error {
 	if t.Kind == "" {
 		t.Kind = "worker"
 	}
-	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, identity, dir, prompt, state, pending_reason, kind, tools, folders, resources, created, updated)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Node, t.Agent, t.Runtime, t.Model, t.Identity, t.Dir, t.Prompt,
-		t.State, t.PendingReason, t.Kind, t.Tools, t.Folders, marshalResources(t.Resources), now.Unix(), now.Unix())
+	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, identity, dir, prompt, state, pending_reason, kind, tools, folders, resources, pinned, created, updated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Node, t.Agent, t.Runtime, t.Model, t.Identity, t.Dir, t.Prompt,
+		t.State, t.PendingReason, t.Kind, t.Tools, t.Folders, marshalResources(t.Resources), t.Pinned, now.Unix(), now.Unix())
 	return err
 }
 
@@ -357,14 +362,14 @@ func (s *Store) updateTask(id string, fields map[string]any) error {
 	return err
 }
 
-const taskColumns = `id, node, agent, node_task_id, runtime, model, identity, kind, tools, folders, resources, dir, prompt, state, pending_reason, session_id, last_seq, created, updated`
+const taskColumns = `id, node, agent, node_task_id, runtime, model, identity, kind, tools, folders, resources, dir, prompt, state, pending_reason, session_id, last_seq, created, updated, pinned`
 
 func scanTask(sc interface{ Scan(...any) error }) (*TaskRow, error) {
 	var t TaskRow
 	var created, updated int64
 	var resources string
 	err := sc.Scan(&t.ID, &t.Node, &t.Agent, &t.NodeTaskID, &t.Runtime, &t.Model, &t.Identity, &t.Kind, &t.Tools, &t.Folders, &resources, &t.Dir, &t.Prompt,
-		&t.State, &t.PendingReason, &t.SessionID, &t.LastSeq, &created, &updated)
+		&t.State, &t.PendingReason, &t.SessionID, &t.LastSeq, &created, &updated, &t.Pinned)
 	t.Resources = unmarshalResources(resources)
 	t.Created, t.Updated = time.Unix(created, 0), time.Unix(updated, 0)
 	return &t, err
@@ -497,6 +502,13 @@ func (s *Store) addMessageVia(role, text, via string, delivered bool) (int64, er
 // undelivered returns the messages and events waiting for the brain.
 func (s *Store) undelivered() ([]Message, error) {
 	return s.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE delivered = 0 AND role IN ('user', 'event') ORDER BY seq`)
+}
+
+// undeliver hands the messages from..to back to the brain: the task they
+// went to never received them (placement.go).
+func (s *Store) undeliver(from, to int) error {
+	_, err := s.db.Exec(`UPDATE messages SET delivered = 0 WHERE seq >= ? AND seq <= ? AND role IN ('user', 'event')`, from, to)
+	return err
 }
 
 // markDelivered also keeps the last message when the brain was given them:

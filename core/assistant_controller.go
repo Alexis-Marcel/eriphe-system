@@ -193,6 +193,10 @@ func (c *core) tendAssistant(ctx context.Context, a Assistant, token string) err
 		resume := t != nil && fails < 2
 		return c.startAssistant(ctx, a, r, token, resume)
 	}
+	// Its node gone, or an always-on one free for it: it moves (placement.go).
+	if c.moveResident(a, r, t) {
+		return nil
+	}
 	for _, tr := range a.triggers() {
 		if h := assistantTriggers[tr].relay; h != nil {
 			h(c, a, t)
@@ -343,7 +347,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 		st.Resume = extra.Resume // checked against the session it reports
 		st.PackDue = false       // a fresh session has it in its first turn
 	})
-	log.Printf("%s: started task %s on %s (resume=%v)", c.assistantLog(a), t.ID, a.Node, extra.Resume != "")
+	log.Printf("%s: started task %s on %s (resume=%v)", c.assistantLog(a), t.ID, orStr(t.Node, "no node yet"), extra.Resume != "")
 	return nil
 }
 
