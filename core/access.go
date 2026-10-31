@@ -251,6 +251,11 @@ var tokenScopes = map[string]scopeSet{
 	"mercury": {byName: true}, "miro": {byName: true}, "netlify": {byName: true}, "raindrop": {byName: true},
 	"ramp": {byName: true}, "readwise": {byName: true}, "sentry": {byName: true}, "supabase": {byName: true},
 	"ticktick": {byName: true},
+	// Its scopes name no verb: readOnly or full.
+	"jotform": {read: []string{"readOnly"}, write: []string{"full"}},
+	"akiflow": {byName: true}, "capacities": {byName: true}, "close": {byName: true}, "mural": {byName: true},
+	"neon": {byName: true}, "pandadoc": {byName: true}, "posthog": {byName: true}, "qonto": {byName: true},
+	"slite": {byName: true}, "sunsama": {byName: true}, "typeform": {byName: true}, "whimsical": {byName: true},
 }
 
 // scopeVerbs are the words of a scope's name that make it more than a read
