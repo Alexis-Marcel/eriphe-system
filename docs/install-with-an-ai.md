@@ -286,7 +286,7 @@ short:
 
    The installer prints `https://127.0.0.1:8443/setup` and a setup code.
 3. To reach the workspace the first time, the person opens an SSH tunnel **from their own
-   computer** (`ssh -L 8443:127.0.0.1:8443 <user>@<server>`), opens `https://127.0.0.1:8443/setup`
+   computer** (`ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes <user>@<server>`), opens `https://127.0.0.1:8443/setup`
    there, and goes on with §5.
 4. Then, right away, **Remote access** (§7, Tailscale): the workspace, the phone app and the other
    devices use the `https://<name>.<tailnet>.ts.net` address from then on; in "Connect a device",

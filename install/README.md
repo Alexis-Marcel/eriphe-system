@@ -868,7 +868,7 @@ installer notices a public address and says so at the end ("Good to know"). Befo
    SSH, and nothing else of Eriphe's by default:
    - **8443, the workspace**: never open to the world. Reach it one of these ways:
      - **Tailscale**, built in: Réglages › Accès à distance (Settings › Remote access), "Turn on"
-       and sign in, from an SSH tunnel the first time (`ssh -L 8443:127.0.0.1:8443 server`, then
+       and sign in, from an SSH tunnel the first time (`ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes user@server`, then
        `https://127.0.0.1:8443` on your computer). The workspace then has a
        `https://<name>.<tailnet>.ts.net` address with a real certificate, for your browser, the
        phone app and the devices, and nothing is opened on the server.
