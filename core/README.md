@@ -178,6 +178,13 @@ brain, through OpenCode:
   Mistral…), and give it enough context: Ollama's default is small, and its documentation
   recommends 16k to 32k tokens for tool calling (`OLLAMA_CONTEXT_LENGTH=32768`, or `num_ctx` in a
   Modelfile).
+- The brain and a task may ask the same server at once: with Ollama, set `OLLAMA_NUM_PARALLEL=2`
+  (or more) so that one does not wait, and time out, behind the other, and
+  `OLLAMA_MAX_LOADED_MODELS=1`. Each slot holds a whole context: on a graphics card with 8 GB, use
+  16k (`OLLAMA_CONTEXT_LENGTH=16384`), or 32k with `OLLAMA_FLASH_ATTENTION=1` and
+  `OLLAMA_KV_CACHE_TYPE=q8_0`, which halve the context's memory. What does not fit on the card
+  runs from the computer's memory, far slower: 16 GB of RAM is tight for one 7B model with 2 slots
+  at 32k. Details and a rule of thumb: `install/README.md`, Ollama's settings.
 
 "Test the server" in the account form calls `GET <base_url>/models` (with `Authorization: Bearer`
 when a key is typed or stored), not following redirects, and lists the models it serves.
@@ -195,7 +202,19 @@ Windows), and the provider names that node in place of an address:
 
 In the workspace: Add an AI account → Modèle auto-hébergé → "Sur un de mes appareils", then the
 device (the ones whose node reports `model_server`; Settings → Devices tags them "Prête un
-modèle"). `node` and `base_url` exclude each other. The path (`model_relay.go`):
+modèle"). `node` and `base_url` exclude each other.
+
+The address is the one the node reaches (`install/README.md`, A model behind this machine): on
+Linux the node is a container, so the server is a container next to it on `eriphe-system`
+(`http://eriphe-ollama:11434`); on a Mac with Apple's container, `127.0.0.1`; on Windows, the node
+runs in WSL, which reaches Windows' `127.0.0.1` only with mirrored networking (`networkingMode=mirrored`
+in the `[wsl2]` section of `%USERPROFILE%\.wslconfig`, Windows 11 22H2 or later, then
+`wsl --shutdown`, which applies to every distribution, and the install again). Ollama for Windows
+runs only in its user's session, while the node runs without anyone logged in: put it in the
+startup programs (Win+R, `shell:startup`). The installers check at the end that the server answers
+the node.
+
+The path (`model_relay.go`):
 
 ```
 task (any node, the brain too) → its node:   <callback>/model/v1/{path}   (the task's secret)
