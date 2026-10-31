@@ -517,6 +517,8 @@ a NAS:
   it works on), the systemd units `eriphe-update.service`, `.path` and `.timer`, its state in
   `/var/lib/eriphe/update`, and a file `updater` in the node's and eriphe-core's folders that tells
   them it is there (see [the machines update themselves](#the-machines-update-themselves)).
+- with systemd and `systemd-inhibit`, `eriphe-awake.path` and `.service`: no sleep while a task is
+  at work (node/README.md, Sleep).
 
 Every container restarts with Docker (`restart: unless-stopped`), and Docker starts at boot.
 
@@ -722,6 +724,12 @@ starts again within a minute after it stops (a `wsl --shutdown` included). Stop 
 eriphe-node, and another runs the updater (`eriphe-update`, every 20 s): it pulls eriphe-node's
 image, swaps the binary (the previous one stays in `/var/lib/eriphe-update`), and in core mode
 recreates eriphe-core's container (`eriphe-core-run`), as the install does.
+
+**Sleep.** A second scheduled task, "Eriphe awake" (or "Eriphe awake (<distribution>)"), runs
+`%ProgramData%\eriphe-node\boot\<distribution>-awake.ps1` with the same triggers: every 30 s it
+asks the distribution whether eriphe-node has a task at work (`/var/lib/eriphe-node/awake`) and,
+while it has, keeps Windows out of sleep (`SetThreadExecutionState`); after, Windows sleeps as it
+is set to (node/README.md, Sleep).
 
 **GPU.** `-Labels gpu` is a label for the scheduler, kept across updates. Windows' NVIDIA driver
 reaches WSL by itself (`/dev/dxg`); the installer adds nothing for it to the distribution.

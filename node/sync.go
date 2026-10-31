@@ -311,6 +311,7 @@ func (n *node) reportLoop(c *coreClient) {
 		}
 		n.reportServices(c)
 		n.upd.handOver(n.running())
+		n.awake.set(n.working())
 	}
 }
 

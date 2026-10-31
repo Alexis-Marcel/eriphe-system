@@ -200,11 +200,12 @@ type node struct {
 	nets     taskNets            // the tasks' networks, with the container engine (apple.go)
 	agents   *agentStore         // the agents injected into tasks (inject.go)
 	prep     preparer            // what eriphe-core wants ready on this node
+	awake    *keepAwake          // the machine out of sleep while a task works (awake.go)
 }
 
 func newNode(o options) *node {
 	return &node{opt: o, tasks: map[string]*Task{}, services: map[string]*service{}, retired: map[string]*service{}, kick: make(chan struct{}, 1),
-		upd: &updates{root: o.root}, agents: newAgentStore(o.root, o.taskBin), prep: preparer{wake: make(chan struct{}, 1)}}
+		upd: &updates{root: o.root}, awake: newKeepAwake(o.root), agents: newAgentStore(o.root, o.taskBin), prep: preparer{wake: make(chan struct{}, 1)}}
 }
 
 func (n *node) poke() {
@@ -270,7 +271,7 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		"active_tasks": active, "memory_bytes": memoryBytes(), "volumes": n.opt.volumeNames(),
 		"shares": n.opt.shareList(),
 		"images": images, "services": engineVersion != "",
-		"always_on": n.opt.alwaysOn, "version": version, "install": n.opt.install,
+		"always_on": n.opt.alwaysOn, "keeps_awake": n.awake.how, "version": version, "install": n.opt.install,
 		"update": n.upd.info(),
 		// The agents unpacked here: a task of theirs starts at once (inject.go).
 		"agents_ready": n.agents.readyRuntimes(),

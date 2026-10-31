@@ -164,7 +164,7 @@ func (c *core) moveResident(a Assistant, r assistantRole, t *TaskRow) bool {
 }
 
 // replaceStranded places again the tasks not started yet whose node has
-// been offline past pendingNodeGrace, unless they are bound to it (by
+// been offline past pendingNodeGrace (asleepNodeGrace if it is asleep), unless they are bound to it (by
 // hand or by their folders). Running tasks keep their node: their work
 // is there. Assistants' tasks are moveResident's.
 func (c *core) replaceStranded() {
@@ -182,13 +182,21 @@ func (c *core) replaceStranded() {
 			continue
 		}
 		i := slices.IndexFunc(nodes, func(n NodeRow) bool { return n.Name == t.Node })
-		if i >= 0 && (nodes[i].Online || time.Since(c.since(nodes[i])) < pendingNodeGrace) {
+		asleep := i >= 0 && c.asleep(nodes[i]) // node_sleep.go
+		grace := pendingNodeGrace
+		if asleep {
+			grace = asleepNodeGrace // it may not wake for a while
+		}
+		if i >= 0 && (nodes[i].Online || time.Since(c.since(nodes[i])) < grace) {
 			continue
 		}
 		if p, err := c.placementOf(t); err != nil || p.Machine != "" {
 			continue
 		}
 		reason := fmt.Sprintf("node %s is offline", t.Node)
+		if asleep {
+			reason = fmt.Sprintf("node %s is asleep", t.Node)
+		}
 		if ok, _ := c.store.unassign(t.ID, t.Node, reason); ok {
 			log.Printf("task %s leaves node %s: %s, it has not started", t.ID, t.Node, reason)
 			moved = true

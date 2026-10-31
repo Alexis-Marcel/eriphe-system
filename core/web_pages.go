@@ -441,6 +441,7 @@ func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, 
 	var out []machineView
 	for i, n := range nodes {
 		info := parseInfo(n)
+		n.Asleep = w.c.asleep(n)
 		active, _ := w.c.store.activeCount(n.Name)
 		m := machineView{NodeRow: n, CPUs: info.CPUs, Memory: info.Memory, Runtimes: info.Runtimes,
 			Labels: info.Labels, Active: active, AlwaysOn: info.AlwaysOn, Version: info.Version,
