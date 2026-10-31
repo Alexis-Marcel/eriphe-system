@@ -24,11 +24,12 @@
       {{template "device-status" .}}
       {{template "device-menu" .}}
     </div>
-    <h3 class="tile-title">{{template "i-device"}}<a href="/settings/devices/{{.Name}}">{{.Name}}</a>{{if .AlwaysOn}} <span class="tag tag-accent badge-on" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</span>{{end}}{{if .Model}} <span class="tag" title="{{t "machines.modelhint"}}">{{t "machines.model"}}</span>{{end}}</h3>
+    <h3 class="tile-title">{{template "i-device"}}<a href="/settings/devices/{{.Name}}" class="stretched">{{.Name}}</a>{{if .AlwaysOn}} <span class="tag tag-accent badge-on" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</span>{{end}}{{if .Model}} <span class="tag" title="{{t "machines.modelhint"}}">{{t "machines.model"}}</span>{{end}}</h3>
     {{if .Suspended}}<p class="cut-note">{{t "devices.cutlead"}}</p>{{end}}
     {{template "device-sees" .}}
     {{template "device-can" .}}
     {{template "device-foot" .}}
+    <span class="device-more" aria-hidden="true">{{t "devices.details"}} ›</span>
   </li>
 {{end}}
   <li class="tile tile-add"><button type="button" data-dialog="connect-dlg"><span class="tile-add-icon" aria-hidden="true">{{template "i-plus"}}</span><b>{{t "machines.add"}}</b><span class="muted small">{{if .Data.Nodes}}{{t "devices.addhint"}}{{else}}{{t "machines.none"}}{{end}}</span></button></li>
