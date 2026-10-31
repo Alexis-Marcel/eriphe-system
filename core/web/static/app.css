@@ -791,14 +791,34 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .mark-typeform { background: #262627; box-shadow: 0 6px 16px -8px #262627; }
 .mark-upwork { background: #6fda44; box-shadow: 0 6px 16px -8px #6fda44; color: #15161f; }
 .mark-wordpress { background: #21759b; box-shadow: 0 6px 16px -8px #21759b; }
+.mark-baserow { background: #5190ef; box-shadow: 0 6px 16px -8px #5190ef; }
+.mark-bitly { background: #ee6123; box-shadow: 0 6px 16px -8px #ee6123; }
+.mark-cloudinary { background: #3448c5; box-shadow: 0 6px 16px -8px #3448c5; }
+.mark-contentful { background: #2478cc; box-shadow: 0 6px 16px -8px #2478cc; }
+.mark-datadog { background: #632ca6; box-shadow: 0 6px 16px -8px #632ca6; }
+.mark-digitalocean { background: #0080ff; box-shadow: 0 6px 16px -8px #0080ff; }
+.mark-egnyte { background: #00968f; box-shadow: 0 6px 16px -8px #00968f; }
+.mark-grafana { background: #f46800; box-shadow: 0 6px 16px -8px #f46800; }
+.mark-helpscout { background: #1292ee; box-shadow: 0 6px 16px -8px #1292ee; }
+.mark-ifttt { background: #000000; box-shadow: 0 6px 16px -8px #000000; }
+.mark-mintlify { background: #18e299; box-shadow: 0 6px 16px -8px #18e299; color: #15161f; }
+.mark-paddle { background: #fddd35; box-shadow: 0 6px 16px -8px #fddd35; color: #15161f; }
+.mark-planetscale { background: #000000; box-shadow: 0 6px 16px -8px #000000; }
+.mark-postman { background: #ff6c37; box-shadow: 0 6px 16px -8px #ff6c37; }
+.mark-railway { background: #0b0d0e; box-shadow: 0 6px 16px -8px #0b0d0e; }
+.mark-sanity { background: #f03e2f; box-shadow: 0 6px 16px -8px #f03e2f; }
+.mark-similarweb { background: #092540; box-shadow: 0 6px 16px -8px #092540; }
 @media (prefers-color-scheme: dark) {
-  .mark-buffer, .mark-calcom, .mark-miro, .mark-vercel, .mark-basecamp, .mark-posthog, .mark-square, .mark-typeform { background: #3a3a40; }
+  .mark-buffer, .mark-calcom, .mark-miro, .mark-vercel, .mark-basecamp, .mark-posthog, .mark-square, .mark-typeform,
+  .mark-ifttt, .mark-planetscale, .mark-railway, .mark-similarweb { background: #3a3a40; }
 }
 /* Without a logo in Simple Icons: a neutral letter mark. */
 .mark-attio, .mark-beehiiv, .mark-context7, .mark-exa, .mark-fastmail, .mark-fireflies, .mark-gamma, .mark-granola, .mark-jam,
 .mark-kit, .mark-mem, .mark-mercury, .mark-metricool, .mark-monday, .mark-otter, .mark-ramp, .mark-raindrop, .mark-readwise,
 .mark-tldv, .mark-typefully, .mark-capacities, .mark-close, .mark-craft, .mark-fathom, .mark-jotform, .mark-lucid, .mark-neon,
-.mark-pandadoc, .mark-pennylane, .mark-qonto, .mark-readai, .mark-slite, .mark-sunsama, .mark-whimsical {
+.mark-pandadoc, .mark-pennylane, .mark-qonto, .mark-readai, .mark-slite, .mark-sunsama, .mark-whimsical,
+.mark-amplitude, .mark-apify, .mark-axiom, .mark-circle, .mark-grain, .mark-guru, .mark-hex, .mark-honeycomb, .mark-kajabi,
+.mark-klaviyo, .mark-leadpages, .mark-lovable, .mark-mailerlite, .mark-padlet, .mark-plain, .mark-typesense, .mark-wave {
   background: linear-gradient(135deg, #64748b 0%, #3f4a5c 100%); box-shadow: 0 6px 16px -8px #3f4a5c;
 }
 

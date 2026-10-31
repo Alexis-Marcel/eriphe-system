@@ -10,9 +10,10 @@ import (
 // (dynamic client registration, or a Client ID Metadata Document), so that
 // no app is made at the vendor. Each address, its registration and its
 // scopes were read from the service's public metadata on 2026-10-30, and
-// on 2026-10-31 for the second batch (Akiflow to Square), found in the MCP
-// registry or the vendor's docs (/.well-known/oauth-protected-resource and
-// oauth-authorization-server); the sign-in itself was not tried for each.
+// on 2026-10-31 for the second and third batches (Akiflow to Square, then
+// Baserow to IFTTT), found in the MCP registry or the vendor's docs
+// (/.well-known/oauth-protected-resource and oauth-authorization-server);
+// the sign-in itself was not tried for each.
 //
 // The services that want an app made at their place (Figma, Slack, Asana,
 // HubSpot, Box, Discord, Google, Microsoft 365) or approved clients only
@@ -77,6 +78,12 @@ var onlineServices = []onlineService{
 	{id: "slite", title: "Slite", url: "https://api.slite.com/mcp", cat: "tasks",
 		fr: [3]string{"La base de connaissances de ton équipe, dans Slite.", "Slite : mes documents d'équipe"},
 		en: [3]string{"Your team's knowledge base, in Slite.", "Slite: my team docs"}},
+	{id: "baserow", title: "Baserow", url: "https://api.baserow.io/mcp", cat: "tasks",
+		fr: [3]string{"Bases, tables et lignes Baserow.", "Baserow : mes bases et tables", "Pour Baserow en ligne (baserow.io). Une installation à toi a sa propre adresse."},
+		en: [3]string{"Baserow databases, tables and rows.", "Baserow: my databases and tables", "For Baserow online (baserow.io). A self-hosted one has its own address."}},
+	{id: "guru", title: "Guru", url: "https://mcp.api.getguru.com/mcp", cat: "tasks", paid: true,
+		fr: [3]string{"La base de connaissances de ton équipe, dans Guru.", "Guru : les fiches de mon équipe", "Guru est payant, après un essai gratuit."},
+		en: [3]string{"Your team's knowledge base, in Guru.", "Guru: my team's cards", "Guru is paid, after a free trial."}},
 
 	// Mail and calendar.
 	{id: "fastmail", title: "Fastmail", url: "https://api.fastmail.com/mcp", cat: "mail", paid: true,
@@ -95,6 +102,14 @@ var onlineServices = []onlineService{
 	{id: "dropbox", title: "Dropbox", url: "https://mcp.dropbox.com/mcp", cat: "files", beta: true,
 		fr: [3]string{"Chercher et lire tes fichiers Dropbox.", "Dropbox : mes fichiers", "Le serveur de Dropbox est en bêta."},
 		en: [3]string{"Search and read your Dropbox files.", "Dropbox: my files", "Dropbox's server is in beta."}},
+	{id: "egnyte", title: "Egnyte", url: "https://mcp-server.egnyte.com/mcp", cat: "files", paid: true,
+		fr: [3]string{"Chercher et lire les fichiers Egnyte de ton entreprise.", "Egnyte : les fichiers de mon entreprise",
+			"Abonnement Egnyte pour entreprises. Un administrateur doit d'abord autoriser l'accès des IA (MCP) dans les réglages d'Egnyte."},
+		en: [3]string{"Search and read your company's Egnyte files.", "Egnyte: my company's files",
+			"An Egnyte business plan. An admin must first allow AI (MCP) access in Egnyte's settings."}},
+	{id: "cloudinary", title: "Cloudinary", url: "https://asset-management.mcp.cloudinary.com/mcp", cat: "files",
+		fr: [3]string{"Images et vidéos de ta médiathèque Cloudinary.", "Cloudinary : mes images et vidéos"},
+		en: [3]string{"Images and videos of your Cloudinary media library.", "Cloudinary: my images and videos"}},
 
 	// Meetings.
 	{id: "granola", title: "Granola", url: "https://mcp.granola.ai/mcp", cat: "meetings",
@@ -115,6 +130,12 @@ var onlineServices = []onlineService{
 	{id: "readai", title: "Read AI", url: "https://api.read.ai/mcp", cat: "meetings",
 		fr: [3]string{"Comptes rendus et transcriptions Read AI.", "Read AI : mes comptes rendus de réunion"},
 		en: [3]string{"Read AI meeting reports and transcripts.", "Read AI: my meeting reports"}},
+	{id: "grain", title: "Grain", url: "https://api.grain.com/_/mcp", cat: "meetings",
+		fr: [3]string{"Enregistrements, transcriptions et notes de réunion Grain.", "Grain : mes réunions enregistrées", "{{name}} voit les réunions auxquelles tu as participé."},
+		en: [3]string{"Grain recordings, transcripts and meeting notes.", "Grain: my recorded meetings", "{{name}} sees the meetings you took part in."}},
+	{id: "wave", title: "Wave", url: "https://mcp.wave.co", cat: "meetings",
+		fr: [3]string{"Réunions, appels et notes enregistrés par Wave.", "Wave : mes réunions et notes", "Wave, la prise de notes par IA de wave.co."},
+		en: [3]string{"Meetings, calls and notes recorded by Wave.", "Wave: my meetings and notes", "Wave, the AI note taker of wave.co."}},
 
 	// Design.
 	{id: "canva", title: "Canva", url: "https://mcp.canva.com/mcp", cat: "design",
@@ -135,6 +156,9 @@ var onlineServices = []onlineService{
 	{id: "lucid", title: "Lucid", url: "https://mcp.lucid.app/mcp", cat: "design",
 		fr: [3]string{"Diagrammes Lucidchart et tableaux Lucidspark.", "Lucid : mes diagrammes"},
 		en: [3]string{"Lucidchart diagrams and Lucidspark boards.", "Lucid: my diagrams"}},
+	{id: "padlet", title: "Padlet", url: "https://mcp.padlet.com/", cat: "design",
+		fr: [3]string{"Tes murs et tableaux Padlet.", "Padlet : mes padlets"},
+		en: [3]string{"Your Padlet boards and walls.", "Padlet: my padlets"}},
 
 	// Development.
 	{id: "cloudflare", title: "Cloudflare", url: "https://mcp.cloudflare.com/mcp", cat: "dev",
@@ -168,6 +192,54 @@ var onlineServices = []onlineService{
 	{id: "context7", title: "Context7", url: "https://mcp.context7.com/mcp", cat: "dev", auth: "none",
 		fr: [3]string{"La documentation à jour des bibliothèques de code.", "Context7 : la documentation à jour des bibliothèques", "Marche sans compte."},
 		en: [3]string{"Up-to-date documentation of code libraries.", "Context7: up-to-date library documentation", "Works without an account."}},
+	{id: "amplitude", title: "Amplitude", url: "https://mcp.amplitude.com/mcp", cat: "dev",
+		fr: [3]string{"Graphiques, tableaux de bord et analyses produit Amplitude.", "Amplitude : mes analyses produit", "Pour les comptes Amplitude aux États-Unis."},
+		en: [3]string{"Amplitude charts, dashboards and product analytics.", "Amplitude: my product analytics", "For Amplitude accounts in the United States."}},
+	{id: "grafana", title: "Grafana", url: "https://mcp.grafana.com/mcp", cat: "dev",
+		fr: [3]string{"Tableaux de bord, métriques et alertes Grafana Cloud.", "Grafana : mes tableaux de bord et métriques", "Pour Grafana Cloud. Un Grafana installé chez toi n'y est pas."},
+		en: [3]string{"Grafana Cloud dashboards, metrics and alerts.", "Grafana: my dashboards and metrics", "For Grafana Cloud. A self-hosted Grafana is not covered."}},
+	{id: "honeycomb", title: "Honeycomb", url: "https://mcp.honeycomb.io/mcp", cat: "dev",
+		fr: [3]string{"Traces, requêtes et alertes Honeycomb.", "Honeycomb : l'observabilité de mes applis"},
+		en: [3]string{"Honeycomb traces, queries and triggers.", "Honeycomb: my apps' observability"}},
+	{id: "axiom", title: "Axiom", url: "https://mcp.axiom.co/mcp", cat: "dev",
+		fr: [3]string{"Journaux et événements de tes jeux de données Axiom.", "Axiom : mes journaux"},
+		en: [3]string{"Logs and events of your Axiom datasets.", "Axiom: my logs"}},
+	{id: "datadog", title: "Datadog", url: "https://mcp.datadoghq.com/v1/mcp", cat: "dev",
+		fr: [3]string{"Journaux, métriques, moniteurs et incidents Datadog.", "Datadog : la surveillance de mes applis",
+			"Pour le site Datadog US1 (datadoghq.com). Un administrateur doit activer l'accès MCP, et l'écriture MCP pour créer ou modifier."},
+		en: [3]string{"Datadog logs, metrics, monitors and incidents.", "Datadog: my apps' monitoring",
+			"For the Datadog US1 site (datadoghq.com). An admin must enable MCP access, and MCP write access to create or change things."}},
+	{id: "hex", title: "Hex", url: "https://app.hex.tech/mcp", cat: "dev", paid: true,
+		fr: [3]string{"Projets, données et analyses Hex.", "Hex : mes analyses de données", "Demande un abonnement Hex Team ou Enterprise."},
+		en: [3]string{"Hex projects, data and analyses.", "Hex: my data analyses", "Needs a Hex Team or Enterprise plan."}},
+	{id: "railway", title: "Railway", url: "https://mcp.railway.com/", cat: "dev",
+		fr: [3]string{"Projets, services, déploiements et journaux Railway.", "Railway : mes projets et déploiements", "Sur l'écran de Railway, tu choisis les espaces et projets que {{name}} voit."},
+		en: [3]string{"Railway projects, services, deployments and logs.", "Railway: my projects and deployments", "On Railway's screen, you pick the workspaces and projects {{name}} sees."}},
+	{id: "digitalocean", title: "DigitalOcean", url: "https://mcp.digitalocean.com/mcp", cat: "dev",
+		fr: [3]string{"Droplets, applis, bases et Spaces DigitalOcean.", "DigitalOcean : mes serveurs et applis",
+			"Sur l'écran de DigitalOcean, tu choisis ce que {{name}} peut faire. Créer des ressources se paie sur ton compte."},
+		en: [3]string{"DigitalOcean Droplets, apps, databases and Spaces.", "DigitalOcean: my servers and apps",
+			"On DigitalOcean's screen, you choose what {{name}} may do. Resources it creates are billed to your account."}},
+	{id: "planetscale", title: "PlanetScale", url: "https://mcp.pscale.dev/mcp/planetscale", cat: "dev", paid: true,
+		fr: [3]string{"Bases, branches et requêtes PlanetScale.", "PlanetScale : mes bases de données",
+			"Sur l'écran de PlanetScale, tu choisis pour chaque organisation ou base : aucun accès, lecture seule ou complet."},
+		en: [3]string{"PlanetScale databases, branches and queries.", "PlanetScale: my databases",
+			"On PlanetScale's screen, you choose for each organization or database: no access, read only or full."}},
+	{id: "typesense", title: "Typesense", url: "https://cloud.typesense.org/mcp/v1", cat: "dev", paid: true,
+		fr: [3]string{"Clusters, collections et recherches Typesense Cloud.", "Typesense : mes clusters de recherche", "Pour Typesense Cloud, payant à l'usage."},
+		en: [3]string{"Typesense Cloud clusters, collections and searches.", "Typesense: my search clusters", "For Typesense Cloud, paid by use."}},
+	{id: "lovable", title: "Lovable", url: "https://mcp.lovable.dev", cat: "dev",
+		fr: [3]string{"Tes projets d'applis Lovable.", "Lovable : mes projets d'applis", "Faire évoluer une appli consomme tes crédits Lovable."},
+		en: [3]string{"Your Lovable app projects.", "Lovable: my app projects", "Changing an app uses your Lovable credits."}},
+	{id: "mintlify", title: "Mintlify", url: "https://mcp.mintlify.com", cat: "dev",
+		fr: [3]string{"Pages, navigation et déploiements de ta doc Mintlify.", "Mintlify : ma documentation"},
+		en: [3]string{"Pages, navigation and deployments of your Mintlify docs.", "Mintlify: my docs"}},
+	{id: "postman", title: "Postman", url: "https://mcp.postman.com/mcp", cat: "dev",
+		fr: [3]string{"Collections, requêtes et environnements Postman.", "Postman : mes collections d'API"},
+		en: [3]string{"Postman collections, requests and environments.", "Postman: my API collections"}},
+	{id: "apify", title: "Apify", url: "https://mcp.apify.com/", cat: "dev",
+		fr: [3]string{"Les Actors Apify : extraire des données du web.", "Apify : extraire des données du web", "Lancer un Actor consomme les crédits de ton compte Apify."},
+		en: [3]string{"Apify Actors: extract data from the web.", "Apify: extract data from the web", "Running an Actor uses your Apify account's credits."}},
 
 	// Websites and customers.
 	{id: "webflow", title: "Webflow", url: "https://mcp.webflow.com/mcp", cat: "web",
@@ -205,6 +277,32 @@ var onlineServices = []onlineService{
 	{id: "upwork", title: "Upwork", url: "https://mcp.upwork.com/mcp", cat: "web",
 		fr: [3]string{"Ton activité de freelance sur Upwork.", "Upwork : mon activité de freelance"},
 		en: [3]string{"Your freelance work on Upwork.", "Upwork: my freelance work"}},
+	{id: "sanity", title: "Sanity", url: "https://mcp.sanity.io/", cat: "web",
+		fr: [3]string{"Contenus et schémas de tes projets Sanity.", "Sanity : mes contenus"},
+		en: [3]string{"Content and schemas of your Sanity projects.", "Sanity: my content"}},
+	{id: "contentful", title: "Contentful", url: "https://mcp.contentful.com/mcp", cat: "web",
+		fr: [3]string{"Entrées, médias et modèles de contenu Contentful.", "Contentful : mes contenus"},
+		en: [3]string{"Contentful entries, assets and content models.", "Contentful: my content"}},
+	{id: "leadpages", title: "Leadpages", url: "https://mcp.leadpages.com/mcp", cat: "web", paid: true,
+		fr: [3]string{"Pages d'atterrissage, sites et blogs Leadpages.", "Leadpages : mes pages et sites", "Leadpages est payant, après un essai gratuit."},
+		en: [3]string{"Leadpages landing pages, sites and blogs.", "Leadpages: my pages and sites", "Leadpages is paid, after a free trial."}},
+	{id: "kajabi", title: "Kajabi", url: "https://mcp.kajabi.com/mcp", cat: "web", paid: true,
+		fr: [3]string{"Formations, offres, contacts et mails Kajabi.", "Kajabi : mes formations et contacts",
+			"Kajabi est payant. Ce que {{name}} écrit arrive en brouillon ; le thème et les utilisateurs du compte restent hors de sa portée."},
+		en: [3]string{"Kajabi courses, offers, contacts and emails.", "Kajabi: my courses and contacts",
+			"Kajabi is paid. What {{name}} writes lands as drafts; the theme and the account's users stay out of its reach."}},
+	{id: "helpscout", title: "Help Scout", url: "https://mcp.helpscout.net/mcp", cat: "web",
+		fr: [3]string{"Conversations et clients du support, dans Help Scout.", "Help Scout : le support client"},
+		en: [3]string{"Support conversations and customers, in Help Scout.", "Help Scout: customer support"}},
+	{id: "plain", title: "Plain", url: "https://mcp.plain.com/mcp", cat: "web",
+		fr: [3]string{"Fils, clients et tickets du support, dans Plain.", "Plain : le support client"},
+		en: [3]string{"Support threads, customers and tickets, in Plain.", "Plain: customer support"}},
+	{id: "similarweb", title: "Similarweb", url: "https://mcp.similarweb.com/", cat: "web", paid: true,
+		fr: [3]string{"Trafic et audience des sites web, par Similarweb.", "Similarweb : le trafic des sites web", "Demande un abonnement Similarweb avec accès aux données."},
+		en: [3]string{"Website traffic and audience, from Similarweb.", "Similarweb: website traffic", "Needs a Similarweb plan with data access."}},
+	{id: "bitly", title: "Bitly", url: "https://api-ssl.bitly.com/v4/mcp", cat: "web",
+		fr: [3]string{"Liens courts, QR codes et clics Bitly.", "Bitly : mes liens et leurs clics"},
+		en: [3]string{"Bitly short links, QR codes and clicks.", "Bitly: my links and their clicks"}},
 
 	// Social networks and newsletters. The networks themselves (LinkedIn,
 	// Meta, X, TikTok, YouTube) host no MCP server: these services post
@@ -240,6 +338,15 @@ var onlineServices = []onlineService{
 			"Plans Kit payants (Creator, Pro). L'envoi se confirme dans Kit."},
 		en: [3]string{"Kit (ConvertKit) newsletter: subscribers, broadcasts, stats.", "Kit: my newsletter, subscribers and broadcasts",
 			"Paid Kit plans (Creator, Pro). Sending is confirmed in Kit."}},
+	{id: "circle", title: "Circle", url: "https://app.circle.so/api/mcp", cat: "social", paid: true,
+		fr: [3]string{"Ta communauté Circle : espaces, posts, membres.", "Circle : ma communauté", "Circle est payant, après un essai gratuit."},
+		en: [3]string{"Your Circle community: spaces, posts, members.", "Circle: my community", "Circle is paid, after a free trial."}},
+	{id: "mailerlite", title: "MailerLite", url: "https://mcp.mailerlite.com/mcp", cat: "social",
+		fr: [3]string{"Newsletter MailerLite : abonnés, campagnes, stats.", "MailerLite : ma newsletter, abonnés et campagnes"},
+		en: [3]string{"MailerLite newsletter: subscribers, campaigns, stats.", "MailerLite: my newsletter, subscribers and campaigns"}},
+	{id: "klaviyo", title: "Klaviyo", url: "https://mcp.klaviyo.com/mcp", cat: "social",
+		fr: [3]string{"Mails et SMS marketing Klaviyo : profils, campagnes, stats.", "Klaviyo : mes campagnes et profils"},
+		en: [3]string{"Klaviyo email and SMS marketing: profiles, campaigns, stats.", "Klaviyo: my campaigns and profiles"}},
 
 	// Payments and finance.
 	{id: "stripe", title: "Stripe", url: "https://mcp.stripe.com", cat: "finance",
@@ -263,6 +370,11 @@ var onlineServices = []onlineService{
 	{id: "square", title: "Square", url: "https://mcp.squareup.com/mcp", cat: "finance",
 		fr: [3]string{"Paiements, commandes et clients Square.", "Square : paiements, commandes et clients"},
 		en: [3]string{"Square payments, orders and customers.", "Square: payments, orders and customers"}},
+	{id: "paddle", title: "Paddle", url: "https://mcp.paddle.com/mcp", cat: "finance",
+		fr: [3]string{"Produits, clients, abonnements et transactions Paddle.", "Paddle : mes ventes et abonnements",
+			"La connexion ne fait que lire au départ. Pour que {{name}} puisse écrire, élargis-la chez Paddle (Paddle > Connectors > MCP)."},
+		en: [3]string{"Paddle products, customers, subscriptions and transactions.", "Paddle: my sales and subscriptions",
+			"The connection only reads at first. For {{name}} to write, widen it at Paddle (Paddle > Connectors > MCP)."}},
 
 	// Automation.
 	{id: "zapier", title: "Zapier", url: "https://mcp.zapier.com/api/mcp/mcp", cat: "automation",
@@ -272,6 +384,9 @@ var onlineServices = []onlineService{
 	{id: "make", title: "Make", url: "https://mcp.make.com/mcp", cat: "automation",
 		fr: [3]string{"Tes scénarios Make, lancés comme des actions.", "Make : lancer mes scénarios", "{{name}} voit les scénarios que tu lui donnes chez Make."},
 		en: [3]string{"Your Make scenarios, run as actions.", "Make: run my scenarios", "{{name}} sees the scenarios you give it at Make."}},
+	{id: "ifttt", title: "IFTTT", url: "https://ifttt.com/mcp", cat: "automation",
+		fr: [3]string{"Tes applets IFTTT et les actions de tes services connectés.", "IFTTT : lancer des actions dans mes services"},
+		en: [3]string{"Your IFTTT applets and the actions of your connected services.", "IFTTT: run actions in my services"}},
 
 	// Other.
 	{id: "strava", title: "Strava", url: "https://mcp.strava.com/mcp", cat: "other", readsOnly: true,

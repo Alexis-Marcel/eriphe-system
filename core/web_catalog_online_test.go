@@ -105,6 +105,23 @@ func TestOnlineCatalog(t *testing.T) {
 		{"neon", []string{"read", "write"}, "[read]"},
 		{"qonto", []string{"offline_access", "client.read", "client.write", "client_invoices.read", "client_invoice.write",
 			"request_transfers.write", "card.read"}, "[offline_access client.read client_invoices.read card.read]"},
+		{"amplitude", []string{"all:read", "all:write"}, "[all:read]"},
+		{"grafana", []string{"grafana:read", "grafana:query", "grafana:write"}, "[grafana:read grafana:query]"},
+		{"honeycomb", []string{"mcp:read", "mcp:write"}, "[mcp:read]"},
+		{"wave", []string{"mcp:read", "mcp:write"}, "[mcp:read]"},
+		{"circle", []string{"read", "write"}, "[read]"},
+		{"leadpages", []string{"pages:read", "pages:write", "sites:read", "sites:write", "blogs:read", "blogs:write", "ads:read", "ads:write"},
+			"[pages:read sites:read blogs:read ads:read]"},
+		{"lovable", []string{"offline", "projects:read", "projects:write", "workspaces:read", "workspaces:write"},
+			"[offline projects:read workspaces:read]"},
+		{"mintlify", []string{"docs:read", "docs:write", "nav:write", "config:write", "session:write", "deployment:read", "deployment:write",
+			"members:read", "members:write", "billing:read", "integrations:write", "analytics:read", "offline_access"},
+			"[docs:read deployment:read members:read billing:read analytics:read offline_access]"},
+		// Explicit: by their names, publish and full_access would read as reads.
+		{"kajabi", []string{"read", "write:content", "write:commerce", "write:contacts", "write:community", "write:emails",
+			"write:automations", "publish", "write:theme", "admin:users"}, "[read]"},
+		{"typesense", []string{"clusters:read", "clusters:restart", "data:full_access", "data:search"},
+			"[clusters:read metrics:read backups:read search_insights:read data:view data:search]"},
 	} {
 		got, granted := scopesFor(tc.preset, accessReadOnly, tc.found, false)
 		if fmtList(got) != tc.read || granted != grantedRead {
@@ -121,7 +138,13 @@ func TestOnlineCatalog(t *testing.T) {
 	}{{"stripe", []string{"mcp"}}, {"granola", []string{"mcp"}}, {"fastmail", []string{"https://www.fastmail.com/dev/mcp", "offline_access"}},
 		{"typefully", []string{"full_access"}}, {"hootsuite", []string{"offline"}}, {"kit", []string{"public"}}, {"make", nil},
 		{"basecamp", []string{"mcp", "full"}}, {"coda", []string{"mcp:all"}}, {"readai", []string{"mcp:execute"}}, {"square", nil},
-		{"pennylane", []string{"mcp:account:read", "mcp:customer_invoice:read", "mcp:private_api"}}} {
+		{"pennylane", []string{"mcp:account:read", "mcp:customer_invoice:read", "mcp:private_api"}},
+		{"railway", []string{"workspace:member"}}, {"ifttt", []string{"mcp"}}, {"baserow", []string{"mcp"}}, {"guru", []string{"default"}},
+		{"padlet", []string{"mcp"}}, {"apify", []string{"full_api_access"}}, {"similarweb", []string{"read"}}, {"sanity", []string{"global"}},
+		{"helpscout", []string{"helpscout"}}, {"plain", []string{"openid", "offline_access"}},
+		{"cloudinary", []string{"openid", "profile", "email", "offline_access", "asset_management", "upload", "media_generation"}},
+		{"datadog", nil}, {"paddle", nil}, {"digitalocean", nil}, {"planetscale", nil}, {"axiom", nil}, {"hex", nil}, {"egnyte", nil},
+		{"postman", nil}, {"contentful", nil}, {"klaviyo", nil}, {"mailerlite", nil}, {"grain", nil}, {"bitly", nil}} {
 		if _, granted := scopesFor(tc.preset, accessReadOnly, tc.found, false); granted != grantedNone {
 			t.Errorf("%s: %s", tc.preset, granted)
 		}
