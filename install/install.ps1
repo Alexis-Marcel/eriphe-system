@@ -124,15 +124,19 @@ $home_ = Join-Path $env:ProgramData "eriphe-node"
 if ($Distro -eq "eriphe") {
   $wslDir = Join-Path $home_ "wsl"
   $task = "Eriphe node"
+  $awakeTask = "Eriphe awake"
 } else {
   $wslDir = Join-Path $home_ "wsl-$Distro"
   $task = "Eriphe node ($Distro)"
+  $awakeTask = "Eriphe awake ($Distro)"
 }
 $resumeTask = "Eriphe install ($Distro)"
 $rule = "Eriphe core ($Distro)"
 # What the scheduled task runs in core mode, forwarding included (step 7).
 $bootDir = Join-Path $home_ "boot"
 $boot = Join-Path $bootDir "$Distro.ps1"
+# What keeps the PC awake while a task is at work (step 7).
+$awake = Join-Path $bootDir "$Distro-awake.ps1"
 $selfUrl = "https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1"
 
 # What it prints: a title, short steps, the outcome and where the logs are,
@@ -424,7 +428,11 @@ if ($Uninstall) {
     Stop-ScheduledTask -TaskName $task
     Unregister-ScheduledTask -TaskName $task -Confirm:$false
   }
-  Remove-Item $boot -Force -ErrorAction SilentlyContinue
+  if (Get-ScheduledTask -TaskName $awakeTask -ErrorAction SilentlyContinue) {
+    Stop-ScheduledTask -TaskName $awakeTask
+    Unregister-ScheduledTask -TaskName $awakeTask -Confirm:$false
+  }
+  Remove-Item $boot, $awake -Force -ErrorAction SilentlyContinue
   if (-not (Get-ChildItem $bootDir -ErrorAction SilentlyContinue)) { Remove-Item $bootDir -Force -ErrorAction SilentlyContinue }
   $wasCore = $false
   if ((Test-Wsl) -and (Test-Distro)) {
@@ -1107,6 +1115,28 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Highest
 Register-ScheduledTask -TaskName $task -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
 
+# No sleep while a task is at work. eriphe-node, in the distribution, writes
+# /var/lib/eriphe-node/awake meanwhile and removes it after (node/README.md,
+# Sleep); the distribution starts no Windows program, so a task of Windows'
+# own looks every 30 s and holds the PC awake while the file is there
+# (SetThreadExecutionState: ES_CONTINUOUS, with ES_SYSTEM_REQUIRED).
+if (Get-ScheduledTask -TaskName $awakeTask -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName $awakeTask }
+New-Item -ItemType Directory -Force $bootDir | Out-Null
+Invoke-Quiet { icacls.exe $bootDir /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" }
+Set-Content -Path $awake -Encoding UTF8 -Value @"
+# Run by the scheduled task "$awakeTask" (install.ps1): keeps Windows out of
+# sleep while eriphe-node has a task at work in $Distro, and lets it sleep after.
+Add-Type -Namespace Eriphe -Name Power -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);'
+while (`$true) {
+  wsl.exe -d $Distro -u root --exec test -e /var/lib/eriphe-node/awake
+  `$flags = if (`$LASTEXITCODE -eq 0) { [uint32]2147483649 } else { [uint32]2147483648 }
+  [void][Eriphe.Power]::SetThreadExecutionState(`$flags)
+  Start-Sleep -Seconds 30
+}
+"@
+$awakeAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$awake`""
+Register-ScheduledTask -TaskName $awakeTask -Action $awakeAction -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+
 if ($CoreMode) {
   # Other ports than the last run's: its forwarding and firewall rule go.
   if ($hadDistro -and (Compare-Object $oldPorts $corePorts)) {
@@ -1127,6 +1157,7 @@ if ($CoreMode) {
   }
 }
 Start-ScheduledTask -TaskName $task
+Start-ScheduledTask -TaskName $awakeTask
 Write-Step "Installed"
 
 # 8. Wait for the node to join, and say where things are.

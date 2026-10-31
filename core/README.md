@@ -480,6 +480,14 @@ setting:
 
 A node given by hand (`node` of `run_task`, or an assistant's) always wins: such a task never moves.
 
+**Asleep or offline** (`node_sleep.go`). A machine that sleeps disconnects and comes back by itself:
+a Mac in maintenance sleep wakes for a minute every quarter of an hour. eriphe-core counts the
+times a node came back after an absence of 2 minutes or more; one that did twice in the last 24
+hours is *asleep* while it is away (Settings → Devices says "En veille", `list_nodes` says
+`asleep`), any other node away is *offline*. The always-on machine is never asleep. A task its node
+has not started yet is placed again after 30 seconds when that node is asleep, instead of 5 minutes.
+The node itself keeps its machine awake while a task is at work (node/README.md, Sleep).
+
 **Ready in advance.** Each node's assignments carry `prepare`: `{runtimes, images}`, the runtimes
 of the configured agents the node could run (it carries their `needs`) and the images they name.
 The node unpacks those agents and pulls those images (and its default one) in the background, at

@@ -554,6 +554,8 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .status .led { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
 .status.on { color: var(--ok); }
 .status.on .led { background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); }
+.status.asleep { color: var(--warn); }
+.status.asleep .led { background: var(--warn-strong); box-shadow: 0 0 0 4px var(--warn-soft); }
 .specs { display: flex; gap: 10px; }
 .spec { flex: 1; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); display: grid; }
 .spec b { font-size: 1.12rem; letter-spacing: -.02em; }

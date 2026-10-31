@@ -32,9 +32,12 @@ func newMCPServer(c *core) *mcp.Server {
 			return map[string]any{"agents": agents}, err
 		})
 
-	tool(s, "list_nodes", "Machines that can run tasks: online or not, CPUs, memory, labels, runtimes, folders (volumes) and images they offer, active tasks.",
+	tool(s, "list_nodes", "Machines that can run tasks: online or not (asleep: away but it comes back by itself), CPUs, memory, labels, runtimes, folders (volumes) and images they offer, active tasks.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {
 			nodes, err := c.store.nodes()
+			for i := range nodes {
+				nodes[i].Asleep = c.asleep(nodes[i])
+			}
 			return map[string]any{"nodes": nodes}, err
 		})
 
