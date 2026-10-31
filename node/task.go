@@ -226,6 +226,7 @@ func newID() string {
 func (n *node) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/node", n.handleNode)
 	mux.HandleFunc("/v1/services/{name}/mcp", n.handleServiceMCP)
+	mux.HandleFunc("POST /v1/wake", n.handleWake)
 	n.shareRoutes(mux)
 }
 
@@ -272,6 +273,8 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		"shares": n.opt.shareList(),
 		"images": images, "services": engineVersion != "",
 		"always_on": n.opt.alwaysOn, "keeps_awake": n.awake.how, "version": version, "install": n.opt.install,
+		// Its network card, for Wake-on-LAN (wake.go).
+		"wake":   n.opt.wake,
 		"update": n.upd.info(),
 		// The agents unpacked here: a task of theirs starts at once (inject.go).
 		"agents_ready": n.agents.readyRuntimes(),

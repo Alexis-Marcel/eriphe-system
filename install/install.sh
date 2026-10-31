@@ -647,6 +647,9 @@ EOF
       # The places whose folders may be given to Eriphe (--share).
       ERIPHE_NODE_SHARES: \${ERIPHE_NODE_SHARES:-}
       ERIPHE_CA_HASH: \${ERIPHE_CA_HASH:-}
+      # Its network card, so that eriphe-core can wake it (wake_card).
+      ERIPHE_WAKE_MAC: \${ERIPHE_WAKE_MAC:-}
+      ERIPHE_WAKE_BROADCAST: \${ERIPHE_WAKE_BROADCAST:-}
       # Only for the first start, from install.sh, never kept in .env.
       ERIPHE_JOIN_TOKEN: \${ERIPHE_JOIN_TOKEN:-}
       ERIPHE_INSTALL: $INSTALL
@@ -691,13 +694,63 @@ EOF
 EOF
 }
 
+# card_to: the network card this machine reaches $1 through (an IPv4
+# address, or default): its MAC address and its network's broadcast address,
+# or nothing for a card with no Ethernet address (the loopback, a VPN's).
+card_to() {
+	if [ "$(uname -s)" = Darwin ]; then
+		ifc=$(route -n get "$1" 2>/dev/null | awk '/interface:/ {print $2}')
+		[ -n "$ifc" ] || return 0
+		mac=$(ifconfig "$ifc" 2>/dev/null | awk '/ether / {print $2; exit}')
+		bcast=$(ifconfig "$ifc" 2>/dev/null | awk '/inet / {for (i = 1; i < NF; i++) if ($i == "broadcast") {print $(i + 1); exit}}')
+	else
+		[ "$1" != default ] || set -- 1.1.1.1
+		ifc=$(ip route get "$1" 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -n 1)
+		[ -n "$ifc" ] || return 0
+		mac=$(cat "/sys/class/net/$ifc/address" 2>/dev/null || true)
+		bcast=$(ip -4 addr show dev "$ifc" 2>/dev/null | sed -n 's/.* brd \([0-9.]*\).*/\1/p' | head -n 1)
+	fi
+	mac=$(printf '%s' "$mac" | tr 'A-F' 'a-f')
+	printf '%s' "$mac" | grep -Eq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$' || return 0
+	[ "$mac" != 00:00:00:00:00:00 ] || return 0
+	printf '%s %s' "$mac" "$bcast"
+}
+
+# wake_card: this machine's card towards eriphe-core, so that eriphe-core
+# can wake it (Wake-on-LAN, node/wake.go): the card of the route to
+# eriphe-core's address when it is an IPv4 address, else (a name, the
+# loopback, a VPN) of the default route. eriphe-launcher has its own, from
+# the host's network.
+wake_card() {
+	host=$(printf '%s' "${CORE_URL%%,*}" | sed -n 's|^[a-z]*://\([0-9][0-9.]*\)\([:/].*\)\{0,1\}$|\1|p')
+	for to in $host default; do
+		card=$(card_to "$to")
+		if [ -n "$card" ]; then
+			printf '%s' "$card"
+			return
+		fi
+	done
+}
+
+# wake_settings sets WAKE_MAC and WAKE_BROADCAST, once.
+wake_settings() {
+	[ -z "${WAKE_DONE:-}" ] || return 0
+	card=$(wake_card || true)
+	WAKE_MAC=$(printf '%s' "$card" | cut -d ' ' -f 1)
+	WAKE_BROADCAST=$(printf '%s' "$card" | cut -s -d ' ' -f 2)
+	WAKE_DONE=1
+}
+
 env_file() {
+	wake_settings
 	cat <<EOF
 ERIPHE_CORE='$CORE_URL'
 ERIPHE_NODE_NAME='$NAME'
 ERIPHE_NODE_LABELS='$LABELS'
 ERIPHE_CA_HASH='$CA_HASH'
 ERIPHE_NODE_SHARES='$SHARES'
+ERIPHE_WAKE_MAC='$WAKE_MAC'
+ERIPHE_WAKE_BROADCAST='$WAKE_BROADCAST'
 EOF
 }
 
@@ -1587,6 +1640,7 @@ mac_shares() {
 }
 
 native_env() {
+	wake_settings
 	cat <<EOF
 # Written by install.sh: run it again rather than editing this file.
 ERIPHE_ROOT=$(q "$ERIPHE_HOME/node")
@@ -1600,6 +1654,8 @@ ERIPHE_NODE_SHARES=$(q "$(mac_shares)")
 ERIPHE_ALWAYS_ON=$([ "$MODE" = core ] && echo 1)
 ERIPHE_WORKER_IMAGE=$(q "$WORKER_IMAGE")
 ERIPHE_CORE_RELAY=$([ "$MODE" = core ] || q "$RELAY_SOCKET")
+ERIPHE_WAKE_MAC=$(q "$WAKE_MAC")
+ERIPHE_WAKE_BROADCAST=$(q "$WAKE_BROADCAST")
 EOF
 }
 

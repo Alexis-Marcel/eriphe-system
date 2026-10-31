@@ -114,6 +114,30 @@ Only their names are reported, never their paths; they are not mounted into task
 folders go through shares instead (see [Shares](#shares-the-users-folders)), which `shares` reports
 (`[{name, writable, missing}]`).
 
+### Waking the machine (Wake-on-LAN)
+
+`GET /v1/node` also reports `wake: {macs, broadcast}`: the MAC address of the network card the
+machine reaches eriphe-core through, and that network's broadcast address, so that eriphe-core can
+wake it when the user allows it (Settings → Devices, off by default; core/README.md, Waking a
+device). The installers record them: `-wake-mac` and `-wake-broadcast` (env `ERIPHE_WAKE_MAC`,
+comma-separated, and `ERIPHE_WAKE_BROADCAST`). `install.sh` takes the card of the route to
+eriphe-core's address (or of the default route) on Linux and macOS, eriphe-launcher the same from a
+short-lived container on the host's network, and `install.ps1` the PC's own card from Windows
+(`Find-NetRoute`, `Get-NetAdapter`; behind a Hyper-V virtual switch, the physical cards that are up
+too), which eriphe-node in WSL cannot see. A node run by hand on the machine itself, without them,
+finds its card alone (the source address of a UDP socket connected to eriphe-core, which sends
+nothing); in a container or in WSL, whose cards are virtual, it reports none.
+
+`POST /v1/wake` `{macs, broadcast}` asks a machine that stays on to send the magic packets (six
+`0xff`, then the MAC address 16 times) to `255.255.255.255` and to the broadcast address, on ports
+9 and 7. It sends them from its own network and, when it runs in a container (the NAS), from a
+short-lived container of its own image on the host's network: on a Docker bridge network a
+broadcast stays on the bridge. That container is `docker run --rm --pull never --network host
+--cap-drop ALL --read-only --security-opt no-new-privileges:true --entrypoint
+/usr/local/bin/eriphe-node <its image> wake-send -mac … -broadcast …`: nothing mounted, no
+capability, gone once sent. The node finds its image with `docker ps`, which the socket proxy
+allows, as it allows the rest of that `docker run`. It answers `{sent: ["here", "host"], errors}`.
+
 ## Updates
 
 The node does not update itself: it has no right to pull its own image or recreate its own
@@ -155,7 +179,7 @@ its install command again; the node's own part comes with its update.
 
 | Call | What |
 |---|---|
-| `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `shares`, `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks |
+| `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `shares`, `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine) |
 | `GET /v1/shares` | the places this machine shares folders from: `[{name, writable, missing}]` |
 | `GET /v1/shares/{share}/dirs?path=P&check=1` | the directories of a folder of a place (see Shares) |
 | `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, identity?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex` or `acp` (with `command`) |
@@ -165,6 +189,7 @@ its install command again; the node's own part comes with its update.
 | `POST /v1/tasks/{id}/permissions/{pid}` | answer a permission request `{allow, message?}` |
 | `POST /v1/tasks/{id}/stop` | stop the agent |
 | `/v1/services/{name}/mcp` | a service's streamable HTTP MCP endpoint (see Services) |
+| `POST /v1/wake` | send another machine's Wake-on-LAN packets: `{macs, broadcast}` (see Waking the machine) |
 
 States: `running`, `waiting_permission`, `idle` (turn over: done or asking something, the
 orchestrator decides), `stopped`, `failed`.

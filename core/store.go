@@ -292,6 +292,8 @@ func (s *Store) deleteNode(name string) error {
 	if _, err := s.db.Exec(`DELETE FROM nodes WHERE name = ?`, name); err != nil {
 		return err
 	}
+	// Whether it may be woken (wake.go).
+	s.forgetWake(name)
 	_, err := s.db.Exec(`DELETE FROM node_log WHERE node = ?`, name) // its access log (node_access.go)
 	return err
 }

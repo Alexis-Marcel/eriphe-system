@@ -405,6 +405,46 @@ function Get-LanAddress {
   }
 }
 
+# This PC's network card towards eriphe-core, so that eriphe-core can wake it
+# (Wake-on-LAN, node/wake.go): its MAC address(es) and its network's
+# broadcast address, as "mac[,mac] broadcast", or nothing. The card of the
+# route to eriphe-core's address when it is an IPv4 one, else of the default
+# route: Windows' own card, which eriphe-node in WSL cannot see. Behind a
+# Hyper-V virtual switch, the physical cards that are up too.
+function Get-WakeCard([string] $core) {
+  $route = $null
+  $hostName = try { ([uri] (($core -split ",")[0])).Host } catch { "" }
+  $ip = $null
+  if ([Net.IPAddress]::TryParse($hostName, [ref] $ip) -and $ip.AddressFamily -eq "InterNetwork" -and -not [Net.IPAddress]::IsLoopback($ip)) {
+    $route = Find-NetRoute -RemoteIPAddress $hostName -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceIndex } | Select-Object -First 1
+  }
+  if (-not $route) {
+    $route = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+      Sort-Object { $_.RouteMetric + $_.InterfaceMetric } | Select-Object -First 1
+  }
+  if (-not $route) { return "" }
+  $index = if ($route.InterfaceIndex) { $route.InterfaceIndex } else { $route.ifIndex }
+  $adapter = Get-NetAdapter -InterfaceIndex $index -ErrorAction SilentlyContinue
+  if (-not $adapter -or $adapter.MacAddress -notmatch "^([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}$") { return "" }
+  $macs = @($adapter.MacAddress)
+  if ($adapter.InterfaceDescription -match "Hyper-V") {
+    $macs += Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" } |
+      ForEach-Object { $_.MacAddress }
+  }
+  $macs = $macs | Where-Object { $_ } | ForEach-Object { $_.ToLower().Replace("-", ":") } | Select-Object -Unique
+  $broadcast = ""
+  $addr = Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $index -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($addr -and $addr.PrefixLength -ge 1 -and $addr.PrefixLength -le 30) {
+    $bytes = ([Net.IPAddress] $addr.IPAddress).GetAddressBytes()
+    for ($i = 0; $i -lt 4; $i++) {
+      $bits = [Math]::Max(0, [Math]::Min(8, $addr.PrefixLength - 8 * $i))
+      $bytes[$i] = $bytes[$i] -bor (255 -shr $bits)
+    }
+    $broadcast = [Net.IPAddress]::new([byte[]] $bytes).ToString()
+  }
+  "$($macs -join ',') $broadcast".Trim()
+}
+
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
   [Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -1045,6 +1085,9 @@ if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
 Invoke-InDistro "pkill -f /usr/local/bin/eriphe-node-run || true; pkill -x eriphe-node || true" | Out-Null
 $mode = if ($CoreMode) { "core" } else { "node" }
 $alwaysOn = if ($CoreMode) { "ERIPHE_ALWAYS_ON=1" } else { "" }
+# This PC's own network card, which the node in WSL cannot see (Get-WakeCard).
+$wakeCard = try { Get-WakeCard $Core } catch { "" }
+$wakeMac, $wakeBroadcast = ($wakeCard + " ").Split(" ")[0, 1]
 $forget = if ($Rejoin) { "rm -f /var/lib/eriphe-node/node.json" } else { "" }
 $token = if ($Rejoin -or -not $joined) { $JoinToken } else { "" }
 # The updater works on these images; the files "updater" tell eriphe-core
@@ -1077,6 +1120,8 @@ ERIPHE_NODE_LABELS=$Labels
 ERIPHE_CA_HASH=$CaHash
 ERIPHE_JOIN_TOKEN=$token
 ERIPHE_VERSION=$pin
+ERIPHE_WAKE_MAC=$wakeMac
+ERIPHE_WAKE_BROADCAST=$wakeBroadcast
 $alwaysOn
 EOF
 "@ | Out-Null

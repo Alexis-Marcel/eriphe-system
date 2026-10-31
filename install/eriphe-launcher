@@ -165,6 +165,13 @@ lan_address() {
 		sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n 1
 }
 
+# wake_card: install.sh's, run in a short-lived container on the host's
+# network: this one's card is Docker's, not the machine's.
+wake_card() {
+	docker run --rm --network host --entrypoint sh -e ERIPHE_INSTALL_LIB=1 -e CORE_URL="${CORE_URL:-}" "$SELF_IMAGE" \
+		-c '. /usr/local/lib/eriphe/install.sh && wake_card' 2>/dev/null || true
+}
+
 uninstalled() { [ -f "$CONF/uninstalled" ]; }
 
 idle() {

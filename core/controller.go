@@ -194,6 +194,7 @@ func (c *core) placePending() {
 		}
 		var waiting *waitingError
 		if errors.As(err, &waiting) {
+			c.wakeFor(t) // the device it needs, if it may be woken (wake.go)
 			if waiting.reason != t.PendingReason {
 				c.store.updateTask(t.ID, map[string]any{"pending_reason": waiting.reason})
 			}

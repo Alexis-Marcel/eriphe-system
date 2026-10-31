@@ -1168,6 +1168,34 @@ itself once access is restored.
 | `POST /v1/nodes/{name}/suspend` | cut access |
 | `POST /v1/nodes/{name}/resume` | restore access |
 
+**Waking a device (Wake-on-LAN).** "Eriphe peut réveiller cet appareil" (the device's page; not on
+the machine that stays on) is off by default, a choice per device kept in the `node_wake` table,
+and forgotten with the device. Once on, the page shows "Réveiller maintenant" while the device is
+off, the card's MAC address it reported (node/README.md, Waking the machine), and how to get it
+ready: Wake-on-LAN in the BIOS/UEFI and on the network adapter (Windows: Device Manager → the
+adapter → Power Management, and "Wake on Magic Packet" under Advanced; Fast Startup off to wake
+from a full shutdown), a cable rather than Wi-Fi; on a Mac, "Wake for network access", from sleep
+only. After "Wake now" the page asks every 5 s whether the device connected again since, and says
+so, or that it did not within 2 minutes.
+
+`wake(node)` (`wake.go`) sends the magic packets, for each MAC address, to `255.255.255.255` and to
+the device's subnet broadcast, on ports 9 and 7, two ways at once: from eriphe-core's own network,
+and through every online machine that stays on (`POST /v1/wake` on its node), which sends them from
+the host's network. Only the second reaches the home network when eriphe-core runs in a container
+on a Docker bridge network, as every installer runs it (`eriphe-system`, published ports): a
+broadcast from a bridge stays on the bridge, and Linux does not forward a directed broadcast either
+(`bc_forwarding` is off). The first one counts where eriphe-core is on the host's network. It is
+refused for a device that is on, whose access is cut, that has not reported a MAC address (an
+older eriphe-node), or that the user did not allow. Nothing crosses the Internet: the device must
+be on the same network as the machine that stays on. On a Windows or Mac home, where the machine
+that stays on runs its node in WSL behind NAT, or as a macOS LaunchAgent held off the LAN, the
+packets may not leave it (not checked).
+
+The scheduler wakes a device by itself: when a task waits for a node (`placePending`) and the
+device its folders are on is off, may be woken and reported its card, eriphe-core wakes it, in the
+background, at most once per 15 minutes per device (`last_auto`), and logs it ("task t-… waits for
+pc, which is off: waking it").
+
 ## Task API (bearer token)
 
 What the `eriphe` CLI uses to follow and answer worker tasks, next to the conversation API. The
