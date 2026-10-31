@@ -400,7 +400,9 @@ func (w *web) render(rw http.ResponseWriter, r *http.Request, s *session, name, 
 			p.Attn = w.attention()
 		}
 	}
-	p.User = w.c.conf().User
+	if u := w.c.conf().User; u != unnamedUser {
+		p.User = u
+	}
 	if s != nil {
 		p.CSRF = s.CSRF
 	}
