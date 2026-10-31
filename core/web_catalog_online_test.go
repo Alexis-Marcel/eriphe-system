@@ -94,6 +94,17 @@ func TestOnlineCatalog(t *testing.T) {
 		{"beehiiv", []string{"read", "write", "openid", "email"}, "[read openid email]"},
 		{"huggingface", []string{"openid", "profile", "read-mcp", "read-repos", "jobs", "contribute-repos", "inference-api"},
 			"[openid profile read-mcp read-repos]"},
+		// Advertised on 2026-10-31.
+		{"akiflow", []string{"mcp:read", "mcp:write"}, "[mcp:read]"},
+		{"sunsama", []string{"read", "execute", "offline_access"}, "[read offline_access]"},
+		{"slite", []string{"openid", "email", "mcp:read", "mcp:write", "offline_access"}, "[openid email mcp:read offline_access]"},
+		{"close", []string{"mcp.read", "mcp.write_destructive", "mcp.write_safe", "offline_access"}, "[mcp.read offline_access]"},
+		{"pandadoc", []string{"read", "write", "documents:read", "documents:edit", "documents:send"}, "[read documents:read]"},
+		{"jotform", []string{"readOnly", "full"}, "[readOnly]"},
+		{"mural", []string{"murals:read", "murals:write", "rooms:read", "workspaces:read"}, "[murals:read rooms:read workspaces:read]"},
+		{"neon", []string{"read", "write"}, "[read]"},
+		{"qonto", []string{"offline_access", "client.read", "client.write", "client_invoices.read", "client_invoice.write",
+			"request_transfers.write", "card.read"}, "[offline_access client.read client_invoices.read card.read]"},
 	} {
 		got, granted := scopesFor(tc.preset, accessReadOnly, tc.found, false)
 		if fmtList(got) != tc.read || granted != grantedRead {
@@ -108,7 +119,9 @@ func TestOnlineCatalog(t *testing.T) {
 		preset string
 		found  []string
 	}{{"stripe", []string{"mcp"}}, {"granola", []string{"mcp"}}, {"fastmail", []string{"https://www.fastmail.com/dev/mcp", "offline_access"}},
-		{"typefully", []string{"full_access"}}, {"hootsuite", []string{"offline"}}, {"kit", []string{"public"}}, {"make", nil}} {
+		{"typefully", []string{"full_access"}}, {"hootsuite", []string{"offline"}}, {"kit", []string{"public"}}, {"make", nil},
+		{"basecamp", []string{"mcp", "full"}}, {"coda", []string{"mcp:all"}}, {"readai", []string{"mcp:execute"}}, {"square", nil},
+		{"pennylane", []string{"mcp:account:read", "mcp:customer_invoice:read", "mcp:private_api"}}} {
 		if _, granted := scopesFor(tc.preset, accessReadOnly, tc.found, false); granted != grantedNone {
 			t.Errorf("%s: %s", tc.preset, granted)
 		}

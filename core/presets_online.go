@@ -9,9 +9,10 @@ import (
 // let Eriphe in like Linear, with OAuth and a client registered on the fly
 // (dynamic client registration, or a Client ID Metadata Document), so that
 // no app is made at the vendor. Each address, its registration and its
-// scopes were read from the service's public metadata on 2026-10-30
-// (/.well-known/oauth-protected-resource and oauth-authorization-server);
-// the sign-in itself was not tried for each.
+// scopes were read from the service's public metadata on 2026-10-30, and
+// on 2026-10-31 for the second batch (Akiflow to Square), found in the MCP
+// registry or the vendor's docs (/.well-known/oauth-protected-resource and
+// oauth-authorization-server); the sign-in itself was not tried for each.
 //
 // The services that want an app made at their place (Figma, Slack, Asana,
 // HubSpot, Box, Discord, Google, Microsoft 365) or approved clients only
@@ -55,6 +56,27 @@ var onlineServices = []onlineService{
 	{id: "monday", title: "monday.com", url: "https://mcp.monday.com/mcp", cat: "tasks",
 		fr: [3]string{"Tableaux et éléments de monday.com.", "monday.com : mes tableaux et éléments"},
 		en: [3]string{"monday.com boards and items.", "monday.com: my boards and items"}},
+	{id: "akiflow", title: "Akiflow", url: "https://mcp.akiflow.com/mcp", cat: "tasks", paid: true,
+		fr: [3]string{"Tâches, agenda et créneaux Akiflow.", "Akiflow : mes tâches et mon planning", "Akiflow est payant, après un essai gratuit."},
+		en: [3]string{"Akiflow tasks, calendar and time slots.", "Akiflow: my tasks and schedule", "Akiflow is paid, after a free trial."}},
+	{id: "sunsama", title: "Sunsama", url: "https://api.sunsama.com/mcp", cat: "tasks", paid: true,
+		fr: [3]string{"Ton planning du jour et tes tâches Sunsama.", "Sunsama : mon planning et mes tâches", "Sunsama est payant, après un essai gratuit."},
+		en: [3]string{"Your daily plan and tasks in Sunsama.", "Sunsama: my plan and tasks", "Sunsama is paid, after a free trial."}},
+	{id: "basecamp", title: "Basecamp", url: "https://mcp.basecamp.com/mcp", cat: "tasks",
+		fr: [3]string{"Projets, to-dos, messages et documents Basecamp.", "Basecamp : mes projets et to-dos"},
+		en: [3]string{"Basecamp projects, to-dos, messages and docs.", "Basecamp: my projects and to-dos"}},
+	{id: "coda", title: "Coda", url: "https://coda.io/apis/mcp", cat: "tasks",
+		fr: [3]string{"Docs, tables et pages Coda.", "Coda : mes docs et tables"},
+		en: [3]string{"Coda docs, tables and pages.", "Coda: my docs and tables"}},
+	{id: "craft", title: "Craft", url: "https://mcp.craft.do/my/mcp", cat: "tasks",
+		fr: [3]string{"Tes documents et notes Craft.", "Craft : mes documents"},
+		en: [3]string{"Your Craft documents and notes.", "Craft: my documents"}},
+	{id: "capacities", title: "Capacities", url: "https://api.capacities.io/mcp", cat: "tasks",
+		fr: [3]string{"Objets, notes du jour et espaces Capacities.", "Capacities : mes notes"},
+		en: [3]string{"Capacities objects, daily notes and spaces.", "Capacities: my notes"}},
+	{id: "slite", title: "Slite", url: "https://api.slite.com/mcp", cat: "tasks",
+		fr: [3]string{"La base de connaissances de ton équipe, dans Slite.", "Slite : mes documents d'équipe"},
+		en: [3]string{"Your team's knowledge base, in Slite.", "Slite: my team docs"}},
 
 	// Mail and calendar.
 	{id: "fastmail", title: "Fastmail", url: "https://api.fastmail.com/mcp", cat: "mail", paid: true,
@@ -87,6 +109,12 @@ var onlineServices = []onlineService{
 	{id: "tldv", title: "tl;dv", url: "https://mcp.tldv.io/mcp", cat: "meetings",
 		fr: [3]string{"Enregistrements et notes de réunion tl;dv.", "tl;dv : mes réunions enregistrées"},
 		en: [3]string{"tl;dv meeting recordings and notes.", "tl;dv: my recorded meetings"}},
+	{id: "fathom", title: "Fathom", url: "https://api.fathom.ai/mcp", cat: "meetings",
+		fr: [3]string{"Notes et transcriptions de réunion Fathom.", "Fathom : mes réunions"},
+		en: [3]string{"Fathom meeting notes and transcripts.", "Fathom: my meetings"}},
+	{id: "readai", title: "Read AI", url: "https://api.read.ai/mcp", cat: "meetings",
+		fr: [3]string{"Comptes rendus et transcriptions Read AI.", "Read AI : mes comptes rendus de réunion"},
+		en: [3]string{"Read AI meeting reports and transcripts.", "Read AI: my meeting reports"}},
 
 	// Design.
 	{id: "canva", title: "Canva", url: "https://mcp.canva.com/mcp", cat: "design",
@@ -98,6 +126,15 @@ var onlineServices = []onlineService{
 	{id: "gamma", title: "Gamma", url: "https://mcp.gamma.app/mcp", cat: "design",
 		fr: [3]string{"Présentations et documents Gamma.", "Gamma : mes présentations"},
 		en: [3]string{"Gamma presentations and documents.", "Gamma: my presentations"}},
+	{id: "whimsical", title: "Whimsical", url: "https://mcp.whimsical.com/mcp", cat: "design",
+		fr: [3]string{"Diagrammes, cartes mentales et maquettes Whimsical.", "Whimsical : mes diagrammes et maquettes"},
+		en: [3]string{"Whimsical flowcharts, mind maps and wireframes.", "Whimsical: my diagrams and wireframes"}},
+	{id: "mural", title: "Mural", url: "https://mcp-canvas.mural.co/mcp", cat: "design",
+		fr: [3]string{"Tableaux blancs Mural.", "Mural : mes tableaux"},
+		en: [3]string{"Mural whiteboards.", "Mural: my boards"}},
+	{id: "lucid", title: "Lucid", url: "https://mcp.lucid.app/mcp", cat: "design",
+		fr: [3]string{"Diagrammes Lucidchart et tableaux Lucidspark.", "Lucid : mes diagrammes"},
+		en: [3]string{"Lucidchart diagrams and Lucidspark boards.", "Lucid: my diagrams"}},
 
 	// Development.
 	{id: "cloudflare", title: "Cloudflare", url: "https://mcp.cloudflare.com/mcp", cat: "dev",
@@ -115,6 +152,12 @@ var onlineServices = []onlineService{
 	{id: "supabase", title: "Supabase", url: "https://mcp.supabase.com/mcp", cat: "dev",
 		fr: [3]string{"Projets, bases de données et fonctions Supabase.", "Supabase : mes projets et bases de données"},
 		en: [3]string{"Supabase projects, databases and functions.", "Supabase: my projects and databases"}},
+	{id: "neon", title: "Neon", url: "https://mcp.neon.tech/mcp", cat: "dev",
+		fr: [3]string{"Projets et bases Postgres Neon.", "Neon : mes bases de données Postgres"},
+		en: [3]string{"Neon Postgres projects and databases.", "Neon: my Postgres databases"}},
+	{id: "posthog", title: "PostHog", url: "https://mcp.posthog.com/mcp", cat: "dev",
+		fr: [3]string{"Analyses produit, feature flags et erreurs PostHog.", "PostHog : mes analyses produit"},
+		en: [3]string{"PostHog product analytics, feature flags and errors.", "PostHog: my product analytics"}},
 	// Without ?login the server answers without an account, with its public tools only.
 	{id: "huggingface", title: "Hugging Face", url: "https://huggingface.co/mcp?login", cat: "dev",
 		fr: [3]string{"Modèles, jeux de données et Spaces.", "Hugging Face : modèles, jeux de données et Spaces"},
@@ -139,6 +182,29 @@ var onlineServices = []onlineService{
 	{id: "attio", title: "Attio", url: "https://mcp.attio.com/mcp", cat: "web",
 		fr: [3]string{"Ton CRM : contacts, entreprises, affaires.", "Attio : mes contacts et affaires"},
 		en: [3]string{"Your CRM: people, companies, deals.", "Attio: my contacts and deals"}},
+	{id: "close", title: "Close", url: "https://mcp.close.com/mcp", cat: "web", paid: true,
+		fr: [3]string{"Ton CRM Close : prospects, affaires, activités.", "Close : mes prospects et affaires", "Close est payant, après un essai gratuit."},
+		en: [3]string{"Your Close CRM: leads, opportunities, activities.", "Close: my leads and opportunities", "Close is paid, after a free trial."}},
+	{id: "pandadoc", title: "PandaDoc", url: "https://mcp.pandadoc.com/v1/mcp", cat: "web",
+		fr: [3]string{"Devis, contrats et signatures PandaDoc.", "PandaDoc : mes devis et contrats"},
+		en: [3]string{"PandaDoc proposals, contracts and signatures.", "PandaDoc: my proposals and contracts"}},
+	{id: "typeform", title: "Typeform", url: "https://api.typeform.com/mcp", cat: "web",
+		fr: [3]string{"Formulaires et réponses Typeform.", "Typeform : mes formulaires et réponses"},
+		en: [3]string{"Typeform forms and responses.", "Typeform: my forms and responses"}},
+	{id: "jotform", title: "Jotform", url: "https://mcp.jotform.com/", cat: "web",
+		fr: [3]string{"Formulaires et réponses Jotform.", "Jotform : mes formulaires et réponses"},
+		en: [3]string{"Jotform forms and submissions.", "Jotform: my forms and submissions"}},
+	{id: "framer", title: "Framer", url: "https://mcp.framer.com/mcp", cat: "web",
+		fr: [3]string{"Tes sites Framer : pages, CMS, composants.", "Framer : mes sites"},
+		en: [3]string{"Your Framer sites: pages, CMS, components.", "Framer: my sites"}},
+	{id: "wordpress", title: "WordPress.com", url: "https://public-api.wordpress.com/wpcom/v2/mcp/v1", cat: "web",
+		fr: [3]string{"Tes sites WordPress.com : articles, pages, réglages.", "WordPress.com : mes sites",
+			"Les sites WordPress installés ailleurs passent par Jetpack."},
+		en: [3]string{"Your WordPress.com sites: posts, pages, settings.", "WordPress.com: my sites",
+			"Self-hosted WordPress sites go through Jetpack."}},
+	{id: "upwork", title: "Upwork", url: "https://mcp.upwork.com/mcp", cat: "web",
+		fr: [3]string{"Ton activité de freelance sur Upwork.", "Upwork : mon activité de freelance"},
+		en: [3]string{"Your freelance work on Upwork.", "Upwork: my freelance work"}},
 
 	// Social networks and newsletters. The networks themselves (LinkedIn,
 	// Meta, X, TikTok, YouTube) host no MCP server: these services post
@@ -188,6 +254,15 @@ var onlineServices = []onlineService{
 	{id: "ramp", title: "Ramp", url: "https://mcp.ramp.com/mcp", cat: "finance",
 		fr: [3]string{"Dépenses, cartes et factures Ramp.", "Ramp : dépenses, cartes et factures", "Ramp est fait pour les entreprises, aux États-Unis."},
 		en: [3]string{"Ramp spend, cards and bills.", "Ramp: spend, cards and bills", "Ramp is for businesses, in the United States."}},
+	{id: "qonto", title: "Qonto", url: "https://mcp.qonto.com/mcp", cat: "finance", paid: true,
+		fr: [3]string{"Comptes, transactions et factures Qonto.", "Qonto : comptes, transactions et factures", "Qonto est une banque en ligne pour les pros, en Europe."},
+		en: [3]string{"Qonto accounts, transactions and invoices.", "Qonto: accounts, transactions and invoices", "Qonto is an online bank for businesses, in Europe."}},
+	{id: "pennylane", title: "Pennylane", url: "https://mcp.pennylane.com/mcp", cat: "finance", paid: true, beta: true,
+		fr: [3]string{"Ta comptabilité Pennylane : factures, écritures, TVA.", "Pennylane : ma comptabilité", "Le serveur de Pennylane est récent et pas encore documenté par Pennylane."},
+		en: [3]string{"Your Pennylane accounting: invoices, entries, VAT.", "Pennylane: my accounting", "Pennylane's server is new and not documented by Pennylane yet."}},
+	{id: "square", title: "Square", url: "https://mcp.squareup.com/mcp", cat: "finance",
+		fr: [3]string{"Paiements, commandes et clients Square.", "Square : paiements, commandes et clients"},
+		en: [3]string{"Square payments, orders and customers.", "Square: payments, orders and customers"}},
 
 	// Automation.
 	{id: "zapier", title: "Zapier", url: "https://mcp.zapier.com/api/mcp/mcp", cat: "automation",

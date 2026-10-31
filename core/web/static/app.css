@@ -781,11 +781,24 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .mark-webflow { background: #146ef5; box-shadow: 0 6px 16px -8px #146ef5; }
 .mark-wix { background: #0c6efc; box-shadow: 0 6px 16px -8px #0c6efc; }
 .mark-zapier { background: #ff4f00; box-shadow: 0 6px 16px -8px #ff4f00; }
-@media (prefers-color-scheme: dark) { .mark-buffer, .mark-calcom, .mark-miro, .mark-vercel { background: #3a3a40; } }
+.mark-akiflow { background: #af38f9; box-shadow: 0 6px 16px -8px #af38f9; }
+.mark-basecamp { background: #1d2d35; box-shadow: 0 6px 16px -8px #1d2d35; }
+.mark-coda { background: #f46a54; box-shadow: 0 6px 16px -8px #f46a54; }
+.mark-framer { background: #0055ff; box-shadow: 0 6px 16px -8px #0055ff; }
+.mark-mural { background: #ff4b4b; box-shadow: 0 6px 16px -8px #ff4b4b; }
+.mark-posthog { background: #000000; box-shadow: 0 6px 16px -8px #000000; }
+.mark-square { background: #3e4348; box-shadow: 0 6px 16px -8px #3e4348; }
+.mark-typeform { background: #262627; box-shadow: 0 6px 16px -8px #262627; }
+.mark-upwork { background: #6fda44; box-shadow: 0 6px 16px -8px #6fda44; color: #15161f; }
+.mark-wordpress { background: #21759b; box-shadow: 0 6px 16px -8px #21759b; }
+@media (prefers-color-scheme: dark) {
+  .mark-buffer, .mark-calcom, .mark-miro, .mark-vercel, .mark-basecamp, .mark-posthog, .mark-square, .mark-typeform { background: #3a3a40; }
+}
 /* Without a logo in Simple Icons: a neutral letter mark. */
 .mark-attio, .mark-beehiiv, .mark-context7, .mark-exa, .mark-fastmail, .mark-fireflies, .mark-gamma, .mark-granola, .mark-jam,
 .mark-kit, .mark-mem, .mark-mercury, .mark-metricool, .mark-monday, .mark-otter, .mark-ramp, .mark-raindrop, .mark-readwise,
-.mark-tldv, .mark-typefully {
+.mark-tldv, .mark-typefully, .mark-capacities, .mark-close, .mark-craft, .mark-fathom, .mark-jotform, .mark-lucid, .mark-neon,
+.mark-pandadoc, .mark-pennylane, .mark-qonto, .mark-readai, .mark-slite, .mark-sunsama, .mark-whimsical {
   background: linear-gradient(135deg, #64748b 0%, #3f4a5c 100%); box-shadow: 0 6px 16px -8px #3f4a5c;
 }
 
