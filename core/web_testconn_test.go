@@ -273,3 +273,50 @@ func TestToolFormHints(t *testing.T) {
 		t.Fatalf("placeholder: %s", body)
 	}
 }
+
+// calendarAnswer: each answer of a CalDAV server to the test, as a line.
+func TestCalendarAnswer(t *testing.T) {
+	for status, want := range map[int]string{
+		207: "ok Connected: the calendar accepts sam and this password.",
+		200: "ok Connected: the calendar accepts sam and this password.",
+		401: "err Login or password refused by the calendar.",
+		403: "err Login or password refused by the calendar.",
+		404: "err No CalDAV calendar at this address: check it.",
+		405: "err No CalDAV calendar at this address: check it.",
+		500: "err The service answered with error 500.",
+	} {
+		if v := calendarAnswer("en", "sam", status); v.State+" "+v.Text != want {
+			t.Errorf("%d: %+v", status, v)
+		}
+	}
+}
+
+// davClient follows the same server's https redirects only, three at
+// most, with the account's credentials.
+func TestDAVClientRedirects(t *testing.T) {
+	check := davClient("sam", "pw").CheckRedirect
+	first := httptest.NewRequest("PROPFIND", "https://dav.example.org/", nil)
+	for _, c := range []struct {
+		to   string
+		hops int
+		ok   bool
+	}{
+		{"https://dav.example.org/.well-known/caldav", 1, true},
+		{"https://dav.example.org/dav/", 4, false},
+		{"http://dav.example.org/dav/", 1, false},
+		{"https://other.example.org/dav/", 1, false},
+	} {
+		req := httptest.NewRequest("PROPFIND", c.to, nil)
+		via := make([]*http.Request, c.hops)
+		for i := range via {
+			via[i] = first
+		}
+		err := check(req, via)
+		if (err == nil) != c.ok {
+			t.Errorf("%s after %d: %v", c.to, c.hops, err)
+		}
+		if user, pw, _ := req.BasicAuth(); c.ok && (user != "sam" || pw != "pw") {
+			t.Errorf("%s: credentials %q %q", c.to, user, pw)
+		}
+	}
+}

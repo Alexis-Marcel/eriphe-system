@@ -619,48 +619,69 @@ func (c *core) memoryTick(ctx context.Context) {
 			c.stop(ctx, r.TaskID)
 		}
 	}
+	c.memoryNight(mc, now)
+	if !c.extractionOn() || c.mem.activeRun() != nil {
+		return
+	}
+	if c.mem.get("night_done") == today && c.catchUpDays(ctx, now) {
+		return
+	}
+	c.extractBusyDay(ctx, mc, now)
+}
+
+// memoryNight purges and backs up the memory, once a night from its hour
+// (extract_at, 03:00 by default).
+func (c *core) memoryNight(mc MemoryConfig, now time.Time) {
+	today := now.Format("2006-01-02")
 	at, err := time.ParseInLocation("15:04", mc.ExtractAt, time.Local)
 	if err != nil {
 		at, _ = time.ParseInLocation("15:04", "03:00", time.Local)
 	}
 	nightly := time.Date(now.Year(), now.Month(), now.Day(), at.Hour(), at.Minute(), 0, 0, time.Local)
-	if !now.Before(nightly) && c.mem.get("night_done") != today {
-		c.mem.set("night_done", today)
-		c.mem.set("night_started", fmt.Sprint(now.Unix()))
-		if n, err := c.mem.purge(); err != nil {
-			log.Printf("memory: purge: %v", err)
-		} else if n > 0 {
-			log.Printf("memory: %d forgotten memories erased", n)
-		}
-		if err := c.mem.backup(mc.BackupDir, mc.BackupKeep); err != nil {
-			log.Printf("memory: backup: %v", err)
-		}
-	}
-	if !c.extractionOn() || c.mem.activeRun() != nil {
+	if now.Before(nightly) || c.mem.get("night_done") == today {
 		return
 	}
-	// The nightly catch-up: one day at a time, each tried once a night.
-	if c.mem.get("night_done") == today {
-		var since int64
-		fmt.Sscan(c.mem.get("night_started"), &since)
-		for i := extractDays; i >= 1; i-- {
-			day := now.AddDate(0, 0, -i).Format("2006-01-02")
-			var tried int
-			c.mem.db.QueryRow(`SELECT COUNT(*) FROM extraction_runs WHERE day = ? AND started >= ?`, day, since).Scan(&tried)
-			if tried > 0 {
-				continue
-			}
-			r, err := c.startExtraction(ctx, day, time.Time{})
-			if err != nil {
-				log.Printf("memory: extraction of %s: %v", day, err)
-				continue
-			}
-			if r != nil {
-				return
-			}
+	c.mem.set("night_done", today)
+	c.mem.set("night_started", fmt.Sprint(now.Unix()))
+	if n, err := c.mem.purge(); err != nil {
+		log.Printf("memory: purge: %v", err)
+	} else if n > 0 {
+		log.Printf("memory: %d forgotten memories erased", n)
+	}
+	if err := c.mem.backup(mc.BackupDir, mc.BackupKeep); err != nil {
+		log.Printf("memory: backup: %v", err)
+	}
+}
+
+// catchUpDays is the nightly catch-up: one day at a time, each tried once
+// a night. It tells whether an extraction started.
+func (c *core) catchUpDays(ctx context.Context, now time.Time) bool {
+	var since int64
+	fmt.Sscan(c.mem.get("night_started"), &since)
+	for i := extractDays; i >= 1; i-- {
+		day := now.AddDate(0, 0, -i).Format("2006-01-02")
+		var tried int
+		c.mem.db.QueryRow(`SELECT COUNT(*) FROM extraction_runs WHERE day = ? AND started >= ?`, day, since).Scan(&tried)
+		if tried > 0 {
+			continue
+		}
+		r, err := c.startExtraction(ctx, day, time.Time{})
+		if err != nil {
+			log.Printf("memory: extraction of %s: %v", day, err)
+			continue
+		}
+		if r != nil {
+			return true
 		}
 	}
-	// A busy day, quiet for a while: extract it so far.
+	return false
+}
+
+// extractBusyDay extracts today so far when it was busy (busy_day
+// messages) and has been quiet for a while (idle_minutes), at most every
+// two hours.
+func (c *core) extractBusyDay(ctx context.Context, mc MemoryConfig, now time.Time) {
+	today := now.Format("2006-01-02")
 	last := c.store.lastMessageSeq()
 	if last == 0 {
 		return
