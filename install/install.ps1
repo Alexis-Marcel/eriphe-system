@@ -370,7 +370,42 @@ function Install-Wsl {
 # machine's addresses and needs no forwarding.
 function Test-Mirrored {
   $cfg = Join-Path $env:USERPROFILE ".wslconfig"
-  (Test-Path $cfg) -and ((Get-Content $cfg -Raw) -match "(?im)^\s*networkingMode\s*=\s*mirrored")
+  (Test-Path $cfg) -and (Test-MirroredText (Get-Content $cfg -Raw))
+}
+
+# A .wslconfig's text sets mirrored networking: networkingMode=mirrored in its
+# [wsl2] section, the only one WSL reads it in.
+function Test-MirroredText([string] $text) {
+  $section = ""
+  foreach ($line in ($text -split "`r?`n")) {
+    $l = $line.Trim()
+    if ($l -match "^\[(.+)\]$") { $section = $Matches[1].Trim().ToLower(); continue }
+    if ($section -eq "wsl2" -and $l -match "^networkingMode\s*=\s*mirrored\s*([#;].*)?$") { return $true }
+  }
+  return $false
+}
+
+# -ModelServer: an http(s) address, its host a name, an IPv4 address or a
+# bracketed IPv6 one (http://[::1]:11434).
+function Test-ModelServerAddress([string] $url) {
+  $url -match "^https?://([A-Za-z0-9._~-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$"
+}
+
+# The model server's list of models, as the node reaches it (its /v1 path, as
+# eriphe-node makes it).
+function Get-ModelsUrl([string] $url) {
+  $base = $url.TrimEnd("/")
+  if ($base.EndsWith("/v1")) { $base = $base.Substring(0, $base.Length - 3).TrimEnd("/") }
+  "$base/v1/models"
+}
+
+# What to do when the model server does not answer from the distribution:
+# its loopback is Windows' own only with mirrored networking.
+function Get-ModelServerAdvice([string] $url, [bool] $mirrored) {
+  if (-not $mirrored -and $url -match "^https?://(localhost|127\.[0-9.]+|\[::1\])([:/]|$)") {
+    return "the model server at $url does not answer from WSL, where $url is the distribution itself: WSL reaches Windows' own addresses only with mirrored networking (Windows 11 22H2 or later). Add networkingMode=mirrored to the [wsl2] section of %USERPROFILE%\.wslconfig, run wsl --shutdown (it stops every distribution), then run this install again (install/README.md, A model behind this machine)."
+  }
+  "the model server at $url does not answer from WSL: start it (Ollama on Windows runs only while you are logged in: add it to your startup programs, Win+R shell:startup), or check the address, then run this install again."
 }
 
 function Remove-CorePorts {
@@ -599,7 +634,7 @@ if (-not $bound.ContainsKey("Labels")) { $Labels = $saved["ERIPHE_NODE_LABELS"] 
 if (-not $bound.ContainsKey("CaHash")) { $CaHash = $saved["ERIPHE_CA_HASH"] }
 if (-not $bound.ContainsKey("ModelServer")) { $ModelServer = $saved["ERIPHE_MODEL_SERVER"] }
 if ($ModelServer -eq "none") { $ModelServer = "" }
-if ($ModelServer -and $ModelServer -notmatch "^https?://[A-Za-z0-9._~-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$") {
+if ($ModelServer -and -not (Test-ModelServerAddress $ModelServer)) {
   throw "-ModelServer ${ModelServer}: the model server's address as the node in WSL reaches it, e.g. http://127.0.0.1:11434"
 }
 $pin = if ($bound.ContainsKey("Version")) { if ($Version -eq "latest") { "" } else { $Version } } else { $saved["ERIPHE_VERSION"] }
@@ -1142,7 +1177,15 @@ EOF
 # (a running one is left as it is). In core mode, the ports are forwarded first, by a script
 # of its own: the distribution's address changes with every start of WSL.
 $mirrored = Test-Mirrored
-$run = "-d $Distro -u root --exec /usr/local/bin/eriphe-node-run"
+# The model server it lends, asked from the distribution, as eriphe-node
+# reaches it: any HTTP answer will do (a server with a key answers 401).
+$modelAnswers = $null
+if ($ModelServer) {
+  $models = Get-ModelsUrl $ModelServer
+  $modelAnswers = (Invoke-InDistro "if wget -S -T 5 -O /dev/null '$models' 2>&1 | grep -q 'HTTP/'; then echo yes; else echo no; fi" | Select-Object -Last 1) -eq "yes"
+  if (-not $modelAnswers) { Add-Notice (Get-ModelServerAdvice $ModelServer $mirrored) }
+}
+$run ="-d $Distro -u root --exec /usr/local/bin/eriphe-node-run"
 if ($CoreMode -and -not $mirrored) {
   New-Item -ItemType Directory -Force $bootDir | Out-Null
   # Only administrators and SYSTEM: the task runs it elevated.
@@ -1262,6 +1305,11 @@ rm -f /tmp/setup-code.err
   Write-Para "Installed, but $here is not connected to $name_ yet: it keeps trying. If it does not appear in $devicesMenu in your browser within a few minutes, check that the computer Eriphe runs on is on, and see the logs."
 } elseif (-not $updating) {
   Write-Para "Done: $here is connected to $name_. Go back to your browser: it now appears in $devicesMenu."
+}
+if ($ModelServer) {
+  $answers = if ($modelAnswers) { "yes" } else { "no" }
+  Write-Out
+  Write-Out "Lends the model server at $ModelServer (answers: $answers)."
 }
 if ($pin -eq "edge") {
   Add-Notice "it follows main, the version in development (-Version latest follows the releases again)."

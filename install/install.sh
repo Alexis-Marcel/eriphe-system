@@ -76,7 +76,22 @@ say() {
 	fi
 }
 # para TEXT: TEXT as a paragraph, wrapped.
-para() { printf '%s\n' "$*" | fold -s -w 66 | sed 's/ *$//' | while IFS= read -r l; do say "$l"; done; }
+para() { printf '%s\n' "$*" | wrap 66 | while IFS= read -r l; do say "$l"; done; }
+# wrap WIDTH: its input wrapped at WIDTH, between words only: a word longer
+# than WIDTH (an address, a command) goes on a line of its own, whole, so
+# that it can be copied.
+wrap() {
+	awk -v w="$1" '{
+		line = ""
+		n = split($0, word, " ")
+		for (i = 1; i <= n; i++) {
+			if (line == "") line = word[i]
+			else if (length(line) + 1 + length(word[i]) > w) { print line; line = word[i] }
+			else line = line " " word[i]
+		}
+		print line
+	}'
+}
 step() {
 	say "  ✓ $1"
 	STEPPED=1
@@ -120,7 +135,7 @@ good_to_know() {
 	fi
 	say "Good to know:"
 	printf '%s' "$NOTES" | while IFS= read -r n; do
-		printf '%s\n' "$n" | awk '{ print toupper(substr($0, 1, 1)) substr($0, 2) }' | fold -s -w 62 | sed 's/ *$//' | {
+		printf '%s\n' "$n" | awk '{ print toupper(substr($0, 1, 1)) substr($0, 2) }' | wrap 62 | {
 			IFS= read -r l && say "  - $l"
 			while IFS= read -r l; do say "    $l"; done
 		}
@@ -460,12 +475,12 @@ host_tz() {
 exposed_notice() {
 	case $1 in
 	127.*)
-		notice "Eriphe listens on this machine's own address only (--bind): from another computer, open the workspace through an SSH tunnel (ssh -L $WEB_PORT:127.0.0.1:$WEB_PORT <user>@<this-machine>, then https://127.0.0.1:$WEB_PORT), then turn on Tailscale in Réglages › Accès à distance (Settings › Remote access), or put it behind a reverse proxy on this machine."
+		notice "Eriphe listens on this machine's own address only (--bind): from another computer, open the workspace through an SSH tunnel (ssh -L 127.0.0.1:$WEB_PORT:127.0.0.1:$WEB_PORT -o ExitOnForwardFailure=yes <user>@<this-machine>, then https://127.0.0.1:$WEB_PORT), then turn on Tailscale in Réglages › Accès à distance (Settings › Remote access), or put it behind a reverse proxy on this machine."
 		return 0
 		;;
 	esac
 	public_address "$1" || return 0
-	notice "$1 is a public address: the workspace (port $WEB_PORT) and the API (port $API_PORT) can be reached from the Internet. Close them in your cloud provider's firewall, then open the workspace through Tailscale (Réglages › Accès à distance, Settings › Remote access) or your own domain behind a reverse proxy; open $API_PORT only if devices join over the Internet. UFW does not filter Docker's ports: use the DOCKER-USER chain, or ${2:-run this again with --bind 127.0.0.1}. Guide: https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md#eriphe-on-a-vps"
+	notice "$1 is a public address: the workspace (port $WEB_PORT) and the API (port $API_PORT) can be reached from the Internet. Close them in your cloud provider's firewall. Do the first setup through an SSH tunnel from your computer, not over the Internet: ssh -L 127.0.0.1:$WEB_PORT:127.0.0.1:$WEB_PORT -o ExitOnForwardFailure=yes <user>@<this-server>, then https://127.0.0.1:$WEB_PORT/setup. Then open the workspace through Tailscale (Réglages › Accès à distance, Settings › Remote access) or your own domain behind a reverse proxy; open $API_PORT only if devices join over the Internet. UFW does not filter Docker's ports: use the DOCKER-USER chain, or ${2:-run this again with --bind 127.0.0.1}. Guide: https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md#eriphe-on-a-vps"
 }
 
 # check_ports: the workspace's and the API's ports differ.
@@ -554,14 +569,39 @@ info() { printf '%s\n' "$INFO" | sed -n "s/^$1=//p" | tail -n 1; }
 # loopback is its own, not the machine's.
 check_model_server() {
 	[ -n "$MODEL_SERVER" ] || return 0
-	printf '%s' "$MODEL_SERVER" | grep -Eq '^https?://[A-Za-z0-9._~-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$' ||
+	printf '%s' "$MODEL_SERVER" | grep -Eq '^https?://([A-Za-z0-9._~-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$' ||
 		die "--model-server is the model server's address, e.g. http://127.0.0.1:11434"
 	[ -z "$NATIVE" ] || return 0
 	case $MODEL_SERVER in
-	*://localhost[:/]* | *://localhost | *://127.* | *://0.0.0.0*)
+	*://localhost[:/]* | *://localhost | *://127.* | *://0.0.0.0* | *://\[::1\]* | *://\[::\]*)
 		die "--model-server $MODEL_SERVER: here eriphe-node runs in a container, where $MODEL_SERVER is the container itself. Run Ollama next to it, on Eriphe's network (install/README.md, A model behind this machine), and give --model-server http://eriphe-ollama:11434"
 		;;
 	esac
+}
+
+# models_url: the model server's list of models (its /v1 path, as eriphe-node
+# makes it), or nothing without --model-server.
+models_url() {
+	[ -n "$MODEL_SERVER" ] || return 0
+	m=${MODEL_SERVER%/}
+	m=${m%/v1}
+	printf '%s/v1/models' "${m%/}"
+}
+
+# model_server_line OUT: the closing line on the model server it lends, and
+# what to do when it does not answer (OUT: the host's model_server_answers,
+# or, on a Mac without a VM, the Mac's own answer).
+model_server_line() {
+	[ -n "$MODEL_SERVER" ] || return 0
+	answers=$(printf '%s\n' "$1" | sed -n 's/^model_server_answers=//p' | tail -n 1)
+	if [ -n "$NATIVE" ]; then
+		answers=no
+		curl -s -m 5 -o /dev/null "$(models_url)" && answers=yes
+	fi
+	say ""
+	say "Lends the model server at $MODEL_SERVER (answers: ${answers:-no})."
+	[ "$answers" = yes ] ||
+		notice "the model server does not answer eriphe-node here: start it, or check the address (install/README.md, A model behind this machine), then run this again."
 }
 
 # settle: merges the options with an earlier install's, once the host has
@@ -662,6 +702,12 @@ if ! command -v docker >/dev/null 2>&1; then
     touch "$CONF/docker-installed"
     echo "eriphe-step: Docker installed"
   } >&2
+fi
+# Docker that an earlier uninstall kept for other containers: still Eriphe's
+# to remove (host_uninstall).
+if [ -f "$CONF.docker-installed" ]; then
+  mkdir -p "$CONF"
+  mv "$CONF.docker-installed" "$CONF/docker-installed"
 fi
 # Docker starts at boot; the containers restart with it.
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
@@ -1250,6 +1296,7 @@ host_up() {
 		printf 'UPDATE_CONF=%s\n' "$(updater_conf | b64)"
 		printf 'UPDATE_SH=%s\n' "$(updater_sh | b64)"
 		printf 'PIN=%s\n' "$(q "$PIN")"
+		printf 'MODELS_URL=%s\n' "$(q "$(models_url)")"
 		# PULL=missing pulls only the images not here yet (eriphe-launcher's
 		# start: updates go through the updater); UPDATE_BY=loop: the updater is
 		# eriphe-launcher's loop, not systemd.
@@ -1347,6 +1394,15 @@ else
   connected
 fi
 docker logs eriphe-node 2>&1 | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-node: /'
+# The model server it lends, asked from eriphe-node's container, as the node
+# reaches it: any HTTP answer will do (a server with a key answers 401).
+if [ -n "${MODELS_URL:-}" ]; then
+  if docker exec eriphe-node wget -S -T 5 -O /dev/null "$MODELS_URL" 2>&1 | grep -q 'HTTP/'; then
+    echo model_server_answers=yes >&3
+  else
+    echo model_server_answers=no >&3
+  fi
+fi
 if [ "$MODE" = core ]; then
   echo "eriphe-step: Started"
   # The setup code, while there is no password (kept until it is used); an
@@ -1442,13 +1498,19 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   done
 fi
 installed=
-[ -f "$CONF/docker-installed" ] && installed=1
+{ [ -f "$CONF/docker-installed" ] || [ -f "$CONF.docker-installed" ]; } && installed=1
 rm -rf "$CONF" "$DATA"
 rm -f /var/log/eriphe-install.log
 if [ -n "$installed" ]; then
   if [ -n "$(docker ps -aq 2>/dev/null)" ]; then
+    # Docker stays for the containers that use it, and is still Eriphe's to
+    # remove: the marker stays, next to the folder (whose presence says that
+    # Eriphe is installed), for a later install or uninstall.
+    touch "$CONF.docker-installed"
     echo docker_kept=1 >&3
+    echo "docker_kept_for=$(docker ps -a --format '{{.Names}}' 2>/dev/null | sort | paste -sd ' ' - | sed 's/ /, /g')" >&3
   else
+    rm -f "$CONF.docker-installed"
     echo "Removing Docker Engine (installed for Eriphe)..."
     if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
       systemctl disable --now docker.service docker.socket containerd.service >/dev/null 2>&1 || true
@@ -2441,8 +2503,10 @@ do_uninstall() {
 		on_steps host_uninstall
 		rm -f "$HOME/.eriphe-install.log"
 		was=$(printf '%s\n' "$OUT" | sed -n 's/^mode=//p')
-		! printf '%s\n' "$OUT" | grep -qx docker_kept=1 ||
-			notice "Docker stays on this computer: other containers use it."
+		if printf '%s\n' "$OUT" | grep -qx docker_kept=1; then
+			kept_for=$(printf '%s\n' "$OUT" | sed -n 's/^docker_kept_for=//p' | tail -n 1)
+			notice "Docker stays on this computer: other containers use it${kept_for:+ ($kept_for)}. Once they are gone, --uninstall again removes it."
+		fi
 		! printf '%s\n' "$OUT" | grep -qx docker_group_kept=1 ||
 			notice "the docker group stays on this computer (it could not be removed): sudo groupdel docker removes it."
 	fi
@@ -2613,7 +2677,16 @@ outcome() {
 		fi
 	fi
 	if [ "$MODE" = core ]; then
-		if [ -n "$code" ]; then
+		if [ -n "$code" ] && public_address "$addr"; then
+			# Not over the Internet: the setup code is all it takes.
+			done_=''
+			[ -n "$UPDATING" ] || done_="Done: Eriphe runs on $HERE. "
+			para "${done_}To finish, open an SSH tunnel to this server from your computer, then this address in your browser, and give the setup code:"
+			say ""
+			say "  ssh -L 127.0.0.1:$WEB_PORT:127.0.0.1:$WEB_PORT -o ExitOnForwardFailure=yes <user>@$addr"
+			say "  https://127.0.0.1:$WEB_PORT/setup"
+			say "  Setup code: $code"
+		elif [ -n "$code" ]; then
 			done_=''
 			[ -n "$UPDATING" ] || done_="Done: Eriphe runs on $HERE. "
 			para "${done_}To finish, open this address in your browser and give the setup code:"
@@ -2632,6 +2705,7 @@ outcome() {
 	elif [ -z "$UPDATING" ]; then
 		para "Done: $HERE is connected to $ASSISTANT. Go back to your browser: it now appears in Appareils (Devices)."
 	fi
+	model_server_line "$1"
 	if [ "$PIN" = edge ]; then
 		notice "it follows main, the version in development (--version latest follows the releases again)."
 	elif [ -n "$PIN" ]; then
