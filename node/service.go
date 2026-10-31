@@ -249,23 +249,8 @@ func (s *service) runOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(s.n.opt.docker, args...)
-	cmd.Env = env
-	stderr := &tailBuffer{}
-	cmd.Stderr = stderr
-	var stdin io.WriteCloser
-	var stdout io.ReadCloser
-	if s.spec.Transport == "stdio" {
-		if stdin, err = cmd.StdinPipe(); err != nil {
-			return err
-		}
-		if stdout, err = cmd.StdoutPipe(); err != nil {
-			return err
-		}
-	} else {
-		cmd.Stdout = stderr
-	}
-	if err := cmd.Start(); err != nil {
+	r, err := s.start(args, env)
+	if err != nil {
 		return err
 	}
 	// Stopping: docker stop, the CLI going away does not stop a container.
@@ -278,46 +263,85 @@ func (s *service) runOnce(ctx context.Context) error {
 		case <-stopped:
 		}
 	}()
-	fail := func(err error) error {
-		if msg := strings.TrimSpace(tail(stderr.String(), 1000)); msg != "" {
-			err = fmt.Errorf("%w: %s", err, msg)
-		}
-		return err
-	}
-
 	if s.spec.Transport == "stdio" {
-		err := s.bridge.serve(ctx, stdout, stdin, func() { s.set(svcRunning, "") })
-		// The connection is over: make sure the container is too.
-		s.n.stopServiceContainer(s.name)
-		werr := cmd.Wait()
-		if ctx.Err() != nil {
-			return nil
-		}
-		if werr != nil {
-			return fail(werr)
-		}
-		return fail(err)
+		return s.serveStdio(ctx, r)
 	}
+	return s.serveHTTP(ctx, r, target)
+}
 
+// serviceRun is one container of a service, started: a stdio one with its
+// input and output, what it prints on stderr (and stdout, over http).
+type serviceRun struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout io.ReadCloser
+	stderr *tailBuffer
+}
+
+// start starts the container's command.
+func (s *service) start(args, env []string) (*serviceRun, error) {
+	r := &serviceRun{cmd: exec.Command(s.n.opt.docker, args...), stderr: &tailBuffer{}}
+	r.cmd.Env = env
+	r.cmd.Stderr = r.stderr
+	var err error
+	if s.spec.Transport == "stdio" {
+		if r.stdin, err = r.cmd.StdinPipe(); err != nil {
+			return nil, err
+		}
+		if r.stdout, err = r.cmd.StdoutPipe(); err != nil {
+			return nil, err
+		}
+	} else {
+		r.cmd.Stdout = r.stderr
+	}
+	if err := r.cmd.Start(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// fail adds to err the end of what the container printed.
+func (r *serviceRun) fail(err error) error {
+	if msg := strings.TrimSpace(tail(r.stderr.String(), 1000)); msg != "" {
+		err = fmt.Errorf("%w: %s", err, msg)
+	}
+	return err
+}
+
+// serveStdio bridges the MCP sessions to a stdio container until either
+// ends.
+func (s *service) serveStdio(ctx context.Context, r *serviceRun) error {
+	err := s.bridge.serve(ctx, r.stdout, r.stdin, func() { s.set(svcRunning, "") })
+	// The connection is over: make sure the container is too.
+	s.n.stopServiceContainer(s.name)
+	werr := r.cmd.Wait()
+	if ctx.Err() != nil {
+		return nil
+	}
+	if werr != nil {
+		return r.fail(werr)
+	}
+	return r.fail(err)
+}
+
+// serveHTTP waits for an http container to open its port, then serves its
+// address until it exits.
+func (s *service) serveHTTP(ctx context.Context, r *serviceRun, target string) error {
 	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
+	go func() { exited <- r.cmd.Wait() }()
 	if target == "" && s.n.apple() {
 		// The container engine: its address, on its own network.
 		ip, err := s.n.appleAddress(ctx, serviceContainer(s.name), exited)
 		if err != nil {
-			s.n.stopServiceContainer(s.name)
-			if ctx.Err() != nil {
-				<-exited
+			if s.giveUp(ctx, exited) {
 				return nil
 			}
-			return fail(err)
+			return r.fail(err)
 		}
 		target = net.JoinHostPort(ip, strconv.Itoa(s.spec.Port))
 	}
 	if err := waitPort(ctx, target, exited); err != nil {
-		s.n.stopServiceContainer(s.name)
-		if ctx.Err() != nil {
-			<-exited
+		if s.giveUp(ctx, exited) {
 			return nil
 		}
 		select {
@@ -327,20 +351,31 @@ func (s *service) runOnce(ctx context.Context) error {
 			}
 		case <-time.After(15 * time.Second):
 		}
-		return fail(err)
+		return r.fail(err)
 	}
 	s.mu.Lock()
 	s.target = "http://" + target + s.spec.Path
 	s.mu.Unlock()
 	s.set(svcRunning, "")
-	err = <-exited
+	err := <-exited
 	s.mu.Lock()
 	s.target = ""
 	s.mu.Unlock()
 	if ctx.Err() != nil {
 		return nil
 	}
-	return fail(err)
+	return r.fail(err)
+}
+
+// giveUp stops a container that did not come up; true when the service is
+// being stopped, once the container is gone.
+func (s *service) giveUp(ctx context.Context, exited chan error) bool {
+	s.n.stopServiceContainer(s.name)
+	if ctx.Err() != nil {
+		<-exited
+		return true
+	}
+	return false
 }
 
 // waitPort waits until addr answers HTTP (any status: a published port
