@@ -145,3 +145,15 @@ func TestWorkspaceLanguage(t *testing.T) {
 		t.Fatalf("web.lang fr: %s", got)
 	}
 }
+
+// The setup page says where its code is: printed by the installer, and by
+// auth setup-code, not only in a log the owner may never open.
+func TestSetupPageSaysWhereTheCodeIs(t *testing.T) {
+	tw := newTestWeb(t)
+	for lang, want := range map[string]string{"fr": "la fin de l&#39;installation", "en": "the end of the install"} {
+		_, body, _ := tw.do("GET", "/setup", nil, map[string]string{"Accept-Language": lang})
+		if !strings.Contains(body, want) || !strings.Contains(body, "auth setup-code") {
+			t.Errorf("%s: the setup page does not say where the code is", lang)
+		}
+	}
+}
