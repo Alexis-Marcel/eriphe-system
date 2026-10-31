@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/oauth2"
 )
 
 // fakeAS is an MCP server protected by its own OAuth authorization server:
@@ -330,5 +332,60 @@ func TestConnectRejects(t *testing.T) {
 	var list []serverInfo
 	if code := call(t, srv, "GET", "/v1/servers", "", &list); code != 200 || len(list) != 1 || list[0].Auth != "oauth" {
 		t.Fatalf("list: %d %+v", code, list)
+	}
+}
+
+// oauthHandler: the stored token outside a connect; during one, a handler
+// for the client of the configuration, of the form, the one registered for
+// this redirect, or a new registration. A client file that cannot be read
+// fails the attempt.
+func TestOAuthHandler(t *testing.T) {
+	dir := t.TempDir()
+	store, err := openStore(filepath.Join(dir, "core.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, secret := filepath.Join(dir, "id"), filepath.Join(dir, "secret")
+	os.WriteFile(id, []byte("client-1"), 0o600)
+	os.WriteFile(secret, []byte("secret-1"), 0o600)
+	p := newPool(store, nil)
+	const redirect = "http://127.0.0.1:8976/callback"
+	handler := func(o OAuthConfig, flow bool, clientID string) (*oauthGate, error) {
+		u := &upstream{p: p, name: "docs", srv: Server{URL: "https://docs.example.org/mcp", Auth: &ServerAuth{OAuth: &o}}, clientID: clientID}
+		if flow {
+			u.flow = &authFlow{redirect: redirect}
+		}
+		return p.oauthHandler(u)
+	}
+
+	if g, err := handler(OAuthConfig{}, false, ""); err != nil || g.ts != nil || g.inner != nil {
+		t.Fatalf("no token, no connect: %+v %v", g, err)
+	}
+	store.saveOAuthToken("docs", &oauth2.Config{ClientID: "c"}, &oauth2.Token{AccessToken: "a", RefreshToken: "r"})
+	if g, err := handler(OAuthConfig{}, false, ""); err != nil || g.ts == nil || g.inner != nil {
+		t.Fatalf("stored token: %+v %v", g, err)
+	}
+	store.saveOAuthClient("docs", oauthClient{ClientID: "registered", RedirectURI: redirect})
+	for name, c := range map[string]struct {
+		o        OAuthConfig
+		clientID string
+	}{
+		"dynamic":           {OAuthConfig{}, ""},
+		"metadata":          {OAuthConfig{ClientMetadata: "https://eriphe.example.org/client.json"}, ""},
+		"client file":       {OAuthConfig{ClientIDFile: id}, ""},
+		"client and secret": {OAuthConfig{ClientIDFile: id, ClientSecretFile: secret}, ""},
+		"typed in the form": {OAuthConfig{ClientIDFile: filepath.Join(dir, "missing")}, "typed"},
+	} {
+		if g, err := handler(c.o, true, c.clientID); err != nil || g.ts == nil || g.inner == nil {
+			t.Errorf("%s: %+v %v", name, g, err)
+		}
+	}
+	for name, o := range map[string]OAuthConfig{
+		"client file missing": {ClientIDFile: filepath.Join(dir, "missing")},
+		"secret file missing": {ClientIDFile: id, ClientSecretFile: filepath.Join(dir, "missing")},
+	} {
+		if _, err := handler(o, true, ""); err == nil {
+			t.Errorf("%s: no error", name)
+		}
 	}
 }

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -283,4 +285,90 @@ func assignedSpec(t *testing.T, c *core, node, id string) nodeTaskSpec {
 		t.Fatalf("no task %s in %s", id, rec.Body)
 	}
 	return nodeTaskSpec{}
+}
+
+// The folder API: behind the token, the workspace's methods, their errors
+// as status codes with the folder error's code.
+func TestFolderAPI(t *testing.T) {
+	c, _ := foldersCore(t)
+	mux := http.NewServeMux()
+	c.folderRoutes(mux, "api-token")
+	call := func(method, path, body, token string) (int, string) {
+		t.Helper()
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.RemoteAddr = "127.0.0.1:1234"
+		r.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, r)
+		return rec.Code, rec.Body.String()
+	}
+
+	if code, _ := call("GET", "/v1/folders", "", "wrong"); code != http.StatusUnauthorized {
+		t.Fatalf("without the token: %d", code)
+	}
+	if code, body := call("POST", "/v1/folders", `{"name":"Clients","node":"nas","share":"data","path":"Clients","access":"drop"}`, "api-token"); code != http.StatusCreated || !strings.Contains(body, `"name":"Clients"`) {
+		t.Fatalf("add: %d %s", code, body)
+	}
+	if code, body := call("GET", "/v1/folders", "", "api-token"); code != http.StatusOK || !strings.Contains(body, `"folders":[{`) || !strings.Contains(body, "Clients") {
+		t.Fatalf("list: %d %s", code, body)
+	}
+	for _, x := range []struct {
+		method, path, body string
+		code               int
+		want               string
+	}{
+		{"POST", "/v1/folders", `{"name":`, http.StatusBadRequest, ""},
+		{"POST", "/v1/folders", `{"name":"clients","node":"nas","share":"data","path":"x"}`, http.StatusConflict, `"code":"exists"`},
+		{"POST", "/v1/folders", `{"name":"Out","node":"nas","share":"data","path":"escape"}`, http.StatusForbidden, `"code":"outside"`},
+		{"POST", "/v1/folders", `{"name":"P","node":"pc","share":"data","path":""}`, http.StatusServiceUnavailable, `"code":"offline"`},
+		{"POST", "/v1/folders", `{"name":"U","node":"nas","share":"nope","path":""}`, http.StatusNotFound, `"code":"unknown_share"`},
+		{"GET", "/v1/nodes/nas/shares", "", http.StatusOK, `{"shares":[{"name":"data","writable":true},{"name":"media","writable":false}]}`},
+		{"GET", "/v1/nodes/pc/shares", "", http.StatusOK, `{"shares":[]}`},
+		{"GET", "/v1/nodes/nas/shares/data/dirs?path=work", "", http.StatusOK, `"dirs":["ACME"]`},
+		{"GET", "/v1/nodes/nas/shares/data/dirs?path=home&check=1", "", http.StatusOK, `"code":"holds_sensitive"`},
+		{"GET", "/v1/nodes/nas/shares/data/dirs?path=escape", "", http.StatusForbidden, `"code":"outside"`},
+		{"GET", "/v1/nodes/pc/shares/data/dirs", "", http.StatusServiceUnavailable, `"code":"offline"`},
+		{"DELETE", "/v1/folders/nope", "", http.StatusNotFound, `{"code":"not_found","error":"no such folder"}`},
+		{"DELETE", "/v1/folders/clients", "", http.StatusNoContent, ""},
+	} {
+		if code, body := call(x.method, x.path, x.body, "api-token"); code != x.code || !strings.Contains(body, x.want) {
+			t.Errorf("%s %s: %d %s", x.method, x.path, code, body)
+		}
+	}
+}
+
+// folderHTTPError: the status of each folder error code.
+func TestFolderHTTPError(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		code int
+	}{
+		{errNoFolder, http.StatusNotFound},
+		{fmt.Errorf("wrapped: %w", errNoFolder), http.StatusNotFound},
+		{&folderError{Code: "bad_name"}, http.StatusBadRequest},
+		{&folderError{Code: "offline"}, http.StatusServiceUnavailable},
+		{&folderError{Code: "unavailable"}, http.StatusServiceUnavailable},
+		{&folderError{Code: "old_node"}, http.StatusServiceUnavailable},
+		{&folderError{Code: "suspended"}, http.StatusServiceUnavailable},
+		{&folderError{Code: "exists"}, http.StatusConflict},
+		{&folderError{Code: "not_found"}, http.StatusNotFound},
+		{&folderError{Code: "unknown_share"}, http.StatusNotFound},
+		{&folderError{Code: "outside"}, http.StatusForbidden},
+		{&folderError{Code: "sensitive"}, http.StatusForbidden},
+		{&folderError{Code: "eriphe_data"}, http.StatusForbidden},
+		{&folderError{Code: "holds_sensitive"}, http.StatusForbidden},
+		{&folderError{Code: "unreadable"}, http.StatusForbidden},
+		{&folderError{Code: "read_only_share"}, http.StatusForbidden},
+		{errors.New("disk full"), http.StatusInternalServerError},
+	} {
+		rec := httptest.NewRecorder()
+		folderHTTPError(rec, c.err)
+		if rec.Code != c.code {
+			t.Errorf("%v: %d, want %d", c.err, rec.Code, c.code)
+		}
+		var fe *folderError
+		if errors.As(c.err, &fe) && !strings.Contains(rec.Body.String(), `"code":"`+fe.Code+`"`) {
+			t.Errorf("%v: body %s", c.err, rec.Body)
+		}
+	}
 }

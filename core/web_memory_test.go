@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newMemoryWeb(t *testing.T) (*testWeb, string) {
@@ -199,5 +200,38 @@ func TestHXTriggerIsASCII(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(h), &v); err != nil || v.Toast.Message != "Épinglé « ok » 🎉\x01" || v.Toast.Kind != "error" {
 		t.Fatalf("%s: %+v %v", h, v, err)
+	}
+}
+
+// "Extract now": nothing to do, a run started, one already running, and no
+// memory at all, each as a toast.
+func TestMemoryExtractNow(t *testing.T) {
+	tw, csrf := newMemoryWeb(t)
+	tw.c.mem.now = func() time.Time { return time.Now().Add(time.Minute) }
+	extract := func(form url.Values) (msg, kind string) {
+		t.Helper()
+		_, _, h := tw.post("/memory/extract", form, csrf)
+		var v struct {
+			Toast struct{ Message, Kind string }
+		}
+		if err := json.Unmarshal([]byte(h.Get("HX-Trigger")), &v); err != nil {
+			t.Fatalf("trigger %q: %v", h.Get("HX-Trigger"), err)
+		}
+		return v.Toast.Message, v.Toast.Kind
+	}
+	if msg, kind := extract(nil); msg != "Rien de nouveau à extraire aujourd'hui." || kind != "ok" {
+		t.Fatalf("nothing: %q %s", msg, kind)
+	}
+	dayActivity(t, tw.c)
+	msg, kind := extract(url.Values{"day": {time.Now().Format("2006-01-02")}})
+	if !strings.HasPrefix(msg, "Extraction lancée (tâche ") || kind != "ok" {
+		t.Fatalf("started: %q %s", msg, kind)
+	}
+	if _, kind := extract(nil); kind != "error" {
+		t.Fatalf("twice: %s", kind)
+	}
+	tw.c.mem = nil
+	if msg, kind := extract(nil); msg != errMemoryOff.Error() || kind != "error" {
+		t.Fatalf("no memory: %q %s", msg, kind)
 	}
 }

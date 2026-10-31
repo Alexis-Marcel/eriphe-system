@@ -475,3 +475,59 @@ func TestCatalogBrainAgent(t *testing.T) {
 	none := newDynamicCore(t, nil)
 	wantKey(t, none.setBrainAgent("sonnet"), "catalog.nobrain")
 }
+
+// bindServerSecrets points each credential at its vault name, only where
+// the server's authentication takes it, and refuses any other.
+func TestBindServerSecrets(t *testing.T) {
+	bearer := func() Server { return Server{URL: "https://x.example.org/mcp", Auth: &ServerAuth{}} }
+	oauth := func() Server {
+		return Server{URL: "https://x.example.org/mcp", Auth: &ServerAuth{OAuth: &OAuthConfig{}}}
+	}
+	local := func() Server { return Server{Run: json.RawMessage(`{"image":"img","transport":"stdio"}`)} }
+
+	s := bearer()
+	writes, err := bindServerSecrets("docs", &s, credentials{"token": " tok ", "client-id": ""})
+	if err != nil || s.Auth.BearerFile != "vault:server.docs.token" || len(writes) != 1 || writes["server.docs.token"] != "tok" {
+		t.Fatalf("token: %v %+v %v", writes, s.Auth, err)
+	}
+	s = oauth()
+	writes, err = bindServerSecrets("docs", &s, credentials{"client-id": "id", "client-secret": "secret"})
+	if err != nil || s.Auth.OAuth.ClientIDFile != "vault:server.docs.client-id" || s.Auth.OAuth.ClientSecretFile != "vault:server.docs.client-secret" ||
+		writes["server.docs.client-id"] != "id" || writes["server.docs.client-secret"] != "secret" {
+		t.Fatalf("client: %v %+v %v", writes, s.Auth.OAuth, err)
+	}
+	s = local()
+	writes, err = bindServerSecrets("svc", &s, credentials{"env:API_KEY": "k"})
+	spec, _ := decodeRun(s.Run)
+	if err != nil || spec.Env["API_KEY"].File != "vault:service.svc.api_key" || writes["service.svc.api_key"] != "k" || spec.Image != "img" {
+		t.Fatalf("env: %v %+v %v", writes, spec, err)
+	}
+	// Empty values change nothing.
+	s = bearer()
+	if writes, err := bindServerSecrets("docs", &s, credentials{"token": "  "}); err != nil || len(writes) != 0 || s.Auth.BearerFile != "" {
+		t.Fatalf("empty: %v %+v %v", writes, s.Auth, err)
+	}
+
+	for name, c := range map[string]struct {
+		s     Server
+		creds credentials
+	}{
+		"token without auth":         {Server{URL: "https://x.example.org/mcp"}, credentials{"token": "t"}},
+		"token with OAuth":           {oauth(), credentials{"token": "t"}},
+		"token with none":            {Server{URL: "https://x.example.org/mcp", Auth: &ServerAuth{None: true}}, credentials{"token": "t"}},
+		"token for a local server":   {Server{Run: local().Run, Auth: &ServerAuth{}}, credentials{"token": "t"}},
+		"client with a bearer":       {bearer(), credentials{"client-id": "i"}},
+		"client secret without auth": {Server{URL: "https://x.example.org/mcp"}, credentials{"client-secret": "s"}},
+		"env for a remote server":    {bearer(), credentials{"env:API_KEY": "k"}},
+		"env with a bad run":         {Server{Run: json.RawMessage(`{"image":"img","unknown":1}`)}, credentials{"env:API_KEY": "k"}},
+		"env with a bad name":        {local(), credentials{"env:1BAD": "k"}},
+		"unknown slot":               {bearer(), credentials{"password": "p"}},
+	} {
+		s := c.s
+		writes, err := bindServerSecrets("docs", &s, c.creds)
+		var ce *catalogError
+		if !errors.As(err, &ce) || ce.Status != http.StatusBadRequest || writes != nil {
+			t.Errorf("%s: %v %v", name, writes, err)
+		}
+	}
+}

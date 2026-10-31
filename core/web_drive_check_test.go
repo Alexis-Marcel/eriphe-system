@@ -243,3 +243,102 @@ func TestAuthErrorCode(t *testing.T) {
 		}
 	}
 }
+
+// testDriveToken: each answer of Google's token endpoint and of Drive's
+// about, as a line; the secrets and tokens are never in it.
+func TestDriveTestToken(t *testing.T) {
+	_, c, _ := filesCore(t, nil)
+	var token, about func(w http.ResponseWriter)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/token" {
+			token(w)
+		} else {
+			about(w)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	old, oldAPI := googleOAuth, driveAPI
+	googleOAuth.TokenURL, driveAPI = srv.URL+"/token", srv.URL+"/drive/v3"
+	t.Cleanup(func() { googleOAuth, driveAPI = old, oldAPI })
+
+	connect := func(refresh string) {
+		t.Helper()
+		tok, _ := json.Marshal(map[string]string{"client_id": testClientID, "client_secret": testClientSecret, "refresh_token": refresh})
+		err := c.putDrive("en", func(fc *filesConfig) {
+			fc.Accounts = []filesAccount{{Name: driveAccount, Provider: "google", Scopes: []string{scopeDrive}}}
+			fc.Accounts[0].Auth.TokenEnv = driveTokenEnv
+		}, credentials{"env:" + driveTokenEnv: string(tok)})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	answer := func(status int, body string) func(http.ResponseWriter) {
+		return func(w http.ResponseWriter) {
+			w.WriteHeader(status)
+			w.Write([]byte(body))
+		}
+	}
+	granted := answer(200, `{"access_token":"`+checkAccess+`"}`)
+	run := func() driveTest {
+		t.Helper()
+		d := &driveChecker{lang: "en", hc: srv.Client()}
+		c.testDriveToken(t.Context(), d)
+		for _, l := range d.out.Lines {
+			for _, s := range []string{testClientSecret, checkRefresh, checkAccess} {
+				if strings.Contains(l.Text+l.Detail, s) {
+					t.Fatalf("a secret is shown: %+v", l)
+				}
+			}
+		}
+		return d.out
+	}
+
+	connect(checkRefresh)
+	for _, x := range []struct {
+		name         string
+		token, about func(http.ResponseWriter)
+		state, want  string
+		reconnect    bool
+	}{
+		{"client refused", answer(401, `{"error":"invalid_client","error_description":"bad secret `+testClientSecret+`"}`), nil,
+			"err", "Google refuses the app", true},
+		{"other error", answer(400, `{"error":"temporarily_unavailable","error_description":"for `+checkRefresh+`"}`), nil,
+			"err", "Google answered: temporarily_unavailable for ••••", false},
+		{"no access token", answer(200, `{}`), nil, "err", "Google answered:", false},
+		{"not JSON", answer(502, `<html>`), nil, "err", "Google answered: http 502", false},
+		{"API error", granted, answer(500, `{"error":{"message":"backend error for `+checkAccess+`"}}`),
+			"err", "Google Drive answered with error 500.", false},
+		{"API off", granted, answer(403, `{"error":{"errors":[{"reason":"accessNotConfigured"}]}}`),
+			"err", "The Google Drive API is not enabled", false},
+		{"API off, details", granted, answer(403, `{"error":{"details":[{"reason":"SERVICE_DISABLED"}]}}`),
+			"err", "The Google Drive API is not enabled", false},
+		{"usage only", granted, answer(200, `{"user":{"emailAddress":"sam@example.com"},"storageQuota":{"usage":"1024"}}`),
+			"ok", "Connected as sam@example.com. 0.0 GB used.", false},
+		{"no quota", granted, answer(200, `{"user":{"emailAddress":"sam@example.com"}}`),
+			"ok", "Connected as sam@example.com.", false},
+	} {
+		token, about = x.token, x.about
+		out := run()
+		if len(out.Lines) != 1 || out.Lines[0].State != x.state || !strings.Contains(out.Lines[0].Text+" "+out.Lines[0].Detail, x.want) || out.Reconnect != x.reconnect {
+			t.Errorf("%s: %+v", x.name, out)
+		}
+	}
+	if out := run(); strings.Contains(out.Lines[0].Text, "used") {
+		t.Errorf("no quota: %+v", out)
+	}
+
+	// Drive out of reach once the token is fresh.
+	token = granted
+	driveAPI = "http://127.0.0.1:1/drive/v3"
+	if out := run(); len(out.Lines) != 1 || !strings.Contains(out.Lines[0].Text, "Google could not be reached") {
+		t.Errorf("drive unreachable: %+v", out)
+	}
+	driveAPI = srv.URL + "/drive/v3"
+
+	// A stored authorization without a refresh token.
+	connect("")
+	if out := run(); len(out.Lines) != 1 || !strings.Contains(out.Lines[0].Text, "cannot be read") || !out.Reconnect {
+		t.Errorf("no refresh token: %+v", out)
+	}
+}

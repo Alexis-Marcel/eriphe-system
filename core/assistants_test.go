@@ -411,3 +411,43 @@ func TestWebAssistants(t *testing.T) {
 		t.Fatal("a bad grant saved")
 	}
 }
+
+// readOnlyField: a workspace edit may set what the file leaves out, or the
+// file's own value, but not change what the file sets. The role counts
+// even when the file has none.
+func TestReadOnlyField(t *testing.T) {
+	file := Assistant{Role: roleTest, DisplayName: "Sam", Agent: "sonnet", Node: "nas", Instructions: "x",
+		Tools: []string{"docs"}, Resources: []ResourceRef{{Kind: "repo", Ref: "o/r"}}, Triggers: []string{triggerConversation}, ReportsTo: brainAssistant}
+	for _, c := range []struct {
+		file, ws Assistant
+		want     string
+	}{
+		{file, Assistant{}, ""},
+		{file, file, ""},
+		{file, Assistant{Role: "other"}, "role"},
+		{Assistant{}, Assistant{Role: roleTest}, "role"},
+		{file, Assistant{DisplayName: "Alex"}, "display_name"},
+		{Assistant{}, Assistant{DisplayName: "Alex"}, ""},
+		{file, Assistant{Agent: "opus"}, "agent"},
+		{Assistant{}, Assistant{Agent: "opus"}, ""},
+		{file, Assistant{Node: "pc"}, "node"},
+		{Assistant{}, Assistant{Node: "pc"}, ""},
+		{file, Assistant{Instructions: "y"}, "instructions"},
+		{Assistant{InstructionsFile: "/p.md"}, Assistant{Instructions: "y"}, "instructions"},
+		{Assistant{}, Assistant{Instructions: "y"}, ""},
+		{file, Assistant{Tools: []string{"mail"}}, "tools"},
+		{Assistant{}, Assistant{Tools: []string{"mail"}}, ""},
+		{file, Assistant{Resources: []ResourceRef{{Kind: "repo", Ref: "o/other"}}}, "resources"},
+		{Assistant{}, Assistant{Resources: []ResourceRef{{Kind: "repo", Ref: "o/other"}}}, ""},
+		{file, Assistant{Triggers: []string{"schedule"}}, "triggers"},
+		{Assistant{}, Assistant{Triggers: []string{"schedule"}}, ""},
+		{file, Assistant{ReportsTo: "other"}, "reports_to"},
+		{Assistant{}, Assistant{ReportsTo: "other"}, ""},
+		// The first field that differs is named.
+		{file, Assistant{Agent: "opus", Tools: []string{"mail"}}, "agent"},
+	} {
+		if got := readOnlyField(c.file, c.ws); got != c.want {
+			t.Errorf("readOnlyField(%+v, %+v) = %q, want %q", c.file, c.ws, got, c.want)
+		}
+	}
+}
