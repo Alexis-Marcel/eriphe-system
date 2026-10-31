@@ -214,6 +214,11 @@ Usage: curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest
                       for the next runs; env ERIPHE_WEB_PORT)
   --api-port N        core mode: the port other devices join on (default
                       8800, kept; env ERIPHE_API_PORT)
+  --bind ADDR         core mode on Linux: the IPv4 address of this machine
+                      the workspace and the API listen on (default 0.0.0.0,
+                      every IPv4 address; 127.0.0.1 when they are reached
+                      only through Tailscale or a reverse proxy here; kept;
+                      env ERIPHE_BIND)
   --version V         pin a release (0.2.0, or 0.2 for its fixes), edge to
                       follow main (testers), or latest: the releases again
   --rollback          go back to the version before the last update
@@ -273,7 +278,9 @@ parse_args() {
 	CA_HASH=${ERIPHE_CA_HASH:-}
 	assistant=${ERIPHE_ASSISTANT_NAME:-}
 	WEB_PORT=${ERIPHE_WEB_PORT:-} API_PORT=${ERIPHE_API_PORT:-} PORT_OPT=''
+	BIND=${ERIPHE_BIND:-} BIND_OPT='' BIND_SET=''
 	[ -n "$LABELS" ] && LABELS_SET=1
+	[ -n "$BIND" ] && BIND_SET=1
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--*=*)
@@ -284,9 +291,10 @@ parse_args() {
 			;;
 		esac
 		case $1 in
-		--core | --join-token | --name | --labels | --ca-hash | --version | --assistant-name | --web-port | --api-port)
+		--core | --join-token | --name | --labels | --ca-hash | --version | --assistant-name | --web-port | --api-port | --bind)
 			[ $# -ge 2 ] || die "$1 needs a value"
 			case $1 in
+			--bind) BIND=$2 BIND_OPT=1 BIND_SET=1 ;;
 			--web-port) WEB_PORT=$2 PORT_OPT=1 ;;
 			--api-port) API_PORT=$2 PORT_OPT=1 ;;
 			--assistant-name) assistant=$2 ;;
@@ -367,8 +375,82 @@ parse_args() {
 	if [ "$MODE" = node ]; then
 		[ -z "$PORT_OPT" ] || die "--web-port and --api-port are for --core-mode: a node opens no port"
 		WEB_PORT='' API_PORT='' PORTS_SET=''
+		[ -z "$BIND_OPT" ] || die "--bind is for --core-mode: a node opens no port"
+		BIND='' BIND_SET=''
+	fi
+	if [ -n "$BIND" ]; then
+		ipv4 "$BIND" || die "--bind is an IPv4 address of this machine, such as 127.0.0.1 (not $BIND)"
+		[ "${OS:-}" != Darwin ] || die "--bind is for Linux: on a Mac, eriphe-core listens on every address"
 	fi
 	check_shares
+}
+
+# ipv4 ADDR: ADDR is an IPv4 address (four numbers of 0 to 255).
+ipv4() {
+	printf '%s' "$1" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || return 1
+	for n in $(printf '%s' "$1" | tr . ' '); do
+		[ "$n" -le 255 ] || return 1
+	done
+}
+
+# public_address ADDR: ADDR can be reached from the Internet: not a private
+# address (RFC 1918, IPv6 fc00::/7), nor a shared one (CGNAT and Tailscale's
+# 100.64.0.0/10), loopback, link-local or unspecified.
+public_address() {
+	a=$(printf '%s' "$1" | tr 'A-F' 'a-f' | sed 's/^\[//; s/\]$//')
+	case $a in
+	'' | 0.0.0.0 | :: | ::1) return 1 ;;
+	::ffff:*.*) public_address "${a#::ffff:}" ;;
+	fc* | fd* | fe[89ab]*:*) return 1 ;;
+	*:*) return 0 ;;
+	*)
+		ipv4 "$a" || return 1
+		o1=${a%%.*} r=${a#*.}
+		o2=${r%%.*}
+		case $o1 in
+		0 | 10 | 127) return 1 ;;
+		169) [ "$o2" != 254 ] ;;
+		172) [ "$o2" -lt 16 ] || [ "$o2" -gt 31 ] ;;
+		192) [ "$o2" != 168 ] ;;
+		100) [ "$o2" -lt 64 ] || [ "$o2" -gt 127 ] ;;
+		*) return 0 ;;
+		esac
+		;;
+	esac
+}
+
+# host_tz: this machine's time zone (an IANA name), or nothing.
+host_tz() {
+	tz=''
+	if command -v timedatectl >/dev/null 2>&1; then
+		tz=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+	fi
+	[ -n "$tz" ] || tz=$(sed -n 1p /etc/timezone 2>/dev/null || true)
+	if [ -z "$tz" ] && [ -L /etc/localtime ]; then
+		tz=$(readlink /etc/localtime 2>/dev/null || true)
+		case $tz in
+		*zoneinfo/*) tz=${tz#*zoneinfo/} ;;
+		*) tz='' ;;
+		esac
+	fi
+	if printf '%s' "$tz" | grep -Eq '^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$'; then
+		printf '%s' "$tz"
+	fi
+}
+
+# exposed_notice ADDR [HOW]: what to do when the address the workspace is
+# printed with is public (a server rented in the cloud): it is reachable from
+# the Internet. HOW: how to listen on 127.0.0.1 only. On 127.0.0.1 (--bind),
+# how to reach it.
+exposed_notice() {
+	case $1 in
+	127.*)
+		notice "Eriphe listens on this machine's own address only (--bind): from another computer, open the workspace through an SSH tunnel (ssh -L $WEB_PORT:127.0.0.1:$WEB_PORT <user>@<this-machine>, then https://127.0.0.1:$WEB_PORT), then turn on Tailscale in Réglages › Accès à distance (Settings › Remote access), or put it behind a reverse proxy on this machine."
+		return 0
+		;;
+	esac
+	public_address "$1" || return 0
+	notice "$1 is a public address: the workspace (port $WEB_PORT) and the API (port $API_PORT) can be reached from the Internet. Close them in your cloud provider's firewall, then open the workspace through Tailscale (Réglages › Accès à distance, Settings › Remote access) or your own domain behind a reverse proxy; open $API_PORT only if devices join over the Internet. UFW does not filter Docker's ports: use the DOCKER-USER chain, or ${2:-run this again with --bind 127.0.0.1}. Guide: https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md#eriphe-on-a-vps"
 }
 
 # check_ports: the workspace's and the API's ports differ.
@@ -481,7 +563,22 @@ settle() {
 	[ -n "$API_PORT" ] || API_PORT=$(saved api_port)
 	WEB_PORT=${WEB_PORT:-8443} API_PORT=${API_PORT:-8800}
 	check_ports
+	CORE_TZ=''
 	if [ "$MODE" = core ]; then
+		[ -n "$BIND_SET" ] || BIND=$(saved bind)
+		[ "$BIND" != 0.0.0.0 ] || BIND=''
+		# eriphe-core's time zone: TZ if given, else the one kept, else this
+		# machine's on a new install only (an older one keeps eriphe-core's
+		# own default). In eriphe-launcher's container, whose zone is not the
+		# host's, TZ alone says it.
+		if [ -n "${TZ:-}" ] || [ -n "${HOST_DATA:-}" ]; then
+			CORE_TZ=${TZ:-}
+		else
+			CORE_TZ=$(saved tz)
+			if [ -z "$CORE_TZ" ] && [ -z "$(saved mode)" ]; then
+				CORE_TZ=$(host_tz)
+			fi
+		fi
 		CORE_URL=http://eriphe-core:8800
 		# eriphe-core on the Mac itself, next to the node.
 		[ -z "$NATIVE" ] || CORE_URL=http://127.0.0.1:$API_PORT
@@ -590,14 +687,16 @@ EOF
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    ports: ["${API_PORT:-8800}:8800", "${WEB_PORT:-8443}:8443"]
+    # IPv4 only: on [::], Docker's userland proxy would hand eriphe-core
+    # every IPv6 client with the bridge's address instead of its own.
+    ports: ["${BIND:-0.0.0.0}:${API_PORT:-8800}:8800", "${BIND:-0.0.0.0}:${WEB_PORT:-8443}:8443"]
     environment:
       # The workspace shows the command that updates it.
       ERIPHE_INSTALL: $INSTALL
 EOF
 		# The join commands give the port the API is published on.
 		[ -z "${API_PORT:-}" ] || [ "$API_PORT" = 8800 ] || printf '      ERIPHE_API_PORT: "%s"\n' "$API_PORT"
-		[ -z "${TZ:-}" ] || printf '      TZ: %s\n' "$(q "$TZ")"
+		[ -z "${CORE_TZ:-}" ] || printf '      TZ: %s\n' "$(q "$CORE_TZ")"
 		cat <<EOF
     volumes:
       - $data/core:/data
@@ -765,6 +864,8 @@ version=$PIN
 shares=$SHARES
 web_port=$WEB_PORT
 api_port=$API_PORT
+bind=${BIND:-}
+tz=${CORE_TZ:-}
 EOF
 }
 
@@ -1307,11 +1408,15 @@ fi
 installed=
 [ -f "$CONF/docker-installed" ] && installed=1
 rm -rf "$CONF" "$DATA"
+rm -f /var/log/eriphe-install.log
 if [ -n "$installed" ]; then
   if [ -n "$(docker ps -aq 2>/dev/null)" ]; then
     echo docker_kept=1 >&3
   else
     echo "Removing Docker Engine (installed for Eriphe)..."
+    if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+      systemctl disable --now docker.service docker.socket containerd.service >/dev/null 2>&1 || true
+    fi
     if command -v apt-get >/dev/null 2>&1; then
       DEBIAN_FRONTEND=noninteractive apt-get purge -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin \
         docker-compose-plugin docker-ce-rootless-extras docker-model-plugin >/dev/null 2>&1 || true
@@ -1331,7 +1436,11 @@ if [ -n "$installed" ]; then
       zypper --non-interactive remove docker docker-compose >/dev/null 2>&1 || true
     fi
     rm -rf /var/lib/docker /var/lib/containerd
-    groupdel docker >/dev/null 2>&1 || true
+    # The group Docker's packages made, which they leave behind.
+    if grep -q '^docker:' /etc/group; then
+      groupdel docker >/dev/null 2>&1 || delgroup docker >/dev/null 2>&1 || true
+      ! grep -q '^docker:' /etc/group || echo docker_group_kept=1 >&3
+    fi
   fi
 fi
 echo "eriphe-step: Removed"
@@ -2123,8 +2232,13 @@ native_up() {
 	step Downloaded
 
 	if [ "$MODE" = core ]; then
-		load "$CORE_LABEL" "$(plist "$CORE_LABEL" keep "$E/core.log" /usr/bin/env "ERIPHE_API_LISTEN=0.0.0.0:$API_PORT" \
-			"ERIPHE_WEB_LISTEN=0.0.0.0:$WEB_PORT" "$E/bin/eriphe-core" -data "$E/core")"
+		if [ -n "$CORE_TZ" ]; then
+			load "$CORE_LABEL" "$(plist "$CORE_LABEL" keep "$E/core.log" /usr/bin/env "ERIPHE_API_LISTEN=0.0.0.0:$API_PORT" \
+				"ERIPHE_WEB_LISTEN=0.0.0.0:$WEB_PORT" "TZ=$CORE_TZ" "$E/bin/eriphe-core" -data "$E/core")"
+		else
+			load "$CORE_LABEL" "$(plist "$CORE_LABEL" keep "$E/core.log" /usr/bin/env "ERIPHE_API_LISTEN=0.0.0.0:$API_PORT" \
+				"ERIPHE_WEB_LISTEN=0.0.0.0:$WEB_PORT" "$E/bin/eriphe-core" -data "$E/core")"
+		fi
 		if [ ! -f "$E/node/node.json" ]; then
 			note "Waiting for eriphe-core..."
 			i=0
@@ -2245,6 +2359,10 @@ to_screen() {
 	if [ "$OS" = Darwin ] && [ -n "$UNINSTALL" ]; then
 		t=${TMPDIR:-/tmp}
 		LOG=${t%/}/eriphe-uninstall.log # ~/.eriphe goes
+	elif [ -n "$UNINSTALL" ]; then
+		# The install's log goes with Eriphe: the uninstall's own is apart.
+		t=${TMPDIR:-/tmp}
+		LOG=$(mktemp "${t%/}/eriphe-uninstall.XXXXXX") || die "cannot write in ${t%/}"
 	elif [ "$OS" = Darwin ]; then
 		LOG=$HOME/.eriphe/install.log
 	elif [ "$(id -u)" = 0 ]; then
@@ -2284,9 +2402,12 @@ do_uninstall() {
 	else
 		ROOT_WHY="it removes what Eriphe installed for the whole computer"
 		on_steps host_uninstall
+		rm -f "$HOME/.eriphe-install.log"
 		was=$(printf '%s\n' "$OUT" | sed -n 's/^mode=//p')
 		! printf '%s\n' "$OUT" | grep -qx docker_kept=1 ||
 			notice "Docker stays on this computer: other containers use it."
+		! printf '%s\n' "$OUT" | grep -qx docker_group_kept=1 ||
+			notice "the docker group stays on this computer (it could not be removed): sudo groupdel docker removes it."
 	fi
 	say ""
 	if [ "$was" = core ]; then
@@ -2440,6 +2561,7 @@ password_reset() {
 # outcome OUT: what was done, what to do next, where the logs are.
 outcome() {
 	addr=$(lan_address)
+	[ -z "${BIND:-}" ] || addr=$BIND
 	addr=${addr:-<this-computer>}
 	code=$(printf '%s\n' "$1" | sed -n 's/^setup_code=//p')
 	now=$(printf '%s\n' "$1" | sed -n 's/^version=//p')
@@ -2467,6 +2589,7 @@ outcome() {
 			para "${done_}Open https://$addr:$WEB_PORT in your browser and sign in (forgotten password: $(password_reset))."
 		fi
 		[ -n "$UPDATING" ] || notice "to connect your other computers, open Réglages › Appareils › Connecter un appareil (Settings › Devices › Connect a device) in your browser."
+		exposed_notice "$addr"
 		[ "$OS" != Darwin ] || [ -n "$UPDATING" ] ||
 			notice "Eriphe runs on this Mac only while $(id -un) is logged in to it: it starts at login and stops at logout. For an Eriphe that is always there, prefer a machine that stays on (a NAS, a mini-PC, a server) as its home."
 	elif [ -z "$UPDATING" ]; then

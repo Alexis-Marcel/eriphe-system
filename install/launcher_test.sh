@@ -112,7 +112,7 @@ launcher ERIPHE_SHARES=shares=/mnt/user ERIPHE_API_PORT=18800 TZ=Europe/Paris sh
 	compose_yaml 100 1" >"$T/compose.yaml" 2>&1
 for want in "- /mnt/user/appdata/eriphe/core:/data" "- /mnt/user/appdata/eriphe/node:/mnt/user/appdata/eriphe/node" \
 	'command: ["-root", "/mnt/user/appdata/eriphe/node",' "-allowbindmountfrom=/mnt/user/appdata/eriphe/node,/mnt/user" \
-	"- /mnt/user:/mnt/user" 'ports: ["18800:8800", "8443:8443"]' "ERIPHE_INSTALL: docker" 'ERIPHE_API_PORT: "18800"' \
+	"- /mnt/user:/mnt/user" 'ports: ["0.0.0.0:18800:8800", "0.0.0.0:8443:8443"]' "ERIPHE_INSTALL: docker" 'ERIPHE_API_PORT: "18800"' \
 	"TZ: 'Europe/Paris'" "image: ghcr.io/alexis-marcel/eriphe-core:latest" '"-always-on"' "user: \"65534:100\""; do
 	has "$T/compose.yaml" "$want" compose
 done
@@ -243,7 +243,75 @@ for bad in "--web-port 0" "--web-port 70000" "--api-port x" "--web-port 8800" "-
 	case $out in *passed*) fail "port options take $bad" ;; esac
 done
 compose=$(installer 'parse_args --core-mode --api-port 9800 --web-port 9443; INFO=; settle; MODE=core CORE_IMAGE=c NODE_IMAGE=n WORKER_IMAGE=w INSTALL=linux; compose_yaml 100 1')
-case $compose in *'ports: ["9800:8800", "9443:8443"]'*'ERIPHE_API_PORT: "9800"'*) ;; *) fail "compose with other ports: $compose" ;; esac
+case $compose in *'ports: ["0.0.0.0:9800:8800", "0.0.0.0:9443:8443"]'*'ERIPHE_API_PORT: "9800"'*) ;; *) fail "compose with other ports: $compose" ;; esac
+
+# ---- --bind: one IPv4 address, kept; never IPv6 (Docker's userland proxy
+# would hide the clients' addresses from eriphe-core)
+
+compose=$(installer 'parse_args --core-mode --bind 127.0.0.1; INFO=; settle; MODE=core CORE_IMAGE=c NODE_IMAGE=n WORKER_IMAGE=w INSTALL=linux; compose_yaml 100 1; install_conf')
+case $compose in *'ports: ["127.0.0.1:8800:8800", "127.0.0.1:8443:8443"]'*"bind=127.0.0.1"*) ;; *) fail "--bind: $compose" ;; esac
+out=$(installer 'parse_args --core-mode; INFO="saved_mode=core
+saved_bind=192.0.2.7"; settle; echo "$BIND"')
+[ "$out" = 192.0.2.7 ] || fail "saved bind: $out"
+out=$(installer 'parse_args --core-mode --bind 0.0.0.0; INFO="saved_mode=core
+saved_bind=192.0.2.7"; settle; echo "bind=$BIND"')
+[ "$out" = bind= ] || fail "--bind 0.0.0.0 goes back to every address: $out"
+for bad in "--bind ::1" "--bind 256.0.0.1" "--bind host" "--core https://192.0.2.10:8800 --join-token t --bind 127.0.0.1"; do
+	out=$(installer "parse_args --core-mode $bad && INFO= && settle && echo passed")
+	case $out in *passed*) fail "--bind takes $bad" ;; esac
+done
+# The launcher: ERIPHE_BIND, not kept when it is no longer given.
+mkdir -p "$T/data/launcher"
+out=$(launcher ERIPHE_BIND=127.0.0.1 sh -c ". '$here/eriphe-launcher'; discover; settings; INFO=; settle; echo \"\$BIND\"" 2>&1)
+[ "$out" = 127.0.0.1 ] || fail "ERIPHE_BIND: $out"
+out=$(launcher sh -c ". '$here/eriphe-launcher'; discover; settings; INFO='saved_bind=127.0.0.1'; settle; echo \"bind=\$BIND\"" 2>&1)
+[ "$out" = bind= ] || fail "the launcher keeps a bind no longer given: $out"
+
+# ---- public addresses: the installers warn that the workspace is on the Internet
+
+for a in 203.0.113.5 198.51.100.1 8.8.8.8 172.32.0.1 100.128.0.1 2001:db8::1 '[2001:db8::2]' ::ffff:203.0.113.5; do
+	installer "public_address '$a' && echo yes" | grep -qx yes || fail "$a is not public"
+done
+for a in 10.0.0.1 172.16.0.1 172.31.255.1 192.168.1.2 100.64.0.1 100.127.0.1 127.0.0.1 169.254.1.1 0.0.0.0 \
+	fd00::1 fc00::1 fe80::1 ::1 :: ::ffff:192.168.1.2 '<this-computer>' ''; do
+	installer "public_address '$a' && echo yes" | grep -qx yes && fail "$a is public"
+done
+out=$(installer 'WEB_PORT=8443 API_PORT=8800; exposed_notice 203.0.113.5; printf "%s" "$NOTES"')
+case $out in *"203.0.113.5 is a public address"*"cloud provider's firewall"*"Tailscale"*"reverse proxy"*"DOCKER-USER"*"--bind 127.0.0.1"*"#eriphe-on-a-vps"*) ;; *) fail "the public address notice: $out" ;; esac
+out=$(installer 'WEB_PORT=8443 API_PORT=8800; exposed_notice 192.168.1.2; exposed_notice 100.64.0.1; printf "notes=%s" "$NOTES"')
+[ "$out" = notes= ] || fail "a notice for a local address: $out"
+# On 127.0.0.1 (--bind): how to reach it, not a warning.
+out=$(installer 'WEB_PORT=8443 API_PORT=8800; exposed_notice 127.0.0.1; printf "%s" "$NOTES"')
+case $out in *"ssh -L 8443:127.0.0.1:8443"*"Tailscale"*) ;; *) fail "the notice on 127.0.0.1: $out" ;; esac
+case $out in *"public address"*) fail "127.0.0.1 is called public: $out" ;; esac
+
+# ---- eriphe-core's time zone: this machine's on a new install, never
+# changed on an older one, TZ first
+
+out=$(TZ='' installer 'host_tz() { echo America/Montreal; }; parse_args --core-mode; INFO=; settle; echo "$CORE_TZ"; install_conf | grep ^tz=')
+[ "$out" = "America/Montreal
+tz=America/Montreal" ] || fail "new install's zone: $out"
+out=$(TZ='' installer 'host_tz() { echo America/Montreal; }; parse_args --core-mode; INFO="saved_mode=core"; settle; echo "tz=$CORE_TZ"')
+[ "$out" = tz= ] || fail "an older install takes this machine's zone: $out"
+out=$(TZ='' installer 'host_tz() { echo America/Montreal; }; parse_args --core-mode; INFO="saved_mode=core
+saved_tz=Asia/Tokyo"; settle; echo "$CORE_TZ"')
+[ "$out" = Asia/Tokyo ] || fail "saved zone: $out"
+out=$(TZ=Europe/Berlin installer 'host_tz() { echo America/Montreal; }; parse_args --core-mode; INFO="saved_mode=core
+saved_tz=Asia/Tokyo"; settle; echo "$CORE_TZ"')
+[ "$out" = Europe/Berlin ] || fail "TZ first: $out"
+compose=$(TZ='' installer 'host_tz() { echo America/Montreal; }; parse_args --core-mode; INFO=; settle; MODE=core CORE_IMAGE=c NODE_IMAGE=n WORKER_IMAGE=w INSTALL=linux; compose_yaml 100 1')
+case $compose in *"TZ: 'America/Montreal'"*) ;; *) fail "the zone in compose: $compose" ;; esac
+# The launcher's container has its own zone, not the host's: TZ only.
+out=$(launcher TZ='' sh -c ". '$here/eriphe-launcher'; discover; settings; host_tz() { echo America/Montreal; }; INFO=; settle; echo \"tz=\$CORE_TZ\"" 2>&1)
+[ "$out" = tz= ] || fail "the launcher takes its container's zone: $out"
+out=$(installer 'host_tz' | grep -Ec '^[A-Za-z]' || true)
+[ "$out" -le 1 ] || fail "host_tz: several lines"
+
+# ---- uninstall on Linux: its own log apart, not the install's, which goes
+
+mkdir -p "$T/tmp"
+out=$(installer "UNINSTALL=1 TMPDIR='$T/tmp' HOME='$T'; to_screen; echo \"\$LOG\" >&5")
+case $out in "$T/tmp/eriphe-uninstall."*) ;; *) fail "the uninstall's log: $out" ;; esac
 # A fake listener: ss names the program on a port.
 mkdir -p "$T/ss"
 cat >"$T/ss/ss" <<'EOF'

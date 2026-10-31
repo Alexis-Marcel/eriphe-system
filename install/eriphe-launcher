@@ -113,7 +113,7 @@ settings() {
 		set -- --core-mode
 		;;
 	node)
-		[ -n "${ERIPHE_CORE:-}" ] || die "ERIPHE_MODE=node joins an eriphe-core: give its address in ERIPHE_CORE (http://192.0.2.10:8800)"
+		[ -n "${ERIPHE_CORE:-}" ] || die "ERIPHE_MODE=node joins an eriphe-core: give its address in ERIPHE_CORE (https://192.0.2.10:8800)"
 		[ -f "$DATA/node/node.json" ] || [ -n "${ERIPHE_JOIN_TOKEN:-}" ] ||
 			die "a new node needs ERIPHE_JOIN_TOKEN: the workspace's Connect a device gives it"
 		;;
@@ -132,7 +132,8 @@ settings() {
 		set -- "$@" --no-share
 	fi
 	DATA=$HOST_DATA # check_shares refuses Eriphe's own folder as a share
-	parse_args "$@"
+	parse_args "$@" # ERIPHE_BIND too
+	BIND_SET=1      # not kept from a run before either
 	DATA=${CONF%/launcher}
 	WEB_PORT=${ERIPHE_WEB_PORT:-8443} API_PORT=${ERIPHE_API_PORT:-8800}
 	for p in "$WEB_PORT" "$API_PORT"; do
@@ -226,6 +227,7 @@ run() {
 # summary OUT: as install.sh's outcome, for this container's log.
 summary() {
 	addr=$(lan_address)
+	[ -z "${BIND:-}" ] || addr=$BIND
 	addr=${addr:-<this-machine>}
 	say ""
 	if [ "$MODE" = core ]; then
@@ -240,6 +242,7 @@ summary() {
 			para "Eriphe runs on this machine: open https://$addr:$WEB_PORT in your browser and sign in (forgotten password: $(password_reset))."
 		fi
 		notice "to connect your other computers, open Réglages › Appareils › Connecter un appareil (Settings › Devices › Connect a device) in your browser."
+		exposed_notice "$addr" "set ERIPHE_BIND=127.0.0.1"
 	elif [ -n "$FIRST" ]; then
 		para "Done: this machine is connected to $ASSISTANT. Go back to your browser: it now appears in Appareils (Devices)."
 	else
