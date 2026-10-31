@@ -87,6 +87,11 @@ func opencodeSetup(t *Task) map[string]string {
 	if ep := t.Spec.ModelEndpoint; ep != nil && ep.Relay && t.secret != "" {
 		env[modelTokenEnv] = t.secret // its key to its node's model relay (model.go)
 	}
+	if selfHostedProvider(t) != nil {
+		// Its model is described in its configuration: no catalog to
+		// fetch from models.dev, nothing leaves for it.
+		env["OPENCODE_DISABLE_MODELS_FETCH"] = "1"
+	}
 	if t.Spec.AppendSystemPrompt != "" {
 		env[instructionsEnv] = t.Spec.AppendSystemPrompt
 	}
@@ -126,9 +131,11 @@ func selfHostedProvider(t *Task) map[string]any {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || !configSafe(base) || !configSafe(model) {
 		return nil
 	}
-	// A model on a home machine can take long to answer a long prompt:
-	// 15 minutes a request, not OpenCode's 5.
-	options := map[string]any{"baseURL": base, "timeout": 900000}
+	// A model on a home machine can take minutes to read a long prompt
+	// before it sends anything: OpenCode's 5 minutes for the headers and
+	// between chunks would cut it, and a total limit would cut a long
+	// answer on a CPU. Generous gaps, no total limit.
+	options := map[string]any{"baseURL": base, "timeout": false, "headerTimeout": 1800000, "chunkTimeout": 600000}
 	switch {
 	case ep.Relay:
 		options["apiKey"] = "{env:" + modelTokenEnv + "}"
