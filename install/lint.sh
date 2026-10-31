@@ -49,4 +49,8 @@ sh -n "$d/eriphe-update"
 	shellcheck -s sh -x install/eriphe-launcher install/launcher_test.sh
 	sh -n install/eriphe-launcher
 )
+# install.ps1's checks that run without Windows, where PowerShell is (CI).
+if command -v pwsh >/dev/null 2>&1; then
+	pwsh -NoProfile -File "$(dirname "$0")/install_test.ps1"
+fi
 echo "install.sh, its ${n} host scripts, the ${w} it writes, install.ps1's updater and eriphe-launcher are clean"
