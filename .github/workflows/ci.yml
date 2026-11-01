@@ -160,8 +160,16 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
+  # Every test passes before any image is published: an image job tags `latest` on a release,
+  # and a workspace offers that version as soon as one image has it.
+  tests:
+    needs: [scripts, node, cred, core, install, cli, mail, calendar, files]
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'
+
   core-image:
-    needs: [version, core]
+    needs: [version, tests]
     permissions:
       contents: read
       packages: write
@@ -174,7 +182,7 @@ jobs:
       version-arg: true
 
   node-image:
-    needs: [version, node, cred]
+    needs: [version, tests]
     permissions:
       contents: read
       packages: write
@@ -211,7 +219,7 @@ jobs:
   # ghcr.io/alexis-marcel/eriphe: eriphe-launcher, Eriphe from one container, with
   # install.sh's functions (install/README.md, One container).
   launcher-image:
-    needs: [version, install]
+    needs: [version, tests]
     permissions:
       contents: read
       packages: write
@@ -226,7 +234,7 @@ jobs:
   # The image tasks start from, and one image per agent the node injects into it
   # (worker/README.md).
   worker:
-    needs: version
+    needs: [version, tests]
     strategy:
       fail-fast: false
       matrix:
@@ -283,7 +291,7 @@ jobs:
       - run: test -z "$(gofmt -l .)"
 
   mail-image:
-    needs: [version, mail]
+    needs: [version, tests]
     permissions:
       contents: read
       packages: write
@@ -311,7 +319,7 @@ jobs:
       - run: test -z "$(gofmt -l .)"
 
   calendar-image:
-    needs: [version, calendar]
+    needs: [version, tests]
     permissions:
       contents: read
       packages: write
@@ -339,7 +347,7 @@ jobs:
       - run: test -z "$(gofmt -l .)"
 
   files-image:
-    needs: [version, files]
+    needs: [version, tests]
     permissions:
       contents: read
       packages: write
