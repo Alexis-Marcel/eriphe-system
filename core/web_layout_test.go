@@ -16,7 +16,6 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 	tw.setup()
 	for _, tc := range []struct{ path, tab, up string }{ // up: a sub-page's page
 		{"/memory", "memory", ""},
-		{"/memory?view=inbox", "memory", ""},
 		{"/settings/devices", "devices", ""},
 		{"/settings/machines", "devices", ""},
 		{"/settings/agents", "agents", ""},
@@ -32,10 +31,6 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/skills", "skills", ""},
 		{"/settings/remote", "remote", ""},
 		{"/settings/notifications", "notifications", ""},
-		{"/settings/channels", "channels", ""},
-		{"/settings/journal", "journal", ""},
-		{"/settings/happened", "happened", ""},
-		{"/settings/happened?range=week&kind=task", "happened", ""},
 		{"/settings/watches", "watches", ""},
 		{"/settings/account", "account", ""},
 	} {
@@ -92,7 +87,7 @@ func TestSettingsList(t *testing.T) {
 	}
 	for _, want := range []string{`<div class="settings is-index">`, `<nav class="settings-nav"`,
 		`<a class="icon-btn settings-close" href="/" aria-label="Fermer les réglages"`, `<h1 class="settings-title">Réglages</h1>`,
-		`<a href="/memory" >`, `<a href="/settings/journal" >`, `class="i chev"`} {
+		`<a href="/memory" >`, `<a href="/settings/account" >`, `class="i chev"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the list lacks %q", want)
 		}
@@ -139,10 +134,10 @@ func TestSettingsNavGroups(t *testing.T) {
 	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
 	nav := body[strings.Index(body, `<nav class="settings-nav"`):]
 	nav = nav[:strings.Index(nav, "</nav>")]
-	order := []string{"Assistant", `href="/memory"`, `href="/settings/happened"`, `href="/settings/agents"`, `href="/settings/skills"`,
+	order := []string{"Assistant", `href="/memory"`, `href="/settings/watches"`, `href="/settings/agents"`, `href="/settings/skills"`,
 		"Connexions", `href="/settings/tools"`, `href="/settings/folders"`,
 		"Appareils &amp; accès", `href="/settings/devices"`, `href="/settings/remote"`, `href="/settings/notifications"`,
-		"Mon espace", `href="/settings/account"`, `href="/settings/journal"`}
+		"Mon espace", `href="/settings/account"`}
 	at := 0
 	for _, want := range order {
 		i := strings.Index(nav[at:], want)
@@ -188,7 +183,7 @@ func TestSettingsNavAttention(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	tw.c.setProviderHealth("p", providerHealth{Cause: causeAuth})
-	_, body, _ := tw.do("GET", "/settings/journal", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
 	nav := body[strings.Index(body, `<nav class="settings-nav"`):]
 	agents := nav[strings.Index(nav, `href="/settings/agents"`):]
 	if !strings.Contains(agents[:strings.Index(agents, "</a>")], "attn-dot") {
@@ -203,7 +198,7 @@ func TestSettingsNavAttention(t *testing.T) {
 func TestShellNeverScrolls(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	for _, path := range []string{"/settings/agents", "/settings/journal", "/memory"} {
+	for _, path := range []string{"/settings/agents", "/activity", "/memory"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); !strings.Contains(body, `<html lang="fr" class="shell">`) {
 			t.Errorf("GET %s: the html element is not marked as the shell", path)
 		}

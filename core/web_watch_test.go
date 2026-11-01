@@ -8,8 +8,10 @@ import (
 	"testing"
 )
 
-// Settings: watches are listed with their runs, added, edited, approved,
-// paused, resumed and deleted, in French and English.
+// Settings → Veilles: the routines and the watches are listed apart, with
+// their runs; a proposed one is not, it waits in « À valider », where it is
+// approved; the page pauses, resumes and deletes. There is no form: the
+// brain writes them, and the page says how to ask it.
 func TestWatchRoutes(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
@@ -19,43 +21,44 @@ func TestWatchRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	r, err := c.addWatch(&watch{Name: "Point au retour", Source: sourceReturn, Spec: watchSpec{After: 240}, Prompt: "Fais le point",
+		State: watchActive, By: "owner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.addWatch(&watch{Name: "GitHub", Source: sourceAlert, Prompt: "Regarde", State: watchActive, By: "owner"}); err != nil {
+		t.Fatal(err)
+	}
 	code, body, _ := tw.do("GET", "/settings/watches", nil, nil)
-	if code != 200 || !strings.Contains(body, "Revue du dimanche") || !strings.Contains(body, "à approuver") ||
-		!strings.Contains(body, "Après un contenu extérieur") {
+	if code != 200 || strings.Contains(body, "Revue du dimanche") || !strings.Contains(body, `href="/activity/approve#watches"`) ||
+		!strings.Contains(body, "Point au retour") || !strings.Contains(body, "Lui demander") || strings.Contains(body, `hx-post="/watches"`) {
 		t.Fatalf("page %d", code)
 	}
+	routines, watches := body[strings.Index(body, `id="routine-title"`):], body[strings.Index(body, `id="watch-list-title"`):]
+	if !strings.Contains(routines[:strings.Index(routines, "</section>")], "Point au retour") ||
+		!strings.Contains(watches[:strings.Index(watches, "</section>")], "GitHub") {
+		t.Fatal("routines and watches are not apart")
+	}
+	if _, body, _ := tw.do("GET", "/activity/approve", nil, nil); !strings.Contains(body, "Revue du dimanche") ||
+		!strings.Contains(body, "Après un contenu extérieur") || !strings.Contains(body, `hx-post="/watches/`+idText(p.ID)+`/approve"`) {
+		t.Fatal("the proposed watch is not in À valider")
+	}
 	h := map[string]string{"X-CSRF-Token": csrf}
-	if code, body, _ := tw.do("POST", "/watches/"+idText(p.ID)+"/approve", url.Values{}, h); code != 200 || !strings.Contains(body, "Active") {
+	if code, body, _ := tw.do("POST", "/watches/"+idText(p.ID)+"/approve", url.Values{}, h); code != 200 || !strings.Contains(body, "Revue du dimanche") {
 		t.Fatalf("approve %d %s", code, body)
 	}
-	form := url.Values{"name": {"Point au retour"}, "source": {"retour"}, "after": {"4h"}, "prompt": {"Fais le point"}}
-	if code, body, _ := tw.do("POST", "/watches", form, h); code != 200 || !strings.Contains(body, "Point au retour") {
-		t.Fatalf("add %d %s", code, body)
+	if code, _, _ := tw.do("POST", "/watches", url.Values{"name": {"x"}, "source": {"retour"}, "prompt": {"y"}}, h); code == 200 {
+		t.Fatal("the form to write a watch is still there")
 	}
-	ws, _ := c.watches()
-	if len(ws) != 2 || ws[1].returnAfter().Hours() != 4 || ws[1].By != "owner" {
-		t.Fatalf("watches %+v", ws)
-	}
-	form = url.Values{"id": {idText(ws[1].ID)}, "name": {"Point au retour"}, "source": {"retour"}, "after": {"1h30"}, "prompt": {"Le point"}}
-	if code, _, _ := tw.do("POST", "/watches", form, h); code != 200 {
-		t.Fatalf("edit %d", code)
-	}
-	if w, _ := c.watch(ws[1].ID); w.Spec.After != 90 || w.Prompt != "Le point" {
-		t.Fatalf("edited %+v", w)
-	}
-	tw.do("POST", "/watches", url.Values{"name": {"x"}, "source": {"horaire"}, "schedule": {"bientôt"}, "prompt": {"y"}}, h)
-	if ws, _ := c.watches(); len(ws) != 2 {
-		t.Fatal("a bad schedule was kept")
-	}
-	tw.do("POST", "/watches/"+idText(ws[1].ID)+"/pause", url.Values{}, h)
-	if w, _ := c.watch(ws[1].ID); w.State != watchPaused {
+	tw.do("POST", "/watches/"+idText(r.ID)+"/pause", url.Values{}, h)
+	if w, _ := c.watch(r.ID); w.State != watchPaused {
 		t.Fatalf("pause %s", w.State)
 	}
-	tw.do("POST", "/watches/"+idText(ws[1].ID)+"/resume", url.Values{}, h)
+	tw.do("POST", "/watches/"+idText(r.ID)+"/resume", url.Values{}, h)
 	if code, _, _ := tw.do("POST", "/watches/"+idText(p.ID)+"/delete", url.Values{}, h); code != 200 {
 		t.Fatalf("delete %d", code)
 	}
-	if ws, _ := c.watches(); len(ws) != 1 || ws[0].State != watchActive {
+	if ws, _ := c.watches(); len(ws) != 2 || ws[0].State != watchActive {
 		t.Fatalf("after delete %+v", ws)
 	}
 }

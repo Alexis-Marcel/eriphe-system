@@ -9,14 +9,13 @@ import (
 	"time"
 )
 
-// Settings → Où te prévenir: the router's page (route.go). The lines in
+// Settings → Notifications → Où te prévenir: the router's page (route.go). The lines in
 // the user's order, one switch each, shown when what they need is there;
 // the delay before the next one; observe or route; which subscription is
 // a phone or a computer, and which node is on which computer; and the
 // last decisions, planned next to sent.
 
 func (w *web) whereRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /settings/where", w.auth(w.handleWhere))
 	mux.Handle("POST /where/mode", w.auth(w.handleWhereMode))
 	mux.Handle("POST /where/line", w.auth(w.handleWhereLine))
 	mux.Handle("POST /where/delay", w.auth(w.handleWhereDelay))
@@ -189,10 +188,6 @@ func describeSent(lang string, sent []routeTarget, skip string) string {
 		parts[i] = describeTarget(lang, t)
 	}
 	return strings.Join(parts, ", ")
-}
-
-func (w *web) handleWhere(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "", page{Title: "settings.where", Nav: "settings", Tab: "where", Data: w.wherePage(w.lang(r))})
 }
 
 func (w *web) renderWhere(rw http.ResponseWriter, r *http.Request, s *session, msg string) {

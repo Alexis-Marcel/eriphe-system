@@ -432,8 +432,12 @@ func TestNotifyRoutes(t *testing.T) {
 		notifyItem{Level: levelBrief})
 	code, body, _ := tw.do("GET", "/settings/notifications?n="+idText(n.ID), nil, nil)
 	if code != 200 || !strings.Contains(body, "Le serveur répond lentement.") || !strings.Contains(body, "Une alerte du moniteur.") ||
-		!strings.Contains(body, "Trop de mails.") || !strings.Contains(body, "is-open") {
+		!strings.Contains(body, `href="/activity/approve#rules"`) || strings.Contains(body, "Trop de mails.") || !strings.Contains(body, "is-open") {
 		t.Fatalf("page %d", code)
+	}
+	// The proposed rule waits in « À valider », not on the page.
+	if _, body, _ := tw.do("GET", "/activity/approve", nil, nil); !strings.Contains(body, "Trop de mails.") || !strings.Contains(body, `hx-post="/notify/rules/1/approve"`) {
+		t.Fatal("the proposed rule is not in À valider")
 	}
 	h := map[string]string{"X-CSRF-Token": csrf}
 	if code, body, _ := tw.do("POST", "/notify/"+idText(n.ID)+"/feedback", url.Values{"r": {"up"}}, h); code != 200 || !strings.Contains(body, `aria-pressed="true"`) {

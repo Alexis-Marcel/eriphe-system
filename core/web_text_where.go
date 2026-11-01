@@ -36,7 +36,7 @@ var whereStrings = map[string]map[string]string{
 		"where.line.telegram":      "Telegram",
 		"where.line.telegram.hint": "Le compte relié.",
 		"where.hint.voice":         "Bientôt : relie Home Assistant pour qu'Eriphe sache dans quelle pièce tu es.",
-		"where.hint.phone":         "Active les notifications sur ton téléphone (Appli et notifications).",
+		"where.hint.phone":         "Active les notifications sur ton téléphone (en haut de cette page).",
 		"where.up":                 "Monter",
 		"where.down":               "Descendre",
 		"where.delay":              "Passer au suivant après (minutes)",
@@ -77,7 +77,6 @@ var whereStrings = map[string]map[string]string{
 		"inapp.open":               "Voir",
 		"rule.also":                "Aussi sur",
 		"rule.never":               "Jamais par",
-		"rule.lines.":              "—",
 	},
 	"en": {
 		"settings.where":           "Where to reach you",
@@ -102,7 +101,7 @@ var whereStrings = map[string]map[string]string{
 		"where.line.telegram":      "Telegram",
 		"where.line.telegram.hint": "The linked account.",
 		"where.hint.voice":         "Coming: connect Home Assistant so that Eriphe knows which room you are in.",
-		"where.hint.phone":         "Turn notifications on on your phone (App & notifications).",
+		"where.hint.phone":         "Turn on the notifications on your phone (at the top of this page).",
 		"where.up":                 "Move up",
 		"where.down":               "Move down",
 		"where.delay":              "Move on after (minutes)",
@@ -143,6 +142,5 @@ var whereStrings = map[string]map[string]string{
 		"inapp.open":               "Open",
 		"rule.also":                "Also on",
 		"rule.never":               "Never by",
-		"rule.lines.":              "—",
 	},
 }

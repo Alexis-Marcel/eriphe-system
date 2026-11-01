@@ -349,7 +349,8 @@ func TestWebPagesRender(t *testing.T) {
 		"/settings/agents/new":                                {`name="runtime"`, `name="provider"`},
 		"/settings/providers/new":                             {"kind=claude-subscription", "kind=chatgpt-subscription"},
 		"/settings/providers/new?kind=claude-subscription":    {`name="key"`, "claude setup-token", `name="preset"`},
-		"/settings/journal":                                   {"git push origin main", "Règle", "Refusé"},
+		"/activity?kind=access":                               {"git push origin main", "Règle", "Refusé"},
+		"/activity/approve":                                   {"a-perm-t-perm-p-1", "Permissions"},
 		"/settings/account":                                   {"Français", "English", "eriphe-core " + version, "Clés et mots de passe enregistrés", "providers.p.secret"},
 	}
 	for path, wants := range pages {

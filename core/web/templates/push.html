@@ -1,32 +1,27 @@
-{{/* Settings → App & notifications (web_push.go): install the workspace as an
-     app, and turn on the notifications of this device. app.js does the
-     browser's part: it tells what this browser can do, asks for the
-     permission on a tap, subscribes and sends the subscription. */}}
+{{/* Settings → Notifications (web_push.go): one page, four sections.
+     Où te prévenir: this device's notifications, the devices, the router's
+     order (web_where.go); Canaux: Telegram (web_telegram.go); Règles et
+     heures calmes (web_notify.go); Envoyées: what the brain said, with the
+     user's feedback, and what the router did. app.js does the browser's
+     part: it tells what this browser can do, asks for the permission on a
+     tap, subscribes and sends the subscription. A rule is asked of the
+     brain: the page shows it and deletes it. */}}
 
 {{define "i-bell"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>{{end}}
 {{define "i-phone"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>{{end}}
+{{define "i-moon"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/></svg>{{end}}
 
 {{define "notifications"}}
 <header class="page-head"><h2>{{t "settings.notifications"}}</h2><p>{{t "push.lead"}}</p></header>
+<nav class="pill-tabs" aria-label="{{t "settings.notifications"}}">
+  <a href="#where">{{t "settings.where"}}</a><a href="#channels">{{t "settings.channels"}}</a><a href="#rules">{{t "rule.title"}}</a><a href="#sent">{{t "notif.sent"}}</a>
+</nav>
 
-<section class="panel app-install" aria-labelledby="install-title" data-install>
-  <div class="panel-head">
-    <h3 id="install-title">{{template "i-phone"}}{{t "install.title"}}</h3>
-    <span class="tag tag-ok" data-installed hidden>{{t "install.done"}}</span>
-  </div>
-  <p class="muted" data-install-lead>{{t "install.lead"}}</p>
-  <div class="actions" data-install-prompt hidden><button class="btn btn-primary" type="button" data-install-button>{{template "i-plus"}}{{t "install.button"}}</button></div>
-  <ul class="install-how">
-    <li data-platform="ios"><b>iPhone, iPad</b><span>{{t "install.ios"}}</span></li>
-    <li data-platform="android"><b>Android</b><span>{{t "install.android"}}</span></li>
-    <li data-platform="desktop"><b>{{t "install.computer"}}</b><span>{{t "install.desktop"}}</span></li>
-  </ul>
-</section>
-
+<h3 class="section-title" id="where">{{template "i-route"}}{{t "settings.where"}}</h3>
 <section class="panel" aria-labelledby="push-title" id="push" data-push-key="{{.Data.Key}}"
   data-msg-unsupported="{{t "push.unsupported"}}" data-msg-insecure="{{t "push.insecure"}}" data-msg-ios="{{t "push.ios"}}"
   data-msg-denied="{{t "push.denied"}}" data-msg-failed="{{t "push.failed"}}" data-msg-off="{{t "push.off"}}">
-  <h3 id="push-title">{{template "i-bell"}}{{t "push.title"}}</h3>
+  <h4 id="push-title" class="notif-sub">{{t "push.title"}}</h4>
   <label class="switch">
     <input type="checkbox" id="push-toggle" disabled aria-describedby="push-state">
     <span><b>{{t "push.toggle"}}</b><small>{{t "push.toggle.hint"}}</small></span>
@@ -36,15 +31,29 @@
     <input type="hidden" name="id" id="push-test-id">
     <button class="btn btn-soft sm" type="submit">{{template "i-bell"}}{{t "push.test"}}</button>
   </form>
-  <p class="small muted">{{t "push.ioshint"}}</p>
-</section>
-
-<section class="panel" aria-labelledby="push-devices-title">
-  <h3 id="push-devices-title">{{t "push.devices"}}</h3>
+  <details class="rule-edit app-install" data-install>
+    <summary class="small">{{t "install.title"}} <span class="tag tag-ok" data-installed hidden>{{t "install.done"}}</span></summary>
+    <p class="small muted" data-install-lead>{{t "install.lead"}} {{t "push.ioshint"}}</p>
+    <div class="actions" data-install-prompt hidden><button class="btn btn-primary sm" type="button" data-install-button>{{template "i-plus"}}{{t "install.button"}}</button></div>
+    <ul class="install-how">
+      <li data-platform="ios"><b>iPhone, iPad</b><span>{{t "install.ios"}}</span></li>
+      <li data-platform="android"><b>Android</b><span>{{t "install.android"}}</span></li>
+      <li data-platform="desktop"><b>{{t "install.computer"}}</b><span>{{t "install.desktop"}}</span></li>
+    </ul>
+  </details>
+  <h4 class="notif-sub">{{t "push.devices"}}</h4>
   <div id="push-devices">{{template "push-devices" .}}</div>
 </section>
+<div id="where-body" class="where">{{template "where-body" .Data.Where}}</div>
 
-{{template "notify-sections" .Data.Notify}}
+<h3 class="section-title" id="channels">{{template "i-chat"}}{{t "settings.channels"}}</h3>
+<section class="panel" aria-labelledby="tg-title" id="telegram">{{template "telegram" .Data.Channels}}</section>
+
+<h3 class="section-title" id="rules">{{template "i-moon"}}{{t "rule.title"}}</h3>
+<section class="panel" aria-label="{{t "rule.title"}}" id="notify-rules">{{template "notify-rules" .Data.Notify}}</section>
+
+<h3 class="section-title" id="sent">{{template "i-bell"}}{{t "notif.sent"}}</h3>
+{{template "notify-sent" .Data}}
 
 <details class="panel advanced">
   <summary><span class="adv-title">{{t "screen.title"}}</span><span class="muted small">{{t "screen.summary"}}</span></summary>
@@ -52,27 +61,47 @@
 </details>
 {{end}}
 
+{{/* The devices told, each with its kind for the router (web_where.go). */}}
 {{define "push-devices"}}
 {{if .Data.Devices}}<ul class="list push-list">{{range .Data.Devices}}
   <li data-push-id="{{.ID}}">
     <div class="list-main"><span class="strong">{{.Label}} <span class="tag tag-accent" data-this-device hidden>{{t "push.this"}}</span></span><span class="small muted">{{tf "push.since" (date .Created)}}</span></div>
-    <button class="btn btn-ghost sm" type="button" hx-post="/push/unsubscribe" hx-vals='{"id": "{{.ID}}"}' hx-target="#push-devices" aria-label="{{t "push.remove"}} {{.Label}}">{{template "i-x"}}{{t "push.remove"}}</button>
+    <form hx-post="/where/device" hx-trigger="change" hx-target="#where-body">
+      <input type="hidden" name="sub" value="{{.ID}}">
+      <select name="kind" aria-label="{{t "where.kind"}} {{.Label}}">{{$c := .Choice}}{{$k := .Kind}}
+        <option value=""{{if eq $c ""}} selected{{end}}>{{tf "where.kind.auto" (t (printf "where.kind.%s" $k))}}</option>
+        <option value="computer"{{if eq $c "computer"}} selected{{end}}>{{t "where.kind.computer"}}</option>
+        <option value="phone"{{if eq $c "phone"}} selected{{end}}>{{t "where.kind.phone"}}</option>
+      </select>
+    </form>
+    <button class="btn btn-ghost sm" type="button" hx-post="/push/unsubscribe" hx-vals='{"id": "{{.ID}}"}' hx-target="#push-devices" aria-label="{{t "push.remove"}} {{.Label}}" title="{{t "push.remove"}}">{{template "i-x"}}</button>
   </li>{{end}}
 </ul>{{else}}<p class="muted small">{{t "push.none"}}</p>{{end}}
 {{end}}
 
-{{/* What the brain told on its own, and why; its rules (web_notify.go, notify.go). */}}
-{{define "notify-sections"}}
+{{/* What the brain told on its own, and why, with the user's feedback; what
+     the router planned and sent (web_notify.go, web_where.go). */}}
+{{define "notify-sent"}}{{with .Notify}}
 <section class="panel" aria-labelledby="notif-title">
-  <h3 id="notif-title">{{template "i-bell"}}{{t "notif.title"}}</h3>
+  <h4 id="notif-title" class="notif-sub">{{t "notif.title"}}</h4>
   <p class="small muted">{{t "notif.lead"}}</p>
   {{if .Held}}<h4 class="notif-sub">{{t "notif.held"}}</h4>
   <ul class="list notif-list">{{range .Held}}{{template "notify-card" .}}{{end}}</ul>{{end}}
   <h4 class="notif-sub">{{t "notif.recent"}}</h4>
   {{if .Recent}}<ul class="list notif-list">{{range .Recent}}{{template "notify-card" .}}{{end}}</ul>
   {{else}}<p class="muted small">{{t "notif.none"}}</p>{{end}}
-</section>
-<section class="panel" aria-labelledby="rules-title" id="notify-rules">{{template "notify-rules" .}}</section>
+</section>{{end}}
+{{with .Where}}<details class="panel advanced">
+  <summary><span class="adv-title">{{t "where.log"}}</span><span class="muted small">{{t "where.log.lead"}}</span></summary>
+  {{if .Log}}<ul class="list where-log">{{range .Log}}
+    <li><div class="list-main">
+      <span class="strong">{{.What}}</span>
+      <span class="small muted">{{date .At}} · <span class="tag{{if eq .Mode "route"}} tag-ok{{else}} tag-accent{{end}}">{{t (printf "where.mode.%s" .Mode)}}</span>{{if .Seen}} · <span class="tag tag-ok">{{t (printf "where.seen.%s" .Seen)}}</span>{{end}}</span>
+      <span class="small"><b>{{t "where.planned"}}</b> {{.Planned}}</span>
+      <span class="small"><b>{{t "where.sent"}}</b> {{.Sent}}</span>
+    </div></li>{{end}}</ul>
+  {{else}}<p class="small muted">{{t "where.log.none"}}</p>{{end}}
+</details>{{end}}
 {{end}}
 
 {{define "notify-card"}}
@@ -95,24 +124,14 @@
 {{define "notify-card-frag"}}{{template "notify-card" .Data}}{{end}}
 
 {{define "notify-rules"}}
-<h3 id="rules-title">{{t "rule.title"}}</h3>
-<p class="small muted">{{t "rule.lead"}}</p>
 <p class="small">{{tf "rule.quietnow" .Weekdays.Window .Weekend.Window}}{{if eq .Weekdays.By "seed"}} {{t "rule.seed"}}{{end}}</p>
-{{range .Suggested}}<p class="small muted">{{tf "rule.suggested" (t (printf "rule.days.%s" .Days)) .From .To .Current}}</p>{{end}}
-{{if .Proposed}}<h4 class="notif-sub">{{t "rule.proposed"}}</h4>
-<ul class="list">{{range .Proposed}}
-  <li><div class="list-main">{{template "rule-line" .}}{{if .Tainted}}<span class="small"><span class="tag tag-no" title="{{.Tainted}}">{{t "notif.tainted"}}</span></span>{{end}}</div>
-    <button class="btn btn-primary sm" hx-post="/notify/rules/{{.ID}}/approve" hx-target="#notify-rules">{{template "i-check"}}{{t "rule.approve"}}</button>
-    <button class="btn btn-ghost sm" hx-post="/notify/rules/{{.ID}}/reject" hx-target="#notify-rules">{{template "i-x"}}{{t "rule.reject"}}</button>
-  </li>{{end}}</ul>{{end}}
-<h4 class="notif-sub">{{t "rule.active"}}</h4>
+{{if or .Proposed .Suggested}}<p class="small"><a class="to-approve" href="/activity/approve#rules">{{template "i-shield"}}{{t "rule.towait"}}</a></p>{{end}}
 {{if .Rules}}<ul class="list">{{range .Rules}}
-  <li><div class="list-main">{{template "rule-line" .}}
-    <details class="rule-edit"><summary class="small">{{t "rule.edit"}}</summary>{{template "rule-form" .}}</details></div>
+  <li><div class="list-main">{{template "rule-line" .}}</div>
     <button class="btn btn-ghost sm" hx-post="/notify/rules/{{.ID}}/delete" hx-target="#notify-rules" hx-confirm="{{t "rule.deleteconfirm"}}">{{template "i-x"}}{{t "rule.delete"}}</button>
   </li>{{end}}</ul>
 {{else}}<p class="muted small">{{t "rule.none"}}</p>{{end}}
-<details class="rule-edit"><summary>{{template "i-plus"}}{{t "rule.add"}}</summary>{{template "rule-form" .Stub}}</details>
+{{template "ask" "rule.ask"}}
 <h4 class="notif-sub">{{t "notify.settings"}}</h4>
 <form class="row-form" hx-post="/notify/settings" hx-target="#notify-rules">
   <label class="field"><span>{{t "notify.zone"}}</span><input name="zone" value="{{.Zone}}" placeholder="{{.DefaultZone}}" maxlength="64"></label>
@@ -126,40 +145,10 @@
 {{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{t (printf "rule.ch.%s" .Channels)}}{{end}}{{if .Also}} · {{t "rule.also"}} <span class="mono">{{.Also}}</span>{{end}}{{if .Never}} · {{t "rule.never"}} <span class="mono">{{.Never}}</span>{{end}}{{end}}</span>
 {{if .Why}}<span class="small muted">{{.Why}}</span>{{end}}{{end}}
 
-{{define "rule-form"}}
-<form class="rule-form" hx-post="/notify/rules" hx-target="#notify-rules">
-  {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
-  <label class="field"><span>{{t "rule.kind"}}</span><select name="kind">
-    <option value="topic"{{if eq .Kind "topic"}} selected{{end}}>{{t "rule.kind.topic"}}</option>
-    <option value="quiet"{{if eq .Kind "quiet"}} selected{{end}}>{{t "rule.kind.quiet"}}</option></select></label>
-  <label class="field"><span>{{t "rule.match"}}</span><input name="match" value="{{.Match}}" placeholder="project:exemple" maxlength="80"></label>
-  <label class="field"><span>{{t "rule.outcome"}}</span><select name="outcome">{{$o := .Outcome}}{{range (list "now" "brief" "never")}}
-    <option value="{{.}}"{{if eq $o .}} selected{{end}}>{{t (printf "rule.out.%s" .)}}</option>{{end}}</select></label>
-  <label class="check"><input type="checkbox" name="night" value="1"{{if .Night}} checked{{end}}> {{t "rule.night"}}</label>
-  <label class="field"><span>{{t "rule.channels"}}</span><select name="channels">{{$c := .Channels}}{{range (list "" "push" "telegram" "push,telegram")}}
-    <option value="{{.}}"{{if eq $c .}} selected{{end}}>{{t (printf "rule.ch.%s" .)}}</option>{{end}}</select></label>
-  <label class="field"><span>{{t "rule.also"}}</span><select name="also">{{$a := .Also}}{{range (list "" "phone" "telegram" "computer")}}
-    <option value="{{.}}"{{if eq $a .}} selected{{end}}>{{if .}}{{t (printf "where.line.%s" .)}}{{else}}{{t "rule.lines."}}{{end}}</option>{{end}}
-    {{if and $a (not (eq $a "phone" "telegram" "computer"))}}<option value="{{$a}}" selected>{{$a}}</option>{{end}}</select></label>
-  <label class="field"><span>{{t "rule.never"}}</span><select name="never">{{$n := .Never}}{{range (list "" "voice" "telegram" "phone" "computer")}}
-    <option value="{{.}}"{{if eq $n .}} selected{{end}}>{{if .}}{{t (printf "where.line.%s" .)}}{{else}}{{t "rule.lines."}}{{end}}</option>{{end}}
-    {{if and $n (not (eq $n "voice" "telegram" "phone" "computer"))}}<option value="{{$n}}" selected>{{$n}}</option>{{end}}</select></label>
-  <label class="field"><span>{{t "rule.days"}}</span><select name="days">{{$d := .Days}}{{range (list "all" "weekdays" "weekend")}}
-    <option value="{{.}}"{{if eq $d .}} selected{{end}}>{{t (printf "rule.days.%s" .)}}</option>{{end}}</select></label>
-  <label class="field"><span>{{t "rule.from"}}</span><input type="time" name="from" value="{{.FromText}}"></label>
-  <label class="field"><span>{{t "rule.to"}}</span><input type="time" name="to" value="{{.ToText}}"></label>
-  <label class="field"><span>{{t "rule.why"}}</span><input name="why" value="{{.Why}}" maxlength="300"></label>
-  <button class="btn btn-soft sm" type="submit">{{template "i-check"}}{{t "rule.save"}}</button>
-</form>
-{{end}}
-
-{{/* Settings → Channels (web_telegram.go, telegram.go): Telegram's bot, the
-     link to the user's account, how much it says there, and the default
-     channels of the brain's notifications. The token is never shown back. */}}
-{{define "channels"}}
-<header class="page-head"><h2>{{t "settings.channels"}}</h2><p>{{t "channels.lead"}}</p></header>
-<section class="panel" aria-labelledby="tg-title" id="telegram">{{template "telegram" .Data}}</section>
-{{end}}
+{{/* Notifications → Canaux (web_telegram.go, telegram.go): Telegram's bot,
+     the link to the user's account, how much it says there, and the
+     default channels of the brain's notifications. The token is never
+     shown back. */}}
 {{define "telegram-frag"}}{{template "telegram" .Data}}{{end}}
 
 {{define "telegram"}}
@@ -212,36 +201,28 @@
 </form>
 {{end}}
 
-{{/* Settings → Où te prévenir (web_where.go, route.go): the lines in the
-     user's order, observe or route, the delay, which device is which, and
-     the last decisions. Every form answers with the whole panel. */}}
+{{/* Notifications → Où te prévenir (web_where.go, route.go): observe or
+     route, the lines in the user's order, the delay, and which machine is
+     which device. Every form answers with the whole body. */}}
 {{define "i-route"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6h6a3.5 3.5 0 0 1 0 7h-5a3.5 3.5 0 0 0 0 7h6"/></svg>{{end}}
 {{define "i-up"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>{{end}}
 {{define "i-down"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>{{end}}
 
-{{define "where"}}
-<header class="page-head"><h2>{{t "settings.where"}}</h2><p>{{t "where.lead"}}</p></header>
-<div id="where" class="where">{{template "where-body" .Data}}</div>
-{{end}}
 {{define "where-frag"}}{{template "where-body" .Data}}{{end}}
 
 {{define "where-body"}}
-<section class="panel" aria-labelledby="where-mode-title">
-  <h3 id="where-mode-title">{{template "i-eye"}}{{t "where.mode"}}</h3>
-  <form hx-post="/where/mode" hx-trigger="change" hx-target="#where">
+<section class="panel" aria-labelledby="where-lines-title">
+  <h4 id="where-lines-title" class="notif-sub">{{t "where.order"}}</h4>
+  <form hx-post="/where/mode" hx-trigger="change" hx-target="#where-body">
     <label class="switch">
       <input type="checkbox" name="mode" value="route"{{if .Route}} checked{{end}}>
       <span><b>{{t "where.mode.switch"}}</b><small>{{if .Route}}{{t "where.mode.on"}}{{else}}{{t "where.mode.off"}}{{end}}</small></span>
     </label>
   </form>
-</section>
-
-<section class="panel" aria-labelledby="where-lines-title">
-  <h3 id="where-lines-title">{{template "i-route"}}{{t "where.order"}}</h3>
   <p class="small muted">{{t "where.order.lead"}}</p>
   <ol class="list where-lines">{{range .Lines}}
     <li class="where-line{{if not .Usable}} is-off{{end}}">
-      <form class="list-main" hx-post="/where/line" hx-trigger="change" hx-target="#where">
+      <form class="list-main" hx-post="/where/line" hx-trigger="change" hx-target="#where-body">
         <input type="hidden" name="step" value="{{.Step}}">
         <label class="switch">
           <input type="checkbox" name="on" value="1"{{if and .On .Usable}} checked{{end}}{{if not .Usable}} disabled{{end}}>
@@ -249,38 +230,22 @@
         </label>
       </form>
       <div class="where-move">
-        <button class="btn btn-ghost sm" type="button" hx-post="/where/line" hx-vals='{"step": "{{.Step}}", "action": "up"}' hx-target="#where"{{if .First}} disabled{{end}} aria-label="{{t "where.up"}}">{{template "i-up"}}</button>
-        <button class="btn btn-ghost sm" type="button" hx-post="/where/line" hx-vals='{"step": "{{.Step}}", "action": "down"}' hx-target="#where"{{if .Last}} disabled{{end}} aria-label="{{t "where.down"}}">{{template "i-down"}}</button>
+        <button class="btn btn-ghost sm" type="button" hx-post="/where/line" hx-vals='{"step": "{{.Step}}", "action": "up"}' hx-target="#where-body"{{if .First}} disabled{{end}} aria-label="{{t "where.up"}}">{{template "i-up"}}</button>
+        <button class="btn btn-ghost sm" type="button" hx-post="/where/line" hx-vals='{"step": "{{.Step}}", "action": "down"}' hx-target="#where-body"{{if .Last}} disabled{{end}} aria-label="{{t "where.down"}}">{{template "i-down"}}</button>
       </div>
     </li>{{end}}
   </ol>
-  <form class="row-form row-form-2" hx-post="/where/delay" hx-target="#where">
+  <form class="row-form row-form-2" hx-post="/where/delay" hx-target="#where-body">
     <label class="field"><span>{{t "where.delay"}}</span><input type="number" name="delay" value="{{.Delay}}" min="1" max="60" required></label>
     <button class="btn btn-soft sm" type="submit">{{t "where.save"}}</button>
   </form>
   <p class="small muted">{{t "where.delay.hint"}}</p>
-</section>
-
-<section class="panel" aria-labelledby="where-devices-title">
-  <h3 id="where-devices-title">{{template "i-device"}}{{t "where.devices"}}</h3>
-  {{if .Devices}}<ul class="list">{{range .Devices}}
-    <li><div class="list-main"><span class="strong">{{.Label}}</span></div>
-      <form hx-post="/where/device" hx-trigger="change" hx-target="#where">
-        <input type="hidden" name="sub" value="{{.ID}}">
-        <select name="kind" aria-label="{{t "where.kind"}} {{.Label}}">{{$c := .Choice}}{{$k := .Kind}}
-          <option value=""{{if eq $c ""}} selected{{end}}>{{tf "where.kind.auto" (t (printf "where.kind.%s" $k))}}</option>
-          <option value="computer"{{if eq $c "computer"}} selected{{end}}>{{t "where.kind.computer"}}</option>
-          <option value="phone"{{if eq $c "phone"}} selected{{end}}>{{t "where.kind.phone"}}</option>
-        </select>
-      </form>
-    </li>{{end}}</ul>
-  {{else}}<p class="small muted">{{t "where.nodevices"}}</p>{{end}}
   {{if .Nodes}}<h4 class="notif-sub">{{t "where.nodes"}}</h4>
   <p class="small muted">{{t "where.nodes.lead"}}</p>
   <ul class="list">{{$computers := .Computers}}{{range .Nodes}}
     <li><div class="list-main"><span class="strong">{{.Name}}</span>
       <span class="small muted">{{if .IdleKnown}}{{if .Locked}}{{t "where.idle.locked"}}{{else}}{{tf "where.idle" .Idle}}{{end}}{{else}}{{t "where.idle.unknown"}}{{end}}</span></div>
-      <form hx-post="/where/node" hx-trigger="change" hx-target="#where">
+      <form hx-post="/where/node" hx-trigger="change" hx-target="#where-body">
         <input type="hidden" name="node" value="{{.Name}}">
         <select name="sub" aria-label="{{t "where.node.sub"}} · {{.Name}}">{{$sub := .Sub}}{{$sug := .Suggested}}
           <option value=""{{if eq $sub ""}} selected{{end}}>{{t "where.node.none"}}</option>
@@ -288,18 +253,5 @@
         </select>
       </form>
     </li>{{end}}</ul>{{end}}
-</section>
-
-<section class="panel" aria-labelledby="where-log-title">
-  <h3 id="where-log-title">{{template "i-history"}}{{t "where.log"}}</h3>
-  <p class="small muted">{{t "where.log.lead"}}</p>
-  {{if .Log}}<ul class="list where-log">{{range .Log}}
-    <li><div class="list-main">
-      <span class="strong">{{.What}}</span>
-      <span class="small muted">{{date .At}} · <span class="tag{{if eq .Mode "route"}} tag-ok{{else}} tag-accent{{end}}">{{t (printf "where.mode.%s" .Mode)}}</span>{{if .Seen}} · <span class="tag tag-ok">{{t (printf "where.seen.%s" .Seen)}}</span>{{end}}</span>
-      <span class="small"><b>{{t "where.planned"}}</b> {{.Planned}}</span>
-      <span class="small"><b>{{t "where.sent"}}</b> {{.Sent}}</span>
-    </div></li>{{end}}</ul>
-  {{else}}<p class="small muted">{{t "where.log.none"}}</p>{{end}}
 </section>
 {{end}}

@@ -42,7 +42,7 @@ func (w *web) memoryRoutes(mux *http.ServeMux) {
 	w.intentionRoutes(mux)
 }
 
-var memoryViews = []string{"all", "inbox", "journal", "commitments", "profile", "forgotten"}
+var memoryViews = []string{"all", "journal", "commitments", "profile", "forgotten"}
 
 // memCard is a memory as the page shows it.
 type memCard struct {
@@ -88,9 +88,8 @@ type memoryPage struct {
 	About       []memCard // what the assistant knows about me, pinned first
 	Interview   bool      // a brain to do the interview again
 
-	Intents         []intentCard // the Intentions tab: the live ones
-	IntentsDone     []intentCard // recently closed
-	ProposedIntents []intentCard // in À approuver
+	Intents     []intentCard // the Intentions tab: the live ones
+	IntentsDone []intentCard // recently closed
 }
 
 type kindLink struct {
@@ -180,6 +179,10 @@ func (w *web) memoryCounts(p *memoryPage) {
 
 func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) {
 	q := r.URL.Query()
+	if q.Get("view") == "inbox" { // the proposals moved to « À valider »
+		http.Redirect(rw, r, "/activity/approve", http.StatusSeeOther)
+		return
+	}
 	p := memoryPage{View: q.Get("view"), Q: strings.TrimSpace(q.Get("q")), Kind: q.Get("kind"), Subject: strings.TrimSpace(q.Get("subject")),
 		Past: q.Get("past") == "1", Kinds: memoryKinds, Budget: profileBudget}
 	if !containsStr(memoryViews, p.View) {
@@ -223,13 +226,6 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 		for _, k := range memoryKinds {
 			p.KindLinks = append(p.KindLinks, kindLink{Kind: k, Href: memoryQuery(p, k), Current: p.Kind == k})
 		}
-	case "inbox":
-		xs, err = m.list(`status = 'proposed'`, nil, `recorded_at DESC, id DESC`, 200)
-		if proposed, e := m.intentions(intentProposed); e == nil {
-			for _, x := range proposed {
-				p.ProposedIntents = append(p.ProposedIntents, w.intentCard(x))
-			}
-		}
 	case "journal":
 		xs, err = m.list(`kind = 'episode' AND status = 'active'`, nil, `occurred_at DESC, id DESC`, 300)
 		p.Runs, _ = m.runs(5)
@@ -252,7 +248,7 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 		if shown[x.ID] {
 			continue
 		}
-		card := w.memCard(x, p.View == "inbox")
+		card := w.memCard(x, false)
 		if p.View == "journal" {
 			day := time.Date(x.OccurredAt.Year(), x.OccurredAt.Month(), x.OccurredAt.Day(), 0, 0, 0, 0, time.Local)
 			if n := len(p.Days); n == 0 || !p.Days[n-1].Day.Equal(day) {
@@ -671,7 +667,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.off":              "La mémoire de {{name}} n'a pas pu s'ouvrir : voir le journal d'eriphe-core.",
 		"mem.export":           "Exporter",
 		"mem.view.all":         "Souvenirs",
-		"mem.view.inbox":       "À approuver",
 		"mem.view.journal":     "Journal",
 		"mem.view.commitments": "Intentions",
 		"mem.view.profile":     "Profil",
@@ -694,7 +689,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.none":             "Rien ici pour l'instant. {{name}} retient ce que tu lui demandes, et ce qu'il tire de tes journées chaque nuit.",
 		"mem.nomatch":          "Aucun souvenir ne correspond.",
 		"mem.inboxlead":        "Ce que {{name}} a lu dans un mail, une page ou une tâche n'entre pas dans sa mémoire sans ton accord.",
-		"mem.inboxnone":        "Rien à approuver.",
 		"mem.journallead":      "Une entrée par conversation et par tâche terminée, écrite chaque nuit par l'extraction.",
 		"mem.journalnone":      "Le journal est vide. Il se remplit chaque nuit à partir de tes conversations.",
 		"mem.commitmentslead":  "Ce qui est dû, par qui, pour quand : tes promesses, celles de {{name}}, ce que tu attends des autres, tes rappels. {{name}} te le rappelle au bon moment.",
@@ -813,7 +807,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.off":              "{{name}}'s memory could not open: see eriphe-core's log.",
 		"mem.export":           "Export",
 		"mem.view.all":         "Memories",
-		"mem.view.inbox":       "To approve",
 		"mem.view.journal":     "Journal",
 		"mem.view.commitments": "Intentions",
 		"mem.view.profile":     "Profile",
@@ -836,7 +829,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.none":             "Nothing here yet. {{name}} remembers what you ask it to, and what it draws from your days every night.",
 		"mem.nomatch":          "No memory matches.",
 		"mem.inboxlead":        "What {{name}} read in a mail, a page or a task does not enter its memory without your approval.",
-		"mem.inboxnone":        "Nothing to approve.",
 		"mem.journallead":      "One entry per conversation and per finished task, written every night by the extraction.",
 		"mem.journalnone":      "The journal is empty. It fills up every night from your conversations.",
 		"mem.commitmentslead":  "What is owed, by whom, by when: your promises, {{name}}'s, what you wait for from others, your reminders. {{name}} reminds you at the right time.",

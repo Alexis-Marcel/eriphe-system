@@ -232,7 +232,7 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	}
 	out := map[string]any{"id": x.ID, "status": x.Status}
 	if x.Status == memProposed {
-		out["note"] = "Only proposed: " + d.Why + ". " + c.conf().User + " approves it in the workspace (Mémoire, À approuver)."
+		out["note"] = "Only proposed: " + d.Why + ". " + c.conf().User + " approves it in the workspace (À valider)."
 	}
 	if x.Pinned {
 		out["profile"] = "pinned"

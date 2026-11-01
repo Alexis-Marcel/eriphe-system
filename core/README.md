@@ -1477,18 +1477,32 @@ answers 409 with the reason.
 Eriphe's own interface, served by eriphe-core on its own HTTPS listener: the conversation with
 Eriphe in the middle, its tasks on the side as live cards (machine, agent, repository and branch,
 state, the pull request or document the agent mentioned), the permissions waiting for an answer
-inline in the conversation (Yes / No, with an optional reason for the agent), and the settings:
-devices (what Eriphe sees and does on each, and the command that connects one), agents, accounts and tools (the vault), the folders
-given to Eriphe (see [Folders](#folders)), the app and the notifications of this device (below), and the journal of decisions.
-The conversation is the one main screen; the header has two buttons, Tâches (a badge counts the
-running tasks, and turns urgent when one waits for the user) and Réglages. On a wide screen Tâches
+inline in the conversation (Yes / No, with an optional reason for the agent), Activité (what one
+consults) and the settings (what one sets). The assistant manages: what the brain can set itself
+(a rule, a watch, a memory, an intention) is asked of it in the conversation, and its pages show
+the state, say why, and undo, with a line saying how to ask rather than a form.
+The conversation is the one main screen; the header has three buttons, Tâches (a badge counts the
+running tasks, and turns urgent when one waits for the user), Activité and Réglages. On a wide screen Tâches
 hides or shows the side panel; on a phone it opens the tasks as a sheet over the conversation
 (closed by its button, Escape or the browser's back), and from any other page it comes back to
-the conversation on its tasks (`/#tasks-panel`). The settings come in four groups: Assistant (the
-memory, "Ce que Jarvis sait de toi", still at `/memory`, what happened, and the agents), Connexions (tools,
-folders), Appareils & accès (devices, remote access, app and notifications, channels) and Mon espace
-(account, sign-out, journal); an entry is marked when it needs a look (an update, a tool in error,
-a refused key). On a phone the settings say the way back, "‹ Conversation".
+the conversation on its tasks (`/#tasks-panel`).
+
+**Activité** (`/activity`, `web_activity.go`) has two views. The feed is what the brain reads with
+`since` (below), by kind (tasks, notifications, watches with their silences, intentions, messages)
+and period; its "tool accesses" kind is the journal of decisions, paged. **À valider**
+(`/activity/approve`) is the one place where what the brain proposed waits for the user: the
+permissions of tasks, memories and intentions, notification rules, watches, and the quiet hours
+the activity suggests (to adopt in one tap). Each is approved or rejected with its own action, and
+the list reloads itself. The Activité button counts the proposals (not the permissions: Tâches
+shows them) and opens À valider while any waits.
+
+The settings come in four groups: Assistant (the memory, "Ce que Jarvis sait de toi", still at
+`/memory`, the watches, the agents, the skills), Connexions (tools, folders), Appareils & accès
+(devices, remote access, notifications) and Mon espace (account, sign-out); an entry is marked
+when it needs a look (an update, a tool in error, a refused key). On a phone the settings say the
+way back, "‹ Conversation". The pages that moved keep their addresses as redirects:
+`/settings/happened` and `/settings/journal` lead to Activité, `/settings/channels` and
+`/settings/where` to their sections of Notifications, `/memory?view=inbox` to À valider.
 The conversation shows the user's messages and the assistant's answers. The events given to the
 brain (a tool or an agent added, a task's turn over, a permission asked) are its notes and are not
 shown; a task that failed, was stopped or was lost is one short line that opens its drawer. When
@@ -1771,14 +1785,14 @@ page follows the visible viewport). The service worker (`/sw.js`,
 served with the static files' version so that each update brings a fresh cache) keeps the static
 files only: versioned ones cache first, the others network first; a page is always fetched, and
 offline a small static page says so. No page, action or event stream is ever cached.
-Settings → App & notifications tells how to install it on this device (iPhone, Android or a
+Settings → Notifications tells how to install it on this device (iPhone, Android or a
 computer), with the browser's own prompt when Chrome or Edge offers one.
 
 **Notifications.** Standard Web Push (RFC 8030, encrypted per RFC 8291, signed with VAPID per RFC
 8292; `push.go`, with [webpush-go](https://github.com/SherClockHolmes/webpush-go)). eriphe-core
 makes its VAPID key pair at first start (`push-vapid.key` in the data folder, 0600, never logged)
 and gives the public key to the page (`GET /push/key`, or the page's own attribute). In Settings →
-App & notifications, the switch "Me prévenir sur cet appareil" asks the browser's permission, then
+Notifications, the switch "Me prévenir sur cet appareil" asks the browser's permission, then
 subscribes and sends the subscription (`POST /push/subscribe`; `POST /push/unsubscribe` removes
 one); the page lists the devices notified, each with a remove button and "cet appareil" on the
 one in hand, and sends a test to it. Three things are pushed, titled with the assistant's name, in
@@ -1788,7 +1802,7 @@ the language the device used:
 |---|---|---|
 | a worker task finished its turn, or failed (or was lost) | « Tâche finie : <title> », « La tâche « <title> » a échoué » | the conversation with that task's drawer (`/?task=<id>`) |
 | a permission waits for the user (one that is theirs, or any while the assistant is away), or the assistant ended a message on a question | « <Name> attend ta réponse : <tool and command, or the question> » | the conversation, at that permission or message |
-| the brain tells something on its own (`notify`), or answers a due intention, and the decision below says now | its text, with 👍 / 👎 / « pas maintenant » buttons where the platform shows them | that notification in Settings → App & notifications, with why |
+| the brain tells something on its own (`notify`), or answers a due intention, and the decision below says now | its text, with 👍 / 👎 / « pas maintenant » buttons where the platform shows them | that notification in Settings → Notifications, with why |
 
 Each is pushed once, and not at all while a workspace tab is visible and focused: every open tab
 tells eriphe-core when it comes in front or leaves (`POST /presence`, and every 20 s while in
@@ -1823,8 +1837,8 @@ a level; the code decides (`decideNotify`, no model):
   carries), and returned to the brain per ref.
 - **Rules are written by the brain only when the user asked in that clean turn** (its `source_ref`
   cites the user's message of the turn, which speaks of being told); otherwise, and always on a
-  tainted turn, they are proposed and the user approves them in Settings, where every rule is shown,
-  edited and deleted.
+  tainted turn, they are proposed and the user approves them in Activité → À valider; Settings →
+  Notifications shows every rule in force, to delete (a new or changed one is asked of the brain).
 - **Adaptive quiet hours, never applied alone.** eriphe-core records cheap signals of activity (the
   user's messages, a workspace tab in front, in 10-minute buckets kept 30 days, reactions to
   notifications) and of unwelcome moments (« pas maintenant »), and suggests a window per kind of
@@ -1842,11 +1856,11 @@ allows: none, injection cases blocked: all).
 
 **Channels: push and Telegram** (`channels.go`, `telegram.go`, `web_telegram.go`). What is sent
 (`tell`) goes by the user's channels: web push and Telegram, all by default, a narrower default in
-Settings → Channels, or a topic rule's own (`channels`: `push`, `telegram` or both). The decision
+Settings → Notifications (Canaux), or a topic rule's own (`channels`: `push`, `telegram` or both). The decision
 above is unchanged; the channels only say where a "now" goes. Telegram, two-way, without an
 inbound port:
 
-- **Setup.** The user creates a bot with BotFather and pastes its token in Settings → Channels:
+- **Setup.** The user creates a bot with BotFather and pastes its token in Settings → Notifications (Canaux):
   checked with `getMe`, kept in the vault (`telegram-bot`), never shown, logged or put in an error
   (the Bot API puts it in the URL: errors are stripped of both). Eriphe then shows a one-time code
   (10 minutes, 10 wrong tries); the private-chat account that sends it to the bot (or opens
@@ -1866,7 +1880,7 @@ inbound port:
   is checked. Files, photos and voice notes are not read; the bot says so.
 - **Approvals stay in the workspace.** No button approves anything: a permission that is the
   user's (user_only) is told on Telegram with what waits and a link, and proposed rules or memories
-  are approved in Settings only. (An optional "approve
+  are approved in the workspace's À valider only. (An optional "approve
   from Telegram" with a second, explicit confirmation is not built.)
 
 **Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
@@ -1888,8 +1902,8 @@ A tab left in front on a machine its node says is idle or locked is not the user
 quiet hours unless the topic's rule says even at night. A brief, a task done or a question is sent
 to one device and not moved on; a test goes to its device. A topic rule keeps channels
 (`channels`), adds lines to the first step (`also`: "Getout: the phone too") or forbids some
-(`never`); a note from a tainted turn never gets a line added nor moves on. Settings → Où te
-prévenir orders the lines (each shown once what it needs is connected, one switch each), sets the
+(`never`); a note from a tainted turn never gets a line added nor moves on. Settings →
+Notifications (Où te prévenir) orders the lines (each shown once what it needs is connected, one switch each), sets the
 delay, says which subscription is a phone or a computer and which node is on which computer
 (suggested by system), and lists the last decisions (`route_log`, planned next to sent). It starts
 in **observe** mode: everything goes as before (every channel, nothing while a tab is in front)
@@ -1922,7 +1936,7 @@ turn; a source that keeps free/busy times only (never titles) joins there.
 - **Taint.** By default `since` quotes only own items and names external ones without their text,
   so reading it does not taint the turn; `include_external` quotes them too and taints the turn
   (`since.external`), as reading an external memory does.
-- **« Ce qui s'est passé »** (`/settings/happened`, Settings → Assistant) shows the same feed to the
+- **Activité** (`/activity`) shows the same feed to the
   user, by kind, since they were last here (the start of their last absence; the last 24 hours if
   none), or the last 24 hours or 7 days, external items marked.
 
@@ -1955,8 +1969,9 @@ features of their own: they are watches whose prompt composes `since`, `notifica
   `since("last_brief")`.
 - **Who writes them.** The brain writes a watch only when the user asked for it in that clean turn
   (its `source_ref` cites the user's message of the turn); otherwise, and always on a tainted turn,
-  it is proposed and the user approves it in **Settings → Watches**, where every watch is listed
-  with its last runs, paused, edited and deleted (what the user writes there is active at once).
+  it is proposed and the user approves it in **Activité → À valider**. Settings → Veilles lists the routines
+  (horaire, retour) apart from the watches (outil, alerte), each with its last runs, to pause,
+  resume or delete; there is no form: the user asks the brain, and the page says how.
   Changing or deleting one takes the user's word in a clean turn. Names and prompts go through the
   memory's scanner.
 - **`outil`: polling a tool, without a model.** eriphe-core calls a catalog tool itself (the pool's
@@ -2177,7 +2192,7 @@ is still due; never periodically. An intention drawn from external content stays
 the user approves it; approved, it may remind, never act: the wake turn that reads it is tainted
 (`intention.external`), and so is a turn whose `intentions` tool returns one. The Memory page lists
 them (Intentions) with done, snooze (an hour, tomorrow 9:00), cancel and reopen; proposed ones are
-approved or rejected there and in À approuver. Schema 4 moved the `commitment` memories into the
+approved or rejected in Activité → À valider. Schema 4 moved the `commitment` memories into the
 table (state kept; each memory archived, with a log entry naming its intention; one already late
 is due and listed, without waking the brain); a `commitment` written since becomes an intention.
 An assistant whose spec lists its `triggers` gets the clock only if `clock` is among them.
@@ -2210,7 +2225,7 @@ does not lift this. Only a delivery holding a user message starts a clean turn: 
 events only (a task's permission, its end) goes on with the current turn and its taint, since
 what the brain read is still in its context; so does a resumed brain session. Every write goes through a scanner: instructions to a model, invisible
 characters, credentials and links carrying tokens are refused; imperative wording not from the
-user is only proposed. Proposals wait in the workspace (Mémoire → À approuver).
+user is only proposed. Proposals wait in the workspace (Activité → À valider).
 
 **Reading back is reading too.** A memory of trust `external` (a task's journal episode, a
 proposal from a mail the user approved) summarises what was read outside: a turn whose `recall`
