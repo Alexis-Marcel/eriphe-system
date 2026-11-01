@@ -11,7 +11,9 @@ import (
 // notify and the code still decides (notify.go); the channels only say
 // where what is sent goes. By default, every channel the user set up; the
 // user may narrow that default (Settings → Channels), and a topic rule may
-// name its own ("project:getout → now, Telegram and push").
+// name its own ("project:getout → now, Telegram and push"). That is how
+// notifications go in observe mode; in route mode the router picks one
+// device at a time (route.go), and a rule's channels keep only those.
 
 const (
 	chanPush     = "push"
@@ -58,26 +60,6 @@ func (c *core) channelsOf(n pushNote) []string {
 		ch = c.defaultChannels()
 	}
 	return strings.Split(ch, ",")
-}
-
-// tell is the one way every notification goes: nothing while the user is
-// looking at the workspace, else to each of its channels the user set up.
-func (c *core) tell(n pushNote) {
-	if !n.Anyway && c.push != nil && c.push.inFront() {
-		return
-	}
-	for _, ch := range c.channelsOf(n) {
-		switch ch {
-		case chanPush:
-			if c.push != nil {
-				c.push.deliver(n)
-			}
-		case chanTelegram:
-			if c.tg != nil {
-				c.tg.deliver(n)
-			}
-		}
-	}
 }
 
 // anyChannel tells whether the user can be reached at all.

@@ -204,6 +204,16 @@ through the sleep. `GET /v1/node` reports how as `keeps_awake`.
 A machine installed before this gets the host's part (`eriphe-awake`, "Eriphe awake") by running
 its install command again; the node's own part comes with its update.
 
+### Idle time
+
+`GET /v1/node` also reports `idle`: `{"known": true, "seconds": 42, "locked": false}`, how long the
+machine's keyboard and mouse have been idle and whether its screen is locked, so that eriphe-core
+notifies the computer the user is at, else their phone (`core/route.go`). A number and a flag,
+nothing of what is on screen. On macOS with the node on the Mac itself it is read from IOKit
+(`ioreg`'s `HIDIdleTime` and the console session's lock, a few milliseconds, no permission);
+elsewhere (Windows through WSL, Linux, Lima's VM) it is `{"known": false}` for now. eriphe-core
+keeps it in memory only.
+
 ## API (through the tunnel)
 
 | Call | What |

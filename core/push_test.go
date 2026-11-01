@@ -62,6 +62,7 @@ type browser struct {
 	mu    sync.Mutex
 	got   []pushPayload
 	heads []http.Header
+	paths []string // the endpoint each push went to: which device
 }
 
 func newBrowser(t *testing.T, vapidPub string) *browser {
@@ -73,6 +74,7 @@ func newBrowser(t *testing.T, vapidPub string) *browser {
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		b.heads = append(b.heads, r.Header.Clone())
+		b.paths = append(b.paths, r.URL.Path)
 		checkVAPID(t, r, vapidPub, "https://"+r.Host)
 		var p pushPayload
 		if err := json.Unmarshal(decryptPush(t, b.key, b.auth, body), &p); err != nil {

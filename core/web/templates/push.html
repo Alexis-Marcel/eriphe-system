@@ -123,7 +123,7 @@
 {{end}}
 {{define "notify-rules-frag"}}{{template "notify-rules" .Data}}{{end}}
 
-{{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{t (printf "rule.ch.%s" .Channels)}}{{end}}{{end}}</span>
+{{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{t (printf "rule.ch.%s" .Channels)}}{{end}}{{if .Also}} · {{t "rule.also"}} <span class="mono">{{.Also}}</span>{{end}}{{if .Never}} · {{t "rule.never"}} <span class="mono">{{.Never}}</span>{{end}}{{end}}</span>
 {{if .Why}}<span class="small muted">{{.Why}}</span>{{end}}{{end}}
 
 {{define "rule-form"}}
@@ -138,6 +138,12 @@
   <label class="check"><input type="checkbox" name="night" value="1"{{if .Night}} checked{{end}}> {{t "rule.night"}}</label>
   <label class="field"><span>{{t "rule.channels"}}</span><select name="channels">{{$c := .Channels}}{{range (list "" "push" "telegram" "push,telegram")}}
     <option value="{{.}}"{{if eq $c .}} selected{{end}}>{{t (printf "rule.ch.%s" .)}}</option>{{end}}</select></label>
+  <label class="field"><span>{{t "rule.also"}}</span><select name="also">{{$a := .Also}}{{range (list "" "phone" "telegram" "computer")}}
+    <option value="{{.}}"{{if eq $a .}} selected{{end}}>{{if .}}{{t (printf "where.line.%s" .)}}{{else}}{{t "rule.lines."}}{{end}}</option>{{end}}
+    {{if and $a (not (eq $a "phone" "telegram" "computer"))}}<option value="{{$a}}" selected>{{$a}}</option>{{end}}</select></label>
+  <label class="field"><span>{{t "rule.never"}}</span><select name="never">{{$n := .Never}}{{range (list "" "voice" "telegram" "phone" "computer")}}
+    <option value="{{.}}"{{if eq $n .}} selected{{end}}>{{if .}}{{t (printf "where.line.%s" .)}}{{else}}{{t "rule.lines."}}{{end}}</option>{{end}}
+    {{if and $n (not (eq $n "voice" "telegram" "phone" "computer"))}}<option value="{{$n}}" selected>{{$n}}</option>{{end}}</select></label>
   <label class="field"><span>{{t "rule.days"}}</span><select name="days">{{$d := .Days}}{{range (list "all" "weekdays" "weekend")}}
     <option value="{{.}}"{{if eq $d .}} selected{{end}}>{{t (printf "rule.days.%s" .)}}</option>{{end}}</select></label>
   <label class="field"><span>{{t "rule.from"}}</span><input type="time" name="from" value="{{.FromText}}"></label>
@@ -204,4 +210,96 @@
   </fieldset>
   <div class="actions"><button class="btn btn-soft sm" type="submit">{{t "channels.save"}}</button></div>
 </form>
+{{end}}
+
+{{/* Settings → Où te prévenir (web_where.go, route.go): the lines in the
+     user's order, observe or route, the delay, which device is which, and
+     the last decisions. Every form answers with the whole panel. */}}
+{{define "i-route"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6h6a3.5 3.5 0 0 1 0 7h-5a3.5 3.5 0 0 0 0 7h6"/></svg>{{end}}
+{{define "i-up"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>{{end}}
+{{define "i-down"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>{{end}}
+
+{{define "where"}}
+<header class="page-head"><h2>{{t "settings.where"}}</h2><p>{{t "where.lead"}}</p></header>
+<div id="where" class="where">{{template "where-body" .Data}}</div>
+{{end}}
+{{define "where-frag"}}{{template "where-body" .Data}}{{end}}
+
+{{define "where-body"}}
+<section class="panel" aria-labelledby="where-mode-title">
+  <h3 id="where-mode-title">{{template "i-eye"}}{{t "where.mode"}}</h3>
+  <form hx-post="/where/mode" hx-trigger="change" hx-target="#where">
+    <label class="switch">
+      <input type="checkbox" name="mode" value="route"{{if .Route}} checked{{end}}>
+      <span><b>{{t "where.mode.switch"}}</b><small>{{if .Route}}{{t "where.mode.on"}}{{else}}{{t "where.mode.off"}}{{end}}</small></span>
+    </label>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="where-lines-title">
+  <h3 id="where-lines-title">{{template "i-route"}}{{t "where.order"}}</h3>
+  <p class="small muted">{{t "where.order.lead"}}</p>
+  <ol class="list where-lines">{{range .Lines}}
+    <li class="where-line{{if not .Usable}} is-off{{end}}">
+      <form class="list-main" hx-post="/where/line" hx-trigger="change" hx-target="#where">
+        <input type="hidden" name="step" value="{{.Step}}">
+        <label class="switch">
+          <input type="checkbox" name="on" value="1"{{if and .On .Usable}} checked{{end}}{{if not .Usable}} disabled{{end}}>
+          <span><b>{{t (printf "where.line.%s" .Step)}}</b><small>{{if .Hint}}{{t .Hint}}{{else}}{{t (printf "where.line.%s.hint" .Step)}}{{end}}</small></span>
+        </label>
+      </form>
+      <div class="where-move">
+        <button class="btn btn-ghost sm" type="button" hx-post="/where/line" hx-vals='{"step": "{{.Step}}", "action": "up"}' hx-target="#where"{{if .First}} disabled{{end}} aria-label="{{t "where.up"}}">{{template "i-up"}}</button>
+        <button class="btn btn-ghost sm" type="button" hx-post="/where/line" hx-vals='{"step": "{{.Step}}", "action": "down"}' hx-target="#where"{{if .Last}} disabled{{end}} aria-label="{{t "where.down"}}">{{template "i-down"}}</button>
+      </div>
+    </li>{{end}}
+  </ol>
+  <form class="row-form row-form-2" hx-post="/where/delay" hx-target="#where">
+    <label class="field"><span>{{t "where.delay"}}</span><input type="number" name="delay" value="{{.Delay}}" min="1" max="60" required></label>
+    <button class="btn btn-soft sm" type="submit">{{t "where.save"}}</button>
+  </form>
+  <p class="small muted">{{t "where.delay.hint"}}</p>
+</section>
+
+<section class="panel" aria-labelledby="where-devices-title">
+  <h3 id="where-devices-title">{{template "i-device"}}{{t "where.devices"}}</h3>
+  {{if .Devices}}<ul class="list">{{range .Devices}}
+    <li><div class="list-main"><span class="strong">{{.Label}}</span></div>
+      <form hx-post="/where/device" hx-trigger="change" hx-target="#where">
+        <input type="hidden" name="sub" value="{{.ID}}">
+        <select name="kind" aria-label="{{t "where.kind"}} {{.Label}}">{{$c := .Choice}}{{$k := .Kind}}
+          <option value=""{{if eq $c ""}} selected{{end}}>{{tf "where.kind.auto" (t (printf "where.kind.%s" $k))}}</option>
+          <option value="computer"{{if eq $c "computer"}} selected{{end}}>{{t "where.kind.computer"}}</option>
+          <option value="phone"{{if eq $c "phone"}} selected{{end}}>{{t "where.kind.phone"}}</option>
+        </select>
+      </form>
+    </li>{{end}}</ul>
+  {{else}}<p class="small muted">{{t "where.nodevices"}}</p>{{end}}
+  {{if .Nodes}}<h4 class="notif-sub">{{t "where.nodes"}}</h4>
+  <p class="small muted">{{t "where.nodes.lead"}}</p>
+  <ul class="list">{{$computers := .Computers}}{{range .Nodes}}
+    <li><div class="list-main"><span class="strong">{{.Name}}</span>
+      <span class="small muted">{{if .IdleKnown}}{{if .Locked}}{{t "where.idle.locked"}}{{else}}{{tf "where.idle" .Idle}}{{end}}{{else}}{{t "where.idle.unknown"}}{{end}}</span></div>
+      <form hx-post="/where/node" hx-trigger="change" hx-target="#where">
+        <input type="hidden" name="node" value="{{.Name}}">
+        <select name="sub" aria-label="{{t "where.node.sub"}} · {{.Name}}">{{$sub := .Sub}}{{$sug := .Suggested}}
+          <option value=""{{if eq $sub ""}} selected{{end}}>{{t "where.node.none"}}</option>
+          {{range $computers}}<option value="{{.ID}}"{{if eq $sub .ID}} selected{{end}}>{{.Label}}{{if eq $sug .ID}} {{t "where.suggested"}}{{end}}</option>{{end}}
+        </select>
+      </form>
+    </li>{{end}}</ul>{{end}}
+</section>
+
+<section class="panel" aria-labelledby="where-log-title">
+  <h3 id="where-log-title">{{template "i-history"}}{{t "where.log"}}</h3>
+  <p class="small muted">{{t "where.log.lead"}}</p>
+  {{if .Log}}<ul class="list where-log">{{range .Log}}
+    <li><div class="list-main">
+      <span class="strong">{{.What}}</span>
+      <span class="small muted">{{date .At}} · <span class="tag{{if eq .Mode "route"}} tag-ok{{else}} tag-accent{{end}}">{{t (printf "where.mode.%s" .Mode)}}</span>{{if .Seen}} · <span class="tag tag-ok">{{t (printf "where.seen.%s" .Seen)}}</span>{{end}}</span>
+      <span class="small"><b>{{t "where.planned"}}</b> {{.Planned}}</span>
+      <span class="small"><b>{{t "where.sent"}}</b> {{.Sent}}</span>
+    </div></li>{{end}}</ul>
+  {{else}}<p class="small muted">{{t "where.log.none"}}</p>{{end}}
+</section>
 {{end}}

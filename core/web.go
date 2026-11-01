@@ -236,6 +236,7 @@ func (w *web) routes() http.Handler {
 	w.welcomeRoutes(mux) // web_welcome.go
 	w.pushRoutes(mux)    // web_push.go
 	w.channelRoutes(mux) // web_telegram.go
+	w.whereRoutes(mux)   // web_where.go
 	return w.headers(mux)
 }
 
@@ -494,6 +495,7 @@ func (c *core) serveWeb(cfg *Config) error {
 	}
 	handler := w.routes()
 	go w.followWaiting(nil) // push notifications of what waits for the user (web_push.go)
+	go c.followRoutes(nil)  // the next device for what was not seen (route_send.go)
 	if c.remote != nil {
 		// The same workspace on the tailnet, once remote access is on (remote.go).
 		c.remote.setWorkspace(tailnetHandler(c.remote.name, handler))

@@ -49,6 +49,8 @@ type core struct {
 	push        *pusher          // notifications on the user's devices (push.go); nil without the workspace
 	notifyClock func() time.Time // the time of notify's decisions (notify.go); nil: now
 	tg          *telegram        // the user's Telegram bot (telegram.go); nil without the workspace
+	idles       sync.Map         // node name → nodeIdle, its machine's idle time, in memory only (route_signals.go)
+	routeMu     sync.Mutex       // one escalation pass at a time (route_send.go)
 
 	github *githubClient // Eriphe's GitHub App (github_app.go)
 	creds  credCache     // credentials minted for tasks, while they last (credentials.go)
@@ -153,6 +155,11 @@ func (c *core) refreshNode(ctx context.Context, n *nodeClient) {
 	err := errOffline
 	if n.connected() {
 		info, err = n.info(ctx)
+	}
+	if err == nil {
+		info = c.takeIdle(n.name, info, time.Now()) // in memory only (route_signals.go)
+	} else {
+		c.idles.Delete(n.name)
 	}
 	if err := c.store.setNodeStatus(n.name, err == nil, info); err != nil {
 		log.Printf("store: %v", err)

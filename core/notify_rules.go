@@ -32,6 +32,9 @@ func init() {
 	extraSchema = append(extraSchema, notifyRulesSchema)
 	// Added with the channels (channels.go): where a topic's notifications go.
 	extraColumns = append(extraColumns, `ALTER TABLE notify_rules ADD COLUMN channels TEXT NOT NULL DEFAULT ''`)
+	// Added with the router (route.go): lines a topic adds, or forbids.
+	extraColumns = append(extraColumns, `ALTER TABLE notify_rules ADD COLUMN also TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE notify_rules ADD COLUMN never_on TEXT NOT NULL DEFAULT ''`)
 }
 
 const (
@@ -66,6 +69,8 @@ type notifyRule struct {
 	Outcome   string    `json:"outcome,omitempty"`
 	Night     bool      `json:"night,omitempty"`
 	Channels  string    `json:"channels,omitempty"` // for a topic: where it goes; the default channels when empty
+	Also      string    `json:"also,omitempty"`     // for a topic: lines added to the first one (route.go)
+	Never     string    `json:"never,omitempty"`    // for a topic: lines it never goes by
 	Days      string    `json:"days,omitempty"`
 	From      int       `json:"-"` // minutes after midnight
 	To        int       `json:"-"`
@@ -130,6 +135,12 @@ func (r *notifyRule) check() error {
 			return err
 		}
 		r.Channels = ch
+		if r.Also, err = checkSteps(r.Also); err != nil {
+			return err
+		}
+		if r.Never, err = checkSteps(r.Never); err != nil {
+			return err
+		}
 	case ruleQuiet:
 		if r.Days == "" {
 			r.Days = daysAll
@@ -140,7 +151,7 @@ func (r *notifyRule) check() error {
 		if n := quietLength(r.From, r.To); n < quietMin || n > quietMax {
 			return fmt.Errorf("quiet hours last between %d and %d hours", quietMin/60, quietMax/60)
 		}
-		r.Match, r.Outcome, r.Night, r.Channels = "", "", false, ""
+		r.Match, r.Outcome, r.Night, r.Channels, r.Also, r.Never = "", "", false, "", "", ""
 	default:
 		return errors.New("kind is topic or quiet")
 	}
@@ -153,7 +164,7 @@ func (r notifyRule) same(o notifyRule) bool {
 	return r.Kind == o.Kind && r.Match == o.Match && r.Days == o.Days
 }
 
-const ruleCols = `id, kind, match, outcome, night, days, quiet_from, quiet_to, state, why, source_ref, tainted, by, created, channels`
+const ruleCols = `id, kind, match, outcome, night, days, quiet_from, quiet_to, state, why, source_ref, tainted, by, created, channels, also, never_on`
 
 func (c *core) notifyRules(states ...string) ([]notifyRule, error) {
 	q := `SELECT ` + ruleCols + ` FROM notify_rules`
@@ -174,7 +185,7 @@ func (c *core) notifyRules(states ...string) ([]notifyRule, error) {
 		var r notifyRule
 		var created int64
 		if err := rows.Scan(&r.ID, &r.Kind, &r.Match, &r.Outcome, &r.Night, &r.Days, &r.From, &r.To, &r.State, &r.Why,
-			&r.SourceRef, &r.Tainted, &r.By, &created, &r.Channels); err != nil {
+			&r.SourceRef, &r.Tainted, &r.By, &created, &r.Channels, &r.Also, &r.Never); err != nil {
 			return nil, err
 		}
 		r.Created = time.Unix(created, 0)
@@ -215,8 +226,8 @@ func (c *core) addNotifyRule(r notifyRule) (notifyRule, error) {
 		}
 	}
 	res, err := tx.Exec(`INSERT INTO notify_rules (kind, match, outcome, night, days, quiet_from, quiet_to, state, why, source_ref,
-		tainted, by, created, updated, channels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.Kind, r.Match, r.Outcome, r.Night, r.Days, r.From, r.To, r.State, r.Why, r.SourceRef, r.Tainted, r.By, now, now, r.Channels)
+		tainted, by, created, updated, channels, also, never_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.Kind, r.Match, r.Outcome, r.Night, r.Days, r.From, r.To, r.State, r.Why, r.SourceRef, r.Tainted, r.By, now, now, r.Channels, r.Also, r.Never)
 	if err != nil {
 		return r, err
 	}
