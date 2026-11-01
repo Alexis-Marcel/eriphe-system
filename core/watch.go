@@ -17,7 +17,14 @@ import (
 //   - horaire: at times of day, in the user's zone (watch_schedule.go): the
 //     morning brief, the Sunday review;
 //   - retour: when the user comes back after an absence longer than a
-//     threshold (user_state.go): the point made on their return.
+//     threshold (user_state.go): the point made on their return;
+//   - outil: eriphe-core calls a read-only catalog tool at an interval and
+//     tests a condition on its result, without a model (watch_poll.go);
+//   - alerte: a service calls the watch's own webhook (watch_alert.go).
+//
+// What outil and alerte bring is external content: the turn they wake is
+// tainted. A watch may carry one action the user authorised in advance
+// (watch_grant.go), which the policy lets through on its wake turn.
 //
 // eriphe-core fires them without a model (watch_tick.go): firing records a
 // run and wakes the brain at its next idle with the watch's prompt
@@ -41,11 +48,18 @@ CREATE TABLE IF NOT EXISTS watch_runs (
 CREATE INDEX IF NOT EXISTS watch_runs_watch ON watch_runs (watch_id, id);
 CREATE INDEX IF NOT EXISTS watch_runs_fired ON watch_runs (fired);`
 
-func init() { extraSchema = append(extraSchema, watchSchema) }
+func init() {
+	extraSchema = append(extraSchema, watchSchema)
+	// Added with the sources outil and alerte: the poll's state, the webhook's token hash.
+	extraColumns = append(extraColumns, `ALTER TABLE watches ADD COLUMN poll TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE watches ADD COLUMN hook TEXT NOT NULL DEFAULT ''`)
+}
 
 const (
 	sourceSchedule = "horaire"
 	sourceReturn   = "retour"
+	sourcePoll     = "outil"
+	sourceAlert    = "alerte"
 
 	watchActive   = "active"
 	watchPaused   = "paused"
@@ -71,15 +85,28 @@ const (
 )
 
 var (
-	watchSources = []string{sourceSchedule, sourceReturn}
+	watchSources = []string{sourceSchedule, sourceReturn, sourcePoll, sourceAlert}
 	// Their English names, which the brain may use too.
-	watchSourceAliases = map[string]string{"schedule": sourceSchedule, "return": sourceReturn}
+	watchSourceAliases = map[string]string{"schedule": sourceSchedule, "return": sourceReturn, "tool": sourcePoll,
+		"poll": sourcePoll, "alert": sourceAlert, "webhook": sourceAlert}
 )
 
 // watchSpec is what a source needs, kept as JSON.
 type watchSpec struct {
 	Schedule string `json:"schedule,omitempty"`      // horaire
 	After    int    `json:"after_minutes,omitempty"` // retour: the absence it takes, in minutes
+
+	// outil: the read-only catalog tool called, its fixed arguments, every
+	// how many minutes, and the condition tested on its result.
+	Server string         `json:"server,omitempty"`
+	Tool   string         `json:"tool,omitempty"`
+	Args   map[string]any `json:"args,omitempty"`
+	Every  int            `json:"every_minutes,omitempty"`
+	Cond   *watchCond     `json:"cond,omitempty"`
+	Judge  string         `json:"judge,omitempty"` // a yes/no question for the judge (judge.go), after the condition
+
+	// alerte: the sender signs its calls (HMAC-SHA256, its secret in the vault).
+	Signed bool `json:"signed,omitempty"`
 }
 
 // watch is one watch.
@@ -99,6 +126,8 @@ type watch struct {
 	LastFired time.Time
 	Mark      int64 // retour: the return (unix) it last fired for
 	Created   time.Time
+	Poll      pollState // outil: what the last calls saw
+	Hook      string    // alerte: the hash of its webhook's token; "" until one is made
 }
 
 // returnAfter is the absence a retour watch waits for.
@@ -116,6 +145,10 @@ func (w *watch) When() string {
 		return w.Spec.Schedule
 	case sourceReturn:
 		return "> " + span(w.returnAfter())
+	case sourcePoll:
+		return fmt.Sprintf("%s.%s / %d min", w.Spec.Server, w.Spec.Tool, w.Spec.Every)
+	case sourceAlert:
+		return "webhook"
 	}
 	return ""
 }
@@ -150,6 +183,40 @@ func (w *watch) check() error {
 		if d := w.returnAfter(); d < awayAfter || d > maxReturnAfter {
 			return fmt.Errorf("after is between %s and %s", span(awayAfter), span(maxReturnAfter))
 		}
+	case sourcePoll:
+		return w.checkPoll()
+	case sourceAlert:
+		w.Spec = watchSpec{Signed: w.Spec.Signed}
+	}
+	return nil
+}
+
+// CondText says an outil watch's condition, for people and the brain.
+func (w *watch) CondText() string {
+	c := w.Spec.Cond
+	if c == nil {
+		return ""
+	}
+	path := c.Path
+	if path == "" {
+		path = "result"
+	}
+	switch c.Kind {
+	case condCompare:
+		return fmt.Sprintf("%s %s %s", path, c.Op, c.Value)
+	case condChanged:
+		return path + " changed"
+	}
+	return "call fails"
+}
+
+// checkWatch is check, and for an outil watch that eriphe-core may call its tool.
+func (c *core) checkWatch(w *watch) error {
+	if err := w.check(); err != nil {
+		return err
+	}
+	if w.Source == sourcePoll {
+		return c.checkPollTool(w)
 	}
 	return nil
 }
@@ -173,18 +240,20 @@ func parseAfter(s string) (int, error) {
 	return int(d.Minutes()), nil
 }
 
-const watchCols = `id, name, source, spec, prompt, brief, state, why, source_ref, tainted, by, next_at, last_fired, mark, created`
+const watchCols = `id, name, source, spec, prompt, brief, state, why, source_ref, tainted, by, next_at, last_fired, mark, created,
+	poll, hook`
 
 func scanWatch(row interface{ Scan(...any) error }) (*watch, error) {
 	var w watch
-	var spec string
+	var spec, poll string
 	var next, last sql.NullInt64
 	var created int64
 	if err := row.Scan(&w.ID, &w.Name, &w.Source, &spec, &w.Prompt, &w.Brief, &w.State, &w.Why, &w.SourceRef, &w.Tainted,
-		&w.By, &next, &last, &w.Mark, &created); err != nil {
+		&w.By, &next, &last, &w.Mark, &created, &poll, &w.Hook); err != nil {
 		return nil, err
 	}
 	json.Unmarshal([]byte(spec), &w.Spec)
+	json.Unmarshal([]byte(poll), &w.Poll)
 	w.NextAt, w.LastFired, w.Created = fromNull(next), fromNull(last), time.Unix(created, 0)
 	return &w, nil
 }
@@ -228,6 +297,9 @@ func (c *core) watches(states ...string) ([]*watch, error) {
 // schedule sets when an active watch of source horaire fires next, from now.
 func (c *core) schedule(w *watch, now time.Time) {
 	w.NextAt = time.Time{}
+	if w.State == watchActive && w.Source == sourcePoll {
+		w.NextAt = now // its first look, at the next tick
+	}
 	if w.State != watchActive || w.Source != sourceSchedule {
 		return
 	}
@@ -238,7 +310,7 @@ func (c *core) schedule(w *watch, now time.Time) {
 
 // addWatch keeps a checked watch.
 func (c *core) addWatch(w *watch) (*watch, error) {
-	if err := w.check(); err != nil {
+	if err := c.checkWatch(w); err != nil {
 		return nil, err
 	}
 	var n int
@@ -263,14 +335,15 @@ func (c *core) addWatch(w *watch) (*watch, error) {
 
 // saveWatch writes a changed watch back: its fields, its state, its next fire.
 func (c *core) saveWatch(w *watch) error {
-	if err := w.check(); err != nil {
+	if err := c.checkWatch(w); err != nil {
 		return err
 	}
 	now := c.notifyTime()
 	c.schedule(w, now)
 	spec, _ := json.Marshal(w.Spec)
+	w.Poll = pollState{} // a watch changed or resumed looks afresh
 	res, err := c.store.db.Exec(`UPDATE watches SET name = ?, source = ?, spec = ?, prompt = ?, brief = ?, state = ?, why = ?,
-		next_at = ?, updated = ? WHERE id = ?`, w.Name, w.Source, string(spec), w.Prompt, w.Brief, w.State, w.Why,
+		next_at = ?, updated = ?, poll = '' WHERE id = ?`, w.Name, w.Source, string(spec), w.Prompt, w.Brief, w.State, w.Why,
 		unixOrNil(w.NextAt), now.Unix(), w.ID)
 	if err != nil {
 		return err
@@ -305,6 +378,7 @@ func (c *core) deleteWatch(id int64) error {
 		return errNoWatch
 	}
 	c.store.db.Exec(`DELETE FROM watch_runs WHERE watch_id = ?`, id)
+	c.revokeGrants(id, "watch deleted")
 	return nil
 }
 

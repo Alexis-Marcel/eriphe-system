@@ -287,6 +287,12 @@ func (c *core) brainPermissionOne(ctx context.Context, t *TaskRow, p map[string]
 	server, _, catalog := splitToolName(tool)
 	if catalog && slices.Contains(grantServers(c.taskGrant(t)), server) {
 		decision, reason := c.decide(tool, input)
+		if decision == decideAsk && c.useWatchGrant(grantTool, normalizeToolName(tool), canonicalArgs(input)) {
+			// Exactly the action the user authorised in advance for the watch being woken for (watch_grant.go).
+			yes := true
+			_, err := c.answer(ctx, t.ID, pid, "action autorisée d'avance par une veille", &yes, byPolicy)
+			return err
+		}
 		switch decision {
 		case decideAsk:
 			c.store.markUserOnly(t.ID, pid, reason)

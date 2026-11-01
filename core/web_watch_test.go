@@ -1,7 +1,9 @@
 package main
 
 import (
+	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -55,6 +57,51 @@ func TestWatchRoutes(t *testing.T) {
 	}
 	if ws, _ := c.watches(); len(ws) != 1 || ws[0].State != watchActive {
 		t.Fatalf("after delete %+v", ws)
+	}
+}
+
+// An alerte watch's address is made in Settings and shown once; the hook
+// takes a POST without a session, refuses a body too large, and the
+// address stops working when a new one is made.
+func TestWatchHookRoutes(t *testing.T) {
+	tw := newTestWeb(t)
+	csrf := tw.setup()
+	c := tw.c
+	w, err := c.addWatch(&watch{Name: "GitHub", Source: sourceAlert, Prompt: "Regarde", State: watchActive, By: "owner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := map[string]string{"X-CSRF-Token": csrf}
+	code, body, _ := tw.do("POST", "/watches/"+idText(w.ID)+"/hook", url.Values{}, h)
+	m := regexp.MustCompile(`value="(https://[^"]+/hooks/watch/([A-Za-z0-9_-]+))"`).FindStringSubmatch(body)
+	if code != 200 || m == nil {
+		t.Fatalf("hook %d %s", code, body)
+	}
+	if code, body, _ := tw.do("GET", "/settings/watches", nil, nil); code != 200 || strings.Contains(body, m[2]) {
+		t.Fatal("the address is shown again")
+	}
+	post := func(token string, n int) int {
+		req, _ := http.NewRequest("POST", tw.srv.URL+hookPath+token, strings.NewReader(`{"action":"opened","x":"`+strings.Repeat("a", n)+`"}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := tw.srv.Client().Do(req) // no session
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if got := post(m[2], 10); got != http.StatusAccepted {
+		t.Fatalf("hook call %d", got)
+	}
+	if got := post(m[2], alertBodyMax); got != http.StatusRequestEntityTooLarge {
+		t.Fatalf("too large %d", got)
+	}
+	if runs := runsOf(t, c, w.ID); len(runs) != 1 || !runs[0].External {
+		t.Fatalf("runs %+v", runs)
+	}
+	tw.do("POST", "/watches/"+idText(w.ID)+"/hook", url.Values{}, h)
+	if got := post(m[2], 10); got != http.StatusNotFound {
+		t.Fatalf("old address %d", got)
 	}
 }
 

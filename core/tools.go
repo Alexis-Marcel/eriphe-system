@@ -73,11 +73,17 @@ func newMCPServer(c *core) *mcp.Server {
 
 	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). Returns the task with its id. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
 		func(ctx context.Context, in runRequest) (*TaskRow, error) {
+			granted := false
 			if err := c.taintedResources(in); err != nil { // resources.go
-				return nil, err
+				// Unless it is exactly the task the user authorised in advance for this watch (watch_grant.go).
+				task, cerr := canonicalTask(in)
+				if cerr != nil || !c.useWatchGrant(grantTask, "run_task", task) {
+					return nil, err
+				}
+				granted = true
 			}
 			t, err := c.runTask(ctx, in)
-			if tainted := c.turnTaint(); err == nil && len(tainted) > 0 {
+			if tainted := c.turnTaint(); err == nil && len(tainted) > 0 && !granted {
 				// Started on a tainted turn: its writes ask me (credentials.go).
 				c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(tainted, ", "))
 			}
