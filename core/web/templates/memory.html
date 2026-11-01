@@ -40,7 +40,7 @@
 {{define "mem-stats"}}
 <div class="mem-stats" id="mem-stats" hx-get="{{if eq .View "all"}}/memory{{else}}/memory?view={{.View}}{{end}}" hx-trigger="memory-changed from:body" hx-select="#mem-stats" hx-swap="outerHTML">
   <a class="stat" href="/memory"><b>{{.Active}}</b><span>{{t "mem.stat.active"}}</span></a>
-  <a class="stat{{if .Proposed}} stat-attn{{end}}" href="/activity/approve"><b>{{.Proposed}}</b><span>{{t "mem.stat.proposed"}}</span></a>
+  <a class="stat{{if .Proposed}} stat-attn{{end}}" href="/settings/approve"><b>{{.Proposed}}</b><span>{{t "mem.stat.proposed"}}</span></a>
   <a class="stat{{if .Overdue}} stat-warn{{end}}" href="/memory?view=commitments"><b>{{.Open}}</b><span>{{t "mem.stat.open"}}{{if .Overdue}} · {{tf "mem.stat.overdue" .Overdue}}{{end}}</span></a>
   <a class="stat stat-meter" href="/memory?view=profile">
     <b>{{.Pct}}<small>%</small></b><span>{{t "mem.stat.profile"}}<span class="stat-detail"> · {{tf "mem.budget" .ProfileUsed .Budget}}</span></span>

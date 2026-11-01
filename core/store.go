@@ -496,6 +496,10 @@ type Message struct {
 	// Notice is what the workspace shows of an event: nil for the brain's
 	// own notes (web_notices.go).
 	Notice *eventNotice `json:"-"`
+	// Cards are the cards shown with a message of the brain's, and Why
+	// why it was sent when it was a notification (web_convo_cards.go).
+	Cards []cardView `json:"-"`
+	Why   *msgWhy    `json:"-"`
 }
 
 func (s *Store) addMessage(role, text string, delivered bool) (int64, error) {

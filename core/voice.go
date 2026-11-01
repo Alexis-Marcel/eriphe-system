@@ -170,6 +170,9 @@ func (c *core) handleVoice(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		seq, err = c.store.addMessageVia(roleUser, strings.TrimSpace(in.Text), voiceVia(in.Area, false), false)
+		if err == nil {
+			c.resolveByText(r.Context(), int(seq)) // "oui" to the question just asked (convo_cards.go)
+		}
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -192,6 +195,18 @@ func (c *core) handleVoice(w http.ResponseWriter, r *http.Request) {
 		hold, max = automationWait, automationWait
 	}
 	text := c.voiceReply(r.Context(), int(seq), hold, max, func(delta string) { emit(map[string]string{"delta": delta}) })
+	// A proposal that came with the answer is asked aloud, short; a plain
+	// "oui" or "non" answers it, under the same rule as in writing.
+	if !automation && text != voiceHolding {
+		lang := "fr"
+		if strings.HasPrefix(strings.ToLower(in.Language), "en") {
+			lang = "en"
+		}
+		if q := c.voiceCardQuestion(int(seq), lang); q != "" && !strings.HasSuffix(strings.TrimSpace(text), "?") {
+			emit(map[string]string{"delta": " " + q})
+			text = strings.TrimSpace(text + " " + q)
+		}
+	}
 	emit(map[string]any{"done": true, "text": text, "continue": strings.HasSuffix(text, "?")})
 }
 

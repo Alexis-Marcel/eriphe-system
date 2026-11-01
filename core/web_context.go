@@ -251,6 +251,7 @@ func (w *web) handleMappingProposal(rw http.ResponseWriter, r *http.Request, s *
 		w.toast(rw, err.Error(), false)
 		return
 	}
+	w.c.proposalDecided(cardPresence, id, action == "approve") // its card says so (convo_cards.go)
 	rw.Header().Set("HX-Trigger", hxTrigger(tr(w.lang(r), "ctx.ha.did."+action), true, true))
 	rw.Header().Set("HX-Reswap", "none")
 	rw.WriteHeader(http.StatusOK)

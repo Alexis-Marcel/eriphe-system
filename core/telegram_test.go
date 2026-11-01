@@ -28,6 +28,7 @@ type fakeTelegram struct {
 	next     int64
 	sent     []map[string]any // sendMessage
 	answered []map[string]any // answerCallbackQuery
+	edited   []map[string]any // editMessageText
 	polls    int
 	fail     int // getUpdates that fail before it works again
 }
@@ -83,6 +84,9 @@ func (f *fakeTelegram) serve(rw http.ResponseWriter, r *http.Request) {
 		ok(map[string]any{"message_id": len(f.sent)})
 	case "answerCallbackQuery":
 		f.answered = append(f.answered, in)
+		ok(true)
+	case "editMessageText":
+		f.edited = append(f.edited, in)
 		ok(true)
 	default:
 		reply(404, map[string]any{"ok": false, "error_code": 404, "description": "Not Found"})

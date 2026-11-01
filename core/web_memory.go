@@ -180,7 +180,7 @@ func (w *web) memoryCounts(p *memoryPage) {
 func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) {
 	q := r.URL.Query()
 	if q.Get("view") == "inbox" { // the proposals moved to « À valider »
-		http.Redirect(rw, r, "/activity/approve", http.StatusSeeOther)
+		http.Redirect(rw, r, "/settings/approve", http.StatusSeeOther)
 		return
 	}
 	p := memoryPage{View: q.Get("view"), Q: strings.TrimSpace(q.Get("q")), Kind: q.Get("kind"), Subject: strings.TrimSpace(q.Get("subject")),
@@ -525,6 +525,7 @@ func (w *web) handleMemoryApprove(rw http.ResponseWriter, r *http.Request, s *se
 		w.toast(rw, err.Error(), false)
 		return
 	}
+	w.c.proposalDecided(cardMemory, x.ID, true) // its card says so (convo_cards.go)
 	w.gone(rw, r, "mem.approved")
 }
 
@@ -541,6 +542,7 @@ func (w *web) handleMemoryReject(rw http.ResponseWriter, r *http.Request, s *ses
 		w.toast(rw, err.Error(), false)
 		return
 	}
+	w.c.proposalDecided(cardMemory, x.ID, false)
 	w.gone(rw, r, "mem.rejected")
 }
 

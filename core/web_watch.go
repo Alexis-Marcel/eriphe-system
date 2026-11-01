@@ -107,5 +107,8 @@ func (w *web) handleWatchAction(rw http.ResponseWriter, r *http.Request, s *sess
 		w.toast(rw, err.Error(), false)
 		return
 	}
+	if action == "approve" || action == "reject" {
+		w.c.proposalDecided(cardWatch, id, action == "approve") // its card says so (convo_cards.go)
+	}
 	w.renderWatches(rw, r, s, tr(lang, "watch.did."+action))
 }

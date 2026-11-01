@@ -92,6 +92,7 @@ func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
 		if seq, err := c.store.addMessage(roleBrain, n.Text, true); err == nil {
 			c.store.set(notifiedKey(int(seq)), "1")
 			c.markBrainMessage(int(seq))
+			c.attachTurnCards(int(seq)) // what it proposed in this turn (convo_cards.go)
 			c.store.db.Exec(`UPDATE notifications SET msg = ? WHERE id = ?`, seq, n.ID)
 		}
 	}
@@ -350,7 +351,8 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 		out["topic"] = topicNote
 	}
 	if got.State == ruleProposed {
-		out["note"] = "Only proposed: " + why + ". " + c.conf().User + " approves it in the workspace (À valider). Do not say it is in force."
+		c.cardProposed(cardRule, got.ID)
+		out["note"] = "Only proposed: " + why + ". " + cardNote(c.conf().User) + " Do not say it is in force."
 	}
 	return out, nil
 }

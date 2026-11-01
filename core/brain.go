@@ -201,7 +201,17 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		if m.Via != "" {
 			ref += " · " + m.Via
 		}
-		parts = append(parts, fmt.Sprintf("[%s %s %s] %s", who, m.Time.Local().Format("15:04"), ref, m.Text)+attachmentLines(m.Attachments))
+		line := fmt.Sprintf("[%s %s %s] %s", who, m.Time.Local().Format("15:04"), ref, m.Text) + attachmentLines(m.Attachments)
+		if m.Role == roleUser {
+			line += c.cardAnswerLine(m.Seq) // a plain yes or no that decided a card (convo_cards.go)
+		}
+		parts = append(parts, line)
+	}
+	// The user is here: a few queued proposals go with the answer, at a good moment.
+	if slices.ContainsFunc(msgs, func(m Message) bool { return m.Role == roleUser && m.Via != automationVia }) {
+		if offer := c.offerCards(c.notifyTime()); offer != "" {
+			parts = append(parts, offer)
+		}
 	}
 	profile, hash := c.profileForDelivery()
 	if profile != "" {
@@ -376,12 +386,14 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 				seq, err := c.store.addMessage(roleBrain, text, true)
 				if err == nil {
 					c.markBrainMessage(int(seq))
+					c.attachTurnCards(int(seq))         // what it proposed in this turn (convo_cards.go)
 					c.notifyWake(int(seq), e.Seq, text) // the answer to a due intention reaches the phone
 				}
 			}
 		}
 		if e.Type == "turn_end" {
 			c.watchTurnEnded(e.Seq) // what the brain did of a watch's wake
+			c.cardsTurnEnded()      // what it proposed after its last message
 		}
 		if e.Type == "turn_end" && failed != "" {
 			c.brainFailed(failed, "turn")
@@ -418,6 +430,8 @@ func (c *core) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// No card is answered in words here: this token may be lent to the
+	// brain (self_url), and the brain never decides a card (convo_cards.go).
 	c.ping()
 	writeJSON(w, http.StatusAccepted, map[string]any{"seq": seq})
 }

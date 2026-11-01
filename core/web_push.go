@@ -229,6 +229,7 @@ func (w *web) followWaiting(stop <-chan struct{}) {
 	defer tick.Stop()
 	for {
 		w.c.telegramReplies() // first: it says whether replies go to Telegram (telegram.go)
+		w.c.telegramCards()   // then the cards that go with them (telegram_cards.go)
 		w.pushWaiting()
 		select {
 		case <-stop:

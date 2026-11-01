@@ -36,7 +36,7 @@
 {{else if eq .Role "user"}}
 <div class="msg msg-user" id="m{{.Seq}}">{{if .Attachments}}<div class="msg-body">{{template "attachments" .Attachments}}{{if .Text}}<div class="bubble">{{md .Text}}</div>{{end}}</div>{{else}}<div class="bubble">{{md .Text}}</div>{{end}}<time datetime="{{iso .Time}}">{{if .Via}}<span class="via" title="{{t "chat.via"}}">{{.Via}} · </span>{{end}}{{clock .Time}}</time></div>
 {{else}}
-<div class="msg msg-brain" id="m{{.Seq}}"><span class="avatar" aria-hidden="true">{{template "logo"}}</span><div class="msg-body"><span class="sr-only">{{t "chat.eriphe"}} :</span><div class="bubble">{{md .Text}}</div><time datetime="{{iso .Time}}">{{clock .Time}}</time></div></div>
+<div class="msg msg-brain" id="m{{.Seq}}"><span class="avatar" aria-hidden="true">{{template "logo"}}</span><div class="msg-body"><span class="sr-only">{{t "chat.eriphe"}} :</span><div class="bubble">{{md .Text}}</div>{{template "msg-why" .Why}}{{template "cards" .Cards}}<time datetime="{{iso .Time}}">{{clock .Time}}</time></div></div>
 {{end}}{{end}}
 
 {{/* An error, one way everywhere (problems.go): the sentence, what to do, and the raw text folded in Details. . is a problem. */}}
@@ -291,7 +291,7 @@
 {{define "new-dot"}}<b class="new-dot" title="{{t "update.available"}}"><span class="sr-only">{{t "update.available"}}</span></b>{{end}}
 
 {{/* The settings' own navigation, in four groups: only what is set; what
-one consults is in Activité (activity.html). Every page of the settings
+one looks back on is here too: the Journal and « À valider » (activity.html). Every page of the settings
 has it, the memory's too. A dot marks an entry that needs a look:
 an update (Devices), a tool in error (Tools), a key refused (Agents).
 On a wide screen it is the sidebar, under the way back to the conversation.
@@ -327,6 +327,8 @@ The ways back follow the pages, never the browser's history. */}}
   <div class="nav-group" role="group" aria-labelledby="sg-space">
     <h2 class="nav-group-title" id="sg-space">{{t "settings.g.space"}}</h2>
     <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.accountnav"}}</span>{{template "chev"}}</a>
+    <a href="/settings/journal" {{if eq .Tab "journal"}}aria-current="page"{{end}}>{{template "i-history"}}<span>{{t "settings.journal"}}</span>{{template "chev"}}</a>
+    <a href="/settings/approve" {{if eq .Tab "approve"}}aria-current="page"{{end}}>{{template "i-shield"}}<span>{{t "activity.approve"}}</span>{{if .Waiting}}<span class="nav-count">{{.Waiting}}</span>{{end}}{{template "chev"}}</a>
   </div>
 </nav>
 {{end}}

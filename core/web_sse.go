@@ -40,6 +40,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 	flusher.Flush()
 
 	var lastTasks, lastPending, lastDraft string
+	lastCards := map[int64]string{}
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	quiet, panelsAt, woken := time.Now(), time.Time{}, true
@@ -53,6 +54,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		if fresh {
 			var b strings.Builder
 			w.dress(msgs)
+			w.dressCards(msgs, lang)
 			for _, m := range msgs {
 				html, err := w.fragment(lang, "home", "message", m)
 				if err != nil {
@@ -84,6 +86,24 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 					writeEvent(rw, "pending", after, html)
 					lastPending, sent = html, true
 				}
+			}
+			// The cards: attached to a message already shown, or decided
+			// (here, on Telegram, in words): each sent again when it changed.
+			var b strings.Builder
+			for _, x := range w.liveCards() {
+				if x.Seq > after {
+					continue // its message comes with it
+				}
+				html, err := w.fragment(lang, "home", "card", w.cardView(x, lang))
+				if err != nil || lastCards[x.ID] == html {
+					continue
+				}
+				lastCards[x.ID] = html
+				b.WriteString(html)
+			}
+			if b.Len() > 0 {
+				writeEvent(rw, "cards", after, b.String())
+				sent = true
 			}
 		}
 		// A notification routed to this tab, in front of the user (route_send.go).

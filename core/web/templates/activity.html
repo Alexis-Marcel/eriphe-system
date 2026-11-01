@@ -1,23 +1,28 @@
-{{/* Activité (web_activity.go): what one consults, beside the conversation.
-     The feed of what happened, by period and kind (the tool accesses are
-     the decisions' journal), and « À valider », where everything the brain
-     proposed waits. A proposal's buttons call its own page's actions; the
+{{/* Settings → Journal and « À valider » (web_activity.go): the black box
+     and the fallback. What happens is told in the conversation, and what
+     waits for the user is asked there, on cards (convo.html); these pages
+     are for looking back: the feed of what happened, by period and kind
+     (the tool accesses are the decisions' journal), and every proposal
+     still waiting. A proposal's buttons call its own page's actions; the
      list then reloads itself (memory-changed). */}}
-{{define "main"}}{{with .Data}}
+{{define "journal-page"}}{{with .Data}}
 <div class="activity" id="activity">
-  <header class="page-head"><h2>{{t "nav.activity"}}</h2><p>{{t "activity.lead"}}</p></header>
-  <nav class="seg-tabs" aria-label="{{t "nav.activity"}}">
-    <a href="/activity" {{if eq .View "feed"}}aria-current="page"{{end}}>{{template "i-history"}}{{t "activity.feed"}}</a>
-    <a href="/activity/approve" {{if eq .View "approve"}}aria-current="page"{{end}}>{{template "i-shield"}}{{t "activity.approve"}}{{if .Waiting}}<b class="tab-count">{{.Waiting}}</b>{{end}}</a>
-  </nav>
-  {{if eq .View "approve"}}{{template "approvals" .Approve}}{{else}}{{template "feed" .Feed}}{{end}}
+  <header class="page-head"><h2>{{t "settings.journal"}}</h2><p>{{t "journal.pagelead"}}</p></header>
+  {{template "feed" .}}
+</div>
+{{end}}{{end}}
+
+{{define "approve-page"}}{{with .Data}}
+<div class="activity" id="activity">
+  <header class="page-head"><h2>{{t "activity.approve"}}</h2><p>{{t "approve.pagelead"}}</p></header>
+  {{template "approvals" .}}
 </div>
 {{end}}{{end}}
 
 {{define "feed"}}
 <nav class="pill-tabs" aria-label="{{t "happened.kinds"}}">
-  <a href="/activity?range={{.Range}}" {{if not .Kind}}aria-current="true"{{end}}>{{t "happened.kind.all"}}</a>
-  {{range list "task" "notification" "watch" "intention" "message" "access"}}<a href="/activity?range={{$.Range}}&amp;kind={{.}}" {{if eq . $.Kind}}aria-current="true"{{end}}>{{t (printf "happened.kind.%s" .)}}</a>{{end}}
+  <a href="/settings/journal?range={{.Range}}" {{if not .Kind}}aria-current="true"{{end}}>{{t "happened.kind.all"}}</a>
+  {{range list "task" "notification" "watch" "intention" "message" "access"}}<a href="/settings/journal?range={{$.Range}}&amp;kind={{.}}" {{if eq . $.Kind}}aria-current="true"{{end}}>{{t (printf "happened.kind.%s" .)}}</a>{{end}}
 </nav>
 {{if eq .Kind "access"}}
 <p class="muted small">{{t "journal.lead"}}</p>
@@ -31,7 +36,7 @@
 {{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-list"}}</span><p>{{t "journal.none"}}</p></div>{{end}}
 {{else}}
 <nav class="pill-tabs" aria-label="{{t "happened.range"}}">
-  {{range list "last" "day" "week"}}<a href="/activity?range={{.}}{{if $.Kind}}&amp;kind={{$.Kind}}{{end}}" {{if eq . $.Range}}aria-current="true"{{end}}>{{t (printf "happened.range.%s" .)}}</a>{{end}}
+  {{range list "last" "day" "week"}}<a href="/settings/journal?range={{.}}{{if $.Kind}}&amp;kind={{$.Kind}}{{end}}" {{if eq . $.Range}}aria-current="true"{{end}}>{{t (printf "happened.range.%s" .)}}</a>{{end}}
 </nav>
 <p class="muted small">{{if .FromLast}}{{tf "happened.fromlast" (date .From)}}{{else if .NoLast}}{{t "happened.nolast"}}{{else}}{{tf "happened.from" (date .From)}}{{end}}</p>
 {{if .Items}}
@@ -59,11 +64,11 @@
   <td data-label="{{t "journal.reason"}}" class="muted">{{short .Reason 300}}</td>
 </tr>
 {{end}}
-{{if .Data.Next}}<tr id="journal-more"><td colspan="5"><button class="btn btn-soft" hx-get="/activity?kind=access&amp;offset={{.Data.Next}}" hx-target="#journal-more" hx-swap="outerHTML">{{t "journal.more"}}</button></td></tr>{{end}}
+{{if .Data.Next}}<tr id="journal-more"><td colspan="5"><button class="btn btn-soft" hx-get="/settings/journal?kind=access&amp;offset={{.Data.Next}}" hx-target="#journal-more" hx-swap="outerHTML">{{t "journal.more"}}</button></td></tr>{{end}}
 {{end}}
 
 {{define "approvals"}}
-<div hidden hx-get="/activity/approve" hx-trigger="memory-changed from:body" hx-select="#activity" hx-target="#activity" hx-swap="outerHTML"></div>
+<div hidden hx-get="/settings/approve" hx-trigger="memory-changed from:body" hx-select="#activity" hx-target="#activity" hx-swap="outerHTML"></div>
 <p class="muted small">{{t "approve.lead"}}</p>
 {{if .Perms}}<section class="approve-group" id="permissions" aria-labelledby="ap-perms">
   <h3 id="ap-perms">{{t "approve.perms"}} <span class="count">{{len .Perms}}</span></h3>

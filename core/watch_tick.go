@@ -207,6 +207,13 @@ func (c *core) deliverWatch(ctx context.Context, a Assistant, t *TaskRow) (bool,
 	c.endWatchTurn() // a previous one whose end was not seen
 	now := c.notifyTime()
 	text := c.turnHead(now) + "\n\n" + c.watchWake(w, r, now)
+	// The brief and the return point are the good moments for what waits:
+	// the cards go with the notify that tells them (convo_cards.go).
+	if (w.Brief || w.Source == sourceReturn) && w.Tainted == "" && !r.External {
+		if offer := c.offerCards(now); offer != "" {
+			text += "\n\n" + offer + "\nDis-le dans ton `notify` du point, en une phrase."
+		}
+	}
 	c.turn.goOn(0, 0, t.LastSeq, c.turnTaint())
 	if w.Tainted != "" {
 		c.turn.taint(taintWatch)

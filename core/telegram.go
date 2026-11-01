@@ -38,9 +38,12 @@ import (
 //     user's own message, marked "· Telegram"; it is the user speaking
 //     (a clean turn) because the sender's id is checked. Files and voice
 //     notes are not read: a short note says so.
-//   - Nothing that is the user's to approve (a user_only permission, a
-//     proposed rule or memory) is approvable from Telegram: the message
-//     says what waits and links to the workspace. The only buttons are a
+//   - A proposal of the brain's (a rule, a memory, a watch…) that goes
+//     with a message sent there comes as a card with Oui / Non buttons,
+//     which answer that proposal alone, from the linked account only
+//     (telegram_cards.go). A permission of a task's is never approvable
+//     from Telegram, a user_only one least of all: the message says what
+//     waits and links to the workspace. The other buttons are a
 //     notification's feedback.
 
 const (
@@ -130,9 +133,10 @@ type tgMessage struct {
 }
 
 type tgCallback struct {
-	ID   string `json:"id"`
-	From tgUser `json:"from"`
-	Data string `json:"data"`
+	ID      string     `json:"id"`
+	From    tgUser     `json:"from"`
+	Data    string     `json:"data"`
+	Message *tgMessage `json:"message"` // the message its button is on
 }
 
 type tgUpdate struct {
@@ -459,10 +463,12 @@ func (t *telegram) onMessage(ctx context.Context, token string, m *tgMessage) {
 	case text == "/start" || strings.HasPrefix(text, "/start "):
 		t.send(ctx, token, m.Chat.ID, tr(lang, "tg.already"), nil)
 	default:
-		if _, err := t.c.store.addMessageVia(roleUser, text, viaTelegram, false); err != nil {
+		seq, err := t.c.store.addMessageVia(roleUser, text, viaTelegram, false)
+		if err != nil {
 			log.Printf("telegram: %v", err)
 			return
 		}
+		t.c.resolveByText(ctx, int(seq)) // the sender is checked: a plain yes or no may answer a card
 		t.c.ping()
 	}
 }
@@ -504,6 +510,10 @@ func (t *telegram) onCallback(ctx context.Context, token string, q *tgCallback) 
 		return
 	}
 	lang, answer := t.lang(), ""
+	if id, yes, ok := parseCardData(q.Data); ok {
+		t.onCardButton(ctx, token, q, id, yes)
+		return
+	}
 	if id, fb, ok := parseFeedbackData(q.Data); ok {
 		if _, err := t.c.notificationFeedback(id, fb); err == nil {
 			answer = tr(lang, "notif.fb.thanks")
@@ -587,6 +597,9 @@ func (t *telegram) drain() {
 func (t *telegram) deliver(n pushNote) {
 	if n.Waiting && t.routing() {
 		return // the user writes from Telegram: the brain's reply goes there already
+	}
+	if n.Notif > 0 {
+		t.c.store.set(tgNotifKey(n.Notif), "1") // its message's cards follow it there (telegramCards)
 	}
 	t.post(t.compose(n))
 }
@@ -681,6 +694,7 @@ func (c *core) telegramReplies() {
 }
 
 func (t *telegram) reply(m Message) {
+	t.c.store.set(tgMsgKey(m.Seq), "1") // its cards follow it there (telegramCards)
 	if t.detail() == detailAlert {
 		t.post(joinLines(tr(t.lang(), "tg.replied"), t.link(fmt.Sprintf("/#m%d", m.Seq))), nil)
 		return

@@ -1,0 +1,50 @@
+{{/* The cards of the conversation (convo_cards.go, web_convo_cards.go):
+     what waits for the user's approval, under the brain's message that
+     proposes it, with its own Oui / Non / Modifier; and what happened,
+     folded in a digest. The event stream sends a card again when it
+     changes ("cards"): app.js puts it in place, by its id. */}}
+{{define "cards"}}{{if .}}<div class="pcards">{{range .}}{{template "card" .}}{{end}}</div>{{end}}{{end}}
+
+{{define "card"}}{{if eq .Kind "digest"}}{{template "digest-card" .}}{{else}}
+<section class="pcard is-{{.State}}" id="card-{{.ID}}" data-msg="{{.Seq}}" aria-labelledby="card-{{.ID}}-t">
+  <header class="pcard-head">
+    <span class="pcard-icon" aria-hidden="true">{{template "i-shield"}}</span>
+    <h3 class="pcard-kind" id="card-{{.ID}}-t">{{t (printf "card.kind.%s" .Kind)}}</h3>
+    {{if .Tainted}}<span class="tag tag-no" title="{{t "card.tainted.hint"}}">{{t "notif.tainted"}}</span>{{end}}
+    <details class="pcard-more">
+      <summary aria-label="{{t "card.more"}}" title="{{t "card.more"}}"><span aria-hidden="true">···</span></summary>
+      <div class="pcard-menu"><a href="/settings/approve">{{t "card.allwaiting"}}</a></div>
+    </details>
+  </header>
+  <p class="pcard-text">{{.Text}}</p>
+  {{if .Why}}<p class="pcard-why">{{.Why}}</p>{{end}}
+  {{if eq .State "pending"}}
+  <div class="pcard-actions">
+    <button class="btn btn-primary sm" type="button" hx-post="/cards/{{.ID}}/yes" hx-target="#card-{{.ID}}" hx-swap="outerHTML" hx-disabled-elt="closest .pcard-actions">{{template "i-check"}}{{t "card.yes"}}</button>
+    <button class="btn btn-soft sm" type="button" hx-post="/cards/{{.ID}}/no" hx-target="#card-{{.ID}}" hx-swap="outerHTML" hx-disabled-elt="closest .pcard-actions">{{template "i-x"}}{{t "card.no"}}</button>
+    <button class="btn btn-ghost sm" type="button" data-card-edit="{{tf "card.edit.hint" (short .Text 80)}}">{{t "card.edit"}}</button>
+  </div>
+  {{else}}<p class="pcard-state" role="status">{{if eq .State "approved"}}{{template "i-check"}}{{else if eq .State "rejected"}}{{template "i-x"}}{{end}}{{t (printf "card.state.%s" .State)}}</p>{{end}}
+</section>
+{{end}}{{end}}
+
+{{define "digest-card"}}
+<details class="pcard pdigest" id="card-{{.ID}}" data-msg="{{.Seq}}">
+  <summary>
+    <span class="pcard-icon" aria-hidden="true">{{template "i-history"}}</span>
+    <span class="pdigest-line">{{with .Digest}}{{if .Items}}{{tf "digest.line" (len .Items) (date .From)}}{{else}}{{tf "digest.none" (date .From)}}{{end}}{{end}}</span>
+    {{template "chev"}}
+  </summary>
+  {{with .Digest}}{{if .Items}}<ol class="pdigest-list">
+  {{range .Items}}<li>
+    <time class="mono small muted" datetime="{{iso .At}}">{{clock .At}}</time>
+    <span>{{if .Task}}<a href="/tasks/{{.Task}}" hx-get="/tasks/{{.Task}}" hx-target="#drawer" hx-swap="innerHTML">{{.Summary}}</a>{{else if .Link}}<a href="{{.Link}}">{{.Summary}}</a>{{else}}{{.Summary}}{{end}}</span>
+    {{if .External}}<span class="tag tag-warn" title="{{t "happened.external.hint"}}">{{t "happened.external"}}</span>{{end}}
+  </li>{{end}}
+  </ol>{{end}}{{end}}
+  <p class="pdigest-foot"><a href="/settings/journal">{{t "digest.journal"}}</a></p>
+</details>
+{{end}}
+
+{{/* Why a spontaneous message was sent: its notification's why and subject. */}}
+{{define "msg-why"}}{{with .}}<details class="msg-why"><summary>{{t "chat.why"}}</summary><p>{{.Why}}{{if .Ref}} · {{if .Link}}<a href="{{.Link}}" class="mono">{{.Ref}}</a>{{else}}<span class="mono">{{.Ref}}</span>{{end}}{{end}}</p></details>{{end}}{{end}}

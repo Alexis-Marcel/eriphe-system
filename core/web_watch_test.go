@@ -30,7 +30,7 @@ func TestWatchRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, body, _ := tw.do("GET", "/settings/watches", nil, nil)
-	if code != 200 || strings.Contains(body, "Revue du dimanche") || !strings.Contains(body, `href="/activity/approve#watches"`) ||
+	if code != 200 || strings.Contains(body, "Revue du dimanche") || !strings.Contains(body, `href="/settings/approve#watches"`) ||
 		!strings.Contains(body, "Point au retour") || !strings.Contains(body, "Lui demander") || strings.Contains(body, `hx-post="/watches"`) {
 		t.Fatalf("page %d", code)
 	}
@@ -39,7 +39,7 @@ func TestWatchRoutes(t *testing.T) {
 		!strings.Contains(watches[:strings.Index(watches, "</section>")], "GitHub") {
 		t.Fatal("routines and watches are not apart")
 	}
-	if _, body, _ := tw.do("GET", "/activity/approve", nil, nil); !strings.Contains(body, "Revue du dimanche") ||
+	if _, body, _ := tw.do("GET", "/settings/approve", nil, nil); !strings.Contains(body, "Revue du dimanche") ||
 		!strings.Contains(body, "Après un contenu extérieur") || !strings.Contains(body, `hx-post="/watches/`+idText(p.ID)+`/approve"`) {
 		t.Fatal("the proposed watch is not in À valider")
 	}

@@ -198,7 +198,7 @@ func TestSettingsNavAttention(t *testing.T) {
 func TestShellNeverScrolls(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	for _, path := range []string{"/settings/agents", "/activity", "/memory"} {
+	for _, path := range []string{"/settings/agents", "/settings/journal", "/memory"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); !strings.Contains(body, `<html lang="fr" class="shell">`) {
 			t.Errorf("GET %s: the html element is not marked as the shell", path)
 		}
