@@ -29,7 +29,8 @@ func (c *core) notifyBrain(id, state string) {
 			}
 		}
 	}
-	c.pushTaskEnded(id, state) // and on the user's devices (push.go)
+	c.logTask(id, state, outcome.receipt) // for since (since.go)
+	c.pushTaskEnded(id, state)            // and on the user's devices (push.go)
 	if c.memoryTaskChanged(id, state) {
 		return // the memory's own tasks are eriphe-core's (memory_extract.go)
 	}
@@ -189,7 +190,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 	if err != nil || len(msgs) == 0 {
 		return false, err
 	}
-	parts := []string{nowLine(time.Now())}
+	parts := []string{c.turnHead(time.Now())} // the time and the user's state (user_state.go)
 	for _, m := range msgs {
 		who := c.conf().User
 		if m.Role == roleEvent {

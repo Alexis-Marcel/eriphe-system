@@ -17,6 +17,7 @@
 {{define "i-eye"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg>{{end}}
 {{define "i-bot"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M9 12.5h.01M15 12.5h.01M9.5 16h5"/></svg>{{end}}
 {{define "i-key"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="14" r="4"/><path d="M11 11l8-8M16 6l2.5 2.5M14 8l2 2"/></svg>{{end}}
+{{define "i-history"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/></svg>{{end}}
 {{define "i-list"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>{{end}}
 {{define "i-user"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>{{end}}
 {{define "i-branch"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="5.5" r="2"/><circle cx="7" cy="18.5" r="2"/><circle cx="17" cy="8.5" r="2"/><path d="M7 7.5v9M17 10.5c0 4-5 3-9 6.5"/></svg>{{end}}
@@ -306,6 +307,7 @@ The ways back follow the pages, never the browser's history. */}}
   <div class="nav-group" role="group" aria-labelledby="sg-assistant">
     <h2 class="nav-group-title" id="sg-assistant">{{t "settings.g.assistant"}}</h2>
     <a href="/memory" {{if eq .Tab "memory"}}aria-current="page"{{end}}>{{template "i-memory"}}<span>{{t "nav.memory"}}</span>{{template "chev"}}</a>
+    <a href="/settings/happened" {{if eq .Tab "happened"}}aria-current="page"{{end}}>{{template "i-history"}}<span>{{t "settings.happened"}}</span>{{template "chev"}}</a>
     <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span>{{if .Attn.Agents}}{{template "attn-dot"}}{{end}}{{template "chev"}}</a>
     <a href="/settings/skills" {{if eq .Tab "skills"}}aria-current="page"{{end}}>{{template "i-skill"}}<span>{{t "settings.skills"}}</span>{{template "chev"}}</a>
   </div>
