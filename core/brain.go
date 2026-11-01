@@ -356,7 +356,10 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 			if text, _ := e.Data["text"].(string); toolCallText(text) {
 				c.brainToolCallText(text)
 			} else if strings.TrimSpace(text) != "" && !quietReply(text) {
-				c.store.addMessage(roleBrain, text, true)
+				seq, err := c.store.addMessage(roleBrain, text, true)
+				if err == nil {
+					c.markBrainMessage(int(seq))
+				}
 			}
 		}
 		if e.Type == "turn_end" && failed != "" {

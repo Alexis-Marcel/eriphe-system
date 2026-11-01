@@ -12,12 +12,7 @@ import (
 // hold yet is listed in knownGaps with why; it is then expected to fail, and
 // the test fails as soon as it holds, so that the list stays true.
 
-var knownGaps = map[string]string{
-	"recalled-external-taints":  "recall returns external episodes into a clean turn without tainting it",
-	"pack-quotes-no-external":   "the context pack quotes external episodes' text",
-	"wake-quotes-no-external":   "the wake packet quotes external episodes' text",
-	"tainted-brain-not-trusted": "what the brain said in a tainted turn is first-party in the next extraction",
-}
+var knownGaps = map[string]string{}
 
 type injectionCase struct {
 	name  string

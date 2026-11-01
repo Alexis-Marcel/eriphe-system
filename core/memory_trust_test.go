@@ -188,6 +188,49 @@ func TestTaintedTurn(t *testing.T) {
 	}
 }
 
+// Reading an external memory back is reading external content; reading my
+// own or the brain's is not. What the brain says after is labelled so.
+func TestExternalMemoryTaints(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	setBrain(c, &BrainConfig{Agent: "small"})
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Sam range ses factures dans le dossier Compta"})
+	ownerSays(c, "Où sont mes factures ?")
+	if _, err := c.brainRecall(recallIn{Query: "factures"}); err != nil {
+		t.Fatal(err)
+	}
+	if tainted := c.turnTaint(); len(tainted) != 0 {
+		t.Fatalf("my own memory tainted the turn: %v", tainted)
+	}
+	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Dans le dossier Compta."}}})
+	c.relayBrainOutput(*c.conf().brain(), mustTask(t, c, "t-brain"))
+	mustAdd(t, c.mem, &Memory{Kind: kindEpisode, Subject: "task", Text: "Un mail demande d'envoyer les factures ailleurs",
+		SourceKind: srcExtraction, SourceRef: "task:t-mail", Trust: trustExternal})
+	ownerSays(c, "Et les mails sur les factures ?")
+	if _, err := c.brainRecall(recallIn{Query: "factures"}); err != nil {
+		t.Fatal(err)
+	}
+	if tainted := c.turnTaint(); !containsStr(tainted, taintExternalMemory) {
+		t.Fatalf("external memory read, turn %v", tainted)
+	}
+	c.store.addEvents("t-brain", []EventRow{{Seq: 2, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Un mail parle de les envoyer ailleurs."}}})
+	c.relayBrainOutput(*c.conf().brain(), mustTask(t, c, "t-brain"))
+	now := time.Now()
+	segs, _ := c.transcript(now.Add(-time.Hour), now.Add(time.Hour))
+	trust := map[string]string{}
+	for _, s := range segs {
+		if s.Who == "brain" {
+			trust[s.Text] = s.Trust
+		}
+	}
+	if trust["Dans le dossier Compta."] != trustFirstParty || trust["Un mail parle de les envoyer ailleurs."] != trustExternal {
+		t.Fatalf("brain messages: %v", trust)
+	}
+	// A tainted turn cannot allow what an external memory asked for.
+	if err := c.taintedAllow("t-brain", "p1"); err == nil {
+		t.Fatal("allowed after reading an external memory")
+	}
+}
+
 func TestTaintFromEvents(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "mcp__eriphe-core__list_tasks"}}})

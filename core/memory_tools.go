@@ -161,6 +161,7 @@ func registerMemoryTools(s *mcp.Server, c *core) {
 			if err != nil {
 				return nil, err
 			}
+			c.readMemories(xs)
 			return map[string]any{"note": memoryNote, "commitments": viewMemories(xs, c.mem.now())}, nil
 		})
 }
@@ -189,6 +190,7 @@ func (c *core) brainRecall(in recallIn) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.readMemories(xs)
 	return map[string]any{"note": memoryNote, "memories": viewMemories(xs, c.mem.now())}, nil
 }
 
