@@ -32,6 +32,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/skills", "skills", ""},
 		{"/settings/remote", "remote", ""},
 		{"/settings/notifications", "notifications", ""},
+		{"/settings/channels", "channels", ""},
 		{"/settings/journal", "journal", ""},
 		{"/settings/happened", "happened", ""},
 		{"/settings/happened?range=week&kind=task", "happened", ""},

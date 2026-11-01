@@ -103,7 +103,7 @@ func (w *web) handleNotifyReact(rw http.ResponseWriter, r *http.Request) {
 func (w *web) handleRuleSave(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
 	rule := notifyRule{Kind: r.PostFormValue("kind"), Match: r.PostFormValue("match"), Outcome: r.PostFormValue("outcome"),
-		Night: r.PostFormValue("night") == "1", Days: r.PostFormValue("days"), Why: r.PostFormValue("why"), State: ruleActive, By: "owner"}
+		Night: r.PostFormValue("night") == "1", Channels: r.PostFormValue("channels"), Days: r.PostFormValue("days"), Why: r.PostFormValue("why"), State: ruleActive, By: "owner"}
 	if rule.Kind == ruleQuiet {
 		var err1, err2 error
 		rule.From, err1 = parseClock(r.PostFormValue("from"))

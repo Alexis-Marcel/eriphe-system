@@ -10,6 +10,7 @@
     {{else if eq .Tab "skills"}}{{if eq .View "skill"}}{{template "skill-page" .}}{{else}}{{template "skills" .}}{{end}}
     {{else if eq .Tab "remote"}}{{template "remote" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
+    {{else if eq .Tab "channels"}}{{template "channels" .}}
     {{else if eq .Tab "journal"}}{{template "journal" .}}
     {{else if eq .Tab "happened"}}{{template "happened" .}}
     {{else}}{{template "account" .}}{{end}}

@@ -192,6 +192,7 @@ func (w *web) followWaiting(stop <-chan struct{}) {
 	tick := time.NewTicker(3 * time.Second)
 	defer tick.Stop()
 	for {
+		w.c.telegramReplies() // first: it says whether replies go to Telegram (telegram.go)
 		w.pushWaiting()
 		select {
 		case <-stop:
@@ -203,8 +204,7 @@ func (w *web) followWaiting(stop <-chan struct{}) {
 }
 
 func (w *web) pushWaiting() {
-	p := w.c.push
-	if p == nil || !p.any() {
+	if !w.c.anyChannel() {
 		return
 	}
 	st := w.c.store
@@ -241,7 +241,9 @@ func (w *web) pushWaiting() {
 			continue // a notification went through notify, and was decided there
 		}
 		if q, ok := asksUser(m.Text); ok {
-			w.c.tell(waitingNote(q, fmt.Sprintf("/#m%d", m.Seq), "ask"))
+			note := waitingNote(q, fmt.Sprintf("/#m%d", m.Seq), "ask")
+			note.Waiting = true // on Telegram, a reply there may carry it already (telegram.go)
+			w.c.tell(note)
 		}
 	}
 	st.set("push_msg_seen", strconv.Itoa(msgs[len(msgs)-1].Seq))

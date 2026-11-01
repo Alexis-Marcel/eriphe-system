@@ -34,6 +34,7 @@ type ruleIn struct {
 	Match     string `json:"match,omitempty" jsonschema:"for topic: the ref it applies to, as given to notify; project:getout also matches project:getout:prod"`
 	Outcome   string `json:"outcome,omitempty" jsonschema:"for topic: now, brief or never"`
 	Night     bool   `json:"night,omitempty" jsonschema:"for topic with outcome now: even in the quiet hours and over the daily cap; only if the user said so"`
+	Channels  string `json:"channels,omitempty" jsonschema:"for topic: where its notifications go, push, telegram or push,telegram; the user's default channels when empty"`
 	Days      string `json:"days,omitempty" jsonschema:"for quiet: all, weekdays (the nights before a weekday) or weekend (Friday and Saturday nights); all by default"`
 	From      string `json:"from,omitempty" jsonschema:"for quiet: when the quiet hours start, HH:MM"`
 	To        string `json:"to,omitempty" jsonschema:"for quiet: when they end, HH:MM"`
@@ -50,7 +51,7 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in notificationsIn) (map[string]any, error) {
 			return c.brainNotifications(in)
 		})
-	tool(s, "rule", "Write or delete a notification rule of the user's: what to do with notifications about a ref (now, brief, never, even at night), or the quiet hours. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in Settings.",
+	tool(s, "rule", "Write or delete a notification rule of the user's: what to do with notifications about a ref (now, brief, never, even at night, and by which channels: push, Telegram), or the quiet hours. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in Settings.",
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})
@@ -246,7 +247,7 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 	default:
 		return nil, errors.New("action is add or delete")
 	}
-	r := notifyRule{Kind: in.Kind, Match: in.Match, Outcome: in.Outcome, Night: in.Night, Days: in.Days, Why: in.Why, By: "brain"}
+	r := notifyRule{Kind: in.Kind, Match: in.Match, Outcome: in.Outcome, Night: in.Night, Channels: in.Channels, Days: in.Days, Why: in.Why, By: "brain"}
 	if r.Kind == "" {
 		r.Kind = ruleTopic
 	}

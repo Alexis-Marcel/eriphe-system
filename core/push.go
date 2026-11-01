@@ -31,9 +31,10 @@ import (
 // to encrypt for it), eriphe-core keeps it, and signs each push with its
 // own VAPID key, kept in its data folder and never logged.
 //
-// Everything goes through tell, the one channel: what it sends is skipped
-// while a workspace tab is in front of the user, and a push service that
-// no longer knows a subscription (404, 410) has it removed.
+// Everything goes through tell (channels.go), which also reaches the user
+// on Telegram: what it sends is skipped while a workspace tab is in front
+// of the user, and a push service that no longer knows a subscription
+// (404, 410) has it removed.
 
 const pushSchema = `CREATE TABLE IF NOT EXISTS push_subscriptions (
   id TEXT PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL,
@@ -63,6 +64,11 @@ type pushNote struct {
 	Anyway  bool              // even with a tab in front (a test the user asked for)
 	OnlyFor string            // one subscription's id; all of them when empty
 	React   string            // where its 👍 / 👎 / « pas maintenant » buttons answer (notify.go)
+	// For the other channels (channels.go).
+	Channels string // where it goes: push, telegram or both; the default channels when empty
+	Notif    int64  // the notification it tells, whose feedback its buttons give
+	Why      string // the notification's why
+	Waiting  bool   // a question of the brain's to the user (pushWaiting)
 }
 
 // pushPayload is what the service worker receives (sw.js).
@@ -154,12 +160,9 @@ func vapidKeys(file string) (priv, pub string, err error) {
 	return base64.RawURLEncoding.EncodeToString(key.Bytes()), base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()), nil
 }
 
-// tell is the channel every notification goes through: nothing while the
-// user is looking at the workspace, else a push to each device, sent in
-// the background.
-func (c *core) tell(n pushNote) {
-	p := c.push
-	if p == nil || (!n.Anyway && p.inFront()) || !p.any() {
+// deliver pushes a note to each device, in the background.
+func (p *pusher) deliver(n pushNote) {
+	if !p.any() {
 		return
 	}
 	p.pending.Add(1)
