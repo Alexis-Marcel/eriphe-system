@@ -1485,32 +1485,53 @@ answers 409 with the reason.
 Eriphe's own interface, served by eriphe-core on its own HTTPS listener: the conversation with
 Eriphe in the middle, its tasks on the side as live cards (machine, agent, repository and branch,
 state, the pull request or document the agent mentioned), the permissions waiting for an answer
-inline in the conversation (Yes / No, with an optional reason for the agent), Activité (what one
-consults) and the settings (what one sets). The assistant manages: what the brain can set itself
+inline in the conversation (Yes / No, with an optional reason for the agent), and the settings. The assistant manages: what the brain can set itself
 (a rule, a watch, a memory, an intention) is asked of it in the conversation, and its pages show
 the state, say why, and undo, with a line saying how to ask rather than a form.
-The conversation is the one main screen; the header has three buttons, Tâches (a badge counts the
-running tasks, and turns urgent when one waits for the user), Activité and Réglages. On a wide screen Tâches
+The conversation is the one main screen; the header has two buttons, Tâches (a badge counts the
+running tasks, and turns urgent when one waits for the user) and Réglages. On a wide screen Tâches
 hides or shows the side panel; on a phone it opens the tasks as a sheet over the conversation
 (closed by its button, Escape or the browser's back), and from any other page it comes back to
 the conversation on its tasks (`/#tasks-panel`).
 
-**Activité** (`/activity`, `web_activity.go`) has two views. The feed is what the brain reads with
-`since` (below), by kind (tasks, notifications, watches with their silences, intentions, messages)
-and period; its "tool accesses" kind is the journal of decisions, paged. **À valider**
-(`/activity/approve`) is the one place where what the brain proposed waits for the user: the
-permissions of tasks, memories and intentions, notification rules, watches, and the quiet hours
-the activity suggests (to adopt in one tap). Each is approved or rejected with its own action, and
-the list reloads itself. The Activité button counts the proposals (not the permissions: Tâches
-shows them) and opens À valider while any waits.
+**Conversation first** (`convo_cards.go`, `web_convo_cards.go`, `templates/convo.html`). What waits
+for the user's approval is asked where they talk to the assistant: every proposal (a memory, an
+intention, a notification rule, a watch, a setting, a presence mapping) is a card bound by the code
+to that one proposal, under the brain's message of the turn that made it (or its last message of
+the turn), with Oui, Non (the proposal's own approve and reject) and Modifier (the composer is
+prefilled, and the brain proposes again). The event stream keeps cards up to date (`cards`:
+approved, declined, no longer current). Other proposals (the memory's extraction, a turn that
+said nothing) are queued and offered three at most, once an hour at most, when the user writes or
+at the brief and the return point, never in the quiet hours, at night (22:00–07:00), when a
+source says do not disturb, in a Focus or while busy; the brain says it in a sentence and the
+cards come with its message. A plain yes or no answers a card in words only when the message is
+the user's own (workspace, Telegram or voice from a device; never `/v1/messages`, whose token may
+be lent to the brain, nor an automation), is nothing but a yes or a no, has no file, comes right
+after a recent message of the brain's written in a clean turn that shows exactly one waiting card,
+whose proposal is not drawn from external content; anything else is the brain's to read, or the
+buttons'. The brain has no tool that decides a card. On Telegram, a card follows the reply or the
+notification it goes with, with Oui / Non buttons answered from the linked account only (none in
+"alerts only"); the voice asks the one card of its answer aloud. A read of `since` adds a
+foldable digest card (the items, with links to the tasks) to the brain's next message, and a
+spontaneous message (a notification) has a "Pourquoi ?" with its why and subject.
+
+The **Journal** (`/settings/journal`, `web_activity.go`) is the black box: the feed the brain reads
+with `since` (below), by kind (tasks, notifications, watches with their silences, intentions,
+messages) and period; its "tool accesses" kind is the journal of decisions, paged. **À valider**
+(`/settings/approve`) is the fallback where whatever still waits is listed: the permissions of
+tasks, memories and intentions, notification rules, watches, settings, presence, and the quiet
+hours the activity suggests (to adopt in one tap). Each is approved or rejected with its own
+action, its card says so, and the list reloads itself. Both are entries of the settings (À
+valider with a discreet count), not of the main navigation.
 
 The settings come in four groups: Assistant (the memory, "Ce que Jarvis sait de toi", still at
 `/memory`, the watches, the agents, the skills), Connexions (tools, folders), Appareils & accès
-(devices, remote access, notifications) and Mon espace (account, sign-out); an entry is marked
+(devices, remote access, notifications) and Mon espace (account, the Journal, À valider); an entry is marked
 when it needs a look (an update, a tool in error, a refused key). On a phone the settings say the
 way back, "‹ Conversation". The pages that moved keep their addresses as redirects:
-`/settings/happened` and `/settings/journal` lead to Activité, `/settings/channels` and
-`/settings/where` to their sections of Notifications, `/memory?view=inbox` to À valider.
+`/settings/happened` and `/activity` lead to the Journal, `/activity/approve` and
+`/memory?view=inbox` to À valider, `/settings/channels` and `/settings/where` to their sections of
+Notifications.
 The conversation shows the user's messages and the assistant's answers. The events given to the
 brain (a tool or an agent added, a task's turn over, a permission asked) are its notes and are not
 shown; a task that failed, was stopped or was lost is one short line that opens its drawer. When
@@ -1845,7 +1866,7 @@ a level; the code decides (`decideNotify`, no model):
   carries), and returned to the brain per ref.
 - **Rules are written by the brain only when the user asked in that clean turn** (its `source_ref`
   cites the user's message of the turn, which speaks of being told); otherwise, and always on a
-  tainted turn, they are proposed and the user approves them in Activité → À valider; Settings →
+  tainted turn, they are proposed and the user approves them in À valider (a card in the conversation); Settings →
   Notifications shows every rule in force, to delete (a new or changed one is asked of the brain).
 - **Adaptive quiet hours, never applied alone.** eriphe-core records cheap signals of activity (the
   user's messages, a workspace tab in front, in 10-minute buckets kept 30 days, reactions to
@@ -1907,10 +1928,13 @@ inbound port:
 - **In.** A text from the linked account joins the conversation as the user's message, `via`
   `Telegram` (`[Sam 09:12 #41 · Telegram]` for the brain): a clean turn, because the sender's id
   is checked. Files, photos and voice notes are not read; the bot says so.
-- **Approvals stay in the workspace.** No button approves anything: a permission that is the
-  user's (user_only) is told on Telegram with what waits and a link, and proposed rules or memories
-  are approved in the workspace's À valider only. (An optional "approve
-  from Telegram" with a second, explicit confirmation is not built.)
+- **Proposals as cards, permissions in the workspace.** A proposal of the brain's (a rule, a memory,
+  an intention, a watch, a setting, a presence mapping) that goes with a reply or a notification
+  sent there comes as a card with Oui / Non buttons (`pc:<card>:<y|n>`), answered from the linked
+  account only, through the same code as the workspace's cards (`telegram_cards.go`); none in
+  "alerts only". A task's permission is never approved from Telegram: one that is the user's
+  (user_only) is told with what waits and a link. (An optional "approve a permission from
+  Telegram" with a second, explicit confirmation is not built.)
 
 **Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
 A pure function, `route(note, signals, settings, tried)`, picks one device at a time from signals
@@ -2070,7 +2094,7 @@ the header's line, the entry point's tokens.
 - **Taint.** By default `since` quotes only own items and names external ones without their text,
   so reading it does not taint the turn; `include_external` quotes them too and taints the turn
   (`since.external`), as reading an external memory does.
-- **Activité** (`/activity`) shows the same feed to the
+- The **Journal** (`/settings/journal`) shows the same feed to the
   user, by kind, since they were last here (the start of their last absence; the last 24 hours if
   none), or the last 24 hours or 7 days, external items marked.
 
@@ -2103,7 +2127,7 @@ features of their own: they are watches whose prompt composes `since`, `notifica
   `since("last_brief")`.
 - **Who writes them.** The brain writes a watch only when the user asked for it in that clean turn
   (its `source_ref` cites the user's message of the turn); otherwise, and always on a tainted turn,
-  it is proposed and the user approves it in **Activité → À valider**. Settings → Veilles lists the routines
+  it is proposed and the user approves it in **À valider (a card in the conversation)**. Settings → Veilles lists the routines
   (horaire, retour) apart from the watches (outil, alerte), each with its last runs, to pause,
   resume or delete; there is no form: the user asks the brain, and the page says how.
   Changing or deleting one takes the user's word in a clean turn. Names and prompts go through the
@@ -2326,7 +2350,7 @@ is still due; never periodically. An intention drawn from external content stays
 the user approves it; approved, it may remind, never act: the wake turn that reads it is tainted
 (`intention.external`), and so is a turn whose `intentions` tool returns one. The Memory page lists
 them (Intentions) with done, snooze (an hour, tomorrow 9:00), cancel and reopen; proposed ones are
-approved or rejected in Activité → À valider. Schema 4 moved the `commitment` memories into the
+approved or rejected in À valider (a card in the conversation). Schema 4 moved the `commitment` memories into the
 table (state kept; each memory archived, with a log entry naming its intention; one already late
 is due and listed, without waking the brain); a `commitment` written since becomes an intention.
 An assistant whose spec lists its `triggers` gets the clock only if `clock` is among them.
@@ -2359,7 +2383,7 @@ does not lift this. Only a delivery holding a user message starts a clean turn: 
 events only (a task's permission, its end) goes on with the current turn and its taint, since
 what the brain read is still in its context; so does a resumed brain session. Every write goes through a scanner: instructions to a model, invisible
 characters, credentials and links carrying tokens are refused; imperative wording not from the
-user is only proposed. Proposals wait in the workspace (Activité → À valider).
+user is only proposed. Proposals wait in the workspace (À valider (a card in the conversation)).
 
 **Reading back is reading too.** A memory of trust `external` (a task's journal episode, a
 proposal from a mail the user approved) summarises what was read outside: a turn whose `recall`

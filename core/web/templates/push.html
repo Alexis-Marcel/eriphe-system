@@ -125,7 +125,7 @@
 
 {{define "notify-rules"}}
 <p class="small">{{tf "rule.quietnow" .Weekdays.Window .Weekend.Window}}{{if eq .Weekdays.By "seed"}} {{t "rule.seed"}}{{end}}</p>
-{{if or .Proposed .Suggested}}<p class="small"><a class="to-approve" href="/activity/approve#rules">{{template "i-shield"}}{{t "rule.towait"}}</a></p>{{end}}
+{{if or .Proposed .Suggested}}<p class="small"><a class="to-approve" href="/settings/approve#rules">{{template "i-shield"}}{{t "rule.towait"}}</a></p>{{end}}
 {{if .Rules}}<ul class="list">{{range .Rules}}
   <li><div class="list-main">{{template "rule-line" .}}</div>
     <button class="btn btn-ghost sm" hx-post="/notify/rules/{{.ID}}/delete" hx-target="#notify-rules" hx-confirm="{{t "rule.deleteconfirm"}}">{{template "i-x"}}{{t "rule.delete"}}</button>

@@ -252,8 +252,9 @@ func (c *core) brainSetting(in settingIn) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.cardProposed(cardSetting, id)
 	return map[string]any{"proposed": id, "name": name, "value": value,
-		"note": "Only proposed: " + reason + ". " + c.conf().User + " approves it in the workspace (À valider). Do not say it is in force."}, nil
+		"note": "Only proposed: " + reason + ". " + cardNote(c.conf().User) + " Do not say it is in force."}, nil
 }
 
 // proposeSetting keeps a proposal; it replaces the one waiting for the same setting.

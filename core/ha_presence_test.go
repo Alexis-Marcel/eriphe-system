@@ -605,7 +605,7 @@ func TestHAWeb(t *testing.T) {
 	if _, body, _ := tw.do("GET", "/settings/notifications", nil, nil); !strings.Contains(body, "un satellite de Home Assistant") {
 		t.Error("the voice line usable without a speaker")
 	}
-	_, body, _ = tw.do("GET", "/activity/approve", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/approve", nil, nil)
 	if !strings.Contains(body, `id="presence"`) || !strings.Contains(body, "assist_satellite.salon") {
 		t.Fatal("the proposal is not in À valider")
 	}

@@ -71,7 +71,7 @@
   </li>{{end}}
   </ul>
   {{if .Err}}<p class="small"><span class="tag tag-warn">{{t "ctx.ha.err"}}</span> {{.Err}}</p>{{end}}
-  {{if .Proposed}}<p class="small"><a href="/activity/approve#presence">{{tf "ctx.ha.proposed" .Proposed}}</a></p>{{end}}
+  {{if .Proposed}}<p class="small"><a href="/settings/approve#presence">{{tf "ctx.ha.proposed" .Proposed}}</a></p>{{end}}
   <p class="small muted">{{t "ctx.ha.lead"}}</p>
   <form class="list-main" hx-post="/context/ha/voice-urgent" hx-trigger="change" hx-target="#context">
     <label class="switch"><input type="checkbox" name="on" value="1"{{if .VoiceUrgent}} checked{{end}}>

@@ -159,6 +159,7 @@ func (c *core) brainMapPresence(ctx context.Context, in mapPresenceIn) (map[stri
 		return out, nil
 	}
 	out["proposed"] = id
-	out["note"] = "Only proposed: " + reason + ". " + c.conf().User + " approves it in the workspace (À valider). Do not say it is in force."
+	c.cardProposed(cardPresence, id)
+	out["note"] = "Only proposed: " + reason + ". " + cardNote(c.conf().User) + " Do not say it is in force."
 	return out, nil
 }

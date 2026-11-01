@@ -12,6 +12,8 @@
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
     {{else if eq .Tab "watches"}}{{template "watches" .}}
     {{else if eq .Tab "context"}}{{template "context" .}}
+    {{else if eq .Tab "journal"}}{{template "journal-page" .}}
+    {{else if eq .Tab "approve"}}{{template "approve-page" .}}
     {{else}}{{template "account" .}}{{end}}
   </div>{{end}}
 </div>

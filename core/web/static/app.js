@@ -253,6 +253,41 @@ function eripheInApp(notes) {
     htmx.process(el);
   }
 
+  // A card of the conversation (convo.html), in its message's place.
+  function placeCard(n) {
+    if (!n.id) return;
+    const old = document.getElementById(n.id);
+    if (old) {
+      if (old.outerHTML === n.outerHTML) return;
+      if (old.open) n.open = true; // a digest the user unfolded stays open
+      if (old.contains(document.activeElement)) return; // not under a finger
+      old.replaceWith(n);
+    } else {
+      const body = $("#m" + n.dataset.msg + " .msg-body");
+      if (!body) return;
+      let box = $(".pcards", body);
+      if (!box) {
+        box = document.createElement("div");
+        box.className = "pcards";
+        body.insertBefore(box, $(":scope > time", body));
+      }
+      box.appendChild(n);
+    }
+    htmx.process(n);
+  }
+
+  // A card's "Modifier": the composer says what it is about; the user
+  // finishes the sentence, and the assistant proposes again.
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-card-edit]");
+    const ta = $("#text");
+    if (!b || !ta) return;
+    ta.value = b.dataset.cardEdit;
+    autosize(ta);
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  });
+
   // The event stream: new messages, the tasks panel, the pending requests.
   function connect() {
     const box = $("#messages");
@@ -317,6 +352,15 @@ function eripheInApp(notes) {
       htmx.process(el);
       badge();
       refreshDrawer();
+    });
+    // A card changed (decided here, on Telegram or in words), or was
+    // attached to a message already shown: put it in place, by its id.
+    es.addEventListener("cards", (e) => {
+      const stick = nearBottom();
+      const tpl = document.createElement("template");
+      tpl.innerHTML = e.data;
+      Array.from(tpl.content.children).forEach((n) => placeCard(n));
+      if (stick) toBottom(true);
     });
     es.addEventListener("pending", (e) => {
       const el = $("#pending");

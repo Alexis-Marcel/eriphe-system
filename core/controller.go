@@ -39,7 +39,10 @@ type core struct {
 	turn brainTurn // what the brain's current turn read (memory_trust.go)
 
 	relayMu sync.Mutex // one copy of the brain's output at a time (relayBrainOutput)
-	draft   brainDraft // the brain's message being written (brain_draft.go)
+	// brainSeqOfTurn is the brain's last message of its current turn, for
+	// the cards it proposes after it (convo_cards.go); held by relayMu.
+	brainSeqOfTurn int
+	draft          brainDraft // the brain's message being written (brain_draft.go)
 
 	placing  sync.Mutex // one pass at a time over the tasks waiting for a node
 	failedOn sync.Map   // service name → the node it kept failing on, avoided while another can take it

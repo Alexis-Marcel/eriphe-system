@@ -9,18 +9,20 @@ import (
 )
 
 // The pages that moved lead to their new place, with what the address
-// carried: links in sent notifications and in the brain's messages keep
-// working.
+// carried: links in sent notifications, in the brain's messages and to the
+// old Activité tab keep working.
 func TestActivityRedirects(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	for from, to := range map[string]string{
-		"/settings/happened":                      "/activity",
-		"/settings/happened?range=week&kind=task": "/activity?range=week&kind=task",
-		"/settings/journal":                       "/activity?kind=access",
-		"/settings/channels":                      "/settings/notifications#channels",
-		"/settings/where":                         "/settings/notifications#where",
-		"/memory?view=inbox":                      "/activity/approve",
+		"/settings/happened":                      "/settings/journal",
+		"/settings/happened?range=week&kind=task": "/settings/journal?range=week&kind=task",
+		"/activity":             "/settings/journal",
+		"/activity?kind=access": "/settings/journal?kind=access",
+		"/activity/approve":     "/settings/approve",
+		"/settings/channels":    "/settings/notifications#channels",
+		"/settings/where":       "/settings/notifications#where",
+		"/memory?view=inbox":    "/settings/approve",
 	} {
 		code, _, h := tw.do("GET", from, nil, nil)
 		if code != http.StatusSeeOther || h.Get("Location") != to {
@@ -35,10 +37,10 @@ func TestActivityRedirects(t *testing.T) {
 	}
 }
 
-// Activité is in the main navigation, beside Tâches, not in the settings:
-// its feed filters by kind and period, and the tool accesses are the
-// decisions' journal, paged.
-func TestActivityFeed(t *testing.T) {
+// The Journal is a discreet entry of the settings, no longer a tab of the
+// main navigation: its feed filters by kind and period, and the tool
+// accesses are the decisions' journal, paged.
+func TestJournalInSettings(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	c := tw.c
@@ -46,60 +48,74 @@ func TestActivityFeed(t *testing.T) {
 	c.store.insertTask(&TaskRow{ID: "t-9", Kind: "worker", Runtime: "claude-code", State: stateRunning, Prompt: "Range les factures"})
 	c.store.recordDecision("t-9", "p-0", "Bash", map[string]any{"command": "git push origin main"}, decideDeny, byPolicy, "no pushing to main")
 
-	code, body, _ := tw.do("GET", "/activity?range=day", nil, nil)
+	code, body, _ := tw.do("GET", "/settings/journal?range=day", nil, nil)
 	if code != 200 {
-		t.Fatalf("GET /activity: %d", code)
+		t.Fatalf("GET /settings/journal: %d", code)
 	}
-	for _, want := range []string{`<html lang="fr" class="shell">`, `id="activity-btn"`, `aria-label="Activité" title="Activité" aria-current="page"`,
-		`<a href="/activity" aria-current="page">`, "Le serveur répond lentement.", "Range les factures", `href="/activity?range=day&amp;kind=access"`} {
+	for _, want := range []string{`class="settings-nav"`, `<a href="/settings/journal" aria-current="page">`, "<h2>Journal</h2>",
+		"Le serveur répond lentement.", "Range les factures", `href="/settings/journal?range=day&amp;kind=access"`} {
 		if !strings.Contains(body, want) {
-			t.Errorf("the feed lacks %q", want)
+			t.Errorf("the journal lacks %q", want)
 		}
 	}
-	for _, gone := range []string{`class="settings-nav"`, "git push origin main"} {
-		if strings.Contains(body, gone) {
-			t.Errorf("the feed has %q", gone)
-		}
+	if strings.Contains(body, "git push origin main") {
+		t.Error("the feed shows the tool accesses")
 	}
-	_, body, _ = tw.do("GET", "/activity?range=day&kind=notification", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/journal?range=day&kind=notification", nil, nil)
 	if strings.Contains(body, "Range les factures") || !strings.Contains(body, "Le serveur répond lentement.") {
 		t.Error("the kind filter let a task through")
 	}
-	_, body, _ = tw.do("GET", "/activity?kind=access", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/journal?kind=access", nil, nil)
 	if !strings.Contains(body, "git push origin main") || !strings.Contains(body, "Refusé") || strings.Contains(body, "Range les factures") {
 		t.Error("the tool accesses are not the journal")
 	}
 	for i := 0; i < journalPage; i++ {
 		c.store.recordDecision("t-9", "p-x", "Read", map[string]any{"file_path": "/tmp/x"}, decideAllow, byPolicy, "")
 	}
-	_, body, _ = tw.do("GET", "/activity?kind=access", nil, nil)
-	if !strings.Contains(body, `hx-get="/activity?kind=access&amp;offset=100"`) {
+	_, body, _ = tw.do("GET", "/settings/journal?kind=access", nil, nil)
+	if !strings.Contains(body, `hx-get="/settings/journal?kind=access&amp;offset=100"`) {
 		t.Fatal("no way to the next page of the journal")
 	}
-	_, body, _ = tw.do("GET", "/activity?kind=access&offset=100", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/journal?kind=access&offset=100", nil, nil)
 	if strings.Contains(body, "<html") || !strings.Contains(body, "git push origin main") {
 		t.Errorf("the next page is not the rows alone: %.200s", body)
 	}
-	// The conversation's top bar has it too; the settings no longer list it.
-	if _, body, _ := tw.do("GET", "/", nil, nil); !strings.Contains(body, `id="activity-btn" href="/activity"`) {
-		t.Error("the conversation has no way to Activité")
+}
+
+// The main navigation has no Activité tab nor its badge: what happens is
+// told in the conversation, and what waits is asked there.
+func TestNavWithoutActivity(t *testing.T) {
+	tw, _ := newMemoryWeb(t)
+	mustAdd(t, tw.c.mem, &Memory{Kind: kindFact, Text: "Le colis arrive jeudi", Status: memProposed, SourceKind: srcExtraction})
+	for _, path := range []string{"/", "/settings/agents", "/settings/journal"} {
+		_, body, _ := tw.do("GET", path, nil, nil)
+		for _, gone := range []string{`id="activity-btn"`, `href="/activity`, `<b class="badge">1</b>`} {
+			if strings.Contains(body, gone) {
+				t.Errorf("GET %s still has %q", path, gone)
+			}
+		}
 	}
-	_, body, _ = tw.do("GET", "/settings", nil, nil)
-	for _, gone := range []string{"/settings/happened", "/settings/journal", "/settings/channels", "/settings/where"} {
+	_, body, _ := tw.do("GET", "/settings", nil, nil)
+	for _, want := range []string{`href="/settings/journal"`, `href="/settings/approve"`, `<span class="nav-count">1</span>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the settings lack %q", want)
+		}
+	}
+	for _, gone := range []string{"/settings/happened", "/settings/channels", "/settings/where"} {
 		if strings.Contains(body, `href="`+gone+`"`) {
 			t.Errorf("the settings still list %s", gone)
 		}
 	}
 }
 
-// « À valider » lists every kind of proposal, each with its own approval;
-// the Activité button counts them and leads there.
+// « À valider », the fallback in the settings, lists every kind of
+// proposal, each with its own approval.
 func TestApprovals(t *testing.T) {
 	tw, csrf := newMemoryWeb(t)
 	c, m := tw.c, tw.c.mem
 
-	_, body, _ := tw.do("GET", "/activity/approve", nil, nil)
-	if !strings.Contains(body, "Rien à valider") || strings.Contains(body, `<b class="badge">`) {
+	_, body, _ := tw.do("GET", "/settings/approve", nil, nil)
+	if !strings.Contains(body, "Rien à valider") {
 		t.Fatal("an empty inbox is not said so")
 	}
 
@@ -113,23 +129,19 @@ func TestApprovals(t *testing.T) {
 	c.store.addEvents("t-perm", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-1", "tool_name": "Bash",
 		"input": map[string]any{"command": "npm publish"}}}})
 
-	_, body, _ = tw.do("GET", "/activity/approve", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/approve", nil, nil)
 	for _, want := range []string{
+		`<a href="/settings/approve" aria-current="page">`,
 		`id="permissions"`, "npm publish", `hx-post="/tasks/t-perm/answer"`,
 		`id="memory"`, "Le colis arrive jeudi", `hx-post="/memory/1/approve"`,
 		"Régler la facture du fournisseur", `hx-post="/memory/intention/1/approve"`,
 		`id="rules"`, "Trop de mails.", `hx-post="/notify/rules/1/approve"`,
 		`id="watches"`, "Revue du dimanche", `hx-post="/watches/` + idText(w.ID) + `/approve"`,
-		`hx-trigger="memory-changed from:body"`, `<b class="tab-count">5</b>`,
+		`hx-trigger="memory-changed from:body"`, `<span class="nav-count">4</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("À valider lacks %q", want)
 		}
-	}
-	// The button counts the proposals (the permissions are on Tâches) and leads to them.
-	if _, body, _ := tw.do("GET", "/settings/agents", nil, nil); !strings.Contains(body, `id="activity-btn" href="/activity/approve"`) ||
-		!strings.Contains(body, `<b class="badge">4</b>`) {
-		t.Error("the Activité button does not count the proposals")
 	}
 	// Approving one empties its place, and the page says it changed.
 	h := map[string]string{"X-CSRF-Token": csrf}
@@ -139,13 +151,13 @@ func TestApprovals(t *testing.T) {
 	if _, _, hd := tw.do("POST", "/tasks/t-perm/answer", url.Values{"permission": {"p-1"}, "allow": {"no"}}, h); !strings.Contains(hd.Get("HX-Trigger"), "memory-changed") {
 		t.Error("answering a permission does not reload À valider")
 	}
-	_, body, _ = tw.do("GET", "/activity/approve", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/approve", nil, nil)
 	if strings.Contains(body, "Trop de mails.") {
 		t.Error("an approved rule still waits")
 	}
 	// English.
 	tw.hc.Jar.SetCookies(mustURL(tw.srv.URL), []*http.Cookie{{Name: "lang", Value: "en"}})
-	if _, body, _ := tw.do("GET", "/activity/approve", nil, nil); !strings.Contains(body, "To approve") || !strings.Contains(body, "Routines and watches") {
+	if _, body, _ := tw.do("GET", "/settings/approve", nil, nil); !strings.Contains(body, "To approve") || !strings.Contains(body, "Routines and watches") {
 		t.Error("no English")
 	}
 }

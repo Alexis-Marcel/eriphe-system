@@ -7,19 +7,20 @@ import (
 	"time"
 )
 
-// Activité: what one consults, beside the conversation and its tasks, out
-// of the settings. Two views: the feed the brain reads with since
-// (since.go), by kind, the tool accesses among them (the decisions'
-// journal); and « À valider », the one place where everything the brain
-// proposed waits for the user: permissions, memories, intentions,
-// notification rules, watches, and the quiet hours the activity suggests.
-// The pages these used to have lead here.
+// What one looks back on, in the settings: the Journal, the feed the brain
+// reads with since (since.go), by kind, the tool accesses among them (the
+// decisions' journal); and « À valider », where everything the brain
+// proposed and the user has not answered yet waits: permissions,
+// memories, intentions, notification rules, watches, settings, presence,
+// and the quiet hours the activity suggests. Both are fallbacks: what
+// happens is told in the conversation, and a proposal is asked there, on
+// a card (convo_cards.go). The Activité tab they had leads here.
 
 const happenedPageMax = 200
 
 func (w *web) activityRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /activity", w.auth(w.handleActivity))
-	mux.Handle("GET /activity/approve", w.auth(w.handleApprovals))
+	mux.Handle("GET /settings/journal", w.auth(w.handleActivity))
+	mux.Handle("GET /settings/approve", w.auth(w.handleApprovals))
 	mux.Handle("POST /settings/proposals/{id}/{action}", w.auth(w.handleSettingProposal))
 	// The old addresses, in notifications already sent and in the brain's
 	// messages: they keep working.
@@ -32,8 +33,9 @@ func (w *web) activityRoutes(mux *http.ServeMux) {
 			http.Redirect(rw, r, u, http.StatusSeeOther)
 		})
 	}
-	mux.Handle("GET /settings/happened", moved("/activity", true))
-	mux.Handle("GET /settings/journal", moved("/activity?kind="+feedAccess, false))
+	mux.Handle("GET /settings/happened", moved("/settings/journal", true))
+	mux.Handle("GET /activity", moved("/settings/journal", true))
+	mux.Handle("GET /activity/approve", moved("/settings/approve", false))
 	mux.Handle("GET /settings/channels", moved("/settings/notifications#channels", false))
 	mux.Handle("GET /settings/where", moved("/settings/notifications#where", false))
 }
@@ -67,14 +69,6 @@ var (
 	happenedRanges = []string{"last", "day", "week"}
 )
 
-// activityPage is what both views get: the counts of their tabs.
-type activityPage struct {
-	View    string // feed or approve
-	Waiting int    // what waits in « À valider »
-	Feed    happenedPage
-	Approve approvals
-}
-
 func (w *web) handleActivity(rw http.ResponseWriter, r *http.Request, s *session) {
 	q := r.URL.Query()
 	v := happenedPage{Kind: q.Get("kind"), Range: q.Get("range"), Max: happenedPageMax}
@@ -97,15 +91,14 @@ func (w *web) handleActivity(rw http.ResponseWriter, r *http.Request, s *session
 			v.Journal.Rows, v.Journal.Next = rows[:journalPage], offset+journalPage
 		}
 		if offset > 0 { // "more": the next rows only
-			w.render(rw, r, s, "activity", "journal-rows", page{Data: v.Journal})
+			w.render(rw, r, s, "settings", "journal-rows", page{Data: v.Journal})
 			return
 		}
 	} else if err := w.fillFeed(&v, w.lang(r)); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.render(rw, r, s, "activity", "", page{Title: "nav.activity", Nav: "activity", View: "feed",
-		Data: activityPage{View: "feed", Waiting: w.approvalCount(), Feed: v}})
+	w.render(rw, r, s, "settings", "", page{Title: "settings.journal", Nav: "settings", Tab: "journal", Data: v})
 }
 
 // fillFeed reads the feed of the page's period and kind.
@@ -208,9 +201,9 @@ func (w *web) approvals() approvals {
 	return a
 }
 
-// approvalCount is the number on the Activité button: the proposals, read
-// with a count each. The permissions are not in it: Tâches already shows
-// them, live.
+// approvalCount is the number beside « À valider » in the settings: the
+// proposals, read with a count each. The permissions are not in it: the
+// conversation and Tâches already show them, live.
 func (w *web) approvalCount() int {
 	n := 0
 	if m := w.c.mem; m != nil {
@@ -248,6 +241,7 @@ func (w *web) handleSettingProposal(rw http.ResponseWriter, r *http.Request, s *
 		w.toast(rw, err.Error(), false)
 		return
 	}
+	w.c.proposalDecided(cardSetting, id, action == "approve") // its card says so (convo_cards.go)
 	rw.Header().Set("HX-Trigger", hxTrigger(tr(w.lang(r), "setting.did."+action), true, true))
 	rw.Header().Set("HX-Reswap", "none")
 	rw.WriteHeader(http.StatusOK)
@@ -255,6 +249,5 @@ func (w *web) handleSettingProposal(rw http.ResponseWriter, r *http.Request, s *
 
 func (w *web) handleApprovals(rw http.ResponseWriter, r *http.Request, s *session) {
 	a := w.approvals()
-	w.render(rw, r, s, "activity", "", page{Title: "activity.approve", Nav: "activity", View: "approve",
-		Data: activityPage{View: "approve", Waiting: a.Count(), Approve: a}})
+	w.render(rw, r, s, "settings", "", page{Title: "activity.approve", Nav: "settings", Tab: "approve", Data: a})
 }

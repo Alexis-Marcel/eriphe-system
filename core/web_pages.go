@@ -254,6 +254,7 @@ func (w *web) handleHome(rw http.ResponseWriter, r *http.Request, s *session) {
 		return
 	}
 	w.dress(msgs)
+	w.dressCards(msgs, w.lang(r))
 	tasks, perms, err := w.tasksAndPerms()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
@@ -285,11 +286,13 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 		w.sendError(rw, r, err)
 		return
 	}
-	if _, err := w.c.store.addUserMessage(text, atts); err != nil {
+	seq, err := w.c.store.addUserMessage(text, atts)
+	if err != nil {
 		w.c.store.removeAttachments(atts)
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.c.resolveByText(r.Context(), int(seq)) // a plain yes or no to the card just above (convo_cards.go)
 	w.c.ping()
 	w.notify()
 	rw.WriteHeader(http.StatusNoContent)

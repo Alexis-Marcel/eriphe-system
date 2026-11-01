@@ -16,7 +16,7 @@
   {{if .Secret}}<label class="field"><span>{{t "watch.hook.secret"}}</span><input class="mono" readonly value="{{.Secret}}"></label>{{end}}
   <p class="small muted">{{t "watch.hook.how"}}</p>
 </section>{{end}}
-{{if .Proposed}}<p class="small"><a class="to-approve" href="/activity/approve#watches">{{template "i-shield"}}{{tf "watch.towait" .Proposed}}</a></p>{{end}}
+{{if .Proposed}}<p class="small"><a class="to-approve" href="/settings/approve#watches">{{template "i-shield"}}{{tf "watch.towait" .Proposed}}</a></p>{{end}}
 <section class="panel" aria-labelledby="routine-title">
   <h3 id="routine-title">{{template "i-history"}}{{t "watch.routines"}}</h3>
   <p class="small muted">{{t "watch.routines.lead"}} {{tf "watch.zone" .Zone}}</p>

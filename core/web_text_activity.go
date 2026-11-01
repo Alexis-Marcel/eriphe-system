@@ -1,6 +1,6 @@
 package main
 
-// The words of Activité (web_activity.go, templates/activity.html): the
+// The words of the Journal and « À valider » (web_activity.go, templates/activity.html): the
 // feed, « À valider », and how the pages say to ask the brain.
 
 func init() {
@@ -13,11 +13,7 @@ func init() {
 
 var activityStrings = map[string]map[string]string{
 	"fr": {
-		"nav.activity":         "Activité",
-		"activity.lead":        "Ce qui s'est passé, et ce qui attend ton accord. {{name}} lit le même fil.",
-		"activity.feed":        "Fil",
 		"activity.approve":     "À valider",
-		"activity.waiting":     "%d à valider",
 		"happened.kind.access": "Accès aux outils",
 		"approve.lead":         "Ce que {{name}} propose n'entre pas en vigueur sans ton accord. Pour changer une proposition, dis-le-lui dans la conversation.",
 		"approve.perms":        "Permissions",
@@ -26,7 +22,7 @@ var activityStrings = map[string]map[string]string{
 		"approve.watches":      "Routines et veilles",
 		"approve.quiet":        "Suggestions",
 		"approve.adopt":        "Adopter",
-		"approve.none":         "Rien à valider. Quand {{name}} te propose quelque chose, ça arrive ici.",
+		"approve.none":         "Rien à valider. Quand {{name}} te propose quelque chose, il te le demande dans la conversation.",
 		"ask.go":               "Lui demander",
 		"notif.sent":           "Envoyées",
 		"rule.towait":          "Des propositions attendent dans À valider",
@@ -41,11 +37,7 @@ var activityStrings = map[string]map[string]string{
 		"watch.runs":           "Derniers réveils",
 	},
 	"en": {
-		"nav.activity":         "Activity",
-		"activity.lead":        "What happened, and what waits for your approval. {{name}} reads the same feed.",
-		"activity.feed":        "Feed",
 		"activity.approve":     "To approve",
-		"activity.waiting":     "%d to approve",
 		"happened.kind.access": "Tool accesses",
 		"approve.lead":         "Nothing {{name}} proposes is in force without your approval. To change a proposal, tell it in the conversation.",
 		"approve.perms":        "Permissions",
@@ -54,7 +46,7 @@ var activityStrings = map[string]map[string]string{
 		"approve.watches":      "Routines and watches",
 		"approve.quiet":        "Suggestions",
 		"approve.adopt":        "Adopt",
-		"approve.none":         "Nothing to approve. When {{name}} proposes something, it comes here.",
+		"approve.none":         "Nothing to approve. When {{name}} proposes something, it asks you in the conversation.",
 		"ask.go":               "Ask",
 		"notif.sent":           "Sent",
 		"rule.towait":          "Proposals wait in To approve",

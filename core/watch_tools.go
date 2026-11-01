@@ -166,7 +166,8 @@ func (c *core) brainWatch(in watchIn) (map[string]any, error) {
 	out["watch"] = c.viewWatch(got, 0)
 	switch {
 	case got.State == watchProposed:
-		out["note"] = "Only proposed: " + why + ". " + c.conf().User + " approves it in the workspace (À valider). Do not say it is set up."
+		c.cardProposed(cardWatch, got.ID)
+		out["note"] = "Only proposed: " + why + ". " + cardNote(c.conf().User) + " Do not say it is set up."
 	case got.Source == sourceAlert:
 		out["note"] = "Its webhook address is made by " + c.conf().User + " in Settings (Veilles), and shown there only: you never see it."
 	}

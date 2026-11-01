@@ -129,7 +129,7 @@ func (w *web) parse() error {
 }
 
 // sharedTemplates are the files of definitions every page has, not pages.
-var sharedTemplates = []string{"parts", "catalog", "tools", "agents", "remote", "folders", "push", "skills", "watches", "cards", "context"}
+var sharedTemplates = []string{"parts", "catalog", "tools", "agents", "remote", "folders", "push", "skills", "watches", "cards", "context", "convo", "activity"}
 
 // notify wakes the event streams at once, rather than at their next tick.
 func (w *web) notify() {
@@ -243,6 +243,7 @@ func (w *web) routes() http.Handler {
 	w.whereRoutes(mux)    // web_where.go
 	w.watchRoutes(mux)    // web_watch.go
 	w.activityRoutes(mux) // web_activity.go
+	w.cardRoutes(mux)     // web_convo_cards.go
 	w.contextRoutes(mux)  // web_context.go
 	return w.headers(mux)
 }
@@ -337,7 +338,7 @@ func (w *web) headers(next http.Handler) http.Handler {
 type page struct {
 	Lang    string
 	Title   string
-	Nav     string // chat, activity or settings
+	Nav     string // chat or settings
 	Tab     string // the settings tab
 	View    string // a form within the tab
 	CSRF    string
@@ -346,7 +347,7 @@ type page struct {
 	Build   string // eriphe-core's version
 	Updates updateNotice
 	Attn    attention // the settings' entries that need a look
-	Waiting int       // what waits in « À valider », on the Activité button
+	Waiting int       // what waits in « À valider », beside its entry in the settings
 	Data    any
 }
 
@@ -418,7 +419,7 @@ func (w *web) render(rw http.ResponseWriter, r *http.Request, s *session, name, 
 	p.Build = version
 	if block == "" {
 		p.Updates = w.updateNotice()
-		if p.Nav != "" {
+		if p.Nav == "settings" {
 			p.Waiting = w.approvalCount() // web_activity.go
 		}
 		if p.Nav == "settings" {

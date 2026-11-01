@@ -18,7 +18,7 @@
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <script src="/static/early.js?v={{.Version}}"></script>
 <link rel="stylesheet" href="/static/app.css?v={{.Version}}">
-{{if or (eq .Tab "memory") (eq .Nav "activity")}}<link rel="stylesheet" href="/static/memory.css?v={{.Version}}">{{end}}
+{{if or (eq .Tab "memory") (eq .Tab "approve")}}<link rel="stylesheet" href="/static/memory.css?v={{.Version}}">{{end}}
 {{if eq .Nav "settings"}}<link rel="stylesheet" href="/static/remote.css?v={{.Version}}">{{end}}
 {{if eq .Tab "agents"}}<link rel="stylesheet" href="/static/agents.css?v={{.Version}}">{{end}}
 <script src="/static/htmx.min.js?v=2.0.4" defer></script>
@@ -34,7 +34,6 @@
   <div class="topbar-end">
     <span class="conn" id="conn" hidden role="status">{{t "chat.offline"}}</span>
     <a class="head-btn" id="tasks-btn" href="{{if eq .Nav "chat"}}#tasks-panel{{else}}/#tasks-panel{{end}}"{{if eq .Nav "chat"}} aria-controls="tasks-panel"{{end}} aria-label="{{t "nav.tasks"}}" title="{{t "nav.tasks"}}">{{template "i-tasks"}}<b class="badge" id="tasks-badge" hidden></b></a>
-    <a class="head-btn" id="activity-btn" href="{{if and .Waiting (ne .Nav "activity")}}/activity/approve{{else}}/activity{{end}}" aria-label="{{t "nav.activity"}}{{if .Waiting}} · {{tf "activity.waiting" .Waiting}}{{end}}" title="{{t "nav.activity"}}"{{if eq .Nav "activity"}} aria-current="page"{{end}}>{{template "i-history"}}{{if .Waiting}}<b class="badge">{{.Waiting}}</b>{{end}}</a>
     <a class="head-btn" href="/settings" aria-label="{{t "nav.settings"}}" title="{{t "nav.settings"}}"{{if eq .Nav "settings"}} aria-current="page"{{end}}>{{template "i-settings"}}{{if or .Updates.Core .Updates.Nodes}}{{template "new-dot"}}{{end}}</a>
   </div>
 </header>

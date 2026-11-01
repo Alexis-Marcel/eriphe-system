@@ -111,6 +111,9 @@ func (w *web) handleIntention(rw http.ResponseWriter, r *http.Request, s *sessio
 		w.toast(rw, err.Error(), false)
 		return
 	}
+	if x.State == intentProposed {
+		w.c.proposalDecided(cardIntention, id, action == "approve") // its card says so (convo_cards.go)
+	}
 	rw.Header().Set("HX-Trigger", hxTrigger(tr(w.lang(r), "intent.did."+action), true, true))
 	w.render(rw, r, s, "memory", "intent-card-frag", page{Data: w.intentCard(got)})
 }

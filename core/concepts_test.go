@@ -277,7 +277,7 @@ func TestApprovalsSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, body, _ := tw.do("GET", "/activity/approve", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/approve", nil, nil)
 	for _, want := range []string{`id="settings"`, "Trop de messages gardés.", `hx-post="/settings/proposals/` + idText(id) + `/approve"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("À valider lacks %q", want)

@@ -1481,3 +1481,56 @@ details.app-install > * + * { margin-top: 10px; }
   .seg-tabs { max-width: none; }
   .approve-group > .list { padding: 2px 14px; }
 }
+
+/* The Journal and « À valider » are pages of the settings now. */
+.settings-body .activity { padding: 0; margin: 0; max-width: none; }
+.nav-count { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 999px;
+  background: var(--surface-2); color: var(--muted); font-size: .72rem; font-weight: 650; }
+.nav-count + .chev { margin-left: 4px; }
+
+/* The conversation's cards (convo.html): what waits for the user, under the
+   brain's message that asks, light and quiet; and what happened, folded. */
+.pcards { display: grid; gap: 8px; margin-top: 4px; max-width: 34rem; }
+.pcard { position: relative; display: grid; gap: 6px; padding: 12px 14px; border-radius: 14px; background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border)); box-shadow: var(--shadow-sm); }
+.pcard-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pcard-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-text); flex: none; }
+.pcard-icon .i { width: 15px; height: 15px; }
+.pcard-kind { flex: 1; min-width: 0; font-size: .78rem; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+.pcard-text { font-size: .95rem; font-weight: 550; overflow-wrap: anywhere; }
+.pcard-why { font-size: .84rem; color: var(--muted); overflow-wrap: anywhere; }
+.pcard-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.pcard-actions .btn { min-height: 36px; }
+.pcard-state { display: inline-flex; align-items: center; gap: 6px; font-size: .84rem; font-weight: 600; color: var(--muted); }
+.pcard-state .i { width: 15px; height: 15px; }
+.pcard.is-approved { border-color: var(--border); box-shadow: none; }
+.pcard.is-approved .pcard-state { color: var(--ok); }
+.pcard.is-approved .pcard-icon { background: var(--ok-soft); color: var(--ok); }
+.pcard.is-rejected, .pcard.is-gone { border-color: var(--border); box-shadow: none; background: var(--surface-2); }
+.pcard.is-rejected .pcard-text, .pcard.is-gone .pcard-text { color: var(--muted); font-weight: 500; }
+.pcard.is-rejected .pcard-icon, .pcard.is-gone .pcard-icon { background: var(--surface); color: var(--muted); }
+.pcard-more { position: relative; flex: none; }
+.pcard-more > summary { list-style: none; cursor: pointer; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; color: var(--muted); font-weight: 700; letter-spacing: 1px; }
+.pcard-more > summary::-webkit-details-marker { display: none; }
+.pcard-more > summary:hover { background: var(--surface-2); color: var(--text); }
+.pcard-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; padding: 6px; border-radius: 12px; background: var(--surface);
+  border: 1px solid var(--border); box-shadow: var(--shadow-lg); white-space: nowrap; }
+.pcard-menu a { display: block; padding: 8px 10px; border-radius: 8px; font-size: .86rem; color: var(--text); }
+.pcard-menu a:hover { background: var(--surface-2); text-decoration: none; }
+.pdigest { padding: 0; gap: 0; border-color: var(--border); }
+.pdigest > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; font-size: .9rem; font-weight: 600; }
+.pdigest > summary::-webkit-details-marker { display: none; }
+.pdigest-line { flex: 1; min-width: 0; }
+.pdigest > summary .chev { width: 16px; height: 16px; color: var(--muted); transition: transform .15s; }
+.pdigest[open] > summary .chev { transform: rotate(90deg); }
+.pdigest-list { list-style: none; margin: 0; padding: 0 14px 4px; display: grid; gap: 2px; }
+.pdigest-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 7px 0; border-top: 1px solid var(--border); font-size: .88rem; }
+.pdigest-list li > span { flex: 1; min-width: 10rem; overflow-wrap: anywhere; }
+.pdigest-foot { padding: 6px 14px 12px; font-size: .82rem; }
+.msg-why { font-size: .8rem; color: var(--muted); padding-left: 4px; }
+.msg-why > summary { cursor: pointer; width: fit-content; font-weight: 600; }
+.msg-why p { margin-top: 4px; max-width: 34rem; overflow-wrap: anywhere; }
+@media (max-width: 860px) {
+  .pcards { max-width: none; }
+  .pcard-actions .btn { flex: 1 1 auto; min-height: 40px; }
+}

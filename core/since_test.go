@@ -231,20 +231,20 @@ func TestHappenedPage(t *testing.T) {
 	c.notify(&notification{Text: "Le serveur répond lentement.", Why: "Une alerte.", Source: notifyFromBrain, Tainted: "mail.read"},
 		notifyItem{Level: levelBrief})
 	c.store.insertTask(&TaskRow{ID: "t-9", Kind: "worker", Runtime: "claude-code", State: stateRunning, Prompt: "Range les factures"})
-	code, body, _ := tw.do("GET", "/activity?range=day", nil, nil)
-	if code != 200 || !strings.Contains(body, "<h2>Activité</h2>") || !strings.Contains(body, "Le serveur répond lentement.") ||
+	code, body, _ := tw.do("GET", "/settings/journal?range=day", nil, nil)
+	if code != 200 || !strings.Contains(body, "<h2>Journal</h2>") || !strings.Contains(body, "Le serveur répond lentement.") ||
 		!strings.Contains(body, "Contenu extérieur") || !strings.Contains(body, `href="/tasks/t-9"`) || !strings.Contains(body, "Range les factures") {
 		t.Fatalf("page %d", code)
 	}
-	_, body, _ = tw.do("GET", "/activity?range=day&kind=task", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/journal?range=day&kind=task", nil, nil)
 	if strings.Contains(body, "Le serveur répond lentement.") || !strings.Contains(body, "Range les factures") {
 		t.Fatal("the kind filter let a notification through")
 	}
-	_, body, _ = tw.do("GET", "/activity", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/journal", nil, nil)
 	if !strings.Contains(body, "Pas d&#39;absence") {
 		t.Fatal("no fallback when the user was never away")
 	}
-	_, body, _ = tw.do("GET", "/activity?"+url.Values{"range": {"year"}, "kind": {"<x>"}}.Encode(), nil, nil)
+	_, body, _ = tw.do("GET", "/settings/journal?"+url.Values{"range": {"year"}, "kind": {"<x>"}}.Encode(), nil, nil)
 	if !strings.Contains(body, `aria-current="true">Depuis ta dernière visite`) {
 		t.Fatal("a bad range was not reset")
 	}
