@@ -171,6 +171,9 @@ func notifyCore(t *testing.T, now time.Time) (*core, *browser) {
 	b := newBrowser(t, p.pub)
 	p.client = b.srv.Client()
 	p.subscribe(b.sub("/push/1"))
+	// Pushes are sent in the background: wait for them before the fake
+	// push service closes, not to fail a later test with a stray send.
+	t.Cleanup(p.pending.Wait)
 	c.store.set("notify_zone", "Europe/Paris")
 	c.notifyClock = func() time.Time { return now }
 	return c, b
