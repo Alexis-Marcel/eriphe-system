@@ -224,6 +224,13 @@ its install command again; the node's own part comes with its update.
 States: `running`, `waiting_permission`, `idle` (turn over: done or asking something, the
 orchestrator decides), `stopped`, `failed`.
 
+**When a turn ends** (`turnend.go`), the node looks at the task's container before eriphe-core
+hears that it is idle; meanwhile the task is reported `running`, and no message is delivered. A
+task with a repository gets a `diff` event: `{files}`, the files changed since the commit it started
+from (committed or not, and the new ones, at most 200), listed by `git` in the container (`docker
+exec`, or `container exec` with Apple's engine), with the container's own rights. eriphe-core
+compares it with the agent's receipt.
+
 The only ports the node listens on are for its task containers, each with its own secret: the task
 listener (`-listen`, 8790), where a Claude Code task calls its permission endpoint `/perm/{id}/mcp`,
 its catalog servers at `/mcp/{server}` and a model behind a node at `/model/v1/{path}`, and the egress relay (`-egress-listen`, 8791, see
@@ -349,7 +356,7 @@ tasks behave as before.
 ## Runtimes
 
 A task's `runtime` is the agent program the node drives in its container (`runtime.go`). All
-write the same events (`text`, `tool_use`, `permission`, `permission_answer`, `turn_end`, `state`,
+write the same events (`text`, `tool_use`, `permission`, `permission_answer`, `turn_end`, `state`, `diff`,
 `error`, `restart`), and all send every permission request to eriphe-core through the task's
 inbox. The node injects the agent of `claude-code`, `opencode` and `codex` into any image (see
 [Agents](#agents)), so `GET /v1/node` reports these and `acp` once its engine answers.

@@ -272,7 +272,7 @@ func (n *node) deliver(t *Task) {
 			}
 		case "message":
 			text, _ := it.Data["text"].(string)
-			if run == nil || t.state() != stateIdle {
+			if run == nil || t.state() != stateIdle || t.busyFinishing() {
 				return // the agent is busy: later
 			}
 			if err := run.send(text); err != nil {
@@ -330,7 +330,7 @@ func (n *node) report(c *coreClient, t *Task) {
 		Events    []Event `json:"events"`
 		Delivered int     `json:"delivered"`
 		Draft     string  `json:"draft,omitempty"` // the text being written, after the events
-	}{t.State, t.SessionID, events, t.delivered, t.draft}
+	}{t.reportedState(), t.SessionID, events, t.delivered, t.draft}
 	same := len(events) == 0 && r.State == t.reported.state && r.SessionID == t.reported.session &&
 		r.Delivered == t.reported.delivered && r.Draft == t.reported.draft
 	t.mu.Unlock()

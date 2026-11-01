@@ -196,6 +196,7 @@ func (n *node) startContainer(t *Task, first string) error {
 	t.mu.Lock()
 	t.run = sess
 	t.onTurnEnd = func() { n.handBack(t) }
+	t.onIdle = func() { n.afterTurn(t) } // turnend.go
 	t.mu.Unlock()
 	go n.handBackWhileRunning(t, done)
 	go func() {
