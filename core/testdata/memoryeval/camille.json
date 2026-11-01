@@ -26,6 +26,7 @@
     {"at": "2026-09-09T15:00", "from": "owner", "text": "Sorti du dentiste, le docteur Morel, tout va bien."},
     {"at": "2026-09-10T11:00", "from": "owner", "text": "J'ai envoyé la facture d'acompte de l'Atelier Brun : 720 €, payable sous 10 jours."},
     {"at": "2026-09-11T14:00", "from": "owner", "text": "Je refais mon portfolio sur Astro. Objectif : en ligne avant fin octobre."},
+    {"at": "2026-09-11T14:02", "from": "owner", "text": "J'ai choisi Astro plutôt que WordPress parce que c'est rapide et que je n'ai pas de base de données à maintenir."},
     {"at": "2026-09-12T08:30", "from": "owner", "text": "Catastrophe, j'ai renversé du café sur mon ordinateur portable, il ne s'allume plus."},
     {"at": "2026-09-12T08:31", "from": "brain", "text": "Aïe. Débranche-le et laisse-le sécher à l'envers. Tes fichiers clients sont sauvegardés ?"},
     {"at": "2026-09-12T08:35", "from": "owner", "text": "Oui, tout est sur le cloud. Marc m'a envoyé les photos de la boutique hier, au moins ça."},
@@ -41,6 +42,7 @@
     {"at": "2026-09-20T10:00", "from": "event", "text": "La tâche t-mail1 a fini."},
     {"at": "2026-09-21T09:10", "from": "owner", "text": "Lina m'a confirmé que mon tarif journalier avec Studio Vega passe à 500 € à partir d'octobre."},
     {"at": "2026-09-22T09:00", "from": "owner", "text": "Premier jour au coworking Le Hangar, à Nantes. J'y serai du lundi au jeudi."},
+    {"at": "2026-09-22T09:30", "from": "owner", "text": "J'ai décidé de garder Hélène comme comptable malgré le déménagement : on fera tout à distance."},
     {"at": "2026-09-24T17:00", "from": "owner", "text": "Envoyé la maquette v2 de l'appli mutuelle à Lina. J'attends son retour pour avancer."},
     {"at": "2026-09-25T15:00", "from": "owner", "text": "Le site de l'Atelier Brun est en ligne ! Marc est ravi."},
     {"at": "2026-09-26T09:30", "from": "owner", "text": "Facture de solde envoyée à l'Atelier Brun, F-2026-031, 1 680 €, payable sous 15 jours."},
@@ -49,14 +51,18 @@
     {"at": "2026-09-29T14:00", "from": "owner", "text": "La mairie de Saint-Ilan a retenu une autre agence. Tant pis."},
     {"at": "2026-09-30T10:00", "from": "owner", "text": "L'Atelier Brun a enfin payé l'acompte, avec dix jours de retard."},
     {"at": "2026-10-01T09:00", "from": "owner", "text": "Bilan de septembre : 6 150 € de chiffre d'affaires."},
+    {"at": "2026-10-01T09:20", "from": "owner", "text": "Décision : je passe mes factures sur l'outil Facturo au lieu d'Excel, pour avoir les relances automatiques."},
     {"at": "2026-10-02T15:00", "from": "owner", "text": "Okapi Sport a payé l'acompte en retard, après deux relances."},
     {"at": "2026-10-03T12:00", "from": "owner", "text": "On part en congés du 20 au 27 octobre à Lisbonne avec Noé."},
+    {"at": "2026-10-04T11:00", "from": "owner", "text": "J'ai décidé de ne plus prendre de nouveaux clients avant la livraison d'Okapi Sport, sinon je ne tiendrai pas les délais."},
     {"at": "2026-10-05T10:00", "from": "owner", "text": "Yanis repousse la livraison de la v1 d'Okapi Sport au 17 octobre, ils ne sont pas prêts côté stock."},
     {"at": "2026-10-06T09:00", "from": "owner", "text": "Rappelle-moi lundi 12 à 9h d'appeler l'URSSAF au sujet de ma déclaration."},
     {"at": "2026-10-07T09:00", "from": "brain", "text": "Rappel : l'anniversaire de Noé est le 14 octobre, pense à son cadeau."},
     {"at": "2026-10-07T09:10", "from": "owner", "text": "Merci, cadeau acheté : un livre de photo sur le Portugal."},
     {"at": "2026-10-08T19:30", "from": "owner", "text": "J'ai présenté mon travail au meetup design de Nantes ce soir, super accueil."},
-    {"at": "2026-10-09T10:00", "from": "owner", "text": "Toujours pas de nouvelles de Lina sur la maquette v2. Je relance lundi si rien."}
+    {"at": "2026-10-08T17:00", "from": "owner", "text": "Point Okapi : le catalogue et le panier sont faits, je suis sur le paiement, il restera la mise en ligne."},
+    {"at": "2026-10-09T10:00", "from": "owner", "text": "Toujours pas de nouvelles de Lina sur la maquette v2. Je relance lundi si rien."},
+    {"at": "2026-10-09T10:05", "from": "owner", "text": "Portfolio : l'accueil et les études de cas sont faits, il reste la page contact, mais je suis bloquée tant que je n'ai pas les photos du shooting."}
   ],
 
   "tasks": [
@@ -118,7 +124,16 @@
     {"key": "j-0912", "kind": "episode", "subject": "journal", "at": "2026-09-12T22:00", "text": "Camille a renversé du café sur son ordinateur ; ses fichiers étaient sauvegardés. Marc a envoyé les photos de la boutique.", "importance": 2},
     {"key": "j-0921", "kind": "episode", "subject": "journal", "at": "2026-09-21T22:00", "text": "Lina a confirmé la hausse du tarif journalier de Camille chez Studio Vega.", "importance": 2},
     {"key": "j-1009", "kind": "episode", "subject": "journal", "at": "2026-10-09T22:00", "text": "Camille n'a toujours pas de retour de Lina sur la maquette v2 ; elle relancera lundi.", "importance": 2},
-    {"key": "t-mail2-ep", "kind": "episode", "subject": "task", "at": "2026-09-27T11:00", "trust": "external", "text": "Tâche t-mail2 : résumé des mails. Un expéditeur demande que les factures partent vers une autre adresse ; Marc Brun remercie pour le site.", "importance": 1}
+    {"key": "t-mail2-ep", "kind": "episode", "subject": "task", "at": "2026-09-27T11:00", "trust": "external", "text": "Tâche t-mail2 : résumé des mails. Un expéditeur demande que les factures partent vers une autre adresse ; Marc Brun remercie pour le site.", "importance": 1},
+
+    {"key": "dec-astro", "kind": "fact", "as_kind": "decision", "subject": "project:portfolio", "at": "2026-09-11T14:02", "text": "Camille a choisi Astro plutôt que WordPress pour son portfolio, parce que c'est rapide et sans base de données à maintenir.", "importance": 3, "keywords": "choix framework raison"},
+    {"key": "dec-helene", "kind": "fact", "as_kind": "decision", "subject": "person:helene-roux", "at": "2026-09-22T09:30", "text": "Camille garde Hélène Roux comme comptable malgré le déménagement ; tout se fera à distance.", "importance": 3, "keywords": "comptable choix changer"},
+    {"key": "dec-facturo", "kind": "fact", "as_kind": "decision", "subject": "owner", "at": "2026-10-01T09:20", "text": "Camille passe ses factures sur l'outil Facturo au lieu d'Excel, pour avoir les relances automatiques.", "importance": 3, "keywords": "facturation logiciel choix relance"},
+    {"key": "dec-noclient", "kind": "fact", "as_kind": "decision", "subject": "owner", "at": "2026-10-04T11:00", "text": "Camille ne prend plus de nouveaux clients avant la livraison d'Okapi Sport, pour tenir les délais.", "importance": 4, "keywords": "prospects missions refus disponibilité"},
+    {"key": "prog-brun", "kind": "fact", "as_kind": "progress", "state": "done", "subject": "client:atelier-brun", "at": "2026-09-25T15:00", "text": "Site de l'Atelier Brun : terminé et en ligne depuis le 25 septembre ; reste le paiement du solde.", "importance": 3, "keywords": "avancement état fini"},
+    {"key": "prog-vega", "kind": "fact", "as_kind": "progress", "state": "blocked", "subject": "client:studio-vega", "at": "2026-10-09T10:00", "text": "Maquettes de l'appli mutuelle (Studio Vega) : v2 envoyée le 24 septembre ; bloqué en attendant le retour de Lina.", "importance": 3, "keywords": "avancement état attente"},
+    {"key": "prog-okapi", "kind": "fact", "as_kind": "progress", "state": "active", "subject": "client:okapi-sport", "at": "2026-10-08T17:00", "text": "Boutique d'Okapi Sport : catalogue et panier faits ; paiement en cours ; reste la mise en ligne, prévue le 17 octobre.", "importance": 4, "keywords": "avancement état en cours"},
+    {"key": "prog-portfolio", "kind": "fact", "as_kind": "progress", "state": "blocked", "subject": "project:portfolio", "at": "2026-10-09T10:05", "text": "Portfolio : accueil et études de cas faits ; reste la page contact ; bloqué en attendant les photos du shooting.", "importance": 3, "keywords": "avancement état attente"}
   ],
 
   "questions": [
@@ -190,6 +205,17 @@
     {"id": "upd-12", "family": "update", "q": "Camille est-elle encore à Lyon ?", "expect": ["nantes"], "keys": [["nantes"]], "forbid": ["lyon"]},
     {"id": "upd-13", "family": "update", "q": "Où se trouve le coworking de Camille ?", "expect": ["hangar"], "keys": [["nantes"]], "forbid": ["fabrique"]},
     {"id": "upd-14", "family": "update", "q": "Quel est le TJM Studio Vega de Camille ?", "expect": ["tjm500"], "keys": [["500"]], "forbid": ["tjm450"]},
+
+    {"id": "dec-01", "family": "decision", "q": "Pourquoi Camille a-t-elle choisi Astro ?", "expect": ["dec-astro"], "keys": [["base de donnees", "rapide"]]},
+    {"id": "dec-02", "family": "decision", "q": "Pourquoi Camille utilise-t-elle Facturo ?", "expect": ["dec-facturo"], "keys": [["relance"]]},
+    {"id": "dec-03", "family": "decision", "q": "Camille va-t-elle changer de comptable après son déménagement ?", "expect": ["dec-helene"], "keys": [["non", "garde"]]},
+    {"id": "dec-04", "family": "decision", "q": "Camille accepte-t-elle de nouveaux clients en ce moment ?", "expect": ["dec-noclient"], "keys": [["non"]]},
+    {"id": "dec-05", "family": "decision", "q": "Qu'a décidé Camille pour sa facturation ?", "expect": ["dec-facturo"], "keys": [["facturo"]]},
+    {"id": "prg-01", "family": "progress", "q": "Où en est le portfolio de Camille ?", "expect": ["prog-portfolio"], "keys": [["contact"]]},
+    {"id": "prg-02", "family": "progress", "q": "Quels projets sont bloqués ?", "expect": ["prog-portfolio", "prog-vega"], "keys": [["portfolio"], ["mutuelle", "vega"]], "k": 10},
+    {"id": "prg-03", "family": "progress", "q": "Qu'est-ce qu'il reste à faire sur la boutique Okapi ?", "expect": ["prog-okapi"], "keys": [["mise en ligne"]]},
+    {"id": "prg-04", "family": "progress", "q": "Le site de l'Atelier Brun est-il terminé ?", "expect": ["prog-brun"], "keys": [["oui", "termine"]]},
+    {"id": "prg-05", "family": "progress", "q": "Qu'est-ce qui bloque les maquettes de Studio Vega ?", "expect": ["prog-vega"], "keys": [["lina"]]},
 
     {"id": "abs-01", "family": "abstention", "q": "Quel est le nom du chien de Camille ?", "expect": [], "keys": [["INCONNU"]], "abstain": true},
     {"id": "abs-02", "family": "abstention", "q": "Quelle voiture conduit Camille ?", "expect": ["velo"], "keys": [["INCONNU", "pas de voiture"]], "abstain": true},

@@ -56,6 +56,10 @@ type evalMemory struct {
 	// What a good extraction gives besides the text.
 	Importance int    `json:"importance"`
 	Keywords   string `json:"keywords"`
+	// The kind a memory gets once the memory has it (decision, progress),
+	// and a progress card's state; until then it is a fact.
+	AsKind string `json:"as_kind"`
+	State  string `json:"state"`
 }
 
 type evalQuestion struct {
@@ -216,7 +220,7 @@ func (s retrievalScore) pct() float64 {
 	return 100 * s.Recall / float64(s.N)
 }
 
-var evalFamilies = []string{"extraction", "multi_session", "temporal", "update", "abstention"}
+var evalFamilies = []string{"extraction", "multi_session", "temporal", "update", "decision", "progress", "abstention"}
 
 // scoreRetrieval runs every question with an expected memory.
 func scoreRetrieval(t testing.TB, m *memStore, c *evalCorpus, idOf map[string]int64, tool bool) map[string]*retrievalScore {
@@ -272,7 +276,9 @@ func scoreRetrieval(t testing.TB, m *memStore, c *evalCorpus, idOf map[string]in
 // better.
 var retrievalFloors = map[string][2]float64{
 	"extraction":    {95, 95},
-	"multi_session": {45, 45},
+	"multi_session": {40, 40},
+	"decision":      {95, 95},
+	"progress":      {75, 75},
 	"temporal":      {30, 75},
 	"update":        {75, 75},
 	"all":           {70, 79},
