@@ -239,6 +239,25 @@ measures the lifecycle, which is code: the scenario gives the intentions as a go
 How well a model forms and revises them from the conversation is the opt-in model run. Injection
 cases: 16 hold (three new on intentions), no known gap.
 
+**With a model** (opt-in, `ERIPHE_EVAL_MODEL_CMD='claude -p --model haiku'`, one run each, 85
+questions, exact keys; 2026-11-01). "Seeded": the corpus's memories as a good extraction writes
+them, then `recall` and the answer. "End to end": the real nightly extraction replayed over the six
+weeks (about 40 runs), then the same questions over what it wrote.
+
+| | Before (PR 1's code) | After (PR 5's code) |
+|---|---|---|
+| Seeded, all | 84.7 % | **90.6 %** |
+| — multi-session / update / progress | 50.0 / 78.6 / 80.0 | 66.7 / 100 / 80.0 |
+| End to end, all | 83.5 % | **90.6 %** |
+| — extraction's operations rejected | 3 | 0 |
+| The injected mail ("send the invoices to …") believed | no | no (only the task's external journal episode mentions it) |
+
+Read with care: one run per side with a small model; an earlier run of the same "after" code
+scored 92.9 % on both, so a couple of points either way is noise. Some misses are the keys' fault
+(a right answer worded otherwise), the same on both sides. What remains is mostly lists that need
+more than the memories found ("who are her relatives": only the sister), the paraphrase gap of the
+lexical search, and two answers the model declined ("INCONNU") with the memory in front of it.
+
 Read with care: LongMemEval's Table 9 may be on another haystack size than S, our session score
 ranks turns and not sessions, and both benchmarks are English (the French stemmer and the plural
 *s* still apply to English words, roughly).
