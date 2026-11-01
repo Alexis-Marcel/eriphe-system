@@ -346,6 +346,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	}
 	if r.Contract != nil {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + r.Contract.instruction())
+		spec.Checks, spec.CheckRounds = r.Contract.Checks, r.Contract.attempts()
 	}
 	if kind == "worker" {
 		c.lendSkills(&spec) // skills_tasks.go

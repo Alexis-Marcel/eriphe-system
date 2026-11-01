@@ -43,6 +43,7 @@ type saved struct {
 	Seq       int    `json:"seq"`
 	Delivered int    `json:"delivered"`
 	Restarts  int    `json:"restarts"`
+	Checks    int    `json:"check_rounds,omitempty"` // failed checks sent back (turnend.go)
 }
 
 type coreClient struct {
@@ -197,6 +198,7 @@ func (n *node) launch(a assignment) {
 	var prev saved
 	if raw, err := os.ReadFile(filepath.Join(t.dir, "task.json")); err == nil && json.Unmarshal(raw, &prev) == nil {
 		t.SessionID, t.seq, t.delivered, t.restarts = prev.SessionID, prev.Seq, prev.Delivered, prev.Restarts+1
+		t.checkRounds = prev.Checks
 		t.reported.delivered = prev.Delivered
 		first = "You were interrupted: the machine or eriphe-node restarted. Check where you were and carry on with the task."
 		if t.SessionID == "" {
@@ -240,7 +242,7 @@ func (t *Task) save() {
 		return
 	}
 	t.mu.Lock()
-	s := saved{SessionID: t.SessionID, Seq: t.seq, Delivered: t.delivered, Restarts: t.restarts}
+	s := saved{SessionID: t.SessionID, Seq: t.seq, Delivered: t.delivered, Restarts: t.restarts, Checks: t.checkRounds}
 	t.mu.Unlock()
 	raw, _ := json.Marshal(s)
 	os.WriteFile(filepath.Join(t.dir, "task.json"), raw, 0o600)
@@ -275,6 +277,12 @@ func (n *node) deliver(t *Task) {
 			if run == nil || t.state() != stateIdle || t.busyFinishing() {
 				return // the agent is busy: later
 			}
+			// skip_checks: a turn that changes nothing (its receipt asked
+			// again) is not checked again (turnend.go).
+			skip, _ := it.Data["skip_checks"].(bool)
+			t.mu.Lock()
+			t.skipChecks = skip
+			t.mu.Unlock()
 			if err := run.send(text); err != nil {
 				return
 			}

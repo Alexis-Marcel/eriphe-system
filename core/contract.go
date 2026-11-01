@@ -93,6 +93,17 @@ func (k *taskContract) normalize() error {
 	return nil
 }
 
+// defaultAttempts is a contract's automatic retries when its budget gives none.
+const defaultAttempts = 2
+
+// attempts is how many automatic retries the contract allows.
+func (k *taskContract) attempts() int {
+	if k.Budget != nil && k.Budget.Attempts > 0 {
+		return k.Budget.Attempts
+	}
+	return defaultAttempts
+}
+
 func (ch *taskCheck) normalize() error {
 	ch.Name = strings.TrimSpace(ch.Name)
 	ch.Run, ch.Exists, ch.Dir = strings.TrimSpace(ch.Run), strings.TrimSpace(ch.Exists), strings.TrimSpace(ch.Dir)
@@ -137,7 +148,7 @@ func (k *taskContract) instruction() string {
 		b.WriteString("\nConstraints:\n- " + strings.Join(k.Constraints, "\n- "))
 	}
 	if len(k.Checks) > 0 {
-		b.WriteString("\nChecks that must pass when you finish (only what Eriphe sees a check pass counts as verified):")
+		b.WriteString("\nChecks Eriphe runs itself in your container when your turn ends; a failed one comes back to you (only what they see pass counts as verified):")
 		for _, ch := range k.Checks {
 			if ch.Run != "" {
 				fmt.Fprintf(&b, "\n- %s: `%s`", ch.Name, ch.Run)

@@ -72,6 +72,12 @@ type TaskSpec struct {
 	// model): its address, reachable through Egress.Endpoints, or one
 	// behind a node, reached through this node's task listener (model.go).
 	ModelEndpoint *ModelEndpoint `json:"model_endpoint,omitempty"`
+
+	// The checks of the task's contract, run in its container when a turn
+	// ends, and how many times a failed one goes back to the agent
+	// (turnend.go). None from an eriphe-core without contracts.
+	Checks      []TaskCheck `json:"checks,omitempty"`
+	CheckRounds int         `json:"check_rounds,omitempty"`
 }
 
 // ModelEndpoint is a self-hosted, OpenAI-compatible model server: its /v1
@@ -89,7 +95,7 @@ type ModelEndpoint struct {
 type Event struct {
 	Seq  int            `json:"seq"`
 	Time time.Time      `json:"time"`
-	Type string         `json:"type"` // text, tool_use, permission, permission_answer, turn_end, diff, error, state
+	Type string         `json:"type"` // text, tool_use, permission, permission_answer, turn_end, diff, check, retry, check_stop, error, state
 	Data map[string]any `json:"data"`
 }
 
@@ -153,7 +159,14 @@ type Task struct {
 	// onIdle runs when a turn has ended and the task is idle (turnend.go);
 	// while it runs, finishing holds the task reported as running.
 	onIdle    func()
-	finishing bool
+	finishing int // runs of onIdle under way
+
+	// The checks of its contract (turnend.go): no check after the turn
+	// asked with skip_checks; failed checks sent back so far, and the last
+	// failure, never sent back twice.
+	skipChecks  bool
+	checkRounds int
+	lastFailure string
 
 	// With the container engine (apple.go): the task's own network, and the
 	// node's address on it, where the task reaches the node.
@@ -213,7 +226,7 @@ func (t *Task) setState(s string) {
 		idle = nil
 	}
 	if idle != nil {
-		t.finishing = true // in the same lock: never reported idle before it ran
+		t.finishing++ // in the same lock: never reported idle before it ran
 	}
 	t.mu.Unlock()
 	t.emit("state", map[string]any{"state": s})
@@ -225,7 +238,7 @@ func (t *Task) setState(s string) {
 // reportedState is the state eriphe-core is told: running while the end of
 // a turn is still being looked at.
 func (t *Task) reportedState() string {
-	if t.finishing && t.State == stateIdle {
+	if t.finishing > 0 && t.State == stateIdle {
 		return stateRunning
 	}
 	return t.State
@@ -235,7 +248,7 @@ func (t *Task) reportedState() string {
 func (t *Task) busyFinishing() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.finishing
+	return t.finishing > 0
 }
 
 func (t *Task) state() string {
