@@ -90,6 +90,13 @@ func TestExtractionDurableState(t *testing.T) {
 	if _, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:y", "text": "Fait : tout", "state": "done", "source_ref": "task:t1"}`); res != "proposed" {
 		t.Fatalf("external progress: %s", res)
 	}
+	// A task's receipt: its lesson is only proposed; my words never make one through the extraction.
+	if _, res := apply(`{"op": "ADD", "kind": "lesson", "text": "Les tests du dépôt site demandent Node 22", "source_ref": "task:t1"}`); res != "proposed" {
+		t.Fatalf("a task's lesson: %s", res)
+	}
+	if _, res := apply(`{"op": "ADD", "kind": "lesson", "text": "Toujours demander", "source_ref": "msg:1"}`); res != "" {
+		t.Fatalf("a lesson from the extraction of my words: %s", res)
+	}
 	// The transcript gives each segment its date, for relative dates.
 	out := renderTranscript([]segment{{Ref: "msg:1", Time: time.Date(2026, 9, 8, 10, 5, 0, 0, time.Local), Who: "owner", Trust: trustOwner, Text: "demain"}})
 	if !strings.Contains(out, `time="2026-09-08 10:05 Tue"`) {

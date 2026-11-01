@@ -220,7 +220,7 @@ Each operation is one of:
 {"op": "NOOP", "id": 42, "source_ref": "msg:12"}
 
 Rules:
-- kind is one of: fact, person, preference, episode, commitment, decision, progress. Never profile or lesson.
+- kind is one of: fact, person, preference, episode, commitment, decision, progress, and lesson only from a task (below). Never profile.
   - decision: a choice %[1]s made and its reason, in one sentence ("X plutôt que Y, parce que Z"). A reversed decision SUPERSEDEs the old one.
   - progress: the current state of one project, client job or goal, one card per subject: "Fait : …; en cours : …; bloqué : …; reste : …", with "state": active, blocked, done or paused. If the memories hold a progress card for that subject, SUPERSEDE it with the whole new state; never ADD a second one.
 - subject: owner, person:<slug>, client:<slug>, project:<name>, home, or a short word.
@@ -232,6 +232,7 @@ Rules:
 - source_ref: the ref of the segment it comes from (several, separated by commas, if needed). Only refs that appear in the transcript.
 - Keep what will still matter in a month: decisions and their reasons, people and their roles, the progress of %[1]s's projects, preferences %[1]s expressed, promises (commitment, with due_at if known). Skip small talk, task mechanics, anything already in the memories (NOOP, or nothing).
 - When something known changed, SUPERSEDE the old memory (its id) rather than ADD a contradiction. Only when both cannot be true: a newer statement is not a contradiction for being newer.
+- A finished task may give a receipt (what it changed, verified, decided, what needs approval, its lessons): its decisions become decision memories, its state of the work the progress card of its project (SUPERSEDE the card), what needs %[1]s's approval a commitment (what %[1]s owes the task), and a lesson it learnt a lesson; all cite task:<id>, and all wait for %[1]s's approval.
 - The journal: one "episode" per finished task (what was done, the outcome; source_ref task:<id>), and one "episode" with subject "journal" that summarises the day's conversation (occurred_at %[2]s, source_ref the main messages). If the memories already hold a journal episode for that day, SUPERSEDE it with a version that covers the whole day.
 - Never write secrets, tokens, passwords or links with tokens.
 

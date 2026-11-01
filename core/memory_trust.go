@@ -462,8 +462,13 @@ func extractionDecision(kind string, refTrust string, scan scanResult, basis str
 	if scan.Reject != "" {
 		return d, fmt.Errorf("refused: %s", scan.Reject)
 	}
-	if kind == kindProfile || kind == kindLesson {
+	if kind == kindProfile || kind == kindLesson && refTrust != trustExternal {
 		return d, fmt.Errorf("an extraction cannot write a %s", kind)
+	}
+	if kind == kindLesson {
+		// A task's lesson (its receipt): only ever proposed, for the user to endorse.
+		d.Why = "a lesson drawn from a task waits for the user's approval"
+		return d, nil
 	}
 	switch {
 	case containsStr(scan.Flags, "imperative") && refTrust != trustOwner:

@@ -121,6 +121,15 @@ proposed (journal episodes, summaries by nature, stay active as before).
 Relative dates are resolved against the segment's own date; a soft deadline is not an end of
 validity; a newer statement does not contradict an older one by being newer.
 
+**Task receipts.** A finished task's turn ends with a structured receipt (what changed, what was
+verified, decisions, what needs approval, lessons; the reliable-tasks work, `core/receipt.go`),
+which the transcript gives the extraction in the task's segment. It becomes durable state like
+anything else a task says, with external trust: its decisions are `decision` memories, its state
+of the work the project's `progress` card, what needs the user's approval an intention (what the
+user owes the task), and its lessons `lesson` memories, the only lessons an extraction may write,
+and only ever proposed: lessons stay the user's to endorse. Reading `task_harness.receipt`
+directly, rather than its text in the transcript, is a later refinement once those PRs land.
+
 ### 5. Typed intentions, evaluated by code, that wake the brain (PR 5)
 
 A table `intentions`: what (text), kind (`promise`: the user owes someone; `commitment`: Eriphe

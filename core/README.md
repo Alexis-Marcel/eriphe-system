@@ -1992,7 +1992,8 @@ citing a `source_ref` of the transcript, with `keywords`, an `importance` 1–5,
 for what is temporary, a `valid_to`) is checked and applied: episodes (the journal, one per
 conversation day and per finished task) and what is stated in the user's words are active; what
 comes from tasks or external content, what was only inferred or is ambiguous, and preferences, are
-proposed; it never writes a profile or a lesson. Each segment carries its date, against which the
+proposed; it never writes a profile, and a lesson only from a task (its receipt), proposed. Each
+segment carries its date, against which the
 agent resolves "demain" or "vendredi". One run per day and window; a failure is retried the next night. The same night
 run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable from the page).
 
