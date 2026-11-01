@@ -210,9 +210,9 @@ its install command again; the node's own part comes with its update.
 machine's keyboard and mouse have been idle and whether its screen is locked, so that eriphe-core
 notifies the computer the user is at, else their phone (`core/route.go`). A number and a flag,
 nothing of what is on screen. On macOS with the node on the Mac itself it is read from IOKit
-(`ioreg`'s `HIDIdleTime` and the console session's lock, a few milliseconds, no permission);
-elsewhere (Windows through WSL, Linux, Lima's VM) it is `{"known": false}` for now. eriphe-core
-keeps it in memory only.
+(`ioreg`'s `HIDIdleTime` and the console session's lock, a few milliseconds, no permission); on
+Windows, from the session helper (see The user's session); elsewhere (Linux, Lima's VM) it is
+`{"known": false}` for now. eriphe-core keeps it in memory only.
 
 ### The user's session (context)
 
@@ -245,18 +245,43 @@ screen-recording or accessibility permission, and the microphone (CoreAudio's
 Elsewhere the node cannot see the session (Windows runs it in WSL; Linux and containers have no one
 answer): it reports `{"known": false}`, unless a **session helper** running in the user's session
 writes a file the node reads, named by `ERIPHE_SESSION_FILE` (at most 4 KiB, ignored once older
-than 30 s):
+than 30 s, so a helper that stops makes the session unknown again):
 
 ```json
-{"at": "2026-11-01T20:15:00Z", "app": "steam.exe", "declared": "", "dnd": true,
- "reason": "fullscreen", "idle_seconds": 42, "locked": false}
+{"at": "2026-11-01T20:15:00Z", "activity": "game", "dnd": true, "reason": "game",
+ "idle_seconds": 42, "locked": false}
 ```
 
-`app` (the executable or identifier in front) stays on the machine: the node maps it with the same
-table. `idle_seconds` and `locked` fill `idle` where the node cannot read it. A Windows helper fills
-it from `GetLastInputInfo`, `GetForegroundWindow` and `SHQueryUserNotificationState`
-(`QUNS_BUSY` → `fullscreen`, `QUNS_RUNNING_D3D_FULL_SCREEN` → `game`, `QUNS_PRESENTATION_MODE` →
-`focus`, `QUNS_NOT_PRESENT` → `locked`). A probe for another system is a `sessionProbe`.
+`activity` is a category of the closed list, worked out by the helper; a helper may give `app`
+(the executable or identifier in front) and `declared` instead, for the node to map with the same
+table (`usersession.Category`). A value off the lists is dropped. `idle_seconds` and `locked`
+fill `idle` where the node cannot read it. The file's format, the closed lists and the tables are
+in `usersession/`, shared by the node and the helper.
+
+**Windows: `eriphe-session.exe`** (`cmd/eriphe-session`). The node runs in WSL and its scheduled
+tasks in session 0 (S4U): none of them sees the keyboard, the screen or the windows. This small
+program (2 MB, Go without cgo) does, from the user's session, as the user, with no window and no
+privilege; it writes only its file, opens no port and sends nothing. Every 5 s it reads:
+
+| Signal | From | Written |
+|---|---|---|
+| idle | `GetLastInputInfo` against `GetTickCount` | `idle_seconds` |
+| locked | `WTSQuerySessionInformation` (`WTSSessionInfoEx`: locked, or not the session at the screen); `QUNS_NOT_PRESENT` | `locked` |
+| not to be disturbed | `SHQueryUserNotificationState`: `QUNS_RUNNING_D3D_FULL_SCREEN` → `game`; `QUNS_BUSY`, `QUNS_PRESENTATION_MODE` (and Windows 8's `QUNS_APP`) → `fullscreen`; `QUNS_QUIET_TIME` (the first hour after an account's first logon) says nothing | `dnd`, `reason` |
+| the app in front | `GetForegroundWindow`, then its process's path (`QueryFullProcessImageName`, with `PROCESS_QUERY_LIMITED_INFORMATION`), mapped **in the session** by `usersession.WindowsCategory`: the executable's name in the table (browsers → `web`, Teams, Zoom, Webex → `meeting`, editors, terminals and shells → `code`, game stores → `game`, …), else `game` when it is installed where game stores put games (`steamapps\common`, `Epic Games`, `XboxGames`, …), else `other`; nothing behind a locked screen | `activity` |
+
+The program's name and path stay in the helper's memory, never in the file; a window's title and
+the Focus assist setting (which Windows does not expose to programs) are not read. A meeting in a browser counts as `web`. The
+node then adds `dnd` with `game` or `meeting` from the category, as on a Mac.
+
+It is installed by `install.ps1` (install/README.md, Windows), which takes it from the node's image
+(`/usr/local/share/eriphe/windows/<arch>/eriphe-session.exe`, built with `-H windowsgui`):
+`%ProgramData%\eriphe-node\bin\eriphe-session.exe`, run at logon by the scheduled task "Eriphe
+session" for the user signed in at the PC, writing `%ProgramData%\eriphe-node\session\session.json`;
+the distribution mounts that folder only, read-only, at `/mnt/eriphe-session`. To see what it
+writes: `& "$env:ProgramData\eriphe-node\bin\eriphe-session.exe" -print | more`.
+
+A probe for another system is a `sessionProbe`.
 
 ## API (through the tunnel)
 

@@ -19,7 +19,7 @@ function Assert-That([bool] $ok, [string] $what) {
   if (-not $ok) { Write-Host "install_test.ps1: FAIL: $what"; $script:failed++ }
 }
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($script, [ref] $null, [ref] $null)
-foreach ($name in "Test-MirroredText", "Test-ModelServerAddress", "Get-ModelsUrl", "Get-ModelServerAdvice", "Write-Secret") {
+foreach ($name in "Test-MirroredText", "Test-ModelServerAddress", "Get-ModelsUrl", "Get-ModelServerAdvice", "Write-Secret", "Get-SessionEnv") {
   $def = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
   if (-not $def) { Write-Host "install_test.ps1: no function $name in install.ps1"; exit 1 }
   Invoke-Expression $def.Extent.Text
@@ -49,6 +49,12 @@ Assert-That ((Get-ModelServerAdvice "http://127.0.0.1:11434" $false) -match "mir
 Assert-That ((Get-ModelServerAdvice "http://[::1]:11434" $false) -match "wsl --shutdown") "IPv6 loopback without mirrored: wsl --shutdown"
 Assert-That ((Get-ModelServerAdvice "http://127.0.0.1:11434" $true) -match "start it") "loopback with mirrored: start it"
 Assert-That ((Get-ModelServerAdvice "http://192.0.2.5:11434" $false) -match "start it") "LAN address: start it"
+# The session helper's folder, as the distribution's sh reads it.
+$se = Get-SessionEnv 'C:\ProgramData\eriphe-node\session'
+Assert-That ($se -ceq "ERIPHE_SESSION_DIR='C:\ProgramData\eriphe-node\session'`nERIPHE_SESSION_FILE=/mnt/eriphe-session/session.json") "session env: $se"
+Assert-That ((Get-SessionEnv "C:\Sam's data\session") -eq "") "a quote in the session folder"
+Assert-That ((Get-SessionEnv "C:\data`nERIPHE_CORE=http://192.0.2.1") -eq "") "a new line in the session folder"
+Assert-That ((Get-SessionEnv "") -eq "") "no session folder"
 # The setup code is printed, not logged.
 $logged = New-Object Collections.Generic.List[string]
 function Write-Log([string] $text) { $logged.Add($text) }
@@ -56,4 +62,4 @@ Write-Secret "  Setup code: " "ABCD-1234" 6>$null
 Assert-That (($logged -join "`n") -notmatch "ABCD-1234") "the setup code in the log"
 Assert-That (($logged -join "`n") -match "not logged") "no line in the log for the setup code"
 if ($failed) { exit 1 }
-Write-Host "install.ps1's .wslconfig, -ModelServer and model server checks pass"
+Write-Host "install.ps1's .wslconfig, -ModelServer, model server and session folder checks pass"
