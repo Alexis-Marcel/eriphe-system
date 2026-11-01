@@ -57,7 +57,8 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})
-	registerSettingTools(s, c) // setting
+	registerSettingTools(s, c)  // setting
+	registerPresenceTools(s, c) // presence_sources, map_presence (ha_tools.go)
 }
 
 func (c *core) brainNotify(in notifyIn) (map[string]any, error) {

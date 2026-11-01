@@ -1922,7 +1922,10 @@ eriphe-core already has, never from the model nor the notification's text:
 2. a computer in use (its node reports the machine's idle time under 2 minutes, not locked, not
    to be disturbed: a game or a meeting in front, the context below) → a push to that computer's
    subscription only;
-3. the voice at home: a placeholder, off until Home Assistant tells where the user is;
+3. the voice in the room: a Home Assistant speaker mapped to the room a fresh (under 2 minutes),
+   personal signal of Home Assistant puts the user in (below), for a "now" from a clean turn,
+   outside the quiet hours, on a line the user turned on (off by default); it says a sentence the
+   code writes (« Sam, Eriphe a quelque chose pour toi. »), never the notification's text;
 4. otherwise the phone (subscriptions whose label, the user's choice or the browser says phone;
    the installed app first), then Telegram.
 
@@ -2007,9 +2010,45 @@ Salon · Focus active]`; a declared `busy` feeds the state's « occupé jusqu'à
 the level and the switches with `setting` (`context_level`, `context_sources_off`), applied when
 asked in a clean turn, else proposed in À valider; the first-launch interview asks the level.
 
+**Home Assistant, adapted to each house** (`ha_client.go`, `ha_presence.go`, `ha_tools.go`;
+source `ha`). With the long-lived token of the catalog's Home Assistant tool (the `home-assistant`
+preset; nothing to install), over Home Assistant's WebSocket API:
+
+1. **Discover** (code, no model): `get_states` and the area, device and entity registries (a user
+   that is not an administrator may be refused the registries: then states only, no areas), kept
+   in memory, filtered to the candidates: `person`, `device_tracker`, `binary_sensor` of class
+   `occupancy`, `presence` or `motion`, room tracker sensors (`*_area`, `*_room`: Bermuda,
+   ESPresense), `media_player`, `assist_satellite`, the companion app's focus, sleep or do not
+   disturb `input_boolean`s, and the `tts` entities. Each with its id, domain, class, area and
+   state; never an attribute.
+2. **Map** (the brain proposes, the user approves): `presence_sources` shows the candidates, which
+   signal each could give, and the mappings; names and areas are the user's text, so it taints the
+   turn. `map_presence(signal, entity, why, source_ref)` checks the entity in code against
+   discovery: `home` (person, device_tracker → `place`), `room` (an occupancy sensor's area, or a
+   room tracker's state → `room`), `asleep` (a bed's occupancy or a sleep switch →
+   `home_activity` `sleep`), `tv` (a media player playing → `home_activity` `tv`), `dnd` (focus →
+   `focus`), `voice` (a satellite or a media player with an area, for the router). Applied when the
+   user asks in a clean turn, citing their message; otherwise kept as a proposal (`ha_mappings`,
+   state `proposed`) in À valider. The page lists the mappings in force and removes them; a room
+   mapping adds the area (or, for a room tracker, the house's areas) to the user's rooms. A
+   mapping is personal (about the user) for a person, a tracker, a room tracker or the focus, and
+   the house's otherwise.
+3. **Follow** (code only, `followHA`): while there are mappings, the level is above 0 and the
+   source is on, one `subscribe_entities` to the mapped entities only; their states become
+   closed signals (`haSignals`: per kind, a personal mapping first, then the newest change;
+   a room off the user's list is dropped), put under `ha` with a time to live of 3 minutes and
+   refreshed every minute while connected. Reconnects with a growing wait (5 s to 5 min), starts
+   again when the mappings, the level or the switch change, and reads the house again every day.
+   Unmapped entities, names and attributes never enter the context.
+4. **Speak**: a `voice` mapping makes the router's voice line usable (above). eriphe-core calls
+   `assist_satellite.announce` (or `tts.speak` with the house's first `tts` entity for a media
+   player) through the REST API. An urgent watch's fixed message is said instead of the generic
+   sentence, and may go through the quiet hours, only when the user turned `voice_for_urgent` on
+   (the page, or `setting`). A rule's `never: voice` keeps it out; `also: voice` does not turn the
+   line on.
+
 **For the next sources.** A source puts signals with `checkSignal` (or `checkSignals`) then
-`putSignals`, under a source name of its own (`ha` for Home Assistant's entities is free); it never
-calls the brain. A new kind or value goes in `ctxKinds` (and in the page's words), with its level.
+`putSignals`, under a source name of its own; it never calls the brain. A new kind or value goes in `ctxKinds` (and in the page's words), with its level.
 A machine whose node cannot see the session (Windows, in WSL) gets it from a session helper's file
 (`ERIPHE_SESSION_FILE`, `node/context.go`).
 

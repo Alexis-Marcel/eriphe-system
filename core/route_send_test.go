@@ -221,7 +221,7 @@ func TestWherePage(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
 	if code, body, _ := tw.do("GET", "/settings/notifications", nil, nil); code != 200 || !strings.Contains(body, "Où te prévenir") ||
-		!strings.Contains(body, "Eriphe ouvert devant toi") || !strings.Contains(body, "relie Home Assistant") {
+		!strings.Contains(body, "Eriphe ouvert devant toi") || !strings.Contains(body, "un satellite de Home Assistant") {
 		t.Fatalf("page: %d", code)
 	}
 	if code, body, _ := tw.post("/where/mode", url.Values{"mode": {"route"}}, csrf); code != 200 || tw.c.routeSettings().Mode != routeOn ||

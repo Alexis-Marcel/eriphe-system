@@ -53,7 +53,9 @@ in an automation). An automation is not you: `eriphe-core` takes only the closed
 speak but never act; any other text is refused. What an automation knows of the house (you came
 home, the TV is on) goes to `POST /v1/context` as a signal, with a source token made on the page
 « Ce qu'Eriphe sait de toi » (see `core/README.md`, the context), for example with a
-`rest_command`.
+`rest_command`. Simpler: with Home Assistant's tool in Eriphe's catalog, `eriphe-core` can
+follow the entities you approve itself (people, room sensors, the bed, the TV, a satellite to speak
+in a room), with the same token and nothing to set up here.
 
 `eriphe-core` answers NDJSON: `{"delta": "..."}` lines, streamed into the chat log as they come,
 then `{"done": true, "text": "...", "continue": false}`. `continue` decides whether the satellite

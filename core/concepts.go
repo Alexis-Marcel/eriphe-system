@@ -23,7 +23,7 @@ var concepts = []concept{
 	{"intention", "intend, intentions, update_intention", "something owed or to do once: at a date and time (remind me at 14:00), or the next time a name comes up"},
 	{"watch", "watch, watches, update_watch", "what comes back on its own: at times of day (horaire), on the user's return (retour), when a tool's result changes (outil), when a service alerts (alerte)"},
 	{"rule", "rule", "what to do with notifications about a topic (now, brief, never, even at night, which lines), and the quiet hours"},
-	{"setting", "setting", "how the user is told in general: device order, lines off, daily cap, time zone, Telegram detail"},
+	{"setting", "setting, presence_sources, map_presence", "how the user is told in general: device order, lines off, daily cap, time zone, Telegram detail; what you may know of the user, and which Home Assistant entities tell it"},
 	{"notify", "notify, notifications", "say something on your own, now or for the brief, under a known topic ref"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
 	{"task", "run_task", "long or heavy work, by an agent on a machine"},

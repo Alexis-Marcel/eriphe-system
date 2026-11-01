@@ -50,6 +50,7 @@ type core struct {
 	notifyClock func() time.Time // the time of notify's decisions (notify.go); nil: now
 	tg          *telegram        // the user's Telegram bot (telegram.go); nil without the workspace
 	known       contextStore     // the user's context: signals in memory only (context.go)
+	ha          haState          // Home Assistant as a source of presence, and its voice (ha_presence.go)
 	routeMu     sync.Mutex       // one escalation pass at a time (route_send.go)
 
 	github *githubClient // Eriphe's GitHub App (github_app.go)

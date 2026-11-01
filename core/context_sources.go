@@ -143,6 +143,9 @@ func (c *core) setSourceOn(source string, on bool) {
 	}
 	slices.Sort(off)
 	c.store.set(ctxOffKey, strings.Join(off, ","))
+	if source == srcHA {
+		c.ha.changed() // followed again, or not
+	}
 }
 
 // setContextLevel sets the level; the signals above it are dropped.
@@ -151,6 +154,7 @@ func (c *core) setContextLevel(level int) error {
 		return errors.New("the level is 0, 1 or 2")
 	}
 	c.store.set(ctxLevelKey, strconv.Itoa(level))
+	c.ha.changed()
 	for _, s := range c.known.fresh(time.Now()) {
 		if ctxKinds[s.Kind].Level > level {
 			c.known.forget(s.Source, s.Kind)

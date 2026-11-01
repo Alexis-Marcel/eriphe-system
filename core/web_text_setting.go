@@ -24,6 +24,7 @@ var settingStrings = map[string]map[string]string{
 		"setting.name.telegram_detail":       "Ce que Telegram reçoit (full : le texte ; alert : un signal)",
 		"setting.name.context_level":         "Ce qu'Eriphe sait de toi (0 : rien ; 1 : présence ; 2 : contexte)",
 		"setting.name.context_sources_off":   "Sources du contexte coupées",
+		"setting.name.voice_for_urgent":      "Dire à voix haute le message d'une veille urgente (on / off)",
 	},
 	"en": {
 		"approve.settings":                   "Settings",
@@ -37,5 +38,6 @@ var settingStrings = map[string]map[string]string{
 		"setting.name.telegram_detail":       "What Telegram gets (full: the text; alert: a signal)",
 		"setting.name.context_level":         "What Eriphe knows about you (0: nothing; 1: presence; 2: context)",
 		"setting.name.context_sources_off":   "Context sources turned off",
+		"setting.name.voice_for_urgent":      "Say an urgent watch's message aloud (on / off)",
 	},
 }

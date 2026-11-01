@@ -17,8 +17,10 @@ import (
 //  2. a computer in use (idle under two minutes, not locked, not in a game
 //     or a meeting: the context, context.go) → a push to
 //     that computer only;
-//  3. at home → the voice in the room (not wired yet: off until Home
-//     Assistant tells where the user is);
+//  3. at home → the voice in the room: a speaker Home Assistant has in the
+//     room a fresh, personal signal puts the user in, for a "now" from a
+//     clean turn, outside the quiet hours, with a text the code writes
+//     (ha_presence.go);
 //  4. otherwise → the phone, then Telegram.
 //
 // The user orders these lines, turns each off, and sets the delay
@@ -96,6 +98,7 @@ type routeNote struct {
 	Only    string `json:"only,omitempty"`    // a rule's channels: push, telegram
 	Also    string `json:"also,omitempty"`    // a rule's lines added to the first
 	Never   string `json:"never,omitempty"`   // a rule's lines forbidden
+	Fixed   bool   `json:"fixed,omitempty"`   // an urgent watch's fixed message, the user's own words
 }
 
 // routeDevice is one of the user's devices as the router sees it.
@@ -117,7 +120,7 @@ type routeDevice struct {
 type routeSignals struct {
 	Devices  []routeDevice // the newest subscription first
 	Telegram bool          // a Telegram account is linked
-	Voice    bool          // Home Assistant says where the user is (not wired yet)
+	Voice    voiceSpot     // a speaker in the room the user is in now (ha_presence.go); Entity "" if none
 	Quiet    bool          // the quiet hours are on
 }
 
@@ -127,6 +130,9 @@ type routeSettings struct {
 	Order []string
 	Off   []string
 	Delay time.Duration
+	// VoiceUrgent: an urgent watch's fixed message may be said aloud, even
+	// in the quiet hours (voice_for_urgent).
+	VoiceUrgent bool
 }
 
 // routeTarget is one place a notification goes.
@@ -155,7 +161,7 @@ func route(n routeNote, sig routeSignals, set routeSettings, tried []string) rou
 	var picks []routeTarget
 	used := slices.Clone(tried)
 	for _, step := range order {
-		if !lineAllowed(n, set, step) {
+		if !lineAllowed(n, set, step) || step == stepVoice && !voiceAllowed(n, sig, set) {
 			continue
 		}
 		if t, ok := pickTarget(step, sig, used); ok {
@@ -175,7 +181,7 @@ func route(n routeNote, sig routeSignals, set routeSettings, tried []string) rou
 	}
 	p.First = []routeTarget{picks[0]}
 	if !n.Tainted {
-		p.First = append(p.First, alsoTargets(n, sig, p.First)...)
+		p.First = append(p.First, alsoTargets(n, sig, set, p.First)...)
 	}
 	// The later steps stand without a fresh signal: a device in use now may
 	// not be in ten minutes, and a re-route then sees it.
@@ -193,6 +199,17 @@ func route(n routeNote, sig routeSignals, set routeSettings, tried []string) rou
 	return p
 }
 
+// voiceAllowed: the voice is more present than any other line, so it is
+// held to more. Only a "now" from a clean turn, on a line the user turned
+// on (a rule's "also" does not turn it on); never in the quiet hours,
+// but for an urgent watch's fixed message when the user said so.
+func voiceAllowed(n routeNote, sig routeSignals, set routeSettings) bool {
+	if n.Level != levelNow || n.Tainted || sig.Voice.Entity == "" || slices.Contains(set.Off, stepVoice) {
+		return false
+	}
+	return !sig.Quiet || n.Fixed && n.Urgent && set.VoiceUrgent
+}
+
 // lineAllowed: the line is on, and the note's rule does not keep it out.
 func lineAllowed(n routeNote, set routeSettings, step string) bool {
 	if slices.Contains(set.Off, step) || slices.Contains(splitList(n.Never), step) {
@@ -203,14 +220,14 @@ func lineAllowed(n routeNote, set routeSettings, step string) bool {
 
 // alsoTargets are the lines a rule adds to the first step, each on a
 // device not reached yet; never a forbidden one.
-func alsoTargets(n routeNote, sig routeSignals, first []routeTarget) []routeTarget {
+func alsoTargets(n routeNote, sig routeSignals, set routeSettings, first []routeTarget) []routeTarget {
 	var out []routeTarget
 	used := make([]string, 0, len(first))
 	for _, t := range first {
 		used = append(used, t.key())
 	}
 	for _, step := range splitList(n.Also) {
-		if slices.Contains(splitList(n.Never), step) || step == stepInApp {
+		if slices.Contains(splitList(n.Never), step) || step == stepInApp || step == stepVoice && !voiceAllowed(n, sig, set) {
 			continue
 		}
 		if t, ok := pickTarget(step, sig, used); ok {
@@ -251,7 +268,9 @@ func pickTarget(step string, sig routeSignals, used []string) (routeTarget, bool
 			return routeTarget{Step: step, Device: best.ID, Label: best.Label}, true
 		}
 	case stepVoice:
-		// Off until Home Assistant tells where the user is (sig.Voice).
+		if sig.Voice.Entity != "" && !slices.Contains(used, voiceDevice+sig.Voice.Entity) {
+			return routeTarget{Step: step, Device: voiceDevice + sig.Voice.Entity, Label: sig.Voice.Room}, true
+		}
 	case stepPhone:
 		var best *routeDevice
 		for i, d := range sig.Devices {
