@@ -82,6 +82,8 @@ func main() {
 	// Eriphe's memory, in its own file: without it, the rest still works.
 	if c.mem, err = openMemory(cfg.memoryConfig().DB); err != nil {
 		log.Printf("memory: %v", err)
+	} else {
+		c.mem.owner = func() string { return c.conf().User }
 	}
 	if err := c.registerServices(c.conf().runSpecs); err != nil {
 		log.Fatalf("services: %v", err)

@@ -77,12 +77,17 @@ approval queue that fills every day gets approved blindly.
 - **French stemming in a shadow column.** `memories` gets a `stems` column (Snowball French over
   the text, subject and keys, in pure Go: `github.com/kljensen/snowball`, MIT, no dependencies),
   indexed by FTS5 beside the text. A query matches the words as typed (with a prefix for long ones)
-  or their stems. Trigram was set aside: an index about three times larger, nothing under three
-  characters, BM25 over substrings ranks poorly, and the CLEF evidence favours a stemmer for French.
+  or their stems. Snowball leaves the plural of short words ("vélos"), so a final *s* goes too, as
+  in Savoy's minimal stemmer. Measured on our corpus (plain BM25, the question's words, text only,
+  recall@5): words 68.9 %, words with prefixes 70.2 %, trigram tokenizer 70.2 % (74.3 % with each
+  word cut to five letters), **words with prefixes and stems 75.7 %**; the index is 4.1 times the
+  words' with trigrams, 1.8 times with the stems column. Trigram also finds nothing under three
+  characters, and the CLEF evidence favours a stemmer for Romance languages.
 - **The key is the memory plus what the extraction adds**: `keywords` (variants and synonyms that
   bridge paraphrases: voiture, bagnole, véhicule), indexed with a lower weight.
-- **Stop words** (French and English) are left out of queries: "quel est le nom de" matched
-  everything.
+- **Stop words** (Snowball's French and English lists and the question words) are left out of
+  queries: "quel est le nom de" matched everything; so is the user's name, which is in nearly every
+  memory about them.
 - **Ranking**: relevance (BM25, normalised over the candidates) first, then bounded factors:
   recency for episodes (a floor, so an old memory that matches well still comes back), importance
   1–5, the subject named in the query, the profile. The old multiplicative half-life sent an old
@@ -179,7 +184,28 @@ Baseline, before any change of PR 2–5 (`go test -run MemoryEval -v`, and the o
 
 After PR 2: the 13 injection cases hold, no known gap; retrieval unchanged.
 
+After PR 3 (same corpus, same questions; "text only" seeds the memories without the keywords and
+importance an extraction gives):
+
+| Measure | Before | After, text only | After, with keywords and importance |
+|---|---|---|---|
+| Our corpus, recall@k, all (raw / tool) | 72.8 / 80.7 | 84.6 / 86.0 | **90.8 / 92.8** |
+| — multi-session (raw) | 44.4 | | 75.0 |
+| — temporal (raw / tool) | 30.8 / 76.9 | | 76.9 / 84.6 |
+| — update (raw) | 78.6 | | 92.9 |
+| LoCoMo turns, R@5 / R@10 | 19.8 / 24.8 | **49.7 / 57.1** | (DRAGON 58.8 / 67.5) |
+| LoCoMo observations, R@5 / R@10 | 47.8 / 53.4 | **50.4 / 55.5** | (DRAGON 49.6 / 57.1) |
+| LongMemEval_S turn, R@5 / R@10 | 65.2 / 74.5 | **70.8 / 79.2** | |
+| LongMemEval_S session, R@5 / R@10 | 85.1 / 87.9 | **90.0 / 91.5** | |
+
+On LoCoMo's observations (an extraction's facts), lexical search with these factors now matches
+the dense retriever of the paper at R@5; on raw dialogue turns it is still 9 points behind it. The
+remaining misses on our corpus are paraphrases without a shared word ("proches" for a partner and
+a sister, "vivait" for "habite") and lists that need more than five memories: what the optional
+embeddings tier, or entity cards, would address.
+
 Read with care: LongMemEval's Table 9 may be on another haystack size than S, our session score
-ranks turns and not sessions, and both benchmarks are English (our stemming does not apply).
+ranks turns and not sessions, and both benchmarks are English (the French stemmer and the plural
+*s* still apply to English words, roughly).
 The LoCoMo turn score is where our ranking failed: conversations span months and the episode
 half-life crushed old turns that matched.

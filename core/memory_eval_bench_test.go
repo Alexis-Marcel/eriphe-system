@@ -278,6 +278,8 @@ func TestMemoryBenchLongMemEval(t *testing.T) {
 		pick = s
 	}
 	turnScore, sessScore := map[string]*benchScore{}, map[string]*benchScore{}
+	var spent time.Duration
+	turns := 0
 	for _, q := range pick {
 		m, clock := benchMemory(t)
 		turnRef := map[int64]string{}
@@ -297,7 +299,10 @@ func TestMemoryBenchLongMemEval(t *testing.T) {
 			}
 		}
 		clock.t = lmeDate(q.Date)
+		began := time.Now()
 		xs, err := m.recall(recallQuery{Query: q.Question, Limit: 10, IncludePast: true})
+		spent += time.Since(began)
+		turns += len(turnRef)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -324,7 +329,8 @@ func TestMemoryBenchLongMemEval(t *testing.T) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	t.Logf("LongMemEval_S retrieval, %d questions (turn: has_answer turns found; session: answer sessions among the sessions of the top turns):", len(pick))
+	t.Logf("LongMemEval_S retrieval, %d questions (turn: has_answer turns found; session: answer sessions among the sessions of the top turns); %.1f ms per recall over %d turns on average:",
+		len(pick), float64(spent.Microseconds())/1000/float64(max(len(pick), 1)), turns/max(len(pick), 1))
 	for _, k := range keys {
 		t.Logf("  %-26s turn %s | session %s", k, turnScore[k], sessScore[k])
 	}

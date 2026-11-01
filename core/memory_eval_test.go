@@ -162,12 +162,21 @@ func seedEval(t testing.TB, m *memStore, clock *fakeClock, c *evalCorpus) map[st
 		idOf[e.Key] = x.ID
 	}
 	clock.t = evalTime(t, c.Now)
+	m.owner = func() string { return c.User }
 	return idOf
 }
 
+// evalNoExtras seeds the text only, as an extraction that gives nothing
+// else would; the eval reports both.
+var evalNoExtras bool
+
 // evalExtras gives a seeded memory what the extraction adds besides its
-// text, once the memory keeps it; nothing yet.
-func evalExtras(x *Memory, e evalMemory) {}
+// text: its keywords and importance.
+func evalExtras(x *Memory, e evalMemory) {
+	if !evalNoExtras {
+		x.Keywords, x.Importance = e.Keywords, e.Importance
+	}
+}
 
 // evalRecall is the recall of a question: its words only (raw), or with
 // the filters a good brain would add (tool).
@@ -237,8 +246,16 @@ func scoreRetrieval(t testing.TB, m *memStore, c *evalCorpus, idOf map[string]in
 			k = 5
 		}
 		got := map[int64]bool{}
-		for _, x := range evalRecall(t, m, q, tool, k) {
+		xs := evalRecall(t, m, q, tool, k)
+		for _, x := range xs {
 			got[x.ID] = true
+		}
+		// ERIPHE_EVAL_DEBUG=tmp-01 shows what a question gets.
+		if os.Getenv("ERIPHE_EVAL_DEBUG") == q.ID {
+			t.Logf("%s (tool %v) %q:", q.ID, tool, q.Q)
+			for _, x := range xs {
+				t.Logf("  %.3f #%d %s", x.Score, x.ID, x.Text)
+			}
 		}
 		found := 0
 		for _, key := range q.Expect {
@@ -276,16 +293,23 @@ func scoreRetrieval(t testing.TB, m *memStore, c *evalCorpus, idOf map[string]in
 // better.
 var retrievalFloors = map[string][2]float64{
 	"extraction":    {95, 95},
-	"multi_session": {40, 40},
+	"multi_session": {70, 75},
 	"decision":      {95, 95},
-	"progress":      {75, 75},
-	"temporal":      {30, 75},
-	"update":        {75, 75},
-	"all":           {70, 79},
+	"progress":      {95, 95},
+	"temporal":      {70, 80},
+	"update":        {90, 90},
+	"all":           {88, 90},
 }
 
 func TestMemoryEvalRetrieval(t *testing.T) {
 	c := loadEvalCorpus(t)
+	// The text alone first, for the record: what keywords and importance add.
+	evalNoExtras = true
+	m0, clock0 := testMemory(t)
+	ids0 := seedEval(t, m0, clock0, c)
+	evalNoExtras = false
+	raw0, tool0 := scoreRetrieval(t, m0, c, ids0, false), scoreRetrieval(t, m0, c, ids0, true)
+	t.Logf("recall@k, text only: raw %s, tool %s", raw0["all"], tool0["all"])
 	m, clock := testMemory(t)
 	idOf := seedEval(t, m, clock, c)
 	raw := scoreRetrieval(t, m, c, idOf, false)

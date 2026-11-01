@@ -110,6 +110,7 @@ const (
 	memoryTextMax    = 2000
 	episodeTextMax   = 4000
 	subjectMax       = 100
+	keywordsMax      = 200
 	linksMax         = 10
 	linkMax          = 300
 	memoryPurgeAfter = 30 * 24 * time.Hour
@@ -139,7 +140,9 @@ type Memory struct {
 	Confidence   float64   `json:"confidence"`
 	UseCount     int       `json:"use_count"`
 	LastUsedAt   time.Time `json:"last_used_at,omitzero"`
-	Flags        string    `json:"flags,omitempty"` // what the scanner noticed
+	Flags        string    `json:"flags,omitempty"`      // what the scanner noticed
+	Keywords     string    `json:"keywords,omitempty"`   // variants and synonyms, indexed with the text
+	Importance   int       `json:"importance,omitempty"` // 1 to 5, 3 by default
 	DeletedAt    time.Time `json:"deleted_at,omitzero"`
 	UpdatedAt    time.Time `json:"updated_at"`
 
@@ -154,11 +157,19 @@ func (m *Memory) Current(now time.Time) bool {
 type memStore struct {
 	db  *sql.DB
 	now func() time.Time
+	// The user's name: in nearly every memory, so not a word to look for.
+	owner func() string
+}
+
+// memoryMigration is one step of the schema: SQL, then Go for what SQL
+// cannot do. Forward only; each runs once, in its own transaction.
+type memoryMigration struct {
+	sql string
+	fn  func(tx *sql.Tx) error
 }
 
 // memoryMigrations are applied in order; meta.schema_version is how many ran.
-var memoryMigrations = []string{
-	`CREATE TABLE memories (
+var memoryMigrations = []memoryMigration{{sql: `CREATE TABLE memories (
 	  id INTEGER PRIMARY KEY AUTOINCREMENT,
 	  kind TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', text TEXT NOT NULL,
 	  links TEXT NOT NULL DEFAULT '[]',
@@ -193,7 +204,71 @@ var memoryMigrations = []string{
 	  id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, upto INTEGER NOT NULL,
 	  task_id TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
 	  started INTEGER NOT NULL, finished INTEGER, applied INTEGER NOT NULL DEFAULT 0);
-	CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
+	CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);`},
+	{fn: migrateSearchKeys},
+}
+
+// migrateSearchKeys (schema 2) gives the full-text index its keys: the
+// extraction's keywords, and the French stems in a shadow column. The FTS
+// table is derived data: it is dropped and rebuilt from memories, whose
+// rows only gain columns (keywords, importance 3, stems).
+func migrateSearchKeys(tx *sql.Tx) error {
+	for _, q := range []string{
+		`DROP TRIGGER IF EXISTS memories_ai`, `DROP TRIGGER IF EXISTS memories_ad`, `DROP TRIGGER IF EXISTS memories_au`,
+		`DROP TABLE IF EXISTS memories_fts`,
+		`ALTER TABLE memories ADD COLUMN keywords TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE memories ADD COLUMN importance INTEGER NOT NULL DEFAULT 3`,
+		`ALTER TABLE memories ADD COLUMN stems TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := tx.Exec(q); err != nil {
+			return err
+		}
+	}
+	rows, err := tx.Query(`SELECT id, text, subject FROM memories`)
+	if err != nil {
+		return err
+	}
+	type row struct {
+		id            int64
+		text, subject string
+	}
+	var all []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.text, &r.subject); err != nil {
+			rows.Close()
+			return err
+		}
+		all = append(all, r)
+	}
+	rows.Close()
+	for _, r := range all {
+		if _, err := tx.Exec(`UPDATE memories SET stems = ? WHERE id = ?`, memoryStems(r.text, r.subject, ""), r.id); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(`CREATE VIRTUAL TABLE memories_fts USING fts5(text, subject, keywords, stems, content='memories', content_rowid='id',
+	  tokenize='unicode61 remove_diacritics 2');
+	CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+	  INSERT INTO memories_fts (rowid, text, subject, keywords, stems) VALUES (new.id, new.text, new.subject, new.keywords, new.stems); END;
+	CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+	  INSERT INTO memories_fts (memories_fts, rowid, text, subject, keywords, stems)
+	    VALUES ('delete', old.id, old.text, old.subject, old.keywords, old.stems); END;
+	CREATE TRIGGER memories_au AFTER UPDATE OF text, subject, keywords, stems ON memories BEGIN
+	  INSERT INTO memories_fts (memories_fts, rowid, text, subject, keywords, stems)
+	    VALUES ('delete', old.id, old.text, old.subject, old.keywords, old.stems);
+	  INSERT INTO memories_fts (rowid, text, subject, keywords, stems) VALUES (new.id, new.text, new.subject, new.keywords, new.stems); END;
+	INSERT INTO memories_fts (memories_fts) VALUES ('rebuild');`)
+	return err
+}
+
+// memoryStems is a memory's stems column: its text, the name in its
+// subject (person:paul: paul) and its keywords.
+func memoryStems(text, subject, keywords string) string {
+	if _, name, ok := strings.Cut(subject, ":"); ok {
+		subject = name
+	}
+	return stemText(text, subject, keywords)
 }
 
 func openMemory(path string) (*memStore, error) {
@@ -230,9 +305,18 @@ func (m *memStore) migrate() error {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(memoryMigrations[i]); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("migration %d: %w", i+1, err)
+		step := memoryMigrations[i]
+		if step.sql != "" {
+			if _, err := tx.Exec(step.sql); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d: %w", i+1, err)
+			}
+		}
+		if step.fn != nil {
+			if err := step.fn(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d: %w", i+1, err)
+			}
 		}
 		if _, err := tx.Exec(`INSERT INTO meta (key, value) VALUES ('schema_version', ?)
 			ON CONFLICT(key) DO UPDATE SET value = excluded.value`, fmt.Sprint(i+1)); err != nil {
@@ -278,7 +362,8 @@ func fromNull(n sql.NullInt64) time.Time {
 }
 
 const memColumns = `id, kind, subject, text, links, occurred_at, valid_from, valid_to, recorded_at, superseded_by, supersedes,
-	due_at, state, source_kind, source_ref, trust, status, pinned, confidence, use_count, last_used_at, flags, deleted_at, updated_at`
+	due_at, state, source_kind, source_ref, trust, status, pinned, confidence, use_count, last_used_at, flags, deleted_at, updated_at,
+	keywords, importance`
 
 func scanMemory(sc interface{ Scan(...any) error }) (*Memory, error) {
 	var x Memory
@@ -287,7 +372,7 @@ func scanMemory(sc interface{ Scan(...any) error }) (*Memory, error) {
 	var from, recorded, updated int64
 	err := sc.Scan(&x.ID, &x.Kind, &x.Subject, &x.Text, &links, &occurred, &from, &validTo, &recorded, &superseded, &supersedes,
 		&due, &x.State, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Status, &x.Pinned, &x.Confidence, &x.UseCount, &used,
-		&x.Flags, &deleted, &updated)
+		&x.Flags, &deleted, &updated, &x.Keywords, &x.Importance)
 	if err != nil {
 		return nil, err
 	}
@@ -354,6 +439,16 @@ func (m *memStore) normalize(x *Memory) error {
 	}
 	if utf8.RuneCountInString(x.Subject) > subjectMax {
 		return fmt.Errorf("subject is longer than %d characters", subjectMax)
+	}
+	x.Keywords = strings.Join(strings.Fields(x.Keywords), " ")
+	if utf8.RuneCountInString(x.Keywords) > keywordsMax {
+		return fmt.Errorf("keywords are longer than %d characters: a few variants and synonyms", keywordsMax)
+	}
+	switch {
+	case x.Importance == 0:
+		x.Importance = 3
+	case x.Importance < 1 || x.Importance > 5:
+		return errors.New("importance is 1 (trivial) to 5 (essential)")
 	}
 	var links []string
 	for _, l := range x.Links {
@@ -451,11 +546,11 @@ func (m *memStore) insert(q querier, x *Memory, who string, except int64) error 
 		links = []byte("[]")
 	}
 	res, err := q.Exec(`INSERT INTO memories (kind, subject, text, links, occurred_at, valid_from, valid_to, recorded_at, supersedes,
-		due_at, state, source_kind, source_ref, trust, status, pinned, confidence, flags, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		due_at, state, source_kind, source_ref, trust, status, pinned, confidence, flags, updated_at, keywords, importance, stems)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		x.Kind, x.Subject, x.Text, string(links), unixOrNil(x.OccurredAt), x.ValidFrom.Unix(), unixOrNil(x.ValidTo), now.Unix(),
 		nullID(x.Supersedes), unixOrNil(x.DueAt), x.State, x.SourceKind, x.SourceRef, x.Trust, x.Status, x.Pinned, x.Confidence,
-		x.Flags, now.Unix())
+		x.Flags, now.Unix(), x.Keywords, x.Importance, memoryStems(x.Text, x.Subject, x.Keywords))
 	if err != nil {
 		return err
 	}
@@ -542,6 +637,9 @@ type memoryPatch struct {
 	State   *string
 	Pinned  *bool
 	Status  *string
+
+	Keywords   *string
+	Importance *int
 }
 
 func (m *memStore) update(id int64, p memoryPatch, who, reason string) (*Memory, error) {
@@ -585,6 +683,12 @@ func (m *memStore) update(id int64, p memoryPatch, who, reason string) (*Memory,
 	if p.Status != nil {
 		x.Status = *p.Status
 	}
+	if p.Keywords != nil {
+		x.Keywords = *p.Keywords
+	}
+	if p.Importance != nil {
+		x.Importance = *p.Importance
+	}
 	if x.Kind != kindProfile && before.Kind == kindProfile && p.Pinned == nil {
 		x.Pinned = before.Pinned
 	}
@@ -603,8 +707,9 @@ func (m *memStore) update(id int64, p memoryPatch, who, reason string) (*Memory,
 		links = []byte("[]")
 	}
 	if _, err := tx.Exec(`UPDATE memories SET kind = ?, subject = ?, text = ?, links = ?, valid_to = ?, due_at = ?, state = ?,
-		pinned = ?, status = ?, updated_at = ? WHERE id = ?`, x.Kind, x.Subject, x.Text, string(links), unixOrNil(x.ValidTo),
-		unixOrNil(x.DueAt), x.State, x.Pinned, x.Status, x.UpdatedAt.Unix(), id); err != nil {
+		pinned = ?, status = ?, updated_at = ?, keywords = ?, importance = ?, stems = ? WHERE id = ?`, x.Kind, x.Subject, x.Text,
+		string(links), unixOrNil(x.ValidTo), unixOrNil(x.DueAt), x.State, x.Pinned, x.Status, x.UpdatedAt.Unix(), x.Keywords,
+		x.Importance, memoryStems(x.Text, x.Subject, x.Keywords), id); err != nil {
 		return nil, err
 	}
 	if err := m.log(tx, id, who, "update", before, &x, reason); err != nil {
@@ -754,25 +859,44 @@ type recallQuery struct {
 	Touch       bool // count the use
 }
 
-// ftsQuery turns free text into an FTS5 query: words, OR between them (bm25
-// ranks the memories that match more of them first), a prefix match for
-// words of four letters or more. FTS syntax in the input is not honoured.
-func ftsQuery(q string) string {
+// ftsQuery turns free text into an FTS5 query: its words but the question
+// words ("quel est le nom de"), OR between them (bm25 ranks first the
+// memories that match more of them), each as typed (a prefix for words of
+// four letters or more) or by its stem (the stems column). FTS syntax in
+// the input is not honoured.
+func ftsQuery(q string, skip ...string) string {
 	var terms []string
-	for _, w := range strings.FieldsFunc(q, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
-		if w == "OR" || w == "AND" || w == "NOT" || w == "ou" || w == "et" {
-			continue
-		}
-		t := `"` + strings.ToLower(w) + `"`
-		if utf8.RuneCountInString(w) >= 4 {
-			t += "*"
-		}
+	add := func(t string) {
 		if !containsStr(terms, t) {
 			terms = append(terms, t)
 		}
 	}
+	for _, w := range memWords(q) {
+		if queryStop(w) || containsStr(skip, foldAccents(w)) {
+			continue
+		}
+		t := `"` + w + `"`
+		if utf8.RuneCountInString(w) >= 4 {
+			t += "*"
+		}
+		add(t)
+		if s := stemWord(w); s != "" {
+			add(`stems : "` + s + `"`)
+		}
+	}
 	return strings.Join(terms, " OR ")
 }
+
+// Ranking weights (docs/memory-design.md): relevance first, then bounded
+// factors, so that an old memory that matches well still comes back.
+const (
+	bm25Weights      = `bm25(memories_fts, 1.0, 0.5, 0.6, 0.8)` // text, subject, keywords, stems
+	episodeRecencyLo = 0.5                                      // an old episode keeps half its relevance
+	inRangeBoost     = 1.6                                      // dated in the question's time
+	outOfRangeFactor = 0.6                                      // a fact not true then
+	pastOutFactor    = 0.3                                      // a fact no longer true, nor true then
+	rangeOnlyScore   = 0.15                                     // in the time asked, without a word in common
+)
 
 func (m *memStore) recall(q recallQuery) ([]*Memory, error) {
 	now := m.now()
@@ -784,17 +908,43 @@ func (m *memStore) recall(q recallQuery) ([]*Memory, error) {
 	if len(statuses) == 0 {
 		statuses = []string{memActive}
 	}
+	text := q.Query
+	var skip []string // the user's name: a question about them says it
+	if m.owner != nil {
+		skip = memWords(foldAccents(m.owner()))
+	}
+	// Time in the question: its words are not what to look for; when the
+	// brain gave no dates, the range reorders.
+	var tr *timeRange
+	if r, rest, ok := queryTime(text, now); ok && strings.TrimSpace(text) != "" {
+		text = rest
+		if q.AsOf.IsZero() && q.Since.IsZero() && q.Until.IsZero() {
+			tr = &r
+			if r.Month != 0 && ftsQuery(text, append(skip, eventWords...)...) != "" {
+				text += " " + frenchMonth[r.Month] // what the memories say of that time
+			}
+		}
+	}
+	if ftsQuery(text, append(skip, eventWords...)...) == "" {
+		text = "" // "que s'est-il passé hier ?": the dates are the question
+	}
+	match := ftsQuery(text, skip...)
+	// How much an episode's age weighs: fully in a listing, the newest
+	// first; down to a floor when it matched words; not at all when the
+	// question is a time ("que s'est-il passé le 19 ?"): that time is chosen.
+	ageFloor := 0.0
+	switch {
+	case match != "":
+		ageFloor = episodeRecencyLo
+	case tr != nil || !q.Since.IsZero() || !q.Until.IsZero():
+		ageFloor = 1
+	}
+	if tr != nil && match == "" {
+		// Nothing but the time: it is the question.
+		q.Since, q.Until, tr = tr.From, tr.To, nil
+	}
 	var where []string
 	var args []any
-	match := ftsQuery(q.Query)
-	from := `memories m`
-	sel := `0.0`
-	if match != "" {
-		from = `memories_fts f JOIN memories m ON m.id = f.rowid`
-		where = append(where, `memories_fts MATCH ?`)
-		args = append(args, match)
-		sel = `bm25(memories_fts, 1.0, 0.5)`
-	}
 	where = append(where, `m.status IN (`+placeholders(len(statuses))+`)`)
 	for _, s := range statuses {
 		args = append(args, s)
@@ -827,7 +977,8 @@ func (m *memStore) recall(q recallQuery) ([]*Memory, error) {
 	case !q.AsOf.IsZero():
 		where = append(where, `m.valid_from <= ? AND (m.valid_to IS NULL OR m.valid_to > ?)`)
 		args = append(args, q.AsOf.Unix(), q.AsOf.Unix())
-	case !q.IncludePast:
+	case !q.IncludePast && tr == nil:
+		// A question about another time also looks at what was true then.
 		where = append(where, `(m.valid_to IS NULL OR m.valid_to > ?)`)
 		args = append(args, now.Unix())
 	}
@@ -839,45 +990,69 @@ func (m *memStore) recall(q recallQuery) ([]*Memory, error) {
 		colList = append(colList, "m."+strings.TrimSpace(c))
 	}
 	cols := strings.Join(colList, ", ")
-	// Enough candidates for the boosts to reorder.
-	query := `SELECT ` + cols + `, ` + sel + ` FROM ` + from + ` WHERE ` + strings.Join(where, " AND ")
-	if match != "" {
-		query += ` ORDER BY ` + sel + ` LIMIT ?`
-		args = append(args, max(q.Limit*5, 50))
-	} else {
-		query += ` ORDER BY COALESCE(m.occurred_at, m.recorded_at) DESC, m.id DESC LIMIT ?`
-		args = append(args, max(q.Limit*5, 50))
-	}
-	rows, err := m.db.Query(query, args...)
-	if err != nil {
-		return nil, err
-	}
+	pool := max(q.Limit*5, 50) // enough candidates for the factors to reorder
+	byID := map[int64]*Memory{}
 	var out []*Memory
-	words := queryWords(q.Query)
-	for rows.Next() {
-		var bm float64
-		x, err := scanMemoryWith(rows, &bm)
+	collect := func(query string, args []any, relevance func(float64) float64) error {
+		rows, err := m.db.Query(query, args...)
 		if err != nil {
-			rows.Close()
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var raw float64
+			x, err := scanMemoryWith(rows, &raw)
+			if err != nil {
+				return err
+			}
+			if byID[x.ID] != nil {
+				continue
+			}
+			x.Score = relevance(raw)
+			byID[x.ID] = x
+			out = append(out, x)
+		}
+		return rows.Err()
+	}
+	base := strings.Join(where, " AND ")
+	if match != "" {
+		query := `SELECT ` + cols + `, ` + bm25Weights + ` FROM memories_fts f JOIN memories m ON m.id = f.rowid
+			WHERE memories_fts MATCH ? AND ` + base + ` ORDER BY ` + bm25Weights + ` LIMIT ?`
+		if err := collect(query, append(append([]any{match}, args...), pool), func(bm float64) float64 { return max(-bm, 1e-6) }); err != nil {
 			return nil, err
 		}
-		score := 1.0
-		if match != "" {
-			score = -bm // bm25: lower is better
-			if score <= 0 {
-				score = 1e-6
+		// Relevance on [0, 1]: the best match is 1.
+		best := 0.0
+		for _, x := range out {
+			best = max(best, x.Score)
+		}
+		for _, x := range out {
+			x.Score /= best
+		}
+		if tr != nil {
+			// What is dated in the time asked comes too, words or not.
+			query := `SELECT ` + cols + `, 0.0 FROM memories m WHERE ` + base + ` AND ((m.occurred_at >= ? AND m.occurred_at < ?)
+				OR (m.occurred_at IS NULL AND m.valid_from < ? AND (m.valid_to IS NULL OR m.valid_to > ?)))
+				ORDER BY COALESCE(m.occurred_at, m.valid_from) DESC LIMIT ?`
+			rangeArgs := append(append([]any{}, args...), tr.From.Unix(), tr.To.Unix(), tr.To.Unix(), tr.From.Unix(), pool)
+			if err := collect(query, rangeArgs, func(float64) float64 { return rangeOnlyScore }); err != nil {
+				return nil, err
 			}
 		}
-		x.Score = score * boost(x, words, now)
-		out = append(out, x)
-	}
-	rows.Close()
-	if match != "" {
-		sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
 	} else {
-		// Without a query: newest first, the profile and fresh episodes ahead.
-		sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
+		query := `SELECT ` + cols + `, 1.0 FROM memories m WHERE ` + base + ` ORDER BY COALESCE(m.occurred_at, m.recorded_at) DESC, m.id DESC LIMIT ?`
+		if err := collect(query, append(args, pool), func(float64) float64 { return 1 }); err != nil {
+			return nil, err
+		}
 	}
+	words := queryWords(text)
+	for _, x := range out {
+		x.Score *= boost(x, words, now, ageFloor)
+		if tr != nil {
+			x.Score *= timeFactor(x, *tr, now)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
 	if len(out) > q.Limit {
 		out = out[:q.Limit]
 	}
@@ -889,9 +1064,11 @@ func (m *memStore) recall(q recallQuery) ([]*Memory, error) {
 	return out, nil
 }
 
-// boost weighs a match: its subject named in the query, its place in the
-// profile, and for episodes their age (half-life of 30 days).
-func boost(x *Memory, words []string, now time.Time) float64 {
+// boost weighs a memory: its subject named in the query, its place in the
+// profile, its importance, and for episodes their age (half-life of 30
+// days), which lowers them no further than ageFloor: with a query, an old
+// memory that matches well still comes back.
+func boost(x *Memory, words []string, now time.Time, ageFloor float64) float64 {
 	b := 1.0
 	if x.Subject != "" && len(words) > 0 {
 		_, name, ok := strings.Cut(x.Subject, ":")
@@ -908,16 +1085,38 @@ func boost(x *Memory, words []string, now time.Time) float64 {
 	if x.Pinned {
 		b *= 1.3
 	}
+	if x.Importance > 0 {
+		b *= 0.8 + 0.1*float64(x.Importance-1) // 0.8 to 1.2
+	}
 	if x.Kind == kindEpisode {
 		t := x.OccurredAt
 		if t.IsZero() {
 			t = x.RecordedAt
 		}
 		if age := now.Sub(t); age > 0 {
-			b *= math.Pow(0.5, float64(age)/float64(episodeHalfLife))
+			fresh := math.Pow(0.5, float64(age)/float64(episodeHalfLife))
+			b *= ageFloor + (1-ageFloor)*fresh
 		}
 	}
 	return b
+}
+
+// timeFactor weighs a memory against the time a question asks about: an
+// episode of that time, a fact true then.
+func timeFactor(x *Memory, r timeRange, now time.Time) float64 {
+	if x.Kind == kindEpisode || !x.OccurredAt.IsZero() {
+		if r.contains(x.OccurredAt) {
+			return inRangeBoost
+		}
+		return 1
+	}
+	switch {
+	case r.overlaps(x.ValidFrom, x.ValidTo):
+		return inRangeBoost
+	case !x.Current(now):
+		return pastOutFactor
+	}
+	return outOfRangeFactor
 }
 
 func queryWords(q string) []string {
@@ -943,7 +1142,7 @@ func scanMemoryWith(rows *sql.Rows, extra ...any) (*Memory, error) {
 	var from, recorded, updated int64
 	dest := []any{&x.ID, &x.Kind, &x.Subject, &x.Text, &links, &occurred, &from, &validTo, &recorded, &superseded, &supersedes,
 		&due, &x.State, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Status, &x.Pinned, &x.Confidence, &x.UseCount, &used,
-		&x.Flags, &deleted, &updated}
+		&x.Flags, &deleted, &updated, &x.Keywords, &x.Importance}
 	if err := rows.Scan(append(dest, extra...)...); err != nil {
 		return nil, err
 	}

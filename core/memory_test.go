@@ -149,8 +149,14 @@ func TestRecallBoostsAndDecay(t *testing.T) {
 	if len(xs) != 2 || xs[0].ID != fresh.ID {
 		t.Fatalf("decay: %v", ids(xs))
 	}
-	if r := xs[1].Score / xs[0].Score; r > 0.3 || r < 0.2 {
-		t.Fatalf("two half-lives should weigh ~0.25, got %.2f", r)
+	// Two half-lives leave a quarter of the freshness, over a floor of a half.
+	if r := xs[1].Score / xs[0].Score; r > 0.65 || r < 0.6 {
+		t.Fatalf("two half-lives should weigh ~0.625, got %.2f", r)
+	}
+	// Without a query, the newest first, and age weighs fully.
+	xs, _ = m.recall(recallQuery{Kinds: []string{kindEpisode}})
+	if r := xs[1].Score / xs[0].Score; xs[0].ID != fresh.ID || r > 0.3 || r < 0.2 {
+		t.Fatalf("listing: %v %.2f", ids(xs), r)
 	}
 	_ = old
 	// The subject named in the query wins over the same text elsewhere.
