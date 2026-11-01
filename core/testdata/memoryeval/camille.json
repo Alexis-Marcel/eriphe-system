@@ -239,14 +239,18 @@
       {"key": "lina", "kind": "waiting_for", "owner": "person:lina-vega", "text": "Retour de Lina sur la maquette v2.", "created": "2026-09-24T17:00", "due": "2026-10-12T09:00", "remind": "2026-10-12T09:00"},
       {"key": "okapi", "kind": "promise", "owner": "owner", "to": "person:yanis", "text": "Livrer la v1 de la boutique Okapi Sport.", "created": "2026-09-15T10:00", "due": "2026-10-10T18:00", "remind": "2026-10-09T09:00"},
       {"key": "brun-solde", "kind": "waiting_for", "owner": "person:marc-brun", "text": "Paiement de la facture F-2026-031.", "created": "2026-09-26T09:30", "due": "2026-10-11T00:00", "remind": "2026-10-11T09:00"},
-      {"key": "urssaf-decl", "kind": "promise", "owner": "owner", "text": "Déclarer le chiffre d'affaires du trimestre à l'URSSAF.", "created": "2026-09-14T09:00", "due": "2026-10-31T23:59", "remind": "2026-10-28T09:00"}
+      {"key": "urssaf-decl", "kind": "promise", "owner": "owner", "text": "Déclarer le chiffre d'affaires du trimestre à l'URSSAF.", "created": "2026-09-14T09:00", "due": "2026-10-31T23:59", "remind": "2026-10-28T09:00"},
+      {"key": "tva-helene", "kind": "reminder", "owner": "owner", "text": "Demander à Hélène ce qu'il faut faire pour la TVA.", "created": "2026-09-14T09:05", "cue": "Hélène"}
     ],
     "events": [
       {"at": "2026-09-11T20:00", "key": "photos", "op": "done"},
       {"at": "2026-09-17T16:00", "key": "planning", "op": "done"},
       {"at": "2026-10-05T10:00", "key": "okapi", "op": "reschedule", "due": "2026-10-17T18:00", "remind": "2026-10-16T09:00"},
       {"at": "2026-10-07T09:10", "key": "cadeau", "op": "done"},
-      {"at": "2026-10-11T10:00", "key": "brun-solde", "op": "snooze", "until": "2026-10-13T09:00"}
+      {"at": "2026-10-11T10:00", "key": "brun-solde", "op": "snooze", "until": "2026-10-13T09:00"},
+      {"at": "2026-09-22T09:30", "op": "say", "text": "Premier jour au Hangar, il fait beau à Nantes."},
+      {"at": "2026-10-14T10:00", "op": "say", "text": "J'ai rendez-vous avec Hélène demain matin pour le bilan."},
+      {"at": "2026-10-15T12:00", "key": "tva-helene", "op": "done"}
     ],
     "checks": [
       {"at": "2026-09-05T12:00", "due": []},
@@ -273,7 +277,9 @@
       {"at": "2026-10-27T12:00", "due": ["urssaf", "lina", "brun-solde", "okapi"]},
       {"at": "2026-10-28T09:30", "due": ["urssaf", "lina", "brun-solde", "okapi", "urssaf-decl"]},
       {"at": "2026-09-18T09:30", "due": []},
-      {"at": "2026-10-16T08:00", "due": ["urssaf", "lina", "brun-solde"]}
+      {"at": "2026-10-16T08:00", "due": ["urssaf", "lina", "brun-solde"]},
+      {"at": "2026-09-22T10:00", "due": []},
+      {"at": "2026-10-14T10:05", "due": ["urssaf", "lina", "brun-solde", "tva-helene"]}
     ]
   },
 

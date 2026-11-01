@@ -85,6 +85,7 @@ type evalProspective struct {
 	Intentions []evalIntention `json:"intentions"`
 	Events     []struct {
 		At, Key, Op, Due, Remind, Until string
+		Text                            string // for say: a message of the user
 	} `json:"events"`
 	Checks []struct {
 		At  string   `json:"at"`
@@ -94,6 +95,7 @@ type evalProspective struct {
 
 type evalIntention struct {
 	Key, Kind, Owner, To, Text, Created, Due, Remind string
+	Cue                                              string // the person whose mention brings it up
 }
 
 type evalInterrupt struct {
@@ -342,6 +344,7 @@ func TestMemoryEvalRetrieval(t *testing.T) {
 type prospectiveSystem interface {
 	add(t testing.TB, in evalIntention)
 	event(t testing.TB, key, op string, due, remind, until time.Time)
+	say(t testing.TB, text string) // a message of the user
 	due(t testing.TB) []string
 }
 
@@ -386,6 +389,10 @@ func runProspective(t testing.TB, c *evalCorpus, clock *fakeClock, sys prospecti
 	for _, e := range c.Prospect.Events {
 		e := e
 		steps = append(steps, step{evalTime(t, e.At), 1, func() {
+			if e.Op == "say" {
+				sys.say(t, e.Text)
+				return
+			}
 			sys.event(t, e.Key, e.Op, evalOptTime(t, e.Due), evalOptTime(t, e.Remind), evalOptTime(t, e.Until))
 		}})
 	}
@@ -417,44 +424,56 @@ func runProspective(t testing.TB, c *evalCorpus, clock *fakeClock, sys prospecti
 	return score, wrong
 }
 
-// commitmentSystem is the memory before typed intentions: a commitment
-// with a due date, and what the wake packet would surface (open ones due
-// within 24 h, or overdue). It has no reminder time, no snooze, and a
-// waiting-for is a commitment like another.
-type commitmentSystem struct {
+// intentionSystem is the typed intentions: the minute timer runs at each
+// checkpoint, and what is due is what the brain would be told of or still
+// has listed as due.
+type intentionSystem struct {
 	m   *memStore
 	ids map[string]int64
 }
 
-func (s *commitmentSystem) add(t testing.TB, in evalIntention) {
-	x := mustAdd(t.(*testing.T), s.m, &Memory{Kind: kindCommitment, Subject: in.Owner, Text: in.Text, DueAt: evalTime(t, in.Due)})
+func (s *intentionSystem) add(t testing.TB, in evalIntention) {
+	x, err := s.m.addIntention(&Intention{Kind: in.Kind, Text: in.Text, Owner: in.Owner, OwedTo: in.To, DueAt: evalOptTime(t, in.Due),
+		RemindAt: evalOptTime(t, in.Remind), Cue: in.Cue, SourceKind: srcOwner, Trust: trustOwner}, "eval")
+	if err != nil {
+		t.Fatalf("%s: %v", in.Key, err)
+	}
 	s.ids[in.Key] = x.ID
 }
 
-func (s *commitmentSystem) event(t testing.TB, key, op string, due, remind, until time.Time) {
-	p := memoryPatch{}
+func (s *intentionSystem) event(t testing.TB, key, op string, due, remind, until time.Time) {
+	ch := intentionChange{}
 	switch op {
 	case "done":
-		p.State = ptr(stateDone)
+		ch.State = intentDone
 	case "cancel":
-		p.State = ptr(stateDropped)
+		ch.State = intentCancelled
+	case "snooze":
+		ch.State, ch.Until = intentSnoozed, until
 	case "reschedule":
-		p.DueAt = &due
-	default:
-		return // a snooze cannot be said
+		ch.DueAt, ch.RemindAt = &due, &remind
 	}
-	if _, err := s.m.update(s.ids[key], p, "eval", ""); err != nil {
+	if _, err := s.m.changeIntention(s.ids[key], ch, "eval", ""); err != nil {
 		t.Fatalf("%s %s: %v", op, key, err)
 	}
 }
 
-func (s *commitmentSystem) due(t testing.TB) []string {
-	p, err := s.m.wakePacket()
+func (s *intentionSystem) say(t testing.TB, text string) {
+	if _, err := s.m.cueIntentions(text); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (s *intentionSystem) due(t testing.TB) []string {
+	if _, err := s.m.tickIntentions(); err != nil {
+		t.Fatal(err)
+	}
+	xs, err := s.m.intentions(intentDue)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var out []string
-	for _, x := range p.Due {
+	for _, x := range xs {
 		for k, id := range s.ids {
 			if id == x.ID {
 				out = append(out, k)
@@ -465,13 +484,15 @@ func (s *commitmentSystem) due(t testing.TB) []string {
 }
 
 // prospectiveFloor is the Set-F1 the prospective checkpoints must keep.
-const prospectiveFloor = 75.0
+// Before typed intentions (commitments and a 24-hour wake window) it was
+// 77.6 %.
+const prospectiveFloor = 99.0
 
 func TestMemoryEvalProspective(t *testing.T) {
 	c := loadEvalCorpus(t)
 	m, clock := testMemory(t)
-	score, wrong := runProspective(t, c, clock, &commitmentSystem{m: m, ids: map[string]int64{}})
-	t.Logf("prospective (commitments and the wake packet): Set-F1 %.1f%% (TP %d, FP %d, FN %d) over %d checkpoints",
+	score, wrong := runProspective(t, c, clock, &intentionSystem{m: m, ids: map[string]int64{}})
+	t.Logf("prospective (typed intentions, the minute timer): Set-F1 %.1f%% (TP %d, FP %d, FN %d) over %d checkpoints",
 		score.F1(), score.TP, score.FP, score.FN, len(c.Prospect.Checks))
 	for _, w := range wrong {
 		t.Logf("  %s", w)

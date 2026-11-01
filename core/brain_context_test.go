@@ -22,8 +22,9 @@ func say(t *testing.T, c *core, role, text string, delivered bool) int {
 
 func TestContextPackContent(t *testing.T) {
 	c, clock := testMemoryCore(t)
-	mustAdd(t, c.mem, &Memory{Kind: kindCommitment, Text: "Envoyer le devis au garage", DueAt: clock.now().Add(-time.Hour)})
-	mustAdd(t, c.mem, &Memory{Kind: kindCommitment, Text: "Déjà fait", State: stateDone})
+	mustIntend(t, c.mem, &Intention{Text: "Envoyer le devis au garage", DueAt: clock.now().Add(-time.Hour)})
+	done := mustIntend(t, c.mem, &Intention{Text: "Déjà fait", DueAt: clock.now().Add(time.Hour)})
+	c.mem.changeIntention(done.ID, intentionChange{State: intentDone}, "test", "")
 	mustAdd(t, c.mem, &Memory{Kind: kindEpisode, Text: "Revue du budget avec Sam"})
 	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Lu dans un mail", Status: memProposed,
 		SourceKind: srcBrain, Trust: trustExternal})

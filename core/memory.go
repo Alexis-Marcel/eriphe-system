@@ -235,6 +235,7 @@ var memoryMigrations = []memoryMigration{{sql: `CREATE TABLE memories (
 	CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);`},
 	{fn: migrateSearchKeys},
 	{sql: `ALTER TABLE memories ADD COLUMN basis TEXT NOT NULL DEFAULT ''`},
+	{fn: migrateIntentions},
 }
 
 // migrateSearchKeys (schema 2) gives the full-text index its keys: the
@@ -1226,17 +1227,6 @@ func (m *memStore) list(where string, args []any, order string, limit int) ([]*M
 		out = append(out, x)
 	}
 	return out, rows.Err()
-}
-
-// commitments are the open ones, the most urgent first (no due date last).
-func (m *memStore) commitments(dueBefore time.Time) ([]*Memory, error) {
-	where := `kind = 'commitment' AND status = 'active' AND state = 'open' AND (valid_to IS NULL OR valid_to > ?)`
-	args := []any{m.now().Unix()}
-	if !dueBefore.IsZero() {
-		where += ` AND due_at IS NOT NULL AND due_at <= ?`
-		args = append(args, dueBefore.Unix())
-	}
-	return m.list(where, args, `due_at IS NULL, due_at, id`, 200)
 }
 
 // profile is the pinned, current, active memories.

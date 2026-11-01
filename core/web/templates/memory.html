@@ -106,8 +106,9 @@
 
 {{define "mem-inbox"}}
 <p class="mem-lead">{{template "i-shield"}}{{t "mem.inboxlead"}}</p>
+{{if .ProposedIntents}}<div class="mem-list" id="intent-list">{{range .ProposedIntents}}{{template "intent-card" .}}{{end}}</div>{{end}}
 <div class="mem-list" id="mem-list">{{range .Items}}{{template "mem-card" .}}{{end}}</div>
-{{if not .Items}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-check"}}</span><p>{{t "mem.inboxnone"}}</p></div>{{end}}
+{{if and (not .Items) (not .ProposedIntents)}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-check"}}</span><p>{{t "mem.inboxnone"}}</p></div>{{end}}
 {{end}}
 
 {{define "mem-journal"}}
@@ -133,11 +134,50 @@
 
 {{define "mem-commitments"}}
 <p class="mem-lead">{{template "i-check"}}{{t "mem.commitmentslead"}}</p>
-<div class="mem-list" id="mem-list">{{range .Items}}{{template "mem-card" .}}{{end}}</div>
-{{if not .Items}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-check"}}</span><p>{{t "mem.commitmentsnone"}}</p></div>{{end}}
-{{if .Done}}<details class="done"><summary>{{t "mem.donerecent"}} <span class="count">{{len .Done}}</span></summary>
-<div class="mem-list">{{range .Done}}{{template "mem-card" .}}{{end}}</div></details>{{end}}
+<div class="mem-list" id="intent-list">{{range .Intents}}{{template "intent-card" .}}{{end}}</div>
+{{if not .Intents}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-check"}}</span><p>{{t "mem.commitmentsnone"}}</p></div>{{end}}
+{{if .IntentsDone}}<details class="done"><summary>{{t "mem.donerecent"}} <span class="count">{{len .IntentsDone}}</span></summary>
+<div class="mem-list">{{range .IntentsDone}}{{template "intent-card" .}}{{end}}</div></details>{{end}}
 {{end}}
+
+{{define "intent-who"}}{{if eq . "owner"}}{{t "intent.owner"}}{{else if eq . "assistant"}}{{t "intent.assistant"}}{{else}}{{.}}{{end}}{{end}}
+
+{{define "intent-card"}}
+<article class="mem k-commitment intent st-{{.State}}" id="intent-{{.ID}}">
+  <div class="mem-top">
+    <span class="kind k-commitment"><i aria-hidden="true"></i>{{t (printf "intent.kind.%s" .Kind)}}</span>
+    <span class="mem-subj">{{template "intent-who" .Owner}}{{if .OwedTo}} → {{template "intent-who" .OwedTo}}{{end}}</span>
+    <span class="tag {{if eq .State "done"}}tag-ok{{else if or (eq .State "due") .Overdue}}tag-no{{end}}">{{t (printf "intent.st.%s" .State)}}</span>
+    {{if .Overdue}}<span class="tag tag-no">{{t "mem.overdue"}}</span>{{end}}
+    <span class="trust t-{{.Trust}}">{{t (printf "trust.%s" .Trust)}}</span>
+  </div>
+  <p class="mem-text">{{.Text}}</p>
+  <p class="mem-meta">
+    {{if not .DueAt.IsZero}}<span class="{{if .Overdue}}due-late{{end}}">{{tf "intent.due" (date .DueAt)}}</span>{{end}}
+    {{if and (not .RemindAt.IsZero) (ne .RemindAt .DueAt)}}<span>{{tf "intent.remind" (date .RemindAt)}}</span>{{end}}
+    {{if eq .State "snoozed"}}<span>{{tf "intent.snoozeduntil" (date .SnoozedUntil)}}</span>{{end}}
+    {{if .Cue}}<span>{{tf "intent.cue" .Cue}}</span>{{end}}
+    {{if eq .Trust "external"}}<span>{{t "intent.external"}}</span>{{end}}
+    <span>{{t (printf "src.%s" .SourceKind)}}{{if .SourceRef}} <span class="mono">{{.SourceRef}}</span>{{end}}</span>
+    <span class="mem-id">n°{{.ID}}</span>
+  </p>
+  <div class="mem-actions">
+    {{if eq .State "proposed"}}
+    <button class="btn btn-primary sm" hx-post="/memory/intention/{{.ID}}/approve" hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{template "i-check"}}{{t "intent.approve"}}</button>
+    <button class="btn btn-ghost sm" hx-post="/memory/intention/{{.ID}}/reject" hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{template "i-x"}}{{t "intent.reject"}}</button>
+    {{else if or (eq .State "done") (eq .State "cancelled")}}
+    <button class="link-btn" hx-post="/memory/intention/{{.ID}}/reopen" hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{t "intent.reopen"}}</button>
+    {{else}}
+    <button class="btn btn-soft sm" hx-post="/memory/intention/{{.ID}}/done" hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{template "i-check"}}{{t "intent.done"}}</button>
+    <button class="link-btn" hx-post="/memory/intention/{{.ID}}/snooze" hx-vals='{"for":"hour"}' hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{t "intent.snoozehour"}}</button>
+    <button class="link-btn" hx-post="/memory/intention/{{.ID}}/snooze" hx-vals='{"for":"day"}' hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{t "intent.snoozeday"}}</button>
+    <button class="link-btn danger push" hx-post="/memory/intention/{{.ID}}/cancel" hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{t "intent.cancel"}}</button>
+    {{end}}
+  </div>
+</article>
+{{end}}
+
+{{define "intent-card-frag"}}{{template "intent-card" .Data}}{{end}}
 
 {{define "mem-profile"}}
 <section class="panel profile-panel">

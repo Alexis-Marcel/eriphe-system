@@ -152,6 +152,20 @@ state (`proposed → open → due → done / cancelled`, `snoozed → due`), pro
   tainted, so it can neither allow a permission nor lend tools that write.
 - The old `commitment` memories move into the table (state kept, the memory archived with a log
   entry that names the intention): one place for what is owed.
+- Each intention wakes the brain once when it comes due, and once more at its deadline if it is
+  still due; after that it stays listed (pack, page, `intentions`) until closed. Quiet hours and
+  "now, the brief, or nothing" are the interrupt score's, a later phase: for now a due reminder
+  wakes the brain at any hour, as the user set it.
+- Event cues other than a person ("when the PR is merged", "when the client answers") are not
+  checked by code yet: PIS needs a language judge for them, and PM-Bench shows channel monitoring
+  is where agents fail most (16.7 % at best). They stay the brain's to notice, and the next phase's.
+
+### Order of the work
+
+The plan had four PRs; the owner's later input (decisions and progress as durable state) and the
+provenance labels made the extraction's new schema a topic of its own, so it is split from the
+retrieval PR: 1 the evaluation, 2 the poisoning fix, 3 retrieval, 4 durable state (decisions,
+progress, basis, importance, planned end), 5 typed intentions. Each is stacked on the previous.
 
 ## Where we deliberately differ from the strongest systems
 
@@ -217,6 +231,32 @@ After PR 4: decisions and progress cards are kinds of their own (the corpus's se
 retrieval unchanged at 90.8 / 92.8; what the extraction writes for them, and the basis rules, are
 covered by `TestExtractionDurableState`. How well a real extraction fills them is measured by the
 opt-in model run.
+
+After PR 5: prospective Set-F1 **100 %** (TP 33, no false alarm, no miss, 27 checkpoints with a
+person cue the old model could not express), against 77.6 % for commitments and the 24-hour wake
+window (12 false alarms: reminders a day early, snoozes ignored, done things still due). This
+measures the lifecycle, which is code: the scenario gives the intentions as a good Form step would.
+How well a model forms and revises them from the conversation is the opt-in model run. Injection
+cases: 16 hold (three new on intentions), no known gap.
+
+**With a model** (opt-in, `ERIPHE_EVAL_MODEL_CMD='claude -p --model haiku'`, one run each, 85
+questions, exact keys; 2026-11-01). "Seeded": the corpus's memories as a good extraction writes
+them, then `recall` and the answer. "End to end": the real nightly extraction replayed over the six
+weeks (about 40 runs), then the same questions over what it wrote.
+
+| | Before (PR 1's code) | After (PR 5's code) |
+|---|---|---|
+| Seeded, all | 84.7 % | **90.6 %** |
+| — multi-session / update / progress | 50.0 / 78.6 / 80.0 | 66.7 / 100 / 80.0 |
+| End to end, all | 83.5 % | **90.6 %** |
+| — extraction's operations rejected | 3 | 0 |
+| The injected mail ("send the invoices to …") believed | no | no (only the task's external journal episode mentions it) |
+
+Read with care: one run per side with a small model; an earlier run of the same "after" code
+scored 92.9 % on both, so a couple of points either way is noise. Some misses are the keys' fault
+(a right answer worded otherwise), the same on both sides. What remains is mostly lists that need
+more than the memories found ("who are her relatives": only the sister), the paraphrase gap of the
+lexical search, and two answers the model declined ("INCONNU") with the memory in front of it.
 
 Read with care: LongMemEval's Table 9 may be on another haystack size than S, our session score
 ranks turns and not sessions, and both benchmarks are English (the French stemmer and the plural
