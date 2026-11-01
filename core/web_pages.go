@@ -64,6 +64,7 @@ type taskCard struct {
 	NeedsYou, Finished   bool
 	LastText             string
 	Receipt              *checkedReceipt // its last turn's, checked (receipt.go)
+	Contract             *taskContract   // what it was asked to make true (contract.go)
 }
 
 // split separates a task's place, owner/repo@branch, into its repository and branch.
@@ -117,7 +118,7 @@ func (w *web) card(st *taskStatus) taskCard {
 	return taskCard{ID: t.ID, Title: truncate(title, 110), Prompt: t.Prompt, Node: t.Node, Agent: t.Agent,
 		Repo: repo, Branch: branch, State: t.State, PendingReason: t.PendingReason, Link: link, LinkLabel: label,
 		Updated: t.Updated, Created: t.Created, Finished: finished(t.State), LastText: st.LastText,
-		NeedsYou: w.needsUser(st), Receipt: st.Receipt}
+		NeedsYou: w.needsUser(st), Receipt: st.Receipt, Contract: st.Contract}
 }
 
 // tasksAndPerms reads the worker tasks for the side panel, and the

@@ -111,6 +111,10 @@ CREATE TABLE IF NOT EXISTS events (
 // extraSchema holds the tables of other modules (the policy's decisions).
 var extraSchema []string
 
+// extraColumns are columns added to those tables later: each fails, and is
+// ignored, once the column is there.
+var extraColumns []string
+
 func openStore(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
@@ -121,6 +125,9 @@ func openStore(path string) (*Store, error) {
 		if _, err := db.Exec(q); err != nil {
 			return nil, err
 		}
+	}
+	for _, q := range extraColumns {
+		db.Exec(q)
 	}
 	// Added after v0: which tasks are the brain rather than workers.
 	db.Exec(`ALTER TABLE tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'worker'`)

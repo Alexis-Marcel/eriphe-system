@@ -133,6 +133,17 @@
 {{else}}<span class="rc rc-none">{{t "receipt.none"}}</span>{{if .Checks}}{{if .Verified}}<span class="rc rc-ok">{{template "i-check"}}{{len .Verified}} {{t "receipt.verified.short"}}</span>{{end}}{{end}}{{end}}</p>
 {{end}}
 
+{{define "contract"}}{{/* what a task was asked to make true (contract.go) */}}
+<section class="contract" aria-labelledby="ct-title">
+<h3 class="section-label" id="ct-title">{{t "contract.title"}}</h3>
+<p class="ct-objective"><strong>{{t "contract.objective"}}</strong> {{.Objective}}</p>
+{{if .Constraints}}<h4 class="rc-sub">{{t "contract.constraints"}}</h4><ul class="rc-list">{{range .Constraints}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{if .Checks}}<h4 class="rc-sub">{{t "contract.checks"}}</h4><ul class="rc-list">{{range .Checks}}<li><strong>{{.Name}}</strong> · {{if .Run}}<code>{{short .Run 120}}</code>{{if .Dir}} <span class="muted small">({{.Dir}})</span>{{end}}{{else}}{{tf "contract.exists" .Exists}}{{end}}</li>{{end}}</ul>{{end}}
+{{if .Evidence}}<h4 class="rc-sub">{{t "contract.evidence"}}</h4><ul class="rc-list">{{range .Evidence}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{with .Budget}}<p class="muted small">{{t "contract.budget"}}{{if .Minutes}} · {{tf "contract.minutes" .Minutes}}{{end}}{{if .Turns}} · {{tf "contract.turns" .Turns}}{{end}}{{if .Attempts}} · {{tf "contract.attempts" .Attempts}}{{end}}{{if .Tokens}} · {{tf "contract.tokens" .Tokens}}{{end}}</p>{{end}}
+</section>
+{{end}}
+
 {{define "receipt"}}{{/* a task's checked receipt, in its drawer (receipt.go) */}}
 <section class="receipt" aria-labelledby="rc-title">
 <h3 class="section-label" id="rc-title">{{t "receipt.title"}}</h3>
@@ -185,6 +196,7 @@
 </dl>
 {{if .Card.PendingReason}}{{if .Card.Finished}}<div class="alert-box">{{template "problem" (problem "task" .Card.PendingReason)}}</div>{{else}}<p class="notice">{{.Card.PendingReason}}</p>{{end}}{{end}}
 {{if .Card.Link}}<a class="btn btn-soft wide" href="{{.Card.Link}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{.Card.LinkLabel}}</a>{{end}}
+{{with .Card.Contract}}{{template "contract" .}}{{end}}
 {{with .Card.Receipt}}{{template "receipt" .}}{{end}}
 <details class="prompt"><summary>{{t "task.prompt"}}</summary><div class="prose">{{md .Card.Prompt}}</div></details>
 {{if .Perm}}{{template "permission" .Perm}}{{end}}

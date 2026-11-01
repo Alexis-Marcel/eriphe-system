@@ -466,7 +466,8 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .rc-partial, .rc-open { background: var(--warn-soft); color: var(--warn); }
 .rc-blocked { background: var(--idle-soft); color: var(--idle); }
 .rc-bad { background: var(--danger-soft); color: var(--danger); }
-.receipt { display: grid; gap: 10px; }
+.receipt, .contract { display: grid; gap: 10px; }
+.ct-objective { margin: 0; font-size: .92rem; }
 .rc-head { margin: 0; display: flex; gap: 6px; flex-wrap: wrap; }
 .rc-summary { margin: 0; font-size: .92rem; }
 .rc-mismatch ul { margin: 6px 0 0; padding-left: 18px; color: var(--danger); }
