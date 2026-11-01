@@ -63,6 +63,7 @@ type taskCard struct {
 	Updated, Created     time.Time
 	NeedsYou, Finished   bool
 	LastText             string
+	Receipt              *checkedReceipt // its last turn's, checked (receipt.go)
 }
 
 // split separates a task's place, owner/repo@branch, into its repository and branch.
@@ -116,7 +117,7 @@ func (w *web) card(st *taskStatus) taskCard {
 	return taskCard{ID: t.ID, Title: truncate(title, 110), Prompt: t.Prompt, Node: t.Node, Agent: t.Agent,
 		Repo: repo, Branch: branch, State: t.State, PendingReason: t.PendingReason, Link: link, LinkLabel: label,
 		Updated: t.Updated, Created: t.Created, Finished: finished(t.State), LastText: st.LastText,
-		NeedsYou: w.needsUser(st)}
+		NeedsYou: w.needsUser(st), Receipt: st.Receipt}
 }
 
 // tasksAndPerms reads the worker tasks for the side panel, and the
@@ -307,7 +308,17 @@ func (w *web) detail(id string) (*taskDetail, error) {
 	d.Credentials, _ = w.c.store.credentialLog(id, 20)
 	for _, e := range st.Recent {
 		switch e.Type {
-		case "text", "tool_use", "permission", "permission_answer", "error":
+		case "text":
+			// Its receipt shows as the report, not as text (receipt.go).
+			if text, _ := e.Data["text"].(string); st.Task.Kind == "worker" && !flagged(e.Data["error"]) {
+				s := stripReceipt(text)
+				if s == "" {
+					continue
+				}
+				e.Data = map[string]any{"text": s}
+			}
+			d.Events = append(d.Events, e)
+		case "tool_use", "permission", "permission_answer", "error":
 			d.Events = append(d.Events, e)
 		case "turn_end":
 			if s, _ := e.Data["subtype"].(string); s != "" && s != "success" {

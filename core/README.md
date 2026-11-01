@@ -572,7 +572,7 @@ whatever address it dials) and one client certificate per node.
 | `list_folders` | the user's folders: name, machine (online or not), access (`read` or `drop`), where a task finds it |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
-| `task_status` | state, the agent's last message, the pending permission; `wait` blocks until the task needs you |
+| `task_status` | state, the agent's last message (without its receipt), its checked [receipt](#receipts-receiptgo), the pending permission; `wait` blocks until the task needs you |
 | `list_tasks` | recent tasks |
 | `answer_task` | allow or deny the pending permission, or reply to the agent's question |
 | `stop_task` | stop the agent |
@@ -621,6 +621,31 @@ again whenever a node comes online and every 15 seconds; stopping one stops it a
 registered node could ever run it, `run_task` fails. Nodes are checked every 15 seconds. Tasks that were active when eriphe-core stopped are
 followed again at start, and a disconnected node's tasks are followed again when it reconnects; a
 node that forgot a task marks it `lost`.
+
+### Receipts (`receipt.go`)
+
+A worker ends every turn with a **receipt**: a fenced ```` ```json ```` block, the last thing of its
+message, `{"receipt": {status, summary, changed, verified, not_verified, decisions, risks,
+needs_approval, lessons}}`, with `status` one of `done`, `partial`, `blocked`. Its standing
+instruction (`workerVoice`) asks for it. It is a block of the final text, not a tool call, because
+every harness (Claude Code, Codex, OpenCode, any ACP agent) hands back its final text, while a tool
+would have to be allowed in each one's permission model. eriphe-core reads the last block that
+parses (a `<receipt>` tag and a message that is only the JSON work too) and never trusts it:
+
+- **verified** is only what a check run by the node saw pass (`check` events); what the agent says
+  it verified without a check stays *claimed, not checked*; a failed check is *not verified*;
+- a file said `changed` is compared with the repository's diff, which the node reports when the
+  turn ends (`diff` event); files of the diff left out are counted;
+- `done` with a failed check, or a change the diff does not have, is an **unsupported claim**.
+
+A turn with no readable receipt is asked once for it (`skip_checks`: the node runs no check after
+that turn), at most twice per task and never twice in a row, without the brain; a turn that failed
+is not asked. The brain then gets the checked receipt (in French, like its other events) instead of
+the agent's last message; without one, the last message, truncated, as before. `task_status`
+returns it as `receipt`, the task's card shows its status and how much is verified, its drawer
+verified and not verified side by side, the checks with the end of a failed one's output, and the
+mismatches. The last receipt is kept in `task_harness`. The night's memory extraction reads a
+finished task's receipt instead of its last message (still external).
 
 ## Permission policy
 

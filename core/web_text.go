@@ -678,6 +678,7 @@ func templateFuncs(lang string) template.FuncMap {
 		"logo":     presetLogo,
 		"initial":  func(s string) string { return strings.ToUpper(string([]rune(s + "?")[:1])) },
 		"finished": finished,
+		"mismatch": func(m mismatch) string { return m.Text(lang) }, // receipt.go
 		"evsubject": func(data map[string]any) string {
 			tool, _ := data["name"].(string)
 			if tool == "" {

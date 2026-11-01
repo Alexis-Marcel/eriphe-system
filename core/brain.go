@@ -21,6 +21,15 @@ const brainStartPrompt = "Tu démarres. Lis tes consignes, ne fais rien d'autre 
 // notifyBrain queues an event for the brain when a worker task changes state
 // in a way that may need it.
 func (c *core) notifyBrain(id, state string) {
+	var receipt *checkedReceipt
+	if state == stateIdle {
+		if t, err := c.store.task(id); err == nil && t.Kind == "worker" {
+			var asked bool
+			if receipt, asked = c.settleTurn(t); asked {
+				return // its receipt first (task_harness.go)
+			}
+		}
+	}
 	c.pushTaskEnded(id, state) // and on the user's devices (push.go)
 	if c.memoryTaskChanged(id, state) {
 		return // the memory's own tasks are eriphe-core's (memory_extract.go)
@@ -58,7 +67,7 @@ func (c *core) notifyBrain(id, state string) {
 			return
 		}
 	case stateIdle:
-		text = fmt.Sprintf("La tâche %s (nœud %s) a fini son tour. Son dernier message : %s", t.ID, t.Node, truncate(st.LastText, 1500))
+		text = idleEvent(t, st.LastText, receipt)
 		if st.AuthError {
 			text += "\n(Erreur d'authentification de l'agent.)"
 		}
@@ -80,6 +89,24 @@ func (c *core) notifyBrain(id, state string) {
 		c.store.set(taintKey(int(seq)), folderTaint(t.Folders))
 	}
 	c.ping()
+}
+
+// idleEvent tells the brain that a worker's turn ended: its checked
+// receipt, or without one its last message.
+func idleEvent(t *TaskRow, lastText string, r *checkedReceipt) string {
+	head := fmt.Sprintf("La tâche %s (nœud %s) a fini son tour.", t.ID, t.Node)
+	if r.missing() {
+		text := fmt.Sprintf("%s Son dernier message (sans reçu lisible) : %s", head, truncate(lastText, 1500))
+		if r != nil && len(r.Checks) > 0 {
+			text += "\n" + r.brainText()
+		}
+		return text
+	}
+	text := head + "\n" + r.brainText()
+	if r.Status == "blocked" && lastText != "" {
+		text += "\nSon message : " + truncate(lastText, 800)
+	}
+	return text
 }
 
 func (c *core) ping() {

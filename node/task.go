@@ -89,7 +89,7 @@ type ModelEndpoint struct {
 type Event struct {
 	Seq  int            `json:"seq"`
 	Time time.Time      `json:"time"`
-	Type string         `json:"type"` // text, tool_use, permission, permission_answer, turn_end, error, state
+	Type string         `json:"type"` // text, tool_use, permission, permission_answer, turn_end, diff, error, state
 	Data map[string]any `json:"data"`
 }
 
@@ -150,6 +150,11 @@ type Task struct {
 	results   []string
 	onTurnEnd func()
 
+	// onIdle runs when a turn has ended and the task is idle (turnend.go);
+	// while it runs, finishing holds the task reported as running.
+	onIdle    func()
+	finishing bool
+
 	// With the container engine (apple.go): the task's own network, and the
 	// node's address on it, where the task reaches the node.
 	network, gateway string
@@ -203,8 +208,34 @@ func (t *Task) write(text string) {
 func (t *Task) setState(s string) {
 	t.mu.Lock()
 	t.State = s
+	idle := t.onIdle
+	if s != stateIdle {
+		idle = nil
+	}
+	if idle != nil {
+		t.finishing = true // in the same lock: never reported idle before it ran
+	}
 	t.mu.Unlock()
 	t.emit("state", map[string]any{"state": s})
+	if idle != nil {
+		go idle()
+	}
+}
+
+// reportedState is the state eriphe-core is told: running while the end of
+// a turn is still being looked at.
+func (t *Task) reportedState() string {
+	if t.finishing && t.State == stateIdle {
+		return stateRunning
+	}
+	return t.State
+}
+
+// busyFinishing tells whether the end of the turn is still being looked at.
+func (t *Task) busyFinishing() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.finishing
 }
 
 func (t *Task) state() string {

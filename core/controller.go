@@ -236,7 +236,7 @@ type runRequest struct {
 // the user through the assistant they named, so it speaks like it.
 func workerVoice(name string) string {
 	return "Your final message is relayed to the user as " + name + "'s. Write it in the language of your instructions; " +
-		"in French, use tutoiement (« tu »), never « vous ». Be concise: the result, without preamble."
+		"in French, use tutoiement (« tu »), never « vous ». Be concise: the result, without preamble.\n\n" + receiptInstruction
 }
 
 // runTask schedules a worker task, sends it to its node and starts following it.
@@ -354,7 +354,9 @@ type taskStatus struct {
 	PendingPermissions []map[string]any `json:"pending_permissions,omitempty"`
 	LastText           string           `json:"last_text,omitempty"`
 	AuthError          bool             `json:"auth_error,omitempty"`
-	Recent             []EventRow       `json:"recent"`
+	// Receipt is its last turn's receipt, as eriphe-core checked it (receipt.go).
+	Receipt *checkedReceipt `json:"receipt,omitempty"`
+	Recent  []EventRow      `json:"recent"`
 }
 
 func (c *core) status(id string, n int) (*taskStatus, error) {
@@ -373,7 +375,14 @@ func (c *core) status(id string, n int) (*taskStatus, error) {
 		case "permission_answer":
 			answered[fmt.Sprint(e.Data["id"])] = true
 		case "text":
-			st.LastText, _ = e.Data["text"].(string)
+			// Shown without its receipt (receipt.go); a message that was
+			// only one leaves the one before.
+			text, _ := e.Data["text"].(string)
+			if t.Kind != "worker" {
+				st.LastText = text
+			} else if s := stripReceipt(text); s != "" || text == "" {
+				st.LastText = s
+			}
 		case "turn_end":
 			if b, _ := e.Data["auth_error"].(bool); b {
 				st.AuthError = true
@@ -390,6 +399,9 @@ func (c *core) status(id string, n int) (*taskStatus, error) {
 		if len(st.PendingPermissions) > 0 {
 			st.PendingPermission = st.PendingPermissions[0]
 		}
+	}
+	if t.Kind == "worker" {
+		st.Receipt = crossCheck(events)
 	}
 	st.Recent = events[max(0, len(events)-n):]
 	return st, nil

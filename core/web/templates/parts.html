@@ -120,8 +120,45 @@
     <div><dt class="sr-only">{{t "task.node"}}</dt><dd>{{template "i-server"}}{{if .Node}}{{.Node}}{{else}}{{t "tasks.waitnode"}}{{end}}</dd></div>
     {{if .Agent}}<div><dt class="sr-only">{{t "task.agent"}}</dt><dd>{{template "i-bot"}}{{.Agent}}</dd></div>{{end}}
   </dl>
+  {{with .Receipt}}{{template "receipt-line" .}}{{end}}
   {{if .Link}}<a class="card-link" href="{{.Link}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{.LinkLabel}}</a>{{end}}
 </article>
+{{end}}
+
+{{define "receipt-line"}}{{/* a task's checked receipt, in one line (receipt.go) */}}
+<p class="rc-line">{{if .Given}}<span class="rc rc-{{.Status}}">{{t (printf "receipt.status.%s" .Status)}}</span>
+  {{if .Verified}}<span class="rc rc-ok">{{template "i-check"}}{{len .Verified}} {{t "receipt.verified.short"}}</span>{{end}}
+  {{if .Open}}<span class="rc rc-open">{{.Open}} {{t "receipt.open.short"}}</span>{{end}}
+  {{if .Unsupported}}<span class="rc rc-bad">{{t "receipt.unsupported"}}</span>{{end}}
+{{else}}<span class="rc rc-none">{{t "receipt.none"}}</span>{{if .Checks}}{{if .Verified}}<span class="rc rc-ok">{{template "i-check"}}{{len .Verified}} {{t "receipt.verified.short"}}</span>{{end}}{{end}}{{end}}</p>
+{{end}}
+
+{{define "receipt"}}{{/* a task's checked receipt, in its drawer (receipt.go) */}}
+<section class="receipt" aria-labelledby="rc-title">
+<h3 class="section-label" id="rc-title">{{t "receipt.title"}}</h3>
+{{if .Given}}
+<p class="rc-head"><span class="rc rc-{{.Status}}">{{t (printf "receipt.status.%s" .Status)}}</span>{{if .Unsupported}}<span class="rc rc-bad">{{t "receipt.unsupported"}}</span>{{end}}</p>
+{{if .Summary}}<p class="rc-summary">{{.Summary}}</p>{{end}}
+{{else}}<p class="muted">{{t "receipt.none.long"}}</p>{{end}}
+{{if .Mismatches}}<div class="alert-box rc-mismatch"><strong>{{t "receipt.mismatches"}}</strong><ul>{{range .Mismatches}}<li>{{mismatch .}}</li>{{end}}</ul></div>{{end}}
+<div class="rc-cols">
+  <div class="rc-col rc-col-ok"><h4>{{template "i-check"}}{{t "receipt.verified"}}</h4>
+    {{if .Verified}}<ul>{{range .Verified}}<li>{{.}}</li>{{end}}</ul>{{else}}<p class="muted small">{{t "receipt.verified.none"}}</p>{{end}}</div>
+  <div class="rc-col rc-col-open"><h4>{{t "receipt.open"}}</h4>
+    {{if .Open}}<ul>{{range .NotVerified}}<li>{{.}}</li>{{end}}{{range .Unchecked}}<li>{{.}} <span class="muted small">· {{t "receipt.claimed"}}</span></li>{{end}}</ul>{{else}}<p class="muted small">{{t "receipt.open.none"}}</p>{{end}}</div>
+</div>
+{{if .Checks}}<h4 class="rc-sub">{{t "receipt.checks"}}</h4>
+<ul class="rc-checks">{{range .Checks}}<li class="{{if .OK}}ok{{else}}no{{end}}">
+  {{if .OK}}{{template "i-check"}}{{else}}{{template "i-x"}}{{end}}<strong>{{.Name}}</strong>
+  <span class="muted small">{{if .OK}}{{t "receipt.check.ok"}}{{else}}{{tf "receipt.check.failed" .ExitCode}}{{end}}{{with .Run}} · <code>{{short . 80}}</code>{{end}}{{with .Exists}} · <code>{{short . 80}}</code>{{end}}</span>
+  {{if and (not .OK) .Output}}<pre class="rc-out">{{.Output}}</pre>{{end}}</li>{{end}}</ul>{{end}}
+{{if .NeedsApproval}}<h4 class="rc-sub">{{t "receipt.needsapproval"}}</h4><ul class="rc-list">{{range .NeedsApproval}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{if .Changed}}<h4 class="rc-sub">{{t "receipt.changed"}}</h4><ul class="rc-list mono">{{range .Changed}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{if .Diff}}<details class="rc-diff"><summary>{{t "receipt.diff"}} <span class="count">{{len .Diff}}</span></summary><ul class="rc-list mono">{{range .Diff}}<li>{{.}}</li>{{end}}</ul></details>{{end}}
+{{if .Decisions}}<h4 class="rc-sub">{{t "receipt.decisions"}}</h4><ul class="rc-list">{{range .Decisions}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{if .Risks}}<h4 class="rc-sub">{{t "receipt.risks"}}</h4><ul class="rc-list">{{range .Risks}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{if .Lessons}}<h4 class="rc-sub">{{t "receipt.lessons"}}</h4><ul class="rc-list">{{range .Lessons}}<li>{{.}}</li>{{end}}</ul>{{end}}
+</section>
 {{end}}
 
 {{define "drawer"}}
@@ -148,6 +185,7 @@
 </dl>
 {{if .Card.PendingReason}}{{if .Card.Finished}}<div class="alert-box">{{template "problem" (problem "task" .Card.PendingReason)}}</div>{{else}}<p class="notice">{{.Card.PendingReason}}</p>{{end}}{{end}}
 {{if .Card.Link}}<a class="btn btn-soft wide" href="{{.Card.Link}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{.Card.LinkLabel}}</a>{{end}}
+{{with .Card.Receipt}}{{template "receipt" .}}{{end}}
 <details class="prompt"><summary>{{t "task.prompt"}}</summary><div class="prose">{{md .Card.Prompt}}</div></details>
 {{if .Perm}}{{template "permission" .Perm}}{{end}}
 {{if .Credentials}}<h3 class="section-label">{{t "cred.title"}}</h3>

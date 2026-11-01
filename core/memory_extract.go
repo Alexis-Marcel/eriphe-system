@@ -110,8 +110,12 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 				}
 			}
 		}
-		text := fmt.Sprintf("Task %s (%s, agent %s, %s), asked by the brain: %s\nIts last message (task output, external): %s",
-			t.ID, t.State, t.Agent, t.Dir, truncate(oneLine(t.Prompt), 800), truncate(st.LastText, 2000))
+		outcome := "Its last message (task output, external): " + truncate(st.LastText, 2000)
+		if r := st.Receipt; !r.missing() { // its receipt, when it gave one (receipt.go)
+			outcome = "Its receipt (task output, external): " + truncate(r.memoryText(), 2000)
+		}
+		text := fmt.Sprintf("Task %s (%s, agent %s, %s), asked by the brain: %s\n%s",
+			t.ID, t.State, t.Agent, t.Dir, truncate(oneLine(t.Prompt), 800), outcome)
 		if len(tools) > 0 {
 			text += "\nTools it used: " + strings.Join(tools, ", ")
 		}
