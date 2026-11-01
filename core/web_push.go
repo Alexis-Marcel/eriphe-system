@@ -11,10 +11,13 @@ import (
 	"time"
 )
 
-// Settings → App & notifications: installing the workspace as an app, and
-// the notifications of this device (push.go). The page subscribes after
-// the user turns the switch on; the tabs say whether they are in front, so
-// that nothing buzzes while the user is looking.
+// Settings → Notifications: one page for the whole subject. Its first
+// section is the notifications of this device (push.go), installing the
+// workspace as an app, and the devices told; the router's order
+// (web_where.go), Telegram (web_telegram.go), the rules and what was sent
+// (web_notify.go) follow. The page subscribes after the user turns the
+// switch on; the tabs say whether they are in front, so that nothing
+// buzzes while the user is looking.
 
 func (w *web) pushRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/notifications", w.auth(w.handleNotifications))
@@ -39,30 +42,38 @@ func (w *web) startPush() {
 type pushDevice struct {
 	ID, Label string
 	Created   time.Time
+	Kind      string // computer or phone, for the router (route.go)
+	Choice    string // the user's, or empty: from its label
 }
 
 type notificationsPage struct {
-	Key     string // the VAPID public key, for the browser's subscription
-	Devices []pushDevice
-	Off     bool       // no key: notifications cannot work here
-	Notify  notifyPage // what the brain told, its rules (web_notify.go)
+	Key      string // the VAPID public key, for the browser's subscription
+	Devices  []pushDevice
+	Off      bool         // no key: notifications cannot work here
+	Notify   notifyPage   // what the brain told, its rules (web_notify.go)
+	Where    wherePage    // the router's order (web_where.go)
+	Channels channelsPage // Telegram (web_telegram.go)
 }
 
-func (w *web) notificationsPage() notificationsPage {
+func (w *web) notificationsPage(lang string) notificationsPage {
+	v := notificationsPage{Notify: w.notifyPage(0), Where: w.wherePage(lang), Channels: w.channelsPage()}
 	p := w.c.push
 	if p == nil {
-		return notificationsPage{Off: true}
+		v.Off = true
+		return v
 	}
-	v := notificationsPage{Key: p.pub, Notify: w.notifyPage(0)}
+	v.Key = p.pub
+	prefs := w.c.devicePrefs()
 	subs, _ := p.subscriptions()
 	for _, s := range subs {
-		v.Devices = append(v.Devices, pushDevice{ID: s.ID, Label: s.Label, Created: s.Created})
+		v.Devices = append(v.Devices, pushDevice{ID: s.ID, Label: s.Label, Created: s.Created,
+			Kind: subKind(s, prefs[s.ID]), Choice: prefs[s.ID].Kind})
 	}
 	return v
 }
 
 func (w *web) handleNotifications(rw http.ResponseWriter, r *http.Request, s *session) {
-	v := w.notificationsPage()
+	v := w.notificationsPage(w.lang(r))
 	if open, err := strconv.ParseInt(r.URL.Query().Get("n"), 10, 64); err == nil {
 		v.Notify = w.notifyPage(open) // opened from a push: that one shows why
 		w.c.ackNotification(open, ackOpened)
@@ -71,7 +82,7 @@ func (w *web) handleNotifications(rw http.ResponseWriter, r *http.Request, s *se
 }
 
 func (w *web) pushDevices(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "push-devices", page{Data: w.notificationsPage()})
+	w.render(rw, r, s, "settings", "push-devices", page{Data: w.notificationsPage(w.lang(r))})
 }
 
 func (w *web) handlePushKey(rw http.ResponseWriter, _ *http.Request, _ *session) {

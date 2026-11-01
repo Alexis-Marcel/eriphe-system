@@ -53,7 +53,7 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in notificationsIn) (map[string]any, error) {
 			return c.brainNotifications(in)
 		})
-	tool(s, "rule", "Write or delete a notification rule of the user's: what to do with notifications about a ref (now, brief, never, even at night, and by which channels: push, Telegram), or the quiet hours. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in Settings.",
+	tool(s, "rule", "Write or delete a notification rule of the user's: what to do with notifications about a ref (now, brief, never, even at night, and by which channels: push, Telegram), or the quiet hours. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider).",
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})
@@ -213,7 +213,7 @@ func (c *core) brainNotifications(in notificationsIn) (map[string]any, error) {
 		out["feedback_30_days"] = tallies
 		set := c.routeSettings()
 		routing := map[string]any{"mode": set.Mode, "order": set.Order, "off": set.Off, "move_on_after_minutes": int(set.Delay / time.Minute),
-			"note": "eriphe-core picks the device, never you. When a device's notifications are often seen late, moved on, or answered not now, propose a rule (also, never) or say the user can reorder Settings → Où te prévenir."}
+			"note": "eriphe-core picks the device, never you. When a device's notifications are often seen late, moved on, or answered not now, propose a rule (also, never) or say the user can reorder Settings → Notifications."}
 		if d := c.deviceTallies(); len(d) > 0 {
 			routing["by_device_30_days"] = d
 		}
@@ -286,7 +286,7 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 	}
 	out := map[string]any{"rule": viewRule(got)}
 	if got.State == ruleProposed {
-		out["note"] = "Only proposed: " + why + ". " + c.conf().User + " approves it in Settings (Appli et notifications). Do not say it is in force."
+		out["note"] = "Only proposed: " + why + ". " + c.conf().User + " approves it in the workspace (À valider). Do not say it is in force."
 	}
 	return out, nil
 }

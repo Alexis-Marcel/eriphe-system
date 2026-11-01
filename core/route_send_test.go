@@ -220,7 +220,7 @@ func TestDeviceKind(t *testing.T) {
 func TestWherePage(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
-	if code, body, _ := tw.do("GET", "/settings/where", nil, nil); code != 200 || !strings.Contains(body, "Où te prévenir") ||
+	if code, body, _ := tw.do("GET", "/settings/notifications", nil, nil); code != 200 || !strings.Contains(body, "Où te prévenir") ||
 		!strings.Contains(body, "Eriphe ouvert devant toi") || !strings.Contains(body, "relie Home Assistant") {
 		t.Fatalf("page: %d", code)
 	}
@@ -252,7 +252,7 @@ func TestWherePage(t *testing.T) {
 	if code != 200 || !strings.Contains(body, `"Bonjour"`) {
 		t.Fatalf("presence: %d %s", code, body)
 	}
-	if code, body, _ := tw.do("GET", "/settings/where", nil, nil); code != 200 || !strings.Contains(body, "dans la page") || !strings.Contains(body, "vue dans la page") {
+	if code, body, _ := tw.do("GET", "/settings/notifications", nil, nil); code != 200 || !strings.Contains(body, "dans la page") || !strings.Contains(body, "vue dans la page") {
 		t.Fatalf("log: %d", code)
 	}
 }

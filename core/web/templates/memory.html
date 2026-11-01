@@ -19,14 +19,12 @@
   {{template "mem-stats" .}}
   <nav class="mem-tabs" aria-label="{{t "nav.memory"}}">
     <a href="/memory" {{if eq .View "all"}}aria-current="page"{{end}}>{{t "mem.view.all"}}</a>
-    <a href="/memory?view=inbox" {{if eq .View "inbox"}}aria-current="page"{{end}}>{{t "mem.view.inbox"}}{{if .Proposed}}<b class="tab-count">{{.Proposed}}</b>{{end}}</a>
     <a href="/memory?view=journal" {{if eq .View "journal"}}aria-current="page"{{end}}>{{t "mem.view.journal"}}</a>
     <a href="/memory?view=commitments" {{if eq .View "commitments"}}aria-current="page"{{end}}>{{t "mem.view.commitments"}}{{if .Overdue}}<b class="tab-count warn">{{.Overdue}}</b>{{end}}</a>
     <a href="/memory?view=profile" {{if eq .View "profile"}}aria-current="page"{{end}}>{{t "mem.view.profile"}}</a>
     {{if .Forgotten}}<a href="/memory?view=forgotten" class="tab-quiet" {{if eq .View "forgotten"}}aria-current="page"{{end}}>{{t "mem.view.forgotten"}}<b class="tab-count quiet">{{.Forgotten}}</b></a>{{end}}
   </nav>
-  {{if eq .View "inbox"}}{{template "mem-inbox" .}}
-  {{else if eq .View "journal"}}{{template "mem-journal" .}}
+  {{if eq .View "journal"}}{{template "mem-journal" .}}
   {{else if eq .View "commitments"}}{{template "mem-commitments" .}}
   {{else if eq .View "profile"}}{{template "mem-profile" .}}
   {{else if eq .View "forgotten"}}{{template "mem-forgotten" .}}
@@ -36,14 +34,13 @@
 {{end}}{{end}}
 
 {{define "i-download"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/></svg>{{end}}
-{{define "i-pin"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l-1 6 3 3v1.5H7V13l3-3zM12 14.5V20"/></svg>{{end}}
 {{define "i-search"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>{{end}}
 {{define "i-clock"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg>{{end}}
 
 {{define "mem-stats"}}
 <div class="mem-stats" id="mem-stats" hx-get="{{if eq .View "all"}}/memory{{else}}/memory?view={{.View}}{{end}}" hx-trigger="memory-changed from:body" hx-select="#mem-stats" hx-swap="outerHTML">
   <a class="stat" href="/memory"><b>{{.Active}}</b><span>{{t "mem.stat.active"}}</span></a>
-  <a class="stat{{if .Proposed}} stat-attn{{end}}" href="/memory?view=inbox"><b>{{.Proposed}}</b><span>{{t "mem.stat.proposed"}}</span></a>
+  <a class="stat{{if .Proposed}} stat-attn{{end}}" href="/activity/approve"><b>{{.Proposed}}</b><span>{{t "mem.stat.proposed"}}</span></a>
   <a class="stat{{if .Overdue}} stat-warn{{end}}" href="/memory?view=commitments"><b>{{.Open}}</b><span>{{t "mem.stat.open"}}{{if .Overdue}} · {{tf "mem.stat.overdue" .Overdue}}{{end}}</span></a>
   <a class="stat stat-meter" href="/memory?view=profile">
     <b>{{.Pct}}<small>%</small></b><span>{{t "mem.stat.profile"}}<span class="stat-detail"> · {{tf "mem.budget" .ProfileUsed .Budget}}</span></span>
@@ -104,13 +101,6 @@
 </section>
 {{end}}
 
-{{define "mem-inbox"}}
-<p class="mem-lead">{{template "i-shield"}}{{t "mem.inboxlead"}}</p>
-{{if .ProposedIntents}}<div class="mem-list" id="intent-list">{{range .ProposedIntents}}{{template "intent-card" .}}{{end}}</div>{{end}}
-<div class="mem-list" id="mem-list">{{range .Items}}{{template "mem-card" .}}{{end}}</div>
-{{if and (not .Items) (not .ProposedIntents)}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-check"}}</span><p>{{t "mem.inboxnone"}}</p></div>{{end}}
-{{end}}
-
 {{define "mem-journal"}}
 <div class="mem-journal-head">
   <p class="mem-lead">{{template "i-clock"}}{{t "mem.journallead"}}</p>
@@ -140,45 +130,6 @@
 <div class="mem-list">{{range .IntentsDone}}{{template "intent-card" .}}{{end}}</div></details>{{end}}
 {{end}}
 
-{{define "intent-who"}}{{if eq . "owner"}}{{t "intent.owner"}}{{else if eq . "assistant"}}{{t "intent.assistant"}}{{else}}{{.}}{{end}}{{end}}
-
-{{define "intent-card"}}
-<article class="mem k-commitment intent st-{{.State}}" id="intent-{{.ID}}">
-  <div class="mem-top">
-    <span class="kind k-commitment"><i aria-hidden="true"></i>{{t (printf "intent.kind.%s" .Kind)}}</span>
-    <span class="mem-subj">{{template "intent-who" .Owner}}{{if .OwedTo}} → {{template "intent-who" .OwedTo}}{{end}}</span>
-    <span class="tag {{if eq .State "done"}}tag-ok{{else if or (eq .State "due") .Overdue}}tag-no{{end}}">{{t (printf "intent.st.%s" .State)}}</span>
-    {{if .Overdue}}<span class="tag tag-no">{{t "mem.overdue"}}</span>{{end}}
-    <span class="trust t-{{.Trust}}">{{t (printf "trust.%s" .Trust)}}</span>
-  </div>
-  <p class="mem-text">{{.Text}}</p>
-  <p class="mem-meta">
-    {{if not .DueAt.IsZero}}<span class="{{if .Overdue}}due-late{{end}}">{{tf "intent.due" (date .DueAt)}}</span>{{end}}
-    {{if and (not .RemindAt.IsZero) (ne .RemindAt .DueAt)}}<span>{{tf "intent.remind" (date .RemindAt)}}</span>{{end}}
-    {{if eq .State "snoozed"}}<span>{{tf "intent.snoozeduntil" (date .SnoozedUntil)}}</span>{{end}}
-    {{if .Cue}}<span>{{tf "intent.cue" .Cue}}</span>{{end}}
-    {{if eq .Trust "external"}}<span>{{t "intent.external"}}</span>{{end}}
-    <span>{{t (printf "src.%s" .SourceKind)}}{{if .SourceRef}} <span class="mono">{{.SourceRef}}</span>{{end}}</span>
-    <span class="mem-id">n°{{.ID}}</span>
-  </p>
-  <div class="mem-actions">
-    {{if eq .State "proposed"}}
-    <button class="btn btn-primary sm" hx-post="/memory/intention/{{.ID}}/approve" hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{template "i-check"}}{{t "intent.approve"}}</button>
-    <button class="btn btn-ghost sm" hx-post="/memory/intention/{{.ID}}/reject" hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{template "i-x"}}{{t "intent.reject"}}</button>
-    {{else if or (eq .State "done") (eq .State "cancelled")}}
-    <button class="link-btn" hx-post="/memory/intention/{{.ID}}/reopen" hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{t "intent.reopen"}}</button>
-    {{else}}
-    <button class="btn btn-soft sm" hx-post="/memory/intention/{{.ID}}/done" hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{template "i-check"}}{{t "intent.done"}}</button>
-    <button class="link-btn" hx-post="/memory/intention/{{.ID}}/snooze" hx-vals='{"for":"hour"}' hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{t "intent.snoozehour"}}</button>
-    <button class="link-btn" hx-post="/memory/intention/{{.ID}}/snooze" hx-vals='{"for":"day"}' hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{t "intent.snoozeday"}}</button>
-    <button class="link-btn danger push" hx-post="/memory/intention/{{.ID}}/cancel" hx-target="#intent-{{.ID}}" hx-swap="outerHTML">{{t "intent.cancel"}}</button>
-    {{end}}
-  </div>
-</article>
-{{end}}
-
-{{define "intent-card-frag"}}{{template "intent-card" .Data}}{{end}}
-
 {{define "mem-profile"}}
 <section class="panel profile-panel">
   <div class="budget">
@@ -197,84 +148,3 @@
 {{if not .Items}}<div class="empty"><p>{{t "mem.forgottennone"}}</p></div>{{end}}
 {{end}}
 
-{{define "mem-card"}}{{if .Edit}}{{template "mem-edit" .}}{{else}}
-<article class="mem k-{{.Kind}}{{if .Past}} is-past{{end}} st-{{.Status}}" id="mem-{{.ID}}">
-  <div class="mem-top">
-    <span class="kind k-{{.Kind}}"><i aria-hidden="true"></i>{{t (printf "kind.%s" .Kind)}}</span>
-    {{if .Subject}}<a class="mem-subj" href="/memory?subject={{.Subject}}">{{.Subject}}</a>{{end}}
-    {{if .Pinned}}<span class="pinned" title="{{t "mem.view.profile"}}">{{template "i-pin"}}<span class="sr-only">{{t "mem.view.profile"}}</span></span>{{end}}
-    {{if .Overdue}}<span class="tag tag-no">{{t "mem.overdue"}}</span>{{end}}
-    {{if eq .Kind "commitment"}}{{if ne .State "open"}}<span class="tag {{if eq .State "done"}}tag-ok{{end}}">{{t (printf "mem.st.%s" .State)}}</span>{{end}}{{end}}
-    {{if eq .Kind "progress"}}<span class="tag {{if eq .State "done"}}tag-ok{{end}}">{{t (printf "mem.st.%s" .State)}}</span>{{end}}
-    <span class="trust t-{{.Trust}}">{{t (printf "trust.%s" .Trust)}}</span>
-  </div>
-  <p class="mem-text">{{.Text}}</p>
-  {{if .Links}}<p class="mem-links">{{range .Links}}<span class="mono">{{template "i-link"}}{{.}}</span>{{end}}</p>{{end}}
-  <p class="mem-meta">
-    {{if eq .Kind "episode"}}<time datetime="{{iso .OccurredAt}}">{{date .OccurredAt}}</time>{{else}}<span>{{tf "mem.recorded" (ago .RecordedAt)}}</span>{{end}}
-    {{if not .DueAt.IsZero}}<span class="{{if .Overdue}}due-late{{end}}">{{tf "mem.dueon" (date .DueAt)}}</span>{{end}}
-    {{if .Past}}<span>{{tf "mem.validto" (date .ValidTo)}}</span>{{end}}
-    {{if .SupersededBy}}<span>{{tf "mem.supersededby" .SupersededBy}}</span>{{end}}
-    <span>{{t (printf "src.%s" .SourceKind)}}{{if .SourceRef}} <span class="mono">{{.SourceRef}}</span>{{end}}</span>
-    {{if .UseCount}}<span>{{tf "mem.used" .UseCount}}</span>{{end}}
-    {{if eq .Status "deleted"}}<span>{{tf "mem.deletedon" (ago .DeletedAt)}}</span>{{end}}
-    <span class="mem-id">n°{{.ID}}</span>
-  </p>
-  {{if eq .Status "proposed"}}
-  {{if .SourceText}}<blockquote class="mem-source"><span class="who who-{{.SourceWho}}">{{t (printf "who.%s" .SourceWho)}}</span> {{.SourceText}}{{if .SourceLink}} <a href="{{.SourceLink}}">↗</a>{{end}}</blockquote>{{end}}
-  {{if .FlagList}}<p class="chips">{{range .FlagList}}<span class="tag tag-no">{{t (printf "mem.flag.%s" .)}}</span>{{end}}</p>{{end}}
-  <div class="mem-actions">
-    <button class="btn btn-primary sm" hx-post="/memory/{{.ID}}/approve" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{template "i-check"}}{{t "mem.approve"}}</button>
-    <button class="btn btn-ghost sm" hx-post="/memory/{{.ID}}/reject" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{template "i-x"}}{{t "mem.reject"}}</button>
-    <button class="link-btn" hx-get="/memory/{{.ID}}/edit" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.edit"}}</button>
-  </div>
-  {{else if eq .Status "deleted"}}
-  <div class="mem-actions"><button class="btn btn-soft sm" hx-post="/memory/{{.ID}}/restore" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.restore"}}</button></div>
-  {{else}}
-  <div class="mem-actions">
-    {{if and (eq .Kind "commitment") (eq .State "open")}}
-    <button class="btn btn-soft sm" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"done"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{template "i-check"}}{{t "mem.done"}}</button>
-    <button class="link-btn" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"dropped"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.drop"}}</button>
-    {{else if eq .Kind "commitment"}}
-    <button class="link-btn" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"open"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.reopen"}}</button>
-    {{end}}
-    <button class="link-btn" hx-get="/memory/{{.ID}}/edit" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.edit"}}</button>
-    {{if not .Past}}{{if .Pinned}}{{if ne .Kind "profile"}}<button class="link-btn" hx-post="/memory/{{.ID}}/pin" hx-vals='{"pin":"0"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.unpin"}}</button>{{end}}
-    {{else}}<button class="link-btn" hx-post="/memory/{{.ID}}/pin" hx-vals='{"pin":"1"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.pin"}}</button>{{end}}{{end}}
-    {{if ne .Kind "episode"}}<button class="link-btn" hx-post="/memory/{{.ID}}/obsolete" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{if .Past}}{{t "mem.current"}}{{else}}{{t "mem.obsolete"}}{{end}}</button>{{end}}
-    <button class="link-btn" hx-get="/memory/{{.ID}}/history" hx-target="#hist-{{.ID}}">{{t "mem.history"}}</button>
-    <button class="link-btn danger push" hx-post="/memory/{{.ID}}/forget" hx-confirm="{{t "mem.forgetconfirm"}}" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.forget"}}</button>
-  </div>
-  {{end}}
-  <div class="mem-hist" id="hist-{{.ID}}"></div>
-</article>
-{{end}}{{end}}
-
-{{define "mem-edit"}}
-<article class="mem editing k-{{.Kind}}" id="mem-{{.ID}}">
-  <form class="mem-form" hx-post="/memory/{{.ID}}" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">
-    {{if .Error}}<p class="alert span2" role="alert">{{.Error}}</p>{{end}}
-    <label class="field span2"><span>{{t "mem.text"}}</span><textarea name="text" rows="3" required maxlength="4000">{{.Text}}</textarea></label>
-    <label class="field"><span>{{t "mem.kind"}}</span><select name="kind">{{$k := .Kind}}{{range .Kinds}}<option value="{{.}}" {{if eq . $k}}selected{{end}}>{{t (printf "kind.%s" .)}}</option>{{end}}</select></label>
-    <label class="field"><span>{{t "mem.subject"}}</span><input type="text" name="subject" value="{{.Subject}}" maxlength="100" class="mono" spellcheck="false" autocomplete="off"></label>
-    <label class="field"><span>{{t "mem.links"}}</span><textarea name="links" rows="2" class="mono">{{range .Links}}{{.}}
-{{end}}</textarea></label>
-    <label class="field"><span>{{t "mem.due"}}</span><input type="date" name="due" value="{{if not .DueAt.IsZero}}{{.DueAt.Local.Format "2006-01-02"}}{{end}}"></label>
-    <div class="mem-form-end span2">
-      <button class="btn btn-ghost" type="button" hx-get="/memory/{{.ID}}/card" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.cancel"}}</button>
-      <button class="btn btn-primary" type="submit">{{t "mem.save"}}</button>
-    </div>
-  </form>
-</article>
-{{end}}
-
-{{define "mem-history"}}
-{{if .Data}}<ol class="hist">{{range .Data}}
-  <li><span class="hist-op">{{t (printf "op.%s" .Op)}}</span> <span class="muted small">{{date .Time}} · {{.Who}}</span>
-    {{if .Reason}}<span class="small"> — {{.Reason}}</span>{{end}}
-    {{if and .Before .After}}{{if ne .Before.Text .After.Text}}<div class="diff"><del>{{.Before.Text}}</del><ins>{{.After.Text}}</ins></div>{{end}}{{end}}
-  </li>{{end}}</ol>
-{{else}}<p class="muted small">{{t "mem.noh"}}</p>{{end}}
-{{end}}
-
-{{define "mem-card-frag"}}{{template "mem-card" .Data}}{{end}}

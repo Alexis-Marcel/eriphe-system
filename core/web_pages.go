@@ -398,7 +398,10 @@ func (w *web) handleAnswer(rw http.ResponseWriter, r *http.Request, s *session) 
 	case allow:
 		msg = tr(lang, "perm.allowed")
 	}
-	w.toast(rw, msg, true)
+	// changed: « À valider » lists the permissions too, and reloads itself.
+	rw.Header().Set("HX-Trigger", hxTrigger(msg, true, true))
+	rw.Header().Set("HX-Reswap", "none")
+	rw.WriteHeader(http.StatusOK)
 }
 
 // handleReply answers the agent of an idle task, as me.
@@ -765,25 +768,6 @@ func (s *Store) decisions(offset, limit int) ([]decisionRow, error) {
 		out = append(out, d)
 	}
 	return out, rows.Err()
-}
-
-func (w *web) handleJournal(rw http.ResponseWriter, r *http.Request, s *session) {
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	offset = max(offset, 0)
-	rows, err := w.c.store.decisions(offset, journalPage+1)
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	v := journalView{Rows: rows}
-	if len(rows) > journalPage {
-		v.Rows, v.Next = rows[:journalPage], offset+journalPage
-	}
-	block := ""
-	if offset > 0 {
-		block = "journal-rows"
-	}
-	w.render(rw, r, s, "settings", block, page{Title: "settings.journal", Nav: "settings", Tab: "journal", Data: v})
 }
 
 // accountPage is "Mon espace": the sign-in, and the keys and passwords the

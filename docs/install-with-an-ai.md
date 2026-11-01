@@ -458,7 +458,7 @@ For each other computer (or a second NAS):
   **Turn on**, **Log in to Tailscale** (a free account), **Enable HTTPS** once. The page then shows
   an `https://<name>.<tailnet>.ts.net` address and a QR code. On the phone: install the Tailscale
   app and sign in with the same account, open that address, and add it to the home screen (Settings
-  → App & notifications explains it for iPhone and Android). It installs as an app with
+  → Notifications explains it for iPhone and Android). It installs as an app with
   notifications. Nothing is opened on the router. The phone app needs this trusted address: at
   the self-signed `https://192.0.2.10:8443` it works in the browser only.
 - **Waking a sleeping PC or Mac.** On the device's page in Settings → Devices (Réglages →

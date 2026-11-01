@@ -7,13 +7,12 @@ import (
 	"time"
 )
 
-// Settings → Channels: where Eriphe reaches the user besides this
+// Settings → Notifications → Canaux: where Eriphe reaches the user besides this
 // device's notifications. Telegram's bot token, the link to the user's
 // account, how much it says there, and the default channels of notify
 // (telegram.go, channels.go).
 
 func (w *web) channelRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /settings/channels", w.auth(w.handleChannels))
 	mux.Handle("GET /channels/telegram", w.auth(w.handleTelegramState))
 	mux.Handle("POST /channels/telegram/token", http.MaxBytesHandler(w.auth(w.handleTelegramToken), 4<<10))
 	mux.Handle("POST /channels/telegram/remove", w.auth(w.handleTelegramRemove))
@@ -83,10 +82,6 @@ func containsChannel(list, ch string) bool {
 		}
 	}
 	return false
-}
-
-func (w *web) handleChannels(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "", page{Title: "settings.channels", Nav: "settings", Tab: "channels", Data: w.channelsPage()})
 }
 
 func (w *web) renderTelegram(rw http.ResponseWriter, r *http.Request, s *session, msg string, ok bool) {

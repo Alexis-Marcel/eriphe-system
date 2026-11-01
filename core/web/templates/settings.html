@@ -10,10 +10,6 @@
     {{else if eq .Tab "skills"}}{{if eq .View "skill"}}{{template "skill-page" .}}{{else}}{{template "skills" .}}{{end}}
     {{else if eq .Tab "remote"}}{{template "remote" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
-    {{else if eq .Tab "channels"}}{{template "channels" .}}
-    {{else if eq .Tab "where"}}{{template "where" .}}
-    {{else if eq .Tab "journal"}}{{template "journal" .}}
-    {{else if eq .Tab "happened"}}{{template "happened" .}}
     {{else if eq .Tab "watches"}}{{template "watches" .}}
     {{else}}{{template "account" .}}{{end}}
   </div>{{end}}
@@ -411,56 +407,6 @@ is shown again. . is a joinWait. */}}
   <p class="muted small" role="status"><span class="pulse-dot" aria-hidden="true"></span>{{tf "devices.waiting" .Name}}</p>
 </div>
 {{end}}
-{{end}}
-
-{{define "journal"}}
-<header class="page-head"><h2>{{t "settings.journal"}}</h2><p>{{t "journal.lead"}}</p></header>
-{{if .Data.Rows}}
-<div class="table-wrap">
-<table class="journal">
-  <thead><tr><th scope="col">{{t "journal.when"}}</th><th scope="col">{{t "journal.decision"}}</th><th scope="col">{{t "journal.what"}}</th><th scope="col">{{t "journal.by"}}</th><th scope="col">{{t "journal.reason"}}</th></tr></thead>
-  <tbody>{{template "journal-rows" .}}</tbody>
-</table>
-</div>
-{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-list"}}</span><p>{{t "journal.none"}}</p></div>{{end}}
-{{end}}
-
-{{/* What happened (web_since.go): the feed the brain reads with since. */}}
-{{define "happened"}}{{with .Data}}
-<header class="page-head"><h2>{{t "settings.happened"}}</h2><p>{{t "happened.lead"}}</p></header>
-<nav class="pill-tabs" aria-label="{{t "happened.range"}}">
-  {{range list "last" "day" "week"}}<a href="/settings/happened?range={{.}}{{if $.Data.Kind}}&amp;kind={{$.Data.Kind}}{{end}}" {{if eq . $.Data.Range}}aria-current="true"{{end}}>{{t (printf "happened.range.%s" .)}}</a>{{end}}
-</nav>
-<nav class="pill-tabs" aria-label="{{t "happened.kinds"}}">
-  <a href="/settings/happened?range={{.Range}}" {{if not .Kind}}aria-current="true"{{end}}>{{t "happened.kind.all"}}</a>
-  {{range list "task" "notification" "intention" "message" "watch"}}<a href="/settings/happened?range={{$.Data.Range}}&amp;kind={{.}}" {{if eq . $.Data.Kind}}aria-current="true"{{end}}>{{t (printf "happened.kind.%s" .)}}</a>{{end}}
-</nav>
-<p class="muted small">{{if .FromLast}}{{tf "happened.fromlast" (date .From)}}{{else if .NoLast}}{{t "happened.nolast"}}{{else}}{{tf "happened.from" (date .From)}}{{end}}</p>
-{{if .Items}}
-<ol class="list happened-list">
-{{range .Items}}
-  <li class="happened happened-{{.Kind}}">
-    <time class="mono small muted" datetime="{{iso .At}}">{{date .At}}</time>
-    <span class="happened-text">{{if .Link}}<a href="{{.Link}}">{{.Summary}}</a>{{else}}{{.Summary}}{{end}}</span>
-    {{if .External}}<span class="tag tag-warn" title="{{t "happened.external.hint"}}">{{t "happened.external"}}</span>{{end}}
-  </li>
-{{end}}
-</ol>
-{{if .More}}<p class="muted small">{{tf "happened.more" .Max}}</p>{{end}}
-{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-history"}}</span><p>{{t "happened.none"}}</p></div>{{end}}
-{{end}}{{end}}
-
-{{define "journal-rows"}}
-{{range .Data.Rows}}
-<tr>
-  <td data-label="{{t "journal.when"}}"><time datetime="{{iso .Time}}">{{date .Time}}</time><span class="muted small mono">{{.TaskID}}</span></td>
-  <td data-label="{{t "journal.decision"}}"><span class="tag {{if eq .Decision "allow"}}tag-ok{{else}}tag-no{{end}}">{{t (printf "decision.%s" .Decision)}}</span></td>
-  <td data-label="{{t "journal.what"}}"><span class="strong">{{.Tool}}</span><code class="subject">{{short .Subject 240}}</code></td>
-  <td data-label="{{t "journal.by"}}"><span class="by by-{{.By}}">{{t (printf "by.%s" .By)}}</span></td>
-  <td data-label="{{t "journal.reason"}}" class="muted">{{short .Reason 300}}</td>
-</tr>
-{{end}}
-{{if .Data.Next}}<tr id="journal-more"><td colspan="5"><button class="btn btn-soft" hx-get="/settings/journal?offset={{.Data.Next}}" hx-target="#journal-more" hx-swap="outerHTML">{{t "journal.more"}}</button></td></tr>{{end}}
 {{end}}
 
 {{define "account"}}

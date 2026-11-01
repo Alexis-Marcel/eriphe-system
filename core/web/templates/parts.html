@@ -290,8 +290,9 @@
 {{/* A newer version is published (updates.go). */}}
 {{define "new-dot"}}<b class="new-dot" title="{{t "update.available"}}"><span class="sr-only">{{t "update.available"}}</span></b>{{end}}
 
-{{/* The settings' own navigation, in four groups; every page of the
-settings has it, the memory's too. A dot marks an entry that needs a look:
+{{/* The settings' own navigation, in four groups: only what is set; what
+one consults is in Activité (activity.html). Every page of the settings
+has it, the memory's too. A dot marks an entry that needs a look:
 an update (Devices), a tool in error (Tools), a key refused (Agents).
 On a wide screen it is the sidebar, under the way back to the conversation.
 On a phone it is the first level alone (/settings, View "index"): a grouped
@@ -307,7 +308,6 @@ The ways back follow the pages, never the browser's history. */}}
   <div class="nav-group" role="group" aria-labelledby="sg-assistant">
     <h2 class="nav-group-title" id="sg-assistant">{{t "settings.g.assistant"}}</h2>
     <a href="/memory" {{if eq .Tab "memory"}}aria-current="page"{{end}}>{{template "i-memory"}}<span>{{t "nav.memory"}}</span>{{template "chev"}}</a>
-    <a href="/settings/happened" {{if eq .Tab "happened"}}aria-current="page"{{end}}>{{template "i-history"}}<span>{{t "settings.happened"}}</span>{{template "chev"}}</a>
     <a href="/settings/watches" {{if eq .Tab "watches"}}aria-current="page"{{end}}>{{template "i-eye"}}<span>{{t "settings.watches"}}</span>{{template "chev"}}</a>
     <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span>{{if .Attn.Agents}}{{template "attn-dot"}}{{end}}{{template "chev"}}</a>
     <a href="/settings/skills" {{if eq .Tab "skills"}}aria-current="page"{{end}}>{{template "i-skill"}}<span>{{t "settings.skills"}}</span>{{template "chev"}}</a>
@@ -322,13 +322,10 @@ The ways back follow the pages, never the browser's history. */}}
     <a href="/settings/devices" {{if eq .Tab "devices"}}aria-current="page"{{end}}>{{template "i-device"}}<span>{{t "settings.machines"}}</span>{{if or .Updates.Core .Updates.Nodes}}{{template "new-dot"}}{{end}}{{template "chev"}}</a>
     <a href="/settings/remote" {{if eq .Tab "remote"}}aria-current="page"{{end}}>{{template "i-globe"}}<span>{{t "settings.remote"}}</span>{{template "chev"}}</a>
     <a href="/settings/notifications" {{if eq .Tab "notifications"}}aria-current="page"{{end}}>{{template "i-bell"}}<span>{{t "settings.notifications"}}</span>{{template "chev"}}</a>
-    <a href="/settings/channels" {{if eq .Tab "channels"}}aria-current="page"{{end}}>{{template "i-chat"}}<span>{{t "settings.channels"}}</span>{{template "chev"}}</a>
-    <a href="/settings/where" {{if eq .Tab "where"}}aria-current="page"{{end}}>{{template "i-route"}}<span>{{t "settings.where"}}</span>{{template "chev"}}</a>
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-space">
     <h2 class="nav-group-title" id="sg-space">{{t "settings.g.space"}}</h2>
     <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.accountnav"}}</span>{{template "chev"}}</a>
-    <a href="/settings/journal" {{if eq .Tab "journal"}}aria-current="page"{{end}}>{{template "i-list"}}<span>{{t "settings.journal"}}</span>{{template "chev"}}</a>
   </div>
 </nav>
 {{end}}
@@ -342,3 +339,7 @@ to the page it belongs to (its .back). */}}
 {{/* The level of the settings' frame: the list alone, a page, or a sub-page. */}}
 {{define "settings-level"}}{{if eq .View "index"}}is-index{{else if .View}}is-sub{{else}}is-page{{end}}{{end}}
 {{define "attn-dot"}}<b class="attn-dot" title="{{t "settings.attn"}}"><span class="sr-only">{{t "settings.attn"}}</span></b>{{end}}
+
+{{/* What the brain sets when asked (a rule, a watch): the page says how to
+ask it, in the conversation, rather than a form. */}}
+{{define "ask"}}<p class="ask">{{template "i-chat"}}<span>{{t .}}</span> <a href="/">{{t "ask.go"}}</a></p>{{end}}

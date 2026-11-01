@@ -14,7 +14,7 @@ import (
 // The brain's watch tools: watch (create), watches (list, with their
 // history) and update_watch (pause, resume, edit, delete). A watch is
 // written only when the user asked for it in this clean turn; otherwise it
-// is proposed, for the user to approve in Settings. Changing or deleting
+// is proposed, for the user to approve in the workspace (À valider). Changing or deleting
 // one takes the user's word in this clean turn too.
 
 type watchIn struct {
@@ -65,7 +65,7 @@ type updateWatchIn struct {
 }
 
 func registerWatchTools(s *mcp.Server, c *core) {
-	tool(s, "watch", "Set up a watch: eriphe-core wakes you, without a model, at times of day (source horaire: the morning brief, the Sunday review), when the user comes back after an absence (source retour: the point on their return), when a read-only catalog tool's result crosses a condition (source outil, polled; on the transition and on recovery) or when a service calls its webhook (source alerte; the user gets its address in Settings), with its prompt. What outil and alerte bring is external: their wake is tainted. You then speak through notify, or answer [rien]. A watch may carry one exact action the user authorises in advance (action), which you may then call on its wake without asking. An outil or alerte watch the user asks to be woken for at any hour is urgent: eriphe-core itself sends its fixed urgent_message, once per incident. For outil and alerte, never choose urgency, condition or action for the user: called without them, it creates nothing and returns what is missing, to ask the user in one short message. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in Settings. Suggest one when it would help; never impose it.",
+	tool(s, "watch", "Set up a watch: eriphe-core wakes you, without a model, at times of day (source horaire: the morning brief, the Sunday review), when the user comes back after an absence (source retour: the point on their return), when a read-only catalog tool's result crosses a condition (source outil, polled; on the transition and on recovery) or when a service calls its webhook (source alerte; the user gets its address in Settings), with its prompt. What outil and alerte bring is external: their wake is tainted. You then speak through notify, or answer [rien]. A watch may carry one exact action the user authorises in advance (action), which you may then call on its wake without asking. An outil or alerte watch the user asks to be woken for at any hour is urgent: eriphe-core itself sends its fixed urgent_message, once per incident. For outil and alerte, never choose urgency, condition or action for the user: called without them, it creates nothing and returns what is missing, to ask the user in one short message. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
 		func(ctx context.Context, in watchIn) (map[string]any, error) {
 			return c.brainWatch(in)
 		})
@@ -159,7 +159,7 @@ func (c *core) brainWatch(in watchIn) (map[string]any, error) {
 	out["watch"] = c.viewWatch(got, 0)
 	switch {
 	case got.State == watchProposed:
-		out["note"] = "Only proposed: " + why + ". " + c.conf().User + " approves it in Settings (Veilles). Do not say it is set up."
+		out["note"] = "Only proposed: " + why + ". " + c.conf().User + " approves it in the workspace (À valider). Do not say it is set up."
 	case got.Source == sourceAlert:
 		out["note"] = "Its webhook address is made by " + c.conf().User + " in Settings (Veilles), and shown there only: you never see it."
 	}
@@ -294,7 +294,7 @@ func (c *core) brainUpdateWatch(in updateWatchIn) (map[string]any, error) {
 		return nil, fmt.Errorf("not changed: %s; %s changes it in Settings (Veilles), or asks you to in their own words", why, c.conf().User)
 	}
 	if w.State == watchProposed && in.Action != "delete" {
-		return nil, fmt.Errorf("watch %d is proposed: only %s approves it, in Settings", w.ID, c.conf().User)
+		return nil, fmt.Errorf("watch %d is proposed: only %s approves it, in the workspace (À valider)", w.ID, c.conf().User)
 	}
 	switch in.Action {
 	case "delete":

@@ -469,7 +469,7 @@ func TestWebTelegramChannels(t *testing.T) {
 	tw.c.tg.api, tw.c.tg.client = f.srv.URL, f.srv.Client()
 	t.Cleanup(tw.c.tg.stop)
 
-	code, body, _ := tw.do("GET", "/settings/channels", nil, nil)
+	code, body, _ := tw.do("GET", "/settings/notifications", nil, nil)
 	if code != 200 || !strings.Contains(body, "pas de bout en bout") || !strings.Contains(body, `name="token"`) {
 		t.Fatalf("GET: %d", code)
 	}
@@ -497,7 +497,7 @@ func TestWebTelegramChannels(t *testing.T) {
 	if _, _, h := tw.post("/channels/settings", url.Values{"detail": {"full"}}, csrf); !strings.Contains(h.Get("HX-Trigger"), "canal") {
 		t.Errorf("no channel accepted: %s", h.Get("HX-Trigger"))
 	}
-	for _, path := range []string{"/settings/channels", "/channels/telegram", "/settings/notifications", "/settings/account"} {
+	for _, path := range []string{"/channels/telegram", "/settings/notifications", "/settings/account"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, fakeBotToken) || strings.Contains(body, "AAH-fake") {
 			t.Errorf("GET %s shows the token", path)
 		}

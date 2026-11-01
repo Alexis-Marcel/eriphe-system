@@ -13,8 +13,6 @@ func init() {
 
 var sinceStrings = map[string]map[string]string{
 	"fr": {
-		"settings.happened":           "Ce qui s'est passé",
-		"happened.lead":               "Tout ce qui s'est passé, dans l'ordre : tâches, notifications, intentions et messages. {{name}} lit le même fil.",
 		"happened.range":              "Période",
 		"happened.range.last":         "Depuis ta dernière visite",
 		"happened.range.day":          "24 h",
@@ -56,8 +54,6 @@ var sinceStrings = map[string]map[string]string{
 		"since.message.brain":         "Réponse de %s",
 	},
 	"en": {
-		"settings.happened":           "What happened",
-		"happened.lead":               "Everything that happened, in order: tasks, notifications, intentions and messages. {{name}} reads the same feed.",
 		"happened.range":              "Period",
 		"happened.range.last":         "Since you were last here",
 		"happened.range.day":          "24 h",

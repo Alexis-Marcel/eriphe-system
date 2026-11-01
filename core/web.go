@@ -102,23 +102,24 @@ func newWeb(c *core, cfg WebConfig) (*web, error) {
 	return w, nil
 }
 
-// parse reads the templates: every page is the layout plus its own file.
+// parse reads the templates: every page is the layout plus its own file,
+// with the shared ones beside.
 func (w *web) parse() error {
 	w.pages = map[string]*template.Template{}
 	files, err := fs.Glob(webFS, "web/templates/*.html")
 	if err != nil {
 		return err
 	}
+	common := []string{"web/templates/layout.html"}
+	for _, name := range sharedTemplates {
+		common = append(common, "web/templates/"+name+".html")
+	}
 	for _, f := range files {
 		name := strings.TrimSuffix(filepath.Base(f), ".html")
-		if name == "layout" || name == "parts" || name == "catalog" || name == "tools" || name == "agents" || name == "remote" || name == "folders" || name == "push" || name == "skills" ||
-			name == "watches" {
+		if name == "layout" || containsStr(sharedTemplates, name) {
 			continue
 		}
-		t, err := template.New(name).Funcs(templateFuncs("fr")).ParseFS(webFS,
-			"web/templates/layout.html", "web/templates/parts.html", "web/templates/catalog.html", "web/templates/tools.html",
-			"web/templates/agents.html", "web/templates/remote.html", "web/templates/folders.html", "web/templates/push.html", "web/templates/skills.html",
-			"web/templates/watches.html", f)
+		t, err := template.New(name).Funcs(templateFuncs("fr")).ParseFS(webFS, append(common, f)...)
 		if err != nil {
 			return err
 		}
@@ -126,6 +127,9 @@ func (w *web) parse() error {
 	}
 	return nil
 }
+
+// sharedTemplates are the files of definitions every page has, not pages.
+var sharedTemplates = []string{"parts", "catalog", "tools", "agents", "remote", "folders", "push", "skills", "watches", "cards"}
 
 // notify wakes the event streams at once, rather than at their next tick.
 func (w *web) notify() {
@@ -221,25 +225,24 @@ func (w *web) routes() http.Handler {
 	// The authorization redirect comes from the vendor's site, without the
 	// session cookie (SameSite=Strict): the flow's own cookie binds it.
 	mux.HandleFunc("GET /oauth/callback", w.handleOAuthCallback)
-	mux.Handle("GET /settings/journal", w.auth(w.handleJournal))
-	mux.Handle("GET /settings/happened", w.auth(w.handleHappened)) // web_since.go
 	mux.Handle("GET /settings/account", w.auth(w.handleAccount))
 	mux.Handle("POST /settings/password", w.auth(w.handlePassword))
 	mux.Handle("POST /settings/signin", w.auth(w.handleSaveSignin))   // web_signin_settings.go
 	mux.Handle("POST /settings/address", w.auth(w.handleSaveAddress)) // web_address.go
 	mux.Handle("POST /settings/signin/issuer", w.auth(w.handleTestIssuer))
 	mux.Handle("POST /settings/signin/try", w.auth(w.handleTrySignin))
-	w.memoryRoutes(mux)  // web_memory.go
-	w.remoteRoutes(mux)  // web_remote.go
-	w.driveRoutes(mux)   // web_drive.go
-	w.folderRoutes(mux)  // web_folders.go
-	w.skillRoutes(mux)   // web_skills.go
-	w.githubRoutes(mux)  // web_github.go
-	w.welcomeRoutes(mux) // web_welcome.go
-	w.pushRoutes(mux)    // web_push.go
-	w.channelRoutes(mux) // web_telegram.go
-	w.whereRoutes(mux)   // web_where.go
-	w.watchRoutes(mux)   // web_watch.go
+	w.memoryRoutes(mux)   // web_memory.go
+	w.remoteRoutes(mux)   // web_remote.go
+	w.driveRoutes(mux)    // web_drive.go
+	w.folderRoutes(mux)   // web_folders.go
+	w.skillRoutes(mux)    // web_skills.go
+	w.githubRoutes(mux)   // web_github.go
+	w.welcomeRoutes(mux)  // web_welcome.go
+	w.pushRoutes(mux)     // web_push.go
+	w.channelRoutes(mux)  // web_telegram.go
+	w.whereRoutes(mux)    // web_where.go
+	w.watchRoutes(mux)    // web_watch.go
+	w.activityRoutes(mux) // web_activity.go
 	return w.headers(mux)
 }
 
@@ -333,7 +336,7 @@ func (w *web) headers(next http.Handler) http.Handler {
 type page struct {
 	Lang    string
 	Title   string
-	Nav     string // conversation or settings
+	Nav     string // chat, activity or settings
 	Tab     string // the settings tab
 	View    string // a form within the tab
 	CSRF    string
@@ -342,6 +345,7 @@ type page struct {
 	Build   string // eriphe-core's version
 	Updates updateNotice
 	Attn    attention // the settings' entries that need a look
+	Waiting int       // what waits in « À valider », on the Activité button
 	Data    any
 }
 
@@ -413,6 +417,9 @@ func (w *web) render(rw http.ResponseWriter, r *http.Request, s *session, name, 
 	p.Build = version
 	if block == "" {
 		p.Updates = w.updateNotice()
+		if p.Nav != "" {
+			p.Waiting = w.approvalCount() // web_activity.go
+		}
 		if p.Nav == "settings" {
 			p.Attn = w.attention()
 		}

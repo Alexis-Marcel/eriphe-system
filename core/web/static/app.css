@@ -1443,3 +1443,37 @@ pre.diff .gap { color: var(--muted); }
 .rule-edit { margin-top: 6px; }
 .rule-edit summary { cursor: pointer; }
 .rule-form { display: grid; gap: 8px; margin-top: 8px; max-width: 32rem; }
+
+/* Activité (activity.html): the feed and « À valider », one column beside
+   the conversation; on a phone, the same gutters as the settings. */
+.activity { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-content: start; max-width: 860px; margin: 0 auto; padding: 32px 24px 64px; }
+.seg-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); max-width: 26rem; }
+.seg-tabs a { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 6px 12px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: .92rem; }
+.seg-tabs a:hover { color: var(--text); text-decoration: none; }
+.seg-tabs a .i { width: 18px; height: 18px; }
+.seg-tabs a[aria-current] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.seg-tabs a[aria-current] .i { color: var(--accent); }
+.approve-group { display: grid; gap: 12px; }
+.approve-group > h3 { display: flex; align-items: center; gap: 8px; font-size: 1.02rem; }
+.approve-group > .list { padding: 4px 18px; border-radius: 20px; background: var(--surface); border: 1px solid var(--border); }
+.approve-group > .list li { flex-wrap: wrap; }
+.approve-group .perm { margin-left: 0; }
+.approve-group .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* A settings page's sections (Notifications), and the way to ask the brain. */
+.section-title { display: flex; align-items: center; gap: 9px; margin-top: 14px; font-size: 1.12rem; scroll-margin-top: 16px; }
+.section-title .i { color: var(--accent); }
+.ask { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--accent-soft); color: var(--text); font-size: .88rem; }
+.ask .i { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--accent-text); }
+.ask span { flex: 1; }
+.ask a { flex: none; font-weight: 600; color: var(--accent-text); }
+.to-approve { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.to-approve .i { width: 16px; height: 16px; }
+.stack { display: grid; gap: 18px; }
+.push-list li form { flex: none; }
+details.app-install > * + * { margin-top: 10px; }
+@media (max-width: 860px) {
+  .activity { padding: 12px max(16px, env(safe-area-inset-right)) max(40px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .seg-tabs { max-width: none; }
+  .approve-group > .list { padding: 2px 14px; }
+}

@@ -12,10 +12,10 @@ func init() {
 
 var pushStrings = map[string]map[string]string{
 	"fr": {
-		"settings.notifications": "Appli et notifications",
+		"settings.notifications": "Notifications",
 		"screen.title":           "Détails de l'écran",
 		"screen.summary":         "Pour comprendre un souci d'affichage sur cet appareil.",
-		"push.lead":              "Installe {{name}} sur ton téléphone comme une appli, et laisse-le te prévenir quand une tâche se termine ou qu'il attend ta réponse.",
+		"push.lead":              "Où, comment et quand {{name}} te prévient. Le plus simple reste de le lui dire : il règle le reste.",
 		"install.title":          "Installer l'appli",
 		"install.done":           "Installée",
 		"install.lead":           "{{name}} s'ouvre alors en plein écran, depuis son icône, comme une application.",
@@ -24,7 +24,7 @@ var pushStrings = map[string]map[string]string{
 		"install.android":        "Dans Chrome, ouvre le menu ⋮, puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».",
 		"install.computer":       "Ordinateur",
 		"install.desktop":        "Dans Chrome ou Edge, l'icône d'installation au bout de la barre d'adresse.",
-		"push.title":             "Notifications sur cet appareil",
+		"push.title":             "Cet appareil",
 		"push.toggle":            "Me prévenir sur cet appareil",
 		"push.toggle.hint":       "Quand une tâche se termine ou échoue, et quand {{name}} attend ta réponse. Rien tant que l'espace est ouvert devant toi.",
 		"push.unsupported":       "Ce navigateur ne reçoit pas de notifications.",
@@ -48,10 +48,10 @@ var pushStrings = map[string]map[string]string{
 		"push.device":            "Appareil",
 	},
 	"en": {
-		"settings.notifications": "App & notifications",
+		"settings.notifications": "Notifications",
 		"screen.title":           "Screen details",
 		"screen.summary":         "To understand a display issue on this device.",
-		"push.lead":              "Install {{name}} on your phone as an app, and let it tell you when a task ends or when it waits for your answer.",
+		"push.lead":              "Where, how and when {{name}} reaches you. The simplest is to tell it: it sets the rest.",
 		"install.title":          "Install the app",
 		"install.done":           "Installed",
 		"install.lead":           "{{name}} then opens full screen, from its icon, like an app.",
@@ -60,7 +60,7 @@ var pushStrings = map[string]map[string]string{
 		"install.android":        "In Chrome, open the ⋮ menu, then “Install app” or “Add to Home screen”.",
 		"install.computer":       "Computer",
 		"install.desktop":        "In Chrome or Edge, the install icon at the end of the address bar.",
-		"push.title":             "Notifications on this device",
+		"push.title":             "This device",
 		"push.toggle":            "Notify me on this device",
 		"push.toggle.hint":       "When a task ends or fails, and when {{name}} waits for your answer. Nothing while the workspace is open in front of you.",
 		"push.unsupported":       "This browser does not receive notifications.",

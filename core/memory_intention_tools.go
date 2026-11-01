@@ -143,7 +143,7 @@ func (c *core) brainIntend(in intendIn) (map[string]any, error) {
 	if got.ID != x.ID {
 		out["note"] = "Already recorded: intention " + fmt.Sprint(got.ID) + "."
 	} else if got.State == intentProposed {
-		out["note"] = "Only proposed: " + d.Why + ". " + c.conf().User + " approves it in the workspace (Mémoire, Intentions)."
+		out["note"] = "Only proposed: " + d.Why + ". " + c.conf().User + " approves it in the workspace (À valider)."
 	}
 	return out, nil
 }
