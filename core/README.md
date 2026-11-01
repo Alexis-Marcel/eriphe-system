@@ -1781,13 +1781,14 @@ and gives the public key to the page (`GET /push/key`, or the page's own attribu
 App & notifications, the switch "Me prévenir sur cet appareil" asks the browser's permission, then
 subscribes and sends the subscription (`POST /push/subscribe`; `POST /push/unsubscribe` removes
 one); the page lists the devices notified, each with a remove button and "cet appareil" on the
-one in hand, and sends a test to it. Two things are pushed, titled with the assistant's name, in
+one in hand, and sends a test to it. Three things are pushed, titled with the assistant's name, in
 the language the device used:
 
 | When | Text | A tap opens |
 |---|---|---|
 | a worker task finished its turn, or failed (or was lost) | « Tâche finie : <title> », « La tâche « <title> » a échoué » | the conversation with that task's drawer (`/?task=<id>`) |
 | a permission waits for the user (one that is theirs, or any while the assistant is away), or the assistant ended a message on a question | « <Name> attend ta réponse : <tool and command, or the question> » | the conversation, at that permission or message |
+| the brain tells something on its own (`notify`), or answers a due intention, and the decision below says now | its text, with 👍 / 👎 / « pas maintenant » buttons where the platform shows them | that notification in Settings → App & notifications, with why |
 
 Each is pushed once, and not at all while a workspace tab is visible and focused: every open tab
 tells eriphe-core when it comes in front or leaves (`POST /presence`, and every 20 s while in
@@ -1797,6 +1798,46 @@ removed. The service worker shows the notification and, on a tap, focuses an ope
 and takes it there, or opens one, on the workspace's own origin. Push needs a trusted HTTPS origin
 (see the certificate above); on iPhone and iPad it reaches the installed app only (iOS 16.4 or
 later), while Android and computers receive it in the browser too.
+
+**The brain's notifications** (`notify.go`, `notify_rules.go`, `notify_quiet.go`). The brain has
+three tools: `notify(text, level now|brief, why, ref)`, `notifications` (what it said, what waits
+for the brief, the feedback, the rules, the quiet hours) and `rule`. The model writes and asks for
+a level; the code decides (`decideNotify`, no model):
+
+- **Quiet hours always hold.** The window is a rule (data): for every night, or for the nights
+  before a weekday or a weekend day, 4 to 16 hours long; without one, the seed 22:00–08:00. A
+  "now" inside it waits for the brief, unless a topic rule of the user's says "even at night".
+  The time zone is the configuration's, or the one set in Settings.
+- **A daily cap** of "now" (4 by default, 0 to 20 in Settings), besides reminders the user asked
+  for in their own words; over it, the brief.
+- **Topic rules** map a `ref` (`project:getout`, which also matches `project:getout:prod`) to now,
+  brief or never. A turn that read external content may lower an outcome, never raise it: what it
+  notifies never interrupts, goes to the brief marked as such, and may hold no link.
+- **The answer to a due intention** is pushed through the same decision, question or not, once per
+  wake; a reminder from an intention drawn from external content waits for the brief.
+- Every notification is kept (`notifications`) with its why, outcome and reason. What waits for the
+  brief is listed for the brain and in Settings (the brief itself comes with routines). Feedback
+  (👍, 👎, « pas maintenant », which moves it back to the brief) is given in Settings or on the push
+  itself (`POST /notify/react`, authorised by the notification's own token, which only its push
+  carries), and returned to the brain per ref.
+- **Rules are written by the brain only when the user asked in that clean turn** (its `source_ref`
+  cites the user's message of the turn, which speaks of being told); otherwise, and always on a
+  tainted turn, they are proposed and the user approves them in Settings, where every rule is shown,
+  edited and deleted.
+- **Adaptive quiet hours, never applied alone.** eriphe-core records cheap signals of activity (the
+  user's messages, a workspace tab in front, in 10-minute buckets kept 30 days, reactions to
+  notifications) and of unwelcome moments (« pas maintenant »), and suggests a window per kind of
+  night from the last 14 days: the median last activity of the evening plus a margin, the median
+  first of the morning, widened over repeated « pas maintenant » just outside it; too few days, no
+  suggestion. The brain sees it in `notifications` and proposes a quiet rule; nothing changes until
+  the user approves. Further signals (a Home Assistant sleep sensor, the phone's focus mode) join
+  `activitySources`. The same signals give the user's last activity (`lastSeen`, `awaySince`), and
+  `notificationsSince` what was held since then, each with its source, time, why, ref, outcome and
+  feedback: what a brief or a point made on the user's return summarises.
+
+The interruption bench (`notify_eval_test.go`, `testdata/notifyeval`) runs with the tests: it scores
+the decision on labelled cases (accuracy, precision and recall of "now", night wake-ups no rule
+allows: none, injection cases blocked: all).
 
 ## Remote access (Tailscale)
 

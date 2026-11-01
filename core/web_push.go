@@ -23,6 +23,7 @@ func (w *web) pushRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /push/unsubscribe", w.auth(w.handleUnsubscribe))
 	mux.Handle("POST /push/test", w.auth(w.handlePushTest))
 	mux.Handle("POST /presence", http.MaxBytesHandler(w.auth(w.handlePresence), 1<<10))
+	w.notifyRoutes(mux) // web_notify.go
 }
 
 // startPush opens the pusher and follows what waits for the user.
@@ -43,7 +44,8 @@ type pushDevice struct {
 type notificationsPage struct {
 	Key     string // the VAPID public key, for the browser's subscription
 	Devices []pushDevice
-	Off     bool // no key: notifications cannot work here
+	Off     bool       // no key: notifications cannot work here
+	Notify  notifyPage // what the brain told, its rules (web_notify.go)
 }
 
 func (w *web) notificationsPage() notificationsPage {
@@ -51,7 +53,7 @@ func (w *web) notificationsPage() notificationsPage {
 	if p == nil {
 		return notificationsPage{Off: true}
 	}
-	v := notificationsPage{Key: p.pub}
+	v := notificationsPage{Key: p.pub, Notify: w.notifyPage(0)}
 	subs, _ := p.subscriptions()
 	for _, s := range subs {
 		v.Devices = append(v.Devices, pushDevice{ID: s.ID, Label: s.Label, Created: s.Created})
@@ -60,7 +62,11 @@ func (w *web) notificationsPage() notificationsPage {
 }
 
 func (w *web) handleNotifications(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "", page{Title: "settings.notifications", Nav: "settings", Tab: "notifications", Data: w.notificationsPage()})
+	v := w.notificationsPage()
+	if open, err := strconv.ParseInt(r.URL.Query().Get("n"), 10, 64); err == nil {
+		v.Notify = w.notifyPage(open) // opened from a push: that one shows why
+	}
+	w.render(rw, r, s, "settings", "", page{Title: "settings.notifications", Nav: "settings", Tab: "notifications", Data: v})
 }
 
 func (w *web) pushDevices(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -130,7 +136,11 @@ func (w *web) handlePushTest(rw http.ResponseWriter, r *http.Request, s *session
 func (w *web) handlePresence(rw http.ResponseWriter, r *http.Request, _ *session) {
 	tab := r.PostFormValue("tab")
 	if w.c.push != nil && tab != "" && len(tab) <= 64 {
-		w.c.push.seen(tab, r.PostFormValue("front") == "1")
+		front := r.PostFormValue("front") == "1"
+		w.c.push.seen(tab, front)
+		if front {
+			w.c.seenPresence(time.Now()) // a signal for the quiet hours (notify_quiet.go)
+		}
 	}
 	rw.WriteHeader(http.StatusNoContent)
 }
@@ -219,13 +229,16 @@ func (w *web) pushWaiting() {
 		st.set("push_msg_seen", strconv.Itoa(st.lastMessageSeq())) // from now on
 		return
 	}
+	// A brain message being written is marked first (notifyWake, brainNotify).
+	w.c.relayMu.Lock()
+	defer w.c.relayMu.Unlock()
 	msgs, err := st.messagesAfter(seen, 50)
 	if err != nil || len(msgs) == 0 {
 		return
 	}
 	for _, m := range msgs {
-		if m.Role != roleBrain {
-			continue
+		if m.Role != roleBrain || st.get(notifiedKey(m.Seq)) != "" {
+			continue // a notification went through notify, and was decided there
 		}
 		if q, ok := asksUser(m.Text); ok {
 			w.c.tell(waitingNote(q, fmt.Sprintf("/#m%d", m.Seq), "ask"))

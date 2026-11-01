@@ -58,7 +58,8 @@ self.addEventListener("fetch", (e) => {
   );
 });
 
-// A push from eriphe-core: {title, body, url, tag}.
+// A push from eriphe-core: {title, body, url, tag}, and for what the
+// assistant told on its own, its buttons (actions) and where they answer.
 self.addEventListener("push", (e) => {
   let data = {};
   try { data = e.data ? e.data.json() : {}; } catch (_) { data = { body: e.data ? e.data.text() : "" }; }
@@ -69,7 +70,8 @@ self.addEventListener("push", (e) => {
     renotify: !!data.tag,
     icon: "/static/icon-192.png",
     badge: "/static/badge-96.png",
-    data: { url: data.url || "/" },
+    data: { url: data.url || "/", react: data.react || "" },
+    actions: Array.isArray(data.actions) ? data.actions.slice(0, 3) : [],
   }));
 });
 
@@ -77,6 +79,16 @@ self.addEventListener("push", (e) => {
 // already open if there is one, else a new one. Only this origin's paths.
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
+  const react = e.notification.data && e.notification.data.react;
+  if (e.action && react) {
+    // A button: 👍, 👎 or « pas maintenant », answered with the push's own
+    // token; nothing opens. Only this origin's paths.
+    const to = new URL(react, self.registration.scope);
+    if (to.origin !== location.origin) return;
+    e.waitUntil(fetch(to.href, { method: "POST", credentials: "omit",
+      body: new URLSearchParams({ r: e.action }) }).catch(() => {}));
+    return;
+  }
   let target = new URL((e.notification.data && e.notification.data.url) || "/", self.registration.scope);
   if (target.origin !== location.origin) target = new URL("/", self.registration.scope);
   e.waitUntil((async () => {

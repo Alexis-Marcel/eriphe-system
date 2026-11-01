@@ -153,9 +153,10 @@ state (`proposed → open → due → done / cancelled`, `snoozed → due`), pro
 - The old `commitment` memories move into the table (state kept, the memory archived with a log
   entry that names the intention): one place for what is owed.
 - Each intention wakes the brain once when it comes due, and once more at its deadline if it is
-  still due; after that it stays listed (pack, page, `intentions`) until closed. Quiet hours and
-  "now, the brief, or nothing" are the interrupt score's, a later phase: for now a due reminder
-  wakes the brain at any hour, as the user set it.
+  still due; after that it stays listed (pack, page, `intentions`) until closed. A due reminder
+  still wakes the brain at any hour, but its answer reaches the phone through notify's decision
+  (quiet hours, daily cap, the user's rules; see the README's notifications): at night it waits
+  for the brief.
 - Event cues other than a person ("when the PR is merged", "when the client answers") are not
   checked by code yet: PIS needs a language judge for them, and PM-Bench shows channel monitoring
   is where agents fail most (16.7 % at best). They stay the brain's to notice, and the next phase's.

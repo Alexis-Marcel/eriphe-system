@@ -1412,3 +1412,12 @@ pre.diff .gap { color: var(--muted); }
 .skill-files li.is-script .mono { color: var(--danger); font-weight: 600; }
 .skill-review { border-color: color-mix(in srgb, var(--warn-strong) 40%, var(--border)); }
 .skill-review .form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* The brain's notifications and rules (push.html, notify-*). */
+.notif-sub { margin: 14px 0 6px; font-size: .9rem; }
+.notif-list li { flex-wrap: wrap; }
+.notif.is-open { border-left: 3px solid var(--accent); padding-left: 10px; }
+.notif-fb { display: flex; flex-wrap: wrap; gap: 6px; }
+.rule-edit { margin-top: 6px; }
+.rule-edit summary { cursor: pointer; }
+.rule-form { display: grid; gap: 8px; margin-top: 8px; max-width: 32rem; }

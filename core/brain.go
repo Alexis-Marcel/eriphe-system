@@ -210,6 +210,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 	if pack != "" {
 		parts = append([]string{pack}, parts...)
 	}
+	c.setWakeTurn(nil) // what it says now answers these, not a due intention
 	// Only a message of mine starts a clean turn: events alone go on with this one.
 	if slices.ContainsFunc(msgs, func(m Message) bool { return m.Role == roleUser }) {
 		c.turn.start(msgs[0].Seq, msgs[len(msgs)-1].Seq, t.LastSeq)
@@ -367,6 +368,7 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 				seq, err := c.store.addMessage(roleBrain, text, true)
 				if err == nil {
 					c.markBrainMessage(int(seq))
+					c.notifyWake(int(seq), e.Seq, text) // the answer to a due intention reaches the phone
 				}
 			}
 		}
