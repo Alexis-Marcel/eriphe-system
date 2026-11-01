@@ -65,7 +65,7 @@ type updateWatchIn struct {
 }
 
 func registerWatchTools(s *mcp.Server, c *core) {
-	tool(s, "watch", "Set up a watch: eriphe-core wakes you, without a model, at times of day (source horaire: the morning brief, the Sunday review), when the user comes back after an absence (source retour: the point on their return), when a read-only catalog tool's result crosses a condition (source outil, polled; on the transition and on recovery) or when a service calls its webhook (source alerte; the user gets its address in Settings), with its prompt. What outil and alerte bring is external: their wake is tainted. You then speak through notify, or answer [rien]. A watch may carry one exact action the user authorises in advance (action), which you may then call on its wake without asking. An outil or alerte watch the user asks to be woken for at any hour is urgent: eriphe-core itself sends its fixed urgent_message, once per incident. For outil and alerte, never choose urgency, condition or action for the user: called without them, it creates nothing and returns what is missing, to ask the user in one short message. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
+	tool(s, "watch", "Set up a watch, for what comes back on its own (a one-off time is an intention: intend): eriphe-core wakes you, without a model, at times of day (source horaire: the morning brief, the Sunday review), when the user comes back after an absence (source retour: the point on their return), when a read-only catalog tool's result crosses a condition (source outil, polled; on the transition and on recovery) or when a service calls its webhook (source alerte; the user gets its address in Settings), with its prompt. What outil and alerte bring is external: their wake is tainted. You then speak through notify, or answer [rien]. A watch may carry one exact action the user authorises in advance (action), which you may then call on its wake without asking. An outil or alerte watch the user asks to be woken for at any hour is urgent: eriphe-core itself sends its fixed urgent_message, once per incident. For outil and alerte, never choose urgency, condition or action for the user: called without them, it creates nothing and returns what is missing, to ask the user in one short message. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
 		func(ctx context.Context, in watchIn) (map[string]any, error) {
 			return c.brainWatch(in)
 		})
@@ -113,6 +113,13 @@ func (c *core) brainWatch(in watchIn) (map[string]any, error) {
 	w := &watch{Name: in.Name, Source: strings.ToLower(strings.TrimSpace(in.Source)), Prompt: in.Prompt, Brief: in.Brief, Why: in.Why, By: "brain",
 		Spec: watchSpec{Schedule: in.Schedule, After: after, Server: in.Server, Tool: in.Tool, Args: in.Args, Every: in.Every,
 			Cond: in.Cond, Judge: in.Judge, Signed: in.Signed}}
+	src := w.Source
+	if a, ok := watchSourceAliases[src]; ok {
+		src = a
+	}
+	if h := watchScheduleHint(in.Schedule); h != "" && (src == sourceSchedule || src == "") {
+		return nil, errors.New("not created: " + h)
+	}
 	if err := c.checkWatch(w); err != nil {
 		return nil, err
 	}
