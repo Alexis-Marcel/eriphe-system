@@ -88,7 +88,7 @@ func TestJoinAndConnect(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	info, err := c.node("pc").info(context.Background())
+	info, err := c.node("pc").info(context.Background(), 1)
 	if err != nil || string(bytes.TrimSpace(info)) != `{"runtimes":["claude-code"]}` {
 		t.Fatalf("info = %s, %v", info, err)
 	}

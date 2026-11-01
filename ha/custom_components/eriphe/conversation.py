@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import aclosing
 from dataclasses import dataclass
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from homeassistant.components import conversation
 from homeassistant.const import MATCH_ALL
@@ -87,6 +87,9 @@ class EripheConversationEntity(conversation.ConversationEntity):
             area=_async_resolve_area(
                 self.hass, user_input.device_id, user_input.satellite_id
             ),
+            # An automation's context has no user: eriphe-core keeps it
+            # from speaking as the user.
+            from_user=user_input.context.user_id is not None,
         )
         outcome = _Outcome()
         async for _content in chat_log.async_add_delta_content_stream(
@@ -102,7 +105,7 @@ class EripheConversationEntity(conversation.ConversationEntity):
         return result
 
     async def _async_answer(
-        self, body: dict[str, str], outcome: _Outcome
+        self, body: dict[str, Any], outcome: _Outcome
     ) -> AsyncIterator[conversation.AssistantContentDeltaDict]:
         """Yield the answer's deltas, or a short sentence when eriphe-core fails."""
         yield {"role": "assistant"}

@@ -111,3 +111,13 @@ def test_build_request_omits_empty_fields():
         "conversation_id": "01ABC",
         "satellite_id": "assist_satellite.kitchen",
     }
+
+
+def test_build_request_says_a_person_spoke():
+    # A person typing in Home Assistant's chat has no device: from_user tells
+    # eriphe-core it is not an automation.
+    assert stream.build_request("Bonjour", from_user=True) == {
+        "text": "Bonjour",
+        "from_user": True,
+    }
+    assert "from_user" not in stream.build_request("brief")

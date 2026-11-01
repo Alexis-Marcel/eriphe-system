@@ -21,7 +21,7 @@ func routeCore(t *testing.T, now time.Time) (*core, *browser, string, string) {
 		t.Fatal(err)
 	}
 	c.setDevicePref(macID, func(p *devicePref) { p.Node = "studio" })
-	c.idles.Store("studio", nodeIdle{Known: true, Seconds: 5, at: now})
+	c.putSignals([]ctxSignal{presenceSignal(srcMachine+"studio", nodeIdle{Known: true, Seconds: 5}, now)})
 	return c, b, macID, pushID(b.sub("/push/1").Endpoint)
 }
 
@@ -55,7 +55,7 @@ func TestRouteOneDeviceThenNext(t *testing.T) {
 	}
 	// Eleven minutes: the Mac has gone idle, the phone.
 	clock = now.Add(11 * time.Minute)
-	c.idles.Store("studio", nodeIdle{Known: true, Seconds: 600, at: clock})
+	c.putSignals([]ctxSignal{presenceSignal(srcMachine+"studio", nodeIdle{Known: true, Seconds: 600}, clock)})
 	c.escalateDue()
 	c.push.pending.Wait()
 	if got := b.sentTo(); !slices.Equal(got, []string{"/push/mac", "/push/1"}) {

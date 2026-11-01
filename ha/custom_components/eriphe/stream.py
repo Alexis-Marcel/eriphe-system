@@ -41,15 +41,23 @@ def build_request(
     device_id: str | None = None,
     satellite_id: str | None = None,
     area: str | None = None,
-) -> dict[str, str]:
-    """Return the body of a voice request, without its empty fields."""
-    body = {
+    from_user: bool = False,
+) -> dict[str, Any]:
+    """Return the body of a voice request, without its empty fields.
+
+    ``from_user`` says a person of the house typed or said the sentence
+    (Home Assistant's context has a user). Without it, and without a device
+    or satellite, eriphe-core takes the sentence as an automation's, which
+    may only ask a closed request ("brief"), never speak as the user.
+    """
+    body: dict[str, Any] = {
         "text": text,
         "language": language,
         "conversation_id": conversation_id,
         "device_id": device_id,
         "satellite_id": satellite_id,
         "area": area,
+        "from_user": from_user,
     }
     return {key: value for key, value in body.items() if value}
 
