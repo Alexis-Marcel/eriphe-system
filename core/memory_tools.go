@@ -138,28 +138,7 @@ func registerMemoryTools(s *mcp.Server, c *core) {
 		})
 	tool(s, "recall", "Search Eriphe's memory: full text (any word matches, accents ignored, no stemming: give variants) with filters. Current facts only unless include_past or as_of.",
 		func(ctx context.Context, in recallIn) (map[string]any, error) {
-			if c.mem == nil {
-				return nil, errMemoryOff
-			}
-			q := recallQuery{Query: in.Query, Kinds: in.Kinds, Subject: in.Subject, IncludePast: in.IncludePast, Limit: in.Limit, Touch: true}
-			var err error
-			if q.Since, err = parseWhen(in.Since); err != nil {
-				return nil, err
-			}
-			if q.Until, err = parseWhen(in.Until); err != nil {
-				return nil, err
-			}
-			if q.AsOf, err = parseWhen(in.AsOf); err != nil {
-				return nil, err
-			}
-			if !q.Until.IsZero() && len(in.Until) == 10 {
-				q.Until = q.Until.Add(24*time.Hour - time.Second)
-			}
-			xs, err := c.mem.recall(q)
-			if err != nil {
-				return nil, err
-			}
-			return map[string]any{"note": memoryNote, "memories": viewMemories(xs, c.mem.now())}, nil
+			return c.brainRecall(in)
 		})
 	tool(s, "update_memory", "Correct a memory in place (a typo, a wrong subject), close a commitment (state done or dropped), or say it is no longer true (valid_to). Changes of the profile, preferences and lessons need the user's message (source_ref).",
 		func(ctx context.Context, in updateIn) (map[string]any, error) {
@@ -187,6 +166,31 @@ func registerMemoryTools(s *mcp.Server, c *core) {
 }
 
 var errMemoryOff = errors.New("Eriphe's memory is not available (see eriphe-core's log)")
+
+func (c *core) brainRecall(in recallIn) (map[string]any, error) {
+	if c.mem == nil {
+		return nil, errMemoryOff
+	}
+	q := recallQuery{Query: in.Query, Kinds: in.Kinds, Subject: in.Subject, IncludePast: in.IncludePast, Limit: in.Limit, Touch: true}
+	var err error
+	if q.Since, err = parseWhen(in.Since); err != nil {
+		return nil, err
+	}
+	if q.Until, err = parseWhen(in.Until); err != nil {
+		return nil, err
+	}
+	if q.AsOf, err = parseWhen(in.AsOf); err != nil {
+		return nil, err
+	}
+	if !q.Until.IsZero() && len(in.Until) == 10 {
+		q.Until = q.Until.Add(24*time.Hour - time.Second)
+	}
+	xs, err := c.mem.recall(q)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"note": memoryNote, "memories": viewMemories(xs, c.mem.now())}, nil
+}
 
 func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	if c.mem == nil {
