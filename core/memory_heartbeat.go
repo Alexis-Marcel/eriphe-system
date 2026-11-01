@@ -6,17 +6,18 @@ import (
 	"time"
 )
 
-// The heartbeat's wake packet: what Eriphe needs to know when it wakes up on
-// its own, from the memory. The heartbeat itself (when it wakes, what it
-// may do) comes later; this assembles what it reads, and records what it
-// decided as an episode, so that the next one knows.
+// The wake packet: what Eriphe needs to know when it wakes up on its own,
+// from the memory. The clock trigger (brain_wake.go) delivers it when an
+// intention becomes due; recordHeartbeat keeps each wake as an episode, so
+// that the next one knows.
 
 type wakePacket struct {
 	Now         time.Time
 	Profile     []*Memory
-	Due         []*Memory // open commitments due within 24 h, or overdue
-	Episodes    []*Memory // the last 24 h
-	Lessons     []*Memory // lessons with subject heartbeat
+	Due         []*Intention // due, and not told yet: why it wakes
+	Pending     []*Intention // due, told before, still not closed
+	Episodes    []*Memory    // the last 24 h
+	Lessons     []*Memory    // lessons with subject heartbeat
 	ProfileText string
 }
 
@@ -27,8 +28,17 @@ func (m *memStore) wakePacket() (*wakePacket, error) {
 	if p.Profile, err = m.profile(); err != nil {
 		return nil, err
 	}
-	if p.Due, err = m.commitments(now.Add(24 * time.Hour)); err != nil {
+	if p.Due, err = m.toSurface(); err != nil {
 		return nil, err
+	}
+	all, err := m.intentions(intentDue)
+	if err != nil {
+		return nil, err
+	}
+	for _, x := range all {
+		if !containsIntention(p.Due, x.ID) {
+			p.Pending = append(p.Pending, x)
+		}
 	}
 	if p.Episodes, err = m.list(`kind = 'episode' AND status = 'active' AND occurred_at >= ?`, []any{now.Add(-24 * time.Hour).Unix()},
 		`occurred_at`, 50); err != nil {
@@ -65,13 +75,18 @@ func (p *wakePacket) render(user string) string {
 	}
 	plain := func(x *Memory) string { return fmt.Sprintf("- [%s #%d] %s", x.Kind, x.ID, quote(x)) }
 	section("Profil de "+user+" :", p.Profile, plain)
-	section("Engagements dus dans les 24 h ou en retard :", p.Due, func(x *Memory) string {
-		due := x.DueAt.Local().Format("2006-01-02 15:04")
-		if x.DueAt.Before(p.Now) {
-			due += ", en retard"
+	intents := func(title string, xs []*Intention) {
+		if len(xs) == 0 {
+			return
 		}
-		return fmt.Sprintf("- [#%d, pour le %s] %s", x.ID, due, quote(x))
-	})
+		b.WriteString("\n" + title + "\n```text\n")
+		for _, x := range xs {
+			b.WriteString(strings.ReplaceAll(intentionLine(x, p.Now), "```", "'''") + "\n")
+		}
+		b.WriteString("```\n")
+	}
+	intents("Ce qui est dû maintenant (la raison de ce réveil) :", p.Due)
+	intents("Déjà rappelé, toujours en attente :", p.Pending)
 	section("Les dernières 24 h :", p.Episodes, func(x *Memory) string {
 		return fmt.Sprintf("- [%s #%d] %s", x.OccurredAt.Local().Format("15:04"), x.ID, quote(x))
 	})
@@ -92,4 +107,13 @@ func (m *memStore) recordHeartbeat(decision string) (*Memory, error) {
 	x := &Memory{Kind: kindEpisode, Subject: "heartbeat", Text: truncate(decision, episodeTextMax-1),
 		SourceKind: srcBrain, SourceRef: "heartbeat", Trust: trustFirstParty, Status: memActive}
 	return x, m.add(x, "heartbeat")
+}
+
+func containsIntention(xs []*Intention, id int64) bool {
+	for _, x := range xs {
+		if x.ID == id {
+			return true
+		}
+	}
+	return false
 }

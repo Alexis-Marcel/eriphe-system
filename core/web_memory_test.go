@@ -24,7 +24,9 @@ func TestMemoryPageRenders(t *testing.T) {
 	mustAdd(t, m, &Memory{Kind: kindProfile, Text: "Sam est développeur"})
 	mustAdd(t, m, &Memory{Kind: kindPerson, Subject: "person:hélène", Text: "Hélène, la sœur de Sam <script>alert(1)</script>"})
 	mustAdd(t, m, &Memory{Kind: kindEpisode, Subject: "journal", Text: "Journée calme"})
-	mustAdd(t, m, &Memory{Kind: kindCommitment, Text: "Payer le loyer", DueAt: m.now().Add(-1)})
+	mustIntend(t, m, &Intention{Text: "Payer le loyer", DueAt: m.now().Add(-time.Minute)})
+	mustIntend(t, m, &Intention{Text: "Régler la facture du fournisseur", DueAt: m.now().Add(48 * time.Hour), State: intentProposed,
+		SourceKind: srcExtraction, SourceRef: "task:t-mail", Trust: trustExternal})
 	seq, _ := tw.c.store.addMessage(roleUser, "Le colis arrive jeudi", true)
 	mustAdd(t, m, &Memory{Kind: kindFact, Text: "Le colis arrive jeudi", Status: memProposed, SourceKind: srcExtraction,
 		SourceRef: "msg:" + strconv.Itoa(int(seq)), Trust: trustExternal, Flags: "imperative"})
@@ -32,9 +34,9 @@ func TestMemoryPageRenders(t *testing.T) {
 		"/memory":                  {"Mémoire", "Hélène, la sœur de Sam &lt;script&gt;", "Sam est développeur", `aria-current="page"`, "/memory/export.jsonl"},
 		"/memory?q=helene":         {"Hélène"},
 		"/memory?kind=person":      {"Hélène"},
-		"/memory?view=inbox":       {"Le colis arrive jeudi", "Approuver", "ressemble à une consigne", "/#m" + strconv.Itoa(int(seq))},
+		"/memory?view=inbox":       {"Le colis arrive jeudi", "Approuver", "ressemble à une consigne", "/#m" + strconv.Itoa(int(seq)), "Régler la facture du fournisseur", "/memory/intention/2/approve"},
 		"/memory?view=journal":     {"Aujourd&#39;hui", "Journée calme", "Extraire aujourd&#39;hui"},
-		"/memory?view=commitments": {"Payer le loyer", "En retard"},
+		"/memory?view=commitments": {"Payer le loyer", "En retard", "Régler la facture", "Demain", "tiré d&#39;un contenu extérieur"},
 		"/memory?view=profile":     {"Sam est développeur", "/ 2500"},
 	} {
 		code, body, _ := tw.do("GET", path, nil, nil)
@@ -58,7 +60,7 @@ func TestMemoryPageRenders(t *testing.T) {
 	}
 	// The export.
 	code, body, h := tw.do("GET", "/memory/export.jsonl", nil, nil)
-	if code != 200 || !strings.Contains(h.Get("Content-Disposition"), "attachment") || strings.Count(body, "\n") != 5 {
+	if code != 200 || !strings.Contains(h.Get("Content-Disposition"), "attachment") || strings.Count(body, "\n") != 4 {
 		t.Fatalf("export: %d %q", code, body)
 	}
 }
@@ -233,5 +235,54 @@ func TestMemoryExtractNow(t *testing.T) {
 	tw.c.mem = nil
 	if msg, kind := extract(nil); msg != errMemoryOff.Error() || kind != "error" {
 		t.Fatalf("no memory: %q %s", msg, kind)
+	}
+}
+
+// The intentions' actions in the page: approve, snooze, done, reopen, cancel.
+func TestIntentionActions(t *testing.T) {
+	tw, csrf := newMemoryWeb(t)
+	m := tw.c.mem
+	ext := mustIntend(t, m, &Intention{Text: "Payer avant vendredi", DueAt: m.now().Add(72 * time.Hour), State: intentProposed,
+		SourceKind: srcExtraction, SourceRef: "task:t-mail", Trust: trustExternal})
+	own := mustIntend(t, m, &Intention{Text: "Rappeler Paul", RemindAt: m.now().Add(-time.Minute)})
+	m.tickIntentions()
+	post := func(x *Intention, action string, v url.Values) (int, string, http.Header) {
+		return tw.post("/memory/intention/"+strconv.FormatInt(x.ID, 10)+"/"+action, v, csrf)
+	}
+	// A proposed one is approved or rejected before anything else.
+	if _, _, h := post(ext, "done", nil); !strings.Contains(h.Get("HX-Trigger"), "Approuve") {
+		t.Fatalf("done before approval: %v", h)
+	}
+	if code, body, _ := post(ext, "approve", nil); code != 200 || !strings.Contains(body, "Prévu") {
+		t.Fatalf("approve: %d %s", code, body)
+	}
+	if x, _ := m.intention(ext.ID); x.State != intentOpen || x.Trust != trustExternal {
+		t.Fatalf("approved: %+v", x)
+	}
+	// Snoozed until tomorrow 9:00, then done, then reopened.
+	if code, body, _ := post(own, "snooze", url.Values{"for": {"day"}}); code != 200 || !strings.Contains(body, "Reporté") {
+		t.Fatalf("snooze: %d %s", code, body)
+	}
+	if x, _ := m.intention(own.ID); x.State != intentSnoozed || x.SnoozedUntil.Hour() != 9 || !x.SnoozedUntil.After(m.now()) {
+		t.Fatalf("snoozed: %+v", x)
+	}
+	post(own, "done", nil)
+	if x, _ := m.intention(own.ID); x.State != intentDone || x.ClosedAt.IsZero() {
+		t.Fatalf("done: %+v", x)
+	}
+	post(own, "reopen", nil)
+	if x, _ := m.intention(own.ID); x.State != intentDue {
+		t.Fatalf("reopened (its time is past): %+v", x)
+	}
+	post(own, "cancel", nil)
+	if x, _ := m.intention(own.ID); x.State != intentCancelled {
+		t.Fatalf("cancelled: %+v", x)
+	}
+	if code, _, _ := post(own, "explode", nil); code != http.StatusBadRequest {
+		t.Fatalf("unknown action: %d", code)
+	}
+	// Without the CSRF token, nothing.
+	if code, _, _ := tw.post("/memory/intention/"+strconv.FormatInt(own.ID, 10)+"/reopen", nil, ""); code == 200 {
+		t.Fatal("no CSRF check")
 	}
 }

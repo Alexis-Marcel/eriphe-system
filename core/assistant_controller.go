@@ -87,6 +87,8 @@ func (r assistantRole) check() error {
 		return fmt.Errorf("%s needs %s", powerLendsResources, powerLaunchesTasks)
 	case slices.Contains(r.Triggers, triggerConversation) && !r.can(powerReceivesConversation):
 		return fmt.Errorf("the %s trigger needs %s", triggerConversation, powerReceivesConversation)
+	case slices.Contains(r.Triggers, triggerClock) && !r.can(powerReceivesConversation):
+		return fmt.Errorf("the %s trigger needs %s", triggerClock, powerReceivesConversation)
 	}
 	return nil
 }

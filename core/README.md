@@ -1003,7 +1003,7 @@ Its spec says what it is and what it runs on; its status is what eriphe-core kee
 | `instructions` | its standing instructions (`{{user}}` and `{{name}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
 | `tools` | its grant from the catalog, like a task's; its role may add the catalog's free reads |
 | `resources` | what it is lent besides its tools (`{kind, ref, access, …}`): kept, lent with the resources work |
-| `triggers` | what wakes it: `conversation` (the user's messages and the tasks' events); later `source:<name>` and `schedule`. Its role's by default; the conversation only for a role that `receivesConversation`, and one enabled assistant at most has it |
+| `triggers` | what wakes it: `conversation` (the user's messages and the tasks' events), `clock` (an intention of the memory that comes due: the wake packet, see [Memory](#memory)); later `source:<name>` and `schedule`. Its role's by default (the brain's: both); `conversation` and `clock` only for a role that `receivesConversation`, and one enabled assistant at most has the conversation |
 | `reports_to` | the assistant it reports to: the brain (the one with the conversation), the only one it may name; empty means the brain. The brain reports to no one |
 | `disabled` | its task is stopped, and none started |
 | `self_url`, `mcp_servers` | the file only (see the brain) |
@@ -1135,8 +1135,8 @@ resume that keeps failing is dropped for a fresh session.
 eriphe-core, not the harness, holds the thread: the harness session (`--resume`) is only a cache.
 A fresh session (the first one, a dropped resume, a resume the node could not do, another harness)
 gets a context pack in its first turn, never in its system prompt: what waits for a decision, the
-tasks under way, the open commitments, the last day's episodes, and the last messages between the
-user and the brain, the newest kept, within about 8,000 tokens (`brain_context.go`). It is quoted
+tasks under way, the intentions under way (the due ones first), the last day's episodes, and the last
+messages between the user and the brain, the newest kept, within about 8,000 tokens (`brain_context.go`). It is quoted
 data; events are left out, since they carry what tasks said. eriphe-core logs its size.
 
 ## Voice (Home Assistant)
@@ -1932,8 +1932,30 @@ project, client job or goal, with a `state` (`active`, `blocked`, `done`, `pause
 saying what is done, under way, blocked and left; each change supersedes the card, so the chain
 is its history.
 
-The brain's tools (on `/mcp`): `remember`, `recall`, `update_memory`, `forget`, `commitments`.
-Results are data, quoted.
+The brain's tools (on `/mcp`): `remember`, `recall`, `update_memory`, `forget`, and for what is
+owed `intend`, `intentions`, `update_intention`. Results are data, quoted.
+
+**Intentions** (prospective memory) are a table of their own, with a lifecycle kept by code: a
+kind (`promise`: the user owes someone; `commitment`: the assistant owes the user; `waiting_for`:
+someone owes the user; `reminder`), who owes and to whom, a deadline (`due_at`), when to bring it up
+(`remind_at`, by default the deadline, or 9:00 on a deadline without a time) or a person `cue` ("the
+next time I talk about Hélène"), and a state: `proposed → open → due → done / cancelled`, `snoozed →
+due`. The brain and the nightly extraction form them and revise them with typed patches (done,
+cancelled, a new deadline); the extraction's patches never come from external content. Every
+minute, without a model, open intentions whose reminder has come and snoozed ones whose snooze is
+over become due; a person cue becomes due when the user's message names them, and the delivery of
+that message carries the intention (`[mémoire]`). A due intention wakes the brain through the
+`clock` trigger (the brain has it with `conversation`): at its next idle, after the user's
+messages, it gets the wake packet (what is due now, what was told and is still due, the profile,
+the last 24 hours, the heartbeat lessons), says it in a sentence or two or `[rien]`, and the wake
+is kept as a `heartbeat` episode. Each intention wakes it once, and once more at its deadline if it
+is still due; never periodically. An intention drawn from external content stays `proposed` until
+the user approves it; approved, it may remind, never act: the wake turn that reads it is tainted
+(`intention.external`), and so is a turn whose `intentions` tool returns one. The Memory page lists
+them (Intentions) with done, snooze (an hour, tomorrow 9:00), cancel and reopen; proposed ones are
+approved or rejected there and in À approuver. Schema 4 moved the `commitment` memories into the
+table (state kept; each memory archived, with a log entry naming its intention); a `commitment`
+written since becomes an intention.
 
 **Search.** The full-text index holds each memory's text, subject, `keywords` (other words to find
 it by: synonyms, variants) and, in a shadow column, the French stems of all three (Snowball French
@@ -1967,7 +1989,7 @@ user is only proposed. Proposals wait in the workspace (Mémoire → À approuve
 
 **Reading back is reading too.** A memory of trust `external` (a task's journal episode, a
 proposal from a mail the user approved) summarises what was read outside: a turn whose `recall`
-or `commitments` returns one is tainted (`memory.external`), like a turn that read the mail
+returns one is tainted (`memory.external`), like a turn that read the mail
 itself. The context pack and the wake packet, which nobody asked for, name such a memory (its id,
 kind and source) without quoting its text. And what the brain writes during a tainted turn is
 marked: the extraction reads it as `external`, so a mail repeated by the brain is not learnt back

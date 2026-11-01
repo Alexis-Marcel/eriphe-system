@@ -113,8 +113,10 @@ func TestMemoryMigrationBasis(t *testing.T) {
 	}
 	mustAdd(t, m, &Memory{Kind: kindFact, Text: "Sam a un vélo cargo", Keywords: "transport"})
 	// Back to schema 2, as a database of the previous version would be.
-	if _, err := m.db.Exec(`ALTER TABLE memories DROP COLUMN basis`); err != nil {
-		t.Fatal(err)
+	for _, q := range []string{`ALTER TABLE memories DROP COLUMN basis`, `DROP TABLE intentions`, `DROP TABLE intention_log`} {
+		if _, err := m.db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
 	}
 	m.db.Exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`)
 	m.db.Close()

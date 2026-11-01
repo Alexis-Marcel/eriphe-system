@@ -133,9 +133,13 @@ func TestApplyExtraction(t *testing.T) {
 		status[x.Kind+":"+x.Text[:10]] = x.Status
 		trust[x.Kind] = x.Trust
 	}
-	if status["commitment:Préparer "] != memActive || status["fact:Le devis e"] != memProposed || status["episode:Sam a parl"] != memActive ||
-		status["preference:Sam aime l"] != memProposed {
+	if status["fact:Le devis e"] != memProposed || status["episode:Sam a parl"] != memActive || status["preference:Sam aime l"] != memProposed {
 		t.Fatalf("statuses: %v", status)
+	}
+	// A commitment is an intention now, open since it is my word.
+	if in, _ := c.mem.intentions(); len(in) != 1 || in[0].Text != "Préparer le devis du site pour jeudi" || in[0].State != intentOpen ||
+		in[0].DueAt.Format("2006-01-02") != "2026-10-29" {
+		t.Fatalf("intentions: %+v", in)
 	}
 	if trust["episode"] != trustExternal {
 		t.Fatalf("the journal cites a task: %v", trust)

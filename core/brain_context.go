@@ -112,23 +112,17 @@ func (c *core) contextPack() (string, contextPackStats) {
 	p.section("Tâches en cours :", tasks)
 	if c.mem != nil {
 		now := c.mem.now() // the memory's clock
-		if xs, err := c.mem.commitments(time.Time{}); err == nil {
+		if xs, err := c.mem.intentions(intentDue, intentOpen, intentSnoozed); err == nil {
 			var lines []string
 			for _, x := range xs {
-				due := ""
-				if !x.DueAt.IsZero() {
-					due = ", pour le " + x.DueAt.Local().Format("2006-01-02 15:04")
-					if x.DueAt.Before(now) {
-						due += ", en retard"
-					}
-				}
-				text := packQuote(x.Text)
+				line := intentionLine(x, now)
 				if x.Trust == trustExternal {
-					text = externalLine(x)
+					// Named, not quoted: the intentions tool reads it, and that taints the turn.
+					line = fmt.Sprintf("- [intention %d, %s] tirée d'un contenu extérieur : intentions la relit, ce qui souille le tour", x.ID, x.State)
 				}
-				lines = append(lines, truncate(fmt.Sprintf("- [#%d%s] %s", x.ID, due, text), packLineMax))
+				lines = append(lines, truncate(line, packLineMax))
 			}
-			p.section("Engagements ouverts (ta mémoire) :", lines)
+			p.section("Intentions en cours (ta mémoire ; dues d'abord) :", lines)
 		}
 		if xs, err := c.mem.list(`kind = 'episode' AND status = 'active' AND occurred_at >= ?`,
 			[]any{now.Add(-24 * time.Hour).Unix()}, `occurred_at DESC, id DESC`, 50); err == nil {
@@ -201,6 +195,9 @@ func (c *core) packTasks() (decisions, tasks []string) {
 	if c.mem != nil {
 		if n := c.mem.count(`status = ?`, memProposed); n > 0 {
 			decisions = append(decisions, fmt.Sprintf("- %d souvenir(s) proposé(s) attendent l'accord de %s dans la page Mémoire", n, user))
+		}
+		if xs, _ := c.mem.intentions(intentProposed); len(xs) > 0 {
+			decisions = append(decisions, fmt.Sprintf("- %d intention(s) proposée(s) attendent l'accord de %s dans la page Mémoire", len(xs), user))
 		}
 	}
 	return decisions, tasks

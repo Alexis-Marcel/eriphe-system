@@ -136,7 +136,7 @@ func truncate(s string, n int) string {
 func init() {
 	assistantRoles[assistantRoleBrain] = assistantRole{
 		Powers: []string{powerTalksToUser, powerReceivesConversation, powerLaunchesTasks, powerLendsResources},
-		Prompt: brainPrompt, StartPrompt: brainStartPrompt, Triggers: []string{triggerConversation},
+		Prompt: brainPrompt, StartPrompt: brainStartPrompt, Triggers: []string{triggerConversation, triggerClock},
 		Profile: "brain", FreeReads: true, Network: true, Streams: true,
 		// Its harness's web search is allowed (brain_web.go); its page
 		// reader is not: each read is decided in brainPermission.
@@ -220,6 +220,10 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		if why := c.store.get(taintKey(m.Seq)); why != "" {
 			c.turn.taint(why) // a task's result read from the user's folders
 		}
+	}
+	// What my message brings up: the intentions whose person it names.
+	if cue := c.cueBlock(msgs); cue != "" {
+		parts = append(parts, cue)
 	}
 	c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Quiet = false })
 	if _, err := c.answer(ctx, t.ID, "", strings.Join(parts, "\n\n"), nil, byUser); err != nil {

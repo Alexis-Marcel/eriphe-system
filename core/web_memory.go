@@ -39,6 +39,7 @@ func (w *web) memoryRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /memory/{id}/restore", w.auth(w.handleMemoryRestore))
 	mux.Handle("POST /memory/{id}/approve", w.auth(w.handleMemoryApprove))
 	mux.Handle("POST /memory/{id}/reject", w.auth(w.handleMemoryReject))
+	w.intentionRoutes(mux)
 }
 
 var memoryViews = []string{"all", "inbox", "journal", "commitments", "profile", "forgotten"}
@@ -86,6 +87,10 @@ type memoryPage struct {
 	Now         time.Time
 	About       []memCard // what the assistant knows about me, pinned first
 	Interview   bool      // a brain to do the interview again
+
+	Intents         []intentCard // the Intentions tab: the live ones
+	IntentsDone     []intentCard // recently closed
+	ProposedIntents []intentCard // in À approuver
 }
 
 type kindLink struct {
@@ -167,9 +172,7 @@ func (w *web) memoryCounts(p *memoryPage) {
 	now := m.now().Unix()
 	p.Active = m.count(`status = 'active' AND (valid_to IS NULL OR valid_to > ?)`, now)
 	p.Proposed = m.count(`status = 'proposed'`)
-	p.Open = m.count(`kind = 'commitment' AND status = 'active' AND state = 'open' AND (valid_to IS NULL OR valid_to > ?)`, now)
-	p.Overdue = m.count(`kind = 'commitment' AND status = 'active' AND state = 'open' AND due_at IS NOT NULL AND due_at < ?
-		AND (valid_to IS NULL OR valid_to > ?)`, now, now)
+	w.intentionCounts(p)
 	p.Forgotten = m.count(`status = 'deleted'`)
 	p.ProfileUsed, p.Budget = m.profileChars(m.db, 0), profileBudget
 	p.Pct = min(100, p.ProfileUsed*100/profileBudget)
@@ -222,6 +225,11 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 		}
 	case "inbox":
 		xs, err = m.list(`status = 'proposed'`, nil, `recorded_at DESC, id DESC`, 200)
+		if proposed, e := m.intentions(intentProposed); e == nil {
+			for _, x := range proposed {
+				p.ProposedIntents = append(p.ProposedIntents, w.intentCard(x))
+			}
+		}
 	case "journal":
 		xs, err = m.list(`kind = 'episode' AND status = 'active'`, nil, `occurred_at DESC, id DESC`, 300)
 		p.Runs, _ = m.runs(5)
@@ -230,13 +238,7 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 			p.Agent = w.c.conf().DefaultAgent
 		}
 	case "commitments":
-		xs, err = m.commitments(time.Time{})
-		if err == nil {
-			done, _ := m.list(`kind = 'commitment' AND status = 'active' AND state != 'open'`, nil, `updated_at DESC`, 20)
-			for _, x := range done {
-				p.Done = append(p.Done, w.memCard(x, false))
-			}
-		}
+		err = w.intentionsView(&p)
 	case "profile":
 		xs, err = m.profile()
 	case "forgotten":
@@ -671,12 +673,12 @@ var memoryStrings = map[string]map[string]string{
 		"mem.view.all":         "Souvenirs",
 		"mem.view.inbox":       "À approuver",
 		"mem.view.journal":     "Journal",
-		"mem.view.commitments": "Engagements",
+		"mem.view.commitments": "Intentions",
 		"mem.view.profile":     "Profil",
 		"mem.view.forgotten":   "Oubliés",
 		"mem.stat.active":      "souvenirs",
 		"mem.stat.proposed":    "à approuver",
-		"mem.stat.open":        "engagements",
+		"mem.stat.open":        "intentions en cours",
 		"mem.stat.overdue":     "%d en retard",
 		"mem.stat.profile":     "profil",
 		"mem.budget":           "%d / %d caractères",
@@ -695,8 +697,8 @@ var memoryStrings = map[string]map[string]string{
 		"mem.inboxnone":        "Rien à approuver.",
 		"mem.journallead":      "Une entrée par conversation et par tâche terminée, écrite chaque nuit par l'extraction.",
 		"mem.journalnone":      "Le journal est vide. Il se remplit chaque nuit à partir de tes conversations.",
-		"mem.commitmentslead":  "Ce que {{name}} ou toi avez promis de faire.",
-		"mem.commitmentsnone":  "Aucun engagement en cours.",
+		"mem.commitmentslead":  "Ce qui est dû, par qui, pour quand : tes promesses, celles de {{name}}, ce que tu attends des autres, tes rappels. {{name}} te le rappelle au bon moment.",
+		"mem.commitmentsnone":  "Rien en cours.",
 		"mem.donerecent":       "Terminés récemment",
 		"mem.profilenone":      "Le profil est vide. Épingle les souvenirs que {{name}} doit toujours avoir en tête.",
 		"mem.forgottenlead":    "Oubliés, ils sont effacés pour de bon 30 jours après. Jusque-là, tu peux les restaurer.",
@@ -813,12 +815,12 @@ var memoryStrings = map[string]map[string]string{
 		"mem.view.all":         "Memories",
 		"mem.view.inbox":       "To approve",
 		"mem.view.journal":     "Journal",
-		"mem.view.commitments": "Commitments",
+		"mem.view.commitments": "Intentions",
 		"mem.view.profile":     "Profile",
 		"mem.view.forgotten":   "Forgotten",
 		"mem.stat.active":      "memories",
 		"mem.stat.proposed":    "to approve",
-		"mem.stat.open":        "commitments",
+		"mem.stat.open":        "intentions under way",
 		"mem.stat.overdue":     "%d overdue",
 		"mem.stat.profile":     "profile",
 		"mem.budget":           "%d / %d characters",
@@ -837,8 +839,8 @@ var memoryStrings = map[string]map[string]string{
 		"mem.inboxnone":        "Nothing to approve.",
 		"mem.journallead":      "One entry per conversation and per finished task, written every night by the extraction.",
 		"mem.journalnone":      "The journal is empty. It fills up every night from your conversations.",
-		"mem.commitmentslead":  "What {{name}} or you promised to do.",
-		"mem.commitmentsnone":  "No open commitment.",
+		"mem.commitmentslead":  "What is owed, by whom, by when: your promises, {{name}}'s, what you wait for from others, your reminders. {{name}} reminds you at the right time.",
+		"mem.commitmentsnone":  "Nothing under way.",
 		"mem.donerecent":       "Recently closed",
 		"mem.profilenone":      "The profile is empty. Pin the memories {{name}} should always keep in mind.",
 		"mem.forgottenlead":    "Forgotten memories are erased for good 30 days later. Until then, you can restore them.",

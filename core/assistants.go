@@ -360,8 +360,10 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 		return fmt.Errorf("%s: role %s: %w", what, a.Role, err)
 	}
 	// What hears the conversation is the brain: its role says it may.
-	if a.has(triggerConversation) && !r.can(powerReceivesConversation) {
-		return fmt.Errorf("%s: the %s trigger is for a role that receives the conversation, not %s", what, triggerConversation, a.Role)
+	for _, tr := range []string{triggerConversation, triggerClock} {
+		if a.has(tr) && !r.can(powerReceivesConversation) {
+			return fmt.Errorf("%s: the %s trigger is for a role that receives the conversation, not %s", what, tr, a.Role)
+		}
 	}
 	if a.DisplayName != "" {
 		if err := checkDisplayName(a.DisplayName); err != nil {
@@ -370,7 +372,7 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 	}
 	for _, t := range a.Triggers {
 		if _, ok := assistantTriggers[t]; !ok {
-			return fmt.Errorf("%s: trigger %q is not supported (yet): conversation is", what, t)
+			return fmt.Errorf("%s: trigger %q is not supported (yet): conversation and clock are", what, t)
 		}
 	}
 	if a.Agent != "" && len(c.Agents) > 0 { // none: it waits for one

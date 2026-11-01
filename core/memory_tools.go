@@ -132,12 +132,8 @@ type forgetIn struct {
 	SourceRef string `json:"source_ref,omitempty" jsonschema:"the user's message asking for it, msg:N"`
 }
 
-type commitmentsIn struct {
-	DueBefore string `json:"due_before,omitempty" jsonschema:"only those due before this date; all open ones by default"`
-}
-
 func registerMemoryTools(s *mcp.Server, c *core) {
-	tool(s, "remember", "Keep something in Eriphe's memory: one fact, preference, person, episode, commitment or lesson per call. To record a change, supersede the old memory (it is kept, dated). What a turn that read external content remembers is only proposed to the user.",
+	tool(s, "remember", "Keep something in Eriphe's memory: one fact, preference, person, episode, lesson, decision or progress card per call (what is owed or to remember to do is an intention: intend). To record a change, supersede the old memory (it is kept, dated). What a turn that read external content remembers is only proposed to the user.",
 		func(ctx context.Context, in rememberIn) (map[string]any, error) {
 			return c.brainRemember(in)
 		})
@@ -153,22 +149,7 @@ func registerMemoryTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in forgetIn) (map[string]any, error) {
 			return c.brainForget(in)
 		})
-	tool(s, "commitments", "Open commitments (what Eriphe or the user promised to do), the most urgent first, with the overdue ones marked.",
-		func(ctx context.Context, in commitmentsIn) (map[string]any, error) {
-			if c.mem == nil {
-				return nil, errMemoryOff
-			}
-			before, err := parseWhen(in.DueBefore)
-			if err != nil {
-				return nil, err
-			}
-			xs, err := c.mem.commitments(before)
-			if err != nil {
-				return nil, err
-			}
-			c.readMemories(xs)
-			return map[string]any{"note": memoryNote, "commitments": viewMemories(xs, c.mem.now())}, nil
-		})
+	registerIntentionTools(s, c)
 }
 
 var errMemoryOff = errors.New("Eriphe's memory is not available (see eriphe-core's log)")
@@ -202,6 +183,15 @@ func (c *core) brainRecall(in recallIn) (map[string]any, error) {
 func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	if c.mem == nil {
 		return nil, errMemoryOff
+	}
+	// What is owed is an intention now, with its lifecycle.
+	if strings.TrimSpace(in.Kind) == kindCommitment && in.Supersedes == 0 {
+		out, err := c.brainIntend(intendIn{Text: in.Text, Subject: in.Subject, DueAt: in.DueAt, SourceRef: in.SourceRef})
+		if err == nil {
+			note, _ := out["note"].(string)
+			out["note"] = strings.TrimSpace(note + " Recorded as an intention: use intend, intentions and update_intention for what is owed.")
+		}
+		return out, err
 	}
 	x := &Memory{Kind: strings.TrimSpace(in.Kind), Subject: in.Subject, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes,
 		Keywords: in.Keywords, Importance: in.Importance, State: in.State}

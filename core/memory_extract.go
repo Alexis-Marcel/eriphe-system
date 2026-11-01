@@ -170,9 +170,6 @@ func (c *core) contextMemories(day string, segs []segment) []*Memory {
 	if xs, err := c.mem.profile(); err == nil {
 		addAll(xs)
 	}
-	if xs, err := c.mem.commitments(time.Time{}); err == nil {
-		addAll(xs)
-	}
 	if from, to, err := dayBounds(day); err == nil {
 		xs, _ := c.mem.recall(recallQuery{Kinds: []string{kindEpisode}, Since: from, Until: to, Limit: 20,
 			Statuses: []string{memActive, memProposed}})
@@ -218,9 +215,12 @@ Each operation is one of:
 {"op": "ADD", "kind": "...", "subject": "...", "text": "...", "keywords": "...", "importance": 3, "basis": "stated", "links": [], "occurred_at": "YYYY-MM-DD", "valid_from": "YYYY-MM-DD", "valid_to": "YYYY-MM-DD", "due_at": "YYYY-MM-DD", "state": "...", "source_ref": "msg:12"}
 {"op": "SUPERSEDE", "id": 42, "kind": "...", "subject": "...", "text": "the new version", "keywords": "...", "importance": 3, "basis": "stated", "valid_from": "YYYY-MM-DD", "source_ref": "msg:12"}
 {"op": "NOOP", "id": 42, "source_ref": "msg:12"}
+{"op": "INTEND", "kind": "...", "text": "...", "owner": "...", "owed_to": "...", "due_at": "YYYY-MM-DDTHH:MM", "remind_at": "YYYY-MM-DDTHH:MM", "cue": "...", "basis": "stated", "source_ref": "msg:12"}
+{"op": "INTENT_UPDATE", "id": 7, "state": "done", "due_at": "YYYY-MM-DD", "source_ref": "msg:12"}
 
 Rules:
-- kind is one of: fact, person, preference, episode, commitment, decision, progress, and lesson only from a task (below). Never profile.
+- What is owed or to remember is an intention (INTEND), not a memory: a promise of %[1]s to someone (kind promise, owner "owner", owed_to the person), a promise of %[5]s (commitment, owner "assistant"), something someone owes %[1]s ("Marc doit m'envoyer…": waiting_for, owner "person:marc"), "rappelle-moi…" (reminder). due_at is the deadline; remind_at when to bring it up if %[1]s said so ("une semaine avant"); cue the name for "la prochaine fois que je parle à X" (then no time). Do not INTEND what the intentions below already hold. When the transcript shows one was kept, cancelled or moved, INTENT_UPDATE it (its intention id; state done or cancelled, or a new due_at / remind_at).
+- kind is one of: fact, person, preference, episode, decision, progress, and lesson only from a task (below). Never profile.
   - decision: a choice %[1]s made and its reason, in one sentence ("X plutôt que Y, parce que Z"). A reversed decision SUPERSEDEs the old one.
   - progress: the current state of one project, client job or goal, one card per subject: "Fait : …; en cours : …; bloqué : …; reste : …", with "state": active, blocked, done or paused. If the memories hold a progress card for that subject, SUPERSEDE it with the whole new state; never ADD a second one.
 - subject: owner, person:<slug>, client:<slug>, project:<name>, home, or a short word.
@@ -265,6 +265,24 @@ func (c *core) extractionPrompt(day string, segs []segment) string {
 			line += " until=" + x.ValidTo.Local().Format("2006-01-02")
 		}
 		mem.WriteString(line + ": " + strings.ReplaceAll(truncate(x.Text, 600), "\n", " ") + "\n")
+	}
+	mem.WriteString("\n## Intentions (what is owed or to remember), the live ones\n")
+	live, _ := c.mem.intentions()
+	if len(live) == 0 {
+		mem.WriteString("(none)\n")
+	}
+	for _, x := range live {
+		line := fmt.Sprintf("- intention=%d kind=%s owner=%q state=%s", x.ID, x.Kind, x.Owner, x.State)
+		if x.OwedTo != "" {
+			line += fmt.Sprintf(" owed_to=%q", x.OwedTo)
+		}
+		if !x.DueAt.IsZero() {
+			line += " due=" + x.DueAt.Local().Format("2006-01-02 15:04")
+		}
+		if x.Cue != "" {
+			line += fmt.Sprintf(" cue=%q", x.Cue)
+		}
+		mem.WriteString(line + ": " + oneLine(truncate(x.Text, 300)) + "\n")
 	}
 	return fmt.Sprintf(extractionInstructions, c.conf().User, day, mem.String(), renderTranscript(segs), c.conf().assistantName())
 }
@@ -448,7 +466,12 @@ type extractionOp struct {
 	Keywords   string   `json:"keywords,omitempty"`
 	Importance int      `json:"importance,omitempty"`
 	Basis      string   `json:"basis,omitempty"`
-	SourceRef  string   `json:"source_ref"`
+	// For an intention.
+	Owner     string `json:"owner,omitempty"`
+	OwedTo    string `json:"owed_to,omitempty"`
+	RemindAt  string `json:"remind_at,omitempty"`
+	Cue       string `json:"cue,omitempty"`
+	SourceRef string `json:"source_ref"`
 }
 
 var fenceRe = regexp.MustCompile("(?s)```(?:json)?\\s*(\\{.*\\})\\s*```")
@@ -558,7 +581,15 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	switch strings.ToUpper(op.Op) {
 	case "NOOP":
 		return "", "noop"
+	case "INTEND":
+		return c.applyIntend(op, trust, ref, who)
+	case "INTENT_UPDATE":
+		return c.applyIntentUpdate(op, trust, ref, who)
 	case "ADD", "SUPERSEDE":
+		if strings.EqualFold(op.Op, "ADD") && op.Kind == kindCommitment {
+			op.Kind = intentReminder // what is owed is an intention now; who owes is not said
+			return c.applyIntend(op, trust, ref, who)
+		}
 	default:
 		return fmt.Sprintf("unknown op %q", op.Op), ""
 	}
@@ -677,6 +708,7 @@ func (c *core) memoryTick(ctx context.Context) {
 		}
 	}
 	c.memoryNight(mc, now)
+	c.intentionsTick()
 	if !c.extractionOn() || c.mem.activeRun() != nil {
 		return
 	}
@@ -819,4 +851,87 @@ func (m *memStore) exportJSONL(w io.Writer) error {
 		}
 	}
 	return rows.Err()
+}
+
+// applyIntend forms an intention from the extraction: open when it comes
+// from the user's or the assistant's own words, stated; proposed when it
+// was read outside or only deduced.
+func (c *core) applyIntend(op extractionOp, trust, ref, who string) (why, result string) {
+	basis := strings.ToLower(strings.TrimSpace(op.Basis))
+	if basis == "" {
+		basis = basisStated
+	}
+	if basisConfidence[basis] == 0 {
+		return fmt.Sprintf("basis %q: stated, inferred or ambiguous", op.Basis), ""
+	}
+	x := &Intention{Kind: op.Kind, Text: op.Text, Owner: op.Owner, OwedTo: op.OwedTo, Subject: op.Subject, Cue: op.Cue,
+		SourceKind: srcExtraction, SourceRef: ref, Trust: trust, Basis: basis, State: intentOpen}
+	var err error
+	if x.DueAt, err = parseWhen(op.DueAt); err != nil {
+		return err.Error(), ""
+	}
+	if x.RemindAt, err = parseWhen(op.RemindAt); err != nil {
+		return err.Error(), ""
+	}
+	scan := scanMemoryText(x.Text, x.Owner, x.OwedTo, x.Subject, x.Cue)
+	if scan.Reject != "" {
+		return "refused: " + scan.Reject, ""
+	}
+	x.Flags = strings.Join(scan.Flags, ",")
+	if trust == trustExternal || basis != basisStated || containsStr(scan.Flags, "imperative") && trust != trustOwner {
+		x.State = intentProposed
+	}
+	got, err := c.mem.addIntention(x, who)
+	if err != nil {
+		return err.Error(), ""
+	}
+	switch {
+	case got.ID != x.ID:
+		return "", "noop"
+	case got.State == intentProposed:
+		return "", "proposed"
+	}
+	return "", "added"
+}
+
+// applyIntentUpdate revises an intention with a typed patch. External
+// content cannot change one: a mail does not close what is owed.
+func (c *core) applyIntentUpdate(op extractionOp, trust, ref, who string) (why, result string) {
+	if trust == trustExternal {
+		return "an external content cannot change an intention", ""
+	}
+	x, err := c.mem.intention(op.ID)
+	if err != nil {
+		return fmt.Sprintf("intention %d: %v", op.ID, err), ""
+	}
+	if x.State == intentProposed {
+		return fmt.Sprintf("intention %d is proposed: the user decides", op.ID), ""
+	}
+	ch := intentionChange{State: strings.ToLower(strings.TrimSpace(op.State))}
+	if ch.State != "" && !containsStr([]string{intentDone, intentCancelled}, ch.State) {
+		return "an extraction closes an intention (done, cancelled) or moves its time", ""
+	}
+	for _, f := range []struct {
+		s string
+		t **time.Time
+	}{{op.DueAt, &ch.DueAt}, {op.RemindAt, &ch.RemindAt}} {
+		if f.s == "" {
+			continue
+		}
+		t, err := parseWhen(f.s)
+		if err != nil {
+			return err.Error(), ""
+		}
+		*f.t = &t
+	}
+	if ch.State == "" && ch.DueAt == nil && ch.RemindAt == nil {
+		return "nothing to change", ""
+	}
+	if ch.State == x.State {
+		return "", "noop"
+	}
+	if _, err := c.mem.changeIntention(op.ID, ch, who, "from "+ref); err != nil {
+		return err.Error(), ""
+	}
+	return "", "superseded"
 }

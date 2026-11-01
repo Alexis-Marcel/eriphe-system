@@ -391,7 +391,7 @@ func TestMemoryToolsOverMCP(t *testing.T) {
 	for _, tl := range res.Tools {
 		have[tl.Name] = true
 	}
-	for _, n := range []string{"remember", "recall", "update_memory", "forget", "commitments"} {
+	for _, n := range []string{"remember", "recall", "update_memory", "forget", "intend", "intentions", "update_intention"} {
 		if !have[n] {
 			t.Errorf("no tool %s", n)
 		}
@@ -414,9 +414,19 @@ func TestMemoryToolsOverMCP(t *testing.T) {
 	if !out.IsError {
 		t.Fatal("lesson without source accepted over MCP")
 	}
-	out, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "commitments", Arguments: map[string]any{}})
-	if err != nil || out.IsError || !strings.Contains(resultText(out), `"commitments":[]`) {
-		t.Fatalf("commitments: %v %s", err, resultText(out))
+	out, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "intentions", Arguments: map[string]any{}})
+	if err != nil || out.IsError || !strings.Contains(resultText(out), `"intentions":[]`) {
+		t.Fatalf("intentions: %v %s", err, resultText(out))
+	}
+	seq = ownerSays(c, "Rappelle-moi d'appeler le garage demain à 9 h")
+	out, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "intend", Arguments: map[string]any{
+		"text": "Appeler le garage", "kind": "reminder", "remind_at": "2026-10-27T09:00", "source_ref": ref(seq)}})
+	if err != nil || out.IsError || !strings.Contains(resultText(out), `"state":"open"`) {
+		t.Fatalf("intend: %v %s", err, resultText(out))
+	}
+	out, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "update_intention", Arguments: map[string]any{"id": 1, "state": "done", "source_ref": ref(seq)}})
+	if err != nil || out.IsError || !strings.Contains(resultText(out), `"state":"done"`) {
+		t.Fatalf("update_intention: %v %s", err, resultText(out))
 	}
 }
 
