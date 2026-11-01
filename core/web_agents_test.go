@@ -600,3 +600,16 @@ func TestSelfHostedTailnetAddress(t *testing.T) {
 		t.Error("tailnetURL")
 	}
 }
+
+// A token a terminal wrapped is pasted whole.
+func TestPastedKey(t *testing.T) {
+	for in, want := range map[string]string{
+		"sk-ant-oat01-abc\ndef  ghi\r\n": "sk-ant-oat01-abcdefghi",
+		"  sk-test  ":                    "sk-test",
+		"":                               "",
+	} {
+		if got := pastedKey(in); got != want {
+			t.Errorf("pastedKey(%q) = %q", in, got)
+		}
+	}
+}
