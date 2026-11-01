@@ -9,6 +9,8 @@
 .k-episode { --k: #7c3aed; }
 .k-commitment { --k: #d97706; }
 .k-lesson { --k: #e11d48; }
+.k-decision { --k: #0d9488; }
+.k-progress { --k: #65a30d; }
 @media (prefers-color-scheme: dark) {
   .k-profile { --k: #8b8bff; }
   .k-preference { --k: #f472b6; }
@@ -17,6 +19,8 @@
   .k-episode { --k: #a78bfa; }
   .k-commitment { --k: #fbbf24; }
   .k-lesson { --k: #fb7185; }
+  .k-decision { --k: #2dd4bf; }
+  .k-progress { --k: #a3e635; }
 }
 
 /* Head */

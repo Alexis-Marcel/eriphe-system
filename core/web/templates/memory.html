@@ -165,6 +165,7 @@
     {{if .Pinned}}<span class="pinned" title="{{t "mem.view.profile"}}">{{template "i-pin"}}<span class="sr-only">{{t "mem.view.profile"}}</span></span>{{end}}
     {{if .Overdue}}<span class="tag tag-no">{{t "mem.overdue"}}</span>{{end}}
     {{if eq .Kind "commitment"}}{{if ne .State "open"}}<span class="tag {{if eq .State "done"}}tag-ok{{end}}">{{t (printf "mem.st.%s" .State)}}</span>{{end}}{{end}}
+    {{if eq .Kind "progress"}}<span class="tag {{if eq .State "done"}}tag-ok{{end}}">{{t (printf "mem.st.%s" .State)}}</span>{{end}}
     <span class="trust t-{{.Trust}}">{{t (printf "trust.%s" .Trust)}}</span>
   </div>
   <p class="mem-text">{{.Text}}</p>

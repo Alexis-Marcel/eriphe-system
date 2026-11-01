@@ -141,6 +141,9 @@ func seedEval(t testing.TB, m *memStore, clock *fakeClock, c *evalCorpus) map[st
 		x := &Memory{Kind: e.Kind, Subject: e.Subject, Text: e.Text, Pinned: e.Pinned, SourceKind: srcExtraction,
 			Trust: trustOwner, Status: memActive, SourceRef: "msg:1"}
 		evalExtras(x, e)
+		if e.AsKind != "" && containsStr(memoryKinds, e.AsKind) {
+			x.Kind, x.State = e.AsKind, e.State
+		}
 		if e.Kind == kindEpisode {
 			x.OccurredAt = clock.t
 		}

@@ -454,15 +454,21 @@ func (c *core) decideBrainWrite(kind, ref string, scan scanResult) (writeDecisio
 }
 
 // extractionDecision applies the rules to an extraction's operation: what
-// it read decides its trust, and only an episode or something taken from
-// my own words can be active at once.
-func extractionDecision(kind string, refTrust string, scan scanResult) (writeDecision, error) {
+// it read decides its trust, and only an episode or something stated in my
+// own words can be active at once; what the extraction deduced (basis
+// inferred or ambiguous) is proposed.
+func extractionDecision(kind string, refTrust string, scan scanResult, basis string) (writeDecision, error) {
 	d := writeDecision{Status: memProposed, Trust: refTrust, Source: srcExtraction}
 	if scan.Reject != "" {
 		return d, fmt.Errorf("refused: %s", scan.Reject)
 	}
-	if kind == kindProfile || kind == kindLesson {
+	if kind == kindProfile || kind == kindLesson && refTrust != trustExternal {
 		return d, fmt.Errorf("an extraction cannot write a %s", kind)
+	}
+	if kind == kindLesson {
+		// A task's lesson (its receipt): only ever proposed, for the user to endorse.
+		d.Why = "a lesson drawn from a task waits for the user's approval"
+		return d, nil
 	}
 	switch {
 	case containsStr(scan.Flags, "imperative") && refTrust != trustOwner:
@@ -471,6 +477,8 @@ func extractionDecision(kind string, refTrust string, scan scanResult) (writeDec
 		d.Why = "a preference waits for the user's approval"
 	case kind == kindEpisode:
 		d.Status = memActive // the journal: its trust tells what it is made of
+	case basis == basisInferred || basis == basisAmbiguous:
+		d.Why = "it is " + basis + ", not said in so many words"
 	case refTrust == trustOwner:
 		d.Status, d.Trust = memActive, trustFirstParty
 	default:

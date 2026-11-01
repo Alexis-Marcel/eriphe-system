@@ -1916,12 +1916,21 @@ are never shown back nor logged.
 Eriphe's own memory, separate from the vault, in `memory.db` next to the database (SQLite, full
 text search with FTS5, accents ignored). It points at the vault (`links`) rather than copying it.
 A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `commitment`,
-`lesson`), a subject (`owner`, `person:<slug>`, `client:<slug>`, `project:<name>`, `home`…),
-dates (`valid_from`, `valid_to` once no longer true; `occurred_at` for an episode; `due_at` and
-`state` for a commitment), where it comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`)
-and a trust level (`owner`, `first_party`, `external`). A change over time supersedes the old
-memory, which stays, dated; every change is in `memory_log`. Forgotten memories are purged after
-30 days.
+`lesson`, `decision`, `progress`), a subject (`owner`, `person:<slug>`, `client:<slug>`,
+`project:<name>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
+what is temporary; `occurred_at` for an episode; `due_at` and `state` for a commitment), where it
+comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`), a trust level (`owner`,
+`first_party`, `external`), and for what the extraction derived a `basis`: `stated` (said in so
+many words), `inferred` (deduced) or `ambiguous`, with a matching confidence (0.9, 0.7, 0.3). A
+change over time supersedes the old memory, which stays, dated; every change is in `memory_log`.
+Forgotten memories are purged after 30 days.
+
+**Durable state.** Raw history is kept for audit (the conversation, `memory_log`, the journal
+episodes); what the brain needs to act is compiled from it in facts, lessons, **decisions** (a
+choice and its reason, superseded when reversed) and **progress** cards: one current card per
+project, client job or goal, with a `state` (`active`, `blocked`, `done`, `paused`) and a text
+saying what is done, under way, blocked and left; each change supersedes the card, so the chain
+is its history.
 
 The brain's tools (on `/mcp`): `remember`, `recall`, `update_memory`, `forget`, `commitments`.
 Results are data, quoted.
@@ -1979,10 +1988,13 @@ messages whenever it changed. Claude Code's own auto-memory is turned off for th
 been quiet `idle_minutes`), eriphe-core writes out the day's transcript (messages and finished
 tasks, each labelled with its trust) and starts a `memory` task (not listed, never the brain's)
 with a cheap agent and the memories it may touch. Its JSON answer (ADD, SUPERSEDE, NOOP, each
-citing a `source_ref` of the transcript) is checked and applied: episodes (the journal, one per
-conversation day and per finished task) and what comes from the user's words are active; what
-comes from tasks or external content, and preferences, are proposed; it never writes a profile
-or a lesson. One run per day and window; a failure is retried the next night. The same night
+citing a `source_ref` of the transcript, with `keywords`, an `importance` 1–5, a `basis` and,
+for what is temporary, a `valid_to`) is checked and applied: episodes (the journal, one per
+conversation day and per finished task) and what is stated in the user's words are active; what
+comes from tasks or external content, what was only inferred or is ambiguous, and preferences, are
+proposed; it never writes a profile, and a lesson only from a task (its receipt), proposed. Each
+segment carries its date, against which the
+agent resolves "demain" or "vendredi". One run per day and window; a failure is retried the next night. The same night
 run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable from the page).
 
 ```json

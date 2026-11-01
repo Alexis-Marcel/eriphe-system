@@ -140,7 +140,7 @@ func seqOf(ref string) int {
 func renderTranscript(segs []segment) string {
 	var b strings.Builder
 	for _, s := range segs {
-		fmt.Fprintf(&b, "<segment ref=%q time=%q from=%q trust=%q>\n%s\n</segment>\n", s.Ref, s.Time.Local().Format("15:04"), s.Who, s.Trust,
+		fmt.Fprintf(&b, "<segment ref=%q time=%q from=%q trust=%q>\n%s\n</segment>\n", s.Ref, s.Time.Local().Format("2006-01-02 15:04 Mon"), s.Who, s.Trust,
 			strings.ReplaceAll(s.Text, "</segment>", "</ segment>"))
 	}
 	out := b.String()
@@ -215,17 +215,24 @@ Answer with ONE JSON object and nothing else:
 {"operations": [ ... ]}
 
 Each operation is one of:
-{"op": "ADD", "kind": "...", "subject": "...", "text": "...", "links": [], "occurred_at": "YYYY-MM-DD", "valid_from": "YYYY-MM-DD", "due_at": "YYYY-MM-DD", "source_ref": "msg:12"}
-{"op": "SUPERSEDE", "id": 42, "kind": "...", "subject": "...", "text": "the new version", "valid_from": "YYYY-MM-DD", "source_ref": "msg:12"}
+{"op": "ADD", "kind": "...", "subject": "...", "text": "...", "keywords": "...", "importance": 3, "basis": "stated", "links": [], "occurred_at": "YYYY-MM-DD", "valid_from": "YYYY-MM-DD", "valid_to": "YYYY-MM-DD", "due_at": "YYYY-MM-DD", "state": "...", "source_ref": "msg:12"}
+{"op": "SUPERSEDE", "id": 42, "kind": "...", "subject": "...", "text": "the new version", "keywords": "...", "importance": 3, "basis": "stated", "valid_from": "YYYY-MM-DD", "source_ref": "msg:12"}
 {"op": "NOOP", "id": 42, "source_ref": "msg:12"}
 
 Rules:
-- kind is one of: fact, person, preference, episode, commitment. Never profile or lesson.
+- kind is one of: fact, person, preference, episode, commitment, decision, progress, and lesson only from a task (below). Never profile.
+  - decision: a choice %[1]s made and its reason, in one sentence ("X plutôt que Y, parce que Z"). A reversed decision SUPERSEDEs the old one.
+  - progress: the current state of one project, client job or goal, one card per subject: "Fait : …; en cours : …; bloqué : …; reste : …", with "state": active, blocked, done or paused. If the memories hold a progress card for that subject, SUPERSEDE it with the whole new state; never ADD a second one.
 - subject: owner, person:<slug>, client:<slug>, project:<name>, home, or a short word.
 - text: in French, one self-contained statement, written as a fact about the world or about %[1]s, never as an instruction. At most 300 characters (an episode: 600).
+- keywords: 3 to 8 other words someone would use to look for it (synonyms, variants, the general term: "voiture auto bagnole véhicule"), not the words already in the text.
+- importance: 1 trivial, 2 minor, 3 useful, 4 important (money, deadlines, work, close people), 5 essential (identity, health, family).
+- basis: "stated" if the segment says it in so many words, "inferred" if you deduced it, "ambiguous" if it is unclear (then better skip it).
+- Dates: each segment has its date; resolve "demain", "vendredi", "dans deux semaines" against the date of the segment that says it, never against today. valid_to is the day something temporary stops being true ("en congés jusqu'au 27": valid_to the 28th); a deadline is not an end of validity (it goes in the text or due_at).
 - source_ref: the ref of the segment it comes from (several, separated by commas, if needed). Only refs that appear in the transcript.
-- Keep what will still matter in a month: decisions, people and their roles, %[1]s's projects and their state, preferences %[1]s expressed, promises (commitment, with due_at if known). Skip small talk, task mechanics, anything already in the memories (NOOP, or nothing).
-- When something known changed, SUPERSEDE the old memory (its id) rather than ADD a contradiction.
+- Keep what will still matter in a month: decisions and their reasons, people and their roles, the progress of %[1]s's projects, preferences %[1]s expressed, promises (commitment, with due_at if known). Skip small talk, task mechanics, anything already in the memories (NOOP, or nothing).
+- When something known changed, SUPERSEDE the old memory (its id) rather than ADD a contradiction. Only when both cannot be true: a newer statement is not a contradiction for being newer.
+- A finished task may give a receipt (what it changed, verified, decided, what needs approval, its lessons): its decisions become decision memories, its state of the work the progress card of its project (SUPERSEDE the card), what needs %[1]s's approval a commitment (what %[1]s owes the task), and a lesson it learnt a lesson; all cite task:<id>, and all wait for %[1]s's approval.
 - The journal: one "episode" per finished task (what was done, the outcome; source_ref task:<id>), and one "episode" with subject "journal" that summarises the day's conversation (occurred_at %[2]s, source_ref the main messages). If the memories already hold a journal episode for that day, SUPERSEDE it with a version that covers the whole day.
 - Never write secrets, tokens, passwords or links with tokens.
 
@@ -250,6 +257,12 @@ func (c *core) extractionPrompt(day string, segs []segment) string {
 		}
 		if !x.DueAt.IsZero() {
 			line += " due=" + x.DueAt.Local().Format("2006-01-02")
+		}
+		if x.Kind == kindProgress {
+			line += " state=" + x.State
+		}
+		if !x.ValidTo.IsZero() {
+			line += " until=" + x.ValidTo.Local().Format("2006-01-02")
 		}
 		mem.WriteString(line + ": " + strings.ReplaceAll(truncate(x.Text, 600), "\n", " ") + "\n")
 	}
@@ -430,6 +443,11 @@ type extractionOp struct {
 	OccurredAt string   `json:"occurred_at,omitempty"`
 	ValidFrom  string   `json:"valid_from,omitempty"`
 	DueAt      string   `json:"due_at,omitempty"`
+	ValidTo    string   `json:"valid_to,omitempty"`
+	State      string   `json:"state,omitempty"`
+	Keywords   string   `json:"keywords,omitempty"`
+	Importance int      `json:"importance,omitempty"`
+	Basis      string   `json:"basis,omitempty"`
 	SourceRef  string   `json:"source_ref"`
 }
 
@@ -544,7 +562,19 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	default:
 		return fmt.Sprintf("unknown op %q", op.Op), ""
 	}
-	x := &Memory{Kind: op.Kind, Subject: op.Subject, Text: op.Text, Links: op.Links, Confidence: 0.8}
+	basis := strings.ToLower(strings.TrimSpace(op.Basis))
+	if basis == "" {
+		basis = basisStated // an answer without it, as before
+	}
+	if basisConfidence[basis] == 0 {
+		return fmt.Sprintf("basis %q: stated, inferred or ambiguous", op.Basis), ""
+	}
+	importance := op.Importance
+	if importance < 1 || importance > 5 {
+		importance = 0 // the default; a bad rating is not worth losing the memory
+	}
+	x := &Memory{Kind: op.Kind, Subject: op.Subject, Text: op.Text, Links: op.Links, Confidence: basisConfidence[basis],
+		Keywords: truncate(op.Keywords, keywordsMax-1), Importance: importance, Basis: basis, State: op.State}
 	if strings.EqualFold(op.Op, "SUPERSEDE") {
 		old, err := c.mem.memory(op.ID)
 		if err != nil || old.Status != memActive || old.SupersededBy != 0 {
@@ -557,11 +587,14 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 		if x.Kind == "" {
 			x.Kind = old.Kind
 		}
+		if x.Kind == kindProgress && x.State == "" && old.Kind == kindProgress {
+			x.State = old.State
+		}
 	}
 	for _, f := range []struct {
 		s string
 		t *time.Time
-	}{{op.OccurredAt, &x.OccurredAt}, {op.ValidFrom, &x.ValidFrom}, {op.DueAt, &x.DueAt}} {
+	}{{op.OccurredAt, &x.OccurredAt}, {op.ValidFrom, &x.ValidFrom}, {op.DueAt, &x.DueAt}, {op.ValidTo, &x.ValidTo}} {
 		if t, err := parseWhen(f.s); err == nil {
 			*f.t = t
 		} else {
@@ -571,8 +604,16 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	if x.ValidFrom.After(c.mem.now()) {
 		x.ValidFrom = time.Time{}
 	}
-	scan := scanMemoryText(x.Text, x.Subject, strings.Join(x.Links, "\n"))
-	d, err := extractionDecision(x.Kind, trust, scan)
+	// An end comes after the start (now, when it is not given).
+	from := x.ValidFrom
+	if from.IsZero() {
+		from = c.mem.now()
+	}
+	if !x.ValidTo.IsZero() && !x.ValidTo.After(from) {
+		return "valid_to is not after the memory became true: give the day it stops being true", ""
+	}
+	scan := scanMemoryText(x.Text, x.Subject, strings.Join(x.Links, "\n"), x.Keywords)
+	d, err := extractionDecision(x.Kind, trust, scan, basis)
 	if err != nil {
 		return err.Error(), ""
 	}

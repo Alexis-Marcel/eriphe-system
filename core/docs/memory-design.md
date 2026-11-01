@@ -121,6 +121,15 @@ proposed (journal episodes, summaries by nature, stay active as before).
 Relative dates are resolved against the segment's own date; a soft deadline is not an end of
 validity; a newer statement does not contradict an older one by being newer.
 
+**Task receipts.** A finished task's turn ends with a structured receipt (what changed, what was
+verified, decisions, what needs approval, lessons; the reliable-tasks work, `core/receipt.go`),
+which the transcript gives the extraction in the task's segment. It becomes durable state like
+anything else a task says, with external trust: its decisions are `decision` memories, its state
+of the work the project's `progress` card, what needs the user's approval an intention (what the
+user owes the task), and its lessons `lesson` memories, the only lessons an extraction may write,
+and only ever proposed: lessons stay the user's to endorse. Reading `task_harness.receipt`
+directly, rather than its text in the transcript, is a later refinement once those PRs land.
+
 ### 5. Typed intentions, evaluated by code, that wake the brain (PR 5)
 
 A table `intentions`: what (text), kind (`promise`: the user owes someone; `commitment`: Eriphe
@@ -203,6 +212,11 @@ the dense retriever of the paper at R@5; on raw dialogue turns it is still 9 poi
 remaining misses on our corpus are paraphrases without a shared word ("proches" for a partner and
 a sister, "vivait" for "habite") and lists that need more than five memories: what the optional
 embeddings tier, or entity cards, would address.
+
+After PR 4: decisions and progress cards are kinds of their own (the corpus's seeded as such),
+retrieval unchanged at 90.8 / 92.8; what the extraction writes for them, and the basis rules, are
+covered by `TestExtractionDurableState`. How well a real extraction fills them is measured by the
+opt-in model run.
 
 Read with care: LongMemEval's Table 9 may be on another haystack size than S, our session score
 ranks turns and not sessions, and both benchmarks are English (the French stemmer and the plural
