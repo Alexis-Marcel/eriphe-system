@@ -103,7 +103,7 @@ func TestBrainLivesOnAlwaysOnNode(t *testing.T) {
 func TestResidentMovesOffOfflineNode(t *testing.T) {
 	c := residentCore(t)
 	ctx := context.Background()
-	c.store.setNodeStatus("nas", false, nil)
+	offlineSince(t, c.core, "nas", time.Hour)
 	c.tendAssistants(ctx, "tok")
 	old := brainStatus(c.core).Task
 	if task, _ := c.store.task(old); task.Node != "laptop" {
@@ -151,12 +151,64 @@ func TestResidentMovesOffOfflineNode(t *testing.T) {
 	}
 }
 
+// After eriphe-core restarts, the brain waits for the always-on node, which
+// connects a few seconds later, rather than start on the laptop: it starts
+// there, its session resumed. The same when that node blips.
+func TestBrainWaitsForAlwaysOnAfterRestart(t *testing.T) {
+	c := residentCore(t)
+	ctx := context.Background()
+	c.tendAssistants(ctx, "tok")
+	old := brainStatus(c.core).Task
+	setBrainStatus(c.core, func(st *AssistantStatus) { st.Session, st.SessionRuntime = "s-1", "claude-code" })
+	c.store.updateTask(old, map[string]any{"state": stateStopped})
+	// eriphe-core restarts: the nas has not connected again yet.
+	c.started = time.Now()
+	offlineSince(t, c.core, "nas", time.Hour)
+	noWait(c.core, brainAssistant)
+	c.tendAssistants(ctx, "tok")
+	if brainStatus(c.core).Task != old {
+		t.Fatal("started before the nas came back")
+	}
+	c.store.setNodeStatus("nas", true, []byte(nasInfo))
+	c.tendAssistants(ctx, "tok")
+	next, _ := c.store.task(brainStatus(c.core).Task)
+	spec, _ := c.store.taskSpec(next.ID)
+	if next.ID == old || next.Node != "nas" || spec.Resume != "s-1" {
+		t.Fatalf("next = %+v, resume %q", next, spec.Resume)
+	}
+	// The nas blips while the brain is idle: it stays, and waits for it.
+	c.store.updateTask(next.ID, map[string]any{"state": stateIdle})
+	offlineSince(t, c.core, "nas", 40*time.Second)
+	if c.tendAssistants(ctx, "tok"); brainStatus(c.core).Task != next.ID {
+		t.Fatal("moved off the nas during a blip")
+	}
+}
+
+// The always-on node never comes back: past the grace, the brain starts
+// on the laptop.
+func TestBrainFallsBackAfterAlwaysOnGrace(t *testing.T) {
+	c := residentCore(t)
+	ctx := context.Background()
+	c.started = time.Now()
+	c.store.setNodeStatus("nas", false, nil)
+	c.tendAssistants(ctx, "tok")
+	if brainStatus(c.core).Task != "" {
+		t.Fatal("started before the grace")
+	}
+	c.started = time.Now().Add(-2 * alwaysOnGrace)
+	offlineSince(t, c.core, "nas", 2*alwaysOnGrace)
+	c.tendAssistants(ctx, "tok")
+	if task, err := c.store.task(brainStatus(c.core).Task); err != nil || task.Node != "laptop" {
+		t.Fatalf("brain on %+v, %v", task, err)
+	}
+}
+
 // A brain that fell back on a machine that sleeps goes home once the
 // always-on one is back, between two turns only.
 func TestResidentReturnsToAlwaysOnAtIdle(t *testing.T) {
 	c := residentCore(t)
 	ctx := context.Background()
-	c.store.setNodeStatus("nas", false, nil)
+	offlineSince(t, c.core, "nas", time.Hour)
 	c.tendAssistants(ctx, "tok")
 	old := brainStatus(c.core).Task
 	c.store.setNodeStatus("nas", true, []byte(nasInfo))

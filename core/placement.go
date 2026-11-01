@@ -25,6 +25,12 @@ const (
 	// residentNodeGrace is how long a resident task waits for its node to
 	// come back before it moves: short, someone may be waiting.
 	residentNodeGrace = 30 * time.Second
+	// alwaysOnGrace is how long a resident assistant waits for an
+	// always-on node that left before it starts or moves elsewhere: after
+	// eriphe-core restarts, the node of its own machine connects a few
+	// seconds later, and a blip passes. Started on a node that may sleep,
+	// it would move back at its first idle and lose its session.
+	alwaysOnGrace = time.Minute
 	// pendingNodeGrace is how long a task not started yet waits for its
 	// node before it is placed again, like a pod on an unreachable node.
 	pendingNodeGrace = 5 * time.Minute
@@ -52,6 +58,23 @@ func steadyNodes(nodes []NodeRow, p placement) []NodeRow {
 		}
 	}
 	return out
+}
+
+// awaitedAlwaysOn is the always-on node that can run p and left less than
+// alwaysOnGrace ago, counted from eriphe-core's start at the earliest,
+// when no always-on node that can is online: a resident task waits for
+// it rather than start on a node that may sleep. "" if there is none.
+func (c *core) awaitedAlwaysOn(p placement) string {
+	all, err := c.store.nodes()
+	if err != nil || len(steadyNodes(c.schedulable(all), p)) > 0 {
+		return ""
+	}
+	for _, n := range all {
+		if !n.Online && !n.Suspended && parseInfo(n).AlwaysOn && p.fits(n) && time.Since(c.since(n)) < alwaysOnGrace {
+			return n.Name
+		}
+	}
+	return ""
 }
 
 // placementOf is what a task asks of its node, from its agent and folders now.
@@ -105,9 +128,9 @@ func (c *core) since(n NodeRow) time.Time {
 }
 
 // moveResident moves an assistant's task that should live elsewhere: its
-// node has been offline past residentNodeGrace and another can take it,
-// or it runs on a node that may sleep while an always-on one can take it
-// now (only at idle, between two turns). It stops the task; the
+// node has been offline past residentNodeGrace (alwaysOnGrace for an
+// always-on one) and another can take it, or it runs on a node that may
+// sleep while an always-on one can take it now (only at idle, between two turns). It stops the task; the
 // controller starts the next one, which the scheduler places, without
 // resuming: the session is on the old node, and the thread is eriphe-core's.
 // It reports whether it moved it.
@@ -130,7 +153,11 @@ func (c *core) moveResident(a Assistant, r assistantRole, t *TaskRow) bool {
 	case i < 0:
 		return false // forgotten: its tasks are lost with it, and the controller starts another
 	case !all[i].Online:
-		if time.Since(c.since(all[i])) < residentNodeGrace {
+		grace := residentNodeGrace
+		if parseInfo(all[i]).AlwaysOn {
+			grace = alwaysOnGrace // it comes back: eriphe-core's own machine, or a blip
+		}
+		if time.Since(c.since(all[i])) < grace {
 			return false
 		}
 		if !slices.ContainsFunc(nodes, func(n NodeRow) bool { return n.Online && n.Name != t.Node && p.fits(n) }) {
