@@ -224,7 +224,11 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 	n.ID, _ = res.LastInsertId()
 	log.Printf("notify: %d %s → %s (%s)", n.ID, it.Level, d.Outcome, d.Reason)
 	if d.Outcome == levelNow {
-		c.tell(notifyNote(n))
+		note := notifyNote(n)
+		if r := topicRule(cx.Rules, it.Ref); r != nil {
+			note.Channels = r.Channels // the rule's channels, else the default (channels.go)
+		}
+		c.tell(note)
 	}
 	return n, nil
 }
@@ -236,7 +240,7 @@ func notifyNote(n *notification) pushNote {
 		tag = "wake"
 	}
 	return pushNote{Body: map[string]string{"fr": n.Text, "en": n.Text}, URL: notificationURL(n.ID), Tag: tag,
-		Topic: tag, Urgent: true, React: fmt.Sprintf("/notify/react?id=%d&k=%s", n.ID, n.token)}
+		Topic: tag, Urgent: true, React: fmt.Sprintf("/notify/react?id=%d&k=%s", n.ID, n.token), Notif: n.ID, Why: n.Why}
 }
 
 func notificationURL(id int64) string {

@@ -123,7 +123,7 @@
 {{end}}
 {{define "notify-rules-frag"}}{{template "notify-rules" .Data}}{{end}}
 
-{{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{end}}</span>
+{{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{t (printf "rule.ch.%s" .Channels)}}{{end}}{{end}}</span>
 {{if .Why}}<span class="small muted">{{.Why}}</span>{{end}}{{end}}
 
 {{define "rule-form"}}
@@ -136,11 +136,72 @@
   <label class="field"><span>{{t "rule.outcome"}}</span><select name="outcome">{{$o := .Outcome}}{{range (list "now" "brief" "never")}}
     <option value="{{.}}"{{if eq $o .}} selected{{end}}>{{t (printf "rule.out.%s" .)}}</option>{{end}}</select></label>
   <label class="check"><input type="checkbox" name="night" value="1"{{if .Night}} checked{{end}}> {{t "rule.night"}}</label>
+  <label class="field"><span>{{t "rule.channels"}}</span><select name="channels">{{$c := .Channels}}{{range (list "" "push" "telegram" "push,telegram")}}
+    <option value="{{.}}"{{if eq $c .}} selected{{end}}>{{t (printf "rule.ch.%s" .)}}</option>{{end}}</select></label>
   <label class="field"><span>{{t "rule.days"}}</span><select name="days">{{$d := .Days}}{{range (list "all" "weekdays" "weekend")}}
     <option value="{{.}}"{{if eq $d .}} selected{{end}}>{{t (printf "rule.days.%s" .)}}</option>{{end}}</select></label>
   <label class="field"><span>{{t "rule.from"}}</span><input type="time" name="from" value="{{.FromText}}"></label>
   <label class="field"><span>{{t "rule.to"}}</span><input type="time" name="to" value="{{.ToText}}"></label>
   <label class="field"><span>{{t "rule.why"}}</span><input name="why" value="{{.Why}}" maxlength="300"></label>
   <button class="btn btn-soft sm" type="submit">{{template "i-check"}}{{t "rule.save"}}</button>
+</form>
+{{end}}
+
+{{/* Settings → Channels (web_telegram.go, telegram.go): Telegram's bot, the
+     link to the user's account, how much it says there, and the default
+     channels of the brain's notifications. The token is never shown back. */}}
+{{define "channels"}}
+<header class="page-head"><h2>{{t "settings.channels"}}</h2><p>{{t "channels.lead"}}</p></header>
+<section class="panel" aria-labelledby="tg-title" id="telegram">{{template "telegram" .Data}}</section>
+{{end}}
+{{define "telegram-frag"}}{{template "telegram" .Data}}{{end}}
+
+{{define "telegram"}}
+<h3 id="tg-title">{{template "i-chat"}}Telegram</h3>
+<p class="notice">{{t "tg.privacy"}}</p>
+{{if not .VaultOpen}}<p class="small muted">{{t "tg.err.vault"}}</p>
+{{else if not .Set}}
+<p class="small">{{t "tg.how"}}</p>
+<form class="stack-form" hx-post="/channels/telegram/token" hx-target="#telegram" hx-disabled-elt="find button">
+  <label class="field"><span>{{t "tg.token"}}</span><input type="password" name="token" autocomplete="off" required maxlength="120" placeholder="123456:ABC…"></label>
+  <div class="actions"><button class="btn btn-primary sm" type="submit">{{t "tg.token.save"}}</button></div>
+</form>
+{{else}}
+<p class="small">{{if .Bot}}{{tf "tg.bot" .Bot}}{{else}}{{t "tg.botset"}}{{end}}{{if .Error}} · <span class="tag tag-no" title="{{.Error}}">{{t "tg.failing"}}</span>{{end}}</p>
+{{if .Linked}}
+<p class="small"><span class="tag tag-ok">{{t "tg.linked.tag"}}</span> {{.Name}}</p>
+<div class="actions">
+  <form hx-post="/channels/telegram/test" hx-swap="none"><button class="btn btn-soft sm" type="submit">{{t "tg.test.button"}}</button></form>
+  <form hx-post="/channels/telegram/unlink" hx-target="#telegram" hx-confirm="{{t "tg.unlinkconfirm"}}"><button class="btn btn-ghost sm" type="submit">{{t "tg.unlink"}}</button></form>
+</div>
+{{else if .Code}}
+<div hx-get="/channels/telegram" hx-trigger="every 3s" hx-target="#telegram">
+  <p>{{t "tg.sendcode"}} <b class="mono">{{.Code}}</b></p>
+  {{if .Bot}}<p class="small"><a href="https://t.me/{{.Bot}}?start={{.Code}}" target="_blank" rel="noopener">{{t "tg.openbot"}}</a></p>{{end}}
+  <p class="small muted">{{t "tg.codehint"}}</p>
+</div>
+{{else}}
+<form hx-post="/channels/telegram/code" hx-target="#telegram"><button class="btn btn-primary sm" type="submit">{{t "tg.link"}}</button></form>
+{{end}}
+{{if .Ignored}}<p class="small muted">{{tf "tg.ignored" .Ignored}}</p>{{end}}
+<p class="small muted">{{t "tg.approvals"}}</p>
+<details class="rule-edit"><summary class="small">{{t "tg.change"}}</summary>
+<form class="stack-form" hx-post="/channels/telegram/token" hx-target="#telegram" hx-disabled-elt="find button">
+  <label class="field"><span>{{t "tg.token"}}</span><input type="password" name="token" autocomplete="off" required maxlength="120"></label>
+  <div class="actions"><button class="btn btn-soft sm" type="submit">{{t "tg.token.save"}}</button>
+  <button class="btn btn-danger-ghost sm" type="button" hx-post="/channels/telegram/remove" hx-target="#telegram" hx-confirm="{{t "tg.removeconfirm"}}">{{t "tg.remove"}}</button></div>
+</form></details>
+{{end}}
+<h4 class="notif-sub">{{t "channels.settings"}}</h4>
+<form class="stack-form" hx-post="/channels/settings" hx-target="#telegram">
+  <fieldset><legend class="small">{{t "channels.default"}}</legend>
+    <label class="check"><input type="checkbox" name="channel" value="push"{{if .Push}} checked{{end}}> {{t "channels.push"}}</label>
+    <label class="check"><input type="checkbox" name="channel" value="telegram"{{if .Telegram}} checked{{end}}> Telegram</label>
+  </fieldset>
+  <fieldset><legend class="small">{{t "tg.detail"}}</legend>
+    <label class="check"><input type="radio" name="detail" value="full"{{if eq .Detail "full"}} checked{{end}}> {{t "tg.detail.full"}}</label>
+    <label class="check"><input type="radio" name="detail" value="alert"{{if eq .Detail "alert"}} checked{{end}}> {{t "tg.detail.alert"}}</label>
+  </fieldset>
+  <div class="actions"><button class="btn btn-soft sm" type="submit">{{t "channels.save"}}</button></div>
 </form>
 {{end}}

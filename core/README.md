@@ -1486,7 +1486,7 @@ hides or shows the side panel; on a phone it opens the tasks as a sheet over the
 (closed by its button, Escape or the browser's back), and from any other page it comes back to
 the conversation on its tasks (`/#tasks-panel`). The settings come in four groups: Assistant (the
 memory, "Ce que Jarvis sait de toi", still at `/memory`, what happened, and the agents), Connexions (tools,
-folders), Appareils & accès (devices, remote access, app and notifications) and Mon espace
+folders), Appareils & accès (devices, remote access, app and notifications, channels) and Mon espace
 (account, sign-out, journal); an entry is marked when it needs a look (an update, a tool in error,
 a refused key). On a phone the settings say the way back, "‹ Conversation".
 The conversation shows the user's messages and the assistant's answers. The events given to the
@@ -1838,6 +1838,35 @@ a level; the code decides (`decideNotify`, no model):
 The interruption bench (`notify_eval_test.go`, `testdata/notifyeval`) runs with the tests: it scores
 the decision on labelled cases (accuracy, precision and recall of "now", night wake-ups no rule
 allows: none, injection cases blocked: all).
+
+**Channels: push and Telegram** (`channels.go`, `telegram.go`, `web_telegram.go`). What is sent
+(`tell`) goes by the user's channels: web push and Telegram, all by default, a narrower default in
+Settings → Channels, or a topic rule's own (`channels`: `push`, `telegram` or both). The decision
+above is unchanged; the channels only say where a "now" goes. Telegram, two-way, without an
+inbound port:
+
+- **Setup.** The user creates a bot with BotFather and pastes its token in Settings → Channels:
+  checked with `getMe`, kept in the vault (`telegram-bot`), never shown, logged or put in an error
+  (the Bot API puts it in the URL: errors are stripped of both). Eriphe then shows a one-time code
+  (10 minutes, 10 wrong tries); the private-chat account that sends it to the bot (or opens
+  `t.me/<bot>?start=<code>`) is recorded, user id and chat id. Only that user id is heard; any
+  other sender, group or bot is ignored, counted in Settings and never answered. Unlink, change or
+  remove the token (a new bot asks for a new link).
+- **Polling.** `getUpdates` long polling (50 s), with a wait from 1 s doubling to 5 min after a
+  failure (or Telegram's `retry_after`); it runs only while a token is set, and stops on removal.
+- **Out.** A notification carries inline buttons 👍 / 👎 / « pas maintenant » (`fb:<id>:<r>`,
+  accepted from the linked account only, recorded like the push's); questions and permissions
+  waiting for the user are told with a link to the workspace. The brain's messages that follow a
+  message the user wrote on Telegram, until their next message from elsewhere, are sent back there
+  (`telegramReplies`). "Alerts only" sends "Eriphe a quelque chose pour toi" and a link instead of
+  any text, replies included. Telegram bots are not end-to-end encrypted, and Settings says so.
+- **In.** A text from the linked account joins the conversation as the user's message, `via`
+  `Telegram` (`[Sam 09:12 #41 · Telegram]` for the brain): a clean turn, because the sender's id
+  is checked. Files, photos and voice notes are not read; the bot says so.
+- **Approvals stay in the workspace.** No button approves anything: a permission that is the
+  user's (user_only) is told on Telegram with what waits and a link, and proposed rules or memories
+  are approved in Settings only. (An optional "approve
+  from Telegram" with a second, explicit confirmation is not built.)
 
 **The user's state and what happened** (`user_state.go`, `since.go`, `since_tool.go`,
 `web_since.go`). Each of the brain's turns opens with the time (`[maintenant …]`) and, under it, the
