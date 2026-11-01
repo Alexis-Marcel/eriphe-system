@@ -86,10 +86,11 @@ func (c *core) deliverClock(ctx context.Context, a Assistant, t *TaskRow) (bool,
 }
 
 // cueBlock is what a message of mine brings up: the intentions whose
-// person it names, made due and told with it; "" if none.
-func (c *core) cueBlock(msgs []Message) string {
+// person it names, made due and told with it; "" if none. The caller marks
+// them told (surfaced) once the delivery went through.
+func (c *core) cueBlock(msgs []Message) (string, []*Intention) {
 	if c.mem == nil {
-		return ""
+		return "", nil
 	}
 	var cued []*Intention
 	for _, m := range msgs {
@@ -103,7 +104,7 @@ func (c *core) cueBlock(msgs []Message) string {
 		cued = append(cued, xs...)
 	}
 	if len(cued) == 0 {
-		return ""
+		return "", nil
 	}
 	now := c.mem.now()
 	var b strings.Builder
@@ -115,6 +116,5 @@ func (c *core) cueBlock(msgs []Message) string {
 		}
 	}
 	b.WriteString("```")
-	c.mem.surfaced(cued, "cue")
-	return b.String()
+	return b.String(), cued
 }

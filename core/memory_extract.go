@@ -232,7 +232,7 @@ Rules:
 - source_ref: the ref of the segment it comes from (several, separated by commas, if needed). Only refs that appear in the transcript.
 - Keep what will still matter in a month: decisions and their reasons, people and their roles, the progress of %[1]s's projects, preferences %[1]s expressed, promises (commitment, with due_at if known). Skip small talk, task mechanics, anything already in the memories (NOOP, or nothing).
 - When something known changed, SUPERSEDE the old memory (its id) rather than ADD a contradiction. Only when both cannot be true: a newer statement is not a contradiction for being newer.
-- A finished task may give a receipt (what it changed, verified, decided, what needs approval, its lessons): its decisions become decision memories, its state of the work the progress card of its project (SUPERSEDE the card), what needs %[1]s's approval a commitment (what %[1]s owes the task), and a lesson it learnt a lesson; all cite task:<id>, and all wait for %[1]s's approval.
+- A finished task may give a receipt (what it changed, verified, decided, what needs approval, its lessons): its decisions become decision memories, its state of the work the progress card of its project (SUPERSEDE the card), what needs %[1]s's approval an INTEND (kind reminder, what %[1]s has to decide), and a lesson it learnt a lesson; all cite task:<id>, and all wait for %[1]s's approval.
 - The journal: one "episode" per finished task (what was done, the outcome; source_ref task:<id>), and one "episode" with subject "journal" that summarises the day's conversation (occurred_at %[2]s, source_ref the main messages). If the memories already hold a journal episode for that day, SUPERSEDE it with a version that covers the whole day.
 - Never write secrets, tokens, passwords or links with tokens.
 
@@ -586,6 +586,9 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	case "INTENT_UPDATE":
 		return c.applyIntentUpdate(op, trust, ref, who)
 	case "ADD", "SUPERSEDE":
+		if strings.EqualFold(op.Op, "SUPERSEDE") && op.Kind == kindCommitment {
+			return "what is owed is an intention: INTEND or INTENT_UPDATE", ""
+		}
 		if strings.EqualFold(op.Op, "ADD") && op.Kind == kindCommitment {
 			op.Kind = intentReminder // what is owed is an intention now; who owes is not said
 			return c.applyIntend(op, trust, ref, who)
@@ -908,7 +911,12 @@ func (c *core) applyIntentUpdate(op extractionOp, trust, ref, who string) (why, 
 		return fmt.Sprintf("intention %d is proposed: the user decides", op.ID), ""
 	}
 	ch := intentionChange{State: strings.ToLower(strings.TrimSpace(op.State))}
-	if ch.State != "" && !containsStr([]string{intentDone, intentCancelled}, ch.State) {
+	moves := op.DueAt != "" || op.RemindAt != ""
+	switch {
+	case ch.State == "" || containsStr([]string{intentDone, intentCancelled}, ch.State):
+	case moves && containsStr([]string{intentOpen, intentDue, "rescheduled"}, ch.State):
+		ch.State = "" // a new time, said with a state: the time is the patch
+	default:
 		return "an extraction closes an intention (done, cancelled) or moves its time", ""
 	}
 	for _, f := range []struct {

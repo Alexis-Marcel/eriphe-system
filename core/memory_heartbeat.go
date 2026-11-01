@@ -86,7 +86,17 @@ func (p *wakePacket) render(user string) string {
 		b.WriteString("```\n")
 	}
 	intents("Ce qui est dû maintenant (la raison de ce réveil) :", p.Due)
-	intents("Déjà rappelé, toujours en attente :", p.Pending)
+	// Told before: an external one is named, not quoted again (its turn is not tainted for it).
+	var pending []*Intention
+	for _, x := range p.Pending {
+		if x.Trust == trustExternal {
+			y := *x
+			y.Text = "(tirée d'un contenu extérieur : intentions la relit, ce qui souille le tour)"
+			x = &y
+		}
+		pending = append(pending, x)
+	}
+	intents("Déjà rappelé, toujours en attente :", pending)
 	section("Les dernières 24 h :", p.Episodes, func(x *Memory) string {
 		return fmt.Sprintf("- [%s #%d] %s", x.OccurredAt.Local().Format("15:04"), x.ID, quote(x))
 	})

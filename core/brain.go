@@ -222,12 +222,16 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		}
 	}
 	// What my message brings up: the intentions whose person it names.
-	if cue := c.cueBlock(msgs); cue != "" {
+	cue, cued := c.cueBlock(msgs)
+	if cue != "" {
 		parts = append(parts, cue)
 	}
 	c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Quiet = false })
 	if _, err := c.answer(ctx, t.ID, "", strings.Join(parts, "\n\n"), nil, byUser); err != nil {
 		return false, err
+	}
+	if len(cued) > 0 {
+		c.mem.surfaced(cued, "cue")
 	}
 	c.updateAssistant(a.Name, func(st *AssistantStatus) {
 		if hash != "" {

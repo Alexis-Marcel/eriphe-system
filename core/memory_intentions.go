@@ -158,6 +158,10 @@ func migrateIntentions(tx *sql.Tx) error {
 				return fmt.Errorf("commitment %d: %w", x.ID, err)
 			}
 		}
+		if in.State == intentOpen && !in.RemindAt.IsZero() && !in.RemindAt.After(now) {
+			// Already past: due and listed as late, not a burst of wakes after the upgrade.
+			in.State, in.SurfacedAt, in.Surfaced, in.NextCheckAt = intentDue, now, 1, time.Time{}
+		}
 		if err := insertIntention(tx, in, now, "migration", fmt.Sprintf("from commitment memory %d", x.ID)); err != nil {
 			return err
 		}
@@ -186,6 +190,9 @@ func defaultRemind(due time.Time) time.Time {
 	}
 	return due
 }
+
+// dayDeadline tells a deadline given as a day (kept as its last minute).
+func dayDeadline(t time.Time) bool { return t.Hour() == 23 && t.Minute() == 59 }
 
 // normalizeIntention checks an intention and fills what follows from it.
 func normalizeIntention(x *Intention, now time.Time) error {
@@ -231,6 +238,11 @@ func normalizeIntention(x *Intention, now time.Time) error {
 	if x.Trigger == triggerTime && x.RemindAt.IsZero() {
 		x.RemindAt = defaultRemind(x.DueAt)
 	}
+	// A deadline on a day (midnight) lasts until that day's end: not late
+	// at the morning's reminder.
+	if !x.DueAt.IsZero() && x.DueAt.Hour() == 0 && x.DueAt.Minute() == 0 && x.DueAt.Second() == 0 {
+		x.DueAt = x.DueAt.Add(24*time.Hour - time.Minute)
+	}
 	if x.Trigger == triggerTime && x.RemindAt.IsZero() {
 		return errors.New("a time trigger needs due_at or remind_at")
 	}
@@ -254,11 +266,11 @@ func normalizeIntention(x *Intention, now time.Time) error {
 func insertIntention(q querier, x *Intention, now time.Time, who, detail string) error {
 	x.CreatedAt, x.UpdatedAt = now, now
 	res, err := q.Exec(`INSERT INTO intentions (kind, text, owner, owed_to, subject, trigger, cue, due_at, remind_at, state, snoozed_until,
-		next_check_at, source_kind, source_ref, trust, basis, memory_id, created_at, updated_at, flags)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		surfaced_at, surfaced, next_check_at, source_kind, source_ref, trust, basis, memory_id, created_at, updated_at, flags)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		x.Kind, x.Text, x.Owner, x.OwedTo, x.Subject, x.Trigger, x.Cue, unixOrNil(x.DueAt), unixOrNil(x.RemindAt), x.State,
-		unixOrNil(x.SnoozedUntil), unixOrNil(x.NextCheckAt), x.SourceKind, x.SourceRef, x.Trust, x.Basis, nullID(x.MemoryID),
-		now.Unix(), now.Unix(), x.Flags)
+		unixOrNil(x.SnoozedUntil), unixOrNil(x.SurfacedAt), x.Surfaced, unixOrNil(x.NextCheckAt), x.SourceKind, x.SourceRef, x.Trust,
+		x.Basis, nullID(x.MemoryID), now.Unix(), now.Unix(), x.Flags)
 	if err != nil {
 		return err
 	}
@@ -403,15 +415,20 @@ func (m *memStore) changeIntention(id int64, ch intentionChange, who, why string
 		}
 		x.State = to
 	}
-	switch x.State {
-	case intentSnoozed:
+	keepNext := x.NextCheckAt // a change that keeps the state keeps its next look
+	switch {
+	case x.State == intentSnoozed && from == intentSnoozed && ch.Until.IsZero():
+		// Still snoozed, until the same time.
+	case x.State == intentSnoozed:
 		if !ch.Until.After(now) {
 			return nil, errors.New("a snooze needs a time to come back, in the future")
 		}
 		x.SnoozedUntil = ch.Until
 		detail = append(detail, "until "+ch.Until.Format("2006-01-02 15:04"))
-	case intentOpen:
+	case x.State == intentOpen:
 		x.SnoozedUntil, x.SurfacedAt, x.Surfaced = time.Time{}, time.Time{}, 0
+	case x.State == intentDue && from != intentDue:
+		x.SnoozedUntil, x.SurfacedAt = time.Time{}, time.Time{} // newly due: to be told
 	}
 	if x.State == intentDone || x.State == intentCancelled {
 		x.ClosedAt = now
@@ -421,8 +438,11 @@ func (m *memStore) changeIntention(id int64, ch intentionChange, who, why string
 	if err := normalizeIntention(x, now); err != nil {
 		return nil, err
 	}
-	if x.State == intentSnoozed {
+	switch {
+	case x.State == intentSnoozed:
 		x.NextCheckAt = x.SnoozedUntil
+	case x.State == intentDue && from == intentDue && !rescheduled:
+		x.NextCheckAt = keepNext // its second word at the deadline stays planned
 	}
 	if x.State == intentOpen && x.Trigger == triggerTime && !x.RemindAt.After(now) {
 		x.State, x.NextCheckAt = intentDue, time.Time{} // its time has already come
@@ -447,7 +467,7 @@ func (m *memStore) changeIntention(id int64, ch intentionChange, who, why string
 // become due. It returns those that just did.
 func (m *memStore) tickIntentions() ([]*Intention, error) {
 	now := m.now()
-	rows, err := m.db.Query(`SELECT id FROM intentions WHERE state IN ('open', 'snoozed') AND trigger != 'person'
+	rows, err := m.db.Query(`SELECT id FROM intentions WHERE state IN ('open', 'snoozed')
 		AND next_check_at IS NOT NULL AND next_check_at <= ?`, now.Unix())
 	if err != nil {
 		return nil, err
@@ -465,7 +485,9 @@ func (m *memStore) tickIntentions() ([]*Intention, error) {
 		if err != nil {
 			return out, err
 		}
-		out = append(out, x)
+		if x != nil {
+			out = append(out, x)
+		}
 	}
 	return out, nil
 }
@@ -480,7 +502,7 @@ func (m *memStore) becomeDue(id int64, who, why string) (*Intention, error) {
 	}
 	from := x.State
 	if !containsStr([]string{intentOpen, intentSnoozed}, from) {
-		return x, nil
+		return nil, nil
 	}
 	x.State, x.SnoozedUntil, x.SurfacedAt, x.NextCheckAt, x.UpdatedAt = intentDue, time.Time{}, time.Time{}, time.Time{}, now
 	tx, err := m.db.Begin()
@@ -488,9 +510,13 @@ func (m *memStore) becomeDue(id int64, who, why string) (*Intention, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`UPDATE intentions SET state = 'due', snoozed_until = NULL, surfaced_at = NULL, next_check_at = NULL, updated_at = ?
-		WHERE id = ? AND state = ?`, now.Unix(), id, from); err != nil {
+	res, err := tx.Exec(`UPDATE intentions SET state = 'due', snoozed_until = NULL, surfaced_at = NULL, next_check_at = NULL, updated_at = ?
+		WHERE id = ? AND state = ?`, now.Unix(), id, from)
+	if err != nil {
 		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return nil, nil // changed meanwhile (the page, the brain): nothing done
 	}
 	if err := intentionLog(tx, id, now, who, "due", from, intentDue, why); err != nil {
 		return nil, err
@@ -525,10 +551,11 @@ func (m *memStore) surfaced(xs []*Intention, how string) {
 	now := m.now()
 	for _, x := range xs {
 		var next any
-		if x.DueAt.After(now) {
+		if x.DueAt.After(now) && !dayDeadline(x.DueAt) {
 			next = x.DueAt.Unix()
 		}
-		m.db.Exec(`UPDATE intentions SET surfaced_at = ?, surfaced = surfaced + 1, next_check_at = ?, updated_at = ? WHERE id = ?`,
+		// Only while it is due: snoozed or closed meanwhile, it keeps its own next look.
+		m.db.Exec(`UPDATE intentions SET surfaced_at = ?, surfaced = surfaced + 1, next_check_at = ?, updated_at = ? WHERE id = ? AND state = 'due'`,
 			now.Unix(), next, now.Unix(), x.ID)
 		intentionLog(m.db, x.ID, now, "eriphe-core", "surfaced", x.State, x.State, how)
 	}
@@ -565,11 +592,13 @@ func (m *memStore) cueIntentions(text string) ([]*Intention, error) {
 		if !hit {
 			continue
 		}
-		if _, err := m.becomeDue(x.ID, "cue", "named in a message"); err != nil {
+		got, err := m.becomeDue(x.ID, "cue", "named in a message")
+		if err != nil {
 			return out, err
 		}
-		x, _ = m.intention(x.ID)
-		out = append(out, x)
+		if got != nil {
+			out = append(out, got)
+		}
 	}
 	return out, nil
 }

@@ -1938,7 +1938,8 @@ owed `intend`, `intentions`, `update_intention`. Results are data, quoted.
 **Intentions** (prospective memory) are a table of their own, with a lifecycle kept by code: a
 kind (`promise`: the user owes someone; `commitment`: the assistant owes the user; `waiting_for`:
 someone owes the user; `reminder`), who owes and to whom, a deadline (`due_at`), when to bring it up
-(`remind_at`, by default the deadline, or 9:00 on a deadline without a time) or a person `cue` ("the
+(`remind_at`, by default the deadline; a deadline given as a day lasts until that day's end and is
+reminded at 9:00) or a person `cue` ("the
 next time I talk about Hélène"), and a state: `proposed → open → due → done / cancelled`, `snoozed →
 due`. The brain and the nightly extraction form them and revise them with typed patches (done,
 cancelled, a new deadline); the extraction's patches never come from external content. Every
@@ -1954,8 +1955,9 @@ the user approves it; approved, it may remind, never act: the wake turn that rea
 (`intention.external`), and so is a turn whose `intentions` tool returns one. The Memory page lists
 them (Intentions) with done, snooze (an hour, tomorrow 9:00), cancel and reopen; proposed ones are
 approved or rejected there and in À approuver. Schema 4 moved the `commitment` memories into the
-table (state kept; each memory archived, with a log entry naming its intention); a `commitment`
-written since becomes an intention.
+table (state kept; each memory archived, with a log entry naming its intention; one already late
+is due and listed, without waking the brain); a `commitment` written since becomes an intention.
+An assistant whose spec lists its `triggers` gets the clock only if `clock` is among them.
 
 **Search.** The full-text index holds each memory's text, subject, `keywords` (other words to find
 it by: synonyms, variants) and, in a shadow column, the French stems of all three (Snowball French

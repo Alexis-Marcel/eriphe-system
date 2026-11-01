@@ -33,7 +33,7 @@ func (w *web) intentionCounts(p *memoryPage) {
 	var n int
 	m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state IN ('open', 'due', 'snoozed')`).Scan(&n)
 	p.Open = n
-	m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state = 'due' OR (state IN ('open', 'snoozed') AND due_at IS NOT NULL AND due_at < ?)`, now).Scan(&n)
+	m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state IN ('open', 'due', 'snoozed') AND due_at IS NOT NULL AND due_at < ?`, now).Scan(&n)
 	p.Overdue = n
 	m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state = 'proposed'`).Scan(&n)
 	p.Proposed += n

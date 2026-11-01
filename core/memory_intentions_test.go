@@ -46,7 +46,7 @@ func TestIntentionLifecycle(t *testing.T) {
 	if _, err := m.changeIntention(call.ID, intentionChange{State: intentSnoozed, Until: clock.t.Add(time.Hour)}, "owner", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.changeIntention(call.ID, intentionChange{State: intentSnoozed}, "owner", ""); err == nil {
+	if _, err := m.changeIntention(day.ID, intentionChange{State: intentSnoozed}, "owner", ""); err == nil {
 		t.Fatal("a snooze without a time")
 	}
 	clock.add(time.Hour)
@@ -98,6 +98,12 @@ func TestIntentionLifecycle(t *testing.T) {
 	}
 	if xs, _ := m.cueIntentions("Rendez-vous avec helene demain"); len(xs) != 1 || xs[0].ID != tva.ID || xs[0].State != intentDue {
 		t.Fatalf("not cued: %+v", xs)
+	}
+	// Snoozed, a cued one comes back at its time like any other.
+	m.changeIntention(tva.ID, intentionChange{State: intentSnoozed, Until: clock.t.Add(time.Hour)}, "owner", "")
+	clock.add(time.Hour)
+	if xs, _ := m.tickIntentions(); len(xs) != 1 || xs[0].ID != tva.ID {
+		t.Fatalf("a snoozed cue did not come back: %v", xs)
 	}
 }
 
@@ -245,7 +251,11 @@ func TestExtractionIntentions(t *testing.T) {
 	if why, res := op(fmt.Sprintf(`{"op": "INTENT_UPDATE", "id": %d, "state": "done", "source_ref": "task:t1"}`, p.ID)); res != "" || !strings.Contains(why, "external") {
 		t.Fatalf("closed by a mail: %s %s", res, why)
 	}
-	if _, res := op(fmt.Sprintf(`{"op": "INTENT_UPDATE", "id": %d, "due_at": "2026-12-11", "source_ref": "msg:1"}`, p.ID)); res != "superseded" {
+	if _, res := op(fmt.Sprintf(`{"op": "INTENT_UPDATE", "id": %d, "state": "snoozed", "source_ref": "msg:1"}`, p.ID)); res != "" {
+		t.Fatalf("a snooze from the extraction: %s", res)
+	}
+	// A new time said with a state "open" (as a model writes it) is a reschedule.
+	if _, res := op(fmt.Sprintf(`{"op": "INTENT_UPDATE", "id": %d, "state": "open", "due_at": "2026-12-11", "source_ref": "msg:1"}`, p.ID)); res != "superseded" {
 		t.Fatalf("rescheduled: %s", res)
 	}
 	if got, _ := c.mem.intention(p.ID); got.DueAt.Format("2006-01-02") != "2026-12-11" {

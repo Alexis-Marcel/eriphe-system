@@ -185,7 +185,10 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 		return nil, errMemoryOff
 	}
 	// What is owed is an intention now, with its lifecycle.
-	if strings.TrimSpace(in.Kind) == kindCommitment && in.Supersedes == 0 {
+	if strings.TrimSpace(in.Kind) == kindCommitment && in.Supersedes != 0 {
+		return nil, errors.New("what is owed is an intention: change it with update_intention")
+	}
+	if strings.TrimSpace(in.Kind) == kindCommitment {
 		out, err := c.brainIntend(intendIn{Text: in.Text, Subject: in.Subject, DueAt: in.DueAt, SourceRef: in.SourceRef})
 		if err == nil {
 			note, _ := out["note"].(string)
