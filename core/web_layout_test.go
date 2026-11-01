@@ -36,6 +36,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/journal", "journal", ""},
 		{"/settings/happened", "happened", ""},
 		{"/settings/happened?range=week&kind=task", "happened", ""},
+		{"/settings/watches", "watches", ""},
 		{"/settings/account", "account", ""},
 	} {
 		code, body, _ := tw.do("GET", tc.path, nil, nil)

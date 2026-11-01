@@ -40,7 +40,7 @@ const (
 	feedNotification = "notification"
 	feedIntention    = "intention"
 	feedMessage      = "message"
-	feedWatch        = "watch" // the watch tool's wakes, to come
+	feedWatch        = "watch" // the watches' runs (watch.go)
 
 	feedOwn      = "own"
 	feedExternal = "external"
@@ -48,7 +48,7 @@ const (
 	feedTextMax    = 160
 	feedDefault    = 50
 	feedMax        = 200
-	lastBriefKey   = "last_brief" // when the last brief was given, unix; the brief writes it
+	lastBriefKey   = "last_brief" // when the last brief was given, unix; a brief watch writes it (watch_tick.go)
 	sinceAway      = "away"
 	sinceLastBrief = "last_brief"
 	taintSince     = "since.external"
@@ -99,7 +99,7 @@ var feedSources = map[string]feedSource{
 	feedNotification: notificationHappenings,
 	feedIntention:    intentionHappenings,
 	feedMessage:      messageHappenings,
-	feedWatch:        func(*core, time.Time, int) ([]happening, error) { return nil, nil },
+	feedWatch:        watchHappenings,
 }
 
 // feed is what happened since from, of these kinds (all if none), oldest

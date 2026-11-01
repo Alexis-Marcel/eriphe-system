@@ -308,6 +308,7 @@ The ways back follow the pages, never the browser's history. */}}
     <h2 class="nav-group-title" id="sg-assistant">{{t "settings.g.assistant"}}</h2>
     <a href="/memory" {{if eq .Tab "memory"}}aria-current="page"{{end}}>{{template "i-memory"}}<span>{{t "nav.memory"}}</span>{{template "chev"}}</a>
     <a href="/settings/happened" {{if eq .Tab "happened"}}aria-current="page"{{end}}>{{template "i-history"}}<span>{{t "settings.happened"}}</span>{{template "chev"}}</a>
+    <a href="/settings/watches" {{if eq .Tab "watches"}}aria-current="page"{{end}}>{{template "i-eye"}}<span>{{t "settings.watches"}}</span>{{template "chev"}}</a>
     <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span>{{if .Attn.Agents}}{{template "attn-dot"}}{{end}}{{template "chev"}}</a>
     <a href="/settings/skills" {{if eq .Tab "skills"}}aria-current="page"{{end}}>{{template "i-skill"}}<span>{{t "settings.skills"}}</span>{{template "chev"}}</a>
   </div>

@@ -14,6 +14,7 @@
     {{else if eq .Tab "where"}}{{template "where" .}}
     {{else if eq .Tab "journal"}}{{template "journal" .}}
     {{else if eq .Tab "happened"}}{{template "happened" .}}
+    {{else if eq .Tab "watches"}}{{template "watches" .}}
     {{else}}{{template "account" .}}{{end}}
   </div>{{end}}
 </div>
@@ -432,7 +433,7 @@ is shown again. . is a joinWait. */}}
 </nav>
 <nav class="pill-tabs" aria-label="{{t "happened.kinds"}}">
   <a href="/settings/happened?range={{.Range}}" {{if not .Kind}}aria-current="true"{{end}}>{{t "happened.kind.all"}}</a>
-  {{range list "task" "notification" "intention" "message"}}<a href="/settings/happened?range={{$.Data.Range}}&amp;kind={{.}}" {{if eq . $.Data.Kind}}aria-current="true"{{end}}>{{t (printf "happened.kind.%s" .)}}</a>{{end}}
+  {{range list "task" "notification" "intention" "message" "watch"}}<a href="/settings/happened?range={{$.Data.Range}}&amp;kind={{.}}" {{if eq . $.Data.Kind}}aria-current="true"{{end}}>{{t (printf "happened.kind.%s" .)}}</a>{{end}}
 </nav>
 <p class="muted small">{{if .FromLast}}{{tf "happened.fromlast" (date .From)}}{{else if .NoLast}}{{t "happened.nolast"}}{{else}}{{tf "happened.from" (date .From)}}{{end}}</p>
 {{if .Items}}

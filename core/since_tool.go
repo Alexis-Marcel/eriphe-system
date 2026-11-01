@@ -34,7 +34,7 @@ type happeningView struct {
 }
 
 func registerSinceTools(s *mcp.Server, c *core) {
-	tool(s, "since", "What happened since a time, from every source, oldest first: tasks (started, finished with their receipt's verdict, waiting, failed, stopped), your notifications (sent, held for the brief, dropped, the user's feedback), intentions (due, done, snoozed, cancelled) and messages. t may be away (since the user left) or last_brief. Each item has a ref to read it in full with the other tools, and a trust: own, or external (not quoted unless include_external, which taints this turn). Only what it lists happened.",
+	tool(s, "since", "What happened since a time, from every source, oldest first: tasks (started, finished with their receipt's verdict, waiting, failed, stopped), your notifications (sent, held for the brief, dropped, the user's feedback), intentions (due, done, snoozed, cancelled), messages and watches (fired, and what you did: notified, said, silent). t may be away (since the user left) or last_brief. Each item has a ref to read it in full with the other tools, and a trust: own, or external (not quoted unless include_external, which taints this turn). Only what it lists happened.",
 		func(ctx context.Context, in sinceIn) (map[string]any, error) {
 			return c.brainSince(in)
 		})

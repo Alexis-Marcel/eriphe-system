@@ -111,12 +111,14 @@ func (w *web) parse() error {
 	}
 	for _, f := range files {
 		name := strings.TrimSuffix(filepath.Base(f), ".html")
-		if name == "layout" || name == "parts" || name == "catalog" || name == "tools" || name == "agents" || name == "remote" || name == "folders" || name == "push" || name == "skills" {
+		if name == "layout" || name == "parts" || name == "catalog" || name == "tools" || name == "agents" || name == "remote" || name == "folders" || name == "push" || name == "skills" ||
+			name == "watches" {
 			continue
 		}
 		t, err := template.New(name).Funcs(templateFuncs("fr")).ParseFS(webFS,
 			"web/templates/layout.html", "web/templates/parts.html", "web/templates/catalog.html", "web/templates/tools.html",
-			"web/templates/agents.html", "web/templates/remote.html", "web/templates/folders.html", "web/templates/push.html", "web/templates/skills.html", f)
+			"web/templates/agents.html", "web/templates/remote.html", "web/templates/folders.html", "web/templates/push.html", "web/templates/skills.html",
+			"web/templates/watches.html", f)
 		if err != nil {
 			return err
 		}
@@ -237,6 +239,7 @@ func (w *web) routes() http.Handler {
 	w.pushRoutes(mux)    // web_push.go
 	w.channelRoutes(mux) // web_telegram.go
 	w.whereRoutes(mux)   // web_where.go
+	w.watchRoutes(mux)   // web_watch.go
 	return w.headers(mux)
 }
 
