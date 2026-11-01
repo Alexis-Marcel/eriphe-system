@@ -1,6 +1,45 @@
 // Eriphe's workspace: the little the server cannot do. htmx sends the
 // forms and actions; this file adds the CSRF header, follows the event
 // stream, and handles the composer, the task drawer, toasts and copying.
+
+// This tab's id: it tells eriphe-core whether it is in front of the user,
+// and gets the notifications routed to it (route.go), by the event stream
+// or the answer to its presence.
+const eripheTab = Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+// A notification routed to this tab: a banner in the page, no system
+// notification. Its link opens it, which is also what "seen" means.
+function eripheInApp(notes) {
+  "use strict";
+  const box = document.getElementById("toasts");
+  if (!box || !Array.isArray(notes)) return;
+  const lang = document.body.dataset.lang === "en" ? "en" : "fr";
+  notes.forEach((n) => {
+    const el = document.createElement("div");
+    el.className = "toast toast-inapp";
+    el.setAttribute("role", "alert");
+    const text = document.createElement("span");
+    text.textContent = (n.body && (n.body[lang] || n.body.fr)) || "";
+    el.appendChild(text);
+    if (n.url && n.url.startsWith("/") && !n.url.startsWith("//")) {
+      const a = document.createElement("a");
+      a.href = n.url;
+      a.textContent = box.dataset.open || (lang === "en" ? "Open" : "Voir");
+      el.appendChild(a);
+    }
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "toast-close";
+    close.setAttribute("aria-label", lang === "en" ? "Close" : "Fermer");
+    close.textContent = "×";
+    close.addEventListener("click", () => el.remove());
+    el.appendChild(close);
+    box.appendChild(el);
+    setTimeout(() => el.classList.add("out"), 15000);
+    setTimeout(() => el.remove(), 15500);
+  });
+}
+
 (function () {
   "use strict";
 
@@ -218,7 +257,8 @@
   function connect() {
     const box = $("#messages");
     if (!box || !window.EventSource) return;
-    const es = new EventSource("/events?after=" + (box.dataset.last || 0));
+    const es = new EventSource("/events?after=" + (box.dataset.last || 0) + "&tab=" + encodeURIComponent(eripheTab));
+    es.addEventListener("notice", (e) => { try { eripheInApp(JSON.parse(e.data)); } catch (err) { /* not for us */ } });
     const conn = $("#conn");
     let failures = 0;
     es.onopen = () => { failures = 0; if (conn) conn.hidden = true; };
@@ -845,20 +885,29 @@ function lit(name) {
   }
 
   // Whether the user is looking: a tab tells eriphe-core when it comes in
-  // front or leaves, and every 20 s while it is in front. Nothing is pushed
-  // to the devices meanwhile (push.go).
+  // front or leaves, and every 20 s while it is in front, with its
+  // browser's push subscription, so that eriphe-core knows on which device
+  // the user is (route.go). The answer may carry a notification routed to
+  // this tab, on a page without the event stream.
   if (document.body && document.body.classList.contains("shell") && csrf()) {
-    const tab = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    let last = null, at = 0;
+    const tab = eripheTab;
+    let last = null, at = 0, sub = "";
+    if (window.isSecureContext && "serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => reg && reg.pushManager && reg.pushManager.getSubscription())
+        .then((s) => s ? pushID(s.endpoint) : "").then((id) => { sub = id; if (front()) tell(true); }).catch(() => {});
+    }
     const front = () => document.visibilityState === "visible" && document.hasFocus();
     const tell = (force) => {
       const f = front();
       if (!force && f === last && (!f || Date.now() - at < 20000)) return;
       last = f;
       at = Date.now();
-      const body = new URLSearchParams({ tab: tab, front: f ? "1" : "0", csrf: csrf() });
+      const body = new URLSearchParams({ tab: tab, front: f ? "1" : "0", sub: sub, csrf: csrf() });
       fetch("/presence", { method: "POST", body: body, credentials: "same-origin", keepalive: true,
-        headers: { "X-CSRF-Token": csrf() } }).catch(() => {});
+        headers: { "X-CSRF-Token": csrf() } })
+        .then((r) => r.status === 200 ? r.json() : null)
+        .then((j) => { if (j && j.notes) eripheInApp(j.notes); })
+        .catch(() => {});
     };
     ["focus", "blur", "pageshow"].forEach((ev) => window.addEventListener(ev, () => tell(false)));
     document.addEventListener("visibilitychange", () => tell(false));

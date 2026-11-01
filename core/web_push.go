@@ -65,6 +65,7 @@ func (w *web) handleNotifications(rw http.ResponseWriter, r *http.Request, s *se
 	v := w.notificationsPage()
 	if open, err := strconv.ParseInt(r.URL.Query().Get("n"), 10, 64); err == nil {
 		v.Notify = w.notifyPage(open) // opened from a push: that one shows why
+		w.c.ackNotification(open, ackOpened)
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.notifications", Nav: "settings", Tab: "notifications", Data: v})
 }
@@ -104,7 +105,7 @@ func (w *web) handleSubscribe(rw http.ResponseWriter, r *http.Request, s *sessio
 		label += " · " + tr(w.lang(r), "push.app")
 	}
 	_, err := w.c.push.subscribe(pushSub{Endpoint: in.Endpoint, P256dh: in.Keys.P256dh, Auth: in.Keys.Auth,
-		Lang: w.lang(r), Label: label})
+		Lang: w.lang(r), Label: label, UAKind: uaKind(r.UserAgent())})
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
@@ -132,17 +133,41 @@ func (w *web) handlePushTest(rw http.ResponseWriter, r *http.Request, s *session
 	w.toast(rw, tr(lang, "push.test.sent"), true)
 }
 
-// handlePresence: a tab says whether it is in front of the user.
+// handlePresence: a tab says whether it is in front of the user, and on
+// which device: its browser's push subscription, if it has one, and its
+// kind. It gets back what waits to be shown in it (route_send.go).
 func (w *web) handlePresence(rw http.ResponseWriter, r *http.Request, _ *session) {
 	tab := r.PostFormValue("tab")
 	if w.c.push != nil && tab != "" && len(tab) <= 64 {
 		front := r.PostFormValue("front") == "1"
-		w.c.push.seen(tab, front)
+		sub := r.PostFormValue("sub")
+		if !isPushID(sub) {
+			sub = ""
+		}
+		ua := r.UserAgent()
+		w.c.push.seenOn(tab, front, tabSeen{sub: sub, kind: uaKind(ua), label: deviceLabel(ua, w.lang(r))})
 		if front {
 			w.c.seenPresence(time.Now()) // a signal for the quiet hours (notify_quiet.go)
+			if notes := w.c.showInApp(tab); len(notes) > 0 {
+				writeJSON(rw, http.StatusOK, map[string]any{"notes": notes})
+				return
+			}
 		}
 	}
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// isPushID: 32 hexadecimal digits, as pushID makes them.
+func isPushID(s string) bool {
+	if len(s) != 32 {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return false
+		}
+	}
+	return true
 }
 
 // deviceLabel names a device from its browser: "iPhone · Safari".

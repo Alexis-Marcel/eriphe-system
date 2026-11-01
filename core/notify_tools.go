@@ -35,6 +35,8 @@ type ruleIn struct {
 	Outcome   string `json:"outcome,omitempty" jsonschema:"for topic: now, brief or never"`
 	Night     bool   `json:"night,omitempty" jsonschema:"for topic with outcome now: even in the quiet hours and over the daily cap; only if the user said so"`
 	Channels  string `json:"channels,omitempty" jsonschema:"for topic: where its notifications go, push, telegram or push,telegram; the user's default channels when empty"`
+	Also      string `json:"also,omitempty" jsonschema:"for topic: lines added to the first device, only if the user asked: phone, telegram or computer ('Getout: on the phone too')"`
+	Never     string `json:"never,omitempty" jsonschema:"for topic: lines it never goes by: voice, telegram, phone, computer or inapp"`
 	Days      string `json:"days,omitempty" jsonschema:"for quiet: all, weekdays (the nights before a weekday) or weekend (Friday and Saturday nights); all by default"`
 	From      string `json:"from,omitempty" jsonschema:"for quiet: when the quiet hours start, HH:MM"`
 	To        string `json:"to,omitempty" jsonschema:"for quiet: when they end, HH:MM"`
@@ -209,6 +211,13 @@ func (c *core) brainNotifications(in notificationsIn) (map[string]any, error) {
 			return nil, err
 		}
 		out["feedback_30_days"] = tallies
+		set := c.routeSettings()
+		routing := map[string]any{"mode": set.Mode, "order": set.Order, "off": set.Off, "move_on_after_minutes": int(set.Delay / time.Minute),
+			"note": "eriphe-core picks the device, never you. When a device's notifications are often seen late, moved on, or answered not now, propose a rule (also, never) or say the user can reorder Settings → Où te prévenir."}
+		if d := c.deviceTallies(); len(d) > 0 {
+			routing["by_device_30_days"] = d
+		}
+		out["routing"] = routing
 	}
 	rv := []ruleView{}
 	for _, r := range rules {
@@ -247,7 +256,7 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 	default:
 		return nil, errors.New("action is add or delete")
 	}
-	r := notifyRule{Kind: in.Kind, Match: in.Match, Outcome: in.Outcome, Night: in.Night, Channels: in.Channels, Days: in.Days, Why: in.Why, By: "brain"}
+	r := notifyRule{Kind: in.Kind, Match: in.Match, Outcome: in.Outcome, Night: in.Night, Channels: in.Channels, Also: in.Also, Never: in.Never, Days: in.Days, Why: in.Why, By: "brain"}
 	if r.Kind == "" {
 		r.Kind = ruleTopic
 	}

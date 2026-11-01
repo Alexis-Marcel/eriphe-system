@@ -1868,6 +1868,36 @@ inbound port:
   are approved in Settings only. (An optional "approve
   from Telegram" with a second, explicit confirmation is not built.)
 
+**Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
+A pure function, `route(note, signals, settings, tried)`, picks one device at a time from signals
+eriphe-core already has, never from the model nor the notification's text:
+
+1. Eriphe open and in front on a device (its tab tells its push subscription with `POST
+   /presence`) → a banner in that page (the event stream's `notice`, or the presence answer), no
+   system push;
+2. a computer in use (its node reports the machine's idle time under 2 minutes, not locked) → a
+   push to that computer's subscription only;
+3. the voice at home: a placeholder, off until Home Assistant tells where the user is;
+4. otherwise the phone (subscriptions whose label, the user's choice or the browser says phone;
+   the installed app first), then Telegram.
+
+A tab left in front on a machine its node says is idle or locked is not the user. A "now" not seen
+(opened, answered, or shown in a page) within the delay (10 minutes, Settings; 3 for an
+"even at night" topic) is routed again without the devices tried, two steps at most, never in the
+quiet hours unless the topic's rule says even at night. A brief, a task done or a question is sent
+to one device and not moved on; a test goes to its device. A topic rule keeps channels
+(`channels`), adds lines to the first step (`also`: "Getout: the phone too") or forbids some
+(`never`); a note from a tainted turn never gets a line added nor moves on. Settings → Où te
+prévenir orders the lines (each shown once what it needs is connected, one switch each), sets the
+delay, says which subscription is a phone or a computer and which node is on which computer
+(suggested by system), and lists the last decisions (`route_log`, planned next to sent). It starts
+in **observe** mode: everything goes as before (every channel, nothing while a tab is in front)
+and the log shows what the router would have done; one switch turns routing on. A node's idle time
+is kept in memory for two minutes, never stored. The `notifications` tool gives the brain the order
+and, by device, what was seen fast, late or moved on, from which it proposes rules. The bench
+(`route_eval_test.go`, `testdata/routeeval`) checks every case, no duplicate, every injection
+blocked.
+
 **The user's state and what happened** (`user_state.go`, `since.go`, `since_tool.go`,
 `web_since.go`). Each of the brain's turns opens with the time (`[maintenant …]`) and, under it, the
 user's state, built by code: `[état de Sam : présent, de retour à 14:50 après 4 h 30 d'absence

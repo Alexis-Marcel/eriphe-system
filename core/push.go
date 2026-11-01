@@ -31,16 +31,20 @@ import (
 // to encrypt for it), eriphe-core keeps it, and signs each push with its
 // own VAPID key, kept in its data folder and never logged.
 //
-// Everything goes through tell (channels.go), which also reaches the user
-// on Telegram: what it sends is skipped while a workspace tab is in front
-// of the user, and a push service that no longer knows a subscription
+// Everything goes through tell (route_send.go), which also reaches the
+// user on Telegram and picks the device (route.go), and a push service that no longer knows a subscription
 // (404, 410) has it removed.
 
 const pushSchema = `CREATE TABLE IF NOT EXISTS push_subscriptions (
   id TEXT PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL,
   lang TEXT NOT NULL, label TEXT NOT NULL, created INTEGER NOT NULL);`
 
-func init() { extraSchema = append(extraSchema, pushSchema) }
+func init() {
+	extraSchema = append(extraSchema, pushSchema)
+	// Added with the router (route.go): a phone's browser or a computer's,
+	// from its user agent when it subscribed.
+	extraColumns = append(extraColumns, `ALTER TABLE push_subscriptions ADD COLUMN ua_kind TEXT NOT NULL DEFAULT ''`)
+}
 
 const (
 	pushKeyFile = "push-vapid.key"
@@ -69,6 +73,8 @@ type pushNote struct {
 	Notif    int64  // the notification it tells, whose feedback its buttons give
 	Why      string // the notification's why
 	Waiting  bool   // a question of the brain's to the user (pushWaiting)
+	// For the router (route.go): its level and its rule, never a device.
+	Route routeNote
 }
 
 // pushPayload is what the service worker receives (sw.js).
@@ -94,6 +100,7 @@ type pushSub struct {
 	Auth     string
 	Lang     string
 	Label    string
+	UAKind   string // computer or phone, from its browser; empty from before the router
 	Created  time.Time
 }
 
@@ -105,13 +112,17 @@ type pusher struct {
 	now     func() time.Time
 	pending sync.WaitGroup // pushes on their way (tests wait for them)
 
-	mu   sync.Mutex
-	tabs map[string]tabSeen // the workspace tabs that said where they are
+	mu    sync.Mutex
+	tabs  map[string]tabSeen // the workspace tabs that said where they are
+	inbox map[string][]inApp // what waits to be shown in a tab, by tab (route_send.go)
 }
 
 type tabSeen struct {
 	front bool
 	at    time.Time
+	sub   string // the push subscription of its browser, if it has one
+	kind  string // computer or phone, from its browser
+	label string // its device, from its browser
 }
 
 // newPusher reads the VAPID key of the data folder, or creates it.
@@ -121,7 +132,7 @@ func newPusher(s *Store) (*pusher, error) {
 		return nil, err
 	}
 	return &pusher{store: s, priv: priv, pub: pub, client: &http.Client{Timeout: 20 * time.Second},
-		now: time.Now, tabs: map[string]tabSeen{}}, nil
+		now: time.Now, tabs: map[string]tabSeen{}, inbox: map[string][]inApp{}}, nil
 }
 
 // vapidKeys reads a P-256 private key (32 bytes, base64url) from file, or
@@ -175,17 +186,38 @@ func (p *pusher) deliver(n pushNote) {
 // seen records where a workspace tab is: in front of the user (visible and
 // focused) or not. A tab that stops saying so is not in front after a while.
 func (p *pusher) seen(tab string, front bool) {
+	p.seenOn(tab, front, tabSeen{})
+}
+
+// seenOn is seen with the tab's device: its push subscription and kind.
+func (p *pusher) seenOn(tab string, front bool, dev tabSeen) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := p.now()
 	for id, t := range p.tabs {
 		if now.Sub(t.at) > frontFor {
 			delete(p.tabs, id)
+			delete(p.inbox, id)
 		}
 	}
 	if _, known := p.tabs[tab]; known || len(p.tabs) < 100 {
-		p.tabs[tab] = tabSeen{front: front, at: now}
+		dev.front, dev.at = front, now
+		p.tabs[tab] = dev
 	}
+}
+
+// frontTabs are the tabs in front of the user now, by id.
+func (p *pusher) frontTabs() map[string]tabSeen {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := p.now()
+	out := map[string]tabSeen{}
+	for id, t := range p.tabs {
+		if t.front && now.Sub(t.at) <= frontFor {
+			out[id] = t
+		}
+	}
+	return out
 }
 
 func (p *pusher) inFront() bool {
@@ -207,7 +239,7 @@ func (p *pusher) any() bool {
 }
 
 func (p *pusher) subscriptions() ([]pushSub, error) {
-	rows, err := p.store.db.Query(`SELECT id, endpoint, p256dh, auth, lang, label, created FROM push_subscriptions ORDER BY created DESC`)
+	rows, err := p.store.db.Query(`SELECT id, endpoint, p256dh, auth, lang, label, ua_kind, created FROM push_subscriptions ORDER BY created DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +248,7 @@ func (p *pusher) subscriptions() ([]pushSub, error) {
 	for rows.Next() {
 		var s pushSub
 		var created int64
-		if err := rows.Scan(&s.ID, &s.Endpoint, &s.P256dh, &s.Auth, &s.Lang, &s.Label, &created); err != nil {
+		if err := rows.Scan(&s.ID, &s.Endpoint, &s.P256dh, &s.Auth, &s.Lang, &s.Label, &s.UAKind, &created); err != nil {
 			return nil, err
 		}
 		s.Created = time.Unix(created, 0)
@@ -252,9 +284,13 @@ func (p *pusher) subscribe(s pushSub) (string, error) {
 		s.Lang = "fr"
 	}
 	id := pushID(s.Endpoint)
-	_, err = p.store.db.Exec(`INSERT INTO push_subscriptions (id, endpoint, p256dh, auth, lang, label, created) VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, lang = excluded.lang, label = excluded.label`,
-		id, s.Endpoint, s.P256dh, s.Auth, s.Lang, truncate(s.Label, 80), p.now().Unix())
+	if s.UAKind != kindPhone && s.UAKind != kindComputer {
+		s.UAKind = ""
+	}
+	_, err = p.store.db.Exec(`INSERT INTO push_subscriptions (id, endpoint, p256dh, auth, lang, label, ua_kind, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, lang = excluded.lang, label = excluded.label,
+		ua_kind = excluded.ua_kind`,
+		id, s.Endpoint, s.P256dh, s.Auth, s.Lang, truncate(s.Label, 80), s.UAKind, p.now().Unix())
 	if err != nil {
 		return "", err
 	}

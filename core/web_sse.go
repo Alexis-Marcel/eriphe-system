@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -26,6 +27,10 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		after, _ = strconv.Atoi(r.URL.Query().Get("after"))
 	}
 	lang := w.lang(r)
+	tab := r.URL.Query().Get("tab") // the tab's id, as it tells its presence (web_push.go)
+	if len(tab) > 64 {
+		tab = ""
+	}
 	h := rw.Header()
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-store")
@@ -79,6 +84,13 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 					writeEvent(rw, "pending", after, html)
 					lastPending, sent = html, true
 				}
+			}
+		}
+		// A notification routed to this tab, in front of the user (route_send.go).
+		if notes := w.c.showInApp(tab); len(notes) > 0 {
+			if raw, err := json.Marshal(notes); err == nil {
+				writeEvent(rw, "notice", after, string(raw))
+				sent = true
 			}
 		}
 		if !sent && time.Since(quiet) > 25*time.Second {

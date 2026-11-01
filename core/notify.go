@@ -225,8 +225,11 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 	log.Printf("notify: %d %s → %s (%s)", n.ID, it.Level, d.Outcome, d.Reason)
 	if d.Outcome == levelNow {
 		note := notifyNote(n)
+		note.Route = routeNote{Level: levelNow, Tainted: it.Tainted}
 		if r := topicRule(cx.Rules, it.Ref); r != nil {
 			note.Channels = r.Channels // the rule's channels, else the default (channels.go)
+			note.Route.Only, note.Route.Also, note.Route.Never = r.Channels, r.Also, r.Never
+			note.Route.Urgent = r.Outcome == levelNow && r.Night
 		}
 		c.tell(note)
 	}
@@ -325,6 +328,7 @@ func (c *core) notificationFeedback(id int64, fb string) (*notification, error) 
 	if k, _ := res.RowsAffected(); k == 0 {
 		return nil, sql.ErrNoRows
 	}
+	c.ackNotification(id, ackFeedback) // seen: no next device (route_send.go)
 	return c.notificationByID(id)
 }
 

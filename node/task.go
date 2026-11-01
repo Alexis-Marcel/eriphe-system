@@ -355,6 +355,8 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		"results_named": true,
 		// A model server eriphe-core may reach through the tunnel (model.go).
 		"model_server": n.opt.modelServer != "",
+		// How long the machine's keyboard and mouse have been idle (idle.go).
+		"idle": machineIdle(ctx),
 	})
 }
 
