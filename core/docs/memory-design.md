@@ -204,6 +204,11 @@ remaining misses on our corpus are paraphrases without a shared word ("proches" 
 a sister, "vivait" for "habite") and lists that need more than five memories: what the optional
 embeddings tier, or entity cards, would address.
 
+After PR 4: decisions and progress cards are kinds of their own (the corpus's seeded as such),
+retrieval unchanged at 90.8 / 92.8; what the extraction writes for them, and the basis rules, are
+covered by `TestExtractionDurableState`. How well a real extraction fills them is measured by the
+opt-in model run.
+
 Read with care: LongMemEval's Table 9 may be on another haystack size than S, our session score
 ranks turns and not sessions, and both benchmarks are English (the French stemmer and the plural
 *s* still apply to English words, roughly).

@@ -87,7 +87,7 @@ func parseWhen(s string) (time.Time, error) {
 
 type rememberIn struct {
 	Text       string   `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact (not as an instruction)"`
-	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, commitment or lesson"`
+	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, commitment, lesson, decision (a choice and its reason) or progress (the current state of a project or goal: done, under way, blocked, left)"`
 	Subject    string   `json:"subject,omitempty" jsonschema:"owner, person:<slug>, client:<slug>, project:<name>, home, or a short free subject"`
 	Links      []string `json:"links,omitempty" jsonschema:"where the details are: vault wikilinks or paths, URLs without tokens; never copy the vault"`
 	ValidFrom  string   `json:"valid_from,omitempty" jsonschema:"when it became true, YYYY-MM-DD; now by default"`
@@ -96,6 +96,7 @@ type rememberIn struct {
 	Supersedes int64    `json:"supersedes,omitempty" jsonschema:"id of the memory this one replaces: it is kept, dated, never overwritten"`
 	SourceRef  string   `json:"source_ref,omitempty" jsonschema:"the message it comes from: msg:N for the user's message #N. Required for profile, preference and lesson"`
 	Keywords   string   `json:"keywords,omitempty" jsonschema:"a few other words someone could use to look for it (synonyms, variants: 'voiture auto bagnole'), indexed with the text"`
+	State      string   `json:"state,omitempty" jsonschema:"for a progress card: active, blocked, done or paused"`
 	Importance int      `json:"importance,omitempty" jsonschema:"1 (trivial) to 5 (essential to know the user), 3 by default"`
 }
 
@@ -117,7 +118,7 @@ type updateIn struct {
 	Links      *[]string `json:"links,omitempty"`
 	ValidTo    string    `json:"valid_to,omitempty" jsonschema:"when it stopped being true, YYYY-MM-DD, or 'now'"`
 	DueAt      string    `json:"due_at,omitempty"`
-	State      string    `json:"state,omitempty" jsonschema:"for a commitment: open, done or dropped"`
+	State      string    `json:"state,omitempty" jsonschema:"for a commitment: open, done or dropped; for a progress card: active, blocked, done or paused"`
 	Pinned     *bool     `json:"pinned,omitempty" jsonschema:"in the profile or not; needs source_ref"`
 	Keywords   *string   `json:"keywords,omitempty" jsonschema:"other words to find it by"`
 	Importance *int      `json:"importance,omitempty" jsonschema:"1 to 5"`
@@ -203,7 +204,7 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 		return nil, errMemoryOff
 	}
 	x := &Memory{Kind: strings.TrimSpace(in.Kind), Subject: in.Subject, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes,
-		Keywords: in.Keywords, Importance: in.Importance}
+		Keywords: in.Keywords, Importance: in.Importance, State: in.State}
 	var err error
 	if x.ValidFrom, err = parseWhen(in.ValidFrom); err != nil {
 		return nil, err

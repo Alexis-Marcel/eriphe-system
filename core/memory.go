@@ -74,9 +74,36 @@ const (
 	kindEpisode    = "episode"
 	kindCommitment = "commitment"
 	kindLesson     = "lesson"
+	// Durable state compiled from the raw history: a choice and its reason,
+	// and the current card of a project or goal (one per subject, each
+	// change superseding the last).
+	kindDecision = "decision"
+	kindProgress = "progress"
 )
 
-var memoryKinds = []string{kindProfile, kindPreference, kindFact, kindPerson, kindEpisode, kindCommitment, kindLesson}
+var memoryKinds = []string{kindProfile, kindPreference, kindFact, kindPerson, kindEpisode, kindCommitment, kindLesson, kindDecision, kindProgress}
+
+// States of a progress card.
+const (
+	progressActive  = "active"
+	progressBlocked = "blocked"
+	progressDone    = "done"
+	progressPaused  = "paused"
+)
+
+var progressStates = []string{progressActive, progressBlocked, progressDone, progressPaused}
+
+// How a derived memory was read (Graphify's labels): said in so many
+// words, deduced, or unclear. Beside the trust, which says who it comes from.
+const (
+	basisStated    = "stated"
+	basisInferred  = "inferred"
+	basisAmbiguous = "ambiguous"
+)
+
+// basisConfidence is the confidence a basis gives: discrete, as models
+// follow a rubric better than a continuous range.
+var basisConfidence = map[string]float64{basisStated: 0.9, basisInferred: 0.7, basisAmbiguous: 0.3}
 
 // ownerKinds are written only from my own words.
 func ownerKind(kind string) bool {
@@ -143,6 +170,7 @@ type Memory struct {
 	Flags        string    `json:"flags,omitempty"`      // what the scanner noticed
 	Keywords     string    `json:"keywords,omitempty"`   // variants and synonyms, indexed with the text
 	Importance   int       `json:"importance,omitempty"` // 1 to 5, 3 by default
+	Basis        string    `json:"basis,omitempty"`      // stated, inferred, ambiguous; "" if not derived
 	DeletedAt    time.Time `json:"deleted_at,omitzero"`
 	UpdatedAt    time.Time `json:"updated_at"`
 
@@ -206,6 +234,7 @@ var memoryMigrations = []memoryMigration{{sql: `CREATE TABLE memories (
 	  started INTEGER NOT NULL, finished INTEGER, applied INTEGER NOT NULL DEFAULT 0);
 	CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);`},
 	{fn: migrateSearchKeys},
+	{sql: `ALTER TABLE memories ADD COLUMN basis TEXT NOT NULL DEFAULT ''`},
 }
 
 // migrateSearchKeys (schema 2) gives the full-text index its keys: the
@@ -363,7 +392,7 @@ func fromNull(n sql.NullInt64) time.Time {
 
 const memColumns = `id, kind, subject, text, links, occurred_at, valid_from, valid_to, recorded_at, superseded_by, supersedes,
 	due_at, state, source_kind, source_ref, trust, status, pinned, confidence, use_count, last_used_at, flags, deleted_at, updated_at,
-	keywords, importance`
+	keywords, importance, basis`
 
 func scanMemory(sc interface{ Scan(...any) error }) (*Memory, error) {
 	var x Memory
@@ -372,7 +401,7 @@ func scanMemory(sc interface{ Scan(...any) error }) (*Memory, error) {
 	var from, recorded, updated int64
 	err := sc.Scan(&x.ID, &x.Kind, &x.Subject, &x.Text, &links, &occurred, &from, &validTo, &recorded, &superseded, &supersedes,
 		&due, &x.State, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Status, &x.Pinned, &x.Confidence, &x.UseCount, &used,
-		&x.Flags, &deleted, &updated, &x.Keywords, &x.Importance)
+		&x.Flags, &deleted, &updated, &x.Keywords, &x.Importance, &x.Basis)
 	if err != nil {
 		return nil, err
 	}
@@ -470,15 +499,27 @@ func (m *memStore) normalize(x *Memory) error {
 	if x.Kind == kindEpisode && x.OccurredAt.IsZero() {
 		x.OccurredAt = now
 	}
-	if x.Kind == kindCommitment {
+	switch x.Kind {
+	case kindCommitment:
 		if x.State == "" {
 			x.State = stateOpen
 		}
 		if !containsStr([]string{stateOpen, stateDone, stateDropped}, x.State) {
 			return errors.New("state must be open, done or dropped")
 		}
-	} else {
+	case kindProgress:
+		if x.State == "" {
+			x.State = progressActive
+		}
+		if !containsStr(progressStates, x.State) {
+			return errors.New("the state of a progress card is active, blocked, done or paused")
+		}
+		x.DueAt = time.Time{}
+	default:
 		x.State, x.DueAt = "", time.Time{}
+	}
+	if x.Basis != "" && basisConfidence[x.Basis] == 0 {
+		return errors.New("basis is stated, inferred or ambiguous")
 	}
 	if x.Kind == kindProfile {
 		x.Pinned = true
@@ -546,11 +587,11 @@ func (m *memStore) insert(q querier, x *Memory, who string, except int64) error 
 		links = []byte("[]")
 	}
 	res, err := q.Exec(`INSERT INTO memories (kind, subject, text, links, occurred_at, valid_from, valid_to, recorded_at, supersedes,
-		due_at, state, source_kind, source_ref, trust, status, pinned, confidence, flags, updated_at, keywords, importance, stems)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		due_at, state, source_kind, source_ref, trust, status, pinned, confidence, flags, updated_at, keywords, importance, stems, basis)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		x.Kind, x.Subject, x.Text, string(links), unixOrNil(x.OccurredAt), x.ValidFrom.Unix(), unixOrNil(x.ValidTo), now.Unix(),
 		nullID(x.Supersedes), unixOrNil(x.DueAt), x.State, x.SourceKind, x.SourceRef, x.Trust, x.Status, x.Pinned, x.Confidence,
-		x.Flags, now.Unix(), x.Keywords, x.Importance, memoryStems(x.Text, x.Subject, x.Keywords))
+		x.Flags, now.Unix(), x.Keywords, x.Importance, memoryStems(x.Text, x.Subject, x.Keywords), x.Basis)
 	if err != nil {
 		return err
 	}
@@ -1142,7 +1183,7 @@ func scanMemoryWith(rows *sql.Rows, extra ...any) (*Memory, error) {
 	var from, recorded, updated int64
 	dest := []any{&x.ID, &x.Kind, &x.Subject, &x.Text, &links, &occurred, &from, &validTo, &recorded, &superseded, &supersedes,
 		&due, &x.State, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Status, &x.Pinned, &x.Confidence, &x.UseCount, &used,
-		&x.Flags, &deleted, &updated, &x.Keywords, &x.Importance}
+		&x.Flags, &deleted, &updated, &x.Keywords, &x.Importance, &x.Basis}
 	if err := rows.Scan(append(dest, extra...)...); err != nil {
 		return nil, err
 	}
