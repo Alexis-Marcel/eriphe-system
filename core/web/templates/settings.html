@@ -11,6 +11,7 @@
     {{else if eq .Tab "remote"}}{{template "remote" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
     {{else if eq .Tab "watches"}}{{template "watches" .}}
+    {{else if eq .Tab "context"}}{{template "context" .}}
     {{else}}{{template "account" .}}{{end}}
   </div>{{end}}
 </div>

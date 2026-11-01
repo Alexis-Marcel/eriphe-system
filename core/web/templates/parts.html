@@ -322,6 +322,7 @@ The ways back follow the pages, never the browser's history. */}}
     <a href="/settings/devices" {{if eq .Tab "devices"}}aria-current="page"{{end}}>{{template "i-device"}}<span>{{t "settings.machines"}}</span>{{if or .Updates.Core .Updates.Nodes}}{{template "new-dot"}}{{end}}{{template "chev"}}</a>
     <a href="/settings/remote" {{if eq .Tab "remote"}}aria-current="page"{{end}}>{{template "i-globe"}}<span>{{t "settings.remote"}}</span>{{template "chev"}}</a>
     <a href="/settings/notifications" {{if eq .Tab "notifications"}}aria-current="page"{{end}}>{{template "i-bell"}}<span>{{t "settings.notifications"}}</span>{{template "chev"}}</a>
+    <a href="/settings/context" {{if eq .Tab "context"}}aria-current="page"{{end}}>{{template "i-pulse"}}<span>{{t "ctx.title"}}</span>{{template "chev"}}</a>
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-space">
     <h2 class="nav-group-title" id="sg-space">{{t "settings.g.space"}}</h2>

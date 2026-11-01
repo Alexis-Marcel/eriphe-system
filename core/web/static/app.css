@@ -1384,6 +1384,10 @@ dialog.modal[open] { max-height: calc(100dvh - 32px - env(safe-area-inset-top) -
 .install-how li span { color: var(--muted); }
 .install-how li.current { background: var(--accent-soft); }
 .push-list li { flex-wrap: wrap; }
+
+/* Settings → Ce qu'Eriphe sait de toi */
+.ctx-privacy { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; color: var(--muted); }
+#context-live .mono, #context pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 #push-state:empty { display: none; }
 
 /* Installed on a phone (iOS standalone): 100dvh can stop short of the screen's

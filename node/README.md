@@ -214,6 +214,50 @@ nothing of what is on screen. On macOS with the node on the Mac itself it is rea
 elsewhere (Windows through WSL, Linux, Lima's VM) it is `{"known": false}` for now. eriphe-core
 keeps it in memory only.
 
+### The user's session (context)
+
+eriphe-core asks with a level, `GET /v1/node?context=N`, the user's choice on the page « Ce
+qu'Eriphe sait de toi » (`core/context.go`). At 0 the node tells nothing of the user (`idle` too
+is `{"known": false}`); without the parameter (an older eriphe-core), `idle` as before and nothing
+more. From 1, it also reports `context`:
+
+```json
+{"known": true, "dnd": true, "reason": "game", "activity": "game"}
+```
+
+- `dnd` and `reason` (level 1): not to be disturbed, and why as a class: `game` or `meeting` when
+  the app in front is one, `fullscreen`, `mic` or `focus` when the system says so.
+- `activity` (level 2 only): the category of the app in front, `game`, `meeting`, `code`, `web`,
+  `video`, `music`, `chat` or `other`.
+
+Everything is worked out on the machine (`context.go`): the app's identifier never leaves it, only
+the category. `categorize(id, declared)` is a pure function: a local table first (browsers → `web`,
+Zoom, Teams, FaceTime → `meeting`, editors and terminals → `code`, Steam → `game`, …), then the
+app's declared `LSApplicationCategoryType` (`public.app-category.games` and the `*-games` →
+`game`, `developer-tools` → `code`, …), else `other`.
+
+On macOS (node on the Mac, as the user's LaunchAgent) the app in front and its declared category
+come from `lsappinfo front` and `lsappinfo info` (LaunchServices, no permission, about 12 ms).
+Fullscreen and the microphone are **not** read: fullscreen has no answer without the
+screen-recording or accessibility permission, and the microphone (CoreAudio's
+`kAudioDevicePropertyDeviceIsRunningSomewhere`) needs cgo, which this node is built without.
+
+Elsewhere the node cannot see the session (Windows runs it in WSL; Linux and containers have no one
+answer): it reports `{"known": false}`, unless a **session helper** running in the user's session
+writes a file the node reads, named by `ERIPHE_SESSION_FILE` (at most 4 KiB, ignored once older
+than 30 s):
+
+```json
+{"at": "2026-11-01T20:15:00Z", "app": "steam.exe", "declared": "", "dnd": true,
+ "reason": "fullscreen", "idle_seconds": 42, "locked": false}
+```
+
+`app` (the executable or identifier in front) stays on the machine: the node maps it with the same
+table. `idle_seconds` and `locked` fill `idle` where the node cannot read it. A Windows helper fills
+it from `GetLastInputInfo`, `GetForegroundWindow` and `SHQueryUserNotificationState`
+(`QUNS_BUSY` → `fullscreen`, `QUNS_RUNNING_D3D_FULL_SCREEN` → `game`, `QUNS_PRESENTATION_MODE` →
+`focus`, `QUNS_NOT_PRESENT` → `locked`). A probe for another system is a `sessionProbe`.
+
 ## API (through the tunnel)
 
 | Call | What |
