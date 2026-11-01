@@ -118,23 +118,14 @@ func (c *core) seenPresence(at time.Time) {
 
 // lastSeen is the user's last activity before now, from the same signals,
 // within the last 30 days (a tab in front counts at its 10-minute bucket);
-// false if none. A return after an absence (step 2's "le point à ton
-// retour") is a new signal after a long gap: awaySince tells the gap.
+// false if none. A return after an absence is a new signal after a long
+// gap: lastAbsence (user_state.go) tells it.
 func (c *core) lastSeen(now time.Time) (time.Time, bool) {
-	var last time.Time
-	for _, src := range activitySources {
-		got, err := src(c, now.AddDate(0, 0, -30))
-		if err != nil {
-			log.Printf("notify: activity: %v", err)
-			continue
-		}
-		for _, s := range got {
-			if !s.Unwelcome && !s.At.After(now) && s.At.After(last) {
-				last = s.At
-			}
-		}
+	ts := c.activityTimes(now) // user_state.go
+	if len(ts) == 0 {
+		return time.Time{}, false
 	}
-	return last, !last.IsZero()
+	return ts[len(ts)-1], true
 }
 
 // awaySince is how long the user has been away at now: since their last

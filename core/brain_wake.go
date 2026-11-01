@@ -64,7 +64,7 @@ func (c *core) deliverClock(ctx context.Context, a Assistant, t *TaskRow) (bool,
 		return false, err
 	}
 	p.Due = due
-	text := nowLine(time.Now()) + "\n\n" + p.render(c.conf().User) + "\n" + fmt.Sprintf(wakeInstructions, c.conf().User)
+	text := c.turnHead(time.Now()) + "\n\n" + p.render(c.conf().User) + "\n" + fmt.Sprintf(wakeInstructions, c.conf().User)
 	c.turn.goOn(0, 0, t.LastSeq, c.turnTaint())
 	var ids []string
 	for _, x := range due {

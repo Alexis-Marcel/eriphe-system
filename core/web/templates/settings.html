@@ -11,6 +11,7 @@
     {{else if eq .Tab "remote"}}{{template "remote" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
     {{else if eq .Tab "journal"}}{{template "journal" .}}
+    {{else if eq .Tab "happened"}}{{template "happened" .}}
     {{else}}{{template "account" .}}{{end}}
   </div>{{end}}
 </div>
@@ -420,6 +421,31 @@ is shown again. . is a joinWait. */}}
 </div>
 {{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-list"}}</span><p>{{t "journal.none"}}</p></div>{{end}}
 {{end}}
+
+{{/* What happened (web_since.go): the feed the brain reads with since. */}}
+{{define "happened"}}{{with .Data}}
+<header class="page-head"><h2>{{t "settings.happened"}}</h2><p>{{t "happened.lead"}}</p></header>
+<nav class="pill-tabs" aria-label="{{t "happened.range"}}">
+  {{range list "last" "day" "week"}}<a href="/settings/happened?range={{.}}{{if $.Data.Kind}}&amp;kind={{$.Data.Kind}}{{end}}" {{if eq . $.Data.Range}}aria-current="true"{{end}}>{{t (printf "happened.range.%s" .)}}</a>{{end}}
+</nav>
+<nav class="pill-tabs" aria-label="{{t "happened.kinds"}}">
+  <a href="/settings/happened?range={{.Range}}" {{if not .Kind}}aria-current="true"{{end}}>{{t "happened.kind.all"}}</a>
+  {{range list "task" "notification" "intention" "message"}}<a href="/settings/happened?range={{$.Data.Range}}&amp;kind={{.}}" {{if eq . $.Data.Kind}}aria-current="true"{{end}}>{{t (printf "happened.kind.%s" .)}}</a>{{end}}
+</nav>
+<p class="muted small">{{if .FromLast}}{{tf "happened.fromlast" (date .From)}}{{else if .NoLast}}{{t "happened.nolast"}}{{else}}{{tf "happened.from" (date .From)}}{{end}}</p>
+{{if .Items}}
+<ol class="list happened-list">
+{{range .Items}}
+  <li class="happened happened-{{.Kind}}">
+    <time class="mono small muted" datetime="{{iso .At}}">{{date .At}}</time>
+    <span class="happened-text">{{if .Link}}<a href="{{.Link}}">{{.Summary}}</a>{{else}}{{.Summary}}{{end}}</span>
+    {{if .External}}<span class="tag tag-warn" title="{{t "happened.external.hint"}}">{{t "happened.external"}}</span>{{end}}
+  </li>
+{{end}}
+</ol>
+{{if .More}}<p class="muted small">{{tf "happened.more" .Max}}</p>{{end}}
+{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-history"}}</span><p>{{t "happened.none"}}</p></div>{{end}}
+{{end}}{{end}}
 
 {{define "journal-rows"}}
 {{range .Data.Rows}}

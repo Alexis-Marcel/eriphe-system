@@ -1413,6 +1413,16 @@ pre.diff .gap { color: var(--muted); }
 .skill-review { border-color: color-mix(in srgb, var(--warn-strong) 40%, var(--border)); }
 .skill-review .form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 
+/* What happened (settings.html, happened). */
+.pill-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); overflow-x: auto; scrollbar-width: none; justify-self: start; max-width: 100%; margin-bottom: 8px; width: fit-content; }
+.pill-tabs::-webkit-scrollbar { display: none; }
+.pill-tabs a { display: inline-flex; align-items: center; flex: none; padding: 7px 14px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: .88rem; }
+.pill-tabs a:hover { color: var(--text); text-decoration: none; }
+.pill-tabs a[aria-current] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.happened-list li { justify-content: flex-start; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; }
+.happened-list time { flex: none; min-width: 8.5rem; }
+.happened-text { flex: 1; min-width: 12rem; overflow-wrap: anywhere; }
+
 /* The brain's notifications and rules (push.html, notify-*). */
 .notif-sub { margin: 14px 0 6px; font-size: .9rem; }
 .notif-list li { flex-wrap: wrap; }

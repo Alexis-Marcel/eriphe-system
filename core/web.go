@@ -219,6 +219,7 @@ func (w *web) routes() http.Handler {
 	// session cookie (SameSite=Strict): the flow's own cookie binds it.
 	mux.HandleFunc("GET /oauth/callback", w.handleOAuthCallback)
 	mux.Handle("GET /settings/journal", w.auth(w.handleJournal))
+	mux.Handle("GET /settings/happened", w.auth(w.handleHappened)) // web_since.go
 	mux.Handle("GET /settings/account", w.auth(w.handleAccount))
 	mux.Handle("POST /settings/password", w.auth(w.handlePassword))
 	mux.Handle("POST /settings/signin", w.auth(w.handleSaveSignin))   // web_signin_settings.go

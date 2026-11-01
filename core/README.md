@@ -1485,7 +1485,7 @@ running tasks, and turns urgent when one waits for the user) and Réglages. On a
 hides or shows the side panel; on a phone it opens the tasks as a sheet over the conversation
 (closed by its button, Escape or the browser's back), and from any other page it comes back to
 the conversation on its tasks (`/#tasks-panel`). The settings come in four groups: Assistant (the
-memory, "Ce que Jarvis sait de toi", still at `/memory`, and the agents), Connexions (tools,
+memory, "Ce que Jarvis sait de toi", still at `/memory`, what happened, and the agents), Connexions (tools,
 folders), Appareils & accès (devices, remote access, app and notifications) and Mon espace
 (account, sign-out, journal); an entry is marked when it needs a look (an update, a tool in error,
 a refused key). On a phone the settings say the way back, "‹ Conversation".
@@ -1838,6 +1838,33 @@ a level; the code decides (`decideNotify`, no model):
 The interruption bench (`notify_eval_test.go`, `testdata/notifyeval`) runs with the tests: it scores
 the decision on labelled cases (accuracy, precision and recall of "now", night wake-ups no rule
 allows: none, injection cases blocked: all).
+
+**The user's state and what happened** (`user_state.go`, `since.go`, `since_tool.go`,
+`web_since.go`). Each of the brain's turns opens with the time (`[maintenant …]`) and, under it, the
+user's state, built by code: `[état de Sam : présent, de retour à 14:50 après 4 h 30 d'absence
+(parti à 10:20) · heures calmes à 22:00 (22:00–08:00) · notifications « maintenant » restantes
+aujourd'hui : 3 sur 4]`. Present or away comes from the activity signals above: no activity for an
+hour is away, and a gap of an hour or more is an absence. "Busy until" comes from `busySources`,
+none yet: reading a connected calendar on every turn would cost a call each time and taint every
+turn; a source that keeps free/busy times only (never titles) joins there.
+
+- **`since(t, kinds?, limit?, include_external?)`** returns one chronological feed since `t` (an
+  RFC3339 time, `YYYY-MM-DD[THH:MM]` in the user's zone, `away`: since the user left before their
+  return, or `last_brief`, from the kv `last_brief` the brief will write): tasks (started; turns
+  finished with their receipt's verdict in numbers, waiting, failed, stopped, from the append-only
+  `task_log` written where the brain is told), notifications (sent, held, dropped, feedback),
+  intentions (due, done, snoozed, cancelled, from `intention_log`), the user's and the brain's
+  messages (short; a brain message sent as a notification is that notification), and `watch`,
+  empty until the watch tool. Each item has a time, kind, event, summary written by code, a ref
+  for drill-down (`task:`, `notification:`, `intention:`, `msg:`) and a trust, `own` or
+  `external` (a notification or brain message written in a tainted turn, an intention drawn from
+  external content, a task started on a tainted turn).
+- **Taint.** By default `since` quotes only own items and names external ones without their text,
+  so reading it does not taint the turn; `include_external` quotes them too and taints the turn
+  (`since.external`), as reading an external memory does.
+- **« Ce qui s'est passé »** (`/settings/happened`, Settings → Assistant) shows the same feed to the
+  user, by kind, since they were last here (the start of their last absence; the last 24 hours if
+  none), or the last 24 hours or 7 days, external items marked.
 
 ## Remote access (Tailscale)
 
