@@ -652,6 +652,29 @@ checked when the task starts (at most 10 checks, unique names, paths under `/wor
 7 days, 5 attempts, 500 turns), kept in `task_harness`, given to the agent after its standing
 instruction, returned by `task_status` as `contract`, and shown in the task's drawer.
 
+### Retries and budgets (`task_retry.go`)
+
+What follows a worker's turn that failed is decided in code, by the failure's class (from the
+causes of `problems.go`), before the brain hears of it:
+
+| Class | Example | What eriphe-core does |
+|---|---|---|
+| passing (`transient`) | network, the provider's 5xx, overloaded, a rate limit | retries it after 30 s, then 1, 2, 4 minutes (5 at most), within the contract's `attempts` (2 by default): the agent is told to carry on |
+| account | key refused, quota or credit spent, model missing | no retry: the brain is told to warn the user |
+| invalid | a request refused (400), a turn cut by its limits | no blind retry: the brain changes the instructions or warns the user |
+| permission | the policy refused an action | never retried: the brain hears it as before |
+| check | a check of the contract failed | sent back to the agent by its node (see eriphe-node's README) |
+| same failure twice | the same class and words (numbers aside) twice in a row, or a check the node stopped sending back | **stops** the task, even with attempts left |
+
+The budget of a contract is kept by eriphe-core: `minutes` (checked every 15 seconds), `turns`
+and `tokens` (input, output and cache writes from the turns' `usage`, where the harness reports
+it) at the end of a turn; a turn whose receipt says `done` is not stopped (the brain closes the
+task), and `answer_task` refuses a new turn once the turns are spent. A task eriphe-core stops
+keeps why (`stop_reason`): the brain hears it with the last receipt when the node reports it
+stopped, and the drawer says so; a retry on its way shows its time. A task whose agent or container
+failed is told to the brain with its class: worth starting again once, or not. Each failure's class
+is kept in `task_harness` for the measures. The brain's prompt no longer counts retries itself.
+
 ### Receipts (`receipt.go`)
 
 A worker ends every turn with a **receipt**: a fenced ```` ```json ```` block, the last thing of its

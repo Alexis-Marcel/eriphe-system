@@ -196,6 +196,8 @@
 </dl>
 {{if .Card.PendingReason}}{{if .Card.Finished}}<div class="alert-box">{{template "problem" (problem "task" .Card.PendingReason)}}</div>{{else}}<p class="notice">{{.Card.PendingReason}}</p>{{end}}{{end}}
 {{if .Card.Link}}<a class="btn btn-soft wide" href="{{.Card.Link}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{.Card.LinkLabel}}</a>{{end}}
+{{with .Card.StopReason}}<p class="notice">{{t (printf "task.stopped.%s" .)}}</p>{{end}}
+{{if not .Card.RetryAt.IsZero}}<p class="notice">{{tf "task.retryat" (clock .Card.RetryAt)}}</p>{{end}}
 {{with .Card.Contract}}{{template "contract" .}}{{end}}
 {{with .Card.Receipt}}{{template "receipt" .}}{{end}}
 <details class="prompt"><summary>{{t "task.prompt"}}</summary><div class="prose">{{md .Card.Prompt}}</div></details>

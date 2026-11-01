@@ -138,8 +138,9 @@ func (c *core) checkNodes(ctx context.Context) {
 	}
 	c.followUpdateAll()
 	c.autoUpdates(time.Now())
-	c.replaceStranded() // placement.go
-	c.placeServices()   // also when no node answers: a node gone too long loses its services
+	c.replaceStranded()       // placement.go
+	c.harnessTick(time.Now()) // retries due, time budgets (task_retry.go)
+	c.placeServices()         // also when no node answers: a node gone too long loses its services
 }
 
 // refreshNode records whether a node answers, and what it offers. A node
@@ -490,6 +491,9 @@ func (c *core) answer(ctx context.Context, id, permission, reply string, allow *
 	}
 	if reply == "" {
 		return "", errors.New("reply is required")
+	}
+	if err := c.turnsLeft(id); err != nil { // its budget (task_retry.go)
+		return "", err
 	}
 	if err := c.store.addInbox(id, "message", map[string]any{"text": reply}); err != nil {
 		return "", err
