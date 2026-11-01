@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -192,7 +193,7 @@ func TestPushEncryptedAndSigned(t *testing.T) {
 	c.tell(pushNote{URL: "/x", Tag: "t", Topic: "task-t-1234", Urgent: true, Body: map[string]string{"fr": "Bonjour", "en": "Hello"}})
 	c.push.pending.Wait()
 	got := b.received()
-	if len(got) != 1 || got[0] != (pushPayload{Title: assistantName(), Body: "Bonjour", URL: "/x", Tag: "t"}) {
+	if len(got) != 1 || !reflect.DeepEqual(got[0], pushPayload{Title: assistantName(), Body: "Bonjour", URL: "/x", Tag: "t"}) {
 		t.Fatalf("received %+v", got)
 	}
 	h := b.heads[0]

@@ -62,6 +62,7 @@ type pushNote struct {
 	Urgent  bool              // the user is waited for
 	Anyway  bool              // even with a tab in front (a test the user asked for)
 	OnlyFor string            // one subscription's id; all of them when empty
+	React   string            // where its 👍 / 👎 / « pas maintenant » buttons answer (notify.go)
 }
 
 // pushPayload is what the service worker receives (sw.js).
@@ -70,6 +71,14 @@ type pushPayload struct {
 	Body  string `json:"body"`
 	URL   string `json:"url"`
 	Tag   string `json:"tag,omitempty"`
+	// The buttons of a notification of the brain's, and where they answer.
+	React   string       `json:"react,omitempty"`
+	Actions []pushAction `json:"actions,omitempty"`
+}
+
+type pushAction struct {
+	Action string `json:"action"`
+	Title  string `json:"title"`
 }
 
 type pushSub struct {
@@ -318,7 +327,13 @@ func (n pushNote) payload(lang string) pushPayload {
 	if title == "" {
 		title = assistantName()
 	}
-	return pushPayload{Title: title, Body: truncate(body, 240), URL: n.URL, Tag: n.Tag}
+	p := pushPayload{Title: title, Body: truncate(body, 240), URL: n.URL, Tag: n.Tag, React: n.React}
+	if n.React != "" {
+		for _, fb := range feedbacks {
+			p.Actions = append(p.Actions, pushAction{Action: fb, Title: tr(lang, "notif.fb."+fb)})
+		}
+	}
+	return p
 }
 
 var topicChars = regexp.MustCompile(`[^A-Za-z0-9_-]`)

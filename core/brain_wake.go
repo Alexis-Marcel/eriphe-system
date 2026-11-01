@@ -74,7 +74,9 @@ func (c *core) deliverClock(ctx context.Context, a Assistant, t *TaskRow) (bool,
 		}
 	}
 	c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Quiet = false })
+	c.setWakeTurn(wakeTurnOf(due, t.LastSeq)) // its answer is a notification (notify.go)
 	if _, err := c.answer(ctx, t.ID, "", text, nil, byUser); err != nil {
+		c.setWakeTurn(nil)
 		return false, err
 	}
 	c.mem.surfaced(due, "wake")
@@ -83,6 +85,21 @@ func (c *core) deliverClock(ctx context.Context, a Assistant, t *TaskRow) (bool,
 	}
 	log.Printf("%s: woken for intentions %s", c.assistantLog(a), strings.Join(ids, ", "))
 	return true, nil
+}
+
+// wakeTurnOf is the wake turn for these due intentions: drawn from
+// external content if any is, asked by the user if all are their own words.
+func wakeTurnOf(due []*Intention, eventSeq int) *wakeTurn {
+	w := &wakeTurn{EventSeq: eventSeq, Asked: true}
+	for _, x := range due {
+		w.IDs = append(w.IDs, x.ID)
+		w.External = w.External || x.Trust == trustExternal
+		w.Asked = w.Asked && x.Trust == trustOwner
+	}
+	if len(due) > 0 {
+		w.Text = due[0].Text
+	}
+	return w
 }
 
 // cueBlock is what a message of mine brings up: the intentions whose

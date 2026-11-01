@@ -44,6 +44,8 @@
   <div id="push-devices">{{template "push-devices" .}}</div>
 </section>
 
+{{template "notify-sections" .Data.Notify}}
+
 <details class="panel advanced">
   <summary><span class="adv-title">{{t "screen.title"}}</span><span class="muted small">{{t "screen.summary"}}</span></summary>
   <pre class="mono small" id="screen-details"></pre>
@@ -57,4 +59,88 @@
     <button class="btn btn-ghost sm" type="button" hx-post="/push/unsubscribe" hx-vals='{"id": "{{.ID}}"}' hx-target="#push-devices" aria-label="{{t "push.remove"}} {{.Label}}">{{template "i-x"}}{{t "push.remove"}}</button>
   </li>{{end}}
 </ul>{{else}}<p class="muted small">{{t "push.none"}}</p>{{end}}
+{{end}}
+
+{{/* What the brain told on its own, and why; its rules (web_notify.go, notify.go). */}}
+{{define "notify-sections"}}
+<section class="panel" aria-labelledby="notif-title">
+  <h3 id="notif-title">{{template "i-bell"}}{{t "notif.title"}}</h3>
+  <p class="small muted">{{t "notif.lead"}}</p>
+  {{if .Held}}<h4 class="notif-sub">{{t "notif.held"}}</h4>
+  <ul class="list notif-list">{{range .Held}}{{template "notify-card" .}}{{end}}</ul>{{end}}
+  <h4 class="notif-sub">{{t "notif.recent"}}</h4>
+  {{if .Recent}}<ul class="list notif-list">{{range .Recent}}{{template "notify-card" .}}{{end}}</ul>
+  {{else}}<p class="muted small">{{t "notif.none"}}</p>{{end}}
+</section>
+<section class="panel" aria-labelledby="rules-title" id="notify-rules">{{template "notify-rules" .}}</section>
+{{end}}
+
+{{define "notify-card"}}
+<li class="notif{{if .Open}} is-open{{end}}" id="notif-{{.ID}}">
+  <div class="list-main">
+    <span class="strong">{{.Text}}</span>
+    <span class="small muted">{{date .Created}} · <span class="tag{{if eq .Outcome "now"}} tag-ok{{else if eq .Outcome "brief"}} tag-accent{{end}}">{{t (printf "notif.out.%s" .Outcome)}}</span>
+      {{if .Held}}<span class="tag">{{t "notif.waiting"}}</span>{{end}}
+      {{if .Tainted}}<span class="tag tag-no" title="{{.Tainted}}">{{t "notif.tainted"}}</span>{{end}}</span>
+    <span class="small">{{t "notif.why"}} {{.Why}}</span>
+    <span class="small muted">{{t (printf "notif.reason.%s" .Reason)}}{{if .Ref}} · <span class="mono">{{.Ref}}</span>{{end}}{{if .Msg}} · <a href="/#m{{.Msg}}">{{t "notif.inchat"}}</a>{{end}}</span>
+  </div>
+  {{if ne .Outcome "never"}}<div class="notif-fb" role="group" aria-label="{{t "notif.fb.label"}}">
+    {{$fb := .Feedback}}{{$id := .ID}}{{range $r := (list "up" "down" "later")}}
+    <button class="btn {{if eq $fb $r}}btn-primary{{else}}btn-ghost{{end}} sm" type="button" aria-pressed="{{if eq $fb $r}}true{{else}}false{{end}}"
+      hx-post="/notify/{{$id}}/feedback" hx-vals='{"r": "{{$r}}"}' hx-target="#notif-{{$id}}" hx-swap="outerHTML">{{t (printf "notif.fb.%s" $r)}}</button>{{end}}
+  </div>{{end}}
+</li>
+{{end}}
+{{define "notify-card-frag"}}{{template "notify-card" .Data}}{{end}}
+
+{{define "notify-rules"}}
+<h3 id="rules-title">{{t "rule.title"}}</h3>
+<p class="small muted">{{t "rule.lead"}}</p>
+<p class="small">{{tf "rule.quietnow" .Weekdays.Window .Weekend.Window}}{{if eq .Weekdays.By "seed"}} {{t "rule.seed"}}{{end}}</p>
+{{range .Suggested}}<p class="small muted">{{tf "rule.suggested" (t (printf "rule.days.%s" .Days)) .From .To .Current}}</p>{{end}}
+{{if .Proposed}}<h4 class="notif-sub">{{t "rule.proposed"}}</h4>
+<ul class="list">{{range .Proposed}}
+  <li><div class="list-main">{{template "rule-line" .}}{{if .Tainted}}<span class="small"><span class="tag tag-no" title="{{.Tainted}}">{{t "notif.tainted"}}</span></span>{{end}}</div>
+    <button class="btn btn-primary sm" hx-post="/notify/rules/{{.ID}}/approve" hx-target="#notify-rules">{{template "i-check"}}{{t "rule.approve"}}</button>
+    <button class="btn btn-ghost sm" hx-post="/notify/rules/{{.ID}}/reject" hx-target="#notify-rules">{{template "i-x"}}{{t "rule.reject"}}</button>
+  </li>{{end}}</ul>{{end}}
+<h4 class="notif-sub">{{t "rule.active"}}</h4>
+{{if .Rules}}<ul class="list">{{range .Rules}}
+  <li><div class="list-main">{{template "rule-line" .}}
+    <details class="rule-edit"><summary class="small">{{t "rule.edit"}}</summary>{{template "rule-form" .}}</details></div>
+    <button class="btn btn-ghost sm" hx-post="/notify/rules/{{.ID}}/delete" hx-target="#notify-rules" hx-confirm="{{t "rule.deleteconfirm"}}">{{template "i-x"}}{{t "rule.delete"}}</button>
+  </li>{{end}}</ul>
+{{else}}<p class="muted small">{{t "rule.none"}}</p>{{end}}
+<details class="rule-edit"><summary>{{template "i-plus"}}{{t "rule.add"}}</summary>{{template "rule-form" .Stub}}</details>
+<h4 class="notif-sub">{{t "notify.settings"}}</h4>
+<form class="row-form" hx-post="/notify/settings" hx-target="#notify-rules">
+  <label class="field"><span>{{t "notify.zone"}}</span><input name="zone" value="{{.Zone}}" placeholder="{{.DefaultZone}}" maxlength="64"></label>
+  <label class="field"><span>{{t "notify.cap"}}</span><input type="number" name="cap" value="{{.Cap}}" min="0" max="20" required></label>
+  <button class="btn btn-soft sm" type="submit">{{t "notify.save"}}</button>
+</form>
+<p class="small muted">{{tf "notify.sent" .SentToday .Cap}}</p>
+{{end}}
+{{define "notify-rules-frag"}}{{template "notify-rules" .Data}}{{end}}
+
+{{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{end}}</span>
+{{if .Why}}<span class="small muted">{{.Why}}</span>{{end}}{{end}}
+
+{{define "rule-form"}}
+<form class="rule-form" hx-post="/notify/rules" hx-target="#notify-rules">
+  {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+  <label class="field"><span>{{t "rule.kind"}}</span><select name="kind">
+    <option value="topic"{{if eq .Kind "topic"}} selected{{end}}>{{t "rule.kind.topic"}}</option>
+    <option value="quiet"{{if eq .Kind "quiet"}} selected{{end}}>{{t "rule.kind.quiet"}}</option></select></label>
+  <label class="field"><span>{{t "rule.match"}}</span><input name="match" value="{{.Match}}" placeholder="project:exemple" maxlength="80"></label>
+  <label class="field"><span>{{t "rule.outcome"}}</span><select name="outcome">{{$o := .Outcome}}{{range (list "now" "brief" "never")}}
+    <option value="{{.}}"{{if eq $o .}} selected{{end}}>{{t (printf "rule.out.%s" .)}}</option>{{end}}</select></label>
+  <label class="check"><input type="checkbox" name="night" value="1"{{if .Night}} checked{{end}}> {{t "rule.night"}}</label>
+  <label class="field"><span>{{t "rule.days"}}</span><select name="days">{{$d := .Days}}{{range (list "all" "weekdays" "weekend")}}
+    <option value="{{.}}"{{if eq $d .}} selected{{end}}>{{t (printf "rule.days.%s" .)}}</option>{{end}}</select></label>
+  <label class="field"><span>{{t "rule.from"}}</span><input type="time" name="from" value="{{.FromText}}"></label>
+  <label class="field"><span>{{t "rule.to"}}</span><input type="time" name="to" value="{{.ToText}}"></label>
+  <label class="field"><span>{{t "rule.why"}}</span><input name="why" value="{{.Why}}" maxlength="300"></label>
+  <button class="btn btn-soft sm" type="submit">{{template "i-check"}}{{t "rule.save"}}</button>
+</form>
 {{end}}
