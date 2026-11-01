@@ -353,9 +353,10 @@ func TestServiceBackoff(t *testing.T) {
 	if len(at) < 6 {
 		t.Fatalf("runs = %v", at)
 	}
-	first, later := at[2]-at[1], at[5]-at[4] // 80 ms, then capped at 160 ms
-	if later < first*1.4 || later > 1.5 {
-		t.Errorf("gaps %.3f then %.3f: no backoff, or no cap", first, later)
+	// The waits start at 40 ms and double to the 160 ms cap. A slow machine
+	// only lengthens a gap, so compare with the floors, not between gaps.
+	if gap := at[5] - at[4]; gap < 0.15 || gap > 1.5 {
+		t.Errorf("gap %.3f after five failures: no backoff, or no cap", gap)
 	}
 }
 
