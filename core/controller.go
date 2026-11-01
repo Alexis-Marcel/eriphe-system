@@ -221,6 +221,9 @@ type runRequest struct {
 	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository cloned into /work/repo (repo, with branch, base, dir), the user's folders (folder, drive-folder; see list_folders), catalog tools (tool; see list_tools); only what it needs, with the least access"`
 	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
 	Node      string        `json:"node,omitempty" jsonschema:"node name; empty lets the scheduler choose"`
+	// Contract: what must be true at the end, for a task that changes
+	// something (contract.go); none for a search or a read.
+	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something: objective (required), constraints, checks, evidence, verify, budget; leave it out for a search or a read. Approval is never part of it: the policy decides"`
 
 	// The old fields, read into resources (normalizeResources).
 	Repo       string   `json:"repo,omitempty" jsonschema:"legacy: use resources {kind: repo}"`
@@ -249,6 +252,14 @@ func (c *core) runTask(ctx context.Context, r runRequest) (*TaskRow, error) {
 func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra nodeTaskSpec) (*TaskRow, error) {
 	if r.Prompt == "" {
 		return nil, errors.New("prompt is required")
+	}
+	if r.Contract != nil {
+		if kind != "worker" {
+			return nil, errors.New("only a worker task takes a contract")
+		}
+		if err := r.Contract.normalize(); err != nil { // contract.go
+			return nil, err
+		}
 	}
 	agentName, agent, err := c.conf().agent(r.Agent)
 	if err != nil {
@@ -312,6 +323,11 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if err := c.store.insertTask(t); err != nil {
 		return nil, err
 	}
+	if r.Contract != nil {
+		if err := c.store.setContract(t.ID, r.Contract); err != nil {
+			return nil, err
+		}
+	}
 	if name != "" {
 		c.logPlaced(t, name) // its access log (node_access.go)
 		if r.Node == "" {
@@ -327,6 +343,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	spec.Folders = nil                                                                 // the same
 	if len(folders) > 0 {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders, c.resultsOn(folders[0].Node)))
+	}
+	if r.Contract != nil {
+		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + r.Contract.instruction())
 	}
 	if kind == "worker" {
 		c.lendSkills(&spec) // skills_tasks.go
@@ -356,7 +375,9 @@ type taskStatus struct {
 	AuthError          bool             `json:"auth_error,omitempty"`
 	// Receipt is its last turn's receipt, as eriphe-core checked it (receipt.go).
 	Receipt *checkedReceipt `json:"receipt,omitempty"`
-	Recent  []EventRow      `json:"recent"`
+	// Contract is what it was asked to make true (contract.go).
+	Contract *taskContract `json:"contract,omitempty"`
+	Recent   []EventRow    `json:"recent"`
 }
 
 func (c *core) status(id string, n int) (*taskStatus, error) {
@@ -402,6 +423,7 @@ func (c *core) status(id string, n int) (*taskStatus, error) {
 	}
 	if t.Kind == "worker" {
 		st.Receipt = crossCheck(events)
+		st.Contract = c.store.contract(id)
 	}
 	st.Recent = events[max(0, len(events)-n):]
 	return st, nil

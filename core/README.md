@@ -568,7 +568,7 @@ whatever address it dials) and one client certificate per node.
 | `list_agents` | agents, when to use each, and whether a node can run them now |
 | `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
 | `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
-| `run_task` | start a task: prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose); the old fields (`repo/ref/branch/dir`, `tools`, `folders`, `identities`) still work |
+| `run_task` | start a task: prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo); the old fields (`repo/ref/branch/dir`, `tools`, `folders`, `identities`) still work |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read` or `drop`), where a task finds it |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
@@ -621,6 +621,36 @@ again whenever a node comes online and every 15 seconds; stopping one stops it a
 registered node could ever run it, `run_task` fails. Nodes are checked every 15 seconds. Tasks that were active when eriphe-core stopped are
 followed again at start, and a disconnected node's tasks are followed again when it reconnects; a
 node that forgot a task marks it `lost`.
+
+### Contracts (`contract.go`)
+
+`run_task` takes an optional `contract`, for a task that changes something (none for a search or a
+read):
+
+```json
+{"objective": "One sentence: what must be true at the end.",
+ "constraints": ["Do not change the public API"],
+ "checks": [{"name": "build", "run": "go build ./...", "dir": "core"},
+            {"name": "tests", "run": "go test ./...", "timeout": 600},
+            {"name": "report", "exists": "/work/folders/Invoices/Eriphe/report.pdf"}],
+ "evidence": ["the PR link", "the test output"],
+ "verify": "auto",
+ "budget": {"minutes": 60, "attempts": 2, "turns": 30, "tokens": 2000000}}
+```
+
+| Field | Enforced by code? |
+|---|---|
+| `objective` (required) | no: shown to the agent first, and in the task's drawer |
+| `constraints` | in part: what is an access is already enforced by the resources and the policy; the rest is advice |
+| `checks` | yes: each `run` (exit code 0, `timeout` seconds, 300 by default, at most 3600) or `exists`, under `/work` only |
+| `evidence` | no: asked for in the receipt |
+| `verify` | `none`, `auto` (default) or `always`: recorded only, for the independent review to come |
+| `budget` | yes: eriphe-core stops the task beyond it |
+
+Approval is never part of a contract: the policy decides it, never the model. A contract is
+checked when the task starts (at most 10 checks, unique names, paths under `/work`, budgets within
+7 days, 5 attempts, 500 turns), kept in `task_harness`, given to the agent after its standing
+instruction, returned by `task_status` as `contract`, and shown in the task's drawer.
 
 ### Receipts (`receipt.go`)
 
