@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/node/usersession"
 )
 
 // The user's session, told to eriphe-core with the node's status (GET
@@ -51,8 +53,8 @@ type sessionState struct {
 
 // The closed lists, the same as eriphe-core's (core/context.go).
 var (
-	dndReasons         = []string{"game", "meeting", "fullscreen", "mic", "focus"}
-	activityCategories = []string{"game", "meeting", "code", "web", "video", "music", "chat", "other"}
+	dndReasons         = usersession.Reasons
+	activityCategories = usersession.Activities
 )
 
 // frontApp is what a probe reads of the app in front, on the machine only.
@@ -91,6 +93,8 @@ func sessionAt(level int, app frontApp, st sessionState, ok bool) sessionState {
 	cat := ""
 	if app.BundleID != "" || app.Declared != "" {
 		cat = categorize(app.BundleID, app.Declared)
+	} else if slices.Contains(activityCategories, st.Activity) {
+		cat = st.Activity // a helper's, worked out in the session
 	}
 	if !out.DND {
 		switch cat {
@@ -103,9 +107,6 @@ func sessionAt(level int, app frontApp, st sessionState, ok bool) sessionState {
 	}
 	if level >= 2 {
 		out.Activity = cat
-		if cat == "" && slices.Contains(activityCategories, st.Activity) {
-			out.Activity = st.Activity
-		}
 	}
 	return out
 }
@@ -125,66 +126,9 @@ func machineSession(ctx context.Context, level int) sessionState {
 	return sessionAt(level, app, st, ok)
 }
 
-// The categories of apps that declare none, or declare a misleading one,
-// by identifier: browsers (Chrome declares none, Safari "productivity"),
-// meeting apps, editors and terminals, game stores. A prefix ends in ".".
-var appTable = map[string]string{
-	// web
-	"com.apple.Safari": "web", "com.google.Chrome": "web", "org.mozilla.firefox": "web", "com.microsoft.edgemac": "web",
-	"company.thebrowser.Browser": "web", "com.brave.Browser": "web", "com.operasoftware.Opera": "web", "com.vivaldi.Vivaldi": "web",
-	"chrome.exe": "web", "msedge.exe": "web", "firefox.exe": "web", "brave.exe": "web", "opera.exe": "web",
-	// meeting
-	"us.zoom.xos": "meeting", "com.microsoft.teams": "meeting", "com.microsoft.teams2": "meeting", "com.apple.FaceTime": "meeting",
-	"com.cisco.webexmeetingsapp": "meeting", "com.webex.meetingmanager": "meeting",
-	"zoom.exe": "meeting", "ms-teams.exe": "meeting", "teams.exe": "meeting",
-	// code
-	"com.microsoft.VSCode": "code", "com.todesktop.230313mzl4w4u92": "code", "dev.zed.Zed": "code", "com.apple.dt.Xcode": "code",
-	"com.jetbrains.": "code", "com.sublimetext.": "code", "com.apple.Terminal": "code", "com.googlecode.iterm2": "code",
-	"dev.warp.": "code", "com.mitchellh.ghostty": "code", "net.kovidgoyal.kitty": "code", "org.alacritty": "code",
-	"code.exe": "code", "cursor.exe": "code", "windowsterminal.exe": "code", "devenv.exe": "code",
-	// game
-	"com.valvesoftware.steam": "game", "com.epicgames.EpicGamesLauncher": "game", "steam.exe": "game",
-	// video, music, chat
-	"com.apple.TV": "video", "org.videolan.vlc": "video", "com.colliderli.iina": "video", "vlc.exe": "video",
-	"com.spotify.client": "music", "com.apple.Music": "music", "spotify.exe": "music",
-	"com.tinyspeck.slackmacgap": "chat", "com.hnc.Discord": "chat", "ru.keepcoder.Telegram": "chat", "net.whatsapp.WhatsApp": "chat",
-	"com.apple.MobileSMS": "chat", "org.whispersystems.signal-desktop": "chat", "slack.exe": "chat", "discord.exe": "chat",
-}
-
-// The declared categories (LSApplicationCategoryType) that say something.
-var declaredTable = map[string]string{
-	"public.app-category.developer-tools":   "code",
-	"public.app-category.video":             "video",
-	"public.app-category.music":             "music",
-	"public.app-category.social-networking": "chat",
-	"public.app-category.entertainment":     "video",
-}
-
-// categorize is an app's category: the local table first (it corrects
-// the declarations), then its declared category, else other. Pure: the
-// app's identifier goes in, one word of activityCategories comes out.
+// categorize is an app's category, worked out on the machine (usersession.Category).
 func categorize(bundleID, declared string) string {
-	id := strings.TrimSpace(bundleID)
-	if cat, ok := appTable[id]; ok {
-		return cat
-	}
-	if cat, ok := appTable[strings.ToLower(id)]; ok {
-		return cat
-	}
-	for prefix, cat := range appTable {
-		if strings.HasSuffix(prefix, ".") && strings.HasPrefix(id, prefix) {
-			return cat
-		}
-	}
-	declared = strings.ToLower(strings.TrimSpace(declared))
-	if declared == "public.app-category.games" || strings.HasSuffix(declared, "-games") &&
-		strings.HasPrefix(declared, "public.app-category.") {
-		return "game"
-	}
-	if cat, ok := declaredTable[declared]; ok {
-		return cat
-	}
-	return "other"
+	return usersession.Category(bundleID, declared)
 }
 
 var (
@@ -212,20 +156,11 @@ func parseAppInfo(out []byte) frontApp {
 	return app
 }
 
-// helperFile is what a session helper writes, every few seconds: the app
-// in front stays on the machine (the node maps it), the rest is closed
-// values. A Windows helper fills it from GetForegroundWindow and
-// SHQueryUserNotificationState (QUNS_BUSY → fullscreen,
-// QUNS_RUNNING_D3D_FULL_SCREEN → game, QUNS_PRESENTATION_MODE → focus).
-type helperFile struct {
-	At       time.Time `json:"at"`
-	App      string    `json:"app,omitempty"`      // the executable or bundle identifier in front
-	Declared string    `json:"declared,omitempty"` // its declared category, if the system has one
-	DND      bool      `json:"dnd,omitempty"`
-	Reason   string    `json:"reason,omitempty"`
-	Idle     *int64    `json:"idle_seconds,omitempty"` // GetLastInputInfo, in the session
-	Locked   bool      `json:"locked,omitempty"`       // QUNS_NOT_PRESENT
-}
+// helperFile is what a session helper writes, every few seconds
+// (usersession.File): the category of the app in front, or the app itself
+// for the node to map, and closed values. The Windows helper
+// (cmd/eriphe-session) writes the category, worked out in the session.
+type helperFile = usersession.File
 
 // userIdle is the machine's idle time as told: from this system, else from
 // a session helper; nothing at level 0. An eriphe-core older than levels
@@ -274,6 +209,9 @@ func helperSession(path string, now time.Time) (frontApp, sessionState, bool) {
 	st := sessionState{DND: h.DND}
 	if slices.Contains(dndReasons, h.Reason) {
 		st.Reason = h.Reason
+	}
+	if slices.Contains(activityCategories, h.Activity) {
+		st.Activity = h.Activity
 	}
 	return frontApp{BundleID: h.App, Declared: h.Declared}, st, true
 }

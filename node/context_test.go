@@ -133,6 +133,25 @@ func TestHelperSession(t *testing.T) {
 	if s := helperIdle(path, now); !s.Locked {
 		t.Fatalf("locked not read: %+v", s)
 	}
+	// The Windows helper's: the category, worked out in the session.
+	write(helperFile{At: now, Activity: "game"})
+	if s := sessionAt(1, frontApp{}, st, true); s.Activity != "" {
+		t.Fatalf("level 1 told the category: %+v", s)
+	}
+	app, st, ok = helperSession(path, now)
+	if s := sessionAt(2, app, st, ok); !s.DND || s.Reason != "game" || s.Activity != "game" {
+		t.Fatalf("helper's game = %+v", s)
+	}
+	write(helperFile{At: now, Activity: "code"})
+	app, st, ok = helperSession(path, now)
+	if s := sessionAt(2, app, st, ok); s.DND || s.Activity != "code" {
+		t.Fatalf("helper's code = %+v", s)
+	}
+	write(helperFile{At: now, Activity: "Some Game.exe"})
+	app, st, ok = helperSession(path, now)
+	if s := sessionAt(2, app, st, ok); s.Activity != "" {
+		t.Fatalf("a category off the list = %+v", s)
+	}
 	write(helperFile{At: now.Add(-time.Minute), App: "steam.exe"})
 	if _, _, ok := helperSession(path, now); ok {
 		t.Fatal("a stale file was read")

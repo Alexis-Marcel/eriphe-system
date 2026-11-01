@@ -141,6 +141,11 @@ $bootDir = Join-Path $home_ "boot"
 $boot = Join-Path $bootDir "$Distro.ps1"
 # What keeps the PC awake while a task is at work (step 7).
 $awake = Join-Path $bootDir "$Distro-awake.ps1"
+# The session helper (step 7): one for the PC, whatever the distribution.
+$sessionTask = "Eriphe session"
+$helperDir = Join-Path $home_ "bin"
+$helperExe = Join-Path $helperDir "eriphe-session.exe"
+$sessionDir = Join-Path $home_ "session"
 $selfUrl = "https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1"
 
 # What it prints: a title, short steps, the outcome and where the logs are,
@@ -491,6 +496,94 @@ function Get-WakeCard([string] $core) {
   "$($macs -join ',') $broadcast".Trim()
 }
 
+# What the distribution's eriphe-node-run and eriphe-node are told of the
+# session helper's folder ($sessionDir): the Windows folder to mount,
+# read-only, and the file in it. Single-quoted for sh; none for a path sh
+# cannot hold that way.
+function Get-SessionEnv([string] $dir) {
+  if (-not $dir -or $dir -match "['`r`n]") { return "" }
+  "ERIPHE_SESSION_DIR='$dir'`nERIPHE_SESSION_FILE=/mnt/eriphe-session/session.json"
+}
+
+# The account signed in at the PC (the console's), whose session the helper
+# runs in; else the one running this script.
+function Get-SessionUser {
+  $user = try { (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).UserName } catch { $null }
+  if (-not $user) { $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name }
+  $user
+}
+
+# The session helper, eriphe-session.exe (node/cmd/eriphe-session): runs as
+# the user signed in at the PC, in their session, started at logon by the
+# scheduled task "Eriphe session", with no window and no privilege. Every few
+# seconds it writes, in $sessionDir, whether they are at the PC and not to be
+# disturbed (closed values, never a program's name); eriphe-node, in the
+# distribution, reads that folder only, read-only (eriphe-node-run). From the
+# image's copy in the distribution; with -Binary, the one already here.
+function Install-SessionHelper {
+  $arch = if (($env:PROCESSOR_ARCHITEW6432, $env:PROCESSOR_ARCHITECTURE) -contains "ARM64") { "arm64" } else { "amd64" }
+  $src = "/usr/local/share/eriphe/windows/$arch/eriphe-session.exe"
+  $user = Get-SessionUser
+  $sid = (New-Object Security.Principal.NTAccount $user).Translate([Security.Principal.SecurityIdentifier]).Value
+  $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  New-Item -ItemType Directory -Force $helperDir, $sessionDir | Out-Null
+  # The program: administrators and SYSTEM change it, users run it.
+  Invoke-Quiet { icacls.exe $helperDir /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" }
+  # Its folder, all of it replaced: the user writes it, the account the
+  # distribution runs as reads it, other users do not see it.
+  Remove-Item (Join-Path $sessionDir "*") -Force -ErrorAction SilentlyContinue
+  $acl = New-Object Security.AccessControl.DirectorySecurity
+  $acl.SetAccessRuleProtection($true, $false)
+  foreach ($r in @(@("S-1-5-32-544", "FullControl"), @("S-1-5-18", "FullControl"), @($me, "ReadAndExecute"), @($sid, "Modify"))) {
+    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule (
+      (New-Object Security.Principal.SecurityIdentifier $r[0]), $r[1], "ContainerInherit, ObjectInherit", "None", "Allow")))
+  }
+  Set-Acl -Path $sessionDir -AclObject $acl
+  if ((wsl.exe -d $Distro -u root -- sh -c "test -s $src && echo yes") -eq "yes") {
+    $new = "$helperExe.new"
+    Invoke-Quiet { cmd.exe /c "wsl.exe -d $Distro -u root --exec cat $src > `"$new`"" }
+    $copied = $LASTEXITCODE -eq 0
+    # A Windows program starts with "MZ".
+    $head = try {
+      $b = New-Object byte[] 2
+      $f = [IO.File]::OpenRead($new)
+      try { [void] $f.Read($b, 0, 2) } finally { $f.Close() }
+      [Text.Encoding]::ASCII.GetString($b)
+    } catch { "" }
+    if (-not $copied -or $head -ne "MZ") {
+      Remove-Item $new -Force -ErrorAction SilentlyContinue
+      throw "could not copy eriphe-session.exe out of $Distro"
+    }
+    if (Get-ScheduledTask -TaskName $sessionTask -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName $sessionTask }
+    Get-Process eriphe-session -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    for ($i = 0; $i -lt 20; $i++) {
+      try { Move-Item -Force $new $helperExe -ErrorAction Stop; break } catch { if ($i -eq 19) { throw }; Start-Sleep -Milliseconds 500 }
+    }
+  }
+  if (-not (Test-Path $helperExe)) { Write-Log "No session helper in this image: the session stays unknown."; return }
+  $action = New-ScheduledTaskAction -Execute $helperExe -Argument "-file `"$(Join-Path $sessionDir 'session.json')`""
+  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Hidden -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
+  $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+  Register-ScheduledTask -TaskName $sessionTask -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+  # Now, when the user is signed in; else at their next logon.
+  try { Start-ScheduledTask -TaskName $sessionTask } catch { Write-Log "$_" }
+  Write-Log "Session helper installed for $user."
+}
+
+# The session helper, its task and its folders, once no distribution is left.
+function Remove-SessionHelper {
+  if (Get-ScheduledTask -TaskName "Eriphe node*" -ErrorAction SilentlyContinue) { return }
+  if (Get-ScheduledTask -TaskName $sessionTask -ErrorAction SilentlyContinue) {
+    Stop-ScheduledTask -TaskName $sessionTask
+    Unregister-ScheduledTask -TaskName $sessionTask -Confirm:$false
+  }
+  Get-Process eriphe-session -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 1
+  Remove-Item $helperDir, $sessionDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
   [Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -520,6 +613,7 @@ if ($Uninstall) {
     Stop-ScheduledTask -TaskName $awakeTask
     Unregister-ScheduledTask -TaskName $awakeTask -Confirm:$false
   }
+  Remove-SessionHelper
   Remove-Item $boot, $awake -Force -ErrorAction SilentlyContinue
   if (-not (Get-ChildItem $bootDir -ErrorAction SilentlyContinue)) { Remove-Item $bootDir -Force -ErrorAction SilentlyContinue }
   $wasCore = $false
@@ -731,6 +825,14 @@ cat > /usr/local/bin/eriphe-node-run <<'EOF'
 set -a
 . /etc/eriphe-node.env
 set +a
+# The session helper's folder (install.ps1), read-only: the one Windows
+# folder the distribution sees, where Windows tells whether the user is at
+# the PC. Without it, the session stays unknown.
+if [ -n "${ERIPHE_SESSION_DIR:-}" ] && ! mountpoint -q /mnt/eriphe-session 2>/dev/null; then
+  mkdir -p /mnt/eriphe-session
+  mount -t drvfs "$ERIPHE_SESSION_DIR" /mnt/eriphe-session -o ro,noexec,nosuid,nodev >>/var/log/eriphe-node.log 2>&1 ||
+    echo "the session helper's folder could not be mounted" >>/var/log/eriphe-node.log
+fi
 eriphe-dockerd
 # The updater, next to the node: it applies eriphe-core's update requests.
 pgrep -f /usr/local/bin/eriphe-update-loop >/dev/null || setsid /usr/local/bin/eriphe-update-loop </dev/null >/dev/null 2>&1 &
@@ -1068,6 +1170,10 @@ $pull
 pull $nodeImage
 id=`$(docker create $nodeImage)
 docker cp "`$id:/usr/local/bin/eriphe-node" /usr/local/bin/eriphe-node.new
+# The Windows session helper, which step 7 puts in Windows (none in an older image).
+rm -rf /usr/local/share/eriphe/windows
+mkdir -p /usr/local/share/eriphe
+docker cp "`$id:/usr/local/share/eriphe/windows" /usr/local/share/eriphe/windows >/dev/null 2>&1 || true
 docker rm "`$id" >/dev/null
 docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' $nodeImage | sed 's/<no value>/unknown/' >/usr/local/bin/eriphe-node.version.new
 docker rmi $nodeImage >/dev/null 2>&1 || true
@@ -1177,6 +1283,7 @@ ERIPHE_WAKE_MAC=$wakeMac
 ERIPHE_WAKE_BROADCAST=$wakeBroadcast
 ERIPHE_MODEL_SERVER=$ModelServer
 $alwaysOn
+$(Get-SessionEnv $sessionDir)
 EOF
 "@ | Out-Null
 
@@ -1243,6 +1350,14 @@ while (`$true) {
 "@
 $awakeAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$awake`""
 Register-ScheduledTask -TaskName $awakeTask -Action $awakeAction -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+
+# Whether the user is at the PC: neither task above sees their session (WSL,
+# and S4U's session 0), so a small program runs in it (Install-SessionHelper).
+# Eriphe works without it: the session is then unknown.
+try { Install-SessionHelper } catch {
+  Write-Log "Session helper: $_"
+  Add-Notice "$name_ cannot tell yet whether you are at $here (see the log): run the command again to retry."
+}
 
 if ($CoreMode) {
   # Other ports than the last run's: its forwarding and firewall rule go.

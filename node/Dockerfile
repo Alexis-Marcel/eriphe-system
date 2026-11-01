@@ -19,12 +19,19 @@ RUN cd cred && for arch in amd64 arm64; do \
       CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /task-bin/linux-$arch/eriphe-cred . && \
       cp /task-bin/linux-$arch/eriphe-cred /task-bin/linux-$arch/gh || exit 1; \
     done
+# eriphe-session, the Windows session helper (cmd/eriphe-session): install.ps1
+# takes it from this image and runs it in the user's session. A GUI program
+# (-H windowsgui): no console window.
+RUN for arch in amd64 arm64; do \
+      CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -ldflags="-s -w -H=windowsgui" -o /windows/$arch/eriphe-session.exe ./cmd/eriphe-session || exit 1; \
+    done
 
 # The docker CLI talks to the host's Docker through the mounted socket.
 FROM docker:27-cli
 COPY --from=build /eriphe-node /usr/local/bin/eriphe-node
 COPY --from=build /darwin-arm64/eriphe-node /usr/local/share/eriphe/darwin-arm64/eriphe-node
 COPY --from=build /task-bin /usr/local/share/eriphe/task-bin
+COPY --from=build /windows /usr/local/share/eriphe/windows
 # eriphe-core reads it on the registry to tell when a node is behind.
 ARG VERSION=dev
 LABEL org.opencontainers.image.version=$VERSION

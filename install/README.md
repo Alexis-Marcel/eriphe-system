@@ -494,8 +494,9 @@ $env:ERIPHE_UNINSTALL='1'; irm https://github.com/Alexis-Marcel/eriphe-system/re
   Lima's download cache (`~/Library/Caches/lima`) unless another Lima is installed.
 - One container: `docker exec eriphe eriphe-launcher uninstall [--data]`, then `docker rm -f
   eriphe` ([One container](#one-container-nas-any-linux-with-docker)).
-- Windows: the distribution and its disk, its scheduled task, and in core mode the port forwarding
-  and firewall rule.
+- Windows: the distribution and its disk, its scheduled tasks, and in core mode the port forwarding
+  and firewall rule; with the last distribution, the session helper (its task "Eriphe session",
+  `%ProgramData%\eriphe-node\bin` and `session`).
 
 In core mode this deletes eriphe-core's data (`/var/lib/eriphe/core`; `~/.eriphe/core` on a Mac
 with Apple's container, in the VM with Lima, in the distribution on Windows): copy it out first to
@@ -762,7 +763,8 @@ machine around them shows depends on the OS:
   - Whoever controls the Mac's account controls the VM (`limactl shell eriphe`), not the other way
     round.
 - **Windows**: the WSL distribution `eriphe` mounts no Windows drive (`[automount] enabled =
-  false`) and cannot start Windows programs (`[interop] enabled = false`, no Windows `PATH`). It
+  false`) and cannot start Windows programs (`[interop] enabled = false`, no Windows `PATH`). Its
+  one Windows folder is the session helper's, read-only (see Windows, Session). It
   reaches the Internet and the LAN through WSL's NAT; the LAN reaches it only on what core mode
   forwards (8800, 8443). All WSL 2 distributions share one network namespace and one kernel: keep
   to this one (see below).
@@ -855,6 +857,21 @@ recreates eriphe-core's container (`eriphe-core-run`), as the install does.
 asks the distribution whether eriphe-node has a task at work (`/var/lib/eriphe-node/awake`) and,
 while it has, keeps Windows out of sleep (`SetThreadExecutionState`); after, Windows sleeps as it
 is set to (node/README.md, Sleep).
+
+**Session.** Neither task sees the user's session (WSL, and session 0 for S4U tasks), so
+eriphe-node could not tell whether someone is at the PC. A third task, "Eriphe session" (one per
+PC), runs `%ProgramData%\eriphe-node\bin\eriphe-session.exe` at logon of the user signed in at
+the PC when the script ran, in their session, as them, hidden and without elevation (a scheduled
+task rather than a `Run` key: it is restarted if it stops, starts at once on install, and goes
+cleanly with the uninstall). Every 5 s it writes, in `%ProgramData%\eriphe-node\session`,
+whether they are idle or locked and not to be disturbed (a game or an app in fullscreen), and the
+category of the app in front, never its name ([node/README.md](../node/README.md), The user's
+session). That folder is the user's to write, the installing account's to read, nobody else's;
+the distribution mounts it alone, read-only, at `/mnt/eriphe-session` (`ERIPHE_SESSION_DIR` and
+`ERIPHE_SESSION_FILE` in `/etc/eriphe-node.env`). The program comes from eriphe-node's image and
+is updated by running the install command again (the updater in the distribution cannot reach
+Windows); with `-Binary`, the one already installed stays. Without it, Eriphe works as before:
+the session is unknown.
 
 **GPU.** `-Labels gpu` is a label for the scheduler, kept across updates. Windows' NVIDIA driver
 reaches WSL by itself (`/dev/dxg`); the installer adds nothing for it to the distribution.
