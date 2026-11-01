@@ -24,7 +24,9 @@ import (
 //
 // What outil and alerte bring is external content: the turn they wake is
 // tainted. A watch may carry one action the user authorised in advance
-// (watch_grant.go), which the policy lets through on its wake turn.
+// (watch_grant.go), which the policy lets through on its wake turn, and an
+// outil or alerte watch the user marked urgent wakes them at any hour with
+// its own fixed message, sent by eriphe-core itself (watch_urgent.go).
 //
 // eriphe-core fires them without a model (watch_tick.go): firing records a
 // run and wakes the brain at its next idle with the watch's prompt
@@ -53,6 +55,12 @@ func init() {
 	// Added with the sources outil and alerte: the poll's state, the webhook's token hash.
 	extraColumns = append(extraColumns, `ALTER TABLE watches ADD COLUMN poll TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE watches ADD COLUMN hook TEXT NOT NULL DEFAULT ''`)
+	// Added with urgent watches (watch_urgent.go): the fixed message, whether
+	// the recovery is urgent too, the open incident; and the run's message.
+	extraColumns = append(extraColumns, `ALTER TABLE watches ADD COLUMN urgent TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE watches ADD COLUMN urgent_recovery INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE watches ADD COLUMN incident INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE watch_runs ADD COLUMN urgent INTEGER`)
 }
 
 const (
@@ -128,6 +136,13 @@ type watch struct {
 	Created   time.Time
 	Poll      pollState // outil: what the last calls saw
 	Hook      string    // alerte: the hash of its webhook's token; "" until one is made
+
+	// Urgent watches (watch_urgent.go): the fixed message the user validated
+	// ("" for a watch that is not urgent), whether its recovery is urgent
+	// too, and when the incident it was sent for opened (0: none open).
+	Urgent         string
+	UrgentRecovery bool
+	Incident       int64
 }
 
 // returnAfter is the absence a retour watch waits for.
@@ -241,7 +256,7 @@ func parseAfter(s string) (int, error) {
 }
 
 const watchCols = `id, name, source, spec, prompt, brief, state, why, source_ref, tainted, by, next_at, last_fired, mark, created,
-	poll, hook`
+	poll, hook, urgent, urgent_recovery, incident`
 
 func scanWatch(row interface{ Scan(...any) error }) (*watch, error) {
 	var w watch
@@ -249,7 +264,8 @@ func scanWatch(row interface{ Scan(...any) error }) (*watch, error) {
 	var next, last sql.NullInt64
 	var created int64
 	if err := row.Scan(&w.ID, &w.Name, &w.Source, &spec, &w.Prompt, &w.Brief, &w.State, &w.Why, &w.SourceRef, &w.Tainted,
-		&w.By, &next, &last, &w.Mark, &created, &poll, &w.Hook); err != nil {
+		&w.By, &next, &last, &w.Mark, &created, &poll, &w.Hook,
+		&w.Urgent, &w.UrgentRecovery, &w.Incident); err != nil {
 		return nil, err
 	}
 	json.Unmarshal([]byte(spec), &w.Spec)
@@ -322,9 +338,9 @@ func (c *core) addWatch(w *watch) (*watch, error) {
 	c.schedule(w, now)
 	spec, _ := json.Marshal(w.Spec)
 	res, err := c.store.db.Exec(`INSERT INTO watches (name, source, spec, prompt, brief, state, why, source_ref, tainted, by,
-		next_at, mark, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		next_at, mark, created, updated, urgent, urgent_recovery) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		w.Name, w.Source, string(spec), w.Prompt, w.Brief, w.State, w.Why, w.SourceRef, w.Tainted, w.By,
-		unixOrNil(w.NextAt), now.Unix(), now.Unix(), now.Unix())
+		unixOrNil(w.NextAt), now.Unix(), now.Unix(), now.Unix(), w.Urgent, w.UrgentRecovery && w.Urgent != "")
 	if err != nil {
 		return nil, err
 	}
@@ -341,9 +357,9 @@ func (c *core) saveWatch(w *watch) error {
 	now := c.notifyTime()
 	c.schedule(w, now)
 	spec, _ := json.Marshal(w.Spec)
-	w.Poll = pollState{} // a watch changed or resumed looks afresh
+	w.Poll, w.Incident = pollState{}, 0 // a watch changed or resumed looks afresh
 	res, err := c.store.db.Exec(`UPDATE watches SET name = ?, source = ?, spec = ?, prompt = ?, brief = ?, state = ?, why = ?,
-		next_at = ?, updated = ?, poll = '' WHERE id = ?`, w.Name, w.Source, string(spec), w.Prompt, w.Brief, w.State, w.Why,
+		next_at = ?, updated = ?, poll = '', incident = 0 WHERE id = ?`, w.Name, w.Source, string(spec), w.Prompt, w.Brief, w.State, w.Why,
 		unixOrNil(w.NextAt), now.Unix(), w.ID)
 	if err != nil {
 		return err
@@ -396,16 +412,18 @@ type watchRun struct {
 	Notification int64
 	Action       string
 	Ended        time.Time
+	Urgent       int64 // the notification eriphe-core sent itself for an urgent watch (watch_urgent.go)
 }
 
-const runCols = `id, watch_id, fired, cause, due, detail, external, woke, outcome, COALESCE(notification, 0), action, ended`
+const runCols = `id, watch_id, fired, cause, due, detail, external, woke, outcome, COALESCE(notification, 0), action, ended,
+	COALESCE(urgent, 0)`
 
 func scanRun(row interface{ Scan(...any) error }) (*watchRun, error) {
 	var r watchRun
 	var fired int64
 	var due, woke, ended sql.NullInt64
 	if err := row.Scan(&r.ID, &r.WatchID, &fired, &r.Cause, &due, &r.Detail, &r.External, &woke, &r.Outcome,
-		&r.Notification, &r.Action, &ended); err != nil {
+		&r.Notification, &r.Action, &ended, &r.Urgent); err != nil {
 		return nil, err
 	}
 	r.Fired, r.Due, r.Woke, r.Ended = time.Unix(fired, 0), fromNull(due), fromNull(woke), fromNull(ended)

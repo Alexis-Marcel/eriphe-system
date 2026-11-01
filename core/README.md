@@ -1806,7 +1806,8 @@ a level; the code decides (`decideNotify`, no model):
 
 - **Quiet hours always hold.** The window is a rule (data): for every night, or for the nights
   before a weekday or a weekend day, 4 to 16 hours long; without one, the seed 22:00–08:00. A
-  "now" inside it waits for the brief, unless a topic rule of the user's says "even at night".
+  "now" inside it waits for the brief, unless a topic rule of the user's says "even at night", or it
+  is the fixed message of a watch the user marked urgent (below).
   The time zone is the configuration's, or the one set in Settings.
 - **A daily cap** of "now" (4 by default, 0 to 20 in Settings), besides reminders the user asked
   for in their own words; over it, the brief.
@@ -1993,6 +1994,27 @@ features of their own: they are watches whose prompt composes `since`, `notifica
   decision on record, `byPolicy`), counted atomically; any other tool or argument still goes to the
   user. A built-in or configured denial is never granted. Each use is logged (`WATCH GRANT USED`),
   recorded with the run (`acted`), written in the conversation and notified to the user.
+- **Urgent watches** (`watch_urgent.go`). A tainted wake never interrupts, so an `outil` or `alerte`
+  watch could never wake the user at night; an urgent one does, bound to that watch, its condition
+  and its text. It carries a short fixed message the user validated (« Alerte boutique : la prod ne
+  répond plus »), set only on a clean turn citing the user's message of it that asks to be woken or
+  reached at any hour (`watch` `urgency: urgent` with `urgent_message`, or `update_watch`
+  `urgent`); a proposal or a tainted turn can neither set nor raise it, and the text holds no link
+  and passes the scanner. An `outil` watch must use `compare` or `status` (a condition that
+  recovers). When the condition becomes true (the deterministic test, confirmed; or a call to the
+  authenticated webhook), eriphe-core itself sends that message, never anything the tool or sender
+  said, as a "now" through the router (`reason: watch`, the urgent delay), over the quiet hours and
+  the daily cap, before any judge or the brain. Once per incident (`incident` on the watch): not
+  again until it recovers (`outil`: the condition false again; `alerte`: a call whose top-level
+  `status` is `resolved`, as Grafana and Alertmanager send), which sends « <name> : revenu à la
+  normale » under the usual rules, urgent too only if the user asked (`urgent_recovery`). A pause,
+  resume or edit starts afresh. The brain is then woken as before, tainted, told the message went:
+  what it adds goes through `notify` with no urgency of its own. Settings shows the fixed message
+  on the watch; the bench's `u-*` and `w-*` cases cover it.
+- **Asking before writing.** For `outil` and `alerte`, `watch` never decides the sensitive points for
+  the user: without `urgency` (`urgent` or `normal`), an `outil` condition, or `action` /
+  `no_action`, it writes nothing and returns `missing`, which the brain asks in one short message
+  with the watch's defaults; other fields (every, name, signed) default.
 - **The judge** (`judge.go`): an interface shaped like a decision model's API (`Ask(state,
   questions) → probabilities`) that an `outil` condition may ask a yes/no question after the
   deterministic test. Only `none` exists: without a judge, the condition alone decides. A judge may

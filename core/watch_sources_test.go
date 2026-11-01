@@ -255,7 +255,8 @@ func sign(secret string, body []byte) string {
 func TestAlertWebhook(t *testing.T) {
 	c, _, _ := pollCore(t)
 	seq := ownerSays(c, "Préviens-moi quand Grafana envoie une alerte")
-	out, err := c.brainWatch(watchIn{Name: "Grafana", Source: "alert", Prompt: "Regarde l'alerte et dis-moi si c'est grave", Signed: true, SourceRef: ref(seq)})
+	out, err := c.brainWatch(watchIn{Name: "Grafana", Source: "alert", Prompt: "Regarde l'alerte et dis-moi si c'est grave", Signed: true, SourceRef: ref(seq),
+		Urgency: urgencyNormal, NoAction: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +352,7 @@ func brainCallsTool(t *testing.T, c *core, id, tool string, input map[string]any
 func TestGrantExactOnly(t *testing.T) {
 	c, _, now := pollCore(t)
 	seq := ownerSays(c, "Surveille les alertes du déploiement ; si la 2.0.1 casse, tu peux remettre la 2.0.0")
-	out, err := c.brainWatch(watchIn{Name: "Déploiement", Source: "alerte", Prompt: "Si la 2.0.1 casse, remets la 2.0.0", SourceRef: ref(seq),
+	out, err := c.brainWatch(watchIn{Name: "Déploiement", Source: "alerte", Prompt: "Si la 2.0.1 casse, remets la 2.0.0", SourceRef: ref(seq), Urgency: urgencyNormal,
 		Action: &grantAction{Tool: "monitor.rollback", Args: map[string]any{"version": "2.0.0"}, Expires: "48h"}})
 	if err != nil {
 		t.Fatal(err)
@@ -424,7 +425,7 @@ func TestGrantExactOnly(t *testing.T) {
 func TestGrantCannotBeInjected(t *testing.T) {
 	c, _, _ := pollCore(t)
 	seq := ownerSays(c, "Surveille le site toutes les minutes, tu peux relancer le rollback si besoin")
-	out, err := c.brainWatch(watchIn{Name: "Site", Source: "alerte", Prompt: "Regarde", SourceRef: ref(seq)})
+	out, err := c.brainWatch(watchIn{Name: "Site", Source: "alerte", Prompt: "Regarde", SourceRef: ref(seq), Urgency: urgencyNormal, NoAction: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,7 +441,7 @@ func TestGrantCannotBeInjected(t *testing.T) {
 			t.Fatal("a tainted turn granted an action")
 		}
 	}
-	if _, err := c.brainWatch(watchIn{Name: "Autre", Source: "alerte", Prompt: "x", SourceRef: ref(seq),
+	if _, err := c.brainWatch(watchIn{Name: "Autre", Source: "alerte", Prompt: "x", SourceRef: ref(seq), Urgency: urgencyNormal,
 		Action: &grantAction{Tool: "monitor.rollback"}}); err == nil {
 		t.Fatal("a tainted turn made a watch with a grant")
 	}
@@ -491,7 +492,7 @@ func TestGrantRunTaskExact(t *testing.T) {
 	seq := ownerSays(c, "Surveille le déploiement ; s'il casse, tu peux lancer la tâche de rollback")
 	task := runRequest{Prompt: "Remets la version 2.0.0 en production", Agent: "small",
 		Resources: []ResourceRef{{Kind: resRepo, Ref: "sam/site", Access: accessWrite, Branch: "eriphe/rollback"}}}
-	out, err := c.brainWatch(watchIn{Name: "Déploiement", Source: "alerte", Prompt: "Rollback si cassé", SourceRef: ref(seq),
+	out, err := c.brainWatch(watchIn{Name: "Déploiement", Source: "alerte", Prompt: "Rollback si cassé", SourceRef: ref(seq), Urgency: urgencyNormal,
 		Action: &grantAction{RunTask: &task}})
 	if err != nil {
 		t.Fatal(err)

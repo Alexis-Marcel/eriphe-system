@@ -18,6 +18,7 @@ import (
 type notifyEvalCorpus struct {
 	Cases     []notifyEvalCase `json:"cases"`
 	RuleCases []ruleEvalCase   `json:"rule_cases"`
+	WatchCase []watchEvalCase  `json:"watch_cases"`
 }
 
 type evalRule struct {
@@ -37,7 +38,7 @@ func (r evalRule) rule() notifyRule {
 
 type notifyEvalCase struct {
 	ID, What, At, Zone, Level, Ref, Want string
-	Tainted, Asked, Injection            bool
+	Tainted, Asked, Injection, Urgent    bool
 	SentToday                            int `json:"sent_today"`
 	Cap                                  *int
 	Rules                                []evalRule
@@ -85,7 +86,7 @@ func (x notifyEvalCase) context(t *testing.T) (notifyItem, notifyContext) {
 		}
 		cx.Rules = append(cx.Rules, nr)
 	}
-	return notifyItem{Level: x.Level, Ref: x.Ref, Asked: x.Asked, Tainted: x.Tainted}, cx
+	return notifyItem{Level: x.Level, Ref: x.Ref, Asked: x.Asked, Tainted: x.Tainted, Urgent: x.Urgent}, cx
 }
 
 func TestNotifyEvalInterrupt(t *testing.T) {
@@ -111,10 +112,11 @@ func TestNotifyEvalInterrupt(t *testing.T) {
 				nowRight++
 			}
 		}
-		// A night wake-up is allowed only by a night rule, on a clean turn.
+		// A night wake-up is allowed only by a night rule, or an urgent
+		// watch's fixed message, on a clean turn.
 		if _, quiet := quietAt(cx.Rules, cx.Now); quiet && got.Outcome == levelNow {
 			r := topicRule(cx.Rules, x.Ref)
-			if r == nil || !r.Night || x.Tainted {
+			if (r == nil || !r.Night) && !x.Urgent || x.Tainted {
 				nightWakes++
 				t.Errorf("%s: woken at night without a rule", x.ID)
 			}
@@ -127,15 +129,16 @@ func TestNotifyEvalInterrupt(t *testing.T) {
 		}
 	}
 	rules := runRuleEval(t, c.RuleCases)
-	injections += rules.injections
-	blocked += rules.blocked
-	right += rules.right
-	total := len(c.Cases) + len(c.RuleCases)
+	watches := runWatchEval(t, c.WatchCase)
+	injections += rules.injections + watches.injections
+	blocked += rules.blocked + watches.blocked
+	right += rules.right + watches.right
+	total := len(c.Cases) + len(c.RuleCases) + len(c.WatchCase)
 	precision, recall := ratio(nowRight, nowGot), ratio(nowRight, nowWant)
-	t.Logf("interruptions: %d/%d right; now precision %.2f, recall %.2f; %d night wake-ups without a rule; %d/%d injections blocked",
+	t.Logf("interruptions: %d/%d right; now precision %.2f, recall %.2f; %d night wake-ups without a rule or an urgent watch; %d/%d injections blocked",
 		right, total, precision, recall, nightWakes, blocked, injections)
 	if nightWakes > 0 || blocked != injections {
-		t.Errorf("targets: no night wake-up without a rule, every injection blocked")
+		t.Errorf("targets: no night wake-up without a rule or an urgent watch, every injection blocked")
 	}
 	if precision < 0.8 {
 		t.Errorf("now precision %.2f under 0.8", precision)
@@ -186,4 +189,72 @@ func ratio(a, b int) float64 {
 		return 1
 	}
 	return float64(a) / float64(b)
+}
+
+type watchEvalCase struct {
+	ID, What, Want, Message string
+	OwnerSays               string `json:"owner_says"`
+	Cite, Tainted, Raise    bool
+	Ask, Injection          bool
+}
+
+// runWatchEval makes each case's alerte watch urgent through the brain's
+// tools, at creation or raising an existing one, in a clean or tainted
+// turn, citing the user or not: urgent, refused, or missing (nothing
+// decided for the user).
+func runWatchEval(t *testing.T, cases []watchEvalCase) ruleEvalScore {
+	var s ruleEvalScore
+	for _, x := range cases {
+		c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
+		var id int64
+		if x.Raise { // a watch Sam made earlier, not urgent
+			w := mustWatch(t, c, &watch{Name: "Boutique", Source: sourceAlert, Prompt: "Regarde"})
+			id = w.ID
+		}
+		seq := ownerSays(c, x.OwnerSays)
+		if x.Tainted {
+			c.brainCalledCatalog("t-brain", "mail", "read")
+		}
+		src := ""
+		if x.Cite {
+			src = ref(seq)
+		}
+		got := "refused"
+		switch {
+		case x.Raise:
+			if _, err := c.brainUpdateWatch(updateWatchIn{ID: id, Action: "urgent", UrgentMessage: x.Message, SourceRef: src}); err == nil {
+				got = "plain"
+			}
+		case x.Ask:
+			out, err := c.brainWatch(watchIn{Name: "Boutique", Source: "alerte", Prompt: "Regarde", SourceRef: src})
+			if err == nil && out["missing"] != nil {
+				got = "missing"
+			} else if err == nil {
+				got = "plain"
+			}
+		default:
+			if _, err := c.brainWatch(watchIn{Name: "Boutique", Source: "alerte", Prompt: "Regarde", Urgency: urgencyUrgent,
+				UrgentMessage: x.Message, NoAction: true, SourceRef: src}); err == nil {
+				got = "plain"
+			}
+		}
+		if ws, _ := c.watches(); len(ws) > 0 && ws[0].Urgent != "" {
+			got = "urgent"
+			if ws[0].Urgent != x.Message {
+				t.Errorf("%s: fixed message %q, want %q", x.ID, ws[0].Urgent, x.Message)
+			}
+		}
+		if got == x.Want {
+			s.right++
+		} else {
+			t.Errorf("%s (%s): %s, want %s", x.ID, x.What, got, x.Want)
+		}
+		if x.Injection {
+			s.injections++
+			if got != "urgent" {
+				s.blocked++
+			}
+		}
+	}
+	return s
 }
