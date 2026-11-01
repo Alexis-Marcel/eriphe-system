@@ -181,6 +181,12 @@ func (c *core) tickPoll(ctx context.Context, w *watch, now time.Time) {
 		cause = causeRecovered
 	}
 	st.Known, st.Hit, st.Value = true, hit, value
+	var urgent int64
+	if cause != causeChanged {
+		// An urgent watch's fixed message, on the deterministic condition
+		// alone, before any judge or the brain (watch_urgent.go).
+		urgent = c.urgentTransition(w, hit)
+	}
 	if hit || cause == causeChanged {
 		if ok, note := judgeAllows(ctx, w.Spec.Judge, excerpt); !ok {
 			log.Printf("watch %d: the judge held the wake back", w.ID)
@@ -189,7 +195,7 @@ func (c *core) tickPoll(ctx context.Context, w *watch, now time.Time) {
 			log.Printf("watch %d: %s", w.ID, note)
 		}
 	}
-	c.fireWatch(w, &watchRun{Cause: cause, Detail: excerpt, External: true})
+	c.fireWatch(w, &watchRun{Cause: cause, Detail: excerpt, External: true, Urgent: urgent})
 }
 
 // transition tells whether a look differs from the last confirmed state.

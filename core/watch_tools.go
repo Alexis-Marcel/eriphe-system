@@ -35,7 +35,12 @@ type watchIn struct {
 	Judge  string         `json:"judge,omitempty" jsonschema:"for outil, optional: a yes/no question a judge would answer about what the condition saw; no judge is set up yet, so it is ignored"`
 	Signed bool           `json:"signed,omitempty" jsonschema:"for alerte: the sender signs its calls (GitHub, Grafana): a secret is made with its address"`
 
-	Action *grantAction `json:"action,omitempty" jsonschema:"one exact action the user authorises in advance for this watch (a catalog tool with exact args, or a run_task), in their own words in this clean turn; used by you on its wake without asking"`
+	Action   *grantAction `json:"action,omitempty" jsonschema:"one exact action the user authorises in advance for this watch (a catalog tool with exact args, or a run_task), in their own words in this clean turn; used by you on its wake without asking"`
+	NoAction bool         `json:"no_action,omitempty" jsonschema:"for outil and alerte: true when the user answered that nothing is done automatically (no action authorised in advance)"`
+
+	Urgency        string `json:"urgency,omitempty" jsonschema:"for outil and alerte, as the user answered: urgent (wake them at any hour with urgent_message, over the quiet hours and the cap) or normal (the usual rules); never chosen for them"`
+	UrgentMessage  string `json:"urgent_message,omitempty" jsonschema:"for urgency urgent: the short fixed message the user validated, in French, sent by eriphe-core itself when the condition becomes true; nothing of what the tool or the alert says goes in it"`
+	UrgentRecovery bool   `json:"urgent_recovery,omitempty" jsonschema:"for urgency urgent: the recovery message is urgent too, only if the user asked; by default it follows the usual rules"`
 }
 
 type watchesIn struct {
@@ -44,7 +49,7 @@ type watchesIn struct {
 
 type updateWatchIn struct {
 	ID        int64        `json:"id"`
-	Action    string       `json:"action" jsonschema:"pause, resume, edit, delete, grant (authorise one exact action in advance, with grant) or revoke (end it)"`
+	Action    string       `json:"action" jsonschema:"pause, resume, edit, delete, grant (authorise one exact action in advance, with grant), revoke (end it), urgent (make an outil or alerte watch wake the user at any hour, with urgent_message) or not_urgent"`
 	Grant     *grantAction `json:"grant,omitempty" jsonschema:"for grant: the exact action, as watch's action"`
 	Every     int          `json:"every_minutes,omitempty"`
 	Cond      *watchCond   `json:"cond,omitempty"`
@@ -54,10 +59,13 @@ type updateWatchIn struct {
 	Prompt    string       `json:"prompt,omitempty"`
 	Brief     *bool        `json:"brief,omitempty"`
 	SourceRef string       `json:"source_ref,omitempty" jsonschema:"the user's message of this turn that asks for it, msg:N"`
+
+	UrgentMessage  string `json:"urgent_message,omitempty" jsonschema:"for urgent: the fixed message the user validated"`
+	UrgentRecovery bool   `json:"urgent_recovery,omitempty" jsonschema:"for urgent: the recovery message is urgent too, only if the user asked"`
 }
 
 func registerWatchTools(s *mcp.Server, c *core) {
-	tool(s, "watch", "Set up a watch: eriphe-core wakes you, without a model, at times of day (source horaire: the morning brief, the Sunday review), when the user comes back after an absence (source retour: the point on their return), when a read-only catalog tool's result crosses a condition (source outil, polled; on the transition and on recovery) or when a service calls its webhook (source alerte; the user gets its address in Settings), with its prompt. What outil and alerte bring is external: their wake is tainted. You then speak through notify, or answer [rien]. A watch may carry one exact action the user authorises in advance (action), which you may then call on its wake without asking. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in Settings. Suggest one when it would help; never impose it.",
+	tool(s, "watch", "Set up a watch: eriphe-core wakes you, without a model, at times of day (source horaire: the morning brief, the Sunday review), when the user comes back after an absence (source retour: the point on their return), when a read-only catalog tool's result crosses a condition (source outil, polled; on the transition and on recovery) or when a service calls its webhook (source alerte; the user gets its address in Settings), with its prompt. What outil and alerte bring is external: their wake is tainted. You then speak through notify, or answer [rien]. A watch may carry one exact action the user authorises in advance (action), which you may then call on its wake without asking. An outil or alerte watch the user asks to be woken for at any hour is urgent: eriphe-core itself sends its fixed urgent_message, once per incident. For outil and alerte, never choose urgency, condition or action for the user: called without them, it creates nothing and returns what is missing, to ask the user in one short message. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in Settings. Suggest one when it would help; never impose it.",
 		func(ctx context.Context, in watchIn) (map[string]any, error) {
 			return c.brainWatch(in)
 		})
@@ -65,7 +73,7 @@ func registerWatchTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in watchesIn) (map[string]any, error) {
 			return c.brainWatches(in)
 		})
-	tool(s, "update_watch", "Pause, resume, edit (name, schedule, after, prompt, brief, every, cond) or delete a watch, or grant or revoke its action authorised in advance, when the user asks for it in this turn (cite their message). An edit revokes its authorised action.",
+	tool(s, "update_watch", "Pause, resume, edit (name, schedule, after, prompt, brief, every, cond) or delete a watch, grant or revoke its action authorised in advance, or make it urgent or not, when the user asks for it in this turn (cite their message). An edit revokes its authorised action.",
 		func(ctx context.Context, in updateWatchIn) (map[string]any, error) {
 			return c.brainUpdateWatch(in)
 		})
@@ -105,8 +113,13 @@ func (c *core) brainWatch(in watchIn) (map[string]any, error) {
 	w := &watch{Name: in.Name, Source: strings.ToLower(strings.TrimSpace(in.Source)), Prompt: in.Prompt, Brief: in.Brief, Why: in.Why, By: "brain",
 		Spec: watchSpec{Schedule: in.Schedule, After: after, Server: in.Server, Tool: in.Tool, Args: in.Args, Every: in.Every,
 			Cond: in.Cond, Judge: in.Judge, Signed: in.Signed}}
-	if err := w.check(); err != nil {
+	if err := c.checkWatch(w); err != nil {
 		return nil, err
+	}
+	if missing := watchMissing(w, in); len(missing) > 0 {
+		return map[string]any{"created": false, "missing": missing, "note": "Nothing created: " + strings.Join(missing, ", ") +
+			" must come from " + c.conf().User + ", never from you. Ask in one short message that sums up the watch with its defaults " +
+			"and asks only these points (what you already know from memory or the rules, do not ask), then call watch again with the answers, citing that message."}, nil
 	}
 	state, why, err := c.watchWrite(in.SourceRef, scanMemoryText(w.Name, w.Prompt, w.Why, w.Spec.Judge))
 	if err != nil {
@@ -114,6 +127,19 @@ func (c *core) brainWatch(in watchIn) (map[string]any, error) {
 	}
 	if in.Action != nil && state != watchActive {
 		return nil, fmt.Errorf("refused: an action is authorised in advance only with a watch the user asks for in this clean turn (%s)", why)
+	}
+	if in.Urgency == urgencyUrgent {
+		// Never on a proposal or a tainted turn: urgent is the user's word only.
+		if state != watchActive {
+			return nil, fmt.Errorf("refused: a watch is urgent only when the user asks for it in this clean turn (%s)", why)
+		}
+		if err := c.urgentWrite(in.SourceRef); err != nil {
+			return nil, err
+		}
+		if w.Urgent, err = checkUrgent(w, in.UrgentMessage); err != nil {
+			return nil, err
+		}
+		w.UrgentRecovery = in.UrgentRecovery
 	}
 	w.State, w.SourceRef = state, strings.TrimSpace(in.SourceRef)
 	if tainted := c.turnTaint(); len(tainted) > 0 {
@@ -157,6 +183,8 @@ type watchView struct {
 	Problem  string     `json:"problem,omitempty"`
 	Webhook  string     `json:"webhook,omitempty"`
 	Action   *grantView `json:"authorised_action,omitempty"`
+	Urgent   string     `json:"urgent_message,omitempty"`
+	Incident bool       `json:"incident_open,omitempty"`
 	Runs     []runView  `json:"runs,omitempty"`
 }
 
@@ -185,7 +213,7 @@ func (c *core) viewWatch(w *watch, history int) watchView {
 		return t.In(loc).Format("2006-01-02 15:04")
 	}
 	v := watchView{ID: w.ID, Name: w.Name, Source: w.Source, When: w.When(), Prompt: w.Prompt, Brief: w.Brief, State: w.State,
-		Next: at(w.NextAt), Last: at(w.LastFired), Proposed: w.Tainted, Problem: w.Poll.Error}
+		Next: at(w.NextAt), Last: at(w.LastFired), Proposed: w.Tainted, Problem: w.Poll.Error, Urgent: w.Urgent, Incident: w.Incident > 0}
 	if w.Source == sourcePoll {
 		v.Cond, v.Args = w.CondText(), canonicalArgs(w.Spec.Args)
 	}
@@ -245,6 +273,19 @@ func (c *core) brainUpdateWatch(in updateWatchIn) (map[string]any, error) {
 		}
 		return map[string]any{"watch": c.viewWatch(w, 0)}, nil
 	}
+	if in.Action == "urgent" { // the user's word, in a clean turn, asking to be woken
+		if err := c.urgentWrite(in.SourceRef); err != nil {
+			return nil, err
+		}
+		text, err := checkUrgent(w, in.UrgentMessage)
+		if err != nil {
+			return nil, err
+		}
+		if err := c.setWatchUrgent(w, text, in.UrgentRecovery); err != nil {
+			return nil, err
+		}
+		return map[string]any{"watch": c.viewWatch(w, 0)}, nil
+	}
 	state, why, err := c.watchWrite(in.SourceRef, scanMemoryText(in.Name, in.Prompt))
 	if err != nil {
 		return nil, err
@@ -270,8 +311,10 @@ func (c *core) brainUpdateWatch(in updateWatchIn) (map[string]any, error) {
 		c.revokeGrants(w.ID, "the watch changed")
 	case "revoke":
 		c.revokeGrants(w.ID, "revoked at the user's word")
+	case "not_urgent":
+		err = c.setWatchUrgent(w, "", false)
 	default:
-		return nil, errors.New("action is pause, resume, edit, delete, grant or revoke")
+		return nil, errors.New("action is pause, resume, edit, delete, grant, revoke, urgent or not_urgent")
 	}
 	if err != nil {
 		return nil, err
@@ -309,4 +352,36 @@ func (c *core) editWatch(w *watch, in updateWatchIn) error {
 		return errors.New("nothing to change: give a name, a schedule, after, a prompt or brief")
 	}
 	return c.saveWatch(w)
+}
+
+const (
+	urgencyUrgent = "urgent"
+	urgencyNormal = "normal"
+)
+
+// watchMissing is what an outil or alerte watch needs from the user before
+// it is written: the sensitive points are never defaulted (whether it wakes
+// them at any hour, whether something is done on its own), nor what an
+// outil watch tests. The rest (every, name, signed) may default.
+func watchMissing(w *watch, in watchIn) []string {
+	if w.Source != sourcePoll && w.Source != sourceAlert {
+		return nil
+	}
+	var missing []string
+	if w.Source == sourcePoll && in.Cond == nil {
+		missing = append(missing, "cond (what counts as the problem)")
+	}
+	switch in.Urgency {
+	case urgencyNormal:
+	case urgencyUrgent:
+		if strings.TrimSpace(in.UrgentMessage) == "" {
+			missing = append(missing, "urgent_message (the fixed text the user validates)")
+		}
+	default:
+		missing = append(missing, "urgency (wake the user at any hour, even at night, or the usual rules)")
+	}
+	if in.Action == nil && !in.NoAction {
+		missing = append(missing, "action (anything done automatically, or no_action)")
+	}
+	return missing
 }

@@ -21,7 +21,9 @@ import (
 //
 //   - There is always a quiet window: a quiet rule of the user's, else the
 //     seed 22:00–08:00. Nothing from the model alone, nor from external
-//     content, breaks it; only a user rule marked "even at night" does.
+//     content, breaks it; only a user rule marked "even at night" does, or
+//     the fixed message of a watch the user marked urgent, which eriphe-core
+//     sends itself (watch_urgent.go).
 //   - At most notifyCap "now" a day (4 by default, Settings), besides what
 //     the user asked for themselves (a reminder from their own words).
 //   - What a tainted turn says (one that read external content) never
@@ -68,6 +70,7 @@ const (
 	reasonCap     = "cap"
 	reasonUrgent  = "urgent" // a rule "even at night" let it through
 	reasonLater   = "later"  // the user said « pas maintenant »
+	reasonWatch   = "watch"  // the fixed message of a watch the user marked urgent
 )
 
 var notifyReasons = map[string]string{
@@ -79,6 +82,7 @@ var notifyReasons = map[string]string{
 	reasonCap:     "kept for the brief: today's cap of interruptions is reached",
 	reasonUrgent:  "sent now: a rule of the user's allows it even at night",
 	reasonLater:   "the user said not now: kept for the brief",
+	reasonWatch:   "sent now, at any hour: the fixed message of a watch the user marked urgent",
 }
 
 // notification is one thing the brain told, or asked to tell, the user.
@@ -108,6 +112,10 @@ type notifyItem struct {
 	Ref     string // what it is about: project:getout, intention:12…
 	Asked   bool   // the user asked for it in their own words: not counted in the cap
 	Tainted bool   // drawn from external content
+	// Urgent is set by eriphe-core only, never by the brain: the fixed
+	// message of a watch the user marked urgent, on its condition
+	// (watch_urgent.go). It goes through the quiet hours and the cap.
+	Urgent bool
 }
 
 // notifyContext is the state it is judged in.
@@ -126,6 +134,9 @@ type notifyDecision struct {
 
 // decideNotify decides, without a model: never, now or for the brief.
 func decideNotify(it notifyItem, cx notifyContext) notifyDecision {
+	if it.Urgent && !it.Tainted && it.Level == levelNow {
+		return notifyDecision{levelNow, reasonWatch, 0}
+	}
 	level := it.Level
 	r := topicRule(cx.Rules, it.Ref)
 	var ruleID int64
@@ -199,8 +210,8 @@ func (c *core) notifyContext() (notifyContext, error) {
 	}
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	var sent int
-	err = c.store.db.QueryRow(`SELECT COUNT(*) FROM notifications WHERE outcome = 'now' AND asked = 0 AND reason != ? AND created >= ?`,
-		reasonUrgent, day.Unix()).Scan(&sent)
+	err = c.store.db.QueryRow(`SELECT COUNT(*) FROM notifications WHERE outcome = 'now' AND asked = 0 AND reason NOT IN (?, ?)
+		AND created >= ?`, reasonUrgent, reasonWatch, day.Unix()).Scan(&sent)
 	return notifyContext{Now: now, Rules: rules, SentNow: sent, Cap: c.notifyCap()}, err
 }
 
@@ -230,6 +241,9 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 			note.Channels = r.Channels // the rule's channels, else the default (channels.go)
 			note.Route.Only, note.Route.Also, note.Route.Never = r.Channels, r.Also, r.Never
 			note.Route.Urgent = r.Outcome == levelNow && r.Night
+		}
+		if d.Reason == reasonWatch {
+			note.Route.Urgent = true // the shorter delay, and escalation in the quiet hours
 		}
 		c.tell(note)
 	}

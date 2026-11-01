@@ -31,7 +31,8 @@ import (
 // The body (64 KiB at most) is external content: kept with the run, cut to
 // a few thousand characters, quoted to the brain as data, and the turn it
 // wakes is tainted. One wake waits at a time per watch; past 60 calls an
-// hour the hook answers 429.
+// hour the hook answers 429. For an urgent watch, a call opens an incident
+// and one whose top-level status is "resolved" ends it (watch_urgent.go).
 
 const (
 	alertBodyMax   = 64 << 10
@@ -101,7 +102,9 @@ func (c *core) receiveAlert(token string, h http.Header, body []byte) alertResul
 	if n >= alertPerHour {
 		return alertResult{http.StatusTooManyRequests, "too many calls"}
 	}
-	c.fireWatch(w, &watchRun{Cause: causeAlert, Detail: alertDetail(body), External: true})
+	// An urgent watch's fixed message, before the brain looks (watch_urgent.go).
+	urgent := c.urgentTransition(w, !alertResolved(body))
+	c.fireWatch(w, &watchRun{Cause: causeAlert, Detail: alertDetail(body), External: true, Urgent: urgent})
 	return alertResult{http.StatusAccepted, "ok"}
 }
 

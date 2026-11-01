@@ -30,6 +30,7 @@
     {{if .Poll.Error}}<span class="small"><span class="tag tag-no">{{t "watch.problem"}}</span> {{.Poll.Error}}</span>{{end}}
     {{if eq .Source "alerte"}}<span class="small">{{if .Hook}}{{t "watch.hook.set"}}{{else}}{{t "watch.hook.none"}}{{end}}
       <button class="btn btn-soft sm" hx-post="/watches/{{.ID}}/hook" hx-target="#watches"{{if .Hook}} hx-confirm="{{t "watch.hook.renewconfirm"}}"{{end}}>{{if .Hook}}{{t "watch.hook.renew"}}{{else}}{{t "watch.hook.make"}}{{end}}</button></span>{{end}}
+    {{if .Urgent}}<span class="small"><span class="tag tag-warn">{{t "watch.urgent"}}</span> « {{.Urgent}} »</span>{{end}}
     {{with .Grant}}<span class="small"><span class="tag tag-warn">{{t "watch.grant"}}</span> <span class="mono">{{.Tool}} {{.Input}}</span>
       · {{tf "watch.grant.left" .Left (date .Expires)}}
       <button class="btn btn-ghost sm" hx-post="/watches/{{.WatchID}}/revoke" hx-target="#watches">{{t "watch.grant.revoke"}}</button></span>{{end}}
