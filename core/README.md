@@ -1925,7 +1925,8 @@ turn; a source that keeps free/busy times only (never titles) joins there.
   user, by kind, since they were last here (the start of their last absence; the last 24 hours if
   none), or the last 24 hours or 7 days, external items marked.
 
-**Watches** (`watch.go`, `watch_schedule.go`, `watch_tick.go`, `watch_tools.go`, `web_watch.go`).
+**Watches** (`watch.go`, `watch_schedule.go`, `watch_tick.go`, `watch_poll.go`, `watch_alert.go`,
+`watch_grant.go`, `judge.go`, `watch_tools.go`, `web_watch.go`).
 What wakes the brain on its own, besides a due intention: one tool, `watch(name, source, schedule |
 after, prompt, brief?)`, with `watches` (each with its last runs) and `update_watch` (pause, resume,
 edit, delete). The brief, the point made on the user's return and the weekly review are not
@@ -1957,6 +1958,46 @@ features of their own: they are watches whose prompt composes `since`, `notifica
   with its last runs, paused, edited and deleted (what the user writes there is active at once).
   Changing or deleting one takes the user's word in a clean turn. Names and prompts go through the
   memory's scanner.
+- **`outil`: polling a tool, without a model.** eriphe-core calls a catalog tool itself (the pool's
+  session, outside any task) with fixed arguments every N minutes (1 at least, 5 by default). Only
+  a free read of the brain's: read-only by its own annotation on a server believed for it, lent to
+  the brain, named by no rule of the policy; checked when written and before every call (a change of
+  access makes the watch wait, its reason shown). The condition is deterministic: `changed` (the
+  value at a dotted path, or the whole result; the first look is the baseline), `compare` (`eq`,
+  `ne`, `gt`, `ge`, `lt`, `le` as numbers when both are, `contains`) or `status` (the call fails or
+  the tool answers an error). It wakes only on a transition, and on the recovery, each confirmed by
+  a second call 30 s later (a flap wakes nobody).
+- **`alerte`: a webhook per watch.** `POST https://<workspace>/hooks/watch/<token>` on the
+  workspace's HTTPS server, without a session: the token (32 random bytes) is made in Settings and
+  shown once, only its hash kept, never seen by the model; a new one replaces the old. A signed
+  watch also gets a secret (in the vault, `watch-hook-<id>`) and checks the body's HMAC-SHA256 in
+  `X-Hub-Signature-256` (GitHub: a webhook with this address, `application/json`, the secret),
+  `X-Grafana-Alerting-Signature` (Grafana: a Webhook contact point with the secret as HMAC signature)
+  or `X-Eriphe-Signature` (`sha256=<hex>`). Body 64 KiB at most (413), kept cut to 4,000
+  characters without invisible characters; 60 calls an hour at most (429); a paused watch answers
+  409.
+- **External content.** What `outil` and `alerte` bring is kept with the run as external: the wake
+  quotes it as data and taints the turn (`watch.outil`, `watch.alerte`), so what it notifies goes to
+  the brief at most (the bench has these cases), it may not allow a permission nor lend a task
+  anything that writes; `since` names it without quoting it.
+- **History and silences.** Each run keeps what the brain did (notified, said, silent, acted, or
+  missed, dropped), in Settings and in `since`; the next brief lists the watches that stayed silent
+  since the last one.
+- **An action authorised in advance** (`watch_grants`). A watch may carry one exact action: a catalog
+  tool with exact arguments, or a `run_task` with a fixed prompt, agent, resources and contract;
+  `max_uses` 1 by default (10 at most), an expiry (7 days by default, 90 at most). It is written only
+  on a turn that read nothing external, citing the user's message of that turn, which must authorise
+  it; never from a tainted turn, so an injected payload can neither make nor widen one; editing the
+  watch revokes it, and the user revokes it in Settings. On that watch's own wake turn, tainted or
+  not, the call whose canonical input hashes the same is let through by the policy (a ticket, a
+  decision on record, `byPolicy`), counted atomically; any other tool or argument still goes to the
+  user. A built-in or configured denial is never granted. Each use is logged (`WATCH GRANT USED`),
+  recorded with the run (`acted`), written in the conversation and notified to the user.
+- **The judge** (`judge.go`): an interface shaped like a decision model's API (`Ask(state,
+  questions) → probabilities`) that an `outil` condition may ask a yes/no question after the
+  deterministic test. Only `none` exists: without a judge, the condition alone decides. A judge may
+  only hold a wake back, never make one or act; Jev (with the user's own key) or a local model
+  (Ollama logprobs) come once a bench shows they catch what rules miss.
 
 ## Remote access (Tailscale)
 
