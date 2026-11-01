@@ -1923,9 +1923,24 @@ and a trust level (`owner`, `first_party`, `external`). A change over time super
 memory, which stays, dated; every change is in `memory_log`. Forgotten memories are purged after
 30 days.
 
-The brain's tools (on `/mcp`): `remember`, `recall` (any word matches, best first; boosts for the
-subject named and the profile; episodes fade with a 30-day half-life; current facts only unless
-`include_past` or `as_of`), `update_memory`, `forget`, `commitments`. Results are data, quoted.
+The brain's tools (on `/mcp`): `remember`, `recall`, `update_memory`, `forget`, `commitments`.
+Results are data, quoted.
+
+**Search.** The full-text index holds each memory's text, subject, `keywords` (other words to find
+it by: synonyms, variants) and, in a shadow column, the French stems of all three (Snowball French
+in Go, plus the plural *s*), so "anniversaires" finds "anniversaire". A query is the question's
+words without the question words ("quel est le nom de") nor the user's name, each matched as
+typed (a prefix from four letters) or by its stem; any word matches, BM25 ranks. The ranking
+then weighs relevance (BM25 over the candidates, the best at 1) by bounded factors: the subject
+named (×1.5), the profile (×1.3), the `importance` 1–5 (×0.8 to ×1.2), and for an episode its
+age (30-day half-life) down to half its relevance only, so an old memory that matches well still
+comes back. A time in the query, read by code from explicit expressions (hier, avant-hier, la
+semaine dernière, ce mois-ci, le mois dernier, début/mi/fin septembre, en mai, le 19 septembre,
+il y a trois jours, a date; and their English forms), reorders and never filters: a day is widened
+by two days on each side, memories of that time come first (×1.6), facts that were true then are
+candidates even if no longer true, and facts not true then are lowered. A question that is only a
+time ("que s'est-il passé hier ?") lists that time. Current facts only otherwise, unless
+`include_past` or `as_of`. `docs/memory-design.md` keeps the reasons and the measures.
 
 **Trust is enforced in code.** Only the user's own messages (`source_ref` naming a message of role
 `user`) create or change a profile, preference or lesson. A brain turn that called an external

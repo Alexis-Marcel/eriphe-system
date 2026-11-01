@@ -95,10 +95,12 @@ type rememberIn struct {
 	DueAt      string   `json:"due_at,omitempty" jsonschema:"for a commitment, when it is due"`
 	Supersedes int64    `json:"supersedes,omitempty" jsonschema:"id of the memory this one replaces: it is kept, dated, never overwritten"`
 	SourceRef  string   `json:"source_ref,omitempty" jsonschema:"the message it comes from: msg:N for the user's message #N. Required for profile, preference and lesson"`
+	Keywords   string   `json:"keywords,omitempty" jsonschema:"a few other words someone could use to look for it (synonyms, variants: 'voiture auto bagnole'), indexed with the text"`
+	Importance int      `json:"importance,omitempty" jsonschema:"1 (trivial) to 5 (essential to know the user), 3 by default"`
 }
 
 type recallIn struct {
-	Query       string   `json:"query,omitempty" jsonschema:"words to look for; no stemming, so add variants: 'anniversaire anniversaires fête' (any word matches, the best matches first)"`
+	Query       string   `json:"query,omitempty" jsonschema:"words to look for, or the question itself: word families are found (anniversaire, anniversaires), synonyms are not, so add them ('voiture auto'); a time in it (hier, en septembre, la semaine dernière) ranks what is dated then first"`
 	Kinds       []string `json:"kinds,omitempty" jsonschema:"only these kinds"`
 	Subject     string   `json:"subject,omitempty" jsonschema:"only this subject; 'person:' for every person"`
 	Since       string   `json:"since,omitempty" jsonschema:"only from this date (an episode's date, a fact's valid_from)"`
@@ -109,16 +111,18 @@ type recallIn struct {
 }
 
 type updateIn struct {
-	ID        int64     `json:"id"`
-	Text      *string   `json:"text,omitempty" jsonschema:"corrected text (to record a change over time, use remember with supersedes instead)"`
-	Subject   *string   `json:"subject,omitempty"`
-	Links     *[]string `json:"links,omitempty"`
-	ValidTo   string    `json:"valid_to,omitempty" jsonschema:"when it stopped being true, YYYY-MM-DD, or 'now'"`
-	DueAt     string    `json:"due_at,omitempty"`
-	State     string    `json:"state,omitempty" jsonschema:"for a commitment: open, done or dropped"`
-	Pinned    *bool     `json:"pinned,omitempty" jsonschema:"in the profile or not; needs source_ref"`
-	SourceRef string    `json:"source_ref,omitempty" jsonschema:"the user's message asking for the change, msg:N"`
-	Reason    string    `json:"reason,omitempty"`
+	ID         int64     `json:"id"`
+	Text       *string   `json:"text,omitempty" jsonschema:"corrected text (to record a change over time, use remember with supersedes instead)"`
+	Subject    *string   `json:"subject,omitempty"`
+	Links      *[]string `json:"links,omitempty"`
+	ValidTo    string    `json:"valid_to,omitempty" jsonschema:"when it stopped being true, YYYY-MM-DD, or 'now'"`
+	DueAt      string    `json:"due_at,omitempty"`
+	State      string    `json:"state,omitempty" jsonschema:"for a commitment: open, done or dropped"`
+	Pinned     *bool     `json:"pinned,omitempty" jsonschema:"in the profile or not; needs source_ref"`
+	Keywords   *string   `json:"keywords,omitempty" jsonschema:"other words to find it by"`
+	Importance *int      `json:"importance,omitempty" jsonschema:"1 to 5"`
+	SourceRef  string    `json:"source_ref,omitempty" jsonschema:"the user's message asking for the change, msg:N"`
+	Reason     string    `json:"reason,omitempty"`
 }
 
 type forgetIn struct {
@@ -136,7 +140,7 @@ func registerMemoryTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in rememberIn) (map[string]any, error) {
 			return c.brainRemember(in)
 		})
-	tool(s, "recall", "Search Eriphe's memory: full text (any word matches, accents ignored, no stemming: give variants) with filters. Current facts only unless include_past or as_of.",
+	tool(s, "recall", "Search Eriphe's memory: full text (any word matches, accents ignored, word families found; give synonyms) with filters, the best matches first. Current facts only unless include_past or as_of, or a past time named in the query.",
 		func(ctx context.Context, in recallIn) (map[string]any, error) {
 			return c.brainRecall(in)
 		})
@@ -198,7 +202,8 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	if c.mem == nil {
 		return nil, errMemoryOff
 	}
-	x := &Memory{Kind: strings.TrimSpace(in.Kind), Subject: in.Subject, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes}
+	x := &Memory{Kind: strings.TrimSpace(in.Kind), Subject: in.Subject, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes,
+		Keywords: in.Keywords, Importance: in.Importance}
 	var err error
 	if x.ValidFrom, err = parseWhen(in.ValidFrom); err != nil {
 		return nil, err
@@ -209,7 +214,7 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	if x.DueAt, err = parseWhen(in.DueAt); err != nil {
 		return nil, err
 	}
-	scan := scanMemoryText(x.Text, x.Subject, strings.Join(x.Links, "\n"))
+	scan := scanMemoryText(x.Text, x.Subject, strings.Join(x.Links, "\n"), x.Keywords)
 	d, err := c.decideBrainWrite(x.Kind, in.SourceRef, scan)
 	if err != nil {
 		return nil, err
@@ -280,7 +285,7 @@ func (c *core) brainUpdate(in updateIn) (map[string]any, error) {
 // updatePatch is the change an update asks for; valid_to "now" ends the
 // memory at once.
 func (c *core) updatePatch(in updateIn) (memoryPatch, error) {
-	p := memoryPatch{Text: in.Text, Subject: in.Subject, Links: in.Links, Pinned: in.Pinned}
+	p := memoryPatch{Text: in.Text, Subject: in.Subject, Links: in.Links, Pinned: in.Pinned, Keywords: in.Keywords, Importance: in.Importance}
 	if in.State != "" {
 		p.State = &in.State
 	}
@@ -315,6 +320,9 @@ func (in updateIn) texts() []string {
 	}
 	if in.Links != nil {
 		parts = append(parts, strings.Join(*in.Links, "\n"))
+	}
+	if in.Keywords != nil {
+		parts = append(parts, *in.Keywords)
 	}
 	return parts
 }
