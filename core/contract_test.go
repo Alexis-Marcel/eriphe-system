@@ -63,6 +63,10 @@ func TestRunTaskContract(t *testing.T) {
 			t.Errorf("system prompt lacks %q", want)
 		}
 	}
+	// Its node runs the checks, and sends a failure back twice at most.
+	if len(spec.Checks) != 2 || spec.Checks[0].Timeout != checkTimeout || spec.Checks[1].Exists != "out/report.pdf" || spec.CheckRounds != defaultAttempts {
+		t.Errorf("spec checks %+v, rounds %d", spec.Checks, spec.CheckRounds)
+	}
 	st, err := c.status(task.ID, 0)
 	if err != nil || st.Contract == nil || st.Contract.Objective != "The contact form sends mail" || st.Contract.Verify != "auto" {
 		t.Errorf("status contract %+v %v", st.Contract, err)

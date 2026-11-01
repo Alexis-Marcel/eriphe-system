@@ -120,6 +120,12 @@ type nodeTaskSpec struct {
 	// The self-hosted model server of the task's agent (OpenCode), set
 	// when the node fetches the task; its address is in Egress.Endpoints.
 	ModelEndpoint *nodeModelEndpoint `json:"model_endpoint,omitempty"`
+
+	// The checks of the task's contract, which its node runs in the
+	// container when a turn ends, and how many times a failed one goes back
+	// to the agent (contract.go). An older node ignores them.
+	Checks      []taskCheck `json:"checks,omitempty"`
+	CheckRounds int         `json:"check_rounds,omitempty"`
 }
 
 // nodeModelEndpoint is where a self-hosted model server answers, and the

@@ -231,6 +231,19 @@ from (committed or not, and the new ones, at most 200), listed by `git` in the c
 exec`, or `container exec` with Apple's engine), with the container's own rights. eriphe-core
 compares it with the agent's receipt.
 
+Then the **checks** of the task's contract (`checks` of the spec), in the container too: first the
+paths that must exist (`exists`, `test -e`), then the commands (`run`, in `dir` relative to the
+agent's working directory, under `timeout` seconds, 300 by default, with the image's `timeout`
+when it has one, the node giving up 30 seconds later), in their order; the first that fails stops
+the others. Each is a `check` event: `{name, ok, exit_code, duration_ms, run | exists, output}`,
+with the last 4 KB of its output. A failed check goes back to the agent as its next turn (the end of
+its output, "fix the cause, then end your turn with your receipt"), without eriphe-core: a `retry`
+event `{reason: check, check, round}`, at most `check_rounds` times (2 by default, 5 at most; kept
+in `task.json` across restarts). The same failure twice in a row (same check, exit code and output)
+is not sent back again: a `check_stop` event `{check, reason: same_failure | rounds}` ends it, and
+the turn stays idle for eriphe-core to read. A message delivered with `skip_checks` (the receipt
+asked again) is not followed by checks.
+
 The only ports the node listens on are for its task containers, each with its own secret: the task
 listener (`-listen`, 8790), where a Claude Code task calls its permission endpoint `/perm/{id}/mcp`,
 its catalog servers at `/mcp/{server}` and a model behind a node at `/model/v1/{path}`, and the egress relay (`-egress-listen`, 8791, see
@@ -356,7 +369,7 @@ tasks behave as before.
 ## Runtimes
 
 A task's `runtime` is the agent program the node drives in its container (`runtime.go`). All
-write the same events (`text`, `tool_use`, `permission`, `permission_answer`, `turn_end`, `state`, `diff`,
+write the same events (`text`, `tool_use`, `permission`, `permission_answer`, `turn_end`, `state`, `diff`, `check`, `retry`, `check_stop`,
 `error`, `restart`), and all send every permission request to eriphe-core through the task's
 inbox. The node injects the agent of `claude-code`, `opencode` and `codex` into any image (see
 [Agents](#agents)), so `GET /v1/node` reports these and `acp` once its engine answers.
