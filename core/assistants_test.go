@@ -451,3 +451,26 @@ func TestReadOnlyField(t *testing.T) {
 		}
 	}
 }
+
+// A new key for the brain's account restarts it: its running task holds
+// the old one, and a retry there fails the same way.
+func TestAssistantAccountKeyRestart(t *testing.T) {
+	c := brainCore(t, &BrainConfig{})
+	ctx := context.Background()
+	c.tendAssistants(ctx, "tok")
+	id := brainStatus(c.core).Task
+	if brainStatus(c.core).AccountStamp == "" {
+		t.Fatal("no stamp of the account's key at start")
+	}
+	c.store.updateTask(id, map[string]any{"state": stateIdle})
+	if c.tendAssistants(ctx, "tok"); c.store.get("brain_stopped:"+id) != "" {
+		t.Fatal("restarted with the same key")
+	}
+	secret := c.conf().Providers[c.conf().Agents["sonnet"].Provider].Secret
+	if err := os.WriteFile(secret, []byte("sk-ant-oat01-new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if c.tendAssistants(ctx, "tok"); c.store.get("brain_stopped:"+id) == "" {
+		t.Fatal("not restarted on a new key")
+	}
+}

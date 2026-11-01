@@ -562,6 +562,7 @@ type AssistantStatus struct {
 	SessionRuntime string `json:"session_runtime,omitempty"` // a session is its harness's own
 	Resume         string `json:"resume,omitempty"`          // the session it was started to resume
 	SpecHash       string `json:"spec_hash,omitempty"`
+	AccountStamp   string `json:"account_stamp,omitempty"` // a digest of its account's key when it started
 	ToolsHash      string `json:"tools_hash,omitempty"`
 	SeenSeq        int    `json:"seen_seq,omitempty"` // its events relayed
 

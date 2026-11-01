@@ -281,6 +281,15 @@ func (c *core) restartIfChanged(ctx context.Context, a Assistant, t *TaskRow) (s
 			return true, c.stopByBrain(ctx, t.ID)
 		}
 	}
+	// A new key for its account: the running task still holds the old one.
+	if k, was := c.accountStamp(a.Agent), c.assistantStatus(a.Name).AccountStamp; k != was {
+		if was == "" { // started before it was kept
+			c.updateAssistant(a.Name, func(st *AssistantStatus) { st.AccountStamp = k })
+		} else {
+			log.Printf("%s: its account's key changed, restarting task %s", c.assistantLog(a), t.ID)
+			return true, c.stopByBrain(ctx, t.ID)
+		}
+	}
 	return false, nil
 }
 
@@ -384,10 +393,10 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	if tools == "" {
 		tools = "unready" // a server it reaches is down: restart once it is back
 	}
-	spec := c.assistantSpecHash(a)
+	spec, account := c.assistantSpecHash(a), c.accountStamp(a.Agent)
 	c.updateAssistant(a.Name, func(st *AssistantStatus) {
 		st.Task, st.Agent, st.LastError = t.ID, t.Agent, ""
-		st.ToolsHash, st.SpecHash = tools, spec
+		st.ToolsHash, st.SpecHash, st.AccountStamp = tools, spec, account
 		st.SeenSeq = 0
 		st.Quiet = true // until its first delivery
 		st.Profile = c.profileHash()
@@ -435,6 +444,22 @@ func (c *core) assistantSpecHash(a Assistant) string {
 	}
 	json.NewEncoder(h).Encode(spec)
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// accountStamp fingerprints the key of an agent's account: a key put in its
+// place restarts the assistant, whose running task still holds the old one.
+// Only a digest of it is kept, never the key.
+func (c *core) accountStamp(agent string) string {
+	p, ok := c.conf().Providers[c.conf().Agents[agent].Provider]
+	if !ok || p.Secret == "" {
+		return ""
+	}
+	v, err := readSecret(p.Secret)
+	if err != nil {
+		return "unreadable"
+	}
+	sum := sha256.Sum256([]byte(v))
+	return hex.EncodeToString(sum[:8])
 }
 
 // standingInstructions are an assistant's instructions with the user's
