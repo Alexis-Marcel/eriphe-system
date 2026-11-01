@@ -119,7 +119,7 @@ func quietLength(from, to int) int { return ((to-from)%1440 + 1440) % 1440 }
 func (r *notifyRule) check() error {
 	switch r.Kind {
 	case ruleTopic:
-		r.Match = strings.ToLower(strings.TrimSpace(r.Match))
+		r.Match = canonRef(r.Match)
 		if r.Match == "" || len(r.Match) > 80 || !ruleRefRe.MatchString(r.Match) {
 			return errors.New("match is a ref like project:getout, person:lina or source:mail")
 		}
@@ -220,9 +220,25 @@ func (c *core) addNotifyRule(r notifyRule) (notifyRule, error) {
 	}
 	defer tx.Rollback()
 	if r.State == ruleActive {
-		if _, err := tx.Exec(`DELETE FROM notify_rules WHERE state = 'active' AND kind = ? AND match = ? AND days = ?`,
-			r.Kind, r.Match, r.Days); err != nil {
+		// The same topic in its canonical form: a rule kept before the
+		// vocabulary (factures) is replaced by its new form (facture).
+		rows, err := tx.Query(`SELECT id, match FROM notify_rules WHERE state = 'active' AND kind = ? AND days = ?`, r.Kind, r.Days)
+		if err != nil {
 			return r, err
+		}
+		var old []int64
+		for rows.Next() {
+			var id int64
+			var match string
+			if rows.Scan(&id, &match) == nil && (match == r.Match || r.Kind == ruleTopic && canonRef(match) == r.Match) {
+				old = append(old, id)
+			}
+		}
+		rows.Close()
+		for _, id := range old {
+			if _, err := tx.Exec(`DELETE FROM notify_rules WHERE id = ?`, id); err != nil {
+				return r, err
+			}
 		}
 	}
 	res, err := tx.Exec(`INSERT INTO notify_rules (kind, match, outcome, night, days, quiet_from, quiet_to, state, why, source_ref,
@@ -266,8 +282,10 @@ func (c *core) deleteNotifyRule(id int64) error {
 // topicRule is the active topic rule for a ref: the longest match, a
 // match being the ref itself or one of its leading parts (project:getout
 // for project:getout:prod).
+// Both sides are compared in their canonical form (topics.go), so a rule
+// written before the vocabulary (factures) still matches (facture).
 func topicRule(rules []notifyRule, ref string) *notifyRule {
-	ref = strings.ToLower(strings.TrimSpace(ref))
+	ref = canonRef(ref)
 	if ref == "" {
 		return nil
 	}
@@ -276,10 +294,11 @@ func topicRule(rules []notifyRule, ref string) *notifyRule {
 		if r.Kind != ruleTopic || r.State != ruleActive {
 			continue
 		}
-		if ref != r.Match && !strings.HasPrefix(ref, r.Match+":") {
+		match := canonRef(r.Match)
+		if match == "" || ref != match && !strings.HasPrefix(ref, match+":") {
 			continue
 		}
-		if best == nil || len(r.Match) > len(best.Match) {
+		if best == nil || len(match) > len(canonRef(best.Match)) {
 			best = &rules[i]
 		}
 	}
@@ -338,10 +357,18 @@ func quietAt(rules []notifyRule, now time.Time) (notifyRule, bool) {
 // this clean turn, in their own words about being told or not; otherwise,
 // or on a tainted turn, it is only proposed.
 
-var ruleRequest = regexp.MustCompile(`(?i)(pr[ée]vien|pr[ée]venir|notif|r[ée]veill|d[ée]rang|alerte|sonne|la nuit|nuits?\b|heures? calmes?|brief|rappel|interromp|ping|tais-toi|silence|plus de messages?|notify|wake|disturb|quiet hours|alert|remind|bother|interrupt)`)
+const ruleRequestWords = `pr[ée]vien|pr[ée]venir|notif|r[ée]veill|d[ée]rang|alerte|sonne|la nuit|nuits?\b|heures? calmes?|brief|rappel|interromp|ping|tais-toi|silence|plus de messages?|notify|wake|disturb|quiet hours|alert|remind|bother|interrupt`
+
+var ruleRequest = regexp.MustCompile(`(?i)(` + ruleRequestWords + `)`)
 
 // ruleWrite is how a brain's rule is recorded: active, or only proposed and why.
 func (c *core) ruleWrite(sourceRef string, scan scanResult) (state, why string, err error) {
+	return c.askedWrite(sourceRef, scan, ruleRequest, "does not speak of being told")
+}
+
+// askedWrite is active when the user's message of this clean turn, cited,
+// asks for it in words that match re; otherwise proposed, and why.
+func (c *core) askedWrite(sourceRef string, scan scanResult, re *regexp.Regexp, notAbout string) (state, why string, err error) {
 	if scan.Reject != "" {
 		return "", "", fmt.Errorf("refused: %s", scan.Reject)
 	}
@@ -355,8 +382,8 @@ func (c *core) ruleWrite(sourceRef string, scan scanResult) (state, why string, 
 		return ruleProposed, "no message of the user's asks for it (source_ref msg:N)", nil
 	case from == 0 || msg.Seq < from || msg.Seq > to:
 		return ruleProposed, "the user's message it cites is not of this turn", nil
-	case !ruleRequest.MatchString(msg.Text):
-		return ruleProposed, "the user's message it cites does not speak of being told", nil
+	case !re.MatchString(msg.Text):
+		return ruleProposed, "the user's message it cites " + notAbout, nil
 	}
 	return ruleActive, "", nil
 }

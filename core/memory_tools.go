@@ -98,6 +98,9 @@ type rememberIn struct {
 	Keywords   string   `json:"keywords,omitempty" jsonschema:"a few other words someone could use to look for it (synonyms, variants: 'voiture auto bagnole'), indexed with the text"`
 	State      string   `json:"state,omitempty" jsonschema:"for a progress card: active, blocked, done or paused"`
 	Importance int      `json:"importance,omitempty" jsonschema:"1 (trivial) to 5 (essential to know the user), 3 by default"`
+	// The escape of rememberRedirect: a preference about the conversation
+	// itself that only sounds like one about notifications.
+	AboutConversation bool `json:"about_conversation,omitempty" jsonschema:"true only when a preference is about how you behave in the conversation (not about notifications, which are rules), and remember refused it as a rule"`
 }
 
 type recallIn struct {
@@ -133,11 +136,11 @@ type forgetIn struct {
 }
 
 func registerMemoryTools(s *mcp.Server, c *core) {
-	tool(s, "remember", "Keep something in Eriphe's memory: one fact, preference, person, episode, lesson, decision or progress card per call (what is owed or to remember to do is an intention: intend). To record a change, supersede the old memory (it is kept, dated). What a turn that read external content remembers is only proposed to the user.",
+	tool(s, "remember", "Keep what you must know about the user in Eriphe's memory: one fact, preference, person, episode, lesson, decision or progress card per call. What the code enforces is never a memory: what is owed or to do once is intend, what comes back on a schedule is watch, how or when the user is told is rule or setting. To record a change, supersede the old memory (it is kept, dated). What a turn that read external content remembers is only proposed to the user.",
 		func(ctx context.Context, in rememberIn) (map[string]any, error) {
 			return c.brainRemember(in)
 		})
-	tool(s, "recall", "Search Eriphe's memory: full text (any word matches, accents ignored, word families found; give synonyms) with filters, the best matches first. Current facts only unless include_past or as_of, or a past time named in the query.",
+	tool(s, "recall", "Search Eriphe's memory: full text (any word matches, accents ignored, word families found; give synonyms) with filters, the best matches first. The user's notification rules about the query come with them (rules, kind rule): enforced by code, changed with rule. Current facts only unless include_past or as_of, or a past time named in the query.",
 		func(ctx context.Context, in recallIn) (map[string]any, error) {
 			return c.brainRecall(in)
 		})
@@ -172,12 +175,102 @@ func (c *core) brainRecall(in recallIn) (map[string]any, error) {
 	if !q.Until.IsZero() && len(in.Until) == 10 {
 		q.Until = q.Until.Add(24*time.Hour - time.Second)
 	}
-	xs, err := c.mem.recall(q)
-	if err != nil {
-		return nil, err
+	wantRule := len(in.Kinds) == 0 || containsStr(in.Kinds, kindRule)
+	q.Kinds = nil
+	for _, k := range in.Kinds {
+		if k != kindRule {
+			q.Kinds = append(q.Kinds, k)
+		}
+	}
+	xs := []*Memory{}
+	if len(in.Kinds) == 0 || len(q.Kinds) > 0 {
+		if xs, err = c.mem.recall(q); err != nil {
+			return nil, err
+		}
 	}
 	c.readMemories(xs)
-	return map[string]any{"note": memoryNote, "memories": viewMemories(xs, c.mem.now())}, nil
+	out := map[string]any{"note": memoryNote, "memories": viewMemories(xs, c.mem.now())}
+	if wantRule {
+		if rules := c.recallRules(in.Query, in.Subject, len(in.Kinds) > 0); len(rules) > 0 {
+			out["rules"] = rules
+			out["rules_note"] = "These are rules, not memories: eriphe-core enforces them on every notification. Change one with rule (or setting), never with remember."
+		}
+	}
+	return out, nil
+}
+
+// kindRule is the kind recall gives the user's notification rules.
+const kindRule = "rule"
+
+// recalledRule is a notification rule as recall shows it, among the memories.
+type recalledRule struct {
+	Kind  string `json:"kind"` // always rule
+	ID    int64  `json:"id"`
+	Rule  string `json:"rule"`
+	State string `json:"state"`
+	Why   string `json:"why,omitempty"`
+}
+
+// ruleSummary says a rule in a line.
+func ruleSummary(r notifyRule) string {
+	if r.Kind == ruleQuiet {
+		return "quiet hours " + r.Window() + " (" + r.Days + " nights)"
+	}
+	s := "notifications about " + r.Match + ": " + r.Outcome
+	if r.Night {
+		s += ", even at night"
+	}
+	for _, f := range [][2]string{{"only by", r.Channels}, {"also on", r.Also}, {"never on", r.Never}} {
+		if f[1] != "" {
+			s += ", " + f[0] + " " + f[1]
+		}
+	}
+	return s
+}
+
+// recallRules are the rules a recall's query is about: every rule when
+// the query speaks of being told (or asks for kind rule), else those about
+// the subject asked or that share a word family with the query.
+func (c *core) recallRules(query, subject string, all bool) []recalledRule {
+	rules, err := c.notifyRules()
+	if err != nil || len(rules) == 0 {
+		return nil
+	}
+	all = all || notifyPrefRe.MatchString(query)
+	words := map[string]bool{}
+	for _, w := range memWords(query) {
+		if !queryStop(w) {
+			words[stemWord(w)] = true
+		}
+	}
+	var out []recalledRule
+	for _, r := range rules {
+		hit := all
+		if s := canonRef(subject); s != "" && r.Kind == ruleTopic {
+			m := canonRef(r.Match)
+			hit = hit || m == s || strings.HasPrefix(m, s+":") || strings.HasPrefix(s, m+":")
+		}
+		if !hit {
+			text := r.Match + " " + r.Why
+			if r.Kind == ruleQuiet {
+				text += " heures calmes nuit calme silence quiet night"
+			}
+			for _, w := range memWords(strings.ReplaceAll(text, ":", " ")) {
+				if words[stemWord(w)] {
+					hit = true
+					break
+				}
+			}
+		}
+		if !hit {
+			continue
+		}
+		if r.Tainted != "" {
+			c.turn.taint(taintNotification) // proposed after reading external content
+		}
+		out = append(out, recalledRule{Kind: kindRule, ID: r.ID, Rule: ruleSummary(r), State: r.State, Why: r.Why})
+	}
+	return out
 }
 
 func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
@@ -195,6 +288,9 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 			out["note"] = strings.TrimSpace(note + " Recorded as an intention: use intend, intentions and update_intention for what is owed.")
 		}
 		return out, err
+	}
+	if h := rememberRedirect(strings.TrimSpace(in.Kind), in.Text); h != "" && !in.AboutConversation {
+		return nil, errors.New("not remembered: " + h)
 	}
 	x := &Memory{Kind: strings.TrimSpace(in.Kind), Subject: in.Subject, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes,
 		Keywords: in.Keywords, Importance: in.Importance, State: in.State}

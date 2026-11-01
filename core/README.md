@@ -1814,8 +1814,8 @@ and takes it there, or opens one, on the workspace's own origin. Push needs a tr
 later), while Android and computers receive it in the browser too.
 
 **The brain's notifications** (`notify.go`, `notify_rules.go`, `notify_quiet.go`). The brain has
-three tools: `notify(text, level now|brief, why, ref)`, `notifications` (what it said, what waits
-for the brief, the feedback, the rules, the quiet hours) and `rule`. The model writes and asks for
+four tools: `notify(text, level now|brief, why, ref)`, `notifications` (what it said, what waits
+for the brief, the feedback, the rules, the quiet hours, the known topics, the settings), `rule` and `setting`. The model writes and asks for
 a level; the code decides (`decideNotify`, no model):
 
 - **Quiet hours always hold.** The window is a rule (data): for every night, or for the nights
@@ -1849,6 +1849,27 @@ a level; the code decides (`decideNotify`, no model):
   `activitySources`. The same signals give the user's last activity (`lastSeen`, `awaySince`), and
   `notificationsSince` what was held since then, each with its source, time, why, ref, outcome and
   feedback: what a brief or a point made on the user's return summarises.
+
+- **One topic vocabulary** (`topics.go`). A rule matches the `ref` the brain gives `notify`, so
+  labels must not drift: `canonRef` is the one form of a ref (lower case, accents folded, spaces as
+  hyphens, `projet:` → `project:`, a one-word topic in the singular: `factures` → `facture`), on both
+  sides of the match, so a rule written before stays in force. The known topics (rules, notifications
+  of the last 90 days, the memory's `project:`, `person:` and `client:` subjects) are listed in
+  `notifications`; a new label of a known word family is kept under the known topic, and a new one
+  is flagged to the brain with the known ones.
+- **Settings through the brain** (`settings_brain.go`, tool `setting`): the device order, the lines
+  off, the delay before the next line, the daily cap, the time zone and the Telegram detail. Applied
+  only when the user asked in that clean turn; otherwise kept in `setting_proposals` and approved in
+  À valider, then written to the same keys Settings uses (one place per setting).
+
+**The brain's concepts** (`concepts.go`). One concept per need: memory (what the brain must know),
+intention (owed or to do once), watch (comes back on its own), rule (how to be told about a topic,
+quiet hours), setting (how to be told in general), notify, since, task. What the code enforces is
+never a memory: `recall` returns the matching rules typed as rules, and the tools refuse the
+wrong concept with a hint naming the right one (`remember` of a notification preference → `rule`
+or `setting`; `watch` at a one-off time → `intend`; a recurring `intend` → `watch`). The concept
+bench (`concepts_test.go`) checks, without a model, that each request's right call is taken and its
+wrong one redirected, and that the map is in the MCP instructions and the prompt.
 
 The interruption bench (`notify_eval_test.go`, `testdata/notifyeval`) runs with the tests: it scores
 the decision on labelled cases (accuracy, precision and recall of "now", night wake-ups no rule

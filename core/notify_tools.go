@@ -19,7 +19,7 @@ type notifyIn struct {
 	Text  string `json:"text" jsonschema:"what to tell the user, in French, one or two sentences, plain text"`
 	Level string `json:"level" jsonschema:"now (worth interrupting: within the hour) or brief (can wait for the next brief)"`
 	Why   string `json:"why" jsonschema:"why you tell it, in French, one sentence the user sees on opening it (the source, what triggered it)"`
-	Ref   string `json:"ref,omitempty" jsonschema:"what it is about, the key rules match: project:<name>, person:<slug>, intention:<id>, task:<id>, source:<server>"`
+	Ref   string `json:"ref,omitempty" jsonschema:"what it is about, the key rules match: a known topic (notifications lists them) before a new one; project:<name> and person:<slug> as in the memory, source:<server>, a one-word topic (facture), task:<id>, intention:<id>"`
 }
 
 type notificationsIn struct {
@@ -49,14 +49,15 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in notifyIn) (map[string]any, error) {
 			return c.brainNotify(in)
 		})
-	tool(s, "notifications", "What you told the user on your own and how they took it (useful, not useful, not now), what waits for the brief, the notification rules (active and proposed), the quiet hours in force, and the window the user's activity suggests.",
+	tool(s, "notifications", "What you told the user on your own and how they took it (useful, not useful, not now), what waits for the brief, the notification rules (active and proposed), the quiet hours in force and the window the user's activity suggests, the known topics (the refs to reuse in notify and rule), and the settings (device order, lines off, daily cap, time zone, Telegram detail).",
 		func(ctx context.Context, in notificationsIn) (map[string]any, error) {
 			return c.brainNotifications(in)
 		})
-	tool(s, "rule", "Write or delete a notification rule of the user's: what to do with notifications about a ref (now, brief, never, even at night, and by which channels: push, Telegram), or the quiet hours. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider).",
+	tool(s, "rule", "Write or delete a notification rule of the user's: what to do with notifications about a topic ref (now, brief, never, even at night, and by which lines), or the quiet hours. This is where a preference about being told lives, never in remember; general settings (device order, daily cap, time zone, Telegram detail) are setting. The match is a known topic (notifications lists them): a new one matches only if notify gives that same ref. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider).",
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})
+	registerSettingTools(s, c) // setting
 }
 
 func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
@@ -76,8 +77,9 @@ func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
 		// What a tainted turn writes may carry a link out (EchoLeak): text only.
 		return nil, errors.New("refused: this turn read external content, so a notification holds no link: write it as text")
 	}
+	ref, topicNote := c.notifyTopic(in.Ref)
 	n := &notification{Text: truncate(text, notifyTextMax), Why: truncate(why, notifyWhyMax),
-		Ref: strings.ToLower(truncate(strings.TrimSpace(in.Ref), 100)), Source: notifyFromBrain, Tainted: strings.Join(tainted, ", ")}
+		Ref: truncate(ref, 100), Source: notifyFromBrain, Tainted: strings.Join(tainted, ", ")}
 	// The message goes in the conversation with the push, and is not pushed again as a question.
 	c.relayMu.Lock()
 	defer c.relayMu.Unlock()
@@ -93,6 +95,12 @@ func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
 		}
 	}
 	out := map[string]any{"id": n.ID, "outcome": n.Outcome, "result": notifyReasons[n.Reason]}
+	if n.Ref != "" {
+		out["ref"] = n.Ref
+	}
+	if topicNote != "" {
+		out["topic"] = topicNote
+	}
 	switch n.Outcome {
 	case levelNow:
 		out["note"] = "Sent, and written in the conversation: do not repeat it; answer [rien] if you have nothing else to say."
@@ -102,6 +110,28 @@ func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
 		out["note"] = "Not sent: a rule of the user's says never for this."
 	}
 	return out, nil
+}
+
+// notifyTopic is the ref a notification is kept under: canonical, the
+// known topic of its word family if there is one, and a note when the
+// brain invented a new one (rules match only the refs in use).
+func (c *core) notifyTopic(label string) (string, string) {
+	raw := strings.ToLower(strings.TrimSpace(label))
+	if raw == "" {
+		return "", ""
+	}
+	topics := c.knownTopics()
+	ref, known := reuseTopic(raw, topics)
+	switch {
+	case ref == "":
+		return raw, "Not a ref (letters, digits, - and : only): no rule can match it. Known topics: " + topicRefs(topics, 15) + "."
+	case isIDRef(ref) || known && ref == canonRef(raw):
+		return ref, ""
+	case known:
+		return ref, "Kept under the known topic " + ref + " (same word family as " + raw + "): use it next time."
+	}
+	return ref, "New topic " + ref + ". Rules match the ref you give: reuse a known topic when it fits (" + topicRefs(topics, 15) +
+		"); for a project or a person, the memory's subject (project:<name>, person:<slug>)."
 }
 
 // notificationView is a notification as the brain sees it.
@@ -238,6 +268,18 @@ func (c *core) brainNotifications(in notificationsIn) (map[string]any, error) {
 		quiet["suggestion_note"] = "Drawn from the user's activity of the last two weeks: propose it with rule (kind quiet), never as decided."
 	}
 	out["quiet_hours"] = quiet
+	out["topics"] = c.knownTopics()
+	out["settings"] = c.currentSettings()
+	if ps, err := c.settingProposals(); err == nil && len(ps) > 0 {
+		var pv []map[string]any
+		for _, p := range ps {
+			if p.Tainted != "" {
+				c.turn.taint(taintNotification)
+			}
+			pv = append(pv, map[string]any{"id": p.ID, "name": p.Name, "value": p.Value, "why": p.Why})
+		}
+		out["settings_proposed"] = pv
+	}
 	if last, away := c.awaySince(cx.Now); !last.IsZero() {
 		out["user_last_seen"] = map[string]any{"at": last.In(cx.Now.Location()).Format("2006-01-02 15:04"), "away_minutes": int(away.Minutes())}
 	}
@@ -259,6 +301,24 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 	r := notifyRule{Kind: in.Kind, Match: in.Match, Outcome: in.Outcome, Night: in.Night, Channels: in.Channels, Also: in.Also, Never: in.Never, Days: in.Days, Why: in.Why, By: "brain"}
 	if r.Kind == "" {
 		r.Kind = ruleTopic
+	}
+	if r.Kind != ruleTopic && r.Kind != ruleQuiet {
+		return nil, errors.New("kind is topic or quiet; the device order, lines off, daily cap, time zone and Telegram detail are settings: setting")
+	}
+	var topicNote string
+	if r.Kind == ruleTopic {
+		topics := c.knownTopics()
+		ref, known := reuseTopic(in.Match, topics)
+		switch {
+		case ref == "":
+		case !known:
+			topicNote = "No notification uses " + ref + " yet: a rule matches the ref notify gives, so give notify this same ref. Known topics: " + topicRefs(topics, 15) + "."
+		case ref != canonRef(in.Match):
+			topicNote = "Written for the known topic " + ref + " (same word family as " + in.Match + ")."
+		}
+		if ref != "" {
+			r.Match = ref
+		}
 	}
 	if r.Kind == ruleQuiet {
 		var err error
@@ -285,6 +345,9 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 		return nil, err
 	}
 	out := map[string]any{"rule": viewRule(got)}
+	if topicNote != "" {
+		out["topic"] = topicNote
+	}
 	if got.State == ruleProposed {
 		out["note"] = "Only proposed: " + why + ". " + c.conf().User + " approves it in the workspace (À valider). Do not say it is in force."
 	}

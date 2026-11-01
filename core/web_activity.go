@@ -20,6 +20,7 @@ const happenedPageMax = 200
 func (w *web) activityRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /activity", w.auth(w.handleActivity))
 	mux.Handle("GET /activity/approve", w.auth(w.handleApprovals))
+	mux.Handle("POST /settings/proposals/{id}/{action}", w.auth(w.handleSettingProposal))
 	// The old addresses, in notifications already sent and in the brain's
 	// messages: they keep working.
 	moved := func(to string, keep bool) http.Handler {
@@ -163,12 +164,13 @@ type approvals struct {
 	Intents  []intentCard
 	Rules    []notifyRule
 	Watches  []watchCard
+	Settings []settingProposal
 	Quiet    []quietSuggestion
 }
 
 // Count is all that waits; Remember, the memories and intentions.
 func (a approvals) Count() int {
-	return len(a.Perms) + a.Remember() + len(a.Rules) + len(a.Watches)
+	return len(a.Perms) + a.Remember() + len(a.Rules) + len(a.Watches) + len(a.Settings)
 }
 
 func (a approvals) Remember() int { return len(a.Memories) + len(a.Intents) }
@@ -199,6 +201,7 @@ func (w *web) approvals() approvals {
 			a.Watches = append(a.Watches, watchCard{watch: x})
 		}
 	}
+	a.Settings, _ = w.c.settingProposals()
 	a.Quiet = w.c.suggestQuiet()
 	return a
 }
@@ -220,7 +223,31 @@ func (w *web) approvalCount() int {
 	if ws, err := w.c.watches(watchProposed); err == nil {
 		n += len(ws)
 	}
+	if ps, err := w.c.settingProposals(); err == nil {
+		n += len(ps)
+	}
 	return n
+}
+
+// handleSettingProposal applies or drops a setting the brain proposed.
+func (w *web) handleSettingProposal(rw http.ResponseWriter, r *http.Request, s *session) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(rw, "bad id", http.StatusBadRequest)
+		return
+	}
+	action := r.PathValue("action")
+	if action != "approve" && action != "reject" {
+		http.Error(rw, "approve or reject", http.StatusBadRequest)
+		return
+	}
+	if err := w.c.decideSetting(id, action == "approve"); err != nil {
+		w.toast(rw, err.Error(), false)
+		return
+	}
+	rw.Header().Set("HX-Trigger", hxTrigger(tr(w.lang(r), "setting.did."+action), true, true))
+	rw.Header().Set("HX-Reswap", "none")
+	rw.WriteHeader(http.StatusOK)
 }
 
 func (w *web) handleApprovals(rw http.ResponseWriter, r *http.Request, s *session) {
