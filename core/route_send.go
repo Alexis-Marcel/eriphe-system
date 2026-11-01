@@ -129,6 +129,8 @@ func (c *core) reach(n pushNote, logID int64, targets []routeTarget) {
 			if c.tg != nil {
 				c.tg.deliver(n)
 			}
+		case stepVoice:
+			go c.announce(n, t)
 		}
 	}
 }

@@ -38,9 +38,10 @@ const (
 	setTgDetail = "telegram_detail"       // full or alert
 	setCtxLevel = "context_level"         // what Eriphe may know of the user: 0, 1 or 2 (context.go)
 	setCtxOff   = "context_sources_off"   // the context's sources turned off, or none
+	setVoiceUrg = "voice_for_urgent"      // on: an urgent watch's fixed message is said aloud too, at any hour (ha_presence.go)
 )
 
-var settingNames = []string{setOrder, setOff, setDelay, setCap, setZone, setTgDetail, setCtxLevel, setCtxOff}
+var settingNames = []string{setOrder, setOff, setDelay, setCap, setZone, setTgDetail, setCtxLevel, setCtxOff, setVoiceUrg}
 
 // settingProposal is a setting the brain proposed.
 type settingProposal struct {
@@ -126,6 +127,11 @@ func checkSetting(name, value string) (string, error) {
 		return value, nil
 	case setCtxOff:
 		return checkSourcesOff(value)
+	case setVoiceUrg:
+		if value != "on" && value != "off" {
+			return "", errors.New("voice_for_urgent is on or off")
+		}
+		return value, nil
 	}
 	return "", fmt.Errorf("name is one of %s; a notification rule about a topic or the quiet hours is rule", strings.Join(settingNames, ", "))
 }
@@ -152,11 +158,12 @@ func ianaCase(z string) string {
 // settingKey is the store key a setting is kept under.
 func settingKey(name string) string {
 	return map[string]string{setOrder: routeOrderKey, setOff: routeOffKey, setDelay: routeDelayKey, setCap: "notify_cap",
-		setZone: "notify_zone", setTgDetail: tgDetailKey, setCtxLevel: ctxLevelKey, setCtxOff: ctxOffKey}[name]
+		setZone: "notify_zone", setTgDetail: tgDetailKey, setCtxLevel: ctxLevelKey, setCtxOff: ctxOffKey,
+		setVoiceUrg: voiceUrgentKey}[name]
 }
 
-// checkSourcesOff normalises a list of the context's sources: machine:<node>
-// or src:<id>, each once, sorted; none or empty for none.
+// checkSourcesOff normalises a list of the context's sources: machine:<node>,
+// src:<id> or ha, each once, sorted; none or empty for none.
 func checkSourcesOff(value string) (string, error) {
 	var out []string
 	for _, s := range strings.Split(value, ",") {
@@ -167,8 +174,8 @@ func checkSourcesOff(value string) (string, error) {
 		node, isNode := strings.CutPrefix(s, srcMachine)
 		id, isSrc := strings.CutPrefix(s, srcToken)
 		_, err := strconv.ParseInt(id, 10, 64)
-		if !(isNode && nodeName.MatchString(node)) && !(isSrc && err == nil) {
-			return "", errors.New("context_sources_off lists sources: machine:<node>, src:<id>, or none")
+		if !(isNode && nodeName.MatchString(node)) && !(isSrc && err == nil) && s != srcHA {
+			return "", errors.New("context_sources_off lists sources: machine:<node>, src:<id>, ha, or none")
 		}
 		out = append(out, s)
 	}
@@ -177,7 +184,12 @@ func checkSourcesOff(value string) (string, error) {
 }
 
 // applySetting writes a checked value where Settings reads it.
-func (c *core) applySetting(name, value string) { c.store.set(settingKey(name), value) }
+func (c *core) applySetting(name, value string) {
+	c.store.set(settingKey(name), value)
+	if name == setCtxLevel || name == setCtxOff {
+		c.ha.changed() // Home Assistant followed again, or not
+	}
+}
 
 // currentSettings are the settings in force, as the brain sees them.
 func (c *core) currentSettings() map[string]any {
@@ -196,15 +208,15 @@ func (c *core) currentSettings() map[string]any {
 	}
 	return map[string]any{setOrder: strings.Join(set.Order, ","), setOff: off, setDelay: int(set.Delay / time.Minute),
 		setCap: c.notifyCap(), setZone: zone, setTgDetail: detail,
-		setCtxLevel: c.contextPrefs().Level, setCtxOff: ctxOffShown(c.store.get(ctxOffKey))}
+		setCtxLevel: c.contextPrefs().Level, setCtxOff: ctxOffShown(c.store.get(ctxOffKey)), setVoiceUrg: map[bool]string{true: "on", false: "off"}[c.voiceUrgent()]}
 }
 
 // settingRequest: wording of the user's about how and where to be told.
 var settingRequest = regexp.MustCompile(`(?i)(` + ruleRequestWords +
-	`|ordre|order|t[ée]l[ée]phone|phone|portable|mobile|ordi|computer|\bmac\b|\bpc\b|telegram|fuseau|time ?zone|plafond|\bcap\b|limite|d[ée]tail|r[ée]glage|setting|appareil|device|contexte?|niveau|level|pr[ée]sence|source)`)
+	`|ordre|order|t[ée]l[ée]phone|phone|portable|mobile|ordi|computer|\bmac\b|\bpc\b|telegram|fuseau|time ?zone|plafond|\bcap\b|limite|d[ée]tail|r[ée]glage|setting|appareil|device|contexte?|niveau|level|pr[ée]sence|source|voix|voice)`)
 
 type settingIn struct {
-	Name      string `json:"name" jsonschema:"device_order (lines first to last: inapp, computer, voice, phone, telegram), lines_off (lines never used, or none), move_on_after_minutes (before a now not seen goes to the next line), daily_cap (now notifications a day, 0 to 20), time_zone (IANA, e.g. Europe/Paris, or default), telegram_detail (full: the text; alert: only that something waits), context_level (what you may know of the user: 0 nothing beyond Eriphe itself, 1 presence: active, idle, do not disturb, home, room, focus, busy; 2 context: the category of what they do too; never above what they said), context_sources_off (sources turned off: machine:<node>, src:<id>, or none)"`
+	Name      string `json:"name" jsonschema:"device_order (lines first to last: inapp, computer, voice, phone, telegram), lines_off (lines never used, or none), move_on_after_minutes (before a now not seen goes to the next line), daily_cap (now notifications a day, 0 to 20), time_zone (IANA, e.g. Europe/Paris, or default), telegram_detail (full: the text; alert: only that something waits), context_level (what you may know of the user: 0 nothing beyond Eriphe itself, 1 presence: active, idle, do not disturb, home, room, focus, busy; 2 context: the category of what they do too; never above what they said), context_sources_off (sources turned off: machine:<node>, src:<id>, ha, or none), voice_for_urgent (on: an urgent watch's fixed message is said aloud in the user's room too, even at night; off)"`
 	Value     string `json:"value" jsonschema:"the new value, as the name describes"`
 	Why       string `json:"why" jsonschema:"why, in French, one sentence: what the user said, or the feedback it comes from"`
 	SourceRef string `json:"source_ref,omitempty" jsonschema:"the user's message of this turn that asks for it, msg:N; without it the setting is only proposed"`

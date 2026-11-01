@@ -104,6 +104,16 @@
     </div>
   </li>{{end}}</ul>
 </section>{{end}}
+{{if .Presence}}<section class="approve-group" id="presence" aria-labelledby="ap-presence">
+  <h3 id="ap-presence">{{t "approve.presence"}} <span class="count">{{len .Presence}}</span></h3>
+  <ul class="list">{{range .Presence}}
+  <li><div class="list-main"><span><b>{{t (printf "ctx.ha.signal.%s" .Signal)}}</b> ← <span class="mono">{{.Entity}}</span>{{if .Room}} · {{.Room}}{{end}}</span>{{if .Why}}<span class="small muted">{{.Why}}</span>{{end}}{{if .Tainted}}<span class="small"><span class="tag tag-no" title="{{.Tainted}}">{{t "notif.tainted"}}</span></span>{{end}}</div>
+    <div class="actions">
+      <button class="btn btn-primary sm" hx-post="/context/ha/proposals/{{.ID}}/approve" hx-swap="none">{{template "i-check"}}{{t "rule.approve"}}</button>
+      <button class="btn btn-ghost sm" hx-post="/context/ha/proposals/{{.ID}}/reject" hx-swap="none">{{template "i-x"}}{{t "rule.reject"}}</button>
+    </div>
+  </li>{{end}}</ul>
+</section>{{end}}
 {{if not .Count}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-check"}}</span><p>{{t "approve.none"}}</p></div>{{end}}
 {{if .Quiet}}<section class="approve-group" id="quiet" aria-labelledby="ap-quiet">
   <h3 id="ap-quiet">{{t "approve.quiet"}}</h3>

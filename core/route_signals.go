@@ -182,7 +182,8 @@ func (c *core) routeSettings() routeSettings {
 	}
 	switch off := c.store.get(routeOffKey); off {
 	case "":
-		// The default: no voice yet, and the channels the user left out.
+		// The default: no voice until the user turns it on, and the
+		// channels the user left out.
 		set.Off = []string{stepVoice}
 		def := c.defaultChannels()
 		if !containsChannel(def, chanTelegram) {
@@ -192,6 +193,7 @@ func (c *core) routeSettings() routeSettings {
 	default:
 		set.Off, _ = splitStepsChecked(off)
 	}
+	set.VoiceUrgent = c.voiceUrgent()
 	if m, err := strconv.Atoi(c.store.get(routeDelayKey)); err == nil && m >= 1 && m <= maxDelayMinutes {
 		set.Delay = time.Duration(m) * time.Minute
 	}
@@ -223,6 +225,7 @@ func (c *core) routeSignals(now time.Time) routeSignals {
 	if cx, err := c.notifyContext(); err == nil {
 		_, sig.Quiet = quietAt(cx.Rules, cx.Now)
 	}
+	sig.Voice, _ = c.haVoiceSpot(now)
 	if c.push == nil {
 		return sig
 	}

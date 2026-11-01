@@ -423,7 +423,7 @@ func TestContextSetting(t *testing.T) {
 	if v, err := checkSetting(setCtxOff, " src:2, machine:studio ,src:2"); err != nil || v != "machine:studio,src:2" {
 		t.Fatalf("%q %v", v, err)
 	}
-	for _, v := range []string{"ha", "machine:Bad Name", "src:x", "src:1; DROP"} {
+	for _, v := range []string{"hass", "machine:Bad Name", "src:x", "src:1; DROP"} {
 		if _, err := checkSetting(setCtxOff, v); err == nil {
 			t.Errorf("sources off %q accepted", v)
 		}

@@ -20,7 +20,9 @@ import (
 //     on the machine (node/context.go);
 //   - a source of the user's with its own token (src:<id>), through
 //     POST /v1/context (context_sources.go): an iPhone shortcut, a Home
-//     Assistant automation, a script.
+//     Assistant automation, a script;
+//   - Home Assistant itself (ha): the entities the user mapped to a signal,
+//     followed by code (ha_presence.go).
 //
 // A signal is a kind and a value from a closed list, with its source, when
 // it came and when it expires. A value off the list is refused: no free
@@ -484,6 +486,9 @@ func (u userCtx) homeWords() string {
 // sourceName says a source as the user knows it: its node's name, or the
 // name they gave a token source.
 func (c *core) sourceName(source string) string {
+	if source == srcHA {
+		return "Home Assistant"
+	}
 	if name, ok := strings.CutPrefix(source, srcMachine); ok {
 		return name
 	}

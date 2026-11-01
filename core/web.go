@@ -507,6 +507,7 @@ func (c *core) serveWeb(cfg *Config) error {
 	handler := w.routes()
 	go w.followWaiting(nil) // push notifications of what waits for the user (web_push.go)
 	go c.followRoutes(nil)  // the next device for what was not seen (route_send.go)
+	go c.followHA(nil)      // the house's mapped entities, as signals (ha_presence.go)
 	if c.remote != nil {
 		// The same workspace on the tailnet, once remote access is on (remote.go).
 		c.remote.setWorkspace(tailnetHandler(c.remote.name, handler))

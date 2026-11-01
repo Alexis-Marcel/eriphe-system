@@ -90,7 +90,9 @@ func (w *web) wherePage(lang string) wherePage {
 				continue
 			}
 		case stepVoice:
-			l.Usable, l.Hint = false, "where.hint.voice"
+			if !c.haVoiceReady() {
+				l.Usable, l.Hint = false, "where.hint.voice"
+			}
 		case stepPhone:
 			if !hasKind[kindPhone] {
 				l.Usable, l.Hint = false, "where.hint.phone"

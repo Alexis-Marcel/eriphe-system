@@ -165,12 +165,13 @@ type approvals struct {
 	Rules    []notifyRule
 	Watches  []watchCard
 	Settings []settingProposal
+	Presence []haMapping // Home Assistant entities the brain proposes to follow (ha_presence.go)
 	Quiet    []quietSuggestion
 }
 
 // Count is all that waits; Remember, the memories and intentions.
 func (a approvals) Count() int {
-	return len(a.Perms) + a.Remember() + len(a.Rules) + len(a.Watches) + len(a.Settings)
+	return len(a.Perms) + a.Remember() + len(a.Rules) + len(a.Watches) + len(a.Settings) + len(a.Presence)
 }
 
 func (a approvals) Remember() int { return len(a.Memories) + len(a.Intents) }
@@ -202,6 +203,7 @@ func (w *web) approvals() approvals {
 		}
 	}
 	a.Settings, _ = w.c.settingProposals()
+	a.Presence = w.c.haMappings(ruleProposed)
 	a.Quiet = w.c.suggestQuiet()
 	return a
 }
@@ -226,6 +228,7 @@ func (w *web) approvalCount() int {
 	if ps, err := w.c.settingProposals(); err == nil {
 		n += len(ps)
 	}
+	n += len(w.c.haMappings(ruleProposed))
 	return n
 }
 

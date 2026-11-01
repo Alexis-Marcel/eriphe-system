@@ -23,6 +23,46 @@ func (w *web) contextRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /context/sources", w.auth(w.handleNewContextSource))
 	mux.Handle("POST /context/sources/{id}/revoke", w.auth(w.handleRevokeContextSource))
 	mux.Handle("POST /context/rooms", w.auth(w.handleContextRooms))
+	mux.Handle("POST /context/ha/{id}/remove", w.auth(w.handleRemoveMapping))
+	mux.Handle("POST /context/ha/proposals/{id}/{action}", w.auth(w.handleMappingProposal))
+	mux.Handle("POST /context/ha/voice-urgent", w.auth(w.handleVoiceUrgent))
+}
+
+// haPageView is Home Assistant on the page: whether it is connected and
+// followed, and the entities mapped to a signal, removable.
+type haPageView struct {
+	Linked      bool // the catalog has a Home Assistant
+	Following   bool
+	Err         string
+	On          bool
+	Seen        time.Time
+	Mappings    []haMappingView
+	Proposed    int
+	VoiceUrgent bool
+}
+
+// haMappingView is a mapping as the page shows it, with the entity's name
+// in Home Assistant when discovery saw it.
+type haMappingView struct {
+	haMapping
+	Name string
+}
+
+func (w *web) haPage(p ctxPrefs) haPageView {
+	c := w.c
+	_, err := c.haLink()
+	v := haPageView{Linked: err == nil, On: !slices.Contains(p.Off, srcHA), Proposed: len(c.haMappings(ruleProposed)), VoiceUrgent: c.voiceUrgent()}
+	v.Following, v.Err = c.haStatus()
+	v.Seen, _ = c.known.lastSeen(srcHA)
+	house := c.ha.cached()
+	for _, m := range c.haMappings(ruleActive) {
+		mv := haMappingView{haMapping: m}
+		if e, ok := house.entity(m.Entity); ok {
+			mv.Name = e.Name
+		}
+		v.Mappings = append(v.Mappings, mv)
+	}
+	return v
 }
 
 // ctxSourceView is a source with its switch.
@@ -68,13 +108,14 @@ type contextPage struct {
 	Rooms    string
 	Fresh    *freshCtxSource
 	Endpoint string
+	HA       haPageView
 }
 
 func (w *web) contextLive(now time.Time) ctxLive {
 	c := w.c
 	u := c.userContext(now)
 	v := ctxLive{Level: u.Level, Place: u.Place, Room: u.Room, Home: u.HomeDoes, Focus: u.Focus, Busy: u.Busy,
-		Line: u.line(c.sourceName), HasHome: len(c.contextSources()) > 0}
+		Line: u.line(c.sourceName), HasHome: len(c.contextSources()) > 0 || len(c.haMappings(ruleActive)) > 0}
 	for _, d := range u.Devices {
 		v.Devices = append(v.Devices, ctxDeviceView{Name: c.sourceName(d.Source), deviceCtx: d, IdleMin: int(d.Idle / time.Minute)})
 	}
@@ -85,7 +126,7 @@ func (w *web) contextPage(r *http.Request) contextPage {
 	c := w.c
 	p := c.contextPrefs()
 	v := contextPage{Live: w.contextLive(time.Now()), Level: p.Level, Rooms: strings.Join(p.Rooms, ", "),
-		Endpoint: w.coreURL(r) + "/v1/context"}
+		Endpoint: w.coreURL(r) + "/v1/context", HA: w.haPage(p)}
 	if nodes, err := c.store.nodes(); err == nil {
 		for _, n := range nodes {
 			key := srcMachine + n.Name
@@ -135,7 +176,7 @@ func (w *web) handleContextLevel(rw http.ResponseWriter, r *http.Request, s *ses
 // source; anything else is refused.
 func (w *web) handleContextSource(rw http.ResponseWriter, r *http.Request, s *session) {
 	key := r.PostFormValue("source")
-	known := slices.ContainsFunc(w.contextPage(r).Machines, func(v ctxSourceView) bool { return v.Key == key }) ||
+	known := key == srcHA || slices.ContainsFunc(w.contextPage(r).Machines, func(v ctxSourceView) bool { return v.Key == key }) ||
 		slices.ContainsFunc(w.c.contextSources(), func(v ctxSource) bool { return v.key() == key })
 	if !known {
 		http.Error(rw, "unknown source", http.StatusBadRequest)
@@ -177,5 +218,51 @@ func (w *web) handleContextRooms(rw http.ResponseWriter, r *http.Request, s *ses
 			w.c.known.forget(sig.Source, sigRoom)
 		}
 	}
+	w.renderContext(rw, r, s, tr(w.lang(r), "ctx.saved"), nil)
+}
+
+// handleRemoveMapping drops an entity's mapping: its signal fades at once.
+func (w *web) handleRemoveMapping(rw http.ResponseWriter, r *http.Request, s *session) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err == nil {
+		err = w.c.removeMapping(id)
+	}
+	if err != nil {
+		w.toast(rw, err.Error(), false)
+		return
+	}
+	w.renderContext(rw, r, s, tr(w.lang(r), "ctx.ha.did.remove"), nil)
+}
+
+// handleMappingProposal approves or rejects a mapping the brain proposed
+// (À valider).
+func (w *web) handleMappingProposal(rw http.ResponseWriter, r *http.Request, s *session) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(rw, "bad id", http.StatusBadRequest)
+		return
+	}
+	action := r.PathValue("action")
+	if action != "approve" && action != "reject" {
+		http.Error(rw, "approve or reject", http.StatusBadRequest)
+		return
+	}
+	if err := w.c.decideMapping(r.Context(), id, action == "approve"); err != nil {
+		w.toast(rw, err.Error(), false)
+		return
+	}
+	rw.Header().Set("HX-Trigger", hxTrigger(tr(w.lang(r), "ctx.ha.did."+action), true, true))
+	rw.Header().Set("HX-Reswap", "none")
+	rw.WriteHeader(http.StatusOK)
+}
+
+// handleVoiceUrgent turns on or off the voice for an urgent watch's
+// fixed message (voice_for_urgent).
+func (w *web) handleVoiceUrgent(rw http.ResponseWriter, r *http.Request, s *session) {
+	v := "off"
+	if r.PostFormValue("on") == "1" {
+		v = "on"
+	}
+	w.c.store.set(voiceUrgentKey, v)
 	w.renderContext(rw, r, s, tr(w.lang(r), "ctx.saved"), nil)
 }
