@@ -675,6 +675,21 @@ stopped, and the drawer says so; a retry on its way shows its time. A task whose
 failed is told to the brain with its class: worth starting again once, or not. Each failure's class
 is kept in `task_harness` for the measures. The brain's prompt no longer counts retries itself.
 
+### Usage and measures (`task_stats.go`)
+
+A turn's `turn_end` carries its `usage` (`input_tokens`, `output_tokens`, `cache_read_tokens`,
+`cache_write_tokens`) and `cost_usd` where the harness reports them (Claude Code both, Codex its
+tokens, OpenCode and other ACP agents nothing yet). A task's drawer shows its tokens (cache reads
+aside) and cost. The side panel of tasks shows a few measures over the last 30 days of finished
+worker tasks, read from what eriphe-core keeps (no service of their own):
+
+- **accepted**: the last receipt says `done`, no check failed, no unsupported claim;
+- **first time**: accepted with one turn, no retry, no check sent back and no receipt asked again;
+- **unsupported claims**: receipts that said more than eriphe-core saw (done with a failed check, a
+  change the diff does not have), and how many `done` receipts claim verifications no check covered;
+- **cost per accepted task**: tokens, dollars where known, and minutes;
+- **failures by class** (see Retries and budgets).
+
 ### Receipts (`receipt.go`)
 
 A worker ends every turn with a **receipt**: a fenced ```` ```json ```` block, the last thing of its

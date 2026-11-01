@@ -183,6 +183,7 @@ func (c *claudeSession) run(first string, stdout io.Reader) error {
 		case "result":
 			text, _ := ev["result"].(string)
 			data := map[string]any{"subtype": ev["subtype"], "result": text, "denials": ev["permission_denials"]}
+			claudeUsage(ev, data) // usage.go
 			if isErr, _ := ev["is_error"].(bool); isErr {
 				data["is_error"] = true // an API error still ends with subtype "success"
 			}

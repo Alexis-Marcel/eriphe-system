@@ -489,6 +489,13 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .rc-checks .no > .i { color: var(--danger); }
 .rc-out { flex-basis: 100%; margin: 2px 0 0; max-height: 160px; overflow: auto; font: .76rem/1.4 var(--mono); background: var(--surface-2); border-radius: 8px; padding: 8px; white-space: pre-wrap; }
 .rc-diff summary { cursor: pointer; font-size: .8rem; font-weight: 700; color: var(--muted); }
+/* How reliable the tasks were lately (task_stats.go). */
+.tstats { margin-top: 18px; display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.tstats-grid { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.tstats-grid dt { font-size: .74rem; color: var(--muted); font-weight: 600; }
+.tstats-grid dd { margin: 2px 0 0; font-size: .92rem; }
+.tstats-grid .warn strong { color: var(--danger); }
+.tstats-fail { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .section-label { font-size: .76rem; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); font-weight: 700; }
 .timeline { list-style: none; margin: 0; padding: 0 0 0 16px; display: grid; gap: 10px; border-left: 2px solid var(--border); }
 .ev { position: relative; font-size: .9rem; min-width: 0; }

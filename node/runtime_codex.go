@@ -134,7 +134,10 @@ type codexSession struct {
 	last     string               // the agent's last message of the turn
 	denials  []string
 	errText  string // the last error the server reported in the turn
-	err      error
+	// The thread's token count, and what it was when the turn began (usage.go).
+	tokens, turnStart codexTokens
+	sawTokens         bool
+	err               error
 }
 
 type codexTurn struct {
@@ -392,6 +395,7 @@ func (s *codexSession) prompt(text string) {
 		s.denials = nil
 	}
 	s.last, s.errText = "", ""
+	s.turnStart = s.tokens
 	done := make(chan codexTurn, 1)
 	s.turnDone = done
 	thread := s.thread
@@ -427,6 +431,9 @@ func (s *codexSession) prompt(text string) {
 	s.mu.Lock()
 	s.busy, s.turn = false, ""
 	data := map[string]any{"subtype": codexStatuses[turn.Status], "stop_reason": turn.Status, "result": s.last}
+	if s.sawTokens {
+		data["usage"] = s.tokens.minus(s.turnStart)
+	}
 	errText := s.errText
 	s.mu.Unlock()
 	if data["subtype"] == "" {
@@ -541,6 +548,17 @@ func (s *codexSession) event(method string, params json.RawMessage) {
 		if !p.WillRetry && p.Error.Message != "" {
 			s.mu.Lock()
 			s.errText = p.Error.Message
+			s.mu.Unlock()
+		}
+	case "thread/tokenUsage/updated":
+		var u struct {
+			TokenUsage struct {
+				Total codexTokens `json:"total"`
+			} `json:"tokenUsage"`
+		}
+		if json.Unmarshal(params, &u) == nil {
+			s.mu.Lock()
+			s.tokens, s.sawTokens = u.TokenUsage.Total, true
 			s.mu.Unlock()
 		}
 	case "turn/completed":

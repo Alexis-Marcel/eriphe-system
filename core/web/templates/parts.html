@@ -106,6 +106,20 @@
 {{if .Active}}<ul class="cards">{{range .Active}}<li>{{template "taskcard" .}}</li>{{end}}</ul>
 {{else}}<div class="empty-side"><span class="empty-art" aria-hidden="true">{{template "i-tasks"}}</span><p>{{t "tasks.none"}}</p></div>{{end}}
 {{if .Done}}<details class="done"><summary>{{t "tasks.done"}} <span class="count">{{len .Done}}</span></summary><ul class="cards">{{range .Done}}<li>{{template "taskcard" .}}</li>{{end}}</ul></details>{{end}}
+{{with .Stats}}{{template "task-stats" .}}{{end}}
+{{end}}
+
+{{define "task-stats"}}{{/* how reliable the tasks were lately (task_stats.go) */}}
+<section class="tstats" aria-labelledby="ts-title">
+  <h3 class="section-label" id="ts-title">{{t "stats.title"}}</h3>
+  <dl class="tstats-grid">
+    <div><dt>{{t "stats.accepted"}}</dt><dd><strong>{{.Rate .Accepted .Finished}} %</strong> <span class="muted small">{{.Accepted}}/{{.Finished}}</span></dd></div>
+    <div><dt>{{t "stats.firstpass"}}</dt><dd><strong>{{.Rate .FirstPass .Finished}} %</strong> <span class="muted small">{{.FirstPass}}/{{.Finished}}</span></dd></div>
+    <div{{if .Unsupported}} class="warn"{{end}}><dt>{{t "stats.unsupported"}}</dt><dd><strong>{{.Unsupported}}</strong>{{if .Unchecked}} <span class="muted small">· {{tf "stats.unchecked" .Unchecked}}</span>{{end}}</dd></div>
+    <div><dt>{{t "stats.cost"}}</dt><dd>{{if .Costed}}<strong>{{money .CostPerAccepted}}</strong> <span class="muted small">· {{tokens .TokensPerAccepted}} {{t "stats.tokens"}} · {{.MinutesPerAccepted}} min</span>{{else}}<span class="muted small">{{t "stats.nocost"}}</span>{{end}}</dd></div>
+  </dl>
+  {{if .Failures}}<p class="tstats-fail"><span class="muted small">{{t "stats.failures"}}</span>{{range .Failures}} <span class="rc rc-{{if eq .Class "transient"}}open{{else if eq .Class "account"}}bad{{else}}none{{end}}">{{t (printf "stats.class.%s" .Class)}} {{.N}}</span>{{end}}</p>{{end}}
+</section>
 {{end}}
 
 {{define "taskcard"}}
@@ -193,6 +207,7 @@
   <div><dt>{{t "task.agent"}}</dt><dd>{{.Card.Agent}}</dd></div>
   {{if .Card.Repo}}<div><dt>{{t "task.repo"}}</dt><dd class="mono">{{.Card.Repo}}</dd></div>{{end}}
   {{if .Card.Branch}}<div><dt>{{t "task.branch"}}</dt><dd class="mono">{{.Card.Branch}}</dd></div>{{end}}
+  {{if .Card.Usage.Known}}<div><dt>{{t "task.usage"}}</dt><dd>{{tokens .Card.Usage.Tokens}} {{t "stats.tokens"}}{{if .Card.Usage.CostUSD}} · {{money .Card.Usage.CostUSD}}{{end}}</dd></div>{{end}}
 </dl>
 {{if .Card.PendingReason}}{{if .Card.Finished}}<div class="alert-box">{{template "problem" (problem "task" .Card.PendingReason)}}</div>{{else}}<p class="notice">{{.Card.PendingReason}}</p>{{end}}{{end}}
 {{if .Card.Link}}<a class="btn btn-soft wide" href="{{.Card.Link}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{.Card.LinkLabel}}</a>{{end}}

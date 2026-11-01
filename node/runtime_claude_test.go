@@ -178,6 +178,28 @@ func TestClaudeAPIError(t *testing.T) {
 	}
 }
 
+// A turn's usage and cost, as Claude Code's result gives them, come with
+// its end.
+func TestClaudeUsage(t *testing.T) {
+	task := &Task{ID: "t-1", perms: map[string]*permission{}}
+	agentOut, fromAgent := io.Pipe()
+	s := claudeCode{}.attach(task, nopCloser{io.Discard})
+	done := make(chan error, 1)
+	go func() { done <- s.run("hello", agentOut) }()
+	fromAgent.Write([]byte(`{"type":"result","subtype":"success","result":"ok","session_id":"s-1","duration_ms":1234,"total_cost_usd":0.0421,` +
+		`"usage":{"input_tokens":12,"output_tokens":340,"cache_creation_input_tokens":2000,"cache_read_input_tokens":15000}}` + "\n"))
+	fromAgent.Close()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	end := eventsOf(task, "turn_end")[0].Data
+	u, _ := end["usage"].(map[string]any)
+	if u["input_tokens"] != int64(12) || u["output_tokens"] != int64(340) || u["cache_write_tokens"] != int64(2000) ||
+		u["cache_read_tokens"] != int64(15000) || end["cost_usd"] != 0.0421 || end["duration_ms"] != int64(1234) {
+		t.Errorf("turn_end = %v", end)
+	}
+}
+
 // The draft goes with the report, and a new draft alone is worth one.
 func TestReportDraft(t *testing.T) {
 	var mu sync.Mutex

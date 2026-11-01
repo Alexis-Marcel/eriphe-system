@@ -25,6 +25,7 @@ type fakeCodex struct {
 	interrupt chan struct{}
 	requests  []codexMessage
 	decisions []string
+	turns     int // turns completed, for the token totals
 	unknown   *rpcError
 	resumable bool
 	script    func(f *fakeCodex, p map[string]any) // a turn of its own, instead of the usual one
@@ -154,6 +155,13 @@ func (f *fakeCodex) turn(p map[string]any) {
 	f.unknown = u.Error
 	f.mu.Unlock()
 	f.note("item/completed", map[string]any{"item": map[string]any{"type": "agentMessage", "id": "m2", "text": "Done"}})
+	// The thread's total grows by the turn's tokens.
+	f.mu.Lock()
+	f.turns++
+	n := int64(f.turns)
+	f.mu.Unlock()
+	f.note("thread/tokenUsage/updated", map[string]any{"threadId": "thr_1", "turnId": "turn_1",
+		"tokenUsage": map[string]any{"total": map[string]any{"inputTokens": 1000 * n, "cachedInputTokens": 400 * n, "outputTokens": 200 * n}}})
 	f.note("turn/completed", map[string]any{"turn": map[string]any{"id": "turn_1", "status": "completed"}})
 }
 
@@ -233,6 +241,13 @@ func TestCodexTurns(t *testing.T) {
 	f.mu.Unlock()
 	if in := tp["input"].([]any)[0].(map[string]any)["text"].(string); !strings.Contains(in, "/work/.env: not the secrets") || !strings.HasSuffix(in, "again") {
 		t.Errorf("second prompt = %q", in)
+	}
+	// Each turn's usage is its share of the thread's total.
+	for i, e := range eventsOf(task, "turn_end") {
+		u, _ := e.Data["usage"].(map[string]any)
+		if u["input_tokens"] != int64(600) || u["cache_read_tokens"] != int64(400) || u["output_tokens"] != int64(200) {
+			t.Errorf("turn %d usage = %v", i+1, u)
+		}
 	}
 	s.stop()
 	if err := <-done; err != nil {
