@@ -1,0 +1,54 @@
+{{/* Settings → Watches (web_watch.go, watch.go): what wakes the brain on
+     its own, each with its last runs; the proposed ones to approve. */}}
+{{define "watches"}}{{with .Data}}
+<header class="page-head"><h2>{{t "settings.watches"}}</h2><p>{{t "watch.lead"}}</p></header>
+<div id="watches">{{template "watches-body" .}}</div>
+{{end}}{{end}}
+{{define "watches-frag"}}{{template "watches-body" .Data}}{{end}}
+
+{{define "watches-body"}}
+{{if .Proposed}}<section class="panel" aria-labelledby="watch-proposed-title">
+  <h3 id="watch-proposed-title">{{t "watch.proposed"}}</h3>
+  <ul class="list">{{range .Proposed}}
+  <li id="watch-{{.ID}}"><div class="list-main">{{template "watch-line" .}}{{if .Tainted}}<span class="small"><span class="tag tag-no" title="{{.Tainted}}">{{t "notif.tainted"}}</span></span>{{end}}</div>
+    <button class="btn btn-primary sm" hx-post="/watches/{{.ID}}/approve" hx-target="#watches">{{template "i-check"}}{{t "watch.approve"}}</button>
+    <button class="btn btn-ghost sm" hx-post="/watches/{{.ID}}/reject" hx-target="#watches">{{template "i-x"}}{{t "watch.reject"}}</button>
+  </li>{{end}}</ul>
+</section>{{end}}
+<section class="panel" aria-labelledby="watch-list-title">
+  <h3 id="watch-list-title">{{template "i-eye"}}{{t "watch.list"}}</h3>
+  <p class="small muted">{{tf "watch.zone" .Zone}}</p>
+  {{if .Watches}}<ul class="list">{{range .Watches}}
+  <li id="watch-{{.ID}}"><div class="list-main">{{template "watch-line" .}}
+    {{if .Runs}}<ul class="watch-runs small muted">{{range .Runs}}<li>{{template "watch-run" .}}</li>{{end}}</ul>{{end}}
+    <details class="rule-edit"><summary class="small">{{t "watch.edit"}}</summary>{{template "watch-form" .}}</details></div>
+    {{if eq .State "paused"}}<button class="btn btn-soft sm" hx-post="/watches/{{.ID}}/resume" hx-target="#watches">{{t "watch.resume"}}</button>
+    {{else}}<button class="btn btn-ghost sm" hx-post="/watches/{{.ID}}/pause" hx-target="#watches">{{t "watch.pause"}}</button>{{end}}
+    <button class="btn btn-ghost sm" hx-post="/watches/{{.ID}}/delete" hx-target="#watches" hx-confirm="{{t "watch.deleteconfirm"}}">{{template "i-x"}}{{t "watch.delete"}}</button>
+  </li>{{end}}</ul>
+  {{else}}<p class="muted small">{{t "watch.none"}}</p>{{end}}
+  <details class="rule-edit"><summary>{{template "i-plus"}}{{t "watch.add"}}</summary>{{template "watch-form" .Stub}}</details>
+</section>
+{{end}}
+
+{{define "watch-line"}}<span class="strong">{{.Name}}</span>
+<span class="small muted"><span class="tag">{{t (printf "watch.src.%s" .Source)}}</span> <span class="mono">{{.When}}</span>
+  · <span class="tag{{if eq .State "active"}} tag-ok{{else if eq .State "proposed"}} tag-accent{{end}}">{{t (printf "watch.state.%s" .State)}}</span>
+  {{if .Brief}}· {{t "watch.brief"}}{{end}}{{if not .NextAt.IsZero}} · {{tf "watch.next" (date .NextAt)}}{{end}}</span>
+<span class="small">{{.Prompt}}</span>{{end}}
+
+{{define "watch-run"}}{{date .Fired}} · {{t (printf "watch.cause.%s" .Cause)}} → <span class="tag{{if eq .Outcome "notified"}} tag-ok{{else if eq .Outcome "acted"}} tag-warn{{end}}">{{t (printf "watch.out.%s" .Outcome)}}</span>{{if .Action}} <span class="mono">{{.Action}}</span>{{end}}{{end}}
+
+{{define "watch-form"}}
+<form class="rule-form" hx-post="/watches" hx-target="#watches">
+  {{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+  <label class="field"><span>{{t "watch.name"}}</span><input name="name" value="{{.Name}}" maxlength="80" required placeholder="{{t "watch.name.ph"}}"></label>
+  <label class="field"><span>{{t "watch.source"}}</span><select name="source">{{$s := .Source}}{{range (list "horaire" "retour")}}
+    <option value="{{.}}"{{if eq $s .}} selected{{end}}>{{t (printf "watch.src.%s" .)}}</option>{{end}}</select></label>
+  <label class="field"><span>{{t "watch.schedule"}}</span><input name="schedule" value="{{.Spec.Schedule}}" maxlength="120" placeholder="weekdays 07:00"><small>{{t "watch.schedule.hint"}}</small></label>
+  <label class="field"><span>{{t "watch.after"}}</span><input name="after" value="{{.After}}" maxlength="10" placeholder="3h"><small>{{t "watch.after.hint"}}</small></label>
+  <label class="field"><span>{{t "watch.prompt"}}</span><textarea name="prompt" rows="3" maxlength="1000" required placeholder="{{t "watch.prompt.ph"}}">{{.Prompt}}</textarea></label>
+  <label class="check"><input type="checkbox" name="brief" value="1"{{if .Brief}} checked{{end}}> {{t "watch.brief.check"}}</label>
+  <button class="btn btn-soft sm" type="submit">{{template "i-check"}}{{t "watch.save"}}</button>
+</form>
+{{end}}

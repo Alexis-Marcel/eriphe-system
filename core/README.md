@@ -1003,7 +1003,7 @@ Its spec says what it is and what it runs on; its status is what eriphe-core kee
 | `instructions` | its standing instructions (`{{user}}` and `{{name}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
 | `tools` | its grant from the catalog, like a task's; its role may add the catalog's free reads |
 | `resources` | what it is lent besides its tools (`{kind, ref, access, …}`): kept, lent with the resources work |
-| `triggers` | what wakes it: `conversation` (the user's messages and the tasks' events), `clock` (an intention of the memory that comes due: the wake packet, see [Memory](#memory)); later `source:<name>` and `schedule`. Its role's by default (the brain's: both); `conversation` and `clock` only for a role that `receivesConversation`, and one enabled assistant at most has the conversation |
+| `triggers` | what wakes it: `conversation` (the user's messages and the tasks' events), `clock` (an intention of the memory that comes due: the wake packet, see [Memory](#memory); or a watch that fired, see Watches). Its role's by default (the brain's: both); `conversation` and `clock` only for a role that `receivesConversation`, and one enabled assistant at most has the conversation |
 | `reports_to` | the assistant it reports to: the brain (the one with the conversation), the only one it may name; empty means the brain. The brain reports to no one |
 | `disabled` | its task is stopped, and none started |
 | `self_url`, `mcp_servers` | the file only (see the brain) |
@@ -1913,8 +1913,8 @@ turn; a source that keeps free/busy times only (never titles) joins there.
   finished with their receipt's verdict in numbers, waiting, failed, stopped, from the append-only
   `task_log` written where the brain is told), notifications (sent, held, dropped, feedback),
   intentions (due, done, snoozed, cancelled, from `intention_log`), the user's and the brain's
-  messages (short; a brain message sent as a notification is that notification), and `watch`,
-  empty until the watch tool. Each item has a time, kind, event, summary written by code, a ref
+  messages (short; a brain message sent as a notification is that notification), and the watches'
+  runs (fired, and what the brain did of them). Each item has a time, kind, event, summary written by code, a ref
   for drill-down (`task:`, `notification:`, `intention:`, `msg:`) and a trust, `own` or
   `external` (a notification or brain message written in a tainted turn, an intention drawn from
   external content, a task started on a tainted turn).
@@ -1924,6 +1924,39 @@ turn; a source that keeps free/busy times only (never titles) joins there.
 - **« Ce qui s'est passé »** (`/settings/happened`, Settings → Assistant) shows the same feed to the
   user, by kind, since they were last here (the start of their last absence; the last 24 hours if
   none), or the last 24 hours or 7 days, external items marked.
+
+**Watches** (`watch.go`, `watch_schedule.go`, `watch_tick.go`, `watch_tools.go`, `web_watch.go`).
+What wakes the brain on its own, besides a due intention: one tool, `watch(name, source, schedule |
+after, prompt, brief?)`, with `watches` (each with its last runs) and `update_watch` (pause, resume,
+edit, delete). The brief, the point made on the user's return and the weekly review are not
+features of their own: they are watches whose prompt composes `since`, `notifications` and
+`notify`, which the brain suggests and never imposes.
+
+- **Sources.** `horaire`: days and times of day in the user's zone (`daily 07:00`, `weekdays
+  07:00`, `weekend 09:30`, `sunday 18:00`, `monday,thursday 09:00`, `every 2h 08:00-20:00`; the
+  French words too). Each fire is a wall-clock time of its day, computed day by day, so a daylight
+  saving change neither skips a day nor fires twice. `retour`: the user comes back after an absence
+  of `after` or more (3 h by default, 1 h to 7 days), from the activity signals of `user_state.go`;
+  once per return (the return it fired for is kept), only within the hour after it, never for a
+  return from before the watch was made or resumed.
+- **Firing, without a model.** A timer (every 30 s) fires what is due and records a run; the next
+  time is kept in the database, so a restart picks it up. Missed times fire once late, never once
+  each; more than 6 hours late, the run is recorded as missed and nothing wakes. One run waits for
+  the brain at a time per watch; a paused or deleted watch's waiting run is dropped.
+- **The wake.** At the brain's next idle, after any due intention, the clock trigger delivers
+  `[veille #N « nom » HH:MM · source …]`, the cause (late, the return and the absence), for a brief
+  where the last brief was, and the watch's prompt; the brain answers through `notify` or with
+  `[rien]`. It goes on with the current turn, as an intention's wake does; a watch that was
+  proposed on a tainted turn (then approved) taints it. When its turn ends (or before the next
+  delivery) the run records what the brain did: `notified`, `said` (in the conversation only) or
+  `silent`. A brief's wake becomes the kv `last_brief` once its turn ended, for
+  `since("last_brief")`.
+- **Who writes them.** The brain writes a watch only when the user asked for it in that clean turn
+  (its `source_ref` cites the user's message of the turn); otherwise, and always on a tainted turn,
+  it is proposed and the user approves it in **Settings → Watches**, where every watch is listed
+  with its last runs, paused, edited and deleted (what the user writes there is active at once).
+  Changing or deleting one takes the user's word in a clean turn. Names and prompts go through the
+  memory's scanner.
 
 ## Remote access (Tailscale)
 
