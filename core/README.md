@@ -1151,8 +1151,16 @@ room (`[Sam 12:00 #N · voix, Bureau]`), and the brain answers it in the same th
 without markdown. The answer comes back as NDJSON, `{"delta"}` lines then `{"done", "text",
 "continue"}`, from the brain's draft as it writes. Only what it says after reading the sentence
 counts. Without a word within 10 s (another turn, a long job), the voice answers « Je m'en occupe,
-je te préviens » and the answer stays in the conversation. A sentence from no device is an automation's
-(the morning brief), marked `Home Assistant`: it waits up to 80 s for the answer it sends on.
+je te préviens » and the answer stays in the conversation.
+
+**An automation is not the user.** A sentence from no device, no satellite and no Home Assistant
+user (`from_user`, which the integration sets when the conversation's context has a user) is an
+automation's. It may only send a closed request, `brief` (the point of the moment, read aloud);
+anything else is refused (400). The request arrives as an event worded by the code (`[événement
+… · Home Assistant, automatisation]`), never as the user's message, and its turn is tainted: the
+brain may answer and propose, never act nor authorise. It waits up to 80 s for the answer it sends
+on. What an automation knows of the house (someone came home, the TV is on) goes to `POST
+/v1/context` as a signal, with a source token of its own.
 
 ## Google Drive (cloud Folders)
 
@@ -1911,13 +1919,15 @@ eriphe-core already has, never from the model nor the notification's text:
 1. Eriphe open and in front on a device (its tab tells its push subscription with `POST
    /presence`) → a banner in that page (the event stream's `notice`, or the presence answer), no
    system push;
-2. a computer in use (its node reports the machine's idle time under 2 minutes, not locked) → a
-   push to that computer's subscription only;
+2. a computer in use (its node reports the machine's idle time under 2 minutes, not locked, not
+   to be disturbed: a game or a meeting in front, the context below) → a push to that computer's
+   subscription only;
 3. the voice at home: a placeholder, off until Home Assistant tells where the user is;
 4. otherwise the phone (subscriptions whose label, the user's choice or the browser says phone;
    the installed app first), then Telegram.
 
-A tab left in front on a machine its node says is idle or locked is not the user. A "now" not seen
+A tab left in front on a machine its node says is idle, locked or not to be disturbed is not the
+user. A "now" not seen
 (opened, answered, or shown in a page) within the delay (10 minutes, Settings; 3 for an
 "even at night" topic) is routed again without the devices tried, two steps at most, never in the
 quiet hours unless the topic's rule says even at night. A brief, a task done or a question is sent
@@ -1928,8 +1938,8 @@ Notifications (Où te prévenir) orders the lines (each shown once what it needs
 delay, says which subscription is a phone or a computer and which node is on which computer
 (suggested by system), and lists the last decisions (`route_log`, planned next to sent). It starts
 in **observe** mode: everything goes as before (every channel, nothing while a tab is in front)
-and the log shows what the router would have done; one switch turns routing on. A node's idle time
-is kept in memory for two minutes, never stored. The `notifications` tool gives the brain the order
+and the log shows what the router would have done; one switch turns routing on. What a node tells
+of its machine is kept as context signals, in memory for two minutes, never stored. The `notifications` tool gives the brain the order
 and, by device, what was seen fast, late or moved on, from which it proposes rules. The bench
 (`route_eval_test.go`, `testdata/routeeval`) checks every case, no duplicate, every injection
 blocked.
@@ -1942,6 +1952,70 @@ aujourd'hui : 3 sur 4]`. Present or away comes from the activity signals above: 
 hour is away, and a gap of an hour or more is an absence. "Busy until" comes from `busySources`,
 none yet: reading a connected calendar on every turn would cost a call each time and taint every
 turn; a source that keeps free/busy times only (never titles) joins there.
+
+**What Eriphe knows about you: the context** (`context.go`, `context_sources.go`,
+`web_context.go`, Settings → Ce qu'Eriphe sait de toi). One concept for where the user is and
+what they do, turned on by the user: a **level** (`context_level`: 0 Rien, 1 Présence, 2
+Contexte; unset is 1, what a Mac's node already told) that is only a preset, and a **switch per
+source** (`context_off`). Sources put **signals**: a kind and a value from a closed list, with
+the source, when it came and when it expires. A value off its list is refused, so no free text
+from a source ever reaches the model.
+
+| Kind | Level | About | Values | Time to live (default, max) |
+|---|---|---|---|---|
+| `presence` | 1 | a device | `active`, `idle`, `locked` | 2 min, 10 min |
+| `dnd` | 1 | a device | `on` (with a `reason`: `game`, `meeting`, `fullscreen`, `mic`, `focus`), `off` | 2 min, 12 h |
+| `activity` | 2 | a device | `game`, `meeting`, `code`, `web`, `video`, `music`, `chat`, `other` | 2 min, 12 h |
+| `place` | 1 | the user | `home`, `away` | 12 h, 24 h |
+| `room` | 1 | the user | one of the user's rooms, listed on the page (`context_rooms`) | 15 min, 1 h |
+| `home_activity` | 2 | the house | `tv`, `sleep`, `office`, `cooking`, `other` | 15 min, 12 h |
+| `focus` | 1 | the user, declared | `on`, `sleep`, `off` | 4 h, 24 h |
+| `busy` | 1 | the user, declared | `busy`, `free` (until it expires) | 1 h, 12 h |
+
+Signals live **in memory only** (`contextStore`), never in the database and with no history; an
+expired one is unknown. Level 0 still keeps the activity record above (30 days), and the page says
+so. The sources:
+
+- **`machine:<node>`**: with its status (`GET /v1/node?context=N`, N the level for that node, 0
+  when it is off), a node tells `idle` (seconds, locked) and `context` (`{known, dnd, reason,
+  activity}`, worked out on the machine: `node/context.go`). They become `presence`, `dnd` and
+  `activity` signals for two minutes; neither is stored with the node's info.
+- **`src:<id>`**: a source made on the page, with its own token (`ecx_…`, shown once, only its
+  hash kept, revoked on the page), for an iPhone shortcut, a Home Assistant automation or a script:
+
+  ```
+  POST /v1/context
+  Authorization: Bearer ecx_…
+  {"kind": "place", "value": "home"}
+  {"signals": [{"kind": "focus", "value": "on", "ttl_minutes": 60}, {"kind": "room", "value": "Salon"}]}
+  ```
+
+  At most 8 signals, 4 KiB, no unknown field; one bad value refuses the whole request (400, with the
+  allowed values). A signal the level or the source's switch keeps out is counted, not an error:
+  `{"accepted": 1, "ignored": 1}`. The token can do nothing else; plain HTTP from the internet is
+  refused. A device signal from such a source is about that source (the page and the header name
+  it), not tied to a push subscription.
+
+**Only quieter.** The router reads `presence` and `dnd` of the node tied to a subscription: a
+device locked, idle or not to be disturbed is skipped by every line (in the app, the computer,
+the last-resort computer), as if it were not there (the bench checks exactly that). A signal never
+adds a line, never moves a notification on, never pierces the quiet hours, never wakes the brain
+nor reaches the conversation, never authorises anything. The brain's header gets one line, written
+by the code from the closed values, under the user's state, only when something is known and the
+level is above 0: `[contexte : studio : actif · jeu · ne pas déranger (jeu) · maison : à la maison,
+Salon · Focus active]`; a declared `busy` feeds the state's « occupé jusqu'à ». The brain changes
+the level and the switches with `setting` (`context_level`, `context_sources_off`), applied when
+asked in a clean turn, else proposed in À valider; the first-launch interview asks the level.
+
+**For the next sources.** A source puts signals with `checkSignal` (or `checkSignals`) then
+`putSignals`, under a source name of its own (`ha` for Home Assistant's entities is free); it never
+calls the brain. A new kind or value goes in `ctxKinds` (and in the page's words), with its level.
+A machine whose node cannot see the session (Windows, in WSL) gets it from a session helper's file
+(`ERIPHE_SESSION_FILE`, `node/context.go`).
+
+The bench (`context_test.go`): every value off a list refused, every kind expiring, the levels and
+switches, a busy device as if absent (every combination), the router skipping a device in a game,
+the header's line, the entry point's tokens.
 
 - **`since(t, kinds?, limit?, include_external?)`** returns one chronological feed since `t` (an
   RFC3339 time, `YYYY-MM-DD[THH:MM]` in the user's zone, `away`: since the user left before their

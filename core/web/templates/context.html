@@ -1,0 +1,106 @@
+{{/* Settings → Ce qu'Eriphe sait de toi (web_context.go, context.go): what
+     Eriphe knows of the user right now, live; the level; a switch per
+     source; the sources with a token; the rooms; and what is kept. */}}
+
+{{define "i-pulse"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg>{{end}}
+
+{{define "context"}}{{with .Data}}
+<header class="page-head"><h2>{{t "ctx.title"}}</h2><p>{{t "ctx.lead"}}</p></header>
+<div id="context" class="stack">{{template "context-body" .}}</div>
+{{end}}{{end}}
+{{define "context-frag"}}{{template "context-body" .Data}}{{end}}
+
+{{define "context-body"}}
+{{with .Fresh}}<section class="panel notice" role="status" aria-labelledby="ctx-token-title">
+  <h3 id="ctx-token-title">{{tf "ctx.token.title" .Name}}</h3>
+  <p class="small">{{t "ctx.token.once"}}</p>
+  <label class="field"><span>{{t "ctx.token.url"}}</span><input class="mono" readonly value="{{.URL}}"></label>
+  <label class="field"><span>{{t "ctx.token.token"}}</span><input class="mono" readonly value="{{.Token}}"></label>
+  <p class="small muted">{{t "ctx.token.how"}}</p>
+  <pre class="mono small">curl -X POST {{.URL}} -H "Authorization: Bearer {{.Token}}" -d '{"kind": "focus", "value": "on", "ttl_minutes": 60}'</pre>
+</section>{{end}}
+
+<section class="panel" aria-labelledby="ctx-live-title">
+  <h3 id="ctx-live-title">{{template "i-pulse"}}{{t "ctx.live"}}</h3>
+  <div id="context-live" hx-get="/context/live" hx-trigger="every 15s" hx-swap="innerHTML">{{template "context-live-body" .Live}}</div>
+  {{template "ask" "ctx.ask.what"}}
+</section>
+
+<section class="panel" aria-labelledby="ctx-level-title">
+  <h3 id="ctx-level-title">{{template "i-eye"}}{{t "ctx.level"}}</h3>
+  <p class="small muted">{{t "ctx.level.lead"}}</p>
+  <form hx-post="/context/level" hx-trigger="change" hx-target="#context">
+    <fieldset class="choices"><legend class="sr-only">{{t "ctx.level"}}</legend>
+      <div class="choice-row">{{$l := .Level}}{{range list "0" "1" "2"}}
+        <label class="choice"><input type="radio" name="level" value="{{.}}"{{if eq . (printf "%d" $l)}} checked{{end}}><b>{{t (printf "ctx.level.%s" .)}}</b><small>{{t (printf "ctx.level.%s.hint" .)}}</small></label>{{end}}
+      </div>
+    </fieldset>
+  </form>
+  {{template "ask" "ctx.ask.level"}}
+</section>
+
+<section class="panel" aria-labelledby="ctx-sources-title">
+  <h3 id="ctx-sources-title">{{template "i-plug"}}{{t "ctx.sources"}}</h3>
+  <p class="small muted">{{t "ctx.sources.lead"}}</p>
+  <h4 class="notif-sub">{{t "ctx.machines"}}</h4>
+  {{if .Machines}}<ul class="list">{{range .Machines}}{{template "context-source" .}}{{end}}</ul>
+  {{else}}<p class="muted small">{{t "ctx.machines.none"}}</p>{{end}}
+  <p class="small muted">{{t "ctx.machines.what"}}</p>
+  <h4 class="notif-sub">{{t "ctx.tokens"}}</h4>
+  <p class="small muted">{{t "ctx.tokens.lead"}}</p>
+  {{if .Sources}}<ul class="list">{{range .Sources}}{{template "context-source" .}}{{end}}</ul>
+  {{else}}<p class="muted small">{{t "ctx.tokens.none"}}</p>{{end}}
+  <form class="row-form row-form-2" hx-post="/context/sources" hx-target="#context">
+    <label class="field"><span>{{t "ctx.tokens.name"}}</span><input name="name" maxlength="30" required placeholder="{{t "ctx.tokens.placeholder"}}"></label>
+    <button class="btn btn-soft sm" type="submit">{{template "i-plus"}}{{t "ctx.tokens.add"}}</button>
+  </form>
+  <p class="small muted">{{tf "ctx.tokens.doc" .Endpoint}}</p>
+  <h4 class="notif-sub">{{t "ctx.rooms"}}</h4>
+  <form class="row-form row-form-2" hx-post="/context/rooms" hx-target="#context">
+    <label class="field"><span>{{t "ctx.rooms.field"}}</span><input name="rooms" value="{{.Rooms}}" placeholder="{{t "ctx.rooms.placeholder"}}"></label>
+    <button class="btn btn-soft sm" type="submit">{{t "ctx.save"}}</button>
+  </form>
+  <p class="small muted">{{t "ctx.rooms.lead"}}</p>
+</section>
+
+<section class="panel" aria-labelledby="ctx-privacy-title">
+  <h3 id="ctx-privacy-title">{{template "i-lock"}}{{t "ctx.privacy"}}</h3>
+  <ul class="small ctx-privacy">
+    <li>{{t "ctx.privacy.local"}}</li>
+    <li>{{t "ctx.privacy.ephemeral"}}</li>
+    <li>{{t "ctx.privacy.closed"}}</li>
+    <li>{{t "ctx.privacy.quieter"}}</li>
+    <li>{{t "ctx.privacy.level0"}}</li>
+    <li>{{t "ctx.privacy.house"}}</li>
+  </ul>
+</section>
+{{end}}
+
+{{define "context-source"}}
+  <li><form class="list-main" hx-post="/context/source" hx-trigger="change" hx-target="#context">
+    <input type="hidden" name="source" value="{{.Key}}">
+    <label class="switch">
+      <input type="checkbox" name="on" value="1"{{if .On}} checked{{end}}>
+      <span><b>{{.Name}}</b><small>{{if .OS}}{{.OS}} · {{end}}{{if .Seen.IsZero}}{{t "ctx.seen.never"}}{{else}}{{tf "ctx.seen" (ago .Seen)}}{{end}}</small></span>
+    </label>
+  </form>
+  {{if .ID}}<button class="btn btn-ghost sm" type="button" hx-post="/context/sources/{{.ID}}/revoke" hx-target="#context" hx-confirm="{{t "ctx.tokens.revokeconfirm"}}" aria-label="{{t "ctx.tokens.revoke"}} {{.Name}}" title="{{t "ctx.tokens.revoke"}}">{{template "i-x"}}</button>{{end}}
+  </li>
+{{end}}
+
+{{define "context-live"}}{{template "context-live-body" .Data}}{{end}}
+{{define "context-live-body"}}
+{{if eq .Level 0}}<p class="small">{{t "ctx.live.off"}}</p>{{else}}
+<ul class="list ctx-live">
+  {{range .Devices}}<li><div class="list-main"><span class="strong">{{.Name}}</span>
+    <span class="small">{{if .Presence}}{{t (printf "ctx.presence.%s" .Presence)}}{{if and (eq .Presence "idle") .IdleMin}} · {{tf "ctx.idle.min" .IdleMin}}{{end}}{{else}}{{t "ctx.unknown"}}{{end}}{{if .Activity}} · {{t (printf "ctx.activity.%s" .Activity)}}{{end}}{{if .DND}} → <span class="tag tag-warn">{{t "ctx.dnd"}}</span>{{if .Reason}} ({{t (printf "ctx.reason.%s" .Reason)}}){{end}}{{end}}</span></div></li>{{end}}
+  {{if not .Devices}}<li><div class="list-main"><span class="strong">{{t "ctx.machines"}}</span><span class="small muted">{{t "ctx.unknown"}}</span></div></li>{{end}}
+  <li><div class="list-main"><span class="strong">{{t "ctx.home"}}</span>
+    <span class="small{{if not (or .Place .Room .Home)}} muted{{end}}">{{if .Place}}{{t (printf "ctx.place.%s" .Place)}}{{end}}{{if .Room}}{{if .Place}} · {{end}}{{.Room}}{{end}}{{if .Home}}{{if or .Place .Room}} · {{end}}{{t (printf "ctx.home.%s" .Home)}}{{end}}{{if not (or .Place .Room .Home)}}{{if .HasHome}}{{t "ctx.unknown"}}{{else}}{{t "ctx.home.none"}}{{end}}{{end}}</span></div></li>
+  {{if or .Focus (not .Busy.IsZero)}}<li><div class="list-main"><span class="strong">{{t "ctx.declared"}}</span>
+    <span class="small">{{if .Focus}}{{t (printf "ctx.focus.%s" .Focus)}}{{end}}{{if not .Busy.IsZero}}{{if .Focus}} · {{end}}{{tf "ctx.busy" (clock .Busy)}}{{end}}</span></div></li>{{end}}
+</ul>
+<p class="small muted">{{t "ctx.live.brain"}}</p>
+<p class="mono small">{{if .Line}}{{.Line}}{{else}}{{t "ctx.live.noline"}}{{end}}</p>
+{{end}}
+{{end}}

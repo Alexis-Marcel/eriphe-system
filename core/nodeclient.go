@@ -72,11 +72,14 @@ type nodeError struct {
 
 func (e *nodeError) Error() string { return fmt.Sprintf("node: %d %s", e.status, e.msg) }
 
-func (c *nodeClient) info(ctx context.Context) (json.RawMessage, error) {
+// info is the node's status. level is the context level it may report at
+// (context.go): 0 nothing of the user, 1 idle and do not disturb, 2 the
+// category of the app in front too. A node older than levels ignores it.
+func (c *nodeClient) info(ctx context.Context, level int) (json.RawMessage, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var raw json.RawMessage
-	err := c.call(ctx, http.MethodGet, "/v1/node", nil, &raw)
+	err := c.call(ctx, http.MethodGet, fmt.Sprintf("/v1/node?context=%d", level), nil, &raw)
 	return raw, err
 }
 

@@ -44,7 +44,16 @@ Authorization: Bearer {token}
 ```
 
 `area` is the name of the Home Assistant area of the satellite entity (or of its device, or of the
-device Home Assistant passed). Empty fields are left out.
+device Home Assistant passed). `"from_user": true` is added when the conversation's context has a
+Home Assistant user (someone typing in the Assist dialog). Empty fields are left out.
+
+A sentence with no device, no satellite and no user is an **automation's** (`conversation.process`
+in an automation). An automation is not you: `eriphe-core` takes only the closed request
+`brief` from it (the point of the moment, read aloud), as an event that can make the assistant
+speak but never act; any other text is refused. What an automation knows of the house (you came
+home, the TV is on) goes to `POST /v1/context` as a signal, with a source token made on the page
+« Ce qu'Eriphe sait de toi » (see `core/README.md`, the context), for example with a
+`rest_command`.
 
 `eriphe-core` answers NDJSON: `{"delta": "..."}` lines, streamed into the chat log as they come,
 then `{"done": true, "text": "...", "continue": false}`. `continue` decides whether the satellite

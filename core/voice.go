@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -20,7 +21,7 @@ import (
 // like any of mine, marked with the room it was said in; the brain answers
 // it in the same thread, with the same memory and tools.
 //
-//	POST /v1/voice  {"text", "language", "conversation_id", "device_id", "satellite_id", "area"}
+//	POST /v1/voice  {"text", "language", "conversation_id", "device_id", "satellite_id", "area", "from_user"}
 //	GET  /v1/voice  {"name"}: what the user calls the assistant, for the agent's name
 //
 // The answer is NDJSON: {"delta": "…"} lines, then {"done": true, "text",
@@ -73,7 +74,7 @@ var notRoom = regexp.MustCompile(`[^\p{L}\p{N} '’-]+`)
 
 func voiceVia(area string, automation bool) string {
 	if automation {
-		return "Home Assistant"
+		return automationVia
 	}
 	area = strings.Join(strings.Fields(notRoom.ReplaceAllString(area, " ")), " ")
 	if r := []rune(area); len(r) > 40 {
@@ -83,6 +84,44 @@ func voiceVia(area string, automation bool) string {
 		return "voix"
 	}
 	return "voix, " + area
+}
+
+// A Home Assistant automation is not the user. Before, its sentence (sent
+// from no device and no satellite) joined the conversation as the user's
+// own words: anything an automation, or what feeds it, wrote would have
+// spoken for them, in a clean turn. Now an automation may only ask one of
+// a closed list of requests, which the code words itself; it arrives as an
+// event, not a message of the user's, and its turn is tainted like a
+// watch's: the brain may answer and propose, never act or authorise. What
+// an automation knows of the house (someone came home, the TV is on) is a
+// signal, for POST /v1/context (context_sources.go), never a sentence.
+
+const (
+	automationVia   = "Home Assistant, automatisation"
+	taintAutomation = "homeassistant.automation"
+)
+
+// automationRequests are what an automation may ask, and how the code
+// words it for the brain.
+var automationRequests = map[string]string{
+	"brief": "Une automatisation de Home Assistant (pas %s) demande le point du moment : fais-le en deux ou trois phrases parlées, " +
+		"sans rien lancer ; ta réponse est lue à voix haute.",
+}
+
+var errAutomationRequest = errors.New("an automation (no device, no satellite, no user) may only send the text \"brief\"; " +
+	"what it knows of the house goes to POST /v1/context as a signal")
+
+// addAutomationRequest adds an automation's request as a tainted event.
+func (c *core) addAutomationRequest(text string) (int64, error) {
+	words, ok := automationRequests[strings.ToLower(strings.TrimSpace(text))]
+	if !ok {
+		return 0, errAutomationRequest
+	}
+	seq, err := c.store.addMessageVia(roleEvent, fmt.Sprintf(words, c.conf().User), automationVia, false)
+	if err != nil {
+		return 0, err
+	}
+	return seq, c.store.set(taintKey(int(seq)), taintAutomation)
 }
 
 // handleVoiceInfo tells Home Assistant the assistant's name.
@@ -110,6 +149,7 @@ func (c *core) handleVoice(w http.ResponseWriter, r *http.Request) {
 		DeviceID       string `json:"device_id"`
 		SatelliteID    string `json:"satellite_id"`
 		Area           string `json:"area"`
+		FromUser       bool   `json:"from_user"` // a person of the house typed or said it (Home Assistant's context has a user)
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&in); err != nil || strings.TrimSpace(in.Text) == "" {
 		http.Error(w, "text is required", http.StatusBadRequest)
@@ -119,8 +159,18 @@ func (c *core) handleVoice(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no brain on this server"})
 		return
 	}
-	automation := in.DeviceID == "" && in.SatelliteID == ""
-	seq, err := c.store.addMessageVia(roleUser, strings.TrimSpace(in.Text), voiceVia(in.Area, automation), false)
+	automation := in.DeviceID == "" && in.SatelliteID == "" && !in.FromUser
+	var seq int64
+	var err error
+	if automation {
+		seq, err = c.addAutomationRequest(in.Text)
+		if errors.Is(err, errAutomationRequest) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else {
+		seq, err = c.store.addMessageVia(roleUser, strings.TrimSpace(in.Text), voiceVia(in.Area, false), false)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

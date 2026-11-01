@@ -83,7 +83,7 @@ func TestVoiceVia(t *testing.T) {
 			t.Errorf("voiceVia(%q) = %q, want %q", in, got, want)
 		}
 	}
-	if got := voiceVia("Bureau", true); got != "Home Assistant" {
+	if got := voiceVia("Bureau", true); got != automationVia {
 		t.Errorf("an automation's = %q", got)
 	}
 }

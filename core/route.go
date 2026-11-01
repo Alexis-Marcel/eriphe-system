@@ -14,7 +14,8 @@ import (
 // node), which push subscription is a phone. One device at a time:
 //
 //  1. Eriphe open and in front on a device → in the page there, no push;
-//  2. a computer in use (idle under two minutes, not locked) → a push to
+//  2. a computer in use (idle under two minutes, not locked, not in a game
+//     or a meeting: the context, context.go) → a push to
 //     that computer only;
 //  3. at home → the voice in the room (not wired yet: off until Home
 //     Assistant tells where the user is);
@@ -106,10 +107,10 @@ type routeDevice struct {
 	Push  bool     // it has a push subscription
 	Tabs  []string // its workspace tabs in front of the user now
 	// From the node on the same machine, when one is tied to it.
-	IdleKnown  bool
-	Idle       time.Duration
-	Locked     bool
-	Fullscreen bool // a game or a film; not reported yet
+	IdleKnown bool
+	Idle      time.Duration
+	Locked    bool
+	DND       bool // not to be disturbed: a game, a meeting, full screen (context.go); skipped by every line
 }
 
 // routeSignals are the signals, read at the moment of routing.
@@ -234,14 +235,14 @@ func pickTarget(step string, sig routeSignals, used []string) (routeTarget, bool
 	switch step {
 	case stepInApp:
 		for _, d := range sig.Devices {
-			if len(d.Tabs) > 0 && free(d) && !away(d) {
+			if len(d.Tabs) > 0 && free(d) && !away(d) && !d.DND {
 				return routeTarget{Step: step, Device: d.ID, Label: d.Label, Tabs: d.Tabs}, true
 			}
 		}
 	case stepComputer:
 		var best *routeDevice
 		for i, d := range sig.Devices {
-			if d.Kind == kindComputer && d.Push && free(d) && d.IdleKnown && !away(d) && !d.Fullscreen &&
+			if d.Kind == kindComputer && d.Push && free(d) && d.IdleKnown && !away(d) && !d.DND &&
 				(best == nil || d.Idle < best.Idle) {
 				best = &sig.Devices[i]
 			}
@@ -254,7 +255,7 @@ func pickTarget(step string, sig routeSignals, used []string) (routeTarget, bool
 	case stepPhone:
 		var best *routeDevice
 		for i, d := range sig.Devices {
-			if d.Kind == kindPhone && d.Push && free(d) && (best == nil || d.App && !best.App) {
+			if d.Kind == kindPhone && d.Push && free(d) && !d.DND && (best == nil || d.App && !best.App) {
 				best = &sig.Devices[i]
 			}
 		}
@@ -274,7 +275,7 @@ func pickTarget(step string, sig routeSignals, used []string) (routeTarget, bool
 func anyComputer(sig routeSignals, used []string) (routeTarget, bool) {
 	var best *routeDevice
 	for i, d := range sig.Devices {
-		if d.Kind != kindComputer || !d.Push || slices.Contains(used, d.ID) {
+		if d.Kind != kindComputer || !d.Push || d.DND || slices.Contains(used, d.ID) {
 			continue
 		}
 		if best == nil || d.IdleKnown && (!best.IdleKnown || d.Idle < best.Idle) {

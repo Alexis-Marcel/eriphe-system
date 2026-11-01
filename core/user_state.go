@@ -116,6 +116,9 @@ func (c *core) userState() (userState, error) {
 			s.Busy = until
 		}
 	}
+	if until := c.userContext(now).Busy; until.After(s.Busy) {
+		s.Busy = until // declared by a source of the user's (context.go)
+	}
 	s.Quiet, s.InQuiet = quietAt(cx.Rules, now)
 	if s.InQuiet {
 		s.QuietOn = clockAfter(now, s.Quiet.To)
@@ -194,7 +197,8 @@ func span(d time.Duration) string {
 	return fmt.Sprintf("%d j %d h", m/(24*60), m%(24*60)/60)
 }
 
-// turnHead opens each of the brain's turns: the time, then the user's state.
+// turnHead opens each of the brain's turns: the time, the user's state,
+// then their context (context.go) when its level is on.
 func (c *core) turnHead(now time.Time) string {
 	head := nowLine(now)
 	s, err := c.userState()
@@ -202,5 +206,9 @@ func (c *core) turnHead(now time.Time) string {
 		log.Printf("brain: user state: %v", err)
 		return head
 	}
-	return head + "\n" + s.line(c.conf().User)
+	head += "\n" + s.line(c.conf().User)
+	if line := c.contextLine(now); line != "" {
+		head += "\n" + line
+	}
+	return head
 }
