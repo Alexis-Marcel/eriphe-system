@@ -761,6 +761,10 @@ func (w *web) handleSaveProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		return
 	}
 	log.Printf("web: provider %s saved", f.Name)
+	if pp.key != "" {
+		// A new key: what was said of the old one no longer holds.
+		w.c.clearProviderHealth(f.Name)
+	}
 	if tested != nil {
 		w.c.testedHealth(f.Name, *tested)
 	}
@@ -810,7 +814,7 @@ func (w *web) readProviderForm(r *http.Request, s *session, m *Config) *provider
 	for _, ps := range f.Kind.Presets {
 		f.Presets = append(f.Presets, presetChoice{Preset: ps.Name, Checked: slices.Contains(pp.checked, ps.Name)})
 	}
-	pp.key = r.PostFormValue("key")
+	pp.key = pastedKey(r.PostFormValue("key"))
 	if f.Kind.ID == "chatgpt-subscription" {
 		// The credential is the sign-in's, not a pasted key.
 		pp.login, pp.key = r.PostFormValue("login"), ""
@@ -1030,7 +1034,7 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		show(testView{State: "err", Text: tr(lang, "test.ratelimit")})
 		return
 	}
-	kind, key := r.PostFormValue("kind"), r.PostFormValue("key")
+	kind, key := r.PostFormValue("kind"), pastedKey(r.PostFormValue("key"))
 	stored := false // the stored key is tried: what it gives is the account's state
 	if n := r.PathValue("name"); n != "" {
 		p, ok := w.c.conf().Providers[n]
@@ -1106,3 +1110,8 @@ func (w *web) checkChatGPT(r *http.Request, name string) testView {
 	}
 	return testView{State: "ok", Text: tr(lang, "ptest.chatgpt")}
 }
+
+// pastedKey is a key as pasted: a terminal that wrapped a long token
+// (claude setup-token's, on a narrow window) leaves line breaks and
+// spaces in it, and no provider's key holds any.
+func pastedKey(k string) string { return strings.Join(strings.Fields(k), "") }
