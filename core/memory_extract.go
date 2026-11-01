@@ -82,6 +82,12 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 		out = append(out, s)
 	}
 	rows.Close()
+	for i, s := range out {
+		// Written in a tainted turn, the brain's words may repeat what it read.
+		if s.Who == "brain" && c.store.get(taintKey(seqOf(s.Ref))) != "" {
+			out[i].Trust = trustExternal
+		}
+	}
 	trows, err := c.store.db.Query(`SELECT `+taskColumns+` FROM tasks WHERE kind = 'worker'
 		AND state IN ('stopped', 'failed', 'lost') AND updated >= ? AND updated < ? ORDER BY updated`, from.Unix(), to.Unix())
 	if err != nil {
@@ -123,6 +129,12 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Time.Before(out[j].Time) })
 	return out, nil
+}
+
+// seqOf is the message number of a msg:N reference, 0 if it is not one.
+func seqOf(ref string) int {
+	n, _ := parseMsgRef(ref)
+	return n
 }
 
 func renderTranscript(segs []segment) string {

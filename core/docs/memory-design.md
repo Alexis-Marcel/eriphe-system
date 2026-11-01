@@ -177,6 +177,8 @@ Baseline, before any change of PR 2–5 (`go test -run MemoryEval -v`, and the o
 | LongMemEval_S, turn (470 q, abstention aside) | 65.2 % | 74.5 % | BM25 round, K=V: 47.2 / 53.8; +fact 55.4 / 60.8 (Table 9; dataset variant not stated) |
 | LongMemEval_S, session (sessions of the top turns) | 85.1 % | 87.9 % | BM25 session, K=V: 63.4 / 71.0 |
 
+After PR 2: the 13 injection cases hold, no known gap; retrieval unchanged.
+
 Read with care: LongMemEval's Table 9 may be on another haystack size than S, our session score
 ranks turns and not sessions, and both benchmarks are English (our stemming does not apply).
 The LoCoMo turn score is where our ranking failed: conversations span months and the episode

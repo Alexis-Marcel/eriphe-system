@@ -56,17 +56,24 @@ func (p *wakePacket) render(user string) string {
 		}
 		b.WriteString("```\n")
 	}
-	plain := func(x *Memory) string { return fmt.Sprintf("- [%s #%d] %s", x.Kind, x.ID, oneLine(x.Text)) }
+	// An external memory is named, not quoted: its turn reads it with recall.
+	quote := func(x *Memory) string {
+		if x.Trust == trustExternal {
+			return externalLine(x)
+		}
+		return oneLine(x.Text)
+	}
+	plain := func(x *Memory) string { return fmt.Sprintf("- [%s #%d] %s", x.Kind, x.ID, quote(x)) }
 	section("Profil de "+user+" :", p.Profile, plain)
 	section("Engagements dus dans les 24 h ou en retard :", p.Due, func(x *Memory) string {
 		due := x.DueAt.Local().Format("2006-01-02 15:04")
 		if x.DueAt.Before(p.Now) {
 			due += ", en retard"
 		}
-		return fmt.Sprintf("- [#%d, pour le %s] %s", x.ID, due, oneLine(x.Text))
+		return fmt.Sprintf("- [#%d, pour le %s] %s", x.ID, due, quote(x))
 	})
 	section("Les dernières 24 h :", p.Episodes, func(x *Memory) string {
-		return fmt.Sprintf("- [%s #%d] %s", x.OccurredAt.Local().Format("15:04"), x.ID, oneLine(x.Text))
+		return fmt.Sprintf("- [%s #%d] %s", x.OccurredAt.Local().Format("15:04"), x.ID, quote(x))
 	})
 	section("Leçons pour le battement de cœur :", p.Lessons, plain)
 	return b.String()

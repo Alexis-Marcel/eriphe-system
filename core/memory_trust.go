@@ -323,6 +323,44 @@ func (c *core) turnTaintBut(pending map[string]int) []string {
 	return tainted
 }
 
+// Reading back is reading too. A memory of external trust (a task's
+// journal, a proposal from a mail that I approved) holds what was read
+// outside, summarised: the turn that reads it through recall or the
+// commitments tool is tainted like one that read the mail itself. The
+// context pack and the wake packet, which nobody asked for, name such a
+// memory without quoting it. And what the brain says in a tainted turn
+// may repeat what it read: its message is external for the extraction,
+// so that it is not learnt back as Eriphe's own conclusion.
+
+const taintExternalMemory = "memory.external"
+
+// readMemories taints the brain's turn when it reads an external memory.
+func (c *core) readMemories(xs []*Memory) {
+	for _, x := range xs {
+		if x.Trust == trustExternal {
+			c.turn.taint(taintExternalMemory)
+			return
+		}
+	}
+}
+
+// markBrainMessage records that a message of the brain was written in a
+// tainted turn (taintKey): the extraction reads it as external content.
+func (c *core) markBrainMessage(seq int) {
+	if tainted := c.turnTaint(); len(tainted) > 0 {
+		c.store.set(taintKey(seq), "brain:"+strings.Join(tainted, ","))
+	}
+}
+
+// externalLine names an external memory in a packet without quoting it.
+func externalLine(x *Memory) string {
+	src := x.SourceRef
+	if src == "" {
+		src = x.SourceKind
+	}
+	return fmt.Sprintf("#%d (%s tiré d'un contenu extérieur, %s : recall le relit, ce qui souille le tour)", x.ID, x.Kind, src)
+}
+
 // The taint also limits what the brain does, not only what it remembers: a
 // tainted turn may have been talked into anything by what it read. It may
 // not allow a permission (the request becomes mine to answer) nor lend a

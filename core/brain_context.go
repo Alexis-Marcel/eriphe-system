@@ -122,7 +122,11 @@ func (c *core) contextPack() (string, contextPackStats) {
 						due += ", en retard"
 					}
 				}
-				lines = append(lines, truncate(fmt.Sprintf("- [#%d%s] %s", x.ID, due, packQuote(x.Text)), packLineMax))
+				text := packQuote(x.Text)
+				if x.Trust == trustExternal {
+					text = externalLine(x)
+				}
+				lines = append(lines, truncate(fmt.Sprintf("- [#%d%s] %s", x.ID, due, text), packLineMax))
 			}
 			p.section("Engagements ouverts (ta mémoire) :", lines)
 		}
@@ -131,7 +135,11 @@ func (c *core) contextPack() (string, contextPackStats) {
 			var lines []string
 			for i := len(xs) - 1; i >= 0; i-- { // the newest were read, in order
 				x := xs[i]
-				lines = append(lines, truncate(fmt.Sprintf("- [%s #%d] %s", x.OccurredAt.Local().Format("01-02 15:04"), x.ID, packQuote(x.Text)), packLineMax))
+				text := packQuote(x.Text)
+				if x.Trust == trustExternal {
+					text = externalLine(x)
+				}
+				lines = append(lines, truncate(fmt.Sprintf("- [%s #%d] %s", x.OccurredAt.Local().Format("01-02 15:04"), x.ID, text), packLineMax))
 			}
 			p.section("Les dernières 24 h (ta mémoire) :", lines)
 		}

@@ -1941,6 +1941,14 @@ what the brain read is still in its context; so does a resumed brain session. Ev
 characters, credentials and links carrying tokens are refused; imperative wording not from the
 user is only proposed. Proposals wait in the workspace (Mémoire → À approuver).
 
+**Reading back is reading too.** A memory of trust `external` (a task's journal episode, a
+proposal from a mail the user approved) summarises what was read outside: a turn whose `recall`
+or `commitments` returns one is tainted (`memory.external`), like a turn that read the mail
+itself. The context pack and the wake packet, which nobody asked for, name such a memory (its id,
+kind and source) without quoting its text. And what the brain writes during a tainted turn is
+marked: the extraction reads it as `external`, so a mail repeated by the brain is not learnt back
+as its own conclusion.
+
 **What it knows about the user.** The Memory page opens on "Ce que Jarvis sait de toi" (the
 assistant's name): the profile and the other current memories about the user (subject `owner`,
 episodes and commitments aside), the pinned ones first and marked, with the cards' usual actions,
