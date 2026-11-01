@@ -65,6 +65,8 @@ type taskCard struct {
 	LastText             string
 	Receipt              *checkedReceipt // its last turn's, checked (receipt.go)
 	Contract             *taskContract   // what it was asked to make true (contract.go)
+	StopReason           string          // why eriphe-core stopped it (task_retry.go)
+	RetryAt              time.Time       // when eriphe-core retries its failed turn
 }
 
 // split separates a task's place, owner/repo@branch, into its repository and branch.
@@ -115,7 +117,12 @@ func (w *web) card(st *taskStatus) taskCard {
 		title = title[:i]
 	}
 	link, label := findLink(st.Recent)
-	return taskCard{ID: t.ID, Title: truncate(title, 110), Prompt: t.Prompt, Node: t.Node, Agent: t.Agent,
+	var retryAt time.Time
+	h := w.c.store.harness(t.ID)
+	if h.RetryAt > 0 {
+		retryAt = time.Unix(h.RetryAt, 0)
+	}
+	return taskCard{StopReason: h.StopReason, RetryAt: retryAt, ID: t.ID, Title: truncate(title, 110), Prompt: t.Prompt, Node: t.Node, Agent: t.Agent,
 		Repo: repo, Branch: branch, State: t.State, PendingReason: t.PendingReason, Link: link, LinkLabel: label,
 		Updated: t.Updated, Created: t.Created, Finished: finished(t.State), LastText: st.LastText,
 		NeedsYou: w.needsUser(st), Receipt: st.Receipt, Contract: st.Contract}

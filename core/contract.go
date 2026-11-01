@@ -176,7 +176,7 @@ func (k *taskContract) instruction() string {
 			parts = append(parts, fmt.Sprintf("%d tokens", bu.Tokens))
 		}
 		if len(parts) > 0 {
-			b.WriteString("\nBudget: " + strings.Join(parts, ", ") + ". If you run short, stop and say what is left in your receipt (status partial).")
+			b.WriteString("\nBudget: " + strings.Join(parts, ", ") + ". Eriphe stops the task beyond it: if you run short, stop and say what is left in your receipt (status partial).")
 		}
 	}
 	return b.String()

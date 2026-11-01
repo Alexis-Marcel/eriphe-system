@@ -21,12 +21,11 @@ const brainStartPrompt = "Tu démarres. Lis tes consignes, ne fais rien d'autre 
 // notifyBrain queues an event for the brain when a worker task changes state
 // in a way that may need it.
 func (c *core) notifyBrain(id, state string) {
-	var receipt *checkedReceipt
+	var outcome turnOutcome
 	if state == stateIdle {
 		if t, err := c.store.task(id); err == nil && t.Kind == "worker" {
-			var asked bool
-			if receipt, asked = c.settleTurn(t); asked {
-				return // its receipt first (task_harness.go)
+			if outcome = c.settleTurn(t); outcome.hold {
+				return // a retry, its receipt, or its stop first (task_harness.go)
 			}
 		}
 	}
@@ -67,7 +66,10 @@ func (c *core) notifyBrain(id, state string) {
 			return
 		}
 	case stateIdle:
-		text = idleEvent(t, st.LastText, receipt)
+		text = idleEvent(t, st.LastText, outcome.receipt)
+		if outcome.note != "" {
+			text += "\n" + outcome.note
+		}
 		if st.AuthError {
 			text += "\n(Erreur d'authentification de l'agent.)"
 		}
@@ -75,7 +77,7 @@ func (c *core) notifyBrain(id, state string) {
 		if state == stateStopped && c.store.get("brain_stopped:"+t.ID) != "" {
 			return // the brain stopped it itself: nothing to tell
 		}
-		text = fmt.Sprintf(taskEndedEvent, t.ID, t.Node, state)
+		text = fmt.Sprintf(taskEndedEvent, t.ID, t.Node, state) + c.endedNote(t)
 	default:
 		return
 	}
