@@ -396,6 +396,12 @@ inbox. The node injects the agent of `claude-code`, `opencode` and `codex` into 
   protocol (JSON-RPC 2.0 without the `jsonrpc` member, one message per line), for a ChatGPT
   subscription. See [Codex](#codex).
 
+A `turn_end` carries the turn's usage where the harness reports it (`usage.go`), in one shape:
+`usage` `{input_tokens, output_tokens, cache_read_tokens, cache_write_tokens}`, and `cost_usd`.
+Claude Code's result gives both, with `duration_ms`; Codex its tokens
+(`thread/tokenUsage/updated`: the turn's share of the thread's total, its cached input counted as
+cache reads); OpenCode and other ACP agents nothing yet.
+
 The container puts `/opt/eriphe/bin` first in `PATH`, clones `repo` if given (installing git with
 apt first when the image has none), then runs the runtime's command. Nothing else is set up for a
 repository (no `mise install`, no devcontainer): the agent installs what it needs (see Task

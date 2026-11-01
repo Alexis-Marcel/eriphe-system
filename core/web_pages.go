@@ -51,6 +51,7 @@ type permView struct {
 type tasksData struct {
 	Active []taskCard
 	Done   []taskCard
+	Stats  *taskStats // how reliable they were lately; nil before any ended
 }
 
 // taskCard is a task as the side panel shows it.
@@ -67,6 +68,7 @@ type taskCard struct {
 	Contract             *taskContract   // what it was asked to make true (contract.go)
 	StopReason           string          // why eriphe-core stopped it (task_retry.go)
 	RetryAt              time.Time       // when eriphe-core retries its failed turn
+	Usage                taskUsage       // what its turns used, where the harness says
 }
 
 // split separates a task's place, owner/repo@branch, into its repository and branch.
@@ -125,7 +127,7 @@ func (w *web) card(st *taskStatus) taskCard {
 	return taskCard{StopReason: h.StopReason, RetryAt: retryAt, ID: t.ID, Title: truncate(title, 110), Prompt: t.Prompt, Node: t.Node, Agent: t.Agent,
 		Repo: repo, Branch: branch, State: t.State, PendingReason: t.PendingReason, Link: link, LinkLabel: label,
 		Updated: t.Updated, Created: t.Created, Finished: finished(t.State), LastText: st.LastText,
-		NeedsYou: w.needsUser(st), Receipt: st.Receipt, Contract: st.Contract}
+		NeedsYou: w.needsUser(st), Receipt: st.Receipt, Contract: st.Contract, Usage: w.c.store.usageOf(t.ID)}
 }
 
 // tasksAndPerms reads the worker tasks for the side panel, and the
@@ -161,6 +163,9 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 	}
 	// What needs me first, then what works, then what waits.
 	sort.SliceStable(out.Active, func(i, j int) bool { return cardRank(out.Active[i]) < cardRank(out.Active[j]) })
+	if st := w.c.store.stats(time.Now().AddDate(0, 0, -statsDays)); st.Finished > 0 {
+		out.Stats = &st // task_stats.go
+	}
 	return out, perms, nil
 }
 
