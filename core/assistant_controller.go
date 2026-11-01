@@ -203,6 +203,9 @@ func (c *core) restartAssistant(ctx context.Context, a Assistant, r assistantRol
 	if time.Now().Unix() < st.NextStart {
 		return nil
 	}
+	if c.awaitAlwaysOn(a, r) {
+		return nil // its home comes back: it starts there, its session resumed
+	}
 	fails := st.Failures
 	if t != nil && t.State == stateFailed {
 		fails++
@@ -219,6 +222,21 @@ func (c *core) restartAssistant(ctx context.Context, a Assistant, r assistantRol
 	// A resume that keeps failing is dropped: better a fresh session than none.
 	resume := t != nil && fails < 2
 	return c.startAssistant(ctx, a, r, token, resume)
+}
+
+// awaitAlwaysOn tells whether a resident assistant not pinned to a node
+// waits for its always-on node to come back (placement.go) before it starts.
+func (c *core) awaitAlwaysOn(a Assistant, r assistantRole) bool {
+	if a.Node != "" || !r.resident() {
+		return false
+	}
+	_, agent, err := c.conf().agent(a.Agent)
+	if err != nil {
+		return false
+	}
+	p := c.taskPlacement(agent, nil)
+	p.Resident = true
+	return c.awaitedAlwaysOn(p) != ""
 }
 
 // followAssistant keeps up with a running assistant's task: its triggers'
