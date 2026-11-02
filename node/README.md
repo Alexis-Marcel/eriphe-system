@@ -81,7 +81,10 @@ device" offers both addresses once remote access is ready.
 - **NAS** (or by hand on Linux): run the image with the root at the same path inside and outside, attached to the
   task network (`-task-network`, see Networks) so that tasks reach it at `-callback-url`, with Docker reached
   through a socket proxy that only allows what the node needs (`DOCKER_HOST`), never the socket
-  itself: see `deploy/nas/compose.yaml` and `deploy/README.md`.
+  itself: `eriphe-node docker-proxy` (`dockerproxy.go`), the same image in a container of its own
+  that holds the socket and checks each container's whole create request against what the node
+  sends (`-bind-from`, `-networks`, `-wake-image`, `-allow-from`). See `deploy/nas/compose.yaml`
+  and `deploy/README.md`.
 - **Windows**: `install/install.ps1` at the root of the repository (it was `node/install/install.ps1`),
   from an administrator PowerShell; see `install/README.md`. It installs WSL if needed, creates a
   WSL distribution `eriphe` (Alpine, Docker Engine, eriphe-node from its image), without Docker
@@ -94,11 +97,10 @@ device" offers both addresses once remote access is ready.
 
   In this distribution eriphe-node runs as root next to dockerd, without a proxy: whoever takes
   over the node is root in the distribution. The distribution is the boundary: it sees no Windows
-  drive and cannot start Windows programs. A socket proxy there would not change much, since the
-  proxy cannot refuse a `--privileged` container (see `deploy/README.md`), and rootless dockerd
-  is not practical in it (no systemd or cgroup delegation in WSL's Alpine, slirp4netns
-  networking, GPU access through the NVIDIA runtime). The plan: run eriphe-node as UID 1000 with
-  the proxy on a Unix socket, once a filter on the whole create request exists, as on the NAS.
+  drive and cannot start Windows programs. Rootless dockerd is not practical in it (no systemd or
+  cgroup delegation in WSL's Alpine, slirp4netns networking, GPU access through the NVIDIA
+  runtime). The plan: run eriphe-node as UID 1000 behind `eriphe-node docker-proxy`, which checks
+  the whole create request (see `deploy/README.md`), as on the NAS.
 
 ## What the node offers
 
@@ -902,7 +904,7 @@ never by eriphe-core: `-share name=/path`, repeatable, or `-share name=/path:ro`
 folders may only be read; env `ERIPHE_NODE_SHARES=home=/home/sam,media=/mnt/media:ro`. The path
 must be the same for the node and for the Docker daemon (as `-root` without `-host-root`): in a
 container, mount it at the same path (`install.sh --share` does, see install/README.md), and let
-the socket proxy bind-mount from it (`-allowbindmountfrom`). A place that is not there (an unplugged
+the socket proxy bind-mount from it (`-bind-from`, and mount it there read-only too). A place that is not there (an unplugged
 disk) is reported `missing` and logged at start. eriphe-core knows a place by its name and a folder
 by its path relative to the place, never the host path.
 

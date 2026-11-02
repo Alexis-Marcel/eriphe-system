@@ -73,6 +73,10 @@ func main() {
 		runWakeSend(os.Args[2:]) // the short-lived container that wakes a machine (wake.go)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "docker-proxy" {
+		runDockerProxy(os.Args[2:]) // the node's only way to Docker (dockerproxy.go)
+		return
+	}
 	core := flag.String("core", os.Getenv("ERIPHE_CORE"), "eriphe-core URL, or several separated by commas, preferred first, e.g. the local one then the remote one (env ERIPHE_CORE)")
 	joinToken := flag.String("join-token", os.Getenv("ERIPHE_JOIN_TOKEN"), "join token, for the first run (env ERIPHE_JOIN_TOKEN)")
 	caHashFlag := flag.String("ca-hash", os.Getenv("ERIPHE_CA_HASH"), "sha256:<hex> of eriphe-core's certificate authority, as join-token prints it: the node then reaches eriphe-core over TLS only, checked against it (env ERIPHE_CA_HASH)")

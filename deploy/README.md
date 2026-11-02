@@ -7,9 +7,10 @@ instead of `install.sh` (see [install/README.md](../install/README.md), the usua
 
 An example for a NAS running Docker (paths and the socket's group are Unraid's: `/mnt/user`,
 `/mnt/user/appdata`, group 281; change them for another system): eriphe-core and the NAS's
-eriphe-node. eriphe-node has no Docker socket: it talks to Docker through
-[wollomatic/socket-proxy](https://github.com/wollomatic/socket-proxy) (`DOCKER_HOST=tcp://eriphe-docker-proxy:2375`),
-which only forwards the calls the node makes and only accepts connections from `eriphe-node`. The
+eriphe-node. eriphe-node has no Docker socket: it talks to Docker through `eriphe-docker-proxy`
+(`DOCKER_HOST=tcp://eriphe-docker-proxy:2375`), the node's own image run as `eriphe-node docker-proxy`
+(node/dockerproxy.go), which only forwards the calls the node makes, only creates containers the way
+the node makes them, and only accepts connections from `eriphe-node`. The
 proxy sits on its own internal network, `eriphe-docker`, that task containers do not join.
 
 Task containers run on `eriphe-tasks`, an internal bridge (no route out) that only eriphe-node
@@ -30,26 +31,39 @@ on `eriphe-tasks` only). The relay is the tasks' one way to the Internet, and ne
 | `POST /containers/{id}/attach`, `/start`, `/wait`, `/stop` | `docker run -i` (hijacked stdin/stdout stream), `docker stop` |
 | `DELETE /containers/{id}` | `docker rm -f` |
 
+A container is created only if its whole request is one the node makes (`node/container.go`,
+`service.go`, `wake.go`): an allowlist of fields, every other one empty. So no `--privileged`, no
+capability beyond the three file ones a task gets (`CHOWN`, `DAC_OVERRIDE`, `FOWNER`), no device
+nor GPU, no host PID, IPC, UTS, user or cgroup namespace, no security option but
+`no-new-privileges` (which is required, as is `--cap-drop ALL`), no unmasked `/proc`, no sysctl,
+no other container's volumes or network, no restart policy, ports published on the loopback only,
+the networks `eriphe-system`, `eriphe-tasks` and `none` only, and one of the node's labels
+(`eriphe.task`, `eriphe.service`, `eriphe.wake`). The host's network is allowed for one container:
+the node's own image (`-wake-image`) running `eriphe-node wake-send`, read-only, without a mount.
+An image is only pulled (`fromImage`), never imported from a file. A container is started,
+attached to, waited for, stopped or removed only if it carries one of the node's labels: the
+other containers of the NAS are not the node's.
+
 Bind mounts are only accepted from `/mnt/user/appdata/eriphe-system/node` and `/mnt/user`, the
 place whose folders the user may give to Eriphe (`ERIPHE_NODE_SHARES: shares=/mnt/user`, see
-node/README.md, Shares) (`-allowbindmountfrom`); named volumes such as `eriphe-cache` are not bind
-mounts and stay allowed. Allowing `/mnt/user` widens what whoever controls eriphe-node could mount
-(appdata included), which the next section's limit already allows; eriphe-node itself mounts only
-the folders the user shared, never appdata nor its own root. Another place to share goes in both
-lists (comma-separated). Everything else is
-refused with 403: `exec`, `kill`, `cp` (archive), `inspect` of a container (it would show its
-environment), volumes, networks, `info`, image removal, builds.
+node/README.md, Shares) (`-bind-from`). The proxy sees both read-only at the same paths, resolves
+a source's symlinks and gives the daemon the resolved path, so a link in the node's root does not
+lead out of them. Named volumes such as `eriphe-cache` are allowed, without a driver's options.
+Allowing `/mnt/user` widens what whoever controls eriphe-node could mount (appdata included),
+which the next section's limit already allows; eriphe-node itself mounts only the folders the user
+shared, never appdata nor its own root. Another place to share goes in both lists
+(comma-separated) and in the proxy's volumes. Everything else is refused with 403: `exec`,
+`kill`, `cp` (archive), `inspect` of a container (it would show its environment), volumes,
+networks, `info`, image removal, builds; `docker logs eriphe-docker-proxy` says what and why.
 
 ### What the proxy does not stop
 
-The proxy reads a container's mounts, not the rest of its configuration. Whoever controls
-eriphe-node (or the proxy's port) can still create a container that is `--privileged`, adds
-capabilities or devices, or uses the host's PID or network namespace, which amounts to root on
-the NAS. They can also attach to, stop or remove other containers, since a container ID does not
-say whose it is. eriphe-node itself only ever builds the `docker run` of `node/container.go`
-(fixed hardening flags, mounts refused outside its root), so this is the risk of eriphe-node
-being taken over, not of a task. Closing it needs a filter on the whole create request (a Docker
-authorization plugin, or a proxy that checks `HostConfig`).
+Whoever controls eriphe-node can still do what the node may: run a container as root with the
+three file capabilities on any image, with the node's root and the shared places mounted
+(appdata included, under `/mnt/user`), on `eriphe-system`. A source is checked when the
+container is created: a directory swapped for a symlink between that check and the daemon's
+mount still leads where the link points, a race the proxy cannot close. Containers it lists
+(`docker ps`) show their labels and commands, not their environment.
 
 ### Updates
 
@@ -70,7 +84,8 @@ which makes this same stack and updates it.
 Needs Docker 28 or later (`docker version`), for the isolated gateway of `eriphe-tasks`.
 
 1. Check the group of the socket: `stat -c %g /var/run/docker.sock`. If it is not 281, change
-   `user:` of `docker-proxy`.
+   `user:` of `docker-proxy`. If you pin the node's image (`:edge`, `:0.2.0`), pin it the same in
+   `-wake-image`.
 2. Copy `nas/compose.yaml` to `/mnt/user/appdata/eriphe-system/compose.yaml`, with a `core.json`
    next to it (see core/README.md, Configuration file: give it a `web` section, or there is no
    workspace) and a `secrets/` folder for the files it names. `core/` holds eriphe-core's data:

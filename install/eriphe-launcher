@@ -454,7 +454,7 @@ uninstall() {
 	[ -z "$ids" ] || docker rm -f $ids >/dev/null
 	docker network rm eriphe-tasks eriphe-system eriphe-docker >/dev/null 2>&1 || true
 	docker volume rm eriphe-cache >/dev/null 2>&1 || true
-	for repo in ${PROXY_IMAGE%:*} $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core; do
+	for repo in $LEGACY_PROXY $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core; do
 		refs=$(docker images --format '{{.Repository}}:{{.Tag}}' "$repo" | grep -v ':<none>$' || true)
 		# shellcheck disable=SC2086 # one argument per image
 		[ -z "$refs" ] || docker image rm $refs >/dev/null 2>&1 || true
