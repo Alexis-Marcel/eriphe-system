@@ -44,17 +44,11 @@ func TestNodeLogStore(t *testing.T) {
 	}
 }
 
-// Eriphe logs a folder listed, opened, lent to a task with its right, the
-// task itself, a result dropped in Eriphe/, and the folder closed.
+// Eriphe logs a folder shared on the device, lent to a task with its
+// right, the task itself, a result dropped in Eriphe/, and the folder closed.
 func TestNodeLogRecordsAccess(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
-	if _, err := c.browse(ctx, "nas", "data", "Clients", false); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.addFolder(ctx, Folder{Name: "Clients", Node: "nas", Share: "data", Path: "Clients", Access: folderDrop}); err != nil {
-		t.Fatal(err)
-	}
 	task, err := c.runTask(ctx, runRequest{Prompt: "sum the invoices", Folders: []string{"Clients"}})
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +58,7 @@ func TestNodeLogRecordsAccess(t *testing.T) {
 		{Type: "tool_use", Data: map[string]any{"name": "Write", "input": map[string]any{"file_path": "/work/out.md"}}},
 		{Type: "tool_use", Data: map[string]any{"name": "Bash", "input": map[string]any{"command": "ls"}}},
 	})
-	if err := c.removeFolder("clients"); err != nil {
+	if err := c.removeFolder(ctx, "clients"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := store.nodeLog("nas", 20, 0)
@@ -72,7 +66,7 @@ func TestNodeLogRecordsAccess(t *testing.T) {
 	for _, e := range got {
 		kinds = append(kinds, e.Kind)
 	}
-	if strings.Join(kinds, ",") != "unshare,result,lend,task,share,list" {
+	if strings.Join(kinds, ",") != "unshare,result,lend,task,share,share" {
 		t.Fatalf("kinds %v", kinds)
 	}
 	if e := got[1]; e.Task != task.ID || e.Folder != "Clients" || e.Detail != "Eriphe/summary.md" {
@@ -84,8 +78,8 @@ func TestNodeLogRecordsAccess(t *testing.T) {
 	if e := got[3]; e.Task != task.ID || e.Detail != "sonnet" {
 		t.Fatalf("task %+v", e)
 	}
-	if e := got[5]; e.Detail != "data:/Clients" {
-		t.Fatalf("list %+v", e)
+	if e := got[5]; e.Folder != "Clients" || e.Access != folderDrop || e.Detail != "" {
+		t.Fatalf("share %+v", e)
 	}
 	if other, _ := store.nodeLog("pc", 20, 0); len(other) != 0 {
 		t.Fatalf("logged on another device: %+v", other)
@@ -98,7 +92,6 @@ func TestNodeLogRecordsAccess(t *testing.T) {
 func TestSuspendNode(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
-	c.addFolder(ctx, Folder{Name: "Clients", Node: "nas", Share: "data", Path: "Clients"})
 	running, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Clients"}})
 	if err != nil || running.Node != "nas" {
 		t.Fatalf("task %+v, %v", running, err)
@@ -132,13 +125,6 @@ func TestSuspendNode(t *testing.T) {
 	}
 	if _, err := c.runTask(ctx, runRequest{Prompt: "x", Folders: []string{"Clients"}}); err == nil || !strings.Contains(err.Error(), "cut") {
 		t.Fatalf("its folders lent: %v", err)
-	}
-	// Its folders are neither listed nor opened.
-	if _, err := c.browse(ctx, "nas", "data", "", false); err == nil || err.(*folderError).Code != "suspended" {
-		t.Fatalf("listed: %v", err)
-	}
-	if _, err := c.addFolder(ctx, Folder{Name: "Other", Node: "nas", Share: "data", Path: "x"}); err == nil {
-		t.Fatal("opened a folder of a cut device")
 	}
 	// It is let in neither through its tunnel nor for its assignments,
 	// even with its right secret.
@@ -209,7 +195,7 @@ func TestNodeAccessAPI(t *testing.T) {
 		Suspended bool           `json:"suspended"`
 		Log       []NodeLogEntry `json:"log"`
 	}
-	if code := call("GET", "/v1/nodes/nas/log", &out); code != http.StatusOK || !out.Suspended || len(out.Log) != 1 || out.Log[0].Kind != logCut {
+	if code := call("GET", "/v1/nodes/nas/log", &out); code != http.StatusOK || !out.Suspended || len(out.Log) != 3 || out.Log[0].Kind != logCut {
 		t.Fatalf("log: %d %+v", code, out)
 	}
 	if code := call("POST", "/v1/nodes/nas/resume", nil); code != http.StatusOK || store.nodeSuspended("nas") {
@@ -234,12 +220,11 @@ func TestWebDevices(t *testing.T) {
 	c, _ := foldersCore(t)
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
-	c.addFolder(context.Background(), Folder{Name: "Clients", Node: "nas", Share: "data", Path: "Clients", Access: folderDrop})
 
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	for _, want := range []string{"Appareils", "Connecter un appareil", "Ce qu&#39;Eriphe voit ici", "Ce qu&#39;Eriphe peut faire ici",
 		"Faire travailler des agents", `<a href="/settings/folders">`, "Clients", "Lecture &#43; dépôt", "Rien d&#39;ouvert",
-		`href="/settings/folders?node=pc"`, `<a href="/settings/devices/nas" class="stretched">nas</a>`, `<span class="device-more" aria-hidden="true">Détails ›</span>`, "Couper l&#39;accès", `hx-post="/settings/devices/nas/suspend"`} {
+		`href="/settings/folders#folders-pc"`, `<a href="/settings/devices/nas" class="stretched">nas</a>`, `<span class="device-more" aria-hidden="true">Détails ›</span>`, "Couper l&#39;accès", `hx-post="/settings/devices/nas/suspend"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/devices lacks %q", want)
 		}
@@ -252,7 +237,7 @@ func TestWebDevices(t *testing.T) {
 	}
 
 	_, body, _ = tw.do("GET", "/settings/devices/nas", nil, nil)
-	for _, want := range []string{"Journal des accès", "Dossier ouvert à Eriphe", "data:/Clients", "Couper l&#39;accès"} {
+	for _, want := range []string{"Journal des accès", "Dossier ouvert à Eriphe", "Clients", "Couper l&#39;accès"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/devices/nas lacks %q", want)
 		}

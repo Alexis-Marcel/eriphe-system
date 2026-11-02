@@ -237,46 +237,6 @@ func checkTree(tree []string) error {
 	return nil
 }
 
-// appleShareDirs is handleShareDirs with the container engine.
-func (n *node) appleShareDirs(w http.ResponseWriter, r *http.Request) {
-	check := r.URL.Query().Get("check") == "1"
-	mode := "list"
-	if check {
-		mode = "tree"
-	}
-	f, e, err := n.appleResolve(r.Context(), r.PathValue("share"), r.URL.Query().Get("path"), mode)
-	if err != nil {
-		writeShareError(w, err)
-		return
-	}
-	dirs := []string{}
-	for _, d := range e.dirs {
-		if !unlisted(d) && !private(f.root.Path, filepath.Join(f.real, d)) {
-			dirs = append(dirs, d)
-		}
-	}
-	sort.Slice(dirs, func(i, j int) bool { return strings.ToLower(dirs[i]) < strings.ToLower(dirs[j]) })
-	truncated := len(dirs) > maxDirs
-	if truncated {
-		dirs = dirs[:maxDirs]
-	}
-	out := map[string]any{"share": r.PathValue("share"), "path": f.rel, "dirs": dirs, "files": e.files,
-		"truncated": truncated, "writable": !f.root.ReadOnly}
-	if check {
-		out["shareable"] = true
-		err := n.holdsOwn(f.real)
-		if err == nil {
-			err = checkTree(e.tree)
-		}
-		if err != nil {
-			var se *shareError
-			errors.As(err, &se)
-			out["shareable"], out["code"], out["reason"] = false, se.Code, se.Msg
-		}
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
 // appleResults makes the folder's results subfolder through the explorer,
 // the folder mounted writable, a former one renamed (chooseResults): it
 // returns the one in use.

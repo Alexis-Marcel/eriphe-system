@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // version is set at build time (the image: X.Y.Z for a release,
@@ -68,6 +69,9 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "core-relay" {
 		runCoreRelay(os.Args[2:]) // a Mac's LaunchDaemon (corerelay.go)
 		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "share" {
+		os.Exit(runShare(os.Args[2:], os.Stdout, os.Stderr)) // the user shares a folder here (share_cmd.go)
 	}
 	if len(os.Args) > 1 && os.Args[1] == "wake-send" {
 		runWakeSend(os.Args[2:]) // the short-lived container that wakes a machine (wake.go)
@@ -164,11 +168,12 @@ func main() {
 	go n.prepareLoop()
 
 	perm := n.taskRoutes(s)
-	for _, sh := range o.shareList() {
+	for _, sh := range n.sharedList() {
 		if sh.Missing {
-			log.Printf("share %s: %s is not there now", sh.Name, o.shares[sh.Name].Path)
+			log.Printf("shared folder %s is not there now", sh.Name)
 		}
 	}
+	go n.watchShared(2 * time.Second) // folders unshared here stop their tasks (shared.go)
 	l, err := n.listenTasks(addr)
 	if err != nil {
 		log.Fatal(err)

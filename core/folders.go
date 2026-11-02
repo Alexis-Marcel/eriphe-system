@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"slices"
@@ -15,94 +15,167 @@ import (
 	"unicode/utf8"
 )
 
-// Folders ("Dossiers"): the user's own folders given to Eriphe. A folder is
-// a name ("Clients"), a source (a machine and a path inside one of the roots
-// that machine shares, set when it was installed: eriphe-core never sees a
-// host path, only the root's name and a path relative to it) and a right:
-// read, the default, or read and drop results, which go only to its results/
-// subfolder; the originals are never changed. The brain lends folders to a
-// task by name, like catalog tools: the task runs on the folder's machine
-// (or waits for it) and gets it mounted at /work/folders/<name>, read-only
-// as Docker enforces it (node/shares.go). What a task reads there is data,
-// never instructions: its result taints the brain's turn, and a turn that
-// read external content may not lend a folder's write right.
+// Folders ("Dossiers"): the user's own folders given to Eriphe. A folder
+// is shared on the machine that holds it, never from here: the user runs
+// `eriphe-node share add` there, or right-clicks it in the Finder or the
+// Explorer, and that machine's node keeps the list (node/shared.go). The
+// node reports each folder's name, right and an opaque id, never its path;
+// eriphe-core can lend a task one of them, or take one off the list
+// (restricting is always allowed), but it can neither look into a machine
+// nor add a folder. A right is read, the default, or read and drop
+// results, which go only to its results/ subfolder; the originals are
+// never changed. The brain lends folders to a task by name, like catalog
+// tools: the task runs on the folder's machine (or waits for it) and gets it
+// mounted at /work/folders/<name>, read-only as Docker enforces it
+// (node/shares.go). What a task reads there is data, never instructions:
+// its result taints the brain's turn, and a turn that read external content
+// may not lend a folder's write right.
+//
+// Folders given from here before (the folders table) are no longer lent:
+// the workspace shows them to be shared again on their machine
+// (legacyFolders).
 
 const (
 	folderRead = "read" // read only
 	folderDrop = "drop" // read, and drop results in its results subfolder (results_folder.go)
 )
 
-// Folder is one folder given to Eriphe.
+// Folder is one folder given to Eriphe, as its machine reported it.
 type Folder struct {
-	Name    string    `json:"name"`
-	Node    string    `json:"node"`  // the machine it is on
-	Share   string    `json:"share"` // the root it is in, as that machine names it
-	Path    string    `json:"path"`  // relative to the root, "" for the root itself
-	Access  string    `json:"access"`
-	Created time.Time `json:"created"`
+	Name    string `json:"name"`              // unique here: "Name (machine)" when two machines share one name
+	Node    string `json:"node"`              // the machine it is on
+	ID      string `json:"id"`                // its id on that machine
+	Access  string `json:"access"`            // read or drop
+	Missing bool   `json:"missing,omitempty"` // not there now on its machine (an unplugged disk)
 }
 
 // mountPath is where a task lent the folder finds it.
 func (f Folder) mountPath() string { return "/work/folders/" + f.Name }
 
+// sharedFolder is a folder shared on a machine, in what its node reports
+// (node/shared.go sharedInfo).
+type sharedFolder struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Access  string `json:"access"`
+	Missing bool   `json:"missing,omitempty"`
+}
+
 func init() {
 	extraSchema = append(extraSchema, `
 CREATE TABLE IF NOT EXISTS folders (
   name TEXT PRIMARY KEY COLLATE NOCASE, node TEXT NOT NULL, share TEXT NOT NULL,
-  path TEXT NOT NULL, access TEXT NOT NULL DEFAULT 'read', created INTEGER NOT NULL);`)
+  path TEXT NOT NULL, access TEXT NOT NULL DEFAULT 'read', created INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS folders_unshared (
+  node TEXT NOT NULL, id TEXT NOT NULL, PRIMARY KEY (node, id));`)
 }
 
-var (
-	errNoFolder     = errors.New("no such folder")
-	errFolderExists = errors.New("a folder already has this name")
-)
+var errNoFolder = errors.New("no such folder")
 
-func scanFolder(sc interface{ Scan(...any) error }) (*Folder, error) {
-	var f Folder
-	var created int64
-	if err := sc.Scan(&f.Name, &f.Node, &f.Share, &f.Path, &f.Access, &created); err != nil {
+// folders are the folders the machines share, as they last said, but those
+// eriphe-core took off and their machine has not yet: never lent again.
+func (s *Store) folders() ([]*Folder, error) {
+	nodes, err := s.nodes()
+	if err != nil {
 		return nil, err
 	}
-	f.Created = time.Unix(created, 0)
-	return &f, nil
+	unshared, err := s.unsharedFolders()
+	if err != nil {
+		return nil, err
+	}
+	out := []*Folder{}
+	count := map[string]int{}
+	for _, n := range nodes {
+		for _, sf := range parseInfo(n).Folders {
+			if unshared[n.Name+"/"+sf.ID] || sf.ID == "" || !validFolderName(sf.Name) {
+				continue
+			}
+			access := folderRead
+			if sf.Access == folderDrop {
+				access = folderDrop
+			}
+			out = append(out, &Folder{Name: sf.Name, Node: n.Name, ID: sf.ID, Access: access, Missing: sf.Missing})
+			count[strings.ToLower(sf.Name)]++
+		}
+	}
+	for _, f := range out {
+		if count[strings.ToLower(f.Name)] > 1 {
+			f.Name += " (" + f.Node + ")"
+		}
+	}
+	slices.SortStableFunc(out, func(a, b *Folder) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
+	return out, nil
 }
 
-func (s *Store) folders() ([]*Folder, error) {
+func (s *Store) folder(name string) (*Folder, error) {
+	fs, err := s.folders()
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range fs {
+		if strings.EqualFold(f.Name, strings.TrimSpace(name)) {
+			return f, nil
+		}
+	}
+	return nil, errNoFolder
+}
+
+// unsharedFolders are the folders eriphe-core took off, by node/id, until
+// their machine no longer lists them.
+func (s *Store) unsharedFolders() (map[string]bool, error) {
+	rows, err := s.db.Query(`SELECT node, id FROM folders_unshared`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var node, id string
+		if err := rows.Scan(&node, &id); err != nil {
+			return nil, err
+		}
+		out[node+"/"+id] = true
+	}
+	return out, rows.Err()
+}
+
+// lastInfo is what a node last said, if anything.
+func (s *Store) lastInfo(node string) nodeInfo {
+	var raw string
+	var info nodeInfo
+	if s.db.QueryRow(`SELECT COALESCE(info, '') FROM nodes WHERE name = ?`, node).Scan(&raw) == nil {
+		json.Unmarshal([]byte(raw), &info)
+	}
+	return info
+}
+
+// legacyFolder is a folder given from the workspace before folders were
+// shared on their machine: shown, never lent.
+type legacyFolder struct {
+	Name, Node, Share, Path, Access string
+	Created                         time.Time
+}
+
+func (s *Store) legacyFolders() ([]legacyFolder, error) {
 	rows, err := s.db.Query(`SELECT name, node, share, path, access, created FROM folders ORDER BY name COLLATE NOCASE`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []*Folder{}
+	var out []legacyFolder
 	for rows.Next() {
-		f, err := scanFolder(rows)
-		if err != nil {
+		var f legacyFolder
+		var created int64
+		if err := rows.Scan(&f.Name, &f.Node, &f.Share, &f.Path, &f.Access, &created); err != nil {
 			return nil, err
 		}
+		f.Created = time.Unix(created, 0)
 		out = append(out, f)
 	}
 	return out, rows.Err()
 }
 
-func (s *Store) folder(name string) (*Folder, error) {
-	f, err := scanFolder(s.db.QueryRow(`SELECT name, node, share, path, access, created FROM folders WHERE name = ?`, name))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errNoFolder
-	}
-	return f, err
-}
-
-func (s *Store) addFolder(f *Folder) error {
-	if _, err := s.folder(f.Name); err == nil {
-		return errFolderExists
-	}
-	f.Created = time.Now()
-	_, err := s.db.Exec(`INSERT INTO folders (name, node, share, path, access, created) VALUES (?, ?, ?, ?, ?, ?)`,
-		f.Name, f.Node, f.Share, f.Path, f.Access, f.Created.Unix())
-	return err
-}
-
-func (s *Store) deleteFolder(name string) error {
+func (s *Store) deleteLegacyFolder(name string) error {
 	res, err := s.db.Exec(`DELETE FROM folders WHERE name = ?`, name)
 	if err != nil {
 		return err
@@ -124,9 +197,7 @@ func validFolderName(s string) bool {
 	})
 }
 
-// folderError is a node's refusal, with its code (node/shares.go):
-// unknown_share, invalid_path, not_found, outside, sensitive, eriphe_data,
-// unavailable, unreadable, holds_sensitive, holds_private; and here offline, old_node.
+// folderError is a refusal, with its code: offline, suspended, not_found.
 type folderError struct {
 	Code string `json:"code"`
 	Msg  string `json:"error"`
@@ -134,136 +205,70 @@ type folderError struct {
 
 func (e *folderError) Error() string { return e.Msg }
 
-// dirListing is a folder of a machine as its node lists it: the names of
-// its directories, how many files it has, never what they hold.
-type dirListing struct {
-	Share     string   `json:"share"`
-	Path      string   `json:"path"`
-	Dirs      []string `json:"dirs"`
-	Files     int      `json:"files"`
-	Truncated bool     `json:"truncated"`
-	Writable  bool     `json:"writable"`
-	Shareable *bool    `json:"shareable,omitempty"`
-	Code      string   `json:"code,omitempty"`
-	Reason    string   `json:"reason,omitempty"`
-}
-
-// Child is the path of one of its directories.
-func (l *dirListing) Child(name string) string {
-	if l.Path == "" {
-		return name
-	}
-	return l.Path + "/" + name
-}
-
-// nodeShare is a root a machine shares from (GET /v1/node).
-type nodeShare struct {
-	Name     string `json:"name"`
-	Writable bool   `json:"writable"`
-	Missing  bool   `json:"missing,omitempty"`
-}
-
-// browse asks a machine, through its tunnel, for the directories of a
-// folder; with check, whether it can be shared.
-func (c *core) browse(ctx context.Context, node, share, path string, check bool) (*dirListing, error) {
-	if c.store.nodeSuspended(node) {
-		return nil, &folderError{Code: "suspended", Msg: suspendedError(node).Error()} // node_access.go
-	}
-	n := c.node(node)
-	if !n.connected() {
-		return nil, &folderError{Code: "offline", Msg: "machine " + node + " is offline"}
-	}
-	q := url.Values{"path": {path}}
-	if check {
-		q.Set("check", "1")
-	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	var out dirListing
-	err := n.call(ctx, http.MethodGet, "/v1/shares/"+url.PathEscape(share)+"/dirs?"+q.Encode(), nil, &out)
-	var ne *nodeError
-	if errors.As(err, &ne) {
-		fe := &folderError{}
-		if json.Unmarshal([]byte(ne.msg), fe) != nil || fe.Code == "" {
-			if ne.status == http.StatusNotFound {
-				return nil, &folderError{Code: "old_node", Msg: "eriphe-node on " + node + " shares no folder: update it"}
-			}
-			return nil, &folderError{Code: "error", Msg: ne.Error()}
-		}
-		return nil, fe
-	}
-	if err != nil {
-		return nil, &folderError{Code: "offline", Msg: fmt.Sprintf("machine %s does not answer: %v", node, err)}
-	}
-	if out.Dirs == nil {
-		out.Dirs = []string{}
-	}
-	if !check { // a check is part of opening a folder, logged as that
-		c.logNode(node, NodeLogEntry{Kind: logList, Detail: share + ":/" + out.Path})
-	}
-	return &out, nil
-}
-
-// machineShares are the roots each machine shares from, as it last said.
-func (c *core) machineShares() (map[string][]nodeShare, error) {
-	nodes, err := c.store.nodes()
-	if err != nil {
-		return nil, err
-	}
-	out := map[string][]nodeShare{}
-	for _, n := range nodes {
-		if s := parseInfo(n).Shares; len(s) > 0 {
-			out[n.Name] = s
-		}
-	}
-	return out, nil
-}
-
-// addFolder checks a new folder with its machine, which must be online,
-// and keeps it under the path the machine resolved (no symlink).
-func (c *core) addFolder(ctx context.Context, f Folder) (*Folder, error) {
-	f.Name = strings.TrimSpace(f.Name)
-	if !validFolderName(f.Name) {
-		return nil, &folderError{Code: "bad_name", Msg: "a folder's name is up to 64 characters, without / \\ , nor a leading dot"}
-	}
-	if f.Access == "" {
-		f.Access = folderRead
-	}
-	if f.Access != folderRead && f.Access != folderDrop {
-		return nil, &folderError{Code: "bad_access", Msg: "access is read or drop"}
-	}
-	if _, err := c.store.folder(f.Name); err == nil {
-		return nil, &folderError{Code: "exists", Msg: errFolderExists.Error()}
-	}
-	l, err := c.browse(ctx, f.Node, f.Share, f.Path, true)
-	if err != nil {
-		return nil, err
-	}
-	if l.Shareable == nil || !*l.Shareable {
-		return nil, &folderError{Code: orStr(l.Code, "holds_sensitive"), Msg: orStr(l.Reason, "this folder cannot be shared")}
-	}
-	if f.Access == folderDrop && !l.Writable {
-		return nil, &folderError{Code: "read_only_share", Msg: "this machine shares this root read-only: results cannot be dropped there"}
-	}
-	f.Path = l.Path
-	if err := c.store.addFolder(&f); err != nil {
-		return nil, err
-	}
-	c.logNode(f.Node, NodeLogEntry{Kind: logShare, Folder: f.Name, Access: f.Access, Detail: f.Share + ":/" + f.Path})
-	return &f, nil
-}
-
-// removeFolder closes a folder of a machine to Eriphe again.
-func (c *core) removeFolder(name string) error {
+// removeFolder takes a folder off its machine's list: at once here (it is
+// never lent again), and on the machine now or as soon as it is back, which
+// then stops the tasks that hold it.
+func (c *core) removeFolder(ctx context.Context, name string) error {
 	f, err := c.store.folder(name)
 	if err != nil {
 		return err
 	}
-	if err := c.store.deleteFolder(f.Name); err != nil {
+	if _, err := c.store.db.Exec(`INSERT OR IGNORE INTO folders_unshared (node, id) VALUES (?, ?)`, f.Node, f.ID); err != nil {
 		return err
 	}
-	c.logNode(f.Node, NodeLogEntry{Kind: logUnshare, Folder: f.Name, Access: f.Access, Detail: f.Share + ":/" + f.Path})
+	c.logNode(f.Node, NodeLogEntry{Kind: logUnshare, Folder: f.Name, Access: f.Access})
+	if n := c.node(f.Node); n.connected() {
+		c.refreshNode(ctx, n) // which tells the machine (unshareOn)
+	}
 	return nil
+}
+
+// unshareOn tells a machine the folders eriphe-core took off, and forgets
+// those it no longer lists.
+func (c *core) unshareOn(ctx context.Context, n *nodeClient, info nodeInfo) {
+	unshared, err := c.store.unsharedFolders()
+	if err != nil {
+		return
+	}
+	for key := range unshared {
+		node, id, _ := strings.Cut(key, "/")
+		if node != n.name {
+			continue
+		}
+		if !slices.ContainsFunc(info.Folders, func(sf sharedFolder) bool { return sf.ID == id }) {
+			c.store.db.Exec(`DELETE FROM folders_unshared WHERE node = ? AND id = ?`, node, id)
+			continue
+		}
+		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		err := n.call(cctx, http.MethodDelete, "/v1/shares/"+url.PathEscape(id), nil, nil)
+		cancel()
+		var ne *nodeError
+		if errors.As(err, &ne) && ne.status == http.StatusNotFound {
+			err = nil
+		}
+		if err != nil {
+			log.Printf("folders: %s keeps folder %s for now: %v", n.name, id, err)
+		}
+	}
+}
+
+// noteShared records in a machine's access log the folders shared or
+// unshared there since it last said.
+func (c *core) noteShared(node string, before, after nodeInfo) {
+	had := map[string]sharedFolder{}
+	for _, f := range before.Folders {
+		had[f.ID] = f
+	}
+	for _, f := range after.Folders {
+		if _, ok := had[f.ID]; ok {
+			delete(had, f.ID)
+			continue
+		}
+		c.logNode(node, NodeLogEntry{Kind: logShare, Folder: f.Name, Access: f.Access})
+	}
+	for _, f := range had {
+		c.logNode(node, NodeLogEntry{Kind: logUnshare, Folder: f.Name, Access: f.Access})
+	}
 }
 
 func orStr(s, def string) string {
@@ -303,13 +308,13 @@ func (c *core) folderGrant(names []string) ([]*Folder, string, error) {
 }
 
 // taskPlacement is what a task asks of its node: its agent's needs, and
-// with folders, their machine sharing their roots.
+// with folders, their machine sharing them.
 func (c *core) taskPlacement(a Agent, fs []*Folder) placement {
 	p := a.placement()
 	for _, f := range fs {
 		p.Machine = f.Node
-		if !slices.Contains(p.Shares, f.Share) {
-			p.Shares = append(p.Shares, f.Share)
+		if !slices.Contains(p.Folders, f.ID) {
+			p.Folders = append(p.Folders, f.ID)
 		}
 	}
 	return p
@@ -352,7 +357,7 @@ func (c *core) specFolders(names string, resources []ResourceRef) ([]nodeFolder,
 				return e.Kind == resFolder && strings.EqualFold(e.Ref, f.Name) && e.Access == accessDrop
 			})
 		}
-		out[i] = nodeFolder{Name: f.Name, Share: f.Share, Path: f.Path, Write: write}
+		out[i] = nodeFolder{Name: f.Name, ID: f.ID, Write: write}
 		if write {
 			out[i].Results, out[i].Former = results, former
 		}
@@ -363,8 +368,7 @@ func (c *core) specFolders(names string, resources []ResourceRef) ([]nodeFolder,
 // nodeFolder is a folder in a task's spec (node/shares.go TaskFolder).
 type nodeFolder struct {
 	Name  string `json:"name"`
-	Share string `json:"share"`
-	Path  string `json:"path"`
+	ID    string `json:"id"` // in its machine's list of shared folders
 	Write bool   `json:"write,omitempty"`
 	// With write: the results subfolder's name, and its former ones,
 	// newest first (results_folder.go). An older node uses Eriphe/.
@@ -482,7 +486,7 @@ func lendHint(kind, name, access string) string {
 }
 
 // The folder API (bearer token), for the CLI and scripts: the same methods
-// back the workspace.
+// back the workspace. A folder is listed or taken off, never added.
 func (c *core) folderRoutes(mux *http.ServeMux, token string) {
 	mux.Handle("GET /v1/folders", bearer(token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fs, err := c.folderViews()
@@ -492,45 +496,12 @@ func (c *core) folderRoutes(mux *http.ServeMux, token string) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"folders": fs})
 	})))
-	mux.Handle("POST /v1/folders", bearer(token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var in Folder
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		f, err := c.addFolder(r.Context(), in)
-		if err != nil {
-			folderHTTPError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, f)
-	})))
 	mux.Handle("DELETE /v1/folders/{name}", bearer(token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := c.removeFolder(r.PathValue("name")); err != nil {
+		if err := c.removeFolder(r.Context(), r.PathValue("name")); err != nil {
 			folderHTTPError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	})))
-	mux.Handle("GET /v1/nodes/{name}/shares", bearer(token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		all, err := c.machineShares()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		shares := all[r.PathValue("name")]
-		if shares == nil {
-			shares = []nodeShare{}
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"shares": shares})
-	})))
-	mux.Handle("GET /v1/nodes/{name}/shares/{share}/dirs", bearer(token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		l, err := c.browse(r.Context(), r.PathValue("name"), r.PathValue("share"), r.URL.Query().Get("path"), r.URL.Query().Get("check") == "1")
-		if err != nil {
-			folderHTTPError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, l)
 	})))
 }
 
@@ -542,14 +513,10 @@ func folderHTTPError(w http.ResponseWriter, err error) {
 	case errors.As(err, &fe):
 		status := http.StatusBadRequest
 		switch fe.Code {
-		case "offline", "unavailable", "old_node", "suspended":
+		case "offline", "suspended":
 			status = http.StatusServiceUnavailable
-		case "exists":
-			status = http.StatusConflict
-		case "not_found", "unknown_share":
+		case "not_found":
 			status = http.StatusNotFound
-		case "outside", "sensitive", "eriphe_data", "holds_sensitive", "holds_private", "unreadable", "read_only_share":
-			status = http.StatusForbidden
 		}
 		writeJSON(w, status, fe)
 	default:

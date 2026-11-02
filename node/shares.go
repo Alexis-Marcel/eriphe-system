@@ -15,15 +15,15 @@ import (
 	"unicode/utf8"
 )
 
-// Shares: the folders of this machine the user may give to Eriphe. The
-// machine declares its roots when it is installed (-share name=/path[:ro]),
-// never eriphe-core, which only ever sees a root's name and a path relative
-// to it. Through the tunnel, eriphe-core lists a root's directories (never
-// a file's content) for the workspace's explorer, and a task it lends a
+// Shares: the folders of this machine the user gives to Eriphe. The
+// machine declares its roots when it is installed (-share name=/path[:ro]):
+// the places a folder may be shared from, on this machine only
+// (shared.go), never from eriphe-core. A task eriphe-core lends a shared
 // folder gets it mounted at /work/folders/<name>: read-only, and with the
 // right to drop results, its Eriphe/ subfolder writable. Every path is
-// resolved again when it is used: no "..", no symlink out of its root, no
-// sensitive place (sensitiveNames), nothing of eriphe-node's own data.
+// resolved again when it is shared and when it is used: no "..", no
+// symlink out of its root, no sensitive place (sensitiveNames), nothing of
+// eriphe-node's own data.
 
 // shareRoot is one root this machine shares from.
 type shareRoot struct {
@@ -52,27 +52,6 @@ func (f shareFlag) Set(s string) error {
 		f[name] = shareRoot{Path: filepath.Clean(path), ReadOnly: ro}
 	}
 	return nil
-}
-
-// shareInfo is a root as eriphe-core sees it: its name, never its path.
-type shareInfo struct {
-	Name     string `json:"name"`
-	Writable bool   `json:"writable"`          // results may be dropped in its folders
-	Missing  bool   `json:"missing,omitempty"` // its path is not there now (an unplugged disk)
-}
-
-func (o options) shareList() []shareInfo {
-	out := []shareInfo{}
-	for name, s := range o.shares {
-		missing := false
-		if o.engine != engineContainer { // a Mac's places are never looked at by the node (apple_explore.go)
-			fi, err := os.Stat(s.Path)
-			missing = err != nil || !fi.IsDir()
-		}
-		out = append(out, shareInfo{Name: name, Writable: !s.ReadOnly, Missing: missing})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
 }
 
 // sensitiveNames are never listed, never part of a shared folder's path,
@@ -117,7 +96,6 @@ func unlisted(name string) bool { return strings.HasPrefix(name, ".") || sensiti
 const (
 	scanDepth = 3     // levels of subfolders searched for a sensitive name, besides the folder itself
 	scanDirs  = 20000 // directories searched at most; beyond, the rest is not
-	maxDirs   = 1000  // directories listed at most
 )
 
 // shareError is a refusal, with a code eriphe-core translates.
@@ -281,63 +259,6 @@ func holdsPrivate(rel string) error {
 	return shareErr(http.StatusForbidden, "holds_private", "this folder holds %s, which its owner made private: share a folder inside it", rel)
 }
 
-// The node's API for shares, through the tunnel.
-func (n *node) shareRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /v1/shares", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"shares": n.opt.shareList()})
-	})
-	mux.HandleFunc("GET /v1/shares/{share}/dirs", n.handleShareDirs)
-}
-
-// handleShareDirs lists the directories of a folder: names only, and how
-// many files it has, never what they hold. With check=1, it also says
-// whether the folder can be shared.
-func (n *node) handleShareDirs(w http.ResponseWriter, r *http.Request) {
-	if n.apple() {
-		n.appleShareDirs(w, r) // the node never reads a Mac's places itself
-		return
-	}
-	f, err := n.resolveFolder(r.PathValue("share"), r.URL.Query().Get("path"))
-	if err != nil {
-		writeShareError(w, err)
-		return
-	}
-	entries, err := os.ReadDir(f.real)
-	if err != nil {
-		writeShareError(w, shareErr(http.StatusForbidden, "unreadable", "this folder cannot be read"))
-		return
-	}
-	dirs, files := []string{}, 0
-	own := n.ownData()
-	rootReal, _ := filepath.EvalSymlinks(f.root.Path)
-	for _, e := range entries {
-		switch {
-		case e.IsDir(): // a symlink is not listed: only real directories
-			if p := filepath.Join(f.real, e.Name()); !unlisted(e.Name()) && !private(rootReal, p) && !within(own, p) && !marked(p) {
-				dirs = append(dirs, e.Name())
-			}
-		case e.Type().IsRegular():
-			files++
-		}
-	}
-	sort.Slice(dirs, func(i, j int) bool { return strings.ToLower(dirs[i]) < strings.ToLower(dirs[j]) })
-	truncated := len(dirs) > maxDirs
-	if truncated {
-		dirs = dirs[:maxDirs]
-	}
-	out := map[string]any{"share": r.PathValue("share"), "path": f.rel, "dirs": dirs, "files": files,
-		"truncated": truncated, "writable": !f.root.ReadOnly}
-	if r.URL.Query().Get("check") == "1" {
-		out["shareable"] = true
-		if err := n.shareable(f); err != nil {
-			var se *shareError
-			errors.As(err, &se)
-			out["shareable"], out["code"], out["reason"] = false, se.Code, se.Msg
-		}
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
 func writeShareError(w http.ResponseWriter, err error) {
 	var se *shareError
 	if !errors.As(err, &se) {
@@ -346,13 +267,12 @@ func writeShareError(w http.ResponseWriter, err error) {
 	writeJSON(w, se.status, se)
 }
 
-// TaskFolder is a folder eriphe-core lends a task, by the name the user
-// gave it: mounted at /work/folders/<name>.
+// TaskFolder is a folder eriphe-core lends a task: one shared on this
+// machine, by its id (shared.go), mounted at /work/folders/<name>.
 type TaskFolder struct {
 	Name  string `json:"name"`
-	Share string `json:"share"`           // the root
-	Path  string `json:"path"`            // relative to it
-	Write bool   `json:"write,omitempty"` // results may be dropped in its results subfolder
+	ID    string `json:"id"`              // in the list of shared folders; nothing else is mounted
+	Write bool   `json:"write,omitempty"` // results may be dropped in its results subfolder, if shared so
 	// With Write: the results subfolder's name (the assistant's), and its
 	// former names, newest first. Empty from an older eriphe-core: Eriphe.
 	Results string   `json:"results,omitempty"`
@@ -432,10 +352,7 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 			return nil, fmt.Errorf("folder %q: invalid or repeated name", tf.Name)
 		}
 		seen[strings.ToLower(tf.Name)] = true
-		f, err := n.resolveFolder(tf.Share, tf.Path)
-		if err == nil {
-			err = n.shareable(f)
-		}
+		f, err := n.lentFolder(t, tf)
 		if err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
@@ -448,7 +365,7 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 			continue
 		}
 		if f.root.ReadOnly {
-			return nil, fmt.Errorf("folder %s: its root %s is read-only on this machine", tf.Name, tf.Share)
+			return nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
 		}
 		// The task sees it under the current name, whichever is used here.
 		cur := tf.resultsName()

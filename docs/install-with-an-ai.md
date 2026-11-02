@@ -412,9 +412,11 @@ For each other computer (or a second NAS):
    (`docker logs eriphe-node`, `~/.eriphe/node.log`, or on Windows
    `wsl -d eriphe -- tail /var/log/eriphe-node.log`), the line `connected to http://… as <name>`
    says it joined.
-5. Folders: the person chooses what Eriphe may see in **Settings → Folders** ("Partager un
-   dossier"): read only, or read and drop results in an `Eriphe/` subfolder. Nothing is shared
-   until they do.
+5. Folders: the person shares what Eriphe may see **on the device itself**: `sudo eriphe-share add
+   <folder>` on Linux, `~/.eriphe/bin/eriphe-share add <folder>` on a Mac, `docker exec eriphe-node
+   eriphe-node share add <folder>` with the one-container install (`--drop` to let Eriphe drop
+   results in its subfolder). Settings → Folders shows what is shared and says the same. Nothing
+   is shared until they do; you never share a folder for them without their word.
 6. **Their own model** (optional): if the person wants Eriphe to use a model on one of their
    machines (a PC with a graphics card, a rented server), that machine joins as a device as above
    and lends the model server with `--model-server` (`-ModelServer` on Windows). The server stays

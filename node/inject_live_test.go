@@ -89,7 +89,7 @@ func TestInjectLive(t *testing.T) {
 
 	agentPackages["probe-first"], agentPackages["probe-second"] = "claude", "claude"
 	t.Cleanup(func() { delete(agentPackages, "probe-first"); delete(agentPackages, "probe-second") })
-	folders := []TaskFolder{{Name: "clients", Share: "share", Path: "Clients", Write: true}}
+	folders := []TaskFolder{lend(t, n, "share", "Clients", "clients", true)}
 	lanHost, lanPort, _ := net.SplitHostPort(lan)
 	results := map[string]map[string]string{}
 	for _, id := range []string{"first", "second"} {
@@ -230,7 +230,7 @@ func TestAppleInjectLive(t *testing.T) {
 	t.Logf("prepared in %s", time.Since(start).Round(time.Millisecond))
 	agentPackages["probe-first"], agentPackages["probe-second"] = "claude", "claude"
 	t.Cleanup(func() { delete(agentPackages, "probe-first"); delete(agentPackages, "probe-second") })
-	folders := []TaskFolder{{Name: "clients", Share: "live", Path: "Clients", Write: true}}
+	folders := []TaskFolder{lend(t, n, "live", "Clients", "clients", true)}
 	lanHost, lanPort, _ := net.SplitHostPort(lan)
 	results := map[string]map[string]string{}
 	for _, id := range []string{"first", "second"} {

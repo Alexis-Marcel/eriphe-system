@@ -16,7 +16,7 @@ type placement struct {
 	Prefers []string // soft: cpu, memory, or a label
 	Image   string   // worker image; the node's default if empty
 	Machine string   // the only node that fits: the one with the task's folders (folders.go)
-	Shares  []string // roots that node must share from
+	Folders []string // the ids of the folders that node must share
 	// Resident: an assistant that someone waits on (placement.go). Hard
 	// rule: an online always-on node that fits, if there is one.
 	Resident bool
@@ -53,8 +53,9 @@ type nodeInfo struct {
 	ResultsNamed bool        `json:"results_named"` // it names the results folder as told (results_folder.go)
 	Install      string      `json:"install"`       // how it was installed: linux, macos, windows, or empty (by hand)
 	Update       updaterInfo `json:"update"`        // its updater, from the installer (machine_updates.go)
-	// The roots it shares folders from (node/shares.go); none from an older one.
-	Shares []nodeShare `json:"shares"`
+	// The folders shared on it, by the user there (node/shared.go); none
+	// from an older one.
+	Folders []sharedFolder `json:"folders"`
 	// It lends a model server through its tunnel (its -model-server,
 	// model_relay.go).
 	ModelServer bool `json:"model_server"`

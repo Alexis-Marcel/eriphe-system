@@ -255,7 +255,7 @@ mail, calendar, Home Assistant…) are added from Settings → Tools.
 ## 4. Connect a device
 
 Connecting a device gives Eriphe access to it, so it can help with what is there: it sees only the
-folders you open to it (Settings → Folders), and puts agents to work there when the full install
+folders you share with it on the device itself (Settings → Folders says how), and puts agents to work there when the full install
 is possible, which is the default.
 
 In the workspace, Settings → Devices → "Connect a device": give it a short name (lowercase letters,
@@ -619,12 +619,24 @@ to Apple's container (in core mode, copy eriphe-core's data out of the VM first)
 
 ## Folders
 
-`--share NAME=/PATH` (repeatable) declares a place of this machine whose folders you may give to
-Eriphe, in the workspace (Settings → Folders → "Partager un dossier"): you browse its folders
-there from any device, name one ("Clients") and choose what Eriphe may do with it, read, or read
-and drop its results in the folder's results subfolder, named after your assistant (`Eriphe/` by
-default, `Jarvis/` if you called it Jarvis). eriphe-core never sees the path, only
-the place's name and a path inside it. Nothing is shared unless you say so.
+`--share NAME=/PATH` (repeatable) declares a place of this machine whose folders you may share
+with Eriphe. You share a folder **on this machine**, never from the workspace, which only shows
+what is shared and can stop sharing it:
+
+```sh
+sudo eriphe-share add /home/sam/Documents/Clients          # read
+sudo eriphe-share add --drop --name Factures /mnt/user/compta/2026
+sudo eriphe-share list
+sudo eriphe-share remove Factures                          # the tasks using it stop
+```
+
+Eriphe reads the folder, or with `--drop` also drops its results in its results subfolder, named
+after your assistant (`Eriphe/` by default, `Jarvis/` if you called it Jarvis). eriphe-core never
+sees the path, only the name. Nothing is shared unless you say so. On a Mac with Apple's container,
+the command is `~/.eriphe/bin/eriphe-share`; with the one-container install (eriphe-launcher),
+`docker exec eriphe-node eriphe-node share add /mnt/user/…`. Folders given from the workspace
+before this version are no longer lent: share them again this way (Settings → Folders lists
+them).
 
 ```sh
 curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --share documents=/home/sam/Documents

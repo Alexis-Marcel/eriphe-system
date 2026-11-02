@@ -61,7 +61,7 @@ func newMCPServer(c *core) *mcp.Server {
 			return out, nil
 		})
 
-	tool(s, "list_folders", "The user's folders given to Eriphe: name, source (a machine, or google-drive), whether it is online, access (read, or drop: the task may also write its results in the folder's results subfolder) and lend, the run_task resources entry that gives it to a task: {kind: folder} for a machine's (the task reads it at /work/folders/<name>), {kind: drive-folder} for a Google Drive one.",
+	tool(s, "list_folders", "The user's folders given to Eriphe: name, source (a machine, or google-drive), whether it is online, access (read, or drop: the task may also write its results in the folder's results subfolder) and lend, the run_task resources entry that gives it to a task: {kind: folder} for a machine's (the task reads it at /work/folders/<name>), {kind: drive-folder} for a Google Drive one. A machine's folder is shared by the user on that machine only: nothing here adds one or looks into a machine.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {
 			fs, err := c.folderViews()
 			return map[string]any{

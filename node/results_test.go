@@ -30,9 +30,10 @@ func testResultsName(t *testing.T, n *node, root string, mounts func(*Task) ([]s
 		fi, err := os.Lstat(filepath.Join(acme, name))
 		return err == nil && fi.IsDir()
 	}
+	lent := lend(t, n, "data", "Clients/ACME", "ACME", true)
 	run := func(tf TaskFolder) (string, *Task) {
 		t.Helper()
-		tf.Name, tf.Share, tf.Path, tf.Write = "ACME", "data", "Clients/ACME", true
+		tf.Name, tf.ID, tf.Write = lent.Name, lent.ID, true
 		task := &Task{Spec: TaskSpec{Folders: []TaskFolder{tf}}}
 		args, err := mounts(task)
 		if err != nil {

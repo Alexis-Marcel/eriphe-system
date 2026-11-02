@@ -134,7 +134,7 @@ the updates-changed event, web_updates.go). */}}
     {{range .Folders}}<li><a href="/settings/folders">{{template "i-folder"}}<span>{{.Name}}</span></a><span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "devices.access.%s" .Access)}}</span></li>{{end}}
   </ul>
   {{else}}
-  <p class="device-none"><span class="muted">{{t "devices.seesnone"}}</span>{{if not .Suspended}}<a href="/settings/folders?node={{.Name}}">{{template "i-plus"}}{{t "devices.sharefolder"}}</a>{{end}}</p>
+  <p class="device-none"><span class="muted">{{t "devices.seesnone"}}</span>{{if not .Suspended}}<a href="/settings/folders#folders-{{.Name}}">{{template "i-plus"}}{{t "devices.sharefolder"}}</a>{{end}}</p>
   {{end}}
 </section>
 {{end}}

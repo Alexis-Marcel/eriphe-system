@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -45,64 +43,21 @@ func appleShareFixture(t *testing.T) (*node, string) {
 	return n, root
 }
 
-// The explorer's listing and checks are the shares' ones (TestShareDirs).
-func TestAppleShareDirs(t *testing.T) {
-	n, _ := appleShareFixture(t)
-	mux := http.NewServeMux()
-	n.routes(mux)
-	get := func(url string) (int, map[string]any) {
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest("GET", url, nil))
-		var out map[string]any
-		json.Unmarshal(rec.Body.Bytes(), &out)
-		return rec.Code, out
-	}
-	code, out := get("/v1/shares/data/dirs")
-	var dirs []string
-	for _, d := range out["dirs"].([]any) {
-		dirs = append(dirs, d.(string))
-	}
-	if code != 200 || !slices.Equal(dirs, []string{"Clients", "Deep", "Deeper", "Home", "Photos"}) {
-		t.Fatalf("%d %v", code, out)
-	}
-	code, out = get("/v1/shares/data/dirs?path=Clients&check=1")
-	if code != 200 || out["files"] != 2.0 || out["shareable"] != true || out["path"] != "Clients" {
-		t.Fatalf("%d %v", code, out)
-	}
-	if code, out = get("/v1/shares/data/dirs?path=Clients-link"); out["path"] != "Clients" {
-		t.Errorf("a symlink inside the root: %d %v", code, out)
-	}
-	for _, p := range []string{"Home", "Deep", ""} {
-		if code, out = get("/v1/shares/data/dirs?check=1&path=" + p); out["shareable"] != false || out["code"] != "holds_sensitive" {
-			t.Errorf("%q: %d %v", p, code, out)
-		}
-	}
-	if code, out = get("/v1/shares/data/dirs?check=1&path=Deeper"); out["shareable"] != true {
-		t.Errorf("Deeper: %d %v", code, out)
-	}
-	for url, want := range map[string]string{
-		"/v1/shares/data/dirs?path=escape":    "outside",
-		"/v1/shares/data/dirs?path=keys":      "sensitive", // a symlink to .ssh
-		"/v1/shares/data/dirs?path=..":        "invalid_path",
-		"/v1/shares/data/dirs?path=Home/.ssh": "sensitive",
-		"/v1/shares/data/dirs?path=nope":      "not_found",
-		"/v1/shares/nope/dirs":                "unknown_share",
-	} {
-		if code, out = get(url); out["code"] != want {
-			t.Errorf("%s: %d %v, want %s", url, code, out, want)
-		}
-	}
+// Sharing on a Mac: the checks are the shares' ones, made by the explorer
+// (TestShareCmd).
+func TestAppleShareCmd(t *testing.T) {
+	n, root := appleShareFixture(t)
+	testShareCmd(t, n, root)
 	// The node's own data in the root (a Mac's ~/.eriphe in the home): what
-	// holds it is looked into, never shared; what is in it, never seen.
+	// holds it is never shared; what is in it, never seen.
 	n.opt.root = filepath.Join(n.opt.shares["data"].Path, "Photos", "eriphe")
 	os.MkdirAll(n.opt.root, 0o700)
-	if code, out = get("/v1/shares/data/dirs?path=Photos&check=1"); code != 200 || out["shareable"] != false || out["code"] != "eriphe_data" {
-		t.Errorf("holding it: %d %v", code, out)
+	for _, p := range []string{"Photos", "Photos/eriphe"} {
+		if out, err := shareOut(t, n, "add", filepath.Join(root, p)); err == nil {
+			t.Errorf("%s: shared %s", p, out)
+		}
 	}
-	if code, out = get("/v1/shares/data/dirs?path=Photos/eriphe"); out["code"] != "eriphe_data" {
-		t.Errorf("in it: %d %v", code, out)
-	}
-	if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{{Name: "p", Share: "data", Path: "Photos"}}}}); err == nil {
+	if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{lend(t, n, "data", "Photos", "p", false)}}}); err == nil {
 		t.Error("a folder holding the node's data is mounted")
 	}
 }
@@ -112,8 +67,8 @@ func TestAppleShareDirs(t *testing.T) {
 func TestAppleFolderMounts(t *testing.T) {
 	n, root := appleShareFixture(t)
 	task := &Task{Spec: TaskSpec{Folders: []TaskFolder{
-		{Name: "ACME", Share: "data", Path: "Clients/ACME", Write: true},
-		{Name: "Photos", Share: "data", Path: "Photos"},
+		lend(t, n, "data", "Clients/ACME", "ACME", true),
+		lend(t, n, "data", "Photos", "Photos", false),
 	}}}
 	args, err := n.folderMounts(task)
 	if err != nil {
@@ -133,12 +88,16 @@ func TestAppleFolderMounts(t *testing.T) {
 	}
 	os.MkdirAll(filepath.Join(root, "Clients", "Beta"), 0o755)
 	os.Symlink(filepath.Join(root, "Photos"), filepath.Join(root, "Clients", "Beta", "Eriphe"))
+	readOnly := lend(t, n, "data", "Clients", "x", false)
+	readOnly.Write = true
 	for name, f := range map[string]TaskFolder{
-		"comma":      {Name: "A, B", Share: "data", Path: "Photos"},
-		"read-only":  {Name: "x", Share: "ro", Path: "Clients", Write: true},
-		"escape":     {Name: "x", Share: "data", Path: "escape"},
-		"sensitive":  {Name: "x", Share: "data", Path: "Home"},
-		"in results": {Name: "x", Share: "data", Path: "Clients/Beta", Write: true},
+		"comma":      {Name: "A, B", ID: lend(t, n, "data", "Photos", "Photos", false).ID},
+		"read-only":  readOnly,
+		"not shared": {Name: "x", ID: "0123456789abcdef"},
+		"escape":     lend(t, n, "data", "escape", "x", false),
+		"through":    lend(t, n, "data", "Clients-link", "x", false),
+		"sensitive":  lend(t, n, "data", "Home", "x", false),
+		"in results": lend(t, n, "data", "Clients/Beta", "x", true),
 	} {
 		if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{f}}}); err == nil {
 			t.Errorf("%s: mounted", name)
@@ -148,15 +107,14 @@ func TestAppleFolderMounts(t *testing.T) {
 	}
 }
 
-// On a Mac, ~/Library is never listed nor shared from the home root; a root
-// inside it (iCloud Drive) is.
+// On a Mac, ~/Library is never shared from the home root; a root inside it
+// (iCloud Drive) is.
 func TestPrivateDirs(t *testing.T) {
 	n, root := appleShareFixture(t)
 	lib := filepath.Join(root, "Library")
 	cloud := filepath.Join(lib, "Mobile Documents", "Cloud")
 	os.MkdirAll(filepath.Join(lib, "Messages"), 0o755)
 	os.MkdirAll(filepath.Join(cloud, "Work"), 0o755)
-	n.opt.shares["cloud"] = shareRoot{Path: cloud}
 	old := privateDirs
 	privateDirs = func() []string { return []string{lib} }
 	defer func() { privateDirs = old }()
@@ -164,24 +122,17 @@ func TestPrivateDirs(t *testing.T) {
 		if !apple {
 			n.opt.engine = engineDocker
 		}
-		mux := http.NewServeMux()
-		n.routes(mux)
-		get := func(url string) string {
-			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, httptest.NewRequest("GET", url, nil))
-			return rec.Body.String()
-		}
-		for _, p := range []string{"Library", "Library/Messages", "Library/Mobile%20Documents/Cloud"} {
-			if out := get("/v1/shares/data/dirs?path=" + p); !strings.Contains(out, `"sensitive"`) {
+		n.opt.shares = shareFlag{"data": {Path: root}}
+		for _, p := range []string{lib, filepath.Join(lib, "Messages"), filepath.Join(cloud, "Work")} {
+			if out, err := shareOut(t, n, "add", p); err == nil {
 				t.Errorf("apple %v, %s: %s", apple, p, out)
 			}
 		}
-		if out := get("/v1/shares/cloud/dirs?path=Work"); !strings.Contains(out, `"path":"Work"`) {
-			t.Errorf("apple %v, a root inside it: %s", apple, out)
+		n.opt.shares["cloud"] = shareRoot{Path: cloud}
+		if out, err := shareOut(t, n, "add", "--name", fmt.Sprintf("work-%v", apple), filepath.Join(cloud, "Work")); err != nil {
+			t.Errorf("apple %v, a root inside it: %v %s", apple, err, out)
 		}
-		if out := get("/v1/shares/data/dirs"); strings.Contains(out, "Library") {
-			t.Errorf("apple %v, listed: %s", apple, out)
-		}
+		changeShared(n.opt.root, func([]sharedFolder) ([]sharedFolder, error) { return nil, nil })
 	}
 }
 

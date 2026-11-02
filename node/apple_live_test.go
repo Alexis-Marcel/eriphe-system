@@ -80,11 +80,11 @@ func TestAppleLive(t *testing.T) {
 	var folders []TaskFolder
 	for i, f := range strings.Split(os.Getenv("ERIPHE_LIVE_FOLDERS"), ",") {
 		if f = strings.TrimSpace(f); f != "" {
-			folders = append(folders, TaskFolder{Name: fmt.Sprintf("f%d", i), Share: "home", Path: f, Write: i > 0})
+			folders = append(folders, lend(t, n, "home", f, fmt.Sprintf("f%d", i), i > 0))
 		}
 	}
 	if f := os.Getenv("ERIPHE_LIVE_ICLOUD"); f != "" {
-		folders = append(folders, TaskFolder{Name: "icloud", Share: "icloud", Path: f, Write: true})
+		folders = append(folders, lend(t, n, "icloud", f, "icloud", true))
 		// Files only in iCloud (brctl evict makes one): over the limit, a
 		// clear refusal; within, the node downloads them before the task.
 		start := time.Now()
@@ -194,7 +194,7 @@ done
 		if f.Write {
 			// Seen, then removed, by a container: this test never opens the
 			// user's folders itself (macOS would ask for it).
-			r, _, err := n.appleResolve(context.Background(), f.Share, f.Path, "list")
+			r, err := n.lentFolder(task, f)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -203,9 +203,9 @@ done
 				"--mount", "type=bind,source="+filepath.Join(r.real, resultsDir)+",target=/e", "alpine:3.22",
 				"sh", "-c", `ls -ln /e/"$1" && rm -f /e/"$1"`, "sh", name).CombinedOutput()
 			if err != nil {
-				t.Errorf("no %s in %s/%s: %v %s", name, f.Path, resultsDir, err, out)
+				t.Errorf("no %s in %s/%s: %v %s", name, f.Name, resultsDir, err, out)
 			} else {
-				t.Logf("%s/%s/%s, written by the task: %s", f.Path, resultsDir, name, strings.TrimSpace(string(out)))
+				t.Logf("%s/%s/%s, written by the task: %s", f.Name, resultsDir, name, strings.TrimSpace(string(out)))
 			}
 		}
 	}
