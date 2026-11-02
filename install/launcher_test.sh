@@ -497,7 +497,7 @@ if mac_up 'relay_loaded() { true; }; root_ready() { false; }'; then :; else fail
 [ "$(cat "$E/bin/eriphe-node")" = new-node ] || fail "Mac reinstall: the new node is not in place"
 [ -f "$M/loaded.org.eriphe.node" ] || fail "Mac reinstall: the node is not running"
 [ -f "$M/loaded.org.eriphe.update" ] || fail "Mac reinstall: the updater is not running"
-[ ! -d "$E/update/lock" ] && [ ! -d "$E/update/install-backup" ] || fail "Mac reinstall leaves its lock or its backup"
+{ [ ! -d "$E/update/lock" ] && [ ! -d "$E/update/install-backup" ]; } || fail "Mac reinstall leaves its lock or its backup"
 has "$M/out" "updater=1" "Mac reinstall"
 has "$M/out" "relay_kept=1" "Mac reinstall, the relay left for later"
 # Root can be asked but is not given: the previous node back, running.
