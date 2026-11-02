@@ -292,7 +292,7 @@ type node struct {
 
 func newNode(o options) *node {
 	return &node{opt: o, tasks: map[string]*Task{}, services: map[string]*service{}, retired: map[string]*service{}, kick: make(chan struct{}, 1),
-		upd: &updates{root: o.root}, awake: newKeepAwake(o.root), agents: newAgentStore(o.root, o.taskBin), toolchains: newToolchainStore(o.root), prep: preparer{wake: make(chan struct{}, 1)}}
+		upd: &updates{root: o.root, install: o.install}, awake: newKeepAwake(o.root), agents: newAgentStore(o.root, o.taskBin), toolchains: newToolchainStore(o.root), prep: preparer{wake: make(chan struct{}, 1)}}
 }
 
 func (n *node) poke() {

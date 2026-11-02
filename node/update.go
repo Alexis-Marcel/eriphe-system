@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,9 +20,10 @@ import (
 // rights: a systemd unit on Linux and in the macOS VM, a loop in the WSL
 // distribution on Windows. They talk through three files in the node's root:
 //
-//	updater           written by the installer: an updater is there, and the version it is pinned to
+//	updater           written by the installer: an updater is there, the version it is pinned to, and the install's layout
 //	update-requested  written by the node: update (to the latest version, or the pinned one) or roll back
 //	update-status     written by the updater: how the last request went
+//	update-needs      written by the installer run by the updater: a step it left for the user
 //
 // eriphe-core asks for an update in the node's assignments. It never names
 // an image nor a command: only "update" or "rollback", the version it runs
@@ -29,12 +31,31 @@ import (
 // request is automatic (an automatic one skips a version that failed here
 // before). The node writes the request only once no task is running: the
 // updater recreates it, and a running agent would lose its turn.
+//
+// An update also brings the machine to the install's layout of its new
+// version (what an install puts there besides eriphe-node: services,
+// LaunchAgents, Syncthing): the updater runs the installer of that version
+// when its layout is newer. What it cannot do alone (a step that needs the
+// Mac's password, or an administrator's PowerShell) it leaves for the user,
+// in update-needs; an updater from before the layouts cannot bring one at
+// all. The node reports both (needs), and eriphe-core tells the user, with
+// the command to run.
 
 const (
 	updaterFile = "updater"
 	requestFile = "update-requested"
 	statusFile  = "update-status"
+	needsFile   = "update-needs"
+
+	// installLayout is the install's layout this build is made for:
+	// install.sh's LAYOUT and install.ps1's $layout (TestInstallLayout).
+	installLayout = 2
 )
+
+// needsWhy are what update-needs may say: the install command to run
+// again, in the Mac's Terminal (the password), or in an administrator's
+// PowerShell (admin); layout, for any other step.
+var needsWhy = map[string]bool{"layout": true, "password": true, "admin": true}
 
 // updateRequest is what eriphe-core asks for (in the assignments).
 type updateRequest struct {
@@ -59,7 +80,8 @@ func (u updateRequest) valid() bool {
 // updates is the node's side of the updates: the request it holds until no
 // task runs, and the last one it handed to the updater.
 type updates struct {
-	root string
+	root    string
+	install string // how the node was installed (install.go)
 
 	mu      sync.Mutex
 	pending *updateRequest // waiting for the tasks to end
@@ -169,7 +191,44 @@ func (u *updates) info() map[string]any {
 		}
 		out["status"] = s
 	}
+	if up != nil {
+		out["layout"] = layoutOf(up)
+		if n := u.needs(up); n != nil {
+			out["needs"] = n
+		}
+	}
 	return out
+}
+
+// layoutOf is the install's layout the updater's file says: 1 from an
+// installer from before the layouts.
+func layoutOf(up map[string]string) int {
+	n, err := strconv.Atoi(up["layout"])
+	if err != nil || n < 1 {
+		return 1
+	}
+	return n
+}
+
+// needs is what the machine's install waits for from its user, if
+// anything: the step the updater left (update-needs), or the install
+// command once on an install of layout 1, older than this build's, which
+// its updater cannot bring (it is from before the layouts; or the layout
+// is incomplete, as a Mac's without Syncthing). An updater of a later
+// layout brings this build's by itself, at its next update; so does
+// eriphe-launcher (docker), as it updates itself.
+func (u *updates) needs(up map[string]string) map[string]any {
+	if nd := keyValues(filepath.Join(u.root, needsFile)); nd != nil {
+		why := nd["why"]
+		if !needsWhy[why] {
+			why = "layout"
+		}
+		return map[string]any{"why": why}
+	}
+	if installLayout > 1 && layoutOf(up) == 1 && u.install != "docker" {
+		return map[string]any{"why": "layout"}
+	}
+	return nil
 }
 
 // running counts the tasks an update would interrupt: an agent at work or

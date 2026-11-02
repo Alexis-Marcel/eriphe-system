@@ -33,6 +33,10 @@ on:
         description: Other image names under ghcr.io/alexis-marcel that get the same tags (e.g. eriphe-worker)
         type: string
         default: ''
+      build-contexts:
+        description: Other build contexts, name=path lines (e.g. installer=install for eriphe-node)
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -69,6 +73,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ${{ inputs.context }}
+          build-contexts: ${{ inputs.build-contexts }}
           platforms: linux/${{ matrix.arch }}
           # eriphe-core tells when a machine is behind by it (core/updates.go).
           build-args: ${{ inputs.version-arg && format('VERSION={0}', inputs.version) || '' }}

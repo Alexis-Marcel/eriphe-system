@@ -454,7 +454,43 @@ How a request goes:
 
 The previous images stay, tagged `eriphe-previous-core` or `eriphe-previous-node`: "Go back to the
 previous version", or `--rollback` (`-Rollback`) on the machine, puts them back, checks the same
-way, and keeps the replaced ones to go forward again.
+way, and keeps the replaced ones to go forward again. A rollback keeps the layout (below).
+
+**What an update brings besides the images.** A release may change what an install puts on a
+machine besides eriphe-node and eriphe-core: a service of the compose project, a LaunchAgent, a
+component (Syncthing came so). That is the install's **layout**, a number in the installers
+(`LAYOUT` in install.sh, `$layout` in install.ps1), raised by such a release, and written down at
+each install (`update.conf`, the `updater` file). The eriphe-node image carries the installers of
+its build (`/usr/local/share/eriphe/install.sh` and `install.ps1`), so the updater takes them from
+the image it has just pulled and checked, as it takes the binaries: no other download. When their
+layout is newer than the machine's, the updater brings the machine to it by itself, after the new
+images (or binaries) pass their check, and also on an update that finds the build current:
+
+| | what the updater runs | as |
+|---|---|---|
+| Linux, and in Lima's VM | the image's `install.sh --layout`: the same compose project, `.env`, units, `eriphe-share` as an install writes, with the images in place (only a new component's image, Syncthing's, is pulled), then up and checked | root, as it runs |
+| macOS with Apple's container | the image's `install.sh --layout`: the settings, the LaunchAgents and the components (Syncthing, checked against its checksum and Kastelo AB's signature as an install checks it), with the binaries in place; its own LaunchAgent is rewritten, loaded as it is at the next login | you, as it runs |
+| Windows | the distribution's setup of the image's `install.ps1` (its scripts, this updater too, the settings every node has, Syncthing's build, checked against its checksum), then `eriphe-node-run` again | root in the distribution |
+| One container | nothing: eriphe-launcher writes the layout of its own install.sh at every start, and updates itself after the machine (its new image's layout, with Syncthing's image pulled) | |
+
+The updater's lock is held throughout, what the layout rewrites is kept, and if a step fails it is
+put back, the services it added go, and the whole update goes back as for a failed check
+("rolled_back"; "failed" when only the layout was to apply). `--layout` is the updaters' option:
+it asks nothing and runs only on an installed machine.
+
+A step that needs more than the updater has is left as it was, and everything else is done: on a
+Mac, the relay's LaunchDaemon or a newer Apple container (the password); on Windows, what
+install.ps1 does on Windows' side (`$adminLayout`: scheduled tasks, the session helper, the
+firewall) or a new `wsl.conf`; in Lima's VM, the whole layout (the Mac's install writes it). The
+updater then writes `update-needs` in the node's folder (`why=password`, `admin` or `layout`), the
+node reports it, and the device's card in Réglages › Appareils (Settings › Devices) says « Cette
+mise à jour a besoin de toi » ("This update needs you"), with the install command of that machine
+to copy: in the Mac's Terminal, or an administrator PowerShell. Running it does the rest and
+clears it.
+
+A machine whose updater is from before the layouts (installed before this release, Syncthing's
+included) cannot bring one: its next update takes the new images only, and the card then asks for
+its install command once; from then on, its updates bring the layouts by themselves.
 
 **A version of your choice.** By default a machine follows `latest`, the releases.
 

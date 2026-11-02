@@ -480,12 +480,16 @@ echo "launchctl $*" >>"$M/calls"
 case $1 in
 bootstrap)
 	l=$(basename "$3" .plist)
+	[ "$l" != "${FAIL_LABEL:-}" ] || exit 5
 	touch "$M/loaded.$l"
 	[ "$l" != org.eriphe.node ] || echo "connected to eriphe-core" >>"$M/home/.eriphe/node.log"
 	;;
 bootout) rm -f "$M/loaded.${2##*/}" ;;
 print) [ -f "$M/loaded.${2##*/}" ] ;;
-kickstart) [ -f "$M/loaded.${3##*/}" ] ;;
+kickstart)
+	[ -f "$M/loaded.${3##*/}" ] || exit 1
+	[ "${3##*/}" != org.eriphe.node ] || echo "connected to eriphe-core" >>"$M/home/.eriphe/node.log"
+	;;
 esac
 EOF
 printf '#!/bin/sh\necho "sudo $*" >>"$M/calls"\necho "sudo: a terminal is required to read the password" >&2\nexit 1\n' >"$M/fake/sudo"
@@ -575,6 +579,54 @@ mac_up 'relay_loaded() { true; }; root_ready() { false; }' || fail "Mac reinstal
 has "$M/out" "Waiting for the update under way to end" "Mac reinstall during an update"
 wait 2>/dev/null || true
 
+# ---- a Mac's layout, from its updater (install.sh --layout)
+
+# A Mac from before Syncthing, its relay to install again (a new plist),
+# no password to be had: Syncthing added and running, the node restarted on
+# the binaries the updater put in place (none fetched), the relay left as
+# it is and said in update-needs, the updater's lock and LaunchAgent left
+# to the updater that runs this.
+mac_reset
+mkdir "$E/update/lock"
+echo $$ >"$E/update/lock/pid"
+if mac_up 'LAYOUT_RUN=1 LOCK_HELD=1 NEEDS=; relay_loaded() { false; }; root_ready() { false; }'; then :; else
+	fail "Mac layout: $(cat "$M/out")"
+fi
+[ "$(cat "$E/bin/eriphe-node")" = old-node ] || fail "Mac layout: the binaries in place are replaced"
+[ -f "$M/loaded.org.eriphe.syncthing" ] || fail "Mac layout: Syncthing is not running"
+[ -f "$M/loaded.org.eriphe.node" ] || fail "Mac layout: the node is not running"
+hasnt "$M/calls" "sudo" "Mac layout, no password"
+hasnt "$M/calls" "bootout gui/$(id -u)/org.eriphe.update" "Mac layout, the updater running it"
+[ -f "$M/loaded.org.eriphe.update" ] || fail "Mac layout: the updater is stopped"
+[ -d "$E/update/lock" ] || fail "Mac layout: the updater's lock is taken from it"
+has "$E/node/update-needs" "why=password" "Mac layout, the relay for its user"
+has "$M/out" "needs=password" "Mac layout"
+has "$E/update.conf" "LAYOUT=2" "Mac layout, its number"
+has "$E/node/updater" "layout=2" "Mac layout, told to the node"
+has "$M/home/Library/LaunchAgents/org.eriphe.update.plist" "<string>$E/update.sh</string>" "Mac layout, the updater's LaunchAgent"
+# A step that fails (Syncthing does not start): what ran before is back,
+# the Syncthing it brought gone, the node running, the lock still the
+# updater's.
+mac_reset
+mkdir "$E/update/lock"
+echo $$ >"$E/update/lock/pid"
+export FAIL_LABEL=org.eriphe.syncthing
+if mac_up 'LAYOUT_RUN=1 LOCK_HELD=1 NEEDS=; relay_loaded() { true; }; root_ready() { false; }'; then
+	fail "Mac layout: a failed step goes on"
+fi
+{ [ "$(cat "$E/node.env")" = OLD=1 ] && [ "$(cat "$E/start-node.sh")" = old-start ]; } || fail "Mac layout failed: the previous settings are not back"
+[ ! -f "$M/home/Library/LaunchAgents/org.eriphe.syncthing.plist" ] || fail "Mac layout failed: the Syncthing it brought stays"
+[ -f "$M/loaded.org.eriphe.node" ] || fail "Mac layout failed: the node is left stopped"
+[ -d "$E/update/lock" ] || fail "Mac layout failed: the updater's lock is taken from it"
+[ ! -f "$E/node/update-needs" ] || fail "Mac layout failed: needs written"
+unset FAIL_LABEL
+rm -rf "${E:?}/update/lock"
+# A full install leaves nothing waiting for the user.
+mac_reset
+printf 'why=password\n' >"$E/node/update-needs"
+mac_up 'relay_loaded() { true; }; root_ready() { false; }' || fail "Mac reinstall, needs: $(cat "$M/out")"
+[ ! -f "$E/node/update-needs" ] || fail "Mac reinstall: the needs stay"
+
 # ---- the Mac's updater: its lock, and a request left "running"
 
 mac_reset
@@ -595,6 +647,58 @@ echo $$ >"$E/update/lock/pid"
 PATH="$M/fake:$PATH" HOME="$M/home" sh "$E/update.sh" 2>/dev/null
 has "$E/node/update-status" "outcome=running" "Mac updater: another one's running update"
 rm -rf "${E:?}/update/lock"
+
+# ---- the Mac's updater: a newer layout, by the node image's install.sh
+
+# The install.sh of the node's image, faked: its layout, what it was run
+# with, and the number it leaves (LAYOUT_FAIL: a step fails).
+cat >"$M/installer" <<'EOF'
+#!/bin/sh
+LAYOUT=2
+echo "installer $* home=$HOME image=$ERIPHE_NODE_IMAGE" >>"$M/calls"
+[ -z "${LAYOUT_FAIL:-}" ] || { echo "eriphe: Syncthing does not start" >&2; exit 1; }
+sed 's/^LAYOUT=.*/LAYOUT=2/' "$HOME/.eriphe/update.conf" >"$HOME/.eriphe/update.conf.new" && mv "$HOME/.eriphe/update.conf.new" "$HOME/.eriphe/update.conf"
+EOF
+echo old-node >"$M/same-node"
+# mac_updater: the updater of a Mac at layout 1 (from before Syncthing).
+mac_updater() {
+	mac_reset
+	PATH="$M/fake:$PATH" HOME="$M/home" sh -c "ERIPHE_INSTALL_LIB=1; . '$here/install.sh'
+		ERIPHE_HOME=\$HOME/.eriphe CONTAINER='$M/fake/container' MODE=node PIN= API_PORT=8800 LAYOUT_DONE=1
+		CORE_IMAGE=c NODE_IMAGE=n WORKER_IMAGE=w; mac_updater_conf >\$ERIPHE_HOME/update.conf; mac_updater_sh >\$ERIPHE_HOME/update.sh"
+}
+# mac_update ID BINARY: eriphe-core's request, the node image's binary BINARY.
+mac_update() {
+	printf 'id=%s\naction=update\ncore=\nauto=0\n' "$1" >"$E/node/update-requested"
+	PATH="$M/fake:$PATH" HOME="$M/home" ERIPHE_UPDATE_HEALTH=4 ERIPHE_NODE_BINARY="$2" ERIPHE_NODE_INSTALLER="$M/installer" \
+		sh "$E/update.sh" 2>/dev/null
+}
+# A new build that brings a layout: its binary, then its install.sh --layout.
+mac_updater
+has "$E/update.conf" "LAYOUT=1" "Mac updater at layout 1"
+mac_update u-10 "$M/new-node"
+has "$E/node/update-status" "outcome=ok" "Mac updater, a new layout"
+has "$M/calls" "installer --layout home=$M/home image=n" "Mac updater runs the image's install.sh"
+[ "$(cat "$E/bin/eriphe-node")" = new-node ] || fail "Mac updater, a new layout: the new node is not in place"
+# Again, nothing newer: the layout is not applied twice.
+: >"$M/calls"
+mac_update u-11 "$M/new-node"
+has "$E/node/update-status" "outcome=current" "Mac updater, at its layout"
+hasnt "$M/calls" "installer" "Mac updater, at its layout"
+# The same build on an older layout: the layout only.
+mac_updater
+mac_update u-12 "$M/same-node"
+has "$E/node/update-status" "outcome=ok" "Mac updater, the layout only"
+has "$E/node/update-status" "message=the install's layout is now its version's" "Mac updater, the layout only"
+# The layout fails: the whole update goes back, the node running.
+mac_updater
+export LAYOUT_FAIL=1
+mac_update u-13 "$M/new-node"
+unset LAYOUT_FAIL
+has "$E/node/update-status" "outcome=rolled_back" "Mac updater, a failed layout"
+has "$E/node/update-status" "the new install layout did not apply: Syncthing does not start" "Mac updater, a failed layout"
+[ "$(cat "$E/bin/eriphe-node")" = old-node ] || fail "Mac updater, a failed layout: the previous node is not back"
+[ -f "$M/loaded.org.eriphe.node" ] || fail "Mac updater, a failed layout: the node is stopped"
 
 # ---- the Linux updater: a request left "running", and the same build again
 
@@ -640,6 +744,142 @@ rm -f "$L/pulled" "$L/calls"
 printf 'id=u-6\naction=update\ncore=0.55.0\nauto=0\n' >"$L/data/node/update-requested"
 NEWV=0.55.0 PATH="$L/fake:$PATH" ERIPHE_UPDATE_HEALTH=2 sh "$L/conf/update.sh" 2>/dev/null
 has "$L/calls" "up -d --pull never --no-deps --force-recreate syncthing" "Linux updater: Syncthing again with the node"
+
+# ---- the Linux updater: a newer layout, by the node image's install.sh
+
+# A machine at layout 1 (from before Syncthing), and a fake docker that
+# keeps which image is under the node's reference (tag) and which one runs
+# (running): the pull brings PULLED, compose's up runs what is tagged.
+# sha256:b is 0.55.0, the others 0.54.0. The image's install.sh is
+# $LL/installer, faked: it says its layout, writes Syncthing into the
+# compose project, and fails with LAYOUT_FAIL. The machine's own paths
+# (units, eriphe-share) are under $LL/root.
+LL=$T/layout
+mkdir -p "$LL/fake" "$LL/conf" "$LL/data/node" "$LL/root"
+export LL
+cat >"$LL/fake/docker" <<'EOF'
+#!/bin/sh
+echo "docker $*" >>"$LL/calls"
+tag=$(cat "$LL/tag" 2>/dev/null || echo sha256:a)
+case $* in
+"inspect -f {{.Image}} eriphe-node") cat "$LL/running" ;;
+"inspect -f {{.State.Status}} {{.RestartCount}} "*) echo "running 0" ;;
+"inspect "*) exit 1 ;;
+"image inspect -f {{.Id}} r/eriphe-node:latest") echo "$tag" ;;
+"image inspect -f {{.Id}} "*) echo sha256:w ;;
+"image inspect -f "*sha256:b) echo 0.55.0 ;;
+"image inspect -f "*) echo 0.54.0 ;;
+"pull -q r/eriphe-node:latest") echo "${PULLED:-sha256:a}" >"$LL/tag" ;;
+"tag sha256:"*" r/eriphe-node:latest") echo "$2" >"$LL/tag" ;;
+"create r/eriphe-node:latest") echo c1 ;;
+"cp c1:/usr/local/share/eriphe/install.sh "*) [ ! -f "$LL/installer" ] || cp "$LL/installer" "$3" ;;
+"logs --since "*) echo "connected to eriphe-core" ;;
+*" up -d --pull never --no-deps node") cp "$LL/tag" "$LL/running" ;;
+esac
+exit 0
+EOF
+cat >"$LL/installer" <<'EOF'
+#!/bin/sh
+LAYOUT=2
+echo "installer $* image=$ERIPHE_NODE_IMAGE" >>"$LL/calls"
+printf 'services:\n  node:\n  syncthing:\n' >"$LL/conf/compose.yaml"
+mkdir -p "$LL/root/etc/systemd/system"
+echo new-unit >"$LL/root/etc/systemd/system/eriphe-awake.path"
+[ -z "${LAYOUT_FAIL:-}" ] || { echo "eriphe: could not download Eriphe" >&2; exit 1; }
+sed 's/^LAYOUT=.*/LAYOUT=2 BY=systemd/' "$LL/conf/update.conf" >"$LL/conf/update.conf.new" && mv "$LL/conf/update.conf.new" "$LL/conf/update.conf"
+EOF
+printf '#!/bin/sh\nexit 0\n' >"$LL/fake/flock"
+chmod +x "$LL/fake/docker" "$LL/fake/flock"
+# linux_layout [UPDATE_BY [INSTALL]]: the machine of before, its node running sha256:a.
+linux_layout() {
+	rm -rf "${LL:?}/calls" "${LL:?}/tag" "${LL:?}/root" "${LL:?}/data/update"
+	echo sha256:a >"$LL/running"
+	printf 'services:\n  node:\n' >"$LL/conf/compose.yaml"
+	installer "CONF='$LL/conf' DATA='$LL/data' CORE_UID=$(id -u) MODE=node PIN= LAYOUT=1 UPDATE_BY=${1:-systemd} INSTALL=${2:-linux}
+		CORE_IMAGE=c NODE_IMAGE=r/eriphe-node:latest WORKER_IMAGE=r/eriphe-base:latest
+		updater_conf >'$LL/conf/update.conf'; updater_sh >'$LL/conf/update.sh'" >/dev/null
+}
+# linux_update ID [PULLED [LAYOUT_FAIL]]: eriphe-core's request, then the updater.
+linux_update() {
+	printf 'id=%s\naction=update\ncore=\nauto=0\n' "$1" >"$LL/data/node/update-requested"
+	PULLED=${2:-} LAYOUT_FAIL=${3:-} PATH="$LL/fake:$PATH" ERIPHE_UPDATE_HEALTH=4 ERIPHE_UPDATE_ROOT="$LL/root" sh "$LL/conf/update.sh" 2>/dev/null
+}
+# A new build that brings a layout: its images, then its install.sh
+# --layout, with the updater's images: Syncthing added.
+linux_layout
+has "$LL/conf/update.conf" "LAYOUT=1" "Linux updater at layout 1"
+linux_update u-20 sha256:b
+has "$LL/data/node/update-status" "outcome=ok" "Linux updater, a new layout"
+has "$LL/data/node/update-status" "to=0.55.0" "Linux updater, a new layout"
+has "$LL/calls" "installer --layout image=r/eriphe-node:latest" "Linux updater runs the image's install.sh"
+has "$LL/conf/compose.yaml" "syncthing:" "Linux updater, a new layout: Syncthing"
+has "$LL/conf/update.conf" "LAYOUT=2" "Linux updater, a new layout: its number"
+# Again: nothing newer, nothing applied twice.
+: >"$LL/calls"
+linux_update u-21 sha256:b
+has "$LL/data/node/update-status" "outcome=current" "Linux updater, at its layout"
+hasnt "$LL/calls" "installer" "Linux updater, at its layout"
+# The same build on an older layout: the layout only.
+linux_layout
+linux_update u-22
+has "$LL/data/node/update-status" "outcome=ok" "Linux updater, the layout only"
+has "$LL/data/node/update-status" "message=the install's layout is now its version's" "Linux updater, the layout only"
+has "$LL/conf/compose.yaml" "syncthing:" "Linux updater, the layout only: Syncthing"
+# The layout fails: what it wrote goes (the unit it added too), the
+# services it added go with them, the previous images run again.
+linux_layout
+linux_update u-23 sha256:b 1
+has "$LL/data/node/update-status" "outcome=rolled_back" "Linux updater, a failed layout"
+has "$LL/data/node/update-status" "message=the new install layout did not apply: could not download Eriphe" "Linux updater, a failed layout"
+hasnt "$LL/conf/compose.yaml" "syncthing" "Linux updater, a failed layout: the compose project of before"
+has "$LL/conf/update.conf" "LAYOUT=1" "Linux updater, a failed layout: the layout of before"
+[ ! -f "$LL/root/etc/systemd/system/eriphe-awake.path" ] || fail "Linux updater, a failed layout: a unit it added stays"
+has "$LL/calls" "up -d --pull never --remove-orphans" "Linux updater, a failed layout: the services it added"
+[ "$(cat "$LL/running")" = sha256:a ] || fail "Linux updater, a failed layout: the previous node does not run"
+has "$LL/data/update/failed" "sha256:b" "Linux updater, a failed layout: the version noted as failed"
+# eriphe-launcher's updater never runs one: the launcher brings its layout
+# as it updates itself.
+linux_layout loop
+linux_update u-24 sha256:b
+has "$LL/data/node/update-status" "outcome=ok" "Linux updater under eriphe-launcher"
+hasnt "$LL/calls" "create r/eriphe-node" "Linux updater under eriphe-launcher"
+hasnt "$LL/calls" "installer" "Linux updater under eriphe-launcher"
+# ---- the Windows updater: the layout it takes from the node image's install.ps1
+
+# Its own lines that read install.ps1 (the layout's numbers, the setup of
+# the distribution, Syncthing's build and checksum), run on this
+# install.ps1: what the distribution's updater would apply.
+W=$T/win
+mkdir -p "$W/state"
+cp "$here/install.ps1" "$W/state/install.ps1"
+awk '/^cat > \/usr\/local\/bin\/eriphe-update <<.EOF.$/ { f = 1; next } f && /^EOF$/ { exit } f' "$here/install.ps1" >"$W/update"
+{
+	echo 'log() { :; }; uname() { echo x86_64; }'
+	sed -n '/^ps_number()/p' "$W/update"
+	sed -n '/^layout() {/,/^  if ! grep -q /p' "$W/update" | sed '1d; $d'
+	echo 'echo "n=$n admin=$admin v=$v st=$st"'
+} >"$W/read.sh"
+out=$(STATE=$W/state sh "$W/read.sh" 2>&1)
+[ "$out" = "n=2 admin=1 v=2.1.7 st=amd64 2edc416e7ed136b7c858ed5f3f02a3b8316589605e54c380228ceea7acbf0142" ] ||
+	fail "Windows updater, install.ps1's layout: $out"
+has "$W/state/layout-setup.sh" "cat > /usr/local/bin/eriphe-node-run <<'EOF'" "Windows updater, the distribution's setup"
+has "$W/state/layout-setup.sh" "ERIPHE_SYNCTHING_HOME=/var/lib/eriphe-syncthing >>/etc/eriphe-node.env" "Windows updater, the settings of the layout"
+has "$W/state/layout-syncthing.sh" 'f=syncthing-linux-$a-v$v.tar.gz' "Windows updater, Syncthing's setup"
+has "$W/state/layout-syncthing.sh" 'sha256sum -c' "Windows updater, Syncthing checked"
+sh -n "$W/state/layout-setup.sh" || fail "Windows updater: the setup it takes does not parse"
+sh -n "$W/state/layout-syncthing.sh" || fail "Windows updater: Syncthing's setup does not parse"
+
+# install.sh --layout is the updaters' alone: no other option.
+out=$(installer 'parse_args --layout --core-mode; layout_run')
+case $out in *"--layout takes no other option"*) ;; *) fail "--layout with an option: $out" ;; esac
+# In a Mac's VM (Lima) the layout is the Mac's install's: updated all the
+# same, the step left for the user, in update-needs.
+rm -f "$LL/data/node/update-needs"
+linux_layout systemd macos
+linux_update u-25 sha256:b
+has "$LL/data/node/update-status" "outcome=ok" "Linux updater in a Mac's VM"
+hasnt "$LL/calls" "installer" "Linux updater in a Mac's VM"
+has "$LL/data/node/update-needs" "why=layout" "Linux updater in a Mac's VM"
 
 # ---- Syncthing
 

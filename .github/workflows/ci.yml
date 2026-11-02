@@ -190,6 +190,8 @@ jobs:
     with:
       image: eriphe-node
       context: node
+      # The installers it carries, for the updaters (node/Dockerfile).
+      build-contexts: installer=install
       version: ${{ needs.version.outputs.version }}
       tags: ${{ needs.version.outputs.tags }}
       version-arg: true

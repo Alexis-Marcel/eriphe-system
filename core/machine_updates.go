@@ -32,6 +32,15 @@ import (
 // same way, in its own root (node/update.go). In both places, the file
 // "updater" says there is one, and the version it is pinned to.
 //
+// An update also brings a machine to the install's layout of its new
+// version (what an install puts there besides the images: services,
+// LaunchAgents, Syncthing): the updater runs that version's installer by
+// itself. What it cannot do alone (a step that needs the Mac's password or
+// an administrator's PowerShell, or any step under an updater from before
+// the layouts) the node reports as its needs, and the machine's card says
+// « Cette mise à jour a besoin de toi », with the command to run; the brain
+// is told once (tellNeeds).
+//
 // The workspace always says when a new version is out; one switch, for all
 // machines, lets them update by themselves at night (off by default).
 // Going back to the version before, or staying on one, is the install
@@ -60,6 +69,13 @@ const (
 	stalledAfter = 30 * time.Minute
 	// stalledKey+machine is the request dropped as stalled, for its line.
 	stalledKey = "update_stalled:"
+	// needsSeenKey+machine is when its needs were first seen ("why time"),
+	// needsToldKey+machine what the brain was told of them (tellNeeds).
+	needsSeenKey = "update_needs_seen:"
+	needsToldKey = "update_needs_told:"
+	// needsQuiet: needs seen for that long, with no request under way, are
+	// told to the brain (an update clears its own in between).
+	needsQuiet = 10 * time.Minute
 )
 
 var (
@@ -77,6 +93,73 @@ type updaterInfo struct {
 	Waiting   string        `json:"waiting,omitempty"`   // a request waits for the tasks to end
 	Requested string        `json:"requested,omitempty"` // a request is with the updater
 	Status    *updateStatus `json:"status,omitempty"`    // how the last one went
+	Layout    int           `json:"layout,omitempty"`    // the install's layout (node/update.go)
+	Needs     *updateNeeds  `json:"needs,omitempty"`     // what the install waits for from its user
+}
+
+// updateNeeds is what a machine's install waits for from its user: its
+// install command run once more (layout), in the Mac's Terminal for a step
+// that needs its password (password), or in an administrator's PowerShell
+// (admin). The node says only which: the command is eriphe-core's, for how
+// the machine was installed (manualUpdate), never one a node names.
+type updateNeeds struct {
+	Why string `json:"why"`
+}
+
+// Reason is Why, one of the three; anything else is layout.
+func (n *updateNeeds) Reason() string {
+	switch n.Why {
+	case "password", "admin":
+		return n.Why
+	}
+	return "layout"
+}
+
+// needsBrain is what the brain is told of each reason.
+var needsBrain = map[string]string{
+	"layout":   "relancer une fois sa commande d'installation : elle ajoute ce que sa nouvelle version demande, et ses mises à jour le feront ensuite seules",
+	"password": "relancer sa commande d'installation dans le Terminal du Mac : une étape demande son mot de passe, le reste est déjà fait",
+	"admin":    "relancer sa commande d'installation dans un PowerShell administrateur : une étape demande les droits d'administrateur de Windows, le reste est déjà fait",
+}
+
+// tellNeeds tells the brain, once, what a machine's update needs of the
+// user, once it has been so for needsQuiet with no request under way; it
+// forgets once the machine needs nothing (the user ran the command).
+func (c *core) tellNeeds(nodes []NodeRow) {
+	now := time.Now()
+	for _, n := range nodes {
+		m := "node:" + n.Name
+		why := ""
+		if nd := parseInfo(n).Update.Needs; nd != nil {
+			why = nd.Reason()
+		}
+		if why == "" {
+			c.store.db.Exec(`DELETE FROM kv WHERE key IN (?, ?)`, needsSeenKey+m, needsToldKey+m)
+			continue
+		}
+		if c.store.get(needsToldKey+m) == why || c.pendingUpdate(m) != nil {
+			continue
+		}
+		seenWhy, at, _ := strings.Cut(c.store.get(needsSeenKey+m), " ")
+		since, err := time.Parse(time.RFC3339, at)
+		if seenWhy != why || err != nil {
+			c.store.set(needsSeenKey+m, why+" "+now.UTC().Format(time.RFC3339))
+			continue
+		}
+		if now.Sub(since) < needsQuiet {
+			continue
+		}
+		c.store.set(needsToldKey+m, why)
+		log.Printf("update: %s needs its user (%s)", m, why)
+		if c.conf().brain() == nil {
+			continue
+		}
+		text := fmt.Sprintf("La mise à jour de l'appareil %s a besoin de %s : %s. Réglages › Appareils lui donne la commande à copier (« Cette mise à jour a besoin de toi »). Dis-le-lui une fois, au bon moment, sans insister.",
+			n.Name, c.conf().User, needsBrain[why])
+		if _, err := c.store.addMessage(roleEvent, text, false); err == nil {
+			c.ping()
+		}
+	}
 }
 
 // updateStatus is the outcome of a request: running, ok, current (nothing
@@ -523,6 +606,7 @@ func (c *core) resolveUpdates(nodes []NodeRow) {
 			c.bump()
 		}
 	}
+	c.tellNeeds(nodes)
 }
 
 // updating tells whether a node has a request not done yet: no new task

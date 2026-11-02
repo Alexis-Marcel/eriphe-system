@@ -53,6 +53,17 @@ SYNCTHING_TEAM=LQE5SYM783
 SYNCTHING_API=127.0.0.1:18384
 SYNCTHING_LISTEN=127.0.0.1:22100
 
+# The install's layout: what an install puts on a machine besides the images
+# (the compose project and its services, the units, the LaunchAgents, the
+# components such as Syncthing). Raise it with a release that changes it:
+# the node's image carries this script (/usr/local/share/eriphe/install.sh),
+# and an updater that updates to an image whose LAYOUT is newer than the
+# machine's runs that script with --layout, which brings the machine to it
+# (install/README.md, The machines update themselves). node/update.go's
+# installLayout is the same number. 1: before it was counted; 2: Syncthing,
+# and the updaters that apply a layout.
+LAYOUT=2
+
 REGISTRY=ghcr.io/alexis-marcel
 # The socket proxy of earlier installs, removed with Eriphe: the node's own
 # image is the proxy now (eriphe-node docker-proxy).
@@ -319,7 +330,7 @@ EOF
 }
 
 parse_args() {
-	MODE='' UNINSTALL='' LABELS_SET='' PIN='' PIN_SET='' ROLLBACK='' SHARES='' SHARES_SET='' NO_SHARE=''
+	MODE='' UNINSTALL='' LABELS_SET='' PIN='' PIN_SET='' ROLLBACK='' SHARES='' SHARES_SET='' NO_SHARE='' LAYOUT_RUN='' NEEDS=''
 	CORE_URL=${ERIPHE_CORE:-}
 	JOIN_TOKEN=${ERIPHE_JOIN_TOKEN:-}
 	NAME=${ERIPHE_NODE_NAME:-}
@@ -382,6 +393,12 @@ parse_args() {
 			;;
 		--rollback)
 			ROLLBACK=1
+			shift
+			;;
+		--layout)
+			# The updaters' (layout_run): this install brought to this
+			# script's layout, with its images and settings, nothing asked.
+			LAYOUT_RUN=1
 			shift
 			;;
 		-h | --help)
@@ -1087,6 +1104,7 @@ updater_conf() {
 # Written by install.sh: run it again rather than editing this file.
 CONF=$(q "$CONF") DATA=$(q "$DATA") CORE_UID=$CORE_UID MODE=$(q "$MODE") PIN=$(q "$PIN")
 CORE_IMAGE=$(q "$CORE_IMAGE") NODE_IMAGE=$(q "$NODE_IMAGE") WORKER_IMAGE=$(q "$WORKER_IMAGE")
+LAYOUT=$LAYOUT BY=$(q "${UPDATE_BY:-systemd}") INSTALL=$(q "${INSTALL:-}")
 EOF
 }
 
@@ -1264,6 +1282,73 @@ syncthing_again() {
 
 main_id() { printf '%s\n' "$1" | awk -v s="$2" '$1 == s { print $3 }'; }
 
+# installer: the install.sh of the node image now under its reference, as
+# $STATE/install.sh, when its layout (LAYOUT) is newer than this machine's.
+# It is that image's (/usr/local/share/eriphe/install.sh), from the build
+# pulled and checked here: no other download. None from an image from
+# before it, nor under eriphe-launcher, which brings its own layout as it
+# updates itself (BY=loop). In a Mac's VM (Lima), the install is the Mac's
+# (its settings, its network card): its user runs it there, told so in the
+# node's update-needs.
+installer() {
+  rm -f "$STATE/install.sh"
+  [ "${BY:-}" != loop ] || return 1
+  c=$(docker create "$NODE_IMAGE" 2>/dev/null) || return 1
+  docker cp "$c:/usr/local/share/eriphe/install.sh" "$STATE/install.sh" >/dev/null 2>&1
+  docker rm "$c" >/dev/null 2>&1
+  n=$(sed -n 's/^LAYOUT=\([0-9][0-9]*\)$/\1/p' "$STATE/install.sh" 2>/dev/null | head -n 1)
+  if [ -z "$n" ] || [ "$n" -le "${LAYOUT:-1}" ]; then
+    rm -f "$STATE/install.sh"
+    return 1
+  fi
+  if [ "${INSTALL:-}" = macos ]; then
+    rm -f "$STATE/install.sh"
+    log "the install's layout $n is the Mac's to apply: its install command, run there"
+    printf 'why=layout\nlayout=%s\n' "$n" >"$DATA/node/update-needs"
+    return 1
+  fi
+  log "the install's layout goes from ${LAYOUT:-1} to $n"
+}
+
+# What install.sh --layout rewrites, kept to put back (ERIPHE_UPDATE_ROOT:
+# the tests' own place for the machine's paths).
+R=${ERIPHE_UPDATE_ROOT:-}
+LAYOUT_FILES="$CONF/compose.yaml $CONF/.env $CONF/install.conf $CONF/update.conf $CONF/update.sh
+  $DATA/node/updater $DATA/core/updater $R/usr/local/bin/eriphe-share
+  $R/etc/systemd/system/eriphe-update.service $R/etc/systemd/system/eriphe-update.path
+  $R/etc/systemd/system/eriphe-update.timer $R/etc/systemd/system/eriphe-awake.service
+  $R/etc/systemd/system/eriphe-awake.path"
+
+# layout: the new layout, by the new install.sh (installer) run with
+# --layout, as root here: the compose project, its settings, the units, the
+# components the layout brings (their images pulled if missing), with the
+# images now under their references; the services up, the node connected.
+# If it fails, what it rewrote is put back and the services it added go.
+layout() {
+  b=$STATE/layout-before
+  rm -rf "$b"
+  for f in $LAYOUT_FILES; do
+    [ ! -f "$f" ] || { mkdir -p "$b$(dirname "$f")" && cp -p "$f" "$b$f"; }
+  done
+  if ERIPHE_CORE_IMAGE=$CORE_IMAGE ERIPHE_NODE_IMAGE=$NODE_IMAGE ERIPHE_WORKER_IMAGE=$WORKER_IMAGE \
+      sh "$STATE/install.sh" --layout </dev/null >"$STATE/layout.log" 2>&1; then
+    rm -rf "$b" "$STATE/install.sh"
+    return 0
+  fi
+  why="the new install layout did not apply: $(sed -n 's/^eriphe: //p' "$STATE/layout.log" | tail -n 1)"
+  for f in $LAYOUT_FILES; do
+    if [ -f "$b$f" ]; then
+      cp -p "$b$f" "$f.new" && mv "$f.new" "$f"
+    else
+      rm -f "$f"
+    fi
+  done
+  rm -rf "$b" "$STATE/install.sh"
+  [ -n "$R" ] || ! command -v systemctl >/dev/null 2>&1 || systemctl daemon-reload >/dev/null 2>&1 || true
+  dc up -d --pull never --remove-orphans >/dev/null 2>&1 || true
+  return 1
+}
+
 # keep TARGET LIST: LIST becomes the version to go back to; the images of
 # the one before are removed once nothing else uses them.
 keep() {
@@ -1324,6 +1409,21 @@ update() {
   done
   if [ "$after" = "$before" ] || [ -n "$same" ]; then
     [ "$after" = "$before" ] || put "$before"
+    # The same build, on an older layout (installed by an older install.sh,
+    # or one whose layout failed): the layout only, checked as an update.
+    if installer; then
+      if layout; then
+        status "$target" "$id" update ok "the install's layout is now its version's" "$from" "$to"
+      else
+        failed=$why
+        if recreate "$target"; then
+          status "$target" "$id" update failed "$failed" "$from" "$to"
+        else
+          status "$target" "$id" update rollback_failed "$failed; then: $why" "$from" "$to"
+        fi
+      fi
+      return
+    fi
     if pinned; then
       status "$target" "$id" update pinned "pinned to $PIN" "$from" "$to"
     else
@@ -1343,7 +1443,9 @@ update() {
     return
   fi
   log "$target: $from -> $to"
-  if recreate "$target"; then
+  # The new images, then the new layout if they bring one: if it fails,
+  # the whole update goes back.
+  if recreate "$target" && { ! installer || layout; }; then
     keep "$target" "$before"
     status "$target" "$id" update ok "" "$from" "$to"
     return
@@ -1499,6 +1601,8 @@ host_up() {
 		# start: updates go through the updater); UPDATE_BY=loop: the updater is
 		# eriphe-launcher's loop, not systemd.
 		printf 'PULL=%s UPDATE_BY=%s\n' "$(q "${PULL:-always}")" "$(q "${UPDATE_BY:-systemd}")"
+		# LOCK_HELD: run by the updater (--layout), which holds the updates' lock.
+		printf 'LOCK_HELD=%s LAYOUT=%s\n' "$(q "${LOCK_HELD:-}")" "$LAYOUT"
 		updater_units
 		cat <<'EOF'
 # Progress on stderr; stdout carries only key=value lines.
@@ -1518,7 +1622,7 @@ done
 # updater's lock (update.sh), held to the end of this script.
 mkdir -p "$DATA/update"
 chmod 700 "$DATA/update"
-if command -v flock >/dev/null 2>&1; then
+if [ -z "$LOCK_HELD" ] && command -v flock >/dev/null 2>&1; then
   exec 9>"$DATA/update/lock"
   if ! flock -n 9; then
     echo "Waiting for the update under way to end..."
@@ -1677,11 +1781,14 @@ elif command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
 fi
 for d in $marks; do
   if [ $updater = 1 ]; then
-    printf 'version=1\npin=%s\nchannel=%s\n' "$pin" "$channel" > "$d/updater"
+    printf 'version=1\npin=%s\nchannel=%s\nlayout=%s\n' "$pin" "$channel" "$LAYOUT" > "$d/updater"
   else
     rm -f "$d/updater"
   fi
 done
+# This machine is at its layout: nothing waits for its user (update-needs,
+# node/update.go).
+rm -f "$DATA/node/update-needs"
 [ $updater = 0 ] || [ "$MODE" != core ] || chown "$CORE_UID:$CORE_UID" "$DATA/core/updater"
 echo "updater=$updater" >&3
 EOF
@@ -2004,7 +2111,11 @@ CONTAINER_WHY="it installs a tool from Apple that Eriphe needs"
 # password), and starts its services, with their Linux kernel.
 native_container() {
 	mkdir -p "$ERIPHE_HOME"
-	if ! container_current; then
+	if ! container_current && [ -n "${LAYOUT_RUN:-}" ] && ! root_ready; then
+		# From the updater: the one in place stays, for its user to update.
+		warn "Apple's container $CONTAINER_VERSION needs the Mac's password: the one in place stays"
+		NEEDS=password
+	elif ! container_current; then
 		note "Installing Apple's container $CONTAINER_VERSION..."
 		need_root "$CONTAINER_WHY"
 		tmp=$(mktemp -d)
@@ -2159,7 +2270,12 @@ root_ready() {
 # should be.
 relay_plan() {
 	RELAY=
-	if ! relay_loaded; then
+	if ! relay_loaded && [ -n "${LAYOUT_RUN:-}" ] && ! root_ready; then
+		# From the updater: the relay in place, if any, stays, for its user
+		# to bring up to date.
+		warn "the relay ($RELAY_LABEL) needs the Mac's password: it stays as it is"
+		NEEDS=password
+	elif ! relay_loaded; then
 		need_root "$RELAY_WHY"
 		RELAY=install
 	elif ! cmp -s "$RELAY_BIN" "$1"; then
@@ -2247,7 +2363,7 @@ syncthing_current() {
 # stops. Without it (no download, a bad checksum or signature) the node is
 # installed all the same, without copies.
 mac_syncthing_fetch() {
-	SYNCTHING_NEW=
+	SYNCTHING_NEW='' SYNCTHING_MISSING=''
 	syncthing_current && return 0
 	d=$ERIPHE_HOME/update/syncthing-new
 	rm -rf "$d"
@@ -2256,6 +2372,7 @@ mac_syncthing_fetch() {
 		SYNCTHING_NEW=$d/syncthing
 	else
 		echo syncthing_missing=1
+		SYNCTHING_MISSING=1
 	fi
 }
 
@@ -2649,6 +2766,7 @@ mac_updater_conf() {
 # Written by install.sh: run it again rather than editing this file.
 E=$(q "$ERIPHE_HOME") CONTAINER=$(q "$CONTAINER") MODE=$(q "$MODE") PIN=$(q "$PIN") API_PORT=$(q "$API_PORT")
 CORE_IMAGE=$(q "$CORE_IMAGE") NODE_IMAGE=$(q "$NODE_IMAGE") WORKER_IMAGE=$(q "$WORKER_IMAGE")
+LAYOUT=${LAYOUT_DONE:-$LAYOUT}
 EOF
 }
 
@@ -2755,7 +2873,8 @@ fetch() {
   [ "$1" = node ] && over=${ERIPHE_NODE_BINARY:-}
   [ "$1" = core ] && over=${ERIPHE_CORE_BINARY:-}
   if [ -n "$over" ]; then
-    cp "$over" "$3/eriphe-$1" && echo dev >"$3/eriphe-$1.version"
+    cp "$over" "$3/eriphe-$1" && echo dev >"$3/eriphe-$1.version" || return 1
+    [ "$1" != node ] || [ -z "${ERIPHE_NODE_INSTALLER:-}" ] || cp "$ERIPHE_NODE_INSTALLER" "$3/install.sh"
     return
   fi
   if ! out=$("$CONTAINER" image pull --progress none "$2" 2>&1); then
@@ -2781,6 +2900,14 @@ fetch() {
       rm -rf "$3/task-bin"
       mkdir -p "$3/task-bin"
       mv "$t/linux-arm64" "$3/task-bin/"
+    fi
+    rm -rf "$t"
+    # Its build's install.sh, for its layout (layout); none in an image
+    # from before it.
+    t=$(mktemp -d "$STATE/fetch.XXXXXX")
+    if "$CONTAINER" run --rm --progress none --entrypoint cp --mount "type=bind,source=$t,target=/out" \
+        "$2" /usr/local/share/eriphe/install.sh /out/ >/dev/null 2>&1 && [ -s "$t/install.sh" ]; then
+      mv "$t/install.sh" "$3/install.sh"
     fi
     rm -rf "$t"
   fi
@@ -2849,6 +2976,29 @@ swap() {
   healthy node "$since"
 }
 
+# newer_layout DIR: DIR's install.sh (fetch) has a newer layout than this
+# Mac's.
+newer_layout() {
+  n=$(sed -n 's/^LAYOUT=\([0-9][0-9]*\)$/\1/p' "$1/install.sh" 2>/dev/null | head -n 1)
+  [ -n "$n" ] && [ "$n" -gt "${LAYOUT:-1}" ]
+}
+
+# layout DIR: the new layout, by DIR's install.sh run with --layout, as
+# this user: the settings, the LaunchAgents, the components the layout
+# brings (Syncthing, checked as the installer checks it), with the binaries
+# now in place; the node restarted and connected. A step that needs the
+# password is left for the user (update-needs). If it fails, install.sh
+# puts back what ran before it (native_restore).
+layout() {
+  log "the install's layout goes from ${LAYOUT:-1} to $(sed -n 's/^LAYOUT=\([0-9][0-9]*\)$/\1/p' "$1/install.sh" | head -n 1)"
+  if ERIPHE_CORE_IMAGE=$CORE_IMAGE ERIPHE_NODE_IMAGE=$NODE_IMAGE ERIPHE_WORKER_IMAGE=$WORKER_IMAGE \
+      sh "$1/install.sh" --layout </dev/null >"$STATE/layout.log" 2>&1; then
+    return 0
+  fi
+  why="the new install layout did not apply: $(sed -n 's/^eriphe: //p' "$STATE/layout.log" | grep -v '^warning: ' | tail -n 1)"
+  return 1
+}
+
 # keep TARGET: what swap replaced is the version to go back to.
 keep() {
   rm -rf "$STATE/previous.$1"
@@ -2889,6 +3039,16 @@ update() {
   done
   worker "$match"
   if [ -n "$same" ]; then
+    # The same build, on an older layout (installed by an older install.sh,
+    # or one whose layout failed): the layout only.
+    if newer_layout "$new"; then
+      if layout "$new"; then
+        status "$target" "$id" update ok "the install's layout is now its version's" "$from" "$to"
+      else
+        status "$target" "$id" update failed "$why" "$from" "$to"
+      fi
+      return
+    fi
     if pinned; then
       status "$target" "$id" update pinned "pinned to $PIN" "$from" "$to"
     else
@@ -2906,7 +3066,9 @@ update() {
     return
   fi
   log "$target: $from -> $to"
-  if swap "$target" "$new"; then
+  # The new binaries, then the new layout if they bring one: if it fails,
+  # the whole update goes back.
+  if swap "$target" "$new" && { ! newer_layout "$new" || layout "$new"; }; then
     keep "$target"
     status "$target" "$id" update ok "" "$from" "$to"
     return
@@ -2989,6 +3151,7 @@ EOF
 # rewritten, is not stopped halfway; it waits for one under way to end, up
 # to 15 minutes. A lock whose holder is gone is from one that died.
 native_lock() {
+	[ -z "${LOCK_HELD:-}" ] || return 0 # the updater's (--layout)
 	l=$E/update/lock i=0
 	until mkdir "$l" 2>/dev/null; do
 		pid=$(cat "$l/pid" 2>/dev/null || true)
@@ -3008,7 +3171,7 @@ native_lock() {
 	echo $$ >"$l/pid"
 }
 
-native_unlock() { rm -rf "$E/update/lock"; }
+native_unlock() { [ -n "${LOCK_HELD:-}" ] || rm -rf "$E/update/lock"; }
 
 # The files an update rewrites, kept to put back (native_restore).
 NATIVE_FILES="node.env install.conf update.conf update.sh start-node.sh"
@@ -3021,7 +3184,7 @@ native_backup() {
 		[ ! -f "$E/$f" ] || cp -p "$E/$f" "$BACKUP/"
 	done
 	cp -Rp "$E/bin" "$BACKUP/bin"
-	for l in "$CORE_LABEL" "$NODE_LABEL" "$UPDATE_LABEL"; do
+	for l in "$CORE_LABEL" "$NODE_LABEL" "$UPDATE_LABEL" "$SYNCTHING_LABEL"; do
 		[ ! -f "$HOME/Library/LaunchAgents/$l.plist" ] || cp -p "$HOME/Library/LaunchAgents/$l.plist" "$BACKUP/"
 	done
 }
@@ -3034,13 +3197,16 @@ native_restore() {
 	[ $? != 0 ] || return 0
 	if [ -n "$BACKUP" ] && [ -d "$BACKUP" ]; then
 		note "Putting back the version of Eriphe that ran before..."
+		# Each through a new file: update.sh may be the updater running.
 		for f in $NATIVE_FILES; do
-			[ ! -f "$BACKUP/$f" ] || cp -p "$BACKUP/$f" "$E/$f"
+			[ ! -f "$BACKUP/$f" ] || { cp -p "$BACKUP/$f" "$E/$f.new" && mv "$E/$f.new" "$E/$f"; }
 		done
 		rm -rf "$E/bin.back"
 		cp -Rp "$BACKUP/bin" "$E/bin.back" && rm -rf "${E:?}/bin" && mv "$E/bin.back" "$E/bin"
 		native_unlock
-		for l in "$CORE_LABEL" "$NODE_LABEL" "$UPDATE_LABEL"; do
+		# A Syncthing this run brought goes with it.
+		[ -f "$BACKUP/$SYNCTHING_LABEL.plist" ] || unload "$SYNCTHING_LABEL"
+		for l in "$CORE_LABEL" "$NODE_LABEL" "$UPDATE_LABEL" "$SYNCTHING_LABEL"; do
 			[ -f "$BACKUP/$l.plist" ] || continue
 			f=$HOME/Library/LaunchAgents/$l.plist
 			cp -p "$BACKUP/$l.plist" "$f"
@@ -3089,20 +3255,34 @@ native_up() {
 	native_env >"$E/node.env"
 	native_conf >"$E/install.conf"
 	mac_updater_conf >"$E/update.conf"
-	mac_updater_sh >"$E/update.sh"
+	# Through a new file: from the updater (--layout), it runs this one.
+	mac_updater_sh >"$E/update.sh.new" && mv "$E/update.sh.new" "$E/update.sh"
 	start_node_sh >"$E/start-node.sh"
 	mac_share_sh >"$E/bin/eriphe-share"
 	chmod 700 "$E/update.sh" "$E/start-node.sh" "$E/bin/eriphe-share"
 	mac_quick_actions
-	# The new binaries, while the ones in place still run.
+	# The new binaries, while the ones in place still run; from the updater
+	# (--layout), the ones it has just put in place stay.
 	new=$E/update/install-new
 	rm -rf "$new"
-	sh "$E/update.sh" install "$new" >&2 ||
-		die "could not download Eriphe: check this Mac's Internet connection, then run the command again"
+	if [ -n "${LAYOUT_RUN:-}" ]; then
+		mkdir -p "$new"
+	else
+		sh "$E/update.sh" install "$new" >&2 ||
+			die "could not download Eriphe: check this Mac's Internet connection, then run the command again"
+	fi
 	step Downloaded
 	mac_syncthing_fetch
+	# A layout not all there counts as the first one: the next update
+	# applies it again.
+	[ -z "${SYNCTHING_MISSING:-}" ] || {
+		LAYOUT_DONE=1
+		mac_updater_conf >"$E/update.conf"
+	}
 	RELAY=
-	[ "$MODE" = core ] || relay_plan "$new/eriphe-node"
+	relay_bin=$new/eriphe-node
+	[ -s "$relay_bin" ] || relay_bin=$E/bin/eriphe-node
+	[ "$MODE" = core ] || relay_plan "$relay_bin"
 	# Stopped while their binaries change.
 	STOPPED=1
 	launchctl bootout "gui/$(id -u)/$NODE_LABEL" >/dev/null 2>&1 || true
@@ -3168,13 +3348,27 @@ native_up() {
 	for d in node core; do
 		[ -d "$E/$d" ] || continue
 		[ "$d" = node ] || [ "$MODE" = core ] || continue
-		printf 'version=1\npin=%s\nchannel=%s\n' "$pin" "$channel" >"$E/$d/updater"
+		printf 'version=1\npin=%s\nchannel=%s\nlayout=%s\n' "$pin" "$channel" "${LAYOUT_DONE:-$LAYOUT}" >"$E/$d/updater"
 	done
-	# The updater, stopped before the lock goes: none runs halfway through
-	# its new start, which takes the requests waiting.
-	launchctl bootout "gui/$(id -u)/$UPDATE_LABEL" >/dev/null 2>&1 || true
-	native_unlock
-	load "$UPDATE_LABEL" "$(plist "$UPDATE_LABEL" update "$E/update.log" /bin/sh "$E/update.sh")"
+	# What waits for this Mac's user (node/update.go): a step that needs the
+	# password, left as it was by the updater (--layout).
+	if [ -n "${NEEDS:-}" ]; then
+		printf 'why=%s\nlayout=%s\n' "${NEEDS:-}" "$LAYOUT" >"$E/node/update-needs"
+		echo "needs=$NEEDS"
+	else
+		rm -f "$E/node/update-needs"
+	fi
+	if [ -n "${LAYOUT_RUN:-}" ]; then
+		# From the updater, which runs under it: its LaunchAgent is written,
+		# loaded as it is at the next login.
+		printf '%s\n' "$(plist "$UPDATE_LABEL" update "$E/update.log" /bin/sh "$E/update.sh")" >"$HOME/Library/LaunchAgents/$UPDATE_LABEL.plist"
+	else
+		# The updater, stopped before the lock goes: none runs halfway
+		# through its new start, which takes the requests waiting.
+		launchctl bootout "gui/$(id -u)/$UPDATE_LABEL" >/dev/null 2>&1 || true
+		native_unlock
+		load "$UPDATE_LABEL" "$(plist "$UPDATE_LABEL" update "$E/update.log" /bin/sh "$E/update.sh")"
+	fi
 	echo updater=1
 	if [ "$MODE" = core ]; then
 		# The setup code, while there is no password (kept until it is used).
@@ -3401,7 +3595,7 @@ do_install() {
 		if [ "$MODE" != core ] && ! relay_loaded; then
 			why=${why:+$why, and }${RELAY_WHY#"${why:+it }"}
 		fi
-		[ -z "$why" ] || need_root "$why"
+		[ -z "$why" ] || [ -n "${LAYOUT_RUN:-}" ] || need_root "$why"
 		native_container
 		out=$(native_up)
 		if printf '%s\n' "$out" | grep -qx relay_kept=1; then
@@ -3431,6 +3625,11 @@ do_install() {
 		on_steps host_up "$(info docker_gid)" "$isolated"
 		out=$OUT
 	fi
+	if [ -n "${LAYOUT_RUN:-}" ]; then
+		printf '%s\n' "$out" | grep -v '^setup_code=' || true
+		say "The layout of this install is now $LAYOUT."
+		return
+	fi
 	if [ "$OS" = Darwin ] && [ -z "$NATIVE" ] && [ "$MODE" = core ]; then
 		for port in "$API_PORT" "$WEB_PORT"; do
 			other=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 && $1 != "limactl" {print $1; exit}')
@@ -3438,6 +3637,23 @@ do_install() {
 		done
 	fi
 	outcome "$out"
+}
+
+# layout_run (--layout): what an updater runs, from the install.sh of the
+# node image it updates to, when that image's LAYOUT is newer than the
+# machine's (install/README.md, The machines update themselves): this
+# install brought to this script's layout, its saved settings and the images
+# in place (the updater's, already pulled: only a component's missing image
+# is), on its own, nothing asked. On a Mac, a step that needs the password
+# is left as it is, and said in the node's update-needs, for its user;
+# everything else is done. It prints what it did; the updater holds the
+# updates' lock (LOCK_HELD) and writes the outcome.
+layout_run() {
+	[ -z "$UNINSTALL$ROLLBACK$MODE$JOIN_TOKEN" ] || die "--layout takes no other option"
+	installed || die "Eriphe is not installed here"
+	[ "$OS" = Linux ] || [ -n "$NATIVE" ] || die "--layout runs in the VM on this Mac"
+	PULL=missing LOCK_HELD=1 NEEDS=''
+	do_install
 }
 
 # password_reset: the command that forgets a forgotten password here, and
@@ -3564,6 +3780,10 @@ main() {
 		mac_setup
 		! mac_native || NATIVE=1
 		HERE="this Mac"
+	fi
+	if [ -n "${LAYOUT_RUN:-}" ]; then
+		layout_run
+		return
 	fi
 	if [ -z "$UNINSTALL$ROLLBACK$MODE" ] && ! installed; then
 		usage >&2

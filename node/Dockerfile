@@ -32,6 +32,12 @@ COPY --from=build /eriphe-node /usr/local/bin/eriphe-node
 COPY --from=build /darwin-arm64/eriphe-node /usr/local/share/eriphe/darwin-arm64/eriphe-node
 COPY --from=build /task-bin /usr/local/share/eriphe/task-bin
 COPY --from=build /windows /usr/local/share/eriphe/windows
+# The installers of this build, for the updaters: one that updates to this
+# image runs its install.sh --layout (or install.ps1's setup, in WSL) when its
+# layout is newer than the machine's (install/README.md, The machines update
+# themselves). From the repository's install/, given as the build context
+# "installer": docker build --build-context installer=install node.
+COPY --from=installer install.sh install.ps1 /usr/local/share/eriphe/
 # eriphe-core reads it on the registry to tell when a node is behind.
 ARG VERSION=dev
 LABEL org.opencontainers.image.version=$VERSION

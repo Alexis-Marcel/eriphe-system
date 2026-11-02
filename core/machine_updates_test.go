@@ -538,3 +538,56 @@ func TestUpdateStalledAndDone(t *testing.T) {
 		t.Fatal("a request under way is dropped")
 	}
 }
+
+// The brain is told once what a machine's update needs of the user, once
+// it has been so for a while with no request under way, and again only
+// for another need after it was met.
+func TestTellNeedsOnce(t *testing.T) {
+	c := newUpdateCore(t, "0.1.0")
+	setBrain(c, &BrainConfig{})
+	events := func() []string {
+		t.Helper()
+		ms, err := c.store.messagesAfter(0, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, m := range ms {
+			if m.Role == roleEvent {
+				out = append(out, m.Text)
+			}
+		}
+		return out
+	}
+	needs := `{"os":"darwin","install":"macos","version":"0.1.0","update":{"updater":true,"layout":2,"needs":{"why":"password"}}}`
+	setNode(t, c, "mac", needs)
+	c.resolveUpdates(mustNodes(t, c))
+	if got := events(); len(got) != 0 {
+		t.Fatalf("told at once: %v", got)
+	}
+	// Seen a while ago: told, once.
+	c.store.set(needsSeenKey+"node:mac", "password "+time.Now().Add(-needsQuiet-time.Minute).UTC().Format(time.RFC3339))
+	c.resolveUpdates(mustNodes(t, c))
+	c.resolveUpdates(mustNodes(t, c))
+	got := events()
+	if len(got) != 1 || !strings.Contains(got[0], "mac") || !strings.Contains(got[0], "Terminal du Mac") ||
+		!strings.Contains(got[0], "Cette mise à jour a besoin de toi") {
+		t.Fatalf("events: %v", got)
+	}
+	// Met (the user ran the command): forgotten; a later need is told again.
+	setNode(t, c, "mac", `{"os":"darwin","install":"macos","version":"0.1.0","update":{"updater":true,"layout":2}}`)
+	c.resolveUpdates(mustNodes(t, c))
+	if c.store.get(needsToldKey+"node:mac") != "" || c.store.get(needsSeenKey+"node:mac") != "" {
+		t.Fatal("a need met is not forgotten")
+	}
+	// A request under way: not told meanwhile.
+	setNode(t, c, "mac", needs)
+	c.store.set(needsSeenKey+"node:mac", "password "+time.Now().Add(-needsQuiet-time.Minute).UTC().Format(time.RFC3339))
+	if _, err := c.requestUpdate("node:mac", "update", false); err != nil {
+		t.Fatal(err)
+	}
+	c.tellNeeds(mustNodes(t, c))
+	if got := events(); len(got) != 1 {
+		t.Fatalf("told during an update: %v", got)
+	}
+}

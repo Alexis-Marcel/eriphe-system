@@ -520,6 +520,16 @@ command was run again) is not sent its update request, which is dropped.
 A machine without updater (installed before, or by hand, as `deploy/nas/compose.yaml`) says so and
 gets no request.
 
+An update also brings a machine to the install's layout of its version (what an install puts there
+besides the images: services, LaunchAgents, Syncthing; install/README.md, The machines update
+themselves). What its updater cannot do alone, the node reports in `update.needs` (`why`:
+`password`, a step that needs the Mac's password; `admin`, one that needs an administrator's
+PowerShell; `layout`, any other, such as an updater from before the layouts), and the device's card
+says « Cette mise à jour a besoin de toi : … » with the command that updates that machine in a code
+block to copy (`manualUpdate`, from how it was installed: never a command a node names), while no
+request is under way. The brain is told once, after 10 minutes with no request under way
+(`tellNeeds`), to mention it to the user; it is forgotten once the machine needs nothing.
+
 While a request is pending, the device's card (or eriphe-core's row) follows it without a reload:
 it asks `GET /settings/devices/{name}/update?id=<request>` (`/settings/updates/core` for
 eriphe-core) every 3 s, 10 s while the request waits for the tasks, and is swapped whole: asked,

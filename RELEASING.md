@@ -88,7 +88,11 @@ GitHub release the same way; the next releases count from it.
   `https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh` (and
   `install.ps1`) serves those of the latest release, and `releases/download/vX.Y.Z/install.sh`
   those of one release. Changes to `install/` on `main` reach users only with a release.
-  (`eriphe.com/install.sh` only redirects there.)
+  (`eriphe.com/install.sh` only redirects there.) The eriphe-node image carries the same two
+  scripts: a release that changes what an install puts on a machine besides the images (a
+  service, a LaunchAgent, a component) raises `LAYOUT` in install.sh and `$layout` in install.ps1
+  (and node/update.go's `installLayout`, which a test checks), so that the updaters apply it by
+  themselves (install/README.md, The machines update themselves).
 - **Pins.** `--version 0.2.0` stays there; `--version 0.2` takes `0.2.x` fixes.
 
 ## Something went wrong

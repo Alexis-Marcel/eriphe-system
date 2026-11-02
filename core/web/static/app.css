@@ -1025,6 +1025,7 @@ dialog.modal h3, dialog.modal p { margin: 0; }
 .machine-update p { margin: 0; }
 .machine-update .cmd, .machine-update .code { justify-self: stretch; }
 .machine-update .err-text { display: block; }
+.machine-update .update-needs { grid-column: 1 / -1; justify-self: stretch; display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
 .update-now { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .system { margin: -4px 0 0; font-size: .86rem; font-weight: 600; color: var(--muted); }
 #machines-advanced > .stack { padding: 0 22px 22px; }

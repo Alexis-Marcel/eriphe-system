@@ -56,6 +56,10 @@ var updatesStrings = map[string]map[string]string{
 		"update.outcome.rollback_failed": "La mise à jour a échoué, et la version précédente ne repart pas",
 		"update.outcome.interrupted":     "La mise à jour a été interrompue avant la fin : relance-la",
 		"update.outcome.stalled":         "La mise à jour s'est arrêtée sans résultat : relance-la",
+		"update.needs":                   "Cette mise à jour a besoin de toi :",
+		"update.needs.layout":            "lance une fois cette commande sur l'appareil. Elle ajoute ce que sa nouvelle version demande ; ses données et ses réglages restent, et ses mises à jour le feront ensuite toutes seules.",
+		"update.needs.password":          "lance cette commande dans le Terminal du Mac : une étape demande ton mot de passe. Le reste est déjà fait.",
+		"update.needs.admin":             "lance cette commande dans un PowerShell administrateur (clic droit sur Démarrer, Terminal (admin)) : une étape demande les droits d'administrateur de Windows. Le reste est déjà fait.",
 	},
 	"en": {
 		"updates.title":                  "Updates",
@@ -102,5 +106,9 @@ var updatesStrings = map[string]map[string]string{
 		"update.outcome.rollback_failed": "The update failed, and the previous version does not start",
 		"update.outcome.interrupted":     "The update was interrupted before its end: run it again",
 		"update.outcome.stalled":         "The update stopped without an outcome: run it again",
+		"update.needs":                   "This update needs you:",
+		"update.needs.layout":            "run this command once on the device. It adds what its new version needs; its data and settings stay, and its updates then do it by themselves.",
+		"update.needs.password":          "run this command in the Mac's Terminal: one step needs your password. The rest is done.",
+		"update.needs.admin":             "run this command in an administrator PowerShell (right-click Start, Terminal (Admin)): one step needs Windows' administrator rights. The rest is done.",
 	},
 }
