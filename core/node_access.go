@@ -31,6 +31,7 @@ const (
 	logShare   = "share"   // a folder opened to Eriphe
 	logUnshare = "unshare" // a folder closed again
 	logLower   = "lower"   // a folder's level lowered, or its copies turned off, from here
+	logCopy    = "copy"    // a copy of a folder kept on it, or deleted: Detail says which
 	logTask    = "task"    // a task run on it: Detail is its agent
 	logLend    = "lend"    // a folder lent to a task, with its right
 	logResult  = "result"  // a file a task wrote in a folder's results subfolder: Detail is its path

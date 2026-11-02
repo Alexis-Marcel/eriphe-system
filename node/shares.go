@@ -312,6 +312,10 @@ type TaskFolder struct {
 	// former names, newest first. Empty from an older eriphe-core: Eriphe.
 	Results string   `json:"results,omitempty"`
 	Former  []string `json:"former,omitempty"`
+	// Copy: the folder is lent from the copy this machine keeps of it, by
+	// its Syncthing folder id (syncfolders.go), while its own machine is
+	// away; what the task writes there goes back to it.
+	Copy string `json:"copy,omitempty"`
 }
 
 // resultsDir is where a task may write in a folder lent with Write, until

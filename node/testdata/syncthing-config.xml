@@ -1,0 +1,19 @@
+<!-- Written by Eriphe's installer: Syncthing for the copies of shared folders (node/README.md, Copies). -->
+<configuration version="52">
+    <gui enabled="true" tls="false">
+        <address>127.0.0.1:18384</address>
+        <apikey>@KEY@</apikey>
+    </gui>
+    <options>
+        <listenAddress>tcp://127.0.0.1:22100</listenAddress>
+        <globalAnnounceEnabled>false</globalAnnounceEnabled>
+        <localAnnounceEnabled>false</localAnnounceEnabled>
+        <relaysEnabled>false</relaysEnabled>
+        <natEnabled>false</natEnabled>
+        <announceLANAddresses>false</announceLANAddresses>
+        <urAccepted>-1</urAccepted>
+        <crashReportingEnabled>false</crashReportingEnabled>
+        <autoUpgradeIntervalH>0</autoUpgradeIntervalH>
+        <startBrowser>false</startBrowser>
+    </options>
+</configuration>

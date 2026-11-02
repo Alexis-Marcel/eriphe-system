@@ -43,6 +43,22 @@ awk '/^cat > \/usr\/local\/bin\/eriphe-update <<.EOF.$/ { f = 1; next } f && /^E
 }
 shellcheck -s sh "$d/eriphe-update"
 sh -n "$d/eriphe-update"
+# The Syncthing of install.ps1's distribution: its setup and its runner.
+{
+	echo '#!/bin/sh'
+	echo "v=2.1.7 a=amd64 sum=0"
+	awk '/^  \$stSetup = @.$/ { f = 1; next } f && /^.@$/ { exit } f' "$(dirname "$0")/install.ps1"
+} >"$d/syncthing-setup"
+awk '/^cat > \/usr\/local\/bin\/eriphe-syncthing-run <<.EOF.$/ { f = 1; next } f && /^EOF$/ { exit } f' \
+	"$(dirname "$0")/install.ps1" >"$d/eriphe-syncthing-run"
+for s in syncthing-setup eriphe-syncthing-run; do
+	[ "$(wc -l <"$d/$s")" -gt 5 ] || {
+		echo "lint.sh: no $s in install.ps1" >&2
+		exit 1
+	}
+	shellcheck -s sh "$d/$s"
+	sh -n "$d/$s"
+done
 # The launcher of the one-container install, which sources install.sh, and its tests.
 (
 	cd "$(dirname "$0")/.."

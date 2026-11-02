@@ -285,6 +285,7 @@ func (c *core) removeFolder(ctx context.Context, name string) error {
 	if n := c.node(f.Node); n.connected() {
 		c.refreshNode(ctx, n) // which tells the machine (unshareOn)
 	}
+	c.syncAll(ctx) // its copies are deleted (folder_copies.go)
 	return nil
 }
 
@@ -322,6 +323,7 @@ func (c *core) lowerFolder(ctx context.Context, name, access string, nocopy bool
 	if n := c.node(f.Node); n.connected() {
 		c.refreshNode(ctx, n) // which tells the machine (lowerOn)
 	}
+	c.syncAll(ctx) // its copies follow its level, or are deleted (folder_copies.go)
 	return nil
 }
 
@@ -453,6 +455,11 @@ func (c *core) taskPlacement(a Agent, fs []*Folder) placement {
 			p.Folders = append(p.Folders, f.ID)
 		}
 	}
+	// Their machine away: a machine with an up-to-date copy of each will do
+	// (folder_copies.go).
+	if host := c.copyHost(fs); host != "" {
+		p.Machine, p.Folders = host, nil
+	}
 	return p
 }
 
@@ -478,6 +485,12 @@ func folderNames(fs []*Folder) []string {
 // (write for manage); one from before them, drop wherever its folder's
 // level allows it.
 func (c *core) specFolders(names string, resources []ResourceRef) ([]nodeFolder, error) {
+	return c.specFoldersOn("", names, resources)
+}
+
+// specFoldersOn are a task's folders as node mounts them: from its copy of
+// each when node is not their machine (folder_copies.go), "" for theirs.
+func (c *core) specFoldersOn(node, names string, resources []ResourceRef) ([]nodeFolder, error) {
 	if names == "" {
 		return nil, nil
 	}
@@ -500,6 +513,12 @@ func (c *core) specFolders(names string, resources []ResourceRef) ([]nodeFolder,
 			level = f.Access
 		}
 		out[i] = nodeFolder{Name: f.Name, ID: f.ID, Write: level == folderDrop, Manage: level == folderManage}
+		if node != "" && node != f.Node {
+			if !c.store.hasCopy(f.Node, f.ID, node) {
+				return nil, fmt.Errorf("folder %q is on %s, and %s keeps no copy of it", f.Name, f.Node, node)
+			}
+			out[i].Copy = syncFolderID(f.Node, f.ID)
+		}
 		if level == folderDrop {
 			out[i].Results, out[i].Former = results, former
 		}
@@ -519,6 +538,9 @@ type nodeFolder struct {
 	// newest first (results_folder.go). An older node uses Eriphe/.
 	Results string   `json:"results,omitempty"`
 	Former  []string `json:"former,omitempty"`
+	// Copy: lent from the copy the task's machine keeps of it, by its
+	// Syncthing folder id, while its own machine is away (folder_copies.go).
+	Copy string `json:"copy,omitempty"`
 }
 
 // folderInstructions tell a worker where its folders are and what it may
@@ -578,6 +600,12 @@ type folderView struct {
 	Online bool   `json:"online"`
 	Lend   string `json:"lend"`               // how the brain lends it to a task
 	Drive  string `json:"drive_id,omitempty"` // a Drive folder's id
+	// A machine's folder: its copies on the user's other machines
+	// (folder_copies.go), the machines that may keep one, and whether its
+	// machine cannot send files iCloud Drive keeps in the cloud only.
+	Copies []copyView   `json:"copies,omitempty"`
+	CopyTo []copyChoice `json:"-"`
+	ICloud bool         `json:"icloud_hint,omitempty"`
 }
 
 // driveFolder is the Drive folder of that name, if any.
@@ -603,10 +631,17 @@ func (c *core) folderViews() ([]folderView, error) {
 	for _, n := range nodes {
 		online[n.Name] = n.Online
 	}
+	sv, err := c.syncView()
+	if err != nil {
+		return nil, err
+	}
 	out := make([]folderView, 0, len(fs))
 	for _, f := range fs {
-		out = append(out, folderView{Folder: f, Source: sourceMachine, Mount: f.mountPath(), Online: online[f.Node],
-			Lend: lendHint(resFolder, f.Name, f.Access)})
+		fv := folderView{Folder: f, Source: sourceMachine, Mount: f.mountPath(), Online: online[f.Node],
+			Lend: lendHint(resFolder, f.Name, f.Access)}
+		fv.Copies, fv.CopyTo = sv.copiesOf(f)
+		fv.ICloud = sv.iCloudHint(f)
+		out = append(out, fv)
 	}
 	ready := false
 	if u := c.pool.get(filesServer); u != nil {
@@ -676,6 +711,7 @@ func (c *core) folderRoutes(mux *http.ServeMux, token string) {
 		}
 		writeJSON(w, http.StatusOK, f)
 	})))
+	mux.Handle("PUT /v1/folders/{name}/copies", bearer(token, http.HandlerFunc(c.handleFolderCopies))) // folder_copies.go
 	mux.Handle("DELETE /v1/folders/{name}", bearer(token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := c.removeFolder(r.Context(), r.PathValue("name")); err != nil {
 			folderHTTPError(w, err)
@@ -699,6 +735,8 @@ func folderHTTPError(w http.ResponseWriter, err error) {
 			status = http.StatusNotFound
 		case "raise":
 			status = http.StatusForbidden
+		case "not_copyable", "no_syncthing": // folder_copies.go
+			status = http.StatusConflict
 		}
 		writeJSON(w, status, fe)
 	default:

@@ -196,6 +196,7 @@ func (c *core) attach(name string, session *yamux.Session, withCert bool) {
 	old := n.session
 	n.session, n.tls = session, withCert
 	n.mu.Unlock()
+	c.syncPushed.Delete(name) // its copies' plan, handed again (folder_copies.go)
 	if old != nil {
 		old.Close()
 	}
@@ -273,5 +274,8 @@ func (c *core) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.disconnect(name)
+	// The copies it kept or sent: deleted on the other machines.
+	c.store.forgetMachineCopies(name)
+	c.syncAll(r.Context())
 	w.WriteHeader(http.StatusNoContent)
 }

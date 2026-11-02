@@ -273,6 +273,16 @@ type node struct {
 	awake    *keepAwake          // the machine out of sleep while a task works (awake.go)
 	// skillFetch gets a task's skill from eriphe-core (skills.go).
 	skillFetch func(ctx context.Context, taskID, sha string) ([]byte, error)
+	// syncNet carries Syncthing's connections to its peers (syncpeer.go).
+	syncNet *syncNet
+	// st drives this machine's Syncthing, once it answered, stID its
+	// device ID (syncthing.go); held by mu.
+	st   *syncthing
+	stID string
+	// syncMu: one application of the copies' plan at a time; synced, when
+	// each copy was last complete (syncfolders.go).
+	syncMu sync.Mutex
+	synced map[string]time.Time
 }
 
 func newNode(o options) *node {
@@ -300,6 +310,8 @@ func (n *node) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/services/{name}/mcp", n.handleServiceMCP)
 	mux.HandleFunc("POST /v1/wake", n.handleWake)
 	mux.HandleFunc("/v1/model/{path...}", n.handleModel)
+	mux.HandleFunc("GET /v1/sync/connect", func(w http.ResponseWriter, r *http.Request) { n.syncNet.handleSyncConnect(w, r) })
+	n.syncRoutes(mux)
 	n.shareRoutes(mux)
 }
 
@@ -356,6 +368,8 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		"results_named": true,
 		// A model server eriphe-core may reach through the tunnel (model.go).
 		"model_server": n.opt.modelServer != "",
+		// Its Syncthing's device ID, for the copies of shared folders (syncthing.go).
+		"syncthing": n.syncthingInfo(ctx),
 		// How long the machine's keyboard and mouse have been idle (idle.go).
 		"idle": userIdle(ctx, r.URL.Query()),
 		// What it may tell of the user's session, at the level asked (context.go).
