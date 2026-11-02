@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -111,7 +113,10 @@ func (ch *taskCheck) normalize() error {
 		return errors.New("a name of at most 40 characters is required")
 	}
 	if (ch.Run == "") == (ch.Exists == "") {
-		return errors.New("give run or exists, not both")
+		return errors.New("give run (a non-empty shell command) or exists (a path), not both")
+	}
+	if ch.Dir != "" && ch.Run == "" {
+		return errors.New("dir is where run runs: an exists check takes none (give its path in exists)")
 	}
 	if ch.Timeout < 0 || ch.Timeout > maxCheckTimeout {
 		return fmt.Errorf("timeout is at most %d seconds", maxCheckTimeout)
@@ -120,9 +125,55 @@ func (ch *taskCheck) normalize() error {
 		ch.Timeout = checkTimeout
 	}
 	// Only the task's own files: /work, or relative to where it works.
-	for _, p := range []string{ch.Exists, ch.Dir} {
-		if p != "" && !underWork(p) {
-			return fmt.Errorf("%s is outside /work", p)
+	for _, f := range []struct{ field, p string }{{"exists", ch.Exists}, {"dir", ch.Dir}} {
+		if err := checkWorkPath(f.field, f.p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkWorkPath says what is certainly wrong with a check's path: outside
+// /work, climbing with "..", or not a single line. Whether a folder
+// exists is only known once the repository is cloned: the node says so
+// then (a config failure, which the brain fixes).
+func checkWorkPath(field, p string) error {
+	switch {
+	case p == "":
+		return nil
+	case strings.ContainsAny(p, "\x00\n\r"):
+		return fmt.Errorf("%s is one path, on one line", field)
+	case slices.Contains(strings.Split(p, "/"), ".."):
+		return fmt.Errorf("%s %q climbs with \"..\": give a path relative to the task's working directory (/work/repo with a repository, else /work), or absolute under /work", field, p)
+	case !underWork(p):
+		return fmt.Errorf("%s %q is outside /work: give a path relative to the task's working directory (/work/repo with a repository, else /work), or absolute under /work", field, p)
+	}
+	return nil
+}
+
+// checkLent says which check names, by an absolute path, what the task is
+// not lent: the repository's /work/repo without a repository, or a folder
+// of /work/folders that is not one of its folders.
+func (k *taskContract) checkLent(repo bool, folders []string) error {
+	for i, ch := range k.Checks {
+		for _, f := range []struct{ field, p string }{{"exists", ch.Exists}, {"dir", ch.Dir}} {
+			if !path.IsAbs(f.p) {
+				continue
+			}
+			c := path.Clean(f.p)
+			if !repo && (c == "/work/repo" || strings.HasPrefix(c, "/work/repo/")) {
+				return fmt.Errorf("contract: check %d: %s %s is in /work/repo, but no repository is lent to this task (resources {kind: repo})", i+1, f.field, f.p)
+			}
+			if rest, ok := strings.CutPrefix(c, "/work/folders/"); ok {
+				name, _, _ := strings.Cut(rest, "/")
+				if !slices.Contains(folders, name) {
+					lent := "none"
+					if len(folders) > 0 {
+						lent = strings.Join(folders, ", ")
+					}
+					return fmt.Errorf("contract: check %d: %s %s names the folder %q, which is not lent to this task (lent: %s)", i+1, f.field, f.p, name, lent)
+				}
+			}
 		}
 	}
 	return nil
@@ -184,6 +235,65 @@ func (k *taskContract) instruction() string {
 
 func init() {
 	extraColumns = append(extraColumns, `ALTER TABLE task_harness ADD COLUMN contract TEXT NOT NULL DEFAULT ''`)
+}
+
+// fixedChecksReply is the agent's next turn when the brain fixed the
+// checks and gave no reply of its own.
+const fixedChecksReply = "Eriphe fixed the checks of your task's contract (one could not run). Make sure the work is done, then end your turn with your receipt: the checks run again when it ends."
+
+// fixChecks replaces the checks of an idle task's contract, when one could
+// not run (a misconfigured contract): checked like at the start, kept, and
+// sent to its node with the next turn, after which they run. The rest of
+// the contract stays.
+func (c *core) fixChecks(ctx context.Context, id string, checks []taskCheck, reply string) (string, error) {
+	t, err := c.store.task(id)
+	if err != nil {
+		return "", err
+	}
+	k := c.store.contract(id)
+	if k == nil {
+		return "", errors.New("the task has no contract: its checks are given with run_task")
+	}
+	if t.State != stateIdle {
+		return "", fmt.Errorf("the task is %s: its checks are fixed once its turn is over (idle)", t.State)
+	}
+	fixed := *k
+	fixed.Checks = checks
+	if err := fixed.normalize(); err != nil {
+		return "", err
+	}
+	spec, err := c.store.taskSpec(id)
+	if err != nil {
+		return "", err
+	}
+	var folders []string
+	if t.Folders != "" {
+		folders = strings.Split(t.Folders, ",")
+	}
+	if err := fixed.checkLent(spec.Repo != "", folders); err != nil {
+		return "", err
+	}
+	if err := c.turnsLeft(id); err != nil {
+		return "", err
+	}
+	if err := c.store.setContract(id, &fixed); err != nil {
+		return "", err
+	}
+	// A restarted task gets them from its spec.
+	spec.Checks = fixed.Checks
+	if err := c.store.setSpec(id, spec); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(reply) == "" {
+		reply = fixedChecksReply
+	}
+	reply += "\n\n" + fixed.instruction() // its standing instruction has the old ones
+	if err := c.store.addInbox(id, "message", map[string]any{"text": reply, "checks": fixed.Checks}); err != nil {
+		return "", err
+	}
+	c.store.updateTask(id, map[string]any{"state": stateRunning})
+	c.bump()
+	return "checks fixed; they run when the task's next turn ends", nil
 }
 
 // contract is a task's contract, nil without one.

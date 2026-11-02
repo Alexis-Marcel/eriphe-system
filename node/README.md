@@ -329,6 +329,28 @@ is not sent back again: a `check_stop` event `{check, reason: same_failure | rou
 the turn stays idle for eriphe-core to read. A message delivered with `skip_checks` (the receipt
 asked again) is not followed by checks.
 
+A check that **could not run at all** is not a failure of the code: its `dir` is not there (the
+script says so itself, exit code 125), its command is not found (exit code 127), or it could not be
+started. Its `check` event carries `config`, the exact reason (`its folder /work/repo/repo does not
+exist (dir "repo" is relative to /work/repo, the task's working directory)`); it is not sent back
+to the agent and does not count as the last failure: a `check_stop` event `{check, reason: config,
+detail}` ends the turn, idle, and eriphe-core tells the brain to fix the contract. A check that ran
+out of time did run (the code may hang): a failure as before. A message whose data carries `checks`
+(the brain fixed them) replaces the task's checks for the turns after it.
+
+**When a task stops** (eriphe-core wants it stopped: the brain, a budget, "the same failure
+twice"), a task with a repository has its work saved before the container stops (`keepwork.go`),
+once: in the container, with git asking Eriphe for credentials as in the task (`eriphe-cred`, no
+prompt), the commits no remote has (`git rev-list --branches --not --remotes`) on the branch the
+task was lent (`branch` of the spec) are pushed to that branch only, so eriphe-core's policy and
+credentials still decide. A credential the user would have to approve is refused while the task
+stops, not waited for. What could not be pushed (no branch lent, the push refused, commits on
+other branches, or the repository could not be read) is **kept on the node**: once the container
+is stopped, `/work/repo` is moved to `kept/<task>/repo` under `-root` with a `meta.json` (task,
+branch, time), which no task mounts, kept `-snapshot-days` (7) like the snapshots and pruned at
+start and every hour. A `work` event says what was done: `{commits, branch, pushed, kept, reason}`
+(`kept` is `kept/<task>`), or `{error}` when the move failed. Nothing to save, no event.
+
 The only ports the node listens on are for its task containers, each with its own secret: the task
 listener (`-listen`, 8790), where a Claude Code task calls its permission endpoint `/perm/{id}/mcp`,
 its catalog servers at `/mcp/{server}`, a model behind a node at `/model/v1/{path}`, its
@@ -456,7 +478,7 @@ tasks behave as before.
 
 A task's `runtime` is the agent program the node drives in its container (`runtime.go`). All
 write the same events (`text`, `tool_use`, `permission`, `permission_answer`, `turn_end`, `state`, `diff`, `check`, `retry`, `check_stop`,
-`error`, `restart`), and all send every permission request to eriphe-core through the task's
+`work`, `error`, `restart`), and all send every permission request to eriphe-core through the task's
 inbox. The node injects the agent of `claude-code`, `opencode` and `codex` into any image (see
 [Agents](#agents)), so `GET /v1/node` reports these and `acp` once its engine answers.
 

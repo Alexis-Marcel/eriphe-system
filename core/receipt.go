@@ -154,7 +154,11 @@ type checkResult struct {
 	Exists   string `json:"exists,omitempty"` // a path that must be there
 	ExitCode int    `json:"exit_code,omitempty"`
 	Output   string `json:"output,omitempty"` // the end of what it printed
-	Seq      int    `json:"seq"`
+	// Config says why the check could not run at all (its folder is not
+	// there, its command not found): the contract is misconfigured, which
+	// is neither the code's failure nor the agent's.
+	Config string `json:"config,omitempty"`
+	Seq    int    `json:"seq"`
 }
 
 // checkedReceipt is a receipt as eriphe-core read it against what it saw.
@@ -359,6 +363,8 @@ func crossCheck(events []EventRow) *checkedReceipt {
 		ch, found := matchCheck(v, cr.Checks)
 		switch {
 		case found && ch.OK:
+		case found && ch.Config != "":
+			cr.Unchecked = append(cr.Unchecked, v) // the check could not run: only claimed
 		case found:
 			cr.Mismatches = append(cr.Mismatches, mismatch{Kind: mmVerifiedFailed, Item: v, Check: ch.Name})
 			cr.Unsupported = true
@@ -368,6 +374,9 @@ func crossCheck(events []EventRow) *checkedReceipt {
 	}
 	if r.Status == "done" {
 		for _, ch := range cr.failedChecks() {
+			if ch.Config != "" {
+				continue // the contract's fault, not a claim of the agent's
+			}
 			cr.Mismatches = append(cr.Mismatches, mismatch{Kind: mmDoneFailed, Check: ch.Name})
 			cr.Unsupported = true
 		}
@@ -467,6 +476,10 @@ func (r *checkedReceipt) brainText() string {
 	line("affirmé sans contrôle", r.Unchecked)
 	line("non vérifié", r.NotVerified)
 	for _, ch := range r.failedChecks() {
+		if ch.Config != "" {
+			fmt.Fprintf(&b, "\n- contrôle %s mal configuré, il n'a pas pu s'exécuter : %s", ch.Name, truncate(ch.Config, 300))
+			continue
+		}
 		fmt.Fprintf(&b, "\n- contrôle %s échoué (code %d) : %s", ch.Name, ch.ExitCode, truncate(oneLine(ch.Output), 300))
 	}
 	line("décisions", r.Decisions)

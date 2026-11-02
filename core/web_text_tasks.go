@@ -30,6 +30,7 @@ var taskStrings = map[string]map[string]string{
 		"receipt.checks":              "Contrôles",
 		"receipt.check.ok":            "réussi",
 		"receipt.check.failed":        "échoué (code %d)",
+		"receipt.check.config":        "n'a pas pu s'exécuter, contrat mal configuré : %s",
 		"receipt.changed":             "Changé",
 		"receipt.diff":                "Fichiers modifiés selon le dépôt",
 		"receipt.needsapproval":       "Attend ton accord",
@@ -71,6 +72,7 @@ var taskStrings = map[string]map[string]string{
 		"stats.class.invalid":         "demande",
 		"stats.class.permission":      "permission",
 		"stats.class.check":           "contrôle",
+		"stats.class.config":          "contrat",
 		"stats.class.budget":          "budget",
 	},
 	"en": {
@@ -92,6 +94,7 @@ var taskStrings = map[string]map[string]string{
 		"receipt.checks":              "Checks",
 		"receipt.check.ok":            "passed",
 		"receipt.check.failed":        "failed (code %d)",
+		"receipt.check.config":        "could not run, the contract is misconfigured: %s",
 		"receipt.changed":             "Changed",
 		"receipt.diff":                "Files changed in the repository",
 		"receipt.needsapproval":       "Waits for your approval",
@@ -133,6 +136,7 @@ var taskStrings = map[string]map[string]string{
 		"stats.class.invalid":         "request",
 		"stats.class.permission":      "permission",
 		"stats.class.check":           "check",
+		"stats.class.config":          "contract",
 		"stats.class.budget":          "budget",
 	},
 }

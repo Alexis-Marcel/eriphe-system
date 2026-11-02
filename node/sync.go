@@ -280,8 +280,14 @@ func (n *node) deliver(t *Task) {
 			// skip_checks: a turn that changes nothing (its receipt asked
 			// again) is not checked again (turnend.go).
 			skip, _ := it.Data["skip_checks"].(bool)
+			checks, fixed := messageChecks(it.Data)
 			t.mu.Lock()
 			t.skipChecks = skip
+			if fixed {
+				// The brain fixed the contract's checks: the next turn's end
+				// runs these, and a failure before them does not count.
+				t.Spec.Checks, t.lastFailure = checks, ""
+			}
 			t.mu.Unlock()
 			if err := run.send(text); err != nil {
 				return

@@ -97,6 +97,15 @@ func (n *node) credentialHandlerWith(ask credentialAsker) http.Handler {
 					writeCred(w, http.StatusForbidden, "not approved")
 					return
 				}
+				t.mu.Lock()
+				stopping := t.stopping
+				t.mu.Unlock()
+				if stopping {
+					// Its work is being saved before the stop (keepwork.go):
+					// nobody waits for an approval, the work is kept instead.
+					writeCred(w, http.StatusForbidden, "the user's approval is needed and the task is stopping: "+a.Reason)
+					return
+				}
 				// The user answers in the workspace; the tool waits, as the
 				// agent waits for any permission.
 				p := t.decide(r.Context(), credentialTool, a.Permission)
