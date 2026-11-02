@@ -122,9 +122,40 @@
     <li><b>{{t "folders.access.manage"}}</b> · {{t "folders.level.manage"}}</li>
   </ul>
   <p class="muted small">{{t "folders.copyhow"}}</p>
-  {{range .Data.Hows}}
-  <h4>{{.Names}}</h4>
-  <p class="small">{{t .How}}</p>
+  <p class="share-prereq">{{t "folders.prereq"}} <a href="/settings/devices">{{t "folders.prereqlink"}}</a></p>
+  {{range .Data.Guides}}
+  <details class="share-guide"{{if .Machines}} open{{end}}>
+    <summary><b>{{t (printf "folders.guide.%s" .System)}}</b>{{if .Machines}} <span class="muted small">· {{.Machines}}</span>{{end}}</summary>
+    {{if eq .System "mac"}}
+    <p class="small">{{t "folders.mac.finder"}}</p>
+    <p class="small">{{t "folders.terminal"}}</p>
+    <div class="code one-line"><pre id="share-mac-add">~/.eriphe/bin/eriphe-share add ~/Documents/Clients</pre><button class="btn btn-soft sm" type="button" data-copy="share-mac-add">{{t "machines.copy"}}</button></div>
+    <p class="muted small">{{t "folders.flags"}}</p>
+    <p class="small">{{t "folders.more"}}</p>
+    <div class="code"><pre id="share-mac-more">~/.eriphe/bin/eriphe-share list
+~/.eriphe/bin/eriphe-share remove Clients
+~/.eriphe/bin/eriphe-share snapshots Clients
+~/.eriphe/bin/eriphe-share restore Clients latest</pre><button class="btn btn-soft sm" type="button" data-copy="share-mac-more">{{t "machines.copy"}}</button></div>
+    {{if .Lima}}<p class="muted small">{{t "folders.mac.lima"}}</p>{{end}}
+    {{else if eq .System "windows"}}
+    <p class="small">{{t "folders.win.explorer"}}</p>
+    <p class="muted small">{{t "folders.win.only"}}</p>
+    {{else}}
+    <p class="small">{{t "folders.terminal"}}</p>
+    <div class="code one-line"><pre id="share-linux-add">sudo eriphe-share add /srv/Clients</pre><button class="btn btn-soft sm" type="button" data-copy="share-linux-add">{{t "machines.copy"}}</button></div>
+    <p class="muted small">{{t "folders.flags"}}</p>
+    <p class="small">{{t "folders.more"}}</p>
+    <div class="code"><pre id="share-linux-more">sudo eriphe-share list
+sudo eriphe-share remove Clients
+sudo eriphe-share snapshots Clients
+sudo eriphe-share restore Clients latest</pre><button class="btn btn-soft sm" type="button" data-copy="share-linux-more">{{t "machines.copy"}}</button></div>
+    <p class="muted small">{{t "folders.linux.limits"}}</p>
+    <h4>{{t "folders.nas"}}</h4>
+    <p class="small">{{t "folders.nas.lead"}}</p>
+    <div class="code one-line"><pre id="share-nas-add">docker exec eriphe-node eriphe-node share add /mnt/user/Clients</pre><button class="btn btn-soft sm" type="button" data-copy="share-nas-add">{{t "machines.copy"}}</button></div>
+    <p class="muted small">{{t "folders.nas.limits"}}</p>
+    {{end}}
+  </details>
   {{end}}
   <form method="dialog" class="modal-actions"><button class="btn" type="submit">{{t "updates.close"}}</button></form>
 </dialog>
