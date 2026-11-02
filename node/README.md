@@ -900,32 +900,59 @@ and one with egress, a share at the same path for it and the daemon (`ERIPHE_LIV
 
 A folder is shared with Eriphe **on the machine that holds it**, never from eriphe-core: the user
 runs `eriphe-node share` there (the installers wrap it as `eriphe-share`, and the Finder's and the
-Explorer's "Share with Eriphe" call it). eriphe-core sees each shared folder's name, right and an
-opaque id, never its path; it can lend a task one of them, or take one off the list (restricting
-is always allowed), but it can neither add a folder nor look into the machine.
+Explorer's "Share with Eriphe..." call it). eriphe-core sees each shared folder's name, level,
+whether it may be copied, and an opaque id, never its path; it can lend a task one of them, take
+one off the list, lower its level or turn its copies off (restricting is always allowed), but it can
+neither add a folder, raise one, nor look into the machine.
+
+Three levels, chosen when the folder is shared:
+
+| Level | Flag | A task lent it at that level |
+|---|---|---|
+| `read` (Lecture) | none, or `--read` | reads it: the folder is mounted read-only |
+| `drop` (À côté) | `--drop` | reads it, and writes only in its results subfolder |
+| `manage` (Gérer) | `--manage` | reads, creates, changes, renames and deletes anywhere in it; a snapshot of it is taken first |
+
+The level chosen on the machine is the most the folder ever gets (its ceiling, `max`): eriphe-core
+may lower it (`PATCH /v1/shares/{id}` through the tunnel, `{"access": "read"}`), never raise it,
+not even back to `max`; only the machine raises it, by sharing the folder again. `--copyable`
+(off by default) records that the user allows copies of the folder on their other machines, for
+the synchronisation to come; eriphe-core may turn it off (`{"copyable": false}`), never on. A raise
+of either through the tunnel is refused (403, `raise`) and logged.
 
 ```sh
-eriphe-node share add [--name NAME] [--drop] FOLDER...   # read; --drop: and results dropped in its results subfolder
+eriphe-node share add [--name NAME] [--read|--drop|--manage] [--copyable] FOLDER...
 eriphe-node share list [--json]
 eriphe-node share remove NAME|FOLDER...                  # the tasks holding it are stopped
+eriphe-node share snapshots NAME|FOLDER                  # its snapshots, newest first
+eriphe-node share restore NAME|FOLDER SNAPSHOT|latest    # back as it was (after a snapshot of it now)
 ```
 
+Sharing a folder already shared again keeps its id (and its name, unless `--name` is given) and
+sets its level, ceiling and copies to those given: that is how the machine raises a level.
+
 Options, before the command: `-root` (env `ERIPHE_ROOT`), `-share` (env `ERIPHE_NODE_SHARES`),
-`-engine` (env `ERIPHE_ENGINE`), `-docker`. It must run as the node's user, with its settings:
+`-engine` (env `ERIPHE_ENGINE`), `-docker`, `-snapshot-days` (env `ERIPHE_SNAPSHOT_DAYS`),
+`-snapshot-limit` (env `ERIPHE_SNAPSHOT_LIMIT`). It must run as the node's user, with its settings:
 `sudo eriphe-share` on Linux (`docker exec eriphe-node eriphe-node share` in the node's
 container, which sees the places at their paths on the machine; `ERIPHE_ROOT` is set there),
 `~/.eriphe/bin/eriphe-share` on a Mac (the node's `node.env`), also behind the Finder's Quick
-Actions "Share with Eriphe" (`~/Library/Services`, a notification says how it went), and the
-Explorer's "Share with Eriphe" on Windows (below).
+Action "Share with Eriphe..." (`~/Library/Services`: it asks for the level and the copies with
+macOS's own dialogs, `eriphe-share --ask`, and a notification says how it went), and the
+Explorer's "Share with Eriphe..." on Windows (below).
 
 **The list** is `shares.json` in the node's data (`-root`, mode 0600): `{id, name, path, access,
-added}` per folder, the path absolute and resolved. The command changes it under a lock file
+max, copyable, added}` per folder, the path absolute and resolved; `access` is the level now
+(`read`, `drop` or `manage`), `max` the level chosen on the machine (empty in a list from before
+levels: `access`), `copyable` true when the user allowed copies. `GET /v1/node` and `GET
+/v1/shares` report `{id, name, access, max, copyable, missing}`, never the path. The command changes it under a lock file
 (`shares.lock`); the node reads it at every use (`GET /v1/node`, a mount) and looks at it every two
-seconds: a folder taken off stops the tasks that hold it (a `folder_revoked` event, then the
-container is stopped). Neither eriphe-core (the tunnel has no way to write it) nor a task (the
+seconds: a folder taken off, or lowered below the level a task holds it at, stops the tasks that
+hold it (a `folder_revoked` event, then the container is stopped). Neither eriphe-core (the tunnel has no way to write it) nor a task (the
 node's data is never mounted nor shared) reaches it. `shares.log`, next to it, is the node's own
-append-only log, one JSON line per event: `add` and `remove` (`by`: `local` or `eriphe-core`),
-`mount` (task, folder, write), `refused`, `stop`.
+append-only log, one JSON line per event: `add`, `change` (shared again) and `remove` (`by`:
+`local` or `eriphe-core`), `lower` (`from`, `access`, `copyable`), `mount` (task, folder,
+access), `snapshot`, `snapshot_failed`, `snapshot_pruned`, `restore`, `refused`, `stop`.
 
 **The places** of this machine are declared when it is installed, never by eriphe-core: `-share
 name=/path`, repeatable, or `-share name=/path:ro` for a place whose folders may only be read; env
@@ -961,13 +988,18 @@ Every path is checked when it is shared, and again at every mount:
   is whole or the folder is not shared: more than 20,000 directories (`too_large`), or one the node
   cannot read (`unreadable_sub`: a task, root, might), and it is refused. On a Mac the explorer's
   tree is held to the same (more than 200,000 entries, or a folder it could not read).
-- `--drop` is refused on a `:ro` place.
+- `--drop` and `--manage` are refused on a `:ro` place.
 
-A task's spec lists its folders: `folders: [{name, id, write}]`. At each start the node takes each
-from the list by its id (a folder not in it is refused, `not_shared`; `write` on a folder shared
-read-only too, `read_only`), checks it again, then gives the container:
+A task's spec lists its folders: `folders: [{name, id, write, manage}]`. At each start the node
+takes each from the list by its id (a folder not in it is refused, `not_shared`; a level above the
+folder's own now too: `write` on a read-only folder is `read_only`, `manage` on a `drop` one
+`level`), checks it again, then gives the container:
 
 - `--mount type=bind,src=<folder>,dst=/work/folders/<name>,readonly`;
+- with `manage`, instead, `--mount type=bind,src=<folder>,dst=/work/folders/<name>`, writable,
+  once a snapshot of the folder is taken (below): without one, the task does not start. What the
+  task writes there as root goes back to the folder's owner, as for `Eriphe/` (`handback.go`). An
+  older node ignores `manage` and mounts the folder read-only;
 - with `write`, `--mount type=bind,src=<folder>/<results>,dst=/work/folders/<name>/<results>`,
   refused on a `:ro` place. `<results>` is the results subfolder eriphe-core names after the
   assistant (`results` in the folder's spec; `Eriphe` when it gives none). The node creates it if it
@@ -987,6 +1019,28 @@ read-only too, `read_only`), checks it again, then gives the container:
   can open, change and delete them;
 - `ERIPHE_FOLDERS` with the folders' names.
 
+**Snapshots.** Before a task lent a folder to `manage` starts, the node copies the folder into its
+own data, `snapshots/<id>/<time>/files` under `-root` (with a `meta.json`: folder, path, task,
+method, bytes copied), which no task mounts and no folder can share. A snapshot is kept
+`-snapshot-days` (7) and pruned at start, every hour and after each new one. If it fails, the task
+does not start (fail closed), and `snapshot_failed` is logged. How the copy is made:
+
+- a Mac: Apple's `cp -c`, an APFS clone, instant and free until a file changes (the node's data is
+  on the same volume as the user's folders). Apple's `cp` rather than the node itself, which never
+  reads a protected place. A folder on another volume is copied, if it is within `-snapshot-limit`
+  (2 GB) by Apple's `du`. No APFS local snapshot: it needs root (`tmutil`), which the LaunchAgent is not;
+- elsewhere (a NAS, Linux, Windows' WSL): the tree walked without following a symlink, each file
+  cloned where the file system can (`FICLONE`: btrfs, XFS), copied otherwise, with its mode, times
+  and owner; what is copied, not cloned, stays within `-snapshot-limit`, beyond which the snapshot
+  fails (lower the folder to `drop`, or raise the limit).
+
+Never hard links (`cp -al`, `rsync --link-dest`): a task writing a file in place, as most editors
+and agents do, would change the snapshot's copy with it. A folder lent to `drop` gets no snapshot:
+its originals are mounted read-only, and only the assistant's results subfolder is writable.
+`eriphe-node share restore` is a local action: it first snapshots the folder as it is (so the
+restore can be undone; refused if that fails), then empties the folder and copies the snapshot
+back. Stop the tasks using the folder before. `latest` is the newest snapshot taken before a task.
+
 A folder's content is visible to a task whole: the node does not hide a file inside it. What it
 does not cover: a sensitive name deeper than three levels, a sensitive file under another name, and
 what changes in the folder between the check and the mount.
@@ -1001,9 +1055,10 @@ folder. On Windows,
 automount stays off: `install.ps1` mounts only the folder of the user signed in at the PC
 (`C:\Users\<user>`, DrvFs, `noexec,nosuid,nodev`) at `/mnt/eriphe/home`, for the node alone, and
 gives it `-share home=/mnt/eriphe/home`, with no proxy in the way. Its `AppData` is sensitive, like
-a NAS's `appdata`. The Explorer's "Share with Eriphe" runs `eriphe-share.ps1`
-(`%ProgramData%\eriphe-node\bin`), which maps the folder under `/mnt/eriphe/home` and runs
-`wsl -d <distro> -u root --exec eriphe-share add` in the distribution (`eriphe-node share` with
+a NAS's `appdata`. The Explorer's "Share with Eriphe..." runs `eriphe-share.ps1`
+(`%ProgramData%\eriphe-node\bin`), which asks for the level and the copies (a small Windows Forms
+window), maps the folder under `/mnt/eriphe/home` and runs `wsl -d <distro> -u root --exec
+eriphe-share add --read|--drop|--manage --copyable[=false]` in the distribution (`eriphe-node share` with
 `/etc/eriphe-node.env`). Writes through such a mount follow its own owner mapping (virtiofs, 9p,
 DrvFs), not the setgid rule above.
 

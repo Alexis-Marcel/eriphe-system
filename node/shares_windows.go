@@ -9,3 +9,6 @@ func ownerGID(string) int { return -1 }
 func writableByUser(string) bool { return true }
 
 func writableByTasks(fi fs.FileInfo) bool { return fi.Mode().Perm()&0o200 != 0 }
+
+// keepOwner: no owners here.
+func keepOwner(string, fs.FileInfo) {}

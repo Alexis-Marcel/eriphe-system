@@ -30,6 +30,7 @@ const (
 	logList    = "list"    // a folder of it listed: Detail is share:/path
 	logShare   = "share"   // a folder opened to Eriphe
 	logUnshare = "unshare" // a folder closed again
+	logLower   = "lower"   // a folder's level lowered, or its copies turned off, from here
 	logTask    = "task"    // a task run on it: Detail is its agent
 	logLend    = "lend"    // a folder lent to a task, with its right
 	logResult  = "result"  // a file a task wrote in a folder's results subfolder: Detail is its path
@@ -166,9 +167,10 @@ func (c *core) logPlaced(t *TaskRow, node string) {
 }
 
 // logResults records the files a task wrote in the results subfolder of
-// the folders it may drop results in, as its agent reports them (the file
-// tools of Claude Code: Write, Edit, MultiEdit, NotebookEdit), and the
-// results folders its node could not rename.
+// the folders it may drop results in, or anywhere in those it may manage,
+// as its agent reports them (the file tools of Claude Code: Write, Edit,
+// MultiEdit, NotebookEdit), and the results folders its node could not
+// rename.
 func (c *core) logResults(t *TaskRow, events []EventRow) {
 	if t.Folders == "" {
 		return
@@ -182,13 +184,18 @@ func (c *core) logResults(t *TaskRow, events []EventRow) {
 				Detail: kept + "/ → " + wanted + "/"})
 		}
 	}
-	var drop []string
+	var drop, manage []string
 	for _, name := range splitNames(t.Folders) {
-		if f, err := c.store.folder(name); err == nil && f.Access == folderDrop {
+		f, err := c.store.folder(name)
+		switch {
+		case err != nil:
+		case f.Access == folderDrop:
 			drop = append(drop, f.Name)
+		case f.Access == folderManage:
+			manage = append(manage, f.Name)
 		}
 	}
-	if len(drop) == 0 {
+	if len(drop) == 0 && len(manage) == 0 {
 		return
 	}
 	results := c.resultsOn(t.Node)
@@ -211,6 +218,12 @@ func (c *core) logResults(t *TaskRow, events []EventRow) {
 			if strings.HasPrefix(path, prefix) && !strings.Contains(path[len(prefix):], "..") {
 				c.logNode(t.Node, NodeLogEntry{Kind: logResult, Task: t.ID, Folder: name, Access: folderDrop,
 					Detail: results + "/" + path[len(prefix):]})
+			}
+		}
+		for _, name := range manage {
+			prefix := (&Folder{Name: name}).mountPath() + "/"
+			if strings.HasPrefix(path, prefix) && !strings.Contains(path[len(prefix):], "..") {
+				c.logNode(t.Node, NodeLogEntry{Kind: logResult, Task: t.ID, Folder: name, Access: folderManage, Detail: path[len(prefix):]})
 			}
 		}
 	}

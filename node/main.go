@@ -48,6 +48,10 @@ type options struct {
 	// With the container engine: what the node downloads at most, in bytes,
 	// of a task's folders kept in the cloud (iCloud Drive), before it starts.
 	downloadLimit int64
+	// Snapshots of the folders lent to manage (snapshot.go): kept so many
+	// days, and what is copied (not cloned) of a folder at most, in bytes.
+	snapshotDays  int
+	snapshotLimit int64
 	labels        []string          // what the scheduler can ask for, e.g. gpu
 	install       string            // how the installers installed it: linux, macos or windows; empty by hand
 	alwaysOn      bool              // the machine never sleeps: eriphe-core puts the tools (services) here
@@ -100,6 +104,8 @@ func main() {
 	flag.StringVar(&o.docker, "docker", "", "the engine's CLI (default: docker, or container with -engine container)")
 	flag.StringVar(&o.engine, "engine", envOr("ERIPHE_ENGINE", engineDocker), "what runs the tasks: docker, or container (Apple's container, on a Mac with Apple silicon and macOS 26: a micro-VM per task) (env ERIPHE_ENGINE)")
 	downloadLimit := flag.String("download-limit", "2g", "with -engine container: what the node downloads at most of a task's folders kept in the cloud (iCloud Drive) before it starts, e.g. 2g")
+	flag.IntVar(&o.snapshotDays, "snapshot-days", envInt("ERIPHE_SNAPSHOT_DAYS", defaultSnapshotDays), "days a snapshot of a folder is kept, taken before each task lent it to manage (env ERIPHE_SNAPSHOT_DAYS)")
+	snapshotLimit := flag.String("snapshot-limit", envOr("ERIPHE_SNAPSHOT_LIMIT", defaultSnapshotLimit), "what a snapshot of a folder copies at most where its files cannot be cloned, e.g. 2g; a bigger folder is not lent to manage (env ERIPHE_SNAPSHOT_LIMIT)")
 	flag.StringVar(&o.taskMemory, "task-memory", "8g", "memory limit of each task container, e.g. 8g (empty: none)")
 	flag.StringVar(&o.taskCPUs, "task-cpus", "", "CPU limit of each task container, e.g. 4 (empty: all the machine's CPUs)")
 	flag.StringVar(&o.serviceMemory, "service-memory", "1g", "memory limit of each service container (empty: none)")
@@ -127,6 +133,11 @@ func main() {
 	if err := o.complete(*modelServer, *downloadLimit, runtime.GOOS); err != nil {
 		log.Fatal(err)
 	}
+	limit, err := parseBytes(*snapshotLimit)
+	if err != nil {
+		log.Fatalf("-snapshot-limit: %v", err)
+	}
+	o.snapshotLimit = limit
 	if err := makeRoot(o.root); err != nil {
 		log.Fatal(err)
 	}
@@ -178,6 +189,7 @@ func main() {
 		}
 	}
 	go n.watchShared(2 * time.Second) // folders unshared here stop their tasks (shared.go)
+	go n.pruneLoop(time.Hour)         // old snapshots go (snapshot.go)
 	l, err := n.listenTasks(addr)
 	if err != nil {
 		log.Fatal(err)
@@ -339,6 +351,14 @@ func parseBytes(s string) (int64, error) {
 		return 0, fmt.Errorf("%q: a size such as 2g or 500m", s)
 	}
 	return v * mult, nil
+}
+
+// envInt is an integer environment variable, def when unset or invalid.
+func envInt(key string, def int) int {
+	if v, err := strconv.Atoi(os.Getenv(key)); err == nil {
+		return v
+	}
+	return def
 }
 
 func envOr(key, def string) string {

@@ -1,18 +1,24 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 )
 
 // Settings → Folders (folders.go): the folders given to Eriphe, by machine,
-// each with a button that stops sharing it, and how to share one: on the
-// machine that holds it, never from here.
+// each with its level (which may only be lowered from here), whether it may
+// be copied to the user's other machines (turned off from here, never on),
+// and a button that stops sharing it; and, in a dialog, how to share one:
+// on the machine that holds it, never from here.
 
 func (w *web) folderRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/folders", w.auth(w.handleFolders))
 	mux.Handle("POST /settings/folders/delete", w.auth(w.handleDeleteFolder))
+	mux.Handle("POST /settings/folders/level", w.auth(w.handleLowerFolder))
+	mux.Handle("POST /settings/folders/nocopy", w.auth(w.handleLowerFolder))
 }
 
 // folderMachine is a machine and the folders shared on it.
@@ -28,6 +34,13 @@ type foldersData struct {
 	Machines []folderMachine
 	Drive    []folderView // the Google Drive folders (cloud.go)
 	Legacy   bool         // some folders are to share again on their machine
+	Hows     []shareHowOn // how to share a folder, by kind of machine
+}
+
+// shareHowOn is how to share a folder on some machines, installed alike.
+type shareHowOn struct {
+	Names string // the machines, comma-separated
+	How   string // the text key
 }
 
 // shareHow is the text key of how to share a folder on a machine, by how it
@@ -84,6 +97,11 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 			}
 		}
 		d.Machines = append(d.Machines, m)
+		if i := slices.IndexFunc(d.Hows, func(h shareHowOn) bool { return h.How == m.How }); i >= 0 {
+			d.Hows[i].Names += ", " + m.Name
+		} else {
+			d.Hows = append(d.Hows, shareHowOn{Names: m.Name, How: m.How})
+		}
 	}
 	for _, v := range views {
 		if v.Source == sourceDrive {
@@ -125,6 +143,31 @@ func (w *web) handleDeleteFolder(rw http.ResponseWriter, r *http.Request, s *ses
 		return
 	}
 	log.Printf("web: folder %s no longer shared", name)
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusOK)
+}
+
+// handleLowerFolder lowers a folder's level (/level, with access) or turns
+// its copies off (/nocopy): never higher, which only its machine can do.
+func (w *web) handleLowerFolder(rw http.ResponseWriter, r *http.Request, s *session) {
+	name := r.PostFormValue("name")
+	access, nocopy := r.PostFormValue("access"), strings.HasSuffix(r.URL.Path, "/nocopy")
+	if nocopy {
+		access = ""
+	}
+	if err := w.c.lowerFolder(r.Context(), name, access, nocopy); err != nil {
+		var fe *folderError
+		switch {
+		case errors.As(err, &fe) && fe.Code == "raise":
+			w.toast(rw, tr(w.lang(r), "folders.err.raise"), false)
+		case errors.Is(err, errNoFolder):
+			w.toast(rw, tr(w.lang(r), "folders.err.gone"), false)
+		default:
+			w.toast(rw, err.Error(), false)
+		}
+		return
+	}
+	log.Printf("web: folder %s lowered (access %q, no copies %v)", name, access, nocopy)
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)
 }

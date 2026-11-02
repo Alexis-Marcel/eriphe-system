@@ -1344,9 +1344,11 @@ share_cmd() {
 	cat <<EOF
 #!/bin/sh
 # Written by install.sh: shares folders of this machine with Eriphe.
-#   eriphe-share add [--name NAME] [--drop] FOLDER...
+#   eriphe-share add [--name NAME] [--drop|--manage] [--copyable] FOLDER...
 #   eriphe-share list
 #   eriphe-share remove NAME|FOLDER...
+#   eriphe-share snapshots NAME
+#   eriphe-share restore NAME SNAPSHOT|latest
 ROOT=$(q "$DATA/node")
 EOF
 	cat <<'EOF'
@@ -2069,47 +2071,81 @@ native_conf() {
 
 # mac_share_sh: ~/.eriphe/bin/eriphe-share, the way to share a folder of
 # this Mac with Eriphe (node/README.md, Shared folders): eriphe-node share,
-# with the node's settings.
+# with the node's settings. --ask (the Finder's Quick Action) asks for the
+# level and the copies with macOS's own dialogs, then says how it went.
 mac_share_sh() {
 	cat <<EOF
 #!/bin/sh
 # Written by install.sh: shares folders of this Mac with Eriphe.
-#   eriphe-share add [--name NAME] [--drop] FOLDER...
+#   eriphe-share add [--name NAME] [--drop|--manage] [--copyable] FOLDER...
 #   eriphe-share list
 #   eriphe-share remove NAME|FOLDER...
+#   eriphe-share snapshots NAME
+#   eriphe-share restore NAME SNAPSHOT|latest
 E=$(q "$ERIPHE_HOME")
 CONTAINER=$(q "$CONTAINER")
 EOF
+	if [ "$(qa_lang)" = fr ]; then
+		cat <<'EOF'
+T_LEVEL='Niveau de partage avec Eriphe :' T_READ='Lecture' T_DROP='À côté (résultats dans un sous-dossier)' T_MANAGE='Gérer (modifier le dossier)'
+T_COPY='Ce dossier peut-il être copié sur tes autres machines ?' T_NO='Non' T_YES='Oui' T_CANCEL='Annuler' T_FAILED='Eriphe : non partagé'
+EOF
+	else
+		cat <<'EOF'
+T_LEVEL='Level of sharing with Eriphe:' T_READ='Read' T_DROP='Next to it (results in a subfolder)' T_MANAGE='Manage (change the folder)'
+T_COPY='May this folder be copied to your other machines?' T_NO='No' T_YES='Yes' T_CANCEL='Cancel' T_FAILED='Eriphe: not shared'
+EOF
+	fi
 	cat <<'EOF'
 set -a
 # shellcheck disable=SC1091
 . "$E/node.env"
 set +a
-# From the Finder's Quick Actions: the outcome as a notification.
-if [ "${1:-}" = --notify ]; then
+# ask LINES... -- ARGS...: an AppleScript run by Apple's osascript, its
+# lines given with -e, the texts as its arguments.
+ask() { osascript -e 'on run argv' "$@" 2>/dev/null; }
+# From the Finder's Quick Action: the level and the copies asked, the
+# outcome as a notification. Cancelled: nothing shared.
+if [ "${1:-}" = --ask ]; then
 	shift
-	if out=$("$E/bin/eriphe-node" share -docker "$CONTAINER" "$@" 2>&1); then title=Eriphe; else title="Eriphe: not shared"; fi
-	osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title (item 2 of argv)' -e 'end run' \
-		"$out" "$title" >/dev/null 2>&1 || true
+	level=$(ask -e 'choose from list {item 2 of argv, item 3 of argv, item 4 of argv} with prompt (item 1 of argv) default items {item 2 of argv} cancel button name (item 5 of argv)' -e 'end run' \
+		"$T_LEVEL" "$T_READ" "$T_DROP" "$T_MANAGE" "$T_CANCEL") || exit 0
+	case $level in
+	"$T_DROP") flag=--drop ;;
+	"$T_MANAGE") flag=--manage ;;
+	"$T_READ") flag=--read ;;
+	*) exit 0 ;;
+	esac
+	copy=$(ask -e 'button returned of (display dialog (item 1 of argv) buttons {item 2 of argv, item 3 of argv} default button 1 with title "Eriphe")' -e 'end run' \
+		"$T_COPY" "$T_NO" "$T_YES") || exit 0
+	if [ "$copy" = "$T_YES" ]; then copy=--copyable; else copy=--copyable=false; fi
+	if out=$("$E/bin/eriphe-node" share -docker "$CONTAINER" add "$flag" "$copy" "$@" 2>&1); then title=Eriphe; else title=$T_FAILED; fi
+	ask -e 'display notification (item 1 of argv) with title (item 2 of argv)' -e 'end run' "$out" "$title" >/dev/null || true
 	exit 0
 fi
 exec "$E/bin/eriphe-node" share -docker "$CONTAINER" "$@"
 EOF
 }
 
-# The Finder's right click, "Share with Eriphe": two Quick Actions in
-# ~/Library/Services, one to share a folder to read, one to read and drop
-# results, both running eriphe-share --notify. Automator workflows, which
-# macOS runs unsigned. Named in French on a Mac in French.
-QA_NAMES_EN="Share with Eriphe|Share with Eriphe (read + results)"
-QA_NAMES_FR="Partager avec Eriphe|Partager avec Eriphe (lecture + résultats)"
+# The Finder's right click, "Share with Eriphe…": one Quick Action in
+# ~/Library/Services that runs eriphe-share --ask, which asks for the level
+# and the copies. An Automator workflow, which macOS runs unsigned. Named in
+# French on a Mac in French. The former two (read, read + results) go.
+QA_NAME_EN="Share with Eriphe…"
+QA_NAME_FR="Partager avec Eriphe…"
+QA_FORMER="Share with Eriphe|Share with Eriphe (read + results)|Partager avec Eriphe|Partager avec Eriphe (lecture + résultats)"
 
-# qa_names: the two Quick Actions' names on this Mac, read then drop.
-qa_names() {
+# qa_lang: fr on a Mac in French, en otherwise.
+qa_lang() {
 	case $(defaults read -g AppleLanguages 2>/dev/null | sed -n '2s/[^a-zA-Z-]//gp') in
-	fr*) printf '%s' "$QA_NAMES_FR" ;;
-	*) printf '%s' "$QA_NAMES_EN" ;;
+	fr*) echo fr ;;
+	*) echo en ;;
 	esac
+}
+
+# qa_name: the Quick Action's name on this Mac.
+qa_name() {
+	if [ "$(qa_lang)" = fr ]; then printf '%s' "$QA_NAME_FR"; else printf '%s' "$QA_NAME_EN"; fi
 }
 
 # xml_text TEXT: TEXT for an XML document.
@@ -2308,20 +2344,17 @@ quick_action() {
 	qa_wflow "$3" >"$w/Contents/document.wflow"
 }
 
-# mac_quick_actions installs the Finder's two Quick Actions (the ones of
-# the other language go), and has the Services menu read them again.
+# mac_quick_actions installs the Finder's Quick Action (the other
+# language's and the former ones go), and has the Services menu read it again.
 mac_quick_actions() {
 	d=$HOME/Library/Services
 	mac_quick_actions_uninstall
-	names=$(qa_names)
-	cmd="exec $(q "$ERIPHE_HOME/bin/eriphe-share") --notify add"
-	quick_action "$d" "${names%%|*}" "$cmd \"\$@\""
-	quick_action "$d" "${names#*|}" "$cmd --drop \"\$@\""
+	quick_action "$d" "$(qa_name)" "exec $(q "$ERIPHE_HOME/bin/eriphe-share") --ask \"\$@\""
 	/System/Library/CoreServices/pbs -update >/dev/null 2>&1 || true
 }
 
 mac_quick_actions_uninstall() {
-	for n in "${QA_NAMES_EN%%|*}" "${QA_NAMES_EN#*|}" "${QA_NAMES_FR%%|*}" "${QA_NAMES_FR#*|}"; do
+	printf '%s|%s|%s\n' "$QA_NAME_EN" "$QA_NAME_FR" "$QA_FORMER" | tr '|' '\n' | while IFS= read -r n; do
 		rm -rf "$HOME/Library/Services/$n.workflow"
 	done
 }
@@ -3268,12 +3301,12 @@ outcome() {
 	if [ -n "$NATIVE" ]; then
 		shared=$(mac_shares)
 		note "Places folders may be shared from: $(printf '%s' "$shared" | sed 's/=[^,]*//g; s/,/, /g')"
-		[ -z "$shared" ] || note "To share one with Eriphe: right-click it in the Finder, Quick Actions, \"$(qa_names | cut -d '|' -f 1)\"; or $(tilde "$ERIPHE_HOME/bin/eriphe-share") add <folder> (--drop to let it drop its results there)"
+		[ -z "$shared" ] || note "To share one with Eriphe: right-click it in the Finder, Quick Actions, \"$(qa_name)\"; or $(tilde "$ERIPHE_HOME/bin/eriphe-share") add <folder> (--drop to let it drop its results next to it, --manage to let it change the folder, --copyable to allow copies on your other machines)"
 		[ -n "$UPDATING" ] || [ -z "$shared" ] ||
 			notice "the first time a folder of Documents, the Desktop or iCloud Drive is shared, macOS asks to allow \"container-runtime-linux\". Allow it."
 	elif [ -n "$SHARES" ]; then
 		note "Places folders may be shared from: $(printf '%s' "$SHARES" | sed 's/=[^,]*//g; s/,/, /g')"
-		[ -n "${HOST_DATA:-}" ] || note "To share one with Eriphe: sudo eriphe-share add <folder> (--drop to let it drop its results there)"
+		[ -n "${HOST_DATA:-}" ] || note "To share one with Eriphe: sudo eriphe-share add <folder> (--drop to let it drop its results next to it, --manage to let it change the folder, --copyable to allow copies on your other machines)"
 	elif [ "$OS" = Linux ] && [ -z "$UPDATING" ]; then
 		hint="--share documents=/home/<you>/Documents"
 		[ -d /mnt/user ] && hint="--share shares=/mnt/user"

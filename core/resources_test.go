@@ -39,7 +39,7 @@ func TestNormalizeResources(t *testing.T) {
 	for name, r := range map[string]runRequest{
 		"is not one of":              {Resources: []ResourceRef{{Kind: "mailbox", Ref: "x"}}},
 		"ref is required":            {Resources: []ResourceRef{{Kind: "folder"}}},
-		"takes access read or drop":  {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", Access: "write"}}},
+		"takes access read or drop":  {Resources: []ResourceRef{{Kind: "drive-folder", Ref: "Clients", Access: "write"}}},
 		"takes access read or write": {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Access: "drop"}}},
 		"takes access read, not":     {Resources: []ResourceRef{{Kind: "file", Ref: "att_x", Access: "write"}}},
 		"a repo's only":              {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", Branch: "x"}}},
