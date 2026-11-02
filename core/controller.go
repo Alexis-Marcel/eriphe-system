@@ -305,6 +305,12 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		return nil, err
 	}
 	folders, machine := lent.Folders, lent.Machine
+	if r.Contract != nil {
+		// Its checks name only what the task is lent (contract.go).
+		if err := r.Contract.checkLent(lent.Repo != nil || r.Repo != "", folderNames(folders)); err != nil {
+			return nil, err
+		}
+	}
 	if r.Node != "" && c.store.nodeSuspended(r.Node) {
 		return nil, suspendedError(r.Node) // node_access.go
 	}

@@ -176,7 +176,7 @@
 {{if .Checks}}<h4 class="rc-sub">{{t "receipt.checks"}}</h4>
 <ul class="rc-checks">{{range .Checks}}<li class="{{if .OK}}ok{{else}}no{{end}}">
   {{if .OK}}{{template "i-check"}}{{else}}{{template "i-x"}}{{end}}<strong>{{.Name}}</strong>
-  <span class="muted small">{{if .OK}}{{t "receipt.check.ok"}}{{else}}{{tf "receipt.check.failed" .ExitCode}}{{end}}{{with .Run}} · <code>{{short . 80}}</code>{{end}}{{with .Exists}} · <code>{{short . 80}}</code>{{end}}</span>
+  <span class="muted small">{{if .OK}}{{t "receipt.check.ok"}}{{else if .Config}}{{tf "receipt.check.config" .Config}}{{else}}{{tf "receipt.check.failed" .ExitCode}}{{end}}{{with .Run}} · <code>{{short . 80}}</code>{{end}}{{with .Exists}} · <code>{{short . 80}}</code>{{end}}</span>
   {{if and (not .OK) .Output}}<pre class="rc-out">{{.Output}}</pre>{{end}}</li>{{end}}</ul>{{end}}
 {{if .NeedsApproval}}<h4 class="rc-sub">{{t "receipt.needsapproval"}}</h4><ul class="rc-list">{{range .NeedsApproval}}<li>{{.}}</li>{{end}}</ul>{{end}}
 {{if .Changed}}<h4 class="rc-sub">{{t "receipt.changed"}}</h4><ul class="rc-list mono">{{range .Changed}}<li>{{.}}</li>{{end}}</ul>{{end}}

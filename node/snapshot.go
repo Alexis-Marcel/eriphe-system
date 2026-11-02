@@ -193,11 +193,14 @@ func (n *node) pruneSnapshots() {
 	}
 }
 
-// pruneLoop prunes the snapshots every so often.
+// pruneLoop prunes the snapshots, and the repositories kept from stopped
+// tasks (keepwork.go), every so often.
 func (n *node) pruneLoop(every time.Duration) {
 	n.pruneSnapshots()
+	n.pruneKept()
 	for range time.Tick(every) {
 		n.pruneSnapshots()
+		n.pruneKept()
 	}
 }
 

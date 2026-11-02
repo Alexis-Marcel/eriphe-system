@@ -662,9 +662,24 @@ read):
 | `budget` | yes: eriphe-core stops the task beyond it |
 
 Approval is never part of a contract: the policy decides it, never the model. A contract is
-checked when the task starts (at most 10 checks, unique names, paths under `/work`, budgets within
-7 days, 5 attempts, 500 turns), kept in `task_harness`, given to the agent after its standing
-instruction, returned by `task_status` as `contract`, and shown in the task's drawer.
+checked when the task starts (at most 10 checks, unique names, budgets within 7 days, 5 attempts,
+500 turns), kept in `task_harness`, given to the agent after its standing instruction, returned by
+`task_status` as `contract`, and shown in the task's drawer. `run_task` refuses, with a reason the
+brain can act on, what is certainly wrong in a check: an empty `run`, a `dir` given with `exists`,
+a `dir` or `exists` outside `/work` or with a `..` element, a path on several lines, a path under
+`/work/repo` without a repository lent, or under `/work/folders/<name>` for a folder not lent.
+`dir` is relative to the task's working directory (`/work/repo` with a repository: `"core"`, not
+`"repo/core"`); whether it exists is only known once the repository is cloned, so the node says it
+then (a *config* failure, below).
+
+**A misconfigured check.** A check that could not run at all (its `dir` is not there, its command
+is not found, it could not be started: the node's `config`) is the contract's fault, neither the
+code's nor the agent's: it is not sent back to the agent, does not count toward "the same failure
+twice", is no unsupported claim of the receipt, and does not stop the task. The task stays idle and
+the brain hears that the contract is misconfigured, with the node's exact reason. It fixes it with
+`answer_task` and `checks` (all of them, checked like at the start; `reply` optional): the
+contract and the task's spec are updated, and the new checks go to the node with the next turn,
+after which they run. The drawer shows such a check as "could not run".
 
 ### Retries and budgets (`task_retry.go`)
 
@@ -678,6 +693,7 @@ causes of `problems.go`), before the brain hears of it:
 | invalid | a request refused (400), a turn cut by its limits | no blind retry: the brain changes the instructions or warns the user |
 | permission | the policy refused an action | never retried: the brain hears it as before |
 | check | a check of the contract failed | sent back to the agent by its node (see eriphe-node's README) |
+| config | a check of the contract could not run (its folder missing, its command not found) | never sent back, never counted, never stopped: the brain is told to fix the contract (above) |
 | same failure twice | the same class and words (numbers aside) twice in a row, or a check the node stopped sending back | **stops** the task, even with attempts left |
 
 The budget of a contract is kept by eriphe-core: `minutes` (checked every 15 seconds), `turns`
@@ -688,6 +704,12 @@ keeps why (`stop_reason`): the brain hears it with the last receipt when the nod
 stopped, and the drawer says so; a retry on its way shows its time. A task whose agent or container
 failed is told to the brain with its class: worth starting again once, or not. Each failure's class
 is kept in `task_harness` for the measures. The brain's prompt no longer counts retries itself.
+
+**No work lost on stop.** Before a task's container is removed (stopped by the brain, a budget or
+"the same failure twice"), its node pushes the commits no remote has on the branch the task was
+lent, through the task's own credential helper (the policy and credentials still decide), or keeps
+the repository on the node (see eriphe-node's README). Its `work` event says which: the brain hears
+it with the stop, even a stop of its own when the work was kept.
 
 ### Usage and measures (`task_stats.go`)
 

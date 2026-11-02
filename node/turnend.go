@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -48,12 +49,20 @@ if [ -z "$base" ]; then base=$(git merge-base HEAD origin/HEAD 2>/dev/null || tr
 
 // runCheckScript runs a check's command in its folder ($1), under timeout
 // when the image has it ($2 seconds), as the shell's own argument ($3):
-// nothing of it is quoted into the script.
-const runCheckScript = `cd "$1" || exit 125
+// nothing of it is quoted into the script. A folder that is not there is
+// said so (noFolderMark), with exit code 125.
+const runCheckScript = `cd "$1" 2>/dev/null || { echo "` + noFolderMark + `$1"; exit 125; }
 if command -v timeout >/dev/null 2>&1; then exec timeout -k 5 "$2" sh -c "$3"; fi
 exec sh -c "$3"`
 
 const existsCheckScript = `test -e "$1"`
+
+// noFolderMark starts what runCheckScript prints when the check's folder
+// is not there.
+const noFolderMark = "eriphe-check: no folder "
+
+// errTimedOut is a script of execTask that ran out of time.
+var errTimedOut = errors.New("timed out")
 
 // afterTurn runs once the task is idle, then lets it be reported so.
 func (n *node) afterTurn(t *Task) {
@@ -75,6 +84,13 @@ func (n *node) afterTurn(t *Task) {
 	}
 	failed, ok := n.runChecks(t)
 	if ok {
+		return
+	}
+	if failed.config != "" {
+		// The check could not run at all: the contract is wrong, not the
+		// agent's work. Nothing goes back to the agent; eriphe-core tells
+		// the brain, which may fix the contract.
+		t.emit("check_stop", map[string]any{"check": failed.check.Name, "reason": "config", "detail": failed.config})
 		return
 	}
 	n.sendBack(t, failed)
@@ -103,6 +119,10 @@ type checkResult struct {
 	code     int
 	output   string
 	duration time.Duration
+	// config says why the check could not run at all (its folder is not
+	// there, its command is not found, it could not be started): the
+	// contract is misconfigured, which is not a failure of the code.
+	config string
 }
 
 // runChecks runs the task's checks in its container, the files that must
@@ -110,7 +130,10 @@ type checkResult struct {
 // that fails. Each is a "check" event.
 func (n *node) runChecks(t *Task) (checkResult, bool) {
 	var exists, runs []TaskCheck
-	for _, ch := range t.Spec.Checks {
+	t.mu.Lock()
+	checks := t.Spec.Checks // the brain may fix them between turns (deliver)
+	t.mu.Unlock()
+	for _, ch := range checks {
 		if ch.Exists != "" {
 			exists = append(exists, ch)
 		} else if ch.Run != "" {
@@ -127,6 +150,9 @@ func (n *node) runChecks(t *Task) (checkResult, bool) {
 		}
 		if r.output != "" {
 			data["output"] = r.output
+		}
+		if r.config != "" {
+			data["config"] = r.config
 		}
 		t.emit("check", data)
 		if !r.ok {
@@ -157,7 +183,32 @@ func (n *node) runCheck(t *Task, ch TaskCheck) checkResult {
 		r.code, r.output = -1, strings.TrimSpace(r.output+"\n"+err.Error())
 	}
 	r.ok = err == nil && code == 0
+	if !r.ok {
+		r.config = checkConfigFault(t, ch, r, err)
+	}
 	return r
+}
+
+// checkConfigFault says why a check that failed could not run at all, or
+// "" when it ran and failed: its folder is not there (runCheckScript's
+// mark), its command is not found (exit code 127), or it could not be
+// started. A check that ran out of time did run: the code may hang.
+func checkConfigFault(t *Task, ch TaskCheck, r checkResult, err error) string {
+	switch {
+	case err != nil && !errors.Is(err, errTimedOut):
+		return "it could not be started: " + err.Error()
+	case err != nil || ch.Run == "":
+		return ""
+	case r.code == 125 && strings.HasPrefix(r.output, noFolderMark):
+		where := checkPath(t, ch.Dir)
+		if ch.Dir != "" && !path.IsAbs(ch.Dir) {
+			return fmt.Sprintf("its folder %s does not exist (dir %q is relative to %s, the task's working directory)", where, ch.Dir, workDir(t))
+		}
+		return fmt.Sprintf("its folder %s does not exist", where)
+	case r.code == 127:
+		return "its command was not found (exit code 127): " + tail(strings.Join(strings.Fields(r.output), " "), 300)
+	}
+	return ""
 }
 
 // checkPath is a check's path in the container: under /work, or relative
@@ -209,6 +260,25 @@ func (n *node) sendBack(t *Task, r checkResult) {
 	t.save()
 }
 
+// messageChecks reads the checks a message carries when the brain fixed a
+// misconfigured contract (eriphe-core's answer_task with checks): they
+// replace the task's.
+func messageChecks(data map[string]any) ([]TaskCheck, bool) {
+	raw, ok := data["checks"]
+	if !ok {
+		return nil, false
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil, false
+	}
+	var checks []TaskCheck
+	if json.Unmarshal(b, &checks) != nil {
+		return nil, false
+	}
+	return checks, true
+}
+
 // execTask runs a shell script in the task's running container, with the
 // container's own environment and rights (docker exec, or container exec
 // with Apple's engine), its arguments as $1, $2…, and returns the end of
@@ -229,7 +299,7 @@ func (n *node) execTask(ctx context.Context, t *Task, max int, script string, ar
 	err := cmd.Run()
 	text := tail(out.String(), max)
 	if ctx.Err() != nil {
-		return text, -1, errors.New("timed out")
+		return text, -1, errTimedOut
 	}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {

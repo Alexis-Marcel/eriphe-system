@@ -460,17 +460,30 @@ func (n *node) hostPath(p string) string {
 	return filepath.Join(n.opt.hostRoot, rel)
 }
 
+// stopContainer stops a task's agent and its container. A task with a
+// repository first pushes or keeps the commits no remote has (keepwork.go),
+// once: the stop may be asked again meanwhile. Stopping is set before, so
+// that a credential the user would have to approve is refused, not waited
+// for.
 func (n *node) stopContainer(t *Task) {
 	t.mu.Lock()
+	again := t.stopping
 	t.stopping = true
 	run := t.run
 	t.mu.Unlock()
+	keep := false
+	if !again && run != nil && t.Spec.Repo != "" && !finished(t.state()) {
+		keep = n.saveWork(t)
+	}
 	if run != nil {
 		run.stop()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	exec.CommandContext(ctx, n.opt.docker, "stop", "-t", "10", containerName(t)).Run()
+	if keep {
+		n.keepRepo(t)
+	}
 }
 
 func tail(s string, n int) string {

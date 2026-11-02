@@ -25,6 +25,7 @@ const (
 	classInvalid    = "invalid"    // a request the agent or its provider refused: not retried blindly
 	classPermission = "permission" // the policy refused an action: never retried, the brain is told
 	classCheck      = "check"      // a check of the contract failed
+	classConfig     = "config"     // a check of the contract could not run: the brain fixes the contract
 	classBudget     = "budget"     // the task ran out of its budget
 )
 
@@ -103,6 +104,14 @@ func (c *core) decideTurn(t *TaskRow, events []EventRow, cr *checkedReceipt) (tu
 		c.noteFailure(t.ID, h, classPermission, "") // told to the brain as it is
 		h = c.store.harness(t.ID)
 	}
+	if ch, ok := configFailure(cr, end.Seq); ok {
+		// A check of this turn could not run at all: the contract is
+		// misconfigured. It is not the code's failure nor the agent's: it
+		// does not count toward "the same failure twice", the task stays
+		// idle, and the brain is told to fix the contract.
+		c.noteFailure(t.ID, h, classConfig, "")
+		return turnOutcome{receipt: cr, note: configNote(t.ID, ch)}, true
+	}
 	if failed := cr.failedChecks(); len(failed) > 0 && failed[0].Seq > end.Seq {
 		// A check of this turn failed: the same way as the last failure, or
 		// twice in a row on the node, it stops the task.
@@ -127,6 +136,30 @@ func lastTurnEnd(events []EventRow) (EventRow, bool) {
 		}
 	}
 	return EventRow{}, false
+}
+
+// configFailure is a check of the turn that ended at seq which could not
+// run at all (its "config" from the node).
+func configFailure(cr *checkedReceipt, seq int) (checkResult, bool) {
+	for _, ch := range cr.failedChecks() {
+		if ch.Seq > seq && ch.Config != "" {
+			return ch, true
+		}
+	}
+	return checkResult{}, false
+}
+
+// configNote tells the brain that a task's contract is misconfigured, with
+// the node's exact reason, and how to fix it.
+func configNote(id string, ch checkResult) string {
+	what := "`" + ch.Run + "`"
+	if ch.Run == "" {
+		what = ch.Exists
+	}
+	return fmt.Sprintf("(Contrat mal configuré : le contrôle %q (%s) n'a pas pu s'exécuter : %s. Ce n'est ni la faute du code ni celle de l'agent, "+
+		"et la tâche n'est pas arrêtée. Corrige le contrôle : answer_task(task_id %s, checks [les contrôles corrigés], reply facultatif) ; "+
+		"ils tournent à la fin du tour suivant. Rappel : dir est relatif au dossier de travail de la tâche (/work/repo avec un dépôt). "+
+		"N'en parle à l'utilisateur que si tu ne sais pas le corriger.)", ch.Name, what, ch.Config, id)
 }
 
 // checkStoppedSame tells whether the node stopped sending a check back,
@@ -206,6 +239,50 @@ func (c *core) failureNote(class, raw string, retries int) string {
 // endedNote is what the brain hears of a task that ended, besides its
 // state: why eriphe-core stopped it, with its last receipt.
 func (c *core) endedNote(t *TaskRow) string {
+	return c.stopReasonNote(t) + c.workNote(t.ID)
+}
+
+// workNote is what the node did with a task's commits no remote had when
+// it stopped (its "work" event): pushed to the lent branch, or kept on the
+// node.
+func (c *core) workNote(id string) string {
+	w, ok := c.store.lastWork(id)
+	if !ok {
+		return ""
+	}
+	if e, _ := w["error"].(string); e != "" {
+		return " Son travail non poussé n'a pas pu être gardé sur le nœud : " + e + "."
+	}
+	branch, _ := w["branch"].(string)
+	kept, _ := w["kept"].(string)
+	reason, _ := w["reason"].(string)
+	pushed, _ := w["pushed"].(bool)
+	var note string
+	if pushed {
+		note = fmt.Sprintf(" Avant l'arrêt, ses commits ont été poussés sur la branche %s.", branch)
+	}
+	if kept != "" {
+		note += fmt.Sprintf(" Ses commits non poussés ne sont pas perdus : son dépôt est gardé sur le nœud, dans %s (7 jours par défaut, comme les instantanés) ; raison du nœud : %s. Dis-le à %s s'il en a besoin.",
+			kept, reason, c.conf().User)
+	}
+	return note
+}
+
+// lastWork is the data of a task's last "work" event.
+func (s *Store) lastWork(id string) (map[string]any, bool) {
+	var raw string
+	if s.db.QueryRow(`SELECT data FROM events WHERE task_id = ? AND type = 'work' ORDER BY seq DESC LIMIT 1`, id).Scan(&raw) != nil {
+		return nil, false
+	}
+	var data map[string]any
+	if json.Unmarshal([]byte(raw), &data) != nil {
+		return nil, false
+	}
+	return data, true
+}
+
+// stopReasonNote says why eriphe-core stopped a task, with its last receipt.
+func (c *core) stopReasonNote(t *TaskRow) string {
 	h := c.store.harness(t.ID)
 	var note string
 	switch h.StopReason {

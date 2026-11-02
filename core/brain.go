@@ -76,7 +76,13 @@ func (c *core) notifyBrain(id, state string) {
 		}
 	case stateStopped, stateFailed, stateLost:
 		if state == stateStopped && c.store.get("brain_stopped:"+t.ID) != "" {
-			return // the brain stopped it itself: nothing to tell
+			// The brain stopped it itself: nothing to tell, unless its
+			// work was kept on the node rather than pushed.
+			if w, _ := c.store.lastWork(t.ID); w["kept"] == nil {
+				return
+			}
+			text = fmt.Sprintf(taskEndedEvent, t.ID, t.Node, state) + c.workNote(t.ID)
+			break
 		}
 		text = fmt.Sprintf(taskEndedEvent, t.ID, t.Node, state) + c.endedNote(t)
 	default:
