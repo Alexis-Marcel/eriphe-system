@@ -1440,6 +1440,37 @@ put there, so it is treated as external content, like a mail or a page:
 
 Nothing adds or raises a folder: it is shared on its machine.
 
+### Copies of a folder
+
+A folder its machine allows copies of (`copyable`, chosen when it was shared there; turned off
+from here, never on) can be kept, up to date, on the user's other machines: Settings → Folders,
+"Copies", tick the machines (`PUT /v1/folders/{name}/copies`, `{"nodes": [...]}`). Each machine
+needs Syncthing, which comes with the installation (node/README.md, Copies); one without is
+shown greyed, to update. eriphe-core keeps who holds a copy of what (`folder_copies.go`,
+`folder_copies`) and hands each node its plan (`PUT /v1/sync`), with the peers' device IDs (from
+`GET /v1/node`, `syncthing.device_id`) and each folder at its level now: `read` sent only, `drop`
+sent only but its results subfolder both ways, `manage` both ways with 30 days of versions on the
+folder's machine. A plan is handed again only when it changes (and after a reconnection), every
+15 s at most. Unticking a machine, turning a folder's copies off, unsharing it or forgetting a
+machine drops the copies from the plans: the copy machines delete them, after stopping the tasks
+working on them.
+
+Each copy shows its state: up to date, syncing (with its %), behind, error (Syncthing's first
+error), waiting (not synced there yet), and what it takes there (`copies` in `GET /v1/folders`).
+A Mac whose iCloud Drive files are kept in the cloud only sets `icloud_hint`: the page asks to keep
+the folder downloaded.
+
+**Tasks on a copy.** While a folder's machine is away, a task lent the folder goes to an online
+machine whose copy was complete when the folder's machine was last seen (within 2 minutes:
+`synced_at`), rather than wait (`copyHost`); its spec lends the copy (`copy` in its folders), at the
+level the task asked for, never above the folder's. With `drop` or `manage`, it writes on the copy,
+and Syncthing brings that back to the folder's machine when it returns (a conflict keeps both
+files). A copy behind waits for the folder's machine, as before.
+
+| Call (bearer token) | What |
+|---|---|
+| `PUT /v1/folders/{name}/copies` | the machines that keep a copy: `{"nodes": ["nas"]}` (`[]`: none, the copies are deleted); 409 if the folder is not copyable or a machine has no Syncthing |
+
 ### Copies: the way between machines
 
 The copies of a shared folder on the user's other machines are kept by Syncthing, one next to each

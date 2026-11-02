@@ -51,7 +51,7 @@ func TestStartSyncthing(t *testing.T) {
 	os.WriteFile(filepath.Join(home, "config.xml"), []byte(f.configXML()), 0o600)
 	n := newNode(options{root: t.TempDir()})
 	n.syncNet = newSyncNet(n.opt.root, "", 0, nil)
-	if n.syncthingInfo() != nil {
+	if n.syncthingInfo(context.Background()) != nil {
 		t.Fatal("a device ID before Syncthing answered")
 	}
 	done := make(chan struct{})
@@ -61,7 +61,7 @@ func TestStartSyncthing(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("startSyncthing did not end")
 	}
-	if info := n.syncthingInfo(); info == nil || info.DeviceID != fakeDeviceID {
+	if info := n.syncthingInfo(context.Background()); info == nil || info.DeviceID != fakeDeviceID {
 		t.Fatalf("info %+v", info)
 	}
 	if n.syncNet.local != "127.0.0.1:22100" {

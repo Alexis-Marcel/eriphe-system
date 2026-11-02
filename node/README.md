@@ -301,6 +301,7 @@ A probe for another system is a `sessionProbe`.
 | `/v1/services/{name}/mcp` | a service's streamable HTTP MCP endpoint (see Services) |
 | `GET`/`POST /v1/model/{path}` | the model server it lends (`-model-server`): its `/v1/{path}`, streamed (see A model behind this node) |
 | `POST /v1/wake` | send another machine's Wake-on-LAN packets: `{macs, broadcast}` (see Waking the machine) |
+| `PUT /v1/sync` | the copies' plan, from eriphe-core: `{peers: [{name, device_id}], folders: [{id, share, name, source, role, access, results, peers}]}` (see Copies); answers `{problems}`, what it left out and why |
 | `GET /v1/sync/connect` | a peer's Syncthing connection, handed over by eriphe-core (`Upgrade: eriphe-sync`, `Eriphe-Sync-Peer`), on to this machine's Syncthing (see Copies) |
 
 States: `running`, `waiting_permission`, `idle` (turn over: done or asking something, the
@@ -1113,6 +1114,50 @@ sends into its tunnel for Syncthing is held to `-sync-limit` per second (8 MiB b
 `ERIPHE_SYNC_LIMIT`, `0` for no limit), all its peers together, so that a big copy leaves room on
 the same connection for the tasks and eriphe-core; each stream also has yamux's window (256 KiB).
 All of a copy's traffic goes through the machine eriphe-core runs on.
+
+**The folders** (`syncfolders.go`). eriphe-core hands each node its plan (`PUT /v1/sync`, kept in
+`<root>/sync/plan.json`): its peers and their device IDs, the folders it sends (`role: source`)
+and the copies it keeps (`role: copy`), each with the folder's level now. The node decides what
+Syncthing may touch:
+
+- it sends a folder only if it is in its list and the user allowed copies of it when sharing it
+  (`copyable`), and never above the level it is shared with now (a `:ro` place sends only);
+  eriphe-core can only restrict. A folder unshared, lowered or no longer copyable here leaves
+  Syncthing within seconds (the node watches its list), whatever eriphe-core says;
+- a copy is kept only in the node's data, `<root>/sync/copies/<id>` (`e-<machine>-<share id>`, the
+  same Syncthing folder id on every machine), never inside a shared folder nor where eriphe-core
+  names: owned by the tasks' user on Linux, where Syncthing, as root, keeps the owner of the folder
+  above what it writes (`copyOwnershipFromParent`);
+- the direction follows the level:
+
+| Level | The folder's machine | A copy |
+|---|---|---|
+| `read` | send only | receive only |
+| `drop` | send only, its results subfolder (the assistant's name) ignored (`/<results>`) | receive only, the same ignored |
+| `drop`'s results subfolder | a Syncthing folder of its own (`<id>-r`), both ways | both ways |
+| `manage` | both ways, with 30 days of staggered versions of what a copy deleted or replaced, in `<root>/sync/versions/<id>` (out of the folder) | both ways |
+
+  Syncthing's direction is per folder, and an ignore pattern can leave a subfolder out but not make
+  it come back: the results subfolder is a folder of its own. Conflicts keep both files
+  (`.sync-conflict-…`, `maxConflicts -1`). Syncthing adds its marker `.stfolder` (and `.stignore`
+  with `drop`) at the folder's root;
+- a copy no longer in the plan (copies turned off, the folder unshared or no longer copyable, a
+  machine forgotten) is taken out of Syncthing and deleted, once the tasks working on it are
+  stopped (`folder_revoked`, `copy_deleted` in `shares.log`); the peer's device goes with its last
+  folder. The versions of a folder no longer synced are deleted after 30 days.
+
+`GET /v1/node` reports each synced folder's state (`syncthing.folders`): Syncthing's `state`,
+`done` (the % of the folder a copy has; on the folder's machine, the least any copy has),
+`need_bytes`, `bytes` (what it takes here), the first `error`, and for a copy `synced_at`, when it
+was last complete. On a Mac, a folder in iCloud Drive or `~/Library/CloudStorage` whose files are
+kept in the cloud only fails with "resource deadlock avoided" (macOS does not download them for
+Syncthing): the state says `icloud: true`, and the workspace tells the user to keep the folder
+downloaded (right-click › Keep Downloaded). Nothing asks for more rights.
+
+A task's spec may lend a copy in place of the folder (`folders: [{…, copy: "<id>"}]`), while the
+folder's machine is away: the node mounts `<root>/sync/copies/<id>` only if its plan keeps that
+copy of that folder, and at most at the copy's level; with `manage`, the snapshot is of the copy.
+What the task writes there goes back to the folder's machine when it returns.
 
 ## Services (local MCP servers)
 

@@ -251,6 +251,9 @@ func (o options) rootList() string {
 // under the path it was shared with (a symlink put there since is refused),
 // and at most at the level it is shared with now.
 func (n *node) lentFolder(t *Task, tf TaskFolder) (*resolvedFolder, error) {
+	if tf.Copy != "" {
+		return n.lentCopy(t, tf) // syncfolders.go
+	}
 	list, err := loadShared(n.opt.root)
 	if err != nil {
 		return nil, err

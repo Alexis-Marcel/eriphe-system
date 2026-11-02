@@ -26,6 +26,34 @@
       </form>
       {{if ne .Max .Access}}<p class="muted small">{{tf "folders.lowered" (t (printf "folders.access.%s" .Max))}}</p>{{end}}
       {{if .Copyable}}
+      <details class="folder-copies"{{if .Copies}} open{{end}}>
+        <summary>{{t "folders.copies"}}{{if .Copies}} · {{len .Copies}}{{end}}</summary>
+        {{if .ICloud}}<p class="warn-note small">{{t "folders.icloudhint"}}</p>{{end}}
+        {{if .Copies}}
+        <ul class="copy-list">
+        {{range .Copies}}
+          <li>
+            <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{.Node}}</span>
+            <span class="tag{{if eq .Status "ok"}} tag-accent{{else if or (eq .Status "error") (eq .Status "behind")}} tag-no{{end}}">{{if eq .Status "syncing"}}{{tf "folders.copy.syncing" (printf "%.0f" .Done)}}{{else}}{{t (printf "folders.copy.%s" .Status)}}{{end}}</span>
+            {{if .Bytes}}<span class="muted small">{{size .Bytes}}</span>{{end}}
+            {{if .Error}}<p class="muted small copy-error">{{.Error}}</p>{{end}}
+          </li>
+        {{end}}
+        </ul>
+        {{end}}
+        {{if .CopyTo}}
+        <form hx-post="/settings/folders/copies" hx-confirm="{{tf "folders.copiesconfirm" .Name}}" class="copy-to">
+          <input type="hidden" name="name" value="{{.Name}}">
+          <p class="small muted">{{t "folders.copyto"}}</p>
+          <div class="checks">
+          {{range .CopyTo}}
+            <label class="check"><input type="checkbox" name="node" value="{{.Node}}" {{if .Checked}}checked{{end}} {{if and (not .Able) (not .Checked)}}disabled{{end}}><span><b>{{.Node}}</b>{{if not .Able}}<small>{{t "folders.copy.unable"}}</small>{{end}}</span></label>
+          {{end}}
+          </div>
+          <button class="btn sm" type="submit">{{t "folders.copiessave"}}</button>
+        </form>
+        {{else}}<p class="muted small">{{t "folders.copy.nomachine"}}</p>{{end}}
+      </details>
       <form hx-post="/settings/folders/nocopy" hx-confirm="{{tf "folders.nocopyconfirm" .Name}}" class="inline">
         <input type="hidden" name="name" value="{{.Name}}">
         <button class="link-btn" type="submit">{{t "folders.nocopy"}}</button>

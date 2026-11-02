@@ -710,6 +710,14 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
   downloaded on the Mac before the task starts, up to 2 GB per task (`-download-limit`); a bigger
   folder fails the task with what to do: "Keep Downloaded" on it, in the Finder.
 - **macOS in Lima's VM**: `--share` is ignored (the VM sees no Mac folder). **Windows**: not yet.
+- **Copies on your other machines**: share the folder with `--copyable` (or tick "may be copied"),
+  then on Settings → Folders, "Copies", tick the machines that keep it up to date (node/README.md,
+  Copies). Syncthing, installed with Eriphe on every machine, copies it through eriphe-core,
+  never directly nor through anyone else. A copy lives in that machine's Eriphe data
+  (`/var/lib/eriphe/node/sync/copies` on Linux, `~/.eriphe/node/sync/copies` on a Mac), and is
+  deleted when you untick it, turn copies off or stop sharing the folder. On a Mac, a folder of
+  iCloud Drive is copied only for the files kept on the Mac: right-click it in the Finder, "Keep
+  Downloaded".
 
 ## A model behind this machine
 

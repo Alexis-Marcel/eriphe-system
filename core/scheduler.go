@@ -59,6 +59,10 @@ type nodeInfo struct {
 	// It lends a model server through its tunnel (its -model-server,
 	// model_relay.go).
 	ModelServer bool `json:"model_server"`
+	// Its Syncthing, for the copies of shared folders: its device ID and
+	// the state of each folder synced there (folder_copies.go); nil
+	// without one.
+	Syncthing *nodeSyncthing `json:"syncthing"`
 }
 
 func parseInfo(n NodeRow) nodeInfo {

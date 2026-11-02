@@ -19,6 +19,7 @@ func (w *web) folderRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/folders/delete", w.auth(w.handleDeleteFolder))
 	mux.Handle("POST /settings/folders/level", w.auth(w.handleLowerFolder))
 	mux.Handle("POST /settings/folders/nocopy", w.auth(w.handleLowerFolder))
+	mux.Handle("POST /settings/folders/copies", w.auth(w.handleFolderCopies))
 }
 
 // folderMachine is a machine and the folders shared on it.
@@ -143,6 +144,33 @@ func (w *web) handleDeleteFolder(rw http.ResponseWriter, r *http.Request, s *ses
 		return
 	}
 	log.Printf("web: folder %s no longer shared", name)
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusOK)
+}
+
+// handleFolderCopies sets the machines that keep a copy of a folder (the
+// boxes ticked): copies added are made, those unticked deleted there.
+func (w *web) handleFolderCopies(rw http.ResponseWriter, r *http.Request, s *session) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := r.PostFormValue("name")
+	if err := w.c.setCopies(r.Context(), name, r.PostForm["node"]); err != nil {
+		var fe *folderError
+		switch {
+		case errors.Is(err, errNoFolder):
+			w.toast(rw, tr(w.lang(r), "folders.err.gone"), false)
+		case errors.As(err, &fe) && fe.Code == "not_copyable":
+			w.toast(rw, tr(w.lang(r), "folders.err.notcopyable"), false)
+		case errors.As(err, &fe) && fe.Code == "no_syncthing":
+			w.toast(rw, tr(w.lang(r), "folders.err.nosyncthing"), false)
+		default:
+			w.toast(rw, err.Error(), false)
+		}
+		return
+	}
+	log.Printf("web: copies of folder %s on %v", name, r.PostForm["node"])
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)
 }

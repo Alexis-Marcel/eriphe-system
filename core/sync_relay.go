@@ -86,6 +86,13 @@ func (s *Store) copies() ([]folderCopy, error) {
 	return out, rows.Err()
 }
 
+// hasCopy tells whether the machine copy keeps a copy of node's folder.
+func (s *Store) hasCopy(node, folder, copy string) bool {
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM folder_copies WHERE node = ? AND folder = ? AND copy = ?`, node, folder, copy).Scan(&n)
+	return n > 0
+}
+
 // syncPaired tells whether a and b share a copy, whichever holds the folder.
 func (s *Store) syncPaired(a, b string) bool {
 	if a == b {

@@ -340,6 +340,7 @@ func (n *node) startSyncthing(home string) {
 				n.mu.Unlock()
 				n.syncNet.setLocal(listen)
 				log.Printf("Syncthing on this machine: device %s, listening on %s (its peers through eriphe-core)", id, listen)
+				go n.watchSync(5 * time.Second) // syncfolders.go
 				return
 			}
 		}
@@ -349,16 +350,19 @@ func (n *node) startSyncthing(home string) {
 }
 
 // syncthingInfo is what GET /v1/node says of Syncthing: its device ID,
-// which eriphe-core hands to the peers it sets up copies with.
+// which eriphe-core hands to the peers it sets up copies with, and the
+// state of each folder synced (syncfolders.go).
 type syncthingInfo struct {
-	DeviceID string `json:"device_id"`
+	DeviceID string            `json:"device_id"`
+	Folders  []syncFolderState `json:"folders,omitempty"`
 }
 
-func (n *node) syncthingInfo() *syncthingInfo {
+func (n *node) syncthingInfo(ctx context.Context) *syncthingInfo {
 	n.mu.Lock()
-	defer n.mu.Unlock()
-	if n.st == nil {
+	id, up := n.stID, n.st != nil
+	n.mu.Unlock()
+	if !up {
 		return nil
 	}
-	return &syncthingInfo{DeviceID: n.stID}
+	return &syncthingInfo{DeviceID: id, Folders: n.syncState(ctx)}
 }

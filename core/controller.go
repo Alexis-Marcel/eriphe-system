@@ -48,6 +48,10 @@ type core struct {
 	failedOn sync.Map   // service name → the node it kept failing on, avoided while another can take it
 
 	syncLinks syncLinks // the Syncthing connections joined between machines (sync_relay.go)
+	// syncMu: one pass at a time over the copies' plans; syncPushed, the
+	// plan each node last took, by name (folder_copies.go).
+	syncMu     sync.Mutex
+	syncPushed sync.Map
 
 	cloud cloudFlows // Google authorizations in progress (cloud.go)
 
@@ -142,6 +146,7 @@ func (c *core) checkNodes(ctx context.Context) {
 	for _, row := range nodes {
 		c.refreshNode(ctx, c.node(row.Name))
 	}
+	c.syncAll(ctx) // the copies' plans (folder_copies.go)
 	if nodes, err = c.store.nodes(); err == nil {
 		c.resolveUpdates(nodes) // machine_updates.go
 		c.autoTLSOnly(nodes)    // machine_tls.go
