@@ -422,6 +422,18 @@ has "$T/compose-share" "ERIPHE_ROOT: /srv/eriphe/node" "the node's data, for doc
 installer 'ERIPHE_HOME=/Users/sam/.eriphe CONTAINER=/usr/local/bin/container; mac_share_sh' >"$T/mac-share"
 shellcheck -s sh "$T/mac-share" || fail "the Mac's eriphe-share: shellcheck"
 has "$T/mac-share" 'exec "$E/bin/eriphe-node" share -docker "$CONTAINER" "$@"' "the Mac's eriphe-share"
+has "$T/mac-share" 'display notification' "the Mac's eriphe-share --notify"
+# The Finder's Quick Actions: on folders, in the Finder, the folders given as
+# the shell script's arguments, a path with & written for XML.
+installer "quick_action '$T/svc' 'Share with Eriphe (read + results)' \"exec '/Users/a&b/.eriphe/bin/eriphe-share' --notify add --drop \\\"\\\$@\\\"\"" >/dev/null
+w="$T/svc/Share with Eriphe (read + results).workflow/Contents"
+has "$w/Info.plist" "<string>Share with Eriphe (read + results)</string>" "Quick Action: its name"
+has "$w/Info.plist" "<string>public.folder</string>" "Quick Action: on folders"
+has "$w/document.wflow" "<string>exec '/Users/a&amp;b/.eriphe/bin/eriphe-share' --notify add --drop \"\$@\"</string>" "Quick Action: its command"
+tr -d '\n\t' <"$w/document.wflow" | grep -q '<key>inputMethod</key><integer>1</integer>' || fail "Quick Action: the folders as arguments"
+if command -v plutil >/dev/null 2>&1; then
+	plutil -lint "$w/Info.plist" "$w/document.wflow" >/dev/null || fail "Quick Action: not a property list"
+fi
 
 if [ "$fails" -gt 0 ]; then
 	echo "launcher_test.sh: $fails failed" >&2

@@ -2010,8 +2010,245 @@ set -a
 # shellcheck disable=SC1091
 . "$E/node.env"
 set +a
+# From the Finder's Quick Actions: the outcome as a notification.
+if [ "${1:-}" = --notify ]; then
+	shift
+	if out=$("$E/bin/eriphe-node" share -docker "$CONTAINER" "$@" 2>&1); then title=Eriphe; else title="Eriphe: not shared"; fi
+	osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title (item 2 of argv)' -e 'end run' \
+		"$out" "$title" >/dev/null 2>&1 || true
+	exit 0
+fi
 exec "$E/bin/eriphe-node" share -docker "$CONTAINER" "$@"
 EOF
+}
+
+# The Finder's right click, "Share with Eriphe": two Quick Actions in
+# ~/Library/Services, one to share a folder to read, one to read and drop
+# results, both running eriphe-share --notify. Automator workflows, which
+# macOS runs unsigned. Named in French on a Mac in French.
+QA_NAMES_EN="Share with Eriphe|Share with Eriphe (read + results)"
+QA_NAMES_FR="Partager avec Eriphe|Partager avec Eriphe (lecture + résultats)"
+
+# qa_names: the two Quick Actions' names on this Mac, read then drop.
+qa_names() {
+	case $(defaults read -g AppleLanguages 2>/dev/null | sed -n '2s/[^a-zA-Z-]//gp') in
+	fr*) printf '%s' "$QA_NAMES_FR" ;;
+	*) printf '%s' "$QA_NAMES_EN" ;;
+	esac
+}
+
+# xml_text TEXT: TEXT for an XML document.
+xml_text() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
+# qa_info_plist NAME: a Quick Action's Info.plist: in the Finder, on folders.
+qa_info_plist() {
+	cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>$(xml_text "$1")</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>runWorkflowAsService</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSApplicationIdentifier</key>
+				<string>com.apple.finder</string>
+			</dict>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.folder</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
+EOF
+}
+
+# qa_wflow COMMAND: a Quick Action's workflow: one Run Shell Script action,
+# the selected folders as its arguments.
+qa_wflow() {
+	cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AMApplicationBuild</key>
+	<string>528</string>
+	<key>AMApplicationVersion</key>
+	<string>2.10</string>
+	<key>AMDocumentVersion</key>
+	<string>2</string>
+	<key>actions</key>
+	<array>
+		<dict>
+			<key>action</key>
+			<dict>
+				<key>AMAccepts</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Optional</key>
+					<true/>
+					<key>Types</key>
+					<array>
+						<string>com.apple.cocoa.string</string>
+					</array>
+				</dict>
+				<key>AMActionVersion</key>
+				<string>2.0.3</string>
+				<key>AMApplication</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>AMParameterProperties</key>
+				<dict>
+					<key>COMMAND_STRING</key>
+					<dict/>
+					<key>CheckedForUserDefaultShell</key>
+					<dict/>
+					<key>inputMethod</key>
+					<dict/>
+					<key>shell</key>
+					<dict/>
+					<key>source</key>
+					<dict/>
+				</dict>
+				<key>AMProvides</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Types</key>
+					<array>
+						<string>com.apple.cocoa.string</string>
+					</array>
+				</dict>
+				<key>ActionBundlePath</key>
+				<string>/System/Library/Automator/Run Shell Script.action</string>
+				<key>ActionName</key>
+				<string>Run Shell Script</string>
+				<key>ActionParameters</key>
+				<dict>
+					<key>COMMAND_STRING</key>
+					<string>$(xml_text "$1")</string>
+					<key>CheckedForUserDefaultShell</key>
+					<true/>
+					<key>inputMethod</key>
+					<integer>1</integer>
+					<key>shell</key>
+					<string>/bin/sh</string>
+					<key>source</key>
+					<string></string>
+				</dict>
+				<key>BundleIdentifier</key>
+				<string>com.apple.RunShellScript</string>
+				<key>CFBundleVersion</key>
+				<string>2.0.3</string>
+				<key>CanShowSelectedItemsWhenRun</key>
+				<false/>
+				<key>CanShowWhenRun</key>
+				<true/>
+				<key>Category</key>
+				<array>
+					<string>AMCategoryUtilities</string>
+				</array>
+				<key>Class Name</key>
+				<string>RunShellScriptAction</string>
+				<key>InputUUID</key>
+				<string>5A1C1F38-0B5B-4E8B-9C55-6E2E9B0C0001</string>
+				<key>Keywords</key>
+				<array>
+					<string>Shell</string>
+					<string>Script</string>
+				</array>
+				<key>OutputUUID</key>
+				<string>5A1C1F38-0B5B-4E8B-9C55-6E2E9B0C0002</string>
+				<key>UUID</key>
+				<string>5A1C1F38-0B5B-4E8B-9C55-6E2E9B0C0003</string>
+				<key>UnlocalizedApplications</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>arguments</key>
+				<dict/>
+				<key>isViewVisible</key>
+				<integer>1</integer>
+			</dict>
+			<key>isViewVisible</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>connectors</key>
+	<dict/>
+	<key>workflowMetaData</key>
+	<dict>
+		<key>applicationBundleIDsByPath</key>
+		<dict/>
+		<key>applicationPaths</key>
+		<array/>
+		<key>inputTypeIdentifier</key>
+		<string>com.apple.Automator.fileSystemObject.folder</string>
+		<key>outputTypeIdentifier</key>
+		<string>com.apple.Automator.nothing</string>
+		<key>presentationMode</key>
+		<integer>15</integer>
+		<key>processesInput</key>
+		<false/>
+		<key>serviceApplicationBundleID</key>
+		<string>com.apple.finder</string>
+		<key>serviceApplicationPath</key>
+		<string>/System/Library/CoreServices/Finder.app</string>
+		<key>serviceInputTypeIdentifier</key>
+		<string>com.apple.Automator.fileSystemObject.folder</string>
+		<key>serviceOutputTypeIdentifier</key>
+		<string>com.apple.Automator.nothing</string>
+		<key>serviceProcessesInput</key>
+		<false/>
+		<key>systemImageName</key>
+		<string>NSActionTemplate</string>
+		<key>useAutomaticInputType</key>
+		<false/>
+		<key>workflowTypeIdentifier</key>
+		<string>com.apple.Automator.servicesMenu</string>
+	</dict>
+</dict>
+</plist>
+EOF
+}
+
+# quick_action DIR NAME COMMAND: the Quick Action NAME in DIR.
+quick_action() {
+	w="$1/$2.workflow"
+	rm -rf "$w"
+	mkdir -p "$w/Contents"
+	qa_info_plist "$2" >"$w/Contents/Info.plist"
+	qa_wflow "$3" >"$w/Contents/document.wflow"
+}
+
+# mac_quick_actions installs the Finder's two Quick Actions (the ones of
+# the other language go), and has the Services menu read them again.
+mac_quick_actions() {
+	d=$HOME/Library/Services
+	mac_quick_actions_uninstall
+	names=$(qa_names)
+	cmd="exec $(q "$ERIPHE_HOME/bin/eriphe-share") --notify add"
+	quick_action "$d" "${names%%|*}" "$cmd \"\$@\""
+	quick_action "$d" "${names#*|}" "$cmd --drop \"\$@\""
+	/System/Library/CoreServices/pbs -update >/dev/null 2>&1 || true
+}
+
+mac_quick_actions_uninstall() {
+	for n in "${QA_NAMES_EN%%|*}" "${QA_NAMES_EN#*|}" "${QA_NAMES_FR%%|*}" "${QA_NAMES_FR#*|}"; do
+		rm -rf "$HOME/Library/Services/$n.workflow"
+	done
 }
 
 # start_node_sh: what the node's LaunchAgent runs: container's services
@@ -2408,6 +2645,7 @@ native_up() {
 	start_node_sh >"$E/start-node.sh"
 	mac_share_sh >"$E/bin/eriphe-share"
 	chmod 700 "$E/update.sh" "$E/start-node.sh" "$E/bin/eriphe-share"
+	mac_quick_actions
 	# Stopped while their binaries change.
 	launchctl bootout "gui/$(id -u)/$NODE_LABEL" >/dev/null 2>&1 || true
 	[ "$MODE" != core ] || launchctl bootout "gui/$(id -u)/$CORE_LABEL" >/dev/null 2>&1 || true
@@ -2495,6 +2733,7 @@ native_up() {
 native_uninstall() {
 	E=$ERIPHE_HOME
 	for l in "$UPDATE_LABEL" "$NODE_LABEL" "$CORE_LABEL"; do unload "$l"; done
+	mac_quick_actions_uninstall
 	native_relay_uninstall
 	if [ -x "$CONTAINER" ] && "$CONTAINER" system status >/dev/null 2>&1; then
 		note "Removing Eriphe's containers..."
@@ -2813,7 +3052,7 @@ outcome() {
 	if [ -n "$NATIVE" ]; then
 		shared=$(mac_shares)
 		note "Places folders may be shared from: $(printf '%s' "$shared" | sed 's/=[^,]*//g; s/,/, /g')"
-		[ -z "$shared" ] || note "To share one with Eriphe: $(tilde "$ERIPHE_HOME/bin/eriphe-share") add <folder> (--drop to let it drop its results there)"
+		[ -z "$shared" ] || note "To share one with Eriphe: right-click it in the Finder, Quick Actions, \"$(qa_names | cut -d '|' -f 1)\"; or $(tilde "$ERIPHE_HOME/bin/eriphe-share") add <folder> (--drop to let it drop its results there)"
 		[ -n "$UPDATING" ] || [ -z "$shared" ] ||
 			notice "the first time a folder of Documents, the Desktop or iCloud Drive is shared, macOS asks to allow \"container-runtime-linux\". Allow it."
 	elif [ -n "$SHARES" ]; then
