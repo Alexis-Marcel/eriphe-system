@@ -570,6 +570,15 @@ a NAS:
   from `eriphe-core join-token -name <name>` (a new eriphe-core accepts machines over TLS only,
   from the start: the node joins with `ERIPHE_CA_HASH`, kept in `.env`), and reads the setup
   code from its log.
+- `eriphe-syncthing`: Syncthing, for the copies of shared folders on your other machines
+  (node/README.md, Copies), the official image `syncthing/syncthing:2.1.7`, pinned by digest, in
+  the node's network namespace: its API (`127.0.0.1:18384`) and its listening address
+  (`127.0.0.1:22100`) are on the loopback only, no port is published, and it reaches the other
+  machines through eriphe-core only. Read-only root, root with the node's three capabilities (to
+  keep the owners of what it writes), its home in `/var/lib/eriphe/syncthing` (its keys, and the
+  `config.xml` the script writes once: the API key, discovery, relays, NAT traversal, usage
+  reports and upgrades off), the shared places and the node's copies (`/var/lib/eriphe/node/sync`)
+  at their paths. The updater recreates it with the node.
 - the networks: `eriphe-tasks` (internal, isolated gateway with Docker 28 or later: the tasks reach
   only the node), `eriphe-system` (eriphe-core and the services), `eriphe-docker` (the proxy).
 - the updater, outside the compose project: `/opt/eriphe/update.sh` and `update.conf` (the images
@@ -607,6 +616,16 @@ you, and each task is a micro-VM of Apple's container (node/README.md, The conta
 - when the node joins another machine's eriphe-core, the root LaunchDaemon `org.eriphe.relay`
   (`/Library/LaunchDaemons`, `/usr/local/libexec/eriphe-relay`, written with `sudo`), the node's
   way to eriphe-core on the LAN (see Troubleshooting, What macOS asks).
+- Syncthing, for the copies of shared folders on your other machines (node/README.md, Copies): its
+  official build 2.1.7 (`syncthing-macos-universal`), checked against the SHA-256 of the release's
+  `sha256sum.txt.asc` written in the script and the code signature of its developer (Developer
+  ID of Kastelo AB, Team ID `LQE5SYM783`, `codesign`), in `~/.eriphe/syncthing`, run by its own
+  LaunchAgent `org.eriphe.syncthing` (log: `~/.eriphe/syncthing.log`). It is not the node's child,
+  so that macOS asks once, for Syncthing, whether it may open Documents or iCloud Drive, and keeps
+  the answer across updates. Its `config.xml` (`~/.eriphe/syncthing/home`, written once) keeps its
+  API and its listening address on the loopback, with discovery, relays, NAT traversal, usage
+  reports and upgrades off. If it cannot be downloaded or checked, the node is installed without
+  copies, and the script says so.
 - the places shared with Eriphe, by themselves: the home folder (`home`), iCloud Drive (`icloud`),
   and each cloud folder of `~/Library/CloudStorage` (`googledrive`, `onedrive`, `dropbox`…), plus
   the `--share` ones; `--no-share` shares none.
@@ -810,6 +829,14 @@ right-click a folder of it in File Explorer, "Show more options", "Share with Er
 shared this way. The menu is that user's (their registry); it works when that user is the one who
 installed Eriphe (the distribution is theirs). Folders elsewhere (another drive, Documents moved
 off the user folder) cannot be shared yet.
+
+For the copies of shared folders on your other machines (node/README.md, Copies), the distribution
+runs Syncthing 2.1.7, its official Linux build checked against the SHA-256 of the release's
+`sha256sum.txt.asc` written in the script (`/usr/local/lib/eriphe/syncthing`, home
+`/var/lib/eriphe-syncthing`, log `/var/log/eriphe-syncthing.log`), started with the node by
+`eriphe-node-run`, its API and its listening address on the loopback only, discovery, relays, NAT
+traversal and upgrades off. It sees only what the distribution sees: your user folder and the
+node's copies.
 
 `irm <url> | iex` takes no parameters: they go in `ERIPHE_*` variables, as in the commands above.
 Each parameter has its own: `-Core` `ERIPHE_CORE`, `-JoinToken` `ERIPHE_JOIN_TOKEN`, `-Name`

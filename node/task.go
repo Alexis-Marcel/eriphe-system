@@ -275,6 +275,10 @@ type node struct {
 	skillFetch func(ctx context.Context, taskID, sha string) ([]byte, error)
 	// syncNet carries Syncthing's connections to its peers (syncpeer.go).
 	syncNet *syncNet
+	// st drives this machine's Syncthing, once it answered, stID its
+	// device ID (syncthing.go); held by mu.
+	st   *syncthing
+	stID string
 }
 
 func newNode(o options) *node {
@@ -359,6 +363,8 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		"results_named": true,
 		// A model server eriphe-core may reach through the tunnel (model.go).
 		"model_server": n.opt.modelServer != "",
+		// Its Syncthing's device ID, for the copies of shared folders (syncthing.go).
+		"syncthing": n.syncthingInfo(),
 		// How long the machine's keyboard and mouse have been idle (idle.go).
 		"idle": userIdle(ctx, r.URL.Query()),
 		// What it may tell of the user's session, at the level asked (context.go).

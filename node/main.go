@@ -64,10 +64,10 @@ type options struct {
 	// /v1 API under it (model.go). Empty: none.
 	modelServer string
 	// Syncthing on this machine, for the copies of shared folders
-	// (syncpeer.go): its listening address on the loopback (empty: none),
-	// and what its connections send into the tunnel at most, per second.
-	syncthingListen string
-	syncLimit       int64
+	// (syncthing.go): its home, where its config.xml is (empty: none), and
+	// what its connections send into the tunnel at most, per second.
+	syncthingHome string
+	syncLimit     int64
 }
 
 func main() {
@@ -115,7 +115,7 @@ func main() {
 	wakeMAC := flag.String("wake-mac", os.Getenv("ERIPHE_WAKE_MAC"), "MAC address(es) of this machine's network card, comma-separated, so that eriphe-core can wake it (Wake-on-LAN); default: the card it reaches eriphe-core through, when the node runs on the machine itself (env ERIPHE_WAKE_MAC)")
 	wakeBroadcast := flag.String("wake-broadcast", os.Getenv("ERIPHE_WAKE_BROADCAST"), "broadcast address of that card's network, e.g. 192.0.2.255 (env ERIPHE_WAKE_BROADCAST)")
 	modelServer := flag.String("model-server", os.Getenv("ERIPHE_MODEL_SERVER"), "a model server this node may lend to Eriphe through its tunnel (Ollama, llama.cpp, vLLM, LM Studio), as this node reaches it, e.g. http://127.0.0.1:11434; only its OpenAI-compatible /v1 API is reached, and no port is opened (env ERIPHE_MODEL_SERVER)")
-	flag.StringVar(&o.syncthingListen, "syncthing-listen", os.Getenv("ERIPHE_SYNCTHING_LISTEN"), "where this machine's Syncthing listens for its peers, on the loopback, e.g. 127.0.0.1:22000; its peers reach it through eriphe-core only (empty: no copies kept here) (env ERIPHE_SYNCTHING_LISTEN)")
+	flag.StringVar(&o.syncthingHome, "syncthing-home", os.Getenv("ERIPHE_SYNCTHING_HOME"), "the home of this machine's Syncthing, as this node sees it: its config.xml gives the API's address and key and where it listens, all on the loopback; its peers reach it through eriphe-core only (empty: no copies here) (env ERIPHE_SYNCTHING_HOME)")
 	syncLimit := flag.String("sync-limit", envOr("ERIPHE_SYNC_LIMIT", "8m"), "what Syncthing's connections send into the tunnel at most, per second, e.g. 8m (0: no limit) (env ERIPHE_SYNC_LIMIT)")
 	labels := flag.String("labels", os.Getenv("ERIPHE_NODE_LABELS"), "comma-separated labels agents can require, e.g. gpu (env ERIPHE_NODE_LABELS)")
 	o.volumes = volumeFlag{}
@@ -139,9 +139,6 @@ func main() {
 		log.Fatalf("-sync-limit: %v", err)
 	}
 	o.syncLimit = limit
-	if err := checkSyncthingListen(o.syncthingListen); err != nil {
-		log.Fatal(err)
-	}
 	if err := makeRoot(o.root); err != nil {
 		log.Fatal(err)
 	}
@@ -162,7 +159,8 @@ func main() {
 		log.Fatal(err)
 	}
 	n := newNode(o)
-	n.syncNet = newSyncNet(o.root, o.syncthingListen, o.syncLimit, coreSyncDialer(s))
+	n.syncNet = newSyncNet(o.root, "", o.syncLimit, coreSyncDialer(s))
+	go n.startSyncthing(o.syncthingHome) // syncthing.go
 	if err := n.ensureTaskNetwork(); err != nil {
 		log.Fatal(err)
 	}

@@ -39,6 +39,20 @@ LIMA_VERSION=2.2.1
 LIMA_SHA256_arm64=9e9eacce88f37e185c346bad73aa6136f738d8cdf8c3bb23cd42b071824bc66e
 LIMA_SHA256_x86_64=6b776e4bc41f358e6ee01fefcc78e2eb26f11635a0fcff632234af77a566c6c4
 
+# Syncthing, for the copies of shared folders (node/README.md, Copies):
+# pinned here, never upgraded by itself. On Linux its official image, by
+# digest; on a Mac its official signed build, its zip checked against the
+# release's sha256sum.txt.asc and its binary against the Developer ID of
+# Kastelo AB, who sign and notarize Syncthing's macOS builds.
+SYNCTHING_VERSION=2.1.7
+SYNCTHING_IMAGE=syncthing/syncthing:2.1.7@sha256:2b71da7c0d0a91a6ae5285ad079226fecc0a365d08b27720e1f7037b018f7546
+SYNCTHING_SHA256_MACOS=a98fb709c79412e5586c81a1586bfb256b6e5a97b067ddf7447155bcdf6aac3f # syncthing-macos-universal-v2.1.7.zip
+SYNCTHING_TEAM=LQE5SYM783
+# Its API and its listening address, on the loopback only (its peers reach
+# it through eriphe-core, node/syncpeer.go).
+SYNCTHING_API=127.0.0.1:18384
+SYNCTHING_LISTEN=127.0.0.1:22100
+
 REGISTRY=ghcr.io/alexis-marcel
 # The socket proxy of earlier installs, removed with Eriphe: the node's own
 # image is the proxy now (eriphe-node docker-proxy).
@@ -295,8 +309,8 @@ prelude() {
 set -eu
 CONF=$(q "$CONF") DATA=$(q "$DATA") CORE_UID=$CORE_UID
 MODE=$(q "${MODE:-}") NODE_NAME=$(q "${NAME:-}") ASSISTANT=$(q "$ASSISTANT")
-IMAGES=$(q "${NODE_IMAGE:-} ${WORKER_IMAGE:-}$([ "${MODE:-}" = core ] && printf ' %s' "${CORE_IMAGE:-}")")
-ALL_REPOS=$(q "$LEGACY_PROXY $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
+IMAGES=$(q "${NODE_IMAGE:-} ${WORKER_IMAGE:-} $SYNCTHING_IMAGE$([ "${MODE:-}" = core ] && printf ' %s' "${CORE_IMAGE:-}")")
+ALL_REPOS=$(q "$LEGACY_PROXY syncthing/syncthing $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
 EOF
 	cat <<'EOF'
 die() { printf 'eriphe: %s\n' "$*" >&2; exit 1; }
@@ -758,6 +772,38 @@ EOF
 	} | on_host
 }
 
+# syncthing_key: a new key for Syncthing's API, which stays on this machine.
+syncthing_key() { od -An -N16 -tx1 /dev/urandom | tr -d ' \n'; }
+
+# syncthing_config KEY: Syncthing's first config.xml (node/testdata/
+# syncthing-config.xml): its API and its listening address on the loopback,
+# KEY for the API, and from its very first start no discovery, relay, NAT
+# traversal, usage or crash report, nor upgrade. Written once; the node
+# sets the same options again at every start (node/syncthing.go).
+syncthing_config() {
+	cat <<EOF
+<!-- Written by Eriphe's installer: Syncthing for the copies of shared folders (node/README.md, Copies). -->
+<configuration version="52">
+    <gui enabled="true" tls="false">
+        <address>$SYNCTHING_API</address>
+        <apikey>$1</apikey>
+    </gui>
+    <options>
+        <listenAddress>tcp://$SYNCTHING_LISTEN</listenAddress>
+        <globalAnnounceEnabled>false</globalAnnounceEnabled>
+        <localAnnounceEnabled>false</localAnnounceEnabled>
+        <relaysEnabled>false</relaysEnabled>
+        <natEnabled>false</natEnabled>
+        <announceLANAddresses>false</announceLANAddresses>
+        <urAccepted>-1</urAccepted>
+        <crashReportingEnabled>false</crashReportingEnabled>
+        <autoUpgradeIntervalH>0</autoUpgradeIntervalH>
+        <startBrowser>false</startBrowser>
+    </options>
+</configuration>
+EOF
+}
+
 # compose_yaml: the compose project, as deploy/nas/compose.yaml with this
 # machine's paths and Docker group. HOST_DATA is the data folder as Docker
 # sees it when this runs in a container (eriphe-launcher, which sees it at
@@ -857,6 +903,8 @@ EOF
       ERIPHE_INSTALL: $INSTALL
       # Its data, for eriphe-node share in its container (eriphe-share).
       ERIPHE_ROOT: $data/node
+      # Syncthing's home, read-only: its API's address and key (node/syncthing.go).
+      ERIPHE_SYNCTHING_HOME: $data/syncthing
       DOCKER_HOST: tcp://eriphe-docker-proxy:2375
     command: ["-root", "$data/node",
               "-network", "eriphe-system", "-task-network", "eriphe-tasks",
@@ -865,15 +913,50 @@ EOF
     volumes:
       # Same path inside and outside: the Docker daemon understands it as is.
       - $data/node:$data/node
+      - $data/syncthing:$data/syncthing:ro
 EOF
-	share_paths | while IFS= read -r p; do
-		case $p in
-		*:ro) printf '      - %s:%s:ro\n' "${p%:ro}" "${p%:ro}" ;;
-		?*) printf '      - %s:%s\n' "$p" "$p" ;;
-		esac
-	done
+	share_volumes
 	cat <<EOF
     networks: [eriphe-system, eriphe-tasks, eriphe-docker]
+
+  syncthing:
+    # The copies of shared folders (node/README.md, Copies): the official
+    # image, pinned by digest, in the node's network namespace, where its API
+    # and its listening address are on the loopback only; it reaches its
+    # peers through the node and eriphe-core, nothing else (no discovery,
+    # relay nor NAT traversal, from its config.xml, written once by
+    # install.sh). Root with no capability but the node's, to keep the
+    # owners of what it writes (copyOwnershipFromParent). It sees the shared
+    # places at their paths, and the copies under the node's data.
+    image: $SYNCTHING_IMAGE
+    container_name: eriphe-syncthing
+    restart: unless-stopped
+    depends_on: [node]
+    network_mode: "service:node"
+    user: "0:0"
+    entrypoint: ["/bin/syncthing"]
+    command: ["serve", "--no-browser"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: [no-new-privileges:true]
+    environment:
+      STHOMEDIR: $data/syncthing
+      HOME: $data/syncthing
+      # The image's own default is every address: the loopback only.
+      STGUIADDRESS: $SYNCTHING_API
+      STNOUPGRADE: "1"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -m 2 http://$SYNCTHING_API/rest/noauth/health | grep -q OK"]
+      interval: 60s
+      timeout: 10s
+    volumes:
+      - $data/syncthing:$data/syncthing
+      - $data/node/sync:$data/node/sync
+EOF
+	share_volumes
+	cat <<EOF
 
 networks:
   eriphe-system:
@@ -896,6 +979,16 @@ EOF
     name: eriphe-docker
     internal: true
 EOF
+}
+
+# share_volumes: the shared places, at their paths, read-only for a :ro one.
+share_volumes() {
+	share_paths | while IFS= read -r p; do
+		case $p in
+		*:ro) printf '      - %s:%s:ro\n' "${p%:ro}" "${p%:ro}" ;;
+		?*) printf '      - %s:%s\n' "$p" "$p" ;;
+		esac
+	done
 }
 
 # card_to: the network card this machine reaches $1 through (an IPv4
@@ -1152,8 +1245,21 @@ recreate() {
   if [ "$(docker inspect -f '{{.Config.Image}}' eriphe-docker-proxy 2>/dev/null)" = "$NODE_IMAGE" ]; then
     start docker-proxy "$NODE_IMAGE" || return 1
   fi
-  start node "$NODE_IMAGE" || return 1
+  start node "$NODE_IMAGE"
+  ok=$?
+  syncthing_again
+  [ "$ok" = 0 ] || return 1
   healthy node "$since"
+}
+
+# syncthing_again: Syncthing runs in the node's network namespace, which a
+# new node container replaces: its container again too. It does not hold
+# up an update: the node runs without it, and says so.
+syncthing_again() {
+  grep -q '^  syncthing:' "$CONF/compose.yaml" 2>/dev/null || return 0
+  if ! out=$(dc up -d --pull never --no-deps --force-recreate syncthing 2>&1); then
+    log "Syncthing does not start again: $(printf '%s' "$out" | tail -n 1)"
+  fi
 }
 
 main_id() { printf '%s\n' "$1" | awk -v s="$2" '$1 == s { print $3 }'; }
@@ -1378,6 +1484,8 @@ host_up() {
 		printf 'SHARE_PATHS=%s\n' "$(q "$([ -n "${HOST_DATA:-}" ] || share_paths | sed 's/:ro$//' | tr '\n' ' ')")"
 		printf 'COMPOSE=%s\n' "$(compose_yaml "$1" "$2" | b64)"
 		printf 'ENVF=%s\n' "$(env_file | b64)"
+		# Syncthing's first configuration, written only if it has none.
+		printf 'SYNCTHING_CONF=%s\n' "$(syncthing_config "$(syncthing_key)" | b64)"
 		printf 'INSTALL_CONF=%s\n' "$(install_conf | b64)"
 		printf 'UPDATE_CONF=%s\n' "$(updater_conf | b64)"
 		printf 'UPDATE_SH=%s\n' "$(updater_sh | b64)"
@@ -1419,6 +1527,11 @@ put() { printf '%s' "$2" | base64 -d > "$1.new" && mv "$1.new" "$1"; }
 put "$CONF/compose.yaml" "$COMPOSE"
 put "$CONF/.env" "$ENVF"
 put "$CONF/install.conf" "$INSTALL_CONF"
+# Syncthing's home (its keys, its configuration with its API key) and the
+# node's copies, root's only.
+mkdir -p "$DATA/syncthing" "$DATA/node/sync"
+chmod 700 "$DATA/syncthing" "$DATA/node/sync"
+[ -s "$DATA/syncthing/config.xml" ] || put "$DATA/syncthing/config.xml" "$SYNCTHING_CONF"
 
 for img in $IMAGES; do
   if [ "$PULL" = missing ] && docker image inspect "$img" >/dev/null 2>&1; then continue; fi
@@ -1856,6 +1969,7 @@ mac_uninstall() {
 NODE_LABEL=org.eriphe.node
 CORE_LABEL=org.eriphe.core
 UPDATE_LABEL=org.eriphe.update
+SYNCTHING_LABEL=org.eriphe.syncthing
 
 # mac_native tells whether this Mac runs Eriphe with Apple's container: Apple
 # silicon, macOS 26 or later, and no install in Lima's VM already (it stays
@@ -1971,6 +2085,7 @@ ERIPHE_WORKER_IMAGE=$(q "$WORKER_IMAGE")
 ERIPHE_CORE_RELAY=$([ "$MODE" = core ] || q "$RELAY_SOCKET")
 ERIPHE_WAKE_MAC=$(q "$WAKE_MAC")
 ERIPHE_WAKE_BROADCAST=$(q "$WAKE_BROADCAST")
+ERIPHE_SYNCTHING_HOME=$(q "$ERIPHE_HOME/syncthing/home")
 EOF
 }
 
@@ -2060,6 +2175,107 @@ native_relay_uninstall() {
 	note "Removing the LaunchDaemon $RELAY_LABEL..."
 	sudo launchctl bootout "system/$RELAY_LABEL" >/dev/null 2>&1 || true
 	sudo rm -rf "$RELAY_PLIST" "$RELAY_BIN" "$(dirname "$RELAY_SOCKET")" /var/log/eriphe-relay.log
+}
+
+# ---- Syncthing on a Mac --------------------------------------------------
+#
+# The copies of shared folders (node/README.md, Copies). Syncthing's
+# official build, signed with the Developer ID of Kastelo AB and notarized,
+# in ~/.eriphe/syncthing, run by a LaunchAgent of its own: macOS asks once
+# whether it may open Documents, iCloud Drive or a cloud's folder, and ties
+# the answer to that signature, so that it holds across Syncthing's
+# versions and Eriphe's updates. It is never the node's child: macOS would
+# then hold the node, which is not signed, responsible. The version is the
+# one pinned here; Syncthing never upgrades itself (autoUpgradeIntervalH 0,
+# STNOUPGRADE).
+
+# syncthing_signed BIN: BIN's code signature is valid, and Kastelo AB's
+# Developer ID (Team ID SYNCTHING_TEAM) signed it.
+syncthing_signed() {
+	codesign --verify --strict -R="anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = \"$SYNCTHING_TEAM\"" "$1" >/dev/null 2>&1 &&
+		codesign -dv "$1" 2>&1 | grep -qx "TeamIdentifier=$SYNCTHING_TEAM"
+}
+
+# syncthing_fetch DIR: the official build, as DIR/syncthing, once its zip
+# matches the checksum pinned here and its binary Kastelo AB's signature.
+syncthing_fetch() {
+	zip=syncthing-macos-universal-v$SYNCTHING_VERSION.zip
+	curl -fsSL -o "$1/$zip" "https://github.com/syncthing/syncthing/releases/download/v$SYNCTHING_VERSION/$zip" || {
+		warn "could not download Syncthing $SYNCTHING_VERSION"
+		return 1
+	}
+	if [ "$(shasum -a 256 "$1/$zip" | cut -d ' ' -f 1)" != "$SYNCTHING_SHA256_MACOS" ]; then
+		warn "Syncthing's archive does not match its checksum: it is not installed"
+		return 1
+	fi
+	ditto -x -k "$1/$zip" "$1/x" || return 1
+	bin=$1/x/syncthing-macos-universal-v$SYNCTHING_VERSION/syncthing
+	if ! syncthing_signed "$bin"; then
+		warn "Syncthing's binary does not carry the signature of its developer (Team ID $SYNCTHING_TEAM): it is not installed"
+		return 1
+	fi
+	mv "$bin" "$1/syncthing"
+}
+
+# syncthing_plist: its LaunchAgent, which runs the signed binary itself:
+# its API on the loopback, no upgrade, no browser.
+syncthing_plist() {
+	S=$ERIPHE_HOME/syncthing
+	printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
+		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+		'<!-- Written by install.sh. -->' '<plist version="1.0">' '<dict>' \
+		"  <key>Label</key><string>$SYNCTHING_LABEL</string>" '  <key>ProgramArguments</key>' '  <array>' \
+		"    <string>$(xml_text "$S/syncthing")</string>" '    <string>serve</string>' '    <string>--no-browser</string>' '  </array>' \
+		'  <key>RunAtLoad</key><true/>' '  <key>KeepAlive</key><true/>' '  <key>ThrottleInterval</key><integer>10</integer>' \
+		'  <key>ProcessType</key><string>Background</string>' \
+		'  <key>EnvironmentVariables</key>' \
+		"  <dict><key>STHOMEDIR</key><string>$(xml_text "$S/home")</string><key>STGUIADDRESS</key><string>$SYNCTHING_API</string><key>STNOUPGRADE</key><string>1</string></dict>" \
+		"  <key>StandardOutPath</key><string>$(xml_text "$ERIPHE_HOME/syncthing.log")</string>" \
+		"  <key>StandardErrorPath</key><string>$(xml_text "$ERIPHE_HOME/syncthing.log")</string>" '</dict>' '</plist>'
+}
+
+# syncthing_current: the pinned version is in place, still signed.
+syncthing_current() {
+	[ "$(cat "$ERIPHE_HOME/syncthing/version" 2>/dev/null)" = "$SYNCTHING_VERSION" ] &&
+		syncthing_signed "$ERIPHE_HOME/syncthing/syncthing"
+}
+
+# mac_syncthing_fetch: the pinned build, if it is not in place yet, as
+# ~/.eriphe/update/syncthing-new/syncthing (SYNCTHING_NEW), before anything
+# stops. Without it (no download, a bad checksum or signature) the node is
+# installed all the same, without copies.
+mac_syncthing_fetch() {
+	SYNCTHING_NEW=
+	syncthing_current && return 0
+	d=$ERIPHE_HOME/update/syncthing-new
+	rm -rf "$d"
+	mkdir -p "$d"
+	if syncthing_fetch "$d"; then
+		SYNCTHING_NEW=$d/syncthing
+	else
+		echo syncthing_missing=1
+	fi
+}
+
+# mac_syncthing: Syncthing in place (the build fetched, if any), its first
+# configuration if it has none, and its LaunchAgent loaded.
+mac_syncthing() {
+	S=$ERIPHE_HOME/syncthing
+	if [ -n "$SYNCTHING_NEW" ]; then
+		launchctl bootout "gui/$(id -u)/$SYNCTHING_LABEL" >/dev/null 2>&1 || true
+		mkdir -p "$S"
+		mv "$SYNCTHING_NEW" "$S/syncthing"
+		echo "$SYNCTHING_VERSION" >"$S/version"
+		rm -rf "$ERIPHE_HOME/update/syncthing-new"
+	fi
+	[ -x "$S/syncthing" ] || return 0
+	(
+		umask 077
+		mkdir -p "$S/home"
+		chmod 700 "$S" "$S/home"
+		[ -s "$S/home/config.xml" ] || syncthing_config "$(syncthing_key)" >"$S/home/config.xml"
+	)
+	load "$SYNCTHING_LABEL" "$(syncthing_plist)"
 }
 
 native_conf() {
@@ -2851,6 +3067,7 @@ native_up() {
 	sh "$E/update.sh" install "$new" >&2 ||
 		die "could not download Eriphe: check this Mac's Internet connection, then run the command again"
 	step Downloaded
+	mac_syncthing_fetch
 	RELAY=
 	[ "$MODE" = core ] || relay_plan "$new/eriphe-node"
 	# Stopped while their binaries change.
@@ -2888,6 +3105,7 @@ native_up() {
 			printf '%s\n' "$JOIN_TOKEN" >"$E/join-token"
 		)
 	fi
+	mac_syncthing
 	since=$({ wc -c <"$E/node.log"; } 2>/dev/null | tr -d " ")
 	since=${since:-0}
 	load "$NODE_LABEL" "$(plist "$NODE_LABEL" keep "$E/node.log" /bin/sh "$E/start-node.sh")"
@@ -2945,7 +3163,7 @@ native_up() {
 # Apple's container if Eriphe installed it.
 native_uninstall() {
 	E=$ERIPHE_HOME
-	for l in "$UPDATE_LABEL" "$NODE_LABEL" "$CORE_LABEL"; do unload "$l"; done
+	for l in "$UPDATE_LABEL" "$NODE_LABEL" "$CORE_LABEL" "$SYNCTHING_LABEL"; do unload "$l"; done
 	mac_quick_actions_uninstall
 	native_relay_uninstall
 	if [ -x "$CONTAINER" ] && "$CONTAINER" system status >/dev/null 2>&1; then
@@ -3155,6 +3373,9 @@ do_install() {
 		out=$(native_up)
 		if printf '%s\n' "$out" | grep -qx relay_kept=1; then
 			notice "the node's relay ($RELAY_LABEL) keeps its older version, as no password could be asked: run the install command again in Terminal to update it."
+		fi
+		if printf '%s\n' "$out" | grep -qx syncthing_missing=1; then
+			notice "Syncthing could not be installed (see the log): this Mac keeps no copy of your folders for now; run the install command again later."
 		fi
 	else
 		if [ "$OS" = Darwin ]; then

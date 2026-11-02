@@ -71,6 +71,13 @@ func newSyncNet(root, local string, limit int64, dial syncDialer) *syncNet {
 	return sn
 }
 
+// setLocal sets Syncthing's listening address, once it is known.
+func (sn *syncNet) setLocal(addr string) {
+	sn.mu.Lock()
+	sn.local = addr
+	sn.mu.Unlock()
+}
+
 // setPeers opens a loopback port for each peer, closes those of the peers
 // no longer named, and returns the ports, by peer. A peer keeps its port of
 // the last start when it is free.
@@ -203,7 +210,10 @@ func copyLimited(dst io.Writer, src io.Reader, limit *byteRate) {
 // handleSyncConnect takes a peer's connection from eriphe-core, on the
 // tunnel, and hands it to this machine's Syncthing.
 func (sn *syncNet) handleSyncConnect(w http.ResponseWriter, r *http.Request) {
-	if sn == nil || sn.local == "" {
+	sn.mu.Lock()
+	target := sn.local
+	sn.mu.Unlock()
+	if target == "" {
 		http.Error(w, "no Syncthing on this machine", http.StatusNotFound)
 		return
 	}
@@ -220,7 +230,7 @@ func (sn *syncNet) handleSyncConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no copy with this machine here", http.StatusForbidden)
 		return
 	}
-	local, err := net.DialTimeout("tcp", sn.local, 5*time.Second)
+	local, err := net.DialTimeout("tcp", target, 5*time.Second)
 	if err != nil {
 		http.Error(w, "Syncthing does not answer on this machine", http.StatusBadGateway)
 		return
