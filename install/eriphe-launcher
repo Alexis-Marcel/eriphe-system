@@ -256,8 +256,11 @@ summary() {
 	elif [ -n "$PIN" ]; then
 		notice "it stays on version $PIN (ERIPHE_VERSION=latest follows the releases)."
 	fi
-	[ -n "$SHARES" ] ||
+	if [ -n "$SHARES" ]; then
+		note "To share a folder with Eriphe: docker exec eriphe-node eriphe-node share add <folder> (--drop to let it drop its results there)"
+	else
 		notice "Eriphe cannot open this machine's folders yet: set ERIPHE_SHARES (shares=/mnt/user) to give it some."
+	fi
 	good_to_know
 	say ""
 	logs="docker logs eriphe-node"

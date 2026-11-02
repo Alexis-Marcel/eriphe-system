@@ -687,16 +687,6 @@ func templateFuncs(lang string) template.FuncMap {
 			input, _ := data["input"].(map[string]any)
 			return subject(tool, input)
 		},
-		// browseurl is the folder explorer's address for a machine, a root and a path (web_folders.go).
-		"browseurl": func(kv ...string) string {
-			q := url.Values{}
-			for i := 0; i+1 < len(kv); i += 2 {
-				if kv[i+1] != "" {
-					q.Set(kv[i], kv[i+1])
-				}
-			}
-			return "/settings/folders/browse?" + q.Encode()
-		},
 	}
 }
 

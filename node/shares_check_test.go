@@ -1,13 +1,10 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -94,37 +91,28 @@ func TestUnraidPrivate(t *testing.T) {
 	}
 	os.MkdirAll(filepath.Join(mnt, "disk1", "domains", "vm2"), 0o755)
 	n.opt.shares = shareFlag{"shares": {Path: user}, "mnt": {Path: mnt}, "vms": {Path: filepath.Join(user, "domains")}}
-	mux := http.NewServeMux()
-	n.routes(mux)
-	get := func(url string) map[string]any {
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest("GET", url, nil))
-		var out map[string]any
-		json.Unmarshal(rec.Body.Bytes(), &out)
-		return out
-	}
-	var dirs []string
-	for _, d := range get("/v1/shares/shares/dirs")["dirs"].([]any) {
-		dirs = append(dirs, d.(string))
-	}
-	if !slices.Equal(dirs, []string{"Docs", "Projects"}) {
-		t.Errorf("listed: %v", dirs)
-	}
-	for _, u := range []string{"/v1/shares/shares/dirs?path=system", "/v1/shares/shares/dirs?path=domains/vm1", "/v1/shares/mnt/dirs?path=disk1/domains"} {
-		if out := get(u); out["code"] != "sensitive" {
-			t.Errorf("%s: %v", u, out)
+	// What the node would refuse to add: "sensitive" on the way, or false
+	// when it holds one.
+	check := func(share, rel string) any {
+		f, err := n.resolveFolder(share, rel)
+		if err != nil {
+			return err.(*shareError).Code
 		}
+		return n.shareable(f) == nil
 	}
-	for u, want := range map[string]any{
-		"/v1/shares/shares/dirs?check=1":                 false, // holds system
-		"/v1/shares/mnt/dirs?check=1&path=disk1":         false, // holds domains
-		"/v1/shares/shares/dirs?check=1&path=Projects":   true,  // its system is the user's
-		"/v1/shares/vms/dirs?check=1&path=vm1":           true,  // a root inside domains
-		"/v1/shares/shares/dirs?check=1&path=Docs":       true,
-		"/v1/shares/shares/dirs?check=1&path=Projects/a": nil, // not found
+	for c, want := range map[[2]string]any{
+		{"shares", "system"}:      "sensitive",
+		{"shares", "domains/vm1"}: "sensitive",
+		{"mnt", "disk1/domains"}:  "sensitive",
+		{"shares", ""}:            false, // holds system
+		{"mnt", "disk1"}:          false, // holds domains
+		{"shares", "Projects"}:    true,  // its system is the user's
+		{"vms", "vm1"}:            true,  // a root inside domains
+		{"shares", "Docs"}:        true,
+		{"shares", "Projects/a"}:  "not_found",
 	} {
-		if out := get(u); out["shareable"] != want {
-			t.Errorf("%s: %v, want shareable %v", u, out, want)
+		if got := check(c[0], c[1]); got != want {
+			t.Errorf("%s/%s: %v, want %v", c[0], c[1], got, want)
 		}
 	}
 }
@@ -139,14 +127,12 @@ func TestAppleTreeFailsClosed(t *testing.T) {
 	os.MkdirAll(locked, 0o755)
 	os.Chmod(locked, 0)
 	t.Cleanup(func() { os.Chmod(locked, 0o755) })
-	mux := http.NewServeMux()
-	n.routes(mux)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/v1/shares/data/dirs?check=1&path=Clients", nil))
-	var out map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &out)
-	if out["shareable"] != false || out["code"] != "unreadable_sub" {
-		t.Errorf("a locked subfolder: %d %v", rec.Code, out)
+	_, e, err := n.appleResolve(context.Background(), "data", "Clients", "tree")
+	if err == nil {
+		err = checkExplored(e)
+	}
+	if err == nil || err.(*shareError).Code != "unreadable_sub" {
+		t.Errorf("a locked subfolder: %v", err)
 	}
 	if err := checkExplored(&exploration{tree: make([]string, treeMax+1)}); err == nil || err.(*shareError).Code != "too_large" {
 		t.Errorf("a tree too large: %v", err)

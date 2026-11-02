@@ -21,7 +21,7 @@ import (
 
 const (
 	testMAC     = "00:00:5e:00:53:01" // RFC 7042's documentation range
-	pcWakeInfo  = `{"runtimes":["claude-code"],"os":"linux","install":"windows","shares":[{"name":"data","writable":true}],"wake":{"macs":["00:00:5e:00:53:01"],"broadcast":"192.0.2.255"}}`
+	pcWakeInfo  = `{"runtimes":["claude-code"],"os":"linux","install":"windows","folders":[{"id":"c1","name":"Clients","access":"read"}],"wake":{"macs":["00:00:5e:00:53:01"],"broadcast":"192.0.2.255"}}`
 	nasWakeInfo = `{"runtimes":["claude-code"],"always_on":true}`
 )
 
@@ -166,7 +166,6 @@ func TestWake(t *testing.T) {
 func TestWakeForWaitingTask(t *testing.T) {
 	c, store, relayed := wakeCore(t)
 	here := fakeWakeHere(t)
-	store.addFolder(&Folder{Name: "Clients", Node: "pc", Share: "data", Path: "Clients", Access: folderRead})
 	task := &TaskRow{ID: "t-wait", Agent: "small", Runtime: "claude-code", Prompt: "Sort the invoices", State: statePending, Folders: "Clients"}
 	store.insertTask(task)
 
