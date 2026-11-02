@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"slices"
 	"strings"
 )
 
@@ -26,7 +25,9 @@ func (w *web) folderRoutes(mux *http.ServeMux) {
 type folderMachine struct {
 	Name    string
 	Online  bool
-	How     string // the text key of how to share a folder there
+	System  string // its share guide (shareGuide)
+	NAS     bool   // Eriphe runs there in Docker
+	Lima    bool   // a Mac with the Lima VM
 	Folders []folderView
 	Legacy  []legacyFolder // given from here before: to share again there
 }
@@ -35,31 +36,58 @@ type foldersData struct {
 	Machines []folderMachine
 	Drive    []folderView // the Google Drive folders (cloud.go)
 	Legacy   bool         // some folders are to share again on their machine
-	Hows     []shareHowOn // how to share a folder, by kind of machine
+	Guides   []shareGuide // how to share a folder, one guide per system
 }
 
-// shareHowOn is how to share a folder on some machines, installed alike.
-type shareHowOn struct {
-	Names string // the machines, comma-separated
-	How   string // the text key
+// shareGuide is how to share a folder on one system, and the user's devices
+// that run it (open when there is one).
+type shareGuide struct {
+	System   string // mac, windows, linux
+	Machines string // the user's devices of that system, comma-separated
+	NAS      bool   // one of them runs Eriphe in Docker (a NAS)
+	Lima     bool   // one of them is a Mac with the Lima VM, which sees no folder
 }
 
-// shareHow is the text key of how to share a folder on a machine, by how it
-// was installed (web_pages.go, systemKey).
-func shareHow(install, goos string) string {
+// shareSystem is the guide for a machine, by how it was installed
+// (web_pages.go, systemKey): the system, and whether it runs in Docker or
+// on Lima.
+func shareSystem(install, goos string) (system string, nas, lima bool) {
 	switch systemKey(install, goos) {
 	case "system.macos-container":
-		return "folders.how.mac"
-	case "system.linux":
-		return "folders.how.linux"
-	case "system.docker":
-		return "folders.how.docker"
-	case "system.windows":
-		return "folders.how.windows"
+		return "mac", false, false
 	case "system.macos-lima":
-		return "folders.how.lima"
+		return "mac", false, true
+	case "system.windows":
+		return "windows", false, false
+	case "system.docker":
+		return "linux", true, false
 	}
-	return "folders.how.node"
+	if goos == "darwin" {
+		return "mac", false, false
+	}
+	if goos == "windows" {
+		return "windows", false, false
+	}
+	return "linux", false, false
+}
+
+// shareGuides are the three guides, with the devices of each.
+func shareGuides(ms []folderMachine) []shareGuide {
+	gs := []shareGuide{{System: "mac"}, {System: "windows"}, {System: "linux"}}
+	for _, m := range ms {
+		for i := range gs {
+			if gs[i].System != m.System {
+				continue
+			}
+			if gs[i].Machines != "" {
+				gs[i].Machines += ", "
+			}
+			gs[i].Machines += m.Name
+			gs[i].NAS = gs[i].NAS || m.NAS
+			gs[i].Lima = gs[i].Lima || m.Lima
+		}
+	}
+	return gs
 }
 
 func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -84,7 +112,8 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 			continue // its access is cut (node_access.go)
 		}
 		info := parseInfo(n)
-		m := folderMachine{Name: n.Name, Online: n.Online, How: shareHow(nodeInstall(n, info), n.OS)}
+		m := folderMachine{Name: n.Name, Online: n.Online}
+		m.System, m.NAS, m.Lima = shareSystem(nodeInstall(n, info), n.OS)
 		for _, v := range views {
 			if v.Source == sourceMachine && v.Node == n.Name {
 				m.Folders = append(m.Folders, v)
@@ -98,12 +127,8 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 			}
 		}
 		d.Machines = append(d.Machines, m)
-		if i := slices.IndexFunc(d.Hows, func(h shareHowOn) bool { return h.How == m.How }); i >= 0 {
-			d.Hows[i].Names += ", " + m.Name
-		} else {
-			d.Hows = append(d.Hows, shareHowOn{Names: m.Name, How: m.How})
-		}
 	}
+	d.Guides = shareGuides(d.Machines)
 	for _, v := range views {
 		if v.Source == sourceDrive {
 			d.Drive = append(d.Drive, v)

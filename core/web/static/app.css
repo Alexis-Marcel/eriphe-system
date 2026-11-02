@@ -1541,6 +1541,11 @@ details.app-install > * + * { margin-top: 10px; }
 .folder-level .field { display: flex; align-items: center; gap: 8px; }
 .folder-level select { width: auto; }
 .share-levels { display: grid; gap: 6px; margin: 10px 0; padding-left: 18px; }
+.share-prereq { margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
+.share-guide { border-top: 1px solid var(--border); padding: 10px 0; }
+.share-guide summary { cursor: pointer; }
+.share-guide .code { margin: 6px 0 10px; }
+.share-guide h4 { margin: 14px 0 4px; }
 .folder-copies { margin-top: 10px; }
 .folder-copies summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
 .copy-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }

@@ -1438,8 +1438,9 @@ partager" in Settings → Dossiers removes either kind.
 **Sharing one** is done on the machine; Settings → Dossiers lists, machine by machine, what is
 shared there, each folder with a level selector that offers only its level and those below, a
 "Peut être copié" badge with "Ne plus copier", and whether it is there now; one "Comment partager ?"
-button opens a dialog with the three levels, the copy option and the commands for each kind of
-machine. Lowering a level, or turning copies off, applies at once here (`folders_lowered`: the
+button opens a dialog with the three levels, the copy option, a reminder that the folder's device
+must be added first, and one guide per system (Mac, Windows, Linux or a NAS in Docker), open for
+the systems of the user's devices, its commands each with a copy button. Lowering a level, or turning copies off, applies at once here (`folders_lowered`: the
 folder is listed and lent at the lower level from then on, even while its machine is away) and on
 the machine now or as soon as it is back (`PATCH /v1/shares/{id}` through its tunnel, which stops
 the tasks holding it above); the row goes once the machine reports it lowered. An older node
