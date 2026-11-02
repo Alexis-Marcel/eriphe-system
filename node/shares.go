@@ -98,6 +98,18 @@ var sensitiveNames = map[string]bool{
 
 func sensitive(name string) bool { return sensitiveNames[strings.ToLower(name)] }
 
+// privateMarker, an empty file the user puts in a folder of their own, makes
+// it private: never listed, never shared, nor any folder holding it down to
+// scanDepth levels, like a sensitive one. Hidden, so the user's sync tools
+// and apps leave it alone.
+const privateMarker = ".eriphe-private"
+
+// marked tells whether dir holds the private marker.
+func marked(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, privateMarker))
+	return err == nil
+}
+
 // unlisted are the directories the explorer does not show: the sensitive
 // ones and every hidden one.
 func unlisted(name string) bool { return strings.HasPrefix(name, ".") || sensitive(name) }
@@ -169,6 +181,16 @@ func (n *node) resolveFolder(share, rel string) (*resolvedFolder, error) {
 	if private(rootReal, real) {
 		return nil, shareErr(http.StatusForbidden, "sensitive", "this folder is hidden or sensitive")
 	}
+	for d := rootReal; ; {
+		if marked(d) {
+			return nil, shareErr(http.StatusForbidden, "sensitive", "this folder is hidden or sensitive")
+		}
+		if d == real {
+			break
+		}
+		rel, _ := filepath.Rel(d, real)
+		d = filepath.Join(d, strings.SplitN(rel, string(filepath.Separator), 2)[0])
+	}
 	if fi, err := os.Stat(real); err != nil || !fi.IsDir() {
 		return nil, shareErr(http.StatusNotFound, "not_found", "no such folder")
 	}
@@ -221,8 +243,9 @@ func (n *node) shareable(f *resolvedFolder) error {
 	return checkShareable(f.real)
 }
 
-// checkShareable refuses a folder that holds something sensitive, up to
-// scanDepth levels down: its content would go to a task whole.
+// checkShareable refuses a folder that holds something sensitive or a
+// private folder, up to scanDepth levels down: its content would go to a
+// task whole.
 func checkShareable(real string) error {
 	type dir struct {
 		path  string
@@ -237,6 +260,10 @@ func checkShareable(real string) error {
 			continue // unreadable to the node too
 		}
 		for _, e := range entries {
+			if e.Name() == privateMarker {
+				rel, _ := filepath.Rel(real, d.path)
+				return holdsPrivate(filepath.ToSlash(rel))
+			}
 			if sensitive(e.Name()) {
 				rel, _ := filepath.Rel(real, filepath.Join(d.path, e.Name()))
 				return shareErr(http.StatusForbidden, "holds_sensitive", "this folder holds %s, which is never shared: share a folder inside it", filepath.ToSlash(rel))
@@ -247,6 +274,11 @@ func checkShareable(real string) error {
 		}
 	}
 	return nil
+}
+
+// holdsPrivate refuses a folder holding the private folder rel.
+func holdsPrivate(rel string) error {
+	return shareErr(http.StatusForbidden, "holds_private", "this folder holds %s, which its owner made private: share a folder inside it", rel)
 }
 
 // The node's API for shares, through the tunnel.
@@ -281,7 +313,7 @@ func (n *node) handleShareDirs(w http.ResponseWriter, r *http.Request) {
 	for _, e := range entries {
 		switch {
 		case e.IsDir(): // a symlink is not listed: only real directories
-			if !unlisted(e.Name()) && !private(rootReal, filepath.Join(f.real, e.Name())) && !within(own, filepath.Join(f.real, e.Name())) {
+			if p := filepath.Join(f.real, e.Name()); !unlisted(e.Name()) && !private(rootReal, p) && !within(own, p) && !marked(p) {
 				dirs = append(dirs, e.Name())
 			}
 		case e.Type().IsRegular():

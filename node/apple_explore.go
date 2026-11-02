@@ -57,11 +57,18 @@ fi
 p=$(realpath "$R/$1" 2>/dev/null) || { printf 'E\0not_found\0'; exit 0; }
 case $p in "$R" | "$R"/*) ;; *) printf 'E\0outside\0'; exit 0 ;; esac
 [ -d "$p" ] || { printf 'E\0not_found\0'; exit 0; }
+# A private folder, or one in a private folder (shares.go: privateMarker).
+q=$p
+while :; do
+  [ -e "$q/.eriphe-private" ] || [ -L "$q/.eriphe-private" ] && { printf 'E\0private\0'; exit 0; }
+  [ "$q" = "$R" ] && break
+  q=${q%/*}
+done
 # Read, not tested: on the share's root, test -r goes by owners the Mac maps.
 ls -a "$p" >/dev/null 2>&1 || { printf 'E\0unreadable\0'; exit 0; }
 printf 'P\0%s\0%s\0' "$p" "${p#"$R"}"
 printf 'D\0'
-find "$p" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null
+find "$p" -mindepth 1 -maxdepth 1 -type d -exec sh -c '[ ! -e "$1/.eriphe-private" ] && [ ! -L "$1/.eriphe-private" ]' sh {} \; -print0 2>/dev/null
 printf '\0F\0%s\0' "$(find "$p" -mindepth 1 -maxdepth 1 -type f -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')"
 if [ "$2" = tree ]; then
   printf 'T\0'
@@ -144,6 +151,8 @@ func explorerRefusal(code string) error {
 		return shareErr(http.StatusForbidden, "outside", "this folder leads out of its root")
 	case "unreadable":
 		return shareErr(http.StatusForbidden, "unreadable", "this folder cannot be read")
+	case "private":
+		return shareErr(http.StatusForbidden, "sensitive", "this folder is hidden or sensitive")
 	case "notdir":
 		return errors.New("the results folder is not a folder")
 	case "nowrite":
@@ -211,13 +220,16 @@ func (n *node) holdsOwn(real string) error {
 }
 
 // checkTree is checkShareable on the explorer's tree of a folder (paths
-// relative to it).
+// relative to it): its entries, files too, so the private marker is seen.
 func checkTree(tree []string) error {
 	if len(tree) > treeMax {
 		tree = tree[:treeMax]
 	}
 	sort.Strings(tree)
 	for _, p := range tree {
+		if path.Base(p) == privateMarker {
+			return holdsPrivate(path.Dir(p))
+		}
 		if sensitive(path.Base(p)) {
 			return shareErr(http.StatusForbidden, "holds_sensitive", "this folder holds %s, which is never shared: share a folder inside it", p)
 		}

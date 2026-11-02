@@ -221,3 +221,59 @@ func TestFolderMounts(t *testing.T) {
 		t.Error("two folders under one name")
 	}
 }
+
+// privateFixture adds a vault whose Caps/Personal/Private its owner made
+// private, three levels down, and a link to it.
+func privateFixture(t *testing.T, root string) {
+	t.Helper()
+	for _, d := range []string{"Vault/Projects", "Vault/Caps/Personal/Private/Notes", "Vault/Caps/Work"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.WriteFile(filepath.Join(root, "Vault/Caps/Personal/Private", privateMarker), nil, 0o644)
+	os.Symlink(filepath.Join(root, "Vault/Caps/Personal/Private"), filepath.Join(root, "Vault/private-link"))
+}
+
+// testPrivateMarker checks a private folder, on either engine: not listed,
+// not looked into nor shared, even through a link, and what holds it is
+// listed but never shared.
+func testPrivateMarker(t *testing.T, n *node, root string) {
+	privateFixture(t, root)
+	mux := http.NewServeMux()
+	n.routes(mux)
+	get := func(url string) (int, map[string]any) {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest("GET", url, nil))
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	code, out := get("/v1/shares/data/dirs?path=Vault/Caps/Personal")
+	if code != 200 || len(out["dirs"].([]any)) != 0 {
+		t.Errorf("listed: %d %v", code, out)
+	}
+	for _, p := range []string{"Vault/Caps/Personal/Private", "Vault/Caps/Personal/Private/Notes", "Vault/private-link"} {
+		if code, out = get("/v1/shares/data/dirs?check=1&path=" + p); out["code"] != "sensitive" {
+			t.Errorf("%s: %d %v, want sensitive", p, code, out)
+		}
+		if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{{Name: "p", Share: "data", Path: p}}}}); err == nil {
+			t.Errorf("%s is mounted", p)
+		}
+	}
+	for _, p := range []string{"Vault", "Vault/Caps", "Vault/Caps/Personal"} {
+		if code, out = get("/v1/shares/data/dirs?check=1&path=" + p); code != 200 || out["shareable"] != false || out["code"] != "holds_private" {
+			t.Errorf("%s: %d %v, want holds_private", p, code, out)
+		}
+	}
+	for _, p := range []string{"Vault/Projects", "Vault/Caps/Work"} {
+		if code, out = get("/v1/shares/data/dirs?check=1&path=" + p); out["shareable"] != true {
+			t.Errorf("%s: %d %v, want shareable", p, code, out)
+		}
+	}
+}
+
+func TestPrivateMarker(t *testing.T) {
+	n, root := shareFixture(t)
+	testPrivateMarker(t, n, root)
+}
