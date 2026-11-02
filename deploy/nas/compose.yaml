@@ -29,34 +29,33 @@ services:
     networks: [eriphe-system]
 
   docker-proxy:
-    image: wollomatic/socket-proxy:1.13.2
+    # eriphe-node docker-proxy (node/dockerproxy.go): only the calls the node
+    # makes, each container's whole request checked against what the node
+    # sends (no privileged container, capability, device, host namespace),
+    # bind mounts from the node's root and the shares only, symlinks resolved.
+    image: ghcr.io/alexis-marcel/eriphe-node
     container_name: eriphe-docker-proxy
     restart: unless-stopped
-    # nobody, in the group that owns /var/run/docker.sock (281 on Unraid:
+    # Root without a capability but DAC_READ_SEARCH, to resolve the bind
+    # mounts' symlinks; in the group of /var/run/docker.sock (281 on Unraid:
     # `stat -c %g /var/run/docker.sock`).
-    user: "65534:281"
+    user: "0:281"
     read_only: true
     cap_drop: [ALL]
+    cap_add: [DAC_READ_SEARCH]
     security_opt: [no-new-privileges:true]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # What bind mounts may come from, read-only, at the same paths as the node.
+      - /mnt/user/appdata/eriphe-system/node:/mnt/user/appdata/eriphe-system/node:ro
+      - /mnt/user:/mnt/user:ro
     networks: [eriphe-docker]
-    # ^ and $ are implied. V: optional API version prefix; ID: a container id or name.
-    command:
-      - -listenip=0.0.0.0
-      - -allowfrom=eriphe-node
-      - -shutdowngracetime=5
-      - -watchdoginterval=0
-      # Bind mounts only from the node's root (task folders and profiles) and
-      # the place whose folders may be given to Eriphe (ERIPHE_NODE_SHARES).
-      - -allowbindmountfrom=/mnt/user/appdata/eriphe-system/node,/mnt/user
-      - -allowHEAD=(/v1\.[0-9]+)?/_ping
-      # version, network inspect bridge and eriphe-tasks, ps, images, and an image's labels (its runtimes)
-      - -allowGET=(/v1\.[0-9]+)?/(_ping|version|networks/(bridge|eriphe-tasks)|containers/json|images/json|images/[a-zA-Z0-9][a-zA-Z0-9_./:@-]*/json)
-      # run -i: create (pulling the image if needed), attach, start, wait; stop
-      - -allowPOST=(/v1\.[0-9]+)?/(containers/create|containers/[a-zA-Z0-9][a-zA-Z0-9_.-]*/(attach|start|wait|stop)|images/create)
-      # rm -f
-      - -allowDELETE=(/v1\.[0-9]+)?/containers/[a-zA-Z0-9][a-zA-Z0-9_.-]*
+    command: ["docker-proxy", "-listen", ":2375", "-allow-from", "eriphe-node",
+              # The node's root and the place whose folders may be given to Eriphe (ERIPHE_NODE_SHARES).
+              "-bind-from", "/mnt/user/appdata/eriphe-system/node,/mnt/user",
+              "-networks", "eriphe-system,eriphe-tasks",
+              # The node's image, the one container allowed on the host's network (wake-on-LAN).
+              "-wake-image", "ghcr.io/alexis-marcel/eriphe-node"]
 
   node:
     image: ghcr.io/alexis-marcel/eriphe-node

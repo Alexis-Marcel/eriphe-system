@@ -408,7 +408,7 @@ or the pinned one) or "rollback". The images are the ones the installer wrote do
 (`ghcr.io/alexis-marcel/eriphe-core`, `eriphe-node`, `eriphe-base`; the node downloads the agents
 of its own version itself, see node/README.md, Agents). Neither eriphe-core nor the
 node gets any new right (the socket proxy allows the node exactly what it did, see
-deploy/README.md): each only writes a short file in its own data folder. An **updater**, which the
+deploy/README.md; it updates with the node, being its image): each only writes a short file in its own data folder. An **updater**, which the
 installer puts on the host side, does the rest, as root there:
 
 | | the updater | runs |
@@ -543,9 +543,13 @@ The same compose project on every Linux machine, written to `/opt/eriphe` (`comp
 `install.conf` with the options), data in `/var/lib/eriphe`, as `deploy/nas/compose.yaml` does on
 a NAS:
 
-- `eriphe-docker-proxy`: the node's only way to Docker, a socket proxy that allows the calls the
-  node makes and bind mounts from `/var/lib/eriphe/node` and the shared places (`--share`) only
-  (see deploy/README.md for what it does not stop). It runs as `nobody` in the group of `/var/run/docker.sock`, found at install.
+- `eriphe-docker-proxy`: the node's only way to Docker, the node's own image run as
+  `eriphe-node docker-proxy` (node/dockerproxy.go). It allows the calls the node makes, creates
+  containers only as the node makes them (nothing privileged, no added capability but a task's
+  three, no device, no host namespace) and bind mounts from `/var/lib/eriphe/node` and the shared
+  places (`--share`) only, their symlinks resolved (see deploy/README.md for what it checks and
+  what it does not stop). It runs as root with every capability dropped but `DAC_READ_SEARCH`, the
+  node's root and the shared places mounted read-only.
 - `eriphe-node`: read-only root, every capability dropped but those that hand the task folders to
   the tasks' user, its root at `/var/lib/eriphe/node` (`node.json`: its identity), and each shared
   place at the same path (read-only for a `:ro` one), told to it in `ERIPHE_NODE_SHARES`.

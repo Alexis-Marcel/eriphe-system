@@ -40,7 +40,9 @@ LIMA_SHA256_arm64=9e9eacce88f37e185c346bad73aa6136f738d8cdf8c3bb23cd42b071824bc6
 LIMA_SHA256_x86_64=6b776e4bc41f358e6ee01fefcc78e2eb26f11635a0fcff632234af77a566c6c4
 
 REGISTRY=ghcr.io/alexis-marcel
-PROXY_IMAGE=wollomatic/socket-proxy:1.13.2
+# The socket proxy of earlier installs, removed with Eriphe: the node's own
+# image is the proxy now (eriphe-node docker-proxy).
+LEGACY_PROXY=wollomatic/socket-proxy
 
 # images: the image references, at the pinned version (--version: a release,
 # or edge for main) or latest, the latest release. Fixed here, in the
@@ -293,8 +295,8 @@ prelude() {
 set -eu
 CONF=$(q "$CONF") DATA=$(q "$DATA") CORE_UID=$CORE_UID
 MODE=$(q "${MODE:-}") NODE_NAME=$(q "${NAME:-}") ASSISTANT=$(q "$ASSISTANT")
-IMAGES=$(q "$PROXY_IMAGE ${NODE_IMAGE:-} ${WORKER_IMAGE:-}$([ "${MODE:-}" = core ] && printf ' %s' "${CORE_IMAGE:-}")")
-ALL_REPOS=$(q "${PROXY_IMAGE%:*} $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
+IMAGES=$(q "${NODE_IMAGE:-} ${WORKER_IMAGE:-}$([ "${MODE:-}" = core ] && printf ' %s' "${CORE_IMAGE:-}")")
+ALL_REPOS=$(q "$LEGACY_PROXY $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
 EOF
 	cat <<'EOF'
 die() { printf 'eriphe: %s\n' "$*" >&2; exit 1; }
@@ -766,8 +768,8 @@ compose_yaml() {
 	cat <<EOF
 # Written by install.sh: run it again rather than editing this file.
 # The node reaches Docker only through the socket proxy, which allows the
-# calls it makes and bind mounts from its root and the shared places only
-# (--share). Tasks run on
+# calls it makes, containers as it makes them (nothing privileged), and bind
+# mounts from its root and the shared places only (--share). Tasks run on
 # eriphe-tasks, an internal network: they reach the node (its task listener
 # and its egress relay, their one way out, which never dials the LAN), not
 # eriphe-core, the services nor this machine.
@@ -802,27 +804,30 @@ EOF
 	fi
 	cat <<EOF
   docker-proxy:
-    image: $PROXY_IMAGE
+    # eriphe-node docker-proxy (node/dockerproxy.go): the calls the node
+    # makes, each container's whole request checked, nothing privileged.
+    image: $NODE_IMAGE
     container_name: eriphe-docker-proxy
     restart: unless-stopped
-    # nobody, in the group that owns /var/run/docker.sock.
-    user: "65534:$gid"
+    # Root without a capability but DAC_READ_SEARCH: it resolves the bind
+    # mounts' symlinks in the node's root and the shares, seen read-only.
+    user: "0:$gid"
     read_only: true
     cap_drop: [ALL]
+    cap_add: [DAC_READ_SEARCH]
     security_opt: [no-new-privileges:true]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - $data/node:$data/node:ro
+EOF
+	share_paths | sed 's/:ro$//' | while IFS= read -r p; do
+		[ -z "$p" ] || printf '      - %s:%s:ro\n' "$p" "$p"
+	done
+	cat <<EOF
     networks: [eriphe-docker]
-    command:
-      - -listenip=0.0.0.0
-      - -allowfrom=eriphe-node
-      - -shutdowngracetime=5
-      - -watchdoginterval=0
-      - -allowbindmountfrom=$data/node$(share_paths | sed 's/:ro$//' | tr '\n' ',' | sed 's/,$//; s/^./,&/')
-      - -allowHEAD=(/v1\.[0-9]+)?/_ping
-      - -allowGET=(/v1\.[0-9]+)?/(_ping|version|networks/(bridge|eriphe-tasks)|containers/json|images/json|images/[a-zA-Z0-9][a-zA-Z0-9_./:@-]*/json)
-      - -allowPOST=(/v1\.[0-9]+)?/(containers/create|containers/[a-zA-Z0-9][a-zA-Z0-9_.-]*/(attach|start|wait|stop)|images/create)
-      - -allowDELETE=(/v1\.[0-9]+)?/containers/[a-zA-Z0-9][a-zA-Z0-9_.-]*
+    command: ["docker-proxy", "-listen", ":2375", "-allow-from", "eriphe-node",
+              "-bind-from", "$data/node$(share_paths | sed 's/:ro$//' | tr '\n' ',' | sed 's/,$//; s/^./,&/')",
+              "-networks", "eriphe-system,eriphe-tasks", "-wake-image", "$NODE_IMAGE"]
 
   node:
     image: $NODE_IMAGE
@@ -1123,6 +1128,12 @@ recreate() {
   if [ "$1" = core ]; then
     start core "$CORE_IMAGE" || return 1
     healthy core "$since" || return 1
+  fi
+  # The socket proxy is the node's image (eriphe-node docker-proxy): it
+  # checks what the node sends, so it takes the node's version, first. An
+  # older compose project's proxy is another image, left as it is.
+  if [ "$(docker inspect -f '{{.Config.Image}}' eriphe-docker-proxy 2>/dev/null)" = "$NODE_IMAGE" ]; then
+    start docker-proxy "$NODE_IMAGE" || return 1
   fi
   start node "$NODE_IMAGE" || return 1
   healthy node "$since"

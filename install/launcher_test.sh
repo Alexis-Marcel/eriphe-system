@@ -111,9 +111,10 @@ fi
 launcher ERIPHE_SHARES=shares=/mnt/user ERIPHE_API_PORT=18800 TZ=Europe/Paris sh -c ". '$here/eriphe-launcher'; discover; settings; INFO=; settle
 	compose_yaml 100 1" >"$T/compose.yaml" 2>&1
 for want in "- /mnt/user/appdata/eriphe/core:/data" "- /mnt/user/appdata/eriphe/node:/mnt/user/appdata/eriphe/node" \
-	'command: ["-root", "/mnt/user/appdata/eriphe/node",' "-allowbindmountfrom=/mnt/user/appdata/eriphe/node,/mnt/user" \
+	'command: ["-root", "/mnt/user/appdata/eriphe/node",' '"-bind-from", "/mnt/user/appdata/eriphe/node,/mnt/user",' \
+	"- /mnt/user:/mnt/user:ro" '"-wake-image", "ghcr.io/alexis-marcel/eriphe-node:latest"]' "cap_add: [DAC_READ_SEARCH]" \
 	"- /mnt/user:/mnt/user" 'ports: ["0.0.0.0:18800:8800", "0.0.0.0:8443:8443"]' "ERIPHE_INSTALL: docker" 'ERIPHE_API_PORT: "18800"' \
-	"TZ: 'Europe/Paris'" "image: ghcr.io/alexis-marcel/eriphe-core:latest" '"-always-on"' "user: \"65534:100\""; do
+	"TZ: 'Europe/Paris'" "image: ghcr.io/alexis-marcel/eriphe-core:latest" '"-always-on"' "user: \"0:100\""; do
 	has "$T/compose.yaml" "$want" compose
 done
 hasnt "$T/compose.yaml" "/data/node" "compose (the launcher's own path)"
