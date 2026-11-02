@@ -22,7 +22,9 @@ import (
 // pinned to) and "rollback" (to the version before). The order is the
 // Kubernetes one: eriphe-core's machine first, the nodes once eriphe-core
 // runs the latest version, as a node is never to be newer than eriphe-core;
-// and a node only once none of its tasks is at work.
+// and a node only once none of its tasks is at work. A node asked by hand
+// while eriphe-core is behind waits for it: eriphe-core is asked first, and
+// the node follows once it runs the latest version (followUpdates).
 //
 // eriphe-core's own machine reads the request from eriphe-core's data folder
 // (update-requested), and writes how it went next to it (update-status); a
@@ -41,6 +43,9 @@ const (
 	// updateAllKey holds when "Update all" was asked while eriphe-core was
 	// behind: the nodes follow once it runs the latest version.
 	updateAllKey = "update_all"
+	// afterCoreKey+machine holds when a node was asked by hand while
+	// eriphe-core was behind: it follows once eriphe-core runs the latest.
+	afterCoreKey = "update_after_core:"
 
 	coreMachine = "core" // eriphe-core's machine; a node is "node:<name>"
 
@@ -48,6 +53,13 @@ const (
 	nightEnd   = 5
 
 	requestTTL = 24 * time.Hour // a request not done by then is dropped
+	// A request with the updater (handed to it, or under way) that has not
+	// ended by then stopped: its updater died or was stopped (a reinstall
+	// restarts it). It is dropped, and the machine's line says so, rather
+	// than keeping a node unschedulable for a day.
+	stalledAfter = 30 * time.Minute
+	// stalledKey+machine is the request dropped as stalled, for its line.
+	stalledKey = "update_stalled:"
 )
 
 var (
@@ -69,7 +81,9 @@ type updaterInfo struct {
 
 // updateStatus is the outcome of a request: running, ok, current (nothing
 // newer), pinned, refused (it would be newer than eriphe-core), skipped
-// (failed here before), failed (nothing changed) or rolled_back.
+// (failed here before), failed (nothing changed), rolled_back,
+// interrupted (the updater stopped before its end, said by its next run),
+// or stalled (eriphe-core gave up waiting for it: resolveUpdates).
 type updateStatus struct {
 	ID      string    `json:"id"`
 	Action  string    `json:"action,omitempty"`
@@ -116,7 +130,7 @@ func manualUpdate(install string) updateCommand {
 
 // updateAll asks every machine that is behind to update, eriphe-core's
 // first: while it is behind, only it is asked, and the nodes follow once it
-// runs the latest version (followUpdateAll). It says how many were asked.
+// runs the latest version (followUpdates). It says how many were asked.
 func (c *core) updateAll() (int, error) {
 	if c.updates.behind("eriphe-core", version) {
 		if c.pendingUpdate(coreMachine) == nil {
@@ -153,24 +167,81 @@ func (c *core) updateNodes() int {
 	return n
 }
 
-// followUpdateAll asks the nodes once eriphe-core, asked first by "Update
-// all", runs the latest version; it gives up after a day.
-func (c *core) followUpdateAll() {
-	at := c.store.get(updateAllKey)
-	if at == "" {
+// updateNow asks a machine to update, by hand. A node while eriphe-core is
+// behind waits for it: eriphe-core is asked first (unless it already is),
+// and the node follows once it runs the latest version (followUpdates).
+// afterCore tells so; a node whose eriphe-core has no updater gets
+// errCoreFirst, as nothing here can update eriphe-core.
+func (c *core) updateNow(machine string) (afterCore bool, err error) {
+	if machine == coreMachine || !c.updates.behind("eriphe-core", version) {
+		_, err := c.requestUpdate(machine, "update", false)
+		return false, err
+	}
+	if !c.machineUpdater(machine).Updater {
+		return false, errNoUpdater
+	}
+	if !c.coreUpdater().Updater {
+		return false, errCoreFirst
+	}
+	if c.pendingUpdate(coreMachine) == nil {
+		if _, err := c.requestUpdate(coreMachine, "update", false); err != nil {
+			return false, err
+		}
+	}
+	log.Printf("update: %s follows eriphe-core's update", machine)
+	return true, c.store.set(afterCoreKey+machine, time.Now().UTC().Format(time.RFC3339))
+}
+
+// afterCore tells whether a machine waits for eriphe-core's update.
+func (c *core) afterCore(machine string) bool {
+	return c.store.get(afterCoreKey+machine) != ""
+}
+
+// followUpdates asks the nodes waiting for eriphe-core ("Update all", or
+// one asked by hand) once eriphe-core runs the latest version. Once
+// eriphe-core's update is over without reaching it (failed, rolled back,
+// pinned), they are not asked: they would take eriphe-core's build, the one
+// they run. A wait gives up after a day.
+func (c *core) followUpdates() {
+	rows, err := c.store.db.Query(`SELECT key, value FROM kv WHERE key = ? OR key LIKE ?`, updateAllKey, afterCoreKey+"%")
+	if err != nil {
 		return
 	}
-	t, err := time.Parse(time.RFC3339, at)
-	switch {
-	case err != nil || time.Since(t) > requestTTL:
-		log.Printf("update: the nodes were not updated: eriphe-core did not update within a day")
-	case c.updates.behind("eriphe-core", version) || c.pendingUpdate(coreMachine) != nil:
-		return
-	default:
-		log.Printf("update: eriphe-core is up to date, the nodes follow")
-		c.updateNodes()
+	waits := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		rows.Scan(&k, &v)
+		waits[k] = v
 	}
-	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, updateAllKey)
+	rows.Close()
+	// Just restarted, eriphe-core has not read the latest versions yet.
+	if len(waits) == 0 || c.updates.checked().IsZero() || c.pendingUpdate(coreMachine) != nil {
+		return
+	}
+	behind := c.updates.behind("eriphe-core", version)
+	for k, at := range waits {
+		t, err := time.Parse(time.RFC3339, at)
+		machine := strings.TrimPrefix(k, afterCoreKey)
+		switch {
+		case err != nil || time.Since(t) > requestTTL:
+			log.Printf("update: %s not asked: eriphe-core did not update within a day", k)
+		case behind:
+			outcome := "no outcome"
+			if st := c.coreUpdater().Status; st != nil {
+				outcome = st.Outcome
+			}
+			log.Printf("update: %s not asked: eriphe-core did not reach the latest version (%s)", k, outcome)
+		case k == updateAllKey:
+			log.Printf("update: eriphe-core is up to date, the nodes follow")
+			c.updateNodes()
+		case c.pendingUpdate(machine) == nil:
+			log.Printf("update: eriphe-core is up to date, %s follows", machine)
+			if _, err := c.requestUpdate(machine, "update", false); err != nil {
+				log.Printf("update: %s not asked: %v", machine, err)
+			}
+		}
+		c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, k)
+	}
 }
 
 // keyValues reads a file of key=value lines; nil if it is missing.
@@ -313,6 +384,7 @@ func (c *core) requestUpdate(machine, action string, auto bool) (*machineUpdate,
 	if err := c.store.set("update_request:"+machine, string(raw)); err != nil {
 		return nil, err
 	}
+	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, stalledKey+machine)
 	log.Printf("update: %s asked of %s (%s)", action, machine, map[bool]string{true: "automatic", false: "by hand"}[auto])
 	if machine != coreMachine {
 		c.bump() // the node reads it in its assignments
@@ -325,6 +397,14 @@ func (c *core) nodeUpdateRequest(name string) *nodeUpdate {
 	r := c.pendingUpdate("node:" + name)
 	if r == nil {
 		return nil
+	}
+	if r.Action == "update" {
+		nodes, _ := c.store.nodes()
+		for _, n := range nodes {
+			if n.Name == name && c.atCoreVersion(parseInfo(n)) {
+				return nil // reinstalled meanwhile: resolveUpdates drops it
+			}
+		}
 	}
 	u := &nodeUpdate{ID: r.ID, Action: r.Action, Core: version, Auto: r.Auto}
 	// A node from before the releases (sha-<commit>) drops a request with a
@@ -340,15 +420,66 @@ func (c *core) nodeUpdateRequest(name string) *nodeUpdate {
 	return u
 }
 
+// atCoreVersion tells whether a node already runs eriphe-core's own
+// release, the most an update can give it (its install command was run
+// again, say), and no updater is at work on it: an update request has
+// nothing left to do there.
+func (c *core) atCoreVersion(info nodeInfo) bool {
+	if info.Version != version || !publishedVersion(version) || c.updates.behind("eriphe-node", info.Version) {
+		return false
+	}
+	return info.Update.Status == nil || info.Update.Status.Outcome != "running"
+}
+
+// stalled tells whether a request is with the updater (handed to it, or
+// under way) and has not ended within stalledAfter.
+func stalled(r *machineUpdate, info updaterInfo, now time.Time) bool {
+	since := time.Time{}
+	switch st := info.Status; {
+	case st != nil && st.ID == r.ID && st.Outcome == "running":
+		since = st.At
+		if since.IsZero() {
+			since = r.At
+		}
+	case info.Requested == r.ID:
+		since = r.At
+	default:
+		return false
+	}
+	return now.Sub(since) > stalledAfter
+}
+
+// stalledStatus is the line of a machine whose request was dropped as
+// stalled, while its updater says nothing newer about it.
+func (c *core) stalledStatus(machine string, st *updateStatus) *updateStatus {
+	var r machineUpdate
+	if json.Unmarshal([]byte(c.store.get(stalledKey+machine)), &r) != nil {
+		return st
+	}
+	if st != nil && (st.ID != r.ID || st.Outcome != "running") {
+		return st
+	}
+	out := &updateStatus{ID: r.ID, Action: r.Action, Outcome: "stalled", At: r.At}
+	if st != nil {
+		out.From, out.At = st.From, st.At
+	}
+	return out
+}
+
 // resolveUpdates drops the requests that are done (the updater wrote their
-// outcome) or too old. It runs with the nodes' check, every 15 seconds.
+// outcome), stalled, too old, or left with nothing to do (the node runs
+// eriphe-core's version already). It runs with the nodes' check, every 15
+// seconds.
 func (c *core) resolveUpdates(nodes []NodeRow) {
 	machines := []string{coreMachine}
 	infos := map[string]updaterInfo{coreMachine: c.coreUpdater()}
+	atCore := map[string]bool{}
 	for _, n := range nodes {
 		m := "node:" + n.Name
 		machines = append(machines, m)
-		infos[m] = parseInfo(n).Update
+		info := parseInfo(n)
+		infos[m] = info.Update
+		atCore[m] = c.atCoreVersion(info)
 	}
 	rows, _ := c.store.db.Query(`SELECT key FROM kv WHERE key LIKE 'update_request:%'`)
 	var keys []string
@@ -370,6 +501,12 @@ func (c *core) resolveUpdates(nodes []NodeRow) {
 			drop = "forgotten"
 		case info.Status != nil && info.Status.ID == r.ID && info.Status.Outcome != "running":
 			drop = info.Status.Outcome
+		case r.Action == "update" && atCore[m]:
+			drop = "it runs eriphe-core's version already"
+		case stalled(r, info, time.Now()):
+			drop = "stalled: the updater did not end it"
+			raw, _ := json.Marshal(r)
+			c.store.set(stalledKey+m, string(raw))
 		case time.Since(r.At) > requestTTL:
 			drop = "not done within a day"
 		}

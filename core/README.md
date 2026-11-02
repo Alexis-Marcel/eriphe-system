@@ -477,7 +477,10 @@ after a failure; a machine that slept checks when it wakes); Settings → Device
 answer older than 15 minutes, asks again in the background; "Vérifier maintenant" in Settings →
 Devices → Updates asks at once (once a minute at most) and says when it last did. A machine is behind when it runs a release older than that one
 (semver order, `version.go`), or a build from before the releases (`sha-<commit>`); a build of
-`main` or a local one never says so, as someone is testing it. The workspace shows `0.2.0`, and a
+`main` or a local one never says so, as someone is testing it. The images publish their `latest`
+tag each on its own, as their build ends: while a release is half published (eriphe-node's
+`latest` out, eriphe-core's or eriphe-base's not yet), the latest release is the older one, which
+every image has, and the check runs again five minutes later. The workspace shows `0.2.0`, and a
 build of `main` as `0.2.0-dev` with its commit in small.
 
 ### Updates of the machines
@@ -501,8 +504,19 @@ turns the switch on.
 The order is Kubernetes': eriphe-core's machine first (its request goes to `update-requested` in
 the data folder, for the updater; the outcome comes back in `update-status`); a node only once
 eriphe-core runs the latest version, in its assignments (`update`, with eriphe-core's version, the
-most the node may get), and the node waits for its tasks to end. While a node has a request, the
-scheduler treats it as offline: new tasks wait for it. A request not done within a day is dropped.
+most the node may get), and the node waits for its tasks to end. A node is offered eriphe-core's
+build, never a newer one: while eriphe-core is behind, a node's "Mettre à jour" asks eriphe-core
+first ("Eriphe se met d'abord à jour, puis cet appareil"), and the card says it waits for
+eriphe-core until eriphe-core runs the latest version; the node is asked then (`followUpdates`,
+as for "Tout mettre à jour"), and not at all if eriphe-core's update ends elsewhere (failed,
+rolled back, pinned). Without an updater on eriphe-core's machine, the button waits for its
+command. An update that ends "ok" or "current" on another version than the one offered says it
+did not reach it, never "À jour". While a node has a request, the
+scheduler treats it as offline: new tasks wait for it. A request not done within a day is dropped;
+one with the updater (handed to it, or "running") that has not ended within 30 minutes stopped (its
+updater died, or a reinstall restarted it): it is dropped, and the machine's line says "La mise à
+jour s'est arrêtée sans résultat". A node that runs eriphe-core's version already (its install
+command was run again) is not sent its update request, which is dropped.
 A machine without updater (installed before, or by hand, as `deploy/nas/compose.yaml`) says so and
 gets no request.
 

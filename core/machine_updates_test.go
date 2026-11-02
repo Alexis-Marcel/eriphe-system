@@ -334,7 +334,7 @@ func TestUpdateAll(t *testing.T) {
 	if n, err := c.updateAll(); err != nil || n != 1 || c.pendingUpdate(coreMachine) == nil || c.pendingUpdate("node:pc") != nil {
 		t.Fatalf("eriphe-core behind: %d %v", n, err)
 	}
-	c.followUpdateAll()
+	c.followUpdates()
 	if c.pendingUpdate("node:pc") != nil {
 		t.Fatal("a node asked before eriphe-core updated")
 	}
@@ -342,7 +342,7 @@ func TestUpdateAll(t *testing.T) {
 	// eriphe-core updated (and restarted): the nodes follow.
 	c.store.db.Exec(`DELETE FROM kv WHERE key = 'update_request:core'`)
 	version = "0.2.0"
-	c.followUpdateAll()
+	c.followUpdates()
 	for _, n := range []string{"pc", "laptop"} {
 		if c.pendingUpdate("node:"+n) == nil {
 			t.Errorf("%s not asked", n)
@@ -396,5 +396,145 @@ func TestMachineSystem(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/machines lacks %q", want)
 		}
+	}
+}
+
+// A node asked by hand while eriphe-core is behind: eriphe-core is asked
+// first (once, for every node waiting), and the node follows only once
+// eriphe-core runs the latest version; not when eriphe-core's update ends
+// elsewhere, nor before eriphe-core, just restarted, read the latest
+// versions.
+func TestUpdateNowAfterCore(t *testing.T) {
+	c := newUpdateCore(t, "0.2.0")
+	setNode(t, c, "pc", `{"version":"0.1.0","update":{"updater":true}}`)
+	setNode(t, c, "laptop", `{"version":"0.1.0","update":{"updater":true}}`)
+	setNode(t, c, "old", `{"version":"0.1.0"}`)
+
+	if _, err := c.updateNow("node:old"); !errors.Is(err, errNoUpdater) {
+		t.Fatalf("a node without updater: %v", err)
+	}
+	after, err := c.updateNow("node:pc")
+	r := c.pendingUpdate(coreMachine)
+	if err != nil || !after || r == nil || c.pendingUpdate("node:pc") != nil || !c.afterCore("node:pc") {
+		t.Fatalf("eriphe-core behind: %t %v %+v", after, err, r)
+	}
+	if _, err := c.updateNow("node:laptop"); err != nil || c.pendingUpdate(coreMachine).ID != r.ID {
+		t.Fatalf("a second node asks eriphe-core again: %v", err)
+	}
+	c.followUpdates()
+	if c.pendingUpdate("node:pc") != nil {
+		t.Fatal("a node asked while eriphe-core updates")
+	}
+
+	// eriphe-core's update rolled back: it still runs 0.1.0, the nodes
+	// would take that same build; they are not asked.
+	os.WriteFile(filepath.Join(c.store.dir, "update-status"), []byte("id="+r.ID+"\naction=update\noutcome=rolled_back\nto=0.2.0\n"), 0o600)
+	c.resolveUpdates(nil)
+	c.followUpdates()
+	if c.pendingUpdate("node:pc") != nil || c.pendingUpdate("node:laptop") != nil || c.afterCore("node:pc") || c.afterCore("node:laptop") {
+		t.Fatal("the nodes asked after eriphe-core failed to update")
+	}
+
+	// Asked again; eriphe-core restarts on 0.2.0, before its first check:
+	// the node waits for it, then follows.
+	if _, err := c.updateNow("node:pc"); err != nil {
+		t.Fatal(err)
+	}
+	r = c.pendingUpdate(coreMachine)
+	os.WriteFile(filepath.Join(c.store.dir, "update-status"), []byte("id="+r.ID+"\naction=update\noutcome=ok\nto=0.2.0\n"), 0o600)
+	c.resolveUpdates(nil)
+	version = "0.2.0"
+	checked := c.updates
+	c.updates = newUpdates(checked.base)
+	c.followUpdates()
+	if c.pendingUpdate("node:pc") != nil || !c.afterCore("node:pc") {
+		t.Fatal("followed before the latest versions were read")
+	}
+	c.updates = checked
+	c.followUpdates()
+	if c.pendingUpdate("node:pc") == nil || c.afterCore("node:pc") {
+		t.Fatal("the node does not follow eriphe-core")
+	}
+
+	// eriphe-core without an updater: nothing here can update it.
+	version = "0.1.0"
+	os.Remove(filepath.Join(c.store.dir, "updater"))
+	if _, err := c.updateNow("node:laptop"); !errors.Is(err, errCoreFirst) {
+		t.Fatalf("eriphe-core by its command: %v", err)
+	}
+}
+
+// A request whose updater stopped (handed to it, or "running", and nothing
+// since) does not keep the node out of the scheduler for a day: it is
+// dropped after stalledAfter, and the machine's line says it stalled. One
+// left to a node that runs eriphe-core's version already (its install
+// command was run again) is neither sent nor kept.
+func TestUpdateStalledAndDone(t *testing.T) {
+	c := newUpdateCore(t, "0.1.0")
+	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
+	r, err := c.requestUpdate("node:pc", "update", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-stalledAfter - time.Minute).UTC().Format(time.RFC3339)
+	// Waiting for the node's tasks: not with the updater, kept.
+	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"waiting":"`+r.ID+`"}}`)
+	age := func(r *machineUpdate) {
+		r.At = time.Now().Add(-stalledAfter - time.Minute)
+		raw, _ := json.Marshal(r)
+		c.store.set("update_request:node:pc", string(raw))
+	}
+	age(r)
+	c.resolveUpdates(mustNodes(t, c))
+	if c.pendingUpdate("node:pc") == nil {
+		t.Fatal("a request waiting for the tasks is dropped as stalled")
+	}
+	// Under way, recently: kept; under way for too long: dropped.
+	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running","from":"0.0.1","at":"`+time.Now().UTC().Format(time.RFC3339)+`"}}}`)
+	c.resolveUpdates(mustNodes(t, c))
+	if c.pendingUpdate("node:pc") == nil {
+		t.Fatal("a running update is dropped")
+	}
+	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running","from":"0.0.1","at":"`+old+`"}}}`)
+	c.resolveUpdates(mustNodes(t, c))
+	if c.pendingUpdate("node:pc") != nil {
+		t.Fatal("a stalled update keeps the node")
+	}
+	for _, n := range c.schedulable(mustNodes(t, c)) {
+		if !n.Online {
+			t.Fatal("the node stays unschedulable")
+		}
+	}
+	if st := c.stalledStatus("node:pc", parseInfo(mustNodes(t, c)[0]).Update.Status); st == nil || st.Outcome != "stalled" || st.ID != r.ID {
+		t.Fatalf("stalled status = %+v", st)
+	}
+	// Handed to an updater that never takes it: the same.
+	r, _ = c.requestUpdate("node:pc", "update", false)
+	if st := c.stalledStatus("node:pc", nil); st != nil {
+		t.Fatalf("a new request still says stalled: %+v", st)
+	}
+	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"requested":"`+r.ID+`"}}`)
+	age(r)
+	c.resolveUpdates(mustNodes(t, c))
+	if c.pendingUpdate("node:pc") != nil {
+		t.Fatal("a request the updater never took keeps the node")
+	}
+
+	// Reinstalled on eriphe-core's version meanwhile: not sent, dropped.
+	r, _ = c.requestUpdate("node:pc", "update", false)
+	setNode(t, c, "pc", `{"version":"0.1.0","update":{"updater":true}}`)
+	if u := assignmentUpdate(t, c, "pc"); u != nil {
+		t.Fatalf("an update sent to a node on eriphe-core's version: %+v", u)
+	}
+	c.resolveUpdates(mustNodes(t, c))
+	if c.pendingUpdate("node:pc") != nil {
+		t.Fatal("the request outlives the reinstall")
+	}
+	// Unless its updater is at it (the same version, recreated).
+	r, _ = c.requestUpdate("node:pc", "update", false)
+	setNode(t, c, "pc", `{"version":"0.1.0","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running"}}}`)
+	c.resolveUpdates(mustNodes(t, c))
+	if c.pendingUpdate("node:pc") == nil {
+		t.Fatal("a request under way is dropped")
 	}
 }

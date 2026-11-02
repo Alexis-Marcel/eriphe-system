@@ -144,7 +144,7 @@ func (c *core) checkNodes(ctx context.Context) {
 		c.resolveUpdates(nodes) // machine_updates.go
 		c.autoTLSOnly(nodes)    // machine_tls.go
 	}
-	c.followUpdateAll()
+	c.followUpdates()
 	c.autoUpdates(time.Now())
 	c.replaceStranded()       // placement.go
 	c.harnessTick(time.Now()) // retries due, time budgets (task_retry.go)

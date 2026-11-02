@@ -399,7 +399,8 @@ A machine without an updater (a compose project of your own) shows the one comma
 instead. To go back to the previous version or stay on one, run the install command again with
 `--rollback` or `--version <version>` (below). The order is
 Kubernetes': eriphe-core's machine first; a node only once eriphe-core runs the latest version (a
-node is never newer than eriphe-core), and only once none of its tasks is at work (an idle one,
+node is never newer than eriphe-core: a node's **Update** while eriphe-core is behind updates
+eriphe-core first, then that node), and only once none of its tasks is at work (an idle one,
 the brain between two turns included, resumes after the restart). While a node has a request, no
 new task starts on it: the tasks wait for it.
 

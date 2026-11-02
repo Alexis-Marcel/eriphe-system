@@ -23,11 +23,19 @@ type updateRow struct {
 	Latest  string // the latest version, when this one is behind
 	updaterInfo
 	Pending   *machineUpdate
-	CoreFirst bool          // a node, while eriphe-core is behind: eriphe-core goes first
-	Manual    updateCommand // the command that updates it by hand, without an updater
+	CoreFirst bool // a node, while eriphe-core is behind: eriphe-core goes first
+	// CoreUpdater: eriphe-core has an updater, so a node's button updates it
+	// first, then the node (updateNow); without one, the node waits for
+	// eriphe-core's command.
+	CoreUpdater bool
+	AfterCore   bool          // a node asked while eriphe-core was behind: it waits for it
+	Manual      updateCommand // the command that updates it by hand, without an updater
 	// Done: the request the page follows has just ended (handleUpdateState),
 	// and its outcome shows once.
 	Done bool
+	// NotReached: its last request ended well (ok, current, pinned) but not
+	// on the version offered, which then shows instead of "up to date".
+	NotReached bool
 }
 
 type updatesData struct {
@@ -41,10 +49,14 @@ func (w *web) updatesData(nodes []NodeRow) updatesData {
 	c := w.c
 	d := updatesData{Night: c.nightUpdates(), Checked: c.updates.checked()}
 	coreBehind := c.updates.behind("eriphe-core", version)
+	latest := c.updates.version("eriphe-core") // the latest release, every image of it published
 	row := updateRow{Machine: coreMachine, Name: "eriphe-core", Core: true, Online: true, Version: version,
 		updaterInfo: c.coreUpdater(), Pending: c.pendingUpdate(coreMachine), Manual: manualUpdate(coreInstall)}
+	if row.Pending == nil {
+		row.Status = c.stalledStatus(coreMachine, row.Status)
+	}
 	if coreBehind {
-		row.Latest = c.updates.version("eriphe-core")
+		row.Latest = latest
 	}
 	d.add(row)
 	for _, n := range nodes {
@@ -52,10 +64,16 @@ func (w *web) updatesData(nodes []NodeRow) updatesData {
 		m := "node:" + n.Name
 		row := updateRow{Machine: m, Name: n.Name, Online: n.Online, Version: info.Version,
 			updaterInfo: info.Update, Pending: c.pendingUpdate(m), CoreFirst: coreBehind,
-			Manual: manualUpdate(nodeInstall(n, info))}
-		if c.updates.behind("eriphe-node", info.Version) {
-			row.Latest = c.updates.version("eriphe-node")
-		} else if !coreBehind && c.updates.version("eriphe-core") != "" && nodeBehindCore(info.Version, version) {
+			CoreUpdater: d.Rows[0].Updater, AfterCore: c.afterCore(m), Manual: manualUpdate(nodeInstall(n, info))}
+		if row.Pending == nil {
+			row.Status = c.stalledStatus(m, row.Status)
+		}
+		// A node takes eriphe-core's build: the latest release once
+		// eriphe-core runs it, never one eriphe-core does not run yet.
+		switch {
+		case coreBehind && (c.updates.behind("eriphe-node", info.Version) || nodeBehindCore(info.Version, version)):
+			row.Latest = latest
+		case !coreBehind && latest != "" && nodeBehindCore(info.Version, version):
 			row.Latest = version // eriphe-core's, the latest: where the node goes
 		}
 		d.add(row)
@@ -85,7 +103,13 @@ func (d *updatesData) add(r updateRow) {
 	if p, st := r.Pending, r.Status; p != nil && st != nil && st.ID == p.ID && st.Outcome != "running" {
 		r.Pending = nil
 	}
-	if r.Latest != "" && r.Updater && r.Pending == nil {
+	if st := r.Status; st != nil && r.Latest != "" && r.Pending == nil && st.To != r.Latest {
+		switch st.Outcome {
+		case "ok", "current", "pinned":
+			r.NotReached = true
+		}
+	}
+	if r.Latest != "" && r.Updater && r.Pending == nil && !r.AfterCore {
 		d.Behind++
 	}
 	d.Rows = append(d.Rows, r)
@@ -137,7 +161,13 @@ func (w *web) handleUpdateNow(rw http.ResponseWriter, r *http.Request, s *sessio
 		w.toast(rw, tr(lang, "update.already"), false)
 		return
 	}
-	if _, err := w.c.requestUpdate(m, "update", false); err != nil {
+	if w.c.afterCore(m) {
+		w.toast(rw, tr(lang, "update.already"), false)
+		return
+	}
+	// A node while eriphe-core is behind: eriphe-core first, then the node,
+	// which its card says; eriphe-core's row, told, follows its request.
+	if _, err := w.c.updateNow(m); err != nil {
 		w.updateError(rw, lang, err)
 		return
 	}
