@@ -436,6 +436,153 @@ if command -v plutil >/dev/null 2>&1; then
 	plutil -lint "$w/Info.plist" "$w/document.wflow" >/dev/null || fail "Quick Action: not a property list"
 fi
 
+# ---- a Mac's reinstall over a running node: never left stopped
+
+# A Mac with Apple's container, faked: launchctl loads and unloads the
+# LaunchAgents (the node, once loaded, says it is connected), sudo can do
+# nothing without a terminal, container pulls.
+M=$T/mac
+mkdir -p "$M/fake"
+cat >"$M/fake/launchctl" <<'EOF'
+#!/bin/sh
+echo "launchctl $*" >>"$M/calls"
+case $1 in
+bootstrap)
+	l=$(basename "$3" .plist)
+	touch "$M/loaded.$l"
+	[ "$l" != org.eriphe.node ] || echo "connected to eriphe-core" >>"$M/home/.eriphe/node.log"
+	;;
+bootout) rm -f "$M/loaded.${2##*/}" ;;
+print) [ -f "$M/loaded.${2##*/}" ] ;;
+kickstart) [ -f "$M/loaded.${3##*/}" ] ;;
+esac
+EOF
+printf '#!/bin/sh\necho "sudo $*" >>"$M/calls"\necho "sudo: a terminal is required to read the password" >&2\nexit 1\n' >"$M/fake/sudo"
+printf '#!/bin/sh\necho "container $*" >>"$M/calls"\n' >"$M/fake/container"
+chmod +x "$M/fake/launchctl" "$M/fake/sudo" "$M/fake/container"
+export M
+E=$M/home/.eriphe
+# mac_reset: an installed node, 0.54.0, running, its relay loaded with an
+# older binary than the one coming.
+mac_reset() {
+	rm -rf "${M:?}/home" "${M:?}/calls" "${M:?}"/loaded.*
+	mkdir -p "$E/bin" "$E/node" "$E/update" "$M/home/Library/LaunchAgents"
+	echo old-node >"$E/bin/eriphe-node"
+	echo 0.54.0 >"$E/bin/eriphe-node.version"
+	echo OLD=1 >"$E/node.env"
+	echo old-start >"$E/start-node.sh"
+	echo '{"name": "mac"}' >"$E/node/node.json"
+	echo old-plist >"$M/home/Library/LaunchAgents/org.eriphe.node.plist"
+	touch "$M/loaded.org.eriphe.node" "$M/loaded.org.eriphe.update"
+	echo new-node >"$M/new-node"
+	echo old-node >"$M/relay-bin"
+	: >"$E/node.log"
+}
+# mac_up OVERRIDES: native_up there, with OVERRIDES (relay_loaded, root_ready).
+mac_up() {
+	PATH="$M/fake:$PATH" HOME="$M/home" ERIPHE_NODE_BINARY="$M/new-node" sh -c "ERIPHE_INSTALL_LIB=1; . '$here/install.sh'
+		OS=Darwin ERIPHE_HOME=\$HOME/.eriphe CONTAINER='$M/fake/container' MODE=node NAME=mac PIN= API_PORT=8800 JOIN_TOKEN=
+		CORE_IMAGE=c NODE_IMAGE=ghcr.io/alexis-marcel/eriphe-node:latest WORKER_IMAGE=ghcr.io/alexis-marcel/eriphe-base:latest
+		RELAY_BIN='$M/relay-bin' RELAY_PLIST='$M/relay.plist'
+		native_env() { echo NEW=1; }; native_conf() { echo mode=node; }; mac_quick_actions() { :; }
+		$1
+		native_up" >"$M/out" 2>&1
+}
+# The relay loaded, only its binary older, no password to be had (a script
+# run without a terminal): no sudo, the node updated and running, the relay
+# left for later.
+mac_reset
+if mac_up 'relay_loaded() { true; }; root_ready() { false; }'; then :; else fail "Mac reinstall without root: $(cat "$M/out")"; fi
+[ ! -f "$M/calls" ] || hasnt "$M/calls" "sudo" "Mac reinstall, the relay's binary only"
+[ "$(cat "$E/bin/eriphe-node")" = new-node ] || fail "Mac reinstall: the new node is not in place"
+[ -f "$M/loaded.org.eriphe.node" ] || fail "Mac reinstall: the node is not running"
+[ -f "$M/loaded.org.eriphe.update" ] || fail "Mac reinstall: the updater is not running"
+[ ! -d "$E/update/lock" ] && [ ! -d "$E/update/install-backup" ] || fail "Mac reinstall leaves its lock or its backup"
+has "$M/out" "updater=1" "Mac reinstall"
+has "$M/out" "relay_kept=1" "Mac reinstall, the relay left for later"
+# Root can be asked but is not given: the previous node back, running.
+mac_reset
+if mac_up 'relay_loaded() { true; }; root_ready() { true; }'; then fail "Mac reinstall: sudo refused, and it went on"; fi
+has "$M/calls" "sudo -v" "Mac reinstall, root asked"
+[ "$(cat "$E/bin/eriphe-node")" = old-node ] || fail "Mac reinstall failed: the previous node is not back"
+{ [ "$(cat "$E/node.env")" = OLD=1 ] && [ "$(cat "$E/start-node.sh")" = old-start ]; } || fail "Mac reinstall failed: the previous settings are not back"
+[ "$(cat "$M/home/Library/LaunchAgents/org.eriphe.node.plist")" = old-plist ] || fail "Mac reinstall failed: the previous LaunchAgent is not back"
+[ -f "$M/loaded.org.eriphe.node" ] || fail "Mac reinstall failed: the node is left stopped"
+[ ! -d "$E/update/lock" ] || fail "Mac reinstall failed: its lock stays"
+# The relay to install, no root: it stops before anything stops.
+mac_reset
+if mac_up 'relay_loaded() { false; }; root_ready() { false; }'; then fail "Mac reinstall: no relay, no root, and it went on"; fi
+hasnt "$M/calls" "launchctl bootout gui/$(id -u)/org.eriphe.node" "Mac reinstall, stopped before the node"
+{ [ "$(cat "$E/bin/eriphe-node")" = old-node ] && [ "$(cat "$E/node.env")" = OLD=1 ]; } || fail "Mac reinstall stopped early: not as before"
+[ -f "$M/loaded.org.eriphe.node" ] || fail "Mac reinstall stopped early: the node is stopped"
+# An update under way (its updater alive, holding the lock): waited for.
+mac_reset
+mkdir "$E/update/lock"
+sleep 3 &
+holder=$!
+echo "$holder" >"$E/update/lock/pid"
+mac_up 'relay_loaded() { true; }; root_ready() { false; }' || fail "Mac reinstall after an update: $(cat "$M/out")"
+has "$M/out" "Waiting for the update under way to end" "Mac reinstall during an update"
+wait 2>/dev/null || true
+
+# ---- the Mac's updater: its lock, and a request left "running"
+
+mac_reset
+PATH="$M/fake:$PATH" HOME="$M/home" sh -c "ERIPHE_INSTALL_LIB=1; . '$here/install.sh'
+	ERIPHE_HOME=\$HOME/.eriphe CONTAINER='$M/fake/container' MODE=node PIN= API_PORT=8800
+	CORE_IMAGE=c NODE_IMAGE=n WORKER_IMAGE=w; mac_updater_conf >\$ERIPHE_HOME/update.conf; mac_updater_sh >\$ERIPHE_HOME/update.sh"
+printf 'id=u-1\naction=update\noutcome=running\nmessage=\nfrom=0.55.0\nto=\nat=1\n' >"$E/node/update-status"
+mkdir -p "$E/update/lock" "$E/update/fetch.abc"
+echo 999999 >"$E/update/lock/pid" # its updater is gone
+PATH="$M/fake:$PATH" HOME="$M/home" sh "$E/update.sh" 2>/dev/null
+has "$E/node/update-status" "outcome=interrupted" "Mac updater: a running status of a dead updater"
+has "$E/node/update-status" "from=0.55.0" "Mac updater: the interrupted status keeps its versions"
+{ [ ! -d "$E/update/fetch.abc" ] && [ ! -d "$E/update/lock" ]; } || fail "Mac updater: leftovers of the dead one stay"
+# A live holder: it leaves everything as it is.
+printf 'id=u-2\naction=update\noutcome=running\n' >"$E/node/update-status"
+mkdir "$E/update/lock"
+echo $$ >"$E/update/lock/pid"
+PATH="$M/fake:$PATH" HOME="$M/home" sh "$E/update.sh" 2>/dev/null
+has "$E/node/update-status" "outcome=running" "Mac updater: another one's running update"
+rm -rf "${E:?}/update/lock"
+
+# ---- the Linux updater: a request left "running", and the same build again
+
+L=$T/linux
+mkdir -p "$L/fake" "$L/conf" "$L/data/node" "$L/data/core"
+installer "CONF='$L/conf' DATA='$L/data' CORE_UID=$(id -u) MODE=node PIN= CORE_IMAGE=c NODE_IMAGE=r/eriphe-node:latest WORKER_IMAGE=r/eriphe-base:latest; updater_conf >'$L/conf/update.conf'; updater_sh >'$L/conf/update.sh'" >/dev/null
+# A fake docker: the node runs image sha256:a, the same build (0.54.0) as
+# sha256:b, which the pull brings.
+cat >"$L/fake/docker" <<'EOF'
+#!/bin/sh
+echo "docker $*" >>"$L/calls"
+case $* in
+"inspect -f {{.Image}} eriphe-node") echo sha256:a ;;
+"inspect -f {{.Image}} "*) exit 1 ;;
+"image inspect -f {{.Id}} r/eriphe-node:latest") if [ -f "$L/pulled" ]; then echo sha256:b; else echo sha256:a; fi ;;
+"image inspect -f {{.Id}} "*) echo sha256:w ;;
+"image inspect -f "*sha256:b) echo "${NEWV:-0.54.0}" ;;
+"image inspect -f "*) echo 0.54.0 ;;
+"pull -q "*) touch "$L/pulled" ;;
+esac
+EOF
+printf '#!/bin/sh\nexit 0\n' >"$L/fake/flock"
+chmod +x "$L/fake/docker" "$L/fake/flock"
+export L
+printf 'id=u-3\naction=update\noutcome=running\nfrom=0.53.0\nto=0.54.0\n' >"$L/data/node/update-status"
+printf 'id=u-4\naction=update\ncore=0.54.0\nauto=0\n' >"$L/data/node/update-requested"
+PATH="$L/fake:$PATH" sh "$L/conf/update.sh" 2>/dev/null
+has "$L/data/update/update.log" "node update u-3: interrupted" "Linux updater: a running status of a dead updater"
+has "$L/data/node/update-status" "id=u-4" "Linux updater: the request after"
+has "$L/data/node/update-status" "outcome=current" "Linux updater: the same build is current"
+hasnt "$L/calls" "compose" "Linux updater: the same build recreated"
+has "$L/calls" "tag sha256:a r/eriphe-node:latest" "Linux updater: the running image back under its reference"
+# A new build: recreated (then, the fake not running it, put back).
+rm -f "$L/pulled" "$L/calls"
+printf 'id=u-5\naction=update\ncore=0.55.0\nauto=0\n' >"$L/data/node/update-requested"
+NEWV=0.55.0 PATH="$L/fake:$PATH" ERIPHE_UPDATE_HEALTH=2 sh "$L/conf/update.sh" 2>/dev/null
+has "$L/calls" "compose -p eriphe" "Linux updater: a new build not recreated"
+
 if [ "$fails" -gt 0 ]; then
 	echo "launcher_test.sh: $fails failed" >&2
 	exit 1

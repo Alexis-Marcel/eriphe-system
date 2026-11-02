@@ -431,14 +431,23 @@ How a request goes:
    for a build of `main`), not their own `latest`, which may be half published (a tag not there
    yet fails the update, and a later one takes it). A node alone takes eriphe-core's build the
    same way, unless it is pinned to a release; a pinned release newer than eriphe-core's is
-   refused ("refused": a node is never newer than eriphe-core). Nothing new: "current".
+   refused ("refused": a node is never newer than eriphe-core). Nothing new, or the same build
+   under another image (a release built again): "current", and nothing is recreated.
 3. It recreates the containers, eriphe-core first, and checks them: eriphe-core answers on
    `/health`, eriphe-node says `connected to` again, within 3 minutes (Windows: the binary is
    swapped and eriphe-node restarted; eriphe-core's container recreated).
 4. If a check fails, it puts the previous images (or binary) back, recreates and checks again:
    "rolled_back", or "rollback_failed" if even that does not come back. That version is noted as
    failed: the night skips it, "Update now" does not.
-5. It writes the outcome next to the request (`update-status`), which the node reports and
+5. An updater that stopped before its end (killed, the machine restarted) leaves "running": the
+   next run, which holds the updates' lock, says "interrupted" instead (eriphe-core itself gives
+   up on a request with the updater after 30 minutes). Running the install command again waits
+   for an update under way, and no update starts while it runs. On a Mac with Apple's container
+   it takes the new binaries while the old ones run, asks for the password (the relay) before it
+   stops anything, or keeps the relay's older binary when no password can be asked (no
+   terminal); on any error, the binaries, settings and LaunchAgents of before come back and the
+   node runs again.
+6. It writes the outcome next to the request (`update-status`), which the node reports and
    eriphe-core shows on the machine's line, with the versions before and after. Its log is
    `/var/lib/eriphe/update/update.log` (Windows: `/var/lib/eriphe-update/update.log`).
 
