@@ -318,9 +318,15 @@ eriphe-core runs its new version, and the cards and "Update all" ask again
 
 {{/* A machine's update: where it stands, and the button, or the command to run on a machine without an updater. . is an updateRow. */}}
 {{define "machine-update"}}
-{{if or .Latest .Pending .Done .AfterCore (and .Status (not (or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned") (eq .Status.Outcome "running"))))}}
+{{if or .Needs .Latest .Pending .Done .AfterCore (and .Status (not (or (eq .Status.Outcome "ok") (eq .Status.Outcome "current") (eq .Status.Outcome "pinned") (eq .Status.Outcome "running"))))}}
 <div class="machine-update">
   <p class="small">{{template "update-state" .}}</p>
+  {{if and .Needs (not .Pending)}}
+  <div class="update-needs" role="status">
+    <p class="small"><b>{{t "update.needs"}}</b> {{t (printf "update.needs.%s" .Needs.Reason)}}</p>
+    <div class="code one-line"><pre id="needs-{{.Machine}}">{{.Manual.Cmd}}</pre><button class="btn btn-soft sm" type="button" data-copy="needs-{{.Machine}}">{{t "machines.copy"}}</button></div>
+  </div>
+  {{end}}
   {{if and .Latest (not .Pending) (not .AfterCore)}}
   {{if .Updater}}
   <form hx-post="/settings/updates/request" class="update-now inline-update" hx-target="closest {{if .Core}}.update-core-row{{else}}.device-foot{{end}}" hx-swap="outerHTML">

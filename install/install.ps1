@@ -117,6 +117,18 @@ $alpine = @{
   ARM64 = @("https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/aarch64/alpine-minirootfs-3.22.7-aarch64.tar.gz",
             "7e9b34ff3304381909e566e2c93de450664ccc724191261423974fc121c11623")
 }
+# The install's layout, as install.sh's LAYOUT: what an install puts in the
+# distribution besides eriphe-node (its scripts, its settings, Syncthing).
+# Raise it with a release that changes it: the node's image carries this
+# script (/usr/local/share/eriphe/install.ps1), and the distribution's
+# updater brings the distribution to a newer one by itself (eriphe-update,
+# layout). $adminLayout is what it puts on Windows' side (the scheduled
+# tasks, the session helper, the firewall, the Explorer's menu): raise it
+# with a release that changes that, which only this script, in an
+# administrator PowerShell, can do; the device then says so to its user.
+# node/update.go's installLayout is $layout.
+$layout = 2
+$adminLayout = 1
 # Syncthing, for the copies of shared folders (node/README.md, Copies): its
 # official Linux build in the distribution, pinned and checked against the
 # release's sha256sum.txt.asc, as install.sh pins it; never upgraded by itself.
@@ -1057,6 +1069,10 @@ BIN=/usr/local/bin/eriphe-node
 NODE_LOG=/var/log/eriphe-node.log
 mkdir -p "$STATE"
 chmod 700 "$STATE"
+# A layout rewrites this script (layout): it runs from a copy of itself.
+if [ "${ERIPHE_UPDATE_COPY:-}" != 1 ] && cp "$0" "$STATE/update.run" 2>/dev/null; then
+  ERIPHE_UPDATE_COPY=1 exec sh "$STATE/update.run" "$@"
+fi
 log() {
   printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$STATE/update.log"
   printf 'eriphe-update: %s\n' "$*" >&2
@@ -1150,9 +1166,100 @@ pull_node() {
   to=$(label "$src")
   c=$(docker create "$src") || { why="docker create failed"; return 1; }
   docker cp "$c:/usr/local/bin/eriphe-node" "$BIN.new" >/dev/null || { docker rm "$c" >/dev/null; why="docker cp failed"; return 1; }
+  # Its build's install.ps1, for its layout; none in an image from before it.
+  rm -f "$STATE/install.ps1"
+  docker cp "$c:/usr/local/share/eriphe/install.ps1" "$STATE/install.ps1" >/dev/null 2>&1 || rm -f "$STATE/install.ps1"
   docker rm "$c" >/dev/null
   docker rmi "$src" >/dev/null 2>&1 || true
   chmod 755 "$BIN.new"
+}
+
+# ps_number NAME: $NAME = <number> in the node image's install.ps1 (pull_node).
+ps_number() { sed -n "s/^[$]$1 = \([0-9][0-9]*\)\$/\1/p" "$STATE/install.ps1" 2>/dev/null | head -n 1; }
+# newer_layout: that install.ps1's layout is newer than this distribution's.
+newer_layout() {
+  n=$(ps_number layout)
+  [ -n "$n" ] && [ "$n" -gt "${LAYOUT:-1}" ]
+}
+# set_value FILE KEY VALUE: KEY=VALUE in FILE, in place of the one there.
+set_value() {
+  { grep -v "^$2=" "$1" 2>/dev/null; echo "$2=$3"; } >"$1.new" && mv "$1.new" "$1"
+}
+# node_restart: eriphe-node-run again (the scheduled task starts it within
+# a minute), with the settings and the scripts now in place, and checked.
+node_restart() {
+  size=$(wc -c <"$NODE_LOG" 2>/dev/null || echo 0)
+  pkill -f /usr/local/bin/eriphe-node-run || true
+  pkill -x eriphe-node || true
+  node_healthy "$size"
+}
+
+# What the layout rewrites, kept to put back.
+LAYOUT_FILES="/etc/eriphe-node.env /etc/eriphe-update.conf /etc/wsl.conf /etc/docker/daemon.json
+  /usr/local/bin/eriphe-dockerd /usr/local/bin/eriphe-node-run /usr/local/bin/eriphe-syncthing-run
+  /usr/local/bin/eriphe-share /usr/local/bin/eriphe-addr /usr/local/bin/eriphe-core-run
+  /usr/local/bin/eriphe-update-loop /usr/local/bin/eriphe-update /var/lib/eriphe-node/updater"
+
+# layout: the distribution brought to the layout of the node image's
+# install.ps1, as that script brings it: its setup of the distribution (its
+# scripts, this one too, and the settings every node has), and Syncthing's,
+# both taken from it as they are; then eriphe-node-run again, checked as an
+# update is. What it rewrote is put back if it fails. What only install.ps1
+# can do, in an administrator PowerShell (Windows' side, $adminLayout, or a
+# new wsl.conf, which needs WSL started again), is left for the user, and
+# said in update-needs.
+layout() {
+  ps=$STATE/install.ps1 b=$STATE/layout-before
+  n=$(ps_number layout) admin=$(ps_number adminLayout)
+  log "the install's layout goes from ${LAYOUT:-1} to $n"
+  awk '/^[$]changed = Invoke-InDistro @.$/ { f = 1; next } f && /^.@$/ { exit } f' "$ps" >"$STATE/layout-setup.sh"
+  awk '/^  [$]stSetup = @.$/ { f = 1; next } f && /^.@$/ { exit } f' "$ps" >"$STATE/layout-syncthing.sh"
+  v=$(sed -n 's/^[$]syncthingVersion = "\([0-9.]*\)"$/\1/p' "$ps")
+  case $(uname -m) in x86_64) k=AMD64 ;; aarch64) k=ARM64 ;; *) k=none ;; esac
+  st=$(awk '/^[$]syncthing = @[{]$/ { f = 1; next } f && /^[}]$/ { exit } f' "$ps" |
+    sed -n "s/^  $k = @(\"\([a-z0-9]*\)\", \"\([0-9a-f]*\)\")\$/\1 \2/p")
+  if ! grep -q '^cat > /usr/local/bin/eriphe-node-run ' "$STATE/layout-setup.sh"; then
+    why="the node image's install.ps1 has no setup to apply"
+    return 1
+  fi
+  rm -rf "$b"
+  for f in $LAYOUT_FILES; do
+    [ ! -f "$f" ] || { mkdir -p "$b$(dirname "$f")" && cp -p "$f" "$b$f"; }
+  done
+  done_=$n needs=
+  if out=$(sh "$STATE/layout-setup.sh" 2>>"$STATE/update.log"); then
+    case $out in *restart*) needs='admin' ;; esac
+    if [ -n "$st" ] && [ -n "$v" ]; then
+      # shellcheck disable=SC2086 # its build and its checksum
+      set -- $st
+      case $(v=$v a=$1 sum=$2 sh "$STATE/layout-syncthing.sh" 2>>"$STATE/update.log") in
+        *syncthing=missing*) log "Syncthing could not be installed"; done_=1 ;;
+      esac
+    fi
+    set_value /etc/eriphe-update.conf LAYOUT "$done_"
+    set_value /var/lib/eriphe-node/updater layout "$done_"
+    [ -z "$admin" ] || [ "$admin" -le "${ADMIN_LAYOUT:-1}" ] || needs='admin'
+    if node_restart; then
+      rm -rf "$b"
+      if [ -n "$needs" ]; then
+        printf 'why=%s\nlayout=%s\n' "$needs" "$n" >/var/lib/eriphe-node/update-needs
+      else
+        rm -f /var/lib/eriphe-node/update-needs
+      fi
+      return 0
+    fi
+  else
+    why="its setup failed"
+  fi
+  why="the new install layout did not apply: $why"
+  for f in $LAYOUT_FILES; do
+    if [ -f "$b$f" ]; then cp -p "$b$f" "$f.new" && mv "$f.new" "$f"; else rm -f "$f"; fi
+  done
+  rm -rf "$b"
+  failed_layout=$why
+  node_restart || true
+  why=$failed_layout
+  return 1
 }
 
 # update_node ID AUTO CORE [TAG]: without TAG, eriphe-core's build (the tag
@@ -1165,6 +1272,15 @@ update_node() {
   pull_node "$build" || { status node "$id" update failed "$why" "$from" ""; return; }
   if cmp -s "$BIN.new" "$BIN"; then
     rm -f "$BIN.new"
+    # The same build, on an older layout: the layout only.
+    if newer_layout; then
+      if layout; then
+        status node "$id" update ok "the install's layout is now its version's" "$from" "$to"
+      else
+        status node "$id" update failed "$why" "$from" "$to"
+      fi
+      return
+    fi
     if pinned; then status node "$id" update pinned "pinned to $PIN" "$from" "$to"; else status node "$id" update current "" "$from" "$to"; fi
     return
   fi
@@ -1183,7 +1299,9 @@ update_node() {
   cp "$BIN" "$STATE/node.before"
   mv "$BIN.new" "$BIN"
   echo "$to" >"$BIN.version"
-  if node_swap; then
+  # The new binary, then the new layout if it brings one: if it fails, the
+  # whole update goes back.
+  if node_swap && { ! newer_layout || layout; }; then
     mv "$STATE/node.before" "$STATE/node.previous"
     echo "$from" >"$STATE/node.previous.version"
     status node "$id" update ok "" "$from" "$to"
@@ -1304,6 +1422,11 @@ done
 EOF
 chmod 755 /usr/local/bin/eriphe-dockerd /usr/local/bin/eriphe-node-run /usr/local/bin/eriphe-addr /usr/local/bin/eriphe-share \
   /usr/local/bin/eriphe-core-run /usr/local/bin/eriphe-update-loop /usr/local/bin/eriphe-update /usr/local/bin/eriphe-syncthing-run
+# The settings this layout gives every node, into an install from before it
+# (step 6 writes them all; the updater runs this setup alone).
+if [ -f /etc/eriphe-node.env ] && ! grep -q '^ERIPHE_SYNCTHING_HOME=' /etc/eriphe-node.env; then
+  echo ERIPHE_SYNCTHING_HOME=/var/lib/eriphe-syncthing >>/etc/eriphe-node.env
+fi
 '@
 if ($changed -contains "restart") { Invoke-Quiet { wsl.exe --terminate $Distro } }
 
@@ -1486,7 +1609,7 @@ $token = if ($Rejoin -or -not $joined) { $JoinToken } else { "" }
 # and the node that it is there (not with -Binary: it would replace that one).
 $updater = if ($Binary) { "rm -f /var/lib/eriphe-node/updater /var/lib/eriphe-core/updater" } else {
   # pin: the release it stays on; channel: edge when it follows main.
-  $mark = if ($pin -eq "edge") { "printf 'version=1\npin=\nchannel=edge\n'" } else { "printf 'version=1\npin=%s\nchannel=\n' '$pin'" }
+  $mark = if ($pin -eq "edge") { "printf 'version=1\npin=\nchannel=edge\nlayout=$layout\n'" } else { "printf 'version=1\npin=%s\nchannel=\nlayout=$layout\n' '$pin'" }
   $marks = "$mark > /var/lib/eriphe-node/updater"
   if ($CoreMode) { $marks += "; $mark > /var/lib/eriphe-core/updater; chown 1993:1993 /var/lib/eriphe-core/updater" }
   $marks
@@ -1502,8 +1625,12 @@ $forget
 cat > /etc/eriphe-update.conf <<'EOF'
 MODE='$mode' PIN='$pin'
 NODE_IMAGE='$nodeImage' CORE_IMAGE='$coreImage'
+LAYOUT=$layout
+ADMIN_LAYOUT=$adminLayout
 EOF
 $updater
+# This PC is at its layout: nothing waits for its user (node/update.go).
+rm -f /var/lib/eriphe-node/update-needs
 cat > /etc/eriphe-node.env <<'EOF'
 ERIPHE_INSTALL_MODE=$mode
 ERIPHE_INSTALL=windows

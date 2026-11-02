@@ -44,7 +44,7 @@ Each Go module builds on its own; run the checks from its folder (CI runs the sa
 | `install/` | `sh install/lint.sh` (needs `shellcheck`) and `sh install/launcher_test.sh` |
 | `.github/scripts/` | `sh .github/scripts/release_test.sh` |
 | `ha/` | `python3 -m pytest ha/tests` |
-| images | `docker build -t eriphe-base:dev worker/base`, `docker build -t eriphe-agent-claude:dev worker/agents/claude`, and the same for `core/`, `node/` and the servers |
+| images | `docker build -t eriphe-base:dev worker/base`, `docker build -t eriphe-agent-claude:dev worker/agents/claude`, and the same for `core/` and the servers; `docker build --build-context installer=install -t eriphe-node:dev node` (it carries the installers) |
 
 Go code is formatted with `gofmt` (`gofmt -l .` prints nothing). Tests need no network and no real
 account: providers and servers are faked; tests that need a real machine or account are named

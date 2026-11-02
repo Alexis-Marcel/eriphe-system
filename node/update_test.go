@@ -2,10 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -140,5 +143,75 @@ func TestUpdateInfo(t *testing.T) {
 	}
 	if n.upd.request(&updateRequest{ID: "u-9", Action: "update"}) {
 		t.Fatal("a request already done is taken again")
+	}
+}
+
+// The install's layout this build is made for is the installers' own: an
+// updater compares theirs with the machine's.
+func TestInstallLayout(t *testing.T) {
+	for _, c := range []struct{ file, re string }{
+		{"../install/install.sh", `(?m)^LAYOUT=([0-9]+)$`},
+		{"../install/install.ps1", `(?m)^\$layout = ([0-9]+)\r?$`},
+	} {
+		raw, err := os.ReadFile(c.file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := regexp.MustCompile(c.re).FindSubmatch(raw)
+		if m == nil {
+			t.Fatalf("%s: no layout", c.file)
+		}
+		if got := string(m[1]); got != strconv.Itoa(installLayout) {
+			t.Errorf("%s: layout %s, installLayout %d", c.file, got, installLayout)
+		}
+	}
+}
+
+// What the install waits for from its user: the step the updater left, or
+// the install command once on an install from before the layouts, which
+// its updater cannot bring; nothing once at this layout, without an
+// updater, or under eriphe-launcher, which brings its own.
+func TestUpdateNeeds(t *testing.T) {
+	needs := func(install, updater, needsFile string) any {
+		t.Helper()
+		root := t.TempDir()
+		if updater != "" {
+			os.WriteFile(filepath.Join(root, updaterFile), []byte(updater), 0o600)
+		}
+		if needsFile != "" {
+			os.WriteFile(filepath.Join(root, "update-needs"), []byte(needsFile), 0o600)
+		}
+		u := &updates{root: root, install: install}
+		return u.info()["needs"]
+	}
+	now := fmt.Sprintf("version=1\npin=\nchannel=\nlayout=%d\n", installLayout)
+	for _, c := range []struct {
+		name, install, updater, needs, want string
+	}{
+		{"at its layout", "macos", now, "", ""},
+		{"an updater from before the layouts", "linux", "version=1\npin=\n", "", "layout"},
+		{"a layout not all there", "macos", "version=1\nlayout=1\n", "", "layout"},
+		{"eriphe-launcher", "docker", "version=1\npin=\n", "", ""},
+		{"no updater", "", "", "", ""},
+		{"the password", "macos", now, "why=password\nlayout=2\n", "password"},
+		{"an administrator", "windows", now, "why=admin\n", "admin"},
+		{"something else", "macos", now, "why=$(reboot)\n", "layout"},
+	} {
+		got := needs(c.install, c.updater, c.needs)
+		if c.want == "" {
+			if got != nil {
+				t.Errorf("%s: needs %v", c.name, got)
+			}
+			continue
+		}
+		if m, ok := got.(map[string]any); !ok || m["why"] != c.want {
+			t.Errorf("%s: needs %v, want %s", c.name, got, c.want)
+		}
+	}
+	// The node reports the layout its updater says.
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, updaterFile), []byte(now), 0o600)
+	if got := (&updates{root: root}).info()["layout"]; got != installLayout {
+		t.Errorf("layout = %v", got)
 	}
 }

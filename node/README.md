@@ -180,13 +180,22 @@ update themselves):
 
 | File in the root | Written by | What |
 |---|---|---|
-| `updater` | the installer | an updater is there (`pin=` the version it is pinned to) |
+| `updater` | the installer | an updater is there (`pin=` the version it is pinned to, `layout=` the install's layout) |
 | `update-requested` | the node | `id`, `action`, `core`, `auto`, key=value lines |
 | `update-status` | the updater | `id`, `action`, `outcome`, `message`, `from`, `to`, `at` |
+| `update-needs` | the installer the updater ran | `why`: a step left for the user (`password`, `admin`, `layout`) |
 
-`GET /v1/node` reports them as `update`: `{updater, pin, waiting, requested, status}`. Without
-`updater` (an install from before, or a node set up by hand) the node writes nothing and
-eriphe-core offers no update.
+`GET /v1/node` reports them as `update`: `{updater, pin, waiting, requested, status, layout,
+needs}`. Without `updater` (an install from before, or a node set up by hand) the node writes
+nothing and eriphe-core offers no update.
+
+An update also brings the machine to the install's layout of its version (install/README.md,
+The machines update themselves): what an install puts there besides eriphe-node, such as
+Syncthing. This build is made for layout 2 (`installLayout`, install.sh's `LAYOUT`). `needs` says
+what the install waits for from its user: `update-needs` when there is one, else `layout` on an
+install of layout 1, whose updater cannot bring a layout at all (an updater from before them, or
+a layout not all there, as a Mac's without Syncthing); not under eriphe-launcher, which brings its
+own. Only the reason: the command to run is eriphe-core's, for how the machine was installed.
 
 ## Sleep
 

