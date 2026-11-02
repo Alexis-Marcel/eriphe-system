@@ -127,7 +127,7 @@ func folderErrorKey(err error) string {
 	if errors.As(err, &fe) {
 		switch fe.Code {
 		case "offline", "unknown_share", "invalid_path", "not_found", "outside", "sensitive", "eriphe_data",
-			"unavailable", "unreadable", "holds_sensitive", "old_node", "suspended", "bad_name", "bad_access", "exists", "read_only_share":
+			"unavailable", "unreadable", "holds_sensitive", "holds_private", "old_node", "suspended", "bad_name", "bad_access", "exists", "read_only_share":
 			return "folders.err." + fe.Code
 		}
 	}

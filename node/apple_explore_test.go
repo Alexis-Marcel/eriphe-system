@@ -184,3 +184,8 @@ func TestPrivateDirs(t *testing.T) {
 		}
 	}
 }
+
+func TestApplePrivateMarker(t *testing.T) {
+	n, root := appleShareFixture(t)
+	testPrivateMarker(t, n, root)
+}
