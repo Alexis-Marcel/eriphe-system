@@ -505,6 +505,94 @@ function Get-SessionEnv([string] $dir) {
   "ERIPHE_SESSION_DIR='$dir'`nERIPHE_SESSION_FILE=/mnt/eriphe-session/session.json"
 }
 
+# The folder of the user signed in at the PC (C:\Users\<name>), the one place
+# folders may be shared from (node/README.md, Shares): the distribution
+# mounts it at /mnt/eriphe/home for eriphe-node only (eriphe-node-run), and
+# a task gets only the folders shared from it. None for a path sh cannot
+# hold single-quoted.
+function Get-SessionProfile {
+  try {
+    $sid = (New-Object Security.Principal.NTAccount (Get-SessionUser)).Translate([Security.Principal.SecurityIdentifier]).Value
+    $dir = (Get-CimInstance Win32_UserProfile -Filter "SID='$sid'" -ErrorAction Stop).LocalPath
+  } catch { return $null }
+  if (-not $dir -or $dir -match "['`r`n,]" -or $dir -notmatch '^[A-Za-z]:\\') { return $null }
+  @{ Sid = $sid; Dir = $dir.TrimEnd('\') }
+}
+
+# What eriphe-node-run and eriphe-node are told of it.
+function Get-ShareEnv($prof) {
+  if (-not $prof) { return "" }
+  "ERIPHE_WINDOWS_HOME='$($prof.Dir)'`nERIPHE_NODE_SHARES=home=/mnt/eriphe/home"
+}
+
+# The Explorer's right click, "Share with Eriphe" (Windows 11: under "Show
+# more options"): two entries on folders, read, and read and drop results,
+# for the user signed in at the PC, running eriphe-share.ps1, which runs
+# eriphe-share in the distribution and says how it went. Per user, in their
+# registry (HKCU\Software\Classes\Directory\shell).
+$shareScript = Join-Path $helperDir "eriphe-share.ps1"
+$shareKeys = "EripheShare", "EripheShareDrop"
+
+function Get-ShareMenuRoots($prof) {
+  $roots = @("HKCU:\Software\Classes\Directory\shell")
+  if ($prof -and (Test-Path "Registry::HKEY_USERS\$($prof.Sid)")) { $roots += "Registry::HKEY_USERS\$($prof.Sid)\Software\Classes\Directory\shell" }
+  $roots
+}
+
+function Install-ShareMenu($prof) {
+  New-Item -ItemType Directory -Force $helperDir | Out-Null
+  Set-Content -Path $shareScript -Encoding UTF8 -Value @"
+# Written by install.ps1: the Explorer's "Share with Eriphe". It shares the
+# folder with Eriphe on this PC, through eriphe-node in the distribution
+# $Distro, and says how it went (node/README.md, Shares).
+param([string] `$Path, [switch] `$Drop)
+`$distro = '$Distro'
+`$profileDir = '$($prof.Dir)'
+"@
+  Add-Content -Path $shareScript -Encoding UTF8 -Value @'
+Add-Type -AssemblyName System.Windows.Forms
+function Show-Outcome([string] $text, [string] $icon) {
+  [void] [System.Windows.Forms.MessageBox]::Show($text, "Eriphe", "OK", $icon)
+}
+$p = $Path.TrimEnd('\')
+if (-not $p.StartsWith($profileDir + '\', [StringComparison]::OrdinalIgnoreCase)) {
+  Show-Outcome "Only the folders in $profileDir can be shared with Eriphe." Warning
+  exit 1
+}
+$rel = $p.Substring($profileDir.Length + 1) -replace '\\', '/'
+$cmd = @('-d', $distro, '-u', 'root', '--exec', '/usr/local/bin/eriphe-share', 'add')
+if ($Drop) { $cmd += '--drop' }
+$cmd += "/mnt/eriphe/home/$rel"
+$env:WSL_UTF8 = '1'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$out = (& wsl.exe @cmd 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -eq 0) { Show-Outcome $out Information } else {
+  if (-not $out) { $out = "Eriphe could not share this folder (wsl.exe: $LASTEXITCODE)." }
+  Show-Outcome $out Warning
+}
+'@
+  $fr = (Get-UICulture).TwoLetterISOLanguageName -eq "fr"
+  $labels = if ($fr) { "Partager avec Eriphe", "Partager avec Eriphe (lecture + r$([char]0xE9)sultats)" } else { "Share with Eriphe", "Share with Eriphe (read + results)" }
+  $run = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$shareScript`" -Path `"%V`""
+  Remove-ShareMenu $prof
+  $root = (Get-ShareMenuRoots $prof)[-1]
+  for ($i = 0; $i -lt 2; $i++) {
+    $key = Join-Path $root $shareKeys[$i]
+    New-Item -Path "$key\command" -Force | Out-Null
+    Set-ItemProperty -Path $key -Name "MUIVerb" -Value $labels[$i]
+    Set-ItemProperty -Path $key -Name "Icon" -Value "imageres.dll,-1023"
+    $cmdLine = if ($i -eq 1) { "$run -Drop" } else { $run }
+    Set-ItemProperty -Path "$key\command" -Name "(default)" -Value $cmdLine
+  }
+  $labels[0]
+}
+
+function Remove-ShareMenu($prof) {
+  foreach ($root in (Get-ShareMenuRoots $prof)) {
+    foreach ($k in $shareKeys) { Remove-Item -Path (Join-Path $root $k) -Recurse -Force -ErrorAction SilentlyContinue }
+  }
+}
+
 # The account signed in at the PC (the console's), whose session the helper
 # runs in; else the one running this script.
 function Get-SessionUser {
@@ -613,6 +701,8 @@ if ($Uninstall) {
     Stop-ScheduledTask -TaskName $awakeTask
     Unregister-ScheduledTask -TaskName $awakeTask -Confirm:$false
   }
+  Remove-ShareMenu (Get-SessionProfile)
+  Remove-Item $shareScript -Force -ErrorAction SilentlyContinue
   Remove-SessionHelper
   Remove-Item $boot, $awake -Force -ErrorAction SilentlyContinue
   if (-not (Get-ChildItem $bootDir -ErrorAction SilentlyContinue)) { Remove-Item $bootDir -Force -ErrorAction SilentlyContinue }
@@ -833,6 +923,13 @@ if [ -n "${ERIPHE_SESSION_DIR:-}" ] && ! mountpoint -q /mnt/eriphe-session 2>/de
   mount -t drvfs "$ERIPHE_SESSION_DIR" /mnt/eriphe-session -o ro,noexec,nosuid,nodev >>/var/log/eriphe-node.log 2>&1 ||
     echo "the session helper's folder could not be mounted" >>/var/log/eriphe-node.log
 fi
+# The user's folder (install.ps1), for eriphe-node only: the one place
+# folders may be shared from. A task gets only a folder shared from it.
+if [ -n "${ERIPHE_WINDOWS_HOME:-}" ] && ! mountpoint -q /mnt/eriphe/home 2>/dev/null; then
+  mkdir -p /mnt/eriphe/home
+  mount -t drvfs "$ERIPHE_WINDOWS_HOME" /mnt/eriphe/home -o noexec,nosuid,nodev >>/var/log/eriphe-node.log 2>&1 ||
+    echo "the user's folder could not be mounted: no folder can be shared" >>/var/log/eriphe-node.log
+fi
 eriphe-dockerd
 # The updater, next to the node: it applies eriphe-core's update requests.
 pgrep -f /usr/local/bin/eriphe-update-loop >/dev/null || setsid /usr/local/bin/eriphe-update-loop </dev/null >/dev/null 2>&1 &
@@ -842,6 +939,15 @@ while true; do
   echo "eriphe-node exited ($?), restarting in 5 s" >>/var/log/eriphe-node.log
   sleep 5
 done
+EOF
+cat > /usr/local/bin/eriphe-share <<'EOF'
+#!/bin/sh
+# eriphe-node share with the node's settings: the Explorer's "Share with
+# Eriphe" runs it (wsl -d <distro> -u root --exec eriphe-share add FOLDER).
+set -a
+. /etc/eriphe-node.env
+set +a
+exec eriphe-node share -root /var/lib/eriphe-node "$@"
 EOF
 cat > /usr/local/bin/eriphe-addr <<'EOF'
 #!/bin/sh
@@ -1127,7 +1233,7 @@ for target in core node; do
   esac
 done
 EOF
-chmod 755 /usr/local/bin/eriphe-dockerd /usr/local/bin/eriphe-node-run /usr/local/bin/eriphe-addr \
+chmod 755 /usr/local/bin/eriphe-dockerd /usr/local/bin/eriphe-node-run /usr/local/bin/eriphe-addr /usr/local/bin/eriphe-share \
   /usr/local/bin/eriphe-core-run /usr/local/bin/eriphe-update-loop /usr/local/bin/eriphe-update
 '@
 if ($changed -contains "restart") { Invoke-Quiet { wsl.exe --terminate $Distro } }
@@ -1258,6 +1364,7 @@ $updater = if ($Binary) { "rm -f /var/lib/eriphe-node/updater /var/lib/eriphe-co
   if ($CoreMode) { $marks += "; $mark > /var/lib/eriphe-core/updater; chown 1993:1993 /var/lib/eriphe-core/updater" }
   $marks
 }
+$sessionProfile = Get-SessionProfile
 $version = if ($Binary) { "echo custom > /usr/local/bin/eriphe-node.version" } else { "mv /usr/local/bin/eriphe-node.version.new /usr/local/bin/eriphe-node.version" }
 Invoke-InDistro @"
 mv /usr/local/bin/eriphe-node.new /usr/local/bin/eriphe-node
@@ -1284,6 +1391,7 @@ ERIPHE_WAKE_BROADCAST=$wakeBroadcast
 ERIPHE_MODEL_SERVER=$ModelServer
 $alwaysOn
 $(Get-SessionEnv $sessionDir)
+$(Get-ShareEnv $sessionProfile)
 EOF
 "@ | Out-Null
 
@@ -1357,6 +1465,12 @@ Register-ScheduledTask -TaskName $awakeTask -Action $awakeAction -Trigger $trigg
 try { Install-SessionHelper } catch {
   Write-Log "Session helper: $_"
   Add-Notice "$name_ cannot tell yet whether you are at $here (see the log): run the command again to retry."
+}
+$shareLabel = $null
+if ($sessionProfile) {
+  try { $shareLabel = Install-ShareMenu $sessionProfile } catch { Write-Log "Share menu: $_" }
+} else {
+  Write-Log "No profile folder found for the user signed in at the PC: no folder can be shared."
 }
 
 if ($CoreMode) {
@@ -1449,6 +1563,10 @@ if ($pin -eq "edge") {
   Add-Notice "it follows main, the version in development (-Version latest follows the releases again)."
 } elseif ($pin) {
   Add-Notice "it stays on version $pin (-Version latest follows the releases again)."
+}
+if ($shareLabel) {
+  Write-Out
+  Write-Out "To share a folder of $($sessionProfile.Dir) with $($name_): right-click it in File Explorer, Show more options, `"$shareLabel`"."
 }
 Write-GoodToKnow
 Write-Out
