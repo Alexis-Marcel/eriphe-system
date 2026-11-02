@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -52,11 +54,12 @@ type githubFlows struct {
 type githubFlow struct {
 	binding string // the hash of the browser's flow cookie
 	started time.Time
+	public  bool // the manifest asked for an app installable on other accounts
 }
 
 const githubFlowTimeout = time.Hour // GitHub's code lasts an hour
 
-func (f *githubFlows) add(binding string) string {
+func (f *githubFlows) add(binding string, public bool) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.m == nil {
@@ -68,7 +71,7 @@ func (f *githubFlows) add(binding string) string {
 		}
 	}
 	state := "gha-" + randomToken(24)
-	f.m[state] = githubFlow{binding: binding, started: time.Now()}
+	f.m[state] = githubFlow{binding: binding, started: time.Now(), public: public}
 	return state
 }
 
@@ -84,28 +87,79 @@ func (f *githubFlows) take(state string) (githubFlow, bool) {
 type githubView struct {
 	Vault         bool
 	App           *githubAppSecret // without its key
-	Installations []githubInstallation
+	Installations []githubInstView
 	InstallErr    string
 	InstallURL    string
 	Suffix        string
-	// The GitHub catalog tool: its name, whether it is on the app, and
-	// whether the workspace may change it.
-	Tool, ToolAuth string
-	ToolReadOnly   bool
-	Created        bool
-	Installed      bool
-	Flash, Error   string
+	// The GitHub connections of the catalog (one name, one connection, one
+	// right), on the app or on a token.
+	Conns []githubConn
+	// ?switch=: the token connection the user came to move to the app;
+	// ?switched=: the one just moved (Revoke: it had a token, to revoke).
+	Switch, Switched string
+	Revoke           bool
+	Created          bool
+	Installed        bool
+	Flash, Error     string
 	// The page that posts the manifest to GitHub.
 	PostURL, Manifest string
 }
 
-func (w *web) githubView(ctx context.Context, r *http.Request) githubView {
-	v := githubView{Vault: currentVault() != nil, Suffix: w.c.conf().User,
-		Created: r.URL.Query().Get("created") != "", Installed: r.URL.Query().Get("installed") != ""}
+// githubConn is a GitHub connection of the catalog.
+type githubConn struct {
+	Name     string
+	Auth     string // github-app, bearer, oauth…
+	Account  string // on the app: its installation's account ("" the owner's)
+	ReadOnly bool   // the configuration file's
+}
+
+// githubInstView is where the app is installed, with the connection that
+// uses that installation, if any, or the name a new one would get.
+type githubInstView struct {
+	githubInstallation
+	Conn, Suggest string
+}
+
+// githubConns are the catalog's GitHub connections, by name.
+func (w *web) githubConns() []githubConn {
 	conf := w.c.conf()
-	for name, s := range conf.Servers {
-		if isGitHubServer(name, s) && (v.Tool == "" || name == "github") {
-			v.Tool, v.ToolAuth, v.ToolReadOnly = name, s.authKind(), w.c.source(kindServer, name) == sourceConfig
+	var out []githubConn
+	for _, name := range slices.Sorted(maps.Keys(conf.Servers)) {
+		s := conf.Servers[name]
+		if !isGitHubServer(name, s) {
+			continue
+		}
+		c := githubConn{Name: name, Auth: s.authKind(), ReadOnly: w.c.source(kindServer, name) == sourceConfig}
+		if s.Auth != nil {
+			c.Account = s.Auth.Account
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+// usesInstallation tells a connection on the app that takes its tokens
+// from the installation on login.
+func (c githubConn) usesInstallation(login, owner string, only bool) bool {
+	if c.Auth != "github-app" {
+		return false
+	}
+	if c.Account == "" {
+		return only || strings.EqualFold(login, owner)
+	}
+	return strings.EqualFold(c.Account, login)
+}
+
+func (w *web) githubView(ctx context.Context, r *http.Request) githubView {
+	q := r.URL.Query()
+	v := githubView{Vault: currentVault() != nil, Suffix: w.c.conf().User,
+		Created: q.Get("created") != "", Installed: q.Get("installed") != "", Conns: w.githubConns()}
+	for _, c := range v.Conns {
+		if c.Name == q.Get("switch") && c.Auth != "github-app" {
+			v.Switch = c.Name
+		}
+		if c.Name == q.Get("switched") && c.Auth == "github-app" {
+			v.Switched, v.Revoke = c.Name, q.Get("revoke") != ""
 		}
 	}
 	app, err := loadGitHubApp()
@@ -117,13 +171,52 @@ func (w *web) githubView(ctx context.Context, r *http.Request) githubView {
 		v.InstallURL = w.c.github.installURL(app.Slug)
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		if v.Installations, err = w.c.github.installations(ctx, app); err != nil {
+		list, err := w.c.github.installations(ctx, app)
+		if err != nil {
 			v.InstallErr = err.Error()
+			break
+		}
+		w.c.github.countRepos(ctx, app, list)
+		taken := map[string]bool{}
+		for _, c := range v.Conns {
+			taken[c.Name] = true
+		}
+		for _, i := range list {
+			iv := githubInstView{githubInstallation: i}
+			for _, c := range v.Conns {
+				if c.usesInstallation(i.Account.Login, app.Owner, len(list) == 1) {
+					iv.Conn = c.Name
+					break
+				}
+			}
+			if iv.Conn == "" {
+				iv.Suggest = suggestGitHubName(i.Account.Login, strings.EqualFold(i.Account.Login, app.Owner), taken)
+				taken[iv.Suggest] = true
+			}
+			v.Installations = append(v.Installations, iv)
 		}
 	case !errors.Is(err, errNoGitHubApp):
 		v.Error = err.Error()
 	}
 	return v
+}
+
+// suggestGitHubName is the name a new connection on an installation gets:
+// github for the owner's, github-<account> for the others, free of the
+// names taken.
+func suggestGitHubName(login string, owner bool, taken map[string]bool) string {
+	base := "github"
+	if !owner || taken[base] {
+		base = slugName("github-" + strings.ToLower(login))
+		if base == "" || !serverName.MatchString(base) {
+			base = "github-2"
+		}
+	}
+	name := base
+	for n := 2; taken[name]; n++ {
+		name = fmt.Sprintf("%s-%d", base, n)
+	}
+	return name
 }
 
 func (w *web) handleGitHub(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -152,8 +245,9 @@ func (w *web) handleGitHubCreate(rw http.ResponseWriter, r *http.Request, s *ses
 		w.render(rw, r, s, "settings", "", page{Title: "github.title", Nav: "settings", Tab: "tools", View: "github", Data: v})
 		return
 	}
-	manifest, _ := json.Marshal(githubAppManifest(githubAppName(r.PostFormValue("suffix")), w.origin(r)))
-	state := w.c.github.flows.add(w.oauthBinding(rw, r))
+	public := r.PostFormValue("public") != ""
+	manifest, _ := json.Marshal(githubAppManifest(githubAppName(r.PostFormValue("suffix")), w.origin(r), public))
+	state := w.c.github.flows.add(w.oauthBinding(rw, r), public)
 	v.PostURL, v.Manifest = w.c.github.newAppURL(org, state), string(manifest)
 	// This page's form goes to GitHub: the policy lets it.
 	rw.Header().Set("Content-Security-Policy", strings.Replace(rw.Header().Get("Content-Security-Policy"),
@@ -185,7 +279,7 @@ func (w *web) handleGitHubCallback(rw http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	app, err := w.c.github.convertManifest(ctx, q.Get("code"))
+	app, err := w.c.github.convertManifest(ctx, q.Get("code"), f.public)
 	if err != nil {
 		log.Printf("web: GitHub App: %v", err)
 		fail(http.StatusBadGateway, err.Error())
@@ -197,46 +291,95 @@ func (w *web) handleGitHubCallback(rw http.ResponseWriter, r *http.Request) {
 	w.render(rw, r, nil, "oauth", "", page{Title: "github.title", Data: oauthDone{Next: "/settings/github?created=1"}})
 }
 
-// handleGitHubTool puts the GitHub catalog tool on the app: one GitHub
-// connection for the tool and for git.
+// handleGitHubTool puts a GitHub connection on the app, from the
+// installation on an account (account; empty: the app owner's): a new
+// one, or one on a token moved to the app (name). A connection moved keeps
+// its name, so its grants and rules; its token leaves the vault with the
+// change (dropOrphanSecrets), and the page says to revoke it on GitHub.
+// Without a name: the connection named github, else the first, else a
+// new one named github.
 func (w *web) handleGitHubTool(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
-	if _, err := loadGitHubApp(); err != nil {
+	app, err := loadGitHubApp()
+	if err != nil {
 		w.toast(rw, tr(lang, "github.noapp"), false)
 		return
 	}
-	// The GitHub tool there is, the one named github first; else a new one.
+	account := strings.TrimSpace(r.PostFormValue("account"))
+	if account != "" && !githubLogin.MatchString(account) {
+		w.toast(rw, tr(lang, "github.badorg"), false)
+		return
+	}
 	conf := w.c.conf()
-	name, srv := "", Server{}
-	if sv, ok := conf.Servers["github"]; ok {
-		name, srv = "github", sv
-	} else {
-		for n, sv := range conf.Servers {
-			if isGitHubServer(n, sv) {
-				name, srv = n, sv
-				break
+	name := strings.TrimSpace(r.PostFormValue("name"))
+	srv, exists := Server{}, false
+	if name == "" {
+		if sv, ok := conf.Servers["github"]; ok {
+			name, srv, exists = "github", sv, true
+		} else {
+			for _, n := range slices.Sorted(maps.Keys(conf.Servers)) {
+				if isGitHubServer(n, conf.Servers[n]) {
+					name, srv, exists = n, conf.Servers[n], true
+					break
+				}
 			}
 		}
-	}
-	if name == "" {
-		name, srv = "github", Server{Use: tr(lang, "preset.github.use")}.withLevel(accessReads)
-	}
-	if srv.local() || srv.URL == "" {
-		srv = Server{Use: srv.Use, Access: srv.Access, TrustAnnotations: srv.TrustAnnotations, AlwaysLoad: srv.AlwaysLoad, Timeout: srv.Timeout}
-		srv.URL = "https://api.githubcopilot.com/mcp/"
+		if name == "" {
+			name = "github"
+		}
+	} else {
+		if !serverName.MatchString(name) {
+			w.toast(rw, w.formError(r, errInvalid(fmt.Errorf("bad name %q", name))), false)
+			return
+		}
+		srv, exists = conf.Servers[name]
+		if exists && !isGitHubServer(name, srv) {
+			w.toast(rw, fmt.Sprintf(tr(lang, "github.notgithub"), name), false)
+			return
+		}
 	}
 	if w.c.source(kindServer, name) == sourceConfig {
 		w.toast(rw, w.formError(r, errReadOnly(kindServer, name)), false)
 		return
 	}
-	srv.Auth = &ServerAuth{GitHubApp: true}
+	// The app must be on that account, when GitHub says where it is.
+	if account != "" {
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		list, err := w.c.github.installations(ctx, app)
+		cancel()
+		if err == nil {
+			if _, err := pickInstallation(app, list, account); err != nil {
+				w.toast(rw, fmt.Sprintf(tr(lang, "github.notthere"), account), false)
+				return
+			}
+		}
+	}
+	if !exists {
+		srv = Server{Use: tr(lang, "preset.github.use")}.withLevel(accessReads)
+		if account != "" && !strings.EqualFold(account, app.Owner) {
+			srv.Use += " (" + account + ")"
+		}
+	}
+	had := srv.authKind()
+	if srv.local() || srv.URL == "" {
+		srv = Server{Use: srv.Use, Access: srv.Access, TrustAnnotations: srv.TrustAnnotations, AlwaysLoad: srv.AlwaysLoad, Timeout: srv.Timeout}
+		srv.URL = "https://api.githubcopilot.com/mcp/"
+	}
+	srv.Auth = &ServerAuth{GitHubApp: true, Account: account}
 	if err := w.c.putServer(putUpsert, name, srv, nil); err != nil {
 		w.toast(rw, w.formError(r, err), false)
 		return
 	}
-	log.Printf("web: tool %s now on the GitHub App", name)
+	log.Printf("web: tool %s now on the GitHub App (%s)", name, orStr(account, "the owner's installation"))
 	w.notify()
-	rw.Header().Set("HX-Redirect", "/settings/tools?saved="+url.QueryEscape(name))
+	next := "/settings/tools?saved=" + url.QueryEscape(name)
+	if exists {
+		next = "/settings/github?switched=" + url.QueryEscape(name)
+		if had == "bearer" {
+			next += "&revoke=1"
+		}
+	}
+	rw.Header().Set("HX-Redirect", next)
 	rw.WriteHeader(http.StatusOK)
 }
 

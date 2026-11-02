@@ -329,7 +329,7 @@ holds their credentials and is the only one to reach them: **a task never sees a
 | Field | What |
 |---|---|
 | `url` | a remote server (streamable HTTP) |
-| `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"github_app": true}` (an installation token of Eriphe's GitHub App, refreshed before it ends: see [credentials on demand](#the-github-app)), `{"none": true}` |
+| `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"github_app": true}` (an installation token of Eriphe's GitHub App, refreshed before it ends; with `"account"`, from that account's or organization's installation: see [credentials on demand](#the-github-app)), `{"none": true}` |
 | `run` | instead of `url` and `auth`: a local server, a container a node runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
 | `use` | what it is for, for the brain |
 | `access` | what Eriphe may do on it: `read-only`, `reads`, `free` or `ask` (see [access levels](#access-levels)); without it, `trust_annotations` says |
@@ -1029,7 +1029,10 @@ Each user creates **their own** GitHub App, in one click, from Settings → Tool
 
 1. eriphe-core writes the manifest: name "Eriphe – <suffix>" (the user's name by default),
    permissions `contents` write, `pull_requests` write, `issues` write, `metadata` read, `checks`
-   read, no webhook (`hook_attributes.active` false), private, `redirect_url`
+   read, no webhook (`hook_attributes.active` false), `public` false unless "Installable sur mes
+   organisations" is ticked (`public` true: GitHub installs a private app on its owner's account
+   only; a public one, other accounts could install on their own repositories, which gives them
+   nothing on the user's, and its key stays in the vault), `redirect_url`
    `https://<workspace>/github-app/callback`, `setup_url` `https://<workspace>/github-app/installed`
    (both lead the browser back to the page: GitHub's redirect does not carry the session cookie,
    which is SameSite=Strict);
@@ -1042,17 +1045,30 @@ Each user creates **their own** GitHub App, in one click, from Settings → Tool
    for the app's id, slug, private key, webhook secret and client, and keeps them in the vault as
    one secret, `github-app`;
 4. the page then installs the app on the repositories Eriphe may work on
-   (`github.com/apps/<slug>/installations/new`) and shows where it is installed.
+   (`github.com/apps/<slug>/installations/new`) and shows where it is installed
+   (`GET /app/installations`): each account or organization, and how many repositories when the
+   installation has selected ones (`GET /installation/repositories`, with a token that reads
+   metadata only). "Installer sur un autre compte ou une organisation" opens the same GitHub page;
+   on an organization, one of its owners approves. A private app says it installs on its owner
+   only, and how to make it public on GitHub.
 
 Minting signs a JWT with the app's key (RS256, nine minutes), finds the installation of the
 repository (`GET /repos/{owner}/{repo}/installation`) and asks
-`POST /app/installations/{id}/access_tokens` with `repositories` and `permissions`.
+`POST /app/installations/{id}/access_tokens` with `repositories` and `permissions`. Git
+credentials of tasks always find the installation per repository, whatever the connections.
 
-"Brancher l'outil GitHub sur l'app" puts the GitHub catalog tool on the same app
-(`{"auth": {"github_app": true}}`): an installation token of the owner's installation, with its
-repositories and rights, renewed five minutes before it ends. One GitHub connection for the tool
-and for git; the tool's former token is forgotten. A tool of the configuration file is changed in
-the file. "Oublier l'app" removes it from the vault (it stays on GitHub).
+**GitHub connections on the app.** A catalog tool on the app is
+`{"auth": {"github_app": true, "account": "acme"}}`: its tokens come from the installation on that
+account or organization (without `account`, the owner's, or the only one), with its repositories
+and rights (reading only for a read-only tool), renewed five minutes before they end, cached per
+account. One name is one connection with its own rights, so `github` can use the user's
+installation and `github-acme` the organization's. The page lists the GitHub connections with
+their account, offers a connection for each installation that has none (a name suggested:
+`github`, `github-<account>`), and a "Passer à l'app" for each one on a token, with the account
+to use. A connection switched keeps its name, so its level, grants and actions allowed; its token
+leaves the vault with the change (the vault's orphan secrets are dropped), and the page says to
+revoke it on GitHub (`github.com/settings/personal-access-tokens`). A tool of the configuration
+file is changed in the file. "Oublier l'app" removes it from the vault (it stays on GitHub).
 
 ## Assistants
 
@@ -1693,7 +1709,14 @@ made at their place (Figma, Slack, Asana, Google, Microsoft 365…) are listed a
 A preset's form asks only what the owner decides: the credential (with the provider's own
 steps and link), the address when it differs per person, the name, what the tool is for, and what
 Eriphe may do on it (its [access level](#access-levels), four cards); the rest (a vendor's address, the authentication, timeouts, an OAuth client, how a
-local server runs) is under the advanced options. Mails and Agenda first ask which kind of account
+local server runs) is under the advanced options. GitHub first asks how to connect, the two ways
+side by side: [Eriphe's GitHub App](#the-github-app) (recommended: the user picks the repositories,
+each task gets a one-hour token for its repository only, commits and PRs appear as the app,
+nothing to approve for a task's push and PR on its branch, about five minutes to set up once; it
+leads to Settings → Tools → GitHub) or a personal token (quick, acts as the user on everything the
+token reaches, long-lived, so each push of a task waits for the user's approval; its form says so
+and links back to the app). A GitHub connection on a token shows "Passer à l'app" in the list and
+in its form. Mails and Agenda first ask which kind of account
 (Gmail, iCloud, Orange, Free, OVHcloud, Fastmail or any IMAP server; iCloud, Fastmail, Nextcloud or
 any CalDAV server) and run `eriphe-mail` and `eriphe-calendar` with its password; "Test the
 connection" tries that password (IMAP login, CalDAV PROPFIND). Outlook, Microsoft 365, Google

@@ -227,6 +227,9 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 func (w *web) toolRow(lang string, conf *Config, sv serverView, voice bool) toolView {
 	t := toolView{serverView: sv, Source: sv.Source, Voice: voice}
 	t.Preset, t.Detail = presetOf(lang, conf.Servers[sv.Name])
+	if t.Preset.ID == "github" {
+		t.Detail = githubDetail(lang, conf.Servers[sv.Name])
+	}
 	t.Scope = w.c.tokenScope(sv.Name, conf.Servers[sv.Name])
 	t.Allowed = len(w.c.store.allowedActions(sv.Name))
 	if sv.Auth == "oauth" {
@@ -238,6 +241,28 @@ func (w *web) toolRow(lang string, conf *Config, sv serverView, voice bool) tool
 		t.Problem = serviceProblem(lang, sv)
 	}
 	return t
+}
+
+// githubDetail is the line of a GitHub connection: on the app, and from
+// which account's installation; or on a personal token.
+func githubDetail(lang string, s Server) string {
+	d := tr(lang, "preset.github.title")
+	switch s.authKind() {
+	case "github-app":
+		account := s.Auth.Account
+		if account == "" {
+			if app, err := loadGitHubApp(); err == nil {
+				account = app.Owner
+			}
+		}
+		d += " · " + tr(lang, "github.viaapp")
+		if account != "" {
+			d += " · " + account
+		}
+	case "bearer":
+		d += " · " + tr(lang, "github.viatoken")
+	}
+	return d
 }
 
 // envRow is one environment variable of a local server, in the form.
@@ -277,6 +302,9 @@ type toolForm struct {
 	SecretSet bool // their password is set
 	Choose    bool // the kind of account is to be picked
 	Switched  bool // an edit moved to another account: a new password is needed
+	// GitHub: Eriphe's app or a personal token comes first (Choose); Way
+	// is "token" once the token is picked (the app has its own page).
+	Way string
 	// OAuth: the primary action connects; Service names whom to.
 	Service   string
 	OrigOAuth bool // an edit of a server already on OAuth: it can be saved without signing in again
@@ -333,6 +361,26 @@ func (f toolForm) PickURL() string {
 		return "/settings/tools/" + f.Name + "/edit?provider="
 	}
 	return "/settings/tools/new?preset=" + f.Preset.ID + "&provider="
+}
+
+// PickKind names the choice the form starts with, for its words
+// (pick.<kind>.*): mail, calendar, or github (the app or a token).
+func (f toolForm) PickKind() string {
+	if f.Preset.ID == "github" {
+		return "github"
+	}
+	return f.Preset.Form
+}
+
+// Picked is what was picked from that choice, if anything.
+func (f toolForm) Picked() string {
+	switch {
+	case f.Way != "":
+		return f.Way
+	case f.Preset.Form == "calendar":
+		return f.Calendar.Provider
+	}
+	return f.Mail.Provider
 }
 
 // MailChoices and CalChoices are the kinds of account offered.
@@ -651,6 +699,15 @@ func (w *web) toolFormPage(rw http.ResponseWriter, r *http.Request, s *session, 
 // account picked from the list, or the list itself ("choose", or nothing
 // for a new tool).
 func pickAccount(f *toolForm, provider string) {
+	if f.Preset.ID == "github" && !f.Edit {
+		// The app or a token: the choice first (web_github.go).
+		if provider == "token" {
+			f.Way = provider
+		} else {
+			f.Choose = true
+		}
+		return
+	}
 	switch f.Preset.Form {
 	case "mail":
 		c, ok := mailChoiceByID(provider)

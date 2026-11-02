@@ -50,6 +50,8 @@ type githubAppSecret struct {
 	WebhookSecret string `json:"webhook_secret,omitempty"`
 	ClientID      string `json:"client_id,omitempty"`
 	ClientSecret  string `json:"client_secret,omitempty"`
+	// Public: created installable on other accounts (the manifest's public).
+	Public bool `json:"public,omitempty"`
 }
 
 // githubApp is the app, its key parsed.
@@ -148,9 +150,9 @@ type githubClient struct {
 	flows githubFlows // the app's creations in progress (web_github.go)
 
 	mu sync.Mutex
-	// The GitHub tool's installation tokens: with all the app's rights, and
-	// with their reading only.
-	toolToks [2]cachedToken
+	// The GitHub tools' installation tokens, by account: with all the app's
+	// rights, and with their reading only.
+	toolToks map[toolKey]cachedToken
 }
 
 // cachedToken is a token and when it ends.
@@ -277,6 +279,33 @@ type githubInstallation struct {
 	} `json:"account"`
 	Selection string `json:"repository_selection"` // all or selected
 	HTMLURL   string `json:"html_url"`
+	// Repos is how many repositories it has, when Counted (selected ones).
+	Repos   int  `json:"-"`
+	Counted bool `json:"-"`
+}
+
+// Org tells an organization's installation.
+func (i githubInstallation) Org() bool { return strings.EqualFold(i.Account.Type, "Organization") }
+
+// countRepos fills in how many repositories each installation on selected
+// repositories has: GitHub tells it to the installation itself, so it takes
+// a token that can read their metadata only. A failure leaves it uncounted.
+func (g *githubClient) countRepos(ctx context.Context, app *githubApp, list []githubInstallation) {
+	for i := range list {
+		if list[i].Selection != "selected" {
+			continue
+		}
+		tok, _, err := g.installationToken(ctx, app, list[i].ID, nil, map[string]string{"metadata": "read"})
+		if err != nil {
+			continue
+		}
+		var out struct {
+			Total int `json:"total_count"`
+		}
+		if g.do(ctx, http.MethodGet, "/installation/repositories?per_page=1", "token "+tok, nil, &out) == nil {
+			list[i].Repos, list[i].Counted = out.Total, true
+		}
+	}
 }
 
 func (g *githubClient) installations(ctx context.Context, app *githubApp) ([]githubInstallation, error) {
@@ -295,11 +324,19 @@ var githubReadPermissions = map[string]string{
 	"contents": "read", "pull_requests": "read", "issues": "read", "metadata": "read", "checks": "read",
 }
 
-// toolToken is the GitHub MCP tool's token on the app: an installation
-// token of the app owner's installation (or the only one), with all its
-// repositories, and all its rights or (readOnly) their reading only,
-// renewed five minutes before it ends.
-func (g *githubClient) toolToken(ctx context.Context, readOnly bool) (string, error) {
+// toolKey is one of the GitHub tool's cached tokens: an account's
+// installation ("" the owner's), with all the app's rights or reading only.
+type toolKey struct {
+	account  string
+	readOnly bool
+}
+
+// toolToken is a GitHub MCP tool's token on the app: an installation token
+// of the installation on account (empty: the app owner's, or the only
+// one), with all its repositories, and all its rights or (readOnly) their
+// reading only, renewed five minutes before it ends. Each GitHub
+// connection names its account: one app, several connections.
+func (g *githubClient) toolToken(ctx context.Context, account string, readOnly bool) (string, error) {
 	app, err := loadGitHubApp()
 	if err != nil {
 		if err == errNoGitHubApp {
@@ -309,20 +346,46 @@ func (g *githubClient) toolToken(ctx context.Context, readOnly bool) (string, er
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	slot := 0
+	key := toolKey{strings.ToLower(account), readOnly}
 	var perms map[string]string
 	if readOnly {
-		slot, perms = 1, githubReadPermissions
+		perms = githubReadPermissions
 	}
-	if c := g.toolToks[slot]; c.tok != "" && c.exp.Sub(g.now()) > 5*time.Minute {
+	if c := g.toolToks[key]; c.tok != "" && c.exp.Sub(g.now()) > 5*time.Minute {
 		return c.tok, nil
 	}
 	list, err := g.installations(ctx, app)
 	if err != nil {
 		return "", err
 	}
+	inst, err := pickInstallation(app, list, account)
+	if err != nil {
+		return "", err
+	}
+	tok, exp, err := g.installationToken(ctx, app, inst, nil, perms)
+	if err != nil {
+		return "", err
+	}
+	if g.toolToks == nil {
+		g.toolToks = map[toolKey]cachedToken{}
+	}
+	g.toolToks[key] = cachedToken{tok, exp}
+	return tok, nil
+}
+
+// pickInstallation is the installation a connection uses: the one on its
+// account; without one, the app owner's, or else the first.
+func pickInstallation(app *githubApp, list []githubInstallation, account string) (int64, error) {
+	if account != "" {
+		for _, i := range list {
+			if strings.EqualFold(i.Account.Login, account) {
+				return i.ID, nil
+			}
+		}
+		return 0, fmt.Errorf("the GitHub App %s is not installed on %s: install it there (Settings → Tools → GitHub)", app.Slug, account)
+	}
 	if len(list) == 0 {
-		return "", fmt.Errorf("the GitHub App %s is not installed anywhere yet", app.Slug)
+		return 0, fmt.Errorf("the GitHub App %s is not installed anywhere yet", app.Slug)
 	}
 	inst := list[0].ID
 	for _, i := range list {
@@ -330,18 +393,13 @@ func (g *githubClient) toolToken(ctx context.Context, readOnly bool) (string, er
 			inst = i.ID
 		}
 	}
-	tok, exp, err := g.installationToken(ctx, app, inst, nil, perms)
-	if err != nil {
-		return "", err
-	}
-	g.toolToks[slot] = cachedToken{tok, exp}
-	return tok, nil
+	return inst, nil
 }
 
 // forget drops the cached tool tokens (the app was removed or replaced).
 func (g *githubClient) forget() {
 	g.mu.Lock()
-	g.toolToks = [2]cachedToken{}
+	g.toolToks = nil
 	g.mu.Unlock()
 }
 
@@ -355,8 +413,12 @@ var githubAppPermissions = map[string]string{
 }
 
 // githubAppManifest describes Eriphe's app; origin is the workspace's
-// address, where GitHub sends the browser back.
-func githubAppManifest(name, origin string) map[string]any {
+// address, where GitHub sends the browser back. A private app (GitHub's
+// default) installs on its owner's account only; public, it installs on
+// the user's organizations too (an owner of each approves). Public gives
+// nothing on the user's repositories: other accounts could install it on
+// their own, and its key stays in Eriphe's vault.
+func githubAppManifest(name, origin string, public bool) map[string]any {
 	return map[string]any{
 		"name":                name,
 		"url":                 "https://github.com/Alexis-Marcel/eriphe-system",
@@ -364,7 +426,7 @@ func githubAppManifest(name, origin string) map[string]any {
 		"redirect_url":        origin + "/github-app/callback",
 		"setup_url":           origin + "/github-app/installed",
 		"setup_on_update":     true,
-		"public":              false,
+		"public":              public,
 		"default_permissions": githubAppPermissions,
 		"default_events":      []string{},
 		// No webhook: eriphe-core asks GitHub, GitHub never calls it.
@@ -401,8 +463,9 @@ func (g *githubClient) installURL(slug string) string {
 }
 
 // convertManifest exchanges the code GitHub sent back (within an hour) for
-// the app: its id, slug and private key, and stores it in the vault.
-func (g *githubClient) convertManifest(ctx context.Context, code string) (githubAppSecret, error) {
+// the app: its id, slug and private key, and stores it in the vault;
+// public is what the manifest asked.
+func (g *githubClient) convertManifest(ctx context.Context, code string, public bool) (githubAppSecret, error) {
 	var out struct {
 		ID            int64  `json:"id"`
 		Slug          string `json:"slug"`
@@ -420,7 +483,7 @@ func (g *githubClient) convertManifest(ctx context.Context, code string) (github
 		return githubAppSecret{}, err
 	}
 	s := githubAppSecret{ID: out.ID, Slug: out.Slug, Name: out.Name, Owner: out.Owner.Login, HTMLURL: out.HTMLURL,
-		PEM: out.PEM, WebhookSecret: out.WebhookSecret, ClientID: out.ClientID, ClientSecret: out.ClientSecret}
+		PEM: out.PEM, WebhookSecret: out.WebhookSecret, ClientID: out.ClientID, ClientSecret: out.ClientSecret, Public: public}
 	if s.ID == 0 || s.Slug == "" || s.PEM == "" {
 		return s, errors.New("GitHub's answer has no app")
 	}

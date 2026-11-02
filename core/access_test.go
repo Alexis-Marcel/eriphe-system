@@ -390,14 +390,14 @@ func TestGitHubToolTokenReadOnly(t *testing.T) {
 	c, _ := credCore(t, "")
 	f := newFakeGitHub(t)
 	withApp(t, c, f)
-	if _, err := c.github.toolToken(context.Background(), true); err != nil {
+	if _, err := c.github.toolToken(context.Background(), "", true); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ := json.Marshal(f.mints()[0])
 	if string(raw) != `{"permissions":{"checks":"read","contents":"read","issues":"read","metadata":"read","pull_requests":"read"}}` {
 		t.Fatalf("read-only token asked with %s", raw)
 	}
-	if _, err := c.github.toolToken(context.Background(), false); err != nil || len(f.mints()) != 2 {
+	if _, err := c.github.toolToken(context.Background(), "", false); err != nil || len(f.mints()) != 2 {
 		t.Fatalf("the full token reused the read-only one: %v, %d mints", err, len(f.mints()))
 	}
 	if raw, _ := json.Marshal(f.mints()[1]); string(raw) != `{}` {

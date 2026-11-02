@@ -518,7 +518,7 @@ func TestCalendarProviderForms(t *testing.T) {
 // The advanced options still work: a vendor's address and a timeout.
 func TestAdvancedOptionsStillWork(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
-	_, body, _ := tw.do("GET", "/settings/tools/new?preset=github", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/tools/new?preset=github&provider=token", nil, nil)
 	main, adv := mainPart(t, body), advancedPart(t, body)
 	if !strings.Contains(main, `name="token"`) || strings.Contains(main, `name="url"`) || strings.Contains(main, `name="auth"`) ||
 		!strings.Contains(main, "github.com/settings/personal-access-tokens/new") || !strings.Contains(adv, `name="timeout"`) ||

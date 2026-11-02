@@ -45,10 +45,7 @@ func (f toolForm) StepHash(provider string) string {
 
 // Hash is the address of the form's own step.
 func (f toolForm) Hash() string {
-	p := f.Mail.Provider
-	if f.Preset.Form == "calendar" {
-		p = f.Calendar.Provider
-	}
+	p := f.Picked()
 	switch {
 	case f.Edit && f.Choose:
 		return "edit/" + f.Name + "/choose"
@@ -68,7 +65,7 @@ func (f toolForm) BackURL() string {
 		return "/settings/tools/" + f.Name + "/edit"
 	case f.Edit:
 		return "/settings/tools"
-	case (f.Mail.Provider != "" || f.Calendar.Provider != "") && !f.Choose:
+	case f.Picked() != "" && !f.Choose:
 		return "/settings/tools/new?preset=" + f.Preset.ID
 	}
 	return "/settings/tools/add"
@@ -80,7 +77,7 @@ func (f toolForm) BackHash() string {
 		return "edit/" + f.Name
 	case f.Edit:
 		return ""
-	case (f.Mail.Provider != "" || f.Calendar.Provider != "") && !f.Choose:
+	case f.Picked() != "" && !f.Choose:
 		return "add/" + f.Preset.ID
 	}
 	return "add"

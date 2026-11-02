@@ -79,7 +79,9 @@
       {{with .SignIn}}<form hx-post="/settings/servers/{{$.Name}}/connect" hx-target="#connect-{{$.Name}}" hx-disabled-elt="find button" class="inline">
         <button class="btn btn-primary sm" type="submit">{{t (printf "tools.%s" .)}}</button></form>{{end}}
       {{if eq .Preset.ID "home-assistant"}}<a class="btn btn-ghost sm" href="/settings/home-assistant">{{t "ha.manage"}}</a>{{end}}
-      {{if eq .Preset.ID "github"}}<a class="btn {{if eq .Auth "github-app"}}btn-ghost{{else}}btn-soft{{end}} sm" href="/settings/github">{{if eq .Auth "github-app"}}{{t "github.manage"}}{{else}}{{t "github.create"}}{{end}}</a>{{end}}
+      {{if eq .Preset.ID "github"}}{{if eq .Auth "github-app"}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>
+      {{else if eq .Source "workspace"}}<a class="btn btn-soft sm" href="/settings/github?switch={{.Name}}#gh-conn-{{.Name}}">{{t "github.switch"}}</a>
+      {{else}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>{{end}}{{end}}
       {{if and (eq .Preset.Form "drive") (eq .Source "workspace")}}<a class="btn btn-ghost sm" href="/settings/drive">{{t "drive.folders"}}</a>{{end}}
       {{if .Editable}}<a class="btn {{if and .Follow .Follow.Edit}}btn-soft{{else}}btn-ghost{{end}} sm" href="/settings/tools/{{.Name}}/edit" data-step-open="add-dlg" data-hash="edit/{{.Name}}">{{t "catalog.edit"}}</a>{{end}}
       {{if eq .Source "workspace"}}<form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{tf "tools.removeconfirm" .Name}}" class="inline">
@@ -221,13 +223,13 @@
 
 {{define "tool-page"}}{{with .Data}}
 <header class="page-head">
-  <a class="back" href="{{.BackURL}}">{{template "i-back"}}{{if and (not .Edit) (not .Choose) (or .Mail.Provider .Calendar.Provider)}}{{t (printf "pick.%s.back" .Preset.Form)}}{{else if and .Choose .Edit}}{{tf "tools.editof" .Name}}{{else if .Edit}}{{t "settings.tools"}}{{else}}{{t "tools.add"}}{{end}}</a>
+  <a class="back" href="{{.BackURL}}">{{template "i-back"}}{{if and (not .Edit) (not .Choose) .Picked}}{{t (printf "pick.%s.back" .PickKind)}}{{else if and .Choose .Edit}}{{tf "tools.editof" .Name}}{{else if .Edit}}{{t "settings.tools"}}{{else}}{{t "tools.add"}}{{end}}</a>
   <div class="form-title">
     {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
     {{else}}<span class="mark {{if eq .Preset.Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
     <h2>{{if .Edit}}{{tf "tools.editof" .Name}}{{else}}{{t (printf "preset.%s.title" .Preset.ID)}}{{end}}</h2>
   </div>
-  {{if .Choose}}<p>{{t (printf "pick.%s.lead" .Preset.Form)}}</p>
+  {{if .Choose}}<p>{{t (printf "pick.%s.lead" .PickKind)}}</p>
   {{else}}{{$help := printf "preset.%s.help" .Preset.ID}}{{if and (not .Edit) (has $help)}}<p>{{t $help}}</p>{{end}}{{end}}
 </header>
 {{template "tool-hints" .}}
@@ -237,7 +239,8 @@
 
 {{/* What a preset's form adds about its own page. . is a toolForm. */}}
 {{define "tool-hints"}}{{if not .Choose}}
-{{if eq .Preset.ID "github"}}<p class="notice">{{t "github.formhint"}} <a href="/settings/github">{{t "github.create"}}</a></p>{{end}}
+{{if eq .Preset.ID "github"}}{{if .Edit}}{{if eq .Auth "bearer"}}<p class="notice">{{t "github.edithint"}} <a href="/settings/github?switch={{.Name}}#gh-conn-{{.Name}}">{{t "github.switch"}}</a></p>{{end}}
+{{else}}<p class="notice">{{t "github.formhint"}} <a href="/settings/github">{{t "github.formlink"}}</a></p>{{end}}{{end}}
 {{if and (eq .Preset.ID "home-assistant") .InDialog}}<p class="notice">{{t "ha.formhint"}} <a href="/settings/home-assistant">{{t "ha.formlink"}}</a></p>{{end}}
 {{end}}{{end}}
 
@@ -260,7 +263,7 @@
       {{else}}<span class="mark" aria-hidden="true">{{initial .Name}}</span>{{end}}
       <h3 id="step-title">{{if .Edit}}{{tf "tools.editof" .Name}}{{else}}{{t (printf "preset.%s.title" .Preset.ID)}}{{end}}</h3>
     </div>
-    {{if .Choose}}<p class="step-lead">{{t (printf "pick.%s.lead" .Preset.Form)}}</p>
+    {{if .Choose}}<p class="step-lead">{{t (printf "pick.%s.lead" .PickKind)}}</p>
     {{else}}{{$help := printf "preset.%s.help" .Preset.ID}}{{if and (not .Edit) (has $help)}}<p class="step-lead">{{t $help}}</p>{{end}}{{end}}
     {{template "tool-hints" .}}
     {{if .Choose}}{{template "account-picker" .}}{{else}}{{template "tool-form" $}}
@@ -331,30 +334,53 @@
 {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
 {{if .Created}}<p class="ok-note" role="status">{{t "github.created"}}</p>{{end}}
 {{if .Installed}}<p class="ok-note" role="status">{{t "github.installed"}}</p>{{end}}
+{{if .Switched}}<p class="ok-note" role="status">{{tf "github.switched" .Switched}}{{if .Revoke}} {{t "github.revoke"}} <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener noreferrer">{{t "github.revokelink"}}</a>{{end}}</p>{{end}}
+{{$owner := ""}}{{$insts := .Installations}}{{$switch := .Switch}}{{if .App}}{{$owner = .App.Owner}}{{end}}
 {{if .App}}
 <section class="panel">
   <h3>{{template "i-shield"}}{{.App.Name}}</h3>
-  <p class="muted small"><span class="mono">{{.App.Slug}}</span> · {{tf "github.owner" .App.Owner}}{{if .App.HTMLURL}} · <a href="{{.App.HTMLURL}}" target="_blank" rel="noopener noreferrer">{{t "github.onGitHub"}}</a>{{end}}</p>
+  <p class="muted small"><span class="mono">{{.App.Slug}}</span> · {{tf "github.owner" .App.Owner}} · {{if .App.Public}}{{t "github.ispublic"}}{{else}}{{t "github.isprivate"}}{{end}}{{if .App.HTMLURL}} · <a href="{{.App.HTMLURL}}" target="_blank" rel="noopener noreferrer">{{t "github.onGitHub"}}</a>{{end}}</p>
   <h4 class="section-label">{{t "github.installations"}}</h4>
   {{if .InstallErr}}<p class="small err-text">{{short .InstallErr 300}}</p>
-  {{else if .Installations}}<ul class="plain-list">{{range .Installations}}<li><b>{{.Account.Login}}</b> <span class="muted small">· {{if eq .Selection "all"}}{{t "github.allrepos"}}{{else}}{{t "github.somerepos"}}{{end}}</span>{{if .HTMLURL}} · <a class="small" href="{{.HTMLURL}}" target="_blank" rel="noopener noreferrer">{{t "github.chooserepos"}}</a>{{end}}</li>{{end}}</ul>
+  {{else if .Installations}}<ul class="plain-list gh-insts">{{range .Installations}}<li>
+    <div><b>{{.Account.Login}}</b> <span class="muted small">· {{if .Org}}{{t "github.org1"}}{{else}}{{t "github.user1"}}{{end}} · {{if eq .Selection "all"}}{{t "github.allrepos"}}{{else if .Counted}}{{if eq .Repos 1}}{{t "github.repos1"}}{{else}}{{tf "github.repos" .Repos}}{{end}}{{else}}{{t "github.somerepos"}}{{end}}</span>{{if .HTMLURL}} · <a class="small" href="{{.HTMLURL}}" target="_blank" rel="noopener noreferrer">{{t "github.chooserepos"}}</a>{{end}}</div>
+    {{if .Conn}}<p class="small muted">{{tf "github.usedby" .Conn}}</p>
+    {{else}}<form hx-post="/settings/github/tool" hx-disabled-elt="find button" class="gh-add">
+      <input type="hidden" name="account" value="{{if ne .Account.Login $owner}}{{.Account.Login}}{{end}}">
+      <label class="field"><span class="small">{{t "github.connname"}}</span><input type="text" name="name" value="{{.Suggest}}" class="mono" maxlength="32" autocomplete="off" spellcheck="false" required></label>
+      <button class="btn btn-soft sm" type="submit">{{t "github.addconn"}}</button>
+    </form>{{end}}
+  </li>{{end}}</ul>
   {{else}}<p class="notice">{{t "github.notinstalled"}}</p>{{end}}
-  <div class="actions"><a class="btn btn-primary" href="{{.InstallURL}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{t "github.install"}}</a></div>
+  <div class="actions"><a class="btn {{if .Installations}}btn-soft{{else}}btn-primary{{end}}" href="{{.InstallURL}}" target="_blank" rel="noopener noreferrer">{{template "i-link"}}{{if .Installations}}{{t "github.installmore"}}{{else}}{{t "github.install"}}{{end}}</a></div>
+  <p class="small muted">{{if .App.Public}}{{t "github.orgapprove"}}{{else}}{{tf "github.privatenote" .App.Owner}}{{end}}</p>
 </section>
+{{end}}
+{{if .Conns}}
 <section class="panel">
-  <h3>{{template "i-plug"}}{{t "github.tooltitle"}}</h3>
-  {{if eq .ToolAuth "github-app"}}<p class="ok-note">{{tf "github.toolonapp" .Tool}}</p>
-  {{else if .ToolReadOnly}}<p class="notice">{{tf "github.toolconfig" .Tool}}</p>
-  {{else}}<p class="muted">{{if .Tool}}{{tf "github.toolmove" .Tool}}{{else}}{{t "github.toolnew"}}{{end}}</p>
-  <form hx-post="/settings/github/tool" hx-disabled-elt="find button" class="actions"><button class="btn btn-soft" type="submit">{{t "github.tooluse"}}</button></form>{{end}}
+  <h3>{{template "i-plug"}}{{t "github.conns"}}</h3>
+  <p class="muted small">{{t "github.connslead"}}</p>
+  <ul class="plain-list gh-conns">{{range .Conns}}<li id="gh-conn-{{.Name}}"{{if eq .Name $switch}} class="lit"{{end}}>
+    <div><b class="mono">{{.Name}}</b> <span class="muted small">· {{if eq .Auth "github-app"}}{{t "github.viaapp"}}{{with or .Account $owner}} · {{.}}{{end}}{{else if eq .Auth "bearer"}}{{t "github.viatoken"}}{{else}}{{t (printf "auth.%s" .Auth)}}{{end}}</span></div>
+    {{if ne .Auth "github-app"}}{{if .ReadOnly}}<p class="small notice-line">{{tf "github.toolconfig" .Name}}</p>
+    {{else if not $owner}}<p class="small muted">{{t "github.switchfirst"}}</p>
+    {{else if not $insts}}<p class="small muted">{{t "github.switchinstall"}}</p>
+    {{else}}<form hx-post="/settings/github/tool" hx-disabled-elt="find button" class="gh-add">
+      <input type="hidden" name="name" value="{{.Name}}">
+      <label class="field"><span class="small">{{t "github.switchfrom"}}</span><select name="account">{{range $insts}}<option value="{{if ne .Account.Login $owner}}{{.Account.Login}}{{end}}">{{.Account.Login}}</option>{{end}}</select></label>
+      <button class="btn {{if eq .Name $switch}}btn-primary{{else}}btn-soft{{end}} sm" type="submit">{{t "github.switch"}}</button>
+    </form>
+    <p class="small muted">{{t "github.switchhint"}}</p>{{end}}{{end}}
+  </li>{{end}}</ul>
 </section>
+{{end}}
+{{if .App}}
 <details class="panel advanced">
   <summary><span class="adv-title">{{t "github.forget"}}</span></summary>
   <p class="muted small">{{t "github.forgethint"}}</p>
   <form hx-post="/settings/github/forget" hx-confirm="{{t "github.forgetconfirm"}}" class="actions"><button class="btn btn-danger-ghost" type="submit">{{t "github.forget"}}</button></form>
 </details>
 {{else}}
-{{if and .Tool (eq .ToolAuth "bearer")}}<p class="notice">{{t "github.fallback"}}</p>{{end}}
 <section class="panel">
   <h3>{{template "i-plus"}}{{t "github.create"}}</h3>
   <p class="muted">{{t "github.createlead"}}</p>
@@ -365,6 +391,7 @@
       <label class="field"><span>{{t "github.suffix"}}</span><input type="text" name="suffix" value="{{.Suffix}}" maxlength="24" autocomplete="off" aria-describedby="gh-suffix-h"><small id="gh-suffix-h">{{t "github.suffixhint"}}</small></label>
       <label class="field"><span>{{t "github.org"}}</span><input type="text" name="org" maxlength="39" autocomplete="off" spellcheck="false" class="mono" aria-describedby="gh-org-h"><small id="gh-org-h">{{t "github.orghint"}}</small></label>
     </div>
+    <label class="check"><input type="checkbox" name="public" value="1"><span><b>{{t "github.public"}}</b><small>{{t "github.publichint"}}</small></span></label>
     <p class="small muted">{{t "github.perms"}}</p>
     <div class="actions"><button class="btn btn-primary" type="submit"{{if not .Vault}} disabled{{end}}>{{t "github.create"}}</button></div>
   </form>
@@ -388,7 +415,7 @@
 {{end}}{{end}}
 
 {{/* The kinds of mailbox or calendar account, each with its logo. */}}
-{{define "account-picker"}}
+{{define "account-picker"}}{{if eq .PickKind "github"}}{{template "github-choice" .}}{{else}}
 <section class="panel picker">
   <ul class="providers">
   {{if eq .Preset.Form "mail"}}{{range .MailChoices}}
@@ -405,6 +432,24 @@
   </ul>
   <p class="muted small soon-why">{{t (printf "pick.%s.soonwhy" .Preset.Form)}}</p>
 </section>
+{{end}}{{end}}
+
+{{/* GitHub's two ways, side by side: Eriphe's app (its page) or a
+     personal token (the form). . is a toolForm. */}}
+{{define "github-choice"}}
+<ul class="gh-choice" role="list">
+  <li class="gh-way gh-way-app">
+    <span class="tag tag-accent">{{t "pick.github.recommended"}}</span>
+    <b class="gh-way-title">{{t "pick.github.app"}}</b>
+    <ul class="gh-points">{{range list "repos" "hour" "as" "noask" "setup"}}<li>{{t (printf "pick.github.app.%s" .)}}</li>{{end}}</ul>
+    <a class="btn btn-primary" href="/settings/github">{{t "pick.github.app.go"}}</a>
+  </li>
+  <li class="gh-way gh-way-token">
+    <b class="gh-way-title">{{t "pick.github.token"}}</b>
+    <ul class="gh-points">{{range list "quick" "you" "long"}}<li>{{t (printf "pick.github.token.%s" .)}}</li>{{end}}</ul>
+    <a class="btn btn-soft" href="{{.PickURL}}token" data-step data-hash="{{.StepHash "token"}}">{{t "pick.github.token.go"}}</a>
+  </li>
+</ul>
 {{end}}
 
 {{define "secret-field"}}{{/* . is a dict: Name, Label, Hint, IsSet */}}

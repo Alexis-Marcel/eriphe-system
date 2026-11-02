@@ -49,7 +49,10 @@ type ServerAuth struct {
 	BearerFile string       `json:"bearer_file,omitempty"`
 	OAuth      *OAuthConfig `json:"oauth,omitempty"`
 	GitHubApp  bool         `json:"github_app,omitempty"`
-	None       bool         `json:"none,omitempty"`
+	// Account, with github_app: the GitHub account or organization whose
+	// installation of the app this connection uses; empty, the app owner's.
+	Account string `json:"account,omitempty"`
+	None    bool   `json:"none,omitempty"`
 }
 
 // OAuthConfig configures the authorization code flow of the MCP
@@ -131,6 +134,9 @@ func (c *Config) checkServers() error {
 		}
 		if n != 1 {
 			return fmt.Errorf("server %s: auth is exactly one of bearer_file, oauth, github_app or none", name)
+		}
+		if a.Account != "" && (!a.GitHubApp || !githubLogin.MatchString(a.Account)) {
+			return fmt.Errorf("server %s: auth account is a GitHub account or organization name, with github_app", name)
 		}
 		if o := a.OAuth; o != nil {
 			if o.ClientSecretFile != "" && o.ClientIDFile == "" {

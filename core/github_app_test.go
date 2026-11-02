@@ -32,6 +32,10 @@ type fakeGitHubAPI struct {
 	srv  *httptest.Server
 	mu   sync.Mutex
 	mint []map[string]any // the bodies of the token requests
+	// org: the app is also installed on the organization acme (8), whose
+	// token requests are orgMint.
+	org     bool
+	orgMint []map[string]any
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHubAPI {
@@ -83,6 +87,20 @@ func (f *fakeGitHubAPI) serve(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"message":"Not Found"}`)
 		return
 	}
+	if r.URL.Path == "/installation/repositories" {
+		// Asked with an installation token: acme's has three repositories.
+		tok, _ := strings.CutPrefix(r.Header.Get("Authorization"), "token ")
+		if !strings.HasPrefix(tok, "ghs_") {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		n := 2
+		if strings.HasPrefix(tok, "ghs_acme_") {
+			n = 3
+		}
+		json.NewEncoder(w).Encode(map[string]any{"total_count": n, "repositories": []any{}})
+		return
+	}
 	if !f.checkJWT(r) {
 		w.WriteHeader(http.StatusUnauthorized)
 		io.WriteString(w, `{"message":"A JSON web token could not be decoded"}`)
@@ -92,7 +110,20 @@ func (f *fakeGitHubAPI) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/installation":
 		io.WriteString(w, `{"id": 7}`)
 	case r.Method == http.MethodGet && r.URL.Path == "/app/installations":
-		io.WriteString(w, `[{"id": 7, "account": {"login": "owner", "type": "User"}, "repository_selection": "selected"}]`)
+		list := `{"id": 7, "account": {"login": "owner", "type": "User"}, "repository_selection": "selected"}`
+		if f.org {
+			list += `, {"id": 8, "account": {"login": "acme", "type": "Organization"}, "repository_selection": "selected"}`
+		}
+		io.WriteString(w, "["+list+"]")
+	case r.Method == http.MethodPost && r.URL.Path == "/app/installations/8/access_tokens" && f.org:
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		f.orgMint = append(f.orgMint, body)
+		n := len(f.orgMint)
+		f.mu.Unlock()
+		json.NewEncoder(w).Encode(map[string]any{"token": "ghs_acme_" + strings.Repeat("x", n),
+			"expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)})
 	case r.Method == http.MethodPost && r.URL.Path == "/app/installations/7/access_tokens":
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
@@ -196,26 +227,26 @@ func TestMintNotInstalled(t *testing.T) {
 func TestGitHubToolToken(t *testing.T) {
 	c, _ := credCore(t, "")
 	f := newFakeGitHub(t)
-	if _, err := c.github.toolToken(context.Background(), false); err == nil {
+	if _, err := c.github.toolToken(context.Background(), "", false); err == nil {
 		t.Fatal("a tool token without an app")
 	}
 	withApp(t, c, f)
-	tok, err := c.github.toolToken(context.Background(), false)
+	tok, err := c.github.toolToken(context.Background(), "", false)
 	if err != nil || tok != "ghs_x" {
 		t.Fatalf("tool token %q %v", tok, err)
 	}
 	if raw, _ := json.Marshal(f.mints()[0]); string(raw) != `{}` {
 		t.Fatalf("asked with %s", raw)
 	}
-	tok, _ = c.github.toolToken(context.Background(), false)
+	tok, _ = c.github.toolToken(context.Background(), "", false)
 	if tok != "ghs_x" || len(f.mints()) != 1 {
 		t.Fatalf("not reused: %q", tok)
 	}
 	// Three minutes left: a new one.
 	c.github.mu.Lock()
-	c.github.toolToks[0].exp = time.Now().Add(3 * time.Minute)
+	c.github.toolToks[toolKey{}] = cachedToken{tok: "ghs_x", exp: time.Now().Add(3 * time.Minute)}
 	c.github.mu.Unlock()
-	if tok, err := c.github.toolToken(context.Background(), false); err != nil || tok != "ghs_xx" || len(f.mints()) != 2 {
+	if tok, err := c.github.toolToken(context.Background(), "", false); err != nil || tok != "ghs_xx" || len(f.mints()) != 2 {
 		t.Fatalf("renewal: %q %v, %d mints", tok, err, len(f.mints()))
 	}
 }
@@ -239,9 +270,13 @@ func TestServerOnGitHubApp(t *testing.T) {
 }
 
 func TestGitHubAppManifest(t *testing.T) {
-	m := githubAppManifest(githubAppName("  Sam's   house "), "https://192.0.2.10:8443")
+	m := githubAppManifest(githubAppName("  Sam's   house "), "https://192.0.2.10:8443", false)
 	if m["name"] != "Eriphe – Sam's house" || m["redirect_url"] != "https://192.0.2.10:8443/github-app/callback" || m["public"] != false {
 		t.Fatalf("manifest %v", m)
+	}
+	// Installable on the user's organizations: GitHub's public key.
+	if pub := githubAppManifest("Eriphe", "https://192.0.2.10:8443", true); pub["public"] != true {
+		t.Fatalf("public manifest %v", pub)
 	}
 	perms := m["default_permissions"].(map[string]string)
 	if perms["contents"] != "write" || perms["pull_requests"] != "write" || perms["issues"] != "write" ||
@@ -276,7 +311,7 @@ func TestGitHubAppManifestFlow(t *testing.T) {
 		t.Fatalf("tools: %d", code)
 	}
 	if code, body, _ := tw.do("GET", "/settings/github", nil, nil); code != 200 || !strings.Contains(body, "Créer l&#39;app GitHub d&#39;Eriphe") ||
-		!strings.Contains(body, "Sans app") {
+		!strings.Contains(body, "Installable sur mes organisations") {
 		t.Fatalf("page without app: %d %s", code, body)
 	}
 

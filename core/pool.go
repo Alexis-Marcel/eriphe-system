@@ -39,8 +39,9 @@ type pool struct {
 	// http is the client for remote servers and their authorization servers.
 	http *http.Client
 	// appToken is the GitHub App's token for a server on it (github_app.go),
-	// with read permissions only for a read-only server.
-	appToken func(ctx context.Context, readOnly bool) (string, error)
+	// from the installation on the server's account (empty: the app
+	// owner's), with read permissions only for a read-only server.
+	appToken func(ctx context.Context, account string, readOnly bool) (string, error)
 
 	mu      sync.Mutex
 	ctx     context.Context // set by run; servers added later start in it
@@ -173,7 +174,8 @@ func (p *pool) dialServer(ctx context.Context, u *upstream) (mcp.Transport, erro
 			return nil, errors.New("no GitHub App here")
 		}
 		readOnly := u.srv.level() == accessReadOnly
-		source := func(ctx context.Context) (string, error) { return p.appToken(ctx, readOnly) }
+		account := u.srv.Auth.Account
+		source := func(ctx context.Context) (string, error) { return p.appToken(ctx, account, readOnly) }
 		if _, err := source(ctx); err != nil {
 			return nil, err
 		}
