@@ -301,6 +301,7 @@ A probe for another system is a `sessionProbe`.
 | `/v1/services/{name}/mcp` | a service's streamable HTTP MCP endpoint (see Services) |
 | `GET`/`POST /v1/model/{path}` | the model server it lends (`-model-server`): its `/v1/{path}`, streamed (see A model behind this node) |
 | `POST /v1/wake` | send another machine's Wake-on-LAN packets: `{macs, broadcast}` (see Waking the machine) |
+| `GET /v1/sync/connect` | a peer's Syncthing connection, handed over by eriphe-core (`Upgrade: eriphe-sync`, `Eriphe-Sync-Peer`), on to this machine's Syncthing (see Copies) |
 
 States: `running`, `waiting_permission`, `idle` (turn over: done or asking something, the
 orchestrator decides), `stopped`, `failed`.
@@ -1006,6 +1007,33 @@ a NAS's `appdata`. The Explorer's "Share with Eriphe" runs `eriphe-share.ps1`
 `wsl -d <distro> -u root --exec eriphe-share add` in the distribution (`eriphe-node share` with
 `/etc/eriphe-node.env`). Writes through such a mount follow its own owner mapping (virtiofs, 9p,
 DrvFs), not the setgid rule above.
+
+## Copies (Syncthing)
+
+A folder shared on one machine can be kept, up to date, on the user's other machines: Syncthing
+runs next to every node and copies it. This section is the way between the machines.
+
+**The way between machines.** Syncthing listens on the loopback only (`-syncthing-listen`, e.g.
+`127.0.0.1:22000`; empty: no copies kept on this machine), without global or local discovery, nor
+relays, nor NAT traversal: no port opens, no third party is involved. The machines reach one
+another through eriphe-core, on the tunnels the nodes already keep open:
+
+```
+Syncthing A → node A        tcp://127.0.0.1:<port of B>        (a loopback port per peer)
+node A → eriphe-core        GET /v1/node/sync/{B}, Upgrade: eriphe-sync   (node secret, TLS)
+eriphe-core → node B        GET /v1/sync/connect, Upgrade: eriphe-sync    (B's tunnel)
+node B → Syncthing B        its -syncthing-listen address
+```
+
+The node opens one loopback port per peer (`127.0.0.1`, kept from one start to the next in
+`<root>/sync/ports.json`), the peer's static address in Syncthing. eriphe-core joins the two
+nodes only if it set up a copy between those two machines (core/README.md, Copies); node B takes
+the connection only from a peer it was told about. Syncthing's own TLS runs end to end, each side
+pinning the other's device ID: eriphe-core and the nodes carry ciphertext only. What this node
+sends into its tunnel for Syncthing is held to `-sync-limit` per second (8 MiB by default, env
+`ERIPHE_SYNC_LIMIT`, `0` for no limit), all its peers together, so that a big copy leaves room on
+the same connection for the tasks and eriphe-core; each stream also has yamux's window (256 KiB).
+All of a copy's traffic goes through the machine eriphe-core runs on.
 
 ## Services (local MCP servers)
 

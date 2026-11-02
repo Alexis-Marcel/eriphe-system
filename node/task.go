@@ -273,6 +273,8 @@ type node struct {
 	awake    *keepAwake          // the machine out of sleep while a task works (awake.go)
 	// skillFetch gets a task's skill from eriphe-core (skills.go).
 	skillFetch func(ctx context.Context, taskID, sha string) ([]byte, error)
+	// syncNet carries Syncthing's connections to its peers (syncpeer.go).
+	syncNet *syncNet
 }
 
 func newNode(o options) *node {
@@ -300,6 +302,7 @@ func (n *node) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/services/{name}/mcp", n.handleServiceMCP)
 	mux.HandleFunc("POST /v1/wake", n.handleWake)
 	mux.HandleFunc("/v1/model/{path...}", n.handleModel)
+	mux.HandleFunc("GET /v1/sync/connect", func(w http.ResponseWriter, r *http.Request) { n.syncNet.handleSyncConnect(w, r) })
 	n.shareRoutes(mux)
 }
 

@@ -1425,6 +1425,18 @@ put there, so it is treated as external content, like a mail or a page:
 
 Nothing adds a folder: it is shared on its machine.
 
+### Copies: the way between machines
+
+The copies of a shared folder on the user's other machines are kept by Syncthing, one next to each
+node (node/README.md, Copies). The machines never reach one another directly: a node carries its
+Syncthing's connection to a peer as `GET /v1/node/sync/{peer}` with `Upgrade: eriphe-sync` and its
+secret (`sync_relay.go`), and eriphe-core goes on through the peer's tunnel (`GET /v1/sync/connect`),
+then copies bytes both ways. It does so only if it set up a copy between the two machines, either
+way (`folder_copies`: `{node, folder, copy}`): any other pair is refused (403), as is a suspended
+machine, and a pair holds at most 4 connections at once (429). When the last copy between two
+machines goes, their connections are cut. Syncthing's TLS runs end to end with pinned device IDs:
+eriphe-core sees only ciphertext.
+
 ## Devices: what Eriphe sees and does there
 
 Connecting a device gives Eriphe access to it, so it can help with what is there; letting agents
