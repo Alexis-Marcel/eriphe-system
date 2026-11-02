@@ -94,9 +94,16 @@ var sensitiveNames = map[string]bool{
 	".netrc": true, ".git-credentials": true, ".pgpass": true, ".vault-token": true, ".npmrc": true,
 	".pypirc": true, ".my.cnf": true, ".bash_history": true, ".zsh_history": true,
 	"id_rsa": true, "id_ecdsa": true, "id_ed25519": true, "id_dsa": true,
+	// A project's secrets, by convention out of its repository but next to it.
+	".env": true, ".envrc": true,
 }
 
-func sensitive(name string) bool { return sensitiveNames[strings.ToLower(name)] }
+// sensitive tells whether a name is never shared: one of sensitiveNames,
+// or a KeePass database (*.kdbx), whatever it is called.
+func sensitive(name string) bool {
+	name = strings.ToLower(name)
+	return sensitiveNames[name] || strings.HasSuffix(name, ".kdbx")
+}
 
 // privateMarker, an empty file the user puts in a folder of their own, makes
 // it private: never listed, never shared, nor any folder holding it down to
@@ -116,7 +123,7 @@ func unlisted(name string) bool { return strings.HasPrefix(name, ".") || sensiti
 
 const (
 	scanDepth = 3     // levels of subfolders searched for a sensitive name, besides the folder itself
-	scanDirs  = 20000 // directories searched at most; beyond, the rest is not
+	scanDirs  = 20000 // directories searched at most; a folder with more is not shareable
 	maxDirs   = 1000  // directories listed at most
 )
 
@@ -252,12 +259,21 @@ func checkShareable(real string) error {
 		depth int
 	}
 	queue := []dir{{real, 0}}
-	for seen := 0; len(queue) > 0 && seen < scanDirs; seen++ {
+	// What is not searched is not known to be safe: too many folders, or
+	// one the node cannot read (a task, root, may), and it is not shared.
+	for seen := 0; len(queue) > 0; seen++ {
+		if seen == scanDirs {
+			return shareErr(http.StatusForbidden, "too_large", "this folder has too many subfolders to be checked: share a folder inside it")
+		}
 		d := queue[0]
 		queue = queue[1:]
 		entries, err := os.ReadDir(d.path)
 		if err != nil {
-			continue // unreadable to the node too
+			if d.depth == 0 {
+				return shareErr(http.StatusForbidden, "unreadable", "this folder cannot be read")
+			}
+			rel, _ := filepath.Rel(real, d.path)
+			return unreadableSub(filepath.ToSlash(rel))
 		}
 		for _, e := range entries {
 			if e.Name() == privateMarker {
@@ -265,6 +281,10 @@ func checkShareable(real string) error {
 				return holdsPrivate(filepath.ToSlash(rel))
 			}
 			if sensitive(e.Name()) {
+				rel, _ := filepath.Rel(real, filepath.Join(d.path, e.Name()))
+				return shareErr(http.StatusForbidden, "holds_sensitive", "this folder holds %s, which is never shared: share a folder inside it", filepath.ToSlash(rel))
+			}
+			if e.IsDir() && private(real, filepath.Join(d.path, e.Name())) {
 				rel, _ := filepath.Rel(real, filepath.Join(d.path, e.Name()))
 				return shareErr(http.StatusForbidden, "holds_sensitive", "this folder holds %s, which is never shared: share a folder inside it", filepath.ToSlash(rel))
 			}
@@ -279,6 +299,15 @@ func checkShareable(real string) error {
 // holdsPrivate refuses a folder holding the private folder rel.
 func holdsPrivate(rel string) error {
 	return shareErr(http.StatusForbidden, "holds_private", "this folder holds %s, which its owner made private: share a folder inside it", rel)
+}
+
+// unreadableSub refuses a folder holding rel, a folder that cannot be
+// checked ("" when the node is not told which).
+func unreadableSub(rel string) error {
+	if rel == "" {
+		return shareErr(http.StatusForbidden, "unreadable_sub", "this folder holds a folder that cannot be read to be checked: share a folder inside it")
+	}
+	return shareErr(http.StatusForbidden, "unreadable_sub", "this folder holds %s, which cannot be read to be checked: share a folder inside it", rel)
 }
 
 // The node's API for shares, through the tunnel.

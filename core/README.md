@@ -1092,7 +1092,9 @@ secret; the node calls `/v1/node/tasks/{id}/mcp/eriphe-core` with its own): it w
 node reaches eriphe-core (the same machine, the LAN, the tailnet), with no address to configure,
 and the brain's container never holds eriphe-core's API token. Only the brain's task gets it.
 `self_url` (e.g. `http://eriphe-core:8800/mcp` when the brain shares a Docker network with
-eriphe-core) still makes the brain call that address directly with the API token, as before.
+eriphe-core) still makes the brain call that address directly, with a token of its own derived
+from the API token (`eat_…`): it opens `/mcp` only, never the rest of the API (folders and their
+listing, machines, assistants, settings).
 
 **It reads by itself.** The brain is lent, with no configuration, every tool a server annotates
 `readOnlyHint` when the server is trusted for its annotations (any [access level](#access-levels)

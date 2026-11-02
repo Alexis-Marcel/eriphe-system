@@ -45,7 +45,7 @@ func (n *node) appleFolderMounts(t *Task) ([]string, error) {
 			err = n.holdsOwn(f.real)
 		}
 		if err == nil {
-			err = checkTree(e.tree)
+			err = checkExplored(e)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)

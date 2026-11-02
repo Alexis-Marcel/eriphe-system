@@ -917,12 +917,18 @@ Every path is checked when it is used, not only when it was shared:
   `.password-store`, `.aws`, `.azure`, `.kube`, `.docker`, `Keychains`, `credentials`,
   `secrets`…), settings and app state where tokens live (`.config`, `.local`, browser and mail
   profiles, `.claude`, `.codex`), a NAS's `appdata`; and key or credential files (`.netrc`,
-  `.git-credentials`, `.pgpass`, `id_ed25519`…);
+  `.git-credentials`, `.pgpass`, `id_ed25519`…), a project's `.env` and `.envrc`, and any KeePass
+  database (`*.kdbx`);
+- never Unraid's `system` (`docker.img`, `libvirt.img`) and `domains` (the VMs' disks) shares,
+  on Linux at `/mnt/<user, cache, disk…>/system` and `domains` only (a folder called `system`
+  elsewhere is the user's), unless a root is itself inside one (`sensitive`, `holds_sensitive`);
 - never the node's own data (`-root`: its secret, the tasks' folders), nor a folder holding it
   (`eriphe_data`);
 - a folder can be shared, and mounted, only if no sensitive name is in it or in its subfolders down
-  to three levels (`holds_sensitive`, at most 20,000 directories searched): a whole home is refused,
-  its `Documents` is not.
+  to three levels (`holds_sensitive`): a whole home is refused, its `Documents` is not. The search
+  is whole or the folder is not shared: more than 20,000 directories (`too_large`), or one the node
+  cannot read (`unreadable_sub`: a task, root, might), and it is refused. On a Mac the explorer's
+  tree is held to the same (more than 200,000 entries, or a folder it could not read).
 
 `GET /v1/shares/{share}/dirs?path=P` lists the real directories of a folder (no symlink, nothing
 hidden or sensitive, sorted, at most 1,000), and how many files it has, never their names nor

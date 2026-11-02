@@ -518,6 +518,7 @@ func TestBrainAssignmentFreeReads(t *testing.T) {
 		t.Fatalf("brain spec = %+v", spec)
 	}
 	// With it, the brain calls that address with the token, as before.
+	c.token = "api-token"
 	editBrain(c, func(a *Assistant) { a.SelfURL = "http://core.example.org:8800/mcp" })
 	w = httptest.NewRecorder()
 	c.handleAssignments(w, req)
@@ -526,6 +527,11 @@ func TestBrainAssignmentFreeReads(t *testing.T) {
 	self, _ := spec.MCPServers[selfServer].(map[string]any)
 	if strings.Join(spec.Servers, ",") != "github" || self["url"] != "http://core.example.org:8800/mcp" {
 		t.Fatalf("brain spec with self_url = %+v", spec)
+	}
+	// With a token of its own, never the API token.
+	headers, _ := self["headers"].(map[string]any)
+	if auth := headers["Authorization"]; auth != "Bearer "+assistantToken(c.token) || auth == "Bearer "+c.token {
+		t.Fatalf("brain's token at self_url: %v", auth)
 	}
 }
 
