@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"maps"
 	"slices"
@@ -525,16 +527,29 @@ func (c *core) assistantGrant(a Assistant) []string {
 	return out
 }
 
+// assistantToken is what an assistant calls eriphe-core's own MCP server
+// with at self_url: derived from the API token, it opens /mcp and nothing
+// else (main.go), so the assistant never holds the token that shares and
+// browses folders, joins machines or changes assistants.
+func assistantToken(token string) string {
+	if token == "" {
+		return ""
+	}
+	m := hmac.New(sha256.New, []byte(token))
+	io.WriteString(m, "eriphe-core assistant mcp")
+	return "eat_" + hex.EncodeToString(m.Sum(nil))
+}
+
 // assistantServers are an assistant's MCP servers, with their tokens:
-// eriphe-core's own at self_url, if its role launches tasks, and the ones the file
-// lists. Without self_url, eriphe-core's own goes through the node
-// (spec.Servers): the node reaches eriphe-core wherever it is, and the
-// assistant holds no token.
+// eriphe-core's own at self_url, if its role launches tasks, with the
+// assistant's token, and the ones the file lists. Without self_url,
+// eriphe-core's own goes through the node (spec.Servers): the node reaches
+// eriphe-core wherever it is, and the assistant holds no token.
 func (c *core) assistantServers(a Assistant, r assistantRole) (map[string]any, error) {
 	servers := map[string]any{}
 	if r.can(powerLaunchesTasks) && a.SelfURL != "" {
 		servers[selfServer] = map[string]any{
-			"type": "http", "url": a.SelfURL, "headers": map[string]string{"Authorization": "Bearer " + c.token}}
+			"type": "http", "url": a.SelfURL, "headers": map[string]string{"Authorization": "Bearer " + assistantToken(c.token)}}
 	}
 	for name, srv := range a.MCPServers {
 		def := map[string]any{"type": "http", "url": srv.URL}

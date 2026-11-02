@@ -306,6 +306,12 @@ func TestFolderAPI(t *testing.T) {
 	if code, _ := call("GET", "/v1/folders", "", "wrong"); code != http.StatusUnauthorized {
 		t.Fatalf("without the token: %d", code)
 	}
+	// An assistant's token (self_url) opens eriphe-core's MCP server only.
+	for _, r := range [][2]string{{"GET", "/v1/folders"}, {"POST", "/v1/folders"}, {"GET", "/v1/nodes/nas/shares/data/dirs"}} {
+		if code, _ := call(r[0], r[1], `{"name":"All","node":"nas","share":"data","path":"","access":"read"}`, assistantToken("api-token")); code != http.StatusUnauthorized {
+			t.Fatalf("%s %s with an assistant's token: %d", r[0], r[1], code)
+		}
+	}
 	if code, body := call("POST", "/v1/folders", `{"name":"Clients","node":"nas","share":"data","path":"Clients","access":"drop"}`, "api-token"); code != http.StatusCreated || !strings.Contains(body, `"name":"Clients"`) {
 		t.Fatalf("add: %d %s", code, body)
 	}
