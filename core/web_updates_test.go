@@ -381,3 +381,17 @@ func TestWebUpdateHalfPublished(t *testing.T) {
 		t.Fatalf("update all, half published: %d asked", n)
 	}
 }
+
+// A request dropped as stalled says so on its card, with its button.
+func TestWebUpdateStalled(t *testing.T) {
+	tw, h := newUpdatesWeb(t)
+	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
+	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
+	r := tw.c.pendingUpdate("node:pc")
+	old := time.Now().Add(-stalledAfter - time.Minute).UTC().Format(time.RFC3339)
+	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running","at":"`+old+`"}}}`)
+	tw.c.resolveUpdates(mustNodes(t, tw.c))
+	_, body, _ := tw.do("GET", "/settings/devices/pc/update?id="+r.ID, nil, h)
+	hasAll(t, "stalled", body, "arrêtée sans résultat", `value="node:pc"`)
+	hasNone(t, "stalled", body, "data-update-poll", "Mise à jour en cours")
+}

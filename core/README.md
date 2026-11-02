@@ -512,7 +512,11 @@ as for "Tout mettre à jour"), and not at all if eriphe-core's update ends elsew
 rolled back, pinned). Without an updater on eriphe-core's machine, the button waits for its
 command. An update that ends "ok" or "current" on another version than the one offered says it
 did not reach it, never "À jour". While a node has a request, the
-scheduler treats it as offline: new tasks wait for it. A request not done within a day is dropped.
+scheduler treats it as offline: new tasks wait for it. A request not done within a day is dropped;
+one with the updater (handed to it, or "running") that has not ended within 30 minutes stopped (its
+updater died, or a reinstall restarted it): it is dropped, and the machine's line says "La mise à
+jour s'est arrêtée sans résultat". A node that runs eriphe-core's version already (its install
+command was run again) is not sent its update request, which is dropped.
 A machine without updater (installed before, or by hand, as `deploy/nas/compose.yaml`) says so and
 gets no request.
 

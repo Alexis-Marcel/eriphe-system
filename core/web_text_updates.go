@@ -54,6 +54,8 @@ var updatesStrings = map[string]map[string]string{
 		"update.outcome.failed":          "La mise à jour a échoué, rien n'a changé",
 		"update.outcome.rolled_back":     "La mise à jour a échoué, version précédente remise",
 		"update.outcome.rollback_failed": "La mise à jour a échoué, et la version précédente ne repart pas",
+		"update.outcome.interrupted":     "La mise à jour a été interrompue avant la fin : relance-la",
+		"update.outcome.stalled":         "La mise à jour s'est arrêtée sans résultat : relance-la",
 	},
 	"en": {
 		"updates.title":                  "Updates",
@@ -98,5 +100,7 @@ var updatesStrings = map[string]map[string]string{
 		"update.outcome.failed":          "The update failed, nothing changed",
 		"update.outcome.rolled_back":     "The update failed, previous version put back",
 		"update.outcome.rollback_failed": "The update failed, and the previous version does not start",
+		"update.outcome.interrupted":     "The update was interrupted before its end: run it again",
+		"update.outcome.stalled":         "The update stopped without an outcome: run it again",
 	},
 }

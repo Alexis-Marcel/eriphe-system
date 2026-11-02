@@ -52,6 +52,9 @@ func (w *web) updatesData(nodes []NodeRow) updatesData {
 	latest := c.updates.version("eriphe-core") // the latest release, every image of it published
 	row := updateRow{Machine: coreMachine, Name: "eriphe-core", Core: true, Online: true, Version: version,
 		updaterInfo: c.coreUpdater(), Pending: c.pendingUpdate(coreMachine), Manual: manualUpdate(coreInstall)}
+	if row.Pending == nil {
+		row.Status = c.stalledStatus(coreMachine, row.Status)
+	}
 	if coreBehind {
 		row.Latest = latest
 	}
@@ -62,6 +65,9 @@ func (w *web) updatesData(nodes []NodeRow) updatesData {
 		row := updateRow{Machine: m, Name: n.Name, Online: n.Online, Version: info.Version,
 			updaterInfo: info.Update, Pending: c.pendingUpdate(m), CoreFirst: coreBehind,
 			CoreUpdater: d.Rows[0].Updater, AfterCore: c.afterCore(m), Manual: manualUpdate(nodeInstall(n, info))}
+		if row.Pending == nil {
+			row.Status = c.stalledStatus(m, row.Status)
+		}
 		// A node takes eriphe-core's build: the latest release once
 		// eriphe-core runs it, never one eriphe-core does not run yet.
 		switch {
