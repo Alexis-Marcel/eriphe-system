@@ -23,7 +23,7 @@ type core struct {
 	base  *Config                // the configuration file, as loaded
 	snap  atomic.Pointer[Config] // the file merged with the workspace's catalog (catalog.go)
 	store *Store
-	token string      // eriphe-core's own API token, lent to the brain at self_url
+	token string      // eriphe-core's own API token; the brain gets one derived from it, at self_url (assistantToken)
 	self  *mcp.Server // eriphe-core's own MCP server, also relayed to the brain by its node
 	pool  *pool       // the catalog's upstream sessions
 

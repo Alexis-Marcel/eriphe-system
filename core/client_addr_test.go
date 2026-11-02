@@ -141,3 +141,24 @@ func TestSigninNoneOnlyFromLocalNetwork(t *testing.T) {
 		t.Fatalf("none from the local network: %s", body)
 	}
 }
+
+// eriphe-core's MCP server takes the API token or an assistant's, derived
+// from it; nothing else does, and an empty token opens nothing.
+func TestBearerAnyAssistantToken(t *testing.T) {
+	h := bearerAny(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+		"secret", assistantToken("secret"))
+	for tok, want := range map[string]int{"secret": http.StatusNoContent, assistantToken("secret"): http.StatusNoContent,
+		assistantToken("other"): http.StatusUnauthorized, "": http.StatusUnauthorized, "wrong": http.StatusUnauthorized} {
+		r := httptest.NewRequest("POST", "/mcp", nil)
+		r.RemoteAddr = "127.0.0.1:5000"
+		r.Header.Set("Authorization", "Bearer "+tok)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		if rec.Code != want {
+			t.Errorf("%q: %d, want %d", tok, rec.Code, want)
+		}
+	}
+	if assistantToken("secret") == "secret" || assistantToken("") != "" {
+		t.Error("the assistant's token is the API token")
+	}
+}

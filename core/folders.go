@@ -126,7 +126,8 @@ func validFolderName(s string) bool {
 
 // folderError is a node's refusal, with its code (node/shares.go):
 // unknown_share, invalid_path, not_found, outside, sensitive, eriphe_data,
-// unavailable, unreadable, holds_sensitive, holds_private; and here offline, old_node.
+// unavailable, unreadable, holds_sensitive, holds_private, unreadable_sub,
+// too_large; and here offline, old_node.
 type folderError struct {
 	Code string `json:"code"`
 	Msg  string `json:"error"`
@@ -548,7 +549,8 @@ func folderHTTPError(w http.ResponseWriter, err error) {
 			status = http.StatusConflict
 		case "not_found", "unknown_share":
 			status = http.StatusNotFound
-		case "outside", "sensitive", "eriphe_data", "holds_sensitive", "holds_private", "unreadable", "read_only_share":
+		case "outside", "sensitive", "eriphe_data", "holds_sensitive", "holds_private", "unreadable", "unreadable_sub",
+			"too_large", "read_only_share":
 			status = http.StatusForbidden
 		}
 		writeJSON(w, status, fe)

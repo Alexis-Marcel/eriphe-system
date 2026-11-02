@@ -430,8 +430,8 @@ func (c *core) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// No card is answered in words here: this token may be lent to the
-	// brain (self_url), and the brain never decides a card (convo_cards.go).
+	// No card is answered in words here, whoever holds the token: the brain
+	// never decides a card (convo_cards.go).
 	c.ping()
 	writeJSON(w, http.StatusAccepted, map[string]any{"seq": seq})
 }

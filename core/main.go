@@ -94,10 +94,11 @@ func main() {
 	server := newMCPServer(c)
 	c.self = server
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", bearer(token, mcp.NewStreamableHTTPHandler(
+	// The API token, or an assistant's (self_url), which opens nothing else.
+	mux.Handle("/mcp", bearerAny(mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true},
-	)))
+	), token, assistantToken(token)))
 	mux.Handle("POST /v1/messages", bearer(token, http.HandlerFunc(c.handlePostMessage)))
 	mux.Handle("GET /v1/messages", bearer(token, http.HandlerFunc(c.handleGetMessages)))
 	mux.Handle("POST /v1/voice", http.HandlerFunc(c.handleVoice)) // Home Assistant's own token (voice.go)
@@ -236,14 +237,21 @@ func joinQuery(name string, rejoin bool, ttl time.Duration) string {
 	return q.Encode()
 }
 
-func bearer(token string, next http.Handler) http.Handler {
+func bearer(token string, next http.Handler) http.Handler { return bearerAny(next, token) }
+
+// bearerAny lets a request through with any of tokens.
+func bearerAny(next http.Handler, tokens ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if clearFromInternet(r) {
 			http.Error(w, errClearFromInternet, http.StatusForbidden)
 			return
 		}
 		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+		ok := 0
+		for _, token := range tokens {
+			ok |= subtle.ConstantTimeCompare([]byte(got), []byte(token))
+		}
+		if ok != 1 {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

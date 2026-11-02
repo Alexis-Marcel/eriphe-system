@@ -38,7 +38,8 @@ import (
 // $1 is the results folder's name, $3… its former names, newest first: one
 // of them is renamed to $1 unless $1 is taken, then it stays in use).
 // It writes NUL-separated records: E code (refused), P path, D dirs…, F
-// count, T entries…; a list ends with an empty record. ERIPHE_R and ERIPHE_F
+// count, T entries…, U (the tree is not whole); a list ends with an empty
+// record. ERIPHE_R and ERIPHE_F
 // stand for /r and /f in the tests.
 const explorerScript = `set -u
 R=${ERIPHE_R:-/r} F=${ERIPHE_F:-/f}
@@ -72,8 +73,10 @@ find "$p" -mindepth 1 -maxdepth 1 -type d -exec sh -c '[ ! -e "$1/.eriphe-privat
 printf '\0F\0%s\0' "$(find "$p" -mindepth 1 -maxdepth 1 -type f -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')"
 if [ "$2" = tree ]; then
   printf 'T\0'
-  find "$p" -mindepth 1 -maxdepth 4 -print0 2>/dev/null
+  find "$p" -mindepth 1 -maxdepth 4 -print0 2>/dev/null; s=$?
   printf '\0'
+  # A folder find could not read: the tree is not whole.
+  [ $s -eq 0 ] || printf 'U\0'
 fi
 `
 
@@ -89,6 +92,8 @@ type exploration struct {
 	dirs  []string // its real directories
 	files int      // how many regular files it has
 	tree  []string // with "tree": its entries three levels down, relative to it
+	// With "tree": a folder in it could not be read, the tree is not whole.
+	unreadable bool
 }
 
 // explore runs the explorer on a root.
@@ -132,6 +137,8 @@ func parseExploration(raw []byte) (*exploration, error) {
 		case "F":
 			e.files, _ = strconv.Atoi(next(i))
 			i++
+		case "U":
+			e.unreadable = true
 		case "D", "T":
 			for i++; i < len(recs) && recs[i] != ""; i++ {
 				if tag == "D" {
@@ -222,8 +229,8 @@ func (n *node) holdsOwn(real string) error {
 // checkTree is checkShareable on the explorer's tree of a folder (paths
 // relative to it): its entries, files too, so the private marker is seen.
 func checkTree(tree []string) error {
-	if len(tree) > treeMax {
-		tree = tree[:treeMax]
+	if len(tree) > treeMax { // not checked whole, not shared (checkShareable)
+		return shareErr(http.StatusForbidden, "too_large", "this folder has too many entries to be checked: share a folder inside it")
 	}
 	sort.Strings(tree)
 	for _, p := range tree {
@@ -233,6 +240,17 @@ func checkTree(tree []string) error {
 		if sensitive(path.Base(p)) {
 			return shareErr(http.StatusForbidden, "holds_sensitive", "this folder holds %s, which is never shared: share a folder inside it", p)
 		}
+	}
+	return nil
+}
+
+// checkExplored is checkTree on what the explorer saw, which must be whole.
+func checkExplored(e *exploration) error {
+	if err := checkTree(e.tree); err != nil {
+		return err
+	}
+	if e.unreadable {
+		return unreadableSub("")
 	}
 	return nil
 }
@@ -266,7 +284,7 @@ func (n *node) appleShareDirs(w http.ResponseWriter, r *http.Request) {
 		out["shareable"] = true
 		err := n.holdsOwn(f.real)
 		if err == nil {
-			err = checkTree(e.tree)
+			err = checkExplored(e)
 		}
 		if err != nil {
 			var se *shareError
