@@ -213,9 +213,16 @@ func (n *node) sendBack(t *Task, r checkResult) {
 // container's own environment and rights (docker exec, or container exec
 // with Apple's engine), its arguments as $1, $2…, and returns the end of
 // its output (at most max bytes) and its exit code. err is for a script
-// that could not run, or ran out of time.
+// that could not run, or ran out of time. The script has the agent's
+// toolchains too, first in PATH, as the entrypoint gave them to the agent
+// (toolchain.go).
 func (n *node) execTask(ctx context.Context, t *Task, max int, script string, args ...string) (string, int, error) {
-	argv := append([]string{"exec", containerName(t), "sh", "-c", script, "eriphe-check"}, args...)
+	argv := []string{"exec"}
+	for _, kv := range toolchainEnvOf(t) {
+		argv = append(argv, "-e", kv)
+	}
+	argv = append(argv, containerName(t), "sh", "-c", toolchainPathScript+"\n"+script, "eriphe-check")
+	argv = append(argv, args...)
 	cmd := exec.CommandContext(ctx, n.opt.docker, argv...)
 	out := &tailBuffer{}
 	cmd.Stdout, cmd.Stderr = out, out

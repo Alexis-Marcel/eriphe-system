@@ -2,8 +2,9 @@
 
 What eriphe-node runs its tasks with: one container per task, started from a small **base**
 image, into which the node **injects** the agent (Claude Code, OpenCode or Codex). The agent then
-installs what the task needs (git, gh, Go, ImageMagick…) in its container, which is thrown away
-with the task; a cache on each machine keeps what was downloaded for the next task.
+installs what the task needs (git, gh, ImageMagick…) in its container, which is thrown away
+with the task; a cache on each machine keeps what was downloaded for the next task. The toolchain
+a repository names (Go, Node.js) comes from the node, ready (see below).
 
 | Image | From | What |
 |---|---|---|
@@ -45,7 +46,11 @@ under the same tags): the updaters of machines installed before pull it, and a n
 - label `eriphe.runtimes=claude-code,opencode,codex,acp`; no entrypoint, command or health check
   (eriphe-node gives its own)
 - no git, gh, mise or compilers: the agent installs them when a task needs them (eriphe-node's
-  entrypoint installs git itself before cloning a task's repository)
+  entrypoint installs git itself before cloning a task's repository). The Go or Node.js version a
+  repository names (`go.mod`, `.nvmrc`, `engines.node`) is not baked in either: eriphe-node
+  downloads it once per machine, checked, and mounts it read-only at `/opt/eriphe-toolchains`,
+  first in `PATH` for the agent and the checks alike ([node/README.md](../node/README.md),
+  Toolchains)
 
 ## Agents
 
@@ -86,7 +91,7 @@ root with Apple's container), kept between the tasks of a machine:
 | `/cache/uv`, `/cache/uv/python` | uv's cache and the Pythons it installs (`UV_CACHE_DIR`, `UV_PYTHON_INSTALL_DIR`) |
 | `/cache/npm` | npm's cache (`npm_config_cache`) |
 | `/cache/pip` | pip's cache (`PIP_CACHE_DIR`) |
-| `/cache/go/mod`, `/cache/go/build` | Go modules and build cache (`GOMODCACHE`, `GOCACHE`), once Go is installed |
+| `/cache/go/mod`, `/cache/go/build` | Go modules and build cache (`GOMODCACHE`, `GOCACHE`), for the Go the node gives a task or one it installs |
 | `/cache/xdg` | anything else following `XDG_CACHE_HOME` |
 
 Measured on a Mac (OrbStack's Docker, and Apple's container): `apt-get update && apt-get install

@@ -326,6 +326,7 @@ func (n *node) taskRoutes(s *state) *http.ServeMux {
 	perm.Handle("/mcp/{server}", n.relayHandler(s))
 	perm.Handle("/model/v1/{path...}", n.modelRelayHandler(s))
 	perm.Handle("POST "+credentialPath, n.credentialHandler(s))
+	perm.Handle("POST "+toolchainPath, n.toolchainHandler())
 	return perm
 }
 
