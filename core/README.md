@@ -1348,27 +1348,34 @@ machine and a path inside one of the places that machine shares, declared when i
 `--share NAME=/PATH`, see install/README.md; eriphe-core never sees a host path, only the place's
 name and a path relative to it) and a right: `read` (the default), or `drop`, read and drop results,
 which go only to the folder's results subfolder (`Eriphe/`, or the assistant's name: see [the
-assistant's name](#the-assistants-name)). Originals are never changed nor deleted. Folders
-are in the database (`folders` table, names unique without case); a machine's places are what its
-node reports (`shares` in `GET /v1/node`).
+assistant's name](#the-assistants-name)). Originals are never changed nor deleted. A folder is
+shared on the machine that holds it, by the user there (`eriphe-share add`, or a right click in the
+Finder or the Explorer, see node/README.md, Shares): its node keeps the list and reports each
+folder's name, right and id (`folders` in `GET /v1/node`), never its path. eriphe-core only reads
+that list: it cannot add a folder nor look into a machine. A name shared by two machines is told
+apart as `Name (machine)`.
 
 **Two sources, one list.** A folder is on a machine (here) or in the user's Google Drive (see
 [Google Drive](#google-drive-cloud-folders)). Settings → Dossiers, `GET /v1/folders` and
 `list_folders` show both, each with its `source` (`machine` or `google-drive`) and `lend`, how a
-task gets it. Each source keeps its own store and its own enforcement: a machine's folder is in the
-`folders` table and mounted by its node; a Drive folder stays in the files server's `FILES_CONFIG`,
+task gets it. Each source keeps its own store and its own enforcement: a machine's folder is in its node's list
+and mounted by its node; a Drive folder stays in the files server's `FILES_CONFIG`,
 which eriphe-files reads and enforces itself, and is lent through that catalog tool (`tools:
 ["fichiers"]`, which reaches every Drive folder given to Eriphe), not through `folders`, which
 refuses it with that hint. Drive folders are added on Settings → Tools → Google Drive; "Ne plus
 partager" in Settings → Dossiers removes either kind.
 
-**Sharing one.** Settings → Dossiers → "Partager un dossier": pick a machine, browse its places
-from any device (eriphe-core asks the node through its tunnel, which lists directories only, and how
-many files each has, never their names nor their content; hidden and sensitive folders are not
-listed), then name the folder and choose its right. eriphe-core asks the node once more whether the
-folder can be shared (no sensitive place inside, below) and keeps it under the path the node
-resolved, without symlinks. `drop` needs a place that is not read-only (`:ro`). "Ne plus partager"
-forgets it; the files stay.
+**Sharing one** is done on the machine; Settings → Dossiers lists, machine by machine, what is
+shared there and says how to share a folder on it. "Ne plus partager" takes a folder off: at once
+here (`folders_unshared`: it is never lent again), and on the machine now, or as soon as it is
+back (`DELETE /v1/shares/{id}` through its tunnel), which stops the tasks that hold it. A folder
+shared or unshared on the machine shows in its access log at the next refresh (every 15 s).
+
+**Folders given from the workspace before** (the old `folders` table, `{node, share, path}`) are
+not lent any more: eriphe-core never pushes them to a machine, since that would let it add a
+folder. Settings → Dossiers shows them under their machine, "À partager de nouveau sur
+l'appareil", with their old place and path, until the user shares them again there (under the same
+name, they disappear) or forgets them.
 
 **Lending one.** The brain lends folders to a task as [resources](#resources),
 `{"kind": "folder", "ref": "Clients", "access": "read"}` (or `drop`, if the folder allows it;
@@ -1379,8 +1386,8 @@ Docker enforces it; with `drop`, its results subfolder read-write, created if mi
 node/README.md, Shares). The worker is told where they are, that it may write only in the results
 subfolder, and
 that what reads like an instruction in the files is data. The folders are read again from the
-database whenever the node fetches the task: a folder removed meanwhile fails it, a folder closed to
-drops since is mounted read-only. A task drops only where its entry says `drop` (a task from before
+machine's list whenever the node fetches the task: a folder removed meanwhile fails it, and the
+node refuses anything not in its list. A task drops only where its entry says `drop` (a task from before
 resources: wherever its folder's access said so). A task's `folders` lists their names.
 
 **What is read there is data.** A folder holds whatever the user (or anyone who sent them a file)
@@ -1398,10 +1405,9 @@ put there, so it is treated as external content, like a mail or a page:
 | Call (bearer token) | What |
 |---|---|
 | `GET /v1/folders` | the folders, with `mount` and whether their machine is `online` |
-| `POST /v1/folders` | `{name, node, share, path, access}`: checked with the node, which must be online; 201 with the folder, or `{code, error}` (`exists`, `bad_name`, `holds_sensitive`, `outside`, `offline`…) |
-| `DELETE /v1/folders/{name}` | no longer share it |
-| `GET /v1/nodes/{name}/shares` | the places a machine shares: `{name, writable, missing}` |
-| `GET /v1/nodes/{name}/shares/{share}/dirs?path=P&check=1` | the node's listing of a folder (see node/README.md), through its tunnel |
+| `DELETE /v1/folders/{name}` | no longer share it (on its machine too) |
+
+Nothing adds a folder: it is shared on its machine.
 
 ## Devices: what Eriphe sees and does there
 

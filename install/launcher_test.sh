@@ -404,6 +404,25 @@ kill "$listener" 2>/dev/null || true
 wait "$listener" 2>/dev/null || true
 fi
 
+# ---- eriphe-share: the node's command, with the folders made absolute
+
+installer 'DATA=/srv/eriphe; share_cmd' >"$T/eriphe-share"
+shellcheck -s sh "$T/eriphe-share" || fail "eriphe-share: shellcheck"
+mkdir -p "$T/here/Clients" "$T/here/add"
+# As root already: no sudo.
+sed 's/^\[ "$(id -u)" = 0 \] || exec sudo .*//' "$T/eriphe-share" >"$T/eriphe-share-root"
+rm -f "$T/calls"
+(cd "$T/here" && sh "$T/eriphe-share-root" add Clients --name Clients --drop /mnt/user/Docs) >/dev/null 2>&1
+has "$T/calls" "exec -i eriphe-node eriphe-node share -root /srv/eriphe/node add $(cd "$T/here/Clients" && pwd) --name Clients --drop /mnt/user/Docs" "eriphe-share"
+rm -f "$T/calls"
+(cd "$T/here" && sh "$T/eriphe-share-root" add) >/dev/null 2>&1
+has "$T/calls" "share -root /srv/eriphe/node add" "eriphe-share: the command itself is never a folder"
+installer 'DATA=/srv/eriphe MODE= NODE_IMAGE=n WORKER_IMAGE=w INSTALL=linux; compose_yaml 100 1' >"$T/compose-share"
+has "$T/compose-share" "ERIPHE_ROOT: /srv/eriphe/node" "the node's data, for docker exec eriphe-node eriphe-node share"
+installer 'ERIPHE_HOME=/Users/sam/.eriphe CONTAINER=/usr/local/bin/container; mac_share_sh' >"$T/mac-share"
+shellcheck -s sh "$T/mac-share" || fail "the Mac's eriphe-share: shellcheck"
+has "$T/mac-share" 'exec "$E/bin/eriphe-node" share -docker "$CONTAINER" "$@"' "the Mac's eriphe-share"
+
 if [ "$fails" -gt 0 ]; then
 	echo "launcher_test.sh: $fails failed" >&2
 	exit 1

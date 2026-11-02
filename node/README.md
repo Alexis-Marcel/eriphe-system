@@ -111,8 +111,8 @@ Labels (`-labels gpu,fast`, env `ERIPHE_NODE_LABELS`) are free words agents can 
 or prefer (`prefers`). Volumes are named host folders the node offers to tasks:
 `-volume media=/mnt/media`, repeatable, or env `ERIPHE_NODE_VOLUMES=media=/mnt/media,code=/srv/code`.
 Only their names are reported, never their paths; they are not mounted into tasks yet: the user's
-folders go through shares instead (see [Shares](#shares-the-users-folders)), which `shares` reports
-(`[{name, writable, missing}]`).
+folders go through shares instead (see [Shares](#shares-the-users-folders)), which `folders` reports
+(`[{id, name, access, missing}]`).
 
 ### A model behind this node
 
@@ -287,9 +287,9 @@ A probe for another system is a `sessionProbe`.
 
 | Call | What |
 |---|---|
-| `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `shares`, `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine) |
-| `GET /v1/shares` | the places this machine shares folders from: `[{name, writable, missing}]` |
-| `GET /v1/shares/{share}/dirs?path=P&check=1` | the directories of a folder of a place (see Shares) |
+| `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `folders` (the shared folders: `{id, name, access, missing}`, never a path), `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine) |
+| `GET /v1/shares` | the folders shared on this machine: `{folders: [{id, name, access, missing}]}`, never a path (see Shares) |
+| `DELETE /v1/shares/{id}` | take a folder off the list (eriphe-core may restrict, never add); the tasks holding it are stopped |
 | `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, identity?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex` or `acp` (with `command`) |
 | `GET /v1/tasks`, `GET /v1/tasks/{id}` | state, agent session, pending permissions |
 | `GET /v1/tasks/{id}/events?after=N&wait=S` | events after N, long polling |
@@ -823,21 +823,20 @@ the program's signature. eriphe-node is not signed with a Developer ID: each upd
 (and a program that launchd starts waits for the answer). So the node never reads a shared place
 itself (`apple_explore.go`):
 
-- the listing (`GET /v1/shares/{share}/dirs`) and the checks run in a short-lived container, the
-  explorer: alpine, the place's root mounted read-only, no network, UID 1000, every capability
-  dropped, about 0.7 s. Paths are resolved there, so a symlink out of the root points nowhere it can
-  see (`outside`). Then the checks of Shares apply to what it reports: nothing hidden or sensitive on
-  the way, nor in the folder three levels down (`holds_sensitive`), not the node's own data
-  (`~/.eriphe`: hidden, and a folder holding it, the home, is listed but not shareable). The
-  places' paths are not even looked at when the node starts (`missing` is never set);
+- the checks of `eriphe-node share add` run in a short-lived container, the explorer: alpine, the
+  place's root mounted read-only, no network, UID 1000, every capability dropped, about 0.7 s.
+  Paths are resolved there, so a symlink out of the root points nowhere it can see (`outside`).
+  Then the checks of Shares apply to what it reports: nothing hidden or sensitive on the way, nor in
+  the folder three levels down (`holds_sensitive`), not the node's own data (`~/.eriphe`: hidden,
+  and a folder holding it, the home, is not shareable). The folders' paths are not even looked at
+  for `missing`;
 - a task's folders are checked the same way when it starts, and `Eriphe/` is made by the explorer,
   the folder mounted writable;
 - `~/Library` is never listed nor shared from a root that holds it (mail, messages, browsers' and
   apps' data): iCloud Drive and `~/Library/CloudStorage/*` inside it are roots of their own.
 
-macOS asks once, for Apple's `container-runtime-linux`, the first time a protected folder is listed
-or mounted, and keeps the answer across Eriphe's updates. The first listing may wait for that answer
-past eriphe-core's timeout; the next one works.
+macOS asks once, for Apple's `container-runtime-linux`, the first time a protected folder is shared
+or mounted, and keeps the answer across Eriphe's updates.
 
 **Files in the cloud.** iCloud Drive and the File Provider clouds keep files "dataless" on a Mac
 that optimises its storage. A task cannot have them downloaded (a read in the container fails with
@@ -897,42 +896,66 @@ and one with egress, a share at the same path for it and the daemon (`ERIPHE_LIV
 
 ## Shares (the user's folders)
 
-The places of this machine whose folders the user may give to Eriphe are declared on the node,
-never by eriphe-core: `-share name=/path`, repeatable, or `-share name=/path:ro` for a place whose
-folders may only be read; env `ERIPHE_NODE_SHARES=home=/home/sam,media=/mnt/media:ro`. The path
-must be the same for the node and for the Docker daemon (as `-root` without `-host-root`): in a
-container, mount it at the same path (`install.sh --share` does, see install/README.md), and let
-the socket proxy bind-mount from it (`-allowbindmountfrom`). A place that is not there (an unplugged
-disk) is reported `missing` and logged at start. eriphe-core knows a place by its name and a folder
-by its path relative to the place, never the host path.
+A folder is shared with Eriphe **on the machine that holds it**, never from eriphe-core: the user
+runs `eriphe-node share` there (the installers wrap it as `eriphe-share`, and the Finder's and the
+Explorer's "Share with Eriphe" call it). eriphe-core sees each shared folder's name, right and an
+opaque id, never its path; it can lend a task one of them, or take one off the list (restricting
+is always allowed), but it can neither add a folder nor look into the machine.
 
-Every path is checked when it is used, not only when it was shared:
+```sh
+eriphe-node share add [--name NAME] [--drop] FOLDER...   # read; --drop: and results dropped in its results subfolder
+eriphe-node share list [--json]
+eriphe-node share remove NAME|FOLDER...                  # the tasks holding it are stopped
+```
 
-- relative only: an absolute path, an empty, `.` or `..` part, or a control character is refused
-  (`invalid_path`);
+Options, before the command: `-root` (env `ERIPHE_ROOT`), `-share` (env `ERIPHE_NODE_SHARES`),
+`-engine` (env `ERIPHE_ENGINE`), `-docker`. It must run as the node's user, with its settings:
+`sudo eriphe-share` on Linux (`docker exec eriphe-node eriphe-node share` in the node's
+container, which sees the places at their paths on the machine; `ERIPHE_ROOT` is set there), and
+`~/.eriphe/bin/eriphe-share` on a Mac (the node's `node.env`).
+
+**The list** is `shares.json` in the node's data (`-root`, mode 0600): `{id, name, path, access,
+added}` per folder, the path absolute and resolved. The command changes it under a lock file
+(`shares.lock`); the node reads it at every use (`GET /v1/node`, a mount) and looks at it every two
+seconds: a folder taken off stops the tasks that hold it (a `folder_revoked` event, then the
+container is stopped). Neither eriphe-core (the tunnel has no way to write it) nor a task (the
+node's data is never mounted nor shared) reaches it. `shares.log`, next to it, is the node's own
+append-only log, one JSON line per event: `add` and `remove` (`by`: `local` or `eriphe-core`),
+`mount` (task, folder, write), `refused`, `stop`.
+
+**The places** of this machine are declared when it is installed, never by eriphe-core: `-share
+name=/path`, repeatable, or `-share name=/path:ro` for a place whose folders may only be read; env
+`ERIPHE_NODE_SHARES=home=/home/sam,media=/mnt/media:ro`. They only bound where a folder may be
+shared from: nothing in them is shared until the user shares it. The path must be the same for the
+node and for the Docker daemon (as `-root` without `-host-root`): in a container, mount it at the
+same path (`install.sh --share` does, see install/README.md), and let the socket proxy bind-mount
+from it (`-allowbindmountfrom`). A shared folder that is not there now (an unplugged disk), or no
+longer in a place, is reported `missing` and logged at start.
+
+Every path is checked when it is shared, and again at every mount:
+
+- in a place: the deepest place that holds it lexically, or through a symlink to one (`outside`
+  otherwise); no empty, `.` or `..` part, nor a control character (`invalid_path`);
 - symlinks are resolved (the place's own too) and the result must stay in the place (`outside`); a
-  folder is known by its resolved path;
+  folder is kept under its resolved path, and a mount whose path now leads elsewhere (a folder
+  swapped for a symlink) is refused (`moved`);
 - never a hidden or sensitive directory on the way (`sensitive`): any name starting with a dot, and
   `sensitiveNames` in `shares.go` without case: keys and credentials (`.ssh`, `.gnupg`,
   `.password-store`, `.aws`, `.azure`, `.kube`, `.docker`, `Keychains`, `credentials`,
   `secrets`…), settings and app state where tokens live (`.config`, `.local`, browser and mail
   profiles, `.claude`, `.codex`), a NAS's `appdata`; and key or credential files (`.netrc`,
-  `.git-credentials`, `.pgpass`, `id_ed25519`…);
-- never the node's own data (`-root`: its secret, the tasks' folders), nor a folder holding it
-  (`eriphe_data`);
-- a folder can be shared, and mounted, only if no sensitive name is in it or in its subfolders down
-  to three levels (`holds_sensitive`, at most 20,000 directories searched): a whole home is refused,
-  its `Documents` is not.
+  `.git-credentials`, `.pgpass`, `id_ed25519`…); nor a folder its owner made private
+  (`.eriphe-private`), nor `~/Library` on a Mac;
+- never the node's own data (`-root`: its secret, the list, the tasks' folders), nor a folder
+  holding it (`eriphe_data`);
+- a folder can be shared, and mounted, only if no sensitive name nor private folder is in it or in
+  its subfolders down to three levels (`holds_sensitive`, `holds_private`, at most 20,000
+  directories searched): a whole home is refused, its `Documents` is not;
+- `--drop` is refused on a `:ro` place.
 
-`GET /v1/shares/{share}/dirs?path=P` lists the real directories of a folder (no symlink, nothing
-hidden or sensitive, sorted, at most 1,000), and how many files it has, never their names nor
-their content: `{share, path, dirs, files, truncated, writable}`, `path` being the resolved one.
-With `check=1`, `shareable` (and `code`, `reason` when not). A refusal is `{code, error}` with 400,
-403, 404 or 503.
-
-A task's spec lists its folders: `folders: [{name, share, path, write}]`. At each start the node
-resolves and checks each again (a folder swapped for a symlink out of its place since fails the
-task), then gives the container:
+A task's spec lists its folders: `folders: [{name, id, write}]`. At each start the node takes each
+from the list by its id (a folder not in it is refused, `not_shared`; `write` on a folder shared
+read-only too, `read_only`), checks it again, then gives the container:
 
 - `--mount type=bind,src=<folder>,dst=/work/folders/<name>,readonly`;
 - with `write`, `--mount type=bind,src=<folder>/<results>,dst=/work/folders/<name>/<results>`,
@@ -960,7 +983,8 @@ what changes in the folder between the check and the mount.
 
 **For other hosts** (the contract the Mac and Windows installers build on): declare the places with
 `-share` (or `ERIPHE_NODE_SHARES`) at paths the node and its Docker daemon both see, the same path
-for both; the node does the listing, the checks and the mounts. On a Mac with Apple's container
+for both, and give the user a way to run `eriphe-node share` as the node's user; the node does the
+checks and the mounts. On a Mac with Apple's container
 the node runs on the Mac and its places are Mac paths; the listing and the checks go through the
 explorer, see [The container engine](#the-container-engine-a-mac). A Mac in Lima's VM shares no
 folder. On Windows,

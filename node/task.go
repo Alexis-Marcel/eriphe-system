@@ -343,8 +343,9 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		"docker": dockerVersion, "engine": n.opt.engine, "engine_version": engineVersion,
 		"image": n.opt.image, "runtimes": runtimes, "labels": n.opt.labels,
 		"active_tasks": active, "memory_bytes": memoryBytes(), "volumes": n.opt.volumeNames(),
-		"shares": n.opt.shareList(),
-		"images": images, "services": engineVersion != "",
+		// The folders shared on this machine, never their paths (shared.go).
+		"folders": n.sharedList(),
+		"images":  images, "services": engineVersion != "",
 		"always_on": n.opt.alwaysOn, "keeps_awake": n.awake.how, "version": version, "install": n.opt.install,
 		// Its network card, for Wake-on-LAN (wake.go).
 		"wake":   n.opt.wake,

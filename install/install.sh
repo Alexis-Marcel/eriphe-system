@@ -850,6 +850,8 @@ EOF
       # Only for the first start, from install.sh, never kept in .env.
       ERIPHE_JOIN_TOKEN: \${ERIPHE_JOIN_TOKEN:-}
       ERIPHE_INSTALL: $INSTALL
+      # Its data, for eriphe-node share in its container (eriphe-share).
+      ERIPHE_ROOT: $data/node
       DOCKER_HOST: tcp://eriphe-docker-proxy:2375
     command: ["-root", "$data/node",
               "-network", "eriphe-system", "-task-network", "eriphe-tasks",
@@ -1300,6 +1302,38 @@ UNIT_AWAKE_PATH=$(printf '%s\n' "[Unit]" "Description=Eriphe: a task at work kee
 EOF
 }
 
+# share_cmd: /usr/local/bin/eriphe-share, the way to share a folder of this
+# machine with Eriphe, here and only here (node/README.md, Shared folders):
+# eriphe-node share in the node's container, which sees the shared places
+# at their paths on this machine. A relative folder is made absolute here.
+share_cmd() {
+	cat <<EOF
+#!/bin/sh
+# Written by install.sh: shares folders of this machine with Eriphe.
+#   eriphe-share add [--name NAME] [--drop] FOLDER...
+#   eriphe-share list
+#   eriphe-share remove NAME|FOLDER...
+ROOT=$(q "$DATA/node")
+EOF
+	cat <<'EOF'
+set -eu
+[ "$(id -u)" = 0 ] || exec sudo "$0" "$@"
+n=$# i=0 prev=
+while [ "$i" -lt "$n" ]; do
+	a=$1
+	shift
+	i=$((i + 1))
+	case $i:$prev:$a in
+	1:* | *:--name:* | *:*:-*) ;;
+	*) if [ -d "$a" ]; then a=$(cd "$a" && pwd); fi ;;
+	esac
+	set -- "$@" "$a"
+	prev=$a
+done
+exec docker exec -i eriphe-node eriphe-node share -root "$ROOT" "$@"
+EOF
+}
+
 # host_up writes the project, pulls the images and starts it, joining the
 # node if it has not joined yet. In core mode it prints the setup code.
 host_up() {
@@ -1313,6 +1347,8 @@ host_up() {
 		printf 'INSTALL_CONF=%s\n' "$(install_conf | b64)"
 		printf 'UPDATE_CONF=%s\n' "$(updater_conf | b64)"
 		printf 'UPDATE_SH=%s\n' "$(updater_sh | b64)"
+		# Not in eriphe-launcher's container: there, docker exec eriphe-node does it.
+		printf 'SHARE_SH=%s\n' "$([ -n "${HOST_DATA:-}" ] || share_cmd | b64)"
 		printf 'PIN=%s\n' "$(q "$PIN")"
 		printf 'MODELS_URL=%s\n' "$(q "$(models_url)")"
 		# PULL=missing pulls only the images not here yet (eriphe-launcher's
@@ -1448,6 +1484,11 @@ echo "version=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.im
 put "$CONF/update.conf" "$UPDATE_CONF"
 put "$CONF/update.sh" "$UPDATE_SH"
 chmod 700 "$CONF/update.sh"
+if [ -n "$SHARE_SH" ]; then
+  mkdir -p /usr/local/bin
+  put /usr/local/bin/eriphe-share "$SHARE_SH"
+  chmod 755 /usr/local/bin/eriphe-share
+fi
 marks="$DATA/node"
 [ "$MODE" = core ] && marks="$marks $DATA/core"
 # pin: the release it stays on; channel: edge when it follows main.
@@ -1521,7 +1562,7 @@ fi
 installed=
 { [ -f "$CONF/docker-installed" ] || [ -f "$CONF.docker-installed" ]; } && installed=1
 rm -rf "$CONF" "$DATA"
-rm -f /var/log/eriphe-install.log
+rm -f /var/log/eriphe-install.log /usr/local/bin/eriphe-share
 if [ -n "$installed" ]; then
   if [ -n "$(docker ps -aq 2>/dev/null)" ]; then
     # Docker stays for the containers that use it, and is still Eriphe's to
@@ -1951,6 +1992,28 @@ native_conf() {
 	echo "auto_shares=$AUTO_SHARES"
 }
 
+# mac_share_sh: ~/.eriphe/bin/eriphe-share, the way to share a folder of
+# this Mac with Eriphe (node/README.md, Shared folders): eriphe-node share,
+# with the node's settings.
+mac_share_sh() {
+	cat <<EOF
+#!/bin/sh
+# Written by install.sh: shares folders of this Mac with Eriphe.
+#   eriphe-share add [--name NAME] [--drop] FOLDER...
+#   eriphe-share list
+#   eriphe-share remove NAME|FOLDER...
+E=$(q "$ERIPHE_HOME")
+CONTAINER=$(q "$CONTAINER")
+EOF
+	cat <<'EOF'
+set -a
+# shellcheck disable=SC1091
+. "$E/node.env"
+set +a
+exec "$E/bin/eriphe-node" share -docker "$CONTAINER" "$@"
+EOF
+}
+
 # start_node_sh: what the node's LaunchAgent runs: container's services
 # (started again after a restart of the Mac), the join token for the first
 # start only, then eriphe-node.
@@ -2343,7 +2406,8 @@ native_up() {
 	mac_updater_conf >"$E/update.conf"
 	mac_updater_sh >"$E/update.sh"
 	start_node_sh >"$E/start-node.sh"
-	chmod 700 "$E/update.sh" "$E/start-node.sh"
+	mac_share_sh >"$E/bin/eriphe-share"
+	chmod 700 "$E/update.sh" "$E/start-node.sh" "$E/bin/eriphe-share"
 	# Stopped while their binaries change.
 	launchctl bootout "gui/$(id -u)/$NODE_LABEL" >/dev/null 2>&1 || true
 	[ "$MODE" != core ] || launchctl bootout "gui/$(id -u)/$CORE_LABEL" >/dev/null 2>&1 || true
@@ -2748,11 +2812,13 @@ outcome() {
 	fi
 	if [ -n "$NATIVE" ]; then
 		shared=$(mac_shares)
-		note "Places shared with Eriphe: $(printf '%s' "$shared" | sed 's/=[^,]*//g; s/,/, /g')"
+		note "Places folders may be shared from: $(printf '%s' "$shared" | sed 's/=[^,]*//g; s/,/, /g')"
+		[ -z "$shared" ] || note "To share one with Eriphe: $(tilde "$ERIPHE_HOME/bin/eriphe-share") add <folder> (--drop to let it drop its results there)"
 		[ -n "$UPDATING" ] || [ -z "$shared" ] ||
-			notice "the first time a task opens Documents, the Desktop or iCloud Drive, macOS asks to allow \"container-runtime-linux\". Allow it."
+			notice "the first time a folder of Documents, the Desktop or iCloud Drive is shared, macOS asks to allow \"container-runtime-linux\". Allow it."
 	elif [ -n "$SHARES" ]; then
-		note "Places shared with Eriphe: $(printf '%s' "$SHARES" | sed 's/=[^,]*//g; s/,/, /g')"
+		note "Places folders may be shared from: $(printf '%s' "$SHARES" | sed 's/=[^,]*//g; s/,/, /g')"
+		[ -n "${HOST_DATA:-}" ] || note "To share one with Eriphe: sudo eriphe-share add <folder> (--drop to let it drop its results there)"
 	elif [ "$OS" = Linux ] && [ -z "$UPDATING" ]; then
 		hint="--share documents=/home/<you>/Documents"
 		[ -d /mnt/user ] && hint="--share shares=/mnt/user"

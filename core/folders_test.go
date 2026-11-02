@@ -12,16 +12,43 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/hashicorp/yamux"
 )
 
-// foldersCore is a core with one agent, a machine "nas" sharing the root
-// "data" (writable) and "media" (read-only) through a fake node on a
-// tunnel, and a machine "pc" sharing nothing.
+// fakeShares is the list of folders shared on the fake machine "nas", as
+// its node keeps it (node/shared.go): eriphe-core may take one off it.
+type fakeShares struct {
+	mu      sync.Mutex
+	folders []sharedFolder
+	deleted []string
+}
+
+func (f *fakeShares) set(list ...sharedFolder) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.folders = list
+}
+
+func (f *fakeShares) gone() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.deleted)
+}
+
+// foldersCore is a core with one agent, a machine "nas" sharing the folders
+// Clients (drop) and Photos (read) through a fake node on a tunnel, and a
+// machine "pc" sharing nothing.
 func foldersCore(t *testing.T) (*core, *Store) {
+	c, store, _ := foldersCoreShares(t)
+	return c, store
+}
+
+func foldersCoreShares(t *testing.T) (*core, *Store, *fakeShares) {
 	t.Helper()
 	dir := t.TempDir()
 	secret := filepath.Join(dir, "claude")
@@ -41,29 +68,19 @@ func foldersCore(t *testing.T) (*core, *Store) {
 	store.registerNode("pc", hashSecret("y"))
 	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"],"cpus":64}`))
 
+	shares := &fakeShares{folders: []sharedFolder{{ID: "f1", Name: "Clients", Access: folderDrop}, {ID: "f2", Name: "Photos", Access: folderRead}}}
 	api := http.NewServeMux()
 	api.HandleFunc("GET /v1/node", func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"runtimes":["claude-code"],"cpus":2,"shares":[{"name":"data","writable":true},{"name":"media","writable":false}]}`))
+		shares.mu.Lock()
+		defer shares.mu.Unlock()
+		writeJSON(w, 200, map[string]any{"runtimes": []string{"claude-code"}, "cpus": 2, "folders": shares.folders})
 	})
-	api.HandleFunc("GET /v1/shares/{share}/dirs", func(w http.ResponseWriter, r *http.Request) {
-		p, check := r.URL.Query().Get("path"), r.URL.Query().Get("check") == "1"
-		share := r.PathValue("share")
-		switch {
-		case share != "data" && share != "media":
-			writeJSON(w, 404, map[string]string{"code": "unknown_share", "error": "no root"})
-		case p == "escape":
-			writeJSON(w, 403, map[string]string{"code": "outside", "error": "out of the root"})
-		default:
-			out := map[string]any{"share": share, "path": strings.TrimSuffix(strings.TrimPrefix(p, "link-to-"), "/"),
-				"dirs": []string{"ACME"}, "files": 2, "writable": share == "data"}
-			if check {
-				out["shareable"] = p != "home"
-				if p == "home" {
-					out["code"], out["reason"] = "holds_sensitive", "holds .ssh"
-				}
-			}
-			writeJSON(w, 200, out)
-		}
+	api.HandleFunc("DELETE /v1/shares/{id}", func(w http.ResponseWriter, r *http.Request) {
+		shares.mu.Lock()
+		defer shares.mu.Unlock()
+		shares.deleted = append(shares.deleted, r.PathValue("id"))
+		shares.folders = slices.DeleteFunc(shares.folders, func(f sharedFolder) bool { return f.ID == r.PathValue("id") })
+		w.WriteHeader(http.StatusNoContent)
 	})
 	coreEnd, nodeEnd := net.Pipe()
 	nodeSession, _ := yamux.Server(nodeEnd, tunnelConfig())
@@ -74,57 +91,118 @@ func foldersCore(t *testing.T) (*core, *Store) {
 	waitUntil(t, func() bool {
 		n, _ := store.nodes()
 		for _, row := range n {
-			if row.Name == "nas" && row.Online && len(parseInfo(row).Shares) == 2 {
+			if row.Name == "nas" && row.Online && len(parseInfo(row).Folders) == 2 {
 				return true
 			}
 		}
 		return false
 	})
-	return c, store
+	return c, store, shares
 }
 
-func TestAddFolder(t *testing.T) {
+// The folders are those the machines share, as they said: a name two
+// machines share is told apart by the machine's; a name that cannot be a
+// folder here is left out.
+func TestFolders(t *testing.T) {
 	c, store := foldersCore(t)
-	ctx := context.Background()
-	f, err := c.addFolder(ctx, Folder{Name: "Clients", Node: "nas", Share: "data", Path: "link-to-work/Clients/", Access: folderDrop})
+	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"],"folders":[`+
+		`{"id":"p1","name":"clients","access":"read"},{"id":"p2","name":"../x","access":"drop"},{"id":"","name":"NoID"},{"id":"p3","name":"Scans","access":"write","missing":true}]}`))
+	fs, err := store.folders()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Kept under the path the machine resolved.
-	if got, _ := store.folder("clients"); got == nil || got.Path != "work/Clients" || got.Access != folderDrop || f.Name != "Clients" {
-		t.Fatalf("stored %+v", got)
+	var got []string
+	for _, f := range fs {
+		got = append(got, fmt.Sprintf("%s@%s:%s:%s:%v", f.Name, f.Node, f.ID, f.Access, f.Missing))
 	}
-	if _, err := c.addFolder(ctx, Folder{Name: "Photos", Node: "nas", Share: "media", Path: "photos"}); err != nil {
+	want := []string{"Clients (nas)@nas:f1:drop:false", "clients (pc)@pc:p1:read:false", "Photos@nas:f2:read:false", "Scans@pc:p3:read:true"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v\nwant %v", got, want)
+	}
+	if f, err := store.folder("CLIENTS (PC)"); err != nil || f.ID != "p1" {
+		t.Fatalf("by name: %+v %v", f, err)
+	}
+	if _, err := store.folder("Clients"); !errors.Is(err, errNoFolder) {
+		t.Fatalf("an ambiguous name: %v", err)
+	}
+	views, _ := c.folderViews()
+	if len(views) != 4 || views[2].Mount != "/work/folders/Photos" || !views[2].Online {
+		t.Fatalf("views %+v", views)
+	}
+}
+
+// eriphe-core may take a folder off its machine's list: never lent again,
+// at once; the machine is told now, or when it is back.
+func TestRemoveFolder(t *testing.T) {
+	c, store, shares := foldersCoreShares(t)
+	ctx := context.Background()
+	if err := c.removeFolder(ctx, "clients"); err != nil {
 		t.Fatal(err)
 	}
-	for name, in := range map[string]Folder{
-		"exists":          {Name: "CLIENTS", Node: "nas", Share: "data", Path: "x"},
-		"bad_name":        {Name: "../x", Node: "nas", Share: "data", Path: "x"},
-		"bad_access":      {Name: "x", Node: "nas", Share: "data", Path: "x", Access: "write"},
-		"holds_sensitive": {Name: "Home", Node: "nas", Share: "data", Path: "home"},
-		"outside":         {Name: "Out", Node: "nas", Share: "data", Path: "escape"},
-		"unknown_share":   {Name: "U", Node: "nas", Share: "nope", Path: ""},
-		"read_only_share": {Name: "M", Node: "nas", Share: "media", Path: "m", Access: folderDrop},
-		"offline":         {Name: "P", Node: "pc", Share: "data", Path: ""},
-	} {
-		_, err := c.addFolder(ctx, in)
-		if fe, ok := err.(*folderError); !ok || fe.Code != name {
-			t.Errorf("%s: %v", name, err)
+	if !slices.Equal(shares.gone(), []string{"f1"}) {
+		t.Fatalf("told the machine %v", shares.gone())
+	}
+	if _, err := store.folder("Clients"); err == nil {
+		t.Fatal("still a folder")
+	}
+	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Clients"}}); err == nil {
+		t.Fatal("lent once removed")
+	}
+	c.refreshNode(ctx, c.node("nas"))
+	if u, _ := store.unsharedFolders(); len(u) != 0 {
+		t.Fatalf("still kept %v once the machine dropped it", u)
+	}
+	// Offline: kept here until the machine is back.
+	nodes, _ := store.nodes()
+	var info json.RawMessage
+	for _, n := range nodes {
+		if n.Name == "nas" {
+			info = n.Info
 		}
 	}
-	fs, _ := c.folderViews()
-	if len(fs) != 2 || !fs[0].Online || fs[0].Mount != "/work/folders/Clients" {
-		t.Fatalf("views %+v", fs)
+	c.disconnect("nas")
+	waitUntil(t, func() bool { return !c.node("nas").connected() })
+	store.setNodeStatus("nas", false, info)
+	if err := c.removeFolder(ctx, "Photos"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.folder("Photos"); err == nil {
+		t.Fatal("lent while its machine is away")
+	}
+	if u, _ := store.unsharedFolders(); !u["nas/f2"] {
+		t.Fatalf("forgotten: %v", u)
+	}
+	if err := c.removeFolder(ctx, "nope"); !errors.Is(err, errNoFolder) {
+		t.Fatalf("unknown: %v", err)
+	}
+	log, _ := store.nodeLog("nas", 10, 0)
+	if len(log) < 2 || log[0].Kind != logUnshare || log[0].Folder != "Photos" {
+		t.Fatalf("access log %+v", log)
+	}
+}
+
+// Folders shared or unshared on a machine are in its access log.
+func TestNoteShared(t *testing.T) {
+	c, store := foldersCore(t)
+	before := nodeInfo{Folders: []sharedFolder{{ID: "a", Name: "Old", Access: folderRead}, {ID: "b", Name: "Kept"}}}
+	after := nodeInfo{Folders: []sharedFolder{{ID: "b", Name: "Kept"}, {ID: "c", Name: "New", Access: folderDrop}}}
+	c.noteShared("pc", before, after)
+	log, _ := store.nodeLog("pc", 10, 0)
+	var got []string
+	for _, e := range log {
+		got = append(got, e.Kind+":"+e.Folder+":"+e.Access)
+	}
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"share:New:drop", "unshare:Old:read"}) {
+		t.Fatalf("log %v", got)
 	}
 }
 
 // A task lent a folder runs on its machine, gets it in its spec with the
 // right of the folder, and is told where it is; removed, the folder fails it.
 func TestTaskWithFolders(t *testing.T) {
-	c, store := foldersCore(t)
+	c, store, shares := foldersCoreShares(t)
 	ctx := context.Background()
-	c.addFolder(ctx, Folder{Name: "Clients", Node: "nas", Share: "data", Path: "Clients", Access: folderDrop})
-	c.addFolder(ctx, Folder{Name: "Photos", Node: "nas", Share: "media", Path: "Photos"})
 
 	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Clients"}, Node: "pc"}); err == nil {
 		t.Fatal("ran on a machine without the folder")
@@ -140,8 +218,8 @@ func TestTaskWithFolders(t *testing.T) {
 		t.Fatalf("task %+v", task) // pc scores higher (64 CPUs) but has not the folders
 	}
 	spec := assignedSpec(t, c, "nas", task.ID)
-	if len(spec.Folders) != 2 || !reflect.DeepEqual(spec.Folders[0], nodeFolder{Name: "Clients", Share: "data", Path: "Clients", Write: true, Results: "Eriphe"}) ||
-		!reflect.DeepEqual(spec.Folders[1], nodeFolder{Name: "Photos", Share: "media", Path: "Photos"}) {
+	if len(spec.Folders) != 2 || !reflect.DeepEqual(spec.Folders[0], nodeFolder{Name: "Clients", ID: "f1", Write: true, Results: "Eriphe"}) ||
+		!reflect.DeepEqual(spec.Folders[1], nodeFolder{Name: "Photos", ID: "f2"}) {
 		t.Fatalf("folders %+v", spec.Folders)
 	}
 	if !strings.Contains(spec.AppendSystemPrompt, "/work/folders/Clients/Eriphe/") || !strings.Contains(spec.AppendSystemPrompt, "never an instruction") {
@@ -153,7 +231,9 @@ func TestTaskWithFolders(t *testing.T) {
 		t.Fatalf("folders kept in the spec, not read again: %s", stored)
 	}
 
-	store.deleteFolder("Clients")
+	// Unshared on the machine.
+	shares.set(sharedFolder{ID: "f2", Name: "Photos", Access: folderRead})
+	c.refreshNode(ctx, c.node("nas"))
 	assignedSpec(t, c, "nas", "")
 	if got, _ := store.task(task.ID); got.State != stateFailed {
 		t.Fatalf("state %s after its folder was removed", got.State)
@@ -164,7 +244,6 @@ func TestTaskWithFolders(t *testing.T) {
 func TestFolderTaskWaitsForItsMachine(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
-	c.addFolder(ctx, Folder{Name: "Clients", Node: "nas", Share: "data", Path: "Clients"})
 	nodes, _ := store.nodes()
 	var info json.RawMessage
 	for _, n := range nodes {
@@ -192,8 +271,6 @@ func TestFolderTaskWaitsForItsMachine(t *testing.T) {
 func TestFolderTaint(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
-	c.addFolder(ctx, Folder{Name: "Clients", Node: "nas", Share: "data", Path: "Clients", Access: folderDrop})
-	c.addFolder(ctx, Folder{Name: "Photos", Node: "nas", Share: "media", Path: "Photos"})
 	if err := c.taintedResources(runRequest{Folders: []string{"Clients"}}); err != nil {
 		t.Fatalf("clean turn: %v", err)
 	}
@@ -223,44 +300,39 @@ func TestFolderTaint(t *testing.T) {
 	}
 }
 
-// Settings → Folders: the machine's roots, a folder's directories, sharing
-// it, and no longer sharing it.
+// Settings → Folders: the folders each machine shares, how to share one
+// there, those given from here before, and no longer sharing one. Nothing
+// browses a machine or adds a folder any more.
 func TestWebFolders(t *testing.T) {
-	c, store := foldersCore(t)
+	c, store, shares := foldersCoreShares(t)
+	store.db.Exec(`INSERT INTO folders (name, node, share, path, access, created) VALUES ('Factures', 'nas', 'data', 'Compta/Factures', 'drop', 1), ('Photos', 'nas', 'media', 'Photos', 'read', 1)`)
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	code, body, _ := tw.do("GET", "/settings/folders", nil, nil)
-	if code != 200 || !strings.Contains(body, "Partager un dossier") || !strings.Contains(body, `<option value="nas" >nas</option>`) ||
-		!strings.Contains(body, "Sans emplacement partagé : pc") {
-		t.Fatalf("page: %d %s", code, body)
-	}
-	code, body, _ = tw.do("GET", "/settings/folders/browse?node=nas", nil, nil)
-	if code != 200 || !strings.Contains(body, `hx-get="/settings/folders/browse?node=nas&amp;share=data"`) || !strings.Contains(body, "En lecture seule sur cet appareil") {
-		t.Fatalf("roots: %d %s", code, body)
-	}
-	code, body, _ = tw.do("GET", "/settings/folders/browse?node=nas&share=data&path=Clients", nil, nil)
-	for _, want := range []string{`path=Clients%2FACME`, "2 fichier(s) ici.", `name="path" value="Clients"`, `name="name" value="Clients"`, `value="drop" >`} {
+	for _, want := range []string{"Clients", "/work/folders/Photos", "Lecture et dépôt des résultats", `id="folders-pc"`, "Aucun dossier partagé sur cet appareil.",
+		"eriphe-node share add", "Factures", "data:/Compta/Factures", "À partager de nouveau sur l&#39;appareil"} {
 		if code != 200 || !strings.Contains(body, want) {
-			t.Fatalf("listing lacks %q: %d %s", want, code, body)
+			t.Fatalf("page lacks %q: %d %s", want, code, body)
 		}
 	}
-	if _, body, _ = tw.do("GET", "/settings/folders/browse?node=nas&share=data&path=escape", nil, nil); !strings.Contains(body, "hors de l&#39;emplacement") {
-		t.Fatalf("escape: %s", body)
+	if strings.Contains(body, "media:/Photos") {
+		t.Fatal("a folder shared again is still to share again")
 	}
-	code, body, h := tw.post("/settings/folders", url.Values{"node": {"nas"}, "share": {"data"}, "path": {"home"}, "name": {"Home"}, "access": {"read"}}, csrf)
-	if code != 200 || !strings.Contains(body, "données sensibles") || h.Get("HX-Refresh") != "" {
-		t.Fatalf("sensitive: %d %s", code, body)
+	for _, u := range []string{"/settings/folders/browse?node=nas", "/settings/folders/browse?node=nas&share=data&path=Clients"} {
+		if code, _, _ := tw.do("GET", u, nil, nil); code == 200 {
+			t.Errorf("%s: %d", u, code)
+		}
 	}
-	code, _, h = tw.post("/settings/folders", url.Values{"node": {"nas"}, "share": {"data"}, "path": {"Clients"}, "name": {"Mes clients"}, "access": {"drop"}}, csrf)
-	if f, _ := store.folder("Mes clients"); code != 200 || h.Get("HX-Refresh") != "true" || f == nil || f.Access != folderDrop {
-		t.Fatalf("share: %d %+v", code, f)
+	if code, _, _ := tw.post("/settings/folders", url.Values{"node": {"nas"}, "share": {"data"}, "path": {"Clients"}, "name": {"x"}}, csrf); code == 200 {
+		t.Fatalf("shared from the workspace: %d", code)
 	}
-	if _, body, _ = tw.do("GET", "/settings/folders", nil, nil); !strings.Contains(body, "Mes clients") || !strings.Contains(body, "data:/Clients") {
-		t.Fatalf("list: %s", body)
+	code, _, h := tw.post("/settings/folders/delete", url.Values{"source": {"legacy"}, "name": {"Factures"}}, csrf)
+	if l, _ := store.legacyFolders(); code != 200 || h.Get("HX-Refresh") != "true" || len(l) != 1 {
+		t.Fatalf("forget: %d %v", code, l)
 	}
-	code, _, h = tw.post("/settings/folders/delete", url.Values{"name": {"Mes clients"}}, csrf)
-	if _, err := store.folder("Mes clients"); code != 200 || h.Get("HX-Refresh") != "true" || err == nil {
-		t.Fatalf("delete: %d %v", code, err)
+	code, _, h = tw.post("/settings/folders/delete", url.Values{"source": {"machine"}, "name": {"Clients"}}, csrf)
+	if _, err := store.folder("Clients"); code != 200 || h.Get("HX-Refresh") != "true" || err == nil || !slices.Equal(shares.gone(), []string{"f1"}) {
+		t.Fatalf("delete: %d %v %v", code, err, shares.gone())
 	}
 }
 
@@ -306,10 +378,8 @@ func TestFolderAPI(t *testing.T) {
 	if code, _ := call("GET", "/v1/folders", "", "wrong"); code != http.StatusUnauthorized {
 		t.Fatalf("without the token: %d", code)
 	}
-	if code, body := call("POST", "/v1/folders", `{"name":"Clients","node":"nas","share":"data","path":"Clients","access":"drop"}`, "api-token"); code != http.StatusCreated || !strings.Contains(body, `"name":"Clients"`) {
-		t.Fatalf("add: %d %s", code, body)
-	}
-	if code, body := call("GET", "/v1/folders", "", "api-token"); code != http.StatusOK || !strings.Contains(body, `"folders":[{`) || !strings.Contains(body, "Clients") {
+	if code, body := call("GET", "/v1/folders", "", "api-token"); code != http.StatusOK || !strings.Contains(body, `"folders":[{`) ||
+		!strings.Contains(body, `"id":"f1"`) || !strings.Contains(body, "Clients") {
 		t.Fatalf("list: %d %s", code, body)
 	}
 	for _, x := range []struct {
@@ -317,17 +387,9 @@ func TestFolderAPI(t *testing.T) {
 		code               int
 		want               string
 	}{
-		{"POST", "/v1/folders", `{"name":`, http.StatusBadRequest, ""},
-		{"POST", "/v1/folders", `{"name":"clients","node":"nas","share":"data","path":"x"}`, http.StatusConflict, `"code":"exists"`},
-		{"POST", "/v1/folders", `{"name":"Out","node":"nas","share":"data","path":"escape"}`, http.StatusForbidden, `"code":"outside"`},
-		{"POST", "/v1/folders", `{"name":"P","node":"pc","share":"data","path":""}`, http.StatusServiceUnavailable, `"code":"offline"`},
-		{"POST", "/v1/folders", `{"name":"U","node":"nas","share":"nope","path":""}`, http.StatusNotFound, `"code":"unknown_share"`},
-		{"GET", "/v1/nodes/nas/shares", "", http.StatusOK, `{"shares":[{"name":"data","writable":true},{"name":"media","writable":false}]}`},
-		{"GET", "/v1/nodes/pc/shares", "", http.StatusOK, `{"shares":[]}`},
-		{"GET", "/v1/nodes/nas/shares/data/dirs?path=work", "", http.StatusOK, `"dirs":["ACME"]`},
-		{"GET", "/v1/nodes/nas/shares/data/dirs?path=home&check=1", "", http.StatusOK, `"code":"holds_sensitive"`},
-		{"GET", "/v1/nodes/nas/shares/data/dirs?path=escape", "", http.StatusForbidden, `"code":"outside"`},
-		{"GET", "/v1/nodes/pc/shares/data/dirs", "", http.StatusServiceUnavailable, `"code":"offline"`},
+		{"POST", "/v1/folders", `{"name":"Clients","node":"nas","share":"data","path":"Clients","access":"drop"}`, http.StatusMethodNotAllowed, ""},
+		{"GET", "/v1/nodes/nas/shares", "", http.StatusNotFound, ""},
+		{"GET", "/v1/nodes/nas/shares/data/dirs?path=work", "", http.StatusNotFound, ""},
 		{"DELETE", "/v1/folders/nope", "", http.StatusNotFound, `{"code":"not_found","error":"no such folder"}`},
 		{"DELETE", "/v1/folders/clients", "", http.StatusNoContent, ""},
 	} {
@@ -345,20 +407,10 @@ func TestFolderHTTPError(t *testing.T) {
 	}{
 		{errNoFolder, http.StatusNotFound},
 		{fmt.Errorf("wrapped: %w", errNoFolder), http.StatusNotFound},
-		{&folderError{Code: "bad_name"}, http.StatusBadRequest},
+		{&folderError{Code: "bad"}, http.StatusBadRequest},
 		{&folderError{Code: "offline"}, http.StatusServiceUnavailable},
-		{&folderError{Code: "unavailable"}, http.StatusServiceUnavailable},
-		{&folderError{Code: "old_node"}, http.StatusServiceUnavailable},
 		{&folderError{Code: "suspended"}, http.StatusServiceUnavailable},
-		{&folderError{Code: "exists"}, http.StatusConflict},
 		{&folderError{Code: "not_found"}, http.StatusNotFound},
-		{&folderError{Code: "unknown_share"}, http.StatusNotFound},
-		{&folderError{Code: "outside"}, http.StatusForbidden},
-		{&folderError{Code: "sensitive"}, http.StatusForbidden},
-		{&folderError{Code: "eriphe_data"}, http.StatusForbidden},
-		{&folderError{Code: "holds_sensitive"}, http.StatusForbidden},
-		{&folderError{Code: "unreadable"}, http.StatusForbidden},
-		{&folderError{Code: "read_only_share"}, http.StatusForbidden},
 		{errors.New("disk full"), http.StatusInternalServerError},
 	} {
 		rec := httptest.NewRecorder()

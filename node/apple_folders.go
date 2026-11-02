@@ -40,18 +40,12 @@ func (n *node) appleFolderMounts(t *Task) ([]string, error) {
 			return nil, fmt.Errorf("folder %q: a name with a comma cannot be mounted on this Mac", tf.Name)
 		}
 		seen[strings.ToLower(tf.Name)] = true
-		f, e, err := n.appleResolve(ctx, tf.Share, tf.Path, "tree")
-		if err == nil {
-			err = n.holdsOwn(f.real)
-		}
-		if err == nil {
-			err = checkTree(e.tree)
-		}
+		f, err := n.lentFolder(t, tf) // checked by the explorer (shared.go)
 		if err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		if tf.Write && f.root.ReadOnly {
-			return nil, fmt.Errorf("folder %s: its root %s is read-only on this machine", tf.Name, tf.Share)
+			return nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
 		}
 		if budget, err = download(f.real, budget, n.opt.downloadLimit); err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)

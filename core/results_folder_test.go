@@ -46,7 +46,6 @@ func TestResultsFolderFollowsTheName(t *testing.T) {
 	keepName(t)
 	c, store := foldersCore(t)
 	ctx := context.Background()
-	c.addFolder(ctx, Folder{Name: "Clients", Node: "nas", Share: "data", Path: "Clients", Access: folderDrop})
 	folder := func() (nodeFolder, string) {
 		t.Helper()
 		task, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Clients"}})

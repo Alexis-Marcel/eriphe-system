@@ -161,6 +161,15 @@ func (c *core) refreshNode(ctx context.Context, n *nodeClient) {
 		info, err = n.info(ctx, c.nodeLevel(n.name)) // what it may tell of its user (context_sources.go)
 	}
 	if err == nil {
+		// The folders shared or unshared there, and those eriphe-core took
+		// off, told again (folders.go).
+		var after nodeInfo
+		before := c.store.lastInfo(n.name)
+		json.Unmarshal(info, &after)
+		c.noteShared(n.name, before, after)
+		c.unshareOn(ctx, n, after)
+	}
+	if err == nil {
 		info = c.takeIdle(n.name, info, time.Now()) // in memory only (route_signals.go)
 	} else {
 		c.known.forget(srcMachine+n.name, "") // a node gone says nothing more
