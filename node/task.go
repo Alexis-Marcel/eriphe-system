@@ -168,6 +168,10 @@ type Task struct {
 	checkRounds int
 	lastFailure string
 
+	// The environment of the toolchains its repository asked for,
+	// NAME=value (toolchain.go): its checks run with it too.
+	toolchainEnv []string
+
 	// With the container engine (apple.go): the task's own network, and the
 	// node's address on it, where the task reaches the node.
 	network, gateway string
@@ -260,17 +264,18 @@ func (t *Task) state() string {
 func finished(state string) bool { return state == stateStopped || state == stateFailed }
 
 type node struct {
-	opt      options
-	mu       sync.Mutex
-	tasks    map[string]*Task
-	services map[string]*service // local MCP servers, by name (service.go)
-	retired  map[string]*service // unassigned services whose container is stopping
-	kick     chan struct{}       // something to deliver or report
-	upd      *updates            // eriphe-core's update request, for the updater (update.go)
-	nets     taskNets            // the tasks' networks, with the container engine (apple.go)
-	agents   *agentStore         // the agents injected into tasks (inject.go)
-	prep     preparer            // what eriphe-core wants ready on this node
-	awake    *keepAwake          // the machine out of sleep while a task works (awake.go)
+	opt        options
+	mu         sync.Mutex
+	tasks      map[string]*Task
+	services   map[string]*service // local MCP servers, by name (service.go)
+	retired    map[string]*service // unassigned services whose container is stopping
+	kick       chan struct{}       // something to deliver or report
+	upd        *updates            // eriphe-core's update request, for the updater (update.go)
+	nets       taskNets            // the tasks' networks, with the container engine (apple.go)
+	agents     *agentStore         // the agents injected into tasks (inject.go)
+	toolchains *toolchainStore     // the toolchains tasks build with (toolchain.go)
+	prep       preparer            // what eriphe-core wants ready on this node
+	awake      *keepAwake          // the machine out of sleep while a task works (awake.go)
 	// skillFetch gets a task's skill from eriphe-core (skills.go).
 	skillFetch func(ctx context.Context, taskID, sha string) ([]byte, error)
 	// syncNet carries Syncthing's connections to its peers (syncpeer.go).
@@ -287,7 +292,7 @@ type node struct {
 
 func newNode(o options) *node {
 	return &node{opt: o, tasks: map[string]*Task{}, services: map[string]*service{}, retired: map[string]*service{}, kick: make(chan struct{}, 1),
-		upd: &updates{root: o.root}, awake: newKeepAwake(o.root), agents: newAgentStore(o.root, o.taskBin), prep: preparer{wake: make(chan struct{}, 1)}}
+		upd: &updates{root: o.root}, awake: newKeepAwake(o.root), agents: newAgentStore(o.root, o.taskBin), toolchains: newToolchainStore(o.root), prep: preparer{wake: make(chan struct{}, 1)}}
 }
 
 func (n *node) poke() {

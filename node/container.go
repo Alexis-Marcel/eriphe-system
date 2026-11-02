@@ -19,7 +19,8 @@ func containerName(t *Task) string { return "eriphe-task-" + t.ID }
 // own way), clones the repository if asked (once: /work is kept across
 // restarts; git is installed first if the image lacks it), makes what it
 // writes group-writable when it has folders (the user's group shares
-// them), then becomes the agent its runtime names. Nothing it prints
+// them), asks the node for the toolchains the repository names and puts
+// them first in PATH (toolchain.go), then becomes the agent its runtime names. Nothing it prints
 // before goes to stdout, the agent's channel.
 const entrypoint = `set -e
 case ":$PATH:" in *":` + injectDir + `/bin:"*) ;; *) export PATH="` + injectDir + `/bin:$PATH" ;; esac
@@ -43,7 +44,21 @@ elif [ -d repo ]; then
   cd repo
 fi
 if [ -n "$ERIPHE_DIR" ]; then cd "$ERIPHE_DIR"; fi
+if [ -n "$ERIPHE_TOOLCHAIN_URL" ] && command -v curl >/dev/null 2>&1; then
+  if tc=$(curl -fsS -X POST --oauth2-bearer "$ERIPHE_TASK_SECRET" "$ERIPHE_TOOLCHAIN_URL"); then
+    while IFS= read -r kv; do case "$kv" in [A-Za-z_]*=*) export "$kv" ;; esac; done <<EOF
+$tc
+EOF
+  else
+    echo "eriphe: the node could not prepare the repository's toolchains" >&2
+  fi
+fi
+` + toolchainPathScript + `
 exec "$@"`
+
+// toolchainPathScript puts the task's toolchains first in PATH, in its
+// entrypoint and in its checks alike (toolchain.go, turnend.go).
+const toolchainPathScript = `if [ -n "$ERIPHE_TOOLCHAIN_PATH" ]; then export PATH="$ERIPHE_TOOLCHAIN_PATH:$PATH"; fi`
 
 // gitCredentials makes git use GH_TOKEN for HTTPS, through the environment
 // only: nothing is written to disk.
@@ -205,6 +220,7 @@ func (n *node) startContainer(t *Task, first string) error {
 			err = werr
 		}
 		close(done)
+		n.toolchains.release(t.ID)
 		removeRunFiles(t)
 		n.agents.release(agentDir)
 		n.endTaskNetwork(t)
@@ -271,6 +287,9 @@ func (n *node) taskEnv(t *Task, agentEnv map[string]string) map[string]string {
 	for k, v := range n.credentialEnv(t) { // where eriphe-cred asks (credential.go)
 		env[k] = v
 	}
+	if n.toolchainsFor(t) {
+		env["ERIPHE_TOOLCHAIN_URL"] = n.callbackFor(t) + toolchainPath // toolchain.go
+	}
 	// The env reaches the container through the docker CLI's own (-e NAME),
 	// and the CLI honours the proxy variables too: it must reach its daemon
 	// directly, never through the relay, which refuses its private address.
@@ -326,6 +345,12 @@ func (n *node) taskMounts(t *Task) ([]string, error) {
 		return nil, err
 	}
 	args = append(args, work...)
+	// The node's toolchains, read-only (toolchain.go).
+	tc, err := n.toolchainMounts(t)
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, tc...)
 	// The folders of this machine lent to it, checked again now.
 	if len(t.Spec.Folders) > 0 {
 		mounts, err := n.folderMounts(t)

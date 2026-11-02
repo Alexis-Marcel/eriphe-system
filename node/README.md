@@ -317,7 +317,9 @@ compares it with the agent's receipt.
 Then the **checks** of the task's contract (`checks` of the spec), in the container too: first the
 paths that must exist (`exists`, `test -e`), then the commands (`run`, in `dir` relative to the
 agent's working directory, under `timeout` seconds, 300 by default, with the image's `timeout`
-when it has one, the node giving up 30 seconds later), in their order; the first that fails stops
+when it has one, the node giving up 30 seconds later), with the environment the agent has: the
+container's, plus the toolchains its repository asked for, first in `PATH`, and their caches (see
+Toolchains), in their order; the first that fails stops
 the others. Each is a `check` event: `{name, ok, exit_code, duration_ms, run | exists, output}`,
 with the last 4 KB of its output. A failed check goes back to the agent as its next turn (the end of
 its output, "fix the cause, then end your turn with your receipt"), without eriphe-core: a `retry`
@@ -329,7 +331,8 @@ asked again) is not followed by checks.
 
 The only ports the node listens on are for its task containers, each with its own secret: the task
 listener (`-listen`, 8790), where a Claude Code task calls its permission endpoint `/perm/{id}/mcp`,
-its catalog servers at `/mcp/{server}` and a model behind a node at `/model/v1/{path}`, and the egress relay (`-egress-listen`, 8791, see
+its catalog servers at `/mcp/{server}`, a model behind a node at `/model/v1/{path}`, its
+credentials at `/v1/task/credential` and its toolchains at `/v1/task/toolchains`, and the egress relay (`-egress-listen`, 8791, see
 Egress). It binds only the node's address on the task network: its interface there when
 the node is a container on it (the NAS), the network's gateway when the node runs on the Docker
 host (WSL), or else the loopback (Docker Desktop). `-listen 10.0.0.2:8790` forces an address,
@@ -691,7 +694,8 @@ Every task container is started with:
 - `--memory` from `-task-memory` (default `8g`, empty for none) and `--cpus` from `-task-cpus`
   (default empty: all the machine's CPUs).
 - no host mount but the task's `work` and `agent` folders (or its profile), refused unless they
-  are under `-root`, the agent (read-only, see Agents), and the user's folders lent to it
+  are under `-root`, the agent (read-only, see Agents), the node's toolchains for a task with a
+  repository (read-only, see Toolchains), and the user's folders lent to it
   (`folders`, see Shares): read-only, but their `Eriphe/`; checked again at each start; never the
   Docker socket.
 
@@ -766,6 +770,69 @@ system's), and holds the agent's binary and the node's own programs for tasks, s
 - a program there runs as the task's root, with the task's environment and network: it is reached
   by name (`eriphe-cred`), and talks to the node through the listener (`ERIPHE_*` variables the
   node sets for it), never through a file of the host.
+
+## Toolchains
+
+A task with a repository finds the toolchain its repository names ready, and its checks run with the
+same one (`toolchain.go`, `toolchain_kinds.go`). Once the entrypoint has cloned the repository, it
+asks the node (`POST /v1/task/toolchains` on the task listener, the task's secret as a bearer
+token, with the image's `curl`); the node reads the repository's files itself, under the task's
+`work/repo` only (no link out of it, regular files of 1 MB at most), from the agent's working
+directory up to the repository's root, the nearest file of each kind winning:
+
+| Kind | Files, in order | Version |
+|---|---|---|
+| Go | `go.mod` | its `toolchain goX` line, or its `go X` line when newer or alone; `1.25.7` exactly, `1.25` the newest stable 1.25.x |
+| Node.js | `.nvmrc`, `.node-version`, then `package.json`'s `engines.node` | an exact version, `lts/*`, `lts/<name>`, `node`, or an npm range (`>=20`, `^20.11`, `20.x \|\| 22.x`, `18 - 20`): its newest LTS release, else its newest |
+
+For each, the node downloads the official release for `linux/<its arch>` (`amd64`, `arm64`)
+**itself**, through its own network, never the task's: `go.dev/dl` (its JSON index gives each
+archive's SHA-256) and `nodejs.org/dist` (`index.json`, then the release's `SHASUMS256.txt`). The
+archive is checked against that SHA-256 before anything of it is unpacked; a mismatch fails it and
+nothing is kept. It is unpacked under `<root>/toolchains/.partial-*` (directories, regular files and
+links that stay in the tree; no setuid bit, nothing out of it; 512 MB of archive and 2 GB unpacked
+at most) and renamed `<root>/toolchains/<name>`, e.g. `go1.25.7-linux-arm64` or
+`node-v22.11.0-linux-x64`. Each download is logged (`toolchain … ready (… downloaded from … in …,
+sha256 … checked)`), and so is what each task gets.
+
+`<root>/toolchains` is mounted read-only at `/opt/eriphe-toolchains` in every task with a
+repository (a toolchain made ready after the container started appears in it). The node's answer is
+the environment to add, one `NAME=value` per line, which the entrypoint exports (as data: nothing of
+it runs):
+
+- `ERIPHE_TOOLCHAIN_PATH`, the toolchains' `bin` directories, which the entrypoint puts first in
+  `PATH` (e.g. `/opt/eriphe-toolchains/go1.25.7-linux-arm64/bin`), before the image's own Node.js;
+- with the node's cache (`-cache-volume`), `GOMODCACHE=/cache/go/mod` and `GOCACHE=/cache/go/build`
+  for Go, `npm_config_cache=/cache/npm` for Node.js (what `eriphe-base` sets already, for any other
+  image): modules and builds are downloaded and compiled once per machine.
+
+The node keeps that environment for the task, and its **checks** get it: `docker exec -e …` (or
+`container exec -e …`) with the same variables and the same `PATH` put first, in the same working
+directory, so `go build ./...` finds the `go` the agent used and its module cache. A toolchain that
+could not be had (no release, offline, checksum) is left out and named in the answer's
+`X-Eriphe-Toolchain-Error` header; the task starts anyway, and the agent can install one itself.
+`GOTOOLCHAIN` is left as Go's default: a `go.mod` raised later in the task makes `go` fetch the newer
+toolchain into the module cache.
+
+The release indexes are kept an hour in memory; a toolchain already there whose version is exact
+(`go 1.25.7`, `.nvmrc` `22.11.0`) is taken without asking the network. A toolchain that no task used
+for 30 days, and none runs with, is removed (each use refreshes its directory's time). To clear them
+all, stop the tasks and remove `<root>/toolchains` (`-root`, e.g. `~/.eriphe/node/toolchains`
+for an install by install.sh); the next task downloads what it needs again. A Go toolchain takes about 55 MB to
+download and 230 MB on disk, Node.js about 60 MB and 190 MB.
+
+Another language is one more `toolchainKind` (`toolchain_kinds.go`): the files that name its
+version, where its releases and their checksums are, and what a task gets of it. Python
+(`.python-version`, which `uv` in `eriphe-base` already serves) and Rust (`rust-toolchain.toml`) are
+not detected yet, nor a repository in a folder lent to the task (the node does not read the user's
+folders).
+
+**Why on the node, not in `eriphe-base`.** Baking Go in the base image would add about 70 MB
+compressed per architecture to every machine, Go repositories or not, and still give one version
+only: a repository asking for another would download it in the task, as before. The node's cache
+gives each repository the version it names, for each architecture natively, once per machine and
+only on the machines whose tasks need it; it is checked against the publisher's checksums by the
+node, not by the task, and it keeps the base image at its size.
 
 ## The container engine (a Mac)
 ## The container engine (a Mac)
