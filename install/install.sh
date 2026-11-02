@@ -1017,9 +1017,11 @@ log() {
   printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$STATE/update.log"
   printf 'eriphe-update: %s\n' "$*" >&2
 }
+LOCKED=
 if command -v flock >/dev/null 2>&1; then
   exec 9>"$STATE/lock"
   flock -n 9 || { log "another update runs"; exit 0; }
+  LOCKED=1
 fi
 
 # status TARGET ID ACTION OUTCOME MESSAGE FROM TO: how a request went, for
@@ -1033,6 +1035,19 @@ status() {
   mv "$f.new" "$f"
   [ "$4" = running ] || log "$1 $3 $2: $4${5:+ ($5)}"
 }
+
+# interrupted: a request still "running" is one whose updater stopped
+# before its end (killed, the machine restarted): this one holds the lock,
+# no other runs. Its outcome says so, rather than "running" for ever.
+interrupted() {
+  for t in core node; do
+    f=$DATA/$t/update-status
+    [ "$(sed -n 's/^outcome=//p' "$f" 2>/dev/null)" = running ] || continue
+    status "$t" "$(sed -n 's/^id=//p' "$f")" "$(sed -n 's/^action=//p' "$f")" interrupted \
+      "the updater stopped before its end" "$(sed -n 's/^from=//p' "$f")" "$(sed -n 's/^to=//p' "$f")"
+  done
+}
+[ -z "$LOCKED" ] || interrupted
 
 # The images of a target, as "service ref" lines (service - when no
 # container runs it: the worker image, which the node starts tasks from).
@@ -1194,7 +1209,15 @@ update() {
   after=$(current "$target" | while read -r svc ref _; do echo "$svc $ref $(image_id "$ref")"; done)
   new=$(main_id "$after" "$main")
   to=$(version "$new")
-  if [ "$after" = "$before" ]; then
+  # The same published build already runs in each container (another image
+  # of it: a release built again, or a tag moved): nothing to recreate.
+  same=1
+  for svc in $(printf '%s\n' "$after" | awk '$1 != "-" { print $1 }'); do
+    a=$(version "$(main_id "$after" "$svc")") b=$(version "$(main_id "$before" "$svc")")
+    { [ "$a" = "$b" ] && tag_of "$a" >/dev/null; } || same=
+  done
+  if [ "$after" = "$before" ] || [ -n "$same" ]; then
+    [ "$after" = "$before" ] || put "$before"
     if pinned; then
       status "$target" "$id" update pinned "pinned to $PIN" "$from" "$to"
     else
@@ -1381,6 +1404,17 @@ fi
 for p in $SHARE_PATHS; do
   [ -d "$p" ] || die "--share: $p is not a folder of this machine"
 done
+# An update under way ends first, and none starts until this is done: the
+# updater's lock (update.sh), held to the end of this script.
+mkdir -p "$DATA/update"
+chmod 700 "$DATA/update"
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$DATA/update/lock"
+  if ! flock -n 9; then
+    echo "Waiting for the update under way to end..."
+    flock -w 900 9 || die "an update of Eriphe is under way on this machine: run the command again in a few minutes"
+  fi
+fi
 put() { printf '%s' "$2" | base64 -d > "$1.new" && mv "$1.new" "$1"; }
 put "$CONF/compose.yaml" "$COMPOSE"
 put "$CONF/.env" "$ENVF"
@@ -1985,10 +2019,40 @@ native_relay() {
 	if ! { sudo install -d -m 755 -o root -g wheel /usr/local/libexec &&
 		sudo install -m 755 -o root -g wheel "$ERIPHE_HOME/bin/eriphe-node" "$RELAY_BIN" &&
 		sudo install -m 644 -o root -g wheel "$tmp" "$RELAY_PLIST"; }; then
+		# The relay of before, if it is still there, rather than none.
+		[ ! -f "$RELAY_PLIST" ] || sudo -n launchctl bootstrap system "$RELAY_PLIST" >/dev/null 2>&1 || true
 		die "could not install the relay"
 	fi
 	rm -f "$tmp"
 	sudo launchctl bootstrap system "$RELAY_PLIST" || die "could not start $RELAY_LABEL"
+}
+
+# root_ready: root is here, or sudo has it, or can ask for it on a terminal
+# (not from the updater, nor from a script run without one).
+root_ready() {
+	[ "$(id -u)" = 0 ] || sudo -n true 2>/dev/null || (: </dev/tty) 2>/dev/null
+}
+
+# relay_plan NEWBIN: what the relay needs, decided before anything stops
+# (RELAY): "install" when it is missing, not loaded or its settings changed,
+# which needs root, asked for now (without it the installation stops here,
+# the node untouched); "binary" when only its binary differs from NEWBIN,
+# done only if root can be had: an older relay still connects the node, and
+# running this again on a terminal updates it; nothing when it is as it
+# should be.
+relay_plan() {
+	RELAY=
+	if ! relay_loaded; then
+		need_root "$RELAY_WHY"
+		RELAY=install
+	elif ! cmp -s "$RELAY_BIN" "$1"; then
+		if root_ready; then
+			RELAY=binary
+		else
+			warn "the relay keeps its older binary: no password can be asked here"
+			echo relay_kept=1 # said after the outcome (native_up runs apart)
+		fi
+	fi
 }
 
 native_relay_uninstall() {
@@ -2362,15 +2426,28 @@ log() {
   printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$STATE/update.log"
   printf 'eriphe-update: %s\n' "$*" >&2
 }
-mkdir "$STATE/lock" 2>/dev/null || {
-  # A lock older than an hour is from an updater that died.
-  if [ -n "$(find "$STATE/lock" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
-    rmdir "$STATE/lock"; mkdir "$STATE/lock" || exit 0
-  else
-    log "another update runs"; exit 0
+# lock: the lock of the updates, which install.sh takes too, with the pid
+# of its holder. One whose holder is gone (killed, the Mac restarted), or
+# without a pid and older than an hour, is from an updater that died.
+lock() {
+  if ! mkdir "$STATE/lock" 2>/dev/null; then
+    pid=$(cat "$STATE/lock/pid" 2>/dev/null)
+    if [ -n "$pid" ]; then
+      ! kill -0 "$pid" 2>/dev/null || return 1
+    elif [ -z "$(find "$STATE/lock" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
+      return 1
+    fi
+    rm -rf "$STATE/lock"
+    mkdir "$STATE/lock" 2>/dev/null || return 1
   fi
+  echo $$ >"$STATE/lock/pid"
 }
-trap 'rmdir "$STATE/lock" 2>/dev/null' EXIT
+# install.sh holds the lock while it runs "install".
+if [ "${1:-}" != install ]; then
+  lock || { log "another update runs"; exit 0; }
+  trap 'rm -rf "$STATE/lock"' EXIT
+  trap 'exit 143' TERM INT HUP
+fi
 
 # status TARGET ID ACTION OUTCOME MESSAGE FROM TO: as the Linux updater's.
 status() {
@@ -2381,6 +2458,19 @@ status() {
   mv "$f.new" "$f"
   [ "$4" = running ] || log "$1 $3 $2: $4${5:+ ($5)}"
 }
+
+# interrupted: as the Linux updater's, a request still "running" (this one
+# holds the lock), and what the stopped one left half fetched.
+interrupted() {
+  for t in core node; do
+    f=$E/$t/update-status
+    [ "$(sed -n 's/^outcome=//p' "$f" 2>/dev/null)" = running ] || continue
+    status "$t" "$(sed -n 's/^id=//p' "$f")" "$(sed -n 's/^action=//p' "$f")" interrupted \
+      "the updater stopped before its end" "$(sed -n 's/^from=//p' "$f")" "$(sed -n 's/^to=//p' "$f")"
+  done
+  rm -rf "$STATE"/fetch.*
+}
+[ "${1:-}" = install ] || interrupted
 
 # The programs of a target, as "name image" lines, eriphe-core first.
 items() {
@@ -2458,8 +2548,12 @@ worker() {
   [ "$src" = "$WORKER_IMAGE" ] || "$CONTAINER" image tag "$src" "$WORKER_IMAGE" >/dev/null 2>&1 || true
 }
 
-# restart NAME: its LaunchAgent again, from the binary now in place.
-restart() { launchctl kickstart -k "gui/$(id -u)/org.eriphe.$1" >/dev/null 2>&1; }
+# restart NAME: its LaunchAgent again, from the binary now in place; loaded
+# again if it is not (a reinstall stopped halfway).
+restart() {
+  launchctl kickstart -k "gui/$(id -u)/org.eriphe.$1" >/dev/null 2>&1 ||
+    launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/org.eriphe.$1.plist" >/dev/null 2>&1
+}
 
 # healthy NAME SINCE: eriphe-core answers, or eriphe-node is connected again
 # (in its log after byte SINCE), within HEALTH seconds.
@@ -2609,11 +2703,12 @@ target=node
 [ "$MODE" = core ] && target=core
 case ${1:-} in
   install)
-    # install.sh: the images' binaries in place, the agents stopped.
+    # install.sh: the images' binaries, into DIR (or in place).
+    mkdir -p "${2:-$E/bin}"
     for line in $(items "$target" | tr ' ' '='); do
       n=${line%%=*} ref=${line#*=}
       echo "Taking eriphe-$n from $ref..." >&2
-      fetch "$n" "$ref" "$E/bin" || { echo "eriphe: $why" >&2; exit 1; }
+      fetch "$n" "$ref" "${2:-$E/bin}" || { echo "eriphe: $why" >&2; exit 1; }
     done
     echo "Pulling $WORKER_IMAGE..." >&2
     worker ""
@@ -2640,14 +2735,107 @@ done
 EOF
 }
 
+# native_lock takes the updater's lock (update.sh's, with this pid), so that
+# no update runs while the binaries change, and the updater, its script
+# rewritten, is not stopped halfway; it waits for one under way to end, up
+# to 15 minutes. A lock whose holder is gone is from one that died.
+native_lock() {
+	l=$E/update/lock i=0
+	until mkdir "$l" 2>/dev/null; do
+		pid=$(cat "$l/pid" 2>/dev/null || true)
+		if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+			rm -rf "$l"
+			continue
+		fi
+		if [ -z "$pid" ] && [ -n "$(find "$l" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
+			rm -rf "$l"
+			continue
+		fi
+		[ $i -gt 0 ] || note "Waiting for the update under way to end..."
+		i=$((i + 1))
+		[ $i -le 450 ] || die "an update of Eriphe is under way on this Mac: run the command again in a few minutes"
+		sleep 2
+	done
+	echo $$ >"$l/pid"
+}
+
+native_unlock() { rm -rf "$E/update/lock"; }
+
+# The files an update rewrites, kept to put back (native_restore).
+NATIVE_FILES="node.env install.conf update.conf update.sh start-node.sh"
+
+# native_backup keeps what runs now: binaries, settings, LaunchAgents.
+native_backup() {
+	rm -rf "$BACKUP"
+	mkdir -p "$BACKUP"
+	for f in $NATIVE_FILES; do
+		[ ! -f "$E/$f" ] || cp -p "$E/$f" "$BACKUP/"
+	done
+	cp -Rp "$E/bin" "$BACKUP/bin"
+	for l in "$CORE_LABEL" "$NODE_LABEL" "$UPDATE_LABEL"; do
+		[ ! -f "$HOME/Library/LaunchAgents/$l.plist" ] || cp -p "$HOME/Library/LaunchAgents/$l.plist" "$BACKUP/"
+	done
+}
+
+# native_restore, when native_up stops on an error: what ran before back in
+# place, and its LaunchAgents running again (stopped by native_up, or not
+# loaded at all), so an update never leaves this Mac without its node.
+# Then the lock goes.
+native_restore() {
+	[ $? != 0 ] || return 0
+	if [ -n "$BACKUP" ] && [ -d "$BACKUP" ]; then
+		note "Putting back the version of Eriphe that ran before..."
+		for f in $NATIVE_FILES; do
+			[ ! -f "$BACKUP/$f" ] || cp -p "$BACKUP/$f" "$E/$f"
+		done
+		rm -rf "$E/bin.back"
+		cp -Rp "$BACKUP/bin" "$E/bin.back" && rm -rf "${E:?}/bin" && mv "$E/bin.back" "$E/bin"
+		native_unlock
+		for l in "$CORE_LABEL" "$NODE_LABEL" "$UPDATE_LABEL"; do
+			[ -f "$BACKUP/$l.plist" ] || continue
+			f=$HOME/Library/LaunchAgents/$l.plist
+			cp -p "$BACKUP/$l.plist" "$f"
+			if { [ -n "$STOPPED" ] && [ "$l" != "$UPDATE_LABEL" ]; } || ! launchctl print "gui/$(id -u)/$l" >/dev/null 2>&1; then
+				launchctl bootout "gui/$(id -u)/$l" >/dev/null 2>&1 || true
+				launchctl bootstrap "gui/$(id -u)" "$f" || warn "could not start $l again"
+			fi
+		done
+		rm -rf "$BACKUP"
+		para "The version of Eriphe that ran before is back on this Mac."
+	fi
+	native_unlock
+}
+
+# native_place NEW: the binaries of NEW (update.sh install NEW) in place.
+native_place() {
+	for f in "$1"/eriphe-*; do
+		[ ! -e "$f" ] || mv -f "$f" "$E/bin/"
+	done
+	if [ -d "$1/task-bin" ]; then
+		rm -rf "$E/bin/task-bin"
+		mv "$1/task-bin" "$E/bin/task-bin"
+	fi
+	rm -rf "$1"
+}
+
 # native_up installs or updates everything: the binaries (from the images,
 # by the updater's own install), the LaunchAgents, the join; in core mode it
-# prints the setup code as host_up does.
+# prints the setup code as host_up does. An update never leaves the node
+# stopped: the new binaries are taken while the old ones run, root is asked
+# for (or done without) before anything stops, and on any error what ran
+# before comes back (native_restore).
 native_up() {
 	E=$ERIPHE_HOME
 	umask 077
 	mkdir -p "$E/bin" "$E/node" "$E/update"
 	[ "$MODE" != core ] || mkdir -p "$E/core"
+	native_lock
+	BACKUP='' STOPPED=''
+	if [ -s "$E/bin/eriphe-node" ]; then
+		BACKUP=$E/update/install-backup
+		native_backup
+	fi
+	trap native_restore EXIT
 	touch "$E/native"
 	native_env >"$E/node.env"
 	native_conf >"$E/install.conf"
@@ -2657,12 +2845,19 @@ native_up() {
 	mac_share_sh >"$E/bin/eriphe-share"
 	chmod 700 "$E/update.sh" "$E/start-node.sh" "$E/bin/eriphe-share"
 	mac_quick_actions
-	# Stopped while their binaries change.
-	launchctl bootout "gui/$(id -u)/$NODE_LABEL" >/dev/null 2>&1 || true
-	[ "$MODE" != core ] || launchctl bootout "gui/$(id -u)/$CORE_LABEL" >/dev/null 2>&1 || true
-	sh "$E/update.sh" install >&2 ||
+	# The new binaries, while the ones in place still run.
+	new=$E/update/install-new
+	rm -rf "$new"
+	sh "$E/update.sh" install "$new" >&2 ||
 		die "could not download Eriphe: check this Mac's Internet connection, then run the command again"
 	step Downloaded
+	RELAY=
+	[ "$MODE" = core ] || relay_plan "$new/eriphe-node"
+	# Stopped while their binaries change.
+	STOPPED=1
+	launchctl bootout "gui/$(id -u)/$NODE_LABEL" >/dev/null 2>&1 || true
+	[ "$MODE" != core ] || launchctl bootout "gui/$(id -u)/$CORE_LABEL" >/dev/null 2>&1 || true
+	native_place "$new"
 
 	if [ "$MODE" = core ]; then
 		if [ -n "$CORE_TZ" ]; then
@@ -2686,7 +2881,7 @@ native_up() {
 			done
 		fi
 	fi
-	[ "$MODE" = core ] || native_relay
+	[ -z "$RELAY" ] || native_relay
 	if [ ! -f "$E/node/node.json" ]; then
 		(
 			umask 077
@@ -2710,7 +2905,10 @@ native_up() {
 		sleep 2
 	done
 	if [ "$MODE" = core ]; then step Started; else step Connected; fi
-	# Joined: the node has its own secret, the token is used.
+	# Joined: the node has its own secret, the token is used. It runs: what
+	# ran before is no longer needed.
+	trap - EXIT
+	rm -rf "$BACKUP"
 	rm -f "$E/join-token"
 	tail -c +"$((since + 1))" "$E/node.log" | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-node: /' >&2
 	# pin: the release it stays on; channel: edge when it follows main.
@@ -2721,6 +2919,10 @@ native_up() {
 		[ "$d" = node ] || [ "$MODE" = core ] || continue
 		printf 'version=1\npin=%s\nchannel=%s\n' "$pin" "$channel" >"$E/$d/updater"
 	done
+	# The updater, stopped before the lock goes: none runs halfway through
+	# its new start, which takes the requests waiting.
+	launchctl bootout "gui/$(id -u)/$UPDATE_LABEL" >/dev/null 2>&1 || true
+	native_unlock
 	load "$UPDATE_LABEL" "$(plist "$UPDATE_LABEL" update "$E/update.log" /bin/sh "$E/update.sh")"
 	echo updater=1
 	if [ "$MODE" = core ]; then
@@ -2951,6 +3153,9 @@ do_install() {
 		[ -z "$why" ] || need_root "$why"
 		native_container
 		out=$(native_up)
+		if printf '%s\n' "$out" | grep -qx relay_kept=1; then
+			notice "the node's relay ($RELAY_LABEL) keeps its older version, as no password could be asked: run the install command again in Terminal to update it."
+		fi
 	else
 		if [ "$OS" = Darwin ]; then
 			mac_lima
