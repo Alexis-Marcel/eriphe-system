@@ -24,31 +24,64 @@ import (
 // nor a task can reach. eriphe-core sees each folder's name, access and an
 // opaque id, never its path; it lends a task a folder by that id, and the
 // node mounts only what is in the list. eriphe-core may take a folder off
-// the list (restricting is always allowed), never add one. The roots of the
-// installation (-share) only bound where a folder may be shared from.
+// the list or lower its level (restricting is always allowed), never add
+// one nor raise it: the level chosen here is the most it ever gets. The
+// roots of the installation (-share) only bound where a folder may be
+// shared from.
 //
 // The command and the running node meet in that file: the command changes
 // it under a lock, the node reads it at every use and looks at it every
 // few seconds, to stop the tasks that hold a folder no longer shared.
 // shares.log next to it records, line by line, every folder shared or
-// unshared, every mount and every refusal.
+// unshared, every level lowered, every mount, snapshot (snapshot.go) and
+// refusal.
 
 const (
 	sharesFile = "shares.json"
 	sharesLock = "shares.lock"
 	sharesLog  = "shares.log"
 
-	accessRead = "read" // read only
-	accessDrop = "drop" // read, and drop results in its results subfolder
+	accessRead   = "read"   // read only
+	accessDrop   = "drop"   // read, and drop results in its results subfolder ("À côté")
+	accessManage = "manage" // read, create, change, rename and delete anywhere in it ("Gérer")
 )
+
+// accessRank orders the levels: a folder is lent at most at its own.
+var accessRank = map[string]int{accessRead: 1, accessDrop: 2, accessManage: 3}
 
 // sharedFolder is one folder shared on this machine.
 type sharedFolder struct {
-	ID     string    `json:"id"`     // random: what eriphe-core names it by
-	Name   string    `json:"name"`   // the name Eriphe knows it by
-	Path   string    `json:"path"`   // absolute, resolved, as this node sees it
-	Access string    `json:"access"` // read or drop
-	Added  time.Time `json:"added"`
+	ID     string `json:"id"`     // random: what eriphe-core names it by
+	Name   string `json:"name"`   // the name Eriphe knows it by
+	Path   string `json:"path"`   // absolute, resolved, as this node sees it
+	Access string `json:"access"` // its level now: read, drop or manage
+	// Max is the level chosen on this machine; eriphe-core may have lowered
+	// Access since, never raised it. Empty before levels: Access.
+	Max string `json:"max,omitempty"`
+	// Copyable: the user allowed copies of it on their other machines (for
+	// the synchronisation to come). Chosen here, off by default;
+	// eriphe-core may turn it off, never on.
+	Copyable bool      `json:"copyable,omitempty"`
+	Added    time.Time `json:"added"`
+}
+
+// ceiling is the level chosen on this machine.
+func (f sharedFolder) ceiling() string {
+	if accessRank[f.Max] > 0 {
+		return f.Max
+	}
+	return f.Access
+}
+
+// level is the level a task asks for a folder: manage, drop or read.
+func (tf TaskFolder) level() string {
+	switch {
+	case tf.Manage:
+		return accessManage
+	case tf.Write:
+		return accessDrop
+	}
+	return accessRead
 }
 
 // loadShared reads the list; none before the first share.
@@ -216,7 +249,7 @@ func (o options) rootList() string {
 
 // lentFolder is the folder a task is lent, checked again: in the list,
 // under the path it was shared with (a symlink put there since is refused),
-// and with the right to drop results only if shared so.
+// and at most at the level it is shared with now.
 func (n *node) lentFolder(t *Task, tf TaskFolder) (*resolvedFolder, error) {
 	list, err := loadShared(n.opt.root)
 	if err != nil {
@@ -228,9 +261,12 @@ func (n *node) lentFolder(t *Task, tf TaskFolder) (*resolvedFolder, error) {
 		return nil, shareErr(http.StatusForbidden, "not_shared", "this folder is not shared on this machine")
 	}
 	sf := list[i]
-	if tf.Write && sf.Access != accessDrop {
-		auditShare(n.opt.root, map[string]any{"event": "refused", "id": sf.ID, "name": sf.Name, "task": t.ID, "reason": "read only"})
-		return nil, shareErr(http.StatusForbidden, "read_only", "this folder is shared read-only on this machine")
+	if accessRank[tf.level()] > accessRank[sf.Access] {
+		auditShare(n.opt.root, map[string]any{"event": "refused", "id": sf.ID, "name": sf.Name, "task": t.ID, "reason": "level " + sf.Access})
+		if sf.Access == accessRead {
+			return nil, shareErr(http.StatusForbidden, "read_only", "this folder is shared read-only on this machine")
+		}
+		return nil, shareErr(http.StatusForbidden, "level", "this folder is shared for %s only on this machine, not %s", sf.Access, tf.level())
 	}
 	f, err := n.checkShared(sf.Path)
 	if err == nil && filepath.Clean(f.src) != filepath.Clean(sf.Path) {
@@ -240,7 +276,8 @@ func (n *node) lentFolder(t *Task, tf TaskFolder) (*resolvedFolder, error) {
 		auditShare(n.opt.root, map[string]any{"event": "refused", "id": sf.ID, "name": sf.Name, "task": t.ID, "reason": err.Error()})
 		return nil, err
 	}
-	auditShare(n.opt.root, map[string]any{"event": "mount", "id": sf.ID, "name": sf.Name, "path": sf.Path, "task": t.ID, "write": tf.Write})
+	auditShare(n.opt.root, map[string]any{"event": "mount", "id": sf.ID, "name": sf.Name, "path": sf.Path, "task": t.ID, "access": tf.level()})
+	f.shared = sf
 	return f, nil
 }
 
@@ -255,10 +292,12 @@ func indexShared(list []sharedFolder, id string) int {
 
 // sharedInfo is a shared folder as eriphe-core sees it: never its path.
 type sharedInfo struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Access  string `json:"access"`
-	Missing bool   `json:"missing,omitempty"` // not there now (an unplugged disk), or out of the roots
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Access   string `json:"access"`             // its level now
+	Max      string `json:"max,omitempty"`      // the level chosen on this machine
+	Copyable bool   `json:"copyable,omitempty"` // may be copied to the user's other machines
+	Missing  bool   `json:"missing,omitempty"`  // not there now (an unplugged disk), or out of the roots
 }
 
 // sharedList is the list for eriphe-core.
@@ -275,14 +314,15 @@ func (n *node) sharedList() []sharedInfo {
 			fi, err := os.Stat(f.Path)
 			missing = err != nil || !fi.IsDir()
 		}
-		out = append(out, sharedInfo{ID: f.ID, Name: f.Name, Access: f.Access, Missing: missing})
+		out = append(out, sharedInfo{ID: f.ID, Name: f.Name, Access: f.Access, Max: f.ceiling(), Copyable: f.Copyable, Missing: missing})
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out
 }
 
-// The node's API for shared folders, through the tunnel: the list, and
-// taking one off it. Nothing adds one, nor looks into a folder.
+// The node's API for shared folders, through the tunnel: the list, taking
+// one off it, and lowering one's level or turning off its copies. Nothing
+// adds one, raises one, nor looks into a folder.
 func (n *node) shareRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/shares", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"folders": n.sharedList()})
@@ -299,6 +339,69 @@ func (n *node) shareRoutes(mux *http.ServeMux) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+	mux.HandleFunc("PATCH /v1/shares/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Access   string `json:"access"`
+			Copyable *bool  `json:"copyable"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
+			writeShareError(w, shareErr(http.StatusBadRequest, "invalid", "want {\"access\": …, \"copyable\": false}"))
+			return
+		}
+		f, err := n.lowerShared(r.PathValue("id"), body.Access, body.Copyable, "eriphe-core")
+		if err != nil {
+			writeShareError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, sharedInfo{ID: f.ID, Name: f.Name, Access: f.Access, Max: f.ceiling(), Copyable: f.Copyable})
+	})
+}
+
+// lowerShared lowers a folder's level, or turns off its copies: what
+// eriphe-core may change. Raising either is refused: only this machine
+// can (eriphe-node share add again). The tasks that hold it above its new
+// level are stopped.
+func (n *node) lowerShared(id, access string, copyable *bool, by string) (*sharedFolder, error) {
+	if access != "" && accessRank[access] == 0 {
+		return nil, shareErr(http.StatusBadRequest, "invalid", "access %q: read, drop or manage", access)
+	}
+	var out sharedFolder
+	var from string
+	err := changeShared(n.opt.root, func(list []sharedFolder) ([]sharedFolder, error) {
+		i := indexShared(list, id)
+		if id == "" || i < 0 {
+			return nil, shareErr(http.StatusNotFound, "not_found", "no such shared folder")
+		}
+		f := &list[i]
+		from = f.Access
+		if access != "" && accessRank[access] > accessRank[f.Access] {
+			return nil, shareErr(http.StatusForbidden, "raise", "only this machine can raise a folder's level: share it again there")
+		}
+		if copyable != nil && *copyable && !f.Copyable {
+			return nil, shareErr(http.StatusForbidden, "raise", "only this machine can allow copies of a folder: share it again there")
+		}
+		if f.Max == "" {
+			f.Max = f.Access
+		}
+		if access != "" {
+			f.Access = access
+		}
+		if copyable != nil && !*copyable {
+			f.Copyable = false
+		}
+		out = *f
+		return list, nil
+	})
+	if err != nil {
+		var se *shareError
+		if errors.As(err, &se) && se.Code == "raise" {
+			auditShare(n.opt.root, map[string]any{"event": "refused", "id": id, "reason": "raise", "by": by})
+		}
+		return nil, err
+	}
+	auditShare(n.opt.root, map[string]any{"event": "lower", "id": out.ID, "name": out.Name, "from": from, "access": out.Access, "copyable": out.Copyable, "by": by})
+	n.revokeAbove(map[string]string{out.ID: out.Access})
+	return &out, nil
 }
 
 // unshare takes the folders that match off the list, says so in the log,
@@ -331,14 +434,36 @@ func (n *node) unshare(match func(sharedFolder) bool, by string) ([]sharedFolder
 // revoke stops the tasks that hold a folder no longer shared: they keep no
 // mount of it.
 func (n *node) revoke(ids map[string]bool) {
-	if len(ids) == 0 || n.tasks == nil {
+	if len(ids) == 0 {
+		return
+	}
+	n.stopHolding(func(tf TaskFolder) bool { return ids[tf.ID] }, "a folder it holds is no longer shared",
+		"a folder lent to this task is no longer shared on its machine: the task is stopped")
+}
+
+// revokeAbove stops the tasks that hold a folder above its level now (by
+// id): their mount gives more than it.
+func (n *node) revokeAbove(levels map[string]string) {
+	if len(levels) == 0 {
+		return
+	}
+	n.stopHolding(func(tf TaskFolder) bool {
+		l, ok := levels[tf.ID]
+		return ok && accessRank[tf.level()] > accessRank[l]
+	}, "a folder it holds was lowered",
+		"the level of a folder lent to this task was lowered on its machine: the task is stopped")
+}
+
+// stopHolding stops the running tasks with a folder that matches.
+func (n *node) stopHolding(match func(TaskFolder) bool, reason, message string) {
+	if n.tasks == nil {
 		return
 	}
 	n.mu.Lock()
 	var hold []*Task
 	for _, t := range n.tasks {
 		for _, tf := range t.Spec.Folders {
-			if ids[tf.ID] {
+			if match(tf) {
 				hold = append(hold, t)
 				break
 			}
@@ -349,39 +474,52 @@ func (n *node) revoke(ids map[string]bool) {
 		if finished(t.state()) {
 			continue
 		}
-		auditShare(n.opt.root, map[string]any{"event": "stop", "task": t.ID, "reason": "a folder it holds is no longer shared"})
-		t.emit("folder_revoked", map[string]any{"message": "a folder lent to this task is no longer shared on its machine: the task is stopped"})
+		auditShare(n.opt.root, map[string]any{"event": "stop", "task": t.ID, "reason": reason})
+		t.emit("folder_revoked", map[string]any{"message": message})
 		go n.stopContainer(t)
 	}
 }
 
 // watchShared looks at the list every few seconds: what the command took
-// off it is revoked.
+// off it is revoked, what it lowered stops the tasks holding it above.
 func (n *node) watchShared(every time.Duration) {
-	ids := func() map[string]bool {
-		list, err := loadShared(n.opt.root)
-		if err != nil {
-			return nil // unreadable now: nothing to compare
-		}
-		out := map[string]bool{}
-		for _, f := range list {
-			out[f.ID] = true
-		}
-		return out
-	}
-	known := ids()
+	known := n.sharedLevels()
 	for range time.Tick(every) {
-		now := ids()
-		if now == nil {
-			continue
-		}
-		gone := map[string]bool{}
-		for id := range known {
-			if !now[id] {
-				gone[id] = true
-			}
-		}
-		n.revoke(gone)
-		known = now
+		known = n.compareShared(known)
 	}
+}
+
+// sharedLevels is each shared folder's level, by id; nil when the list
+// cannot be read now.
+func (n *node) sharedLevels() map[string]string {
+	list, err := loadShared(n.opt.root)
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, f := range list {
+		out[f.ID] = f.Access
+	}
+	return out
+}
+
+// compareShared revokes what changed since known, and returns the levels now.
+func (n *node) compareShared(known map[string]string) map[string]string {
+	now := n.sharedLevels()
+	if now == nil {
+		return known // unreadable now: nothing to compare
+	}
+	gone := map[string]bool{}
+	lowered := map[string]string{}
+	for id, l := range known {
+		switch nl, ok := now[id]; {
+		case !ok:
+			gone[id] = true
+		case accessRank[nl] < accessRank[l]:
+			lowered[id] = nl
+		}
+	}
+	n.revoke(gone)
+	n.revokeAbove(lowered)
+	return now
 }

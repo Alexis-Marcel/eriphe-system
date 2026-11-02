@@ -1534,3 +1534,11 @@ details.app-install > * + * { margin-top: 10px; }
   .pcards { max-width: none; }
   .pcard-actions .btn { flex: 1 1 auto; min-height: 40px; }
 }
+
+/* Settings → Folders: a folder's level, and how to share one. */
+.page-head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.folder-level { margin-top: 8px; }
+.folder-level .field { display: flex; align-items: center; gap: 8px; }
+.folder-level select { width: auto; }
+.share-levels { display: grid; gap: 6px; margin: 10px 0; padding-left: 18px; }
+#share-how-dlg h4 { margin: 14px 0 4px; font-size: .95rem; }

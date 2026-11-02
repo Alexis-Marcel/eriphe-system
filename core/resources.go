@@ -16,7 +16,8 @@ import (
 //
 // read only reads; drop also creates new files in an Eriphe-owned place
 // (a folder's results subfolder, results_folder.go), never changing the originals; write
-// changes the thing itself (for a repository: push). Each kind takes the
+// changes the thing itself (for a repository: push; for a folder shared to
+// manage: create, change, rename and delete in it). Each kind takes the
 // rights that make sense for it (resourceKinds), and an entry never gets
 // more than the user opened (a folder's own access).
 //
@@ -54,7 +55,7 @@ func atLeast(a, b string) bool { return accessRank[a] >= accessRank[b] && access
 // resourceKinds are the kinds and the rights each takes.
 var resourceKinds = map[string][]string{
 	resRepo:        {accessRead, accessWrite},
-	resFolder:      {accessRead, accessDrop},
+	resFolder:      {accessRead, accessDrop, accessWrite},
 	resDriveFolder: {accessRead, accessDrop},
 	resTool:        {accessRead, accessWrite},
 	resFile:        {accessRead},
@@ -65,7 +66,7 @@ var resourceKinds = map[string][]string{
 type ResourceRef struct {
 	Kind   string `json:"kind" jsonschema:"repo, folder, drive-folder, tool or file"`
 	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or drive-folder its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); file an attachment id (att_…)"`
-	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder and drive-folder: read, or drop to add results in its results subfolder, named after the assistant (at most the folder's own access); tool: read or write, from the tools' annotations when empty; file: read. Default read"`
+	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); drive-folder: read or drop; at most the folder's own level; tool: read or write, from the tools' annotations when empty; file: read. Default read"`
 	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create; with access write, the first push to it needs no approval"`
 	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
 	Dir    string `json:"dir,omitempty" jsonschema:"repo: the working directory inside the repository, if not its root"`
@@ -191,10 +192,16 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 				return nil, fmt.Errorf("folder %q: unknown (see list_folders)", e.Ref)
 			}
 			e.Ref = f.Name
+			own := resourceAccess(f.Access)
 			if e.Access == "" {
-				e.Access = f.Access // the old folders field lent a folder with its own access
+				// The old folders field lent a folder with its own access,
+				// drop at most: managing it is asked for in so many words.
+				e.Access = own
+				if e.Access == accessWrite {
+					e.Access = accessDrop
+				}
 			}
-			if !atLeast(f.Access, e.Access) {
+			if !atLeast(own, e.Access) {
 				return nil, fmt.Errorf("folder %q is opened to Eriphe for %s only: it cannot be lent %s", f.Name, f.Access, e.Access)
 			}
 			names = append(names, f.Name)
@@ -272,12 +279,28 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 	return out, nil
 }
 
-// folderAccess is the access a folder is lent with, as folders name it.
+// folderAccess is the access a folder is lent with, as folders name it:
+// write is manage.
 func folderAccess(access string) string {
-	if access == accessDrop {
+	switch access {
+	case accessDrop:
 		return folderDrop
+	case accessWrite:
+		return folderManage
 	}
 	return folderRead
+}
+
+// resourceAccess is a folder's level on the resources' scale: manage is
+// write.
+func resourceAccess(level string) string {
+	switch level {
+	case folderDrop:
+		return accessDrop
+	case folderManage:
+		return accessWrite
+	}
+	return accessRead
 }
 
 // resolveRequest is resolveResources for a request.

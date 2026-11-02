@@ -19,8 +19,9 @@ import (
 // machine declares its roots when it is installed (-share name=/path[:ro]):
 // the places a folder may be shared from, on this machine only
 // (shared.go), never from eriphe-core. A task eriphe-core lends a shared
-// folder gets it mounted at /work/folders/<name>: read-only, and with the
-// right to drop results, its Eriphe/ subfolder writable. Every path is
+// folder gets it mounted at /work/folders/<name>, as its level says:
+// read-only; read-only but its Eriphe/ subfolder (drop); or writable
+// whole (manage), after a snapshot of it (snapshot.go). Every path is
 // resolved again when it is shared and when it is used: no "..", no
 // symlink out of its root, no sensitive place (sensitiveNames), nothing of
 // eriphe-node's own data.
@@ -124,6 +125,8 @@ type resolvedFolder struct {
 	real string // its path, without any symlink
 	src  string // the same under the root's declared path: what the Docker daemon and the socket proxy are given
 	rel  string // relative to the root, without any symlink ("" for the root itself)
+	// shared is its entry in the list, when lent to a task (lentFolder).
+	shared sharedFolder
 }
 
 // resolveFolder checks a path relative to a root: no "..", nothing hidden
@@ -302,6 +305,9 @@ type TaskFolder struct {
 	Name  string `json:"name"`
 	ID    string `json:"id"`              // in the list of shared folders; nothing else is mounted
 	Write bool   `json:"write,omitempty"` // results may be dropped in its results subfolder, if shared so
+	// Manage: the whole folder is writable, if shared so; a snapshot of it
+	// is taken first. An older node ignores it: the folder is read-only.
+	Manage bool `json:"manage,omitempty"`
 	// With Write: the results subfolder's name (the assistant's), and its
 	// former names, newest first. Empty from an older eriphe-core: Eriphe.
 	Results string   `json:"results,omitempty"`
@@ -367,8 +373,10 @@ func validFolderName(s string) bool {
 // folderMounts are the docker run arguments that mount a task's folders:
 // each read-only, its results subfolder writable when lent with Write
 // (created if missing, in the folder's group, so that what the task writes
-// stays the user's to open, change and delete), and the folders' groups
-// added to the task's user so that it reads what the group may.
+// stays the user's to open, change and delete), the whole folder writable
+// when lent with Manage, once a snapshot of it is taken (none, no task),
+// and the folders' groups added to the task's user so that it reads what
+// the group may.
 func (n *node) folderMounts(t *Task) ([]string, error) {
 	if n.apple() {
 		return n.appleFolderMounts(t)
@@ -386,10 +394,21 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		dst := "/work/folders/" + tf.Name
-		args = append(args, "--mount", mountSpec("type=bind", "src="+f.src, "dst="+dst, "readonly"))
 		if gid := ownerGID(f.real); gid > 0 {
 			groups[gid] = true
 		}
+		if tf.Manage {
+			if f.root.ReadOnly {
+				return nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
+			}
+			if err := n.snapshotLent(t, f); err != nil {
+				return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
+			}
+			args = append(args, "--mount", mountSpec("type=bind", "src="+f.src, "dst="+dst))
+			results = append(results, f.real) // what it writes as root goes back to the folder's owner
+			continue
+		}
+		args = append(args, "--mount", mountSpec("type=bind", "src="+f.src, "dst="+dst, "readonly"))
 		if !tf.Write {
 			continue
 		}

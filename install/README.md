@@ -498,7 +498,7 @@ $env:ERIPHE_UNINSTALL='1'; irm https://github.com/Alexis-Marcel/eriphe-system/re
 - macOS with Apple's container: the LaunchAgents `org.eriphe.node`, `org.eriphe.core` and
   `org.eriphe.update`, the LaunchDaemon `org.eriphe.relay` with its binary, socket folder and log
   (with `sudo`), the task, service and explorer containers and their networks, Eriphe's images,
-  the Finder's two Quick Actions "Share with Eriphe" (`~/Library/Services`), and `~/.eriphe`. Apple's `container` too if the script installed it (it notes so in
+  the Finder's Quick Action "Share with Eriphe..." and the former two (`~/Library/Services`), and `~/.eriphe`. Apple's `container` too if the script installed it (it notes so in
   `~/.eriphe/container-installed`) and no other container is left; otherwise it stays.
 - macOS in Lima's VM: the LaunchAgent, the VM and its disk, `~/.eriphe` (Lima included), and
   Lima's download cache (`~/Library/Caches/lima`) unless another Lima is installed.
@@ -636,21 +636,29 @@ to Apple's container (in core mode, copy eriphe-core's data out of the VM first)
 
 `--share NAME=/PATH` (repeatable) declares a place of this machine whose folders you may share
 with Eriphe. You share a folder **on this machine**, never from the workspace, which only shows
-what is shared and can stop sharing it:
+what is shared, can lower a folder's level or turn its copies off, and can stop sharing it:
 
 ```sh
 sudo eriphe-share add /home/sam/Documents/Clients          # read
 sudo eriphe-share add --drop --name Factures /mnt/user/compta/2026
+sudo eriphe-share add --manage --copyable /home/sam/Notes  # change it; copies allowed
 sudo eriphe-share list
+sudo eriphe-share snapshots Notes                          # taken before each task that may change it
+sudo eriphe-share restore Notes latest
 sudo eriphe-share remove Factures                          # the tasks using it stop
 ```
 
-Eriphe reads the folder, or with `--drop` also drops its results in its results subfolder, named
-after your assistant (`Eriphe/` by default, `Jarvis/` if you called it Jarvis). eriphe-core never
-sees the path, only the name. Nothing is shared unless you say so. On a Mac with Apple's container,
-right-click a folder in the Finder, Quick Actions, "Share with Eriphe" (or "… (read + results)";
-named in French on a Mac in French), or use `~/.eriphe/bin/eriphe-share`. On Windows, right-click a
-folder of your user folder in File Explorer, "Show more options", "Share with Eriphe". With the
+Three levels: Eriphe reads the folder (read, the default); with `--drop` ("À côté") it also drops
+its results in its results subfolder, named after your assistant (`Eriphe/` by default, `Jarvis/`
+if you called it Jarvis); with `--manage` ("Gérer") it may create, change, rename and delete
+anywhere in it, the node taking a snapshot of the folder before each such task (kept 7 days,
+restored with `eriphe-share restore`). The level chosen here is the most it gets: the workspace
+can lower it, only this machine raises it (share it again). `--copyable` (off by default) allows
+copies of the folder on your other machines. eriphe-core never sees the path, only the name.
+Nothing is shared unless you say so. On a Mac with Apple's container, right-click a folder in the
+Finder, Quick Actions, "Share with Eriphe..." (named in French on a Mac in French), which asks for
+the level and the copies, or use `~/.eriphe/bin/eriphe-share`. On Windows, right-click a folder of
+your user folder in File Explorer, "Show more options", "Share with Eriphe...", which asks the same. With the
 one-container install (eriphe-launcher), `docker exec eriphe-node eriphe-node share add /mnt/user/…`. Folders given from the workspace
 before this version are no longer lent: share them again this way (Settings → Folders lists
 them).
@@ -805,8 +813,9 @@ without Docker Desktop, and a scheduled task that starts it with Windows, logged
 
 The distribution sees no Windows drive. Only the folder of the user signed in at the PC
 (`C:\Users\<you>`) is mounted, for eriphe-node alone, as the one place folders may be shared from:
-right-click a folder of it in File Explorer, "Show more options", "Share with Eriphe" (read) or
-"Share with Eriphe (read + results)". A window says how it went. A task gets only the folders
+right-click a folder of it in File Explorer, "Show more options", "Share with Eriphe...": a small
+window asks for the level (read, next to it, manage) and whether it may be copied to your other
+machines, then says how it went. A task gets only the folders
 shared this way. The menu is that user's (their registry); it works when that user is the one who
 installed Eriphe (the distribution is theirs). Folders elsewhere (another drive, Documents moved
 off the user folder) cannot be shared yet.

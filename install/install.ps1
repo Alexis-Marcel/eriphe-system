@@ -525,11 +525,13 @@ function Get-ShareEnv($prof) {
   "ERIPHE_WINDOWS_HOME='$($prof.Dir)'`nERIPHE_NODE_SHARES=home=/mnt/eriphe/home"
 }
 
-# The Explorer's right click, "Share with Eriphe" (Windows 11: under "Show
-# more options"): two entries on folders, read, and read and drop results,
-# for the user signed in at the PC, running eriphe-share.ps1, which runs
-# eriphe-share in the distribution and says how it went. Per user, in their
-# registry (HKCU\Software\Classes\Directory\shell).
+# The Explorer's right click, "Share with Eriphe..." (Windows 11: under "Show
+# more options"): one entry on folders, for the user signed in at the PC,
+# running eriphe-share.ps1, which asks for the level (read, next to it,
+# manage) and whether the folder may be copied to the user's other machines,
+# runs eriphe-share in the distribution and says how it went. Per user, in
+# their registry (HKCU\Software\Classes\Directory\shell). The former second
+# entry (read + results) goes.
 $shareScript = Join-Path $helperDir "eriphe-share.ps1"
 $shareKeys = "EripheShare", "EripheShareDrop"
 
@@ -539,15 +541,31 @@ function Get-ShareMenuRoots($prof) {
   $roots
 }
 
+# The words of the right click, by the language of Windows.
+function Get-ShareWords {
+  if ((Get-UICulture).TwoLetterISOLanguageName -eq "fr") {
+    $e = [char]0xE9; $a = [char]0xC0; $o = [char]0xF4
+    return @{ Menu = "Partager avec Eriphe$([char]0x2026)"; Level = "Niveau de partage avec Eriphe :"; Read = "Lecture"
+      Drop = "$a c$o$e (r$e" + "sultats dans un sous-dossier)"; Manage = "G$e" + "rer (modifier le dossier)"
+      Copy = "Peut $([char]0xEA)tre copi$e sur mes autres machines"; Ok = "Partager"; Cancel = "Annuler" }
+  }
+  @{ Menu = "Share with Eriphe$([char]0x2026)"; Level = "Level of sharing with Eriphe:"; Read = "Read"
+    Drop = "Next to it (results in a subfolder)"; Manage = "Manage (change the folder)"
+    Copy = "May be copied to my other machines"; Ok = "Share"; Cancel = "Cancel" }
+}
+
 function Install-ShareMenu($prof) {
   New-Item -ItemType Directory -Force $helperDir | Out-Null
+  $w = Get-ShareWords
   Set-Content -Path $shareScript -Encoding UTF8 -Value @"
-# Written by install.ps1: the Explorer's "Share with Eriphe". It shares the
-# folder with Eriphe on this PC, through eriphe-node in the distribution
-# $Distro, and says how it went (node/README.md, Shares).
-param([string] `$Path, [switch] `$Drop)
+# Written by install.ps1: the Explorer's "Share with Eriphe...". It asks for
+# the level and the copies, shares the folder with Eriphe on this PC,
+# through eriphe-node in the distribution $Distro, and says how it went
+# (node/README.md, Shared folders).
+param([string] `$Path)
 `$distro = '$Distro'
 `$profileDir = '$($prof.Dir)'
+`$words = @{ Level = '$($w.Level)'; Read = '$($w.Read)'; Drop = '$($w.Drop)'; Manage = '$($w.Manage)'; Copy = '$($w.Copy)'; Ok = '$($w.Ok)'; Cancel = '$($w.Cancel)' }
 "@
   Add-Content -Path $shareScript -Encoding UTF8 -Value @'
 Add-Type -AssemblyName System.Windows.Forms
@@ -559,9 +577,40 @@ if (-not $p.StartsWith($profileDir + '\', [StringComparison]::OrdinalIgnoreCase)
   Show-Outcome "Only the folders in $profileDir can be shared with Eriphe." Warning
   exit 1
 }
+# The level and the copies: a small window of Windows' own controls.
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "Eriphe"; $form.FormBorderStyle = "FixedDialog"; $form.MaximizeBox = $false; $form.MinimizeBox = $false
+$form.StartPosition = "CenterScreen"; $form.AutoSize = $true; $form.AutoSizeMode = "GrowAndShrink"; $form.Padding = New-Object System.Windows.Forms.Padding(12)
+$panel = New-Object System.Windows.Forms.FlowLayoutPanel
+$panel.FlowDirection = "TopDown"; $panel.AutoSize = $true; $panel.WrapContents = $false
+$label = New-Object System.Windows.Forms.Label
+$label.Text = "$($words.Level)`n$(Split-Path $p -Leaf)"; $label.AutoSize = $true
+$panel.Controls.Add($label)
+$choices = @()
+foreach ($k in "Read", "Drop", "Manage") {
+  $r = New-Object System.Windows.Forms.RadioButton
+  $r.Text = $words[$k]; $r.Tag = $k; $r.AutoSize = $true; $r.Checked = ($k -eq "Read")
+  $panel.Controls.Add($r); $choices += $r
+}
+$copy = New-Object System.Windows.Forms.CheckBox
+$copy.Text = $words.Copy; $copy.AutoSize = $true; $copy.Margin = New-Object System.Windows.Forms.Padding(3, 10, 3, 10)
+$panel.Controls.Add($copy)
+$buttons = New-Object System.Windows.Forms.FlowLayoutPanel
+$buttons.AutoSize = $true
+$ok = New-Object System.Windows.Forms.Button
+$ok.Text = $words.Ok; $ok.DialogResult = "OK"
+$cancel = New-Object System.Windows.Forms.Button
+$cancel.Text = $words.Cancel; $cancel.DialogResult = "Cancel"
+$buttons.Controls.AddRange(@($ok, $cancel))
+$panel.Controls.Add($buttons)
+$form.Controls.Add($panel)
+$form.AcceptButton = $ok; $form.CancelButton = $cancel; $form.TopMost = $true
+if ($form.ShowDialog() -ne "OK") { exit 0 }
+$level = ($choices | Where-Object { $_.Checked }).Tag
 $rel = $p.Substring($profileDir.Length + 1) -replace '\\', '/'
 $cmd = @('-d', $distro, '-u', 'root', '--exec', '/usr/local/bin/eriphe-share', 'add')
-if ($Drop) { $cmd += '--drop' }
+$cmd += switch ($level) { "Drop" { '--drop' } "Manage" { '--manage' } default { '--read' } }
+$cmd += if ($copy.Checked) { '--copyable' } else { '--copyable=false' }
 $cmd += "/mnt/eriphe/home/$rel"
 $env:WSL_UTF8 = '1'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -571,20 +620,14 @@ if ($LASTEXITCODE -eq 0) { Show-Outcome $out Information } else {
   Show-Outcome $out Warning
 }
 '@
-  $fr = (Get-UICulture).TwoLetterISOLanguageName -eq "fr"
-  $labels = if ($fr) { "Partager avec Eriphe", "Partager avec Eriphe (lecture + r$([char]0xE9)sultats)" } else { "Share with Eriphe", "Share with Eriphe (read + results)" }
   $run = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$shareScript`" -Path `"%V`""
   Remove-ShareMenu $prof
-  $root = (Get-ShareMenuRoots $prof)[-1]
-  for ($i = 0; $i -lt 2; $i++) {
-    $key = Join-Path $root $shareKeys[$i]
-    New-Item -Path "$key\command" -Force | Out-Null
-    Set-ItemProperty -Path $key -Name "MUIVerb" -Value $labels[$i]
-    Set-ItemProperty -Path $key -Name "Icon" -Value "imageres.dll,-1023"
-    $cmdLine = if ($i -eq 1) { "$run -Drop" } else { $run }
-    Set-ItemProperty -Path "$key\command" -Name "(default)" -Value $cmdLine
-  }
-  $labels[0]
+  $key = Join-Path (Get-ShareMenuRoots $prof)[-1] $shareKeys[0]
+  New-Item -Path "$key\command" -Force | Out-Null
+  Set-ItemProperty -Path $key -Name "MUIVerb" -Value $w.Menu
+  Set-ItemProperty -Path $key -Name "Icon" -Value "imageres.dll,-1023"
+  Set-ItemProperty -Path "$key\command" -Name "(default)" -Value $run
+  $w.Menu
 }
 
 function Remove-ShareMenu($prof) {

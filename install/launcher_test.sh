@@ -420,21 +420,52 @@ rm -f "$T/calls"
 has "$T/calls" "share -root /srv/eriphe/node add" "eriphe-share: the command itself is never a folder"
 installer 'DATA=/srv/eriphe MODE= NODE_IMAGE=n WORKER_IMAGE=w INSTALL=linux; compose_yaml 100 1' >"$T/compose-share"
 has "$T/compose-share" "ERIPHE_ROOT: /srv/eriphe/node" "the node's data, for docker exec eriphe-node eriphe-node share"
-installer 'ERIPHE_HOME=/Users/sam/.eriphe CONTAINER=/usr/local/bin/container; mac_share_sh' >"$T/mac-share"
+installer 'ERIPHE_HOME=/Users/sam/.eriphe CONTAINER=/usr/local/bin/container; qa_lang() { echo fr; }; mac_share_sh' >"$T/mac-share"
 shellcheck -s sh "$T/mac-share" || fail "the Mac's eriphe-share: shellcheck"
 has "$T/mac-share" 'exec "$E/bin/eriphe-node" share -docker "$CONTAINER" "$@"' "the Mac's eriphe-share"
-has "$T/mac-share" 'display notification' "the Mac's eriphe-share --notify"
-# The Finder's Quick Actions: on folders, in the Finder, the folders given as
+has "$T/mac-share" "T_MANAGE='Gérer" "the Mac's eriphe-share: in French on a Mac in French"
+# --ask: the level and the copies asked with osascript (faked: Gérer, then
+# Oui), then eriphe-node share add with both, the outcome as a notification.
+A=$T/ask
+mkdir -p "$A/home/bin" "$A/fake"
+: >"$A/home/node.env"
+printf '#!/bin/sh\necho "eriphe-node $*" >>"%s/calls"\necho "Shared"\n' "$A" >"$A/home/bin/eriphe-node"
+cat >"$A/fake/osascript" <<'EOF'
+#!/bin/sh
+case "$*" in
+*"choose from list"*) echo "${ASK_LEVEL:-Gérer (modifier le dossier)}" ;;
+*"display dialog"*) echo "${ASK_COPY:-Oui}" ;;
+*"display notification"*) echo "notified $*" >>"$ASK_DIR/calls" ;;
+esac
+EOF
+chmod +x "$A/home/bin/eriphe-node" "$A/fake/osascript"
+sed "s|^E=.*|E='$A/home'|" "$T/mac-share" >"$A/eriphe-share"
+PATH="$A/fake:$PATH" ASK_DIR=$A sh "$A/eriphe-share" --ask "/Users/sam/Documents/Notes" >/dev/null 2>&1
+has "$A/calls" "eriphe-node share -docker /usr/local/bin/container add --manage --copyable /Users/sam/Documents/Notes" "Quick Action: the level and copies chosen"
+has "$A/calls" "notified" "Quick Action: the outcome said"
+rm -f "$A/calls"
+PATH="$A/fake:$PATH" ASK_DIR=$A ASK_LEVEL=Lecture ASK_COPY=Non sh "$A/eriphe-share" --ask "/Users/sam/Documents/Notes" >/dev/null 2>&1
+has "$A/calls" "add --read --copyable=false /Users/sam/Documents/Notes" "Quick Action: read, no copies, said always"
+rm -f "$A/calls"
+PATH="$A/fake:$PATH" ASK_DIR=$A ASK_LEVEL=false sh "$A/eriphe-share" --ask "/Users/sam/Documents/Notes" >/dev/null 2>&1
+[ ! -s "$A/calls" ] || fail "Quick Action: cancelled, yet shared"
+# The Finder's Quick Action: on folders, in the Finder, the folders given as
 # the shell script's arguments, a path with & written for XML.
-installer "quick_action '$T/svc' 'Share with Eriphe (read + results)' \"exec '/Users/a&b/.eriphe/bin/eriphe-share' --notify add --drop \\\"\\\$@\\\"\"" >/dev/null
-w="$T/svc/Share with Eriphe (read + results).workflow/Contents"
-has "$w/Info.plist" "<string>Share with Eriphe (read + results)</string>" "Quick Action: its name"
+installer "quick_action '$T/svc' 'Partager avec Eriphe…' \"exec '/Users/a&b/.eriphe/bin/eriphe-share' --ask \\\"\\\$@\\\"\"" >/dev/null
+w="$T/svc/Partager avec Eriphe….workflow/Contents"
+has "$w/Info.plist" "<string>Partager avec Eriphe…</string>" "Quick Action: its name"
 has "$w/Info.plist" "<string>public.folder</string>" "Quick Action: on folders"
-has "$w/document.wflow" "<string>exec '/Users/a&amp;b/.eriphe/bin/eriphe-share' --notify add --drop \"\$@\"</string>" "Quick Action: its command"
+has "$w/document.wflow" "<string>exec '/Users/a&amp;b/.eriphe/bin/eriphe-share' --ask \"\$@\"</string>" "Quick Action: its command"
 tr -d '\n\t' <"$w/document.wflow" | grep -q '<key>inputMethod</key><integer>1</integer>' || fail "Quick Action: the folders as arguments"
 if command -v plutil >/dev/null 2>&1; then
 	plutil -lint "$w/Info.plist" "$w/document.wflow" >/dev/null || fail "Quick Action: not a property list"
 fi
+# Installed: one Quick Action, the former two gone (the Services menu's
+# refresh, pbs, left out).
+mkdir -p "$T/qahome/Library/Services/Share with Eriphe (read + results).workflow" "$T/qahome/Library/Services/Partager avec Eriphe.workflow"
+installer "HOME='$T/qahome' ERIPHE_HOME=/Users/sam/.eriphe; qa_lang() { echo en; }; mac_quick_actions_uninstall; quick_action \"\$HOME/Library/Services\" \"\$(qa_name)\" x" >/dev/null
+[ -d "$T/qahome/Library/Services/Share with Eriphe….workflow" ] || fail "Quick Action: not installed"
+[ "$(find "$T/qahome/Library/Services" -maxdepth 1 -name '*.workflow' | wc -l | tr -d ' ')" = 1 ] || fail "Quick Action: the former ones are left"
 
 # ---- a Mac's reinstall over a running node: never left stopped
 

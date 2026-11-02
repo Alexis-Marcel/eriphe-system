@@ -155,20 +155,19 @@ func testShareCmd(t *testing.T, n *node, root string) {
 		t.Fatalf("a link: %v %s", err, out)
 	}
 	for name, args := range map[string][]string{
-		"escape":      {filepath.Join(root, "escape")},
-		"dotdot":      {root + "/Clients/../../outside"},
-		"outside":     {filepath.Dir(root)},
-		"sensitive":   {filepath.Join(root, "Home")},
-		"hidden":      {filepath.Join(root, ".hidden")},
-		"ssh":         {filepath.Join(root, "Home", ".ssh")},
-		"ssh link":    {filepath.Join(root, "keys")},
-		"deep":        {filepath.Join(root, "Deep")},
-		"own data":    {n.opt.root},
-		"read-only":   {"--drop", filepath.Join(root, "Clients", "Beta")},
-		"same folder": {filepath.Join(root, "Clients", "ACME")},
-		"same name":   {"--name", "acme", filepath.Join(root, "Clients", "Beta")},
-		"bad name":    {"--name", ".x", filepath.Join(root, "Clients", "Beta")},
-		"no such":     {filepath.Join(root, "nope")},
+		"escape":    {filepath.Join(root, "escape")},
+		"dotdot":    {root + "/Clients/../../outside"},
+		"outside":   {filepath.Dir(root)},
+		"sensitive": {filepath.Join(root, "Home")},
+		"hidden":    {filepath.Join(root, ".hidden")},
+		"ssh":       {filepath.Join(root, "Home", ".ssh")},
+		"ssh link":  {filepath.Join(root, "keys")},
+		"deep":      {filepath.Join(root, "Deep")},
+		"own data":  {n.opt.root},
+		"read-only": {"--drop", filepath.Join(root, "Clients", "Beta")},
+		"same name": {"--name", "acme", filepath.Join(root, "Clients", "Beta")},
+		"bad name":  {"--name", ".x", filepath.Join(root, "Clients", "Beta")},
+		"no such":   {filepath.Join(root, "nope")},
 	} {
 		if name == "read-only" {
 			saved := n.opt.shares
@@ -201,6 +200,22 @@ func testShareCmd(t *testing.T, n *node, root string) {
 	if strings.Contains(string(raw), root) || !strings.Contains(string(raw), `"name":"ACME","access":"drop"`) {
 		t.Fatalf("for eriphe-core: %s", raw)
 	}
+	// Shared again, the same folder gets the level and copies given here,
+	// and keeps its id and name.
+	before, _ := loadShared(n.opt.root)
+	if out, err = shareOut(t, n, "add", "--manage", "--copyable", filepath.Join(root, "Clients", "ACME")); err != nil || !strings.Contains(out, `now as "ACME" (read and changed`) || !strings.Contains(out, "copied") {
+		t.Fatalf("shared again: %v %s", err, out)
+	}
+	after, _ := loadShared(n.opt.root)
+	if len(after) != 3 || after[0].ID != before[0].ID || after[0].Access != accessManage || after[0].Max != accessManage || !after[0].Copyable {
+		t.Fatalf("shared again: %+v", after[0])
+	}
+	if out, err = shareOut(t, n, "add", "--drop", "--manage", filepath.Join(root, "Photos")); err == nil {
+		t.Fatalf("--drop and --manage: %s", out)
+	}
+	if out, _ = shareOut(t, n, "list"); !strings.Contains(out, "COPYABLE") || !strings.Contains(out, "manage") {
+		t.Fatalf("list: %s", out)
+	}
 	if out, err = shareOut(t, n, "remove", "photos de famille", filepath.Join(root, "Clients")); err != nil || strings.Count(out, "No longer shared") != 2 {
 		t.Fatalf("remove: %v %s", err, out)
 	}
@@ -208,7 +223,7 @@ func testShareCmd(t *testing.T, n *node, root string) {
 		t.Fatalf("removed twice: %s", out)
 	}
 	logged, _ := os.ReadFile(filepath.Join(n.opt.root, sharesLog))
-	if c := strings.Count(string(logged), `"event":"add"`); c != 3 || strings.Count(string(logged), `"event":"remove"`) != 2 {
+	if c := strings.Count(string(logged), `"event":"add"`); c != 3 || strings.Count(string(logged), `"event":"remove"`) != 2 || strings.Count(string(logged), `"event":"change"`) != 1 {
 		t.Fatalf("shares.log:\n%s", logged)
 	}
 }

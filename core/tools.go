@@ -16,7 +16,7 @@ After run_task, call task_status with wait (e.g. 120) rather than polling: it re
 A task in idle has finished its turn: read last_text, then either answer its question with answer_task,
 or stop_task when the work is done. Never invent a task's result: read it with task_status.
 Everything a task is lent goes in run_task's resources, one entry {kind, ref, access} per thing, access read < drop < write, the least it needs:
-repo (owner/name, cloned into /work/repo; branch, base, dir; write to push, and with a branch its first push there needs no approval), folder and drive-folder (by name, see list_folders; drop to add results in its results subfolder, named after the assistant), tool (a catalog server or server.tool globs, see list_tools).
+repo (owner/name, cloned into /work/repo; branch, base, dir; write to push, and with a branch its first push there needs no approval), folder and drive-folder (by name, see list_folders; drop to add results in its results subfolder, named after the assistant; for a folder shared to manage, write to change the folder itself), tool (a catalog server or server.tool globs, see list_tools).
 A tainted turn (one that read external content) may lend reads only.
 For a task that changes something, give run_task a contract: objective (one sentence, what must be true at the end), constraints, checks ({name, run, dir, timeout} or {name, exists}, under /work), evidence, budget (minutes, attempts, turns, tokens). Only what a check saw pass counts as verified in the task's receipt. Approval is never part of a contract: the policy decides it.
 When a turn ends, task_status gives the task's receipt, checked by eriphe-core: verified, claimed but not checked, not verified, mismatches.
@@ -61,7 +61,7 @@ func newMCPServer(c *core) *mcp.Server {
 			return out, nil
 		})
 
-	tool(s, "list_folders", "The user's folders given to Eriphe: name, source (a machine, or google-drive), whether it is online, access (read, or drop: the task may also write its results in the folder's results subfolder) and lend, the run_task resources entry that gives it to a task: {kind: folder} for a machine's (the task reads it at /work/folders/<name>), {kind: drive-folder} for a Google Drive one. A machine's folder is shared by the user on that machine only: nothing here adds one or looks into a machine.",
+	tool(s, "list_folders", "The user's folders given to Eriphe: name, source (a machine, or google-drive), whether it is online, access (read; drop: the task may also write its results in the folder's results subfolder; manage: it may also be lent with write, to create, change, rename and delete in the folder, its machine taking a snapshot first), copyable (the user allows copies of it on their other machines) and lend, the run_task resources entry that gives it to a task: {kind: folder} for a machine's (the task reads it at /work/folders/<name>), {kind: drive-folder} for a Google Drive one. A machine's folder is shared by the user on that machine only, at the most it may get: nothing here adds one, raises its level or looks into a machine.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {
 			fs, err := c.folderViews()
 			return map[string]any{

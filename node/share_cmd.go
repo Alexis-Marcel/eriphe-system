@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -18,26 +19,39 @@ import (
 // running node, and changes the list in the node's data: nothing of it is
 // reachable from eriphe-core.
 //
-//	eriphe-node share add [--name N] [--drop] <folder>...
+//	eriphe-node share add [--name N] [--drop|--manage] [--copyable] <folder>...
 //	eriphe-node share list [--json]
 //	eriphe-node share remove <name or folder>...
+//	eriphe-node share snapshots <name or folder>
+//	eriphe-node share restore <name or folder> <snapshot>
 //
 // The installers wrap it: eriphe-share on Linux (docker exec in the node's
 // container) and on a Mac, eriphe-share in the WSL distribution on Windows,
 // and the Finder's and the Explorer's "Share with Eriphe".
 const shareUsage = `eriphe-node share: share folders of this machine with Eriphe.
 
-  eriphe-node share add [--name NAME] [--drop] FOLDER...
-      share each folder, read-only; --drop also lets tasks drop their results
-      in its results subfolder; --name gives the name Eriphe knows it by (one
-      folder only; default: the folder's own name)
+  eriphe-node share add [--name NAME] [--read|--drop|--manage] [--copyable] FOLDER...
+      share each folder, read-only by default (--read); --drop also lets tasks drop
+      their results in its results subfolder ("next to it"); --manage lets
+      them create, change, rename and delete anything in it, a snapshot being
+      taken before each such task; --copyable allows copies of it on your
+      other machines; --name gives the name Eriphe knows it by (one folder
+      only; default: the folder's own name). The level chosen here is the
+      most Eriphe gets: the workspace may lower it, never raise it. Sharing
+      a folder already shared again sets its level and copies anew.
   eriphe-node share list [--json]
   eriphe-node share remove NAME|FOLDER...
       stop sharing; the tasks using it are stopped
+  eriphe-node share snapshots NAME|FOLDER
+      the snapshots of a folder, taken before the tasks that manage it
+  eriphe-node share restore NAME|FOLDER SNAPSHOT|latest
+      put the folder back as it was in that snapshot (a snapshot of it as it
+      is now is taken first); stop the tasks using it before
 
 Options, before the command: -root DIR (env ERIPHE_ROOT), -share NAME=/PATH
 (env ERIPHE_NODE_SHARES: the places a folder may be shared from), -engine
-(env ERIPHE_ENGINE), -docker CLI. A folder is never shared if it holds keys,
+(env ERIPHE_ENGINE), -docker CLI, -snapshot-days N (env ERIPHE_SNAPSHOT_DAYS),
+-snapshot-limit SIZE (env ERIPHE_SNAPSHOT_LIMIT). A folder is never shared if it holds keys,
 passwords or settings, a folder made private (.eriphe-private), or Eriphe's
 own data.
 `
@@ -57,7 +71,14 @@ func runShare(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	fs.Var(o.shares, "share", "a place folders may be shared from")
+	fs.IntVar(&o.snapshotDays, "snapshot-days", envInt("ERIPHE_SNAPSHOT_DAYS", defaultSnapshotDays), "days a snapshot is kept")
+	limit := fs.String("snapshot-limit", envOr("ERIPHE_SNAPSHOT_LIMIT", defaultSnapshotLimit), "what a snapshot copies at most")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	var lerr error
+	if o.snapshotLimit, lerr = parseBytes(*limit); lerr != nil {
+		fmt.Fprintln(stderr, "eriphe-node share: -snapshot-limit:", lerr)
 		return 2
 	}
 	if fs.NArg() == 0 {
@@ -93,7 +114,7 @@ func runShare(args []string, stdout, stderr io.Writer) int {
 }
 
 var (
-	errUsage    = errors.New("usage: eriphe-node share add|list|remove (eriphe-node share -h)")
+	errUsage    = errors.New("usage: eriphe-node share add|list|remove|snapshots|restore (eriphe-node share -h)")
 	errReported = errors.New("some folders were not shared")
 )
 
@@ -120,28 +141,43 @@ func (n *node) shareCmd(cmd string, args []string, out io.Writer) error {
 	switch cmd {
 	case "add":
 		name := fs.String("name", "", "")
+		read := fs.Bool("read", false, "") // the default, said: the right click passes it
 		drop := fs.Bool("drop", false, "")
+		manage := fs.Bool("manage", false, "")
+		copyable := fs.Bool("copyable", false, "")
 		paths, err := parseInterspersed(fs, args)
 		if err != nil || len(paths) == 0 || (*name != "" && len(paths) > 1) {
 			return errUsage
 		}
+		if (*drop && *manage) || (*read && (*drop || *manage)) {
+			fmt.Fprintln(out, "--read, --drop and --manage: choose one")
+			return errUsage
+		}
 		access := accessRead
-		if *drop {
+		switch {
+		case *drop:
 			access = accessDrop
+		case *manage:
+			access = accessManage
 		}
 		failed := false
 		for _, p := range paths {
-			f, err := n.shareFolder(p, *name, access)
+			f, changed, err := n.shareFolder(p, *name, access, *copyable)
 			if err != nil {
 				fmt.Fprintf(out, "Not shared: %s: %v\n", p, err)
 				failed = true
 				continue
 			}
-			what := "read"
-			if f.Access == accessDrop {
-				what = "read, and results dropped in its results subfolder"
+			what := map[string]string{accessRead: "read only", accessDrop: "read, and results dropped in its results subfolder",
+				accessManage: "read and changed, a snapshot taken before each task that may change it"}[f.Access]
+			if f.Copyable {
+				what += "; may be copied to your other machines"
 			}
-			fmt.Fprintf(out, "Shared with Eriphe as %q (%s): %s\n", f.Name, what, f.Path)
+			verb := "Shared with Eriphe"
+			if changed {
+				verb = "Still shared with Eriphe, now"
+			}
+			fmt.Fprintf(out, "%s as %q (%s): %s\n", verb, f.Name, what, f.Path)
 		}
 		if failed {
 			return errReported
@@ -166,11 +202,72 @@ func (n *node) shareCmd(cmd string, args []string, out io.Writer) error {
 			return nil
 		}
 		w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tACCESS\tFOLDER\tSHARED")
+		fmt.Fprintln(w, "NAME\tACCESS\tCOPYABLE\tFOLDER\tSHARED")
 		for _, f := range list {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", f.Name, f.Access, f.Path, f.Added.Local().Format("2006-01-02 15:04"))
+			access := f.Access
+			if f.ceiling() != f.Access {
+				access += " (" + f.ceiling() + " here, lowered)"
+			}
+			copyable := "no"
+			if f.Copyable {
+				copyable = "yes"
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", f.Name, access, copyable, f.Path, f.Added.Local().Format("2006-01-02 15:04"))
 		}
 		return w.Flush()
+	case "snapshots":
+		rest, err := parseInterspersed(fs, args)
+		if err != nil || len(rest) != 1 {
+			return errUsage
+		}
+		id, name, path, err := n.snapshotTarget(rest[0])
+		if err != nil {
+			return err
+		}
+		list := n.snapshots(id)
+		if len(list) == 0 {
+			fmt.Fprintf(out, "No snapshot of %q (%s): one is taken before each task that may change it.\n", name, path)
+			return nil
+		}
+		w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "SNAPSHOT\tTAKEN\tBEFORE\tHOW")
+		for _, m := range list {
+			how := m.Method
+			if m.Copied > 0 {
+				how += " " + size(m.Copied)
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", m.Stamp, m.Time.Local().Format("2006-01-02 15:04:05"), m.Task, how)
+		}
+		w.Flush()
+		fmt.Fprintf(out, "Kept %d days. To put %q back as it was: eriphe-node share restore %q SNAPSHOT\n", n.snapshotDays(), name, name)
+		return nil
+	case "restore":
+		rest, err := parseInterspersed(fs, args)
+		if err != nil || len(rest) != 2 {
+			return errUsage
+		}
+		id, name, path, err := n.snapshotTarget(rest[0])
+		if err != nil {
+			return err
+		}
+		list := n.snapshots(id)
+		i := -1
+		for j, m := range list {
+			if m.Stamp == rest[1] || (rest[1] == "latest" && m.Task != "restore") {
+				i = j
+				break
+			}
+		}
+		if i < 0 {
+			return fmt.Errorf("no snapshot %s of %q: see eriphe-node share snapshots %q", rest[1], name, name)
+		}
+		before, err := n.restoreSnapshot(list[i], path)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "%q (%s) is back as it was at %s.\nAs it was just before: snapshot %s (eriphe-node share restore %q %s undoes this).\n",
+			name, path, list[i].Time.Local().Format("2006-01-02 15:04:05"), before.Stamp, name, before.Stamp)
+		return nil
 	case "remove", "rm":
 		rest, err := parseInterspersed(fs, args)
 		if err != nil || len(rest) == 0 {
@@ -212,41 +309,80 @@ func (n *node) sharedMatch(arg string) func(sharedFolder) bool {
 	}
 }
 
-// shareFolder checks a folder and adds it to the list.
-func (n *node) shareFolder(path, name, access string) (*sharedFolder, error) {
+// snapshotTarget is the folder a name or a path names, for its snapshots:
+// shared now, or shared before and snapshotted then.
+func (n *node) snapshotTarget(arg string) (id, name, path string, err error) {
+	list, err := loadShared(n.opt.root)
+	if err != nil {
+		return "", "", "", err
+	}
+	match := n.sharedMatch(arg)
+	for _, f := range list {
+		if match(f) {
+			return f.ID, f.Name, f.Path, nil
+		}
+	}
+	ids, _ := os.ReadDir(filepath.Join(n.opt.root, snapshotsDir))
+	for _, d := range ids {
+		for _, m := range n.snapshots(d.Name()) {
+			if match(sharedFolder{Name: m.Name, Path: m.Path}) {
+				return m.ID, m.Name, m.Path, nil
+			}
+		}
+	}
+	return "", "", "", fmt.Errorf("%s: no folder shared, nor snapshotted, under this name", arg)
+}
+
+// shareFolder checks a folder and adds it to the list; one shared already
+// gets the level and copies given (changed), its name too if given.
+func (n *node) shareFolder(path, name, access string, copyable bool) (*sharedFolder, bool, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	f, err := n.checkShared(abs)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if access == accessDrop && f.root.ReadOnly {
-		return nil, errors.New("this place is read-only on this machine: share it without --drop")
+	if access != accessRead && f.root.ReadOnly {
+		return nil, false, errors.New("this place is read-only on this machine: share it without --drop or --manage")
 	}
+	named := name != ""
 	if name == "" {
 		name = filepath.Base(f.src)
 	}
 	name = strings.TrimSpace(name)
 	if !validFolderName(name) || strings.Contains(name, ",") {
-		return nil, fmt.Errorf("%q cannot be its name: up to 64 characters, without / \\ , nor a leading dot (--name)", name)
+		return nil, false, fmt.Errorf("%q cannot be its name: up to 64 characters, without / \\ , nor a leading dot (--name)", name)
 	}
-	sf := sharedFolder{ID: newShareID(), Name: name, Path: f.src, Access: access, Added: time.Now().UTC().Truncate(time.Second)}
+	sf := sharedFolder{ID: newShareID(), Name: name, Path: f.src, Access: access, Max: access, Copyable: copyable, Added: time.Now().UTC().Truncate(time.Second)}
+	changed, from := false, ""
 	err = changeShared(n.opt.root, func(list []sharedFolder) ([]sharedFolder, error) {
-		for _, g := range list {
-			switch {
-			case filepath.Clean(g.Path) == filepath.Clean(sf.Path):
-				return nil, fmt.Errorf("already shared as %q: remove it first to change it", g.Name)
-			case strings.EqualFold(g.Name, sf.Name):
+		i := slices.IndexFunc(list, func(g sharedFolder) bool { return filepath.Clean(g.Path) == filepath.Clean(sf.Path) })
+		for j, g := range list {
+			if j != i && strings.EqualFold(g.Name, sf.Name) && (i < 0 || named) {
 				return nil, fmt.Errorf("another folder is shared as %q: choose another name with --name", g.Name)
 			}
 		}
-		return append(list, sf), nil
+		if i < 0 {
+			return append(list, sf), nil
+		}
+		// Shared already: the machine sets its level and copies anew.
+		changed, from = true, list[i].Access
+		if named {
+			list[i].Name = sf.Name
+		}
+		list[i].Access, list[i].Max, list[i].Copyable = access, access, copyable
+		sf = list[i]
+		return list, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	auditShare(n.opt.root, map[string]any{"event": "add", "id": sf.ID, "name": sf.Name, "path": sf.Path, "access": sf.Access, "by": "local"})
-	return &sf, nil
+	if changed {
+		auditShare(n.opt.root, map[string]any{"event": "change", "id": sf.ID, "name": sf.Name, "path": sf.Path, "from": from, "access": sf.Access, "copyable": sf.Copyable, "by": "local"})
+	} else {
+		auditShare(n.opt.root, map[string]any{"event": "add", "id": sf.ID, "name": sf.Name, "path": sf.Path, "access": sf.Access, "copyable": sf.Copyable, "by": "local"})
+	}
+	return &sf, changed, nil
 }

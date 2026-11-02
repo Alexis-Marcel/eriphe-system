@@ -26,7 +26,8 @@ import (
 
 // appleFolderMounts are the container run arguments that mount a task's
 // folders: each read-only, its results subfolder writable when lent with
-// Write.
+// Write, the whole folder writable when lent with Manage, once a snapshot
+// of it is taken (snapshot.go).
 func (n *node) appleFolderMounts(t *Task) ([]string, error) {
 	ctx := context.Background()
 	var args []string
@@ -44,13 +45,25 @@ func (n *node) appleFolderMounts(t *Task) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
-		if tf.Write && f.root.ReadOnly {
+		if (tf.Write || tf.Manage) && f.root.ReadOnly {
 			return nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
 		}
 		if budget, err = download(f.real, budget, n.opt.downloadLimit); err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		dst := "/work/folders/" + tf.Name
+		if tf.Manage {
+			// After the download: the snapshot holds the files themselves.
+			if err := n.snapshotLent(t, f); err != nil {
+				return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
+			}
+			mount, err := appleMount(f.real, dst, false)
+			if err != nil {
+				return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
+			}
+			args = append(args, mount...)
+			continue
+		}
 		mount, err := appleMount(f.real, dst, true)
 		if err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)

@@ -42,3 +42,11 @@ func writableByTasks(fi fs.FileInfo) bool {
 	}
 	return false
 }
+
+// keepOwner gives a snapshot's copy the owner of its original, where the
+// node may (root with CHOWN in its container); a link is not followed.
+func keepOwner(p string, fi fs.FileInfo) {
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok && (int(st.Uid) != os.Getuid() || int(st.Gid) != os.Getgid()) {
+		os.Lchown(p, int(st.Uid), int(st.Gid))
+	}
+}
