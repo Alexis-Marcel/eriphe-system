@@ -80,6 +80,9 @@ type planFolder struct {
 	Access  string   `json:"access"`
 	Results string   `json:"results,omitempty"`
 	Peers   []string `json:"peers"`
+	// Paused: kept as it is, not synced, while a machine of the pair is
+	// suspended or has no Syncthing for now (an older version back).
+	Paused bool `json:"paused,omitempty"`
 }
 
 // syncView is what the plans are made of, read once.
@@ -124,8 +127,10 @@ func (v *syncView) deviceID(node string) string {
 	return ""
 }
 
-// live is whether a copy may be planned: its folder still shared and
-// copyable, both machines there with Syncthing.
+// live is whether a copy is synced now: its folder still shared and
+// copyable, both machines there with Syncthing. A copy whose folder is
+// still copyable but a machine suspended or without Syncthing for now is
+// planned paused: kept, not deleted.
 func (v *syncView) live(fc folderCopy) (*Folder, bool) {
 	f := v.folders[fc.Node+"/"+fc.Folder]
 	return f, f != nil && f.Copyable && v.deviceID(fc.Node) != "" && v.deviceID(fc.Copy) != ""
@@ -137,13 +142,24 @@ func (c *core) plan(v *syncView, node string) nodePlan {
 	peers := map[string]bool{}
 	sources := map[string]int{} // folder id → its entry
 	for _, fc := range v.copies {
+		if fc.Node != node && fc.Copy != node {
+			continue
+		}
 		f, ok := v.live(fc)
-		if !ok || (fc.Node != node && fc.Copy != node) {
+		if f == nil || !f.Copyable {
 			continue
 		}
 		pf := planFolder{ID: syncFolderID(f.Node, f.ID), Share: f.ID, Name: f.Name, Source: f.Node, Access: f.Access}
 		if f.Access == folderDrop {
 			pf.Results = c.resultsName()
+		}
+		if !ok {
+			// Paused, with no peer: kept as it is until both are back.
+			if fc.Copy == node && !slices.ContainsFunc(p.Folders, func(g planFolder) bool { return g.ID == pf.ID }) {
+				pf.Role, pf.Peers, pf.Paused = "copy", []string{}, true
+				p.Folders = append(p.Folders, pf)
+			}
+			continue
 		}
 		peer := fc.Node
 		if fc.Node == node {

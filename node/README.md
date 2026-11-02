@@ -1144,7 +1144,9 @@ Syncthing may touch:
 - a copy no longer in the plan (copies turned off, the folder unshared or no longer copyable, a
   machine forgotten) is taken out of Syncthing and deleted, once the tasks working on it are
   stopped (`folder_revoked`, `copy_deleted` in `shares.log`); the peer's device goes with its last
-  folder. The versions of a folder no longer synced are deleted after 30 days.
+  folder. The versions of a folder no longer synced are deleted after 30 days. A copy planned
+  `paused` (a machine of the pair suspended, or without Syncthing for now) is kept as it is, not
+  synced.
 
 `GET /v1/node` reports each synced folder's state (`syncthing.folders`): Syncthing's `state`,
 `done` (the % of the folder a copy has; on the folder's machine, the least any copy has),

@@ -1453,7 +1453,8 @@ sent only but its results subfolder both ways, `manage` both ways with 30 days o
 folder's machine. A plan is handed again only when it changes (and after a reconnection), every
 15 s at most. Unticking a machine, turning a folder's copies off, unsharing it or forgetting a
 machine drops the copies from the plans: the copy machines delete them, after stopping the tasks
-working on them.
+working on them. While a machine of the pair is suspended (or back on a version without
+Syncthing), the copy is kept, paused, not deleted.
 
 Each copy shows its state: up to date, syncing (with its %), behind, error (Syncthing's first
 error), waiting (not synced there yet), and what it takes there (`copies` in `GET /v1/folders`).

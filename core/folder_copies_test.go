@@ -146,6 +146,18 @@ func TestFolderCopiesPlan(t *testing.T) {
 		t.Fatalf("copies %+v", fcs)
 	}
 
+	// The Mac suspended: the copy is kept, paused, not deleted.
+	c.store.db.Exec(`UPDATE nodes SET suspended = 1 WHERE name = 'mac'`)
+	c.syncAll(ctx)
+	if np, _ := nas.last(); len(np.Folders) != 1 || !np.Folders[0].Paused || len(np.Peers) != 0 {
+		t.Fatalf("nas, the Mac suspended: %+v", np)
+	}
+	c.store.db.Exec(`UPDATE nodes SET suspended = 0 WHERE name = 'mac'`)
+	c.syncAll(ctx)
+	if np, _ := nas.last(); len(np.Folders) != 1 || np.Folders[0].Paused {
+		t.Fatalf("nas, the Mac back: %+v", np)
+	}
+
 	// Unticked: the copy machine's plan no longer has it (it deletes it).
 	if err := c.setCopies(ctx, "Docs", nil); err != nil {
 		t.Fatal(err)

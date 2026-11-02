@@ -159,6 +159,17 @@ func TestSyncCopies(t *testing.T) {
 		}
 	}
 
+	// Paused (a machine of the pair suspended): kept, not synced.
+	paused := cp
+	paused.Paused, paused.Peers = true, []string{}
+	putPlan(t, n, syncPlan{Folders: []planFolder{paused}})
+	if got := f.folders[cp.ID]; !got.Paused || len(got.Devices) != 0 {
+		t.Fatalf("paused copy %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(n.copyPath(cp.ID), "a.jpg")); err != nil {
+		t.Fatalf("a paused copy lost its files: %v", err)
+	}
+
 	// manage: both ways on the copy too, without versions (the folder's
 	// machine keeps them).
 	plan.Folders[0].Access = accessManage

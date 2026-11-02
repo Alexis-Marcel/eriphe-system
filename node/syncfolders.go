@@ -75,6 +75,9 @@ type planFolder struct {
 	Access  string   `json:"access"`  // its level: read, drop or manage
 	Results string   `json:"results"` // with drop: the results subfolder's name
 	Peers   []string `json:"peers"`   // the machines it syncs with, among Peers
+	// Paused: a copy kept as it is, not synced, while a machine of the
+	// pair is suspended or has no Syncthing for now.
+	Paused bool `json:"paused,omitempty"`
 }
 
 const (
@@ -117,7 +120,7 @@ func (p syncPlan) check() error {
 				return fmt.Errorf("folder %s: peer %q is not among the peers", f.ID, pe)
 			}
 		}
-		if f.Role == roleCopy && (len(f.Peers) != 1 || f.Peers[0] != f.Source) {
+		if f.Role == roleCopy && !f.Paused && (len(f.Peers) != 1 || f.Peers[0] != f.Source) {
 			return fmt.Errorf("folder %s: a copy syncs with its folder's machine only", f.ID)
 		}
 		ids[f.ID] = true
@@ -326,7 +329,7 @@ func (n *node) stFolders(pf planFolder, shared []sharedFolder, ids map[string]st
 	case roleCopy:
 		path = n.copyPath(pf.ID)
 	}
-	main := stFolder{ID: pf.ID, Label: pf.Name, Path: path, Devices: devices, RescanIntervalS: 3600,
+	main := stFolder{ID: pf.ID, Label: pf.Name, Path: path, Devices: devices, RescanIntervalS: 3600, Paused: pf.Paused,
 		FSWatcherEnabled: true, FSWatcherDelayS: 10, MaxConflicts: -1,
 		// As root on Linux, what it writes takes its folder's owner.
 		CopyOwnershipFromParent: runtime.GOOS == "linux" && os.Geteuid() == 0}
