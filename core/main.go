@@ -128,6 +128,7 @@ func main() {
 	mux.HandleFunc("GET /v1/node/tasks/{id}/skills/{sha}", c.handleTaskSkill)     // skills_tasks.go
 	mux.HandleFunc("POST /v1/node/services/{name}/report", c.handleServiceReport)
 	mux.HandleFunc("POST /v1/node/certificate", c.handleNodeCertificate)
+	mux.HandleFunc("GET /v1/node/sync/{peer}", c.handleNodeSync) // sync_relay.go
 	mux.Handle("GET /v1/services", bearer(token, http.HandlerFunc(c.handleServices)))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "ok\n") })
 	// Remote access over the tailnet (remote.go): the same API, and the workspace.

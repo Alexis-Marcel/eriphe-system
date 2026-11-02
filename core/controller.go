@@ -47,6 +47,8 @@ type core struct {
 	placing  sync.Mutex // one pass at a time over the tasks waiting for a node
 	failedOn sync.Map   // service name → the node it kept failing on, avoided while another can take it
 
+	syncLinks syncLinks // the Syncthing connections joined between machines (sync_relay.go)
+
 	cloud cloudFlows // Google authorizations in progress (cloud.go)
 
 	push        *pusher          // notifications on the user's devices (push.go); nil without the workspace
