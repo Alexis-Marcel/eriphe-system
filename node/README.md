@@ -289,7 +289,7 @@ A probe for another system is a `sessionProbe`.
 
 | Call | What |
 |---|---|
-| `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `folders` (the shared folders: `{id, name, access, missing}`, never a path), `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine) |
+| `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `folders` (the shared folders: `{id, name, access, missing}`, never a path), `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine), `syncthing` (its Syncthing's `device_id`, see Copies) |
 | `GET /v1/shares` | the folders shared on this machine: `{folders: [{id, name, access, missing}]}`, never a path (see Shares) |
 | `DELETE /v1/shares/{id}` | take a folder off the list (eriphe-core may restrict, never add); the tasks holding it are stopped |
 | `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, identity?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex` or `acp` (with `command`) |
@@ -1066,18 +1066,42 @@ DrvFs), not the setgid rule above.
 ## Copies (Syncthing)
 
 A folder shared on one machine can be kept, up to date, on the user's other machines: Syncthing
-runs next to every node and copies it. This section is the way between the machines.
+runs next to every node and copies it.
 
-**The way between machines.** Syncthing listens on the loopback only (`-syncthing-listen`, e.g.
-`127.0.0.1:22000`; empty: no copies kept on this machine), without global or local discovery, nor
-relays, nor NAT traversal: no port opens, no third party is involved. The machines reach one
-another through eriphe-core, on the tunnels the nodes already keep open:
+**Syncthing on each machine.** The installation runs it beside the node, never as the node's
+child, and pins its version (2.1.7); it never upgrades itself:
+
+| Machine | Syncthing | Home (`-syncthing-home`) |
+|---|---|---|
+| Linux, NAS, one-container install, a Mac in Lima's VM | the official image `syncthing/syncthing`, by digest, container `eriphe-syncthing` in the node's network namespace (`network_mode: service:node`), the shared places and `<root>/sync` at their paths | `/var/lib/eriphe/syncthing` |
+| Mac with Apple's container | the official signed build (Developer ID of Kastelo AB, Team ID `LQE5SYM783`, notarized) in `~/.eriphe/syncthing`, run by its own LaunchAgent `org.eriphe.syncthing` | `~/.eriphe/syncthing/home` |
+| Windows | the official Linux build in the WSL distribution, `/usr/local/lib/eriphe/syncthing`, started by `eriphe-node-run`: it sees what the distribution sees | `/var/lib/eriphe-syncthing` |
+
+On a Mac, Syncthing must not be the node's child: macOS grants access to Documents, iCloud Drive or
+a cloud's folder to the program that asks, and the node is not signed. Syncthing's own signed
+binary, in its own LaunchAgent, asks once; the answer is tied to Kastelo AB's signature and holds
+across Syncthing's versions, Eriphe's updates and restarts. On Windows, the user's folder is a
+DrvFs mount, where Syncthing sees no change notification: it rescans it (every hour by default).
+
+The installation writes Syncthing's first `config.xml` once, before its first start
+(`testdata/syncthing-config.xml`): its API on `127.0.0.1:18384` with a generated key, listening on
+`tcp://127.0.0.1:22100` only, and no global or local discovery, relay, NAT traversal, LAN address
+announcement, usage or crash report, browser nor upgrade. The node (`syncthing.go`) reads the API's
+address and key there (`-syncthing-home`, env `ERIPHE_SYNCTHING_HOME`; empty: no copies on this
+machine), refuses an API or a listening address off the loopback, sets those options again at every
+start through the REST API, and reports Syncthing's device ID in `GET /v1/node` (`syncthing:
+{device_id}`), which eriphe-core hands to the peers. The API key never leaves the machine. It
+drives Syncthing through its REST API only, waiting for it while it is not up yet.
+
+**The way between machines.** Syncthing listens on the loopback only, without global or local
+discovery, nor relays, nor NAT traversal: no port opens, no third party is involved. The machines
+reach one another through eriphe-core, on the tunnels the nodes already keep open:
 
 ```
 Syncthing A → node A        tcp://127.0.0.1:<port of B>        (a loopback port per peer)
 node A → eriphe-core        GET /v1/node/sync/{B}, Upgrade: eriphe-sync   (node secret, TLS)
 eriphe-core → node B        GET /v1/sync/connect, Upgrade: eriphe-sync    (B's tunnel)
-node B → Syncthing B        its -syncthing-listen address
+node B → Syncthing B        its listening address (127.0.0.1:22100)
 ```
 
 The node opens one loopback port per peer (`127.0.0.1`, kept from one start to the next in

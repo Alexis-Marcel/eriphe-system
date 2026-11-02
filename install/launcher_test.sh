@@ -516,6 +516,7 @@ mac_up() {
 		CORE_IMAGE=c NODE_IMAGE=ghcr.io/alexis-marcel/eriphe-node:latest WORKER_IMAGE=ghcr.io/alexis-marcel/eriphe-base:latest
 		RELAY_BIN='$M/relay-bin' RELAY_PLIST='$M/relay.plist'
 		native_env() { echo NEW=1; }; native_conf() { echo mode=node; }; mac_quick_actions() { :; }
+		syncthing_fetch() { printf '#!/bin/sh\n' >\"\$1/syncthing\"; chmod +x \"\$1/syncthing\"; }
 		$1
 		native_up" >"$M/out" 2>&1
 }
@@ -531,6 +532,24 @@ if mac_up 'relay_loaded() { true; }; root_ready() { false; }'; then :; else fail
 { [ ! -d "$E/update/lock" ] && [ ! -d "$E/update/install-backup" ]; } || fail "Mac reinstall leaves its lock or its backup"
 has "$M/out" "updater=1" "Mac reinstall"
 has "$M/out" "relay_kept=1" "Mac reinstall, the relay left for later"
+# Syncthing: its own LaunchAgent, running the binary itself (not the node's
+# child, not a shell), its first configuration written with a key of its
+# own, never in the LaunchAgent.
+[ -f "$M/loaded.org.eriphe.syncthing" ] || fail "Mac reinstall: Syncthing is not running"
+sp=$M/home/Library/LaunchAgents/org.eriphe.syncthing.plist
+has "$sp" "<string>$E/syncthing/syncthing</string>" "Syncthing's LaunchAgent runs its binary"
+has "$sp" "<key>STGUIADDRESS</key><string>127.0.0.1:18384</string>" "Syncthing's API on the loopback"
+has "$sp" "<key>STNOUPGRADE</key><string>1</string>" "Syncthing never upgrades itself"
+hasnt "$sp" "apikey" "Syncthing's LaunchAgent"
+hasnt "$sp" "/bin/sh" "Syncthing's LaunchAgent"
+has "$E/syncthing/home/config.xml" "<address>127.0.0.1:18384</address>" "Syncthing's first configuration"
+[ "$(cat "$E/syncthing/version")" = 2.1.7 ] || fail "Syncthing's version is not kept"
+[ "$(stat -c %a "$E/syncthing/home/config.xml" 2>/dev/null || stat -f %Lp "$E/syncthing/home/config.xml")" = 600 ] || fail "Syncthing's config.xml is readable by others"
+key=$(sed -n 's|.*<apikey>\(.*\)</apikey>.*|\1|p' "$E/syncthing/home/config.xml")
+[ "${#key}" -ge 32 ] || fail "Syncthing's API key: $key"
+# Run again: the same configuration, its key kept.
+mac_up 'relay_loaded() { true; }; root_ready() { false; }' || fail "Mac reinstall, again: $(cat "$M/out")"
+has "$E/syncthing/home/config.xml" "<apikey>$key</apikey>" "Syncthing's key, kept"
 # Root can be asked but is not given: the previous node back, running.
 mac_reset
 if mac_up 'relay_loaded() { true; }; root_ready() { true; }'; then fail "Mac reinstall: sudo refused, and it went on"; fi
@@ -613,6 +632,77 @@ rm -f "$L/pulled" "$L/calls"
 printf 'id=u-5\naction=update\ncore=0.55.0\nauto=0\n' >"$L/data/node/update-requested"
 NEWV=0.55.0 PATH="$L/fake:$PATH" ERIPHE_UPDATE_HEALTH=2 sh "$L/conf/update.sh" 2>/dev/null
 has "$L/calls" "compose -p eriphe" "Linux updater: a new build not recreated"
+
+# The updater recreates Syncthing with the node: it lives in the node's
+# network namespace.
+printf 'services:\n  node:\n  syncthing:\n' >"$L/conf/compose.yaml"
+rm -f "$L/pulled" "$L/calls"
+printf 'id=u-6\naction=update\ncore=0.55.0\nauto=0\n' >"$L/data/node/update-requested"
+NEWV=0.55.0 PATH="$L/fake:$PATH" ERIPHE_UPDATE_HEALTH=2 sh "$L/conf/update.sh" 2>/dev/null
+has "$L/calls" "up -d --pull never --no-deps --force-recreate syncthing" "Linux updater: Syncthing again with the node"
+
+# ---- Syncthing
+
+# Its first configuration: the node's own test reads the same file
+# (node/testdata/syncthing-config.xml), with the key in place of @KEY@.
+installer 'syncthing_config @KEY@' >"$T/st-config.xml"
+cmp -s "$T/st-config.xml" "$here/../node/testdata/syncthing-config.xml" ||
+	fail "syncthing_config differs from node/testdata/syncthing-config.xml: $(diff "$T/st-config.xml" "$here/../node/testdata/syncthing-config.xml")"
+# install.ps1 writes the same one in its distribution.
+awk "/^<!-- Written by Eriphe's installer: Syncthing/ { f = 1 } f && /^EOF\$/ { exit } f" "$here/install.ps1" >"$T/st-config-ps1.xml"
+cmp -s "$T/st-config-ps1.xml" "$here/../node/testdata/syncthing-config.xml" ||
+	fail "install.ps1's Syncthing configuration differs from node/testdata/syncthing-config.xml"
+k1=$(installer syncthing_key) k2=$(installer syncthing_key)
+{ [ "${#k1}" = 32 ] && [ "$k1" != "$k2" ]; } || fail "syncthing_key: $k1 $k2"
+
+# The compose project: the pinned image, in the node's network namespace,
+# its API on the loopback, the places and the copies at their paths; the
+# node reads its home, read-only.
+installer 'DATA=/srv/eriphe MODE=node NODE_IMAGE=n WORKER_IMAGE=w INSTALL=linux SHARES=docs=/srv/docs,media=/srv/media:ro; compose_yaml 100 1' >"$T/compose-st"
+for want in "image: syncthing/syncthing:2.1.7@sha256:2b71da7c0d0a91a6ae5285ad079226fecc0a365d08b27720e1f7037b018f7546" \
+	'network_mode: "service:node"' "STGUIADDRESS: 127.0.0.1:18384" 'STNOUPGRADE: "1"' 'entrypoint: ["/bin/syncthing"]' \
+	"STHOMEDIR: /srv/eriphe/syncthing" "- /srv/eriphe/syncthing:/srv/eriphe/syncthing" "- /srv/eriphe/node/sync:/srv/eriphe/node/sync" \
+	"- /srv/eriphe/syncthing:/srv/eriphe/syncthing:ro" "ERIPHE_SYNCTHING_HOME: /srv/eriphe/syncthing" \
+	"- /srv/docs:/srv/docs" "- /srv/media:/srv/media:ro"; do
+	has "$T/compose-st" "$want" "compose, Syncthing"
+done
+hasnt "$T/compose-st" "8384:" "compose, Syncthing (a published port)"
+hasnt "$T/compose-st" "22000" "compose, Syncthing (a published port)"
+
+# Its signature on a Mac: valid, and Kastelo AB's Team ID, or refused.
+S=$T/st
+mkdir -p "$S/fake" "$S/dl"
+cat >"$S/fake/codesign" <<'EOF'
+#!/bin/sh
+case $1 in
+--verify) case $* in *'leaf[subject.OU] = "LQE5SYM783"'*) [ "${ST_VALID:-1}" = 1 ] ;; *) exit 1 ;; esac ;;
+-dv) printf 'Executable=%s
+Identifier=syncthing
+TeamIdentifier=%s
+' "$2" "${ST_TEAM:-LQE5SYM783}" >&2 ;;
+esac
+EOF
+cat >"$S/fake/curl" <<'EOF'
+#!/bin/sh
+while [ $# -gt 1 ]; do [ "$1" = -o ] && { echo zip >"$2"; }; shift; done
+echo "$1" >>"$S/urls"
+EOF
+printf '#!/bin/sh
+echo "${ST_SUM:-a98fb709c79412e5586c81a1586bfb256b6e5a97b067ddf7447155bcdf6aac3f}  $3"
+' >"$S/fake/shasum"
+printf '#!/bin/sh
+mkdir -p "$4/syncthing-macos-universal-v2.1.7" && echo bin >"$4/syncthing-macos-universal-v2.1.7/syncthing"
+' >"$S/fake/ditto"
+chmod +x "$S/fake/"*
+export S
+st() { env PATH="$S/fake:$PATH" "$@" sh -c "ERIPHE_INSTALL_LIB=1; . '$here/install.sh'; rm -rf '$S/dl'; mkdir -p '$S/dl'; syncthing_fetch '$S/dl'" >/dev/null 2>&1; }
+st || fail "Syncthing's build, signed and matching: refused"
+[ -f "$S/dl/syncthing" ] || fail "Syncthing's build is not in place"
+has "$S/urls" "https://github.com/syncthing/syncthing/releases/download/v2.1.7/syncthing-macos-universal-v2.1.7.zip" "Syncthing's download"
+if st ST_SUM=0000; then fail "Syncthing: another checksum accepted"; fi
+if st ST_TEAM=ABCDE12345; then fail "Syncthing: another Team ID accepted"; fi
+if st ST_VALID=0; then fail "Syncthing: an invalid signature accepted"; fi
+[ ! -f "$S/dl/syncthing" ] || fail "Syncthing: a refused build left in place"
 
 if [ "$fails" -gt 0 ]; then
 	echo "launcher_test.sh: $fails failed" >&2

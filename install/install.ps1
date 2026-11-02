@@ -117,6 +117,14 @@ $alpine = @{
   ARM64 = @("https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/aarch64/alpine-minirootfs-3.22.7-aarch64.tar.gz",
             "7e9b34ff3304381909e566e2c93de450664ccc724191261423974fc121c11623")
 }
+# Syncthing, for the copies of shared folders (node/README.md, Copies): its
+# official Linux build in the distribution, pinned and checked against the
+# release's sha256sum.txt.asc, as install.sh pins it; never upgraded by itself.
+$syncthingVersion = "2.1.7"
+$syncthing = @{
+  AMD64 = @("amd64", "2edc416e7ed136b7c858ed5f3f02a3b8316589605e54c380228ceea7acbf0142")
+  ARM64 = @("arm64", "48e456690cd2b97e7d26b02b5ac35f62a3b36172267b144cfeaf02c993ab955c")
+}
 # The images, at the pinned version or latest (set once the saved settings
 # are read); replaced by ERIPHE_NODE_IMAGE and ERIPHE_CORE_IMAGE, as with
 # install.sh. eriphe-core never chooses them.
@@ -974,12 +982,30 @@ if [ -n "${ERIPHE_WINDOWS_HOME:-}" ] && ! mountpoint -q /mnt/eriphe/home 2>/dev/
     echo "the user's folder could not be mounted: no folder can be shared" >>/var/log/eriphe-node.log
 fi
 eriphe-dockerd
+# Syncthing, beside the node (not its child): the copies of shared folders.
+pgrep -f /usr/local/bin/eriphe-syncthing-run >/dev/null || setsid /usr/local/bin/eriphe-syncthing-run </dev/null >/dev/null 2>&1 &
 # The updater, next to the node: it applies eriphe-core's update requests.
 pgrep -f /usr/local/bin/eriphe-update-loop >/dev/null || setsid /usr/local/bin/eriphe-update-loop </dev/null >/dev/null 2>&1 &
 # Windows only restarts a task that fails to start: this loop restarts the node.
 while true; do
   eriphe-node -root /var/lib/eriphe-node >>/var/log/eriphe-node.log 2>&1
   echo "eriphe-node exited ($?), restarting in 5 s" >>/var/log/eriphe-node.log
+  sleep 5
+done
+EOF
+cat > /usr/local/bin/eriphe-syncthing-run <<'EOF'
+#!/bin/sh
+# Started by eriphe-node-run: Syncthing, its API and its listening address
+# on the loopback only (its config.xml, written once by install.ps1), its
+# peers reached through the node and eriphe-core. It sees what the
+# distribution sees: the user's folder, and the copies in the node's data.
+S=/var/lib/eriphe-syncthing
+BIN=/usr/local/lib/eriphe/syncthing/syncthing
+[ -x "$BIN" ] && [ -s "$S/config.xml" ] || exit 0
+export STHOMEDIR="$S" HOME="$S" STGUIADDRESS=127.0.0.1:18384 STNOUPGRADE=1
+while true; do
+  "$BIN" serve --no-browser >>/var/log/eriphe-syncthing.log 2>&1
+  echo "syncthing exited ($?), restarting in 5 s" >>/var/log/eriphe-syncthing.log
   sleep 5
 done
 EOF
@@ -1277,9 +1303,67 @@ for target in core node; do
 done
 EOF
 chmod 755 /usr/local/bin/eriphe-dockerd /usr/local/bin/eriphe-node-run /usr/local/bin/eriphe-addr /usr/local/bin/eriphe-share \
-  /usr/local/bin/eriphe-core-run /usr/local/bin/eriphe-update-loop /usr/local/bin/eriphe-update
+  /usr/local/bin/eriphe-core-run /usr/local/bin/eriphe-update-loop /usr/local/bin/eriphe-update /usr/local/bin/eriphe-syncthing-run
 '@
 if ($changed -contains "restart") { Invoke-Quiet { wsl.exe --terminate $Distro } }
+
+# Syncthing in the distribution: the pinned build if it is not there yet,
+# checked, and its first configuration if it has none. Without it (no
+# download, a bad checksum) the node runs all the same, without copies.
+$stArch = $env:PROCESSOR_ARCHITECTURE
+if ($env:PROCESSOR_ARCHITEW6432) { $stArch = $env:PROCESSOR_ARCHITEW6432 }
+if ($syncthing.ContainsKey($stArch)) {
+  $stSetup = @'
+dir=/usr/local/lib/eriphe/syncthing
+if [ "$(cat "$dir/version" 2>/dev/null)" != "$v" ]; then
+  tmp=$(mktemp -d)
+  f=syncthing-linux-$a-v$v.tar.gz
+  if wget -q -O "$tmp/$f" "https://github.com/syncthing/syncthing/releases/download/v$v/$f" &&
+    echo "$sum  $tmp/$f" | sha256sum -c -s && tar -xzf "$tmp/$f" -C "$tmp"; then
+    mkdir -p "$dir"
+    mv "$tmp/syncthing-linux-$a-v$v/syncthing" "$dir/syncthing.new"
+    chmod 755 "$dir/syncthing.new"
+    mv "$dir/syncthing.new" "$dir/syncthing"
+    echo "$v" >"$dir/version"
+    # The one running, if any, starts again on the new build.
+    pkill -f "$dir/syncthing serve" || true
+  else
+    echo syncthing=missing
+  fi
+  rm -rf "$tmp"
+fi
+umask 077
+mkdir -p /var/lib/eriphe-syncthing /var/lib/eriphe-node/sync
+if [ ! -s /var/lib/eriphe-syncthing/config.xml ]; then
+  key=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+  sed "s/@KEY@/$key/" >/var/lib/eriphe-syncthing/config.xml <<'EOF'
+<!-- Written by Eriphe's installer: Syncthing for the copies of shared folders (node/README.md, Copies). -->
+<configuration version="52">
+    <gui enabled="true" tls="false">
+        <address>127.0.0.1:18384</address>
+        <apikey>@KEY@</apikey>
+    </gui>
+    <options>
+        <listenAddress>tcp://127.0.0.1:22100</listenAddress>
+        <globalAnnounceEnabled>false</globalAnnounceEnabled>
+        <localAnnounceEnabled>false</localAnnounceEnabled>
+        <relaysEnabled>false</relaysEnabled>
+        <natEnabled>false</natEnabled>
+        <announceLANAddresses>false</announceLANAddresses>
+        <urAccepted>-1</urAccepted>
+        <crashReportingEnabled>false</crashReportingEnabled>
+        <autoUpgradeIntervalH>0</autoUpgradeIntervalH>
+        <startBrowser>false</startBrowser>
+    </options>
+</configuration>
+EOF
+fi
+'@
+  $stOut = Invoke-InDistro ("v='$syncthingVersion' a='$($syncthing[$stArch][0])' sum='$($syncthing[$stArch][1])'`n" + $stSetup)
+  if ($stOut -contains "syncthing=missing") {
+    Add-Notice "Syncthing could not be installed (see the log): this PC keeps no copy of your folders for now; run the command again later."
+  }
+}
 
 # 3. Docker Engine, for the images. The node keeps running until the new
 # binary is there: a failed pull leaves it as it was.
@@ -1432,6 +1516,7 @@ ERIPHE_VERSION=$pin
 ERIPHE_WAKE_MAC=$wakeMac
 ERIPHE_WAKE_BROADCAST=$wakeBroadcast
 ERIPHE_MODEL_SERVER=$ModelServer
+ERIPHE_SYNCTHING_HOME=/var/lib/eriphe-syncthing
 $alwaysOn
 $(Get-SessionEnv $sessionDir)
 $(Get-ShareEnv $sessionProfile)
