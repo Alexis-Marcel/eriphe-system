@@ -264,6 +264,12 @@ type runRequest struct {
 	Tools      []string `json:"tools,omitempty" jsonschema:"legacy: use resources {kind: tool}"`
 	Folders    []string `json:"folders,omitempty" jsonschema:"legacy: use resources {kind: folder}"`
 	Identities []string `json:"identities,omitempty" jsonschema:"legacy, do not use: long-lived credentials from the configuration file; a repo resource gets short-lived access instead"`
+
+	// askStart: what the task will need of the user's is asked at launch,
+	// on a card, and the task waits for the answer (task_start.go); taint
+	// is why its start may have been talked into it, if it may.
+	askStart bool
+	taint    []string
 }
 
 // workerVoice is a worker's standing instruction: its last message reaches
@@ -351,11 +357,18 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 			where += "@" + branch
 		}
 	}
+	var needs []startNeed
+	if kind == "worker" && r.askStart {
+		needs = c.startNeeds(lent.List, r.taint) // task_start.go
+	}
 	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model,
 		Identity: strings.Join(r.Identities, ","), Dir: where, Prompt: r.Prompt, State: statePending,
 		Kind: kind, Tools: strings.Join(grant, ","), Folders: lent.folderNames(), Resources: lent.List, Pinned: r.Node != ""}
 	if waiting != nil {
 		t.PendingReason = waiting.reason
+	}
+	if len(needs) > 0 {
+		t.Desired, t.PendingReason = desiredHeld, "waits for "+c.conf().User+"'s approval to start, asked on a card in the conversation"
 	}
 	if err := c.store.insertTask(t); err != nil {
 		return nil, err
@@ -393,9 +406,16 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		spec.Prompt = spec.AppendSystemPrompt + "\n\n" + spec.Prompt
 		spec.AppendSystemPrompt = ""
 	}
-	c.store.updateTask(t.ID, map[string]any{"desired": desiredRunning})
+	if len(needs) == 0 {
+		c.store.updateTask(t.ID, map[string]any{"desired": desiredRunning})
+	}
 	if err := c.store.setSpec(t.ID, spec); err != nil {
 		return nil, err
+	}
+	if len(needs) > 0 {
+		if err := c.holdTask(t, needs, r.taint); err != nil {
+			return nil, err
+		}
 	}
 	c.bump()
 	return c.store.task(t.ID)

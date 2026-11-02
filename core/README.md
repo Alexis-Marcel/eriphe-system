@@ -955,12 +955,15 @@ the node relays it to `POST /v1/node/tasks/{id}/credential` with its own secret 
 | the brain | deny: it works through its tools |
 | no GitHub repository is lent to the task: no `repo` [resource](#resources) on GitHub (a task from before resources: no GitHub catalog server in its grant) | deny |
 | the first rule of `policy.credentials` that matches (host and repo globs, access) | its decision: `allow`, `ask` (once per task), `deny` |
-| no rule: a repository its `repo` resource covers (a task from before resources: its `repo`, as `read`) | read: allow; write by git with access `write` and a declared `branch`: allow (the user's own turn lent it so; a tainted turn cannot); any other write (access `read`, no branch, gh): ask, the first time in the task |
+| no rule: a repository its `repo` resource covers (a task from before resources: its `repo`, as `read`) | read: allow; write (git's push, gh's pull request) with access `write` and a declared `branch`: allow (the user's own turn lent it so; a tainted turn cannot); any other write (access `read`, no branch): ask, the first time in the task |
 | no rule: another repository | deny |
 | a write allowed so far, by a task that read external content (an external catalog tool, a page, a web search) or was started on a tainted turn of the brain | ask |
 | allowed so far, without the GitHub App (the fallback below) | ask, the first time in the task |
 
-A repository lent for `write` on a branch makes its first push there approved; a `git push` of that
+A repository lent for `write` on a branch makes its first push there approved, and the pull request
+gh opens from it (gh's token writes pull requests and issues, never contents; `gh pr merge`, a
+release, a repository's settings, its secrets and `gh api -X` stay the user's, built-in asks of
+policy.go); a `git push` of that
 task to another branch (`git push origin other`, `HEAD:other`, `--all`, `--tags`, `--mirror`) is the
 refused (`undeclaredPush`, policy.go). It reads the command line, shell redirections (`2>&1`,
 `> out`) aside: a push of the current branch after the task switched to another one is decided by
@@ -979,6 +982,24 @@ its credential, as any other.
 so, the brain's answer is refused), on the approval card of the workspace like any other. The
 tool waits meanwhile. Once allowed, the approval holds for that repository (a write covers reads)
 for the rest of the task, and the node asks eriphe-core again, which mints.
+
+**Asked at launch.** What a task started by `run_task` will need of the user is foreseen when it
+starts, with the same decision (`startNeeds`, `task_start.go`): for each GitHub repository lent
+for `write`, its push by git (on its branch, if declared). When that would ask (the fallback token
+without the GitHub App, a `policy.credentials` rule that asks, a tainted start, no declared
+branch), the task does not start: it is kept `pending` with `desired` `held` (no node is given it,
+no placement moves it, its `pending_reason` says why) and the user gets one card in the
+conversation (kind `taskstart`, [conversation cards](#workspace-web)), « Pour pousser `eriphe/x`
+sur owner/repo, j'utiliserai le jeton GitHub de l'outil, qui n'est pas limité à ce dépôt. ». Oui
+keeps the same approval as the push's own (`credential_grants`, logged "approved at launch": a
+write to that repository, by git or gh, for the rest of the task, as long as it reads no external
+content: after that, its push asks again) and lets the task go, so its push is allowed without
+asking again; Non stops it and tells the brain.
+Like every card, only the user's click or a plain yes or no of theirs decides it, never the brain
+(`answer_task` has nothing to answer on a held task; `stop_task` cancels it). With the GitHub App
+and a declared branch nothing is asked and the task starts at once. What is not foreseen (a push
+to a repository lent for read, a task that reads external content on the way) still asks when it
+happens.
 
 **The credential.** With [the GitHub App](#the-github-app), an installation token restricted to the
 one repository and the rights asked for, valid one hour: git reads `contents: read` or `write`; gh
@@ -1605,7 +1626,8 @@ the conversation on its tasks (`/#tasks-panel`).
 
 **Conversation first** (`convo_cards.go`, `web_convo_cards.go`, `templates/convo.html`). What waits
 for the user's approval is asked where they talk to the assistant: every proposal (a memory, an
-intention, a notification rule, a watch, a setting, a presence mapping) is a card bound by the code
+intention, a notification rule, a watch, a setting, a presence mapping, the start of a task that
+needs something of theirs: [asked at launch](#credentials-on-demand)) is a card bound by the code
 to that one proposal, under the brain's message of the turn that made it (or its last message of
 the turn), with Oui, Non (the proposal's own approve and reject) and Modifier (the composer is
 prefilled, and the brain proposes again). The event stream keeps cards up to date (`cards`:

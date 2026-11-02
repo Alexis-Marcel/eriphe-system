@@ -78,7 +78,7 @@ const (
 	cardsOfferedKey = "cards_offered_at"
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart}
 
 // cardMu makes deciding a card one thing at a time: a click and a "oui"
 // at the same moment decide it once.
@@ -239,6 +239,8 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		m := c.haMappings("")[i]
 		p.Pending, p.Tainted, p.Why, p.Outcome = m.State == ruleProposed, m.Tainted, m.Why, cardApproved
 		p.text = func(lang string) string { return tr(lang, "ctx.ha.signal."+m.Signal) + " ← " + m.Entity }
+	case cardTaskStart:
+		return c.taskStartProposal(p) // task_start.go
 	}
 	return p
 }
@@ -305,6 +307,9 @@ func (c *core) pendingProposals() []proposal {
 	for _, m := range c.haMappings(ruleProposed) {
 		add(cardPresence, m.ID)
 	}
+	for _, id := range c.proposedStarts() { // task_start.go
+		add(cardTaskStart, id)
+	}
 	return out
 }
 
@@ -346,6 +351,8 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.decideSetting(id, approve)
 	case cardPresence:
 		return c.decideMapping(ctx, id, approve)
+	case cardTaskStart:
+		return c.decideTaskStart(id, approve)
 	}
 	return fmt.Errorf("no proposal kind %q", kind)
 }
@@ -447,6 +454,9 @@ func (c *core) decideCard(ctx context.Context, id int64, approve bool, by string
 	kind, pid, _ := parseProposalRef(x.Ref)
 	if err := c.decideProposal(ctx, kind, pid, approve); err != nil {
 		return x, err
+	}
+	if kind == cardTaskStart && !approve && by != "text" {
+		c.taskStartDeclined(pid) // a "non" in words is told with the message
 	}
 	x.State, x.Decided, x.By = cardRejected, time.Now(), by
 	if approve {

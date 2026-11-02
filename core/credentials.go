@@ -240,9 +240,10 @@ func decideCredential(p *Policy, req credRequest, f credFacts) credDecision {
 		case g == nil:
 			return deny(d.Repo + " is not the repository this task was asked to work on")
 		case req.Access != accessWrite:
-		case g.Access == accessWrite && g.Branch != "" && orStr(req.Tool, "git") == "git":
+		case g.Access == accessWrite && g.Branch != "":
 			// Lent for write on a branch by my own (untainted) turn: that was
-			// my approval of the first push. A push elsewhere asks (policy.go).
+			// my approval of the first push, and of the pull request gh opens
+			// from it. A push elsewhere, a merge or a release asks (policy.go).
 			d.Reason = "lent for write to " + d.Repo + " on " + g.Branch
 		case g.Access == accessWrite:
 			ask, d.Reason = true, "first push to "+d.Repo+" in this task"
@@ -294,8 +295,12 @@ func (c *core) handleTaskCredential(w http.ResponseWriter, r *http.Request) {
 // credential decides a request, mints the credential if allowed, and logs it.
 func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) credAnswer {
 	tool := orStr(req.Tool, "git")
-	facts := credFacts{Kind: t.Kind, Tainted: c.taskTaint(t),
-		Granted: func(repo, access string) bool { return c.store.credentialGranted(t.ID, "github", repo, access) }}
+	facts := credFacts{Kind: t.Kind, Tainted: c.taskTaint(t)}
+	facts.Granted = func(repo, access string) bool {
+		// An approval given at launch knew of no external content read since (task_start.go).
+		return c.store.credentialGranted(t.ID, "github", repo, access) ||
+			len(facts.Tainted) == 0 && c.store.credentialGranted(t.ID, serviceAtLaunch, repo, access)
+	}
 	facts.Repos, facts.Lent = c.taskRepos(t)
 	_, appErr := loadGitHubApp()
 	facts.Fallback = appErr == errNoGitHubApp
@@ -424,10 +429,17 @@ func (s *Store) credentialAnswered(taskID string, input map[string]any, decision
 	host, _ := input["host"].(string)
 	tool, _ := input["tool"].(string)
 	if decision == decideAllow && by == byUser && repo != "" && (access == accessRead || access == accessWrite) {
-		s.db.Exec(`INSERT OR IGNORE INTO credential_grants (task_id, service, repo, access, time) VALUES (?, 'github', ?, ?, ?)`,
-			taskID, strings.ToLower(repo), access, time.Now().Unix())
+		s.grantCredential(taskID, "github", repo, access)
 	}
 	s.logCredential(taskID, orStr(tool, "git"), host, repo, access, decision, by, "", reason)
+}
+
+// grantCredential keeps the user's approval of this access to the
+// repository for the rest of the task: given at the push (github), or at
+// launch (serviceAtLaunch, task_start.go).
+func (s *Store) grantCredential(taskID, service, repo, access string) {
+	s.db.Exec(`INSERT OR IGNORE INTO credential_grants (task_id, service, repo, access, time) VALUES (?, ?, ?, ?, ?)`,
+		taskID, service, strings.ToLower(repo), access, time.Now().Unix())
 }
 
 // credentialGranted: the user approved this access, or a write, to the

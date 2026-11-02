@@ -81,8 +81,13 @@ func newMCPServer(c *core) *mcp.Server {
 				}
 				granted = true
 			}
+			tainted := c.turnTaint()
+			in.askStart = true // what is the user's is asked now, not at the push (task_start.go)
+			if !granted {
+				in.taint = tainted
+			}
 			t, err := c.runTask(ctx, in)
-			if tainted := c.turnTaint(); err == nil && len(tainted) > 0 && !granted {
+			if err == nil && len(tainted) > 0 && !granted {
 				// Started on a tainted turn: its writes ask me (credentials.go).
 				c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(tainted, ", "))
 			}

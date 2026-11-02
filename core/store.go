@@ -76,6 +76,9 @@ type TaskRow struct {
 	Resources []ResourceRef `json:"resources,omitempty"`
 	// Pinned: its node was chosen by hand, and it never moves.
 	Pinned bool `json:"pinned,omitempty"`
+	// Desired, when inserted: held while its start waits for the user
+	// (task_start.go), running otherwise. Not read back.
+	Desired string `json:"-"`
 }
 
 type EventRow struct {
@@ -358,9 +361,9 @@ func (s *Store) insertTask(t *TaskRow) error {
 	if t.Kind == "" {
 		t.Kind = "worker"
 	}
-	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, identity, dir, prompt, state, pending_reason, kind, tools, folders, resources, pinned, created, updated)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Node, t.Agent, t.Runtime, t.Model, t.Identity, t.Dir, t.Prompt,
-		t.State, t.PendingReason, t.Kind, t.Tools, t.Folders, marshalResources(t.Resources), t.Pinned, now.Unix(), now.Unix())
+	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, identity, dir, prompt, state, pending_reason, kind, tools, folders, resources, pinned, desired, created, updated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Node, t.Agent, t.Runtime, t.Model, t.Identity, t.Dir, t.Prompt,
+		t.State, t.PendingReason, t.Kind, t.Tools, t.Folders, marshalResources(t.Resources), t.Pinned, orStr(t.Desired, desiredRunning), now.Unix(), now.Unix())
 	return err
 }
 
