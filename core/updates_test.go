@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // fakeRegistry answers like GHCR for the images' latest tag: an anonymous
@@ -25,6 +26,12 @@ type fakeRegistry struct {
 
 func newFakeRegistry(t *testing.T, versions map[string]string) *fakeRegistry {
 	t.Helper()
+	// The worker is published with the node, unless a test says otherwise.
+	if v, ok := versions["eriphe-node"]; ok {
+		if _, set := versions["eriphe-base"]; !set {
+			versions["eriphe-base"] = v
+		}
+	}
 	f := &fakeRegistry{versions: versions}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
@@ -82,18 +89,18 @@ func (f *fakeRegistry) serve(w http.ResponseWriter, r *http.Request) {
 // it is a local one.
 func TestUpdatesLatestVersions(t *testing.T) {
 	for _, single := range []bool{false, true} {
-		f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
+		f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.3.0", "eriphe-node": "0.3.0"})
 		f.single = single
 		u := newUpdates(f.srv.URL + "/")
 		u.check(context.Background())
-		if got := u.version("eriphe-core"); got != "0.2.0" {
+		if got := u.version("eriphe-core"); got != "0.3.0" {
 			t.Fatalf("single %t: eriphe-core latest %q", single, got)
 		}
 		if got := u.version("eriphe-node"); got != "0.3.0" {
 			t.Fatalf("single %t: eriphe-node latest %q", single, got)
 		}
 	}
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.2.0"})
 	u := newUpdates(f.srv.URL)
 	u.check(context.Background())
 	for _, c := range []struct {
@@ -104,13 +111,44 @@ func TestUpdatesLatestVersions(t *testing.T) {
 		{"eriphe-core", "0.2.0", false},
 		{"eriphe-core", "dev", false},
 		{"eriphe-node", "", false}, // an older node, without a version
-		{"eriphe-node", "0.2.0", true},
+		{"eriphe-node", "0.1.0", true},
 		{"eriphe-worker", "0.1.0", false}, // not checked: unknown
 	} {
 		if got := u.behind(c.image, c.running); got != c.behind {
 			t.Errorf("behind(%s, %s) = %t", c.image, c.running, got)
 		}
 	}
+	// A release half published: eriphe-node's latest is out, eriphe-core's
+	// or the worker's not yet. The latest release is the one every image
+	// has, and the check runs again sooner.
+	if u.due(time.Now()) {
+		t.Fatal("due right after a check")
+	}
+	for _, half := range []map[string]string{
+		{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"},
+		{"eriphe-core": "0.3.0", "eriphe-node": "0.2.0"},
+		{"eriphe-core": "0.3.0", "eriphe-node": "0.3.0", "eriphe-base": "0.2.0"},
+	} {
+		f.versions = half
+		u.check(context.Background())
+		for _, image := range []string{"eriphe-core", "eriphe-node"} {
+			if got := u.version(image); got != "0.2.0" {
+				t.Errorf("%v: %s latest %q", half, image, got)
+			}
+			if u.behind(image, "0.2.0") {
+				t.Errorf("%v: 0.2.0 behind a release half published", half)
+			}
+		}
+		if !u.due(time.Now().Add(updateRetry)) {
+			t.Errorf("%v: not checked again soon", half)
+		}
+	}
+	f.versions = map[string]string{"eriphe-core": "0.3.0", "eriphe-node": "0.3.0", "eriphe-base": "0.3.0"}
+	u.check(context.Background())
+	if !u.behind("eriphe-core", "0.2.0") || !u.behind("eriphe-node", "0.2.0") || u.due(time.Now().Add(updateRetry)) {
+		t.Error("the release, once every image has it")
+	}
+
 	// Before any check, and without updates at all, nothing is behind.
 	if newUpdates(f.srv.URL).behind("eriphe-core", "0.1.0") || (*updates)(nil).behind("eriphe-core", "0.1.0") {
 		t.Error("behind with no latest version known")
@@ -189,7 +227,7 @@ func TestUpdatesAPI(t *testing.T) {
 	defer func(v string) { version = v }(version)
 	version = "0.1.0"
 	c, _ := newTestAPI(t)
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.3.0", "eriphe-node": "0.3.0"})
 	c.updates = newUpdates(f.srv.URL)
 	c.updates.check(context.Background())
 	mux := http.NewServeMux()
@@ -233,7 +271,7 @@ func TestUpdatesAPI(t *testing.T) {
 	if code := call(t, api, "GET", "/v1/version", "", &v); code != 200 {
 		t.Fatalf("GET /v1/version: %d", code)
 	}
-	if !v.Core.Behind || v.Core.Version != "0.1.0" || v.Core.Latest != "0.2.0" || len(v.Core.Commands) == 0 ||
+	if !v.Core.Behind || v.Core.Version != "0.1.0" || v.Core.Latest != "0.3.0" || len(v.Core.Commands) == 0 ||
 		v.Node["latest"] != "0.3.0" {
 		t.Errorf("GET /v1/version: %+v", v)
 	}

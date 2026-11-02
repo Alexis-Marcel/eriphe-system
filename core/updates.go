@@ -30,6 +30,14 @@ import (
 // registry unreachable, nothing is said: the last answer stays, and the
 // error is logged once. Settings → Devices may also check now, once a
 // minute at most (checkNow).
+//
+// Each image publishes its latest tag on its own, as its build ends
+// (RELEASING.md): for a few minutes, eriphe-node's latest may be the new
+// release and eriphe-core's not yet, or the other way round. The latest
+// release is then the older of the two (version): eriphe-core's machine
+// pulls the node and the worker of its own build, and a node takes
+// eriphe-core's, so a release is offered once every image has it. The check
+// runs again sooner meanwhile.
 
 const (
 	registryURL    = "https://ghcr.io"
@@ -44,8 +52,9 @@ const (
 	maxRegistryDoc = 1 << 20
 )
 
-// The images whose latest version is checked.
-var updateImages = []string{"eriphe-core", "eriphe-node"}
+// The images whose latest version is checked: what an update pulls (the
+// worker, eriphe-base, with the node).
+var updateImages = []string{"eriphe-core", "eriphe-node", "eriphe-base"}
 
 type updates struct {
 	base   string // the registry, replaced in tests
@@ -90,7 +99,7 @@ func (u *updates) due(now time.Time) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	every := updateEvery
-	if u.failed {
+	if u.failed || u.halfPublished() {
 		every = updateRetry
 	}
 	return u.at.IsZero() || now.Round(0).Sub(u.at.Round(0)) >= every
@@ -167,14 +176,39 @@ func (u *updates) checked() time.Time {
 	return u.at
 }
 
-// version is the latest version of an image, empty while unknown.
+// version is the latest release of an image, empty while unknown: the
+// oldest of the images' latest versions, which every image has (a release
+// half published is not one yet).
 func (u *updates) version(image string) string {
 	if u == nil {
 		return ""
 	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return u.latest[image]
+	v, ok := u.latest[image]
+	if !ok {
+		return ""
+	}
+	oldest, _ := parseVersion(v)
+	for _, other := range u.latest {
+		if o, ok := parseVersion(other); ok && o.compare(oldest) < 0 {
+			v, oldest = other, o
+		}
+	}
+	return v
+}
+
+// halfPublished tells whether the images' latest versions differ: a
+// release is being published. u.mu is held.
+func (u *updates) halfPublished() bool {
+	seen := ""
+	for _, v := range u.latest {
+		if seen != "" && v != seen {
+			return true
+		}
+		seen = v
+	}
+	return false
 }
 
 // behind tells whether a build of an image is older than its latest

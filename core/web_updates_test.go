@@ -196,9 +196,15 @@ func TestWebUpdateOthersFollow(t *testing.T) {
 	hasAll(t, "page", body, follows("/settings/updates/all"), follows("/settings/updates/core"),
 		follows("/settings/devices/pc/update"), follows("/settings/devices/nas/update"), "Tout mettre à jour")
 
-	// While eriphe-core is behind, the nodes wait for it.
+	// While eriphe-core is behind, a node's button updates it first.
 	_, body, _ = tw.do("GET", "/settings/devices/pc/update", nil, h)
-	hasAll(t, "core first", body, "→ 0.2.0", "disabled title=")
+	hasAll(t, "core first", body, "→ 0.2.0", `value="node:pc"`, "abord à jour, puis cet appareil.")
+	hasNone(t, "core first", body, "disabled title=")
+	// Without an updater of eriphe-core, nothing here can: the node waits.
+	os.Rename(filepath.Join(tw.c.store.dir, "updater"), filepath.Join(tw.c.store.dir, "updater.off"))
+	_, body, _ = tw.do("GET", "/settings/devices/pc/update", nil, h)
+	hasAll(t, "core first, by its command", body, "→ 0.2.0", "disabled title=", "Après eriphe-core")
+	os.Rename(filepath.Join(tw.c.store.dir, "updater.off"), filepath.Join(tw.c.store.dir, "updater"))
 
 	// eriphe-core asked and done: the cards, asked again, let their buttons go.
 	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"core"}}, h)
@@ -291,5 +297,87 @@ func TestUpdatesDue(t *testing.T) {
 	u.failed = false
 	if !u.due(now.Add(31 * time.Minute)) {
 		t.Fatal("not due after an hour")
+	}
+}
+
+// A device's update asked while eriphe-core is behind: eriphe-core is
+// asked first, the card says the device waits for it and follows, and the
+// device is asked once eriphe-core runs the latest version.
+func TestWebUpdateAfterCore(t *testing.T) {
+	tw, h := newUpdatesWeb(t)
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.2.0"})
+	tw.c.updates = newUpdates(f.srv.URL)
+	tw.c.updates.check(context.Background())
+	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true}}`)
+
+	code, body, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
+	r := tw.c.pendingUpdate(coreMachine)
+	if code != http.StatusOK || r == nil || tw.c.pendingUpdate("node:pc") != nil || hdr.Get("HX-Trigger") != "updates-changed" {
+		t.Fatalf("update now, eriphe-core behind: %d %+v %v\n%s", code, r, hdr, body)
+	}
+	hasAll(t, "waiting for eriphe-core", body, `id="device-foot-pc"`, `hx-get="/settings/devices/pc/update"`,
+		"data-update-poll", "eriphe-core : il se met à jour d&#39;abord, puis cet appareil.")
+	hasNone(t, "waiting for eriphe-core", body, `value="node:pc"`, "À jour", "Mise à jour disponible")
+	// Asked again: the device already waits.
+	if _, _, hdr = tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h); !strings.Contains(hdr.Get("HX-Trigger"), `demande est d\u00e9j\u00e0`) {
+		t.Fatalf("asked twice: %v", hdr)
+	}
+	// eriphe-core's row follows its own request; "Update all" leaves the device out.
+	_, body, _ = tw.do("GET", "/settings/updates/core", nil, h)
+	hasAll(t, "eriphe-core asked", body, "?id="+r.ID, "Mise à jour demandée…")
+
+	// eriphe-core restarted on the latest version: the device is asked.
+	os.WriteFile(filepath.Join(tw.c.store.dir, "update-status"), []byte("id="+r.ID+"\naction=update\noutcome=ok\nto=0.2.0\n"), 0o600)
+	version = "0.2.0"
+	tw.c.resolveUpdates(mustNodes(t, tw.c))
+	tw.c.followUpdates()
+	n := tw.c.pendingUpdate("node:pc")
+	if n == nil || tw.c.afterCore("node:pc") {
+		t.Fatalf("the device does not follow: %+v", n)
+	}
+	_, body, _ = tw.do("GET", "/settings/devices/pc/update", nil, h)
+	hasAll(t, "the device asked", body, "?id="+n.ID, "Mise à jour demandée…")
+	setNode(t, tw.c, "pc", `{"version":"0.2.0","update":{"updater":true,"status":{"id":"`+n.ID+`","outcome":"ok","from":"0.1.0","to":"0.2.0"}}}`)
+	_, body, _ = tw.do("GET", "/settings/devices/pc/update?id="+n.ID, nil, h)
+	hasAll(t, "the device done", body, "eriphe-node 0.2.0", "update-done", "À jour")
+}
+
+// An update that ends "ok" or "current" on another version than the one
+// offered is not called up to date.
+func TestWebUpdateNotReached(t *testing.T) {
+	tw, h := newUpdatesWeb(t)
+	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
+	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
+	r := tw.c.pendingUpdate("node:pc")
+	for _, outcome := range []string{"current", "ok"} {
+		setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"`+outcome+`","from":"0.0.1","to":"0.0.1"}}}`)
+		_, body, _ := tw.do("GET", "/settings/devices/pc/update?id="+r.ID, nil, h)
+		hasAll(t, outcome, body, "Pas mis à jour en 0.1.0", `value="node:pc"`)
+		hasNone(t, outcome, body, "update-done", "À jour<", "Déjà à jour")
+	}
+}
+
+// A release half published (eriphe-node's latest out, eriphe-core's not
+// yet): a node is offered no version eriphe-core does not run, and its
+// button does not make it "update" to the build it runs.
+func TestWebUpdateHalfPublished(t *testing.T) {
+	tw, _ := newUpdatesWeb(t)
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.1.0", "eriphe-node": "0.2.0"})
+	tw.c.updates = newUpdates(f.srv.URL)
+	tw.c.updates.check(context.Background())
+	setNode(t, tw.c, "same", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true}}`)
+	setNode(t, tw.c, "old", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
+	d := tw.w.updatesData(mustNodes(t, tw.c))
+	for _, row := range d.Rows {
+		want := map[string]string{"core": "", "node:same": "", "node:old": "0.1.0"}[row.Machine]
+		if row.Latest != want || row.CoreFirst {
+			t.Errorf("%s: latest %q (want %q), core first %t", row.Machine, row.Latest, want, row.CoreFirst)
+		}
+	}
+	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
+	hasNone(t, "half published", body, "0.2.0", `value="node:same"`)
+	hasAll(t, "half published", body, `value="node:old"`)
+	if n := tw.c.updateNodes(); n != 1 || tw.c.pendingUpdate("node:same") != nil {
+		t.Fatalf("update all, half published: %d asked", n)
 	}
 }

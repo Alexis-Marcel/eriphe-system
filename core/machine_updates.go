@@ -22,7 +22,9 @@ import (
 // pinned to) and "rollback" (to the version before). The order is the
 // Kubernetes one: eriphe-core's machine first, the nodes once eriphe-core
 // runs the latest version, as a node is never to be newer than eriphe-core;
-// and a node only once none of its tasks is at work.
+// and a node only once none of its tasks is at work. A node asked by hand
+// while eriphe-core is behind waits for it: eriphe-core is asked first, and
+// the node follows once it runs the latest version (followUpdates).
 //
 // eriphe-core's own machine reads the request from eriphe-core's data folder
 // (update-requested), and writes how it went next to it (update-status); a
@@ -41,6 +43,9 @@ const (
 	// updateAllKey holds when "Update all" was asked while eriphe-core was
 	// behind: the nodes follow once it runs the latest version.
 	updateAllKey = "update_all"
+	// afterCoreKey+machine holds when a node was asked by hand while
+	// eriphe-core was behind: it follows once eriphe-core runs the latest.
+	afterCoreKey = "update_after_core:"
 
 	coreMachine = "core" // eriphe-core's machine; a node is "node:<name>"
 
@@ -116,7 +121,7 @@ func manualUpdate(install string) updateCommand {
 
 // updateAll asks every machine that is behind to update, eriphe-core's
 // first: while it is behind, only it is asked, and the nodes follow once it
-// runs the latest version (followUpdateAll). It says how many were asked.
+// runs the latest version (followUpdates). It says how many were asked.
 func (c *core) updateAll() (int, error) {
 	if c.updates.behind("eriphe-core", version) {
 		if c.pendingUpdate(coreMachine) == nil {
@@ -153,24 +158,81 @@ func (c *core) updateNodes() int {
 	return n
 }
 
-// followUpdateAll asks the nodes once eriphe-core, asked first by "Update
-// all", runs the latest version; it gives up after a day.
-func (c *core) followUpdateAll() {
-	at := c.store.get(updateAllKey)
-	if at == "" {
+// updateNow asks a machine to update, by hand. A node while eriphe-core is
+// behind waits for it: eriphe-core is asked first (unless it already is),
+// and the node follows once it runs the latest version (followUpdates).
+// afterCore tells so; a node whose eriphe-core has no updater gets
+// errCoreFirst, as nothing here can update eriphe-core.
+func (c *core) updateNow(machine string) (afterCore bool, err error) {
+	if machine == coreMachine || !c.updates.behind("eriphe-core", version) {
+		_, err := c.requestUpdate(machine, "update", false)
+		return false, err
+	}
+	if !c.machineUpdater(machine).Updater {
+		return false, errNoUpdater
+	}
+	if !c.coreUpdater().Updater {
+		return false, errCoreFirst
+	}
+	if c.pendingUpdate(coreMachine) == nil {
+		if _, err := c.requestUpdate(coreMachine, "update", false); err != nil {
+			return false, err
+		}
+	}
+	log.Printf("update: %s follows eriphe-core's update", machine)
+	return true, c.store.set(afterCoreKey+machine, time.Now().UTC().Format(time.RFC3339))
+}
+
+// afterCore tells whether a machine waits for eriphe-core's update.
+func (c *core) afterCore(machine string) bool {
+	return c.store.get(afterCoreKey+machine) != ""
+}
+
+// followUpdates asks the nodes waiting for eriphe-core ("Update all", or
+// one asked by hand) once eriphe-core runs the latest version. Once
+// eriphe-core's update is over without reaching it (failed, rolled back,
+// pinned), they are not asked: they would take eriphe-core's build, the one
+// they run. A wait gives up after a day.
+func (c *core) followUpdates() {
+	rows, err := c.store.db.Query(`SELECT key, value FROM kv WHERE key = ? OR key LIKE ?`, updateAllKey, afterCoreKey+"%")
+	if err != nil {
 		return
 	}
-	t, err := time.Parse(time.RFC3339, at)
-	switch {
-	case err != nil || time.Since(t) > requestTTL:
-		log.Printf("update: the nodes were not updated: eriphe-core did not update within a day")
-	case c.updates.behind("eriphe-core", version) || c.pendingUpdate(coreMachine) != nil:
-		return
-	default:
-		log.Printf("update: eriphe-core is up to date, the nodes follow")
-		c.updateNodes()
+	waits := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		rows.Scan(&k, &v)
+		waits[k] = v
 	}
-	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, updateAllKey)
+	rows.Close()
+	// Just restarted, eriphe-core has not read the latest versions yet.
+	if len(waits) == 0 || c.updates.checked().IsZero() || c.pendingUpdate(coreMachine) != nil {
+		return
+	}
+	behind := c.updates.behind("eriphe-core", version)
+	for k, at := range waits {
+		t, err := time.Parse(time.RFC3339, at)
+		machine := strings.TrimPrefix(k, afterCoreKey)
+		switch {
+		case err != nil || time.Since(t) > requestTTL:
+			log.Printf("update: %s not asked: eriphe-core did not update within a day", k)
+		case behind:
+			outcome := "no outcome"
+			if st := c.coreUpdater().Status; st != nil {
+				outcome = st.Outcome
+			}
+			log.Printf("update: %s not asked: eriphe-core did not reach the latest version (%s)", k, outcome)
+		case k == updateAllKey:
+			log.Printf("update: eriphe-core is up to date, the nodes follow")
+			c.updateNodes()
+		case c.pendingUpdate(machine) == nil:
+			log.Printf("update: eriphe-core is up to date, %s follows", machine)
+			if _, err := c.requestUpdate(machine, "update", false); err != nil {
+				log.Printf("update: %s not asked: %v", machine, err)
+			}
+		}
+		c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, k)
+	}
 }
 
 // keyValues reads a file of key=value lines; nil if it is missing.
