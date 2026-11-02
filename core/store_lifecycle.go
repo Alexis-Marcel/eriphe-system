@@ -34,10 +34,11 @@ func (s *Store) setSpec(id string, spec nodeTaskSpec) error {
 	return s.updateTask(id, map[string]any{"spec": string(raw)})
 }
 
-// assignments returns a node's tasks that are not over yet.
+// assignments returns a node's tasks that are not over yet; a task whose
+// start waits for the user (desired held, task_start.go) is not one yet.
 func (s *Store) assignments(node string) ([]assignment, error) {
 	rows, err := s.db.Query(`SELECT id, kind, agent, identity, tools, folders, resources, desired, state, spec FROM tasks
-		WHERE node = ? AND node != '' AND state NOT IN ('stopped', 'failed', 'lost') ORDER BY created`, node)
+		WHERE node = ? AND node != '' AND state NOT IN ('stopped', 'failed', 'lost') AND desired != 'held' ORDER BY created`, node)
 	if err != nil {
 		return nil, err
 	}
