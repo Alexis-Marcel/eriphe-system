@@ -254,7 +254,7 @@ func TestCredentialFromRepoResource(t *testing.T) {
 	}
 }
 
-// A push elsewhere than the branch lent for write is the user's.
+// A push elsewhere than the branch lent for write is refused.
 func TestUndeclaredPush(t *testing.T) {
 	for cmd, want := range map[string]string{
 		"git push":                                   "",
@@ -267,6 +267,11 @@ func TestUndeclaredPush(t *testing.T) {
 		"git push -o ci.skip origin eriphe/fix":      "",
 		`git commit -m "push it" && git status`:      "",
 		"git push origin +dev":                       "dev",
+		"git push origin eriphe/fix 2>&1 | tail -5":  "",
+		"git push origin eriphe/fix 2>/dev/null":     "",
+		"git push origin eriphe/fix > out.txt":       "",
+		"git push origin eriphe/fix >> log 2>&1":     "",
+		"git push origin other 2>&1":                 "other",
 	} {
 		got := ""
 		for _, m := range gitPush.FindAllStringSubmatch(cmd, -1) {
@@ -287,14 +292,17 @@ func TestUndeclaredPush(t *testing.T) {
 	}
 	c.applyPolicy("t-2", ev(1, "p1", "git push origin eriphe/fix"))
 	c.applyPolicy("t-2", ev(2, "p2", "git push origin release"))
-	if c.store.userOnly("t-2", "p1") != "" || !strings.Contains(c.store.userOnly("t-2", "p2"), "release") {
-		t.Fatalf("p1 %q, p2 %q", c.store.userOnly("t-2", "p1"), c.store.userOnly("t-2", "p2"))
+	if d := decisionOf(c, "t-2", "p1"); d != decideAllow {
+		t.Fatalf("push on its branch: %q", d)
 	}
-	// A task lent for read, or from before resources: the brain's, as before.
+	if d := decisionOf(c, "t-2", "p2"); d != decideDeny {
+		t.Fatalf("push elsewhere: %q", d)
+	}
+	// A task lent for read, or from before resources: its credential decides.
 	c.store.insertTask(&TaskRow{ID: "t-3", Node: "pc", Runtime: "claude-code", Kind: "worker", Prompt: "x", State: stateWaitingPermission})
 	c.applyPolicy("t-3", ev(1, "p1", "git push origin release"))
-	if c.store.userOnly("t-3", "p1") != "" {
-		t.Fatal("an old task's push went to the user")
+	if c.store.userOnly("t-3", "p1") != "" || decisionOf(c, "t-3", "p1") != decideAllow {
+		t.Fatal("an old task's push was not left to its credential")
 	}
 }
 
@@ -364,4 +372,11 @@ func TestRunTaskSchema(t *testing.T) {
 		return
 	}
 	t.Fatal("no run_task")
+}
+
+// decisionOf is the decision recorded for a task's permission.
+func decisionOf(c *core, task, pid string) string {
+	var d string
+	c.store.db.QueryRow(`SELECT decision FROM decisions WHERE task_id = ? AND permission_id = ?`, task, pid).Scan(&d)
+	return d
 }
