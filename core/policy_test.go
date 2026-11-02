@@ -44,8 +44,8 @@ func TestPolicyDecide(t *testing.T) {
 		{"Bash", map[string]any{"command": "env | grep TOKEN"}, decideDeny},
 		{"Bash", map[string]any{"command": "set -e; go build ./..."}, decideBrain},
 		{"Write", map[string]any{"file_path": "/work/repo/main.go"}, decideBrain},
-		{"Write", map[string]any{"file_path": "/work/../etc/passwd"}, decideDeny},
-		{"Edit", map[string]any{"file_path": "/home/claude/.bashrc"}, decideDeny},
+		// Outside /work is still the task's container: no rule (inContainer).
+		{"Edit", map[string]any{"file_path": "/home/claude/.bashrc"}, decideBrain},
 		{"Bash", map[string]any{"command": "gh pr create --fill"}, decideBrain},
 		{"Bash", map[string]any{"command": "gh pr merge 12 --squash"}, decideAsk},
 		{"Bash", map[string]any{"command": "npm publish"}, decideAsk},

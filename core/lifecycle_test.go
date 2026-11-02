@@ -91,12 +91,12 @@ func TestDeclarativeLifecycle(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	now := time.Now()
 	call("POST", "/v1/node/tasks/"+task.ID+"/report", nodeReport{State: stateWaitingPermission, SessionID: "s1",
-		Events: []EventRow{{Seq: 1, Time: now, Type: "permission", Data: map[string]any{"id": "p1", "tool_name": "Bash"}}}}, nil)
+		Events: []EventRow{{Seq: 1, Time: now, Type: "permission", Data: map[string]any{"id": "p1", "tool_name": "mcp__notes__write"}}}}, nil)
 	yes := true
-	if _, err := c.answer(context.Background(), task.ID, "", "", &yes, byBrain); err != nil {
+	if _, err := c.answer(context.Background(), task.ID, "", "", &yes, byUser); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.answer(context.Background(), task.ID, "", "", &yes, byBrain); err == nil {
+	if _, err := c.answer(context.Background(), task.ID, "", "", &yes, byUser); err == nil {
 		t.Fatal("answered twice")
 	}
 	select {

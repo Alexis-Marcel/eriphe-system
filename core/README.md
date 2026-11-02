@@ -737,7 +737,7 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
 1. **built-in denials**, which no rule lifts: recursive `rm`, pushing to `main`/`master`, force
    pushes, `git reset --hard` and history rewrites, reading secrets (`$GH_TOKEN`, `printenv`,
    `/proc/*/environ`, Claude Code's `.credentials.json`, Codex's `auth.json`, `$ERIPHE_CODEX_AUTH`,
-   `$CODEX_HOME`…), writing outside `/work`. OpenCode's and Codex's requests (the `opencode` and
+   `$CODEX_HOME`…). OpenCode's and Codex's requests (the `opencode` and
    `codex` runtimes) come under Claude Code's tool names (`Bash`, `Edit`, `Write`, `WebFetch`…)
    with the same inputs, so the same rules apply;
 2. the configuration's `policy.rules`, first match wins:
@@ -751,7 +751,12 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    relay them and its answer is refused. The exception: what a catalog server's
    [access level](#access-levels) leaves free (a read, or any tool of a `free` server) is the
    brain's to judge, and a write of a `read-only` server is denied before the rules;
-4. anything else is the brain's to judge.
+4. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
+   `Write`, `Edit`, `WebFetch`…) is allowed, without waking the brain (`inContainer`). The container
+   is the boundary: what leaves it goes through the node's mounts (a folder's level), its egress
+   filter and the credentials eriphe-core lends, which the shell rules above cannot replace (they
+   read a command line, and only stop mistakes);
+5. what is left (a lent catalog tool the rules do not name) is the brain's to judge.
 
 For an MCP tool (`mcp__<server>__<tool>`), `match` applies to the JSON of its input (keys sorted).
 Common safe reads, allowed without asking anyone:
@@ -935,8 +940,9 @@ the node relays it to `POST /v1/node/tasks/{id}/credential` with its own secret 
 
 A repository lent for `write` on a branch makes its first push there approved; a `git push` of that
 task to another branch (`git push origin other`, `HEAD:other`, `--all`, `--tags`, `--mirror`) is the
-user's to approve (`undeclaredPush`, policy.go). It reads the command line: a push of the current
-branch after the task switched to another one is still the brain's to judge, as before.
+refused (`undeclaredPush`, policy.go). It reads the command line, shell redirections (`2>&1`,
+`> out`) aside: a push of the current branch after the task switched to another one is decided by
+its credential, as any other.
 
 ```json
 "policy": {"credentials": [
@@ -1429,8 +1435,8 @@ put there, so it is treated as external content, like a mail or a page:
   memory_trust.go);
 - on a tainted turn, `run_task` refuses to lend a folder with `drop` or `write`, as it refuses
   every `write` or `drop` entry and catalog tools that act; folders to read still go;
-- the permission policy applies to the task as to any other: its writes outside `/work` are denied
-  by the built-in rules, and Docker refuses any write in the folder but in `Eriphe/`.
+- the permission policy applies to the task as to any other, and Docker refuses any write in the
+  folder but in `Eriphe/`.
 
 | Call (bearer token) | What |
 |---|---|

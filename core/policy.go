@@ -170,10 +170,6 @@ func (p *Policy) decide(tool string, input map[string]any) (decision, reason str
 // for good (remembered, after the file's rules: access.go).
 func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, remembered []Rule) (decision, reason string) {
 	subj := subject(tool, input)
-	if writeTools[tool] && strings.HasPrefix(subj, "/") && subj != "/work" && !strings.HasPrefix(subj, "/work/") &&
-		!strings.HasPrefix(subj, "/tmp/") {
-		return decideDeny, "écrire hors du dossier de travail (/work) est interdit"
-	}
 	for _, r := range builtinDeny {
 		if r.matches(tool, subj) {
 			return r.Decision, r.Reason
@@ -241,7 +237,9 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 		decision, reason := c.decide(tool, input)
 		if decision == decideBrain {
 			if why := c.undeclaredPush(id, tool, input); why != "" {
-				decision, reason = decideAsk, why
+				decision, reason = decideDeny, why
+			} else if inContainer(tool) {
+				decision = decideAllow
 			}
 		}
 		switch decision {
@@ -266,11 +264,22 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 	return left
 }
 
+// inContainer tells whether a worker's tool acts only inside its task's
+// container: its own tools (shell, files, web), not a lent catalog tool nor
+// a credential. The container is the boundary: what leaves it goes through
+// the node's mounts (a folder's level), its egress filter and the
+// credentials eriphe-core lends (credentials.go), never through the shell
+// rules above, which only stop mistakes. So what the policy left undecided
+// there is allowed, without waking the brain.
+func inContainer(tool string) bool {
+	return tool != credentialTool && !strings.HasPrefix(tool, "mcp__")
+}
+
 // gitPush finds the git push commands of a shell line, and their arguments.
 // git's own options may come before push (git -C dir push).
 var gitPush = regexp.MustCompile(`(?:^|[;&|(]\s*|\s)git(?:\s+-[^\s;&|]+(?:\s+[^-\s;&|][^\s;&|]*)?)*\s+push\b([^;&|]*)`)
 
-// undeclaredPush is why a push is mine to approve: the task was lent its
+// undeclaredPush is why a push is refused: the task was lent its
 // repository for write on a declared branch, which made the first push to
 // that branch approved (credentials.go), and this one goes elsewhere.
 func (c *core) undeclaredPush(taskID, tool string, input map[string]any) string {
@@ -302,6 +311,10 @@ func (c *core) undeclaredPush(taskID, tool string, input map[string]any) string 
 	return ""
 }
 
+// redirection is a shell redirection token (2>, >>out, 2>&1, <in): not a
+// push argument. A bare operator takes the next token as its file.
+var redirection = regexp.MustCompile(`^[0-9]*(>>?|<<?|>&|&>)`)
+
 // pushTarget is where a git push's arguments go other than branch, or ""
 // when they push the current branch or branch only.
 func pushTarget(args []string, branch string) string {
@@ -309,6 +322,10 @@ func pushTarget(args []string, branch string) string {
 	for i := 0; i < len(args); i++ {
 		a := strings.Trim(args[i], `"'`)
 		switch {
+		case redirection.MatchString(a):
+			if redirection.FindString(a) == strings.TrimRight(a, "&") {
+				i++ // its file
+			}
 		case a == "--all" || a == "--mirror" || a == "--tags":
 			return a
 		case a == "-o" || a == "--push-option" || a == "--repo" || a == "--receive-pack" || a == "--exec":
