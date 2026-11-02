@@ -479,7 +479,7 @@ $env:ERIPHE_UNINSTALL='1'; irm https://github.com/Alexis-Marcel/eriphe-system/re
 
 - Linux: the compose project and its containers, the task and service containers, the networks,
   the `eriphe-cache` volume, Eriphe's images (every tag), the updater's systemd units,
-  `/opt/eriphe`, `/var/lib/eriphe` and the install's log (`/var/log/eriphe-install.log`; the
+  `/opt/eriphe`, `/var/lib/eriphe`, `/usr/local/bin/eriphe-share` and the install's log (`/var/log/eriphe-install.log`; the
   uninstall writes its own in `/tmp`). Docker Engine too, with its `docker` group, if the script
   installed it and no other container is left; otherwise it stays, the uninstall names the
   containers that keep it, and the mark that Eriphe installed it stays too
@@ -488,14 +488,15 @@ $env:ERIPHE_UNINSTALL='1'; irm https://github.com/Alexis-Marcel/eriphe-system/re
 - macOS with Apple's container: the LaunchAgents `org.eriphe.node`, `org.eriphe.core` and
   `org.eriphe.update`, the LaunchDaemon `org.eriphe.relay` with its binary, socket folder and log
   (with `sudo`), the task, service and explorer containers and their networks, Eriphe's images,
-  and `~/.eriphe`. Apple's `container` too if the script installed it (it notes so in
+  the Finder's two Quick Actions "Share with Eriphe" (`~/Library/Services`), and `~/.eriphe`. Apple's `container` too if the script installed it (it notes so in
   `~/.eriphe/container-installed`) and no other container is left; otherwise it stays.
 - macOS in Lima's VM: the LaunchAgent, the VM and its disk, `~/.eriphe` (Lima included), and
   Lima's download cache (`~/Library/Caches/lima`) unless another Lima is installed.
 - One container: `docker exec eriphe eriphe-launcher uninstall [--data]`, then `docker rm -f
   eriphe` ([One container](#one-container-nas-any-linux-with-docker)).
-- Windows: the distribution and its disk, its scheduled tasks, and in core mode the port forwarding
-  and firewall rule; with the last distribution, the session helper (its task "Eriphe session",
+- Windows: the distribution and its disk, its scheduled tasks, the Explorer's "Share with Eriphe"
+  (`HKCU\Software\Classes\Directory\shell\EripheShare*`, `eriphe-share.ps1`), and in core mode
+  the port forwarding and firewall rule; with the last distribution, the session helper (its task "Eriphe session",
   `%ProgramData%\eriphe-node\bin` and `session`).
 
 In core mode this deletes eriphe-core's data (`/var/lib/eriphe/core`; `~/.eriphe/core` on a Mac
@@ -633,8 +634,10 @@ sudo eriphe-share remove Factures                          # the tasks using it 
 Eriphe reads the folder, or with `--drop` also drops its results in its results subfolder, named
 after your assistant (`Eriphe/` by default, `Jarvis/` if you called it Jarvis). eriphe-core never
 sees the path, only the name. Nothing is shared unless you say so. On a Mac with Apple's container,
-the command is `~/.eriphe/bin/eriphe-share`; with the one-container install (eriphe-launcher),
-`docker exec eriphe-node eriphe-node share add /mnt/user/…`. Folders given from the workspace
+right-click a folder in the Finder, Quick Actions, "Share with Eriphe" (or "… (read + results)";
+named in French on a Mac in French), or use `~/.eriphe/bin/eriphe-share`. On Windows, right-click a
+folder of your user folder in File Explorer, "Show more options", "Share with Eriphe". With the
+one-container install (eriphe-launcher), `docker exec eriphe-node eriphe-node share add /mnt/user/…`. Folders given from the workspace
 before this version are no longer lent: share them again this way (Settings → Folders lists
 them).
 
@@ -785,6 +788,14 @@ machine around them shows depends on the OS:
 
 `install.ps1` creates its own WSL distribution, `eriphe` (Alpine, Docker Engine, eriphe-node),
 without Docker Desktop, and a scheduled task that starts it with Windows, logged in or not.
+
+The distribution sees no Windows drive. Only the folder of the user signed in at the PC
+(`C:\Users\<you>`) is mounted, for eriphe-node alone, as the one place folders may be shared from:
+right-click a folder of it in File Explorer, "Show more options", "Share with Eriphe" (read) or
+"Share with Eriphe (read + results)". A window says how it went. A task gets only the folders
+shared this way. The menu is that user's (their registry); it works when that user is the one who
+installed Eriphe (the distribution is theirs). Folders elsewhere (another drive, Documents moved
+off the user folder) cannot be shared yet.
 
 `irm <url> | iex` takes no parameters: they go in `ERIPHE_*` variables, as in the commands above.
 Each parameter has its own: `-Core` `ERIPHE_CORE`, `-JoinToken` `ERIPHE_JOIN_TOKEN`, `-Name`

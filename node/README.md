@@ -911,8 +911,10 @@ eriphe-node share remove NAME|FOLDER...                  # the tasks holding it 
 Options, before the command: `-root` (env `ERIPHE_ROOT`), `-share` (env `ERIPHE_NODE_SHARES`),
 `-engine` (env `ERIPHE_ENGINE`), `-docker`. It must run as the node's user, with its settings:
 `sudo eriphe-share` on Linux (`docker exec eriphe-node eriphe-node share` in the node's
-container, which sees the places at their paths on the machine; `ERIPHE_ROOT` is set there), and
-`~/.eriphe/bin/eriphe-share` on a Mac (the node's `node.env`).
+container, which sees the places at their paths on the machine; `ERIPHE_ROOT` is set there),
+`~/.eriphe/bin/eriphe-share` on a Mac (the node's `node.env`), also behind the Finder's Quick
+Actions "Share with Eriphe" (`~/Library/Services`, a notification says how it went), and the
+Explorer's "Share with Eriphe" on Windows (below).
 
 **The list** is `shares.json` in the node's data (`-root`, mode 0600): `{id, name, path, access,
 added}` per folder, the path absolute and resolved. The command changes it under a lock file
@@ -988,9 +990,14 @@ checks and the mounts. On a Mac with Apple's container
 the node runs on the Mac and its places are Mac paths; the listing and the checks go through the
 explorer, see [The container engine](#the-container-engine-a-mac). A Mac in Lima's VM shares no
 folder. On Windows,
-the WSL distribution reaches a drive as `/mnt/<letter>/…` once mounted (automount is off today): the
-node there gets `-share <name>=/mnt/c/Users/<user>/Documents`, with no proxy in the way. Writes
-through such a mount follow its own owner mapping (virtiofs, 9p, DrvFs), not the setgid rule above.
+automount stays off: `install.ps1` mounts only the folder of the user signed in at the PC
+(`C:\Users\<user>`, DrvFs, `noexec,nosuid,nodev`) at `/mnt/eriphe/home`, for the node alone, and
+gives it `-share home=/mnt/eriphe/home`, with no proxy in the way. Its `AppData` is sensitive, like
+a NAS's `appdata`. The Explorer's "Share with Eriphe" runs `eriphe-share.ps1`
+(`%ProgramData%\eriphe-node\bin`), which maps the folder under `/mnt/eriphe/home` and runs
+`wsl -d <distro> -u root --exec eriphe-share add` in the distribution (`eriphe-node share` with
+`/etc/eriphe-node.env`). Writes through such a mount follow its own owner mapping (virtiofs, 9p,
+DrvFs), not the setgid rule above.
 
 ## Services (local MCP servers)
 
