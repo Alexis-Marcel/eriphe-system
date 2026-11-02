@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestShareFlag(t *testing.T) {
@@ -104,59 +105,208 @@ func TestResolveFolder(t *testing.T) {
 	}
 }
 
-func TestShareDirs(t *testing.T) {
-	n, _ := shareFixture(t)
+// lend puts a folder in the list as is, unchecked (a list changed by hand,
+// or a folder changed since it was shared), and returns it as a task is
+// lent it: the same folder twice is one entry.
+func lend(t *testing.T, n *node, share, rel, name string, write bool) TaskFolder {
+	t.Helper()
+	access := accessRead
+	if write {
+		access = accessDrop
+	}
+	p := filepath.Join(n.opt.shares[share].Path, filepath.FromSlash(rel))
+	var id string
+	err := changeShared(n.opt.root, func(list []sharedFolder) ([]sharedFolder, error) {
+		for _, f := range list {
+			if f.Path == p && f.Access == access && f.Name == name {
+				id = f.ID
+				return list, nil
+			}
+		}
+		id = newShareID()
+		return append(list, sharedFolder{ID: id, Name: name, Path: p, Access: access}), nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return TaskFolder{Name: name, ID: id, Write: write}
+}
+
+// shareOut runs eriphe-node share with the fixture's node.
+func shareOut(t *testing.T, n *node, cmd string, args ...string) (string, error) {
+	t.Helper()
+	var b strings.Builder
+	err := n.shareCmd(cmd, args, &b)
+	return b.String(), err
+}
+
+// testShareCmd checks eriphe-node share on either engine: what may be
+// shared, under which name and right, listed, and removed.
+func testShareCmd(t *testing.T, n *node, root string) {
+	out, err := shareOut(t, n, "add", filepath.Join(root, "Clients", "ACME"), "--drop")
+	if err != nil || !strings.Contains(out, `Shared with Eriphe as "ACME"`) {
+		t.Fatalf("add: %v %s", err, out)
+	}
+	if out, err = shareOut(t, n, "add", "--name", "Photos de famille", filepath.Join(root, "Photos")); err != nil {
+		t.Fatalf("add with a name: %v %s", err, out)
+	}
+	// A symlink inside the root is shared as its target.
+	if out, err = shareOut(t, n, "add", filepath.Join(root, "Clients-link")); err != nil || !strings.Contains(out, filepath.Join(root, "Clients")+"\n") {
+		t.Fatalf("a link: %v %s", err, out)
+	}
+	for name, args := range map[string][]string{
+		"escape":      {filepath.Join(root, "escape")},
+		"dotdot":      {root + "/Clients/../../outside"},
+		"outside":     {filepath.Dir(root)},
+		"sensitive":   {filepath.Join(root, "Home")},
+		"hidden":      {filepath.Join(root, ".hidden")},
+		"ssh":         {filepath.Join(root, "Home", ".ssh")},
+		"ssh link":    {filepath.Join(root, "keys")},
+		"deep":        {filepath.Join(root, "Deep")},
+		"own data":    {n.opt.root},
+		"read-only":   {"--drop", filepath.Join(root, "Clients", "Beta")},
+		"same folder": {filepath.Join(root, "Clients", "ACME")},
+		"same name":   {"--name", "acme", filepath.Join(root, "Clients", "Beta")},
+		"bad name":    {"--name", ".x", filepath.Join(root, "Clients", "Beta")},
+		"no such":     {filepath.Join(root, "nope")},
+	} {
+		if name == "read-only" {
+			saved := n.opt.shares
+			n.opt.shares = shareFlag{"ro": {Path: root, ReadOnly: true}}
+			out, err = shareOut(t, n, "add", args...)
+			n.opt.shares = saved
+		} else {
+			out, err = shareOut(t, n, "add", args...)
+		}
+		if err == nil || !strings.HasPrefix(out, "Not shared: ") {
+			t.Errorf("%s: shared: %v %s", name, err, out)
+		}
+	}
+	list, _ := loadShared(n.opt.root)
+	var names []string
+	for _, f := range list {
+		names = append(names, f.Name+":"+f.Access)
+	}
+	if !slices.Equal(names, []string{"ACME:drop", "Photos de famille:read", "Clients:read"}) {
+		t.Fatalf("list %v", names)
+	}
+	if fi, err := os.Stat(filepath.Join(n.opt.root, sharesFile)); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("shares.json: %v", err)
+	}
+	if out, _ = shareOut(t, n, "list"); !strings.Contains(out, "Photos de famille") || !strings.Contains(out, filepath.Join(root, "Photos")) {
+		t.Fatalf("list: %s", out)
+	}
+	// eriphe-core sees names, rights and ids, never a path.
+	raw, _ := json.Marshal(n.sharedList())
+	if strings.Contains(string(raw), root) || !strings.Contains(string(raw), `"name":"ACME","access":"drop"`) {
+		t.Fatalf("for eriphe-core: %s", raw)
+	}
+	if out, err = shareOut(t, n, "remove", "photos de famille", filepath.Join(root, "Clients")); err != nil || strings.Count(out, "No longer shared") != 2 {
+		t.Fatalf("remove: %v %s", err, out)
+	}
+	if out, err = shareOut(t, n, "remove", "Photos de famille"); err == nil {
+		t.Fatalf("removed twice: %s", out)
+	}
+	logged, _ := os.ReadFile(filepath.Join(n.opt.root, sharesLog))
+	if c := strings.Count(string(logged), `"event":"add"`); c != 3 || strings.Count(string(logged), `"event":"remove"`) != 2 {
+		t.Fatalf("shares.log:\n%s", logged)
+	}
+}
+
+func TestShareCmd(t *testing.T) {
+	n, root := shareFixture(t)
+	testShareCmd(t, n, root)
+}
+
+func TestRunShare(t *testing.T) {
+	n, root := shareFixture(t)
+	os.WriteFile(filepath.Join(n.opt.root, "node.json"), []byte("{}"), 0o600)
+	t.Setenv("ERIPHE_NODE_SHARES", "data="+root)
+	var out, errs strings.Builder
+	if code := runShare([]string{"-root", n.opt.root, "add", filepath.Join(root, "Photos")}, &out, &errs); code != 0 {
+		t.Fatalf("%d %s %s", code, &out, &errs)
+	}
+	if code := runShare([]string{"-root", filepath.Join(root, "Photos"), "list"}, &out, &errs); code != 1 || !strings.Contains(errs.String(), "no eriphe-node") {
+		t.Fatalf("no node there: %d %s", code, &errs)
+	}
+	if code := runShare([]string{"-root", n.opt.root, "share"}, &out, &errs); code != 2 {
+		t.Fatalf("unknown command: %d", code)
+	}
+}
+
+// Through the tunnel, eriphe-core sees the list and may take a folder off
+// it; it may not add one nor look into a folder.
+func TestShareAPI(t *testing.T) {
+	n, root := shareFixture(t)
 	mux := http.NewServeMux()
 	n.routes(mux)
-	get := func(url string) (int, map[string]any) {
+	call := func(method, url string) (int, string) {
 		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest("GET", url, nil))
-		var out map[string]any
-		json.Unmarshal(rec.Body.Bytes(), &out)
-		return rec.Code, out
+		mux.ServeHTTP(rec, httptest.NewRequest(method, url, strings.NewReader(`{"path":"/"}`)))
+		return rec.Code, rec.Body.String()
 	}
-	code, out := get("/v1/shares/data/dirs")
-	if code != 200 {
-		t.Fatalf("%d %v", code, out)
+	if code, out := call("GET", "/v1/shares"); code != 200 || out != `{"folders":[]}`+"\n" {
+		t.Fatalf("%d %s", code, out)
 	}
-	var dirs []string
-	for _, d := range out["dirs"].([]any) {
-		dirs = append(dirs, d.(string))
-	}
-	// Only real directories, nothing hidden; symlinks are not listed.
-	if !slices.Equal(dirs, []string{"Clients", "Deep", "Deeper", "Home", "Photos"}) {
-		t.Fatalf("dirs %v", dirs)
-	}
-	code, out = get("/v1/shares/data/dirs?path=Clients&check=1")
-	if code != 200 || out["files"] != 2.0 || out["shareable"] != true || out["writable"] != true {
-		t.Fatalf("%d %v", code, out)
-	}
-	if raw, _ := json.Marshal(out); strings.Contains(string(raw), "contract") || strings.Contains(string(raw), "instructions") {
-		t.Fatalf("a file shows: %s", raw)
-	}
-	for _, p := range []string{"Home", "Deep", ""} {
-		code, out = get("/v1/shares/data/dirs?check=1&path=" + p)
-		if code != 200 || out["shareable"] != false || out["code"] != "holds_sensitive" {
-			t.Errorf("%q: %d %v", p, code, out)
+	tf := lend(t, n, "data", "Photos", "Photos", false)
+	for _, u := range []string{"/v1/shares/data/dirs", "/v1/shares/data/dirs?path=Clients&check=1"} {
+		if code, out := call("GET", u); code != 404 && code != 405 {
+			t.Errorf("%s: %d %s", u, code, out)
 		}
 	}
-	// Below scanDepth, not searched.
-	if code, out = get("/v1/shares/data/dirs?check=1&path=Deeper"); out["shareable"] != true {
-		t.Errorf("Deeper: %d %v", code, out)
-	}
-	for url, want := range map[string]int{
-		"/v1/shares/data/dirs?path=escape":    403,
-		"/v1/shares/data/dirs?path=..":        400,
-		"/v1/shares/data/dirs?path=Home/.ssh": 403,
-		"/v1/shares/nope/dirs":                404,
-	} {
-		if code, out = get(url); code != want || out["code"] == "" {
-			t.Errorf("%s: %d %v, want %d", url, code, out, want)
+	for _, m := range []string{"POST", "PUT", "PATCH"} {
+		if code, _ := call(m, "/v1/shares"); code != 405 {
+			t.Errorf("%s /v1/shares: %d", m, code)
 		}
 	}
-	code, out = get("/v1/shares")
-	if raw, _ := json.Marshal(out); code != 200 || string(raw) != `{"shares":[{"name":"data","writable":true},{"name":"ro","writable":false}]}` {
-		t.Fatalf("%d %s", code, raw)
+	if code, out := call("GET", "/v1/shares"); code != 200 || !strings.Contains(out, tf.ID) || strings.Contains(out, root) {
+		t.Fatalf("%d %s", code, out)
+	}
+	if code, out := call("DELETE", "/v1/shares/"+tf.ID); code != 204 {
+		t.Fatalf("delete: %d %s", code, out)
+	}
+	if code, _ := call("DELETE", "/v1/shares/"+tf.ID); code != 404 {
+		t.Fatalf("deleted twice: %d", code)
+	}
+	if list, _ := loadShared(n.opt.root); len(list) != 0 {
+		t.Fatalf("still there: %v", list)
+	}
+	logged, _ := os.ReadFile(filepath.Join(n.opt.root, sharesLog))
+	if !strings.Contains(string(logged), `"by":"eriphe-core","event":"remove"`) {
+		t.Fatalf("shares.log: %s", logged)
+	}
+}
+
+// A folder taken off the list stops the tasks that hold it, whoever took
+// it off; the others carry on.
+func TestRevoke(t *testing.T) {
+	n, _ := shareFixture(t)
+	n.opt.docker = "true"
+	a, b := lend(t, n, "data", "Photos", "Photos", false), lend(t, n, "data", "Clients", "Clients", false)
+	holder := &Task{ID: "holder", State: stateRunning, Spec: TaskSpec{Folders: []TaskFolder{a}}}
+	other := &Task{ID: "other", State: stateRunning, Spec: TaskSpec{Folders: []TaskFolder{b}}}
+	n.tasks[holder.ID], n.tasks[other.ID] = holder, other
+	go n.watchShared(10 * time.Millisecond)
+	time.Sleep(30 * time.Millisecond)
+	// Taken off by the command, which the node only sees in the file.
+	if err := changeShared(n.opt.root, func(l []sharedFolder) ([]sharedFolder, error) { return l[1:], nil }); err != nil {
+		t.Fatal(err)
+	}
+	stopped := func(t *Task) bool {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		return t.stopping
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for !stopped(holder) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !stopped(holder) || stopped(other) {
+		t.Fatalf("holder stopped %v, other %v", stopped(holder), stopped(other))
+	}
+	// And a new mount of it is refused.
+	if _, err := n.folderMounts(&Task{ID: "again", Spec: TaskSpec{Folders: []TaskFolder{a}}}); err == nil {
+		t.Fatal("mounted once unshared")
 	}
 }
 
@@ -167,8 +317,8 @@ func TestFolderMounts(t *testing.T) {
 	defer func() { chownResults = os.Lchown }()
 
 	task := &Task{Spec: TaskSpec{Folders: []TaskFolder{
-		{Name: "Clients, ACME", Share: "data", Path: "Clients/ACME", Write: true},
-		{Name: "Photos", Share: "data", Path: "Photos"},
+		lend(t, n, "data", "Clients/ACME", "Clients, ACME", true),
+		lend(t, n, "data", "Photos", "Photos", false),
 	}}}
 	args, err := n.folderMounts(task)
 	if err != nil {
@@ -195,29 +345,48 @@ func TestFolderMounts(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "Photos", "Eriphe")); err == nil {
 		t.Fatal("Eriphe/ made in a read-only folder")
 	}
+	logged, _ := os.ReadFile(filepath.Join(n.opt.root, sharesLog))
+	if strings.Count(string(logged), `"event":"mount"`) != 2 {
+		t.Fatalf("shares.log: %s", logged)
+	}
 
+	os.MkdirAll(filepath.Join(root, "Clients", "Beta"), 0o755)
+	readOnly := lend(t, n, "data", "Clients/Beta", "Beta", false)
+	readOnly.Write = true
 	for name, f := range map[string]TaskFolder{
-		"escape":     {Name: "x", Share: "data", Path: "escape"},
-		"dotdot":     {Name: "x", Share: "data", Path: "Clients/../../outside"},
-		"sensitive":  {Name: "x", Share: "data", Path: "Home"},
-		"read-only":  {Name: "x", Share: "ro", Path: "Clients/Beta", Write: true},
-		"bad name":   {Name: "../x", Share: "data", Path: "Photos"},
-		"hidden":     {Name: ".x", Share: "data", Path: "Photos"},
-		"no such":    {Name: "x", Share: "data", Path: "nope"},
-		"no share":   {Name: "x", Share: "nope", Path: ""},
-		"in results": {Name: "x", Share: "data", Path: "Clients/ACME"},
+		"not shared":  {Name: "x", ID: "0123456789abcdef"},
+		"no id":       {Name: "x"},
+		"escape":      lend(t, n, "data", "escape", "x", false),
+		"dotdot":      lend(t, n, "data", "Clients/../../outside", "x", false),
+		"sensitive":   lend(t, n, "data", "Home", "x", false),
+		"through":     lend(t, n, "data", "Clients-link", "x", false), // a link put there since
+		"read-only":   readOnly,
+		"bad name":    {Name: "../x", ID: lend(t, n, "data", "Photos", "Photos", false).ID},
+		"hidden":      {Name: ".x", ID: lend(t, n, "data", "Photos", "Photos", false).ID},
+		"no such":     lend(t, n, "data", "nope", "x", false),
+		"out of root": {Name: "x", ID: func() string { tf := lend(t, n, "data", "", "x", false); return tf.ID }()},
 	} {
-		if name == "in results" {
-			// A symlink named Eriphe would send the writes elsewhere.
-			os.MkdirAll(filepath.Join(root, "Clients", "Beta"), 0o755)
-			os.Symlink(filepath.Join(root, "Photos"), filepath.Join(root, "Clients", "Beta", "Eriphe"))
-			f = TaskFolder{Name: "x", Share: "data", Path: "Clients/Beta", Write: true}
+		if name == "out of root" {
+			saved := n.opt.shares
+			n.opt.shares = shareFlag{"other": {Path: filepath.Join(root, "Clients")}}
+			_, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{f}}})
+			n.opt.shares = saved
+			if err == nil {
+				t.Errorf("%s: mounted", name)
+			}
+			continue
 		}
 		if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{f}}}); err == nil {
 			t.Errorf("%s: mounted", name)
 		}
 	}
-	if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{{Name: "a", Share: "data", Path: "Photos"}, {Name: "A", Share: "data", Path: "Clients"}}}}); err == nil {
+	// A symlink named Eriphe would send the writes elsewhere.
+	os.Symlink(filepath.Join(root, "Photos"), filepath.Join(root, "Clients", "Beta", "Eriphe"))
+	if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{lend(t, n, "data", "Clients/Beta", "Beta", true)}}}); err == nil {
+		t.Error("in results: mounted")
+	}
+	p := lend(t, n, "data", "Photos", "Photos", false)
+	if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{p, {Name: "photos", ID: p.ID}}}}); err == nil {
 		t.Error("two folders under one name")
 	}
 }
@@ -235,40 +404,26 @@ func privateFixture(t *testing.T, root string) {
 	os.Symlink(filepath.Join(root, "Vault/Caps/Personal/Private"), filepath.Join(root, "Vault/private-link"))
 }
 
-// testPrivateMarker checks a private folder, on either engine: not listed,
-// not looked into nor shared, even through a link, and what holds it is
-// listed but never shared.
+// testPrivateMarker checks a private folder, on either engine: never
+// shared nor mounted, even through a link, nor what holds it.
 func testPrivateMarker(t *testing.T, n *node, root string) {
 	privateFixture(t, root)
-	mux := http.NewServeMux()
-	n.routes(mux)
-	get := func(url string) (int, map[string]any) {
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest("GET", url, nil))
-		var out map[string]any
-		json.Unmarshal(rec.Body.Bytes(), &out)
-		return rec.Code, out
-	}
-	code, out := get("/v1/shares/data/dirs?path=Vault/Caps/Personal")
-	if code != 200 || len(out["dirs"].([]any)) != 0 {
-		t.Errorf("listed: %d %v", code, out)
-	}
-	for _, p := range []string{"Vault/Caps/Personal/Private", "Vault/Caps/Personal/Private/Notes", "Vault/private-link"} {
-		if code, out = get("/v1/shares/data/dirs?check=1&path=" + p); out["code"] != "sensitive" {
-			t.Errorf("%s: %d %v, want sensitive", p, code, out)
+	for _, p := range []string{"Vault/Caps/Personal/Private", "Vault/Caps/Personal/Private/Notes", "Vault/private-link",
+		"Vault", "Vault/Caps", "Vault/Caps/Personal"} {
+		if out, err := shareOut(t, n, "add", filepath.Join(root, p)); err == nil {
+			t.Errorf("%s shared: %s", p, out)
 		}
-		if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{{Name: "p", Share: "data", Path: p}}}}); err == nil {
+		if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{lend(t, n, "data", p, "p", false)}}}); err == nil {
 			t.Errorf("%s is mounted", p)
 		}
 	}
-	for _, p := range []string{"Vault", "Vault/Caps", "Vault/Caps/Personal"} {
-		if code, out = get("/v1/shares/data/dirs?check=1&path=" + p); code != 200 || out["shareable"] != false || out["code"] != "holds_private" {
-			t.Errorf("%s: %d %v, want holds_private", p, code, out)
-		}
+	if out, err := shareOut(t, n, "add", filepath.Join(root, "Vault"), filepath.Join(root, "Vault/Caps/Personal")); err == nil ||
+		!strings.Contains(out, "made private") {
+		t.Errorf("holding it: %v %s", err, out)
 	}
 	for _, p := range []string{"Vault/Projects", "Vault/Caps/Work"} {
-		if code, out = get("/v1/shares/data/dirs?check=1&path=" + p); out["shareable"] != true {
-			t.Errorf("%s: %d %v, want shareable", p, code, out)
+		if out, err := shareOut(t, n, "add", filepath.Join(root, p)); err != nil {
+			t.Errorf("%s: %v %s", p, err, out)
 		}
 	}
 }

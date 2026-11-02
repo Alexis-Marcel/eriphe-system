@@ -80,9 +80,6 @@ func withDrive(t *testing.T, c *core, folders ...DriveFolder) {
 // Each entry is checked against what the user opened, and never gets more.
 func TestResolveFolders(t *testing.T) {
 	c, _ := foldersCore(t)
-	ctx := context.Background()
-	c.addFolder(ctx, Folder{Name: "Clients", Node: "nas", Share: "data", Path: "Clients", Access: folderDrop})
-	c.addFolder(ctx, Folder{Name: "Photos", Node: "nas", Share: "media", Path: "Photos"})
 	withDrive(t, c, DriveFolder{Name: "Factures", ID: "d1", Access: folderRead}, DriveFolder{Name: "Devis", ID: "d2", Access: folderDrop})
 
 	// The old field lends a folder with its own access; a resource, read unless it says drop.
@@ -155,7 +152,6 @@ func TestResolveTools(t *testing.T) {
 func TestTaskKeepsResources(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
-	c.addFolder(ctx, Folder{Name: "Clients", Node: "nas", Share: "data", Path: "Clients", Access: folderDrop})
 	task, err := c.runTask(ctx, runRequest{Prompt: "fix it", Resources: []ResourceRef{
 		{Kind: resRepo, Ref: "owner/site", Access: accessWrite, Branch: "eriphe/fix", Base: "dev", Dir: "web"},
 		{Kind: resFolder, Ref: "clients"},

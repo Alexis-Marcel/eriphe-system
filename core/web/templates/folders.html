@@ -1,79 +1,80 @@
 {{define "folders"}}
 <header class="page-head"><h2>{{t "settings.folders"}}</h2><p>{{t "folders.lead"}}</p></header>
-{{if .Data.Folders}}
-<ul class="grid">
-{{range .Data.Folders}}
-  <li class="tile">
-    <div class="tile-head">
-      <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{if eq .Source "google-drive"}}Google Drive{{else}}<a class="folder-device" href="/settings/devices/{{.Node}}">{{.Node}}</a>{{end}}</span>
-      <span class="tile-actions">
-      <form hx-post="/settings/folders/delete" hx-confirm="{{tf "folders.deleteconfirm" .Name}}" class="inline">
-        <input type="hidden" name="source" value="{{.Source}}">
-        <input type="hidden" name="name" value="{{.Name}}">
-        <button class="link-btn" type="submit">{{t "folders.delete"}}</button>
-      </form>
-      </span>
-    </div>
-    <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
-    {{if eq .Source "google-drive"}}<p class="muted small folder-src">{{t "folders.drive"}}</p>{{else}}<p class="muted small mono folder-src">{{.Share}}:/{{.Path}}</p>{{end}}
-    <p class="chips"><span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "folders.access.%s" .Access)}}</span></p>
-    {{if eq .Source "google-drive"}}<p class="muted small">{{t "folders.drivelend"}}</p>{{else}}<p class="muted small">{{tf "folders.mount" .Mount}}</p>{{end}}
-  </li>
-{{end}}
-</ul>
-{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-folder"}}</span><p>{{t "folders.none"}}</p></div>{{end}}
-
-<section class="panel" aria-labelledby="share-title">
-  <h3 id="share-title">{{template "i-plus"}}{{t "folders.share"}}</h3>
-  <p class="muted">{{t "folders.sharelead"}}</p>
-  {{if .Data.Machines}}
-  <label class="field"><span>{{t "folders.machine"}}</span>
-    <select name="node" hx-get="/settings/folders/browse" hx-target="#explorer" hx-swap="innerHTML"{{if .Data.Pick}} hx-trigger="load, change"{{end}}>
-      <option value="">{{t "folders.pickmachine"}}</option>
-      {{range .Data.Machines}}<option value="{{.Name}}" {{if not .Online}}disabled{{end}}{{if eq .Name $.Data.Pick}} selected{{end}}>{{.Name}}{{if not .Online}} · {{t "machines.offline"}}{{end}}</option>{{end}}
-    </select></label>
-  <div id="explorer" class="explorer" aria-live="polite"></div>
-  {{else}}
-  <p class="notice">{{t "folders.nomachine"}}</p>
+{{if .Data.Legacy}}<p class="notice">{{t "folders.legacylead"}}</p>{{end}}
+{{range .Data.Machines}}
+<section class="panel" aria-labelledby="folders-{{.Name}}">
+  <h3 id="folders-{{.Name}}"><span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span><a class="folder-device" href="/settings/devices/{{.Name}}">{{.Name}}</a></span></h3>
+  {{if .Folders}}
+  <ul class="grid">
+  {{range .Folders}}
+    <li class="tile">
+      <div class="tile-head">
+        <span class="chips"><span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "folders.access.%s" .Access)}}</span>{{if .Missing}} <span class="tag tag-no">{{t "folders.missing"}}</span>{{end}}</span>
+        <span class="tile-actions">
+        <form hx-post="/settings/folders/delete" hx-confirm="{{tf "folders.deleteconfirm" .Name}}" class="inline">
+          <input type="hidden" name="source" value="machine">
+          <input type="hidden" name="name" value="{{.Name}}">
+          <button class="link-btn" type="submit">{{t "folders.delete"}}</button>
+        </form>
+        </span>
+      </div>
+      <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
+      <p class="muted small">{{tf "folders.mount" .Mount}}</p>
+      {{if eq .Access "drop"}}<p class="muted small">{{t "folders.access.droplead"}}</p>{{end}}
+    </li>
   {{end}}
-  {{if .Data.Others}}<p class="muted small">{{tf "folders.others" (join .Data.Others ", ")}}</p>{{end}}
-  <p class="muted small"><a href="/settings/drive">{{t "folders.adddrive"}}</a></p>
+  </ul>
+  {{else}}<p class="muted">{{t "folders.none"}}</p>{{end}}
+  {{if .Legacy}}
+  <p class="muted small">{{t "folders.legacy"}}</p>
+  <ul class="grid">
+  {{range .Legacy}}
+    <li class="tile">
+      <div class="tile-head">
+        <span class="chips"><span class="tag">{{t "folders.reshare"}}</span></span>
+        <span class="tile-actions">
+        <form hx-post="/settings/folders/delete" hx-confirm="{{tf "folders.deleteconfirm" .Name}}" class="inline">
+          <input type="hidden" name="source" value="legacy">
+          <input type="hidden" name="name" value="{{.Name}}">
+          <button class="link-btn" type="submit">{{t "folders.forget"}}</button>
+        </form>
+        </span>
+      </div>
+      <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
+      <p class="muted small mono folder-src">{{.Share}}:/{{.Path}}</p>
+    </li>
+  {{end}}
+  </ul>
+  {{end}}
+  <details class="share-how"{{if not .Folders}} open{{end}}><summary>{{t "folders.share"}}</summary><p class="muted small">{{t .How}}</p></details>
+</section>
+{{else}}
+<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-folder"}}</span><p>{{t "folders.nomachine"}}</p></div>
+{{end}}
+
+{{if .Data.Drive}}
+<section class="panel" aria-labelledby="folders-drive">
+  <h3 id="folders-drive">{{t "folders.drive"}}</h3>
+  <ul class="grid">
+  {{range .Data.Drive}}
+    <li class="tile">
+      <div class="tile-head">
+        <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>Google Drive</span>
+        <span class="tile-actions">
+        <form hx-post="/settings/folders/delete" hx-confirm="{{tf "folders.deleteconfirm" .Name}}" class="inline">
+          <input type="hidden" name="source" value="{{.Source}}">
+          <input type="hidden" name="name" value="{{.Name}}">
+          <button class="link-btn" type="submit">{{t "folders.delete"}}</button>
+        </form>
+        </span>
+      </div>
+      <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
+      <p class="chips"><span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "folders.access.%s" .Access)}}</span></p>
+      <p class="muted small">{{t "folders.drivelend"}}</p>
+    </li>
+  {{end}}
+  </ul>
 </section>
 {{end}}
-
-{{define "folder-explorer"}}{{with .Data}}
-{{if .Error}}<p class="alert" role="alert">{{t .Error}}</p>{{end}}
-{{if .Shares}}
-<p class="muted small">{{t "folders.roots"}}</p>
-<ul class="dirs">
-  {{range .Shares}}<li><button class="dir" type="button" {{if .Missing}}disabled{{end}} hx-get="{{browseurl "node" $.Data.Node "share" .Name}}" hx-target="#explorer">{{template "i-folder"}}<span>{{.Name}}</span>{{if .Missing}}<small>{{t "folders.missing"}}</small>{{else if not .Writable}}<small>{{t "folders.readonlyroot"}}</small>{{end}}</button></li>{{end}}
-</ul>
-{{else if .Listing}}
-<nav class="crumbs" aria-label="{{t "folders.where"}}">
-  <button class="link-btn" type="button" hx-get="{{browseurl "node" .Node}}" hx-target="#explorer">{{.Node}}</button>
-  {{range .Crumbs}}<span aria-hidden="true">/</span><button class="link-btn" type="button" hx-get="{{browseurl "node" $.Data.Node "share" $.Data.Share "path" .Path}}" hx-target="#explorer">{{.Label}}</button>{{end}}
-</nav>
-<ul class="dirs">
-  {{if .Parent}}<li><button class="dir dir-up" type="button" hx-get="{{browseurl "node" .Node "share" .Share "path" .Parent.Path}}" hx-target="#explorer">{{template "i-back"}}<span>{{.Parent.Label}}</span></button></li>{{end}}
-  {{range .Listing.Dirs}}<li><button class="dir" type="button" hx-get="{{browseurl "node" $.Data.Node "share" $.Data.Share "path" ($.Data.Listing.Child .)}}" hx-target="#explorer">{{template "i-folder"}}<span>{{.}}</span></button></li>{{end}}
-</ul>
-<p class="muted small">{{if not .Listing.Dirs}}{{t "folders.nodirs"}} {{end}}{{tf "folders.files" .Listing.Files}}{{if .Listing.Truncated}} {{t "folders.truncated"}}{{end}}</p>
-<form class="stack-form share-form" hx-post="/settings/folders" hx-target="#share-result" hx-swap="innerHTML">
-  <input type="hidden" name="node" value="{{.Node}}">
-  <input type="hidden" name="share" value="{{.Share}}">
-  <input type="hidden" name="path" value="{{.Listing.Path}}">
-  <label class="field"><span>{{t "folders.name"}}</span>
-    <input type="text" name="name" value="{{.Name}}" required maxlength="64" autocomplete="off"></label>
-  <fieldset class="choices"><legend>{{t "folders.access"}}</legend>
-    <div class="choice-row">
-      <label class="choice"><input type="radio" name="access" value="read" checked><b>{{t "folders.access.read"}}</b><small>{{t "folders.access.readlead"}}</small></label>
-      <label class="choice"><input type="radio" name="access" value="drop" {{if not .Listing.Writable}}disabled{{end}}><b>{{t "folders.access.drop"}}</b><small>{{if .Listing.Writable}}{{t "folders.access.droplead"}}{{else}}{{t "folders.readonlyroot"}}{{end}}</small></label>
-    </div>
-  </fieldset>
-  <div class="form-actions"><button class="btn btn-primary" type="submit">{{t "folders.sharethis"}}</button></div>
-  <div id="share-result"></div>
-</form>
+<p class="muted small"><a href="/settings/drive">{{t "folders.adddrive"}}</a></p>
 {{end}}
-{{end}}{{end}}
-
-{{define "folder-share-error"}}<p class="alert" role="alert">{{t .Data}}</p>{{end}}
