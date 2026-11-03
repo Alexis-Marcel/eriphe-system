@@ -45,6 +45,9 @@ type options struct {
 	egressPort  string // port of the egress relay, on the listener's host (empty: none)
 	docker      string // docker CLI, or Apple's container CLI with that engine
 	engine      string // what runs the tasks: docker, or container (Apple's, on a Mac: apple.go)
+	// engineURL is eriphe-node engine's address (engine_remote.go): Docker
+	// through it only; empty: through the docker CLI.
+	engineURL string
 	// With the container engine: what the node downloads at most, in bytes,
 	// of a task's folders kept in the cloud (iCloud Drive), before it starts.
 	downloadLimit int64
@@ -92,6 +95,10 @@ func main() {
 		runWakeSend(os.Args[2:]) // the short-lived container that wakes a machine (wake.go)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "engine" {
+		runEngine(os.Args[2:]) // the node's engine, which holds the Docker socket (engine_server.go)
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "docker-proxy" {
 		runDockerProxy(os.Args[2:]) // the node's only way to Docker (dockerproxy.go)
 		return
@@ -114,6 +121,7 @@ func main() {
 	flag.StringVar(&o.callbackURL, "callback-url", "http://host.docker.internal:8790", "URL task containers use to reach this node")
 	flag.StringVar(&o.docker, "docker", "", "the engine's CLI (default: docker, or container with -engine container)")
 	flag.StringVar(&o.engine, "engine", envOr("ERIPHE_ENGINE", engineDocker), "what runs the tasks: docker, or container (Apple's container, on a Mac with Apple silicon and macOS 26: a micro-VM per task) (env ERIPHE_ENGINE)")
+	flag.StringVar(&o.engineURL, "engine-url", os.Getenv("ERIPHE_ENGINE_URL"), "eriphe-node engine's address, e.g. http://eriphe-engine:8792: Docker only through it, with its networks and cache volume (env ERIPHE_ENGINE_URL)")
 	downloadLimit := flag.String("download-limit", "2g", "with -engine container: what the node downloads at most of a task's folders kept in the cloud (iCloud Drive) before it starts, e.g. 2g")
 	flag.IntVar(&o.snapshotDays, "snapshot-days", envInt("ERIPHE_SNAPSHOT_DAYS", defaultSnapshotDays), "days a snapshot of a folder is kept, taken before each task lent it to manage (env ERIPHE_SNAPSHOT_DAYS)")
 	snapshotLimit := flag.String("snapshot-limit", envOr("ERIPHE_SNAPSHOT_LIMIT", defaultSnapshotLimit), "what a snapshot of a folder copies at most where its files cannot be cloned, e.g. 2g; a bigger folder is not lent to manage (env ERIPHE_SNAPSHOT_LIMIT)")
@@ -173,6 +181,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if o.engineURL != "" {
+		if err := loadEngineConfig(&o, 30, 2*time.Second); err != nil {
+			log.Fatal(err)
+		}
+	}
 	if err := checkNetworks(o); err != nil {
 		log.Fatal(err)
 	}
@@ -259,6 +272,9 @@ func (o *options) complete(modelServer, downloadLimit, goos string) error {
 	}
 	if o.engine == engineContainer && goos != "darwin" {
 		return errors.New("-engine container is Apple's container, on a Mac: use docker here")
+	}
+	if o.engineURL != "" && o.engine != engineDocker {
+		return errors.New("-engine-url is eriphe-node engine, for Docker: not with -engine container")
 	}
 	if o.docker == "" {
 		o.docker = o.engine

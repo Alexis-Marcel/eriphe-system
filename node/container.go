@@ -262,7 +262,7 @@ func (n *node) taskEnv(t *Task, agentEnv map[string]string) map[string]string {
 	// The env reaches the container through the docker CLI's own (-e NAME),
 	// and the CLI honours the proxy variables too: it must reach its daemon
 	// directly, never through the relay, which refuses its private address.
-	if h := dockerDaemonHost(os.Getenv("DOCKER_HOST")); h != "" && env["NO_PROXY"] != "" {
+	if h := dockerDaemonHost(os.Getenv("DOCKER_HOST")); h != "" && env["NO_PROXY"] != "" && n.opt.engineURL == "" {
 		env["NO_PROXY"] += "," + h
 		env["no_proxy"] = env["NO_PROXY"]
 	}
