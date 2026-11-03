@@ -36,6 +36,9 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "boom")
 		os.Exit(1)
 	}
+	// eriphe-node share asks no running node in the tests but those that
+	// mean to (access_test.go).
+	shareAsksNode = false
 	os.Exit(m.Run())
 }
 

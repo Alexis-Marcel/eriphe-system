@@ -54,6 +54,8 @@ type syncState struct {
 	Bytes     int64     `json:"bytes"`
 	Error     string    `json:"error,omitempty"`
 	ICloud    bool      `json:"icloud,omitempty"`
+	Problem   string    `json:"problem,omitempty"` // its machine cannot read or write it (node/access.go)
+	Program   string    `json:"program,omitempty"` // eriphe-node or syncthing: the one refused
 	SyncedAt  time.Time `json:"synced_at,omitzero"`
 }
 
@@ -322,6 +324,11 @@ type copyView struct {
 	Done   float64 `json:"done"`   // %, while syncing
 	Bytes  int64   `json:"bytes"`  // what it takes on that machine
 	Error  string  `json:"error,omitempty"`
+	// Problem: that machine cannot write the copy, or read the folder it
+	// sends (node/access.go); Mac: it is a Mac, whose Settings it may open.
+	Problem string `json:"problem,omitempty"`
+	Program string `json:"program,omitempty"` // the program refused: eriphe-node or syncthing
+	Mac     bool   `json:"mac,omitempty"`
 }
 
 // copyChoice is a machine the user may tick to keep a copy.
@@ -334,7 +341,7 @@ type copyChoice struct {
 // copyStatus is a copy's state: up to date, syncing, behind, an error, or
 // waiting (not synced there yet).
 func (v *syncView) copyStatus(f *Folder, node string) copyView {
-	cv := copyView{Node: node, Online: v.nodes[node].Online, Status: "waiting"}
+	cv := copyView{Node: node, Online: v.nodes[node].Online, Status: "waiting", Mac: v.nodes[node].OS == "darwin"}
 	st := parseInfo(v.nodes[node]).Syncthing
 	if st == nil {
 		return cv
@@ -346,8 +353,11 @@ func (v *syncView) copyStatus(f *Folder, node string) copyView {
 	}
 	s := st.Folders[i]
 	cv.Done, cv.Bytes = s.Done, s.Bytes
+	cv.Problem, cv.Program = s.Problem, s.Program
 	src := v.nodes[f.Node]
 	switch {
+	case s.Problem != "":
+		cv.Status, cv.Error = "error", s.Error
 	case s.State == "missing":
 	case s.Error != "":
 		cv.Status, cv.Error = "error", s.Error

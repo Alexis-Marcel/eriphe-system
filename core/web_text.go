@@ -636,6 +636,8 @@ func templateFuncs(lang string) template.FuncMap {
 			}
 			return m
 		},
+		// macprog is the program to turn on in Files and Folders (folder_access.go).
+		"macprog":   macProgram,
 		"trimvault": func(s string) string { return strings.TrimPrefix(s, vaultPrefix) },
 		// tor is the text of key, or of fallback when key has none.
 		"tor": func(key, fallback string) string {

@@ -267,6 +267,11 @@ func (st *syncthing) deleteFolder(ctx context.Context, id string) error {
 	return st.call(ctx, http.MethodDelete, "/rest/config/folders/"+url.PathEscape(id), nil, nil, nil)
 }
 
+// scan has Syncthing scan a folder now.
+func (st *syncthing) scan(ctx context.Context, folder string) error {
+	return st.call(ctx, http.MethodPost, "/rest/db/scan", url.Values{"folder": {folder}}, nil, nil)
+}
+
 // setIgnores replaces a folder's ignore patterns (its .stignore).
 func (st *syncthing) setIgnores(ctx context.Context, folder string, patterns []string) error {
 	if patterns == nil {

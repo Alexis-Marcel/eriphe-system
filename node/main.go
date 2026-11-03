@@ -170,8 +170,16 @@ func main() {
 		log.Fatal(err)
 	}
 	n := newNode(o)
+	n.name = s.Name // its folders' ids in Syncthing (syncfolders.go)
 	n.syncNet = newSyncNet(o.root, "", o.syncLimit, coreSyncDialer(s))
 	go n.startSyncthing(o.syncthingHome) // syncthing.go
+	if runtime.GOOS == "darwin" {
+		// eriphe-node share asks the node itself to open a folder it
+		// shares, and Syncthing to scan it (local.go).
+		if err := n.listenLocal(); err != nil {
+			log.Printf("local socket: %v", err)
+		}
+	}
 	if err := n.ensureTaskNetwork(); err != nil {
 		log.Fatal(err)
 	}
@@ -200,10 +208,13 @@ func main() {
 	for _, sh := range n.sharedList() {
 		if sh.Missing {
 			log.Printf("shared folder %s is not there now", sh.Name)
+		} else if sh.Problem != "" {
+			log.Printf("shared folder %s cannot be used now: %s", sh.Name, sh.Problem)
 		}
 	}
-	go n.watchShared(2 * time.Second) // folders unshared here stop their tasks (shared.go)
-	go n.pruneLoop(time.Hour)         // old snapshots go (snapshot.go)
+	go n.watchShared(2 * time.Second)  // folders unshared here stop their tasks (shared.go)
+	go n.watchAccess(30 * time.Second) // folders found blocked, tried again (access.go)
+	go n.pruneLoop(time.Hour)          // old snapshots go (snapshot.go)
 	l, err := n.listenTasks(addr)
 	if err != nil {
 		log.Fatal(err)

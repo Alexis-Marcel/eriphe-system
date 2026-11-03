@@ -1527,6 +1527,18 @@ here (`folders_unshared`: it is never lent again), and on the machine now, or as
 back (`DELETE /v1/shares/{id}` through its tunnel), which stops the tasks that hold it. A folder
 shared or unshared on the machine shows in its access log at the next refresh (every 15 s).
 
+**A folder its machine cannot use** is never silent (`folder_access.go`, node/README.md, Folders it
+cannot use): its node reports a `problem` for the folder (`denied`, `read_only`, `missing`; the
+folder's `problem` in `GET /v1/folders`), and for a copy (its `problem` among `copies`), with the
+`program` refused, `eriphe-node` or `syncthing`. Settings →
+Dossiers says it on the folder's tile and on the copy's line, and the device's card marks the folder
+"bloqué" with the same note. On a Mac that macOS keeps from the folder: « macOS bloque l'accès à ce
+dossier », how to allow it (turn on the program named in Files and Folders), and « Autoriser », which asks that Mac's node to open System Settings ›
+Privacy & Security › Files and Folders there (`POST /settings/devices/{name}/privacy`, then `POST
+/v1/privacy/open` through its tunnel: nothing else can be opened, the user decides there); the note
+goes once the node sees the folder open again. On another system, or another problem, a plain
+explanation.
+
 **Folders given from the workspace before** (the old `folders` table, `{node, share, path}`) are
 not lent any more: eriphe-core never pushes them to a machine, since that would let it add a
 folder. Settings → Dossiers shows them under their machine, "À partager de nouveau sur

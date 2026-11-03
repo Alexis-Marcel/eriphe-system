@@ -15,6 +15,7 @@ var deviceStrings = map[string]map[string]string{
 	"fr": {
 		"devices.sees":                 "Ce que {{name}} voit ici",
 		"devices.seesnone":             "Rien d'ouvert",
+		"devices.blocked":              "bloqué",
 		"devices.access.read":          "Lecture",
 		"devices.access.drop":          "Lecture + dépôt",
 		"devices.access.manage":        "Gérer",
@@ -57,6 +58,7 @@ var deviceStrings = map[string]map[string]string{
 	"en": {
 		"devices.sees":                 "What {{name}} sees here",
 		"devices.seesnone":             "Nothing open",
+		"devices.blocked":              "blocked",
 		"devices.access.read":          "Read",
 		"devices.access.drop":          "Read + drop",
 		"devices.access.manage":        "Manage",

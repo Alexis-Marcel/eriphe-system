@@ -298,8 +298,8 @@ A probe for another system is a `sessionProbe`.
 
 | Call | What |
 |---|---|
-| `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `folders` (the shared folders: `{id, name, access, missing}`, never a path), `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine), `syncthing` (its Syncthing's `device_id`, see Copies) |
-| `GET /v1/shares` | the folders shared on this machine: `{folders: [{id, name, access, missing}]}`, never a path (see Shares) |
+| `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `folders` (the shared folders: `{id, name, access, missing, problem, program}`, never a path; see Folders it cannot use), `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine), `syncthing` (its Syncthing's `device_id`, see Copies) |
+| `GET /v1/shares` | the folders shared on this machine: `{folders: [{id, name, access, missing, problem, program}]}`, never a path (see Shares) |
 | `DELETE /v1/shares/{id}` | take a folder off the list (eriphe-core may restrict, never add); the tasks holding it are stopped |
 | `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, identity?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex` or `acp` (with `command`) |
 | `GET /v1/tasks`, `GET /v1/tasks/{id}` | state, agent session, pending permissions |
@@ -310,6 +310,7 @@ A probe for another system is a `sessionProbe`.
 | `/v1/services/{name}/mcp` | a service's streamable HTTP MCP endpoint (see Services) |
 | `GET`/`POST /v1/model/{path}` | the model server it lends (`-model-server`): its `/v1/{path}`, streamed (see A model behind this node) |
 | `POST /v1/wake` | send another machine's Wake-on-LAN packets: `{macs, broadcast}` (see Waking the machine) |
+| `POST /v1/privacy/open` | on a Mac, open System Settings › Privacy & Security › Files and Folders there, nothing else (the workspace's "Allow"); 404 elsewhere (see Folders it cannot use) |
 | `PUT /v1/sync` | the copies' plan, from eriphe-core: `{peers: [{name, device_id}], folders: [{id, share, name, source, role, access, results, peers}]}` (see Copies); answers `{problems}`, what it left out and why |
 | `GET /v1/sync/connect` | a peer's Syncthing connection, handed over by eriphe-core (`Upgrade: eriphe-sync`, `Eriphe-Sync-Peer`), on to this machine's Syncthing (see Copies) |
 
@@ -922,8 +923,8 @@ refuses what is not a task. Keeping the Mac's own services out would need a pack
 **macOS's privacy, and the explorer.** Documents, the Desktop, Downloads, iCloud Drive and the
 clouds' folders are protected: a program reads them once the user allows it, the permission tied to
 the program's signature. eriphe-node is not signed with a Developer ID: each update would ask again
-(and a program that launchd starts waits for the answer). So the node never reads a shared place
-itself (`apple_explore.go`):
+(and a program that launchd starts waits for the answer). So the node does not list or check a
+shared place itself (`apple_explore.go`):
 
 - the checks of `eriphe-node share add` run in a short-lived container, the explorer: alpine, the
   place's root mounted read-only, no network, UID 1000, every capability dropped, about 0.7 s.
@@ -939,6 +940,26 @@ itself (`apple_explore.go`):
 
 macOS asks once, for Apple's `container-runtime-linux`, the first time a protected folder is shared
 or mounted, and keeps the answer across Eriphe's updates.
+
+**Asked when sharing.** Two other programs open a shared folder on the Mac itself: eriphe-node
+(the dataless files of Files in the cloud, its checks before the copies) and Syncthing, which copies
+a folder that may be copied to the user's other machines (see Copies). So that macOS asks for them
+while the user is at the terminal (or in the Finder, for its Quick Action), not later from a
+LaunchAgent where nobody answers, `eriphe-node share add` says first that macOS may ask, up to
+twice for a folder that may be copied (eriphe-node, then Syncthing), and to allow both; then it asks
+the running node, through its local socket (`<root>/local.sock`, the node's user's only,
+`local.go`), to open each folder it shares. The node opens it, and for a folder that may be copied
+hands it to its Syncthing at once (`syncshare.go`: a send-only folder, id `e-<machine>-<share>`, no
+device yet) and has it scanned, which makes macOS ask for Syncthing too; the command waits for the
+answers (up to 3 minutes). Refused, it names the program refused, says how to allow it (System
+Settings › Privacy & Security › Files and Folders, then turn on eriphe-node or syncthing), and
+opens that pane. The folder is shared either way, and the node opens only a folder of its list
+there. It then never opens a folder of the Mac just to report on it: what it saw is kept
+(`access.json`), and only a folder found blocked is tried again, every 30 seconds (see Folders it
+cannot use). Syncthing's answer is tied to Kastelo AB's signature and holds across updates;
+eriphe-node's is tied to its ad hoc signature, which changes with each build, so macOS may ask
+again for it after an update of the node: the folder then shows as blocked in the workspace, with
+"Allow".
 
 **Files in the cloud.** iCloud Drive and the File Provider clouds keep files "dataless" on a Mac
 that optimises its storage. A task cannot have them downloaded (a read in the container fails with
@@ -1030,6 +1051,12 @@ eriphe-node share restore NAME|FOLDER SNAPSHOT|latest    # back as it was (after
 
 Sharing a folder already shared again keeps its id (and its name, unless `--name` is given) and
 sets its level, ceiling and copies to those given: that is how the machine raises a level.
+
+On a Mac, `share add` also has the running node open each folder it shares, and hand one that may
+be copied to Syncthing, so that macOS asks the user then for eriphe-node and for Syncthing;
+refused, it names the program to allow and opens System Settings there (see The container engine,
+Asked when sharing). The folder is shared either way: the workspace shows it blocked until it is
+allowed.
 
 Options, before the command: `-root` (env `ERIPHE_ROOT`), `-share` (env `ERIPHE_NODE_SHARES`),
 `-engine` (env `ERIPHE_ENGINE`), `-docker`, `-snapshot-days` (env `ERIPHE_SNAPSHOT_DAYS`),
@@ -1178,7 +1205,8 @@ child, and pins its version (2.1.7); it never upgrades itself:
 
 On a Mac, Syncthing must not be the node's child: macOS grants access to Documents, iCloud Drive or
 a cloud's folder to the program that asks, and the node is not signed. Syncthing's own signed
-binary, in its own LaunchAgent, asks once; the answer is tied to Kastelo AB's signature and holds
+binary, in its own LaunchAgent, asks once, when the folder is shared (see The container engine, Asked
+when sharing); the answer is tied to Kastelo AB's signature and holds
 across Syncthing's versions, Eriphe's updates and restarts. On Windows, the user's folder is a
 DrvFs mount, where Syncthing sees no change notification: it rescans it (every hour by default).
 
@@ -1260,6 +1288,34 @@ complete when the folder's machine was last seen): the node mounts `<root>/sync/
 if its plan keeps that copy of that folder, and at most at the copy's level; with `manage`, the
 snapshot is of the copy, taken here. What the task writes there goes back to the folder's machine,
 at once or when it returns.
+
+### Folders it cannot use
+
+A folder this node cannot reach is never silent (`access.go`). `GET /v1/node` gives each shared
+folder a `problem`, and each synced folder (`syncthing.folders`) too, when there is one, with the
+`program` refused, `eriphe-node` or `syncthing` (the one to turn on in macOS's Files and Folders):
+
+| `problem` | What |
+|---|---|
+| `denied` | the system refuses it: macOS's privacy (Files and Folders), or the folder's permissions (EPERM, EACCES; Syncthing's "operation not permitted", "permission denied") |
+| `read_only` | it may be read, not written: a read-only volume, or a folder lent above read that the node cannot write |
+| `missing` | not there: an unplugged disk, a folder moved (also `missing: true`) |
+
+How it is known: on Linux and Windows, a shared folder is opened when the node reports (and checked
+writable when lent above read); on a Mac, what the node saw when it last opened it (`access.json`,
+see The container engine, Asked when sharing). Before Syncthing gets a folder, the node opens the
+one it sends from here (not on a Mac, where Syncthing's own answer counts), and writes then removes
+a file of its own (`.eriphe-probe-*`) in the copy it keeps here, so a copy is never received where
+it cannot be written: either failing, the folder is left out of Syncthing (`problems` of `PUT
+/v1/sync`), its state says why, and it is tried again every 30 seconds. What Syncthing itself
+reports of a folder (its error, its files' errors) gives the problem too, for `syncthing`; a folder
+it was refused is scanned again every 30 seconds until it is allowed. A folder handed to Syncthing
+when it was shared stays there with no device until copies are planned, then is the plan's folder
+of the same id, taken as it is (its devices added), never added twice; it goes from Syncthing once
+the folder may no longer be copied or is unshared. eriphe-core shows the problem on Settings →
+Folders and on the device's card; on a Mac whose `problem` is `denied`, its "Allow" calls `POST
+/v1/privacy/open`, which opens System Settings › Privacy & Security › Files and Folders on the Mac,
+where the user turns on the program named.
 
 ## Services (local MCP servers)
 

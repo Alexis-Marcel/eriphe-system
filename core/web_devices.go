@@ -26,7 +26,8 @@ func (w *web) deviceRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/devices/{name}/rejoin", w.auth(w.handleRejoinCommand))
 	mux.Handle("POST /settings/devices/{name}/suspend", w.auth(w.handleDeviceAccess(true)))
 	mux.Handle("POST /settings/devices/{name}/resume", w.auth(w.handleDeviceAccess(false)))
-	w.wakeRoutes(mux) // web_wake.go
+	mux.Handle("POST /settings/devices/{name}/privacy", w.auth(w.handlePrivacy)) // folder_access.go
+	w.wakeRoutes(mux)                                                            // web_wake.go
 }
 
 // deviceLogPage is how many entries of the access log a page shows.

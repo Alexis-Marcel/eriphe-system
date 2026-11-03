@@ -60,6 +60,12 @@ type Folder struct {
 	Max      string `json:"max,omitempty"`      // the level chosen on its machine, the most it may get
 	Copyable bool   `json:"copyable,omitempty"` // may be copied to the user's other machines
 	Missing  bool   `json:"missing,omitempty"`  // not there now on its machine (an unplugged disk)
+	// Problem: why its machine cannot use it now (node/access.go): denied
+	// (macOS's privacy, permissions), read_only, missing.
+	Problem string `json:"problem,omitempty"`
+	// Program: what is refused it, eriphe-node or syncthing (the one to
+	// allow in macOS's Files and Folders); empty from an older node.
+	Program string `json:"program,omitempty"`
 }
 
 // Lower are the levels a folder may be lowered to from here: its own and
@@ -78,6 +84,8 @@ type sharedFolder struct {
 	Max      string `json:"max,omitempty"` // empty from an older node: its access
 	Copyable bool   `json:"copyable,omitempty"`
 	Missing  bool   `json:"missing,omitempty"`
+	Problem  string `json:"problem,omitempty"`
+	Program  string `json:"program,omitempty"`
 }
 
 func init() {
@@ -132,7 +140,7 @@ func (s *Store) folders() ([]*Folder, error) {
 				}
 				copyable = copyable && !l.nocopy
 			}
-			out = append(out, &Folder{Name: sf.Name, Node: n.Name, ID: sf.ID, Access: access, Max: maxLevel, Copyable: copyable, Missing: sf.Missing})
+			out = append(out, &Folder{Name: sf.Name, Node: n.Name, ID: sf.ID, Access: access, Max: maxLevel, Copyable: copyable, Missing: sf.Missing, Problem: sf.Problem, Program: sf.Program})
 			count[strings.ToLower(sf.Name)]++
 		}
 	}

@@ -1065,8 +1065,21 @@ The install itself, every command's output included, is in `~/.eriphe/install.lo
 `C:\ProgramData\eriphe-node\install.log` (Windows); an uninstall on a Mac writes
 `$TMPDIR/eriphe-uninstall.log`, as `~/.eriphe` goes.
 
-**What macOS asks, on a Mac with Apple's container.** Each once, for Apple's program, never for
-Eriphe's (so not again after an update):
+**What macOS asks, on a Mac with Apple's container.** When you share a folder in Documents, the
+Desktop, Downloads, iCloud Drive, a cloud folder or a removable volume (`eriphe-share add`, or the
+Finder's "Share with Eriphe…"), which says first that macOS may ask:
+
+- "« eriphe-node » would like to access files in your Documents folder" (or the others).
+- "« syncthing » would like to access files in your Documents folder", for a folder that may be
+  copied (`--copyable`): Syncthing keeps its copies.
+
+Allow both. Refused, the command names the program and opens System Settings → Privacy & Security
+→ Files and Folders, where you turn it on; the workspace shows the folder as blocked, with
+"Autoriser" ("Allow"), which opens that pane on the Mac, until you do. Syncthing's answer holds
+across updates (its signature is its developer's); eriphe-node is not signed with a Developer ID,
+so macOS may ask again for it after an update, and the workspace then shows the folder blocked.
+
+Then each once, for Apple's program, never for Eriphe's (so not again after an update):
 
 - "« container-runtime-linux » would like to access files in your Documents folder" (or the
   Desktop, Downloads, iCloud Drive, a cloud folder): the first time a folder there is listed in the

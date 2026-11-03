@@ -243,6 +243,15 @@ func (n *node) applySync(ctx context.Context) (map[string]string, error) {
 			problems[pf.ID] = why
 			continue
 		}
+		// What Syncthing would fail on, said rather than left to it: the
+		// folder this machine sends must open (on a Mac, the node asks
+		// macOS here if it never did: Syncthing is its child and gets the
+		// same answer), and a copy must be writable before it receives
+		// anything (access.go).
+		if why := n.syncAccess(pf, shared); why != "" {
+			problems[pf.ID] = why
+			continue
+		}
 		for i, f := range folders {
 			if f.Path == "" {
 				continue
@@ -265,13 +274,16 @@ func (n *node) applySync(ctx context.Context) (map[string]string, error) {
 		}
 	}
 	// What Syncthing holds that the plan does not: removed. This Syncthing
-	// is Eriphe's own; anything else in it is not to be kept.
+	// is Eriphe's own; anything else in it is not to be kept, but a folder
+	// shared here that may be copied, handed to it when it was shared
+	// (registerShared): the plan reuses it once copies are set up.
 	have, err := st.folders(ctx)
 	if err != nil {
 		return problems, err
 	}
+	own := n.ownSynced(shared)
 	for _, f := range have {
-		if !want[f.ID] {
+		if !want[f.ID] && !own[f.ID] {
 			if err := st.deleteFolder(ctx, f.ID); err != nil {
 				return problems, err
 			}
@@ -353,6 +365,34 @@ func (n *node) stFolders(pf planFolder, shared []sharedFolder, ids map[string]st
 		}
 		return []stFolder{main}, nil, ""
 	}
+}
+
+// syncAccess is why a planned folder cannot be synced here now, noted
+// (access.go): the folder sent from here does not open, or the copy kept
+// here cannot be written. "" when it can.
+func (n *node) syncAccess(pf planFolder, shared []sharedFolder) string {
+	switch pf.Role {
+	case roleSource:
+		i := indexShared(shared, pf.Share)
+		if i < 0 || n.apple() {
+			// On a Mac, Syncthing reads the folder itself, with its own
+			// permission: what it says of it is reported (syncState).
+			return ""
+		}
+		if note := n.probeShared(shared[i]); note.Problem != "" {
+			return "this machine cannot open the folder (" + note.Problem + "): " + note.Error
+		}
+	case roleCopy:
+		p := n.copyPath(pf.ID)
+		err := n.makeCopyDir(p)
+		if err == nil {
+			err = probeWrite(p)
+		}
+		if n.access.note(pf.ID, err); err != nil {
+			return "this machine cannot write the copy: " + err.Error()
+		}
+	}
+	return ""
 }
 
 // makeCopyDir makes a copy's folder, the tasks' user's on Linux (what
@@ -475,6 +515,11 @@ type syncFolderState struct {
 	// ICloud: Syncthing cannot read files iCloud Drive (or a cloud's
 	// folder) keeps in the cloud only: the user should keep it downloaded.
 	ICloud bool `json:"icloud,omitempty"`
+	// Problem: why this machine cannot read the folder it sends, or write
+	// the copy it keeps (access.go): denied, read_only, missing.
+	Problem string `json:"problem,omitempty"`
+	// Program: the one the problem is of, eriphe-node or syncthing.
+	Program string `json:"program,omitempty"`
 	// SyncedAt is when a copy was last seen complete.
 	SyncedAt time.Time `json:"synced_at,omitzero"`
 }
@@ -496,25 +541,45 @@ func (n *node) syncState(ctx context.Context) []syncFolderState {
 	var out []syncFolderState
 	for _, pf := range plan.Folders {
 		s := syncFolderState{ID: pf.ID, Share: pf.Share, Source: pf.Source, Role: pf.Role}
+		noteID := pf.ID
+		if pf.Role == roleSource {
+			noteID = pf.Share
+		}
+		note, _ := n.access.get(noteID)
+		if note.Program == programSyncthing {
+			note = accessNote{} // Syncthing's own: said again below
+		}
 		fs, err := st.folderStatus(ctx, pf.ID)
 		if err != nil {
 			s.State, s.Error = "missing", "not synced here"
+			if note.Problem != "" { // left out of Syncthing for it (syncAccess)
+				s.Error, s.Problem, s.Program = note.Error, note.Problem, programNode
+			}
 			out = append(out, s)
 			continue
+		}
+		if note.Problem != "" {
+			s.Problem, s.Program = note.Problem, programNode
 		}
 		s.State, s.NeedBytes, s.Bytes = fs.State, fs.NeedBytes, fs.LocalBytes
 		if fs.Error != "" {
 			s.Error = fs.Error
 		}
-		if errs, err := st.folderErrors(ctx, pf.ID); err == nil && len(errs) > 0 {
-			if s.Error == "" {
-				s.Error = fmt.Sprintf("%s: %s", errs[0].Path, errs[0].Error)
-			}
-			if pf.Role == roleSource && n.inCloudDrive(shared, pf.Share) && slices.ContainsFunc(errs, func(e stFileError) bool {
-				return strings.Contains(e.Error, "resource deadlock avoided")
-			}) {
-				s.ICloud = true
-			}
+		errs, _ := st.folderErrors(ctx, pf.ID)
+		if s.Error == "" && len(errs) > 0 {
+			s.Error = fmt.Sprintf("%s: %s", errs[0].Path, errs[0].Error)
+		}
+		stNote := syncthingNote(fs, errs)
+		if s.Problem == "" && stNote.Problem != "" {
+			s.Problem, s.Program = stNote.Problem, programSyncthing
+		}
+		if pf.Role == roleSource {
+			n.access.set(pf.ID, stNote) // the shared folder says it too (folderProblem)
+		}
+		if pf.Role == roleSource && n.inCloudDrive(shared, pf.Share) && slices.ContainsFunc(errs, func(e stFileError) bool {
+			return strings.Contains(e.Error, "resource deadlock avoided")
+		}) {
+			s.ICloud = true
 		}
 		if pf.Role == roleCopy {
 			s.Done = 100
@@ -554,18 +619,24 @@ func (n *node) inCloudDrive(shared []sharedFolder, id string) bool {
 
 // watchSync applies the plan again whenever the list of shared folders
 // changes (a folder unshared, lowered or no longer copyable here: its
-// Syncthing folder goes at once) or the plan does.
+// Syncthing folder goes at once) or the plan does; and, while a folder is
+// left out for what this machine cannot open or write, every syncRetry,
+// so that it comes in once the user allows it.
 func (n *node) watchSync(every time.Duration) {
-	last := ""
+	last, retry := "", time.Time{}
 	for {
 		sig := n.syncSignature()
-		if sig != last {
+		if sig != last || (!retry.IsZero() && time.Now().After(retry)) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			if problems, err := n.applySync(ctx); err != nil {
 				log.Printf("sync: %v", err)
 			} else {
+				retry = time.Time{}
 				for id, why := range problems {
-					log.Printf("sync: folder %s left out: %s", id, why)
+					if sig != last {
+						log.Printf("sync: folder %s left out: %s", id, why)
+					}
+					retry = time.Now().Add(syncRetry)
 				}
 				last = sig
 			}
@@ -574,6 +645,9 @@ func (n *node) watchSync(every time.Duration) {
 		time.Sleep(every)
 	}
 }
+
+// syncRetry is how often a folder left out is tried again.
+const syncRetry = 30 * time.Second
 
 // syncSignature is what applySync depends on: the plan, and each shared
 // folder's id, path, level and copyable flag.
