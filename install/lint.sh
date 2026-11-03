@@ -34,39 +34,33 @@ done
 	echo "lint.sh: expected 4 host scripts and 1 written one, found ${n:-0} and ${w:-0}" >&2
 	exit 1
 }
-# The updater install.ps1 writes in its WSL distribution.
-awk '/^cat > \/usr\/local\/bin\/eriphe-update <<.EOF.$/ { f = 1; next } f && /^EOF$/ { exit } f' \
-	"$(dirname "$0")/install.ps1" >"$d/eriphe-update"
-[ -s "$d/eriphe-update" ] || {
-	echo "lint.sh: no eriphe-update in install.ps1" >&2
+# What install.ps1 runs in its WSL distribution: its setup (which the updater
+# of an install from before runs too), and the scripts it writes there.
+ps=$(dirname "$0")/install.ps1
+awk '/^[$]changed = Invoke-InDistro @.$/ { f = 1; next } f && /^.@$/ { exit } f' "$ps" >"$d/wsl-setup"
+grep -q '^cat > /usr/local/bin/eriphe-node-run ' "$d/wsl-setup" || {
+	echo "lint.sh: install.ps1's setup writes no eriphe-node-run (the updater of before looks for it)" >&2
 	exit 1
 }
-shellcheck -s sh "$d/eriphe-update"
-sh -n "$d/eriphe-update"
-# The Syncthing of install.ps1's distribution: its setup and its runner.
-{
-	echo '#!/bin/sh'
-	echo "v=2.1.7 a=amd64 sum=0"
-	awk '/^  \$stSetup = @.$/ { f = 1; next } f && /^.@$/ { exit } f' "$(dirname "$0")/install.ps1"
-} >"$d/syncthing-setup"
-awk '/^cat > \/usr\/local\/bin\/eriphe-syncthing-run <<.EOF.$/ { f = 1; next } f && /^EOF$/ { exit } f' \
-	"$(dirname "$0")/install.ps1" >"$d/eriphe-syncthing-run"
-for s in syncthing-setup eriphe-syncthing-run; do
+for s in eriphe-node-run eriphe-share eriphe-dockerd; do
+	awk '/^cat > \/usr\/local\/bin\/'"$s"' <<.EOF.$/ { f = 1; next } f && /^EOF$/ { exit } f' "$ps" >"$d/$s"
 	[ "$(wc -l <"$d/$s")" -gt 5 ] || {
 		echo "lint.sh: no $s in install.ps1" >&2
 		exit 1
 	}
+done
+for s in wsl-setup eriphe-node-run eriphe-share eriphe-dockerd; do
 	shellcheck -s sh "$d/$s"
 	sh -n "$d/$s"
 done
 # The launcher of the one-container install, which sources install.sh, and its tests.
 (
 	cd "$(dirname "$0")/.."
-	shellcheck -s sh -x install/eriphe-launcher install/launcher_test.sh
+	shellcheck -s sh -x install/eriphe-launcher install/launcher_test.sh install/wsl_test.sh
 	sh -n install/eriphe-launcher
 )
 # install.ps1's checks that run without Windows, where PowerShell is (CI).
 if command -v pwsh >/dev/null 2>&1; then
 	pwsh -NoProfile -File "$(dirname "$0")/install_test.ps1"
 fi
-echo "install.sh, its ${n} host scripts, the ${w} it writes, install.ps1's updater and eriphe-launcher are clean"
+echo "install.sh, its ${n} host scripts, the ${w} it writes, install.ps1's WSL scripts and eriphe-launcher are clean"

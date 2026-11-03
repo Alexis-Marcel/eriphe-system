@@ -41,7 +41,7 @@ Each Go module builds on its own; run the checks from its folder (CI runs the sa
 |---|---|
 | `core/`, `cli/`, `servers/mail/`, `servers/calendar/`, `servers/files/`, `node/cred/` | `go build ./... && go vet ./... && go test ./...` |
 | `node/` | the same, plus `GOOS=windows go build ./...` |
-| `install/` | `sh install/lint.sh` (needs `shellcheck`) and `sh install/launcher_test.sh` |
+| `install/` | `sh install/lint.sh` (needs `shellcheck`), `sh install/launcher_test.sh` and `sh install/wsl_test.sh` |
 | `.github/scripts/` | `sh .github/scripts/release_test.sh` |
 | `ha/` | `python3 -m pytest ha/tests` |
 | images | `docker build -t eriphe-base:dev worker/base`, `docker build -t eriphe-agent-claude:dev worker/agents/claude`, and the same for `core/` and the servers; `docker build --build-context installer=install -t eriphe-node:dev node` (it carries the installers) |
@@ -78,4 +78,4 @@ account: providers and servers are faked; tests that need a real machine or acco
   throwaway VM.
 - Do not point tests or scripts at a real eriphe-core, NAS or account.
 - Do not run the installers on your own machine to test a change unless that is the machine you
-  mean to install; `install/launcher_test.sh` and `install/lint.sh` cover the scripts.
+  mean to install; `install/launcher_test.sh`, `install/wsl_test.sh` and `install/lint.sh` cover the scripts.

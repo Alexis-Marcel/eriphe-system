@@ -19,8 +19,8 @@
 # ERIPHE_WEB_PORT and -ApiPort ERIPHE_API_PORT (core mode: the workspace's
 # port, 8443, and the one other devices join on, 8800; kept), -ModelServer
 # ERIPHE_MODEL_SERVER (a model server this node lends through its tunnel, as
-# the node in WSL reaches it: http://127.0.0.1:11434 with WSL's mirrored
-# networking; none for none; kept), and the
+# the node in its container reaches it: http://eriphe-ollama:11434 for an
+# Ollama container on Eriphe's network; none for none; kept), and the
 # switches -CoreMode, -Rejoin, -Rollback and -Uninstall
 # ERIPHE_CORE_MODE, ERIPHE_REJOIN, ERIPHE_ROLLBACK and ERIPHE_UNINSTALL,
 # set to 1. A parameter given wins over its variable; the script clears
@@ -36,28 +36,32 @@
 # joined to it.
 #
 # Without WSL, the script installs it; when Windows needs a reboot for it,
-# the script carries on by itself at the next logon. eriphe-node comes from
-# its image (ghcr.io/alexis-marcel/eriphe-node), pulled in the distribution;
-# -Binary gives a Linux eriphe-node binary instead.
+# the script carries on by itself at the next logon. The distribution is a
+# Linux machine with Docker that runs Eriphe's launcher
+# (ghcr.io/alexis-marcel/eriphe), as on any Linux (install/README.md, One
+# container): eriphe-node runs in a container, behind eriphe-node engine,
+# the only one with the Docker socket; eriphe-core too in core mode. What
+# only Windows can do stays here: the scheduled tasks, the session helper,
+# the Explorer's menu, the network card to wake, the ports of core mode.
 #
-# Run it again to update eriphe-node (and eriphe-core) or the labels; the
-# node keeps its identity, and what is not given again is kept: a plain
+# Run it again to update Eriphe or the labels; the node keeps its identity,
+# and what is not given again is kept: a plain
 # `irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex` updates. -Rejoin, with a rejoin
 # token for this name, drops that identity and joins again. -Uninstall removes the
 # distribution (the node's identity, and eriphe-core's data in core mode),
 # its scheduled task, and the port forwarding and firewall rule of core mode.
+# An install from before the launcher (eriphe-node a binary in the
+# distribution) moves to it, its data and the folders shared kept.
 #
 # Afterwards the machine updates itself when eriphe-core asks (Settings,
-# Machines, Updates): an updater in the distribution, started with the node,
-# pulls the new image, swaps the binary (and eriphe-core's container), and
-# puts the previous one back if the node does not connect again. -Version
-# 0.2.0 pins a release, -Version edge follows main (testers), -Version
-# latest follows the releases again; -Rollback goes back to the version
-# before the last update.
+# Machines, Updates): the launcher applies the update, and puts the previous
+# version back if the node does not connect again. -Version 0.2.0 pins a
+# release, -Version edge follows main (testers), -Version latest follows
+# the releases again; -Rollback goes back to the version before the last
+# update.
 #
-# Tasks run on their own Docker network, eriphe-tasks, which the node
-# creates: they reach the node on its gateway, not one another nor the
-# services on the default bridge.
+# Tasks run on their own Docker network, eriphe-tasks: they reach the node,
+# not one another nor this PC's services.
 [CmdletBinding()]
 param(
   [string] $Core,            # eriphe-core's address(es), comma-separated, preferred first
@@ -66,7 +70,6 @@ param(
   [string] $Labels,          # what agents can require of this node, comma-separated, e.g. gpu
   [string] $CaHash,          # sha256:<hex>, the eriphe-core CA to trust (TLS)
   [switch] $CoreMode,        # run eriphe-core here too, and join this node to it
-  [string] $Binary,          # a Linux eriphe-node binary, instead of the one in its image
   [string] $Distro = "eriphe",
   [switch] $Rejoin,          # join again under -Name, with a rejoin token (the old secret stops working)
   [string] $Version,         # pin a release (0.2.0, or 0.2 for its fixes); edge follows main; latest the releases
@@ -75,7 +78,7 @@ param(
   [string] $AssistantName,   # the assistant's name, for what this script prints
   [string] $WebPort,         # core mode: the workspace's port (default 8443, kept for the next runs)
   [string] $ApiPort,         # core mode: the port other devices join on (default 8800, kept)
-  [string] $ModelServer      # a model server this node lends through its tunnel, as the node in WSL reaches it; "none" for none (kept)
+  [string] $ModelServer      # a model server this node lends through its tunnel, as the node in its container reaches it; "none" for none (kept)
 )
 $bound = @{} + $PSBoundParameters
 # This script's own text, for the resume after a reboot (none under irm | iex:
@@ -94,7 +97,7 @@ $fromEnv = @{
   ERIPHE_CORE_MODE = "CoreMode"; ERIPHE_REJOIN = "Rejoin"; ERIPHE_ROLLBACK = "Rollback"; ERIPHE_UNINSTALL = "Uninstall"
 }
 foreach ($v in @(Get-ChildItem Env: | Where-Object Name -like "ERIPHE_*")) {
-  if ($v.Name -in "ERIPHE_NODE_IMAGE", "ERIPHE_CORE_IMAGE") { continue }
+  if ($v.Name -in "ERIPHE_NODE_IMAGE", "ERIPHE_LAUNCHER_IMAGE") { continue }
   $p = $fromEnv[$v.Name]
   if (-not $p) { throw "unknown variable $($v.Name) (known: $(($fromEnv.Keys | Sort-Object) -join ', '))" }
   Remove-Item "Env:$($v.Name)"
@@ -117,30 +120,21 @@ $alpine = @{
   ARM64 = @("https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/aarch64/alpine-minirootfs-3.22.7-aarch64.tar.gz",
             "7e9b34ff3304381909e566e2c93de450664ccc724191261423974fc121c11623")
 }
-# The install's layout, as install.sh's LAYOUT: what an install puts in the
-# distribution besides eriphe-node (its scripts, its settings, Syncthing).
-# Raise it with a release that changes it: the node's image carries this
-# script (/usr/local/share/eriphe/install.ps1), and the distribution's
-# updater brings the distribution to a newer one by itself (eriphe-update,
-# layout). $adminLayout is what it puts on Windows' side (the scheduled
-# tasks, the session helper, the firewall, the Explorer's menu): raise it
-# with a release that changes that, which only this script, in an
-# administrator PowerShell, can do; the device then says so to its user.
-# node/update.go's installLayout is $layout. 3 is install.sh's (eriphe-node
-# engine on Linux): nothing changes here, the distribution's layout runs again.
+# The install's layout, as install.sh's LAYOUT, which node/update.go's
+# installLayout is too. The node image carries this script
+# (/usr/local/share/eriphe/install.ps1): the updater of an install from
+# before the launcher brings it to a newer layout by itself, with this
+# script's setup of the distribution ($changed). $adminLayout is what it
+# puts on Windows' side (the scheduled tasks, the session helper, the
+# firewall, the Explorer's menu): raise it with a release that changes that,
+# which only this script, in an administrator PowerShell, can do; the
+# device then says so to its user.
 $layout = 3
 $adminLayout = 1
-# Syncthing, for the copies of shared folders (node/README.md, Copies): its
-# official Linux build in the distribution, pinned and checked against the
-# release's sha256sum.txt.asc, as install.sh pins it; never upgraded by itself.
-$syncthingVersion = "2.1.7"
-$syncthing = @{
-  AMD64 = @("amd64", "2edc416e7ed136b7c858ed5f3f02a3b8316589605e54c380228ceea7acbf0142")
-  ARM64 = @("arm64", "48e456690cd2b97e7d26b02b5ac35f62a3b36172267b144cfeaf02c993ab955c")
-}
 # The images, at the pinned version or latest (set once the saved settings
-# are read); replaced by ERIPHE_NODE_IMAGE and ERIPHE_CORE_IMAGE, as with
-# install.sh. eriphe-core never chooses them.
+# are read): the launcher's, which chooses the others, and the node's, for
+# the session helper it carries; replaced by ERIPHE_LAUNCHER_IMAGE and
+# ERIPHE_NODE_IMAGE (tests). eriphe-core never chooses them.
 $registry = "ghcr.io/alexis-marcel"
 $corePorts = 8800, 8443          # API (nodes, join), workspace: -ApiPort and -WebPort, or kept
 $home_ = Join-Path $env:ProgramData "eriphe-node"
@@ -424,21 +418,10 @@ function Test-ModelServerAddress([string] $url) {
   $url -match "^https?://([A-Za-z0-9._~-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$"
 }
 
-# The model server's list of models, as the node reaches it (its /v1 path, as
-# eriphe-node makes it).
-function Get-ModelsUrl([string] $url) {
-  $base = $url.TrimEnd("/")
-  if ($base.EndsWith("/v1")) { $base = $base.Substring(0, $base.Length - 3).TrimEnd("/") }
-  "$base/v1/models"
-}
-
-# What to do when the model server does not answer from the distribution:
-# its loopback is Windows' own only with mirrored networking.
-function Get-ModelServerAdvice([string] $url, [bool] $mirrored) {
-  if (-not $mirrored -and $url -match "^https?://(localhost|127\.[0-9.]+|\[::1\])([:/]|$)") {
-    return "the model server at $url does not answer from WSL, where $url is the distribution itself: WSL reaches Windows' own addresses only with mirrored networking (Windows 11 22H2 or later). Add networkingMode=mirrored to the [wsl2] section of %USERPROFILE%\.wslconfig, run wsl --shutdown (it stops every distribution), then run this install again (install/README.md, A model behind this machine)."
-  }
-  "the model server at $url does not answer from WSL: start it (Ollama on Windows runs only while you are logged in: add it to your startup programs, Win+R shell:startup), or check the address, then run this install again."
+# An address of this PC's own loopback, which the node, in its container,
+# does not reach: its loopback is the container's.
+function Test-LoopbackAddress([string] $url) {
+  $url -match "^https?://(localhost|127\.[0-9.]+|0\.0\.0\.0|\[::1?\])([:/]|$)"
 }
 
 function Remove-CorePorts {
@@ -517,20 +500,21 @@ function Get-WakeCard([string] $core) {
   "$($macs -join ',') $broadcast".Trim()
 }
 
-# What the distribution's eriphe-node-run and eriphe-node are told of the
-# session helper's folder ($sessionDir): the Windows folder to mount,
-# read-only, and the file in it. Single-quoted for sh; none for a path sh
-# cannot hold that way.
+# What the distribution's eriphe-node-run is told of the session helper's
+# folder ($sessionDir): the Windows folder to mount, read-only, at
+# /mnt/eriphe-session, which the launcher gives the node read-only
+# (ERIPHE_SESSION_DIR). Single-quoted for sh; none for a path sh cannot
+# hold that way.
 function Get-SessionEnv([string] $dir) {
   if (-not $dir -or $dir -match "['`r`n]") { return "" }
-  "ERIPHE_SESSION_DIR='$dir'`nERIPHE_SESSION_FILE=/mnt/eriphe-session/session.json"
+  "ERIPHE_SESSION_DIR='$dir'"
 }
 
 # The folder of the user signed in at the PC (C:\Users\<name>), the one place
 # folders may be shared from (node/README.md, Shares): the distribution
-# mounts it at /mnt/eriphe/home for eriphe-node only (eriphe-node-run), and
-# a task gets only the folders shared from it. None for a path sh cannot
-# hold single-quoted.
+# mounts it at /mnt/eriphe/home (eriphe-node-run), and a task gets only the
+# folders shared from it, from eriphe-node engine. None for a path sh
+# cannot hold single-quoted.
 function Get-SessionProfile {
   try {
     $sid = (New-Object Security.Principal.NTAccount (Get-SessionUser)).Translate([Security.Principal.SecurityIdentifier]).Value
@@ -540,7 +524,8 @@ function Get-SessionProfile {
   @{ Sid = $sid; Dir = $dir.TrimEnd('\') }
 }
 
-# What eriphe-node-run and eriphe-node are told of it.
+# What eriphe-node-run is told of it, and the launcher's list of the
+# folders shared starts from, for an install from before it (its place).
 function Get-ShareEnv($prof) {
   if (-not $prof) { return "" }
   "ERIPHE_WINDOWS_HOME='$($prof.Dir)'`nERIPHE_NODE_SHARES=home=/mnt/eriphe/home"
@@ -550,7 +535,8 @@ function Get-ShareEnv($prof) {
 # more options"): one entry on folders, for the user signed in at the PC,
 # running eriphe-share.ps1, which asks for the level (read, next to it,
 # manage) and whether the folder may be copied to the user's other machines,
-# runs eriphe-share in the distribution and says how it went. Per user, in
+# runs eriphe-share in the distribution (the launcher's eriphe share) and
+# says how it went. Per user, in
 # their registry (HKCU\Software\Classes\Directory\shell). The former second
 # entry (read + results) goes.
 $shareScript = Join-Path $helperDir "eriphe-share.ps1"
@@ -671,7 +657,7 @@ function Get-SessionUser {
 # seconds it writes, in $sessionDir, whether they are at the PC and not to be
 # disturbed (closed values, never a program's name); eriphe-node, in the
 # distribution, reads that folder only, read-only (eriphe-node-run). From the
-# image's copy in the distribution; with -Binary, the one already here.
+# node image's copy in the distribution.
 function Install-SessionHelper {
   $arch = if (($env:PROCESSOR_ARCHITEW6432, $env:PROCESSOR_ARCHITECTURE) -contains "ARM64") { "arm64" } else { "amd64" }
   $src = "/usr/local/share/eriphe/windows/$arch/eriphe-session.exe"
@@ -791,7 +777,6 @@ if ($Uninstall) {
 
 if ($Rejoin -and -not $JoinToken) { throw "-Rejoin needs -JoinToken (a rejoin token: eriphe-core join-token -name <name> -rejoin)" }
 if ($CoreMode -and $Core) { throw "-CoreMode runs eriphe-core here: leave -Core out" }
-if ($Binary -and -not (Test-Path $Binary)) { throw "no eriphe-node binary at $Binary" }
 if ($Version -match "^v[0-9]") { $Version = $Version.Substring(1) }
 if ($Version -and $Version -ne "latest" -and $Version -cnotmatch "^(edge|sha-[0-9a-f]{7,40}|(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?)?)$") {
   throw "-Version: latest, edge, or a release such as 0.2.0 (0.2 for its fixes)"
@@ -803,16 +788,25 @@ if ($Rollback) {
   Write-Out
   if (-not ((Test-Wsl) -and (Test-Distro))) { throw "Eriphe is not installed on $here" }
   $status = Invoke-InDistro @"
-[ -x /usr/local/bin/eriphe-update ] || { echo "eriphe: no updater here yet: run the install command once, without -Rollback" >&2; exit 1; }
 eriphe-dockerd >&2
-eriphe-update rollback >&2
-dir=/var/lib/eriphe-node
-grep -qx ERIPHE_INSTALL_MODE=core /etc/eriphe-node.env && dir=/var/lib/eriphe-core
+if docker inspect eriphe >/dev/null 2>&1; then
+  docker start eriphe >/dev/null
+  docker exec eriphe eriphe-launcher rollback >&2
+elif [ -x /usr/local/bin/eriphe-update ]; then
+  eriphe-update rollback >&2
+else
+  echo "eriphe: no updater here yet: run the install command once, without -Rollback" >&2
+  exit 1
+fi
+t=node
+grep -qx ERIPHE_INSTALL_MODE=core /etc/eriphe-node.env && t=core
+dir=/var/lib/eriphe/`$t
+[ -d "`$dir" ] || dir=/var/lib/eriphe-`$t
 cat "`$dir/update-status"
 "@
   Write-Para (Get-StatusLine $status)
   Write-Out
-  Write-Out "Logs: wsl -d $Distro -- tail /var/log/eriphe-update.log"
+  Write-Out "Logs: wsl -d $Distro -- docker logs eriphe"
   return
 }
 
@@ -892,12 +886,21 @@ if (-not $bound.ContainsKey("CaHash")) { $CaHash = $saved["ERIPHE_CA_HASH"] }
 if (-not $bound.ContainsKey("ModelServer")) { $ModelServer = $saved["ERIPHE_MODEL_SERVER"] }
 if ($ModelServer -eq "none") { $ModelServer = "" }
 if ($ModelServer -and -not (Test-ModelServerAddress $ModelServer)) {
-  throw "-ModelServer ${ModelServer}: the model server's address as the node in WSL reaches it, e.g. http://127.0.0.1:11434"
+  throw "-ModelServer ${ModelServer}: the model server's address as the node in its container reaches it, e.g. http://eriphe-ollama:11434"
+}
+# The node runs in a container: this PC's loopback is not its own. An
+# earlier install's (Ollama for Windows, through mirrored networking) is no
+# longer lent, and said so.
+if ($ModelServer -and (Test-LoopbackAddress $ModelServer)) {
+  $why = "the node runs in a container, where $ModelServer is the container itself, not Windows: run the model server as a container on Eriphe's network and give its name (install/README.md, A model behind this machine)"
+  if ($bound.ContainsKey("ModelServer")) { throw "-ModelServer ${ModelServer}: $why" }
+  Add-Notice "the model server at $ModelServer is no longer lent to Eriphe: $why."
+  $ModelServer = ""
 }
 $pin = if ($bound.ContainsKey("Version")) { if ($Version -eq "latest") { "" } else { $Version } } else { $saved["ERIPHE_VERSION"] }
 $tag = if ($pin) { $pin } else { "latest" }
 $nodeImage = if ($env:ERIPHE_NODE_IMAGE) { $env:ERIPHE_NODE_IMAGE } else { "$registry/eriphe-node:$tag" }
-$coreImage = if ($env:ERIPHE_CORE_IMAGE) { $env:ERIPHE_CORE_IMAGE } else { "$registry/eriphe-core:$tag" }
+$launcherImage = if ($env:ERIPHE_LAUNCHER_IMAGE) { $env:ERIPHE_LAUNCHER_IMAGE } else { "$registry/eriphe:$tag" }
 if (-not $Core -and -not $CoreMode) { $Core = $saved["ERIPHE_CORE"] }
 if ($Name -notmatch "^[a-z0-9][a-z0-9-]*$") { throw "-Name ${Name}: lowercase letters, digits and dashes" }
 if ($Labels -notmatch "^[A-Za-z0-9_.,=-]*$") { throw "-Labels ${Labels}: comma-separated words" }
@@ -938,6 +941,10 @@ if (-not $exists) {
 }
 
 # Its setup, again on every run so that an update brings the new scripts.
+# The updater of an install from before the launcher (layout 3 or older)
+# takes this setup from the node image's install.ps1 and runs it as it is,
+# to bring that install here: eriphe-node-run then moves its data, once. It
+# must keep writing eriphe-node-run, which that updater looks for.
 $changed = Invoke-InDistro @'
 apk add --no-cache docker ca-certificates >/dev/null 2>/tmp/apk.log || {
   cat /tmp/apk.log >&2
@@ -955,8 +962,8 @@ appendWindowsPath = false
 default = root
 EOF
 if ! cmp -s /tmp/wsl.conf /etc/wsl.conf; then mv /tmp/wsl.conf /etc/wsl.conf; echo restart; else rm /tmp/wsl.conf; fi
-# Task containers reach the node through host.docker.internal: the bridge's
-# address, set here because dockerd does not always find it at boot in WSL.
+# host.docker.internal: the bridge's address, set here because dockerd does
+# not always find it at boot in WSL.
 mkdir -p /etc/docker
 cat > /etc/docker/daemon.json <<'EOF'
 {"host-gateway-ips": ["172.17.0.1"]}
@@ -967,539 +974,250 @@ cat > /usr/local/bin/eriphe-dockerd <<'EOF'
 docker info >/dev/null 2>&1 && exit 0
 # Detached from the WSL session: its end must not send dockerd a reload.
 setsid dockerd >>/var/log/dockerd.log 2>&1 < /dev/null &
-for i in $(seq 60); do docker info >/dev/null 2>&1 && exit 0; sleep 1; done
+for _ in $(seq 60); do docker info >/dev/null 2>&1 && exit 0; sleep 1; done
 echo "dockerd does not start: see /var/log/dockerd.log" >&2
 exit 1
 EOF
 cat > /usr/local/bin/eriphe-node-run <<'EOF'
 #!/bin/sh
-# Started by Windows at boot: Docker Engine, then eriphe-node.
+# Started by Windows at boot, and every minute (a running one is left as it
+# is): Docker Engine, then Eriphe's launcher (ghcr.io/alexis-marcel/eriphe),
+# which makes and keeps running eriphe-node engine, eriphe-node, Syncthing
+# and, in core mode, eriphe-core, as on any Linux (install/README.md, One
+# container): the node, in its container, has neither the Docker socket nor
+# Windows. This distribution gives it two Windows folders, mounted here.
+# It stays to relay the node's log, and stops Eriphe when it is stopped
+# (install.ps1, before it changes the settings; the updater of an install
+# from before, when the move to the launcher did not work).
+# R: another root, for its tests (install/wsl_test.sh).
+R=${ERIPHE_WSL_ROOT:-}
+D="$R/var/lib/eriphe"
+LOG="$R/var/log/eriphe-node.log"
+log() { printf '%s eriphe-node-run: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$LOG"; }
+# The updater of an install from before, at work (it waits for the node).
+old_updater() { pgrep -f /var/lib/eriphe-update/update.run >/dev/null 2>&1; }
+
+# migrate: an install from before the launcher (eriphe-node a binary here,
+# its data in /var/lib/eriphe-node): its node, eriphe-core and Syncthing
+# stop, and their data moves into the launcher's folder, once, reachable at
+# its old paths too. The launcher's list of the folders shared starts from
+# the node's own, in its place (the user's folder).
+migrate() {
+  [ -d "$R/var/lib/eriphe-node" ] && [ ! -L "$R/var/lib/eriphe-node" ] || return 0
+  log "moving this install to Eriphe's launcher: its data goes to $D"
+  pkill -f /usr/local/bin/eriphe-update-loop
+  pkill -f /usr/local/bin/eriphe-syncthing-run
+  pkill -f '/usr/local/lib/eriphe/syncthing/syncthing serve'
+  pkill -x eriphe-node
+  mkdir -p "$D/launcher"
+  chmod 711 "$D"
+  docker inspect -f '{{.Config.Image}}' eriphe-core >"$D/launcher/core-before" 2>/dev/null || rm -f "$D/launcher/core-before"
+  docker rm -f eriphe-core >/dev/null 2>&1
+  for p in "node:$R/var/lib/eriphe-node" "core:$R/var/lib/eriphe-core" "syncthing:$R/var/lib/eriphe-syncthing"; do
+    old=${p#*:} new=$D/${p%%:*}
+    [ -d "$old" ] && [ ! -L "$old" ] && [ ! -e "$new" ] || continue
+    if ! { mv "$old" "$new" && ln -s "$new" "$old"; }; then
+      log "could not move $old to $new"
+      return 1
+    fi
+  done
+  [ -f "$D/launcher/install.conf" ] ||
+    printf 'mode=%s\nshares=%s\n' "${ERIPHE_INSTALL_MODE:-node}" "${ERIPHE_NODE_SHARES:-}" >"$D/launcher/install.conf"
+  rm -f "$D/node/update-needs"
+  MOVED=1
+}
+
+# undo: the move back, Eriphe's containers gone, eriphe-core's of before
+# started again: for the updater of before, which then puts the install
+# back as it was.
+undo() {
+  log "the node did not connect through Eriphe's launcher: back to the install of before"
+  docker rm -f eriphe eriphe-node eriphe-syncthing eriphe-engine eriphe-core >/dev/null 2>&1
+  for p in "node:$R/var/lib/eriphe-node" "core:$R/var/lib/eriphe-core" "syncthing:$R/var/lib/eriphe-syncthing"; do
+    old=${p#*:} new=$D/${p%%:*}
+    [ -L "$old" ] && [ -d "$new" ] || continue
+    rm -f "$old" && mv "$new" "$old"
+  done
+  if [ -s "$D/launcher/core-before" ] && [ -x "$R/usr/local/bin/eriphe-core-run" ]; then
+    "$R/usr/local/bin/eriphe-core-run" "$(cat "$D/launcher/core-before")" || log "eriphe-core of before does not start"
+  fi
+  rm -rf "$D/launcher"
+}
+
+# cleanup: once the node is connected through the launcher, what an install
+# from before left (the node's binary, its updater, its Syncthing).
+cleanup() {
+  [ -e "$R/usr/local/bin/eriphe-node" ] || [ -e "$R/usr/local/bin/eriphe-update" ] || return 0
+  log "this install runs through Eriphe's launcher: what the install of before left goes"
+  rm -f "$R/usr/local/bin/eriphe-node" "$R/usr/local/bin/eriphe-node.new" "$R/usr/local/bin/eriphe-node.version" \
+    "$R/usr/local/bin/eriphe-node.version.new" "$R/usr/local/bin/eriphe-core-run" "$R/usr/local/bin/eriphe-update" \
+    "$R/usr/local/bin/eriphe-update-loop" "$R/usr/local/bin/eriphe-syncthing-run" "$R/etc/eriphe-update.conf" "$D/launcher/core-before"
+  rm -rf "$R/usr/local/lib/eriphe/syncthing"
+  old_updater || rm -rf "$R/var/lib/eriphe-update"
+}
+
+# confirm: the node connected, then cleanup; after a move, if it is not
+# within 150 s while the updater of before waits for it, undo (and stop).
+confirm() {
+  trap - TERM INT
+  i=0
+  until docker logs eriphe-node 2>&1 | grep -q 'connected to '; do
+    i=$((i + 5))
+    if [ -n "${MOVED:-}" ] && [ "$i" -ge 150 ] && old_updater; then
+      undo
+      kill -TERM $$
+      return
+    fi
+    sleep 5
+  done
+  cleanup
+}
+
+# launcher_env: the launcher's settings, from this install's (install.ps1).
+launcher_env() {
+  mode=${ERIPHE_INSTALL_MODE:-node}
+  echo "ERIPHE_MODE=$mode"
+  if [ "$mode" = core ]; then
+    # shellcheck disable=SC1091
+    [ ! -f "$R/etc/eriphe-core.ports" ] || . "$R/etc/eriphe-core.ports"
+    echo "ERIPHE_API_PORT=${API_PORT:-8800}"
+    echo "ERIPHE_WEB_PORT=${WEB_PORT:-8443}"
+  else
+    echo "ERIPHE_CORE=${ERIPHE_CORE:-}"
+    echo "ERIPHE_CA_HASH=${ERIPHE_CA_HASH:-}"
+    [ -f "$D/node/node.json" ] || echo "ERIPHE_JOIN_TOKEN=${ERIPHE_JOIN_TOKEN:-}"
+  fi
+  echo "ERIPHE_NODE_NAME=${ERIPHE_NODE_NAME:-}"
+  echo "ERIPHE_NODE_LABELS=${ERIPHE_NODE_LABELS:-}"
+  echo "ERIPHE_VERSION=${ERIPHE_VERSION:-}"
+  echo "ERIPHE_WAKE_MAC=${ERIPHE_WAKE_MAC:-}"
+  echo "ERIPHE_WAKE_BROADCAST=${ERIPHE_WAKE_BROADCAST:-}"
+  # The node's loopback is its container's, not Windows'.
+  case ${ERIPHE_MODEL_SERVER:-} in
+  *://localhost* | *://127.* | *://0.0.0.0* | *://\[::1\]*)
+    log "the model server at $ERIPHE_MODEL_SERVER is Windows' own loopback, which the node, in its container, does not reach: it is not lent (install/README.md, A model behind this machine)"
+    echo "ERIPHE_MODEL_SERVER="
+    ;;
+  *) echo "ERIPHE_MODEL_SERVER=${ERIPHE_MODEL_SERVER:-}" ;;
+  esac
+  ! mountpoint -q /mnt/eriphe-session 2>/dev/null || echo "ERIPHE_SESSION_DIR=/mnt/eriphe-session"
+  echo "ERIPHE_SHARE_COMMAND=wsl -d ${ERIPHE_DISTRO:-${WSL_DISTRO_NAME:-eriphe}} eriphe-share"
+}
+
+# launcher_up: the launcher's container, made with this install's settings
+# when there is none (install.ps1 removes it to change them).
+launcher_up() {
+  umask 077
+  launcher_env >"$R/etc/eriphe-launcher.env"
+  umask 022
+  if docker inspect eriphe >/dev/null 2>&1; then
+    docker start eriphe >/dev/null 2>>"$LOG" && return 0
+  fi
+  img=${ERIPHE_LAUNCHER_IMAGE:-ghcr.io/alexis-marcel/eriphe:${ERIPHE_VERSION:-latest}}
+  docker image inspect "$img" >/dev/null 2>&1 || docker pull -q "$img" >>"$LOG" 2>&1 || {
+    log "could not download $img"
+    return 1
+  }
+  docker run -d --name eriphe --restart unless-stopped \
+    --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER \
+    --read-only --tmpfs /tmp --security-opt no-new-privileges \
+    -v /var/run/docker.sock:/var/run/docker.sock -v "$D:/data" \
+    --env-file "$R/etc/eriphe-launcher.env" "$img" >/dev/null 2>>"$LOG"
+}
+
+stop() {
+  kill "${RELAY:-}" "${WATCH:-}" 2>/dev/null
+  docker stop eriphe >/dev/null 2>&1
+  docker stop eriphe-node eriphe-syncthing eriphe-engine eriphe-core >/dev/null 2>&1
+  exit 0
+}
+
+# Its functions only, for its tests.
+[ -z "${ERIPHE_NODE_RUN_LIB:-}" ] || return 0 2>/dev/null || exit 0
 # Once joined, the node has its own secret: the join token is dropped.
-[ -f /var/lib/eriphe-node/node.json ] && sed -i '/^ERIPHE_JOIN_TOKEN=/d' /etc/eriphe-node.env
+[ ! -f /var/lib/eriphe-node/node.json ] || sed -i '/^ERIPHE_JOIN_TOKEN=/d' /etc/eriphe-node.env
 set -a
+# shellcheck disable=SC1091
 . /etc/eriphe-node.env
 set +a
 # The session helper's folder (install.ps1), read-only: the one Windows
-# folder the distribution sees, where Windows tells whether the user is at
-# the PC. Without it, the session stays unknown.
+# folder the node sees besides the folders shared, where Windows tells
+# whether the user is at the PC. Without it, the session stays unknown.
 if [ -n "${ERIPHE_SESSION_DIR:-}" ] && ! mountpoint -q /mnt/eriphe-session 2>/dev/null; then
   mkdir -p /mnt/eriphe-session
-  mount -t drvfs "$ERIPHE_SESSION_DIR" /mnt/eriphe-session -o ro,noexec,nosuid,nodev >>/var/log/eriphe-node.log 2>&1 ||
-    echo "the session helper's folder could not be mounted" >>/var/log/eriphe-node.log
+  mount -t drvfs "$ERIPHE_SESSION_DIR" /mnt/eriphe-session -o ro,noexec,nosuid,nodev >>"$LOG" 2>&1 ||
+    log "the session helper's folder could not be mounted"
 fi
-# The user's folder (install.ps1), for eriphe-node only: the one place
-# folders may be shared from. A task gets only a folder shared from it.
+# The user's folder (install.ps1): the one place folders may be shared from.
+# A task gets only the folders shared from it (eriphe share), from the engine.
 if [ -n "${ERIPHE_WINDOWS_HOME:-}" ] && ! mountpoint -q /mnt/eriphe/home 2>/dev/null; then
   mkdir -p /mnt/eriphe/home
-  mount -t drvfs "$ERIPHE_WINDOWS_HOME" /mnt/eriphe/home -o noexec,nosuid,nodev >>/var/log/eriphe-node.log 2>&1 ||
-    echo "the user's folder could not be mounted: no folder can be shared" >>/var/log/eriphe-node.log
+  mount -t drvfs "$ERIPHE_WINDOWS_HOME" /mnt/eriphe/home -o noexec,nosuid,nodev >>"$LOG" 2>&1 ||
+    log "the user's folder could not be mounted: no folder can be shared"
 fi
-eriphe-dockerd
-# Syncthing, beside the node (not its child): the copies of shared folders.
-pgrep -f /usr/local/bin/eriphe-syncthing-run >/dev/null || setsid /usr/local/bin/eriphe-syncthing-run </dev/null >/dev/null 2>&1 &
-# The updater, next to the node: it applies eriphe-core's update requests.
-pgrep -f /usr/local/bin/eriphe-update-loop >/dev/null || setsid /usr/local/bin/eriphe-update-loop </dev/null >/dev/null 2>&1 &
-# Windows only restarts a task that fails to start: this loop restarts the node.
-while true; do
-  eriphe-node -root /var/lib/eriphe-node >>/var/log/eriphe-node.log 2>&1
-  echo "eriphe-node exited ($?), restarting in 5 s" >>/var/log/eriphe-node.log
-  sleep 5
-done
-EOF
-cat > /usr/local/bin/eriphe-syncthing-run <<'EOF'
-#!/bin/sh
-# Started by eriphe-node-run: Syncthing, its API and its listening address
-# on the loopback only (its config.xml, written once by install.ps1), its
-# peers reached through the node and eriphe-core. It sees what the
-# distribution sees: the user's folder, and the copies in the node's data.
-S=/var/lib/eriphe-syncthing
-BIN=/usr/local/lib/eriphe/syncthing/syncthing
-[ -x "$BIN" ] && [ -s "$S/config.xml" ] || exit 0
-export STHOMEDIR="$S" HOME="$S" STGUIADDRESS=127.0.0.1:18384 STNOUPGRADE=1
-while true; do
-  "$BIN" serve --no-browser >>/var/log/eriphe-syncthing.log 2>&1
-  echo "syncthing exited ($?), restarting in 5 s" >>/var/log/eriphe-syncthing.log
-  sleep 5
+eriphe-dockerd >>"$LOG" 2>&1 || exit 1
+MOVED=
+migrate || exit 1
+launcher_up || exit 1
+trap stop TERM INT
+confirm &
+WATCH=$!
+since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+while :; do
+  if docker inspect eriphe-node >/dev/null 2>&1; then
+    docker logs -f --since "$since" eriphe-node >>"$LOG" 2>&1 &
+    RELAY=$!
+    wait "$RELAY"
+    since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  fi
+  sleep 5 &
+  wait $!
 done
 EOF
 cat > /usr/local/bin/eriphe-share <<'EOF'
 #!/bin/sh
-# eriphe-node share with the node's settings: the Explorer's "Share with
-# Eriphe" runs it (wsl -d <distro> -u root --exec eriphe-share add FOLDER).
-set -a
-. /etc/eriphe-node.env
-set +a
-exec eriphe-node share -root /var/lib/eriphe-node "$@"
+# eriphe share, through the launcher, which keeps the list of the folders
+# shared: the Explorer's "Share with Eriphe" runs it (wsl -d <distro> -u root
+# --exec eriphe-share add FOLDER). Not copyable is the default.
+for a; do
+  shift
+  [ "$a" = --copyable=false ] || set -- "$@" "$a"
+done
+exec docker exec eriphe eriphe share "$@"
 EOF
 cat > /usr/local/bin/eriphe-addr <<'EOF'
 #!/bin/sh
 # The distribution's address behind WSL's NAT, where Windows forwards eriphe-core's ports.
 ip -4 addr show eth0 | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -n 1
 EOF
-cat > /usr/local/bin/eriphe-core-run <<'EOF'
-#!/bin/sh
-# eriphe-core's container, from the image given (install.ps1, eriphe-update),
-# on the ports of /etc/eriphe-core.ports (-ApiPort, -WebPort).
-[ ! -f /etc/eriphe-core.ports ] || . /etc/eriphe-core.ports
-docker rm -f eriphe-core >/dev/null 2>&1 || true
-docker run -d --name eriphe-core --restart unless-stopped --read-only --cap-drop ALL \
-  --security-opt no-new-privileges:true -v /var/lib/eriphe-core:/data -e ERIPHE_INSTALL=windows \
-  -p "0.0.0.0:${API_PORT:-8800}:8800" -p "0.0.0.0:${WEB_PORT:-8443}:8443" -e "ERIPHE_API_PORT=${API_PORT:-8800}" "$1" >/dev/null
-EOF
-cat > /usr/local/bin/eriphe-update-loop <<'EOF'
-#!/bin/sh
-# Started with eriphe-node: looks for an update request every 20 s.
-while true; do
-  /usr/local/bin/eriphe-update >>/var/log/eriphe-update.log 2>&1
-  sleep 20
-done
-EOF
-cat > /usr/local/bin/eriphe-update <<'EOF'
-#!/bin/sh
-# Applies the update requests of eriphe-core and eriphe-node, in the WSL
-# distribution (install/README.md, Updates): eriphe-node's binary from its
-# image, eriphe-core's container in core mode, each checked and put back
-# as it was if it does not come back. "rollback" goes back to the version
-# before the last update. eriphe-update-loop runs it every 20 s.
-set -u
+chmod 755 /usr/local/bin/eriphe-dockerd /usr/local/bin/eriphe-node-run /usr/local/bin/eriphe-addr /usr/local/bin/eriphe-share
+# A new install: the node's data in the launcher's folder from the start,
+# at its old path too (Windows' "Eriphe awake" reads it there).
+mkdir -p /var/lib/eriphe
+chmod 711 /var/lib/eriphe
+[ -e /var/lib/eriphe-node ] || { mkdir -p /var/lib/eriphe/node && ln -s /var/lib/eriphe/node /var/lib/eriphe-node; }
+# The launcher's image, there before eriphe-node-run starts it (the updater
+# of an install from before waits a few minutes only).
+set -a
 # shellcheck disable=SC1091
-. /etc/eriphe-update.conf
-STATE=/var/lib/eriphe-update
-HEALTH=${ERIPHE_UPDATE_HEALTH:-180}
-BIN=/usr/local/bin/eriphe-node
-NODE_LOG=/var/log/eriphe-node.log
-mkdir -p "$STATE"
-chmod 700 "$STATE"
-# A layout rewrites this script (layout): it runs from a copy of itself.
-if [ "${ERIPHE_UPDATE_COPY:-}" != 1 ] && cp "$0" "$STATE/update.run" 2>/dev/null; then
-  ERIPHE_UPDATE_COPY=1 exec sh "$STATE/update.run" "$@"
-fi
-log() {
-  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$STATE/update.log"
-  printf 'eriphe-update: %s\n' "$*" >&2
-}
-if command -v flock >/dev/null 2>&1; then
-  exec 9>"$STATE/lock"
-  flock -n 9 || exit 0
-fi
-
-dir_of() { if [ "$1" = core ]; then echo /var/lib/eriphe-core; else echo /var/lib/eriphe-node; fi; }
-
-status() {
-  f=$(dir_of "$1")/update-status
-  msg=$(printf '%s' "$5" | tr '\n\r' '  ' | cut -c 1-300)
-  printf 'id=%s\naction=%s\noutcome=%s\nmessage=%s\nfrom=%s\nto=%s\nat=%s\n' "$2" "$3" "$4" "$msg" "$6" "$7" "$(date +%s)" >"$f.new"
-  chmod 600 "$f.new"
-  [ "$1" = core ] && chown 1993:1993 "$f.new"
-  mv "$f.new" "$f"
-  [ "$4" = running ] || log "$1 $3 $2: $4${5:+ ($5)}"
-}
-
-label() {
-  v=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$1" 2>/dev/null)
-  case $v in
-    '' | '<no value>') printf '%s' "$1" | sed 's/^sha256://' | cut -c 1-12 ;;
-    *) printf '%s' "$v" ;;
-  esac
-}
-node_version() { cat "$BIN.version" 2>/dev/null || echo unknown; }
-# tag_of VERSION: the images' tag of a build: X.Y.Z for a release,
-# sha-<commit> for a build of main (X.Y.Z-dev+<commit>); none for a local one.
-tag_of() {
-  case $1 in
-    *-dev+*) t=sha-${1##*+} ;;
-    *+*) t= ;;
-    *) t=$1 ;;
-  esac
-  printf '%s' "$t" | grep -Eq '^(sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$' && printf '%s' "$t"
-}
-release() { printf '%s' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; }
-# newer A B: release A is newer than release B.
-newer() {
-  printf '%s %s\n' "$1" "$2" | awk '{ split($1, a, "."); split($2, b, ".")
-    for (i = 1; i <= 3; i++) { if (a[i] + 0 > b[i] + 0) exit 0; if (a[i] + 0 < b[i] + 0) exit 1 }
-    exit 1 }'
-}
-# pinned: on a release of its own choice (edge follows main instead).
-pinned() { [ -n "$PIN" ] && [ "$PIN" != edge ]; }
-
-# node_healthy SIZE: eriphe-node, restarted by eriphe-node-run, says it is
-# connected after byte SIZE of its log.
-node_healthy() {
-  i=0
-  until tail -c +"$(($1 + 1))" "$NODE_LOG" 2>/dev/null | grep -q 'connected to '; do
-    i=$((i + 2)); [ $i -lt "$HEALTH" ] || { why="eriphe-node is not connected after $HEALTH s"; return 1; }
-    sleep 2
-  done
-}
-
-# node_swap: the binary in place is started again, and checked.
-node_swap() {
-  size=$(wc -c <"$NODE_LOG" 2>/dev/null || echo 0)
-  pkill -x eriphe-node || true
-  node_healthy "$size"
-}
-
-core_healthy() {
-  i=0
-  # shellcheck disable=SC1091
-  [ ! -f /etc/eriphe-core.ports ] || . /etc/eriphe-core.ports
-  until wget -q -O /dev/null "http://127.0.0.1:${API_PORT:-8800}/health" 2>/dev/null; do
-    i=$((i + 2)); [ $i -lt "$HEALTH" ] || { why="eriphe-core does not answer"; return 1; }
-    sleep 2
-  done
-}
-
-# core_swap ID: eriphe-core's container again, from image ID, and checked.
-core_swap() {
-  docker tag "$1" "$CORE_IMAGE"
-  /usr/local/bin/eriphe-core-run "$CORE_IMAGE" || { why="eriphe-core does not start"; return 1; }
-  core_healthy
-}
-
-# pull_node [TAG]: the binary of eriphe-node at TAG, eriphe-core's build
-# (or, without, the latest, edge or pinned one), as $BIN.new, and its
-# version in $to.
-pull_node() {
-  src=$NODE_IMAGE
-  case ${1:-}:$NODE_IMAGE in ?*:*/eriphe-node:*) src=${NODE_IMAGE%:*}:$1 ;; esac
-  docker pull -q "$src" >/tmp/eriphe-pull.log 2>&1 || { why="could not pull $src: $(tail -n 1 /tmp/eriphe-pull.log)"; return 1; }
-  to=$(label "$src")
-  c=$(docker create "$src") || { why="docker create failed"; return 1; }
-  docker cp "$c:/usr/local/bin/eriphe-node" "$BIN.new" >/dev/null || { docker rm "$c" >/dev/null; why="docker cp failed"; return 1; }
-  # Its build's install.ps1, for its layout; none in an image from before it.
-  rm -f "$STATE/install.ps1"
-  docker cp "$c:/usr/local/share/eriphe/install.ps1" "$STATE/install.ps1" >/dev/null 2>&1 || rm -f "$STATE/install.ps1"
-  docker rm "$c" >/dev/null
-  docker rmi "$src" >/dev/null 2>&1 || true
-  chmod 755 "$BIN.new"
-}
-
-# ps_number NAME: $NAME = <number> in the node image's install.ps1 (pull_node).
-ps_number() { sed -n "s/^[$]$1 = \([0-9][0-9]*\)\$/\1/p" "$STATE/install.ps1" 2>/dev/null | head -n 1; }
-# newer_layout: that install.ps1's layout is newer than this distribution's.
-newer_layout() {
-  n=$(ps_number layout)
-  [ -n "$n" ] && [ "$n" -gt "${LAYOUT:-1}" ]
-}
-# set_value FILE KEY VALUE: KEY=VALUE in FILE, in place of the one there.
-set_value() {
-  { grep -v "^$2=" "$1" 2>/dev/null; echo "$2=$3"; } >"$1.new" && mv "$1.new" "$1"
-}
-# node_restart: eriphe-node-run again (the scheduled task starts it within
-# a minute), with the settings and the scripts now in place, and checked.
-node_restart() {
-  size=$(wc -c <"$NODE_LOG" 2>/dev/null || echo 0)
-  pkill -f /usr/local/bin/eriphe-node-run || true
-  pkill -x eriphe-node || true
-  node_healthy "$size"
-}
-
-# What the layout rewrites, kept to put back.
-LAYOUT_FILES="/etc/eriphe-node.env /etc/eriphe-update.conf /etc/wsl.conf /etc/docker/daemon.json
-  /usr/local/bin/eriphe-dockerd /usr/local/bin/eriphe-node-run /usr/local/bin/eriphe-syncthing-run
-  /usr/local/bin/eriphe-share /usr/local/bin/eriphe-addr /usr/local/bin/eriphe-core-run
-  /usr/local/bin/eriphe-update-loop /usr/local/bin/eriphe-update /var/lib/eriphe-node/updater"
-
-# layout: the distribution brought to the layout of the node image's
-# install.ps1, as that script brings it: its setup of the distribution (its
-# scripts, this one too, and the settings every node has), and Syncthing's,
-# both taken from it as they are; then eriphe-node-run again, checked as an
-# update is. What it rewrote is put back if it fails. What only install.ps1
-# can do, in an administrator PowerShell (Windows' side, $adminLayout, or a
-# new wsl.conf, which needs WSL started again), is left for the user, and
-# said in update-needs.
-layout() {
-  ps=$STATE/install.ps1 b=$STATE/layout-before
-  n=$(ps_number layout) admin=$(ps_number adminLayout)
-  log "the install's layout goes from ${LAYOUT:-1} to $n"
-  awk '/^[$]changed = Invoke-InDistro @.$/ { f = 1; next } f && /^.@$/ { exit } f' "$ps" >"$STATE/layout-setup.sh"
-  awk '/^  [$]stSetup = @.$/ { f = 1; next } f && /^.@$/ { exit } f' "$ps" >"$STATE/layout-syncthing.sh"
-  v=$(sed -n 's/^[$]syncthingVersion = "\([0-9.]*\)"$/\1/p' "$ps")
-  case $(uname -m) in x86_64) k=AMD64 ;; aarch64) k=ARM64 ;; *) k=none ;; esac
-  st=$(awk '/^[$]syncthing = @[{]$/ { f = 1; next } f && /^[}]$/ { exit } f' "$ps" |
-    sed -n "s/^  $k = @(\"\([a-z0-9]*\)\", \"\([0-9a-f]*\)\")\$/\1 \2/p")
-  if ! grep -q '^cat > /usr/local/bin/eriphe-node-run ' "$STATE/layout-setup.sh"; then
-    why="the node image's install.ps1 has no setup to apply"
-    return 1
-  fi
-  rm -rf "$b"
-  for f in $LAYOUT_FILES; do
-    [ ! -f "$f" ] || { mkdir -p "$b$(dirname "$f")" && cp -p "$f" "$b$f"; }
-  done
-  done_=$n needs=
-  if out=$(sh "$STATE/layout-setup.sh" 2>>"$STATE/update.log"); then
-    case $out in *restart*) needs='admin' ;; esac
-    if [ -n "$st" ] && [ -n "$v" ]; then
-      # shellcheck disable=SC2086 # its build and its checksum
-      set -- $st
-      case $(v=$v a=$1 sum=$2 sh "$STATE/layout-syncthing.sh" 2>>"$STATE/update.log") in
-        *syncthing=missing*) log "Syncthing could not be installed"; done_=1 ;;
-      esac
-    fi
-    set_value /etc/eriphe-update.conf LAYOUT "$done_"
-    set_value /var/lib/eriphe-node/updater layout "$done_"
-    [ -z "$admin" ] || [ "$admin" -le "${ADMIN_LAYOUT:-1}" ] || needs='admin'
-    if node_restart; then
-      rm -rf "$b"
-      if [ -n "$needs" ]; then
-        printf 'why=%s\nlayout=%s\n' "$needs" "$n" >/var/lib/eriphe-node/update-needs
-      else
-        rm -f /var/lib/eriphe-node/update-needs
-      fi
-      return 0
-    fi
-  else
-    why="its setup failed"
-  fi
-  why="the new install layout did not apply: $why"
-  for f in $LAYOUT_FILES; do
-    if [ -f "$b$f" ]; then cp -p "$b$f" "$f.new" && mv "$f.new" "$f"; else rm -f "$f"; fi
-  done
-  rm -rf "$b"
-  failed_layout=$why
-  node_restart || true
-  why=$failed_layout
-  return 1
-}
-
-# update_node ID AUTO CORE [TAG]: without TAG, eriphe-core's build (the tag
-# of CORE), unless pinned to a release.
-update_node() {
-  id=$1 auto=$2 core=$3 from=$(node_version)
-  build=${4:-}
-  if [ -z "$build" ] && ! pinned; then build=$(tag_of "$core"); fi
-  status node "$id" update running "" "$from" ""
-  pull_node "$build" || { status node "$id" update failed "$why" "$from" ""; return; }
-  if cmp -s "$BIN.new" "$BIN"; then
-    rm -f "$BIN.new"
-    # The same build, on an older layout: the layout only.
-    if newer_layout; then
-      if layout; then
-        status node "$id" update ok "the install's layout is now its version's" "$from" "$to"
-      else
-        status node "$id" update failed "$why" "$from" "$to"
-      fi
-      return
-    fi
-    if pinned; then status node "$id" update pinned "pinned to $PIN" "$from" "$to"; else status node "$id" update current "" "$from" "$to"; fi
-    return
-  fi
-  # A node is never newer than eriphe-core (a release pinned here may be).
-  if release "$core" && release "$to" && newer "$to" "$core"; then
-    rm -f "$BIN.new"
-    status node "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
-    return
-  fi
-  sum=$(sha256sum "$BIN.new" | cut -d ' ' -f 1)
-  if [ "$auto" = 1 ] && grep -qx "$sum" "$STATE/failed" 2>/dev/null; then
-    rm -f "$BIN.new"
-    status node "$id" update skipped "$to failed here before" "$from" "$to"
-    return
-  fi
-  cp "$BIN" "$STATE/node.before"
-  mv "$BIN.new" "$BIN"
-  echo "$to" >"$BIN.version"
-  # The new binary, then the new layout if it brings one: if it fails, the
-  # whole update goes back.
-  if node_swap && { ! newer_layout || layout; }; then
-    mv "$STATE/node.before" "$STATE/node.previous"
-    echo "$from" >"$STATE/node.previous.version"
-    status node "$id" update ok "" "$from" "$to"
-    return
-  fi
-  failed=$why
-  echo "$sum" >>"$STATE/failed"
-  mv "$STATE/node.before" "$BIN"
-  echo "$from" >"$BIN.version"
-  if node_swap; then status node "$id" update rolled_back "$failed" "$from" "$to"; else status node "$id" update rollback_failed "$failed; then: $why" "$from" "$to"; fi
-}
-
-rollback_node() {
-  id=$1 from=$(node_version)
-  [ -f "$STATE/node.previous" ] || { status node "$id" rollback failed "no previous version here" "$from" ""; return; }
-  to=$(cat "$STATE/node.previous.version" 2>/dev/null || echo unknown)
-  status node "$id" rollback running "" "$from" "$to"
-  cp "$BIN" "$STATE/node.before"
-  cp "$STATE/node.previous" "$BIN"
-  echo "$to" >"$BIN.version"
-  if node_swap; then
-    sha256sum "$STATE/node.before" | cut -d ' ' -f 1 >>"$STATE/failed"
-    mv "$STATE/node.before" "$STATE/node.previous"
-    echo "$from" >"$STATE/node.previous.version"
-    status node "$id" rollback ok "" "$from" "$to"
-    return
-  fi
-  failed=$why
-  mv "$STATE/node.before" "$BIN"
-  echo "$from" >"$BIN.version"
-  if node_swap; then status node "$id" rollback failed "$failed: back on $from" "$from" "$to"; else status node "$id" rollback rollback_failed "$failed; then: $why" "$from" "$to"; fi
-}
-
-# update_core ID AUTO: eriphe-core first, then this machine's node.
-update_core() {
-  id=$1 auto=$2
-  have=$(docker inspect -f '{{.Image}}' eriphe-core 2>/dev/null)
-  from=$(label "$have")
-  status core "$id" update running "" "$from" ""
-  if ! docker pull -q "$CORE_IMAGE" >/tmp/eriphe-pull.log 2>&1; then
-    status core "$id" update failed "could not pull $CORE_IMAGE: $(tail -n 1 /tmp/eriphe-pull.log)" "$from" ""
-    return
-  fi
-  want=$(docker image inspect -f '{{.Id}}' "$CORE_IMAGE")
-  to=$(label "$want")
-  # This machine's node: from the same build as eriphe-core (the tag of its
-  # version), not its own latest, which may be half published.
-  match=$(tag_of "$to")
-  if [ "$want" = "$have" ]; then
-    # eriphe-core is current: its node may not be.
-    (update_node "$id-node" "$auto" "$to" "$match") # its own variables
-    if pinned; then status core "$id" update pinned "pinned to $PIN" "$from" "$to"; else status core "$id" update current "" "$from" "$to"; fi
-    return
-  fi
-  if [ "$auto" = 1 ] && grep -qx "$want" "$STATE/failed" 2>/dev/null; then
-    docker tag "$have" "$CORE_IMAGE"
-    status core "$id" update skipped "$to failed here before" "$from" "$to"
-    return
-  fi
-  docker tag "$have" "${CORE_IMAGE%:*}:eriphe-previous"
-  if core_swap "$want"; then
-    echo "$have" >"$STATE/core.previous"
-    (update_node "$id-node" "$auto" "$to" "$match") # its own variables
-    status core "$id" update ok "" "$from" "$to"
-    return
-  fi
-  failed=$why
-  echo "$want" >>"$STATE/failed"
-  if core_swap "$have"; then status core "$id" update rolled_back "$failed" "$from" "$to"; else status core "$id" update rollback_failed "$failed; then: $why" "$from" "$to"; fi
-}
-
-rollback_core() {
-  id=$1
-  have=$(docker inspect -f '{{.Image}}' eriphe-core 2>/dev/null)
-  from=$(label "$have")
-  prev=$(cat "$STATE/core.previous" 2>/dev/null)
-  if [ -z "$prev" ] || ! docker image inspect "$prev" >/dev/null 2>&1; then
-    status core "$id" rollback failed "no previous version here" "$from" ""
-    return
-  fi
-  to=$(label "$prev")
-  status core "$id" rollback running "" "$from" "$to"
-  if core_swap "$prev"; then
-    echo "$have" >"$STATE/core.previous"
-    echo "$have" >>"$STATE/failed"
-    docker tag "$have" "${CORE_IMAGE%:*}:eriphe-previous"
-    (rollback_node "$id-node")
-    status core "$id" rollback ok "" "$from" "$to"
-    return
-  fi
-  failed=$why
-  if core_swap "$have"; then status core "$id" rollback failed "$failed: back on $from" "$from" "$to"; else status core "$id" rollback rollback_failed "$failed; then: $why" "$from" "$to"; fi
-}
-
-field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
-
-if [ "${1:-}" = rollback ]; then
-  if [ "$MODE" = core ]; then rollback_core "local-$(date +%s)"; else rollback_node "local-$(date +%s)"; fi
-  exit 0
-fi
-for target in core node; do
-  f=$(dir_of "$target")/update-requested
-  [ -f "$f" ] || continue
-  [ "$target" = node ] || [ "$MODE" = core ] || { rm -f "$f"; continue; }
-  id=$(field "$f" id) action=$(field "$f" action) core=$(field "$f" core) auto=$(field "$f" auto)
-  rm -f "$f"
-  printf '%s' "$id" | grep -Eq '^[a-z0-9-]{1,40}$' || { log "$target: a request without a valid id"; continue; }
-  printf '%s' "$core" | grep -Eq '^(sha-[0-9a-f]{7,40}|dev|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)?$' || core=
-  [ "$auto" = 1 ] || auto=0
-  case $target:$action in
-    core:update) update_core "$id" "$auto" ;;
-    core:rollback) rollback_core "$id" ;;
-    node:update) update_node "$id" "$auto" "$core" ;;
-    node:rollback) rollback_node "$id" ;;
-    *) status "$target" "$id" "$action" failed "unknown action" "" "" ;;
-  esac
-done
-EOF
-chmod 755 /usr/local/bin/eriphe-dockerd /usr/local/bin/eriphe-node-run /usr/local/bin/eriphe-addr /usr/local/bin/eriphe-share \
-  /usr/local/bin/eriphe-core-run /usr/local/bin/eriphe-update-loop /usr/local/bin/eriphe-update /usr/local/bin/eriphe-syncthing-run
-# The settings this layout gives every node, into an install from before it
-# (step 6 writes them all; the updater runs this setup alone).
-if [ -f /etc/eriphe-node.env ] && ! grep -q '^ERIPHE_SYNCTHING_HOME=' /etc/eriphe-node.env; then
-  echo ERIPHE_SYNCTHING_HOME=/var/lib/eriphe-syncthing >>/etc/eriphe-node.env
-fi
+[ ! -f /etc/eriphe-node.env ] || . /etc/eriphe-node.env
+set +a
+img=${ERIPHE_LAUNCHER_IMAGE:-ghcr.io/alexis-marcel/eriphe:${ERIPHE_VERSION:-latest}}
+{ eriphe-dockerd && docker pull -q "$img"; } >/dev/null 2>&1 || true
 '@
 if ($changed -contains "restart") { Invoke-Quiet { wsl.exe --terminate $Distro } }
 
-# Syncthing in the distribution: the pinned build if it is not there yet,
-# checked, and its first configuration if it has none. Without it (no
-# download, a bad checksum) the node runs all the same, without copies.
-$stArch = $env:PROCESSOR_ARCHITECTURE
-if ($env:PROCESSOR_ARCHITEW6432) { $stArch = $env:PROCESSOR_ARCHITEW6432 }
-if ($syncthing.ContainsKey($stArch)) {
-  $stSetup = @'
-dir=/usr/local/lib/eriphe/syncthing
-if [ "$(cat "$dir/version" 2>/dev/null)" != "$v" ]; then
-  tmp=$(mktemp -d)
-  f=syncthing-linux-$a-v$v.tar.gz
-  if wget -q -O "$tmp/$f" "https://github.com/syncthing/syncthing/releases/download/v$v/$f" &&
-    echo "$sum  $tmp/$f" | sha256sum -c -s && tar -xzf "$tmp/$f" -C "$tmp"; then
-    mkdir -p "$dir"
-    mv "$tmp/syncthing-linux-$a-v$v/syncthing" "$dir/syncthing.new"
-    chmod 755 "$dir/syncthing.new"
-    mv "$dir/syncthing.new" "$dir/syncthing"
-    echo "$v" >"$dir/version"
-    # The one running, if any, starts again on the new build.
-    pkill -f "$dir/syncthing serve" || true
-  else
-    echo syncthing=missing
-  fi
-  rm -rf "$tmp"
-fi
-umask 077
-mkdir -p /var/lib/eriphe-syncthing /var/lib/eriphe-node/sync
-if [ ! -s /var/lib/eriphe-syncthing/config.xml ]; then
-  key=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
-  sed "s/@KEY@/$key/" >/var/lib/eriphe-syncthing/config.xml <<'EOF'
-<!-- Written by Eriphe's installer: Syncthing for the copies of shared folders (node/README.md, Copies). -->
-<configuration version="52">
-    <gui enabled="true" tls="false">
-        <address>127.0.0.1:18384</address>
-        <apikey>@KEY@</apikey>
-    </gui>
-    <options>
-        <listenAddress>tcp://127.0.0.1:22100</listenAddress>
-        <globalAnnounceEnabled>false</globalAnnounceEnabled>
-        <localAnnounceEnabled>false</localAnnounceEnabled>
-        <relaysEnabled>false</relaysEnabled>
-        <natEnabled>false</natEnabled>
-        <announceLANAddresses>false</announceLANAddresses>
-        <urAccepted>-1</urAccepted>
-        <crashReportingEnabled>false</crashReportingEnabled>
-        <autoUpgradeIntervalH>0</autoUpgradeIntervalH>
-        <startBrowser>false</startBrowser>
-    </options>
-</configuration>
-EOF
-fi
-'@
-  $stOut = Invoke-InDistro ("v='$syncthingVersion' a='$($syncthing[$stArch][0])' sum='$($syncthing[$stArch][1])'`n" + $stSetup)
-  if ($stOut -contains "syncthing=missing") {
-    Add-Notice "Syncthing could not be installed (see the log): this PC keeps no copy of your folders for now; run the command again later."
-  }
-}
-
-# 3. Docker Engine, for the images. The node keeps running until the new
-# binary is there: a failed pull leaves it as it was.
+# 3. Docker Engine, for the images. Eriphe keeps running until the new
+# images are there: a failed pull leaves it as it was.
 Invoke-InDistro "eriphe-dockerd" | Out-Null
-# The version running, to say what an update changes.
+# The version running, to say what an update changes (an install from before
+# the launcher: its node's binary).
 $versionOf = @'
-if grep -qx ERIPHE_INSTALL_MODE=core /etc/eriphe-node.env 2>/dev/null; then
-  docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' eriphe-core 2>/dev/null | sed 's/<no value>//'
-else
-  cat /usr/local/bin/eriphe-node.version 2>/dev/null
-fi
-true
+c=eriphe-node
+grep -qx ERIPHE_INSTALL_MODE=core /etc/eriphe-node.env 2>/dev/null && c=eriphe-core
+v=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$c" 2>/dev/null | sed 's/<no value>//')
+[ -n "$v" ] || [ "$c" = eriphe-core ] || v=$(cat /usr/local/bin/eriphe-node.version 2>/dev/null)
+echo "$v"
 '@
 $before = if ($updating) { Invoke-InDistro $versionOf | Select-Object -Last 1 } else { "" }
 
@@ -1515,127 +1233,63 @@ pull() {
 }
 '@
 
-# 4. The binary, next to the running one: from its image, or given (through
-# stdin: the distribution does not see Windows' drives).
-if ($Binary) {
-  Invoke-Quiet { cmd.exe /c "wsl.exe -d $Distro -u root -- sh -c `"cat > /usr/local/bin/eriphe-node.new && chmod 755 /usr/local/bin/eriphe-node.new`" < `"$Binary`"" }
-  if ($LASTEXITCODE -ne 0) { throw "copying eriphe-node failed" }
-} else {
-  Write-Log "Pulling $nodeImage..."
-  Invoke-InDistro @"
+# 4. The launcher's image, and the node's, which the launcher runs and which
+# carries the Windows session helper (step 7).
+Write-Log "Pulling $launcherImage and $nodeImage..."
+Invoke-InDistro @"
 $pull
+pull $launcherImage
 pull $nodeImage
 id=`$(docker create $nodeImage)
-docker cp "`$id:/usr/local/bin/eriphe-node" /usr/local/bin/eriphe-node.new
-# The Windows session helper, which step 7 puts in Windows (none in an older image).
 rm -rf /usr/local/share/eriphe/windows
 mkdir -p /usr/local/share/eriphe
 docker cp "`$id:/usr/local/share/eriphe/windows" /usr/local/share/eriphe/windows >/dev/null 2>&1 || true
 docker rm "`$id" >/dev/null
-docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' $nodeImage | sed 's/<no value>/unknown/' >/usr/local/bin/eriphe-node.version.new
-docker rmi $nodeImage >/dev/null 2>&1 || true
-chmod 755 /usr/local/bin/eriphe-node.new
 "@ | Out-Null
-}
 
-# 5. Core mode: eriphe-core as a container, its data in /var/lib/eriphe-core,
-# recreated when its image changes; the node joins it on the loopback.
+# 5. Core mode: the ports eriphe-core is published on (the launcher's
+# ERIPHE_API_PORT and ERIPHE_WEB_PORT, from eriphe-node-run).
 if ($CoreMode) {
-  Write-Log "Pulling $coreImage..."
-  Invoke-InDistro @"
-$pull
-mkdir -p /var/lib/eriphe-core
-chown 1993:1993 /var/lib/eriphe-core
-chmod 700 /var/lib/eriphe-core
-pull $coreImage
-want=`$(docker image inspect -f '{{.Id}}' $coreImage)
-have=`$(docker inspect -f '{{.Image}}' eriphe-core 2>/dev/null || true)
-# Its ports: recreated on others.
-printf 'API_PORT=%s\nWEB_PORT=%s\n' $apiPort_ $webPort_ > /tmp/eriphe-core.ports
-if ! cmp -s /tmp/eriphe-core.ports /etc/eriphe-core.ports; then mv /tmp/eriphe-core.ports /etc/eriphe-core.ports; have=; else rm /tmp/eriphe-core.ports; fi
-if [ "`$want" != "`$have" ]; then
-  eriphe-core-run $coreImage
-  docker image prune -f >/dev/null
-else
-  docker start eriphe-core >/dev/null
-fi
-for i in `$(seq 60); do wget -q -O /dev/null http://127.0.0.1:$apiPort_/health 2>/dev/null && exit 0; sleep 1; done
-docker logs --tail 20 eriphe-core >&2
-echo "eriphe: Eriphe did not start (eriphe-core does not answer on :$apiPort_): run the command again" >&2
-exit 1
-"@ | Out-Null
-  # The node turns this address to TLS by itself once eriphe-core offers it.
-  $Core = "http://127.0.0.1:$apiPort_"
-  if (-not $joined -or $Rejoin) {
-    $joinArgs = "-name $Name"
-    if ($Rejoin) { $joinArgs += " -rejoin" }
-    # It prints the command that joins a node, with the token and eriphe-core's
-    # CA (-ca-hash); eriphe-core may still be starting. A new eriphe-core
-    # accepts machines over TLS only, from the start: the node joins with its
-    # CA's hash, kept for the next runs.
-    $joining = Invoke-InDistro @"
-for i in `$(seq 30); do
-  if t=`$(docker exec eriphe-core eriphe-core join-token $joinArgs 2>/tmp/join.log | grep -e ' -join-token ') && [ -n "`$t" ]; then echo "`$t"; exit 0; fi
-  sleep 2
-done
-cat /tmp/join.log >&2
-echo "eriphe: Eriphe did not start (eriphe-core gives no join token): run the command again" >&2
-exit 1
-"@ | Select-Object -Last 1
-    if ($joining -notmatch " -join-token (\S+)") { throw "Eriphe did not start (eriphe-core gives no join token): run the command again" }
-    $JoinToken = $Matches[1]
-    if ($joining -match " -ca-hash (sha256:[0-9a-f]+)") { $CaHash = $Matches[1] }
-  }
+  Invoke-InDistro "printf 'API_PORT=%s\nWEB_PORT=%s\n' $apiPort_ $webPort_ > /etc/eriphe-core.ports" | Out-Null
 } else {
   Remove-CorePorts
+  Invoke-InDistro "rm -f /etc/eriphe-core.ports" | Out-Null
 }
 Write-Step "Downloaded"
 
-# 6. Stop the node, put the new binary in place, and its settings; the join
-# token only matters until the node has joined. Disabled first, so that it
-# does not start again meanwhile (step 7 registers it again, enabled).
+# 6. Stop Eriphe, and its launcher, which eriphe-node-run makes again with
+# the new settings; the join token only matters until the node has joined.
+# The task is disabled first, so that it does not start again meanwhile
+# (step 7 registers it again, enabled).
 if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
   Disable-ScheduledTask -TaskName $task | Out-Null
   Stop-ScheduledTask -TaskName $task
 }
-Invoke-InDistro "pkill -f /usr/local/bin/eriphe-node-run || true; pkill -x eriphe-node || true" | Out-Null
+Invoke-InDistro @'
+pkill -f /usr/local/bin/eriphe-node-run || true
+pkill -x eriphe-node || true
+for i in $(seq 30); do pgrep -f /usr/local/bin/eriphe-node-run >/dev/null || break; sleep 1; done
+docker rm -f eriphe >/dev/null 2>&1 || true
+'@ | Out-Null
 $mode = if ($CoreMode) { "core" } else { "node" }
-$alwaysOn = if ($CoreMode) { "ERIPHE_ALWAYS_ON=1" } else { "" }
+$coreUrl = if ($CoreMode) { "" } else { $Core }
 # This PC's own network card, which the node in WSL cannot see (Get-WakeCard).
 $wakeCard = try { Get-WakeCard $Core } catch { "" }
 $wakeMac, $wakeBroadcast = ($wakeCard + " ").Split(" ")[0, 1]
 $forget = if ($Rejoin) { "rm -f /var/lib/eriphe-node/node.json" } else { "" }
 $token = if ($Rejoin -or -not $joined) { $JoinToken } else { "" }
-# The updater works on these images; the files "updater" tell eriphe-core
-# and the node that it is there (not with -Binary: it would replace that one).
-$updater = if ($Binary) { "rm -f /var/lib/eriphe-node/updater /var/lib/eriphe-core/updater" } else {
-  # pin: the release it stays on; channel: edge when it follows main.
-  $mark = if ($pin -eq "edge") { "printf 'version=1\npin=\nchannel=edge\nlayout=$layout\n'" } else { "printf 'version=1\npin=%s\nchannel=\nlayout=$layout\n' '$pin'" }
-  $marks = "$mark > /var/lib/eriphe-node/updater"
-  if ($CoreMode) { $marks += "; $mark > /var/lib/eriphe-core/updater; chown 1993:1993 /var/lib/eriphe-core/updater" }
-  $marks
-}
+$launcherSetting = if ($env:ERIPHE_LAUNCHER_IMAGE) { "ERIPHE_LAUNCHER_IMAGE=$launcherImage" } else { "" }
 $sessionProfile = Get-SessionProfile
-$version = if ($Binary) { "echo custom > /usr/local/bin/eriphe-node.version" } else { "mv /usr/local/bin/eriphe-node.version.new /usr/local/bin/eriphe-node.version" }
 Invoke-InDistro @"
-mv /usr/local/bin/eriphe-node.new /usr/local/bin/eriphe-node
-$version
 umask 077
-mkdir -p /var/lib/eriphe-node
 $forget
-cat > /etc/eriphe-update.conf <<'EOF'
-MODE='$mode' PIN='$pin'
-NODE_IMAGE='$nodeImage' CORE_IMAGE='$coreImage'
-LAYOUT=$layout
-ADMIN_LAYOUT=$adminLayout
-EOF
-$updater
 # This PC is at its layout: nothing waits for its user (node/update.go).
 rm -f /var/lib/eriphe-node/update-needs
 cat > /etc/eriphe-node.env <<'EOF'
 ERIPHE_INSTALL_MODE=$mode
 ERIPHE_INSTALL=windows
-ERIPHE_CORE=$Core
+ERIPHE_DISTRO=$Distro
+ERIPHE_CORE=$coreUrl
 ERIPHE_NODE_NAME=$Name
 ERIPHE_NODE_LABELS=$Labels
 ERIPHE_CA_HASH=$CaHash
@@ -1644,27 +1298,19 @@ ERIPHE_VERSION=$pin
 ERIPHE_WAKE_MAC=$wakeMac
 ERIPHE_WAKE_BROADCAST=$wakeBroadcast
 ERIPHE_MODEL_SERVER=$ModelServer
-ERIPHE_SYNCTHING_HOME=/var/lib/eriphe-syncthing
-$alwaysOn
+$launcherSetting
 $(Get-SessionEnv $sessionDir)
 $(Get-ShareEnv $sessionProfile)
 EOF
 "@ | Out-Null
 
 # 7. Start at boot, logged in or not, and start again if WSL stops: the task
-# runs eriphe-node-run (which restarts the node) in the distribution, at
+# runs eriphe-node-run (which starts the launcher) in the distribution, at
 # boot and every minute from now on, which starts it again once it has ended
-# (a running one is left as it is). In core mode, the ports are forwarded first, by a script
-# of its own: the distribution's address changes with every start of WSL.
+# (a running one is left as it is). In core mode, the ports are forwarded
+# first, by a script of its own: the distribution's address changes with
+# every start of WSL.
 $mirrored = Test-Mirrored
-# The model server it lends, asked from the distribution, as eriphe-node
-# reaches it: any HTTP answer will do (a server with a key answers 401).
-$modelAnswers = $null
-if ($ModelServer) {
-  $models = Get-ModelsUrl $ModelServer
-  $modelAnswers = (Invoke-InDistro "if wget -S -T 5 -O /dev/null '$models' 2>&1 | grep -q 'HTTP/'; then echo yes; else echo no; fi" | Select-Object -Last 1) -eq "yes"
-  if (-not $modelAnswers) { Add-Notice (Get-ModelServerAdvice $ModelServer $mirrored) }
-}
 $run ="-d $Distro -u root --exec /usr/local/bin/eriphe-node-run"
 if ($CoreMode -and -not $mirrored) {
   New-Item -ItemType Directory -Force $bootDir | Out-Null
@@ -1672,7 +1318,7 @@ if ($CoreMode -and -not $mirrored) {
   Invoke-Quiet { icacls.exe $bootDir /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" }
   Set-Content -Path $boot -Encoding UTF8 -Value @"
 # Run by the scheduled task "$task" (install.ps1): forwards eriphe-core's
-# ports to the distribution's address, then runs eriphe-node there.
+# ports to the distribution's address, then runs eriphe-node-run there.
 `$ip = wsl.exe -d $Distro -u root --exec /usr/local/bin/eriphe-addr
 if (`$ip) {
   foreach (`$p in $($corePorts -join ', ')) {
@@ -1693,10 +1339,10 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Highest
 Register-ScheduledTask -TaskName $task -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
 
-# No sleep while a task is at work. eriphe-node, in the distribution, writes
-# /var/lib/eriphe-node/awake meanwhile and removes it after (node/README.md,
-# Sleep); the distribution starts no Windows program, so a task of Windows'
-# own looks every 30 s and holds the PC awake while the file is there
+# No sleep while a task is at work. eriphe-node, in its container, writes
+# awake in its data meanwhile and removes it after (node/README.md, Sleep);
+# the distribution starts no Windows program, so a task of Windows' own
+# looks every 30 s and holds the PC awake while the file is there
 # (SetThreadExecutionState: ES_CONTINUOUS, with ES_SYSTEM_REQUIRED).
 if (Get-ScheduledTask -TaskName $awakeTask -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName $awakeTask }
 New-Item -ItemType Directory -Force $bootDir | Out-Null
@@ -1752,11 +1398,11 @@ Start-ScheduledTask -TaskName $task
 Start-ScheduledTask -TaskName $awakeTask
 Write-Step "Installed"
 
-# 8. Wait for the node to join, and say where things are. In core mode it
-# starts after eriphe-core, which can take minutes on a slow PC.
-$tries = if ($CoreMode) { 90 } else { 30 }
-for ($i = 0; $i -lt $tries; $i++) {
-  $joined = (wsl.exe -d $Distro -u root -- sh -c "test -f /var/lib/eriphe-node/node.json && pgrep -x eriphe-node >/dev/null && echo yes") -eq "yes"
+# 8. Wait for the node to join, and say where things are. The launcher
+# downloads the images of a first install, and in core mode the node starts
+# after eriphe-core: it can take minutes.
+for ($i = 0; $i -lt 150; $i++) {
+  $joined = (wsl.exe -d $Distro -u root -- sh -c "test -f /var/lib/eriphe-node/node.json && docker logs eriphe-node 2>&1 | grep -q 'connected to ' && echo yes") -eq "yes"
   if ($joined) { break }
   Start-Sleep -Seconds 2
 }
@@ -1774,18 +1420,15 @@ if ($updating) {
 if ($CoreMode) {
   $lan = Get-LanAddress
   if (-not $lan) { $lan = "<this-pc>" }
-  # The setup code, while there is no password (kept until it is used); an
-  # older eriphe-core has no auth setup-code: its log says it.
+  # The setup code, while there is no password (kept until it is used).
   $setup = Invoke-InDistro @'
 if code=$(docker exec eriphe-core eriphe-core auth setup-code 2>/tmp/setup-code.err); then
   printf '%s\n' "$code"
-elif ! grep -q 'has a password' /tmp/setup-code.err; then
-  docker logs eriphe-core 2>&1 | sed -n 's/.*setup code \([A-Za-z0-9-]*\).*/\1/p' | tail -n 1
 fi
 rm -f /tmp/setup-code.err
 '@ | Select-Object -Last 1
-  # The tailnet's address, when remote access is on (none from an older eriphe-core).
-  $remote = Invoke-InDistro "docker exec eriphe-core eriphe-core remote-address 2>/dev/null" | Select-Object -Last 1
+  # The tailnet's address, when remote access is on.
+  $remote = Invoke-InDistro "docker exec eriphe-core eriphe-core remote-address 2>/dev/null; true" | Select-Object -Last 1
   if ($remote -notmatch "^https://[A-Za-z0-9.-]+$") { $remote = "" }
   $done = if ($updating) { "" } else { "Done: Eriphe runs on $here. " }
   if ($setup) {
@@ -1811,9 +1454,8 @@ rm -f /tmp/setup-code.err
   Write-Para "Done: $here is connected to $name_. Go back to your browser: it now appears in $devicesMenu."
 }
 if ($ModelServer) {
-  $answers = if ($modelAnswers) { "yes" } else { "no" }
   Write-Out
-  Write-Out "Lends the model server at $ModelServer (answers: $answers)."
+  Write-Out "Lends the model server at $ModelServer."
 }
 if ($pin -eq "edge") {
   Add-Notice "it follows main, the version in development (-Version latest follows the releases again)."
@@ -1826,5 +1468,5 @@ if ($shareLabel) {
 }
 Write-GoodToKnow
 Write-Out
-Write-Out "Logs: wsl -d $Distro -- tail /var/log/eriphe-node.log"
+Write-Out "Logs: wsl -d $Distro -- tail /var/log/eriphe-node.log (updates: wsl -d $Distro -- docker logs eriphe)"
 }

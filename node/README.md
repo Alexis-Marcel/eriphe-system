@@ -90,9 +90,10 @@ device" offers both addresses once remote access is ready.
   node's docker commands through it with the docker CLI: a new one belongs there.
 - **Windows**: `install/install.ps1` at the root of the repository (it was `node/install/install.ps1`),
   from an administrator PowerShell; see `install/README.md`. It installs WSL if needed, creates a
-  WSL distribution `eriphe` (Alpine, Docker Engine, eriphe-node from its image), without Docker
-  Desktop, and a scheduled task that starts it with Windows, logged in or not. Windows drives and
-  programs are not visible from it. `-CoreMode` runs eriphe-core there too.
+  WSL distribution `eriphe` (Alpine, Docker Engine), without Docker Desktop, which runs Eriphe's
+  launcher as any Linux does (eriphe-node in a container, behind eriphe-node engine), and a
+  scheduled task that starts it with Windows, logged in or not. Windows drives and programs are not
+  visible from it. `-CoreMode` runs eriphe-core there too.
 
   ```powershell
   & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'https://192.0.2.10:8800' -JoinToken <token> -Name pc -Labels 'gpu' -CaHash sha256:<hex>
@@ -158,7 +159,7 @@ comma-separated, and `ERIPHE_WAKE_BROADCAST`). `install.sh` takes the card of th
 eriphe-core's address (or of the default route) on Linux and macOS, eriphe-launcher the same from a
 short-lived container on the host's network, and `install.ps1` the PC's own card from Windows
 (`Find-NetRoute`, `Get-NetAdapter`; behind a Hyper-V virtual switch, the physical cards that are up
-too), which eriphe-node in WSL cannot see. A node run by hand on the machine itself, without them,
+too), which neither the launcher nor eriphe-node in WSL can see (the launcher's `ERIPHE_WAKE_MAC`). A node run by hand on the machine itself, without them,
 finds its card alone (the source address of a UDP socket connected to eriphe-core, which sends
 nothing); in a container or in WSL, whose cards are virtual, it reports none.
 
@@ -399,10 +400,10 @@ not internal is kept, with a warning at start: Docker cannot change it, remove i
 running and the node (or compose) creates it again.
 
 What it does not stop: on the NAS, tasks share `eriphe-tasks` and can reach one another (nothing in
-them listens; each has its own secret). Where the node runs on the Docker host (WSL), the bridge's
-gateway is the host: a service of the host listening on all its addresses is reachable there
-(WSL's distribution runs only the node). The listener's address keeps it off the LAN, not off the
-host's other bridges: every call still needs a task's secret.
+them listens; each has its own secret). Where the node runs on the Docker host itself (a node run
+by hand), the bridge's gateway is the host: a service of the host listening on all its addresses
+is reachable there. The listener's address keeps it off the LAN, not off the host's other bridges:
+every call still needs a task's secret.
 
 ## Egress
 
@@ -929,8 +930,8 @@ What it cannot prevent is a race: a directory replaced by a symlink between its 
 daemon's mount. `TestEngineRunsTheNode` runs the node's own functions through the engine to a fake
 daemon (a new verb belongs there); `TestEngineRefusesWhatTheNodeMayNotDo` is a compromised node
 calling the engine directly. install.sh (Linux, a Mac's Lima VM), eriphe-launcher and
-`deploy/nas` run it as `eriphe-engine` (`ERIPHE_ENGINE_URL=http://eriphe-engine:8792`); WSL still
-runs the node next to dockerd without either (install.ps1).
+`deploy/nas` run it as `eriphe-engine` (`ERIPHE_ENGINE_URL=http://eriphe-engine:8792`), and so
+does Windows, whose WSL distribution runs the launcher (install.ps1).
 
 ## The container engine (a Mac)
 
@@ -1286,13 +1287,14 @@ the node runs on the Mac and its places are Mac paths; the listing and the check
 explorer, see [The container engine](#the-container-engine-a-mac). A Mac in Lima's VM shares no
 folder. On Windows,
 automount stays off: `install.ps1` mounts only the folder of the user signed in at the PC
-(`C:\Users\<user>`, DrvFs, `noexec,nosuid,nodev`) at `/mnt/eriphe/home`, for the node alone, and
-gives it `-share home=/mnt/eriphe/home`, with no proxy in the way. Its `AppData` is sensitive, like
+(`C:\Users\<user>`, DrvFs, `noexec,nosuid,nodev`) at `/mnt/eriphe/home`, the one place folders
+are shared from; the launcher keeps the list of the folders shared, as on any Linux with Docker,
+and eriphe-node engine gives a task those only. Its `AppData` is sensitive, like
 a NAS's `appdata`. The Explorer's "Share with Eriphe..." runs `eriphe-share.ps1`
 (`%ProgramData%\eriphe-node\bin`), which asks for the level and the copies (a small Windows Forms
 window), maps the folder under `/mnt/eriphe/home` and runs `wsl -d <distro> -u root --exec
-eriphe-share add --read|--drop|--manage --copyable[=false]` in the distribution (`eriphe-node share` with
-`/etc/eriphe-node.env`). Writes through such a mount follow its own owner mapping (virtiofs, 9p,
+eriphe-share add --read|--drop|--manage --copyable[=false]` in the distribution (the launcher's
+`eriphe share add`, which gives the engine that folder, then the node's `share add`). Writes through such a mount follow its own owner mapping (virtiofs, 9p,
 DrvFs), not the setgid rule above.
 
 ## Copies (Syncthing)
@@ -1307,7 +1309,7 @@ child, and pins its version (2.1.7); it never upgrades itself:
 |---|---|---|
 | Linux, NAS, one-container install, a Mac in Lima's VM | the official image `syncthing/syncthing`, by digest, container `eriphe-syncthing` in the node's network namespace (`network_mode: service:node`), the shared places (one-container: the folders that may be copied only) and `<root>/sync` at their paths | `/var/lib/eriphe/syncthing` |
 | Mac with Apple's container | the official signed build (Developer ID of Kastelo AB, Team ID `LQE5SYM783`, notarized) in `~/.eriphe/syncthing`, run by its own LaunchAgent `org.eriphe.syncthing` | `~/.eriphe/syncthing/home` |
-| Windows | the official Linux build in the WSL distribution, `/usr/local/lib/eriphe/syncthing`, started by `eriphe-node-run`: it sees what the distribution sees | `/var/lib/eriphe-syncthing` |
+| Windows | as the one-container install: the launcher runs it in the WSL distribution | `/var/lib/eriphe/syncthing` |
 
 On a Mac, Syncthing must not be the node's child: macOS grants access to Documents, iCloud Drive or
 a cloud's folder to the program that asks, and the node is not signed. Syncthing's own signed
