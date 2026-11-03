@@ -83,7 +83,10 @@ device" offers both addresses once remote access is ready.
   through a socket proxy that only allows what the node needs (`DOCKER_HOST`), never the socket
   itself: `eriphe-node docker-proxy` (`dockerproxy.go`), the same image in a container of its own
   that holds the socket and checks each container's whole create request against what the node
-  sends (`-bind-from`, `-bind-file`, `-host-root`, `-networks`, `-wake-image`, `-allow-from`). See `deploy/nas/compose.yaml`
+  sends (`-bind-from`, `-bind-file`, `-host-root`, `-networks`, `-wake-image`, `-allow-from`), and
+  lets it touch its own containers only, and run a command (`docker exec`: the checks, the diff, the
+  work kept) in a task's only, without privilege nor another user. `TestDockerProxyLetsTheNodeThrough` runs the
+  node's docker commands through it with the docker CLI: a new one belongs there. See `deploy/nas/compose.yaml`
   and `deploy/README.md`.
 - **Windows**: `install/install.ps1` at the root of the repository (it was `node/install/install.ps1`),
   from an administrator PowerShell; see `install/README.md`. It installs WSL if needed, creates a
@@ -341,7 +344,8 @@ asked again) is not followed by checks.
 
 A check that **could not run at all** is not a failure of the code: its `dir` is not there (the
 script says so itself, exit code 125), its command is not found (exit code 127), or it could not be
-started. Its `check` event carries `config`, the exact reason (`its folder /work/repo/repo does not
+started: the engine refused or failed the exec (the script prints its own exit code last, so that
+the docker CLI's is never taken for it). Its `check` event carries `config`, the exact reason (`its folder /work/repo/repo does not
 exist (dir "repo" is relative to /work/repo, the task's working directory)`); it is not sent back
 to the agent and does not count as the last failure: a `check_stop` event `{check, reason: config,
 detail}` ends the turn, idle, and eriphe-core tells the brain to fix the contract. A check that ran

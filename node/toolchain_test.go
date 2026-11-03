@@ -419,7 +419,7 @@ func TestToolchainsReachChecks(t *testing.T) {
 		t.Skip("needs sh")
 	}
 	f := newFakeReleases(t)
-	cli, cliDir := fakeCLI(t, `printf '%s\n' "$@" > "$d/exec"`)
+	cli, cliDir := fakeCLI(t, `printf '%s\n' "$@" > "$d/exec"; printf '\n`+execExit+`0\n'`)
 	root := filepath.Join(t.TempDir(), "root")
 	n := newNode(options{root: root, hostRoot: root, docker: cli, cacheVolume: "eriphe-cache"})
 	n.toolchains = f.store(root, "arm64")
@@ -466,7 +466,7 @@ func TestToolchainsReachChecks(t *testing.T) {
 			t.Errorf("the check misses -e %s: %q", kv, args)
 		}
 	}
-	if !strings.Contains(string(raw), "\n-c\n"+toolchainPathScript+"\ncd \"$1\"") {
+	if !strings.Contains(string(raw), "\n-c\n"+toolchainPathScript+"\n(\ncd \"$1\"") {
 		t.Errorf("the check's script does not put the toolchains first in PATH: %q", args)
 	}
 	if slices.Index(args, containerName(task)) < slices.Index(args, "-e") {
