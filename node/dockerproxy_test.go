@@ -172,9 +172,10 @@ func TestDockerProxyClassify(t *testing.T) {
 		"POST /v1.47/containers/create?name=eriphe-task-t1", "POST /v1.47/images/create?fromImage=example.org%2Fx&tag=1",
 		"POST /v1.47/containers/abc/attach?stream=1", "POST /v1.47/containers/abc/start", "POST /v1.47/containers/abc/wait",
 		"POST /v1.47/containers/eriphe-task-t1/stop?t=10", "DELETE /v1.47/containers/abc?force=1",
+		"GET /v1.47/containers/abc/json", "POST /v1.47/containers/abc/exec", "POST /v1.47/exec/e1/start", "GET /v1.47/exec/e1/json",
 	}
 	refused := []string{
-		"GET /v1.47/info", "GET /v1.47/containers/abc/json", "POST /v1.47/containers/abc/exec",
+		"GET /v1.47/info", "GET /v1.47/containers/abc/logs", "POST /v1.47/exec/e1/resize", "GET /v1.47/exec/../containers/json",
 		"POST /v1.47/containers/abc/kill", "POST /v1.47/containers/abc/update", "PUT /v1.47/containers/abc/archive",
 		"POST /v1.47/images/create?fromSrc=http://example.org/x.tar&repo=example.org/eriphe-node", "POST /v1.47/images/create",
 		"POST /v1.47/volumes/create", "POST /v1.47/networks/create", "POST /v1.47/build", "GET /v1.47/networks/lan",
@@ -196,6 +197,25 @@ func TestDockerProxyClassify(t *testing.T) {
 	if _, err := p.classify(httptest.NewRequest("POST", "/v1.23/containers/abc/start", strings.NewReader(`{"Privileged":true}`))); err == nil {
 		t.Error("a start with a body is allowed")
 	}
+	// An exec's body is checked: nothing its container has not.
+	for body, ok := range map[string]bool{
+		`{"User":"","Privileged":false,"Tty":false,"AttachStdin":false,"AttachStderr":true,"AttachStdout":true,"DetachKeys":"","Env":["A=1"],"WorkingDir":"","Cmd":["sh","-c","true"]}`: true,
+		`{"Cmd":["sh"],"Privileged":true}`: false, `{"Cmd":["sh"],"privileged":true}`: false,
+		`{"Cmd":["sh"],"User":"0:0"}`: false, `{"Cmd":["sh"],"Detach":true,"x":1}`: false, `[`: false,
+	} {
+		c, err := p.classify(httptest.NewRequest("POST", "/v1.47/containers/abc/exec", strings.NewReader(body)))
+		if err == nil {
+			_, err = c.check([]byte(body))
+		}
+		if (err == nil) != ok {
+			t.Errorf("exec %s: %v", body, err)
+		}
+	}
+	if c, err := p.classify(httptest.NewRequest("POST", "/v1.47/exec/e1/start", strings.NewReader(`{"Detach":false,"Tty":false}`))); err != nil || c.exec != "e1" {
+		t.Errorf("exec start: %+v %v", c, err)
+	} else if _, err := c.check([]byte(`{"Detach":false,"Privileged":true}`)); err == nil {
+		t.Error("an exec start with Privileged is allowed")
+	}
 }
 
 // fakeDaemon is a Docker daemon on a Unix socket: two containers, the
@@ -214,11 +234,22 @@ func fakeDaemon(t *testing.T) (socket string, created chan []byte) {
 	}
 	created = make(chan []byte, 1)
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if loc := apiVersion.FindStringIndex(r.URL.Path); loc != nil {
+			r.URL.Path = r.URL.Path[loc[1]-1:]
+		}
 		switch {
 		case r.URL.Path == "/containers/mine/json":
 			io.WriteString(w, `{"Config":{"Labels":{"eriphe.task":"t1"}}}`)
 		case r.URL.Path == "/containers/other/json":
 			io.WriteString(w, `{"Config":{"Labels":{"com.docker.compose.service":"core"}}}`)
+		case r.URL.Path == "/containers/wake/json":
+			io.WriteString(w, `{"Config":{"Labels":{"eriphe.wake":"1"}}}`)
+		case r.URL.Path == "/exec/ewake/json":
+			io.WriteString(w, `{"ContainerID":"wake","ExitCode":0}`)
+		case r.URL.Path == "/exec/emine/json":
+			io.WriteString(w, `{"ContainerID":"mine","ExitCode":0}`)
+		case r.URL.Path == "/exec/eother/json":
+			io.WriteString(w, `{"ContainerID":"other","ExitCode":0}`)
 		case strings.HasSuffix(r.URL.Path, "/json"):
 			http.Error(w, `{"message":"no such container"}`, http.StatusNotFound)
 		case strings.HasSuffix(r.URL.Path, "/containers/create"):
@@ -226,7 +257,10 @@ func fakeDaemon(t *testing.T) (socket string, created chan []byte) {
 			created <- b
 			w.WriteHeader(http.StatusCreated)
 			io.WriteString(w, `{"Id":"mine"}`)
-		case strings.HasSuffix(r.URL.Path, "/attach"):
+		case strings.HasSuffix(r.URL.Path, "/exec"):
+			w.WriteHeader(http.StatusCreated)
+			io.WriteString(w, `{"Id":"emine"}`)
+		case strings.HasSuffix(r.URL.Path, "/attach"), strings.HasSuffix(r.URL.Path, "/start") && strings.HasPrefix(r.URL.Path, "/exec/"):
 			conn, buf, _ := w.(http.Hijacker).Hijack()
 			defer conn.Close()
 			io.WriteString(conn, "HTTP/1.1 101 UPGRADED\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
@@ -268,6 +302,31 @@ func TestDockerProxyForwards(t *testing.T) {
 		}
 	}
 
+	// exec: in the node's task containers only, and started or read only there.
+	for _, tc := range []struct {
+		method, path, body string
+		want               int
+	}{
+		{"POST", "/containers/mine/exec", `{"Cmd":["true"],"AttachStdout":true}`, http.StatusCreated},
+		{"POST", "/containers/other/exec", `{"Cmd":["true"]}`, http.StatusForbidden},
+		// The node's, but on the host's network: no command but its own.
+		{"POST", "/containers/wake/exec", `{"Cmd":["sh"]}`, http.StatusForbidden},
+		{"POST", "/exec/ewake/start", `{"Detach":true}`, http.StatusForbidden},
+		{"POST", "/containers/wake/stop", "", http.StatusNoContent},
+		{"POST", "/containers/mine/exec", `{"Cmd":["true"],"Privileged":true}`, http.StatusForbidden},
+		{"GET", "/exec/emine/json", "", http.StatusOK},
+		{"GET", "/exec/eother/json", "", http.StatusForbidden},
+		{"GET", "/exec/egone/json", "", http.StatusNotFound},
+		{"POST", "/exec/eother/start", `{"Detach":true}`, http.StatusForbidden},
+		{"GET", "/containers/other/json", "", http.StatusForbidden},
+	} {
+		req, _ := http.NewRequest(tc.method, front.URL+"/v1.47"+tc.path, strings.NewReader(tc.body))
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil || resp.StatusCode != tc.want {
+			t.Errorf("%s %s %s: %v %v, want %d", tc.method, tc.path, tc.body, err, resp, tc.want)
+		}
+	}
+
 	// attach: the stream goes both ways, the end of input passed on.
 	conn, err := net.Dial("tcp", strings.TrimPrefix(front.URL, "http://"))
 	if err != nil {
@@ -285,6 +344,24 @@ func TestDockerProxyForwards(t *testing.T) {
 	out, _ := io.ReadAll(br)
 	if string(out) != "echo:hello" {
 		t.Errorf("attach: %q", out)
+	}
+
+	// exec's start too, its body passed on (the fake echoes it with the rest).
+	conn, err = net.Dial("tcp", strings.TrimPrefix(front.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	io.WriteString(conn, "POST /v1.47/exec/emine/start HTTP/1.1\r\nHost: docker\r\nContent-Type: application/json\r\nContent-Length: 28\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n{\"Detach\":false,\"Tty\":false}")
+	br = bufio.NewReader(conn)
+	resp, err = http.ReadResponse(br, nil)
+	if err != nil || resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("exec start: %v %v", err, resp)
+	}
+	io.WriteString(conn, "hi")
+	conn.(*net.TCPConn).CloseWrite()
+	if out, _ := io.ReadAll(br); string(out) != `echo:{"Detach":false,"Tty":false}hi` {
+		t.Errorf("exec start: %q", out)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -63,6 +64,13 @@ const noFolderMark = "eriphe-check: no folder "
 
 // errTimedOut is a script of execTask that ran out of time.
 var errTimedOut = errors.New("timed out")
+
+// execExit starts the last line of what execTask's scripts print: their
+// exit code. Without it the script did not run to its end in the
+// container (the engine refused or failed the exec, or the container is
+// gone), and the docker CLI's exit code is not the script's: a check that
+// could not run must not read as one that failed.
+const execExit = "eriphe-exec-exit="
 
 // afterTurn runs once the task is idle, then lets it be reported so.
 func (n *node) afterTurn(t *Task) {
@@ -285,28 +293,31 @@ func messageChecks(data map[string]any) ([]TaskCheck, bool) {
 // its output (at most max bytes) and its exit code. err is for a script
 // that could not run, or ran out of time. The script has the agent's
 // toolchains too, first in PATH, as the entrypoint gave them to the agent
-// (toolchain.go).
+// (toolchain.go). The script runs in a subshell, its exit code printed
+// after it (execExit).
 func (n *node) execTask(ctx context.Context, t *Task, max int, script string, args ...string) (string, int, error) {
 	argv := []string{"exec"}
 	for _, kv := range toolchainEnvOf(t) {
 		argv = append(argv, "-e", kv)
 	}
-	argv = append(argv, containerName(t), "sh", "-c", toolchainPathScript+"\n"+script, "eriphe-check")
+	wrapped := toolchainPathScript + "\n(\n" + script + "\n)\nprintf '\\n" + execExit + "%d\\n' $?"
+	argv = append(argv, containerName(t), "sh", "-c", wrapped, "eriphe-check")
 	argv = append(argv, args...)
 	cmd := exec.CommandContext(ctx, n.opt.docker, argv...)
 	out := &tailBuffer{}
 	cmd.Stdout, cmd.Stderr = out, out
 	err := cmd.Run()
-	text := tail(out.String(), max)
+	text := out.String()
 	if ctx.Err() != nil {
-		return text, -1, errTimedOut
+		return tail(text, max), -1, errTimedOut
 	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) {
-		return text, exit.ExitCode(), nil
+	if i := strings.LastIndex(text, "\n"+execExit); i >= 0 {
+		if code, perr := strconv.Atoi(strings.TrimSpace(text[i+1+len(execExit):])); perr == nil {
+			return tail(text[:i], max), code, nil
+		}
 	}
-	if err != nil {
-		return text, -1, err
+	if err == nil {
+		err = errors.New("no exit code")
 	}
-	return text, 0, nil
+	return tail(text, max), -1, fmt.Errorf("it did not run in the container (%v): %s", err, tail(strings.TrimSpace(text), 300))
 }

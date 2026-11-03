@@ -32,9 +32,17 @@ import (
 // privileged container, added capability, device, host namespace, weakened
 // security option or bind mount outside the node's root and the shared
 // places gets through, whatever a compromised node asks. A container is
-// started, attached to, waited for, stopped or removed only if it carries
-// one of the node's labels: the other containers of the machine are not
-// the node's to touch.
+// inspected, started, attached to, waited for, stopped or removed only if
+// it carries one of the node's labels: the other containers of the machine
+// are not the node's to touch. A command is run (docker exec: turnend.go's
+// execTask) in a task's container only, not in a wake's on the host's
+// network nor in a helper's or a service's: it gets nothing its container
+// has not (no privilege, no other user), and an exec is started or read
+// only if its container is a task's, asked to the daemon each time.
+//
+// TestDockerProxyLetsTheNodeThrough runs the node's own docker commands,
+// with the docker CLI, through this proxy: a call the node makes and the
+// proxy refuses fails there, not on a machine.
 //
 // Bind mounts are checked on their real path: the proxy sees the node's
 // root and the shared places read-only, at the same paths as the Docker
@@ -65,25 +73,34 @@ type dockerPolicy struct {
 // without one is not created, nor touched.
 var nodeLabels = []string{"eriphe.task", "eriphe.service", "eriphe.wake", "eriphe.helper"}
 
+// execLabels are those of the containers a command may be run in: a task's.
+var execLabels = []string{"eriphe.task"}
+
 // taskCaps are the capabilities a container may get back: a task's
 // (container.go, hardening).
 var taskCaps = map[string]bool{"CHOWN": true, "DAC_OVERRIDE": true, "FOWNER": true}
 
 var (
-	apiVersion  = regexp.MustCompile(`^/v1\.[0-9]+/`)
-	containerOp = regexp.MustCompile(`^/containers/([a-zA-Z0-9][a-zA-Z0-9_.-]*)/(attach|start|wait|stop)$`)
-	containerRm = regexp.MustCompile(`^/containers/([a-zA-Z0-9][a-zA-Z0-9_.-]*)$`)
-	imageInfo   = regexp.MustCompile(`^/images/[a-zA-Z0-9][a-zA-Z0-9_./:@-]*/json$`)
-	networkInfo = regexp.MustCompile(`^/networks/([a-zA-Z0-9][a-zA-Z0-9_.-]*)$`)
-	volumeName  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
+	apiVersion   = regexp.MustCompile(`^/v1\.[0-9]+/`)
+	containerOp  = regexp.MustCompile(`^/containers/([a-zA-Z0-9][a-zA-Z0-9_.-]*)/(attach|start|wait|stop)$`)
+	containerRm  = regexp.MustCompile(`^/containers/([a-zA-Z0-9][a-zA-Z0-9_.-]*)$`)
+	containerGet = regexp.MustCompile(`^/containers/([a-zA-Z0-9][a-zA-Z0-9_.-]*)/json$`)
+	execCreate   = regexp.MustCompile(`^/containers/([a-zA-Z0-9][a-zA-Z0-9_.-]*)/exec$`)
+	execStart    = regexp.MustCompile(`^/exec/([a-zA-Z0-9][a-zA-Z0-9_.-]*)/start$`)
+	execGet      = regexp.MustCompile(`^/exec/([a-zA-Z0-9][a-zA-Z0-9_.-]*)/json$`)
+	imageInfo    = regexp.MustCompile(`^/images/[a-zA-Z0-9][a-zA-Z0-9_./:@-]*/json$`)
+	networkInfo  = regexp.MustCompile(`^/networks/([a-zA-Z0-9][a-zA-Z0-9_.-]*)$`)
+	volumeName   = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 )
 
 // call is what the proxy makes of a request: refused (err), forwarded as
-// is, forwarded once its container is checked (target), or a create whose
-// body is checked.
+// is, or forwarded once its container (target, or exec's), its body
+// (check) or both are checked.
 type call struct {
-	target string // a container the request acts on
-	create bool
+	target string                       // a container the request acts on
+	exec   string                       // an exec the request acts on: its container is checked
+	check  func([]byte) ([]byte, error) // the body's checker, which may change it; nil: no body
+	labels []string                     // the labels target may carry, one of them: nodeLabels if none
 }
 
 // classify allows a request by its method and path, without the API version.
@@ -98,12 +115,16 @@ func (p *dockerPolicy) classify(r *http.Request) (call, error) {
 	if path.Clean(pth) != pth {
 		return call{}, errors.New("unclean path")
 	}
-	// No body but a create's: an old API's start took a HostConfig.
-	if r.Method != http.MethodPost || pth != "/containers/create" {
-		if r.ContentLength > 0 || len(r.TransferEncoding) > 0 {
-			return call{}, errors.New("unexpected body")
-		}
+	c, err := p.route(r, pth)
+	// No body but a checked one: an old API's start took a HostConfig.
+	if err == nil && c.check == nil && (r.ContentLength > 0 || len(r.TransferEncoding) > 0) {
+		return call{}, errors.New("unexpected body")
 	}
+	return c, err
+}
+
+// route allows a request by its method and its path.
+func (p *dockerPolicy) route(r *http.Request, pth string) (call, error) {
 	switch r.Method {
 	case http.MethodHead, http.MethodGet:
 		switch {
@@ -112,6 +133,10 @@ func (p *dockerPolicy) classify(r *http.Request) (call, error) {
 		case r.Method == http.MethodHead:
 		case pth == "/version", pth == "/containers/json", pth == "/images/json", imageInfo.MatchString(pth):
 			return call{}, nil
+		case containerGet.MatchString(pth):
+			return call{target: containerGet.FindStringSubmatch(pth)[1]}, nil
+		case execGet.MatchString(pth):
+			return call{exec: execGet.FindStringSubmatch(pth)[1], labels: execLabels}, nil
 		case networkInfo.MatchString(pth):
 			if n := networkInfo.FindStringSubmatch(pth)[1]; n == "bridge" || p.networks[n] {
 				return call{}, nil
@@ -120,7 +145,7 @@ func (p *dockerPolicy) classify(r *http.Request) (call, error) {
 	case http.MethodPost:
 		switch {
 		case pth == "/containers/create":
-			return call{create: true}, nil
+			return call{check: p.checkCreate}, nil
 		case pth == "/images/create":
 			// A pull only: fromSrc imports any file as an image of any name.
 			q := r.URL.Query()
@@ -129,6 +154,10 @@ func (p *dockerPolicy) classify(r *http.Request) (call, error) {
 			}
 		case containerOp.MatchString(pth):
 			return call{target: containerOp.FindStringSubmatch(pth)[1]}, nil
+		case execCreate.MatchString(pth):
+			return call{target: execCreate.FindStringSubmatch(pth)[1], check: checkFields("exec", execFields), labels: execLabels}, nil
+		case execStart.MatchString(pth):
+			return call{exec: execStart.FindStringSubmatch(pth)[1], check: checkFields("exec start", execStartFields), labels: execLabels}, nil
 		}
 	case http.MethodDelete:
 		if m := containerRm.FindStringSubmatch(pth); m != nil {
@@ -220,6 +249,32 @@ var hostFields = setOf("Binds", "Mounts", "Tmpfs", "NetworkMode", "PortBindings"
 	"CapAdd", "CapDrop", "SecurityOpt", "ExtraHosts", "GroupAdd", "ReadonlyRootfs", "Init", "ConsoleSize",
 	"Memory", "MemorySwap", "MemoryReservation", "MemorySwappiness", "NanoCpus", "CpuShares", "CpuPeriod",
 	"CpuQuota", "PidsLimit", "ShmSize", "MaskedPaths", "ReadonlyPaths")
+
+// execFields are the fields of an exec the node may set (execTask), and
+// execStartFields those of its start: any other must be empty, an exec's
+// User and Privileged first of all.
+var execFields = setOf("AttachStdin", "AttachStdout", "AttachStderr", "DetachKeys", "Tty", "ConsoleSize", "Env", "WorkingDir", "Cmd")
+
+var execStartFields = setOf("Detach", "Tty", "ConsoleSize")
+
+// checkFields is the checker of a body whose fields must be in allowed, or
+// empty.
+func checkFields(what string, allowed map[string]bool) func([]byte) ([]byte, error) {
+	return func(body []byte) ([]byte, error) {
+		var c map[string]any
+		dec := json.NewDecoder(bytes.NewReader(body))
+		dec.UseNumber()
+		if err := dec.Decode(&c); err != nil {
+			return nil, fmt.Errorf("bad body: %v", err)
+		}
+		for k, v := range c {
+			if !allowed[k] && !zero(v) {
+				return nil, fmt.Errorf("%s: %s is not allowed", what, k)
+			}
+		}
+		return json.Marshal(c)
+	}
+}
 
 func setOf(names ...string) map[string]bool {
 	m := map[string]bool{}
@@ -535,10 +590,10 @@ func (p *dockerProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.refuse(w, r, http.StatusForbidden, err)
 		return
 	}
-	if c.create {
+	if c.check != nil {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 		if err == nil {
-			body, err = p.policy.checkCreate(body)
+			body, err = c.check(body)
 		}
 		if err != nil {
 			p.refuse(w, r, http.StatusForbidden, err)
@@ -548,14 +603,25 @@ func (p *dockerProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.TransferEncoding = nil
 		r.Header.Del("Content-Length")
 	}
+	if c.exec != "" {
+		id, status, err := p.execContainer(r.Context(), c.exec)
+		if err != nil {
+			p.refuse(w, r, status, err)
+			return
+		}
+		c.target = id
+	}
+	if c.labels == nil {
+		c.labels = nodeLabels
+	}
 	if c.target != "" {
-		if status, err := p.nodeContainer(r.Context(), c.target); err != nil {
+		if status, err := p.nodeContainer(r.Context(), c.target, c.labels); err != nil {
 			p.refuse(w, r, status, err)
 			return
 		}
 	}
 	if strings.EqualFold(r.Header.Get("Upgrade"), "tcp") {
-		p.hijack(w, r) // attach: the container's stdin and stdout
+		p.hijack(w, r) // attach or exec: the stdin and stdout of a container or a command
 		return
 	}
 	p.rp.ServeHTTP(w, r)
@@ -574,8 +640,8 @@ func (p *dockerProxy) checkPeer(r *http.Request) error {
 	return fmt.Errorf("%s is not %s", host, p.allowFrom)
 }
 
-// nodeContainer checks that a container carries one of the node's labels.
-func (p *dockerProxy) nodeContainer(ctx context.Context, id string) (int, error) {
+// nodeContainer checks that a container carries one of labels, the node's.
+func (p *dockerProxy) nodeContainer(ctx context.Context, id string, labels []string) (int, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+url.PathEscape(id)+"/json", nil)
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -591,17 +657,39 @@ func (p *dockerProxy) nodeContainer(ctx context.Context, id string) (int, error)
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil || resp.StatusCode != http.StatusOK {
 		return http.StatusBadGateway, fmt.Errorf("cannot inspect %s (%s)", id, resp.Status)
 	}
-	for _, l := range nodeLabels {
+	for _, l := range labels {
 		if _, ok := info.Config.Labels[l]; ok {
 			return 0, nil
 		}
 	}
+	if len(labels) < len(nodeLabels) {
+		return http.StatusForbidden, fmt.Errorf("%s is not a container of eriphe-node's with %s", id, strings.Join(labels, " or "))
+	}
 	return http.StatusForbidden, fmt.Errorf("%s is not a container of eriphe-node", id)
 }
 
-// hijack forwards an upgraded connection (docker run -i's attach) byte for
-// byte: the request, then both ways until the daemon's side ends. The
-// client's end of input (stdin closed) is passed on as a half-close.
+// execContainer is the container an exec runs in, as the daemon says.
+func (p *dockerProxy) execContainer(ctx context.Context, id string) (string, int, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/exec/"+url.PathEscape(id)+"/json", nil)
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return "", http.StatusBadGateway, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return "", http.StatusNotFound, fmt.Errorf("no such exec: %s", id)
+	}
+	var info struct{ ContainerID string }
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil || resp.StatusCode != http.StatusOK || info.ContainerID == "" {
+		return "", http.StatusBadGateway, fmt.Errorf("cannot inspect exec %s (%s)", id, resp.Status)
+	}
+	return info.ContainerID, 0, nil
+}
+
+// hijack forwards an upgraded connection (docker run -i's attach, docker
+// exec's start) byte for byte: the request, then both ways until the
+// daemon's side ends. The client's end of input (stdin closed) is passed on
+// as a half-close.
 func (p *dockerProxy) hijack(w http.ResponseWriter, r *http.Request) {
 	back, err := net.Dial("unix", p.socket)
 	if err != nil {

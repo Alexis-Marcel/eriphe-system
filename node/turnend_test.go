@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -8,7 +9,9 @@ import (
 	"testing"
 )
 
-// execNode is lifecycleNode whose docker also answers exec with body.
+// execNode is lifecycleNode whose docker also answers exec with body,
+// run in a subshell whose exit code is printed after it, as execTask's
+// scripts do in the container.
 func execNode(t *testing.T, run, body string) (*node, string) {
 	t.Helper()
 	n, dir := lifecycleNode(t, run)
@@ -16,7 +19,7 @@ func execNode(t *testing.T, run, body string) (*node, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := strings.Replace(string(raw), "case \"$1\" in\n", "case \"$1\" in\nexec)\n"+body+"\n  ;;\n", 1)
+	script := strings.Replace(string(raw), "case \"$1\" in\n", "case \"$1\" in\nexec)\n  (\n"+body+"\n  )\n  printf '\\n"+execExit+"%d\\n' $?\n  ;;\n", 1)
 	if err := os.WriteFile(n.opt.docker, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +100,28 @@ const checkExec = `  d=$(dirname "$0")
     vary) echo "output $(wc -l < "$d/checks")"; exit 2 ;;
     esac ;;
   esac`
+
+// A check the engine does not run (here, the Docker proxy refusing the
+// exec) is a misconfigured check, for the brain, not a failure the agent
+// would be told to fix: the CLI's exit code is not the check's.
+func TestCheckNotRun(t *testing.T) {
+	cli, _ := fakeCLI(t, `echo "Error response from daemon: eriphe-docker-proxy: not a call eriphe-node makes" >&2; exit 1`)
+	root := filepath.Join(t.TempDir(), "root")
+	n := newNode(options{root: root, hostRoot: root, docker: cli})
+	task := &Task{ID: "t-1", dir: filepath.Join(root, "tasks", "t-1"), Spec: TaskSpec{Runtime: "claude-code"}}
+	for _, ch := range []TaskCheck{{Name: "tests", Run: "go test ./..."}, {Name: "report", Exists: "/work/out.txt"}} {
+		r := n.runCheck(task, ch)
+		if r.ok || r.code != -1 || !strings.Contains(r.config, "could not be started") || !strings.Contains(r.config, "not a call eriphe-node makes") {
+			t.Errorf("%s: %+v", ch.Name, r)
+		}
+	}
+	// Its exit code is the script's, whatever the CLI's.
+	cli, _ = fakeCLI(t, `printf 'ran\n\n`+execExit+`1\n'; exit 0`)
+	n.opt.docker = cli
+	if out, code, err := n.execTask(context.Background(), task, 100, "false"); out != "ran\n" || code != 1 || err != nil {
+		t.Errorf("exec: %q %d %v", out, code, err)
+	}
+}
 
 func settled(task *Task) bool { return task.state() == stateIdle && !task.busyFinishing() }
 
