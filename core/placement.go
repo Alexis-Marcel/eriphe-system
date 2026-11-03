@@ -15,8 +15,9 @@ import (
 //     (the brain first). Hard rule: an online always-on node that fits; the
 //     best other node only when none does, and it comes back as soon as it
 //     can. Someone waits for its answer: a machine that sleeps is no home.
-//   - bound: a task that needs one node's folders (placement.Machine). It
-//     goes there and waits for it.
+//   - bound: a task lent the user's folders (placement.Bound). It goes to
+//     a machine holding them up to date (its folders' or one with copies,
+//     folder_copies.go), the best by the scores, and waits for one.
 //   - the others: the scores of scheduler.go, preferences only.
 //
 // A node chosen by hand (the task's or the assistant's node) always wins.
@@ -139,8 +140,8 @@ func (c *core) moveResident(a Assistant, r assistantRole, t *TaskRow) bool {
 		return false
 	}
 	p, err := c.placementOf(t)
-	if err != nil || p.Machine != "" {
-		return false // bound to its folders' machine: it waits for it
+	if err != nil || p.Bound {
+		return false // bound to its folders: it waits for its machine
 	}
 	all, err := c.store.nodes()
 	if err != nil {
@@ -217,8 +218,9 @@ func (c *core) replaceStranded() {
 		if i >= 0 && (nodes[i].Online || time.Since(c.since(nodes[i])) < grace) {
 			continue
 		}
-		if p, err := c.placementOf(t); err != nil || p.Machine != "" {
-			continue
+		if p, err := c.placementOf(t); err != nil ||
+			p.Bound && !slices.ContainsFunc(c.schedulable(nodes), func(n NodeRow) bool { return n.Online && n.Name != t.Node && p.fits(n) }) {
+			continue // bound to its folders, and no other machine holds them up to date now
 		}
 		reason := fmt.Sprintf("node %s is offline", t.Node)
 		if asleep {

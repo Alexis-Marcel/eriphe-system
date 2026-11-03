@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -87,7 +89,7 @@ func copiesCore(t *testing.T) (*core, *syncNode, *syncNode) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := newCore(&Config{User: "Sam"}, store)
+	c := newCore(&Config{User: "Sam", Agents: map[string]Agent{"a": {Runtime: "claude-code"}}, DefaultAgent: "a"}, store)
 	for _, n := range []string{"mac", "nas", "pc"} {
 		store.registerNode(n, hashSecret(n))
 	}
@@ -199,6 +201,43 @@ func TestFolderCopiesGo(t *testing.T) {
 	}
 }
 
+// copyState sets what node's Syncthing reports of folder share of mac
+// (role source on mac, copy elsewhere), and reads it again.
+func copyState(t *testing.T, c *core, sn *syncNode, node, device string, s ...syncState) {
+	t.Helper()
+	for i := range s {
+		if s[i].ID == "" {
+			s[i].ID = "e-mac-" + s[i].Share
+		}
+		s[i].Source = "mac"
+		if s[i].Role == "" {
+			s[i].Role = map[bool]string{true: "source", false: "copy"}[node == "mac"]
+		}
+	}
+	sn.set("syncthing", map[string]any{"device_id": device, "folders": s})
+	c.refreshNode(context.Background(), c.node(node))
+}
+
+// placeFolders is where the scheduler puts a task of agent lent the
+// folders named, "" while it waits.
+func placeFolders(t *testing.T, c *core, a Agent, names ...string) (string, placement) {
+	t.Helper()
+	fs, _, err := c.folderGrant(names)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := c.taskPlacement(a, fs)
+	nodes, _ := c.store.nodes()
+	name, err := schedule(c.schedulable(nodes), "", p, func(string) (int, error) { return 0, nil })
+	var waiting *waitingError
+	if err != nil && !errors.As(err, &waiting) {
+		t.Fatalf("schedule %v: %v", names, err)
+	}
+	return name, p
+}
+
+const docsID = "00112233445566aa"
+
 // A copy's state, as Settings → Folders shows it; and while the folder's
 // machine is away, a task lent the folder goes to a machine whose copy was
 // complete when it was last seen, which mounts the copy.
@@ -206,11 +245,7 @@ func TestFolderCopyStatusAndPlacement(t *testing.T) {
 	c, mac, nas := copiesCore(t)
 	ctx := context.Background()
 	c.setCopies(ctx, "Docs", []string{"nas"})
-	state := func(s syncState) {
-		s.ID, s.Share, s.Source, s.Role = "e-mac-00112233445566aa", "00112233445566aa", "mac", "copy"
-		nas.set("syncthing", map[string]any{"device_id": nasDevice, "folders": []syncState{s}})
-		c.refreshNode(ctx, c.node("nas"))
-	}
+	state := func(s syncState) { copyState(t, c, nas, "nas", nasDevice, s) }
 	view := func() folderView {
 		vs, _ := c.folderViews()
 		for _, v := range vs {
@@ -221,39 +256,37 @@ func TestFolderCopyStatusAndPlacement(t *testing.T) {
 		t.Fatal("no Docs")
 		return folderView{}
 	}
-	state(syncState{State: "syncing", Done: 42, NeedBytes: 10, Bytes: 100})
+	state(syncState{Share: docsID, State: "syncing", Done: 42, NeedBytes: 10, Bytes: 100})
 	if v := view(); len(v.Copies) != 1 || v.Copies[0].Status != "syncing" || v.Copies[0].Done != 42 || v.Copies[0].Bytes != 100 {
 		t.Fatalf("syncing %+v", v.Copies)
 	}
-	state(syncState{State: "idle", Done: 100, Bytes: 120, SyncedAt: time.Now()})
+	state(syncState{Share: docsID, State: "idle", Done: 100, Bytes: 120, SyncedAt: time.Now()})
 	if v := view(); v.Copies[0].Status != "ok" {
 		t.Fatalf("up to date %+v", v.Copies)
 	}
-	state(syncState{State: "idle", Error: "disk full"})
+	state(syncState{Share: docsID, State: "idle", Error: "disk full"})
 	if v := view(); v.Copies[0].Status != "error" || v.Copies[0].Error != "disk full" {
 		t.Fatalf("error %+v", v.Copies)
 	}
 	// The Mac says its iCloud files are in the cloud only: the hint.
-	mac.set("syncthing", map[string]any{"device_id": macDevice, "folders": []syncState{{ID: "e-mac-00112233445566aa", Role: "source", ICloud: true}}})
-	c.refreshNode(ctx, c.node("mac"))
+	copyState(t, c, mac, "mac", macDevice, syncState{Share: docsID, ICloud: true})
 	if !view().ICloud {
 		t.Fatal("no iCloud hint")
 	}
 
 	// The Mac goes away, its copy complete just before.
-	state(syncState{State: "idle", Done: 100, SyncedAt: time.Now()})
+	state(syncState{Share: docsID, State: "idle", Done: 100, SyncedAt: time.Now()})
 	c.node("mac").session.Close()
 	waitUntil(t, func() bool { return !c.node("mac").connected() })
 	c.refreshNode(ctx, c.node("mac"))
-	if host := c.copyHost([]*Folder{view().Folder}); host != "nas" {
-		t.Fatalf("copy host %q", host)
+	if hosts := c.folderHosts([]*Folder{view().Folder}); !slices.Equal(hosts, []string{"mac", "nas"}) { // the Mac to wait for
+		t.Fatalf("hosts %v", hosts)
 	}
 	if v := view(); v.Copies[0].Status != "ok" {
 		t.Fatalf("complete before the Mac left: %+v", v.Copies)
 	}
-	p := c.taskPlacement(Agent{Runtime: "claude-code"}, []*Folder{view().Folder})
-	if p.Machine != "nas" || len(p.Folders) != 0 {
-		t.Fatalf("placement %+v", p)
+	if name, _ := placeFolders(t, c, Agent{Runtime: "claude-code"}, "Docs"); name != "nas" {
+		t.Fatalf("placed on %q", name)
 	}
 	fs, err := c.specFoldersOn("nas", "Docs", []ResourceRef{{Kind: resFolder, Ref: "Docs", Access: accessDrop}})
 	if err != nil || len(fs) != 1 || fs[0].Copy != "e-mac-00112233445566aa" || !fs[0].Write {
@@ -262,13 +295,136 @@ func TestFolderCopyStatusAndPlacement(t *testing.T) {
 	if _, err := c.specFoldersOn("pc", "Docs", nil); err == nil {
 		t.Fatal("lent on a machine without a copy")
 	}
-	// Last complete long before the Mac left: behind, no task there.
-	state(syncState{State: "idle", Done: 100, SyncedAt: time.Now().Add(-time.Hour)})
+	// Last complete long before the Mac left: behind, the task waits for
+	// the Mac.
+	state(syncState{Share: docsID, State: "idle", Done: 100, SyncedAt: time.Now().Add(-time.Hour)})
 	if v := view(); v.Copies[0].Status != "behind" {
 		t.Fatalf("behind %+v", v.Copies)
 	}
-	if host := c.copyHost([]*Folder{view().Folder}); host != "" {
-		t.Fatalf("a copy behind hosts a task: %q", host)
+	if name, p := placeFolders(t, c, Agent{Runtime: "claude-code"}, "Docs"); name != "" || !slices.Equal(p.Hosts, []string{"mac"}) {
+		t.Fatalf("a copy behind hosts a task: %q %+v", name, p)
+	}
+}
+
+// With its machine online, a folder may be worked on wherever it is up to
+// date: its machine, or one keeping a copy in sync, nothing pending either
+// way; the scheduler picks the best of them.
+func TestFolderTaskOnAnyHolder(t *testing.T) {
+	c, mac, nas := copiesCore(t)
+	ctx := context.Background()
+	c.setCopies(ctx, "Docs", []string{"nas"})
+	nas.set("cpus", 16) // the NAS scores higher for an agent that prefers cpu
+	cpu := Agent{Runtime: "claude-code", Prefers: []string{"cpu"}}
+	settled := syncState{Share: docsID, State: "idle"}
+	synced := syncState{Share: docsID, State: "idle", Done: 100, SyncedAt: time.Now()}
+
+	// In sync both ways: either machine, the NAS chosen when better.
+	copyState(t, c, mac, "mac", macDevice, settled)
+	copyState(t, c, nas, "nas", nasDevice, synced)
+	name, p := placeFolders(t, c, cpu, "Docs")
+	if name != "nas" || !slices.Equal(p.Hosts, []string{"mac", "nas"}) {
+		t.Fatalf("placed on %q, hosts %v", name, p.Hosts)
+	}
+	if name, _ := placeFolders(t, c, Agent{Runtime: "claude-code"}, "Docs"); name != "mac" {
+		t.Fatalf("a tie goes by name: %q", name)
+	}
+	// Level capped at the folder's on its machine: asked to write a folder
+	// at drop, the copy is lent to drop.
+	fs, err := c.specFoldersOn("nas", "Docs", []ResourceRef{{Kind: resFolder, Ref: "Docs", Access: accessWrite}})
+	if err != nil || len(fs) != 1 || fs[0].Copy != "e-mac-"+docsID || !fs[0].Write || fs[0].Manage {
+		t.Fatalf("spec on the copy %+v %v", fs, err)
+	}
+	if fs, err := c.specFoldersOn("mac", "Docs", nil); err != nil || fs[0].Copy != "" {
+		t.Fatalf("spec on its machine %+v %v", fs, err)
+	}
+
+	// Something pending: the copy is not up to date, only the Mac fits.
+	for why, set := range map[string]func(){
+		"the copy receives": func() {
+			copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "syncing", NeedBytes: 10, SyncedAt: time.Now()})
+		},
+		"the copy has bytes to get": func() {
+			copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "idle", NeedBytes: 10, SyncedAt: time.Now()})
+		},
+		"the Mac receives from it": func() {
+			copyState(t, c, mac, "mac", macDevice, syncState{Share: docsID, State: "syncing", NeedBytes: 5})
+		},
+		"the Mac has an error": func() {
+			copyState(t, c, mac, "mac", macDevice, syncState{Share: docsID, State: "idle", Error: "no access"})
+		},
+		"the Mac says nothing of it": func() { copyState(t, c, mac, "mac", macDevice) },
+	} {
+		copyState(t, c, mac, "mac", macDevice, settled)
+		copyState(t, c, nas, "nas", nasDevice, synced)
+		set()
+		if name, p := placeFolders(t, c, cpu, "Docs"); name != "mac" || !slices.Equal(p.Hosts, []string{"mac"}) {
+			t.Errorf("%s: placed on %q, hosts %v", why, name, p.Hosts)
+		}
+	}
+
+	// The Mac away and the copy not complete then: the task waits for one.
+	copyState(t, c, mac, "mac", macDevice, settled)
+	copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "syncing", NeedBytes: 10})
+	c.node("mac").session.Close()
+	waitUntil(t, func() bool { return !c.node("mac").connected() })
+	c.refreshNode(ctx, c.node("mac"))
+	nodes, _ := c.store.nodes()
+	_, p = placeFolders(t, c, cpu, "Docs")
+	if _, err := schedule(c.schedulable(nodes), "", p, func(string) (int, error) { return 0, nil }); err == nil || !strings.Contains(err.Error(), "mac") {
+		t.Fatalf("waits: %v", err)
+	}
+}
+
+// Several folders, of one machine or more: a machine that holds each up to
+// date; none holding them all, they are not lent together.
+func TestFolderTaskSeveralFolders(t *testing.T) {
+	c, mac, nas := copiesCore(t)
+	ctx := context.Background()
+	const musicID, mediaID = "00112233445566cc", "00112233445566dd"
+	mac.set("folders", []sharedFolder{{ID: docsID, Name: "Docs", Access: folderDrop, Copyable: true},
+		{ID: "00112233445566bb", Name: "Private", Access: folderManage}, {ID: musicID, Name: "Music", Access: folderRead, Copyable: true}})
+	c.refreshNode(ctx, c.node("mac"))
+	nas.set("folders", []sharedFolder{{ID: mediaID, Name: "Media", Access: folderRead}})
+	c.refreshNode(ctx, c.node("nas"))
+	c.setCopies(ctx, "Docs", []string{"nas"})
+	c.setCopies(ctx, "Music", []string{"nas"})
+	settledBoth := []syncState{{Share: docsID, State: "idle"}, {Share: musicID, State: "idle"}}
+	copyState(t, c, mac, "mac", macDevice, settledBoth...)
+	now := time.Now()
+	copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "idle", SyncedAt: now}, syncState{Share: musicID, State: "idle", SyncedAt: now})
+
+	if _, p := placeFolders(t, c, Agent{Runtime: "claude-code"}, "Docs", "Music"); !slices.Equal(p.Hosts, []string{"mac", "nas"}) {
+		t.Fatalf("both up to date: hosts %v", p.Hosts)
+	}
+	// One of them behind on the NAS: only the Mac holds both up to date.
+	copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "idle", SyncedAt: now}, syncState{Share: musicID, State: "syncing", NeedBytes: 1})
+	if _, p := placeFolders(t, c, Agent{Runtime: "claude-code"}, "Docs", "Music"); !slices.Equal(p.Hosts, []string{"mac"}) {
+		t.Fatalf("one behind: hosts %v", p.Hosts)
+	}
+	// Folders of two machines: the NAS has its own and a copy of the
+	// other's; the Mac has no copy of the NAS's.
+	if name, p := placeFolders(t, c, Agent{Runtime: "claude-code"}, "Docs", "Media"); name != "nas" || !slices.Equal(p.Hosts, []string{"nas"}) {
+		t.Fatalf("two machines: on %q, hosts %v", name, p.Hosts)
+	}
+	fs, err := c.specFoldersOn("nas", "Docs,Media", nil)
+	if err != nil || fs[0].Copy != "e-mac-"+docsID || fs[1].Copy != "" {
+		t.Fatalf("spec %+v %v", fs, err)
+	}
+	// The NAS's copy of Docs not up to date: the task waits for it.
+	copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "syncing", NeedBytes: 1})
+	_, p := placeFolders(t, c, Agent{Runtime: "claude-code"}, "Docs", "Media")
+	nodes, _ := c.store.nodes()
+	_, err = schedule(c.schedulable(nodes), "", p, func(string) (int, error) { return 0, nil })
+	var waiting *waitingError
+	if len(p.Hosts) != 0 || !errors.As(err, &waiting) || !strings.Contains(err.Error(), "up to date") || !strings.Contains(err.Error(), "nas") {
+		t.Fatalf("waits for the copy: %+v %v", p, err)
+	}
+	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Docs", "Media"}, Node: "mac"}); err == nil || !strings.Contains(err.Error(), "nor copied") {
+		t.Fatalf("pinned on a machine without them all: %v", err)
+	}
+	// No machine holds them all: not lent together.
+	if _, _, err := c.folderGrant([]string{"Private", "Media"}); err == nil || !strings.Contains(err.Error(), "no machine holds them all") {
+		t.Fatalf("lent together: %v", err)
 	}
 }
 

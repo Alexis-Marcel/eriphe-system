@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -310,7 +311,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if err != nil {
 		return nil, err
 	}
-	folders, machine := lent.Folders, lent.Machine
+	folders := lent.Folders
 	if r.Contract != nil {
 		// Its checks name only what the task is lent (contract.go).
 		if err := r.Contract.checkLent(lent.Repo != nil || r.Repo != "", folderNames(folders)); err != nil {
@@ -320,8 +321,8 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if r.Node != "" && c.store.nodeSuspended(r.Node) {
 		return nil, suspendedError(r.Node) // node_access.go
 	}
-	if machine != "" && r.Node != "" && r.Node != machine {
-		return nil, fmt.Errorf("the folders %s are on %s, not on %s: leave node empty", strings.Join(folderNames(folders), ", "), machine, r.Node)
+	if len(folders) > 0 && r.Node != "" && !slices.Contains(c.folderHolders(folders), r.Node) {
+		return nil, fmt.Errorf("the folders %s are not on %s, nor copied there: leave node empty", strings.Join(folderNames(folders), ", "), r.Node)
 	}
 	// No online node may fit yet: the task then waits, without a node, for
 	// one that would (see placePending). An assistant someone waits on

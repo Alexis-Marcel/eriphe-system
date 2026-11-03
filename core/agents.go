@@ -419,13 +419,5 @@ func (p placement) fits(n NodeRow) bool {
 			return false
 		}
 	}
-	if p.Machine != "" && n.Name != p.Machine {
-		return false
-	}
-	for _, id := range p.Folders {
-		if !slices.ContainsFunc(info.Folders, func(sf sharedFolder) bool { return sf.ID == id }) {
-			return false
-		}
-	}
-	return true
+	return !p.Bound || slices.Contains(p.Hosts, n.Name)
 }
