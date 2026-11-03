@@ -19,9 +19,10 @@ container](../install/README.md#one-container-nas-any-linux-with-docker).
    `docker exec eriphe eriphe share add "/mnt/user/1 PROJECTS"` (read only; `--drop` lets it
    write its results in its results subfolder, `--manage` lets it change the folder, `--copyable`
    allows copies on your other machines). `docker exec eriphe eriphe share list` shows them,
-   `remove` stops one. Each folder shared is given to eriphe-node alone; nothing else of the NAS,
-   not `/mnt/user` nor `appdata`, is mounted into it. eriphe-node and its Syncthing restart for a
-   few seconds each time.
+   `remove` stops one. Eriphe's tasks get each folder shared alone; nothing else of the NAS, not
+   `/mnt/user` nor `appdata`, is mounted into eriphe-node or its tasks. Nothing restarts: the next
+   task has the folder (a task at work keeps the folders it was given until it ends); only the
+   copies to your other machines pause a few seconds when the folders that may be copied change.
 
 The template runs the launcher hardened (Extra Parameters: `--cap-drop=ALL --cap-add=CHOWN
 --cap-add=DAC_OVERRIDE --cap-add=FOWNER --read-only --tmpfs /tmp --security-opt

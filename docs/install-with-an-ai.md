@@ -414,7 +414,7 @@ For each other computer (or a second NAS):
 5. Folders: the person shares what Eriphe may see **on the device itself**: `sudo eriphe-share add
    <folder>` on Linux, `~/.eriphe/bin/eriphe-share add <folder>` on a Mac, `docker exec eriphe
    eriphe share add <folder>` with the one-container install (a host path such as
-   `/mnt/user/Documents`; Eriphe's containers restart for a few seconds to see it) (read; `--drop` to let Eriphe
+   `/mnt/user/Documents`; nothing restarts, the next task sees it) (read; `--drop` to let Eriphe
    drop results in its subfolder, `--manage` to let it change the folder, a snapshot being taken
    before each such task; `--copyable` to allow copies on their other machines). Settings → Folders
    shows what is shared and its "Comment partager ?" dialog says the same. Nothing is shared until

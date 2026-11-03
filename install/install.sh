@@ -881,16 +881,36 @@ EOF
     security_opt: [no-new-privileges:true]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - $data/node:$data/node:ro
 EOF
-	share_paths | sed 's/:ro$//' | while IFS= read -r p; do
-		[ -z "$p" ] || printf '      - %s\n' "$(yaml_str "$p:$p:ro")"
-	done
-	cat <<EOF
+	if [ -n "${FOLDER_HELPER:-}" ]; then
+		# eriphe-launcher: the folders shared are in a file of its own,
+		# read again at each request (no restart to share one), the node's
+		# data and theirs resolved in the host's /, seen read-only.
+		cat <<EOF
+      - type: bind
+        source: /
+        target: /host
+        read_only: true
+        bind: {propagation: rslave}
+      - $data/proxy:/etc/eriphe-proxy:ro
+    networks: [eriphe-docker]
+    command: ["docker-proxy", "-listen", ":2375", "-allow-from", "eriphe-node",
+              "-bind-from", "$data/node", "-bind-file", "/etc/eriphe-proxy/binds", "-host-root", "/host",
+              "-networks", "eriphe-system,eriphe-tasks", "-wake-image", "$NODE_IMAGE"]
+EOF
+	else
+		printf '      - %s:%s:ro\n' "$data/node" "$data/node"
+		share_paths | sed 's/:ro$//' | while IFS= read -r p; do
+			[ -z "$p" ] || printf '      - %s\n' "$(yaml_str "$p:$p:ro")"
+		done
+		cat <<EOF
     networks: [eriphe-docker]
     command: ["docker-proxy", "-listen", ":2375", "-allow-from", "eriphe-node",
               "-bind-from", $(yaml_str "$data/node$(share_paths | sed 's/:ro$//' | tr '\n' ',' | sed 's/,$//; s/^./,&/')"),
               "-networks", "eriphe-system,eriphe-tasks", "-wake-image", "$NODE_IMAGE"]
+EOF
+	fi
+	cat <<EOF
 
   node:
     image: $NODE_IMAGE
@@ -921,9 +941,11 @@ EOF
       # Its data, for eriphe-node share in its container (eriphe-share).
       ERIPHE_ROOT: $data/node
 EOF
-	# eriphe-launcher shares the folders itself (it mounts them): the
-	# node's own eriphe-node share add points to its command.
+	# eriphe-launcher keeps the list of the folders shared: the node's own
+	# eriphe-node share add points to its command. The node mounts none of
+	# them: helpers of its image work in them (node/helper.go).
 	[ -z "${SHARE_COMMAND:-}" ] || printf '      ERIPHE_SHARE_COMMAND: %s\n' "$(yaml_str "$SHARE_COMMAND")"
+	[ -z "${FOLDER_HELPER:-}" ] || printf '      ERIPHE_FOLDER_HELPER: %s\n' "$NODE_IMAGE"
 	cat <<EOF
       # Syncthing's home, read-only: its API's address and key (node/syncthing.go).
       ERIPHE_SYNCTHING_HOME: $data/syncthing
@@ -937,7 +959,7 @@ EOF
       - $data/node:$data/node
       - $data/syncthing:$data/syncthing:ro
 EOF
-	share_volumes
+	[ -n "${FOLDER_HELPER:-}" ] || share_volumes
 	cat <<EOF
     networks: [eriphe-system, eriphe-tasks, eriphe-docker]
 
@@ -977,7 +999,12 @@ EOF
       - $data/syncthing:$data/syncthing
       - $data/node/sync:$data/node/sync
 EOF
-	share_volumes
+	# eriphe-launcher: the folders that may be copied only (COPIED, one a line).
+	if [ -n "${FOLDER_HELPER:-}" ]; then
+		printf '%s\n' "${COPIED:-}" | mount_lines
+	else
+		share_volumes
+	fi
 	cat <<EOF
 
 networks:
@@ -1004,8 +1031,11 @@ EOF
 }
 
 # share_volumes: the shared places, at their paths, read-only for a :ro one.
-share_volumes() {
-	share_paths | while IFS= read -r p; do
+share_volumes() { share_paths | mount_lines; }
+
+# mount_lines: a volume a path read (PATH, or PATH:ro read-only), at its path.
+mount_lines() {
+	while IFS= read -r p; do
 		case $p in
 		*:ro) printf '      - %s\n' "$(yaml_str "${p%:ro}:${p%:ro}:ro")" ;;
 		?*) printf '      - %s\n' "$(yaml_str "$p:$p")" ;;

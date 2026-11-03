@@ -211,27 +211,35 @@ none` works).
 - **Folders.** Nothing of the host is given to Eriphe until you share a folder, on the host:
   `docker exec eriphe eriphe share add /mnt/user/Documents` (the options of [Folders](#folders):
   `--drop`, `--manage`, `--copyable`, `--name`; also `list`, `remove`, `snapshots`, `restore`).
-  The launcher keeps the list (`launcher/folders`) and gives eriphe-node and Syncthing each folder
-  shared alone, mounted at its path; the socket proxy allows bind mounts from those folders only.
-  Nothing else of the host is mounted into them, not `/mnt/user`, nor Eriphe's own data: a node
-  taken over could not reach eriphe-core's memory, accounts or keys. Before anything sees a
+  The launcher keeps the list (`launcher/folders`) and writes a copy of it for the socket proxy
+  (`proxy/binds`, a folder of the data the node never sees, mounted read-only into the proxy
+  only), which reads it again at each request and allows bind mounts from those folders only
+  (`:ro` ones read-only only). eriphe-node mounts **no** shared folder: a task gets the folders it
+  is given from the Docker daemon when its container is made, each alone at its path, and what
+  the node does inside a folder (its checks before each lend, a results subfolder, a snapshot
+  before `--manage`, a restore, handing results back, its access checks) runs in a short-lived
+  container of its own image given only that folder (and the snapshot's place in its data), with
+  no network, a read-only root and a task's three capabilities (node/README.md, Folder helpers).
+  Syncthing sees only the folders that may be copied (`--copyable`), each at its path. Nothing
+  else of the host is mounted into them, not `/mnt/user`, nor Eriphe's own data: a node taken
+  over could not reach eriphe-core's memory, accounts or keys. Before anything sees a
   folder, the launcher refuses a hidden one, `appdata`, a system folder, Unraid's `system` and
   `domains`, Eriphe's data or a folder holding it or the Docker socket, and a path with a quote, a
   `$`, a comma or a colon; then a short-lived container of the node's image (no network, no
   capability but reading, the host's `/` read-only) runs the node's own checks on the host: no
   symlink on the way, nothing sensitive or private in it or above it (node/README.md, Shared
-  folders). Mounts are fixed when a container is made: sharing a folder makes the node, Syncthing
-  and the proxy again, a few seconds. Their tasks' containers are stopped with the node and start
-  again from their folders, resuming their sessions (a turn under way is cut, and counts as one
-  of a task's 3 restarts): while a task is at work, `share add` refuses unless `--now`, and
-  `share remove` unmounts the folder at the next start unless `--now`. A folder stopped from the
-  workspace is unmounted at the next start or share command; one not on the host now (a disk
-  away) is left out until it is back. `docker exec eriphe-node eriphe-node share add` now prints
+  folders). `share add` and `share remove` take effect at once and restart neither the node nor
+  the proxy, nor any task: the next task gets the folder, or no longer does. A task already at
+  work with a folder that is then unshared keeps it until it ends (eriphe-node lends it to no new
+  task). Only Syncthing is made again, when the folders that may be copied change: copies to
+  your other machines pause a few seconds (the command says so). A folder stopped from the
+  workspace leaves the lists within seconds; one not on the host now (a disk away) is not copied
+  until it is back. `docker exec eriphe-node eriphe-node share add` now prints
   the launcher's command instead.
 - **Places of before.** An install from before this version gave eriphe-node whole places
   (`ERIPHE_SHARES`, `shares=/mnt/user`). On its first start after the update, the launcher turns
-  the folders shared in them (the node's list) into its own list, each mounted alone, a `:ro`
-  place's read-only, with no action needed; a place with nothing shared simply goes. A folder
+  the folders shared in them (the node's list) into its own list, each given alone, a `:ro`
+  place's read-only (the proxy allows it read-only only), with no action needed; a place with nothing shared simply goes. A folder
   that no longer passes the checks above is logged and given to Eriphe no more (the workspace
   shows it missing). `ERIPHE_SHARES` is ignored afterwards: remove it from the container.
 - **Uninstall.** `docker exec eriphe eriphe-launcher uninstall` removes the containers it made, the

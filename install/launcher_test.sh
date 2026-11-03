@@ -28,14 +28,18 @@ printf '%s\n' "$*" >>"$T/calls"
 # The node's share add and remove, on its list ($T/data/node/shares.json):
 # it refuses /mnt/user/Refused.
 L=$T/data/node/shares.json
+# The node's helpers reach a folder through the proxy: in its list only.
 if [ "$1 $2 $3 $4 $5 $6 $7" = "exec -e ERIPHE_SHARE_COMMAND= eriphe-node eriphe-node share add" ]; then
   shift 7
-  rc=0
+  rc=0 c=false
   [ -f "$L" ] || echo '{"folders": []}' >"$L"
   for a; do
     case $a in
+    --copyable) c=true ;;
     /mnt/user/Refused) echo "Not shared: $a: no"; rc=1 ;;
-    /*) jq --arg p "$a" '.folders |= (map(select(.path != $p)) + [{id: "x", name: ($p | split("/") | last), path: $p, access: "read"}])' "$L" >"$L.new" && mv "$L.new" "$L" ;;
+    /*)
+      if ! grep -Fxq -- "$a" "$T/data/proxy/binds" 2>/dev/null; then echo "Not shared: $a: not in the proxy's list"; rc=1; continue; fi
+      jq --arg p "$a" --argjson c "$c" '.folders |= (map(select(.path != $p)) + [{id: "x", name: ($p | split("/") | last), path: $p, access: "read", copyable: $c}])' "$L" >"$L.new" && mv "$L.new" "$L" ;;
     esac
   done
   exit $rc
@@ -143,7 +147,7 @@ for bad in "mnt/user/Docs" "/" "/mnt/user/Docs/" "/mnt/user/../user/Docs" "/mnt/
 done
 
 # An install of before with places: the folders shared in them become the
-# list, each mounted alone, a :ro place's read-only; what is not in a place,
+# list, each given alone, a :ro place's read-only; what is not in a place,
 # or no longer passes, goes; once.
 reset_folders() {
 	rm -rf "$T/data"
@@ -162,7 +166,7 @@ run_in 'discover; folders_migrate' >"$T/out"
 [ "$(cat "$T/data/launcher/folders")" = "/mnt/user/1 PROJECTS
 /mnt/media/Films:ro" ] || fail "migration: $(cat "$T/data/launcher/folders")"
 has "$T/out" "/mnt/user/appdata/plex is no longer given to Eriphe" "migration (a folder refused)"
-has "$T/out" "each of the 2 folders shared is now mounted alone" "migration"
+has "$T/out" "each of the 2 folders shared is now given alone" "migration"
 echo '{"folders": []}' >"$T/data/node/shares.json"
 run_in 'discover; folders_migrate' >/dev/null
 [ "$(grep -c . "$T/data/launcher/folders")" = 2 ] || fail "migration, again"
@@ -171,22 +175,33 @@ reset_folders
 launcher ERIPHE_SHARES=shares=/mnt/user sh -c ". '$here/eriphe-launcher'; discover; folders_migrate" >/dev/null 2>&1
 { [ -f "$T/data/launcher/folders" ] && [ ! -s "$T/data/launcher/folders" ]; } || fail "migration, nothing shared"
 
-# ---- the compose project: the host's paths, the folders shared alone
+# ---- the compose project: the host's paths; no folder for the node, its
+# ---- proxy reading the list, Syncthing the folders it may copy only
 
 reset_folders
 printf '/mnt/user/1 PROJECTS\n/mnt/media/Films:ro\n/mnt/missing\n' >"$T/data/launcher/folders"
+cat >"$T/data/node/shares.json" <<'EOF'
+{"folders": [{"id": "a", "name": "1 PROJECTS", "path": "/mnt/user/1 PROJECTS", "access": "drop"},
+ {"id": "b", "name": "Films", "path": "/mnt/media/Films", "access": "read", "copyable": true},
+ {"id": "c", "name": "missing", "path": "/mnt/missing", "access": "read", "copyable": true}]}
+EOF
 launcher ERIPHE_API_PORT=18800 TZ=Europe/Paris sh -c ". '$here/eriphe-launcher'; discover; settings; INFO=; settle
 	compose_yaml 100 1; env_file" >"$T/compose.yaml" 2>&1
 for want in "- /mnt/user/appdata/eriphe/core:/data" "- /mnt/user/appdata/eriphe/node:/mnt/user/appdata/eriphe/node" \
-	'command: ["-root", "/mnt/user/appdata/eriphe/node",' '"-bind-from", "/mnt/user/appdata/eriphe/node,/mnt/user/1 PROJECTS,/mnt/media/Films",' \
-	'- "/mnt/user/1 PROJECTS:/mnt/user/1 PROJECTS:ro"' '"-wake-image", "ghcr.io/alexis-marcel/eriphe-node:latest"]' "cap_add: [DAC_READ_SEARCH]" \
-	'- "/mnt/user/1 PROJECTS:/mnt/user/1 PROJECTS"' '- "/mnt/media/Films:/mnt/media/Films:ro"' \
+	'command: ["-root", "/mnt/user/appdata/eriphe/node",' \
+	'"-bind-from", "/mnt/user/appdata/eriphe/node", "-bind-file", "/etc/eriphe-proxy/binds", "-host-root", "/host",' \
+	"- /mnt/user/appdata/eriphe/proxy:/etc/eriphe-proxy:ro" "source: /" "target: /host" "bind: {propagation: rslave}" \
+	'"-wake-image", "ghcr.io/alexis-marcel/eriphe-node:latest"]' "cap_add: [DAC_READ_SEARCH]" \
+	"ERIPHE_FOLDER_HELPER: ghcr.io/alexis-marcel/eriphe-node:latest" '- "/mnt/media/Films:/mnt/media/Films:ro"' \
 	'ports: ["0.0.0.0:18800:8800", "0.0.0.0:8443:8443"]' "ERIPHE_INSTALL: docker" 'ERIPHE_API_PORT: "18800"' \
 	"TZ: 'Europe/Paris'" "image: ghcr.io/alexis-marcel/eriphe-core:latest" '"-always-on"' "user: \"0:100\"" \
-	'ERIPHE_SHARE_COMMAND: "docker exec eriphe eriphe share"' "ERIPHE_NODE_SHARES='folder1=/mnt/user/1 PROJECTS,folder2=/mnt/media/Films:ro'"; do
+	'ERIPHE_SHARE_COMMAND: "docker exec eriphe eriphe share"' "ERIPHE_NODE_SHARES=''"; do
 	has "$T/compose.yaml" "$want" compose
 done
 hasnt "$T/compose.yaml" "/data/node" "compose (the launcher's own path)"
+# The node and the proxy get no folder shared: only Syncthing, once, what it may copy.
+hasnt "$T/compose.yaml" "1 PROJECTS:" "compose (a folder not copied)"
+[ "$(grep -c 'Films:' "$T/compose.yaml")" = 1 ] || fail "compose: a folder copied is mounted into more than Syncthing"
 # A folder not on the host now is left out, not the whole start.
 hasnt "$T/compose.yaml" "/mnt/missing:" "compose (a folder away)"
 has "$T/compose.yaml" "/mnt/missing is not a folder of this machine now" "compose (a folder away)"
@@ -195,70 +210,94 @@ for p in /mnt/user /mnt/media /mnt/user/appdata/eriphe; do
 	hasnt "$T/compose.yaml" "- \"$p:" "compose (only the folders)"
 done
 
-# ---- eriphe share: the launcher checks, mounts, then the node shares
+# ---- eriphe share: the launcher checks, lists, then the node shares;
+# ---- nothing restarts but Syncthing, when the folders copied change
 
 # share_in ARGS: eriphe share, the stack's start and the host's answer faked.
 share_in() {
 	launcher sh -c ". '$here/eriphe-launcher'
 		on_steps() { OUT=; }
-		stack_up() { echo restack >>\"\$T/calls\"; compose_yaml 100 1 >\"\$CONF/compose.yaml\"; }
+		stack_up() { echo stack_up >>\"\$T/calls\"; }
 		share \"\$@\"" sh "$@" 2>&1
 }
+# syncthing_up: Syncthing made again, how many times since $T/calls was emptied.
+syncthing_up() { grep -c ' up -d --no-deps --pull never syncthing$' "$T/calls" || true; }
+B=$T/data/proxy/binds
 reset_folders
 echo mode=core >"$T/data/launcher/install.conf"
+: >"$T/all-calls"
+keep_calls() { cat "$T/calls" >>"$T/all-calls"; : >"$T/calls"; }
 out=$(share_in add --drop "/mnt/user/1 PROJECTS") || fail "share add: $out"
 has "$T/calls" "run --rm --network none --read-only --cap-drop ALL --cap-add DAC_READ_SEARCH --security-opt no-new-privileges --user 0:0 --mount type=bind,src=/,dst=/host,readonly --entrypoint eriphe-node ghcr.io/alexis-marcel/eriphe-node:latest share check -host /host -data /mnt/user/appdata/eriphe /mnt/user/1 PROJECTS" "share add (the node's checks, on the host, first)"
 has "$T/calls" "exec -e ERIPHE_SHARE_COMMAND= eriphe-node eriphe-node share add --drop /mnt/user/1 PROJECTS" "share add (then the node's)"
-[ "$(grep -c '^restack' "$T/calls")" = 1 ] || fail "share add makes the node again once: $(cat "$T/calls")"
 [ "$(cat "$T/data/launcher/folders")" = "/mnt/user/1 PROJECTS" ] || fail "share add: the list"
-has "$T/data/launcher/compose.yaml" '- "/mnt/user/1 PROJECTS:/mnt/user/1 PROJECTS"' "share add (its mount)"
-# Shared already: its level anew, nothing made again.
-: >"$T/calls"
-share_in add --manage "/mnt/user/1 PROJECTS" >/dev/null || fail "share add again"
-hasnt "$T/calls" "restack" "share add of a folder mounted"
-has "$T/calls" "eriphe-node share add --manage /mnt/user/1 PROJECTS" "share add again"
-# Refused here or by the node's checks: never mounted.
+[ "$(cat "$B")" = "/mnt/user/1 PROJECTS" ] || fail "share add: the proxy's list: $(cat "$B")"
+[ "$(syncthing_up)" = 0 ] || fail "share add of a folder not copied makes Syncthing again"
+case $out in *"pause"*) fail "share add of a folder not copied: $out" ;; esac
+keep_calls
+# Copies allowed: Syncthing alone made again, on it; said.
+out=$(share_in add --drop --copyable "/mnt/user/1 PROJECTS") || fail "share add --copyable: $out"
+[ "$(syncthing_up)" = 1 ] || fail "share add --copyable: $(cat "$T/calls")"
+case $out in *"Copies to your other machines pause a few seconds"*) ;; *) fail "share add --copyable: $out" ;; esac
+has "$T/data/launcher/compose.yaml" '- "/mnt/user/1 PROJECTS:/mnt/user/1 PROJECTS"' "share add --copyable (Syncthing's mount)"
+[ "$(cat "$T/data/launcher/copied")" = "/mnt/user/1 PROJECTS" ] || fail "share add --copyable: $(cat "$T/data/launcher/copied")"
+keep_calls
+# Shared already, the same copies: its level anew, nothing made again.
+share_in add --manage --copyable "/mnt/user/1 PROJECTS" >/dev/null || fail "share add again"
+has "$T/calls" "eriphe-node share add --manage --copyable /mnt/user/1 PROJECTS" "share add again"
+[ "$(syncthing_up)" = 0 ] || fail "share add again makes Syncthing again"
+keep_calls
+# Refused here or by the node's checks: never listed.
 for bad in /mnt/user/appdata/plex /mnt/user/Secret; do
-	: >"$T/calls"
 	out=$(share_in add "$bad") && fail "share add $bad passes"
 	case $out in *"Not shared: $bad: "*) ;; *) fail "share add $bad: $out" ;; esac
-	hasnt "$T/calls" "restack" "share add $bad"
+	hasnt "$B" "$bad" "share add $bad"
+	keep_calls
 done
-has "$T/calls" "share check" "share add (the node's checks)"
 [ "$out" = "Not shared: /mnt/user/Secret: this folder holds .ssh, which is never shared: share a folder inside it" ] ||
 	fail "share add, the node's reason: $out"
 # A node from before eriphe share cannot check: update first.
 out=$(share_in add /mnt/user/Old) && fail "share add with an older node passes"
 case $out in *"cannot check a folder yet: update Eriphe first"*) ;; *) fail "share add with an older node: $out" ;; esac
-# Refused by the node once mounted: mounted no longer.
-: >"$T/calls"
+keep_calls
+# Refused by the node: off the list again, the proxy's too.
 share_in add /mnt/user/Docs /mnt/user/Refused >/dev/null && fail "share add of a folder the node refuses passes"
-[ "$(grep -c '^restack' "$T/calls")" = 2 ] || fail "share add, refused by the node: $(cat "$T/calls")"
 [ "$(cat "$T/data/launcher/folders")" = "/mnt/user/1 PROJECTS
 /mnt/user/Docs" ] || fail "share add, refused by the node: $(cat "$T/data/launcher/folders")"
-# Tasks running: not without --now.
+hasnt "$B" "Refused" "share add, refused by the node"
+keep_calls
+# Tasks at work: shared now all the same, nothing of theirs restarted.
 echo tasks=1 >"$T/data/node/awake"
-: >"$T/calls"
-out=$(share_in add /mnt/user/Music) && fail "share add while a task runs"
-case $out in *"1 task(s) at work here now"*"--now"*) ;; *) fail "share add while a task runs: $out" ;; esac
-hasnt "$T/calls" "restack" "share add while a task runs"
-share_in add --now /mnt/user/Music >/dev/null || fail "share add --now"
-has "$T/calls" "restack" "share add --now"
-# Remove: the node first; unmounted at once, or once no task runs.
-: >"$T/calls"
-out=$(share_in remove Music)
-hasnt "$T/calls" "restack" "share remove while a task runs"
-case $out in *"still has it mounted"*) ;; *) fail "share remove while a task runs: $out" ;; esac
-share_in remove --now Music >/dev/null
-has "$T/calls" "restack" "share remove --now"
+share_in add /mnt/user/Music >/dev/null || fail "share add while a task runs"
+has "$B" "/mnt/user/Music" "share add while a task runs"
+out=$(share_in add --now /mnt/user/Films) && fail "share add --now passes: $out"
+keep_calls
+# Remove: the node first, then off the lists at once.
+share_in remove Music >/dev/null || fail "share remove"
+hasnt "$T/data/launcher/folders" "Music" "share remove"
+hasnt "$B" "Music" "share remove (the proxy's list)"
+[ "$(syncthing_up)" = 0 ] || fail "share remove of a folder not copied makes Syncthing again"
+keep_calls
+out=$(share_in remove "/mnt/user/1 PROJECTS")
+[ "$(syncthing_up)" = 1 ] || fail "share remove of a folder copied: $(cat "$T/calls")"
+case $out in *"pause a few seconds"*) ;; *) fail "share remove of a folder copied: $out" ;; esac
+hasnt "$T/data/launcher/compose.yaml" "1 PROJECTS" "share remove (Syncthing's mount)"
+[ "$(cat "$T/data/launcher/folders")" = "/mnt/user/Docs" ] || fail "share remove: $(cat "$T/data/launcher/folders")"
 rm "$T/data/node/awake"
-share_in remove "/mnt/user/Docs" >/dev/null
-[ "$(cat "$T/data/launcher/folders")" = "/mnt/user/1 PROJECTS" ] || fail "share remove: $(cat "$T/data/launcher/folders")"
-# A folder the node no longer shares (stopped from the workspace) is
-# unmounted at the next start.
+keep_calls
+# A folder the node no longer shares (stopped from the workspace) leaves
+# the lists at the next tick.
 echo '{"folders": []}' >"$T/data/node/shares.json"
-run_in 'discover; if gone=$(unshared) && [ -n "$gone" ]; then drop_folders "$gone"; fi' >/dev/null
+run_in 'discover; on_steps() { OUT=; }; tick' >/dev/null
 [ ! -s "$T/data/launcher/folders" ] || fail "unshared from the workspace: $(cat "$T/data/launcher/folders")"
+[ ! -s "$B" ] || fail "unshared from the workspace, the proxy's list: $(cat "$B")"
+keep_calls
+# Never the node, the proxy or eriphe-core: no compose up but Syncthing's, no restart.
+cat "$T/all-calls" >"$T/calls"
+if grep -E ' (up|restart|stop|rm|create)( |$)' "$T/calls" | grep -v ' up -d --no-deps --pull never syncthing$' | grep -v '^run ' >"$T/out"; then
+	fail "eriphe share made more than Syncthing again: $(cat "$T/out")"
+fi
+hasnt "$T/calls" "stack_up" "eriphe share (the stack)"
 # list, snapshots and restore are the node's.
 : >"$T/calls"
 share_in list >/dev/null
@@ -270,6 +309,7 @@ out=$(env ERIPHE_LAUNCHER_LIB="$here/install.sh" "$T/eriphe" update 2>&1) && fai
 case $out in *"eriphe share add"*) ;; *) fail "eriphe update: $out" ;; esac
 out=$(env ERIPHE_LAUNCHER_LIB="$here/install.sh" "$T/eriphe" share --help 2>&1)
 case $out in *"eriphe share add [--name NAME]"*) ;; *) fail "eriphe share --help: $out" ;; esac
+case $out in *"--now"*) fail "eriphe share --help: $out" ;; esac
 rm -rf "$T/data"
 mkdir -p "$T/data"
 has "$T/compose.yaml" 'ERIPHE_WAKE_MAC: ${ERIPHE_WAKE_MAC:-}' "compose (the card to wake)"
