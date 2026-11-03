@@ -628,17 +628,7 @@ func (p *dockerProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // checkPeer answers the node only: the address allowFrom resolves to.
-func (p *dockerProxy) checkPeer(r *http.Request) error {
-	if p.allowFrom == "" {
-		return nil
-	}
-	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	addrs, err := p.lookup(p.allowFrom)
-	if err == nil && slices.Contains(addrs, host) {
-		return nil
-	}
-	return fmt.Errorf("%s is not %s", host, p.allowFrom)
-}
+func (p *dockerProxy) checkPeer(r *http.Request) error { return checkPeer(r, p.allowFrom, p.lookup) }
 
 // nodeContainer checks that a container carries one of labels, the node's.
 func (p *dockerProxy) nodeContainer(ctx context.Context, id string, labels []string) (int, error) {

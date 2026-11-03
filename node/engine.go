@@ -18,8 +18,10 @@ import (
 // the engine says it to its tool, with the hardening built in: a caller never
 // passes a capability, a security option or a network of its own.
 //
-// Two engines: Docker (engine_docker.go) and Apple's container (apple.go),
-// both through their CLI for now. Where they differ in a way the node must
+// Three engines: Docker through its CLI (engine_docker.go), Apple's
+// container through its own (apple.go), and eriphe-node engine
+// (engine_remote.go), which holds the Docker socket for the node and builds
+// the containers itself (engine_server.go). Where they differ in a way the node must
 // know (Apple's tasks each on a network of their own, folders seen only
 // through the explorer, files written as the Mac's user), the engine says
 // so in its traits, never the node by asking which engine it has.
@@ -168,13 +170,17 @@ type engineRun struct {
 func (r *engineRun) Wait() error { return r.wait() }
 
 // engine is the node's engine: Apple's container with -engine container,
-// Docker otherwise, or a test's.
+// eriphe-node engine with -engine-url, the docker CLI otherwise, or a
+// test's.
 func (n *node) engine() engine {
 	if n.eng != nil {
 		return n.eng
 	}
 	if n.opt.engine == engineContainer {
 		return appleEngine{&n.opt, &n.nets}
+	}
+	if n.opt.engineURL != "" {
+		return remoteEngine{&n.opt}
 	}
 	return dockerEngine{&n.opt}
 }

@@ -60,7 +60,7 @@ const shareUsage = `eriphe-node share: share folders of this machine with Eriphe
 
 Options, before the command: -root DIR (env ERIPHE_ROOT), -share NAME=/PATH
 (env ERIPHE_NODE_SHARES: the places a folder may be shared from), -engine
-(env ERIPHE_ENGINE), -docker CLI, -snapshot-days N (env ERIPHE_SNAPSHOT_DAYS),
+(env ERIPHE_ENGINE), -docker CLI, -engine-url URL (env ERIPHE_ENGINE_URL), -snapshot-days N (env ERIPHE_SNAPSHOT_DAYS),
 -snapshot-limit SIZE (env ERIPHE_SNAPSHOT_LIMIT). A folder is never shared if it holds keys,
 passwords or settings, a folder made private (.eriphe-private), or Eriphe's
 own data.
@@ -75,6 +75,7 @@ func runShare(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.root, "root", envOr("ERIPHE_ROOT", "data"), "the node's data")
 	fs.StringVar(&o.engine, "engine", envOr("ERIPHE_ENGINE", engineDocker), "docker or container")
 	fs.StringVar(&o.docker, "docker", "", "the engine's CLI")
+	fs.StringVar(&o.engineURL, "engine-url", os.Getenv("ERIPHE_ENGINE_URL"), "eriphe-node engine's address")
 	fs.StringVar(&o.folderHelper, "folder-helper", os.Getenv("ERIPHE_FOLDER_HELPER"), "the node's own image, for the helpers that work in the shared folders")
 	o.shares = shareFlag{}
 	if err := o.shares.Set(os.Getenv("ERIPHE_NODE_SHARES")); err != nil {
