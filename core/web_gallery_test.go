@@ -507,7 +507,7 @@ func TestCalendarProviderForms(t *testing.T) {
 	if b := post("c-bad", "nextcloud", url.Values{"cal_url": {"http://cloud.example.org"}}); !strings.Contains(b, "https://") {
 		t.Errorf("http CalDAV: %s", b)
 	}
-	if b := post("c-bad", "google", nil); !strings.Contains(b, "pas encore pris en charge") {
+	if b := post("c-bad", "google", nil); !strings.Contains(b, "avec ton compte Google") {
 		t.Errorf("google: %s", b)
 	}
 	if b := post("c-bad", "icloud", url.Values{"timezone": {"Mars/Base"}}); !strings.Contains(b, "Fuseau horaire inconnu") {

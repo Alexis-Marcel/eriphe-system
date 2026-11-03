@@ -77,7 +77,11 @@ JSON in `CALENDAR_CONFIG`, or a file in `CALENDAR_CONFIG_FILE` (or `-config`):
   `caldav` (any server, `url` required, https only), `microsoft` (Graph, token with
   `Calendars.ReadWrite`).
 - `auth`: exactly one of `password_env`, `password_file`, `oauth_token_env`, `oauth_token_file`,
-  read again at each request (a refreshed token file is picked up).
+  read again at each request (a refreshed token file is picked up). An OAuth secret may also be a
+  refresh grant, `{"client_id", "client_secret", "refresh_token"}`, as eriphe-core lends it for a
+  Google account: the access token is then refreshed here, in memory (`refresh.go`), never written
+  nor logged; a refresh token Google refuses gives an error that says to reconnect the account in
+  Eriphe.
 - Limits: `max_events` (500), `timeout_seconds` (30), ranges up to 92 days (62 for free time).
 
 ## Running

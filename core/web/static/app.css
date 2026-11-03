@@ -804,6 +804,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .mark-github { background: #24292f; box-shadow: 0 6px 16px -8px #24292f; }
 .mark-home-assistant { background: #18bcf2; box-shadow: 0 6px 16px -8px #18bcf2; }
 .mark-gdrive { background: #1a73e8; box-shadow: 0 6px 16px -8px #1a73e8; }
+.mark-google { background: #4285f4; box-shadow: 0 6px 16px -8px #4285f4; }
 @media (prefers-color-scheme: dark) { .mark-notion, .mark-github { background: #3a3a40; } }
 /* The online tools (presets_online.go): the brand colours of Simple Icons; a light one takes a dark logo. */
 .mark-airtable { background: #18bfff; box-shadow: 0 6px 16px -8px #18bfff; }
@@ -1191,6 +1192,7 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 }
 .pmark svg { width: 20px; height: 20px; }
 .pmark-gmail { background: #ea4335; }
+.pmark-google { background: #4285f4; }
 .pmark-icloud { background: #3693f3; }
 .pmark-outlook, .pmark-office365 { background: #0078d4; }
 .pmark-orange { background: #ff7900; }
@@ -1567,3 +1569,17 @@ details.app-install > * + * { margin-top: 10px; }
 .copy-to { display: grid; gap: 8px; margin-top: 8px; }
 .copy-to .btn { justify-self: start; }
 #share-how-dlg h4 { margin: 14px 0 4px; font-size: .95rem; }
+
+/* Settings → Tools → Google: the accounts and their services. */
+.gaccounts { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.gaccount { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.gaccount-bad { border-color: var(--warn); background: var(--warn-soft); }
+.gaccount-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gaccount-email { word-break: break-all; }
+.gservices { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.gservices li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gservice-name { font-weight: 600; min-width: 9em; }
+.gaccount-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gadd { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.inline-check { display: inline-flex; align-items: center; gap: 4px; }
+.drive-accounts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

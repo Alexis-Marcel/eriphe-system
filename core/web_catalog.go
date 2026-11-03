@@ -158,7 +158,7 @@ type oauthDone struct {
 func (w *web) handleOAuthCallback(rw http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if isCloudState(q.Get("state")) {
-		w.handleDriveCallback(rw, r) // Google Drive (web_drive.go)
+		w.handleGoogleCallback(rw, r) // a Google account (web_google.go)
 		return
 	}
 	u, f := w.c.pool.flowByState(q.Get("state"))

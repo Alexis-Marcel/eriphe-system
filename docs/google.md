@@ -1,10 +1,14 @@
-# Connect Google Drive with your own Google app
+# Connect Google (Gmail, Google Calendar, Google Drive) with your own Google app
 
-Eriphe reaches Google Drive with **your own Google app**: an OAuth client you create once in your
-own Google Cloud project, like Home Assistant's Google integrations. Nobody else holds its key, and
-no Eriphe server is in the path: Google sends your browser straight back to your workspace. It
-takes a few minutes, once. Settings → Tools → Google Drive shows these same steps, with your
-workspace's exact redirect URI and a Copy button.
+Eriphe reaches Google with **your own Google app**: an OAuth client you create once in your own
+Google Cloud project, like Home Assistant's Google integrations. Nobody else holds its key, and no
+Eriphe server is in the path: Google sends your browser straight back to your workspace. It takes a
+few minutes, **once for every service and every Google account**. Settings → Tools → Google shows
+these same steps, with your workspace's exact redirect URI and the scopes, each with a Copy button.
+
+Then each Google account is **one sign-in**: tick the services Eriphe may use (Gmail, Google
+Calendar, Google Drive), sign in at Google, and Eriphe asks only for those services' access. A
+service added later to the same account asks for that one only; the others stay.
 
 Google's console changes; what follows is its English interface (Google Auth Platform) as of
 October 2026.
@@ -20,50 +24,58 @@ Google only sends back to an **authorized redirect URI** that follows its rules
   `*.home.arpa` or a bare name are refused.
 
 Eriphe's redirect URI is `<the address you open Eriphe at>/oauth/callback`. If you open Eriphe at a
-local address, the Google Drive page says so and offers:
+local address, the Google page says so and offers:
 
 1. **Remote access** (Settings → Remote access): Tailscale gives Eriphe an
    `https://<name>.<tailnet>.ts.net` address with a real certificate, which Google takes. Open the
-   Google Drive page at that address and follow the steps from there.
+   Google page at that address and follow the steps from there.
 2. **Your own domain**: put Eriphe behind your reverse proxy at, for instance,
    `https://eriphe.example.org`, and set it as the workspace address ([reverse proxy
    guide](reverse-proxy.md)): the redirect URI is then `https://eriphe.example.org/oauth/callback`.
-3. **No Google app at all**: install "Google Drive for desktop" on an always-on computer where
-   Eriphe is installed, and give its synced Google Drive folder as a folder of that computer
-   (Settings → Folders). Eriphe then sees those files like any local folder.
+3. **No Google app at all**: Gmail with an app password (Settings → Tools → Mail → Gmail with an
+   app password; it needs 2-Step Verification), and for Drive, "Google Drive for desktop" on an
+   always-on computer where Eriphe is installed, its synced folder given as a folder of that
+   computer (Settings → Folders). Google Calendar has no way without the app.
 
 ## The steps
 
 1. **Create a project**: <https://console.cloud.google.com/projectcreate> → name it `Eriphe` →
    **Create**. Make sure it is the selected project for the next steps.
-2. **Enable the Drive API**: <https://console.cloud.google.com/apis/library/drive.googleapis.com>
-   → **Enable**.
+2. **Enable the APIs**, the three at once:
+   <https://console.cloud.google.com/flows/enableapi?apiid=gmail.googleapis.com,caldav.googleapis.com,drive.googleapis.com>
+   → pick the project → **Enable** (Gmail API, CalDAV API, Google Drive API).
 3. **Branding**: Google Auth Platform (<https://console.cloud.google.com/auth/overview>) →
    **Get started**: App name `Eriphe`, your address as **User support email** → Next; Audience
    **External** → Next; your address under **Contact Information** → Next; accept the Google API
    Services User Data Policy → **Create**.
 4. **Audience** (<https://console.cloud.google.com/auth/audience>): under **Test users**,
-   **Add users**, add the Google address whose Drive Eriphe will use → **Save**. Or publish the app
+   **Add users**, add each Google address Eriphe will use → **Save**. Or publish the app
    instead (see [Testing or In production](#testing-or-in-production)).
-5. **Data access** (<https://console.cloud.google.com/auth/scopes>): **Add or remove scopes**,
-   tick `https://www.googleapis.com/auth/drive` and `https://www.googleapis.com/auth/drive.readonly`
-   (filter on "drive") → **Update** → **Save**.
+5. **Data access** (<https://console.cloud.google.com/auth/scopes>): **Add or remove scopes** →
+   under **Manually add scopes**, paste
+   `https://mail.google.com/,https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/drive.readonly`
+   → **Add to table** → **Update** → **Save**.
 6. **Clients** (<https://console.cloud.google.com/auth/clients/create>): **Create client** →
    Application type **Web application**, Name `Eriphe`; under **Authorized redirect URIs**, **Add
-   URI** and paste exactly the URI the Google Drive page shows, e.g.
+   URI** and paste exactly the URI the Google page shows, e.g.
    `https://eriphe.tail1234.ts.net/oauth/callback` (no final slash) → **Create**. No "Authorized
    JavaScript origins" are needed.
 7. **Keep the client**: Google shows the client ID and secret once
    ([Manage OAuth clients](https://support.google.com/cloud/answer/15549257): the secret is hashed
    afterwards, only its last four characters stay visible). Click **Download JSON**, or copy both.
-8. **In Eriphe**, Settings → Tools → Google Drive: give the downloaded `client_secret_….json`, or
+8. **In Eriphe**, Settings → Tools → Google: give the downloaded `client_secret_….json`, or
    paste the client ID and secret → **Save my Google app**. The secret goes to the vault
    (`google-drive-client`) and is never shown again; "Replace my Google app" takes another one.
-9. **Connect Google Drive**: tick "Allow Eriphe to drop results" if Eriphe may add files (always in
-   an `Eriphe` subfolder of the folders you allow), then Google's consent: "Google hasn't verified
-   this app" is your own app: **Advanced** → **Go to Eriphe**, and allow the access to Drive.
-10. **Choose folders**: back in the workspace, once the Files server runs, open the folders and
-    give each one "read" or "read + drop".
+9. **Connect an account**: tick the services (Gmail, Google Calendar, Google Drive) and, for
+   Drive, "Allow Eriphe to drop results" if Eriphe may add files (always in an `Eriphe` subfolder
+   of the folders you allow) → **Sign in with Google**. "Google hasn't verified this app" is your
+   own app: **Advanced** → **Go to Eriphe**, and allow what is asked (Google may show a box per
+   service: one left unticked is said back in the workspace).
+10. **Drive: choose folders**: Settings → Tools → Google Drive, once the Files server runs, open the
+    folders and give each one "read" or "read + drop".
+11. **Another account**: "Add a Google account" on the same page, with its own services. Each
+    account has its own tools (`mail`, `mail-<name>`, `agenda`…); Drive folders of every account
+    are in the one Files tool.
 
 A Desktop client ("installed" in the JSON) is refused: Google sends it only to loopback addresses,
 which a workspace on another machine cannot use. If the uploaded JSON lists redirect URIs and not
@@ -92,7 +104,10 @@ To check in the console (Audience → Publishing status), as Google words it tod
   test user will expire seven days from the time of consent", refresh token included
   ([Manage App Audience](https://support.google.com/cloud/answer/15549945),
   [Refresh token expiration](https://developers.google.com/identity/protocols/oauth2#expiration)):
-  Drive must then be connected again every week.
+  the account must then be connected again every week. Eriphe checks each account's
+  authorization every half hour: one Google withdrew shows "To reconnect" in Settings → Tools,
+  its tools wait (the assistant is told), and **Reconnect** signs in again with the services it
+  had, in one click.
 - **In production** (**Publish app**): the 7-day expiry of Testing does not apply. The app is not
   verified, so Google shows its "unverified app" warning before the consent, and an unverified
   app is capped at 100 users. For an app for your personal use (fewer than 100 users), Google

@@ -33,7 +33,7 @@ type galleryPage struct {
 }
 
 // popularPresets open the gallery, before its categories.
-var popularPresets = []string{"mail", "calendar", "gdrive", "notion", "todoist", "home-assistant", "github", "linear"}
+var popularPresets = []string{"google", "mail", "calendar", "gdrive", "notion", "todoist", "home-assistant", "github", "linear"}
 
 // presetKeywords are more words a preset is found by: brands, and what it
 // does in both languages.
@@ -41,6 +41,7 @@ var presetKeywords = map[string]string{
 	"mail":           "email e-mail courriel gmail outlook icloud proton imap smtp",
 	"calendar":       "calendrier calendar rendez-vous google icloud caldav nextcloud",
 	"gdrive":         "google docs sheets documents fichiers files",
+	"google":         "gmail agenda calendar calendrier drive docs workspace compte account",
 	"home-assistant": "domotique smart home lumieres lights",
 	"github":         "git code repos pull requests issues",
 	"linear":         "tickets issues projets",

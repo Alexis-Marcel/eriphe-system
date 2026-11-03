@@ -61,6 +61,9 @@ var toolPresets = []toolPreset{
 	// servers/files: the folders given to Eriphe in Google Drive. Its page
 	// connects the account and picks the folders (web_drive.go).
 	{ID: "gdrive", Form: "drive", Name: filesServer, Mark: "GD", Kind: "local", Trust: true},
+	// One Google account for Gmail, Google Calendar and Google Drive: its
+	// page signs in once with the services ticked (google.go, web_google.go).
+	{ID: "google", Form: "google", Name: "google", Mark: "G", Kind: "local", Trust: true},
 	{ID: "remote", Form: "generic", Mark: "↗", Kind: "remote", Auth: "none"},
 	{ID: "local", Form: "generic", Mark: "▣", Kind: "local"},
 }
@@ -70,6 +73,8 @@ func (p toolPreset) Page() string {
 	switch {
 	case p.Form == "drive":
 		return "/settings/drive"
+	case p.Form == "google":
+		return "/settings/google"
 	case p.ID == "home-assistant":
 		return "/settings/home-assistant" // both ways: its tools, and its voice (web_homeassistant.go)
 	case p.ID == "remote":
@@ -147,9 +152,11 @@ type mailChoice struct {
 	Link     string // where the password is made
 	Soon     bool   // not supported yet
 	Hidden   bool   // not offered, only read back
+	Page     string // connected on a page of its own (a Google account), not with the form
 }
 
 var mailChoices = []mailChoice{
+	{ID: "google", Page: "/settings/google?add=mail"},
 	{ID: "gmail", Provider: "gmail", AppPass: true, Link: "https://myaccount.google.com/apppasswords"},
 	{ID: "icloud", Provider: "icloud", AppPass: true, Link: "https://account.apple.com/account/manage"},
 	{ID: "outlook", Provider: "outlook", Soon: true},
@@ -271,6 +278,9 @@ func (f *mailForm) normalize(old *RunSpec) error {
 	if !ok {
 		return errors.New("presets.noprovider")
 	}
+	if c.Page != "" {
+		return errors.New("presets.google")
+	}
 	if c.Soon {
 		// Kept as it is on an edit; not added.
 		if prev, ok := mailFormOf(deref(old)); !ok || prev.Provider != c.ID {
@@ -362,13 +372,15 @@ func mailFormOf(spec RunSpec) (mailForm, bool) {
 }
 
 // Calendar: eriphe-calendar with one CalDAV account and an app password.
-// Google and Microsoft need an OAuth token lent by eriphe-core, which it
-// does not do yet: they are shown as coming soon.
+// Google Calendar is connected with the Google account (its page,
+// web_google.go); Microsoft needs an OAuth token lent by eriphe-core, which
+// it does not do yet: it is shown as coming soon.
 type calChoice struct {
 	ID       string
 	NeedsURL bool   // the server's address is asked
 	Link     string // where the app password is made
 	Soon     bool
+	Page     string // connected on a page of its own (a Google account), not with the form
 }
 
 var calChoices = []calChoice{
@@ -376,7 +388,7 @@ var calChoices = []calChoice{
 	{ID: "fastmail", Link: "https://app.fastmail.com/settings/security"},
 	{ID: "nextcloud", NeedsURL: true},
 	{ID: "caldav", NeedsURL: true},
-	{ID: "google", Soon: true},
+	{ID: "google", Page: "/settings/google?add=calendar"},
 	{ID: "microsoft", Soon: true},
 }
 
@@ -453,6 +465,9 @@ func (f *calendarForm) normalize() error {
 	}
 	if c.Soon {
 		return errors.New("presets.soon")
+	}
+	if c.Page != "" {
+		return errors.New("presets.google")
 	}
 	if f.Username == "" {
 		return errors.New("presets.nouser")

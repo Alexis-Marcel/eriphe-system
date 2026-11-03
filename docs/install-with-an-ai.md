@@ -475,9 +475,10 @@ For each other computer (or a second NAS):
 - **Tools** (mail, calendars, Home Assistant, GitHub, any MCP server): Settings → Tools.
   Each one asks the person to approve access at the service (OAuth) or to paste a token there:
   they do it, in the workspace.
-- **Google Drive** needs the person's own Google app, created once in their Google Cloud console:
-  follow [docs/google-drive.md](google-drive.md) with them, step by step. Google refuses a workspace
-  opened at an IP address: turn on Remote access first and open the Google Drive page at the
+- **Google** (Gmail, Google Calendar, Google Drive) needs the person's own Google app, created
+  once in their Google Cloud console for every service and every account: follow
+  [docs/google.md](google.md) with them, step by step (Settings → Tools → Google). Google refuses a
+  workspace opened at an IP address: turn on Remote access first and open the Google page at the
   `ts.net` address. "Google hasn't verified this app" is expected (it is their own app):
   **Advanced** → **Go to Eriphe**.
 - **GitHub**: Settings → Tools → GitHub → "Créer l'app GitHub d'Eriphe" (see
@@ -549,7 +550,7 @@ device stays listed in the workspace: "Forget" it on its card.
 | "Docker on this computer is older than version 28" | Eriphe works, but tasks are less isolated: update Docker. |
 | Linux: "this computer does not update itself (it has no systemd)" | Run the install command again from time to time to update it. |
 | The phone app cannot install, or no notifications | They need a trusted address: Remote access (§7). |
-| Google Drive: "redirect URI" refused | The workspace was opened at an IP address: use the Remote access address (§7, [docs/google-drive.md](google-drive.md)). |
+| Google: "redirect URI" refused | The workspace was opened at an IP address: use the Remote access address (§7, [docs/google.md](google.md)). |
 
 **Logs**, to read when something fails (they hold no secret, but read them yourself rather than
 asking the person to post them publicly):

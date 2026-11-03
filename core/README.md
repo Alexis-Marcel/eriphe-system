@@ -341,7 +341,8 @@ A name is lowercase letters, digits and dashes (it becomes `mcp__<name>__<tool>`
 
 **Upstream pool.** eriphe-core keeps one MCP session per server, lists its tools and keeps them
 cached (refreshed on `tools/list_changed`), and reconnects with backoff (1 s to 5 min). A server is
-`connecting`, `ready`, `needs_auth` (OAuth: the user must connect it) or `error`.
+`connecting`, `ready`, `needs_auth` (OAuth: the user must connect it; or a [Google
+account](#google-accounts-gmail-calendar-drive) Google refused, until it is reconnected) or `error`.
 
 **Grants.** A task is lent catalog tools as [resources](#resources) of kind `tool`: a server name
 (all its tools) or `server.tool`, where the tool may hold `*` globs (`notion`, `github.get_*`,
@@ -1254,6 +1255,52 @@ brain may answer and propose, never act nor authorise. It waits up to 80 s for t
 on. What an automation knows of the house (someone came home, the TV is on) goes to `POST
 /v1/context` as a signal, with a source token of its own.
 
+## Google accounts (Gmail, Calendar, Drive)
+
+One sign-in per Google account gives Eriphe any of Gmail, Google Calendar and Google Drive
+(`google.go`; Settings → Tools → Google, `/settings/google`, `web_google.go`). The user's own
+Google app ([below](#your-own-google-app)) is set up once for every service and every account; the
+page's guide turns the three APIs on with one link (Gmail, CalDAV, Drive) and gives the scopes and
+the redirect URI to copy.
+
+| Service | Scope | Server |
+|---|---|---|
+| `mail` | `https://mail.google.com/` (IMAP and SMTP with XOAUTH2) | eriphe-mail, `mail` (then `mail-<local part>`), Gmail preset |
+| `calendar` | `https://www.googleapis.com/auth/calendar` (CalDAV) | eriphe-calendar, `agenda` (then `agenda-<local part>`), provider `google` |
+| `drive` | `…/auth/drive`, or `drive.readonly` without "drop results" | eriphe-files, `fichiers`, one account of it per Google account |
+
+**Connect.** The page ticks the services, and Connect asks Google for `openid email` and their
+scopes only, with `access_type=offline`, `prompt=consent`, PKCE, the signed state of
+[the Drive flow](#your-own-google-app) and `include_granted_scopes=true`: a service added later to
+the same account (its `login_hint`) asks for that one alone, and Google's answer covers what the
+account granted before. The address comes from the ID token of the token endpoint's answer (over
+TLS, which OpenID Connect takes in place of its signature). The refresh token, with the client id
+and secret, is kept **once per account** in the vault (`google.<hash>.token`), and each service's
+server reads it from there in its environment (`MAIL_GOOGLE_TOKEN`, `CALENDAR_GOOGLE_TOKEN`,
+`FILES_GOOGLE_TOKEN_<hash>`), refreshing its access token itself: the token never enters a task or
+a spec. Which servers belong to an account is read from their specs (that vault reference). A
+service Google did not grant (its box unticked on Google's page) is said back. Connecting again
+writes the new token for every service of the account, and the nodes restart them with it.
+
+**Several accounts.** Each account has its own servers (`mail`, `mail-sam`…); Drive folders of
+every account are in the one `fichiers`, each folder naming its account. The page lists the
+accounts, each with its services, their tools and states, "Ajouter" for a service it has not,
+"Reconnecter" and "Retirer ce compte" (its servers and Drive folders go, its token leaves the vault
+and is revoked at Google, `oauth2.googleapis.com/revoke`).
+
+**To reconnect.** Every 30 minutes (`googleTick`, with the nodes' check) eriphe-core asks Google
+for an access token with each account's refresh token. `invalid_grant` (revoked, or the 7 days of
+an app in Testing) or a refused client marks the account "À reconnecter": its servers are held in
+`needs_auth` (the pool's `authHold`; a Drive with another working account is not), a call says
+why, `list_tools` gives as `connect` where to do it (`Settings → Tools → Google → Reconnect
+<address>`), and the brain is told once (an event in the conversation). The Tools list and the
+page show the account to reconnect with a one-click "Reconnecter", which asks again for the
+services it had. Google out of reach changes nothing. Gmail and Calendar also say "reconnect it in
+Eriphe" when Google refuses their refresh.
+
+Gmail with an app password (the Mail form's other Gmail) stays for a workspace Google cannot send
+back to (a local address, [below](#addresses-google-takes)).
+
 ## Google Drive (cloud Folders)
 
 A folder of the user's Google Drive becomes a Folder given to Eriphe: a name, the cloud as its
@@ -1268,13 +1315,15 @@ its node; it never enters a task or a task's spec.
 Settings → Tools → Google Drive (`/settings/drive`, `web_drive.go`, the logic in `cloud.go`):
 
 1. **Your Google app**: the guide, then the client JSON (or id and secret) of the user's own
-   Google app ([below](#your-own-google-app)), kept in the vault.
-2. **Connect**: "Connecter Google Drive" sends the browser to Google; "Permettre à Eriphe de
+   Google app ([below](#your-own-google-app)), kept in the vault; the same as the Google page's.
+2. **Connect**: "Connecter Google Drive" is the [Google account](#google-accounts-gmail-calendar-drive)
+   flow with Drive alone; "Permettre à Eriphe de
    déposer des résultats" asks for the scope that writes. The account comes back connected, and the
    workspace creates the catalog server `fichiers` (image `ghcr.io/alexis-marcel/eriphe-files`,
    access `reads`: its reads are free, `write_file` is the user's to allow). Set to read only,
    the tool connects with `drive.readonly` whatever the box says.
-3. **Choose**: once the service runs, the page browses the account's folders (My Drive, Shared with
+3. **Choose**: once the service runs, the page browses each account's folders (a chip per account
+   when there are several) (My Drive, Shared with
    me, shared drives) through the server's `browse_folders`, and each one is given "en lecture" or
    "lecture + dépôt". The chosen folders are written in the service's `FILES_CONFIG`, which
    restarts it; removing one, or changing its access, does the same.
@@ -1304,7 +1353,7 @@ connection.
 
 There is no shared Eriphe app: each user creates **their own** Google OAuth client once, the Home
 Assistant way, and the page guides them through Google's console in a few minutes (the same steps
-in [docs/google-drive.md](../docs/google-drive.md)). Nobody else holds its secret, there is no
+in [docs/google.md](../docs/google.md)). Nobody else holds its secret, there is no
 user cap or verification to share with strangers, and no server of the maintainers is in the path.
 
 The client is a **Web application** client of the user's Google Cloud project (Drive API on, an
@@ -1331,8 +1380,8 @@ The payload is `{"w": "<workspace origin>", "n": "<flow id>", "x": <expiry>}`, t
 only this eriphe-core has (`cloud_state_key` in the store, made once): a state it did not make, or
 replayed, is refused at its callback. The flow is bound to the browser like the other workspace
 flows (the `__Host-eriphe-oauth` cookie, its hash kept with the flow): another browser with the
-same link is refused. The refresh token goes to the vault with the client id and secret, which
-eriphe-files needs to refresh it.
+same link is refused. The refresh token goes to the vault with the client id and secret, once per
+account (`google.<hash>.token`), which the servers need to refresh it.
 
 ### Addresses Google takes
 
@@ -1341,7 +1390,7 @@ Google checks an authorized redirect URI against its
 https (http only for localhost), no raw IP address (loopback ones aside), and a host whose
 top-level domain is on the public suffix list. `googleOrigin` applies them to the workspace's
 origin (`publicsuffix`, ICANN section; `home.arpa` counts as local): a workspace opened at
-`https://192.168.1.2:8443` or `https://eriphe.local` cannot connect Drive, and the page says so
+`https://192.168.1.2:8443` or `https://eriphe.local` cannot connect Google, and the page says so
 instead of showing the guide, with what to do:
 
 - turn on **Remote access** (Tailscale gives `https://<name>.<tailnet>.ts.net`, which Google takes;
@@ -1350,7 +1399,7 @@ instead of showing the guide, with what to do:
 - or, with no Google app at all, "Google Drive for desktop" on an always-on computer, its synced
   folder given as a folder of that machine ([Folders](#folders)).
 
-`startDrive` refuses such an origin too (`drive.origin.ip`, `drive.origin.local`,
+`startGoogle` refuses such an origin too (`drive.origin.ip`, `drive.origin.local`,
 `drive.origin.http`).
 
 ### Testing or In production
@@ -1359,7 +1408,7 @@ In the console's Audience, a **Testing** app only takes its test users (up to 10
 expires a test user's authorization, refresh token included, seven days after consent
 ([Manage App Audience](https://support.google.com/cloud/answer/15549945),
 [refresh token expiration](https://developers.google.com/identity/protocols/oauth2#expiration)):
-Drive must be connected again every week. **Published** ("In production"), that expiry does not
+the account must be connected again every week (it shows "À reconnecter"). **Published** ("In production"), that expiry does not
 apply; the app being unverified, Google shows its unverified-app warning before the consent and
 caps it at 100 users, and an app for personal use (fewer than 100 users) may stay unverified
 ([personal use](https://support.google.com/cloud/answer/13464323)). The page says both, to be
@@ -1729,9 +1778,10 @@ and links back to the app). A GitHub connection on a token shows "Passer à l'ap
 in its form. Mails and Agenda first ask which kind of account
 (Gmail, iCloud, Orange, Free, OVHcloud, Fastmail or any IMAP server; iCloud, Fastmail, Nextcloud or
 any CalDAV server) and run `eriphe-mail` and `eriphe-calendar` with its password; "Test the
-connection" tries that password (IMAP login, CalDAV PROPFIND). Outlook, Microsoft 365, Google
-Calendar and Microsoft calendars are shown as coming soon: they wait for eriphe-core to lend OAuth
-tokens to local servers. A vendor's OAuth service (Linear, Notion and the catalog's) opens a short page (name, use, access), then "Se
+connection" tries that password (IMAP login, CalDAV PROPFIND). "Gmail avec ton compte Google"
+(first, recommended) and Google Agenda lead to Settings → Tools → Google, one sign-in for Gmail,
+Calendar and Drive ([Google accounts](#google-accounts-gmail-calendar-drive)); the Google tile of
+"Add a tool" too. Outlook, Microsoft 365 and Microsoft calendars are shown as coming soon. A vendor's OAuth service (Linear, Notion and the catalog's) opens a short page (name, use, access), then "Se
 connecter à Linear" saves and signs in at once; the tool is added only once authorized. Settings →
 Tools also edits and removes the workspace's own tools, and connects again those that use OAuth
 (see [OAuth](#oauth-and-eriphe-connect)). A collapsed "Secrets avancés"

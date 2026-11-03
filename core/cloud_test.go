@@ -121,11 +121,16 @@ type fakeGoogle struct {
 	clientID  string
 	secret    string
 	scope     string
+	email     string // the account signed in
+	refresh   string // the refresh token it gives
+	revoked   bool   // refresh grants are refused
 	exchanges int
+	refreshes int
+	revokes   []string
 }
 
 func newFakeGoogle(t *testing.T) *fakeGoogle {
-	g := &fakeGoogle{t: t, scope: scopeDrive}
+	g := &fakeGoogle{t: t, scope: scopeDrive, email: "sam@example.org", refresh: "the-refresh"}
 	g.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		defer g.mu.Unlock()
@@ -133,6 +138,20 @@ func newFakeGoogle(t *testing.T) *fakeGoogle {
 		f := r.Form
 		sum := sha256.Sum256([]byte(f.Get("code_verifier")))
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/revoke" {
+			g.revokes = append(g.revokes, f.Get("token"))
+			return
+		}
+		if r.URL.Path == "/token" && f.Get("grant_type") == "refresh_token" {
+			g.refreshes++
+			if g.revoked || f.Get("client_id") != g.clientID {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant"})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"access_token": "at2", "expires_in": 3600, "token_type": "Bearer"})
+			return
+		}
 		if r.URL.Path != "/token" || f.Get("grant_type") != "authorization_code" || f.Get("code") != "the-code" ||
 			f.Get("client_id") != g.clientID || f.Get("client_secret") != g.secret || f.Get("redirect_uri") != g.redirect ||
 			base64.RawURLEncoding.EncodeToString(sum[:]) != g.challenge {
@@ -141,14 +160,21 @@ func newFakeGoogle(t *testing.T) *fakeGoogle {
 			return
 		}
 		g.exchanges++
-		json.NewEncoder(w).Encode(map[string]any{"access_token": "at", "refresh_token": "the-refresh", "expires_in": 3600,
-			"token_type": "Bearer", "scope": g.scope})
+		json.NewEncoder(w).Encode(map[string]any{"access_token": "at", "refresh_token": g.refresh, "expires_in": 3600,
+			"token_type": "Bearer", "scope": "openid https://www.googleapis.com/auth/userinfo.email " + g.scope, "id_token": fakeIDToken(g.email)})
 	}))
 	t.Cleanup(g.srv.Close)
-	old, oldHTTP := googleOAuth, cloudHTTP
-	googleOAuth.AuthURL, googleOAuth.TokenURL, cloudHTTP = g.srv.URL+"/auth", g.srv.URL+"/token", g.srv.Client()
-	t.Cleanup(func() { googleOAuth, cloudHTTP = old, oldHTTP })
+	old, oldHTTP, oldRevoke := googleOAuth, cloudHTTP, googleRevokeURL
+	googleOAuth.AuthURL, googleOAuth.TokenURL, cloudHTTP, googleRevokeURL = g.srv.URL+"/auth", g.srv.URL+"/token", g.srv.Client(), g.srv.URL+"/revoke"
+	t.Cleanup(func() { googleOAuth, cloudHTTP, googleRevokeURL = old, oldHTTP, oldRevoke })
 	return g
+}
+
+// fakeIDToken is an ID token as Google's token endpoint gives it (its
+// signature is not checked: it comes straight from the endpoint).
+func fakeIDToken(email string) string {
+	claims, _ := json.Marshal(map[string]any{"iss": "https://accounts.google.com", "email": email, "email_verified": true})
+	return "eyJhbGciOiJSUzI1NiJ9." + base64.RawURLEncoding.EncodeToString(claims) + ".c2ln"
 }
 
 // authorize reads what the workspace sent to Google, as Google would.
@@ -199,8 +225,9 @@ func filesCore(t *testing.T, mutate func(*Config)) (*testWeb, *catalogCore, stri
 		})
 		mcp.AddTool(s, &mcp.Tool{Name: "browse_folders", Meta: mcp.Meta{"eriphe/setup": true}},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
-				Parent string `json:"parent,omitempty"`
-				Page   string `json:"page_token,omitempty"`
+				Account string `json:"account,omitempty"`
+				Parent  string `json:"parent,omitempty"`
+				Page    string `json:"page_token,omitempty"`
 			}) (*mcp.CallToolResult, map[string]any, error) {
 				if in.Parent == "" {
 					return nil, map[string]any{"folders": []map[string]string{{"id": "root-id", "name": "My Drive"}}}, nil
@@ -262,7 +289,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	if code != 200 || authURL == "" {
 		t.Fatalf("connect: %d %s", code, body)
 	}
-	if u, _ := url.Parse(authURL); u.Query().Get("scope") != scopeDrive {
+	if u, _ := url.Parse(authURL); u.Query().Get("scope") != "openid email "+scopeDrive || u.Query().Get("include_granted_scopes") != "true" {
 		t.Fatalf("scope %q", u.Query().Get("scope"))
 	}
 	state := g.authorize(t, authURL)
@@ -299,7 +326,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	// eriphe-files runs with the token from the vault, never in its spec.
 	srv := c.conf().Servers[filesServer]
 	spec, _ := decodeRun(srv.Run)
-	if !strings.HasPrefix(spec.Image, filesImage) || spec.Env[driveTokenEnv].File != "vault:service.fichiers.files_google_token" ||
+	if !strings.HasPrefix(spec.Image, filesImage) || spec.Env[driveTokenEnvOf("sam@example.org")].File != "vault:"+googleSecret("sam@example.org") ||
 		strings.Contains(string(srv.Run), "the-refresh") || !srv.TrustAnnotations {
 		t.Fatalf("server: %s", srv.Run)
 	}
@@ -308,7 +335,7 @@ func TestDriveRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	var tok map[string]string
-	json.Unmarshal([]byte(env[driveTokenEnv]), &tok)
+	json.Unmarshal([]byte(env[driveTokenEnvOf("sam@example.org")]), &tok)
 	if tok["refresh_token"] != "the-refresh" || tok["client_id"] != testClientID || tok["client_secret"] != testClientSecret {
 		t.Fatalf("token lent: %v", tok)
 	}
@@ -333,8 +360,8 @@ func TestDriveRoundTrip(t *testing.T) {
 	}
 	tw.post("/settings/drive/folders", url.Values{"id": {"other"}, "name": {"Compta"}, "access": {"read"}}, csrf)
 	fc, _ := filesConfigOf(c.conf().Servers[filesServer])
-	if len(fc.Folders) != 2 || fc.Folders[0] != (DriveFolder{Name: "Compta", Account: "google", ID: "compta", Access: "drop"}) ||
-		fc.Folders[1].Name != "Compta (2)" || fc.Accounts[0].Auth.TokenEnv != driveTokenEnv {
+	if len(fc.Folders) != 2 || fc.Folders[0] != (DriveFolder{Name: "Compta", Account: "sam@example.org", ID: "compta", Access: "drop"}) ||
+		fc.Folders[1].Name != "Compta (2)" || fc.Accounts[0].Auth.TokenEnv != driveTokenEnvOf("sam@example.org") {
 		t.Fatalf("folders: %+v", fc)
 	}
 	if code, body, _ := tw.do("GET", "/settings/drive", nil, nil); code != 200 || !strings.Contains(body, "Compta (2)") ||
@@ -360,7 +387,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	if f := c.cloudFolders(); len(f) != 1 || f[0].ID != "compta" {
 		t.Fatalf("after remove: %+v", f)
 	}
-	if spec, _ := decodeRun(c.conf().Servers[filesServer].Run); spec.Env[driveTokenEnv].File == "" {
+	if spec, _ := decodeRun(c.conf().Servers[filesServer].Run); spec.Env[driveTokenEnvOf("sam@example.org")].File == "" {
 		t.Fatal("a folder change lost the token")
 	}
 
@@ -372,7 +399,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	if st := c.driveState(); st.CanWrite || st.Folders[0].Access != "read" {
 		t.Fatalf("read only: %+v", st)
 	}
-	if err := c.addDriveFolder("compta", "Compta", "drop"); err == nil {
+	if err := c.addDriveFolder("", "compta", "Compta", "drop"); err == nil {
 		t.Fatal("write right without the scope")
 	}
 }
@@ -455,11 +482,11 @@ func TestDriveUnusableOrigin(t *testing.T) {
 			t.Fatalf("%s: %s", host, body)
 		}
 	}
-	_, err := c.startDrive(driveConnect{Origin: "https://192.168.1.2:8443", Binding: "b"})
+	_, err := c.startGoogle(googleConnect{Services: []string{googleDrive}, Origin: "https://192.168.1.2:8443", Binding: "b"})
 	wantKey(t, err, "drive.origin.ip")
-	_, err = c.startDrive(driveConnect{Origin: "https://eriphe.local", Binding: "b"})
+	_, err = c.startGoogle(googleConnect{Services: []string{googleDrive}, Origin: "https://eriphe.local", Binding: "b"})
 	wantKey(t, err, "drive.origin.local")
-	_, err = c.startDrive(driveConnect{Origin: "http://eriphe.example.org", Binding: "b"})
+	_, err = c.startGoogle(googleConnect{Services: []string{googleDrive}, Origin: "http://eriphe.example.org", Binding: "b"})
 	wantKey(t, err, "drive.origin.http")
 }
 
@@ -486,23 +513,23 @@ func TestDriveRefusals(t *testing.T) {
 	tw, c, _ := filesCore(t, nil)
 	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
 	// Denied at Google: nothing saved.
-	authURL, err := c.startDrive(driveConnect{Origin: tw.srv.URL, Binding: "b"})
+	authURL, err := c.startGoogle(googleConnect{Services: []string{googleDrive}, Origin: tw.srv.URL, Binding: "b"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	u, _ := url.Parse(authURL)
-	err = c.finishDrive(context.Background(), tw.srv.URL, u.Query().Get("state"), "", "access_denied", "b")
+	_, err = c.finishGoogle(context.Background(), tw.srv.URL, u.Query().Get("state"), "", "access_denied", "b")
 	wantKey(t, err, "drive.denied")
 	if _, ok := c.conf().Servers[filesServer]; ok {
 		t.Fatal("saved after a refusal")
 	}
 	// A state for another workspace is refused here.
-	authURL, _ = c.startDrive(driveConnect{Origin: "https://eriphe.example.org", Binding: "b"})
+	authURL, _ = c.startGoogle(googleConnect{Services: []string{googleDrive}, Origin: "https://eriphe.example.org", Binding: "b"})
 	u, _ = url.Parse(authURL)
-	if err := c.finishDrive(context.Background(), tw.srv.URL, u.Query().Get("state"), "the-code", "", "b"); err != errBadState {
+	if _, err := c.finishGoogle(context.Background(), tw.srv.URL, u.Query().Get("state"), "the-code", "", "b"); err != errBadState {
 		t.Fatalf("other origin: %v", err)
 	}
 	// A tool of the same name that is not eriphe-files is left alone.
 	c.putServer(putCreate, filesServer, Server{URL: "https://x.example/mcp", Auth: &ServerAuth{None: true}, Use: "x"}, nil)
-	wantKey(t, c.addDriveFolder("a", "A", "read"), "drive.taken")
+	wantKey(t, c.addDriveFolder("", "a", "A", "read"), "drive.taken")
 }

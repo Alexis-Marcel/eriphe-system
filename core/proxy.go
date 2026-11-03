@@ -370,6 +370,11 @@ func (c *core) listServers(only string, withTools bool) []serverInfo {
 		}
 		if info.Status == statusNeedsAuth {
 			info.Connect = "eriphe connect " + name
+			if c.pool.authHold != nil {
+				if why, where := c.pool.authHold(name); why != "" {
+					info.Connect = where // in the workspace, not a command
+				}
+			}
 		}
 		out = append(out, info)
 	}

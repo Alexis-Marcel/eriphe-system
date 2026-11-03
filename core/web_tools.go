@@ -30,6 +30,10 @@ type toolView struct {
 	Allowed int        // its actions allowed without asking
 	Voice   bool       // Home Assistant's: it has a voice token
 	Token   bool       // OAuth: a credential is stored (it may have expired)
+	// Google is the Google account the tool reads (google.go), one that
+	// must be connected again first; Reconnect, it must.
+	Google    string
+	Reconnect bool
 	// Follow is the line that follows a tool just saved, in its row, until
 	// it is up or says why not (web_tools_dialog.go).
 	Follow *toolStatus
@@ -41,7 +45,7 @@ type toolView struct {
 func (t toolView) Editable() bool { return editable(t.Source, t.Preset, t.Auth) }
 
 func editable(source string, p toolPreset, auth string) bool {
-	return source == sourceWorkspace && p.ID != "home-assistant" && auth != "github-app" && p.Form != "drive"
+	return source == sourceWorkspace && p.ID != "home-assistant" && auth != "github-app" && p.Form != "drive" && p.Form != "google"
 }
 
 // AccessURL is where the row's access level leads: the access part of the
@@ -63,10 +67,13 @@ func (t toolView) AllowedURL() string {
 
 // SignIn is the row's way to sign in to an OAuth service, only when it
 // is needed: "connect" when it never was, "reconnect" when the
-// authorization expired, was revoked or lacks a right. Otherwise the
+// authorization expired, was revoked or lacks a right; "google" when the
+// Google account it reads must be connected again (web_google.go). Otherwise the
 // level, changed with the form, is what asks for a new token.
 func (t toolView) SignIn() string {
 	switch {
+	case t.Reconnect:
+		return "google"
 	case t.Auth != "oauth" || t.Status != statusNeedsAuth:
 		return ""
 	case t.Token:
@@ -120,6 +127,16 @@ func presetOf(lang string, s Server) (toolPreset, string) {
 	spec, err := decodeRun(s.Run)
 	if err != nil {
 		return toolPreset{}, ""
+	}
+	if email := googleAccountOfRun(spec); email != "" {
+		// Gmail or Google Calendar on a Google account (google.go).
+		p, _ := presetByID("google")
+		return p, tr(lang, "google."+googleServiceOf(spec)) + " · " + email
+	}
+	if email := googleAccountOfRun(spec); email != "" {
+		// Gmail or Google Calendar on a Google account (google.go).
+		p, _ := presetByID("google")
+		return p, tr(lang, "google."+googleServiceOf(spec)) + " · " + email
 	}
 	if m, ok := mailFormOf(spec); ok {
 		p, _ := presetByID("mail")
@@ -235,6 +252,11 @@ func (w *web) toolRow(lang string, conf *Config, sv serverView, voice bool) tool
 	if sv.Auth == "oauth" {
 		_, tok, _ := w.c.store.oauthToken(sv.Name)
 		t.Token = tok != nil
+	}
+	for _, a := range w.c.googleOwners(conf.Servers[sv.Name]) {
+		if t.Google == "" || a.Reconnect != "" && !t.Reconnect {
+			t.Google, t.Reconnect = a.Email, a.Reconnect != ""
+		}
 	}
 	t.Pending, t.Placed = startState(sv)
 	if t.Pending {
@@ -470,7 +492,9 @@ func toolFormOf(name string, s Server) toolForm {
 			v := spec.Env[k]
 			f.Env = append(f.Env, envRow{Name: k, Value: v.Value, Secret: v.File != "", IsSet: v.File != ""})
 		}
-		if m, ok := mailFormOf(spec); ok {
+		if googleAccountOfRun(spec) != "" {
+			f.Preset, _ = presetByID("google") // its page, not this form
+		} else if m, ok := mailFormOf(spec); ok {
 			f.Preset, _ = presetByID("mail")
 			f.Mail, f.SecretSet = m, spec.Env[mailSecretEnv].File != ""
 		} else if cf, ok := calendarFormOf(spec); ok {
@@ -712,7 +736,7 @@ func pickAccount(f *toolForm, provider string) {
 	case "mail":
 		c, ok := mailChoiceByID(provider)
 		switch {
-		case ok && !c.Soon && !c.Hidden:
+		case ok && !c.Soon && !c.Hidden && c.Page == "":
 			if f.Edit && c.ID != f.Mail.Provider {
 				f.Mail, f.SecretSet, f.Switched = mailForm{Address: f.Mail.Address, Provider: c.ID}, false, true
 			}
@@ -723,7 +747,7 @@ func pickAccount(f *toolForm, provider string) {
 	case "calendar":
 		c, ok := calChoiceByID(provider)
 		switch {
-		case ok && !c.Soon:
+		case ok && !c.Soon && c.Page == "":
 			if f.Edit && c.ID != f.Calendar.Provider {
 				f.Calendar = calendarForm{Provider: c.ID, Username: f.Calendar.Username, Timezone: f.Calendar.Timezone}
 				f.SecretSet, f.Switched = false, true
@@ -740,9 +764,9 @@ func (w *web) handleNewTool(rw http.ResponseWriter, r *http.Request, s *session)
 	if !ok {
 		p, _ = presetByID("remote")
 	}
-	if p.Form == "drive" {
+	if p.Form == "drive" || p.Form == "google" {
 		if inDialog(r) {
-			w.render(rw, r, s, "settings", "drive-step", page{Data: driveStep{Added: w.addedPresets(w.lang(r))[p.ID]}})
+			w.render(rw, r, s, "settings", p.Form+"-step", page{Data: driveStep{Added: w.addedPresets(w.lang(r))[p.ID]}})
 			return
 		}
 		http.Redirect(rw, r, p.Page(), http.StatusSeeOther)

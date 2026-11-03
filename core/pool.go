@@ -42,6 +42,10 @@ type pool struct {
 	// from the installation on the server's account (empty: the app
 	// owner's), with read permissions only for a read-only server.
 	appToken func(ctx context.Context, account string, readOnly bool) (string, error)
+	// authHold tells a server that waits for the user to connect an account
+	// again (a Google account Google refused, google.go): why, and where the
+	// user does it; "" when it does not wait.
+	authHold func(name string) (why, where string)
 
 	mu      sync.Mutex
 	ctx     context.Context // set by run; servers added later start in it
@@ -257,6 +261,13 @@ func (u *upstream) connect(ctx context.Context) error {
 	if flow != nil {
 		timeout = flowTimeout + time.Minute // the user authorizes in a browser meanwhile
 	}
+	if why := u.held(); why != "" {
+		u.mu.Lock()
+		u.status, u.err, u.needsAuth = statusNeedsAuth, why, why
+		u.mu.Unlock()
+		log.Printf("server %s: waits for its account to be connected again", u.name)
+		return errors.New(why)
+	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	sess, err := u.open(cctx)
@@ -373,8 +384,21 @@ func (u *upstream) tool(name string) *mcp.Tool {
 	return nil
 }
 
+// held is why the server waits for an account to be connected again, or "".
+func (u *upstream) held() string {
+	if u.p == nil || u.p.authHold == nil {
+		return ""
+	}
+	why, _ := u.p.authHold(u.name)
+	return why
+}
+
 // call forwards one tool call, within the server's timeout.
 func (u *upstream) call(ctx context.Context, tool string, args json.RawMessage) (*mcp.CallToolResult, error) {
+	if why := u.held(); why != "" {
+		_, where := u.p.authHold(u.name)
+		return nil, fmt.Errorf("server %s cannot be used: %s; the user reconnects it in the workspace (%s)", u.name, why, where)
+	}
 	u.mu.Lock()
 	sess, status, errText := u.session, u.status, u.err
 	u.mu.Unlock()

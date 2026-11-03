@@ -182,6 +182,12 @@ func (a *AccountConfig) secret() (string, error) {
 		v = string(b)
 	}
 	v = strings.TrimSpace(v)
+	if a.Auth.oauth() {
+		// A refresh grant lent by eriphe-core (refresh.go).
+		if tok, ok, err := accessToken(v); ok {
+			return tok, err
+		}
+	}
 	if a.Auth.oauth() && strings.HasPrefix(v, "{") {
 		var t struct {
 			AccessToken string `json:"access_token"`

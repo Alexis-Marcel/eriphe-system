@@ -101,7 +101,7 @@ func TestWebPresetsAreValid(t *testing.T) {
 		"local":          {"image": {"mcp/sequentialthinking"}, "use": {"think"}, "transport": {"stdio"}, "egress": {"1"}},
 	}
 	for _, p := range toolPresets {
-		if p.Form == "drive" {
+		if p.Form == "drive" || p.Form == "google" {
 			continue // its own page (web_drive_test.go)
 		}
 		f := newToolForm("fr", p)
