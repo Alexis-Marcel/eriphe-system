@@ -18,3 +18,5 @@
 __pycache__/
 .pytest_cache/
 /servers/files/files
+# Local worktrees of coding assistants
+/.claude/worktrees/
