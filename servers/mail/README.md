@@ -89,7 +89,11 @@ or guessed from the address), an account needs only `address` and `auth`:
   orange.fr/wanadoo.fr, fastmail.com.
 - `auth`: exactly one of `password_env`, `password_file`, `oauth_token_env`, `oauth_token_file`. The
   secret is read again at each connection, so a token file refreshed by eriphe-core is picked up.
-  A token file may hold the bare token or an OAuth JSON response with `access_token`.
+  A token file may hold the bare token or an OAuth JSON response with `access_token`. It may also
+  hold a refresh grant, `{"client_id", "client_secret", "refresh_token"}`, as eriphe-core lends it
+  for a Google account (Gmail with XOAUTH2, scope `https://mail.google.com/`): the access token is
+  then refreshed here, in memory (`refresh.go`), never written nor logged; a refresh token Google
+  refuses gives an error that says to reconnect the account in Eriphe.
 - `security`: `tls` (implicit, default on 993/465) or `starttls` (default otherwise). There is no
   plaintext mode; certificates are verified (`ca_file` adds roots for a self-hosted server).
 - `username` defaults to the address; `save_sent` (copy sent mail to Sent) defaults to false for

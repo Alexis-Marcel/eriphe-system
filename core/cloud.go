@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -34,7 +33,7 @@ import (
 // client "Web application" they create once in their Google Cloud project,
 // with the workspace's own https://<workspace>/oauth/callback as its
 // redirect. The page guides them through it (web_drive.go,
-// docs/google-drive.md); the client id and secret are kept in the vault
+// docs/google.md); the client id and secret are kept in the vault
 // (googleClientVault), never shown back:
 //
 //	workspace → Google (PKCE, state = e1.<payload>.<mac>)
@@ -55,8 +54,7 @@ const (
 	filesServer    = "fichiers"
 	filesImage     = "ghcr.io/alexis-marcel/eriphe-files"
 	filesConfigEnv = "FILES_CONFIG"
-	driveTokenEnv  = "FILES_GOOGLE_TOKEN"
-	driveAccount   = "google"
+	driveTokenEnv  = "FILES_GOOGLE_TOKEN" // an account's is FILES_GOOGLE_TOKEN_<hash> (driveTokenEnvOf)
 
 	googleClientVault = "google-drive-client" // the user's own client, in the vault
 	googleClientIDEnd = ".apps.googleusercontent.com"
@@ -272,6 +270,8 @@ type cloudFlow struct {
 	config   *oauth2.Config
 	lang     string
 	expires  time.Time
+	services []string // the Google services asked for (google.go)
+	back     string   // the page the browser goes back to
 }
 
 type cloudFlows struct {
@@ -305,94 +305,6 @@ func (f *cloudFlows) take(id string) *cloudFlow {
 	return fl
 }
 
-// driveConnect is what the workspace's Connect asks.
-type driveConnect struct {
-	Origin  string // the workspace, as the browser reaches it
-	Binding string // hash of the browser's flow cookie
-	Write   bool   // ask for the scope that also creates files
-	Lang    string // the words of the tool's use, if it is created
-}
-
-// startDrive starts a Google authorization and returns where to send the
-// browser.
-func (c *core) startDrive(in driveConnect) (string, error) {
-	app, err := googleClient()
-	if errors.Is(err, errNoGoogleClient) {
-		return "", &catalogError{http.StatusBadRequest, "drive.noclient", "", err}
-	}
-	if err != nil {
-		return "", err
-	}
-	if why := googleOrigin(in.Origin); why != "" {
-		return "", &catalogError{http.StatusBadRequest, "drive.origin." + why, in.Origin, errors.New("Google takes no redirect to " + in.Origin)}
-	}
-	redirect := in.Origin + "/oauth/callback"
-	// A read-only tool gets a read-only token, whatever the page asked.
-	scope := scopeDriveReadonly
-	if srv, ok := c.conf().Servers[filesServer]; in.Write && (!ok || srv.level() != accessReadOnly) {
-		scope = scopeDrive
-	}
-	cfg := &oauth2.Config{ClientID: app.ID, ClientSecret: app.Secret, Endpoint: googleOAuth, RedirectURL: redirect, Scopes: []string{scope}}
-	nonce := randomToken(18)
-	fl := &cloudFlow{origin: in.Origin, verifier: oauth2.GenerateVerifier(), binding: in.Binding, config: cfg,
-		lang: in.Lang, expires: time.Now().Add(cloudFlowExpiry)}
-	c.cloud.put(nonce, fl)
-	state := signState(c.stateKey(), statePayload{Origin: in.Origin, Nonce: nonce, Expires: fl.expires.Unix()})
-	// prompt=consent: Google gives a refresh token at every consent, not only the first.
-	return cfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(fl.verifier),
-		oauth2.SetAuthURLParam("prompt", "consent")), nil
-}
-
-// finishDrive takes Google's answer, as the workspace's callback received
-// it: it checks the state, the flow and the browser, exchanges the code and
-// gives the token to the files server.
-func (c *core) finishDrive(ctx context.Context, origin, state, code, errCode, binding string) error {
-	p, err := openState(c.stateKey(), state, time.Now())
-	if err != nil {
-		return err
-	}
-	fl := c.cloud.take(p.Nonce)
-	if fl == nil || fl.origin != p.Origin || p.Origin != origin ||
-		subtle.ConstantTimeCompare([]byte(fl.binding), []byte(binding)) != 1 {
-		return errBadState
-	}
-	if errCode != "" {
-		if errCode == "access_denied" {
-			return &catalogError{http.StatusBadRequest, "drive.denied", "", errors.New("access denied")}
-		}
-		return fmt.Errorf("Google refused: %s", errCode)
-	}
-	if code == "" {
-		return errors.New("no code in the redirect")
-	}
-	tok, err := fl.config.Exchange(context.WithValue(ctx, oauth2.HTTPClient, cloudHTTP), code, oauth2.VerifierOption(fl.verifier))
-	if err != nil {
-		var re *oauth2.RetrieveError
-		if errors.As(err, &re) {
-			return fmt.Errorf("Google refused the code: %s %s", re.ErrorCode, re.ErrorDescription)
-		}
-		return fmt.Errorf("exchanging the code: %w", err)
-	}
-	if tok.RefreshToken == "" {
-		return errors.New("Google gave no refresh token: remove Eriphe's access at myaccount.google.com/connections, then connect again")
-	}
-	scopes := strings.Fields(fmt.Sprint(tok.Extra("scope")))
-	if !slices.Contains(scopes, scopeDrive) && !slices.Contains(scopes, scopeDriveReadonly) {
-		return &catalogError{http.StatusBadRequest, "drive.noscope", "", errors.New("the access to Google Drive was not granted")}
-	}
-	secret, _ := json.Marshal(map[string]string{"client_id": fl.config.ClientID, "client_secret": fl.config.ClientSecret,
-		"refresh_token": tok.RefreshToken})
-	return c.putDrive(fl.lang, func(fc *filesConfig) {
-		fc.Accounts = []filesAccount{{Name: driveAccount, Provider: "google", Scopes: scopes}}
-		fc.Accounts[0].Auth.TokenEnv = driveTokenEnv
-		if !slices.Contains(scopes, scopeDrive) {
-			for i := range fc.Folders {
-				fc.Folders[i].Access = "read"
-			}
-		}
-	}, credentials{"env:" + driveTokenEnv: string(secret)})
-}
-
 // The files server's configuration, as servers/files reads it.
 
 type filesConfig struct {
@@ -422,8 +334,15 @@ type DriveFolder struct {
 type driveState struct {
 	Exists   bool // the server is in the catalog
 	Mine     bool // … and it is the workspace's eriphe-files
-	CanWrite bool // the account granted the scope that creates files
+	CanWrite bool // an account granted the scope that creates files
+	Accounts []driveAccountView
 	Folders  []DriveFolder
+}
+
+// driveAccountView is one account of the files server.
+type driveAccountView struct {
+	Name     string // the Google address; "google" for a Drive connected before accounts
+	CanWrite bool
 }
 
 func (c *core) driveState() driveState {
@@ -434,9 +353,32 @@ func (c *core) driveState() driveState {
 	fc, ok := filesConfigOf(srv)
 	st := driveState{Exists: true, Mine: ok && c.source(kindServer, filesServer) == sourceWorkspace, Folders: fc.Folders}
 	for _, a := range fc.Accounts {
-		st.CanWrite = st.CanWrite || slices.Contains(a.Scopes, scopeDrive)
+		w := slices.Contains(a.Scopes, scopeDrive)
+		st.Accounts = append(st.Accounts, driveAccountView{Name: a.Name, CanWrite: w})
+		st.CanWrite = st.CanWrite || w
 	}
 	return st
+}
+
+// canWrite tells whether an account of the files server may create files.
+func (st driveState) canWrite(account string) bool {
+	for _, a := range st.Accounts {
+		if strings.EqualFold(a.Name, account) {
+			return a.CanWrite
+		}
+	}
+	return false
+}
+
+// driveAccountName finds the account a folder is taken from: the one
+// named, or the only one.
+func (st driveState) driveAccountName(account string) (string, bool) {
+	for _, a := range st.Accounts {
+		if strings.EqualFold(a.Name, account) || account == "" && len(st.Accounts) == 1 {
+			return a.Name, true
+		}
+	}
+	return "", false
 }
 
 func filesConfigOf(srv Server) (filesConfig, bool) {
@@ -457,9 +399,17 @@ func filesConfigOf(srv Server) (filesConfig, bool) {
 // cloudFolders are the cloud Folders, for the Folder object.
 func (c *core) cloudFolders() []DriveFolder { return c.driveState().Folders }
 
-// putDrive changes the files server's configuration (and its token, with
-// creds), creating the server the first time.
-func (c *core) putDrive(lang string, change func(*filesConfig), creds credentials) error {
+// driveTokenEnvOf is the environment variable of an account's token in the
+// files server.
+func driveTokenEnvOf(email string) string {
+	h := sha256.Sum256([]byte(strings.ToLower(email)))
+	return driveTokenEnv + "_" + strings.ToUpper(hex.EncodeToString(h[:4]))
+}
+
+// putDrive changes the files server's configuration, creating the server
+// the first time and removing it when no account is left. env holds the
+// token references of accounts added; the others keep theirs.
+func (c *core) putDrive(lang string, change func(*filesConfig), env map[string]EnvValue) error {
 	srv, exists := c.conf().Servers[filesServer]
 	var fc filesConfig
 	spec := RunSpec{Image: filesImage, Transport: transportStdio}
@@ -472,30 +422,94 @@ func (c *core) putDrive(lang string, change func(*filesConfig), creds credential
 	}
 	change(&fc)
 	if len(fc.Accounts) == 0 {
+		if exists {
+			return c.deleteServer(filesServer)
+		}
 		return errors.New("Google Drive is not connected")
 	}
 	raw, _ := json.Marshal(fc)
-	env := map[string]EnvValue{filesConfigEnv: {Value: string(raw)}}
-	if v, ok := spec.Env[driveTokenEnv]; ok {
-		env[driveTokenEnv] = v
+	next := map[string]EnvValue{filesConfigEnv: {Value: string(raw)}}
+	for _, a := range fc.Accounts {
+		if v, ok := env[a.Auth.TokenEnv]; ok {
+			next[a.Auth.TokenEnv] = v
+		} else if v, ok := spec.Env[a.Auth.TokenEnv]; ok {
+			next[a.Auth.TokenEnv] = v
+		}
 	}
-	spec.Env = env
+	spec.Env = next
 	mode := putUpdate
 	if !exists {
 		mode = putCreate
 		srv = Server{Use: tr(lang, "preset.gdrive.use")}.withLevel(accessReads)
 	}
 	srv.Run = marshalRun(spec)
-	return c.putServer(mode, filesServer, srv, creds)
+	return c.putServer(mode, filesServer, srv, nil)
 }
 
-// addDriveFolder gives a folder to Eriphe, or changes its access.
-func (c *core) addDriveFolder(id, name, access string) error {
+// putDriveAccount gives a Google account to the files server, or updates
+// its scopes. A Drive connected before accounts existed (its token in
+// FILES_GOOGLE_TOKEN) is taken over by the first account connected: its
+// folders stay. Without the scope that writes, the account's folders fall
+// back to read.
+func (c *core) putDriveAccount(lang, email string, scopes []string) error {
+	tokenEnv := driveTokenEnvOf(email)
+	env := map[string]EnvValue{tokenEnv: {File: vaultPrefix + googleSecret(email)}}
+	return c.putDrive(lang, func(fc *filesConfig) {
+		i := slices.IndexFunc(fc.Accounts, func(a filesAccount) bool { return strings.EqualFold(a.Name, email) })
+		if i < 0 {
+			if j := slices.IndexFunc(fc.Accounts, func(a filesAccount) bool { return a.Auth.TokenEnv == driveTokenEnv }); j >= 0 {
+				old := fc.Accounts[j].Name
+				fc.Accounts = slices.Delete(fc.Accounts, j, j+1)
+				for k := range fc.Folders {
+					if fc.Folders[k].Account == old || fc.Folders[k].Account == "" {
+						fc.Folders[k].Account = email
+					}
+				}
+			}
+			fc.Accounts = append(fc.Accounts, filesAccount{Name: email, Provider: "google"})
+			i = len(fc.Accounts) - 1
+		}
+		fc.Accounts[i].Scopes = scopes
+		fc.Accounts[i].Auth.TokenEnv = tokenEnv
+		if !slices.Contains(scopes, scopeDrive) {
+			for k := range fc.Folders {
+				if strings.EqualFold(fc.Folders[k].Account, email) {
+					fc.Folders[k].Access = "read"
+				}
+			}
+		}
+	}, env)
+}
+
+// dropDriveAccount takes an account and its folders out of the files server.
+func (c *core) dropDriveAccount(email string) error {
+	return c.putDrive("", func(fc *filesConfig) {
+		fc.Accounts = slices.DeleteFunc(fc.Accounts, func(a filesAccount) bool { return strings.EqualFold(a.Name, email) })
+		fc.Folders = slices.DeleteFunc(fc.Folders, func(f DriveFolder) bool { return strings.EqualFold(f.Account, email) })
+	}, nil)
+}
+
+// addDriveFolder gives a folder of an account to Eriphe, or changes its
+// access. account may be empty with one account.
+func (c *core) addDriveFolder(account, id, name, access string) error {
 	id, name = strings.TrimSpace(id), strings.Join(strings.Fields(name), " ")
 	if id == "" || name == "" || len(name) > 120 || (access != "read" && access != "drop") {
 		return &catalogError{http.StatusBadRequest, "drive.badfolder", "", errors.New("a folder needs an id, a name and an access")}
 	}
-	if access == "drop" && !c.driveState().CanWrite {
+	st := c.driveState()
+	if st.Exists && !st.Mine {
+		return &catalogError{http.StatusConflict, "drive.taken", filesServer, errors.New("a tool named " + filesServer + " already exists")}
+	}
+	for _, f := range st.Folders {
+		if f.ID == id {
+			account = f.Account
+		}
+	}
+	account, ok := st.driveAccountName(account)
+	if !ok {
+		return &catalogError{http.StatusBadRequest, "drive.badfolder", "", errors.New("no such Google Drive account")}
+	}
+	if access == "drop" && !st.canWrite(account) {
 		return &catalogError{http.StatusBadRequest, "drive.readonly", "", errors.New("Google Drive was connected for reading only")}
 	}
 	return c.putDrive("", func(fc *filesConfig) {
@@ -509,7 +523,7 @@ func (c *core) addDriveFolder(id, name, access string) error {
 		for n := 2; slices.ContainsFunc(fc.Folders, func(f DriveFolder) bool { return strings.EqualFold(f.Name, final) }); n++ {
 			final = fmt.Sprintf("%s (%d)", name, n)
 		}
-		fc.Folders = append(fc.Folders, DriveFolder{Name: final, Account: driveAccount, ID: id, Access: access})
+		fc.Folders = append(fc.Folders, DriveFolder{Name: final, Account: account, ID: id, Access: access})
 	}, nil)
 }
 
@@ -521,12 +535,15 @@ func (c *core) removeDriveFolder(id string) error {
 
 // browseDrive lists an account's folders through the files server's setup
 // tool, which tasks never get.
-func (c *core) browseDrive(ctx context.Context, parent, page string) ([]driveItem, string, error) {
+func (c *core) browseDrive(ctx context.Context, account, parent, page string) ([]driveItem, string, error) {
 	u := c.pool.get(filesServer)
 	if u == nil {
 		return nil, "", errors.New("Google Drive is not connected")
 	}
 	in := map[string]string{"parent": parent}
+	if account != "" {
+		in["account"] = account
+	}
 	if page != "" {
 		in["page_token"] = page
 	}

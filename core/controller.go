@@ -54,7 +54,8 @@ type core struct {
 	syncMu     sync.Mutex
 	syncPushed sync.Map
 
-	cloud cloudFlows // Google authorizations in progress (cloud.go)
+	cloud  cloudFlows  // Google authorizations in progress (cloud.go)
+	google googleWatch // the Google accounts' changes and checks (google.go)
 
 	push        *pusher          // notifications on the user's devices (push.go); nil without the workspace
 	notifyClock func() time.Time // the time of notify's decisions (notify.go); nil: now
@@ -103,6 +104,7 @@ func newCore(cfg *Config, store *Store) *core {
 	c.github = newGitHubClient()
 	c.pool = newPool(store, m.Servers)
 	c.pool.appToken = c.github.toolToken // the GitHub tool on the app
+	c.pool.authHold = c.googleHold       // a Google account to connect again (google.go)
 	// Local servers are services, reached on their node.
 	c.pool.dialLocal = func(ctx context.Context, name string, _ json.RawMessage) (mcp.Transport, error) {
 		return c.dialService(ctx, name)
@@ -154,9 +156,10 @@ func (c *core) checkNodes(ctx context.Context) {
 	}
 	c.followUpdates()
 	c.autoUpdates(time.Now())
-	c.replaceStranded()       // placement.go
-	c.harnessTick(time.Now()) // retries due, time budgets (task_retry.go)
-	c.placeServices()         // also when no node answers: a node gone too long loses its services
+	c.replaceStranded()           // placement.go
+	c.harnessTick(time.Now())     // retries due, time budgets (task_retry.go)
+	c.placeServices()             // also when no node answers: a node gone too long loses its services
+	c.googleTick(ctx, time.Now()) // the Google accounts' tokens, now and then (google.go)
 }
 
 // refreshNode records whether a node answers, and what it offers. A node

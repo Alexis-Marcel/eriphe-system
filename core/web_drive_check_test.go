@@ -177,13 +177,7 @@ func TestDriveTest(t *testing.T) {
 
 	// Connected: the account.
 	tok, _ := json.Marshal(map[string]string{"client_id": testClientID, "client_secret": testClientSecret, "refresh_token": checkRefresh})
-	err := c.putDrive("fr", func(fc *filesConfig) {
-		fc.Accounts = []filesAccount{{Name: driveAccount, Provider: "google", Scopes: []string{scopeDrive}}}
-		fc.Accounts[0].Auth.TokenEnv = driveTokenEnv
-	}, credentials{"env:" + driveTokenEnv: string(tok)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	putLegacyDrive(t, c.core, "fr", string(tok))
 	body = driveTestBody(t, tw, csrf)
 	wantLines(t, body, "Connecté en tant que sam@example.com (Sam Doe). 3,2 Go utilisés sur 15 Go.")
 	if strings.Contains(body, "test-err") || strings.Contains(body, "/settings/drive/connect") {
@@ -244,6 +238,24 @@ func TestAuthErrorCode(t *testing.T) {
 	}
 }
 
+// putLegacyDrive gives the files server one account the way Drive was
+// connected before Google accounts: named "google", its token in
+// FILES_GOOGLE_TOKEN.
+func putLegacyDrive(t *testing.T, c *core, lang, tok string) {
+	t.Helper()
+	const ref = "service.fichiers.files_google_token"
+	if err := currentVault().set(ref, tok); err != nil {
+		t.Fatal(err)
+	}
+	err := c.putDrive(lang, func(fc *filesConfig) {
+		fc.Accounts = []filesAccount{{Name: "google", Provider: "google", Scopes: []string{scopeDrive}}}
+		fc.Accounts[0].Auth.TokenEnv = driveTokenEnv
+	}, map[string]EnvValue{driveTokenEnv: {File: vaultPrefix + ref}})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // testDriveToken: each answer of Google's token endpoint and of Drive's
 // about, as a line; the secrets and tokens are never in it.
 func TestDriveTestToken(t *testing.T) {
@@ -265,13 +277,7 @@ func TestDriveTestToken(t *testing.T) {
 	connect := func(refresh string) {
 		t.Helper()
 		tok, _ := json.Marshal(map[string]string{"client_id": testClientID, "client_secret": testClientSecret, "refresh_token": refresh})
-		err := c.putDrive("en", func(fc *filesConfig) {
-			fc.Accounts = []filesAccount{{Name: driveAccount, Provider: "google", Scopes: []string{scopeDrive}}}
-			fc.Accounts[0].Auth.TokenEnv = driveTokenEnv
-		}, credentials{"env:" + driveTokenEnv: string(tok)})
-		if err != nil {
-			t.Fatal(err)
-		}
+		putLegacyDrive(t, c.core, "en", string(tok))
 	}
 	answer := func(status int, body string) func(http.ResponseWriter) {
 		return func(w http.ResponseWriter) {

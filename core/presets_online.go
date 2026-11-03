@@ -386,7 +386,7 @@ var onlineServices = []onlineService{
 
 // The categories of the presets that come with Eriphe.
 var presetCategories = map[string]string{"linear": "tasks", "notion": "tasks", "mail": "mail", "calendar": "mail",
-	"gdrive": "files", "github": "dev", "home-assistant": "home"}
+	"gdrive": "files", "google": "mail", "github": "dev", "home-assistant": "home"}
 
 func init() {
 	at := len(toolPresets)

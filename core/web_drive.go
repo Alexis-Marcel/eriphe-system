@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"slices"
@@ -66,22 +65,7 @@ func (w *web) handleDrive(rw http.ResponseWriter, r *http.Request, s *session) {
 // downloads, or its client id and secret typed. The secret is never shown
 // back nor logged.
 func (w *web) handleDriveClient(rw http.ResponseWriter, r *http.Request, s *session) {
-	r.Body = http.MaxBytesReader(rw, r.Body, 64<<10)
-	var (
-		app       oauthApp
-		redirects []string
-		err       error
-	)
-	if f, _, ferr := r.FormFile("client_json"); ferr == nil {
-		raw, rerr := io.ReadAll(io.LimitReader(f, 32<<10))
-		f.Close()
-		if rerr != nil {
-			raw = nil
-		}
-		app, redirects, err = parseGoogleClient(raw)
-	} else {
-		app, err = checkGoogleClient(r.PostFormValue("client_id"), r.PostFormValue("client_secret"))
-	}
+	app, redirects, err := readGoogleClient(rw, r) // web_google.go
 	if err == nil {
 		err = storeGoogleClient(app)
 	}
@@ -98,50 +82,16 @@ func (w *web) handleDriveClient(rw http.ResponseWriter, r *http.Request, s *sess
 	w.render(rw, r, s, "settings", "drive-wrap-frag", page{Data: v})
 }
 
+// handleDriveConnect connects a Google account for Drive: the Google flow
+// (web_google.go) with Drive alone, back to this page.
 func (w *web) handleDriveConnect(rw http.ResponseWriter, r *http.Request, s *session) {
-	if !w.atAddress(rw, r) {
-		return
-	}
-	in := driveConnect{Origin: w.origin(r), Write: r.PostFormValue("write") != "", Lang: w.lang(r)}
-	in.Binding = w.oauthBinding(rw, r)
-	authURL, err := w.c.startDrive(in)
-	if err != nil {
+	in := googleConnect{Services: []string{googleDrive}, Write: r.PostFormValue("write") != "",
+		Hint: r.PostFormValue("account"), Back: "/settings/drive"}
+	w.startGoogleFlow(rw, r, s, in, "drive-connect-result", func(err error) any {
 		v := w.driveView(r)
 		v.Error = w.driveError(r, err)
-		w.render(rw, r, s, "settings", "drive-connect-result", page{Data: v})
-		return
-	}
-	rw.Header().Set("HX-Redirect", authURL)
-	rw.WriteHeader(http.StatusOK)
-}
-
-// handleDriveCallback is the end of a Google authorization, at the
-// workspace's /oauth/callback, where Google sends the browser back.
-func (w *web) handleDriveCallback(rw http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	binding := ""
-	if c, err := r.Cookie(oauthCookie); err == nil {
-		binding = hashToken(c.Value)
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
-	defer cancel()
-	err := w.c.finishDrive(ctx, w.origin(r), q.Get("state"), q.Get("code"), q.Get("error"), binding)
-	v := oauthDone{Name: "Google Drive", Back: "/settings/drive"}
-	if err != nil {
-		if errors.Is(err, errBadState) {
-			rw.WriteHeader(http.StatusBadRequest)
-			err = errors.New(tr(w.lang(r), "oauth.expired"))
-		}
-		v.Error = w.driveError(r, err)
-		log.Printf("web: Google Drive: authorization failed")
-	} else {
-		// A page of this site, then the settings: the session cookie
-		// (SameSite=Strict) is not sent on the redirect from Google.
-		v.Next = "/settings/drive?connected=1"
-		log.Printf("web: Google Drive: connected")
-	}
-	w.notify()
-	w.render(rw, r, nil, "oauth", "", page{Title: "oauth.title", Data: v})
+		return v
+	})
 }
 
 // driveError words a refusal: one of ours by its key, else as it is.
@@ -154,6 +104,8 @@ func (w *web) driveError(r *http.Request, err error) string {
 }
 
 type driveBrowse struct {
+	Account      string   // the account browsed
+	Accounts     []string // the accounts, when there are several
 	Parent, Name string
 	Folders      []driveItem
 	Next         string
@@ -166,21 +118,30 @@ func (w *web) handleDriveBrowse(rw http.ResponseWriter, r *http.Request, s *sess
 	q := r.URL.Query()
 	v := driveBrowse{Parent: q.Get("parent"), Name: q.Get("name"), Given: map[string]string{}}
 	st := w.c.driveState()
-	v.CanWrite = st.CanWrite
+	v.Account, _ = st.driveAccountName(q.Get("account"))
+	if v.Account == "" && len(st.Accounts) > 0 {
+		v.Account = st.Accounts[0].Name
+	}
+	if len(st.Accounts) > 1 {
+		for _, a := range st.Accounts {
+			v.Accounts = append(v.Accounts, a.Name)
+		}
+	}
+	v.CanWrite = st.canWrite(v.Account)
 	for _, f := range st.Folders {
 		v.Given[f.ID] = f.Access
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	var err error
-	if v.Folders, v.Next, err = w.c.browseDrive(ctx, v.Parent, q.Get("page")); err != nil {
+	if v.Folders, v.Next, err = w.c.browseDrive(ctx, v.Account, v.Parent, q.Get("page")); err != nil {
 		v.Error = w.driveError(r, err)
 	}
 	w.render(rw, r, s, "settings", "drive-browse", page{Data: v})
 }
 
 func (w *web) handleDriveAdd(rw http.ResponseWriter, r *http.Request, s *session) {
-	err := w.c.addDriveFolder(r.PostFormValue("id"), r.PostFormValue("name"), r.PostFormValue("access"))
+	err := w.c.addDriveFolder(r.PostFormValue("account"), r.PostFormValue("id"), r.PostFormValue("name"), r.PostFormValue("access"))
 	w.driveFolders(rw, r, s, err)
 }
 

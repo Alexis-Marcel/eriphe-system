@@ -102,7 +102,7 @@ var toolStrings = map[string]map[string]string{
 		"pick.soon":             "Bientôt",
 		"pick.change":           "Changer",
 		"pick.mail.soonwhy":     "Bientôt : Outlook, Hotmail et Microsoft 365 n'acceptent plus de mot de passe pour les applications depuis septembre 2024. Il leur faut une autorisation (OAuth) qu'Eriphe ne sait pas encore prêter à ses programmes locaux.",
-		"pick.calendar.soonwhy": "Bientôt : Google et Microsoft demandent une autorisation (OAuth) qu'Eriphe ne sait pas encore prêter à ses programmes locaux.",
+		"pick.calendar.soonwhy": "Bientôt : Microsoft demande une autorisation (OAuth) qu'Eriphe ne sait pas encore prêter à ses programmes locaux. Google Agenda se connecte avec ton compte Google.",
 
 		"mail.address":               "Adresse mail",
 		"mail.password":              "Mot de passe d'application",
@@ -118,7 +118,7 @@ var toolStrings = map[string]map[string]string{
 		"mail.username":              "Identifiant de connexion",
 		"mail.usernameplaceholder":   "Vide : l'adresse mail",
 		"mailp.gmail":                "Gmail",
-		"mailp.gmail.domains":        "gmail.com, Google Workspace",
+		"mailp.gmail.domains":        "Avec un mot de passe d'application",
 		"mailp.gmail.note":           "La validation en deux étapes doit être active.",
 		"mailp.gmail.placeholder":    "prenom@gmail.com",
 		"mailp.gmail.howtotitle":     "Créer un mot de passe d'application Google",
@@ -201,7 +201,7 @@ var toolStrings = map[string]map[string]string{
 		"calp.caldav.urlhint":            "L'adresse CalDAV donnée par ton hébergeur (https).",
 		"calp.caldav.steps":              "L'aide de ton hébergeur donne l'adresse CalDAV (cherche « CalDAV » ou « synchroniser l'agenda »).\nUtilise un mot de passe d'application s'il en propose.",
 		"calp.google":                    "Google Agenda",
-		"calp.google.desc":               "Bientôt",
+		"calp.google.desc":               "Avec ton compte Google, sans mot de passe.",
 		"calp.microsoft":                 "Outlook, Microsoft 365",
 		"calp.microsoft.desc":            "Bientôt",
 
@@ -307,7 +307,7 @@ var toolStrings = map[string]map[string]string{
 		"pick.soon":             "Soon",
 		"pick.change":           "Change",
 		"pick.mail.soonwhy":     "Soon: Outlook, Hotmail and Microsoft 365 no longer accept app passwords since September 2024. They need an authorization (OAuth) Eriphe cannot lend its local programs yet.",
-		"pick.calendar.soonwhy": "Soon: Google and Microsoft need an authorization (OAuth) Eriphe cannot lend its local programs yet.",
+		"pick.calendar.soonwhy": "Soon: Microsoft needs an authorization (OAuth) Eriphe cannot lend its local programs yet. Google Calendar connects with your Google account.",
 
 		"mail.address":              "Mail address",
 		"mail.password":             "App password",
@@ -322,7 +322,7 @@ var toolStrings = map[string]map[string]string{
 		"mail.smtpporthint":         "465 by default (TLS); 587 for STARTTLS.",
 		"mail.username":             "Login",
 		"mail.usernameplaceholder":  "Empty: the mail address",
-		"mailp.gmail.domains":       "gmail.com, Google Workspace",
+		"mailp.gmail.domains":       "With an app password",
 		"mailp.gmail.note":          "2-Step Verification must be on.",
 		"mailp.gmail.howtotitle":    "Create a Google app password",
 		"mailp.gmail.steps":         "Turn on 2-Step Verification for your Google account if it is not (Security → 2-Step Verification).\nOpen the “App passwords” page with the button below.\nName it “Eriphe”, then click Create.\nCopy the 16 letters shown and paste them here (spaces do not matter).\nWork account (Google Workspace): if the page does not exist, your administrator turned app passwords off.",
@@ -378,7 +378,7 @@ var toolStrings = map[string]map[string]string{
 		"calp.caldav.urlhint":    "The CalDAV address your host gives (https).",
 		"calp.caldav.steps":      "Your host's help gives the CalDAV address (look for “CalDAV” or “sync your calendar”).\nUse an app password if it offers them.",
 		"calp.google":            "Google Calendar",
-		"calp.google.desc":       "Soon",
+		"calp.google.desc":       "With your Google account, no password.",
 		"calp.microsoft.desc":    "Soon",
 
 		"presets.badaddress":    "That mail address does not look right.",

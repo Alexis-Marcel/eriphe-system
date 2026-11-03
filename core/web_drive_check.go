@@ -158,10 +158,15 @@ func (c *core) testDrive(ctx context.Context, lang, origin string) driveTest {
 // then the account it is for.
 func (c *core) testDriveToken(ctx context.Context, d *driveChecker) {
 	add, hc, out, lang := d.add, d.hc, &d.out, d.lang
-	spec, _ := decodeRun(c.conf().Servers[filesServer].Run)
+	srv := c.conf().Servers[filesServer]
+	spec, _ := decodeRun(srv.Run)
 	raw, err := "", errors.New("no token")
-	if f := spec.Env[driveTokenEnv].File; f != "" {
-		raw, err = readSecret(f)
+	// The first account's (a Drive of several accounts tests that one;
+	// Settings → Tools → Google shows the state of each).
+	if fc, ok := filesConfigOf(srv); ok && len(fc.Accounts) > 0 {
+		if f := spec.Env[fc.Accounts[0].Auth.TokenEnv].File; f != "" {
+			raw, err = readSecret(f)
+		}
 	}
 	var tok struct {
 		ClientID     string `json:"client_id"`
