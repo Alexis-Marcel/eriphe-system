@@ -22,7 +22,7 @@
 {{define "feed"}}
 <nav class="pill-tabs" aria-label="{{t "happened.kinds"}}">
   <a href="/settings/journal?range={{.Range}}" {{if not .Kind}}aria-current="true"{{end}}>{{t "happened.kind.all"}}</a>
-  {{range list "task" "notification" "watch" "intention" "message" "access"}}<a href="/settings/journal?range={{$.Range}}&amp;kind={{.}}" {{if eq . $.Kind}}aria-current="true"{{end}}>{{t (printf "happened.kind.%s" .)}}</a>{{end}}
+  {{range list "task" "notification" "watch" "intention" "message" "learned" "access"}}<a href="/settings/journal?range={{$.Range}}&amp;kind={{.}}" {{if eq . $.Kind}}aria-current="true"{{end}}>{{t (printf "happened.kind.%s" .)}}</a>{{end}}
 </nav>
 {{if eq .Kind "access"}}
 <p class="muted small">{{t "journal.lead"}}</p>

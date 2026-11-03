@@ -150,6 +150,7 @@ func newMCPServer(c *core) *mcp.Server {
 			return map[string]string{"result": "stopping"}, c.stopByBrain(ctx, in.TaskID)
 		})
 	registerMemoryTools(s, c)     // remember, recall, update_memory, forget, commitments
+	registerLearningTools(s, c)   // learned, unlearn
 	registerAttachmentTools(s, c) // read_attachment
 	registerSkillTools(s, c)      // list_skills, read_skill
 	registerNotifyTools(s, c)     // notify, notifications, rule

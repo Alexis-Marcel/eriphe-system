@@ -65,7 +65,7 @@ type happenedPage struct {
 }
 
 var (
-	happenedKinds  = []string{feedTask, feedNotification, feedIntention, feedMessage, feedWatch, feedAccess}
+	happenedKinds  = []string{feedTask, feedNotification, feedIntention, feedMessage, feedWatch, feedLearned, feedAccess}
 	happenedRanges = []string{"last", "day", "week"}
 )
 
@@ -144,6 +144,8 @@ func happenedLink(ref string) string {
 		return "/memory?view=commitments"
 	case "watch":
 		return "/settings/watches#watch-" + id
+	case "learned":
+		return "/settings/learned#learned-" + id
 	}
 	return ""
 }

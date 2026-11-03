@@ -366,6 +366,9 @@ func (c *core) brainUpdate(in updateIn) (map[string]any, error) {
 	if d.Status != memActive {
 		return nil, fmt.Errorf("not changed: %s; propose a new memory with remember instead, or ask %s", d.Why, c.conf().User)
 	}
+	if d.Trust == trustOwner {
+		p.Ref = d.Ref // the user's message, for the learning journal
+	}
 	x, err := c.mem.update(in.ID, p, "brain", strings.TrimSpace(in.Reason))
 	if err != nil {
 		return nil, err
@@ -436,7 +439,11 @@ func (c *core) brainForget(in forgetIn) (map[string]any, error) {
 	if d.Status != memActive {
 		return nil, fmt.Errorf("not forgotten: %s; ask %s", d.Why, c.conf().User)
 	}
-	if err := c.mem.forget(in.ID, "brain", in.Reason); err != nil {
+	ownRef := ""
+	if d.Trust == trustOwner {
+		ownRef = d.Ref
+	}
+	if err := c.mem.forgetRef(in.ID, "brain", in.Reason, ownRef); err != nil {
 		return nil, err
 	}
 	return map[string]any{"result": fmt.Sprintf("memory %d forgotten; erased in 30 days, restorable until then in the workspace", in.ID)}, nil

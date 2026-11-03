@@ -129,7 +129,7 @@ func (w *web) parse() error {
 }
 
 // sharedTemplates are the files of definitions every page has, not pages.
-var sharedTemplates = []string{"parts", "catalog", "tools", "google", "agents", "remote", "folders", "push", "skills", "watches", "cards", "context", "convo", "activity"}
+var sharedTemplates = []string{"parts", "catalog", "tools", "google", "agents", "remote", "folders", "push", "skills", "watches", "cards", "context", "convo", "activity", "learned"}
 
 // notify wakes the event streams at once, rather than at their next tick.
 func (w *web) notify() {
@@ -237,6 +237,7 @@ func (w *web) routes() http.Handler {
 	w.googleRoutes(mux)   // web_google.go
 	w.folderRoutes(mux)   // web_folders.go
 	w.skillRoutes(mux)    // web_skills.go
+	w.learnedRoutes(mux)  // web_learned.go
 	w.githubRoutes(mux)   // web_github.go
 	w.welcomeRoutes(mux)  // web_welcome.go
 	w.pushRoutes(mux)     // web_push.go

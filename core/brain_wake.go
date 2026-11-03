@@ -72,7 +72,7 @@ func (c *core) deliverIntentions(ctx context.Context, a Assistant, t *TaskRow) (
 		return false, err
 	}
 	c.endWatchTurn() // a watch turn whose end was not seen
-	p, err := c.mem.wakePacket()
+	p, err := c.wakePacket()
 	if err != nil {
 		return false, err
 	}
@@ -93,6 +93,7 @@ func (c *core) deliverIntentions(ctx context.Context, a Assistant, t *TaskRow) (
 		return false, err
 	}
 	c.mem.surfaced(due, "wake")
+	c.learnedTold(p.Learned)
 	if _, err := c.mem.recordHeartbeat("Réveil pour les intentions " + strings.Join(ids, ", ") + "."); err != nil {
 		log.Printf("memory: heartbeat: %v", err)
 	}

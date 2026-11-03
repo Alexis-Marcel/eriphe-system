@@ -78,7 +78,11 @@ const (
 	cardsOfferedKey = "cards_offered_at"
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn}
+
+// cardUnlearn is an undo of the learning journal the brain proposed on a
+// tainted turn (learning_tools.go).
+const cardUnlearn = "unlearn"
 
 // cardMu makes deciding a card one thing at a time: a click and a "oui"
 // at the same moment decide it once.
@@ -241,6 +245,23 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		p.text = func(lang string) string { return tr(lang, "ctx.ha.signal."+m.Signal) + " ← " + m.Entity }
 	case cardTaskStart:
 		return c.taskStartProposal(p) // task_start.go
+	case cardUnlearn:
+		if c.mem == nil {
+			return p
+		}
+		e, err := c.mem.learning(id)
+		if err != nil {
+			return p
+		}
+		p.Pending, p.Why = e.Undo == undoProposed && e.Status != learnReverted, e.UndoWhy
+		p.Outcome = cardApproved
+		if e.Undo == undoRejected {
+			p.Outcome = cardRejected
+		}
+		if e.Trust == trustExternal {
+			p.Tainted = "external:" + e.Target()
+		}
+		p.text = func(lang string) string { return fmt.Sprintf(tr(lang, "card.unlearn"), learnedSummary(e, lang)) }
 	}
 	return p
 }
@@ -310,6 +331,22 @@ func (c *core) pendingProposals() []proposal {
 	for _, id := range c.proposedStarts() { // task_start.go
 		add(cardTaskStart, id)
 	}
+	if m := c.mem; m != nil {
+		rows, err := m.db.Query(`SELECT id FROM learning_log WHERE undo = ? AND status != ? ORDER BY id`, undoProposed, learnReverted)
+		if err == nil {
+			var ids []int64
+			for rows.Next() {
+				var id int64
+				if rows.Scan(&id) == nil {
+					ids = append(ids, id)
+				}
+			}
+			rows.Close()
+			for _, id := range ids {
+				add(cardUnlearn, id)
+			}
+		}
+	}
 	return out
 }
 
@@ -353,6 +390,12 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.decideMapping(ctx, id, approve)
 	case cardTaskStart:
 		return c.decideTaskStart(id, approve)
+	case cardUnlearn:
+		if approve {
+			_, err := c.unlearn(id, "owner", p.Why, nil)
+			return err
+		}
+		return c.mem.setUndo(id, undoRejected, p.Why)
 	}
 	return fmt.Errorf("no proposal kind %q", kind)
 }

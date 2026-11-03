@@ -407,7 +407,7 @@ func parseMsgRef(ref string) (int, bool) {
 }
 
 // rememberRequest: wording of mine that asks Eriphe to keep something.
-var rememberRequest = regexp.MustCompile(`(?i)\b(retiens|retenir|souviens|souvenir|rappelle[- ]toi|mémorise|memorise|mémoriser|note (que|bien|ça|ca)|garde en (tête|tete|mémoire|memoire)|n'oublie pas|oublie pas|remember|keep in mind|note that|don't forget|do not forget|mets? (le |la |ça |ca )?(dans|en) (ta )?mémoire|enregistre|ajoute à ta mémoire|à l'avenir|a l'avenir|la prochaine fois|désormais|dorénavant|corrige|mets à jour|oublie)\b`)
+var rememberRequest = regexp.MustCompile(`(?i)\b(retiens|retenir|souviens|souvenir|rappelle[- ]toi|mémorise|memorise|mémoriser|note (que|bien|ça|ca)|garde en (tête|tete|mémoire|memoire)|n'oublie pas|oublie pas|remember|keep in mind|note that|don't forget|do not forget|mets? (le |la |ça |ca )?(dans|en) (ta )?mémoire|enregistre|ajoute à ta mémoire|à l'avenir|a l'avenir|la prochaine fois|désormais|dorénavant|corrige|mets à jour|oublie|forget)\b`)
 
 // writeDecision is how a brain write is recorded, or why it is refused.
 type writeDecision struct {
@@ -427,7 +427,6 @@ func (c *core) decideBrainWrite(kind, ref string, scan scanResult) (writeDecisio
 	if scan.Reject != "" {
 		return d, fmt.Errorf("refused: %s", scan.Reject)
 	}
-	from, to, _, _ := c.turn.snapshot()
 	msg, owner := c.ownerMessage(d.Ref)
 	if owner {
 		d.Trust = trustOwner
@@ -436,8 +435,7 @@ func (c *core) decideBrainWrite(kind, ref string, scan scanResult) (writeDecisio
 	if ownerKind(kind) && !owner {
 		return d, errOwnerOnly
 	}
-	// My message of this very turn asked for it.
-	asked := owner && msg.Seq >= from && msg.Seq <= to && from > 0 && rememberRequest.MatchString(msg.Text)
+	asked := owner && c.askedThisTurn(msg)
 	if tainted := c.turnTaint(); len(tainted) > 0 && !asked {
 		d.Status, d.Trust = memProposed, trustExternal
 		d.Why = "this turn read external content (" + strings.Join(tainted, ", ") + ")"
@@ -451,6 +449,14 @@ func (c *core) decideBrainWrite(kind, ref string, scan scanResult) (writeDecisio
 		d.Why = "it reads like an instruction, and does not come from the user's own message"
 	}
 	return d, nil
+}
+
+// askedThisTurn tells whether my message, of this very turn, asks Eriphe
+// to keep, correct or forget something: that lifts a tainted turn's
+// "only proposed" for the memory, never for acting.
+func (c *core) askedThisTurn(msg *Message) bool {
+	from, to, _, _ := c.turn.snapshot()
+	return msg.Seq >= from && msg.Seq <= to && from > 0 && rememberRequest.MatchString(msg.Text)
 }
 
 // extractionDecision applies the rules to an extraction's operation: what

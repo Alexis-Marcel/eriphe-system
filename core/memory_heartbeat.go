@@ -14,10 +14,11 @@ import (
 type wakePacket struct {
 	Now         time.Time
 	Profile     []*Memory
-	Due         []*Intention // due, and not told yet: why it wakes
-	Pending     []*Intention // due, told before, still not closed
-	Episodes    []*Memory    // the last 24 h
-	Lessons     []*Memory    // lessons with subject heartbeat
+	Due         []*Intention  // due, and not told yet: why it wakes
+	Pending     []*Intention  // due, told before, still not closed
+	Episodes    []*Memory     // the last 24 h
+	Lessons     []*Memory     // lessons with subject heartbeat
+	Learned     []*learnEntry // what was learned since the last brief, not told yet (learning.go)
 	ProfileText string
 }
 
@@ -101,6 +102,22 @@ func (p *wakePacket) render(user string) string {
 		return fmt.Sprintf("- [%s #%d] %s", x.OccurredAt.Local().Format("15:04"), x.ID, quote(x))
 	})
 	section("Leçons pour le battement de cœur :", p.Lessons, plain)
+	b.WriteString(learnedBlock(p.Learned))
+	return b.String()
+}
+
+// learnedBlock is what was learned, for a wake or a brief: to tell in a
+// sentence each, never as a list of ids.
+func learnedBlock(xs []*learnEntry) string {
+	if len(xs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nCe que tu as appris depuis le dernier point (dis-le en une phrase chacun, sans numéros ; `learned` et `unlearn` s'il veut revenir dessus) :\n```text\n")
+	for _, e := range xs {
+		b.WriteString(strings.ReplaceAll(learnedLine(e), "```", "'''") + "\n")
+	}
+	b.WriteString("```\n")
 	return b.String()
 }
 
