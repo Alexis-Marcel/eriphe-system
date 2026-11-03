@@ -611,6 +611,10 @@ type folderView struct {
 	Copies []copyView   `json:"copies,omitempty"`
 	CopyTo []copyChoice `json:"-"`
 	ICloud bool         `json:"icloud_hint,omitempty"`
+	// Machines: a machine's folder, every machine holding it, its own
+	// first then those keeping a copy, each online or not and up to date
+	// or not: a task may run on any of them up to date (folder_copies.go).
+	Machines []folderHolder `json:"machines,omitempty"`
 }
 
 // driveFolder is the Drive folder of that name, if any.
@@ -646,6 +650,7 @@ func (c *core) folderViews() ([]folderView, error) {
 			Lend: lendHint(resFolder, f.Name, f.Access)}
 		fv.Copies, fv.CopyTo = sv.copiesOf(f)
 		fv.ICloud = sv.iCloudHint(f)
+		fv.Machines = sv.holdersOf(f)
 		out = append(out, fv)
 	}
 	ready := false
