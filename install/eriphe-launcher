@@ -11,14 +11,15 @@
 #
 # It creates and keeps running the containers install.sh makes on a Linux
 # host, with install.sh's own functions (sourced): eriphe-core in core mode,
-# with no Docker access; eriphe-node, which reaches Docker only through the
-# socket proxy; the proxy; the task network. Their data is under /data, given
+# with no Docker access; eriphe-node, which has no Docker access either:
+# it asks eriphe-node engine; the engine, the only one with the socket; the
+# task network. Their data is under /data, given
 # to them at its path on the host, which it reads from its own container.
 # It listens on no port and runs nothing else; it is their updater: it
 # applies eriphe-core's and the node's update requests as install.sh's
 # updater does, then updates itself. It keeps the list of the folders of
-# this machine shared with Eriphe (eriphe share): the socket proxy lets the
-# node's tasks have those folders only, nothing else of the host.
+# this machine shared with Eriphe (eriphe share): the engine gives the
+# node's tasks those folders only, nothing else of the host.
 #
 #   eriphe-launcher run                 the container's command
 #   eriphe-launcher update              update now, as the workspace's Update
@@ -42,8 +43,9 @@ SWAP=eriphe-launcher-swap
 OS=Linux NATIVE='' INSTALL=docker
 MOUNTINFO=${ERIPHE_MOUNTINFO:-/proc/self/mountinfo}
 # The folders shared, one host path a line (:ro: a read-only one, kept from
-# a place of an earlier install); the proxy's copy of it, in a folder of the
-# data the node never sees; the folders Syncthing has now (it may copy them).
+# a place of an earlier install); the engine's copy of it, in a folder of
+# the data the node never sees (proxy/, its name from the socket proxy of
+# before the engine); the folders Syncthing has now (it may copy them).
 FOLDERS=$CONF/folders
 BINDS=$DATA/proxy/binds
 COPIED_NOW=$CONF/copied
@@ -143,7 +145,7 @@ settings() {
 	set -- "$@" --version "$pin" --labels "${ERIPHE_NODE_LABELS:-}" --model-server "${ERIPHE_MODEL_SERVER:-}" --no-share
 	parse_args "$@" # ERIPHE_BIND too
 	BIND_SET=1      # not kept from a run before either
-	FOLDER_HELPER=1 # install.sh's compose: the node mounts no folder, the proxy reads $BINDS
+	FOLDER_HELPER=1 # install.sh's compose: the node mounts no folder, the engine reads $BINDS
 	COPIED=$(copied) || COPIED=$(cat "$COPIED_NOW" 2>/dev/null || true)
 	SHARE_COMMAND="docker exec ${SELF_NAME:-eriphe} eriphe share"
 	[ -z "${ERIPHE_SHARES:-}" ] ||
@@ -160,8 +162,8 @@ settings() {
 # ---- The folders shared (eriphe share)
 #
 # eriphe-node mounts no shared folder: a task gets its folders from the
-# Docker daemon when its container is made, through the socket proxy, which
-# allows bind mounts from the folders of the launcher's list only ($BINDS,
+# Docker daemon when eriphe-node engine makes its container, which it does
+# with bind mounts from the folders of the launcher's list only ($BINDS,
 # read again at each request). What the node does in a folder (its checks,
 # a snapshot, a restore, a results subfolder) runs in a short-lived
 # container of its image given that folder only (node/helper.go). Sharing a
@@ -177,7 +179,7 @@ settings() {
 # folders: the launcher's list, one a line.
 folders() { [ ! -f "$FOLDERS" ] || grep -v '^$' "$FOLDERS" || true; }
 
-# write_binds: the proxy's copy of the list, replaced whole (it reads it
+# write_binds: the engine's copy of the list, replaced whole (it reads it
 # again at each request).
 write_binds() {
 	mkdir -p "${BINDS%/*}"
@@ -428,7 +430,7 @@ stack_up() {
 	printf '%s\n' "$COPIED" >"$COPIED_NOW"
 }
 
-# sync_folders: the proxy's list written again, and Syncthing alone made
+# sync_folders: the engine's list written again, and Syncthing alone made
 # again if the folders it may copy changed (nothing else restarts).
 sync_folders() {
 	write_binds
@@ -743,7 +745,7 @@ share_ready() {
 
 # share_add ARGS...: each folder checked here (folder_ok), then by the
 # node's own checks on the host (folder_check), put in the list (the
-# proxy's too), then shared by the node, with the level and copies asked; a
+# engine's too), then shared by the node, with the level and copies asked; a
 # folder the node does not share leaves the list again.
 share_add() {
 	level='' copy='' fname='' named='' asked=''
@@ -806,7 +808,7 @@ share_add() {
 	want=$(printf '%s\n' "$want" | grep -v '^$' || true)
 	[ "$want" = "$cur" ] || set_folders "$want"
 	write_binds
-	# The node's own share add, the proxy allowing the folders: its checks
+	# The node's own share add, the engine allowing the folders: its checks
 	# (in helpers given the folder), the level and the copies, its list.
 	set --
 	[ -z "$level" ] || set -- "$level"
@@ -829,7 +831,7 @@ share_add() {
 
 # share_remove NAME|FOLDER...: the node stops sharing them (no new task
 # gets them; a task at work keeps them until it ends), then they leave the
-# list, the proxy's and Syncthing's.
+# list, the engine's and Syncthing's.
 share_remove() {
 	if [ $# -eq 0 ]; then
 		share_usage >&2
