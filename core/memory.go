@@ -236,6 +236,7 @@ var memoryMigrations = []memoryMigration{{sql: `CREATE TABLE memories (
 	{fn: migrateSearchKeys},
 	{sql: `ALTER TABLE memories ADD COLUMN basis TEXT NOT NULL DEFAULT ''`},
 	{fn: migrateIntentions},
+	{sql: learningSchema}, // learning.go
 }
 
 // migrateSearchKeys (schema 2) gives the full-text index its keys: the
@@ -650,6 +651,11 @@ func (m *memStore) add(x *Memory, who string) error {
 			return err
 		}
 	}
+	if x.Status == memActive {
+		if err := m.learnWrite(tx, x, old, who, ""); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
@@ -682,6 +688,8 @@ type memoryPatch struct {
 
 	Keywords   *string
 	Importance *int
+
+	Ref string // what asked for the change (msg:N), for the learning journal; not kept on the memory
 }
 
 func (m *memStore) update(id int64, p memoryPatch, who, reason string) (*Memory, error) {
@@ -690,6 +698,14 @@ func (m *memStore) update(id int64, p memoryPatch, who, reason string) (*Memory,
 		return nil, err
 	}
 	defer tx.Rollback()
+	x, err := m.updateTx(tx, id, p, who, reason)
+	if err != nil {
+		return nil, err
+	}
+	return x, tx.Commit()
+}
+
+func (m *memStore) updateTx(tx *sql.Tx, id int64, p memoryPatch, who, reason string) (*Memory, error) {
 	before, err := scanMemory(tx.QueryRow(`SELECT `+memColumns+` FROM memories WHERE id = ?`, id))
 	if err != nil {
 		return nil, errNoMemory
@@ -757,7 +773,10 @@ func (m *memStore) update(id int64, p memoryPatch, who, reason string) (*Memory,
 	if err := m.log(tx, id, who, "update", before, &x, reason); err != nil {
 		return nil, err
 	}
-	return &x, tx.Commit()
+	if err := m.learnUpdate(tx, before, &x, who, reason, p.Ref); err != nil {
+		return nil, err
+	}
+	return &x, nil
 }
 
 // approve makes a proposed memory active, as the owner, and replaces what
@@ -809,16 +828,31 @@ func (m *memStore) approve(id int64, who string) (*Memory, error) {
 			return nil, err
 		}
 	}
+	if err := m.learnWrite(tx, x, old, who, "approved"); err != nil {
+		return nil, err
+	}
 	return x, tx.Commit()
 }
 
 // forget hides a memory at once and purges it after memoryPurgeAfter.
 func (m *memStore) forget(id int64, who, reason string) error {
+	return m.forgetRef(id, who, reason, "")
+}
+
+// forgetRef is forget, with what asked for it (msg:N) for the learning journal.
+func (m *memStore) forgetRef(id int64, who, reason, ref string) error {
 	tx, err := m.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err := m.forgetTx(tx, id, who, reason, ref); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (m *memStore) forgetTx(tx *sql.Tx, id int64, who, reason, ref string) error {
 	before, err := scanMemory(tx.QueryRow(`SELECT `+memColumns+` FROM memories WHERE id = ?`, id))
 	if err != nil {
 		return errNoMemory
@@ -835,7 +869,7 @@ func (m *memStore) forget(id int64, who, reason string) error {
 	if err := m.log(tx, id, who, "forget", before, nil, reason); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return m.learnForget(tx, before, who, reason, ref)
 }
 
 // restore brings back a forgotten memory before it is purged.
@@ -847,13 +881,27 @@ func (m *memStore) restore(id int64, who string) error {
 	if x.Status != memDeleted {
 		return nil
 	}
-	_, err = m.db.Exec(`UPDATE memories SET status = 'active', deleted_at = NULL, updated_at = ? WHERE id = ?`, m.now().Unix(), id)
-	if err == nil {
-		after := *x
-		after.Status = memActive
-		m.log(m.db, id, who, "restore", nil, &after, "")
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
 	}
-	return err
+	defer tx.Rollback()
+	if err := m.restoreTx(tx, x, who); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (m *memStore) restoreTx(tx *sql.Tx, x *Memory, who string) error {
+	if _, err := tx.Exec(`UPDATE memories SET status = 'active', deleted_at = NULL, updated_at = ? WHERE id = ?`, m.now().Unix(), x.ID); err != nil {
+		return err
+	}
+	after := *x
+	after.Status, after.DeletedAt = memActive, time.Time{}
+	if err := m.log(tx, x.ID, who, "restore", nil, &after, ""); err != nil {
+		return err
+	}
+	return m.learnWrite(tx, &after, nil, who, "restored")
 }
 
 // purge removes for good what was forgotten long enough ago, and its history.

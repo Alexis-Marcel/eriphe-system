@@ -1,0 +1,44 @@
+{{/* Settings → « Ce qu'Eriphe a appris » (web_learned.go): the learning
+     journal, newest first, by kind and status; each entry with its source,
+     date, status and what it changed, and « Annuler », which undoes it. */}}
+{{define "learned-page"}}{{with .Data}}
+<div class="activity learned" id="learned">
+  <header class="page-head"><h2>{{t "learned.title"}}</h2><p>{{t "learned.lead"}}</p></header>
+  {{if .Off}}<p class="alert" role="alert">{{t "learned.off"}}</p>{{else}}
+  <nav class="pill-tabs" aria-label="{{t "learned.kinds"}}">
+    <a href="/settings/learned{{if .Status}}?status={{.Status}}{{end}}" {{if not .Kind}}aria-current="true"{{end}}>{{t "happened.kind.all"}}</a>
+    {{range .Kinds}}<a href="/settings/learned?kind={{.}}{{if $.Data.Status}}&amp;status={{$.Data.Status}}{{end}}" {{if eq . $.Data.Kind}}aria-current="true"{{end}}>{{t (printf "learned.kind.%s" .)}}</a>{{end}}
+  </nav>
+  <nav class="pill-tabs" aria-label="{{t "learned.statuses"}}">
+    <a href="/settings/learned{{if .Kind}}?kind={{.Kind}}{{end}}" {{if not .Status}}aria-current="true"{{end}}>{{t "happened.kind.all"}}</a>
+    {{range .Statuses}}<a href="/settings/learned?status={{.}}{{if $.Data.Kind}}&amp;kind={{$.Data.Kind}}{{end}}" {{if eq . $.Data.Status}}aria-current="true"{{end}}>{{t (printf "learned.status.%s" .)}}</a>{{end}}
+  </nav>
+  {{if .Rows}}
+  <ol class="list happened-list learned-list">
+  {{range .Rows}}
+    <li class="happened learned-entry" id="learned-{{.ID}}">
+      <time class="mono small muted" datetime="{{iso .At}}">{{date .At}}</time>
+      <div class="happened-text">
+        <p>
+          <span class="strong">{{t (printf "learned.action.%s" .Action)}}</span>
+          · {{t (printf "learned.kind.%s" .Kind)}}{{if .Subject}} <code class="subject">{{.Subject}}</code>{{end}}
+          <span class="tag{{if eq .Status "confirmed"}} tag-ok{{else if eq .Status "reverted"}} tag-no{{else}} tag-warn{{end}}">{{t (printf "learned.status.%s" .Status)}}</span>
+          {{if eq .Risk "high"}}<span class="tag tag-script" title="{{t "learned.riskhint"}}">{{t "learned.risk.high"}}</span>{{end}}
+          {{if eq .Undo "proposed"}}<span class="tag tag-warn">{{t "learned.undoproposed"}}</span>{{end}}
+        </p>
+        {{if eq .Kind "skill"}}<p><span class="mono">{{.Skill}}</span> <span class="muted small mono">{{.Version}}</span></p>
+        {{else if .Gone}}<p class="muted">{{t "learned.gone"}}</p>
+        {{else}}{{if .Before}}<p class="muted"><s>{{.Before}}</s></p>{{end}}<p>{{.Text}}</p>{{end}}
+        <p class="muted small">{{t "learned.source"}} {{t (printf "learned.src.%s" .Source)}}{{if .Reason}} · {{.Reason}}{{end}}{{range .Links}} · {{if .Href}}<a href="{{.Href}}">{{.Ref}}</a>{{else}}<span class="mono">{{.Ref}}</span>{{end}}{{end}}</p>
+      </div>
+      {{if .CanUndo}}<div class="mem-actions">
+        <button class="btn btn-soft sm" hx-post="/settings/learned/{{.ID}}/undo" hx-confirm="{{t "learned.confirm"}}">{{t "learned.undo"}}</button>
+        {{if eq .Undo "proposed"}}<button class="link-btn" hx-post="/settings/learned/{{.ID}}/keep">{{t "learned.keep"}}</button>{{end}}
+      </div>{{end}}
+    </li>
+  {{end}}
+  </ol>
+  {{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-history"}}</span><p>{{t "learned.none"}}</p></div>{{end}}
+  {{end}}
+</div>
+{{end}}{{end}}

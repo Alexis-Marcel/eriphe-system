@@ -920,7 +920,7 @@ Skills** (`web_skills.go`):
 - **A new version** (the same name, uploaded again) waits for approval with its diff against the
   approved one, file by file. Tasks keep the approved version until the user approves the new one
   (the hash they read is checked) or keeps the old one.
-- **On or off**, and **delete**. Bundles no skill points at any more are deleted.
+- **On or off**, and **delete**. Bundles no skill points at any more are deleted, but for the last five versions a skill replaced or had when deleted (`skill_kept`), which the [learning journal](#what-eriphe-learned) needs to undo a change; they are never given to a task.
 
 **In tasks.** Every worker task gets the skills that are approved and on when it starts, as its
 spec's `skills` (name and sha256 of each, `skills_tasks.go`). Its node fetches each bundle with its
@@ -2571,7 +2571,7 @@ saying what is done, under way, blocked and left; each change supersedes the car
 is its history.
 
 The brain's tools (on `/mcp`): `remember`, `recall`, `update_memory`, `forget`, and for what is
-owed `intend`, `intentions`, `update_intention`. Results are data, quoted.
+owed `intend`, `intentions`, `update_intention`; for what it learned `learned` and `unlearn` ([below](#what-eriphe-learned)). Results are data, quoted.
 
 **Intentions** (prospective memory) are a table of their own, with a lifecycle kept by code: a
 kind (`promise`: the user owes someone; `commitment`: the assistant owes the user; `waiting_for`:
@@ -2676,3 +2676,41 @@ run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable fr
 All keys are optional: `db` defaults to `memory.db` next to `db`, `agent` to the catalog's `haiku`
 if there is one, else the default agent; `trusted_servers` lists catalog servers whose results do
 not taint a turn (none by default).
+
+### What Eriphe learned
+
+The learning journal (`learning.go`, table `learning_log` in `memory.db`, schema 5) records every
+change to what steers Eriphe: a memory of kind `lesson`, `preference`, `decision` or `profile` (or
+pinned) made active, changed (superseded or edited in place) or forgotten, and every change of a
+skill's approved version (approved, replaced, deleted). A proposal is not learned until approved.
+Each entry says what it touched (`memory #N`, or the skill's name and versions), the action
+(`added`, `changed`, `removed`, `reverted`), a status (`trial`: in force, not confirmed;
+`confirmed`: the user's own words or hand, or approved by them; `dormant`; `reverted`), a
+provenance (`user`, `brain`, `task`, `external`, `extraction`, `consolidation`), a risk class
+(for now `high` for the profile, a lesson, or a skill with scripts; `low` otherwise), a reason
+and its evidence (`msg:N`, `task:<id>`, `learned:<id>`). Entries are fixed but for their status
+(a trigger refuses the rest). They point at the data rather than copying it: the memories
+themselves and `memory_log`'s before and after for a memory, the bundles for a skill.
+
+**Undo.** Undoing an entry forgets an added memory, puts a superseded one back as it was (current
+again, pinned again), restores the state before an edit or a forgotten memory, and for a skill
+puts the previous approved version back (or removes an added skill, or brings back a deleted
+one). Only the newest change of a thing still in force can be undone; the undo is an entry of its
+own (`reverted`, pointing at the one undone, which becomes `reverted`), never undone itself.
+
+**For the user**: Settings → « Ce qu'Eriphe a appris » (`/settings/learned`, `web_learned.go`),
+newest first, by kind and status, each entry with its source, date, status, what it changed
+(before and after) and « Annuler ». A skill shows its name and version, never its files.
+
+**For the brain**: `learned` (by kind, status, subject, topic or period, with ids; a memory drawn
+from external content is named, not quoted) and `unlearn` (`id`, `reason`, `source_ref`). An
+undo needs the user's message; on a tainted turn it is only proposed, unless that message of the
+same turn asked for it (as for `remember`), and waits as a card (kind `unlearn`) or on the page.
+The wake packet and the brief (`briefLines`) carry what was learned since the last brief and not
+told yet, except what the user did by hand, for the brain to say in a sentence each; `since`
+lists the entries (kind `learned`), and so does the Journal.
+
+The statuses `trial` and `dormant`, the provenance `consolidation`, the risk class and the
+evidence refs are there for the learning loop that comes next: fewer cards by provenance and
+risk, skills written by the brain, reflection and consolidation, helpful/harmful counters with
+automatic undo.

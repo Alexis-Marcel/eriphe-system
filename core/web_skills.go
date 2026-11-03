@@ -172,7 +172,7 @@ func (w *web) skillError(rw http.ResponseWriter, lang string, err error) {
 
 func (w *web) handleApproveSkill(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
-	if err := w.c.store.approveSkill(name, r.PostFormValue("sha")); err != nil {
+	if err := w.c.approveSkill(name, r.PostFormValue("sha"), "owner"); err != nil {
 		w.toast(rw, tr(w.lang(r), "skills.err.changed"), false)
 		return
 	}
@@ -209,7 +209,7 @@ func (w *web) handleEnableSkill(rw http.ResponseWriter, r *http.Request, s *sess
 
 func (w *web) handleDeleteSkill(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
-	if err := w.c.store.deleteSkill(name); err != nil {
+	if err := w.c.deleteSkill(name, "owner"); err != nil {
 		w.toast(rw, tr(w.lang(r), "err.internal"), false)
 		return
 	}

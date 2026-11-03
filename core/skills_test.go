@@ -188,9 +188,13 @@ func TestSkillLifecycle(t *testing.T) {
 	if err := s.deleteSkill(k.Name); err != nil {
 		t.Fatal(err)
 	}
-	s.db.QueryRow(`SELECT COUNT(*) FROM skill_bundles`).Scan(&n)
-	if _, err := s.skill("release-notes"); err != errNoSkill || n != 0 {
-		t.Errorf("deleted: %v, %d bundles", err, n)
+	// Its approved version is kept a while, for the learning journal's undo.
+	s.db.QueryRow(`SELECT COUNT(*) FROM skill_bundles WHERE sha IN (SELECT sha FROM skill_kept)`).Scan(&n)
+	if _, err := s.skill("release-notes"); err != errNoSkill || n != 1 {
+		t.Errorf("deleted: %v, %d bundles kept", err, n)
+	}
+	if all, _ := s.skills(); len(all) != 0 {
+		t.Errorf("a deleted skill is listed: %+v", all)
 	}
 }
 

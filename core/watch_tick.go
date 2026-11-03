@@ -294,11 +294,22 @@ func grantCallName(g *watchGrant) string {
 func (c *core) briefLines(now time.Time) string {
 	var unix int64
 	if _, err := fmt.Sscan(c.store.get(lastBriefKey), &unix); err != nil || unix <= 0 {
-		return "C'est un brief, le premier : `since` avec une heure, ou `away`, te donne ce qui s'est passé.\n"
+		return "C'est un brief, le premier : `since` avec une heure, ou `away`, te donne ce qui s'est passé.\n" + c.learnedForBrief(now)
 	}
 	out := fmt.Sprintf("C'est un brief : le précédent date du %s, `since(\"last_brief\")` te donne ce qui s'est passé depuis, "+
 		"et `notifications` (`held_only`) ce qui l'attend.\n", time.Unix(unix, 0).In(now.Location()).Format("2006-01-02 15:04"))
-	return out + c.silentSince(time.Unix(unix, 0), now)
+	return out + c.silentSince(time.Unix(unix, 0), now) + c.learnedForBrief(now)
+}
+
+// learnedForBrief is what was learned since the last brief and not told
+// yet, marked told: the brief says it in a sentence each.
+func (c *core) learnedForBrief(now time.Time) string {
+	xs := c.learnedToTell(now)
+	if len(xs) == 0 {
+		return ""
+	}
+	c.learnedTold(xs)
+	return learnedBlock(xs)
 }
 
 // silentSince lists the watches that fired and stayed silent since a time:

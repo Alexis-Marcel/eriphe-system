@@ -33,7 +33,12 @@ import (
 
 const skillSchema = `CREATE TABLE IF NOT EXISTS skill_bundles (sha TEXT PRIMARY KEY, data BLOB NOT NULL, time INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS skills (name TEXT PRIMARY KEY, approved TEXT NOT NULL DEFAULT '', pending TEXT NOT NULL DEFAULT '',
-  enabled INTEGER NOT NULL DEFAULT 1, source TEXT NOT NULL DEFAULT '', approved_at INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL);`
+  enabled INTEGER NOT NULL DEFAULT 1, source TEXT NOT NULL DEFAULT '', approved_at INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS skill_kept (name TEXT NOT NULL, sha TEXT NOT NULL, time INTEGER NOT NULL, PRIMARY KEY (name, sha));`
+
+// skillKept is how many replaced versions of a skill are kept, so that the
+// learning journal can undo a change (learning.go).
+const skillKept = 5
 
 func init() { extraSchema = append(extraSchema, skillSchema) }
 
@@ -459,15 +464,88 @@ func (s *Store) addSkillVersion(files []skillFile, source string) (*Skill, bool,
 // approveSkill makes the pending version the one tasks get: the version
 // the user read (sha), not one uploaded since.
 func (s *Store) approveSkill(name, sha string) error {
-	res, err := s.db.Exec(`UPDATE skills SET approved = pending, pending = '', approved_at = ?, updated = ? WHERE name = ? AND pending = ? AND pending != ''`,
-		time.Now().Unix(), time.Now().Unix(), name, sha)
+	_, err := s.approveSkillVersion(name, sha)
+	return err
+}
+
+// approveSkillVersion is approveSkill; it says the version replaced, kept
+// a while (skill_kept).
+func (s *Store) approveSkillVersion(name, sha string) (prev string, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	if err := tx.QueryRow(`SELECT approved FROM skills WHERE name = ? AND pending = ? AND pending != ''`, name, sha).Scan(&prev); err != nil {
+		return "", errNoSkill
+	}
+	now := time.Now().Unix()
+	if _, err := tx.Exec(`UPDATE skills SET approved = pending, pending = '', approved_at = ?, updated = ? WHERE name = ?`, now, now, name); err != nil {
+		return "", err
+	}
+	if err := keepSkillVersion(tx, name, prev); err != nil {
+		return "", err
+	}
+	if err := gcSkillBundles(tx); err != nil {
+		return "", err
+	}
+	return prev, tx.Commit()
+}
+
+// keepSkillVersion keeps a replaced version's bundle for a while.
+func keepSkillVersion(tx *sql.Tx, name, sha string) error {
+	if sha == "" {
+		return nil
+	}
+	_, err := tx.Exec(`INSERT INTO skill_kept (name, sha, time) VALUES (?, ?, ?) ON CONFLICT (name, sha) DO UPDATE SET time = excluded.time`,
+		name, sha, time.Now().UnixNano())
+	return err
+}
+
+// setSkillApproved puts a skill back to version to ("" for none) from
+// version from ("" for none), as the learning journal undoes a change: it
+// refuses when the skill changed since.
+func (s *Store) setSkillApproved(name, from, to string) error {
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return errNoSkill
+	defer tx.Rollback()
+	var current string
+	err = tx.QueryRow(`SELECT approved FROM skills WHERE name = ?`, name).Scan(&current)
+	missing := err == sql.ErrNoRows
+	if err != nil && !missing {
+		return err
 	}
-	return s.gcSkills()
+	if current != from {
+		return fmt.Errorf("skill %s changed since: undo its newer change first", name)
+	}
+	if to != "" {
+		var n int
+		tx.QueryRow(`SELECT COUNT(*) FROM skill_bundles WHERE sha = ?`, to).Scan(&n)
+		if n == 0 {
+			return fmt.Errorf("the version %s of skill %s is no longer kept", shortSHA(to), name)
+		}
+	}
+	now := time.Now().Unix()
+	switch {
+	case to == "":
+		_, err = tx.Exec(`DELETE FROM skills WHERE name = ?`, name)
+	case missing:
+		_, err = tx.Exec(`INSERT INTO skills (name, approved, approved_at, updated) VALUES (?, ?, ?, ?)`, name, to, now, now)
+	default:
+		_, err = tx.Exec(`UPDATE skills SET approved = ?, approved_at = ?, updated = ? WHERE name = ?`, to, now, now, name)
+	}
+	if err != nil {
+		return err
+	}
+	if err := keepSkillVersion(tx, name, from); err != nil {
+		return err
+	}
+	if err := gcSkillBundles(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // rejectSkill drops the pending version; a skill never approved goes.
@@ -493,14 +571,31 @@ func (s *Store) enableSkill(name string, on bool) error {
 }
 
 func (s *Store) deleteSkill(name string) error {
-	res, err := s.db.Exec(`DELETE FROM skills WHERE name = ?`, name)
+	_, err := s.deleteSkillVersion(name)
+	return err
+}
+
+// deleteSkillVersion is deleteSkill; it says the approved version it had,
+// kept a while (skill_kept).
+func (s *Store) deleteSkillVersion(name string) (prev string, err error) {
+	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return "", err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return errNoSkill
+	defer tx.Rollback()
+	if err := tx.QueryRow(`SELECT approved FROM skills WHERE name = ?`, name).Scan(&prev); err != nil {
+		return "", errNoSkill
 	}
-	return s.gcSkills()
+	if _, err := tx.Exec(`DELETE FROM skills WHERE name = ?`, name); err != nil {
+		return "", err
+	}
+	if err := keepSkillVersion(tx, name, prev); err != nil {
+		return "", err
+	}
+	if err := gcSkillBundles(tx); err != nil {
+		return "", err
+	}
+	return prev, tx.Commit()
 }
 
 func (s *Store) gcSkills() error {
@@ -519,7 +614,12 @@ func (s *Store) gcSkills() error {
 // that started with one is fetched it at its start; a restarted one
 // whose version went away starts without it.
 func gcSkillBundles(tx *sql.Tx) error {
-	_, err := tx.Exec(`DELETE FROM skill_bundles WHERE sha NOT IN (SELECT approved FROM skills UNION SELECT pending FROM skills)`)
+	if _, err := tx.Exec(`DELETE FROM skill_kept WHERE rowid IN (SELECT rowid FROM
+		(SELECT rowid, ROW_NUMBER() OVER (PARTITION BY name ORDER BY time DESC) AS n FROM skill_kept) WHERE n > ?)`, skillKept); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`DELETE FROM skill_bundles WHERE sha NOT IN (SELECT approved FROM skills UNION SELECT pending FROM skills
+		UNION SELECT sha FROM skill_kept)`)
 	return err
 }
 
