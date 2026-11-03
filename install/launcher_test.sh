@@ -339,7 +339,7 @@ has "$T/compose.yaml" "/var/run/docker.sock:/var/run/docker.sock:ro" compose
 stack_in() {
 	launcher ERIPHE_MODE=node ERIPHE_CORE=http://192.0.2.10:8800 ERIPHE_JOIN_TOKEN=t sh -c ". '$here/eriphe-launcher'
 		on_host() { sh -s; }
-		discover; settings; INFO=; settle; COPIED=; write_binds; stack_up" >"$T/out" 2>&1 || fail "stack_up: $(cat "$T/out")"
+		discover; PULL=missing UPDATE_BY=loop; settings; INFO=; settle; COPIED=; write_binds; stack_up" >"$T/out" 2>&1 || fail "stack_up: $(cat "$T/out")"
 }
 C=$T/data/launcher/compose.yaml
 rm -rf "$T/data"
