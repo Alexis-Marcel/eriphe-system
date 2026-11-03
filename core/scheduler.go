@@ -15,8 +15,14 @@ type placement struct {
 	Needs   []string // labels required
 	Prefers []string // soft: cpu, memory, or a label
 	Image   string   // worker image; the node's default if empty
-	Machine string   // the only node that fits: the one with the task's folders (folders.go)
-	Folders []string // the ids of the folders that node must share
+	// Bound: the task has the user's folders. Hosts are then the only
+	// nodes that fit, those holding each of them up to date now
+	// (folderHosts, folder_copies.go); Holders those holding them at all,
+	// up to date or not: while none of Hosts is online, the task waits for
+	// one of them.
+	Bound   bool
+	Hosts   []string
+	Holders []string
 	// Resident: an assistant that someone waits on (placement.go). Hard
 	// rule: an online always-on node that fits, if there is one.
 	Resident bool
@@ -30,8 +36,11 @@ func (p placement) String() string {
 	if len(p.Needs) > 0 {
 		s += " with " + strings.Join(p.Needs, ", ")
 	}
-	if p.Machine != "" {
-		s += " on " + p.Machine + ", which has its folders"
+	switch {
+	case p.Bound && len(p.Hosts) > 0:
+		s += " on " + strings.Join(p.Hosts, " or ") + ", which hold its folders up to date"
+	case p.Bound:
+		s += " on a machine that holds its folders up to date"
 	}
 	return s
 }
@@ -133,6 +142,20 @@ func schedule(nodes []NodeRow, want string, p placement, active func(string) (in
 		}
 		if s := score(parseInfo(n), p, load); best == "" || s > bestScore {
 			best, bestScore = n.Name, s
+		}
+	}
+	if best == "" && len(offline) == 0 && p.Bound {
+		// Its folders are on a machine that can run it, not up to date
+		// there yet: it waits for them.
+		free := p
+		free.Bound = false
+		for _, n := range nodes {
+			if slices.Contains(p.Holders, n.Name) && free.fits(n) {
+				offline = append(offline, n.Name)
+			}
+		}
+		if len(offline) > 0 {
+			return "", &waitingError{fmt.Sprintf("waiting for the folders to be up to date on a machine that can run %s (%s)", free, strings.Join(offline, ", "))}
 		}
 	}
 	switch {

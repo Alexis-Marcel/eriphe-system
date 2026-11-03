@@ -416,8 +416,10 @@ func orStr(s, def string) string {
 	return s
 }
 
-// folderGrant reads the folders lent to a task: all on one machine, which
-// the task then runs on.
+// folderGrant reads the folders lent to a task, and their machine when
+// they are all on one ("" otherwise). Folders of several machines are lent
+// together only if a machine holds them all, as theirs or as copies
+// (folderHolders).
 func (c *core) folderGrant(names []string) ([]*Folder, string, error) {
 	var out []*Folder
 	node := ""
@@ -435,30 +437,31 @@ func (c *core) folderGrant(names []string) ([]*Folder, string, error) {
 		if c.store.nodeSuspended(f.Node) {
 			return nil, "", fmt.Errorf("folder %q is not lent: %w", f.Name, suspendedError(f.Node)) // node_access.go
 		}
-		if node != "" && f.Node != node {
-			return nil, "", fmt.Errorf("folders %s and %s are on different machines (%s, %s): one task gets the folders of one machine",
-				out[0].Name, f.Name, node, f.Node)
+		if len(out) == 0 {
+			node = f.Node
+		} else if f.Node != node {
+			node = ""
 		}
-		node = f.Node
 		out = append(out, f)
+	}
+	if len(out) > 1 && node == "" && len(c.folderHolders(out)) == 0 {
+		var where []string
+		for _, f := range out {
+			where = append(where, f.Name+" ("+f.Node+")")
+		}
+		return nil, "", fmt.Errorf("folders %s are on different machines and no machine holds them all: keep copies of them on one machine (Settings → Folders), or lend them to separate tasks",
+			strings.Join(where, ", "))
 	}
 	return out, node, nil
 }
 
 // taskPlacement is what a task asks of its node: its agent's needs, and
-// with folders, their machine sharing them.
+// with folders, the machines holding them up to date now, and those
+// holding them at all, to wait for (folder_copies.go).
 func (c *core) taskPlacement(a Agent, fs []*Folder) placement {
 	p := a.placement()
-	for _, f := range fs {
-		p.Machine = f.Node
-		if !slices.Contains(p.Folders, f.ID) {
-			p.Folders = append(p.Folders, f.ID)
-		}
-	}
-	// Their machine away: a machine with an up-to-date copy of each will do
-	// (folder_copies.go).
-	if host := c.copyHost(fs); host != "" {
-		p.Machine, p.Folders = host, nil
+	if len(fs) > 0 {
+		p.Bound, p.Hosts, p.Holders = true, c.folderHosts(fs), c.folderHolders(fs)
 	}
 	return p
 }
@@ -489,7 +492,8 @@ func (c *core) specFolders(names string, resources []ResourceRef) ([]nodeFolder,
 }
 
 // specFoldersOn are a task's folders as node mounts them: from its copy of
-// each when node is not their machine (folder_copies.go), "" for theirs.
+// each folder whose machine it is not (folder_copies.go); "" for each
+// folder's own machine.
 func (c *core) specFoldersOn(node, names string, resources []ResourceRef) ([]nodeFolder, error) {
 	if names == "" {
 		return nil, nil
@@ -539,7 +543,8 @@ type nodeFolder struct {
 	Results string   `json:"results,omitempty"`
 	Former  []string `json:"former,omitempty"`
 	// Copy: lent from the copy the task's machine keeps of it, by its
-	// Syncthing folder id, while its own machine is away (folder_copies.go).
+	// Syncthing folder id, on a machine other than the folder's
+	// (folder_copies.go).
 	Copy string `json:"copy,omitempty"`
 }
 

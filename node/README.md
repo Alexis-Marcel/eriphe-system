@@ -1254,10 +1254,12 @@ kept in the cloud only fails with "resource deadlock avoided" (macOS does not do
 Syncthing): the state says `icloud: true`, and the workspace tells the user to keep the folder
 downloaded (right-click › Keep Downloaded). Nothing asks for more rights.
 
-A task's spec may lend a copy in place of the folder (`folders: [{…, copy: "<id>"}]`), while the
-folder's machine is away: the node mounts `<root>/sync/copies/<id>` only if its plan keeps that
-copy of that folder, and at most at the copy's level; with `manage`, the snapshot is of the copy.
-What the task writes there goes back to the folder's machine when it returns.
+A task's spec may lend a copy in place of the folder (`folders: [{…, copy: "<id>"}]`), when
+eriphe-core places the task on this machine rather than the folder's (the copy in sync, or
+complete when the folder's machine was last seen): the node mounts `<root>/sync/copies/<id>` only
+if its plan keeps that copy of that folder, and at most at the copy's level; with `manage`, the
+snapshot is of the copy, taken here. What the task writes there goes back to the folder's machine,
+at once or when it returns.
 
 ## Services (local MCP servers)
 

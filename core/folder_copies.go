@@ -27,10 +27,16 @@ import (
 // the plan: the copy machines then stop the tasks working on them and
 // delete them.
 //
-// While the folder's machine is away, a task may run on a copy that was
-// complete when that machine was last seen (copyHost): with drop or manage
-// it writes on the copy, and Syncthing brings that back when the machine
-// returns.
+// It does not matter which machine owns a folder: a task lent folders may
+// run on any machine that holds each of them up to date (folderHosts), the
+// folder's own machine or one keeping a copy in sync now, with nothing
+// pending either way; while a folder's machine is away, a copy that was
+// complete when that machine was last seen will do (syncGrace). The
+// scheduler picks the best of them, as for any task (scheduler.go). With
+// drop or manage the task writes on the copy (for manage, after a snapshot
+// of the copy, on the machine running it), and Syncthing brings that back
+// to the folder's machine, at once or when it returns. The task's level is
+// never above the folder's on its machine.
 
 // syncGrace is how close to its folder machine's last moment a copy must
 // have been complete to stand in for it.
@@ -390,43 +396,80 @@ func (v *syncView) iCloudHint(f *Folder) bool {
 	return slices.ContainsFunc(st.Folders, func(s syncState) bool { return s.ID == id && s.ICloud })
 }
 
-// copyHost is the machine a task lent fs may run on while their machine is
-// away: one that is online and holds a copy of each, up to date. "" when
-// their machine is there, or no copy will do.
-func (c *core) copyHost(fs []*Folder) string {
-	if len(fs) == 0 {
-		return ""
-	}
+// folderHosts are the machines a task lent fs may run on now, by name:
+// for each folder, its own machine, sharing it as it last reported, or one
+// that keeps a copy of it in sync (copyUsable). Which machine owns a
+// folder does not matter: the scheduler picks the best of them
+// (scheduler.go).
+func (c *core) folderHosts(fs []*Folder) []string {
 	v, err := c.syncView()
-	if err != nil {
-		return ""
+	if err != nil || len(fs) == 0 {
+		return nil
 	}
-	if src, ok := v.nodes[fs[0].Node]; !ok || src.Online {
-		return ""
-	}
-	var hosts []string
-	for _, fc := range v.copies {
-		if fc.Node == fs[0].Node && fc.Folder == fs[0].ID {
-			hosts = append(hosts, fc.Copy)
+	var out []string
+	for name := range v.nodes {
+		if !slices.ContainsFunc(fs, func(f *Folder) bool { return !v.holdsNow(f, name) }) {
+			out = append(out, name)
 		}
 	}
-	slices.Sort(hosts)
-	for _, h := range hosts {
-		if n := v.nodes[h]; !n.Online || n.Suspended {
-			continue
-		}
-		ok := true
-		for _, f := range fs {
-			if _, live := v.live(folderCopy{Node: f.Node, Folder: f.ID, Copy: h}); !live || !v.hasCopy(f, h) || v.copyStatus(f, h).Status != "ok" {
-				ok = false
-				break
-			}
-		}
-		if ok {
-			return h
+	slices.Sort(out)
+	return out
+}
+
+// holdsNow tells whether node may lend f to a task now: its own machine
+// sharing it, or its copy in sync.
+func (v *syncView) holdsNow(f *Folder, node string) bool {
+	if node == f.Node {
+		return slices.ContainsFunc(parseInfo(v.nodes[node]).Folders, func(sf sharedFolder) bool { return sf.ID == f.ID })
+	}
+	return v.copyUsable(f, node)
+}
+
+// copyUsable tells whether node's copy of f may stand in for it now: kept
+// and synced there, that machine online, and the copy in sync. With the
+// folder's machine online, nothing may be pending either way: the copy
+// idle with nothing to receive, the folder's machine idle with nothing to
+// receive from its copies. With it away, the copy must have been complete
+// when it was last seen (syncGrace).
+func (v *syncView) copyUsable(f *Folder, node string) bool {
+	n := v.nodes[node]
+	if !n.Online || n.Suspended || !v.hasCopy(f, node) {
+		return false
+	}
+	if _, live := v.live(folderCopy{Node: f.Node, Folder: f.ID, Copy: node}); !live || v.copyStatus(f, node).Status != "ok" {
+		return false
+	}
+	return !v.nodes[f.Node].Online || v.sourceSettled(f)
+}
+
+// sourceSettled tells whether f's machine reports its side of the copies
+// idle, with nothing to receive from them and no error.
+func (v *syncView) sourceSettled(f *Folder) bool {
+	st := parseInfo(v.nodes[f.Node]).Syncthing
+	if st == nil {
+		return false
+	}
+	id := syncFolderID(f.Node, f.ID)
+	i := slices.IndexFunc(st.Folders, func(s syncState) bool { return s.ID == id && s.Role == "source" })
+	return i >= 0 && st.Folders[i].State == "idle" && st.Folders[i].NeedBytes == 0 && st.Folders[i].Error == ""
+}
+
+// folderHolders are the machines that hold each of fs, up to date or not:
+// its own machine, or one keeping a copy of it. A task lent fs is only
+// ever placed on one of them, and waits for one while none is up to date.
+func (c *core) folderHolders(fs []*Folder) []string {
+	v, err := c.syncView()
+	if err != nil || len(fs) == 0 {
+		return nil
+	}
+	var out []string
+	for name := range v.nodes {
+		if !slices.ContainsFunc(fs, func(f *Folder) bool { return name != f.Node && !v.hasCopy(f, name) }) {
+			out = append(out, name)
 		}
 	}
-	return ""
+	slices.Sort(out)
+	return out
 }
 
 func (v *syncView) hasCopy(f *Folder, node string) bool {

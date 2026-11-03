@@ -618,7 +618,10 @@ setting:
   always-on one can take it, it moves there between two turns. Moving starts a fresh session with
   the context pack: the thread is eriphe-core's, and a message its old node never received is
   delivered again.
-- **Bound**: a task with the user's folders goes to the node that has them, and waits for it.
+- **Bound**: a task with the user's folders goes to a node that holds each of them up to date,
+  the folder's machine or one keeping a copy in sync ([Tasks on a copy](#copies-of-a-folder)),
+  the best of them by the scores above, and waits for one. A task its node has not started yet
+  is placed again, like the others, when another such node is online.
 - **The others**: the scores above. A task its node has not started yet is placed again after that
   node has been offline for 5 minutes; a running task keeps its node.
 
@@ -867,7 +870,7 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 | Kind | `ref` | Access | What the task gets |
 |---|---|---|---|
 | `repo` | `owner/name` on GitHub, or a git URL; `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` | cloned into `/work/repo`; [credentials](#credentials-on-demand) for it; its skills if it is the user's own or trusted (below); one per task |
-| `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine |
+| `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
 | `drive-folder` | a Google Drive folder, by name | `read`, `drop` (at most the folder's own) | for now, the files server whole (it reaches every Drive folder given to Eriphe, each with its own access) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
 | `file` | an attachment of the conversation (`att_…`) | `read` | not yet: refused with a clear error |
@@ -1484,9 +1487,10 @@ name, they disappear) or forgets them.
 **Lending one.** The brain lends folders to a task as [resources](#resources),
 `{"kind": "folder", "ref": "Clients", "access": "read"}` (or `drop`, if the folder allows it, or
 `write` for a folder at `manage`, to change the folder itself; `list_folders` gives each one's
-entry in `lend`; the old `folders` field still works, and lends at most `drop`). The task is placed on the folders' machine (all of a task's
-folders must be on one machine), or waits for it while it is offline (`pending_reason` says so);
-`node` may only name that machine. Its node mounts each at `/work/folders/<name>`, read-only as
+entry in `lend`; the old `folders` field still works, and lends at most `drop`). The task is placed on a machine that holds each of its folders
+up to date, theirs or one keeping copies of them (below, Copies of a folder), or waits for one
+(`pending_reason` says so); folders of several machines go together only if one machine holds
+them all, and `node` may only name a machine that holds them. Its node mounts each at `/work/folders/<name>`, read-only as
 Docker enforces it; with `drop`, its results subfolder read-write, created if missing; with
 `write` (`manage` in the node's spec), the whole folder read-write, after its snapshot (see
 node/README.md, Shares). The worker is told where they are, what it may write in each, and
@@ -1537,12 +1541,18 @@ error), waiting (not synced there yet), and what it takes there (`copies` in `GE
 A Mac whose iCloud Drive files are kept in the cloud only sets `icloud_hint`: the page asks to keep
 the folder downloaded.
 
-**Tasks on a copy.** While a folder's machine is away, a task lent the folder goes to an online
-machine whose copy was complete when the folder's machine was last seen (within 2 minutes:
-`synced_at`), rather than wait (`copyHost`); its spec lends the copy (`copy` in its folders), at the
-level the task asked for, never above the folder's. With `drop` or `manage`, it writes on the copy,
-and Syncthing brings that back to the folder's machine when it returns (a conflict keeps both
-files). A copy behind waits for the folder's machine, as before.
+**Tasks on a copy.** Which machine owns a folder does not matter: a task lent folders may run on
+any machine that holds each of them up to date (`folderHosts`), and the scheduler picks the best
+of them as for any task (resources, preferences, load). A machine holds a folder up to date if it
+is the folder's machine, or keeps a copy in sync now: the copy idle with nothing to receive, and
+the folder's machine idle with nothing to receive from its copies, without error. While the
+folder's machine is away, a copy that was complete when that machine was last seen (within 2
+minutes: `synced_at`) will do. A task lent several folders goes to a machine that holds them all
+so. Its spec lends the copy (`copy` in its folders), at the level the task asked for, never above
+the folder's on its machine; with `manage`, the node running the task takes the snapshot of the
+copy first. With `drop` or `manage`, it writes on the copy, and Syncthing brings that back to the
+folder's machine, at once or when it returns (a conflict keeps both files). With no machine up to
+date online, the task waits: for the folder's machine, or for a copy to catch up.
 
 | Call (bearer token) | What |
 |---|---|
