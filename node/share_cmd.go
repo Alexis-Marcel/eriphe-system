@@ -28,7 +28,11 @@ import (
 //
 // The installers wrap it: eriphe-share on Linux (docker exec in the node's
 // container) and on a Mac, eriphe-share in the WSL distribution on Windows,
-// and the Finder's and the Explorer's "Share with Eriphe".
+// and the Finder's and the Explorer's "Share with Eriphe". With the
+// one-container install, eriphe-launcher shares a folder (eriphe share add,
+// in its container): it mounts that folder alone into the node, then runs
+// this; ERIPHE_SHARE_COMMAND, set on the node's container, points a user's
+// own eriphe-node share add to it.
 const shareUsage = `eriphe-node share: share folders of this machine with Eriphe.
 
   eriphe-node share add [--name NAME] [--read|--drop|--manage] [--copyable] FOLDER...
@@ -48,6 +52,11 @@ const shareUsage = `eriphe-node share: share folders of this machine with Eriphe
   eriphe-node share restore NAME|FOLDER SNAPSHOT|latest
       put the folder back as it was in that snapshot (a snapshot of it as it
       is now is taken first); stop the tasks using it before
+  eriphe-node share check [-host DIR] [-data PATH]... FOLDER
+      eriphe-launcher's check of a folder of the host, seen under DIR
+      (default /host), before it mounts it into the node: no symlink on
+      the way, nothing hidden, sensitive or private, not Eriphe's own data
+      (-data, host paths)
 
 Options, before the command: -root DIR (env ERIPHE_ROOT), -share NAME=/PATH
 (env ERIPHE_NODE_SHARES: the places a folder may be shared from), -engine
@@ -86,6 +95,18 @@ func runShare(args []string, stdout, stderr io.Writer) int {
 		fs.Usage()
 		return 2
 	}
+	switch fs.Arg(0) {
+	case "check":
+		return runShareCheck(fs.Args()[1:], stderr)
+	case "add":
+		// eriphe-launcher mounts into the node only the folders shared, and
+		// so shares them itself: it calls this with ERIPHE_SHARE_COMMAND
+		// cleared, once the folder is mounted.
+		if c := os.Getenv("ERIPHE_SHARE_COMMAND"); c != "" {
+			fmt.Fprintf(stderr, "eriphe-node share: on this machine, a folder is shared through Eriphe's launcher, which gives eriphe-node that folder only:\n  %s add%s\n", c, shellWords(fs.Args()[1:]))
+			return 1
+		}
+	}
 	if o.docker == "" {
 		o.docker = o.engine
 	}
@@ -113,6 +134,50 @@ func runShare(args []string, stdout, stderr io.Writer) int {
 	}
 	return 0
 }
+
+// runShareCheck is `eriphe-node share check -host DIR [-data PATH]... FOLDER`
+// (shares_host.go): no node's data is needed, nor touched.
+func runShareCheck(args []string, stderr io.Writer) int {
+	fs := flag.NewFlagSet("check", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	host := fs.String("host", "/host", "where the host's / is seen")
+	var own stringList
+	fs.Var(&own, "data", "a host path of Eriphe's own data, never shared nor holding a share (repeatable)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(stderr, "usage: eriphe-node share check -host DIR [-data PATH]... FOLDER")
+		return 2
+	}
+	if err := checkHostFolder(*host, fs.Arg(0), own); err != nil {
+		fmt.Fprintf(stderr, "eriphe-node share: %s: %v\n", fs.Arg(0), err)
+		return 1
+	}
+	return 0
+}
+
+const shellSafe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:,+@%"
+
+// shellWords are args as a shell reads them back, each after a space.
+func shellWords(args []string) string {
+	var b strings.Builder
+	for _, a := range args {
+		b.WriteByte(' ')
+		if a != "" && strings.Trim(a, shellSafe) == "" {
+			b.WriteString(a)
+			continue
+		}
+		b.WriteString("'" + strings.ReplaceAll(a, "'", `'\''`) + "'")
+	}
+	return b.String()
+}
+
+// stringList reads a repeated flag.
+type stringList []string
+
+func (l *stringList) String() string     { return strings.Join(*l, ",") }
+func (l *stringList) Set(s string) error { *l = append(*l, s); return nil }
 
 var (
 	errUsage    = errors.New("usage: eriphe-node share add|list|remove|snapshots|restore (eriphe-node share -h)")

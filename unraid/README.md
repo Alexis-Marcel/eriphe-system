@@ -12,10 +12,24 @@ container](../install/README.md#one-container-nas-any-linux-with-docker).
    `https://github.com/Alexis-Marcel/eriphe-system` and save. Or copy `eriphe.xml` to
    `/boot/config/plugins/dockerMan/templates-user/my-eriphe.xml` on the flash drive.
 2. Docker → **Add Container** → Template: **eriphe**. Check the data folder
-   (`/mnt/user/appdata/eriphe`), the shares (`shares=/mnt/user`) and the ports (8443, 8800), then
-   **Apply**.
+   (`/mnt/user/appdata/eriphe`) and the ports (8443, 8800), then **Apply**.
 3. Its log (the container's icon → Logs) ends with the workspace's address and a setup code:
    open the WebUI, `/setup`, and give the code.
+4. Share the folders Eriphe may work with, from the NAS's terminal (the `>_` icon at the top):
+   `docker exec eriphe eriphe share add "/mnt/user/1 PROJECTS"` (read only; `--drop` lets it
+   write its results in its results subfolder, `--manage` lets it change the folder, `--copyable`
+   allows copies on your other machines). `docker exec eriphe eriphe share list` shows them,
+   `remove` stops one. Each folder shared is given to eriphe-node alone; nothing else of the NAS,
+   not `/mnt/user` nor `appdata`, is mounted into it. eriphe-node and its Syncthing restart for a
+   few seconds each time.
+
+The template runs the launcher hardened (Extra Parameters: `--cap-drop=ALL --cap-add=CHOWN
+--cap-add=DAC_OVERRIDE --cap-add=FOWNER --read-only --tmpfs /tmp --security-opt
+no-new-privileges`): it keeps only what it needs to write eriphe-core's folder. A container made
+from an earlier template keeps its own settings: add them by hand (Docker → eriphe → Edit →
+Advanced View → Extra Parameters), and remove its **Shares** variable (`ERIPHE_SHARES`), no longer
+used. Its folders shared stay shared: the update turns them into folders given one by one
+([install/README.md, One container](../install/README.md#one-container-nas-any-linux-with-docker)).
 
 The containers it makes show on the Docker page as containers without a template (eriphe-core,
 eriphe-node, eriphe-docker-proxy): leave them to it, it recreates them on updates. To remove

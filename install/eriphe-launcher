@@ -3,6 +3,8 @@
 # container (ghcr.io/alexis-marcel/eriphe, install/README.md, One container):
 #
 #   docker run -d --name eriphe --restart unless-stopped \
+#     --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER \
+#     --read-only --tmpfs /tmp --security-opt no-new-privileges \
 #     -v /var/run/docker.sock:/var/run/docker.sock \
 #     -v /mnt/user/appdata/eriphe:/data \
 #     ghcr.io/alexis-marcel/eriphe
@@ -14,12 +16,16 @@
 # to them at its path on the host, which it reads from its own container.
 # It listens on no port and runs nothing else; it is their updater: it
 # applies eriphe-core's and the node's update requests as install.sh's
-# updater does, then updates itself.
+# updater does, then updates itself. It keeps the list of the folders of
+# this machine shared with Eriphe: each is mounted alone into the node and
+# Syncthing, nothing else of the host (eriphe share).
 #
 #   eriphe-launcher run                 the container's command
 #   eriphe-launcher update              update now, as the workspace's Update
 #   eriphe-launcher rollback            back to the version before the last update
 #   eriphe-launcher uninstall [--data]  remove the containers it made (and the data)
+#   eriphe-launcher share ...           the folders shared (eriphe share --help), also
+#                                       as: docker exec eriphe eriphe share add FOLDER
 #   eriphe-launcher swap ID             (its own) replace container ID by one of this image
 set -eu
 
@@ -35,6 +41,11 @@ LAUNCHER_REPO=${ERIPHE_LAUNCHER_REPO:-$REGISTRY/eriphe} # another for a test reg
 SWAP=eriphe-launcher-swap
 OS=Linux NATIVE='' INSTALL=docker
 MOUNTINFO=${ERIPHE_MOUNTINFO:-/proc/self/mountinfo}
+# The folders shared, one host path a line (:ro: a read-only one, kept from
+# a place of an earlier install).
+FOLDERS=$CONF/folders
+NL='
+'
 
 log() { printf '%s eriphe-launcher: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >&2; }
 dc() { docker compose -p eriphe --project-directory "$CONF" -f "$CONF/compose.yaml" --env-file "$CONF/.env" "$@"; }
@@ -125,16 +136,14 @@ settings() {
 		pin=$(ref_tag "$SELF_REF")
 		printf '%s' "$pin" | grep -Eq '^(latest|edge|sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+(\.[0-9]+(-[0-9A-Za-z.-]+)?)?)$' || pin=latest
 	fi
-	set -- "$@" --version "$pin" --labels "${ERIPHE_NODE_LABELS:-}" --model-server "${ERIPHE_MODEL_SERVER:-}"
-	if [ -n "${ERIPHE_SHARES:-}" ]; then
-		set -- "$@" --share "$ERIPHE_SHARES"
-	else
-		set -- "$@" --no-share
-	fi
-	DATA=$HOST_DATA # check_shares refuses Eriphe's own folder as a share
+	# The places are the folders shared, set after (shares_now).
+	set -- "$@" --version "$pin" --labels "${ERIPHE_NODE_LABELS:-}" --model-server "${ERIPHE_MODEL_SERVER:-}" --no-share
 	parse_args "$@" # ERIPHE_BIND too
 	BIND_SET=1      # not kept from a run before either
-	DATA=${CONF%/launcher}
+	shares_now
+	SHARE_COMMAND="docker exec ${SELF_NAME:-eriphe} eriphe share"
+	[ -z "${ERIPHE_SHARES:-}" ] ||
+		log "ERIPHE_SHARES is no longer used: remove it from this container's settings. Share a folder with: $SHARE_COMMAND add <folder>"
 	WEB_PORT=${ERIPHE_WEB_PORT:-8443} API_PORT=${ERIPHE_API_PORT:-8800}
 	for p in "$WEB_PORT" "$API_PORT"; do
 		if ! printf '%s' "$p" | grep -Eq '^[1-9][0-9]{0,4}$' || [ "$p" -gt 65535 ]; then
@@ -144,15 +153,197 @@ settings() {
 	[ "$WEB_PORT" != "$API_PORT" ] || die "ERIPHE_WEB_PORT and ERIPHE_API_PORT are the same port"
 }
 
-# check_places: each share is a folder of the host, which a short-lived
-# container of this image tells (the launcher does not see them).
-check_places() {
-	share_paths | sed 's/:ro$//' | while IFS= read -r p; do
-		[ -n "$p" ] || continue
-		docker run --rm --network none --entrypoint true \
-			--mount "type=bind,src=$p,dst=/place,readonly" "$SELF_IMAGE" >/dev/null 2>&1 ||
-			die "ERIPHE_SHARES: $p is not a folder of this machine"
+# ---- The folders shared (eriphe share)
+#
+# eriphe-node and Syncthing see only the folders shared, each mounted alone
+# at its path, and the socket proxy allows bind mounts from them only: the
+# node cannot reach anything else of the host, Eriphe's own data included.
+# Mounts are fixed when a container is made: sharing a folder, or stopping,
+# makes the node, Syncthing and the proxy again (a few seconds). The node
+# keeps its own list (shares.json in its data: names, levels, copies), and
+# shares only what is mounted; the launcher's list follows it: a folder the
+# node no longer shares (stopped from the workspace) is unmounted at the
+# next start or share command.
+
+# folders: the launcher's list, one a line.
+folders() { [ ! -f "$FOLDERS" ] || grep -v '^$' "$FOLDERS" || true; }
+
+# shares_now: SHARES, install.sh's places, from the folders shared: one a
+# folder, at its path (folderN=/PATH[:ro],...), checked as --share is.
+shares_now() {
+	DATA=$HOST_DATA # check_shares refuses Eriphe's own folder as a share
+	SHARES=$(folder_shares)
+	check_shares
+	DATA=${CONF%/launcher}
+}
+
+# folder_shares: the places, the folders not on the host now (a disk away, a
+# folder deleted) left out until they are back. A short-lived container of
+# this image tells (the launcher does not see them).
+folder_shares() {
+	i=0 out=''
+	while IFS= read -r l; do
+		[ -n "$l" ] || continue
+		if ! docker run --rm --network none --entrypoint true \
+			--mount "type=bind,src=${l%:ro},dst=/place,readonly" "$SELF_IMAGE" >/dev/null 2>&1; then
+			log "${l%:ro} is not a folder of this machine now: Eriphe does not get it until it is back"
+			continue
+		fi
+		i=$((i + 1))
+		out="$out${out:+,}folder$i=$l"
+	done <<EOF
+$(folders)
+EOF
+	printf '%s' "$out"
+}
+
+# folder_ok PATH: PATH may be shared, as written (it says why not): an
+# absolute path, nothing hidden on the way, neither appdata, a system
+# folder, an Unraid share's system or domains, nor Eriphe's own data or a
+# folder holding it or the Docker socket; none of the characters the
+# compose project, its .env or the places' lists read.
+folder_ok() {
+	case $1 in
+	/?*) ;;
+	*) echo "not an absolute path of this machine (/mnt/user/Documents)" && return 1 ;;
+	esac
+	case $1 in
+	*/ | *//* | */./* | */../* | */. | */..) echo "not a folder's path as it is (no trailing /, no . or ..)" && return 1 ;;
+	*[\'\"\\\$\`,:]*) echo "it has a quote, a backslash, a \$, a backtick, a comma or a colon: rename it, or share a folder inside it" && return 1 ;;
+	*' ') echo "it ends with a space" && return 1 ;;
+	*/.*) echo "hidden: Eriphe never shares a hidden folder" && return 1 ;;
+	esac
+	if printf '%s' "$1" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+		echo "it has a control character" && return 1
+	fi
+	if printf '%s/' "$1" | grep -qi '/appdata/'; then
+		echo "appdata holds the containers' settings and tokens: never shared" && return 1
+	fi
+	if printf '%s' "$1" | grep -Eq '^/(bin|boot|dev|etc|lib|lib32|lib64|libx32|proc|root|run|sbin|sys|tmp|usr|var)(/|$)'; then
+		echo "a folder of the system: never shared" && return 1
+	fi
+	if printf '%s' "$1" | grep -Eq '^/mnt/[^/]+/(system|domains)(/|$)'; then
+		echo "Unraid's system and domains (Docker's and the VMs' disks): never shared" && return 1
+	fi
+	case $1/ in
+	"$HOST_DATA"/*) echo "Eriphe's own data: never shared" && return 1 ;;
+	esac
+	case $HOST_DATA/ in
+	"$1"/*) echo "it holds Eriphe's own data ($HOST_DATA): share a folder inside it" && return 1 ;;
+	esac
+	case $HOST_SOCK in
+	"$1"/*) echo "it holds the Docker socket: never shared" && return 1 ;;
+	esac
+	return 0
+}
+
+# folder_check PATH: the node's own checks, on the host, before PATH is
+# mounted into it (eriphe-node share check): a short-lived container of the
+# node's image, without a network nor a capability but reading every
+# folder, sees the host's / read-only; no symlink on the way, nothing
+# sensitive or private in it or above it. It says why not.
+folder_check() {
+	rc=0
+	out=$(docker run --rm --network none --read-only --cap-drop ALL --cap-add DAC_READ_SEARCH \
+		--security-opt no-new-privileges --user 0:0 --mount type=bind,src=/,dst=/host,readonly \
+		--entrypoint eriphe-node "$NODE_IMAGE" share check -host /host -data "$HOST_DATA" "$1" 2>&1) || rc=$?
+	case $rc:$out in
+	0:*) return 0 ;;
+	*"no eriphe-node in"* | 2:*)
+		# A node from before eriphe share: no share check, it wants its data.
+		echo "this eriphe-node cannot check a folder yet: update Eriphe first (Settings › Devices › Update, or docker exec ${SELF_NAME:-eriphe} eriphe-launcher update)"
+		return 1
+		;;
+	esac
+	out=$(printf '%s\n' "$out" | tail -n 1)
+	out=${out#"eriphe-node share: "}
+	printf '%s\n' "${out#"$1: "}"
+	return 1
+}
+
+# shared_paths: the folders in the node's list (shares.json), one a line;
+# fails when it cannot be read. None before the first share.
+shared_paths() {
+	[ -f "$DATA/node/shares.json" ] || return 0
+	jq -r '(.folders // [])[] | .path | select(type == "string" and (explode | all(. >= 32 and . != 127)))' "$DATA/node/shares.json"
+}
+
+# unshared [ONLY]: the folders of the launcher's list the node does not
+# share (any longer), only those of ONLY (lines) if given; fails when the
+# node's list cannot be read.
+unshared() {
+	shared=$(shared_paths) || return 1
+	folders | while IFS= read -r l; do
+		if printf '%s\n' "$shared" | grep -Fxq -- "${l%:ro}"; then continue; fi
+		if [ -n "${1:-}" ] && ! printf '%s\n' "$1" | grep -Fxq -- "${l%:ro}"; then continue; fi
+		printf '%s\n' "$l"
 	done
+}
+
+# set_folders LINES: the launcher's list.
+set_folders() {
+	printf '%s\n' "$1" | grep -v '^$' >"$FOLDERS.new" || true
+	mv "$FOLDERS.new" "$FOLDERS"
+}
+
+# drop_folders LINES: those lines off the launcher's list.
+drop_folders() { set_folders "$(folders | grep -Fxv -- "$1" || true)"; }
+
+# folders_migrate: an install from before, with places (ERIPHE_SHARES,
+# shares=/mnt/user), gets the folders shared in them as its list, each
+# checked again (a :ro place's read-only); the places themselves go. Once.
+folders_migrate() {
+	[ ! -f "$FOLDERS" ] || return 0
+	places=${ERIPHE_SHARES:-$(sed -n 's/^shares=//p' "$CONF/install.conf" 2>/dev/null | head -n 1)}
+	list=''
+	if [ -n "$places" ]; then
+		shared=$(shared_paths) || {
+			log "the node's list of shared folders cannot be read: its folders are kept for the next start"
+			return 0
+		}
+		while IFS= read -r p; do
+			[ -n "$p" ] || continue
+			ro='' found=''
+			set -f
+			old_ifs=$IFS IFS=,
+			for s in $places; do
+				pl=${s#*=} r=''
+				case $pl in *:ro) pl=${pl%:ro} r=:ro ;; esac
+				case $p/ in "${pl%/}"/*) found=1 ro=$r && break ;; esac
+			done
+			IFS=$old_ifs
+			set +f
+			[ -n "$found" ] || continue
+			if why=$(folder_ok "$p"); then
+				list="$list$p$ro$NL"
+			else
+				log "$p is no longer given to Eriphe: $why"
+			fi
+		done <<EOF
+$shared
+EOF
+	fi
+	mkdir -p "$CONF"
+	set_folders "$list"
+	[ -z "$places" ] || log "the places ($places) are gone: each of the $(folders | grep -c . || true) folders shared is now mounted alone"
+}
+
+# at_work: how many tasks are at work here now (an agent running a turn),
+# from the node's awake file (node/awake.go); a task waiting for a message
+# or a permission is not.
+at_work() {
+	n=$(sed -n 's/^tasks=\([0-9][0-9]*\)$/\1/p' "$DATA/node/awake" 2>/dev/null | head -n 1)
+	printf '%s' "${n:-0}"
+}
+
+# busy NOW WHAT: refuses WHAT while tasks are at work here, unless NOW:
+# making the node again stops its tasks' containers; they start again from
+# their folders and resume their sessions, but a turn under way is cut.
+busy() {
+	[ -z "$1" ] || return 0
+	n=$(at_work)
+	[ "$n" -gt 0 ] || return 0
+	die "$n task(s) at work here now: $2 starts eriphe-node again, which interrupts them (they resume where they were). Run it again once they are done, or with --now"
 }
 
 # lan_address: the host's address on the LAN, from a short-lived container
@@ -193,14 +384,18 @@ run() {
 		log "Eriphe was uninstalled from here (eriphe-launcher uninstall): remove this container, or delete $HOST_DATA/launcher/uninstalled to install it again"
 		idle
 	fi
-	settings
-	check_places
+	mkdir -p "$CONF"
+	chmod 700 "$CONF"
+	folders_migrate
+	# What the node no longer shares is unmounted.
+	if gone=$(unshared) && [ -n "$gone" ]; then
+		drop_folders "$gone"
+	fi
 	# A first install takes the current images, even if older ones with the
 	# same tag are already on this machine; a restart never updates.
 	PULL=missing UPDATE_BY=loop FIRST=''
 	[ -f "$CONF/install.conf" ] || PULL=always FIRST=1
-	mkdir -p "$CONF"
-	chmod 700 "$CONF"
+	settings
 	say ""
 	if [ -n "$FIRST" ] && [ "$MODE" = node ]; then
 		say "Connecting this machine to $ASSISTANT"
@@ -213,6 +408,13 @@ run() {
 	on_steps host_docker
 	INFO=$OUT
 	settle
+	stack_up
+	summary "$OUT"
+	loop
+}
+
+# stack_up: the compose project written and up, as install.sh's host_up.
+stack_up() {
 	version=$(info docker_version)
 	isolated=1
 	if [ "${version%%.*}" -lt 28 ] 2>/dev/null; then
@@ -220,8 +422,13 @@ run() {
 		isolated=0
 	fi
 	on_steps host_up "$(info docker_gid)" "$isolated"
-	summary "$OUT"
-	loop
+}
+
+# restack: the node, Syncthing and the proxy made again on the folders
+# shared now (compose makes again only what changed).
+restack() {
+	shares_now
+	stack_up
 }
 
 # summary OUT: as install.sh's outcome, for this container's log.
@@ -256,10 +463,10 @@ summary() {
 	elif [ -n "$PIN" ]; then
 		notice "it stays on version $PIN (ERIPHE_VERSION=latest follows the releases)."
 	fi
-	if [ -n "$SHARES" ]; then
-		note "To share a folder with Eriphe: docker exec eriphe-node eriphe-node share add <folder> (--drop to let it drop its results there)"
+	if [ -n "$(folders)" ]; then
+		note "Folders shared with Eriphe here: $SHARE_COMMAND list; to share another: $SHARE_COMMAND add <folder> (--drop to let it drop its results there)"
 	else
-		notice "Eriphe cannot open this machine's folders yet: set ERIPHE_SHARES (shares=/mnt/user) to give it some."
+		notice "Eriphe opens no folder of this machine yet: share one with $SHARE_COMMAND add <folder> (--drop to let it drop its results there)."
 	fi
 	good_to_know
 	say ""
@@ -338,7 +545,9 @@ self_update() {
 	[ "$new" != "$SELF_IMAGE" ] || return 0
 	log "updating itself to $tag"
 	docker rm -f "$SWAP" >/dev/null 2>&1 || true
+	# As hardened as the launcher: root for the socket, no capability.
 	docker run -d --rm --name "$SWAP" --network none --label eriphe.launcher=swap \
+		--cap-drop ALL --read-only --tmpfs /tmp --security-opt no-new-privileges \
 		-v "$HOST_SOCK:$SOCK" "$new" swap "$SELF" >/dev/null ||
 		log "could not start $SWAP"
 }
@@ -435,6 +644,197 @@ local_update() {
 	[ "$1" = rollback ] || [ -z "$to" ] || self_update "$to"
 }
 
+# ---- eriphe share
+
+share_usage() {
+	cat <<'EOF'
+eriphe share: the folders of this machine shared with Eriphe. eriphe-node
+and Syncthing get each folder shared alone, at its path, and nothing else of
+this machine: sharing a folder, or stopping, starts them again (a few
+seconds).
+
+  eriphe share add [--name NAME] [--read|--drop|--manage] [--copyable] [--now] FOLDER...
+      share each folder (its path on this machine: /mnt/user/Documents),
+      read-only by default (--read); --drop also lets tasks drop their
+      results in its results subfolder; --manage lets them create, change
+      and delete anything in it, a snapshot taken before each such task;
+      --copyable allows copies on your other machines; --name: the name
+      Eriphe knows it by (one folder only). Again on a folder shared: its
+      level and copies anew.
+  eriphe share remove [--now] NAME|FOLDER...
+      stop sharing; the tasks using it are stopped
+  eriphe share list [--json]
+  eriphe share snapshots NAME|FOLDER
+  eriphe share restore NAME|FOLDER SNAPSHOT|latest
+
+--now: even while tasks are at work here (they are interrupted, then
+resume where they were). Never shared: hidden folders, appdata, a folder holding keys,
+passwords or settings, a symlink, a system folder, Eriphe's own data.
+EOF
+}
+
+# share CMD ARGS...: eriphe share.
+share() {
+	cmd=${1:-}
+	[ $# -eq 0 ] || shift
+	case $cmd in
+	add) share_add "$@" ;;
+	remove | rm) share_remove "$@" ;;
+	list | snapshots | restore)
+		share_installed
+		exec docker exec eriphe-node eriphe-node share "$cmd" "$@"
+		;;
+	'' | -h | --help | help) share_usage ;;
+	*) die "unknown command eriphe share $cmd (eriphe share --help)" ;;
+	esac
+}
+
+share_installed() {
+	[ -f "$CONF/install.conf" ] || die "Eriphe is not installed here yet: the container's first start does it"
+	! uninstalled || die "Eriphe was uninstalled from here"
+}
+
+# share_ready: what a change of the list needs: no update under way (its
+# lock), the settings, the host's answer.
+share_ready() {
+	share_installed
+	discover
+	exec 8>"$CONF/apply.lock"
+	! command -v flock >/dev/null 2>&1 || flock 8
+	folders_migrate
+	PULL=missing UPDATE_BY=loop
+	settings
+	on_steps host_docker
+	INFO=$OUT
+	settle
+}
+
+# share_add ARGS...: each folder checked here (folder_ok), then by the
+# node's own checks on the host (folder_check), mounted (restack), then
+# shared by the node, with the level and copies asked; a folder the node
+# does not share is unmounted again.
+share_add() {
+	level='' copy='' fname='' named='' now='' asked=''
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-read | --read | -drop | --drop | -manage | --manage)
+			l=--${1##*-}
+			[ -z "$level" ] || [ "$level" = "$l" ] || die "--read, --drop and --manage: choose one"
+			level=$l
+			;;
+		-copyable | --copyable) copy=1 ;;
+		-now | --now) now=1 ;;
+		-name | --name)
+			[ $# -ge 2 ] || die "--name takes the name Eriphe knows the folder by"
+			fname=$2 named=1
+			shift
+			;;
+		-name=* | --name=*) fname=${1#*=} named=1 ;;
+		-?*) die "unknown option $1 (eriphe share --help)" ;;
+		*)
+			case $1 in *"$NL"*) die "a folder's path is one line" ;; esac
+			asked="$asked$1$NL"
+			;;
+		esac
+		shift
+	done
+	if [ -z "$asked" ]; then
+		share_usage >&2
+		exit 2
+	fi
+	[ -z "$named" ] || [ "$(printf '%s' "$asked" | grep -c .)" = 1 ] || die "--name is for one folder only"
+	share_ready
+	cur=$(folders) want=$(folders) given='' failed=''
+	set -f
+	old_ifs=$IFS IFS=$NL
+	for p in $asked; do
+		IFS=$old_ifs
+		if ! why=$(folder_ok "$p"); then
+			say "Not shared: $p: $why"
+			failed=1
+			continue
+		fi
+		if printf '%s\n' "$want" | grep -Fxq -- "$p:ro"; then
+			# Read-only, from a :ro place: written to only if asked now.
+			if [ "$level" = --drop ] || [ "$level" = --manage ]; then
+				want=$(printf '%s\n' "$want" | grep -Fxv -- "$p:ro" || true)$NL$p
+			fi
+		elif ! printf '%s\n' "$want" | grep -Fxq -- "$p"; then
+			if ! why=$(folder_check "$p"); then
+				say "Not shared: $p: $why"
+				failed=1
+				continue
+			fi
+			want=$want$NL$p
+		fi
+		given=$given$p$NL
+	done
+	IFS=$old_ifs
+	set +f
+	[ -n "$given" ] || exit 1
+	want=$(printf '%s\n' "$want" | grep -v '^$' || true)
+	if [ "$want" != "$cur" ]; then
+		busy "$now" "sharing a folder"
+		set_folders "$want"
+		say "Giving the folder to eriphe-node and Syncthing (they start again)..."
+		restack
+	fi
+	# The node's own share add, the folders mounted: its checks, the level
+	# and the copies, its list.
+	set --
+	[ -z "$level" ] || set -- "$level"
+	[ -z "$copy" ] || set -- "$@" --copyable
+	[ -z "$named" ] || set -- "$@" --name "$fname"
+	set -f
+	IFS=$NL
+	for p in $given; do set -- "$@" "$p"; done
+	IFS=$old_ifs
+	set +f
+	rc=0
+	docker exec -e ERIPHE_SHARE_COMMAND= eriphe-node eriphe-node share add "$@" || rc=$?
+	if gone=$(unshared "$given") && [ -n "$gone" ]; then
+		drop_folders "$gone"
+		say "Taking back what eriphe-node did not share..."
+		restack
+	fi
+	[ "$rc" != 0 ] || [ -z "$failed" ] || rc=1
+	exit "$rc"
+}
+
+# share_remove [--now] NAME|FOLDER...: the node stops sharing them (and the
+# tasks using them), then they are unmounted; while tasks are at work, at the
+# next start unless --now.
+share_remove() {
+	now=''
+	n=$# i=0
+	while [ "$i" -lt "$n" ]; do
+		a=$1
+		shift
+		i=$((i + 1))
+		case $a in
+		-now | --now) now=1 ;;
+		*) set -- "$@" "$a" ;;
+		esac
+	done
+	if [ $# -eq 0 ]; then
+		share_usage >&2
+		exit 2
+	fi
+	share_ready
+	rc=0
+	docker exec eriphe-node eriphe-node share remove "$@" || rc=$?
+	if gone=$(unshared) && [ -n "$gone" ]; then
+		if [ -z "$now" ] && [ "$(at_work)" -gt 0 ]; then
+			say "Unused now; eriphe-node still has it mounted until it starts again (tasks are at work here): eriphe share remove --now, or the next start of ${SELF_NAME:-eriphe}, takes it off."
+		else
+			drop_folders "$gone"
+			say "Taking the folder back from eriphe-node and Syncthing (they start again)..."
+			restack
+		fi
+	fi
+	exit "$rc"
+}
+
 # uninstall [--data]: install.sh --uninstall's work on what this container
 # made; its data stays unless --data. The container is then stopped, kept
 # from starting again, for you to remove.
@@ -486,8 +886,20 @@ uninstall() {
 # The tests (launcher_test.sh) source it for its functions.
 [ -z "${ERIPHE_LAUNCHER_SOURCED:-}" ] || return 0
 
+# As eriphe (docker exec eriphe eriphe share ...): its share command only.
+if [ "${0##*/}" = eriphe ]; then
+	case ${1:-} in
+	share) ;;
+	*) die "eriphe here is for the folders shared: eriphe share add|remove|list|snapshots|restore (eriphe share --help)" ;;
+	esac
+fi
+
 case ${1:-run} in
 run) run ;;
+share)
+	shift
+	share "$@"
+	;;
 update) local_update update ;;
 rollback) local_update rollback ;;
 uninstall)
@@ -498,6 +910,6 @@ swap)
 	[ $# -eq 2 ] || die "swap takes the container to replace"
 	swap "$2"
 	;;
--h | --help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' ;;
-*) die "unknown command $1 (run, update, rollback, uninstall)" ;;
+-h | --help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//' ;;
+*) die "unknown command $1 (run, update, rollback, uninstall, share)" ;;
 esac

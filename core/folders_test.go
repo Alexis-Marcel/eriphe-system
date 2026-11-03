@@ -343,7 +343,7 @@ func TestWebFolders(t *testing.T) {
 	csrf := tw.setup()
 	code, body, _ := tw.do("GET", "/settings/folders", nil, nil)
 	for _, want := range []string{"Clients", `<option value="drop" selected>À côté</option>`, `id="folders-pc"`, "Aucun dossier partagé sur cet appareil.",
-		`data-dialog="share-how-dlg"`, "Comment partager ?", `id="share-how-dlg"`, "eriphe-node share add", "--manage", "Gérer", "Factures", "data:/Compta/Factures", "À partager de nouveau sur l&#39;appareil"} {
+		`data-dialog="share-how-dlg"`, "Comment partager ?", `id="share-how-dlg"`, "docker exec eriphe eriphe share add /mnt/user/Clients", "--manage", "Gérer", "Factures", "data:/Compta/Factures", "À partager de nouveau sur l&#39;appareil"} {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Fatalf("page lacks %q: %d %s", want, code, body)
 		}

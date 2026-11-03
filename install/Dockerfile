@@ -6,6 +6,8 @@ FROM docker:27-cli
 RUN apk add --no-cache curl jq
 COPY install.sh /usr/local/lib/eriphe/install.sh
 COPY eriphe-launcher /usr/local/bin/eriphe-launcher
+# eriphe share, the folders shared: docker exec eriphe eriphe share add FOLDER.
+RUN ln -s eriphe-launcher /usr/local/bin/eriphe
 ARG VERSION=dev
 ENV ERIPHE_LAUNCHER_VERSION=$VERSION
 # The version, which eriphe-core and the updaters read; the source, which

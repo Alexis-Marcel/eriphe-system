@@ -17,8 +17,10 @@ import (
 
 // Folders ("Dossiers"): the user's own folders given to Eriphe. A folder
 // is shared on the machine that holds it, never from here: the user runs
-// `eriphe-node share add` there, or right-clicks it in the Finder or the
-// Explorer, and that machine's node keeps the list (node/shared.go). The
+// `eriphe-node share add` there (through eriphe-share, or `eriphe share
+// add` in the one-container install's launcher, which mounts that folder
+// alone into the node), or right-clicks it in the Finder or the Explorer,
+// and that machine's node keeps the list (node/shared.go). The
 // node reports each folder's name, level, whether it may be copied to the
 // user's other machines, and an opaque id, never its path; eriphe-core can
 // lend a task one of them, take one off the list, lower its level or turn

@@ -1063,6 +1063,7 @@ Options, before the command: `-root` (env `ERIPHE_ROOT`), `-share` (env `ERIPHE_
 `-snapshot-limit` (env `ERIPHE_SNAPSHOT_LIMIT`). It must run as the node's user, with its settings:
 `sudo eriphe-share` on Linux (`docker exec eriphe-node eriphe-node share` in the node's
 container, which sees the places at their paths on the machine; `ERIPHE_ROOT` is set there),
+`docker exec eriphe eriphe share` with the one-container install (below),
 `~/.eriphe/bin/eriphe-share` on a Mac (the node's `node.env`), also behind the Finder's Quick
 Action "Share with Eriphe..." (`~/Library/Services`: it asks for the level and the copies with
 macOS's own dialogs, `eriphe-share --ask`, and a notification says how it went), and the
@@ -1089,6 +1090,23 @@ node and for the Docker daemon (as `-root` without `-host-root`): in a container
 same path (`install.sh --share` does, see install/README.md), and let the socket proxy bind-mount
 from it (`-allowbindmountfrom`). A shared folder that is not there now (an unplugged disk), or no
 longer in a place, is reported `missing` and logged at start.
+
+**The one-container install** (eriphe-launcher, install/README.md) has no places to declare: the
+launcher keeps the list of the folders shared on the machine, and mounts each into the node and
+Syncthing alone, at its path, as a place of its own (`ERIPHE_NODE_SHARES=folder1=/mnt/user/Docs,…`;
+the socket proxy's `-bind-from` is the same folders). Nothing else of the host is mounted, Eriphe's
+own data included: the node can never share, nor reach, a folder the launcher did not mount. The
+user shares a folder with the launcher (`docker exec eriphe eriphe share add FOLDER`, the same
+options), which checks it, then runs `eriphe-node share check` in a short-lived container of the
+node's image (no network, no capability but `DAC_READ_SEARCH`, the host's `/` read-only at
+`/host`): a path with no symlink anywhere on the way (the mount is then what was checked), nothing
+hidden, sensitive or private on the way, above it (a `.eriphe-private` in a parent, an Unraid
+share's `system` or `domains`) or inside it, not Eriphe's data (`-data`, host paths) nor holding
+it. Then it makes the node, Syncthing and the proxy again with the folder mounted, and runs this
+node's own `share add` on it (`ERIPHE_SHARE_COMMAND` cleared), which keeps the name, the level and
+the copies as anywhere. `ERIPHE_SHARE_COMMAND`, set on the node's container, makes a user's own
+`eriphe-node share add` print the launcher's command instead; `list`, `remove`, `snapshots` and
+`restore` work as before.
 
 Every path is checked when it is shared, and again at every mount:
 

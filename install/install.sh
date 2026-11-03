@@ -884,12 +884,12 @@ EOF
       - $data/node:$data/node:ro
 EOF
 	share_paths | sed 's/:ro$//' | while IFS= read -r p; do
-		[ -z "$p" ] || printf '      - %s:%s:ro\n' "$p" "$p"
+		[ -z "$p" ] || printf '      - %s\n' "$(yaml_str "$p:$p:ro")"
 	done
 	cat <<EOF
     networks: [eriphe-docker]
     command: ["docker-proxy", "-listen", ":2375", "-allow-from", "eriphe-node",
-              "-bind-from", "$data/node$(share_paths | sed 's/:ro$//' | tr '\n' ',' | sed 's/,$//; s/^./,&/')",
+              "-bind-from", $(yaml_str "$data/node$(share_paths | sed 's/:ro$//' | tr '\n' ',' | sed 's/,$//; s/^./,&/')"),
               "-networks", "eriphe-system,eriphe-tasks", "-wake-image", "$NODE_IMAGE"]
 
   node:
@@ -920,6 +920,11 @@ EOF
       ERIPHE_INSTALL: $INSTALL
       # Its data, for eriphe-node share in its container (eriphe-share).
       ERIPHE_ROOT: $data/node
+EOF
+	# eriphe-launcher shares the folders itself (it mounts them): the
+	# node's own eriphe-node share add points to its command.
+	[ -z "${SHARE_COMMAND:-}" ] || printf '      ERIPHE_SHARE_COMMAND: %s\n' "$(yaml_str "$SHARE_COMMAND")"
+	cat <<EOF
       # Syncthing's home, read-only: its API's address and key (node/syncthing.go).
       ERIPHE_SYNCTHING_HOME: $data/syncthing
       DOCKER_HOST: tcp://eriphe-docker-proxy:2375
@@ -1002,11 +1007,14 @@ EOF
 share_volumes() {
 	share_paths | while IFS= read -r p; do
 		case $p in
-		*:ro) printf '      - %s:%s:ro\n' "${p%:ro}" "${p%:ro}" ;;
-		?*) printf '      - %s:%s\n' "$p" "$p" ;;
+		*:ro) printf '      - %s\n' "$(yaml_str "${p%:ro}:${p%:ro}:ro")" ;;
+		?*) printf '      - %s\n' "$(yaml_str "$p:$p")" ;;
 		esac
 	done
 }
+
+# yaml_str S: S as a YAML string in double quotes (a path may hold a space or a #).
+yaml_str() { printf '"%s"' "$(printf '%s' "$1" | sed 's/[\\"]/\\&/g')"; }
 
 # card_to: the network card this machine reaches $1 through (an IPv4
 # address, or default): its MAC address and its network's broadcast address,

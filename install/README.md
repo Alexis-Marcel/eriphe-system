@@ -158,15 +158,17 @@ already runs, Eriphe also installs by starting one container, `ghcr.io/alexis-ma
 
 ```sh
 docker run -d --name eriphe --restart unless-stopped \
+  --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER \
+  --read-only --tmpfs /tmp --security-opt no-new-privileges \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /srv/eriphe:/data \
-  -e ERIPHE_SHARES=documents=/srv/documents \
   ghcr.io/alexis-marcel/eriphe
 docker logs -f eriphe
+docker exec eriphe eriphe share add /srv/documents   # a folder Eriphe may read
 ```
 
-`/srv/eriphe` is Eriphe's data folder, any folder of the host (on Unraid `/mnt/user/appdata/eriphe`,
-with `ERIPHE_SHARES=shares=/mnt/user`; on Synology for instance `/volume1/docker/eriphe`). On Unraid, the template `unraid/eriphe.xml` does the same from the Docker page
+`/srv/eriphe` is Eriphe's data folder, any folder of the host (on Unraid `/mnt/user/appdata/eriphe`;
+on Synology for instance `/volume1/docker/eriphe`). On Unraid, the template `unraid/eriphe.xml` does the same from the Docker page
 ([unraid/README.md](../unraid/README.md)).
 
 This container is the **launcher** (`install/eriphe-launcher`). It makes and keeps running the same
@@ -178,9 +180,17 @@ no port, is on no network of Eriphe's (tasks cannot reach it), and runs nothing 
 them, then waits for update requests. It does not even need a network of its own (`--network
 none` works).
 
+- **Hardened.** The launcher holds the Docker socket, so its own container gives it no more than it
+  needs: no capability but `CHOWN`, `DAC_OVERRIDE` and `FOWNER` (it runs as root, the socket's
+  owner, and writes eriphe-core's folder, owned by UID 1993: hands it over, reads and writes the
+  update requests in it), a read-only root (it writes only under `/data`, and in `/tmp`, a tmpfs),
+  and `no-new-privileges`. Its short-lived containers are as tight: the swap that replaces it on
+  an update has no capability at all, no network, a read-only root. Without these flags it works
+  the same, with more than it needs.
 - **Data.** Everything lives in the folder mounted at `/data`: `core/` (eriphe-core's data, owned
   by UID 1993), `node/` (the node's root, `node.json` its identity), `launcher/` (the compose
-  project, `install.conf`, the updater), `update/` (the updater's log and the previous versions).
+  project, `install.conf`, the updater, `folders`: the folders shared), `update/` (the updater's
+  log and the previous versions).
   The other containers need the folder's path on the host for their bind mounts: the launcher reads
   it from its own container, through the socket (`docker inspect`, the source of `/data`). A named
   volume works too.
@@ -198,6 +208,32 @@ none` works).
   short-lived container of the new image (`eriphe-launcher-swap`, no network) replaces the
   launcher's container by one with the same settings (puts the old one back if the new one does not
   stay up). By hand: `docker exec eriphe eriphe-launcher update`, or `rollback`.
+- **Folders.** Nothing of the host is given to Eriphe until you share a folder, on the host:
+  `docker exec eriphe eriphe share add /mnt/user/Documents` (the options of [Folders](#folders):
+  `--drop`, `--manage`, `--copyable`, `--name`; also `list`, `remove`, `snapshots`, `restore`).
+  The launcher keeps the list (`launcher/folders`) and gives eriphe-node and Syncthing each folder
+  shared alone, mounted at its path; the socket proxy allows bind mounts from those folders only.
+  Nothing else of the host is mounted into them, not `/mnt/user`, nor Eriphe's own data: a node
+  taken over could not reach eriphe-core's memory, accounts or keys. Before anything sees a
+  folder, the launcher refuses a hidden one, `appdata`, a system folder, Unraid's `system` and
+  `domains`, Eriphe's data or a folder holding it or the Docker socket, and a path with a quote, a
+  `$`, a comma or a colon; then a short-lived container of the node's image (no network, no
+  capability but reading, the host's `/` read-only) runs the node's own checks on the host: no
+  symlink on the way, nothing sensitive or private in it or above it (node/README.md, Shared
+  folders). Mounts are fixed when a container is made: sharing a folder makes the node, Syncthing
+  and the proxy again, a few seconds. Their tasks' containers are stopped with the node and start
+  again from their folders, resuming their sessions (a turn under way is cut, and counts as one
+  of a task's 3 restarts): while a task is at work, `share add` refuses unless `--now`, and
+  `share remove` unmounts the folder at the next start unless `--now`. A folder stopped from the
+  workspace is unmounted at the next start or share command; one not on the host now (a disk
+  away) is left out until it is back. `docker exec eriphe-node eriphe-node share add` now prints
+  the launcher's command instead.
+- **Places of before.** An install from before this version gave eriphe-node whole places
+  (`ERIPHE_SHARES`, `shares=/mnt/user`). On its first start after the update, the launcher turns
+  the folders shared in them (the node's list) into its own list, each mounted alone, a `:ro`
+  place's read-only, with no action needed; a place with nothing shared simply goes. A folder
+  that no longer passes the checks above is logged and given to Eriphe no more (the workspace
+  shows it missing). `ERIPHE_SHARES` is ignored afterwards: remove it from the container.
 - **Uninstall.** `docker exec eriphe eriphe-launcher uninstall` removes the containers it made, the
   task and service containers, the networks, the `eriphe-cache` volume and Eriphe's images; the
   data folder stays (`uninstall --data` empties it too). It then stops the launcher and keeps it
@@ -210,7 +246,6 @@ for the node's name once joined):
 | Variable | Default | What |
 |---|---|---|
 | `ERIPHE_MODE` | `core` | `core`: eriphe-core here, with a node of its own; `node`: join another eriphe-core |
-| `ERIPHE_SHARES` | none | places whose folders may be given to Eriphe, `NAME=/PATH[:ro]` comma-separated, host paths (`shares=/mnt/user`), as `--share` ([Folders](#folders)); each is checked on the host by a short-lived container |
 | `ERIPHE_WEB_PORT` | `8443` | the workspace's port on the host |
 | `ERIPHE_API_PORT` | `8800` | eriphe-core's port on the host, for the other devices (the join commands give it) |
 | `ERIPHE_BIND` | every IPv4 address | the host's IPv4 address the two ports listen on, as `--bind` (`127.0.0.1`: only through Tailscale or a reverse proxy on the host) |
@@ -714,7 +749,8 @@ Nothing is shared unless you say so. On a Mac with Apple's container, right-clic
 Finder, Quick Actions, "Share with Eriphe..." (named in French on a Mac in French), which asks for
 the level and the copies, or use `~/.eriphe/bin/eriphe-share`. On Windows, right-click a folder of
 your user folder in File Explorer, "Show more options", "Share with Eriphe...", which asks the same. With the
-one-container install (eriphe-launcher), `docker exec eriphe-node eriphe-node share add /mnt/user/…`. Folders given from the workspace
+one-container install (eriphe-launcher), `docker exec eriphe eriphe share add /mnt/user/…`, which
+mounts that folder alone into the node ([One container](#one-container-nas-any-linux-with-docker)). Folders given from the workspace
 before this version are no longer lent: share them again this way (Settings → Folders lists
 them).
 
