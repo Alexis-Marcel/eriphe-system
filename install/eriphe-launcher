@@ -147,7 +147,22 @@ settings() {
 	BIND_SET=1      # not kept from a run before either
 	FOLDER_HELPER=1 # install.sh's compose: the node mounts no folder, the engine reads $BINDS
 	COPIED=$(copied) || COPIED=$(cat "$COPIED_NOW" 2>/dev/null || true)
-	SHARE_COMMAND="docker exec ${SELF_NAME:-eriphe} eriphe share"
+	# The command a user shares a folder with, as said here and by the node:
+	# this container's, unless the machine has its own (Windows' Explorer).
+	SHARE_COMMAND=${ERIPHE_SHARE_COMMAND:-docker exec ${SELF_NAME:-eriphe} eriphe share}
+	case $SHARE_COMMAND in
+	*"$NL"* | *"$(printf '\r')"*) die "ERIPHE_SHARE_COMMAND is one line" ;;
+	esac
+	wake_given
+	# The folder a helper in the user's session writes session.json to (on
+	# Windows, eriphe-session.exe), given to the node read-only.
+	SESSION_DIR=${ERIPHE_SESSION_DIR:-}
+	case $SESSION_DIR in
+	'') ;;
+	/ | *[!A-Za-z0-9/._-]*) die "ERIPHE_SESSION_DIR=$SESSION_DIR: the session folder is not / and has only letters, digits, /, ., _ or -" ;;
+	/*) ;;
+	*) die "ERIPHE_SESSION_DIR=$SESSION_DIR is not an absolute path" ;;
+	esac
 	[ -z "${ERIPHE_SHARES:-}" ] ||
 		log "ERIPHE_SHARES is no longer used: remove it from this container's settings. Share a folder with: $SHARE_COMMAND add <folder>"
 	WEB_PORT=${ERIPHE_WEB_PORT:-8443} API_PORT=${ERIPHE_API_PORT:-8800}
@@ -366,6 +381,40 @@ lan_address() {
 wake_card() {
 	docker run --rm --network host --entrypoint sh -e ERIPHE_INSTALL_LIB=1 -e CORE_URL="${CORE_URL:-}" "$SELF_IMAGE" \
 		-c '. /usr/local/lib/eriphe/install.sh && wake_card' 2>/dev/null || true
+}
+
+# wake_given: the card given in ERIPHE_WAKE_MAC (MAC addresses, comma-
+# separated) and ERIPHE_WAKE_BROADCAST, when the host's network is not the
+# machine's (WSL's card is virtual): then wake_card does not look for it.
+wake_given() {
+	if [ -z "${ERIPHE_WAKE_MAC:-}" ]; then
+		[ -z "${ERIPHE_WAKE_BROADCAST:-}" ] || die "ERIPHE_WAKE_BROADCAST goes with ERIPHE_WAKE_MAC, the card's MAC address"
+		return 0
+	fi
+	macs=
+	old_ifs=$IFS
+	IFS=,
+	set -f
+	for m in $ERIPHE_WAKE_MAC; do
+		m=$(printf '%s' "$m" | tr -d ' ' | tr 'A-F-' 'a-f:')
+		[ -n "$m" ] || continue
+		if ! printf '%s' "$m" | grep -Eq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$' || [ "$m" = 00:00:00:00:00:00 ]; then
+			IFS=$old_ifs
+			die "ERIPHE_WAKE_MAC: $m is not a MAC address, like 00:00:5e:00:53:01"
+		fi
+		macs=${macs:+$macs,}$m
+	done
+	IFS=$old_ifs
+	set +f
+	[ -n "$macs" ] || die "ERIPHE_WAKE_MAC has no MAC address, like 00:00:5e:00:53:01"
+	b=${ERIPHE_WAKE_BROADCAST:-}
+	if [ -n "$b" ]; then
+		printf '%s' "$b" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || die "ERIPHE_WAKE_BROADCAST: $b is not an IPv4 address, like 192.0.2.255"
+		for o in $(printf '%s' "$b" | tr . ' '); do
+			[ "$o" -le 255 ] || die "ERIPHE_WAKE_BROADCAST: $b is not an IPv4 address, like 192.0.2.255"
+		done
+	fi
+	WAKE_MAC=$macs WAKE_BROADCAST=$b WAKE_DONE=1
 }
 
 uninstalled() { [ -f "$CONF/uninstalled" ]; }

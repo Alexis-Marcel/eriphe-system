@@ -262,6 +262,9 @@ for the node's name once joined):
 | `ERIPHE_NODE_LABELS` | none | as `--labels` |
 | `ERIPHE_MODEL_SERVER` | none | as `--model-server`: `http://eriphe-ollama:11434` for an Ollama container on `eriphe-system` ([A model behind this machine](#a-model-behind-this-machine)) |
 | `ERIPHE_CORE`, `ERIPHE_JOIN_TOKEN`, `ERIPHE_CA_HASH` | | node mode: from "Connect a device" (the token only matters at the first start) |
+| `ERIPHE_WAKE_MAC`, `ERIPHE_WAKE_BROADCAST` | found | the network card to wake this machine by ([Connect a device](#4-connect-a-device), Waking a device): its MAC address (several, comma-separated) and its network's broadcast address, when the host's network is not the machine's (under WSL its card is virtual); otherwise the launcher finds them on the host's network |
+| `ERIPHE_SESSION_DIR` | none | a folder of the host where a helper in the user's session writes `session.json` (on Windows, `eriphe-session.exe`): given read-only to the node only, which tells eriphe-core whether the user is at the machine |
+| `ERIPHE_SHARE_COMMAND` | `docker exec eriphe eriphe share` | the command a folder is shared with on this machine, as the launcher's log and the node say it (for a machine with its own, such as Windows' Explorer menu) |
 | `ERIPHE_ADDRESS` | found | the host's address, for the log only |
 | `TZ` | | eriphe-core's time zone (Unraid gives the server's; without it, Europe/Paris) |
 

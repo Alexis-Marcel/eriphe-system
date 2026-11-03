@@ -53,6 +53,8 @@ SYNCTHING_TEAM=LQE5SYM783
 # it through eriphe-core, node/syncpeer.go).
 SYNCTHING_API=127.0.0.1:18384
 SYNCTHING_LISTEN=127.0.0.1:22100
+# Where eriphe-launcher's node sees the session folder (ERIPHE_SESSION_DIR).
+SESSION_MOUNT=/run/eriphe-session
 
 # The install's layout: what an install puts on a machine besides the images
 # (the compose project and its services, the units, the LaunchAgents, the
@@ -947,8 +949,12 @@ EOF
 	# eriphe-launcher keeps the list of the folders shared: the node's own
 	# eriphe-node share add points to its command. The node mounts none of
 	# them: helpers of its image work in them (node/helper.go).
-	[ -z "${SHARE_COMMAND:-}" ] || printf '      ERIPHE_SHARE_COMMAND: %s\n' "$(yaml_str "$SHARE_COMMAND")"
+	# ($ doubled: Compose would read it as one of its variables.)
+	[ -z "${SHARE_COMMAND:-}" ] || printf '      ERIPHE_SHARE_COMMAND: %s\n' "$(yaml_str "$(printf '%s' "$SHARE_COMMAND" | sed 's/\$/$$/g')")"
 	[ -z "${FOLDER_HELPER:-}" ] || printf '      ERIPHE_FOLDER_HELPER: %s\n' "$NODE_IMAGE"
+	# eriphe-launcher: what a helper in the user's session writes (on
+	# Windows, eriphe-session.exe), its folder given read-only (node/context.go).
+	[ -z "${SESSION_DIR:-}" ] || printf '      ERIPHE_SESSION_FILE: %s/session.json\n' "$SESSION_MOUNT"
 	cat <<EOF
       # Syncthing's home, read-only: its API's address and key (node/syncthing.go).
       ERIPHE_SYNCTHING_HOME: $data/syncthing
@@ -963,6 +969,7 @@ EOF
       - $data/node:$data/node
       - $data/syncthing:$data/syncthing:ro
 EOF
+	[ -z "${SESSION_DIR:-}" ] || printf '      - %s\n' "$(yaml_str "$SESSION_DIR:$SESSION_MOUNT:ro")"
 	[ -n "${FOLDER_HELPER:-}" ] || share_volumes
 	cat <<EOF
     networks: [eriphe-system, eriphe-tasks, eriphe-docker]
