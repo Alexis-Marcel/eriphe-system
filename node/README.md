@@ -70,8 +70,8 @@ device" offers both addresses once remote access is ready.
 - **Linux, macOS**: `install/install.sh`, one command that brings its own container runtime
   (Docker Engine on Linux; on a Mac with Apple silicon and macOS 26, Apple's container, the node on
   the Mac itself, see [The container engine](#the-container-engine-a-mac); on other Macs Lima and
-  a Linux VM that sees no Mac folder, without Docker Desktop) and runs the node as below, with a
-  socket proxy where there is Docker; `--core-mode` installs eriphe-core next to it. See
+  a Linux VM that sees no Mac folder, without Docker Desktop) and runs the node as below, behind
+  eriphe-node engine where there is Docker; `--core-mode` installs eriphe-core next to it. See
   `install/README.md`.
 
   ```sh
@@ -79,16 +79,15 @@ device" offers both addresses once remote access is ready.
   ```
 
 - **NAS** (or by hand on Linux): run the image with the root at the same path inside and outside, attached to the
-  task network (`-task-network`, see Networks) so that tasks reach it at `-callback-url`, with Docker reached
-  through a socket proxy that only allows what the node needs (`DOCKER_HOST`), never the socket
-  itself: `eriphe-node docker-proxy` (`dockerproxy.go`), the same image in a container of its own
+  task network (`-task-network`, see Networks) so that tasks reach it at `-callback-url`, with no Docker
+  access but eriphe-node engine (`-engine-url`, see [The engine](#eriphe-node-engine)), never the socket
+  itself; see `deploy/nas/compose.yaml` and `deploy/README.md`. Before the engine, the node reached Docker
+  through `eriphe-node docker-proxy` (`dockerproxy.go`, to be removed), the same image in a container of its own
   that holds the socket and checks each container's whole create request against what the node
   sends (`-bind-from`, `-bind-file`, `-host-root`, `-networks`, `-wake-image`, `-allow-from`), and
   lets it touch its own containers only, and run a command (`docker exec`: the checks, the diff, the
   work kept) in a task's only, without privilege nor another user. `TestDockerProxyLetsTheNodeThrough` runs the
-  node's docker commands through it with the docker CLI: a new one belongs there. See `deploy/nas/compose.yaml`
-  and `deploy/README.md`. `eriphe-node engine` (see [The engine](#eriphe-node-engine)) replaces it:
-  the node then speaks no Docker at all (`-engine-url`).
+  node's docker commands through it with the docker CLI: a new one belongs there.
 - **Windows**: `install/install.ps1` at the root of the repository (it was `node/install/install.ps1`),
   from an administrator PowerShell; see `install/README.md`. It installs WSL if needed, creates a
   WSL distribution `eriphe` (Alpine, Docker Engine, eriphe-node from its image), without Docker
@@ -929,7 +928,9 @@ directly. The node is not trusted: a compromised node gets its own tasks, nothin
 What it cannot prevent is a race: a directory replaced by a symlink between its check and the
 daemon's mount. `TestEngineRunsTheNode` runs the node's own functions through the engine to a fake
 daemon (a new verb belongs there); `TestEngineRefusesWhatTheNodeMayNotDo` is a compromised node
-calling the engine directly. The installers still run the socket proxy (`docker-proxy`) for now.
+calling the engine directly. install.sh (Linux, a Mac's Lima VM), eriphe-launcher and
+`deploy/nas` run it as `eriphe-engine` (`ERIPHE_ENGINE_URL=http://eriphe-engine:8792`); WSL still
+runs the node next to dockerd without either (install.ps1).
 
 ## The container engine (a Mac)
 

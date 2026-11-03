@@ -173,7 +173,7 @@ on Synology for instance `/volume1/docker/eriphe`). On Unraid, the template `unr
 
 This container is the **launcher** (`install/eriphe-launcher`). It makes and keeps running the same
 containers as `install.sh` on a Linux host, with `install.sh`'s own functions: `eriphe-core` (no
-Docker access), `eriphe-node` (Docker only through the socket proxy), `eriphe-docker-proxy`, and
+Docker access), `eriphe-node` (no Docker access either: it asks the engine), `eriphe-engine`, and
 the networks `eriphe-system`, `eriphe-tasks`, `eriphe-docker` (see [What it
 installs](#what-it-installs)). Core and node stay separate containers. The launcher itself listens on
 no port, is on no network of Eriphe's (tasks cannot reach it), and runs nothing else: it starts
@@ -211,9 +211,9 @@ none` works).
 - **Folders.** Nothing of the host is given to Eriphe until you share a folder, on the host:
   `docker exec eriphe eriphe share add /mnt/user/Documents` (the options of [Folders](#folders):
   `--drop`, `--manage`, `--copyable`, `--name`; also `list`, `remove`, `snapshots`, `restore`).
-  The launcher keeps the list (`launcher/folders`) and writes a copy of it for the socket proxy
-  (`proxy/binds`, a folder of the data the node never sees, mounted read-only into the proxy
-  only), which reads it again at each request and allows bind mounts from those folders only
+  The launcher keeps the list (`launcher/folders`) and writes a copy of it for eriphe-node engine
+  (`proxy/binds`, a folder of the data the node never sees, mounted read-only into the engine
+  only), which reads it again at each request and mounts folders from that list only
   (`:ro` ones read-only only). eriphe-node mounts **no** shared folder: a task gets the folders it
   is given from the Docker daemon when its container is made, each alone at its path, and what
   the node does inside a folder (its checks before each lend, a results subfolder, a snapshot
@@ -229,7 +229,7 @@ none` works).
   capability but reading, the host's `/` read-only) runs the node's own checks on the host: no
   symlink on the way, nothing sensitive or private in it or above it (node/README.md, Shared
   folders). `share add` and `share remove` take effect at once and restart neither the node nor
-  the proxy, nor any task: the next task gets the folder, or no longer does. A task already at
+  the engine, nor any task: the next task gets the folder, or no longer does. A task already at
   work with a folder that is then unshared keeps it until it ends (eriphe-node lends it to no new
   task). Only Syncthing is made again, when the folders that may be copied change: copies to
   your other machines pause a few seconds (the command says so). A folder stopped from the
@@ -239,7 +239,7 @@ none` works).
 - **Places of before.** An install from before this version gave eriphe-node whole places
   (`ERIPHE_SHARES`, `shares=/mnt/user`). On its first start after the update, the launcher turns
   the folders shared in them (the node's list) into its own list, each given alone, a `:ro`
-  place's read-only (the proxy allows it read-only only), with no action needed; a place with nothing shared simply goes. A folder
+  place's read-only (the engine mounts it read-only only), with no action needed; a place with nothing shared simply goes. A folder
   that no longer passes the checks above is logged and given to Eriphe no more (the workspace
   shows it missing). `ERIPHE_SHARES` is ignored afterwards: remove it from the container.
 - **Uninstall.** `docker exec eriphe eriphe-launcher uninstall` removes the containers it made, the
@@ -451,8 +451,8 @@ eriphe-core never names an image nor a command: it can only ask "update" (to the
 or the pinned one) or "rollback". The images are the ones the installer wrote down
 (`ghcr.io/alexis-marcel/eriphe-core`, `eriphe-node`, `eriphe-base`; the node downloads the agents
 of its own version itself, see node/README.md, Agents). Neither eriphe-core nor the
-node gets any new right (the socket proxy allows the node exactly what it did, see
-deploy/README.md; it updates with the node, being its image): each only writes a short file in its own data folder. An **updater**, which the
+node gets any new right (eriphe-node engine runs the node's verbs only, see
+deploy/README.md; it updates with the node, first, being its image): each only writes a short file in its own data folder. An **updater**, which the
 installer puts on the host side, does the rest, as root there:
 
 | | the updater | runs |
@@ -633,13 +633,17 @@ The same compose project on every Linux machine, written to `/opt/eriphe` (`comp
 `install.conf` with the options), data in `/var/lib/eriphe`, as `deploy/nas/compose.yaml` does on
 a NAS:
 
-- `eriphe-docker-proxy`: the node's only way to Docker, the node's own image run as
-  `eriphe-node docker-proxy` (node/dockerproxy.go). It allows the calls the node makes, creates
-  containers only as the node makes them (nothing privileged, no added capability but a task's
-  three, no device, no host namespace) and bind mounts from `/var/lib/eriphe/node` and the shared
-  places (`--share`) only, their symlinks resolved (see deploy/README.md for what it checks and
-  what it does not stop). It runs as root with every capability dropped but `DAC_READ_SEARCH`, the
-  node's root and the shared places mounted read-only.
+- `eriphe-engine`: the only container with the Docker socket, the node's own image run as
+  `eriphe-node engine` (node/README.md, The engine). The node has no Docker access: it asks the
+  engine (`ERIPHE_ENGINE_URL`) for its verbs (a task, a check in a task, a service, a helper, a
+  wake), and the engine makes each container itself, with its hardening (nothing privileged, no
+  added capability but a task's three, no device, no host namespace, its own networks), with bind
+  mounts from `/var/lib/eriphe/node` and the shared places (`--share`) only, their symlinks
+  resolved (see deploy/README.md for what it checks and what it does not stop). It runs as root
+  with every capability dropped but `DAC_READ_SEARCH`, the node's root and the shared places
+  mounted read-only. An install from before it had `eriphe-docker-proxy` instead: its next update
+  brings the engine and removes the proxy (layout 3, [the machines update
+  themselves](#the-machines-update-themselves)).
 - `eriphe-node`: read-only root, every capability dropped but those that hand the task folders to
   the tasks' user, its root at `/var/lib/eriphe/node` (`node.json`: its identity), and each shared
   place at the same path (read-only for a `:ro` one), told to it in `ERIPHE_NODE_SHARES`.
@@ -659,7 +663,7 @@ a NAS:
   reports and upgrades off), the shared places and the node's copies (`/var/lib/eriphe/node/sync`)
   at their paths. The updater recreates it with the node.
 - the networks: `eriphe-tasks` (internal, isolated gateway with Docker 28 or later: the tasks reach
-  only the node), `eriphe-system` (eriphe-core and the services), `eriphe-docker` (the proxy).
+  only the node), `eriphe-system` (eriphe-core and the services), `eriphe-docker` (the engine, reached by the node only).
 - the updater, outside the compose project: `/opt/eriphe/update.sh` and `update.conf` (the images
   it works on), the systemd units `eriphe-update.service`, `.path` and `.timer`, its state in
   `/var/lib/eriphe/update`, and a file `updater` in the node's and eriphe-core's folders that tells
@@ -674,7 +678,7 @@ script (`get.docker.com`) on Debian, Ubuntu, Raspberry Pi OS, Fedora, RHEL and C
 packages, a current Engine with the compose plugin, which the distributions' packages often lack or
 ship too old (the isolated gateway needs Docker 28). On Alpine, Arch and openSUSE, which that script
 does not cover, it uses the distribution's packages. An existing Docker is kept as it is (rootless
-Docker is not supported: the proxy needs `/var/run/docker.sock`).
+Docker is not supported: the engine needs `/var/run/docker.sock`).
 
 **macOS on Apple silicon, macOS 26 or later**: no VM of Eriphe's. eriphe-node runs on the Mac as
 you, and each task is a micro-VM of Apple's container (node/README.md, The container engine).
@@ -773,7 +777,7 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
   to: its folders can only be read.
 - Saved with the other options: running the script again keeps them; any `--share` replaces the
   whole list; `--no-share` empties it.
-- The node sees each place at the same path, and the socket proxy allows bind mounts from it.
+- The node sees each place at the same path, and eriphe-node engine mounts folders from it.
   What the node refuses whatever the place (node/README.md, Shares): hidden folders, keys,
   credentials and settings (`.ssh`, `.gnupg`, `.config`, `appdata`…), a folder that holds one,
   symlinks out of the place, and the node's own data.
@@ -888,8 +892,8 @@ node, and their egress relay never dials a private address (see node/README.md, 
 machine around them shows depends on the OS:
 
 - **Linux**: no VM. The containers see the folders the node is given (`/var/lib/eriphe/node`, and
-  the folders of the shared places a task is lent), not the rest of the host. The socket proxy
-  refuses any other bind mount.
+  the folders of the shared places a task is lent), not the rest of the host. eriphe-node engine
+  mounts nothing else.
 - **macOS with Apple's container**: each task is a micro-VM of its own, with its own kernel, that
   sees only its folders (its task folder, the cache, the folders lent to it), on a network of its
   own with no route out: not the LAN, not the Internet but through the node's relay, not the other

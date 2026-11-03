@@ -909,7 +909,7 @@ EOF
 		cat <<EOF
     networks: [eriphe-docker]
     command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",
-              "-bind-from", $(yaml_str "$data/node$(share_paths | sed 's/:ro$//' | tr '\n' ',' | sed 's/,$//; s/^./,&/')"),
+              "-bind-from", $(yaml_str "$data/node$(share_paths | tr '\n' ',' | sed 's/,$//; s/^./,&/')"),
               "-network", "eriphe-system", "-task-network", "eriphe-tasks", "-node-image", "$NODE_IMAGE"]
 EOF
 	fi
