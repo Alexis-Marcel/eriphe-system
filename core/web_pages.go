@@ -456,6 +456,10 @@ type machineView struct {
 	NoTLS    bool      // it connects without its certificate yet, while machines have TLS (machine_tls.go)
 	// What Eriphe sees there: the folders shared with it on this device.
 	Folders []*Folder
+	// Problem: why it cannot use one of them, if any (folder_access.go):
+	// denied first, which the user can fix from here on a Mac.
+	Problem string
+	Program string // the program refused it, to allow on a Mac
 	// What it can do there: put agents to work, if the node runs tasks.
 	Workers bool
 	// Whether Eriphe may wake it (web_wake.go).
@@ -483,6 +487,9 @@ func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, 
 		for _, f := range folders {
 			if f.Node == n.Name {
 				m.Folders = append(m.Folders, f)
+				if f.Problem != "" && (m.Problem == "" || f.Problem == "denied") {
+					m.Problem, m.Program = f.Problem, f.Program
+				}
 			}
 		}
 		out = append(out, m)

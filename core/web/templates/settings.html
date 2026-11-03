@@ -133,8 +133,9 @@ the updates-changed event, web_updates.go). */}}
   <h4 id="sees-{{.Name}}">{{template "i-eye"}}{{t "devices.sees"}}</h4>
   {{if .Folders}}
   <ul class="device-folders">
-    {{range .Folders}}<li><a href="/settings/folders">{{template "i-folder"}}<span>{{.Name}}</span></a><span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "devices.access.%s" .Access)}}</span></li>{{end}}
+    {{range .Folders}}<li><a href="/settings/folders">{{template "i-folder"}}<span>{{.Name}}</span></a>{{if .Problem}}<span class="tag tag-no">{{t "devices.blocked"}}</span>{{else}}<span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "devices.access.%s" .Access)}}</span>{{end}}</li>{{end}}
   </ul>
+  {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" (eq .OS "darwin") "Node" .Name "Copy" false)}}{{end}}
   {{else}}
   <p class="device-none"><span class="muted">{{t "devices.seesnone"}}</span>{{if not .Suspended}}<a href="/settings/folders#folders-{{.Name}}">{{template "i-plus"}}{{t "devices.sharefolder"}}</a>{{end}}</p>
   {{end}}

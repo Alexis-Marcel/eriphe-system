@@ -1,6 +1,6 @@
 {{define "folders"}}
 <header class="page-head page-head-row"><h2>{{t "settings.folders"}}</h2><button class="link-btn" type="button" data-dialog="share-how-dlg" aria-haspopup="dialog">{{t "folders.how"}}</button></header>
-{{range .Data.Machines}}
+{{range .Data.Machines}}{{$mac := eq .System "mac"}}
 <section class="panel" aria-labelledby="folders-{{.Name}}">
   <h3 id="folders-{{.Name}}"><span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span><a class="folder-device" href="/settings/devices/{{.Name}}">{{.Name}}</a></span></h3>
   {{if .Folders}}
@@ -18,6 +18,7 @@
         </span>
       </div>
       <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
+      {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" $mac "Node" .Node "Copy" false)}}{{end}}
       <form hx-post="/settings/folders/level" hx-trigger="change" hx-confirm="{{tf "folders.lowerconfirm" .Name}}" class="folder-level">
         <input type="hidden" name="name" value="{{.Name}}">
         {{$access := .Access}}
@@ -36,6 +37,7 @@
             <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{.Node}}</span>
             <span class="tag{{if eq .Status "ok"}} tag-accent{{else if or (eq .Status "error") (eq .Status "behind")}} tag-no{{end}}">{{if eq .Status "syncing"}}{{tf "folders.copy.syncing" (printf "%.0f" .Done)}}{{else}}{{t (printf "folders.copy.%s" .Status)}}{{end}}</span>
             {{if .Bytes}}<span class="muted small">{{size .Bytes}}</span>{{end}}
+            {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" .Mac "Node" .Node "Copy" true)}}{{end}}
             {{if .Error}}<p class="muted small copy-error">{{.Error}}</p>{{end}}
           </li>
         {{end}}
@@ -159,4 +161,19 @@ sudo eriphe-share restore Clients latest</pre><button class="btn btn-soft sm" ty
   {{end}}
   <form method="dialog" class="modal-actions"><button class="btn" type="submit">{{t "updates.close"}}</button></form>
 </dialog>
+{{end}}
+
+{{/* A folder its machine cannot use (folder_access.go): on a Mac that macOS keeps from it, "Allow" opens System Settings there; elsewhere, why. . is a dict: Problem, Program (the program refused: eriphe-node or syncthing), Mac (that machine is a Mac), Node, Copy (a copy kept on it). */}}
+{{define "folder-problem"}}
+<div class="warn-note small folder-problem" role="status">
+  {{- if and (eq .Problem "denied") .Mac}}
+  <p><b>{{t "folders.problem.denied.mac"}}</b></p>
+  <p>{{tf "folders.problem.macfix" (macprog .Program)}}</p>
+  <form hx-post="/settings/devices/{{.Node}}/privacy" class="inline"><input type="hidden" name="program" value="{{macprog .Program}}"><button class="btn sm" type="submit">{{t "folders.allow"}}</button></form>
+  {{- else if .Copy}}
+  <p>{{t (printf "folders.copyproblem.%s" .Problem)}}</p>
+  {{- else}}
+  <p>{{t (printf "folders.problem.%s" .Problem)}}</p>
+  {{- end}}
+</div>
 {{end}}

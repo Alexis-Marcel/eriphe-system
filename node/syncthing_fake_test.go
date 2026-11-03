@@ -109,6 +109,20 @@ func newFakeSyncthing(t *testing.T) *fakeSyncthing {
 		f.ignores[r.URL.Query().Get("folder")] = in.Ignore
 		f.mu.Unlock()
 	})
+	// A scan: a folder never scanned is idle afterwards, unless the test
+	// set its state.
+	mux.HandleFunc("POST /rest/db/scan", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		id := r.URL.Query().Get("folder")
+		if _, ok := f.folders[id]; !ok {
+			http.Error(w, "no such folder", http.StatusNotFound)
+			return
+		}
+		if _, ok := f.status[id]; !ok {
+			f.status[id] = stFolderStatus{State: "idle"}
+		}
+	})
 	mux.HandleFunc("GET /rest/db/status", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		s, ok := f.status[r.URL.Query().Get("folder")]

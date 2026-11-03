@@ -288,11 +288,16 @@ type node struct {
 	// each copy was last complete (syncfolders.go).
 	syncMu sync.Mutex
 	synced map[string]time.Time
+	// access: what the node last saw of the folders it opened (access.go).
+	access *accessState
+	// name: this machine's, as eriphe-core knows it: its folders' ids in
+	// Syncthing are e-<name>-<share id> (syncfolders.go).
+	name string
 }
 
 func newNode(o options) *node {
 	return &node{opt: o, tasks: map[string]*Task{}, services: map[string]*service{}, retired: map[string]*service{}, kick: make(chan struct{}, 1),
-		upd: &updates{root: o.root, install: o.install}, awake: newKeepAwake(o.root), agents: newAgentStore(o.root, o.taskBin), toolchains: newToolchainStore(o.root), prep: preparer{wake: make(chan struct{}, 1)}}
+		upd: &updates{root: o.root, install: o.install}, awake: newKeepAwake(o.root), agents: newAgentStore(o.root, o.taskBin), toolchains: newToolchainStore(o.root), prep: preparer{wake: make(chan struct{}, 1)}, access: newAccessState(o.root)}
 }
 
 func (n *node) poke() {
@@ -314,6 +319,7 @@ func (n *node) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/node", n.handleNode)
 	mux.HandleFunc("/v1/services/{name}/mcp", n.handleServiceMCP)
 	mux.HandleFunc("POST /v1/wake", n.handleWake)
+	mux.HandleFunc("POST /v1/privacy/open", n.handlePrivacy) // local.go
 	mux.HandleFunc("/v1/model/{path...}", n.handleModel)
 	mux.HandleFunc("GET /v1/sync/connect", func(w http.ResponseWriter, r *http.Request) { n.syncNet.handleSyncConnect(w, r) })
 	n.syncRoutes(mux)

@@ -1072,6 +1072,9 @@ dialog.modal h3, dialog.modal p { margin: 0; }
 .field-with-btn { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
 .field-with-btn > .btn { min-height: 42px; }
 .warn-note { padding: 11px 14px; border-radius: 12px; background: var(--warn-soft); color: var(--warn); font-size: .9rem; font-weight: 550; border: 1px solid color-mix(in srgb, var(--warn-strong) 35%, transparent); }
+/* A folder its machine cannot use (folder_access.go), with "Allow" on a Mac. */
+.folder-problem { display: grid; gap: 6px; justify-items: start; }
+.folder-problem p { margin: 0; }
 
 details.advanced { padding: 0; gap: 0; }
 details.advanced > summary { list-style: none; cursor: pointer; display: grid; gap: 4px; padding: 18px 22px; border-radius: 20px; }

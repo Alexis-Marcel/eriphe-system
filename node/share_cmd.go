@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"text/tabwriter"
@@ -161,6 +162,11 @@ func (n *node) shareCmd(cmd string, args []string, out io.Writer) error {
 			access = accessManage
 		}
 		failed := false
+		if shareAsksNode && *copyable {
+			fmt.Fprintln(out, "macOS may ask up to twice, to allow Eriphe (eriphe-node) and Syncthing (its copies) to access this folder: click Allow both times.")
+		} else if shareAsksNode {
+			fmt.Fprintln(out, "macOS may ask you to allow Eriphe (eriphe-node) to access this folder: click Allow.")
+		}
 		for _, p := range paths {
 			f, changed, err := n.shareFolder(p, *name, access, *copyable)
 			if err != nil {
@@ -178,6 +184,9 @@ func (n *node) shareCmd(cmd string, args []string, out io.Writer) error {
 				verb = "Still shared with Eriphe, now"
 			}
 			fmt.Fprintf(out, "%s as %q (%s): %s\n", verb, f.Name, what, f.Path)
+			if shareAsksNode {
+				n.nodeOpens(*f, out) // shared all the same: the workspace shows it blocked
+			}
 		}
 		if failed {
 			return errReported
@@ -296,6 +305,56 @@ func (n *node) shareCmd(cmd string, args []string, out io.Writer) error {
 		return nil
 	}
 	return errUsage
+}
+
+// shareAsksNode: on a Mac, eriphe-node share add has the running node open
+// each folder it shares, so that macOS asks the user now, for the node
+// (local.go); askNode is how (a variable for the tests).
+var (
+	shareAsksNode = runtime.GOOS == "darwin"
+	askNode       = askLocalAccess
+)
+
+// nodeOpens has the running node open a folder just shared (and Syncthing
+// scan it, if it may be copied), and says how it went: refused, which
+// program to allow and where, with System Settings opened there; the node
+// not running, to share it again once it runs.
+func (n *node) nodeOpens(f sharedFolder, out io.Writer) {
+	reply, err := askNode(n.opt.root, f.ID, localAskTimeout)
+	switch {
+	case errors.Is(err, errNoLocalNode):
+		fmt.Fprintln(out, "Eriphe is not running on this Mac now: share the folder again once it runs, so that macOS asks you then.")
+		return
+	case err != nil:
+		fmt.Fprintf(out, "Could not ask Eriphe to open %q: %v\n", f.Name, err)
+		return
+	}
+	notes := []accessNote{reply.Node}
+	if reply.Syncthing != nil {
+		notes = append(notes, *reply.Syncthing)
+	}
+	denied := false
+	for _, note := range notes {
+		program := note.Program
+		if program == "" {
+			program = programNode
+		}
+		switch {
+		case note.Problem == problemDenied:
+			fmt.Fprintf(out, "macOS does not let %s open %q. To allow it: System Settings › Privacy & Security › Files and Folders, then turn on %s.\n", program, f.Name, program)
+			denied = true
+		case note.Problem != "":
+			fmt.Fprintf(out, "%s cannot use %q now (%s): %s\n", program, f.Name, note.Problem, note.Error)
+		case note.Error != "":
+			fmt.Fprintf(out, "%s could not check %q: %s\n", program, f.Name, note.Error)
+		}
+	}
+	if denied {
+		fmt.Fprintln(out, "Opening System Settings there now.")
+		if err := openPrivacy(); err != nil {
+			fmt.Fprintf(out, "(System Settings did not open: %v)\n", err)
+		}
+	}
 }
 
 // sharedMatch matches a shared folder by its name (any case) or its folder.

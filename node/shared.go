@@ -301,6 +301,12 @@ type sharedInfo struct {
 	Max      string `json:"max,omitempty"`      // the level chosen on this machine
 	Copyable bool   `json:"copyable,omitempty"` // may be copied to the user's other machines
 	Missing  bool   `json:"missing,omitempty"`  // not there now (an unplugged disk), or out of the roots
+	// Problem: why this node cannot use it now, if it cannot (access.go):
+	// denied (macOS's privacy, permissions), read_only, missing.
+	Problem string `json:"problem,omitempty"`
+	// Program: the one the problem is of, eriphe-node or syncthing: on a
+	// Mac, the one to allow in Files and Folders.
+	Program string `json:"program,omitempty"`
 }
 
 // sharedList is the list for eriphe-core.
@@ -312,12 +318,12 @@ func (n *node) sharedList() []sharedInfo {
 	out := []sharedInfo{}
 	for _, f := range list {
 		_, _, in := n.opt.rootOf(f.Path)
-		missing := !in
-		if in && !n.apple() { // a Mac's places are never looked at by the node (apple_explore.go)
-			fi, err := os.Stat(f.Path)
-			missing = err != nil || !fi.IsDir()
+		problem, program := problemMissing, programNode
+		if in {
+			problem, program = n.folderProblem(f) // on a Mac, what was last seen (access.go)
 		}
-		out = append(out, sharedInfo{ID: f.ID, Name: f.Name, Access: f.Access, Max: f.ceiling(), Copyable: f.Copyable, Missing: missing})
+		out = append(out, sharedInfo{ID: f.ID, Name: f.Name, Access: f.Access, Max: f.ceiling(), Copyable: f.Copyable,
+			Missing: problem == problemMissing, Problem: problem, Program: program})
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out
