@@ -7,11 +7,13 @@ instead of `install.sh` (see [install/README.md](../install/README.md), the usua
 
 An example for a NAS running Docker (paths and the socket's group are Unraid's: `/mnt/user`,
 `/mnt/user/appdata`, group 281; change them for another system): eriphe-core and the NAS's
-eriphe-node. eriphe-node has no Docker socket: it talks to Docker through `eriphe-docker-proxy`
-(`DOCKER_HOST=tcp://eriphe-docker-proxy:2375`), the node's own image run as `eriphe-node docker-proxy`
-(node/dockerproxy.go), which only forwards the calls the node makes, only creates containers the way
-the node makes them, and only accepts connections from `eriphe-node`. The
-proxy sits on its own internal network, `eriphe-docker`, that task containers do not join.
+eriphe-node. eriphe-node has no Docker access: it asks `eriphe-engine`
+(`ERIPHE_ENGINE_URL=http://eriphe-engine:8792`), the node's own image run as `eriphe-node engine`
+(node/engine_server.go, node/README.md, The engine), the only container that holds the Docker
+socket. The node sends verbs (run a task, run a check in a task, run a service, stop, a folder
+helper, a wake), never a container as such; the engine makes each container itself, with its
+hardening, and only answers `eriphe-node`. The engine sits on its own internal network,
+`eriphe-docker`, that task containers do not join.
 
 Task containers run on `eriphe-tasks`, an internal bridge (no route out) that only eriphe-node
 joins besides them, with an isolated gateway (the bridge has no address on the NAS, so the NAS's
@@ -22,57 +24,51 @@ as `eriphe-node:8790` and its egress relay as `eriphe-node:8791` (both bound to 
 on `eriphe-tasks` only). The relay is the tasks' one way to the Internet, and never dials the LAN
 (see node/README.md, Egress).
 
-| Allowed | For |
-|---|---|
-| `HEAD/GET /_ping`, `GET /version` | the CLI's handshake, `docker version` |
-| `GET /networks/bridge`, `GET /networks/eriphe-tasks` | the gateways and subnet of the networks, for `host.docker.internal` and the task listener's address |
-| `GET /containers/json`, `GET /images/json` | `docker ps -a --filter`, `docker images` |
-| `POST /containers/create`, `POST /images/create` | `docker run` (and its image pull) |
-| `POST /containers/{id}/attach`, `/start`, `/wait`, `/stop` | `docker run -i` (hijacked stdin/stdout stream), `docker stop` |
-| `DELETE /containers/{id}` | `docker rm -f` |
+A request says what is wanted (an image, folders and their access, an environment, limits) and
+nothing else: a request with any other field is refused, and none can express `--privileged`, a
+capability, a device or GPU, a host namespace, a security option, a network or a volume. The
+hardening is the engine's: `--cap-drop ALL` with the three file capabilities a task gets
+(`CHOWN`, `DAC_OVERRIDE`, `FOWNER`), `no-new-privileges`, the networks from the engine's own flags
+(`-network`, `-task-network`), the node's labels. The host's network is used for one container
+only: the node's own image (`-node-image`) sending a wake, read-only, without a mount; the same
+image is the only one run as a folder helper. A check runs only in the running container of the
+task it names; a stop or a removal only touches the node's own containers: the other containers
+of the NAS are not the node's.
 
-A container is created only if its whole request is one the node makes (`node/container.go`,
-`service.go`, `wake.go`): an allowlist of fields, every other one empty. So no `--privileged`, no
-capability beyond the three file ones a task gets (`CHOWN`, `DAC_OVERRIDE`, `FOWNER`), no device
-nor GPU, no host PID, IPC, UTS, user or cgroup namespace, no security option but
-`no-new-privileges` (which is required, as is `--cap-drop ALL`), no unmasked `/proc`, no sysctl,
-no other container's volumes or network, no restart policy, ports published on the loopback only,
-the networks `eriphe-system`, `eriphe-tasks` and `none` only, and one of the node's labels
-(`eriphe.task`, `eriphe.service`, `eriphe.wake`). The host's network is allowed for one container:
-the node's own image (`-wake-image`) running `eriphe-node wake-send`, read-only, without a mount.
-An image is only pulled (`fromImage`), never imported from a file. A container is started,
-attached to, waited for, stopped or removed only if it carries one of the node's labels: the
-other containers of the NAS are not the node's.
-
-Bind mounts are only accepted from `/mnt/user/appdata/eriphe-system/node` and `/mnt/user`, the
-place whose folders the user may give to Eriphe (`ERIPHE_NODE_SHARES: shares=/mnt/user`, see
-node/README.md, Shares) (`-bind-from`). The proxy sees both read-only at the same paths, resolves
+Folders are only mounted from `/mnt/user/appdata/eriphe-system/node` and `/mnt/user`, the place
+whose folders the user may give to Eriphe (`ERIPHE_NODE_SHARES: shares=/mnt/user`, see
+node/README.md, Shares) (`-bind-from`). The engine sees both read-only at the same paths, resolves
 a source's symlinks and gives the daemon the resolved path, so a link in the node's root does not
-lead out of them. Named volumes such as `eriphe-cache` are allowed, without a driver's options.
-Allowing `/mnt/user` widens what whoever controls eriphe-node could mount (appdata included),
-which the next section's limit already allows; eriphe-node itself mounts only the folders the user
-shared, never appdata nor its own root. Another place to share goes in both lists
-(comma-separated) and in the proxy's volumes. Everything else is refused with 403: `exec`,
-`kill`, `cp` (archive), `inspect` of a container (it would show its environment), volumes,
-networks, `info`, image removal, builds; `docker logs eriphe-docker-proxy` says what and why.
+lead out of them. Allowing `/mnt/user` widens what whoever controls eriphe-node could mount
+(appdata included), which the next section's limit already allows; eriphe-node itself mounts only
+the folders the user shared, never appdata nor its own root. Another place to share goes in both
+lists (comma-separated) and in the engine's volumes. A refusal answers with its reason, logged
+without the request: `docker logs eriphe-engine` says what and why.
 
-### What the proxy does not stop
+### What the engine does not stop
 
-Whoever controls eriphe-node can still do what the node may: run a container as root with the
-three file capabilities on any image, with the node's root and the shared places mounted
-(appdata included, under `/mnt/user`), on `eriphe-system`. A source is checked when the
-container is created: a directory swapped for a symlink between that check and the daemon's
-mount still leads where the link points, a race the proxy cannot close. Containers it lists
-(`docker ps`) show their labels and commands, not their environment.
+Whoever controls eriphe-node can still do what the node may: run a task container of any image,
+with the three file capabilities, the node's root and the shared places mounted (appdata
+included, under `/mnt/user`), and run a check in its own tasks. A source is checked when the
+container is made: a directory swapped for a symlink between that check and the daemon's mount
+still leads where the link points, a race the engine cannot close.
+
+### From the socket proxy
+
+Before eriphe-node engine, this project ran `docker-proxy` (`eriphe-docker-proxy`) and gave the
+node `DOCKER_HOST`. To move to the engine, take this file again (or rename the service to
+`engine` with the command above, give the node `ERIPHE_ENGINE_URL` instead of `DOCKER_HOST`, and
+`depends_on: [core, engine]`), then `docker compose up -d --remove-orphans`: the proxy's container
+goes, the engine starts, the node is made again. The node and the engine must be the same version.
 
 ### Updates
 
 This compose project has no updater (install/README.md, The machines update themselves): the
-proxy above gives the node no new right, and nothing on the NAS applies eriphe-core's update
+engine above gives the node no new right, and nothing on the NAS applies eriphe-core's update
 requests. Settings → Machines → Updates says the NAS cannot update itself and sends it none; set
 it to "Jamais" there so that it gives no notice either, and update it by hand:
 `docker compose pull && docker compose up -d` in `/mnt/user/appdata/eriphe-system` (eriphe-core
-first, then the node). The images have no tag here, so they are `latest`, the latest release
+first, then the engine and the node). The images have no tag here, so they are `latest`, the latest release
 ([RELEASING.md](../RELEASING.md)); write `:edge` on the three of them to follow `main`, or
 `:0.2.0` to stay on a release (the node takes the base image and the agents of its own version). It gets an updater, and updates
 itself, once it is installed with `install.sh --core-mode` instead, or, on Unraid or any NAS with
@@ -84,8 +80,8 @@ which makes this same stack and updates it.
 Needs Docker 28 or later (`docker version`), for the isolated gateway of `eriphe-tasks`.
 
 1. Check the group of the socket: `stat -c %g /var/run/docker.sock`. If it is not 281, change
-   `user:` of `docker-proxy`. If you pin the node's image (`:edge`, `:0.2.0`), pin it the same in
-   `-wake-image`.
+   `user:` of `engine`. If you pin the node's image (`:edge`, `:0.2.0`), pin it the same for the
+   engine's `image:` and in `-node-image`.
 2. Copy `nas/compose.yaml` to `/mnt/user/appdata/eriphe-system/compose.yaml`, with a `core.json`
    next to it (see core/README.md, Configuration file: give it a `web` section, or there is no
    workspace) and a `secrets/` folder for the files it names. `core/` holds eriphe-core's data:
@@ -99,7 +95,8 @@ Needs Docker 28 or later (`docker version`), for the isolated gateway of `eriphe
 5. Check: `docker logs eriphe-node` says it is connected over TLS, with `tasks on eriphe-tasks`
    and an `egress relay on 172.x.y.z:8791`; `docker network inspect eriphe-tasks --format
    '{{.Internal}} {{.Options}}'` says `true` and `gateway_mode_ipv4:isolated`; a task starts,
-   answers and stops, and `docker logs eriphe-docker-proxy` shows no blocked request.
+   answers and stops, and `docker logs eriphe-engine` shows no refusal; `docker inspect eriphe-node
+   --format '{{.Config.Env}}'` shows `ERIPHE_ENGINE_URL` and no `DOCKER_HOST`.
 6. Folders: Settings → Folders → "Partager un dossier" offers the machine `nas` and its place
    `shares` (appdata does not show). With "Lecture et dépôt", the task's container has the folder
    read-only and its `Eriphe/` subfolder writable.

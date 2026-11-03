@@ -17,8 +17,9 @@
 #   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --rollback
 #
 # Linux: Docker Engine if it is missing, then a compose project in /opt/eriphe
-# (data in /var/lib/eriphe): a socket proxy that only allows the node's Docker
-# calls, the node, and eriphe-core in core mode, restarted with Docker at boot.
+# (data in /var/lib/eriphe): eriphe-node engine, the only one with the Docker
+# socket, which runs the node's verbs only, the node, and eriphe-core in core
+# mode, restarted with Docker at boot.
 # macOS on Apple silicon with macOS 26: Apple's container (installed if it is
 # missing), eriphe-node on the Mac itself, which runs each task in a micro-VM
 # of its own, eriphe-core next to it in core mode, all in ~/.eriphe and
@@ -61,12 +62,13 @@ SYNCTHING_LISTEN=127.0.0.1:22100
 # machine's runs that script with --layout, which brings the machine to it
 # (install/README.md, The machines update themselves). node/update.go's
 # installLayout is the same number. 1: before it was counted; 2: Syncthing,
-# and the updaters that apply a layout.
-LAYOUT=2
+# and the updaters that apply a layout; 3: eriphe-node engine in place of the
+# socket proxy.
+LAYOUT=3
 
 REGISTRY=ghcr.io/alexis-marcel
 # The socket proxy of earlier installs, removed with Eriphe: the node's own
-# image is the proxy now (eriphe-node docker-proxy).
+# image holds the socket now (eriphe-node engine).
 LEGACY_PROXY=wollomatic/socket-proxy
 
 # images: the image references, at the pinned version (--version: a release,
@@ -830,8 +832,8 @@ compose_yaml() {
 	data=${HOST_DATA:-$DATA}
 	cat <<EOF
 # Written by install.sh: run it again rather than editing this file.
-# The node reaches Docker only through the socket proxy, which allows the
-# calls it makes, containers as it makes them (nothing privileged), and bind
+# The node has no Docker access: it asks eriphe-node engine, which holds the
+# socket and makes the containers itself (nothing privileged), with bind
 # mounts from its root and the shared places only (--share). Tasks run on
 # eriphe-tasks, an internal network: they reach the node (its task listener
 # and its egress relay, their one way out, which never dials the LAN), not
@@ -866,11 +868,12 @@ EOF
 EOF
 	fi
 	cat <<EOF
-  docker-proxy:
-    # eriphe-node docker-proxy (node/dockerproxy.go): the calls the node
-    # makes, each container's whole request checked, nothing privileged.
+  engine:
+    # eriphe-node engine (node/engine_server.go): the node's verbs (a task,
+    # a check, a service, a helper, a wake), each container made here with
+    # its hardening, nothing privileged.
     image: $NODE_IMAGE
-    container_name: eriphe-docker-proxy
+    container_name: eriphe-engine
     restart: unless-stopped
     # Root without a capability but DAC_READ_SEARCH: it resolves the bind
     # mounts' symlinks in the node's root and the shares, seen read-only.
@@ -892,11 +895,11 @@ EOF
         target: /host
         read_only: true
         bind: {propagation: rslave}
-      - $data/proxy:/etc/eriphe-proxy:ro
+      - $data/proxy:/etc/eriphe-engine:ro
     networks: [eriphe-docker]
-    command: ["docker-proxy", "-listen", ":2375", "-allow-from", "eriphe-node",
-              "-bind-from", "$data/node", "-bind-file", "/etc/eriphe-proxy/binds", "-host-root", "/host",
-              "-networks", "eriphe-system,eriphe-tasks", "-wake-image", "$NODE_IMAGE"]
+    command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",
+              "-bind-from", "$data/node", "-bind-file", "/etc/eriphe-engine/binds", "-host-root", "/host",
+              "-network", "eriphe-system", "-task-network", "eriphe-tasks", "-node-image", "$NODE_IMAGE"]
 EOF
 	else
 		printf '      - %s:%s:ro\n' "$data/node" "$data/node"
@@ -905,9 +908,9 @@ EOF
 		done
 		cat <<EOF
     networks: [eriphe-docker]
-    command: ["docker-proxy", "-listen", ":2375", "-allow-from", "eriphe-node",
-              "-bind-from", $(yaml_str "$data/node$(share_paths | sed 's/:ro$//' | tr '\n' ',' | sed 's/,$//; s/^./,&/')"),
-              "-networks", "eriphe-system,eriphe-tasks", "-wake-image", "$NODE_IMAGE"]
+    command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",
+              "-bind-from", $(yaml_str "$data/node$(share_paths | tr '\n' ',' | sed 's/,$//; s/^./,&/')"),
+              "-network", "eriphe-system", "-task-network", "eriphe-tasks", "-node-image", "$NODE_IMAGE"]
 EOF
 	fi
 	cat <<EOF
@@ -916,7 +919,7 @@ EOF
     image: $NODE_IMAGE
     container_name: eriphe-node
     restart: unless-stopped
-    depends_on: [docker-proxy$([ "$MODE" = core ] && printf ', core')]
+    depends_on: [engine$([ "$MODE" = core ] && printf ', core')]
     read_only: true
     tmpfs: [/tmp]
     # Root in its container, to hand the task folders to the tasks' user.
@@ -949,7 +952,8 @@ EOF
 	cat <<EOF
       # Syncthing's home, read-only: its API's address and key (node/syncthing.go).
       ERIPHE_SYNCTHING_HOME: $data/syncthing
-      DOCKER_HOST: tcp://eriphe-docker-proxy:2375
+      # Docker only through eriphe-node engine: neither the socket nor a proxy.
+      ERIPHE_ENGINE_URL: http://eriphe-engine:8792
     command: ["-root", "$data/node",
               "-network", "eriphe-system", "-task-network", "eriphe-tasks",
               "-callback-url", "http://eriphe-node:8790",
@@ -1129,7 +1133,7 @@ b64() { base64 | tr -d '\n'; }
 # ---- The updater, on the Linux host ---------------------------------------
 #
 # eriphe-core and the node have no right to pull an image or recreate a
-# container (the node reaches Docker only through the socket proxy). The
+# container (the node reaches Docker only through eriphe-node engine). The
 # updater does it for them, on the host, as root: a systemd unit that starts
 # when eriphe-core (core mode) or the node drops a request in its data
 # folder (update-requested), and writes how it went next to it
@@ -1295,12 +1299,16 @@ recreate() {
     start core "$CORE_IMAGE" || return 1
     healthy core "$since" || return 1
   fi
-  # The socket proxy is the node's image (eriphe-node docker-proxy): it
-  # checks what the node sends, so it takes the node's version, first. An
-  # older compose project's proxy is another image, left as it is.
-  if [ "$(docker inspect -f '{{.Config.Image}}' eriphe-docker-proxy 2>/dev/null)" = "$NODE_IMAGE" ]; then
-    start docker-proxy "$NODE_IMAGE" || return 1
-  fi
+  # The engine is the node's image (eriphe-node engine): the node and the
+  # engine speak the same version of its API, so it takes the node's
+  # version, first. So does the socket proxy of a project from before the
+  # engine (eriphe-node docker-proxy) until its layout replaces it; an
+  # older project's proxy is another image, left as it is.
+  for s in engine docker-proxy; do
+    if [ "$(docker inspect -f '{{.Config.Image}}' "eriphe-$s" 2>/dev/null)" = "$NODE_IMAGE" ]; then
+      start "$s" "$NODE_IMAGE" || return 1
+    fi
+  done
   start node "$NODE_IMAGE"
   ok=$?
   syncthing_again
@@ -1671,6 +1679,9 @@ put() { printf '%s' "$2" | base64 -d > "$1.new" && mv "$1.new" "$1"; }
 put "$CONF/compose.yaml" "$COMPOSE"
 put "$CONF/.env" "$ENVF"
 put "$CONF/install.conf" "$INSTALL_CONF"
+# The socket proxy of a project from before eriphe-node engine: the engine
+# replaces it (its service is no longer in the project).
+docker rm -f eriphe-docker-proxy >/dev/null 2>&1 || true
 # Syncthing's home (its keys, its configuration with its API key) and the
 # node's copies, root's only.
 mkdir -p "$DATA/syncthing" "$DATA/node/sync"
@@ -1694,7 +1705,7 @@ echo "eriphe-step: Downloaded"
 
 up() { dc up -d --pull never --remove-orphans "$@"; }
 if [ ! -f "$DATA/node/node.json" ] && [ "$MODE" = core ]; then
-  up core docker-proxy
+  up core engine
   echo "Waiting for eriphe-core..."
   i=0
   # It prints the command that joins a node, with the token and eriphe-core's

@@ -2,7 +2,7 @@
 
 `eriphe.xml` is the Unraid template of `ghcr.io/alexis-marcel/eriphe`, Eriphe's launcher: one
 container that creates and keeps running Eriphe's own containers (eriphe-core, eriphe-node, the
-socket proxy), applies the updates started from the workspace and then updates itself. How it
+engine that alone holds the Docker socket), applies the updates started from the workspace and then updates itself. How it
 works, and the same install on any Linux with Docker: [install/README.md, One
 container](../install/README.md#one-container-nas-any-linux-with-docker).
 
@@ -33,7 +33,7 @@ used. Its folders shared stay shared: the update turns them into folders given o
 ([install/README.md, One container](../install/README.md#one-container-nas-any-linux-with-docker)).
 
 The containers it makes show on the Docker page as containers without a template (eriphe-core,
-eriphe-node, eriphe-docker-proxy): leave them to it, it recreates them on updates. To remove
+eriphe-node, eriphe-engine, eriphe-syncthing): leave them to it, it recreates them on updates. To remove
 everything: `docker exec eriphe eriphe-launcher uninstall` (with `--data` to delete
 `/mnt/user/appdata/eriphe` too), then remove the `eriphe` container.
 

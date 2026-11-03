@@ -126,8 +126,9 @@ $alpine = @{
 # tasks, the session helper, the firewall, the Explorer's menu): raise it
 # with a release that changes that, which only this script, in an
 # administrator PowerShell, can do; the device then says so to its user.
-# node/update.go's installLayout is $layout.
-$layout = 2
+# node/update.go's installLayout is $layout. 3 is install.sh's (eriphe-node
+# engine on Linux): nothing changes here, the distribution's layout runs again.
+$layout = 3
 $adminLayout = 1
 # Syncthing, for the copies of shared folders (node/README.md, Copies): its
 # official Linux build in the distribution, pinned and checked against the

@@ -1,10 +1,11 @@
-# eriphe-core and the NAS's eriphe-node, with the node's Docker access going
-# through a socket proxy that only allows the calls eriphe-node makes.
+# eriphe-core and the NAS's eriphe-node, which has no Docker access: it asks
+# eriphe-node engine, the only one with the Docker socket, for its verbs (a
+# task, a check, a service, a helper, a wake), never for a container as such.
 # Task containers are started on eriphe-tasks, an internal network of their
 # own that only eriphe-node joins besides them: they reach only the node, its
 # task listener (eriphe-node:8790) and its egress relay (eriphe-node:8791),
 # their one way to the Internet, which never dials the LAN. Not eriphe-core,
-# the local MCP services (on eriphe-system), the NAS nor the rest of the LAN. The proxy is on its own internal network, which only
+# the local MCP services (on eriphe-system), the NAS nor the rest of the LAN. The engine is on its own internal network, which only
 # eriphe-node joins.
 name: eriphe-system
 services:
@@ -28,13 +29,14 @@ services:
       - ./secrets:/secrets:ro
     networks: [eriphe-system]
 
-  docker-proxy:
-    # eriphe-node docker-proxy (node/dockerproxy.go): only the calls the node
-    # makes, each container's whole request checked against what the node
-    # sends (no privileged container, capability, device, host namespace),
-    # bind mounts from the node's root and the shares only, symlinks resolved.
+  engine:
+    # eriphe-node engine (node/engine_server.go): the node's verbs only, each
+    # container made here with its hardening (no privileged container,
+    # capability, device, host namespace, network or volume the node could
+    # ask for), bind mounts from the node's root and the shares only,
+    # symlinks resolved. Same image and version as the node.
     image: ghcr.io/alexis-marcel/eriphe-node
-    container_name: eriphe-docker-proxy
+    container_name: eriphe-engine
     restart: unless-stopped
     # Root without a capability but DAC_READ_SEARCH, to resolve the bind
     # mounts' symlinks; in the group of /var/run/docker.sock (281 on Unraid:
@@ -50,22 +52,24 @@ services:
       - /mnt/user/appdata/eriphe-system/node:/mnt/user/appdata/eriphe-system/node:ro
       - /mnt/user:/mnt/user:ro
     networks: [eriphe-docker]
-    command: ["docker-proxy", "-listen", ":2375", "-allow-from", "eriphe-node",
+    command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",
               # The node's root and the place whose folders may be given to Eriphe (ERIPHE_NODE_SHARES).
               "-bind-from", "/mnt/user/appdata/eriphe-system/node,/mnt/user",
-              "-networks", "eriphe-system,eriphe-tasks",
-              # The node's image, the one container allowed on the host's network (wake-on-LAN).
-              "-wake-image", "ghcr.io/alexis-marcel/eriphe-node"]
+              # The networks: the node takes them from the engine.
+              "-network", "eriphe-system", "-task-network", "eriphe-tasks",
+              # The node's image, the one container run on the host's network (wake-on-LAN).
+              "-node-image", "ghcr.io/alexis-marcel/eriphe-node"]
 
   node:
     image: ghcr.io/alexis-marcel/eriphe-node
     container_name: eriphe-node
     restart: unless-stopped
-    depends_on: [core, docker-proxy]
+    depends_on: [core, engine]
     environment:
       ERIPHE_CORE: http://eriphe-core:8800
       ERIPHE_NODE_NAME: nas
-      DOCKER_HOST: tcp://eriphe-docker-proxy:2375
+      # Docker only through the engine: neither the socket nor a proxy.
+      ERIPHE_ENGINE_URL: http://eriphe-engine:8792
       # Only for the first join: ERIPHE_JOIN_TOKEN=... docker compose up -d node
       ERIPHE_JOIN_TOKEN: ${ERIPHE_JOIN_TOKEN:-}
       # eriphe-core's CA for machines (Settings → Machines): the node checks it. Without it, the
