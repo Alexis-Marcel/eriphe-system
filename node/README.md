@@ -870,7 +870,23 @@ gives each repository the version it names, for each architecture natively, once
 only on the machines whose tasks need it; it is checked against the publisher's checksums by the
 node, not by the task, and it keeps the base image at its size.
 
-## The container engine (a Mac)
+## The engine
+
+The node never runs `docker` or `container` itself: it asks its engine (`engine.go`), an
+interface of a few verbs with typed specifications, the way Kubernetes' CRI or Nomad's task drivers
+do: `runTask` (the agent's stdin and stdout are the container's), `execSync` (a check, its exit
+code apart from a failure to run it), `stop`, `runService`, `removeStray`, `runHelper` (a
+short-lived helper: the folder helper, the Mac's explorer), `wake`, `pull`, `info`,
+`ensureNetwork`. The node says what it wants (an image, folders and their access, an
+environment); the engine says it to its tool, with the hardening built in: a caller never passes a
+capability, a security option or a network of its own. Two engines, both through their CLI for
+now: Docker (`engine_docker.go`) and Apple's container (`apple.go`), chosen once from `-engine`.
+Where they differ in a way the node must know, the engine says so in its traits: tasks on networks
+of their own, folders seen only through the explorer, files written as the user's. The node's tests
+use an engine in memory (`engine_fake_test.go`); what each engine says to its tool is tested with a
+fake CLI. `TestEngineBoundaries` fails when a file other than the engines' runs their CLI or asks
+which engine it has.
+
 ## The container engine (a Mac)
 
 `-engine container` (env `ERIPHE_ENGINE=container`, what install.sh sets on a Mac with Apple

@@ -86,12 +86,7 @@ type fakeEngine struct {
 	helpers []helperRunSpec
 	pulled  []string
 	// exec answers execSync; nil for exit code 0 and no output.
-	exec func(container string, spec execSpec) (execResult, error)
-	// agent plays a task's container: it reads the agent's input and
-	// writes its output; nil for a container that exits at once.
-	agent func(stdin io.Reader, stdout io.Writer)
-	// running are the started containers' input, by name: stop closes it.
-	running map[string]*io.PipeReader
+	exec    func(container string, spec execSpec) (execResult, error)
 	inf     engineInfo
 	wakeErr error
 }
@@ -107,22 +102,16 @@ func (f *fakeEngine) beginTask(taskID string) (string, string, error) {
 
 func (f *fakeEngine) endTask(string) {}
 
+// runTask records the task; its container ends once its input is closed.
 func (f *fakeEngine) runTask(spec taskRunSpec) (*engineRun, error) {
-	inR, inW := io.Pipe()
-	outR, outW := io.Pipe()
 	f.mu.Lock()
 	f.tasks = append(f.tasks, spec)
-	if f.running == nil {
-		f.running = map[string]*io.PipeReader{}
-	}
-	f.running[spec.name] = inR
-	agent := f.agent
 	f.mu.Unlock()
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
 	done := make(chan struct{})
 	go func() {
-		if agent != nil {
-			agent(inR, outW)
-		}
+		io.Copy(io.Discard, inR)
 		outW.Close()
 		close(done)
 	}()
@@ -144,9 +133,6 @@ func (f *fakeEngine) stop(_ context.Context, container string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.stopped = append(f.stopped, container)
-	if in := f.running[container]; in != nil {
-		in.Close()
-	}
 }
 
 func (f *fakeEngine) runService(serviceRunSpec) (*engineRun, string, error) {
