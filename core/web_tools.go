@@ -84,6 +84,7 @@ func (t toolView) SignIn() string {
 
 type toolsPage struct {
 	Tools   []toolView
+	Groups  []toolGroup // the tools, a card per kind with several accounts (web_tools_groups.go)
 	Gallery galleryPage // the "Add a tool" dialog (web_gallery.go)
 	Flash   string
 	Alert   string // a pending tool that was not connected
@@ -207,6 +208,7 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 		}
 		v.Tools = append(v.Tools, t)
 	}
+	v.Groups = groupTools(lang, v.Tools)
 	v.Gallery = w.gallery(lang)
 	if n := q.Get("saved"); n != "" && w.c.source(kindServer, n) != "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.saved"), n)

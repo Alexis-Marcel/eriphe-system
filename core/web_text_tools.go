@@ -213,6 +213,8 @@ var toolStrings = map[string]map[string]string{
 		"presets.badtz":         "Fuseau horaire inconnu (par exemple Europe/Paris).",
 		"presets.calnoprovider": "Fournisseur introuvable depuis cet identifiant : choisis ton agenda dans la liste.",
 		"presets.soon":          "Ce service n'est pas encore pris en charge : bientôt.",
+		"groups.count":          "%d comptes · %d outils",
+		"groups.addaccount":     "Ajouter un compte",
 
 		"test.mailok":      "Connexion réussie : la boîte %s accepte ce mot de passe.",
 		"test.maildenied":  "Mot de passe refusé par la messagerie : vérifie l'adresse et le mot de passe (d'application) collé.",
@@ -389,6 +391,8 @@ var toolStrings = map[string]map[string]string{
 		"presets.badtz":         "Unknown time zone (for example Europe/Paris).",
 		"presets.calnoprovider": "No provider found from this login: pick your calendar in the list.",
 		"presets.soon":          "This service is not supported yet: soon.",
+		"groups.count":          "%d accounts · %d tools",
+		"groups.addaccount":     "Add an account",
 
 		"test.mailok":      "Connected: the mailbox %s accepts this password.",
 		"test.maildenied":  "Password refused by the mail provider: check the address and the (app) password pasted.",
