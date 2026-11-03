@@ -169,7 +169,7 @@ run_in 'discover; folders_migrate' >/dev/null
 # From ERIPHE_SHARES, kept in the container's settings; places with nothing shared simply go.
 reset_folders
 launcher ERIPHE_SHARES=shares=/mnt/user sh -c ". '$here/eriphe-launcher'; discover; folders_migrate" >/dev/null 2>&1
-[ -f "$T/data/launcher/folders" ] && [ ! -s "$T/data/launcher/folders" ] || fail "migration, nothing shared"
+{ [ -f "$T/data/launcher/folders" ] && [ ! -s "$T/data/launcher/folders" ]; } || fail "migration, nothing shared"
 
 # ---- the compose project: the host's paths, the folders shared alone
 
