@@ -475,3 +475,51 @@ func TestWebFolderCopies(t *testing.T) {
 		t.Error("API: a folder not copyable copied")
 	}
 }
+
+// list_folders tells, for each machine's folder, the machines holding it,
+// online or not and up to date or not.
+func TestListFoldersMachines(t *testing.T) {
+	c, mac, nas := copiesCore(t)
+	ctx := context.Background()
+	c.setCopies(ctx, "Docs", []string{"nas"})
+	docs := func() folderView {
+		vs, _ := c.folderViews()
+		for _, v := range vs {
+			if v.Name == "Docs" {
+				return v
+			}
+		}
+		t.Fatal("no Docs")
+		return folderView{}
+	}
+	copyState(t, c, mac, "mac", macDevice, syncState{Share: docsID, State: "idle"})
+	copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "syncing", NeedBytes: 3})
+	want := []folderHolder{{Node: "mac", Role: "machine", Online: true, UpToDate: true}, {Node: "nas", Role: "copy", Online: true}}
+	if got := docs().Machines; !slices.Equal(got, want) {
+		t.Fatalf("syncing: %+v", got)
+	}
+	copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "idle", SyncedAt: time.Now()})
+	want[1].UpToDate = true
+	if got := docs().Machines; !slices.Equal(got, want) {
+		t.Fatalf("in sync: %+v", got)
+	}
+	raw, _ := json.Marshal(docs())
+	if !strings.Contains(string(raw), `"machines":[{"node":"mac","role":"machine","online":true,"up_to_date":true},{"node":"nas","role":"copy","online":true,"up_to_date":true}]`) {
+		t.Fatalf("json %s", raw)
+	}
+	// The Mac away, the copy complete then: still up to date there.
+	c.node("mac").session.Close()
+	waitUntil(t, func() bool { return !c.node("mac").connected() })
+	c.refreshNode(ctx, c.node("mac"))
+	want[0].Online = false
+	if got := docs().Machines; !slices.Equal(got, want) {
+		t.Fatalf("the Mac away: %+v", got)
+	}
+	// A folder without copies: its machine only.
+	vs, _ := c.folderViews()
+	for _, v := range vs {
+		if v.Name == "Private" && (len(v.Machines) != 1 || v.Machines[0].Node != "mac" || v.Machines[0].Role != "machine") {
+			t.Fatalf("Private %+v", v.Machines)
+		}
+	}
+}

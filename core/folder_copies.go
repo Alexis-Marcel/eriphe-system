@@ -454,6 +454,25 @@ func (v *syncView) sourceSettled(f *Folder) bool {
 	return i >= 0 && st.Folders[i].State == "idle" && st.Folders[i].NeedBytes == 0 && st.Folders[i].Error == ""
 }
 
+// folderHolder is a machine holding a folder, for the brain (list_folders).
+type folderHolder struct {
+	Node     string `json:"node"`
+	Role     string `json:"role"` // its machine, or a copy
+	Online   bool   `json:"online"`
+	UpToDate bool   `json:"up_to_date"` // a task may be lent it there now
+}
+
+// holdersOf are the machines holding f: its own, then those keeping a copy.
+func (v *syncView) holdersOf(f *Folder) []folderHolder {
+	out := []folderHolder{{Node: f.Node, Role: "machine", Online: v.nodes[f.Node].Online, UpToDate: v.holdsNow(f, f.Node)}}
+	for _, fc := range v.copies {
+		if fc.Node == f.Node && fc.Folder == f.ID {
+			out = append(out, folderHolder{Node: fc.Copy, Role: "copy", Online: v.nodes[fc.Copy].Online, UpToDate: v.copyUsable(f, fc.Copy)})
+		}
+	}
+	return out
+}
+
 // folderHolders are the machines that hold each of fs, up to date or not:
 // its own machine, or one keeping a copy of it. A task lent fs is only
 // ever placed on one of them, and waits for one while none is up to date.
