@@ -335,9 +335,9 @@ has "$T/compose.yaml" "/var/run/docker.sock:/var/run/docker.sock:ro" compose
 # ---- the stack up, by host_up's own script: a new install, and the update
 # ---- of one from before eriphe-node engine (its socket proxy goes)
 
-# stack_in: the launcher's stack_up, a node's, its host script run here.
+# stack_in [ENV=V...]: the launcher's stack_up, a node's, its host script run here.
 stack_in() {
-	launcher ERIPHE_MODE=node ERIPHE_CORE=http://192.0.2.10:8800 ERIPHE_JOIN_TOKEN=t sh -c ". '$here/eriphe-launcher'
+	launcher ERIPHE_MODE=node ERIPHE_CORE=http://192.0.2.10:8800 ERIPHE_JOIN_TOKEN=t "$@" sh -c ". '$here/eriphe-launcher'
 		on_host() { sh -s; }
 		discover; PULL=missing UPDATE_BY=loop; settings; INFO=; settle; COPIED=; write_binds; stack_up" >"$T/out" 2>&1 || fail "stack_up: $(cat "$T/out")"
 }
@@ -383,6 +383,60 @@ if [ -z "$r" ] || [ -z "$u" ] || [ "$r" -gt "$u" ]; then
 	fail "update from the proxy: its container removed, then the stack up ($(tr '\n' '|' <"$T/calls"))"
 fi
 [ "$(cat "$T/data/proxy/binds")" = "/mnt/user/1 PROJECTS" ] || fail "update from the proxy: the engine's list: $(cat "$T/data/proxy/binds")"
+rm -rf "$T/data"
+mkdir -p "$T/data"
+
+# ---- the machine's own settings, when the host is not the machine (WSL):
+# ---- its wake card, its session folder, its share command; none by default
+
+E=$T/data/launcher/.env
+node_service() { sed -n '/^  node:$/,/^  syncthing:$/p' "$C"; }
+mkdir -p "$T/data/launcher"
+: >"$T/calls"
+stack_in
+has "$E" "ERIPHE_WAKE_MAC='00:00:5e:00:53:01'" "the wake card, found"
+has "$T/calls" "run --rm --network host --entrypoint sh" "the wake card, looked for on the host's network"
+hasnt "$C" "eriphe-session" "no session folder"
+hasnt "$C" "ERIPHE_SESSION_FILE" "no session file"
+has "$C" 'ERIPHE_SHARE_COMMAND: "docker exec eriphe eriphe share"' "the share command, by default"
+cp "$C" "$T/compose.default"
+rm -rf "$T/data"
+mkdir -p "$T/data/launcher"
+: >"$T/calls"
+stack_in ERIPHE_WAKE_MAC="00-00-5E-00-53-02, 00:00:5e:00:53:03" ERIPHE_WAKE_BROADCAST=192.0.2.255 \
+	ERIPHE_SESSION_DIR=/mnt/eriphe-session ERIPHE_SHARE_COMMAND='eriphe share $1'
+has "$E" "ERIPHE_WAKE_MAC='00:00:5e:00:53:02,00:00:5e:00:53:03'" "the wake card, given"
+has "$E" "ERIPHE_WAKE_BROADCAST='192.0.2.255'" "the wake card's broadcast, given"
+hasnt "$T/calls" "--network host --entrypoint sh" "the wake card, given: not looked for"
+node_service >"$T/node.yaml"
+has "$T/node.yaml" '- "/mnt/eriphe-session:/run/eriphe-session:ro"' "the session folder, read-only, in the node"
+has "$T/node.yaml" "ERIPHE_SESSION_FILE: /run/eriphe-session/session.json" "the session file, for the node"
+[ "$(grep -c eriphe-session "$C")" = 2 ] || fail "the session folder elsewhere than the node: $(grep -n eriphe-session "$C")"
+has "$T/node.yaml" 'ERIPHE_SHARE_COMMAND: "eriphe share $$1"' "the share command, given (its \$ for Compose)"
+# Not given again: not kept from the run before.
+rm -rf "$T/data"
+mkdir -p "$T/data/launcher"
+: >"$T/calls"
+stack_in
+cmp -s "$C" "$T/compose.default" || fail "the settings kept from the run before: $(diff "$T/compose.default" "$C")"
+has "$E" "ERIPHE_WAKE_MAC='00:00:5e:00:53:01'" "the wake card, found again"
+# The share command in what the launcher says.
+rm -rf "$T/data"
+mkdir -p "$T/data"
+out=$(launcher ERIPHE_SHARE_COMMAND='eriphe share' ERIPHE_SHARES=shares=/mnt/user sh -c ". '$here/eriphe-launcher'; discover; settings" 2>&1 || true)
+case $out in *"Share a folder with: eriphe share add <folder>"*) ;; *) fail "the share command, said: $out" ;; esac
+for bad in "ERIPHE_WAKE_BROADCAST=192.0.2.255" "ERIPHE_WAKE_MAC=00:00:5e:00:53" "ERIPHE_WAKE_MAC=00:00:00:00:00:00" \
+	"ERIPHE_WAKE_MAC=00:00:5e:00:53:zz" "ERIPHE_WAKE_MAC=," "ERIPHE_WAKE_MAC=00:00:5e:00:53:01 ERIPHE_WAKE_BROADCAST=192.0.2.256" \
+	"ERIPHE_WAKE_MAC=00:00:5e:00:53:01 ERIPHE_WAKE_BROADCAST=fe80::1" "ERIPHE_SESSION_DIR=mnt/session" "ERIPHE_SESSION_DIR=/" \
+	"ERIPHE_SESSION_DIR=/mnt/a:b" "ERIPHE_SESSION_DIR=/mnt/Sam's"; do
+	# shellcheck disable=SC2086 # one argument per variable
+	if launcher $bad sh -c ". '$here/eriphe-launcher'; discover; settings" >/dev/null 2>&1; then
+		fail "settings take $bad"
+	fi
+done
+if launcher ERIPHE_SHARE_COMMAND="$(printf 'eriphe share\nx')" sh -c ". '$here/eriphe-launcher'; discover; settings" >/dev/null 2>&1; then
+	fail "settings take a share command on two lines"
+fi
 rm -rf "$T/data"
 mkdir -p "$T/data"
 
