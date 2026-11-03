@@ -7,12 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -245,12 +243,14 @@ func (s *service) loop(ctx context.Context) {
 
 // runOnce runs one container of the service until it exits or ctx ends.
 func (s *service) runOnce(ctx context.Context) error {
-	args, env, target, err := s.n.serviceArgs(s.name, s.spec)
+	spec, err := s.n.serviceRun(s.name, s.spec)
 	if err != nil {
 		return err
 	}
-	r, err := s.start(args, env)
-	if err != nil {
+	r := &serviceRun{stderr: &tailBuffer{}}
+	spec.stderr = r.stderr
+	var target string
+	if r.ctr, target, err = s.n.engine().runService(spec); err != nil {
 		return err
 	}
 	// Stopping: docker stop, the CLI going away does not stop a container.
@@ -272,32 +272,8 @@ func (s *service) runOnce(ctx context.Context) error {
 // serviceRun is one container of a service, started: a stdio one with its
 // input and output, what it prints on stderr (and stdout, over http).
 type serviceRun struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stdout io.ReadCloser
+	ctr    *engineRun
 	stderr *tailBuffer
-}
-
-// start starts the container's command.
-func (s *service) start(args, env []string) (*serviceRun, error) {
-	r := &serviceRun{cmd: exec.Command(s.n.opt.docker, args...), stderr: &tailBuffer{}}
-	r.cmd.Env = env
-	r.cmd.Stderr = r.stderr
-	var err error
-	if s.spec.Transport == "stdio" {
-		if r.stdin, err = r.cmd.StdinPipe(); err != nil {
-			return nil, err
-		}
-		if r.stdout, err = r.cmd.StdoutPipe(); err != nil {
-			return nil, err
-		}
-	} else {
-		r.cmd.Stdout = r.stderr
-	}
-	if err := r.cmd.Start(); err != nil {
-		return nil, err
-	}
-	return r, nil
 }
 
 // fail adds to err the end of what the container printed.
@@ -311,10 +287,10 @@ func (r *serviceRun) fail(err error) error {
 // serveStdio bridges the MCP sessions to a stdio container until either
 // ends.
 func (s *service) serveStdio(ctx context.Context, r *serviceRun) error {
-	err := s.bridge.serve(ctx, r.stdout, r.stdin, func() { s.set(svcRunning, "") })
+	err := s.bridge.serve(ctx, r.ctr.stdout, r.ctr.stdin, func() { s.set(svcRunning, "") })
 	// The connection is over: make sure the container is too.
 	s.n.stopServiceContainer(s.name)
-	werr := r.cmd.Wait()
+	werr := r.ctr.Wait()
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -328,10 +304,10 @@ func (s *service) serveStdio(ctx context.Context, r *serviceRun) error {
 // address until it exits.
 func (s *service) serveHTTP(ctx context.Context, r *serviceRun, target string) error {
 	exited := make(chan error, 1)
-	go func() { exited <- r.cmd.Wait() }()
-	if target == "" && s.n.apple() {
-		// The container engine: its address, on its own network.
-		ip, err := s.n.appleAddress(ctx, serviceContainer(s.name), exited)
+	go func() { exited <- r.ctr.Wait() }()
+	if target == "" {
+		// Its address, on its own network, once it runs.
+		ip, err := s.n.engine().serviceAddress(ctx, serviceContainer(s.name), exited)
 		if err != nil {
 			if s.giveUp(ctx, exited) {
 				return nil
@@ -406,99 +382,42 @@ func waitPort(ctx context.Context, addr string, exited chan error) error {
 func (n *node) stopServiceContainer(name string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	exec.CommandContext(ctx, n.opt.docker, "stop", "-t", "10", serviceContainer(name)).Run()
+	n.engine().stop(ctx, serviceContainer(name))
 }
 
-// serviceArgs is the docker run command of a service, the environment of
-// that command (secrets are passed by name, -e NAME, never on a command
-// line) and, for http, the address the node reaches the container on.
-func (n *node) serviceArgs(name string, spec serviceSpec) (args, env []string, target string, err error) {
+// serviceRun is a service's container: its image, user, network needs and
+// data. Its secrets reach the engine by name, never on a command line.
+func (n *node) serviceRun(name string, spec serviceSpec) (serviceRunSpec, error) {
 	user := spec.User
 	if user == "" {
 		user = fmt.Sprintf("%d:%d", taskUID, taskGID)
 	}
 	uid, gid, err := parseUser(user)
 	if err != nil {
-		return nil, nil, "", err
+		return serviceRunSpec{}, err
 	}
 	if spec.Image == "" || strings.HasPrefix(spec.Image, "-") {
-		return nil, nil, "", fmt.Errorf("bad image %q", spec.Image)
+		return serviceRunSpec{}, fmt.Errorf("bad image %q", spec.Image)
 	}
-	if n.apple() {
-		return n.appleServiceArgs(name, spec, user, uid, gid)
+	stdio := spec.Transport == "stdio"
+	if !stdio && (spec.Port < 1 || spec.Port > 65535) {
+		return serviceRunSpec{}, errors.New("an http service needs its port")
 	}
-	args = []string{"run", "--rm", "--name", serviceContainer(name), "--label", "eriphe.service=" + name}
-	if spec.Transport == "stdio" {
-		args = append(args, "-i")
-	}
-	args = append(args, "--user", user, "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
-		"--pids-limit", "256", "--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=256m")
-	if !spec.Writable {
-		args = append(args, "--read-only")
-	}
-	if n.opt.serviceMemory != "" {
-		args = append(args, "--memory", n.opt.serviceMemory)
-	}
-
-	// The network: none without egress, unless an http service needs one to
-	// be reached, then the node's internal network. The node reaches an http
-	// container by name on a network it shares (the NAS), or else on a
-	// loopback port it publishes (a node outside Docker: WSL, a Mac).
-	network := n.opt.network
-	switch {
-	case !spec.Egress && spec.Transport == "stdio":
-		network = "none"
-	case !spec.Egress:
-		if n.opt.serviceNetwork == "" {
-			return nil, nil, "", errors.New("an http service without egress needs the node's -service-network (an internal Docker network the node is on)")
-		}
-		network = n.opt.serviceNetwork
-	}
-	// Never the tasks' network: they would reach the service directly.
-	if spec.Transport == "http" && dockerNetwork(network) == dockerNetwork(n.opt.taskNetwork) {
-		return nil, nil, "", errSharedBridge
-	}
-	if network != "" {
-		args = append(args, "--network", network)
-	} else {
-		args = append(args, "--add-host", "host.docker.internal:"+n.hostGateway(""))
-	}
-	if spec.Transport == "http" {
-		if spec.Port < 1 || spec.Port > 65535 {
-			return nil, nil, "", errors.New("an http service needs its port")
-		}
-		if network != "" {
-			target = net.JoinHostPort(serviceContainer(name), strconv.Itoa(spec.Port))
-		} else {
-			port, err := freePort()
-			if err != nil {
-				return nil, nil, "", err
-			}
-			args = append(args, "-p", fmt.Sprintf("127.0.0.1:%d:%d", port, spec.Port))
-			target = net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
-		}
-	}
-
+	r := serviceRunSpec{name: serviceContainer(name), service: name, image: spec.Image, args: spec.Args, user: user,
+		stdio: stdio, port: spec.Port, writable: spec.Writable, egress: spec.Egress, env: spec.Env}
 	if spec.Volume {
 		dir := n.serviceDir(name)
-		mount, err := n.bindMount(dir, "/data")
+		m, err := n.bindMount(dir, "/data")
 		if err != nil {
-			return nil, nil, "", err
+			return serviceRunSpec{}, err
 		}
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, nil, "", err
+			return serviceRunSpec{}, err
 		}
 		os.Chown(dir, uid, gid)
-		args = append(args, mount...)
+		r.mounts = []mount{m}
 	}
-	env = os.Environ()
-	for k, v := range spec.Env {
-		args = append(args, "-e", k)
-		env = append(env, k+"="+v)
-	}
-	args = append(args, spec.Image)
-	args = append(args, spec.Args...)
-	return args, env, target, nil
+	return r, nil
 }
 
 func parseUser(s string) (uid, gid int, err error) {
@@ -532,18 +451,7 @@ func (n *node) removeStrayServices() {
 }
 
 // removeLabelled removes the containers carrying a label, whatever its value.
-func (n *node) removeLabelled(label string) {
-	if n.apple() {
-		n.appleRemoveLabelled(label)
-		return
-	}
-	out, err := exec.Command(n.opt.docker, "ps", "-aq", "--filter", "label="+label).Output()
-	if err != nil || len(strings.TrimSpace(string(out))) == 0 {
-		return
-	}
-	args := append([]string{"rm", "-f"}, strings.Fields(string(out))...)
-	exec.Command(n.opt.docker, args...).Run()
-}
+func (n *node) removeLabelled(label string) { n.engine().removeStray(label) }
 
 // reportServices tells eriphe-core what changed in each service.
 func (n *node) reportServices(c *coreClient) {

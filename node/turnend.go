@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -293,31 +291,9 @@ func messageChecks(data map[string]any) ([]TaskCheck, bool) {
 // its output (at most max bytes) and its exit code. err is for a script
 // that could not run, or ran out of time. The script has the agent's
 // toolchains too, first in PATH, as the entrypoint gave them to the agent
-// (toolchain.go). The script runs in a subshell, its exit code printed
-// after it (execExit).
+// (toolchain.go).
 func (n *node) execTask(ctx context.Context, t *Task, max int, script string, args ...string) (string, int, error) {
-	argv := []string{"exec"}
-	for _, kv := range toolchainEnvOf(t) {
-		argv = append(argv, "-e", kv)
-	}
-	wrapped := toolchainPathScript + "\n(\n" + script + "\n)\nprintf '\\n" + execExit + "%d\\n' $?"
-	argv = append(argv, containerName(t), "sh", "-c", wrapped, "eriphe-check")
-	argv = append(argv, args...)
-	cmd := exec.CommandContext(ctx, n.opt.docker, argv...)
-	out := &tailBuffer{}
-	cmd.Stdout, cmd.Stderr = out, out
-	err := cmd.Run()
-	text := out.String()
-	if ctx.Err() != nil {
-		return tail(text, max), -1, errTimedOut
-	}
-	if i := strings.LastIndex(text, "\n"+execExit); i >= 0 {
-		if code, perr := strconv.Atoi(strings.TrimSpace(text[i+1+len(execExit):])); perr == nil {
-			return tail(text[:i], max), code, nil
-		}
-	}
-	if err == nil {
-		err = errors.New("no exit code")
-	}
-	return tail(text, max), -1, fmt.Errorf("it did not run in the container (%v): %s", err, tail(strings.TrimSpace(text), 300))
+	r, err := n.engine().execSync(ctx, containerName(t), execSpec{env: toolchainEnvOf(t), setup: toolchainPathScript,
+		script: script, name: "eriphe-check", args: args, max: max})
+	return r.output, r.exit, err
 }

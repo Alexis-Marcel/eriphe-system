@@ -374,7 +374,7 @@ func (n *node) syncAccess(pf planFolder, shared []sharedFolder) string {
 	switch pf.Role {
 	case roleSource:
 		i := indexShared(shared, pf.Share)
-		if i < 0 || n.apple() {
+		if i < 0 || n.engine().traits().explores {
 			// On a Mac, Syncthing reads the folder itself, with its own
 			// permission: what it says of it is reported (syncState).
 			return ""
@@ -405,7 +405,7 @@ func (n *node) makeCopyDir(p string) error {
 	if err := os.Mkdir(p, 0o755); err != nil && !errors.Is(err, fs.ErrExist) {
 		return err
 	}
-	if runtime.GOOS == "linux" && os.Geteuid() == 0 && !n.apple() {
+	if runtime.GOOS == "linux" && os.Geteuid() == 0 && !n.engine().traits().mapsOwners {
 		return chownResults(p, taskUID, taskGID)
 	}
 	return nil

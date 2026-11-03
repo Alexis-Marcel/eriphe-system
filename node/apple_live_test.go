@@ -74,7 +74,7 @@ func TestAppleLive(t *testing.T) {
 	}
 
 	// The explorer lists the home's root, its own data hidden.
-	if _, e, err := n.appleResolve(context.Background(), "home", "", "list"); err != nil || len(e.dirs) == 0 {
+	if _, e, err := n.exploredResolve(context.Background(), "home", "", "list"); err != nil || len(e.dirs) == 0 {
 		t.Errorf("the home's root: %v", err)
 	}
 	var folders []TaskFolder
@@ -88,7 +88,7 @@ func TestAppleLive(t *testing.T) {
 		// Files only in iCloud (brctl evict makes one): over the limit, a
 		// clear refusal; within, the node downloads them before the task.
 		start := time.Now()
-		r, _, err := n.appleResolve(context.Background(), "icloud", f, "list")
+		r, _, err := n.exploredResolve(context.Background(), "icloud", f, "list")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -186,7 +186,7 @@ done
 	n.stopContainer(other)
 	waitDone(t, other)
 	for _, tk := range []*Task{task, other} {
-		if l, err := n.appleNetworks(taskNetwork(tk)); err == nil && len(l) > 0 {
+		if l, err := appleOf(n).appleNetworks(taskNetwork(tk.ID)); err == nil && len(l) > 0 {
 			t.Errorf("the network of %s is still there", tk.ID)
 		}
 	}

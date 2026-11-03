@@ -12,7 +12,6 @@ import (
 	"io/fs"
 	"log"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -596,14 +595,4 @@ func (n *node) prepareNow(p *prepareSpec) {
 }
 
 // pullImage pulls an image with the node's engine.
-func (n *node) pullImage(ctx context.Context, image string) error {
-	args := []string{"pull", "-q", image}
-	if n.apple() {
-		args = []string{"image", "pull", "--progress", "none", image}
-	}
-	out, err := exec.CommandContext(ctx, n.opt.docker, args...).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%v: %s", err, tail(strings.TrimSpace(string(out)), 300))
-	}
-	return nil
-}
+func (n *node) pullImage(ctx context.Context, image string) error { return n.engine().pull(ctx, image) }

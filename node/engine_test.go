@@ -37,7 +37,7 @@ else
   touch "$d/seen"; printf '[{"id":"eriphe-svc-mail","status":{"state":"stopped","networks":[]}}]'
 fi`)
 	n := newNode(options{docker: cli, engine: engineContainer})
-	ip, err := n.appleAddress(context.Background(), "eriphe-svc-mail", make(chan error, 1))
+	ip, err := appleOf(n).serviceAddress(context.Background(), "eriphe-svc-mail", make(chan error, 1))
 	if err != nil || ip != "192.168.64.5" {
 		t.Errorf("got %q, %v", ip, err)
 	}
@@ -46,12 +46,12 @@ fi`)
 	n = newNode(options{docker: never, engine: engineContainer})
 	exited := make(chan error, 1)
 	exited <- nil
-	if _, err := n.appleAddress(context.Background(), "eriphe-svc-mail", exited); err == nil || len(exited) != 1 {
+	if _, err := appleOf(n).serviceAddress(context.Background(), "eriphe-svc-mail", exited); err == nil || len(exited) != 1 {
 		t.Errorf("exited: %v, the exit kept: %v", err, len(exited) == 1)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	if _, err := n.appleAddress(ctx, "eriphe-svc-mail", make(chan error, 1)); err != context.DeadlineExceeded {
+	if _, err := appleOf(n).serviceAddress(ctx, "eriphe-svc-mail", make(chan error, 1)); err != context.DeadlineExceeded {
 		t.Errorf("timed out: %v", err)
 	}
 }
@@ -108,7 +108,7 @@ func TestSelfImage(t *testing.T) {
 	} {
 		cli, dir := fakeCLI(t, tc.body)
 		n := newNode(options{docker: cli})
-		got, err := n.selfImage(context.Background())
+		got, err := dockerOf(n).selfImage(context.Background())
 		if got != tc.want || (err == nil) != (tc.want != "") {
 			t.Errorf("%s: %q, %v", tc.body, got, err)
 		}

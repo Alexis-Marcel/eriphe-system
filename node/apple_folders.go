@@ -24,13 +24,13 @@ import (
 // the task fails with what to do (make the folder "Keep Downloaded" in the
 // Finder).
 
-// appleFolderMounts are the container run arguments that mount a task's
-// folders: each read-only, its results subfolder writable when lent with
+// exploredFolderMounts are the mounts of a task's folders, with an engine
+// that explores them (folderMounts): each read-only, its results subfolder writable when lent with
 // Write, the whole folder writable when lent with Manage, once a snapshot
 // of it is taken (snapshot.go).
-func (n *node) appleFolderMounts(t *Task) ([]string, error) {
+func (n *node) exploredFolderMounts(t *Task) ([]mount, error) {
 	ctx := context.Background()
-	var args []string
+	var args []mount
 	seen := map[string]bool{}
 	budget := n.opt.downloadLimit
 	for _, tf := range t.Spec.Folders {
@@ -57,32 +57,30 @@ func (n *node) appleFolderMounts(t *Task) ([]string, error) {
 			if err := n.snapshotLent(t, f); err != nil {
 				return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 			}
-			mount, err := appleMount(f.real, dst, false)
-			if err != nil {
+			if err := n.engine().mountable(f.real); err != nil {
 				return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 			}
-			args = append(args, mount...)
+			args = append(args, mount{src: f.real, dst: dst})
 			continue
 		}
-		mount, err := appleMount(f.real, dst, true)
-		if err != nil {
+		if err := n.engine().mountable(f.real); err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
-		args = append(args, mount...)
+		args = append(args, mount{src: f.real, dst: dst, readOnly: true})
 		if !tf.Write {
 			continue
 		}
-		use, err := n.appleResults(ctx, f.real, tf)
+		use, err := n.exploredResults(ctx, f.real, tf)
 		if err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		if cur := tf.resultsName(); use != cur {
 			resultsConflict(t, tf, use)
 		}
-		if mount, err = appleMount(filepath.Join(f.real, use), dst+"/"+tf.resultsName(), false); err != nil {
+		if err := n.engine().mountable(filepath.Join(f.real, use)); err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
-		args = append(args, mount...)
+		args = append(args, mount{src: filepath.Join(f.real, use), dst: dst + "/" + tf.resultsName()})
 	}
 	return args, nil
 }

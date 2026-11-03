@@ -232,7 +232,7 @@ func (n *node) probeShared(f sharedFolder) accessNote {
 // lent above read must also be writable. Then what Syncthing last said of
 // it, if it may be copied.
 func (n *node) folderProblem(f sharedFolder) (problem, program string) {
-	if n.apple() || n.helper() {
+	if n.engine().traits().explores || n.helper() {
 		// What was last seen: the node does not look into it to report.
 		if note, _ := n.access.get(f.ID); note.Problem != "" {
 			return note.Problem, programNode

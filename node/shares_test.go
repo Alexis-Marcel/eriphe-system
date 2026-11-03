@@ -320,7 +320,7 @@ func TestRevoke(t *testing.T) {
 		t.Fatalf("holder stopped %v, other %v", stopped(holder), stopped(other))
 	}
 	// And a new mount of it is refused.
-	if _, err := n.folderMounts(&Task{ID: "again", Spec: TaskSpec{Folders: []TaskFolder{a}}}); err == nil {
+	if _, err := n.folderArgs(t, &Task{ID: "again", Spec: TaskSpec{Folders: []TaskFolder{a}}}); err == nil {
 		t.Fatal("mounted once unshared")
 	}
 }
@@ -335,7 +335,7 @@ func TestFolderMounts(t *testing.T) {
 		lend(t, n, "data", "Clients/ACME", "Clients, ACME", true),
 		lend(t, n, "data", "Photos", "Photos", false),
 	}}}
-	args, err := n.folderMounts(task)
+	args, err := n.folderArgs(t, task)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,24 +384,24 @@ func TestFolderMounts(t *testing.T) {
 		if name == "out of root" {
 			saved := n.opt.shares
 			n.opt.shares = shareFlag{"other": {Path: filepath.Join(root, "Clients")}}
-			_, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{f}}})
+			_, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{f}}})
 			n.opt.shares = saved
 			if err == nil {
 				t.Errorf("%s: mounted", name)
 			}
 			continue
 		}
-		if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{f}}}); err == nil {
+		if _, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{f}}}); err == nil {
 			t.Errorf("%s: mounted", name)
 		}
 	}
 	// A symlink named Eriphe would send the writes elsewhere.
 	os.Symlink(filepath.Join(root, "Photos"), filepath.Join(root, "Clients", "Beta", "Eriphe"))
-	if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{lend(t, n, "data", "Clients/Beta", "Beta", true)}}}); err == nil {
+	if _, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{lend(t, n, "data", "Clients/Beta", "Beta", true)}}}); err == nil {
 		t.Error("in results: mounted")
 	}
 	p := lend(t, n, "data", "Photos", "Photos", false)
-	if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{p, {Name: "photos", ID: p.ID}}}}); err == nil {
+	if _, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{p, {Name: "photos", ID: p.ID}}}}); err == nil {
 		t.Error("two folders under one name")
 	}
 }
@@ -428,7 +428,7 @@ func testPrivateMarker(t *testing.T, n *node, root string) {
 		if out, err := shareOut(t, n, "add", filepath.Join(root, p)); err == nil {
 			t.Errorf("%s shared: %s", p, out)
 		}
-		if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{lend(t, n, "data", p, "p", false)}}}); err == nil {
+		if _, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{lend(t, n, "data", p, "p", false)}}}); err == nil {
 			t.Errorf("%s is mounted", p)
 		}
 	}

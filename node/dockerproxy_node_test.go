@@ -99,7 +99,7 @@ func TestDockerProxyLetsTheNodeThrough(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"docker":"27.0.0"`) {
 		t.Errorf("node: %s", w.Body)
 	}
-	if err := n.ensureTaskNetwork(); err != nil {
+	if err := n.engine().ensureNetwork(); err != nil {
 		t.Errorf("task network: %v", err)
 	}
 

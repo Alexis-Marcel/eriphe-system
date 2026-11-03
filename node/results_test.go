@@ -88,7 +88,7 @@ func TestResultsName(t *testing.T) {
 	chownResults = func(string, int, int) error { return nil }
 	defer func() { chownResults = os.Lchown }()
 	testResultsName(t, n, root, func(task *Task) ([]string, error) {
-		args, err := n.folderMounts(task)
+		args, err := n.folderArgs(t, task)
 		// docker's --mount spelling, as the Mac's.
 		for i, a := range args {
 			a = strings.Replace(a, ",dst=", ",target=", 1)
@@ -100,5 +100,5 @@ func TestResultsName(t *testing.T) {
 
 func TestAppleResultsName(t *testing.T) {
 	n, root := appleShareFixture(t)
-	testResultsName(t, n, root, n.folderMounts)
+	testResultsName(t, n, root, func(task *Task) ([]string, error) { return n.folderArgs(t, task) })
 }

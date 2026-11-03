@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,7 +8,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -97,7 +95,7 @@ func (r *helperResp) err() error {
 }
 
 // helper tells whether shared folders are reached through helpers.
-func (n *node) helper() bool { return n.opt.folderHelper != "" && !n.apple() }
+func (n *node) helper() bool { return n.opt.folderHelper != "" && !n.engine().traits().explores }
 
 // helperMount is one bind mount of a helper, at its own path.
 type helperMount struct {
@@ -107,34 +105,23 @@ type helperMount struct {
 
 // runHelper runs a helper with its mounts; a variable for the tests.
 var runHelper = func(n *node, req helperReq, mounts []helperMount) (*helperResp, error) {
-	args := []string{"run", "--rm", "-i", "--network", "none", "--read-only", "--user", "0:0",
-		"--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER",
-		"--security-opt", "no-new-privileges", "--pids-limit", "64", "--label", "eriphe.helper=" + req.Op,
-		"--entrypoint", "/usr/local/bin/eriphe-node"}
+	spec := helperRunSpec{image: n.opt.folderHelper, entrypoint: "/usr/local/bin/eriphe-node", args: []string{"folder-helper"},
+		label: "eriphe.helper=" + req.Op}
 	seen := map[string]bool{}
 	for _, m := range mounts {
 		if seen[m.path] {
 			continue
 		}
 		seen[m.path] = true
-		spec := []string{"type=bind", "src=" + m.path, "dst=" + m.path}
-		if m.readOnly {
-			spec = append(spec, "readonly")
-		}
-		args = append(args, "--mount", mountSpec(spec...))
+		spec.mounts = append(spec.mounts, mount{src: m.path, dst: m.path, readOnly: m.readOnly})
 	}
-	args = append(args, n.opt.folderHelper, "folder-helper")
-	raw, _ := json.Marshal(req)
+	spec.stdin, _ = json.Marshal(req)
 	ctx, cancel := context.WithTimeout(context.Background(), helperTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, n.opt.docker, args...)
-	cmd.Stdin = bytes.NewReader(raw)
-	var out, errs bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errs
-	err := cmd.Run()
+	stdout, stderr, err := n.engine().runHelper(ctx, spec)
 	var resp helperResp
-	if jerr := json.Unmarshal(out.Bytes(), &resp); jerr != nil {
-		msg := strings.TrimSpace(errs.String())
+	if jerr := json.Unmarshal(stdout, &resp); jerr != nil {
+		msg := strings.TrimSpace(string(stderr))
 		if i := strings.LastIndex(msg, "\n"); i >= 0 {
 			msg = msg[i+1:]
 		}
@@ -187,7 +174,7 @@ func (n *node) helperPrepare(f *resolvedFolder, tf TaskFolder) (*helperResp, err
 // a helper checks it again and prepares it, a snapshot is taken by another
 // for manage. It returns the task's mounts, its results folders (handed
 // back by helpers too) and the groups to add.
-func (n *node) helperFolderMounts(t *Task, tf TaskFolder, f *resolvedFolder, dst string) (args, results []string, gids []int, err error) {
+func (n *node) helperFolderMounts(t *Task, tf TaskFolder, f *resolvedFolder, dst string) (args []mount, results []string, gids []int, err error) {
 	sf := f.shared
 	resp, err := n.helperPrepare(f, tf)
 	if err == nil && filepath.Clean(resp.Real) != filepath.Clean(sf.Path) {
@@ -206,20 +193,20 @@ func (n *node) helperFolderMounts(t *Task, tf TaskFolder, f *resolvedFolder, dst
 		if err := n.snapshotLent(t, f); err != nil {
 			return nil, nil, nil, err
 		}
-		args = append(args, "--mount", mountSpec("type=bind", "src="+f.src, "dst="+dst))
+		args = append(args, mount{src: f.src, dst: dst})
 		results = append(results, f.src)
 	case tf.Write:
-		args = append(args, "--mount", mountSpec("type=bind", "src="+f.src, "dst="+dst, "readonly"))
+		args = append(args, mount{src: f.src, dst: dst, readOnly: true})
 		if resp.Kept != "" {
 			resultsConflict(t, tf, resp.Kept)
 		}
 		if resp.RGID > 0 {
 			gids = append(gids, resp.RGID)
 		}
-		args = append(args, "--mount", mountSpec("type=bind", "src="+filepath.Join(f.src, resp.Use), "dst="+dst+"/"+tf.resultsName()))
+		args = append(args, mount{src: filepath.Join(f.src, resp.Use), dst: dst + "/" + tf.resultsName()})
 		results = append(results, filepath.Join(f.src, resp.Use))
 	default:
-		args = append(args, "--mount", mountSpec("type=bind", "src="+f.src, "dst="+dst, "readonly"))
+		args = append(args, mount{src: f.src, dst: dst, readOnly: true})
 	}
 	return args, results, gids, nil
 }

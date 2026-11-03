@@ -70,7 +70,7 @@ func TestHelperFolderMounts(t *testing.T) {
 	defer func() { chownResults = os.Lchown }()
 
 	task := &Task{ID: "t-1", Spec: TaskSpec{Folders: []TaskFolder{manage, drop, read}}}
-	args, err := n.folderMounts(task)
+	args, err := n.folderArgs(t, task)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,13 +120,13 @@ func TestHelperFolderMounts(t *testing.T) {
 	// Checked again at each lend: a folder that leads elsewhere now is refused.
 	os.Rename(docs, docs+"-old")
 	os.Symlink(clients, docs)
-	if _, err := n.folderMounts(&Task{ID: "t-2", Spec: TaskSpec{Folders: []TaskFolder{read}}}); err == nil {
+	if _, err := n.folderArgs(t, &Task{ID: "t-2", Spec: TaskSpec{Folders: []TaskFolder{read}}}); err == nil {
 		t.Fatal("lent where it leads now")
 	}
 	// A folder that cannot be shared is refused by the helper's checks.
 	os.Remove(docs)
 	os.Symlink(filepath.Join(root, "Home", ".ssh"), docs)
-	if _, err := n.folderMounts(&Task{ID: "t-3", Spec: TaskSpec{Folders: []TaskFolder{read}}}); err == nil {
+	if _, err := n.folderArgs(t, &Task{ID: "t-3", Spec: TaskSpec{Folders: []TaskFolder{read}}}); err == nil {
 		t.Fatal("lent a folder of keys")
 	}
 }

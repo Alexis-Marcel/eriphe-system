@@ -18,7 +18,7 @@ const handBackEvery = time.Minute
 
 // handBack gives the task's results back to their folders' owners.
 func (n *node) handBack(t *Task) {
-	if n.apple() {
+	if n.engine().traits().mapsOwners {
 		return
 	}
 	t.mu.Lock()
