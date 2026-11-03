@@ -606,12 +606,16 @@ func (n *node) toolchainsFor(t *Task) bool {
 // toolchainMounts mounts the node's toolchains read-only in a task's
 // container: those its repository asks for appear there when they are
 // ready, even after the container started.
-func (n *node) toolchainMounts(t *Task) ([]string, error) {
+func (n *node) toolchainMounts(t *Task) ([]mount, error) {
 	if !n.toolchainsFor(t) {
 		return nil, nil
 	}
 	if err := os.MkdirAll(n.toolchains.dir, 0o755); err != nil {
 		return nil, err
 	}
-	return n.readOnlyMount(n.toolchains.dir, toolchainMount)
+	m, err := n.readOnlyMount(n.toolchains.dir, toolchainMount)
+	if err != nil {
+		return nil, err
+	}
+	return []mount{m}, nil
 }

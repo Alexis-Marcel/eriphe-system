@@ -120,7 +120,7 @@ func TestManageMount(t *testing.T) {
 	n, root := shareFixture(t)
 	tf := lendAt(t, n, "Clients", "Clients", accessManage)
 	task := &Task{ID: "t-1", Spec: TaskSpec{Folders: []TaskFolder{tf}}}
-	args, err := n.folderMounts(task)
+	args, err := n.folderArgs(t, task)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,14 +140,14 @@ func TestManageMount(t *testing.T) {
 	}
 	// A read-only place is never managed.
 	n.opt.shares["data"] = shareRoot{Path: root, ReadOnly: true}
-	if _, err := n.folderMounts(&Task{ID: "t-ro", Spec: TaskSpec{Folders: []TaskFolder{tf}}}); err == nil {
+	if _, err := n.folderArgs(t, &Task{ID: "t-ro", Spec: TaskSpec{Folders: []TaskFolder{tf}}}); err == nil {
 		t.Fatal("managed on a read-only place")
 	}
 	n.opt.shares["data"] = shareRoot{Path: root}
 	// Fail closed.
 	takeSnapshot = func(src, dst string, limit int64) (string, int64, error) { return "", 0, errSnapshotTooBig }
 	defer func() { takeSnapshot = platformSnapshot }()
-	if _, err := n.folderMounts(&Task{ID: "t-2", Spec: TaskSpec{Folders: []TaskFolder{tf}}}); err == nil || !strings.Contains(err.Error(), "not started") {
+	if _, err := n.folderArgs(t, &Task{ID: "t-2", Spec: TaskSpec{Folders: []TaskFolder{tf}}}); err == nil || !strings.Contains(err.Error(), "not started") {
 		t.Fatalf("without a snapshot: %v", err)
 	}
 	if len(n.snapshots(tf.ID)) != 1 {
@@ -162,7 +162,7 @@ func TestManageMount(t *testing.T) {
 	chownResults = func(string, int, int) error { return nil }
 	defer func() { chownResults = os.Lchown }()
 	takeSnapshot = platformSnapshot
-	if _, err := n.folderMounts(&Task{ID: "t-3", Spec: TaskSpec{Folders: []TaskFolder{d}}}); err != nil {
+	if _, err := n.folderArgs(t, &Task{ID: "t-3", Spec: TaskSpec{Folders: []TaskFolder{d}}}); err != nil {
 		t.Fatal(err)
 	}
 	if len(n.snapshots(d.ID)) != 0 {
@@ -315,7 +315,7 @@ func TestRestoreFailsClosed(t *testing.T) {
 func TestAppleManageMount(t *testing.T) {
 	n, root := appleShareFixture(t)
 	tf := lendAt(t, n, "Photos", "Photos", accessManage)
-	args, err := n.folderMounts(&Task{ID: "t-1", Spec: TaskSpec{Folders: []TaskFolder{tf}}})
+	args, err := n.folderArgs(t, &Task{ID: "t-1", Spec: TaskSpec{Folders: []TaskFolder{tf}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +327,7 @@ func TestAppleManageMount(t *testing.T) {
 	}
 	takeSnapshot = func(src, dst string, limit int64) (string, int64, error) { return "", 0, errSnapshotTooBig }
 	defer func() { takeSnapshot = platformSnapshot }()
-	if _, err := n.folderMounts(&Task{ID: "t-2", Spec: TaskSpec{Folders: []TaskFolder{tf}}}); err == nil {
+	if _, err := n.folderArgs(t, &Task{ID: "t-2", Spec: TaskSpec{Folders: []TaskFolder{tf}}}); err == nil {
 		t.Fatal("mounted without a snapshot")
 	}
 }

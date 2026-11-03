@@ -12,7 +12,7 @@ import (
 func TestBindMountStaysInRoot(t *testing.T) {
 	n := &node{opt: options{root: "/data/node", hostRoot: "/mnt/node"}}
 	got, err := n.bindMount("/data/node/tasks/t-1/work", "/work")
-	if err != nil || strings.Join(got, " ") != "-v /mnt/node/tasks/t-1/work:/work" {
+	if err != nil || strings.Join(dockerOf(n).mountArgs(got), " ") != "-v /mnt/node/tasks/t-1/work:/work" {
 		t.Fatalf("got %v, %v", got, err)
 	}
 	for _, p := range []string{"/data/node/../etc", "/etc", "/data/nodeX/x", "/data"} {

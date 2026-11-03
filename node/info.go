@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -39,23 +38,6 @@ func memoryBytes() int64 {
 		}
 	}
 	return 0
-}
-
-// localImages lists the images the Docker daemon has, as repo:tag.
-func localImages(ctx context.Context, docker string) []string {
-	out, err := exec.CommandContext(ctx, docker, "images", "--format", "{{.Repository}}:{{.Tag}}").Output()
-	if err != nil {
-		return []string{}
-	}
-	images := []string{}
-	for _, l := range strings.Split(string(out), "\n") {
-		l = strings.TrimSpace(l)
-		if l == "" || strings.Contains(l, "<none>") || len(images) == maxImages {
-			continue
-		}
-		images = append(images, l)
-	}
-	return images
 }
 
 // volumeNames are the names of the folders offered to tasks; never their paths.

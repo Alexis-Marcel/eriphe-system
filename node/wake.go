@@ -11,8 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -250,56 +248,11 @@ func runWakeSend(args []string) {
 	}
 }
 
-var containerID = regexp.MustCompile(`/containers/([0-9a-f]{64})/`)
-
-// selfImage is the image of the node's own container, as Docker lists it
-// (the socket proxy allows listing containers).
-func (n *node) selfImage(ctx context.Context) (string, error) {
-	id := ""
-	if raw, err := os.ReadFile("/proc/self/mountinfo"); err == nil {
-		if m := containerID.FindSubmatch(raw); m != nil {
-			id = string(m[1])
-		}
-	}
-	if id == "" {
-		id, _ = os.Hostname()
-	}
-	out, err := exec.CommandContext(ctx, n.opt.docker, "ps", "--no-trunc", "--filter", "id="+id, "--format", "{{.Image}}").Output()
-	img := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
-	if err != nil || img == "" {
-		return "", fmt.Errorf("cannot find this node's own image (%v)", err)
-	}
-	return img, nil
-}
-
-// wakeHostArgs is the `docker run` of the short-lived container that sends
-// the packets from the host's network: the node's image, nothing mounted,
-// no capability, read-only, gone once done.
-func wakeHostArgs(image string, w wakeInfo) []string {
-	args := []string{"run", "--rm", "--pull", "never", "--network", "host", "--cap-drop", "ALL",
-		"--security-opt", "no-new-privileges:true", "--read-only", "--label", "eriphe.wake=1",
-		"--entrypoint", "/usr/local/bin/eriphe-node", image, "wake-send", "-mac", strings.Join(w.MACs, ",")}
-	if w.Broadcast != "" {
-		args = append(args, "-broadcast", w.Broadcast)
-	}
-	return args
-}
-
 // wakeHost is the machine handleWake runs on; a test stands in for it.
 var wakeHost = thisHost
 
 // runWakeHost sends the packets from the host's network.
-var runWakeHost = func(ctx context.Context, n *node, w wakeInfo) error {
-	img, err := n.selfImage(ctx)
-	if err != nil {
-		return err
-	}
-	out, err := exec.CommandContext(ctx, n.opt.docker, wakeHostArgs(img, w)...).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%v: %s", err, bytes.TrimSpace(out))
-	}
-	return nil
-}
+var runWakeHost = func(ctx context.Context, n *node, w wakeInfo) error { return n.engine().wake(ctx, w) }
 
 // handleWake is POST /v1/wake {macs, broadcast}: eriphe-core asks this
 // machine, which stays on, to wake another one. It answers how it sent the
@@ -330,10 +283,12 @@ func (n *node) handleWake(w http.ResponseWriter, r *http.Request) {
 	} else {
 		sent = append(sent, "here")
 	}
-	if inContainer(wakeHost()) && !n.apple() {
+	if inContainer(wakeHost()) {
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
-		if err := runWakeHost(ctx, n, in); err != nil {
+		if err := runWakeHost(ctx, n, in); errors.Is(err, errors.ErrUnsupported) {
+			// This engine has no way to the host's network.
+		} else if err != nil {
 			errs = append(errs, "host: "+err.Error())
 		} else {
 			sent = append(sent, "host")

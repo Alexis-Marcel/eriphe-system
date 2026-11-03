@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -77,51 +76,19 @@ const (
 	taskGID = 1000
 )
 
-// hardening is what every task container gets. It runs as root, whatever
-// the image says, so that the agent installs what it needs (apt-get, in a
-// container thrown away with the task), with no capability but three file
-// ones: CHOWN and FOWNER, which dpkg needs (a package's files belong to its
-// own users and groups), and DAC_OVERRIDE (the task's folders, a folder
-// lent to it, files of earlier tasks of UID 1000: root reads and writes
-// them as their owner did). No SETUID or SETGID (apt runs as root, without
-// its _apt sandbox user, see worker/base/apt.conf), no network capability,
-// no way to gain privileges (no-new-privileges), a process limit, and a
-// tmpfs at /tmp (exec: builds and test binaries run from there). The root
-// filesystem is writable: what is installed goes with the container. The
-// mounts keep the rest out of reach: folders read-only but Eriphe/, the
-// agent read-only.
-var hardening = []string{
-	"--user", "0:0",
-	"--cap-drop", "ALL",
-	"--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER",
-	"--security-opt", "no-new-privileges",
-	"--pids-limit", "1024",
-	"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=2g",
-}
-
-// resourceLimits are the node's memory and CPU limits for a task container.
-func (n *node) resourceLimits() []string {
-	var args []string
-	if n.opt.taskMemory != "" {
-		args = append(args, "--memory", n.opt.taskMemory)
-	}
-	if n.opt.taskCPUs != "" {
-		args = append(args, "--cpus", n.opt.taskCPUs)
-	}
-	return args
-}
-
 // bindMount mounts a directory of the node's root into the task container,
 // and refuses anything outside it: tasks see no other host path.
-func (n *node) bindMount(p, target string) ([]string, error) {
+func (n *node) bindMount(p, target string) (mount, error) {
+	if !n.inRoot(p) {
+		return mount{}, fmt.Errorf("refusing to mount %s: outside the node root %s", p, n.opt.root)
+	}
+	return mount{src: p, dst: target, inRoot: true}, nil
+}
+
+// inRoot tells whether p is in the node's root.
+func (n *node) inRoot(p string) bool {
 	rel, err := filepath.Rel(n.opt.root, p)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return nil, fmt.Errorf("refusing to mount %s: outside the node root %s", p, n.opt.root)
-	}
-	if n.apple() {
-		return appleMount(p, target, false)
-	}
-	return []string{"-v", n.hostPath(p) + ":" + target}, nil
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 func repoURL(repo string) string {
@@ -165,11 +132,10 @@ func (n *node) startContainer(t *Task, first string) error {
 			removeRunFiles(t)
 		}
 	}()
-	if n.apple() {
-		// Its own network first: the agent's configuration names its gateway.
-		if err := n.startTaskNetwork(t); err != nil {
-			return err
-		}
+	// Its own network first, with an engine that makes one: the agent's
+	// configuration names its gateway.
+	if err := n.startTaskNetwork(t); err != nil {
+		return err
 	}
 	agentArgs, agentEnv := rt.command(n, t)
 	var files map[string][]byte
@@ -181,32 +147,20 @@ func (n *node) startContainer(t *Task, first string) error {
 		return err
 	}
 	n.mountSkills(t) // skills_user.go
-	args, cmdEnv, err := n.taskRunArgs(t, agentArgs, agentEnv)
-	if err != nil {
-		n.endTaskNetwork(t)
-		return err
-	}
-
-	cmd := exec.Command(n.opt.docker, args...)
-	cmd.Env = cmdEnv
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		n.endTaskNetwork(t)
-		return err
-	}
-	stdout, err := cmd.StdoutPipe()
+	run, err := n.taskRun(t, agentArgs, agentEnv)
 	if err != nil {
 		n.endTaskNetwork(t)
 		return err
 	}
 	stderr := &tailBuffer{}
-	cmd.Stderr = stderr
-	if err := cmd.Start(); err != nil {
+	run.stderr = stderr
+	ctr, err := n.engine().runTask(run)
+	if err != nil {
 		n.endTaskNetwork(t)
 		return err
 	}
 	started = true
-	sess := rt.attach(t, stdin)
+	sess := rt.attach(t, ctr.stdin)
 	done := make(chan struct{})
 	t.mu.Lock()
 	t.run = sess
@@ -215,8 +169,8 @@ func (n *node) startContainer(t *Task, first string) error {
 	t.mu.Unlock()
 	go n.handBackWhileRunning(t, done)
 	go func() {
-		err := sess.run(first, stdout)
-		if werr := cmd.Wait(); werr != nil {
+		err := sess.run(first, ctr.stdout)
+		if werr := ctr.Wait(); werr != nil {
 			err = werr
 		}
 		close(done)
@@ -237,35 +191,50 @@ func (n *node) startContainer(t *Task, first string) error {
 	return nil
 }
 
-// taskRunArgs is the command line of a task's container (`docker run`, or
-// `container run`, apple.go) and the environment of that command: the
-// task's own variables are passed by name (-e NAME), so their values never
-// appear on a command line.
-func (n *node) taskRunArgs(t *Task, agentArgs []string, agentEnv map[string]string) (args, cmdEnv []string, err error) {
-	env := n.taskEnv(t, agentEnv)
-	if n.apple() {
-		if args, err = n.appleTaskArgs(t); err != nil {
-			return nil, nil, err
-		}
-	} else {
-		args = n.dockerTaskArgs(t)
-	}
-	mounts, err := n.taskMounts(t)
+// startTaskNetwork gives the task its own network, and the node's address
+// on it, with an engine that makes one (beginTask).
+func (n *node) startTaskNetwork(t *Task) error {
+	name, gw, err := n.engine().beginTask(t.ID)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	args = append(args, mounts...)
+	t.mu.Lock()
+	t.network, t.gateway = name, gw
+	t.mu.Unlock()
+	return nil
+}
+
+// endTaskNetwork removes the task's network once its container is gone.
+func (n *node) endTaskNetwork(t *Task) {
+	t.mu.Lock()
+	name := t.network
+	t.network = ""
+	t.mu.Unlock()
+	if name != "" {
+		n.engine().endTask(name)
+	}
+}
+
+// taskRun is a task's container: its image, its mounts, its environment,
+// and the entrypoint that prepares it before the agent runs.
+func (n *node) taskRun(t *Task, agentArgs []string, agentEnv map[string]string) (taskRunSpec, error) {
+	env := n.taskEnv(t, agentEnv)
+	mounts, groups, err := n.taskMounts(t)
+	if err != nil {
+		return taskRunSpec{}, err
+	}
 	if len(t.Spec.Folders) > 0 {
 		env["ERIPHE_FOLDERS"] = folderNames(t.Spec.Folders)
 	}
-	cmdEnv = os.Environ()
-	for k, v := range env {
-		args = append(args, "-e", k)
-		cmdEnv = append(cmdEnv, k+"="+v)
-	}
-	args = append(args, "--entrypoint", "sh", t.Spec.Image, "-c", entrypoint, "eriphe")
-	args = append(args, agentArgs...)
-	return args, cmdEnv, nil
+	t.mu.Lock()
+	network := t.network
+	t.mu.Unlock()
+	return taskRunSpec{
+		name: containerName(t), taskID: t.ID, image: t.Spec.Image,
+		network: network, systemNetwork: t.Spec.SystemNetwork,
+		mounts: mounts, groups: groups, env: env,
+		entrypoint: "sh", cmd: append([]string{"-c", entrypoint, "eriphe"}, agentArgs...),
+	}, nil
 }
 
 // taskEnv is the environment of a task's container: what the entrypoint
@@ -312,63 +281,41 @@ func (n *node) taskEnv(t *Task, agentEnv map[string]string) map[string]string {
 	return env
 }
 
-// dockerTaskArgs is the start of a task's `docker run`: the container, its
-// hardening and limits, its networks and the shared cache.
-func (n *node) dockerTaskArgs(t *Task) []string {
-	// An image's own health check is for its standalone use, not for tasks.
-	args := []string{"run", "-i", "--rm", "--no-healthcheck", "--name", containerName(t), "--label", "eriphe.task=" + t.ID,
-		"--add-host", "host.docker.internal:" + n.hostGateway(n.opt.taskNetwork)}
-	args = append(args, hardening...)
-	args = append(args, n.resourceLimits()...)
-	// Their own network, never eriphe-core's nor the services' (network.go).
-	args = append(args, "--network", dockerNetwork(n.opt.taskNetwork))
-	if t.Spec.SystemNetwork && n.opt.network != "" {
-		// The brain calls eriphe-core and its MCP servers by name; workers never do.
-		args = append(args, "--network", n.opt.network)
-	}
-	if n.opt.cacheVolume != "" {
-		// Tools and package caches, shared by the node's tasks.
-		args = append(args, "-v", n.opt.cacheVolume+":/cache")
-	}
-	return args
-}
-
 // taskMounts is what a task's container mounts: its agent and run files
 // read-only, its workspace and agent config, and the folders lent to it.
-func (n *node) taskMounts(t *Task) ([]string, error) {
-	args, err := n.injectedMounts(t)
-	if err != nil {
-		return nil, err
+func (n *node) taskMounts(t *Task) (mounts []mount, groups []int, err error) {
+	if mounts, err = n.injectedMounts(t); err != nil {
+		return nil, nil, err
 	}
 	work, err := n.workMounts(t)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	args = append(args, work...)
+	mounts = append(mounts, work...)
 	// The node's toolchains, read-only (toolchain.go).
 	tc, err := n.toolchainMounts(t)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	args = append(args, tc...)
+	mounts = append(mounts, tc...)
 	// The folders of this machine lent to it, checked again now.
 	if len(t.Spec.Folders) > 0 {
-		mounts, err := n.folderMounts(t)
+		folders, gids, err := n.folderMounts(t)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := os.MkdirAll(filepath.Join(t.dir, "work", "folders"), 0o700); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		args = append(args, mounts...)
+		mounts, groups = append(mounts, folders...), gids
 	}
-	return args, nil
+	return mounts, groups, nil
 }
 
 // injectedMounts mounts, read-only, the agent and the node's helpers
 // (inject.go), and the files the runtime hands its agent (runfiles.go).
-func (n *node) injectedMounts(t *Task) ([]string, error) {
-	var args []string
+func (n *node) injectedMounts(t *Task) ([]mount, error) {
+	var args []mount
 	t.mu.Lock()
 	agentDir := t.agentDir
 	t.mu.Unlock()
@@ -377,7 +324,7 @@ func (n *node) injectedMounts(t *Task) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, mount...)
+		args = append(args, mount)
 	}
 	if t.dir != "" {
 		if _, err := os.Stat(runDir(t)); err == nil {
@@ -385,7 +332,7 @@ func (n *node) injectedMounts(t *Task) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			args = append(args, mount...)
+			args = append(args, mount)
 			for sub, target := range runSubMounts {
 				dir := filepath.Join(runDir(t), sub)
 				if _, err := os.Stat(dir); err != nil {
@@ -395,7 +342,7 @@ func (n *node) injectedMounts(t *Task) ([]string, error) {
 				if err != nil {
 					return nil, err
 				}
-				args = append(args, mount...)
+				args = append(args, mount)
 			}
 		}
 	}
@@ -406,8 +353,8 @@ func (n *node) injectedMounts(t *Task) ([]string, error) {
 // the task's folder, so a restarted container finds its work and resumes
 // its session. A named profile is shared between tasks instead (the
 // brain's).
-func (n *node) workMounts(t *Task) ([]string, error) {
-	var args []string
+func (n *node) workMounts(t *Task) ([]mount, error) {
+	var args []mount
 	work := filepath.Join(t.dir, "work")
 	config := filepath.Join(t.dir, "agent")
 	if t.Spec.Profile != "" {
@@ -423,7 +370,7 @@ func (n *node) workMounts(t *Task) ([]string, error) {
 		if err := os.MkdirAll(m[0], 0o700); err != nil {
 			return nil, err
 		}
-		args = append(args, mount...)
+		args = append(args, mount)
 	}
 	return args, nil
 }
@@ -440,24 +387,11 @@ func folderNames(folders []TaskFolder) string {
 
 // readOnlyMount mounts a directory of the node's root read-only at target:
 // an agent's at /opt/eriphe, the task's run files at /run/eriphe.
-func (n *node) readOnlyMount(dir, target string) ([]string, error) {
-	rel, err := filepath.Rel(n.opt.root, dir)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return nil, fmt.Errorf("refusing to mount %s: outside the node root %s", dir, n.opt.root)
+func (n *node) readOnlyMount(dir, target string) (mount, error) {
+	if !n.inRoot(dir) {
+		return mount{}, fmt.Errorf("refusing to mount %s: outside the node root %s", dir, n.opt.root)
 	}
-	if n.apple() {
-		return appleMount(dir, target, true)
-	}
-	return []string{"--mount", mountSpec("type=bind", "src="+n.hostPath(dir), "dst="+target, "readonly")}, nil
-}
-
-// hostPath is a path under -root as the Docker daemon sees it.
-func (n *node) hostPath(p string) string {
-	rel, err := filepath.Rel(n.opt.root, p)
-	if err != nil {
-		return p
-	}
-	return filepath.Join(n.opt.hostRoot, rel)
+	return mount{src: dir, dst: target, readOnly: true, inRoot: true}, nil
 }
 
 // stopContainer stops a task's agent and its container. A task with a
@@ -480,7 +414,7 @@ func (n *node) stopContainer(t *Task) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	exec.CommandContext(ctx, n.opt.docker, "stop", "-t", "10", containerName(t)).Run()
+	n.engine().stop(ctx, containerName(t))
 	if keep {
 		n.keepRepo(t)
 	}

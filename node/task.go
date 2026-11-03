@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os/exec"
 	"runtime"
 	"sync"
 	"time"
@@ -265,6 +264,7 @@ func finished(state string) bool { return state == stateStopped || state == stat
 
 type node struct {
 	opt        options
+	eng        engine // a test's; else the one -engine names (engine.go)
 	mu         sync.Mutex
 	tasks      map[string]*Task
 	services   map[string]*service // local MCP servers, by name (service.go)
@@ -343,32 +343,19 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	runtimes := []string{}
-	var dockerVersion, engineVersion string
-	var images []string
-	if n.apple() {
-		// Apple's container: no Docker, its own version and images.
-		if engineVersion = appleVersion(ctx, n.opt.docker); engineVersion != "" {
-			runtimes = injectedRuntimes
-		}
-		images = appleImages(ctx, n.opt.docker)
-	} else {
-		out, err := exec.CommandContext(ctx, n.opt.docker, "version", "--format", "{{.Server.Version}}").Output()
-		if err == nil {
-			dockerVersion = string(trimNL(out))
-			engineVersion = dockerVersion
-			runtimes = injectedRuntimes
-		}
-		images = localImages(ctx, n.opt.docker)
+	ei := n.engine().info(ctx)
+	if ei.version != "" {
+		runtimes = injectedRuntimes
 	}
 	active := n.running()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"os": runtime.GOOS, "arch": runtime.GOARCH, "cpus": runtime.NumCPU(),
-		"docker": dockerVersion, "engine": n.opt.engine, "engine_version": engineVersion,
+		"docker": ei.docker, "engine": n.opt.engine, "engine_version": ei.version,
 		"image": n.opt.image, "runtimes": runtimes, "labels": n.opt.labels,
 		"active_tasks": active, "memory_bytes": memoryBytes(), "volumes": n.opt.volumeNames(),
 		// The folders shared on this machine, never their paths (shared.go).
 		"folders": n.sharedList(),
-		"images":  images, "services": engineVersion != "",
+		"images":  ei.images, "services": ei.version != "",
 		"always_on": n.opt.alwaysOn, "keeps_awake": n.awake.how, "version": version, "install": n.opt.install,
 		// Its network card, for Wake-on-LAN (wake.go).
 		"wake":   n.opt.wake,

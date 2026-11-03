@@ -211,7 +211,7 @@ func (n *node) checkShared(path string) (*resolvedFolder, error) {
 		return n.helperCheck(path) // each folder is a place of its own (helper.go)
 	}
 	share, rel, ok := n.opt.rootOf(path)
-	if !ok && !n.apple() {
+	if !ok && !n.engine().traits().explores {
 		// A path through a symlink to a root (a NAS's /mnt/user0 and /mnt/user).
 		if real, err := filepath.EvalSymlinks(path); err == nil {
 			share, rel, ok = n.opt.rootOf(real)
@@ -220,8 +220,8 @@ func (n *node) checkShared(path string) (*resolvedFolder, error) {
 	if !ok {
 		return nil, shareErr(http.StatusForbidden, "outside", "%s is in none of the places this machine shares folders from (%s)", path, n.opt.rootList())
 	}
-	if n.apple() {
-		f, e, err := n.appleResolve(context.Background(), share, rel, "tree")
+	if n.engine().traits().explores {
+		f, e, err := n.exploredResolve(context.Background(), share, rel, "tree")
 		if err == nil {
 			err = n.holdsOwn(f.real)
 		}

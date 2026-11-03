@@ -57,7 +57,7 @@ func TestAppleShareCmd(t *testing.T) {
 			t.Errorf("%s: shared %s", p, out)
 		}
 	}
-	if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{lend(t, n, "data", "Photos", "p", false)}}}); err == nil {
+	if _, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{lend(t, n, "data", "Photos", "p", false)}}}); err == nil {
 		t.Error("a folder holding the node's data is mounted")
 	}
 }
@@ -70,7 +70,7 @@ func TestAppleFolderMounts(t *testing.T) {
 		lend(t, n, "data", "Clients/ACME", "ACME", true),
 		lend(t, n, "data", "Photos", "Photos", false),
 	}}}
-	args, err := n.folderMounts(task)
+	args, err := n.folderArgs(t, task)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestAppleFolderMounts(t *testing.T) {
 		"sensitive":  lend(t, n, "data", "Home", "x", false),
 		"in results": lend(t, n, "data", "Clients/Beta", "x", true),
 	} {
-		if _, err := n.folderMounts(&Task{Spec: TaskSpec{Folders: []TaskFolder{f}}}); err == nil {
+		if _, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{f}}}); err == nil {
 			t.Errorf("%s: mounted", name)
 		} else if name == "in results" && !strings.Contains(err.Error(), "not a folder") {
 			t.Errorf("in results: %v", err)

@@ -106,10 +106,10 @@ func TestEnsureTaskNetwork(t *testing.T) {
 	fake, calls := filepath.Join(dir, "docker"), filepath.Join(dir, "calls")
 	os.WriteFile(fake, []byte("#!/bin/sh\necho \"$*\" >> "+calls+"\n[ \"$2\" = inspect ] && [ -f "+dir+"/exists ] && echo true && exit 0\n[ \"$2\" = inspect ] && exit 1\ntouch "+dir+"/exists\n"), 0o755)
 	n := newNode(options{docker: fake, taskNetwork: "eriphe-tasks"})
-	if err := n.ensureTaskNetwork(); err != nil {
+	if err := n.engine().ensureNetwork(); err != nil {
 		t.Fatal(err)
 	}
-	if err := n.ensureTaskNetwork(); err != nil {
+	if err := n.engine().ensureNetwork(); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ := os.ReadFile(calls)

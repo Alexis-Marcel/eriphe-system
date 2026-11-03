@@ -180,7 +180,7 @@ func TestSyncCopies(t *testing.T) {
 	// Lent to manage: mounted writable after a snapshot of the copy, taken
 	// here, on the machine running the task.
 	managed := &Task{ID: "t-m", State: stateRunning, Spec: TaskSpec{Folders: []TaskFolder{{Name: "Photos", ID: share, Copy: cp.ID, Manage: true}}}}
-	if args, err := n.folderMounts(managed); err != nil || strings.Contains(strings.Join(args, " "), "readonly") {
+	if args, err := n.folderArgs(t, managed); err != nil || strings.Contains(strings.Join(args, " "), "readonly") {
 		t.Fatalf("managed copy: %v %v", args, err)
 	}
 	if snaps := n.snapshots(cp.ID); len(snaps) != 1 || snaps[0].Task != "t-m" {

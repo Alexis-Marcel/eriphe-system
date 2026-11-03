@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os/exec"
 	"strings"
 )
 
@@ -42,57 +41,6 @@ func checkNetworks(o options) error {
 	return nil
 }
 
-// networkConfig is the subnets and gateways of a Docker network.
-func (n *node) networkConfig(name string) (subnets, gateways []string, err error) {
-	out, err := exec.Command(n.opt.docker, "network", "inspect", dockerNetwork(name),
-		"--format", "{{range .IPAM.Config}}{{.Subnet}} {{.Gateway}};{{end}}").Output()
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, c := range strings.Split(strings.TrimSpace(string(out)), ";") {
-		f := strings.Fields(c)
-		if len(f) > 0 {
-			subnets = append(subnets, f[0])
-		}
-		if len(f) > 1 && net.ParseIP(f[1]) != nil {
-			gateways = append(gateways, f[1])
-		}
-	}
-	return subnets, gateways, nil
-}
-
-// ensureTaskNetwork creates the task network if it does not exist: an
-// internal bridge on which containers cannot reach one another (the node,
-// outside Docker, is reached on its gateway). The NAS's compose file creates
-// it instead, with eriphe-node on it: there the node is a container the
-// tasks must reach. Docker cannot make an existing network internal: one
-// that is not is reported, the tasks on it can still bypass the relay.
-func (n *node) ensureTaskNetwork() error {
-	if n.apple() {
-		return nil // one network per task, made when it starts (apple.go)
-	}
-	name := dockerNetwork(n.opt.taskNetwork)
-	if name == defaultBridge {
-		log.Printf("warning: tasks on Docker's default bridge have direct egress, the LAN included: give -task-network")
-		return nil
-	}
-	if out, err := exec.Command(n.opt.docker, "network", "inspect", name, "--format", "{{.Internal}}").Output(); err == nil {
-		if strings.TrimSpace(string(out)) != "true" {
-			log.Printf("warning: the task network %s is not internal: tasks can bypass the egress relay and reach the LAN. "+
-				"Recreate it with no task running: docker network rm %s (this node creates it again), or internal: true in compose", name, name)
-		}
-		return nil
-	}
-	out, err := exec.Command(n.opt.docker, "network", "create", "--driver", "bridge", "--internal",
-		"-o", "com.docker.network.bridge.enable_icc=false", "--label", "eriphe.network=tasks", name).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("the task network %s does not exist and cannot be created (%v: %s): create it, or attach this node to it",
-			name, err, strings.TrimSpace(string(out)))
-	}
-	log.Printf("created the task network %s", name)
-	return nil
-}
-
 // listenAddr is where the task listener binds. An explicit host is kept; an
 // empty one (":8790", the default) becomes this node's address on the task
 // network: its interface there (the node is a container on it, the NAS) or
@@ -107,12 +55,12 @@ func (n *node) listenAddr(listen string) (string, error) {
 	if host != "" {
 		return listen, nil
 	}
-	if n.apple() {
-		// Each task's network comes and goes with it (apple.go): every
+	if n.engine().traits().ownNetworks {
+		// Each task's network comes and goes with it (beginTask): every
 		// address, and taskListener accepts only the tasks' networks.
 		return net.JoinHostPort("0.0.0.0", port), nil
 	}
-	subnets, _, err := n.networkConfig(n.opt.taskNetwork)
+	subnets, err := n.engine().taskSubnets()
 	if err != nil {
 		return "", fmt.Errorf("inspect the task network %s: %w", dockerNetwork(n.opt.taskNetwork), err)
 	}
@@ -145,24 +93,14 @@ func pickListenIP(subnets []string, addrs []net.Addr) (net.IP, bool) {
 	return nil, false
 }
 
-// hostGateway is the address containers on a network reach the host on:
-// its gateway, asked of Docker, since dockerd's own "host-gateway" can be
-// lost when it reloads its configuration (seen under WSL).
-func (n *node) hostGateway(network string) string {
-	if _, gw, err := n.networkConfig(network); err == nil && len(gw) > 0 {
-		return gw[0]
-	}
-	return "host-gateway"
-}
-
 var errSharedBridge = errors.New("an http service with egress would share Docker's default bridge with the tasks: give the node -task-network, or -network for its services")
 
 // callbackFor is how a task's container reaches this node. A task on two
 // networks (the brain) could resolve the node's name to its address on the
 // other one, where the listener is not bound: it gets the bound address.
 func (n *node) callbackFor(t *Task) string {
-	if n.apple() {
-		// The gateway of the task's own network is this Mac.
+	if n.engine().traits().ownNetworks {
+		// The gateway of the task's own network is this machine.
 		t.mu.Lock()
 		gw := t.gateway
 		t.mu.Unlock()

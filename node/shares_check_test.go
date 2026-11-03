@@ -127,7 +127,7 @@ func TestAppleTreeFailsClosed(t *testing.T) {
 	os.MkdirAll(locked, 0o755)
 	os.Chmod(locked, 0)
 	t.Cleanup(func() { os.Chmod(locked, 0o755) })
-	_, e, err := n.appleResolve(context.Background(), "data", "Clients", "tree")
+	_, e, err := n.exploredResolve(context.Background(), "data", "Clients", "tree")
 	if err == nil {
 		err = checkExplored(e)
 	}

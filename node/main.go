@@ -187,7 +187,7 @@ func main() {
 			log.Printf("local socket: %v", err)
 		}
 	}
-	if err := n.ensureTaskNetwork(); err != nil {
+	if err := n.engine().ensureNetwork(); err != nil {
 		log.Fatal(err)
 	}
 	addr, err := n.listenAddr(*listen)
@@ -323,7 +323,7 @@ func (n *node) egressRelay(listen, addr string) (relay *egressProxy, l net.Liste
 		return nil, nil, "", err
 	}
 	_, n.opt.egressPort, _ = net.SplitHostPort(egressAddr)
-	if n.apple() {
+	if n.engine().traits().ownNetworks {
 		// The listener answers on the loopback too; a task names it by
 		// its network's gateway.
 		_, port, _ := net.SplitHostPort(addr)
@@ -354,7 +354,7 @@ func (n *node) taskRoutes(s *state) *http.ServeMux {
 // startMessage is what the node logs once it is up.
 func (n *node) startMessage(name, addr, egressAddr string) string {
 	o := n.opt
-	if n.apple() {
+	if n.engine().traits().ownNetworks {
 		return fmt.Sprintf("eriphe-node %s (%s), image %s, tasks with Apple's container, each on a network of its own, task listener on %s, egress relay on %s (tasks' networks only)",
 			name, version, o.image, addr, orNone(egressAddr))
 	}
@@ -366,7 +366,7 @@ func (n *node) startMessage(name, addr, egressAddr string) string {
 // on every address but for the tasks' networks and the loopback only.
 func (n *node) listenTasks(addr string) (net.Listener, error) {
 	l, err := net.Listen("tcp", addr)
-	if err != nil || !n.apple() {
+	if err != nil || !n.engine().traits().ownNetworks {
 		return l, err
 	}
 	return taskListener{l, &n.nets}, nil

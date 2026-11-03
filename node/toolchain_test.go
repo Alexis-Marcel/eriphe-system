@@ -475,10 +475,11 @@ func TestToolchainsReachChecks(t *testing.T) {
 
 	// The task's container mounts the toolchains read-only and knows where
 	// to ask.
-	mounts, err := n.taskMounts(task)
+	ms, groups, err := n.taskMounts(task)
 	if err != nil {
 		t.Fatal(err)
 	}
+	mounts := n.render(t, ms, groups)
 	if !slices.Contains(mounts, mountSpec("type=bind", "src="+filepath.Join(root, "toolchains"), "dst="+toolchainMount, "readonly")) {
 		t.Errorf("no read-only toolchains mount: %q", mounts)
 	}

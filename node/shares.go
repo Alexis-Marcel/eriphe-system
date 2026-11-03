@@ -376,35 +376,37 @@ func validFolderName(s string) bool {
 	return !strings.ContainsFunc(s, func(r rune) bool { return r == '/' || r == '\\' || unicode.IsControl(r) })
 }
 
-// folderMounts are the docker run arguments that mount a task's folders:
+// folderMounts are the mounts of a task's folders:
 // each read-only, its results subfolder writable when lent with Write
 // (created if missing, in the folder's group, so that what the task writes
 // stays the user's to open, change and delete), the whole folder writable
 // when lent with Manage, once a snapshot of it is taken (none, no task),
 // and the folders' groups added to the task's user so that it reads what
 // the group may.
-func (n *node) folderMounts(t *Task) ([]string, error) {
-	if n.apple() {
-		return n.appleFolderMounts(t)
+func (n *node) folderMounts(t *Task) ([]mount, []int, error) {
+	if n.engine().traits().explores {
+		mounts, err := n.exploredFolderMounts(t)
+		return mounts, nil, err
 	}
-	var args, results []string
+	var args []mount
+	var results []string
 	groups := map[int]bool{}
 	seen := map[string]bool{}
 	for _, tf := range t.Spec.Folders {
 		if !validFolderName(tf.Name) || seen[strings.ToLower(tf.Name)] {
-			return nil, fmt.Errorf("folder %q: invalid or repeated name", tf.Name)
+			return nil, nil, fmt.Errorf("folder %q: invalid or repeated name", tf.Name)
 		}
 		seen[strings.ToLower(tf.Name)] = true
 		f, err := n.lentFolder(t, tf)
 		if err != nil {
-			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
+			return nil, nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		dst := "/work/folders/" + tf.Name
 		if f.helper {
 			// Checked, its results made, its snapshot taken by helpers.
 			a, r, gids, err := n.helperFolderMounts(t, tf, f, dst)
 			if err != nil {
-				return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
+				return nil, nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 			}
 			args, results = append(args, a...), append(results, r...)
 			for _, g := range gids {
@@ -417,21 +419,21 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 		}
 		if tf.Manage {
 			if f.root.ReadOnly {
-				return nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
+				return nil, nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
 			}
 			if err := n.snapshotLent(t, f); err != nil {
-				return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
+				return nil, nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 			}
-			args = append(args, "--mount", mountSpec("type=bind", "src="+f.src, "dst="+dst))
+			args = append(args, mount{src: f.src, dst: dst})
 			results = append(results, f.real) // what it writes as root goes back to the folder's owner
 			continue
 		}
-		args = append(args, "--mount", mountSpec("type=bind", "src="+f.src, "dst="+dst, "readonly"))
+		args = append(args, mount{src: f.src, dst: dst, readOnly: true})
 		if !tf.Write {
 			continue
 		}
 		if f.root.ReadOnly {
-			return nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
+			return nil, nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
 		}
 		// The task sees it under the current name, whichever is used here.
 		cur := tf.resultsName()
@@ -441,12 +443,12 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 		}
 		gid, err := ensureResults(filepath.Join(f.real, use), ownerGID(f.real))
 		if err != nil {
-			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
+			return nil, nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		if gid > 0 {
 			groups[gid] = true
 		}
-		args = append(args, "--mount", mountSpec("type=bind", "src="+filepath.Join(f.src, use), "dst="+dst+"/"+cur))
+		args = append(args, mount{src: filepath.Join(f.src, use), dst: dst + "/" + cur})
 		results = append(results, filepath.Join(f.real, use))
 	}
 	// What the task writes there as root goes back to the results folder's owner (handback.go).
@@ -460,10 +462,7 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 		}
 	}
 	sort.Ints(gids)
-	for _, g := range gids {
-		args = append(args, "--group-add", fmt.Sprint(g))
-	}
-	return args, nil
+	return args, gids, nil
 }
 
 // mountSpec is a --mount value, its fields quoted when they hold a comma

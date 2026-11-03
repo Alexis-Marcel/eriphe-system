@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
@@ -98,23 +96,23 @@ type exploration struct {
 
 // explore runs the explorer on a root.
 func (n *node) explore(ctx context.Context, root shareRoot, rel, mode string) (*exploration, error) {
-	mount, err := appleMount(root.Path, "/r", true)
-	if err != nil {
+	if err := n.engine().mountable(root.Path); err != nil {
 		return nil, shareErr(http.StatusBadRequest, "invalid_path", "%v", err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute) // the first time, macOS waits for the user's answer
 	defer cancel()
-	args := append([]string{"run", "--rm", "--progress", "none", "--network", "none", "--read-only",
-		"--user", fmt.Sprintf("%d:%d", taskUID, taskGID), "--cap-drop", "ALL", "--memory", "256m", "--cpus", "1",
-		"--label", "eriphe.explorer=1"}, mount...)
-	args = append(args, "--entrypoint", "sh", explorerImage, "-c", explorerScript, "sh", rel, mode)
-	var out, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, n.opt.docker, args...)
-	cmd.Stdout, cmd.Stderr = &out, &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, shareErr(http.StatusServiceUnavailable, "unavailable", "this Mac could not look into %s: %v %s", filepath.Base(root.Path), err, tail(strings.TrimSpace(stderr.String()), 300))
+	out, stderr, err := n.engine().runHelper(ctx, explorer([]mount{{src: root.Path, dst: "/r", readOnly: true}}, rel, mode))
+	if err != nil {
+		return nil, shareErr(http.StatusServiceUnavailable, "unavailable", "this Mac could not look into %s: %v %s", filepath.Base(root.Path), err, tail(strings.TrimSpace(string(stderr)), 300))
 	}
-	return parseExploration(out.Bytes())
+	return parseExploration(out)
+}
+
+// explorer is the explorer's helper: the task's user, its mounts, the
+// script and its arguments.
+func explorer(mounts []mount, args ...string) helperRunSpec {
+	return helperRunSpec{image: explorerImage, entrypoint: "sh", args: append([]string{"-c", explorerScript, "sh"}, args...),
+		mounts: mounts, label: "eriphe.explorer=1", user: fmt.Sprintf("%d:%d", taskUID, taskGID)}
 }
 
 func parseExploration(raw []byte) (*exploration, error) {
@@ -168,9 +166,9 @@ func explorerRefusal(code string) error {
 	return shareErr(http.StatusNotFound, "not_found", "no such folder")
 }
 
-// appleResolve is resolveFolder with the container engine: the path checked,
+// exploredResolve is resolveFolder with the container engine: the path checked,
 // resolved by the explorer, and checked again as resolved.
-func (n *node) appleResolve(ctx context.Context, share, rel, mode string) (*resolvedFolder, *exploration, error) {
+func (n *node) exploredResolve(ctx context.Context, share, rel, mode string) (*resolvedFolder, *exploration, error) {
 	root, ok := n.opt.shares[share]
 	if !ok {
 		return nil, nil, shareErr(http.StatusNotFound, "unknown_share", "this machine shares no root %q", share)
@@ -255,27 +253,23 @@ func checkExplored(e *exploration) error {
 	return nil
 }
 
-// appleResults makes the folder's results subfolder through the explorer,
+// exploredResults makes the folder's results subfolder through the explorer,
 // the folder mounted writable, a former one renamed (chooseResults): it
 // returns the one in use.
-func (n *node) appleResults(ctx context.Context, real string, tf TaskFolder) (string, error) {
-	mount, err := appleMount(real, "/f", false)
-	if err != nil {
+func (n *node) exploredResults(ctx context.Context, real string, tf TaskFolder) (string, error) {
+	if err := n.engine().mountable(real); err != nil {
 		return "", err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	args := append([]string{"run", "--rm", "--progress", "none", "--network", "none", "--read-only",
-		"--user", fmt.Sprintf("%d:%d", taskUID, taskGID), "--cap-drop", "ALL", "--memory", "256m", "--cpus", "1",
-		"--label", "eriphe.explorer=1"}, mount...)
 	cur := tf.resultsName()
-	args = append(args, "--entrypoint", "sh", explorerImage, "-c", explorerScript, "sh", cur, "results")
+	args := []string{cur, "results"}
 	for _, old := range tf.Former {
 		if validFolderName(old) && !strings.Contains(old, ",") {
 			args = append(args, old)
 		}
 	}
-	out, err := exec.CommandContext(ctx, n.opt.docker, args...).Output()
+	out, _, err := n.engine().runHelper(ctx, explorer([]mount{{src: real, dst: "/f"}}, args...))
 	if err != nil {
 		return "", fmt.Errorf("cannot make %s/: %v", cur, err)
 	}
