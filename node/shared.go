@@ -207,6 +207,9 @@ func (n *node) checkShared(path string) (*resolvedFolder, error) {
 		return nil, shareErr(http.StatusBadRequest, "invalid_path", "%s: not an absolute path", path)
 	}
 	path = filepath.Clean(path)
+	if n.helper() {
+		return n.helperCheck(path) // each folder is a place of its own (helper.go)
+	}
 	share, rel, ok := n.opt.rootOf(path)
 	if !ok && !n.apple() {
 		// A path through a symlink to a root (a NAS's /mnt/user0 and /mnt/user).
@@ -271,6 +274,10 @@ func (n *node) lentFolder(t *Task, tf TaskFolder) (*resolvedFolder, error) {
 		}
 		return nil, shareErr(http.StatusForbidden, "level", "this folder is shared for %s only on this machine, not %s", sf.Access, tf.level())
 	}
+	if n.helper() {
+		// Checked by the helper that prepares it (helperFolderMounts).
+		return &resolvedFolder{root: shareRoot{Path: sf.Path}, real: sf.Path, src: sf.Path, shared: sf, helper: true}, nil
+	}
 	f, err := n.checkShared(sf.Path)
 	if err == nil && filepath.Clean(f.src) != filepath.Clean(sf.Path) {
 		err = shareErr(http.StatusForbidden, "moved", "this folder leads elsewhere since it was shared: share it again")
@@ -318,6 +325,7 @@ func (n *node) sharedList() []sharedInfo {
 	out := []sharedInfo{}
 	for _, f := range list {
 		_, _, in := n.opt.rootOf(f.Path)
+		in = in || n.helper() // the proxy's list bounds them, not the node's places
 		problem, program := problemMissing, programNode
 		if in {
 			problem, program = n.folderProblem(f) // on a Mac, what was last seen (access.go)

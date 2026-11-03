@@ -127,6 +127,8 @@ type resolvedFolder struct {
 	rel  string // relative to the root, without any symlink ("" for the root itself)
 	// shared is its entry in the list, when lent to a task (lentFolder).
 	shared sharedFolder
+	// helper: the node does not see it, a helper does (helper.go).
+	helper bool
 }
 
 // resolveFolder checks a path relative to a root: no "..", nothing hidden
@@ -398,6 +400,18 @@ func (n *node) folderMounts(t *Task) ([]string, error) {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		dst := "/work/folders/" + tf.Name
+		if f.helper {
+			// Checked, its results made, its snapshot taken by helpers.
+			a, r, gids, err := n.helperFolderMounts(t, tf, f, dst)
+			if err != nil {
+				return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
+			}
+			args, results = append(args, a...), append(results, r...)
+			for _, g := range gids {
+				groups[g] = true
+			}
+			continue
+		}
 		if gid := ownerGID(f.real); gid > 0 {
 			groups[gid] = true
 		}

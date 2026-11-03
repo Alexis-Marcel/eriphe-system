@@ -24,6 +24,19 @@ func (n *node) handBack(t *Task) {
 	t.mu.Lock()
 	dirs := append([]string(nil), t.results...)
 	t.mu.Unlock()
+	if n.helper() {
+		if len(dirs) == 0 {
+			return
+		}
+		var mounts []helperMount
+		for _, d := range dirs {
+			mounts = append(mounts, helperMount{d, false})
+		}
+		if _, err := n.helperCall(helperReq{Op: "handback", Dirs: dirs}, mounts...); err != nil {
+			log.Printf("task %s: results: %v", t.ID, err)
+		}
+		return
+	}
 	for _, d := range dirs {
 		if _, err := handBackDir(d); err != nil {
 			log.Printf("task %s: results in %s: %v", t.ID, d, err)

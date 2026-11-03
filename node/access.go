@@ -218,6 +218,11 @@ func probeWrite(dir string) error {
 // probeShared is whether the node opens a shared folder now, noted, with
 // the problem if any: on a Mac, the moment macOS asks the user, once.
 func (n *node) probeShared(f sharedFolder) accessNote {
+	if n.helper() {
+		n.helperProbe([]sharedFolder{f})
+		note, _ := n.access.get(f.ID)
+		return note
+	}
 	return n.access.note(f.ID, probeRead(f.Path))
 }
 
@@ -227,7 +232,8 @@ func (n *node) probeShared(f sharedFolder) accessNote {
 // lent above read must also be writable. Then what Syncthing last said of
 // it, if it may be copied.
 func (n *node) folderProblem(f sharedFolder) (problem, program string) {
-	if n.apple() {
+	if n.apple() || n.helper() {
+		// What was last seen: the node does not look into it to report.
 		if note, _ := n.access.get(f.ID); note.Problem != "" {
 			return note.Problem, programNode
 		}

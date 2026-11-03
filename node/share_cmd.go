@@ -75,6 +75,7 @@ func runShare(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.root, "root", envOr("ERIPHE_ROOT", "data"), "the node's data")
 	fs.StringVar(&o.engine, "engine", envOr("ERIPHE_ENGINE", engineDocker), "docker or container")
 	fs.StringVar(&o.docker, "docker", "", "the engine's CLI")
+	fs.StringVar(&o.folderHelper, "folder-helper", os.Getenv("ERIPHE_FOLDER_HELPER"), "the node's own image, for the helpers that work in the shared folders")
 	o.shares = shareFlag{}
 	if err := o.shares.Set(os.Getenv("ERIPHE_NODE_SHARES")); err != nil {
 		fmt.Fprintln(stderr, "eriphe-node share:", err)
