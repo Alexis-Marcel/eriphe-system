@@ -72,12 +72,18 @@ type options struct {
 	// what its connections send into the tunnel at most, per second.
 	syncthingHome string
 	syncLimit     int64
+	// The node's own image, for the helpers that work in the shared
+	// folders it does not see (helper.go); empty: it sees them itself.
+	folderHelper string
 }
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "core-relay" {
 		runCoreRelay(os.Args[2:]) // a Mac's LaunchDaemon (corerelay.go)
 		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "folder-helper" {
+		os.Exit(runFolderHelper(os.Stdin, os.Stdout)) // in a helper's container (helper.go)
 	}
 	if len(os.Args) > 1 && os.Args[1] == "share" {
 		os.Exit(runShare(os.Args[2:], os.Stdout, os.Stderr)) // the user shares a folder here (share_cmd.go)
@@ -123,6 +129,7 @@ func main() {
 	modelServer := flag.String("model-server", os.Getenv("ERIPHE_MODEL_SERVER"), "a model server this node may lend to Eriphe through its tunnel (Ollama, llama.cpp, vLLM, LM Studio), as this node reaches it, e.g. http://127.0.0.1:11434; only its OpenAI-compatible /v1 API is reached, and no port is opened (env ERIPHE_MODEL_SERVER)")
 	flag.StringVar(&o.syncthingHome, "syncthing-home", os.Getenv("ERIPHE_SYNCTHING_HOME"), "the home of this machine's Syncthing, as this node sees it: its config.xml gives the API's address and key and where it listens, all on the loopback; its peers reach it through eriphe-core only (empty: no copies here) (env ERIPHE_SYNCTHING_HOME)")
 	syncLimit := flag.String("sync-limit", envOr("ERIPHE_SYNC_LIMIT", "8m"), "what Syncthing's connections send into the tunnel at most, per second, e.g. 8m (0: no limit) (env ERIPHE_SYNC_LIMIT)")
+	flag.StringVar(&o.folderHelper, "folder-helper", os.Getenv("ERIPHE_FOLDER_HELPER"), "the node's own image: the shared folders are not mounted here, short-lived containers of it work in them (the one-container install) (env ERIPHE_FOLDER_HELPER)")
 	labels := flag.String("labels", os.Getenv("ERIPHE_NODE_LABELS"), "comma-separated labels agents can require, e.g. gpu (env ERIPHE_NODE_LABELS)")
 	o.volumes = volumeFlag{}
 	if err := volumeFlag(o.volumes).Set(os.Getenv("ERIPHE_NODE_VOLUMES")); err != nil {
@@ -214,7 +221,10 @@ func main() {
 	}
 	go n.watchShared(2 * time.Second)  // folders unshared here stop their tasks (shared.go)
 	go n.watchAccess(30 * time.Second) // folders found blocked, tried again (access.go)
-	go n.pruneLoop(time.Hour)          // old snapshots go (snapshot.go)
+	if n.helper() {
+		go n.probeLoop(5 * time.Minute) // what the node reports of the folders it does not see (helper.go)
+	}
+	go n.pruneLoop(time.Hour) // old snapshots go (snapshot.go)
 	l, err := n.listenTasks(addr)
 	if err != nil {
 		log.Fatal(err)

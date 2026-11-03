@@ -239,28 +239,27 @@ and updates Eriphe's own containers next to it (eriphe-core, eriphe-node, eriphe
 1. Docker → **Add Container** → at the bottom, Template repositories: add
    `https://github.com/Alexis-Marcel/eriphe-system` and **Save**.
 2. Docker → **Add Container** → Template: **eriphe**. Keep the data folder
-   `/mnt/user/appdata/eriphe` and the shares `shares=/mnt/user` (appdata and hidden folders are
-   always refused). If something already uses port 8443 (a UniFi controller often does), set
+   `/mnt/user/appdata/eriphe`. If something already uses port 8443 (a UniFi controller often does), set
    **Workspace port** to a free one, e.g. 9443, and the WebUI address to match. **Apply**.
 3. Open the container's log (its icon → Logs). It ends with the workspace's address and a setup
    code. Go to §5.
 
 **Any other NAS or Linux with Docker** (Synology, TrueNAS, a Pi…): pick a data folder on the
-machine (on Synology for instance `/volume1/docker/eriphe`; on Unraid `/mnt/user/appdata/eriphe`)
-and the folders Eriphe may be given (`ERIPHE_SHARES`, host paths, `NAME=/PATH` comma-separated, or
-leave it out). Then, as root or with `sudo`:
+machine (on Synology for instance `/volume1/docker/eriphe`; on Unraid `/mnt/user/appdata/eriphe`).
+Then, as root or with `sudo`:
 
 ```sh
 docker run -d --name eriphe --restart unless-stopped \
+  --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER \
+  --read-only --tmpfs /tmp --security-opt no-new-privileges \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /volume1/docker/eriphe:/data \
-  -e ERIPHE_SHARES=shares=/volume1/data \
   ghcr.io/alexis-marcel/eriphe
 docker logs -f eriphe
 ```
 
-- The data folder and the shares are **paths on the host**, and the data folder must not be inside
-  a share.
+- The data folder is a **path on the host**. Folders are shared later, one by one, by the person
+  (§6, step 5): nothing of the machine is given to Eriphe before.
 - Port 8443 or 8800 taken: add `-e ERIPHE_WEB_PORT=9443` (or `-e ERIPHE_API_PORT=9800`).
 - Expected end of `docker logs eriphe`: "Done: Eriphe runs on this machine. To finish, open this
   address in your browser and give the setup code:", the address, the setup code, and "Good to
@@ -413,8 +412,9 @@ For each other computer (or a second NAS):
    `wsl -d eriphe -- tail /var/log/eriphe-node.log`), the line `connected to http://… as <name>`
    says it joined.
 5. Folders: the person shares what Eriphe may see **on the device itself**: `sudo eriphe-share add
-   <folder>` on Linux, `~/.eriphe/bin/eriphe-share add <folder>` on a Mac, `docker exec eriphe-node
-   eriphe-node share add <folder>` with the one-container install (read; `--drop` to let Eriphe
+   <folder>` on Linux, `~/.eriphe/bin/eriphe-share add <folder>` on a Mac, `docker exec eriphe
+   eriphe share add <folder>` with the one-container install (a host path such as
+   `/mnt/user/Documents`; nothing restarts, the next task sees it) (read; `--drop` to let Eriphe
    drop results in its subfolder, `--manage` to let it change the folder, a snapshot being taken
    before each such task; `--copyable` to allow copies on their other machines). Settings → Folders
    shows what is shared and its "Comment partager ?" dialog says the same. Nothing is shared until

@@ -300,3 +300,124 @@ func TestDockerProxyAnswersTheNodeOnly(t *testing.T) {
 		t.Errorf("another host: %d", w.Code)
 	}
 }
+
+// helperBody is a folder helper's create request, as runHelper makes it:
+// the wake container's, changed (same CLI, same flags but the network).
+func (f *proxyFixture) helperBody(t *testing.T, src string, edit func(c, hc map[string]any)) []byte {
+	return f.body(t, "wake", func(c, hc map[string]any) {
+		c["Labels"] = map[string]any{"eriphe.helper": "check"}
+		c["Cmd"] = []any{"folder-helper"}
+		c["OpenStdin"], c["StdinOnce"], c["AttachStdin"] = true, true, true
+		c["User"] = "0:0"
+		hc["NetworkMode"] = "none"
+		hc["PidsLimit"] = 64
+		hc["CapAdd"] = []any{"CHOWN", "DAC_OVERRIDE", "FOWNER"}
+		hc["Mounts"] = []any{map[string]any{"Type": "bind", "Source": src, "Target": src, "ReadOnly": true}}
+		if edit != nil {
+			edit(c, hc)
+		}
+	})
+}
+
+func TestDockerProxyFolderHelper(t *testing.T) {
+	f := newProxyFixture(t)
+	if _, err := f.policy.checkCreate(f.helperBody(t, filepath.Join(f.share, "docs"), nil)); err != nil {
+		t.Fatalf("helper: %v", err)
+	}
+	cases := map[string]func(c, hc map[string]any){
+		"another image":    func(c, hc map[string]any) { c["Image"] = "example.org/evil:1" },
+		"a shell":          func(c, hc map[string]any) { c["Entrypoint"] = []any{"sh"} },
+		"another command":  func(c, hc map[string]any) { c["Cmd"] = []any{"wake-send"} },
+		"a network":        func(c, hc map[string]any) { hc["NetworkMode"] = "eriphe-tasks" },
+		"the host network": func(c, hc map[string]any) { hc["NetworkMode"] = "host" },
+		"writable":         func(c, hc map[string]any) { hc["ReadonlyRootfs"] = false },
+		"a capability":     func(c, hc map[string]any) { hc["CapAdd"] = []any{"SYS_ADMIN"} },
+		"outside": func(c, hc map[string]any) {
+			hc["Mounts"] = []any{map[string]any{"Type": "bind", "Source": "/etc", "Target": "/etc"}}
+		},
+	}
+	for name, edit := range cases {
+		if _, err := f.policy.checkCreate(f.helperBody(t, filepath.Join(f.share, "docs"), edit)); err == nil {
+			t.Errorf("helper, %s: allowed", name)
+		}
+	}
+	f.policy.wakeImage = ""
+	if _, err := f.policy.checkCreate(f.helperBody(t, f.share, nil)); err == nil {
+		t.Error("a helper allowed with no node image known")
+	}
+}
+
+func TestDockerProxyBindFile(t *testing.T) {
+	f := newProxyFixture(t)
+	base := filepath.Dir(f.root)
+	folder := filepath.Join(base, "outside")
+	f.policy.bindFile = filepath.Join(base, "binds")
+	task := func() error {
+		_, err := f.policy.checkCreate(f.body(t, "task", func(c, hc map[string]any) {
+			hc["Binds"] = []any{folder + ":/work/folders/x:ro"}
+		}))
+		return err
+	}
+	if task() == nil {
+		t.Fatal("allowed with no bind file")
+	}
+	// Shared now: allowed at the next create, the proxy as it was.
+	os.WriteFile(f.policy.bindFile, []byte("/\n\nrelative\n"+folder+"\n"), 0o644)
+	if err := task(); err != nil {
+		t.Fatalf("listed: %v", err)
+	}
+	// "/" is never a place, even listed.
+	os.WriteFile(f.policy.bindFile, []byte("/\n"), 0o644)
+	if task() == nil {
+		t.Error("/ listed allows everything")
+	}
+	// Listed read-only: mounted read-only only.
+	os.WriteFile(f.policy.bindFile, []byte(folder+":ro\n"), 0o644)
+	if err := task(); err != nil {
+		t.Fatalf("read-only, mounted read-only: %v", err)
+	}
+	for _, edit := range []func(c, hc map[string]any){
+		func(c, hc map[string]any) { hc["Binds"] = []any{folder + ":/work/folders/x"} },
+		func(c, hc map[string]any) {
+			hc["Mounts"] = []any{map[string]any{"Type": "bind", "Source": folder, "Target": "/work/folders/x"}}
+		},
+	} {
+		if _, err := f.policy.checkCreate(f.body(t, "task", edit)); err == nil || !strings.Contains(err.Error(), "read-only") {
+			t.Errorf("read-only, mounted writable: %v", err)
+		}
+	}
+	// Unshared: refused at once.
+	os.WriteFile(f.policy.bindFile, []byte(f.share+"\n"), 0o644)
+	if task() == nil {
+		t.Error("allowed once unlisted")
+	}
+}
+
+func TestResolveIn(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(root, "mnt/user/Docs/a"), 0o755)
+	os.MkdirAll(filepath.Join(root, "etc"), 0o755)
+	os.Symlink("/mnt/user/Docs", filepath.Join(root, "mnt/user/Link"))
+	os.Symlink("../../etc", filepath.Join(root, "mnt/user/Up"))
+	os.Symlink("../../../../../../..", filepath.Join(root, "mnt/user/Docs/a/out"))
+	os.Symlink("loop", filepath.Join(root, "loop"))
+	for in, want := range map[string]string{
+		"/mnt/user/Docs/a":            "/mnt/user/Docs/a",
+		"/mnt/user/Link/a":            "/mnt/user/Docs/a",
+		"/mnt/user/Up":                "/etc",
+		"/mnt/user/Docs/a/out":        "/",
+		"/mnt/user/../user/Docs/./a/": "/mnt/user/Docs/a",
+	} {
+		if got, err := resolveIn(root, in); err != nil || got != want {
+			t.Errorf("%s: %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"/loop", "/missing", "relative"} {
+		if got, err := resolveIn(root, in); err == nil {
+			t.Errorf("%s: %q, no error", in, got)
+		}
+	}
+}

@@ -83,7 +83,7 @@ device" offers both addresses once remote access is ready.
   through a socket proxy that only allows what the node needs (`DOCKER_HOST`), never the socket
   itself: `eriphe-node docker-proxy` (`dockerproxy.go`), the same image in a container of its own
   that holds the socket and checks each container's whole create request against what the node
-  sends (`-bind-from`, `-networks`, `-wake-image`, `-allow-from`). See `deploy/nas/compose.yaml`
+  sends (`-bind-from`, `-bind-file`, `-host-root`, `-networks`, `-wake-image`, `-allow-from`). See `deploy/nas/compose.yaml`
   and `deploy/README.md`.
 - **Windows**: `install/install.ps1` at the root of the repository (it was `node/install/install.ps1`),
   from an administrator PowerShell; see `install/README.md`. It installs WSL if needed, creates a
@@ -1063,6 +1063,7 @@ Options, before the command: `-root` (env `ERIPHE_ROOT`), `-share` (env `ERIPHE_
 `-snapshot-limit` (env `ERIPHE_SNAPSHOT_LIMIT`). It must run as the node's user, with its settings:
 `sudo eriphe-share` on Linux (`docker exec eriphe-node eriphe-node share` in the node's
 container, which sees the places at their paths on the machine; `ERIPHE_ROOT` is set there),
+`docker exec eriphe eriphe share` with the one-container install (below),
 `~/.eriphe/bin/eriphe-share` on a Mac (the node's `node.env`), also behind the Finder's Quick
 Action "Share with Eriphe..." (`~/Library/Services`: it asks for the level and the copies with
 macOS's own dialogs, `eriphe-share --ask`, and a notification says how it went), and the
@@ -1089,6 +1090,46 @@ node and for the Docker daemon (as `-root` without `-host-root`): in a container
 same path (`install.sh --share` does, see install/README.md), and let the socket proxy bind-mount
 from it (`-allowbindmountfrom`). A shared folder that is not there now (an unplugged disk), or no
 longer in a place, is reported `missing` and logged at start.
+
+**The one-container install** (eriphe-launcher, install/README.md) has no places to declare, and
+the node mounts no shared folder at all: the launcher keeps the list of the folders shared on the
+machine and writes it to a file the socket proxy reads again at each request (`-bind-file`, one
+path a line, `PATH:ro` for one mounted read-only only; in a folder of the data mounted into the
+proxy only, read-only), its paths resolved in the host's `/`, seen read-only (`-host-root`). A
+task gets its folders from the Docker daemon when its container is made, so a folder shared now
+is the next task's, and one unshared is lent to no new task (a task at work keeps it until it
+ends). Nothing else of the host is mounted, Eriphe's own data included: the node can never share,
+nor reach, a folder not on the launcher's list. Syncthing alone mounts the folders that may be
+copied, and is made again (copies pause a few seconds) when they change. The
+user shares a folder with the launcher (`docker exec eriphe eriphe share add FOLDER`, the same
+options), which checks it, then runs `eriphe-node share check` in a short-lived container of the
+node's image (no network, no capability but `DAC_READ_SEARCH`, the host's `/` read-only at
+`/host`): a path with no symlink anywhere on the way (the mount is then what was checked), nothing
+hidden, sensitive or private on the way, above it (a `.eriphe-private` in a parent, an Unraid
+share's `system` or `domains`) or inside it, not Eriphe's data (`-data`, host paths) nor holding
+it. Then it puts the folder on the proxy's list and runs this node's own `share add` on it
+(`ERIPHE_SHARE_COMMAND` cleared), which checks it again in a helper and keeps the name, the level
+and the copies as anywhere; nothing restarts.
+
+**Folder helpers** (`-folder-helper IMAGE`, env `ERIPHE_FOLDER_HELPER`, the node's own image; set
+by the one-container install). What the node does inside a shared folder runs instead in a
+short-lived container of its image, `eriphe-node folder-helper` (a JSON request on stdin, the
+answer on stdout), made through the socket proxy with only the folder needed bind-mounted at its
+path (read-only unless it writes there), no network, a read-only root, `--user 0:0`, every
+capability dropped but `CHOWN`, `DAC_OVERRIDE` and `FOWNER`, `no-new-privileges`, label
+`eriphe.helper`; the proxy allows such a container only from the node's image (`-wake-image`),
+running `folder-helper`, with no network and a read-only root. The helpers are: `check` (a
+folder's checks, at `share add` and before every lend: resolved, shareable, nothing sensitive in
+it), `prepare` (a folder lent to a task, checked again, its group for `--group-add`, with `--drop`
+its results subfolder chosen, renamed from a former name, made and handed to the tasks' user),
+`snapshot` (the copy before a `--manage` task, made in the helper from the folder, read-only,
+straight into the snapshot's new folder in the node's data: nothing goes through the node, and a
+clone where the filesystem has one), `restore` (the folder emptied and the snapshot copied back,
+after a snapshot of it as it was), `handback` (results written as root given back to their
+owners, at each turn's end) and `probe` (whether each folder opens and may be written to, every
+5 minutes and when the copies need it: what `GET /v1/shares` reports as `missing`). `ERIPHE_SHARE_COMMAND`, set on the node's container, makes a user's own
+`eriphe-node share add` print the launcher's command instead; `list`, `remove`, `snapshots` and
+`restore` work as before.
 
 Every path is checked when it is shared, and again at every mount:
 
@@ -1199,7 +1240,7 @@ child, and pins its version (2.1.7); it never upgrades itself:
 
 | Machine | Syncthing | Home (`-syncthing-home`) |
 |---|---|---|
-| Linux, NAS, one-container install, a Mac in Lima's VM | the official image `syncthing/syncthing`, by digest, container `eriphe-syncthing` in the node's network namespace (`network_mode: service:node`), the shared places and `<root>/sync` at their paths | `/var/lib/eriphe/syncthing` |
+| Linux, NAS, one-container install, a Mac in Lima's VM | the official image `syncthing/syncthing`, by digest, container `eriphe-syncthing` in the node's network namespace (`network_mode: service:node`), the shared places (one-container: the folders that may be copied only) and `<root>/sync` at their paths | `/var/lib/eriphe/syncthing` |
 | Mac with Apple's container | the official signed build (Developer ID of Kastelo AB, Team ID `LQE5SYM783`, notarized) in `~/.eriphe/syncthing`, run by its own LaunchAgent `org.eriphe.syncthing` | `~/.eriphe/syncthing/home` |
 | Windows | the official Linux build in the WSL distribution, `/usr/local/lib/eriphe/syncthing`, started by `eriphe-node-run`: it sees what the distribution sees | `/var/lib/eriphe-syncthing` |
 

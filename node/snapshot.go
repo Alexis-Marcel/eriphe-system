@@ -105,7 +105,7 @@ func (n *node) snapshot(sf sharedFolder, real, task string) (*snapshotMeta, erro
 	if err := os.Mkdir(tmp, 0o700); err != nil {
 		return nil, err
 	}
-	method, copied, err := takeSnapshot(real, filepath.Join(tmp, "files"), n.snapshotLimit())
+	method, copied, err := n.copySnapshot(real, tmp, n.snapshotLimit())
 	m := &snapshotMeta{Stamp: stamp, ID: sf.ID, Name: sf.Name, Path: sf.Path, Time: now, Task: task, Method: method, Copied: copied}
 	if err == nil {
 		raw, _ := json.MarshalIndent(m, "", "  ")
@@ -122,6 +122,22 @@ func (n *node) snapshot(sf sharedFolder, real, task string) (*snapshotMeta, erro
 	auditShare(n.opt.root, map[string]any{"event": "snapshot", "id": sf.ID, "name": sf.Name, "task": task, "snapshot": stamp, "method": method, "copied": copied})
 	n.pruneSnapshots()
 	return m, nil
+}
+
+// copySnapshot copies the folder at real into tmp/files: here, or in a
+// helper that sees the folder read-only and tmp, the snapshot's new folder
+// in the node's data, writable (helper.go): the copy is made there, once.
+func (n *node) copySnapshot(real, tmp string, limit int64) (string, int64, error) {
+	dst := filepath.Join(tmp, "files")
+	if !n.helper() {
+		return takeSnapshot(real, dst, limit)
+	}
+	resp, err := n.helperCall(helperReq{Op: "snapshot", Folder: real, Dst: dst, Limit: limit},
+		helperMount{real, true}, helperMount{tmp, false})
+	if err != nil {
+		return "", 0, err
+	}
+	return resp.Method, resp.Copied, nil
 }
 
 func (n *node) snapshotDays() int {
@@ -317,9 +333,11 @@ func (n *node) restoreSnapshot(m snapshotMeta, path string) (*snapshotMeta, erro
 	if fi, err := os.Stat(files); err != nil || !fi.IsDir() {
 		return nil, fmt.Errorf("snapshot %s is incomplete", m.Stamp)
 	}
-	fi, err := os.Stat(path)
-	if err != nil || !fi.IsDir() {
-		return nil, fmt.Errorf("%s is not a folder of this machine now", path)
+	if !n.helper() {
+		fi, err := os.Stat(path)
+		if err != nil || !fi.IsDir() {
+			return nil, fmt.Errorf("%s is not a folder of this machine now", path)
+		}
 	}
 	if own := n.ownData(); within(own, path) || within(path, own) {
 		return nil, fmt.Errorf("%s is or holds eriphe-node's own data", path)
@@ -328,17 +346,12 @@ func (n *node) restoreSnapshot(m snapshotMeta, path string) (*snapshotMeta, erro
 	if err != nil {
 		return nil, fmt.Errorf("no snapshot of the folder as it is now could be taken, so nothing was restored: %w", err)
 	}
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return nil, err
-	}
-	for _, e := range entries {
-		if err := forceRemove(filepath.Join(path, e.Name())); err != nil {
-			return before, fmt.Errorf("cannot empty the folder (%v): it can be put back as it was with snapshot %s", err, before.Stamp)
+	if n.helper() {
+		if _, err := n.helperCall(helperReq{Op: "restore", Folder: path, Dst: files}, helperMount{path, false}, helperMount{files, true}); err != nil {
+			return before, fmt.Errorf("%v: the folder as it was before is snapshot %s", err, before.Stamp)
 		}
-	}
-	if _, _, err := copyTree(files, path, 0); err != nil {
-		return before, fmt.Errorf("cannot copy the snapshot back (%v): the folder as it was before is snapshot %s", err, before.Stamp)
+	} else if err := refill(path, files); err != nil {
+		return before, fmt.Errorf("%v: the folder as it was before is snapshot %s", err, before.Stamp)
 	}
 	auditShare(n.opt.root, map[string]any{"event": "restore", "id": m.ID, "name": m.Name, "path": path, "snapshot": m.Stamp, "before": before.Stamp, "by": "local"})
 	return before, nil

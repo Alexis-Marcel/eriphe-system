@@ -41,10 +41,21 @@ import (
 // daemon, resolves their symlinks and hands the daemon the resolved path.
 // What it cannot prevent is a race: a directory replaced by a symlink
 // between its check and the daemon's mount.
+//
+// With the one-container install, the places are the folders shared, one
+// by one, and they change while it runs: eriphe-launcher writes them in a
+// file (-bind-file, one path a line) the proxy reads again at every
+// create, in a folder of its data the node never sees; the proxy sees the
+// host's / read-only (-host-root) and resolves symlinks inside it, so that
+// a folder shared now needs no restart. A helper (helper.go) is the node's
+// own image running eriphe-node folder-helper, with no network and a
+// read-only root (checkHelper).
 
 // dockerPolicy is what the proxy allows.
 type dockerPolicy struct {
 	bindFrom  []string        // bind mounts only from these places, or under them
+	bindFile  string          // and those listed in this file, read at each create
+	hostRoot  string          // where the host's / is seen, to resolve paths in it (empty: here, as is)
 	networks  map[string]bool // the networks containers may join
 	wakeImage string          // the node's own image: the one container on the host's network
 	resolve   func(string) (string, error)
@@ -52,7 +63,7 @@ type dockerPolicy struct {
 
 // nodeLabels are the labels of the containers the node makes: a container
 // without one is not created, nor touched.
-var nodeLabels = []string{"eriphe.task", "eriphe.service", "eriphe.wake"}
+var nodeLabels = []string{"eriphe.task", "eriphe.service", "eriphe.wake", "eriphe.helper"}
 
 // taskCaps are the capabilities a container may get back: a task's
 // (container.go, hardening).
@@ -152,7 +163,12 @@ func (p *dockerPolicy) checkCreate(body []byte) ([]byte, error) {
 	}
 	labels, _ := c["Labels"].(map[string]any)
 	if !slices.ContainsFunc(nodeLabels, func(l string) bool { _, ok := labels[l]; return ok }) {
-		return nil, errors.New("not a container of eriphe-node (no eriphe.task, eriphe.service or eriphe.wake label)")
+		return nil, errors.New("not a container of eriphe-node (no eriphe.task, eriphe.service, eriphe.wake or eriphe.helper label)")
+	}
+	if _, ok := labels["eriphe.helper"]; ok {
+		if err := p.checkHelper(c, hc); err != nil {
+			return nil, err
+		}
 	}
 	// Hardened as the node always does it.
 	if !slices.ContainsFunc(stringsOf(hc["CapDrop"]), func(s string) bool { return strings.EqualFold(s, "ALL") }) {
@@ -304,6 +320,30 @@ func (p *dockerPolicy) checkNetworks(c, hc map[string]any) error {
 	return nil
 }
 
+// checkHelper allows a folder helper as the node makes it (helper.go): its
+// own image running folder-helper, no network, a read-only root.
+func (p *dockerPolicy) checkHelper(c, hc map[string]any) error {
+	if p.wakeImage == "" || c["Image"] != p.wakeImage {
+		return errors.New("a folder helper is the node's own image")
+	}
+	if !slices.Equal(stringsOf(c["Entrypoint"]), []string{"/usr/local/bin/eriphe-node"}) || !slices.Equal(stringsOf(c["Cmd"]), []string{"folder-helper"}) {
+		return errors.New("a folder helper runs eriphe-node folder-helper only")
+	}
+	if hc["NetworkMode"] != "none" {
+		return errors.New("a folder helper has no network")
+	}
+	if nc, ok := c["NetworkingConfig"].(map[string]any); ok && !zero(nc) {
+		return errors.New("a folder helper has no network")
+	}
+	if hc["ReadonlyRootfs"] != true {
+		return errors.New("a folder helper has a read-only root")
+	}
+	if !zero(hc["PortBindings"]) || !zero(hc["Binds"]) || !zero(hc["GroupAdd"]) {
+		return errors.New("a folder helper has its folders as --mount binds only")
+	}
+	return nil
+}
+
 // checkMounts allows bind mounts from the allowed places only, resolved,
 // named volumes without a driver's options (they could bind any path), and
 // tmpfs.
@@ -324,9 +364,12 @@ func (p *dockerPolicy) checkMounts(hc map[string]any) error {
 			}
 			continue
 		}
-		real, err := p.bindSource(parts[0])
+		real, ro, err := p.bindSource(parts[0])
 		if err != nil {
 			return err
+		}
+		if ro && (len(parts) < 3 || parts[2] != "ro") {
+			return fmt.Errorf("bind source %s is shared read-only", parts[0])
 		}
 		parts[0] = real
 		binds[i] = strings.Join(parts, ":")
@@ -342,9 +385,12 @@ func (p *dockerPolicy) checkMounts(hc map[string]any) error {
 		switch m["Type"] {
 		case "bind":
 			src, _ := m["Source"].(string)
-			real, err := p.bindSource(src)
+			real, ro, err := p.bindSource(src)
 			if err != nil {
 				return err
+			}
+			if ro && m["ReadOnly"] != true {
+				return fmt.Errorf("bind source %s is shared read-only", src)
 			}
 			m["Source"] = real
 		case "volume":
@@ -363,21 +409,93 @@ func (p *dockerPolicy) checkMounts(hc map[string]any) error {
 }
 
 // bindSource is a bind mount's source resolved, if it is one of the allowed
-// places or under one.
-func (p *dockerPolicy) bindSource(src string) (string, error) {
+// places or under one; ro: only under places listed read-only (PATH:ro in
+// the bind file), to be mounted read-only.
+func (p *dockerPolicy) bindSource(src string) (string, bool, error) {
 	if !filepath.IsAbs(src) {
-		return "", fmt.Errorf("bind source %q is not absolute", src)
+		return "", false, fmt.Errorf("bind source %q is not absolute", src)
 	}
 	real, err := p.resolve(src)
 	if err != nil {
-		return "", fmt.Errorf("bind source %s cannot be resolved", src)
+		return "", false, fmt.Errorf("bind source %s cannot be resolved", src)
 	}
-	for _, from := range p.bindFrom {
-		if r, err := p.resolve(from); err == nil && within(r, real) {
-			return real, nil
+	found, ro := false, true
+	for _, from := range slices.Concat(p.bindFrom, p.listed()) {
+		path, readOnly := strings.CutSuffix(from, ":ro")
+		if r, err := p.resolve(path); err == nil && within(r, real) {
+			found, ro = true, ro && readOnly
 		}
 	}
-	return "", fmt.Errorf("bind source %s is outside the allowed places", src)
+	if !found {
+		return "", false, fmt.Errorf("bind source %s is outside the allowed places", src)
+	}
+	return real, ro, nil
+}
+
+// listed is the places of -bind-file now (PATH, or PATH:ro for one that is
+// mounted read-only only): none when it cannot be read.
+func (p *dockerPolicy) listed() []string {
+	if p.bindFile == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(p.bindFile)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, l := range strings.Split(string(raw), "\n") {
+		l = strings.TrimSpace(l)
+		path, ro := strings.CutSuffix(l, ":ro")
+		if filepath.IsAbs(path) && filepath.Clean(path) != "/" {
+			if path = filepath.Clean(path); ro {
+				path += ":ro"
+			}
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+// resolveIn resolves p's symlinks as the host would, the host's / being
+// root here: an absolute link leads back under root, never out of it.
+func resolveIn(root, p string) (string, error) {
+	if !filepath.IsAbs(p) {
+		return "", fmt.Errorf("%s is not absolute", p)
+	}
+	todo := strings.Split(p, "/")
+	cur, links := "/", 0
+	for len(todo) > 0 {
+		c := todo[0]
+		todo = todo[1:]
+		switch c {
+		case "", ".":
+			continue
+		case "..":
+			cur = filepath.Dir(cur)
+			continue
+		}
+		next := filepath.Join(cur, c)
+		fi, err := os.Lstat(filepath.Join(root, next))
+		if err != nil {
+			return "", err
+		}
+		if fi.Mode()&os.ModeSymlink == 0 {
+			cur = next
+			continue
+		}
+		if links++; links > 255 {
+			return "", fmt.Errorf("%s: too many links", p)
+		}
+		target, err := os.Readlink(filepath.Join(root, next))
+		if err != nil {
+			return "", err
+		}
+		if strings.HasPrefix(target, "/") {
+			cur = "/"
+		}
+		todo = append(strings.Split(target, "/"), todo...)
+	}
+	return cur, nil
 }
 
 // dockerProxy forwards the allowed calls to the Docker socket.
@@ -533,9 +651,15 @@ func runDockerProxy(args []string) {
 	allowFrom := fs.String("allow-from", "", "the only host answered, by name (eriphe-node); empty: any")
 	bindFrom := fs.String("bind-from", "", "comma-separated places bind mounts may come from: the node's root and the shared places, seen here at the same paths")
 	networks := fs.String("networks", "eriphe-system,eriphe-tasks", "comma-separated networks containers may join, besides none and the default bridge")
-	wakeImage := fs.String("wake-image", "", "the node's own image, the one allowed on the host's network (wake-on-LAN)")
+	wakeImage := fs.String("wake-image", "", "the node's own image, the one allowed on the host's network (wake-on-LAN) and for its folder helpers")
+	bindFile := fs.String("bind-file", "", "a file of more places bind mounts may come from, one a line, read again at each create (eriphe-launcher's folders shared)")
+	hostRoot := fs.String("host-root", "", "where the host's / is seen here, read-only: bind mounts are resolved in it (empty: at their paths here)")
 	fs.Parse(args)
-	policy := &dockerPolicy{networks: map[string]bool{}, wakeImage: *wakeImage, resolve: filepath.EvalSymlinks}
+	policy := &dockerPolicy{networks: map[string]bool{}, wakeImage: *wakeImage, bindFile: *bindFile, hostRoot: *hostRoot, resolve: filepath.EvalSymlinks}
+	if *hostRoot != "" {
+		root := *hostRoot
+		policy.resolve = func(p string) (string, error) { return resolveIn(root, p) }
+	}
 	for _, b := range strings.Split(*bindFrom, ",") {
 		if b = strings.TrimSpace(b); b != "" {
 			policy.bindFrom = append(policy.bindFrom, filepath.Clean(b))
@@ -546,7 +670,7 @@ func runDockerProxy(args []string) {
 			policy.networks[n] = true
 		}
 	}
-	log.Printf("eriphe-docker-proxy %s on %s: bind mounts from %v, networks %s", version, *listen, policy.bindFrom, *networks)
+	log.Printf("eriphe-docker-proxy %s on %s: bind mounts from %v %s, networks %s", version, *listen, policy.bindFrom, *bindFile, *networks)
 	srv := &http.Server{Addr: *listen, Handler: newDockerProxy(policy, *socket, *allowFrom), ReadHeaderTimeout: 10 * time.Second}
 	if err := srv.ListenAndServe(); err != nil {
 		fmt.Fprintln(os.Stderr, "docker-proxy:", err)
