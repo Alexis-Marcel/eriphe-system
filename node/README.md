@@ -87,7 +87,8 @@ device" offers both addresses once remote access is ready.
   lets it touch its own containers only, and run a command (`docker exec`: the checks, the diff, the
   work kept) in a task's only, without privilege nor another user. `TestDockerProxyLetsTheNodeThrough` runs the
   node's docker commands through it with the docker CLI: a new one belongs there. See `deploy/nas/compose.yaml`
-  and `deploy/README.md`.
+  and `deploy/README.md`. `eriphe-node engine` (see [The engine](#eriphe-node-engine)) replaces it:
+  the node then speaks no Docker at all (`-engine-url`).
 - **Windows**: `install/install.ps1` at the root of the repository (it was `node/install/install.ps1`),
   from an administrator PowerShell; see `install/README.md`. It installs WSL if needed, creates a
   WSL distribution `eriphe` (Alpine, Docker Engine, eriphe-node from its image), without Docker
@@ -170,7 +171,7 @@ broadcast stays on the bridge. That container is `docker run --rm --pull never -
 --cap-drop ALL --read-only --security-opt no-new-privileges:true --entrypoint
 /usr/local/bin/eriphe-node <its image> wake-send -mac … -broadcast …`: nothing mounted, no
 capability, gone once sent. The node finds its image with `docker ps`, which the socket proxy
-allows, as it allows the rest of that `docker run`. It answers `{sent: ["here", "host"], errors}`.
+allows, as it allows the rest of that `docker run`; eriphe-node engine knows it (`-node-image`). It answers `{sent: ["here", "host"], errors}`.
 
 ## Updates
 
@@ -879,13 +880,56 @@ code apart from a failure to run it), `stop`, `runService`, `removeStray`, `runH
 short-lived helper: the folder helper, the Mac's explorer), `wake`, `pull`, `info`,
 `ensureNetwork`. The node says what it wants (an image, folders and their access, an
 environment); the engine says it to its tool, with the hardening built in: a caller never passes a
-capability, a security option or a network of its own. Two engines, both through their CLI for
-now: Docker (`engine_docker.go`) and Apple's container (`apple.go`), chosen once from `-engine`.
+capability, a security option or a network of its own. Three engines: Docker through its CLI
+(`engine_docker.go`), Apple's container through its own (`apple.go`), chosen from `-engine`, and
+eriphe-node engine (`engine_remote.go`, below), chosen by `-engine-url`.
 Where they differ in a way the node must know, the engine says so in its traits: tasks on networks
 of their own, folders seen only through the explorer, files written as the user's. The node's tests
 use an engine in memory (`engine_fake_test.go`); what each engine says to its tool is tested with a
 fake CLI. `TestEngineBoundaries` fails when a file other than the engines' runs their CLI or asks
 which engine it has.
+
+### eriphe-node engine
+
+`eriphe-node engine` (`engine_server.go`) is the same image in a container of its own next to the
+node, the only one that holds the Docker socket. The node, given `-engine-url` (env
+`ERIPHE_ENGINE_URL`, e.g. `http://eriphe-engine:8792`), has no `DOCKER_HOST` and no Docker CLI: it
+sends each verb to the engine, which builds the container itself and speaks to the Docker API
+directly. The node is not trusted: a compromised node gets its own tasks, nothing more.
+
+- **Nothing to ask for.** A request says what is wanted (a task with its image, folders and their
+  access, environment, entrypoint and limits; a service; a folder helper; a wake), never how. Its
+  fields are the only ones taken (a request with any other is refused), and none can express a
+  privilege, a capability, a security option, a device, a host namespace, a network or a volume: the
+  hardening is the engine's, the same as the docker CLI engine's (Task containers, Services).
+- **The operator's policy**, in the engine's flags, the way Nomad's Docker driver has it:
+  `-bind-from` (the places folders may be mounted from, the node's root among them, `PATH:ro` for one
+  read-only), `-bind-file` (more, one a line, read again at each request: eriphe-launcher's folders
+  shared), `-host-root` (where the host's `/` is seen read-only: folders are resolved in it and the
+  resolved path is what the daemon mounts), `-node-image` (the node's own image: the only one run on
+  the host's network, to wake a machine, and as a folder helper), `-task-network`, `-network`,
+  `-service-network`, `-cache-volume` (the node takes these from the engine at start, whatever its own
+  flags say), `-allow-from` (the only host answered, by name), `-listen` (`:8792`), `-socket`.
+- **Its own containers only.** A check runs (`/v1/exec`) in the running container of the task it
+  names, which must carry that task's label: never in a service's, a helper's, a wake's or any other
+  of the machine. A stop is for a task's or a service's container carrying its label, a removal for
+  the node's labels only. The check's exit code comes from the daemon, apart from its output: a check
+  that could not run is an error, never a failed check.
+- **The API** is versioned by its prefix, `/v1`: a path the engine does not know answers 404 and
+  says that the node and the engine must be of the same version; the node logs a warning when their
+  versions differ. `GET /v1/config`, `POST /v1/tasks`, `/v1/services` (streams), `/v1/exec`, `/v1/stop`,
+  `/v1/remove-stray`, `/v1/helpers`, `/v1/wake`, `/v1/pull`, `/v1/networks/ensure`, `GET /v1/info`,
+  `/v1/networks/tasks`. Refusals answer `{error}` and are logged without the request's body.
+- **Streams.** A task's or a service's container runs on a connection of its own (`Upgrade:
+  eriphe-engine`, `engine_stream.go`): frames of the Docker daemon's own format, the node's input
+  (an empty frame closes it), the container's stdout and stderr, then its end (`{exit, error}`). The
+  container outlives the node's connection, as it outlived the docker CLI: a stop stops it. An image
+  the daemon does not have is pulled first, as `docker run` does.
+
+What it cannot prevent is a race: a directory replaced by a symlink between its check and the
+daemon's mount. `TestEngineRunsTheNode` runs the node's own functions through the engine to a fake
+daemon (a new verb belongs there); `TestEngineRefusesWhatTheNodeMayNotDo` is a compromised node
+calling the engine directly. The installers still run the socket proxy (`docker-proxy`) for now.
 
 ## The container engine (a Mac)
 
