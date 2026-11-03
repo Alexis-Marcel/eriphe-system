@@ -81,13 +81,12 @@ device" offers both addresses once remote access is ready.
 - **NAS** (or by hand on Linux): run the image with the root at the same path inside and outside, attached to the
   task network (`-task-network`, see Networks) so that tasks reach it at `-callback-url`, with no Docker
   access but eriphe-node engine (`-engine-url`, see [The engine](#eriphe-node-engine)), never the socket
-  itself; see `deploy/nas/compose.yaml` and `deploy/README.md`. Before the engine, the node reached Docker
-  through `eriphe-node docker-proxy` (`dockerproxy.go`, to be removed), the same image in a container of its own
-  that holds the socket and checks each container's whole create request against what the node
-  sends (`-bind-from`, `-bind-file`, `-host-root`, `-networks`, `-wake-image`, `-allow-from`), and
-  lets it touch its own containers only, and run a command (`docker exec`: the checks, the diff, the
-  work kept) in a task's only, without privilege nor another user. `TestDockerProxyLetsTheNodeThrough` runs the
-  node's docker commands through it with the docker CLI: a new one belongs there.
+  itself; see `deploy/nas/compose.yaml` and `deploy/README.md`. The image has no docker CLI. Before the
+  engine, the node reached Docker through `eriphe-node docker-proxy`, a socket proxy now gone: in the
+  container of an install from before, `docker-proxy` only waits, until the install's next layout
+  replaces it with the engine (install/README.md, The machines update themselves). A node that
+  cannot reach its engine (or Docker) at start connects all the same, with no runtime to offer, says
+  so in its log ("no container engine here"), and starts again once the engine answers.
 - **Windows**: `install/install.ps1` at the root of the repository (it was `node/install/install.ps1`),
   from an administrator PowerShell; see `install/README.md`. It installs WSL if needed, creates a
   WSL distribution `eriphe` (Alpine, Docker Engine, eriphe-node from its image), without Docker
@@ -102,8 +101,8 @@ device" offers both addresses once remote access is ready.
   over the node is root in the distribution. The distribution is the boundary: it sees no Windows
   drive and cannot start Windows programs. Rootless dockerd is not practical in it (no systemd or
   cgroup delegation in WSL's Alpine, slirp4netns networking, GPU access through the NVIDIA
-  runtime). The plan: run eriphe-node as UID 1000 behind `eriphe-node docker-proxy`, which checks
-  the whole create request (see `deploy/README.md`), as on the NAS.
+  runtime). The plan: run eriphe-node in a container behind eriphe-node engine, which checks
+  the whole create request (see [The engine](#eriphe-node-engine)), as on the NAS.
 
 ## What the node offers
 

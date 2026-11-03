@@ -232,7 +232,8 @@ Requirements (the installer checks them and says so if one is missing):
 ### 4D. NAS or Linux with Docker: one container
 
 Eriphe installs as one container, `ghcr.io/alexis-marcel/eriphe`, the *launcher*, which creates
-and updates Eriphe's own containers next to it (eriphe-core, eriphe-node, eriphe-docker-proxy).
+and updates Eriphe's own containers next to it (eriphe-core, eriphe-node, eriphe-engine,
+eriphe-syncthing).
 
 **Unraid** (its template, from the Docker page; details in [unraid/README.md](../unraid/README.md)):
 
@@ -265,7 +266,7 @@ docker logs -f eriphe
   address in your browser and give the setup code:", the address, the setup code, and "Good to
   know: then the browser asks you to name your assistant and connect its AI account." Stop
   following the log with Ctrl+C (the container keeps running).
-- The containers it makes (eriphe-core, eriphe-node, eriphe-docker-proxy) show without a template:
+- The containers it makes (eriphe-core, eriphe-node, eriphe-engine, eriphe-syncthing) show without a template:
   leave them alone, the launcher recreates them on updates.
 
 ### 4E. A server rented in the cloud (VPS)

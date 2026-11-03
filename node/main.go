@@ -95,12 +95,12 @@ func main() {
 		runWakeSend(os.Args[2:]) // the short-lived container that wakes a machine (wake.go)
 		return
 	}
-	if len(os.Args) > 1 && os.Args[1] == "engine" {
-		runEngine(os.Args[2:]) // the node's engine, which holds the Docker socket (engine_server.go)
+	if len(os.Args) > 1 && os.Args[1] == "docker-proxy" {
+		proxyGone() // an install from before the engine, until its layout (engine_remote.go)
 		return
 	}
-	if len(os.Args) > 1 && os.Args[1] == "docker-proxy" {
-		runDockerProxy(os.Args[2:]) // the node's only way to Docker (dockerproxy.go)
+	if len(os.Args) > 1 && os.Args[1] == "engine" {
+		runEngine(os.Args[2:]) // the node's engine, which holds the Docker socket (engine_server.go)
 		return
 	}
 	core := flag.String("core", os.Getenv("ERIPHE_CORE"), "eriphe-core URL, or several separated by commas, preferred first, e.g. the local one then the remote one (env ERIPHE_CORE)")
@@ -181,10 +181,9 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var noEngine error
 	if o.engineURL != "" {
-		if err := loadEngineConfig(&o, 30, 2*time.Second); err != nil {
-			log.Fatal(err)
-		}
+		noEngine = loadEngineConfig(&o, 30, 2*time.Second)
 	}
 	if err := checkNetworks(o); err != nil {
 		log.Fatal(err)
@@ -200,8 +199,11 @@ func main() {
 			log.Printf("local socket: %v", err)
 		}
 	}
-	if err := n.engine().ensureNetwork(); err != nil {
-		log.Fatal(err)
+	if noEngine == nil {
+		noEngine = n.engine().ensureNetwork()
+	}
+	if noEngine != nil {
+		n.withoutEngine(s, noEngine)
 	}
 	addr, err := n.listenAddr(*listen)
 	if err != nil {

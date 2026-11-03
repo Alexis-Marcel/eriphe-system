@@ -60,6 +60,8 @@ node `DOCKER_HOST`. To move to the engine, take this file again (or rename the s
 `engine` with the command above, give the node `ERIPHE_ENGINE_URL` instead of `DOCKER_HOST`, and
 `depends_on: [core, engine]`), then `docker compose up -d --remove-orphans`: the proxy's container
 goes, the engine starts, the node is made again. The node and the engine must be the same version.
+Node images from 0.70 on have no socket proxy (and no docker CLI): with this project not moved yet,
+the node connects without a runtime and says so in its log ("no container engine here").
 
 ### Updates
 
