@@ -14,9 +14,9 @@
 <div id="tools-body">
 {{if or .Tools .VoiceOnly}}
 <ul class="tools" id="tools-list"{{if .Waiting}} hx-get="{{.RefreshURL}}" hx-trigger="load delay:2s" hx-select="#tools-list" hx-swap="outerHTML"{{end}}>
-{{range .Tools}}
-  <li class="tool" id="tool-{{.Name}}">{{template "tool-row" .}}</li>
-{{end}}
+{{range .Groups}}{{if .Single}}
+  <li class="tool" id="tool-{{.Single.Name}}">{{template "tool-row" .Single}}</li>
+{{else}}{{template "tool-group" .}}{{end}}{{end}}
 {{if .VoiceOnly}}
   <li class="tool">
     <span class="mark preset-mark mark-home-assistant" aria-hidden="true">{{template "preset-icon" "home-assistant"}}</span>
@@ -44,6 +44,27 @@
   <div class="add-step" id="tool-step" hidden></div>
 </dialog>
 {{end}}{{end}}
+
+{{/* A kind of tool with several accounts, as one card: each account, its
+     tools as rows, and "Ajouter un compte". . is a toolGroup. */}}
+{{define "tool-group"}}
+  <li class="tool-group" id="group-{{.Preset.ID}}" aria-labelledby="group-{{.Preset.ID}}-t">
+    <div class="group-head">
+      <span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
+      <div class="group-title"><h3 id="group-{{.Preset.ID}}-t">{{t (printf "preset.%s.title" .Preset.ID)}}</h3>
+        <span class="muted small">{{tf "groups.count" (len .Accounts) .Count}}</span></div>
+      <a class="btn btn-soft sm" href="{{.AddURL}}"{{if .AddStep}} data-step-open="add-dlg" data-hash="add/{{.Preset.ID}}"{{end}}>{{template "i-plus"}}{{t "groups.addaccount"}}</a>
+    </div>
+    <ul class="group-accounts">
+    {{range .Accounts}}
+      <li class="group-account{{if .Reconnect}} group-account-bad{{end}}">
+        {{if gt (len .Tools) 1}}<p class="group-account-label"><b>{{.Label}}</b>{{if .Reconnect}} <span class="chip srv-needs_auth">{{t "google.toreconnect"}}</span>{{end}}</p>{{end}}
+        <ul class="tools">{{range .Tools}}<li class="tool" id="tool-{{.Name}}">{{template "tool-row" .}}</li>{{end}}</ul>
+      </li>
+    {{end}}
+    </ul>
+  </li>
+{{end}}
 
 {{/* One tool of the list. . is a toolView; with .Follow, its row follows
      the tool just saved and asks for itself again until it settles. */}}

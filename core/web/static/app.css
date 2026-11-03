@@ -1583,3 +1583,15 @@ details.app-install > * + * { margin-top: 10px; }
 .gadd { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .inline-check { display: inline-flex; align-items: center; gap: 4px; }
 .drive-accounts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* Settings → Tools: a kind of tool with several accounts, as one card. */
+.tool-group { list-style: none; display: grid; gap: 10px; padding: 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-sm); }
+.tool-group .tool { padding: 12px 14px; border-radius: 12px; box-shadow: none; background: var(--surface-2); border-color: transparent; }
+.group-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.group-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.group-title h3 { margin: 0; }
+.group-accounts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.group-account { display: grid; gap: 6px; }
+.group-account-bad .tool { background: var(--warn-soft); }
+.group-account-label { margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; word-break: break-all; }
+.group-account > .tools { margin: 0; padding: 0; gap: 6px; }

@@ -1785,7 +1785,12 @@ nothing to approve for a task's push and PR on its branch, about five minutes to
 leads to Settings → Tools → GitHub) or a personal token (quick, acts as the user on everything the
 token reaches, long-lived, so each push of a task waits for the user's approval; its form says so
 and links back to the app). A GitHub connection on a token shows "Passer à l'app" in the list and
-in its form. Mails and Agenda first ask which kind of account
+in its form. In the list, the tools of one kind (by their preset: Mails, Agenda, GitHub, Google,
+Notion…) make one card when there are several (`web_tools_groups.go`): the kind, how many
+accounts and tools, "Ajouter un compte" (the kind's form, or its page), then each account (the
+address or GitHub account its line names; a Google account's Gmail and Agenda together, with the
+Drive of every account) with its tools as rows, each with its state, access, reconnect, edit and
+remove. A kind with one tool stays a plain row. Mails and Agenda first ask which kind of account
 (Gmail, iCloud, Orange, Free, OVHcloud, Fastmail or any IMAP server; iCloud, Fastmail, Nextcloud or
 any CalDAV server) and run `eriphe-mail` and `eriphe-calendar` with its password; "Test the
 connection" tries that password (IMAP login, CalDAV PROPFIND). "Gmail avec ton compte Google"
