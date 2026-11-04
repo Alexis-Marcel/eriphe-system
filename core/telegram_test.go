@@ -464,7 +464,8 @@ func TestTelegramTokenNeverInErrors(t *testing.T) {
 	}
 }
 
-// Settings → Channels: the token is pasted, never shown back; the code links.
+// Settings → Access → Telegram: the token is pasted, never shown back; the
+// code links. The default channels stay in Notifications.
 func TestWebTelegramChannels(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
@@ -473,7 +474,7 @@ func TestWebTelegramChannels(t *testing.T) {
 	tw.c.tg.api, tw.c.tg.client = f.srv.URL, f.srv.Client()
 	t.Cleanup(tw.c.tg.stop)
 
-	code, body, _ := tw.do("GET", "/settings/notifications", nil, nil)
+	code, body, _ := tw.do("GET", "/settings/remote", nil, nil)
 	if code != 200 || !strings.Contains(body, "pas de bout en bout") || !strings.Contains(body, `name="token"`) {
 		t.Fatalf("GET: %d", code)
 	}
@@ -494,14 +495,17 @@ func TestWebTelegramChannels(t *testing.T) {
 	if _, body, _ := tw.do("GET", "/channels/telegram", nil, nil); !strings.Contains(body, "@sam") || !strings.Contains(body, "Délier") {
 		t.Fatalf("linked: %s", body)
 	}
-	if code, _, _ := tw.post("/channels/settings", url.Values{"detail": {"alert"}, "channel": {"telegram"}}, csrf); code != 200 ||
-		tw.c.store.get(tgDetailKey) != detailAlert || tw.c.defaultChannels() != "telegram" {
+	if code, body, _ := tw.post("/channels/settings", url.Values{"detail": {"alert"}, "channel": {"telegram"}}, csrf); code != 200 ||
+		tw.c.store.get(tgDetailKey) != detailAlert || tw.c.defaultChannels() != "telegram" || !strings.Contains(body, `hx-target="#channels"`) {
 		t.Fatalf("settings: %d %q %q", code, tw.c.store.get(tgDetailKey), tw.c.defaultChannels())
 	}
 	if _, _, h := tw.post("/channels/settings", url.Values{"detail": {"full"}}, csrf); !strings.Contains(h.Get("HX-Trigger"), "canal") {
 		t.Errorf("no channel accepted: %s", h.Get("HX-Trigger"))
 	}
-	for _, path := range []string{"/channels/telegram", "/settings/notifications", "/settings/account"} {
+	if _, body, _ := tw.do("GET", "/settings/notifications", nil, nil); strings.Contains(body, "Aucun compte relié.") {
+		t.Error("Notifications still says no account is linked")
+	}
+	for _, path := range []string{"/channels/telegram", "/settings/remote", "/settings/notifications", "/settings/account"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, fakeBotToken) || strings.Contains(body, "AAH-fake") {
 			t.Errorf("GET %s shows the token", path)
 		}

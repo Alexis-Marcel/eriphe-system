@@ -1775,12 +1775,14 @@ valider with a discreet count), not of the main navigation.
 
 The settings come in four groups: Assistant (the memory, "Ce que Jarvis sait de toi", still at
 `/memory`, the watches, the agents, the skills), Connexions (tools, folders), Appareils & accès
-(devices, remote access, notifications) and Mon espace (account, the Journal, À valider); an entry is marked
+(devices, access, notifications) and Mon espace (account, the Journal, À valider); an entry is marked
 when it needs a look (an update, a tool in error, a refused key). On a phone the settings say the
 way back, "‹ Conversation". The pages that moved keep their addresses as redirects:
 `/settings/happened` and `/activity` lead to the Journal, `/activity/approve` and
-`/memory?view=inbox` to À valider, `/settings/channels` and `/settings/where` to their sections of
-Notifications.
+`/memory?view=inbox` to À valider, `/settings/where` to its section of Notifications, and
+`/settings/channels` (like `/settings/notifications#telegram`, in the browser) to Telegram in Access.
+**Access** (`/settings/remote`) gathers the ways to talk to the assistant: from the web (remote access,
+below), the mobile app (installing the workspace) and Telegram's bot.
 The conversation shows the user's messages and the assistant's answers. The events given to the
 brain (a tool or an agent added, a task's turn over, a permission asked) are its notes and are not
 shown; a task that failed, was stopped or was lost is one short line that opens its drawer. When
@@ -2076,7 +2078,7 @@ page follows the visible viewport). The service worker (`/sw.js`,
 served with the static files' version so that each update brings a fresh cache) keeps the static
 files only: versioned ones cache first, the others network first; a page is always fetched, and
 offline a small static page says so. No page, action or event stream is ever cached.
-Settings → Notifications tells how to install it on this device (iPhone, Android or a
+Settings → Access (App mobile) tells how to install it on this device (iPhone, Android or a
 computer), with the browser's own prompt when Chrome or Edge offers one.
 
 **Notifications.** Standard Web Push (RFC 8030, encrypted per RFC 8291, signed with VAPID per RFC
@@ -2168,11 +2170,11 @@ allows: none, injection cases blocked: all).
 
 **Channels: push and Telegram** (`channels.go`, `telegram.go`, `web_telegram.go`). What is sent
 (`tell`) goes by the user's channels: web push and Telegram, all by default, a narrower default in
-Settings → Notifications (Canaux), or a topic rule's own (`channels`: `push`, `telegram` or both). The decision
+Settings → Notifications (Où te prévenir), or a topic rule's own (`channels`: `push`, `telegram` or both). The decision
 above is unchanged; the channels only say where a "now" goes. Telegram, two-way, without an
 inbound port:
 
-- **Setup.** The user creates a bot with BotFather and pastes its token in Settings → Notifications (Canaux):
+- **Setup.** The user creates a bot with BotFather and pastes its token in Settings → Access (Telegram):
   checked with `getMe`, kept in the vault (`telegram-bot`), never shown, logged or put in an error
   (the Bot API puts it in the URL: errors are stripped of both). Eriphe then shows a one-time code
   (10 minutes, 10 wrong tries); the private-chat account that sends it to the bot (or opens
@@ -2462,7 +2464,7 @@ eriphe-core can join the owner's private Tailscale network (a *tailnet*) by itse
 embedded Tailscale ([tsnet](https://tailscale.com/kb/1244/tsnet), BSD-3): the workspace and the
 API are then reachable from every device of that tailnet, at home and away, in HTTPS with a
 certificate browsers trust, and nothing is opened on the router. It is off by default and turned on
-from the workspace, **Settings → Remote access** (owner only):
+from the workspace, **Settings → Access** (Depuis le web; owner only):
 
 1. **Turn on remote access** starts Tailscale (machine name `eriphe` by default).
 2. **Log in to Tailscale** opens Tailscale's login page (a free account with Google, Apple or

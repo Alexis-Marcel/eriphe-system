@@ -11,3 +11,9 @@ if (matchMedia("(display-mode: standalone)").matches || navigator.standalone ===
 if (location.pathname === "/settings" && matchMedia("(min-width: 861px)").matches) {
   location.replace("/memory");
 }
+
+// Telegram moved from Notifications to Access: its old address, in links
+// already shared, leads to the new place.
+if (location.pathname === "/settings/notifications" && location.hash === "#telegram") {
+  location.replace("/settings/remote#telegram");
+}

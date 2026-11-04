@@ -20,7 +20,7 @@ func TestActivityRedirects(t *testing.T) {
 		"/activity":             "/settings/journal",
 		"/activity?kind=access": "/settings/journal?kind=access",
 		"/activity/approve":     "/settings/approve",
-		"/settings/channels":    "/settings/notifications#channels",
+		"/settings/channels":    "/settings/remote#telegram",
 		"/settings/where":       "/settings/notifications#where",
 		"/memory?view=inbox":    "/settings/approve",
 	} {
@@ -162,10 +162,12 @@ func TestApprovals(t *testing.T) {
 	}
 }
 
-// Notifications is one page with its four sections: where to reach the
-// user (this device, the devices, the router's order), the channels, the
-// rules and quiet hours, and what was sent. A rule is asked of the brain:
-// the page has no form to write one, only to delete.
+// Notifications is one page with its three sections: where to reach the
+// user (this device, the devices, the router's order, the default
+// channels), the rules and quiet hours, and what was sent. Installing the
+// app and Telegram's bot are in Access: an unlinked Telegram stays a line,
+// with a link there. A rule is asked of the brain: the page has no form to
+// write one, only to delete.
 func TestNotificationsOnePage(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
@@ -175,9 +177,10 @@ func TestNotificationsOnePage(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("GET: %d", code)
 	}
-	order := []string{`<a href="#where">`, `<a href="#channels">`, `<a href="#rules">`, `<a href="#sent">`,
-		`id="where"`, `id="push"`, `id="push-devices"`, `id="where-body"`, "Eriphe ouvert devant toi",
-		`id="channels"`, `id="telegram"`, `id="rules"`, `id="notify-rules"`, "project:site", `hx-post="/notify/rules/1/delete"`, `class="ask"`,
+	order := []string{`<a href="#where">`, `<a href="#rules">`, `<a href="#sent">`,
+		`id="where"`, `id="push"`, `href="/settings/remote#app"`, `id="push-devices"`, `id="where-body"`, "Eriphe ouvert devant toi",
+		"Aucun compte relié.", `<a href="/settings/remote#telegram">Configurer dans Accès</a>`,
+		`id="channels"`, `hx-post="/channels/settings"`, `id="rules"`, `id="notify-rules"`, "project:site", `hx-post="/notify/rules/1/delete"`, `class="ask"`,
 		`id="sent"`, "Dernières décisions"}
 	at := 0
 	for _, want := range order {
@@ -187,7 +190,7 @@ func TestNotificationsOnePage(t *testing.T) {
 		}
 		at += i + len(want)
 	}
-	for _, gone := range []string{`class="rule-form"`, `name="match"`} {
+	for _, gone := range []string{`class="rule-form"`, `name="match"`, `data-install`, `id="tg-panel"`, `name="token"`, `href="#channels"`} {
 		if strings.Contains(body, gone) {
 			t.Errorf("the page still has %q", gone)
 		}

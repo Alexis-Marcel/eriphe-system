@@ -117,8 +117,8 @@ The workspace speaks the browser's language (French, or English for any other), 
 name its menus in both. The setup code stays the same until it is used, and every run of the
 installer prints it again while there is no password (on the screen only: the install's log says it
 was printed, not what it is); once there is one, the installer says to sign in instead, with the
-command for a [forgotten password](#forgotten-password). With remote access on (Settings → Remote
-access), it gives the tailnet address (`https://eriphe.<tailnet>.ts.net`) to sign in at, rather
+command for a [forgotten password](#forgotten-password). With remote access on (Settings →
+Access), it gives the tailnet address (`https://eriphe.<tailnet>.ts.net`) to sign in at, rather
 than the SSH tunnel of a server bound to `127.0.0.1`.
 
 **Another port.** Core mode needs ports 8443 (the workspace) and 8800 (the API, for the other
@@ -1089,7 +1089,7 @@ installer notices a public address and says so at the end ("Good to know"). Befo
    groups, DigitalOcean…: the firewall of the provider's console, in front of the server). Allow
    SSH, and nothing else of Eriphe's by default:
    - **8443, the workspace**: never open to the world. Reach it one of these ways:
-     - **Tailscale**, built in: Réglages › Accès à distance (Settings › Remote access), "Turn on"
+     - **Tailscale**, built in: Réglages › Accès (Settings › Access), "Turn on"
        and sign in, from an SSH tunnel the first time (`ssh -L 127.0.0.1:8443:127.0.0.1:8443 -o ExitOnForwardFailure=yes <user>@<server>`, then
        `https://127.0.0.1:8443` on your computer). The workspace then has a
        `https://<name>.<tailnet>.ts.net` address with a real certificate, for your browser, the

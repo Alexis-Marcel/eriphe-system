@@ -12,10 +12,10 @@ import (
 )
 
 // Settings → Notifications: one page for the whole subject. Its first
-// section is the notifications of this device (push.go), installing the
-// workspace as an app, and the devices told; the router's order
-// (web_where.go), Telegram (web_telegram.go), the rules and what was sent
-// (web_notify.go) follow. The page subscribes after the user turns the
+// section is the notifications of this device (push.go) and the devices
+// told, the router's order (web_where.go) and the default channels
+// (web_telegram.go); the rules and what was sent (web_notify.go) follow.
+// Installing the app and Telegram's bot are in Settings → Access. The page subscribes after the user turns the
 // switch on; the tabs say whether they are in front, so that nothing
 // buzzes while the user is looking.
 
@@ -52,7 +52,7 @@ type notificationsPage struct {
 	Off      bool         // no key: notifications cannot work here
 	Notify   notifyPage   // what the brain told, its rules (web_notify.go)
 	Where    wherePage    // the router's order (web_where.go)
-	Channels channelsPage // Telegram (web_telegram.go)
+	Channels channelsPage // the default channels (web_telegram.go)
 }
 
 func (w *web) notificationsPage(lang string) notificationsPage {

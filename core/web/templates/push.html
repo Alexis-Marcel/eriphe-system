@@ -1,11 +1,12 @@
-{{/* Settings → Notifications (web_push.go): one page, four sections.
+{{/* Settings → Notifications (web_push.go): one page, three sections.
      Où te prévenir: this device's notifications, the devices, the router's
-     order (web_where.go); Canaux: Telegram (web_telegram.go); Règles et
-     heures calmes (web_notify.go); Envoyées: what the brain said, with the
-     user's feedback, and what the router did. app.js does the browser's
-     part: it tells what this browser can do, asks for the permission on a
-     tap, subscribes and sends the subscription. A rule is asked of the
-     brain: the page shows it and deletes it. */}}
+     order (web_where.go) and the default channels (web_telegram.go); Règles
+     et heures calmes (web_notify.go); Envoyées: what the brain said, with
+     the user's feedback, and what the router did. Installing the app and
+     Telegram's bot are in Settings → Access (remote.html). app.js does the
+     browser's part: it tells what this browser can do, asks for the
+     permission on a tap, subscribes and sends the subscription. A rule is
+     asked of the brain: the page shows it and deletes it. */}}
 
 {{define "i-bell"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>{{end}}
 {{define "i-phone"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>{{end}}
@@ -14,7 +15,7 @@
 {{define "notifications"}}
 <header class="page-head"><h2>{{t "settings.notifications"}}</h2><p>{{t "push.lead"}}</p></header>
 <nav class="pill-tabs" aria-label="{{t "settings.notifications"}}">
-  <a href="#where">{{t "settings.where"}}</a><a href="#channels">{{t "settings.channels"}}</a><a href="#rules">{{t "rule.title"}}</a><a href="#sent">{{t "notif.sent"}}</a>
+  <a href="#where">{{t "settings.where"}}</a><a href="#rules">{{t "rule.title"}}</a><a href="#sent">{{t "notif.sent"}}</a>
 </nav>
 
 <h3 class="section-title" id="where">{{template "i-route"}}{{t "settings.where"}}</h3>
@@ -31,23 +32,12 @@
     <input type="hidden" name="id" id="push-test-id">
     <button class="btn btn-soft sm" type="submit">{{template "i-bell"}}{{t "push.test"}}</button>
   </form>
-  <details class="rule-edit app-install" data-install>
-    <summary class="small">{{t "install.title"}} <span class="tag tag-ok" data-installed hidden>{{t "install.done"}}</span></summary>
-    <p class="small muted" data-install-lead>{{t "install.lead"}} {{t "push.ioshint"}}</p>
-    <div class="actions" data-install-prompt hidden><button class="btn btn-primary sm" type="button" data-install-button>{{template "i-plus"}}{{t "install.button"}}</button></div>
-    <ul class="install-how">
-      <li data-platform="ios"><b>iPhone, iPad</b><span>{{t "install.ios"}}</span></li>
-      <li data-platform="android"><b>Android</b><span>{{t "install.android"}}</span></li>
-      <li data-platform="desktop"><b>{{t "install.computer"}}</b><span>{{t "install.desktop"}}</span></li>
-    </ul>
-  </details>
+  <p class="small muted">{{t "push.ioshint"}} <a href="/settings/remote#app">{{t "push.installlink"}}</a></p>
   <h4 class="notif-sub">{{t "push.devices"}}</h4>
   <div id="push-devices">{{template "push-devices" .}}</div>
 </section>
 <div id="where-body" class="where">{{template "where-body" .Data.Where}}</div>
-
-<h3 class="section-title" id="channels">{{template "i-chat"}}{{t "settings.channels"}}</h3>
-<section class="panel" aria-labelledby="tg-title" id="telegram">{{template "telegram" .Data.Channels}}</section>
+<section class="panel" aria-labelledby="channels-title" id="channels">{{template "channels-settings" .Data.Channels}}</section>
 
 <h3 class="section-title" id="rules">{{template "i-moon"}}{{t "rule.title"}}</h3>
 <section class="panel" aria-label="{{t "rule.title"}}" id="notify-rules">{{template "notify-rules" .Data.Notify}}</section>
@@ -145,19 +135,18 @@
 {{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{t (printf "rule.ch.%s" .Channels)}}{{end}}{{if .Also}} · {{t "rule.also"}} <span class="mono">{{.Also}}</span>{{end}}{{if .Never}} · {{t "rule.never"}} <span class="mono">{{.Never}}</span>{{end}}{{end}}</span>
 {{if .Why}}<span class="small muted">{{.Why}}</span>{{end}}{{end}}
 
-{{/* Notifications → Canaux (web_telegram.go, telegram.go): Telegram's bot,
-     the link to the user's account, how much it says there, and the
-     default channels of the brain's notifications. The token is never
-     shown back. */}}
+{{/* Access → Telegram (web_telegram.go, telegram.go): Telegram's bot and
+     the link to the user's account. The token is never shown back. */}}
 {{define "telegram-frag"}}{{template "telegram" .Data}}{{end}}
 
 {{define "telegram"}}
-<h3 id="tg-title">{{template "i-chat"}}Telegram</h3>
+<h3 id="tg-title">{{template "i-chat"}}{{t "tg.title"}}</h3>
+<p class="small muted">{{t "tg.lead"}}</p>
 <p class="notice">{{t "tg.privacy"}}</p>
 {{if not .VaultOpen}}<p class="small muted">{{t "tg.err.vault"}}</p>
 {{else if not .Set}}
 <p class="small">{{t "tg.how"}}</p>
-<form class="stack-form" hx-post="/channels/telegram/token" hx-target="#telegram" hx-disabled-elt="find button">
+<form class="stack-form" hx-post="/channels/telegram/token" hx-target="#tg-panel" hx-disabled-elt="find button">
   <label class="field"><span>{{t "tg.token"}}</span><input type="password" name="token" autocomplete="off" required maxlength="120" placeholder="123456:ABC…"></label>
   <div class="actions"><button class="btn btn-primary sm" type="submit">{{t "tg.token.save"}}</button></div>
 </form>
@@ -167,28 +156,35 @@
 <p class="small"><span class="tag tag-ok">{{t "tg.linked.tag"}}</span> {{.Name}}</p>
 <div class="actions">
   <form hx-post="/channels/telegram/test" hx-swap="none"><button class="btn btn-soft sm" type="submit">{{t "tg.test.button"}}</button></form>
-  <form hx-post="/channels/telegram/unlink" hx-target="#telegram" hx-confirm="{{t "tg.unlinkconfirm"}}"><button class="btn btn-ghost sm" type="submit">{{t "tg.unlink"}}</button></form>
+  <form hx-post="/channels/telegram/unlink" hx-target="#tg-panel" hx-confirm="{{t "tg.unlinkconfirm"}}"><button class="btn btn-ghost sm" type="submit">{{t "tg.unlink"}}</button></form>
 </div>
 {{else if .Code}}
-<div hx-get="/channels/telegram" hx-trigger="every 3s" hx-target="#telegram">
+<div hx-get="/channels/telegram" hx-trigger="every 3s" hx-target="#tg-panel">
   <p>{{t "tg.sendcode"}} <b class="mono">{{.Code}}</b></p>
   {{if .Bot}}<p class="small"><a href="https://t.me/{{.Bot}}?start={{.Code}}" target="_blank" rel="noopener">{{t "tg.openbot"}}</a></p>{{end}}
   <p class="small muted">{{t "tg.codehint"}}</p>
 </div>
 {{else}}
-<form hx-post="/channels/telegram/code" hx-target="#telegram"><button class="btn btn-primary sm" type="submit">{{t "tg.link"}}</button></form>
+<form hx-post="/channels/telegram/code" hx-target="#tg-panel"><button class="btn btn-primary sm" type="submit">{{t "tg.link"}}</button></form>
 {{end}}
 {{if .Ignored}}<p class="small muted">{{tf "tg.ignored" .Ignored}}</p>{{end}}
 <p class="small muted">{{t "tg.approvals"}}</p>
 <details class="rule-edit"><summary class="small">{{t "tg.change"}}</summary>
-<form class="stack-form" hx-post="/channels/telegram/token" hx-target="#telegram" hx-disabled-elt="find button">
+<form class="stack-form" hx-post="/channels/telegram/token" hx-target="#tg-panel" hx-disabled-elt="find button">
   <label class="field"><span>{{t "tg.token"}}</span><input type="password" name="token" autocomplete="off" required maxlength="120"></label>
   <div class="actions"><button class="btn btn-soft sm" type="submit">{{t "tg.token.save"}}</button>
-  <button class="btn btn-danger-ghost sm" type="button" hx-post="/channels/telegram/remove" hx-target="#telegram" hx-confirm="{{t "tg.removeconfirm"}}">{{t "tg.remove"}}</button></div>
+  <button class="btn btn-danger-ghost sm" type="button" hx-post="/channels/telegram/remove" hx-target="#tg-panel" hx-confirm="{{t "tg.removeconfirm"}}">{{t "tg.remove"}}</button></div>
 </form></details>
 {{end}}
-<h4 class="notif-sub">{{t "channels.settings"}}</h4>
-<form class="stack-form" hx-post="/channels/settings" hx-target="#telegram">
+{{end}}
+
+{{/* Notifications → Où te prévenir: the default channels of the brain's
+     notifications, and how much Telegram is told (web_telegram.go). */}}
+{{define "channels-frag"}}{{template "channels-settings" .Data}}{{end}}
+
+{{define "channels-settings"}}
+<h4 id="channels-title" class="notif-sub">{{t "channels.settings"}}</h4>
+<form class="stack-form" hx-post="/channels/settings" hx-target="#channels">
   <fieldset><legend class="small">{{t "channels.default"}}</legend>
     <label class="check"><input type="checkbox" name="channel" value="push"{{if .Push}} checked{{end}}> {{t "channels.push"}}</label>
     <label class="check"><input type="checkbox" name="channel" value="telegram"{{if .Telegram}} checked{{end}}> Telegram</label>
@@ -226,7 +222,7 @@
         <input type="hidden" name="step" value="{{.Step}}">
         <label class="switch">
           <input type="checkbox" name="on" value="1"{{if and .On .Usable}} checked{{end}}{{if not .Usable}} disabled{{end}}>
-          <span><b>{{t (printf "where.line.%s" .Step)}}</b><small>{{if .Hint}}{{t .Hint}}{{else}}{{t (printf "where.line.%s.hint" .Step)}}{{end}}</small></span>
+          <span><b>{{t (printf "where.line.%s" .Step)}}</b><small>{{if .Hint}}{{t .Hint}}{{else}}{{t (printf "where.line.%s.hint" .Step)}}{{end}}{{with .Link}} <a href="{{.}}">{{t "where.hint.configure"}}</a>{{end}}</small></span>
         </label>
       </form>
       <div class="where-move">

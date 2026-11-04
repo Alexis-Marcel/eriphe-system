@@ -26,7 +26,7 @@ Google only sends back to an **authorized redirect URI** that follows its rules
 Eriphe's redirect URI is `<the address you open Eriphe at>/oauth/callback`. If you open Eriphe at a
 local address, the Google page says so and offers:
 
-1. **Remote access** (Settings → Remote access): Tailscale gives Eriphe an
+1. **Remote access** (Settings → Access): Tailscale gives Eriphe an
    `https://<name>.<tailnet>.ts.net` address with a real certificate, which Google takes. Open the
    Google page at that address and follow the steps from there.
 2. **Your own domain**: put Eriphe behind your reverse proxy at, for instance,
