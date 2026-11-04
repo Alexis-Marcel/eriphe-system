@@ -15,7 +15,7 @@
 {{if or .Tools .VoiceOnly}}
 <ul class="tools" id="tools-list"{{if .Waiting}} hx-get="{{.RefreshURL}}" hx-trigger="load delay:2s" hx-select="#tools-list" hx-swap="outerHTML"{{end}}>
 {{range .Groups}}{{if .Single}}
-  <li class="tool" id="tool-{{.Single.Name}}">{{template "tool-row" .Single}}</li>
+  <li class="tool" id="tool-{{.Single.Key}}">{{template "tool-row" .Single}}</li>
 {{else}}{{template "tool-group" .}}{{end}}{{end}}
 {{if .VoiceOnly}}
   <li class="tool">
@@ -59,21 +59,22 @@
     {{range .Accounts}}
       <li class="group-account{{if .Reconnect}} group-account-bad{{end}}">
         {{if gt (len .Tools) 1}}<p class="group-account-label"><b>{{.Label}}</b>{{if .Reconnect}} <span class="chip srv-needs_auth">{{t "google.toreconnect"}}</span>{{end}}</p>{{end}}
-        <ul class="tools">{{range .Tools}}<li class="tool" id="tool-{{.Name}}">{{template "tool-row" .}}</li>{{end}}</ul>
+        <ul class="tools">{{range .Tools}}<li class="tool" id="tool-{{.Key}}">{{template "tool-row" .}}</li>{{end}}</ul>
       </li>
     {{end}}
     </ul>
   </li>
 {{end}}
 
-{{/* One tool of the list. . is a toolView; with .Follow, its row follows
-     the tool just saved and asks for itself again until it settles. */}}
+{{/* One tool of the list, or one account of the mail or the calendar
+     (.Account). . is a toolView; with .Follow, its row follows the tool
+     just saved and asks for itself again until it settles. */}}
 {{define "tool-row"}}
     {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
     {{else}}<span class="mark {{if eq .Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
     <div class="tool-main">
       <div class="tool-head">
-        <h3 class="mono">{{.Name}}</h3>
+        <h3{{if not .Account}} class="mono"{{end}}>{{.Title}}</h3>
         {{if .Reconnect}}<span class="chip srv-needs_auth"><span class="pulse" aria-hidden="true"></span>{{t "google.toreconnect"}}</span>
         {{else if .Pending}}<span class="chip srv-pending"><span class="pulse" aria-hidden="true"></span>{{if .Placed}}{{t "server.starting"}}{{else}}{{t "server.pending"}}{{end}}</span>
         {{else}}<span class="chip srv-{{.Status}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "server.%s" .Status)}}</span>{{end}}
@@ -85,8 +86,8 @@
         {{if .Detail}}{{.Detail}}{{else if eq .Kind "local"}}{{t "tools.local"}}{{else}}<span class="mono">{{.URL}}</span> · {{t (printf "auth.%s" .Auth)}}{{end}}
         {{if eq .Kind "local"}}{{if .Node}} · {{.Node}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
         {{if and (eq .Preset.ID "home-assistant") .Voice}} · {{t "ha.voiceon"}}{{end}}
-        · <a class="access-tag level-{{.Access}}" href="{{.AccessURL}}"{{if .Editable}} data-step-open="add-dlg" data-hash="edit/{{.Name}}" data-scroll="form-access"{{end}} title="{{t (printf "access.%s" .Access)}} — {{t (printf "access.%s.hint" .Access)}}">{{t (printf "access.%s.short" .Access)}}</a>
-        {{if .Allowed}} · <a class="muted" href="{{.AllowedURL}}"{{if .Editable}} data-step-open="add-dlg" data-hash="edit/{{.Name}}" data-scroll="allowed-{{.Name}}"{{end}}>{{if eq .Allowed 1}}{{t "allowed.count1"}}{{else}}{{tf "allowed.count" .Allowed}}{{end}}</a>{{end}}
+        · <a class="access-tag level-{{.Access}}" href="{{.AccessURL}}"{{if .Editable}} data-step-open="add-dlg" data-hash="{{.EditHash}}" data-scroll="form-access"{{end}} title="{{t (printf "access.%s" .Access)}} — {{t (printf "access.%s.hint" .Access)}}">{{t (printf "access.%s.short" .Access)}}</a>
+        {{if .Allowed}} · <a class="muted" href="{{.AllowedURL}}"{{if .Editable}} data-step-open="add-dlg" data-hash="{{.EditHash}}" data-scroll="allowed-{{.Key}}"{{end}}>{{if eq .Allowed 1}}{{t "allowed.count1"}}{{else}}{{tf "allowed.count" .Allowed}}{{end}}</a>{{end}}
       </p>
       {{if .Scope.Reconnect}}<p class="small notice-line">{{tf "access.reconnect" .Name}}{{if eq .Preset.Form "drive"}} <a href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</p>{{end}}
       {{with .Follow}}{{template "tool-status-line" .}}
@@ -96,11 +97,11 @@
       {{else if eq .SignIn "reconnect"}}<p class="small notice-line">{{t "tools.expired"}}</p>
       {{else if eq .SignIn "connect"}}<p class="small muted">{{t "tools.notyet"}}</p>
       {{else if and .Error (ne .Status "ready")}}<div class="small">{{template "problem" (problem "tool" .Error)}}</div>{{end}}{{end}}
-      <div id="connect-{{.Name}}" class="connect-box"></div>
+      <div id="connect-{{.Key}}" class="connect-box"></div>
     </div>
     <div class="tool-actions">
-      {{if eq .SignIn "google"}}{{template "google-reconnect" dict "Account" .Google "Target" (printf "connect-%s" .Name) "Back" "/settings/tools"}}
-      {{else}}{{with .SignIn}}<form hx-post="/settings/servers/{{$.Name}}/connect" hx-target="#connect-{{$.Name}}" hx-disabled-elt="find button" class="inline">
+      {{if eq .SignIn "google"}}{{template "google-reconnect" dict "Account" .Google "Target" (printf "connect-%s" .Key) "Back" "/settings/tools"}}
+      {{else}}{{with .SignIn}}<form hx-post="/settings/servers/{{$.Name}}/connect" hx-target="#connect-{{$.Key}}" hx-disabled-elt="find button" class="inline">
         <button class="btn btn-primary sm" type="submit">{{t (printf "tools.%s" .)}}</button></form>{{end}}{{end}}
       {{if and (eq .Preset.ID "google") (eq .Source "workspace")}}<a class="btn btn-ghost sm" href="/settings/google">{{t "google.manage"}}</a>{{end}}
       {{if eq .Preset.ID "home-assistant"}}<a class="btn btn-ghost sm" href="/settings/home-assistant">{{t "ha.manage"}}</a>{{end}}
@@ -108,9 +109,9 @@
       {{else if eq .Source "workspace"}}<a class="btn btn-soft sm" href="/settings/github?switch={{.Name}}#gh-conn-{{.Name}}">{{t "github.switch"}}</a>
       {{else}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>{{end}}{{end}}
       {{if and (eq .Preset.Form "drive") (eq .Source "workspace")}}<a class="btn btn-ghost sm" href="/settings/drive">{{t "drive.folders"}}</a>{{end}}
-      {{if .Editable}}<a class="btn {{if and .Follow .Follow.Edit}}btn-soft{{else}}btn-ghost{{end}} sm" href="/settings/tools/{{.Name}}/edit" data-step-open="add-dlg" data-hash="edit/{{.Name}}">{{t "catalog.edit"}}</a>{{end}}
-      {{if eq .Source "workspace"}}<form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{tf "tools.removeconfirm" .Name}}" class="inline">
-        <button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>{{end}}
+      {{if .Editable}}<a class="btn {{if and .Follow .Follow.Edit}}btn-soft{{else}}btn-ghost{{end}} sm" href="{{.EditURL}}" data-step-open="add-dlg" data-hash="{{.EditHash}}">{{t "catalog.edit"}}</a>{{end}}
+      {{if .Removable}}<form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{if .Account}}{{tf "accounts.removeconfirm" .Account}}{{else}}{{tf "tools.removeconfirm" .Name}}{{end}}" class="inline">
+        {{with .Account}}<input type="hidden" name="account" value="{{.}}">{{end}}<button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>{{end}}
     </div>
 {{end}}
 {{define "tool-row-frag"}}{{template "tool-row" .Data}}{{end}}
@@ -248,11 +249,11 @@
 
 {{define "tool-page"}}{{with .Data}}
 <header class="page-head">
-  <a class="back" href="{{.BackURL}}">{{template "i-back"}}{{if and (not .Edit) (not .Choose) .Picked}}{{t (printf "pick.%s.back" .PickKind)}}{{else if and .Choose .Edit}}{{tf "tools.editof" .Name}}{{else if .Edit}}{{t "settings.tools"}}{{else}}{{t "tools.add"}}{{end}}</a>
+  <a class="back" href="{{.BackURL}}">{{template "i-back"}}{{if and (not .Edit) (not .Choose) .Picked}}{{t (printf "pick.%s.back" .PickKind)}}{{else if and .Choose .Edit}}{{tf "tools.editof" .Title}}{{else if .Edit}}{{t "settings.tools"}}{{else}}{{t "tools.add"}}{{end}}</a>
   <div class="form-title">
     {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
     {{else}}<span class="mark {{if eq .Preset.Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
-    <h2>{{if .Edit}}{{tf "tools.editof" .Name}}{{else}}{{t (printf "preset.%s.title" .Preset.ID)}}{{end}}</h2>
+    <h2>{{if .Edit}}{{tf "tools.editof" .Title}}{{else}}{{t (printf "preset.%s.title" .Preset.ID)}}{{end}}</h2>
   </div>
   {{if .Choose}}<p>{{t (printf "pick.%s.lead" .PickKind)}}</p>
   {{else}}{{$help := printf "preset.%s.help" .Preset.ID}}{{if and (not .Edit) (has $help)}}<p>{{t $help}}</p>{{end}}{{end}}
@@ -286,7 +287,7 @@
     <div class="form-title">
       {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
       {{else}}<span class="mark" aria-hidden="true">{{initial .Name}}</span>{{end}}
-      <h3 id="step-title">{{if .Edit}}{{tf "tools.editof" .Name}}{{else}}{{t (printf "preset.%s.title" .Preset.ID)}}{{end}}</h3>
+      <h3 id="step-title">{{if .Edit}}{{tf "tools.editof" .Title}}{{else}}{{t (printf "preset.%s.title" .Preset.ID)}}{{end}}</h3>
     </div>
     {{if .Choose}}<p class="step-lead">{{t (printf "pick.%s.lead" .PickKind)}}</p>
     {{else}}{{$help := printf "preset.%s.help" .Preset.ID}}{{if and (not .Edit) (has $help)}}<p class="step-lead">{{t $help}}</p>{{end}}{{end}}
@@ -352,7 +353,7 @@
 
 {{/* A tool's status in its row, which asks for itself again until it settles. . is a toolStatus. */}}
 {{define "tool-status-line"}}{{with .}}
-<div class="test-result test-{{.State}} tool-status" role="status"{{if .Poll}} hx-get="/settings/tools/{{.Name}}/row" hx-trigger="load delay:{{.Poll}}" hx-target="closest li" hx-swap="innerHTML"{{end}}>
+<div class="test-result test-{{.State}} tool-status" role="status"{{if .Poll}} hx-get="{{.Row}}" hx-trigger="load delay:{{.Poll}}" hx-target="closest li" hx-swap="innerHTML"{{end}}>
   {{if eq .State "ok"}}{{template "i-check"}}{{else if eq .State "err"}}{{template "i-x"}}{{else}}<span class="pulse" aria-hidden="true"></span>{{end}}
   <div class="test-body">
     <p>{{.Text}}</p>
@@ -564,21 +565,21 @@
 {{end}}
 
 {{/* The actions allowed without asking. . is a toolAccess. */}}
-{{define "allowed-actions"}}<section class="panel" id="allowed-{{.Name}}" aria-labelledby="allowed-{{.Name}}-t">
-  <h3 id="allowed-{{.Name}}-t">{{template "i-check"}}{{t "allowed.title"}}</h3>
+{{define "allowed-actions"}}<section class="panel" id="allowed-{{.Key}}" aria-labelledby="allowed-{{.Key}}-t">
+  <h3 id="allowed-{{.Key}}-t">{{template "i-check"}}{{t "allowed.title"}}</h3>
   {{if .Allowed}}<p class="muted small">{{t "allowed.lead"}}</p>
   <ul class="plain-list allowed-list">{{range .Allowed}}
     <li><span class="mono">{{.Name}}</span> <span class="muted small">· {{tf "allowed.since" (ago .Time)}}</span>
-      <form hx-post="/settings/tools/{{.Server}}/allowed/delete" hx-target="#allowed-{{.Server}}" hx-swap="outerHTML" class="inline">
-        <input type="hidden" name="tool" value="{{.Tool}}"><button class="link-btn danger" type="submit">{{t "allowed.remove"}}</button></form></li>{{end}}
+      <form hx-post="/settings/tools/{{.Server}}/allowed/delete" hx-target="#allowed-{{$.Key}}" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="tool" value="{{.Tool}}">{{with .Account}}<input type="hidden" name="account" value="{{.}}">{{end}}<button class="link-btn danger" type="submit">{{t "allowed.remove"}}</button></form></li>{{end}}
   </ul>
   {{else}}<p class="muted small">{{t "allowed.none"}}</p>{{end}}
 </section>{{end}}
 {{define "allowed-actions-frag"}}{{template "allowed-actions" .Data}}{{end}}
 
 {{/* A tool's access: its level, its credential, its allowed actions. . is a toolAccess. */}}
-{{define "tool-access"}}<div class="stack" id="access-{{.Name}}">
-<form class="panel stack" hx-post="/settings/tools/{{.Name}}/access" hx-target="#access-{{.Name}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
+{{define "tool-access"}}<div class="stack" id="access-{{.Key}}">
+<form class="panel stack" hx-post="/settings/tools/{{.Name}}/access{{.Query}}" hx-target="#access-{{.Key}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
   {{if .Saved}}<p class="ok-note" role="status">{{t "access.saved"}}</p>{{end}}
   {{template "access-choices" dict "Access" .Access "Preset" .Preset "Locked" .Locked}}
@@ -596,7 +597,7 @@
   <div class="form-title">
     {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
     {{else}}<span class="mark" aria-hidden="true">{{initial .Name}}</span>{{end}}
-    <h2>{{tf "access.pagetitle" .Name}}</h2>
+    <h2>{{tf "access.pagetitle" .Title}}</h2>
   </div>
   <p>{{t "access.pagelead"}}</p>
 </header>
@@ -655,6 +656,7 @@
 {{define "tool-form"}}{{with .Data}}{{$c := .Preset.Compact}}
 <form class="panel tool-form{{if .OrigOAuth}} orig-oauth{{.ReauthClass}}{{end}}" id="tool-form" hx-post="{{if .Edit}}/settings/tools/{{.Name}}{{else}}/settings/tools{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
   <input type="hidden" name="preset" value="{{.Preset.ID}}">
+  {{with .Account}}<input type="hidden" name="account" value="{{.}}">{{end}}
   {{if .InDialog}}<input type="hidden" name="dialog" value="1">{{end}}
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
 
@@ -662,7 +664,7 @@
   {{else if eq .Preset.Form "calendar"}}{{template "cal-fields" .}}
   {{else}}{{template "generic-fields" .}}{{end}}
 
-  <div class="form-grid name-row">{{template "name-field" .}}{{template "use-field" .}}</div>
+  {{if not .IsAccount}}<div class="form-grid name-row">{{template "name-field" .}}{{template "use-field" .}}</div>{{end}}
   {{template "access-choices" dict "Access" .Access "Preset" .Preset "Locked" false "ID" "form-access"}}
   {{if and (not .Edit) .Preset.Vendor}}<p class="muted small token-note">{{if .Preset.Scoped}}{{t "access.scoped.write"}}{{else if .Preset.ReadsOnly}}{{t "access.readsonly"}}{{else}}{{t "access.unscoped"}}{{end}}</p>{{end}}
 

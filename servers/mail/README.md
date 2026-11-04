@@ -20,6 +20,13 @@ access token lent by eriphe-core and used with XOAUTH2 (the server never runs an
 Message ids are opaque (account, folder, UIDVALIDITY, UID). A folder can be named by its role, so
 "archive" is `[Gmail]/All Mail` on Gmail and `Archive` elsewhere.
 
+Every tool takes an optional `account` (its `name`). The reads without one cover every account;
+`create_draft` and `send_message` need one when there are several. `read_message`, `mark` and
+`move` work from the ids, and refuse an id of another account than the one named, so a caller
+that names the account it means cannot act on another by mistake. An account with `read_only`
+can be searched and read, never written from: no draft, no send, no mark, no move
+(`list_accounts` shows it, with `can_send` false).
+
 Dates are shown in the zone of the process (`TZ`, which eriphe-core sets to the user's zone, e.g.
 `Europe/Paris`) with their offset, e.g. `2026-10-19T10:00:00+02:00`; search and read results also
 name that zone in `timezone`. Without `TZ` they are in UTC.
@@ -94,6 +101,8 @@ or guessed from the address), an account needs only `address` and `auth`:
   for a Google account (Gmail with XOAUTH2, scope `https://mail.google.com/`): the access token is
   then refreshed here, in memory (`refresh.go`), never written nor logged; a refresh token Google
   refuses gives an error that says to reconnect the account in Eriphe.
+- `read_only`: the account is only read (eriphe-core sets it for an account it gives read-only
+  access).
 - `security`: `tls` (implicit, default on 993/465) or `starttls` (default otherwise). There is no
   plaintext mode; certificates are verified (`ca_file` adds roots for a self-hosted server).
 - `username` defaults to the address; `save_sent` (copy sent mail to Sent) defaults to false for

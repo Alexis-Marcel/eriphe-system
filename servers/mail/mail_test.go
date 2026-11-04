@@ -590,3 +590,59 @@ func TestToolAnnotations(t *testing.T) {
 		t.Errorf("move annotations: %+v", a)
 	}
 }
+
+// An account kept read only is read like any other and never written; a
+// call that names an account must touch only its messages.
+func TestReadOnlyAccountAndNamedAccount(t *testing.T) {
+	e := newEnv(t, rev2)
+	e.cfg.Accounts[1].ReadOnly = true // pro
+	cs := connect(t, e.cfg)
+
+	acc := call[listAccountsOut](t, cs, "list_accounts", nil)
+	if !acc.Accounts[1].ReadOnly || acc.Accounts[1].CanSend || acc.Accounts[0].ReadOnly {
+		t.Errorf("accounts: %+v", acc.Accounts)
+	}
+	pro := call[searchOut](t, cs, "search_messages", map[string]any{"account": "pro"})
+	perso := call[searchOut](t, cs, "search_messages", map[string]any{"account": "perso"})
+	if len(pro.Messages) != 1 || len(perso.Messages) != 2 {
+		t.Fatalf("pro %d perso %d", len(pro.Messages), len(perso.Messages))
+	}
+	proID := pro.Messages[0].ID
+	if m := call[Message](t, cs, "read_message", map[string]any{"id": proID, "account": "pro"}); m.Subject != "Réunion" {
+		t.Errorf("read pro: %+v", m)
+	}
+
+	for _, c := range []struct {
+		tool string
+		args map[string]any
+	}{
+		{"mark", map[string]any{"ids": []string{proID}, "read": true}},
+		{"move", map[string]any{"ids": []string{proID}, "to": "trash"}},
+		{"create_draft", map[string]any{"account": "pro", "to": []string{"sam@example.org"}, "body": "Hi"}},
+		{"create_draft", map[string]any{"reply_to": proID, "body": "Hi"}},
+		{"send_message", map[string]any{"account": "pro", "to": []string{"sam@example.org"}, "subject": "Hi", "body": "Hi"}},
+	} {
+		if msg := callErr(t, cs, c.tool, c.args); !strings.Contains(msg, "read only") {
+			t.Errorf("%s %v: %s", c.tool, c.args, msg)
+		}
+	}
+	if b := folderMessages(t, e, "bob@example.net", "bob-pw", "INBOX"); len(b) != 1 {
+		t.Errorf("pro's inbox changed: %d", len(b))
+	}
+
+	// The account named and the ids must agree.
+	if msg := callErr(t, cs, "read_message", map[string]any{"id": proID, "account": "perso"}); !strings.Contains(msg, `of account "pro"`) {
+		t.Errorf("read with the wrong account: %s", msg)
+	}
+	if msg := callErr(t, cs, "mark", map[string]any{"account": "perso", "ids": []string{perso.Messages[0].ID, proID}, "read": true}); !strings.Contains(msg, `of account "pro"`) {
+		t.Errorf("mark with the wrong account: %s", msg)
+	}
+	if after := call[searchOut](t, cs, "search_messages", map[string]any{"account": "perso", "unread": true}); len(after.Messages) != 1 {
+		t.Errorf("a refused mark changed perso: %+v", after.Messages)
+	}
+	call[markOut](t, cs, "mark", map[string]any{"account": "perso", "ids": []string{perso.Messages[0].ID}, "flagged": true})
+	d := call[draftOut](t, cs, "create_draft", map[string]any{"account": "perso", "to": []string{"sam@example.org"}, "body": "Hi"})
+	if msg := callErr(t, cs, "send_message", map[string]any{"draft_id": d.ID, "account": "pro"}); !strings.Contains(msg, `of account "perso"`) {
+		t.Errorf("send a draft from the wrong account: %s", msg)
+	}
+}

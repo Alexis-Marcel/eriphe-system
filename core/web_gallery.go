@@ -62,6 +62,12 @@ var categoryKeywords = map[string]string{
 func (w *web) addedPresets(lang string) map[string]bool {
 	added := map[string]bool{}
 	for _, s := range w.c.conf().Servers {
+		if svc, cfg, ok := accountsOf(s); ok {
+			for _, a := range cfg.Accounts { // each account comes from where it does
+				added[accountPreset(svc, a).ID] = true
+			}
+			continue
+		}
 		if p, _ := presetOf(lang, s); p.ID != "" {
 			added[p.ID] = true
 		}

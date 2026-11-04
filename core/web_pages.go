@@ -158,7 +158,7 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 			tool := fmt.Sprint(p["tool_name"])
 			pid := fmt.Sprint(p["id"])
 			perms = append(perms, permView{Task: card, ID: pid, Tool: tool, Subject: subject(tool, input),
-				UserOnly: w.c.store.userOnly(t.ID, pid), Always: w.c.rememberable(tool)})
+				UserOnly: w.c.store.userOnly(t.ID, pid), Always: w.c.rememberable(tool, input)})
 		}
 	}
 	// What needs me first, then what works, then what waits.
@@ -346,7 +346,7 @@ func (w *web) detail(id string) (*taskDetail, error) {
 		input, _ := p["input"].(map[string]any)
 		tool, pid := fmt.Sprint(p["tool_name"]), fmt.Sprint(p["id"])
 		d.Perm = &permView{Task: d.Card, ID: pid, Tool: tool, Subject: subject(tool, input), UserOnly: w.c.store.userOnly(id, pid), Where: "d-",
-			Always: w.c.rememberable(tool)}
+			Always: w.c.rememberable(tool, input)}
 	}
 	return d, nil
 }

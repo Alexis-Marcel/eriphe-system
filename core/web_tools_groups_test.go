@@ -57,15 +57,19 @@ func TestGroupTools(t *testing.T) {
 }
 
 // Two mailboxes are one card, each with its row and its actions, and a way
-// to add another.
+// to add another: two accounts of the one mail server.
 func TestToolsListGroupsAccounts(t *testing.T) {
-	tw, _, csrf := catalogWeb(t, nil)
-	for name, addr := range map[string]string{"mail": "sam@gmail.com", "mail-pro": "sam@fastmail.com"} {
-		form := url.Values{"preset": {"mail"}, "name": {name}, "use": {"mails"}, "access": {"reads"}, "address": {addr}, "password": {"app-pw"}}
+	tw, c, csrf := catalogWeb(t, nil)
+	for _, addr := range []string{"sam@gmail.com", "sam@fastmail.com"} {
+		form := url.Values{"preset": {"mail"}, "access": {"reads"}, "address": {addr}, "password": {"app-pw"}}
 		if code, body, _ := tw.post("/settings/tools", form, csrf); code != 200 {
-			t.Fatalf("add %s: %d %s", name, code, body)
+			t.Fatalf("add %s: %d %s", addr, code, body)
 		}
 	}
+	if len(c.serviceServers(mailService)) != 1 {
+		t.Fatal("a server per mailbox")
+	}
+	gmail, fastmail := rowKey("mail", "sam@gmail.com"), rowKey("mail", "sam@fastmail.com")
 	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
 	i := strings.Index(body, `id="group-mail"`)
 	if i < 0 {
@@ -73,13 +77,27 @@ func TestToolsListGroupsAccounts(t *testing.T) {
 	}
 	group := body[i:]
 	for _, want := range []string{"2 comptes · 2 outils", "Ajouter un compte", `href="/settings/tools/new?preset=mail" data-step-open="add-dlg"`,
-		`id="tool-mail"`, `id="tool-mail-pro"`, "Gmail · sam@gmail.com", "Fastmail · sam@fastmail.com",
-		`/settings/tools/mail/edit`, `/settings/tools/mail-pro/delete`} {
+		`id="tool-` + gmail + `"`, `id="tool-` + fastmail + `"`, "Gmail · sam@gmail.com", "Fastmail · sam@fastmail.com",
+		`/settings/tools/mail/edit?account=sam%40fastmail.com`, `<input type="hidden" name="account" value="sam@fastmail.com">`} {
 		if !strings.Contains(group, want) {
 			t.Errorf("the group lacks %q", want)
 		}
 	}
-	if strings.Count(body, `id="tool-mail"`) != 1 {
+	if strings.Count(body, `id="tool-`+gmail+`"`) != 1 {
 		t.Fatal("a row twice")
+	}
+	// One account removed: the other stays, with its password.
+	if code, _, h := tw.post("/settings/tools/mail/delete", url.Values{"account": {"sam@gmail.com"}}, csrf); code != 200 ||
+		h.Get("HX-Redirect") != "/settings/tools?removedaccount=sam%40gmail.com" {
+		t.Fatalf("remove: %d %v", code, h)
+	}
+	if st, _ := c.serviceServer(mailService); len(st.Config.Accounts) != 1 || st.Config.Accounts[0].Name != "sam@fastmail.com" {
+		t.Fatalf("after removal: %+v", st.Config.Accounts)
+	}
+	if _, pw := serviceAccount(t, c.core, mailService, "sam@fastmail.com"); pw != "app-pw" {
+		t.Fatal("the other account lost its password")
+	}
+	if _, body, _ := tw.do("GET", "/settings/tools?removedaccount=sam%40gmail.com", nil, nil); !strings.Contains(body, "Compte « sam@gmail.com » retiré.") {
+		t.Error("no flash")
 	}
 }

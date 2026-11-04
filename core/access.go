@@ -45,8 +45,12 @@ var accessLevels = []string{accessReadOnly, accessReads, accessFree, accessAsk}
 func validAccess(a string) bool { return a == "" || slices.Contains(accessLevels, a) }
 
 // level is a server's access level. An older entry has trust_annotations
-// only: true was "reads free", false "ask me everything".
+// only: true was "reads free", false "ask me everything". A server of
+// several accounts has what their levels come to (accountsLevel).
 func (s Server) level() string {
+	if len(s.AccountAccess) > 0 {
+		return accountsLevel(s.AccountAccess)
+	}
 	if s.Access != "" {
 		return s.Access
 	}
@@ -60,10 +64,82 @@ func (s Server) level() string {
 func (s Server) trusts() bool { return s.level() != accessAsk }
 
 // withLevel sets a server's access level, and trust_annotations to match
-// for whatever still reads it.
+// for whatever still reads it; a server of several accounts gets it for
+// each of them.
 func (s Server) withLevel(level string) Server {
+	if len(s.AccountAccess) > 0 {
+		next := map[string]string{}
+		for a := range s.AccountAccess {
+			next[a] = level
+		}
+		s.AccountAccess = next
+	}
 	s.Access, s.TrustAnnotations = level, level != accessAsk
 	return s
+}
+
+// Accounts. A server of several accounts (the mail, the calendar) has a
+// level for each (Server.AccountAccess): a professional mailbox read only
+// beside a personal one free. A call is decided at the level of the
+// account its "account" argument names; the server itself refuses a call
+// whose ids are of another account, and any write in an account it was
+// told to keep read only. A call that names no account takes what the
+// levels come to: a read is free unless an account asks for everything;
+// a write, when the levels differ, is refused until it names its account.
+
+// accountsLevel is what the levels of the accounts come to, for what
+// knows the server alone (the tools it lends, the reads allowed in
+// advance): ask when one asks for everything, read only when all are, free
+// when all are, else reads free and the rest asked.
+func accountsLevel(levels map[string]string) string {
+	all := func(l string) bool {
+		for _, v := range levels {
+			if v != l {
+				return false
+			}
+		}
+		return true
+	}
+	for _, v := range levels {
+		if v == accessAsk {
+			return accessAsk
+		}
+	}
+	switch {
+	case all(accessReadOnly):
+		return accessReadOnly
+	case all(accessFree):
+		return accessFree
+	}
+	return accessReads
+}
+
+// accountLevel is the level of the account a call names, if the server
+// has a level for it; ok is false when the call names none of them.
+func (s Server) accountLevel(input map[string]any) (level string, ok bool) {
+	named, _ := input["account"].(string)
+	named = strings.TrimSpace(named)
+	if named == "" {
+		return "", false
+	}
+	for a, l := range s.AccountAccess {
+		if strings.EqualFold(a, named) {
+			return l, true
+		}
+	}
+	return "", false
+}
+
+// mixed tells whether the accounts of a server have different levels.
+func (s Server) mixed() bool {
+	first := ""
+	for _, l := range s.AccountAccess {
+		if first != "" && l != first {
+			return true
+		}
+		first = l
+	}
+	return false
 }
 
 // lends tells whether a server's level lends one of its tools at all: a
@@ -76,10 +152,15 @@ func lends(s Server, t *mcp.Tool) bool {
 type catalogFacts struct {
 	level string // its server's access level; "" for a tool out of the catalog
 	read  bool   // read-only by its own annotation, on a server trusted for it
+	// noAccount: a write on a server whose accounts have different levels,
+	// that names none of them.
+	noAccount bool
 }
 
-func (p *pool) facts(claudeName string) catalogFacts {
-	server, _, ok := splitToolName(claudeName)
+// facts is what the catalog says of a call: of the tool alone with a nil
+// input, of the account it names on a server of several (accountLevel).
+func (p *pool) facts(claudeName string, input map[string]any) catalogFacts {
+	server, tool, ok := splitToolName(claudeName)
 	if !ok || p == nil {
 		return catalogFacts{}
 	}
@@ -87,34 +168,52 @@ func (p *pool) facts(claudeName string) catalogFacts {
 	if u == nil {
 		return catalogFacts{}
 	}
-	return catalogFacts{level: u.srv.level(), read: p.readOnly(claudeName)}
+	t := u.toolByClaudeName(tool)
+	reads := t != nil && t.Annotations != nil && t.Annotations.ReadOnlyHint // by its own annotation
+	if level, ok := u.srv.accountLevel(input); ok {
+		return catalogFacts{level: level, read: level != accessAsk && reads}
+	}
+	return catalogFacts{level: u.srv.level(), read: p.readOnly(claudeName), noAccount: !reads && u.srv.mixed()}
 }
+
+const noAccountReason = "ses comptes n'ont pas le même accès : l'appel doit nommer son compte (account)"
 
 // free tells whether a catalog tool is Eriphe's to call without the user:
 // a read of a server whose reads are free, or any tool of a free one.
 func (f catalogFacts) free() bool { return f.read || f.level == accessFree }
 
 // Actions allowed for good: "Toujours autoriser cette action" on a
-// permission. Each is a rule of the policy, evaluated after the file's.
+// permission. Each is a rule of the policy, evaluated after the file's. On
+// a server of several accounts, an action is allowed for the account the
+// call named, not for the others.
 
-const allowedSchema = `CREATE TABLE IF NOT EXISTS allowed_actions (
-  tool TEXT PRIMARY KEY, server TEXT NOT NULL, time INTEGER NOT NULL);`
+// remembered_actions took the place of allowed_actions, whose key was the
+// tool alone: what was allowed there stays, for every account.
+const allowedSchema = `CREATE TABLE IF NOT EXISTS remembered_actions (
+  tool TEXT NOT NULL, account TEXT NOT NULL DEFAULT '', server TEXT NOT NULL, time INTEGER NOT NULL,
+  PRIMARY KEY (tool, account));`
 
-func init() { extraSchema = append(extraSchema, allowedSchema) }
+func init() {
+	extraSchema = append(extraSchema, allowedSchema)
+	extraColumns = append(extraColumns,
+		`INSERT OR IGNORE INTO remembered_actions (tool, account, server, time) SELECT tool, '', server, time FROM allowed_actions`,
+		`DROP TABLE allowed_actions`)
+}
 
 // allowedAction is one action allowed without asking.
 type allowedAction struct {
-	Tool   string // its Claude Code name, mcp__server__tool
-	Server string
-	Name   string // the tool's own part
-	Time   time.Time
+	Tool    string // its Claude Code name, mcp__server__tool
+	Account string // the account it is allowed for, on a server of several; "" any
+	Server  string
+	Name    string // the tool's own part
+	Time    time.Time
 }
 
 const allowedReason = "action autorisée sans demander"
 
-func (s *Store) allowAction(server, tool string) error {
-	_, err := s.db.Exec(`INSERT INTO allowed_actions (tool, server, time) VALUES (?, ?, ?)
-		ON CONFLICT(tool) DO NOTHING`, normalizeToolName(tool), server, time.Now().Unix())
+func (s *Store) allowAction(server, tool, account string) error {
+	_, err := s.db.Exec(`INSERT INTO remembered_actions (tool, account, server, time) VALUES (?, ?, ?, ?)
+		ON CONFLICT(tool, account) DO NOTHING`, normalizeToolName(tool), account, server, time.Now().Unix())
 	return err
 }
 
@@ -124,7 +223,7 @@ func (s *Store) allowedActions(server string) []allowedAction {
 	if s == nil {
 		return nil
 	}
-	rows, err := s.db.Query(`SELECT tool, server, time FROM allowed_actions WHERE ? = '' OR server = ? ORDER BY tool`, server, server)
+	rows, err := s.db.Query(`SELECT tool, account, server, time FROM remembered_actions WHERE ? = '' OR server = ? ORDER BY tool, account`, server, server)
 	if err != nil {
 		return nil
 	}
@@ -133,7 +232,7 @@ func (s *Store) allowedActions(server string) []allowedAction {
 	for rows.Next() {
 		var a allowedAction
 		var t int64
-		if rows.Scan(&a.Tool, &a.Server, &t) != nil {
+		if rows.Scan(&a.Tool, &a.Account, &a.Server, &t) != nil {
 			continue
 		}
 		a.Time = time.Unix(t, 0)
@@ -143,52 +242,95 @@ func (s *Store) allowedActions(server string) []allowedAction {
 	return out
 }
 
-func (s *Store) forgetAction(server, tool string) error {
-	_, err := s.db.Exec(`DELETE FROM allowed_actions WHERE server = ? AND tool = ?`, server, normalizeToolName(tool))
+// accountActions are a server's actions allowed for one account.
+func (s *Store) accountActions(server, account string) []allowedAction {
+	return slices.DeleteFunc(s.allowedActions(server), func(a allowedAction) bool { return !strings.EqualFold(a.Account, account) })
+}
+
+func (s *Store) forgetAction(server, tool, account string) error {
+	_, err := s.db.Exec(`DELETE FROM remembered_actions WHERE server = ? AND tool = ? AND account = ?`, server, normalizeToolName(tool), account)
 	return err
 }
 
 // forgetActions drops a server's allowed actions: removed, its name may
 // go to another.
 func (s *Store) forgetActions(server string) {
-	s.db.Exec(`DELETE FROM allowed_actions WHERE server = ?`, server)
+	s.db.Exec(`DELETE FROM remembered_actions WHERE server = ?`, server)
+}
+
+// forgetAccountActions drops what was allowed for an account removed.
+func (s *Store) forgetAccountActions(server, account string) {
+	s.db.Exec(`DELETE FROM remembered_actions WHERE server = ? AND account = ? COLLATE NOCASE`, server, account)
+}
+
+// moveActions gives a server's allowed actions to another, for one of its
+// accounts: the servers of one account each merged into one (accounts.go).
+func (s *Store) moveActions(from, to, account string) {
+	for _, a := range s.allowedActions(from) {
+		_, tool, _ := splitToolName(a.Tool)
+		s.allowAction(to, claudeToolName(to, tool), cmpOr(a.Account, account))
+	}
+	s.forgetActions(from)
 }
 
 // allowedRules are the allowed actions as rules of the policy.
 func (s *Store) allowedRules() []Rule {
 	var out []Rule
 	for _, a := range s.allowedActions("") {
-		out = append(out, Rule{Tool: globEscape(a.Tool), Decision: decideAllow, Reason: allowedReason})
+		r := Rule{Tool: globEscape(a.Tool), Decision: decideAllow, Reason: allowedReason}
+		if a.Account != "" {
+			r.account = ptrTo(a.Account)
+		}
+		out = append(out, r)
 	}
 	return out
 }
 
+func ptrTo[T any](v T) *T { return &v }
+
+// callAccount is the account a call names, on a server of several: the
+// name the server has it under; "" when it names none of them.
+func (c *core) callAccount(server string, input map[string]any) string {
+	srv, ok := c.conf().Servers[server]
+	if !ok {
+		return ""
+	}
+	named, _ := input["account"].(string)
+	for a := range srv.AccountAccess {
+		if strings.EqualFold(a, strings.TrimSpace(named)) {
+			return a
+		}
+	}
+	return ""
+}
+
 // rememberCheck tells whether an action may be allowed for good: a tool of
 // the catalog whose level and the policy's denials do not refuse it.
-func (c *core) rememberCheck(tool string) (server string, err error) {
+func (c *core) rememberCheck(tool string, input map[string]any) (server string, err error) {
 	server, _, ok := splitToolName(tool)
 	if _, inCatalog := c.conf().Servers[server]; !ok || !inCatalog {
 		return "", errors.New("only an action of a catalog tool can be allowed for good")
 	}
-	if d, why := c.conf().Policy.decideWith(tool, nil, c.pool.facts(tool), nil); d == decideDeny {
+	if d, why := c.conf().Policy.decideWith(tool, input, c.pool.facts(tool, input), nil); d == decideDeny {
 		return "", fmt.Errorf("Eriphe's policy refuses this action (%s): it cannot be allowed for good", why)
 	}
 	return server, nil
 }
 
 // rememberable tells whether a permission's card offers "always allow".
-func (c *core) rememberable(tool string) bool {
-	_, err := c.rememberCheck(tool)
+func (c *core) rememberable(tool string, input map[string]any) bool {
+	_, err := c.rememberCheck(tool, input)
 	return err == nil
 }
 
-// rememberAction allows a catalog tool's action without asking, from now on.
-func (c *core) rememberAction(tool string) error {
-	server, err := c.rememberCheck(tool)
+// rememberAction allows a catalog tool's action without asking, from now
+// on: for the account the call names, on a server of several.
+func (c *core) rememberAction(tool string, input map[string]any) error {
+	server, err := c.rememberCheck(tool, input)
 	if err != nil {
 		return err
 	}
-	return c.store.allowAction(server, tool)
+	return c.store.allowAction(server, tool, c.callAccount(server, input))
 }
 
 // answerAlways allows a pending permission, as the user, and its action
@@ -199,14 +341,16 @@ func (c *core) answerAlways(ctx context.Context, id, permission, reply string) (
 		return "", err
 	}
 	tool := ""
+	var input map[string]any
 	for _, q := range st.PendingPermissions {
 		if permission == "" || fmt.Sprint(q["id"]) == permission {
 			tool = fmt.Sprint(q["tool_name"])
+			input, _ = q["input"].(map[string]any)
 			break
 		}
 	}
 	if tool != "" {
-		if _, err := c.rememberCheck(tool); err != nil {
+		if _, err := c.rememberCheck(tool, input); err != nil {
 			return "", err
 		}
 	}
@@ -215,7 +359,7 @@ func (c *core) answerAlways(ctx context.Context, id, permission, reply string) (
 	if err != nil {
 		return "", err
 	}
-	if err := c.rememberAction(tool); err != nil {
+	if err := c.rememberAction(tool, input); err != nil {
 		return "", err
 	}
 	return res + "; " + tool + " is allowed without asking from now on", nil

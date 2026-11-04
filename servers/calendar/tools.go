@@ -70,6 +70,14 @@ func (c *Calendars) account(name string) (*account, error) {
 	return nil, fmt.Errorf("no account %q (accounts: %s)", name, c.names())
 }
 
+// writes refuses an account kept read only.
+func writes(a *account) error {
+	if a.cfg.ReadOnly {
+		return fmt.Errorf("account %q is read only: no event can be written in it", a.cfg.Name)
+	}
+	return nil
+}
+
 func (c *Calendars) pick(name string) ([]*account, error) {
 	if strings.TrimSpace(name) == "" {
 		return c.accounts, nil
@@ -211,12 +219,15 @@ type problem struct {
 	Error   string `json:"error"`
 }
 
+type accountOut struct {
+	Name     string `json:"name"`
+	Provider string `json:"provider"`
+	ReadOnly bool   `json:"read_only,omitempty"`
+}
+
 type accountsOut struct {
-	Accounts []struct {
-		Name     string `json:"name"`
-		Provider string `json:"provider"`
-	} `json:"accounts"`
-	Timezone string `json:"timezone"`
+	Accounts []accountOut `json:"accounts"`
+	Timezone string       `json:"timezone"`
 }
 
 type listCalendarsIn struct {
@@ -248,6 +259,7 @@ type listEventsOut struct {
 
 type idIn struct {
 	ID       string `json:"id" jsonschema:"event id from list_events"`
+	Account  string `json:"account,omitempty" jsonschema:"the account of the event, as list_events gives it"`
 	Timezone string `json:"timezone,omitempty" jsonschema:"IANA zone for showing times"`
 }
 
@@ -265,6 +277,7 @@ type createIn struct {
 
 type updateIn struct {
 	ID          string  `json:"id" jsonschema:"event id; for a recurring event the whole series changes"`
+	Account     string  `json:"account,omitempty" jsonschema:"the account of the event, as list_events gives it; needed when there are several"`
 	Title       *string `json:"title,omitempty"`
 	Start       *string `json:"start,omitempty" jsonschema:"new start; the duration is kept when end is not given; a date makes it all-day"`
 	End         *string `json:"end,omitempty" jsonschema:"new end; for all-day events the last day (inclusive)"`
@@ -320,10 +333,7 @@ func newServer(c *Calendars, version string) *mcp.Server {
 		func(ctx context.Context, _ struct{}) (accountsOut, error) {
 			var o accountsOut
 			for _, a := range c.accounts {
-				o.Accounts = append(o.Accounts, struct {
-					Name     string `json:"name"`
-					Provider string `json:"provider"`
-				}{a.cfg.Name, a.cfg.Provider})
+				o.Accounts = append(o.Accounts, accountOut{a.cfg.Name, a.cfg.Provider, a.cfg.ReadOnly})
 			}
 			o.Timezone = c.cfg.Timezone
 			return o, nil
@@ -376,7 +386,7 @@ func newServer(c *Calendars, version string) *mcp.Server {
 			if err != nil {
 				return Event{}, err
 			}
-			a, r, err := c.ref(in.ID)
+			a, r, err := c.ref(in.ID, in.Account)
 			if err != nil {
 				return Event{}, err
 			}
@@ -425,8 +435,11 @@ func newServer(c *Calendars, version string) *mcp.Server {
 			if err != nil {
 				return Event{}, err
 			}
-			a, r, err := c.ref(in.ID)
+			a, r, err := c.ref(in.ID, in.Account)
 			if err != nil {
+				return Event{}, err
+			}
+			if err := writes(a); err != nil {
 				return Event{}, err
 			}
 			p := EventPatch{Title: in.Title, Location: in.Location, Description: in.Description}
@@ -472,8 +485,11 @@ func newServer(c *Calendars, version string) *mcp.Server {
 	tool(s, "delete_event", "Delete an event. For a recurring event the whole series is deleted.",
 		&mcp.ToolAnnotations{DestructiveHint: ptr(true), IdempotentHint: true, OpenWorldHint: ptr(false)},
 		func(ctx context.Context, in idIn) (deleteOut, error) {
-			a, r, err := c.ref(in.ID)
+			a, r, err := c.ref(in.ID, in.Account)
 			if err != nil {
+				return deleteOut{}, err
+			}
+			if err := writes(a); err != nil {
 				return deleteOut{}, err
 			}
 			if err := a.p.Delete(ctx, r.Calendar, r.Event); err != nil {
@@ -491,13 +507,27 @@ func newServer(c *Calendars, version string) *mcp.Server {
 	return s
 }
 
-func (c *Calendars) ref(id string) (*account, eventRef, error) {
+// ref finds an event's account; named, if given, must be that account: a
+// call names the account it touches, and its id must agree.
+func (c *Calendars) ref(id, named string) (*account, eventRef, error) {
 	r, err := parseEventRef(id)
 	if err != nil {
 		return nil, r, err
 	}
 	a, err := c.account(r.Account)
-	return a, r, err
+	if err != nil {
+		return nil, r, err
+	}
+	if strings.TrimSpace(named) != "" {
+		b, err := c.account(named)
+		if err != nil {
+			return nil, r, err
+		}
+		if b != a {
+			return nil, r, fmt.Errorf("the event is of account %q, not %q", a.cfg.Name, b.cfg.Name)
+		}
+	}
+	return a, r, nil
 }
 
 func (c *Calendars) calName(ctx context.Context, a *account, id string) string {
@@ -519,7 +549,7 @@ func (c *Calendars) writable(ctx context.Context, acct, cal string) (target, err
 	}
 	var ok []target
 	for _, t := range ts {
-		if !t.cal.ReadOnly {
+		if !t.cal.ReadOnly && !t.a.cfg.ReadOnly {
 			ok = append(ok, t)
 		}
 	}
@@ -527,6 +557,9 @@ func (c *Calendars) writable(ctx context.Context, acct, cal string) (target, err
 		return ok[0], nil
 	}
 	if len(ok) == 0 {
+		if len(ts) > 0 && ts[0].a.cfg.ReadOnly && strings.TrimSpace(acct) != "" {
+			return target{}, writes(ts[0].a)
+		}
 		return target{}, errors.New("no writable calendar matches")
 	}
 	var names []string

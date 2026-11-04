@@ -39,6 +39,9 @@ type AccountConfig struct {
 	Auth     AuthConfig `json:"auth"`
 	// GraphURL overrides https://graph.microsoft.com/v1.0 (tests).
 	GraphURL string `json:"graph_url,omitempty"`
+	// ReadOnly refuses every write in this account's calendars: it can
+	// only be read.
+	ReadOnly bool `json:"read_only,omitempty"`
 }
 
 // AuthConfig names where the secret is. Exactly one is set. Secrets are read

@@ -145,53 +145,59 @@ func TestAddDialogSteps(t *testing.T) {
 
 // "Modifier" opens the tool's form in the dialog directly: no way back to
 // the search, its access in it, and the save closes the dialog on the list.
+// A mailbox is an account of the mail: its form is the account's.
 func TestEditInDialog(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
-	form := url.Values{"preset": {"mail"}, "name": {"mails"}, "use": {"mails"}, "access": {"read"}, "mail_provider": {"gmail"},
+	key := rowKey("mail", "sam@gmail.com")
+	form := url.Values{"preset": {"mail"}, "access": {"read"}, "mail_provider": {"gmail"},
 		"address": {"sam@gmail.com"}, "password": {"abcd efgh ijkl mnop"}}
-	if code, _, h := tw.post("/settings/tools", form, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=mails&tool=mails&new=1" {
+	if code, _, h := tw.post("/settings/tools", form, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=mail&tool="+key+"&new=1" {
 		t.Fatalf("save: %d %v", code, h)
 	}
-	code, body, _ := tw.step("/settings/tools/mails/edit")
+	edit := "/settings/tools/mail/edit?account=sam@gmail.com"
+	code, body, _ := tw.step(edit)
 	if code != 200 {
 		t.Fatalf("edit: %d", code)
 	}
-	wantStep(t, "edit", body, "edit/mails")
+	wantStep(t, "edit", body, "edit/mail~sam@gmail.com")
 	if strings.Contains(body, "data-step-back") {
 		t.Error("an edit has a way back to the search")
 	}
-	if !strings.Contains(body, `hx-post="/settings/tools/mails"`) || !strings.Contains(body, `name="dialog" value="1"`) ||
-		!strings.Contains(body, `href="/settings/tools/mails/edit?provider=choose" data-step data-hash="edit/mails/choose"`) {
+	if !strings.Contains(body, `hx-post="/settings/tools/mail"`) || !strings.Contains(body, `name="dialog" value="1"`) ||
+		!strings.Contains(body, `name="account" value="sam@gmail.com"`) || strings.Contains(body, `name="name"`) ||
+		!strings.Contains(body, `href="/settings/tools/mail/edit?account=sam%40gmail.com&amp;provider=choose" data-step data-hash="edit/mail~sam@gmail.com/choose"`) {
 		t.Errorf("edit form: %s", mainPart(t, body))
 	}
 	// Another kind of account, from the edit: back to the edit.
-	_, body, _ = tw.step("/settings/tools/mails/edit?provider=choose")
-	wantStep(t, "edit picker", body, "edit/mails/choose")
-	if !strings.Contains(body, `<a class="step-back" href="/settings/tools/mails/edit" data-step-back data-hash="edit/mails">`) {
+	_, body, _ = tw.step(edit + "&provider=choose")
+	wantStep(t, "edit picker", body, "edit/mail~sam@gmail.com/choose")
+	if !strings.Contains(body, `<a class="step-back" href="/settings/tools/mail/edit?account=sam%40gmail.com" data-step-back data-hash="edit/mail~sam@gmail.com">`) {
 		t.Error("the kinds of account of an edit do not lead back to it")
 	}
 	// Its access is part of it: the level, the credential, the allowed actions.
-	_, body, _ = tw.step("/settings/tools/mails/edit")
-	if !strings.Contains(body, `fieldset class="choices access" id="form-access"`) || !strings.Contains(body, `id="allowed-mails"`) ||
+	_, body, _ = tw.step(edit)
+	if !strings.Contains(body, `fieldset class="choices access" id="form-access"`) || !strings.Contains(body, `id="allowed-`+key+`"`) ||
 		!strings.Contains(body, "token-note") {
 		t.Errorf("no access in the edit: %s", body)
 	}
 	// Saved from the dialog: no step after it, the dialog closes on the list.
-	form.Set("use", "my mails")
+	form.Set("access", "free")
+	form.Set("account", "sam@gmail.com")
+	form.Del("password")
 	form.Set("dialog", "1")
-	code, body, h := tw.post("/settings/tools/mails", form, csrf)
+	code, body, h := tw.post("/settings/tools/mail", form, csrf)
 	if code != 200 || h.Get("HX-Redirect") != "" || h.Get("HX-Retarget") != "" || h.Get("HX-Reswap") != "none" || body != "" {
 		t.Fatalf("save in the dialog: %d %v %s", code, h, body)
 	}
-	if got := h.Get("HX-Trigger"); got != `{"tool-saved":{"message":"\u00ab mails \u00bb modifi\u00e9","name":"mails","new":false}}` {
+	if got := h.Get("HX-Trigger"); got != `{"tool-saved":{"message":"\u00ab sam@gmail.com \u00bb modifi\u00e9","name":"`+key+`","new":false}}` {
 		t.Errorf("saved event: %s", got)
 	}
-	if c.conf().Servers["mails"].Use != "my mails" {
+	if c.conf().Servers["mail"].AccountAccess["sam@gmail.com"] != accessFree {
 		t.Error("not saved")
 	}
 	// A refusal stays in the form, in the dialog.
-	form.Set("use", "")
-	_, body, h = tw.post("/settings/tools/mails", form, csrf)
+	form.Set("address", "not an address")
+	_, body, h = tw.post("/settings/tools/mail", form, csrf)
 	if h.Get("HX-Retarget") != "" || !strings.Contains(body, `id="tool-form"`) || !strings.Contains(body, `name="dialog" value="1"`) || !strings.Contains(body, `class="alert"`) {
 		t.Errorf("refused in the dialog: %v %s", h, body)
 	}
@@ -202,30 +208,35 @@ func TestEditInDialog(t *testing.T) {
 // the row alone is asked again until then.
 func TestSavedRowFollowsTheTool(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
-	form := url.Values{"preset": {"mail"}, "name": {"mails"}, "use": {"mails"}, "access": {"read"}, "mail_provider": {"gmail"},
+	key := rowKey("mail", "sam@gmail.com")
+	form := url.Values{"preset": {"mail"}, "access": {"read"}, "mail_provider": {"gmail"},
 		"address": {"sam@gmail.com"}, "password": {"abcd efgh ijkl mnop"}, "dialog": {"1"}}
 	code, body, h := tw.post("/settings/tools", form, csrf)
 	if code != 200 || h.Get("HX-Reswap") != "none" || body != "" ||
-		h.Get("HX-Trigger") != `{"tool-saved":{"message":"\u00ab mails \u00bb ajout\u00e9","name":"mails","new":true}}` {
+		h.Get("HX-Trigger") != `{"tool-saved":{"message":"\u00ab sam@gmail.com \u00bb ajout\u00e9","name":"`+key+`","new":true}}` {
 		t.Fatalf("save: %d %v %s", code, h, body)
 	}
 	if strings.Contains(body, "data-tool-saved") || strings.Contains(body, "Terminé") {
 		t.Fatal("a step after the save")
 	}
-	// The list: the new tool first, its row following it.
+	// The list: the new account first, its row following it.
 	waitStatus(t, c.pool.get("docs"), statusReady)
-	_, list, _ := tw.do("GET", "/settings/tools?tool=mails&new=1", nil, nil)
+	_, list, _ := tw.do("GET", "/settings/tools?tool="+key+"&new=1", nil, nil)
 	first := strings.Index(list, `<li class="tool" id="tool-`)
-	if first < 0 || !strings.HasPrefix(list[first:], `<li class="tool" id="tool-mails">`) {
-		t.Fatalf("the new tool is not first: %s", mainPart(t, list))
+	if first < 0 || !strings.HasPrefix(list[first:], `<li class="tool" id="tool-`+key+`">`) {
+		t.Fatalf("the new account is not first: %s", mainPart(t, list))
 	}
 	row := list[first:]
 	row = row[:strings.Index(row, "</li>")]
 	if !strings.Contains(row, "tool-status") {
-		t.Errorf("the row does not follow the tool: %s", row)
+		t.Errorf("the row does not follow the account: %s", row)
 	}
 	if strings.Contains(list[strings.Index(list, `id="tool-docs"`):], "tool-status") {
 		t.Error("another row follows too")
+	}
+	// The account's row alone.
+	if _, s, _ := tw.do("GET", "/settings/tools/mail/row?account=sam@gmail.com", nil, map[string]string{"HX-Request": "true"}); !strings.Contains(s, "<h3>sam@gmail.com</h3>") {
+		t.Errorf("account row: %s", s)
 	}
 	// Ready: said once, no more asking.
 	_, s, _ := tw.do("GET", "/settings/tools/docs/row", nil, map[string]string{"HX-Request": "true"})
@@ -241,6 +252,13 @@ func TestSavedRowFollowsTheTool(t *testing.T) {
 	if b := rec.Body.String(); !strings.Contains(b, `hx-get="/settings/tools/mails/row" hx-trigger="load delay:1500ms" hx-target="closest li" hx-swap="innerHTML"`) {
 		t.Errorf("starting: %s", b)
 	}
+	// … an account's row asks for its own.
+	st.Row = toolView{serverView: sv, Account: "sam@gmail.com"}.RowURL()
+	rec = httptest.NewRecorder()
+	tw.w.render(rec, httptest.NewRequest("GET", "/", nil), nil, "settings", "tool-row-frag", page{Data: toolView{serverView: sv, Account: "sam@gmail.com", Follow: &st}})
+	if b := rec.Body.String(); !strings.Contains(b, `hx-get="/settings/tools/mails/row?account=sam%40gmail.com"`) {
+		t.Errorf("an account starting: %s", b)
+	}
 	if _, _, h := tw.do("GET", "/settings/tools/nope/row", nil, map[string]string{"HX-Request": "true"}); h.Get("HX-Refresh") != "true" {
 		t.Errorf("gone: %v", h)
 	}
@@ -249,8 +267,8 @@ func TestSavedRowFollowsTheTool(t *testing.T) {
 		t.Errorf("added: %d %s", code, h.Get("Location"))
 	}
 	// The list's flash no longer says it can be used at once.
-	_, page, _ := tw.do("GET", "/settings/tools?saved=mails", nil, nil)
-	if p := html.UnescapeString(page); !strings.Contains(p, "Outil « mails » enregistré. Son état est sur sa carte") || strings.Contains(p, "dès maintenant") {
+	_, page, _ := tw.do("GET", "/settings/tools?saved=mail", nil, nil)
+	if p := html.UnescapeString(page); !strings.Contains(p, "Outil « mail » enregistré. Son état est sur sa carte") || strings.Contains(p, "dès maintenant") {
 		t.Error("the saved flash")
 	}
 }
@@ -353,17 +371,17 @@ func TestRowSignIn(t *testing.T) {
 // but their fields ask the browser to keep what was typed in them.
 func TestRefusedFormKeepsTypedSecrets(t *testing.T) {
 	tw, _, csrf := catalogWeb(t, nil)
-	form := url.Values{"preset": {"calendar"}, "name": {"agenda"}, "use": {"agenda"}, "access": {"read"}, "cal_provider": {"icloud"},
+	form := url.Values{"preset": {"calendar"}, "access": {"read"}, "cal_provider": {"icloud"},
 		"cal_user": {"sam@icloud.com"}, "password": {"abcd-efgh-ijkl-mnop"}, "timezone": {"Europe/Paris"}, "dialog": {"1"}}
 	if code, _, h := tw.post("/settings/tools", form, csrf); code != 200 || h.Get("HX-Trigger") == "" {
 		t.Fatalf("first save: %d %v", code, h)
 	}
 	_, body, _ := tw.post("/settings/tools", form, csrf)
-	if !strings.Contains(body, "existe déjà") || !strings.Contains(body, `id="secret-password" hx-preserve`) || strings.Contains(body, "abcd-efgh") {
+	if !strings.Contains(body, "déjà connecté") || !strings.Contains(body, `id="secret-password" hx-preserve`) || strings.Contains(body, "abcd-efgh") {
 		t.Fatalf("refused: %s", body)
 	}
-	// A second calendar is offered a name of its own.
-	if _, body, _ = tw.step("/settings/tools/new?preset=calendar&provider=icloud"); !strings.Contains(body, `name="name" value="agenda-icloud"`) {
+	// A second calendar is an account of the same one: no name to give.
+	if _, body, _ = tw.step("/settings/tools/new?preset=calendar&provider=icloud"); strings.Contains(body, `name="name"`) {
 		t.Fatalf("second calendar's name: %s", body)
 	}
 	// A form shown for the first time keeps nothing.

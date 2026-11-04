@@ -827,13 +827,24 @@ whose annotations nobody vouches for) starts on `ask`. An entry without `access`
 `trust_annotations: true` is `reads`, without it `ask`; the old form values (`read`, `trust`) are
 read the same way. Whatever the level, the built-in denials come first, then the file's rules.
 
+**Per account.** The mail and the calendar are one server each for every account (`mail`,
+`agenda`: [one server per service](#mail-and-calendar-one-server-per-service)), and each account
+has its own level, in `account_access` (account name to level): a work mailbox can be read only
+while a personal one is free. A call is decided at the level of the account its `account` argument
+names (case does not count); one that names none is decided at the server's level, the summary of
+its accounts (`ask` if one is, `read-only` or `free` if all are, else `reads`), and a write that
+names none is denied when the accounts' levels differ, with a reason that says to name it. The
+server holds to it too: eriphe-core marks `read_only` in its configuration the accounts that are,
+and the server refuses their writes and an id of another account than the one named.
+
 **Always allow.** A permission card for a catalog tool's action offers "Toujours autoriser" (the
 API: `POST /v1/tasks/{id}/answer` with `"allow": true, "always": true`): the request is allowed,
 and `server.tool` is allowed without asking from then on, for any input. These are rules kept in
-eriphe-core's database (`allowed_actions`), evaluated after the file's rules (which win) and never
-above a built-in denial or a `read-only` level (the card does not offer it there). Each tool's
-access page (Settings → Tools → Access, `/settings/tools/{name}/access`) lists them, with
-"Retirer"; removing a server forgets them.
+eriphe-core's database (`remembered_actions`: tool, account, server), evaluated after the file's
+rules (which win) and never above a built-in denial or a `read-only` level (the card does not offer
+it there). On a server of accounts, it is allowed for the account the call named only. Each tool's
+access page (Settings → Tools → Access, `/settings/tools/{name}/access`, `?account=` for an
+account's) lists them, with "Retirer"; removing a server, or an account, forgets them.
 
 **Scoped credentials.** Where the service can scope its credential, the level decides what Eriphe
 asks for:
@@ -1288,8 +1299,8 @@ the redirect URI to copy.
 
 | Service | Scope | Server |
 |---|---|---|
-| `mail` | `https://mail.google.com/` (IMAP and SMTP with XOAUTH2) | eriphe-mail, `mail` (then `mail-<local part>`), Gmail preset |
-| `calendar` | `https://www.googleapis.com/auth/calendar` (CalDAV) | eriphe-calendar, `agenda` (then `agenda-<local part>`), provider `google` |
+| `mail` | `https://mail.google.com/` (IMAP and SMTP with XOAUTH2) | eriphe-mail, an account of `mail`, Gmail preset |
+| `calendar` | `https://www.googleapis.com/auth/calendar` (CalDAV) | eriphe-calendar, an account of `agenda`, provider `google` |
 | `drive` | `…/auth/drive`, or `drive.readonly` without "drop results" | eriphe-files, `fichiers`, one account of it per Google account |
 
 **Connect.** The page ticks the services, and Connect asks Google for `openid email` and their
@@ -1299,14 +1310,15 @@ the same account (its `login_hint`) asks for that one alone, and Google's answer
 account granted before. The address comes from the ID token of the token endpoint's answer (over
 TLS, which OpenID Connect takes in place of its signature). The refresh token, with the client id
 and secret, is kept **once per account** in the vault (`google.<hash>.token`), and each service's
-server reads it from there in its environment (`MAIL_GOOGLE_TOKEN`, `CALENDAR_GOOGLE_TOKEN`,
-`FILES_GOOGLE_TOKEN_<hash>`), refreshing its access token itself: the token never enters a task or
+server reads it from there in its environment (`MAIL_GOOGLE_TOKEN_<hash>`,
+`CALENDAR_GOOGLE_TOKEN_<hash>`, `FILES_GOOGLE_TOKEN_<hash>`), refreshing its access token itself: the token never enters a task or
 a spec. Which servers belong to an account is read from their specs (that vault reference). A
 service Google did not grant (its box unticked on Google's page) is said back. Connecting again
 writes the new token for every service of the account, and the nodes restart them with it.
 
-**Several accounts.** Each account has its own servers (`mail`, `mail-sam`…); Drive folders of
-every account are in the one `fichiers`, each folder naming its account. The page lists the
+**Several accounts.** Every account's mailbox is an account of the one `mail`, its calendar an
+account of the one `agenda`, its Drive folders in the one `fichiers`, each folder naming its
+account. The page lists the
 accounts, each with its services, their tools and states, "Ajouter" for a service it has not,
 "Reconnecter" and "Retirer ce compte" (its servers and Drive folders go, its token leaves the vault
 and is revoked at Google, `oauth2.googleapis.com/revoke`).
@@ -1314,7 +1326,7 @@ and is revoked at Google, `oauth2.googleapis.com/revoke`).
 **To reconnect.** Every 30 minutes (`googleTick`, with the nodes' check) eriphe-core asks Google
 for an access token with each account's refresh token. `invalid_grant` (revoked, or the 7 days of
 an app in Testing) or a refused client marks the account "À reconnecter": its servers are held in
-`needs_auth` (the pool's `authHold`; a Drive with another working account is not), a call says
+`needs_auth` (the pool's `authHold`; a server with another working account is not), a call says
 why, `list_tools` gives as `connect` where to do it (`Settings → Tools → Google → Reconnect
 <address>`), and the brain is told once (an event in the conversation). The Tools list and the
 page show the account to reconnect with a one-click "Reconnecter", which asks again for the
@@ -1504,6 +1516,23 @@ for its backoff. It fails, with the reason, if the service is not
 placed, not `running`, or its node not connected; `serviceEndpoint` gives the `*http.Client` and
 URL instead. `registerServices(map[string]RunSpec)` sets the desired services; eriphe-core calls it
 at start with the catalog's `run` entries (unknown `run` fields are refused).
+
+### Mail and calendar: one server per service
+
+Every mailbox is an account of one `eriphe-mail` server (`mail`), every calendar an account of one
+`eriphe-calendar` server (`agenda`) (`accounts.go`): the brain sees one `search_messages` and one
+`list_events` that cover every account, and names `account` for a write. Each account is named
+after its address (a calendar after its username, with its server's host when the username is not
+an address) and keeps its secret in a variable of its own (`MAIL_PASSWORD_<hash>`,
+`MAIL_GOOGLE_TOKEN_<hash>`, `CALENDAR_PASSWORD_<hash>`, `CALENDAR_GOOGLE_TOKEN_<hash>`), its level
+in the server's `account_access` ([per account](#access-levels)). The tools list still shows a row
+per account, with its own form, access page and removal; the server goes with its last account.
+
+Before, each account was a server of its own (`mail`, `mail-sam`, `agenda-icloud`…). At start,
+`mergeAccountServers` (`accounts_merge.go`) makes them one, under the service's own name when one
+has it: each account keeps its secret's vault reference (nothing is asked again) and the level of
+the server it was; the actions allowed for good, the watches (which then name `account`) and the
+assistants lent a server move to the one left. It does nothing once they are one.
 
 ## Folders
 

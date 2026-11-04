@@ -475,3 +475,47 @@ END:VCALENDAR
 		t.Fatalf("got %+v", got)
 	}
 }
+
+// An account kept read only is read like any other and never written; a
+// call that names an account must touch only its events.
+func TestReadOnlyAccountAndNamedAccount(t *testing.T) {
+	e := newEnv(t)
+	cs := e.connect(t)
+	ev := call[Event](t, cs, "create_event", map[string]any{"account": "cloud", "title": "A", "start": "2026-10-27T08:00"})
+	mine := call[Event](t, cs, "create_event", map[string]any{"account": "icloud", "calendar": "Personnel", "title": "B", "start": "2026-10-27T12:00"})
+	e.cfg.Accounts[1].ReadOnly = true // cloud
+	cs = e.connect(t)
+
+	acc := call[accountsOut](t, cs, "list_accounts", nil)
+	if acc.Accounts[0].ReadOnly || !acc.Accounts[1].ReadOnly {
+		t.Errorf("accounts: %+v", acc.Accounts)
+	}
+	if got := call[Event](t, cs, "get_event", map[string]any{"id": ev.ID, "account": "cloud"}); got.Title != "A" {
+		t.Errorf("read: %+v", got)
+	}
+	for _, c := range []struct {
+		tool string
+		args map[string]any
+	}{
+		{"create_event", map[string]any{"account": "cloud", "title": "x", "start": "2026-10-27T10:00"}},
+		{"update_event", map[string]any{"id": ev.ID, "title": "x"}},
+		{"delete_event", map[string]any{"id": ev.ID}},
+	} {
+		if msg := callErr(t, cs, c.tool, c.args); !strings.Contains(msg, "read only") {
+			t.Errorf("%s: %s", c.tool, msg)
+		}
+	}
+	// Without an account, the read-only one's calendars are not candidates.
+	if msg := callErr(t, cs, "create_event", map[string]any{"title": "x", "start": "2026-10-27T10:00"}); !strings.Contains(msg, "several calendars") || strings.Contains(msg, " cloud/") || strings.Contains(msg, "(cloud/") {
+		t.Errorf("ambiguous: %s", msg)
+	}
+	// The account named and the id must agree.
+	if msg := callErr(t, cs, "delete_event", map[string]any{"id": ev.ID, "account": "icloud"}); !strings.Contains(msg, `of account "cloud"`) {
+		t.Errorf("wrong account: %s", msg)
+	}
+	call[Event](t, cs, "update_event", map[string]any{"id": mine.ID, "account": "icloud", "title": "B2"})
+	l := call[listEventsOut](t, cs, "list_events", map[string]any{"from": "2026-10-27", "days": 1})
+	if titles(l.Events) != "A,B2" {
+		t.Errorf("events: %s", titles(l.Events))
+	}
+}

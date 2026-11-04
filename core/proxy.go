@@ -124,8 +124,12 @@ var globChars = regexp.MustCompile(`[\\*?\[]`)
 // free by its server's access level (a read of a server believed for it,
 // or any tool of a free one), and named by no rule of my policy (such a
 // tool goes through the permission flow, with its input).
-func (c *core) freeRead(claudeName string) bool {
-	return c.pool.facts(claudeName).free() && !c.conf().Policy.names(claudeName)
+func (c *core) freeRead(claudeName string) bool { return c.freeCall(claudeName, nil) }
+
+// freeCall is freeRead for one call: on a server of several accounts, at
+// the level of the account it names.
+func (c *core) freeCall(claudeName string, input map[string]any) bool {
+	return c.pool.facts(claudeName, input).free() && !c.conf().Policy.names(claudeName)
 }
 
 // readsFreely tells whether a task is an assistant's whose role reads freely.
@@ -234,12 +238,17 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 		return toolError("arguments must be a JSON object")
 	}
 	claude := claudeToolName(u.name, tool)
-	f := c.pool.facts(claude)
+	f := c.pool.facts(claude, input)
 	switch {
 	case f.level == accessReadOnly && !f.read:
+		if _, named := u.srv.accountLevel(input); named {
+			return toolError("this account is read only in Eriphe: only its reads are allowed")
+		}
 		return toolError("this tool is read only in Eriphe: only its reads are lent")
+	case f.noAccount:
+		return toolError("the accounts of this tool do not have the same access in Eriphe: give account, the account this call is for")
 	case c.store.useTicket(taskID, claude, input):
-	case c.readsFreely(taskID) && c.freeRead(claude):
+	case c.readsFreely(taskID) && c.freeCall(claude, input):
 		// The brain reads freely: no permission round trip, a decision on record all the same.
 		why := "lecture libre du cerveau"
 		if !f.read {

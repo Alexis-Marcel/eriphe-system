@@ -39,6 +39,7 @@ func (p toolPreset) level() string {
 // toolAccess is a tool's access page, and its allowed actions.
 type toolAccess struct {
 	Name    string
+	Account string // the account it is about, on a server of several (accounts.go)
 	Preset  toolPreset
 	Access  string
 	Locked  bool // the configuration file's: its level is changed there
@@ -50,7 +51,11 @@ type toolAccess struct {
 	Error   string
 }
 
-func (w *web) toolAccess(lang, name string) (toolAccess, bool) {
+func (w *web) toolAccess(lang, name string) (toolAccess, bool) { return w.toolAccessOf(lang, name, "") }
+
+// toolAccessOf is toolAccess for one account of a server of several: its
+// level and its allowed actions.
+func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 	srv, ok := w.c.conf().Servers[name]
 	if !ok {
 		return toolAccess{}, false
@@ -58,22 +63,41 @@ func (w *web) toolAccess(lang, name string) (toolAccess, bool) {
 	v := toolAccess{Name: name, Access: srv.level(), Locked: w.c.source(kindServer, name) != sourceWorkspace,
 		Auth: srv.authKind(), Scope: w.c.tokenScope(name, srv), Allowed: w.c.store.allowedActions(name)}
 	v.Preset, _ = presetOf(lang, srv)
+	if svc, cfg, isSvc := accountsOf(srv); isSvc && account != "" {
+		i := cfg.index(account)
+		if i < 0 {
+			return toolAccess{}, false
+		}
+		a := cfg.Accounts[i]
+		v.Account, v.Preset = a.Name, accountPreset(svc, a)
+		v.Access, v.Scope = svcServer{Server: srv}.level(a.Name), tokenScope{}
+		v.Allowed = w.c.store.accountActions(name, a.Name)
+	}
 	if u := w.c.pool.get(name); u != nil {
 		v.Status, _, _ = u.snapshot()
 	}
 	return v, true
 }
 
+// Key names the access's parts in their ids, as its row does.
+func (v toolAccess) Key() string { return rowKey(v.Name, v.Account) }
+
+// Title is whom the access is of: the tool, or the account.
+func (v toolAccess) Title() string { return cmpOr(v.Account, v.Name) }
+
+// Query is "?account=…" for an account's access.
+func (v toolAccess) Query() string { return accountQuery(v.Account) }
+
 func (w *web) handleToolAccess(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
-	v, ok := w.toolAccess(w.lang(r), name)
+	v, ok := w.toolAccessOf(w.lang(r), name, r.URL.Query().Get("account"))
 	if !ok {
 		http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther)
 		return
 	}
 	// A tool changed with its form: its access is part of it.
 	if srv := w.c.conf().Servers[name]; editable(w.c.source(kindServer, name), v.Preset, srv.authKind()) {
-		http.Redirect(rw, r, "/settings/tools/"+url.PathEscape(name)+"/edit#form-access", http.StatusSeeOther)
+		http.Redirect(rw, r, "/settings/tools/"+url.PathEscape(name)+"/edit"+v.Query()+"#form-access", http.StatusSeeOther)
 		return
 	}
 	v.Saved = r.URL.Query().Get("saved") != ""
@@ -87,8 +111,9 @@ func (w *web) handleSaveToolAccess(rw http.ResponseWriter, r *http.Request, s *s
 	name := r.PathValue("name")
 	srv, ok := w.workspaceServer(name)
 	level := r.PostFormValue("access")
+	account := r.URL.Query().Get("account")
 	if !ok || level == "" || !validAccess(level) {
-		v, found := w.toolAccess(w.lang(r), name)
+		v, found := w.toolAccessOf(w.lang(r), name, account)
 		if !found {
 			http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther)
 			return
@@ -101,27 +126,37 @@ func (w *web) handleSaveToolAccess(rw http.ResponseWriter, r *http.Request, s *s
 		w.render(rw, r, s, "settings", "tool-access-frag", page{Data: v})
 		return
 	}
-	if err := w.c.putServer(putUpdate, name, srv.withLevel(level), nil); err != nil {
-		v, _ := w.toolAccess(w.lang(r), name)
+	var err error
+	if account != "" {
+		err = w.c.setAccountLevel(name, account, level) // one account of its service (accounts.go)
+	} else {
+		err = w.c.putServer(putUpdate, name, srv.withLevel(level), nil)
+	}
+	if err != nil {
+		v, _ := w.toolAccessOf(w.lang(r), name, account)
 		v.Access, v.Error = level, w.formError(r, err)
 		w.render(rw, r, s, "settings", "tool-access-frag", page{Data: v})
 		return
 	}
 	log.Printf("web: tool %s set to %s", name, level)
 	w.notify()
-	rw.Header().Set("HX-Redirect", "/settings/tools/"+url.PathEscape(name)+"/access?saved=1")
+	q := "?saved=1"
+	if account != "" {
+		q = accountQuery(account) + "&saved=1"
+	}
+	rw.Header().Set("HX-Redirect", "/settings/tools/"+url.PathEscape(name)+"/access"+q)
 	rw.WriteHeader(http.StatusOK)
 }
 
 // handleForgetAction removes an allowed action: the tool asks again.
 func (w *web) handleForgetAction(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
-	if err := w.c.store.forgetAction(name, r.PostFormValue("tool")); err != nil {
+	if err := w.c.store.forgetAction(name, r.PostFormValue("tool"), r.PostFormValue("account")); err != nil {
 		w.toast(rw, err.Error(), false)
 		return
 	}
 	log.Printf("web: tool %s: an allowed action removed", name)
-	v, ok := w.toolAccess(w.lang(r), name)
+	v, ok := w.toolAccessOf(w.lang(r), name, r.PostFormValue("account"))
 	if !ok {
 		w.toast(rw, tr(w.lang(r), "allowed.removed"), true)
 		return

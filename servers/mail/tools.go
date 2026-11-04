@@ -52,6 +52,30 @@ func (m *Mailer) account(name string) (*Account, error) {
 	return nil, fmt.Errorf("no account %q (accounts: %s)", name, strings.Join(m.names(), ", "))
 }
 
+// writes refuses an account kept read only.
+func writes(a *Account) error {
+	if a.ReadOnly {
+		return fmt.Errorf("account %q is read only: nothing can be written from it", a.Name)
+	}
+	return nil
+}
+
+// same checks that the account named, if any, is the one an id is of: a
+// call names the account it touches, and its ids must agree.
+func (m *Mailer) same(named string, a *Account) error {
+	if strings.TrimSpace(named) == "" {
+		return nil
+	}
+	b, err := m.account(named)
+	if err != nil {
+		return err
+	}
+	if b != a {
+		return fmt.Errorf("the message is of account %q, not %q", a.Name, b.Name)
+	}
+	return nil
+}
+
 func (m *Mailer) names() []string {
 	var n []string
 	for _, a := range m.accounts {
@@ -67,6 +91,7 @@ type accountOut struct {
 	Address  string `json:"address"`
 	Provider string `json:"provider,omitempty"`
 	CanSend  bool   `json:"can_send"`
+	ReadOnly bool   `json:"read_only,omitempty"`
 }
 type listAccountsOut struct {
 	Accounts []accountOut `json:"accounts"`
@@ -110,11 +135,12 @@ type accountProblem struct {
 
 type readIn struct {
 	ID       string `json:"id" jsonschema:"message id from search_messages"`
+	Account  string `json:"account,omitempty" jsonschema:"the account of the message, as search_messages gives it"`
 	MaxChars int    `json:"max_chars,omitempty" jsonschema:"maximum body characters returned"`
 }
 
 type draftIn struct {
-	Account  string   `json:"account,omitempty" jsonschema:"account to write from; default the account of the message answered, or the only account"`
+	Account  string   `json:"account,omitempty" jsonschema:"account to write from; needed when there are several"`
 	To       []string `json:"to,omitempty" jsonschema:"recipients, e.g. Jane Doe <jane@example.com>; when replying, defaults to the sender"`
 	Cc       []string `json:"cc,omitempty"`
 	Bcc      []string `json:"bcc,omitempty"`
@@ -131,7 +157,7 @@ type draftOut struct {
 
 type sendIn struct {
 	DraftID  string   `json:"draft_id,omitempty" jsonschema:"id of a draft (from create_draft) to send as is; then the other fields are ignored"`
-	Account  string   `json:"account,omitempty" jsonschema:"account to send from"`
+	Account  string   `json:"account,omitempty" jsonschema:"account to send from (with draft_id, the draft's); needed when there are several"`
 	To       []string `json:"to,omitempty"`
 	Cc       []string `json:"cc,omitempty"`
 	Bcc      []string `json:"bcc,omitempty"`
@@ -148,6 +174,7 @@ type sendOut struct {
 }
 
 type markIn struct {
+	Account string   `json:"account,omitempty" jsonschema:"the account of the messages, as search_messages gives it; needed when there are several"`
 	IDs     []string `json:"ids" jsonschema:"message ids"`
 	Read    *bool    `json:"read,omitempty" jsonschema:"true marks read, false unread"`
 	Flagged *bool    `json:"flagged,omitempty" jsonschema:"true flags (stars), false unflags"`
@@ -157,8 +184,9 @@ type markOut struct {
 }
 
 type moveIn struct {
-	IDs []string `json:"ids" jsonschema:"message ids"`
-	To  string   `json:"to" jsonschema:"archive, trash, inbox, junk, or a folder name"`
+	Account string   `json:"account,omitempty" jsonschema:"the account of the messages, as search_messages gives it; needed when there are several"`
+	IDs     []string `json:"ids" jsonschema:"message ids"`
+	To      string   `json:"to" jsonschema:"archive, trash, inbox, junk, or a folder name"`
 }
 type moveOut struct {
 	Moved  int      `json:"moved"`
@@ -184,7 +212,7 @@ func newServer(m *Mailer, version string) *mcp.Server {
 		func(ctx context.Context, _ struct{}) (listAccountsOut, error) {
 			out := listAccountsOut{Accounts: []accountOut{}}
 			for _, a := range m.accounts {
-				out.Accounts = append(out.Accounts, accountOut{a.Name, a.Address, a.Provider, a.SMTP.Host != ""})
+				out.Accounts = append(out.Accounts, accountOut{a.Name, a.Address, a.Provider, a.SMTP.Host != "" && !a.ReadOnly, a.ReadOnly})
 			}
 			return out, nil
 		})
@@ -260,6 +288,9 @@ func newServer(m *Mailer, version string) *mcp.Server {
 			if err != nil {
 				return nil, err
 			}
+			if err := m.same(in.Account, a); err != nil {
+				return nil, err
+			}
 			max := in.MaxChars
 			if max <= 0 || max > m.cfg.MaxBodyChars {
 				max = m.cfg.MaxBodyChars
@@ -273,6 +304,9 @@ func newServer(m *Mailer, version string) *mcp.Server {
 		func(ctx context.Context, in draftIn) (draftOut, error) {
 			a, err := m.accountFor(in.Account, in.ReplyTo)
 			if err != nil {
+				return draftOut{}, err
+			}
+			if err := writes(a); err != nil {
 				return draftOut{}, err
 			}
 			id, err := a.SaveDraft(ctx, &Draft{To: in.To, Cc: in.Cc, Bcc: in.Bcc, Subject: in.Subject, Body: in.Body, ReplyTo: in.ReplyTo, ReplyAll: in.ReplyAll})
@@ -297,7 +331,13 @@ func newServer(m *Mailer, version string) *mcp.Server {
 				if a, err = m.account(r.Account); err != nil {
 					return sendOut{}, err
 				}
+				if err := m.same(in.Account, a); err != nil {
+					return sendOut{}, err
+				}
 			} else if a, err = m.accountFor(in.Account, in.ReplyTo); err != nil {
+				return sendOut{}, err
+			}
+			if err := writes(a); err != nil {
 				return sendOut{}, err
 			}
 			id, warning, err := a.Send(ctx, &Draft{To: in.To, Cc: in.Cc, Bcc: in.Bcc, Subject: in.Subject, Body: in.Body, ReplyTo: in.ReplyTo, ReplyAll: in.ReplyAll}, in.DraftID)
@@ -313,7 +353,7 @@ func newServer(m *Mailer, version string) *mcp.Server {
 			if in.Read == nil && in.Flagged == nil {
 				return markOut{}, errors.New("give read and/or flagged")
 			}
-			return markOut{len(in.IDs)}, m.byAccount(ctx, in.IDs, func(a *Account, g map[folderKey][]imap.UID, k []folderKey) error {
+			return markOut{len(in.IDs)}, m.byAccount(ctx, in.Account, in.IDs, func(a *Account, g map[folderKey][]imap.UID, k []folderKey) error {
 				return a.Mark(ctx, g, k, in.Read, in.Flagged)
 			})
 		})
@@ -325,7 +365,7 @@ func newServer(m *Mailer, version string) *mcp.Server {
 				return moveOut{}, errors.New("give to")
 			}
 			out := moveOut{Moved: len(in.IDs)}
-			err := m.byAccount(ctx, in.IDs, func(a *Account, g map[folderKey][]imap.UID, k []folderKey) error {
+			err := m.byAccount(ctx, in.Account, in.IDs, func(a *Account, g map[folderKey][]imap.UID, k []folderKey) error {
 				ids, dest, err := a.Move(ctx, g, k, in.To)
 				out.IDs = append(out.IDs, ids...)
 				out.Folder = dest
@@ -361,8 +401,9 @@ func (m *Mailer) accountFor(name, replyTo string) (*Account, error) {
 	return m.account(name)
 }
 
-// byAccount groups message ids by account and folder.
-func (m *Mailer) byAccount(ctx context.Context, ids []string, fn func(*Account, map[folderKey][]imap.UID, []folderKey) error) error {
+// byAccount groups message ids by account and folder; named, if given, is
+// the account they must all be of. No account kept read only is written.
+func (m *Mailer) byAccount(ctx context.Context, named string, ids []string, fn func(*Account, map[folderKey][]imap.UID, []folderKey) error) error {
 	if len(ids) == 0 {
 		return errors.New("no message id")
 	}
@@ -381,11 +422,22 @@ func (m *Mailer) byAccount(ctx context.Context, ids []string, fn func(*Account, 
 		}
 		perAccount[k.Account] = append(perAccount[k.Account], k)
 	}
+	var accts []*Account
 	for _, name := range order {
 		a, err := m.account(name)
 		if err != nil {
 			return err
 		}
+		if err := m.same(named, a); err != nil {
+			return err
+		}
+		if err := writes(a); err != nil {
+			return err
+		}
+		accts = append(accts, a)
+	}
+	for i, name := range order {
+		a := accts[i]
 		if err := fn(a, groups, perAccount[name]); err != nil {
 			return err
 		}

@@ -24,7 +24,9 @@ import (
 // Google accounts: one sign-in for Gmail, Google Calendar and Google Drive.
 //
 // The user's own Google app (cloud.go) is set up once for every service and
-// every account. Connecting an account asks Google for the services ticked
+// every account. Each service has one server for all the accounts (Gmail
+// beside the other mailboxes in the mail, Google Calendar in the calendar:
+// accounts.go; Drive in eriphe-files). Connecting an account asks Google for the services ticked
 // (any of mail, calendar, drive) and only their scopes, with
 // include_granted_scopes: adding a service later to the same account asks
 // for that one only, and Google's answer covers all the account granted. The
@@ -207,9 +209,13 @@ func (c *core) googleHold(name string) (why, where string) {
 	if !ok {
 		return "", ""
 	}
-	// Held when every account it reads is refused: a Drive of two accounts
-	// still serves the folders of the one that works.
+	// Held when every account it holds is a Google account refused: a Drive
+	// of two accounts still serves the folders of the one that works, the
+	// mail still reads the other mailboxes.
 	owners := c.googleOwners(s)
+	if _, cfg, ok := accountsOf(s); ok && len(cfg.Accounts) > len(owners) {
+		return "", ""
+	}
 	var emails []string
 	for _, a := range owners {
 		if a.Reconnect == "" {
@@ -421,10 +427,11 @@ func (c *core) connectGoogle(lang, email string, scopes []string, secret string,
 			// Its scopes may have changed (read only, or not).
 			errs = append(errs, c.putDriveAccount(lang, email, scopes))
 		case have[s]:
-		case s == googleMail:
-			errs = append(errs, c.addGoogleServer(lang, email, "mail", googleMailRun(email)))
-		case s == googleCalendar:
-			errs = append(errs, c.addGoogleServer(lang, email, "agenda", googleCalendarRun(email, c.conf().TimeZone)))
+		default:
+			if svc, ok := serviceByGoogle(s); ok {
+				errs = append(errs, c.putAccount(svc, accountPut{Lang: lang, Account: googleAccountFor(svc, email),
+					Secret: &EnvValue{File: vaultPrefix + googleSecret(email)}}))
+			}
 		}
 	}
 	if was.Reconnect != "" {
@@ -443,44 +450,13 @@ func (c *core) googleWoken(email string) {
 	}
 }
 
-// googleMailRun is eriphe-mail for a Gmail account on its Google token.
-func googleMailRun(email string) RunSpec {
-	cfg := map[string]any{"accounts": []map[string]any{{"name": email, "address": email, "provider": "gmail",
-		"auth": map[string]string{"oauth_token_env": mailGoogleEnv}}}}
-	raw, _ := json.Marshal(cfg)
-	return RunSpec{Image: mailImage, Transport: transportStdio, Env: map[string]EnvValue{
-		"MAIL_CONFIG": {Value: string(raw)}, mailGoogleEnv: {File: vaultPrefix + googleSecret(email)}}}
-}
-
-// googleCalendarRun is eriphe-calendar for a Google Calendar on its token.
-func googleCalendarRun(email, zone string) RunSpec {
-	cfg := map[string]any{"accounts": []map[string]any{{"name": email, "provider": "google", "username": email,
-		"auth": map[string]string{"oauth_token_env": calGoogleEnv}}}}
-	if zone != "" {
-		cfg["timezone"] = zone
+// googleAccountFor is a Google account as an account of the mail (Gmail
+// over IMAP with XOAUTH2) or of the calendar (Google CalDAV).
+func googleAccountFor(svc accountService, email string) svcAccount {
+	if svc == mailService {
+		return svcAccount{Name: email, Address: email, Provider: "gmail"}
 	}
-	raw, _ := json.Marshal(cfg)
-	return RunSpec{Image: calendarImage, Transport: transportStdio, Env: map[string]EnvValue{
-		"CALENDAR_CONFIG": {Value: string(raw)}, calGoogleEnv: {File: vaultPrefix + googleSecret(email)}}}
-}
-
-// googleAccountOfRun reads the address a Google server of mail or calendar
-// is for.
-func googleAccountOfRun(spec RunSpec) string {
-	env := map[string]string{googleMail: "MAIL_CONFIG", googleCalendar: "CALENDAR_CONFIG"}[googleServiceOf(spec)]
-	if env == "" || len(googleRefs(spec)) == 0 {
-		return ""
-	}
-	var cfg struct {
-		Accounts []struct {
-			Address  string `json:"address"`
-			Username string `json:"username"`
-		} `json:"accounts"`
-	}
-	if json.Unmarshal([]byte(spec.Env[env].Value), &cfg) != nil || len(cfg.Accounts) != 1 {
-		return ""
-	}
-	return cmpOr(cfg.Accounts[0].Address, cfg.Accounts[0].Username)
+	return svcAccount{Name: email, Provider: "google", Username: email}
 }
 
 func cmpOr(a, b string) string {
@@ -490,15 +466,8 @@ func cmpOr(a, b string) string {
 	return b
 }
 
-// addGoogleServer creates the server of a service, under a name free in
-// the catalog: base, then base-<the address's local part>.
-func (c *core) addGoogleServer(lang, email, base string, spec RunSpec) error {
-	name := c.freeServerName(base, email)
-	use := map[string]string{"mail": "preset.mail.use", "agenda": "preset.calendar.use"}[base]
-	srv := Server{Use: tr(lang, use) + " (" + email + ")", Run: marshalRun(spec)}.withLevel(accessReads)
-	return c.putServer(putCreate, name, srv, nil)
-}
-
+// freeServerName is a name free in the catalog: base, then
+// base-<the address's local part>.
 func (c *core) freeServerName(base, email string) string {
 	taken := func(n string) bool { _, ok := c.conf().Servers[n]; return ok }
 	if !taken(base) {
@@ -534,8 +503,8 @@ func (c *core) removeGoogleAccount(ctx context.Context, email string) error {
 			errs = append(errs, c.dropDriveAccount(email))
 			continue
 		}
-		if c.source(kindServer, t.Name) == sourceWorkspace {
-			errs = append(errs, c.deleteServer(t.Name))
+		if svc, ok := serviceByGoogle(t.Service); ok && c.source(kindServer, t.Name) == sourceWorkspace {
+			errs = append(errs, c.dropAccount(svc, email))
 		}
 	}
 	if err := errors.Join(errs...); err != nil {
@@ -686,7 +655,7 @@ func (c *core) markGoogle(email, why string) {
 	if user == "" {
 		user = "l'utilisateur"
 	}
-	text := fmt.Sprintf("Google a retiré l'autorisation du compte %s (%s) : les outils %s ne marchent plus tant que %s ne l'a pas reconnecté (Réglages › Outils › Google › Reconnecter, un clic). Dis-le-lui une fois, au bon moment ; ne lance pas de tâche qui en a besoin d'ici là.",
+	text := fmt.Sprintf("Google a retiré l'autorisation du compte %s (%s) : les outils %s ne marchent plus pour ce compte tant que %s ne l'a pas reconnecté (Réglages › Outils › Google › Reconnecter, un clic). Dis-le-lui une fois, au bon moment ; ne lance pas de tâche qui en a besoin d'ici là.",
 		email, googleWhyFR[why], strings.Join(names, ", "), user)
 	if _, err := c.store.addMessage(roleEvent, text, false); err == nil {
 		c.ping()

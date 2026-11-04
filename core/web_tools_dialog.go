@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // "Add a tool" in two steps, in the tools page's dialog: the search
@@ -38,7 +39,7 @@ func (p toolPreset) StepURL() string {
 // accounts, after the # of the tools page: add/mail/gmail, edit/mail/choose.
 func (f toolForm) StepHash(provider string) string {
 	if f.Edit {
-		return "edit/" + f.Name + "/" + provider
+		return editHash(f.Name, f.Account) + "/" + provider
 	}
 	return "add/" + f.Preset.ID + "/" + provider
 }
@@ -48,9 +49,9 @@ func (f toolForm) Hash() string {
 	p := f.Picked()
 	switch {
 	case f.Edit && f.Choose:
-		return "edit/" + f.Name + "/choose"
+		return editHash(f.Name, f.Account) + "/choose"
 	case f.Edit:
-		return "edit/" + f.Name
+		return editHash(f.Name, f.Account)
 	case p != "" && !f.Choose:
 		return f.StepHash(p)
 	}
@@ -62,7 +63,7 @@ func (f toolForm) Hash() string {
 func (f toolForm) BackURL() string {
 	switch {
 	case f.Choose && f.Edit:
-		return "/settings/tools/" + f.Name + "/edit"
+		return "/settings/tools/" + f.Name + "/edit" + accountQuery(f.Account)
 	case f.Edit:
 		return "/settings/tools"
 	case f.Picked() != "" && !f.Choose:
@@ -74,7 +75,7 @@ func (f toolForm) BackURL() string {
 func (f toolForm) BackHash() string {
 	switch {
 	case f.Choose && f.Edit:
-		return "edit/" + f.Name
+		return editHash(f.Name, f.Account)
 	case f.Edit:
 		return ""
 	case f.Picked() != "" && !f.Choose:
@@ -133,6 +134,7 @@ func (w *web) handleToolAdded(rw http.ResponseWriter, r *http.Request, s *sessio
 // waiting for a device, starting, ready, or why not and what to do.
 type toolStatus struct {
 	Name   string
+	Row    string // where its row asks for itself again
 	State  string // wait, start, ok (ready) or err
 	Text   string
 	Hint   string // what to do, when it is not ready
@@ -143,7 +145,7 @@ type toolStatus struct {
 
 // statusOf words where a tool is: the line of its row after a save.
 func statusOf(lang string, sv serverView) toolStatus {
-	v := toolStatus{Name: sv.Name, State: "err"}
+	v := toolStatus{Name: sv.Name, Row: "/settings/tools/" + sv.Name + "/row", State: "err"}
 	v.Edit = sv.Source == sourceWorkspace
 	pending, placed := startState(sv)
 	switch {
@@ -173,11 +175,17 @@ func statusOf(lang string, sv serverView) toolStatus {
 // handleToolRow is a followed tool's row alone (GET
 // /settings/tools/{name}/row), asked again until the tool settles.
 func (w *web) handleToolRow(rw http.ResponseWriter, r *http.Request, s *session) {
-	lang, name := w.lang(r), r.PathValue("name")
+	lang, name, account := w.lang(r), r.PathValue("name"), r.URL.Query().Get("account")
 	for _, sv := range w.servers() {
-		if sv.Name == name {
-			t := w.toolRow(lang, w.c.conf(), sv, w.c.store.get(voiceTokenKey) != "")
+		if sv.Name != name {
+			continue
+		}
+		for _, t := range w.toolRows(lang, w.c.conf(), sv, w.c.store.get(voiceTokenKey) != "") {
+			if !strings.EqualFold(t.Account, account) {
+				continue
+			}
 			st := statusOf(lang, sv)
+			st.Row = t.RowURL()
 			t.Follow = &st
 			w.render(rw, r, s, "settings", "tool-row-frag", page{Data: t})
 			return
