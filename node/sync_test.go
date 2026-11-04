@@ -472,3 +472,24 @@ func TestPermHandler(t *testing.T) {
 		waitFor(t, func() bool { return task.state() == stateRunning })
 	}
 }
+
+// Without its engine, a node runs none of its tasks: they wait.
+func TestNoTasksWithoutEngine(t *testing.T) {
+	n, dir := lifecycleNode(t, agentRun)
+	n.noEngine = true
+	n.assigned([]assignment{{ID: "t-1", Desired: "running", Spec: TaskSpec{Runtime: "claude-code", Prompt: "hi"}}}, nil, nil)
+	if task := n.get("t-1"); task != nil {
+		t.Fatalf("launched: %+v", task)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(dir, "calls")); len(raw) != 0 {
+		t.Errorf("engine called: %s", raw)
+	}
+	n.noEngine = false
+	n.assigned([]assignment{{ID: "t-1", Desired: "running", Spec: TaskSpec{Runtime: "claude-code", Prompt: "hi"}}}, nil, nil)
+	task := n.get("t-1")
+	if task == nil {
+		t.Fatal("not launched with its engine")
+	}
+	waitFor(t, func() bool { return task.state() == stateIdle })
+	n.stopContainer(task)
+}

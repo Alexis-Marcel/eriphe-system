@@ -87,8 +87,10 @@ var errUnknownTask = errors.New("eriphe-core does not know this task")
 // sync runs the watch loop and the report loop until the process ends.
 func (n *node) sync(s *state) {
 	c := &coreClient{s: s, http: s.longClient()}
-	n.removeStrayContainers()
-	n.removeStrayServices()
+	if !n.noEngine {
+		n.removeStrayContainers()
+		n.removeStrayServices()
+	}
 	go n.reportLoop(c)
 	var rev int64
 	backoff := time.Second
@@ -109,13 +111,34 @@ func (n *node) sync(s *state) {
 		}
 		backoff = time.Second
 		rev = out.Rev
-		n.reconcile(out.Tasks)
-		n.reconcileServices(out.Services)
-		n.wanted(out.Prepare)
+		n.assigned(out.Tasks, out.Services, out.Prepare)
 		if n.upd.request(out.Update) {
 			n.poke()
 		}
 	}
+}
+
+// assigned makes the node match what eriphe-core assigns it. Without its
+// engine, it runs nothing: with what it would need of the engine unknown
+// (its networks, its cache), a task could start where it should not. The
+// tasks wait, assigned, until the node starts again with its engine.
+func (n *node) assigned(tasks []assignment, services []serviceAssignment, prep *prepareSpec) {
+	if n.noEngine {
+		waiting := 0
+		for _, a := range tasks {
+			if a.Desired == "running" {
+				waiting++
+			}
+		}
+		if waiting != n.waiting {
+			log.Printf("no container engine: %d task(s) wait for it", waiting)
+			n.waiting = waiting
+		}
+		return
+	}
+	n.reconcile(tasks)
+	n.reconcileServices(services)
+	n.wanted(prep)
 }
 
 // removeStrayContainers removes task containers left by a previous run of

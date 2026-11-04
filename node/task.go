@@ -280,7 +280,11 @@ type node struct {
 	agents     *agentStore         // the agents injected into tasks (inject.go)
 	toolchains *toolchainStore     // the toolchains tasks build with (toolchain.go)
 	prep       preparer            // what eriphe-core wants ready on this node
-	awake      *keepAwake          // the machine out of sleep while a task works (awake.go)
+	// noEngine: started without its container engine (withoutEngine): it
+	// runs nothing, and what is assigned waits for the engine.
+	noEngine bool
+	waiting  int        // the tasks waiting, last said
+	awake    *keepAwake // the machine out of sleep while a task works (awake.go)
 	// skillFetch gets a task's skill from eriphe-core (skills.go).
 	skillFetch func(ctx context.Context, taskID, sha string) ([]byte, error)
 	// syncNet carries Syncthing's connections to its peers (syncpeer.go).
