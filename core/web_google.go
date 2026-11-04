@@ -34,6 +34,7 @@ type googleView struct {
 	Missing   []string // … and these services were not granted
 	Saved     string   // just saved the Google app: "ok", or the redirect URI its file lacks
 	Error     string
+	Waiting   bool // a service's tool is starting: the accounts refresh themselves until it is up
 }
 
 // googleAccountView is one Google account on the page.
@@ -50,6 +51,9 @@ type googleServiceView struct {
 	Service string // mail, calendar, drive
 	Tool    string // the catalog server
 	Status  string // the server's: ready, connecting, needs_auth…
+	Pending bool   // its local service does not run yet (startState)
+	Placed  bool   // … but a machine has it and is starting it
+	Problem string // why it does not start, in words (serviceProblem)
 }
 
 // Has tells whether the page ticks a service for a new account.
@@ -97,11 +101,16 @@ func (w *web) googleView(r *http.Request) googleView {
 	if len(v.Add) == 0 {
 		v.Add = googleServices
 	}
-	v.Accounts = w.googleAccountViews()
+	v.Accounts = w.googleAccountViews(w.lang(r))
+	for _, a := range v.Accounts {
+		for _, sv := range a.Services {
+			v.Waiting = v.Waiting || sv.Placed || sv.Status == statusConnecting
+		}
+	}
 	return v
 }
 
-func (w *web) googleAccountViews() []googleAccountView {
+func (w *web) googleAccountViews(lang string) []googleAccountView {
 	drive := w.c.driveState()
 	var out []googleAccountView
 	for _, a := range w.c.googleAccounts() {
@@ -109,8 +118,18 @@ func (w *web) googleAccountViews() []googleAccountView {
 		have := map[string]bool{}
 		for _, t := range w.c.googleTools(a.Email) {
 			sv := googleServiceView{Service: t.Service, Tool: t.Name}
+			srv := serverView{serverInfo: serverInfo{Name: t.Name, Kind: "local"}}
 			if u := w.c.pool.get(t.Name); u != nil {
-				sv.Status, _, _ = u.snapshot()
+				srv.Status, _, _ = u.snapshot()
+			}
+			if st, err := w.c.store.service(t.Name); err == nil {
+				srv.Node, srv.Service, srv.Error = st.Node, st.State, st.Error
+			}
+			// a tool whose service is still being placed or started is
+			// starting, not in error: its first dial fails until it runs
+			sv.Status = srv.Status
+			if sv.Pending, sv.Placed = startState(srv); sv.Pending {
+				sv.Problem = serviceProblem(lang, srv)
 			}
 			av.Services = append(av.Services, sv)
 			have[t.Service] = true
