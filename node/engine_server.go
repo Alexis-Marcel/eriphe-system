@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -40,8 +41,8 @@ import (
 //
 // Folders are checked on their real path, resolved in the host's / when
 // the engine sees it read-only (-host-root), and the resolved path is what
-// the daemon mounts. What it cannot prevent is a race: a directory
-// replaced by a symlink between its check and the daemon's mount.
+// the daemon mounts. A directory replaced by a symlink between its check
+// and the daemon's mount is what mountClash (engine_policy.go) prevents.
 
 // engineAPI is the version of the API, the prefix of its paths: a node and
 // an engine that do not speak the same say so.
@@ -59,6 +60,9 @@ type engineServer struct {
 	cacheVolume                          string
 	allowFrom                            string // the only host answered, by name
 	lookup                               func(string) ([]string, error)
+	// creating: one container made at a time, from its mounts' check to
+	// its creation (mountClash).
+	creating sync.Mutex
 }
 
 // The requests, as the node sends them: a field not here is refused.
@@ -357,7 +361,33 @@ func (s *engineServer) handleTask(w http.ResponseWriter, r *http.Request) {
 		s.refuse(w, r, http.StatusForbidden, err)
 		return
 	}
-	s.serveStream(w, r, taskPrefix+t.Task, c, extra, nil)
+	s.creating.Lock()
+	if err := s.clash(r.Context(), c, true); err != nil {
+		s.creating.Unlock()
+		s.refuseClash(w, r, err)
+		return
+	}
+	s.serveStream(w, r, taskPrefix+t.Task, c, extra, nil, s.creating.Unlock)
+}
+
+// clash is why c cannot be made now (mountClash), with the creating lock
+// held.
+func (s *engineServer) clash(ctx context.Context, c apiContainer, task bool) error {
+	others, err := s.d.listed(ctx, "eriphe.task", "eriphe.helper")
+	if err != nil {
+		return fmt.Errorf("list the containers: %v", err)
+	}
+	return mountClash(c.HostConfig.Mounts, task, others)
+}
+
+// refuseClash refuses a container that must wait (409), or that could not
+// be checked (502).
+func (s *engineServer) refuseClash(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.As(err, new(errMountClash)) {
+		s.refuse(w, r, http.StatusConflict, err)
+		return
+	}
+	s.refuse(w, r, http.StatusBadGateway, err)
 }
 
 // serviceContainer is a service's container (engine_docker.go's
@@ -442,19 +472,26 @@ func (s *engineServer) handleService(w http.ResponseWriter, r *http.Request) {
 		s.refuse(w, r, http.StatusForbidden, err)
 		return
 	}
-	s.serveStream(w, r, servicePrefix+sv.Service, c, "", http.Header{"Eriphe-Target": {target}})
+	s.serveStream(w, r, servicePrefix+sv.Service, c, "", http.Header{"Eriphe-Target": {target}}, nil)
 }
 
 // serveStream creates a container and runs it on a connection of its own:
 // its input from the node, its output and its end to it (engine_stream.go).
 // The container outlives the node's connection, as it outlived the docker
 // CLI: it is stopped by a stop.
-func (s *engineServer) serveStream(w http.ResponseWriter, r *http.Request, name string, c apiContainer, extra string, header http.Header) {
+func (s *engineServer) serveStream(w http.ResponseWriter, r *http.Request, name string, c apiContainer, extra string, header http.Header, created func()) {
+	if created == nil {
+		created = func() {}
+	}
+	done := sync.OnceFunc(created)
+	defer done()
 	if !strings.EqualFold(r.Header.Get("Upgrade"), "eriphe-engine") {
 		s.refuse(w, r, http.StatusBadRequest, errors.New("a container's stream needs Upgrade: eriphe-engine"))
 		return
 	}
-	if err := s.d.create(r.Context(), name, c, true); err != nil {
+	err := s.d.create(r.Context(), name, c, true)
+	done()
+	if err != nil {
 		s.refuse(w, r, http.StatusBadGateway, fmt.Errorf("create %s: %v", name, err))
 		return
 	}
@@ -679,7 +716,15 @@ func (s *engineServer) handleHelper(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := "eriphe-helper-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	if err := s.d.create(r.Context(), name, c, false); err != nil {
+	s.creating.Lock()
+	if err := s.clash(r.Context(), c, false); err != nil {
+		s.creating.Unlock()
+		s.refuseClash(w, r, err)
+		return
+	}
+	err = s.d.create(r.Context(), name, c, false)
+	s.creating.Unlock()
+	if err != nil {
 		s.refuse(w, r, http.StatusBadGateway, fmt.Errorf("create a helper: %v", err))
 		return
 	}

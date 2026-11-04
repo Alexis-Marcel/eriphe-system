@@ -394,6 +394,33 @@ func (d *dockerAPI) listLabelled(ctx context.Context, label string) ([]string, e
 	return ids, nil
 }
 
+// apiListed is a container as the daemon lists it: its state (created,
+// running…), its labels and its mounts, a bind's source as it was given.
+type apiListed struct {
+	ID     string            `json:"Id"`
+	State  string            `json:"State"`
+	Labels map[string]string `json:"Labels"`
+	Mounts []struct {
+		Type   string `json:"Type"`
+		Source string `json:"Source"`
+		RW     bool   `json:"RW"`
+	} `json:"Mounts"`
+}
+
+// listed is the containers with one of these labels, in any state.
+func (d *dockerAPI) listed(ctx context.Context, labels ...string) ([]apiListed, error) {
+	var out []apiListed
+	for _, l := range labels {
+		f, _ := json.Marshal(map[string][]string{"label": {l}})
+		var list []apiListed
+		if err := d.call(ctx, http.MethodGet, "/containers/json", url.Values{"all": {"1"}, "filters": {string(f)}}, nil, &list); err != nil {
+			return nil, err
+		}
+		out = append(out, list...)
+	}
+	return out, nil
+}
+
 // apiNetwork is what the engine reads of a network.
 type apiNetwork struct {
 	Internal bool `json:"Internal"`

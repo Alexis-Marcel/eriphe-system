@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -89,6 +90,7 @@ type fakeEngine struct {
 	exec    func(container string, spec execSpec) (execResult, error)
 	inf     engineInfo
 	wakeErr error
+	busy    int // runTask says errEngineBusy this many times first
 }
 
 func (f *fakeEngine) traits() engineTraits { return f.tr }
@@ -105,6 +107,11 @@ func (f *fakeEngine) endTask(string) {}
 // runTask records the task; its container ends once its input is closed.
 func (f *fakeEngine) runTask(spec taskRunSpec) (*engineRun, error) {
 	f.mu.Lock()
+	if f.busy > 0 {
+		f.busy--
+		f.mu.Unlock()
+		return nil, fmt.Errorf("eriphe-node engine: its folder is under one a task can write (%w)", errEngineBusy)
+	}
 	f.tasks = append(f.tasks, spec)
 	f.mu.Unlock()
 	inR, inW := io.Pipe()

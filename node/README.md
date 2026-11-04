@@ -925,8 +925,12 @@ directly. The node is not trusted: a compromised node gets its own tasks, nothin
   container outlives the node's connection, as it outlived the docker CLI: a stop stops it. An image
   the daemon does not have is pulled first, as `docker run` does.
 
-What it cannot prevent is a race: a directory replaced by a symlink between its check and the
-daemon's mount. `TestEngineRunsTheNode` runs the node's own functions through the engine to a fake
+A folder is checked when its container is made and mounted when it starts: no container mounts a
+path strictly under a place a running task can write, nor does a task get a place to write over
+what a container not started yet mounts (`mountClash`, `engine_policy.go`). The engine answers 409
+and the node tries again every 15 s, for up to 12 hours (`runTaskWhenFree`), so that a task cannot
+swap another's folder for a symlink in between. What it cannot prevent is the node itself, which
+writes its own root, doing so with a task's folder there. `TestEngineRunsTheNode` runs the node's own functions through the engine to a fake
 daemon (a new verb belongs there); `TestEngineRefusesWhatTheNodeMayNotDo` is a compromised node
 calling the engine directly. install.sh (Linux, a Mac's Lima VM), eriphe-launcher and
 `deploy/nas` run it as `eriphe-engine` (`ERIPHE_ENGINE_URL=http://eriphe-engine:8792`), and so
