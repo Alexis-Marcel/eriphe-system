@@ -1,4 +1,6 @@
-{{/* Settings → Remote access (web_remote.go). */}}
+{{/* Settings → Access (web_remote.go): from the web (the remote access),
+     the mobile app (installing the workspace, app.js) and Telegram's bot
+     (push.html, web_telegram.go). */}}
 
 {{define "i-globe"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.3 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.3-3.5-8.5s1.1-6.1 3.5-8.5z"/></svg>{{end}}
 {{define "i-phone"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/></svg>{{end}}
@@ -6,9 +8,30 @@
 {{define "i-clock"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>{{end}}
 
 {{define "remote"}}
-<header class="page-head"><h2>{{t "settings.remote"}}</h2><p>{{t "remote.lead"}}</p></header>
+<header class="page-head"><h2>{{t "settings.remote"}}</h2><p>{{t "access.lead"}}</p></header>
+<nav class="pill-tabs" aria-label="{{t "settings.remote"}}">
+  <a href="#web">{{t "access.web"}}</a><a href="#app">{{t "access.app"}}</a><a href="#telegram">{{t "access.telegram"}}</a>
+</nav>
+
+<h3 class="section-title" id="web">{{template "i-globe"}}{{t "access.web"}}</h3>
+<p class="muted">{{t "remote.lead"}}</p>
 <div id="remote-live" class="remote-live" data-remote-live>{{template "remote-status" .}}</div>
 {{template "remote-advanced" .}}
+
+<h3 class="section-title" id="app">{{template "i-phone"}}{{t "access.app"}}</h3>
+<section class="panel app-install" aria-labelledby="install-title" data-install>
+  <h4 id="install-title" class="notif-sub">{{t "install.title"}} <span class="tag tag-ok" data-installed hidden>{{t "install.done"}}</span></h4>
+  <p class="small muted" data-install-lead>{{t "install.lead"}} {{t "install.notifyhint"}}</p>
+  <div class="actions" data-install-prompt hidden><button class="btn btn-primary sm" type="button" data-install-button>{{template "i-plus"}}{{t "install.button"}}</button></div>
+  <ul class="install-how">
+    <li data-platform="ios"><b>iPhone, iPad</b><span>{{t "install.ios"}}</span></li>
+    <li data-platform="android"><b>Android</b><span>{{t "install.android"}}</span></li>
+    <li data-platform="desktop"><b>{{t "install.computer"}}</b><span>{{t "install.desktop"}}</span></li>
+  </ul>
+</section>
+
+<h3 class="section-title" id="telegram">{{template "i-chat"}}{{t "access.telegram"}}</h3>
+<section class="panel" aria-labelledby="tg-title" id="tg-panel">{{template "telegram" .Data.Telegram}}</section>
 {{end}}
 
 {{define "remote-steps"}}
@@ -55,7 +78,7 @@
 {{end}}
 <section class="panel remote-card" aria-labelledby="remote-title">
   <div class="panel-head">
-    <h3 id="remote-title">{{template "i-globe"}}{{t "settings.remote"}}</h3>
+    <h3 id="remote-title">{{template "i-globe"}}{{t "remote.title"}}</h3>
     <span class="status {{if eq .Phase "ready"}}on{{else if eq .Phase "error"}}bad{{else}}wait{{end}}"><span class="led" aria-hidden="true"></span>{{t (printf "remote.phase.%s" .Phase)}}</span>
   </div>
   {{if ne .Phase "error"}}{{template "remote-steps" .}}{{end}}

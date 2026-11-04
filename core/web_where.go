@@ -28,6 +28,7 @@ type whereLine struct {
 	On          bool
 	Usable      bool   // what it needs is there
 	Hint        string // what it needs, when it is not
+	Link        string // where to set it up, on another page
 	First, Last bool   // among the lines shown
 }
 
@@ -98,8 +99,8 @@ func (w *web) wherePage(lang string) wherePage {
 				l.Usable, l.Hint = false, "where.hint.phone"
 			}
 		case stepTelegram:
-			if !telegram {
-				continue
+			if !telegram { // set up in Settings → Access (remote.html)
+				l.Usable, l.Hint, l.Link = false, "where.hint.telegram", "/settings/remote#telegram"
 			}
 		}
 		v.Lines = append(v.Lines, l)

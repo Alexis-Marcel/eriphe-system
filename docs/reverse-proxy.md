@@ -2,7 +2,7 @@
 
 If you already run a reverse proxy (Traefik, Nginx Proxy Manager, Caddy…) with your own domain and
 certificate, Eriphe can sit behind it at a name of yours, e.g. `https://eriphe.example.org`. With no
-domain and no proxy, use **Remote access** instead (Settings → Remote access): Eriphe joins your
+domain and no proxy, use **Remote access** instead (Settings → Access): Eriphe joins your
 Tailscale network by itself, with a certificate browsers trust.
 
 Keep it private: route the name on your local network and over your VPN (split DNS, an IP allow

@@ -13,7 +13,6 @@ func init() {
 
 var telegramStrings = map[string]map[string]string{
 	"fr": {
-		"settings.channels":     "Canaux",
 		"channels.lead":         "Où {{name}} te joint en plus des notifications de tes appareils, et d'où tu peux lui répondre.",
 		"channels.settings":     "Réglages des canaux",
 		"channels.default":      "Par défaut, ses notifications passent par :",
@@ -21,7 +20,9 @@ var telegramStrings = map[string]map[string]string{
 		"channels.save":         "Enregistrer",
 		"channels.saved":        "Canaux enregistrés.",
 		"channels.err.none":     "Choisis au moins un canal.",
-		"tg.privacy":            "Telegram ne chiffre pas de bout en bout les conversations avec un bot : ses serveurs voient ce que {{name}} t'y écrit et ce que tu lui réponds. Choisis « alertes seulement » pour n'y recevoir qu'un signal et un lien.",
+		"tg.privacy":            "Telegram ne chiffre pas de bout en bout les conversations avec un bot : ses serveurs voient ce que {{name}} t'y écrit et ce que tu lui réponds. Choisis « alertes seulement » dans Notifications pour n'y recevoir qu'un signal et un lien.",
+		"tg.title":              "Parle à {{name}} depuis Telegram",
+		"tg.lead":               "Écris-lui depuis Telegram comme dans l'espace ; il peut aussi t'y prévenir.",
 		"tg.how":                "Crée un bot avec @BotFather sur Telegram (commande /newbot), puis colle ici le jeton qu'il te donne. Il est gardé chiffré dans le coffre et ne s'affiche plus jamais.",
 		"tg.token":              "Jeton du bot",
 		"tg.token.save":         "Enregistrer le jeton",
@@ -65,7 +66,6 @@ var telegramStrings = map[string]map[string]string{
 		"rule.ch.push,telegram": "Appareils et Telegram",
 	},
 	"en": {
-		"settings.channels":     "Channels",
 		"channels.lead":         "Where {{name}} reaches you besides your devices' notifications, and where you can answer from.",
 		"channels.settings":     "Channel settings",
 		"channels.default":      "By default, its notifications go by:",
@@ -73,7 +73,9 @@ var telegramStrings = map[string]map[string]string{
 		"channels.save":         "Save",
 		"channels.saved":        "Channels saved.",
 		"channels.err.none":     "Choose at least one channel.",
-		"tg.privacy":            "Telegram does not encrypt chats with a bot end to end: its servers see what {{name}} writes to you there and what you answer. Choose “alerts only” to get just a nudge and a link.",
+		"tg.privacy":            "Telegram does not encrypt chats with a bot end to end: its servers see what {{name}} writes to you there and what you answer. Choose “alerts only” in Notifications to get just a nudge and a link.",
+		"tg.title":              "Talk to {{name}} from Telegram",
+		"tg.lead":               "Write to it from Telegram as in the workspace; it can also reach you there.",
 		"tg.how":                "Create a bot with @BotFather on Telegram (/newbot), then paste the token it gives you here. It is kept encrypted in the vault and never shown again.",
 		"tg.token":              "Bot token",
 		"tg.token.save":         "Save the token",
