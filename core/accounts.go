@@ -1,0 +1,391 @@
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"slices"
+	"sort"
+	"strings"
+)
+
+// One server for each service, whatever the number of accounts: the mail
+// is one eriphe-mail with every mailbox, the calendar one eriphe-calendar
+// with every calendar account, so the brain searches all the mail, lists
+// the week's events and finds free time across every account in one call.
+// Both servers take several accounts (servers/mail, servers/calendar); each
+// tool names the account it touches in its "account" argument, and refuses
+// ids of another.
+//
+// An account is added to the server (made the first time), changed or
+// taken out of it (the server goes with the last one), from the account's
+// form or from a Google account's page. Each account keeps its own access
+// level (Server.AccountAccess, access.go): the server is also told to keep
+// read only the accounts whose level is read only. Its secret is a
+// variable of its own in the server's environment: a password bound by the
+// catalog (MAIL_PASSWORD_<hash>), or the Google account's token in the
+// vault (MAIL_GOOGLE_TOKEN_<hash>).
+//
+// Before, each account was a server of its own (mail, mail-sam, agenda…):
+// mergeAccountServers makes them one at start (accounts_merge.go).
+
+// accountService is the mail or the calendar.
+type accountService struct {
+	ID          string // its preset: mail or calendar
+	Base        string // the catalog name it is made under
+	Image       string
+	ConfigEnv   string // the variable of its configuration
+	PasswordEnv string // the stem of an account's password variable
+	GoogleEnv   string // the stem of a Google account's token variable
+	Use         string // the text key of what it is for
+	Google      string // the Google service it gives (google.go)
+}
+
+var (
+	mailService = accountService{ID: "mail", Base: "mail", Image: mailImage, ConfigEnv: "MAIL_CONFIG",
+		PasswordEnv: mailSecretEnv, GoogleEnv: mailGoogleEnv, Use: "preset.mail.use", Google: googleMail}
+	calendarService = accountService{ID: "calendar", Base: "agenda", Image: calendarImage, ConfigEnv: "CALENDAR_CONFIG",
+		PasswordEnv: calSecretEnv, GoogleEnv: calGoogleEnv, Use: "preset.calendar.use", Google: googleCalendar}
+	accountServices = []accountService{mailService, calendarService}
+)
+
+// serviceOf finds the service a server's image gives.
+func serviceOf(spec RunSpec) (accountService, bool) {
+	for _, svc := range accountServices {
+		if strings.HasPrefix(spec.Image, svc.Image) {
+			return svc, true
+		}
+	}
+	return accountService{}, false
+}
+
+// serviceByGoogle finds the service of a Google service (mail, calendar).
+func serviceByGoogle(g string) (accountService, bool) {
+	for _, svc := range accountServices {
+		if svc.Google == g {
+			return svc, true
+		}
+	}
+	return accountService{}, false
+}
+
+// svcAccount is an account as eriphe-mail or eriphe-calendar reads it;
+// what one of them does not know is left empty (and out of the JSON).
+type svcAccount struct {
+	Name     string        `json:"name"`
+	Address  string        `json:"address,omitempty"` // mail
+	Provider string        `json:"provider,omitempty"`
+	URL      string        `json:"url,omitempty"` // calendar
+	Username string        `json:"username,omitempty"`
+	IMAP     *mailEndpoint `json:"imap,omitempty"`
+	SMTP     *mailEndpoint `json:"smtp,omitempty"`
+	Auth     svcAuth       `json:"auth"`
+	ReadOnly bool          `json:"read_only,omitempty"`
+}
+
+type svcAuth struct {
+	PasswordEnv   string `json:"password_env,omitempty"`
+	OAuthTokenEnv string `json:"oauth_token_env,omitempty"`
+}
+
+// secretEnv is the variable of the account's secret.
+func (a svcAccount) secretEnv() string { return cmpOr(a.Auth.PasswordEnv, a.Auth.OAuthTokenEnv) }
+
+// google tells an account on a Google account's token.
+func (a svcAccount) google() bool { return a.Auth.OAuthTokenEnv != "" }
+
+// svcConfig is the server's configuration.
+type svcConfig struct {
+	Timezone string       `json:"timezone,omitempty"` // calendar
+	Accounts []svcAccount `json:"accounts"`
+}
+
+func (cfg svcConfig) index(name string) int {
+	return slices.IndexFunc(cfg.Accounts, func(a svcAccount) bool { return strings.EqualFold(a.Name, name) })
+}
+
+// accountEnv is the variable of an account's secret: the stem, and a hash
+// of the account's name (a name is an address, not a variable).
+func accountEnv(stem, name string) string {
+	h := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(name))))
+	return stem + "_" + strings.ToUpper(hex.EncodeToString(h[:4]))
+}
+
+// svcConfigOf reads a server's configuration, if it is a server of the
+// service.
+func svcConfigOf(svc accountService, spec RunSpec) (svcConfig, bool) {
+	if !strings.HasPrefix(spec.Image, svc.Image) {
+		return svcConfig{}, false
+	}
+	var cfg svcConfig
+	if json.Unmarshal([]byte(spec.Env[svc.ConfigEnv].Value), &cfg) != nil {
+		return svcConfig{}, false
+	}
+	return cfg, true
+}
+
+// svcServer is the workspace server of a service, as it is.
+type svcServer struct {
+	Name   string
+	Server Server
+	Spec   RunSpec
+	Config svcConfig
+}
+
+// account finds one of its accounts.
+func (st svcServer) account(name string) (svcAccount, bool) {
+	if i := st.Config.index(name); i >= 0 {
+		return st.Config.Accounts[i], true
+	}
+	return svcAccount{}, false
+}
+
+// level is an account's access level.
+func (st svcServer) level(name string) string {
+	for a, l := range st.Server.AccountAccess {
+		if strings.EqualFold(a, name) {
+			return l
+		}
+	}
+	return st.Server.level()
+}
+
+// serviceServers are the workspace servers of a service, the one under
+// its own name first: one once they are merged.
+func (c *core) serviceServers(svc accountService) []svcServer {
+	var out []svcServer
+	for name, s := range c.conf().Servers {
+		if !s.local() || c.source(kindServer, name) != sourceWorkspace {
+			continue
+		}
+		spec, err := decodeRun(s.Run)
+		if err != nil {
+			continue
+		}
+		if cfg, ok := svcConfigOf(svc, spec); ok {
+			out = append(out, svcServer{Name: name, Server: s, Spec: spec, Config: cfg})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Name == svc.Base || out[j].Name != svc.Base && out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// serviceServer is the workspace server of a service.
+func (c *core) serviceServer(svc accountService) (svcServer, bool) {
+	if all := c.serviceServers(svc); len(all) > 0 {
+		return all[0], true
+	}
+	return svcServer{}, false
+}
+
+// accountsOf is a server's accounts, if it is the server of a service.
+func accountsOf(s Server) (accountService, svcConfig, bool) {
+	if !s.local() {
+		return accountService{}, svcConfig{}, false
+	}
+	spec, err := decodeRun(s.Run)
+	if err != nil {
+		return accountService{}, svcConfig{}, false
+	}
+	svc, ok := serviceOf(spec)
+	if !ok {
+		return accountService{}, svcConfig{}, false
+	}
+	cfg, ok := svcConfigOf(svc, spec)
+	return svc, cfg, ok
+}
+
+var (
+	errAccountExists  = &catalogError{http.StatusConflict, "accounts.exists", "", errors.New("this account is already connected")}
+	errAccountUnknown = &catalogError{http.StatusNotFound, "accounts.unknown", "", errors.New("no such account")}
+)
+
+// accountPut is a change of one account of a service.
+type accountPut struct {
+	Lang    string     // the words of the server's use, if it is made
+	Replace string     // the account changed, by its name; "" adds one
+	Account svcAccount // its auth names no variable: it gets its own
+	Level   string     // "" keeps the account's level (reads free for a new one)
+	Secret  *EnvValue  // its secret's reference (a Google token); nil keeps it, or takes Password
+	// Password, typed, goes to the vault with the account.
+	Password string
+	Timezone string // calendar: the server's zone, if given
+}
+
+// putAccount adds an account to its service's server, made if need be, or
+// changes one. A Google account connected again (Secret) replaces an
+// account of the same name.
+func (c *core) putAccount(svc accountService, in accountPut) error {
+	st, exists := c.serviceServer(svc)
+	a := in.Account
+	if strings.TrimSpace(a.Name) == "" {
+		return errInvalid(errors.New("an account needs a name"))
+	}
+	if !exists {
+		st = svcServer{Name: c.freeServerName(svc.Base, a.Name), Spec: RunSpec{Image: svc.Image, Transport: transportStdio},
+			Server: Server{Use: tr(in.Lang, svc.Use)}}
+	}
+	cfg := st.Config
+	at := -1
+	if in.Replace != "" {
+		if at = cfg.index(in.Replace); at < 0 {
+			return errAccountUnknown
+		}
+	}
+	if same := cfg.index(a.Name); same >= 0 && same != at {
+		if in.Secret == nil {
+			return errAccountExists
+		}
+		at = same // the same address connected with Google: it takes its place
+	}
+	var old svcAccount
+	level := in.Level
+	if at >= 0 {
+		old = cfg.Accounts[at]
+		if level == "" {
+			level = st.level(old.Name)
+		}
+	}
+	if level == "" {
+		level = accessReads
+	}
+	stem := svc.PasswordEnv
+	if in.Secret != nil {
+		stem = svc.GoogleEnv
+	}
+	env := accountEnv(stem, a.Name)
+	a.Auth = svcAuth{}
+	if in.Secret != nil {
+		a.Auth.OAuthTokenEnv = env
+	} else {
+		a.Auth.PasswordEnv = env
+	}
+	creds := credentials{}
+	secret := EnvValue{}
+	switch {
+	case in.Secret != nil:
+		secret = *in.Secret
+	case strings.TrimSpace(in.Password) != "":
+		creds["env:"+env] = in.Password
+		secret = EnvValue{File: "vault:pending"} // bound by the catalog
+	case at >= 0 && old.Auth.PasswordEnv != "":
+		secret = st.Spec.Env[old.Auth.PasswordEnv]
+	}
+	if secret.File == "" && secret.Value == "" {
+		return errors.New("form.nopassword")
+	}
+	if at >= 0 {
+		cfg.Accounts[at] = a
+	} else {
+		cfg.Accounts = append(cfg.Accounts, a)
+	}
+	if svc == calendarService {
+		cfg.Timezone = cmpOr(in.Timezone, cmpOr(cfg.Timezone, c.conf().TimeZone))
+	}
+	levels := map[string]string{}
+	for k, v := range st.Server.AccountAccess {
+		if !strings.EqualFold(k, old.Name) || old.Name == "" {
+			levels[k] = v
+		}
+	}
+	levels[a.Name] = level
+	srv := st.Server
+	srv.AccountAccess = levels
+	if err := c.writeService(svc, st, srv, cfg, map[string]EnvValue{env: secret}, creds, exists); err != nil {
+		return err
+	}
+	if old.Name != "" && !strings.EqualFold(old.Name, a.Name) {
+		c.store.forgetAccountActions(st.Name, old.Name)
+	}
+	return nil
+}
+
+// dropAccount takes an account out of its service's server; the server
+// goes with its last account.
+func (c *core) dropAccount(svc accountService, name string) error {
+	st, ok := c.serviceServer(svc)
+	if !ok || st.Config.index(name) < 0 {
+		return errAccountUnknown
+	}
+	cfg := st.Config
+	gone := cfg.Accounts[cfg.index(name)]
+	cfg.Accounts = slices.Delete(cfg.Accounts, cfg.index(name), cfg.index(name)+1)
+	if len(cfg.Accounts) == 0 {
+		return c.deleteServer(st.Name)
+	}
+	srv := st.Server
+	srv.AccountAccess = map[string]string{}
+	for k, v := range st.Server.AccountAccess {
+		if !strings.EqualFold(k, gone.Name) {
+			srv.AccountAccess[k] = v
+		}
+	}
+	if err := c.writeService(svc, st, srv, cfg, nil, nil, true); err != nil {
+		return err
+	}
+	c.store.forgetAccountActions(st.Name, gone.Name)
+	return nil
+}
+
+// setAccountLevel changes one account's access level.
+func (c *core) setAccountLevel(server, account, level string) error {
+	if !validAccess(level) || level == "" {
+		return errInvalid(errors.New("unknown access level"))
+	}
+	srv, ok := c.conf().Servers[server]
+	svc, cfg, isSvc := accountsOf(srv)
+	if !ok || !isSvc || c.source(kindServer, server) != sourceWorkspace {
+		return errReadOnly(kindServer, server)
+	}
+	i := cfg.index(account)
+	if i < 0 {
+		return errAccountUnknown
+	}
+	spec, _ := decodeRun(srv.Run)
+	levels := map[string]string{}
+	for k, v := range srv.AccountAccess {
+		levels[k] = v
+	}
+	for k := range levels {
+		if strings.EqualFold(k, account) {
+			delete(levels, k)
+		}
+	}
+	levels[cfg.Accounts[i].Name] = level
+	next := srv
+	next.AccountAccess = levels
+	return c.writeService(svc, svcServer{Name: server, Server: srv, Spec: spec, Config: cfg}, next, cfg, nil, nil, true)
+}
+
+// writeService writes a service's server: its configuration, each
+// account's secret (env holds the new ones; the others keep theirs) and
+// read_only for the accounts kept read only.
+func (c *core) writeService(svc accountService, st svcServer, srv Server, cfg svcConfig, env map[string]EnvValue, creds credentials, exists bool) error {
+	for i := range cfg.Accounts {
+		cfg.Accounts[i].ReadOnly = srv.AccountAccess[cfg.Accounts[i].Name] == accessReadOnly
+	}
+	raw, _ := json.Marshal(cfg)
+	next := map[string]EnvValue{svc.ConfigEnv: {Value: string(raw)}}
+	for _, a := range cfg.Accounts {
+		e := a.secretEnv()
+		if v, ok := env[e]; ok {
+			next[e] = v
+		} else if v, ok := st.Spec.Env[e]; ok {
+			next[e] = v
+		}
+	}
+	spec := st.Spec
+	spec.Env = next
+	srv.Run = marshalRun(spec)
+	level := srv.level()
+	srv.Access, srv.TrustAnnotations = level, level != accessAsk
+	mode := putUpdate
+	if !exists {
+		mode = putCreate
+	}
+	return c.putServer(mode, st.Name, srv, creds)
+}

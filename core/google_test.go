@@ -99,8 +99,9 @@ func TestGoogleAccounts(t *testing.T) {
 	}
 	ref := googleSecret("sam@example.org")
 	mail, cal := runOf(t, c.core, "mail"), runOf(t, c.core, "agenda")
-	if mail.Env[mailGoogleEnv].File != vaultPrefix+ref || cal.Env[calGoogleEnv].File != vaultPrefix+ref ||
-		!strings.Contains(mail.Env["MAIL_CONFIG"].Value, `"oauth_token_env":"MAIL_GOOGLE_TOKEN"`) ||
+	samMail, samCal := accountEnv(mailGoogleEnv, "sam@example.org"), accountEnv(calGoogleEnv, "sam@example.org")
+	if mail.Env[samMail].File != vaultPrefix+ref || cal.Env[samCal].File != vaultPrefix+ref ||
+		!strings.Contains(mail.Env["MAIL_CONFIG"].Value, `"oauth_token_env":"`+samMail+`"`) ||
 		!strings.Contains(cal.Env["CALENDAR_CONFIG"].Value, `"provider":"google"`) || !strings.Contains(cal.Env["CALENDAR_CONFIG"].Value, "Europe/Paris") {
 		t.Fatalf("specs: %+v %+v", mail, cal)
 	}
@@ -110,7 +111,7 @@ func TestGoogleAccounts(t *testing.T) {
 		}
 	}
 	env, err := lendService(mail)
-	if err != nil || !strings.Contains(env[mailGoogleEnv], `"refresh_token":"the-refresh"`) {
+	if err != nil || !strings.Contains(env[samMail], `"refresh_token":"the-refresh"`) {
 		t.Fatalf("lent: %v %v", env, err)
 	}
 	if _, ok := c.conf().Servers[filesServer]; ok {
@@ -139,7 +140,7 @@ func TestGoogleAccounts(t *testing.T) {
 	if n := len(c.googleTools("sam@example.org")); n != 3 || len(c.googleAccounts()) != 1 {
 		t.Fatalf("%d tools, %d accounts", n, len(c.googleAccounts()))
 	}
-	if env, _ := lendService(runOf(t, c.core, "mail")); !strings.Contains(env[mailGoogleEnv], "the-refresh-2") {
+	if env, _ := lendService(runOf(t, c.core, "mail")); !strings.Contains(env[samMail], "the-refresh-2") {
 		t.Fatal("the mail server does not read the new token")
 	}
 	if st := c.driveState(); len(st.Accounts) != 1 || st.Accounts[0].Name != "sam@example.org" || !st.CanWrite {
@@ -182,14 +183,22 @@ func TestGoogleAccounts(t *testing.T) {
 		t.Fatalf("failed: %s", body)
 	}
 
-	// A second account, for mail: a tool of its own, under another name.
+	// A second account, for mail: one more account of the same server.
 	g.email, g.scope, g.refresh = "bob@example.org", scopeMail, "bob-refresh"
 	googleSignIn(t, tw, g, csrf, url.Values{"service": {"mail"}})
-	if spec := runOf(t, c.core, "mail-bob"); spec.Env[mailGoogleEnv].File != vaultPrefix+googleSecret("bob@example.org") {
+	bobMail := accountEnv(mailGoogleEnv, "bob@example.org")
+	if spec := runOf(t, c.core, "mail"); spec.Env[bobMail].File != vaultPrefix+googleSecret("bob@example.org") ||
+		spec.Env[samMail].File != vaultPrefix+ref || !strings.Contains(spec.Env["MAIL_CONFIG"].Value, `"name":"bob@example.org"`) {
 		t.Fatalf("second account: %+v", spec)
 	}
-	if !strings.Contains(c.conf().Servers["mail-bob"].Use, "bob@example.org") {
-		t.Fatalf("use: %q", c.conf().Servers["mail-bob"].Use)
+	if _, ok := c.conf().Servers["mail-bob"]; ok || strings.Contains(c.conf().Servers["mail"].Use, "@") {
+		t.Fatalf("a server for the second account: %+v", c.conf().Servers)
+	}
+	if tools := c.googleTools("bob@example.org"); len(tools) != 1 || tools[0].Name != "mail" {
+		t.Fatalf("bob's tools: %+v", tools)
+	}
+	if lv := c.conf().Servers["mail"].AccountAccess; lv["bob@example.org"] != accessReads || lv["sam@example.org"] != accessReads {
+		t.Fatalf("levels: %v", lv)
 	}
 
 	// A service Google did not grant is said.
@@ -205,8 +214,9 @@ func TestGoogleAccounts(t *testing.T) {
 	if _, body, _ := tw.post("/settings/google/remove", url.Values{"account": {"bob@example.org"}}, csrf); strings.Contains(body, "bob@example.org") {
 		t.Fatalf("removed: %s", body)
 	}
-	if _, ok := c.conf().Servers["mail-bob"]; ok {
-		t.Fatal("its tool stays")
+	if spec := runOf(t, c.core, "mail"); spec.Env[bobMail].File != "" || strings.Contains(spec.Env["MAIL_CONFIG"].Value, "bob@") ||
+		spec.Env[samMail].File != vaultPrefix+ref {
+		t.Fatalf("its account stays, or sam's went: %+v", spec)
 	}
 	if _, err := currentVault().get(googleSecret("bob@example.org")); err == nil {
 		t.Fatal("its token stays")

@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +21,9 @@ import (
 
 type toolView struct {
 	serverView
+	// Account is the account the row is, on a server of several (the
+	// mail, the calendar: web_accounts.go); "" for a tool.
+	Account string
 	Source  string
 	Preset  toolPreset // the preset it comes from, if any
 	Detail  string     // a line for a preset's tool: "Gmail · sam@gmail.com"
@@ -44,6 +48,12 @@ type toolView struct {
 // or are the configuration file's.
 func (t toolView) Editable() bool { return editable(t.Source, t.Preset, t.Auth) }
 
+// Removable tells a row with its own removal: a workspace tool, or an
+// account on a password (a Google account's goes with it, on its page).
+func (t toolView) Removable() bool {
+	return t.Source == sourceWorkspace && (t.Account == "" || t.Preset.ID != "google")
+}
+
 func editable(source string, p toolPreset, auth string) bool {
 	return source == sourceWorkspace && p.ID != "home-assistant" && auth != "github-app" && p.Form != "drive" && p.Form != "google"
 }
@@ -53,16 +63,16 @@ func editable(source string, p toolPreset, auth string) bool {
 // actions allowed without asking.
 func (t toolView) AccessURL() string {
 	if t.Editable() {
-		return "/settings/tools/" + t.Name + "/edit#form-access"
+		return t.EditURL() + "#form-access"
 	}
-	return "/settings/tools/" + t.Name + "/access"
+	return "/settings/tools/" + t.Name + "/access" + accountQuery(t.Account)
 }
 
 func (t toolView) AllowedURL() string {
 	if t.Editable() {
-		return "/settings/tools/" + t.Name + "/edit#allowed-" + t.Name
+		return t.EditURL() + "#allowed-" + t.Key()
 	}
-	return "/settings/tools/" + t.Name + "/access#allowed-" + t.Name
+	return "/settings/tools/" + t.Name + "/access" + accountQuery(t.Account) + "#allowed-" + t.Key()
 }
 
 // SignIn is the row's way to sign in to an OAuth service, only when it
@@ -129,23 +139,14 @@ func presetOf(lang string, s Server) (toolPreset, string) {
 	if err != nil {
 		return toolPreset{}, ""
 	}
-	if email := googleAccountOfRun(spec); email != "" {
-		// Gmail or Google Calendar on a Google account (google.go).
-		p, _ := presetByID("google")
-		return p, tr(lang, "google."+googleServiceOf(spec)) + " · " + email
-	}
-	if email := googleAccountOfRun(spec); email != "" {
-		// Gmail or Google Calendar on a Google account (google.go).
-		p, _ := presetByID("google")
-		return p, tr(lang, "google."+googleServiceOf(spec)) + " · " + email
-	}
-	if m, ok := mailFormOf(spec); ok {
-		p, _ := presetByID("mail")
-		return p, tr(lang, "mailp."+m.Provider) + " · " + m.Address
-	}
-	if c, ok := calendarFormOf(spec); ok {
-		p, _ := presetByID("calendar")
-		return p, tr(lang, "calp."+c.Provider) + " · " + c.Username
+	if svc, cfg, ok := accountsOf(s); ok {
+		// The mail or the calendar, every account (accounts.go); one
+		// account says which, and comes from where it does.
+		if len(cfg.Accounts) == 1 {
+			return accountPreset(svc, cfg.Accounts[0]), accountDetail(lang, svc, cfg.Accounts[0])
+		}
+		p, _ := presetByID(svc.ID)
+		return p, ""
 	}
 	if fc, ok := filesConfigOf(Server{Run: marshalRun(spec)}); ok {
 		p, _ := presetByID("gdrive")
@@ -185,28 +186,30 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 	v.Voice = w.c.store.get(voiceTokenKey) != ""
 	v.VoiceOnly = v.Voice
 	q := r.URL.Query()
-	if n := q.Get("tool"); serverName.MatchString(n) && w.c.source(kindServer, n) != "" {
-		v.Follow, v.New = n, q.Get("new") != ""
+	if n := q.Get("tool"); followKey.MatchString(n) {
+		v.Follow, v.New = n, q.Get("new") != "" // a tool, or an account's row (its Key)
 	}
 	for _, sv := range w.servers() {
-		t := w.toolRow(lang, conf, sv, v.Voice)
-		if t.Preset.ID == "home-assistant" {
-			v.VoiceOnly = false
-		}
-		if sv.Name == v.Follow {
-			st := statusOf(lang, sv)
-			t.Follow = &st
-			if v.New {
-				v.Tools = append([]toolView{t}, v.Tools...)
-				continue
+		for _, t := range w.toolRows(lang, conf, sv, v.Voice) {
+			if t.Preset.ID == "home-assistant" {
+				v.VoiceOnly = false
 			}
-		} else {
-			// a server being placed or still connecting (e.g. just
-			// authorized): the list refreshes itself until it settles; the
-			// tool followed asks for its own row
-			v.Waiting = v.Waiting || t.Placed || sv.Status == statusConnecting
+			if t.Key() == v.Follow || t.Account != "" && sv.Name == v.Follow && v.New {
+				st := statusOf(lang, sv)
+				st.Row = t.RowURL()
+				t.Follow = &st
+				if v.New {
+					v.Tools = append([]toolView{t}, v.Tools...)
+					continue
+				}
+			} else {
+				// a server being placed or still connecting (e.g. just
+				// authorized): the list refreshes itself until it settles; the
+				// tool followed asks for its own row
+				v.Waiting = v.Waiting || t.Placed || sv.Status == statusConnecting
+			}
+			v.Tools = append(v.Tools, t)
 		}
-		v.Tools = append(v.Tools, t)
 	}
 	v.Groups = groupTools(lang, v.Tools)
 	v.Gallery = w.gallery(lang)
@@ -215,6 +218,9 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 	}
 	if n := q.Get("removed"); n != "" && serverName.MatchString(n) && w.c.source(kindServer, n) == "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.removed"), n)
+	}
+	if n := q.Get("removedaccount"); n != "" && len(n) <= 254 && !strings.ContainsAny(n, "<>\"") {
+		v.Flash = fmt.Sprintf(tr(lang, "accounts.removed"), n)
 	}
 	if n := q.Get("connected"); n != "" && w.c.source(kindServer, n) != "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.connectedflash"), n)
@@ -241,6 +247,9 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.tools", Nav: "settings", Tab: "tools", Data: v})
 }
+
+// followKey is what ?tool= may name: a tool, or an account's row.
+var followKey = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
 
 // toolRow is one tool of the list.
 func (w *web) toolRow(lang string, conf *Config, sv serverView, voice bool) toolView {
@@ -320,7 +329,9 @@ type toolForm struct {
 	Volume, Egress, Writable           bool
 	Env                                []envRow
 	// Mail and calendar: the kind of account comes first (Choose), then
-	// its own form.
+	// its own form. Account is the account edited, in its service's
+	// server (accounts.go).
+	Account   string
 	Mail      mailForm
 	Calendar  calendarForm
 	SecretSet bool // their password is set
@@ -379,8 +390,18 @@ func (w *web) reauthLevels(name string, s Server) []string {
 	return out
 }
 
+// IsAccount tells the form of a mailbox or a calendar account: an account
+// of its service's one server, without a name or a use of its own.
+func (f toolForm) IsAccount() bool { return f.Preset.Form == "mail" || f.Preset.Form == "calendar" }
+
+// Title is what an edit's form is of: the account, or the tool.
+func (f toolForm) Title() string { return cmpOr(f.Account, f.Name) }
+
 // PickURL is where a kind of account picked from the list leads.
 func (f toolForm) PickURL() string {
+	if f.Edit && f.Account != "" {
+		return "/settings/tools/" + f.Name + "/edit?account=" + url.QueryEscape(f.Account) + "&provider="
+	}
 	if f.Edit {
 		return "/settings/tools/" + f.Name + "/edit?provider="
 	}
@@ -447,6 +468,9 @@ func newToolForm(lang string, p toolPreset) toolForm {
 	if p.Form == "calendar" {
 		f.Calendar = calendarForm{Timezone: "Europe/Paris"}
 	}
+	if p.Form == "mail" || p.Form == "calendar" {
+		f.Kind = "local"
+	}
 	f.Env = padEnv(nil)
 	return f
 }
@@ -494,14 +518,8 @@ func toolFormOf(name string, s Server) toolForm {
 			v := spec.Env[k]
 			f.Env = append(f.Env, envRow{Name: k, Value: v.Value, Secret: v.File != "", IsSet: v.File != ""})
 		}
-		if googleAccountOfRun(spec) != "" {
-			f.Preset, _ = presetByID("google") // its page, not this form
-		} else if m, ok := mailFormOf(spec); ok {
-			f.Preset, _ = presetByID("mail")
-			f.Mail, f.SecretSet = m, spec.Env[mailSecretEnv].File != ""
-		} else if cf, ok := calendarFormOf(spec); ok {
-			f.Preset, _ = presetByID("calendar")
-			f.Calendar, f.SecretSet = cf, spec.Env[calSecretEnv].File != ""
+		if svc, _, ok := accountsOf(s); ok {
+			f.Preset, _ = presetByID(svc.ID) // its accounts have their forms (web_accounts.go)
 		}
 	}
 	f.Env = padEnv(f.Env)
@@ -519,7 +537,8 @@ func readToolForm(r *http.Request) toolForm {
 		Volume: on("volume"), Egress: on("egress"), Writable: on("writable"),
 		Mail: mailForm{Address: v("address"), Provider: v("mail_provider"), IMAPHost: v("imap_host"), SMTPHost: v("smtp_host"),
 			IMAPPort: v("imap_port"), SMTPPort: v("smtp_port"), Username: v("mail_user")},
-		Calendar: calendarForm{Provider: v("cal_provider"), URL: v("cal_url"), Username: v("cal_user"), Timezone: v("timezone")}}
+		Calendar: calendarForm{Provider: v("cal_provider"), URL: v("cal_url"), Username: v("cal_user"), Timezone: v("timezone")},
+		Account:  v("account")}
 	f.Access = formAccess(v("access"), on("trust"))
 	f.InDialog = on("dialog")
 	if slug := slugName(f.Name); slug != "" {
@@ -559,52 +578,10 @@ func (f toolForm) server(r *http.Request, old *Server) (Server, credentials, err
 		}
 	}
 	switch {
-	case f.Preset.Form == "mail" || f.Preset.Form == "calendar":
-		return f.accountServer(r, s, oldSpec)
 	case f.Kind == "local":
 		return f.localServer(r, s, oldSpec)
 	}
 	return f.remoteServer(r, s, old)
-}
-
-// accountServer is a mail or calendar tool: its server's run, and the
-// account's password.
-func (f toolForm) accountServer(r *http.Request, s Server, oldSpec *RunSpec) (Server, credentials, error) {
-	spec, env, moved, err := f.accountRun(oldSpec)
-	if err != nil {
-		return s, nil, err
-	}
-	// Another mailbox or calendar account: the old password is not its own.
-	pw := accountPassword(r, f)
-	if strings.TrimSpace(pw) == "" && (spec.Env[env].File == "" || moved) {
-		if moved {
-			return s, nil, errors.New("form.newpassword")
-		}
-		return s, nil, errors.New("form.nopassword")
-	}
-	s.Run = marshalRun(spec)
-	return s, credentials{"env:" + env: pw}, nil
-}
-
-// accountRun is the run of a mail or calendar tool, the variable of its
-// password, and whether it is another account than the one edited.
-func (f toolForm) accountRun(oldSpec *RunSpec) (spec RunSpec, env string, moved bool, err error) {
-	if f.Preset.Form == "mail" {
-		if err = f.Mail.normalize(oldSpec); err == nil {
-			spec, err = f.Mail.run(oldSpec)
-		}
-		if prev, ok := mailFormOf(deref(oldSpec)); ok {
-			moved = !prev.same(f.Mail)
-		}
-		return spec, mailSecretEnv, moved, err
-	}
-	if err = f.Calendar.normalize(); err == nil {
-		spec, err = f.Calendar.run(oldSpec)
-	}
-	if prev, ok := calendarFormOf(deref(oldSpec)); ok {
-		moved = !prev.same(f.Calendar)
-	}
-	return spec, calSecretEnv, moved, err
 }
 
 // localServer is a server run on a node, from its image.
@@ -788,7 +765,12 @@ func (w *web) handleNewTool(rw http.ResponseWriter, r *http.Request, s *session)
 		}
 	}
 	pickAccount(&f, r.URL.Query().Get("provider"))
-	if f.Name != "" {
+	if p.Form == "mail" || p.Form == "calendar" {
+		f.Name = "" // an account of the service's one server (accounts.go)
+		if st, ok := w.c.serviceServer(calendarService); ok && p.Form == "calendar" && st.Config.Timezone != "" {
+			f.Calendar.Timezone = st.Config.Timezone // one zone for the calendar
+		}
+	} else if f.Name != "" {
 		// a second account of a kind: a name of its own, not one taken
 		// (agenda, then agenda-icloud, agenda-icloud-2…)
 		f.Name = w.c.freeServerName(f.Name, f.Picked())
@@ -804,10 +786,21 @@ func (w *web) handleEditTool(rw http.ResponseWriter, r *http.Request, s *session
 		return
 	}
 	f := toolFormOf(name, srv)
+	if svc, a, ok := w.accountOfRequest(r, name); ok {
+		af, editable := w.toolFormOfAccount(name, srv, svc, a)
+		if !editable {
+			http.Redirect(rw, r, "/settings/google", http.StatusSeeOther) // a Google account's page
+			return
+		}
+		f = af
+	} else if _, _, isSvc := accountsOf(srv); isSvc {
+		http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther) // its accounts have the forms
+		return
+	}
 	if p := r.URL.Query().Get("provider"); p != "" {
 		pickAccount(&f, p)
 	}
-	if v, ok := w.toolAccess(w.lang(r), name); ok {
+	if v, ok := w.toolAccessOf(w.lang(r), name, f.Account); ok {
 		f.AccessView = &v
 	}
 	f.Reauth = w.reauthLevels(name, srv)
@@ -841,6 +834,10 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 		} else {
 			fail(errNotFound(kindServer, name))
 		}
+		return
+	}
+	if f.Preset.Form == "mail" || f.Preset.Form == "calendar" {
+		w.saveAccount(rw, r, s, f, name, old) // web_accounts.go
 		return
 	}
 	if mode == putCreate && name == "" {
@@ -936,13 +933,6 @@ func (w *web) keepToolSecrets(r *http.Request, f *toolForm, name string, old Ser
 	if v, ok := w.toolAccess(w.lang(r), name); ok {
 		f.AccessView = &v
 	}
-	switch f.Preset.Form {
-	case "mail":
-		f.SecretSet = back.SecretSet && back.Mail.same(f.Mail)
-	case "calendar":
-		f.SecretSet = back.SecretSet && back.Calendar.same(f.Calendar)
-	}
-	f.Switched = !f.SecretSet && back.SecretSet
 	for i := range f.Env {
 		for _, o := range back.Env {
 			if o.Name == f.Env[i].Name && f.Env[i].Secret {
@@ -954,6 +944,10 @@ func (w *web) keepToolSecrets(r *http.Request, f *toolForm, name string, old Ser
 
 func (w *web) handleDeleteTool(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
+	if r.PostFormValue("account") != "" {
+		w.deleteAccount(rw, r, name) // web_accounts.go
+		return
+	}
 	if err := w.c.deleteServer(name); err != nil {
 		w.toast(rw, w.formError(r, err), false)
 		return

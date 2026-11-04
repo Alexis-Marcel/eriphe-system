@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"fmt"
 	"html"
 	"net"
@@ -288,14 +287,26 @@ func TestAccessChoiceMapsToPolicy(t *testing.T) {
 	}
 }
 
-func mailConfig(t *testing.T, c *catalogCore, name string) mailAccount {
+// serviceAccount is an account of the mail or of the calendar, by its
+// name, and its secret as the server reads it.
+func serviceAccount(t *testing.T, c *core, svc accountService, name string) (svcAccount, string) {
 	t.Helper()
-	spec := c.conf().runSpecs[name]
-	var cfg struct{ Accounts []mailAccount }
-	if err := json.Unmarshal([]byte(spec.Env["MAIL_CONFIG"].Value), &cfg); err != nil || len(cfg.Accounts) != 1 {
-		t.Fatalf("%s: MAIL_CONFIG = %q", name, spec.Env["MAIL_CONFIG"].Value)
+	st, ok := c.serviceServer(svc)
+	if !ok {
+		t.Fatalf("no %s server", svc.ID)
 	}
-	return cfg.Accounts[0]
+	a, ok := st.account(name)
+	if !ok {
+		t.Fatalf("%s: no account %s in %s", svc.ID, name, st.Spec.Env[svc.ConfigEnv].Value)
+	}
+	secret, _ := readSecret(c.conf().runSpecs[st.Name].Env[a.secretEnv()].File)
+	return a, secret
+}
+
+func mailConfig(t *testing.T, c *catalogCore, address string) svcAccount {
+	t.Helper()
+	a, _ := serviceAccount(t, c.core, mailService, address)
+	return a
 }
 
 // Mail: the kind of mailbox first, then its own form; each gives a config
@@ -355,36 +366,45 @@ func TestMailProviderForms(t *testing.T) {
 			t.Errorf("%s: %d %s", tc.provider, code, body)
 			continue
 		}
-		a := mailConfig(t, c, tc.name)
-		if a.Provider != tc.wantProvider || a.Address != tc.address || a.Auth.PasswordEnv != mailSecretEnv {
+		a := mailConfig(t, c, tc.address)
+		if a.Provider != tc.wantProvider || a.Address != tc.address || a.Name != tc.address || a.Auth.PasswordEnv != accountEnv(mailSecretEnv, tc.address) {
 			t.Errorf("%s: %+v", tc.provider, a)
 		}
 		if tc.wantIMAP != "" && (a.IMAP == nil || a.IMAP.Host != tc.wantIMAP || a.IMAP.Port != 993 || a.SMTP.Host != "smtp.free.fr" || a.SMTP.Port != 465) {
 			t.Errorf("%s: servers %+v %+v", tc.provider, a.IMAP, a.SMTP)
 		}
 		// It edits back in its own form.
-		_, body, _ := tw.do("GET", "/settings/tools/"+tc.name+"/edit", nil, nil)
-		if !strings.Contains(body, `name="mail_provider" value="`+tc.provider+`"`) || !strings.Contains(body, `value="`+tc.address+`"`) {
+		_, body, _ := tw.do("GET", "/settings/tools/mail/edit?account="+tc.address, nil, nil)
+		if !strings.Contains(body, `name="mail_provider" value="`+tc.provider+`"`) || !strings.Contains(body, `value="`+tc.address+`"`) ||
+			!strings.Contains(body, `name="account" value="`+tc.address+`"`) {
 			t.Errorf("%s: edit form %s", tc.provider, mainPart(t, body))
 		}
 	}
+	// One server for every mailbox, each with its password.
+	if st, _ := c.serviceServer(mailService); st.Name != "mail" || len(st.Config.Accounts) != 6 || len(c.serviceServers(mailService)) != 1 {
+		t.Fatalf("mail server: %s %+v", st.Name, st.Config.Accounts)
+	}
 	// Gmail's app password is shown in groups: the spaces are not kept.
-	if pw, _ := readSecret(c.conf().runSpecs["m-gmail"].Env[mailSecretEnv].File); pw != "abcdefghijklmnop" {
+	if _, pw := serviceAccount(t, c.core, mailService, "sam@gmail.com"); pw != "abcdefghijklmnop" {
 		t.Errorf("gmail password = %q", pw)
 	}
-	if pw, _ := readSecret(c.conf().runSpecs["m-orange"].Env[mailSecretEnv].File); pw != "abcd efgh ijkl mnop" {
+	if _, pw := serviceAccount(t, c.core, mailService, "sam@orange.fr"); pw != "abcd efgh ijkl mnop" {
 		t.Errorf("orange password = %q", pw)
+	}
+	// The same mailbox twice is refused.
+	if _, body, _ := post("m-again", "gmail", "sam@gmail.com", nil); !strings.Contains(html.UnescapeString(body), "déjà connecté") {
+		t.Errorf("twice: %s", body)
 	}
 	// Other: its servers, and the advanced ports and login.
 	if code, body, _ := post("m-other", "other", "sam@example.org", url.Values{"imap_host": {"mail.example.org"},
 		"smtp_host": {"mail.example.org"}, "smtp_port": {"587"}, "mail_user": {"sam"}}); code != 200 || strings.Contains(body, "alert") {
 		t.Fatalf("other: %d %s", code, body)
 	}
-	a := mailConfig(t, c, "m-other")
+	a := mailConfig(t, c, "sam@example.org")
 	if a.IMAP.Host != "mail.example.org" || a.IMAP.Port != 993 || a.SMTP.Port != 587 || a.Username != "sam" || a.Provider != "" {
 		t.Fatalf("other: %+v %+v %+v", a, a.IMAP, a.SMTP)
 	}
-	_, body, _ = tw.do("GET", "/settings/tools/m-other/edit", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/tools/mail/edit?account=sam@example.org", nil, nil)
 	if adv := advancedPart(t, body); !strings.Contains(adv, `name="smtp_port" value="587"`) || !strings.Contains(adv, `name="mail_user" value="sam"`) {
 		t.Fatalf("other edit: %s", adv)
 	}
@@ -396,16 +416,16 @@ func TestMailProviderForms(t *testing.T) {
 	}{
 		{"outlook", "sam@outlook.com", nil, "pas encore pris en charge"},
 		{"gmail", "not an address", nil, "ne semble pas valable"},
-		{"other", "sam@example.org", url.Values{"imap_host": {"https://x"}, "smtp_host": {"y"}}, "Indique les serveurs IMAP et SMTP"},
-		{"other", "sam@example.org", url.Values{"imap_host": {"x"}, "smtp_host": {"y"}, "imap_port": {"99999"}}, "Le port est un nombre"},
+		{"other", "sam@example.net", url.Values{"imap_host": {"https://x"}, "smtp_host": {"y"}}, "Indique les serveurs IMAP et SMTP"},
+		{"other", "sam@example.net", url.Values{"imap_host": {"x"}, "smtp_host": {"y"}, "imap_port": {"99999"}}, "Le port est un nombre"},
 		{"nope", "sam@example.org", nil, "Messagerie non reconnue"},
 	} {
 		if _, body, _ := post("m-bad", tc.provider, tc.address, tc.extra); !strings.Contains(html.UnescapeString(body), tc.want) {
 			t.Errorf("%s %s: no %q in %s", tc.provider, tc.address, tc.want, body)
 		}
 	}
-	if _, ok := c.conf().Servers["m-bad"]; ok {
-		t.Fatal("a refused mailbox was added")
+	if st, _ := c.serviceServer(mailService); len(st.Config.Accounts) != 7 {
+		t.Fatalf("a refused mailbox was added: %+v", st.Config.Accounts)
 	}
 }
 
@@ -420,19 +440,21 @@ func TestMailSwitchNeedsPassword(t *testing.T) {
 	// The same mailbox: the password is kept, the access changes.
 	form.Del("password")
 	form.Set("access", "ask")
+	form.Set("account", "sam@gmail.com")
 	if code, body, h := tw.post("/settings/tools/mail", form, csrf); code != 200 || h.Get("HX-Redirect") == "" {
 		t.Fatalf("same mailbox: %d %s", code, body)
 	}
-	file := c.conf().runSpecs["mail"].Env[mailSecretEnv].File
-	if pw, _ := readSecret(file); pw != "gmail-pw" || c.conf().Servers["mail"].TrustAnnotations {
+	a, _ := serviceAccount(t, c.core, mailService, "sam@gmail.com")
+	file := c.conf().runSpecs["mail"].Env[a.secretEnv()].File
+	if pw, _ := readSecret(file); pw != "gmail-pw" || c.conf().Servers["mail"].TrustAnnotations || c.conf().Servers["mail"].AccountAccess["sam@gmail.com"] != accessAsk {
 		t.Fatalf("same mailbox: %q %+v", pw, c.conf().Servers["mail"])
 	}
 	// The picker on an edit, then Free.
-	_, body, _ := tw.do("GET", "/settings/tools/mail/edit?provider=choose", nil, nil)
-	if !strings.Contains(body, `href="/settings/tools/mail/edit?provider=free"`) || !strings.Contains(body, "provider current") {
+	_, body, _ := tw.do("GET", "/settings/tools/mail/edit?account=sam@gmail.com&provider=choose", nil, nil)
+	if !strings.Contains(body, `href="/settings/tools/mail/edit?account=sam%40gmail.com&amp;provider=free"`) || !strings.Contains(body, "provider current") {
 		t.Fatalf("edit picker: %s", body)
 	}
-	_, body, _ = tw.do("GET", "/settings/tools/mail/edit?provider=free", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/tools/mail/edit?account=sam@gmail.com&provider=free", nil, nil)
 	if b := html.UnescapeString(body); !strings.Contains(b, `name="mail_provider" value="free"`) || strings.Contains(b, "défini — remplacer") ||
 		!strings.Contains(b, "Nouveau compte") {
 		t.Fatalf("switched form: %s", mainPart(t, b))
@@ -442,22 +464,27 @@ func TestMailSwitchNeedsPassword(t *testing.T) {
 	if _, body, _ := tw.post("/settings/tools/mail", form, csrf); !strings.Contains(html.UnescapeString(body), "Ce n'est plus le même compte") {
 		t.Fatalf("switch without password: %s", body)
 	}
-	if a := mailConfig(t, c, "mail"); a.Address != "sam@gmail.com" {
+	if a := mailConfig(t, c, "sam@gmail.com"); a.Address != "sam@gmail.com" {
 		t.Fatal("the refused switch was saved")
 	}
 	form.Set("password", "free-pw")
 	if code, _, h := tw.post("/settings/tools/mail", form, csrf); code != 200 || h.Get("HX-Redirect") == "" {
 		t.Fatal("switch")
 	}
-	if a := mailConfig(t, c, "mail"); a.Address != "sam@free.fr" || a.IMAP.Host != "imap.free.fr" {
-		t.Fatalf("switched: %+v", a)
+	a, pw := serviceAccount(t, c.core, mailService, "sam@free.fr")
+	if a.IMAP.Host != "imap.free.fr" || pw != "free-pw" || c.conf().Servers["mail"].AccountAccess["sam@free.fr"] != accessAsk {
+		t.Fatalf("switched: %+v %q %v", a, pw, c.conf().Servers["mail"].AccountAccess)
 	}
-	if pw, _ := readSecret(c.conf().runSpecs["mail"].Env[mailSecretEnv].File); pw != "free-pw" {
-		t.Fatalf("password after the switch = %q", pw)
+	if st, _ := c.serviceServer(mailService); len(st.Config.Accounts) != 1 {
+		t.Fatalf("the switch kept the old account: %+v", st.Config.Accounts)
 	}
-	// Removed: its password goes with it.
-	tw.post("/settings/tools/mail/delete", nil, csrf)
-	if _, err := readSecret(c.conf().runSpecs["mail"].Env[mailSecretEnv].File); err == nil {
+	newFile := c.conf().runSpecs["mail"].Env[a.secretEnv()].File
+	// Removed: the server goes with its last account, its password too.
+	tw.post("/settings/tools/mail/delete", url.Values{"account": {"sam@free.fr"}}, csrf)
+	if _, ok := c.conf().Servers["mail"]; ok {
+		t.Fatal("the mail server stays without accounts")
+	}
+	if _, err := readSecret(newFile); err == nil {
 		t.Fatal("password kept after removal")
 	}
 	if _, err := readSecret(file); err == nil {
@@ -496,13 +523,24 @@ func TestCalendarProviderForms(t *testing.T) {
 	}
 	post("c-icloud", "icloud", nil)
 	post("c-next", "nextcloud", url.Values{"cal_url": {"https://cloud.example.org/remote.php/dav"}, "cal_user": {"sam"}, "timezone": {"America/New_York"}})
+	// One calendar server for both, in the zone given last.
+	st, _ := c.serviceServer(calendarService)
 	for name, want := range map[string]calendarForm{
-		"c-icloud": {Provider: "icloud", Username: "sam@icloud.com", Timezone: "Europe/Paris"},
-		"c-next":   {Provider: "nextcloud", URL: "https://cloud.example.org/remote.php/dav", Username: "sam", Timezone: "America/New_York"},
+		"sam@icloud.com":        {Provider: "icloud", Username: "sam@icloud.com", Timezone: "America/New_York"},
+		"sam@cloud.example.org": {Provider: "nextcloud", URL: "https://cloud.example.org/remote.php/dav", Username: "sam", Timezone: "America/New_York"},
 	} {
-		if got, ok := calendarFormOf(c.conf().runSpecs[name]); !ok || got != want {
-			t.Errorf("%s = %+v", name, got)
+		a, pw := serviceAccount(t, c.core, calendarService, name)
+		if got, ok := calendarFormOf(a, st.Config.Timezone); !ok || got != want || pw != "pw" {
+			t.Errorf("%s = %+v %q", name, got, pw)
 		}
+	}
+	if st.Name != "agenda" || len(st.Config.Accounts) != 2 {
+		t.Fatalf("calendar server: %s %+v", st.Name, st.Config.Accounts)
+	}
+	// A new account's form starts in the calendar's zone.
+	_, body, _ = tw.do("GET", "/settings/tools/new?preset=calendar&provider=fastmail", nil, nil)
+	if !strings.Contains(advancedPart(t, body), `name="timezone" value="America/New_York"`) {
+		t.Errorf("zone of a new account: %s", advancedPart(t, body))
 	}
 	if b := post("c-bad", "nextcloud", url.Values{"cal_url": {"http://cloud.example.org"}}); !strings.Contains(b, "https://") {
 		t.Errorf("http CalDAV: %s", b)
@@ -621,6 +659,7 @@ func TestAccountConnectionTest(t *testing.T) {
 	form.Set("password", "good-pw")
 	tw.post("/settings/tools", form, csrf)
 	form.Del("password")
+	form.Set("account", "sam@example.org")
 	if b := test("/settings/tool-test/mail", form); !strings.Contains(b, "test-ok") {
 		t.Fatalf("stored password: %s", b)
 	}

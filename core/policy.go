@@ -48,6 +48,10 @@ type Rule struct {
 	Decision string `json:"decision"` // allow, deny or ask
 	Reason   string `json:"reason,omitempty"`
 	re       *regexp.Regexp
+	// account, set, holds the rule to the calls that name this account
+	// (an action allowed for good for one account: access.go); "" those
+	// that name none.
+	account *string
 }
 
 type Policy struct {
@@ -135,7 +139,17 @@ func subject(tool string, input map[string]any) string {
 }
 
 func (r Rule) matches(tool, subj string) bool {
-	return r.forTool(tool) && (r.re == nil || r.re.MatchString(subj))
+	return r.forTool(tool) && (r.re == nil || r.re.MatchString(subj)) && (r.account == nil || subjectAccount(subj, *r.account))
+}
+
+// subjectAccount tells whether an MCP call's input names the account.
+func subjectAccount(subj, account string) bool {
+	var in struct {
+		Account any `json:"account"`
+	}
+	json.Unmarshal([]byte(subj), &in)
+	named, _ := in.Account.(string)
+	return strings.EqualFold(strings.TrimSpace(named), account)
 }
 
 // forTool tells whether a rule is about a tool, whatever it acts on.
@@ -178,6 +192,9 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 	if f.level == accessReadOnly && !f.read {
 		return decideDeny, "cet outil est en lecture seule : cette action n'est pas une lecture"
 	}
+	if f.noAccount {
+		return decideDeny, noAccountReason
+	}
 	for _, set := range [][]Rule{p.rules(), remembered} {
 		for _, r := range set {
 			if r.matches(tool, subj) {
@@ -202,7 +219,7 @@ func (c *core) decide(tool string, input map[string]any) (decision, reason strin
 	if strings.HasPrefix(tool, "mcp__") {
 		remembered = c.store.allowedRules()
 	}
-	return c.conf().Policy.decideWith(tool, input, c.pool.facts(tool), remembered)
+	return c.conf().Policy.decideWith(tool, input, c.pool.facts(tool, input), remembered)
 }
 
 func (p *Policy) rules() []Rule {

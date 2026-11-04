@@ -34,6 +34,12 @@ type Server struct {
 	// TrustAnnotations lets the server's own readOnlyHint count: a read-only
 	// tool of a trusted server is the brain's to allow, the others the user's.
 	TrustAnnotations bool `json:"trust_annotations,omitempty"`
+	// AccountAccess is the access level of each account of a server that
+	// holds several (the mail, the calendar), by the account's name, as
+	// the server's tools take it in their "account" argument. A call is
+	// decided at the level of the account it names; access is then what
+	// they come to together (access.go).
+	AccountAccess map[string]string `json:"account_access,omitempty"`
 	// Timeout of one tool call, in seconds (default 600).
 	Timeout int `json:"timeout,omitempty"`
 	// AlwaysLoad has a harness that defers MCP tools until they are searched
@@ -107,6 +113,11 @@ func (c *Config) checkServers() error {
 		}
 		if !validAccess(s.Access) {
 			return fmt.Errorf("server %s: access is one of %s", name, strings.Join(accessLevels, ", "))
+		}
+		for account, level := range s.AccountAccess {
+			if strings.TrimSpace(account) == "" || level == "" || !validAccess(level) {
+				return fmt.Errorf("server %s: account_access gives each account one of %s", name, strings.Join(accessLevels, ", "))
+			}
 		}
 		if s.local() {
 			if s.URL != "" || s.Auth != nil {

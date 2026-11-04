@@ -147,13 +147,13 @@ func TestRememberedActions(t *testing.T) {
 	if got, _ := c.decide(write, nil); got != decideAsk {
 		t.Fatalf("before = %q", got)
 	}
-	if err := c.rememberAction("Bash"); err == nil {
+	if err := c.rememberAction("Bash", nil); err == nil {
 		t.Fatal("a shell command remembered")
 	}
-	if err := c.rememberAction("mcp__mail__send"); err == nil {
+	if err := c.rememberAction("mcp__mail__send", nil); err == nil {
 		t.Fatal("a tool out of the catalog remembered")
 	}
-	if err := c.rememberAction(write); err != nil {
+	if err := c.rememberAction(write, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, why := c.decide(write, map[string]any{"title": "x"}); got != decideAllow || why != allowedReason {
@@ -176,11 +176,11 @@ func TestRememberedActions(t *testing.T) {
 	if got, _ := c.decide(write, nil); got != decideDeny {
 		t.Fatalf("remembered write on a read-only tool = %q", got)
 	}
-	if c.rememberable(write) {
+	if c.rememberable(write, nil) {
 		t.Fatal("always offered on a read-only tool's write")
 	}
 	setLevel(t, c, "github", accessReads)
-	if err := c.store.forgetAction("github", write); err != nil {
+	if err := c.store.forgetAction("github", write, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := c.decide(write, nil); got != decideAsk {
@@ -415,5 +415,133 @@ func TestLends(t *testing.T) {
 	rw := &mcp.Tool{Name: "w"}
 	if !lends(Server{Access: accessReadOnly}, ro) || lends(Server{Access: accessReadOnly}, rw) || !lends(Server{Access: accessReads}, rw) {
 		t.Fatal("lends")
+	}
+}
+
+// A server of several accounts: each call is decided at the level of the
+// account it names; one that names none takes what they come to.
+func TestAccountLevels(t *testing.T) {
+	c := newCatalogCore(t)
+	setBrain(c, &BrainConfig{})
+	read, write := "mcp__github__get_issue", "mcp__github__create_issue"
+	servers := c.conf().Servers
+	gh := servers["github"]
+	gh.AccountAccess = map[string]string{"pro@example.org": accessReadOnly, "perso@example.org": accessFree}
+	servers["github"] = gh
+	c.pool.sync(servers)
+	waitStatus(t, c.pool.get("github"), statusReady)
+	if gh.level() != accessReads {
+		t.Fatalf("together: %s", gh.level())
+	}
+	for _, tc := range []struct {
+		tool    string
+		account string
+		want    string
+	}{
+		{write, "pro@example.org", decideDeny},    // read only
+		{write, "PRO@example.org", decideDeny},    // its name in another case
+		{write, "perso@example.org", decideBrain}, // free
+		{write, "", decideDeny},                   // a write that names no account, when they differ
+		{write, "nobody@example.org", decideDeny}, // … or one it does not have
+		{read, "pro@example.org", decideBrain},
+		{read, "", decideBrain}, // reads are free in both
+	} {
+		in := map[string]any{"title": "x"}
+		if tc.account != "" {
+			in["account"] = tc.account
+		}
+		if got, why := c.decide(tc.tool, in); got != tc.want {
+			t.Errorf("%s for %q = %q (%s), want %q", tc.tool, tc.account, got, why, tc.want)
+		}
+	}
+	// The proxy holds to it too, whatever the ticket.
+	u := c.pool.get("github")
+	for account, want := range map[string]string{"pro@example.org": "this account is read only", "": "give account"} {
+		in := map[string]any{"title": "x"}
+		if account != "" {
+			in["account"] = account
+		}
+		c.store.addTicket("t-1", write, in)
+		raw, _ := json.Marshal(in)
+		if out := c.proxyCall(context.Background(), "t-1", []string{"github"}, u, "create_issue", raw); !out.IsError || !strings.Contains(resultText(out), want) {
+			t.Errorf("%q at the proxy: %s", account, resultText(out))
+		}
+	}
+	// One account that asks for everything: no read is free without naming
+	// another account, and none is allowed in advance.
+	gh.AccountAccess["perso@example.org"] = accessAsk
+	c.pool.sync(servers)
+	waitStatus(t, c.pool.get("github"), statusReady)
+	if got, _ := c.decide(read, map[string]any{"number": 1}); got != decideAsk {
+		t.Errorf("a read naming no account = %q", got)
+	}
+	if got, _ := c.decide(read, map[string]any{"account": "perso@example.org"}); got != decideAsk {
+		t.Errorf("a read of the account that asks = %q", got)
+	}
+	if got, _ := c.decide(read, map[string]any{"account": "pro@example.org"}); got != decideBrain {
+		t.Errorf("a read of the read-only account = %q", got)
+	}
+	if contains(c.brainFreeReads(), read) {
+		t.Error("a read allowed in advance while an account asks")
+	}
+}
+
+// "Always allow" on a server of several accounts holds for the account
+// the call named, not the others.
+func TestRememberedPerAccount(t *testing.T) {
+	c := newCatalogCore(t)
+	write := "mcp__github__create_issue"
+	servers := c.conf().Servers
+	gh := servers["github"]
+	gh.AccountAccess = map[string]string{"pro@example.org": accessReads, "perso@example.org": accessReads}
+	servers["github"] = gh
+	c.pool.sync(servers)
+	waitStatus(t, c.pool.get("github"), statusReady)
+	perso := map[string]any{"account": "perso@example.org", "title": "x"}
+	pro := map[string]any{"account": "pro@example.org", "title": "x"}
+	if err := c.rememberAction(write, perso); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := c.decide(write, perso); got != decideAllow {
+		t.Fatalf("perso = %q", got)
+	}
+	if got, _ := c.decide(write, map[string]any{"account": "Perso@Example.org"}); got != decideAllow {
+		t.Fatalf("perso in another case = %q", got)
+	}
+	if got, _ := c.decide(write, pro); got != decideAsk {
+		t.Fatalf("pro = %q", got)
+	}
+	if got, _ := c.decide(write, map[string]any{"title": "x"}); got != decideAsk {
+		t.Fatalf("no account = %q", got)
+	}
+	if a := c.store.accountActions("github", "perso@example.org"); len(a) != 1 || a[0].Account != "perso@example.org" {
+		t.Fatalf("listed = %+v", a)
+	}
+	if a := c.store.accountActions("github", "pro@example.org"); len(a) != 0 {
+		t.Fatalf("listed for pro = %+v", a)
+	}
+	// Forgotten with its account.
+	c.store.forgetAccountActions("github", "PERSO@example.org")
+	if got, _ := c.decide(write, perso); got != decideAsk {
+		t.Fatalf("forgotten = %q", got)
+	}
+}
+
+// What was allowed for good before the actions had accounts stays.
+func TestRememberedActionsMoveToTheirTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "core.db")
+	s, err := openStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.db.Exec(`DROP TABLE remembered_actions`)
+	s.db.Exec(`CREATE TABLE allowed_actions (tool TEXT PRIMARY KEY, server TEXT NOT NULL, time INTEGER NOT NULL)`)
+	s.db.Exec(`INSERT INTO allowed_actions VALUES ('mcp__github__create_issue', 'github', 1)`)
+	s.db.Close()
+	if s, err = openStore(path); err != nil {
+		t.Fatal(err)
+	}
+	if a := s.allowedActions(""); len(a) != 1 || a[0].Tool != "mcp__github__create_issue" || a[0].Account != "" {
+		t.Fatalf("after: %+v", a)
 	}
 }

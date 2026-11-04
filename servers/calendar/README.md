@@ -22,6 +22,12 @@ New CalDAV events are written in UTC; recurring events the server does not expan
 here (RRULE, EXDATE, moved occurrences), and an unknown TZID (Windows zone names) falls back to the
 configured zone.
 
+Every tool takes an optional `account` (its `name`). The reads without one cover every account;
+`create_event` needs one (and a calendar) when several calendars can be written. `get_event`,
+`update_event` and `delete_event` work from the event id, and refuse an id of another account than
+the one named. An account with `read_only` is read, never written: no event is created, changed or
+deleted in it (`list_accounts` shows it).
+
 ## Cache
 
 Reads are answered from memory when they can be, so `list_events`, `list_calendars` and
@@ -82,6 +88,8 @@ JSON in `CALENDAR_CONFIG`, or a file in `CALENDAR_CONFIG_FILE` (or `-config`):
   Google account: the access token is then refreshed here, in memory (`refresh.go`), never written
   nor logged; a refresh token Google refuses gives an error that says to reconnect the account in
   Eriphe.
+- `read_only`: the account is only read (eriphe-core sets it for an account it gives read-only
+  access).
 - Limits: `max_events` (500), `timeout_seconds` (30), ranges up to 92 days (62 for free time).
 
 ## Running

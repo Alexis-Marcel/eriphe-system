@@ -128,7 +128,7 @@ const (
 	calSecretEnv  = "CALENDAR_PASSWORD"
 )
 
-// Mail: eriphe-mail with one account and a password. The user picks the
+// Mail: an account of eriphe-mail with a password (accounts.go). The user picks the
 // kind of mailbox first; each one has its own form. Checked against each
 // provider's help (October 2026):
 //   - Gmail: an app password needs 2-Step Verification
@@ -221,18 +221,6 @@ type mailEndpoint struct {
 	Port int    `json:"port,omitempty"`
 }
 
-type mailAccount struct {
-	Name     string        `json:"name"`
-	Address  string        `json:"address"`
-	Provider string        `json:"provider,omitempty"`
-	Username string        `json:"username,omitempty"`
-	IMAP     *mailEndpoint `json:"imap,omitempty"`
-	SMTP     *mailEndpoint `json:"smtp,omitempty"`
-	Auth     struct {
-		PasswordEnv string `json:"password_env"`
-	} `json:"auth"`
-}
-
 type mailForm struct {
 	Address  string
 	Provider string // a mailChoice ID; "" to guess it from the address
@@ -262,8 +250,8 @@ func port(s string, def int) (int, bool) {
 }
 
 // normalize fills the provider guessed from the address and checks what
-// was typed.
-func (f *mailForm) normalize(old *RunSpec) error {
+// was typed; old is the mailbox edited, if any.
+func (f *mailForm) normalize(old *svcAccount) error {
 	addr, err := mail.ParseAddress(strings.TrimSpace(f.Address))
 	if err != nil || !strings.Contains(addr.Address, "@") {
 		return errors.New("presets.badaddress")
@@ -283,7 +271,10 @@ func (f *mailForm) normalize(old *RunSpec) error {
 	}
 	if c.Soon {
 		// Kept as it is on an edit; not added.
-		if prev, ok := mailFormOf(deref(old)); !ok || prev.Provider != c.ID {
+		if old == nil {
+			return errors.New("presets.soon")
+		}
+		if prev, ok := mailFormOf(*old); !ok || prev.Provider != c.ID {
 			return errors.New("presets.soon")
 		}
 	}
@@ -303,21 +294,13 @@ func (f *mailForm) normalize(old *RunSpec) error {
 	return nil
 }
 
-func deref(s *RunSpec) RunSpec {
-	if s == nil {
-		return RunSpec{}
-	}
-	return *s
-}
-
-// mailRun builds eriphe-mail's run spec: MAIL_CONFIG with one account, its
-// password from the vault (bound by the catalog).
-func (f mailForm) run(old *RunSpec) (RunSpec, error) {
+// account is the mailbox as eriphe-mail reads it, named by its address;
+// its password's variable is given by putAccount.
+func (f mailForm) account(old *svcAccount) (svcAccount, error) {
 	if err := f.normalize(old); err != nil {
-		return RunSpec{}, err
+		return svcAccount{}, err
 	}
-	a := mailAccount{Name: "mail", Address: f.Address}
-	a.Auth.PasswordEnv = mailSecretEnv
+	a := svcAccount{Name: f.Address, Address: f.Address}
 	switch c := f.Choice(); {
 	case c.ID == "other":
 		ip, _ := port(f.IMAPPort, 993)
@@ -328,26 +311,12 @@ func (f mailForm) run(old *RunSpec) (RunSpec, error) {
 	default:
 		a.Provider = c.Provider
 	}
-	raw, _ := json.Marshal(map[string]any{"accounts": []mailAccount{a}})
-	spec := RunSpec{Image: mailImage, Transport: transportStdio, Env: map[string]EnvValue{"MAIL_CONFIG": {Value: string(raw)}}}
-	if old != nil {
-		keepOptions(&spec, *old, mailSecretEnv)
-	}
-	return spec, nil
+	return a, nil
 }
 
-// mailFormOf reads the form back from a mail server's spec, if it is one.
-func mailFormOf(spec RunSpec) (mailForm, bool) {
-	if !strings.HasPrefix(spec.Image, mailImage) {
-		return mailForm{}, false
-	}
-	var cfg struct {
-		Accounts []mailAccount `json:"accounts"`
-	}
-	if json.Unmarshal([]byte(spec.Env["MAIL_CONFIG"].Value), &cfg) != nil || len(cfg.Accounts) != 1 {
-		return mailForm{}, false
-	}
-	a := cfg.Accounts[0]
+// mailFormOf reads the form back from a mailbox of eriphe-mail; ok is
+// false for one on a Google account's token (its page, not this form).
+func mailFormOf(a svcAccount) (mailForm, bool) {
 	f := mailForm{Address: a.Address, Provider: a.Provider}
 	if a.IMAP != nil && a.SMTP != nil {
 		f.Provider = "other"
@@ -368,10 +337,11 @@ func mailFormOf(spec RunSpec) (mailForm, bool) {
 	} else if f.Provider == "" {
 		f.Provider = guessMailProvider(a.Address)
 	}
-	return f, a.Auth.PasswordEnv == mailSecretEnv
+	return f, !a.google()
 }
 
-// Calendar: eriphe-calendar with one CalDAV account and an app password.
+// Calendar: a CalDAV account of eriphe-calendar with an app password
+// (accounts.go).
 // Google Calendar is connected with the Google account (its page,
 // web_google.go); Microsoft needs an OAuth token lent by eriphe-core, which
 // it does not do yet: it is shown as coming soon.
@@ -411,16 +381,6 @@ func (f calendarForm) davURL() string {
 		return "https://caldav.fastmail.com/dav/"
 	}
 	return f.URL
-}
-
-type calendarAccount struct {
-	Name     string `json:"name"`
-	Provider string `json:"provider"`
-	URL      string `json:"url,omitempty"`
-	Username string `json:"username"`
-	Auth     struct {
-		PasswordEnv string `json:"password_env"`
-	} `json:"auth"`
 }
 
 type calendarForm struct {
@@ -490,44 +450,27 @@ func (f *calendarForm) normalize() error {
 	return nil
 }
 
-func (f calendarForm) run(old *RunSpec) (RunSpec, error) {
+// account is the calendar account as eriphe-calendar reads it, named by
+// its username, with its server's host when the username is not an
+// address (a Nextcloud "sam"); its password's variable is given by
+// putAccount.
+func (f calendarForm) account() (svcAccount, error) {
 	if err := f.normalize(); err != nil {
-		return RunSpec{}, err
+		return svcAccount{}, err
 	}
-	a := calendarAccount{Name: f.Provider, Provider: f.Provider, Username: f.Username, URL: f.URL}
-	a.Auth.PasswordEnv = calSecretEnv
-	raw, _ := json.Marshal(map[string]any{"timezone": f.Timezone, "accounts": []calendarAccount{a}})
-	spec := RunSpec{Image: calendarImage, Transport: transportStdio, Env: map[string]EnvValue{"CALENDAR_CONFIG": {Value: string(raw)}}}
-	if old != nil {
-		keepOptions(&spec, *old, calSecretEnv)
+	name := f.Username
+	if u, err := url.Parse(f.URL); !strings.Contains(name, "@") && err == nil && u.Host != "" {
+		name += "@" + u.Hostname()
 	}
-	return spec, nil
+	return svcAccount{Name: name, Provider: f.Provider, Username: f.Username, URL: f.URL}, nil
 }
 
-func calendarFormOf(spec RunSpec) (calendarForm, bool) {
-	if !strings.HasPrefix(spec.Image, calendarImage) {
-		return calendarForm{}, false
-	}
-	var cfg struct {
-		Timezone string            `json:"timezone"`
-		Accounts []calendarAccount `json:"accounts"`
-	}
-	if json.Unmarshal([]byte(spec.Env["CALENDAR_CONFIG"].Value), &cfg) != nil || len(cfg.Accounts) != 1 {
-		return calendarForm{}, false
-	}
-	a := cfg.Accounts[0]
+// calendarFormOf reads the form back from an account of eriphe-calendar;
+// ok is false for one this form does not make (Google, Microsoft).
+func calendarFormOf(a svcAccount, zone string) (calendarForm, bool) {
 	c, ok := calChoiceByID(a.Provider)
-	return calendarForm{Provider: a.Provider, URL: a.URL, Username: a.Username, Timezone: cfg.Timezone},
-		a.Auth.PasswordEnv == calSecretEnv && ok && !c.Soon
-}
-
-// keepOptions carries over, on an edit, what the simple form does not
-// show: placement, volume, the password's vault reference.
-func keepOptions(spec *RunSpec, old RunSpec, secretEnv string) {
-	spec.Node, spec.Needs, spec.Prefers, spec.Volume, spec.Egress = old.Node, old.Needs, old.Prefers, old.Volume, old.Egress
-	if v, ok := old.Env[secretEnv]; ok && v.File != "" {
-		spec.Env[secretEnv] = v
-	}
+	return calendarForm{Provider: a.Provider, URL: a.URL, Username: a.Username, Timezone: zone},
+		!a.google() && ok && !c.Soon && c.Page == ""
 }
 
 func marshalRun(spec RunSpec) json.RawMessage {

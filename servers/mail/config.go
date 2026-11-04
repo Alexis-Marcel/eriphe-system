@@ -42,6 +42,9 @@ type AccountConfig struct {
 	SaveSent *bool `json:"save_sent,omitempty"`
 	// CAFile is a PEM bundle of extra roots, for self-hosted servers.
 	CAFile string `json:"ca_file,omitempty"`
+	// ReadOnly refuses every write from this account (drafts, sending,
+	// marks, moves): it can only be read.
+	ReadOnly bool `json:"read_only,omitempty"`
 }
 
 // Endpoint is an IMAP or SMTP server. Security is tls (implicit TLS) or

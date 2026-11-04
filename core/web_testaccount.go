@@ -24,19 +24,26 @@ import (
 var testRoots *x509.CertPool
 
 // accountSecret is the password to try: the one typed, else the stored one
-// when the edit keeps the same account.
-func accountSecret(r *http.Request, f toolForm, old *Server, env string, same func(RunSpec) bool) (string, error) {
+// of the account edited (f.Account in old, its service's server) when the
+// edit keeps the same account.
+func accountSecret(r *http.Request, f toolForm, old *Server, same func(svcAccount) bool) (string, error) {
 	if pw := accountPassword(r, f); strings.TrimSpace(pw) != "" {
 		return pw, nil
 	}
-	if old == nil || !old.local() {
+	if old == nil || f.Account == "" {
 		return "", nil
 	}
-	spec, err := decodeRun(old.Run)
-	if err != nil || spec.Env[env].File == "" || !same(spec) {
+	_, cfg, ok := accountsOf(*old)
+	i := cfg.index(f.Account)
+	if !ok || i < 0 {
 		return "", nil
 	}
-	return readSecret(spec.Env[env].File)
+	a := cfg.Accounts[i]
+	spec, _ := decodeRun(old.Run)
+	if a.Auth.PasswordEnv == "" || spec.Env[a.Auth.PasswordEnv].File == "" || !same(a) {
+		return "", nil
+	}
+	return readSecret(spec.Env[a.Auth.PasswordEnv].File)
 }
 
 func (w *web) testMail(r *http.Request, f toolForm, old *Server) testView {
@@ -47,8 +54,8 @@ func (w *web) testMail(r *http.Request, f toolForm, old *Server) testView {
 	if f.Mail.Choice().Soon {
 		return testView{State: "err", Text: tr(lang, "test.mailsoon")}
 	}
-	pw, err := accountSecret(r, f, old, mailSecretEnv, func(spec RunSpec) bool {
-		prev, ok := mailFormOf(spec)
+	pw, err := accountSecret(r, f, old, func(a svcAccount) bool {
+		prev, ok := mailFormOf(a)
 		return ok && prev.same(f.Mail)
 	})
 	if err != nil {
@@ -129,8 +136,8 @@ func (w *web) testCalendar(r *http.Request, f toolForm, old *Server) testView {
 	if err := f.Calendar.normalize(); err != nil {
 		return testView{State: "err", Text: w.formError(r, err)}
 	}
-	pw, err := accountSecret(r, f, old, calSecretEnv, func(spec RunSpec) bool {
-		prev, ok := calendarFormOf(spec)
+	pw, err := accountSecret(r, f, old, func(a svcAccount) bool {
+		prev, ok := calendarFormOf(a, "")
 		return ok && prev.same(f.Calendar)
 	})
 	if err != nil {

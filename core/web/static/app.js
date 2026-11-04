@@ -692,7 +692,11 @@ function lit(name) {
   function urlOf(hash) {
     const [kind, id] = hash.split("/");
     if (!id) return null;
-    if (kind === "edit") return "/settings/tools/" + encodeURIComponent(id) + "/edit";
+    if (kind === "edit") {
+      // edit/mail, or edit/mail~sam@example.org: an account of the mail
+      const [name, account] = id.split("~");
+      return "/settings/tools/" + encodeURIComponent(name) + "/edit" + (account ? "?account=" + encodeURIComponent(account) : "");
+    }
     const tile = kind === "add" && pick.querySelector('a[data-hash="add/' + CSS.escape(id) + '"]');
     return tile ? tile.dataset.step : null;
   }

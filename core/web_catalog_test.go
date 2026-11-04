@@ -116,7 +116,11 @@ func TestWebPresetsAreValid(t *testing.T) {
 			t.Errorf("preset %s: %d %s", p.ID, code, body)
 			continue
 		}
-		srv := c.conf().Servers["p-"+p.ID]
+		name := "p-" + p.ID
+		if p.Form == "mail" || p.Form == "calendar" {
+			name = map[string]string{"mail": "mail", "calendar": "agenda"}[p.Form] // the service's one server
+		}
+		srv := c.conf().Servers[name]
 		if srv.Use == "" || srv.TrustAnnotations != p.Trust || srv.level() != p.level() {
 			t.Errorf("preset %s: %+v", p.ID, srv)
 		}
@@ -124,20 +128,21 @@ func TestWebPresetsAreValid(t *testing.T) {
 			t.Errorf("preset %s: %+v", p.ID, srv)
 		}
 	}
-	mail := c.conf().runSpecs["p-mail"]
-	if mail.Image != mailImage || mail.Env[mailSecretEnv].File != "vault:service.p-mail.mail_password" ||
-		!strings.Contains(mail.Env["MAIL_CONFIG"].Value, `"address":"someone@gmail.com"`) || !strings.Contains(mail.Env["MAIL_CONFIG"].Value, `"password_env":"MAIL_PASSWORD"`) {
+	mail := c.conf().runSpecs["mail"]
+	env := accountEnv(mailSecretEnv, "someone@gmail.com")
+	if mail.Image != mailImage || mail.Env[env].File != "vault:service.mail."+strings.ToLower(env) ||
+		!strings.Contains(mail.Env["MAIL_CONFIG"].Value, `"address":"someone@gmail.com"`) || !strings.Contains(mail.Env["MAIL_CONFIG"].Value, `"password_env":"`+env+`"`) {
 		t.Fatalf("mail = %+v", mail)
 	}
-	cal := c.conf().runSpecs["p-calendar"]
-	if !strings.Contains(cal.Env["CALENDAR_CONFIG"].Value, `"provider":"icloud"`) || cal.Env[calSecretEnv].File == "" {
+	cal := c.conf().runSpecs["agenda"]
+	if !strings.Contains(cal.Env["CALENDAR_CONFIG"].Value, `"provider":"icloud"`) || cal.Env[accountEnv(calSecretEnv, "someone@icloud.com")].File == "" {
 		t.Fatalf("calendar = %+v", cal)
 	}
-	if _, err := c.store.service("p-mail"); err != nil {
+	if _, err := c.store.service("mail"); err != nil {
 		t.Fatal("mail service not registered")
 	}
-	// The mail tool edits back in its own form, without its password.
-	_, body, _ := tw.do("GET", "/settings/tools/p-mail/edit", nil, nil)
+	// The mailbox edits back in its own form, without its password.
+	_, body, _ := tw.do("GET", "/settings/tools/mail/edit?account=someone@gmail.com", nil, nil)
 	if !strings.Contains(body, `value="someone@gmail.com"`) || strings.Contains(body, "app-pw") || !strings.Contains(body, "défini — remplacer") {
 		t.Fatalf("mail edit: %s", body)
 	}

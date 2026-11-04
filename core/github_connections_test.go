@@ -81,7 +81,7 @@ func TestGitHubSwitchTokenToApp(t *testing.T) {
 	if v, err := currentVault().get(secret); err != nil || v != "github_pat_x" {
 		t.Fatalf("token not stored: %q %v", v, err)
 	}
-	if err := cc.store.allowAction("github-acme", "create_issue"); err != nil {
+	if err := cc.store.allowAction("github-acme", "create_issue", ""); err != nil {
 		t.Fatal(err)
 	}
 	tw := newTestWebFor(t, cc.core)
