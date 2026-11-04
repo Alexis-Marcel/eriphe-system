@@ -86,7 +86,9 @@ device" offers both addresses once remote access is ready.
   container of an install from before, `docker-proxy` only waits, until the install's next layout
   replaces it with the engine (install/README.md, The machines update themselves). A node that
   cannot reach its engine (or Docker) at start connects all the same, with no runtime to offer, says
-  so in its log ("no container engine here"), and starts again once the engine answers.
+  so in its log ("no container engine here"), and starts again once the engine answers. Until then
+  it runs nothing: its tasks stay assigned and wait ("N task(s) wait for it"), and it touches no
+  container; only updates go on.
 - **Windows**: `install/install.ps1` at the root of the repository (it was `node/install/install.ps1`),
   from an administrator PowerShell; see `install/README.md`. It installs WSL if needed, creates a
   WSL distribution `eriphe` (Alpine, Docker Engine), without Docker Desktop, which runs Eriphe's

@@ -364,6 +364,7 @@ func loadEngineConfig(o *options, tries int, every time.Duration) error {
 // it one. It looks for the engine again, and starts again once it is there.
 func (n *node) withoutEngine(s *state, why error) {
 	log.Printf("no container engine here: %v; connected all the same, with no task to run, until the install brings one (install/README.md, The machines update themselves)", why)
+	n.noEngine = true // its tasks wait (sync.go)
 	api := http.NewServeMux()
 	n.routes(api)
 	go serve(s, api)
