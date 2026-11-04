@@ -833,6 +833,12 @@ case $1 in
 bootstrap)
 	l=$(basename "$3" .plist)
 	[ "$l" != "${FAIL_LABEL:-}" ] || exit 5
+	# LATE_LABEL: refused once, as launchd does right after a bootout.
+	if [ "$l" = "${LATE_LABEL:-}" ] && [ ! -f "$M/late.$l" ]; then
+		touch "$M/late.$l"
+		echo "Bootstrap failed: 5: Input/output error" >&2
+		exit 5
+	fi
 	touch "$M/loaded.$l"
 	[ "$l" != org.eriphe.node ] || echo "connected to eriphe-core" >>"$M/home/.eriphe/node.log"
 	;;
@@ -972,7 +978,19 @@ fi
 [ -f "$M/loaded.org.eriphe.node" ] || fail "Mac layout failed: the node is left stopped"
 [ -d "$E/update/lock" ] || fail "Mac layout failed: the updater's lock is taken from it"
 [ ! -f "$E/node/update-needs" ] || fail "Mac layout failed: needs written"
+has "$M/out" "eriphe: macOS did not start org.eriphe.syncthing" "Mac layout failed: which agent"
 unset FAIL_LABEL
+rm -rf "${E:?}/update/lock"
+# Refused once right after its bootout (launchd still stopping it): tried
+# again, the layout goes through.
+mac_reset
+rm -f "$M"/late.*
+mkdir "$E/update/lock"
+echo $$ >"$E/update/lock/pid"
+export LATE_LABEL=org.eriphe.syncthing AGENT_RETRY_DELAY=0
+mac_up 'LAYOUT_RUN=1 LOCK_HELD=1 NEEDS=; relay_loaded() { true; }; root_ready() { false; }' || fail "Mac layout, a late bootstrap: $(cat "$M/out")"
+[ -f "$M/loaded.org.eriphe.syncthing" ] || fail "Mac layout, a late bootstrap: Syncthing not started"
+unset LATE_LABEL AGENT_RETRY_DELAY
 rm -rf "${E:?}/update/lock"
 # A full install leaves nothing waiting for the user.
 mac_reset
