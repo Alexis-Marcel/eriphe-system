@@ -343,3 +343,22 @@ func TestRowSignIn(t *testing.T) {
 		}
 	}
 }
+
+// A refused form comes back without the secrets typed (never sent back),
+// but their fields ask the browser to keep what was typed in them.
+func TestRefusedFormKeepsTypedSecrets(t *testing.T) {
+	tw, _, csrf := catalogWeb(t, nil)
+	form := url.Values{"preset": {"calendar"}, "name": {"agenda"}, "use": {"agenda"}, "access": {"read"}, "cal_provider": {"icloud"},
+		"cal_user": {"sam@icloud.com"}, "password": {"abcd-efgh-ijkl-mnop"}, "timezone": {"Europe/Paris"}, "dialog": {"1"}}
+	if code, _, h := tw.post("/settings/tools", form, csrf); code != 200 || h.Get("HX-Trigger") == "" {
+		t.Fatalf("first save: %d %v", code, h)
+	}
+	_, body, _ := tw.post("/settings/tools", form, csrf)
+	if !strings.Contains(body, "existe déjà") || !strings.Contains(body, `id="secret-password" hx-preserve`) || strings.Contains(body, "abcd-efgh") {
+		t.Fatalf("refused: %s", body)
+	}
+	// A form shown for the first time keeps nothing.
+	if _, body, _ = tw.step("/settings/tools/new?preset=calendar&provider=icloud"); !strings.Contains(body, `id="secret-password"`) || strings.Contains(body, "hx-preserve") {
+		t.Fatalf("new form: %s", body)
+	}
+}
