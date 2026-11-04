@@ -283,6 +283,16 @@ func workerVoice(name string) string {
 		"in French, use tutoiement (« tu »), never « vous ». Be concise: the result, without preamble.\n\n" + receiptInstruction
 }
 
+// taskUntrusted: a task started on what came from outside, which may leave
+// something in its node's cache for the next tasks to run: the brain and the
+// assistants (they read the mail, the web…), memory extraction (it reads
+// their conversations), and a worker started on a tainted turn. Those get a
+// cache of their own; workers the user or an untainted turn started share
+// the other.
+func taskUntrusted(kind string, taint []string) bool {
+	return kind != "worker" || len(taint) > 0
+}
+
 // runTask schedules a worker task, sends it to its node and starts following it.
 func (c *core) runTask(ctx context.Context, r runRequest) (*TaskRow, error) {
 	return c.startTask(ctx, "worker", r, nodeTaskSpec{AppendSystemPrompt: workerVoice(c.conf().assistantName())})
@@ -393,6 +403,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	spec.Repo, spec.Ref, spec.Branch, spec.Image = repo, base, branch, agent.Image
 	spec.Command = agent.Command
 	spec.RepoSkills = c.repoSkills(ctx, lent.Repo)
+	spec.Untrusted = taskUntrusted(kind, r.taint)
 	spec.Identity, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the node fetches the task
 	spec.Folders = nil                                                                 // the same
 	if len(folders) > 0 {

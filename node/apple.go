@@ -125,7 +125,7 @@ func (e appleEngine) taskArgs(spec taskRunSpec) ([]string, error) {
 	if e.o.cacheVolume != "" {
 		// A folder of the root, not a volume: a volume belongs to root, and
 		// the task's user could not write to it.
-		dir := filepath.Join(e.o.root, "cache")
+		dir := filepath.Join(e.o.root, cacheFor("cache", spec.untrusted))
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err
 		}

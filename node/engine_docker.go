@@ -105,8 +105,8 @@ func (e dockerEngine) taskArgs(spec taskRunSpec) []string {
 		args = append(args, "--network", e.o.network)
 	}
 	if e.o.cacheVolume != "" {
-		// Tools and package caches, shared by the node's tasks.
-		args = append(args, "-v", e.o.cacheVolume+":/cache")
+		// Tools and package caches, shared by the node's tasks of the same trust.
+		args = append(args, "-v", cacheFor(e.o.cacheVolume, spec.untrusted)+":/cache")
 	}
 	for _, m := range spec.mounts {
 		args = append(args, e.mountArgs(m)...)

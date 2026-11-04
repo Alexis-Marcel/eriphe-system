@@ -129,6 +129,10 @@ type nodeTaskSpec struct {
 	// to the agent (contract.go). An older node ignores them.
 	Checks      []taskCheck `json:"checks,omitempty"`
 	CheckRounds int         `json:"check_rounds,omitempty"`
+
+	// Untrusted: started on what came from outside (taskUntrusted); its
+	// node gives it a cache of its own. An older node ignores it.
+	Untrusted bool `json:"untrusted,omitempty"`
 }
 
 // nodeModelEndpoint is where a self-hosted model server answers, and the

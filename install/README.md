@@ -244,7 +244,7 @@ none` works).
   that no longer passes the checks above is logged and given to Eriphe no more (the workspace
   shows it missing). `ERIPHE_SHARES` is ignored afterwards: remove it from the container.
 - **Uninstall.** `docker exec eriphe eriphe-launcher uninstall` removes the containers it made, the
-  task and service containers, the networks, the `eriphe-cache` volume and Eriphe's images; the
+  task and service containers, the networks, the `eriphe-cache` and `eriphe-cache-untrusted` volumes and Eriphe's images; the
   data folder stays (`uninstall --data` empties it too). It then stops the launcher and keeps it
   from starting again (a mark, `launcher/uninstalled`): remove it with `docker rm -f eriphe` (on
   Unraid, Docker → eriphe → Remove), and its image.
@@ -571,7 +571,7 @@ $env:ERIPHE_UNINSTALL='1'; irm https://github.com/Alexis-Marcel/eriphe-system/re
 ```
 
 - Linux: the compose project and its containers, the task and service containers, the networks,
-  the `eriphe-cache` volume, Eriphe's images (every tag), the updater's systemd units,
+  the `eriphe-cache` and `eriphe-cache-untrusted` volumes, Eriphe's images (every tag), the updater's systemd units,
   `/opt/eriphe`, `/var/lib/eriphe`, `/usr/local/bin/eriphe-share` and the install's log (`/var/log/eriphe-install.log`; the
   uninstall writes its own in `/tmp`). Docker Engine too, with its `docker` group, if the script
   installed it and no other container is left; otherwise it stays, the uninstall names the

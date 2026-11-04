@@ -1876,7 +1876,7 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   # shellcheck disable=SC2086 # one argument per id
   [ -z "$ids" ] || docker rm -f $ids >/dev/null
   docker network rm eriphe-tasks eriphe-system eriphe-docker >/dev/null 2>&1 || true
-  docker volume rm eriphe-cache >/dev/null 2>&1 || true
+  docker volume rm eriphe-cache eriphe-cache-untrusted >/dev/null 2>&1 || true
   # Every tag of Eriphe's images: latest, a pinned one, the previous ones.
   for repo in $ALL_REPOS; do
     refs=$(docker images --format '{{.Repository}}:{{.Tag}}' "$repo" | grep -v ':<none>$' || true)

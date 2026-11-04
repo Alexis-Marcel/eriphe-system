@@ -146,7 +146,7 @@ func (e remoteEngine) runTask(spec taskRunSpec) (*engineRun, error) {
 	if spec.name != containerName(&Task{ID: spec.taskID}) {
 		return nil, fmt.Errorf("a task's container is %s, not %s", containerName(&Task{ID: spec.taskID}), spec.name)
 	}
-	r, _, err := e.stream("/tasks", wireTask{Task: spec.taskID, Image: spec.image, SystemNetwork: spec.systemNetwork,
+	r, _, err := e.stream("/tasks", wireTask{Task: spec.taskID, Image: spec.image, SystemNetwork: spec.systemNetwork, Untrusted: spec.untrusted,
 		Mounts: e.wireMounts(spec.mounts), Groups: spec.groups, Env: spec.env, Entrypoint: spec.entrypoint, Cmd: spec.cmd,
 		Memory: e.o.taskMemory, CPUs: e.o.taskCPUs}, true, spec.stderr)
 	return r, err

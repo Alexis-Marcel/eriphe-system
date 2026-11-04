@@ -83,7 +83,8 @@ image of one's own for another ACP agent can be built the same way (`COPY` its b
 ## Cache
 
 eriphe-node mounts a volume at `/cache` (`eriphe-cache`, see `-cache-volume`; a folder of its
-root with Apple's container), kept between the tasks of a machine:
+root with Apple's container), kept between the tasks of a machine; the tasks eriphe-core marks
+untrusted get another one, `eriphe-cache-untrusted` (node/README.md):
 
 | Path | What |
 |---|---|

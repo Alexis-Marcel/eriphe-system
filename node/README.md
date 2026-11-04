@@ -676,7 +676,11 @@ two turns with an allowed command and a denied write, a restart and a loaded ses
 
 Every task container mounts the Docker volume `eriphe-cache` at `/cache` (`-cache-volume`, empty to
 disable): the base image keeps apt's, uv's, npm's and pip's caches there (worker/README.md, Cache),
-so a package is downloaded once per node.
+so a package is downloaded once per node. A task eriphe-core marks `untrusted` (one started on
+what came from outside: the brain, the assistants, memory extraction, a worker started on a
+tainted turn) mounts `eriphe-cache-untrusted` instead (`<root>/cache-untrusted` with Apple's
+container): what it leaves there is never run by the other tasks (`cache.go`). A trusted task that
+reads the web later in its run still shares the trusted cache.
 
 ### Agent skills
 

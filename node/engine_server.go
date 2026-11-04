@@ -82,6 +82,7 @@ type (
 		Task          string            `json:"task"`
 		Image         string            `json:"image"`
 		SystemNetwork bool              `json:"system_network,omitempty"`
+		Untrusted     bool              `json:"untrusted,omitempty"`
 		Mounts        []wireMount       `json:"mounts,omitempty"`
 		Groups        []int             `json:"groups,omitempty"`
 		Env           map[string]string `json:"env,omitempty"`
@@ -355,7 +356,7 @@ func (s *engineServer) taskContainer(ctx context.Context, t wireTask) (apiContai
 		c.Entrypoint = []string{t.Entrypoint}
 	}
 	if s.cacheVolume != "" {
-		c.HostConfig.Binds = []string{s.cacheVolume + ":/cache"}
+		c.HostConfig.Binds = []string{cacheFor(s.cacheVolume, t.Untrusted) + ":/cache"}
 	}
 	for _, g := range t.Groups {
 		if g < 0 {

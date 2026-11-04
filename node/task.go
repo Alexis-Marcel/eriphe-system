@@ -77,6 +77,11 @@ type TaskSpec struct {
 	// (turnend.go). None from an eriphe-core without contracts.
 	Checks      []TaskCheck `json:"checks,omitempty"`
 	CheckRounds int         `json:"check_rounds,omitempty"`
+
+	// Untrusted: eriphe-core started the task on what came from outside (a
+	// tainted turn, the brain, memory extraction): it gets a cache of its
+	// own, never the one the other tasks run from (cache.go).
+	Untrusted bool `json:"untrusted,omitempty"`
 }
 
 // ModelEndpoint is a self-hosted, OpenAI-compatible model server: its /v1
