@@ -76,7 +76,7 @@ func TestAddDialogSteps(t *testing.T) {
 		{"/settings/tools/new?preset=mail", "add/mail", "/settings/tools/add", "add",
 			[]string{`class="panel picker"`, `href="/settings/tools/new?preset=mail&amp;provider=gmail" data-step data-hash="add/mail/gmail"`}},
 		{"/settings/tools/new?preset=mail&provider=gmail", "add/mail/gmail", "/settings/tools/new?preset=mail", "add/mail",
-			[]string{`name="mail_provider" value="gmail"`, `name="dialog" value="1"`, `data-hash="add/mail/choose"`, `href="/settings/tools" data-step-close`}},
+			[]string{`name="mail_provider" value="gmail"`, `name="dialog" value="1"`, `href="/settings/tools" data-step-close`}},
 		{"/settings/tools/new?preset=calendar&provider=icloud", "add/calendar/icloud", "/settings/tools/new?preset=calendar", "add/calendar",
 			[]string{`name="cal_provider" value="icloud"`, `name="dialog" value="1"`}},
 		{"/settings/tools/new?preset=linear", "add/linear", "/settings/tools/add", "add",
@@ -109,6 +109,11 @@ func TestAddDialogSteps(t *testing.T) {
 			if !strings.Contains(body, w) {
 				t.Errorf("%s lacks %s", tc.path, w)
 			}
+		}
+		// The kind of account picked goes back to the list by the step's
+		// back link only: no "Changer" beside it.
+		if strings.Contains(body, "/choose") {
+			t.Errorf("%s: a second way back to the kinds of account", tc.path)
 		}
 		if !strings.Contains(body, `<form method="dialog">`) {
 			t.Errorf("%s: no close button", tc.path)
