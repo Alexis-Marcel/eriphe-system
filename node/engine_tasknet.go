@@ -114,11 +114,16 @@ func (s *engineServer) beginTaskNet(ctx context.Context, task string) (wireTaskN
 	if err != nil {
 		return wireTaskNetResult{}, err
 	}
-	// Made like the task network: its driver options (an isolated gateway).
-	var opts map[string]string
+	// Made like the task network: its driver options (an isolated
+	// gateway), but its bridge's name, which is its own.
+	opts := map[string]string{}
 	for _, n := range all {
 		if n.Name == dockerNetwork(s.taskNetwork) {
-			opts = n.Options
+			for k, v := range n.Options {
+				if k != "com.docker.network.bridge.name" {
+					opts[k] = v
+				}
+			}
 		}
 	}
 	err = s.d.call(ctx, http.MethodPost, "/networks/create", nil, map[string]any{
