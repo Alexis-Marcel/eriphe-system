@@ -509,11 +509,13 @@
   {{if .Note}}<p class="small muted">{{.Note}}</p>{{end}}
 </div>{{end}}{{end}}
 
-{{define "account-head"}}{{/* . is a dict: ID, Title, Note, Change, Hash */}}
+{{/* The kind of account picked. A new tool goes back to the list with the
+     step's back link; an edit, which has none, changes it here. */}}
+{{define "account-head"}}{{/* . is a dict: ID, Title, Note, Change (empty: none), Hash */}}
 <div class="account-head">
   <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "provider-icon" .ID}}</span>
   <div class="account-text"><b>{{.Title}}</b>{{if .Note}}<small>{{.Note}}</small>{{end}}</div>
-  <a class="btn btn-ghost sm" href="{{.Change}}" data-step data-hash="{{.Hash}}">{{t "pick.change"}}</a>
+  {{with .Change}}<a class="btn btn-ghost sm" href="{{.}}" data-step data-hash="{{$.Hash}}">{{t "pick.change"}}</a>{{end}}
 </div>{{end}}
 
 {{define "name-field"}}<label class="field"><span>{{t "form.name"}}</span>
@@ -601,7 +603,7 @@
 
 {{define "mail-fields"}}{{$c := .Mail.Choice}}{{$id := $c.ID}}
   <input type="hidden" name="mail_provider" value="{{$id}}">
-  {{template "account-head" dict "ID" $id "Title" (t (printf "mailp.%s" $id)) "Note" (t (printf "mailp.%s.note" $id)) "Change" (printf "%schoose" .PickURL) "Hash" (.StepHash "choose")}}
+  {{template "account-head" dict "ID" $id "Title" (t (printf "mailp.%s" $id)) "Note" (t (printf "mailp.%s.note" $id)) "Change" (and .Edit (printf "%schoose" .PickURL)) "Hash" (.StepHash "choose")}}
   {{if $c.Soon}}<p class="alert" role="alert">{{t (printf "mailp.%s.soonlong" $id)}}</p>{{end}}
   {{if .Switched}}<p class="notice">{{t "form.switched"}}</p>{{end}}
   <div class="form-grid">
@@ -619,7 +621,7 @@
 
 {{define "cal-fields"}}{{$c := .Calendar.Choice}}{{$id := $c.ID}}
   <input type="hidden" name="cal_provider" value="{{$id}}">
-  {{template "account-head" dict "ID" $id "Title" (t (printf "calp.%s" $id)) "Note" (t (printf "calp.%s.desc" $id)) "Change" (printf "%schoose" .PickURL) "Hash" (.StepHash "choose")}}
+  {{template "account-head" dict "ID" $id "Title" (t (printf "calp.%s" $id)) "Note" (t (printf "calp.%s.desc" $id)) "Change" (and .Edit (printf "%schoose" .PickURL)) "Hash" (.StepHash "choose")}}
   {{if .Switched}}<p class="notice">{{t "form.switched"}}</p>{{end}}
   <div class="form-grid">
     {{if $c.NeedsURL}}<label class="field span-2"><span>{{t "cal.url"}}</span><input type="text" name="cal_url" value="{{.Calendar.URL}}" inputmode="url" spellcheck="false" autocapitalize="off" class="mono" placeholder="{{t (printf "calp.%s.urlplaceholder" $id)}}" aria-describedby="cu-h"><small id="cu-h">{{t (printf "calp.%s.urlhint" $id)}}</small></label>{{end}}
