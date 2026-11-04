@@ -1528,11 +1528,19 @@ an address) and keeps its secret in a variable of its own (`MAIL_PASSWORD_<hash>
 in the server's `account_access` ([per account](#access-levels)). The tools list still shows a row
 per account, with its own form, access page and removal; the server goes with its last account.
 
+Two calendars can share an address: an Apple account's and a Google account's. They are two
+accounts. The Google one keeps the address as its name (the Google account finds its calendar by
+it); the other is named after where it is (`sam@example.org (iCloud)`, or its server's host). A
+Google account connected after an Apple calendar of its address renames that calendar, which keeps
+its secret, its level, what was allowed for it and its watches. The same calendar added twice is
+refused.
+
 Before, each account was a server of its own (`mail`, `mail-sam`, `agenda-icloud`…). At start,
 `mergeAccountServers` (`accounts_merge.go`) makes them one, under the service's own name when one
 has it: each account keeps its secret's vault reference (nothing is asked again) and the level of
 the server it was; the actions allowed for good, the watches (which then name `account`) and the
-assistants lent a server move to the one left. It does nothing once they are one.
+assistants lent a server move to the one left. Two calendars of one address are both kept, named
+as above. It does nothing once they are one.
 
 ## Folders
 
