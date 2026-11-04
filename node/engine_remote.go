@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"slices"
@@ -21,18 +22,60 @@ import (
 // -engine-url: the node never speaks to Docker itself. It says what it
 // wants, the engine builds the containers; the networks and the cache
 // volume are the engine's (loadEngineConfig).
-type remoteEngine struct{ o *options }
+type remoteEngine struct {
+	o    *options
+	nets *taskNets // the tasks' own networks, when the engine makes them
+}
 
 // remoteClient reaches the engine directly, never through a proxy of the
 // environment.
 var remoteClient = &http.Client{Transport: &http.Transport{Proxy: nil, MaxIdleConns: 8, IdleConnTimeout: time.Minute}}
 
-func (e remoteEngine) traits() engineTraits { return engineTraits{} }
+func (e remoteEngine) traits() engineTraits { return engineTraits{ownNetworks: e.o.engineTaskNets} }
 
-// The tasks share one network: nothing to make for one.
-func (e remoteEngine) beginTask(string) (string, string, error) { return "", "", nil }
-func (e remoteEngine) endTask(string)                           {}
-func (e remoteEngine) mountable(string) error                   { return nil }
+// beginTask has the engine make the task's own network, with the node on
+// it (engine_tasknet.go), when it makes them; the tasks share one
+// otherwise. The node's address on it is the one its task reaches.
+func (e remoteEngine) beginTask(taskID string) (string, string, error) {
+	if !e.o.engineTaskNets {
+		return "", "", nil
+	}
+	var out wireTaskNetResult
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := e.call(ctx, http.MethodPost, "/networks/task", wireTaskNet{Task: taskID}, &out); err != nil {
+		return "", "", err
+	}
+	subnet, err1 := netip.ParsePrefix(out.Subnet)
+	node, err2 := netip.ParseAddr(out.Node)
+	if err := errors.Join(err1, err2); err != nil || !subnet.Contains(node) {
+		e.endTask(out.Network)
+		return "", "", fmt.Errorf("eriphe-node engine: the task's network %s: subnet %q, node %q", out.Network, out.Subnet, out.Node)
+	}
+	if e.nets != nil {
+		e.nets.add(out.Network, subnet, node)
+	}
+	return out.Network, out.Node, nil
+}
+
+// endTask has the engine remove the task's network once its container is
+// gone.
+func (e remoteEngine) endTask(network string) {
+	task, ok := strings.CutPrefix(network, taskNetPrefix)
+	if !ok {
+		return
+	}
+	if e.nets != nil {
+		e.nets.remove(network)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := e.call(ctx, http.MethodPost, "/networks/task/end", wireTaskNet{Task: task}, nil); err != nil {
+		log.Printf("task %s: its network: %v", task, err)
+	}
+}
+
+func (e remoteEngine) mountable(string) error { return nil }
 
 func (e remoteEngine) url(path string) string {
 	return strings.TrimRight(e.o.engineURL, "/") + engineAPI + path
@@ -292,10 +335,11 @@ func loadEngineConfig(o *options, tries int, every time.Duration) error {
 			time.Sleep(every)
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		err = remoteEngine{o}.call(ctx, http.MethodGet, "/config", nil, &c)
+		err = remoteEngine{o: o}.call(ctx, http.MethodGet, "/config", nil, &c)
 		cancel()
 		if err == nil {
 			o.taskNetwork, o.network, o.serviceNetwork, o.cacheVolume = c.TaskNetwork, c.Network, c.ServiceNetwork, c.CacheVolume
+			o.engineTaskNets = c.TaskNetworks
 			if c.Version != version {
 				log.Printf("warning: eriphe-node engine is %s, this node %s", c.Version, version)
 			}

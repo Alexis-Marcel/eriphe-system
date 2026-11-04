@@ -15,13 +15,14 @@ helper, a wake), never a container as such; the engine makes each container itse
 hardening, and only answers `eriphe-node`. The engine sits on its own internal network,
 `eriphe-docker`, that task containers do not join.
 
-Task containers run on `eriphe-tasks`, an internal bridge (no route out) that only eriphe-node
-joins besides them, with an isolated gateway (the bridge has no address on the NAS, so the NAS's
-own services, its web UI included, are not reachable on it). eriphe-core and the local MCP services
-are on `eriphe-system`, which tasks are not on: a task cannot call a service container directly
-(bypassing grants, policy and tickets) nor eriphe-core. It reaches only the node: its task listener
-as `eriphe-node:8790` and its egress relay as `eriphe-node:8791` (both bound to the node's address
-on `eriphe-tasks` only). The relay is the tasks' one way to the Internet, and never dials the LAN
+Each task container runs on a network of its own, `eriphe-task-<id>`, which the engine makes for it
+(a /28 of 10.213.0.0/16, `-task-pool`) like `eriphe-tasks`: an internal bridge (no route out) with an
+isolated gateway (the bridge has no address on the NAS, so the NAS's own services, its web UI
+included, are not reachable on it), that only eriphe-node joins besides the task. eriphe-core and
+the local MCP services are on `eriphe-system`, which tasks are not on: a task cannot call a service
+container directly (bypassing grants, policy and tickets), eriphe-core, nor another task. It reaches
+only the node: its task listener on port 8790 and its egress relay on 8791, at the node's address on
+its network (the node accepts no other network on them). The relay is the tasks' one way to the Internet, and never dials the LAN
 (see node/README.md, Egress).
 
 A request says what is wanted (an image, folders and their access, an environment, limits) and
@@ -94,8 +95,8 @@ Needs Docker 28 or later (`docker version`), for the isolated gateway of `eriphe
 4. `ERIPHE_JOIN_TOKEN=<token> docker compose up -d`. Optionally set `ERIPHE_CA_HASH` (the hash from
    Settings → Machines) so that the node checks eriphe-core's CA instead of trusting the first
    exchange.
-5. Check: `docker logs eriphe-node` says it is connected over TLS, with `tasks on eriphe-tasks`
-   and an `egress relay on 172.x.y.z:8791`; `docker network inspect eriphe-tasks --format
+5. Check: `docker logs eriphe-node` says it is connected over TLS, with tasks `each on a network
+   of its own`; while a task runs, `docker network inspect eriphe-task-<id> --format
    '{{.Internal}} {{.Options}}'` says `true` and `gateway_mode_ipv4:isolated`; a task starts,
    answers and stops, and `docker logs eriphe-engine` shows no refusal; `docker inspect eriphe-node
    --format '{{.Config.Env}}'` shows `ERIPHE_ENGINE_URL` and no `DOCKER_HOST`.

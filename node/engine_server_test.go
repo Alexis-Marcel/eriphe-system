@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -32,12 +33,36 @@ type apiDaemon struct {
 	done    map[string]chan struct{}
 	exit    map[string]int
 	missing map[string]bool // images it does not have until pulled
+	nets    map[string]*fakeNet
+}
+
+// fakeNet is a network of the fake daemon: who is on it, at which address.
+type fakeNet struct {
+	internal bool
+	subnet   string
+	labels   map[string]string
+	options  map[string]string
+	members  map[string]string // container name: its address, with the prefix
+}
+
+func (n *fakeNet) json(name string) map[string]any {
+	members := map[string]any{}
+	for c, ip := range n.members {
+		members["id-"+c] = map[string]any{"Name": c, "IPv4Address": ip}
+	}
+	gw := netip.MustParsePrefix(n.subnet).Addr().Next().String()
+	return map[string]any{"Name": name, "Internal": n.internal, "Labels": n.labels, "Options": n.options,
+		"IPAM": map[string]any{"Config": []map[string]string{{"Subnet": n.subnet, "Gateway": gw}}}, "Containers": members}
 }
 
 func newAPIDaemon(t *testing.T) (*apiDaemon, *dockerAPI) {
 	t.Helper()
 	d := &apiDaemon{created: map[string]apiContainer{}, labels: map[string]map[string]string{},
-		done: map[string]chan struct{}{}, exit: map[string]int{}, missing: map[string]bool{}}
+		done: map[string]chan struct{}{}, exit: map[string]int{}, missing: map[string]bool{},
+		nets: map[string]*fakeNet{"eriphe-tasks": {internal: true, subnet: "172.30.0.0/16", members: map[string]string{},
+			options: map[string]string{"com.docker.network.bridge.gateway_mode_ipv4": "isolated"}},
+			"eriphe-system":   {subnet: "172.29.0.0/16", members: map[string]string{}},
+			"eriphe-services": {internal: true, subnet: "172.28.0.0/16", members: map[string]string{}}}}
 	srv := httptest.NewServer(d)
 	t.Cleanup(srv.Close)
 	addr := strings.TrimPrefix(srv.URL, "http://")
@@ -135,15 +160,81 @@ func (d *apiDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		d.mu.Unlock()
 		json.NewEncoder(w).Encode(out)
-	case parts[0] == "networks" && r.Method == http.MethodGet:
-		if parts[1] != "eriphe-tasks" {
+	case p == "/networks" && r.Method == http.MethodGet:
+		var f map[string][]string
+		json.Unmarshal([]byte(r.URL.Query().Get("filters")), &f)
+		var out []map[string]any
+		d.mu.Lock()
+		for name, n := range d.nets {
+			k, v, _ := strings.Cut(strings.Join(f["label"], ""), "=")
+			if k == "" || n.labels[k] == v {
+				out = append(out, n.json(name))
+			}
+		}
+		d.mu.Unlock()
+		json.NewEncoder(w).Encode(out)
+	case p == "/networks/create":
+		var c struct {
+			Name     string
+			Internal bool
+			Options  map[string]string
+			Labels   map[string]string
+			IPAM     struct{ Config []struct{ Subnet string } }
+		}
+		json.NewDecoder(r.Body).Decode(&c)
+		d.mu.Lock()
+		_, there := d.nets[c.Name]
+		if !there {
+			n := &fakeNet{internal: c.Internal, labels: c.Labels, options: c.Options, members: map[string]string{}}
+			if len(c.IPAM.Config) > 0 {
+				n.subnet = c.IPAM.Config[0].Subnet
+			}
+			d.nets[c.Name] = n
+		}
+		d.mu.Unlock()
+		if there {
+			w.WriteHeader(http.StatusConflict)
+			io.WriteString(w, `{"message":"network exists"}`)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		io.WriteString(w, `{}`)
+	case parts[0] == "networks":
+		d.mu.Lock()
+		n, ok := d.nets[parts[1]]
+		d.mu.Unlock()
+		if !ok {
 			notFound("network")
 			return
 		}
-		io.WriteString(w, `{"Internal":true,"IPAM":{"Config":[{"Subnet":"172.30.0.0/16","Gateway":"172.30.0.1"}]}}`)
-	case parts[0] == "networks":
-		w.WriteHeader(http.StatusCreated)
-		io.WriteString(w, `{}`)
+		var c struct{ Container string }
+		json.NewDecoder(r.Body).Decode(&c)
+		d.mu.Lock()
+		switch {
+		case r.Method == http.MethodGet:
+			json.NewEncoder(w).Encode(n.json(parts[1]))
+		case last == "connect":
+			a := netip.MustParsePrefix(n.subnet).Addr().Next().Next()
+			for range n.members {
+				a = a.Next()
+			}
+			n.members[c.Container] = netip.PrefixFrom(a, netip.MustParsePrefix(n.subnet).Bits()).String()
+			w.WriteHeader(http.StatusOK)
+		case last == "disconnect":
+			delete(n.members, c.Container)
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodDelete:
+			if len(n.members) > 0 {
+				w.WriteHeader(http.StatusForbidden)
+				io.WriteString(w, `{"message":"has active endpoints"}`)
+			} else {
+				delete(d.nets, parts[1])
+				w.WriteHeader(http.StatusNoContent)
+			}
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+		d.mu.Unlock()
 	case parts[0] == "containers" && last == "json":
 		d.mu.Lock()
 		labels, ok := d.labels[parts[1]]
@@ -412,7 +503,7 @@ func TestEngineRunsTheNode(t *testing.T) {
 // run's error, not its exit.
 func TestEngineTaskStream(t *testing.T) {
 	f := newEngineFixture(t)
-	e := remoteEngine{&options{engineURL: f.url, root: f.root, hostRoot: f.root}}
+	e := remoteEngine{o: &options{engineURL: f.url, root: f.root, hostRoot: f.root}}
 	f.d.mu.Lock()
 	f.d.exit["eriphe-task-t2"] = 2
 	f.d.missing["example.org/new:1"] = true
@@ -557,7 +648,7 @@ func TestRemoteEngineErrors(t *testing.T) {
 	f := newEngineFixture(t)
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(os.Stderr)
-	e := remoteEngine{&options{engineURL: f.url}}
+	e := remoteEngine{o: &options{engineURL: f.url}}
 	ctx := context.Background()
 	if _, err := e.execSync(ctx, "eriphe-task-gone", execSpec{script: "true"}); err == nil || !strings.Contains(err.Error(), "did not run") {
 		t.Errorf("exec in none: %v", err)
@@ -572,7 +663,7 @@ func TestRemoteEngineErrors(t *testing.T) {
 		!strings.Contains(err.Error(), "not root") {
 		t.Errorf("a root service: %v", err)
 	}
-	gone := remoteEngine{&options{engineURL: "http://127.0.0.1:1"}}
+	gone := remoteEngine{o: &options{engineURL: "http://127.0.0.1:1"}}
 	if err := gone.pull(ctx, "x"); err == nil {
 		t.Error("no engine")
 	}
@@ -595,5 +686,97 @@ func TestSplitImage(t *testing.T) {
 		if n, tag := splitImage(in); n != want[0] || tag != want[1] {
 			t.Errorf("%s: %s %s", in, n, tag)
 		}
+	}
+}
+
+// A task's subnet is the first of the pool no network uses; a pool used
+// up, or smaller than one, says so.
+func TestFreeSubnet(t *testing.T) {
+	nets := func(subnets ...string) []apiNetworkFull {
+		var out []apiNetworkFull
+		for _, s := range subnets {
+			var n apiNetworkFull
+			n.IPAM.Config = append(n.IPAM.Config, struct {
+				Subnet string `json:"Subnet"`
+			}{s})
+			out = append(out, n)
+		}
+		return out
+	}
+	pool := netip.MustParsePrefix("10.213.0.0/16")
+	if got, err := freeSubnet(pool, nets("172.17.0.0/16", "10.213.0.0/28", "10.213.0.16/28")); err != nil || got.String() != "10.213.0.32/28" {
+		t.Errorf("next free: %v %v", got, err)
+	}
+	if _, err := freeSubnet(pool, nets("10.0.0.0/8")); err == nil {
+		t.Error("a pool used up")
+	}
+	if _, err := freeSubnet(netip.MustParsePrefix("10.213.0.0/30"), nil); err == nil {
+		t.Error("a pool smaller than a task's subnet")
+	}
+}
+
+// Each task on a network of its own: made by the engine like the task
+// network (internal, its options), the node on it at an address of its
+// subnet, which the node accepts; the task's container on it; once over,
+// the node leaves and the network goes, and so do those a run left.
+func TestEngineTaskNetworks(t *testing.T) {
+	f := newEngineFixture(t)
+	f.s.nodeName, f.s.taskPool = "eriphe-node", netip.MustParsePrefix("10.213.0.0/16")
+	o := &options{engineURL: f.url, root: f.root, hostRoot: f.root}
+	if err := loadEngineConfig(o, 1, 0); err != nil || !o.engineTaskNets {
+		t.Fatalf("the engine does not say it makes task networks: %v", err)
+	}
+	nets := &taskNets{}
+	e := remoteEngine{o: o, nets: nets}
+	if !e.traits().ownNetworks {
+		t.Error("no own networks")
+	}
+	name, node, err := e.beginTask("t1")
+	if err != nil || name != "eriphe-task-t1" || node != "10.213.0.2" {
+		t.Fatalf("begin: %q %q %v", name, node, err)
+	}
+	f.d.mu.Lock()
+	n := f.d.nets[name]
+	_, onIt := n.members["eriphe-node"]
+	f.d.mu.Unlock()
+	if !n.internal || n.subnet != "10.213.0.0/28" || n.labels["eriphe.task"] != "t1" ||
+		n.options["com.docker.network.bridge.gateway_mode_ipv4"] != "isolated" || !onIt {
+		t.Errorf("the task's network: %+v", n)
+	}
+	if !nets.allowed(netip.MustParseAddr("10.213.0.3")) || nets.allowed(netip.MustParseAddr("172.30.0.3")) {
+		t.Error("the node accepts other networks than the tasks'")
+	}
+	r, err := e.runTask(taskRunSpec{name: "eriphe-task-t1", taskID: "t1", image: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.stdin.Close()
+	if c, _ := f.d.container("eriphe-task-t1"); c.HostConfig.NetworkMode != "eriphe-task-t1" ||
+		!slices.Contains(c.HostConfig.ExtraHosts, "host.docker.internal:10.213.0.1") {
+		t.Errorf("the task's container: %s %v", c.HostConfig.NetworkMode, c.HostConfig.ExtraHosts)
+	}
+	if name2, _, err := e.beginTask("t2"); err != nil || f.d.nets[name2].subnet != "10.213.0.16/28" {
+		t.Errorf("a second task's network: %v", err)
+	}
+	e.endTask(name)
+	f.d.mu.Lock()
+	_, left := f.d.nets[name]
+	f.d.mu.Unlock()
+	if left || nets.allowed(netip.MustParseAddr("10.213.0.3")) {
+		t.Error("the network is still there once the task is over")
+	}
+	// A network a run left goes with the tasks' stray containers; the
+	// others stay.
+	e.removeStray("eriphe.task")
+	f.d.mu.Lock()
+	_, stray := f.d.nets["eriphe-task-t2"]
+	_, shared := f.d.nets["eriphe-tasks"]
+	f.d.mu.Unlock()
+	if stray || !shared {
+		t.Errorf("stray task network left %v, shared one gone %v", stray, !shared)
+	}
+	// Not a task's network: never removed.
+	if _, _, err := e.beginTask("../x"); err == nil {
+		t.Error("a bad task id")
 	}
 }

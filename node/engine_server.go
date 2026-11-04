@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -59,6 +61,11 @@ type engineServer struct {
 	cacheVolume                          string
 	allowFrom                            string // the only host answered, by name
 	lookup                               func(string) ([]string, error)
+	// Each task on a network of its own (engine_tasknet.go): the node's
+	// container, joined to it, and where its subnet comes from.
+	nodeName   string
+	taskPool   netip.Prefix
+	networking sync.Mutex
 }
 
 // The requests, as the node sends them: a field not here is refused.
@@ -140,6 +147,8 @@ type (
 		Network        string `json:"network"`
 		ServiceNetwork string `json:"service_network"`
 		CacheVolume    string `json:"cache_volume"`
+		// TaskNetworks: each task on a network of its own (engine_tasknet.go).
+		TaskNetworks bool `json:"task_networks,omitempty"`
 	}
 )
 
@@ -170,6 +179,8 @@ func (s *engineServer) handler() http.Handler {
 	mux.HandleFunc("GET "+engineAPI+"/info", s.handleInfo)
 	mux.HandleFunc("POST "+engineAPI+"/networks/ensure", s.handleEnsureNetwork)
 	mux.HandleFunc("GET "+engineAPI+"/networks/tasks", s.handleTaskSubnets)
+	mux.HandleFunc("POST "+engineAPI+"/networks/task", s.handleTaskNet)
+	mux.HandleFunc("POST "+engineAPI+"/networks/task/end", s.handleTaskNetEnd)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.refuse(w, r, http.StatusNotFound, fmt.Errorf("no %s %s in this engine's API %s: the node and eriphe-node engine must be of the same version", r.Method, r.URL.Path, engineAPI))
 	})
@@ -203,7 +214,7 @@ func decode(w http.ResponseWriter, r *http.Request, v any) error {
 
 func (s *engineServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, wireConfig{Version: version, TaskNetwork: s.taskNetwork, Network: s.network,
-		ServiceNetwork: s.serviceNetwork, CacheVolume: s.cacheVolume})
+		ServiceNetwork: s.serviceNetwork, CacheVolume: s.cacheVolume, TaskNetworks: s.nodeName != "" && s.taskPool.IsValid()})
 }
 
 // mounts checks a container's folders against the policy: each from an
@@ -322,14 +333,20 @@ func (s *engineServer) taskContainer(ctx context.Context, t wireTask) (apiContai
 		}
 		extra = s.network
 	}
+	// Its own network when the engine made one (engine_tasknet.go), else
+	// the one the tasks share.
+	network := s.taskNetwork
+	if own := s.taskNetOf(ctx, t.Task); own != "" {
+		network = own
+	}
 	c := apiContainer{Image: t.Image, User: "0:0", Env: env, Cmd: t.Cmd, Labels: map[string]string{"eriphe.task": t.Task},
 		AttachStdin: true, AttachStdout: true, AttachStderr: true, OpenStdin: true, StdinOnce: true,
 		// An image's own health check is for its standalone use, not for tasks.
 		Healthcheck: &apiHealthcheck{Test: []string{"NONE"}},
-		HostConfig: apiHostConfig{Mounts: mounts, NetworkMode: dockerNetwork(s.taskNetwork), AutoRemove: true,
+		HostConfig: apiHostConfig{Mounts: mounts, NetworkMode: dockerNetwork(network), AutoRemove: true,
 			CapDrop: []string{"ALL"}, CapAdd: []string{"CHOWN", "DAC_OVERRIDE", "FOWNER"}, SecurityOpt: []string{"no-new-privileges"},
 			PidsLimit: 1024, Tmpfs: map[string]string{"/tmp": "rw,exec,nosuid,nodev,size=2g"},
-			ExtraHosts: []string{"host.docker.internal:" + s.hostGateway(ctx, s.taskNetwork)},
+			ExtraHosts: []string{"host.docker.internal:" + s.hostGateway(ctx, network)},
 			Memory:     mem, NanoCpus: cpus}}
 	if t.Entrypoint != "" {
 		c.Entrypoint = []string{t.Entrypoint}
@@ -632,6 +649,9 @@ func (s *engineServer) handleRemoveStray(w http.ResponseWriter, r *http.Request)
 	for _, id := range ids {
 		s.d.remove(r.Context(), id)
 	}
+	if l.Label == "eriphe.task" {
+		s.removeStrayTaskNets(r.Context())
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -872,7 +892,21 @@ func runEngine(args []string) {
 	fs.StringVar(&s.network, "network", "", "Docker network of eriphe-core, shared with the node: the brain's tasks and the services with egress join it (empty: Docker's default bridge for the services, none for the tasks)")
 	fs.StringVar(&s.serviceNetwork, "service-network", "", "internal Docker network, shared with the node, for http services without egress")
 	fs.StringVar(&s.cacheVolume, "cache-volume", "eriphe-cache", "Docker volume for the tasks' tool and package caches (empty: none)")
+	fs.StringVar(&s.nodeName, "node-container", "", "the node's container, joined to each task's own network (empty: -allow-from; none: the tasks share -task-network)")
+	pool := fs.String("task-pool", "10.213.0.0/16", "where each task's own network gets its subnet (a /28), apart from the LAN's addresses")
 	fs.Parse(args)
+	switch s.nodeName {
+	case "":
+		s.nodeName = *allowFrom
+	case "none":
+		s.nodeName = ""
+	}
+	if p, err := netip.ParsePrefix(*pool); err == nil && p.Addr().Is4() {
+		s.taskPool = p
+	} else {
+		fmt.Fprintf(os.Stderr, "engine: -task-pool %q: an IPv4 subnet such as 10.213.0.0/16\n", *pool)
+		os.Exit(2)
+	}
 	if err := checkNetworks(options{taskNetwork: s.taskNetwork, network: s.network, serviceNetwork: s.serviceNetwork}); err != nil {
 		fmt.Fprintln(os.Stderr, "engine:", err)
 		os.Exit(2)
