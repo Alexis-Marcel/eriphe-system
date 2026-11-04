@@ -1009,6 +1009,12 @@ migrate() {
   pkill -f /usr/local/bin/eriphe-syncthing-run
   pkill -f '/usr/local/lib/eriphe/syncthing/syncthing serve'
   pkill -x eriphe-node
+  # The node of before made the task network itself, which Compose refuses
+  # as not its own: its tasks go, and so does the network, for the
+  # launcher's to take its place (the node of before makes it again if it
+  # comes back).
+  docker ps -aq --filter label=eriphe.task | xargs -r docker rm -f >/dev/null 2>&1
+  docker network rm eriphe-tasks >/dev/null 2>&1
   mkdir -p "$D/launcher"
   chmod 711 "$D"
   docker inspect -f '{{.Config.Image}}' eriphe-core >"$D/launcher/core-before" 2>/dev/null || rm -f "$D/launcher/core-before"
