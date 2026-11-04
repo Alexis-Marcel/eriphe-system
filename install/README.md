@@ -207,7 +207,8 @@ none` works).
   machine now runs (`0.9.0`, or `sha-<commit>` on edge), tags it under its own reference, and a
   short-lived container of the new image (`eriphe-launcher-swap`, no network) replaces the
   launcher's container by one with the same settings (puts the old one back if the new one does not
-  stay up). By hand: `docker exec eriphe eriphe-launcher update`, or `rollback`.
+  stay up). By hand: `docker exec eriphe eriphe-launcher update`, or `rollback`; while a task is at work
+  it says so and does nothing (the task would start over), unless `--now` follows.
 - **Folders.** Nothing of the host is given to Eriphe until you share a folder, on the host:
   `docker exec eriphe eriphe share add /mnt/user/Documents` (the options of [Folders](#folders):
   `--drop`, `--manage`, `--copyable`, `--name`; also `list`, `remove`, `snapshots`, `restore`).

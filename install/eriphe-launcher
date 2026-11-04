@@ -705,6 +705,11 @@ request() {
 local_update() {
 	[ -f "$CONF/update.sh" ] || die "Eriphe is not installed here yet: the container's first start does it"
 	uninstalled && die "Eriphe was uninstalled from here"
+	# A task at work would start over: the node writes this file while one
+	# runs a turn (node/awake.go). eriphe-core's requests wait by themselves.
+	if [ "${2:-}" != --now ] && [ -f "$DATA/node/awake" ]; then
+		die "$(sed -n 's/^tasks=//p' "$DATA/node/awake") task(s) at work here: try again once they are done, or add --now (they would start over)"
+	fi
 	discover
 	MODE=$(sed -n 's/^mode=//p' "$CONF/install.conf")
 	main=node to=
@@ -964,8 +969,8 @@ share)
 	shift
 	share "$@"
 	;;
-update) local_update update ;;
-rollback) local_update rollback ;;
+update) local_update update "${2:-}" ;;
+rollback) local_update rollback "${2:-}" ;;
 uninstall)
 	shift
 	uninstall "$@"

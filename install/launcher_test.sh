@@ -502,6 +502,14 @@ OUTCOME=ok run_in 'local_update update' >"$T/out"
 [ "$(grep -c '^update.sh' "$T/calls")" = 2 ] || fail "local update: $(cat "$T/calls")"
 has "$T/out" "eriphe-core: Updated to 0.8.0." "local update"
 has "$T/calls" "run -d --rm --name eriphe-launcher-swap" "local update, then itself"
+# A task at work: refused, unless --now.
+reset
+echo tasks=2 >"$T/data/node/awake"
+OUTCOME=ok run_in 'local_update update' >"$T/out"
+has "$T/out" "2 task(s) at work here" "local update while a task works"
+hasnt "$T/calls" "update.sh" "local update while a task works"
+OUTCOME=ok run_in 'local_update update --now' >"$T/out"
+has "$T/calls" "update.sh" "local update --now"
 
 # ---- its new container: its own settings, not its old image's
 
