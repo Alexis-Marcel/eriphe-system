@@ -35,6 +35,7 @@ printf '%s\n' "$*" >>"$T/calls"
 case $* in
 "inspect -f {{.Config.Image}} eriphe-core") [ -n "${CORE_BEFORE:-}" ] && echo "$CORE_BEFORE" || exit 1 ;;
 "logs eriphe-node") [ -z "${CONNECTED:-}" ] || echo "2026/11/04 01:00:00 connected to http://192.0.2.10:8800" ;;
+"ps -aq --filter label=eriphe.task") echo 0123456789ab ;;
 esac
 exit 0
 EOF
@@ -150,7 +151,8 @@ done
 [ "$(cat "$R/var/lib/eriphe/launcher/install.conf")" = "mode=core
 shares=home=/mnt/eriphe/home" ] || fail "the move: the launcher's list starts from $(cat "$R/var/lib/eriphe/launcher/install.conf")"
 [ "$(cat "$R/var/lib/eriphe/launcher/core-before")" = ghcr.io/alexis-marcel/eriphe-core:0.60.0 ] || fail "the move: eriphe-core's image of before"
-for want in "pkill -f /usr/local/bin/eriphe-update-loop" "pkill -f /usr/local/bin/eriphe-syncthing-run" "pkill -x eriphe-node" "rm -f eriphe-core"; do
+for want in "pkill -f /usr/local/bin/eriphe-update-loop" "pkill -f /usr/local/bin/eriphe-syncthing-run" "pkill -x eriphe-node" "rm -f eriphe-core" \
+	"rm -f 0123456789ab" "network rm eriphe-tasks"; do
 	has "$T/calls" "$want" "the move stops the install of before"
 done
 # Once only.
