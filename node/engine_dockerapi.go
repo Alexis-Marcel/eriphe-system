@@ -410,3 +410,11 @@ func (d *dockerAPI) network(ctx context.Context, name string) (apiNetwork, error
 	err := d.call(ctx, http.MethodGet, "/networks/"+url.PathEscape(name), nil, nil, &n)
 	return n, err
 }
+
+// closeWrite ends c's sending half, when it has one: the daemon sees the end
+// of what the client sent, and still answers.
+func closeWrite(c net.Conn) {
+	if cw, ok := c.(interface{ CloseWrite() error }); ok {
+		cw.CloseWrite()
+	}
+}

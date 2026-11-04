@@ -1172,6 +1172,75 @@ linux_update u-24 sha256:b
 has "$LL/data/node/update-status" "outcome=ok" "Linux updater under eriphe-launcher"
 hasnt "$LL/calls" "create r/eriphe-node" "Linux updater under eriphe-launcher"
 hasnt "$LL/calls" "installer" "Linux updater under eriphe-launcher"
+# ---- a layout-2 Linux install (the socket proxy) updated to this build
+
+# Its own updater, as install.sh wrote it then (testdata), runs this
+# build's images: the proxy's container and the node again from the new
+# node image first (it has no proxy any more, and the node starts without
+# Docker: node/engine_remote.go, withoutEngine), the node connected, then
+# the image's install.sh --layout, which brings the engine. The image's
+# install.sh is faked past its LAYOUT line, this one's.
+LP=$T/layout2
+mkdir -p "$LP/fake" "$LP/conf" "$LP/data/node"
+export LP
+cp "$here/testdata/linux-update-layout2.sh" "$LP/conf/update.sh"
+printf "CONF='%s' DATA='%s' CORE_UID=%s MODE='' PIN=''\nCORE_IMAGE='c' NODE_IMAGE='r/eriphe-node:latest' WORKER_IMAGE='r/eriphe-base:latest'\nLAYOUT=2 BY='systemd' INSTALL='linux'\n" \
+	"$LP/conf" "$LP/data" "$(id -u)" >"$LP/conf/update.conf"
+cat >"$LP/conf/compose.yaml" <<'EOF'
+services:
+  docker-proxy:
+    container_name: eriphe-docker-proxy
+    command: ["docker-proxy", "-listen", ":2375"]
+  node:
+    environment:
+      DOCKER_HOST: tcp://eriphe-docker-proxy:2375
+EOF
+cat >"$LP/fake/docker" <<'EOF'
+#!/bin/sh
+echo "docker $*" >>"$LP/calls"
+tag=$(cat "$LP/tag" 2>/dev/null || echo sha256:a)
+case $* in
+"inspect -f {{.Image}} eriphe-node") cat "$LP/running" ;;
+"inspect -f {{.Image}} eriphe-docker-proxy") cat "$LP/proxy" ;;
+"inspect -f {{.Config.Image}} eriphe-docker-proxy") echo r/eriphe-node:latest ;;
+"inspect -f {{.State.Status}} {{.RestartCount}} "*) echo "running 0" ;;
+"inspect "*) exit 1 ;;
+"image inspect -f {{.Id}} r/eriphe-node:latest") echo "$tag" ;;
+"image inspect -f {{.Id}} "*) echo sha256:w ;;
+"image inspect -f "*sha256:b) echo 0.70.0 ;;
+"image inspect -f "*) echo 0.66.0 ;;
+"pull -q r/eriphe-node:latest") echo sha256:b >"$LP/tag" ;;
+"tag sha256:"*" r/eriphe-node:latest") echo "$2" >"$LP/tag" ;;
+"create r/eriphe-node:latest") echo c1 ;;
+"cp c1:/usr/local/share/eriphe/install.sh "*) cp "$LP/installer" "$3" ;;
+"logs --since "*) [ "$(cat "$LP/running")" = sha256:b ] && echo "no container engine here: connected all the same" && echo "connected to eriphe-core" ;;
+*" up -d --pull never --no-deps node") cp "$LP/tag" "$LP/running" ;;
+*" up -d --pull never --no-deps docker-proxy") cp "$LP/tag" "$LP/proxy" ;;
+esac
+exit 0
+EOF
+{
+	grep '^LAYOUT=' "$here/install.sh"
+	cat <<'EOF'
+echo "installer $* image=$ERIPHE_NODE_IMAGE" >>"$LP/calls"
+printf 'services:\n  engine:\n  node:\n    environment:\n      ERIPHE_ENGINE_URL: http://eriphe-engine:8792\n' >"$LP/conf/compose.yaml"
+sed 's/^LAYOUT=.*/LAYOUT=3 BY=systemd/' "$LP/conf/update.conf" >"$LP/conf/update.conf.new" && mv "$LP/conf/update.conf.new" "$LP/conf/update.conf"
+EOF
+} >"$LP/installer"
+printf '#!/bin/sh\nexit 0\n' >"$LP/fake/flock"
+chmod +x "$LP/fake/docker" "$LP/fake/flock"
+echo sha256:a >"$LP/running"
+echo sha256:a >"$LP/proxy"
+printf 'id=u-30\naction=update\ncore=\nauto=0\n' >"$LP/data/node/update-requested"
+PATH="$LP/fake:$PATH" ERIPHE_UPDATE_HEALTH=4 ERIPHE_UPDATE_ROOT="$LP/root" sh "$LP/conf/update.sh" 2>/dev/null
+has "$LP/data/node/update-status" "outcome=ok" "layout-2 update"
+has "$LP/data/node/update-status" "to=0.70.0" "layout-2 update"
+[ "$(cat "$LP/proxy")" = sha256:b ] || fail "layout-2 update: the proxy's container not on the new image"
+has "$LP/calls" "installer --layout image=r/eriphe-node:latest" "layout-2 update: this build's layout"
+has "$LP/conf/compose.yaml" "ERIPHE_ENGINE_URL: http://eriphe-engine:8792" "layout-2 update: the engine"
+hasnt "$LP/conf/compose.yaml" "docker-proxy" "layout-2 update: the proxy"
+has "$LP/conf/update.conf" "LAYOUT=3" "layout-2 update: its layout"
+
 # ---- the Windows updater: the layout it takes from the node image's install.ps1
 
 # The updater of an install from before the launcher (testdata), its own

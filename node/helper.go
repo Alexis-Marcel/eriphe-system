@@ -15,14 +15,14 @@ import (
 
 // Folder helpers. With the one-container install (eriphe-launcher), the
 // node mounts no shared folder at all: a task gets its folders as bind
-// mounts from the Docker daemon when its container is made, through the
-// socket proxy, which allows only the folders shared (the launcher's list,
-// re-read at each request). What the node does inside a shared folder runs
+// mounts from the Docker daemon when its container is made, through
+// eriphe-node engine, which allows only the folders shared (the launcher's
+// list, re-read at each request). What the node does inside a shared folder runs
 // instead in a short-lived container of its own image, the helper, made
-// through the proxy with only that folder (and, for a snapshot, its place
+// by the engine with only that folder (and, for a snapshot, its place
 // in the node's data) bind-mounted at its path, no network, a read-only
 // root, no capability but a task's (CHOWN, DAC_OVERRIDE, FOWNER) and
-// no-new-privileges (dockerproxy.go, checkHelper). It runs the same code
+// no-new-privileges (engine_server.go, helperContainer). It runs the same code
 // the node runs on a machine where it sees the folders itself:
 //
 //   - check: a folder's checks, when it is shared and before every lend

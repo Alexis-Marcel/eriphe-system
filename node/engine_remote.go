@@ -9,8 +9,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -300,4 +303,52 @@ func loadEngineConfig(o *options, tries int, every time.Duration) error {
 		}
 	}
 	return fmt.Errorf("eriphe-node engine at %s: %v", o.engineURL, err)
+}
+
+// withoutEngine: a node that cannot reach its container engine at start (an
+// install whose layout is older than this build, such as a Linux one still
+// on the socket proxy of before eriphe-node engine) connects to eriphe-core
+// all the same, with no runtime to offer, so that it says so and its
+// updater, which waits for it to connect, can bring the layout that gives
+// it one. It looks for the engine again, and starts again once it is there.
+func (n *node) withoutEngine(s *state, why error) {
+	log.Printf("no container engine here: %v; connected all the same, with no task to run, until the install brings one (install/README.md, The machines update themselves)", why)
+	api := http.NewServeMux()
+	n.routes(api)
+	go serve(s, api)
+	go n.sync(s)
+	untilTrue(n.engineBack, engineRetry)
+	log.Print("the container engine is here now: eriphe-node starts again")
+	os.Exit(1)
+}
+
+// untilTrue returns once ok, asked every so often.
+func untilTrue(ok func() bool, every time.Duration) {
+	for !ok() {
+		time.Sleep(every)
+	}
+}
+
+// engineRetry is how often a node without its engine looks for it again.
+var engineRetry = 30 * time.Second
+
+// engineBack: the engine answers now, as the node needs it at start.
+func (n *node) engineBack() bool {
+	if n.opt.engineURL != "" {
+		o := n.opt
+		return loadEngineConfig(&o, 1, 0) == nil
+	}
+	return n.engine().ensureNetwork() == nil
+}
+
+// proxyGone stands in the container of the socket proxy of an install from
+// before eriphe-node engine: its updater makes it again from this image,
+// with the node's, before the new layout that replaces it applies. It runs
+// nothing, so that it neither starts a node of its own nor restarts in a
+// loop, and stops when told.
+func proxyGone() {
+	log.Print("eriphe-node docker-proxy is gone: eriphe-node engine replaces it, which this install's next layout brings (install/README.md, The machines update themselves)")
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
+	<-stop
 }
