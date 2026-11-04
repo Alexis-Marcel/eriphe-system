@@ -923,7 +923,12 @@ directly. The node is not trusted: a compromised node gets its own tasks, nothin
   read-only), `-bind-file` (more, one a line, read again at each request: eriphe-launcher's folders
   shared), `-host-root` (where the host's `/` is seen read-only: folders are resolved in it and the
   resolved path is what the daemon mounts), `-node-image` (the node's own image: the only one run on
-  the host's network, to wake a machine, and as a folder helper), `-task-network`, `-network`,
+  the host's network, to wake a machine, and as a folder helper), `-images` (the images tasks and
+  services may run or pull: a repository, any of its tags; `REPO:TAG` or `REPO@DIGEST`, that one
+  only; `REGISTRY/NAMESPACE/`, all of a namespace, `mcp/` for Docker Hub's; `*` for any; default
+  Eriphe's own, `ghcr.io/alexis-marcel/`, and the node's image always), `-image-file` (more, one a
+  line, read again at each request: `<data>/proxy/images` with the installers, `images.go`),
+  `-task-network`, `-network`,
   `-service-network`, `-cache-volume` (the node takes these from the engine at start, whatever its own
   flags say), `-allow-from` (the only host answered, by name), `-listen` (`:8792`), `-socket`.
 - **Its own containers only.** A check runs (`/v1/exec`) in the running container of the task it

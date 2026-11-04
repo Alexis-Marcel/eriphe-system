@@ -42,6 +42,7 @@ Eriphe is two programs:
 - [Options](#options)
 - [What it installs](#what-it-installs)
 - [Folders](#folders)
+- [Images this machine runs](#images-this-machine-runs)
 - [A model behind this machine](#a-model-behind-this-machine)
 - [What the VM can and cannot see](#what-the-vm-can-and-cannot-see)
 - [Windows](#windows)
@@ -810,6 +811,24 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
   deleted when you untick it, turn copies off or stop sharing the folder. On a Mac, a folder of
   iCloud Drive is copied only for the files kept on the Mac: right-click it in the Finder, "Keep
   Downloaded".
+
+## Images this machine runs
+
+A machine runs Eriphe's images only (`ghcr.io/alexis-marcel/…`, and the worker image you
+installed with): a tool or an agent of another image added in the workspace is refused there,
+"image … is not allowed on this machine", until you allow it on the machine itself. Write it in
+`<data>/proxy/images` (`/var/lib/eriphe/proxy/images` on Linux, the launcher's data folder on a
+NAS), one a line, read again at each start of a task or a tool:
+
+```
+mcp/                              # all of Docker Hub's mcp/ images
+ghcr.io/example/tool              # any tag of this one
+ghcr.io/example/other@sha256:…    # this exact image only
+```
+
+eriphe-core and a node never choose this list: a taken-over core or node cannot make the machine
+pull and run an image of its own. With Apple's container on a Mac there is no engine between the
+node and the runtime, and no such list.
 
 ## A model behind this machine
 
