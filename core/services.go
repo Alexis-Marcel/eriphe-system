@@ -177,9 +177,34 @@ func checkServices(specs map[string]RunSpec) (map[string]RunSpec, error) {
 		if err != nil {
 			return nil, fmt.Errorf("service %s: %w", name, err)
 		}
+		n.Image = pinnedImage(n.Image, version)
 		out[name] = n
 	}
 	return out, nil
+}
+
+// Eriphe's own tools (the mail, the calendar, the files) read the
+// configuration eriphe-core writes them, which changes with it: they run
+// the image of eriphe-core's version, not whatever image a machine pulled
+// once (a node pulls an image it does not have, never a newer one). A new
+// version of eriphe-core changes their specs, so their nodes run the new
+// image. The images are published under the same tags as eriphe-core's
+// (.github/workflows/ci.yml): 0.79.0 for a release, sha-<commit> for a
+// build of main. A development build ("dev") and an image named with its
+// tag or digest are left as they are.
+var ownServiceImages = []string{mailImage, calendarImage, filesImage}
+
+func pinnedImage(image, version string) string {
+	if !slices.Contains(ownServiceImages, image) {
+		return image
+	}
+	switch _, sha, dev := strings.Cut(version, "-dev+"); {
+	case dev && sha != "":
+		return image + ":sha-" + sha
+	case dev, version == "", version == "dev", strings.ContainsAny(version, "+ "):
+		return image
+	}
+	return image + ":" + version
 }
 
 func (s RunSpec) hash() string {

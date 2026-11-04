@@ -1528,6 +1528,14 @@ an address) and keeps its secret in a variable of its own (`MAIL_PASSWORD_<hash>
 in the server's `account_access` ([per account](#access-levels)). The tools list still shows a row
 per account, with its own form, access page and removal; the server goes with its last account.
 
+These servers read the configuration eriphe-core writes them, which changes with it: they run the
+image of eriphe-core's version (`services.go`, `pinnedImage`), as eriphe-files does. A release
+0.79.0 runs `eriphe-mail:0.79.0`, a build of `main` `eriphe-mail:sha-<commit>`, the tags CI
+publishes them under; a development build ("dev") runs the untagged image. A node pulls an image
+it does not have, never a newer one of one it has: without this, a machine kept the image it pulled
+first. A new version of eriphe-core changes their specs, and their node runs them again with the
+new image.
+
 Two calendars can share an address: an Apple account's and a Google account's. They are two
 accounts. The Google one keeps the address as its name (the Google account finds its calendar by
 it); the other is named after where it is (`sam@example.org (iCloud)`, or its server's host). A
