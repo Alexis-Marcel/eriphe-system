@@ -357,6 +357,10 @@ func TestRefusedFormKeepsTypedSecrets(t *testing.T) {
 	if !strings.Contains(body, "existe déjà") || !strings.Contains(body, `id="secret-password" hx-preserve`) || strings.Contains(body, "abcd-efgh") {
 		t.Fatalf("refused: %s", body)
 	}
+	// A second calendar is offered a name of its own.
+	if _, body, _ = tw.step("/settings/tools/new?preset=calendar&provider=icloud"); !strings.Contains(body, `name="name" value="agenda-icloud"`) {
+		t.Fatalf("second calendar's name: %s", body)
+	}
 	// A form shown for the first time keeps nothing.
 	if _, body, _ = tw.step("/settings/tools/new?preset=calendar&provider=icloud"); !strings.Contains(body, `id="secret-password"`) || strings.Contains(body, "hx-preserve") {
 		t.Fatalf("new form: %s", body)
