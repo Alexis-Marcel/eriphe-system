@@ -384,3 +384,51 @@ func TestServicesOnAlwaysOnNodes(t *testing.T) {
 		t.Fatalf("agenda on %q after a new spec, want nas", where("agenda"))
 	}
 }
+
+// Eriphe's own tools run the image of eriphe-core's version: a node never
+// pulls a newer image of one it has, and their configuration changes with
+// eriphe-core.
+func TestPinnedImage(t *testing.T) {
+	for _, c := range []struct{ image, version, want string }{
+		{mailImage, "0.79.0", mailImage + ":0.79.0"},
+		{calendarImage, "0.79.0", calendarImage + ":0.79.0"},
+		{filesImage, "1.2.0-rc.1", filesImage + ":1.2.0-rc.1"},
+		{mailImage, "0.79.0-dev+abc1234", mailImage + ":sha-abc1234"},
+		{mailImage, "dev", mailImage},
+		{mailImage, "", mailImage},
+		{mailImage + ":0.70.0", "0.79.0", mailImage + ":0.70.0"}, // named with its tag: kept
+		{"mcp/time", "0.79.0", "mcp/time"},
+		{"ghcr.io/alexis-marcel/eriphe-base", "0.79.0", "ghcr.io/alexis-marcel/eriphe-base"},
+	} {
+		if got := pinnedImage(c.image, c.version); got != c.want {
+			t.Errorf("pinnedImage(%s, %s) = %s, want %s", c.image, c.version, got, c.want)
+		}
+	}
+}
+
+// A new version of eriphe-core changes the spec of its tools: their node
+// runs them again, with the new image.
+func TestOwnServicesFollowTheVersion(t *testing.T) {
+	was := version
+	t.Cleanup(func() { version = was })
+	c, store := newServiceCore(t)
+	specs := map[string]RunSpec{"mail": {Image: mailImage, Transport: "stdio"}, "time": {Image: "mcp/time", Transport: "stdio"}}
+	version = "0.78.0"
+	if err := c.registerServices(specs); err != nil {
+		t.Fatal(err)
+	}
+	mail, _ := store.service("mail")
+	timeSvc, _ := store.service("time")
+	if mail.Spec.Image != mailImage+":0.78.0" || timeSvc.Spec.Image != "mcp/time" {
+		t.Fatalf("images: %s %s", mail.Spec.Image, timeSvc.Spec.Image)
+	}
+	version = "0.79.0"
+	if err := c.registerServices(specs); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := store.service("mail")
+	timeAfter, _ := store.service("time")
+	if after.Spec.Image != mailImage+":0.79.0" || after.Hash == mail.Hash || timeAfter.Hash != timeSvc.Hash {
+		t.Fatalf("after the update: %s %s→%s, time %s→%s", after.Spec.Image, mail.Hash, after.Hash, timeSvc.Hash, timeAfter.Hash)
+	}
+}
