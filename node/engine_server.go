@@ -55,6 +55,8 @@ type engineServer struct {
 	policy *dockerPolicy // bindFrom, bindFile, resolve: where folders may come from
 	// nodeImage is the node's own image: wake-on-LAN and folder helpers.
 	nodeImage string
+	// images: those the machine allows (images.go); nil: any.
+	images *imagePolicy
 	// The networks: the tasks', eriphe-core's and the services' with egress
 	// (system), the http services' without egress; and the tasks' cache.
 	taskNetwork, network, serviceNetwork string
@@ -253,10 +255,14 @@ func envList(env map[string]string) ([]string, error) {
 	return out, nil
 }
 
-// checkImage refuses what is not an image's name.
-func checkImage(image string) error {
+// checkImage refuses what is not an image's name, and an image the machine
+// does not allow (images.go).
+func (s *engineServer) checkImage(image string) error {
 	if !imageName.MatchString(image) {
 		return fmt.Errorf("bad image %q", image)
+	}
+	if s.images != nil {
+		return s.images.check(image)
 	}
 	return nil
 }
@@ -310,7 +316,7 @@ func (s *engineServer) taskContainer(ctx context.Context, t wireTask) (apiContai
 	if !engineID.MatchString(t.Task) {
 		return apiContainer{}, "", fmt.Errorf("bad task %q", t.Task)
 	}
-	if err := checkImage(t.Image); err != nil {
+	if err := s.checkImage(t.Image); err != nil {
 		return apiContainer{}, "", err
 	}
 	mounts, err := s.mounts(t.Mounts)
@@ -412,7 +418,7 @@ func (s *engineServer) serviceContainer(ctx context.Context, sv wireService) (ap
 	if !engineID.MatchString(sv.Service) {
 		return apiContainer{}, "", fmt.Errorf("bad service %q", sv.Service)
 	}
-	if err := checkImage(sv.Image); err != nil {
+	if err := s.checkImage(sv.Image); err != nil {
 		return apiContainer{}, "", err
 	}
 	if err := checkUser(sv.User); err != nil {
@@ -823,7 +829,7 @@ func (s *engineServer) handlePull(w http.ResponseWriter, r *http.Request) {
 		s.refuse(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if err := checkImage(in.Image); err != nil {
+	if err := s.checkImage(in.Image); err != nil {
 		s.refuse(w, r, http.StatusForbidden, err)
 		return
 	}
@@ -930,6 +936,8 @@ func runEngine(args []string) {
 	bindFrom := fs.String("bind-from", "", "comma-separated places folders may be mounted from: the node's root and the shared places, as the Docker daemon sees them, PATH:ro for one read-only")
 	bindFile := fs.String("bind-file", "", "a file of more places folders may be mounted from, one a line (PATH or PATH:ro), read again at each request (eriphe-launcher's folders shared)")
 	hostRoot := fs.String("host-root", "", "where the host's / is seen here, read-only: folders are resolved in it (empty: at their paths here)")
+	images := fs.String("images", defaultImages, "comma-separated images tasks and services may run: a repository (any tag), REGISTRY/NAMESPACE/ for all of a namespace, * for any; the node's image is always allowed")
+	imageFile := fs.String("image-file", "", "a file of more images allowed, one a line as in -images, read again at each request")
 	nodeImage := fs.String("node-image", "", "the node's own image: the one run on the host's network to wake a machine, and as a folder helper (empty: neither)")
 	s := &engineServer{lookup: net.LookupHost}
 	fs.StringVar(&s.taskNetwork, "task-network", "eriphe-tasks", "Docker network for task containers, apart from eriphe-core and the services (created if missing)")
@@ -956,6 +964,10 @@ func runEngine(args []string) {
 		os.Exit(2)
 	}
 	s.allowFrom, s.nodeImage = *allowFrom, *nodeImage
+	s.images = &imagePolicy{allowed: splitList(*images), file: *imageFile}
+	if s.nodeImage != "" {
+		s.images.allowed = append(s.images.allowed, s.nodeImage)
+	}
 	s.policy = &dockerPolicy{bindFile: *bindFile, resolve: filepath.EvalSymlinks}
 	if *hostRoot != "" {
 		root := *hostRoot
@@ -974,8 +986,8 @@ func runEngine(args []string) {
 	s.d = newDockerAPI(func(ctx context.Context) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", sock)
 	})
-	log.Printf("eriphe-node engine %s (API %s) on %s: folders from %v %s, task network %s, network %s, service network %s",
-		version, engineAPI, *listen, s.policy.bindFrom, *bindFile, s.taskNetwork, orNone(s.network), orNone(s.serviceNetwork))
+	log.Printf("eriphe-node engine %s (API %s) on %s: folders from %v %s, images %v %s, task network %s, network %s, service network %s",
+		version, engineAPI, *listen, s.policy.bindFrom, *bindFile, s.images.allowed, *imageFile, s.taskNetwork, orNone(s.network), orNone(s.serviceNetwork))
 	srv := &http.Server{Addr: *listen, Handler: s.handler(), ReadHeaderTimeout: 10 * time.Second}
 	if err := srv.ListenAndServe(); err != nil {
 		fmt.Fprintln(os.Stderr, "engine:", err)

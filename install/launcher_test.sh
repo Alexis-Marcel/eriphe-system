@@ -196,6 +196,7 @@ for want in "- /mnt/user/appdata/eriphe/core:/data" "- /mnt/user/appdata/eriphe/
 	'command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",' "container_name: eriphe-engine" \
 	'"-bind-from", "/mnt/user/appdata/eriphe/node", "-bind-file", "/etc/eriphe-engine/binds", "-host-root", "/host",' \
 	"- /mnt/user/appdata/eriphe/proxy:/etc/eriphe-engine:ro" "source: /" "target: /host" \
+	'"-images", "ghcr.io/alexis-marcel/,ghcr.io/alexis-marcel/eriphe-base:latest", "-image-file", "/etc/eriphe-engine/images",' \
 	'"-network", "eriphe-system", "-task-network", "eriphe-tasks", "-node-image", "ghcr.io/alexis-marcel/eriphe-node:latest"]' \
 	"cap_add: [DAC_READ_SEARCH]" "depends_on: [engine, core]" "ERIPHE_ENGINE_URL: http://eriphe-engine:8792" \
 	"ERIPHE_FOLDER_HELPER: ghcr.io/alexis-marcel/eriphe-node:latest" '- "/mnt/media/Films:/mnt/media/Films:ro"' \
@@ -766,6 +767,8 @@ installer 'parse_args --share docs=/srv/docs --share media=/srv/media:ro; DATA=/
 has "$T/compose-share" '"-bind-from", "/srv/eriphe/node,/srv/docs,/srv/media:ro",' "install.sh's engine, the places"
 has "$T/compose-share" '"-network", "eriphe-system", "-task-network", "eriphe-tasks", "-node-image", "n"]' "install.sh's engine, its networks and the node's image"
 has "$T/compose-share" "ERIPHE_ENGINE_URL: http://eriphe-engine:8792" "install.sh's node, the engine"
+has "$T/compose-share" '"-images", "ghcr.io/alexis-marcel/,w", "-image-file", "/etc/eriphe-engine/images",' "install.sh's engine, the images allowed"
+has "$T/compose-share" "- /srv/eriphe/proxy:/etc/eriphe-engine:ro" "install.sh's engine, the machine's list of images"
 has "$T/compose-share" "depends_on: [engine]" "install.sh's node, after the engine"
 hasnt "$T/compose-share" "DOCKER_HOST" "install.sh's node, its Docker"
 [ "$(grep -c 'docker.sock:' "$T/compose-share")" = 1 ] || fail "install.sh: the socket is given to more than the engine"

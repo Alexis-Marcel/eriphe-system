@@ -32,7 +32,9 @@ hardening is the engine's: `--cap-drop ALL` with the three file capabilities a t
 (`CHOWN`, `DAC_OVERRIDE`, `FOWNER`), `no-new-privileges`, the networks from the engine's own flags
 (`-network`, `-task-network`), the node's labels. The host's network is used for one container
 only: the node's own image (`-node-image`) sending a wake, read-only, without a mount; the same
-image is the only one run as a folder helper. A check runs only in the running container of the
+image is the only one run as a folder helper. Tasks and services run Eriphe's images only
+(`-images`, default `ghcr.io/alexis-marcel/`): add another in `-images` or in a file of
+`-image-file`, one a line. A check runs only in the running container of the
 task it names; a stop or a removal only touches the node's own containers: the other containers
 of the NAS are not the node's.
 

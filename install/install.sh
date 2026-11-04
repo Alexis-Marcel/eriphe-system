@@ -903,6 +903,7 @@ EOF
     networks: [eriphe-docker]
     command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",
               "-bind-from", "$data/node", "-bind-file", "/etc/eriphe-engine/binds", "-host-root", "/host",
+              "-images", $(yaml_str "$REGISTRY/,$WORKER_IMAGE"), "-image-file", "/etc/eriphe-engine/images",
               "-network", "eriphe-system", "-task-network", "eriphe-tasks", "-node-image", "$NODE_IMAGE"]
 EOF
 	else
@@ -911,9 +912,11 @@ EOF
 			[ -z "$p" ] || printf '      - %s\n' "$(yaml_str "$p:$p:ro")"
 		done
 		cat <<EOF
+      - $data/proxy:/etc/eriphe-engine:ro
     networks: [eriphe-docker]
     command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",
               "-bind-from", $(yaml_str "$data/node$(share_paths | tr '\n' ',' | sed 's/,$//; s/^./,&/')"),
+              "-images", $(yaml_str "$REGISTRY/,$WORKER_IMAGE"), "-image-file", "/etc/eriphe-engine/images",
               "-network", "eriphe-system", "-task-network", "eriphe-tasks", "-node-image", "$NODE_IMAGE"]
 EOF
 	fi
