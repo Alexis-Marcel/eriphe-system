@@ -118,8 +118,15 @@ func engineError(resp *http.Response) error {
 	if json.Unmarshal(raw, &e) != nil || e.Error == "" {
 		e.Error = strings.TrimSpace(resp.Status + " " + string(raw))
 	}
+	if resp.StatusCode == http.StatusConflict {
+		return fmt.Errorf("eriphe-node engine: %s (%w)", e.Error, errEngineBusy)
+	}
 	return fmt.Errorf("eriphe-node engine: %s", e.Error)
 }
+
+// errEngineBusy is a container the engine cannot make yet: one of its
+// folders is under a place another task can write (mountClash).
+var errEngineBusy = errors.New("not yet")
 
 // wireMounts are mounts as the engine takes them: at their paths for the
 // Docker daemon.

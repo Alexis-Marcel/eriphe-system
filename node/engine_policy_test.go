@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -143,5 +144,55 @@ func TestEngineBack(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("still waiting with the engine back")
+	}
+}
+
+// No container mounts a path strictly under a place a task can write; a
+// task gets no place to write over what a container not started yet
+// mounts; what is not under it, or read only, or a helper's, passes.
+func TestMountClash(t *testing.T) {
+	listed := func(label, id, state string, src string, rw bool) apiListed {
+		l := apiListed{ID: id, State: state, Labels: map[string]string{label: id}}
+		l.Mounts = append(l.Mounts, struct {
+			Type   string `json:"Type"`
+			Source string `json:"Source"`
+			RW     bool   `json:"RW"`
+		}{"bind", src, rw})
+		return l
+	}
+	bind := func(src string, ro bool) apiMount {
+		return apiMount{Type: "bind", Source: src, Target: "/w", ReadOnly: ro}
+	}
+	manager := listed("eriphe.task", "t-1", "running", "/srv/docs", true)
+	for _, c := range []struct {
+		name   string
+		binds  []apiMount
+		task   bool
+		others []apiListed
+		clash  bool
+	}{
+		{"under a task's writable place", []apiMount{bind("/srv/docs/results", false)}, true, []apiListed{manager}, true},
+		{"read-only under it", []apiMount{bind("/srv/docs/sub", true)}, true, []apiListed{manager}, true},
+		{"a helper under it", []apiMount{bind("/srv/docs/sub", false)}, false, []apiListed{manager}, true},
+		{"the place itself", []apiMount{bind("/srv/docs", true)}, true, []apiListed{manager}, false},
+		{"beside it", []apiMount{bind("/srv/docsx/results", false)}, true, []apiListed{manager}, false},
+		{"under a read-only one", []apiMount{bind("/srv/docs/results", false)}, true,
+			[]apiListed{listed("eriphe.task", "t-1", "running", "/srv/docs", false)}, false},
+		{"under a helper's writable place", []apiMount{bind("/srv/docs/results", false)}, true,
+			[]apiListed{listed("eriphe.helper", "h-1", "running", "/srv/docs", true)}, false},
+		{"a writer over one not started", []apiMount{bind("/srv/docs", false)}, true,
+			[]apiListed{listed("eriphe.task", "t-2", "created", "/srv/docs/results", true)}, true},
+		{"a writer over one started", []apiMount{bind("/srv/docs", false)}, true,
+			[]apiListed{listed("eriphe.task", "t-2", "running", "/srv/docs/results", true)}, false},
+		{"a helper over one not started", []apiMount{bind("/srv/docs", false)}, false,
+			[]apiListed{listed("eriphe.task", "t-2", "created", "/srv/docs/results", true)}, false},
+	} {
+		err := mountClash(c.binds, c.task, c.others)
+		if (err != nil) != c.clash {
+			t.Errorf("%s: %v", c.name, err)
+		}
+		if err != nil && !errors.As(err, new(errMountClash)) {
+			t.Errorf("%s: %T", c.name, err)
+		}
 	}
 }

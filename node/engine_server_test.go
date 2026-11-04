@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -33,6 +34,7 @@ type apiDaemon struct {
 	done    map[string]chan struct{}
 	exit    map[string]int
 	missing map[string]bool // images it does not have until pulled
+	started map[string]bool
 	nets    map[string]*fakeNet
 }
 
@@ -58,7 +60,7 @@ func (n *fakeNet) json(name string) map[string]any {
 func newAPIDaemon(t *testing.T) (*apiDaemon, *dockerAPI) {
 	t.Helper()
 	d := &apiDaemon{created: map[string]apiContainer{}, labels: map[string]map[string]string{},
-		done: map[string]chan struct{}{}, exit: map[string]int{}, missing: map[string]bool{},
+		done: map[string]chan struct{}{}, exit: map[string]int{}, missing: map[string]bool{}, started: map[string]bool{},
 		nets: map[string]*fakeNet{"eriphe-tasks": {internal: true, subnet: "172.30.0.0/16", members: map[string]string{},
 			options: map[string]string{"com.docker.network.bridge.gateway_mode_ipv4": "isolated"}},
 			"eriphe-system":   {subnet: "172.29.0.0/16", members: map[string]string{}},
@@ -151,11 +153,19 @@ func (d *apiDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/containers/json":
 		var f map[string][]string
 		json.Unmarshal([]byte(r.URL.Query().Get("filters")), &f)
-		var out []map[string]string
+		var out []map[string]any
 		d.mu.Lock()
 		for name, labels := range d.labels {
 			if _, ok := labels[f["label"][0]]; ok {
-				out = append(out, map[string]string{"Id": name})
+				state := "created"
+				if d.started[name] {
+					state = "running"
+				}
+				var mounts []map[string]any
+				for _, m := range d.created[name].HostConfig.Mounts {
+					mounts = append(mounts, map[string]any{"Type": m.Type, "Source": m.Source, "RW": !m.ReadOnly})
+				}
+				out = append(out, map[string]any{"Id": name, "State": state, "Labels": labels, "Mounts": mounts})
 			}
 		}
 		d.mu.Unlock()
@@ -295,6 +305,11 @@ func (d *apiDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-time.After(10 * time.Second):
 		}
 		fmt.Fprintf(w, `{"StatusCode":%d}`, exit)
+	case parts[0] == "containers" && last == "start":
+		d.mu.Lock()
+		d.started[parts[1]] = true
+		d.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodDelete:
 		d.mu.Lock()
 		delete(d.labels, parts[1])
@@ -779,4 +794,42 @@ func TestEngineTaskNetworks(t *testing.T) {
 	if _, _, err := e.beginTask("../x"); err == nil {
 		t.Error("a bad task id")
 	}
+}
+
+// A task whose folder is under one another task can write waits (409,
+// errEngineBusy) until that task is gone: the engine's check and the
+// daemon's mount see the same folder.
+func TestEngineWaitsForAWriter(t *testing.T) {
+	f := newEngineFixture(t)
+	e := remoteEngine{o: &options{engineURL: f.url, root: f.root, hostRoot: f.root}}
+	results := filepath.Join(f.share, "results")
+	os.MkdirAll(results, 0o755)
+	manager, err := e.runTask(taskRunSpec{name: "eriphe-task-t1", taskID: "t1", image: "x", mounts: []mount{{src: f.share, dst: "/work/folders/docs"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.stdin.Close()
+	writer := taskRunSpec{name: "eriphe-task-t2", taskID: "t2", image: "x",
+		mounts: []mount{{src: f.share, dst: "/work/folders/docs", readOnly: true}, {src: results, dst: "/work/folders/docs/results"}}}
+	if _, err := e.runTask(writer); !errors.Is(err, errEngineBusy) || !strings.Contains(err.Error(), "which task t1 can write") {
+		t.Fatalf("under a task's writable folder: %v", err)
+	}
+	if _, ok := f.d.container("eriphe-task-t2"); ok {
+		t.Error("made anyway")
+	}
+	// Read only beside it: it runs.
+	if r, err := e.runTask(taskRunSpec{name: "eriphe-task-t3", taskID: "t3", image: "x", mounts: []mount{{src: f.share, dst: "/r", readOnly: true}}}); err != nil {
+		t.Errorf("the same folder, read only: %v", err)
+	} else {
+		r.stdin.Close()
+	}
+	// The manager gone, the writer runs.
+	f.d.mu.Lock()
+	delete(f.d.labels, "eriphe-task-t1")
+	f.d.mu.Unlock()
+	r, err := e.runTask(writer)
+	if err != nil {
+		t.Fatalf("once the writer is gone: %v", err)
+	}
+	r.stdin.Close()
 }

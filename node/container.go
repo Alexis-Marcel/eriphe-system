@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -154,7 +155,12 @@ func (n *node) startContainer(t *Task, first string) error {
 	}
 	stderr := &tailBuffer{}
 	run.stderr = stderr
-	ctr, err := n.engine().runTask(run)
+	ctr, err := n.runTaskWhenFree(t, run)
+	if errors.Is(err, errStoppedWaiting) {
+		n.endTaskNetwork(t)
+		t.setState(stateStopped)
+		return nil
+	}
 	if err != nil {
 		n.endTaskNetwork(t)
 		return err
@@ -189,6 +195,33 @@ func (n *node) startContainer(t *Task, first string) error {
 		t.setState(stateStopped)
 	}()
 	return nil
+}
+
+// busyRetry and busyWait: how often, and how long, a task whose folder
+// another task may write waits for it (errEngineBusy).
+var busyRetry, busyWait = 15 * time.Second, 12 * time.Hour
+
+var errStoppedWaiting = errors.New("stopped while it waited for its folder")
+
+// runTaskWhenFree runs the task's container, once the engine can make it:
+// while one of its folders is under a place another task can write, it
+// waits, says so once, and stops waiting if the task is stopped.
+func (n *node) runTaskWhenFree(t *Task, run taskRunSpec) (*engineRun, error) {
+	ctr, err := n.engine().runTask(run)
+	for waited := time.Duration(0); errors.Is(err, errEngineBusy) && waited < busyWait; waited += busyRetry {
+		if waited == 0 {
+			t.emit("retry", map[string]any{"reason": "folder_busy", "message": err.Error()})
+		}
+		time.Sleep(busyRetry)
+		t.mu.Lock()
+		stopping := t.stopping
+		t.mu.Unlock()
+		if stopping {
+			return nil, errStoppedWaiting
+		}
+		ctr, err = n.engine().runTask(run)
+	}
+	return ctr, err
 }
 
 // startTaskNetwork gives the task its own network, and the node's address
