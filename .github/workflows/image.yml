@@ -29,7 +29,8 @@ on:
         description: >-
           Keep the Go module and build caches the Dockerfile mounts (/go/pkg/mod,
           /root/.cache/go-build) between runs: restored on every build, saved by main's
-          pushes only, so pull requests do not crowd them out of the repository's cache.
+          pushes only (when the dependencies or the Dockerfile change), so pull requests
+          do not crowd them out of the repository's cache.
         type: boolean
         default: false
       build-contexts:
@@ -65,20 +66,24 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       # BuildKit keeps its cache mounts inside the builder, which is new on every
       # run: the cache dance injects them from the Actions cache before the build
-      # and, in its post step, takes them out of the builder after it. On main,
-      # actions/cache's post step, which runs after (posts run in reverse order),
-      # saves them; elsewhere they are only restored.
+      # and, in its post step, takes them out of the builder after it, which takes
+      # a while (about 1 min 40 for eriphe-core). The cache is keyed by the
+      # dependencies and the Dockerfile (its Go version): main saves it when they
+      # change, in actions/cache's post step, which runs after the dance's (posts
+      # run in reverse order); otherwise it is only restored, and only the
+      # module's own packages are compiled again.
       - if: inputs.go-cache && env.SAVE_GO_CACHE == 'true'
+        id: go-cache
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/go-cache
-          key: go-cache-${{ inputs.image }}-${{ matrix.arch }}-${{ github.sha }}
+          key: go-cache-${{ inputs.image }}-${{ matrix.arch }}-${{ hashFiles(format('{0}/**/go.sum', inputs.context), format('{0}/Dockerfile', inputs.context)) }}
           restore-keys: go-cache-${{ inputs.image }}-${{ matrix.arch }}-
       - if: inputs.go-cache && env.SAVE_GO_CACHE != 'true'
         uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/go-cache
-          key: go-cache-${{ inputs.image }}-${{ matrix.arch }}-${{ github.sha }}
+          key: go-cache-${{ inputs.image }}-${{ matrix.arch }}-${{ hashFiles(format('{0}/**/go.sum', inputs.context), format('{0}/Dockerfile', inputs.context)) }}
           restore-keys: go-cache-${{ inputs.image }}-${{ matrix.arch }}-
       - if: inputs.go-cache
         uses: reproducible-containers/buildkit-cache-dance@5422eac04292c961a382e0f584ea0f03ad9da723 # v3.4.0
@@ -88,7 +93,7 @@ jobs:
               "${{ runner.temp }}/go-cache/mod": "/go/pkg/mod",
               "${{ runner.temp }}/go-cache/build": "/root/.cache/go-build"
             }
-          skip-extraction: ${{ env.SAVE_GO_CACHE != 'true' }}
+          skip-extraction: ${{ env.SAVE_GO_CACHE != 'true' || steps.go-cache.outputs.cache-hit == 'true' }}
       - if: env.PUSH == 'true'
         uses: docker/login-action@v4
         with:
