@@ -1583,7 +1583,6 @@ details.app-install > * + * { margin-top: 10px; }
 .gservices li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .gservice-name { font-weight: 600; min-width: 9em; }
 .gaccount-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.gadd { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .inline-check { display: inline-flex; align-items: center; gap: 4px; }
 .drive-accounts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 

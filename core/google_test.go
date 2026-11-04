@@ -122,6 +122,14 @@ func TestGoogleAccounts(t *testing.T) {
 		t.Fatalf("tools list: %s", body)
 	}
 
+	// The service it does not use follows the others, with its own button,
+	// before the account's actions.
+	_, body, _ = tw.do("GET", "/settings/google", nil, nil)
+	drive, actions := strings.Index(body, `<input type="hidden" name="service" value="drive">`), strings.Index(body, `class="gaccount-actions"`)
+	if drive < 0 || actions < drive || !strings.Contains(body, "Pas encore ajouté") || strings.Contains(body, `class="inline gadd"`) {
+		t.Fatalf("drive to add: %s", body)
+	}
+
 	// Drive added to the same account: its scope alone, the account named.
 	g.scope, g.refresh = scopeMail+" "+scopeCalendar+" "+scopeDrive, "the-refresh-2"
 	q, _ = googleSignIn(t, tw, g, csrf, url.Values{"service": {"drive"}, "account": {"sam@example.org"}, "write": {"1"}})
