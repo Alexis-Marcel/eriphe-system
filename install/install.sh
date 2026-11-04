@@ -890,13 +890,15 @@ EOF
 	if [ -n "${FOLDER_HELPER:-}" ]; then
 		# eriphe-launcher: the folders shared are in a file of its own,
 		# read again at each request (no restart to share one), the node's
-		# data and theirs resolved in the host's /, seen read-only.
+		# data and theirs resolved in the host's /, seen read-only. With
+		# the mounts there are when it starts (a bind is recursive), not
+		# those made after: rslave needs / to be a shared mount, which it
+		# is not on Unraid, and Docker then refuses to start the engine.
 		cat <<EOF
       - type: bind
         source: /
         target: /host
         read_only: true
-        bind: {propagation: rslave}
       - $data/proxy:/etc/eriphe-engine:ro
     networks: [eriphe-docker]
     command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",
