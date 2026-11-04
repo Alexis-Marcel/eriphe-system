@@ -47,7 +47,8 @@ type options struct {
 	engine      string // what runs the tasks: docker, or container (Apple's, on a Mac: apple.go)
 	// engineURL is eriphe-node engine's address (engine_remote.go): Docker
 	// through it only; empty: through the docker CLI.
-	engineURL string
+	engineURL      string
+	engineTaskNets bool // the engine makes each task a network of its own (engine_tasknet.go)
 	// With the container engine: what the node downloads at most, in bytes,
 	// of a task's folders kept in the cloud (iCloud Drive), before it starts.
 	downloadLimit int64
@@ -373,8 +374,12 @@ func (n *node) taskRoutes(s *state) *http.ServeMux {
 func (n *node) startMessage(name, addr, egressAddr string) string {
 	o := n.opt
 	if n.engine().traits().ownNetworks {
-		return fmt.Sprintf("eriphe-node %s (%s), image %s, tasks with Apple's container, each on a network of its own, task listener on %s, egress relay on %s (tasks' networks only)",
-			name, version, o.image, addr, orNone(egressAddr))
+		with := "eriphe-node engine"
+		if o.engine == engineContainer {
+			with = "Apple's container"
+		}
+		return fmt.Sprintf("eriphe-node %s (%s), image %s, tasks with %s, each on a network of its own, task listener on %s, egress relay on %s (tasks' networks only)",
+			name, version, o.image, with, addr, orNone(egressAddr))
 	}
 	return fmt.Sprintf("eriphe-node %s (%s), image %s, tasks on %s, services on %s, task listener on %s, egress relay on %s",
 		name, version, o.image, dockerNetwork(o.taskNetwork), dockerNetwork(o.network), addr, orNone(egressAddr))

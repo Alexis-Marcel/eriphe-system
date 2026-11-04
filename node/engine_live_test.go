@@ -69,7 +69,7 @@ func TestEngineLive(t *testing.T) {
 	srv := httptest.NewServer(s.handler())
 	defer srv.Close()
 	o := &options{engineURL: srv.URL, root: base, hostRoot: base, taskMemory: "512m", taskCPUs: "1", serviceMemory: "256m", folderHelper: image}
-	e := remoteEngine{o}
+	e := remoteEngine{o: o}
 
 	if err := e.ensureNetwork(); err != nil {
 		t.Fatalf("task network: %v", err)

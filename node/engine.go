@@ -180,7 +180,7 @@ func (n *node) engine() engine {
 		return appleEngine{&n.opt, &n.nets}
 	}
 	if n.opt.engineURL != "" {
-		return remoteEngine{&n.opt}
+		return remoteEngine{o: &n.opt, nets: &n.nets}
 	}
 	return dockerEngine{&n.opt}
 }

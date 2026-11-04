@@ -668,8 +668,9 @@ a NAS:
   `config.xml` the script writes once: the API key, discovery, relays, NAT traversal, usage
   reports and upgrades off), the shared places and the node's copies (`/var/lib/eriphe/node/sync`)
   at their paths. The updater recreates it with the node.
-- the networks: `eriphe-tasks` (internal, isolated gateway with Docker 28 or later: the tasks reach
-  only the node), `eriphe-system` (eriphe-core and the services), `eriphe-docker` (the engine, reached by the node only).
+- the networks: `eriphe-tasks` (internal, isolated gateway with Docker 28 or later), the model of
+  each task's own network `eriphe-task-<id>`, which the engine makes and removes with the task, on a
+  /28 of 10.213.0.0/16 (the task reaches only the node), `eriphe-system` (eriphe-core and the services), `eriphe-docker` (the engine, reached by the node only).
 - the updater, outside the compose project: `/opt/eriphe/update.sh` and `update.conf` (the images
   it works on), the systemd units `eriphe-update.service`, `.path` and `.timer`, its state in
   `/var/lib/eriphe/update`, and a file `updater` in the node's and eriphe-core's folders that tells
@@ -879,8 +880,8 @@ adresse"), but then it listens on the network.
 
 ## What the VM can and cannot see
 
-Eriphe's tasks run in containers, on a network of their own (`eriphe-tasks`) that reaches only the
-node, and their egress relay never dials a private address (see node/README.md, Egress). What the
+Eriphe's tasks run in containers, each on a network of its own (`eriphe-task-<id>`) that reaches
+only the node, and their egress relay never dials a private address (see node/README.md, Egress). What the
 machine around them shows depends on the OS:
 
 - **Linux**: no VM. The containers see the folders the node is given (`/var/lib/eriphe/node`, and

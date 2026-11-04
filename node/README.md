@@ -381,7 +381,8 @@ Tasks run untrusted work, so they are kept apart from what they must not reach:
 
 | Network | Who is on it | Flag |
 |---|---|---|
-| task network (`eriphe-tasks`, internal) | task containers; on the NAS, eriphe-node too | `-task-network` |
+| a task's own network (`eriphe-task-<id>`, internal), with eriphe-node engine | one task container, and eriphe-node | the engine's `-node-container`, `-task-pool` |
+| task network (`eriphe-tasks`, internal) | task containers, without such an engine; on the NAS, eriphe-node too | `-task-network` |
 | service network (the NAS's `eriphe-system`, else Docker's default bridge) | services with egress; on the NAS, eriphe-core and eriphe-node | `-network` |
 | internal service network | http services without egress, eriphe-node | `-service-network` |
 
@@ -398,8 +399,18 @@ on it), since the node is a container the tasks must reach by name. An existing 
 not internal is kept, with a warning at start: Docker cannot change it, remove it with no task
 running and the node (or compose) creates it again.
 
-What it does not stop: on the NAS, tasks share `eriphe-tasks` and can reach one another (nothing in
-them listens; each has its own secret). Where the node runs on the Docker host itself (a node run
+With eriphe-node engine (the one-container install, install.sh, `deploy/nas`), each task has a
+network of its own, as with Apple's container: the engine makes `eriphe-task-<id>` before the
+task's container (`engine_tasknet.go`), internal and with the task network's driver options (its
+isolated gateway), on a /28 of `-task-pool` (10.213.0.0/16 by default: Docker's own pools hold some
+thirty networks, and a machine with other stacks has used most), and joins the node's container to
+it. The task reaches its node at its address there, nothing else: no other task. The node listens on
+every address but accepts only its tasks' networks (`taskListener`). Once the task is over the node
+leaves and the network goes; `remove-stray` removes those a run left. Change `-task-pool` if the LAN
+uses those addresses.
+
+What it does not stop: without such an engine, tasks share the task network and can reach one
+another (each has its own secret). Where the node runs on the Docker host itself (a node run
 by hand), the bridge's gateway is the host: a service of the host listening on all its addresses
 is reachable there. The listener's address keeps it off the LAN, not off the host's other bridges:
 every call still needs a task's secret.

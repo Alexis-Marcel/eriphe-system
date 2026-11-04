@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-// Task containers run on their own Docker network, -task-network
+// Task containers run on their own Docker network: with eriphe-node
+// engine, one per task (engine_tasknet.go), else -task-network
 // (eriphe-tasks by default): an internal bridge, with no route out, that
 // holds the tasks and, on the NAS, eriphe-node. Services and eriphe-core are
 // on other networks, which Docker keeps apart from it: a task cannot reach a
