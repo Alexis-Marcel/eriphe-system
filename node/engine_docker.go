@@ -15,9 +15,10 @@ import (
 	"strings"
 )
 
-// dockerEngine runs containers with the docker CLI: on a Linux machine, the
-// NAS (through the node's socket proxy, dockerproxy.go), WSL, or Docker
-// Desktop.
+// dockerEngine runs containers with the docker CLI of the machine: in WSL,
+// or eriphe-node run by hand next to Docker. The node's image has no docker
+// CLI: in a container, the node reaches containers through eriphe-node
+// engine (remoteEngine).
 type dockerEngine struct{ o *options }
 
 func (e dockerEngine) traits() engineTraits { return engineTraits{} }

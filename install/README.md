@@ -646,7 +646,9 @@ a NAS:
   with every capability dropped but `DAC_READ_SEARCH`, the node's root and the shared places
   mounted read-only. An install from before it had `eriphe-docker-proxy` instead: its next update
   brings the engine and removes the proxy (layout 3, [the machines update
-  themselves](#the-machines-update-themselves)).
+  themselves](#the-machines-update-themselves)). Node images have no proxy since: on such an
+  install, the update's new node connects first without any runtime ("no container engine here"
+  in its log), then the layout brings the engine.
 - `eriphe-node`: read-only root, every capability dropped but those that hand the task folders to
   the tasks' user, its root at `/var/lib/eriphe/node` (`node.json`: its identity), and each shared
   place at the same path (read-only for a `:ro` one), told to it in `ERIPHE_NODE_SHARES`.

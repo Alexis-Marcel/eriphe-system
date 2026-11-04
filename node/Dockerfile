@@ -26,8 +26,12 @@ RUN for arch in amd64 arm64; do \
       CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -ldflags="-s -w -H=windowsgui" -o /windows/$arch/eriphe-session.exe ./cmd/eriphe-session || exit 1; \
     done
 
-# The docker CLI talks to the host's Docker through the mounted socket.
-FROM docker:27-cli
+# No Docker CLI: the node reaches containers through eriphe-node engine
+# (ERIPHE_ENGINE_URL), which speaks to the Docker API itself. Alpine for its
+# shell and cp (the Mac's install.sh copies files out with --entrypoint cp),
+# and the CA certificates for the registry and the core.
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates
 COPY --from=build /eriphe-node /usr/local/bin/eriphe-node
 COPY --from=build /darwin-arm64/eriphe-node /usr/local/share/eriphe/darwin-arm64/eriphe-node
 COPY --from=build /task-bin /usr/local/share/eriphe/task-bin
