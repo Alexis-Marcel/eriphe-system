@@ -84,6 +84,10 @@ func (claudeCode) command(n *node, t *Task) ([]string, map[string]string) {
 		// rules carry the same tools (skills.go).
 		args = append(args, "--allowedTools", strings.Join(spec.AllowedTools, ","))
 	}
+	if len(spec.HarnessTools) > 0 {
+		// The brain's: of Claude Code's built-in tools, only these.
+		args = append(args, "--tools", strings.Join(spec.HarnessTools, ","))
+	}
 	if repoSkillsOff(spec) {
 		// No skill and no Skill tool: those of a repository not vouched
 		// for, or the brain's (skills.go).

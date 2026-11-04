@@ -1190,6 +1190,14 @@ eriphe-core) still makes the brain call that address directly, with a token of i
 from the API token (`eat_…`): it opens `/mcp` only, never the rest of the API (folders and their
 listing, machines, assistants, settings).
 
+**Its tools, upfront.** eriphe-core's own server is loaded upfront (`alwaysLoad`, either way the
+brain reaches it): a harness that defers MCP tools behind a search (Claude Code's tool search)
+would otherwise have the brain look for `run_task` or `recall` before their first call, and see
+only their names, not the descriptions its concepts rely on. The catalog's servers stay deferred
+unless `always_load`. Of its harness's own tools the brain keeps only the web and that search
+(`HarnessTools` of its role's card: `WebSearch`, `WebFetch`, `ToolSearch`, Claude Code's
+`--tools`); the rest (Agent, Bash, Edit, Read…) it never needs.
+
 **It reads by itself.** The brain is lent, with no configuration, every tool a server annotates
 `readOnlyHint` when the server is trusted for its annotations (any [access level](#access-levels)
 but `ask`; `reads` is the default of the presets), and every tool of a server whose access is

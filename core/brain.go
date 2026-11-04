@@ -148,6 +148,9 @@ func init() {
 		// Its harness's web search is allowed (brain_web.go); its page
 		// reader is not: each read is decided in brainPermission.
 		AllowedTools: []string{"WebSearch"}, NoWebSearch: noWebSearchLine,
+		// It works through MCP tools: of its harness's own, only the web and
+		// the search for its catalog's deferred tools.
+		HarnessTools: []string{"WebSearch", "WebFetch", "ToolSearch"},
 		instructions: func(c *core, _ Assistant, prompt string) string {
 			// The profile, from the memory: data about the user, quoted.
 			if profile := c.profileBlock(false); profile != "" {
