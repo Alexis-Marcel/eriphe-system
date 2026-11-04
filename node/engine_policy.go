@@ -12,8 +12,8 @@ import (
 // bind mount on its real path: it sees the node's root and the shared
 // places read-only, at the same paths as the Docker daemon (or the host's /
 // at -host-root), resolves their symlinks and hands the daemon the
-// resolved path. What it cannot prevent is a race: a directory replaced by
-// a symlink between its check and the daemon's mount.
+// resolved path. A directory replaced by a symlink between its check and
+// the daemon's mount is mountClash's (below).
 //
 // With the one-container install, the places are the folders shared, one
 // by one, and they change while it runs: eriphe-launcher writes them in a
@@ -54,6 +54,54 @@ func (p *dockerPolicy) bindSource(src string) (string, bool, error) {
 		return "", false, fmt.Errorf("bind source %s is outside the allowed places", src)
 	}
 	return real, ro, nil
+}
+
+// A bind mount is checked on its path, and the daemon mounts that path
+// later, when the container starts: a task that can write a folder could
+// put a link in place of what is under it in between, and have another
+// container mount the host's / instead. So no container mounts a path
+// strictly under a place a task can write, while that task is there; nor
+// does a task get a place to write while a container not started yet mounts
+// something under it. The container waits (409), the node tries it again.
+// What a running container mounted is mounted: a link put there later
+// changes nothing.
+
+// errMountClash is a container that cannot be made yet (mountClash).
+type errMountClash struct{ why string }
+
+func (e errMountClash) Error() string { return e.why }
+
+// mountClash is why a container with these mounts cannot be made now, among
+// others (tasks and helpers); task: it is a task's, which runs anything, so
+// what it may write counts.
+func mountClash(binds []apiMount, task bool, others []apiListed) error {
+	for _, o := range others {
+		_, isTask := o.Labels["eriphe.task"]
+		for _, om := range o.Mounts {
+			if om.Type != "bind" {
+				continue
+			}
+			for _, b := range binds {
+				if b.Type != "bind" {
+					continue
+				}
+				if isTask && om.RW && strictlyUnder(om.Source, b.Source) {
+					return errMountClash{fmt.Sprintf("%s is under %s, which task %s can write: it waits until that task ends",
+						b.Source, om.Source, o.Labels["eriphe.task"])}
+				}
+				if task && !b.ReadOnly && o.State == "created" && strictlyUnder(b.Source, om.Source) {
+					return errMountClash{fmt.Sprintf("%s holds %s, which a container not started yet mounts: it waits until that one starts",
+						b.Source, om.Source)}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// strictlyUnder: p is under base, and not base itself.
+func strictlyUnder(base, p string) bool {
+	return within(base, p) && filepath.Clean(base) != filepath.Clean(p)
 }
 
 // listed is the places of -bind-file now (PATH, or PATH:ro for one that is

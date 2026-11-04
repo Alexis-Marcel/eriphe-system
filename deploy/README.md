@@ -50,8 +50,10 @@ without the request: `docker logs eriphe-engine` says what and why.
 Whoever controls eriphe-node can still do what the node may: run a task container of any image,
 with the three file capabilities, the node's root and the shared places mounted (appdata
 included, under `/mnt/user`), and run a check in its own tasks. A source is checked when the
-container is made: a directory swapped for a symlink between that check and the daemon's mount
-still leads where the link points, a race the engine cannot close.
+container is made and mounted when it starts. Between the two, a task cannot swap what another
+container mounts for a symlink: no container mounts a path under a place a task can write while
+that task is there (it waits). The node itself writes its own root, though: a compromised node
+could still swap a task's folder there for a symlink, a race the engine cannot close.
 
 ### From the socket proxy
 

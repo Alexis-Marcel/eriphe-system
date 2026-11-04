@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The engine follows -engine, and says where it differs.
@@ -236,5 +237,40 @@ func TestEngineBoundaries(t *testing.T) {
 			}
 			return true
 		})
+	}
+}
+
+// A task whose folder another task may write waits for it: it says so
+// once, tries again, and runs once the engine can make it; stopped while
+// it waits, it stops waiting.
+func TestTaskWaitsForItsFolder(t *testing.T) {
+	defer func(r, w time.Duration) { busyRetry, busyWait = r, w }(busyRetry, busyWait)
+	busyRetry, busyWait = time.Millisecond, time.Minute
+	root := t.TempDir()
+	n := newNode(options{root: root, hostRoot: root})
+	f := &fakeEngine{busy: 3}
+	n.eng = f
+	task := &Task{ID: "t1", perms: map[string]*permission{}}
+	r, err := n.runTaskWhenFree(task, taskRunSpec{name: "eriphe-task-t1", taskID: "t1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.stdin.Close()
+	retries := 0
+	task.mu.Lock()
+	events := slices.Clone(task.events)
+	task.mu.Unlock()
+	for _, ev := range events {
+		if ev.Type == "retry" {
+			retries++
+		}
+	}
+	if retries != 1 || len(f.tasks) != 1 {
+		t.Errorf("said %d times, ran %d times", retries, len(f.tasks))
+	}
+	f.busy = 1000
+	stopped := &Task{ID: "t2", stopping: true, perms: map[string]*permission{}}
+	if _, err := n.runTaskWhenFree(stopped, taskRunSpec{name: "eriphe-task-t2", taskID: "t2"}); !errors.Is(err, errStoppedWaiting) {
+		t.Errorf("stopped while it waits: %v", err)
 	}
 }
