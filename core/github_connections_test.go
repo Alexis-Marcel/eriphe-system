@@ -202,7 +202,8 @@ func TestGitHubConnectionOnInstall(t *testing.T) {
 	tw.setup()
 
 	// GitHub's return names the installation, on to the page.
-	if _, body, _ := tw.do("GET", "/github-app/installed?installation_id=8&setup_action=install", nil, nil); !strings.Contains(body, "installed=1&amp;installation=8") {
+	if _, body, _ := tw.do("GET", "/github-app/installed?installation_id=8&setup_action=install", nil, nil); !strings.Contains(body, "installed=1&amp;installation=8") ||
+		!strings.Contains(body, "Retour sur Eriphe") || strings.Contains(body, "est connecté") {
 		t.Fatalf("installed: %s", body)
 	}
 	if _, body, _ := tw.do("GET", "/github-app/installed?installation_id=8&setup_action=update", nil, nil); strings.Contains(body, "installation=8") {

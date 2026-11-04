@@ -12,6 +12,11 @@
     <span class="auth-mark" aria-hidden="true">{{template "logo"}}</span>
     <p class="lead">{{t "sso.moving"}}</p>
     <a class="btn btn-primary wide" href="{{.Data.Next}}">{{t "sso.continue"}}</a>
+    {{else if not .Data.Name}}
+    {{/* A return with nothing connected here (GitHub's app pages): on to Next. */}}
+    <span class="auth-mark" aria-hidden="true">{{template "logo"}}</span>
+    <p class="lead">{{t "oauth.returning"}}</p>
+    <a class="btn btn-primary wide" href="{{.Data.Next}}">{{t "sso.continue"}}</a>
     {{else}}
     <span class="oauth-mark" aria-hidden="true">{{template "i-check"}}</span>
     <h1>{{tf "oauth.connected" .Data.Name}}</h1>
