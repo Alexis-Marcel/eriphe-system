@@ -494,9 +494,11 @@
 </ul>
 {{end}}
 
-{{define "secret-field"}}{{/* . is a dict: Name, Label, Hint, IsSet */}}
+{{/* Keep: the form is shown again after a refusal; the browser keeps
+     what was typed in the field (hx-preserve), never sent back. */}}
+{{define "secret-field"}}{{/* . is a dict: Name, Label, Hint, IsSet, Keep */}}
 <label class="field"><span>{{.Label}}</span>
-  <input type="password" name="{{.Name}}" autocomplete="new-password" spellcheck="false" {{if .IsSet}}placeholder="{{t "secret.setplaceholder"}}"{{end}} aria-describedby="{{.Name}}-h">
+  <input type="password" name="{{.Name}}" id="secret-{{.Name}}"{{if .Keep}} hx-preserve{{end}} autocomplete="new-password" spellcheck="false" {{if .IsSet}}placeholder="{{t "secret.setplaceholder"}}"{{end}} aria-describedby="{{.Name}}-h">
   <small id="{{.Name}}-h">{{if .IsSet}}<span class="set-pill">{{template "i-check"}}{{t "secret.set"}}</span> {{t "secret.keep"}}{{else}}{{.Hint}}{{end}}</small></label>
 {{end}}
 
@@ -613,8 +615,8 @@
     <label class="field"><span>{{t "mail.imap"}}</span><input type="text" name="imap_host" value="{{.Mail.IMAPHost}}" spellcheck="false" autocapitalize="off" class="mono" placeholder="imap.exemple.fr"></label>
     <label class="field"><span>{{t "mail.smtp"}}</span><input type="text" name="smtp_host" value="{{.Mail.SMTPHost}}" spellcheck="false" autocapitalize="off" class="mono" placeholder="smtp.exemple.fr"></label>
     {{end}}
-    {{if $c.AppPass}}{{template "secret-field" dict "Name" "password" "Label" (t "mail.password") "Hint" (t "mail.passwordhint") "IsSet" .SecretSet}}
-    {{else}}{{template "secret-field" dict "Name" "password" "Label" (t "mail.boxpassword") "Hint" (tor (printf "mailp.%s.passwordhint" $id) "mail.boxpasswordhint") "IsSet" .SecretSet}}{{end}}
+    {{if $c.AppPass}}{{template "secret-field" dict "Name" "password" "Label" (t "mail.password") "Hint" (t "mail.passwordhint") "IsSet" .SecretSet "Keep" .Error}}
+    {{else}}{{template "secret-field" dict "Name" "password" "Label" (t "mail.boxpassword") "Hint" (tor (printf "mailp.%s.passwordhint" $id) "mail.boxpasswordhint") "IsSet" .SecretSet "Keep" .Error}}{{end}}
   </div>
   {{template "howto" dict "Title" (t (printf "mailp.%s.howtotitle" $id)) "Steps" (steps (printf "mailp.%s.steps" $id)) "Link" $c.Link "Note" (and $c.AppPass (t "mail.howto.safe"))}}
 {{end}}
@@ -626,7 +628,7 @@
   <div class="form-grid">
     {{if $c.NeedsURL}}<label class="field span-2"><span>{{t "cal.url"}}</span><input type="text" name="cal_url" value="{{.Calendar.URL}}" inputmode="url" spellcheck="false" autocapitalize="off" class="mono" placeholder="{{t (printf "calp.%s.urlplaceholder" $id)}}" aria-describedby="cu-h"><small id="cu-h">{{t (printf "calp.%s.urlhint" $id)}}</small></label>{{end}}
     <label class="field"><span>{{t (printf "calp.%s.user" $id)}}</span><input type="text" name="cal_user" value="{{.Calendar.Username}}" spellcheck="false" autocapitalize="off" autocomplete="username" placeholder="{{t (printf "calp.%s.userplaceholder" $id)}}"></label>
-    {{template "secret-field" dict "Name" "password" "Label" (t "cal.password") "Hint" (t "cal.passwordhint") "IsSet" .SecretSet}}
+    {{template "secret-field" dict "Name" "password" "Label" (t "cal.password") "Hint" (t "cal.passwordhint") "IsSet" .SecretSet "Keep" .Error}}
   </div>
   {{template "howto" dict "Title" (t "cal.howtotitle") "Steps" (steps (printf "calp.%s.steps" $id)) "Link" $c.Link "Note" ""}}
 {{end}}
@@ -638,7 +640,7 @@
     {{if not .Preset.FixedURL}}{{template "url-field" .}}{{end}}
     {{if not $c}}{{template "auth-choices" .}}{{end}}
     <div class="if-bearer stack">
-      {{template "secret-field" dict "Name" "token" "Label" (t "form.token") "Hint" (tor (printf "preset.%s.tokenhint" .Preset.ID) "preset.remote.tokenhint") "IsSet" .TokenSet}}
+      {{template "secret-field" dict "Name" "token" "Label" (t "form.token") "Hint" (tor (printf "preset.%s.tokenhint" .Preset.ID) "preset.remote.tokenhint") "IsSet" .TokenSet "Keep" .Error}}
       {{if $c}}{{template "howto" dict "Title" (t "form.tokenhowto") "Steps" (steps (printf "preset.%s.steps" .Preset.ID)) "Link" (t (printf "preset.%s.link" .Preset.ID)) "Note" ""}}{{end}}
     </div>
     <p class="hint-box if-oauth{{if .OrigOAuth}} if-reauth{{end}}">{{template "i-link"}}<span>{{if and .Service .Edit}}{{tf "form.oauthnoteedit" .Service}}{{else if .Service}}{{tf "form.oauthnoteto" .Service}}{{else}}{{t "form.oauthnote"}}{{end}}</span></p>
@@ -684,8 +686,8 @@
         <p class="muted small">{{t "form.oauthclienthint"}}</p>
         <label class="field"><span>{{t "form.scopes"}}</span><input type="text" name="scopes" value="{{.Scopes}}" spellcheck="false" class="mono" placeholder="read write"></label>
         <div class="form-grid">
-          {{template "secret-field" dict "Name" "client_id" "Label" (t "form.clientid") "Hint" "" "IsSet" .ClientIDSet}}
-          {{template "secret-field" dict "Name" "client_secret" "Label" (t "form.clientsecret") "Hint" "" "IsSet" .ClientSecretSet}}
+          {{template "secret-field" dict "Name" "client_id" "Label" (t "form.clientid") "Hint" "" "IsSet" .ClientIDSet "Keep" .Error}}
+          {{template "secret-field" dict "Name" "client_secret" "Label" (t "form.clientsecret") "Hint" "" "IsSet" .ClientSecretSet "Keep" .Error}}
         </div>
         {{if .ClientIDSet}}<label class="check"><input type="checkbox" name="forget_client" value="1"><span><b>{{t "form.forgetclient"}}</b></span></label>{{end}}
         <label class="field"><span>{{t "form.cimd"}}</span><input type="text" name="client_metadata_url" value="{{.ClientMetadata}}" spellcheck="false" class="mono" placeholder="https://…/client.json"></label>
@@ -705,10 +707,10 @@
         <div class="field"><span>{{t "form.env"}}</span>
           <input type="hidden" name="env_count" value="{{len .Env}}">
           <div class="env-rows">
-          {{range $i, $e := .Env}}
+          {{$keep := .Error}}{{range $i, $e := .Env}}
             <div class="env-row">
               <input type="text" name="env_name_{{$i}}" value="{{$e.Name}}" placeholder="NOM" spellcheck="false" autocapitalize="characters" class="mono" aria-label="{{t "form.envname"}}">
-              <input type="{{if $e.Secret}}password{{else}}text{{end}}" name="env_value_{{$i}}" value="{{if not $e.Secret}}{{$e.Value}}{{end}}" {{if $e.IsSet}}placeholder="{{t "secret.setplaceholder"}}"{{end}} spellcheck="false" autocomplete="off" class="mono" aria-label="{{t "form.envvalue"}}">
+              <input type="{{if $e.Secret}}password{{else}}text{{end}}" name="env_value_{{$i}}"{{if $e.Secret}} id="env-value-{{$i}}"{{if $keep}} hx-preserve{{end}}{{end}} value="{{if not $e.Secret}}{{$e.Value}}{{end}}" {{if $e.IsSet}}placeholder="{{t "secret.setplaceholder"}}"{{end}} spellcheck="false" autocomplete="off" class="mono" aria-label="{{t "form.envvalue"}}">
               <label class="check sm"><input type="checkbox" name="env_secret_{{$i}}" value="1" {{if $e.Secret}}checked{{end}}><span>{{t "form.envsecret"}}</span></label>
             </div>
           {{end}}

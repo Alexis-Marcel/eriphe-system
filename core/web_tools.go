@@ -788,6 +788,11 @@ func (w *web) handleNewTool(rw http.ResponseWriter, r *http.Request, s *session)
 		}
 	}
 	pickAccount(&f, r.URL.Query().Get("provider"))
+	if f.Name != "" {
+		// a second account of a kind: a name of its own, not one taken
+		// (agenda, then agenda-icloud, agenda-icloud-2…)
+		f.Name = w.c.freeServerName(f.Name, f.Picked())
+	}
 	w.toolFormPage(rw, r, s, f)
 }
 
