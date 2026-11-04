@@ -1084,6 +1084,18 @@ leaves the vault with the change (the vault's orphan secrets are dropped), and t
 revoke it on GitHub (`github.com/settings/personal-access-tokens`). A tool of the configuration
 file is changed in the file. "Oublier l'app" removes it from the vault (it stays on GitHub).
 
+**A connection by itself, on installing.** Installing the app on an account is the user's choice of
+that account and its repositories, so it needs no second click: GitHub sends the browser back to
+`setup_url` with the `installation_id`, which goes on to the page (`?installation=`), and that
+installation gets its connection there (`connectInstallation`, `web_github.go`). Only an
+installation of the app, made in the last 15 minutes and used by no connection: one installed
+before, or whose connection the user removed since, keeps the "Ajouter la connexion" button. A
+GitHub connection on a token named as this account's would be (`github` for the app owner,
+`github-<account>` otherwise) moves to the app, keeping its name and rights (the page then says to
+revoke its token); otherwise a new one comes, named as suggested, at the presets' level (free reads,
+writes on approval). The page then says which (`?added=`, `?switched=`); reloading it does nothing
+again.
+
 ## Assistants
 
 An assistant is a long-lived agent that owns one task, as a Kubernetes Deployment owns its Pod.

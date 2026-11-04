@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -40,10 +41,18 @@ func (w *web) githubRoutes(mux *http.ServeMux) {
 
 // handleGitHubInstalled is where GitHub sends the browser after an
 // installation (the app's setup_url): without the session cookie, it only
-// leads on to the page, which the cookie reaches again. It changes nothing.
+// leads on to the page, which the cookie reaches again, with the
+// installation GitHub names. It changes nothing.
 func (w *web) handleGitHubInstalled(rw http.ResponseWriter, r *http.Request) {
-	w.render(rw, r, nil, "oauth", "", page{Title: "github.title", Data: oauthDone{Next: "/settings/github?installed=1"}})
+	next := "/settings/github?installed=1"
+	if id := r.URL.Query().Get("installation_id"); githubID.MatchString(id) && r.URL.Query().Get("setup_action") == "install" {
+		next += "&installation=" + id
+	}
+	w.render(rw, r, nil, "oauth", "", page{Title: "github.title", Data: oauthDone{Next: next}})
 }
+
+// githubID is a GitHub installation's id.
+var githubID = regexp.MustCompile(`^[0-9]{1,19}$`)
 
 // githubFlows are the app creations in progress, by state.
 type githubFlows struct {
@@ -98,9 +107,11 @@ type githubView struct {
 	// ?switched=: the one just moved (Revoke: it had a token, to revoke).
 	Switch, Switched string
 	Revoke           bool
-	Created          bool
-	Installed        bool
-	Flash, Error     string
+	// ?added=: the connection just added by itself for an installation.
+	Added        string
+	Created      bool
+	Installed    bool
+	Flash, Error string
 	// The page that posts the manifest to GitHub.
 	PostURL, Manifest string
 }
@@ -161,6 +172,9 @@ func (w *web) githubView(ctx context.Context, r *http.Request) githubView {
 		if c.Name == q.Get("switched") && c.Auth == "github-app" {
 			v.Switched, v.Revoke = c.Name, q.Get("revoke") != ""
 		}
+		if c.Name == q.Get("added") && c.Auth == "github-app" {
+			v.Added = c.Name
+		}
 	}
 	app, err := loadGitHubApp()
 	switch {
@@ -220,8 +234,79 @@ func suggestGitHubName(login string, owner bool, taken map[string]bool) string {
 }
 
 func (w *web) handleGitHub(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "", page{Title: "github.title", Nav: "settings", Tab: "tools", View: "github",
-		Data: w.githubView(r.Context(), r)})
+	v := w.githubView(r.Context(), r)
+	if id := r.URL.Query().Get("installation"); id != "" {
+		if name, switched, had, ok := w.connectInstallation(v, id, w.lang(r)); ok {
+			// To the page as it is now, saying what was done; reloading it
+			// does nothing again.
+			next := "/settings/github?added=" + url.QueryEscape(name)
+			if switched {
+				next = "/settings/github?switched=" + url.QueryEscape(name)
+				if had == "bearer" {
+					next += "&revoke=1"
+				}
+			}
+			http.Redirect(rw, r, next, http.StatusSeeOther)
+			return
+		}
+	}
+	w.render(rw, r, s, "settings", "", page{Title: "github.title", Nav: "settings", Tab: "tools", View: "github", Data: v})
+}
+
+// githubFreshInstall is how recent an installation is for its connection
+// to come by itself: the one the user just made, not an older one.
+const githubFreshInstall = 15 * time.Minute
+
+// connectInstallation gives the installation the user just made on GitHub
+// its connection (its id: the setup_url's installation_id). Installing the
+// app on an account is the user's choice of that account and its
+// repositories: no second click. Only an installation of the app, made in
+// the last minutes and used by no connection: one the user disconnected
+// later stays so. A GitHub connection on a token named as this account's
+// would be (github for the app owner, github-<account> otherwise) moves
+// to the app, keeping its name and rights; otherwise a new one comes, at
+// the presets' level.
+func (w *web) connectInstallation(v githubView, id, lang string) (name string, switched bool, had string, ok bool) {
+	if v.App == nil || !githubID.MatchString(id) {
+		return "", false, "", false
+	}
+	var inst *githubInstView
+	for i := range v.Installations {
+		if strconv.FormatInt(v.Installations[i].ID, 10) == id {
+			inst = &v.Installations[i]
+		}
+	}
+	if inst == nil || inst.Conn != "" || inst.CreatedAt.IsZero() || time.Since(inst.CreatedAt) > githubFreshInstall {
+		return "", false, "", false
+	}
+	login, owner := inst.Account.Login, v.App.Owner
+	account := ""
+	if !strings.EqualFold(login, owner) {
+		account = login
+	}
+	base := "github"
+	if account != "" {
+		base = slugName("github-" + strings.ToLower(login))
+	}
+	conf := w.c.conf()
+	srv, exists := conf.Servers[base]
+	name = inst.Suggest
+	if exists && isGitHubServer(base, srv) && srv.authKind() != "github-app" && w.c.source(kindServer, base) != sourceConfig {
+		name, switched = base, true
+	} else {
+		srv, exists = Server{}, false
+	}
+	if name == "" {
+		return "", false, "", false
+	}
+	had, err := w.c.putGitHubConnection(name, srv, exists, account, owner, lang)
+	if err != nil {
+		log.Printf("web: GitHub installation %s on %s: %v", id, login, err)
+		return "", false, "", false
+	}
+	log.Printf("web: GitHub installation on %s: tool %s on the app (%s)", login, name, map[bool]string{true: "moved", false: "added"}[switched])
+	w.notify()
+	return name, switched, had, true
 }
 
 // handleGitHubCreate writes the manifest and shows the page that posts it
@@ -354,19 +439,8 @@ func (w *web) handleGitHubTool(rw http.ResponseWriter, r *http.Request, s *sessi
 			}
 		}
 	}
-	if !exists {
-		srv = Server{Use: tr(lang, "preset.github.use")}.withLevel(accessReads)
-		if account != "" && !strings.EqualFold(account, app.Owner) {
-			srv.Use += " (" + account + ")"
-		}
-	}
-	had := srv.authKind()
-	if srv.local() || srv.URL == "" {
-		srv = Server{Use: srv.Use, Access: srv.Access, TrustAnnotations: srv.TrustAnnotations, AlwaysLoad: srv.AlwaysLoad, Timeout: srv.Timeout}
-		srv.URL = "https://api.githubcopilot.com/mcp/"
-	}
-	srv.Auth = &ServerAuth{GitHubApp: true, Account: account}
-	if err := w.c.putServer(putUpsert, name, srv, nil); err != nil {
+	had, err := w.c.putGitHubConnection(name, srv, exists, account, app.Owner, lang)
+	if err != nil {
 		w.toast(rw, w.formError(r, err), false)
 		return
 	}
@@ -395,4 +469,25 @@ func (w *web) handleGitHubForget(rw http.ResponseWriter, r *http.Request, s *ses
 	w.notify()
 	rw.Header().Set("HX-Redirect", "/settings/github")
 	rw.WriteHeader(http.StatusOK)
+}
+
+// putGitHubConnection puts the connection name on the app's installation
+// on account ("" the owner's): srv when it exists (a connection moved
+// keeps its name, level and rules; its token leaves the vault with the
+// change), else a new one at the presets' level. It returns how the
+// connection authenticated before.
+func (c *core) putGitHubConnection(name string, srv Server, exists bool, account, owner, lang string) (string, error) {
+	if !exists {
+		srv = Server{Use: tr(lang, "preset.github.use")}.withLevel(accessReads)
+		if account != "" && !strings.EqualFold(account, owner) {
+			srv.Use += " (" + account + ")"
+		}
+	}
+	had := srv.authKind()
+	if srv.local() || srv.URL == "" {
+		srv = Server{Use: srv.Use, Access: srv.Access, TrustAnnotations: srv.TrustAnnotations, AlwaysLoad: srv.AlwaysLoad, Timeout: srv.Timeout}
+		srv.URL = "https://api.githubcopilot.com/mcp/"
+	}
+	srv.Auth = &ServerAuth{GitHubApp: true, Account: account}
+	return had, c.putServer(putUpsert, name, srv, nil)
 }

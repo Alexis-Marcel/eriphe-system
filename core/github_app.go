@@ -277,8 +277,9 @@ type githubInstallation struct {
 		Login string `json:"login"`
 		Type  string `json:"type"`
 	} `json:"account"`
-	Selection string `json:"repository_selection"` // all or selected
-	HTMLURL   string `json:"html_url"`
+	Selection string    `json:"repository_selection"` // all or selected
+	HTMLURL   string    `json:"html_url"`
+	CreatedAt time.Time `json:"created_at"`
 	// Repos is how many repositories it has, when Counted (selected ones).
 	Repos   int  `json:"-"`
 	Counted bool `json:"-"`
