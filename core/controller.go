@@ -104,7 +104,8 @@ func newCore(cfg *Config, store *Store) *core {
 	c.github = newGitHubClient()
 	c.pool = newPool(store, m.Servers)
 	c.pool.appToken = c.github.toolToken // the GitHub tool on the app
-	c.pool.authHold = c.googleHold       // a Google account to connect again (google.go)
+	c.pool.appTokenRefused = c.github.dropToolToken
+	c.pool.authHold = c.googleHold // a Google account to connect again (google.go)
 	// Local servers are services, reached on their node.
 	c.pool.dialLocal = func(ctx context.Context, name string, _ json.RawMessage) (mcp.Transport, error) {
 		return c.dialService(ctx, name)

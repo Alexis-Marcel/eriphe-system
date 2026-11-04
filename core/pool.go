@@ -42,6 +42,9 @@ type pool struct {
 	// from the installation on the server's account (empty: the app
 	// owner's), with read permissions only for a read-only server.
 	appToken func(ctx context.Context, account string, readOnly bool) (string, error)
+	// appTokenRefused drops that token once GitHub refuses it (401): the
+	// installation it came from was removed, or the app replaced.
+	appTokenRefused func(account string, readOnly bool)
 	// authHold tells a server that waits for the user to connect an account
 	// again (a Google account Google refused, google.go): why, and where the
 	// user does it; "" when it does not wait.
@@ -183,7 +186,12 @@ func (p *pool) dialServer(ctx context.Context, u *upstream) (mcp.Transport, erro
 		if _, err := source(ctx); err != nil {
 			return nil, err
 		}
-		t.HTTPClient = &http.Client{Transport: tokenTransport{source: source, base: http.DefaultTransport}}
+		refused := func() {
+			if p.appTokenRefused != nil {
+				p.appTokenRefused(account, readOnly)
+			}
+		}
+		t.HTTPClient = &http.Client{Transport: tokenTransport{source: source, refused: refused, base: http.DefaultTransport}}
 	case "oauth":
 		h, err := p.oauthHandler(u)
 		if err != nil {
