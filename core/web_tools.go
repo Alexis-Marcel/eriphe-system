@@ -41,12 +41,13 @@ type toolView struct {
 	// Follow is the line that follows a tool just saved, in its row, until
 	// it is up or says why not (web_tools_dialog.go).
 	Follow *toolStatus
-	// A service of an account (web_tools_groups.go): Service is mail,
-	// calendar or drive; Owner the account's address and Provider who
+	// A service of an account (web_tools_groups.go): Part is mail,
+	// calendar or drive (not Service, the state of its service on its
+	// machine); Owner the account's address and Provider who
 	// gives it (google, icloud…), the card it is in; Label its heading
 	// there and Mark its icon. Drive is the Google account whose Drive the
 	// row is.
-	Service  string
+	Part     string
 	Label    string
 	Owner    string
 	Provider string

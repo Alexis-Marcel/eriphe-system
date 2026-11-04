@@ -1604,4 +1604,5 @@ details.app-install > * + * { margin-top: 10px; }
 .account-title h3 { word-break: break-all; }
 .account-card .group-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .account-card-bad { border-color: var(--warn); }
+.account-card > [aria-live]:empty { display: none; }
 .account-add { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 2px; }

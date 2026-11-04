@@ -70,7 +70,7 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView, voice bool) 
 			t.Google, t.Reconnect = g.Email, g.Reconnect != ""
 		}
 		t.Scope = tokenScope{}
-		t.Service, t.Label = svc.ID, tr(lang, "acct.svc."+svc.ID)
+		t.Part, t.Label = svc.ID, tr(lang, "acct.svc."+svc.ID)
 		t.Owner, t.Provider = accountOwner(svc, a)
 		t.Mark, t.Detail = svc.ID, accountProduct(lang, svc, a)
 		out = append(out, t)
@@ -123,7 +123,7 @@ func (w *web) driveRows(lang string, conf *Config, sv serverView, voice bool, fc
 				n++
 			}
 		}
-		t.Drive, t.Service, t.Label, t.Mark = a.Name, googleDrive, tr(lang, "acct.svc."+googleDrive), "gdrive"
+		t.Drive, t.Part, t.Label, t.Mark = a.Name, googleDrive, tr(lang, "acct.svc."+googleDrive), "gdrive"
 		t.Owner, t.Provider = a.Name, "google"
 		t.Detail = tr(lang, "preset.gdrive.title") + " · " + driveCount(lang, n)
 		t.Google, t.Reconnect = a.Name, false
