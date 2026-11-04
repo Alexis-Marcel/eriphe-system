@@ -262,6 +262,7 @@ jobs:
       context: ${{ matrix.context }}
       aliases: ${{ matrix.aliases || '' }}
       version: ${{ needs.version.outputs.version }}
+      version-arg: true
       tags: ${{ needs.version.outputs.tags }}
 
   cli:

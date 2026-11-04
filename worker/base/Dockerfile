@@ -48,3 +48,7 @@ ENV PATH=/opt/eriphe/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin
 LABEL eriphe.runtimes="claude-code,opencode,codex,acp"
 
 WORKDIR /work
+
+# eriphe-core tells when a machine is behind by it (core/updates.go).
+ARG VERSION=dev
+LABEL org.opencontainers.image.version=$VERSION
