@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A connection on the app names its account: its tokens come from that
@@ -185,4 +187,86 @@ func TestGitHubAddChoice(t *testing.T) {
 	if tr("en", "pick.github.app.noask") == "pick.github.app.noask" || tr("en", "github.switch") != "Switch to the app" {
 		t.Fatal("English words missing")
 	}
+}
+
+// Back from an installation, its connection comes by itself: a new one on
+// an organization, the owner's token connection moved to the app. Once:
+// not for an unknown, old or already used installation.
+func TestGitHubConnectionOnInstall(t *testing.T) {
+	cc := newDynamicCore(t, nil)
+	f := newFakeGitHub(t)
+	f.org = true
+	withApp(t, cc.core, f)
+	tw := newTestWebFor(t, cc.core)
+	tw.setup()
+
+	// GitHub's return names the installation, on to the page.
+	if _, body, _ := tw.do("GET", "/github-app/installed?installation_id=8&setup_action=install", nil, nil); !strings.Contains(body, "installed=1&amp;installation=8") {
+		t.Fatalf("installed: %s", body)
+	}
+	if _, body, _ := tw.do("GET", "/github-app/installed?installation_id=8&setup_action=update", nil, nil); strings.Contains(body, "installation=8") {
+		t.Fatalf("an update names it: %s", body)
+	}
+	// Unknown: nothing.
+	if code, _, _ := tw.do("GET", "/settings/github?installed=1&installation=99", nil, nil); code != 200 || len(githubServers(cc.core)) != 0 {
+		t.Fatalf("unknown: %d %v", code, cc.conf().Servers)
+	}
+
+	// acme's: a new connection, at the presets' level.
+	code, _, h := tw.do("GET", "/settings/github?installed=1&installation=8", nil, nil)
+	if code != http.StatusSeeOther || h.Get("Location") != "/settings/github?added=github-acme" {
+		t.Fatalf("acme: %d %v", code, h)
+	}
+	s := cc.conf().Servers["github-acme"]
+	if s.Auth == nil || !s.Auth.GitHubApp || s.Auth.Account != "acme" || s.level() != accessReads {
+		t.Fatalf("github-acme %+v %+v", s, s.Auth)
+	}
+	if _, body, _ := tw.do("GET", "/settings/github?added=github-acme", nil, nil); !strings.Contains(body, "« github-acme » est dans tes outils") ||
+		!strings.Contains(body, "Connexion « github-acme »") {
+		t.Fatalf("page: %s", body)
+	}
+	// Again: it has its connection.
+	if code, _, _ := tw.do("GET", "/settings/github?installed=1&installation=8", nil, nil); code != 200 || len(githubServers(cc.core)) != 1 {
+		t.Fatalf("again: %d %v", code, cc.conf().Servers)
+	}
+
+	// The owner's, with a token connection named github: moved to the app.
+	if err := cc.putServer(putCreate, "github", Server{URL: "https://api.githubcopilot.com/mcp/", Auth: &ServerAuth{}, Use: "GitHub"}.withLevel(accessFree),
+		credentials{"token": "github_pat_x"}); err != nil {
+		t.Fatal(err)
+	}
+	code, _, h = tw.do("GET", "/settings/github?installed=1&installation=7", nil, nil)
+	if code != http.StatusSeeOther || h.Get("Location") != "/settings/github?switched=github&revoke=1" {
+		t.Fatalf("owner: %d %v", code, h)
+	}
+	if s := cc.conf().Servers["github"]; s.Auth == nil || !s.Auth.GitHubApp || s.Auth.Account != "" || s.level() != accessFree {
+		t.Fatalf("github %+v", s)
+	}
+}
+
+// An installation made long ago gets no connection by itself: one the user
+// removed stays removed.
+func TestGitHubOldInstallStaysUnconnected(t *testing.T) {
+	cc := newDynamicCore(t, nil)
+	f := newFakeGitHub(t)
+	f.org = true
+	f.created = time.Now().Add(-time.Hour)
+	withApp(t, cc.core, f)
+	tw := newTestWebFor(t, cc.core)
+	tw.setup()
+	if code, body, _ := tw.do("GET", "/settings/github?installed=1&installation=8", nil, nil); code != 200 || len(githubServers(cc.core)) != 0 ||
+		!strings.Contains(body, `value="github-acme"`) {
+		t.Fatalf("old: %d %v", code, cc.conf().Servers)
+	}
+}
+
+// githubServers are the catalog's GitHub connections.
+func githubServers(c *core) []string {
+	var out []string
+	for name, s := range c.conf().Servers {
+		if isGitHubServer(name, s) {
+			out = append(out, name)
+		}
+	}
+	return out
 }

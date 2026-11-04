@@ -36,6 +36,8 @@ type fakeGitHubAPI struct {
 	// token requests are orgMint.
 	org     bool
 	orgMint []map[string]any
+	// created: when the installations were made (now when zero).
+	created time.Time
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHubAPI {
@@ -110,9 +112,14 @@ func (f *fakeGitHubAPI) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/installation":
 		io.WriteString(w, `{"id": 7}`)
 	case r.Method == http.MethodGet && r.URL.Path == "/app/installations":
-		list := `{"id": 7, "account": {"login": "owner", "type": "User"}, "repository_selection": "selected"}`
+		created := f.created
+		if created.IsZero() {
+			created = time.Now()
+		}
+		at := created.UTC().Format(time.RFC3339)
+		list := `{"id": 7, "account": {"login": "owner", "type": "User"}, "repository_selection": "selected", "created_at": "` + at + `"}`
 		if f.org {
-			list += `, {"id": 8, "account": {"login": "acme", "type": "Organization"}, "repository_selection": "selected"}`
+			list += `, {"id": 8, "account": {"login": "acme", "type": "Organization"}, "repository_selection": "selected", "created_at": "` + at + `"}`
 		}
 		io.WriteString(w, "["+list+"]")
 	case r.Method == http.MethodPost && r.URL.Path == "/app/installations/8/access_tokens" && f.org:

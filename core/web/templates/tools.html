@@ -375,7 +375,7 @@
 <div class="stack">
 {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
 {{if .Created}}<p class="ok-note" role="status">{{t "github.created"}}</p>{{end}}
-{{if .Installed}}<p class="ok-note" role="status">{{t "github.installed"}}</p>{{end}}
+{{if .Added}}<p class="ok-note" role="status">{{tf "github.added" .Added}}</p>{{else if and .Installed (not .Switched)}}<p class="ok-note" role="status">{{t "github.installed"}}</p>{{end}}
 {{if .Switched}}<p class="ok-note" role="status">{{tf "github.switched" .Switched}}{{if .Revoke}} {{t "github.revoke"}} <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener noreferrer">{{t "github.revokelink"}}</a>{{end}}</p>{{end}}
 {{$owner := ""}}{{$insts := .Installations}}{{$switch := .Switch}}{{if .App}}{{$owner = .App.Owner}}{{end}}
 {{if .App}}
