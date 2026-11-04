@@ -194,7 +194,7 @@ for want in "- /mnt/user/appdata/eriphe/core:/data" "- /mnt/user/appdata/eriphe/
 	'command: ["-root", "/mnt/user/appdata/eriphe/node",' \
 	'command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",' "container_name: eriphe-engine" \
 	'"-bind-from", "/mnt/user/appdata/eriphe/node", "-bind-file", "/etc/eriphe-engine/binds", "-host-root", "/host",' \
-	"- /mnt/user/appdata/eriphe/proxy:/etc/eriphe-engine:ro" "source: /" "target: /host" "bind: {propagation: rslave}" \
+	"- /mnt/user/appdata/eriphe/proxy:/etc/eriphe-engine:ro" "source: /" "target: /host" \
 	'"-network", "eriphe-system", "-task-network", "eriphe-tasks", "-node-image", "ghcr.io/alexis-marcel/eriphe-node:latest"]' \
 	"cap_add: [DAC_READ_SEARCH]" "depends_on: [engine, core]" "ERIPHE_ENGINE_URL: http://eriphe-engine:8792" \
 	"ERIPHE_FOLDER_HELPER: ghcr.io/alexis-marcel/eriphe-node:latest" '- "/mnt/media/Films:/mnt/media/Films:ro"' \
@@ -204,6 +204,9 @@ for want in "- /mnt/user/appdata/eriphe/core:/data" "- /mnt/user/appdata/eriphe/
 	has "$T/compose.yaml" "$want" compose
 done
 hasnt "$T/compose.yaml" "/data/node" "compose (the launcher's own path)"
+# No mount propagation on the host's /: Docker refuses rslave where / is not
+# a shared mount (Unraid), and the engine would not start.
+hasnt "$T/compose.yaml" "propagation" "compose (the engine's view of the host)"
 # The node has no Docker access but the engine's verbs: no DOCKER_HOST, no proxy.
 hasnt "$T/compose.yaml" "DOCKER_HOST" "compose (the node's Docker)"
 hasnt "$T/compose.yaml" "docker-proxy" "compose (the socket proxy)"

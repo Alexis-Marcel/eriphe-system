@@ -644,7 +644,9 @@ a NAS:
   mounts from `/var/lib/eriphe/node` and the shared places (`--share`) only, their symlinks
   resolved (see deploy/README.md for what it checks and what it does not stop). It runs as root
   with every capability dropped but `DAC_READ_SEARCH`, the node's root and the shared places
-  mounted read-only. An install from before it had `eriphe-docker-proxy` instead: its next update
+  mounted read-only (with eriphe-launcher, the host's `/`, as mounted when the engine starts: a
+  disk mounted later is seen once the engine is made again, at the next update or `docker restart
+  eriphe-engine`). An install from before it had `eriphe-docker-proxy` instead: its next update
   brings the engine and removes the proxy (layout 3, [the machines update
   themselves](#the-machines-update-themselves)). Node images have no proxy since: on such an
   install, the update's new node connects first without any runtime ("no container engine here"
