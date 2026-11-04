@@ -38,9 +38,11 @@ last=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude 
 
 ## What CI does
 
-`.github/workflows/ci.yml` runs every check, then builds every image for amd64 and arm64
-(`image.yml`) with the build's version (the binaries' `-X main.version`, and the label
-`org.opencontainers.image.version`), and publishes it under:
+`.github/workflows/ci.yml` runs every check and, at the same time, builds every image for amd64
+and arm64 (`image.yml`) with the build's version (the binaries' `-X main.version`, and the label
+`org.opencontainers.image.version`). On a push, each architecture is pushed by digest only, with
+no name; once every check passed and every image is built, the `publish` job names them, one
+multi-arch manifest per image, under:
 
 | Pushed | Version | Image tags |
 |---|---|---|

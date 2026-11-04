@@ -1,28 +1,44 @@
 # The builder runs on the build machine and cross-compiles for the target.
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
-ARG TARGETOS TARGETARCH
+# The module and build caches are cache mounts, which CI keeps between runs
+# (.github/workflows/image.yml). Each program is a stage of its own: they are
+# built at the same time.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS src
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
-ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /eriphe-node .
+
+FROM src AS build
+ARG TARGETOS TARGETARCH VERSION=dev
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /eriphe-node .
+
 # The Mac's own: on Apple silicon with macOS 26, install.sh runs eriphe-node
 # on macOS itself and takes it from this image (no token, the same version).
-RUN CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /darwin-arm64/eriphe-node .
+FROM src AS darwin
+ARG VERSION=dev
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /darwin-arm64/eriphe-node .
+
 # eriphe-cred, the credential helper (cred/, a module of its own with no
 # dependency), for both Linux architectures: the node copies
 # task-bin/linux-<arch>/ into every task's /opt/eriphe/bin (-task-bin), the
 # Mac's install.sh takes linux-arm64 for its tasks' VMs. gh, gh's wrapper,
 # is the same program under that name: a copy, as links are not copied.
-RUN cd cred && for arch in amd64 arm64; do \
+FROM src AS cred
+ARG VERSION=dev
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    cd cred && for arch in amd64 arm64; do \
       CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /task-bin/linux-$arch/eriphe-cred . && \
       cp /task-bin/linux-$arch/eriphe-cred /task-bin/linux-$arch/gh || exit 1; \
     done
+
 # eriphe-session, the Windows session helper (cmd/eriphe-session): install.ps1
 # takes it from this image and runs it in the user's session. A GUI program
 # (-H windowsgui): no console window.
-RUN for arch in amd64 arm64; do \
+FROM src AS session
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    for arch in amd64 arm64; do \
       CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -ldflags="-s -w -H=windowsgui" -o /windows/$arch/eriphe-session.exe ./cmd/eriphe-session || exit 1; \
     done
 
@@ -33,9 +49,9 @@ RUN for arch in amd64 arm64; do \
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates
 COPY --from=build /eriphe-node /usr/local/bin/eriphe-node
-COPY --from=build /darwin-arm64/eriphe-node /usr/local/share/eriphe/darwin-arm64/eriphe-node
-COPY --from=build /task-bin /usr/local/share/eriphe/task-bin
-COPY --from=build /windows /usr/local/share/eriphe/windows
+COPY --from=darwin /darwin-arm64/eriphe-node /usr/local/share/eriphe/darwin-arm64/eriphe-node
+COPY --from=cred /task-bin /usr/local/share/eriphe/task-bin
+COPY --from=session /windows /usr/local/share/eriphe/windows
 # The installers of this build, for the updaters: one that updates to this
 # image runs its install.sh --layout (or install.ps1's setup, in WSL) when its
 # layout is newer than the machine's (install/README.md, The machines update

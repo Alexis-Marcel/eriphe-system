@@ -122,6 +122,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: node/go.mod
+          cache-dependency-path: node/go.sum
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
@@ -140,6 +141,8 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: node/cred/go.mod
+          # No dependency, hence no go.sum: nothing to cache.
+          cache: false
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
@@ -156,12 +159,17 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
       - run: go build ./...
       - run: go vet ./...
+      # In memory: each test opens a SQLite database in t.TempDir(), whose every
+      # migration syncs to disk.
       - run: go test ./...
+        env:
+          TMPDIR: /dev/shm
 
-  # Every test passes before any image is published: an image job tags `latest` on a release,
-  # and a workspace offers that version as soon as one image has it.
+  # Every test passes before any image is published (the publish job): a release tags
+  # `latest`, and a workspace offers that version as soon as one image has it.
   tests:
     needs: [scripts, node, cred, core, install, cli, mail, calendar, files]
     runs-on: ubuntu-latest
@@ -169,7 +177,7 @@ jobs:
       - run: 'true'
 
   core-image:
-    needs: [version, tests]
+    needs: version
     permissions:
       contents: read
       packages: write
@@ -178,11 +186,11 @@ jobs:
       image: eriphe-core
       context: core
       version: ${{ needs.version.outputs.version }}
-      tags: ${{ needs.version.outputs.tags }}
       version-arg: true
+      go-cache: true
 
   node-image:
-    needs: [version, tests]
+    needs: version
     permissions:
       contents: read
       packages: write
@@ -193,8 +201,8 @@ jobs:
       # The installers it carries, for the updaters (node/Dockerfile).
       build-contexts: installer=install
       version: ${{ needs.version.outputs.version }}
-      tags: ${{ needs.version.outputs.tags }}
       version-arg: true
+      go-cache: true
 
   install:
     runs-on: ubuntu-latest
@@ -222,7 +230,7 @@ jobs:
   # ghcr.io/alexis-marcel/eriphe: eriphe-launcher, Eriphe from one container, with
   # install.sh's functions (install/README.md, One container).
   launcher-image:
-    needs: [version, tests]
+    needs: version
     permissions:
       contents: read
       packages: write
@@ -231,22 +239,18 @@ jobs:
       image: eriphe
       context: install
       version: ${{ needs.version.outputs.version }}
-      tags: ${{ needs.version.outputs.tags }}
       version-arg: true
 
   # The image tasks start from, and one image per agent the node injects into it
   # (worker/README.md).
   worker:
-    needs: [version, tests]
+    needs: version
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Also as eriphe-worker, the image it replaces: the updaters of the machines
-          # installed before pull it (install/README.md).
           - image: eriphe-base
             context: worker/base
-            aliases: eriphe-worker
           - image: eriphe-agent-claude
             context: worker/agents/claude
           - image: eriphe-agent-codex
@@ -260,10 +264,8 @@ jobs:
     with:
       image: ${{ matrix.image }}
       context: ${{ matrix.context }}
-      aliases: ${{ matrix.aliases || '' }}
       version: ${{ needs.version.outputs.version }}
       version-arg: true
-      tags: ${{ needs.version.outputs.tags }}
 
   cli:
     runs-on: ubuntu-latest
@@ -275,6 +277,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
@@ -289,13 +292,14 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: servers/mail/go.mod
+          cache-dependency-path: servers/mail/go.sum
       - run: go build ./...
       - run: go vet ./...
       - run: go test -race ./...
       - run: test -z "$(gofmt -l .)"
 
   mail-image:
-    needs: [version, tests]
+    needs: version
     permissions:
       contents: read
       packages: write
@@ -304,7 +308,6 @@ jobs:
       image: eriphe-mail
       context: servers/mail
       version: ${{ needs.version.outputs.version }}
-      tags: ${{ needs.version.outputs.tags }}
       version-arg: true
 
   calendar:
@@ -317,13 +320,14 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: servers/calendar/go.mod
+          cache-dependency-path: servers/calendar/go.sum
       - run: go build ./...
       - run: go vet ./...
       - run: go test -race ./...
       - run: test -z "$(gofmt -l .)"
 
   calendar-image:
-    needs: [version, tests]
+    needs: version
     permissions:
       contents: read
       packages: write
@@ -332,7 +336,6 @@ jobs:
       image: eriphe-calendar
       context: servers/calendar
       version: ${{ needs.version.outputs.version }}
-      tags: ${{ needs.version.outputs.tags }}
       version-arg: true
 
   files:
@@ -345,13 +348,14 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: servers/files/go.mod
+          cache-dependency-path: servers/files/go.sum
       - run: go build ./...
       - run: go vet ./...
       - run: go test -race ./...
       - run: test -z "$(gofmt -l .)"
 
   files-image:
-    needs: [version, tests]
+    needs: version
     permissions:
       contents: read
       packages: write
@@ -360,8 +364,72 @@ jobs:
       image: eriphe-files
       context: servers/files
       version: ${{ needs.version.outputs.version }}
-      tags: ${{ needs.version.outputs.tags }}
       version-arg: true
+
+  # The images, built while the tests run and pushed by digest only on a push (image.yml),
+  # published as one multi-arch manifest each under the build's tags once every test passed:
+  # nothing is named, no version is published, before. One entry per image job above.
+  publish:
+    if: github.event_name == 'push'
+    needs: [version, tests, core-image, node-image, launcher-image, worker, mail-image, calendar-image, files-image]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: eriphe-core
+          - image: eriphe-node
+          - image: eriphe
+          # Also as eriphe-worker, the image it replaces: the updaters of the machines
+          # installed before pull it (install/README.md).
+          - image: eriphe-base
+            aliases: eriphe-worker
+          - image: eriphe-agent-claude
+          - image: eriphe-agent-codex
+          - image: eriphe-agent-opencode
+          - image: eriphe-mail
+          - image: eriphe-calendar
+          - image: eriphe-files
+    name: publish (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY_IMAGE: ghcr.io/alexis-marcel/${{ matrix.image }}
+      TAGS: ${{ needs.version.outputs.tags }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ matrix.image }}--*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create the multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          set -- *
+          [ $# -eq 2 ] || { echo "::error::want 2 digests (amd64, arm64), have: $*"; exit 1; }
+          set --
+          for tag in $TAGS; do set -- "$@" -t "${REGISTRY_IMAGE}:${tag}"; done
+          [ $# -gt 0 ] || { echo "::error::no tag to publish"; exit 1; }
+          # shellcheck disable=SC2046 # one argument per digest
+          docker buildx imagetools create "$@" $(printf "${REGISTRY_IMAGE}@sha256:%s " *)
+      # The same manifest under each alias, from the image just published.
+      - if: matrix.aliases
+        env:
+          ALIASES: ${{ matrix.aliases }}
+        run: |
+          for alias in $ALIASES; do
+            set --
+            for tag in $TAGS; do set -- "$@" -t "ghcr.io/alexis-marcel/${alias}:${tag}"; done
+            docker buildx imagetools create "$@" "${REGISTRY_IMAGE}:${TAGS%% *}"
+          done
+      - run: docker buildx imagetools inspect "${REGISTRY_IMAGE}:${TAGS%% *}"
 
   # A release, once every check passed and every image is published under its
   # tags: the tag vX.Y.Z on this commit (unless pushed by hand), then the GitHub
@@ -372,7 +440,7 @@ jobs:
   # no other run.
   release:
     if: needs.version.outputs.release == 'true'
-    needs: [version, core-image, node-image, launcher-image, worker, mail-image, calendar-image, files-image, install, cli]
+    needs: [version, tests, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
