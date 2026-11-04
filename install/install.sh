@@ -66,7 +66,7 @@ SESSION_MOUNT=/run/eriphe-session
 # installLayout is the same number. 1: before it was counted; 2: Syncthing,
 # and the updaters that apply a layout; 3: eriphe-node engine in place of the
 # socket proxy.
-LAYOUT=3
+LAYOUT=4
 
 REGISTRY=ghcr.io/alexis-marcel
 # The socket proxy of earlier installs, removed with Eriphe: the node's own

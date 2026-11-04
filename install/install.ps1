@@ -129,7 +129,7 @@ $alpine = @{
 # firewall, the Explorer's menu): raise it with a release that changes that,
 # which only this script, in an administrator PowerShell, can do; the
 # device then says so to its user.
-$layout = 3
+$layout = 4
 $adminLayout = 1
 # The images, at the pinned version or latest (set once the saved settings
 # are read): the launcher's, which chooses the others, and the node's, for
