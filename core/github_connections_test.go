@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -269,4 +270,39 @@ func githubServers(c *core) []string {
 		}
 	}
 	return out
+}
+
+// A tool token GitHub refuses (its installation removed and made again,
+// say) is dropped: the next call mints one from the installation there now,
+// instead of the cached one for up to an hour.
+func TestGitHubRefusedToolTokenDropped(t *testing.T) {
+	c, _ := credCore(t, "")
+	f := newFakeGitHub(t)
+	withApp(t, c, f)
+	ctx := context.Background()
+	if tok, err := c.github.toolToken(ctx, "", false); err != nil || tok != "ghs_x" {
+		t.Fatalf("first: %q %v", tok, err)
+	}
+	refused := 0
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer ghs_x" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer api.Close()
+	tt := tokenTransport{source: func(ctx context.Context) (string, error) { return c.github.toolToken(ctx, "", false) },
+		refused: func() { refused++; c.github.dropToolToken("", false) }, base: http.DefaultTransport}
+	client := &http.Client{Transport: tt}
+	resp, err := client.Get(api.URL)
+	if err != nil || resp.StatusCode != http.StatusUnauthorized || refused != 1 {
+		t.Fatalf("refused: %v %v, %d", resp, err, refused)
+	}
+	resp.Body.Close()
+	resp, err = client.Get(api.URL)
+	if err != nil || resp.StatusCode != http.StatusOK || len(f.mints()) != 2 {
+		t.Fatalf("again: %v %v, %d mints", resp, err, len(f.mints()))
+	}
+	resp.Body.Close()
 }

@@ -397,6 +397,16 @@ func pickInstallation(app *githubApp, list []githubInstallation, account string)
 	return inst, nil
 }
 
+// dropToolToken forgets the cached tool token of account: GitHub refused
+// it, so the next call mints a new one from the installation there now (an
+// app uninstalled and installed again has a new installation, and the
+// former's tokens are revoked).
+func (g *githubClient) dropToolToken(account string, readOnly bool) {
+	g.mu.Lock()
+	delete(g.toolToks, toolKey{strings.ToLower(account), readOnly})
+	g.mu.Unlock()
+}
+
 // forget drops the cached tool tokens (the app was removed or replaced).
 func (g *githubClient) forget() {
 	g.mu.Lock()
@@ -498,8 +508,9 @@ func (g *githubClient) convertManifest(ctx context.Context, code string, public 
 // tokenTransport adds a token from a source to every request: the GitHub
 // tool on the app.
 type tokenTransport struct {
-	source func(context.Context) (string, error)
-	base   http.RoundTripper
+	source  func(context.Context) (string, error)
+	refused func() // the token was refused (401): the source mints a new one next
+	base    http.RoundTripper
 }
 
 func (t tokenTransport) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -509,5 +520,9 @@ func (t tokenTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	r = r.Clone(r.Context())
 	r.Header.Set("Authorization", "Bearer "+tok)
-	return t.base.RoundTrip(r)
+	resp, err := t.base.RoundTrip(r)
+	if err == nil && resp.StatusCode == http.StatusUnauthorized && t.refused != nil {
+		t.refused()
+	}
+	return resp, err
 }
