@@ -43,7 +43,7 @@ permissions:
 env:
   REGISTRY_IMAGE: ghcr.io/alexis-marcel/${{ inputs.image }}
   PUSH: ${{ github.event_name == 'push' }}
-  SAVE_GO_CACHE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+  SAVE_GO_CACHE: true # TEMP: measure, to revert
 
 jobs:
   build:
