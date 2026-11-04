@@ -2107,7 +2107,7 @@ mac_agent() {
 	fi
 	launchctl bootout "$domain/$AGENT_LABEL" >/dev/null 2>&1 || true
 	printf '%s\n' "$new" >"$AGENT_PLIST"
-	launchctl bootstrap "$domain" "$AGENT_PLIST"
+	start_agent "$AGENT_LABEL" "$AGENT_PLIST"
 }
 
 mac_uninstall() {
@@ -2813,7 +2813,24 @@ load() {
 	mkdir -p "$HOME/Library/LaunchAgents"
 	launchctl bootout "gui/$(id -u)/$1" >/dev/null 2>&1 || true
 	printf '%s\n' "$2" >"$f"
-	launchctl bootstrap "gui/$(id -u)" "$f"
+	start_agent "$1" "$f"
+}
+
+# start_agent LABEL FILE: the LaunchAgent LABEL bootstrapped from FILE, once
+# launchd no longer has the one just booted out: right after a bootout,
+# launchd refuses a bootstrap while the former instance is still going
+# (5: Input/output error). Refused again after a pause, the install stops,
+# saying which agent.
+start_agent() {
+	d=gui/$(id -u)
+	i=0
+	while launchctl print "$d/$1" >/dev/null 2>&1 && [ $i -lt 50 ]; do
+		sleep 0.2
+		i=$((i + 1))
+	done
+	launchctl bootstrap "$d" "$2" 2>/dev/null && return 0
+	sleep "${AGENT_RETRY_DELAY:-2}"
+	launchctl bootstrap "$d" "$2" || die "macOS did not start $1 (launchctl bootstrap $2)"
 }
 
 unload() {
@@ -3273,7 +3290,7 @@ native_restore() {
 			cp -p "$BACKUP/$l.plist" "$f"
 			if { [ -n "$STOPPED" ] && [ "$l" != "$UPDATE_LABEL" ]; } || ! launchctl print "gui/$(id -u)/$l" >/dev/null 2>&1; then
 				launchctl bootout "gui/$(id -u)/$l" >/dev/null 2>&1 || true
-				launchctl bootstrap "gui/$(id -u)" "$f" || warn "could not start $l again"
+				(start_agent "$l" "$f") || warn "could not start $l again"
 			fi
 		done
 		rm -rf "$BACKUP"
