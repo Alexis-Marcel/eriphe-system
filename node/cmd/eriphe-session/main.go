@@ -128,5 +128,9 @@ func run(ctx context.Context, file string, every time.Duration, read func() (pro
 			return
 		case <-t.C:
 		}
+		// A tick and the end may both be ready: the end wins.
+		if ctx.Err() != nil {
+			return
+		}
 	}
 }
