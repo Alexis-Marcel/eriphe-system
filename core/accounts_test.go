@@ -184,3 +184,128 @@ func TestGoogleHoldWithOtherAccounts(t *testing.T) {
 		t.Fatalf("held with another mailbox: %s", why)
 	}
 }
+
+// An Apple calendar and a Google calendar of one address are two
+// calendars: the merge keeps both, the Google one under the address.
+func TestMergeKeepsTwoCalendarsOfOneAddress(t *testing.T) {
+	cc := newDynamicCore(t, nil)
+	c := cc.core
+	ref := googleSecret("sam@example.org")
+	if err := currentVault().set(ref, `{"refresh_token":"sam"}`); err != nil {
+		t.Fatal(err)
+	}
+	oldServer(t, c, "agenda", calendarImage, "CALENDAR_CONFIG",
+		`{"accounts":[{"name":"icloud","provider":"icloud","username":"sam@example.org","auth":{"password_env":"CALENDAR_PASSWORD"}}]}`,
+		accessFree, "mon agenda", nil, credentials{"env:CALENDAR_PASSWORD": "apple-pw"})
+	oldServer(t, c, "agenda-sam", calendarImage, "CALENDAR_CONFIG",
+		`{"accounts":[{"name":"sam@example.org","provider":"google","username":"sam@example.org","auth":{"oauth_token_env":"CALENDAR_GOOGLE_TOKEN"}}]}`,
+		accessReadOnly, "mon agenda (sam@example.org)", map[string]EnvValue{calGoogleEnv: {File: vaultPrefix + ref}}, nil)
+	c.store.allowAction("agenda", "mcp__agenda__create_event", "")
+
+	c.mergeAccountServers()
+
+	cal, ok := c.serviceServer(calendarService)
+	if !ok || len(cal.Config.Accounts) != 2 {
+		t.Fatalf("calendar: %+v", cal.Config.Accounts)
+	}
+	google, _ := serviceAccount(t, c, calendarService, "sam@example.org")
+	if !google.google() || cal.Spec.Env[google.secretEnv()].File != vaultPrefix+ref || !google.ReadOnly {
+		t.Errorf("google: %+v", google)
+	}
+	apple, pw := serviceAccount(t, c, calendarService, "sam@example.org (iCloud)")
+	if apple.google() || apple.Provider != "icloud" || pw != "apple-pw" || apple.ReadOnly {
+		t.Errorf("apple: %+v %q", apple, pw)
+	}
+	if lv := cal.Server.AccountAccess; lv["sam@example.org"] != accessReadOnly || lv["sam@example.org (iCloud)"] != accessFree {
+		t.Errorf("levels: %v", lv)
+	}
+	if a := c.store.allowedActions("agenda"); len(a) != 1 || a[0].Account != "sam@example.org (iCloud)" {
+		t.Errorf("allowed: %+v", a)
+	}
+}
+
+// An Apple calendar added beside a Google calendar of its address is
+// named apart; a Google account connected after an Apple calendar of its
+// address takes the address, the Apple one keeps its secret, its level,
+// what was allowed and its watches under another name. The same calendar
+// twice is still refused.
+func TestCalendarsOfOneAddress(t *testing.T) {
+	apple := svcAccount{Name: "sam@example.org", Provider: "icloud", Username: "sam@example.org", URL: "https://caldav.icloud.com"}
+	google := func(c *core) error {
+		ref := googleSecret("sam@example.org")
+		currentVault().set(ref, `{"refresh_token":"sam"}`)
+		return c.putAccount(calendarService, accountPut{Lang: "fr", Account: googleAccountFor(calendarService, "sam@example.org"),
+			Secret: &EnvValue{File: vaultPrefix + ref}})
+	}
+
+	t.Run("apple after google", func(t *testing.T) {
+		c := newDynamicCore(t, nil).core
+		if err := google(c); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.putAccount(calendarService, accountPut{Lang: "fr", Account: apple, Password: "apple-pw"}); err != nil {
+			t.Fatal(err)
+		}
+		if a, _ := serviceAccount(t, c, calendarService, "sam@example.org"); !a.google() {
+			t.Errorf("the address is not Google's: %+v", a)
+		}
+		if a, pw := serviceAccount(t, c, calendarService, "sam@example.org (iCloud)"); a.Provider != "icloud" || pw != "apple-pw" {
+			t.Errorf("apple: %+v %q", a, pw)
+		}
+		if err := c.putAccount(calendarService, accountPut{Lang: "fr", Account: apple, Password: "again"}); err != errAccountExists {
+			t.Errorf("the same Apple calendar twice: %v", err)
+		}
+		// Its own form (which names it by its username) changes it, under
+		// its name.
+		if err := c.putAccount(calendarService, accountPut{Lang: "fr", Replace: "sam@example.org (iCloud)", Account: apple, Level: accessReadOnly}); err != nil {
+			t.Fatal(err)
+		}
+		if st, _ := c.serviceServer(calendarService); len(st.Config.Accounts) != 2 || st.Server.AccountAccess["sam@example.org (iCloud)"] != accessReadOnly {
+			t.Errorf("after the edit: %+v %v", st.Config.Accounts, st.Server.AccountAccess)
+		}
+	})
+
+	t.Run("google after apple", func(t *testing.T) {
+		c := newDynamicCore(t, nil).core
+		if err := c.putAccount(calendarService, accountPut{Lang: "fr", Account: apple, Password: "apple-pw", Level: accessFree}); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.putAccount(calendarService, accountPut{Lang: "fr", Account: apple, Password: "x"}); err != errAccountExists {
+			t.Fatalf("the same calendar twice: %v", err)
+		}
+		st, _ := c.serviceServer(calendarService)
+		c.store.allowAction(st.Name, "mcp__"+st.Name+"__create_event", "sam@example.org")
+		spec, _ := json.Marshal(watchSpec{Server: st.Name, Tool: "list_events", Args: map[string]any{"account": "sam@example.org"}, Every: 30})
+		c.store.db.Exec(`INSERT INTO watches (name, source, spec, prompt, state, by, created, updated) VALUES ('rdv', 'outil', ?, 'x', 'active', 'user', 0, 0)`, string(spec))
+
+		if err := google(c); err != nil {
+			t.Fatal(err)
+		}
+		st, _ = c.serviceServer(calendarService)
+		if len(st.Config.Accounts) != 2 {
+			t.Fatalf("accounts: %+v", st.Config.Accounts)
+		}
+		if a, _ := serviceAccount(t, c, calendarService, "sam@example.org"); !a.google() {
+			t.Errorf("Google did not take the address: %+v", a)
+		}
+		a, pw := serviceAccount(t, c, calendarService, "sam@example.org (iCloud)")
+		if a.Provider != "icloud" || pw != "apple-pw" || st.Server.AccountAccess["sam@example.org (iCloud)"] != accessFree {
+			t.Errorf("apple: %+v %q %v", a, pw, st.Server.AccountAccess)
+		}
+		if got := c.store.allowedActions(st.Name); len(got) != 1 || got[0].Account != "sam@example.org (iCloud)" {
+			t.Errorf("allowed: %+v", got)
+		}
+		var raw string
+		c.store.db.QueryRow(`SELECT spec FROM watches WHERE name = 'rdv'`).Scan(&raw)
+		if !strings.Contains(raw, `"account":"sam@example.org (iCloud)"`) {
+			t.Errorf("watch: %s", raw)
+		}
+		// Google connected again replaces its own account only.
+		if err := google(c); err != nil {
+			t.Fatal(err)
+		}
+		if st, _ := c.serviceServer(calendarService); len(st.Config.Accounts) != 2 {
+			t.Errorf("after reconnecting: %+v", st.Config.Accounts)
+		}
+	})
+}
