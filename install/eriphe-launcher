@@ -670,6 +670,8 @@ swap() {
 	img=$(api "http://docker/images/$oldimg/json" | jq -c '.Config // {}') || img='{}'
 	body=$(create_body "$j" "$img" | jq --arg ref "$ref" '.Image = $ref')
 	log "replacing $name"
+	# What a swap of before could not remove would hold the name.
+	docker rm -f "$name-previous" >/dev/null 2>&1 || true
 	docker stop -t 30 "$old" >/dev/null
 	docker rename "$old" "$name-previous"
 	new=
@@ -677,7 +679,8 @@ swap() {
 		new=$(printf '%s' "$out" | jq -r .Id) && docker start "$new" >/dev/null; then
 		sleep "${ERIPHE_SWAP_CHECK:-15}"
 		if [ "$(docker inspect -f '{{.State.Running}} {{.State.Restarting}}' "$new" 2>/dev/null)" = "true false" ]; then
-			docker rm "$old" >/dev/null
+			# Forced: one that kept restarting may still be.
+			docker rm -f "$old" >/dev/null
 			docker image rm "$oldimg" >/dev/null 2>&1 || true
 			log "$name replaced"
 			return 0

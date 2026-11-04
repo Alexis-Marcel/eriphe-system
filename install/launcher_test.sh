@@ -62,6 +62,7 @@ case $* in
 *'Destination "/var/run/docker.sock"'*) echo /var/run/docker.sock ;;
 "info -f {{.Name}}") echo Tower.local ;;
 "image inspect -f {{.Id}} "*) echo sha256:new ;;
+"inspect -f {{.State.Running}} {{.State.Restarting}} "*) echo "${SWAP_STATE:-true false}" ;;
 "run --rm --network none --entrypoint true --mount type=bind,src=/mnt/missing,"*) exit 1 ;;
 "run --rm --network host --entrypoint sh "*) printf '00:00:5e:00:53:01 192.0.2.255' ;;
 "logs eriphe-node") echo "2026/11/03 10:00:00 connected to http://192.0.2.10:8800" ;;
@@ -518,6 +519,24 @@ run_in "create_body \"\$(cat '$T/inspect.json')\" '$img'" >"$T/body.json"
 want='{"Env":["ERIPHE_SHARES=shares=/mnt/user"],"Labels":{"net.unraid.docker.managed":"dockerman"},"Binds":["/var/run/docker.sock:/var/run/docker.sock","/mnt/user/appdata/eriphe:/data"],"Restart":"unless-stopped","Networks":{"bridge":{"IPAMConfig":null,"Aliases":[]}},"Hostname":null,"Cmd":null,"Entrypoint":null}'
 got=$(jq -c '{Env, Labels, Binds: .HostConfig.Binds, Restart: .HostConfig.RestartPolicy.Name, Networks: .NetworkingConfig.EndpointsConfig, Hostname, Cmd, Entrypoint}' "$T/body.json")
 [ "$got" = "$want" ] || fail "create body: $got"
+
+# ---- the swap: what a swap of before left goes first, the old one forced out
+
+swap_in() { run_in "api() { case \$* in *-X\ POST*) echo '{\"Id\": \"new1\"}' ;; *images/*) echo '{}' ;; *) cat '$T/inspect.json' ;; esac; }; ERIPHE_SWAP_CHECK=0 swap $ID"; }
+: >"$T/calls"
+swap_in >/dev/null
+l=$(grep -n -- "^rm -f eriphe-previous$" "$T/calls" | cut -d : -f 1)
+r=$(grep -n -- "^rename $ID eriphe-previous$" "$T/calls" | cut -d : -f 1)
+if [ -z "$l" ] || [ -z "$r" ] || [ "$l" -gt "$r" ]; then
+	fail "swap: a leftover eriphe-previous is not removed before the rename ($(tr '\n' '|' <"$T/calls"))"
+fi
+has "$T/calls" "rm -f $ID" "swap: the old one forced out"
+# The new one does not stay up: the old one back under its name.
+: >"$T/calls"
+SWAP_STATE="false true" swap_in >/dev/null
+for want in "rm -f new1" "rename eriphe-previous eriphe" "start $ID"; do
+	has "$T/calls" "$want" "swap, back"
+done
 
 # ---- uninstall: what it made; the data stays unless --data
 
