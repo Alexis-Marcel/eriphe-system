@@ -78,29 +78,46 @@ func (c *core) mergeService(svc accountService, all []svcServer) error {
 	of := map[string]string{} // a server's account, for what is moved to the one left
 	for _, st := range all {
 		cfg.Timezone = cmpOr(cfg.Timezone, st.Config.Timezone)
-		for _, a := range st.Config.Accounts {
-			name := mergedName(svc, a)
-			if cfg.index(name) >= 0 {
-				log.Printf("accounts: %s: an account is twice, the first kept", svc.ID) // never the address
-				continue
-			}
-			v := st.Spec.Env[a.secretEnv()]
-			stem := svc.PasswordEnv
-			if a.google() {
-				stem = svc.GoogleEnv
-			}
-			level := st.level(a.Name)
-			a.Name, a.Auth = name, svcAuth{}
-			if stem == svc.GoogleEnv {
-				a.Auth.OAuthTokenEnv = accountEnv(stem, name)
-			} else {
-				a.Auth.PasswordEnv = accountEnv(stem, name)
-			}
-			env[a.secretEnv()] = v
-			levels[name] = level
-			cfg.Accounts = append(cfg.Accounts, a)
-			if len(st.Config.Accounts) == 1 {
-				of[st.Name] = name
+	}
+	// The Google accounts first: one keeps its address as its name
+	// (google.go finds it so), and another account of that address is
+	// named apart.
+	for _, google := range []bool{true, false} {
+		for _, st := range all {
+			for _, a := range st.Config.Accounts {
+				if a.google() != google {
+					continue
+				}
+				name := mergedName(svc, a)
+				if i := cfg.index(name); i >= 0 {
+					if svc.sameAccount(cfg.Accounts[i], a) {
+						log.Printf("accounts: %s: an account is twice, the first kept", svc.ID) // never the address
+						continue
+					}
+					// two calendars of one address (a Google account's and
+					// an Apple account's): both kept, the second named apart
+					named := a
+					named.Name = name
+					name = cfg.freeName(named, -1)
+				}
+				v := st.Spec.Env[a.secretEnv()]
+				stem := svc.PasswordEnv
+				if a.google() {
+					stem = svc.GoogleEnv
+				}
+				level := st.level(a.Name)
+				a.Name, a.Auth = name, svcAuth{}
+				if stem == svc.GoogleEnv {
+					a.Auth.OAuthTokenEnv = accountEnv(stem, name)
+				} else {
+					a.Auth.PasswordEnv = accountEnv(stem, name)
+				}
+				env[a.secretEnv()] = v
+				levels[name] = level
+				cfg.Accounts = append(cfg.Accounts, a)
+				if len(st.Config.Accounts) == 1 {
+					of[st.Name] = name
+				}
 			}
 		}
 	}
@@ -134,24 +151,9 @@ func (c *core) mergeService(svc accountService, all []svcServer) error {
 // instead, for the account they read (a server of one account read it
 // alone).
 func (c *core) moveWatches(from, to, account string) {
-	rows, err := c.store.db.Query(`SELECT id, spec FROM watches`)
-	if err != nil {
-		return
-	}
-	type change struct {
-		id   int64
-		spec string
-	}
-	var changes []change
-	for rows.Next() {
-		var id int64
-		var raw string
-		if rows.Scan(&id, &raw) != nil {
-			continue
-		}
-		var spec map[string]any
-		if json.Unmarshal([]byte(raw), &spec) != nil || spec["server"] != from {
-			continue
+	c.updateWatches(func(spec map[string]any) bool {
+		if spec["server"] != from {
+			return false
 		}
 		spec["server"] = to
 		args, _ := spec["args"].(map[string]any)
@@ -162,12 +164,38 @@ func (c *core) moveWatches(from, to, account string) {
 			args["account"] = account
 		}
 		spec["args"] = args
+		return true
+	})
+}
+
+// updateWatches changes the watches' specs: change says whether it
+// changed one.
+func (c *core) updateWatches(change func(spec map[string]any) bool) {
+	rows, err := c.store.db.Query(`SELECT id, spec FROM watches`)
+	if err != nil {
+		return
+	}
+	type update struct {
+		id   int64
+		spec string
+	}
+	var updates []update
+	for rows.Next() {
+		var id int64
+		var raw string
+		if rows.Scan(&id, &raw) != nil {
+			continue
+		}
+		var spec map[string]any
+		if json.Unmarshal([]byte(raw), &spec) != nil || !change(spec) {
+			continue
+		}
 		next, _ := json.Marshal(spec)
-		changes = append(changes, change{id, string(next)})
+		updates = append(updates, update{id, string(next)})
 	}
 	rows.Close()
-	for _, ch := range changes {
-		c.store.db.Exec(`UPDATE watches SET spec = ? WHERE id = ?`, ch.spec, ch.id)
+	for _, u := range updates {
+		c.store.db.Exec(`UPDATE watches SET spec = ? WHERE id = ?`, u.spec, u.id)
 	}
 }
 

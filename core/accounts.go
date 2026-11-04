@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strings"
@@ -104,6 +106,43 @@ type svcConfig struct {
 
 func (cfg svcConfig) index(name string) int {
 	return slices.IndexFunc(cfg.Accounts, func(a svcAccount) bool { return strings.EqualFold(a.Name, name) })
+}
+
+// sameAccount tells whether two accounts of one name are one account: a
+// mailbox is its address, whoever connects it; a calendar is also where it
+// is (an Apple account and a Google account can have the same address,
+// and are two calendars).
+func (svc accountService) sameAccount(x, y svcAccount) bool {
+	if svc == mailService {
+		return true
+	}
+	return strings.EqualFold(x.Provider, y.Provider) && strings.EqualFold(x.URL, y.URL)
+}
+
+// freeName is a name for a that no other account has (skip is its own
+// place, -1 for a new one): its own, else with where it is
+// ("sam@example.org (iCloud)"), else numbered.
+func (cfg svcConfig) freeName(a svcAccount, skip int) string {
+	taken := func(n string) bool { i := cfg.index(n); return i >= 0 && i != skip }
+	if !taken(a.Name) {
+		return a.Name
+	}
+	where, known := tr("en", "calp."+a.Provider), a.Provider != "" && a.Provider != "caldav"
+	if !known || where == "calp."+a.Provider {
+		where = cmpOr(a.Provider, "2")
+		if u, err := url.Parse(a.URL); err == nil && u.Hostname() != "" {
+			where = u.Hostname()
+		}
+	}
+	base := a.Name + " (" + where + ")"
+	if !taken(base) {
+		return base
+	}
+	for n := 2; ; n++ {
+		if s := fmt.Sprintf("%s %d", base, n); !taken(s) {
+			return s
+		}
+	}
 }
 
 // accountEnv is the variable of an account's secret: the stem, and a hash
@@ -217,8 +256,10 @@ type accountPut struct {
 }
 
 // putAccount adds an account to its service's server, made if need be, or
-// changes one. A Google account connected again (Secret) replaces an
-// account of the same name.
+// changes one. A Google account connected again (Secret) replaces the
+// account of its address; two calendars of one address (an Apple
+// account's, a Google account's) are two accounts, the Google one named
+// by the address and the other named apart (freeName).
 func (c *core) putAccount(svc accountService, in accountPut) error {
 	st, exists := c.serviceServer(svc)
 	a := in.Account
@@ -236,18 +277,47 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 			return errAccountUnknown
 		}
 	}
+	cfg.Accounts = slices.Clone(cfg.Accounts)
+	access := map[string]string{}
+	for k, v := range st.Server.AccountAccess {
+		access[k] = v
+	}
+	var renamed [2]string // an account of another kind that gave its name to a Google account
 	if same := cfg.index(a.Name); same >= 0 && same != at {
-		if in.Secret == nil {
+		other := cfg.Accounts[same]
+		switch {
+		case svc.sameAccount(other, a) && in.Secret == nil:
 			return errAccountExists
+		case svc.sameAccount(other, a):
+			at = same // the same address connected with Google: it takes its place
+		case in.Secret != nil && !other.google():
+			// A Google account is named by its address (google.go finds
+			// it so): the other one, an Apple calendar of the same
+			// address, takes another name and keeps its secret and level.
+			name := cfg.freeName(other, -1) // its own name counts: it gives it up
+			for k, v := range access {
+				if strings.EqualFold(k, other.Name) {
+					delete(access, k)
+					access[name] = v
+				}
+			}
+			renamed = [2]string{other.Name, name}
+			cfg.Accounts[same].Name = name
+		default:
+			for i, x := range cfg.Accounts { // already named apart
+				if i != at && svc.sameAccount(x, a) && strings.EqualFold(x.Username, a.Username) && in.Secret == nil {
+					return errAccountExists
+				}
+			}
+			a.Name = cfg.freeName(a, at) // two calendars of one address
 		}
-		at = same // the same address connected with Google: it takes its place
 	}
 	var old svcAccount
 	level := in.Level
 	if at >= 0 {
 		old = cfg.Accounts[at]
 		if level == "" {
-			level = st.level(old.Name)
+			level = svcServer{Server: Server{Access: st.Server.Access, AccountAccess: access}}.level(old.Name)
 		}
 	}
 	if level == "" {
@@ -287,7 +357,7 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 		cfg.Timezone = cmpOr(in.Timezone, cmpOr(cfg.Timezone, c.conf().TimeZone))
 	}
 	levels := map[string]string{}
-	for k, v := range st.Server.AccountAccess {
+	for k, v := range access {
 		if !strings.EqualFold(k, old.Name) || old.Name == "" {
 			levels[k] = v
 		}
@@ -301,7 +371,28 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 	if old.Name != "" && !strings.EqualFold(old.Name, a.Name) {
 		c.store.forgetAccountActions(st.Name, old.Name)
 	}
+	if renamed[0] != "" {
+		c.renameAccountRefs(st.Name, renamed[0], renamed[1])
+	}
 	return nil
+}
+
+// renameAccountRefs has what named an account of a server by its name —
+// its actions allowed for good, the watches reading it — name it by its
+// new one.
+func (c *core) renameAccountRefs(server, from, to string) {
+	c.store.db.Exec(`UPDATE remembered_actions SET account = ? WHERE server = ? AND account = ? COLLATE NOCASE`, to, server, from)
+	c.updateWatches(func(spec map[string]any) bool {
+		args, _ := spec["args"].(map[string]any)
+		if spec["server"] != server || args == nil {
+			return false
+		}
+		if name, _ := args["account"].(string); !strings.EqualFold(name, from) {
+			return false
+		}
+		args["account"] = to
+		return true
+	})
 }
 
 // dropAccount takes an account out of its service's server; the server
