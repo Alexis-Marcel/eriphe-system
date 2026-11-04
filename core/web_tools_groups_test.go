@@ -8,51 +8,63 @@ import (
 
 func TestGroupTools(t *testing.T) {
 	p := func(id string) toolPreset { x, _ := presetByID(id); return x }
-	row := func(name, preset, detail, google string) toolView {
-		return toolView{serverView: serverView{serverInfo: serverInfo{Name: name}}, Preset: p(preset), Detail: detail, Google: google}
+	row := func(name, preset, detail string) toolView {
+		return toolView{serverView: serverView{serverInfo: serverInfo{Name: name}}, Preset: p(preset), Detail: detail}
+	}
+	svc := func(name, service, owner, provider, google string) toolView {
+		t := row(name, service, "")
+		t.Service, t.Label, t.Owner, t.Provider, t.Google = service, service, owner, provider, google
+		if google != "" {
+			t.Preset = p("google")
+		}
+		return t
 	}
 	tools := []toolView{
-		row("mail", "mail", "Gmail · sam@example.org", ""),
-		row("agenda", "calendar", "iCloud · sam@icloud.example", ""),
-		row("mail-pro", "mail", "Fastmail · sam@pro.example", ""),
-		row("gmail", "google", "Gmail · bob@example.org", "bob@example.org"),
-		row("notion", "notion", "Notion", ""),
-		row("agenda-bob", "google", "Google Agenda · bob@example.org", "bob@example.org"),
-		row(filesServer, "gdrive", "Google Drive · 2 dossiers", ""),
-		row("x", "remote", "", ""),
-		row("y", "remote", "", ""),
+		svc("agenda", "calendar", "sam@example.org", "google", "sam@example.org"),
+		svc("agenda", "calendar", "sam@example.org", "icloud", ""), // an Apple calendar of the same address
+		svc(filesServer, "drive", "sam@example.org", "google", "sam@example.org"),
+		svc(filesServer, "drive", "bob@example.org", "google", "bob@example.org"),
+		row("gh-1", "github", "GitHub · acme"),
+		svc("mail", "mail", "SAM@example.org", "google", "sam@example.org"),
+		svc("mail", "mail", "sam@example.org", "icloud", ""),
+		svc("mail", "mail", "pro@example.net", "ovh", ""),
+		row("notion", "notion", "Notion"),
+		row("gh-2", "github", "GitHub · sam"),
+		row("x", "remote", ""),
 	}
-	tools[5].Reconnect = true
-	groups := groupTools("fr", tools)
+	tools[3].Reconnect = true
+	groups := groupTools(tools)
 	var got []string
 	for _, g := range groups {
-		if g.Single != nil {
+		switch {
+		case g.Owner != "":
+			got = append(got, g.Provider+":"+g.Owner+"["+strings.Join(g.Services(), "+")+"]")
+		case g.Single != nil:
 			got = append(got, g.Single.Name)
-			continue
-		}
-		var accounts []string
-		for _, a := range g.Accounts {
-			var names []string
-			for _, t := range a.Tools {
-				names = append(names, t.Name)
+		default:
+			var accounts []string
+			for _, a := range g.Accounts {
+				accounts = append(accounts, a.Label)
 			}
-			accounts = append(accounts, a.Label+"="+strings.Join(names, "+"))
+			got = append(got, g.Preset.ID+"["+strings.Join(accounts, ",")+"]")
 		}
-		got = append(got, g.Preset.ID+"["+strings.Join(accounts, ",")+"]")
 	}
-	want := "mail[sam@example.org=mail,sam@pro.example=mail-pro] agenda google[bob@example.org=gmail+agenda-bob,Google Drive=fichiers] notion x y"
+	want := "google:sam@example.org[mail+calendar+drive] icloud:sam@example.org[mail+calendar] google:bob@example.org[drive] github[acme,sam] ovh:pro@example.net[mail] notion x"
 	if strings.Join(got, " ") != want {
 		t.Fatalf("groups:\n%s\nwant\n%s", strings.Join(got, " "), want)
 	}
-	if !groups[2].Accounts[0].Reconnect || groups[2].Accounts[1].Reconnect {
-		t.Fatal("reconnect")
+	sam, apple, bob, ovh := groups[0], groups[1], groups[2], groups[4]
+	if sam.Google != "sam@example.org" || sam.Reconnect || len(sam.Others) != 0 {
+		t.Errorf("sam: %+v", sam)
 	}
-	if groups[0].AddURL() != "/settings/tools/new?preset=mail" || !groups[0].AddStep() || groups[2].AddURL() != "/settings/google" || groups[2].AddStep() {
-		t.Fatalf("add: %s %s", groups[0].AddURL(), groups[2].AddURL())
+	if bob.Google != "bob@example.org" || !bob.Reconnect || strings.Join(bob.Others, ",") != "mail,calendar" {
+		t.Errorf("bob: reconnect %v, others %v", bob.Reconnect, bob.Others)
 	}
-	// Drive alone, without Google accounts, is its own kind.
-	if g := groupTools("fr", []toolView{tools[6]}); len(g) != 1 || g[0].Single == nil || g[0].Preset.ID != "gdrive" {
-		t.Fatalf("drive alone: %+v", g)
+	if apple.Google != "" || apple.Others != nil || ovh.Google != "" {
+		t.Error("an account of no Google has Google's actions")
+	}
+	if apple.Key() == sam.Key() {
+		t.Error("two cards, one id")
 	}
 }
 
@@ -71,16 +83,26 @@ func TestToolsListGroupsAccounts(t *testing.T) {
 	}
 	gmail, fastmail := rowKey("mail", "sam@gmail.com"), rowKey("mail", "sam@fastmail.com")
 	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
-	i := strings.Index(body, `id="group-mail"`)
-	if i < 0 {
-		t.Fatalf("no group: %s", body)
-	}
-	group := body[i:]
-	for _, want := range []string{"2 comptes · 2 outils", "Ajouter un compte", `href="/settings/tools/new?preset=mail" data-step-open="add-dlg"`,
-		`id="tool-` + gmail + `"`, `id="tool-` + fastmail + `"`, "Gmail · sam@gmail.com", "Fastmail · sam@fastmail.com",
-		`/settings/tools/mail/edit?account=sam%40fastmail.com`, `<input type="hidden" name="account" value="sam@fastmail.com">`} {
-		if !strings.Contains(group, want) {
-			t.Errorf("the group lacks %q", want)
+	// A card for each account: a Gmail on a password is the Google
+	// account's mailbox, the Fastmail one Fastmail's.
+	for _, c := range []struct{ card, row, head, product, edit string }{
+		{rowKey("acct", "google:sam@gmail.com"), gmail, "sam@gmail.com", "Google · Mail", "sam%40gmail.com"},
+		{rowKey("acct", "fastmail:sam@fastmail.com"), fastmail, "sam@fastmail.com", "Fastmail · Mail", "sam%40fastmail.com"},
+	} {
+		i := strings.Index(body, `id="`+c.card+`"`)
+		if i < 0 {
+			t.Fatalf("no card for %s: %s", c.head, mainPart(t, body))
+		}
+		card := body[i:]
+		card = card[:strings.Index(card, "</ul>")]
+		for _, want := range []string{`<h3 id="` + c.card + `-t">` + c.head + `</h3>`, c.product, `id="tool-` + c.row + `"`, "<h3>Mail</h3>",
+			`/settings/tools/mail/edit?account=` + c.edit, `pmark-`} {
+			if !strings.Contains(card, want) {
+				t.Errorf("the card of %s lacks %q", c.head, want)
+			}
+		}
+		if strings.Contains(card, "Ajouter à ce compte") || strings.Contains(card, `href="/settings/google"`) {
+			t.Errorf("the card of %s has a Google account's actions", c.head)
 		}
 	}
 	if strings.Count(body, `id="tool-`+gmail+`"`) != 1 {

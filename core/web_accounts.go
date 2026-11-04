@@ -70,6 +70,66 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView, voice bool) 
 			t.Google, t.Reconnect = g.Email, g.Reconnect != ""
 		}
 		t.Scope = tokenScope{}
+		t.Service, t.Label = svc.ID, tr(lang, "acct.svc."+svc.ID)
+		t.Owner, t.Provider = accountOwner(svc, a)
+		t.Mark, t.Detail = svc.ID, accountProduct(lang, svc, a)
+		out = append(out, t)
+	}
+	return out
+}
+
+// accountOwner is the account a mailbox or a calendar is of, for its card:
+// its address, and who gives it (a Gmail on a password is the Google
+// account's mailbox all the same).
+func accountOwner(svc accountService, a svcAccount) (address, provider string) {
+	address, provider = a.Name, a.Provider
+	switch {
+	case a.google():
+		return a.Name, "google"
+	case svc == mailService:
+		f, _ := mailFormOf(a)
+		address, provider = cmpOr(a.Address, a.Name), f.Provider
+	case strings.Contains(a.Username, "@"):
+		address = a.Username
+	}
+	if provider == "gmail" {
+		provider = "google"
+	}
+	return address, cmpOr(provider, "other")
+}
+
+// accountProduct is the line of a service in its account's card: what it
+// is at its provider ("Gmail", "Google Agenda", "iCloud").
+func accountProduct(lang string, svc accountService, a svcAccount) string {
+	switch {
+	case a.google():
+		return tr(lang, "google."+svc.Google)
+	case svc == mailService:
+		f, _ := mailFormOf(a)
+		return tr(lang, "mailp."+f.Provider)
+	}
+	return tr(lang, "calp."+a.Provider)
+}
+
+// driveRows are the rows of Google Drive: one under each Google account
+// whose Drive it reads, with that account's folders.
+func (w *web) driveRows(lang string, conf *Config, sv serverView, voice bool, fc filesConfig) []toolView {
+	var out []toolView
+	for _, a := range fc.Accounts {
+		t := w.toolRow(lang, conf, sv, voice)
+		n := 0
+		for _, f := range fc.Folders {
+			if strings.EqualFold(f.Account, a.Name) || f.Account == "" && len(fc.Accounts) == 1 {
+				n++
+			}
+		}
+		t.Drive, t.Service, t.Label, t.Mark = a.Name, googleDrive, tr(lang, "acct.svc."+googleDrive), "gdrive"
+		t.Owner, t.Provider = a.Name, "google"
+		t.Detail = tr(lang, "preset.gdrive.title") + " · " + driveCount(lang, n)
+		t.Google, t.Reconnect = a.Name, false
+		if g, ok := w.c.googleAccount(a.Name); ok {
+			t.Reconnect = g.Reconnect != ""
+		}
 		out = append(out, t)
 	}
 	return out
@@ -77,14 +137,22 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView, voice bool) 
 
 // toolRows are the rows of one server of the list.
 func (w *web) toolRows(lang string, conf *Config, sv serverView, voice bool) []toolView {
-	if _, _, ok := accountsOf(conf.Servers[sv.Name]); ok {
+	srv := conf.Servers[sv.Name]
+	if _, _, ok := accountsOf(srv); ok {
 		return w.accountRows(lang, conf, sv, voice)
+	}
+	if fc, ok := filesConfigOf(srv); ok && len(fc.Accounts) > 0 && w.c.source(kindServer, sv.Name) == sourceWorkspace {
+		return w.driveRows(lang, conf, sv, voice, fc)
 	}
 	return []toolView{w.toolRow(lang, conf, sv, voice)}
 }
 
 // Key names the row in its ids: the tool, or the tool and its account.
-func (t toolView) Key() string { return rowKey(t.Name, t.Account) }
+func (t toolView) Key() string { return rowKey(t.Name, t.rowAccount()) }
+
+// rowAccount is the account the row is of its server: an account of the
+// mail or the calendar, or the Google account of a Drive row.
+func (t toolView) rowAccount() string { return cmpOr(t.Account, t.Drive) }
 
 // accountQuery is "?account=…" for an account's row, "" for a tool's.
 func accountQuery(account string) string {
@@ -112,11 +180,12 @@ func editHash(name, account string) string {
 
 // RowURL is the row alone, asked again while it is followed.
 func (t toolView) RowURL() string {
-	return "/settings/tools/" + t.Name + "/row" + accountQuery(t.Account)
+	return "/settings/tools/" + t.Name + "/row" + accountQuery(t.rowAccount())
 }
 
-// Title is the row's heading: the tool's name, or the account's.
-func (t toolView) Title() string { return cmpOr(t.Account, t.Name) }
+// Title is the row's heading: in an account's card, its service ("Mail");
+// else the tool's name.
+func (t toolView) Title() string { return cmpOr(t.Label, cmpOr(t.Account, t.Name)) }
 
 // accountOfRequest is the account a request is about (?account=, or the
 // form's account), as the server has it; "" for a server without accounts

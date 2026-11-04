@@ -181,7 +181,7 @@ func (w *web) handleToolRow(rw http.ResponseWriter, r *http.Request, s *session)
 			continue
 		}
 		for _, t := range w.toolRows(lang, w.c.conf(), sv, w.c.store.get(voiceTokenKey) != "") {
-			if !strings.EqualFold(t.Account, account) {
+			if !strings.EqualFold(t.rowAccount(), account) {
 				continue
 			}
 			st := statusOf(lang, sv)
