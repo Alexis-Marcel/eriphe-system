@@ -203,6 +203,13 @@ func TestGoogleAccounts(t *testing.T) {
 	if _, body, _ = tw.do("GET", "/settings/google", nil, nil); !strings.Contains(body, "nasa") || strings.Contains(body, "Démarrage…") {
 		t.Fatalf("failed: %s", body)
 	}
+	// In the tools list, a row says the state of its service on its
+	// machine, never which service of the account it is.
+	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
+	if strings.Contains(body, "service.mail") || strings.Contains(body, "service.calendar") || strings.Contains(body, "service.drive") ||
+		strings.Count(body, " · "+tr("fr", "service."+stateFailed)) < 3 {
+		t.Fatalf("service state: %s", body[strings.Index(body, `id="tools-list"`):strings.Index(body, `id="add-dlg"`)])
+	}
 
 	// A second account, for mail: one more account of the same server.
 	g.email, g.scope, g.refresh = "bob@example.org", scopeMail, "bob-refresh"

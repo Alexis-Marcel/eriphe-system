@@ -13,7 +13,7 @@ func TestGroupTools(t *testing.T) {
 	}
 	svc := func(name, service, owner, provider, google string) toolView {
 		t := row(name, service, "")
-		t.Service, t.Label, t.Owner, t.Provider, t.Google = service, service, owner, provider, google
+		t.Part, t.Label, t.Owner, t.Provider, t.Google = service, service, owner, provider, google
 		if google != "" {
 			t.Preset = p("google")
 		}

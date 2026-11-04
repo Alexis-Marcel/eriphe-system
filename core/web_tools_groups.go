@@ -61,7 +61,7 @@ func (g toolGroup) Tools() []toolView {
 		out = append(out, a.Tools...)
 	}
 	slices.SortStableFunc(out, func(x, y toolView) int {
-		return slices.Index(googleServices, x.Service) - slices.Index(googleServices, y.Service)
+		return slices.Index(googleServices, x.Part) - slices.Index(googleServices, y.Part)
 	})
 	return out
 }
@@ -95,7 +95,7 @@ func accountLabel(t toolView) string {
 
 // ownerKey is the card of an account a row is a service of; "" for a tool.
 func ownerKey(t toolView) string {
-	if t.Service == "" || t.Owner == "" {
+	if t.Part == "" || t.Owner == "" {
 		return ""
 	}
 	return t.Provider + ":" + strings.ToLower(t.Owner)
@@ -167,7 +167,7 @@ func groupTools(tools []toolView) []toolGroup {
 		if g.Owner != "" {
 			if g.Google != "" {
 				for _, s := range googleServices {
-					if !slices.ContainsFunc(g.Accounts[0].Tools, func(t toolView) bool { return t.Service == s }) {
+					if !slices.ContainsFunc(g.Accounts[0].Tools, func(t toolView) bool { return t.Part == s }) {
 						g.Others = append(g.Others, s)
 					}
 				}

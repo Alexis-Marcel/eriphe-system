@@ -123,7 +123,7 @@
       </p>
       {{if .Scope.Reconnect}}<p class="small notice-line">{{tf "access.reconnect" .Name}}{{if eq .Preset.Form "drive"}} <a href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</p>{{end}}
       {{with .Follow}}{{template "tool-status-line" .}}
-      {{else}}{{if and .Reconnect .Service}}{{else if .Reconnect}}<p class="small notice-line">{{tf "google.rowreconnect" .Google}}</p>
+      {{else}}{{if and .Reconnect .Part}}{{else if .Reconnect}}<p class="small notice-line">{{tf "google.rowreconnect" .Google}}</p>
       {{else if .Problem}}<div class="problem small"><p class="problem-text">{{.Problem}}</p>{{with .Error}}<details class="problem-details"><summary>{{t "problem.details"}}</summary><code>{{short . 1200}}</code></details>{{end}}</div>
       {{else if .Pending}}<p class="small muted">{{if .Placed}}{{t "problem.tool.pending"}}{{else}}{{t "tools.pendinghint"}}{{end}}</p>
       {{else if eq .SignIn "reconnect"}}<p class="small notice-line">{{t "tools.expired"}}</p>
@@ -132,10 +132,10 @@
       <div id="connect-{{.Key}}" class="connect-box"></div>
     </div>
     <div class="tool-actions">
-      {{if eq .SignIn "google"}}{{if not .Service}}{{template "google-reconnect" dict "Account" .Google "Target" (printf "connect-%s" .Key) "Back" "/settings/tools"}}{{end}}
+      {{if eq .SignIn "google"}}{{if not .Part}}{{template "google-reconnect" dict "Account" .Google "Target" (printf "connect-%s" .Key) "Back" "/settings/tools"}}{{end}}
       {{else}}{{with .SignIn}}<form hx-post="/settings/servers/{{$.Name}}/connect" hx-target="#connect-{{$.Key}}" hx-disabled-elt="find button" class="inline">
         <button class="btn btn-primary sm" type="submit">{{t (printf "tools.%s" .)}}</button></form>{{end}}{{end}}
-      {{if and (eq .Preset.ID "google") (eq .Source "workspace") (not .Service)}}<a class="btn btn-ghost sm" href="/settings/google">{{t "google.manage"}}</a>{{end}}
+      {{if and (eq .Preset.ID "google") (eq .Source "workspace") (not .Part)}}<a class="btn btn-ghost sm" href="/settings/google">{{t "google.manage"}}</a>{{end}}
       {{if eq .Preset.ID "home-assistant"}}<a class="btn btn-ghost sm" href="/settings/home-assistant">{{t "ha.manage"}}</a>{{end}}
       {{if eq .Preset.ID "github"}}{{if eq .Auth "github-app"}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>
       {{else if eq .Source "workspace"}}<a class="btn btn-soft sm" href="/settings/github?switch={{.Name}}#gh-conn-{{.Name}}">{{t "github.switch"}}</a>
