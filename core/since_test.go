@@ -180,7 +180,8 @@ func TestLastAbsenceIn(t *testing.T) {
 func TestSinceTrust(t *testing.T) {
 	c := feedCore(t)
 	c.notifyClock = func() time.Time { return at(t, "2026-11-04", "10:00") }
-	ownerSays(c, "Qu'est-ce qui s'est passé ?")
+	// The question is dated before the window, not at the wall clock's time.
+	setTime(t, c, `UPDATE messages SET time = ? WHERE seq = ?`, at(t, "2026-11-04", "06:59"), ownerSays(c, "Qu'est-ce qui s'est passé ?"))
 	out, err := c.brainSince(sinceIn{T: "2026-11-04T07:00"})
 	if err != nil {
 		t.Fatal(err)
