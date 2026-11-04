@@ -463,7 +463,7 @@ installer puts on the host side, does the rest, as root there:
 | Linux | `/opt/eriphe/update.sh`, run by `eriphe-update.service` (systemd) | when a request is dropped (`eriphe-update.path`), and every 10 minutes (`eriphe-update.timer`) |
 | macOS with Apple's container | `~/.eriphe/update.sh`, run by the LaunchAgent `org.eriphe.update`: the new `eriphe-node` (and `eriphe-core`) taken from their images, restarted and checked, the previous ones kept in `~/.eriphe/update/previous.*` | when a request is dropped (`WatchPaths`), and every 10 minutes |
 | macOS in Lima's VM | the same as Linux, in the VM (Ubuntu, systemd): nothing more on the Mac | the same |
-| Windows | `/usr/local/bin/eriphe-update` in the distribution | every 20 s, a loop that the scheduled task starts with eriphe-node |
+| Windows | the launcher's, in the distribution: as One container below (an install from before the launcher: `/usr/local/bin/eriphe-update`, until it moves to it) | when a request is dropped (it looks every 5 s) |
 | One container | `install.sh`'s updater, in `/data/launcher/update.sh`, run by the launcher, which then updates itself ([One container](#one-container-nas-any-linux-with-docker)) | when a request is dropped (it looks every 5 s) |
 
 How a request goes:
@@ -481,9 +481,8 @@ How a request goes:
    refused ("refused": a node is never newer than eriphe-core). Nothing new, or the same build
    under another image (a release built again): "current", and nothing is recreated.
 3. It recreates the containers, eriphe-core first, and checks them: eriphe-core answers on
-   `/health`, eriphe-node says `connected to` again, within 3 minutes (Windows: the binary is
-   swapped and eriphe-node restarted; eriphe-core's container recreated).
-4. If a check fails, it puts the previous images (or binary) back, recreates and checks again:
+   `/health`, eriphe-node says `connected to` again, within 3 minutes.
+4. If a check fails, it puts the previous images back, recreates and checks again:
    "rolled_back", or "rollback_failed" if even that does not come back. That version is noted as
    failed: the night skips it, "Update now" does not.
 5. An updater that stopped before its end (killed, the machine restarted) leaves "running": the
@@ -496,7 +495,8 @@ How a request goes:
    node runs again.
 6. It writes the outcome next to the request (`update-status`), which the node reports and
    eriphe-core shows on the machine's line, with the versions before and after. Its log is
-   `/var/lib/eriphe/update/update.log` (Windows: `/var/lib/eriphe-update/update.log`).
+   `/var/lib/eriphe/update/update.log` (one container, Windows included: the launcher's log,
+   `docker logs eriphe`).
 
 The previous images stay, tagged `eriphe-previous-core` or `eriphe-previous-node`: "Go back to the
 previous version", or `--rollback` (`-Rollback`) on the machine, puts them back, checks the same
@@ -516,7 +516,7 @@ images (or binaries) pass their check, and also on an update that finds the buil
 |---|---|---|
 | Linux, and in Lima's VM | the image's `install.sh --layout`: the same compose project, `.env`, units, `eriphe-share` as an install writes, with the images in place (only a new component's image, Syncthing's, is pulled), then up and checked | root, as it runs |
 | macOS with Apple's container | the image's `install.sh --layout`: the settings, the LaunchAgents and the components (Syncthing, checked against its checksum and Kastelo AB's signature as an install checks it), with the binaries in place; its own LaunchAgent is rewritten, loaded as it is at the next login | you, as it runs |
-| Windows | the distribution's setup of the image's `install.ps1` (its scripts, this updater too, the settings every node has, Syncthing's build, checked against its checksum), then `eriphe-node-run` again | root in the distribution |
+| Windows | as one container below; an install from before the launcher: the distribution's setup of the image's `install.ps1`, then `eriphe-node-run` again, which moves it to the launcher ([Windows](#windows)) | root in the distribution |
 | One container | nothing: eriphe-launcher writes the layout of its own install.sh at every start, and updates itself after the machine (its new image's layout, with Syncthing's image pulled) | |
 
 The updater's lock is held throughout, what the layout rewrites is kept, and if a step fails it is
@@ -619,7 +619,6 @@ The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nod
 | `--no-model-server` | `-ModelServer none` | lend no model server any more |
 | `--uninstall` | `-Uninstall` | remove everything the script installed |
 | | `-Rejoin` | with a rejoin token: drop the node's identity and join again under `-Name` |
-| | `-Binary <path>` | a Linux eriphe-node binary, instead of the one in `ghcr.io/alexis-marcel/eriphe-node` |
 | | `-Distro <name>` | another distribution than `eriphe` (its task and rules get their own names) |
 
 In PowerShell a comma makes a list: quote `-Core` and `-Labels` when they hold one.
@@ -842,31 +841,17 @@ The address is the one eriphe-node reaches:
 - **A Mac with Apple's container**: eriphe-node runs on the Mac itself: Ollama for macOS listens on
   `127.0.0.1:11434` by default, give `--model-server http://127.0.0.1:11434`. (A Mac in Lima's VM:
   the address the VM reaches, as on Linux.)
-- **Windows**: eriphe-node runs in the `eriphe` WSL distribution, behind a NAT of its own by
-  default, where `127.0.0.1` is the distribution, not Windows. Ollama for Windows is at
-  `-ModelServer http://127.0.0.1:11434` once WSL uses **mirrored networking** (Windows 11 22H2 or
-  later):
+- **Windows**: eriphe-node runs in a container in the `eriphe` WSL distribution, as on Linux:
+  `127.0.0.1` is the container, not Windows, and the node does not reach Windows' own loopback
+  even with WSL's mirrored networking. Run Ollama as a container in the distribution, on
+  Eriphe's network, as for Linux above (`wsl -d eriphe -- docker run ...`), and give
+  `-ModelServer http://eriphe-ollama:11434`. **Ollama for Windows can no longer be lent**: a
+  loopback address is refused, and an earlier install's is dropped, with a notice. Ollama in the
+  distribution sees no GPU by itself (it would need NVIDIA's container toolkit there, which the
+  installer does not set up): it runs on the processor.
 
-  1. Add to `%USERPROFILE%\.wslconfig` (create the file if it is not there; WSL reads it only in
-     the `[wsl2]` section):
-
-     ```ini
-     [wsl2]
-     networkingMode=mirrored
-     ```
-
-  2. Run `wsl --shutdown`: WSL reads the file only when it starts again. It stops every
-     distribution, and the setting applies to all of them, not only Eriphe's.
-  3. Run the install command again with `-ModelServer http://127.0.0.1:11434`.
-
-  Ollama for Windows runs in your session only: it starts when you log in and stops when you log
-  out, while eriphe-node runs at boot, logged in or not. Add Ollama to your startup programs
-  (Win+R, `shell:startup`, and put a shortcut to Ollama there), and stay logged in (a locked
-  screen is fine) whenever Eriphe should use it.
-
-At the end, the installer says whether the model server answers eriphe-node: "Lends the model
-server at … (answers: yes)". With "no", start the server or check the address; on Windows, with a
-loopback address and no mirrored networking, it says to turn it on.
+At the end, the Linux installer says whether the model server answers eriphe-node: "Lends the
+model server at … (answers: yes)". With "no", start the server or check the address.
 
 ### Ollama's settings
 
@@ -926,25 +911,30 @@ machine around them shows depends on the OS:
 
 ## Windows
 
-`install.ps1` creates its own WSL distribution, `eriphe` (Alpine, Docker Engine, eriphe-node),
-without Docker Desktop, and a scheduled task that starts it with Windows, logged in or not.
+`install.ps1` creates its own WSL distribution, `eriphe` (Alpine, Docker Engine), without Docker
+Desktop, and a scheduled task that starts it with Windows, logged in or not. The distribution is a
+Linux machine with Docker like any other: it runs Eriphe's launcher
+([One container](#one-container-nas-any-linux-with-docker)), which makes and keeps running
+eriphe-node engine, eriphe-node, Syncthing and, in core mode, eriphe-core, with its data in
+`/var/lib/eriphe` there. eriphe-node runs in a container, with neither the Docker socket nor
+anything of Windows but what the launcher gives it; eriphe-node engine, the only one with the
+socket, gives a task only the folders shared. What only Windows can do stays in `install.ps1`: the
+scheduled tasks, the session helper, the Explorer's menu, the network card to wake (Windows'
+own, which the launcher in WSL cannot see: `ERIPHE_WAKE_MAC`), and the ports of core mode.
 
 The distribution sees no Windows drive. Only the folder of the user signed in at the PC
-(`C:\Users\<you>`) is mounted, for eriphe-node alone, as the one place folders may be shared from:
+(`C:\Users\<you>`) is mounted, at `/mnt/eriphe/home`, as the one place folders may be shared from:
 right-click a folder of it in File Explorer, "Show more options", "Share with Eriphe...": a small
 window asks for the level (read, next to it, manage) and whether it may be copied to your other
 machines, then says how it went. A task gets only the folders
-shared this way. The menu is that user's (their registry); it works when that user is the one who
+shared this way: the menu runs the launcher's `eriphe share add` (`wsl -d eriphe eriphe-share add
+/mnt/eriphe/home/<folder>` does the same). The menu is that user's (their registry); it works when that user is the one who
 installed Eriphe (the distribution is theirs). Folders elsewhere (another drive, Documents moved
 off the user folder) cannot be shared yet.
 
-For the copies of shared folders on your other machines (node/README.md, Copies), the distribution
-runs Syncthing 2.1.7, its official Linux build checked against the SHA-256 of the release's
-`sha256sum.txt.asc` written in the script (`/usr/local/lib/eriphe/syncthing`, home
-`/var/lib/eriphe-syncthing`, log `/var/log/eriphe-syncthing.log`), started with the node by
-`eriphe-node-run`, its API and its listening address on the loopback only, discovery, relays, NAT
-traversal and upgrades off. It sees only what the distribution sees: your user folder and the
-node's copies.
+For the copies of shared folders on your other machines (node/README.md, Copies), the launcher
+runs Syncthing in its container, as on Linux: it sees the folders it may copy and the node's
+copies, nothing else.
 
 `irm <url> | iex` takes no parameters: they go in `ERIPHE_*` variables, as in the commands above.
 Each parameter has its own: `-Core` `ERIPHE_CORE`, `-JoinToken` `ERIPHE_JOIN_TOKEN`, `-Name`
@@ -983,7 +973,7 @@ there and [open an issue](https://github.com/Alexis-Marcel/eriphe-system/issues)
 it shows (a false positive is reported to Microsoft from there).
 
 **Core mode** (`-CoreMode`): eriphe-core runs as a container in the distribution, with its data in
-`/var/lib/eriphe-core` there and no configuration file, and this machine's node joins it by itself.
+`/var/lib/eriphe/core` there and no configuration file, and this machine's node joins it by itself.
 
 **WSL missing.** The script installs it (`wsl --install --no-distribution`, or on a Windows whose
 `wsl.exe` refuses it, the Windows features and then `wsl --update` after the restart). On a PC set
@@ -995,12 +985,26 @@ next logon of the same user, in a window (`powershell -File`, the parameters aft
 removes the task and the copy. Under `irm | iex` there is no script text to save: the copy is
 downloaded again from the latest release.
 
-**eriphe-node** comes from its image: dockerd pulls `ghcr.io/alexis-marcel/eriphe-node` in the
-distribution and the binary is copied out of it (`docker create`, `docker cp`). The running node is
-stopped only once the new binary is there, so a failed pull changes nothing.
+**The images**: dockerd pulls `ghcr.io/alexis-marcel/eriphe` (the launcher) and
+`ghcr.io/alexis-marcel/eriphe-node` (for the session helper it carries, below) in the
+distribution; the launcher pulls the others. Eriphe is stopped only once they are there, so a
+failed pull changes nothing.
 
-**Running it again** updates eriphe-node (and in core mode eriphe-core, whose container is created
-again only when its image changed) and keeps the node's identity.
+**Running it again** writes the settings again (`/etc/eriphe-node.env` in the distribution), makes
+the launcher's container again with them (`eriphe-node-run` does, from that file), and keeps the
+node's identity; the launcher brings the rest to its version.
+
+**From before the launcher.** An install of an earlier version ran eriphe-node as a binary in the
+distribution, as root, next to dockerd, with its own updater. Running the install command again
+moves it to the launcher; so does its own updater, at its next update, once a release raises the
+layout: the new `eriphe-node-run` stops that node, eriphe-core and Syncthing, moves their data
+(`/var/lib/eriphe-node`, `/var/lib/eriphe-core`, `/var/lib/eriphe-syncthing`) into
+`/var/lib/eriphe`, leaves a link at each old path, and starts the launcher, whose list of the
+folders shared starts from the node's. The node keeps its identity, eriphe-core its data, Syncthing
+its copies. Once the node is connected through the launcher, what the old install left goes (the
+binary, its updater, its Syncthing build). If the node does not connect within 150 s while the old
+updater waits for it, the move is undone (data back, eriphe-core of before started again) and that
+updater puts the old install back, as for any failed update.
 
 **From the LAN to eriphe-core (core mode).** WSL 2 puts the distribution behind a NAT of its own
 that only Windows' localhost reaches. Windows forwards ports 8800 (API, nodes) and 8443 (or `-ApiPort`, `-WebPort`)
@@ -1019,14 +1023,16 @@ installing user without a session (S4U). It runs `wsl.exe -d eriphe -u root --ex
 /usr/local/bin/eriphe-node-run` (in core mode without mirrored networking, the forwarding script
 above), at boot and every minute: a run that is still going is left alone, so the distribution
 starts again within a minute after it stops (a `wsl --shutdown` included). Stop it with
-`Disable-ScheduledTask`, then `Stop-ScheduledTask`. Inside, a loop restarts
-eriphe-node, and another runs the updater (`eriphe-update`, every 20 s): it pulls eriphe-node's
-image, swaps the binary (the previous one stays in `/var/lib/eriphe-update`), and in core mode
-recreates eriphe-core's container (`eriphe-core-run`), as the install does.
+`Disable-ScheduledTask`, then `Stop-ScheduledTask`. `eriphe-node-run` mounts Windows' two folders
+(below), starts dockerd and the launcher's container (made again from `/etc/eriphe-node.env` when
+there is none), then stays to copy eriphe-node's log to `/var/log/eriphe-node.log`; stopped, it
+stops Eriphe's containers. The launcher applies the updates ([One container](#one-container-nas-any-linux-with-docker)),
+and updates itself after.
 
 **Sleep.** A second scheduled task, "Eriphe awake" (or "Eriphe awake (<distribution>)"), runs
 `%ProgramData%\eriphe-node\boot\<distribution>-awake.ps1` with the same triggers: every 30 s it
-asks the distribution whether eriphe-node has a task at work (`/var/lib/eriphe-node/awake`) and,
+asks the distribution whether eriphe-node has a task at work (`/var/lib/eriphe-node/awake`, a link
+to the node's data in `/var/lib/eriphe/node`) and,
 while it has, keeps Windows out of sleep (`SetThreadExecutionState`); after, Windows sleeps as it
 is set to (node/README.md, Sleep).
 
@@ -1039,11 +1045,11 @@ cleanly with the uninstall). Every 5 s it writes, in `%ProgramData%\eriphe-node\
 whether they are idle or locked and not to be disturbed (a game or an app in fullscreen), and the
 category of the app in front, never its name ([node/README.md](../node/README.md), The user's
 session). That folder is the user's to write, the installing account's to read, nobody else's;
-the distribution mounts it alone, read-only, at `/mnt/eriphe-session` (`ERIPHE_SESSION_DIR` and
-`ERIPHE_SESSION_FILE` in `/etc/eriphe-node.env`). The program comes from eriphe-node's image and
-is updated by running the install command again (the updater in the distribution cannot reach
-Windows); with `-Binary`, the one already installed stays. Without it, Eriphe works as before:
-the session is unknown.
+the distribution mounts it alone, read-only, at `/mnt/eriphe-session` (`ERIPHE_SESSION_DIR` in
+`/etc/eriphe-node.env`), and the launcher gives it to the node only, read-only (its
+`ERIPHE_SESSION_DIR`). The program comes from eriphe-node's image and is updated by running the
+install command again (the updater in the distribution cannot reach Windows). Without it, Eriphe
+works as before: the session is unknown.
 
 **GPU.** `-Labels gpu` is a label for the scheduler, kept across updates. Windows' NVIDIA driver
 reaches WSL by itself (`/dev/dxg`); the installer adds nothing for it to the distribution.

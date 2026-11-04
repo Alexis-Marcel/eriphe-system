@@ -1246,13 +1246,14 @@ has "$LP/conf/update.conf" "LAYOUT=3" "layout-2 update: its layout"
 
 # ---- the Windows updater: the layout it takes from the node image's install.ps1
 
-# Its own lines that read install.ps1 (the layout's numbers, the setup of
-# the distribution, Syncthing's build and checksum), run on this
-# install.ps1: what the distribution's updater would apply.
+# The updater of an install from before the launcher (testdata), its own
+# lines that read install.ps1 (the layout's numbers, the setup of the
+# distribution, Syncthing's build, gone with the launcher), run on this
+# install.ps1: what the distribution's updater would apply to move to it.
 W=$T/win
 mkdir -p "$W/state"
 cp "$here/install.ps1" "$W/state/install.ps1"
-awk '/^cat > \/usr\/local\/bin\/eriphe-update <<.EOF.$/ { f = 1; next } f && /^EOF$/ { exit } f' "$here/install.ps1" >"$W/update"
+cp "$here/testdata/wsl-update-layout3.sh" "$W/update"
 {
 	echo 'log() { :; }; uname() { echo x86_64; }'
 	sed -n '/^ps_number()/p' "$W/update"
@@ -1260,14 +1261,11 @@ awk '/^cat > \/usr\/local\/bin\/eriphe-update <<.EOF.$/ { f = 1; next } f && /^E
 	echo 'echo "n=$n admin=$admin v=$v st=$st"'
 } >"$W/read.sh"
 out=$(STATE=$W/state sh "$W/read.sh" 2>&1)
-[ "$out" = "n=$layout admin=1 v=2.1.7 st=amd64 2edc416e7ed136b7c858ed5f3f02a3b8316589605e54c380228ceea7acbf0142" ] ||
-	fail "Windows updater, install.ps1's layout: $out"
+[ "$out" = "n=$layout admin=1 v= st=" ] || fail "Windows updater, install.ps1's layout: $out"
 has "$W/state/layout-setup.sh" "cat > /usr/local/bin/eriphe-node-run <<'EOF'" "Windows updater, the distribution's setup"
-has "$W/state/layout-setup.sh" "ERIPHE_SYNCTHING_HOME=/var/lib/eriphe-syncthing >>/etc/eriphe-node.env" "Windows updater, the settings of the layout"
-has "$W/state/layout-syncthing.sh" 'f=syncthing-linux-$a-v$v.tar.gz' "Windows updater, Syncthing's setup"
-has "$W/state/layout-syncthing.sh" 'sha256sum -c' "Windows updater, Syncthing checked"
+has "$W/state/layout-setup.sh" "docker run -d --name eriphe --restart unless-stopped" "Windows updater, the setup starts the launcher"
 sh -n "$W/state/layout-setup.sh" || fail "Windows updater: the setup it takes does not parse"
-sh -n "$W/state/layout-syncthing.sh" || fail "Windows updater: Syncthing's setup does not parse"
+[ ! -s "$W/state/layout-syncthing.sh" ] || fail "Windows updater: a Syncthing of the distribution to set up"
 
 # install.sh --layout is the updaters' alone: no other option.
 out=$(installer 'parse_args --layout --core-mode; layout_run')
@@ -1288,10 +1286,6 @@ has "$LL/data/node/update-needs" "why=layout" "Linux updater in a Mac's VM"
 installer 'syncthing_config @KEY@' >"$T/st-config.xml"
 cmp -s "$T/st-config.xml" "$here/../node/testdata/syncthing-config.xml" ||
 	fail "syncthing_config differs from node/testdata/syncthing-config.xml: $(diff "$T/st-config.xml" "$here/../node/testdata/syncthing-config.xml")"
-# install.ps1 writes the same one in its distribution.
-awk "/^<!-- Written by Eriphe's installer: Syncthing/ { f = 1 } f && /^EOF\$/ { exit } f" "$here/install.ps1" >"$T/st-config-ps1.xml"
-cmp -s "$T/st-config-ps1.xml" "$here/../node/testdata/syncthing-config.xml" ||
-	fail "install.ps1's Syncthing configuration differs from node/testdata/syncthing-config.xml"
 k1=$(installer syncthing_key) k2=$(installer syncthing_key)
 { [ "${#k1}" = 32 ] && [ "$k1" != "$k2" ]; } || fail "syncthing_key: $k1 $k2"
 
