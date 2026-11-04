@@ -103,6 +103,7 @@ type nodeTaskSpec struct {
 	MCPServers         map[string]any `json:"mcp_servers,omitempty"`
 	AppendSystemPrompt string         `json:"append_system_prompt,omitempty"`
 	AllowedTools       []string       `json:"allowed_tools,omitempty"`
+	HarnessTools       []string       `json:"harness_tools,omitempty"` // an assistant: the only harness tools it keeps
 	Profile            string         `json:"profile,omitempty"`
 	SystemNetwork      bool           `json:"system_network,omitempty"`  // the brain reaches eriphe-core by name
 	Stream             bool           `json:"stream,omitempty"`          // the brain: its text as it is written (brain_draft.go)

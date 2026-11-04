@@ -41,7 +41,10 @@ type assistantRole struct {
 	Network      bool     // the system network: it reaches eriphe-core by name
 	Streams      bool     // its text as it is written, for its triggers' wrote
 	AllowedTools []string // its harness's own tools allowed in advance
-	NoWebSearch  string   // told in its instructions when its harness cannot search the web
+	// HarnessTools are the only harness tools it keeps (Claude Code's
+	// --tools); empty keeps them all.
+	HarnessTools []string
+	NoWebSearch  string // told in its instructions when its harness cannot search the web
 
 	// Hooks; nil does nothing.
 	instructions func(c *core, a Assistant, prompt string) string     // completes its standing prompt
@@ -549,7 +552,8 @@ func (c *core) assistantServers(a Assistant, r assistantRole) (map[string]any, e
 	servers := map[string]any{}
 	if r.can(powerLaunchesTasks) && a.SelfURL != "" {
 		servers[selfServer] = map[string]any{
-			"type": "http", "url": a.SelfURL, "headers": map[string]string{"Authorization": "Bearer " + assistantToken(c.token)}}
+			"type": "http", "url": a.SelfURL, "headers": map[string]string{"Authorization": "Bearer " + assistantToken(c.token)},
+			"alwaysLoad": true}
 	}
 	for name, srv := range a.MCPServers {
 		def := map[string]any{"type": "http", "url": srv.URL}
@@ -587,6 +591,7 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 	}
 	spec.SystemNetwork = r.Network
 	spec.Stream = r.Streams
+	spec.HarnessTools = r.HarnessTools
 	// One memory: eriphe-core's, not Claude Code's own.
 	if spec.Identity == nil {
 		spec.Identity = map[string]string{}
@@ -603,6 +608,9 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 	}
 	if r.can(powerLaunchesTasks) && a.SelfURL == "" {
 		spec.Servers = append(spec.Servers, selfServer) // relayed by its node
+		// Its own tools, used nearly every turn and named by its concept
+		// map: loaded upfront, never searched for first.
+		spec.AlwaysLoad = append(spec.AlwaysLoad, selfServer)
 	}
 	return nil
 }

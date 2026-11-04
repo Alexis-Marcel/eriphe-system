@@ -512,9 +512,10 @@ func TestBrainAssignmentFreeReads(t *testing.T) {
 		t.Fatalf("assignment = %s", w.Body.Bytes())
 	}
 	spec := out.Tasks[0].Spec
-	// Without self_url, the node relays eriphe-core's own server too.
+	// Without self_url, the node relays eriphe-core's own server too,
+	// loaded upfront.
 	if strings.Join(spec.AllowedTools, ",") != "mcp__eriphe-core,mcp__github__get_issue" || strings.Join(spec.Servers, ",") != "github,eriphe-core" ||
-		strings.Join(spec.AlwaysLoad, ",") != "github" || len(spec.MCPServers) != 0 {
+		strings.Join(spec.AlwaysLoad, ",") != "github,eriphe-core" || len(spec.MCPServers) != 0 {
 		t.Fatalf("brain spec = %+v", spec)
 	}
 	// With it, the brain calls that address with the token, as before.
@@ -525,7 +526,8 @@ func TestBrainAssignmentFreeReads(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &out)
 	spec = out.Tasks[0].Spec
 	self, _ := spec.MCPServers[selfServer].(map[string]any)
-	if strings.Join(spec.Servers, ",") != "github" || self["url"] != "http://core.example.org:8800/mcp" {
+	if strings.Join(spec.Servers, ",") != "github" || self["url"] != "http://core.example.org:8800/mcp" || self["alwaysLoad"] != true ||
+		strings.Join(spec.AlwaysLoad, ",") != "github" {
 		t.Fatalf("brain spec with self_url = %+v", spec)
 	}
 	// With a token of its own, never the API token.

@@ -337,3 +337,18 @@ func TestClaudeAlwaysLoad(t *testing.T) {
 		t.Fatalf("servers = %v", cfg.MCPServers)
 	}
 }
+
+// An assistant keeps only the harness tools its card names (the brain: the
+// web and the tool search); a worker keeps Claude Code's whole set.
+func TestClaudeHarnessTools(t *testing.T) {
+	n := newNode(options{})
+	brain := mcpTask()
+	brain.Spec.HarnessTools = []string{"WebSearch", "WebFetch", "ToolSearch"}
+	args, _ := claudeCode{}.command(n, brain)
+	if i := slices.Index(args, "--tools"); i < 0 || i+1 >= len(args) || args[i+1] != "WebSearch,WebFetch,ToolSearch" {
+		t.Fatalf("brain args = %v", args)
+	}
+	if args, _ := (claudeCode{}).command(n, mcpTask()); slices.Contains(args, "--tools") {
+		t.Fatalf("worker args = %v", args)
+	}
+}

@@ -83,7 +83,8 @@ func TestBrainIsAnAssistant(t *testing.T) {
 	}
 	// Its node gets what the brain's card says.
 	if err := c.fetchAssistant(task, &spec); err != nil || !spec.SystemNetwork || !spec.Stream ||
-		strings.Join(spec.Servers, ",") != selfServer || spec.Identity["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] != "1" {
+		strings.Join(spec.Servers, ",") != selfServer || strings.Join(spec.AlwaysLoad, ",") != selfServer ||
+		strings.Join(spec.HarnessTools, ",") != "WebSearch,WebFetch,ToolSearch" || spec.Identity["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] != "1" {
 		t.Fatalf("fetched = %+v, %v", spec, err)
 	}
 	// One task: a second pass starts none.

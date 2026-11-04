@@ -48,6 +48,7 @@ type TaskSpec struct {
 	MCPServers         map[string]any `json:"mcp_servers,omitempty"`          // extra MCP servers, .mcp.json format
 	AppendSystemPrompt string         `json:"append_system_prompt,omitempty"` // standing instructions
 	AllowedTools       []string       `json:"allowed_tools,omitempty"`        // tools that need no permission
+	HarnessTools       []string       `json:"harness_tools,omitempty"`        // the only harness tools it keeps (Claude Code's --tools); empty: all
 	Profile            string         `json:"profile,omitempty"`              // persistent agent config, so a session can be resumed
 	SystemNetwork      bool           `json:"system_network,omitempty"`       // the brain: also on eriphe-core's network, to reach its tools
 	Stream             bool           `json:"stream,omitempty"`               // report the text being written as a draft
