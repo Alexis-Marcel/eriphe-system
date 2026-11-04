@@ -545,7 +545,7 @@ echo "name: eriphe" >"$T/data/launcher/compose.yaml"
 echo '{}' >"$T/data/node/node.json"
 run_in 'uninstall' >"$T/out"
 for want in "compose -p eriphe --project-directory $T/data/launcher -f $T/data/launcher/compose.yaml --env-file $T/data/launcher/.env down --remove-orphans" \
-	"network rm eriphe-tasks eriphe-system eriphe-docker" "volume rm eriphe-cache" \
+	"network rm eriphe-tasks eriphe-system eriphe-docker" "volume rm eriphe-cache eriphe-cache-untrusted" \
 	"images --format {{.Repository}}:{{.Tag}} ghcr.io/alexis-marcel/eriphe-core" \
 	"update --restart no $ID" "stop -t 2 $ID"; do
 	has "$T/calls" "$want" uninstall

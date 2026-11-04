@@ -97,7 +97,9 @@ type taskRunSpec struct {
 	network string
 	// systemNetwork: on eriphe-core's network too (the brain).
 	systemNetwork bool
-	mounts        []mount
+	// untrusted: the task gets the untrusted cache (cache.go).
+	untrusted bool
+	mounts    []mount
 	// groups are added to the task's user, to read what they may.
 	groups     []int
 	env        map[string]string

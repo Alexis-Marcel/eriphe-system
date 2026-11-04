@@ -413,6 +413,19 @@ func TestEngineRunsTheNode(t *testing.T) {
 			t.Errorf("task mount %+v", m)
 		}
 	}
+
+	// A task started on what came from outside: a cache of its own.
+	untrusted := &Task{ID: "t2", secret: "s3cret", dir: filepath.Join(f.root, "tasks", "t2"),
+		Spec: TaskSpec{Image: "worker", Prompt: "hi", Runtime: "claude-code", Untrusted: true}}
+	if err := n.startContainer(untrusted, "hi"); err != nil {
+		t.Fatal(err)
+	}
+	untrusted.run.stop()
+	waitFor(t, func() bool { return finished(untrusted.state()) })
+	n.stopContainer(untrusted)
+	if c, ok := f.d.container("eriphe-task-t2"); !ok || !slices.Equal(c.HostConfig.Binds, []string{"eriphe-cache-untrusted:/cache"}) {
+		t.Errorf("untrusted task container: %+v", c.HostConfig.Binds)
+	}
 	if !slices.Contains(c.Env, "ERIPHE_TASK_SECRET=s3cret") {
 		t.Errorf("task env: %v", c.Env)
 	}

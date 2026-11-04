@@ -264,7 +264,7 @@ func (n *node) taskRun(t *Task, agentArgs []string, agentEnv map[string]string) 
 	t.mu.Unlock()
 	return taskRunSpec{
 		name: containerName(t), taskID: t.ID, image: t.Spec.Image,
-		network: network, systemNetwork: t.Spec.SystemNetwork,
+		network: network, systemNetwork: t.Spec.SystemNetwork, untrusted: t.Spec.Untrusted,
 		mounts: mounts, groups: groups, env: env,
 		entrypoint: "sh", cmd: append([]string{"-c", entrypoint, "eriphe"}, agentArgs...),
 	}, nil
