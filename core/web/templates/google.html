@@ -23,7 +23,7 @@
 <div id="google-connect-result" aria-live="polite"></div>
 
 {{if .Accounts}}
-<section class="panel" aria-labelledby="g-accounts-t">
+<section class="panel" id="g-accounts" aria-labelledby="g-accounts-t"{{if .Waiting}} hx-get="/settings/google" hx-trigger="load delay:2s" hx-select="#g-accounts" hx-swap="outerHTML"{{end}}>
   <h3 id="g-accounts-t">{{template "i-check"}}{{t "google.accounts"}}</h3>
   <ul class="gaccounts">
   {{range .Accounts}}{{$a := .}}
@@ -34,22 +34,30 @@
         {{else}}<span class="chip srv-ready"><span class="pulse" aria-hidden="true"></span>{{t "google.ok"}}</span>{{end}}
       </div>
       {{if .Reconnect}}<p class="small notice-line">{{t "google.reconnecthint"}}</p>{{end}}
-      {{if .Services}}<ul class="gservices">
+      {{/* Its services, then the ones it could add, each with its own button. */}}
+      {{if not .Services}}<p class="muted small">{{t "google.noservices"}}</p>{{end}}
+      <ul class="gservices">
         {{range .Services}}<li>
           <span class="gservice-name">{{t (printf "google.%s" .Service)}}</span>
           <span class="muted small">{{t "google.tool"}} <span class="mono">{{.Tool}}</span></span>
-          {{with .Status}}<span class="chip srv-{{.}}">{{t (printf "server.%s" .)}}</span>{{end}}
+          {{if .Pending}}<span class="chip srv-pending"><span class="pulse" aria-hidden="true"></span>{{if .Placed}}{{t "server.starting"}}{{else}}{{t "server.pending"}}{{end}}</span>
+          {{else}}{{with .Status}}<span class="chip srv-{{.}}">{{t (printf "server.%s" .)}}</span>{{end}}{{end}}
+          {{with .Problem}}<span class="small notice-line">{{.}}</span>{{end}}
           {{if eq .Service "drive"}}<a class="small" href="/settings/drive">{{if eq $a.Folders 0}}{{t "google.pickfolders"}}{{else}}{{t "drive.folders"}} ({{$a.Folders}}){{end}}</a>{{end}}
         </li>{{end}}
-      </ul>{{else}}<p class="muted small">{{t "google.noservices"}}</p>{{end}}
+        {{range .Others}}<li class="gservice-other">
+          <span class="gservice-name">{{t (printf "google.%s" .)}}</span>
+          <span class="muted small">{{t "google.notadded"}}</span>
+          <form class="inline" hx-post="/settings/google/connect" hx-target="#google-connect-result" hx-disabled-elt="find button[type=submit]">
+            <input type="hidden" name="account" value="{{$a.Email}}">
+            <input type="hidden" name="service" value="{{.}}">
+            <input type="hidden" name="write" value="1">
+            <button class="btn btn-soft sm" type="submit">{{t "google.addservice"}}</button>
+          </form>
+        </li>{{end}}
+      </ul>
       <div class="gaccount-actions">
         {{template "google-reconnect" dict "Account" .Email "Target" "google-connect-result" "Primary" .Reconnect}}
-        {{if .Others}}<form class="inline gadd" hx-post="/settings/google/connect" hx-target="#google-connect-result" hx-disabled-elt="find button[type=submit]">
-          <input type="hidden" name="account" value="{{.Email}}">
-          {{range .Others}}<label class="check inline-check"><input type="checkbox" name="service" value="{{.}}"><span>{{t (printf "google.%s" .)}}</span></label>{{end}}
-          <input type="hidden" name="write" value="1">
-          <button class="btn btn-soft sm" type="submit">{{t "google.addservice"}}</button>
-        </form>{{end}}
         <form class="inline" hx-post="/settings/google/remove" hx-target="#google-wrap" hx-swap="outerHTML" hx-confirm="{{tf "google.removeconfirm" .Email}}">
           <input type="hidden" name="account" value="{{.Email}}">
           <button class="link-btn danger" type="submit">{{t "google.remove"}}</button>

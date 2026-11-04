@@ -122,6 +122,14 @@ func TestGoogleAccounts(t *testing.T) {
 		t.Fatalf("tools list: %s", body)
 	}
 
+	// The service it does not use follows the others, with its own button,
+	// before the account's actions.
+	_, body, _ = tw.do("GET", "/settings/google", nil, nil)
+	drive, actions := strings.Index(body, `<input type="hidden" name="service" value="drive">`), strings.Index(body, `class="gaccount-actions"`)
+	if drive < 0 || actions < drive || !strings.Contains(body, "Pas encore ajouté") || strings.Contains(body, `class="inline gadd"`) {
+		t.Fatalf("drive to add: %s", body)
+	}
+
 	// Drive added to the same account: its scope alone, the account named.
 	g.scope, g.refresh = scopeMail+" "+scopeCalendar+" "+scopeDrive, "the-refresh-2"
 	q, _ = googleSignIn(t, tw, g, csrf, url.Values{"service": {"drive"}, "account": {"sam@example.org"}, "write": {"1"}})
@@ -141,6 +149,37 @@ func TestGoogleAccounts(t *testing.T) {
 	if !strings.Contains(body, "sam@example.org") || !strings.Contains(body, "Choisir des dossiers") || strings.Contains(body, "the-refresh") ||
 		strings.Contains(body, testClientSecret) {
 		t.Fatalf("google page: %s", body)
+	}
+
+	// Its services just added are starting, not in error (their first
+	// dial fails until they run): the accounts ask for themselves again.
+	for _, name := range []string{"mail", "agenda", filesServer} {
+		u := c.pool.get(name)
+		u.mu.Lock()
+		u.status, u.err = statusError, "service "+name+" has no node: not placed yet"
+		u.mu.Unlock()
+	}
+	_, body, _ = tw.do("GET", "/settings/google", nil, nil)
+	if !strings.Contains(body, "En attente d&#39;un appareil") || strings.Contains(body, ">Erreur<") {
+		t.Fatalf("waiting for a machine: %s", body)
+	}
+	for _, name := range []string{"mail", "agenda", filesServer} {
+		if _, err := c.store.assignService(name, "nasa"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, body, _ = tw.do("GET", "/settings/google", nil, nil)
+	if !strings.Contains(body, "Démarrage…") || strings.Contains(body, ">Erreur<") ||
+		!strings.Contains(body, `id="g-accounts" aria-labelledby="g-accounts-t" hx-get="/settings/google"`) {
+		t.Fatalf("starting: %s", body)
+	}
+	for _, name := range []string{"mail", "agenda", filesServer} {
+		if err := c.store.updateService(name, map[string]any{"state": stateFailed, "error": "pull access denied for x"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, body, _ = tw.do("GET", "/settings/google", nil, nil); !strings.Contains(body, "nasa") || strings.Contains(body, "Démarrage…") {
+		t.Fatalf("failed: %s", body)
 	}
 
 	// A second account, for mail: a tool of its own, under another name.
