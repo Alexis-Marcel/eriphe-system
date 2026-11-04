@@ -280,6 +280,7 @@ func isDate(p *ical.Prop) bool {
 
 func (d *CalDAV) item(ev ical.Event, href, calID string) Item {
 	it := Item{ID: href, CalendarID: calID}
+	it.UID, _ = ev.Props.Text(ical.PropUID)
 	it.Title, _ = ev.Props.Text(ical.PropSummary)
 	it.Location, _ = ev.Props.Text(ical.PropLocation)
 	it.Description, _ = ev.Props.Text(ical.PropDescription)

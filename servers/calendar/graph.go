@@ -33,6 +33,7 @@ type graphTime struct {
 
 type graphEvent struct {
 	ID       string     `json:"id,omitempty"`
+	ICalUID  string     `json:"iCalUId,omitempty"`
 	Subject  *string    `json:"subject,omitempty"`
 	Start    *graphTime `json:"start,omitempty"`
 	End      *graphTime `json:"end,omitempty"`
@@ -51,7 +52,7 @@ type graphEvent struct {
 	SeriesMasterID string `json:"seriesMasterId,omitempty"`
 }
 
-const graphSelect = "id,subject,start,end,isAllDay,location,bodyPreview,showAs,isCancelled,type,seriesMasterId"
+const graphSelect = "id,iCalUId,subject,start,end,isAllDay,location,bodyPreview,showAs,isCancelled,type,seriesMasterId"
 
 func (g *Graph) call(ctx context.Context, method, path string, in, out any) error {
 	u := path
@@ -169,7 +170,7 @@ func (g *Graph) parseTime(t *graphTime) time.Time {
 }
 
 func (g *Graph) item(e graphEvent, calID string) Item {
-	it := Item{ID: e.ID, CalendarID: calID, Start: g.parseTime(e.Start), End: g.parseTime(e.End)}
+	it := Item{ID: e.ID, UID: e.ICalUID, CalendarID: calID, Start: g.parseTime(e.Start), End: g.parseTime(e.End)}
 	if e.Subject != nil {
 		it.Title = *e.Subject
 	}

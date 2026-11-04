@@ -170,18 +170,52 @@ func (c *Calendars) zone(tz string) (*time.Location, error) {
 // --- Output ---
 
 type Event struct {
-	ID          string `json:"id"`
-	Account     string `json:"account"`
-	Calendar    string `json:"calendar"`
-	Title       string `json:"title"`
-	Start       string `json:"start"`
-	End         string `json:"end"`
-	AllDay      bool   `json:"all_day,omitempty"`
-	Location    string `json:"location,omitempty"`
-	Description string `json:"description,omitempty"`
-	Recurring   bool   `json:"recurring,omitempty"`
-	Free        bool   `json:"free,omitempty"`
+	ID          string      `json:"id"`
+	Account     string      `json:"account"`
+	Calendar    string      `json:"calendar"`
+	Title       string      `json:"title"`
+	Start       string      `json:"start"`
+	End         string      `json:"end"`
+	AllDay      bool        `json:"all_day,omitempty"`
+	Location    string      `json:"location,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Recurring   bool        `json:"recurring,omitempty"`
+	Free        bool        `json:"free,omitempty"`
+	Copies      []EventCopy `json:"copies,omitempty" jsonschema:"the same event (same UID and start) in other calendars or accounts, shown once"`
+	uid         string
 	start       time.Time
+}
+
+// EventCopy is another copy of an event: an invitation sent to two
+// accounts, a calendar shared with or subscribed from another.
+type EventCopy struct {
+	ID       string `json:"id"`
+	Account  string `json:"account"`
+	Calendar string `json:"calendar"`
+}
+
+// collapseCopies keeps the first event of each UID and start (the list is
+// sorted by start) and lists the others as its copies: the occurrences of a
+// recurring event share their UID, not their start. An event without a UID
+// is never collapsed.
+func collapseCopies(evs []Event) []Event {
+	first := map[string]int{}
+	out := evs[:0:0]
+	for _, e := range evs {
+		if e.uid == "" {
+			out = append(out, e)
+			continue
+		}
+		key := e.uid + "\x00" + e.Start
+		i, seen := first[key]
+		if !seen {
+			first[key] = len(out)
+			out = append(out, e)
+			continue
+		}
+		out[i].Copies = append(out[i].Copies, EventCopy{ID: e.ID, Account: e.Account, Calendar: e.Calendar})
+	}
+	return out
 }
 
 // out formats an event: times in loc; all-day events as dates, end
@@ -190,7 +224,7 @@ func out(a *account, calName string, it *Item, loc *time.Location, maxDesc int) 
 	e := Event{
 		ID:      eventRef{a.cfg.Name, it.CalendarID, it.ID}.String(),
 		Account: a.cfg.Name, Calendar: calName, Title: it.Title, AllDay: it.AllDay,
-		Location: it.Location, Recurring: it.Recurring, Free: it.Free, start: it.Start,
+		Location: it.Location, Recurring: it.Recurring, Free: it.Free, uid: it.UID, start: it.Start,
 	}
 	if it.AllDay {
 		e.Start = it.Start.Format(time.DateOnly)
@@ -352,7 +386,9 @@ func newServer(c *Calendars, version string) *mcp.Server {
 			return o, nil
 		})
 
-	tool(s, "list_events", "Events between two dates, from every calendar unless one is given, recurring events expanded, sorted by start.", ro,
+	tool(s, "list_events", "Events between two dates, from every calendar unless one is given, recurring events expanded, sorted by start. "+
+		"An event in several calendars or accounts (same UID and start) is shown once, the others in copies: "+
+		"update_event and delete_event act on the id given only.", ro,
 		func(ctx context.Context, in listEventsIn) (listEventsOut, error) {
 			loc, err := c.zone(in.Timezone)
 			if err != nil {
@@ -367,6 +403,7 @@ func newServer(c *Calendars, version string) *mcp.Server {
 				return listEventsOut{}, err
 			}
 			o := listEventsOut{Events: []Event{}, Timezone: loc.String(), Errors: probs}
+			evs = collapseCopies(evs)
 			q := strings.ToLower(strings.TrimSpace(in.Query))
 			for _, e := range evs {
 				if q != "" && !strings.Contains(strings.ToLower(e.Title+"\n"+e.Location+"\n"+e.Description), q) {

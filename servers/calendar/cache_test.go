@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -67,7 +68,7 @@ func TestCacheServesEvents(t *testing.T) {
 		t.Fatalf("cached %s, live %s, %v", titles(l.Events), titles(live.Events), l.Errors)
 	}
 	for i := range l.Events {
-		if l.Events[i] != live.Events[i] {
+		if !reflect.DeepEqual(l.Events[i], live.Events[i]) {
 			t.Errorf("cached %+v\nlive   %+v", l.Events[i], live.Events[i])
 		}
 	}
