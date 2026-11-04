@@ -259,3 +259,4 @@ func bearerAny(next http.Handler, tokens ...string) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+// TEMP: measure a change to core, to revert
