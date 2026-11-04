@@ -646,3 +646,40 @@ func TestReadOnlyAccountAndNamedAccount(t *testing.T) {
 		t.Errorf("send a draft from the wrong account: %s", msg)
 	}
 }
+
+// A message in two accounts (sent to both) is found once, its other copy
+// named; a message without a Message-ID is never taken for another.
+func TestSearchShowsCopiesOnce(t *testing.T) {
+	e := newEnv(t, rev2)
+	deliver(t, e.bob, "INBOX", devisMail, imap.FlagSeen)
+	noID := strings.Replace(strings.Replace(devisMail, "Message-ID: <devis-1@example.org>\n", "", 1), "Devis cuisine", "Sans id", 1)
+	deliver(t, e.alice, "INBOX", noID)
+	deliver(t, e.bob, "INBOX", noID)
+	cs := connect(t, e.cfg)
+
+	out := call[searchOut](t, cs, "search_messages", map[string]any{"subject": "devis"})
+	if len(out.Messages) != 1 {
+		t.Fatalf("got %d messages: %+v", len(out.Messages), out.Messages)
+	}
+	m := out.Messages[0]
+	if len(m.Copies) != 1 || m.Copies[0].Account == m.Account || m.Copies[0].ID == m.ID || m.Copies[0].Folder != "INBOX" {
+		t.Fatalf("copies: %+v", m)
+	}
+	// Each copy keeps its own state and is read with its own id.
+	unread := map[string]bool{m.Account: m.Unread, m.Copies[0].Account: m.Copies[0].Unread}
+	if !unread["perso"] || unread["pro"] {
+		t.Errorf("unread: %v", unread)
+	}
+	if msg := call[Message](t, cs, "read_message", map[string]any{"id": m.Copies[0].ID}); msg.Account != m.Copies[0].Account {
+		t.Errorf("copy read: %+v", msg)
+	}
+
+	// Without a Message-ID, both stay.
+	if out := call[searchOut](t, cs, "search_messages", map[string]any{"subject": "sans id"}); len(out.Messages) != 2 || len(out.Messages[0].Copies) != 0 {
+		t.Errorf("without Message-ID: %+v", out.Messages)
+	}
+	// One account searched alone has no copy to show.
+	if one := call[searchOut](t, cs, "search_messages", map[string]any{"subject": "devis", "account": "pro"}); len(one.Messages) != 1 || len(one.Messages[0].Copies) != 0 {
+		t.Errorf("one account: %+v", one.Messages)
+	}
+}

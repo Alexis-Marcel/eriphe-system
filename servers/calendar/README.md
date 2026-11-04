@@ -28,6 +28,12 @@ Every tool takes an optional `account` (its `name`). The reads without one cover
 the one named. An account with `read_only` is read, never written: no event is created, changed or
 deleted in it (`list_accounts` shows it).
 
+An event in several calendars or accounts (an invitation sent to two addresses, a shared or
+subscribed calendar) is shown once by `list_events`, the others in its `copies` (id, account,
+calendar), matched by iCalendar UID and start, so each occurrence of a recurring event stays one;
+an event without a UID is never matched. `update_event` and `delete_event` act on the id given
+only; `find_free_time` is the same either way.
+
 ## Cache
 
 Reads are answered from memory when they can be, so `list_events`, `list_calendars` and

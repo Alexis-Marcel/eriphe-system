@@ -297,18 +297,52 @@ type Query struct {
 }
 
 type Summary struct {
-	ID             string    `json:"id"`
-	Account        string    `json:"account"`
-	Folder         string    `json:"folder"`
-	From           string    `json:"from"`
-	To             []string  `json:"to,omitempty"`
-	Subject        string    `json:"subject"`
-	Date           string    `json:"date" jsonschema:"in the time zone of the server (see timezone), with its offset"`
-	Unread         bool      `json:"unread"`
-	Flagged        bool      `json:"flagged,omitempty"`
-	HasAttachments bool      `json:"has_attachments,omitempty"`
-	Snippet        string    `json:"snippet,omitempty"`
-	time           time.Time `json:"-"`
+	ID             string   `json:"id"`
+	Account        string   `json:"account"`
+	Folder         string   `json:"folder"`
+	From           string   `json:"from"`
+	To             []string `json:"to,omitempty"`
+	Subject        string   `json:"subject"`
+	Date           string   `json:"date" jsonschema:"in the time zone of the server (see timezone), with its offset"`
+	Unread         bool     `json:"unread"`
+	Flagged        bool     `json:"flagged,omitempty"`
+	HasAttachments bool     `json:"has_attachments,omitempty"`
+	Snippet        string   `json:"snippet,omitempty"`
+	Copies         []Copy   `json:"copies,omitempty" jsonschema:"the same message (same Message-ID) in other accounts or folders, shown once"`
+	messageID      string
+	time           time.Time
+}
+
+// Copy is another copy of a message found in a search: in another account
+// (sent from one to the other, forwarded, sent to both) or folder.
+type Copy struct {
+	ID      string `json:"id"`
+	Account string `json:"account"`
+	Folder  string `json:"folder"`
+	Unread  bool   `json:"unread"`
+}
+
+// collapseCopies keeps the first message of each Message-ID (the list is
+// sorted newest first) and lists the others as its copies; a message
+// without a Message-ID is never collapsed.
+func collapseCopies(s []Summary) []Summary {
+	first := map[string]int{}
+	out := s[:0:0]
+	for _, m := range s {
+		key := strings.ToLower(strings.TrimSpace(m.messageID))
+		if key == "" {
+			out = append(out, m)
+			continue
+		}
+		i, seen := first[key]
+		if !seen {
+			first[key] = len(out)
+			out = append(out, m)
+			continue
+		}
+		out[i].Copies = append(out[i].Copies, Copy{ID: m.ID, Account: m.Account, Folder: m.Folder, Unread: m.Unread})
+	}
+	return out
 }
 
 func (q Query) criteria() *imap.SearchCriteria {
@@ -382,7 +416,6 @@ type header struct {
 	Summary
 	uid                    imap.UID
 	cc, replyTo, inReplyTo []string
-	messageID              string
 	draft                  bool
 	flags                  []imap.Flag
 	internal               time.Time // INTERNALDATE: when the server got it

@@ -519,3 +519,40 @@ func TestReadOnlyAccountAndNamedAccount(t *testing.T) {
 		t.Errorf("events: %s", titles(l.Events))
 	}
 }
+
+// An invitation sent to two accounts is listed once, its other copy named;
+// each occurrence of a recurring one too; two events at the same time stay
+// two.
+func TestListEventsShowsCopiesOnce(t *testing.T) {
+	e := newEnv(t)
+	at := tomorrowAt(10)
+	e.perso.put(t, "/u/calendars/personnel/inv.ics", vevent("invite-1@example.org", "Réunion", at, time.Hour, ""))
+	e.family.put(t, "/u/calendars/famille/inv.ics", vevent("invite-1@example.org", "Réunion", at, time.Hour, ""))
+	e.perso.put(t, "/u/calendars/travail/other.ics", vevent("other-1@example.org", "Autre", at, time.Hour, ""))
+	daily := "RRULE:FREQ=DAILY;COUNT=3\n"
+	e.perso.put(t, "/u/calendars/personnel/daily.ics", vevent("daily-1@example.org", "Point", tomorrowAt(8), 30*time.Minute, daily))
+	e.family.put(t, "/u/calendars/famille/daily.ics", vevent("daily-1@example.org", "Point", tomorrowAt(8), 30*time.Minute, daily))
+	cs := e.connect(t)
+
+	l := call[listEventsOut](t, cs, "list_events", map[string]any{"days": 7})
+	count := map[string]int{}
+	for _, ev := range l.Events {
+		count[ev.Title]++
+		if ev.Title == "Réunion" || ev.Title == "Point" {
+			if len(ev.Copies) != 1 || ev.Copies[0].Account == ev.Account || ev.Copies[0].ID == ev.ID {
+				t.Errorf("%s copies: %+v", ev.Title, ev)
+			}
+		}
+		if ev.Title == "Autre" && len(ev.Copies) != 0 {
+			t.Errorf("another event taken for a copy: %+v", ev)
+		}
+	}
+	if count["Réunion"] != 1 || count["Point"] != 3 || count["Autre"] != 1 {
+		t.Fatalf("events: %v (%s)", count, titles(l.Events))
+	}
+	// One account alone has no copy to show.
+	one := call[listEventsOut](t, cs, "list_events", map[string]any{"days": 7, "account": "cloud", "query": "réunion"})
+	if len(one.Events) != 1 || len(one.Events[0].Copies) != 0 {
+		t.Errorf("one account: %+v", one.Events)
+	}
+}

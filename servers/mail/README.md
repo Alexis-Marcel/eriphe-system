@@ -27,6 +27,11 @@ that names the account it means cannot act on another by mistake. An account wit
 can be searched and read, never written from: no draft, no send, no mark, no move
 (`list_accounts` shows it, with `can_send` false).
 
+A message found in several accounts or folders (sent from one account to another, forwarded, sent
+to both) is shown once by `search_messages`: the newest copy, the others in its `copies` (id,
+account, folder, unread), matched by Message-ID; a message without one is never matched. `mark`
+and `move` act on the id given only.
+
 Dates are shown in the zone of the process (`TZ`, which eriphe-core sets to the user's zone, e.g.
 `Europe/Paris`) with their offset, e.g. `2026-10-19T10:00:00+02:00`; search and read results also
 name that zone in `timezone`. Without `TZ` they are in UTC.
