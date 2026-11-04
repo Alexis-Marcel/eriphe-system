@@ -41,6 +41,17 @@ type toolView struct {
 	// Follow is the line that follows a tool just saved, in its row, until
 	// it is up or says why not (web_tools_dialog.go).
 	Follow *toolStatus
+	// A service of an account (web_tools_groups.go): Service is mail,
+	// calendar or drive; Owner the account's address and Provider who
+	// gives it (google, icloud…), the card it is in; Label its heading
+	// there and Mark its icon. Drive is the Google account whose Drive the
+	// row is.
+	Service  string
+	Label    string
+	Owner    string
+	Provider string
+	Mark     string
+	Drive    string
 }
 
 // Editable tells a tool changed with its form, in the dialog; the others
@@ -51,7 +62,7 @@ func (t toolView) Editable() bool { return editable(t.Source, t.Preset, t.Auth) 
 // Removable tells a row with its own removal: a workspace tool, or an
 // account on a password (a Google account's goes with it, on its page).
 func (t toolView) Removable() bool {
-	return t.Source == sourceWorkspace && (t.Account == "" || t.Preset.ID != "google")
+	return t.Source == sourceWorkspace && t.Drive == "" && (t.Account == "" || t.Preset.ID != "google")
 }
 
 func editable(source string, p toolPreset, auth string) bool {
@@ -211,7 +222,7 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 			v.Tools = append(v.Tools, t)
 		}
 	}
-	v.Groups = groupTools(lang, v.Tools)
+	v.Groups = groupTools(v.Tools)
 	v.Gallery = w.gallery(lang)
 	if n := q.Get("saved"); n != "" && w.c.source(kindServer, n) != "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.saved"), n)

@@ -1,22 +1,38 @@
 package main
 
 import (
+	"slices"
 	"strings"
 )
 
-// The tools list, grouped: the tools of one kind (Mail, Agenda, GitHub,
-// Google…, by the preset they come from) make one card when there are
-// several, listing each account with its tools (the same row as a lone
-// tool: its state, its access, reconnect, edit, remove) and "Ajouter un
-// compte". A kind with one tool stays a plain row; a tool of no preset is
-// its own. Several tools of one account (a Google account's Gmail and
-// Agenda) are under that account.
+// The tools list, grouped, as a phone's Settings → Accounts:
+//
+//   - each account is a card: a Google account, an Apple account, a
+//     mailbox… with its address, who gives it, and a row for each of its
+//     services (Mail, Agenda, Drive) — the same row as a lone tool: its
+//     state, its access, edit, remove. A Google account's card has its
+//     actions: manage, reconnect, add the services it does not have yet.
+//     The servers stay one per service (accounts.go): only the list is by
+//     account. An Apple calendar and a Google calendar of one address are
+//     two cards;
+//   - the other tools of one kind (GitHub…) make one card when there are
+//     several, by account; a kind with one tool stays a plain row, a tool
+//     of no preset is its own.
 
 // toolGroup is one entry of the list.
 type toolGroup struct {
 	Preset   toolPreset
 	Single   *toolView // a kind with one tool: its row alone
 	Accounts []toolAccount
+
+	// An account's card: its address, who gives it (google, icloud…), and
+	// for a Google account, the account and the services it could add.
+	Owner        string
+	Provider     string
+	ProviderName string // "Google", "iCloud"; "" for an IMAP or CalDAV of no name
+	Google       string
+	Reconnect    bool
+	Others       []string
 }
 
 // toolAccount is one account of a group, and its tools.
@@ -35,19 +51,38 @@ func (g toolGroup) Count() int {
 	return n
 }
 
+// Key names an account's card in its ids.
+func (g toolGroup) Key() string { return rowKey("acct", g.Provider+":"+g.Owner) }
+
+// Tools are an account's services, in their order: mail, calendar, drive.
+func (g toolGroup) Tools() []toolView {
+	var out []toolView
+	for _, a := range g.Accounts {
+		out = append(out, a.Tools...)
+	}
+	slices.SortStableFunc(out, func(x, y toolView) int {
+		return slices.Index(googleServices, x.Service) - slices.Index(googleServices, y.Service)
+	})
+	return out
+}
+
+// Services are the names of an account's services, for its card's line.
+func (g toolGroup) Services() []string {
+	var out []string
+	for _, t := range g.Tools() {
+		out = append(out, t.Label)
+	}
+	return out
+}
+
 // AddURL is where "Ajouter un compte" leads: the preset's page, or its
 // form; AddStep tells a form that opens in the dialog.
-func (g toolGroup) AddURL() string {
-	if g.Preset.ID == "gdrive" {
-		return "/settings/google?add=drive"
-	}
-	return g.Preset.Page()
-}
+func (g toolGroup) AddURL() string { return g.Preset.Page() }
 
 func (g toolGroup) AddStep() bool { return strings.HasPrefix(g.AddURL(), "/settings/tools/new?") }
 
 // accountLabel is the account a tool is for, from its line: what follows
-// its last " · " ("Gmail · sam@example.org", "GitHub · via l'app · acme").
+// its last " · " ("GitHub · via l'app · acme").
 func accountLabel(t toolView) string {
 	if t.Google != "" {
 		return t.Google
@@ -58,35 +93,55 @@ func accountLabel(t toolView) string {
 	return t.Name
 }
 
-// groupFamily is the kind a tool is grouped by: its preset, Drive with the
-// Google accounts once there are some; "" for a tool of no preset.
-func groupFamily(t toolView, google bool) string {
-	switch {
-	case t.Preset.ID == "gdrive" && google:
-		return "google"
-	case t.Preset.ID == "remote" || t.Preset.ID == "local":
+// ownerKey is the card of an account a row is a service of; "" for a tool.
+func ownerKey(t toolView) string {
+	if t.Service == "" || t.Owner == "" {
+		return ""
+	}
+	return t.Provider + ":" + strings.ToLower(t.Owner)
+}
+
+// groupFamily is the kind a tool is grouped by: its preset; "" for a tool
+// of no preset.
+func groupFamily(t toolView) string {
+	if t.Preset.ID == "remote" || t.Preset.ID == "local" {
 		return ""
 	}
 	return t.Preset.ID
 }
 
-// groupTools groups the list, keeping the order in which kinds first come.
-func groupTools(lang string, tools []toolView) []toolGroup {
-	google := false
-	for _, t := range tools {
-		google = google || t.Preset.ID == "google"
-	}
+// groupTools groups the list, keeping the order in which accounts and
+// kinds first come.
+func groupTools(tools []toolView) []toolGroup {
 	var out []toolGroup
 	index := map[string]int{}
 	for _, t := range tools {
-		fam := groupFamily(t, google)
+		if key := ownerKey(t); key != "" {
+			i, ok := index["acct "+key]
+			if !ok {
+				name := t.Detail // the provider, for a mailbox or a calendar on a password
+				switch t.Provider {
+				case "google":
+					name = "Google"
+				case "other", "caldav":
+					name = ""
+				}
+				out = append(out, toolGroup{Owner: t.Owner, Provider: t.Provider, ProviderName: name, Accounts: []toolAccount{{Label: t.Owner}}})
+				i = len(out) - 1
+				index["acct "+key] = i
+			}
+			g := &out[i]
+			g.Accounts[0].Tools = append(g.Accounts[0].Tools, t)
+			if t.Provider == "google" && t.Google != "" {
+				g.Google = t.Google
+				g.Reconnect = g.Reconnect || t.Reconnect
+			}
+			continue
+		}
+		fam := groupFamily(t)
 		i, ok := index[fam]
 		if fam == "" || !ok {
-			p := t.Preset
-			if fam == "google" {
-				p, _ = presetByID("google")
-			}
-			out = append(out, toolGroup{Preset: p})
+			out = append(out, toolGroup{Preset: t.Preset})
 			i = len(out) - 1
 			if fam != "" {
 				index[fam] = i
@@ -94,9 +149,6 @@ func groupTools(lang string, tools []toolView) []toolGroup {
 		}
 		g := &out[i]
 		label := accountLabel(t)
-		if t.Preset.ID == "gdrive" {
-			label = tr(lang, "preset.gdrive.title") // its folders, of every account
-		}
 		j := -1
 		for k, a := range g.Accounts {
 			if strings.EqualFold(a.Label, label) {
@@ -111,9 +163,20 @@ func groupTools(lang string, tools []toolView) []toolGroup {
 		g.Accounts[j].Reconnect = g.Accounts[j].Reconnect || t.Reconnect
 	}
 	for i := range out {
-		if out[i].Count() == 1 {
-			t := out[i].Accounts[0].Tools[0]
-			out[i].Single = &t
+		g := &out[i]
+		if g.Owner != "" {
+			if g.Google != "" {
+				for _, s := range googleServices {
+					if !slices.ContainsFunc(g.Accounts[0].Tools, func(t toolView) bool { return t.Service == s }) {
+						g.Others = append(g.Others, s)
+					}
+				}
+			}
+			continue
+		}
+		if g.Count() == 1 {
+			t := g.Accounts[0].Tools[0]
+			g.Single = &t
 		}
 	}
 	return out

@@ -118,8 +118,15 @@ func TestGoogleAccounts(t *testing.T) {
 		t.Fatal("Drive connected without being asked")
 	}
 	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
-	if !strings.Contains(body, "Gmail · sam@example.org") || !strings.Contains(body, "Google Agenda · sam@example.org") ||
-		strings.Contains(body, `/settings/tools/mail/edit"`) || !strings.Contains(body, `href="/settings/google"`) {
+	// One card for the account: its address, its services, its actions,
+	// and Drive to add to it.
+	card := rowKey("acct", "google:sam@example.org")
+	body = body[strings.Index(body, `id="tools-list"`):]
+	body = body[:strings.Index(body, `id="add-dlg"`)]
+	if !strings.Contains(body, `<h3 id="`+card+`-t">sam@example.org</h3>`) || !strings.Contains(body, "Google · Mail, Agenda") ||
+		!strings.Contains(body, "<h3>Mail</h3>") || !strings.Contains(body, "<h3>Agenda</h3>") || !strings.Contains(body, "Google Agenda") ||
+		strings.Contains(body, `/settings/tools/mail/edit"`) || strings.Count(body, `href="/settings/google"`) != 1 ||
+		!strings.Contains(body, "Ajouter à ce compte") || !strings.Contains(body, `<input type="hidden" name="service" value="drive">`) {
 		t.Fatalf("tools list: %s", body)
 	}
 
@@ -150,6 +157,20 @@ func TestGoogleAccounts(t *testing.T) {
 	if !strings.Contains(body, "sam@example.org") || !strings.Contains(body, "Choisir des dossiers") || strings.Contains(body, "the-refresh") ||
 		strings.Contains(body, testClientSecret) {
 		t.Fatalf("google page: %s", body)
+	}
+	// In the tools list, Drive is a service of the account's card, with
+	// that account's folders, and there is nothing left to add.
+	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
+	body = body[strings.Index(body, `id="tools-list"`):]
+	body = body[:strings.Index(body, `id="add-dlg"`)]
+	driveRow := rowKey(filesServer, "sam@example.org")
+	if !strings.Contains(body, "Google · Mail, Agenda, Drive") || !strings.Contains(body, `id="tool-`+driveRow+`"`) || !strings.Contains(body, "<h3>Drive</h3>") ||
+		!strings.Contains(body, "Google Drive · aucun dossier") || strings.Contains(body, "Ajouter à ce compte") || strings.Count(body, `class="tool-group`) != 1 ||
+		strings.Contains(body, `hx-post="/settings/tools/`+filesServer+`/delete"`) || !strings.Contains(body, `href="/settings/drive"`) {
+		t.Fatalf("tools list with Drive: %s", body)
+	}
+	if _, s, _ := tw.do("GET", "/settings/tools/"+filesServer+"/row?account=sam@example.org", nil, map[string]string{"HX-Request": "true"}); !strings.Contains(s, "<h3>Drive</h3>") {
+		t.Errorf("drive row: %s", s)
 	}
 
 	// Its services just added are starting, not in error (their first

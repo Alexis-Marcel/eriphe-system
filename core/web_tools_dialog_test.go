@@ -235,7 +235,7 @@ func TestSavedRowFollowsTheTool(t *testing.T) {
 		t.Error("another row follows too")
 	}
 	// The account's row alone.
-	if _, s, _ := tw.do("GET", "/settings/tools/mail/row?account=sam@gmail.com", nil, map[string]string{"HX-Request": "true"}); !strings.Contains(s, "<h3>sam@gmail.com</h3>") {
+	if _, s, _ := tw.do("GET", "/settings/tools/mail/row?account=sam@gmail.com", nil, map[string]string{"HX-Request": "true"}); !strings.Contains(s, "<h3>Mail</h3>") {
 		t.Errorf("account row: %s", s)
 	}
 	// Ready: said once, no more asking.

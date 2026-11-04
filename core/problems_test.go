@@ -386,7 +386,7 @@ func TestToolRowErrors(t *testing.T) {
 			Pending: true, Placed: true},
 			[]string{"Il démarre sur son appareil"}, []string{"is pending on", "problem-text"}},
 	} {
-		html, err := tw.w.fragment("fr", "settings", "tools", page{Data: toolsPage{Tools: []toolView{c.tv}, Groups: groupTools("fr", []toolView{c.tv})}})
+		html, err := tw.w.fragment("fr", "settings", "tools", page{Data: toolsPage{Tools: []toolView{c.tv}, Groups: groupTools([]toolView{c.tv})}})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -14,7 +14,7 @@
 <div id="tools-body">
 {{if or .Tools .VoiceOnly}}
 <ul class="tools" id="tools-list"{{if .Waiting}} hx-get="{{.RefreshURL}}" hx-trigger="load delay:2s" hx-select="#tools-list" hx-swap="outerHTML"{{end}}>
-{{range .Groups}}{{if .Single}}
+{{range .Groups}}{{if .Owner}}{{template "account-card" .}}{{else if .Single}}
   <li class="tool" id="tool-{{.Single.Key}}">{{template "tool-row" .Single}}</li>
 {{else}}{{template "tool-group" .}}{{end}}{{end}}
 {{if .VoiceOnly}}
@@ -66,15 +66,47 @@
   </li>
 {{end}}
 
+{{/* An account's card: its address, who gives it, a row for each of its
+     services; a Google account's actions: manage, reconnect, and the
+     services it could add. . is a toolGroup with an Owner. */}}
+{{define "account-card"}}
+  <li class="tool-group account-card{{if .Reconnect}} account-card-bad{{end}}" id="{{.Key}}" aria-labelledby="{{.Key}}-t">
+    <div class="group-head">
+      <span class="mark preset-mark pmark-{{.Provider}}" aria-hidden="true">{{template "account-icon" .Provider}}</span>
+      <div class="group-title account-title">
+        <h3 id="{{.Key}}-t">{{.Owner}}</h3>
+        <span class="muted small">{{with .ProviderName}}{{.}} · {{end}}{{join .Services ", "}}</span>
+        {{if .Reconnect}}<span class="chip srv-needs_auth"><span class="pulse" aria-hidden="true"></span>{{t "google.toreconnect"}}</span>{{end}}
+      </div>
+      {{if .Google}}<div class="group-actions">
+        {{if .Reconnect}}{{template "google-reconnect" dict "Account" .Google "Target" (printf "%s-r" .Key) "Back" "/settings/tools" "Primary" true}}{{end}}
+        <a class="btn btn-ghost sm" href="/settings/google">{{t "google.manage"}}</a>
+      </div>{{end}}
+    </div>
+    {{if .Reconnect}}<p class="small notice-line">{{tf "google.rowreconnect" .Google}}</p>{{end}}
+    <ul class="tools">{{range .Tools}}<li class="tool" id="tool-{{.Key}}">{{template "tool-row" .}}</li>{{end}}</ul>
+    {{if .Others}}<div class="account-add">
+      <span class="muted small">{{t "acct.addservice"}}</span>
+      {{range .Others}}<form class="inline" hx-post="/settings/google/connect" hx-target="#{{$.Key}}-r" hx-disabled-elt="find button">
+        <input type="hidden" name="account" value="{{$.Google}}"><input type="hidden" name="service" value="{{.}}">
+        <input type="hidden" name="write" value="1"><input type="hidden" name="back" value="/settings/tools">
+        <button class="btn btn-soft sm" type="submit">{{template "i-plus"}}{{t (printf "google.%s" .)}}</button>
+      </form>{{end}}
+    </div>{{end}}
+    {{if .Google}}<div id="{{.Key}}-r" aria-live="polite"></div>{{end}}
+  </li>
+{{end}}
+
 {{/* One tool of the list, or one account of the mail or the calendar
      (.Account). . is a toolView; with .Follow, its row follows the tool
      just saved and asks for itself again until it settles. */}}
 {{define "tool-row"}}
-    {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
+    {{if .Mark}}<span class="mark preset-mark mark-{{.Mark}}" aria-hidden="true">{{template "preset-icon" .Mark}}</span>
+    {{else if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
     {{else}}<span class="mark {{if eq .Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
     <div class="tool-main">
       <div class="tool-head">
-        <h3{{if not .Account}} class="mono"{{end}}>{{.Title}}</h3>
+        <h3{{if not (or .Account .Label)}} class="mono"{{end}}>{{.Title}}</h3>
         {{if .Reconnect}}<span class="chip srv-needs_auth"><span class="pulse" aria-hidden="true"></span>{{t "google.toreconnect"}}</span>
         {{else if .Pending}}<span class="chip srv-pending"><span class="pulse" aria-hidden="true"></span>{{if .Placed}}{{t "server.starting"}}{{else}}{{t "server.pending"}}{{end}}</span>
         {{else}}<span class="chip srv-{{.Status}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "server.%s" .Status)}}</span>{{end}}
@@ -91,7 +123,7 @@
       </p>
       {{if .Scope.Reconnect}}<p class="small notice-line">{{tf "access.reconnect" .Name}}{{if eq .Preset.Form "drive"}} <a href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</p>{{end}}
       {{with .Follow}}{{template "tool-status-line" .}}
-      {{else}}{{if .Reconnect}}<p class="small notice-line">{{tf "google.rowreconnect" .Google}}</p>
+      {{else}}{{if and .Reconnect .Service}}{{else if .Reconnect}}<p class="small notice-line">{{tf "google.rowreconnect" .Google}}</p>
       {{else if .Problem}}<div class="problem small"><p class="problem-text">{{.Problem}}</p>{{with .Error}}<details class="problem-details"><summary>{{t "problem.details"}}</summary><code>{{short . 1200}}</code></details>{{end}}</div>
       {{else if .Pending}}<p class="small muted">{{if .Placed}}{{t "problem.tool.pending"}}{{else}}{{t "tools.pendinghint"}}{{end}}</p>
       {{else if eq .SignIn "reconnect"}}<p class="small notice-line">{{t "tools.expired"}}</p>
@@ -100,10 +132,10 @@
       <div id="connect-{{.Key}}" class="connect-box"></div>
     </div>
     <div class="tool-actions">
-      {{if eq .SignIn "google"}}{{template "google-reconnect" dict "Account" .Google "Target" (printf "connect-%s" .Key) "Back" "/settings/tools"}}
+      {{if eq .SignIn "google"}}{{if not .Service}}{{template "google-reconnect" dict "Account" .Google "Target" (printf "connect-%s" .Key) "Back" "/settings/tools"}}{{end}}
       {{else}}{{with .SignIn}}<form hx-post="/settings/servers/{{$.Name}}/connect" hx-target="#connect-{{$.Key}}" hx-disabled-elt="find button" class="inline">
         <button class="btn btn-primary sm" type="submit">{{t (printf "tools.%s" .)}}</button></form>{{end}}{{end}}
-      {{if and (eq .Preset.ID "google") (eq .Source "workspace")}}<a class="btn btn-ghost sm" href="/settings/google">{{t "google.manage"}}</a>{{end}}
+      {{if and (eq .Preset.ID "google") (eq .Source "workspace") (not .Service)}}<a class="btn btn-ghost sm" href="/settings/google">{{t "google.manage"}}</a>{{end}}
       {{if eq .Preset.ID "home-assistant"}}<a class="btn btn-ghost sm" href="/settings/home-assistant">{{t "ha.manage"}}</a>{{end}}
       {{if eq .Preset.ID "github"}}{{if eq .Auth "github-app"}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>
       {{else if eq .Source "workspace"}}<a class="btn btn-soft sm" href="/settings/github?switch={{.Name}}#gh-conn-{{.Name}}">{{t "github.switch"}}</a>
@@ -463,12 +495,12 @@
   <ul class="providers">
   {{if eq .Preset.Form "mail"}}{{range .MailChoices}}
     <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else if .Page}}<a class="provider provider-google" href="{{.Page}}">{{else}}<a class="provider{{if eq .ID $.Mail.Provider}} current{{end}}" href="{{$.PickURL}}{{.ID}}" data-step data-hash="{{$.StepHash .ID}}">{{end}}
-      <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "provider-icon" .ID}}</span>
+      <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "account-icon" .ID}}</span>
       <span class="provider-text"><b>{{t (printf "mailp.%s" .ID)}}</b><small>{{if .Soon}}<span class="soon-tag">{{t "pick.soon"}}</span>{{else}}{{t (printf "mailp.%s.domains" .ID)}}{{end}}</small></span>
     {{if .Soon}}</div>{{else}}</a>{{end}}</li>
   {{end}}{{else}}{{range .CalChoices}}
     <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else if .Page}}<a class="provider provider-google" href="{{.Page}}">{{else}}<a class="provider{{if eq .ID $.Calendar.Provider}} current{{end}}" href="{{$.PickURL}}{{.ID}}" data-step data-hash="{{$.StepHash .ID}}">{{end}}
-      <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "provider-icon" .ID}}</span>
+      <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "account-icon" .ID}}</span>
       <span class="provider-text"><b>{{t (printf "calp.%s" .ID)}}</b><small>{{if .Soon}}<span class="soon-tag">{{t "pick.soon"}}</span>{{else}}{{t (printf "calp.%s.desc" .ID)}}{{end}}</small></span>
     {{if .Soon}}</div>{{else}}</a>{{end}}</li>
   {{end}}{{end}}
@@ -516,7 +548,7 @@
      step's back link; an edit, which has none, changes it here. */}}
 {{define "account-head"}}{{/* . is a dict: ID, Title, Note, Change (empty: none), Hash */}}
 <div class="account-head">
-  <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "provider-icon" .ID}}</span>
+  <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "account-icon" .ID}}</span>
   <div class="account-text"><b>{{.Title}}</b>{{if .Note}}<small>{{.Note}}</small>{{end}}</div>
   {{with .Change}}<a class="btn btn-ghost sm" href="{{.}}" data-step data-hash="{{$.Hash}}">{{t "pick.change"}}</a>{{end}}
 </div>{{end}}
