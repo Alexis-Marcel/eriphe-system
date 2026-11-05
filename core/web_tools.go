@@ -217,8 +217,14 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 	}
 	v.Groups = groupTools(v.Tools)
 	v.Gallery = w.gallery(lang)
-	if n := q.Get("saved"); n != "" && (w.c.source(kindServer, n) != "" || w.c.source(kindAccess, n) != "") {
+	if n := q.Get("saved"); n != "" && w.c.source(kindServer, n) != "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.saved"), n)
+	}
+	if n := q.Get("savedaccess"); n != "" && w.c.source(kindAccess, n) != "" {
+		v.Flash = fmt.Sprintf(tr(lang, "lent.saved"), n)
+	}
+	if n := q.Get("removedaccess"); serverName.MatchString(n) && w.c.source(kindAccess, n) == "" {
+		v.Flash = fmt.Sprintf(tr(lang, "lent.removed"), n)
 	}
 	if n := q.Get("removed"); n != "" && serverName.MatchString(n) && w.c.source(kindServer, n) == "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.removed"), n)

@@ -239,6 +239,10 @@ func errNotFound(kind, name string) error {
 }
 
 func errInvalid(err error) error {
+	var worded *catalogError
+	if errors.As(err, &worded) {
+		return err // it has its words for the user
+	}
 	return &catalogError{http.StatusBadRequest, "", "", err}
 }
 

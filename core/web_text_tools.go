@@ -14,6 +14,16 @@ func init() {
 
 var toolStrings = map[string]map[string]string{
 	"fr": {
+		"lent.saved":                           "Accès « %s » enregistré.",
+		"lent.removed":                         "Accès « %s » retiré, et son secret effacé.",
+		"lent.err.secret":                      "Il lui faut un secret.",
+		"lent.err.nohost":                      "Il lui faut au moins un hôte.",
+		"lent.err.host":                        "« %s » n'est pas un hôte : un nom exact comme registry.npmjs.org, avec un port si ce n'est pas 443, sans https:// ni chemin.",
+		"lent.err.private":                     "%s n'est pas une adresse publique : eriphe-core ne va que vers des adresses publiques.",
+		"lent.err.env":                         "« %s » ne peut pas tenir le substitut : une variable comme NPM_TOKEN, en majuscules, qui ne soit pas de celles dont dépend la tâche.",
+		"lent.err.header":                      "« %s » n'est pas un nom d'en-tête.",
+		"lent.err.rule":                        "Règle « %s » : une méthode ou *, puis un chemin, comme GET /v1/*.",
+		"lent.err.tool":                        "Un outil porte déjà le nom %s.",
 		"lent.title":                           "Accès",
 		"lent.lead":                            "Ce qu'un programme utilise dans une tâche avec un secret : un registre de paquets, une API avec une clé. La tâche ne tient jamais le secret : elle reçoit un substitut, et le vrai est posé à la sortie, pour ces hôtes seulement.",
 		"lent.add":                             "Ajouter un accès",
@@ -278,6 +288,16 @@ var toolStrings = map[string]map[string]string{
 		"test.calnotfound": "Pas d'agenda CalDAV à cette adresse : vérifie-la.",
 	},
 	"en": {
+		"lent.saved":                    "Access “%s” saved.",
+		"lent.removed":                  "Access “%s” removed, and its secret erased.",
+		"lent.err.secret":               "It needs a secret.",
+		"lent.err.nohost":               "It needs at least one host.",
+		"lent.err.host":                 "“%s” is not a host: an exact name such as registry.npmjs.org, with a port if not 443, no https:// nor path.",
+		"lent.err.private":              "%s is not a public address: eriphe-core only goes to public addresses.",
+		"lent.err.env":                  "“%s” cannot hold the placeholder: a variable such as NPM_TOKEN, in capitals, and not one the task depends on.",
+		"lent.err.header":               "“%s” is not a header name.",
+		"lent.err.rule":                 "Rule “%s”: a method or *, then a path, as GET /v1/*.",
+		"lent.err.tool":                 "A tool is already named %s.",
 		"lent.title":                    "Accesses",
 		"lent.lead":                     "What a program uses in a task with a secret: a package registry, an API with a key. The task never holds the secret: it gets a placeholder, and the real one is put in on the way out, for these hosts only.",
 		"lent.add":                      "Add an access",

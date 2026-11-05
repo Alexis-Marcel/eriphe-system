@@ -144,38 +144,44 @@ func (a Access) targets() []string {
 	return out
 }
 
+// accessRefusal is what is wrong with an access: in English for the log and
+// the file, under a key of web_text_tools.go for the workspace's form.
+func accessRefusal(key, arg, name, format string, args ...any) error {
+	return &catalogError{http.StatusBadRequest, key, arg, fmt.Errorf("access %s: "+format, append([]any{name}, args...)...)}
+}
+
 func (a Access) check(name string) error {
 	if a.Kind != "" && a.Kind != accessHTTP {
 		return fmt.Errorf("access %s: unknown kind %q", name, a.Kind)
 	}
 	if a.Secret == "" {
-		return fmt.Errorf("access %s: it needs a secret", name)
+		return accessRefusal("lent.err.secret", "", name, "it needs a secret")
 	}
 	if len(a.Hosts) == 0 {
-		return fmt.Errorf("access %s: it needs at least one host", name)
+		return accessRefusal("lent.err.nohost", "", name, "it needs at least one host")
 	}
 	for _, h := range a.Hosts {
 		t, err := accessTarget(h)
 		if err != nil {
-			return fmt.Errorf("access %s: %w", name, err)
+			return accessRefusal("lent.err.host", h, name, "%w", err)
 		}
 		host, _, _ := net.SplitHostPort(t)
 		if ip, err := netip.ParseAddr(host); err == nil && !accessAddr(ip) {
-			return fmt.Errorf("access %s: %s is not on the public Internet: eriphe-core only goes to public addresses", name, host)
+			return accessRefusal("lent.err.private", host, name, "%s is not on the public Internet: eriphe-core only goes to public addresses", host)
 		}
 	}
 	if !accessEnvName.MatchString(a.Env) || accessReservedEnv(a.Env) {
-		return fmt.Errorf("access %s: %q cannot hold its placeholder: a variable such as NPM_TOKEN", name, a.Env)
+		return accessRefusal("lent.err.env", a.Env, name, "%q cannot hold its placeholder: a variable such as NPM_TOKEN", a.Env)
 	}
 	if a.Value != "" && a.Value != gridFree && a.Value != gridApproval {
 		return fmt.Errorf("access %s: its value is free or approval, not %q", name, a.Value)
 	}
 	if a.Header != "" && !accessHeaderName.MatchString(a.Header) {
-		return fmt.Errorf("access %s: %q is not a header name", name, a.Header)
+		return accessRefusal("lent.err.header", a.Header, name, "%q is not a header name", a.Header)
 	}
 	for _, r := range a.Rules {
 		if _, _, err := parseAccessRule(r); err != nil {
-			return fmt.Errorf("access %s: %w", name, err)
+			return accessRefusal("lent.err.rule", r, name, "%w", err)
 		}
 	}
 	return nil
@@ -192,7 +198,7 @@ func (c *Config) checkAccesses() error {
 			return err
 		}
 		if _, ok := c.Servers[name]; ok {
-			return fmt.Errorf("access %s: a tool has this name", name)
+			return accessRefusal("lent.err.tool", name, name, "a tool has this name")
 		}
 	}
 	return nil
@@ -514,7 +520,7 @@ func (c *core) putAccess(mode, name string, a Access, secret string) error {
 	case inDyn:
 		a.Secret = old.Secret
 	default:
-		return errInvalid(fmt.Errorf("access %s: it needs a secret", name))
+		return accessRefusal("lent.err.secret", "", name, "it needs a secret")
 	}
 	d := c.dyn.clone()
 	d.Accesses[name] = a

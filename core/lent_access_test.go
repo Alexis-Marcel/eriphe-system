@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -560,7 +561,8 @@ func TestAccessPage(t *testing.T) {
 	if len(a.Hosts) != 2 || a.Value != gridFree || len(a.Rules) != 1 || a.Secret != "vault:access.npm.secret" {
 		t.Fatalf("access = %+v", a)
 	}
-	if code, body, _ := tw.do("GET", "/settings/tools", nil, nil); code != 200 || !strings.Contains(body, accessHost) || strings.Contains(body, accessSecret) {
+	if code, body, _ := tw.do("GET", "/settings/tools?savedaccess=npm", nil, nil); code != 200 || !strings.Contains(body, accessHost) ||
+		strings.Contains(body, accessSecret) || !strings.Contains(html.UnescapeString(body), "Accès « npm » enregistré") {
 		t.Fatalf("list: %d", code)
 	}
 	code, body, _ := tw.do("GET", "/settings/accesses/npm/edit", nil, nil)
@@ -578,7 +580,8 @@ func TestAccessPage(t *testing.T) {
 	}
 	// A refusal stays on the form.
 	form.Set("env", "PATH")
-	if _, body, h := tw.post("/settings/accesses/npm", form, csrf); h.Get("HX-Redirect") != "" || !strings.Contains(body, "lent-form") {
+	if _, body, h := tw.post("/settings/accesses/npm", form, csrf); h.Get("HX-Redirect") != "" || !strings.Contains(body, "lent-form") ||
+		!strings.Contains(html.UnescapeString(body), "ne peut pas tenir le substitut") {
 		t.Fatalf("refused: %s", body)
 	}
 	if code, body, h := tw.post("/settings/accesses/npm/delete", nil, csrf); code != 200 || h.Get("HX-Redirect") == "" {

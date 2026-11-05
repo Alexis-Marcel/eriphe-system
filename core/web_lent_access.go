@@ -87,7 +87,7 @@ func (w *web) handleSaveAccess(rw http.ResponseWriter, r *http.Request, s *sessi
 	}
 	log.Printf("web: access %s saved", f.Name)
 	w.notify()
-	rw.Header().Set("HX-Redirect", "/settings/tools?saved="+url.QueryEscape(f.Name)+"#accesses")
+	rw.Header().Set("HX-Redirect", "/settings/tools?savedaccess="+url.QueryEscape(f.Name)+"#accesses")
 	rw.WriteHeader(http.StatusOK)
 }
 
@@ -99,6 +99,6 @@ func (w *web) handleDeleteAccess(rw http.ResponseWriter, r *http.Request, s *ses
 	}
 	log.Printf("web: access %s removed", name)
 	w.notify()
-	rw.Header().Set("HX-Redirect", "/settings/tools?removed="+url.QueryEscape(name)+"#accesses")
+	rw.Header().Set("HX-Redirect", "/settings/tools?removedaccess="+url.QueryEscape(name)+"#accesses")
 	rw.WriteHeader(http.StatusOK)
 }
