@@ -377,6 +377,7 @@ func TestAccessRules(t *testing.T) {
 	before := svc.calls()
 	for _, no := range []struct{ method, target string }{
 		{"POST", "/v1/pkg"}, {"GET", "/admin"}, {"GET", "/v1/../admin"}, {"GET", "/v1/%2e%2e/admin"}, {"GET", "/v1/..%5cadmin"}, {"GET", "/exact/more"},
+		{"GET", "/v1/..;/admin"}, {"GET", "/v1/%252e%252e/admin"},
 	} {
 		if rec := viaRelay(c, "nas", task.ID, accessHost+":443", no.method, no.target, placeholderAuth(task.ID), nil); rec.Code != 403 {
 			t.Errorf("%v: %d", no, rec.Code)
@@ -384,6 +385,58 @@ func TestAccessRules(t *testing.T) {
 	}
 	if svc.calls() != before {
 		t.Error("a refused request went out")
+	}
+}
+
+// With rules, a GET stays a GET; a refusal's path stays on one line.
+func TestAccessRulesKeepToTheirWord(t *testing.T) {
+	c, svc := accessCore(t, Access{Value: gridFree, Rules: []string{"GET /v1/*"}})
+	task := lendAccess(t, c, true, npm)
+	rec := viaRelay(c, "nas", task.ID, accessHost+":443", "GET", "/v1/x", placeholderAuth(task.ID), map[string]string{"X-HTTP-Method-Override": "DELETE"})
+	if rec.Code != 200 {
+		t.Fatal(rec.Code)
+	}
+	if v := svc.last(t).Header.Get("X-Http-Method-Override"); v != "" {
+		t.Errorf("override = %q", v)
+	}
+	viaRelay(c, "nas", task.ID, accessHost+":443", "GET", "/x%0aforged", placeholderAuth(task.ID), nil)
+	entries, _ := c.store.credentialLog(task.ID, 1)
+	if len(entries) != 1 || entries[0].Decision != decideDeny || strings.Contains(entries[0].Reason, "\n") {
+		t.Errorf("log = %+v", entries)
+	}
+}
+
+// Basic reflected whole is its base64: it does not come back either.
+func TestAccessScrubsBasic(t *testing.T) {
+	c, _ := accessCore(t, Access{Value: gridFree})
+	task := lendAccess(t, c, true, npm)
+	auth := "Basic " + base64.StdEncoding.EncodeToString([]byte("x:"+accessPlaceholder(task.ID, "npm")))
+	rec := viaRelay(c, "nas", task.ID, accessHost+":443", "GET", "/", auth, nil)
+	if got := rec.Header().Get("X-Echo"); got != auth {
+		t.Errorf("X-Echo = %q", got)
+	}
+}
+
+// The agent's own key must not take the placeholder's place.
+func TestAccessCannotTakeTheAgentsVariable(t *testing.T) {
+	c, _ := accessCore(t, Access{Value: gridFree, Env: "MY_KEY"})
+	agentEnv := map[string]string{"MY_KEY": "the-agent-key"}
+	if err := c.checkAgentEnv([]ResourceRef{npm}, agentEnv); err == nil {
+		t.Error("accepted")
+	}
+	if err := c.checkAgentEnv([]ResourceRef{npm}, map[string]string{"OTHER": "x"}); err != nil {
+		t.Error(err)
+	}
+}
+
+// The vault page names an access's secret: it is not "unused".
+func TestAccessSecretOnTheVaultPage(t *testing.T) {
+	c, _ := accessCore(t, Access{Value: gridFree})
+	tw := newTestWebFor(t, c)
+	csrf := tw.setup()
+	code, body, _ := tw.post("/settings/secrets", url.Values{"name": {"other"}, "value": {"x"}}, csrf)
+	if code != 200 || !strings.Contains(body, "Accès npm") {
+		t.Fatalf("%d %s", code, body)
 	}
 }
 
@@ -398,31 +451,42 @@ func TestAccessCheck(t *testing.T) {
 		return a
 	}
 	for name, a := range map[string]Access{
-		"no secret":     edit(func(a *Access) { a.Secret = "" }),
-		"no host":       edit(func(a *Access) { a.Hosts = nil }),
-		"a URL":         edit(func(a *Access) { a.Hosts = []string{"https://example.org/x"} }),
-		"a wildcard":    edit(func(a *Access) { a.Hosts = []string{"*.example.org"} }),
-		"a bad port":    edit(func(a *Access) { a.Hosts = []string{"example.org:99999"} }),
-		"loopback":      edit(func(a *Access) { a.Hosts = []string{"127.0.0.1"} }),
-		"the LAN":       edit(func(a *Access) { a.Hosts = []string{"192.168.1.10:8443"} }),
-		"metadata":      edit(func(a *Access) { a.Hosts = []string{"169.254.169.254"} }),
-		"no variable":   edit(func(a *Access) { a.Env = "" }),
-		"lowercase":     edit(func(a *Access) { a.Env = "npm_token" }),
-		"PATH":          edit(func(a *Access) { a.Env = "PATH" }),
-		"a proxy":       edit(func(a *Access) { a.Env = "HTTPS_PROXY" }),
-		"the task's":    edit(func(a *Access) { a.Env = "ERIPHE_TASK_SECRET" }),
-		"a preload":     edit(func(a *Access) { a.Env = "LD_PRELOAD" }),
-		"a value":       edit(func(a *Access) { a.Value = gridNever }),
-		"a kind":        edit(func(a *Access) { a.Kind = "ssh" }),
-		"a header":      edit(func(a *Access) { a.Header = "a b" }),
-		"a rule":        edit(func(a *Access) { a.Rules = []string{"GET"} }),
-		"a rule's path": edit(func(a *Access) { a.Rules = []string{"GET v1"} }),
+		"no secret":           edit(func(a *Access) { a.Secret = "" }),
+		"no host":             edit(func(a *Access) { a.Hosts = nil }),
+		"a URL":               edit(func(a *Access) { a.Hosts = []string{"https://example.org/x"} }),
+		"a wildcard":          edit(func(a *Access) { a.Hosts = []string{"*.example.org"} }),
+		"a port with a slash": edit(func(a *Access) { a.Hosts = []string{"example.org:8443/"} }),
+		"a hex port":          edit(func(a *Access) { a.Hosts = []string{"example.org:0x1bb"} }),
+		"NAT64":               edit(func(a *Access) { a.Hosts = []string{"[64:ff9b::a00:1]:443"} }),
+		"git's":               edit(func(a *Access) { a.Env = "GIT_ASKPASS" }),
+		"a hop":               edit(func(a *Access) { a.Header = "Proxy-Authorization" }),
+		"the relay's":         edit(func(a *Access) { a.Header = "Eriphe-Foo" }),
+		"a bad port":          edit(func(a *Access) { a.Hosts = []string{"example.org:99999"} }),
+		"loopback":            edit(func(a *Access) { a.Hosts = []string{"127.0.0.1"} }),
+		"the LAN":             edit(func(a *Access) { a.Hosts = []string{"192.168.1.10:8443"} }),
+		"metadata":            edit(func(a *Access) { a.Hosts = []string{"169.254.169.254"} }),
+		"no variable":         edit(func(a *Access) { a.Env = "" }),
+		"lowercase":           edit(func(a *Access) { a.Env = "npm_token" }),
+		"PATH":                edit(func(a *Access) { a.Env = "PATH" }),
+		"a proxy":             edit(func(a *Access) { a.Env = "HTTPS_PROXY" }),
+		"the task's":          edit(func(a *Access) { a.Env = "ERIPHE_TASK_SECRET" }),
+		"a preload":           edit(func(a *Access) { a.Env = "LD_PRELOAD" }),
+		"a value":             edit(func(a *Access) { a.Value = gridNever }),
+		"a kind":              edit(func(a *Access) { a.Kind = "ssh" }),
+		"a header":            edit(func(a *Access) { a.Header = "a b" }),
+		"a rule":              edit(func(a *Access) { a.Rules = []string{"GET"} }),
+		"a rule's path":       edit(func(a *Access) { a.Rules = []string{"GET v1"} }),
 	} {
 		if err := a.check("npm"); err == nil {
 			t.Errorf("%s accepted", name)
 		}
 	}
-	for _, a := range []string{"10.0.0.1", "100.64.0.1", "fd00::1", "::1", "0.0.0.0", "224.0.0.1", "::ffff:192.168.0.1"} {
+	gh := good
+	gh.Env = "GH_TOKEN"
+	if err := gh.check("gh"); err != nil {
+		t.Errorf("GH_TOKEN: %v", err)
+	}
+	for _, a := range []string{"64:ff9b::a00:1", "2002:c0a8:1::1", "198.18.0.1", "240.0.0.1", "0.1.2.3", "10.0.0.1", "100.64.0.1", "fd00::1", "::1", "0.0.0.0", "224.0.0.1", "::ffff:192.168.0.1"} {
 		if accessAddr(netip.MustParseAddr(a)) {
 			t.Errorf("%s is not public", a)
 		}

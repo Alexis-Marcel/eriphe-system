@@ -132,7 +132,7 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 		v.Providers = append(v.Providers, pv)
 	}
 	for k, why := range w.c.skippedEntries() {
-		if !strings.HasPrefix(k, kindServer+"/") {
+		if !strings.HasPrefix(k, kindServer+"/") && !strings.HasPrefix(k, kindAccess+"/") {
 			v.Skipped[k] = why
 		}
 	}

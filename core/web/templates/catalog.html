@@ -11,7 +11,7 @@
 {{range .Secrets}}
   <li>
     <div class="list-main">
-      <span class="strong">{{if eq .Owner "server"}}{{tf "secrets.ofserver" .Of}} · {{t (printf "slot.%s" .Slot)}}{{else if eq .Owner "service"}}{{tf "secrets.ofserver" .Of}} · <span class="mono">{{.Slot}}</span>{{else if eq .Owner "provider"}}{{tf "secrets.ofprovider" .Of}} · {{t "slot.key"}}{{else if eq .Owner "config"}}{{t "secrets.ofconfig"}} · <span class="mono">{{.Of}}</span>{{else}}{{t "secrets.unused"}}{{end}}</span>
+      <span class="strong">{{if eq .Owner "server"}}{{tf "secrets.ofserver" .Of}} · {{t (printf "slot.%s" .Slot)}}{{else if eq .Owner "service"}}{{tf "secrets.ofserver" .Of}} · <span class="mono">{{.Slot}}</span>{{else if eq .Owner "provider"}}{{tf "secrets.ofprovider" .Of}} · {{t "slot.key"}}{{else if eq .Owner "access"}}{{tf "secrets.ofaccess" .Of}}{{else if eq .Owner "config"}}{{t "secrets.ofconfig"}} · <span class="mono">{{.Of}}</span>{{else}}{{t "secrets.unused"}}{{end}}</span>
       <span class="muted small"><code>{{.Name}}</code> · {{tf "accounts.updated" (ago .Updated)}}</span>
     </div>
     <div class="secret-actions">

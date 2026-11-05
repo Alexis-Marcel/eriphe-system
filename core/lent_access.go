@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -40,8 +41,9 @@ import (
 // one a request names. A placeholder sent anywhere else stays a placeholder.
 //
 // This does not stop a service that reflects its headers from handing the
-// secret back: only response headers are scrubbed here, not bodies, and
-// the access's page says a long-lived secret is only as safe as its service.
+// secret back: only response headers are scrubbed here (not bodies, trailers
+// nor 1xx answers), and the access's page says a long-lived secret is only
+// as safe as its service.
 
 const (
 	accessHTTP = "http" // the only delivery yet: a secret in a header
@@ -81,21 +83,34 @@ type Access struct {
 }
 
 var (
-	accessEnvName    = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 	accessHeaderName = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
 	accessMethod     = regexp.MustCompile(`^([A-Z]+|\*)$`)
 	accessHostName   = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`)
 )
 
-// accessReservedEnv are variables a task's programs or its node depend on:
-// a placeholder must not take their place.
-func accessReservedEnv(env string) bool {
+// checkAccessEnv tells whether a variable may hold a placeholder: what a
+// credential may not take (agents.go), and the bundle's. GitHub's token
+// variables are a credential's own: a placeholder is what they should hold.
+func checkAccessEnv(env string) error {
 	switch env {
-	case "PATH", "HOME", "USER", "SHELL", "PWD", "TZ", "NO_PROXY", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
-		"SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "GIT_SSL_CAINFO", "PIP_CERT", "NODE_OPTIONS":
+	case "GH_TOKEN", "GITHUB_TOKEN":
+		return nil
+	case "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "PIP_CERT":
+		return fmt.Errorf("its variable %s is the system's, not a credential's", env)
+	}
+	return checkCredentialEnv(env)
+}
+
+// accessHeldBack are headers the secret could not get through: those a
+// proxy drops on the way, the relay's own, and what a request is not sent
+// by name.
+func accessHeldBack(header string) bool {
+	switch http.CanonicalHeaderKey(header) {
+	case "Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Proxy-Connection", "Te", "Trailer",
+		"Transfer-Encoding", "Upgrade", "Host", "Content-Length":
 		return true
 	}
-	return strings.HasPrefix(env, "ERIPHE_") || strings.HasPrefix(env, "LD_") || strings.HasPrefix(env, "DYLD_")
+	return strings.HasPrefix(http.CanonicalHeaderKey(header), "Eriphe-")
 }
 
 func (a Access) value() string {
@@ -126,8 +141,7 @@ func accessTarget(host string) (string, error) {
 	if _, err := netip.ParseAddr(name); err != nil && !accessHostName.MatchString(name) {
 		return "", fmt.Errorf("%q is not a host: a name such as registry.npmjs.org, with a port if not 443", host)
 	}
-	var p int
-	if n, err := fmt.Sscan(port, &p); err != nil || n != 1 || p < 1 || p > 65535 {
+	if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 || strconv.Itoa(p) != port {
 		return "", fmt.Errorf("%q: bad port", host)
 	}
 	return net.JoinHostPort(name, port), nil
@@ -170,13 +184,13 @@ func (a Access) check(name string) error {
 			return accessRefusal("lent.err.private", host, name, "%s is not on the public Internet: eriphe-core only goes to public addresses", host)
 		}
 	}
-	if !accessEnvName.MatchString(a.Env) || accessReservedEnv(a.Env) {
-		return accessRefusal("lent.err.env", a.Env, name, "%q cannot hold its placeholder: a variable such as NPM_TOKEN", a.Env)
+	if err := checkAccessEnv(a.Env); err != nil {
+		return accessRefusal("lent.err.env", a.Env, name, "%w", err)
 	}
 	if a.Value != "" && a.Value != gridFree && a.Value != gridApproval {
 		return fmt.Errorf("access %s: its value is free or approval, not %q", name, a.Value)
 	}
-	if a.Header != "" && !accessHeaderName.MatchString(a.Header) {
+	if a.Header != "" && (!accessHeaderName.MatchString(a.Header) || accessHeldBack(a.Header)) {
 		return accessRefusal("lent.err.header", a.Header, name, "%q is not a header name", a.Header)
 	}
 	for _, r := range a.Rules {
@@ -212,14 +226,21 @@ func parseAccessRule(rule string) (method, path string, err error) {
 	return f[0], f[1], nil
 }
 
+// accessMethodOverrides make some services take a POST for another method:
+// with rules, they go.
+var accessMethodOverrides = []string{"X-Http-Method-Override", "X-Http-Method", "X-Method-Override"}
+
 // allows tells whether the rules let a request have the secret. A path that
-// climbs (/v1/../admin, or with a backslash some servers read as a slash)
-// would pass a prefix on its way elsewhere: refused once there are rules.
+// may climb on the service would pass a prefix on its way elsewhere: refused
+// once there are rules. That is a segment of .. (or ..; as Java servers read
+// it), a backslash some servers read as a slash, and what is still encoded
+// after one decoding, for a server that decodes twice. A limit against
+// mistakes and plain REST: the real one is the token's rights.
 func (a Access) allows(method, path string) bool {
 	if len(a.Rules) == 0 {
 		return true
 	}
-	if strings.Contains(path, "\\") || slices.Contains(strings.Split(path, "/"), "..") {
+	if strings.ContainsAny(path, "\\%") || slices.ContainsFunc(strings.Split(path, "/"), func(s string) bool { return strings.HasPrefix(s, "..") }) {
 		return false
 	}
 	for _, r := range a.Rules {
@@ -255,12 +276,32 @@ func swapPlaceholder(value, placeholder, secret string) (string, bool) {
 	return scheme + " " + base64.StdEncoding.EncodeToString([]byte(strings.ReplaceAll(string(raw), placeholder, secret))), true
 }
 
+// accessBlocked are the non-public ranges netip has no predicate for, as in
+// the node's relay (node/egress.go): some embed a private IPv4.
+var accessBlocked = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),
+	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("192.0.2.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("64:ff9b::/96"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
+	netip.MustParsePrefix("2001::/32"),
+	netip.MustParsePrefix("2001:db8::/32"),
+	netip.MustParsePrefix("2002::/16"),
+}
+
 // accessAddr is an address eriphe-core goes to for an access: a public one.
 // A declared name must not lead it to its own network, the cloud's metadata
 // or the node's LAN (a private target leaves from the node: not yet).
 func accessAddr(a netip.Addr) bool {
 	a = a.Unmap()
-	return a.IsValid() && a.IsGlobalUnicast() && !localAddr(a)
+	if !a.IsValid() || !a.IsGlobalUnicast() || localAddr(a) {
+		return false
+	}
+	return !slices.ContainsFunc(accessBlocked, func(p netip.Prefix) bool { return p.Contains(a) })
 }
 
 // accessControl refuses, at the socket, any other address, whatever
@@ -404,8 +445,10 @@ func (c *core) injectAccess(t *TaskRow, names []string, target string, r *http.R
 			continue
 		}
 		deny := func(why error) error {
-			c.store.logCredential(t.ID, accessLogTool, host, name, r.Method, decideDeny, byPolicy, "", why.Error())
-			log.Printf("access: task %s: %s %s refused: %v", t.ID, r.Method, host, why)
+			// The path is the task's: one short line in what watches it.
+			line := truncate(oneLine(why.Error()), 300)
+			c.store.logCredential(t.ID, accessLogTool, host, name, r.Method, decideDeny, byPolicy, "", line)
+			log.Printf("access: task %s: %s %s refused: %s", t.ID, r.Method, host, line)
 			return why
 		}
 		if err := c.accessUsable(t, name); err != nil {
@@ -421,8 +464,18 @@ func (c *core) injectAccess(t *TaskRow, names []string, target string, r *http.R
 		}
 		swapped, _ := swapPlaceholder(value, placeholder, secret)
 		r.Header.Set(header, swapped)
-		pairs = append(pairs, secret, placeholder)
-		c.store.logCredential(t.ID, accessLogTool, host, name, r.Method, decideAllow, byPolicy, "", truncate(uri.Path, 200))
+		if len(a.Rules) > 0 {
+			for _, h := range accessMethodOverrides {
+				r.Header.Del(h)
+			}
+		}
+		// The secret as it left, too: Basic is its base64, whole value.
+		pairs = append(pairs, swapped, value, secret, placeholder)
+		if _, encoded, ok := strings.Cut(swapped, " "); ok {
+			_, original, _ := strings.Cut(value, " ")
+			pairs = append(pairs, encoded, original)
+		}
+		c.store.logCredential(t.ID, accessLogTool, host, name, r.Method, decideAllow, byPolicy, "", truncate(oneLine(uri.Path), 200))
 	}
 	return strings.NewReplacer(pairs...), nil
 }
@@ -437,6 +490,21 @@ func (c *core) lentAccesses(taskID string, list []ResourceRef) []nodeAccess {
 		}
 	}
 	return out
+}
+
+// checkAgentEnv refuses an access whose variable is one the task's agent is
+// lent: the real credential would win over the placeholder, and go out to
+// the access's hosts.
+func (c *core) checkAgentEnv(list []ResourceRef, agentEnv map[string]string) error {
+	for _, e := range list {
+		if e.Kind != resAccess {
+			continue
+		}
+		if env := c.conf().Accesses[e.Ref].Env; agentEnv[env] != "" {
+			return fmt.Errorf("access %s uses the variable %s, which holds this task's agent's own key: rename it, or use another agent", e.Ref, env)
+		}
+	}
+	return nil
 }
 
 // checkLentAccesses refuses what one task cannot be lent together: two

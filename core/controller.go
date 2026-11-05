@@ -362,7 +362,11 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		return nil, fmt.Errorf("agent %s runs %s: catalog tools need a runtime that takes MCP servers", agentName, agent.Runtime)
 	}
 	// The credentials are checked now, but only read again when the node fetches the task.
-	if _, err := c.lend(agentName); err != nil {
+	agentEnv, err := c.lend(agentName)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.checkAgentEnv(lent.List, agentEnv); err != nil {
 		return nil, err
 	}
 	// The node still gets the spec fields of before, derived from the resources.

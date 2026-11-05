@@ -132,10 +132,10 @@ resource, `{"kind": "access", "ref": "npm"}`; `list_tools` shows them to the bra
 | `use` | what it is for, for the brain and the user |
 | `secret` | a file, or `vault:<name>`; from the workspace, typed once, straight to the vault as `access.<name>.secret`, and never shown back |
 | `hosts` | the exact names it reaches, with a port if not 443; public addresses only |
-| `env` | the variable holding the placeholder (`NPM_TOKEN`); not one a task depends on (`PATH`, `ERIPHE_*`…) |
+| `env` | the variable holding the placeholder (`NPM_TOKEN`); not one a task depends on (`PATH`, `GIT_*`, `ERIPHE_*`…), nor its agent's own key |
 | `value` | `free`, or `approval` (the default) |
 | `header` | the one header the secret goes in; `Authorization` by default, Bearer and Basic alike |
-| `rules` | if any, the only requests the secret goes on: `GET /v1/*`, `* /exact` |
+| `rules` | if any, the only requests the secret goes on: `GET /v1/*`, `* /exact`. A path that may climb on the service, or is still encoded, is refused, and a method override header dropped: a limit against mistakes, the real one being the token's rights |
 
 The task never holds the secret. Its variable holds a placeholder; the node's relay decrypts the
 access's hosts only ([node/README](../node/README.md#accesses)) and hands each request to
@@ -150,11 +150,14 @@ details. It ends with its task.
 
 What this does not do:
 
-- A service that reflects its headers hands the secret back. Response headers are scrubbed, bodies
-  are not: inject into the one header, and prefer short-lived tokens. The page says so.
+- A service that reflects its headers hands the secret back. Response headers are scrubbed, as a
+  raw value or as Basic; bodies, trailers and 1xx answers are not: inject into the one header, and
+  prefer short-lived tokens. The page says so.
 - The node sees an access's requests, though not its secret. A client that pins its certificates
   fails on that access, and so does gRPC (HTTP/1.1 only), and a presigned URL cannot be made from a
   placeholder.
+- Each use is one row of `credential_log`, written before the request goes, and the table is not
+  pruned: a large install through an access makes many rows, and the task's details show the latest.
 - It stops a secret from being stolen, not from being used: the real limit is set at the provider.
 - What a task reads through an access is external content, and does not taint the task: Eriphe does
   not read a program's traffic, as it does not read its shell output. The page says so too.
