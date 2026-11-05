@@ -792,7 +792,17 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    is the boundary: what leaves it goes through the node's mounts (a folder's level), its egress
    filter and the credentials eriphe-core lends, which the shell rules above cannot replace (they
    read a command line, and only stop mistakes);
-5. what is left (a lent catalog tool the rules do not name) is the brain's to judge.
+5. **a lent tool is authorized** (`lend.go`): a task uses what the brain lent it without asking
+   again, call by call. A read of a lent tool is allowed; an action that stays in its service (a
+   tool the server, trusted for its annotations, marks `openWorldHint: false`: moving a mail,
+   creating an event) is allowed too when the task was started in the turn of one of the user's
+   messages (or as a watch's action authorised in advance). An action that reaches outside
+   (sending, publishing) or that no annotation vouches for stays the user's, a server on `ask`
+   keeps asking, and the steps above come first;
+6. what is left is the brain's to judge. A request the brain was told of and left at the end of
+   its turn (it relayed it, or could not decide) is the user's. The workspace and the
+   notifications show the user only the requests that are theirs (any while the brain is off or
+   stopped by an error); a task's own page shows them all.
 
 For an MCP tool (`mcp__<server>__<tool>`), `match` applies to the JSON of its input (keys sorted).
 Common safe reads, allowed without asking anyone:
@@ -817,7 +827,7 @@ kept apart from **how** its credential is scoped.
 | Level | Workspace | Reads | Writes |
 |---|---|---|---|
 | `read-only` | Lecture seule / Read only | free | not lent: not in `tools/list` of a task nor in `list_tools`, denied by the policy and refused by the proxy |
-| `reads` | Lecture libre, écriture sur accord / Free reads, writes on approval | free | the user's to approve |
+| `reads` | Lecture libre, écriture sur accord / Free reads, writes on approval | free | the user's to approve: in the workspace, or by asking Eriphe for the work (a [lent tool](#permission-policy)) |
 | `free` | Tout libre / Everything free | free | free (the brain judges a worker's; the brain's own are allowed in advance) |
 | `ask` | Tout sur accord / Everything on approval | the user's | the user's |
 

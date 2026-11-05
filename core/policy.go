@@ -202,6 +202,9 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 			}
 		}
 	}
+	if f.lent && f.level != accessAsk {
+		return decideAllow, lentReason
+	}
 	if f.free() {
 		return decideBrain, ""
 	}
@@ -215,11 +218,22 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 
 // decide applies the policy, with what the catalog knows of the tool.
 func (c *core) decide(tool string, input map[string]any) (decision, reason string) {
+	return c.decideFacts(tool, input, c.pool.facts(tool, input))
+}
+
+// decideTask is decide for a worker's request, knowing what it was lent.
+func (c *core) decideTask(t *TaskRow, tool string, input map[string]any) (decision, reason string) {
+	f := c.pool.facts(tool, input)
+	f.lent = t != nil && c.lendAllows(t, tool)
+	return c.decideFacts(tool, input, f)
+}
+
+func (c *core) decideFacts(tool string, input map[string]any, f catalogFacts) (decision, reason string) {
 	var remembered []Rule
 	if strings.HasPrefix(tool, "mcp__") {
 		remembered = c.store.allowedRules()
 	}
-	return c.conf().Policy.decideWith(tool, input, c.pool.facts(tool, input), remembered)
+	return c.conf().Policy.decideWith(tool, input, f, remembered)
 }
 
 func (p *Policy) rules() []Rule {
@@ -236,6 +250,7 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 	if c.isAssistantTask(id) {
 		return false // its role's approval path answers it (assistant_controller.go)
 	}
+	t, _ := c.store.task(id)
 	left := false
 	for _, e := range events {
 		if e.Type != "permission" {
@@ -251,7 +266,7 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 			left = true
 			continue
 		}
-		decision, reason := c.decide(tool, input)
+		decision, reason := c.decideTask(t, tool, input)
 		if decision == decideBrain {
 			if why := c.undeclaredPush(id, tool, input); why != "" {
 				decision, reason = decideDeny, why
