@@ -207,6 +207,29 @@ func pinnedImage(image, version string) string {
 	return image + ":" + version
 }
 
+// ownToolVersion is the version one of Eriphe's own tools must be, the
+// one of eriphe-core; "" for another server, or a development build.
+func ownToolVersion(s Server) string {
+	if !s.local() || version == "" || version == "dev" {
+		return ""
+	}
+	spec, err := decodeRun(s.Run)
+	if err != nil {
+		return ""
+	}
+	image := spec.Image
+	if i := strings.LastIndexByte(image, ':'); i > strings.LastIndexByte(image, '/') {
+		image = image[:i]
+	}
+	if !slices.Contains(ownServiceImages, image) {
+		return ""
+	}
+	return version
+}
+
+// behind tells a tool that said its version, and not the one it must be.
+func behind(got, want string) bool { return got != "" && got != "dev" && got != want }
+
 func (s RunSpec) hash() string {
 	raw, _ := json.Marshal(s)
 	h := sha256.Sum256(raw)

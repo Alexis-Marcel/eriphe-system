@@ -333,6 +333,10 @@ type serverInfo struct {
 	RedirectURI      string     `json:"redirect_uri,omitempty"`
 	ToolCount        int        `json:"tool_count"`
 	Tools            []toolInfo `json:"tools,omitempty"`
+	// Version is what the server says it is; Want, for one of Eriphe's own
+	// tools that is not eriphe-core's version, the one it must be.
+	Version string `json:"version,omitempty"`
+	Want    string `json:"want_version,omitempty"`
 }
 
 type toolInfo struct {
@@ -369,6 +373,10 @@ func (c *core) listServers(only string, withTools bool) []serverInfo {
 			// Read only: its reads alone are shown, as they alone are lent.
 			tools = slices.DeleteFunc(slices.Clone(tools), func(t *mcp.Tool) bool { return !lends(s, t) })
 			info.Status, info.Error, info.ToolCount = status, truncate(errText, 300), len(tools)
+			info.Version = u.version()
+			if want := ownToolVersion(s); want != "" && behind(info.Version, want) {
+				info.Want = want
+			}
 			if withTools {
 				for _, t := range tools {
 					ti := toolInfo{Name: t.Name, Description: truncate(oneLine(t.Description), 160)}

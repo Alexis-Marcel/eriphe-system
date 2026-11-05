@@ -1545,6 +1545,9 @@ publishes them under; a development build ("dev") runs the untagged image. A nod
 it does not have, never a newer one of one it has: without this, a machine kept the image it pulled
 first. A new version of eriphe-core changes their specs, and their node runs them again with the
 new image.
+A tool of another version still says so: its version (its MCP `serverInfo`) is in `list_tools`
+(`version`, and `want_version` when it is not eriphe-core's), its row in Settings → Tools says it
+may misread its configuration, and an error of its tells the brain that likely cause.
 
 Two calendars can share an address: an Apple account's and a Google account's. They are two
 accounts. The Google one keeps the address as its name (the Google account finds its calendar by

@@ -382,6 +382,21 @@ func (u *upstream) snapshot() (status, errText string, tools []*mcp.Tool) {
 	return u.status, u.err, u.tools
 }
 
+// version is what the server said it is when its session opened (its
+// serverInfo); "" before, or when it says nothing.
+func (u *upstream) version() string {
+	u.mu.Lock()
+	sess := u.session
+	u.mu.Unlock()
+	if sess == nil {
+		return ""
+	}
+	if r := sess.InitializeResult(); r != nil && r.ServerInfo != nil {
+		return r.ServerInfo.Version
+	}
+	return ""
+}
+
 func (u *upstream) tool(name string) *mcp.Tool {
 	_, _, tools := u.snapshot()
 	for _, t := range tools {
@@ -426,7 +441,16 @@ func (u *upstream) call(ctx context.Context, tool string, args json.RawMessage) 
 	if len(args) > 0 {
 		params.Arguments = args
 	}
-	return sess.CallTool(ctx, params)
+	res, err := sess.CallTool(ctx, params)
+	if err == nil && res != nil && res.IsError {
+		if got, want := u.version(), ownToolVersion(u.srv); want != "" && behind(got, want) {
+			// The brain is told the likely cause, not left to guess.
+			res.Content = append(res.Content, &mcp.TextContent{Text: fmt.Sprintf("(This tool runs version %s, Eriphe %s: "+
+				"it may not read the configuration Eriphe gives it. Its machine restarts it with version %s once it has it; "+
+				"the user sees it in Settings → Tools.)", got, want, want)})
+		}
+	}
+	return res, err
 }
 
 // readOnly tells whether a catalog tool, by its Claude Code name, is

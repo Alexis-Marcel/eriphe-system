@@ -219,6 +219,7 @@ var toolStrings = map[string]map[string]string{
 		"acct.svc.calendar":     "Agenda",
 		"acct.svc.drive":        "Drive",
 		"acct.addservice":       "Ajouter à ce compte :",
+		"tools.behind":          "Cet outil tourne en version %s, Eriphe en %s : il peut mal lire la configuration qu'Eriphe lui donne. Son appareil le relance avec la bonne version dès qu'il l'a téléchargée.",
 
 		"test.mailok":      "Connexion réussie : la boîte %s accepte ce mot de passe.",
 		"test.maildenied":  "Mot de passe refusé par la messagerie : vérifie l'adresse et le mot de passe (d'application) collé.",
@@ -401,6 +402,7 @@ var toolStrings = map[string]map[string]string{
 		"acct.svc.calendar":     "Calendar",
 		"acct.svc.drive":        "Drive",
 		"acct.addservice":       "Add to this account:",
+		"tools.behind":          "This tool runs version %s, Eriphe %s: it may misread the configuration Eriphe gives it. Its machine restarts it with the right version once it has downloaded it.",
 
 		"test.mailok":      "Connected: the mailbox %s accepts this password.",
 		"test.maildenied":  "Password refused by the mail provider: check the address and the (app) password pasted.",
