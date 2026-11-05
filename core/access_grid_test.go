@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"html"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -246,16 +247,24 @@ func TestToolPageSavesTheGrid(t *testing.T) {
 	if !strings.Contains(body, `name="grid-send" value="never" aria-label`) || !strings.Contains(html.UnescapeString(body), "Comme sa catégorie") {
 		t.Fatalf("page: %s", body)
 	}
-	// A shortcut fills the grid.
-	form.Set("shortcut", accessReadOnly)
-	tw.post("/settings/tools/linear/access", form, csrf)
-	if s := c.conf().Servers["linear"]; s.level() != accessReadOnly {
-		t.Fatalf("shortcut: %s", s.level())
+	// A shortcut fills the grid in the page: it saves nothing, nor is it the
+	// button Enter presses.
+	if !strings.Contains(body, `type="button" data-fill="never"`) || !strings.Contains(body, `type="button" data-fill="free"`) ||
+		!strings.Contains(body, `class="alert free-warn"`) {
+		t.Fatalf("shortcuts: %s", body)
 	}
-	form.Del("shortcut")
 	form.Set("grid-send", "sometimes")
-	if _, _, h := tw.post("/settings/tools/linear/access", form, csrf); h.Get("HX-Redirect") != "" {
+	status, body, h := tw.post("/settings/tools/linear/access", form, csrf)
+	if h.Get("HX-Redirect") != "" {
 		t.Fatal("a bad value saved")
+	}
+	// Refused, the page keeps what the user chose.
+	if status != 200 || !strings.Contains(body, `name="grid-delete" value="approval" aria-label="Supprimer : Sur accord" checked`) {
+		t.Fatalf("refused: %d %s", status, body)
+	}
+	// Every row is needed: a form without one resets nothing.
+	if _, _, h := tw.post("/settings/tools/linear/access", url.Values{"grid-send": {gridFree}}, csrf); h.Get("HX-Redirect") != "" {
+		t.Fatal("a partial form saved")
 	}
 	// Without the switch, the annotations do not count.
 	form.Set("grid-send", gridFree)
@@ -285,15 +294,90 @@ func TestToolPageExceptionsAndLocked(t *testing.T) {
 	if got := c.conf().Servers["github"]; got.Grid != before.Grid {
 		t.Fatalf("changed: %+v", got)
 	}
-	v := []toolException{{Name: "create_issue"}, {Name: "get_issue"}}
-	r := httptest.NewRequest("POST", "/", strings.NewReader("exception-create_issue=free&exception-get_issue="))
-	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if _, ex, _ := formGrid(r, v, map[string]string{"get_issue": gridNever}); len(ex) != 1 || ex["create_issue"] != gridFree {
+	post := func(body string) *http.Request {
+		r := httptest.NewRequest("POST", "/", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if err := r.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	own := map[string]string{"get_issue": gridNever}
+	v := toolAccess{Tools: []toolException{{Name: "create_issue"}, {Name: "get_issue"}}, Own: own}
+	r := post("exception-create_issue=free&exception-get_issue=")
+	if ex := formExceptions(r, accessGrid{}, v); len(ex) != 1 || ex["create_issue"] != gridFree {
 		t.Fatalf("exceptions = %v", ex)
 	}
+	// A page drawn while the server reconnected showed no panel: nothing goes.
+	if ex := formExceptions(post("grid-read=free"), accessGrid{}, v); len(ex) != 1 || ex["get_issue"] != gridNever {
+		t.Fatalf("no panel = %v", ex)
+	}
+	// On an account, what its server says is not copied; following its
+	// category takes a value of its own.
+	v = toolAccess{Tools: []toolException{{Name: "send", Category: catSend}, {Name: "move", Category: catDelete}},
+		Inherited: map[string]string{"send": gridFree, "move": gridNever}}
+	ex := formExceptions(post("exception-send=free&exception-move="), accessGrid{Delete: gridApproval}, v)
+	if len(ex) != 1 || ex["move"] != gridApproval {
+		t.Fatalf("inherited = %v", ex)
+	}
 	// A server that is down lists nothing: its exceptions stay.
-	if _, ex, _ := formGrid(r, nil, map[string]string{"get_issue": gridNever}); ex["get_issue"] != gridNever {
+	if ex := formExceptions(r, accessGrid{}, toolAccess{Own: own}); ex["get_issue"] != gridNever {
 		t.Fatalf("exceptions of a server down = %v", ex)
+	}
+}
+
+// An account's page saves the account's grid: it reaches its server's
+// read_only, its switch holds for it alone, the other account keeps its own.
+// The server has no grid of its own to save.
+func TestAccountPageSavesItsGrid(t *testing.T) {
+	tw, c, csrf := catalogWeb(t, nil)
+	for _, addr := range []string{"pro@example.org", "perso@example.org"} {
+		form := url.Values{"preset": {"mail"}, "access": {"reads"}, "mail_provider": {"ovh"}, "address": {addr}, "password": {addr + "-pw"}}
+		if code, body, _ := tw.post("/settings/tools", form, csrf); code != 200 {
+			t.Fatalf("add %s: %d %s", addr, code, body)
+		}
+	}
+	form := url.Values{"grid-read": {gridFree}, "grid-change": {gridNever}, "grid-delete": {gridNever}, "grid-send": {gridNever}, "trust": {"1"}}
+	if _, _, h := tw.post("/settings/tools/mail/access", form, csrf); h.Get("HX-Redirect") != "" {
+		t.Fatal("saved on the server of several accounts")
+	}
+	if c.conf().Servers["mail"].Grid != nil {
+		t.Fatal("a grid no call would read")
+	}
+	if code, body, h := tw.post("/settings/tools/mail/access?account=pro%40example.org", form, csrf); code != 200 || h.Get("HX-Redirect") == "" {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	pro, _ := serviceAccount(t, c.core, mailService, "pro@example.org")
+	perso, _ := serviceAccount(t, c.core, mailService, "perso@example.org")
+	if !pro.ReadOnly || perso.ReadOnly {
+		t.Fatalf("pro %+v perso %+v", pro, perso)
+	}
+	srv := c.conf().Servers["mail"]
+	if a, ok := srv.accountAccess(map[string]any{"account": "pro@example.org"}); !ok || a.grid.Send != gridNever || !a.trusted {
+		t.Fatalf("pro: %+v", a)
+	}
+	if a, ok := srv.accountAccess(map[string]any{"account": "perso@example.org"}); !ok || a.level() != accessReads {
+		t.Fatalf("perso: %+v", a)
+	}
+	form.Del("trust")
+	tw.post("/settings/tools/mail/access?account=pro%40example.org", form, csrf)
+	if a, _ := c.conf().Servers["mail"].accountAccess(map[string]any{"account": "pro@example.org"}); a.trusted {
+		t.Fatal("the switch of the account")
+	}
+}
+
+// Once one account has its own access, the server's no longer speaks for the
+// others: they are written down as they were.
+func TestKeepAccounts(t *testing.T) {
+	grid := accessGrid{gridFree, gridFree, gridApproval, gridNever}
+	srv := Server{Grid: &grid, TrustAnnotations: true, AccountAccess: map[string]string{"pro@example.org": accessFree}}
+	kept := keepAccounts(srv, svcConfig{Accounts: []svcAccount{{Name: "pro@example.org"}, {Name: "perso@example.org"}}})
+	a, ok := kept.accountAccess(map[string]any{"account": "perso@example.org"})
+	if !ok || a.grid != grid || !a.trusted {
+		t.Fatalf("perso: %+v", a)
+	}
+	if _, ok := kept.AccountGrids["pro@example.org"]; ok || srv.AccountGrids != nil {
+		t.Fatalf("kept %+v, server %+v", kept.AccountGrids, srv.AccountGrids)
 	}
 }
 

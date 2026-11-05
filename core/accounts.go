@@ -438,13 +438,32 @@ func (c *core) setAccountGrid(server, account string, g accountGrid) error {
 		return errAccountUnknown
 	}
 	spec, _ := decodeRun(srv.Run)
-	next := srv
-	next.AccountGrids = withoutAccount(srv.AccountGrids, account)
+	next := keepAccounts(srv, cfg)
+	next.AccountGrids = withoutAccount(next.AccountGrids, account)
 	if next.AccountGrids == nil {
 		next.AccountGrids = map[string]accountGrid{}
 	}
 	next.AccountGrids[cfg.Accounts[i].Name] = g
 	return c.writeService(svc, svcServer{Name: server, Server: srv, Spec: spec, Config: cfg}, next, cfg, nil, nil, true)
+}
+
+// keepAccounts writes down what each account follows from its server: once
+// one account has its own access, the server's no longer speaks for the
+// others (toolFacts).
+func keepAccounts(srv Server, cfg svcConfig) Server {
+	base := srv.baseAccess()
+	grids := maps.Clone(srv.AccountGrids)
+	for _, a := range cfg.Accounts {
+		if _, ok := srv.accountAccess(map[string]any{"account": a.Name}); ok {
+			continue
+		}
+		if grids == nil {
+			grids = map[string]accountGrid{}
+		}
+		grids[a.Name] = accountGrid{Grid: base.grid, Trust: &base.trusted}
+	}
+	srv.AccountGrids = grids
+	return srv
 }
 
 // withoutAccount is a server's account grids less one account's.
@@ -472,6 +491,7 @@ func (c *core) setAccountLevel(server, account, level string) error {
 		return errAccountUnknown
 	}
 	spec, _ := decodeRun(srv.Run)
+	srv = keepAccounts(srv, cfg)
 	levels := map[string]string{}
 	for k, v := range srv.AccountAccess {
 		levels[k] = v

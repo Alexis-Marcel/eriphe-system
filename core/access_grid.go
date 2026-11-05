@@ -179,7 +179,9 @@ func (a serverAccess) of(t *mcp.Tool) (category, value string) {
 }
 
 // level is the level closest to it. An exception that lets a tool do more
-// than read needs a credential that can: it is not read only.
+// than read needs a credential that can: it is not read only. The level does
+// not know the tools, so an exception on a read tool counts too: the grid
+// still refuses the writes, the credential alone is wider than it could be.
 func (a serverAccess) level() string {
 	level := gridLevel(a.grid, a.trusted)
 	if level == accessReadOnly {

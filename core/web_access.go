@@ -58,7 +58,9 @@ type toolAccess struct {
 	Rows    []gridRow
 	Trusted bool
 	Tools   []toolException
-	Own     map[string]string // its exceptions, of the tools listed now or not
+	Own     map[string]string // its own exceptions, of the tools listed now or not
+	// Inherited is what an account has from its server's exceptions.
+	Inherited map[string]string
 	// Connection is the page of its connection, when it has one.
 	Connection string
 }
@@ -92,10 +94,12 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 		v.Access, v.Scope = svcServer{Server: srv}.level(a.Name), tokenScope{}
 		v.Allowed = w.c.store.accountActions(name, a.Name)
 	}
-	access := srv.baseAccess()
-	own := srv.Exceptions
-	if a, ok := srv.accountAccess(map[string]any{"account": v.Account}); ok {
-		access = a
+	access, own := srv.baseAccess(), srv.Exceptions
+	if v.Account != "" {
+		own, v.Inherited = nil, srv.Exceptions
+		if a, ok := srv.accountAccess(map[string]any{"account": v.Account}); ok {
+			access = a
+		}
 		for name, g := range srv.AccountGrids {
 			if strings.EqualFold(name, v.Account) {
 				own = g.Exceptions
@@ -110,10 +114,15 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 		var tools []*mcp.Tool
 		v.Status, _, tools = u.snapshot()
 		for _, t := range tools {
-			v.Tools = append(v.Tools, toolException{t.Name, toolCategory(t, access.trusted), own[t.Name]})
+			v.Tools = append(v.Tools, toolException{t.Name, toolCategory(t, access.trusted), access.exceptions[t.Name]})
 		}
-		slices.SortFunc(v.Tools, func(a, b toolException) int { return strings.Compare(a.Name, b.Name) })
 	}
+	for name, value := range own { // a tool not listed now keeps its line: its exception can go
+		if !slices.ContainsFunc(v.Tools, func(t toolException) bool { return t.Name == name }) {
+			v.Tools = append(v.Tools, toolException{Name: name, Value: value})
+		}
+	}
+	slices.SortFunc(v.Tools, func(a, b toolException) int { return strings.Compare(a.Name, b.Name) })
 	v.Connection = connectionPage(name, v.Account, v.Preset, srv.authKind(), w.c.source(kindServer, name))
 	return v, true
 }
@@ -156,28 +165,71 @@ func (w *web) handleToolAccess(rw http.ResponseWriter, r *http.Request, s *sessi
 	w.render(rw, r, s, "settings", "", page{Title: "access.page", Nav: "settings", Tab: "tools", View: "access", Data: v})
 }
 
-// formGrid reads the grid a page posted, and its exceptions: a shortcut
-// fills the grid in one click. The page shows the tools listed now: a
-// server that is down keeps the exceptions of those it cannot show.
-func formGrid(r *http.Request, tools []toolException, own map[string]string) (accessGrid, map[string]string, bool) {
+// formGrid reads the grid a page posted, each category required.
+func formGrid(r *http.Request) (accessGrid, error) {
 	g := accessGrid{r.PostFormValue("grid-read"), r.PostFormValue("grid-change"), r.PostFormValue("grid-delete"), r.PostFormValue("grid-send")}
-	if level := r.PostFormValue("shortcut"); level != "" {
-		g = levelGrid(level)
-	}
-	exceptions := map[string]string{}
-	maps.Copy(exceptions, own)
-	for _, t := range tools {
-		delete(exceptions, t.Name)
-		if v := r.PostFormValue("exception-" + t.Name); v != "" {
-			exceptions[t.Name] = v
+	for _, c := range categories {
+		if r.PostFormValue("grid-"+c) == "" {
+			return g, errInvalid(errors.New("grid: " + c + " has no value"))
 		}
 	}
-	return g, exceptions, r.PostFormValue("trust") != ""
+	return g, nil
 }
 
-// saveGrid gives a tool, or one of its accounts, the grid of the page.
+// formExceptions reads the exceptions a page posted. Only the tools it
+// showed change: a page drawn while the server was reconnecting has none.
+// On an account, what its server says stays out of its own exceptions; to
+// follow its category instead, it needs that value of its own.
+func formExceptions(r *http.Request, g accessGrid, v toolAccess) map[string]string {
+	exceptions := map[string]string{}
+	maps.Copy(exceptions, v.Own)
+	for _, t := range v.Tools {
+		key := "exception-" + t.Name
+		if !r.PostForm.Has(key) {
+			continue
+		}
+		delete(exceptions, t.Name)
+		value := r.PostForm.Get(key)
+		if held, ok := v.Inherited[t.Name]; ok {
+			if value == held {
+				continue
+			}
+			if value == "" && t.Category != "" {
+				value = g.value(t.Category)
+			}
+		}
+		if value != "" {
+			exceptions[t.Name] = value
+		}
+	}
+	return exceptions
+}
+
+// posted is the page as the user left it, when it could not be saved.
+func (v toolAccess) posted(r *http.Request) toolAccess {
+	for i, row := range v.Rows {
+		v.Rows[i].Value = cmpOr(r.PostFormValue("grid-"+row.Category), row.Value)
+	}
+	for i, t := range v.Tools {
+		if r.PostForm.Has("exception-" + t.Name) {
+			v.Tools[i].Value = r.PostForm.Get("exception-" + t.Name)
+		}
+	}
+	v.Trusted = r.PostFormValue("trust") != ""
+	return v
+}
+
+// saveGrid gives a tool, or one of its accounts, the grid of the page. A
+// server of several accounts has no grid of its own: they each do.
 func (w *web) saveGrid(r *http.Request, name, account string, srv Server, v toolAccess) error {
-	g, exceptions, trusted := formGrid(r, v.Tools, v.Own)
+	if _, cfg, isSvc := accountsOf(srv); isSvc && account == "" && len(cfg.Accounts) > 0 {
+		return errInvalid(errors.New("grid: choose one of its accounts"))
+	}
+	g, err := formGrid(r)
+	if err != nil {
+		return err
+	}
+	exceptions, trusted := formExceptions(r, g, v), r.PostFormValue("trust") != ""
 	if err := (Server{Grid: &g, Exceptions: exceptions}).checkAccess(); err != nil {
 		return errInvalid(err)
 	}
@@ -221,6 +273,9 @@ func (w *web) handleSaveToolAccess(rw http.ResponseWriter, r *http.Request, s *s
 		err = w.c.putServer(putUpdate, name, srv.withLevel(level), nil)
 	}
 	if err != nil {
+		if level == "" {
+			v = v.posted(r)
+		}
 		v.Error = w.formError(r, err)
 		w.render(rw, r, s, "settings", "tool-access-frag", page{Data: v})
 		return

@@ -142,7 +142,8 @@
       {{else if eq .Source "workspace"}}<a class="btn btn-soft sm" href="/settings/github?switch={{.Name}}#gh-conn-{{.Name}}">{{t "github.switch"}}</a>
       {{else}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>{{end}}{{end}}
       {{if and (eq .Preset.Form "drive") (eq .Source "workspace")}}<a class="btn btn-ghost sm" href="/settings/drive">{{t "drive.folders"}}</a>{{end}}
-      <a class="btn {{if and .Follow .Follow.Edit}}btn-soft{{else}}btn-ghost{{end}} sm" href="{{.AccessURL}}">{{t "catalog.edit"}}</a>
+      {{if and .Follow .Follow.Edit .Editable}}<a class="btn btn-soft sm" href="{{.EditURL}}" data-step-open="add-dlg" data-hash="{{.EditHash}}">{{t "catalog.edit"}}</a>
+      {{else}}<a class="btn btn-ghost sm" href="{{.AccessURL}}">{{t "catalog.edit"}}</a>{{end}}
       {{if .Removable}}<form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{if .Account}}{{tf "accounts.removeconfirm" .Account}}{{else}}{{tf "tools.removeconfirm" .Name}}{{end}}" class="inline">
         {{with .Account}}<input type="hidden" name="account" value="{{.}}">{{end}}<button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>{{end}}
     </div>
@@ -615,16 +616,17 @@
   <legend>{{t "access.title"}}</legend>
   <table>
     <thead><tr><td></td>{{range list "free" "approval" "never"}}<th scope="col">{{t (printf "grid.%s" .)}}</th>{{end}}</tr></thead>
-    <tbody>{{range $row := .Rows}}<tr>
+    <tbody>{{range $row := .Rows}}<tr{{if ne $row.Category "read"}} class="above-read"{{end}}>
       <th scope="row">{{t (printf "grid.cat.%s" $row.Category)}}<small>{{t (printf "grid.cat.%s.hint" $row.Category)}}</small></th>
       {{range list "free" "approval" "never"}}<td><input type="radio" name="grid-{{$row.Category}}" value="{{.}}" aria-label="{{t (printf "grid.cat.%s" $row.Category)}} : {{t (printf "grid.%s" .)}}" {{if eq . $row.Value}}checked{{end}}></td>{{end}}
     </tr>{{end}}</tbody>
   </table>
   {{if not .Locked}}<div class="grid-shortcuts">
-    <button class="btn btn-soft sm" type="submit" name="shortcut" value="read-only">{{t "access.read-only"}}</button>
-    <button class="btn btn-soft sm" type="submit" name="shortcut" value="free">{{t "access.free"}}</button>
+    <button class="btn btn-soft sm" type="button" data-fill="never">{{t "access.read-only"}}</button>
+    <button class="btn btn-soft sm" type="button" data-fill="free">{{t "access.free"}}</button>
   </div>{{end}}
   <label class="check"><input type="checkbox" name="trust" value="1" {{if .Trusted}}checked{{end}}><span>{{t "grid.trust"}}<small>{{t "grid.trust.hint"}}</small></span></label>
+  <p class="alert free-warn" role="note">{{t "access.free.warn"}}</p>
   <small class="muted">{{t "grid.note"}}</small>
 </fieldset>{{end}}
 
@@ -633,7 +635,7 @@
   <summary>{{t "grid.exceptions"}}</summary>
   <p class="muted small">{{t "grid.exceptions.lead"}}</p>
   <ul class="plain-list">{{range .Tools}}{{$v := .Value}}
-    <li><span class="mono">{{.Name}}</span> <span class="muted small">{{t (printf "grid.cat.%s" .Category)}}</span>
+    <li><span class="mono">{{.Name}}</span>{{with .Category}} <span class="muted small">{{t (printf "grid.cat.%s" .)}}</span>{{end}}
       <select name="exception-{{.Name}}" aria-label="{{.Name}}" {{if $.Locked}}disabled{{end}}>
         <option value="">{{t "grid.exception.none"}}</option>
         {{range list "free" "approval" "never"}}<option value="{{.}}" {{if eq . $v}}selected{{end}}>{{t (printf "grid.%s" .)}}</option>{{end}}

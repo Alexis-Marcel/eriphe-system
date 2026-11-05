@@ -578,6 +578,20 @@ document.addEventListener("click", (e) => {
   if (field) setTimeout(() => field.focus({ preventScroll: true }), 300);
 });
 
+// A shortcut of a tool's grid (tools.html) fills it: reads free, the rest as
+// it says, on a server believed, as its categories mean nothing otherwise.
+// Saving stays the page's button, so the warning on Free is seen first.
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-fill]");
+  if (!b) return;
+  const grid = b.closest(".access-grid");
+  grid.querySelectorAll("tbody tr").forEach((row) => {
+    const value = row.classList.contains("above-read") ? b.dataset.fill : "free";
+    row.querySelector(`input[value="${value}"]`).checked = true;
+  });
+  grid.querySelector('input[name="trust"]').checked = true;
+});
+
 function openDialog(d) {
   if (!d.open) d.showModal();
   const field = d.dataset.focusOnOpen && document.getElementById(d.dataset.focusOnOpen);
@@ -655,7 +669,7 @@ document.body.addEventListener("htmx:afterRequest", (e) => {
 // "Add a tool" in two steps (tools.html, web_tools_dialog.go). A tile, a
 // kind of account or any link marked data-step loads its step into
 // #tool-step, in place of the search; "Modifier" (data-step-open) opens
-// the dialog on the tool's form, scrolled to its data-scroll part if any.
+// the dialog on the tool's form.
 // The address says which step (#add, #add/mail, #edit/mail), the
 // browser's Back goes to the step before and, from the first one, closes
 // the dialog; closed, the address is as before, so a reload does not open
@@ -811,11 +825,7 @@ function lit(name) {
     const edit = e.target.closest("a[data-step-open]");
     if (edit) {
       e.preventDefault();
-      const part = edit.dataset.scroll;
-      return go(edit.getAttribute("href").split("#")[0], edit.dataset.hash, "push").then(() => {
-        const el = part && document.getElementById(part);
-        if (el && step.contains(el)) reveal(el, true);
-      });
+      return go(edit.getAttribute("href").split("#")[0], edit.dataset.hash, "push");
     }
     if (!d.contains(e.target)) return;
     const back = e.target.closest("a[data-step-back]");

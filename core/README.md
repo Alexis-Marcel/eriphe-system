@@ -855,6 +855,8 @@ file:
 With a `grid`, `trust_annotations` says on its own whether the annotations count: without it, every
 tool is Send. `exceptions` replace a tool's category value, Never included; `account_grids` is one
 grid per account, in the place of `account_access`, and a server's exceptions hold for its accounts.
+An account's `trust_annotations` replaces its server's. Once one account has an access of its own,
+the others are written down with the one they had: the server's no longer speaks for them.
 A call that names no account takes the strictest of their values, and is refused when they differ,
 unless it is a read none of them refuses.
 

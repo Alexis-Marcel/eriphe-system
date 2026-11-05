@@ -1241,8 +1241,9 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 .access-tag.level-reads, .access-tag.level-read-only { color: var(--ok); font-weight: 600; }
 .access-tag.level-free { color: var(--warn); font-weight: 600; }
 .choice.level-free:has(input:checked) { border-color: var(--warn-strong); box-shadow: 0 0 0 3px var(--warn-soft); }
-.choices.access .free-warn { display: none; margin: 0; background: var(--warn-soft); color: var(--warn); }
-.choices.access:has(input[value="free"]:checked) .free-warn { display: block; }
+.choices.access .free-warn, .access-grid .free-warn { display: none; margin: 0; background: var(--warn-soft); color: var(--warn); }
+.choices.access:has(input[value="free"]:checked) .free-warn,
+.access-grid:has(.above-read input[value="free"]:checked) .free-warn { display: block; }
 .notice-line { margin: 4px 0 0; color: var(--warn); }
 .token-note { margin: 0; }
 .token-note p { margin: 0 0 8px; }
