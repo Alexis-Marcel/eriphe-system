@@ -50,7 +50,7 @@ func newMCPServer(c *core) *mcp.Server {
 	type toolsIn struct {
 		Server string `json:"server,omitempty" jsonschema:"only this server; empty for the whole catalog"`
 	}
-	tool(s, "list_tools", "The tool catalog: MCP servers, what each is for, whether it is ready or needs the user to connect it, and its tools (name, short description, read-only by the server's own annotation). Lend them to a task with run_task's resources, {kind: tool, ref: server or server.tool glob}.",
+	tool(s, "list_tools", "The tool catalog: MCP servers, what each is for, whether it is ready or needs the user to connect it, and its tools (name, short description, read-only by the server's own annotation, category: read, change, delete or send, value: free, approval or never, and accounts: its value in each account). A tool at never is not listed. Lend them to a task with run_task's resources, {kind: tool, ref: server or server.tool glob}.",
 		func(ctx context.Context, in toolsIn) (map[string]any, error) {
 			out := map[string]any{
 				"servers": c.listServers(in.Server, true),
@@ -92,8 +92,8 @@ func newMCPServer(c *core) *mcp.Server {
 				// Started on a tainted turn: its writes ask me (credentials.go).
 				c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(tainted, ", "))
 			}
-			if err == nil && (granted || c.turnFromUser()) {
-				c.store.set(lentByUserKey(t.ID), "1") // its lend authorizes its actions (lend.go)
+			if err == nil && (granted || (len(tainted) == 0 && c.turnFromUser())) {
+				c.store.set(lentByUserKey(t.ID), "1") // a clean start (lend.go)
 			}
 			return t, err
 		})

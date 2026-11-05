@@ -7,8 +7,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // What Eriphe may do on each tool of the catalog, apart from how the tool's
@@ -44,13 +42,25 @@ var accessLevels = []string{accessReadOnly, accessReads, accessFree, accessAsk}
 
 func validAccess(a string) bool { return a == "" || slices.Contains(accessLevels, a) }
 
-// level is a server's access level. An older entry has trust_annotations
-// only: true was "reads free", false "ask me everything". A server of
+// level is a server's access level, or the closest to its grid. A server of
 // several accounts has what their levels come to (accountsLevel).
 func (s Server) level() string {
-	if len(s.AccountAccess) > 0 {
-		return accountsLevel(s.AccountAccess)
+	if accounts := s.accountAccesses(); len(accounts) > 0 {
+		levels := map[string]string{}
+		for name, a := range accounts {
+			levels[name] = gridLevel(a.grid, a.trusted)
+		}
+		return accountsLevel(levels)
 	}
+	if s.Grid != nil {
+		return gridLevel(*s.Grid, s.TrustAnnotations)
+	}
+	return s.ownLevel()
+}
+
+// ownLevel is a server's named level. An older entry has trust_annotations
+// only: true was "reads free", false "ask me everything".
+func (s Server) ownLevel() string {
 	if s.Access != "" {
 		return s.Access
 	}
@@ -67,13 +77,14 @@ func (s Server) trusts() bool { return s.level() != accessAsk }
 // for whatever still reads it; a server of several accounts gets it for
 // each of them.
 func (s Server) withLevel(level string) Server {
-	if len(s.AccountAccess) > 0 {
+	if accounts := s.accountAccesses(); len(accounts) > 0 {
 		next := map[string]string{}
-		for a := range s.AccountAccess {
+		for a := range accounts {
 			next[a] = level
 		}
 		s.AccountAccess = next
 	}
+	s.Grid, s.AccountGrids = nil, nil // a level replaces a grid
 	s.Access, s.TrustAnnotations = level, level != accessAsk
 	return s
 }
@@ -142,25 +153,20 @@ func (s Server) mixed() bool {
 	return false
 }
 
-// lends tells whether a server's level lends one of its tools at all: a
-// read-only server lends its reads only.
-func lends(s Server, t *mcp.Tool) bool {
-	return s.level() != accessReadOnly || (s.trusts() && t != nil && t.Annotations != nil && t.Annotations.ReadOnlyHint)
-}
-
 // catalogFacts is what the policy knows of a catalog tool.
 type catalogFacts struct {
-	level string // its server's access level; "" for a tool out of the catalog
-	read  bool   // read-only by its own annotation, on a server trusted for it
-	// noAccount: a write on a server whose accounts have different levels,
-	// that names none of them.
+	category string // read, change, delete or send (access_grid.go)
+	value    string // free, approval or never; "" for a tool out of the catalog
+	read     bool   // in the Read category
+	// noAccount: a call that must name its account, and names none.
 	noAccount bool
-	// lent: the task's lend authorizes the call (lend.go).
-	lent bool
+	// unclean: a Free above Read does not hold: the brain's turn is tainted,
+	// or the task did not start cleanly (decideWith).
+	unclean bool
 }
 
 // facts is what the catalog says of a call: of the tool alone with a nil
-// input, of the account it names on a server of several (accountLevel).
+// input, of the account it names on a server of several.
 func (p *pool) facts(claudeName string, input map[string]any) catalogFacts {
 	server, tool, ok := splitToolName(claudeName)
 	if !ok || p == nil {
@@ -170,19 +176,13 @@ func (p *pool) facts(claudeName string, input map[string]any) catalogFacts {
 	if u == nil {
 		return catalogFacts{}
 	}
-	t := u.toolByClaudeName(tool)
-	reads := t != nil && t.Annotations != nil && t.Annotations.ReadOnlyHint // by its own annotation
-	if level, ok := u.srv.accountLevel(input); ok {
-		return catalogFacts{level: level, read: level != accessAsk && reads}
-	}
-	return catalogFacts{level: u.srv.level(), read: p.readOnly(claudeName), noAccount: !reads && u.srv.mixed()}
+	return u.srv.toolFacts(u.toolByClaudeName(tool), input)
 }
 
 const noAccountReason = "ses comptes n'ont pas le même accès : l'appel doit nommer son compte (account)"
 
-// free tells whether a catalog tool is Eriphe's to call without the user:
-// a read of a server whose reads are free, or any tool of a free one.
-func (f catalogFacts) free() bool { return f.read || f.level == accessFree }
+// free tells whether the grid leaves a tool to Eriphe.
+func (f catalogFacts) free() bool { return f.value == gridFree }
 
 // Actions allowed for good: "Toujours autoriser cette action" on a
 // permission. Each is a rule of the policy, evaluated after the file's. On

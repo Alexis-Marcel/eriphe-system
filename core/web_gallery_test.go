@@ -258,7 +258,7 @@ func TestAccessChoiceMapsToPolicy(t *testing.T) {
 	if !c.conf().Servers["linear"].TrustAnnotations {
 		t.Fatal("reads free did not trust the annotations")
 	}
-	if d, _ := c.decide("mcp__linear__search", nil); d != decideBrain {
+	if d, _ := c.decide("mcp__linear__search", nil); d != decideAllow {
 		t.Fatalf("a read with reads free: %q", d)
 	}
 	if d, _ := c.decide("mcp__linear__other", nil); d != decideAsk {

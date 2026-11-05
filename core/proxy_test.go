@@ -266,7 +266,7 @@ func TestCatalogPolicy(t *testing.T) {
 		input map[string]any
 		want  string
 	}{
-		{"mcp__github__get_issue", map[string]any{"number": 1}, decideBrain},
+		{"mcp__github__get_issue", map[string]any{"number": 1}, decideAllow},
 		{"mcp__github__create_issue", map[string]any{"title": "x"}, decideAsk},
 		{"mcp__notes__read", nil, decideAsk},         // not trusted for its annotations
 		{"mcp__mail__send", nil, decideAsk},          // not in the catalog
@@ -360,7 +360,7 @@ func TestBrainCatalogPermission(t *testing.T) {
 	}
 
 	ask("b-3", "Bash", map[string]any{"command": "ls"})
-	ask("b-4", "mcp__notes__read", nil) // not granted to the brain
+	ask("b-4", "mcp__absent__read", nil) // not granted to the brain
 	for _, id := range []string{"b-3", "b-4"} {
 		if items := inbox(id); len(items) != 1 || items[0].Data["allow"] != false {
 			t.Fatalf("%s: %+v", id, items)
@@ -368,8 +368,9 @@ func TestBrainCatalogPermission(t *testing.T) {
 	}
 }
 
-// The brain's grant: the believed reads of the catalog, without any
-// configuration, and what brain.tools adds.
+// The brain's grant: what is not Never of the catalog, without any
+// configuration, and what brain.tools adds. Only its free reads are allowed
+// in advance.
 func TestBrainGrant(t *testing.T) {
 	c := newCatalogCore(t)
 	waitStatus(t, c.pool.get("notes"), statusReady)
@@ -377,15 +378,14 @@ func TestBrainGrant(t *testing.T) {
 		t.Fatalf("no brain, grant = %v", g)
 	}
 	setBrain(c, &BrainConfig{})
-	// notes.read says it is read-only, but notes is not believed; create_issue writes.
-	if g := strings.Join(c.brainGrant(), ","); g != "github.get_issue" {
+	if g := strings.Join(c.brainGrant(), ","); g != "github.create_issue,github.get_issue,notes.read" {
 		t.Fatalf("grant = %s", g)
 	}
 	if g := strings.Join(c.brainFreeReads(), ","); g != "mcp__github__get_issue" {
 		t.Fatalf("free reads = %s", g)
 	}
 	editBrain(c, func(a *Assistant) { a.Tools = []string{"notes", "github.get_issue", "mail"} })
-	if g := strings.Join(c.brainGrant(), ","); g != "notes,github.get_issue" {
+	if g := strings.Join(c.brainGrant(), ","); g != "notes,github.get_issue,github.create_issue,notes.read" {
 		t.Fatalf("grant with brain.tools = %s", g)
 	}
 	if s := strings.Join(c.specServers(&TaskRow{Kind: "brain"}), ","); s != "github,notes" {
@@ -443,7 +443,7 @@ func TestBrainRestartsOnToolChange(t *testing.T) {
 }
 
 // The brain calls a believed read through its proxy without asking; a
-// write is refused even when brain.tools lends it, until it is allowed.
+// write is listed, and refused until the policy allows it.
 func TestBrainFreeReadProxy(t *testing.T) {
 	c := newCatalogCore(t)
 	setBrain(c, &BrainConfig{})
@@ -452,7 +452,7 @@ func TestBrainFreeReadProxy(t *testing.T) {
 	c.turn.start(1, 1, 0)
 	ctx := context.Background()
 	cs := connectTo(t, c.taskServer("b-1", c.brainGrant(), "github"))
-	if res, _ := cs.ListTools(ctx, nil); len(res.Tools) != 1 || res.Tools[0].Name != "get_issue" {
+	if res, _ := cs.ListTools(ctx, nil); len(res.Tools) != 2 {
 		t.Fatalf("tools = %+v", res.Tools)
 	}
 	out, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "get_issue", Arguments: map[string]any{"number": 3}})
@@ -514,7 +514,7 @@ func TestBrainAssignmentFreeReads(t *testing.T) {
 	spec := out.Tasks[0].Spec
 	// Without self_url, the node relays eriphe-core's own server too,
 	// loaded upfront.
-	if strings.Join(spec.AllowedTools, ",") != "mcp__eriphe-core,mcp__github__get_issue" || strings.Join(spec.Servers, ",") != "github,eriphe-core" ||
+	if strings.Join(spec.AllowedTools, ",") != "mcp__eriphe-core,mcp__github__get_issue" || strings.Join(spec.Servers, ",") != "github,notes,eriphe-core" ||
 		strings.Join(spec.AlwaysLoad, ",") != "github,eriphe-core" || len(spec.MCPServers) != 0 {
 		t.Fatalf("brain spec = %+v", spec)
 	}
@@ -526,7 +526,7 @@ func TestBrainAssignmentFreeReads(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &out)
 	spec = out.Tasks[0].Spec
 	self, _ := spec.MCPServers[selfServer].(map[string]any)
-	if strings.Join(spec.Servers, ",") != "github" || self["url"] != "http://core.example.org:8800/mcp" || self["alwaysLoad"] != true ||
+	if strings.Join(spec.Servers, ",") != "github,notes" || self["url"] != "http://core.example.org:8800/mcp" || self["alwaysLoad"] != true ||
 		strings.Join(spec.AlwaysLoad, ",") != "github" {
 		t.Fatalf("brain spec with self_url = %+v", spec)
 	}

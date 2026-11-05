@@ -40,6 +40,14 @@ type Server struct {
 	// decided at the level of the account it names; access is then what
 	// they come to together (access.go).
 	AccountAccess map[string]string `json:"account_access,omitempty"`
+	// Grid is the value of each category of tools (access_grid.go), in the
+	// place of access; trust_annotations then says on its own whether the
+	// server's annotations count: without it, every tool is Send.
+	Grid *accessGrid `json:"grid,omitempty"`
+	// Exceptions give one tool, by its name, its own value.
+	Exceptions map[string]string `json:"exceptions,omitempty"`
+	// AccountGrids is a grid per account, in the place of account_access.
+	AccountGrids map[string]accountGrid `json:"account_grids,omitempty"`
 	// Timeout of one tool call, in seconds (default 600).
 	Timeout int `json:"timeout,omitempty"`
 	// AlwaysLoad has a harness that defers MCP tools until they are searched
@@ -110,6 +118,9 @@ func (c *Config) checkServers() error {
 		}
 		if s.Timeout < 0 {
 			return fmt.Errorf("server %s: bad timeout", name)
+		}
+		if err := s.checkAccess(); err != nil {
+			return fmt.Errorf("server %s: %w", name, err)
 		}
 		if !validAccess(s.Access) {
 			return fmt.Errorf("server %s: access is one of %s", name, strings.Join(accessLevels, ", "))
