@@ -42,6 +42,7 @@ func init() { extraSchema = append(extraSchema, catalogSchema) }
 
 const (
 	kindServer   = "server"
+	kindAccess   = "access"
 	kindProvider = "provider"
 	kindAgent    = "agent"
 	kindSetting  = "setting"
@@ -58,6 +59,7 @@ const (
 // dynamicCatalog is what the workspace added.
 type dynamicCatalog struct {
 	Servers      map[string]Server
+	Accesses     map[string]Access
 	Providers    map[string]Provider
 	Agents       map[string]Agent
 	DefaultAgent string // a preference, when the configuration sets none
@@ -66,12 +68,12 @@ type dynamicCatalog struct {
 }
 
 func newDynamic() dynamicCatalog {
-	return dynamicCatalog{Servers: map[string]Server{}, Providers: map[string]Provider{}, Agents: map[string]Agent{},
+	return dynamicCatalog{Servers: map[string]Server{}, Accesses: map[string]Access{}, Providers: map[string]Provider{}, Agents: map[string]Agent{},
 		Assistants: map[string]Assistant{}}
 }
 
 func (d dynamicCatalog) clone() dynamicCatalog {
-	return dynamicCatalog{Servers: maps.Clone(d.Servers), Providers: maps.Clone(d.Providers),
+	return dynamicCatalog{Servers: maps.Clone(d.Servers), Accesses: maps.Clone(d.Accesses), Providers: maps.Clone(d.Providers),
 		Agents: maps.Clone(d.Agents), DefaultAgent: d.DefaultAgent, Assistants: maps.Clone(d.Assistants)}
 }
 
@@ -131,10 +133,14 @@ func (s *Store) forgetOAuth(server string) {
 func mergeCatalog(base *Config, d dynamicCatalog) *Config {
 	m := *base
 	m.Servers = maps.Clone(base.Servers)
+	m.Accesses = maps.Clone(base.Accesses)
 	m.Providers = maps.Clone(base.Providers)
 	m.Agents = maps.Clone(base.Agents)
 	if m.Servers == nil {
 		m.Servers = map[string]Server{}
+	}
+	if m.Accesses == nil {
+		m.Accesses = map[string]Access{}
 	}
 	if m.Providers == nil {
 		m.Providers = map[string]Provider{}
@@ -145,6 +151,11 @@ func mergeCatalog(base *Config, d dynamicCatalog) *Config {
 	for n, s := range d.Servers {
 		if _, ok := base.Servers[n]; !ok {
 			m.Servers[n] = s
+		}
+	}
+	for n, a := range d.Accesses {
+		if _, ok := base.Accesses[n]; !ok {
+			m.Accesses[n] = a
 		}
 	}
 	for n, p := range d.Providers {
@@ -189,6 +200,9 @@ func (m *Config) validate() error {
 	if err := m.checkServers(); err != nil {
 		return err
 	}
+	if err := m.checkAccesses(); err != nil {
+		return err
+	}
 	if err := m.checkAssistants(); err != nil {
 		return err
 	}
@@ -225,6 +239,10 @@ func errNotFound(kind, name string) error {
 }
 
 func errInvalid(err error) error {
+	var worded *catalogError
+	if errors.As(err, &worded) {
+		return err // it has its words for the user
+	}
 	return &catalogError{http.StatusBadRequest, "", "", err}
 }
 
@@ -259,7 +277,7 @@ func ownerOf(secret string) (kind, name, slot string, ok bool) {
 		return "", "", "", false
 	}
 	switch prefix {
-	case "server", "service", "provider":
+	case "server", "service", "provider", kindAccess:
 		return prefix, name, slot, true
 	}
 	return "", "", "", false
@@ -383,7 +401,7 @@ func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string)
 		log.Printf("catalog: %v", err)
 		return d, skipped
 	}
-	order := map[string]int{kindSetting: 0, kindProvider: 1, kindAgent: 2, kindServer: 3, kindAssistant: 4}
+	order := map[string]int{kindSetting: 0, kindProvider: 1, kindAgent: 2, kindServer: 3, kindAccess: 4, kindAssistant: 5}
 	brainAgent := "" // the setting of before the brain was an assistant
 	sort.SliceStable(rows, func(i, j int) bool { return order[rows[i].Kind] < order[rows[j].Kind] })
 	for _, r := range rows {
@@ -427,6 +445,14 @@ func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string)
 				}
 				try.Servers[r.Name] = s
 			}
+		case kindAccess:
+			var a Access
+			if err = json.Unmarshal(r.Spec, &a); err == nil {
+				if _, ok := base.Accesses[r.Name]; ok {
+					err = errors.New("shadowed by the configuration file")
+				}
+				try.Accesses[r.Name] = a
+			}
 		default:
 			continue
 		}
@@ -458,6 +484,9 @@ func (c *core) source(kind, name string) string {
 	case kindServer:
 		_, inBase = c.base.Servers[name]
 		_, inDyn = c.dyn.Servers[name]
+	case kindAccess:
+		_, inBase = c.base.Accesses[name]
+		_, inDyn = c.dyn.Accesses[name]
 	case kindProvider:
 		_, inBase = c.base.Providers[name]
 		_, inDyn = c.dyn.Providers[name]
@@ -577,6 +606,9 @@ func (c *core) dropOrphanSecrets(d dynamicCatalog) {
 	for _, p := range d.Providers {
 		used[strings.TrimPrefix(p.Secret, vaultPrefix)] = true
 	}
+	for _, a := range d.Accesses {
+		used[strings.TrimPrefix(a.Secret, vaultPrefix)] = true
+	}
 	// Entries left out at start are still stored: their secrets stay too.
 	rows, err := c.store.catalogRows()
 	if err != nil {
@@ -593,6 +625,11 @@ func (c *core) dropOrphanSecrets(d dynamicCatalog) {
 			var p Provider
 			if json.Unmarshal(r.Spec, &p) == nil {
 				used[strings.TrimPrefix(p.Secret, vaultPrefix)] = true
+			}
+		case kindAccess:
+			var a Access
+			if json.Unmarshal(r.Spec, &a) == nil {
+				used[strings.TrimPrefix(a.Secret, vaultPrefix)] = true
 			}
 		}
 	}

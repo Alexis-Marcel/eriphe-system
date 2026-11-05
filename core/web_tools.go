@@ -96,15 +96,16 @@ func (t toolView) SignIn() string {
 }
 
 type toolsPage struct {
-	Tools   []toolView
-	Groups  []toolGroup // the tools, a card per kind with several accounts (web_tools_groups.go)
-	Gallery galleryPage // the "Add a tool" dialog (web_gallery.go)
-	Flash   string
-	Alert   string // a pending tool that was not connected
-	Skipped map[string]string
-	Waiting bool   // a tool is starting: the list refreshes itself until it is up
-	Follow  string // ?tool=: the tool just saved, its row followed and lit
-	New     bool   // ?new=1: … a new one, at the top of the list
+	Tools    []toolView
+	Accesses []accessRow // what tasks use with their own programs (web_lent_access.go)
+	Groups   []toolGroup // the tools, a card per kind with several accounts (web_tools_groups.go)
+	Gallery  galleryPage // the "Add a tool" dialog (web_gallery.go)
+	Flash    string
+	Alert    string // a pending tool that was not connected
+	Skipped  map[string]string
+	Waiting  bool   // a tool is starting: the list refreshes itself until it is up
+	Follow   string // ?tool=: the tool just saved, its row followed and lit
+	New      bool   // ?new=1: … a new one, at the top of the list
 	// Home Assistant talks to Eriphe (its voice token) but Eriphe has no
 	// tool of it: its entry is still in the list (web_homeassistant.go).
 	VoiceOnly bool
@@ -219,6 +220,12 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 	if n := q.Get("saved"); n != "" && w.c.source(kindServer, n) != "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.saved"), n)
 	}
+	if n := q.Get("savedaccess"); n != "" && w.c.source(kindAccess, n) != "" {
+		v.Flash = fmt.Sprintf(tr(lang, "lent.saved"), n)
+	}
+	if n := q.Get("removedaccess"); serverName.MatchString(n) && w.c.source(kindAccess, n) == "" {
+		v.Flash = fmt.Sprintf(tr(lang, "lent.removed"), n)
+	}
 	if n := q.Get("removed"); n != "" && serverName.MatchString(n) && w.c.source(kindServer, n) == "" {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.removed"), n)
 	}
@@ -242,9 +249,14 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 		}
 		v.Alert = fmt.Sprintf(tr(lang, "tools.notconnected."+why), n) + " " + tr(lang, end)
 	}
+	v.Accesses = w.accessRows() // web_lent_access.go
 	v.Skipped = map[string]string{}
 	for k, why := range w.c.skippedEntries() {
-		if name, ok := strings.CutPrefix(k, kindServer+"/"); ok {
+		name, ok := strings.CutPrefix(k, kindServer+"/")
+		if !ok {
+			name, ok = strings.CutPrefix(k, kindAccess+"/")
+		}
+		if ok {
 			v.Skipped[name] = why
 		}
 	}

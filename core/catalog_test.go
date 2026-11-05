@@ -240,7 +240,7 @@ func TestCatalogAgents(t *testing.T) {
 	if _, a, err := c.conf().agent("kimi"); err != nil || a.Model != kimi.Model {
 		t.Fatal(err)
 	}
-	env, err := c.lend("worker", "kimi", "")
+	env, err := c.lend("kimi")
 	if err != nil || env["OPENROUTER_API_KEY"] != "sk-or-1" {
 		t.Fatalf("lend = %v, %v", env, err)
 	}
@@ -254,7 +254,7 @@ func TestCatalogAgents(t *testing.T) {
 	if err := c.putProvider(putUpdate, "or", c.conf().Providers["or"], "sk-or-2"); err != nil {
 		t.Fatal(err)
 	}
-	if env, _ := c.lend("worker", "kimi", ""); env["OPENROUTER_API_KEY"] != "sk-or-2" {
+	if env, _ := c.lend("kimi"); env["OPENROUTER_API_KEY"] != "sk-or-2" {
 		t.Fatal("key not replaced")
 	}
 	if err := c.deleteAgent("kimi"); err != nil {

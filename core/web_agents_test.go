@@ -536,7 +536,7 @@ func TestWebACPAgents(t *testing.T) {
 		!strings.HasSuffix(spec.Prompt, "\n\ntidy up") {
 		t.Fatalf("spec = %+v", spec)
 	}
-	env, err := c.lend("worker", "goose", "")
+	env, err := c.lend("goose")
 	if err != nil || env["OPENAI_API_KEY"] != "sk-proj-abc" {
 		t.Fatalf("lent %v, %v", env, err)
 	}

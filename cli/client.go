@@ -35,17 +35,16 @@ type Message struct {
 
 // Task is a worker task as eriphe-core lists it.
 type Task struct {
-	ID         string    `json:"id"`
-	Node       string    `json:"node"`
-	Agent      string    `json:"agent,omitempty"`
-	Runtime    string    `json:"runtime"`
-	Model      string    `json:"model,omitempty"`
-	Identities string    `json:"identities,omitempty"`
-	Dir        string    `json:"dir"`
-	Prompt     string    `json:"prompt"`
-	State      string    `json:"state"`
-	Created    time.Time `json:"created"`
-	Updated    time.Time `json:"updated"`
+	ID      string    `json:"id"`
+	Node    string    `json:"node"`
+	Agent   string    `json:"agent,omitempty"`
+	Runtime string    `json:"runtime"`
+	Model   string    `json:"model,omitempty"`
+	Dir     string    `json:"dir"`
+	Prompt  string    `json:"prompt"`
+	State   string    `json:"state"`
+	Created time.Time `json:"created"`
+	Updated time.Time `json:"updated"`
 }
 
 // Event is one thing that happened in a task: text, tool_use, permission,

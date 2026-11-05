@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"slices"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -31,25 +30,14 @@ func (c *core) bump() {
 	c.mu.Unlock()
 }
 
-// lend reads the credentials of a task: its agent's provider, its identities
-// and, for the brain, eriphe-core's own token. They are read when a node
-// fetches the task and never stored.
-func (c *core) lend(kind, agentName, identities string) (map[string]string, error) {
+// lend reads the credentials of a task's agent: its provider's. They are
+// read when a node fetches the task and never stored.
+func (c *core) lend(agentName string) (map[string]string, error) {
 	_, agent, err := c.conf().agent(agentName)
 	if err != nil {
 		return nil, err
 	}
-	env, err := c.conf().lendAgent(agent)
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, n := range strings.Split(identities, ",") {
-		if n != "" {
-			names = append(names, n)
-		}
-	}
-	return env, c.conf().lend(names, env)
+	return c.conf().lendAgent(agent)
 }
 
 // nodeFromRequest authenticates a node by its name and secret, and by its
@@ -100,7 +88,7 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 	for _, a := range rows {
 		spec := a.Spec
 		if a.Desired == desiredRunning {
-			env, err := c.lend(a.Kind, a.Agent, a.Idents)
+			env, err := c.lend(a.Agent)
 			if err != nil {
 				// The configuration changed under the task: it cannot run any more.
 				log.Printf("task %s fails: %v", a.ID, err)
@@ -110,6 +98,7 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 			}
 			spec.Identity = env
 			spec.TZ = c.conf().TimeZone
+			spec.Accesses = c.lentAccesses(a.ID, a.Resources) // lent_access.go
 			if spec.Folders, err = c.specFoldersOn(name, a.Folders, a.Resources); err != nil {
 				// A folder was removed (or moved) under the task.
 				log.Printf("task %s fails: %v", a.ID, err)

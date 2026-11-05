@@ -120,16 +120,11 @@ func TestReadSecretFromVault(t *testing.T) {
 	if _, err := readSecret("vault:missing"); err == nil {
 		t.Fatal("read a missing secret")
 	}
-	// Files still work, and lend uses the vault too.
+	// Files still work.
 	file := filepath.Join(t.TempDir(), "s")
 	os.WriteFile(file, []byte("from-file\n"), 0o600)
 	if got, _ := readSecret(file); got != "from-file" {
 		t.Fatalf("file = %q", got)
-	}
-	cfg := &Config{Identities: map[string]Identity{"gh": {Env: "GH_TOKEN", File: "vault:token"}}}
-	env := map[string]string{}
-	if err := cfg.lend([]string{"gh"}, env); err != nil || env["GH_TOKEN"] != "abc" {
-		t.Fatalf("lend = %v, %v", env, err)
 	}
 	// Import a file once.
 	if err := v.importFile("imported", file); err != nil {

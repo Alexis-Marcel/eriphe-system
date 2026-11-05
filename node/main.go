@@ -218,6 +218,7 @@ func main() {
 		if relay, l, egressAddr, err = n.egressRelay(*egressListen, addr); err != nil {
 			log.Fatal(err)
 		}
+		relay.access = n.accessRelay(s) // egress_access.go
 		go func() { log.Fatal(http.Serve(l, relay)) }()
 	}
 	api := http.NewServeMux()

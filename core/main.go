@@ -1,5 +1,5 @@
 // eriphe-core is Eriphe's control plane: it keeps the state of nodes and
-// tasks, schedules tasks on nodes, follows them, lends identities, and gives
+// tasks, schedules tasks on nodes, follows them, lends accesses, and gives
 // the brain its tools over MCP.
 //
 //	eriphe-core -data /data                                      # no file: defaults, files in /data
@@ -126,6 +126,7 @@ func main() {
 	mux.Handle("/v1/node/tasks/{id}/mcp/{server}", c.taskMCPHandler())
 	mux.Handle("/v1/node/tasks/{id}/model/{path...}", c.taskModelHandler())       // model_relay.go
 	mux.HandleFunc("POST /v1/node/tasks/{id}/credential", c.handleTaskCredential) // credentials.go
+	mux.Handle("/v1/node/tasks/{id}/access", c.taskAccessHandler())               // lent_access.go
 	mux.HandleFunc("GET /v1/node/tasks/{id}/skills/{sha}", c.handleTaskSkill)     // skills_tasks.go
 	mux.HandleFunc("POST /v1/node/services/{name}/report", c.handleServiceReport)
 	mux.HandleFunc("POST /v1/node/certificate", c.handleNodeCertificate)

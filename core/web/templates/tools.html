@@ -30,6 +30,7 @@
 </ul>
 {{else}}<div class="empty tools-empty"><span class="empty-art" aria-hidden="true">{{template "i-plug"}}</span><p>{{t "tools.empty"}}</p>{{template "add-tool-btn"}}</div>{{end}}
 </div>
+{{template "lent-accesses" .}}
 
 {{/* Two steps: the search, then the tool picked, loaded in #tool-step
      (web_tools_dialog.go, app.js). */}}
@@ -719,6 +720,83 @@
       <small id="img-h">{{t "form.imagehint"}}</small></label>
   </div>
 {{end}}
+
+{{/* What tasks use with their own programs, below the tools. . is a toolsPage. */}}
+{{define "lent-accesses"}}
+<section class="stack" id="accesses">
+  <header class="page-head page-head-row">
+    <div><h3>{{t "lent.title"}}</h3><p class="muted small">{{t "lent.lead"}}</p></div>
+    <a class="btn btn-soft sm" href="/settings/accesses/new">{{template "i-plus"}}{{t "lent.add"}}</a>
+  </header>
+  {{if .Accesses}}<ul class="tools">{{range .Accesses}}
+  <li class="tool" id="lent-{{.Name}}">
+    <span class="mark" aria-hidden="true">{{initial .Name}}</span>
+    <div class="tool-main">
+      <div class="tool-head"><h3 class="mono">{{.Name}}</h3>{{template "src-tag" .Source}}</div>
+      {{if .Use}}<p class="use">{{.Use}}</p>{{end}}
+      <p class="muted small meta-line"><span class="mono">{{.Hosts}}</span> · <span class="mono">${{.Env}}</span> · {{t (printf "lent.value.%s" .Value)}}</p>
+    </div>
+    {{if .Editable}}<div class="tool-actions"><a class="btn btn-ghost sm" href="/settings/accesses/{{.Name}}/edit">{{t "lent.edit"}}</a></div>{{end}}
+  </li>{{end}}</ul>
+  {{else}}<p class="muted small">{{t "lent.empty"}}</p>{{end}}
+</section>
+{{end}}
+
+{{/* An access's form. . is an accessForm. */}}
+{{define "lent-access-form"}}
+<form class="panel stack" id="lent-form" hx-post="{{if .Edit}}/settings/accesses/{{.Name}}{{else}}/settings/accesses{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  <div class="form-grid">
+    <label class="field"><span>{{t "lent.name"}}</span>
+      <input type="text" name="name" value="{{.Name}}" class="mono" spellcheck="false" autocapitalize="off" placeholder="npm"{{if .Edit}} readonly{{end}} aria-describedby="lent-name-h">
+      <small id="lent-name-h">{{t "lent.namehint"}}</small></label>
+    <label class="field"><span>{{t "lent.use"}}</span>
+      <input type="text" name="use" value="{{.Use}}" aria-describedby="lent-use-h">
+      <small id="lent-use-h">{{t "lent.usehint"}}</small></label>
+    <label class="field span-2"><span>{{t "lent.hosts"}}</span>
+      <textarea name="hosts" rows="2" class="mono" spellcheck="false" autocapitalize="off" placeholder="registry.npmjs.org" aria-describedby="lent-hosts-h">{{.Hosts}}</textarea>
+      <small id="lent-hosts-h">{{t "lent.hostshint"}}</small></label>
+    <label class="field"><span>{{t "lent.env"}}</span>
+      <input type="text" name="env" value="{{.Env}}" class="mono" spellcheck="false" autocapitalize="characters" placeholder="NPM_TOKEN" aria-describedby="lent-env-h">
+      <small id="lent-env-h">{{t "lent.envhint"}}</small></label>
+    {{template "secret-field" dict "Name" "secret" "Label" (t "lent.secret") "Hint" (t "lent.secrethint") "IsSet" .Edit "Keep" .Error}}
+  </div>
+  <fieldset class="choices"><legend>{{t "lent.value"}}</legend>
+    <div class="checks">
+      <label class="check"><input type="radio" name="value" value="approval"{{if ne .Value "free"}} checked{{end}}><span><b>{{t "lent.value.approval"}}</b><small>{{t "lent.value.approvalhint"}}</small></span></label>
+      <label class="check"><input type="radio" name="value" value="free"{{if eq .Value "free"}} checked{{end}}><span><b>{{t "lent.value.free"}}</b><small>{{t "lent.value.freehint"}}</small></span></label>
+    </div>
+  </fieldset>
+  <details class="advanced-opts"{{if or .Header .Rules}} open{{end}}>
+    <summary>{{t "form.advanced"}}</summary>
+    <div class="form-grid">
+      <label class="field"><span>{{t "lent.header"}}</span>
+        <input type="text" name="header" value="{{.Header}}" class="mono" spellcheck="false" autocapitalize="off" placeholder="Authorization" aria-describedby="lent-header-h">
+        <small id="lent-header-h">{{t "lent.headerhint"}}</small></label>
+      <label class="field span-2"><span>{{t "lent.rules"}}</span>
+        <textarea name="rules" rows="3" class="mono" spellcheck="false" autocapitalize="off" placeholder="GET /v1/*" aria-describedby="lent-rules-h">{{.Rules}}</textarea>
+        <small id="lent-rules-h">{{t "lent.ruleshint"}}</small></label>
+    </div>
+  </details>
+  <div class="notice stack">
+    <p class="small">{{t "lent.warn.limit"}}</p>
+    <p class="small">{{t "lent.warn.reflect"}}</p>
+    <p class="small">{{t "lent.warn.read"}}</p>
+  </div>
+  <div class="actions"><button class="btn btn-primary" type="submit">{{t "lent.save"}}</button></div>
+</form>
+{{end}}
+{{define "lent-access-form-frag"}}{{template "lent-access-form" .Data}}{{end}}
+
+{{define "lent-access-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
+  <h2>{{if .Edit}}{{.Name}}{{else}}{{t "lent.add"}}{{end}}</h2>
+  <p>{{t "lent.lead"}}</p>
+</header>
+{{template "lent-access-form" .}}
+{{if .Edit}}<form class="actions" hx-post="/settings/accesses/{{.Name}}/delete" hx-confirm="{{tf "lent.removeconfirm" .Name}}"><button class="btn btn-ghost sm" type="submit">{{t "lent.remove"}}</button></form>{{end}}
+{{end}}{{end}}
 
 {{define "tool-form"}}{{with .Data}}{{$c := .Preset.Compact}}
 <form class="panel tool-form{{if .OrigOAuth}} orig-oauth{{.ReauthClass}}{{end}}" id="tool-form" hx-post="{{if .Edit}}/settings/tools/{{.Name}}{{else}}/settings/tools{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>

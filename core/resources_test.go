@@ -310,15 +310,12 @@ func TestUndeclaredPush(t *testing.T) {
 	}
 }
 
-// On a tainted turn, run_task lends reads only, of every kind, and no
-// legacy identity.
+// On a tainted turn, run_task lends reads only, of every kind.
 func TestTaintedResources(t *testing.T) {
 	c := newCatalogCore(t)
 	withDrive(t, c, DriveFolder{Name: "Factures", ID: "d1", Access: folderRead})
 	c.conf().User = "Sam"
-	c.conf().Identities = map[string]Identity{"github": {Env: "GH_TOKEN", File: "/nope"}}
 	refused := []runRequest{
-		{Identities: []string{"github"}},
 		{Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "x"}}},
 		{Resources: []ResourceRef{{Kind: resDriveFolder, Ref: "Factures"}}},
 		{Resources: []ResourceRef{{Kind: resRepo, Ref: "someone/tool", TrustSkills: true}}},
@@ -345,9 +342,6 @@ func TestTaintedResources(t *testing.T) {
 			t.Errorf("tainted %+v: %v", r, err)
 		}
 	}
-	if err := c.taintedResources(refused[0]); !strings.Contains(err.Error(), "identities github") {
-		t.Errorf("identities: %v", err)
-	}
 	for _, r := range allowed {
 		if err := c.taintedResources(r); err != nil {
 			t.Errorf("tainted %+v: %v", r, err)
@@ -369,7 +363,7 @@ func TestRunTaskSchema(t *testing.T) {
 		}
 		raw, _ := json.Marshal(tl.InputSchema)
 		s := string(raw)
-		for _, want := range []string{`"resources"`, `"kind"`, `"access"`, "drive-folder", "legacy: use resources {kind: repo}", "legacy, do not use"} {
+		for _, want := range []string{`"resources"`, `"kind"`, `"access"`, "drive-folder", "legacy: use resources {kind: repo}"} {
 			if !strings.Contains(s, want) {
 				t.Errorf("schema lacks %s: %s", want, s)
 			}

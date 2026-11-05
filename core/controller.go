@@ -254,7 +254,7 @@ func newTaskID() string {
 
 type runRequest struct {
 	Prompt    string        `json:"prompt" jsonschema:"what the agent must do, self-contained: it does not see this conversation"`
-	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository cloned into /work/repo (repo, with branch, base, dir), the user's folders (folder, drive-folder; see list_folders), catalog tools (tool; see list_tools); only what it needs, with the least access"`
+	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository cloned into /work/repo (repo, with branch, base, dir), the user's folders (folder, drive-folder; see list_folders), catalog tools (tool; see list_tools), accesses a program uses, a package registry or an API key (access; see list_tools); only what it needs, with the least access"`
 	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
 	Node      string        `json:"node,omitempty" jsonschema:"node name; empty lets the scheduler choose"`
 	// Contract: what must be true at the end, for a task that changes
@@ -262,13 +262,12 @@ type runRequest struct {
 	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something: objective (required), constraints, checks, evidence, verify, budget; leave it out for a search or a read. Approval is never part of it: the policy decides"`
 
 	// The old fields, read into resources (normalizeResources).
-	Repo       string   `json:"repo,omitempty" jsonschema:"legacy: use resources {kind: repo}"`
-	Ref        string   `json:"ref,omitempty" jsonschema:"legacy: use resources {kind: repo, base}"`
-	Branch     string   `json:"branch,omitempty" jsonschema:"legacy: use resources {kind: repo, branch}"`
-	Dir        string   `json:"dir,omitempty" jsonschema:"legacy: use resources {kind: repo, dir}"`
-	Tools      []string `json:"tools,omitempty" jsonschema:"legacy: use resources {kind: tool}"`
-	Folders    []string `json:"folders,omitempty" jsonschema:"legacy: use resources {kind: folder}"`
-	Identities []string `json:"identities,omitempty" jsonschema:"legacy, do not use: long-lived credentials from the configuration file; a repo resource gets short-lived access instead"`
+	Repo    string   `json:"repo,omitempty" jsonschema:"legacy: use resources {kind: repo}"`
+	Ref     string   `json:"ref,omitempty" jsonschema:"legacy: use resources {kind: repo, base}"`
+	Branch  string   `json:"branch,omitempty" jsonschema:"legacy: use resources {kind: repo, branch}"`
+	Dir     string   `json:"dir,omitempty" jsonschema:"legacy: use resources {kind: repo, dir}"`
+	Tools   []string `json:"tools,omitempty" jsonschema:"legacy: use resources {kind: tool}"`
+	Folders []string `json:"folders,omitempty" jsonschema:"legacy: use resources {kind: folder}"`
 
 	// askStart: what the task will need of the user's is asked at launch,
 	// on a card, and the task waits for the answer (task_start.go); taint
@@ -363,7 +362,11 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		return nil, fmt.Errorf("agent %s runs %s: catalog tools need a runtime that takes MCP servers", agentName, agent.Runtime)
 	}
 	// The credentials are checked now, but only read again when the node fetches the task.
-	if _, err := c.lend(kind, agentName, strings.Join(r.Identities, ",")); err != nil {
+	agentEnv, err := c.lend(agentName)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.checkAgentEnv(lent.List, agentEnv); err != nil {
 		return nil, err
 	}
 	// The node still gets the spec fields of before, derived from the resources.
@@ -386,7 +389,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		}
 	}
 	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model,
-		Identity: strings.Join(r.Identities, ","), Dir: where, Prompt: r.Prompt, State: statePending,
+		Dir: where, Prompt: r.Prompt, State: statePending,
 		Kind: kind, Tools: strings.Join(grant, ","), Folders: lent.folderNames(), Resources: lent.List, Pinned: r.Node != ""}
 	if waiting != nil {
 		t.PendingReason = waiting.reason
@@ -418,6 +421,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	spec.Folders = nil                                                                 // the same
 	if len(folders) > 0 {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders, c.resultsOn(folders[0].Node)))
+	}
+	if s := c.accessInstructions(lent.List); s != "" {
+		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + s)
 	}
 	if r.Contract != nil {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + r.Contract.instruction())

@@ -121,6 +121,11 @@ type nodeTaskSpec struct {
 	// Where the task may connect: the node's egress relay enforces it.
 	Egress *nodeEgress `json:"egress,omitempty"`
 
+	// What it uses with its own programs: the node decrypts those hosts
+	// and hands their requests to eriphe-core (lent_access.go). An older node
+	// ignores them: the placeholder then goes out as it is, and fails.
+	Accesses []nodeAccess `json:"accesses,omitempty"`
+
 	// The self-hosted model server of the task's agent (OpenCode), set
 	// when the node fetches the task; its address is in Egress.Endpoints.
 	ModelEndpoint *nodeModelEndpoint `json:"model_endpoint,omitempty"`
@@ -134,6 +139,14 @@ type nodeTaskSpec struct {
 	// Untrusted: started on what came from outside (taskUntrusted); its
 	// node gives it a cache of its own. An older node ignores it.
 	Untrusted bool `json:"untrusted,omitempty"`
+}
+
+// nodeAccess is one access as a task's node gets it: never its secret.
+type nodeAccess struct {
+	Name        string   `json:"name"`
+	Hosts       []string `json:"hosts"` // host:port
+	Env         string   `json:"env"`
+	Placeholder string   `json:"placeholder"`
 }
 
 // nodeModelEndpoint is where a self-hosted model server answers, and the

@@ -147,15 +147,30 @@ func sortNeeds(needs []accessNeed) []accessNeed {
 	return needs
 }
 
+// entryNeeds is what lending one entry outright needs of the user: a tool's
+// categories, or the use of an access, On approval or on a start that is
+// not clean.
+func (c *core) entryNeeds(e ResourceRef, clean bool) []accessNeed {
+	switch e.Kind {
+	case resTool:
+		return c.refNeeds(e.Ref, clean)
+	case resAccess:
+		if a, ok := c.conf().Accesses[e.Ref]; ok && (a.value() == gridApproval || !clean) {
+			return []accessNeed{{Server: e.Ref, Category: catUse}}
+		}
+	}
+	return nil
+}
+
 // accessStartNeeds is what a task's lend needs of the user at launch: what
 // it is lent outright, a held tool waiting for its release.
 func (c *core) accessStartNeeds(list []ResourceRef, clean bool) []startNeed {
 	seen := map[accessNeed]bool{}
 	for _, e := range list {
-		if e.Kind != resTool || e.Hold {
+		if e.Hold {
 			continue
 		}
-		for _, n := range c.refNeeds(e.Ref, clean) {
+		for _, n := range c.entryNeeds(e, clean) {
 			seen[n] = true
 		}
 	}
@@ -170,8 +185,9 @@ func (c *core) accessStartNeeds(list []ResourceRef, clean bool) []startNeed {
 // advance, for a watch.
 func (c *core) grantLent(t *TaskRow) {
 	for _, e := range t.Resources {
-		if e.Kind == resTool && !e.Hold {
-			for _, n := range c.refNeeds(e.Ref, true) {
+		if !e.Hold {
+			// Free on a clean start needs no yes: a watch's start is one.
+			for _, n := range c.entryNeeds(e, true) {
 				c.store.grantAccess(t.ID, n)
 			}
 		}
@@ -335,10 +351,14 @@ func (c *core) taskTitle(id string) string {
 // accessStartText says what a start's card asks of the grid: a sentence per
 // account, its categories together.
 func accessStartText(needs []startNeed, lang string) []string {
-	var order []string
+	var order, out []string
 	byTarget := map[string][]string{}
 	for _, n := range needs {
 		if n.Server == "" {
+			continue
+		}
+		if n.Category == catUse {
+			out = append(out, fmt.Sprintf(tr(lang, "access.ask.use"), n.Server))
 			continue
 		}
 		target := accessNeed{n.Server, n.Category, n.Account}.Target()
@@ -347,7 +367,6 @@ func accessStartText(needs []startNeed, lang string) []string {
 		}
 		byTarget[target] = append(byTarget[target], n.Category)
 	}
-	var out []string
 	for _, target := range order {
 		out = append(out, fmt.Sprintf(tr(lang, "access.ask.start"), verbs(byTarget[target], lang), target))
 	}
@@ -449,7 +468,7 @@ func (c *core) releaseTools(id string, refs []string) (string, error) {
 	}
 	var held, asked []string
 	for _, e := range t.Resources {
-		if e.Kind == resTool && e.Hold {
+		if (e.Kind == resTool || e.Kind == resAccess) && e.Hold {
 			held = append(held, e.Ref)
 		}
 	}
@@ -479,7 +498,7 @@ func (c *core) releaseApproved(a accessQuestion) error {
 	}
 	list := slices.Clone(t.Resources)
 	for i := range list {
-		if list[i].Kind == resTool && list[i].Hold && slices.Contains(a.Refs, list[i].Ref) {
+		if list[i].Hold && slices.Contains(a.Refs, list[i].Ref) {
 			list[i].Hold = false
 		}
 	}
@@ -487,11 +506,14 @@ func (c *core) releaseApproved(a accessQuestion) error {
 		return err
 	}
 	clean := c.store.get(lentByUserKey(a.TaskID)) != ""
-	for _, ref := range a.Refs {
-		for _, n := range c.refNeeds(ref, clean) {
+	for _, e := range list {
+		if !slices.Contains(a.Refs, e.Ref) {
+			continue
+		}
+		for _, n := range c.entryNeeds(e, clean) {
 			c.store.grantAccess(a.TaskID, n)
 		}
-		c.store.logDecision(a.TaskID, "", "release "+ref, nil, decideAllow, byUser, "débloqué sur la carte")
+		c.store.logDecision(a.TaskID, "", "release "+e.Ref, nil, decideAllow, byUser, "débloqué sur la carte")
 	}
 	log.Printf("task %s: released %s by the user", a.TaskID, strings.Join(a.Refs, ", "))
 	return nil

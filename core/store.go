@@ -60,10 +60,9 @@ type TaskRow struct {
 	NodeTaskID    string    `json:"node_task_id,omitempty"`
 	Runtime       string    `json:"runtime"`
 	Model         string    `json:"model,omitempty"`
-	Identity      string    `json:"identities,omitempty"` // names only, never the secrets
-	Kind          string    `json:"kind,omitempty"`       // worker or brain
-	Tools         string    `json:"tools,omitempty"`      // its grant from the catalog, comma-separated
-	Folders       string    `json:"folders,omitempty"`    // the user's folders lent to it, by name, comma-separated (folders.go)
+	Kind          string    `json:"kind,omitempty"`    // worker or brain
+	Tools         string    `json:"tools,omitempty"`   // its grant from the catalog, comma-separated
+	Folders       string    `json:"folders,omitempty"` // the user's folders lent to it, by name, comma-separated (folders.go)
 	Dir           string    `json:"dir"`
 	Prompt        string    `json:"prompt"`
 	State         string    `json:"state"`
@@ -361,8 +360,8 @@ func (s *Store) insertTask(t *TaskRow) error {
 	if t.Kind == "" {
 		t.Kind = "worker"
 	}
-	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, identity, dir, prompt, state, pending_reason, kind, tools, folders, resources, pinned, desired, created, updated)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Node, t.Agent, t.Runtime, t.Model, t.Identity, t.Dir, t.Prompt,
+	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, dir, prompt, state, pending_reason, kind, tools, folders, resources, pinned, desired, created, updated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Node, t.Agent, t.Runtime, t.Model, t.Dir, t.Prompt,
 		t.State, t.PendingReason, t.Kind, t.Tools, t.Folders, marshalResources(t.Resources), t.Pinned, orStr(t.Desired, desiredRunning), now.Unix(), now.Unix())
 	return err
 }
@@ -377,13 +376,13 @@ func (s *Store) updateTask(id string, fields map[string]any) error {
 	return err
 }
 
-const taskColumns = `id, node, agent, node_task_id, runtime, model, identity, kind, tools, folders, resources, dir, prompt, state, pending_reason, session_id, last_seq, created, updated, pinned`
+const taskColumns = `id, node, agent, node_task_id, runtime, model, kind, tools, folders, resources, dir, prompt, state, pending_reason, session_id, last_seq, created, updated, pinned`
 
 func scanTask(sc interface{ Scan(...any) error }) (*TaskRow, error) {
 	var t TaskRow
 	var created, updated int64
 	var resources string
-	err := sc.Scan(&t.ID, &t.Node, &t.Agent, &t.NodeTaskID, &t.Runtime, &t.Model, &t.Identity, &t.Kind, &t.Tools, &t.Folders, &resources, &t.Dir, &t.Prompt,
+	err := sc.Scan(&t.ID, &t.Node, &t.Agent, &t.NodeTaskID, &t.Runtime, &t.Model, &t.Kind, &t.Tools, &t.Folders, &resources, &t.Dir, &t.Prompt,
 		&t.State, &t.PendingReason, &t.SessionID, &t.LastSeq, &created, &updated, &t.Pinned)
 	t.Resources = unmarshalResources(resources)
 	t.Created, t.Updated = time.Unix(created, 0), time.Unix(updated, 0)
