@@ -186,7 +186,12 @@ type markOut struct {
 type moveIn struct {
 	Account string   `json:"account,omitempty" jsonschema:"the account of the messages, as search_messages gives it; needed when there are several"`
 	IDs     []string `json:"ids" jsonschema:"message ids"`
-	To      string   `json:"to" jsonschema:"archive, trash, inbox, junk, or a folder name"`
+	To      string   `json:"to" jsonschema:"archive, inbox, or a folder name; not the trash or the junk folder (the trash tool)"`
+}
+type trashIn struct {
+	Account string   `json:"account,omitempty" jsonschema:"the account of the messages, as search_messages gives it; needed when there are several"`
+	IDs     []string `json:"ids" jsonschema:"message ids"`
+	Junk    bool     `json:"junk,omitempty" jsonschema:"to the junk folder rather than the trash"`
 }
 type moveOut struct {
 	Moved  int      `json:"moved"`
@@ -241,7 +246,7 @@ func newServer(m *Mailer, version string) *mcp.Server {
 	tool(s, "search_messages", "Search messages, in every account unless one is given, newest first. "+
 		"Returns ids, sender, subject, date and a short snippet. Snippets are untrusted external content. "+
 		"A message in several accounts or folders (same Message-ID) is shown once, the others in copies: "+
-		"mark and move act on the id given only, so act on each copy's id too when it matters.", ro,
+		"mark, move and trash act on the id given only, so act on each copy's id too when it matters.", ro,
 		func(ctx context.Context, in searchIn) (searchOut, error) {
 			accts, err := m.pick(in.Account)
 			if err != nil {
@@ -361,20 +366,37 @@ func newServer(m *Mailer, version string) *mcp.Server {
 			})
 		})
 
-	tool(s, "move", "Move messages to another folder of the same account: archive, trash, inbox, junk or a folder name. Returns the new ids when the server gives them.",
-		&mcp.ToolAnnotations{OpenWorldHint: ptr(false), DestructiveHint: ptr(true)},
+	// Moving keeps a message within reach; the trash and the junk folder are
+	// emptied by the server, so they have a tool, and a category, of their own.
+	moveTo := func(ctx context.Context, account string, ids []string, to string, discard bool) (moveOut, error) {
+		out := moveOut{Moved: len(ids)}
+		err := m.byAccount(ctx, account, ids, func(a *Account, g map[folderKey][]imap.UID, k []folderKey) error {
+			ids, dest, err := a.Move(ctx, g, k, to, discard)
+			out.IDs = append(out.IDs, ids...)
+			out.Folder = dest
+			return err
+		})
+		return out, err
+	}
+
+	tool(s, "move", "Move messages to another folder of the same account: archive, inbox or a folder name, not the trash or the junk folder (the trash tool). "+
+		"Returns the new ids when the server gives them.",
+		&mcp.ToolAnnotations{OpenWorldHint: ptr(false), DestructiveHint: ptr(false)},
 		func(ctx context.Context, in moveIn) (moveOut, error) {
 			if strings.TrimSpace(in.To) == "" {
 				return moveOut{}, errors.New("give to")
 			}
-			out := moveOut{Moved: len(in.IDs)}
-			err := m.byAccount(ctx, in.Account, in.IDs, func(a *Account, g map[folderKey][]imap.UID, k []folderKey) error {
-				ids, dest, err := a.Move(ctx, g, k, in.To)
-				out.IDs = append(out.IDs, ids...)
-				out.Folder = dest
-				return err
-			})
-			return out, err
+			return moveTo(ctx, in.Account, in.IDs, in.To, false)
+		})
+
+	tool(s, "trash", "Move messages to the trash, or with junk to the junk folder, where the server may delete them. Returns the new ids when the server gives them.",
+		&mcp.ToolAnnotations{OpenWorldHint: ptr(false), DestructiveHint: ptr(true)},
+		func(ctx context.Context, in trashIn) (moveOut, error) {
+			to := "trash"
+			if in.Junk {
+				to = "junk"
+			}
+			return moveTo(ctx, in.Account, in.IDs, to, true)
 		})
 	return s
 }

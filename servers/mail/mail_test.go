@@ -440,7 +440,13 @@ func TestMarkAndMove(t *testing.T) {
 	if len(arch.Messages) != 1 || arch.Messages[0].ID != mv.IDs[0] {
 		t.Fatalf("archive: %+v", arch.Messages)
 	}
-	call[moveOut](t, cs, "move", map[string]any{"ids": mv.IDs, "to": "trash"})
+	// The trash has its tool: move refuses it, however it is named.
+	for _, to := range []string{"trash", "Trash"} {
+		if msg := callErr(t, cs, "move", map[string]any{"ids": mv.IDs, "to": to}); !strings.Contains(msg, "use the trash tool") {
+			t.Errorf("move to %s: %s", to, msg)
+		}
+	}
+	call[moveOut](t, cs, "trash", map[string]any{"ids": mv.IDs})
 	trash := call[searchOut](t, cs, "search_messages", map[string]any{"account": "perso", "folder": "Trash"})
 	inbox := call[searchOut](t, cs, "search_messages", map[string]any{"account": "perso"})
 	if len(trash.Messages) != 1 || len(inbox.Messages) != 1 {
@@ -452,9 +458,77 @@ func TestMarkAndMove(t *testing.T) {
 	}
 	// Folder roles work in French too.
 	b := call[searchOut](t, cs, "search_messages", map[string]any{"account": "pro"})
-	bm := call[moveOut](t, cs, "move", map[string]any{"ids": []string{b.Messages[0].ID}, "to": "trash"})
+	if msg := callErr(t, cs, "move", map[string]any{"ids": []string{b.Messages[0].ID}, "to": "Corbeille"}); !strings.Contains(msg, "use the trash tool") {
+		t.Errorf("move to Corbeille: %s", msg)
+	}
+	bm := call[moveOut](t, cs, "trash", map[string]any{"ids": []string{b.Messages[0].ID}})
 	if bm.Folder != "Corbeille" {
 		t.Errorf("pro trash: %+v", bm)
+	}
+}
+
+// The junk folder goes the way of the trash: its server may empty it.
+func TestJunkTakesTheTrashTool(t *testing.T) {
+	e := newEnv(t, rev2)
+	if err := e.alice.Create("Spam", nil); err != nil {
+		t.Fatal(err)
+	}
+	cs := connect(t, e.cfg)
+	s := call[searchOut](t, cs, "search_messages", map[string]any{"account": "perso", "subject": "promo"})
+	id := s.Messages[0].ID
+	refused := func(cs *mcp.ClientSession, folders ...string) {
+		t.Helper()
+		for _, to := range folders {
+			if msg := callErr(t, cs, "move", map[string]any{"ids": []string{id}, "to": to}); !strings.Contains(msg, "use the trash tool") {
+				t.Errorf("move to %s: %s", to, msg)
+			}
+		}
+	}
+	refused(cs, "junk", "Spam")
+	for _, folder := range []string{"Bin", "Trash/2024", "Old.Spam"} { // a second one, or under one
+		if err := e.alice.Create(folder, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	refused(connect(t, e.cfg), "Bin", "Trash/2024", "Old.Spam")
+	if out := call[moveOut](t, cs, "trash", map[string]any{"ids": []string{id}, "junk": true}); out.Folder != "Spam" {
+		t.Errorf("junk: %+v", out)
+	}
+}
+
+// Each tool says what it is: eriphe-core's grid sorts them by it (Read,
+// Change, Delete, Send).
+func TestToolAnnotations(t *testing.T) {
+	e := newEnv(t, rev2)
+	cs := connect(t, e.cfg)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"list_accounts": "read", "list_folders": "read", "search_messages": "read", "read_message": "read",
+		"create_draft": "change", "mark": "change", "move": "change", "trash": "delete", "send_message": "send"}
+	for _, tool := range res.Tools {
+		a, got := tool.Annotations, "send"
+		if tool.Name == "send_message" && (a == nil || a.DestructiveHint == nil || !*a.DestructiveHint) {
+			t.Errorf("send_message annotations: %+v", a)
+		}
+		switch {
+		case a == nil:
+		case a.ReadOnlyHint:
+			got = "read"
+		case a.OpenWorldHint == nil || *a.OpenWorldHint:
+		case a.DestructiveHint == nil || *a.DestructiveHint:
+			got = "delete"
+		default:
+			got = "change"
+		}
+		if got != want[tool.Name] {
+			t.Errorf("%s = %s, want %q", tool.Name, got, want[tool.Name])
+		}
+		delete(want, tool.Name)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing: %v", want)
 	}
 }
 
@@ -557,37 +631,6 @@ func TestTLSRequired(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "only tls or starttls") {
 			t.Errorf("security %s: %v", sec, err)
 		}
-	}
-}
-
-func TestToolAnnotations(t *testing.T) {
-	e := newEnv(t, rev2)
-	cs := connect(t, e.cfg)
-	res, err := cs.ListTools(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := map[string]*mcp.ToolAnnotations{}
-	for _, tl := range res.Tools {
-		got[tl.Name] = tl.Annotations
-	}
-	want := []string{"list_accounts", "list_folders", "search_messages", "read_message", "create_draft", "send_message", "mark", "move"}
-	if len(got) != len(want) {
-		t.Errorf("tools: %v", got)
-	}
-	for _, n := range want[:4] {
-		if got[n] == nil || !got[n].ReadOnlyHint {
-			t.Errorf("%s should be read-only", n)
-		}
-	}
-	if a := got["send_message"]; a == nil || a.ReadOnlyHint || a.DestructiveHint == nil || !*a.DestructiveHint || a.OpenWorldHint == nil || !*a.OpenWorldHint {
-		t.Errorf("send_message annotations: %+v", a)
-	}
-	if a := got["create_draft"]; a == nil || a.ReadOnlyHint || *a.DestructiveHint {
-		t.Errorf("create_draft annotations: %+v", a)
-	}
-	if a := got["move"]; a == nil || !*a.DestructiveHint {
-		t.Errorf("move annotations: %+v", a)
 	}
 }
 
