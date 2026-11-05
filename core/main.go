@@ -127,6 +127,7 @@ func main() {
 	mux.Handle("/v1/node/tasks/{id}/model/{path...}", c.taskModelHandler())       // model_relay.go
 	mux.HandleFunc("POST /v1/node/tasks/{id}/credential", c.handleTaskCredential) // credentials.go
 	mux.Handle("/v1/node/tasks/{id}/access", c.taskAccessHandler())               // lent_access.go
+	mux.Handle("POST /v1/node/tasks/{id}/ssh", c.taskSSHHandler())                // lent_ssh.go
 	mux.HandleFunc("GET /v1/node/tasks/{id}/skills/{sha}", c.handleTaskSkill)     // skills_tasks.go
 	mux.HandleFunc("POST /v1/node/services/{name}/report", c.handleServiceReport)
 	mux.HandleFunc("POST /v1/node/certificate", c.handleNodeCertificate)

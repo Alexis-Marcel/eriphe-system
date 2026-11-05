@@ -726,15 +726,16 @@
 <section class="stack" id="accesses">
   <header class="page-head page-head-row">
     <div><h3>{{t "lent.title"}}</h3><p class="muted small">{{t "lent.lead"}}</p></div>
-    <a class="btn btn-soft sm" href="/settings/accesses/new">{{template "i-plus"}}{{t "lent.add"}}</a>
+    <div class="tool-actions"><a class="btn btn-soft sm" href="/settings/accesses/new">{{template "i-plus"}}{{t "lent.add"}}</a>
+    <a class="btn btn-soft sm" href="/settings/accesses/new?kind=ssh">{{template "i-plus"}}{{t "lent.addssh"}}</a></div>
   </header>
   {{if .Accesses}}<ul class="tools">{{range .Accesses}}
   <li class="tool" id="lent-{{.Name}}">
     <span class="mark" aria-hidden="true">{{initial .Name}}</span>
     <div class="tool-main">
-      <div class="tool-head"><h3 class="mono">{{.Name}}</h3>{{template "src-tag" .Source}}</div>
+      <div class="tool-head"><h3 class="mono">{{.Name}}</h3>{{template "src-tag" .Source}}{{if .Untested}} <span class="chip srv-needs_auth">{{t "lent.untested"}}</span>{{end}}</div>
       {{if .Use}}<p class="use">{{.Use}}</p>{{end}}
-      <p class="muted small meta-line"><span class="mono">{{.Hosts}}</span> · <span class="mono">${{.Env}}</span> · {{t (printf "lent.value.%s" .Value)}}</p>
+      <p class="muted small meta-line"><span class="mono">{{.Hosts}}</span>{{if .Env}} · <span class="mono">${{.Env}}</span>{{end}} · {{t (printf "lent.value.%s" .Value)}}</p>
     </div>
     {{if .Editable}}<div class="tool-actions"><a class="btn btn-ghost sm" href="/settings/accesses/{{.Name}}/edit">{{t "lent.edit"}}</a></div>{{end}}
   </li>{{end}}</ul>
@@ -743,7 +744,7 @@
 {{end}}
 
 {{/* An access's form. . is an accessForm. */}}
-{{define "lent-access-form"}}
+{{define "lent-access-form"}}{{if .SSH}}{{template "lent-ssh-form" .}}{{else}}
 <form class="panel stack" id="lent-form" hx-post="{{if .Edit}}/settings/accesses/{{.Name}}{{else}}/settings/accesses{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
   <div class="form-grid">
@@ -785,15 +786,71 @@
   </div>
   <div class="actions"><button class="btn btn-primary" type="submit">{{t "lent.save"}}</button></div>
 </form>
+{{end}}{{end}}
+
+{{/* An SSH access's form: its key is made on saving. . is an accessForm. */}}
+{{define "lent-ssh-form"}}
+<form class="panel stack" id="lent-form" hx-post="{{if .Edit}}/settings/accesses/{{.Name}}{{else}}/settings/accesses{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
+  <input type="hidden" name="kind" value="ssh">
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  <div class="form-grid">
+    <label class="field"><span>{{t "lent.name"}}</span>
+      <input type="text" name="name" value="{{.Name}}" class="mono" spellcheck="false" autocapitalize="off" placeholder="build-server"{{if .Edit}} readonly{{end}} aria-describedby="lent-name-h">
+      <small id="lent-name-h">{{t "lent.ssh.namehint"}}</small></label>
+    <label class="field"><span>{{t "lent.use"}}</span>
+      <input type="text" name="use" value="{{.Use}}" aria-describedby="lent-use-h">
+      <small id="lent-use-h">{{t "lent.usehint"}}</small></label>
+    <label class="field"><span>{{t "lent.ssh.host"}}</span>
+      <input type="text" name="hosts" value="{{.Hosts}}" class="mono" spellcheck="false" autocapitalize="off" placeholder="192.0.2.10" aria-describedby="lent-hosts-h">
+      <small id="lent-hosts-h">{{t "lent.ssh.hosthint"}}</small></label>
+    <label class="field"><span>{{t "lent.ssh.user"}}</span>
+      <input type="text" name="user" value="{{.User}}" class="mono" spellcheck="false" autocapitalize="off" placeholder="eriphe" aria-describedby="lent-user-h">
+      <small id="lent-user-h">{{t "lent.ssh.userhint"}}</small></label>
+  </div>
+  <fieldset class="choices"><legend>{{t "lent.value"}}</legend>
+    <div class="checks">
+      <label class="check"><input type="radio" name="value" value="approval"{{if ne .Value "free"}} checked{{end}}><span><b>{{t "lent.value.approval"}}</b><small>{{t "lent.value.approvalhint"}}</small></span></label>
+      <label class="check"><input type="radio" name="value" value="free"{{if eq .Value "free"}} checked{{end}}><span><b>{{t "lent.value.free"}}</b><small>{{t "lent.value.freehint"}}</small></span></label>
+    </div>
+  </fieldset>
+  {{if .Edit}}<details class="advanced-opts"{{if .Error}} open{{end}}>
+    <summary>{{t "form.advanced"}}</summary>
+    <label class="field"><span>{{t "lent.ssh.hostkey"}}</span>
+      <textarea name="host_key" rows="2" class="mono" spellcheck="false" autocapitalize="off" placeholder="ssh-ed25519 AAAA…" aria-describedby="lent-hostkey-h">{{.HostKey}}</textarea>
+      <small id="lent-hostkey-h">{{t "lent.ssh.hostkeyhint"}}</small></label>
+  </details>{{end}}
+  <div class="notice stack">
+    <p class="small">{{t "lent.ssh.warn.all"}}</p>
+    <p class="small">{{t "lent.ssh.warn.seen"}}</p>
+    <p class="small">{{t "lent.warn.read"}}</p>
+  </div>
+  <div class="actions"><button class="btn btn-primary" type="submit">{{if .Edit}}{{t "lent.save"}}{{else}}{{t "lent.ssh.create"}}{{end}}</button></div>
+</form>
 {{end}}
+
+{{/* What goes on the machine, and the test. . is an accessForm. */}}
+{{define "lent-ssh-key"}}
+<section class="panel stack" id="lent-ssh">
+  <h3>{{t "lent.ssh.keytitle"}}</h3>
+  <p class="small">{{tf "lent.ssh.keylead" .User}}</p>
+  <div class="code"><pre id="lent-public-key">{{.PublicKey}}</pre><button class="btn btn-soft sm" type="button" data-copy="lent-public-key">{{t "machines.copy"}}</button></div>
+  {{if .Tested}}<p class="small" role="status">{{t "lent.test.ok"}}</p>{{end}}
+  {{if .Fingerprint}}<p class="small muted">{{t "lent.ssh.pinned"}} <span class="mono">{{.Fingerprint}}</span></p>
+  {{else}}<p class="small notice-line">{{t "lent.ssh.notpinned"}}</p>{{end}}
+  <div id="lent-ssh-result" aria-live="polite"></div>
+  <form class="actions" hx-post="/settings/accesses/{{.Name}}/test" hx-target="#lent-ssh-result" hx-disabled-elt="find button"><button class="btn btn-soft" type="submit">{{t "lent.ssh.test"}}</button></form>
+</section>
+{{end}}
+{{define "lent-ssh-test"}}{{with .Data}}<p class="alert" role="alert">{{t .Key}}</p>{{if .Found}}<p class="small muted">{{t "lent.test.found"}} <span class="mono">{{.Found}}</span></p>{{end}}{{end}}{{end}}
 {{define "lent-access-form-frag"}}{{template "lent-access-form" .Data}}{{end}}
 
 {{define "lent-access-page"}}{{with .Data}}
 <header class="page-head">
   <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
-  <h2>{{if .Edit}}{{.Name}}{{else}}{{t "lent.add"}}{{end}}</h2>
-  <p>{{t "lent.lead"}}</p>
+  <h2>{{if .Edit}}{{.Name}}{{else if .SSH}}{{t "lent.addssh"}}{{else}}{{t "lent.add"}}{{end}}</h2>
+  <p>{{if .SSH}}{{t "lent.ssh.lead"}}{{else}}{{t "lent.lead"}}{{end}}</p>
 </header>
+{{if and .SSH .Edit}}{{template "lent-ssh-key" .}}{{end}}
 {{template "lent-access-form" .}}
 {{if .Edit}}<form class="actions" hx-post="/settings/accesses/{{.Name}}/delete" hx-confirm="{{tf "lent.removeconfirm" .Name}}"><button class="btn btn-ghost sm" type="submit">{{t "lent.remove"}}</button></form>{{end}}
 {{end}}{{end}}

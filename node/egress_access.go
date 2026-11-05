@@ -49,6 +49,7 @@ type TaskAccess struct {
 	Hosts       []string `json:"hosts"` // host:port
 	Env         string   `json:"env"`   // the variable holding the placeholder
 	Placeholder string   `json:"placeholder"`
+	SSH         *TaskSSH `json:"ssh,omitempty"` // an SSH access: no hosts, no placeholder (egress_ssh.go)
 }
 
 const (
@@ -87,7 +88,9 @@ func accessEnv(t *Task) map[string]string {
 		env[v] = accessBundle
 	}
 	for _, a := range t.Spec.Accesses {
-		env[a.Env] = a.Placeholder
+		if a.Env != "" {
+			env[a.Env] = a.Placeholder
+		}
 	}
 	return env
 }

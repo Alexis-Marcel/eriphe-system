@@ -72,6 +72,7 @@ type testRelay struct {
 	lookups        int
 	accessHosts    []string // its accesses (egress_access_test.go)
 	ca             *taskCA
+	tunnels        []string // its SSH accesses (egress_ssh_test.go)
 }
 
 func newTestRelay(t *testing.T, upstream string, resolve func(n int, host string) []string) *testRelay {
@@ -83,7 +84,7 @@ func newTestRelay(t *testing.T, upstream string, resolve func(n int, host string
 		if id != "t-1" || secret != "s" {
 			return nil, false
 		}
-		return &egressTask{id: id, rule: r.rule, accessHosts: r.accessHosts, ca: r.ca, seen: func(h string) bool {
+		return &egressTask{id: id, rule: r.rule, accessHosts: r.accessHosts, ca: r.ca, tunnels: r.tunnels, seen: func(h string) bool {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			if seen[h] {

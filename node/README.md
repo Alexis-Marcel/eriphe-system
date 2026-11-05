@@ -480,6 +480,21 @@ declared host on another port is not its access. A task with egress `none` gets 
   trusts the rest of the Internet. A program that ignores them fails on that access, closed.
 - HTTP/1.1 only, so a gRPC client fails on an injected host.
 
+**SSH accesses.** An access with `ssh` ([core/README](../core/README.md)) has no hosts for the relay
+to decrypt: `{name, ssh: {target, user, host_key, public_key}}`, and never a private key.
+
+- The entrypoint installs `openssh-client` if the image has no `ssh`, as for git, copies the run
+  file `ssh-config` to the account's `~/.ssh/config`, and starts `eriphe-cred ssh-agent` on
+  `SSH_AUTH_SOCK`. Each access is a `Host` of its name and its address, its known host in
+  `ssh-known-hosts`, under `HostKeyAlias`, offering only its own public key; every host gets
+  `StrictHostKeyChecking yes`.
+- `POST /v1/task/ssh` on the task listener (task secret) relays `{op: keys | sign}` to eriphe-core.
+  No host socket is mounted, so it works on every engine.
+- `eriphe-cred tunnel %h %p`, ssh's `ProxyCommand`, sends a `CONNECT` to the relay. The relay opens
+  it to that exact `host:port` only, after asking eriphe-core whether the access may be used now,
+  private addresses included, as for a model server, never the loopback, link-local addresses or
+  multicast. Any other host or port of the LAN stays refused, and so does a task with egress `none`.
+
 ## Catalog relay
 
 A task's assignment lists the catalog servers of its grant (`servers`), by name only. The node
@@ -509,7 +524,8 @@ Its entrypoint makes git use the helper when it is there and the task has no `GH
 `GIT_CONFIG_COUNT=2`, `credential.helper=/opt/eriphe/bin/eriphe-cred`,
 `credential.useHttpPath=true`, before the clone (a private repository clones through it too).
 
-**`eriphe-cred`** (`cred/`, a module of its own, standard library only) is one of the
+**`eriphe-cred`** (`cred/`, a module of its own, standard library only; also the SSH agent and
+tunnel of [SSH accesses](#accesses)) is one of the
 [injected programs](#injected-programs-optbin): the node's image ships it for both Linux
 architectures in `/usr/local/share/eriphe/task-bin/linux-{amd64,arm64}/`, as `eriphe-cred` and as
 `gh` (a copy, since links are not copied), so every task finds both in `/opt/eriphe/bin`, first on
