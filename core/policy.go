@@ -111,7 +111,8 @@ var builtinAsk = []Rule{
 		decideAsk, "agit sur GitHub au-delà d'une branche et d'une PR"),
 	rule("Bash", shellBoundary+`(npm|pnpm|yarn)\s+publish|`+shellBoundary+`(cargo|twine|gem)\s+(publish|upload|push)|docker\s+push`,
 		decideAsk, "publie un paquet ou une image"),
-	rule("Bash", shellBoundary+`(ssh|scp|sftp|rsync)\s|`+shellBoundary+`(curl|wget|http)\s[^;&|]*(-X\s*(POST|PUT|PATCH|DELETE)|--data|\s-d\s|--form|\s-F\s|--upload-file|--post)`,
+	rule("Bash", shellBoundary+`(ssh|scp|sftp|rsync)\s`, decideAsk, sshAskReason),
+	rule("Bash", shellBoundary+`(curl|wget|http)\s[^;&|]*(-X\s*(POST|PUT|PATCH|DELETE)|--data|\s-d\s|--form|\s-F\s|--upload-file|--post)`,
 		decideAsk, "envoie quelque chose à une autre machine ou un service"),
 	rule("mcp__*", ``, decideAsk, "outil externe"),
 }
@@ -232,7 +233,7 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 		return decideAllow, why
 	}
 	for _, r := range builtinAsk {
-		if r.matches(tool, subj) {
+		if r.matches(tool, subj) && !(f.sshLent && r.Reason == sshAskReason) {
 			return r.Decision, r.Reason
 		}
 	}
@@ -240,6 +241,10 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 }
 
 const (
+	// sshAskReason: the built-in ask of ssh, which a task lent an SSH access
+	// does not get: the access was decided, and reaches that machine only.
+	sshAskReason = "envoie quelque chose à une autre machine"
+
 	neverReason    = "cet outil n'est pas autorisé dans Eriphe"
 	approvalReason = "cet outil demande ton accord"
 	freeReason     = "accès libre"
@@ -257,6 +262,7 @@ func (c *core) decide(tool string, input map[string]any) (decision, reason strin
 func (c *core) decideTask(t *TaskRow, tool string, input map[string]any) (decision, reason string) {
 	f := c.pool.facts(tool, input)
 	f.unclean = t == nil || c.store.get(lentByUserKey(t.ID)) == ""
+	f.sshLent = t != nil && len(c.lentSSH(t)) > 0
 	if server, name, ok := splitToolName(tool); ok && t != nil {
 		if u := c.pool.get(server); u != nil {
 			if real := u.toolByClaudeName(name); real != nil {

@@ -11,6 +11,8 @@
 //	eriphe-cred get|store|erase   git's credential helper protocol (stdin, stdout)
 //	eriphe-cred gh ARGS...        runs the real gh with a token for this one command
 //	gh ARGS...                    the same, when installed as gh ahead of the real one on PATH
+//	eriphe-cred ssh-agent         the SSH agent of a task with an SSH access (ssh.go)
+//	eriphe-cred tunnel HOST PORT  ssh's ProxyCommand, through the node's relay
 //
 // It reads ERIPHE_CRED_URL (the node's endpoint) and ERIPHE_TASK_SECRET,
 // which the node gives every task.
@@ -55,6 +57,10 @@ func main() {
 		os.Exit(runGit(args[0], os.Stdin, os.Stdout, os.Stderr, newClient(), gitAccess))
 	case "gh":
 		os.Exit(runGh(args[1:], newClient(), osEnv{}))
+	case "ssh-agent":
+		os.Exit(runSSHAgent(os.Stderr))
+	case "tunnel":
+		os.Exit(runTunnel(args[1:], os.Stdin, os.Stdout, os.Stderr))
 	case "version", "--version":
 		fmt.Println("eriphe-cred", version)
 	default:

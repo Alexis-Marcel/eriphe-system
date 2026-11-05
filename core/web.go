@@ -216,6 +216,7 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /settings/accesses", w.auth(w.handleSaveAccess))
 	mux.Handle("POST /settings/accesses/{name}", w.auth(w.handleSaveAccess))
 	mux.Handle("POST /settings/accesses/{name}/delete", w.auth(w.handleDeleteAccess))
+	mux.Handle("POST /settings/accesses/{name}/test", w.auth(w.handleTestAccess))
 	mux.Handle("POST /settings/tool-test", w.auth(w.handleTestTool))
 	mux.Handle("POST /settings/tool-test/{name}", w.auth(w.handleTestTool))
 	// The vault and the tools were one page: its address leads to the tools.
