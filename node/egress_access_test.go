@@ -332,3 +332,28 @@ func TestAccessTarget(t *testing.T) {
 		}
 	}
 }
+
+// A real client, told only what a task's environment tells it: the relay,
+// and the bundle.
+func TestAccessWithARealClient(t *testing.T) {
+	curl, err := exec.LookPath("curl")
+	if err != nil {
+		t.Skip("no curl")
+	}
+	r, f, ca := accessRelayed(t, upstreamServer(t).Listener.Addr().String())
+	bundle := filepath.Join(t.TempDir(), "bundle.pem")
+	os.WriteFile(bundle, ca.pem, 0o600)
+	cmd := exec.Command(curl, "-sS", "--fail", "-H", "Authorization: Bearer placeholder", "--data-binary", "a body", "https://registry.example.org/pkg")
+	cmd.Env = []string{"HTTPS_PROXY=" + egressURL("127.0.0.1", r.srv.Listener.Addr().(*net.TCPAddr).AddrPort().String()[len("127.0.0.1:"):], "t-1", "s"),
+		"CURL_CA_BUNDLE=" + bundle, "SSL_CERT_FILE=" + bundle}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if string(out) != "from core" {
+		t.Fatalf("curl = %q", out)
+	}
+	if got := f.last(t); got.Header.Get(accessAuthHeader) != "Bearer placeholder" || got.Header.Get(accessHostHeader) != accessHostPort {
+		t.Errorf("headers = %v", got.Header)
+	}
+}
