@@ -147,6 +147,15 @@ type nodeAccess struct {
 	Hosts       []string `json:"hosts"` // host:port
 	Env         string   `json:"env"`
 	Placeholder string   `json:"placeholder"`
+	SSH         *nodeSSH `json:"ssh,omitempty"` // an SSH access: no hosts, no placeholder
+}
+
+// nodeSSH is what a task's ssh is configured with: no secret.
+type nodeSSH struct {
+	Target    string `json:"target"` // host:port
+	User      string `json:"user"`
+	HostKey   string `json:"host_key"`
+	PublicKey string `json:"public_key"`
 }
 
 // nodeModelEndpoint is where a self-hosted model server answers, and the

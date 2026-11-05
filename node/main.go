@@ -219,6 +219,7 @@ func main() {
 			log.Fatal(err)
 		}
 		relay.access = n.accessRelay(s) // egress_access.go
+		relay.sshOpen = s.sshOpen       // egress_ssh.go
 		go func() { log.Fatal(http.Serve(l, relay)) }()
 	}
 	api := http.NewServeMux()
@@ -367,6 +368,7 @@ func (n *node) taskRoutes(s *state) *http.ServeMux {
 	perm.Handle("/mcp/{server}", n.relayHandler(s))
 	perm.Handle("/model/v1/{path...}", n.modelRelayHandler(s))
 	perm.Handle("POST "+credentialPath, n.credentialHandler(s))
+	perm.Handle("POST "+sshPath, n.sshHandler(s))
 	perm.Handle("POST "+toolchainPath, n.toolchainHandler())
 	return perm
 }

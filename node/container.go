@@ -16,7 +16,7 @@ func containerName(t *Task) string { return "eriphe-task-" + t.ID }
 // The container puts the injected agent first in PATH, makes the cache's
 // apt directories, makes git ask Eriphe for its credentials when
 // eriphe-cred is there (credential.go; a task given a GH_TOKEN keeps its own
-// way), writes the bundle of a task with accesses (egress_access.go), clones the repository if asked (once: /work is kept across
+// way), writes the bundle of a task with accesses (egress_access.go), sets up ssh and its agent for SSH accesses (egress_ssh.go), clones the repository if asked (once: /work is kept across
 // restarts; git is installed first if the image lacks it), makes what it
 // writes group-writable when it has folders (the user's group shares
 // them), asks the node for the toolchains the repository names and puts
@@ -29,6 +29,7 @@ if [ -w /cache ]; then mkdir -p /cache/apt/archives/partial /cache/apt/lists/par
 cd /work
 if [ -n "$ERIPHE_FOLDERS" ]; then umask 002; fi
 ` + accessBundleScript + `
+` + sshAccessScript + `
 if [ -z "$GH_TOKEN" ] && [ -n "$ERIPHE_CRED_URL" ] && [ -x ` + injectDir + `/bin/eriphe-cred ]; then
   export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=` + injectDir + `/bin/eriphe-cred \
     GIT_CONFIG_KEY_1=credential.useHttpPath GIT_CONFIG_VALUE_1=true
@@ -148,6 +149,7 @@ func (n *node) startContainer(t *Task, first string) error {
 		n.endTaskNetwork(t)
 		return err
 	}
+	files = withSSHFiles(t, files) // egress_ssh.go
 	if err := writeRunFiles(t, files); err != nil {
 		n.endTaskNetwork(t)
 		return err
@@ -298,6 +300,9 @@ func (n *node) taskEnv(t *Task, agentEnv map[string]string) map[string]string {
 		env[k] = v
 	}
 	for k, v := range n.credentialEnv(t) { // where eriphe-cred asks (credential.go)
+		env[k] = v
+	}
+	for k, v := range n.sshEnv(t) { // egress_ssh.go
 		env[k] = v
 	}
 	if n.toolchainsFor(t) {

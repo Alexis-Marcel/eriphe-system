@@ -162,6 +162,29 @@ What this does not do:
 - What a task reads through an access is external content, and does not taint the task: Eriphe does
   not read a program's traffic, as it does not read its shell output. The page says so too.
 
+**SSH accesses.** An access of kind `ssh` is a machine a task configures with the real `ssh`, and
+so `scp`, `rsync` or Ansible (`core/lent_ssh.go`). Settings → Tools, "Add an SSH machine", asks for
+the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (port 22 by default),
+`user`, `secret` (a private key file) and `host_key`.
+
+- **The key.** Saving makes an Ed25519 pair: the private key goes straight to the vault as
+  `access.<name>.secret` and is never shown; the page shows the public line for the machine's
+  `authorized_keys`. One key per access: removing that line, or the access, ends it. Saving the
+  access again keeps the key.
+- **The host key.** The page's test connects once from eriphe-core, which confirms the key is in
+  place, and records the machine's host key. A machine only a node reaches cannot be tested: its
+  key can be pasted (`ssh-keyscan`). An access with no host key cannot be lent. A key that changed
+  fails the test; emptying the field and testing again records the new one.
+- **The path.** `eriphe-cred` is the task's SSH agent, and asks `/v1/node/tasks/{id}/ssh`
+  (`{op: keys | sign | connect}`) through its node. eriphe-core signs a login only (RFC 4252's
+  `publickey` request, for that key and the access's `user`): the key signs no commit or file and
+  logs in to no other account. Before opening a tunnel, the relay asks too. Each connection, login
+  and refusal goes in `credential_log` (tool `access`).
+- **What it does not do.** SSH lends everything the remote account can do: Eriphe sees the logins,
+  not the commands, and `sudo` is the machine's to set. Use a dedicated account. The host key is
+  pinned in the task's own `ssh` configuration, which a task can change: it protects a task from
+  another machine, not a machine from the task.
+
 `identities`, the long-lived secrets handed to a task as they were, are gone: `core.json`'s are
 ignored, with a line in the log. An HTTP token becomes an access; declare it with the same variable.
 

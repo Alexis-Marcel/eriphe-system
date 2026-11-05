@@ -49,7 +49,8 @@ const (
 )
 
 // egressPorts are the ports the relay connects to: HTTP and HTTPS (git over
-// HTTPS included), not SMTP, SSH nor anything else.
+// HTTPS included), not SMTP, SSH nor anything else. An SSH access's one
+// host and port is apart (egress_ssh.go).
 var egressPorts = map[string]bool{"80": true, "443": true}
 
 // blockedPrefixes are the non-public ranges netip has no predicate for.
@@ -140,6 +141,8 @@ type egressTask struct {
 	// with (egress_access.go).
 	accessHosts []string
 	ca          *taskCA
+	// The host:port of its SSH accesses (egress_ssh.go).
+	tunnels []string
 }
 
 type egressProxy struct {
@@ -162,6 +165,9 @@ type egressProxy struct {
 	logf         func(format string, args ...any)
 	// access serves the requests of a task's accesses (egress_access.go).
 	access http.Handler
+	// sshOpen asks eriphe-core whether a task may open a tunnel now
+	// (egress_ssh.go).
+	sshOpen func(ctx context.Context, taskID, target string) error
 }
 
 func newEgressProxy(authorize func(id, secret string) (*egressTask, bool), self []string, listener string) *egressProxy {
@@ -204,6 +210,7 @@ func (n *node) egressAuthorizer(id, secret string) (*egressTask, bool) {
 			e.accessHosts = append(e.accessHosts, a.Hosts...)
 		}
 	}
+	e.tunnels = sshTargets(t) // egress_ssh.go
 	return e, true
 }
 
@@ -314,7 +321,7 @@ func (p *egressProxy) dialModelServer(ctx context.Context, t *egressTask, host, 
 		}
 	}
 	if len(ok) == 0 {
-		err := refused("%s is not a model server's address (loopback, link-local, multicast or unspecified)", host)
+		err := refused("%s is not an address a task may be lent (loopback, link-local, multicast or unspecified)", host)
 		p.note(t, host, err)
 		return nil, err
 	}
@@ -417,7 +424,13 @@ func (p *egressProxy) connect(w http.ResponseWriter, r *http.Request, t *egressT
 		p.intercept(w, t, target) // egress_access.go
 		return
 	}
-	upstream, err := p.dial(r.Context(), t, r.Host)
+	var upstream net.Conn
+	var err error
+	if t.isTunnel(r.Host) {
+		upstream, err = p.dialTunnel(r.Context(), t, r.Host) // egress_ssh.go
+	} else {
+		upstream, err = p.dial(r.Context(), t, r.Host)
+	}
 	if err != nil {
 		writeEgressError(w, err)
 		return
