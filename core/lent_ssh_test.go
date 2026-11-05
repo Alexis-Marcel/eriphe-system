@@ -357,3 +357,96 @@ func TestSSHAccessPage(t *testing.T) {
 		t.Fatalf("%d: %s", code, body)
 	}
 }
+
+// boundLogin is what OpenSSH 8.9 and later sign.
+func boundLogin(user string, key, hostKey []byte) []byte {
+	return ssh.Marshal(struct {
+		Session   string
+		Type      byte
+		User      string
+		Service   string
+		Method    string
+		Signed    bool
+		Algorithm string
+		Key       []byte
+		HostKey   []byte
+	}{"session", sshUserAuthRequest, user, "ssh-connection", sshHostBound, true, ssh.KeyAlgoED25519, key, hostKey})
+}
+
+func TestSSHSignsAHostBoundLoginForThePinnedMachine(t *testing.T) {
+	c, a := sshCore(t, gridFree, testHostKey)
+	task := lendAccess(t, c, true, box)
+	s, _ := a.sshSigner()
+	key := s.PublicKey().Marshal()
+	pin, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(testHostKey))
+	if code, _, body := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: boundLogin("sam", key, pin.Marshal())}); code != 200 {
+		t.Fatalf("%d %s", code, body)
+	}
+	if code, _, _ := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: boundLogin("sam", key, key)}); code != http.StatusForbidden {
+		t.Fatalf("another machine: %d", code)
+	}
+	if _, err := parseSSHLogin(append(loginData("sam", key), 1, 2, 3)); err == nil {
+		t.Fatal("publickey with something after it")
+	}
+}
+
+func TestSSHCommandsAskNothingOnceLent(t *testing.T) {
+	c, _ := sshCore(t, gridFree, testHostKey)
+	task := lendAccess(t, c, true, box)
+	input := map[string]any{"command": "ssh box uptime"}
+	if d, why := c.decideTask(task, "Bash", input); d != decideBrain {
+		t.Fatalf("%s: %s", d, why)
+	}
+	if d, _ := c.decideTask(task, "Bash", map[string]any{"command": "curl https://example.org -d x"}); d != decideAsk {
+		t.Fatalf("curl: %s", d)
+	}
+	if d, _ := c.decideTask(nil, "Bash", input); d != decideAsk {
+		t.Fatalf("nothing lent: %s", d)
+	}
+}
+
+func TestSSHConnectWithTwoAccessesOnOneMachine(t *testing.T) {
+	c, _ := sshCore(t, gridFree, testHostKey)
+	if err := c.putAccess(putCreate, "admin", Access{Kind: accessSSH, Hosts: []string{sshHost}, User: "root", Value: gridApproval, HostKey: testHostKey}, ""); err != nil {
+		t.Fatal(err)
+	}
+	task, err := c.runTask(context.Background(), runRequest{Prompt: "fix it", cleanStart: true, Resources: []ResourceRef{box, {Kind: resAccess, Ref: "admin", Hold: true}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.store.set(lentByUserKey(task.ID), "1")
+	for range 20 {
+		if code, _, body := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpConnect, Target: sshHost + ":22"}); code != 200 {
+			t.Fatalf("%d %s", code, body)
+		}
+	}
+}
+
+func TestSSHPinOnlyTheAccessTested(t *testing.T) {
+	c, a := sshCore(t, gridFree, "")
+	moved := a
+	moved.Hosts = []string{"192.0.2.11"}
+	if err := c.pinSSHHostKey("box", moved, testHostKey); !errors.Is(err, errSSHChanged) {
+		t.Fatalf("another machine: %v", err)
+	}
+	if err := c.pinSSHHostKey("box", a, testHostKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.pinSSHHostKey("box", a, "ssh-ed25519 other"); !errors.Is(err, errSSHChanged) {
+		t.Fatalf("a key pinned meanwhile: %v", err)
+	}
+	if err := c.deleteAccess("box"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.pinSSHHostKey("box", a, testHostKey); !errors.Is(err, errSSHChanged) {
+		t.Fatalf("removed: %v", err)
+	}
+}
+
+func TestNormalHostKey(t *testing.T) {
+	for _, in := range []string{testHostKey, "ssh-gw.example.org " + testHostKey, sshHost + " " + testHostKey + " comment"} {
+		if got, err := normalHostKey(in); err != nil || got != testHostKey {
+			t.Errorf("%q: %q %v", in, got, err)
+		}
+	}
+}

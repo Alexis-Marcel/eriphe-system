@@ -12,10 +12,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"net/netip"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -63,6 +65,10 @@ const (
 
 	// sshUserAuthRequest is SSH_MSG_USERAUTH_REQUEST (RFC 4252).
 	sshUserAuthRequest = 50
+
+	// sshHostBound is what OpenSSH 8.9 and later sign in place of
+	// publickey: the same, with the machine's host key at the end.
+	sshHostBound = "publickey-hostbound-v00@openssh.com"
 )
 
 var accessSSHUser = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
@@ -85,24 +91,16 @@ func (a Access) sshTarget() string {
 // that, an authorized_keys line or a line of ssh-keyscan.
 func normalHostKey(s string) (string, error) {
 	f := strings.Fields(s)
-	for i, w := range f { // ssh-keyscan starts with the host
-		if strings.HasPrefix(w, "ssh-") || strings.HasPrefix(w, "ecdsa-") {
-			f = f[i:]
-			break
+	for i := 0; i+1 < len(f); i++ { // ssh-keyscan starts with the host
+		raw, err := base64.StdEncoding.DecodeString(f[i+1])
+		if err != nil {
+			continue
+		}
+		if k, err := ssh.ParsePublicKey(raw); err == nil && k.Type() == f[i] {
+			return hostKeyLine(k), nil
 		}
 	}
-	if len(f) < 2 {
-		return "", errors.New("not a public key")
-	}
-	raw, err := base64.StdEncoding.DecodeString(f[1])
-	if err != nil {
-		return "", err
-	}
-	k, err := ssh.ParsePublicKey(raw)
-	if err != nil {
-		return "", err
-	}
-	return hostKeyLine(k), nil
+	return "", errors.New("not a public key")
 }
 
 func hostKeyLine(k ssh.PublicKey) string {
@@ -191,10 +189,12 @@ func (a Access) sshPublicKey(name string) (string, error) {
 type sshLogin struct {
 	User, Algorithm string
 	Key             []byte
+	HostKey         []byte // the machine's, when the client binds the login to it
 }
 
-// parseSSHLogin reads what a client signs to log in (RFC 4252, section 7),
-// and nothing else: a key lent to log in signs no commit, no file.
+// parseSSHLogin reads what a client signs to log in (RFC 4252, section 7,
+// and OpenSSH's PROTOCOL for sshHostBound), and nothing else: a key lent to
+// log in signs no commit, no file.
 func parseSSHLogin(data []byte) (sshLogin, error) {
 	var m struct {
 		Session   string
@@ -205,14 +205,39 @@ func parseSSHLogin(data []byte) (sshLogin, error) {
 		Signed    bool
 		Algorithm string
 		Key       []byte
+		Rest      []byte `ssh:"rest"`
 	}
+	notLogin := errors.New("this is not a login")
 	if err := ssh.Unmarshal(data, &m); err != nil {
-		return sshLogin{}, errors.New("this is not a login")
+		return sshLogin{}, notLogin
 	}
-	if m.Type != sshUserAuthRequest || m.Service != "ssh-connection" || m.Method != "publickey" || !m.Signed {
-		return sshLogin{}, errors.New("this is not a login")
+	if m.Type != sshUserAuthRequest || m.Service != "ssh-connection" || !m.Signed {
+		return sshLogin{}, notLogin
 	}
-	return sshLogin{User: m.User, Algorithm: m.Algorithm, Key: m.Key}, nil
+	login := sshLogin{User: m.User, Algorithm: m.Algorithm, Key: m.Key}
+	switch m.Method {
+	case "publickey":
+		if len(m.Rest) > 0 {
+			return sshLogin{}, notLogin
+		}
+	case sshHostBound:
+		var bound struct {
+			HostKey []byte
+		}
+		if err := ssh.Unmarshal(m.Rest, &bound); err != nil {
+			return sshLogin{}, notLogin
+		}
+		login.HostKey = bound.HostKey
+	default:
+		return sshLogin{}, notLogin
+	}
+	return login, nil
+}
+
+// pinned tells whether a host key is the one the access pins.
+func (a Access) pinned(hostKey []byte) bool {
+	k, _, _, _, err := ssh.ParseAuthorizedKey([]byte(a.HostKey))
+	return err == nil && bytes.Equal(k.Marshal(), hostKey)
 }
 
 // sshRequest is what a node asks for a task.
@@ -338,6 +363,9 @@ func (c *core) sshSign(t *TaskRow, key, data []byte) ([]byte, error) {
 		if login.User != a.User {
 			return nil, c.sshUse(t, name, target, "login", fmt.Errorf("the access %s logs in as %s, not as another account", name, a.User))
 		}
+		if login.HostKey != nil && !a.pinned(login.HostKey) {
+			return nil, c.sshUse(t, name, target, "login", fmt.Errorf("the access %s logs in to its pinned machine only", name))
+		}
 		sig, err := s.Sign(rand.Reader, data)
 		if err != nil {
 			return nil, c.sshUse(t, name, target, "login", errors.New("the signature failed"))
@@ -349,13 +377,26 @@ func (c *core) sshSign(t *TaskRow, key, data []byte) ([]byte, error) {
 }
 
 // sshConnect tells whether the relay may open a tunnel to a target for the
-// task: an access lent to it goes there, and it may use it now.
+// task: an access lent to it goes there, and it may use it now. Two accesses
+// may share a machine: one usable is enough, each signs for itself.
 func (c *core) sshConnect(t *TaskRow, target string) error {
-	for name, a := range c.lentSSH(t) {
-		if a.sshTarget() != target {
+	lent := c.lentSSH(t)
+	var refused error
+	var refusedName string
+	for _, name := range slices.Sorted(maps.Keys(lent)) {
+		if lent[name].sshTarget() != target {
 			continue
 		}
-		return c.sshUse(t, name, target, "connection", c.accessUsable(t, name))
+		err := c.accessUsable(t, name)
+		if err == nil {
+			return c.sshUse(t, name, target, "connection", nil)
+		}
+		if refused == nil {
+			refused, refusedName = err, name
+		}
+	}
+	if refused != nil {
+		return c.sshUse(t, refusedName, target, "connection", refused)
 	}
 	return errors.New("no SSH access of this task goes to " + target)
 }
@@ -384,6 +425,9 @@ func (c *core) testSSH(ctx context.Context, name string) (hostKey string, err er
 	if a.HostKey != "" {
 		if k, _, _, _, err := ssh.ParseAuthorizedKey([]byte(a.HostKey)); err == nil {
 			config.HostKeyAlgorithms = []string{k.Type()}
+			if k.Type() == ssh.KeyAlgoRSA { // its key type, not what it signs with now
+				config.HostKeyAlgorithms = []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
+			}
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, sshTestTimeout)
@@ -415,7 +459,7 @@ func (c *core) testSSH(ctx context.Context, name string) (hostKey string, err er
 	}()
 	sc.Close()
 	if a.HostKey == "" {
-		if err := c.pinSSHHostKey(name, hostKey); err != nil {
+		if err := c.pinSSHHostKey(name, a, hostKey); err != nil {
 			return "", err
 		}
 	}
@@ -431,15 +475,26 @@ var (
 	errSSHHostKey     = errors.New("the machine's host key is not the one pinned")
 	errSSHRefused     = errors.New("the machine refused the key: is it in authorized_keys?")
 	errSSHUnreachable = errors.New("eriphe-core cannot reach the machine")
+	errSSHChanged     = errors.New("the access changed during the test")
 )
 
-// pinSSHHostKey records a workspace access's host key.
-func (c *core) pinSSHHostKey(name, key string) error {
+// pinSSHHostKey records a workspace access's host key, if the access is
+// still the one tested: the test takes seconds, and the page may have
+// changed its machine, pinned a key, or made it anew meanwhile.
+func (c *core) pinSSHHostKey(name string, tested Access, key string) error {
 	c.catalogMu.Lock()
 	defer c.catalogMu.Unlock()
 	a, ok := c.dyn.Accesses[name]
 	if !ok {
-		return errReadOnly(kindAccess, name) // the file's: its host_key is written there
+		if _, inFile := c.base.Accesses[name]; inFile {
+			return errReadOnly(kindAccess, name) // its host_key is written there
+		}
+		return errSSHChanged
+	}
+	now, err := a.sshPublicKey(name)
+	then, err2 := tested.sshPublicKey(name)
+	if err != nil || err2 != nil || now != then || a.HostKey != "" || a.sshTarget() != tested.sshTarget() || a.User != tested.User {
+		return errSSHChanged
 	}
 	a.HostKey = key
 	d := c.dyn.clone()
