@@ -96,7 +96,7 @@ func TestToolsListGroupsAccounts(t *testing.T) {
 		card := body[i:]
 		card = card[:strings.Index(card, "</ul>")]
 		for _, want := range []string{`<h3 id="` + c.card + `-t">` + c.head + `</h3>`, c.product, `id="tool-` + c.row + `"`, "<h3>Mail</h3>",
-			`/settings/tools/mail/edit?account=` + c.edit, `pmark-`} {
+			`/settings/tools/mail/access?account=` + c.edit, `pmark-`} {
 			if !strings.Contains(card, want) {
 				t.Errorf("the card of %s lacks %q", c.head, want)
 			}

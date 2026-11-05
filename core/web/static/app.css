@@ -1222,14 +1222,28 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 .howto-box p { margin: 0; }
 
 /* What Eriphe may do on a tool, in the form and in the list (access.go). */
+.access-grid { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 12px; }
+.access-grid legend { font-size: .86rem; font-weight: 600; padding: 0; margin-bottom: 8px; }
+.access-grid table { width: 100%; border-collapse: collapse; }
+.access-grid th { font-weight: 500; font-size: .84rem; text-align: center; padding: 8px 4px; }
+.access-grid tbody th { text-align: left; font-weight: 600; }
+.access-grid th small { display: block; font-weight: 400; color: var(--muted); font-size: .76rem; }
+.access-grid td { text-align: center; padding: 8px 4px; }
+.access-grid tbody tr + tr > * { border-top: 1px solid var(--border); }
+.access-grid input[type=radio] { width: 20px; height: 20px; }
+.grid-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
+.access-grid .check small { display: block; font-size: .8rem; }
+.exceptions li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 4px 0; }
+.exceptions select { margin-left: auto; }
 .choices.access > small { font-size: .8rem; line-height: 1.4; }
 .access-tag { color: var(--muted); text-decoration: none; }
 .access-tag:hover { text-decoration: underline; }
 .access-tag.level-reads, .access-tag.level-read-only { color: var(--ok); font-weight: 600; }
 .access-tag.level-free { color: var(--warn); font-weight: 600; }
 .choice.level-free:has(input:checked) { border-color: var(--warn-strong); box-shadow: 0 0 0 3px var(--warn-soft); }
-.choices.access .free-warn { display: none; margin: 0; background: var(--warn-soft); color: var(--warn); }
-.choices.access:has(input[value="free"]:checked) .free-warn { display: block; }
+.choices.access .free-warn, .access-grid .free-warn { display: none; margin: 0; background: var(--warn-soft); color: var(--warn); }
+.choices.access:has(input[value="free"]:checked) .free-warn,
+.access-grid:has(.above-read input[value="free"]:checked) .free-warn { display: block; }
 .notice-line { margin: 4px 0 0; color: var(--warn); }
 .token-note { margin: 0; }
 .token-note p { margin: 0 0 8px; }

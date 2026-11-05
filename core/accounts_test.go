@@ -133,8 +133,8 @@ func TestAccountLevelReachesTheServer(t *testing.T) {
 	}
 	// The list shows each account's level.
 	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
-	if !strings.Contains(body, `level-read-only" href="/settings/tools/mail/edit?account=pro%40example.org#form-access"`) ||
-		!strings.Contains(body, `level-reads" href="/settings/tools/mail/edit?account=perso%40example.org#form-access"`) {
+	if !strings.Contains(body, `level-read-only" href="/settings/tools/mail/access?account=pro%40example.org"`) ||
+		!strings.Contains(body, `level-reads" href="/settings/tools/mail/access?account=perso%40example.org"`) {
 		t.Fatalf("list: %s", body)
 	}
 	// From the access page: perso free.

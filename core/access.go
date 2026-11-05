@@ -48,14 +48,11 @@ func (s Server) level() string {
 	if accounts := s.accountAccesses(); len(accounts) > 0 {
 		levels := map[string]string{}
 		for name, a := range accounts {
-			levels[name] = gridLevel(a.grid, a.trusted)
+			levels[name] = a.level()
 		}
 		return accountsLevel(levels)
 	}
-	if s.Grid != nil {
-		return gridLevel(*s.Grid, s.TrustAnnotations)
-	}
-	return s.ownLevel()
+	return s.baseAccess().level()
 }
 
 // ownLevel is a server's named level. An older entry has trust_annotations

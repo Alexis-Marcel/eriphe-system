@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"html"
-	"net/http"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -226,15 +225,15 @@ func TestWebAlwaysAllow(t *testing.T) {
 	}
 	_, body, _ = tw.do("GET", "/settings/tools/github/access", nil, nil)
 	b := html.UnescapeString(body)
-	for _, want := range []string{"Actions autorisées sans demander", "create_issue", "fichier de configuration", "Lecture seule", "Tout libre",
-		"Tout sur accord", "Ce service ne propose pas de jeton en lecture seule"} {
+	for _, want := range []string{"Actions autorisées sans demander", "create_issue", "fichier de configuration", "Sur accord", "Jamais",
+		"Ce service ne propose pas de jeton en lecture seule"} {
 		if !strings.Contains(b, want) {
-			t.Fatalf("access page lacks %q: %s", want, mainPart(t, body))
+			t.Fatalf("access page lacks %q: %s", want, body)
 		}
 	}
 	_, body, _ = tw.do("GET", "/settings/tools/github/access", nil, map[string]string{"Cookie": "lang=en"})
 	b = html.UnescapeString(body)
-	for _, want := range []string{"Actions allowed without asking", "Read only", "Free reads, writes on approval", "Everything free", "Everything on approval"} {
+	for _, want := range []string{"Actions allowed without asking", "On approval", "Never", "Exceptions, tool by tool"} {
 		if !strings.Contains(b, want) {
 			t.Fatalf("English access page lacks %q", want)
 		}
@@ -271,22 +270,19 @@ func TestWebChangeLevel(t *testing.T) {
 	if s := c.conf().Servers["linear"]; s.level() != accessReadOnly || s.authKind() != "oauth" {
 		t.Fatalf("saved %+v", s)
 	}
-	// A tool with a form has its access in it: the page leads there.
-	if code, _, h := tw.do("GET", "/settings/tools/linear/access?saved=1", nil, nil); code != http.StatusSeeOther ||
-		h.Get("Location") != "/settings/tools/linear/edit#form-access" {
-		t.Fatalf("access page: %d %s", code, h.Get("Location"))
+	// Every tool has its page: its grid, and a way to its connection.
+	code3, body, _ := tw.do("GET", "/settings/tools/linear/access?saved=1", nil, nil)
+	if b := html.UnescapeString(body); code3 != 200 || !strings.Contains(b, `name="grid-send" value="never"`) ||
+		!strings.Contains(b, "Le jeton permet plus : Eriphe s'en tient à la lecture.") || !strings.Contains(b, `href="/settings/tools/linear/edit"`) {
+		t.Fatalf("page after save: %d %s", code3, body)
 	}
-	_, body, _ := tw.do("GET", "/settings/tools/linear/edit", nil, nil)
-	if b := html.UnescapeString(body); !strings.Contains(b, `id="form-access"`) || !strings.Contains(b, "Le jeton permet plus : Eriphe s'en tient à la lecture.") ||
-		!strings.Contains(b, `value="read-only" checked`) || !strings.Contains(b, `id="allowed-linear"`) {
-		t.Fatalf("form after save: %s", mainPart(t, body))
+	_, body, _ = tw.do("GET", "/settings/tools/linear/edit", nil, nil)
+	if strings.Contains(body, `id="form-access"`) || !strings.Contains(body, `name="access" value="read-only"`) {
+		t.Fatalf("the edit still offers levels: %s", mainPart(t, body))
 	}
 	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
-	if !strings.Contains(body, ">Lecture seule</a>") || !strings.Contains(body, `href="/settings/tools/linear/edit#form-access" data-step-open="add-dlg"`) {
-		t.Fatal("the row does not show the level, or it does not lead to the form")
-	}
-	if strings.Contains(body, `href="/settings/tools/linear/access"`) {
-		t.Error("the row still has an Access button")
+	if !strings.Contains(body, ">Lecture seule</a>") || !strings.Contains(body, `href="/settings/tools/linear/access"`) {
+		t.Fatal("the row does not show the level, or it does not lead to the page")
 	}
 	if _, _, h := tw.post("/settings/tools/linear/access", url.Values{"access": {"all"}}, csrf); h.Get("HX-Redirect") != "" {
 		t.Fatal("a bad level saved")

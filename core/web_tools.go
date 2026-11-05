@@ -70,22 +70,13 @@ func editable(source string, p toolPreset, auth string) bool {
 	return source == sourceWorkspace && p.ID != "home-assistant" && auth != "github-app" && p.Form != "drive" && p.Form != "google"
 }
 
-// AccessURL is where the row's access level leads: the access part of the
-// tool's form, or its access page for a tool without one; AllowedURL, its
-// actions allowed without asking.
+// AccessURL is the tool's page, every row's Edit (web_access.go); AllowedURL,
+// its actions allowed without asking there.
 func (t toolView) AccessURL() string {
-	if t.Editable() {
-		return t.EditURL() + "#form-access"
-	}
 	return "/settings/tools/" + t.Name + "/access" + accountQuery(t.Account)
 }
 
-func (t toolView) AllowedURL() string {
-	if t.Editable() {
-		return t.EditURL() + "#allowed-" + t.Key()
-	}
-	return "/settings/tools/" + t.Name + "/access" + accountQuery(t.Account) + "#allowed-" + t.Key()
-}
+func (t toolView) AllowedURL() string { return t.AccessURL() + "#allowed-" + t.Key() }
 
 // SignIn is the row's way to sign in to an OAuth service, only when it
 // is needed: "connect" when it never was, "reconnect" when the

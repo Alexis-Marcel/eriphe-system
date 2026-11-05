@@ -838,7 +838,12 @@ Each category is `free`, `approval` or `never`:
 
 The grid is read at each call: a change applies at once, running tasks included. A row left out has
 the default: Read free, the rest on approval. A level [below](#access-levels) reads as a grid until
-a server has one of its own; the workspace shows levels for now. In the configuration file:
+a server has one of its own. Every tool's **Edit** opens its page (Settings → Tools,
+`/settings/tools/{name}/access`, `?account=` for an account's): the grid, shortcuts that fill it,
+whether the server's annotations are believed, the collapsed panel of exceptions, its credential,
+its allowed actions, and a link to its connection (its form, or the page of Google, Drive, Home
+Assistant or GitHub). A tool of the configuration file shows its grid, changed in the file. In the
+file:
 
 ```json
 "mail": {"url": "…", "use": "…", "trust_annotations": true,
@@ -850,6 +855,8 @@ a server has one of its own; the workspace shows levels for now. In the configur
 With a `grid`, `trust_annotations` says on its own whether the annotations count: without it, every
 tool is Send. `exceptions` replace a tool's category value, Never included; `account_grids` is one
 grid per account, in the place of `account_access`, and a server's exceptions hold for its accounts.
+An account's `trust_annotations` replaces its server's. Once one account has an access of its own,
+the others are written down with the one they had: the server's no longer speaks for them.
 A call that names no account takes the strictest of their values, and is refused when they differ,
 unless it is a read none of them refuses.
 
@@ -913,12 +920,12 @@ API: `POST /v1/tasks/{id}/answer` with `"allow": true, "always": true`): the req
 and `server.tool` is allowed without asking from then on, for any input. These are rules kept in
 eriphe-core's database (`remembered_actions`: tool, account, server), evaluated after the file's
 rules (which win) and never above a built-in denial or a Never (the card does not offer it there).
-Each is a Free exception: it follows the clean start rule [above](#access-grid). On a server of accounts, it is allowed for the account the call named only. Each tool's
-access page (Settings → Tools → Access, `/settings/tools/{name}/access`, `?account=` for an
-account's) lists them, with "Retirer"; removing a server, or an account, forgets them.
+Each is a Free exception: it follows the clean start rule [above](#access-grid). On a server of accounts, it is allowed for the account the call named only. Each tool's page
+([above](#access-grid)) lists them, with "Retirer"; removing a server, or an account, forgets them.
 
-**Scoped credentials.** Where the service can scope its credential, the level decides what Eriphe
-asks for:
+**Scoped credentials.** Where the service can scope its credential, the level closest to the grid
+decides what Eriphe asks for: Read only when Change, Delete and Send are all Never and no exception
+lets a tool do more.
 
 | Tool | Read only | Otherwise |
 |---|---|---|
