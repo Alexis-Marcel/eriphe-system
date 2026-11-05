@@ -93,7 +93,10 @@ JSON in `CALENDAR_CONFIG`, or a file in `CALENDAR_CONFIG_FILE` (or `-config`):
   refresh grant, `{"client_id", "client_secret", "refresh_token"}`, as eriphe-core lends it for a
   Google account: the access token is then refreshed here, in memory (`refresh.go`), never written
   nor logged; a refresh token Google refuses gives an error that says to reconnect the account in
-  Eriphe.
+  Eriphe. When Google refuses a request (403), its reason is read from the body (`refusal.go`): the
+  CalDAV API turned off in the Google Cloud project of the user's Google app (it is not the Google
+  Calendar API), or the account connected without Google Calendar, each with what to do. Any other
+  refusal stays "403 Forbidden".
 - `read_only`: the account is only read (eriphe-core sets it for an account it gives read-only
   access).
 - Limits: `max_events` (500), `timeout_seconds` (30), ranges up to 92 days (62 for free time).
