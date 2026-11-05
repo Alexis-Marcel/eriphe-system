@@ -186,7 +186,9 @@ func (c *core) packTasks() (decisions, tasks []string) {
 		for _, perm := range st.PendingPermissions {
 			pid := fmt.Sprint(perm["id"])
 			who := "à toi de répondre (answer_task)"
-			if reason := c.store.userOnly(t.ID, pid); reason != "" {
+			if reason := c.store.userOnly(t.ID, pid); reason != "" && c.accessAsked(t.ID, pid) {
+				who = fmt.Sprintf("une carte la demande déjà à %s (%s) : ne la relaie pas", user, reason)
+			} else if reason != "" {
 				who = fmt.Sprintf("à %s seul (%s) : relaie-la-lui", user, reason)
 			}
 			decisions = append(decisions, truncate(fmt.Sprintf("- permission %s de la tâche %s, %v, %s", pid, t.ID, perm["tool_name"], who), packLineMax))

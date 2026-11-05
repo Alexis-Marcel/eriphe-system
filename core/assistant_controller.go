@@ -492,6 +492,9 @@ func (c *core) assistantToolsHash(a Assistant) string {
 	grant := c.assistantGrant(a)
 	h := sha256.New()
 	json.NewEncoder(h).Encode(grant)
+	if assistantRoles[a.Role].FreeReads {
+		json.NewEncoder(h).Encode(c.brainFreeReads()) // allowed in advance when it starts
+	}
 	for _, name := range grantServers(grant) {
 		if _, ok := c.conf().Servers[name]; !ok {
 			continue

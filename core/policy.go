@@ -15,15 +15,17 @@ import (
 //
 //  1. the built-in denials, which nothing overrides (mass deletion, pushing
 //     to main, rewriting history, reading secrets, writing outside /work);
-//  2. the rules of the configuration, first match wins;
-//  3. a catalog tool's exception, then the actions the user allowed for good
+//  2. a catalog tool at Never, by its exception or its category, and a call
+//     that must name its account;
+//  3. the rules of the configuration, first match wins;
+//  4. a tool lent held back is the user's until its release;
+//  5. a catalog tool's exception, then the actions the user allowed for good
 //     ("Toujours autoriser", Free exceptions that do not lift a Never);
-//  4. its category's value in the grid of the account the call names: Never
-//     is refused, On approval is the user's, Free is allowed, unless it
-//     writes on a tainted turn or a task that did not start cleanly: then
-//     it is On approval too;
-//  5. the built-in asks: what reaches a third party is the user's decision;
-//  6. anything else is for the brain to judge. No catalog call gets here.
+//  6. its category's value in the grid of the account the call names: On
+//     approval is the user's, Free is allowed, unless it writes on a tainted
+//     turn or a task that did not start cleanly: then it is On approval too;
+//  7. the built-in asks: what reaches a third party is the user's decision;
+//  8. anything else is for the brain to judge. No catalog call gets here.
 //
 // Every decision, whoever takes it, is recorded in the decisions table.
 
@@ -193,10 +195,16 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 	if f.noAccount {
 		return decideDeny, noAccountReason
 	}
+	if f.value == gridNever {
+		return decideDeny, neverReason // no rule lifts it: the proxy would refuse the call
+	}
 	for _, r := range p.rules() {
 		if r.matches(tool, subj) {
 			return r.Decision, r.Reason
 		}
+	}
+	if f.held {
+		return decideAsk, heldReason
 	}
 	why := freeReason
 	for _, r := range remembered {
@@ -212,8 +220,6 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 		break
 	}
 	switch f.value {
-	case gridNever:
-		return decideDeny, neverReason
 	case gridApproval:
 		if f.granted {
 			return decideAllow, grantedReason
@@ -237,6 +243,7 @@ const (
 	neverReason    = "cet outil n'est pas autorisé dans Eriphe"
 	approvalReason = "cet outil demande ton accord"
 	freeReason     = "accès libre"
+	heldReason     = "outil retenu : il attend d'être débloqué"
 	uncleanReason  = "accès libre, mais un contenu extérieur a été lu ou la tâche n'est pas partie de ta demande : il faut ton accord"
 )
 
@@ -251,7 +258,12 @@ func (c *core) decideTask(t *TaskRow, tool string, input map[string]any) (decisi
 	f := c.pool.facts(tool, input)
 	f.unclean = t == nil || c.store.get(lentByUserKey(t.ID)) == ""
 	if server, name, ok := splitToolName(tool); ok && t != nil {
-		f.unclean = f.unclean || heldTool(t.Resources, server, name)
+		if u := c.pool.get(server); u != nil {
+			if real := u.toolByClaudeName(name); real != nil {
+				name = real.Name // a ref names the tool as its server does
+			}
+		}
+		f.held = heldTool(t.Resources, server, name)
 		f.granted = c.accessGranted(t.ID, c.callNeed(tool, input, f))
 	}
 	return c.decideFacts(tool, input, f)

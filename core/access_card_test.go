@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // accessCard is the one card waiting whose text says what.
@@ -140,22 +142,150 @@ func TestCardReplacesTheRawRequest(t *testing.T) {
 	}
 }
 
-// A plain yes answers the card just above; on a tainted one, buttons only.
-func TestAccessCardAnsweredInWords(t *testing.T) {
+// An access card comes at any moment: a plain yes may be for the brain's
+// question just before it, so only its buttons answer.
+func TestStrayYesDoesNotAnswerAccess(t *testing.T) {
 	c := newMailCore(t, "")
-	ctx := context.Background()
 	waitingTask(c, "t-1")
+	c.store.addMessage(roleBrain, "Je l'archive ?", true)
 	request(t, c, "t-1", "p-1", "move")
 	seq, _ := c.store.addMessage(roleUser, "oui", true)
-	if x, ok := c.resolveByText(ctx, int(seq)); !ok || x.State != cardApproved {
-		t.Fatalf("a plain yes: %+v, %v", x, ok)
+	if _, ok := c.resolveByText(context.Background(), int(seq)); ok {
+		t.Fatal("a stray yes answered an access card")
 	}
-	waitingTask(c, "t-2")
-	c.store.set(taskTaintKey("t-2"), "started on a tainted turn: mail.read")
-	request(t, c, "t-2", "p-2", "move")
-	seq, _ = c.store.addMessage(roleUser, "oui", true)
-	if _, ok := c.resolveByText(ctx, int(seq)); ok {
-		t.Fatal("a plain yes answered a tainted card")
+	if len(c.store.accessGrants("t-1")) != 0 {
+		t.Fatal("a stray yes granted the category")
+	}
+}
+
+// The card's message is a question: it notifies as any question does, also
+// in alerts only.
+func TestAccessCardNotifies(t *testing.T) {
+	c := newMailCore(t, "")
+	waitingTask(c, "t-1")
+	request(t, c, "t-1", "p-1", "move")
+	msgs, _ := c.store.messagesAfter(0, 10)
+	if len(msgs) != 1 {
+		t.Fatalf("messages: %+v", msgs)
+	}
+	if _, ok := asksUser(msgs[0].Text); !ok {
+		t.Errorf("not a question: %q", msgs[0].Text)
+	}
+	x := accessQuestion{TaskID: "b", Need: accessNeed{"mail", catSend, ""}, Call: "mcp__mail__send {}"}
+	if _, ok := asksUser(c.accessText(x, "fr")); !ok {
+		t.Errorf("the brain's is not a question: %q", c.accessText(x, "fr"))
+	}
+}
+
+// A hold is lifted by its release alone: not by a grant of its category,
+// nor because it reads.
+func TestHoldIsNotAGrant(t *testing.T) {
+	c := newMailCore(t, accessReads)
+	c.store.set(lentByUserKey("t-1"), "1")
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
+		State: stateWaitingPermission, Tools: "mail", Resources: []ResourceRef{
+			{Kind: resTool, Ref: "mail.move", Access: accessWrite, Hold: true},
+			{Kind: resTool, Ref: "mail.search_messages", Access: accessRead, Hold: true},
+		}})
+	c.store.grantAccess("t-1", accessNeed{"mail", catChange, ""})
+	for _, tool := range []string{"move", "search_messages"} {
+		if got := request(t, c, "t-1", "p-"+tool, tool); got != "user" {
+			t.Errorf("%s held: %s", tool, got)
+		}
+	}
+	// Its release answers what waited on it.
+	if _, err := c.releaseTools("t-1", []string{"mail.move"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.decideCard(context.Background(), accessCard(t, c, "mail.move").ID, true, "web"); err != nil {
+		t.Fatal(err)
+	}
+	if told, allow := answeredAllow(t, c, "t-1", "p-move"); !told || !allow {
+		t.Errorf("what waited on the release: told %v, allow %v", told, allow)
+	}
+	if told, _ := answeredAllow(t, c, "t-1", "p-search_messages"); told {
+		t.Error("the release answered a tool still held")
+	}
+}
+
+// A ref names a tool as its server does, Claude Code's name differs.
+func TestHoldOfAToolWithADot(t *testing.T) {
+	c := newMailCore(t, accessFree)
+	u := c.pool.get("mail")
+	u.mu.Lock()
+	u.tools = append(u.tools, &mcp.Tool{Name: "issues.create"})
+	u.mu.Unlock()
+	task := &TaskRow{ID: "t-1", Resources: []ResourceRef{{Kind: resTool, Ref: "mail.issues.create", Hold: true}}}
+	c.store.set(lentByUserKey("t-1"), "1")
+	if got, why := c.decideTask(task, claudeToolName("mail", "issues.create"), nil); got != decideAsk || why != heldReason {
+		t.Errorf("held = %q (%s)", got, why)
+	}
+}
+
+// No rule lifts a Never: the proxy would refuse the call anyway.
+func TestRuleDoesNotLiftNever(t *testing.T) {
+	c := newMailCore(t, accessReadOnly)
+	c.conf().Policy = &Policy{Rules: []Rule{{Tool: "mcp__mail__*", Decision: decideAllow}}}
+	if err := c.conf().Policy.compile(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := c.decide("mcp__mail__send", nil); got != decideDeny {
+		t.Errorf("a rule on Never = %q", got)
+	}
+}
+
+// A request whose card is decided and that nothing covers shows again as a
+// permission, rather than stay hidden behind a card that is gone.
+func TestRequestLeftByACardShowsAgain(t *testing.T) {
+	c := newMailCore(t, "")
+	waitingTask(c, "t-1")
+	request(t, c, "t-1", "p-1", "move")
+	x := accessCard(t, c, "change")
+	c.conf().Policy = &Policy{Rules: []Rule{{Tool: "mcp__mail__move", Decision: decideAsk, Reason: "a rule now"}}}
+	if err := c.conf().Policy.compile(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.decideCard(context.Background(), x.ID, true, "web"); err != nil {
+		t.Fatal(err)
+	}
+	if c.accessAsked("t-1", "p-1") {
+		t.Error("still hidden behind a decided card")
+	}
+}
+
+// Two services of one account stay apart on a card.
+func TestStartCardNamesEachService(t *testing.T) {
+	needs := []startNeed{{Server: "mail", Category: catChange, Account: "sam@example.org"},
+		{Server: "agenda", Category: catChange, Account: "sam@example.org"}}
+	got := strings.Join(accessStartText(needs, "en"), " ")
+	if !strings.Contains(got, "in mail sam@example.org") || !strings.Contains(got, "in agenda sam@example.org") {
+		t.Errorf("text = %s", got)
+	}
+}
+
+// A level moved from Free to approval changes what is allowed in advance:
+// the brain must restart, though its grant is the same.
+func TestFreeReadsChangeTheToolsHash(t *testing.T) {
+	c := newCatalogCore(t)
+	setBrain(c, &BrainConfig{})
+	c.started = time.Now().Add(-time.Hour)
+	waitStatus(t, c.pool.get("notes"), statusReady)
+	a := *c.conf().brain()
+	before := c.assistantToolsHash(a)
+	setLevel(t, c, "github", accessAsk)
+	if after := c.assistantToolsHash(a); before == "" || after == "" || after == before {
+		t.Errorf("hash %q then %q", before, after)
+	}
+}
+
+// What the workspace does with accounts holds for an account with a grid.
+func TestAccountGridFollowsTheAccount(t *testing.T) {
+	grids := map[string]accountGrid{"Sam@example.org": {}, "pro@example.org": {}}
+	if got := withoutAccount(grids, "sam@example.org"); len(got) != 1 {
+		t.Errorf("left %v", got)
+	}
+	if len(grids) != 2 {
+		t.Error("the server's own map was changed")
 	}
 }
 
@@ -279,7 +409,7 @@ func TestDrawerShowsGrants(t *testing.T) {
 	tw.setup()
 	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x", State: stateRunning})
 	c.store.grantAccess("t-1", accessNeed{"mail", catDelete, "sam@example.org"})
-	if _, body, _ := tw.do("GET", "/tasks/t-1", nil, nil); !strings.Contains(body, "supprimer, sam@example.org") {
+	if _, body, _ := tw.do("GET", "/tasks/t-1", nil, nil); !strings.Contains(body, "supprimer, mail sam@example.org") {
 		t.Errorf("no grant in the drawer: %s", body)
 	}
 }

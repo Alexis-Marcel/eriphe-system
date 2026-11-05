@@ -776,24 +776,27 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    `$CODEX_HOME`…). OpenCode's and Codex's requests (the `opencode` and
    `codex` runtimes) come under Claude Code's tool names (`Bash`, `Edit`, `Write`, `WebFetch`…)
    with the same inputs, so the same rules apply;
-2. the configuration's `policy.rules`, first match wins:
+2. a catalog tool at Never, and a call that must name its account: the proxy would refuse them, so
+   no rule lifts them;
+3. the configuration's `policy.rules`, first match wins:
    `{"tool": "Bash", "match": "^go test", "decision": "allow"}` (`tool` is a name, a glob such as
    `mcp__*`, or names joined by `|`; `match` is a regular expression on the command, path or URL;
    `decision` is `allow`, `deny` or `ask`);
-3. for a catalog tool, its **exception**, then the actions the user allowed for good ("Toujours
+4. a tool lent [held back](#resources) is the user's until its release: neither a grant of its
+   category nor a free read lifts that;
+5. for a catalog tool, its **exception**, then the actions the user allowed for good ("Toujours
    autoriser", [below](#access-levels)), then its **category's value** in the
-   [grid](#access-grid) of the account the call names: Never is refused, On approval asks on a
-   [card](#the-approval-card), Free is allowed, and a write naming no account on a server whose
-   accounts differ is refused. No catalog call is left to the brain's judgment;
-4. **built-in asks**, for what reaches a third party (merging, releasing, publishing, `ssh`, `curl
+   [grid](#access-grid) of the account the call names: On approval asks on a
+   [card](#the-approval-card), Free is allowed. No catalog call is left to the brain's judgment;
+6. **built-in asks**, for what reaches a third party (merging, releasing, publishing, `ssh`, `curl
    -X POST`, an MCP tool out of the catalog): only the user may answer, through the CLI; the brain
    is told to relay them and its answer is refused;
-5. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
+7. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
    `Write`, `Edit`, `WebFetch`…) is allowed, without waking the brain (`inContainer`). The container
    is the boundary: what leaves it goes through the node's mounts (a folder's level), its egress
    filter and the credentials eriphe-core lends, which the shell rules above cannot replace (they
    read a command line, and only stop mistakes);
-6. what is left is the brain's to judge. A request the brain was told of and left at the end of
+8. what is left is the brain's to judge. A request the brain was told of and left at the end of
    its turn (it relayed it, or could not decide) is the user's. The workspace and the
    notifications show the user only the requests that are theirs (any while the brain is off or
    stopped by an error); a task's own page shows them all.
@@ -860,15 +863,17 @@ through the policy, so the turn's taint is always seen.
 
 ### The approval card
 
-An approval is a card of the conversation (`access_card.go`), answered by the user's click or a
-plain yes or no read by eriphe-core, never by the brain; a card that may carry someone else's words
-(a tainted turn or start) takes the buttons only. A task's card is shown:
+An approval is a card of the conversation (`access_card.go`), answered by the user, never by the
+brain. A start's card also takes a plain yes or no read by eriphe-core, unless it may carry someone
+else's words (a tainted turn). The others take their buttons only: they come at any moment, so a
+yes may answer something else. A task's card is shown:
 
 1. **at launch**, on its start's card, for what it is lent outright: it waits (`held`) for the answer;
 2. **on release** of a tool lent [held back](#resources);
 3. **at the first call** of a category not granted yet; the calls that wait on it are answered with it.
 
-A card at the first call or on release has a message of its own. These cards and a start's go to
+A card at the first call or on release has a message of its own, the question, which notifies as
+any question does. These cards and a start's go to
 Telegram as well, whatever the messages around them did, answered from the linked account only
 ("Alerts only" sends none): whoever holds the user's Telegram session can approve, as they can
 approve proposals. A task's raw permissions (a rule's `ask`, a command) stay out of Telegram. The
@@ -974,7 +979,7 @@ a skill never approves a tool by itself.
 **Held back** (`"hold": true`, a `tool` entry only): for work the user validates before it acts
 (analyse, report, then act on what they approved). The task sees the tool from the start (its
 agent lists its tools once, and the node its servers when it fetches the task), but none of its
-calls is authorized: a Free does not hold for it (`lend.go`). The brain asks with `answer_task`
+calls is authorized, whatever the grid or a grant says (`lend.go`). The brain asks with `answer_task`
 `release` (the entries' `ref`, `mail.move`), for an entry lent held only: the user gets a
 [card](#the-approval-card), and only their yes releases it. The release is kept in the task's
 resources, what it needs is granted, it is logged in `decisions` (`release mail.move`), and the

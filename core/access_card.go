@@ -226,23 +226,21 @@ func (c *core) accessAsked(taskID, pid string) bool {
 	return c.store.get(accessWaitKey(taskID, pid)) != ""
 }
 
-// accessWaitKey marks a task's request that waits on a card asked for an
-// earlier call of the same category.
+// accessWaitKey holds the card a task's request waits on.
 func accessWaitKey(taskID, pid string) string { return "access_wait:" + taskID + ":" + pid }
 
 // askTaskAccess asks a task's category at its first call: one card, however
 // many calls wait on it. The requests are the user's meanwhile.
 func (c *core) askTaskAccess(t *TaskRow, pid, tool string, input map[string]any, reason string) {
 	c.store.markUserOnly(t.ID, pid, reason)
-	c.store.set(accessWaitKey(t.ID, pid), "1")
 	n := c.callNeed(tool, input, c.pool.facts(tool, input))
 	var id int64
 	err := c.store.db.QueryRow(`SELECT id FROM access_asks WHERE task_id = ? AND server = ? AND category = ? AND account = ? AND refs = '' AND state = ?`,
 		t.ID, n.Server, n.Category, n.Account, startProposed).Scan(&id)
-	if err == nil {
-		return
+	if err != nil {
+		id = c.newAccessAsk(accessQuestion{TaskID: t.ID, Permission: pid, Need: n, Tainted: c.store.get(taskTaintKey(t.ID))})
 	}
-	c.newAccessAsk(accessQuestion{TaskID: t.ID, Permission: pid, Need: n, Tainted: c.store.get(taskTaintKey(t.ID))})
+	c.store.set(accessWaitKey(t.ID, pid), fmt.Sprint(id))
 }
 
 // askBrainAccess asks one call of the brain: On approval, or a Free write on
@@ -271,7 +269,8 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 	}
 	id, _ := res.LastInsertId()
 	c.cardProposed(cardAccess, id)
-	seq, err := c.store.addMessage(roleBrain, fmt.Sprintf("(%s attend ton accord.)", c.conf().assistantName()), true)
+	// The question itself: what notifies the user of a question notifies them of this one.
+	seq, err := c.store.addMessage(roleBrain, c.accessText(a, "fr"), true)
 	if err != nil {
 		return id
 	}
@@ -310,8 +309,8 @@ func verbs(list []string, lang string) string {
 	return strings.Join(out, ", ")
 }
 
-// accessTarget is where a need acts: its account, or its server.
-func accessTarget(n accessNeed) string { return cmpOr(n.Account, n.Server) }
+// Target is where a need acts: its server, and its account if it has one.
+func (n accessNeed) Target() string { return strings.TrimSpace(n.Server + " " + n.Account) }
 
 func (c *core) accessText(a accessQuestion, lang string) string {
 	title := truncate(oneLine(c.taskTitle(a.TaskID)), 60)
@@ -319,9 +318,9 @@ func (c *core) accessText(a accessQuestion, lang string) string {
 	case len(a.Refs) > 0:
 		return fmt.Sprintf(tr(lang, "access.ask.release"), title, strings.Join(a.Refs, ", "))
 	case a.Call != "":
-		return fmt.Sprintf(tr(lang, "access.ask.brain"), c.conf().assistantName(), verbs([]string{a.Need.Category}, lang), accessTarget(a.Need), a.Call)
+		return fmt.Sprintf(tr(lang, "access.ask.brain"), c.conf().assistantName(), verbs([]string{a.Need.Category}, lang), a.Need.Target(), a.Call)
 	}
-	return fmt.Sprintf(tr(lang, "access.ask.task"), title, verbs([]string{a.Need.Category}, lang), accessTarget(a.Need))
+	return fmt.Sprintf(tr(lang, "access.ask.task"), title, verbs([]string{a.Need.Category}, lang), a.Need.Target())
 }
 
 // taskTitle is how a card names a task: the start of what it was asked.
@@ -342,7 +341,7 @@ func accessStartText(needs []startNeed, lang string) []string {
 		if n.Server == "" {
 			continue
 		}
-		target := accessTarget(accessNeed{n.Server, n.Category, n.Account})
+		target := accessNeed{n.Server, n.Category, n.Account}.Target()
 		if byTarget[target] == nil {
 			order = append(order, target)
 		}
@@ -375,7 +374,11 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 	switch {
 	case len(a.Refs) > 0:
 		if approve {
-			return c.releaseApproved(a)
+			if err := c.releaseApproved(a); err != nil {
+				return err
+			}
+			c.settleWaiting(ctx, a, true)
+			return nil
 		}
 		c.store.logDecision(a.TaskID, "", "release "+strings.Join(a.Refs, ", "), nil, decideDeny, byUser, "refusé sur la carte")
 		return nil
@@ -396,8 +399,10 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 	return nil
 }
 
-// settleWaiting answers the requests of a task that waited on a card: what
-// the yes now covers, or, on a no, those of the same category and account.
+// settleWaiting answers the requests of a task once a card is decided: on a
+// yes, every request of the user's the policy now allows; on a no, those
+// waiting on this card. What still waits and has no card left shows as a
+// permission.
 func (c *core) settleWaiting(ctx context.Context, a accessQuestion, approve bool) {
 	st, err := c.status(a.TaskID, 0)
 	if err != nil {
@@ -405,20 +410,27 @@ func (c *core) settleWaiting(ctx context.Context, a accessQuestion, approve bool
 	}
 	for _, p := range st.PendingPermissions {
 		pid, tool := fmt.Sprint(p["id"]), fmt.Sprint(p["tool_name"])
-		if c.store.get(accessWaitKey(a.TaskID, pid)) == "" || c.store.answered(a.TaskID, pid) {
+		if c.store.answered(a.TaskID, pid) || c.store.userOnly(a.TaskID, pid) == "" {
 			continue
+		}
+		onThis := c.store.get(accessWaitKey(a.TaskID, pid)) == fmt.Sprint(a.ID)
+		if onThis {
+			c.store.set(accessWaitKey(a.TaskID, pid), "")
 		}
 		input, _ := p["input"].(map[string]any)
-		if c.callNeed(tool, input, c.pool.facts(tool, input)) != a.Need {
-			continue
-		}
-		c.store.set(accessWaitKey(a.TaskID, pid), "") // from here on it shows as a permission, if it still waits
-		allow, msg := approve, ""
-		if !approve {
+		allow, msg := false, ""
+		switch {
+		case approve:
+			d, _ := c.decideTask(st.Task, tool, input)
+			if allow = d == decideAllow; !allow {
+				continue
+			}
+		case onThis:
 			msg = "Refusé par " + c.conf().User + " : fais autrement ou explique pourquoi c'est nécessaire."
-		} else if d, _ := c.decideTask(st.Task, tool, input); d != decideAllow {
+		default:
 			continue
 		}
+		c.store.set(accessWaitKey(a.TaskID, pid), "")
 		if _, err := c.answer(ctx, a.TaskID, pid, msg, &allow, byUser); err != nil {
 			log.Printf("access: task %s, permission %s: %v", a.TaskID, pid, err)
 		}

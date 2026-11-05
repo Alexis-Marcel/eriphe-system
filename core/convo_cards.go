@@ -703,8 +703,8 @@ func (c *core) resolveByText(ctx context.Context, seq int) (convoCard, bool) {
 		return none, false
 	}
 	x, p := c.liveCard(cards[0])
-	if x.State != cardPending || p.Tainted != "" {
-		return none, false
+	if x.State != cardPending || p.Tainted != "" || x.Kind == cardAccess {
+		return none, false // an access card comes at any moment: a yes may be for something else, so its buttons only
 	}
 	x, err = c.decideCard(ctx, x.ID, yes, "text")
 	if err != nil {
@@ -723,7 +723,7 @@ func (c *core) voiceCardQuestion(seq int, lang string) string {
 		return ""
 	}
 	x, p := c.liveCard(xs[0])
-	if x.State != cardPending || p.Tainted != "" {
+	if x.State != cardPending || p.Tainted != "" || x.Kind == cardAccess {
 		return ""
 	}
 	return fmt.Sprintf(tr(lang, "card.voice.ask"), spoken(truncate(p.Text(lang), 160)))

@@ -161,8 +161,11 @@ type catalogFacts struct {
 	// noAccount: a call that must name its account, and names none.
 	noAccount bool
 	// unclean: a Free above Read does not hold: the brain's turn is tainted,
-	// or the task did not start cleanly, or lent the tool held back.
+	// or the task did not start cleanly.
 	unclean bool
+	// held: the task was lent the tool held back: nothing authorizes it but
+	// its release, a grant of its category or a free read no more than the rest.
+	held bool
 	// granted: the user approved this category for the task (access_card.go).
 	granted bool
 }
