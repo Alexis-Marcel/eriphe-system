@@ -1,7 +1,7 @@
 # eriphe-core
 
 Eriphe's control plane (v0): it keeps the state of nodes and tasks in SQLite, schedules tasks on
-nodes, follows them, lends identities, and gives the brain its tools over MCP. One binary, with
+nodes, follows them, lends accesses, and gives the brain its tools over MCP. One binary, with
 k8s-like modules: `store`, `api`/`mcp`, `scheduler`, controllers, `identity`.
 
 ```sh
@@ -74,7 +74,10 @@ optional (see [The brain](#the-brain)).
                "use": "a second opinion, or code for a model other than Claude"}
   },
   "default_agent": "sonnet",
-  "identities": {"github": {"env": "GH_TOKEN", "file": "/secrets/github-token"}},
+  "accesses": {
+    "npm": {"use": "publish our packages", "secret": "vault:npm-token", "hosts": ["registry.npmjs.org"],
+            "env": "NPM_TOKEN", "value": "approval"}
+  },
   "servers": {
     "github": {"url": "https://api.githubcopilot.com/mcp/", "auth": {"bearer_file": "/secrets/github-mcp-token"},
                "use": "GitHub: issues, pull requests, code search", "access": "reads"},
@@ -118,16 +121,46 @@ node labels it needs (`needs`, for example `gpu`), what it would rather have (`p
 or any node label), and `use`, which tells the brain when to pick it.
 The brain is an agent too (`brain.agent`, or Settings → Agents when the file names none): changing
 it restarts the brain once its turn is over, on its session if the harness is the same, or on a
-fresh one with the context pack. Its runtime must take MCP servers and a system prompt. The provider's credential is lent to each task, plus the
-`identities` the task asks for (legacy, see below).
+fresh one with the context pack. Its runtime must take MCP servers and a system prompt. The provider's credential is lent to each task.
 
-**Identities (legacy).** `identities` in `core.json` name a file (or `vault:` secret) lent as is to a
-task that asks for it by name, as an environment variable (`{"github": {"env": "GH_TOKEN", "file":
-…}}`): a long-lived token inside the task. They still work, but tasks now get their access to
-GitHub through [credentials on demand](#credentials-on-demand): short-lived, for one repository,
-decided by the policy and logged. A task given a `GH_TOKEN` identity keeps its own way (git uses
-that token, eriphe-cred is not set up). On a tainted turn of the brain, `run_task` refuses any
-identity.
+**Accesses.** An access is what a real program in a task uses with a secret: a package registry, an
+API with a key. It is declared in Settings → Tools (Accesses) or under `accesses`, and lent as a
+resource, `{"kind": "access", "ref": "npm"}`; `list_tools` shows them to the brain.
+
+| Field | What |
+|---|---|
+| `use` | what it is for, for the brain and the user |
+| `secret` | a file, or `vault:<name>`; from the workspace, typed once, straight to the vault as `access.<name>.secret`, and never shown back |
+| `hosts` | the exact names it reaches, with a port if not 443; public addresses only |
+| `env` | the variable holding the placeholder (`NPM_TOKEN`); not one a task depends on (`PATH`, `ERIPHE_*`…) |
+| `value` | `free`, or `approval` (the default) |
+| `header` | the one header the secret goes in; `Authorization` by default, Bearer and Basic alike |
+| `rules` | if any, the only requests the secret goes on: `GET /v1/*`, `* /exact` |
+
+The task never holds the secret. Its variable holds a placeholder; the node's relay decrypts the
+access's hosts only ([node/README](../node/README.md#accesses)) and hands each request to
+`/v1/node/tasks/{id}/access`, where eriphe-core puts the secret in that header and goes on to the
+host the task connected to, whatever its request says. A placeholder sent anywhere else, or in
+another header, stays a placeholder; a request that carries none goes as it is. An access has no
+grid, since Eriphe sees the use of the secret and not what the program does with it. `approval` is
+asked on the card of a task's start, once for the task, by the user only; `free` holds on a clean
+start, and asks on any other, as a tool's Free writes do. An access lent with `hold` does nothing
+until its release. Each use, and each refusal, is in the `credential_log`, shown in the task's
+details. It ends with its task.
+
+What this does not do:
+
+- A service that reflects its headers hands the secret back. Response headers are scrubbed, bodies
+  are not: inject into the one header, and prefer short-lived tokens. The page says so.
+- The node sees an access's requests, though not its secret. A client that pins its certificates
+  fails on that access, and so does gRPC (HTTP/1.1 only), and a presigned URL cannot be made from a
+  placeholder.
+- It stops a secret from being stolen, not from being used: the real limit is set at the provider.
+- What a task reads through an access is external content, and does not taint the task: Eriphe does
+  not read a program's traffic, as it does not read its shell output. The page says so too.
+
+`identities`, the long-lived secrets handed to a task as they were, are gone: `core.json`'s are
+ignored, with a line in the log. An HTTP token becomes an access; declare it with the same variable.
 
 **Harness cards.** What each runtime can do, as the node drives it, is one entry of `harnesses`
 (`harnesses.go`): MCP servers, how it takes a system prompt (a flag, developer instructions, an
@@ -267,8 +300,8 @@ holders refreshing it would sign each other out):
   stored in a task's spec, never shown: the page shows the account's e-mail and plan only.
   `ERIPHE_CHATGPT_ISSUER` points the sign-in at a fake OpenAI, for tests.
 
-Secrets stay in files (or the vault); identities are read when a task starts, sent to its node,
-and never stored or logged.
+Secrets stay in files (or the vault). A provider's key is read when a task starts, sent to its node,
+and never stored or logged; an access's never leaves eriphe-core.
 
 ## Dynamic catalog (workspace)
 

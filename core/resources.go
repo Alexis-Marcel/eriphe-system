@@ -25,6 +25,7 @@ import (
 //	{"kind": "folder",       "ref": "Clients",    "access": "drop"}
 //	{"kind": "drive-folder", "ref": "Factures",   "access": "read"}
 //	{"kind": "tool",         "ref": "github.get_*"}
+//	{"kind": "access",       "ref": "npm"}
 //	{"kind": "file",         "ref": "att_…"}
 //
 // The old fields of run_task (repo, ref, branch, dir; tools; folders) are
@@ -40,6 +41,7 @@ const (
 	resFolder      = "folder"
 	resDriveFolder = "drive-folder"
 	resTool        = "tool"
+	resAccess      = "access"
 	resFile        = "file"
 )
 
@@ -58,15 +60,16 @@ var resourceKinds = map[string][]string{
 	resFolder:      {accessRead, accessDrop, accessWrite},
 	resDriveFolder: {accessRead, accessDrop},
 	resTool:        {accessRead, accessWrite},
+	resAccess:      {}, // it has no scale: what it can do is the provider's (access.go)
 	resFile:        {accessRead},
 }
 
 // ResourceRef is one thing lent to a task. Branch, Base and Dir are a
 // repository's only.
 type ResourceRef struct {
-	Kind   string `json:"kind" jsonschema:"repo, folder, drive-folder, tool or file"`
-	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or drive-folder its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); file an attachment id (att_…)"`
-	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); drive-folder: read or drop; at most the folder's own level; tool: read or write, from the tools' annotations when empty; file: read. Default read"`
+	Kind   string `json:"kind" jsonschema:"repo, folder, drive-folder, tool, access or file"`
+	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or drive-folder its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access its name in list_tools' accesses; file an attachment id (att_…)"`
+	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); drive-folder: read or drop; at most the folder's own level; tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
 	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create; with access write, the first push to it needs no approval"`
 	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
 	Dir    string `json:"dir,omitempty" jsonschema:"repo: the working directory inside the repository, if not its root"`
@@ -75,7 +78,7 @@ type ResourceRef struct {
 	TrustSkills bool `json:"trust_skills,omitempty" jsonschema:"repo: also load the agent skills the repository carries (.claude/skills, .agents/skills, .opencode/skills) when it is not the user's own; the user's own repositories load theirs anyway. Only for a repository the user said they trust"`
 	// Hold lends a tool held back (lend.go): the task sees it, but none of
 	// its calls is authorized until the user approves its release on a card.
-	Hold bool `json:"hold,omitempty" jsonschema:"tool: lend it held back, for work the user validates before it acts: the task sees the tool, but its calls are not authorized until the user approves its release on a card (answer_task with release). A held tool may be lent on a tainted turn"`
+	Hold bool `json:"hold,omitempty" jsonschema:"tool or access: lend it held back, for work the user validates before it acts: the task sees it, but nothing of it is authorized until the user approves its release on a card (answer_task with release). It may be lent on a tainted turn"`
 }
 
 // key tells two entries for the same thing apart from different ones.
@@ -111,10 +114,13 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 			TrustSkills: in.TrustSkills, Hold: in.Hold}
 		rights, ok := resourceKinds[e.Kind]
 		if !ok {
-			return nil, fmt.Errorf("resource %d: kind %q is not one of repo, folder, drive-folder, tool, file", i+1, in.Kind)
+			return nil, fmt.Errorf("resource %d: kind %q is not one of repo, folder, drive-folder, tool, access, file", i+1, in.Kind)
 		}
 		if e.Ref == "" {
 			return nil, fmt.Errorf("resource %d (%s): ref is required", i+1, e.Kind)
+		}
+		if e.Access != "" && e.Kind == resAccess {
+			return nil, fmt.Errorf("resource %s: an access takes no access level: what it can do is set at the provider", e.Ref)
 		}
 		if e.Access != "" && !slices.Contains(rights, e.Access) {
 			return nil, fmt.Errorf("resource %s: a %s takes access %s, not %q", e.Ref, e.Kind, strings.Join(rights, " or "), e.Access)
@@ -122,10 +128,10 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 		if e.Kind != resRepo && (e.Branch != "" || e.Base != "" || e.Dir != "" || e.TrustSkills) {
 			return nil, fmt.Errorf("resource %s: branch, base, dir and trust_skills are a repo's only", e.Ref)
 		}
-		if e.Hold && e.Kind != resTool {
-			return nil, fmt.Errorf("resource %s: only a tool is lent held back (hold)", e.Ref)
+		if e.Hold && e.Kind != resTool && e.Kind != resAccess {
+			return nil, fmt.Errorf("resource %s: only a tool or an access is lent held back (hold)", e.Ref)
 		}
-		if e.Access == "" && e.Kind != resTool {
+		if e.Access == "" && e.Kind != resTool && e.Kind != resAccess {
 			e.Access = accessRead // least privilege; a tool's comes from its annotations
 		}
 		out = append(out, e)
@@ -243,6 +249,10 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 				return nil, fmt.Errorf("tool %s: its tools may act (or are not listed yet): lend it with access write, or only its read-only tools", e.Ref)
 			}
 			grant = append(grant, e.Ref)
+		case resAccess:
+			if _, ok := c.conf().Accesses[e.Ref]; !ok {
+				return nil, errNoAccess(e.Ref)
+			}
 		case resFile:
 			id := strings.TrimPrefix(e.Ref, "attachment:")
 			if _, err := c.store.attachment(id); err != nil {
@@ -260,6 +270,9 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 		} else {
 			out.List = append(out.List, e)
 		}
+	}
+	if err := c.checkLentAccesses(out.List); err != nil {
+		return nil, err
 	}
 	for _, e := range out.List {
 		if e.Kind == resFolder {
@@ -341,9 +354,9 @@ func unmarshalResources(raw string) []ResourceRef {
 
 // taintedResources refuses, during a tainted turn of the brain, a task
 // lent anything that writes: a write or drop entry, a Drive folder (its
-// files server is lent whole for now), and the old identities, long-lived
-// secrets. Reads still go, and tools: what they may do then is asked on a
-// card at launch (access_card.go). My own message
+// files server is lent whole for now). Reads still go, and tools and
+// accesses: what they may do then is asked on a card at launch
+// (access_card.go). My own message
 // does not lift it: the brain asks me, and starts the task in the turn of
 // my answer.
 func (c *core) taintedResources(r runRequest) error {
@@ -355,16 +368,13 @@ func (c *core) taintedResources(r runRequest) error {
 		return fmt.Errorf("refused: this turn read external content (%s), and the task would be lent %s: "+
 			"ask %s first, and launch it in the turn of their answer", strings.Join(tainted, ", "), what, c.conf().User)
 	}
-	if len(r.Identities) > 0 {
-		return refuse("long-lived credentials (identities " + strings.Join(r.Identities, ", ") + ")")
-	}
 	lent, err := c.resolveRequest(r)
 	if err != nil {
 		return err
 	}
 	var writes, acting []string
 	for _, e := range lent.List {
-		if e.Kind == resTool {
+		if e.Kind == resTool || e.Kind == resAccess {
 			continue // what it may do is asked on a card (access_card.go)
 		}
 		if e.TrustSkills {

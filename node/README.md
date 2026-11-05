@@ -461,6 +461,25 @@ it is also on the services' network, which has egress, and calls its MCP servers
 Why networks and not a bearer per service: a local MCP server is a third-party image, which checks
 no token the node could inject; only keeping tasks off its network protects it.
 
+## Accesses
+
+An access is what a program in the task uses with a secret ([core/README](../core/README.md)). The
+task's spec names each one's `hosts` (`host:port`), `env` and `placeholder`, never its secret, which
+does not come to the node. For exactly those hosts, the relay ends the task's TLS session instead of
+tunnelling it, and hands each request to eriphe-core at `/v1/node/tasks/{id}/access`, with the node's
+secret, streaming; eriphe-core puts the secret in and goes on to the service. The target is what the
+task connected to, never what its request says, and the headers only the relay writes are dropped
+from what the task sends. Every other `CONNECT` stays a blind tunnel, under the rule above: a
+declared host on another port is not its access. A task with egress `none` gets none.
+
+- **An authority per task**, made in memory: its key is never in the container and goes with the
+  task. Only its certificate is given, as a run file (`/run/eriphe/access-ca.pem`).
+- **A merged bundle.** The entrypoint writes `/tmp/eriphe-ca-bundle.pem`, the image's own
+  certificates then the task's, and `SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`,
+  `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO` and `PIP_CERT` point at it, for accesses only: the task still
+  trusts the rest of the Internet. A program that ignores them fails on that access, closed.
+- HTTP/1.1 only, so a gRPC client fails on an injected host.
+
 ## Catalog relay
 
 A task's assignment lists the catalog servers of its grant (`servers`), by name only. The node

@@ -63,7 +63,7 @@ func TestStartOnEmptyDataDir(t *testing.T) {
 		cfg.Brain.PromptFile != "" || cfg.Brain.SelfURL != "" || cfg.PublicURL != "" {
 		t.Fatalf("defaults = %+v", cfg)
 	}
-	if cfg.Policy != nil || len(cfg.Servers) != 0 || len(cfg.Agents) != 0 || len(cfg.Identities) != 0 {
+	if cfg.Policy != nil || len(cfg.Servers) != 0 || len(cfg.Agents) != 0 || len(cfg.Accesses) != 0 {
 		t.Fatalf("defaults that are someone's own: %+v", cfg)
 	}
 	if w.cfg.Listen != "0.0.0.0:8443" || w.setupCode() == "" {
@@ -166,7 +166,7 @@ func TestOldConfigUnchanged(t *testing.T) {
 	b := c.Brain
 	if c.Listen != "0.0.0.0:8800" || c.PublicURL != "http://nas.example.org:8800" || c.Web.Listen != "0.0.0.0:8443" ||
 		c.TokenFile != "/secrets/core-token" || c.DB != "/data/core.db" || c.User != "Sam" || c.DefaultAgent != "opus" ||
-		c.Identities["github"].Env != "GH_TOKEN" || len(c.Policy.Rules) != 1 {
+		len(c.LegacyIdentities) == 0 || len(c.Policy.Rules) != 1 {
 		t.Fatalf("config = %+v", c)
 	}
 	if b.Node != "nas" || b.Agent != "opus" || b.SelfURL != "http://eriphe-core:8800/mcp" || b.MCPServers["extra"].URL == "" ||

@@ -68,6 +68,10 @@ type TaskSpec struct {
 	// none given: the public Internet.
 	Egress *EgressRule `json:"egress,omitempty"`
 
+	// What it uses with its own programs: placeholders, and the hosts the
+	// relay decrypts (egress_access.go).
+	Accesses []TaskAccess `json:"accesses,omitempty"`
+
 	// A self-hosted model server the agent uses (OpenCode, a selfhosted/
 	// model): its address, reachable through Egress.Endpoints, or one
 	// behind a node, reached through this node's task listener (model.go).
@@ -154,6 +158,7 @@ type Task struct {
 	mcpErr error
 
 	egressHosts map[string]bool // hosts the task went to through the relay, logged once each
+	ca          *taskCA         // its accesses' authority: in memory only (egress_access.go)
 
 	// The agent's directory mounted at /opt/eriphe while the container runs
 	// (inject.go), and the Eriphe/ folders it writes to (handback.go).

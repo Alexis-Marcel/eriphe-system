@@ -27,8 +27,10 @@ type Config struct {
 	Providers map[string]Provider `json:"providers"`            // where models are
 	Agents    map[string]Agent    `json:"agents"`               // what the brain can pick for a task
 	// The agent of a task that names none.
-	DefaultAgent string              `json:"default_agent"`
-	Identities   map[string]Identity `json:"identities"` // other credentials a task can borrow, e.g. github
+	DefaultAgent string `json:"default_agent"`
+	// Ignored: the long-lived credentials of older versions, replaced by
+	// accesses (lent_access.go). Only said at start, if still there.
+	LegacyIdentities json.RawMessage `json:"identities,omitempty"`
 	// The brain: the built-in assistant eriphe (assistants.go). Only the
 	// file's: the merged configuration has it in Assistants.
 	Brain *BrainConfig `json:"brain,omitempty"`
@@ -37,6 +39,8 @@ type Config struct {
 	Policy     *Policy              `json:"policy,omitempty"` // permission rules, on top of the built-in ones
 	// The tool catalog: MCP servers tasks reach through eriphe-core (servers.go).
 	Servers map[string]Server `json:"servers,omitempty"`
+	// What tasks use with their own programs, its secret kept here (lent_access.go).
+	Accesses map[string]Access `json:"accesses,omitempty"`
 	// Ignored: the shared Google app of older versions (cloud.go, legacyCloud).
 	Cloud *CloudConfig `json:"cloud,omitempty"`
 
@@ -82,13 +86,6 @@ type MCPServer struct {
 	URL       string `json:"url"`
 	TokenFile string `json:"token_file,omitempty"`
 	TokenEnv  string `json:"token_env,omitempty"`
-}
-
-// Identity is a credential eriphe-core lends to a task: the content of File
-// is passed to the agent as the environment variable Env.
-type Identity struct {
-	Env  string `json:"env"`
-	File string `json:"file"`
 }
 
 // defaultData is where eriphe-core keeps its files without a configuration
@@ -200,6 +197,9 @@ func loadConfig(path string) (*Config, error) {
 const unnamedUser = "l'utilisateur"
 
 func (c *Config) complete(where string) error {
+	if len(c.LegacyIdentities) > 0 && string(c.LegacyIdentities) != "null" {
+		log.Printf("%s: identities are no longer read: declare an access in Settings → Tools, or under accesses", where)
+	}
 	if c.Listen == "" {
 		c.Listen = "127.0.0.1:8800"
 	}
@@ -261,21 +261,4 @@ func readSecret(path string) (string, error) {
 		return "", fmt.Errorf("%s is empty", path)
 	}
 	return s, nil
-}
-
-// lend reads identities for one task, into env. The values go to the node
-// and are never stored or logged.
-func (c *Config) lend(names []string, env map[string]string) error {
-	for _, name := range names {
-		id, ok := c.Identities[name]
-		if !ok {
-			return fmt.Errorf("unknown identity %q", name)
-		}
-		v, err := readSecret(id.File)
-		if err != nil {
-			return fmt.Errorf("identity %q: %w", name, err)
-		}
-		env[id.Env] = v
-	}
-	return nil
 }

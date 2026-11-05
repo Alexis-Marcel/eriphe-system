@@ -25,7 +25,7 @@ func TestStore(t *testing.T) {
 		t.Fatalf("nodes = %+v", nodes)
 	}
 
-	task := &TaskRow{ID: "t-1", Node: "pc", Runtime: "claude-code", Identity: "claude", Dir: "/w", Prompt: "do", State: stateRunning}
+	task := &TaskRow{ID: "t-1", Node: "pc", Runtime: "claude-code", Dir: "/w", Prompt: "do", State: stateRunning}
 	if err := s.insertTask(task); err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := s.task("t-1")
-	if got.LastSeq != 2 || got.Identity != "claude" {
+	if got.LastSeq != 2 {
 		t.Fatalf("task = %+v", got)
 	}
 	last, _ := s.events("t-1", 1)

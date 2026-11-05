@@ -15,8 +15,8 @@ func containerName(t *Task) string { return "eriphe-task-" + t.ID }
 
 // The container puts the injected agent first in PATH, makes the cache's
 // apt directories, makes git ask Eriphe for its credentials when
-// eriphe-cred is there (credential.go; a legacy GH_TOKEN identity keeps its
-// own way), clones the repository if asked (once: /work is kept across
+// eriphe-cred is there (credential.go; a task given a GH_TOKEN keeps its own
+// way), writes the bundle of a task with accesses (egress_access.go), clones the repository if asked (once: /work is kept across
 // restarts; git is installed first if the image lacks it), makes what it
 // writes group-writable when it has folders (the user's group shares
 // them), asks the node for the toolchains the repository names and puts
@@ -28,6 +28,7 @@ if [ ! -w "${HOME:-/}" ]; then export HOME=/tmp/home; mkdir -p "$HOME"; fi
 if [ -w /cache ]; then mkdir -p /cache/apt/archives/partial /cache/apt/lists/partial 2>/dev/null || true; fi
 cd /work
 if [ -n "$ERIPHE_FOLDERS" ]; then umask 002; fi
+` + accessBundleScript + `
 if [ -z "$GH_TOKEN" ] && [ -n "$ERIPHE_CRED_URL" ] && [ -x ` + injectDir + `/bin/eriphe-cred ]; then
   export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=` + injectDir + `/bin/eriphe-cred \
     GIT_CONFIG_KEY_1=credential.useHttpPath GIT_CONFIG_VALUE_1=true
@@ -142,6 +143,10 @@ func (n *node) startContainer(t *Task, first string) error {
 	var files map[string][]byte
 	if fr, ok := rt.(fileRuntime); ok {
 		files = fr.files(n, t)
+	}
+	if files, err = withAccessCA(t, files); err != nil { // egress_access.go
+		n.endTaskNetwork(t)
+		return err
 	}
 	if err := writeRunFiles(t, files); err != nil {
 		n.endTaskNetwork(t)
@@ -275,10 +280,16 @@ func (n *node) taskRun(t *Task, agentArgs []string, agentEnv map[string]string) 
 // eriphe-core lends it, each over the ones before.
 func (n *node) taskEnv(t *Task, agentEnv map[string]string) map[string]string {
 	spec := t.Spec
-	env := map[string]string{
+	env := accessEnv(t) // first: nothing of the node's gives way to a placeholder (egress_access.go)
+	if env == nil {
+		env = map[string]string{}
+	}
+	for k, v := range map[string]string{
 		"ERIPHE_REPO": repoURL(spec.Repo), "ERIPHE_REF": spec.Ref, "ERIPHE_BRANCH": spec.Branch, "ERIPHE_DIR": spec.Dir,
 		"GIT_AUTHOR_NAME": "Eriphe", "GIT_AUTHOR_EMAIL": "eriphe@eriphe.local",
 		"GIT_COMMITTER_NAME": "Eriphe", "GIT_COMMITTER_EMAIL": "eriphe@eriphe.local",
+	} {
+		env[k] = v
 	}
 	if spec.TZ != "" {
 		env["TZ"] = spec.TZ // the agent's clock is the user's, not the node's

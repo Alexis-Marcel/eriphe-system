@@ -19,7 +19,6 @@ type assignment struct {
 	ID      string
 	Kind    string // worker or brain
 	Agent   string
-	Idents  string // identity names, comma-separated
 	Tools   string // catalog grant, comma-separated
 	Folders string // the user's folders, by name, comma-separated
 	// Resources is all it was lent; nil for a task from before (resources.go).
@@ -37,7 +36,7 @@ func (s *Store) setSpec(id string, spec nodeTaskSpec) error {
 // assignments returns a node's tasks that are not over yet; a task whose
 // start waits for the user (desired held, task_start.go) is not one yet.
 func (s *Store) assignments(node string) ([]assignment, error) {
-	rows, err := s.db.Query(`SELECT id, kind, agent, identity, tools, folders, resources, desired, state, spec FROM tasks
+	rows, err := s.db.Query(`SELECT id, kind, agent, tools, folders, resources, desired, state, spec FROM tasks
 		WHERE node = ? AND node != '' AND state NOT IN ('stopped', 'failed', 'lost') AND desired != 'held' ORDER BY created`, node)
 	if err != nil {
 		return nil, err
@@ -47,7 +46,7 @@ func (s *Store) assignments(node string) ([]assignment, error) {
 	for rows.Next() {
 		var a assignment
 		var spec, resources string
-		if err := rows.Scan(&a.ID, &a.Kind, &a.Agent, &a.Idents, &a.Tools, &a.Folders, &resources, &a.Desired, &a.State, &spec); err != nil {
+		if err := rows.Scan(&a.ID, &a.Kind, &a.Agent, &a.Tools, &a.Folders, &resources, &a.Desired, &a.State, &spec); err != nil {
 			return nil, err
 		}
 		a.Resources = unmarshalResources(resources)

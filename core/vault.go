@@ -274,8 +274,8 @@ func (c *Config) secretRefs() []secretRef {
 	for name, p := range c.Providers {
 		add("providers."+name+".secret", p.Secret, name)
 	}
-	for name, id := range c.Identities {
-		add("identities."+name+".file", id.File, name)
+	for name, a := range c.Accesses {
+		add("accesses."+name+".secret", a.Secret, name)
 	}
 	if c.Brain != nil {
 		for name, s := range c.Brain.MCPServers {

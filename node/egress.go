@@ -136,6 +136,10 @@ type egressTask struct {
 	id   string
 	rule EgressRule
 	seen func(host string) bool // true the first time this task goes to host
+	// The host:port of its accesses, and the authority they are decrypted
+	// with (egress_access.go).
+	accessHosts []string
+	ca          *taskCA
 }
 
 type egressProxy struct {
@@ -156,6 +160,8 @@ type egressProxy struct {
 	// (endpointControl), but for tests.
 	dialEndpoint func(ctx context.Context, network, addr string) (net.Conn, error)
 	logf         func(format string, args ...any)
+	// access serves the requests of a task's accesses (egress_access.go).
+	access http.Handler
 }
 
 func newEgressProxy(authorize func(id, secret string) (*egressTask, bool), self []string, listener string) *egressProxy {
@@ -186,7 +192,19 @@ func (n *node) egressAuthorizer(id, secret string) (*egressTask, bool) {
 	if t.Spec.Egress != nil {
 		rule = *t.Spec.Egress
 	}
-	return &egressTask{id: t.ID, rule: rule, seen: t.egressSeen}, true
+	e := &egressTask{id: t.ID, rule: rule, seen: t.egressSeen}
+	if len(t.Spec.Accesses) > 0 {
+		ca, err := t.authority()
+		if err != nil {
+			log.Printf("task %s: no authority for its accesses: %v", t.ID, err)
+			return e, true // its accesses then go as blind tunnels, and fail
+		}
+		e.ca = ca
+		for _, a := range t.Spec.Accesses {
+			e.accessHosts = append(e.accessHosts, a.Hosts...)
+		}
+	}
+	return e, true
 }
 
 // egressSeen records a host the task went to, and tells if it is new.
@@ -394,6 +412,11 @@ func writeEgressError(w http.ResponseWriter, err error) {
 
 // connect opens a tunnel, for HTTPS: the relay sees the host, not the traffic.
 func (p *egressProxy) connect(w http.ResponseWriter, r *http.Request, t *egressTask) {
+	if target := accessTarget(r.Host); p.access != nil && t.isAccess(target) {
+		p.note(t, target, nil)
+		p.intercept(w, t, target) // egress_access.go
+		return
+	}
 	upstream, err := p.dial(r.Context(), t, r.Host)
 	if err != nil {
 		writeEgressError(w, err)
