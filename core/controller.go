@@ -484,10 +484,16 @@ func (c *core) status(id string, n int) (*taskStatus, error) {
 			}
 		}
 	}
-	if t.State == stateWaitingPermission {
+	// An older node reported a task running again once one of its
+	// requests made at once was answered: the others of its turn are still
+	// pending.
+	if t.State == stateWaitingPermission || t.State == stateRunning {
 		for _, e := range events {
 			pid := fmt.Sprint(e.Data["id"])
-			if e.Type == "permission" && !answered[pid] && !c.store.answered(id, pid) {
+			switch {
+			case e.Type == "turn_end":
+				st.PendingPermissions = nil // a turn's end leaves none waiting
+			case e.Type == "permission" && !answered[pid] && !c.store.answered(id, pid):
 				st.PendingPermissions = append(st.PendingPermissions, e.Data)
 			}
 		}

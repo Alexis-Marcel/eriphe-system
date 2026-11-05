@@ -412,9 +412,14 @@ func (t *Task) decide(ctx context.Context, tool string, input map[string]any) pe
 	}
 	t.mu.Lock()
 	delete(t.perms, p.ID)
+	waiting := len(t.perms) > 0
 	t.mu.Unlock()
 	t.emit("permission_answer", map[string]any{"id": p.ID, "allow": a.Allow, "message": a.Message})
-	t.setState(stateRunning)
+	if !waiting {
+		// An agent may ask for several at once: it runs again only when
+		// none is left, so the others stay pending for eriphe-core.
+		t.setState(stateRunning)
+	}
 	return a
 }
 
