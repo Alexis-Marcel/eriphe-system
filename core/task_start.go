@@ -52,8 +52,13 @@ const (
 // startNeed is one thing a task will need of the user's: a write to a
 // repository, and why it is theirs.
 type startNeed struct {
-	Repo     string `json:"repo"`
-	Access   string `json:"access"`
+	Repo   string `json:"repo,omitempty"`
+	Access string `json:"access,omitempty"`
+	// Server, Category and Account: what the grid asks of a tool lent
+	// outright, in the place of a repository (access_card.go).
+	Server   string `json:"server,omitempty"`
+	Category string `json:"category,omitempty"`
+	Account  string `json:"account,omitempty"`
 	Branch   string `json:"branch,omitempty"`
 	Fallback bool   `json:"fallback,omitempty"` // the GitHub tool's own token, not limited to the repository
 	Rule     bool   `json:"rule,omitempty"`     // a line of policy.credentials asks
@@ -134,7 +139,7 @@ func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string) error {
 func needsLog(needs []startNeed) string {
 	var parts []string
 	for _, n := range needs {
-		parts = append(parts, n.Access+" "+n.Repo+" ("+n.Reason+")")
+		parts = append(parts, strings.TrimSpace(n.Access+" "+n.Repo+n.Server+" "+n.Account)+" ("+n.Reason+")")
 	}
 	return strings.Join(parts, "; ")
 }
@@ -204,6 +209,9 @@ func (c *core) taskStartProposal(p proposal) proposal {
 func startText(needs []startNeed, lang string) string {
 	var lines []string
 	for _, n := range needs {
+		if n.Server != "" {
+			continue // said together below
+		}
 		target := fmt.Sprintf(tr(lang, "taskstart.target.repo"), n.Repo)
 		if n.Branch != "" {
 			target = fmt.Sprintf(tr(lang, "taskstart.target.branch"), n.Branch, n.Repo)
@@ -223,7 +231,7 @@ func startText(needs []startNeed, lang string) string {
 		}
 		lines = append(lines, line)
 	}
-	return strings.Join(lines, " ")
+	return strings.Join(append(lines, accessStartText(needs, lang)...), " ")
 }
 
 // decideTaskStart is the user's answer to a held start: yes grants what it
@@ -252,6 +260,10 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 		return nil
 	}
 	for _, n := range s.Needs {
+		if n.Server != "" {
+			c.store.grantAccess(s.TaskID, accessNeed{n.Server, n.Category, n.Account})
+			continue
+		}
 		c.store.grantCredential(s.TaskID, serviceAtLaunch, n.Repo, n.Access)
 		c.store.logCredential(s.TaskID, "git", "github.com", n.Repo, n.Access, decideAllow, byUser, "", "approved at launch: "+n.Reason)
 	}

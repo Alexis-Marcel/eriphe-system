@@ -215,9 +215,12 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 	case gridNever:
 		return decideDeny, neverReason
 	case gridApproval:
+		if f.granted {
+			return decideAllow, grantedReason
+		}
 		return decideAsk, approvalReason
 	case gridFree:
-		if f.unclean && !f.read {
+		if f.unclean && !f.read && !f.granted {
 			return decideAsk, uncleanReason
 		}
 		return decideAllow, why
@@ -247,6 +250,10 @@ func (c *core) decide(tool string, input map[string]any) (decision, reason strin
 func (c *core) decideTask(t *TaskRow, tool string, input map[string]any) (decision, reason string) {
 	f := c.pool.facts(tool, input)
 	f.unclean = t == nil || c.store.get(lentByUserKey(t.ID)) == ""
+	if server, name, ok := splitToolName(tool); ok && t != nil {
+		f.unclean = f.unclean || heldTool(t.Resources, server, name)
+		f.granted = c.accessGranted(t.ID, c.callNeed(tool, input, f))
+	}
 	return c.decideFacts(tool, input, f)
 }
 
@@ -317,7 +324,11 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 			c.store.addInbox(id, "permission", map[string]any{"id": pid, "allow": allow, "message": msg, "by": byPolicy})
 			c.store.recordDecision(id, pid, tool, input, decision, byPolicy, reason)
 		case decideAsk:
-			c.store.markUserOnly(id, pid, reason)
+			if t != nil && accessReason(reason) {
+				c.askTaskAccess(t, pid, tool, input, reason) // a card, once per category (access_card.go)
+			} else {
+				c.store.markUserOnly(id, pid, reason)
+			}
 			left = true
 		default:
 			left = true

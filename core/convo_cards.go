@@ -34,8 +34,9 @@ import (
 //   - What happened is told the same way: a digest card follows the
 //     brain's message that read since (cardDigest).
 //
-// The permissions of tasks keep their own cards, at the end of the
-// conversation (pending): they block a task, and their policy is theirs.
+// A task's raw permissions (a rule's ask, a command) keep their own cards,
+// at the end of the conversation (pending); what the grid asks is a card
+// here (access_card.go).
 
 const convoCardsSchema = `CREATE TABLE IF NOT EXISTS convo_cards (
 	id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +79,7 @@ const (
 	cardsOfferedKey = "cards_offered_at"
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess}
 
 // cardUnlearn is an undo of the learning journal the brain proposed on a
 // tainted turn (learning_tools.go).
@@ -245,6 +246,8 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		p.text = func(lang string) string { return tr(lang, "ctx.ha.signal."+m.Signal) + " ← " + m.Entity }
 	case cardTaskStart:
 		return c.taskStartProposal(p) // task_start.go
+	case cardAccess:
+		return c.accessProposal(p) // access_card.go
 	case cardUnlearn:
 		if c.mem == nil {
 			return p
@@ -331,6 +334,9 @@ func (c *core) pendingProposals() []proposal {
 	for _, id := range c.proposedStarts() { // task_start.go
 		add(cardTaskStart, id)
 	}
+	for _, id := range c.proposedAccess() {
+		add(cardAccess, id)
+	}
 	if m := c.mem; m != nil {
 		rows, err := m.db.Query(`SELECT id FROM learning_log WHERE undo = ? AND status != ? ORDER BY id`, undoProposed, learnReverted)
 		if err == nil {
@@ -390,6 +396,8 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.decideMapping(ctx, id, approve)
 	case cardTaskStart:
 		return c.decideTaskStart(id, approve)
+	case cardAccess:
+		return c.decideAccess(ctx, id, approve)
 	case cardUnlearn:
 		if approve {
 			_, err := c.unlearn(id, "owner", p.Why, nil)
@@ -500,6 +508,9 @@ func (c *core) decideCard(ctx context.Context, id int64, approve bool, by string
 	}
 	if kind == cardTaskStart && !approve && by != "text" {
 		c.taskStartDeclined(pid) // a "non" in words is told with the message
+	}
+	if kind == cardAccess && by != "text" {
+		c.accessDecidedTold(pid, approve)
 	}
 	x.State, x.Decided, x.By = cardRejected, time.Now(), by
 	if approve {

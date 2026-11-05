@@ -218,6 +218,7 @@
 {{with .Card.Receipt}}{{template "receipt" .}}{{end}}
 <details class="prompt"><summary>{{t "task.prompt"}}</summary><div class="prose">{{md .Card.Prompt}}</div></details>
 {{if .Perm}}{{template "permission" .Perm}}{{end}}
+{{range .Grants}}<p class="notice">{{tf "access.granted" (t (printf "access.verb.%s" .Category)) (or .Account .Server)}}</p>{{end}}
 {{if .Credentials}}<h3 class="section-label">{{t "cred.title"}}</h3>
 <ol class="timeline">{{range .Credentials}}
   <li class="ev ev-cred cred-{{.Decision}}"><span class="ev-tag">{{template "i-key"}}{{t (printf "cred.%s" .Decision)}}</span><code>{{.Access}} {{.Host}}/{{.Repo}}</code>

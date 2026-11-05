@@ -345,8 +345,8 @@ func TestBrainCatalogPermission(t *testing.T) {
 		t.Fatalf("write: %+v", items)
 	}
 	msgs, _ := c.store.messagesAfter(before, 10)
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "b-2") {
-		t.Fatalf("the user is not told: %+v", msgs)
+	if cards, _ := c.cardsWhere(`kind = ? AND seq > 0`, cardAccess); len(msgs) != 1 || len(cards) != 1 || cards[0].Seq != msgs[0].Seq {
+		t.Fatalf("the user is not told: %+v, %+v", msgs, cards)
 	}
 	yes := true
 	if _, err := c.answer(ctx, "b-2", "", "", &yes, byBrain); err == nil {
@@ -618,7 +618,7 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tools := range [][]string{{"github"}, {"github.create_issue"}, {"notes"}} {
-		if out := run(tools...); !out.IsError || !strings.Contains(resultText(out), "ask Sam first") {
+		if out := run(tools...); out.IsError || !strings.Contains(resultText(out), "approval to start") {
 			t.Fatalf("tainted run_task with %v = %s", tools, resultText(out))
 		}
 	}
@@ -626,6 +626,16 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 		if out := run(tools...); out.IsError {
 			t.Fatalf("tainted run_task with %v = %s", tools, resultText(out))
 		}
+	}
+
+	// A user's message does not make a tainted start clean.
+	seq, _ := c.store.addMessage(roleUser, "lance-la", true)
+	c.turn.start(int(seq), int(seq), 0)
+	c.turn.taint("github.get_issue")
+	var started TaskRow
+	json.Unmarshal([]byte(resultText(run("github.get_*"))), &started)
+	if started.ID == "" || c.store.get(lentByUserKey(started.ID)) != "" {
+		t.Fatalf("a tainted start marked clean: %+v", started)
 	}
 
 	c.turn.start(2, 2, 0)

@@ -57,7 +57,9 @@ func (c *core) notifyBrain(id, state string) {
 			told = append(told, pid)
 			in, _ := json.Marshal(p["input"])
 			line := fmt.Sprintf("La tâche %s (nœud %s) demande une permission (permission_id %s) : %v %s", t.ID, t.Node, pid, p["tool_name"], truncate(string(in), 400))
-			if reason := c.store.userOnly(t.ID, pid); reason != "" {
+			if reason := c.store.userOnly(t.ID, pid); reason != "" && c.accessAsked(t.ID, pid) {
+				line += fmt.Sprintf("\nUne carte le demande déjà à %s (%s) : ne relaie pas, tu ne peux pas y répondre.", c.conf().User, reason)
+			} else if reason != "" {
 				line += fmt.Sprintf("\nCette décision revient à %s seul (%s) : relaie-lui la demande, tu ne peux pas y répondre.", c.conf().User, reason)
 			}
 			if text != "" {
@@ -321,6 +323,10 @@ func (c *core) brainPermissionOne(ctx context.Context, t *TaskRow, p map[string]
 		}
 		switch decision {
 		case decideAsk:
+			if accessReason(reason) {
+				c.askBrainAccess(t, pid, tool, input, reason, pending) // a card for this call (access_card.go)
+				return nil
+			}
 			c.store.markUserOnly(t.ID, pid, reason)
 			raw, _ := json.Marshal(input)
 			c.store.addMessage(roleBrain, fmt.Sprintf("(%s veut utiliser %s %s : %s. Autorise ou refuse dans `eriphe`, tâche %s.)",

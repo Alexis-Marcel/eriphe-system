@@ -161,8 +161,10 @@ type catalogFacts struct {
 	// noAccount: a call that must name its account, and names none.
 	noAccount bool
 	// unclean: a Free above Read does not hold: the brain's turn is tainted,
-	// or the task did not start cleanly (decideWith).
+	// or the task did not start cleanly, or lent the tool held back.
 	unclean bool
+	// granted: the user approved this category for the task (access_card.go).
+	granted bool
 }
 
 // facts is what the catalog says of a call: of the tool alone with a nil
@@ -298,7 +300,7 @@ func (c *core) callAccount(server string, input map[string]any) string {
 		return ""
 	}
 	named, _ := input["account"].(string)
-	for a := range srv.AccountAccess {
+	for a := range srv.accountAccesses() {
 		if strings.EqualFold(a, strings.TrimSpace(named)) {
 			return a
 		}
