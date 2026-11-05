@@ -39,6 +39,10 @@ func parseCardData(s string) (int64, bool, bool) {
 	return id, parts[2] == "y", err == nil && id > 0
 }
 
+// blocksATask tells whether a card stops a task until it is answered: it
+// goes to Telegram whatever its message did.
+func blocksATask(kind string) bool { return kind == cardTaskStart || kind == cardAccess }
+
 // sentToTelegram tells whether a message of the brain's went to Telegram.
 func (c *core) sentToTelegram(seq int) bool {
 	if c.store.get(tgMsgKey(seq)) != "" {
@@ -64,7 +68,7 @@ func (c *core) telegramCards() {
 	}
 	lang := t.lang()
 	for _, x := range xs {
-		if !c.sentToTelegram(x.Seq) {
+		if !blocksATask(x.Kind) && !c.sentToTelegram(x.Seq) {
 			continue
 		}
 		x, p := c.liveCard(x)

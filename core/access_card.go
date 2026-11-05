@@ -255,8 +255,8 @@ func (c *core) askBrainAccess(t *TaskRow, pid, tool string, input map[string]any
 }
 
 // newAccessAsk keeps a question and shows its card now: the brain or the
-// task is stopped on it, so no later message will carry it. Its message
-// goes to Telegram with it: the same conversation, and the same card.
+// task is stopped on it, so no later message will carry it. It goes to
+// Telegram as well (telegramCards).
 func (c *core) newAccessAsk(a accessQuestion) int64 {
 	refs := ""
 	if len(a.Refs) > 0 {
@@ -276,7 +276,6 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 		return id
 	}
 	c.store.db.Exec(`UPDATE convo_cards SET seq = ?, turn = 0, attached = ? WHERE ref = ?`, seq, time.Now().Unix(), proposalRef(cardAccess, id))
-	c.store.set(tgMsgKey(int(seq)), "1") // its card goes to Telegram, without waiting for a reply there
 	log.Printf("access: card %d for task %s: %s", id, a.TaskID, a.Need.Category)
 	c.bump()
 	return id

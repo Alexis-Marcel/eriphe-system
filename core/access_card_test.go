@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -158,13 +159,32 @@ func TestAccessCardAnsweredInWords(t *testing.T) {
 	}
 }
 
-// On Telegram: its message counts as sent, so telegramCards takes it.
-func TestAccessCardGoesToTelegram(t *testing.T) {
-	c := newMailCore(t, "")
+// What stops a task goes to Telegram, though no message of its went there;
+// another card waits for its message. "Alerts only" sends none.
+func TestBlockingCardsGoToTelegram(t *testing.T) {
+	c, _, f := telegramCore(t)
+	linked(c)
+	c.tg.restart()
 	waitingTask(c, "t-1")
-	request(t, c, "t-1", "p-1", "move")
-	if x := accessCard(t, c, "change"); !c.sentToTelegram(x.Seq) {
-		t.Error("the card's message is not for Telegram")
+	c.newAccessAsk(accessQuestion{TaskID: "t-1", Permission: "p-1", Need: accessNeed{"mail", catChange, ""}})
+	seq, _ := c.store.addMessage(roleBrain, "Je lance la tâche.", true)
+	if err := c.holdTask(&TaskRow{ID: "t-1"}, []startNeed{{Server: "mail", Category: catSend}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	c.store.updateTask("t-1", map[string]any{"state": statePending, "desired": desiredHeld})
+	c.attachTurnCards(int(seq))
+	c.store.set(tgDetailKey, detailAlert)
+	c.telegramCards()
+	c.tg.pending.Wait()
+	if sent := f.sentMessages(); len(sent) != 0 {
+		t.Fatalf("alerts only sent %v", sent)
+	}
+	c.store.set(tgDetailKey, detailFull)
+	c.telegramCards()
+	c.tg.pending.Wait()
+	sent := f.sentMessages()
+	if len(sent) != 2 || !strings.Contains(fmt.Sprint(sent[0]["reply_markup"]), "pc:") {
+		t.Fatalf("sent %v", sent)
 	}
 }
 

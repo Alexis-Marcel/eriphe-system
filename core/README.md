@@ -868,7 +868,8 @@ plain yes or no read by eriphe-core, never by the brain; a card that may carry s
 2. **on release** of a tool lent [held back](#resources);
 3. **at the first call** of a category not granted yet; the calls that wait on it are answered with it.
 
-Each card has a message of its own, and goes to Telegram as well, from the linked account only
+A card at the first call or on release has a message of its own. These cards and a start's go to
+Telegram as well, whatever the messages around them did, answered from the linked account only
 ("Alerts only" sends none): whoever holds the user's Telegram session can approve, as they can
 approve proposals. A task's raw permissions (a rule's `ask`, a command) stay out of Telegram. The
 answers are kept in `decisions`, and a grant shows in the task's drawer. A task exactly authorised
