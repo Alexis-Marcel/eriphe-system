@@ -221,5 +221,9 @@ func (c *authClient) Do(req *http.Request) (*http.Response, error) {
 	} else {
 		req.SetBasicAuth(c.acct.Username, secret)
 	}
-	return c.http.Do(req)
+	resp, err := c.http.Do(req)
+	if err != nil || c.acct.Provider != "google" {
+		return resp, err
+	}
+	return readGoogleRefusal(resp) // why Google refuses, when it says (refusal.go)
 }
