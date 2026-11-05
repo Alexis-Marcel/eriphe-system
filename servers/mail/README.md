@@ -15,7 +15,7 @@ access token lent by eriphe-core and used with XOAUTH2 (the server never runs an
 | `create_draft` | plain text draft appended to Drafts; `reply_to` sets In-Reply-To/References, recipients and subject | not destructive |
 | `send_message` | send a draft (`draft_id`) or a new message; a separate tool so the policy can leave it to the user | destructive, open world |
 | `mark` | read/unread, flagged/unflagged | idempotent |
-| `move` | archive, inbox or any folder but the trash and the junk folder, however they are named | not destructive |
+| `move` | archive, inbox or any folder but the trash and the junk folder, known by their role or name, subfolders included | not destructive |
 | `trash` | to the trash, or with `junk` to the junk folder, where the server may delete it | destructive |
 
 Message ids are opaque (account, folder, UIDVALIDITY, UID). A folder can be named by its role, so

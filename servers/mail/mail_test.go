@@ -476,11 +476,21 @@ func TestJunkTakesTheTrashTool(t *testing.T) {
 	cs := connect(t, e.cfg)
 	s := call[searchOut](t, cs, "search_messages", map[string]any{"account": "perso", "subject": "promo"})
 	id := s.Messages[0].ID
-	for _, to := range []string{"junk", "Spam"} {
-		if msg := callErr(t, cs, "move", map[string]any{"ids": []string{id}, "to": to}); !strings.Contains(msg, "use the trash tool") {
-			t.Errorf("move to %s: %s", to, msg)
+	refused := func(cs *mcp.ClientSession, folders ...string) {
+		t.Helper()
+		for _, to := range folders {
+			if msg := callErr(t, cs, "move", map[string]any{"ids": []string{id}, "to": to}); !strings.Contains(msg, "use the trash tool") {
+				t.Errorf("move to %s: %s", to, msg)
+			}
 		}
 	}
+	refused(cs, "junk", "Spam")
+	for _, folder := range []string{"Bin", "Trash/2024", "Old.Spam"} { // a second one, or under one
+		if err := e.alice.Create(folder, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	refused(connect(t, e.cfg), "Bin", "Trash/2024", "Old.Spam")
 	if out := call[moveOut](t, cs, "trash", map[string]any{"ids": []string{id}, "junk": true}); out.Folder != "Spam" {
 		t.Errorf("junk: %+v", out)
 	}
@@ -499,6 +509,9 @@ func TestToolAnnotations(t *testing.T) {
 		"create_draft": "change", "mark": "change", "move": "change", "trash": "delete", "send_message": "send"}
 	for _, tool := range res.Tools {
 		a, got := tool.Annotations, "send"
+		if tool.Name == "send_message" && (a == nil || a.DestructiveHint == nil || !*a.DestructiveHint) {
+			t.Errorf("send_message annotations: %+v", a)
+		}
 		switch {
 		case a == nil:
 		case a.ReadOnlyHint:

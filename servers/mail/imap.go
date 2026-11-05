@@ -141,7 +141,7 @@ var roleAttrs = map[imap.MailboxAttr]string{
 var roleNames = map[string][]string{
 	"drafts":  {"drafts", "draft", "brouillons"},
 	"sent":    {"sent", "sent items", "sent messages", "sent mail", "envoyés", "messages envoyés", "éléments envoyés"},
-	"trash":   {"trash", "deleted items", "deleted messages", "bin", "corbeille", "éléments supprimés"},
+	"trash":   {"trash", "deleted", "deleted items", "deleted messages", "bin", "corbeille", "éléments supprimés"},
 	"archive": {"archive", "archives"},
 	"junk":    {"junk", "spam", "junk e-mail", "junk email", "courrier indésirable", "indésirables"},
 }
@@ -274,18 +274,45 @@ func (a *Account) resolveFolder(c *imapclient.Client, s string) (string, error) 
 	return "", fmt.Errorf("%s: no folder %q (see list_folders)", a.Name, s)
 }
 
-// keeps refuses a folder that discards what it gets.
+// keeps refuses a folder that discards what it gets: by its role, or by its
+// name, or a parent's, as a server may have more than one. A trash with a
+// name nobody knows, on a server without special-use flags, is not seen.
 func (a *Account) keeps(c *imapclient.Client, folder string) error {
+	if folder == "INBOX" {
+		return nil
+	}
 	folders, err := a.cachedFolders(c)
 	if err != nil {
 		return err
 	}
+	role := ""
 	for _, f := range folders {
-		if f.Name == folder && (f.Role == "trash" || f.Role == "junk") {
-			return fmt.Errorf("%s: %q is the %s folder: use the trash tool", a.Name, folder, f.Role)
+		if f.Name == folder {
+			role = f.Role
 		}
 	}
+	discards := role == "trash" || role == "junk"
+	for _, part := range strings.FieldsFunc(strings.ToLower(folder), func(r rune) bool { return r == '/' || r == '.' }) {
+		discards = discards || slices.Contains(roleNames["trash"], part) || slices.Contains(roleNames["junk"], part)
+	}
+	if discards {
+		return fmt.Errorf("%s: %q is a trash or junk folder: use the trash tool", a.Name, folder)
+	}
 	return nil
+}
+
+// roleFolder is the account's folder of a role, whatever else is named so.
+func (a *Account) roleFolder(c *imapclient.Client, role string) (string, error) {
+	folders, err := a.cachedFolders(c)
+	if err != nil {
+		return "", err
+	}
+	for _, f := range folders {
+		if f.Role == role {
+			return f.Name, nil
+		}
+	}
+	return "", fmt.Errorf("%s: no %s folder (see list_folders)", a.Name, role)
 }
 
 // selectRef opens the message's folder and checks the id is still valid.
@@ -923,21 +950,21 @@ func (a *Account) Mark(ctx context.Context, groups map[folderKey][]imap.UID, key
 }
 
 // Move moves messages to a folder or role and returns their new ids when the
-// server reports them. The trash and the junk folder take discard, however
-// they are named.
+// server reports them. With discard, to is a role, the trash or the junk
+// folder, which nothing else reaches.
 func (a *Account) Move(ctx context.Context, groups map[folderKey][]imap.UID, keys []folderKey, to string, discard bool) ([]string, string, error) {
 	var ids []string
 	var dest string
 	defer a.cache.poke()
 	err := a.session(ctx, func(c *imapclient.Client) error {
 		var err error
-		if dest, err = a.resolveFolder(c, to); err != nil {
-			return err
+		if discard {
+			dest, err = a.roleFolder(c, to)
+		} else if dest, err = a.resolveFolder(c, to); err == nil {
+			err = a.keeps(c, dest)
 		}
-		if !discard {
-			if err := a.keeps(c, dest); err != nil {
-				return err
-			}
+		if err != nil {
+			return err
 		}
 		for _, k := range keys {
 			if k.Folder == dest {
