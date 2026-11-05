@@ -1144,7 +1144,7 @@ token, once the decision above is made, an approval included. The token is minte
 on the way out (`git_access.go`):
 
 ```
-git → the node's relay → eriphe-core (decides, reads the refs, mints) → GitHub
+git → the node's relay → eriphe-core (decides, mints) → GitHub
 ```
 
 The node says which hosts a task's relay decrypts, whatever the task sent: a task started before
@@ -1154,19 +1154,13 @@ right to a repository's contents when it comes from the GitHub App.
 - **Each request is decided again**, from what it is and not from what the helper said: a push is
   `git-receive-pack`, whatever `eriphe-cred` asked for, and a placeholder proves nothing. A write
   that needs an approval the task did not get is refused here (403), not asked.
-- **The refs of a push are read**, whoever signs it and whatever ran it, a script included. With a
-  `branch` lent, a push may change that branch only: another branch, a tag or the branch's deletion
-  is refused. Nobody pushes to `main` or `master`. Without a `branch`, the rest is left to the
-  decision above. git says why: ` ! [remote rejected] … (it pushes to refs/heads/other, not to the
-  branch it was lent (eriphe/fix))`, and the refusal is in the log.
-- **What cannot be read is refused**: a signed push, a compressed body, a broken or endless list of
-  refs, and any other request that changes something on `github.com` through a path that hides what
-  it is (`..`, `//`, what is still encoded).
-- **Forcing a push cannot be told from its refs**: a task may rewrite its own lent branch through
-  a script. The shell rule against `--force` stays (policy.go), and stops a mistake only.
+- **What is pushed is not read**, as for any access: what is decided is the lend, a repository, read
+  or write. The `branch` lent is what the task is told to push to, and the real limit is the
+  provider's: a token for that one repository, and the repository's protection rules on GitHub. The
+  shell rules (policy.go) stop a push to `main` or a forced one by mistake, not a script.
 - Other requests to `github.com` go as they are, with no token: a public clone, a release's
   download. So they cross eriphe-core too, and a program that refuses the task's certificate fails
-  on `github.com`. Large File Storage counts as a read: a push of large files fails.
+  on `github.com`. Large File Storage is a write when the task may write there, else a read.
 
 ```json
 "policy": {"credentials": [

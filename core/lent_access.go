@@ -563,8 +563,12 @@ func (c *core) checkLentAccesses(list []ResourceRef) error {
 // accessInstructions tell a task how to use what it is lent.
 func (c *core) accessInstructions(list []ResourceRef) string {
 	var b, machines strings.Builder
+	var repos []string
 	conf := c.conf()
 	for _, e := range list {
+		if e.Kind == resRepo && e.Access == accessWrite && e.Branch != "" {
+			repos = append(repos, "You are lent "+e.Ref+" to push to the branch "+e.Branch+": push there, and nowhere else in this repository.")
+		}
 		a, ok := conf.Accesses[e.Ref]
 		if e.Kind != resAccess || !ok {
 			continue
@@ -584,7 +588,7 @@ func (c *core) accessInstructions(list []ResourceRef) string {
 			b.WriteString(" (held back until the user releases it)")
 		}
 	}
-	var out []string
+	out := repos
 	if b.Len() > 0 {
 		out = append(out, "You are lent these accesses:"+b.String()+"\nEach variable holds a placeholder, not the real secret: use it as you would the secret (a bearer token, a password, a tool's configuration), over HTTPS, and the real one is put in on the way out, for those hosts only. It cannot be read, and is of no use anywhere else; never ask for the real one.")
 	}

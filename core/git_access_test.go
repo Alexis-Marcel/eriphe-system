@@ -21,112 +21,9 @@ import (
 	"testing"
 )
 
-const (
-	oidA    = "1111111111111111111111111111111111111111"
-	oidB    = "2222222222222222222222222222222222222222"
-	oidZero = "0000000000000000000000000000000000000000"
-)
-
 var lentRepo = ResourceRef{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/fix"}
 
-func pushBody(refs ...string) string {
-	var b strings.Builder
-	for i, ref := range refs {
-		line := oidA + " " + oidB + " " + ref
-		if i == 0 {
-			line += "\x00report-status side-band-64k agent=git/2"
-		}
-		b.Write(pktLine([]byte(line + "\n")))
-	}
-	return b.String() + "0000PACKdata"
-}
-
-func TestReadPushCommands(t *testing.T) {
-	sha256 := strings.Repeat("a", 64)
-	for name, tc := range map[string]struct {
-		body string
-		refs []string
-		bad  bool
-	}{
-		"one":         {body: pushBody("refs/heads/x"), refs: []string{"refs/heads/x"}},
-		"several":     {body: pushBody("refs/heads/x", "refs/tags/v1"), refs: []string{"refs/heads/x", "refs/tags/v1"}},
-		"probe":       {body: "0000"},
-		"empty":       {body: ""},
-		"sha256":      {body: string(pktLine([]byte(sha256+" "+sha256+" refs/heads/x\n"))) + "0000", refs: []string{"refs/heads/x"}},
-		"shallow":     {body: string(pktLine([]byte("shallow "+oidA+"\n"))) + pushBody("refs/heads/x"), refs: []string{"refs/heads/x"}},
-		"no flush":    {body: string(pktLine([]byte(oidA + " " + oidB + " refs/heads/x\n"))), bad: true},
-		"cut":         {body: "00ff" + oidA, bad: true},
-		"cut length":  {body: "00", bad: true},
-		"not hex":     {body: "zzzz", bad: true},
-		"signed sign": {body: "+0ff", bad: true},
-		"delimiter":   {body: "0001", bad: true},
-		"response":    {body: "0002", bad: true},
-		"empty line":  {body: "0004", bad: true},
-		"too long":    {body: "fff5", bad: true},
-		"signed":      {body: string(pktLine([]byte("push-cert\x00report-status\n"))) + "0000", bad: true},
-		"other":       {body: string(pktLine([]byte("hello there friend\n"))) + "0000", bad: true},
-		"one id":      {body: string(pktLine([]byte(oidA+" refs/heads/x\n"))) + "0000", bad: true},
-		"two sizes":   {body: string(pktLine([]byte(oidA+" "+sha256+" refs/heads/x\n"))) + "0000", bad: true},
-		"no ref":      {body: string(pktLine([]byte(oidA+" "+oidB+" \n"))) + "0000", bad: true},
-		"upper":       {body: string(pktLine([]byte(strings.ToUpper(sha256)+" "+sha256+" x\n"))) + "0000", bad: true},
-		"endless":     {body: strings.Repeat(string(pktLine([]byte(oidA+" "+oidB+" refs/heads/x\n"))), 30000), bad: true},
-	} {
-		cmds, _, err := readPushCommands(strings.NewReader(tc.body))
-		if (err != nil) != tc.bad {
-			t.Errorf("%s: %v", name, err)
-		}
-		var refs []string
-		for _, c := range cmds {
-			refs = append(refs, c.Ref)
-		}
-		if !slices.Equal(refs, tc.refs) {
-			t.Errorf("%s: refs %v", name, refs)
-		}
-	}
-	// A NUL on a later line hides what follows it, at GitHub as here.
-	cmds, _, err := readPushCommands(strings.NewReader(string(pktLine([]byte(oidA+" "+oidB+" refs/heads/a\n"))) +
-		string(pktLine([]byte(oidA+" "+oidB+" refs/heads/b\x00refs/heads/c\n"))) + "0000"))
-	if err != nil || len(cmds) != 2 || cmds[1].Ref != "refs/heads/b" {
-		t.Fatalf("%v %v", cmds, err)
-	}
-}
-
-func TestPushRefusal(t *testing.T) {
-	branch := []repoGrant{{Repo: "owner/repo", Access: accessWrite, Branch: "eriphe/fix"}}
-	two := append(branch, repoGrant{Repo: "Owner/Repo", Access: accessWrite, Branch: "eriphe/docs"})
-	open := []repoGrant{{Repo: "owner/repo", Access: accessWrite}}
-	cmd := func(ref string) pushCommand { return pushCommand{oidA, oidB, ref} }
-	remove := func(ref string) pushCommand { return pushCommand{oidA, oidZero, ref} }
-	for name, tc := range map[string]struct {
-		repos []repoGrant
-		cmds  []pushCommand
-		says  string
-	}{
-		"its branch":       {branch, []pushCommand{cmd("refs/heads/eriphe/fix")}, ""},
-		"nothing":          {branch, nil, ""},
-		"another":          {branch, []pushCommand{cmd("refs/heads/other")}, "refs/heads/other"},
-		"one of two":       {branch, []pushCommand{cmd("refs/heads/eriphe/fix"), cmd("refs/heads/other")}, "refs/heads/other"},
-		"a tag":            {branch, []pushCommand{cmd("refs/tags/v1")}, "refs/tags/v1"},
-		"a like name":      {branch, []pushCommand{cmd("refs/heads/eriphe/fix2")}, "fix2"},
-		"not under heads":  {branch, []pushCommand{cmd("eriphe/fix")}, "eriphe/fix"},
-		"deleted":          {branch, []pushCommand{remove("refs/heads/eriphe/fix")}, "deletes"},
-		"main":             {branch, []pushCommand{cmd("refs/heads/main")}, "main"},
-		"both loans":       {two, []pushCommand{cmd("refs/heads/eriphe/fix"), cmd("refs/heads/eriphe/docs")}, ""},
-		"no branch":        {open, []pushCommand{cmd("refs/heads/other"), cmd("refs/tags/v1")}, ""},
-		"no branch, main":  {open, []pushCommand{cmd("refs/heads/main")}, "main"},
-		"master":           {open, []pushCommand{cmd("refs/heads/master")}, "master"},
-		"MAIN":             {open, []pushCommand{cmd("refs/heads/MAIN")}, "MAIN"},
-		"delete main":      {open, []pushCommand{remove("refs/heads/main")}, "main"},
-		"not lent":         {nil, []pushCommand{cmd("refs/heads/other")}, ""},
-		"not lent, main":   {nil, []pushCommand{cmd("refs/heads/main")}, "main"},
-		"another's branch": {[]repoGrant{{Repo: "owner/other", Branch: "x"}}, []pushCommand{cmd("refs/heads/y")}, ""},
-	} {
-		got := pushRefusal(tc.cmds, tc.repos, "owner/repo")
-		if tc.says == "" && got != "" || !strings.Contains(got, tc.says) {
-			t.Errorf("%s: %q", name, got)
-		}
-	}
-}
+const pushBody = "0000PACKdata"
 
 func TestReadGitCall(t *testing.T) {
 	for raw, want := range map[string]gitCall{
@@ -135,8 +32,8 @@ func TestReadGitCall(t *testing.T) {
 		"GET /o/r.git/info/refs":                          {repo: "o/r", access: accessRead},
 		"POST /o/r.git/git-upload-pack":                   {repo: "o/r", access: accessRead},
 		"GET /o/r.git/info/refs?service=git-receive-pack": {repo: "o/r", access: accessWrite},
-		"POST /o/r.git/git-receive-pack":                  {repo: "o/r", access: accessWrite, push: true},
-		"POST /o/r.git/info/lfs/objects/batch":            {repo: "o/r", access: accessRead},
+		"POST /o/r.git/git-receive-pack":                  {repo: "o/r", access: accessWrite},
+		"POST /o/r.git/info/lfs/objects/batch":            {repo: "o/r", access: accessRead, lfs: true},
 		"GET /o/r/archive/main.zip":                       {},
 		"GET /login":                                      {},
 		"PUT /o/r.git/git-receive-pack":                   {},
@@ -247,7 +144,7 @@ func TestGitTokenGoesInOnTheWayOut(t *testing.T) {
 
 func TestGitPushOfItsBranchGoesOnWhole(t *testing.T) {
 	c, task, svc := gitCore(t, true, lentRepo)
-	body := pushBody("refs/heads/eriphe/fix")
+	body := pushBody
 	rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/git-receive-pack", gitAuth(task.ID), body, nil)
 	if rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
@@ -257,63 +154,6 @@ func TestGitPushOfItsBranchGoesOnWhole(t *testing.T) {
 	}
 }
 
-func TestGitPushElsewhereIsRefused(t *testing.T) {
-	c, task, svc := gitCore(t, true, lentRepo)
-	for _, auth := range []string{gitAuth(task.ID), "Basic " + base64.StdEncoding.EncodeToString([]byte("x:a-token-of-gh")), ""} {
-		for _, ref := range []string{"refs/heads/other", "refs/heads/main", "refs/tags/v1"} {
-			rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/git-receive-pack", auth, pushBody(ref), nil)
-			if rec.Code != 200 || !strings.Contains(rec.Body.String(), "ng "+ref) {
-				t.Fatalf("%s: %d %q", ref, rec.Code, rec.Body)
-			}
-			if rec.Header().Get("Content-Type") != "application/x-git-receive-pack-result" {
-				t.Fatalf("%s: %v", ref, rec.Header())
-			}
-		}
-	}
-	if svc.calls() != 0 {
-		t.Fatal("a push reached GitHub")
-	}
-	log, _ := c.store.credentialLog(task.ID, 10)
-	if len(log) == 0 || log[0].Decision != decideDeny || log[0].Repo != "owner/repo" || !strings.Contains(log[0].Reason, "refs/tags/v1") {
-		t.Fatalf("log %+v", log)
-	}
-}
-
-func TestGitPushThatCannotBeReadIsRefused(t *testing.T) {
-	c, task, svc := gitCore(t, true, lentRepo)
-	push := "/owner/repo.git/git-receive-pack"
-	for name, tc := range map[string]struct {
-		method, target, body string
-		more                 map[string]string
-	}{
-		"compressed":  {"POST", push, pushBody("refs/heads/eriphe/fix"), map[string]string{"Content-Encoding": "gzip"}},
-		"signed":      {"POST", push, string(pktLine([]byte("push-cert\x00report-status\n"))) + "0000", nil},
-		"cut":         {"POST", push, "00", nil},
-		"encoded":     {"POST", "/owner/repo.git/git-receive%252Dpack", pushBody("refs/heads/main"), nil},
-		"slashes":     {"POST", "/owner/repo.git//git-receive-pack", pushBody("refs/heads/main"), nil},
-		"trailing":    {"POST", push + "/", pushBody("refs/heads/main"), nil},
-		"climbing":    {"POST", "/owner/repo.git/x/../git-receive-pack", pushBody("refs/heads/main"), nil},
-		"upper":       {"POST", "/owner/repo.git/GIT-RECEIVE-PACK", pushBody("refs/heads/main"), nil},
-		"other verb":  {"PUT", push, pushBody("refs/heads/main"), nil},
-		"no repo":     {"POST", "/owner/re!po/git-receive-pack", pushBody("refs/heads/main"), nil},
-		"nested repo": {"POST", "/a/b/c/git-receive-pack", pushBody("refs/heads/main"), nil},
-	} {
-		rec := viaRelayBody(c, "nas", task.ID, tc.method, tc.target, gitAuth(task.ID), tc.body, tc.more)
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("%s: %d %q", name, rec.Code, rec.Body)
-		}
-	}
-	if svc.calls() != 0 {
-		t.Fatal("a push reached GitHub")
-	}
-	// Decoded once, it says what it is, and is read.
-	rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/git%2Dreceive%2Dpack", gitAuth(task.ID), pushBody("refs/heads/main"), nil)
-	if !strings.Contains(rec.Body.String(), "ng refs/heads/main") || svc.calls() != 0 {
-		t.Fatalf("%d %q", rec.Code, rec.Body)
-	}
-}
-
-// A placeholder proves nothing: each request is decided for what it is.
 func TestGitDecidesEachRequest(t *testing.T) {
 	c, task, svc := gitCore(t, false, ResourceRef{Kind: resRepo, Ref: "owner/repo", Access: accessRead})
 	auth := gitAuth(task.ID)
@@ -326,7 +166,7 @@ func TestGitDecidesEachRequest(t *testing.T) {
 		{"POST", "/owner/repo.git/git-receive-pack"},
 		{"GET", "/other/repo.git/info/refs?service=git-upload-pack"},
 	} {
-		rec := viaRelayBody(c, "nas", task.ID, tc[0], tc[1], auth, pushBody("refs/heads/x"), nil)
+		rec := viaRelayBody(c, "nas", task.ID, tc[0], tc[1], auth, pushBody, nil)
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("%s: %d %s", tc[1], rec.Code, rec.Body)
 		}
@@ -336,7 +176,7 @@ func TestGitDecidesEachRequest(t *testing.T) {
 	}
 	// Approved by the user, the same push goes.
 	c.store.grantCredential(task.ID, "github", "owner/repo", accessWrite)
-	if rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/git-receive-pack", auth, pushBody("refs/heads/x"), nil); rec.Code != 200 {
+	if rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/git-receive-pack", auth, pushBody, nil); rec.Code != 200 {
 		t.Fatalf("approved: %d %s", rec.Code, rec.Body)
 	}
 }
@@ -468,28 +308,6 @@ func (s *gitServer) refs(t *testing.T) string {
 
 // A client that asked for no side band, or no report at all, is answered in
 // its own terms.
-func TestRejectPushForms(t *testing.T) {
-	cmds := []pushCommand{{oidA, oidB, "refs/heads/x"}}
-	plain := httptest.NewRecorder()
-	rejectPush(plain, cmds, []string{"report-status"}, "no")
-	if want := "000eunpack ok\n0017ng refs/heads/x no\n0000"; plain.Body.String() != want {
-		t.Fatalf("%q", plain.Body)
-	}
-	banded := httptest.NewRecorder()
-	rejectPush(banded, cmds, []string{"report-status-v2", "side-band"}, "no")
-	if !strings.HasSuffix(banded.Body.String(), "00000000") || banded.Body.String()[4] != 1 {
-		t.Fatalf("%q", banded.Body)
-	}
-	none := httptest.NewRecorder()
-	rejectPush(none, cmds, nil, "no")
-	if none.Code != http.StatusForbidden {
-		t.Fatalf("%d", none.Code)
-	}
-}
-
-// Real git, end to end but for the relay's TLS: it clones and pushes its
-// branch with a placeholder, and what else it pushes, by whatever command,
-// stays out, with git saying why.
 func TestGitWithARealClient(t *testing.T) {
 	c, task, _ := gitCore(t, true, lentRepo)
 	s := startGitServer(t, c, task.ID)
@@ -524,26 +342,9 @@ func TestGitWithARealClient(t *testing.T) {
 	run("commit", "--quiet", "-m", "big")
 	run("-c", "http.postBuffer=1024", "push", "--quiet", "origin", "eriphe/fix")
 
-	for name, args := range map[string][]string{
-		"another":        {"push", "origin", "eriphe/fix:other"},
-		"main":           {"push", "origin", "eriphe/fix:main"},
-		"tag":            {"push", "origin", "eriphe/fix:refs/tags/v1"},
-		"delete":         {"push", "origin", ":eriphe/fix"},
-		"chunked":        {"-c", "http.postBuffer=1024", "push", "origin", "HEAD:other"},
-		"along with":     {"push", "origin", "eriphe/fix", "eriphe/fix:other"},
-		"through a URL":  {"push", s.url, "HEAD:refs/heads/other"},
-		"by its plumber": {"send-pack", "--remote=origin", s.url, "HEAD:refs/heads/other"},
-	} {
-		out, err := s.git(t, repo, task.ID, args...)
-		if err == nil {
-			t.Errorf("%s: it went\n%s", name, out)
-		}
-		if name != "by its plumber" && !strings.Contains(out, "remote rejected") {
-			t.Errorf("%s: git does not say why:\n%s", name, out)
-		}
-	}
-	refs := s.refs(t)
-	if strings.Contains(refs, "other") || strings.Contains(refs, "main") || strings.Contains(refs, "v1") || !strings.Contains(refs, "eriphe/fix") {
+	// What is pushed is not read: GitHub's protection rules are the limit.
+	run("push", "--quiet", "origin", "eriphe/fix:other")
+	if refs := s.refs(t); !strings.Contains(refs, "refs/heads/other") {
 		t.Fatalf("refs: %s", refs)
 	}
 	s.mu.Lock()
@@ -556,5 +357,24 @@ func TestGitWithARealClient(t *testing.T) {
 		if !strings.HasPrefix(string(raw), "x-access-token:ghs_") {
 			t.Fatalf("GitHub got %q", raw)
 		}
+	}
+}
+
+func TestGitLFSWritesWhereTheTaskMayWrite(t *testing.T) {
+	c, task, _ := gitCore(t, true, lentRepo)
+	rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/info/lfs/objects/batch", gitAuth(task.ID), "{}", nil)
+	if rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	log, _ := c.store.credentialLog(task.ID, 10)
+	if len(log) == 0 || log[0].Access != accessWrite {
+		t.Fatalf("log %+v", log)
+	}
+}
+
+func TestGitBranchIsToldToTheTask(t *testing.T) {
+	c, _, _ := gitCore(t, true, lentRepo)
+	if text := c.accessInstructions([]ResourceRef{lentRepo}); !strings.Contains(text, "the branch eriphe/fix") {
+		t.Fatalf("instructions: %q", text)
 	}
 }
