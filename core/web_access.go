@@ -3,15 +3,20 @@ package main
 import (
 	"errors"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// A tool's access: what Eriphe may do on it, how its credential follows,
-// and the actions allowed without asking (access.go). A tool changed with
-// its form has them in it; the others have this page, those of the
-// configuration file too: their level is the file's, their allowed actions
-// the workspace's.
+// A tool's page, its Edit: its grid and exceptions (access_grid.go), how its
+// credential follows, and the actions allowed without asking (access.go).
+// Those of the configuration file have it too: their grid is the file's,
+// their allowed actions the workspace's. Its connection has its form, or
+// a page of its own.
 
 // formAccess reads the access level a form posted: one of the levels;
 // "read" was the older forms' "reads free", and "trust" the API's.
@@ -49,7 +54,21 @@ type toolAccess struct {
 	Allowed []allowedAction
 	Saved   bool
 	Error   string
+	// Its grid, what believing the server's annotations says, and its tools.
+	Rows    []gridRow
+	Trusted bool
+	Tools   []toolException
+	Own     map[string]string // its exceptions, of the tools listed now or not
+	// Connection is the page of its connection, when it has one.
+	Connection string
 }
+
+// gridRow is one category of a grid.
+type gridRow struct{ Category, Value string }
+
+// toolException is one tool of the exceptions' panel; Value is "" when it
+// follows its category.
+type toolException struct{ Name, Category, Value string }
 
 func (w *web) toolAccess(lang, name string) (toolAccess, bool) { return w.toolAccessOf(lang, name, "") }
 
@@ -73,10 +92,48 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 		v.Access, v.Scope = svcServer{Server: srv}.level(a.Name), tokenScope{}
 		v.Allowed = w.c.store.accountActions(name, a.Name)
 	}
-	if u := w.c.pool.get(name); u != nil {
-		v.Status, _, _ = u.snapshot()
+	access := srv.baseAccess()
+	own := srv.Exceptions
+	if a, ok := srv.accountAccess(map[string]any{"account": v.Account}); ok {
+		access = a
+		for name, g := range srv.AccountGrids {
+			if strings.EqualFold(name, v.Account) {
+				own = g.Exceptions
+			}
+		}
 	}
+	for _, c := range categories {
+		v.Rows = append(v.Rows, gridRow{c, access.grid.value(c)})
+	}
+	v.Trusted, v.Own = access.trusted, own
+	if u := w.c.pool.get(name); u != nil {
+		var tools []*mcp.Tool
+		v.Status, _, tools = u.snapshot()
+		for _, t := range tools {
+			v.Tools = append(v.Tools, toolException{t.Name, toolCategory(t, access.trusted), own[t.Name]})
+		}
+		slices.SortFunc(v.Tools, func(a, b toolException) int { return strings.Compare(a.Name, b.Name) })
+	}
+	v.Connection = connectionPage(name, v.Account, v.Preset, srv.authKind(), w.c.source(kindServer, name))
 	return v, true
+}
+
+// connectionPage is where a tool's connection is changed: its form, or its
+// own page; "" when it has neither.
+func connectionPage(name, account string, p toolPreset, auth, source string) string {
+	switch {
+	case editable(source, p, auth):
+		return "/settings/tools/" + url.PathEscape(name) + "/edit" + accountQuery(account)
+	case p.ID == "home-assistant":
+		return "/settings/home-assistant"
+	case auth == "github-app" || p.ID == "github":
+		return "/settings/github"
+	case p.Form == "drive":
+		return "/settings/drive"
+	case p.Form == "google" || p.ID == "google":
+		return "/settings/google"
+	}
+	return ""
 }
 
 // Key names the access's parts in their ids, as its row does.
@@ -95,29 +152,57 @@ func (w *web) handleToolAccess(rw http.ResponseWriter, r *http.Request, s *sessi
 		http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther)
 		return
 	}
-	// A tool changed with its form: its access is part of it.
-	if srv := w.c.conf().Servers[name]; editable(w.c.source(kindServer, name), v.Preset, srv.authKind()) {
-		http.Redirect(rw, r, "/settings/tools/"+url.PathEscape(name)+"/edit"+v.Query()+"#form-access", http.StatusSeeOther)
-		return
-	}
 	v.Saved = r.URL.Query().Get("saved") != ""
 	w.render(rw, r, s, "settings", "", page{Title: "access.page", Nav: "settings", Tab: "tools", View: "access", Data: v})
 }
 
-// handleSaveToolAccess changes a workspace tool's level. Going down
-// applies at once; going up past what the stored credential allows asks
-// to connect again (the page says so).
+// formGrid reads the grid a page posted, and its exceptions: a shortcut
+// fills the grid in one click. The page shows the tools listed now: a
+// server that is down keeps the exceptions of those it cannot show.
+func formGrid(r *http.Request, tools []toolException, own map[string]string) (accessGrid, map[string]string, bool) {
+	g := accessGrid{r.PostFormValue("grid-read"), r.PostFormValue("grid-change"), r.PostFormValue("grid-delete"), r.PostFormValue("grid-send")}
+	if level := r.PostFormValue("shortcut"); level != "" {
+		g = levelGrid(level)
+	}
+	exceptions := map[string]string{}
+	maps.Copy(exceptions, own)
+	for _, t := range tools {
+		delete(exceptions, t.Name)
+		if v := r.PostFormValue("exception-" + t.Name); v != "" {
+			exceptions[t.Name] = v
+		}
+	}
+	return g, exceptions, r.PostFormValue("trust") != ""
+}
+
+// saveGrid gives a tool, or one of its accounts, the grid of the page.
+func (w *web) saveGrid(r *http.Request, name, account string, srv Server, v toolAccess) error {
+	g, exceptions, trusted := formGrid(r, v.Tools, v.Own)
+	if err := (Server{Grid: &g, Exceptions: exceptions}).checkAccess(); err != nil {
+		return errInvalid(err)
+	}
+	if account != "" {
+		return w.c.setAccountGrid(name, account, accountGrid{Grid: g, Exceptions: exceptions, Trust: &trusted})
+	}
+	srv.Grid, srv.Exceptions, srv.TrustAnnotations = &g, exceptions, trusted
+	srv.Access = ""
+	return w.c.putServer(putUpdate, name, srv, nil)
+}
+
+// handleSaveToolAccess changes a workspace tool's grid. Going down applies
+// at once; going up past what the stored credential allows asks to connect
+// again (the page says so).
 func (w *web) handleSaveToolAccess(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
 	srv, ok := w.workspaceServer(name)
 	level := r.PostFormValue("access")
 	account := r.URL.Query().Get("account")
-	if !ok || level == "" || !validAccess(level) {
-		v, found := w.toolAccessOf(w.lang(r), name, account)
-		if !found {
-			http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther)
-			return
-		}
+	v, found := w.toolAccessOf(w.lang(r), name, account)
+	if !found {
+		http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther)
+		return
+	}
+	if !ok || (level != "" && !validAccess(level)) {
 		err := errReadOnly(kindServer, name)
 		if ok {
 			err = errInvalid(errors.New("unknown access level"))
@@ -127,18 +212,20 @@ func (w *web) handleSaveToolAccess(rw http.ResponseWriter, r *http.Request, s *s
 		return
 	}
 	var err error
-	if account != "" {
+	switch {
+	case level == "":
+		err = w.saveGrid(r, name, account, srv, v)
+	case account != "":
 		err = w.c.setAccountLevel(name, account, level) // one account of its service (accounts.go)
-	} else {
+	default:
 		err = w.c.putServer(putUpdate, name, srv.withLevel(level), nil)
 	}
 	if err != nil {
-		v, _ := w.toolAccessOf(w.lang(r), name, account)
-		v.Access, v.Error = level, w.formError(r, err)
+		v.Error = w.formError(r, err)
 		w.render(rw, r, s, "settings", "tool-access-frag", page{Data: v})
 		return
 	}
-	log.Printf("web: tool %s set to %s", name, level)
+	log.Printf("web: tool %s: its access changed", name)
 	w.notify()
 	q := "?saved=1"
 	if account != "" {

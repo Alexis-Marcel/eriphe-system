@@ -184,10 +184,8 @@ func (st svcServer) account(name string) (svcAccount, bool) {
 
 // level is an account's access level.
 func (st svcServer) level(name string) string {
-	for a, l := range st.Server.AccountAccess {
-		if strings.EqualFold(a, name) {
-			return l
-		}
+	if a, ok := st.Server.accountAccess(map[string]any{"account": name}); ok {
+		return a.level()
 	}
 	return st.Server.level()
 }
@@ -428,6 +426,27 @@ func (c *core) dropAccount(svc accountService, name string) error {
 	return nil
 }
 
+// setAccountGrid gives one account a grid of its own.
+func (c *core) setAccountGrid(server, account string, g accountGrid) error {
+	srv, ok := c.conf().Servers[server]
+	svc, cfg, isSvc := accountsOf(srv)
+	if !ok || !isSvc || c.source(kindServer, server) != sourceWorkspace {
+		return errReadOnly(kindServer, server)
+	}
+	i := cfg.index(account)
+	if i < 0 {
+		return errAccountUnknown
+	}
+	spec, _ := decodeRun(srv.Run)
+	next := srv
+	next.AccountGrids = withoutAccount(srv.AccountGrids, account)
+	if next.AccountGrids == nil {
+		next.AccountGrids = map[string]accountGrid{}
+	}
+	next.AccountGrids[cfg.Accounts[i].Name] = g
+	return c.writeService(svc, svcServer{Name: server, Server: srv, Spec: spec, Config: cfg}, next, cfg, nil, nil, true)
+}
+
 // withoutAccount is a server's account grids less one account's.
 func withoutAccount(grids map[string]accountGrid, account string) map[string]accountGrid {
 	if len(grids) == 0 {
@@ -475,7 +494,7 @@ func (c *core) setAccountLevel(server, account, level string) error {
 func (c *core) writeService(svc accountService, st svcServer, srv Server, cfg svcConfig, env map[string]EnvValue, creds credentials, exists bool) error {
 	for i := range cfg.Accounts {
 		a, ok := srv.accountAccesses()[cfg.Accounts[i].Name]
-		cfg.Accounts[i].ReadOnly = ok && gridLevel(a.grid, a.trusted) == accessReadOnly
+		cfg.Accounts[i].ReadOnly = ok && a.level() == accessReadOnly
 	}
 	raw, _ := json.Marshal(cfg)
 	next := map[string]EnvValue{svc.ConfigEnv: {Value: string(raw)}}

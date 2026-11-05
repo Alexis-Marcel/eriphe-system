@@ -119,8 +119,8 @@
         {{if .Detail}}{{.Detail}}{{else if eq .Kind "local"}}{{t "tools.local"}}{{else}}<span class="mono">{{.URL}}</span> · {{t (printf "auth.%s" .Auth)}}{{end}}
         {{if eq .Kind "local"}}{{if .Node}} · {{.Node}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
         {{if and (eq .Preset.ID "home-assistant") .Voice}} · {{t "ha.voiceon"}}{{end}}
-        · <a class="access-tag level-{{.Access}}" href="{{.AccessURL}}"{{if .Editable}} data-step-open="add-dlg" data-hash="{{.EditHash}}" data-scroll="form-access"{{end}} title="{{t (printf "access.%s" .Access)}} — {{t (printf "access.%s.hint" .Access)}}">{{t (printf "access.%s.short" .Access)}}</a>
-        {{if .Allowed}} · <a class="muted" href="{{.AllowedURL}}"{{if .Editable}} data-step-open="add-dlg" data-hash="{{.EditHash}}" data-scroll="allowed-{{.Key}}"{{end}}>{{if eq .Allowed 1}}{{t "allowed.count1"}}{{else}}{{tf "allowed.count" .Allowed}}{{end}}</a>{{end}}
+        · <a class="access-tag level-{{.Access}}" href="{{.AccessURL}}" title="{{t (printf "access.%s" .Access)}} — {{t (printf "access.%s.hint" .Access)}}">{{t (printf "access.%s.short" .Access)}}</a>
+        {{if .Allowed}} · <a class="muted" href="{{.AllowedURL}}">{{if eq .Allowed 1}}{{t "allowed.count1"}}{{else}}{{tf "allowed.count" .Allowed}}{{end}}</a>{{end}}
       </p>
       {{if .Scope.Reconnect}}<p class="small notice-line">{{tf "access.reconnect" .Name}}{{if eq .Preset.Form "drive"}} <a href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</p>{{end}}
       {{with .Follow}}{{template "tool-status-line" .}}
@@ -142,7 +142,7 @@
       {{else if eq .Source "workspace"}}<a class="btn btn-soft sm" href="/settings/github?switch={{.Name}}#gh-conn-{{.Name}}">{{t "github.switch"}}</a>
       {{else}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>{{end}}{{end}}
       {{if and (eq .Preset.Form "drive") (eq .Source "workspace")}}<a class="btn btn-ghost sm" href="/settings/drive">{{t "drive.folders"}}</a>{{end}}
-      {{if .Editable}}<a class="btn {{if and .Follow .Follow.Edit}}btn-soft{{else}}btn-ghost{{end}} sm" href="{{.EditURL}}" data-step-open="add-dlg" data-hash="{{.EditHash}}">{{t "catalog.edit"}}</a>{{end}}
+      <a class="btn {{if and .Follow .Follow.Edit}}btn-soft{{else}}btn-ghost{{end}} sm" href="{{.AccessURL}}">{{t "catalog.edit"}}</a>
       {{if .Removable}}<form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{if .Account}}{{tf "accounts.removeconfirm" .Account}}{{else}}{{tf "tools.removeconfirm" .Name}}{{end}}" class="inline">
         {{with .Account}}<input type="hidden" name="account" value="{{.}}">{{end}}<button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>{{end}}
     </div>
@@ -586,15 +586,15 @@
      level; one of the configuration file, from here. */}}
 {{define "token-note"}}{{$s := .Scope}}
 {{if $s.Reconnect}}<div class="notice token-note"><p>{{tf "access.reconnect" .Name}}</p>
-  {{if and (eq .Auth "oauth") .Locked}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline"><button class="btn btn-primary sm" type="submit">{{t "tools.reconnect"}}</button></form>
+  {{if eq .Auth "oauth"}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline"><button class="btn btn-primary sm" type="submit">{{t "tools.reconnect"}}</button></form>
   {{else if eq .Preset.Form "drive"}}<a class="btn btn-primary sm" href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</div>
 {{else if $s.Shrink}}<div class="notice token-note"><p>{{t "access.shrink"}}</p>
-  {{if and (eq .Auth "oauth") .Locked}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline"><button class="btn btn-soft sm" type="submit">{{t "tools.reconnect"}}</button></form>
+  {{if eq .Auth "oauth"}}<form hx-post="/settings/servers/{{.Name}}/connect" hx-target="#connect-{{.Name}}" hx-disabled-elt="find button" class="inline"><button class="btn btn-soft sm" type="submit">{{t "tools.reconnect"}}</button></form>
   {{else if eq .Preset.Form "drive"}}<a class="btn btn-soft sm" href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</div>
 {{else if $s.Scoped}}<p class="muted small token-note">{{if eq .Access "read-only"}}{{t "access.scoped.read"}}{{else}}{{t "access.scoped.write"}}{{end}}</p>
 {{else if eq .Access "read-only"}}<p class="notice token-note">{{t "access.enforced"}}</p>
 {{else}}<p class="muted small token-note">{{t "access.unscoped"}}</p>{{end}}
-{{if and (eq .Auth "oauth") .Locked}}<div id="connect-{{.Name}}" class="connect-box"></div>{{end}}
+{{if eq .Auth "oauth"}}<div id="connect-{{.Name}}" class="connect-box"></div>{{end}}
 {{end}}
 
 {{/* The actions allowed without asking. . is a toolAccess. */}}
@@ -611,15 +611,47 @@
 {{define "allowed-actions-frag"}}{{template "allowed-actions" .Data}}{{end}}
 
 {{/* A tool's access: its level, its credential, its allowed actions. . is a toolAccess. */}}
+{{define "access-grid"}}<fieldset class="access-grid" {{if .Locked}}disabled{{end}}>
+  <legend>{{t "access.title"}}</legend>
+  <table>
+    <thead><tr><td></td>{{range list "free" "approval" "never"}}<th scope="col">{{t (printf "grid.%s" .)}}</th>{{end}}</tr></thead>
+    <tbody>{{range $row := .Rows}}<tr>
+      <th scope="row">{{t (printf "grid.cat.%s" $row.Category)}}<small>{{t (printf "grid.cat.%s.hint" $row.Category)}}</small></th>
+      {{range list "free" "approval" "never"}}<td><input type="radio" name="grid-{{$row.Category}}" value="{{.}}" aria-label="{{t (printf "grid.cat.%s" $row.Category)}} : {{t (printf "grid.%s" .)}}" {{if eq . $row.Value}}checked{{end}}></td>{{end}}
+    </tr>{{end}}</tbody>
+  </table>
+  {{if not .Locked}}<div class="grid-shortcuts">
+    <button class="btn btn-soft sm" type="submit" name="shortcut" value="read-only">{{t "access.read-only"}}</button>
+    <button class="btn btn-soft sm" type="submit" name="shortcut" value="free">{{t "access.free"}}</button>
+  </div>{{end}}
+  <label class="check"><input type="checkbox" name="trust" value="1" {{if .Trusted}}checked{{end}}><span>{{t "grid.trust"}}<small>{{t "grid.trust.hint"}}</small></span></label>
+  <small class="muted">{{t "grid.note"}}</small>
+</fieldset>{{end}}
+
+{{/* One value per tool, in the place of its category's. . is a toolAccess. */}}
+{{define "access-exceptions"}}{{if .Tools}}<details class="exceptions">
+  <summary>{{t "grid.exceptions"}}</summary>
+  <p class="muted small">{{t "grid.exceptions.lead"}}</p>
+  <ul class="plain-list">{{range .Tools}}{{$v := .Value}}
+    <li><span class="mono">{{.Name}}</span> <span class="muted small">{{t (printf "grid.cat.%s" .Category)}}</span>
+      <select name="exception-{{.Name}}" aria-label="{{.Name}}" {{if $.Locked}}disabled{{end}}>
+        <option value="">{{t "grid.exception.none"}}</option>
+        {{range list "free" "approval" "never"}}<option value="{{.}}" {{if eq . $v}}selected{{end}}>{{t (printf "grid.%s" .)}}</option>{{end}}
+      </select></li>{{end}}
+  </ul>
+</details>{{end}}{{end}}
+
+{{/* A tool's page: its grid, its credential, its allowed actions. . is a toolAccess. */}}
 {{define "tool-access"}}<div class="stack" id="access-{{.Key}}">
 <form class="panel stack" hx-post="/settings/tools/{{.Name}}/access{{.Query}}" hx-target="#access-{{.Key}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
   {{if .Saved}}<p class="ok-note" role="status">{{t "access.saved"}}</p>{{end}}
-  {{template "access-choices" dict "Access" .Access "Preset" .Preset "Locked" .Locked}}
+  {{template "access-grid" .}}
+  {{template "access-exceptions" .}}
   {{if .Locked}}<p class="muted small">{{t "access.locked"}}</p>
   {{else}}<div class="actions"><button class="btn btn-primary" type="submit">{{t "access.save"}}</button></div>{{end}}
 </form>
-<section class="panel stack">{{template "token-note" .}}</section>
+<section class="panel stack">{{template "token-note" .}}{{with .Connection}}<a class="btn btn-ghost sm" href="{{.}}">{{t "access.connection"}}</a>{{end}}</section>
 {{template "allowed-actions" .}}
 </div>{{end}}
 {{define "tool-access-frag"}}{{template "tool-access" .Data}}{{end}}
@@ -698,7 +730,8 @@
   {{else}}{{template "generic-fields" .}}{{end}}
 
   {{if not .IsAccount}}<div class="form-grid name-row">{{template "name-field" .}}{{template "use-field" .}}</div>{{end}}
-  {{template "access-choices" dict "Access" .Access "Preset" .Preset "Locked" false "ID" "form-access"}}
+  {{if .Edit}}<input type="hidden" name="access" value="{{.Access}}">
+  {{else}}{{template "access-choices" dict "Access" .Access "Preset" .Preset "Locked" false "ID" "form-access"}}{{end}}
   {{if and (not .Edit) .Preset.Vendor}}<p class="muted small token-note">{{if .Preset.Scoped}}{{t "access.scoped.write"}}{{else if .Preset.ReadsOnly}}{{t "access.readsonly"}}{{else}}{{t "access.unscoped"}}{{end}}</p>{{end}}
 
   <details class="advanced-opts" {{if and .Error (not $c)}}open{{end}}>

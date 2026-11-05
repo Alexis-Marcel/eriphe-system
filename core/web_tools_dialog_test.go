@@ -59,8 +59,8 @@ func TestAddDialogTiles(t *testing.T) {
 	if !strings.Contains(list, `<div id="tools-body">`) {
 		t.Error("the list has no part to refresh")
 	}
-	if !strings.Contains(list, `href="/settings/tools/taches/edit" data-step-open="add-dlg" data-hash="edit/taches"`) {
-		t.Error("Modifier does not open the dialog")
+	if !strings.Contains(list, `href="/settings/tools/taches/access"`) {
+		t.Error("Modifier does not open the tool's page")
 	}
 }
 
@@ -174,9 +174,9 @@ func TestEditInDialog(t *testing.T) {
 	if !strings.Contains(body, `<a class="step-back" href="/settings/tools/mail/edit?account=sam%40gmail.com" data-step-back data-hash="edit/mail~sam@gmail.com">`) {
 		t.Error("the kinds of account of an edit do not lead back to it")
 	}
-	// Its access is part of it: the level, the credential, the allowed actions.
+	// Its access is on the tool's page; the credential and the allowed actions show here too.
 	_, body, _ = tw.step(edit)
-	if !strings.Contains(body, `fieldset class="choices access" id="form-access"`) || !strings.Contains(body, `id="allowed-`+key+`"`) ||
+	if strings.Contains(body, `id="form-access"`) || !strings.Contains(body, `id="allowed-`+key+`"`) ||
 		!strings.Contains(body, "token-note") {
 		t.Errorf("no access in the edit: %s", body)
 	}

@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"html"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -219,6 +222,114 @@ func TestListToolsSaysCategoryAndValue(t *testing.T) {
 	} {
 		if got := tools[name]; got.Category != want[0] || got.Value != want[1] {
 			t.Errorf("%s = %+v", name, got)
+		}
+	}
+}
+
+// The tool's page saves a grid: its rows, its shortcuts, its exceptions.
+func TestToolPageSavesTheGrid(t *testing.T) {
+	tw, c, f, csrf := pendingWeb(t)
+	authURL := startConnectForm(t, tw, csrf, "/settings/tools", oauthToolForm(f))
+	code, state := f.authorize(authURL)
+	callback(t, tw, "code="+code+"&state="+url.QueryEscape(state))
+	waitStatus(t, c.pool.get("linear"), statusReady)
+	form := url.Values{"grid-read": {gridFree}, "grid-change": {gridFree}, "grid-delete": {gridApproval}, "grid-send": {gridNever}, "trust": {"1"}}
+	if code, _, h := tw.post("/settings/tools/linear/access", form, csrf); code != 200 || h.Get("HX-Redirect") == "" {
+		t.Fatalf("save: %d %v", code, h)
+	}
+	s := c.conf().Servers["linear"]
+	if s.Grid == nil || *s.Grid != (accessGrid{gridFree, gridFree, gridApproval, gridNever}) || !s.TrustAnnotations {
+		t.Fatalf("saved %+v", s)
+	}
+	waitStatus(t, c.pool.get("linear"), statusReady) // saved, it reconnects
+	_, body, _ := tw.do("GET", "/settings/tools/linear/access", nil, nil)
+	if !strings.Contains(body, `name="grid-send" value="never" aria-label`) || !strings.Contains(html.UnescapeString(body), "Comme sa catégorie") {
+		t.Fatalf("page: %s", body)
+	}
+	// A shortcut fills the grid.
+	form.Set("shortcut", accessReadOnly)
+	tw.post("/settings/tools/linear/access", form, csrf)
+	if s := c.conf().Servers["linear"]; s.level() != accessReadOnly {
+		t.Fatalf("shortcut: %s", s.level())
+	}
+	form.Del("shortcut")
+	form.Set("grid-send", "sometimes")
+	if _, _, h := tw.post("/settings/tools/linear/access", form, csrf); h.Get("HX-Redirect") != "" {
+		t.Fatal("a bad value saved")
+	}
+	// Without the switch, the annotations do not count.
+	form.Set("grid-send", gridFree)
+	form.Del("trust")
+	tw.post("/settings/tools/linear/access", form, csrf)
+	if s := c.conf().Servers["linear"]; s.TrustAnnotations || s.trusts() {
+		t.Fatalf("trust: %+v", s)
+	}
+}
+
+// A tool's exceptions come from its panel; the configuration's page changes
+// nothing, and shows no way to.
+func TestToolPageExceptionsAndLocked(t *testing.T) {
+	c := newCatalogCore(t)
+	c.conf().User = "Sam"
+	tw := newTestWebFor(t, c)
+	csrf := tw.setup()
+	_, body, _ := tw.do("GET", "/settings/tools/github/access", nil, nil)
+	if !strings.Contains(body, `name="exception-create_issue"`) || !strings.Contains(body, "<fieldset class=\"access-grid\" disabled") ||
+		strings.Contains(body, `name="shortcut"`) {
+		t.Fatalf("a tool of the file: %s", body)
+	}
+	before := c.conf().Servers["github"]
+	if _, _, h := tw.post("/settings/tools/github/access", url.Values{"grid-send": {gridFree}}, csrf); h.Get("HX-Redirect") != "" {
+		t.Fatal("a tool of the file was changed")
+	}
+	if got := c.conf().Servers["github"]; got.Grid != before.Grid {
+		t.Fatalf("changed: %+v", got)
+	}
+	v := []toolException{{Name: "create_issue"}, {Name: "get_issue"}}
+	r := httptest.NewRequest("POST", "/", strings.NewReader("exception-create_issue=free&exception-get_issue="))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if _, ex, _ := formGrid(r, v, map[string]string{"get_issue": gridNever}); len(ex) != 1 || ex["create_issue"] != gridFree {
+		t.Fatalf("exceptions = %v", ex)
+	}
+	// A server that is down lists nothing: its exceptions stay.
+	if _, ex, _ := formGrid(r, nil, map[string]string{"get_issue": gridNever}); ex["get_issue"] != gridNever {
+		t.Fatalf("exceptions of a server down = %v", ex)
+	}
+}
+
+// An exception that does more than read needs a credential that can.
+func TestExceptionKeepsTheCredential(t *testing.T) {
+	never := accessGrid{gridFree, gridNever, gridNever, gridNever}
+	s := Server{Grid: &never, TrustAnnotations: true}
+	if s.level() != accessReadOnly {
+		t.Fatalf("level = %s", s.level())
+	}
+	s.Exceptions = map[string]string{"draft": gridFree}
+	if s.level() != accessReads {
+		t.Errorf("with an exception = %s", s.level())
+	}
+	s.Exceptions = map[string]string{"draft": gridNever}
+	if s.level() != accessReadOnly {
+		t.Errorf("with a Never = %s", s.level())
+	}
+}
+
+// Every row leads to its page, and each connection has its way.
+func TestConnectionPages(t *testing.T) {
+	for _, tc := range []struct {
+		p            toolPreset
+		auth, source string
+		want         string
+	}{
+		{toolPreset{}, "oauth", sourceWorkspace, "/settings/tools/x/edit"},
+		{toolPreset{ID: "home-assistant"}, "bearer", sourceWorkspace, "/settings/home-assistant"},
+		{toolPreset{ID: "github"}, "github-app", sourceWorkspace, "/settings/github"},
+		{toolPreset{Form: "drive"}, "none", sourceWorkspace, "/settings/drive"},
+		{toolPreset{Form: "google"}, "none", sourceWorkspace, "/settings/google"},
+		{toolPreset{}, "bearer", sourceConfig, ""},
+	} {
+		if got := connectionPage("x", "", tc.p, tc.auth, tc.source); got != tc.want {
+			t.Errorf("%+v = %q, want %q", tc, got, tc.want)
 		}
 	}
 }

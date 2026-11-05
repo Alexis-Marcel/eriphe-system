@@ -49,6 +49,9 @@ type accessGrid struct {
 type accountGrid struct {
 	Grid       accessGrid        `json:"grid"`
 	Exceptions map[string]string `json:"exceptions,omitempty"`
+	// Trust is whether this account believes the annotations; without it,
+	// the server's trust_annotations says.
+	Trust *bool `json:"trust_annotations,omitempty"`
 }
 
 func (g accessGrid) value(category string) string {
@@ -175,6 +178,20 @@ func (a serverAccess) of(t *mcp.Tool) (category, value string) {
 	return category, value
 }
 
+// level is the level closest to it. An exception that lets a tool do more
+// than read needs a credential that can: it is not read only.
+func (a serverAccess) level() string {
+	level := gridLevel(a.grid, a.trusted)
+	if level == accessReadOnly {
+		for _, v := range a.exceptions {
+			if v != gridNever {
+				return accessReads
+			}
+		}
+	}
+	return level
+}
+
 // baseAccess is a server's access, leaving its accounts aside.
 func (s Server) baseAccess() serverAccess {
 	if s.Grid != nil {
@@ -200,7 +217,11 @@ func (s Server) accountAccesses() map[string]serverAccess {
 			exceptions = map[string]string{}
 		}
 		maps.Copy(exceptions, a.Exceptions)
-		out[name] = serverAccess{a.Grid, exceptions, s.TrustAnnotations}
+		trusted := s.TrustAnnotations
+		if a.Trust != nil {
+			trusted = *a.Trust
+		}
+		out[name] = serverAccess{a.Grid, exceptions, trusted}
 	}
 	return out
 }
