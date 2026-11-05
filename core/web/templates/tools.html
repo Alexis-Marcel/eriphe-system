@@ -114,6 +114,7 @@
         {{template "src-tag" .Source}}
       </div>
       {{if .Use}}<p class="use">{{.Use}}</p>{{end}}
+      {{if .Want}}<p class="small notice-line">{{tf "tools.behind" .Version .Want}}</p>{{end}}
       <p class="muted small meta-line">
         {{if .Detail}}{{.Detail}}{{else if eq .Kind "local"}}{{t "tools.local"}}{{else}}<span class="mono">{{.URL}}</span> · {{t (printf "auth.%s" .Auth)}}{{end}}
         {{if eq .Kind "local"}}{{if .Node}} · {{.Node}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
