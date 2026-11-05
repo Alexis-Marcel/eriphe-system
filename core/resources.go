@@ -73,6 +73,9 @@ type ResourceRef struct {
 	// TrustSkills loads the agent skills a repository carries even when it
 	// is not the user's own (repo_skills.go).
 	TrustSkills bool `json:"trust_skills,omitempty" jsonschema:"repo: also load the agent skills the repository carries (.claude/skills, .agents/skills, .opencode/skills) when it is not the user's own; the user's own repositories load theirs anyway. Only for a repository the user said they trust"`
+	// Hold lends a tool held back (lend.go): the task sees it, but none of
+	// its calls is authorized until the user approves its release on a card.
+	Hold bool `json:"hold,omitempty" jsonschema:"tool: lend it held back, for work the user validates before it acts: the task sees the tool, but its calls are not authorized until the user approves its release on a card (answer_task with release). A held tool may be lent on a tainted turn"`
 }
 
 // key tells two entries for the same thing apart from different ones.
@@ -89,6 +92,9 @@ func (r ResourceRef) String() string {
 	if r.Access != "" {
 		s += " (" + r.Access + ")"
 	}
+	if r.Hold {
+		s += ", held"
+	}
 	return s
 }
 
@@ -102,7 +108,7 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 		e := ResourceRef{Kind: strings.ToLower(strings.TrimSpace(in.Kind)), Ref: strings.TrimSpace(in.Ref),
 			Access: strings.ToLower(strings.TrimSpace(in.Access)),
 			Branch: strings.TrimSpace(in.Branch), Base: strings.TrimSpace(in.Base), Dir: strings.TrimSpace(in.Dir),
-			TrustSkills: in.TrustSkills}
+			TrustSkills: in.TrustSkills, Hold: in.Hold}
 		rights, ok := resourceKinds[e.Kind]
 		if !ok {
 			return nil, fmt.Errorf("resource %d: kind %q is not one of repo, folder, drive-folder, tool, file", i+1, in.Kind)
@@ -115,6 +121,9 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 		}
 		if e.Kind != resRepo && (e.Branch != "" || e.Base != "" || e.Dir != "" || e.TrustSkills) {
 			return nil, fmt.Errorf("resource %s: branch, base, dir and trust_skills are a repo's only", e.Ref)
+		}
+		if e.Hold && e.Kind != resTool {
+			return nil, fmt.Errorf("resource %s: only a tool is lent held back (hold)", e.Ref)
 		}
 		if e.Access == "" && e.Kind != resTool {
 			e.Access = accessRead // least privilege; a tool's comes from its annotations
@@ -247,6 +256,7 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 				out.List[i].Access = e.Access
 			}
 			out.List[i].TrustSkills = out.List[i].TrustSkills || e.TrustSkills
+			out.List[i].Hold = out.List[i].Hold && e.Hold // lent outright once is lent outright
 		} else {
 			out.List = append(out.List, e)
 		}
@@ -330,9 +340,10 @@ func unmarshalResources(raw string) []ResourceRef {
 }
 
 // taintedResources refuses, during a tainted turn of the brain, a task
-// lent anything that writes: a write or drop entry of any kind, tools that
-// may act, a Drive folder (its files server is lent whole for now), and
-// the old identities, long-lived secrets. Reads still go. My own message
+// lent anything that writes: a write or drop entry, a Drive folder (its
+// files server is lent whole for now), and the old identities, long-lived
+// secrets. Reads still go, and tools: what they may do then is asked on a
+// card at launch (access_card.go). My own message
 // does not lift it: the brain asks me, and starts the task in the turn of
 // my answer.
 func (c *core) taintedResources(r runRequest) error {
@@ -353,6 +364,9 @@ func (c *core) taintedResources(r runRequest) error {
 	}
 	var writes, acting []string
 	for _, e := range lent.List {
+		if e.Kind == resTool {
+			continue // what it may do is asked on a card (access_card.go)
+		}
 		if e.TrustSkills {
 			// A repository's skills are instructions and scripts: trusting
 			// them is the user's call, not a turn's that read someone else's words.
@@ -361,8 +375,6 @@ func (c *core) taintedResources(r runRequest) error {
 		switch {
 		case e.Access == accessWrite || e.Access == accessDrop:
 			writes = append(writes, e.String())
-		case e.Kind == resTool:
-			acting = append(acting, c.actingGrant([]string{e.Ref})...)
 		case e.Kind == resDriveFolder:
 			if len(c.actingGrant([]string{filesServer})) > 0 {
 				acting = append(acting, e.String()+" through "+filesServer+", which can write in every Drive folder")

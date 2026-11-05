@@ -11,17 +11,21 @@ import (
 
 // The permission policy is code, not an instruction to a model: a mail or a
 // web page read by an agent can talk the brain into anything, not this.
-// Every permission request of a worker goes through it first:
+// Every permission request goes through it first:
 //
 //  1. the built-in denials, which nothing overrides (mass deletion, pushing
 //     to main, rewriting history, reading secrets, writing outside /work);
-//  2. a write tool of a catalog server set to read only (access.go);
-//  3. the rules of the configuration, first match wins, then the actions
-//     the user allowed for good ("Toujours autoriser");
-//  4. the built-in asks: what reaches a third party is the user's decision,
-//     including the tools of MCP servers, except what the server's access
-//     level leaves free (its reads, or everything), which the brain judges;
-//  5. anything else is for the brain to judge.
+//  2. a catalog tool at Never, by its exception or its category, and a call
+//     that must name its account;
+//  3. the rules of the configuration, first match wins;
+//  4. a tool lent held back is the user's until its release;
+//  5. a catalog tool's exception, then the actions the user allowed for good
+//     ("Toujours autoriser", Free exceptions that do not lift a Never);
+//  6. its category's value in the grid of the account the call names: On
+//     approval is the user's, Free is allowed, unless it writes on a tainted
+//     turn or a task that did not start cleanly: then it is On approval too;
+//  7. the built-in asks: what reaches a third party is the user's decision;
+//  8. anything else is for the brain to judge. No catalog call gets here.
 //
 // Every decision, whoever takes it, is recorded in the decisions table.
 
@@ -179,9 +183,8 @@ func (p *Policy) decide(tool string, input map[string]any) (decision, reason str
 	return p.decideWith(tool, input, catalogFacts{}, nil)
 }
 
-// decideWith is decide knowing what the catalog says of the tool (its
-// server's access level, whether it reads) and the actions the user allowed
-// for good (remembered, after the file's rules: access.go).
+// decideWith is decide knowing what the catalog says of the tool and the
+// actions the user allowed for good (remembered: access.go).
 func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, remembered []Rule) (decision, reason string) {
 	subj := subject(tool, input)
 	for _, r := range builtinDeny {
@@ -189,24 +192,44 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 			return r.Decision, r.Reason
 		}
 	}
-	if f.level == accessReadOnly && !f.read {
-		return decideDeny, "cet outil est en lecture seule : cette action n'est pas une lecture"
-	}
 	if f.noAccount {
 		return decideDeny, noAccountReason
 	}
-	for _, set := range [][]Rule{p.rules(), remembered} {
-		for _, r := range set {
-			if r.matches(tool, subj) {
-				return r.Decision, r.Reason
-			}
+	if f.value == gridNever {
+		return decideDeny, neverReason // no rule lifts it: the proxy would refuse the call
+	}
+	for _, r := range p.rules() {
+		if r.matches(tool, subj) {
+			return r.Decision, r.Reason
 		}
 	}
-	if f.lent && f.level != accessAsk {
-		return decideAllow, lentReason
+	if f.held {
+		return decideAsk, heldReason
 	}
-	if f.free() {
-		return decideBrain, ""
+	why := freeReason
+	for _, r := range remembered {
+		if !r.matches(tool, subj) {
+			continue
+		}
+		if f.value == "" {
+			return r.Decision, r.Reason
+		}
+		if f.value == gridApproval {
+			f.value, why = gridFree, r.Reason
+		}
+		break
+	}
+	switch f.value {
+	case gridApproval:
+		if f.granted {
+			return decideAllow, grantedReason
+		}
+		return decideAsk, approvalReason
+	case gridFree:
+		if f.unclean && !f.read && !f.granted {
+			return decideAsk, uncleanReason
+		}
+		return decideAllow, why
 	}
 	for _, r := range builtinAsk {
 		if r.matches(tool, subj) {
@@ -216,15 +239,41 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 	return decideBrain, ""
 }
 
+const (
+	neverReason    = "cet outil n'est pas autorisé dans Eriphe"
+	approvalReason = "cet outil demande ton accord"
+	freeReason     = "accès libre"
+	heldReason     = "outil retenu : il attend d'être débloqué"
+	uncleanReason  = "accès libre, mais un contenu extérieur a été lu ou la tâche n'est pas partie de ta demande : il faut ton accord"
+)
+
 // decide applies the policy, with what the catalog knows of the tool.
 func (c *core) decide(tool string, input map[string]any) (decision, reason string) {
 	return c.decideFacts(tool, input, c.pool.facts(tool, input))
 }
 
-// decideTask is decide for a worker's request, knowing what it was lent.
+// decideTask is decide for a worker's request: its Free writes hold on a
+// clean start only, whatever it read since.
 func (c *core) decideTask(t *TaskRow, tool string, input map[string]any) (decision, reason string) {
 	f := c.pool.facts(tool, input)
-	f.lent = t != nil && c.lendAllows(t, tool)
+	f.unclean = t == nil || c.store.get(lentByUserKey(t.ID)) == ""
+	if server, name, ok := splitToolName(tool); ok && t != nil {
+		if u := c.pool.get(server); u != nil {
+			if real := u.toolByClaudeName(name); real != nil {
+				name = real.Name // a ref names the tool as its server does
+			}
+		}
+		f.held = heldTool(t.Resources, server, name)
+		f.granted = c.accessGranted(t.ID, c.callNeed(tool, input, f))
+	}
+	return c.decideFacts(tool, input, f)
+}
+
+// decideBrainCall is decide for the brain's request: its Free writes hold on
+// a clean turn only; pending are its page reads that have not run yet.
+func (c *core) decideBrainCall(tool string, input map[string]any, pending map[string]int) (decision, reason string) {
+	f := c.pool.facts(tool, input)
+	f.unclean = len(c.turnTaintBut(pending)) > 0
 	return c.decideFacts(tool, input, f)
 }
 
@@ -287,7 +336,11 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 			c.store.addInbox(id, "permission", map[string]any{"id": pid, "allow": allow, "message": msg, "by": byPolicy})
 			c.store.recordDecision(id, pid, tool, input, decision, byPolicy, reason)
 		case decideAsk:
-			c.store.markUserOnly(id, pid, reason)
+			if t != nil && accessReason(reason) {
+				c.askTaskAccess(t, pid, tool, input, reason) // a card, once per category (access_card.go)
+			} else {
+				c.store.markUserOnly(id, pid, reason)
+			}
 			left = true
 		default:
 			left = true

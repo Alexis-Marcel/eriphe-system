@@ -320,9 +320,6 @@ func TestTaintedResources(t *testing.T) {
 	refused := []runRequest{
 		{Identities: []string{"github"}},
 		{Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "x"}}},
-		{Resources: []ResourceRef{{Kind: resTool, Ref: "github.create_issue", Access: accessWrite}}},
-		{Tools: []string{"github"}},
-		{Tools: []string{"notes"}}, // read-only by its word, not believed
 		{Resources: []ResourceRef{{Kind: resDriveFolder, Ref: "Factures"}}},
 		{Resources: []ResourceRef{{Kind: resRepo, Ref: "someone/tool", TrustSkills: true}}},
 	}
@@ -332,6 +329,10 @@ func TestTaintedResources(t *testing.T) {
 		{Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo"}}},
 		{Resources: []ResourceRef{{Kind: resTool, Ref: "github.get_*"}}},
 		{Tools: []string{"github.get_*"}},
+		// What a tool may do is asked on a card at launch (access_card.go).
+		{Resources: []ResourceRef{{Kind: resTool, Ref: "github.create_issue", Access: accessWrite}}},
+		{Tools: []string{"github"}},
+		{Tools: []string{"notes"}},
 	}
 	for _, r := range append(refused, allowed...) {
 		if err := c.taintedResources(r); err != nil {

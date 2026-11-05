@@ -492,6 +492,9 @@ func (c *core) assistantToolsHash(a Assistant) string {
 	grant := c.assistantGrant(a)
 	h := sha256.New()
 	json.NewEncoder(h).Encode(grant)
+	if assistantRoles[a.Role].FreeReads {
+		json.NewEncoder(h).Encode(c.brainFreeReads()) // allowed in advance when it starts
+	}
 	for _, name := range grantServers(grant) {
 		if _, ok := c.conf().Servers[name]; !ok {
 			continue
@@ -513,16 +516,15 @@ func (c *core) assistantToolsHash(a Assistant) string {
 }
 
 // assistantGrant is what an assistant may use of the catalog: what its
-// tools grant and, if its role reads freely, every tool a server says is
-// read-only when the server is believed for its annotations (my "reads
-// free", our own mail and calendar). It is computed on each use: a tool the
-// catalog lists later is in it at once, for the proxy.
+// tools grant and, if its role reads freely, every tool that is not Never:
+// the grid decides each of its calls. It is computed on each use: a tool
+// the catalog lists later is in it at once, for the proxy.
 func (c *core) assistantGrant(a Assistant) []string {
 	out := c.conf().assistantTools(a)
 	if !assistantRoles[a.Role].FreeReads {
 		return out
 	}
-	for _, r := range c.freeTools() {
+	for _, r := range c.lentTools() {
 		if g := r.server + "." + globEscape(r.tool); !slices.Contains(out, g) {
 			out = append(out, g)
 		}

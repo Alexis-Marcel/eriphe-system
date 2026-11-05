@@ -274,7 +274,13 @@ type runRequest struct {
 	// on a card, and the task waits for the answer (task_start.go); taint
 	// is why its start may have been talked into it, if it may.
 	askStart bool
-	taint    []string
+	// cleanStart: started in a clean turn of the user's, or by a watch they
+	// authorised: its Free writes hold (lend.go).
+	cleanStart bool
+	// approvedInAdvance: the user authorised exactly this task for a watch:
+	// no card for what it is lent.
+	approvedInAdvance bool
+	taint             []string
 }
 
 // workerVoice is a worker's standing instruction: its last message reaches
@@ -375,6 +381,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	var needs []startNeed
 	if kind == "worker" && r.askStart {
 		needs = c.startNeeds(lent.List, r.taint) // task_start.go
+		if !r.approvedInAdvance {
+			needs = append(needs, c.accessStartNeeds(lent.List, r.cleanStart)...)
+		}
 	}
 	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model,
 		Identity: strings.Join(r.Identities, ","), Dir: where, Prompt: r.Prompt, State: statePending,

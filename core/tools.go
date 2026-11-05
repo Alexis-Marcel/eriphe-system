@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -17,8 +18,9 @@ A task in idle has finished its turn: read last_text, then either answer its que
 or stop_task when the work is done. Never invent a task's result: read it with task_status.
 Everything a task is lent goes in run_task's resources, one entry {kind, ref, access} per thing, access read < drop < write, the least it needs:
 repo (owner/name, cloned into /work/repo; branch, base, dir; write to push, and with a branch its first push there needs no approval), folder and drive-folder (by name, see list_folders; drop to add results in its results subfolder, named after the assistant; for a folder shared to manage, write to change the folder itself), tool (a catalog server or server.tool globs, see list_tools).
-What you lend is authorized: the task calls a lent tool's reads without asking, and its actions that stay in their service (moving a mail) too when you start it in the turn of the user's message; sending or publishing stays the user's. Lend only the tools it needs (mail.search_messages, mail.move), not a whole server.
-A tainted turn (one that read external content) may lend reads only.
+What you lend is what the task reaches; the grid decides what it may do (list_tools gives each tool's category and value): free goes, approval is asked of the user on a card when it starts, once per category and account, and neither the user's sentence nor you can answer it. Lend only the tools it needs (mail.search_messages, mail.move), not a whole server.
+A tainted turn (one that read external content) may lend reads and tools, whose free writes are then asked on the card too, but no write on a repository or folder.
+For work the user validates before it acts (analyse, report, then act), lend the acting tools held back (hold: true): the task sees them, but they are not authorized; when the work is ready to act, answer_task with release: the user is asked on a card, and you are told their answer. A held tool may be lent on a tainted turn.
 For a task that changes something, give run_task a contract: objective (one sentence, what must be true at the end), constraints, checks ({name, run, dir, timeout} or {name, exists}, under /work), evidence, budget (minutes, attempts, turns, tokens). Only what a check saw pass counts as verified in the task's receipt. Approval is never part of a contract: the policy decides it. A check that could not run at all (its dir missing, its command not found) is a misconfigured contract, not a failure of the code: the task stays idle and you fix it with answer_task's checks.
 When a turn ends, task_status gives the task's receipt, checked by eriphe-core: verified, claimed but not checked, not verified, mismatches.
 Your own catalog tools (yours) you call directly: read with them yourself, and start a task only to act or for heavy work.
@@ -50,7 +52,7 @@ func newMCPServer(c *core) *mcp.Server {
 	type toolsIn struct {
 		Server string `json:"server,omitempty" jsonschema:"only this server; empty for the whole catalog"`
 	}
-	tool(s, "list_tools", "The tool catalog: MCP servers, what each is for, whether it is ready or needs the user to connect it, and its tools (name, short description, read-only by the server's own annotation). Lend them to a task with run_task's resources, {kind: tool, ref: server or server.tool glob}.",
+	tool(s, "list_tools", "The tool catalog: MCP servers, what each is for, whether it is ready or needs the user to connect it, and its tools (name, short description, read-only by the server's own annotation, category: read, change, delete or send, value: free, approval or never, and accounts: its value in each account). A tool at never is not listed. Lend them to a task with run_task's resources, {kind: tool, ref: server or server.tool glob}.",
 		func(ctx context.Context, in toolsIn) (map[string]any, error) {
 			out := map[string]any{
 				"servers": c.listServers(in.Server, true),
@@ -73,27 +75,31 @@ func newMCPServer(c *core) *mcp.Server {
 
 	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). Returns the task with its id. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
 		func(ctx context.Context, in runRequest) (*TaskRow, error) {
-			granted := false
-			if err := c.taintedResources(in); err != nil { // resources.go
-				// Unless it is exactly the task the user authorised in advance for this watch (watch_grant.go).
-				task, cerr := canonicalTask(in)
-				if cerr != nil || !c.useWatchGrant(grantTask, "run_task", task) {
+			// Exactly the task the user authorised in advance for this watch (watch_grant.go)?
+			task, cerr := canonicalTask(in)
+			granted := cerr == nil && c.useWatchGrant(grantTask, "run_task", task)
+			if !granted {
+				if err := c.taintedResources(in); err != nil { // resources.go
 					return nil, err
 				}
-				granted = true
 			}
 			tainted := c.turnTaint()
 			in.askStart = true // what is the user's is asked now, not at the push (task_start.go)
 			if !granted {
 				in.taint = tainted
 			}
+			in.cleanStart = granted || (len(tainted) == 0 && c.turnFromUser())
+			in.approvedInAdvance = granted
 			t, err := c.runTask(ctx, in)
 			if err == nil && len(tainted) > 0 && !granted {
 				// Started on a tainted turn: its writes ask me (credentials.go).
 				c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(tainted, ", "))
 			}
-			if err == nil && (granted || c.turnFromUser()) {
-				c.store.set(lentByUserKey(t.ID), "1") // its lend authorizes its actions (lend.go)
+			if err == nil && in.cleanStart {
+				c.store.set(lentByUserKey(t.ID), "1") // a clean start (lend.go)
+			}
+			if err == nil && granted {
+				c.grantLent(t) // the user's yes was given in advance (access_card.go)
 			}
 			return t, err
 		})
@@ -138,9 +144,27 @@ func newMCPServer(c *core) *mcp.Server {
 		Allow        *bool  `json:"allow,omitempty" jsonschema:"for a task waiting for a permission: true to allow, false to deny"`
 		// Checks fix a misconfigured contract (contract.go).
 		Checks []taskCheck `json:"checks,omitempty" jsonschema:"to fix a misconfigured contract of an idle task: all its checks, replacing the contract's; they run when its next turn ends (reply optional)"`
+		// Release asks the user to release tools lent held back (access_card.go).
+		Release []string `json:"release,omitempty" jsonschema:"tools the task was lent held back (run_task resources with hold), as their ref there (mail.move): the user is asked on a card, and only their yes authorizes them"`
 	}
-	tool(s, "answer_task", "Answer what a task waits for: allow or deny its pending permission, or reply to its question; with checks, fix its contract's misconfigured checks.",
+	tool(s, "answer_task", "Answer what a task waits for: allow or deny its pending permission, or reply to its question; with checks, fix its contract's misconfigured checks; with release, ask the user on a card to release the tools it was lent held back.",
 		func(ctx context.Context, in answerIn) (map[string]string, error) {
+			if len(in.Release) > 0 {
+				res, err := c.releaseTools(in.TaskID, in.Release)
+				if err != nil || in.Reply == "" && in.Allow == nil && in.Checks == nil {
+					return map[string]string{"result": res}, err
+				}
+				var more string
+				if in.Checks != nil {
+					more, err = c.fixChecks(ctx, in.TaskID, in.Checks, in.Reply)
+				} else {
+					more, err = c.answer(ctx, in.TaskID, in.PermissionID, in.Reply, in.Allow, byBrain)
+				}
+				if err != nil {
+					return map[string]string{"result": res}, fmt.Errorf("%s, but: %w", res, err)
+				}
+				return map[string]string{"result": res + "; " + more}, nil
+			}
 			if in.Checks != nil {
 				res, err := c.fixChecks(ctx, in.TaskID, in.Checks, in.Reply)
 				return map[string]string{"result": res}, err

@@ -33,9 +33,9 @@ func TestAccessLevels(t *testing.T) {
 		level, read, write string
 		lent, freeReads    string // tools a task granted github sees, the brain's free tools
 	}{
-		{accessReadOnly, decideBrain, decideDeny, "get_issue", "mcp__github__get_issue"},
-		{accessReads, decideBrain, decideAsk, "create_issue,get_issue", "mcp__github__get_issue"},
-		{accessFree, decideBrain, decideBrain, "create_issue,get_issue", "mcp__github__create_issue,mcp__github__get_issue"},
+		{accessReadOnly, decideAllow, decideDeny, "get_issue", "mcp__github__get_issue"},
+		{accessReads, decideAllow, decideAsk, "create_issue,get_issue", "mcp__github__get_issue"},
+		{accessFree, decideAllow, decideAllow, "create_issue,get_issue", "mcp__github__get_issue"}, // a write goes through the policy
 		{accessAsk, decideAsk, decideAsk, "create_issue,get_issue", ""},
 	}
 	for _, tc := range cases {
@@ -75,7 +75,7 @@ func TestAccessLevels(t *testing.T) {
 	c.store.recordDecision("t-1", "p1", write, map[string]any{"title": "x"}, decideAllow, byUser, "")
 	raw, _ := json.Marshal(map[string]any{"title": "x"})
 	if out := c.proxyCall(context.Background(), "t-1", []string{"github"}, u, "create_issue", raw); !out.IsError ||
-		!strings.Contains(resultText(out), "read only") {
+		!strings.Contains(resultText(out), "not allowed") {
 		t.Fatalf("a write on a read-only tool = %+v", out)
 	}
 	// The file's rules still come before the free level.
@@ -440,11 +440,11 @@ func TestAccountLevels(t *testing.T) {
 	}{
 		{write, "pro@example.org", decideDeny},    // read only
 		{write, "PRO@example.org", decideDeny},    // its name in another case
-		{write, "perso@example.org", decideBrain}, // free
+		{write, "perso@example.org", decideAllow}, // free
 		{write, "", decideDeny},                   // a write that names no account, when they differ
 		{write, "nobody@example.org", decideDeny}, // … or one it does not have
-		{read, "pro@example.org", decideBrain},
-		{read, "", decideBrain}, // reads are free in both
+		{read, "pro@example.org", decideAllow},
+		{read, "", decideAllow}, // reads are free in both
 	} {
 		in := map[string]any{"title": "x"}
 		if tc.account != "" {
@@ -456,7 +456,7 @@ func TestAccountLevels(t *testing.T) {
 	}
 	// The proxy holds to it too, whatever the ticket.
 	u := c.pool.get("github")
-	for account, want := range map[string]string{"pro@example.org": "this account is read only", "": "give account"} {
+	for account, want := range map[string]string{"pro@example.org": "not allowed", "": "give account"} {
 		in := map[string]any{"title": "x"}
 		if account != "" {
 			in["account"] = account
@@ -478,7 +478,7 @@ func TestAccountLevels(t *testing.T) {
 	if got, _ := c.decide(read, map[string]any{"account": "perso@example.org"}); got != decideAsk {
 		t.Errorf("a read of the account that asks = %q", got)
 	}
-	if got, _ := c.decide(read, map[string]any{"account": "pro@example.org"}); got != decideBrain {
+	if got, _ := c.decide(read, map[string]any{"account": "pro@example.org"}); got != decideAllow {
 		t.Errorf("a read of the read-only account = %q", got)
 	}
 	if contains(c.brainFreeReads(), read) {

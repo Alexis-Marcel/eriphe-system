@@ -92,19 +92,18 @@ func (c *core) brainGrant() []string {
 
 type catalogTool struct{ server, tool string }
 
-// freeTools are the tools Eriphe may call without the user, as the pool
-// lists them now: the read-only ones of the servers trusted for their
-// annotations, and every tool of a server whose access is free.
-func (c *core) freeTools() []catalogTool {
+// lentTools are the tools of the catalog that are not Never, as the pool
+// lists them now: the brain sees them all, and the grid decides each call.
+func (c *core) lentTools() []catalogTool {
 	var out []catalogTool
 	for name := range c.conf().Servers {
 		u := c.pool.get(name)
-		if u == nil || !u.srv.trusts() {
+		if u == nil {
 			continue
 		}
 		_, _, tools := u.snapshot()
 		for _, t := range tools {
-			if u.srv.level() == accessFree || (t.Annotations != nil && t.Annotations.ReadOnlyHint) {
+			if lends(u.srv, t) {
 				out = append(out, catalogTool{name, t.Name})
 			}
 		}
@@ -121,15 +120,16 @@ func globEscape(s string) string { return globChars.ReplaceAllString(s, `\$0`) }
 var globChars = regexp.MustCompile(`[\\*?\[]`)
 
 // freeRead tells whether the brain may call a catalog tool without asking:
-// free by its server's access level (a read of a server believed for it,
-// or any tool of a free one), and named by no rule of my policy (such a
-// tool goes through the permission flow, with its input).
+// a Read at Free, named by no rule of my policy (such a tool goes through
+// the permission flow, with its input). A write always goes through it:
+// the policy must see the turn's taint.
 func (c *core) freeRead(claudeName string) bool { return c.freeCall(claudeName, nil) }
 
 // freeCall is freeRead for one call: on a server of several accounts, at
-// the level of the account it names.
+// the value of the account it names.
 func (c *core) freeCall(claudeName string, input map[string]any) bool {
-	return c.pool.facts(claudeName, input).free() && !c.conf().Policy.names(claudeName)
+	f := c.pool.facts(claudeName, input)
+	return f.read && f.free() && !f.noAccount && !c.conf().Policy.names(claudeName)
 }
 
 // readsFreely tells whether a task is an assistant's whose role reads freely.
@@ -147,7 +147,7 @@ func (c *core) readsFreely(taskID string) bool {
 // wait for a permission.
 func (c *core) brainFreeReads() []string {
 	var out []string
-	for _, r := range c.freeTools() {
+	for _, r := range c.lentTools() {
 		if name := claudeToolName(r.server, r.tool); c.freeRead(name) && !slices.Contains(out, name) {
 			out = append(out, name)
 		}
@@ -240,21 +240,14 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	claude := claudeToolName(u.name, tool)
 	f := c.pool.facts(claude, input)
 	switch {
-	case f.level == accessReadOnly && !f.read:
-		if _, named := u.srv.accountLevel(input); named {
-			return toolError("this account is read only in Eriphe: only its reads are allowed")
-		}
-		return toolError("this tool is read only in Eriphe: only its reads are lent")
 	case f.noAccount:
 		return toolError("the accounts of this tool do not have the same access in Eriphe: give account, the account this call is for")
+	case f.value == gridNever:
+		return toolError("this tool is not allowed in Eriphe, for this account or at all")
 	case c.store.useTicket(taskID, claude, input):
 	case c.readsFreely(taskID) && c.freeCall(claude, input):
 		// The brain reads freely: no permission round trip, a decision on record all the same.
-		why := "lecture libre du cerveau"
-		if !f.read {
-			why = "outil en accès libre"
-		}
-		c.store.logDecision(taskID, "", claude, input, decideAllow, byPolicy, why)
+		c.store.logDecision(taskID, "", claude, input, decideAllow, byPolicy, "lecture libre du cerveau")
 	default:
 		return toolError("this call was not allowed through Eriphe's permissions: ask for it as usual")
 	}
@@ -343,6 +336,10 @@ type toolInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	ReadOnly    bool   `json:"read_only,omitempty"` // by the server's own annotation
+	Category    string `json:"category,omitempty"`  // read, change, delete or send
+	Value       string `json:"value,omitempty"`     // free, approval or never; the strictest of its accounts
+	// Accounts is its value in each account, on a server of several.
+	Accounts map[string]string `json:"accounts,omitempty"`
 }
 
 // listServers describes the catalog, or one server of it; withTools adds
@@ -381,6 +378,14 @@ func (c *core) listServers(only string, withTools bool) []serverInfo {
 				for _, t := range tools {
 					ti := toolInfo{Name: t.Name, Description: truncate(oneLine(t.Description), 160)}
 					ti.ReadOnly = t.Annotations != nil && t.Annotations.ReadOnlyHint
+					f := s.toolFacts(t, nil)
+					ti.Category, ti.Value = f.category, f.value
+					for account, a := range s.accountAccesses() {
+						if ti.Accounts == nil {
+							ti.Accounts = map[string]string{}
+						}
+						_, ti.Accounts[account] = a.of(t)
+					}
 					info.Tools = append(info.Tools, ti)
 				}
 			}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -365,6 +366,10 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 	levels[a.Name] = level
 	srv := st.Server
 	srv.AccountAccess = levels
+	if g, ok := srv.AccountGrids[old.Name]; ok && !strings.EqualFold(old.Name, a.Name) {
+		srv.AccountGrids = withoutAccount(srv.AccountGrids, old.Name) // renamed: its grid goes with it
+		srv.AccountGrids[a.Name] = g
+	}
 	if err := c.writeService(svc, st, srv, cfg, map[string]EnvValue{env: secret}, creds, exists); err != nil {
 		return err
 	}
@@ -409,6 +414,7 @@ func (c *core) dropAccount(svc accountService, name string) error {
 		return c.deleteServer(st.Name)
 	}
 	srv := st.Server
+	srv.AccountGrids = withoutAccount(st.Server.AccountGrids, gone.Name)
 	srv.AccountAccess = map[string]string{}
 	for k, v := range st.Server.AccountAccess {
 		if !strings.EqualFold(k, gone.Name) {
@@ -420,6 +426,16 @@ func (c *core) dropAccount(svc accountService, name string) error {
 	}
 	c.store.forgetAccountActions(st.Name, gone.Name)
 	return nil
+}
+
+// withoutAccount is a server's account grids less one account's.
+func withoutAccount(grids map[string]accountGrid, account string) map[string]accountGrid {
+	if len(grids) == 0 {
+		return grids
+	}
+	out := maps.Clone(grids)
+	maps.DeleteFunc(out, func(k string, _ accountGrid) bool { return strings.EqualFold(k, account) })
+	return out
 }
 
 // setAccountLevel changes one account's access level.
@@ -449,6 +465,7 @@ func (c *core) setAccountLevel(server, account, level string) error {
 	levels[cfg.Accounts[i].Name] = level
 	next := srv
 	next.AccountAccess = levels
+	next.AccountGrids = withoutAccount(srv.AccountGrids, account) // a level replaces a grid
 	return c.writeService(svc, svcServer{Name: server, Server: srv, Spec: spec, Config: cfg}, next, cfg, nil, nil, true)
 }
 
@@ -457,7 +474,8 @@ func (c *core) setAccountLevel(server, account, level string) error {
 // read_only for the accounts kept read only.
 func (c *core) writeService(svc accountService, st svcServer, srv Server, cfg svcConfig, env map[string]EnvValue, creds credentials, exists bool) error {
 	for i := range cfg.Accounts {
-		cfg.Accounts[i].ReadOnly = srv.AccountAccess[cfg.Accounts[i].Name] == accessReadOnly
+		a, ok := srv.accountAccesses()[cfg.Accounts[i].Name]
+		cfg.Accounts[i].ReadOnly = ok && gridLevel(a.grid, a.trusted) == accessReadOnly
 	}
 	raw, _ := json.Marshal(cfg)
 	next := map[string]EnvValue{svc.ConfigEnv: {Value: string(raw)}}
@@ -473,7 +491,10 @@ func (c *core) writeService(svc accountService, st svcServer, srv Server, cfg sv
 	spec.Env = next
 	srv.Run = marshalRun(spec)
 	level := srv.level()
-	srv.Access, srv.TrustAnnotations = level, level != accessAsk
+	srv.Access = level
+	if srv.Grid == nil && len(srv.AccountGrids) == 0 {
+		srv.TrustAnnotations = level != accessAsk // with a grid, it is a switch of its own
+	}
 	mode := putUpdate
 	if !exists {
 		mode = putCreate

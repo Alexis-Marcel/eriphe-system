@@ -73,6 +73,10 @@ func residentCore(t *testing.T) *catalogCore {
 	c.store.registerNode("nas", hashSecret("b"))
 	c.store.setNodeStatus("nas", true, []byte(nasInfo))
 	c.started = time.Now().Add(-time.Hour)
+	// Its tools are settled: one that comes later restarts the idle brain.
+	for name := range c.conf().Servers {
+		waitStatus(t, c.pool.get(name), statusReady)
+	}
 	return c
 }
 

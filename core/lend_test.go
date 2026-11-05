@@ -83,30 +83,22 @@ func ask(t *testing.T, c *core, id, tools string, names ...string) map[string]st
 	return got
 }
 
-// What a task is lent, it uses: a read and an action that stays in the
-// mailbox go through without asking; a send, or an action no annotation
-// says stays inside, is the user's; what is not lent is not authorized.
-func TestLendAuthorizes(t *testing.T) {
+// A task's lend says what it reaches, the grid what it may do: at the
+// default grid, a read goes through and everything else is the user's, even
+// in a task the user started: their sentence approves nothing.
+func TestGridDecidesWhatIsLent(t *testing.T) {
 	c := newMailCore(t, "")
 	got := ask(t, c, "t-1", "mail", "search_messages", "move", "send", "unannotated")
-	want := map[string]string{"search_messages": "allowed", "move": "allowed", "send": "user", "unannotated": "user"}
+	want := map[string]string{"search_messages": "allowed", "move": "user", "send": "user", "unannotated": "user"}
 	for k, v := range want {
 		if got[k] != v {
 			t.Errorf("%s: %s, want %s", k, got[k], v)
 		}
 	}
-	if got := ask(t, c, "t-2", "mail.search_messages", "move"); got["move"] != "user" {
-		t.Errorf("an action not lent: %s", got["move"])
-	}
-	// A task the brain started alone (a watch woke it): its reads only.
-	if got := ask(t, c, "t-alone", "mail", "search_messages", "move"); got["search_messages"] != "allowed" || got["move"] != "user" {
-		t.Errorf("a task started without my message: %v", got)
-	}
-
-	// A server the user wants to be asked for everything: the lend does not change it.
+	// A server the user wants to be asked for everything: its reads too.
 	c = newMailCore(t, accessAsk)
-	if got := ask(t, c, "t-3", "mail", "move"); got["move"] != "user" {
-		t.Errorf("on a server set to ask: %s", got["move"])
+	if got := ask(t, c, "t-3", "mail", "search_messages"); got["search_messages"] != "user" {
+		t.Errorf("on a server set to ask: %s", got["search_messages"])
 	}
 }
 

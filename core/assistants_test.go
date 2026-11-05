@@ -131,7 +131,7 @@ func TestAssistantSpecHashRestart(t *testing.T) {
 	if c.tendAssistants(ctx, "tok"); c.store.get("brain_stopped:"+next) == "" {
 		t.Fatal("not restarted on new tools")
 	}
-	if g := c.brainGrant(); strings.Join(g, ",") != "docs" {
+	if g := c.brainGrant(); strings.Join(g, ",") != "docs,docs.ping" {
 		t.Fatalf("grant = %v", g)
 	}
 }

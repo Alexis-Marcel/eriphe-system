@@ -16,8 +16,9 @@ import (
 // and Non buttons. A button answers its card only, through the same code
 // as the workspace's, and only from the linked account (onCallback checks
 // the sender before anything). "Alerts only" sends no card: a button must
-// never approve what the user cannot read. A task's permission never comes
-// here: that policy is unchanged.
+// never approve what the user cannot read. A task's raw permission never
+// comes here (a command, a JSON input): what the grid asks does, one
+// readable sentence (access_card.go).
 
 func tgMsgKey(seq int) string    { return fmt.Sprintf("tg_msg:%d", seq) }
 func tgNotifKey(id int64) string { return fmt.Sprintf("tg_notif:%d", id) }
@@ -37,6 +38,10 @@ func parseCardData(s string) (int64, bool, bool) {
 	id, err := strconv.ParseInt(parts[1], 10, 64)
 	return id, parts[2] == "y", err == nil && id > 0
 }
+
+// blocksATask tells whether a card stops a task until it is answered: it
+// goes to Telegram whatever its message did.
+func blocksATask(kind string) bool { return kind == cardTaskStart || kind == cardAccess }
 
 // sentToTelegram tells whether a message of the brain's went to Telegram.
 func (c *core) sentToTelegram(seq int) bool {
@@ -63,7 +68,7 @@ func (c *core) telegramCards() {
 	}
 	lang := t.lang()
 	for _, x := range xs {
-		if !c.sentToTelegram(x.Seq) {
+		if !blocksATask(x.Kind) && !c.sentToTelegram(x.Seq) {
 			continue
 		}
 		x, p := c.liveCard(x)

@@ -599,7 +599,7 @@ whatever address it dials) and one client certificate per node.
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
 | `task_status` | state, the agent's last message (without its receipt), its checked [receipt](#receipts-receiptgo), the pending permission; `wait` blocks until the task needs you |
 | `list_tasks` | recent tasks |
-| `answer_task` | allow or deny the pending permission, or reply to the agent's question |
+| `answer_task` | allow or deny the pending permission, or reply to the agent's question; `release` asks the user on a card to release the tools it was lent [held back](#resources) |
 | `stop_task` | stop the agent |
 
 The scheduler takes the requested node if it is online and fits. Otherwise it works in two passes,
@@ -776,30 +776,27 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    `$CODEX_HOME`…). OpenCode's and Codex's requests (the `opencode` and
    `codex` runtimes) come under Claude Code's tool names (`Bash`, `Edit`, `Write`, `WebFetch`…)
    with the same inputs, so the same rules apply;
-2. the configuration's `policy.rules`, first match wins:
+2. a catalog tool at Never, and a call that must name its account: the proxy would refuse them, so
+   no rule lifts them;
+3. the configuration's `policy.rules`, first match wins:
    `{"tool": "Bash", "match": "^go test", "decision": "allow"}` (`tool` is a name, a glob such as
    `mcp__*`, or names joined by `|`; `match` is a regular expression on the command, path or URL;
    `decision` is `allow`, `deny` or `ask`);
-   then the actions the user allowed for good ("Toujours autoriser", [below](#access-levels)),
-   which the file's rules come before;
-3. **built-in asks**, for what reaches a third party (merging, releasing, publishing, `ssh`, `curl
-   -X POST`, external MCP tools): only the user may answer, through the CLI; the brain is told to
-   relay them and its answer is refused. The exception: what a catalog server's
-   [access level](#access-levels) leaves free (a read, or any tool of a `free` server) is the
-   brain's to judge, and a write of a `read-only` server is denied before the rules;
-4. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
+4. a tool lent [held back](#resources) is the user's until its release: neither a grant of its
+   category nor a free read lifts that;
+5. for a catalog tool, its **exception**, then the actions the user allowed for good ("Toujours
+   autoriser", [below](#access-levels)), then its **category's value** in the
+   [grid](#access-grid) of the account the call names: On approval asks on a
+   [card](#the-approval-card), Free is allowed. No catalog call is left to the brain's judgment;
+6. **built-in asks**, for what reaches a third party (merging, releasing, publishing, `ssh`, `curl
+   -X POST`, an MCP tool out of the catalog): only the user may answer, through the CLI; the brain
+   is told to relay them and its answer is refused;
+7. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
    `Write`, `Edit`, `WebFetch`…) is allowed, without waking the brain (`inContainer`). The container
    is the boundary: what leaves it goes through the node's mounts (a folder's level), its egress
    filter and the credentials eriphe-core lends, which the shell rules above cannot replace (they
    read a command line, and only stop mistakes);
-5. **a lent tool is authorized** (`lend.go`): a task uses what the brain lent it without asking
-   again, call by call. A read of a lent tool is allowed; an action that stays in its service (a
-   tool the server, trusted for its annotations, marks `openWorldHint: false`: moving a mail,
-   creating an event) is allowed too when the task was started in the turn of one of the user's
-   messages (or as a watch's action authorised in advance). An action that reaches outside
-   (sending, publishing) or that no annotation vouches for stays the user's, a server on `ask`
-   keeps asking, and the steps above come first;
-6. what is left is the brain's to judge. A request the brain was told of and left at the end of
+8. what is left is the brain's to judge. A request the brain was told of and left at the end of
    its turn (it relayed it, or could not decide) is the user's. The workspace and the
    notifications show the user only the requests that are theirs (any while the brain is off or
    stopped by an error); a task's own page shows them all.
@@ -819,6 +816,70 @@ Common safe reads, allowed without asking anyone:
 
 Every decision (by the policy, the brain or the user) is kept in the `decisions` table.
 
+### Access grid
+
+The server says what each tool is, the user says what each kind of tool may do (`access_grid.go`).
+A tool falls in one category by its MCP annotations, with MCP's pessimistic defaults:
+
+| Category | Annotations |
+|---|---|
+| Read | `readOnlyHint: true` |
+| Change | `openWorldHint: false`, `destructiveHint: false` |
+| Delete | `openWorldHint: false`, `destructiveHint` true or absent |
+| Send | `openWorldHint` true or absent: an unannotated tool, and every tool of a server whose annotations are not believed |
+
+Each category is `free`, `approval` or `never`:
+
+| Value | Brain | Task |
+|---|---|---|
+| `never` | not listed, cannot be lent | not in its `tools/list`; the proxy refuses it, ticket or not |
+| `free` | called without asking | called without asking |
+| `approval` | a card per call | a card once per task, category and account, granted until it ends |
+
+The grid is read at each call: a change applies at once, running tasks included. A row left out has
+the default: Read free, the rest on approval. A level [below](#access-levels) reads as a grid until
+a server has one of its own; the workspace shows levels for now. In the configuration file:
+
+```json
+"mail": {"url": "…", "use": "…", "trust_annotations": true,
+  "grid": {"read": "free", "change": "free", "delete": "approval", "send": "never"},
+  "exceptions": {"create_draft": "free"},
+  "account_grids": {"sam@example.org": {"grid": {"send": "approval"}, "exceptions": {"move": "never"}}}}
+```
+
+With a `grid`, `trust_annotations` says on its own whether the annotations count: without it, every
+tool is Send. `exceptions` replace a tool's category value, Never included; `account_grids` is one
+grid per account, in the place of `account_access`, and a server's exceptions hold for its accounts.
+A call that names no account takes the strictest of their values, and is refused when they differ,
+unless it is a read none of them refuses.
+
+**Free needs a clean start.** Free is the user's delegation, within which only the model's judgment
+holds; a hard guarantee is set in the grid. One guard stays, against prompt injection: on a tainted
+turn every Free above Read counts as On approval, for the brain until the user's next message
+starts a clean turn, for a task if it was started on one (or by the brain alone, or was lent the
+tool held back). A task started cleanly keeps its Free writes even after reading external content.
+Only the brain's Free reads are allowed in advance and called without a ticket; its writes go
+through the policy, so the turn's taint is always seen.
+
+### The approval card
+
+An approval is a card of the conversation (`access_card.go`), answered by the user, never by the
+brain. A start's card also takes a plain yes or no read by eriphe-core, unless it may carry someone
+else's words (a tainted turn). The others take their buttons only: they come at any moment, so a
+yes may answer something else. A task's card is shown:
+
+1. **at launch**, on its start's card, for what it is lent outright: it waits (`held`) for the answer;
+2. **on release** of a tool lent [held back](#resources);
+3. **at the first call** of a category not granted yet; the calls that wait on it are answered with it.
+
+A card at the first call or on release has a message of its own, the question, which notifies as
+any question does. These cards and a start's go to
+Telegram as well, whatever the messages around them did, answered from the linked account only
+("Alerts only" sends none): whoever holds the user's Telegram session can approve, as they can
+approve proposals. A task's raw permissions (a rule's `ask`, a command) stay out of Telegram. The
+answers are kept in `decisions`, and a grant shows in the task's drawer. A task exactly authorised
+in advance for a watch needs no card. A no refuses what waits; the next call asks again.
+
 ### Access levels
 
 Each catalog server has an access level (`access`, `access.go`): **what** Eriphe may do on it,
@@ -827,8 +888,8 @@ kept apart from **how** its credential is scoped.
 | Level | Workspace | Reads | Writes |
 |---|---|---|---|
 | `read-only` | Lecture seule / Read only | free | not lent: not in `tools/list` of a task nor in `list_tools`, denied by the policy and refused by the proxy |
-| `reads` | Lecture libre, écriture sur accord / Free reads, writes on approval | free | the user's to approve: in the workspace, or by asking Eriphe for the work (a [lent tool](#permission-policy)) |
-| `free` | Tout libre / Everything free | free | free (the brain judges a worker's; the brain's own are allowed in advance) |
+| `reads` | Lecture libre, écriture sur accord / Free reads, writes on approval | free | on [approval](#the-approval-card) |
+| `free` | Tout libre / Everything free | free | free, on a [clean start](#access-grid) |
 | `ask` | Tout sur accord / Everything on approval | the user's | the user's |
 
 A read is what the server itself marks `readOnlyHint`. `ask` is the former "Tout me demander":
@@ -851,8 +912,8 @@ and the server refuses their writes and an id of another account than the one na
 API: `POST /v1/tasks/{id}/answer` with `"allow": true, "always": true`): the request is allowed,
 and `server.tool` is allowed without asking from then on, for any input. These are rules kept in
 eriphe-core's database (`remembered_actions`: tool, account, server), evaluated after the file's
-rules (which win) and never above a built-in denial or a `read-only` level (the card does not offer
-it there). On a server of accounts, it is allowed for the account the call named only. Each tool's
+rules (which win) and never above a built-in denial or a Never (the card does not offer it there).
+Each is a Free exception: it follows the clean start rule [above](#access-grid). On a server of accounts, it is allowed for the account the call named only. Each tool's
 access page (Settings → Tools → Access, `/settings/tools/{name}/access`, `?account=` for an
 account's) lists them, with "Retirer"; removing a server, or an account, forgets them.
 
@@ -915,10 +976,19 @@ keeps them off, unless the entry says `"trust_skills": true`. The node gets the 
 spec's `repo_skills` and turns them off per agent (node/README.md, Agent skills); whatever loads,
 a skill never approves a tool by itself.
 
+**Held back** (`"hold": true`, a `tool` entry only): for work the user validates before it acts
+(analyse, report, then act on what they approved). The task sees the tool from the start (its
+agent lists its tools once, and the node its servers when it fetches the task), but none of its
+calls is authorized, whatever the grid or a grant says (`lend.go`). The brain asks with `answer_task`
+`release` (the entries' `ref`, `mail.move`), for an entry lent held only: the user gets a
+[card](#the-approval-card), and only their yes releases it. The release is kept in the task's
+resources, what it needs is granted, it is logged in `decisions` (`release mail.move`), and the
+brain is told the answer. An entry lent outright beside a held one wins.
+
 **On a tainted turn** (the brain read external content), `run_task` refuses any `write` or `drop`
-entry, `trust_skills`, tools that may act, a Drive folder (its files server is lent whole for now)
-and any legacy `identities`: the brain asks the user and starts the task in the turn of their
-answer. Reads still go.
+entry, `trust_skills`, a Drive folder (its files server is lent whole for now) and any legacy
+`identities`: the brain asks the user and starts the task in the turn of their answer. Reads still
+go, and tools: what they may do is asked on a card at launch, Free writes included.
 
 ## Skills
 
@@ -1231,12 +1301,12 @@ unless `always_load`. Of its harness's own tools the brain keeps only the web an
 (`HarnessTools` of its role's card: `WebSearch`, `WebFetch`, `ToolSearch`, Claude Code's
 `--tools`); the rest (Agent, Bash, Edit, Read…) it never needs.
 
-**It reads by itself.** The brain is lent, with no configuration, every tool a server annotates
-`readOnlyHint` when the server is trusted for its annotations (any [access level](#access-levels)
-but `ask`; `reads` is the default of the presets), and every tool of a server whose access is
-`free`, through its proxy like any
-task. These free reads are allowed in advance in its assignment (`allowed_tools`) and called
-without a ticket: no permission round trip, a decision on record all the same. A read named by a
+**It reads by itself.** The brain is lent, with no configuration, every tool of the catalog that is
+not [Never](#access-grid), through its proxy like any task. Its Free reads are allowed in advance
+in its assignment (`allowed_tools`) and called without a ticket: no permission round trip, a
+decision on record all the same. Everything else goes through the policy: a Free write is allowed
+on a clean turn and asked on a [card](#the-approval-card) on a tainted one, On approval is a card
+per call. A read named by a
 policy rule of the configuration is not free: it goes through the policy with its input. The list
 is computed when its node fetches the task, so a tool or server added later reaches the brain at
 its next start (the proxy itself follows the catalog at once); in eriphe-core's first minute, the
@@ -2259,9 +2329,9 @@ inbound port:
   an intention, a watch, a setting, a presence mapping) that goes with a reply or a notification
   sent there comes as a card with Oui / Non buttons (`pc:<card>:<y|n>`), answered from the linked
   account only, through the same code as the workspace's cards (`telegram_cards.go`); none in
-  "alerts only". A task's permission is never approved from Telegram: one that is the user's
-  (user_only) is told with what waits and a link. (An optional "approve a permission from
-  Telegram" with a second, explicit confirmation is not built.)
+  "alerts only". The [access card](#the-approval-card) of a catalog tool goes there too. A task's
+  raw permission (a command, a JSON input) is never approved from Telegram: one that is the user's
+  (user_only) is told with what waits and a link.
 
 **Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
 A pure function, `route(note, signals, settings, tried)`, picks one device at a time from signals

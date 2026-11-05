@@ -5,62 +5,37 @@ import (
 	"strconv"
 )
 
-// A task's lent tools are its authorization. When the brain starts a task,
-// it lends it the catalog tools the work needs (run_task's resources), and
-// eriphe-core checks the lend: an acting tool only in a clean turn
-// (taintedResources), never more than the user opened. Once lent, a tool is
-// the task's to use: its calls are not asked again, one by one.
+// What a task is lent is what it may reach, not what it may do: the grid
+// decides each call (access_grid.go). The lend only says how a task
+// started, which a Free write depends on (decideTask).
 //
-// Only the reads of a task the brain started alone (woken by a watch or an
-// event): its actions are authorized by a lend made in the turn of one of
-// my messages, the request it answers (lentByUserKey).
-//
-// What stays out of a lend, decided by the policy as before:
-//
-//   - the built-in denials, the rules of the configuration and the actions
-//     the user allowed for good;
-//   - a server set to ask (the user wants to be asked for everything) or
-//     read-only;
-//   - an action that reaches outside (sending a mail, publishing), or that
-//     no annotation the server is trusted for says stays inside: the
-//     user's to approve.
-//
-// What is left to the brain (a tool it did not lend reads as nothing here)
-// is its to answer; if its turn ends without an answer, the request is the
-// user's (brainLeftPermissions).
+// A tool may also be lent held back (a resource with hold): for work the
+// user validates before it acts (analyse, report, then act on what they
+// approved). The task sees it from the start, since its agent lists its
+// tools once, but until the user approves its release on a card
+// (access_card.go) a Free does not hold for it.
 
-const lentReason = "prêté à la tâche"
-
-// lendAllows tells whether a task's lend authorizes a call of a catalog
-// tool, by its Claude Code name: lent, and a read or an action that stays
-// inside its service, by the annotations of a server trusted for them.
-func (c *core) lendAllows(t *TaskRow, claudeName string) bool {
-	server, name, ok := splitToolName(claudeName)
-	if !ok || c.pool == nil {
-		return false
+// heldTool tells whether a task's resources hold a tool back: lent held,
+// and covered by no entry lent outright.
+func heldTool(list []ResourceRef, server, tool string) bool {
+	held := false
+	for _, e := range list {
+		if e.Kind != resTool || !grantAllows([]string{e.Ref}, server, tool) {
+			continue
+		}
+		if !e.Hold {
+			return false
+		}
+		held = true
 	}
-	u := c.pool.get(server)
-	if u == nil || !u.srv.trusts() {
-		return false
-	}
-	tool := u.toolByClaudeName(name)
-	if tool == nil || !grantAllows(c.taskGrant(t), server, tool.Name) || !lends(u.srv, tool) {
-		return false
-	}
-	a := tool.Annotations
-	if a == nil {
-		return false
-	}
-	if a.ReadOnlyHint {
-		return true
-	}
-	return a.OpenWorldHint != nil && !*a.OpenWorldHint && c.store.get(lentByUserKey(t.ID)) != ""
+	return held
 }
 
-// lentByUserKey marks a task started in the turn of one of my messages (or
-// as a watch I authorised in advance): its lend of actions answers what I
-// asked. A task the brain started alone (woken by a watch, an event) has
-// its reads only: its actions are asked as before.
+// lentByUserKey marks a clean start: a task started in a clean turn of one
+// of my messages, or as a watch I authorised in advance. It keeps its Free
+// writes whatever it reads since. Any other task, started on a tainted turn
+// or by the brain alone (woken by a watch, an event), has its Free writes
+// On approval.
 func lentByUserKey(id string) string { return "lent_by_user:" + id }
 
 // turnFromUser tells whether the brain's turn going on was started by a

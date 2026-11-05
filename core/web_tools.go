@@ -573,6 +573,12 @@ func readToolForm(r *http.Request) toolForm {
 // is the entry being edited, whose secret references stay unless replaced.
 func (f toolForm) server(r *http.Request, old *Server) (Server, credentials, error) {
 	s := Server{Use: f.Use}.withLevel(f.Access)
+	if old != nil {
+		s.Exceptions = old.Exceptions
+		if old.level() == f.Access { // the form shows a level: the grid behind it stays
+			s.Grid, s.AccountGrids, s.TrustAnnotations = old.Grid, old.AccountGrids, old.TrustAnnotations
+		}
+	}
 	if f.Use == "" {
 		return s, nil, errors.New("form.nouse")
 	}

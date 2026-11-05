@@ -204,8 +204,8 @@ func (w *web) shownPermissions(st *taskStatus, away bool) []map[string]any {
 	var out []map[string]any
 	for _, p := range st.PendingPermissions {
 		pid := fmt.Sprint(p["id"])
-		if w.c.store.answered(st.Task.ID, pid) {
-			continue
+		if w.c.store.answered(st.Task.ID, pid) || w.c.accessAsked(st.Task.ID, pid) {
+			continue // a card of the conversation asks it
 		}
 		if away || w.c.store.userOnly(st.Task.ID, pid) != "" {
 			out = append(out, p)
@@ -338,6 +338,7 @@ type taskDetail struct {
 	Card        taskCard
 	Events      []EventRow
 	Credentials []CredentialEntry // what it asked for (credentials.go)
+	Grants      []accessNeed      // the tool accesses the user granted it (access_card.go)
 	Perm        *permView
 	Flash       string
 	OK          bool
@@ -350,6 +351,7 @@ func (w *web) detail(id string) (*taskDetail, error) {
 	}
 	d := &taskDetail{Card: w.card(st)}
 	d.Credentials, _ = w.c.store.credentialLog(id, 20)
+	d.Grants = w.c.store.accessGrants(id)
 	for _, e := range st.Recent {
 		switch e.Type {
 		case "text":

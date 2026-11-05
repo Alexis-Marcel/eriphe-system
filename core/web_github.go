@@ -485,7 +485,8 @@ func (c *core) putGitHubConnection(name string, srv Server, exists bool, account
 	}
 	had := srv.authKind()
 	if srv.local() || srv.URL == "" {
-		srv = Server{Use: srv.Use, Access: srv.Access, TrustAnnotations: srv.TrustAnnotations, AlwaysLoad: srv.AlwaysLoad, Timeout: srv.Timeout}
+		srv = Server{Use: srv.Use, Access: srv.Access, TrustAnnotations: srv.TrustAnnotations, AlwaysLoad: srv.AlwaysLoad, Timeout: srv.Timeout,
+			Grid: srv.Grid, Exceptions: srv.Exceptions, AccountGrids: srv.AccountGrids}
 		srv.URL = "https://api.githubcopilot.com/mcp/"
 	}
 	srv.Auth = &ServerAuth{GitHubApp: true, Account: account}
