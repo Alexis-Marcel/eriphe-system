@@ -382,7 +382,8 @@ func (c *core) taskAccessHandler() http.Handler {
 			return
 		}
 		names := c.accessesOn(t, target)
-		if len(names) == 0 {
+		git := gitLent(t, target) // git_access.go
+		if len(names) == 0 && !git {
 			http.Error(w, "no access of this task reaches "+target, http.StatusForbidden)
 			return
 		}
@@ -397,6 +398,13 @@ func (c *core) taskAccessHandler() http.Handler {
 		if auth != "" {
 			r.Header.Set("Authorization", auth)
 		}
+		gitScrub := strings.NewReplacer()
+		if git {
+			var goesOn bool
+			if gitScrub, goesOn = c.gitRequest(w, t, r, uri); !goesOn {
+				return
+			}
+		}
 		scrub, err := c.injectAccess(t, names, target, r, uri)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusForbidden)
@@ -410,7 +418,7 @@ func (c *core) taskAccessHandler() http.Handler {
 			ModifyResponse: func(res *http.Response) error {
 				for k, vs := range res.Header {
 					for i := range vs {
-						res.Header[k][i] = scrub.Replace(vs[i])
+						res.Header[k][i] = gitScrub.Replace(scrub.Replace(vs[i]))
 					}
 				}
 				return nil

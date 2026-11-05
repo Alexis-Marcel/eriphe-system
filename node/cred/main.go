@@ -4,7 +4,9 @@
 // the node asks eriphe-core, which decides (is the service lent to the task,
 // is the repository allowed, read or write, does the user approve) and
 // mints a short-lived token for that one repository. No long-lived secret
-// is ever in the task.
+// is ever in the task; for git, nor is the token: what it gets is a
+// placeholder, and the real one goes in on the way out, past the task's
+// relay (core/git_access.go). This helper need not know.
 //
 //	eriphe-cred get|store|erase   git's credential helper protocol (stdin, stdout)
 //	eriphe-cred gh ARGS...        runs the real gh with a token for this one command
