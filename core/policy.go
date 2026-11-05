@@ -322,12 +322,8 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 			continue
 		}
 		decision, reason := c.decideTask(t, tool, input)
-		if decision == decideBrain {
-			if why := c.undeclaredPush(id, tool, input); why != "" {
-				decision, reason = decideDeny, why
-			} else if inContainer(tool) {
-				decision = decideAllow
-			}
+		if decision == decideBrain && inContainer(tool) {
+			decision = decideAllow
 		}
 		switch decision {
 		case decideAllow, decideDeny:
@@ -364,80 +360,6 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 // there is allowed, without waking the brain.
 func inContainer(tool string) bool {
 	return tool != credentialTool && !strings.HasPrefix(tool, "mcp__")
-}
-
-// gitPush finds the git push commands of a shell line, and their arguments.
-// git's own options may come before push (git -C dir push).
-var gitPush = regexp.MustCompile(`(?:^|[;&|(]\s*|\s)git(?:\s+-[^\s;&|]+(?:\s+[^-\s;&|][^\s;&|]*)?)*\s+push\b([^;&|]*)`)
-
-// undeclaredPush is why a push is refused: the task was lent its
-// repository for write on a declared branch, which made the first push to
-// that branch approved (credentials.go), and this one goes elsewhere.
-func (c *core) undeclaredPush(taskID, tool string, input map[string]any) string {
-	if tool != "Bash" {
-		return ""
-	}
-	cmd, _ := input["command"].(string)
-	if !strings.Contains(cmd, "push") {
-		return ""
-	}
-	t, err := c.store.task(taskID)
-	if err != nil {
-		return ""
-	}
-	branch := ""
-	for _, e := range t.Resources {
-		if e.Kind == resRepo && e.Access == accessWrite {
-			branch = e.Branch
-		}
-	}
-	if branch == "" {
-		return ""
-	}
-	for _, m := range gitPush.FindAllStringSubmatch(cmd, -1) {
-		if dst := pushTarget(strings.Fields(m[1]), branch); dst != "" {
-			return "pushes to " + dst + ", not to the branch it was lent (" + branch + ")"
-		}
-	}
-	return ""
-}
-
-// redirection is a shell redirection token (2>, >>out, 2>&1, <in): not a
-// push argument. A bare operator takes the next token as its file.
-var redirection = regexp.MustCompile(`^[0-9]*(>>?|<<?|>&|&>)`)
-
-// pushTarget is where a git push's arguments go other than branch, or ""
-// when they push the current branch or branch only.
-func pushTarget(args []string, branch string) string {
-	positional := 0
-	for i := 0; i < len(args); i++ {
-		a := strings.Trim(args[i], `"'`)
-		switch {
-		case redirection.MatchString(a):
-			if redirection.FindString(a) == strings.TrimRight(a, "&") {
-				i++ // its file
-			}
-		case a == "--all" || a == "--mirror" || a == "--tags":
-			return a
-		case a == "-o" || a == "--push-option" || a == "--repo" || a == "--receive-pack" || a == "--exec":
-			i++ // its value
-		case strings.HasPrefix(a, "-"):
-		default:
-			positional++
-			if positional == 1 {
-				continue // the remote
-			}
-			dst := strings.TrimPrefix(a, "+")
-			if _, after, ok := strings.Cut(dst, ":"); ok {
-				dst = after
-			}
-			dst = strings.TrimPrefix(dst, "refs/heads/")
-			if dst != "" && dst != "HEAD" && dst != branch {
-				return dst
-			}
-		}
-	}
-	return ""
 }
 
 // Decisions are kept, append-only, to read back what was allowed and by whom.

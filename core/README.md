@@ -488,8 +488,9 @@ new access token is used. The database file is as sensitive as `/secrets`.
 - Every call is a permission request first, under the policy below; the proxy enforces it with
   tickets.
 - git and gh in a task get [credentials on demand](#credentials-on-demand): a one-hour token for one
-  repository, decided by the policy, approved by the user for a first push, and logged; a vendor's
-  long-lived token is lent only as the flagged fallback, without a GitHub App.
+  repository, decided by the policy, approved by the user for a first push, and logged; git's goes
+  in on the way out and stays out of the task; a vendor's long-lived token is used only as the
+  flagged fallback, without a GitHub App.
 - What servers say (descriptions, results, errors) is data for the agents, never instructions:
   the brain's prompt says so, and the policy, not the brain, decides what reaches a third party.
 
@@ -1135,11 +1136,31 @@ the node relays it to `POST /v1/node/tasks/{id}/credential` with its own secret 
 A repository lent for `write` on a branch makes its first push there approved, and the pull request
 gh opens from it (gh's token writes pull requests and issues, never contents; `gh pr merge`, a
 release, a repository's settings, its secrets and `gh api -X` stay the user's, built-in asks of
-policy.go); a `git push` of that
-task to another branch (`git push origin other`, `HEAD:other`, `--all`, `--tags`, `--mirror`) is the
-refused (`undeclaredPush`, policy.go). It reads the command line, shell redirections (`2>&1`,
-`> out`) aside: a push of the current branch after the task switched to another one is decided by
-its credential, as any other.
+policy.go).
+
+**git holds no token.** For a task lent a GitHub repository, the node's relay decrypts `github.com`
+as a host of an [access](../node/README.md#accesses), and `eriphe-cred` gets a placeholder where it would get the
+token, once the decision above is made, an approval included. The token is minted here and goes in
+on the way out (`git_access.go`):
+
+```
+git → the node's relay → eriphe-core (decides, mints) → GitHub
+```
+
+The node says which hosts a task's relay decrypts, whatever the task sent: a task started before
+this, or on an older node, still gets the token. gh still does too, for its one process, with no
+right to a repository's contents when it comes from the GitHub App.
+
+- **Each request is decided again**, from what it is and not from what the helper said: a push is
+  `git-receive-pack`, whatever `eriphe-cred` asked for, and a placeholder proves nothing. A write
+  that needs an approval the task did not get is refused here (403), not asked.
+- **What is pushed is not read**, as for any access: what is decided is the lend, a repository, read
+  or write. The `branch` lent is what the task is told to push to, and the real limit is the
+  provider's: a token for that one repository, and the repository's protection rules on GitHub. The
+  shell rules (policy.go) stop a push to `main` or a forced one by mistake, not a script.
+- Other requests to `github.com` go as they are, with no token: a public clone, a release's
+  download. So they cross eriphe-core too, and a program that refuses the task's certificate fails
+  on `github.com`. Large File Storage is a write when the task may write there, else a read.
 
 ```json
 "policy": {"credentials": [

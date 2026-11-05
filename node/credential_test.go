@@ -64,6 +64,26 @@ func TestCredentialAllowAndDeny(t *testing.T) {
 	}
 }
 
+// What the task's relay decrypts is the node's word: a token instead of a
+// placeholder is not the task's to ask for, nor the other way round.
+func TestCredentialSaysWhatIsRelayed(t *testing.T) {
+	var asked []credRequest
+	task, srv := credTask(t, func(_ context.Context, _ *Task, req credRequest) (*credAnswer, error) {
+		asked = append(asked, req)
+		return &credAnswer{Decision: "allow", Username: "x-access-token", Password: "eriphe-git-t-1"}, nil
+	})
+	forged := `{"host":"github.com","path":"owner/repo.git","access":"write","relayed":["forged.example.org:443"]}`
+	postCred(t, srv, "task-secret", forged)
+	if len(asked[0].Relayed) != 0 {
+		t.Fatalf("no access, yet %v", asked[0].Relayed)
+	}
+	task.Spec.Accesses = []TaskAccess{{Name: "github", Hosts: []string{"github.com:443"}}, {Name: "npm", Hosts: []string{"registry.example.org:443"}}}
+	postCred(t, srv, "task-secret", forged)
+	if got := asked[1].Relayed; len(got) != 2 || got[0] != "github.com:443" || got[1] != "registry.example.org:443" {
+		t.Fatalf("relayed %v", got)
+	}
+}
+
 // An approval goes through the task's permission flow, then eriphe-core is
 // asked again.
 func TestCredentialAsksTheUser(t *testing.T) {

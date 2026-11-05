@@ -98,7 +98,7 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 			}
 			spec.Identity = env
 			spec.TZ = c.conf().TimeZone
-			spec.Accesses = c.lentAccesses(a.ID, a.Resources) // lent_access.go
+			spec.Accesses = append(c.lentAccesses(a.ID, a.Resources), lentGit(a.ID, a.Resources)...) // lent_access.go, git_access.go
 			if spec.Folders, err = c.specFoldersOn(name, a.Folders, a.Resources); err != nil {
 				// A folder was removed (or moved) under the task.
 				log.Printf("task %s fails: %v", a.ID, err)

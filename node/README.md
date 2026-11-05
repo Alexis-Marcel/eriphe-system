@@ -512,12 +512,15 @@ them to `claude-code` tasks only.
 The task listener also serves `POST /v1/task/credential` (`credential.go`), with the task's own
 secret: `eriphe-cred` in the task asks it for a credential (`{protocol, host, path, access,
 tool}`), the node relays it to eriphe-core (`POST /v1/node/tasks/{id}/credential`, with the
-node's secret and certificate, like reports) and answers `{username, password, expires}`, or 403
+node's secret and certificate, like reports), adding `relayed`, the hosts of the task's accesses
+whatever the task sent, and answers `{username, password, expires}`, or 403
 with the reason, or 404 when eriphe-core has no service for the host (git then goes on to another
 helper). When eriphe-core says the user must approve, the node asks a permission `Credential` of
 the task (the same flow, the same card in the workspace) and, once allowed, asks eriphe-core again.
 The tool waits meanwhile (up to the hour of any permission). See core/README.md, "Credentials on
-demand", for the decision and the GitHub App.
+demand", for the decision and the GitHub App. A task lent a GitHub repository has `github.com:443`
+among its [accesses](#accesses), so git's `password` is a placeholder, and the token goes in at
+eriphe-core; the node never sees it.
 
 Every task gets `ERIPHE_CRED_URL` (`<callback-url>/v1/task/credential`) and `ERIPHE_TASK_SECRET`.
 Its entrypoint makes git use the helper when it is there and the task has no `GH_TOKEN` identity:

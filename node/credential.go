@@ -41,6 +41,10 @@ type credRequest struct {
 	Path     string `json:"path,omitempty"`
 	Access   string `json:"access"`
 	Tool     string `json:"tool,omitempty"`
+	// Relayed are the hosts this task's relay decrypts: eriphe-core gives
+	// git a placeholder for those, not a token. This node's word, whatever
+	// the task sent.
+	Relayed []string `json:"relayed,omitempty"`
 }
 
 // credAnswer is eriphe-core's answer.
@@ -77,6 +81,10 @@ func (n *node) credentialHandlerWith(ask credentialAsker) http.Handler {
 		if err := json.NewDecoder(io.LimitReader(r.Body, 8<<10)).Decode(&req); err != nil || req.Host == "" {
 			writeCred(w, http.StatusBadRequest, "a credential request names a host")
 			return
+		}
+		req.Relayed = nil
+		for _, a := range t.Spec.Accesses {
+			req.Relayed = append(req.Relayed, a.Hosts...)
 		}
 		for asked := false; ; asked = true {
 			a, err := ask(r.Context(), t, req)

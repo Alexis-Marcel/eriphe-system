@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 )
 
 // The old fields of run_task are read into resources; the new ones are
@@ -255,58 +254,6 @@ func TestCredentialFromRepoResource(t *testing.T) {
 	// From before resources, without the GitHub tool: refused, as then.
 	if a := c.credential(ctx, old, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read"}); a.Decision != decideDeny {
 		t.Fatalf("old task without the tool: %+v", a)
-	}
-}
-
-// A push elsewhere than the branch lent for write is refused.
-func TestUndeclaredPush(t *testing.T) {
-	for cmd, want := range map[string]string{
-		"git push":                                   "",
-		"git push -u origin eriphe/fix":              "",
-		"git push origin HEAD":                       "",
-		"git push origin HEAD:refs/heads/eriphe/fix": "",
-		"git -C /work/repo push origin other":        "other",
-		"git add . && git push origin HEAD:other":    "other",
-		"git push --tags":                            "--tags",
-		"git push -o ci.skip origin eriphe/fix":      "",
-		`git commit -m "push it" && git status`:      "",
-		"git push origin +dev":                       "dev",
-		"git push origin eriphe/fix 2>&1 | tail -5":  "",
-		"git push origin eriphe/fix 2>/dev/null":     "",
-		"git push origin eriphe/fix > out.txt":       "",
-		"git push origin eriphe/fix >> log 2>&1":     "",
-		"git push origin other 2>&1":                 "other",
-	} {
-		got := ""
-		for _, m := range gitPush.FindAllStringSubmatch(cmd, -1) {
-			if got = pushTarget(strings.Fields(m[1]), "eriphe/fix"); got != "" {
-				break
-			}
-		}
-		if got != want {
-			t.Errorf("%s: %q, want %q", cmd, got, want)
-		}
-	}
-
-	c, _ := credCore(t, "")
-	c.store.insertTask(&TaskRow{ID: "t-2", Node: "pc", Runtime: "claude-code", Kind: "worker", Prompt: "x", State: stateWaitingPermission,
-		Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/fix"}}})
-	ev := func(seq int, pid, cmd string) []EventRow {
-		return []EventRow{{Seq: seq, Time: time.Now(), Type: "permission", Data: map[string]any{"id": pid, "tool_name": "Bash", "input": map[string]any{"command": cmd}}}}
-	}
-	c.applyPolicy("t-2", ev(1, "p1", "git push origin eriphe/fix"))
-	c.applyPolicy("t-2", ev(2, "p2", "git push origin release"))
-	if d := decisionOf(c, "t-2", "p1"); d != decideAllow {
-		t.Fatalf("push on its branch: %q", d)
-	}
-	if d := decisionOf(c, "t-2", "p2"); d != decideDeny {
-		t.Fatalf("push elsewhere: %q", d)
-	}
-	// A task lent for read, or from before resources: its credential decides.
-	c.store.insertTask(&TaskRow{ID: "t-3", Node: "pc", Runtime: "claude-code", Kind: "worker", Prompt: "x", State: stateWaitingPermission})
-	c.applyPolicy("t-3", ev(1, "p1", "git push origin release"))
-	if c.store.userOnly("t-3", "p1") != "" || decisionOf(c, "t-3", "p1") != decideAllow {
-		t.Fatal("an old task's push was not left to its credential")
 	}
 }
 

@@ -34,7 +34,9 @@ import (
 // token, one hour (github_app.go). Without the app, the GitHub tool's own
 // token, long-lived and not limited to the repository: the user approves
 // it first. Every request is logged (credential_log) and shown in the
-// task's details.
+// task's details. git gets a placeholder rather than the token, which goes
+// in on the way out (git_access.go); gh still gets the token, until its
+// actions go through the catalog.
 //
 // A task from before resources has none kept: its repository is the one it
 // was asked to work on (spec.Repo), lent for read, and the service is lent
@@ -65,6 +67,9 @@ type credRequest struct {
 	Path     string `json:"path,omitempty"`
 	Access   string `json:"access"`
 	Tool     string `json:"tool,omitempty"` // git or gh
+	// Relayed are the hosts the task's relay decrypts: the node's word, never
+	// the task's (git_access.go).
+	Relayed []string `json:"relayed,omitempty"`
 }
 
 // credAnswer is eriphe-core's answer to the node.
@@ -292,9 +297,8 @@ func (c *core) handleTaskCredential(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c.credential(r.Context(), t, req))
 }
 
-// credential decides a request, mints the credential if allowed, and logs it.
-func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) credAnswer {
-	tool := orStr(req.Tool, "git")
+// credentialFacts is what is known of a task when a credential is decided.
+func (c *core) credentialFacts(t *TaskRow) credFacts {
 	facts := credFacts{Kind: t.Kind, Tainted: c.taskTaint(t)}
 	facts.Granted = func(repo, access string) bool {
 		// An approval given at launch knew of no external content read since (task_start.go).
@@ -304,6 +308,13 @@ func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) cred
 	facts.Repos, facts.Lent = c.taskRepos(t)
 	_, appErr := loadGitHubApp()
 	facts.Fallback = appErr == errNoGitHubApp
+	return facts
+}
+
+// credential decides a request, mints the credential if allowed, and logs it.
+func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) credAnswer {
+	tool := orStr(req.Tool, "git")
+	facts := c.credentialFacts(t)
 	d := decideCredential(c.conf().Policy, req, facts)
 	if d.Decision == decideAsk && facts.Fallback {
 		if _, err := c.githubToolToken(); err != nil {
@@ -323,6 +334,10 @@ func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) cred
 			break
 		}
 		a.Username, a.Password, a.Expires, source = m.Username, m.Password, m.Expires, m.Source
+		if gitRelayed(req) {
+			// The token stays here, minted so that a failure is told now.
+			a.Password, a.Expires = gitPlaceholder(t.ID), time.Time{}
+		}
 		if m.Source == sourceToolToken {
 			a.Reason = "fallback: the GitHub tool's own token (no GitHub App): long-lived and not limited to " + d.Repo
 		}

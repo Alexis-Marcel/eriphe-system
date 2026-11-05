@@ -14,7 +14,7 @@ func init() {
 var githubStrings = map[string]map[string]string{
 	"fr": {
 		"github.title":            "GitHub",
-		"github.lead":             "Avec l'app GitHub de {{name}}, chaque tâche reçoit un jeton d'une heure, pour son seul dépôt, et pousse sa branche sans rien te demander. Aucun jeton durable n'entre dans une tâche. Les connexions GitHub de tes outils peuvent passer par la même app.",
+		"github.lead":             "Avec l'app GitHub de {{name}}, chaque tâche reçoit un jeton d'une heure, pour son seul dépôt, et pousse sa branche sans rien te demander. Aucun jeton durable n'entre dans une tâche. {{name}} ne lit pas ce qu'une tâche pousse : pour protéger main, règle la protection des branches sur GitHub. Les connexions GitHub de tes outils peuvent passer par la même app.",
 		"github.formhint":         "Avec un jeton, {{name}} te demande ton accord chaque fois qu'une tâche doit pousser.",
 		"github.formlink":         "Choisir plutôt l'app",
 		"github.edithint":         "Cette connexion passe par un jeton : {{name}} te demande ton accord chaque fois qu'une tâche doit pousser.",
@@ -103,7 +103,7 @@ var githubStrings = map[string]map[string]string{
 	},
 	"en": {
 		"github.title":            "GitHub",
-		"github.lead":             "With {{name}}'s GitHub App, each task gets a one-hour token for its own repository only, and pushes its branch without asking you. No long-lived token ever enters a task. Your tools' GitHub connections can use the same app.",
+		"github.lead":             "With {{name}}'s GitHub App, each task gets a one-hour token for its own repository only, and pushes its branch without asking you. No long-lived token ever enters a task. {{name}} does not read what a task pushes: to protect main, set branch protection on GitHub. Your tools' GitHub connections can use the same app.",
 		"github.formhint":         "With a token, {{name}} asks for your approval each time a task needs to push.",
 		"github.formlink":         "Pick the app instead",
 		"github.edithint":         "This connection uses a token: {{name}} asks for your approval each time a task needs to push.",

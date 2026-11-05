@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"html"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -328,7 +329,7 @@ func TestSSHAccessPage(t *testing.T) {
 	public, _ := a.sshPublicKey("box")
 	_, body, _ = tw.do("GET", "/settings/accesses/box/edit", nil, nil)
 	secret, _ := readSecret(a.Secret)
-	if !strings.Contains(body, public) || strings.Contains(body, secret) || strings.Contains(body, "PRIVATE KEY") {
+	if !strings.Contains(html.UnescapeString(body), public) || strings.Contains(body, secret) || strings.Contains(body, "PRIVATE KEY") {
 		t.Fatalf("the page: %s", body)
 	}
 	if !strings.Contains(body, "/settings/accesses/box/test") {
