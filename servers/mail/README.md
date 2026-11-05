@@ -15,22 +15,23 @@ access token lent by eriphe-core and used with XOAUTH2 (the server never runs an
 | `create_draft` | plain text draft appended to Drafts; `reply_to` sets In-Reply-To/References, recipients and subject | not destructive |
 | `send_message` | send a draft (`draft_id`) or a new message; a separate tool so the policy can leave it to the user | destructive, open world |
 | `mark` | read/unread, flagged/unflagged | idempotent |
-| `move` | archive, trash, inbox, junk or any folder | destructive |
+| `move` | archive, inbox or any folder but the trash and the junk folder, however they are named | not destructive |
+| `trash` | to the trash, or with `junk` to the junk folder, where the server may delete it | destructive |
 
 Message ids are opaque (account, folder, UIDVALIDITY, UID). A folder can be named by its role, so
 "archive" is `[Gmail]/All Mail` on Gmail and `Archive` elsewhere.
 
 Every tool takes an optional `account` (its `name`). The reads without one cover every account;
-`create_draft` and `send_message` need one when there are several. `read_message`, `mark` and
-`move` work from the ids, and refuse an id of another account than the one named, so a caller
+`create_draft` and `send_message` need one when there are several. `read_message`, `mark`, `move`
+and `trash` work from the ids, and refuse an id of another account than the one named, so a caller
 that names the account it means cannot act on another by mistake. An account with `read_only`
-can be searched and read, never written from: no draft, no send, no mark, no move
+can be searched and read, never written from: no draft, no send, no mark, no move, no trash
 (`list_accounts` shows it, with `can_send` false).
 
 A message found in several accounts or folders (sent from one account to another, forwarded, sent
 to both) is shown once by `search_messages`: the newest copy, the others in its `copies` (id,
-account, folder, unread), matched by Message-ID; a message without one is never matched. `mark`
-and `move` act on the id given only.
+account, folder, unread), matched by Message-ID; a message without one is never matched. `mark`,
+`move` and `trash` act on the id given only.
 
 Dates are shown in the zone of the process (`TZ`, which eriphe-core sets to the user's zone, e.g.
 `Europe/Paris`) with their offset, e.g. `2026-10-19T10:00:00+02:00`; search and read results also
@@ -51,7 +52,7 @@ at each start, and the container stays read-only.
   new message, a flag change or an expunge in INBOX is seen within a second; every cached
   folder is also checked every 2 minutes (only what changed is fetched: UIDs, then flags,
   `CHANGEDSINCE` with CONDSTORE; nothing at all when `HIGHESTMODSEQ` did not move). Writes
-  (`mark`, `move`, drafts, `send_message`) still go to the server, update the cache at once and
+  (`mark`, `move`, `trash`, drafts, `send_message`) still go to the server, update the cache at once and
   trigger a sync. A dropped connection is retried with backoff (5 s doubling to 5 min).
 - **Fallback**: the server answers what the cache cannot answer for sure: a `text` search
   (bodies), another folder, a `since` older than the window or fewer matches than the limit in

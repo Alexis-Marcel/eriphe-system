@@ -274,6 +274,20 @@ func (a *Account) resolveFolder(c *imapclient.Client, s string) (string, error) 
 	return "", fmt.Errorf("%s: no folder %q (see list_folders)", a.Name, s)
 }
 
+// keeps refuses a folder that discards what it gets.
+func (a *Account) keeps(c *imapclient.Client, folder string) error {
+	folders, err := a.cachedFolders(c)
+	if err != nil {
+		return err
+	}
+	for _, f := range folders {
+		if f.Name == folder && (f.Role == "trash" || f.Role == "junk") {
+			return fmt.Errorf("%s: %q is the %s folder: use the trash tool", a.Name, folder, f.Role)
+		}
+	}
+	return nil
+}
+
 // selectRef opens the message's folder and checks the id is still valid.
 func (a *Account) selectFolder(c *imapclient.Client, folder string, uidValidity uint32, readOnly bool) (*imap.SelectData, error) {
 	sel, err := c.Select(folder, &imap.SelectOptions{ReadOnly: readOnly}).Wait()
@@ -909,8 +923,9 @@ func (a *Account) Mark(ctx context.Context, groups map[folderKey][]imap.UID, key
 }
 
 // Move moves messages to a folder or role and returns their new ids when the
-// server reports them.
-func (a *Account) Move(ctx context.Context, groups map[folderKey][]imap.UID, keys []folderKey, to string) ([]string, string, error) {
+// server reports them. The trash and the junk folder take discard, however
+// they are named.
+func (a *Account) Move(ctx context.Context, groups map[folderKey][]imap.UID, keys []folderKey, to string, discard bool) ([]string, string, error) {
 	var ids []string
 	var dest string
 	defer a.cache.poke()
@@ -918,6 +933,11 @@ func (a *Account) Move(ctx context.Context, groups map[folderKey][]imap.UID, key
 		var err error
 		if dest, err = a.resolveFolder(c, to); err != nil {
 			return err
+		}
+		if !discard {
+			if err := a.keeps(c, dest); err != nil {
+				return err
+			}
 		}
 		for _, k := range keys {
 			if k.Folder == dest {
