@@ -220,8 +220,8 @@ func deviceLabel(ua, lang string) string {
 	return tr(lang, "push.device")
 }
 
-// The watch on what waits for the user: a permission only they can give
-// (or any, while the assistant is away), and a question the assistant
+// The watch on what waits for the user: a permission shown to them (theirs,
+// or any while the assistant is away: web_pages.go), and a question the assistant
 // ended its message with. Each is told once.
 
 func (w *web) followWaiting(stop <-chan struct{}) {
@@ -247,11 +247,7 @@ func (w *web) pushWaiting() {
 	st := w.c.store
 	_, perms, err := w.tasksAndPerms()
 	if err == nil {
-		away := w.brainState() != "" && w.brainState() != "thinking"
-		for _, pv := range perms {
-			if pv.UserOnly == "" && !away {
-				continue // the assistant decides, or asks
-			}
+		for _, pv := range perms { // the ones shown to the user (web_pages.go)
 			key := "push_perm:" + pv.Task.ID + ":" + pv.ID
 			if st.get(key) != "" {
 				continue

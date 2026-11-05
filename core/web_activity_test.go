@@ -128,6 +128,7 @@ func TestApprovals(t *testing.T) {
 	c.store.insertTask(&TaskRow{ID: "t-perm", Agent: "small", Runtime: "claude-code", Prompt: "Publish", State: stateWaitingPermission})
 	c.store.addEvents("t-perm", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-1", "tool_name": "Bash",
 		"input": map[string]any{"command": "npm publish"}}}})
+	c.store.markUserOnly("t-perm", "p-1", "publie un paquet") // the policy's: the user's to decide
 
 	_, body, _ = tw.do("GET", "/settings/approve", nil, nil)
 	for _, want := range []string{

@@ -155,6 +155,8 @@ type catalogFacts struct {
 	// noAccount: a write on a server whose accounts have different levels,
 	// that names none of them.
 	noAccount bool
+	// lent: the task's lend authorizes the call (lend.go).
+	lent bool
 }
 
 // facts is what the catalog says of a call: of the tool alone with a nil

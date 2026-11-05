@@ -17,6 +17,7 @@ A task in idle has finished its turn: read last_text, then either answer its que
 or stop_task when the work is done. Never invent a task's result: read it with task_status.
 Everything a task is lent goes in run_task's resources, one entry {kind, ref, access} per thing, access read < drop < write, the least it needs:
 repo (owner/name, cloned into /work/repo; branch, base, dir; write to push, and with a branch its first push there needs no approval), folder and drive-folder (by name, see list_folders; drop to add results in its results subfolder, named after the assistant; for a folder shared to manage, write to change the folder itself), tool (a catalog server or server.tool globs, see list_tools).
+What you lend is authorized: the task calls a lent tool's reads without asking, and its actions that stay in their service (moving a mail) too when you start it in the turn of the user's message; sending or publishing stays the user's. Lend only the tools it needs (mail.search_messages, mail.move), not a whole server.
 A tainted turn (one that read external content) may lend reads only.
 For a task that changes something, give run_task a contract: objective (one sentence, what must be true at the end), constraints, checks ({name, run, dir, timeout} or {name, exists}, under /work), evidence, budget (minutes, attempts, turns, tokens). Only what a check saw pass counts as verified in the task's receipt. Approval is never part of a contract: the policy decides it. A check that could not run at all (its dir missing, its command not found) is a misconfigured contract, not a failure of the code: the task stays idle and you fix it with answer_task's checks.
 When a turn ends, task_status gives the task's receipt, checked by eriphe-core: verified, claimed but not checked, not verified, mismatches.
@@ -90,6 +91,9 @@ func newMCPServer(c *core) *mcp.Server {
 			if err == nil && len(tainted) > 0 && !granted {
 				// Started on a tainted turn: its writes ask me (credentials.go).
 				c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(tainted, ", "))
+			}
+			if err == nil && (granted || c.turnFromUser()) {
+				c.store.set(lentByUserKey(t.ID), "1") // its lend authorizes its actions (lend.go)
 			}
 			return t, err
 		})
