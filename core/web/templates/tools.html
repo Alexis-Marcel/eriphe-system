@@ -833,7 +833,7 @@
 <section class="panel stack" id="lent-ssh">
   <h3>{{t "lent.ssh.keytitle"}}</h3>
   <p class="small">{{tf "lent.ssh.keylead" .User}}</p>
-  <div class="code one-line"><pre id="lent-public-key">{{.PublicKey}}</pre><button class="btn btn-soft sm" type="button" data-copy="lent-public-key">{{t "machines.copy"}}</button></div>
+  <div class="code"><pre id="lent-public-key">{{.PublicKey}}</pre><button class="btn btn-soft sm" type="button" data-copy="lent-public-key">{{t "machines.copy"}}</button></div>
   {{if .Tested}}<p class="small" role="status">{{t "lent.test.ok"}}</p>{{end}}
   {{if .Fingerprint}}<p class="small muted">{{t "lent.ssh.pinned"}} <span class="mono">{{.Fingerprint}}</span></p>
   {{else}}<p class="small notice-line">{{t "lent.ssh.notpinned"}}</p>{{end}}

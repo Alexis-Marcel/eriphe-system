@@ -100,11 +100,11 @@ func (f accessForm) access() Access {
 }
 
 func (w *web) handleNewAccess(rw http.ResponseWriter, r *http.Request, s *session) {
-	kind := ""
+	kind, title := "", "lent.add"
 	if r.URL.Query().Get("kind") == accessSSH {
-		kind = accessSSH
+		kind, title = accessSSH, "lent.addssh"
 	}
-	w.render(rw, r, s, "settings", "", page{Title: "lent.add", Nav: "settings", Tab: "tools", View: "lent-access", Data: accessForm{Value: gridApproval, Kind: kind}})
+	w.render(rw, r, s, "settings", "", page{Title: title, Nav: "settings", Tab: "tools", View: "lent-access", Data: accessForm{Value: gridApproval, Kind: kind}})
 }
 
 func (w *web) handleEditAccess(rw http.ResponseWriter, r *http.Request, s *session) {
