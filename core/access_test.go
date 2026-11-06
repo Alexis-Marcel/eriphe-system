@@ -64,7 +64,7 @@ func TestAccessLevels(t *testing.T) {
 			t.Errorf("%s: list_tools %+v", tc.level, info)
 		}
 		// The built-in denials win whatever the level.
-		if got, _ := c.decide("Bash", map[string]any{"command": "rm -rf /work"}); got != decideDeny {
+		if got, _ := c.decide("Bash", map[string]any{"command": "git push origin main"}); got != decideDeny {
 			t.Errorf("%s: built-in denial = %q", tc.level, got)
 		}
 	}

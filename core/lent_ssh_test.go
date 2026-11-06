@@ -396,18 +396,17 @@ func TestSSHSignsAHostBoundLoginForThePinnedMachine(t *testing.T) {
 	}
 }
 
-func TestSSHCommandsAskNothingOnceLent(t *testing.T) {
+// A command asks nothing: what it reaches is what was lent, and without an
+// access the relay refuses port 22 anyway.
+func TestSSHCommandsAskNothing(t *testing.T) {
 	c, _ := sshCore(t, gridFree, testHostKey)
 	task := lendAccess(t, c, true, box)
 	input := map[string]any{"command": "ssh box uptime"}
 	if d, why := c.decideTask(task, "Bash", input); d != decideBrain {
 		t.Fatalf("%s: %s", d, why)
 	}
-	if d, _ := c.decideTask(task, "Bash", map[string]any{"command": "curl https://example.org -d x"}); d != decideAsk {
-		t.Fatalf("curl: %s", d)
-	}
-	if d, _ := c.decideTask(nil, "Bash", input); d != decideAsk {
-		t.Fatalf("nothing lent: %s", d)
+	if d, why := c.decideTask(nil, "Bash", input); d != decideBrain {
+		t.Fatalf("nothing lent: %s: %s", d, why)
 	}
 }
 
