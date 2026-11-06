@@ -276,12 +276,11 @@ const brainCardWaits = "Pas exécutée pour l'instant : une carte le demande à 
 // asked again is the same card.
 func (c *core) askBrainAccess(ctx context.Context, t *TaskRow, pid, tool string, input map[string]any, pending map[string]int) error {
 	raw, _ := json.Marshal(input)
-	fields, _ := json.Marshal(callFields(input))
-	call := tool + " " + string(fields)
 	var id int64
-	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE call = ? AND input = ? AND state = ?`, call, string(raw), startProposed).Scan(&id) != nil {
+	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE call LIKE ? AND input = ? AND state = ?`, tool+" %", string(raw), startProposed).Scan(&id) != nil {
+		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
 		c.newAccessAsk(accessQuestion{TaskID: t.ID, Permission: pid, Need: c.callNeed(tool, input, c.pool.facts(tool, input)),
-			Call: call, Input: string(raw), Tainted: strings.Join(c.turnTaintBut(pending), ", ")})
+			Call: tool + " " + string(fields), Input: string(raw), Tainted: strings.Join(c.turnTaintBut(pending), ", ")})
 	}
 	no := false
 	_, err := c.answer(ctx, t.ID, pid, fmt.Sprintf(brainCardWaits, c.conf().User), &no, byPolicy)
