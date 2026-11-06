@@ -374,7 +374,7 @@ func TestBrainCardIsForOneCall(t *testing.T) {
 	c.store.addEvents("b-1", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
 		Data: map[string]any{"id": "p-1", "tool_name": "mcp__mail__move", "input": in}}})
 	c.askBrainAccess(&TaskRow{ID: "b-1"}, "p-1", "mcp__mail__move", in, approvalReason, nil)
-	x := accessCard(t, c, "mcp__mail__move")
+	x := accessCard(t, c, "use “move” in mail")
 	if _, err := c.decideCard(ctx, x.ID, true, "web"); err != nil {
 		t.Fatal(err)
 	}
@@ -386,6 +386,47 @@ func TestBrainCardIsForOneCall(t *testing.T) {
 	}
 	if got, _ := c.decideBrainCall("mcp__mail__move", in, nil); got != decideAsk {
 		t.Errorf("the next call: %q", got)
+	}
+}
+
+// A card says the action and its parameters in words, never the raw call,
+// in the web and on Telegram, and the message does not repeat them.
+func TestBrainCardReads(t *testing.T) {
+	c := newMailCore(t, "")
+	long := strings.Repeat("x", cardValueMax+50)
+	in := map[string]any{"repo": "portfolio", "number": 7, "body": long}
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.askBrainAccess(&TaskRow{ID: "b-1"}, "p-1", "mcp__mail__merge_pull_request", in, approvalReason, nil)
+	_, p := c.liveCard(accessCard(t, c, "merge a pull request"))
+	if fr := p.Text("fr"); !strings.Contains(fr, "fusionner une pull request") || strings.Contains(fr, "mcp__") || strings.Contains(fr, "{") {
+		t.Errorf("fr: %q", fr)
+	}
+	got := map[string]string{}
+	var names []string
+	for _, f := range p.Fields {
+		got[f.Name] = f.Value
+		names = append(names, f.Name)
+	}
+	if strings.Join(names, ",") != "body,number,repo" || got["number"] != "7" || got["repo"] != "portfolio" {
+		t.Errorf("fields: %+v", p.Fields)
+	}
+	if len([]rune(got["body"])) > cardValueMax+3 {
+		t.Errorf("a value of %d", len(got["body"]))
+	}
+	msgs, _ := c.store.messagesAfter(0, 10)
+	if len(msgs) == 0 || strings.Contains(msgs[len(msgs)-1].Text, "pull request") {
+		t.Errorf("the message says it twice: %+v", msgs)
+	}
+}
+
+// A call kept before the fields were: its action still reads.
+func TestBrainCardOfAnOldCall(t *testing.T) {
+	a := accessQuestion{Call: `mcp__github__create_pull_request {"base":"ma`}
+	if got := callVerb(a.Call, "fr"); got != "ouvrir une pull request" {
+		t.Errorf("verb: %q", got)
+	}
+	if f := a.fields(); len(f) != 0 {
+		t.Errorf("fields: %+v", f)
 	}
 }
 

@@ -932,7 +932,8 @@ through the policy, so the turn's taint is always seen.
 An approval is a card of the conversation (`access_card.go`), answered by the user, never by the
 brain. A start's card also takes a plain yes or no read by eriphe-core, unless it may carry someone
 else's words (a tainted turn). The others take their buttons only: they come at any moment, so a
-yes may answer something else. A task's card is shown:
+yes may answer something else. A brain's card says the action in words and lists the call's
+parameters by name, the long ones folded, on Telegram too; never the raw call. A task's card is shown:
 
 1. **at launch**, on its start's card, for what it is lent outright: it waits (`held`) for the answer;
 2. **on release** of a tool lent [held back](#resources);
