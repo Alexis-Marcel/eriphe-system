@@ -77,15 +77,6 @@ func TestAccessLevels(t *testing.T) {
 		!strings.Contains(resultText(out), "not allowed") {
 		t.Fatalf("a write on a read-only tool = %+v", out)
 	}
-	// The file's rules still come before the free level.
-	setLevel(t, c, "github", accessFree)
-	c.conf().Policy = &Policy{Rules: []Rule{{Tool: write, Decision: decideDeny, Reason: "no issues"}}}
-	if err := c.conf().Policy.compile(); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := c.decide(write, nil); got != decideDeny {
-		t.Fatalf("a deny rule with everything free = %q", got)
-	}
 }
 
 func sortedCopy(s []string) []string {
@@ -161,15 +152,6 @@ func TestRememberedActions(t *testing.T) {
 	if a := c.store.allowedActions("github"); len(a) != 1 || a[0].Name != "create_issue" || a[0].Tool != write {
 		t.Fatalf("listed = %+v", a)
 	}
-	// The file's rules win.
-	c.conf().Policy = &Policy{Rules: []Rule{{Tool: write, Match: "secret", Decision: decideDeny}}}
-	if err := c.conf().Policy.compile(); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := c.decide(write, map[string]any{"title": "secret"}); got != decideDeny {
-		t.Fatalf("file rule after a remembered action = %q", got)
-	}
-	c.conf().Policy = nil
 	// Read only refuses the write, remembered or not, and offers no "always".
 	setLevel(t, c, "github", accessReadOnly)
 	if got, _ := c.decide(write, nil); got != decideDeny {

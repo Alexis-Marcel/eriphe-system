@@ -273,11 +273,8 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 
 // brainPermission answers what the brain asks for. Its free reads never
 // come here (proxy.go). Its other catalog tools go through the policy like
-// a worker's, except that what would be the brain's to judge is allowed
-// (a read-only tool a rule of mine names, say), and what
-// is the user's waits for the user, told in the conversation. Its web
-// search is allowed and its page reads decided in brain_web.go. Anything
-// else is refused: the brain only works through MCP tools.
+// a worker's, and what is the user's goes on a card, which never holds it.
+// Its web is decided in brain_web.go. Anything else is refused: the brain only works through MCP tools.
 func (c *core) brainPermission(ctx context.Context, t *TaskRow) error {
 	st, err := c.status(t.ID, 0)
 	if err != nil {

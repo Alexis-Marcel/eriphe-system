@@ -33,7 +33,7 @@ type Config struct {
 	Brain *BrainConfig `json:"brain,omitempty"`
 	// Other long-lived assistants, by name (assistants.go).
 	Assistants map[string]Assistant `json:"assistants,omitempty"`
-	Policy     *Policy              `json:"policy,omitempty"` // permission rules, on top of the built-in ones
+	Policy     *retiredPolicy       `json:"policy,omitempty"` // refused: see check
 	// The tool catalog: MCP servers tasks reach through eriphe-core (servers.go).
 	Servers map[string]Server `json:"servers,omitempty"`
 	// What tasks use with their own programs, its secret kept here (lent_access.go).
@@ -233,12 +233,16 @@ func (c *Config) complete(where string) error {
 			return fmt.Errorf("%s: %w", where, err)
 		}
 	}
-	if c.Policy != nil {
-		if err := c.Policy.compile(); err != nil {
-			return fmt.Errorf("%s: %w", where, err)
-		}
+	if c.Policy != nil && len(c.Policy.Rules) > 0 {
+		return fmt.Errorf("%s: policy.rules is gone, and starting without them could allow what they denied: remove them and set each tool's access in Settings → Tools", where)
 	}
 	return nil
+}
+
+// retiredPolicy is what is left of the file's permission rules: the access of
+// each tool decides now, and a file that still has rules does not start.
+type retiredPolicy struct {
+	Rules []json.RawMessage `json:"rules,omitempty"`
 }
 
 // readSecret reads a secret from a file, or from the vault for "vault:<name>".

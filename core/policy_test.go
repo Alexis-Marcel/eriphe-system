@@ -10,14 +10,6 @@ import (
 )
 
 func TestPolicyDecide(t *testing.T) {
-	p := &Policy{Rules: []Rule{
-		{Tool: "Bash", Match: `^make deploy`, Decision: decideAsk, Reason: "déploie"},
-		{Tool: "Bash", Match: `^go test`, Decision: decideAllow},
-		{Tool: "Bash", Match: `rm -rf /work/folders/x`, Decision: decideAllow}, // cannot lift a built-in denial
-	}}
-	if err := p.compile(); err != nil {
-		t.Fatal(err)
-	}
 	cases := []struct {
 		tool  string
 		input map[string]any
@@ -68,17 +60,13 @@ func TestPolicyDecide(t *testing.T) {
 		{"Bash", map[string]any{"command": "curl -s https://example.com"}, decideNoRule},
 		{"Bash", map[string]any{"command": "ssh host uptime"}, decideNoRule},
 		{"Bash", map[string]any{"command": "rsync -a src/ dst/"}, decideNoRule},
-		{"Bash", map[string]any{"command": "make deploy prod"}, decideAsk},
-		{"Bash", map[string]any{"command": "go test ./..."}, decideAllow},
+		{"Bash", map[string]any{"command": "go test ./..."}, decideNoRule},
 		{"mcp__mail__send", map[string]any{"to": "x"}, decideAsk},
 	}
 	for _, c := range cases {
-		if got, _ := p.decide(c.tool, c.input); got != c.want {
+		if got, _ := decideWith(c.tool, c.input, catalogFacts{}, nil); got != c.want {
 			t.Errorf("%s %v = %q, want %q", c.tool, c.input, got, c.want)
 		}
-	}
-	if err := (&Policy{Rules: []Rule{{Tool: "Bash", Decision: "maybe"}}}).compile(); err == nil {
-		t.Error("bad decision accepted")
 	}
 }
 
@@ -88,21 +76,17 @@ func TestPolicyInReports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy := &Policy{Rules: []Rule{{Tool: "Bash", Match: `^make deploy`, Decision: decideAsk, Reason: "déploie"}}}
-	if err := policy.compile(); err != nil {
-		t.Fatal(err)
-	}
-	c := newCore(&Config{User: "Sam", Brain: &BrainConfig{}, Policy: policy}, store)
+	c := newCore(&Config{User: "Sam", Brain: &BrainConfig{}}, store)
 	store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Runtime: "claude-code", Dir: "/w", Prompt: "do", State: stateRunning})
-	report := func(seq int, cmd string) bool {
+	report := func(seq int, tool, cmd string) bool {
 		ev := []EventRow{{Seq: seq, Time: time.Now(), Type: "permission",
-			Data: map[string]any{"id": "p" + string(rune('0'+seq)), "tool_name": "Bash", "input": map[string]any{"command": cmd}}}}
+			Data: map[string]any{"id": "p" + string(rune('0'+seq)), "tool_name": tool, "input": map[string]any{"command": cmd}}}}
 		store.addEvents("t-1", ev)
 		store.updateTask("t-1", map[string]any{"state": stateWaitingPermission})
 		return c.applyPolicy("t-1", ev)
 	}
 
-	if report(1, "git push origin main") {
+	if report(1, "Bash", "git push origin main") {
 		t.Fatal("a denial was left for the brain")
 	}
 	items, _ := store.inbox("t-1")
@@ -115,9 +99,9 @@ func TestPolicyInReports(t *testing.T) {
 		t.Fatalf("decision by %q", by)
 	}
 
-	// What has no card to go on is refused, not left waiting.
-	if report(2, "make deploy prod") {
-		t.Fatal("an ask with no card was left waiting")
+	// What is not in the catalog is refused, not left waiting.
+	if report(2, "mcp__elsewhere__run", "x") {
+		t.Fatal("a tool out of the catalog was left waiting")
 	}
 	if items, _ := store.inbox("t-1"); len(items) != 2 || items[1].Data["allow"] != false {
 		t.Fatalf("inbox = %+v", items)

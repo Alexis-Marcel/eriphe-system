@@ -133,12 +133,11 @@ func TestPollReadOnlyOnly(t *testing.T) {
 	if _, err := c.brainWatch(watchIn{Name: "x", Source: "outil", Server: "monitor", Tool: "rollback", Prompt: "y", SourceRef: ref(seq)}); err == nil {
 		t.Error("the brain made a watch call a tool that acts")
 	}
-	// A rule of the policy now names the read: the watch waits, and says why.
-	c.conf().Policy = &Policy{Rules: []Rule{{Tool: "mcp__monitor__status", Decision: decideAsk}}}
-	c.conf().Policy.compile()
+	// The read is no longer Free: the watch waits, and says why.
+	setLevel(t, c, "monitor", accessAsk)
 	c.watchTick(context.Background())
 	if got, _ := c.watch(ok.ID); got.Poll.Error == "" {
-		t.Fatal("polled a tool the policy names")
+		t.Fatal("polled a tool that is not Free")
 	}
 }
 
@@ -459,14 +458,17 @@ func TestGrantCannotBeInjected(t *testing.T) {
 		Grant: &grantAction{Tool: "monitor.rollback", Args: map[string]any{"version": "2.0.0"}}}); err == nil {
 		t.Fatal("granted without the user's authorising words")
 	}
-	// A policy denial cannot be granted.
-	c.conf().Policy = &Policy{Rules: []Rule{{Tool: "mcp__monitor__rollback", Match: `0\.0\.1`, Decision: decideDeny, Reason: "too old"}}}
-	c.conf().Policy.compile()
+	// A denial cannot be granted.
+	before := c.conf().Servers["monitor"]
+	setLevel(t, c, "monitor", accessReadOnly)
 	seq = ownerSays(c, "Tu peux remettre la 0.0.1 si besoin")
 	if _, err := c.brainUpdateWatch(updateWatchIn{ID: id, Action: "grant", SourceRef: ref(seq),
 		Grant: &grantAction{Tool: "monitor.rollback", Args: map[string]any{"version": "0.0.1"}}}); err == nil || !strings.Contains(err.Error(), "denies") {
 		t.Fatalf("a denied action granted: %v", err)
 	}
+	c.conf().Servers["monitor"] = before
+	c.pool.sync(c.conf().Servers)
+	waitStatus(t, c.pool.get("monitor"), statusReady)
 	if _, err := c.brainUpdateWatch(updateWatchIn{ID: id, Action: "grant", SourceRef: ref(seq),
 		Grant: &grantAction{Tool: "monitor.rollback", Args: map[string]any{"version": "2.0.0"}, MaxUses: 50}}); err == nil {
 		t.Fatal("max_uses over the limit")

@@ -129,7 +129,7 @@ func (c *core) freeRead(claudeName string) bool { return c.freeCall(claudeName, 
 // the value of the account it names.
 func (c *core) freeCall(claudeName string, input map[string]any) bool {
 	f := c.pool.facts(claudeName, input)
-	return f.read && f.free() && !f.noAccount && !c.conf().Policy.names(claudeName)
+	return f.read && f.free() && !f.noAccount
 }
 
 // readsFreely tells whether a task is an assistant's whose role reads freely.
