@@ -621,15 +621,16 @@ func templateFuncs(lang string) template.FuncMap {
 			}
 			return t.Local().Format("02/01 15:04")
 		},
-		"ver":      displayVersion,
-		"date":     func(t time.Time) string { return t.Local().Format("02/01/2006 15:04") },
-		"iso":      func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
-		"md":       markdown,
-		"short":    truncate,
-		"size":     func(b int64) string { return byteSize(lang, b) },
-		"filesize": func(b int64) string { return fileSize(lang, b) },
-		"join":     strings.Join,
-		"list":     func(s ...string) []string { return s },
+		"ver":       displayVersion,
+		"date":      func(t time.Time) string { return t.Local().Format("02/01/2006 15:04") },
+		"iso":       func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
+		"md":        markdown,
+		"short":     truncate,
+		"webValues": func() []string { return []string{gridFree, gridApproval, gridNever} },
+		"size":      func(b int64) string { return byteSize(lang, b) },
+		"filesize":  func(b int64) string { return fileSize(lang, b) },
+		"join":      strings.Join,
+		"list":      func(s ...string) []string { return s },
 		"dict": func(kv ...any) map[string]any {
 			m := map[string]any{}
 			for i := 0; i+1 < len(kv); i += 2 {

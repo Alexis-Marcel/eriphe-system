@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"slices"
 	"strconv"
@@ -156,7 +155,7 @@ func init() {
 		Profile: "brain", FreeReads: true, Network: true, Streams: true,
 		// Its harness's web search is allowed (brain_web.go); its page
 		// reader is not: each read is decided in brainPermission.
-		AllowedTools: []string{"WebSearch"}, NoWebSearch: noWebSearchLine,
+		NoWebSearch: noWebSearchLine,
 		// It works through MCP tools: of its harness's own, only the web and
 		// the search for its catalog's deferred tools.
 		HarnessTools: []string{"WebSearch", "WebFetch", "ToolSearch"},
@@ -306,11 +305,8 @@ func (c *core) brainPermissionOne(ctx context.Context, t *TaskRow, p map[string]
 	switch tool {
 	case webFetchTool: // its harness's page reader (brain_web.go)
 		return c.brainFetch(ctx, t, pid, input, pending)
-	case "WebSearch": // allowed in advance on Claude Code; another harness may still ask
-		log.Printf("brain: WebSearch allowed")
-		yes := true
-		_, err := c.answer(ctx, t.ID, pid, "", &yes, byPolicy)
-		return err
+	case webSearchTool:
+		return c.brainSearch(ctx, t, pid, input, pending)
 	}
 	server, _, catalog := splitToolName(tool)
 	if catalog && slices.Contains(grantServers(c.taskGrant(t)), server) {

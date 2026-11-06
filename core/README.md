@@ -1360,7 +1360,9 @@ permission requests are denied, but for the web.
 **The web.** The brain searches with its harness's own search: Claude Code's `WebSearch` is in its
 `allowed_tools`; Codex is held to `web_search = "cached"` by the node; OpenCode's `websearch` is
 denied (a harness without a search is told so in its standing instructions). Its page reader
-(`WebFetch`, OpenCode's `webfetch`) is not allowed in advance: each read is decided by eriphe-core
+(`WebFetch`, OpenCode's `webfetch`) and its search are not allowed in advance: the web is a row of
+Settings → Tools, Free, On approval or Never, for the brain only (a task's web is its container's).
+On approval is a card for each search and page; a yes lets that one through. Each read is decided by eriphe-core
 (`brain_web.go`). A URL that is not http(s), carries credentials, or names this machine or the local
 network (localhost, a loopback, private, link-local or CGNAT IP, a name without a dot or under
 `.local`, `.lan`, `.internal`, `.home.arpa`…) is refused; a policy rule on `WebFetch` that denies or

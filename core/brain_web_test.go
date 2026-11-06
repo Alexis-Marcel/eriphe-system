@@ -172,7 +172,7 @@ func TestBrainWebSearchAndRules(t *testing.T) {
 	}
 }
 
-// The brain's spec allows its web search in advance, not its page reader;
+// Nothing of the web is allowed in advance: its value decides each call;
 // a harness without a search of its own is told.
 func TestBrainWebSpec(t *testing.T) {
 	c, _ := testMemoryCore(t)
@@ -185,7 +185,7 @@ func TestBrainWebSpec(t *testing.T) {
 	}
 	startedBrain(t, c, false)
 	s := spec()
-	if !slices.Contains(s.AllowedTools, "WebSearch") || slices.Contains(s.AllowedTools, "WebFetch") {
+	if slices.Contains(s.AllowedTools, "WebSearch") || slices.Contains(s.AllowedTools, "WebFetch") {
 		t.Fatalf("allowed = %v", s.AllowedTools)
 	}
 	if strings.Contains(s.AppendSystemPrompt, noWebSearchLine) {
@@ -197,5 +197,42 @@ func TestBrainWebSpec(t *testing.T) {
 	startedBrain(t, c, false)
 	if s := spec(); !strings.Contains(s.AppendSystemPrompt, noWebSearchLine) {
 		t.Fatalf("OpenCode not told it cannot search: %q", s.AppendSystemPrompt)
+	}
+}
+
+func TestWebValue(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	ownerSays(c, "Cherche, et lis https://mine.example/")
+	search := [2]any{"WebSearch", map[string]any{"query": "météo"}}
+
+	if c.webValue() != gridFree {
+		t.Fatalf("default: %q", c.webValue())
+	}
+	if err := c.setWebValue("sometimes"); err == nil {
+		t.Fatal("a bad value")
+	}
+
+	// On approval: a card for a search and for a page, the user's own address free.
+	c.setWebValue(gridApproval)
+	brainAsks(t, c, search, fetch("https://other.example/"), fetch("https://mine.example/"))
+	got := answers(t, c)
+	if got["WebSearch"] || got["https://other.example/"] || !got["https://mine.example/"] {
+		t.Fatalf("approval: %v", got)
+	}
+	x := accessCard(t, c, "search the web")
+	if _, err := c.decideCard(context.Background(), x.ID, true, "web"); err != nil {
+		t.Fatal(err)
+	}
+	waitEvent(t, c, "tu peux chercher « météo »")
+	if !c.usePageYes("météo") {
+		t.Fatal("the yes was not kept")
+	}
+
+	// Never: refused at once, no card.
+	c.setWebValue(gridNever)
+	before := accessCards(t, c)
+	brainAsks(t, c, [2]any{"WebSearch", map[string]any{"query": "autre"}}, fetch("https://mine.example/"))
+	if accessCards(t, c) != before {
+		t.Fatal("a card for what is refused")
 	}
 }
