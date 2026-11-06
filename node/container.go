@@ -90,6 +90,9 @@ func (n *node) inRoot(p string) bool {
 }
 
 func repoURL(repo string) string {
+	if name, ok := strings.CutPrefix(repo, "git@github.com:"); ok {
+		return "https://github.com/" + name // the relay carries no git over SSH
+	}
 	if repo == "" || strings.Contains(repo, "://") || strings.HasPrefix(repo, "git@") {
 		return repo
 	}

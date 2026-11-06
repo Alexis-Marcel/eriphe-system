@@ -46,12 +46,7 @@ func TestSelfHostedConfig(t *testing.T) {
 	if spec.ModelEndpoint.KeyEnv != "SELFHOSTED_API_KEY" || !slices.Equal(spec.Egress.Endpoints, []string{"llm.example.org:443"}) {
 		t.Fatalf("spec %+v, egress %+v", spec.ModelEndpoint, spec.Egress)
 	}
-	// A task without egress gets no endpoint; another provider's agent nothing.
-	spec = nodeTaskSpec{Egress: &nodeEgress{Mode: "none"}}
-	cfg.modelEndpoint("qwen", env, &spec)
-	if len(spec.Egress.Endpoints) != 0 {
-		t.Errorf("mode none: %+v", spec.Egress)
-	}
+	// Another provider's agent gets nothing.
 	cfg.Providers["or"] = Provider{Kind: "openrouter-api", Secret: secret}
 	cfg.Agents["kimi"] = Agent{Runtime: "opencode", Provider: "or", Model: "openrouter/kimi"}
 	spec = nodeTaskSpec{Egress: defaultEgress()}

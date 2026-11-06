@@ -178,7 +178,7 @@ func TestRemoveFolder(t *testing.T) {
 	if _, err := store.folder("Clients"); err == nil {
 		t.Fatal("still a folder")
 	}
-	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Clients"}}); err == nil {
+	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients")}); err == nil {
 		t.Fatal("lent once removed")
 	}
 	c.refreshNode(ctx, c.node("nas"))
@@ -237,13 +237,13 @@ func TestTaskWithFolders(t *testing.T) {
 	c, store, shares := foldersCoreShares(t)
 	ctx := context.Background()
 
-	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Clients"}, Node: "pc"}); err == nil {
+	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients"), Node: "pc"}); err == nil {
 		t.Fatal("ran on a machine without the folder")
 	}
-	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Nope"}}); err == nil {
+	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Nope")}); err == nil {
 		t.Fatal("ran with an unknown folder")
 	}
-	task, err := c.runTask(ctx, runRequest{Prompt: "sum the invoices", Folders: []string{"clients", "Photos"}})
+	task, err := c.runTask(ctx, runRequest{Prompt: "sum the invoices", Resources: folderRefs("clients", "Photos")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestFolderTaskWaitsForItsMachine(t *testing.T) {
 		}
 	}
 	store.setNodeStatus("nas", false, info)
-	task, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Clients"}})
+	task, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,14 +304,14 @@ func TestFolderTaskWaitsForItsMachine(t *testing.T) {
 func TestFolderTaint(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
-	if err := c.taintedResources(runRequest{Folders: []string{"Clients"}}); err != nil {
+	if err := c.taintedResources(runRequest{Resources: folderRefs("Clients")}); err != nil {
 		t.Fatalf("clean turn: %v", err)
 	}
 	c.turn.taint("gmail.read")
-	if err := c.taintedResources(runRequest{Folders: []string{"Photos"}}); err != nil {
+	if err := c.taintedResources(runRequest{Resources: folderRefs("Photos")}); err != nil {
 		t.Fatalf("read-only folder on a tainted turn: %v", err)
 	}
-	if err := c.taintedResources(runRequest{Folders: []string{"Photos", "Clients"}}); err == nil || !strings.Contains(err.Error(), "Clients") {
+	if err := c.taintedResources(runRequest{Resources: folderRefs("Photos", "Clients")}); err == nil || !strings.Contains(err.Error(), "Clients") {
 		t.Fatalf("drop folder on a tainted turn: %v", err)
 	}
 	// Lent for reading only, a drop folder still goes.
@@ -321,7 +321,7 @@ func TestFolderTaint(t *testing.T) {
 
 	c.base.Brain = &BrainConfig{}
 	c.snap.Store(mergeCatalog(c.base, c.dyn))
-	task, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Photos"}})
+	task, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Photos")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -499,10 +499,6 @@ func TestManageFolderSpec(t *testing.T) {
 	c.refreshNode(ctx, c.node("nas"))
 	if _, err := c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Photos", Access: accessWrite}}}); err == nil {
 		t.Fatal("a read folder lent to write")
-	}
-	lent, err := c.resolveRequest(runRequest{Folders: []string{"Clients"}})
-	if err != nil || lent.List[0].Access != accessDrop {
-		t.Fatalf("the old field: %+v %v", lent, err)
 	}
 	task, err := c.runTask(ctx, runRequest{Prompt: "tidy", Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessWrite}}})
 	if err != nil {

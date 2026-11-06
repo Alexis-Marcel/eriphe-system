@@ -188,7 +188,7 @@ func newMCPServer(c *core) *mcp.Server {
 	return s
 }
 
-// tool registers a typed tool and logs every call (never the identities).
+// tool registers a typed tool and logs every call.
 func tool[In, Out any](s *mcp.Server, name, desc string, fn func(context.Context, In) (Out, error)) {
 	mcp.AddTool(s, &mcp.Tool{Name: name, Description: desc},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {

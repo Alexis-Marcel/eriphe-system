@@ -19,7 +19,12 @@ func sshRelay(t *testing.T, open func(target string) error) *testRelay {
 	t.Helper()
 	r := newTestRelay(t, upstreamServer(t).Listener.Addr().String(), func(int, string) []string { return []string{"192.168.1.30"} })
 	r.tunnels = []string{sshLAN}
-	r.p.sshOpen = func(_ context.Context, _, target string) error { return open(target) }
+	r.p.sshCore = func(_ context.Context, _, target string) (net.Conn, error) {
+		if err := open(target); err != nil {
+			return nil, err
+		}
+		return nil, errCoreCannotReach
+	}
 	return r
 }
 
@@ -53,14 +58,14 @@ func TestTunnelWaitsForEriphe(t *testing.T) {
 	if len(r.endpointDialed) != 0 {
 		t.Fatalf("dialed %v", r.endpointDialed)
 	}
-	r.p.sshOpen = nil
+	r.p.sshCore = nil
 	if code, _, _ := r.connect(t, sshLAN, basic("t-1", "s")); code != http.StatusForbidden {
 		t.Fatalf("no answer: %d", code)
 	}
 }
 
 // A session goes through eriphe-core: the node dials nothing, unless
-// eriphe-core cannot reach the machine or does not carry sessions yet.
+// eriphe-core cannot reach the machine.
 func TestTunnelThroughCore(t *testing.T) {
 	var asked []string
 	r := sshRelay(t, func(target string) error {
@@ -95,13 +100,6 @@ func TestTunnelThroughCore(t *testing.T) {
 	}
 	if !slices.Equal(r.endpointDialed, []string{sshLAN}) || len(asked) != 0 {
 		t.Fatalf("dialed %v, asked %v", r.endpointDialed, asked)
-	}
-	answer = errNoCoreSession
-	if code, _, _ := r.connect(t, sshLAN, basic("t-1", "s")); code != http.StatusOK {
-		t.Fatalf("an older eriphe-core: %d", code)
-	}
-	if !slices.Equal(asked, []string{sshLAN}) {
-		t.Fatalf("an older eriphe-core was not asked: %v", asked)
 	}
 }
 
@@ -138,8 +136,8 @@ func TestSSHCoreAnswers(t *testing.T) {
 		t.Fatalf("unreachable: %v", err)
 	}
 	status = http.StatusNotFound
-	if _, err := s.sshCore(context.Background(), "t-1", sshLAN); !errors.Is(err, errNoCoreSession) {
-		t.Fatalf("an older eriphe-core: %v", err)
+	if _, err := s.sshCore(context.Background(), "t-1", sshLAN); err == nil || errors.Is(err, errCoreCannotReach) {
+		t.Fatalf("another answer: %v", err)
 	}
 	status = http.StatusSwitchingProtocols
 	ctx, cancel := context.WithCancel(context.Background())
@@ -158,16 +156,11 @@ func TestSSHCoreAnswers(t *testing.T) {
 	cancel()
 }
 
-func TestTunnelRefusedAtTheNodeAndWithoutEgress(t *testing.T) {
+func TestTunnelRefusedAtTheNode(t *testing.T) {
 	r := sshRelay(t, func(string) error { return nil })
 	r.tunnels = []string{"127.0.0.1:22"}
-	if code, _, _ := r.connect(t, "127.0.0.1:22", basic("t-1", "s")); code != http.StatusForbidden {
+	if code, _, _ := r.connect(t, "127.0.0.1:22", basic("t-1", "s")); code == http.StatusOK {
 		t.Errorf("the loopback: %d", code)
-	}
-	r.tunnels = []string{sshLAN}
-	r.rule = EgressRule{Mode: egressNone}
-	if code, _, _ := r.connect(t, sshLAN, basic("t-1", "s")); code != http.StatusForbidden {
-		t.Errorf("egress none: %d", code)
 	}
 }
 

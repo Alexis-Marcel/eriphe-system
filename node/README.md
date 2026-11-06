@@ -424,9 +424,6 @@ listener stays direct), and `NODE_USE_ENV_PROXY=1` (Node's own `fetch` ignores t
 otherwise). The relay:
 
 - knows the task by its credentials (`Proxy-Authorization: Basic`), refused once the task is over;
-- applies the task's rule, `egress` in its spec from eriphe-core: `{"mode": "internet"}` (the
-  default, also when the spec has none: the public Internet), `{"mode": "none"}`, and `allow`, a
-  list of hosts that restricts it (`github.com`, `*.npmjs.org` for any name under it);
 - connects to ports 80 and 443 only (HTTPS through `CONNECT`, plain HTTP forwarded without the
   task's credentials): git over HTTPS works, git over SSH does not;
 - resolves names itself and dials only public addresses: never loopback, RFC 1918, link-local

@@ -132,12 +132,9 @@ func withSSHFiles(t *Task, files map[string][]byte) map[string][]byte {
 	return files
 }
 
-// isTunnel tells whether hostport is exactly an SSH access of the task,
-// with the mode internet, as isEndpoint.
+// isTunnel tells whether hostport is exactly an SSH access of the task, as
+// isEndpoint.
 func (t *egressTask) isTunnel(hostport string) bool {
-	if t.rule.Mode != egressInternet && t.rule.Mode != "" {
-		return false
-	}
 	target := accessTarget(hostport)
 	for _, e := range t.tunnels {
 		if e == target {
@@ -150,13 +147,9 @@ func (t *egressTask) isTunnel(hostport string) bool {
 // sshProto is the upgrade of a session's bytes through eriphe-core.
 const sshProto = "eriphe-ssh"
 
-var (
-	// errCoreCannotReach: the task may connect, but eriphe-core has no way
-	// to the machine.
-	errCoreCannotReach = errors.New("eriphe-core cannot reach the machine")
-	// errNoCoreSession: an eriphe-core with no sessions, older than this node.
-	errNoCoreSession = errors.New("eriphe-core does not carry sessions")
-)
+// errCoreCannotReach: the task may connect, but eriphe-core has no way to the
+// machine.
+var errCoreCannotReach = errors.New("eriphe-core cannot reach the machine")
 
 // dialTunnel connects to an SSH access's machine, once eriphe-core says the
 // task may use it now, through eriphe-core. If it cannot, the very address
@@ -168,31 +161,22 @@ func (p *egressProxy) dialTunnel(ctx context.Context, t *egressTask, hostport st
 	if err != nil {
 		return nil, &egressError{http.StatusBadRequest, "bad address " + hostport}
 	}
-	if p.sshCore != nil {
-		up, err := p.sshCore(ctx, t.id, target)
-		switch {
-		case err == nil:
-			p.note(t, host, nil)
-			return up, nil
-		case errors.Is(err, errCoreCannotReach):
-			up, err := p.dialModelServer(ctx, t, host, port)
-			if err != nil {
-				return nil, &egressError{http.StatusBadGateway, fmt.Sprintf("neither eriphe-core nor this node reaches %s: %v", target, err)}
-			}
-			return up, nil
-		case !errors.Is(err, errNoCoreSession):
-			p.note(t, host, err)
-			return nil, err
-		}
-	}
-	if p.sshOpen == nil {
+	if p.sshCore == nil {
 		return nil, refused("no way to ask eriphe-core for %s", target)
 	}
-	if err := p.sshOpen(ctx, t.id, target); err != nil {
+	up, err := p.sshCore(ctx, t.id, target)
+	switch {
+	case err == nil:
+		p.note(t, host, nil)
+		return up, nil
+	case !errors.Is(err, errCoreCannotReach):
 		p.note(t, host, err)
 		return nil, err
 	}
-	return p.dialModelServer(ctx, t, host, port)
+	if up, err = p.dialModelServer(ctx, t, host, port); err != nil {
+		return nil, &egressError{http.StatusBadGateway, fmt.Sprintf("neither eriphe-core nor this node reaches %s: %v", target, err)}
+	}
+	return up, nil
 }
 
 // sshCore opens a task's session through eriphe-core: after the upgrade, the
@@ -234,7 +218,7 @@ func (s *state) sshCore(ctx context.Context, taskID, target string) (net.Conn, e
 	case http.StatusBadGateway:
 		return nil, errCoreCannotReach
 	}
-	return nil, errNoCoreSession
+	return nil, &egressError{http.StatusBadGateway, fmt.Sprintf("eriphe-core: %d %s", res.StatusCode, bytes.TrimSpace(answer))}
 }
 
 // coreSession is a session through eriphe-core; closing it ends its context.
@@ -246,21 +230,6 @@ type coreSession struct {
 func (c *coreSession) Close() error {
 	defer c.end()
 	return c.rwcConn.Close()
-}
-
-// sshOpen asks eriphe-core whether a task may open a tunnel.
-func (s *state) sshOpen(ctx context.Context, taskID, target string) error {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	body, _ := json.Marshal(map[string]string{"op": "connect", "target": target})
-	status, answer, err := s.askSSH(ctx, taskID, body)
-	switch {
-	case err != nil:
-		return &egressError{http.StatusBadGateway, "eriphe-core: " + err.Error()}
-	case status != http.StatusOK:
-		return refused("%s", strings.TrimSpace(string(answer)))
-	}
-	return nil
 }
 
 // askSSH relays a request to eriphe-core, under this node's name.

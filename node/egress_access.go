@@ -211,9 +211,9 @@ func accessTarget(hostport string) string {
 }
 
 // isAccess tells whether a CONNECT's target is exactly a host of one of the
-// task's accesses. A task without egress has none.
+// task's accesses.
 func (t *egressTask) isAccess(target string) bool {
-	return t.rule.Mode != egressNone && slices.Contains(t.accessHosts, target)
+	return slices.Contains(t.accessHosts, target)
 }
 
 // intercept ends the task's TLS session to one of its accesses' hosts, and

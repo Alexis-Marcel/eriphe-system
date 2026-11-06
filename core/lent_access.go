@@ -541,7 +541,8 @@ func (c *core) checkAgentEnv(list []ResourceRef, agentEnv map[string]string) err
 }
 
 // checkLentAccesses refuses what one task cannot be lent: two accesses
-// sharing a variable, and an SSH access with no host key to pin.
+// sharing a variable, one on the variable of its repository, and an SSH
+// access with no host key to pin.
 func (c *core) checkLentAccesses(list []ResourceRef) error {
 	byEnv := map[string]string{}
 	for _, e := range list {
@@ -549,6 +550,9 @@ func (c *core) checkLentAccesses(list []ResourceRef) error {
 			continue
 		}
 		a := c.conf().Accesses[e.Ref]
+		if a.Env == gitAccessEnv && slices.ContainsFunc(list, isGitHubRepo) {
+			return fmt.Errorf("access %s uses the variable %s, which holds the placeholder of the repository lent: rename it", e.Ref, gitAccessEnv)
+		}
 		if a.isSSH() {
 			if a.HostKey == "" {
 				return fmt.Errorf("access %s has no host key yet: the user tests it first, in Settings → Tools", e.Ref)

@@ -155,7 +155,7 @@ func TestOldConfigUnchanged(t *testing.T) {
 		"token_file": "/secrets/core-token", "db": "/data/core.db", "user": "Sam",
 		"providers": {"anthropic": {"kind": "claude-subscription", "secret": "`+secret+`"}},
 		"agents": {"opus": {"runtime": "claude-code", "provider": "anthropic", "model": "opus"}},
-		"default_agent": "opus", "identities": {"github": {"env": "GH_TOKEN", "file": "/secrets/github-token"}},
+		"default_agent": "opus",
 		"brain": {"node": "nas", "agent": "opus", "prompt_file": "`+prompt+`", "self_url": "http://eriphe-core:8800/mcp",
 			"mcp_servers": {"extra": {"url": "http://extra.example.org/mcp"}}, "tools": ["docs"]},
 		"policy": {"rules": [{"tool": "Bash", "match": "^go test", "decision": "allow"}]}}`), 0o600)
@@ -166,7 +166,7 @@ func TestOldConfigUnchanged(t *testing.T) {
 	b := c.Brain
 	if c.Listen != "0.0.0.0:8800" || c.PublicURL != "http://nas.example.org:8800" || c.Web.Listen != "0.0.0.0:8443" ||
 		c.TokenFile != "/secrets/core-token" || c.DB != "/data/core.db" || c.User != "Sam" || c.DefaultAgent != "opus" ||
-		len(c.LegacyIdentities) == 0 || len(c.Policy.Rules) != 1 {
+		len(c.Policy.Rules) != 1 {
 		t.Fatalf("config = %+v", c)
 	}
 	if b.Node != "nas" || b.Agent != "opus" || b.SelfURL != "http://eriphe-core:8800/mcp" || b.MCPServers["extra"].URL == "" ||

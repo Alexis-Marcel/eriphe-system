@@ -168,16 +168,11 @@ type nodeModelEndpoint struct {
 	Relay   bool   `json:"relay,omitempty"`
 }
 
-// nodeEgress is a task's egress rule, like a Kubernetes NetworkPolicy:
-// "internet" (public addresses only, never the LAN) or "none", and when
-// Allow is set, only those hosts ("github.com", "*.npmjs.org"). Endpoints
-// are host:port the task may reach even on the LAN or another port: its
-// self-hosted model server's, nothing else.
+// nodeEgress is what a task may reach beyond the public Internet: Endpoints,
+// host:port even on the LAN or another port, its self-hosted model server's.
 type nodeEgress struct {
-	Mode      string   `json:"mode"`
-	Allow     []string `json:"allow,omitempty"`
 	Endpoints []string `json:"endpoints,omitempty"`
 }
 
 // defaultEgress is every task's rule for now: the public Internet.
-func defaultEgress() *nodeEgress { return &nodeEgress{Mode: "internet"} }
+func defaultEgress() *nodeEgress { return &nodeEgress{} }

@@ -239,8 +239,8 @@ func TestSSHNeedsTheUsersYes(t *testing.T) {
 	if code, _, _ := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: loginData("sam", key)}); code != http.StatusForbidden {
 		t.Fatalf("signed without a yes: %d", code)
 	}
-	if code, _, _ := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpConnect, Target: sshHost + ":22"}); code != http.StatusForbidden {
-		t.Fatalf("a tunnel without a yes: %d", code)
+	if err := c.sshConnect(task, sshHost+":22"); err == nil {
+		t.Fatal("a tunnel without a yes")
 	}
 	c.store.grantAccess(task.ID, accessNeed{Server: "box", Category: catUse})
 	if code, _, body := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: loginData("sam", key)}); code != 200 {
@@ -251,12 +251,12 @@ func TestSSHNeedsTheUsersYes(t *testing.T) {
 func TestSSHConnectOnlyToTheAccessTarget(t *testing.T) {
 	c, _ := sshCore(t, gridFree, testHostKey)
 	task := lendAccess(t, c, true, box)
-	if code, _, body := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpConnect, Target: sshHost + ":22"}); code != 200 {
-		t.Fatalf("%d %s", code, body)
+	if err := c.sshConnect(task, sshHost+":22"); err != nil {
+		t.Fatal(err)
 	}
 	for _, target := range []string{sshHost + ":2222", "192.0.2.11:22"} {
-		if code, _, _ := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpConnect, Target: target}); code != http.StatusForbidden {
-			t.Errorf("%s: %d", target, code)
+		if err := c.sshConnect(task, target); err == nil {
+			t.Errorf("%s: allowed", target)
 		}
 	}
 }
@@ -421,8 +421,8 @@ func TestSSHConnectWithTwoAccessesOnOneMachine(t *testing.T) {
 	}
 	c.store.set(lentByUserKey(task.ID), "1")
 	for range 20 {
-		if code, _, body := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpConnect, Target: sshHost + ":22"}); code != 200 {
-			t.Fatalf("%d %s", code, body)
+		if err := c.sshConnect(task, sshHost+":22"); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

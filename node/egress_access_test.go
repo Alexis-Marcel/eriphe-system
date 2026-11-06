@@ -200,14 +200,6 @@ func TestAccessRelayLeavesOtherHostsAlone(t *testing.T) {
 	}
 }
 
-func TestAccessRelayHonoursNoEgress(t *testing.T) {
-	r, _, _ := accessRelayed(t, upstreamServer(t).Listener.Addr().String())
-	r.rule = EgressRule{Mode: egressNone}
-	if code, _, _ := r.connect(t, accessHostPort, basic("t-1", "s")); code != http.StatusForbidden {
-		t.Errorf("no egress: %d", code)
-	}
-}
-
 // A task over reaches nothing, even on a session still open.
 func TestAccessRelayStopsWithItsTask(t *testing.T) {
 	h := accessRelayTo(func() string { return "http://192.0.2.1" }, func() (string, string) { return "nas", "x" }, http.DefaultTransport,

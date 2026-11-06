@@ -49,7 +49,7 @@ func TestNodeLogStore(t *testing.T) {
 func TestNodeLogRecordsAccess(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
-	task, err := c.runTask(ctx, runRequest{Prompt: "sum the invoices", Folders: []string{"Clients"}})
+	task, err := c.runTask(ctx, runRequest{Prompt: "sum the invoices", Resources: folderRefs("Clients")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestNodeLogRecordsAccess(t *testing.T) {
 func TestSuspendNode(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
-	running, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Clients"}})
+	running, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients")})
 	if err != nil || running.Node != "nas" {
 		t.Fatalf("task %+v, %v", running, err)
 	}
@@ -123,7 +123,7 @@ func TestSuspendNode(t *testing.T) {
 	if task, err := c.runTask(ctx, runRequest{Prompt: "x"}); err != nil || task.Node != "pc" {
 		t.Fatalf("chosen: %+v, %v", task, err)
 	}
-	if _, err := c.runTask(ctx, runRequest{Prompt: "x", Folders: []string{"Clients"}}); err == nil || !strings.Contains(err.Error(), "cut") {
+	if _, err := c.runTask(ctx, runRequest{Prompt: "x", Resources: folderRefs("Clients")}); err == nil || !strings.Contains(err.Error(), "cut") {
 		t.Fatalf("its folders lent: %v", err)
 	}
 	// It is let in neither through its tunnel nor for its assignments,

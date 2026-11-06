@@ -48,7 +48,7 @@ func TestResultsFolderFollowsTheName(t *testing.T) {
 	ctx := context.Background()
 	folder := func() (nodeFolder, string) {
 		t.Helper()
-		task, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Clients"}})
+		task, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients")})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -97,7 +97,7 @@ func TestResultsFolderFollowsTheName(t *testing.T) {
 	}
 
 	// Its node kept the former one: said in the device's log.
-	task, _ := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Clients"}})
+	task, _ := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients")})
 	c.logResults(task, []EventRow{{Type: "results_conflict", Data: map[string]any{"folder": "Clients", "kept": "Alfred", "wanted": "Jarvis"}},
 		{Type: "tool_use", Data: map[string]any{"name": "Write", "input": map[string]any{"file_path": "/work/folders/Clients/Jarvis/devis.txt"}}}})
 	log, _ := store.nodeLog("nas", 10, 0)

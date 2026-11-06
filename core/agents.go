@@ -220,12 +220,11 @@ func (c *Config) modelEndpoint(agentName string, env map[string]string, spec *no
 	}
 	spec.ModelEndpoint = ep
 	hostport, ok := endpointHostPort(p.BaseURL)
-	if !ok || spec.Egress == nil || spec.Egress.Mode == "none" {
+	if !ok || spec.Egress == nil {
 		return
 	}
 	// The rule may be shared with the stored spec: a copy is changed.
 	e := *spec.Egress
-	e.Allow = slices.Clone(e.Allow)
 	if !slices.Contains(e.Endpoints, hostport) {
 		e.Endpoints = append(slices.Clone(e.Endpoints), hostport)
 	}

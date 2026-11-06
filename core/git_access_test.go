@@ -448,26 +448,3 @@ func TestGhRepoOf(t *testing.T) {
 }
 
 // A token that writes holds only what may be written; one owner per token.
-func TestGhRepos(t *testing.T) {
-	lent := []repoGrant{{Repo: "o/a", Access: accessRead}, {Repo: "o/b", Access: accessWrite}, {Repo: "other/c", Access: accessWrite}}
-	writes := func(repo, access string) bool { return access == accessRead || repo == "o/b" }
-	for _, r := range []struct {
-		named  string
-		allows func(string, string) bool
-		repos  []string
-		access string
-	}{
-		{"", writes, []string{"o/b"}, accessWrite},
-		{"", func(repo, access string) bool { return access == accessRead || repo == "other/c" }, []string{"other/c"}, accessWrite},
-		{"o/a", writes, []string{"o/a"}, accessRead},
-		{"O/B", writes, []string{"o/b"}, accessWrite},
-		{"", func(_, access string) bool { return access == accessRead }, []string{"o/a", "o/b"}, accessRead},
-		{"o/elsewhere", writes, nil, accessRead},
-		{"", func(string, string) bool { return false }, nil, accessRead},
-	} {
-		repos, access := ghRepos(r.named, lent, r.allows)
-		if !slices.Equal(repos, r.repos) || access != r.access {
-			t.Errorf("%q: %v %s", r.named, repos, access)
-		}
-	}
-}

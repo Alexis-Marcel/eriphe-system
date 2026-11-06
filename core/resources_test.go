@@ -8,21 +8,27 @@ import (
 	"testing"
 )
 
-// The old fields of run_task are read into resources; the new ones are
-// checked for their form.
+// folderRefs lends folders; Clients, opened for drop in these tests, for drop.
+func folderRefs(names ...string) []ResourceRef {
+	var out []ResourceRef
+	for _, n := range names {
+		access := accessRead
+		if strings.EqualFold(n, "Clients") {
+			access = accessDrop
+		}
+		out = append(out, ResourceRef{Kind: resFolder, Ref: n, Access: access})
+	}
+	return out
+}
+
+// Resources are checked for their form; an assistant's tools are read into them.
 func TestNormalizeResources(t *testing.T) {
-	got, err := normalizeResources(runRequest{Repo: "owner/repo", Ref: "main", Branch: "eriphe/fix", Dir: "web",
-		Tools: []string{"github.get_*", " "}, Folders: []string{"Clients"}})
+	got, err := normalizeResources(runRequest{Tools: []string{"github.get_*", " "}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []ResourceRef{
-		{Kind: resRepo, Ref: "owner/repo", Access: accessRead, Branch: "eriphe/fix", Base: "main", Dir: "web"},
-		{Kind: resTool, Ref: "github.get_*"},
-		{Kind: resFolder, Ref: "Clients"},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("legacy = %+v", got)
+	if want := []ResourceRef{{Kind: resTool, Ref: "github.get_*"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("tools = %+v", got)
 	}
 	got, err = normalizeResources(runRequest{Resources: []ResourceRef{
 		{Kind: " Repo ", Ref: "owner/repo", Access: "WRITE", Branch: "eriphe/x"},
@@ -40,10 +46,9 @@ func TestNormalizeResources(t *testing.T) {
 		"ref is required":            {Resources: []ResourceRef{{Kind: "folder"}}},
 		"takes access read or drop":  {Resources: []ResourceRef{{Kind: "drive-folder", Ref: "Clients", Access: "write"}}},
 		"takes access read or write": {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Access: "drop"}}},
-		"takes access read, not":     {Resources: []ResourceRef{{Kind: "file", Ref: "att_x", Access: "write"}}},
 		"a repo's only":              {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", Branch: "x"}}},
 		"trust_skills are a repo":    {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", TrustSkills: true}}},
-		"one repository per task":    {Repo: "o/a", Resources: []ResourceRef{{Kind: "repo", Ref: "o/b"}}},
+		"one repository per task":    {Resources: []ResourceRef{{Kind: "repo", Ref: "o/a"}, {Kind: "repo", Ref: "o/b"}}},
 		"not a branch name":          {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Branch: "--force"}}},
 		"inside the repository":      {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Dir: "../etc"}}},
 	} {
@@ -82,7 +87,7 @@ func TestResolveFolders(t *testing.T) {
 	withDrive(t, c, DriveFolder{Name: "Factures", ID: "d1", Access: folderRead}, DriveFolder{Name: "Devis", ID: "d2", Access: folderDrop})
 
 	// The old field lends a folder with its own access; a resource, read unless it says drop.
-	l, err := c.resolveRequest(runRequest{Folders: []string{"clients", "Photos"}})
+	l, err := c.resolveRequest(runRequest{Resources: folderRefs("clients", "Photos")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +100,7 @@ func TestResolveFolders(t *testing.T) {
 		t.Fatalf("default read: %+v %v", l, err)
 	}
 	// The same folder twice: once, with the higher access.
-	l, _ = c.resolveRequest(runRequest{Folders: []string{"Clients"}, Resources: []ResourceRef{{Kind: resFolder, Ref: "CLIENTS", Access: accessRead}}})
+	l, _ = c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessDrop}, {Kind: resFolder, Ref: "CLIENTS", Access: accessRead}}})
 	if len(l.List) != 1 || l.List[0].Access != accessDrop {
 		t.Fatalf("merged %+v", l.List)
 	}
@@ -110,19 +115,10 @@ func TestResolveFolders(t *testing.T) {
 		"is on a machine":                       {Kind: resDriveFolder, Ref: "Clients"},
 		"Drive folder \"Factures\" is opened":   {Kind: resDriveFolder, Ref: "Factures", Access: accessDrop},
 		"unknown":                               {Kind: resFolder, Ref: "Nope"},
-		"no such attachment":                    {Kind: resFile, Ref: "att_00000000000000000000000000000000"},
 	} {
 		if _, err := c.resolveRequest(runRequest{Resources: []ResourceRef{r}}); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%+v: %v, want %q", r, err, want)
 		}
-	}
-	// An attachment of the conversation is known, but not lent yet.
-	seq, _ := c.store.addUserMessage("here", nil)
-	c.store.db.Exec(`INSERT INTO attachments (id, seq, name, type, size, created) VALUES (?, ?, 'a.txt', 'text/plain', 1, 0)`,
-		"att_11111111111111111111111111111111", seq)
-	if _, err := c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resFile, Ref: "attachment:att_11111111111111111111111111111111"}}}); err == nil ||
-		!strings.Contains(err.Error(), "not lent to tasks yet") {
-		t.Fatalf("file: %v", err)
 	}
 }
 
@@ -218,7 +214,6 @@ func TestTaintedResources(t *testing.T) {
 	}
 	allowed := []runRequest{
 		{},
-		{Repo: "owner/repo", Branch: "eriphe/x"}, // the old field: read, its pushes ask
 		{Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo"}}},
 		// A write to a repository is asked on the start's card, as an access.
 		{Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "x"}}},
@@ -261,7 +256,7 @@ func TestRunTaskSchema(t *testing.T) {
 		}
 		raw, _ := json.Marshal(tl.InputSchema)
 		s := string(raw)
-		for _, want := range []string{`"resources"`, `"kind"`, `"access"`, "drive-folder", "legacy: use resources {kind: repo}"} {
+		for _, want := range []string{`"resources"`, `"kind"`, `"access"`, "drive-folder"} {
 			if !strings.Contains(s, want) {
 				t.Errorf("schema lacks %s: %s", want, s)
 			}

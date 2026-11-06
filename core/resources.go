@@ -26,7 +26,6 @@ import (
 //	{"kind": "drive-folder", "ref": "Factures",   "access": "read"}
 //	{"kind": "tool",         "ref": "github.get_*"}
 //	{"kind": "access",       "ref": "npm"}
-//	{"kind": "file",         "ref": "att_…"}
 //
 // The old fields of run_task (repo, ref, branch, dir; tools; folders) are
 // read into the same list at the edge (normalizeResources). The list is
@@ -42,7 +41,6 @@ const (
 	resDriveFolder = "drive-folder"
 	resTool        = "tool"
 	resAccess      = "access"
-	resFile        = "file"
 )
 
 // accessDrop is the middle of the scale (accessRead and accessWrite are in
@@ -61,7 +59,6 @@ var resourceKinds = map[string][]string{
 	resDriveFolder: {accessRead, accessDrop},
 	resTool:        {accessRead, accessWrite},
 	resAccess:      {}, // it has no scale: what it can do is the provider's (access.go)
-	resFile:        {accessRead},
 }
 
 // ResourceRef is one thing lent to a task. Branch, Base and Dir are a
@@ -136,20 +133,9 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 		}
 		out = append(out, e)
 	}
-	// The old fields. A repository lent through them was always "first
-	// push asks": that is read here, whose writes ask the user.
-	if repo := strings.TrimSpace(r.Repo); repo != "" {
-		out = append(out, ResourceRef{Kind: resRepo, Ref: repo, Access: accessRead,
-			Branch: strings.TrimSpace(r.Branch), Base: strings.TrimSpace(r.Ref), Dir: strings.TrimSpace(r.Dir)})
-	}
 	for _, g := range r.Tools {
 		if g = strings.TrimSpace(g); g != "" {
 			out = append(out, ResourceRef{Kind: resTool, Ref: g})
-		}
-	}
-	for _, name := range r.Folders {
-		if name = strings.TrimSpace(name); name != "" {
-			out = append(out, ResourceRef{Kind: resFolder, Ref: name})
 		}
 	}
 	repos := 0
@@ -208,14 +194,6 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 			}
 			e.Ref = f.Name
 			own := resourceAccess(f.Access)
-			if e.Access == "" {
-				// The old folders field lent a folder with its own access,
-				// drop at most: managing it is asked for in so many words.
-				e.Access = own
-				if e.Access == accessWrite {
-					e.Access = accessDrop
-				}
-			}
 			if !atLeast(own, e.Access) {
 				return nil, fmt.Errorf("folder %q is opened to Eriphe for %s only: it cannot be lent %s", f.Name, f.Access, e.Access)
 			}
@@ -253,12 +231,6 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 			if _, ok := c.conf().Accesses[e.Ref]; !ok {
 				return nil, errNoAccess(e.Ref)
 			}
-		case resFile:
-			id := strings.TrimPrefix(e.Ref, "attachment:")
-			if _, err := c.store.attachment(id); err != nil {
-				return nil, fmt.Errorf("file %q: no such attachment in the conversation", e.Ref)
-			}
-			return nil, fmt.Errorf("file %s: attachments are not lent to tasks yet: read it with read_attachment and put what the task needs in its prompt", id)
 		}
 		// The same thing twice: once, with the higher access.
 		if i := slices.IndexFunc(out.List, func(o ResourceRef) bool { return o.key() == e.key() }); i >= 0 {

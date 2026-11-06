@@ -190,9 +190,6 @@ the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (p
   pinned in the task's own `ssh` configuration, which a task can change: it protects a task from
   another machine, not a machine from the task.
 
-`identities`, the long-lived secrets handed to a task as they were, are gone: `core.json`'s are
-ignored, with a line in the log. An HTTP token becomes an access; declare it with the same variable.
-
 **Harness cards.** What each runtime can do, as the node drives it, is one entry of `harnesses`
 (`harnesses.go`): MCP servers, how it takes a system prompt (a flag, developer instructions, an
 instructions file, or prepended to the prompt), streaming, a PDF or an image in a tool result, its
@@ -236,8 +233,7 @@ brain, through OpenCode:
 - When a node fetches a task of such an agent, eriphe-core adds `model_endpoint` (`base_url`, and
   `key_env` with a key) to its spec and that one `host:port` to a copy of its egress rule
   (`endpoints`): the node's relay lets the task reach that server, even on the LAN or another
-  port, and nothing else of the LAN (`node/README.md`, Egress). A task without egress (`none`)
-  gets no endpoint.
+  port, and nothing else of the LAN (`node/README.md`, Egress).
 - Nothing is assumed of the models but tool calling. Pick one made for it (Qwen 3, Llama 3.1+,
   Mistral…), and give it enough context: Ollama's default is small, and its documentation
   recommends 16k to 32k tokens for tool calling (`OLLAMA_CONTEXT_LENGTH=32768`, or `num_ctx` in a
@@ -299,8 +295,7 @@ the lending node → the server:               <model-server>/v1/{path}
   secrets stop here: the server gets the provider's key (`secret`), if any, which is never lent
   to a task.
 - The task's spec carries `model_endpoint: {"relay": true}`, no address and no key; its egress
-  rule is unchanged (its node is reached directly, as for its catalog servers), so it works with
-  egress `none` too.
+  rule is unchanged (its node is reached directly, as for its catalog servers).
 - Answers stream through as they come (`FlushInterval: -1` at every hop): a chat completion's
   server-sent events arrive token by token.
 - The lending machine must be connected: otherwise the task's request fails with `502` ("the
@@ -410,7 +405,7 @@ account](#google-accounts-gmail-calendar-drive) Google refused, until it is reco
 
 **Grants.** A task is lent catalog tools as [resources](#resources) of kind `tool`: a server name
 (all its tools) or `server.tool`, where the tool may hold `*` globs (`notion`, `github.get_*`,
-`github.list_issues`); the old `tools` field of `run_task` still works. The grant is stored on
+`github.list_issues`). The grant is stored on
 the task. The brain's is `brain.tools` plus, without configuration, every read-only tool of the
 servers trusted for their annotations (see the brain). Catalog tools need an agent whose runtime
 takes MCP servers.
@@ -657,7 +652,7 @@ whatever address it dials) and one client certificate per node.
 | `list_agents` | agents, when to use each, and whether a node can run them now |
 | `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
 | `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
-| `run_task` | start a task: prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo); the old fields (`repo/ref/branch/dir`, `tools`, `folders`, `identities`) still work |
+| `run_task` | start a task: prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read`, `drop` or `manage`), `max`, `copyable`, where a task finds it, and `machines`: every machine holding it (its own, then its copies), each `online` and `up_to_date` or not; a task may run on any up to date |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
@@ -1027,17 +1022,11 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 | `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
 | `drive-folder` | a Google Drive folder, by name | `read`, `drop` (at most the folder's own) | for now, the files server whole (it reaches every Drive folder given to Eriphe, each with its own access) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
-| `file` | an attachment of the conversation (`att_…`) | `read` | not yet: refused with a clear error |
 
 The access defaults to `read` (for a tool, to what its annotations say). Each entry is checked
 against what the user opened: an unknown folder or server is refused, and so is a `drop` on a
-folder opened for reading, or a `write` on a folder not at `manage`. The old fields are read into
-the same list: `repo/ref/branch/dir` become a `repo` entry with access `read` (its pushes ask, as
-they always did), `tools` become `tool` entries, `folders` become `folder` entries with the
-folder's own access, `drop` at most. The list is kept with the
-task (`tasks.resources`, JSON; empty for tasks from before it); the old columns (`tools`, `folders`,
-`dir`) are still written, and the node still gets its spec fields (`repo`, `folders`…), derived from
-the list.
+folder opened for reading, or a `write` on a folder not at `manage`. The list is kept with the task
+(`tasks.resources`, JSON), and the node gets its spec fields (`repo`, `folders`…), derived from it.
 
 **A repository's skills** (`.claude/skills`, `.agents/skills`, `.opencode/skills`: instructions
 and scripts its agents load by themselves) load only from the user's own repositories
@@ -1057,8 +1046,7 @@ resources, what it needs is granted, it is logged in `decisions` (`release mail.
 brain is told the answer. An entry lent outright beside a held one wins.
 
 **On a tainted turn** (the brain read external content), `run_task` refuses a folder with `write` or
-`drop`, `trust_skills`, a Drive folder (its files server is lent whole for now) and any legacy
-`identities`: the brain asks the user and starts the task in the turn of their answer. Reads still
+`drop`, `trust_skills` and a Drive folder (its files server is lent whole for now): the brain asks the user and starts the task in the turn of their answer. Reads still
 go, and tools, accesses and a GitHub repository for `write`: what they may do is asked on a card at
 launch, Free included.
 
@@ -2733,7 +2721,7 @@ safe place: without it the vault does not open. A key that does not open what th
 is refused at start (and the vault stays closed).
 
 Every field that names a secret file also takes `vault:<name>`: `token_file`, a provider's
-`secret`, an identity's `file`, a brain MCP server's `token_file`:
+`secret`, a brain MCP server's `token_file`:
 
 ```json
 "providers": {"openrouter": {"kind": "openrouter-api", "secret": "vault:openrouter"}}

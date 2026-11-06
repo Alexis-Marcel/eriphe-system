@@ -34,19 +34,12 @@ import (
 
 // EgressRule is where a task may connect.
 type EgressRule struct {
-	Mode  string   `json:"mode"`            // "internet" (the default: public addresses only) or "none"
-	Allow []string `json:"allow,omitempty"` // if set, only these hosts: "github.com", "*.npmjs.org" (subdomains)
 	// Endpoints are the host:port of the task's self-hosted model server
-	// ("192.0.2.10:11434"): with the mode internet, each is reachable even
-	// on the LAN or another port, but only that very host and port, and
+	// ("192.0.2.10:11434"): each is reachable even on the LAN or another
+	// port, but only that very host and port, and
 	// never at a loopback, link-local, multicast or unspecified address.
 	Endpoints []string `json:"endpoints,omitempty"`
 }
-
-const (
-	egressInternet = "internet"
-	egressNone     = "none"
-)
 
 // egressPorts are the ports the relay connects to: HTTP and HTTPS (git over
 // HTTPS included), not SMTP, SSH nor anything else. An SSH access's one
@@ -116,23 +109,6 @@ func guardControl(_, address string, _ syscall.RawConn) error {
 	return nil
 }
 
-// hostAllowed matches a host against a rule's allowlist: an exact name, or
-// "*.domain" for any name under domain (not domain itself).
-func hostAllowed(allow []string, host string) bool {
-	host = strings.TrimSuffix(strings.ToLower(host), ".")
-	for _, a := range allow {
-		a = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(a)), ".")
-		if suffix, ok := strings.CutPrefix(a, "*."); ok {
-			if strings.HasSuffix(host, "."+suffix) {
-				return true
-			}
-		} else if a != "" && host == a {
-			return true
-		}
-	}
-	return false
-}
-
 type egressTask struct {
 	id   string
 	rule EgressRule
@@ -165,9 +141,6 @@ type egressProxy struct {
 	logf         func(format string, args ...any)
 	// access serves the requests of a task's accesses (egress_access.go).
 	access http.Handler
-	// sshOpen asks eriphe-core whether a task may open a tunnel now
-	// (egress_ssh.go).
-	sshOpen func(ctx context.Context, taskID, target string) error
 	// sshCore opens a task's session through eriphe-core (egress_ssh.go).
 	sshCore func(ctx context.Context, taskID, target string) (net.Conn, error)
 }
@@ -196,7 +169,7 @@ func (n *node) egressAuthorizer(id, secret string) (*egressTask, bool) {
 	if t == nil || t.secret == "" || subtle.ConstantTimeCompare([]byte(secret), []byte(t.secret)) != 1 || finished(t.state()) {
 		return nil, false
 	}
-	rule := EgressRule{Mode: egressInternet}
+	var rule EgressRule
 	if t.Spec.Egress != nil {
 		rule = *t.Spec.Egress
 	}
@@ -290,11 +263,8 @@ func (p *egressProxy) dial(ctx context.Context, t *egressTask, hostport string) 
 }
 
 // isEndpoint tells whether host:port is exactly a model server the task's
-// rule declares, with the mode internet: no other host, no other port.
+// rule declares: no other host, no other port.
 func (t *egressTask) isEndpoint(host, port string) bool {
-	if t.rule.Mode != egressInternet && t.rule.Mode != "" {
-		return false
-	}
 	target := net.JoinHostPort(host, port)
 	for _, e := range t.rule.Endpoints {
 		h, p, err := net.SplitHostPort(strings.TrimSpace(e))
@@ -345,20 +315,10 @@ func mustPort(port string) uint16 {
 	return p
 }
 
-// check applies the task's rule to a host and port, before any lookup.
+// check applies the relay's ports to a host and port, before any lookup.
 func (p *egressProxy) check(t *egressTask, host, port string) error {
-	switch t.rule.Mode {
-	case egressInternet, "":
-	case egressNone:
-		return refused("this task has no egress")
-	default:
-		return refused("unknown egress mode %q", t.rule.Mode)
-	}
 	if !egressPorts[port] {
 		return refused("port %s is not allowed (only 80 and 443)", port)
-	}
-	if len(t.rule.Allow) > 0 && !hostAllowed(t.rule.Allow, host) {
-		return refused("%s is not in this task's allowlist", host)
 	}
 	return nil
 }
