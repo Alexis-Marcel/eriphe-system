@@ -226,6 +226,15 @@ func TestTaskStartClean(t *testing.T) {
 	}
 }
 
+// With GitHub not connected, a yes could give nothing: no card.
+func TestTaskStartNotConnected(t *testing.T) {
+	c := startCore(t)
+	currentVault().remove("server.github.token")
+	if task := launchWrite(t, c); c.heldTask(task.ID) {
+		t.Fatal("a card for what cannot work")
+	}
+}
+
 // A watch authorised in advance needs no card: the yes given for it covers
 // the repository too, even with no branch declared.
 func TestTaskStartApprovedInAdvance(t *testing.T) {

@@ -96,7 +96,7 @@ var builtinDeny = []Rule{
 	rule("Bash", shellBoundary+`rm\s+([^;&|]*\s)?(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\s([^;&|]*\s)?['"]?/work/folders|`+
 		shellBoundary+`rm\s+([^;&|]*\s)?['"]?/work/folders[^;&|]*\s(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(\s|$|[;&|])`,
 		decideDeny, "suppression récursive interdite dans un dossier prêté (rm -r)"),
-	rule("Bash", `git\s+push\b[^;&|]*(\s|:)(main|master)(\s|$|[;&|])`, decideDeny, "pousser sur main est interdit : pousse une branche"),
+	rule("Bash", `git\s+push\b[^;&|]*(\s|:|refs/heads/)(main|master)(\s|$|[;&|'")])`, decideDeny, "pousser sur main est interdit : pousse une branche"),
 	rule("Bash", `git\s+push\b[^;&|]*(\s--force\b|\s-f\b|\s--force-with-lease\b|\s\+\S)`, decideDeny, "forcer un push est interdit"),
 	rule("Bash", `\$\{?(`+secretVars+`)\b|/proc/[^/\s]+/environ|`+shellBoundary+`(printenv|env|export\s+-p|set)\s*($|[;&|>])|\.credentials\.json|eriphe-codex|codex/auth\.json|git\s+config\b[^;&|]*credential`,
 		decideDeny, "lire les secrets de la tâche est interdit"),

@@ -60,7 +60,7 @@ const (
 	accessTargetHeader = "Eriphe-Access-Target"
 	accessAuthHeader   = "Eriphe-Access-Authorization"
 
-	// accessLogTool names an access's uses in the credential log.
+	// accessLogTool names an access's uses in the access log.
 	accessLogTool = "access"
 )
 

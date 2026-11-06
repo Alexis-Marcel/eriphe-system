@@ -28,16 +28,20 @@ const pushBody = "0000PACKdata"
 
 func TestReadGitCall(t *testing.T) {
 	for raw, want := range map[string]gitCall{
-		"GET /o/r.git/info/refs?service=git-upload-pack":  {repo: "o/r", access: accessRead},
-		"GET /o/r/info/refs?service=git-upload-pack":      {repo: "o/r", access: accessRead},
-		"GET /o/r.git/info/refs":                          {repo: "o/r", access: accessRead},
-		"POST /o/r.git/git-upload-pack":                   {repo: "o/r", access: accessRead},
-		"GET /o/r.git/info/refs?service=git-receive-pack": {repo: "o/r", access: accessWrite},
-		"POST /o/r.git/git-receive-pack":                  {repo: "o/r", access: accessWrite},
-		"POST /o/r.git/info/lfs/objects/batch":            {repo: "o/r", access: accessRead, lfs: true},
-		"GET /o/r/archive/main.zip":                       {},
-		"GET /login":                                      {},
-		"PUT /o/r.git/git-receive-pack":                   {},
+		"GET /o/r.git/info/refs?service=git-upload-pack":        {repo: "o/r", access: accessRead},
+		"GET /o/r/info/refs?service=git-upload-pack":            {repo: "o/r", access: accessRead},
+		"GET /o/r.git/info/refs":                                {repo: "o/r", access: accessRead},
+		"POST /o/r.git/git-upload-pack":                         {repo: "o/r", access: accessRead},
+		"GET /o/r.git/info/refs?service=git-receive-pack":       {repo: "o/r", access: accessWrite},
+		"POST /o/r.git/git-receive-pack":                        {repo: "o/r", access: accessWrite},
+		"POST /o/r.git/info/lfs/objects/batch":                  {repo: "o/r", access: accessRead, lfs: true},
+		"GET /o/r/archive/main.zip":                             {},
+		"GET /login":                                            {},
+		"POST /o/r/info/lfs/../../../v/x/git-receive-pack":      {},
+		"POST /o/r/./git-receive-pack":                          {},
+		"POST /o/r/info/lfs/%2e%2e/%2e%2e/v/x/git-receive-pack": {},
+		"POST /o/r/info%2Flfs/objects/batch":                    {},
+		"PUT /o/r.git/git-receive-pack":                         {},
 	} {
 		method, target, _ := strings.Cut(raw, " ")
 		uri, err := url.ParseRequestURI(target)
@@ -361,6 +365,19 @@ func TestGitLFSWritesWhereTheTaskMayWrite(t *testing.T) {
 	log, _ := c.store.accessLog(task.ID, 10)
 	if len(log) == 0 || log[0].Action != accessWrite {
 		t.Fatalf("log %+v", log)
+	}
+}
+
+// Without the App the token could write anything: what cannot be told from a
+// read is not one.
+func TestGitLFSWithoutTheApp(t *testing.T) {
+	c, task, svc := gitCore(t, false, ResourceRef{Kind: resRepo, Ref: "owner/repo", Access: accessRead})
+	currentVault().remove(githubAppVault)
+	currentVault().set("server.github.token", "github_pat_long_lived")
+	calls := svc.calls()
+	rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/info/lfs/objects/batch", gitAuth(task.ID), "{}", nil)
+	if rec.Code != http.StatusForbidden || svc.calls() != calls {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 }
 
