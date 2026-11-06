@@ -398,10 +398,12 @@ GitHub tool: Settings → Tools → GitHub → **Créer l'app GitHub d'Eriphe**.
 4. Optional: **Brancher l'outil GitHub sur l'app**, so the GitHub tool (issues, pull requests, code
    search) uses the same app instead of a personal token.
 
-Then a task lent the GitHub tool asks for its access when it needs it: one hour, the task's
-repository only, read freely, and the first push waits for your approval in the workspace. The
-task's details list every access it asked for. Without the app, a task gets the GitHub tool's
-token instead, which lasts and is not limited to one repository: the page warns about it.
+Then a task lent a repository gets its access on the way out: one hour, that repository only. A
+repository lent for read cannot be pushed to. One lent for write is decided when the task starts:
+your own request with a branch needs nothing more, otherwise a card asks you. The task's details
+list every access it used. Without the app, git uses the GitHub tool's token instead, with the same
+rules, but that token lasts and is not limited to one repository: the page warns about it, and `gh`
+needs the app.
 
 The app needs no public address: GitHub sends your browser back to the workspace at the address
 you opened it with. Nothing reaches eriphe-core from GitHub (no webhook).

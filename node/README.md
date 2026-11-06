@@ -434,7 +434,7 @@ otherwise). The relay:
   the LAN: eriphe-core adds its `host:port` to the rule's `endpoints` (`["192.0.2.10:11434"]`)
   when the node fetches the task. Only a target that is exactly a declared `host:port` (the name
   or address as declared, the same port) is let through, on any port and even at a private
-  address, and only with the mode `internet` (not `none`; `allow` does not restrict it). Its name
+  address. Its name
   is resolved by the relay, which still refuses loopback (the node itself), link-local (the cloud's
   metadata included), multicast and unspecified addresses, and dials the very address it checked
   (checked again on the socket). Another port of the same machine, or another machine of the LAN,
@@ -445,11 +445,8 @@ otherwise). The relay:
 
 What honors the variables (checked through the relay): curl, git, npm, Node's `fetch` (with
 `NODE_USE_ENV_PROXY`), Claude Code, Codex, OpenCode (Bun), apt (Debian's mirrors over plain HTTP,
-forwarded), uv and pip. A task's installs go out the same way: with the default rule
-(`internet`) every public mirror is reachable; an agent restricted by `allow` needs the hosts of
-what it installs, e.g. `deb.debian.org`, `pypi.org` and `files.pythonhosted.org`,
-`registry.npmjs.org`, `github.com` and `*.githubusercontent.com`. A program that ignores
-them fails closed: no route, no DNS for outside names. The brain (`system_network`) gets no proxy:
+forwarded), uv and pip. A task's installs go out the same way: every public mirror is reachable.
+A program that ignores them fails closed: no route, no DNS for outside names. The brain (`system_network`) gets no proxy:
 it is also on the services' network, which has egress, and calls its MCP servers directly.
 `-egress-listen ""` turns the relay off (tasks then reach only the node).
 
@@ -562,8 +559,8 @@ cache reads); OpenCode and other ACP agents nothing yet.
 The container puts `/opt/eriphe/bin` first in `PATH`, clones `repo` if given (installing git with
 apt first when the image has none), then runs the runtime's command. Nothing else is set up for a
 repository (no `mise install`, no devcontainer): the agent installs what it needs (see Task
-containers). Identities (for example `CLAUDE_CODE_OAUTH_TOKEN`, `OPENROUTER_API_KEY`, `GH_TOKEN`)
-are passed as environment variables, never on a command line.
+containers). The agent's environment (for example `CLAUDE_CODE_OAUTH_TOKEN`, `OPENROUTER_API_KEY`)
+is passed as environment variables, never on a command line.
 
 ### ACP
 
