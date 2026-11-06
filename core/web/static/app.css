@@ -1226,17 +1226,18 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 /* What Eriphe may do on a tool, in the form and in the list (access.go). */
 .access-grid { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 12px; }
 .access-grid legend { font-size: .86rem; font-weight: 600; padding: 0; margin-bottom: 8px; }
-.access-grid table { width: 100%; border-collapse: collapse; }
-.access-grid th { font-weight: 500; font-size: .84rem; text-align: center; padding: 8px 4px; }
-.access-grid tbody th { text-align: left; font-weight: 600; }
-.access-grid th small { display: block; font-weight: 400; color: var(--muted); font-size: .76rem; }
-.access-grid td { text-align: center; padding: 8px 4px; }
-.access-grid tbody tr + tr > * { border-top: 1px solid var(--border); }
-.access-grid input[type=radio] { width: 20px; height: 20px; }
+.access-grid table, .exceptions table { width: 100%; border-collapse: collapse; }
+:is(.access-grid, .exceptions) th { font-weight: 500; font-size: .84rem; text-align: center; padding: 8px 4px; }
+:is(.access-grid, .exceptions) tbody th { text-align: left; font-weight: 600; }
+:is(.access-grid, .exceptions) th small { display: block; font-weight: 400; color: var(--muted); font-size: .76rem; }
+:is(.access-grid, .exceptions) td { text-align: center; padding: 8px 4px; }
+:is(.access-grid, .exceptions) tbody tr + tr > * { border-top: 1px solid var(--border); }
+:is(.access-grid, .exceptions) input[type=radio] { width: 20px; height: 20px; }
+.exceptions table { margin-top: 8px; }
+.exceptions tbody th { width: 42%; overflow-wrap: anywhere; }
+.exceptions tbody th .mono { font-weight: 500; }
 .grid-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
 .access-grid .check small { display: block; font-size: .8rem; }
-.exceptions li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 4px 0; }
-.exceptions select { margin-left: auto; }
 .choices.access > small { font-size: .8rem; line-height: 1.4; }
 .access-tag { color: var(--muted); text-decoration: none; }
 .access-tag:hover { text-decoration: underline; }
