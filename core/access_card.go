@@ -108,6 +108,9 @@ func (s *Store) accessGrants(taskID string) []accessNeed {
 
 // callNeed is what a call of a catalog tool needs granted.
 func (c *core) callNeed(tool string, input map[string]any, f catalogFacts) accessNeed {
+	if tool == webFetchTool {
+		return accessNeed{Server: "web", Category: catRead}
+	}
 	server, _, _ := splitToolName(tool)
 	return accessNeed{server, f.category, c.callAccount(server, input)}
 }
@@ -270,6 +273,9 @@ func (c *core) askTaskAccess(t *TaskRow, pid, tool string, input map[string]any,
 // brainCardWaits answers the brain's call at once: a card never holds it.
 const brainCardWaits = "Pas exécutée pour l'instant : une carte le demande à %s. Ne la relance pas et continue, tu restes disponible. S'il dit oui, eriphe-core l'exécute telle quelle et te donne le résultat."
 
+// brainPageWaits is brainCardWaits for a page read, which only the brain can do.
+const brainPageWaits = "Pas lue pour l'instant : une carte le demande à %s. Ne la relance pas et continue, tu restes disponible. S'il dit oui, tu en es prévenu et tu pourras la lire."
+
 // askBrainAccess asks one call of the brain, On approval or a Free write on a
 // tainted turn: the card keeps the call, the brain goes on, and a yes runs
 // exactly that call (runApprovedCall), however late it comes. The same call
@@ -283,7 +289,11 @@ func (c *core) askBrainAccess(ctx context.Context, t *TaskRow, pid, tool string,
 			Call: tool + " " + string(fields), Input: string(raw), Tainted: strings.Join(c.turnTaintBut(pending), ", ")})
 	}
 	no := false
-	_, err := c.answer(ctx, t.ID, pid, fmt.Sprintf(brainCardWaits, c.conf().User), &no, byPolicy)
+	waits := brainCardWaits
+	if tool == webFetchTool {
+		waits = brainPageWaits
+	}
+	_, err := c.answer(ctx, t.ID, pid, fmt.Sprintf(waits, c.conf().User), &no, byPolicy)
 	return err
 }
 
@@ -295,6 +305,11 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	ctx, cancel := context.WithTimeout(context.Background(), approvedCallTimeout)
 	defer cancel()
 	name, _, _ := strings.Cut(a.Call, " ")
+	if name == webFetchTool {
+		c.store.addMessage(roleEvent, c.allowPage(a), false)
+		c.ping()
+		return
+	}
 	text, server := c.approvedCall(ctx, a, name)
 	seq, err := c.store.addMessage(roleEvent, text, false)
 	if err == nil && server != "" && !containsStr(c.conf().memoryConfig().TrustedServers, server) {
@@ -455,6 +470,8 @@ func (c *core) accessText(a accessQuestion, lang string) string {
 	switch {
 	case len(a.Refs) > 0:
 		return fmt.Sprintf(tr(lang, "access.ask.release"), title, strings.Join(a.Refs, ", "))
+	case strings.HasPrefix(a.Call, webFetchTool+" "):
+		return fmt.Sprintf(tr(lang, "access.ask.page"), c.conf().assistantName())
 	case a.Call != "":
 		return fmt.Sprintf(tr(lang, "access.ask.brain"), c.conf().assistantName(), callVerb(a.Call, lang), a.Need.Target())
 	}
