@@ -556,8 +556,8 @@ Claude Code's result gives both, with `duration_ms`; Codex its tokens
 (`thread/tokenUsage/updated`: the turn's share of the thread's total, its cached input counted as
 cache reads); OpenCode and other ACP agents nothing yet.
 
-The container puts `/opt/eriphe/bin` first in `PATH`, clones `repo` if given (installing git with
-apt first when the image has none), then runs the runtime's command. Nothing else is set up for a
+The container puts `/opt/eriphe/bin` first in `PATH`, clones `repo` if given (installing git and gh
+with apt first when the image lacks them; without a repository, neither), then runs the runtime's command. Nothing else is set up for a
 repository (no `mise install`, no devcontainer): the agent installs what it needs (see Task
 containers). The agent's environment (for example `CLAUDE_CODE_OAUTH_TOKEN`, `OPENROUTER_API_KEY`)
 is passed as environment variables, never on a command line.
