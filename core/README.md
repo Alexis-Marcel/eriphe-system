@@ -1969,7 +1969,8 @@ approved, declined, no longer current). Other proposals (the memory's extraction
 said nothing) are queued and offered three at most, once an hour at most, when the user writes or
 at the brief and the return point, never in the quiet hours, at night (22:00–07:00), when a
 source says do not disturb, in a Focus or while busy; the brain says it in a sentence and the
-cards come with its message. A plain yes or no answers a card in words only when the message is
+cards come with its message. A card that stops a task is not one of these: if its turn wrote
+nothing (a turn that failed), it goes with the brain's next message, whatever the hour. A plain yes or no answers a card in words only when the message is
 the user's own (workspace, Telegram or voice from a device; never `/v1/messages`, whose token may
 be lent to the brain, nor an automation), is nothing but a yes or a no, has no file, comes right
 after a recent message of the brain's written in a clean turn that shows exactly one waiting card,

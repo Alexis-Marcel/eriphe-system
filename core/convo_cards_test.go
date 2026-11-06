@@ -172,6 +172,37 @@ func TestCardsFollowTheTurn(t *testing.T) {
 	}
 }
 
+// A held task's card does not wait for a good moment: its turn failed before
+// the brain wrote, it is night, and it still comes with the brain's next
+// message. If the task stopped meanwhile, it does not.
+func TestBlockingCardSurvivesASilentTurn(t *testing.T) {
+	c, _ := notifyCore(t, at(t, "2026-11-04", "23:30"))
+	hold := func(id string) int64 {
+		t.Helper()
+		waitingTask(c, id)
+		c.store.updateTask(id, map[string]any{"state": statePending, "desired": desiredHeld})
+		if err := c.holdTask(&TaskRow{ID: id}, []startNeed{{Server: "nas", Category: "use"}}, nil); err != nil {
+			t.Fatal(err)
+		}
+		var start int64
+		c.store.db.QueryRow(`SELECT id FROM task_starts WHERE task_id = ?`, id).Scan(&start)
+		return start
+	}
+	kept, gone := hold("t-kept"), hold("t-gone")
+	c.cardsTurnEnded()
+	if x := cardOf(t, c, cardTaskStart, kept); x.Seq != 0 || x.Turn {
+		t.Fatalf("after a silent turn: %+v", x)
+	}
+	c.store.updateTask("t-gone", map[string]any{"state": stateStopped, "desired": desiredStopped})
+	seq := brainSays(c, "Je reprends.")
+	if x := cardOf(t, c, cardTaskStart, kept); x.Seq != seq || x.State != cardPending {
+		t.Fatalf("the held task's card did not come: %+v", x)
+	}
+	if x := cardOf(t, c, cardTaskStart, gone); x.Seq != 0 {
+		t.Fatalf("the card of a stopped task came: %+v", x)
+	}
+}
+
 // A plain yes or no answers a card, only under the safe rule.
 func TestCardAnsweredInWords(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
