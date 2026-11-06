@@ -29,6 +29,9 @@ import (
 //     when the user writes, or at the brief and the return point; never in
 //     the quiet hours, at night or when a source says not to disturb
 //     (offerCards). The brain says it in a sentence; the cards come with it.
+//   - A card that stops a task (blocksATask) never waits for a good moment:
+//     if its turn wrote nothing, as when the turn failed, it goes with the
+//     brain's next message, whatever the hour.
 //   - The brain never approves: no tool of its decides a card. A plain
 //     "oui" or "non" of the user's may, under strict rules (resolveByText).
 //   - What happened is told the same way: a digest card follows the
@@ -440,8 +443,24 @@ func (c *core) attachTurnCards(seq int) {
 	if seq <= 0 {
 		return
 	}
+	c.claimBlockingCards()
 	c.store.db.Exec(`UPDATE convo_cards SET seq = ?, turn = 0, attached = ? WHERE seq = 0 AND turn = 1`, seq, time.Now().Unix())
 	c.brainSeqOfTurn = seq
+}
+
+// claimBlockingCards takes the cards back from the queue that stop a task:
+// the task waits on them, so the offer's quiet hours are not for them. One
+// whose task stopped meanwhile stays out of the conversation.
+func (c *core) claimBlockingCards() {
+	xs, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind IN (?, ?)`, cardPending, cardTaskStart, cardAccess)
+	if err != nil {
+		return
+	}
+	for _, x := range xs {
+		if x, _ = c.liveCard(x); x.State == cardPending {
+			c.store.db.Exec(`UPDATE convo_cards SET turn = 1 WHERE id = ? AND seq = 0`, x.ID)
+		}
+	}
 }
 
 // cardsTurnEnded attaches what the brain proposed after its last message
