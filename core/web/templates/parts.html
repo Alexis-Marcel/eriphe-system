@@ -223,7 +223,7 @@
 <ol class="timeline">{{range .Credentials}}
   <li class="ev ev-cred cred-{{.Decision}}"><span class="ev-tag">{{template "i-key"}}{{t (printf "cred.%s" .Decision)}}</span><code>{{.Access}} {{.Host}}/{{.Repo}}</code>
     <span class="muted small">{{.Tool}} · {{clock .Time}}{{if eq .By "user"}} · {{t "cred.byuser"}}{{end}}</span>
-    {{if .Fallback}}<span class="cred-why err-text">{{t "cred.fallback"}}</span>{{else if .Reason}}<span class="cred-why muted">{{short .Reason 200}}</span>{{end}}</li>
+    {{if .Fallback}}<span class="cred-why muted">{{t "cred.fallback"}}</span>{{else if .Reason}}<span class="cred-why muted">{{short .Reason 200}}</span>{{end}}</li>
 {{end}}</ol>{{end}}
 <h3 class="section-label">{{t "task.activity"}}</h3>
 {{if .Events}}<ol class="timeline">{{range .Events}}{{$fail := evfail .}}

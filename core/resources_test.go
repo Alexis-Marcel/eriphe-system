@@ -193,7 +193,7 @@ func TestTaskKeepsResources(t *testing.T) {
 }
 
 // Credentials come from the repo resources: a covering entry with enough
-// access, a write on a declared branch approved by the user's own turn.
+// access, a write on a declared branch on a clean start.
 func TestDecideCredentialFromResources(t *testing.T) {
 	push := credRequest{Host: "github.com", Path: "owner/site.git", Access: "write", Tool: "git"}
 	lentWrite := []repoGrant{{Repo: "owner/site", Access: accessWrite, Branch: "eriphe/fix"}}
@@ -204,26 +204,21 @@ func TestDecideCredentialFromResources(t *testing.T) {
 		want   string
 		reason string
 	}{
-		{"covered write on its branch", push, credFacts{Kind: "worker", Repos: lentWrite, Lent: true}, decideAllow, "lent for write"},
+		{"covered write on its branch", push, credFacts{Kind: "worker", Repos: lentWrite, Lent: true, Clean: true}, decideAllow, "lent for write"},
+		{"not the user's own start asks", push, credFacts{Kind: "worker", Repos: lentWrite, Lent: true}, decideAsk, "not the user's own"},
 		{"covered read", credRequest{Host: "github.com", Path: "Owner/Site", Access: "read"}, credFacts{Kind: "worker", Repos: lentWrite, Lent: true}, decideAllow, ""},
 		{"gh write on a branch lent for write", credRequest{Host: "api.github.com", Path: "owner/site", Access: "write", Tool: "gh"},
-			credFacts{Kind: "worker", Repos: lentWrite, Lent: true}, decideAllow, "lent for write"},
+			credFacts{Kind: "worker", Repos: lentWrite, Lent: true, Clean: true}, decideAllow, "lent for write"},
 		{"gh write without a branch asks", credRequest{Host: "api.github.com", Path: "owner/site", Access: "write", Tool: "gh"},
-			credFacts{Kind: "worker", Repos: []repoGrant{{Repo: "owner/site", Access: accessWrite}}, Lent: true}, decideAsk, "first push"},
-		{"gh write on a tainted task asks", credRequest{Host: "api.github.com", Path: "owner/site", Access: "write", Tool: "gh"},
-			credFacts{Kind: "worker", Repos: lentWrite, Lent: true, Tainted: []string{"WebFetch"}}, decideAsk, "external content"},
-		{"write without a branch asks", push, credFacts{Kind: "worker", Repos: []repoGrant{{Repo: "owner/site", Access: accessWrite}}, Lent: true}, decideAsk, "first push"},
-		{"lent read: a write asks", push, credFacts{Kind: "worker", Repos: []repoGrant{{Repo: "owner/site", Access: accessRead, Branch: "x"}}, Lent: true}, decideAsk, "lent for read"},
+			credFacts{Kind: "worker", Repos: []repoGrant{{Repo: "owner/site", Access: accessWrite}}, Lent: true, Clean: true}, decideAsk, "no branch"},
+		{"write without a branch asks", push, credFacts{Kind: "worker", Repos: []repoGrant{{Repo: "owner/site", Access: accessWrite}}, Lent: true, Clean: true}, decideAsk, "no branch"},
+		{"lent read: a write is refused", push, credFacts{Kind: "worker", Repos: []repoGrant{{Repo: "owner/site", Access: accessRead, Branch: "x"}}, Lent: true}, decideDeny, "for read"},
 		{"another repo", credRequest{Host: "github.com", Path: "owner/other.git", Access: "read"}, credFacts{Kind: "worker", Repos: lentWrite, Lent: true}, decideDeny, "not the repository"},
-		{"tainted task asks", push, credFacts{Kind: "worker", Repos: lentWrite, Lent: true, Tainted: []string{"WebFetch"}}, decideAsk, "external content"},
-		{"fallback asks", credRequest{Host: "github.com", Path: "owner/site.git", Access: "read"},
-			credFacts{Kind: "worker", Repos: lentWrite, Lent: true, Fallback: true}, decideAsk, "no GitHub App"},
-		{"fallback approved", credRequest{Host: "github.com", Path: "owner/site.git", Access: "read"},
-			credFacts{Kind: "worker", Repos: lentWrite, Lent: true, Fallback: true, Granted: func(string, string) bool { return true }}, decideAllow, "approved"},
+		{"without the App, the same", push, credFacts{Kind: "worker", Repos: lentWrite, Lent: true, Clean: true, Fallback: true}, decideAllow, "lent for write"},
 		{"nothing lent", push, credFacts{Kind: "worker", Lent: false}, decideDeny, "no GitHub repository"},
 	}
 	for _, c := range cases {
-		d := decideCredential(nil, c.req, c.facts)
+		d := decideCredential(c.req, c.facts)
 		if d.Decision != c.want || !strings.Contains(d.Reason, c.reason) {
 			t.Errorf("%s: %s (%s), want %s (%q)", c.name, d.Decision, d.Reason, c.want, c.reason)
 		}
@@ -240,16 +235,12 @@ func TestCredentialFromRepoResource(t *testing.T) {
 		Resources: []ResourceRef{{Kind: resRepo, Ref: "https://github.com/owner/repo.git", Access: accessWrite, Branch: "eriphe/fix"}}}
 	c.store.insertTask(task)
 	task, _ = c.store.task("t-2")
+	c.store.set(lentByUserKey(task.ID), "1")
 	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "write", Tool: "git"}); a.Decision != decideAllow || a.Password == "" {
 		t.Fatalf("push on its branch: %+v", a)
 	}
 	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/other.git", Access: "read"}); a.Decision != decideDeny {
 		t.Fatalf("other repo: %+v", a)
-	}
-	// Started on a tainted turn: its writes ask.
-	c.store.set(taskTaintKey(task.ID), "started on a tainted turn: mcp__mail__read")
-	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "write", Tool: "git"}); a.Decision != decideAsk {
-		t.Fatalf("tainted: %+v", a)
 	}
 	// From before resources, without the GitHub tool: refused, as then.
 	if a := c.credential(ctx, old, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read"}); a.Decision != decideDeny {
@@ -263,7 +254,6 @@ func TestTaintedResources(t *testing.T) {
 	withDrive(t, c, DriveFolder{Name: "Factures", ID: "d1", Access: folderRead})
 	c.conf().User = "Sam"
 	refused := []runRequest{
-		{Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "x"}}},
 		{Resources: []ResourceRef{{Kind: resDriveFolder, Ref: "Factures"}}},
 		{Resources: []ResourceRef{{Kind: resRepo, Ref: "someone/tool", TrustSkills: true}}},
 	}
@@ -271,6 +261,8 @@ func TestTaintedResources(t *testing.T) {
 		{},
 		{Repo: "owner/repo", Branch: "eriphe/x"}, // the old field: read, its pushes ask
 		{Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo"}}},
+		// A write to a repository is asked on the start's card, as an access.
+		{Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "x"}}},
 		{Resources: []ResourceRef{{Kind: resTool, Ref: "github.get_*"}}},
 		{Tools: []string{"github.get_*"}},
 		// What a tool may do is asked on a card at launch (access_card.go).

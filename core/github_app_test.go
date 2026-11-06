@@ -174,11 +174,8 @@ func TestMintInstallationToken(t *testing.T) {
 	ctx := context.Background()
 
 	a := c.credential(ctx, task, credRequest{Protocol: "https", Host: "github.com", Path: "owner/repo.git", Access: "read", Tool: "git"})
-	if a.Decision != decideAllow || a.Password != "ghs_x" || a.Username != "x-access-token" {
+	if a.Decision != decideAllow || a.Password != gitPlaceholder(task.ID) || a.Username != "x-access-token" {
 		t.Fatalf("read: %+v", a)
-	}
-	if d := time.Until(a.Expires); d < 50*time.Minute || d > time.Hour {
-		t.Fatalf("expires in %s", d)
 	}
 	mints := f.mints()
 	if len(mints) != 1 {
@@ -194,14 +191,13 @@ func TestMintInstallationToken(t *testing.T) {
 	}
 
 	// Cached: git asks more than once in one operation.
-	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read"}); a.Password != "ghs_x" || len(f.mints()) != 1 {
+	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read"}); a.Decision != decideAllow || len(f.mints()) != 1 {
 		t.Fatalf("not reused: %+v, %d mints", a, len(f.mints()))
 	}
 
-	// A write, once approved, gets contents:write.
-	c.store.credentialAnswered(task.ID, map[string]any{"host": "github.com", "repo": "owner/repo", "access": "write"}, decideAllow, byUser, "")
-	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "write"}); a.Password != "ghs_xx" {
-		t.Fatalf("write: %+v", a)
+	// A write gets contents:write.
+	if m, err := c.mintGitHub(ctx, task.ID, "owner/repo", accessWrite, false); err != nil || m.Password != "ghs_xx" {
+		t.Fatalf("write: %+v %v", m, err)
 	}
 	mints = f.mints()
 	if w, _ := json.Marshal(mints[1]["permissions"]); string(w) != `{"contents":"write"}` {

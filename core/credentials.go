@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -24,18 +23,20 @@ import (
 //	POST /v1/node/tasks/{id}/credential   {protocol, host, path, access, tool}   (node secret)
 //
 // eriphe-core decides, deny by default (decideCredential): the repository
-// must be lent to the task, as a repo resource (resources.go;
-// policy.credentials adds or removes some), with enough access. A write
-// needs the user's approval the first time (a permission only the user
-// answers, shown in the workspace like any other), unless the user's own
-// turn lent the repository for write on a declared branch, and whenever
-// the task read external content. Then it mints a short-lived credential
-// for that one repository and those rights only: a GitHub App installation
-// token, one hour (github_app.go). Without the app, the GitHub tool's own
-// token, long-lived and not limited to the repository: the user approves
-// it first. Every request is logged (credential_log) and shown in the
-// task's details. git gets a placeholder rather than the token, which goes
-// in on the way out (git_access.go), and so does gh's, with the app only.
+// must be lent to the task, as a repo resource (resources.go), with enough
+// access. What is decided is the lend, at launch, as for any access
+// (lent_access.go): a read needs nothing; a write on a declared branch
+// needs a clean start (lend.go); anything else the user's yes on the start's
+// card (task_start.go). What the task reads afterwards changes nothing, and
+// nothing waits in a command: what is not lent is refused at once, with its
+// reason. Then it mints a short-lived credential for that one repository and
+// those rights only: a GitHub App installation token, one hour
+// (github_app.go). Without the app, the GitHub tool's own token, which never
+// leaves eriphe-core: the same rules apply, and each request is checked
+// against the repository lent. Every request is logged (credential_log) and
+// shown in the task's details. git gets a placeholder rather than the token,
+// which goes in on the way out (git_access.go), and so does gh's, with the
+// app only.
 //
 // A task from before resources has none kept: its repository is the one it
 // was asked to work on (spec.Repo), lent for read, and the service is lent
@@ -66,9 +67,6 @@ type credRequest struct {
 	Path     string `json:"path,omitempty"`
 	Access   string `json:"access"`
 	Tool     string `json:"tool,omitempty"` // git or gh
-	// Relayed are the hosts the task's relay decrypts: the node's word, never
-	// the task's (git_access.go).
-	Relayed []string `json:"relayed,omitempty"`
 }
 
 // credAnswer is eriphe-core's answer to the node.
@@ -79,54 +77,6 @@ type credAnswer struct {
 	Password   string         `json:"password,omitempty"`
 	Expires    time.Time      `json:"expires,omitzero"`
 	Permission map[string]any `json:"permission,omitempty"` // with ask: the input of the permission the node asks
-}
-
-// CredentialRule is a line of policy.credentials, first match wins: a host
-// and a repository (globs, any when empty), read or write (both when
-// empty), and the decision. It replaces the default (the task's own
-// repository, a write approved once): allow lends without asking (a write
-// still asks on a tainted task), ask always asks the first time, deny refuses.
-type CredentialRule struct {
-	Host     string `json:"host,omitempty"`
-	Repo     string `json:"repo,omitempty"`
-	Access   string `json:"access,omitempty"`
-	Decision string `json:"decision"`
-	Reason   string `json:"reason,omitempty"`
-}
-
-func checkCredentialRules(rules []CredentialRule) error {
-	for i, r := range rules {
-		if r.Decision != decideAllow && r.Decision != decideDeny && r.Decision != decideAsk {
-			return fmt.Errorf("policy credential rule %d: decision must be allow, deny or ask", i+1)
-		}
-		if r.Access != "" && r.Access != accessRead && r.Access != accessWrite {
-			return fmt.Errorf("policy credential rule %d: access must be read or write", i+1)
-		}
-		for _, g := range []string{r.Host, r.Repo} {
-			if _, err := path.Match(g, ""); err != nil {
-				return fmt.Errorf("policy credential rule %d: bad glob %q", i+1, g)
-			}
-		}
-	}
-	return nil
-}
-
-func (r CredentialRule) matches(host, repo, access string) bool {
-	glob := func(g, s string) bool {
-		if g == "" {
-			return true
-		}
-		ok, _ := path.Match(strings.ToLower(g), strings.ToLower(s))
-		return ok
-	}
-	return glob(r.Host, host) && glob(r.Repo, repo) && (r.Access == "" || r.Access == access)
-}
-
-func (p *Policy) credentialRules() []CredentialRule {
-	if p == nil {
-		return nil
-	}
-	return p.Credentials
 }
 
 // credService is the service a host belongs to, and its canonical host
@@ -167,12 +117,13 @@ func githubRepo(raw string) string {
 
 // credFacts is what the decision needs to know of the task.
 type credFacts struct {
-	Kind    string      // worker or brain
-	Repos   []repoGrant // the GitHub repositories lent to it
-	Lent    bool        // the service is lent to it
-	Tainted []string    // why it may have been talked into something, if it may
-	// Fallback: there is no GitHub App, so what would be lent is the
-	// GitHub tool's own token, long-lived and good for every repository.
+	Kind  string      // worker or brain
+	Repos []repoGrant // the GitHub repositories lent to it
+	Lent  bool        // the service is lent to it
+	Clean bool        // a clean start (lend.go)
+	// Fallback: there is no GitHub App, so the token is the GitHub tool's
+	// own, good for every repository: gh, whose requests do not always name
+	// one, cannot use it.
 	Fallback bool
 	Granted  func(repo, access string) bool
 }
@@ -198,8 +149,9 @@ type credDecision struct {
 	Decision, Reason, Service, Host, Repo string
 }
 
-// decideCredential applies the rules to a request, deny by default.
-func decideCredential(p *Policy, req credRequest, f credFacts) credDecision {
+// decideCredential applies the lend to a request, deny by default. It says
+// ask for a write only the user's yes on the start's card can lend.
+func decideCredential(req credRequest, f credFacts) credDecision {
 	service, host := credService(req.Host)
 	d := credDecision{Service: service, Host: host, Repo: githubRepo(req.Path)}
 	if service == "" {
@@ -219,61 +171,23 @@ func decideCredential(p *Policy, req credRequest, f credFacts) credDecision {
 	case !f.Lent:
 		return deny("no GitHub repository is lent to this task: lend it one (run_task's resources, {kind: repo})")
 	}
-	ask := false
-	d.Reason = "the task's own repository"
-	rule := -1
-	for i, r := range p.credentialRules() {
-		if r.matches(host, d.Repo, req.Access) {
-			rule = i
-			break
-		}
+	g := covering(f.Repos, d.Repo)
+	switch {
+	case g == nil:
+		return deny(d.Repo + " is not the repository this task was asked to work on")
+	case req.Access != accessWrite:
+		d.Decision, d.Reason = decideAllow, "the task's own repository"
+	case g.Access != accessWrite:
+		return deny(d.Repo + " is lent to this task for read: it cannot push there")
+	case g.Branch != "" && f.Clean:
+		d.Decision, d.Reason = decideAllow, "lent for write to "+d.Repo+" on "+g.Branch
+	case f.Granted != nil && f.Granted(d.Repo, accessWrite):
+		d.Decision, d.Reason = decideAllow, "approved by the user at launch"
+	case g.Branch == "":
+		d.Decision, d.Reason = decideAsk, "a write to "+d.Repo+" with no branch declared"
+	default:
+		d.Decision, d.Reason = decideAsk, "a write to "+d.Repo+" on a start that is not the user's own"
 	}
-	if rule >= 0 {
-		r := p.credentialRules()[rule]
-		switch r.Decision {
-		case decideDeny:
-			return deny(orStr(r.Reason, "refused by the policy"))
-		case decideAsk:
-			ask, d.Reason = true, orStr(r.Reason, "the policy asks for "+req.Access+" access to "+d.Repo)
-		default:
-			d.Reason = orStr(r.Reason, "allowed by the policy")
-		}
-	} else {
-		g := covering(f.Repos, d.Repo)
-		switch {
-		case g == nil:
-			return deny(d.Repo + " is not the repository this task was asked to work on")
-		case req.Access != accessWrite:
-		case g.Access == accessWrite && g.Branch != "":
-			// Lent for write on a branch by my own (untainted) turn: that was
-			// my approval of the first push, and of the pull request gh opens
-			// from it.
-			d.Reason = "lent for write to " + d.Repo + " on " + g.Branch
-		case g.Access == accessWrite:
-			ask, d.Reason = true, "first push to "+d.Repo+" in this task"
-		default:
-			ask, d.Reason = true, "first push to "+d.Repo+" in this task (lent for read)"
-		}
-	}
-	if req.Access == accessWrite && !ask && len(f.Tainted) > 0 {
-		ask, d.Reason = true, "the task read external content ("+strings.Join(f.Tainted, ", ")+")"
-	}
-	if f.Fallback {
-		why := "no GitHub App: the GitHub tool's own long-lived token, not limited to " + d.Repo
-		if ask {
-			d.Reason += "; " + why
-		} else {
-			ask, d.Reason = true, why
-		}
-	}
-	if ask {
-		if f.Granted == nil || !f.Granted(d.Repo, req.Access) {
-			d.Decision = decideAsk
-			return d
-		}
-		d.Reason = "approved by the user earlier in this task"
-	}
-	d.Decision = decideAllow
 	return d
 }
 
@@ -298,52 +212,44 @@ func (c *core) handleTaskCredential(w http.ResponseWriter, r *http.Request) {
 
 // credentialFacts is what is known of a task when a credential is decided.
 func (c *core) credentialFacts(t *TaskRow) credFacts {
-	facts := credFacts{Kind: t.Kind, Tainted: c.taskTaint(t)}
-	facts.Granted = func(repo, access string) bool {
-		// An approval given at launch knew of no external content read since (task_start.go).
-		return c.store.credentialGranted(t.ID, "github", repo, access) ||
-			len(facts.Tainted) == 0 && c.store.credentialGranted(t.ID, serviceAtLaunch, repo, access)
-	}
+	facts := credFacts{Kind: t.Kind, Clean: c.store.get(lentByUserKey(t.ID)) != ""}
+	facts.Granted = func(repo, access string) bool { return c.store.credentialGranted(t.ID, repo, access) }
 	facts.Repos, facts.Lent = c.taskRepos(t)
 	_, appErr := loadGitHubApp()
 	facts.Fallback = appErr == errNoGitHubApp
 	return facts
 }
 
+// notApproved is what a task is told of a write the user did not approve.
+func notApproved(why string) string {
+	return "this needs the user's approval, which this task did not get: " + why
+}
+
 // credential decides a request, mints the credential if allowed, and logs it.
 func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) credAnswer {
 	tool := orStr(req.Tool, "git")
 	facts := c.credentialFacts(t)
-	d := decideCredential(c.conf().Policy, req, facts)
-	if d.Decision == decideAsk && facts.Fallback {
-		if _, err := c.githubToolToken(); err != nil {
-			d.Decision, d.Reason = decideDeny, "GitHub is not connected for git: create Eriphe's GitHub App in Settings → Tools → GitHub"
-		}
-	}
+	d := decideCredential(req, facts)
 	a := credAnswer{Decision: d.Decision, Reason: d.Reason}
 	source := ""
 	switch d.Decision {
 	case decideAsk:
-		a.Permission = map[string]any{"host": d.Host, "repo": d.Repo, "access": req.Access, "tool": tool, "reason": d.Reason}
+		a = credAnswer{Decision: decideDeny, Reason: notApproved(d.Reason)}
 	case decideAllow:
-		m, err := c.mintGitHub(ctx, t.ID, d.Repo, req.Access, tool == ghLogTool) // gh's: a task started before its relay
+		m, err := c.mintGitHub(ctx, t.ID, d.Repo, req.Access, false)
 		if err != nil {
 			a = credAnswer{Decision: decideDeny, Reason: "cannot give a credential: " + err.Error()}
 			source = "error"
 			break
 		}
-		a.Username, a.Password, a.Expires, source = m.Username, m.Password, m.Expires, m.Source
-		if gitRelayed(req) {
-			// The token stays here, minted so that a failure is told now.
-			a.Password, a.Expires = gitPlaceholder(t.ID), time.Time{}
-		}
+		// The token stays here, minted so that a failure is told now.
+		a.Username, a.Password, source = m.Username, gitPlaceholder(t.ID), m.Source
 		if m.Source == sourceToolToken {
-			a.Reason = "fallback: the GitHub tool's own token (no GitHub App): long-lived and not limited to " + d.Repo
+			a.Reason = "fallback: the GitHub tool's own token (no GitHub App)"
 		}
 	}
 	c.store.logCredential(t.ID, tool, d.Host, d.Repo, req.Access, a.Decision, byPolicy, source, a.Reason)
-	log.Printf("credential: task %s %s %s %s/%s: %s (%s)%s", t.ID, tool, req.Access, d.Host, d.Repo, a.Decision, a.Reason,
-		map[bool]string{true: " WARNING: long-lived token lent", false: ""}[source == sourceToolToken])
+	log.Printf("credential: task %s %s %s %s/%s: %s (%s)", t.ID, tool, req.Access, d.Host, d.Repo, a.Decision, a.Reason)
 	return a
 }
 
@@ -391,77 +297,31 @@ func isGitHubServer(name string, s Server) bool {
 	return name == "github"
 }
 
-// taskTaint is why a task may have been talked into something: it was
-// started on a tainted turn of the brain, or it called an external catalog
-// tool, fetched a page or searched the web.
-func (c *core) taskTaint(t *TaskRow) []string {
-	var out []string
-	if why := c.store.get(taskTaintKey(t.ID)); why != "" {
-		out = append(out, why)
-	}
-	trusted := c.conf().memoryConfig().TrustedServers
-	for after := 0; ; {
-		page, err := c.store.eventsAfter(t.ID, after, 500)
-		if err != nil {
-			return append(out, "events.unreadable")
-		}
-		for _, e := range page {
-			if e.Type != "tool_use" {
-				continue
-			}
-			name, _ := e.Data["name"].(string)
-			why := ""
-			switch {
-			case strings.HasPrefix(name, "mcp__eriphe"):
-			case strings.HasPrefix(name, "mcp__"):
-				server, _, _ := strings.Cut(strings.TrimPrefix(name, "mcp__"), "__")
-				if !containsStr(trusted, server) {
-					why = name
-				}
-			case name == "WebFetch" || name == "WebSearch":
-				why = name
-			}
-			if why != "" && !containsStr(out, why) {
-				out = append(out, why)
-			}
-		}
-		if len(page) < 500 {
-			return out
-		}
-		after = page[len(page)-1].Seq
-	}
-}
-
 // taskTaintKey marks a task started on a tainted turn of the brain.
 func taskTaintKey(id string) string { return "task_taint:" + id }
 
-// credentialAnswered is the policy's hook when the user answers a
-// credential's permission: an approval is kept for the rest of the task.
+// credentialAnswered is the policy's hook when a credential's permission is
+// answered: a task of an older node may still ask.
 func (s *Store) credentialAnswered(taskID string, input map[string]any, decision, by, reason string) {
 	repo, _ := input["repo"].(string)
 	access, _ := input["access"].(string)
 	host, _ := input["host"].(string)
 	tool, _ := input["tool"].(string)
-	if decision == decideAllow && by == byUser && repo != "" && (access == accessRead || access == accessWrite) {
-		s.grantCredential(taskID, "github", repo, access)
-	}
 	s.logCredential(taskID, orStr(tool, "git"), host, repo, access, decision, by, "", reason)
 }
 
-// grantCredential keeps the user's approval of this access to the
-// repository for the rest of the task: given at the push (github), or at
-// launch (serviceAtLaunch, task_start.go).
-func (s *Store) grantCredential(taskID, service, repo, access string) {
-	s.db.Exec(`INSERT OR IGNORE INTO credential_grants (task_id, service, repo, access, time) VALUES (?, ?, ?, ?, ?)`,
-		taskID, service, strings.ToLower(repo), access, time.Now().Unix())
+// grantCredential keeps the user's yes on a start's card for the rest of the task.
+func (s *Store) grantCredential(taskID, repo, access string) {
+	s.db.Exec(`INSERT OR IGNORE INTO credential_grants (task_id, service, repo, access, time) VALUES (?, 'github', ?, ?, ?)`,
+		taskID, strings.ToLower(repo), access, time.Now().Unix())
 }
 
 // credentialGranted: the user approved this access, or a write, to the
 // repository in this task.
-func (s *Store) credentialGranted(taskID, service, repo, access string) bool {
+func (s *Store) credentialGranted(taskID, repo, access string) bool {
 	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM credential_grants WHERE task_id = ? AND service = ? AND repo = ? AND (access = ? OR access = 'write')`,
-		taskID, service, strings.ToLower(repo), access).Scan(&n)
+	s.db.QueryRow(`SELECT COUNT(*) FROM credential_grants WHERE task_id = ? AND repo = ? AND (access = ? OR access = 'write')`,
+		taskID, strings.ToLower(repo), access).Scan(&n)
 	return n > 0
 }
 

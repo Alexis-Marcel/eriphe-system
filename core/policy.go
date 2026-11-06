@@ -60,14 +60,9 @@ type Rule struct {
 
 type Policy struct {
 	Rules []Rule `json:"rules,omitempty"`
-	// Credentials are the rules of credentials on demand (credentials.go).
-	Credentials []CredentialRule `json:"credentials,omitempty"`
 }
 
 func (p *Policy) compile() error {
-	if err := checkCredentialRules(p.Credentials); err != nil {
-		return err
-	}
 	for i := range p.Rules {
 		r := &p.Rules[i]
 		if r.Tool == "" {

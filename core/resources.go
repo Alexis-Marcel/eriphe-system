@@ -383,6 +383,7 @@ func (c *core) taintedResources(r runRequest) error {
 			return refuse("the skills of " + e.Ref + " (trust_skills)")
 		}
 		switch {
+		case isGitHubRepo(e): // a write is asked on the start's card (task_start.go)
 		case e.Access == accessWrite || e.Access == accessDrop:
 			writes = append(writes, e.String())
 		case e.Kind == resDriveFolder:

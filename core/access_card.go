@@ -184,6 +184,9 @@ func (c *core) accessStartNeeds(list []ResourceRef, clean bool) []startNeed {
 // grantLent grants a task what it is lent outright: the user approved it in
 // advance, for a watch.
 func (c *core) grantLent(t *TaskRow) {
+	for _, n := range c.startNeeds(t.Resources, true) {
+		c.store.grantCredential(t.ID, n.Repo, n.Access)
+	}
 	for _, e := range t.Resources {
 		if !e.Hold {
 			// Free on a clean start needs no yes: a watch's start is one.

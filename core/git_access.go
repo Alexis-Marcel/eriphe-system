@@ -10,7 +10,7 @@ import (
 
 // git on the path of an access. A task lent a GitHub repository holds no
 // token: eriphe-cred still asks (credentials.go), and gets a placeholder
-// once the decision is made, approval included. The node's relay decrypts
+// once the decision is made. The node's relay decrypts
 // github.com for that task and hands each request here, as for any access
 // (lent_access.go), where the real token goes in:
 //
@@ -66,13 +66,6 @@ func lentGit(taskID string, list []ResourceRef) []nodeAccess {
 	}
 }
 
-// gitRelayed: the relay of the task asking decrypts github.com, as its node
-// says. Not so for a task started before, or on an older node: it gets its
-// token as it always did, or it could not work at all.
-func gitRelayed(req credRequest) bool {
-	return req.Tool != ghLogTool && slices.Contains(req.Relayed, gitTarget)
-}
-
 // gitCall is what a request to github.com is, for git.
 type gitCall struct {
 	repo   string // owner/name, if it is a call of git's
@@ -124,7 +117,7 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 	}
 	facts := c.credentialFacts(t)
 	decide := func(access string) credDecision {
-		return decideCredential(c.conf().Policy, credRequest{Protocol: "https", Host: "github.com", Path: call.repo, Access: access, Tool: gitLogTool}, facts)
+		return decideCredential(credRequest{Protocol: "https", Host: "github.com", Path: call.repo, Access: access, Tool: gitLogTool}, facts)
 	}
 	if call.lfs && decide(accessWrite).Decision == decideAllow {
 		call.access = accessWrite // it may be an upload: what the task may write, it may store
@@ -133,7 +126,7 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 	if d.Decision != decideAllow {
 		why := d.Reason
 		if d.Decision == decideAsk {
-			why = "this needs the user's approval, which this task did not get: " + why
+			why = notApproved(why)
 		}
 		refuse(why)
 		http.Error(w, why, http.StatusForbidden)
@@ -224,12 +217,12 @@ func (c *core) ghRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, uri
 	}
 	allows := func(repo, access string) bool {
 		req := credRequest{Protocol: "https", Host: "api.github.com", Path: repo, Access: access, Tool: ghLogTool}
-		return decideCredential(c.conf().Policy, req, facts).Decision == decideAllow
+		return decideCredential(req, facts).Decision == decideAllow
 	}
 	named := ghRepoOf(uri.Path)
 	repos, access := ghRepos(named, facts.Repos, allows)
 	if len(repos) == 0 {
-		return refuse(http.StatusForbidden, named, orStr(named, "GitHub")+" is not lent to this task, or the policy refuses it")
+		return refuse(http.StatusForbidden, named, orStr(named, "GitHub")+" is not lent to this task")
 	}
 	m, err := c.mintGitHubFor(r.Context(), t.ID, repos, access, true)
 	if err != nil && access == accessRead {
