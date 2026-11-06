@@ -107,8 +107,8 @@ var builtinDeny = []Rule{
 }
 
 var builtinAsk = []Rule{
-	rule("Bash", `gh\s+(pr\s+merge|release\b|repo\s+(delete|edit|rename)|secret\b|api\b[^;&|]*-X\s*(POST|PUT|PATCH|DELETE))`,
-		decideAsk, "agit sur GitHub au-delà d'une branche et d'une PR"),
+	// A mistake, not a script: what gh can do is its token's (git_access.go).
+	rule("Bash", `gh\s+pr\s+merge\b`, decideAsk, "fusionner une PR reste à l'utilisateur"),
 	rule("Bash", shellBoundary+`(npm|pnpm|yarn)\s+publish|`+shellBoundary+`(cargo|twine|gem)\s+(publish|upload|push)|docker\s+push`,
 		decideAsk, "publie un paquet ou une image"),
 	rule("Bash", shellBoundary+`(ssh|scp|sftp|rsync)\s`, decideAsk, sshAskReason),

@@ -23,14 +23,12 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 # eriphe-cred, the credential helper (cred/, a module of its own with no
 # dependency), for both Linux architectures: the node copies
 # task-bin/linux-<arch>/ into every task's /opt/eriphe/bin (-task-bin), the
-# Mac's install.sh takes linux-arm64 for its tasks' VMs. gh, gh's wrapper,
-# is the same program under that name: a copy, as links are not copied.
+# Mac's install.sh takes linux-arm64 for its tasks' VMs.
 FROM src AS cred
 ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     cd cred && for arch in amd64 arm64; do \
-      CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /task-bin/linux-$arch/eriphe-cred . && \
-      cp /task-bin/linux-$arch/eriphe-cred /task-bin/linux-$arch/gh || exit 1; \
+      CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /task-bin/linux-$arch/eriphe-cred . || exit 1; \
     done
 
 # eriphe-session, the Windows session helper (cmd/eriphe-session): install.ps1

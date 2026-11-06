@@ -595,19 +595,30 @@ func githubPermissions(access string, api bool) map[string]string {
 // App for that one repository and those rights, or else the GitHub tool's
 // own token.
 func (c *core) mintGitHub(ctx context.Context, taskID, repo, access string, api bool) (minted, error) {
+	return c.mintGitHubFor(ctx, taskID, []string{repo}, access, api)
+}
+
+// mintGitHubFor is mintGitHub for repositories of one owner: a request of gh
+// may name none of them (git_access.go).
+func (c *core) mintGitHubFor(ctx context.Context, taskID string, repos []string, access string, api bool) (minted, error) {
 	app, err := loadGitHubApp()
 	if err == nil {
 		perms := githubPermissions(access, api)
-		key := fmt.Sprintf("%s|%s|%v", taskID, strings.ToLower(repo), perms)
+		key := fmt.Sprintf("%s|%s|%v", taskID, strings.ToLower(strings.Join(repos, ",")), perms)
 		if m, ok := c.creds.get(key, time.Now()); ok {
 			return m, nil
 		}
-		owner, name, _ := strings.Cut(repo, "/")
+		owner, name, _ := strings.Cut(repos[0], "/")
 		inst, err := c.github.installationFor(ctx, app, owner, name)
 		if err != nil {
 			return minted{}, err
 		}
-		tok, exp, err := c.github.installationToken(ctx, app, inst, []string{name}, perms)
+		names := make([]string, 0, len(repos))
+		for _, r := range repos {
+			_, n, _ := strings.Cut(r, "/")
+			names = append(names, n)
+		}
+		tok, exp, err := c.github.installationToken(ctx, app, inst, names, perms)
 		if err != nil {
 			return minted{}, err
 		}
