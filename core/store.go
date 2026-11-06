@@ -7,6 +7,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -64,6 +65,7 @@ type TaskRow struct {
 	Tools         string    `json:"tools,omitempty"`   // its grant from the catalog, comma-separated
 	Folders       string    `json:"folders,omitempty"` // the user's folders lent to it, by name, comma-separated (folders.go)
 	Dir           string    `json:"dir"`
+	Title         string    `json:"title,omitempty"` // what the user reads, if it was given
 	Prompt        string    `json:"prompt"`
 	State         string    `json:"state"`
 	SessionID     string    `json:"session_id,omitempty"`
@@ -140,6 +142,7 @@ func openStore(path string) (*Store, error) {
 	// Added after v0: which tasks are the brain rather than workers.
 	db.Exec(`ALTER TABLE tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'worker'`)
 	db.Exec(`ALTER TABLE tasks ADD COLUMN agent TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE tasks ADD COLUMN title TEXT NOT NULL DEFAULT ''`)
 	// Added with the declarative lifecycle: what the task should be, which its
 	// node reads, and what it should do (run or stop).
 	db.Exec(`ALTER TABLE tasks ADD COLUMN spec TEXT NOT NULL DEFAULT ''`)
@@ -366,8 +369,8 @@ func (s *Store) insertTask(t *TaskRow) error {
 	if t.Kind == "" {
 		t.Kind = "worker"
 	}
-	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, dir, prompt, state, pending_reason, kind, tools, folders, resources, pinned, desired, created, updated)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Node, t.Agent, t.Runtime, t.Model, t.Dir, t.Prompt,
+	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, dir, title, prompt, state, pending_reason, kind, tools, folders, resources, pinned, desired, created, updated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Node, t.Agent, t.Runtime, t.Model, t.Dir, t.Title, t.Prompt,
 		t.State, t.PendingReason, t.Kind, t.Tools, t.Folders, marshalResources(t.Resources), t.Pinned, orStr(t.Desired, desiredRunning), now.Unix(), now.Unix())
 	return err
 }
@@ -382,13 +385,28 @@ func (s *Store) updateTask(id string, fields map[string]any) error {
 	return err
 }
 
-const taskColumns = `id, node, agent, node_task_id, runtime, model, kind, tools, folders, resources, dir, prompt, state, pending_reason, session_id, last_seq, created, updated, pinned`
+// taskTitleMax is as long as a task's title gets.
+const taskTitleMax = 110
+
+// label is how the user reads a task: its title, or its prompt's first line.
+func (t *TaskRow) label() string {
+	if t.Title != "" {
+		return t.Title
+	}
+	line := strings.TrimSpace(t.Prompt)
+	if i := strings.IndexByte(line, '\n'); i > 0 {
+		line = line[:i]
+	}
+	return truncate(line, taskTitleMax)
+}
+
+const taskColumns = `id, node, agent, node_task_id, runtime, model, kind, tools, folders, resources, dir, title, prompt, state, pending_reason, session_id, last_seq, created, updated, pinned`
 
 func scanTask(sc interface{ Scan(...any) error }) (*TaskRow, error) {
 	var t TaskRow
 	var created, updated int64
 	var resources string
-	err := sc.Scan(&t.ID, &t.Node, &t.Agent, &t.NodeTaskID, &t.Runtime, &t.Model, &t.Kind, &t.Tools, &t.Folders, &resources, &t.Dir, &t.Prompt,
+	err := sc.Scan(&t.ID, &t.Node, &t.Agent, &t.NodeTaskID, &t.Runtime, &t.Model, &t.Kind, &t.Tools, &t.Folders, &resources, &t.Dir, &t.Title, &t.Prompt,
 		&t.State, &t.PendingReason, &t.SessionID, &t.LastSeq, &created, &updated, &t.Pinned)
 	t.Resources = unmarshalResources(resources)
 	t.Created, t.Updated = time.Unix(created, 0), time.Unix(updated, 0)

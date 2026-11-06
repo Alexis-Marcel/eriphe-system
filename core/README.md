@@ -652,7 +652,7 @@ whatever address it dials) and one client certificate per node.
 | `list_agents` | agents, when to use each, and whether a node can run them now |
 | `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
 | `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
-| `run_task` | start a task: prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
+| `run_task` | start a task: title (what the user reads; else its contract's objective, else the prompt's first line), prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read`, `drop` or `manage`), `max`, `copyable`, where a task finds it, and `machines`: every machine holding it (its own, then its copies), each `online` and `up_to_date` or not; a task may run on any up to date |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |

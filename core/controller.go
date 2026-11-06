@@ -252,7 +252,18 @@ func newTaskID() string {
 	return "t-" + hex.EncodeToString(b)
 }
 
+// title is what the user reads for a task: the one given, or its contract's
+// objective. Without either, its prompt's first line (TaskRow.label).
+func (r runRequest) title() string {
+	title := oneLine(r.Title)
+	if title == "" && r.Contract != nil {
+		title = oneLine(r.Contract.Objective)
+	}
+	return truncate(title, taskTitleMax)
+}
+
 type runRequest struct {
+	Title     string        `json:"title,omitempty" jsonschema:"what the user reads for this task, in a few words in their language: Écrire le README de portfolio. Not the agent's instructions"`
 	Prompt    string        `json:"prompt" jsonschema:"what the agent must do, self-contained: it does not see this conversation"`
 	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository cloned into /work/repo (repo, with branch, base, dir), the user's folders (folder, drive-folder; see list_folders), catalog tools (tool; see list_tools), accesses a program uses, a package registry or an API key (access; see list_tools); only what it needs, with the least access"`
 	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
@@ -381,7 +392,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		needs = append(c.startNeeds(lent.List, r.cleanStart), c.accessStartNeeds(lent.List, r.cleanStart)...) // task_start.go
 	}
 	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model,
-		Dir: where, Prompt: r.Prompt, State: statePending,
+		Dir: where, Title: r.title(), Prompt: r.Prompt, State: statePending,
 		Kind: kind, Tools: strings.Join(grant, ","), Folders: lent.folderNames(), Resources: lent.List, Pinned: r.Node != ""}
 	if waiting != nil {
 		t.PendingReason = waiting.reason
