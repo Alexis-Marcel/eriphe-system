@@ -194,7 +194,7 @@ func TestRepoFromResource(t *testing.T) {
 	withApp(t, c, newFakeGitHub(t))
 	task := &TaskRow{ID: "t-2", Resources: []ResourceRef{{Kind: resRepo, Ref: "https://github.com/owner/repo.git", Access: accessWrite, Branch: "eriphe/fix"}}}
 	c.store.set(lentByUserKey(task.ID), "1")
-	facts := c.credentialFacts(task)
+	facts := c.repoFacts(task)
 	if d := decideRepo("owner/repo", accessWrite, facts); d.Decision != decideAllow {
 		t.Fatalf("push on its branch: %+v", d)
 	}

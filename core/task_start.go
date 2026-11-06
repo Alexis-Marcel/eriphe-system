@@ -14,7 +14,7 @@ import (
 // and asked once, when the task starts. The task waits meanwhile: it is kept,
 // pending, with desired "held", which no node sees and no placement moves.
 // The user gets one card in the conversation (convo_cards.go, kind
-// taskstart): Oui records the grants (credential_grants, access_grants), and
+// taskstart): Oui records the grants (repo_grants, access_grants), and
 // lets the task go; Non stops it and tells the brain. As every card, the
 // brain cannot decide it.
 
@@ -64,7 +64,7 @@ func (c *core) startNeeds(list []ResourceRef, clean bool) []startNeed {
 		if g.Access != accessWrite {
 			continue
 		}
-		if d := decideRepo(g.Repo, accessWrite, credFacts{Repos: repos, Clean: clean}); d.Decision == decideAsk {
+		if d := decideRepo(g.Repo, accessWrite, repoFacts{Repos: repos, Clean: clean}); d.Decision == decideAsk {
 			out = append(out, startNeed{Repo: g.Repo, Access: accessWrite, Branch: g.Branch, Reason: d.Reason})
 		}
 	}
@@ -202,8 +202,8 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 			c.store.grantAccess(s.TaskID, accessNeed{n.Server, n.Category, n.Account})
 			continue
 		}
-		c.store.grantCredential(s.TaskID, n.Repo, n.Access)
-		c.store.logCredential(s.TaskID, "git", "github.com", n.Repo, n.Access, decideAllow, byUser, "", "approved at launch: "+n.Reason)
+		c.store.grantRepo(s.TaskID, n.Repo, n.Access)
+		c.store.logAccess(s.TaskID, "git", "github.com", n.Repo, n.Access, decideAllow, byUser, "", "approved at launch: "+n.Reason)
 	}
 	c.store.db.Exec(`UPDATE tasks SET desired = ?, pending_reason = '', updated = ? WHERE id = ? AND desired = ?`,
 		desiredRunning, time.Now().Unix(), s.TaskID, desiredHeld)

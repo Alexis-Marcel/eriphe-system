@@ -314,7 +314,7 @@ func (n *node) taskEnv(t *Task, agentEnv map[string]string) map[string]string {
 	for k, v := range agentEnv {
 		env[k] = v
 	}
-	for k, v := range spec.Identity {
+	for k, v := range spec.AgentEnv {
 		env[k] = v
 	}
 	if _, ok := env["GH_TOKEN"]; ok {

@@ -326,7 +326,7 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 // container: its own tools (shell, files, web), not a lent catalog tool.
 // The container is the boundary: what leaves it goes through
 // the node's mounts (a folder's level), its egress filter and the
-// credentials eriphe-core lends (credentials.go), never through the shell
+// credentials eriphe-core lends (repo_lend.go), never through the shell
 // rules above, which only stop mistakes. So what the policy left undecided
 // there is allowed, without waking the brain.
 func inContainer(tool string) bool {

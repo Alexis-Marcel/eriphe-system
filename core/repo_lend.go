@@ -27,21 +27,21 @@ import (
 // (github_app.go). Without the app, the GitHub tool's own token: it never
 // leaves eriphe-core either, the same rules apply, and each request of git is
 // checked against the repository lent. Every request is logged
-// (credential_log) and shown in the task's details.
+// (access_log) and shown in the task's details.
 
 const (
 	accessRead  = "read"
 	accessWrite = "write"
 )
 
-const credentialSchema = `CREATE TABLE IF NOT EXISTS credential_log (
-  time INTEGER NOT NULL, task_id TEXT NOT NULL, tool TEXT NOT NULL, host TEXT NOT NULL, repo TEXT NOT NULL,
-  access TEXT NOT NULL, decision TEXT NOT NULL, by TEXT NOT NULL, source TEXT NOT NULL, reason TEXT NOT NULL);
-CREATE INDEX IF NOT EXISTS credential_log_task ON credential_log (task_id, time);
-CREATE TABLE IF NOT EXISTS credential_grants (task_id TEXT NOT NULL, service TEXT NOT NULL, repo TEXT NOT NULL,
+const repoLendSchema = `CREATE TABLE IF NOT EXISTS access_log (
+  time INTEGER NOT NULL, task_id TEXT NOT NULL, tool TEXT NOT NULL, host TEXT NOT NULL, target TEXT NOT NULL,
+  action TEXT NOT NULL, decision TEXT NOT NULL, by TEXT NOT NULL, source TEXT NOT NULL, reason TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS access_log_task ON access_log (task_id, time);
+CREATE TABLE IF NOT EXISTS repo_grants (task_id TEXT NOT NULL, service TEXT NOT NULL, repo TEXT NOT NULL,
   access TEXT NOT NULL, time INTEGER NOT NULL, PRIMARY KEY (task_id, service, repo, access));`
 
-func init() { extraSchema = append(extraSchema, credentialSchema) }
+func init() { extraSchema = append(extraSchema, repoLendSchema) }
 
 // credService is the service a host belongs to, and its canonical host
 // (what rules and the log name); "" when eriphe-core has none for it.
@@ -79,8 +79,8 @@ func githubRepo(raw string) string {
 	return parts[0] + "/" + parts[1]
 }
 
-// credFacts is what the decision needs to know of the task.
-type credFacts struct {
+// repoFacts is what the decision needs to know of the task.
+type repoFacts struct {
 	Repos []repoGrant // the GitHub repositories lent to it
 	Clean bool        // a clean start (lend.go)
 	// Fallback: there is no GitHub App, so the token is the GitHub tool's
@@ -113,7 +113,7 @@ type repoDecision struct {
 }
 
 // decideRepo applies the lend to a use of a repository, deny by default.
-func decideRepo(repo, access string, f credFacts) repoDecision {
+func decideRepo(repo, access string, f repoFacts) repoDecision {
 	g := covering(f.Repos, repo)
 	switch {
 	case g == nil:
@@ -132,10 +132,10 @@ func decideRepo(repo, access string, f credFacts) repoDecision {
 	return repoDecision{decideAsk, "a write to " + repo + " on a start that is not the user's own"}
 }
 
-// credentialFacts is what is known of a task when a use is decided.
-func (c *core) credentialFacts(t *TaskRow) credFacts {
-	facts := credFacts{Repos: lentRepos(t.Resources), Clean: c.store.get(lentByUserKey(t.ID)) != ""}
-	facts.Granted = func(repo, access string) bool { return c.store.credentialGranted(t.ID, repo, access) }
+// repoFacts is what is known of a task when a use is decided.
+func (c *core) repoFacts(t *TaskRow) repoFacts {
+	facts := repoFacts{Repos: lentRepos(t.Resources), Clean: c.store.get(lentByUserKey(t.ID)) != ""}
+	facts.Granted = func(repo, access string) bool { return c.store.repoGranted(t.ID, repo, access) }
 	_, appErr := loadGitHubApp()
 	facts.Fallback = appErr == errNoGitHubApp
 	return facts
@@ -172,33 +172,34 @@ func isGitHubServer(name string, s Server) bool {
 // taskTaintKey marks a task started on a tainted turn of the brain.
 func taskTaintKey(id string) string { return "task_taint:" + id }
 
-// grantCredential keeps the user's yes on a start's card for the rest of the task.
-func (s *Store) grantCredential(taskID, repo, access string) {
-	s.db.Exec(`INSERT OR IGNORE INTO credential_grants (task_id, service, repo, access, time) VALUES (?, 'github', ?, ?, ?)`,
+// grantRepo keeps the user's yes on a start's card for the rest of the task.
+func (s *Store) grantRepo(taskID, repo, access string) {
+	s.db.Exec(`INSERT OR IGNORE INTO repo_grants (task_id, service, repo, access, time) VALUES (?, 'github', ?, ?, ?)`,
 		taskID, strings.ToLower(repo), access, time.Now().Unix())
 }
 
-// credentialGranted: the user approved this access, or a write, to the
+// repoGranted: the user approved this access, or a write, to the
 // repository in this task.
-func (s *Store) credentialGranted(taskID, repo, access string) bool {
+func (s *Store) repoGranted(taskID, repo, access string) bool {
 	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM credential_grants WHERE task_id = ? AND repo = ? AND (access = ? OR access = 'write')`,
+	s.db.QueryRow(`SELECT COUNT(*) FROM repo_grants WHERE task_id = ? AND repo = ? AND (access = ? OR access = 'write')`,
 		taskID, strings.ToLower(repo), access).Scan(&n)
 	return n > 0
 }
 
-func (s *Store) logCredential(taskID, tool, host, repo, access, decision, by, source, reason string) {
-	s.db.Exec(`INSERT INTO credential_log (time, task_id, tool, host, repo, access, decision, by, source, reason)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, time.Now().Unix(), taskID, tool, host, repo, access, decision, by, source, reason)
+func (s *Store) logAccess(taskID, tool, host, target, action, decision, by, source, reason string) {
+	s.db.Exec(`INSERT INTO access_log (time, task_id, tool, host, target, action, decision, by, source, reason)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, time.Now().Unix(), taskID, tool, host, target, action, decision, by, source, reason)
 }
 
-// CredentialEntry is one line of a task's credential log.
-type CredentialEntry struct {
+// AccessEntry is one line of a task's access log: what it reached (Target, a
+// repository or an access) and how (Action: read, write, a method or ssh).
+type AccessEntry struct {
 	Time     time.Time `json:"time"`
 	Tool     string    `json:"tool"`
 	Host     string    `json:"host"`
-	Repo     string    `json:"repo"`
-	Access   string    `json:"access"`
+	Target   string    `json:"target"`
+	Action   string    `json:"action"`
 	Decision string    `json:"decision"`
 	By       string    `json:"by"`
 	Source   string    `json:"source,omitempty"` // github-app or tool-token, when lent
@@ -206,20 +207,20 @@ type CredentialEntry struct {
 }
 
 // Fallback: the long-lived token was lent.
-func (e CredentialEntry) Fallback() bool { return e.Source == sourceToolToken }
+func (e AccessEntry) Fallback() bool { return e.Source == sourceToolToken }
 
-func (s *Store) credentialLog(taskID string, limit int) ([]CredentialEntry, error) {
-	rows, err := s.db.Query(`SELECT time, tool, host, repo, access, decision, by, source, reason FROM credential_log
+func (s *Store) accessLog(taskID string, limit int) ([]AccessEntry, error) {
+	rows, err := s.db.Query(`SELECT time, tool, host, target, action, decision, by, source, reason FROM access_log
 		WHERE task_id = ? ORDER BY time DESC, rowid DESC LIMIT ?`, taskID, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []CredentialEntry{}
+	out := []AccessEntry{}
 	for rows.Next() {
-		var e CredentialEntry
+		var e AccessEntry
 		var ts int64
-		if err := rows.Scan(&ts, &e.Tool, &e.Host, &e.Repo, &e.Access, &e.Decision, &e.By, &e.Source, &e.Reason); err != nil {
+		if err := rows.Scan(&ts, &e.Tool, &e.Host, &e.Target, &e.Action, &e.Decision, &e.By, &e.Source, &e.Reason); err != nil {
 			return nil, err
 		}
 		e.Time = time.Unix(ts, 0)
@@ -228,12 +229,12 @@ func (s *Store) credentialLog(taskID string, limit int) ([]CredentialEntry, erro
 	return out, rows.Err()
 }
 
-func (c *core) handleTaskCredentials(w http.ResponseWriter, r *http.Request) {
+func (c *core) handleTaskAccessLog(w http.ResponseWriter, r *http.Request) {
 	if _, err := c.store.task(r.PathValue("id")); err != nil {
 		http.Error(w, "no such task", http.StatusNotFound)
 		return
 	}
-	log, err := c.store.credentialLog(r.PathValue("id"), 200)
+	log, err := c.store.accessLog(r.PathValue("id"), 200)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -264,14 +265,14 @@ type minted struct {
 	Source             string
 }
 
-// credCache keeps the tokens minted for a task, until ten minutes before
+// tokenCache keeps the tokens minted for a task, until ten minutes before
 // they end: git asks more than once in one push.
-type credCache struct {
+type tokenCache struct {
 	mu sync.Mutex
 	m  map[string]minted
 }
 
-func (cc *credCache) get(key string, now time.Time) (minted, bool) {
+func (cc *tokenCache) get(key string, now time.Time) (minted, bool) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 	m, ok := cc.m[key]
@@ -282,7 +283,7 @@ func (cc *credCache) get(key string, now time.Time) (minted, bool) {
 	return m, ok
 }
 
-func (cc *credCache) put(key string, m minted) {
+func (cc *tokenCache) put(key string, m minted) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 	if cc.m == nil {
@@ -320,7 +321,7 @@ func (c *core) mintGitHub(ctx context.Context, taskID, repo, access string, api 
 	if err == nil {
 		perms := githubPermissions(access, api)
 		key := fmt.Sprintf("%s|%s|%v", taskID, strings.ToLower(repo), perms)
-		if m, ok := c.creds.get(key, time.Now()); ok {
+		if m, ok := c.tokens.get(key, time.Now()); ok {
 			return m, nil
 		}
 		owner, name, _ := strings.Cut(repo, "/")
@@ -333,7 +334,7 @@ func (c *core) mintGitHub(ctx context.Context, taskID, repo, access string, api 
 			return minted{}, err
 		}
 		m := minted{Username: "x-access-token", Password: tok, Expires: exp, Source: sourceApp}
-		c.creds.put(key, m)
+		c.tokens.put(key, m)
 		return m, nil
 	}
 	if err != errNoGitHubApp {

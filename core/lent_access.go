@@ -470,7 +470,7 @@ func (c *core) injectAccess(t *TaskRow, names []string, target string, r *http.R
 		deny := func(why error) error {
 			// The path is the task's: one short line in what watches it.
 			line := truncate(oneLine(why.Error()), 300)
-			c.store.logCredential(t.ID, accessLogTool, host, name, r.Method, decideDeny, byPolicy, "", line)
+			c.store.logAccess(t.ID, accessLogTool, host, name, r.Method, decideDeny, byPolicy, "", line)
 			log.Printf("access: task %s: %s %s refused: %s", t.ID, r.Method, host, line)
 			return why
 		}
@@ -498,7 +498,7 @@ func (c *core) injectAccess(t *TaskRow, names []string, target string, r *http.R
 			_, original, _ := strings.Cut(value, " ")
 			pairs = append(pairs, encoded, original)
 		}
-		c.store.logCredential(t.ID, accessLogTool, host, name, r.Method, decideAllow, byPolicy, "", truncate(oneLine(uri.Path), 200))
+		c.store.logAccess(t.ID, accessLogTool, host, name, r.Method, decideAllow, byPolicy, "", truncate(oneLine(uri.Path), 200))
 	}
 	return strings.NewReplacer(pairs...), nil
 }

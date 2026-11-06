@@ -14,7 +14,7 @@ import (
 func mcpTask() *Task {
 	return &Task{ID: "t1", State: stateRunning, secret: "sec", perms: map[string]*permission{},
 		Spec: TaskSpec{Prompt: "go", Servers: []string{"vault"},
-			Identity: map[string]string{"TOK": "tok-1"},
+			AgentEnv: map[string]string{"TOK": "tok-1"},
 			MCPServers: map[string]any{
 				"eriphe-core": map[string]any{"type": "http", "url": "http://core:8080/mcp",
 					"headers": map[string]any{"Authorization": "Bearer core-token"}},

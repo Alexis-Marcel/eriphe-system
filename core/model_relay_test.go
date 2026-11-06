@@ -165,7 +165,7 @@ func TestModelBehindNode(t *testing.T) {
 		t.Fatalf("assignments: %s", rec.Body)
 	}
 	spec := a.Tasks[0].Spec
-	if spec.ModelEndpoint == nil || !spec.ModelEndpoint.Relay || spec.ModelEndpoint.BaseURL != "" || len(spec.Identity) != 0 ||
+	if spec.ModelEndpoint == nil || !spec.ModelEndpoint.Relay || spec.ModelEndpoint.BaseURL != "" || len(spec.AgentEnv) != 0 ||
 		spec.Egress == nil || len(spec.Egress.Endpoints) != 0 {
 		t.Fatalf("spec %+v, endpoint %+v, egress %+v", spec, spec.ModelEndpoint, spec.Egress)
 	}

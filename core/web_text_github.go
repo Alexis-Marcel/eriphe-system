@@ -1,7 +1,7 @@
 package main
 
 // The words of Settings → Tools → GitHub (web_github.go) and of a task's
-// credentials (credentials.go).
+// credentials (repo_lend.go).
 
 func init() {
 	for lang, words := range githubStrings {

@@ -124,7 +124,7 @@ func TestOpenCodeSelfHosted(t *testing.T) {
 		}
 		return cfg.Provider, cfg.Disabled, env["OPENCODE_CONFIG_CONTENT"]
 	}
-	spec := TaskSpec{Model: "selfhosted/qwen3:8b", Identity: map[string]string{"SELFHOSTED_API_KEY": "k-123"},
+	spec := TaskSpec{Model: "selfhosted/qwen3:8b", AgentEnv: map[string]string{"SELFHOSTED_API_KEY": "k-123"},
 		ModelEndpoint: &ModelEndpoint{BaseURL: "http://192.0.2.10:11434/v1", KeyEnv: "SELFHOSTED_API_KEY"}}
 	prov, disabled, raw := config(spec)
 	p, ok := prov["selfhosted"]
@@ -150,12 +150,12 @@ func TestOpenCodeSelfHosted(t *testing.T) {
 		t.Error("a cloud model loses its catalog")
 	}
 	// No key: no apiKey.
-	spec.Identity, spec.ModelEndpoint.KeyEnv = nil, ""
+	spec.AgentEnv, spec.ModelEndpoint.KeyEnv = nil, ""
 	if prov, _, _ := config(spec); prov["selfhosted"].Options["apiKey"] != nil {
 		t.Errorf("apiKey without a key: %+v", prov)
 	}
 	// A key OpenCode could not read as one stays out.
-	spec.Identity, spec.ModelEndpoint.KeyEnv = map[string]string{"SELFHOSTED_API_KEY": `a"b`}, "SELFHOSTED_API_KEY"
+	spec.AgentEnv, spec.ModelEndpoint.KeyEnv = map[string]string{"SELFHOSTED_API_KEY": `a"b`}, "SELFHOSTED_API_KEY"
 	if prov, _, _ := config(spec); prov["selfhosted"].Options["apiKey"] != nil {
 		t.Errorf("a key with a quote: %+v", prov)
 	}

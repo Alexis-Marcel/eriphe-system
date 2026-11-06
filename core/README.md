@@ -145,7 +145,7 @@ another header, stays a placeholder; a request that carries none goes as it is. 
 grid, since Eriphe sees the use of the secret and not what the program does with it. `approval` is
 asked on the card of a task's start, once for the task, by the user only; `free` holds on a clean
 start, and asks on any other, as a tool's Free writes do. An access lent with `hold` does nothing
-until its release. Each use, and each refusal, is in the `credential_log`, shown in the task's
+until its release. Each use, and each refusal, is in the `access_log`, shown in the task's
 details. It ends with its task.
 
 What this does not do:
@@ -156,7 +156,7 @@ What this does not do:
 - The node sees an access's requests, though not its secret. A client that pins its certificates
   fails on that access, and so does gRPC (HTTP/1.1 only), and a presigned URL cannot be made from a
   placeholder.
-- Each use is one row of `credential_log`, written before the request goes, and the table is not
+- Each use is one row of `access_log`, written before the request goes, and the table is not
   pruned: a large install through an access makes many rows, and the task's details show the latest.
 - It stops a secret from being stolen, not from being used: the real limit is set at the provider.
 - What a task reads through an access is external content, and does not taint the task: Eriphe does
@@ -183,7 +183,7 @@ the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (p
   eriphe-core decides and dials that exact address, carrying SSH's encrypted bytes. So a node need
   not reach the machine. A machine eriphe-core cannot reach answers 502, and the node dials it
   itself. Each connection, login
-  and refusal goes in `credential_log` (tool `access`). A task lent an SSH access no longer gets the
+  and refusal goes in `access_log` (tool `access`). A task lent an SSH access no longer gets the
   built-in ask on `ssh`, `scp`, `sftp` and `rsync`: the access was decided, and reaches that machine only.
 - **What it does not do.** SSH lends everything the remote account can do: Eriphe sees the logins,
   not the commands, and `sudo` is the machine's to set. Use a dedicated account. The host key is
@@ -1141,7 +1141,7 @@ its push. When that takes the user's yes, the task does not start: it is kept `p
 `desired` `held` (no node is given it, no placement moves it, its `pending_reason` says why) and the
 user gets one card in the conversation (kind `taskstart`, [conversation cards](#workspace-web)),
 « Pour pousser `eriphe/x` sur owner/repo, il me faut ton accord. ». Oui keeps the approval
-(`credential_grants`, logged "approved at launch": a write to that repository, by git or gh, for the
+(`repo_grants`, logged "approved at launch": a write to that repository, by git or gh, for the
 rest of the task) and lets the task go; Non stops it and tells the brain. Like every card, only the
 user's click or a plain yes or no of theirs decides it, never the brain (`answer_task` has nothing
 to answer on a held task; `stop_task` cancels it). A task authorised in advance for a watch needs no
@@ -1155,9 +1155,9 @@ rights until ten minutes before it ends. Without the app, git goes with the GitH
 token (**fallback**): it stays in eriphe-core too, each request is checked against the repository
 lent, and the log says so. gh cannot use it, and the Tools page says to create the app.
 
-**The log.** Every request is kept (`credential_log`: time, task, tool, host, repository, access,
-decision, by whom, source, reason), and shown in the task's details ("Accès demandés") and by `GET /v1/tasks/{id}/credentials`. Approvals are in
-`credential_grants`.
+**The log.** Every request is kept (`access_log`: time, task, tool, host, repository, access,
+decision, by whom, source, reason), and shown in the task's details ("Accès demandés") and by `GET /v1/tasks/{id}/access-log`. Approvals are in
+`repo_grants`.
 
 **What it does not stop.** What is lent is usable: a task talked into something by a page it read
 can push to the branch it was lent, and the limit is then the token and the repository's protection
@@ -1885,7 +1885,7 @@ handlers are thin layers over the methods behind the MCP tools.
 | `GET /v1/tasks?all=1` | worker tasks, the most recent first; active ones only without `all`; the brain too while it waits for a permission |
 | `GET /v1/tasks/{id}?events=N` | the task's status (as `task_status`) with its last N events (20) |
 | `GET /v1/tasks/{id}/events?after=N&wait=S` | events after seq N, waiting up to S seconds (max 120) for new ones; a finished task answers at once |
-| `GET /v1/tasks/{id}/credentials` | what the task used, as [GitHub in a task] says(#github-in-a-task), the latest first: time, tool, host, repo, access, decision, by whom, source |
+| `GET /v1/tasks/{id}/access-log` | what the task used, as [GitHub in a task](#github-in-a-task) says, the latest first: time, tool, host, repo, access, decision, by whom, source |
 | `POST /v1/tasks/{id}/answer` | `{reply, allow}`: allow or deny the pending permission (`allow` set), or reply to an idle task |
 | `POST /v1/tasks/{id}/stop` | stop the task's agent |
 

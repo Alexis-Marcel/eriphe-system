@@ -19,21 +19,21 @@ func TestDecideRepo(t *testing.T) {
 	cases := []struct {
 		name         string
 		repo, access string
-		facts        credFacts
+		facts        repoFacts
 		want, reason string
 	}{
-		{"a read of its repository", "owner/repo", accessRead, credFacts{Repos: read}, decideAllow, "own repository"},
-		{"case does not matter", "Owner/Repo", accessRead, credFacts{Repos: read}, decideAllow, ""},
-		{"lent for read takes no push", "owner/repo", accessWrite, credFacts{Repos: read}, decideDeny, "for read"},
-		{"not even with a yes", "owner/repo", accessWrite, credFacts{Repos: read, Granted: granted("owner/repo@write")}, decideDeny, "for read"},
-		{"a branch on a clean start", "owner/repo", accessWrite, credFacts{Repos: branch, Clean: true}, decideAllow, "lent for write"},
-		{"a branch, not the user's own start", "owner/repo", accessWrite, credFacts{Repos: branch}, decideAsk, "not the user's own"},
-		{"no branch", "owner/repo", accessWrite, credFacts{Repos: write, Clean: true}, decideAsk, "no branch"},
-		{"approved", "owner/repo", accessWrite, credFacts{Repos: write, Granted: granted("owner/repo@write")}, decideAllow, "approved"},
-		{"a read approval is not a write", "owner/repo", accessWrite, credFacts{Repos: write, Granted: granted("owner/repo@read")}, decideAsk, ""},
-		{"without the App, the same", "owner/repo", accessWrite, credFacts{Repos: branch, Clean: true, Fallback: true}, decideAllow, "lent for write"},
-		{"another repository", "owner/other", accessRead, credFacts{Repos: read}, decideDeny, "not the repository"},
-		{"nothing lent", "owner/repo", accessRead, credFacts{}, decideDeny, "not the repository"},
+		{"a read of its repository", "owner/repo", accessRead, repoFacts{Repos: read}, decideAllow, "own repository"},
+		{"case does not matter", "Owner/Repo", accessRead, repoFacts{Repos: read}, decideAllow, ""},
+		{"lent for read takes no push", "owner/repo", accessWrite, repoFacts{Repos: read}, decideDeny, "for read"},
+		{"not even with a yes", "owner/repo", accessWrite, repoFacts{Repos: read, Granted: granted("owner/repo@write")}, decideDeny, "for read"},
+		{"a branch on a clean start", "owner/repo", accessWrite, repoFacts{Repos: branch, Clean: true}, decideAllow, "lent for write"},
+		{"a branch, not the user's own start", "owner/repo", accessWrite, repoFacts{Repos: branch}, decideAsk, "not the user's own"},
+		{"no branch", "owner/repo", accessWrite, repoFacts{Repos: write, Clean: true}, decideAsk, "no branch"},
+		{"approved", "owner/repo", accessWrite, repoFacts{Repos: write, Granted: granted("owner/repo@write")}, decideAllow, "approved"},
+		{"a read approval is not a write", "owner/repo", accessWrite, repoFacts{Repos: write, Granted: granted("owner/repo@read")}, decideAsk, ""},
+		{"without the App, the same", "owner/repo", accessWrite, repoFacts{Repos: branch, Clean: true, Fallback: true}, decideAllow, "lent for write"},
+		{"another repository", "owner/other", accessRead, repoFacts{Repos: read}, decideDeny, "not the repository"},
+		{"nothing lent", "owner/repo", accessRead, repoFacts{}, decideDeny, "not the repository"},
 	}
 	for _, c := range cases {
 		d := decideRepo(c.repo, c.access, c.facts)
@@ -105,8 +105,8 @@ func TestMintFallbackToolToken(t *testing.T) {
 	}
 }
 
-func TestCredCache(t *testing.T) {
-	var cc credCache
+func TestTokenCache(t *testing.T) {
+	var cc tokenCache
 	now := time.Now()
 	cc.put("k", minted{Password: "a", Expires: now.Add(time.Hour)})
 	if m, ok := cc.get("k", now); !ok || m.Password != "a" {
@@ -120,8 +120,8 @@ func TestCredCache(t *testing.T) {
 // The task's details show what it asked for, and which token it was.
 func TestCredentialsInTaskDetails(t *testing.T) {
 	c, task := credCore(t, "github")
-	c.store.logCredential(task.ID, gitLogTool, "github.com", "owner/repo", accessRead, decideAllow, byPolicy, sourceToolToken, "")
-	c.store.logCredential(task.ID, gitLogTool, "github.com", "owner/other", accessRead, decideDeny, byPolicy, "", "not lent")
+	c.store.logAccess(task.ID, gitLogTool, "github.com", "owner/repo", accessRead, decideAllow, byPolicy, sourceToolToken, "")
+	c.store.logAccess(task.ID, gitLogTool, "github.com", "owner/other", accessRead, decideDeny, byPolicy, "", "not lent")
 	tw := newTestWebFor(t, c)
 	tw.setup()
 	code, body, _ := tw.do("GET", "/tasks/"+task.ID, nil, nil)

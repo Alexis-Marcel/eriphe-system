@@ -221,8 +221,8 @@ func TestSSHSignsTheLoginOnly(t *testing.T) {
 		t.Errorf("another node: %d", code)
 	}
 	var allowed, denied int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM credential_log WHERE task_id = ? AND tool = ? AND decision = ?`, task.ID, accessLogTool, decideAllow).Scan(&allowed)
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM credential_log WHERE task_id = ? AND tool = ? AND decision = ?`, task.ID, accessLogTool, decideDeny).Scan(&denied)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM access_log WHERE task_id = ? AND tool = ? AND decision = ?`, task.ID, accessLogTool, decideAllow).Scan(&allowed)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM access_log WHERE task_id = ? AND tool = ? AND decision = ?`, task.ID, accessLogTool, decideDeny).Scan(&denied)
 	if allowed != 1 || denied != 3 {
 		t.Fatalf("logged %d allowed, %d denied", allowed, denied)
 	}
@@ -519,7 +519,7 @@ func TestSSHSessionGoesThroughCore(t *testing.T) {
 		t.Fatalf("dialed %v", dialed)
 	}
 	var logged int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM credential_log WHERE task_id = ? AND decision = ?`, task.ID, decideAllow).Scan(&logged)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM access_log WHERE task_id = ? AND decision = ?`, task.ID, decideAllow).Scan(&logged)
 	if logged != 1 {
 		t.Fatalf("logged %d connections", logged)
 	}

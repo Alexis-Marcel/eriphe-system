@@ -105,10 +105,10 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 	}
 	refuse := func(why string) {
 		line := truncate(oneLine(why), 300)
-		c.store.logCredential(t.ID, gitLogTool, "github.com", call.repo, call.access, decideDeny, byPolicy, "", line)
+		c.store.logAccess(t.ID, gitLogTool, "github.com", call.repo, call.access, decideDeny, byPolicy, "", line)
 		log.Printf("git: task %s: %s %s refused: %s", t.ID, r.Method, call.repo, line)
 	}
-	facts := c.credentialFacts(t)
+	facts := c.repoFacts(t)
 	if call.lfs && decideRepo(call.repo, accessWrite, facts).Decision == decideAllow {
 		call.access = accessWrite // it may be an upload: what the task may write, it may store
 	}
@@ -128,7 +128,7 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 		http.Error(w, "eriphe-core cannot get a token for "+call.repo, http.StatusBadGateway)
 		return none, false
 	}
-	c.store.logCredential(t.ID, gitLogTool, "github.com", call.repo, call.access, decideAllow, byPolicy, m.Source, d.Reason)
+	c.store.logAccess(t.ID, gitLogTool, "github.com", call.repo, call.access, decideAllow, byPolicy, m.Source, d.Reason)
 	return putGitHubToken(r, placeholder, m.Password), true
 }
 
@@ -165,12 +165,12 @@ func (c *core) ghRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, uri
 	}
 	refuse := func(status int, repo, why string) (*strings.Replacer, bool) {
 		line := truncate(oneLine(why), 300)
-		c.store.logCredential(t.ID, ghLogTool, "api.github.com", repo, accessRead, decideDeny, byPolicy, "", line)
+		c.store.logAccess(t.ID, ghLogTool, "api.github.com", repo, accessRead, decideDeny, byPolicy, "", line)
 		log.Printf("gh: task %s: %s %s refused: %s", t.ID, r.Method, repo, line)
 		http.Error(w, why, status)
 		return none, false
 	}
-	facts := c.credentialFacts(t)
+	facts := c.repoFacts(t)
 	if facts.Fallback {
 		// The tool's own token holds everything, and these requests are not
 		// classified: only a token of the App, limited as lent, goes here.
@@ -195,6 +195,6 @@ func (c *core) ghRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, uri
 	if err != nil {
 		return refuse(http.StatusBadGateway, repo, "eriphe-core cannot get a token: "+err.Error())
 	}
-	c.store.logCredential(t.ID, ghLogTool, "api.github.com", repo, access, decideAllow, byPolicy, m.Source, truncate(r.Method+" "+uri.Path, 200))
+	c.store.logAccess(t.ID, ghLogTool, "api.github.com", repo, access, decideAllow, byPolicy, m.Source, truncate(r.Method+" "+uri.Path, 200))
 	return putGitHubToken(r, placeholder, m.Password), true
 }

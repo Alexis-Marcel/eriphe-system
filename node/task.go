@@ -25,18 +25,18 @@ const (
 // TaskSpec is what eriphe-core assigns. The identity (environment
 // variables) is lent for this task only.
 type TaskSpec struct {
-	Runtime  string            `json:"runtime"`            // agent in the container: claude-code, opencode, codex or acp
-	Prompt   string            `json:"prompt"`             // first user turn
-	Image    string            `json:"image,omitempty"`    // worker image; the node's default if empty
-	Repo     string            `json:"repo,omitempty"`     // git URL or owner/name on GitHub, cloned into /work/repo
-	Ref      string            `json:"ref,omitempty"`      // branch or tag to start from
-	Branch   string            `json:"branch,omitempty"`   // work branch to create
-	Dir      string            `json:"dir,omitempty"`      // working directory inside the container
-	Model    string            `json:"model,omitempty"`    // optional model override
-	Command  []string          `json:"command,omitempty"`  // an ACP agent's command line (runtime acp), run as is
-	Identity map[string]string `json:"identity,omitempty"` // env vars, e.g. CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN
-	Resume   string            `json:"resume,omitempty"`   // agent session to resume
-	TZ       string            `json:"tz,omitempty"`       // the user's time zone, e.g. Europe/Paris
+	Runtime  string            `json:"runtime"`             // agent in the container: claude-code, opencode, codex or acp
+	Prompt   string            `json:"prompt"`              // first user turn
+	Image    string            `json:"image,omitempty"`     // worker image; the node's default if empty
+	Repo     string            `json:"repo,omitempty"`      // git URL or owner/name on GitHub, cloned into /work/repo
+	Ref      string            `json:"ref,omitempty"`       // branch or tag to start from
+	Branch   string            `json:"branch,omitempty"`    // work branch to create
+	Dir      string            `json:"dir,omitempty"`       // working directory inside the container
+	Model    string            `json:"model,omitempty"`     // optional model override
+	Command  []string          `json:"command,omitempty"`   // an ACP agent's command line (runtime acp), run as is
+	AgentEnv map[string]string `json:"agent_env,omitempty"` // env vars, e.g. CLAUDE_CODE_OAUTH_TOKEN
+	Resume   string            `json:"resume,omitempty"`    // agent session to resume
+	TZ       string            `json:"tz,omitempty"`        // the user's time zone, e.g. Europe/Paris
 
 	// Catalog servers lent to the task: the node relays them to eriphe-core
 	// (relay.go).
@@ -90,7 +90,7 @@ type TaskSpec struct {
 }
 
 // ModelEndpoint is a self-hosted, OpenAI-compatible model server: its /v1
-// address and the variable of Identity that carries its key, if any. With
+// address and the variable of AgentEnv that carries its key, if any. With
 // Relay, the server is behind one of the user's nodes: the task reaches it
 // at this node's /model/v1, with its own secret, and this node relays to
 // eriphe-core, which goes on through that node's tunnel (model.go).

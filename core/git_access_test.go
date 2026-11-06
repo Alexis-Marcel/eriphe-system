@@ -109,8 +109,8 @@ func TestGitTokenGoesInOnTheWayOut(t *testing.T) {
 	if echo := rec.Header().Get("X-Echo"); strings.Contains(echo, base64.StdEncoding.EncodeToString([]byte("x-access-token:ghs_x"))) || echo != gitAuth(task.ID) {
 		t.Errorf("the answer holds %q", echo)
 	}
-	log, _ := c.store.credentialLog(task.ID, 10)
-	if len(log) == 0 || log[0].Tool != "git" || log[0].Repo != "owner/repo" || log[0].Decision != decideAllow || log[0].Source != sourceApp {
+	log, _ := c.store.accessLog(task.ID, 10)
+	if len(log) == 0 || log[0].Tool != "git" || log[0].Target != "owner/repo" || log[0].Decision != decideAllow || log[0].Source != sourceApp {
 		t.Fatalf("log %+v", log)
 	}
 }
@@ -148,7 +148,7 @@ func TestGitDecidesEachRequest(t *testing.T) {
 		t.Fatal("it reached GitHub")
 	}
 	// Lent for read, no yes makes it a write: the lend is what is decided.
-	c.store.grantCredential(task.ID, "owner/repo", accessWrite)
+	c.store.grantRepo(task.ID, "owner/repo", accessWrite)
 	if rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/git-receive-pack", auth, pushBody, nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("lent for read: %d %s", rec.Code, rec.Body)
 	}
@@ -163,7 +163,7 @@ func TestGitWriteIsDecidedAtLaunch(t *testing.T) {
 	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushBody, nil); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "user's approval") {
 		t.Fatalf("not approved: %d %s", rec.Code, rec.Body)
 	}
-	c.store.grantCredential(task.ID, "owner/repo", accessWrite)
+	c.store.grantRepo(task.ID, "owner/repo", accessWrite)
 	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushBody, nil); rec.Code != 200 {
 		t.Fatalf("approved: %d %s", rec.Code, rec.Body)
 	}
@@ -358,8 +358,8 @@ func TestGitLFSWritesWhereTheTaskMayWrite(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	log, _ := c.store.credentialLog(task.ID, 10)
-	if len(log) == 0 || log[0].Access != accessWrite {
+	log, _ := c.store.accessLog(task.ID, 10)
+	if len(log) == 0 || log[0].Action != accessWrite {
 		t.Fatalf("log %+v", log)
 	}
 }
@@ -398,8 +398,8 @@ func TestGhTokenGoesInOnTheWayOut(t *testing.T) {
 	if perms, _ := json.Marshal(f.mints()[0]["permissions"]); string(perms) != `{"checks":"read","contents":"read","issues":"write","pull_requests":"write"}` {
 		t.Fatalf("permissions: %s", perms)
 	}
-	log, _ := c.store.credentialLog(task.ID, 10)
-	if len(log) == 0 || log[0].Tool != ghLogTool || log[0].Repo != "owner/repo" || log[0].Access != accessWrite || log[0].Decision != decideAllow {
+	log, _ := c.store.accessLog(task.ID, 10)
+	if len(log) == 0 || log[0].Tool != ghLogTool || log[0].Target != "owner/repo" || log[0].Action != accessWrite || log[0].Decision != decideAllow {
 		t.Fatalf("log %+v", log)
 	}
 }

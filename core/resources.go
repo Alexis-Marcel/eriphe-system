@@ -31,7 +31,7 @@ import (
 // read into the same list at the edge (normalizeResources). The list is
 // kept with the task (tasks.resources); the old columns are still written,
 // and the node still gets its spec fields (repo, folders…), derived from it.
-// The same list decides the task's credentials (credentials.go) and what
+// The same list decides the task's credentials (repo_lend.go) and what
 // a tainted turn may not lend (taintedResources).
 
 // The kinds of resources.
@@ -44,7 +44,7 @@ const (
 )
 
 // accessDrop is the middle of the scale (accessRead and accessWrite are in
-// credentials.go).
+// repo_lend.go).
 const accessDrop = "drop"
 
 var accessRank = map[string]int{accessRead: 1, accessDrop: 2, accessWrite: 3}

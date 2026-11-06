@@ -48,7 +48,7 @@ func testNoSecrets(t *testing.T, engine, rt string) {
 	task.Spec.Runtime = rt
 	task.Spec.Image = "worker"
 	task.Spec.AppendSystemPrompt = prompt
-	task.Spec.Identity = map[string]string{"TOK": "tok-1", "CLAUDE_CODE_OAUTH_TOKEN": "oauth-token-5678", "GH_TOKEN": "gh-token-9012"}
+	task.Spec.AgentEnv = map[string]string{"TOK": "tok-1", "CLAUDE_CODE_OAUTH_TOKEN": "oauth-token-5678", "GH_TOKEN": "gh-token-9012"}
 	if rt == "acp" {
 		task.Spec.Command = []string{"goose", "acp"}
 	}

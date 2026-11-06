@@ -65,7 +65,7 @@ type core struct {
 	routeMu     sync.Mutex       // one escalation pass at a time (route_send.go)
 
 	github *githubClient // Eriphe's GitHub App (github_app.go)
-	creds  credCache     // credentials minted for tasks, while they last (credentials.go)
+	tokens tokenCache    // tokens minted for tasks, while they last (repo_lend.go)
 
 	catalogMu sync.Mutex // one change of the catalog at a time
 	dyn       dynamicCatalog
@@ -409,7 +409,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	spec.Command = agent.Command
 	spec.RepoSkills = c.repoSkills(ctx, lent.Repo)
 	spec.Untrusted = taskUntrusted(kind, r.taint)
-	spec.Identity, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the node fetches the task
+	spec.AgentEnv, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the node fetches the task
 	spec.Folders = nil                                                                 // the same
 	if len(folders) > 0 {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders, c.resultsOn(folders[0].Node)))

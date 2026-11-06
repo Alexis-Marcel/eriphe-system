@@ -595,10 +595,10 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 	spec.Stream = r.Streams
 	spec.HarnessTools = r.HarnessTools
 	// One memory: eriphe-core's, not Claude Code's own.
-	if spec.Identity == nil {
-		spec.Identity = map[string]string{}
+	if spec.AgentEnv == nil {
+		spec.AgentEnv = map[string]string{}
 	}
-	spec.Identity["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+	spec.AgentEnv["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
 	// Its free reads, as the catalog lists them now: allowed in advance,
 	// they never wait for a permission. The node reads them when it starts.
 	if r.FreeReads {

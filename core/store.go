@@ -123,6 +123,12 @@ func openStore(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
+	// The log and the grants of tasks, under their names of before.
+	db.Exec(`DROP INDEX IF EXISTS credential_log_task`)
+	db.Exec(`ALTER TABLE credential_log RENAME TO access_log`)
+	db.Exec(`ALTER TABLE access_log RENAME COLUMN repo TO target`)
+	db.Exec(`ALTER TABLE access_log RENAME COLUMN access TO action`)
+	db.Exec(`ALTER TABLE credential_grants RENAME TO repo_grants`)
 	for _, q := range append([]string{schema}, extraSchema...) {
 		if _, err := db.Exec(q); err != nil {
 			return nil, err

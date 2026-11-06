@@ -50,7 +50,7 @@ func TestCodexLive(t *testing.T) {
 	auth := fmt.Sprintf(`{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{"id_token":%q,"access_token":%q,"refresh_token":"","account_id":"a"},"last_refresh":%q}`,
 		jwt, jwt, time.Now().UTC().Format(time.RFC3339))
 	spec := TaskSpec{Runtime: "codex", Image: image, Model: "gpt-fake", Prompt: "Write a.txt, then b.txt.",
-		Identity: map[string]string{"ERIPHE_CODEX_AUTH": auth}}
+		AgentEnv: map[string]string{"ERIPHE_CODEX_AUTH": auth}}
 	start := func(first, session string) *Task {
 		task := &Task{ID: "live", Spec: spec, State: stateRunning, dir: dir, SessionID: session, perms: map[string]*permission{}}
 		if err := n.startContainer(task, first); err != nil {

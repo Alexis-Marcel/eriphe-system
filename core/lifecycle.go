@@ -96,7 +96,7 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 				c.notifyBrain(a.ID, stateFailed)
 				continue
 			}
-			spec.Identity = env
+			spec.AgentEnv = env
 			spec.TZ = c.conf().TimeZone
 			spec.Accesses = append(c.lentAccesses(a.ID, a.Resources), lentGit(a.ID, a.Resources)...) // lent_access.go, git_access.go
 			if spec.Folders, err = c.specFoldersOn(name, a.Folders, a.Resources); err != nil {

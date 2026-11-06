@@ -152,7 +152,7 @@ func selfHostedProvider(t *Task) map[string]any {
 	switch {
 	case ep.Relay:
 		options["apiKey"] = "{env:" + modelTokenEnv + "}"
-	case ep.KeyEnv != "" && credentialVar.MatchString(ep.KeyEnv) && configSafe(t.Spec.Identity[ep.KeyEnv]) && t.Spec.Identity[ep.KeyEnv] != "":
+	case ep.KeyEnv != "" && credentialVar.MatchString(ep.KeyEnv) && configSafe(t.Spec.AgentEnv[ep.KeyEnv]) && t.Spec.AgentEnv[ep.KeyEnv] != "":
 		options["apiKey"] = "{env:" + ep.KeyEnv + "}"
 	}
 	return map[string]any{

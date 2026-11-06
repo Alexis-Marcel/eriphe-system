@@ -93,7 +93,7 @@ type nodeTaskSpec struct {
 	Image    string            `json:"image,omitempty"`
 	Model    string            `json:"model,omitempty"`
 	Command  []string          `json:"command,omitempty"` // an ACP agent's command line (runtime acp)
-	Identity map[string]string `json:"identity,omitempty"`
+	AgentEnv map[string]string `json:"agent_env,omitempty"`
 	Resume   string            `json:"resume,omitempty"`
 	TZ       string            `json:"tz,omitempty"` // the user's time zone
 
@@ -159,7 +159,7 @@ type nodeSSH struct {
 }
 
 // nodeModelEndpoint is where a self-hosted model server answers, and the
-// variable of Identity that carries its key, if it has one; or, with Relay,
+// variable of AgentEnv that carries its key, if it has one; or, with Relay,
 // that the server is behind a node: the task reaches it through its own
 // node and eriphe-core (model_relay.go).
 type nodeModelEndpoint struct {

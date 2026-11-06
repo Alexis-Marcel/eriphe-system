@@ -393,7 +393,7 @@ func (c *core) sshUse(t *TaskRow, name, host, what string, why error) error {
 		decision, reason = decideDeny, truncate(oneLine(why.Error()), 300)
 		log.Printf("access: task %s: %s on %s refused: %s", t.ID, what, host, reason)
 	}
-	c.store.logCredential(t.ID, accessLogTool, host, name, accessSSH, decision, byPolicy, "", reason)
+	c.store.logAccess(t.ID, accessLogTool, host, name, accessSSH, decision, byPolicy, "", reason)
 	return why
 }
 

@@ -65,7 +65,7 @@ func assignedIDs(t *testing.T, c *core) []string {
 
 // mayPush is the decision on a push to the repository lent.
 func mayPush(c *core, t *TaskRow) repoDecision {
-	return decideRepo("owner/repo", accessWrite, c.credentialFacts(t))
+	return decideRepo("owner/repo", accessWrite, c.repoFacts(t))
 }
 
 // launchWrite lends a repository for write on a branch, on a start that is
@@ -136,7 +136,7 @@ func TestTaskStartHeld(t *testing.T) {
 	if _, err := c.answer(context.Background(), task.ID, "", "", &allow, byBrain); err == nil {
 		t.Fatal("the brain answered a held start")
 	}
-	if !c.heldTask(task.ID) || c.store.credentialGranted(task.ID, "owner/repo", accessWrite) {
+	if !c.heldTask(task.ID) || c.store.repoGranted(task.ID, "owner/repo", accessWrite) {
 		t.Fatal("decided without the user")
 	}
 }
@@ -157,7 +157,7 @@ func TestTaskStartApproved(t *testing.T) {
 	if d := mayPush(c, got); d.Decision != decideAllow {
 		t.Fatalf("push after the launch approval: %+v", d)
 	}
-	log, _ := c.store.credentialLog(task.ID, 10)
+	log, _ := c.store.accessLog(task.ID, 10)
 	if len(log) != 1 || log[0].By != byUser || !strings.Contains(log[0].Reason, "at launch") {
 		t.Fatalf("log %+v", log)
 	}
@@ -180,7 +180,7 @@ func TestTaskStartDeclined(t *testing.T) {
 		t.Fatalf("%+v %v", x, err)
 	}
 	got, _ := c.store.task(task.ID)
-	if got.State != stateStopped || slices.Contains(assignedIDs(t, c), task.ID) || c.store.credentialGranted(task.ID, "owner/repo", accessWrite) {
+	if got.State != stateStopped || slices.Contains(assignedIDs(t, c), task.ID) || c.store.repoGranted(task.ID, "owner/repo", accessWrite) {
 		t.Fatalf("declined start: %+v", got)
 	}
 	msgs, _ := c.store.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE role = ?`, roleEvent)
