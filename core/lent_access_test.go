@@ -648,6 +648,10 @@ func TestAccessPage(t *testing.T) {
 		!strings.Contains(html.UnescapeString(body), "ne peut pas tenir le substitut") {
 		t.Fatalf("refused: %s", body)
 	}
+	// Removed from its row, as a tool is.
+	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, `<form hx-post="/settings/accesses/npm/delete"`) {
+		t.Fatal("no way to remove it from the list")
+	}
 	if code, body, h := tw.post("/settings/accesses/npm/delete", nil, csrf); code != 200 || h.Get("HX-Redirect") == "" {
 		t.Fatalf("delete: %d %s", code, body)
 	}

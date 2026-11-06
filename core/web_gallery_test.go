@@ -117,7 +117,7 @@ func TestGallery(t *testing.T) {
 		"Développement</h4>", "<b>GitHub</b>", "Réseaux &amp; newsletters</h4>", "<b>Buffer</b>", "<b>Kit</b>",
 		"Automatisation</h4>", "<b>Zapier</b>", "<b>Make</b>", "Maison</h4>", "<b>Home Assistant</b>",
 		`Pas trouvé ? <a href="/settings/tools/add/other" data-finder-paste>Colle son adresse</a>`, "Pas dans la liste ?</h4>",
-		"<b>Autre programme local</b>", "<b>Autre service en ligne</b>", "Pas encore possible</summary>")
+		"<b>Autre programme local</b>", "<b>Autre service en ligne</b>", "<b>Machine SSH</b>", "<b>Clé ou jeton HTTP</b>", "Pas encore possible</summary>")
 	for _, w := range want {
 		i := strings.Index(body[at+1:], w)
 		if i < 0 {
@@ -129,6 +129,12 @@ func TestGallery(t *testing.T) {
 	for _, p := range toolPresets {
 		if !strings.Contains(body, `href="`+p.Page()+`"`) {
 			t.Errorf("gallery: no page for %s", p.ID)
+		}
+	}
+	// An access is found here too, and leaves the dialog for its own page.
+	for _, p := range accessTiles {
+		if !strings.Contains(html.UnescapeString(body), `class="ftile preset-`+p.ID+`" href="`+p.Link+`" title=`) {
+			t.Errorf("gallery: the tile of %s", p.ID)
 		}
 	}
 	if strings.Contains(body, "tool-add") {

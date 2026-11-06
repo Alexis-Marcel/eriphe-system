@@ -18,6 +18,7 @@ import (
 
 type toolPreset struct {
 	ID    string
+	Link  string // a tile that is no tool's form: the page it opens
 	Form  string // generic, mail or calendar
 	Name  string // the catalog name it suggests
 	Mark  string // the two letters of its badge
@@ -71,6 +72,8 @@ var toolPresets = []toolPreset{
 // Page is where the preset's tile leads.
 func (p toolPreset) Page() string {
 	switch {
+	case p.Link != "":
+		return p.Link
 	case p.Form == "drive":
 		return "/settings/drive"
 	case p.Form == "google":
