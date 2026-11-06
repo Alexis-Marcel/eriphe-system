@@ -168,6 +168,8 @@ type egressProxy struct {
 	// sshOpen asks eriphe-core whether a task may open a tunnel now
 	// (egress_ssh.go).
 	sshOpen func(ctx context.Context, taskID, target string) error
+	// sshCore opens a task's session through eriphe-core (egress_ssh.go).
+	sshCore func(ctx context.Context, taskID, target string) (net.Conn, error)
 }
 
 func newEgressProxy(authorize func(id, secret string) (*egressTask, bool), self []string, listener string) *egressProxy {

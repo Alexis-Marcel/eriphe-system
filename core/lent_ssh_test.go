@@ -1,19 +1,24 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -449,5 +454,106 @@ func TestNormalHostKey(t *testing.T) {
 		if got, err := normalHostKey(in); err != nil || got != testHostKey {
 			t.Errorf("%q: %q %v", in, got, err)
 		}
+	}
+}
+
+// sshTunnelServer serves a node's session requests, with sshDial on dial.
+func sshTunnelServer(t *testing.T, c *core, dial func(context.Context, string) (net.Conn, error)) string {
+	t.Helper()
+	before := sshDial
+	sshDial = dial
+	t.Cleanup(func() { sshDial = before })
+	mux := http.NewServeMux()
+	mux.Handle("GET /v1/node/tasks/{id}/ssh/connect", c.taskSSHTunnelHandler())
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.Listener.Addr().String()
+}
+
+// sshOpenSession sends what a node sends to open a session, and returns the
+// connection, its reader, and eriphe-core's status.
+func sshOpenSession(t *testing.T, addr, node, taskID, target, upgrade string) (net.Conn, *bufio.Reader, int) {
+	t.Helper()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	fmt.Fprintf(conn, "GET /v1/node/tasks/%s/ssh/connect?target=%s HTTP/1.1\r\nHost: core\r\nAuthorization: Bearer x\r\nEriphe-Node: %s\r\nConnection: Upgrade\r\nUpgrade: %s\r\n\r\n",
+		taskID, url.QueryEscape(target), node, upgrade)
+	br := bufio.NewReader(conn)
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return conn, br, res.StatusCode
+}
+
+// A session leaves from eriphe-core: decided, to the access's exact address,
+// logged, and the bytes go both ways untouched.
+func TestSSHSessionGoesThroughCore(t *testing.T) {
+	c, _ := sshCore(t, gridFree, testHostKey)
+	task := lendAccess(t, c, true, box)
+	var dialed []string
+	addr := sshTunnelServer(t, c, func(_ context.Context, target string) (net.Conn, error) {
+		dialed = append(dialed, target)
+		mine, theirs := net.Pipe()
+		go func() {
+			b := make([]byte, 4)
+			io.ReadFull(theirs, b)
+			theirs.Write([]byte("SSH:" + string(b)))
+			theirs.Close()
+		}()
+		return mine, nil
+	})
+	conn, br, code := sshOpenSession(t, addr, task.Node, task.ID, sshHost+":22", sshProto)
+	if code != http.StatusSwitchingProtocols {
+		t.Fatalf("session: %d", code)
+	}
+	conn.Write([]byte("ping"))
+	got, err := io.ReadAll(br)
+	if err != nil || string(got) != "SSH:ping" {
+		t.Fatalf("through the session: %q %v", got, err)
+	}
+	if !slices.Equal(dialed, []string{sshHost + ":22"}) {
+		t.Fatalf("dialed %v", dialed)
+	}
+	var logged int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM credential_log WHERE task_id = ? AND decision = ?`, task.ID, decideAllow).Scan(&logged)
+	if logged != 1 {
+		t.Fatalf("logged %d connections", logged)
+	}
+}
+
+// Nothing is dialed for what the task may not reach, for an unknown node, or
+// without the upgrade; a machine eriphe-core cannot reach says so, for the
+// node to try.
+func TestSSHSessionRefused(t *testing.T) {
+	c, _ := sshCore(t, gridFree, testHostKey)
+	task := lendAccess(t, c, true, box)
+	dials := 0
+	addr := sshTunnelServer(t, c, func(context.Context, string) (net.Conn, error) {
+		dials++
+		return nil, errors.New("no route to host")
+	})
+	for _, r := range []struct {
+		node, target, upgrade string
+		want                  int
+	}{
+		{task.Node, sshHost + ":2222", sshProto, http.StatusForbidden},
+		{task.Node, "192.0.2.11:22", sshProto, http.StatusForbidden},
+		{"another", sshHost + ":22", sshProto, http.StatusUnauthorized},
+		{task.Node, sshHost + ":22", "eriphe-sync", http.StatusUpgradeRequired},
+	} {
+		if _, _, code := sshOpenSession(t, addr, r.node, task.ID, r.target, r.upgrade); code != r.want {
+			t.Errorf("%+v: %d", r, code)
+		}
+	}
+	if dials != 0 {
+		t.Fatalf("dialed %d times", dials)
+	}
+	if _, _, code := sshOpenSession(t, addr, task.Node, task.ID, sshHost+":22", sshProto); code != http.StatusBadGateway {
+		t.Fatalf("an unreachable machine: %d", code)
 	}
 }

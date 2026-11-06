@@ -490,10 +490,15 @@ to decrypt: `{name, ssh: {target, user, host_key, public_key}}`, and never a pri
   `StrictHostKeyChecking yes`.
 - `POST /v1/task/ssh` on the task listener (task secret) relays `{op: keys | sign}` to eriphe-core.
   No host socket is mounted, so it works on every engine.
-- `eriphe-cred tunnel %h %p`, ssh's `ProxyCommand`, sends a `CONNECT` to the relay. The relay opens
-  it to that exact `host:port` only, after asking eriphe-core whether the access may be used now,
-  private addresses included, as for a model server, never the loopback, link-local addresses or
-  multicast. Any other host or port of the LAN stays refused, and so does a task with egress `none`.
+- `eriphe-cred tunnel %h %p`, ssh's `ProxyCommand`, sends a `CONNECT` to the relay, for that exact
+  `host:port` only. The session leaves from eriphe-core, as an HTTP access's requests do: the relay
+  upgrades `GET /v1/node/tasks/{id}/ssh/connect?target=host:port` (`eriphe-ssh`), through the
+  core relay on a Mac, and eriphe-core decides and dials. So a node
+  that cannot reach the LAN, as a Mac's, still reaches the machine, with no right of its own.
+- A machine eriphe-core cannot reach (502, the decision taken) is dialed from the node itself, and
+  so is any machine with an eriphe-core older than this node, after asking it: private addresses
+  included, as for a model server, never the loopback, link-local addresses or multicast. Any other
+  host or port of the LAN stays refused, and so does a task with egress `none`.
 
 ## Catalog relay
 

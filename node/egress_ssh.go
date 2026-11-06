@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -22,7 +24,10 @@ import (
 //   - the session: ssh's ProxyCommand, eriphe-cred tunnel, sends a CONNECT
 //     to the relay. That one host and port is reachable, on the LAN too,
 //     once eriphe-core says the access may be used now; nothing else of the
-//     LAN, no other port. The relay sees encrypted bytes.
+//     LAN, no other port. The relay sees encrypted bytes. They leave from
+//     eriphe-core, as an HTTP access's requests do, so a node that cannot
+//     reach the LAN (a Mac's, README) still reaches the machine; a machine
+//     only this node reaches is dialed from here.
 //
 // The task's ssh is configured here, with no secret: the access's name, its
 // account, the machine's pinned host key, and which key to offer. A task is
@@ -142,14 +147,43 @@ func (t *egressTask) isTunnel(hostport string) bool {
 	return false
 }
 
+// sshProto is the upgrade of a session's bytes through eriphe-core.
+const sshProto = "eriphe-ssh"
+
+var (
+	// errCoreCannotReach: the task may connect, but eriphe-core has no way
+	// to the machine.
+	errCoreCannotReach = errors.New("eriphe-core cannot reach the machine")
+	// errNoCoreSession: an eriphe-core with no sessions, older than this node.
+	errNoCoreSession = errors.New("eriphe-core does not carry sessions")
+)
+
 // dialTunnel connects to an SSH access's machine, once eriphe-core says the
-// task may use it now: the very address checked is dialed, as for a model
-// server, on the LAN too but never the node itself nor the cloud's metadata.
+// task may use it now, through eriphe-core. If it cannot, the very address
+// checked is dialed from here, as for a model server, on the LAN too but
+// never the node itself nor the cloud's metadata.
 func (p *egressProxy) dialTunnel(ctx context.Context, t *egressTask, hostport string) (net.Conn, error) {
 	target := accessTarget(hostport)
 	host, port, err := net.SplitHostPort(target)
 	if err != nil {
 		return nil, &egressError{http.StatusBadRequest, "bad address " + hostport}
+	}
+	if p.sshCore != nil {
+		up, err := p.sshCore(ctx, t.id, target)
+		switch {
+		case err == nil:
+			p.note(t, host, nil)
+			return up, nil
+		case errors.Is(err, errCoreCannotReach):
+			up, err := p.dialModelServer(ctx, t, host, port)
+			if err != nil {
+				return nil, &egressError{http.StatusBadGateway, fmt.Sprintf("neither eriphe-core nor this node reaches %s: %v", target, err)}
+			}
+			return up, nil
+		case !errors.Is(err, errNoCoreSession):
+			p.note(t, host, err)
+			return nil, err
+		}
 	}
 	if p.sshOpen == nil {
 		return nil, refused("no way to ask eriphe-core for %s", target)
@@ -159,6 +193,59 @@ func (p *egressProxy) dialTunnel(ctx context.Context, t *egressTask, hostport st
 		return nil, err
 	}
 	return p.dialModelServer(ctx, t, host, port)
+}
+
+// sshCore opens a task's session through eriphe-core: after the upgrade, the
+// connection's bytes are the machine's. ctx covers the opening only; the
+// request gets a context of its own, which ends with the session, since
+// canceling it would cut the upgraded connection.
+func (s *state) sshCore(ctx context.Context, taskID, target string) (net.Conn, error) {
+	session, end := context.WithCancel(context.Background())
+	stop := context.AfterFunc(ctx, end)
+	timer := time.AfterFunc(30*time.Second, end)
+	defer stop()
+	defer timer.Stop()
+	req, err := http.NewRequestWithContext(session, http.MethodGet,
+		s.base()+"/v1/node/tasks/"+taskID+"/ssh/connect?target="+url.QueryEscape(target), nil)
+	if err != nil {
+		end()
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.Secret)
+	req.Header.Set("Eriphe-Node", s.Name)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", sshProto)
+	res, err := s.dialClient().Do(req)
+	if err != nil {
+		end()
+		return nil, &egressError{http.StatusBadGateway, "eriphe-core: " + err.Error()}
+	}
+	if res.StatusCode == http.StatusSwitchingProtocols {
+		if rwc, ok := res.Body.(io.ReadWriteCloser); ok {
+			return &coreSession{rwcConn{rwc}, end}, nil
+		}
+	}
+	defer end()
+	defer res.Body.Close()
+	answer, _ := io.ReadAll(io.LimitReader(res.Body, 300))
+	switch res.StatusCode {
+	case http.StatusForbidden:
+		return nil, refused("%s", bytes.TrimSpace(answer))
+	case http.StatusBadGateway:
+		return nil, errCoreCannotReach
+	}
+	return nil, errNoCoreSession
+}
+
+// coreSession is a session through eriphe-core; closing it ends its context.
+type coreSession struct {
+	rwcConn // syncpeer.go
+	end     context.CancelFunc
+}
+
+func (c *coreSession) Close() error {
+	defer c.end()
+	return c.rwcConn.Close()
 }
 
 // sshOpen asks eriphe-core whether a task may open a tunnel.
