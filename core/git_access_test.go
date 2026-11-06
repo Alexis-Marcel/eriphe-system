@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -99,10 +100,6 @@ func TestGitGetsAPlaceholder(t *testing.T) {
 	// A task from before, or on an older node: its token, or it stops working.
 	if a := c.credential(ctx, task, credRequest{Protocol: "https", Host: "github.com", Path: "owner/repo.git", Access: accessRead, Tool: "git"}); !strings.HasPrefix(a.Password, "ghs_") {
 		t.Fatalf("not relayed: %+v", a)
-	}
-	// gh keeps its token, with no right to the contents.
-	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: accessWrite, Tool: "gh", Relayed: relayed}); !strings.HasPrefix(a.Password, "ghs_") {
-		t.Fatalf("gh: %+v", a)
 	}
 	// A refusal stays one.
 	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "other/repo.git", Access: accessRead, Tool: "git", Relayed: relayed}); a.Decision != decideDeny || a.Password != "" {
@@ -390,7 +387,11 @@ func viaRelayGh(c *core, taskID, method, target string) *httptest.ResponseRecord
 // gh holds the placeholder and its token goes in on the way out, on /graphql
 // too, which is not classified: the task never sees the token.
 func TestGhTokenGoesInOnTheWayOut(t *testing.T) {
-	c, task, svc := gitCore(t, true, lentRepo)
+	c := startCore(t)
+	f := newFakeGitHub(t)
+	withApp(t, c, f)
+	task := lendAccess(t, c, true, lentRepo)
+	svc := startService(t)
 	rec := viaRelayGh(c, task.ID, "POST", "/graphql")
 	if rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
@@ -401,6 +402,9 @@ func TestGhTokenGoesInOnTheWayOut(t *testing.T) {
 	}
 	if echo := rec.Header().Get("X-Echo"); strings.Contains(echo, "ghs_x") {
 		t.Fatalf("the answer holds %q", echo)
+	}
+	if perms, _ := json.Marshal(f.mints()[0]["permissions"]); string(perms) != `{"checks":"read","contents":"read","issues":"write","pull_requests":"write"}` {
+		t.Fatalf("permissions: %s", perms)
 	}
 	log, _ := c.store.credentialLog(task.ID, 10)
 	if len(log) == 0 || log[0].Tool != ghLogTool || log[0].Repo != "owner/repo" || log[0].Access != accessWrite || log[0].Decision != decideAllow {
