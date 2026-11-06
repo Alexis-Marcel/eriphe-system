@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 )
@@ -15,9 +14,7 @@ import (
 func containerName(t *Task) string { return "eriphe-task-" + t.ID }
 
 // The container puts the injected agent first in PATH, makes the cache's
-// apt directories, makes git ask Eriphe for its credentials when
-// eriphe-cred is there (credential.go; a task given a token of its own in
-// GH_TOKEN keeps its own way, ownGitToken), writes the bundle of a task with accesses (egress_access.go), sets up ssh and its agent for SSH accesses (egress_ssh.go), clones the repository if asked (once: /work is kept across
+// apt directories, writes the bundle of a task with accesses (egress_access.go), sets up ssh and its agent for SSH accesses (egress_ssh.go), clones the repository if asked (once: /work is kept across
 // restarts; git is installed first if the image lacks it), makes what it
 // writes group-writable when it has folders (the user's group shares
 // them), asks the node for the toolchains the repository names and puts
@@ -31,10 +28,6 @@ cd /work
 if [ -n "$ERIPHE_FOLDERS" ]; then umask 002; fi
 ` + accessBundleScript + `
 ` + sshAccessScript + `
-if [ -z "$ERIPHE_GIT_OWN_TOKEN" ] && [ -n "$ERIPHE_CRED_URL" ] && [ -x ` + injectDir + `/bin/eriphe-cred ]; then
-  export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=` + injectDir + `/bin/eriphe-cred \
-    GIT_CONFIG_KEY_1=credential.useHttpPath GIT_CONFIG_VALUE_1=true
-fi
 if [ -n "$ERIPHE_REPO" ] && [ ! -d repo ]; then
   if ! command -v git >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
     echo "eriphe: installing git" >&2
@@ -64,7 +57,8 @@ exec "$@"`
 const toolchainPathScript = `if [ -n "$ERIPHE_TOOLCHAIN_PATH" ]; then export PATH="$ERIPHE_TOOLCHAIN_PATH:$PATH"; fi`
 
 // gitCredentials makes git use GH_TOKEN for HTTPS, through the environment
-// only: nothing is written to disk.
+// only: nothing is written to disk. For a task lent a GitHub repository it is
+// a placeholder, which eriphe-core replaces past the relay.
 var gitCredentials = []string{
 	"GIT_CONFIG_COUNT=1",
 	"GIT_CONFIG_KEY_0=credential.helper",
@@ -300,10 +294,8 @@ func (n *node) taskEnv(t *Task, agentEnv map[string]string) map[string]string {
 	for k, v := range n.egressEnv(t) { // their only way out (egress.go)
 		env[k] = v
 	}
-	for k, v := range n.credentialEnv(t) { // where eriphe-cred asks (credential.go)
-		env[k] = v
-	}
-	for k, v := range n.sshEnv(t) { // egress_ssh.go
+	env["ERIPHE_TASK_SECRET"] = t.secret // for what it asks this node: ssh, toolchains
+	for k, v := range n.sshEnv(t) {      // egress_ssh.go
 		env[k] = v
 	}
 	if n.toolchainsFor(t) {
@@ -322,24 +314,13 @@ func (n *node) taskEnv(t *Task, agentEnv map[string]string) map[string]string {
 	for k, v := range spec.Identity {
 		env[k] = v
 	}
-	if ownGitToken(t, env) {
-		env["ERIPHE_GIT_OWN_TOKEN"] = "1"
+	if _, ok := env["GH_TOKEN"]; ok {
 		for _, kv := range gitCredentials {
 			k, v, _ := strings.Cut(kv, "=")
 			env[k] = v
 		}
 	}
 	return env
-}
-
-// ownGitToken: GH_TOKEN is a token given to the task, not the placeholder of
-// its access to GitHub, which leaves git to eriphe-cred.
-func ownGitToken(t *Task, env map[string]string) bool {
-	token, ok := env["GH_TOKEN"]
-	if !ok {
-		return false
-	}
-	return !slices.ContainsFunc(t.Spec.Accesses, func(a TaskAccess) bool { return a.Env == "GH_TOKEN" && a.Placeholder == token })
 }
 
 // taskMounts is what a task's container mounts: its agent and run files

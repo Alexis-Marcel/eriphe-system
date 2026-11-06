@@ -356,11 +356,9 @@ out of time did run (the code may hang): a failure as before. A message whose da
 
 **When a task stops** (eriphe-core wants it stopped: the brain, a budget, "the same failure
 twice"), a task with a repository has its work saved before the container stops (`keepwork.go`),
-once: in the container, with git asking Eriphe for credentials as in the task (`eriphe-cred`, no
-prompt), the commits no remote has (`git rev-list --branches --not --remotes`) on the branch the
-task was lent (`branch` of the spec) are pushed to that branch only, so eriphe-core's policy and
-credentials still decide. A credential the user would have to approve is refused while the task
-stops, not waited for. What could not be pushed (no branch lent, the push refused, commits on
+once: in the container, with the task's git (no prompt), the commits no remote has (`git rev-list
+--branches --not --remotes`) on the branch the task was lent (`branch` of the spec) are pushed to
+that branch only, so eriphe-core still decides. What could not be pushed (no branch lent, the push refused, commits on
 other branches, or the repository could not be read) is **kept on the node**: once the container
 is stopped, `/work/repo` is moved to `kept/<task>/repo` under `-root` with a `meta.json` (task,
 branch, time), which no task mounts, kept `-snapshot-days` (7) like the snapshots and pruned at
@@ -512,35 +510,21 @@ route, and the server's credential stays in eriphe-core (the node never sees it)
 reach every runtime the same way (see [ACP](#acp) and [Codex](#codex)); eriphe-core still lends
 them to `claude-code` tasks only.
 
-## Credentials on demand
+## git and gh
 
-The task listener also serves `POST /v1/task/credential` (`credential.go`), with the task's own
-secret: `eriphe-cred` in the task asks it for a credential (`{protocol, host, path, access,
-tool}`), the node relays it to eriphe-core (`POST /v1/node/tasks/{id}/credential`, with the
-node's secret and certificate, like reports), adding `relayed`, the hosts of the task's accesses
-whatever the task sent, and answers `{username, password, expires}`, or 403
-with the reason, or 404 when eriphe-core has no service for the host (git then goes on to another
-helper). When eriphe-core says the user must approve, the node asks a permission `Credential` of
-the task (the same flow, the same card in the workspace) and, once allowed, asks eriphe-core again.
-The tool waits meanwhile (up to the hour of any permission). See core/README.md, "Credentials on
-demand", for the decision and the GitHub App. A task lent a GitHub repository has `github.com:443`
-among its [accesses](#accesses), so git's `password` is a placeholder, and the token goes in at
-eriphe-core; the node never sees it.
+A task lent a GitHub repository has `github.com:443` and `api.github.com:443` among its
+[accesses](#accesses), with a placeholder in `GH_TOKEN`. gh reads it; git gets it from a fixed
+credential helper in the task's environment (`GIT_CONFIG_*`, nothing written), before the clone, so
+a private repository clones the same way. Each request crosses the relay to eriphe-core, which
+decides and puts the token in: the node never sees it. A refusal is a 403 with its reason in plain
+text, which git shows as `remote: …`. See core/README.md, "GitHub in a task".
 
-Every task gets `ERIPHE_CRED_URL` (`<callback-url>/v1/task/credential`) and `ERIPHE_TASK_SECRET`.
-Its entrypoint makes git use the helper when it is there and the task has no token of its own in `GH_TOKEN` (the placeholder of its access to GitHub is not one):
-`GIT_CONFIG_COUNT=2`, `credential.helper=/opt/eriphe/bin/eriphe-cred`,
-`credential.useHttpPath=true`, before the clone (a private repository clones through it too).
-
-**`eriphe-cred`** (`cred/`, a module of its own, standard library only; also the SSH agent and
-tunnel of [SSH accesses](#accesses)) is one of the
-[injected programs](#injected-programs-optbin): the node's image ships it for both Linux
-architectures in `/usr/local/share/eriphe/task-bin/linux-{amd64,arm64}/`, so every task finds it in
-`/opt/eriphe/bin`, first on its `PATH`. `gh` is the real one, which the agent installs with apt
-when it needs it: it holds a placeholder in `GH_TOKEN`, as an [access](#accesses) of the task. On a Mac with Apple's container, install.sh takes the `linux-arm64`
-folder from the image with eriphe-node and passes it as `-task-bin`. Without eriphe-cred in
-`/opt/eriphe/bin` (an older node image, or `-task-bin` pointing elsewhere), git is not set up and
-tasks behave as before.
+**`eriphe-cred`** (`cred/`, a module of its own, standard library only) is the SSH agent and tunnel
+of [SSH accesses](#accesses). It is one of the [injected programs](#injected-programs-optbin): the
+node's image ships it for both Linux architectures in
+`/usr/local/share/eriphe/task-bin/linux-{amd64,arm64}/`, so every task finds it in
+`/opt/eriphe/bin`, first on its `PATH`. On a Mac with Apple's container, install.sh takes the
+`linux-arm64` folder from the image with eriphe-node and passes it as `-task-bin`.
 
 ## Runtimes
 

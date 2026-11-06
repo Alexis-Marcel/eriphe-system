@@ -362,13 +362,12 @@ func (n *node) egressRelay(listen, addr string) (relay *egressProxy, l net.Liste
 
 // taskRoutes is the task listener's API. Only task containers call it,
 // each with its own secret: their permission endpoint, the relay to their
-// catalog servers, and their credentials on demand (credential.go).
+// catalog servers, their SSH agent's questions and their toolchains.
 func (n *node) taskRoutes(s *state) *http.ServeMux {
 	perm := http.NewServeMux()
 	perm.Handle("/perm/{id}/mcp", n.permHandler())
 	perm.Handle("/mcp/{server}", n.relayHandler(s))
 	perm.Handle("/model/v1/{path...}", n.modelRelayHandler(s))
-	perm.Handle("POST "+credentialPath, n.credentialHandler(s))
 	perm.Handle("POST "+sshPath, n.sshHandler(s))
 	perm.Handle("POST "+toolchainPath, n.toolchainHandler())
 	return perm

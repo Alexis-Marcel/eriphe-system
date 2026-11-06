@@ -192,59 +192,18 @@ func TestTaskKeepsResources(t *testing.T) {
 	}
 }
 
-// Credentials come from the repo resources: a covering entry with enough
-// access, a write on a declared branch on a clean start.
-func TestDecideCredentialFromResources(t *testing.T) {
-	push := credRequest{Host: "github.com", Path: "owner/site.git", Access: "write", Tool: "git"}
-	lentWrite := []repoGrant{{Repo: "owner/site", Access: accessWrite, Branch: "eriphe/fix"}}
-	cases := []struct {
-		name   string
-		req    credRequest
-		facts  credFacts
-		want   string
-		reason string
-	}{
-		{"covered write on its branch", push, credFacts{Kind: "worker", Repos: lentWrite, Lent: true, Clean: true}, decideAllow, "lent for write"},
-		{"not the user's own start asks", push, credFacts{Kind: "worker", Repos: lentWrite, Lent: true}, decideAsk, "not the user's own"},
-		{"covered read", credRequest{Host: "github.com", Path: "Owner/Site", Access: "read"}, credFacts{Kind: "worker", Repos: lentWrite, Lent: true}, decideAllow, ""},
-		{"gh write on a branch lent for write", credRequest{Host: "api.github.com", Path: "owner/site", Access: "write", Tool: "gh"},
-			credFacts{Kind: "worker", Repos: lentWrite, Lent: true, Clean: true}, decideAllow, "lent for write"},
-		{"gh write without a branch asks", credRequest{Host: "api.github.com", Path: "owner/site", Access: "write", Tool: "gh"},
-			credFacts{Kind: "worker", Repos: []repoGrant{{Repo: "owner/site", Access: accessWrite}}, Lent: true, Clean: true}, decideAsk, "no branch"},
-		{"write without a branch asks", push, credFacts{Kind: "worker", Repos: []repoGrant{{Repo: "owner/site", Access: accessWrite}}, Lent: true, Clean: true}, decideAsk, "no branch"},
-		{"lent read: a write is refused", push, credFacts{Kind: "worker", Repos: []repoGrant{{Repo: "owner/site", Access: accessRead, Branch: "x"}}, Lent: true}, decideDeny, "for read"},
-		{"another repo", credRequest{Host: "github.com", Path: "owner/other.git", Access: "read"}, credFacts{Kind: "worker", Repos: lentWrite, Lent: true}, decideDeny, "not the repository"},
-		{"without the App, the same", push, credFacts{Kind: "worker", Repos: lentWrite, Lent: true, Clean: true, Fallback: true}, decideAllow, "lent for write"},
-		{"nothing lent", push, credFacts{Kind: "worker", Lent: false}, decideDeny, "no GitHub repository"},
-	}
-	for _, c := range cases {
-		d := decideCredential(c.req, c.facts)
-		if d.Decision != c.want || !strings.Contains(d.Reason, c.reason) {
-			t.Errorf("%s: %s (%s), want %s (%q)", c.name, d.Decision, d.Reason, c.want, c.reason)
-		}
-	}
-}
-
-// A task with a repo resource needs no GitHub tool; one from before
-// resources still does.
-func TestCredentialFromRepoResource(t *testing.T) {
-	c, old := credCore(t, "")
+// A repository is what a repo resource lends, and no more.
+func TestRepoFromResource(t *testing.T) {
+	c, _ := credCore(t, "")
 	withApp(t, c, newFakeGitHub(t))
-	ctx := context.Background()
-	task := &TaskRow{ID: "t-2", Node: "pc", Agent: "sonnet", Runtime: "claude-code", Kind: "worker", Prompt: "fix it", State: stateRunning,
-		Resources: []ResourceRef{{Kind: resRepo, Ref: "https://github.com/owner/repo.git", Access: accessWrite, Branch: "eriphe/fix"}}}
-	c.store.insertTask(task)
-	task, _ = c.store.task("t-2")
+	task := &TaskRow{ID: "t-2", Resources: []ResourceRef{{Kind: resRepo, Ref: "https://github.com/owner/repo.git", Access: accessWrite, Branch: "eriphe/fix"}}}
 	c.store.set(lentByUserKey(task.ID), "1")
-	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "write", Tool: "git"}); a.Decision != decideAllow || a.Password == "" {
-		t.Fatalf("push on its branch: %+v", a)
+	facts := c.credentialFacts(task)
+	if d := decideRepo("owner/repo", accessWrite, facts); d.Decision != decideAllow {
+		t.Fatalf("push on its branch: %+v", d)
 	}
-	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/other.git", Access: "read"}); a.Decision != decideDeny {
-		t.Fatalf("other repo: %+v", a)
-	}
-	// From before resources, without the GitHub tool: refused, as then.
-	if a := c.credential(ctx, old, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read"}); a.Decision != decideDeny {
-		t.Fatalf("old task without the tool: %+v", a)
+	if d := decideRepo("owner/other", accessRead, facts); d.Decision != decideDeny {
+		t.Fatalf("other repo: %+v", d)
 	}
 }
 

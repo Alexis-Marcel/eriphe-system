@@ -393,7 +393,7 @@ holds their credentials and is the only one to reach them: **a task never sees a
 | Field | What |
 |---|---|
 | `url` | a remote server (streamable HTTP) |
-| `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"github_app": true}` (an installation token of Eriphe's GitHub App, refreshed before it ends; with `"account"`, from that account's or organization's installation: see [credentials on demand](#the-github-app)), `{"none": true}` |
+| `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"github_app": true}` (an installation token of Eriphe's GitHub App, refreshed before it ends; with `"account"`, from that account's or organization's installation: see [GitHub in a task](#the-github-app)), `{"none": true}` |
 | `run` | instead of `url` and `auth`: a local server, a container a node runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
 | `use` | what it is for, for the brain |
 | `access` | what Eriphe may do on it: `read-only`, `reads`, `free` or `ask` (see [access levels](#access-levels)); without it, `trust_annotations` says |
@@ -491,7 +491,7 @@ new access token is used. The database file is as sensitive as `/secrets`.
   reaches eriphe-core with its secret, and only for its own running tasks.
 - Every call is a permission request first, under the policy below; the proxy enforces it with
   tickets.
-- git and gh in a task get [credentials on demand](#credentials-on-demand): a one-hour token for one
+- git and gh in a task get [GitHub in a task](#github-in-a-task): a one-hour token for one
   repository, decided at launch as any lend, and logged; it goes in on the way out and stays out of
   the task. Without a GitHub App, the tool's own token stays in eriphe-core the same way.
 - What servers say (descriptions, results, errors) is data for the agents, never instructions:
@@ -785,7 +785,7 @@ is kept in `task_harness` for the measures. The brain's prompt no longer counts 
 
 **No work lost on stop.** Before a task's container is removed (stopped by the brain, a budget or
 "the same failure twice"), its node pushes the commits no remote has on the branch the task was
-lent, through the task's own credential helper (the same decision applies), or keeps
+lent, with the task's own git (the same decision applies), or keeps
 the repository on the node (see eriphe-node's README). Its `work` event says which: the brain hears
 it with the stop, even a stop of its own when the work was kept.
 
@@ -1023,7 +1023,7 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 
 | Kind | `ref` | Access | What the task gets |
 |---|---|---|---|
-| `repo` | `owner/name` on GitHub, or a git URL; `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` | cloned into `/work/repo`; [credentials](#credentials-on-demand) for it; its skills if it is the user's own or trusted (below); one per task |
+| `repo` | `owner/name` on GitHub, or a git URL; `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` | cloned into `/work/repo`; [credentials](#github-in-a-task) for it; its skills if it is the user's own or trusted (below); one per task |
 | `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
 | `drive-folder` | a Google Drive folder, by name | `read`, `drop` (at most the folder's own) | for now, the files server whole (it reaches every Drive folder given to Eriphe, each with its own access) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
@@ -1099,35 +1099,18 @@ text (not their scripts), and a skill's scripts run in a task. Nothing of a skil
 privileged, long-lived container, whatever its runtime. A skill is the user's own, approved by them:
 reading one does not taint the turn.
 
-## Credentials on demand
+## GitHub in a task
 
-A task asks for the access it needs when it needs it, through the standard extension points of
-its tools, and eriphe-core decides and mints a short-lived credential for that one thing: **no
-long-lived secret ever enters a task** (the study behind it: tasks adapt to what they need, and
-ask for their access the same way they install their tools).
+A task lent a GitHub repository uses the real `git` and the real `gh`, which the agent installs with
+apt. It holds a placeholder in `GH_TOKEN`: gh reads it, and git gets it from a fixed credential
+helper in the task's environment. Each request crosses the node's relay, as for any
+[access](../node/README.md#accesses), and eriphe-core decides and puts the token in.
 
-**The path of a request.** `eriphe-cred` (node/cred, a small static Go program) is in every task
-at `/opt/eriphe/bin`, with the injected agent (node/README.md, Injected programs). It is:
-
-- git's **credential helper**: the task's entrypoint sets `credential.helper=/opt/eriphe/bin/eriphe-cred`
-  and `credential.useHttpPath=true` (environment `GIT_CONFIG_*`, nothing written), so git names the
-  repository; git's protocol does not say whether it fetches or pushes, so eriphe-cred reads it
-  from the git command that started it (`push` writes, anything else reads);
-- **gh**: the real one, which the agent installs with apt. It holds the same placeholder in `GH_TOKEN`, and its requests to `api.github.com` go through the relay like git's (below).
-
-It posts `{protocol, host, path, access}` to the node's task listener
-(`<callback-url>/v1/task/credential`, with the task's own secret, as the permission endpoint);
-the node relays it to `POST /v1/node/tasks/{id}/credential` with its own secret and certificate.
-
-**The decision** (`decideCredential`, deny by default; first that applies):
+**The decision** (`decideRepo`, deny by default; first that applies):
 
 | | Answer |
 |---|---|
-| a host eriphe-core has no service for (anything but `github.com`, `api.github.com`) | none: git goes on to another helper, or none |
-| not `https`, no repository (git without `useHttpPath`), an access other than `read`/`write` | deny |
-| the brain | deny: it works through its tools |
-| no GitHub repository is lent to the task: no `repo` [resource](#resources) on GitHub (a task from before resources: no GitHub catalog server in its grant) | deny |
-| another repository than the one its `repo` resource covers | deny |
+| another repository than the one its `repo` [resource](#resources) covers | deny |
 | a read of it | allow |
 | a write (git's push, gh's pull request) to a repository lent for `read` | deny, at once: a push is not lent |
 | a write on the declared `branch` of a repository lent for `write`, on a clean start (the user's own clean turn, or a watch they authorised) | allow |
@@ -1140,11 +1123,8 @@ gh's token writes pull requests and issues, never contents: GitHub itself refuse
 release, a repository's settings or its secrets. A task that must merge is lent the catalog's GitHub
 tool, under its grid.
 
-**git holds no token.** For a task lent a GitHub repository, the node's relay decrypts `github.com`
-as a host of an [access](../node/README.md#accesses), and `eriphe-cred` gets a placeholder where it would get the
-token, once the decision above is made. The token is minted here and goes in
-on the way out (`git_access.go`). gh goes the same way, to `api.github.com`: its requests are not
-classified (much of it is one `POST /graphql`). Its token is for the repository a REST path names,
+**No token in the task.** The token is minted here and goes in on the way out (`git_access.go`).
+gh's requests, to `api.github.com`, are not classified (much of it is one `POST /graphql`). Its token is for the repository a REST path names,
 which must be lent, or else for those lent, of one owner; when some may be written, for those only,
 with write rights, so that it holds nothing lent for read. So with several repositories lent, a
 request that names none may not reach all of them. A write not allowed yet gets a token that reads,
@@ -1156,8 +1136,8 @@ are not classified:
 git → the node's relay → eriphe-core (decides, mints) → GitHub
 ```
 
-- **Each request is decided again**, from what it is and not from what the helper said: a push is
-  `git-receive-pack`, whatever `eriphe-cred` asked for, and a placeholder proves nothing. A refusal
+- **Each request is decided**, from what it is: a push is `git-receive-pack`, and a placeholder
+  proves nothing. A refusal
   is a 403 with its reason in plain text, which git shows as `remote: …`.
 - **What is pushed is not read**, as for any access: what is decided is the lend, a repository, read
   or write. The `branch` lent is what the task is told to push to, and the real limit is the
@@ -1193,10 +1173,7 @@ decision, by whom, source, reason), and shown in the task's details ("Accès dem
 
 **What it does not stop.** What is lent is usable: a task talked into something by a page it read
 can push to the branch it was lent, and the limit is then the token and the repository's protection
-rules on GitHub. The task's secret, which eriphe-cred uses, is
-in the task's environment (the egress relay's address already carries it): the agent could ask
-for a credential itself, which is no more than git can, and the policy denies reading it
-(`$ERIPHE_TASK_SECRET`) like the other secrets.
+rules on GitHub.
 
 ### The GitHub App
 
@@ -1920,7 +1897,7 @@ handlers are thin layers over the methods behind the MCP tools.
 | `GET /v1/tasks?all=1` | worker tasks, the most recent first; active ones only without `all`; the brain too while it waits for a permission |
 | `GET /v1/tasks/{id}?events=N` | the task's status (as `task_status`) with its last N events (20) |
 | `GET /v1/tasks/{id}/events?after=N&wait=S` | events after seq N, waiting up to S seconds (max 120) for new ones; a finished task answers at once |
-| `GET /v1/tasks/{id}/credentials` | what the task asked for with [credentials on demand](#credentials-on-demand), the latest first: time, tool, host, repo, access, decision, by whom, source |
+| `GET /v1/tasks/{id}/credentials` | what the task used, as [GitHub in a task] says(#github-in-a-task), the latest first: time, tool, host, repo, access, decision, by whom, source |
 | `POST /v1/tasks/{id}/answer` | `{reply, allow}`: allow or deny the pending permission (`allow` set), or reply to an idle task |
 | `POST /v1/tasks/{id}/stop` | stop the task's agent |
 
@@ -1944,7 +1921,7 @@ the conversation on its tasks (`/#tasks-panel`).
 **Conversation first** (`convo_cards.go`, `web_convo_cards.go`, `templates/convo.html`). What waits
 for the user's approval is asked where they talk to the assistant: every proposal (a memory, an
 intention, a notification rule, a watch, a setting, a presence mapping, the start of a task that
-needs something of theirs: [asked at launch](#credentials-on-demand)) is a card bound by the code
+needs something of theirs: [asked at launch](#github-in-a-task)) is a card bound by the code
 to that one proposal, under the brain's message of the turn that made it (or its last message of
 the turn), with Oui, Non (the proposal's own approve and reject) and Modifier (the composer is
 prefilled, and the brain proposes again). The event stream keeps cards up to date (`cards`:

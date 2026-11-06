@@ -173,9 +173,8 @@ func TestMintInstallationToken(t *testing.T) {
 	withApp(t, c, f)
 	ctx := context.Background()
 
-	a := c.credential(ctx, task, credRequest{Protocol: "https", Host: "github.com", Path: "owner/repo.git", Access: "read", Tool: "git"})
-	if a.Decision != decideAllow || a.Password != gitPlaceholder(task.ID) || a.Username != "x-access-token" {
-		t.Fatalf("read: %+v", a)
+	if m, err := c.mintGitHub(ctx, task.ID, "owner/repo", accessRead, false); err != nil || m.Password != "ghs_x" || m.Username != "x-access-token" {
+		t.Fatalf("read: %+v %v", m, err)
 	}
 	mints := f.mints()
 	if len(mints) != 1 {
@@ -185,14 +184,9 @@ func TestMintInstallationToken(t *testing.T) {
 	if string(raw) != `{"permissions":{"contents":"read"},"repositories":["repo"]}` {
 		t.Fatalf("token asked with %s", raw)
 	}
-	log, _ := c.store.credentialLog(task.ID, 10)
-	if len(log) != 1 || log[0].Source != sourceApp || log[0].Fallback() {
-		t.Fatalf("log %+v", log)
-	}
-
 	// Cached: git asks more than once in one operation.
-	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "read"}); a.Decision != decideAllow || len(f.mints()) != 1 {
-		t.Fatalf("not reused: %+v, %d mints", a, len(f.mints()))
+	if _, err := c.mintGitHub(ctx, task.ID, "owner/repo", accessRead, false); err != nil || len(f.mints()) != 1 {
+		t.Fatalf("not reused: %v, %d mints", err, len(f.mints()))
 	}
 
 	// A write gets contents:write.

@@ -8,23 +8,21 @@ import (
 	"strings"
 )
 
-// git on the path of an access. A task lent a GitHub repository holds no
-// token: eriphe-cred still asks (credentials.go), and gets a placeholder
-// once the decision is made. The node's relay decrypts
-// github.com for that task and hands each request here, as for any access
+// git and gh on the path of an access. A task lent a GitHub repository holds
+// no token: GH_TOKEN holds a placeholder, which gh reads and git's credential
+// helper hands over. The node's relay decrypts github.com and api.github.com
+// for that task and hands each request here, as for any access
 // (lent_access.go), where the real token goes in:
 //
-//	git → the node's relay → eriphe-core (decides, mints) → GitHub
+//	git, gh → the node's relay → eriphe-core (decides, mints) → GitHub
 //
-// The decision is made again on each request, from what the request is
-// rather than what the helper said: a placeholder is no proof, the task can
-// write it down without asking.
+// The decision is made on each request, from what the request is: a push is
+// git-receive-pack, and a placeholder is no proof.
 //
-// gh goes the same way, to api.github.com: it reads GH_TOKEN, which holds the
-// same placeholder. Its token writes pull requests and issues, never contents.
 // A request of gh does not always name a repository (much of it is one POST
-// /graphql), and is not classified: what it may do is the token's, minted as
-// the lend says, for the repositories lent (ghRequest).
+// /graphql), and is not classified: what it may do is the token's, which
+// writes pull requests and issues, never contents, minted as the lend says,
+// for the repositories lent (ghRequest).
 //
 // As for any access, what is decided is the lend: a repository, read or
 // write. What is pushed is not read. The branch lent is what the task is
@@ -35,12 +33,10 @@ import (
 const (
 	gitTarget = "github.com:443"
 	ghTarget  = "api.github.com:443"
-	// gitAccessName and gitAccessEnv are how the node gets github.com, as an
-	// access of the task's. Nothing reads the variable: git asks its helper.
+	// gitAccessName and gitAccessEnv are how the node gets GitHub, as an
+	// access of the task's.
 	gitAccessName = "github"
-	gitAccessEnv  = "ERIPHE_GIT_PLACEHOLDER"
-	ghAccessName  = "github-api"
-	ghAccessEnv   = "GH_TOKEN"
+	gitAccessEnv  = "GH_TOKEN"
 
 	gitLogTool = "git"
 	ghLogTool  = "gh"
@@ -54,16 +50,13 @@ func gitPlaceholder(taskID string) string { return "eriphe-git-" + taskID }
 
 func isGitHubRepo(e ResourceRef) bool { return e.Kind == resRepo && githubRepo(e.Ref) != "" }
 
-// lentGit is github.com as the node gets it, for a task lent a repository
-// there. Reads go this way too: one path for all of a repository.
+// lentGit is GitHub as the node gets it, for a task lent a repository there.
+// Reads go this way too: one path for all of a repository.
 func lentGit(taskID string, list []ResourceRef) []nodeAccess {
 	if !slices.ContainsFunc(list, isGitHubRepo) {
 		return nil
 	}
-	return []nodeAccess{
-		{Name: gitAccessName, Hosts: []string{gitTarget}, Env: gitAccessEnv, Placeholder: gitPlaceholder(taskID)},
-		{Name: ghAccessName, Hosts: []string{ghTarget}, Env: ghAccessEnv, Placeholder: gitPlaceholder(taskID)},
-	}
+	return []nodeAccess{{Name: gitAccessName, Hosts: []string{gitTarget, ghTarget}, Env: gitAccessEnv, Placeholder: gitPlaceholder(taskID)}}
 }
 
 // gitCall is what a request to github.com is, for git.
@@ -116,13 +109,10 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 		log.Printf("git: task %s: %s %s refused: %s", t.ID, r.Method, call.repo, line)
 	}
 	facts := c.credentialFacts(t)
-	decide := func(access string) credDecision {
-		return decideCredential(credRequest{Protocol: "https", Host: "github.com", Path: call.repo, Access: access, Tool: gitLogTool}, facts)
-	}
-	if call.lfs && decide(accessWrite).Decision == decideAllow {
+	if call.lfs && decideRepo(call.repo, accessWrite, facts).Decision == decideAllow {
 		call.access = accessWrite // it may be an upload: what the task may write, it may store
 	}
-	d := decide(call.access)
+	d := decideRepo(call.repo, call.access, facts)
 	if d.Decision != decideAllow {
 		why := d.Reason
 		if d.Decision == decideAsk {
@@ -132,13 +122,13 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 		http.Error(w, why, http.StatusForbidden)
 		return none, false
 	}
-	m, err := c.mintGitHub(r.Context(), t.ID, d.Repo, call.access, false)
+	m, err := c.mintGitHub(r.Context(), t.ID, call.repo, call.access, false)
 	if err != nil {
 		refuse("cannot give a credential: " + err.Error())
-		http.Error(w, "eriphe-core cannot get a token for "+d.Repo, http.StatusBadGateway)
+		http.Error(w, "eriphe-core cannot get a token for "+call.repo, http.StatusBadGateway)
 		return none, false
 	}
-	c.store.logCredential(t.ID, gitLogTool, "github.com", d.Repo, call.access, decideAllow, byPolicy, m.Source, d.Reason)
+	c.store.logCredential(t.ID, gitLogTool, "github.com", call.repo, call.access, decideAllow, byPolicy, m.Source, d.Reason)
 	return putGitHubToken(r, placeholder, m.Password), true
 }
 
@@ -215,10 +205,7 @@ func (c *core) ghRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, uri
 		// classified: only a token of the App, limited as lent, goes here.
 		return refuse(http.StatusForbidden, "", "gh needs Eriphe's GitHub App: create it in Settings → Tools → GitHub")
 	}
-	allows := func(repo, access string) bool {
-		req := credRequest{Protocol: "https", Host: "api.github.com", Path: repo, Access: access, Tool: ghLogTool}
-		return decideCredential(req, facts).Decision == decideAllow
-	}
+	allows := func(repo, access string) bool { return decideRepo(repo, access, facts).Decision == decideAllow }
 	named := ghRepoOf(uri.Path)
 	repos, access := ghRepos(named, facts.Repos, allows)
 	if len(repos) == 0 {

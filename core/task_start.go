@@ -10,7 +10,7 @@ import (
 
 // A task's crossings, decided at launch. What a task lent by run_task needs
 // of the user's (a write to a repository not lent outright by a clean start)
-// is foreseen with the same decision as the push itself (decideCredential),
+// is foreseen with the same decision as the push itself (decideRepo),
 // and asked once, when the task starts. The task waits meanwhile: it is kept,
 // pending, with desired "held", which no node sees and no placement moves.
 // The user gets one card in the conversation (convo_cards.go, kind
@@ -58,21 +58,14 @@ type startNeed struct {
 // startNeeds foresees what the lent repositories will need of the user's:
 // for each one lent for write, the decision its push will get.
 func (c *core) startNeeds(list []ResourceRef, clean bool) []startNeed {
-	var repos []repoGrant
-	for _, e := range list {
-		if r := githubRepo(e.Ref); e.Kind == resRepo && r != "" {
-			repos = append(repos, repoGrant{Repo: r, Access: e.Access, Branch: e.Branch})
-		}
-	}
+	repos := lentRepos(list)
 	var out []startNeed
 	for _, g := range repos {
 		if g.Access != accessWrite {
 			continue
 		}
-		req := credRequest{Protocol: "https", Host: "github.com", Path: g.Repo, Access: accessWrite, Tool: gitLogTool}
-		d := decideCredential(req, credFacts{Kind: "worker", Repos: repos, Lent: true, Clean: clean})
-		if d.Decision == decideAsk {
-			out = append(out, startNeed{Repo: d.Repo, Access: accessWrite, Branch: g.Branch, Reason: d.Reason})
+		if d := decideRepo(g.Repo, accessWrite, credFacts{Repos: repos, Clean: clean}); d.Decision == decideAsk {
+			out = append(out, startNeed{Repo: g.Repo, Access: accessWrite, Branch: g.Branch, Reason: d.Reason})
 		}
 	}
 	return out

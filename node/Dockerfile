@@ -20,7 +20,7 @@ ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /darwin-arm64/eriphe-node .
 
-# eriphe-cred, the credential helper (cred/, a module of its own with no
+# eriphe-cred, the SSH agent and tunnel of tasks (cred/, a module of its own with no
 # dependency), for both Linux architectures: the node copies
 # task-bin/linux-<arch>/ into every task's /opt/eriphe/bin (-task-bin), the
 # Mac's install.sh takes linux-arm64 for its tasks' VMs.

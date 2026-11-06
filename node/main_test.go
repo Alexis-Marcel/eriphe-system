@@ -138,7 +138,6 @@ func TestTaskRoutes(t *testing.T) {
 		{"POST", "/perm/t-1/mcp", "/perm/{id}/mcp"},
 		{"POST", "/mcp/mail", "/mcp/{server}"},
 		{"GET", "/model/v1/models", "/model/v1/{path...}"},
-		{"POST", credentialPath, "POST " + credentialPath},
 		{"GET", "/v1/node", ""},
 	} {
 		if _, p := mux.Handler(httptest.NewRequest(tc.method, tc.path, nil)); p != tc.pattern {
