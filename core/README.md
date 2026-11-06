@@ -420,8 +420,8 @@ covers (their own input schemas; `tools/list` shows only them, any other call is
 forwards each call upstream with the real credential. Tools only for now (no resources or
 prompts); a long call streams, within the server's `timeout`.
 
-**Tickets.** A call goes upstream only if its permission request was allowed (by the policy, the
-brain or the user) for that task, that tool and that exact input, within 30 minutes, once. An agent
+**Tickets.** A call goes upstream only if its permission request was allowed (by the policy or the
+user) for that task, that tool and that exact input, within 30 minutes, once. An agent
 that found its task's secret (in its process list, say) cannot call a tool behind its own
 permission prompt.
 
@@ -658,7 +658,7 @@ whatever address it dials) and one client certificate per node.
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
 | `task_status` | state, the agent's last message (without its receipt), its checked [receipt](#receipts-receiptgo), the pending permission; `wait` blocks until the task needs you |
 | `list_tasks` | recent tasks |
-| `answer_task` | allow or deny the pending permission, or reply to the agent's question; `release` asks the user on a card to release the tools it was lent [held back](#resources) |
+| `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources) |
 | `stop_task` | stop the agent |
 
 The scheduler takes the requested node if it is online and fits. Otherwise it works in two passes,
@@ -846,11 +846,11 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
 5. for a catalog tool, its **exception**, then the actions the user allowed for good ("Toujours
    autoriser", [below](#access-levels)), then its **category's value** in the
    [grid](#access-grid) of the account the call names: On approval asks on a
-   [card](#the-approval-card), Free is allowed. No catalog call is left to the brain's judgment;
+   [card](#the-approval-card), Free is allowed;
 6. an MCP tool out of the catalog: refused at once, it is not lent. There is no built-in ask on a command: what a task reaches
    with a secret is what it was lent, decided at launch, and Free asks nothing;
 7. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
-   `Write`, `Edit`, `WebFetch`…) is allowed, without waking the brain (`inContainer`). The container
+   `Write`, `Edit`, `WebFetch`…) is allowed (`inContainer`). The container
    is the boundary: what leaves it goes through the node's mounts (a folder's level), its egress
    filter and the credentials eriphe-core lends, which the shell rules above cannot replace (they
    read a command line, and only stop mistakes);
@@ -872,7 +872,7 @@ Common safe reads, allowed without asking anyone:
 ]}
 ```
 
-Every decision (by the policy, the brain or the user) is kept in the `decisions` table.
+Every decision (by the policy or the user) is kept in the `decisions` table.
 
 ### Access grid
 
@@ -1351,7 +1351,7 @@ its next start (the proxy itself follows the catalog at once); in eriphe-core's 
 brain waits for the trusted servers that are still connecting before it starts.
 
 Its other catalog tools (`brain.tools`) are not allowed in advance: each call goes through the
-policy like a worker's, except that what would be the brain's to judge is allowed, and a call
+policy like a worker's, and a call
 without its permission is refused by the proxy. What is the user's waits for the user: eriphe-core says so in the conversation, and the brain's
 task shows in `GET /v1/tasks` (and the CLI) until the user allows or denies it. The brain's other
 permission requests are denied, but for the web.
@@ -1754,8 +1754,7 @@ put there, so it is treated as external content, like a mail or a page:
 
 - the event that brings the brain the result of a task that read folders says so, and taints the
   turn that reads it (`folder:<names>`), as `task_status` of such a task does: the memory only
-  proposes what that turn remembers, and the brain may not allow a permission (see
-  memory_trust.go);
+  proposes what that turn remembers (see memory_trust.go);
 - on a tainted turn, `run_task` refuses to lend a folder with `drop` or `write`; folders to read
   still go;
 - the permission policy applies to the task as to any other, and Docker refuses any write in the
@@ -2589,7 +2588,7 @@ features of their own: they are watches whose prompt composes `since`, `notifica
   409.
 - **External content.** What `outil` and `alerte` bring is kept with the run as external: the wake
   quotes it as data and taints the turn (`watch.outil`, `watch.alerte`), so what it notifies goes to
-  the brief at most (the bench has these cases), it may not allow a permission nor lend a task
+  the brief at most (the bench has these cases), it may not lend a task
   anything that writes; `since` names it without quoting it.
 - **History and silences.** Each run keeps what the brain did (notified, said, silent, acted, or
   missed, dropped), in Settings and in `since`; the next brief lists the watches that stayed silent
@@ -2812,8 +2811,7 @@ time ("que s'est-il passé hier ?") lists that time. Current facts only otherwis
 `user`) create or change a profile, preference or lesson. A brain turn that called an external
 catalog tool (seen by the proxy, or in the turn's events for servers it reaches directly and the
 web tools) is tainted: what it remembers is only `proposed`, unless the user's message of that
-same turn asked for it. A tainted turn also cannot act: the brain's `answer_task` allowing a
-permission is refused and the request becomes the user's to answer, and `run_task` lending tools
+same turn asked for it. A tainted turn also cannot act: `run_task` lending tools
 that are not all believed reads (a write, a server not trusted for its annotations) is refused;
 a task with reads only, or no catalog tool, still starts. The user's own message of that turn
 does not lift this. Only a delivery holding a user message starts a clean turn: a delivery of

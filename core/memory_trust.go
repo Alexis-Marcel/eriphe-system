@@ -21,8 +21,7 @@ import (
 //     profile or a lesson; I approve them in the workspace;
 //   - a brain turn that called an external catalog tool is tainted: what it
 //     remembers is only proposed, unless my own message of that turn asked
-//     for it; nor may it allow a permission or lend a task tools that act
-//     (taintedAllow, taintedResources);
+//     for it; nor may it lend a task tools that act (taintedResources);
 //   - only my own words create or change lessons, preferences and the
 //     profile (source_ref names my message, checked against its role);
 //   - every write goes through the scanner: instructions to the model,
@@ -366,19 +365,6 @@ func externalLine(x *Memory) string {
 // not allow a permission (the request becomes mine to answer) nor lend a
 // task anything but believed reads. My own message of the same turn does
 // not lift this.
-
-// taintedAllow refuses the brain's allow of a permission during a tainted
-// turn, and hands the request to me instead.
-func (c *core) taintedAllow(taskID, pid string) error {
-	tainted := c.turnTaint()
-	if len(tainted) == 0 {
-		return nil
-	}
-	why := c.conf().assistantName() + " a lu un contenu extérieur dans ce tour (" + strings.Join(tainted, ", ") + ")"
-	c.store.markUserOnly(taskID, pid, why)
-	return fmt.Errorf("not allowed: this turn read external content (%s), so allowing is %s's decision now: "+
-		"the request is forwarded to %s, relay it in one line and do not retry", strings.Join(tainted, ", "), c.conf().User, c.conf().User)
-}
 
 // ownerMessage reads a message I wrote, from a source_ref "msg:N" (or "#N").
 func (c *core) ownerMessage(ref string) (*Message, bool) {

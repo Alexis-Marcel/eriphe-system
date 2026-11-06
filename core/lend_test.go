@@ -102,39 +102,14 @@ func TestGridDecidesWhatIsLent(t *testing.T) {
 	}
 }
 
-// A request the brain was told of and left at the end of its turn is the
-// user's; one it was not told of yet stays its own.
-func TestBrainLeftPermissions(t *testing.T) {
-	c := newMailCore(t, "")
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
-		State: stateWaitingPermission})
-	c.store.addEvents("t-1", []EventRow{
-		{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-told", "tool_name": "mcp__mail__move"}},
-		{Seq: 2, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-new", "tool_name": "mcp__mail__move"}},
-	})
-	told, _ := c.store.addMessage(roleEvent, "une permission", true)
-	later, _ := c.store.addMessage(roleEvent, "une autre", false)
-	c.store.set("notified_perm:t-1:p-told", idText(told))
-	c.store.set("notified_perm:t-1:p-new", idText(later))
-
-	c.brainLeftPermissions()
-	if c.store.userOnly("t-1", "p-told") == "" {
-		t.Error("a request the brain left is not the user's")
-	}
-	if c.store.userOnly("t-1", "p-new") != "" {
-		t.Error("a request the brain has not seen yet was handed over")
-	}
-}
-
-// The user sees the requests that are theirs; the brain's only while it is
-// away.
+// The user sees every pending request, but for those a card asks.
 func TestShownPermissions(t *testing.T) {
 	tw := newTestWeb(t)
 	c := tw.c
 	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
 		State: stateWaitingPermission})
 	c.store.addEvents("t-1", []EventRow{
-		{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-brain", "tool_name": "mcp__mail__move"}},
+		{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-any", "tool_name": "mcp__mail__move"}},
 		{Seq: 2, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-user", "tool_name": "mcp__mail__send"}},
 	})
 	c.store.markUserOnly("t-1", "p-user", "envoie un mail")
@@ -142,11 +117,8 @@ func TestShownPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := tw.w.shownPermissions(st, false); len(got) != 1 || got[0]["id"] != "p-user" {
+	if got := tw.w.shownPermissions(st); len(got) != 2 {
 		t.Errorf("shown %v", got)
-	}
-	if got := tw.w.shownPermissions(st, true); len(got) != 2 {
-		t.Errorf("shown while the brain is away: %v", got)
 	}
 }
 

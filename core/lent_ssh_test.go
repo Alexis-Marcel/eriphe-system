@@ -402,10 +402,10 @@ func TestSSHCommandsAskNothing(t *testing.T) {
 	c, _ := sshCore(t, gridFree, testHostKey)
 	task := lendAccess(t, c, true, box)
 	input := map[string]any{"command": "ssh box uptime"}
-	if d, why := c.decideTask(task, "Bash", input); d != decideBrain {
+	if d, why := c.decideTask(task, "Bash", input); d != decideNoRule {
 		t.Fatalf("%s: %s", d, why)
 	}
-	if d, why := c.decideTask(nil, "Bash", input); d != decideBrain {
+	if d, why := c.decideTask(nil, "Bash", input); d != decideNoRule {
 		t.Fatalf("nothing lent: %s: %s", d, why)
 	}
 }

@@ -180,9 +180,6 @@ func TestClockWakesBrain(t *testing.T) {
 	if !containsStr(c.turnTaint(), taintIntention) {
 		t.Fatalf("turn after an external intention: %v", c.turnTaint())
 	}
-	if err := c.taintedAllow("t-brain", "p1"); err == nil {
-		t.Fatal("an intention from a mail let the brain allow a permission")
-	}
 }
 
 // My message that names a person brings up the intention cued on them,

@@ -220,9 +220,9 @@ func deviceLabel(ua, lang string) string {
 	return tr(lang, "push.device")
 }
 
-// The watch on what waits for the user: a permission shown to them (theirs,
-// or any while the assistant is away: web_pages.go), and a question the assistant
-// ended its message with. Each is told once.
+// The watch on what waits for the user: a permission shown to them
+// (web_pages.go), and a question the assistant ended its message with. Each is
+// told once.
 
 func (w *web) followWaiting(stop <-chan struct{}) {
 	tick := time.NewTicker(3 * time.Second)

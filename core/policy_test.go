@@ -30,10 +30,10 @@ func TestPolicyDecide(t *testing.T) {
 		{"Bash", map[string]any{"command": "rm /work/folders/x -rf"}, decideDeny},
 		{"Bash", map[string]any{"command": "rm -rf build /work/folders/x"}, decideDeny},
 		// The task's own container: nothing to guard.
-		{"Bash", map[string]any{"command": "rm -rf dist"}, decideBrain},
-		{"Bash", map[string]any{"command": "rm -rf /tmp/x; ls /work/folders"}, decideBrain},
-		{"Bash", map[string]any{"command": "rm /work/folders/a.txt"}, decideBrain},
-		{"Bash", map[string]any{"command": "rm notes.txt"}, decideBrain},
+		{"Bash", map[string]any{"command": "rm -rf dist"}, decideNoRule},
+		{"Bash", map[string]any{"command": "rm -rf /tmp/x; ls /work/folders"}, decideNoRule},
+		{"Bash", map[string]any{"command": "rm /work/folders/a.txt"}, decideNoRule},
+		{"Bash", map[string]any{"command": "rm notes.txt"}, decideNoRule},
 		{"Bash", map[string]any{"command": "git push origin main"}, decideDeny},
 		{"Bash", map[string]any{"command": "git push origin HEAD:master"}, decideDeny},
 		{"Bash", map[string]any{"command": "git push --force origin eriphe/x"}, decideDeny},
@@ -44,30 +44,30 @@ func TestPolicyDecide(t *testing.T) {
 		{"Bash", map[string]any{"command": `bash -c "git push origin main"`}, decideDeny},
 		{"Bash", map[string]any{"command": "(git push origin main)"}, decideDeny},
 		{"Bash", map[string]any{"command": "git push origin HEAD:refs/heads/main"}, decideDeny},
-		{"Bash", map[string]any{"command": "git push -u origin eriphe/issue-12"}, decideBrain},
-		{"Bash", map[string]any{"command": "git push origin main-fix"}, decideBrain},
-		{"Bash", map[string]any{"command": "git reset --hard HEAD~3"}, decideBrain},
-		{"Bash", map[string]any{"command": "git clean -fd"}, decideBrain},
+		{"Bash", map[string]any{"command": "git push -u origin eriphe/issue-12"}, decideNoRule},
+		{"Bash", map[string]any{"command": "git push origin main-fix"}, decideNoRule},
+		{"Bash", map[string]any{"command": "git reset --hard HEAD~3"}, decideNoRule},
+		{"Bash", map[string]any{"command": "git clean -fd"}, decideNoRule},
 		// A placeholder, not a secret: the task is told to use it as one.
-		{"Bash", map[string]any{"command": `curl -H "Authorization: token $GH_TOKEN" https://api.github.com/user`}, decideBrain},
+		{"Bash", map[string]any{"command": `curl -H "Authorization: token $GH_TOKEN" https://api.github.com/user`}, decideNoRule},
 		{"Bash", map[string]any{"command": "curl -H \"Authorization: ${CLAUDE_CODE_OAUTH_TOKEN}\" x"}, decideDeny},
 		{"Bash", map[string]any{"command": "cat /proc/self/environ"}, decideDeny},
 		{"Bash", map[string]any{"command": "echo \"$OPENROUTER_API_KEY\""}, decideDeny},
 		{"Bash", map[string]any{"command": "printenv"}, decideDeny},
 		{"Bash", map[string]any{"command": "env | grep TOKEN"}, decideDeny},
-		{"Bash", map[string]any{"command": "set -e; go build ./..."}, decideBrain},
-		{"Write", map[string]any{"file_path": "/work/repo/main.go"}, decideBrain},
+		{"Bash", map[string]any{"command": "set -e; go build ./..."}, decideNoRule},
+		{"Write", map[string]any{"file_path": "/work/repo/main.go"}, decideNoRule},
 		// Outside /work is still the task's container: no rule (inContainer).
-		{"Edit", map[string]any{"file_path": "/home/claude/.bashrc"}, decideBrain},
-		{"Bash", map[string]any{"command": "gh pr create --fill"}, decideBrain},
+		{"Edit", map[string]any{"file_path": "/home/claude/.bashrc"}, decideNoRule},
+		{"Bash", map[string]any{"command": "gh pr create --fill"}, decideNoRule},
 		// No built-in ask on a command: what it reaches is what was lent.
-		{"Bash", map[string]any{"command": "gh pr merge 12 --squash"}, decideBrain},
-		{"Bash", map[string]any{"command": "npm publish"}, decideBrain},
-		{"Bash", map[string]any{"command": "docker push example.org/app"}, decideBrain},
-		{"Bash", map[string]any{"command": "curl -X POST https://example.com/hook -d x"}, decideBrain},
-		{"Bash", map[string]any{"command": "curl -s https://example.com"}, decideBrain},
-		{"Bash", map[string]any{"command": "ssh host uptime"}, decideBrain},
-		{"Bash", map[string]any{"command": "rsync -a src/ dst/"}, decideBrain},
+		{"Bash", map[string]any{"command": "gh pr merge 12 --squash"}, decideNoRule},
+		{"Bash", map[string]any{"command": "npm publish"}, decideNoRule},
+		{"Bash", map[string]any{"command": "docker push example.org/app"}, decideNoRule},
+		{"Bash", map[string]any{"command": "curl -X POST https://example.com/hook -d x"}, decideNoRule},
+		{"Bash", map[string]any{"command": "curl -s https://example.com"}, decideNoRule},
+		{"Bash", map[string]any{"command": "ssh host uptime"}, decideNoRule},
+		{"Bash", map[string]any{"command": "rsync -a src/ dst/"}, decideNoRule},
 		{"Bash", map[string]any{"command": "make deploy prod"}, decideAsk},
 		{"Bash", map[string]any{"command": "go test ./..."}, decideAllow},
 		{"mcp__mail__send", map[string]any{"to": "x"}, decideAsk},
@@ -142,15 +142,15 @@ func TestConcurrentPermissions(t *testing.T) {
 	c.notifyBrain("t-1", stateWaitingPermission)
 	c.notifyBrain("t-1", stateWaitingPermission) // a second report must not repeat them
 	msgs, _ := store.undelivered()
-	if len(msgs) != 1 || strings.Count(msgs[0].Text, "permission_id") != 3 {
+	if len(msgs) != 1 || strings.Count(msgs[0].Text, "demande une permission") != 3 {
 		t.Fatalf("brain told %+v", msgs)
 	}
 	yes := true
-	if _, err := c.answer(context.Background(), "t-1", "", "", &yes, byBrain); err == nil || !strings.Contains(err.Error(), "several") {
+	if _, err := c.answer(context.Background(), "t-1", "", "", &yes, byUser); err == nil || !strings.Contains(err.Error(), "several") {
 		t.Fatalf("an answer without permission_id was accepted with three pending: %v", err)
 	}
 	for _, pid := range []string{"p2", "p1", "p3"} {
-		if _, err := c.answer(context.Background(), "t-1", pid, "", &yes, byBrain); err != nil {
+		if _, err := c.answer(context.Background(), "t-1", pid, "", &yes, byUser); err != nil {
 			t.Fatalf("answer %s: %v", pid, err)
 		}
 	}
@@ -162,7 +162,7 @@ func TestConcurrentPermissions(t *testing.T) {
 	if len(items) != 3 || !got["p1"] || !got["p2"] || !got["p3"] {
 		t.Fatalf("inbox = %+v", items)
 	}
-	if _, err := c.answer(context.Background(), "t-1", "p2", "", &yes, byBrain); err == nil {
+	if _, err := c.answer(context.Background(), "t-1", "p2", "", &yes, byUser); err == nil {
 		t.Fatal("a permission was answered twice")
 	}
 }

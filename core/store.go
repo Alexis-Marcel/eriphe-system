@@ -646,11 +646,3 @@ func (s *Store) eventsAfter(taskID string, after, limit int) ([]EventRow, error)
 	}
 	return out, rows.Err()
 }
-
-// isDelivered tells whether a message of the conversation was given to the
-// brain.
-func (s *Store) isDelivered(seq int) bool {
-	var d bool
-	s.db.QueryRow(`SELECT delivered FROM messages WHERE seq = ?`, seq).Scan(&d)
-	return d
-}
