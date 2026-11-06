@@ -43,14 +43,13 @@ CREATE TABLE IF NOT EXISTS repo_grants (task_id TEXT NOT NULL, service TEXT NOT 
 
 func init() { extraSchema = append(extraSchema, repoLendSchema) }
 
-// credService is the service a host belongs to, and its canonical host
-// (what rules and the log name); "" when eriphe-core has none for it.
-func credService(host string) (service, canonical string) {
+// isGitHubHost: a host of GitHub's.
+func isGitHubHost(host string) bool {
 	switch strings.ToLower(strings.TrimSuffix(host, ":443")) {
 	case "github.com", "api.github.com", "www.github.com":
-		return "github", "github.com"
+		return true
 	}
-	return "", ""
+	return false
 }
 
 var repoPart = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
@@ -61,13 +60,13 @@ func githubRepo(raw string) string {
 	raw = strings.TrimSpace(raw)
 	p := raw
 	if u, err := url.Parse(raw); err == nil && u.Scheme != "" && u.Host != "" {
-		if s, _ := credService(u.Hostname()); s != "github" {
+		if !isGitHubHost(u.Hostname()) {
 			return ""
 		}
 		p = u.Path
 	} else if host, rest, ok := strings.Cut(raw, ":"); ok && strings.Contains(host, "@") {
 		_, h, _ := strings.Cut(host, "@")
-		if s, _ := credService(h); s != "github" {
+		if !isGitHubHost(h) {
 			return ""
 		}
 		p = rest

@@ -68,6 +68,10 @@ type gitCall struct {
 
 // readGitCall reads a request's path.
 func readGitCall(method string, uri *url.URL) gitCall {
+	// What is forwarded is what was read: no way around it in the path.
+	if uri.RawPath != "" || slices.ContainsFunc(strings.Split(uri.Path, "/"), func(s string) bool { return s == "." || s == ".." }) {
+		return gitCall{}
+	}
 	parts := strings.SplitN(strings.TrimPrefix(uri.Path, "/"), "/", 3)
 	if len(parts) != 3 {
 		return gitCall{}
@@ -109,8 +113,17 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 		log.Printf("git: task %s: %s %s refused: %s", t.ID, r.Method, call.repo, line)
 	}
 	facts := c.repoFacts(t)
-	if call.lfs && decideRepo(call.repo, accessWrite, facts).Decision == decideAllow {
-		call.access = accessWrite // it may be an upload: what the task may write, it may store
+	if call.lfs {
+		switch {
+		case decideRepo(call.repo, accessWrite, facts).Decision == decideAllow:
+			call.access = accessWrite // it may be an upload: what the task may write, it may store
+		case facts.Fallback:
+			// Its path does not tell an upload, and the tool's token could write.
+			why := "Large File Storage needs a write lent, or Eriphe's GitHub App"
+			refuse(why)
+			http.Error(w, why, http.StatusForbidden)
+			return none, false
+		}
 	}
 	d := decideRepo(call.repo, call.access, facts)
 	if d.Decision != decideAllow {

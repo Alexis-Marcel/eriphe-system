@@ -441,9 +441,7 @@ func (n *node) readOnlyMount(dir, target string) (mount, error) {
 
 // stopContainer stops a task's agent and its container. A task with a
 // repository first pushes or keeps the commits no remote has (keepwork.go),
-// once: the stop may be asked again meanwhile. Stopping is set before, so
-// that a credential the user would have to approve is refused, not waited
-// for.
+// once: the stop may be asked again meanwhile.
 func (n *node) stopContainer(t *Task) {
 	t.mu.Lock()
 	again := t.stopping

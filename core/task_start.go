@@ -59,6 +59,11 @@ type startNeed struct {
 // for each one lent for write, the decision its push will get.
 func (c *core) startNeeds(list []ResourceRef, clean bool) []startNeed {
 	repos := lentRepos(list)
+	if _, err := loadGitHubApp(); err == errNoGitHubApp {
+		if _, err := c.githubToolToken(); err != nil {
+			return nil // GitHub is not connected: a yes would give nothing
+		}
+	}
 	var out []startNeed
 	for _, g := range repos {
 		if g.Access != accessWrite {
