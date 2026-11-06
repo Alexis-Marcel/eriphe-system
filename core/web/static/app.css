@@ -799,6 +799,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .preset-text small { color: var(--muted); font-size: .82rem; line-height: 1.35; }
 .preset-mark svg { width: 22px; height: 22px; }
 /* Each service in its own colour; ours keep the accent gradient. */
+.mark-access-ssh, .mark-access-http { background: linear-gradient(135deg, var(--run) 0%, #0ea5a4 100%); }
 .mark-linear { background: #5e6ad2; box-shadow: 0 6px 16px -8px #5e6ad2; }
 .mark-notion { background: #191919; box-shadow: 0 6px 16px -8px #191919; }
 .mark-github { background: #24292f; box-shadow: 0 6px 16px -8px #24292f; }

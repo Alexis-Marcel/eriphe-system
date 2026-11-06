@@ -28,8 +28,15 @@ type presetGroup struct {
 type galleryPage struct {
 	Popular []presetTile // first, while nothing is searched
 	Groups  []presetGroup
-	Others  []presetTile // a local program, then a server by its address: always last
+	Others  []presetTile // a local program, a server by its address, then the accesses: always last
 	Count   int
+}
+
+// accessTiles are what a task's programs use with a secret, in the gallery
+// too: not tools of the catalog (web_lent_access.go), but where one looks.
+var accessTiles = []toolPreset{
+	{ID: "access-ssh", Link: "/settings/accesses/new?kind=ssh"},
+	{ID: "access-http", Link: "/settings/accesses/new"},
 }
 
 // popularPresets open the gallery, before its categories.
@@ -50,6 +57,8 @@ var presetKeywords = map[string]string{
 	"ticktick":       "todo to-do taches tasks",
 	"remote":         "mcp url adresse address",
 	"local":          "docker image programme program",
+	"access-ssh":     "ssh machine serveur server nas shell terminal",
+	"access-http":    "http api token jeton cle key npm pypi registre registry acces access",
 }
 
 // categoryKeywords are more words every preset of a category is found by:
@@ -113,6 +122,9 @@ func (w *web) gallery(lang string) galleryPage {
 		if p, ok := presetByID(id); ok {
 			g.Others = append(g.Others, w.tile(lang, p, added))
 		}
+	}
+	for _, p := range accessTiles {
+		g.Others = append(g.Others, w.tile(lang, p, added))
 	}
 	return g
 }

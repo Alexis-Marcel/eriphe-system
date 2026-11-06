@@ -28,7 +28,11 @@ func inDialog(r *http.Request) bool {
 
 // StepURL is where a tile of the dialog leads: the preset's form, even for
 // the presets whose tile leads to a page of their own without JavaScript.
+// "" for a tile that leaves the dialog for its page.
 func (p toolPreset) StepURL() string {
+	if p.Link != "" {
+		return ""
+	}
 	if p.ID == "remote" {
 		return p.Page()
 	}

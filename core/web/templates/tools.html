@@ -190,7 +190,7 @@
 
 {{/* One tile of the gallery. . is a presetTile. */}}
 {{define "finder-tile"}}{{$desc := t (printf "preset.%s.desc" .ID)}}
-  <li data-search="{{.Search}}"><a class="ftile preset-{{.ID}}" href="{{.Page}}" data-step="{{.StepURL}}" data-hash="add/{{.ID}}" title="{{$desc}}">
+  <li data-search="{{.Search}}"><a class="ftile preset-{{.ID}}" href="{{.Page}}"{{with .StepURL}} data-step="{{.}}" data-hash="add/{{$.ID}}"{{end}} title="{{$desc}}">
     <span class="mark preset-mark mark-{{.ID}}" aria-hidden="true">{{template "preset-icon" .ID}}</span>
     <span class="ftile-text">
       <span class="ftile-name"><b>{{t (printf "preset.%s.title" .ID)}}</b>
@@ -737,7 +737,8 @@
       {{if .Use}}<p class="use">{{.Use}}</p>{{end}}
       <p class="muted small meta-line"><span class="mono">{{.Hosts}}</span>{{if .Env}} · <span class="mono">${{.Env}}</span>{{end}} · {{t (printf "lent.value.%s" .Value)}}</p>
     </div>
-    {{if .Editable}}<div class="tool-actions"><a class="btn btn-ghost sm" href="/settings/accesses/{{.Name}}/edit">{{t "lent.edit"}}</a></div>{{end}}
+    {{if .Editable}}<div class="tool-actions"><a class="btn btn-ghost sm" href="/settings/accesses/{{.Name}}/edit">{{t "lent.edit"}}</a>
+      <form hx-post="/settings/accesses/{{.Name}}/delete" hx-confirm="{{tf "lent.removeconfirm" .Name}}" class="inline"><button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form></div>{{end}}
   </li>{{end}}</ul>
   {{else}}<p class="muted small">{{t "lent.empty"}}</p>{{end}}
 </section>

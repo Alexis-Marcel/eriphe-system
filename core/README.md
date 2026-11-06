@@ -163,7 +163,7 @@ What this does not do:
   not read a program's traffic, as it does not read its shell output. The page says so too.
 
 **SSH accesses.** An access of kind `ssh` is a machine a task configures with the real `ssh`, and
-so `scp`, `rsync` or Ansible (`core/lent_ssh.go`). Settings → Tools, "Add an SSH machine", asks for
+so `scp`, `rsync` or Ansible (`core/lent_ssh.go`). Settings → Tools, "Add an SSH machine" (also a tile of "Add a tool"), asks for
 the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (port 22 by default),
 `user`, `secret` (a private key file) and `host_key`.
 
