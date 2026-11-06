@@ -109,10 +109,6 @@ var builtinAsk = []Rule{
 // subject is what a tool acts on, which rules match against: for an MCP
 // tool, the JSON of its input.
 func subject(tool string, input map[string]any) string {
-	if tool == credentialTool {
-		// "write github.com/owner/repo": what the user approves.
-		return fmt.Sprintf("%v %v/%v", input["access"], input["host"], input["repo"])
-	}
 	if strings.HasPrefix(tool, "mcp__") {
 		if input == nil {
 			input = map[string]any{}
@@ -296,13 +292,6 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 		pid := fmt.Sprint(e.Data["id"])
 		tool := fmt.Sprint(e.Data["tool_name"])
 		input, _ := e.Data["input"].(map[string]any)
-		if tool == credentialTool {
-			// A credential the policy could not lend alone: the user's.
-			reason, _ := input["reason"].(string)
-			c.store.markUserOnly(id, pid, orStr(reason, "lends access to a repository"))
-			left = true
-			continue
-		}
 		decision, reason := c.decideTask(t, tool, input)
 		if decision == decideBrain && inContainer(tool) {
 			decision = decideAllow
@@ -334,14 +323,14 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 }
 
 // inContainer tells whether a worker's tool acts only inside its task's
-// container: its own tools (shell, files, web), not a lent catalog tool nor
-// a credential. The container is the boundary: what leaves it goes through
+// container: its own tools (shell, files, web), not a lent catalog tool.
+// The container is the boundary: what leaves it goes through
 // the node's mounts (a folder's level), its egress filter and the
 // credentials eriphe-core lends (credentials.go), never through the shell
 // rules above, which only stop mistakes. So what the policy left undecided
 // there is allowed, without waking the brain.
 func inContainer(tool string) bool {
-	return tool != credentialTool && !strings.HasPrefix(tool, "mcp__")
+	return !strings.HasPrefix(tool, "mcp__")
 }
 
 // Decisions are kept, append-only, to read back what was allowed and by whom.
@@ -359,9 +348,6 @@ func (s *Store) recordDecision(taskID, pid, tool string, input map[string]any, d
 	s.logDecision(taskID, pid, tool, input, decision, by, reason)
 	if decision == decideAllow && strings.HasPrefix(tool, "mcp__") {
 		s.addTicket(taskID, tool, input)
-	}
-	if tool == credentialTool {
-		s.credentialAnswered(taskID, input, decision, by, reason) // credentials.go
 	}
 }
 

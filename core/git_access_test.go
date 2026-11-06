@@ -83,32 +83,10 @@ func viaRelayBody(c *core, node, taskID, method, target, auth, body string, more
 	return rec
 }
 
-// The helper gets a placeholder where the relay decrypts github.com, and
-// nothing a task can name changes that.
-func TestGitGetsAPlaceholder(t *testing.T) {
-	c, task, _ := gitCore(t, true, lentRepo)
-	ctx := context.Background()
-	for _, host := range []string{"github.com", "www.github.com", "api.github.com", "github.com:443"} {
-		for _, tool := range []string{"git", "", "anything"} {
-			a := c.credential(ctx, task, credRequest{Protocol: "https", Host: host, Path: "owner/repo.git", Access: accessWrite, Tool: tool})
-			if a.Decision != decideAllow || a.Password != gitPlaceholder(task.ID) || !a.Expires.IsZero() {
-				t.Fatalf("%s %s: %+v", host, tool, a)
-			}
-		}
-	}
-	// A refusal stays one.
-	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "other/repo.git", Access: accessRead, Tool: "git"}); a.Decision != decideDeny || a.Password != "" {
-		t.Fatalf("other: %+v", a)
-	}
-}
-
 func TestGitReachesTheNodeWithoutAToken(t *testing.T) {
 	got := lentGit("t-1", []ResourceRef{lentRepo})
-	if len(got) != 2 || !slices.Equal(got[0].Hosts, []string{gitTarget}) || got[0].Placeholder != gitPlaceholder("t-1") || got[0].Env == "" {
+	if len(got) != 1 || !slices.Equal(got[0].Hosts, []string{gitTarget, ghTarget}) || got[0].Placeholder != gitPlaceholder("t-1") || got[0].Env != "GH_TOKEN" {
 		t.Fatalf("%+v", got)
-	}
-	if !slices.Equal(got[1].Hosts, []string{ghTarget}) || got[1].Placeholder != gitPlaceholder("t-1") || got[1].Env != "GH_TOKEN" {
-		t.Fatalf("gh: %+v", got[1])
 	}
 	if got := lentGit("t-1", []ResourceRef{{Kind: resRepo, Ref: "https://gitlab.example.org/o/r"}, npm}); got != nil {
 		t.Fatalf("not GitHub: %+v", got)

@@ -63,8 +63,10 @@ func assignedIDs(t *testing.T, c *core) []string {
 	return ids
 }
 
-// pushReq is the git push of the lent branch.
-var pushReq = credRequest{Protocol: "https", Host: "github.com", Path: "owner/repo.git", Access: accessWrite, Tool: "git"}
+// mayPush is the decision on a push to the repository lent.
+func mayPush(c *core, t *TaskRow) repoDecision {
+	return decideRepo("owner/repo", accessWrite, c.credentialFacts(t))
+}
 
 // launchWrite lends a repository for write on a branch, on a start that is
 // not the user's own.
@@ -152,20 +154,19 @@ func TestTaskStartApproved(t *testing.T) {
 		t.Fatal("not started")
 	}
 	got, _ := c.store.task(task.ID)
-	a := c.credential(context.Background(), got, pushReq)
-	if a.Decision != decideAllow || a.Password != gitPlaceholder(task.ID) {
-		t.Fatalf("push after the launch approval: %+v", a)
+	if d := mayPush(c, got); d.Decision != decideAllow {
+		t.Fatalf("push after the launch approval: %+v", d)
 	}
 	log, _ := c.store.credentialLog(task.ID, 10)
-	if len(log) != 2 || log[1].By != byUser || !strings.Contains(log[1].Reason, "at launch") || log[0].Decision != decideAllow {
+	if len(log) != 1 || log[0].By != byUser || !strings.Contains(log[0].Reason, "at launch") {
 		t.Fatalf("log %+v", log)
 	}
 	if _, err := c.decideCard(context.Background(), x.ID, false, "web"); err == nil {
 		t.Fatal("decided twice")
 	}
 	c.store.addEvents(task.ID, []EventRow{{Seq: 1, Type: "tool_use", Data: map[string]any{"name": "WebFetch", "input": map[string]any{"url": "https://example.org"}}}})
-	if a := c.credential(context.Background(), got, pushReq); a.Decision != decideAllow {
-		t.Fatalf("after reading a page: %+v", a)
+	if d := mayPush(c, got); d.Decision != decideAllow {
+		t.Fatalf("after reading a page: %+v", d)
 	}
 }
 
@@ -213,12 +214,8 @@ func TestTaskStartClean(t *testing.T) {
 	}
 	// It pushes, and opens its pull request with gh, without a question.
 	got, _ := c.store.task(task.ID)
-	if a := c.credential(context.Background(), got, pushReq); a.Decision != decideAllow || a.Password == "" {
-		t.Fatalf("push with the app: %+v", a)
-	}
-	pr := credRequest{Protocol: "https", Host: "api.github.com", Path: "owner/repo", Access: accessWrite, Tool: "gh"}
-	if a := c.credential(context.Background(), got, pr); a.Decision != decideAllow || a.Password == "" {
-		t.Fatalf("gh pr create with the app: %+v", a)
+	if d := mayPush(c, got); d.Decision != decideAllow {
+		t.Fatalf("push with the app: %+v", d)
 	}
 	// A read-only repository asks nothing at launch either, even without the app.
 	c2 := startCore(t)
@@ -245,7 +242,7 @@ func TestTaskStartApprovedInAdvance(t *testing.T) {
 	c.store.set(lentByUserKey(task.ID), "1")
 	c.grantLent(task)
 	got, _ := c.store.task(task.ID)
-	if a := c.credential(context.Background(), got, pushReq); a.Decision != decideAllow {
-		t.Fatalf("push: %+v", a)
+	if d := mayPush(c, got); d.Decision != decideAllow {
+		t.Fatalf("push: %+v", d)
 	}
 }

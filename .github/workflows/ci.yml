@@ -130,7 +130,7 @@ jobs:
       - run: sudo "$(command -v go)" test -run HandBack -v .
       - run: GOOS=windows go build ./...
 
-  # eriphe-cred, the credential helper the node lends every task.
+  # eriphe-cred, the SSH agent and tunnel the node lends every task.
   cred:
     runs-on: ubuntu-latest
     defaults:

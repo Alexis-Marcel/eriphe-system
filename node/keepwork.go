@@ -14,25 +14,18 @@ import (
 // No work lost on stop. Before a task's container is stopped (by the brain,
 // a budget, or eriphe-core's "fails twice"), the node looks at its
 // repository: commits that no remote has are pushed, if they are on the
-// branch the task was lent, through the task's own credential helper, so
-// eriphe-core's policy and credentials still decide. What cannot be pushed
-// (no branch lent, the push refused, an approval the user would have to
-// give) is kept on the node instead: /work/repo is moved to kept/<task>
+// branch the task was lent, as the task itself would, so eriphe-core still
+// decides. What cannot be pushed (no branch lent, the push refused) is kept on the node instead: /work/repo is moved to kept/<task>
 // under -root once the container is stopped, kept -snapshot-days like the
 // snapshots, then pruned. A "work" event says what was done.
 
 const keptDir = "kept"
 
 // saveWorkScript pushes the lent branch ($1) when it has commits no remote
-// has, with git asking Eriphe for its credentials as in the task
-// (entrypoint), and never a prompt. It prints ahead=N (commits of the local
+// has, with the task's git (gitCredentials), and never a prompt. It prints ahead=N (commits of the local
 // branches no remote has), pushed=1 when the push went through, left=N
 // (those still not on a remote), and the push's own words when it failed.
 const saveWorkScript = `cd /work/repo 2>/dev/null || { echo "ahead=0"; exit 0; }
-if [ -z "$ERIPHE_GIT_OWN_TOKEN" ] && [ -n "$ERIPHE_CRED_URL" ] && [ -x ` + injectDir + `/bin/eriphe-cred ]; then
-  export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=` + injectDir + `/bin/eriphe-cred \
-    GIT_CONFIG_KEY_1=credential.useHttpPath GIT_CONFIG_VALUE_1=true
-fi
 export GIT_TERMINAL_PROMPT=0
 ahead=$(git rev-list --count --branches --not --remotes 2>/dev/null) || ahead=0
 echo "ahead=$ahead"
