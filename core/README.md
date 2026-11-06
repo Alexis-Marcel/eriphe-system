@@ -936,7 +936,8 @@ yes may answer something else. A card never holds the brain: its call is answere
 run, the card keeps the exact input, and a yes runs it from eriphe-core, however late and even after
 the brain restarted, if the tool is still allowed; the result, or a no, comes back as an event. The
 same call asked again is the same card. A brain's card says the action in words and lists the call's
-parameters by name, the long ones folded, on Telegram too; never the raw call. A task's card is shown:
+parameters by name, the long ones folded, on Telegram too; never the raw call. A call on a pull request
+adds its title and the start of its description, read with the tool itself when the card is made. A task's card is shown:
 
 1. **at launch**, on its start's card, for what it is lent outright: it waits (`held`) for the answer;
 2. **on release** of a tool lent [held back](#resources);
