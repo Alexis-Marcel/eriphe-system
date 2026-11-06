@@ -30,6 +30,7 @@
 </ul>
 {{else}}<div class="empty tools-empty"><span class="empty-art" aria-hidden="true">{{template "i-plug"}}</span><p>{{t "tools.empty"}}</p>{{template "add-tool-btn"}}</div>{{end}}
 </div>
+{{template "web-tool" .}}
 {{template "lent-accesses" .}}
 
 {{/* Two steps: the search, then the tool picked, loaded in #tool-step
@@ -720,6 +721,21 @@
       <input type="text" name="image" value="{{.Image}}" spellcheck="false" autocapitalize="off" class="mono" placeholder="mcp/sequentialthinking" aria-describedby="img-h">
       <small id="img-h">{{t "form.imagehint"}}</small></label>
   </div>
+{{end}}
+
+{{/* The web, a tool of the list with nothing to connect. . is a toolsPage. */}}
+{{define "web-tool"}}
+<ul class="tools" id="web-tool"><li class="tool">
+  <span class="mark tint-{{tint "web"}}" aria-hidden="true">{{initial "web"}}</span>
+  <div class="tool-main">
+    <div class="tool-head"><h3>{{t "web.title"}}</h3></div>
+    <p class="use">{{tf "web.lead" name}}</p>
+    <p class="muted small meta-line">{{t (printf "web.value.%shint" .Web)}}</p>
+  </div>
+  <div class="tool-actions"><form hx-post="/settings/web" hx-trigger="change" hx-target="#web-tool" hx-select="#web-tool" hx-swap="outerHTML">
+    <select name="value" aria-label="{{t "web.title"}}">{{$v := .Web}}{{range $o := webValues}}<option value="{{$o}}"{{if eq $o $v}} selected{{end}}>{{t (printf "web.value.%s" $o)}}</option>{{end}}</select>
+  </form></div>
+</li></ul>
 {{end}}
 
 {{/* What tasks use with their own programs, below the tools. . is a toolsPage. */}}

@@ -98,6 +98,7 @@ func (t toolView) SignIn() string {
 type toolsPage struct {
 	Tools    []toolView
 	Accesses []accessRow // what tasks use with their own programs (web_lent_access.go)
+	Web      string      // the web's value (brain_web.go)
 	Groups   []toolGroup // the tools, a card per kind with several accounts (web_tools_groups.go)
 	Gallery  galleryPage // the "Add a tool" dialog (web_gallery.go)
 	Flash    string
@@ -250,6 +251,7 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 		v.Alert = fmt.Sprintf(tr(lang, "tools.notconnected."+why), n) + " " + tr(lang, end)
 	}
 	v.Accesses = w.accessRows() // web_lent_access.go
+	v.Web = w.c.webValue()
 	v.Skipped = map[string]string{}
 	for k, why := range w.c.skippedEntries() {
 		name, ok := strings.CutPrefix(k, kindServer+"/")

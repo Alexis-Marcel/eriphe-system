@@ -38,6 +38,9 @@ const noWebSearchLine = "Ton harnais n'a pas de recherche web : si une demande e
 // under (OpenCode's webfetch is renamed by the node).
 const webFetchTool = "WebFetch"
 
+// webSearchTool is the harness's own search.
+const webSearchTool = "WebSearch"
+
 // webURL is the URL of a page read's input.
 func webURL(input any) string {
 	in, _ := input.(map[string]any)
@@ -80,17 +83,70 @@ func (c *core) brainFetch(ctx context.Context, t *TaskRow, pid string, input map
 		_, err := c.answer(ctx, t.ID, pid, "", &yes, byPolicy)
 		return err
 	}
-	if tainted := c.turnTaintBut(pending); len(tainted) > 0 {
+	value := c.webValue()
+	if value == gridNever {
+		return c.refuseWeb(ctx, t, pid)
+	}
+	if value == gridApproval || len(c.turnTaintBut(pending)) > 0 {
 		if !c.ownerWroteURL(raw) && !c.usePageYes(raw) {
 			return c.brainFetchAsk(ctx, t, pid, raw, input, pending)
 		}
-		log.Printf("brain: WebFetch %s allowed on a tainted turn: the URL is in the user's message", truncate(raw, 200))
-	} else {
-		log.Printf("brain: WebFetch %s allowed: clean turn", truncate(raw, 200))
+	}
+	log.Printf("brain: WebFetch %s allowed", truncate(raw, 200))
+	yes := true
+	_, err := c.answer(ctx, t.ID, pid, "", &yes, byPolicy)
+	return err
+}
+
+// The web is a tool of the list (Settings → Tools): Free, On approval or
+// Never, for the brain. Free asks on a tainted turn, as any write: a URL is a
+// way out. A search stays free there, or web research would be a card each
+// step. A task's web is its container's: what it is lent is what it can lose.
+const webValueKey = "web_access"
+
+// webValue is the web's value, Free by default.
+func (c *core) webValue() string {
+	switch v := c.store.get(webValueKey); v {
+	case gridApproval, gridNever:
+		return v
+	}
+	return gridFree
+}
+
+func (c *core) setWebValue(v string) error {
+	if v != gridFree && v != gridApproval && v != gridNever {
+		return fmt.Errorf("%q is not a value of the web", v)
+	}
+	c.store.set(webValueKey, v)
+	return nil
+}
+
+func (c *core) refuseWeb(ctx context.Context, t *TaskRow, pid string) error {
+	no := false
+	_, err := c.answer(ctx, t.ID, pid, "Refusé : le web est coupé pour toi dans Réglages → Outils. Dis-le si une demande en a besoin.", &no, byPolicy)
+	return err
+}
+
+// brainSearch decides a brain's web search.
+func (c *core) brainSearch(ctx context.Context, t *TaskRow, pid string, input map[string]any, pending map[string]int) error {
+	query := webSearchQuery(input)
+	switch c.webValue() {
+	case gridNever:
+		return c.refuseWeb(ctx, t, pid)
+	case gridApproval:
+		if !c.usePageYes(query) {
+			return c.askBrainAccess(ctx, t, pid, webSearchTool, input, pending)
+		}
 	}
 	yes := true
 	_, err := c.answer(ctx, t.ID, pid, "", &yes, byPolicy)
 	return err
+}
+
+// webSearchQuery is what a search asks.
+func webSearchQuery(input map[string]any) string {
+	query, _ := input["query"].(string)
+	return query
 }
 
 // brainFetchAsk hands a page read to me, on a card like any call.
@@ -119,6 +175,11 @@ func (c *core) usePageYes(raw string) bool {
 func (c *core) allowPage(a accessQuestion) string {
 	var input map[string]any
 	json.Unmarshal([]byte(a.Input), &input)
+	if strings.HasPrefix(a.Call, webSearchTool+" ") {
+		query := webSearchQuery(input)
+		c.store.set(pageYesKey(query), strconv.FormatInt(time.Now().Unix(), 10))
+		return fmt.Sprintf("%s a dit oui : tu peux chercher « %s ». Lance cette recherche maintenant, une seule fois.", c.conf().User, query)
+	}
 	raw := webURL(input)
 	c.store.set(pageYesKey(raw), strconv.FormatInt(time.Now().Unix(), 10))
 	return fmt.Sprintf("%s a dit oui : tu peux lire la page %s. Lis-la maintenant avec ton outil web, une seule fois, et dis-lui ce qu'il voulait savoir.", c.conf().User, raw)

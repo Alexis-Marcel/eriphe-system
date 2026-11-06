@@ -108,7 +108,7 @@ func (s *Store) accessGrants(taskID string) []accessNeed {
 
 // callNeed is what a call of a catalog tool needs granted.
 func (c *core) callNeed(tool string, input map[string]any, f catalogFacts) accessNeed {
-	if tool == webFetchTool {
+	if tool == webFetchTool || tool == webSearchTool {
 		return accessNeed{Server: "web", Category: catRead}
 	}
 	server, _, _ := splitToolName(tool)
@@ -274,7 +274,7 @@ func (c *core) askTaskAccess(t *TaskRow, pid, tool string, input map[string]any,
 const brainCardWaits = "Pas exécutée pour l'instant : une carte le demande à %s. Ne la relance pas et continue, tu restes disponible. S'il dit oui, eriphe-core l'exécute telle quelle et te donne le résultat."
 
 // brainPageWaits is brainCardWaits for a page read, which only the brain can do.
-const brainPageWaits = "Pas lue pour l'instant : une carte le demande à %s. Ne la relance pas et continue, tu restes disponible. S'il dit oui, tu en es prévenu et tu pourras la lire."
+const brainPageWaits = "Pas fait pour l'instant : une carte le demande à %s. Ne le relance pas et continue, tu restes disponible. S'il dit oui, tu en es prévenu et tu pourras le faire."
 
 // askBrainAccess asks one call of the brain, On approval or a Free write on a
 // tainted turn: the card keeps the call, the brain goes on, and a yes runs
@@ -290,7 +290,7 @@ func (c *core) askBrainAccess(ctx context.Context, t *TaskRow, pid, tool string,
 	}
 	no := false
 	waits := brainCardWaits
-	if tool == webFetchTool {
+	if tool == webFetchTool || tool == webSearchTool {
 		waits = brainPageWaits
 	}
 	_, err := c.answer(ctx, t.ID, pid, fmt.Sprintf(waits, c.conf().User), &no, byPolicy)
@@ -305,7 +305,7 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	ctx, cancel := context.WithTimeout(context.Background(), approvedCallTimeout)
 	defer cancel()
 	name, _, _ := strings.Cut(a.Call, " ")
-	if name == webFetchTool {
+	if name == webFetchTool || name == webSearchTool {
 		c.store.addMessage(roleEvent, c.allowPage(a), false)
 		c.ping()
 		return
@@ -470,6 +470,8 @@ func (c *core) accessText(a accessQuestion, lang string) string {
 	switch {
 	case len(a.Refs) > 0:
 		return fmt.Sprintf(tr(lang, "access.ask.release"), title, strings.Join(a.Refs, ", "))
+	case strings.HasPrefix(a.Call, webSearchTool+" "):
+		return fmt.Sprintf(tr(lang, "access.ask.search"), c.conf().assistantName())
 	case strings.HasPrefix(a.Call, webFetchTool+" "):
 		return fmt.Sprintf(tr(lang, "access.ask.page"), c.conf().assistantName())
 	case a.Call != "":

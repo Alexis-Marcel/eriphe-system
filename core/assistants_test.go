@@ -77,7 +77,7 @@ func TestBrainIsAnAssistant(t *testing.T) {
 		t.Fatalf("first turn = %q", task.Prompt)
 	}
 	spec, err := c.store.taskSpec(task.ID)
-	if err != nil || spec.Profile != "brain" || !spec.NoAgentMemory || strings.Join(spec.AllowedTools, ",") != "mcp__eriphe-core,WebSearch" ||
+	if err != nil || spec.Profile != "brain" || !spec.NoAgentMemory || strings.Join(spec.AllowedTools, ",") != "mcp__eriphe-core" ||
 		!strings.Contains(spec.AppendSystemPrompt, "Eriphe") {
 		t.Fatalf("spec = %+v, %v", spec, err)
 	}

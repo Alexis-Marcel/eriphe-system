@@ -176,3 +176,13 @@ func (w *web) handleTestAccess(rw http.ResponseWriter, r *http.Request, s *sessi
 	}
 	w.render(rw, r, s, "settings", "lent-ssh-test", page{Data: map[string]string{"Key": key, "Found": found}})
 }
+
+// handleWebValue sets the web's value and shows the tools again.
+func (w *web) handleWebValue(rw http.ResponseWriter, r *http.Request, s *session) {
+	if err := w.c.setWebValue(r.PostFormValue("value")); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+	log.Printf("web: the web is %s", r.PostFormValue("value"))
+	w.handleTools(rw, r, s)
+}
