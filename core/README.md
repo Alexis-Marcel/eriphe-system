@@ -178,7 +178,11 @@ the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (p
 - **The path.** `eriphe-cred` is the task's SSH agent, and asks `/v1/node/tasks/{id}/ssh`
   (`{op: keys | sign | connect}`) through its node. eriphe-core signs a login only (RFC 4252's
   `publickey` request, or OpenSSH's host-bound one, whose host key must be the pinned one, for that
-  key and the access's `user`): the key signs no commit or file and logs in to no other account. Before opening a tunnel, the relay asks too. Each connection, login
+  key and the access's `user`): the key signs no commit or file and logs in to no other account. The session leaves from eriphe-core, as an HTTP access's requests
+  do: the relay upgrades `GET /v1/node/tasks/{id}/ssh/connect?target=host:port` (`eriphe-ssh`), and
+  eriphe-core decides and dials that exact address, carrying SSH's encrypted bytes. So a node need
+  not reach the machine. A machine eriphe-core cannot reach answers 502, and the node dials it
+  itself. Each connection, login
   and refusal goes in `credential_log` (tool `access`). A task lent an SSH access no longer gets the
   built-in ask on `ssh`, `scp`, `sftp` and `rsync`: the access was decided, and reaches that machine only.
 - **What it does not do.** SSH lends everything the remote account can do: Eriphe sees the logins,

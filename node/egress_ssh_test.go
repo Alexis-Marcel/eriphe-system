@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -55,6 +57,105 @@ func TestTunnelWaitsForEriphe(t *testing.T) {
 	if code, _, _ := r.connect(t, sshLAN, basic("t-1", "s")); code != http.StatusForbidden {
 		t.Fatalf("no answer: %d", code)
 	}
+}
+
+// A session goes through eriphe-core: the node dials nothing, unless
+// eriphe-core cannot reach the machine or does not carry sessions yet.
+func TestTunnelThroughCore(t *testing.T) {
+	var asked []string
+	r := sshRelay(t, func(target string) error {
+		asked = append(asked, target)
+		return nil
+	})
+	var answer error
+	r.p.sshCore = func(context.Context, string, string) (net.Conn, error) {
+		if answer != nil {
+			return nil, answer
+		}
+		mine, theirs := net.Pipe()
+		t.Cleanup(func() { theirs.Close() })
+		return mine, nil
+	}
+	if code, _, _ := r.connect(t, sshLAN, basic("t-1", "s")); code != http.StatusOK {
+		t.Fatalf("through eriphe-core: %d", code)
+	}
+	if len(r.endpointDialed) != 0 || len(asked) != 0 {
+		t.Fatalf("dialed %v, asked %v", r.endpointDialed, asked)
+	}
+	answer = refused("the access box is held back")
+	if code, _, _ := r.connect(t, sshLAN, basic("t-1", "s")); code != http.StatusForbidden {
+		t.Fatalf("refused: %d", code)
+	}
+	if len(r.endpointDialed) != 0 {
+		t.Fatalf("a refused session was dialed: %v", r.endpointDialed)
+	}
+	answer = errCoreCannotReach
+	if code, _, _ := r.connect(t, sshLAN, basic("t-1", "s")); code != http.StatusOK {
+		t.Fatalf("a machine only the node reaches: %d", code)
+	}
+	if !slices.Equal(r.endpointDialed, []string{sshLAN}) || len(asked) != 0 {
+		t.Fatalf("dialed %v, asked %v", r.endpointDialed, asked)
+	}
+	answer = errNoCoreSession
+	if code, _, _ := r.connect(t, sshLAN, basic("t-1", "s")); code != http.StatusOK {
+		t.Fatalf("an older eriphe-core: %d", code)
+	}
+	if !slices.Equal(asked, []string{sshLAN}) {
+		t.Fatalf("an older eriphe-core was not asked: %v", asked)
+	}
+}
+
+// What eriphe-core answers to a session, as the relay reads it, and the
+// connection staying up once the request that opened it is over.
+func TestSSHCoreAnswers(t *testing.T) {
+	status := http.StatusForbidden
+	var got *http.Request
+	core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r
+		if status != http.StatusSwitchingProtocols {
+			http.Error(w, "held back", status)
+			return
+		}
+		conn, rw, _ := http.NewResponseController(w).Hijack()
+		defer conn.Close()
+		rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: " + sshProto + "\r\nConnection: Upgrade\r\n\r\n")
+		rw.Flush()
+		b := make([]byte, 4)
+		io.ReadFull(rw, b)
+		conn.Write(b)
+	}))
+	t.Cleanup(core.Close)
+	s := &state{Core: core.URL, Name: "n1", Secret: "x"}
+	var denied *egressError
+	if _, err := s.sshCore(context.Background(), "t-1", sshLAN); !errors.As(err, &denied) || denied.status != http.StatusForbidden || denied.msg != "held back" {
+		t.Fatalf("refused: %v", err)
+	}
+	if got.URL.Path != "/v1/node/tasks/t-1/ssh/connect" || got.URL.Query().Get("target") != sshLAN || got.Header.Get("Upgrade") != sshProto {
+		t.Fatalf("asked %s %v", got.URL, got.Header)
+	}
+	status = http.StatusBadGateway
+	if _, err := s.sshCore(context.Background(), "t-1", sshLAN); !errors.Is(err, errCoreCannotReach) {
+		t.Fatalf("unreachable: %v", err)
+	}
+	status = http.StatusNotFound
+	if _, err := s.sshCore(context.Background(), "t-1", sshLAN); !errors.Is(err, errNoCoreSession) {
+		t.Fatalf("an older eriphe-core: %v", err)
+	}
+	status = http.StatusSwitchingProtocols
+	ctx, cancel := context.WithCancel(context.Background())
+	conn, err := s.sshCore(ctx, "t-1", sshLAN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	b := make([]byte, 4)
+	if _, err := io.ReadFull(conn, b); err != nil || string(b) != "ping" {
+		t.Fatalf("through the session: %q %v", b, err)
+	}
+	cancel()
 }
 
 func TestTunnelRefusedAtTheNodeAndWithoutEgress(t *testing.T) {

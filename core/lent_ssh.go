@@ -39,11 +39,18 @@ import (
 //
 //	POST /v1/node/tasks/{id}/ssh   {op: keys | sign | connect, ...}   (node secret)
 //
-// The session's bytes go the other way, from the node: eriphe-cred tunnels
-// them through the relay, to the access's exact host and port
-// (node/egress_ssh.go), which may be on the node's LAN. The relay asks here
-// before it opens one (connect). Only a login signature is given, for the
-// access's own account: the key signs nothing else, whatever the task asks.
+// The session's bytes leave from here too, as an HTTP access's requests do:
+// eriphe-cred tunnels them through the relay, which upgrades a request to
+// eriphe-core, and eriphe-core dials the access's exact host and port:
+//
+//	GET /v1/node/tasks/{id}/ssh/connect?target=host:port, Upgrade: eriphe-ssh   (node secret)
+//
+// So a node need not reach the machine, which a Mac's node cannot on the LAN
+// (node/README.md). The bytes are SSH's, encrypted between the task and the
+// machine. A machine eriphe-core cannot reach answers 502, the decision
+// taken: the node dials it itself, if it can (node/egress_ssh.go). Only a
+// login signature is given, for the access's own account: the key signs
+// nothing else, whatever the task asks.
 //
 // The access pins the machine's host key, recorded by the test connection
 // or pasted: it cannot be lent without one. That protects the task from
@@ -58,6 +65,11 @@ const (
 
 	// sshTestTimeout is how long the test connection may take.
 	sshTestTimeout = 15 * time.Second
+
+	// sshProto is the upgrade of a session's bytes through eriphe-core.
+	sshProto = "eriphe-ssh"
+	// sshDialTimeout is how long a task's session waits for the machine.
+	sshDialTimeout = 10 * time.Second
 
 	sshOpKeys    = "keys"
 	sshOpSign    = "sign"
@@ -275,16 +287,11 @@ func (c *core) lentSSH(t *TaskRow) map[string]Access {
 // taskSSHHandler serves /v1/node/tasks/{id}/ssh, for nodes.
 func (c *core) taskSSHHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		node, ok := c.nodeFromRequest(r)
+		t, ok := c.sshTask(w, r)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		t, err := c.store.task(r.PathValue("id"))
-		if err != nil || t.Node != node || finished(t.State) {
-			http.Error(w, "no such task on this node", http.StatusNotFound)
-			return
-		}
+		var err error
 		var req sshRequest
 		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -307,6 +314,62 @@ func (c *core) taskSSHHandler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, a)
+	})
+}
+
+// sshTask is the running task a node asks for, or the answer that it is not.
+func (c *core) sshTask(w http.ResponseWriter, r *http.Request) (*TaskRow, bool) {
+	node, ok := c.nodeFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return nil, false
+	}
+	t, err := c.store.task(r.PathValue("id"))
+	if err != nil || t.Node != node || finished(t.State) {
+		http.Error(w, "no such task on this node", http.StatusNotFound)
+		return nil, false
+	}
+	return t, true
+}
+
+// taskSSHTunnelHandler serves /v1/node/tasks/{id}/ssh/connect: a session of
+// the task, from here to the access's machine.
+func (c *core) taskSSHTunnelHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t, ok := c.sshTask(w, r)
+		if !ok {
+			return
+		}
+		if !strings.EqualFold(r.Header.Get("Upgrade"), sshProto) {
+			http.Error(w, "upgrade to "+sshProto+" required", http.StatusUpgradeRequired)
+			return
+		}
+		target := r.URL.Query().Get("target")
+		if err := c.sshConnect(t, target); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), sshDialTimeout)
+		defer cancel()
+		up, err := sshDial(ctx, target)
+		if err != nil {
+			log.Printf("access: task %s: eriphe-core cannot reach %s: %v", t.ID, target, err)
+			http.Error(w, errSSHUnreachable.Error(), http.StatusBadGateway)
+			return
+		}
+		conn, rw, err := http.NewResponseController(w).Hijack()
+		if err != nil {
+			up.Close()
+			return
+		}
+		conn.SetDeadline(time.Time{})
+		rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: " + sshProto + "\r\nConnection: Upgrade\r\n\r\n")
+		if err := rw.Flush(); err != nil {
+			conn.Close()
+			up.Close()
+			return
+		}
+		pipeSync(&bufferedConn{Conn: conn, r: rw.Reader}, up, up) // sync_relay.go
 	})
 }
 

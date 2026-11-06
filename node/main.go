@@ -220,6 +220,7 @@ func main() {
 		}
 		relay.access = n.accessRelay(s) // egress_access.go
 		relay.sshOpen = s.sshOpen       // egress_ssh.go
+		relay.sshCore = s.sshCore
 		go func() { log.Fatal(http.Serve(l, relay)) }()
 	}
 	api := http.NewServeMux()
