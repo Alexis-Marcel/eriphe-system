@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // The brain's web, as decided in the study "Recherche web du cerveau"
@@ -22,8 +25,9 @@ import (
 //     depth;
 //   - a rule of mine about WebFetch that denies or asks wins;
 //   - on a clean turn, the read is free;
-//   - on a tainted turn, it is mine to decide, unless the URL is written in
-//     my own message of this turn: I chose it, the brain added nothing to it.
+//   - on a tainted turn, it is mine to decide on a card, which never holds
+//     the brain; a yes lets it read that page once. The URL written in my own
+//     message of this turn is free: I chose it, the brain added nothing to it.
 //
 // A read is itself external content: it taints the turn (turnTaint).
 
@@ -68,11 +72,17 @@ func (c *core) brainFetch(ctx context.Context, t *TaskRow, pid string, input map
 		_, err := c.answer(ctx, t.ID, pid, "Refusé par la politique d'Eriphe : "+reason+".", &no, byPolicy)
 		return err
 	case decideAsk:
-		return c.brainFetchAsk(t, pid, raw, reason)
+		if !c.usePageYes(raw) {
+			return c.brainFetchAsk(ctx, t, pid, raw, input, pending)
+		}
+		log.Printf("brain: WebFetch %s allowed: the user said yes on its card", truncate(raw, 200))
+		yes := true
+		_, err := c.answer(ctx, t.ID, pid, "", &yes, byPolicy)
+		return err
 	}
 	if tainted := c.turnTaintBut(pending); len(tainted) > 0 {
-		if !c.ownerWroteURL(raw) {
-			return c.brainFetchAsk(t, pid, raw, c.conf().assistantName()+" a lu un contenu extérieur dans ce tour ("+strings.Join(tainted, ", ")+")")
+		if !c.ownerWroteURL(raw) && !c.usePageYes(raw) {
+			return c.brainFetchAsk(ctx, t, pid, raw, input, pending)
 		}
 		log.Printf("brain: WebFetch %s allowed on a tainted turn: the URL is in the user's message", truncate(raw, 200))
 	} else {
@@ -83,13 +93,35 @@ func (c *core) brainFetch(ctx context.Context, t *TaskRow, pid string, input map
 	return err
 }
 
-// brainFetchAsk hands a page read to me, told in the conversation.
-func (c *core) brainFetchAsk(t *TaskRow, pid, raw, reason string) error {
-	log.Printf("brain: WebFetch %s is the user's decision: %s", truncate(raw, 200), reason)
-	c.store.markUserOnly(t.ID, pid, reason)
-	c.store.addMessage(roleBrain, fmt.Sprintf("(%s veut lire la page %s : %s. Autorise ou refuse dans `eriphe`, tâche %s.)",
-		c.conf().assistantName(), truncate(raw, 400), reason, t.ID), true)
-	return nil
+// brainFetchAsk hands a page read to me, on a card like any call.
+func (c *core) brainFetchAsk(ctx context.Context, t *TaskRow, pid, raw string, input map[string]any, pending map[string]int) error {
+	log.Printf("brain: WebFetch %s is the user's decision", truncate(raw, 200))
+	return c.askBrainAccess(ctx, t, pid, webFetchTool, input, pending)
+}
+
+// pageYesTTL is how long a yes on a page read waits for the brain to read it.
+const pageYesTTL = time.Hour
+
+func pageYesKey(raw string) string { return "page_yes:" + raw }
+
+// usePageYes consumes the yes given to that page, if there is one.
+func (c *core) usePageYes(raw string) bool {
+	at, err := strconv.ParseInt(c.store.get(pageYesKey(raw)), 10, 64)
+	if err != nil {
+		return false
+	}
+	c.store.set(pageYesKey(raw), "")
+	return time.Since(time.Unix(at, 0)) < pageYesTTL
+}
+
+// allowPage answers a yes on a page read: the page is read by the brain's own
+// reader, so the yes lets its next read of that URL through.
+func (c *core) allowPage(a accessQuestion) string {
+	var input map[string]any
+	json.Unmarshal([]byte(a.Input), &input)
+	raw := webURL(input)
+	c.store.set(pageYesKey(raw), strconv.FormatInt(time.Now().Unix(), 10))
+	return fmt.Sprintf("%s a dit oui : tu peux lire la page %s. Lis-la maintenant avec ton outil web, une seule fois, et dis-lui ce qu'il voulait savoir.", c.conf().User, raw)
 }
 
 // ownerWroteURL tells whether a URL is written in one of my messages of the
