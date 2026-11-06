@@ -82,8 +82,7 @@ func TestPolicyDecide(t *testing.T) {
 	}
 }
 
-// A denial never reaches the brain; a decision reserved to the user cannot
-// be taken by the brain.
+// A denial never reaches the brain, and nothing is left for it to judge.
 func TestPolicyInReports(t *testing.T) {
 	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
 	if err != nil {
@@ -116,22 +115,12 @@ func TestPolicyInReports(t *testing.T) {
 		t.Fatalf("decision by %q", by)
 	}
 
-	if !report(2, "make deploy prod") {
-		t.Fatal("an ask was not left for the user")
+	// What has no card to go on is refused, not left waiting.
+	if report(2, "make deploy prod") {
+		t.Fatal("an ask with no card was left waiting")
 	}
-	c.notifyBrain("t-1", stateWaitingPermission)
-	msgs, _ := store.undelivered()
-	if len(msgs) == 0 || !strings.Contains(msgs[len(msgs)-1].Text, "revient à Sam") || !strings.Contains(msgs[len(msgs)-1].Text, "permission_id p2") {
-		t.Fatalf("brain not told the decision is the user's: %+v", msgs)
-	}
-	store.ackInbox("t-1", 99)
-	store.addEvents("t-1", []EventRow{{Seq: 3, Time: time.Now(), Type: "permission_answer", Data: map[string]any{"id": "p1"}}})
-	yes := true
-	if _, err := c.answer(context.Background(), "t-1", "", "", &yes, byBrain); err == nil || !strings.Contains(err.Error(), "Sam") {
-		t.Fatalf("the brain answered a user-only permission: %v", err)
-	}
-	if _, err := c.answer(context.Background(), "t-1", "", "ok", &yes, byUser); err != nil {
-		t.Fatalf("the user could not answer: %v", err)
+	if items, _ := store.inbox("t-1"); len(items) != 2 || items[1].Data["allow"] != false {
+		t.Fatalf("inbox = %+v", items)
 	}
 }
 

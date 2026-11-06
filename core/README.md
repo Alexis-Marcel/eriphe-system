@@ -847,8 +847,7 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    autoriser", [below](#access-levels)), then its **category's value** in the
    [grid](#access-grid) of the account the call names: On approval asks on a
    [card](#the-approval-card), Free is allowed. No catalog call is left to the brain's judgment;
-6. an MCP tool out of the catalog: only the user may answer, through the CLI; the brain is told to
-   relay it and its answer is refused. There is no built-in ask on a command: what a task reaches
+6. an MCP tool out of the catalog: refused at once, it is not lent. There is no built-in ask on a command: what a task reaches
    with a secret is what it was lent, decided at launch, and Free asks nothing;
 7. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
    `Write`, `Edit`, `WebFetch`…) is allowed, without waking the brain (`inContainer`). The container
