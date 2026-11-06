@@ -266,9 +266,9 @@ func (c *core) askTaskAccess(t *TaskRow, pid, tool string, input map[string]any,
 // a tainted turn.
 func (c *core) askBrainAccess(t *TaskRow, pid, tool string, input map[string]any, reason string, pending map[string]int) {
 	c.store.markUserOnly(t.ID, pid, reason)
-	raw, _ := json.Marshal(input)
+	raw, _ := json.Marshal(callFields(input))
 	c.newAccessAsk(accessQuestion{TaskID: t.ID, Permission: pid, Need: c.callNeed(tool, input, c.pool.facts(tool, input)),
-		Call: tool + " " + truncate(string(raw), 300), Tainted: strings.Join(c.turnTaintBut(pending), ", ")})
+		Call: tool + " " + string(raw), Tainted: strings.Join(c.turnTaintBut(pending), ", ")})
 }
 
 // newAccessAsk keeps a question and shows its card now: the brain or the
@@ -289,7 +289,8 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 	id, _ := res.LastInsertId()
 	c.cardProposed(cardAccess, id)
 	// The question itself: what notifies the user of a question notifies them of this one.
-	seq, err := c.store.addMessage(roleBrain, c.accessText(a, "fr"), true)
+	// The card says what: the message does not say it twice.
+	seq, err := c.store.addMessage(roleBrain, fmt.Sprintf(tr("fr", "access.ask.message"), a.Need.Target()), true)
 	if err != nil {
 		return id
 	}
@@ -316,7 +317,53 @@ func (c *core) accessProposal(p proposal) proposal {
 	}
 	p.Tainted = a.Tainted
 	p.text = func(lang string) string { return c.accessText(a, lang) }
+	p.Fields = a.fields()
 	return p
+}
+
+// cardField is one parameter of a call, as a card shows it.
+type cardField struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// cardValueMax is as much of a value as a card keeps.
+const cardValueMax = 4000
+
+// callFields are a call's parameters as the user reads them, by name.
+func callFields(input map[string]any) []cardField {
+	out := []cardField{}
+	for _, name := range slices.Sorted(maps.Keys(input)) {
+		value, ok := input[name].(string)
+		if !ok {
+			raw, _ := json.Marshal(input[name])
+			value = string(raw)
+		}
+		out = append(out, cardField{name, truncate(value, cardValueMax)})
+	}
+	return out
+}
+
+// fields reads the parameters kept with the call.
+func (a accessQuestion) fields() []cardField {
+	_, raw, _ := strings.Cut(a.Call, " ")
+	var out []cardField
+	json.Unmarshal([]byte(raw), &out)
+	return out
+}
+
+// callVerb says a call as an action, in lang: in the user's words for the
+// usual ones, otherwise the tool's own name.
+func callVerb(call, lang string) string {
+	name, _, _ := strings.Cut(call, " ")
+	if _, tool, ok := splitToolName(name); ok {
+		name = tool
+	}
+	key := "access.call." + name
+	if s := tr(lang, key); s != key {
+		return s
+	}
+	return fmt.Sprintf(tr(lang, "access.call.other"), strings.ReplaceAll(name, "_", " "))
 }
 
 // verbs says categories as an action, in lang.
@@ -337,7 +384,7 @@ func (c *core) accessText(a accessQuestion, lang string) string {
 	case len(a.Refs) > 0:
 		return fmt.Sprintf(tr(lang, "access.ask.release"), title, strings.Join(a.Refs, ", "))
 	case a.Call != "":
-		return fmt.Sprintf(tr(lang, "access.ask.brain"), c.conf().assistantName(), verbs([]string{a.Need.Category}, lang), a.Need.Target(), a.Call)
+		return fmt.Sprintf(tr(lang, "access.ask.brain"), c.conf().assistantName(), callVerb(a.Call, lang), a.Need.Target())
 	}
 	return fmt.Sprintf(tr(lang, "access.ask.task"), title, verbs([]string{a.Need.Category}, lang), a.Need.Target())
 }

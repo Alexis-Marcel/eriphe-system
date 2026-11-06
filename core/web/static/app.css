@@ -1533,6 +1533,10 @@ details.app-install > * + * { margin-top: 10px; }
 .pcard-icon .i { width: 15px; height: 15px; }
 .pcard-kind { flex: 1; min-width: 0; font-size: .82rem; font-weight: 600; color: var(--muted); }
 .pcard-text { font-size: .95rem; font-weight: 500; overflow-wrap: anywhere; }
+.pcard-call { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .15rem .8rem; font-size: .84rem; margin: 0; }
+.pcard-call dt { color: var(--muted); }
+.pcard-call dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.pcard-call summary { cursor: pointer; }
 .pcard-why { font-size: .84rem; color: var(--muted); overflow-wrap: anywhere; }
 .pcard-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .pcard-actions .btn { min-height: 36px; }

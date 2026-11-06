@@ -86,6 +86,9 @@ func (c *core) telegramCards() {
 // cardTelegramText is a card as Telegram shows it, in plain text.
 func cardTelegramText(x convoCard, p proposal, lang string) string {
 	text := tr(lang, "card.kind."+x.Kind) + "\n" + truncate(p.Text(lang), 600)
+	for _, f := range p.Fields {
+		text += "\n" + f.Name + " : " + truncate(oneLine(f.Value), 200)
+	}
 	if p.Why != "" {
 		text += "\n" + truncate(p.Why, 300)
 	}

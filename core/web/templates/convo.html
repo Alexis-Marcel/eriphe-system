@@ -10,13 +10,15 @@
   <header class="pcard-head">
     <span class="pcard-icon" aria-hidden="true">{{template "i-shield"}}</span>
     <h3 class="pcard-kind" id="card-{{.ID}}-t">{{t (printf "card.kind.%s" .Kind)}}</h3>
-    {{if .Tainted}}<span class="tag tag-no" title="{{t "card.tainted.hint"}}">{{t "notif.tainted"}}</span>{{end}}
+    {{if .Tainted}}<span class="tag tag-no">{{t "notif.tainted"}}</span>{{end}}
     <details class="pcard-more">
       <summary aria-label="{{t "card.more"}}" title="{{t "card.more"}}"><span aria-hidden="true">···</span></summary>
       <div class="pcard-menu"><a href="/settings/approve">{{t "card.allwaiting"}}</a></div>
     </details>
   </header>
   <p class="pcard-text">{{.Text}}</p>
+  {{if .Fields}}<dl class="pcard-call">{{range .Fields}}<dt>{{.Name}}</dt><dd>{{if gt (len .Value) 160}}<details><summary>{{short .Value 120}}</summary><p>{{.Value}}</p></details>{{else}}{{.Value}}{{end}}</dd>{{end}}</dl>{{end}}
+  {{if .Tainted}}<p class="pcard-why">{{t "card.tainted.hint"}}</p>{{end}}
   {{if .Why}}<p class="pcard-why">{{.Why}}</p>{{end}}
   {{if eq .State "pending"}}
   <div class="pcard-actions">

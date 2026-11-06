@@ -26,6 +26,7 @@ type cardView struct {
 	Text    string
 	Why     string
 	Tainted string
+	Fields  []cardField
 	Digest  *digestView
 }
 
@@ -69,7 +70,7 @@ func (w *web) cardView(x convoCard, lang string) cardView {
 	if t := p.Text(lang); t != "" {
 		v.Text = t
 	}
-	v.Why, v.Tainted = p.Why, p.Tainted
+	v.Why, v.Tainted, v.Fields = p.Why, p.Tainted, p.Fields
 	return v
 }
 

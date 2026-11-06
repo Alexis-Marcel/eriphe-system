@@ -164,7 +164,8 @@ type proposal struct {
 	Outcome   string // when not pending: approved, rejected or gone
 	Tainted   string // why it may carry what someone else wrote, if it may
 	Why       string
-	Extracted bool // from the memory's extraction, not from a turn of the brain's
+	Fields    []cardField // the parameters of a call to approve
+	Extracted bool        // from the memory's extraction, not from a turn of the brain's
 	text      func(lang string) string
 }
 
