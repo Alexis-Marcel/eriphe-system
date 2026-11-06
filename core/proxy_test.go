@@ -341,19 +341,13 @@ func TestBrainCatalogPermission(t *testing.T) {
 
 	before := c.store.lastMessageSeq()
 	ask("b-2", "mcp__github__create_issue", map[string]any{"title": "x"})
-	if items := inbox("b-2"); len(items) != 0 || c.store.userOnly("b-2", "p1") == "" {
+	// A card takes it, and the brain is not held on it.
+	if items := inbox("b-2"); len(items) != 1 || items[0].Data["allow"] != false {
 		t.Fatalf("write: %+v", items)
 	}
 	msgs, _ := c.store.messagesAfter(before, 10)
 	if cards, _ := c.cardsWhere(`kind = ? AND seq > 0`, cardAccess); len(msgs) != 1 || len(cards) != 1 || cards[0].Seq != msgs[0].Seq {
 		t.Fatalf("the user is not told: %+v, %+v", msgs, cards)
-	}
-	yes := true
-	if _, err := c.answer(ctx, "b-2", "", "", &yes, byBrain); err == nil {
-		t.Fatal("the brain answered its own write")
-	}
-	if _, err := c.answer(ctx, "b-2", "", "", &yes, byUser); err != nil {
-		t.Fatal(err)
 	}
 	if tasks, _ := c.store.tasks(true, 10); len(tasks) != 2 {
 		t.Fatalf("the brain waiting for the user is not listed: %+v", tasks)

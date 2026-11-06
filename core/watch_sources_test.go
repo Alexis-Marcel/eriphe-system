@@ -380,8 +380,8 @@ func TestGrantExactOnly(t *testing.T) {
 	if brainCallsTool(t, c, "b-2", "mcp__monitor__rollback", map[string]any{"version": "2.0.0", "force": true}) {
 		t.Fatal("an extra argument allowed")
 	}
-	if c.store.userOnly("b-1", "p1") == "" {
-		t.Fatal("the other action is not the user's to answer")
+	if accessCards(t, c) < 2 {
+		t.Fatal("the other actions are not the user's to answer")
 	}
 	// Exactly it: through, once.
 	if !brainCallsTool(t, c, "b-3", "mcp__monitor__rollback", map[string]any{"version": "2.0.0"}) {
