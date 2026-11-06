@@ -225,9 +225,8 @@ func TestExternalMemoryTaints(t *testing.T) {
 	if trust["Dans le dossier Compta."] != trustFirstParty || trust["Un mail parle de les envoyer ailleurs."] != trustExternal {
 		t.Fatalf("brain messages: %v", trust)
 	}
-	// A tainted turn cannot allow what an external memory asked for.
-	if err := c.taintedAllow("t-brain", "p1"); err == nil {
-		t.Fatal("allowed after reading an external memory")
+	if len(c.turnTaint()) == 0 {
+		t.Fatal("reading an external memory did not taint the turn")
 	}
 }
 
@@ -360,10 +359,6 @@ func TestTaintCarriesOverEvents(t *testing.T) {
 	from, _, _, tainted := c.turn.snapshot()
 	if from != int(seq) || strings.Join(tainted, ",") != "mail.read_message" {
 		t.Fatalf("turn after events: from %d, %v", from, tainted)
-	}
-	yes := true
-	if _, err := c.answer(ctx, "t-1", "p1", "", &yes, byBrain); err == nil || c.store.userOnly("t-1", "p1") == "" {
-		t.Fatalf("allow after an event-only delivery = %v", err)
 	}
 	// What it remembers then is only proposed.
 	out, err := c.brainRemember(rememberIn{Text: "Retenu", Kind: kindFact})

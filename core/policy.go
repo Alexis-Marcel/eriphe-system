@@ -30,10 +30,10 @@ import (
 // Every decision, whoever takes it, is recorded in the decisions table.
 
 const (
-	decideAllow = "allow"
-	decideDeny  = "deny"
-	decideAsk   = "ask" // only the user may answer
-	decideBrain = ""    // no rule: the brain judges
+	decideAllow  = "allow"
+	decideDeny   = "deny"
+	decideAsk    = "ask" // only the user may answer
+	decideNoRule = ""    // no rule: a tool of its container, or the brain's own
 )
 
 // Who answered a permission.
@@ -220,7 +220,7 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 			return r.Decision, r.Reason
 		}
 	}
-	return decideBrain, ""
+	return decideNoRule, ""
 }
 
 const (
@@ -276,9 +276,8 @@ func (p *Policy) rules() []Rule {
 	return p.Rules
 }
 
-// applyPolicy answers the new permission requests of a worker that the
-// policy decides, and marks those only the user may answer. It returns true
-// when some request is left for the brain (or, through it, the user).
+// applyPolicy answers the new permission requests of a worker, or marks them
+// as the user's. It returns true when some request is left for the user.
 func (c *core) applyPolicy(id string, events []EventRow) bool {
 	if c.isAssistantTask(id) {
 		return false // its role's approval path answers it (assistant_controller.go)
@@ -293,7 +292,7 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 		tool := fmt.Sprint(e.Data["tool_name"])
 		input, _ := e.Data["input"].(map[string]any)
 		decision, reason := c.decideTask(t, tool, input)
-		if decision == decideBrain && inContainer(tool) {
+		if decision == decideNoRule && inContainer(tool) {
 			decision = decideAllow
 		}
 		switch decision {
@@ -319,14 +318,13 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 				left = true
 				continue
 			}
-			// Not in the catalog: nothing to ask, it is not lent.
+			fallthrough
+		default: // not in the catalog: nothing to ask, it is not lent
 			if !c.store.answered(id, pid) {
 				msg := "Refusé par la politique d'Eriphe : " + reason + "."
 				c.store.addInbox(id, "permission", map[string]any{"id": pid, "allow": false, "message": msg, "by": byPolicy})
 				c.store.recordDecision(id, pid, tool, input, decideDeny, byPolicy, reason)
 			}
-		default:
-			left = true
 		}
 	}
 	return left

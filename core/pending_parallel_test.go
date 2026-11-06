@@ -27,7 +27,7 @@ func TestPendingWhileRunning(t *testing.T) {
 		t.Fatalf("pending %v", st.PendingPermissions)
 	}
 	yes := true
-	if _, err := c.answer(context.Background(), "t-1", "p2", "", &yes, byBrain); err != nil {
+	if _, err := c.answer(context.Background(), "t-1", "p2", "", &yes, byUser); err != nil {
 		t.Fatalf("answer the second: %v", err)
 	}
 
