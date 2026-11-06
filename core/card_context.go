@@ -69,6 +69,18 @@ func pullContext(input map[string]any, has func(string) bool, read func(tool str
 	return nil
 }
 
+// cardFields are what a card lists: what it read, then the call's parameters
+// but the number that read already says.
+func cardFields(context []cardField, input map[string]any) []cardField {
+	out := context
+	for _, f := range callFields(input) {
+		if len(context) == 0 || (f.Name != "pullNumber" && f.Name != "pull_number") {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // callContext is what a card adds to a call's parameters.
 func (c *core) callContext(ctx context.Context, tool string, input map[string]any) []cardField {
 	server, _, ok := splitToolName(tool)

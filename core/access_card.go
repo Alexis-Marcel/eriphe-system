@@ -278,7 +278,7 @@ func (c *core) askBrainAccess(ctx context.Context, t *TaskRow, pid, tool string,
 	raw, _ := json.Marshal(input)
 	var id int64
 	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE call LIKE ? AND input = ? AND state = ?`, tool+" %", string(raw), startProposed).Scan(&id) != nil {
-		fields, _ := json.Marshal(append(c.callContext(ctx, tool, input), callFields(input)...))
+		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
 		c.newAccessAsk(accessQuestion{TaskID: t.ID, Permission: pid, Need: c.callNeed(tool, input, c.pool.facts(tool, input)),
 			Call: tool + " " + string(fields), Input: string(raw), Tainted: strings.Join(c.turnTaintBut(pending), ", ")})
 	}

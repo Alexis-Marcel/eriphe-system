@@ -43,3 +43,15 @@ func TestPullContextNone(t *testing.T) {
 		t.Errorf("no such tool: %+v", got)
 	}
 }
+
+// The number is in the title: not twice. Without a title, it is all there is.
+func TestCardFields(t *testing.T) {
+	in := map[string]any{"pullNumber": 8.0, "repo": "site"}
+	got := cardFields([]cardField{{"PR", "#8 a title"}}, in)
+	if len(got) != 2 || got[1].Name != "repo" {
+		t.Errorf("%+v", got)
+	}
+	if got := cardFields(nil, in); len(got) != 2 || got[0].Name != "pullNumber" {
+		t.Errorf("no context: %+v", got)
+	}
+}
