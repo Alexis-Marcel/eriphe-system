@@ -324,8 +324,7 @@ func (c *core) brainPermissionOne(ctx context.Context, t *TaskRow, p map[string]
 		switch decision {
 		case decideAsk:
 			if accessReason(reason) {
-				c.askBrainAccess(t, pid, tool, input, reason, pending) // a card for this call (access_card.go)
-				return nil
+				return c.askBrainAccess(ctx, t, pid, tool, input, pending) // a card for this call (access_card.go)
 			}
 			c.store.markUserOnly(t.ID, pid, reason)
 			raw, _ := json.Marshal(input)

@@ -370,23 +370,87 @@ func TestBrainCardIsForOneCall(t *testing.T) {
 	c := newMailCore(t, "")
 	ctx := context.Background()
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
-	in := map[string]any{"id": "42"}
+	in := map[string]any{}
 	c.store.addEvents("b-1", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
 		Data: map[string]any{"id": "p-1", "tool_name": "mcp__mail__move", "input": in}}})
-	c.askBrainAccess(&TaskRow{ID: "b-1"}, "p-1", "mcp__mail__move", in, approvalReason, nil)
+	if err := c.askBrainAccess(ctx, &TaskRow{ID: "b-1"}, "p-1", "mcp__mail__move", in, nil); err != nil {
+		t.Fatal(err)
+	}
+	if told, allow := answeredAllow(t, c, "b-1", "p-1"); !told || allow {
+		t.Fatalf("the brain is held: told %v, allow %v", told, allow)
+	}
 	x := accessCard(t, c, "use “move” in mail")
+	// The brain restarted meanwhile: the card still waits, and still runs.
+	c.store.updateTask("b-1", map[string]any{"state": stateStopped})
 	if _, err := c.decideCard(ctx, x.ID, true, "web"); err != nil {
 		t.Fatal(err)
 	}
-	if told, allow := answeredAllow(t, c, "b-1", "p-1"); !told || !allow {
-		t.Errorf("told %v, allow %v", told, allow)
-	}
-	if !c.store.useTicket("b-1", "mcp__mail__move", in) {
-		t.Error("the yes gave the call no ticket")
+	if text := waitEvent(t, c, "est exécutée"); !strings.Contains(text, "mcp__mail__move") {
+		t.Errorf("event: %q", text)
 	}
 	if got, _ := c.decideBrainCall("mcp__mail__move", in, nil); got != decideAsk {
 		t.Errorf("the next call: %q", got)
 	}
+}
+
+// waitEvent waits for an event that says what.
+func waitEvent(t *testing.T, c *core, what string) string {
+	t.Helper()
+	for range 200 {
+		msgs, _ := c.store.messagesAfter(0, 50)
+		for _, m := range msgs {
+			if m.Role == roleEvent && strings.Contains(m.Text, what) {
+				return m.Text
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("no event says %q", what)
+	return ""
+}
+
+// brainCalls makes the brain ask a call, as a permission of its own.
+func brainCalls(t *testing.T, c *core, pid, tool string, in map[string]any) {
+	t.Helper()
+	st, _ := c.store.task("b-1")
+	c.store.addEvents("b-1", []EventRow{{Seq: st.LastSeq + 1, Time: time.Now(), Type: "permission",
+		Data: map[string]any{"id": pid, "tool_name": tool, "input": in}}})
+	if err := c.askBrainAccess(context.Background(), &TaskRow{ID: "b-1"}, pid, tool, in, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A no runs nothing, and the brain is told; the same call asked twice is one card.
+func TestBrainCardNo(t *testing.T) {
+	c := newMailCore(t, "")
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	in := map[string]any{"id": "42"}
+	brainCalls(t, c, "p-1", "mcp__mail__move", in)
+	brainCalls(t, c, "p-2", "mcp__mail__move", in)
+	if n := accessCards(t, c); n != 1 {
+		t.Fatalf("%d cards", n)
+	}
+	if _, err := c.decideCard(context.Background(), accessCard(t, c, "move").ID, false, "web"); err != nil {
+		t.Fatal(err)
+	}
+	waitEvent(t, c, "a refusé sur la carte")
+	msgs, _ := c.store.messagesAfter(0, 50)
+	for _, m := range msgs {
+		if strings.Contains(m.Text, "est exécutée") {
+			t.Errorf("run on a no: %q", m.Text)
+		}
+	}
+}
+
+// What the user forbade since is not run on an old yes.
+func TestBrainCardToolGone(t *testing.T) {
+	c := newMailCore(t, "")
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	brainCalls(t, c, "p-1", "mcp__mail__nothing", map[string]any{})
+	if _, err := c.decideCard(context.Background(), accessCard(t, c, "nothing").ID, true, "web"); err != nil {
+		t.Fatal(err)
+	}
+	waitEvent(t, c, "n'a pas pu être exécutée")
 }
 
 // A card says the action and its parameters in words, never the raw call,
@@ -396,7 +460,7 @@ func TestBrainCardReads(t *testing.T) {
 	long := strings.Repeat("x", cardValueMax+50)
 	in := map[string]any{"repo": "portfolio", "number": 7, "body": long}
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
-	c.askBrainAccess(&TaskRow{ID: "b-1"}, "p-1", "mcp__mail__merge_pull_request", in, approvalReason, nil)
+	brainCalls(t, c, "p-1", "mcp__mail__merge_pull_request", in)
 	_, p := c.liveCard(accessCard(t, c, "merge a pull request"))
 	if fr := p.Text("fr"); !strings.Contains(fr, "fusionner une pull request") || strings.Contains(fr, "mcp__") || strings.Contains(fr, "{") {
 		t.Errorf("fr: %q", fr)
