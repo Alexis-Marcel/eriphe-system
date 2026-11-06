@@ -2,7 +2,7 @@
 
 Eriphe's control plane (v0): it keeps the state of nodes and tasks in SQLite, schedules tasks on
 nodes, follows them, lends accesses, and gives the brain its tools over MCP. One binary, with
-k8s-like modules: `store`, `api`/`mcp`, `scheduler`, controllers, `identity`.
+k8s-like modules: `store`, `api`/`mcp`, `scheduler`, controllers.
 
 ```sh
 go build -o eriphe-core .
@@ -39,7 +39,7 @@ with the setup code ABCD-EFGH`) creates the owner's password, and a short wizard
 assistant (the user chooses its name) and connects the AI account it thinks with
 (a Claude subscription's `claude setup-token`, or any other kind of Settings → Agents, with its
 usual agents). The brain starts as soon as a machine has joined.
-Nothing else is on by default: no tool, no policy rule, no identity; the catalog's tools (Home
+Nothing else is on by default: no tool, no policy rule, no access; the catalog's tools (Home
 Assistant, GitHub, mail…) are added from Settings → Tools.
 
 An installer gets a join token for the machine's own node without the workspace:
