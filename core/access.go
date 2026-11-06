@@ -165,7 +165,6 @@ type catalogFacts struct {
 	held bool
 	// granted: the user approved this category for the task (access_card.go).
 	granted bool
-	sshLent bool // the task is lent an SSH access: ssh asks nothing more (lent_ssh.go)
 }
 
 // facts is what the catalog says of a call: of the tool alone with a nil

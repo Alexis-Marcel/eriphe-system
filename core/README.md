@@ -834,8 +834,8 @@ finished task's receipt instead of its last message (still external).
 Every permission request of a worker goes through a policy written in code before the brain hears
 of it, so that a prompt injection (a mail, a web page) cannot talk the brain into it:
 
-1. **built-in denials**, which no rule lifts: recursive `rm`, pushing to `main`/`master`, force
-   pushes, `git reset --hard` and history rewrites, reading secrets (`$GH_TOKEN`, `printenv`,
+1. **built-in denials**, which no rule lifts: a recursive `rm` naming `/work/folders`, pushing to
+   `main`/`master`, force pushes, reading secrets (`$ANTHROPIC_API_KEY`, `printenv`,
    `/proc/*/environ`, Claude Code's `.credentials.json`, Codex's `auth.json`, `$ERIPHE_CODEX_AUTH`,
    `$CODEX_HOME`…). OpenCode's and Codex's requests (the `opencode` and
    `codex` runtimes) come under Claude Code's tool names (`Bash`, `Edit`, `Write`, `WebFetch`…)
@@ -852,9 +852,9 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    autoriser", [below](#access-levels)), then its **category's value** in the
    [grid](#access-grid) of the account the call names: On approval asks on a
    [card](#the-approval-card), Free is allowed. No catalog call is left to the brain's judgment;
-6. **built-in asks**, for what reaches a third party (merging, releasing, publishing, `ssh`, `curl
-   -X POST`, an MCP tool out of the catalog): only the user may answer, through the CLI; the brain
-   is told to relay them and its answer is refused;
+6. an MCP tool out of the catalog: only the user may answer, through the CLI; the brain is told to
+   relay it and its answer is refused. There is no built-in ask on a command: what a task reaches
+   with a secret is what it was lent, decided at launch, and Free asks nothing;
 7. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
    `Write`, `Edit`, `WebFetch`…) is allowed, without waking the brain (`inContainer`). The container
    is the boundary: what leaves it goes through the node's mounts (a folder's level), its egress

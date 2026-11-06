@@ -13,8 +13,8 @@ import (
 // web page read by an agent can talk the brain into anything, not this.
 // Every permission request goes through it first:
 //
-//  1. the built-in denials, which nothing overrides (mass deletion, pushing
-//     to main, rewriting history, reading secrets, writing outside /work);
+//  1. the built-in denials, which nothing overrides (deleting a shared folder
+//     wholesale, pushing to main, forcing a push, reading secrets);
 //  2. a catalog tool at Never, by its exception or its category, and a call
 //     that must name its account;
 //  3. the rules of the configuration, first match wins;
@@ -24,7 +24,7 @@ import (
 //  6. its category's value in the grid of the account the call names: On
 //     approval is the user's, Free is allowed, unless it writes on a tainted
 //     turn or a task that did not start cleanly: then it is On approval too;
-//  7. the built-in asks: what reaches a third party is the user's decision;
+//  7. an MCP tool the catalog does not know is the user's decision;
 //  8. anything else is for the brain to judge. No catalog call gets here.
 //
 // Every decision, whoever takes it, is recorded in the decisions table.
@@ -88,28 +88,21 @@ func rule(tool, match, decision, reason string) Rule {
 
 const (
 	shellBoundary = `(^|[;&|(]\s*|\s)` // the start of a command in a shell line
-	secretVars    = `CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|GH_TOKEN|GITHUB_TOKEN|OPENAI_API_KEY|GOOGLE_GENERATIVE_AI_API_KEY|MISTRAL_API_KEY|OPENROUTER_API_KEY|ERIPHE_CODEX_AUTH|CODEX_HOME|ERIPHE_TASK_SECRET`
+	secretVars    = `CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|OPENAI_API_KEY|GOOGLE_GENERATIVE_AI_API_KEY|MISTRAL_API_KEY|OPENROUTER_API_KEY|ERIPHE_CODEX_AUTH|CODEX_HOME|ERIPHE_TASK_SECRET`
 )
 
 var builtinDeny = []Rule{
-	rule("Bash", shellBoundary+`rm\s+(\S+\s+)*(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(\s|$)`,
-		decideDeny, "suppression récursive interdite (rm -r)"),
-	rule("Bash", `git\s+push\b[^;&|]*(\s|:)(main|master)\b`, decideDeny, "pousser sur main est interdit : pousse une branche"),
+	// The task's container is its own: only what it was lent is worth a guard.
+	rule("Bash", shellBoundary+`rm\s+([^;&|]*\s)?(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\s([^;&|]*\s)?['"]?/work/folders|`+
+		shellBoundary+`rm\s+([^;&|]*\s)?['"]?/work/folders[^;&|]*\s(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(\s|$|[;&|])`,
+		decideDeny, "suppression récursive interdite dans un dossier prêté (rm -r)"),
+	rule("Bash", `git\s+push\b[^;&|]*(\s|:)(main|master)(\s|$|[;&|])`, decideDeny, "pousser sur main est interdit : pousse une branche"),
 	rule("Bash", `git\s+push\b[^;&|]*(\s--force\b|\s-f\b|\s--force-with-lease\b|\s\+\S)`, decideDeny, "forcer un push est interdit"),
-	rule("Bash", `git\s+(reset\s+--hard|clean\s+-[a-zA-Z]*f|filter-branch|filter-repo)`, decideDeny, "réécrire ou effacer l'historique est interdit"),
 	rule("Bash", `\$\{?(`+secretVars+`)\b|/proc/[^/\s]+/environ|`+shellBoundary+`(printenv|env|export\s+-p|set)\s*($|[;&|>])|\.credentials\.json|eriphe-codex|codex/auth\.json|git\s+config\b[^;&|]*credential`,
 		decideDeny, "lire les secrets de la tâche est interdit"),
 }
 
 var builtinAsk = []Rule{
-	// A mistake, not a script: what gh can do is its token's, which cannot
-	// write contents (git_access.go).
-	rule("Bash", `gh\s+pr\s+merge\b`, decideAsk, "fusionner une PR reste à l'utilisateur"),
-	rule("Bash", shellBoundary+`(npm|pnpm|yarn)\s+publish|`+shellBoundary+`(cargo|twine|gem)\s+(publish|upload|push)|docker\s+push`,
-		decideAsk, "publie un paquet ou une image"),
-	rule("Bash", shellBoundary+`(ssh|scp|sftp|rsync)\s`, decideAsk, sshAskReason),
-	rule("Bash", shellBoundary+`(curl|wget|http)\s[^;&|]*(-X\s*(POST|PUT|PATCH|DELETE)|--data|\s-d\s|--form|\s-F\s|--upload-file|--post)`,
-		decideAsk, "envoie quelque chose à une autre machine ou un service"),
 	rule("mcp__*", ``, decideAsk, "outil externe"),
 }
 
@@ -173,8 +166,6 @@ func (p *Policy) names(tool string) bool {
 	return false
 }
 
-var writeTools = map[string]bool{"Write": true, "Edit": true, "MultiEdit": true, "NotebookEdit": true}
-
 // decide applies the policy to a permission request.
 func (p *Policy) decide(tool string, input map[string]any) (decision, reason string) {
 	return p.decideWith(tool, input, catalogFacts{}, nil)
@@ -229,7 +220,7 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 		return decideAllow, why
 	}
 	for _, r := range builtinAsk {
-		if r.matches(tool, subj) && !(f.sshLent && r.Reason == sshAskReason) {
+		if r.matches(tool, subj) {
 			return r.Decision, r.Reason
 		}
 	}
@@ -237,10 +228,6 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 }
 
 const (
-	// sshAskReason: the built-in ask of ssh, which a task lent an SSH access
-	// does not get: the access was decided, and reaches that machine only.
-	sshAskReason = "envoie quelque chose à une autre machine"
-
 	neverReason    = "cet outil n'est pas autorisé dans Eriphe"
 	approvalReason = "cet outil demande ton accord"
 	freeReason     = "accès libre"
@@ -258,7 +245,6 @@ func (c *core) decide(tool string, input map[string]any) (decision, reason strin
 func (c *core) decideTask(t *TaskRow, tool string, input map[string]any) (decision, reason string) {
 	f := c.pool.facts(tool, input)
 	f.unclean = t == nil || c.store.get(lentByUserKey(t.ID)) == ""
-	f.sshLent = t != nil && len(c.lentSSH(t)) > 0
 	if server, name, ok := splitToolName(tool); ok && t != nil {
 		if u := c.pool.get(server); u != nil {
 			if real := u.toolByClaudeName(name); real != nil {

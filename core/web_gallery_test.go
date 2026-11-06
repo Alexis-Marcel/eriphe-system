@@ -284,7 +284,7 @@ func TestAccessChoiceMapsToPolicy(t *testing.T) {
 		t.Fatalf("a read with ask everything: %q", d)
 	}
 	// The built-in denials come first whatever the choice.
-	if d, _ := c.decide("Bash", map[string]any{"command": "rm -rf /work"}); d != decideDeny {
+	if d, _ := c.decide("Bash", map[string]any{"command": "git push origin main"}); d != decideDeny {
 		t.Fatalf("built-in denial: %q", d)
 	}
 	// The list says it.

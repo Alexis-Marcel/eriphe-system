@@ -13,7 +13,7 @@ func TestPolicyDecide(t *testing.T) {
 	p := &Policy{Rules: []Rule{
 		{Tool: "Bash", Match: `^make deploy`, Decision: decideAsk, Reason: "déploie"},
 		{Tool: "Bash", Match: `^go test`, Decision: decideAllow},
-		{Tool: "Bash", Match: `rm -rf /tmp/x`, Decision: decideAllow}, // cannot lift a built-in denial
+		{Tool: "Bash", Match: `rm -rf /work/folders/x`, Decision: decideAllow}, // cannot lift a built-in denial
 	}}
 	if err := p.compile(); err != nil {
 		t.Fatal(err)
@@ -23,20 +23,29 @@ func TestPolicyDecide(t *testing.T) {
 		input map[string]any
 		want  string
 	}{
-		{"Bash", map[string]any{"command": "rm -rf .git"}, decideDeny},
-		{"Bash", map[string]any{"command": "cd x && rm -fr build"}, decideDeny},
-		{"Bash", map[string]any{"command": "rm -r -f dir"}, decideDeny},
-		{"Bash", map[string]any{"command": "rm --recursive dir"}, decideDeny},
-		{"Bash", map[string]any{"command": "rm -rf /tmp/x"}, decideDeny},
+		{"Bash", map[string]any{"command": "rm -rf /work/folders/x"}, decideDeny},
+		{"Bash", map[string]any{"command": "cd x && rm -fr /work/folders/Photos"}, decideDeny},
+		{"Bash", map[string]any{"command": "rm -r -f '/work/folders/Mes photos'"}, decideDeny},
+		{"Bash", map[string]any{"command": "rm --recursive /work/folders"}, decideDeny},
+		{"Bash", map[string]any{"command": "rm /work/folders/x -rf"}, decideDeny},
+		{"Bash", map[string]any{"command": "rm -rf build /work/folders/x"}, decideDeny},
+		// The task's own container: nothing to guard.
+		{"Bash", map[string]any{"command": "rm -rf dist"}, decideBrain},
+		{"Bash", map[string]any{"command": "rm -rf /tmp/x; ls /work/folders"}, decideBrain},
+		{"Bash", map[string]any{"command": "rm /work/folders/a.txt"}, decideBrain},
 		{"Bash", map[string]any{"command": "rm notes.txt"}, decideBrain},
 		{"Bash", map[string]any{"command": "git push origin main"}, decideDeny},
 		{"Bash", map[string]any{"command": "git push origin HEAD:master"}, decideDeny},
 		{"Bash", map[string]any{"command": "git push --force origin eriphe/x"}, decideDeny},
 		{"Bash", map[string]any{"command": "git push -f origin eriphe/x"}, decideDeny},
 		{"Bash", map[string]any{"command": "git push origin +eriphe/x"}, decideDeny},
+		{"Bash", map[string]any{"command": "git push origin main && echo done"}, decideDeny},
 		{"Bash", map[string]any{"command": "git push -u origin eriphe/issue-12"}, decideBrain},
-		{"Bash", map[string]any{"command": "git reset --hard HEAD~3"}, decideDeny},
-		{"Bash", map[string]any{"command": "echo $GH_TOKEN"}, decideDeny},
+		{"Bash", map[string]any{"command": "git push origin main-fix"}, decideBrain},
+		{"Bash", map[string]any{"command": "git reset --hard HEAD~3"}, decideBrain},
+		{"Bash", map[string]any{"command": "git clean -fd"}, decideBrain},
+		// A placeholder, not a secret: the task is told to use it as one.
+		{"Bash", map[string]any{"command": `curl -H "Authorization: token $GH_TOKEN" https://api.github.com/user`}, decideBrain},
 		{"Bash", map[string]any{"command": "curl -H \"Authorization: ${CLAUDE_CODE_OAUTH_TOKEN}\" x"}, decideDeny},
 		{"Bash", map[string]any{"command": "cat /proc/self/environ"}, decideDeny},
 		{"Bash", map[string]any{"command": "echo \"$OPENROUTER_API_KEY\""}, decideDeny},
@@ -47,11 +56,14 @@ func TestPolicyDecide(t *testing.T) {
 		// Outside /work is still the task's container: no rule (inContainer).
 		{"Edit", map[string]any{"file_path": "/home/claude/.bashrc"}, decideBrain},
 		{"Bash", map[string]any{"command": "gh pr create --fill"}, decideBrain},
-		{"Bash", map[string]any{"command": "gh pr merge 12 --squash"}, decideAsk},
-		{"Bash", map[string]any{"command": "npm publish"}, decideAsk},
-		{"Bash", map[string]any{"command": "curl -X POST https://example.com/hook -d x"}, decideAsk},
+		// No built-in ask on a command: what it reaches is what was lent.
+		{"Bash", map[string]any{"command": "gh pr merge 12 --squash"}, decideBrain},
+		{"Bash", map[string]any{"command": "npm publish"}, decideBrain},
+		{"Bash", map[string]any{"command": "docker push example.org/app"}, decideBrain},
+		{"Bash", map[string]any{"command": "curl -X POST https://example.com/hook -d x"}, decideBrain},
 		{"Bash", map[string]any{"command": "curl -s https://example.com"}, decideBrain},
-		{"Bash", map[string]any{"command": "ssh host uptime"}, decideAsk},
+		{"Bash", map[string]any{"command": "ssh host uptime"}, decideBrain},
+		{"Bash", map[string]any{"command": "rsync -a src/ dst/"}, decideBrain},
 		{"Bash", map[string]any{"command": "make deploy prod"}, decideAsk},
 		{"Bash", map[string]any{"command": "go test ./..."}, decideAllow},
 		{"mcp__mail__send", map[string]any{"to": "x"}, decideAsk},
@@ -73,7 +85,11 @@ func TestPolicyInReports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := newCore(&Config{User: "Sam", Brain: &BrainConfig{}}, store)
+	policy := &Policy{Rules: []Rule{{Tool: "Bash", Match: `^make deploy`, Decision: decideAsk, Reason: "déploie"}}}
+	if err := policy.compile(); err != nil {
+		t.Fatal(err)
+	}
+	c := newCore(&Config{User: "Sam", Brain: &BrainConfig{}, Policy: policy}, store)
 	store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Runtime: "claude-code", Dir: "/w", Prompt: "do", State: stateRunning})
 	report := func(seq int, cmd string) bool {
 		ev := []EventRow{{Seq: seq, Time: time.Now(), Type: "permission",
@@ -83,7 +99,7 @@ func TestPolicyInReports(t *testing.T) {
 		return c.applyPolicy("t-1", ev)
 	}
 
-	if report(1, "rm -rf .git") {
+	if report(1, "git push origin main") {
 		t.Fatal("a denial was left for the brain")
 	}
 	items, _ := store.inbox("t-1")
@@ -96,7 +112,7 @@ func TestPolicyInReports(t *testing.T) {
 		t.Fatalf("decision by %q", by)
 	}
 
-	if !report(2, "gh pr merge 3") {
+	if !report(2, "make deploy prod") {
 		t.Fatal("an ask was not left for the user")
 	}
 	c.notifyBrain("t-1", stateWaitingPermission)
