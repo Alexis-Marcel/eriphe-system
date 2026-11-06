@@ -37,7 +37,7 @@ import (
 //   - What happened is told the same way: a digest card follows the
 //     brain's message that read since (cardDigest).
 //
-// A task's raw permissions (a rule's ask, a command) keep their own cards,
+// A task's raw permissions (a held tool's) keep their own cards,
 // at the end of the conversation (pending); what the grid asks is a card
 // here (access_card.go).
 

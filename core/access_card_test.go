@@ -231,18 +231,6 @@ func TestHoldOfAToolWithADot(t *testing.T) {
 	}
 }
 
-// No rule lifts a Never: the proxy would refuse the call anyway.
-func TestRuleDoesNotLiftNever(t *testing.T) {
-	c := newMailCore(t, accessReadOnly)
-	c.conf().Policy = &Policy{Rules: []Rule{{Tool: "mcp__mail__*", Decision: decideAllow}}}
-	if err := c.conf().Policy.compile(); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := c.decide("mcp__mail__send", nil); got != decideDeny {
-		t.Errorf("a rule on Never = %q", got)
-	}
-}
-
 // A request whose card is decided and that nothing covers shows again as a
 // permission, rather than stay hidden behind a card that is gone.
 func TestRequestLeftByACardShowsAgain(t *testing.T) {
@@ -250,10 +238,7 @@ func TestRequestLeftByACardShowsAgain(t *testing.T) {
 	waitingTask(c, "t-1")
 	request(t, c, "t-1", "p-1", "move")
 	x := accessCard(t, c, "change")
-	c.conf().Policy = &Policy{Rules: []Rule{{Tool: "mcp__mail__move", Decision: decideAsk, Reason: "a rule now"}}}
-	if err := c.conf().Policy.compile(); err != nil {
-		t.Fatal(err)
-	}
+	setLevel(t, c, "mail", accessReadOnly)
 	if _, err := c.decideCard(context.Background(), x.ID, true, "web"); err != nil {
 		t.Fatal(err)
 	}
