@@ -101,6 +101,10 @@ func TestGitGetsAPlaceholder(t *testing.T) {
 	if a := c.credential(ctx, task, credRequest{Protocol: "https", Host: "github.com", Path: "owner/repo.git", Access: accessRead, Tool: "git"}); !strings.HasPrefix(a.Password, "ghs_") {
 		t.Fatalf("not relayed: %+v", a)
 	}
+	// The wrapper of a task started before gh's relay keeps its token.
+	if a := c.credential(ctx, task, credRequest{Host: "api.github.com", Path: "owner/repo", Access: accessWrite, Tool: ghLogTool, Relayed: relayed}); !strings.HasPrefix(a.Password, "ghs_") {
+		t.Fatalf("gh: %+v", a)
+	}
 	// A refusal stays one.
 	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "other/repo.git", Access: accessRead, Tool: "git", Relayed: relayed}); a.Decision != decideDeny || a.Password != "" {
 		t.Fatalf("other: %+v", a)
@@ -428,6 +432,19 @@ func TestGhStaysOnItsRepository(t *testing.T) {
 	}
 }
 
+// Without the App, only the tool's own token could go: gh is told why, and
+// nothing leaves.
+func TestGhNeedsTheApp(t *testing.T) {
+	c, task, svc := gitCore(t, true, lentRepo)
+	if err := currentVault().remove(githubAppVault); err != nil {
+		t.Fatal(err)
+	}
+	rec := viaRelayGh(c, task.ID, "GET", "/repos/owner/repo")
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "GitHub App") || svc.calls() != 0 {
+		t.Fatalf("%d %s, %d calls", rec.Code, rec.Body, svc.calls())
+	}
+}
+
 func TestGhRepoOf(t *testing.T) {
 	for path, want := range map[string]string{
 		"/repos/o/r":          "o/r",
@@ -453,6 +470,7 @@ func TestGhRepos(t *testing.T) {
 		access string
 	}{
 		{"", writes, []string{"o/b"}, accessWrite},
+		{"", func(repo, access string) bool { return access == accessRead || repo == "other/c" }, []string{"other/c"}, accessWrite},
 		{"o/a", writes, []string{"o/a"}, accessRead},
 		{"O/B", writes, []string{"o/b"}, accessWrite},
 		{"", func(_, access string) bool { return access == accessRead }, []string{"o/a", "o/b"}, accessRead},

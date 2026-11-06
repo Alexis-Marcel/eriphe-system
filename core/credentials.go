@@ -35,8 +35,7 @@ import (
 // token, long-lived and not limited to the repository: the user approves
 // it first. Every request is logged (credential_log) and shown in the
 // task's details. git gets a placeholder rather than the token, which goes
-// in on the way out (git_access.go); gh still gets the token, until its
-// actions go through the catalog.
+// in on the way out (git_access.go), and so does gh's, with the app only.
 //
 // A task from before resources has none kept: its repository is the one it
 // was asked to work on (spec.Repo), lent for read, and the service is lent
@@ -248,7 +247,7 @@ func decideCredential(p *Policy, req credRequest, f credFacts) credDecision {
 		case g.Access == accessWrite && g.Branch != "":
 			// Lent for write on a branch by my own (untainted) turn: that was
 			// my approval of the first push, and of the pull request gh opens
-			// from it. A push elsewhere, a merge or a release asks (policy.go).
+			// from it.
 			d.Reason = "lent for write to " + d.Repo + " on " + g.Branch
 		case g.Access == accessWrite:
 			ask, d.Reason = true, "first push to "+d.Repo+" in this task"
@@ -327,7 +326,7 @@ func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) cred
 	case decideAsk:
 		a.Permission = map[string]any{"host": d.Host, "repo": d.Repo, "access": req.Access, "tool": tool, "reason": d.Reason}
 	case decideAllow:
-		m, err := c.mintGitHub(ctx, t.ID, d.Repo, req.Access, false)
+		m, err := c.mintGitHub(ctx, t.ID, d.Repo, req.Access, tool == ghLogTool) // gh's: a task started before its relay
 		if err != nil {
 			a = credAnswer{Decision: decideDeny, Reason: "cannot give a credential: " + err.Error()}
 			source = "error"

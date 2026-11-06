@@ -107,7 +107,8 @@ var builtinDeny = []Rule{
 }
 
 var builtinAsk = []Rule{
-	// A mistake, not a script: what gh can do is its token's (git_access.go).
+	// A mistake, not a script: what gh can do is its token's, which cannot
+	// write contents (git_access.go).
 	rule("Bash", `gh\s+pr\s+merge\b`, decideAsk, "fusionner une PR reste à l'utilisateur"),
 	rule("Bash", shellBoundary+`(npm|pnpm|yarn)\s+publish|`+shellBoundary+`(cargo|twine|gem)\s+(publish|upload|push)|docker\s+push`,
 		decideAsk, "publie un paquet ou une image"),

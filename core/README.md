@@ -1136,7 +1136,7 @@ the node relays it to `POST /v1/node/tasks/{id}/credential` with its own secret 
 A repository lent for `write` on a branch makes its first push there approved, and the pull request
 gh opens from it. gh's token writes pull requests and issues, never contents: GitHub itself refuses
 it a merge, a release, a repository's settings or its secrets. A built-in ask stays on `gh pr merge`,
-for a mistake with the long-lived fallback.
+for a mistake.
 
 **git holds no token.** For a task lent a GitHub repository, the node's relay decrypts `github.com`
 as a host of an [access](../node/README.md#accesses), and `eriphe-cred` gets a placeholder where it would get the
@@ -1144,15 +1144,19 @@ token, once the decision above is made, an approval included. The token is minte
 on the way out (`git_access.go`). gh goes the same way, to `api.github.com`: its requests are not
 classified (much of it is one `POST /graphql`). Its token is for the repository a REST path names,
 which must be lent, or else for those lent, of one owner; when some may be written, for those only,
-with write rights, so that it holds nothing lent for read. A write not allowed yet gets a token that
-reads, and GitHub refuses the write:
+with write rights, so that it holds nothing lent for read. So with several repositories lent, a
+request that names none may not reach all of them. A write not allowed yet gets a token that reads,
+and GitHub refuses the write. A read with no token to be had (a public repository the App is not on)
+goes without one. gh needs the GitHub App: the tool's own token holds everything, and gh's requests
+are not classified:
 
 ```
 git → the node's relay → eriphe-core (decides, mints) → GitHub
 ```
 
 The node says which hosts a task's relay decrypts, whatever the task sent: a task started before
-this, or on an older node, still gets the token.
+this, or on an older node, still gets the token. A node older than eriphe-core takes the placeholder
+in `GH_TOKEN` for a token of the task's: its git gets no approval card, and a write not granted is refused.
 
 - **Each request is decided again**, from what it is and not from what the helper said: a push is
   `git-receive-pack`, whatever `eriphe-cred` asked for, and a placeholder proves nothing. A write

@@ -70,7 +70,7 @@ func lentGit(taskID string, list []ResourceRef) []nodeAccess {
 // says. Not so for a task started before, or on an older node: it gets its
 // token as it always did, or it could not work at all.
 func gitRelayed(req credRequest) bool {
-	return slices.Contains(req.Relayed, gitTarget)
+	return req.Tool != ghLogTool && slices.Contains(req.Relayed, gitTarget)
 }
 
 // gitCall is what a request to github.com is, for git.
@@ -177,26 +177,28 @@ func ghRepoOf(path string) string {
 	return githubRepo(parts[1] + "/" + parts[2])
 }
 
-// ghRepos are the repositories a token of gh is for, and its access: those
-// the request names, or else all those lent, of one owner as a token is;
-// those that may be written when there are any, so that a token that writes
+// ghRepos are the repositories a token of gh is for, and its access: the one
+// the request names, or else those lent, of one owner as a token is. Those
+// that may be written come first, and alone, so that a token that writes
 // holds nothing lent for read. A write not allowed yet gets a token that
 // reads, and GitHub refuses the write.
 func ghRepos(named string, lent []repoGrant, allows func(repo, access string) bool) ([]string, string) {
-	var names []string
-	for _, g := range lent {
-		switch {
-		case named != "" && !strings.EqualFold(g.Repo, named):
-		case len(names) > 0 && !strings.EqualFold(repoOwner(names[0]), repoOwner(g.Repo)):
-		case allows(g.Repo, accessRead):
-			names = append(names, g.Repo)
+	pick := func(access string) []string {
+		var names []string
+		for _, g := range lent {
+			switch {
+			case named != "" && !strings.EqualFold(g.Repo, named):
+			case len(names) > 0 && !strings.EqualFold(repoOwner(names[0]), repoOwner(g.Repo)):
+			case allows(g.Repo, access):
+				names = append(names, g.Repo)
+			}
 		}
+		return names
 	}
-	writable := slices.DeleteFunc(slices.Clone(names), func(r string) bool { return !allows(r, accessWrite) })
-	if len(writable) > 0 {
-		return writable, accessWrite
+	if names := pick(accessWrite); len(names) > 0 {
+		return names, accessWrite
 	}
-	return names, accessRead
+	return pick(accessRead), accessRead
 }
 
 // ghRequest puts gh's token in a request to api.github.com, as gitRequest
@@ -215,6 +217,11 @@ func (c *core) ghRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, uri
 		return none, false
 	}
 	facts := c.credentialFacts(t)
+	if facts.Fallback {
+		// The tool's own token holds everything, and these requests are not
+		// classified: only a token of the App, limited as lent, goes here.
+		return refuse(http.StatusForbidden, "", "gh needs Eriphe's GitHub App: create it in Settings → Tools → GitHub")
+	}
 	allows := func(repo, access string) bool {
 		req := credRequest{Protocol: "https", Host: "api.github.com", Path: repo, Access: access, Tool: ghLogTool}
 		return decideCredential(c.conf().Policy, req, facts).Decision == decideAllow
@@ -222,9 +229,15 @@ func (c *core) ghRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, uri
 	named := ghRepoOf(uri.Path)
 	repos, access := ghRepos(named, facts.Repos, allows)
 	if len(repos) == 0 {
-		return refuse(http.StatusForbidden, named, orStr(named, "GitHub")+" is not lent to this task")
+		return refuse(http.StatusForbidden, named, orStr(named, "GitHub")+" is not lent to this task, or the policy refuses it")
 	}
 	m, err := c.mintGitHubFor(r.Context(), t.ID, repos, access, true)
+	if err != nil && access == accessRead {
+		// A public repository the App is not installed on reads without one.
+		log.Printf("gh: task %s: no token for %s, going without: %v", t.ID, strings.Join(repos, ", "), err)
+		r.Header.Del("Authorization")
+		return none, true
+	}
 	if err != nil {
 		return refuse(http.StatusBadGateway, repos[0], "eriphe-core cannot get a token: "+err.Error())
 	}
