@@ -92,13 +92,6 @@ func TestDeclarativeLifecycle(t *testing.T) {
 	now := time.Now()
 	call("POST", "/v1/node/tasks/"+task.ID+"/report", nodeReport{State: stateWaitingPermission, SessionID: "s1",
 		Events: []EventRow{{Seq: 1, Time: now, Type: "permission", Data: map[string]any{"id": "p1", "tool_name": "mcp__notes__write"}}}}, nil)
-	yes := true
-	if _, err := c.answer(context.Background(), task.ID, "", "", &yes, byUser); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.answer(context.Background(), task.ID, "", "", &yes, byUser); err == nil {
-		t.Fatal("answered twice")
-	}
 	select {
 	case b := <-done:
 		// The watch woke on the report; the answer is there by now.
@@ -107,7 +100,7 @@ func TestDeclarativeLifecycle(t *testing.T) {
 			t.Fatalf("after answer = %+v", b)
 		}
 		call("POST", "/v1/node/tasks/"+task.ID+"/report", nodeReport{State: stateIdle, Delivered: b.Tasks[0].Inbox[0].Seq,
-			Events: []EventRow{{Seq: 2, Time: now, Type: "permission_answer", Data: map[string]any{"id": "p1", "allow": true}},
+			Events: []EventRow{{Seq: 2, Time: now, Type: "permission_answer", Data: map[string]any{"id": "p1", "allow": false}},
 				{Seq: 3, Time: now, Type: "text", Data: map[string]any{"text": "42 lines"}}}}, nil)
 	case <-time.After(5 * time.Second):
 		t.Fatal("the watch did not wake up")

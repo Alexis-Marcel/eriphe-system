@@ -103,7 +103,7 @@ var builtinDeny = []Rule{
 }
 
 var builtinAsk = []Rule{
-	rule("mcp__*", ``, decideAsk, "outil externe"),
+	rule("mcp__*", ``, decideAsk, "cet outil n'est pas dans le catalogue d'Eriphe"),
 }
 
 // subject is what a tool acts on, which rules match against: for an MCP
@@ -311,10 +311,20 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 		case decideAsk:
 			if t != nil && accessReason(reason) {
 				c.askTaskAccess(t, pid, tool, input, reason) // a card, once per category (access_card.go)
-			} else {
-				c.store.markUserOnly(id, pid, reason)
+				left = true
+				continue
 			}
-			left = true
+			if reason == heldReason {
+				c.store.markUserOnly(id, pid, reason) // it waits for its release, on its card
+				left = true
+				continue
+			}
+			// Not in the catalog: nothing to ask, it is not lent.
+			if !c.store.answered(id, pid) {
+				msg := "Refusé par la politique d'Eriphe : " + reason + "."
+				c.store.addInbox(id, "permission", map[string]any{"id": pid, "allow": false, "message": msg, "by": byPolicy})
+				c.store.recordDecision(id, pid, tool, input, decideDeny, byPolicy, reason)
+			}
 		default:
 			left = true
 		}

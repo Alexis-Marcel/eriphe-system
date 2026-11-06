@@ -322,11 +322,9 @@ func (c *core) brainPermissionOne(ctx context.Context, t *TaskRow, p map[string]
 			if accessReason(reason) {
 				return c.askBrainAccess(ctx, t, pid, tool, input, pending) // a card for this call (access_card.go)
 			}
-			c.store.markUserOnly(t.ID, pid, reason)
-			raw, _ := json.Marshal(input)
-			c.store.addMessage(roleBrain, fmt.Sprintf("(%s veut utiliser %s %s : %s. Autorise ou refuse dans `eriphe`, tâche %s.)",
-				c.conf().assistantName(), tool, truncate(string(raw), 400), reason, t.ID), true)
-			return nil
+			no := false // not in the catalog: nothing to ask, it is not lent
+			_, err := c.answer(ctx, t.ID, pid, "Refusé : "+reason+".", &no, byPolicy)
+			return err
 		case decideDeny:
 			no := false
 			_, err := c.answer(ctx, t.ID, pid, "Refusé par la politique d'Eriphe : "+reason+".", &no, byPolicy)
