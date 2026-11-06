@@ -486,7 +486,7 @@ func (c *core) taskTitle(id string) string {
 	if err != nil {
 		return id
 	}
-	return t.Prompt
+	return t.label()
 }
 
 // accessStartText says what a start's card asks of the grid: a sentence per

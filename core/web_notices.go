@@ -35,7 +35,7 @@ func (w *web) notice(m Message) *eventNotice {
 	}
 	n := &eventNotice{Key: "event.task." + sub[2], Title: sub[1], Task: sub[1]}
 	if t, err := w.c.store.task(sub[1]); err == nil {
-		n.Title = taskTitle(t.Prompt) // push.go
+		n.Title = taskTitle(t) // push.go
 	}
 	return n
 }

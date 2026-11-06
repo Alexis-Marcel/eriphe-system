@@ -114,17 +114,13 @@ func findLink(events []EventRow) (link, label string) {
 func (w *web) card(st *taskStatus) taskCard {
 	t := st.Task
 	repo, branch := splitDir(t.Dir)
-	title := strings.TrimSpace(t.Prompt)
-	if i := strings.IndexByte(title, '\n'); i > 0 {
-		title = title[:i]
-	}
 	link, label := findLink(st.Recent)
 	var retryAt time.Time
 	h := w.c.store.harness(t.ID)
 	if h.RetryAt > 0 {
 		retryAt = time.Unix(h.RetryAt, 0)
 	}
-	return taskCard{StopReason: h.StopReason, RetryAt: retryAt, ID: t.ID, Title: truncate(title, 110), Prompt: t.Prompt, Node: t.Node, Agent: t.Agent,
+	return taskCard{StopReason: h.StopReason, RetryAt: retryAt, ID: t.ID, Title: t.label(), Prompt: t.Prompt, Node: t.Node, Agent: t.Agent,
 		Repo: repo, Branch: branch, State: t.State, PendingReason: t.PendingReason, Link: link, LinkLabel: label,
 		Updated: t.Updated, Created: t.Created, Finished: finished(t.State), LastText: st.LastText,
 		NeedsYou: w.needsUser(st), Receipt: st.Receipt, Contract: st.Contract, Usage: w.c.store.usageOf(t.ID)}
