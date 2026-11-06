@@ -22,7 +22,7 @@ import (
 // A request of gh does not always name a repository (much of it is one POST
 // /graphql), and is not classified: what it may do is the token's, which
 // writes pull requests and issues, never contents, minted as the lend says,
-// for the repositories lent (ghRequest).
+// for the task's one repository (ghRequest).
 //
 // As for any access, what is decided is the lend: a repository, read or
 // write. What is pushed is not read. The branch lent is what the task is
@@ -68,6 +68,10 @@ type gitCall struct {
 
 // readGitCall reads a request's path.
 func readGitCall(method string, uri *url.URL) gitCall {
+	// What is forwarded is what was read: no way around it in the path.
+	if uri.RawPath != "" || slices.ContainsFunc(strings.Split(uri.Path, "/"), func(s string) bool { return s == "." || s == ".." }) {
+		return gitCall{}
+	}
 	parts := strings.SplitN(strings.TrimPrefix(uri.Path, "/"), "/", 3)
 	if len(parts) != 3 {
 		return gitCall{}
@@ -105,12 +109,21 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 	}
 	refuse := func(why string) {
 		line := truncate(oneLine(why), 300)
-		c.store.logCredential(t.ID, gitLogTool, "github.com", call.repo, call.access, decideDeny, byPolicy, "", line)
+		c.store.logAccess(t.ID, gitLogTool, "github.com", call.repo, call.access, decideDeny, byPolicy, "", line)
 		log.Printf("git: task %s: %s %s refused: %s", t.ID, r.Method, call.repo, line)
 	}
-	facts := c.credentialFacts(t)
-	if call.lfs && decideRepo(call.repo, accessWrite, facts).Decision == decideAllow {
-		call.access = accessWrite // it may be an upload: what the task may write, it may store
+	facts := c.repoFacts(t)
+	if call.lfs {
+		switch {
+		case decideRepo(call.repo, accessWrite, facts).Decision == decideAllow:
+			call.access = accessWrite // it may be an upload: what the task may write, it may store
+		case facts.Fallback:
+			// Its path does not tell an upload, and the tool's token could write.
+			why := "Large File Storage needs a write lent, or Eriphe's GitHub App"
+			refuse(why)
+			http.Error(w, why, http.StatusForbidden)
+			return none, false
+		}
 	}
 	d := decideRepo(call.repo, call.access, facts)
 	if d.Decision != decideAllow {
@@ -128,7 +141,7 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 		http.Error(w, "eriphe-core cannot get a token for "+call.repo, http.StatusBadGateway)
 		return none, false
 	}
-	c.store.logCredential(t.ID, gitLogTool, "github.com", call.repo, call.access, decideAllow, byPolicy, m.Source, d.Reason)
+	c.store.logAccess(t.ID, gitLogTool, "github.com", call.repo, call.access, decideAllow, byPolicy, m.Source, d.Reason)
 	return putGitHubToken(r, placeholder, m.Password), true
 }
 
@@ -146,11 +159,6 @@ func putGitHubToken(r *http.Request, placeholder, token string) *strings.Replace
 	return strings.NewReplacer(pairs...)
 }
 
-func repoOwner(repo string) string {
-	owner, _, _ := strings.Cut(repo, "/")
-	return owner
-}
-
 // ghRepoOf is the repository of a REST path of api.github.com, if it names one.
 func ghRepoOf(path string) string {
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
@@ -158,30 +166,6 @@ func ghRepoOf(path string) string {
 		return ""
 	}
 	return githubRepo(parts[1] + "/" + parts[2])
-}
-
-// ghRepos are the repositories a token of gh is for, and its access: the one
-// the request names, or else those lent, of one owner as a token is. Those
-// that may be written come first, and alone, so that a token that writes
-// holds nothing lent for read. A write not allowed yet gets a token that
-// reads, and GitHub refuses the write.
-func ghRepos(named string, lent []repoGrant, allows func(repo, access string) bool) ([]string, string) {
-	pick := func(access string) []string {
-		var names []string
-		for _, g := range lent {
-			switch {
-			case named != "" && !strings.EqualFold(g.Repo, named):
-			case len(names) > 0 && !strings.EqualFold(repoOwner(names[0]), repoOwner(g.Repo)):
-			case allows(g.Repo, access):
-				names = append(names, g.Repo)
-			}
-		}
-		return names
-	}
-	if names := pick(accessWrite); len(names) > 0 {
-		return names, accessWrite
-	}
-	return pick(accessRead), accessRead
 }
 
 // ghRequest puts gh's token in a request to api.github.com, as gitRequest
@@ -194,33 +178,36 @@ func (c *core) ghRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, uri
 	}
 	refuse := func(status int, repo, why string) (*strings.Replacer, bool) {
 		line := truncate(oneLine(why), 300)
-		c.store.logCredential(t.ID, ghLogTool, "api.github.com", repo, accessRead, decideDeny, byPolicy, "", line)
+		c.store.logAccess(t.ID, ghLogTool, "api.github.com", repo, accessRead, decideDeny, byPolicy, "", line)
 		log.Printf("gh: task %s: %s %s refused: %s", t.ID, r.Method, repo, line)
 		http.Error(w, why, status)
 		return none, false
 	}
-	facts := c.credentialFacts(t)
+	facts := c.repoFacts(t)
 	if facts.Fallback {
 		// The tool's own token holds everything, and these requests are not
 		// classified: only a token of the App, limited as lent, goes here.
 		return refuse(http.StatusForbidden, "", "gh needs Eriphe's GitHub App: create it in Settings → Tools → GitHub")
 	}
-	allows := func(repo, access string) bool { return decideRepo(repo, access, facts).Decision == decideAllow }
 	named := ghRepoOf(uri.Path)
-	repos, access := ghRepos(named, facts.Repos, allows)
-	if len(repos) == 0 {
+	repos := facts.Repos
+	if len(repos) != 1 || named != "" && !strings.EqualFold(named, repos[0].Repo) {
 		return refuse(http.StatusForbidden, named, orStr(named, "GitHub")+" is not lent to this task")
 	}
-	m, err := c.mintGitHubFor(r.Context(), t.ID, repos, access, true)
+	repo, access := repos[0].Repo, accessRead
+	if decideRepo(repo, accessWrite, facts).Decision == decideAllow {
+		access = accessWrite
+	}
+	m, err := c.mintGitHub(r.Context(), t.ID, repo, access, true)
 	if err != nil && access == accessRead {
 		// A public repository the App is not installed on reads without one.
-		log.Printf("gh: task %s: no token for %s, going without: %v", t.ID, strings.Join(repos, ", "), err)
+		log.Printf("gh: task %s: no token for %s, going without: %v", t.ID, repo, err)
 		r.Header.Del("Authorization")
 		return none, true
 	}
 	if err != nil {
-		return refuse(http.StatusBadGateway, repos[0], "eriphe-core cannot get a token: "+err.Error())
+		return refuse(http.StatusBadGateway, repo, "eriphe-core cannot get a token: "+err.Error())
 	}
-	c.store.logCredential(t.ID, ghLogTool, "api.github.com", strings.Join(repos, ", "), access, decideAllow, byPolicy, m.Source, truncate(r.Method+" "+uri.Path, 200))
+	c.store.logAccess(t.ID, ghLogTool, "api.github.com", repo, access, decideAllow, byPolicy, m.Source, truncate(r.Method+" "+uri.Path, 200))
 	return putGitHubToken(r, placeholder, m.Password), true
 }

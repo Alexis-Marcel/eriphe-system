@@ -60,7 +60,7 @@ const (
 	accessTargetHeader = "Eriphe-Access-Target"
 	accessAuthHeader   = "Eriphe-Access-Authorization"
 
-	// accessLogTool names an access's uses in the credential log.
+	// accessLogTool names an access's uses in the access log.
 	accessLogTool = "access"
 )
 
@@ -470,7 +470,7 @@ func (c *core) injectAccess(t *TaskRow, names []string, target string, r *http.R
 		deny := func(why error) error {
 			// The path is the task's: one short line in what watches it.
 			line := truncate(oneLine(why.Error()), 300)
-			c.store.logCredential(t.ID, accessLogTool, host, name, r.Method, decideDeny, byPolicy, "", line)
+			c.store.logAccess(t.ID, accessLogTool, host, name, r.Method, decideDeny, byPolicy, "", line)
 			log.Printf("access: task %s: %s %s refused: %s", t.ID, r.Method, host, line)
 			return why
 		}
@@ -498,7 +498,7 @@ func (c *core) injectAccess(t *TaskRow, names []string, target string, r *http.R
 			_, original, _ := strings.Cut(value, " ")
 			pairs = append(pairs, encoded, original)
 		}
-		c.store.logCredential(t.ID, accessLogTool, host, name, r.Method, decideAllow, byPolicy, "", truncate(oneLine(uri.Path), 200))
+		c.store.logAccess(t.ID, accessLogTool, host, name, r.Method, decideAllow, byPolicy, "", truncate(oneLine(uri.Path), 200))
 	}
 	return strings.NewReplacer(pairs...), nil
 }
@@ -541,7 +541,8 @@ func (c *core) checkAgentEnv(list []ResourceRef, agentEnv map[string]string) err
 }
 
 // checkLentAccesses refuses what one task cannot be lent: two accesses
-// sharing a variable, and an SSH access with no host key to pin.
+// sharing a variable, one on the variable of its repository, and an SSH
+// access with no host key to pin.
 func (c *core) checkLentAccesses(list []ResourceRef) error {
 	byEnv := map[string]string{}
 	for _, e := range list {
@@ -549,6 +550,9 @@ func (c *core) checkLentAccesses(list []ResourceRef) error {
 			continue
 		}
 		a := c.conf().Accesses[e.Ref]
+		if a.Env == gitAccessEnv && slices.ContainsFunc(list, isGitHubRepo) {
+			return fmt.Errorf("access %s uses the variable %s, which holds the placeholder of the repository lent: rename it", e.Ref, gitAccessEnv)
+		}
 		if a.isSSH() {
 			if a.HostKey == "" {
 				return fmt.Errorf("access %s has no host key yet: the user tests it first, in Settings → Tools", e.Ref)

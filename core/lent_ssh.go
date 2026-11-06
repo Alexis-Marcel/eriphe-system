@@ -71,9 +71,8 @@ const (
 	// sshDialTimeout is how long a task's session waits for the machine.
 	sshDialTimeout = 10 * time.Second
 
-	sshOpKeys    = "keys"
-	sshOpSign    = "sign"
-	sshOpConnect = "connect"
+	sshOpKeys = "keys"
+	sshOpSign = "sign"
 
 	// sshUserAuthRequest is SSH_MSG_USERAUTH_REQUEST (RFC 4252).
 	sshUserAuthRequest = 50
@@ -254,10 +253,9 @@ func (a Access) pinned(hostKey []byte) bool {
 
 // sshRequest is what a node asks for a task.
 type sshRequest struct {
-	Op     string `json:"op"`
-	Key    []byte `json:"key,omitempty"`    // sign: the public key, as the agent lists it
-	Data   []byte `json:"data,omitempty"`   // sign: what to sign
-	Target string `json:"target,omitempty"` // connect: host:port
+	Op   string `json:"op"`
+	Key  []byte `json:"key,omitempty"`  // sign: the public key, as the agent lists it
+	Data []byte `json:"data,omitempty"` // sign: what to sign
 }
 
 type sshKey struct {
@@ -303,8 +301,6 @@ func (c *core) taskSSHHandler() http.Handler {
 			a.Keys = c.sshKeys(t)
 		case sshOpSign:
 			a.Signature, err = c.sshSign(t, req.Key, req.Data)
-		case sshOpConnect:
-			err = c.sshConnect(t, req.Target)
 		default:
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
@@ -397,7 +393,7 @@ func (c *core) sshUse(t *TaskRow, name, host, what string, why error) error {
 		decision, reason = decideDeny, truncate(oneLine(why.Error()), 300)
 		log.Printf("access: task %s: %s on %s refused: %s", t.ID, what, host, reason)
 	}
-	c.store.logCredential(t.ID, accessLogTool, host, name, accessSSH, decision, byPolicy, "", reason)
+	c.store.logAccess(t.ID, accessLogTool, host, name, accessSSH, decision, byPolicy, "", reason)
 	return why
 }
 

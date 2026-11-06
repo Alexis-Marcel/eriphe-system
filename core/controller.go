@@ -65,7 +65,7 @@ type core struct {
 	routeMu     sync.Mutex       // one escalation pass at a time (route_send.go)
 
 	github *githubClient // Eriphe's GitHub App (github_app.go)
-	creds  credCache     // credentials minted for tasks, while they last (credentials.go)
+	tokens tokenCache    // tokens minted for tasks, while they last (repo_lend.go)
 
 	catalogMu sync.Mutex // one change of the catalog at a time
 	dyn       dynamicCatalog
@@ -261,13 +261,8 @@ type runRequest struct {
 	// something (contract.go); none for a search or a read.
 	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something: objective (required), constraints, checks, evidence, verify, budget; leave it out for a search or a read. Approval is never part of it: the policy decides"`
 
-	// The old fields, read into resources (normalizeResources).
-	Repo    string   `json:"repo,omitempty" jsonschema:"legacy: use resources {kind: repo}"`
-	Ref     string   `json:"ref,omitempty" jsonschema:"legacy: use resources {kind: repo, base}"`
-	Branch  string   `json:"branch,omitempty" jsonschema:"legacy: use resources {kind: repo, branch}"`
-	Dir     string   `json:"dir,omitempty" jsonschema:"legacy: use resources {kind: repo, dir}"`
-	Tools   []string `json:"tools,omitempty" jsonschema:"legacy: use resources {kind: tool}"`
-	Folders []string `json:"folders,omitempty" jsonschema:"legacy: use resources {kind: folder}"`
+	// Tools is an assistant's grant, never a brain's call.
+	Tools []string `json:"-"`
 
 	// askStart: what the task will need of the user's is asked at launch,
 	// on a card, and the task waits for the answer (task_start.go); taint
@@ -333,7 +328,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	folders := lent.Folders
 	if r.Contract != nil {
 		// Its checks name only what the task is lent (contract.go).
-		if err := r.Contract.checkLent(lent.Repo != nil || r.Repo != "", folderNames(folders)); err != nil {
+		if err := r.Contract.checkLent(lent.Repo != nil, folderNames(folders)); err != nil {
 			return nil, err
 		}
 	}
@@ -370,9 +365,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		return nil, err
 	}
 	// The node still gets the spec fields of before, derived from the resources.
-	dir, repo, base, branch := r.Dir, "", "", ""
+	var dir, repo, base, branch string
 	if lent.Repo != nil {
-		dir, repo, base, branch = orStr(lent.Repo.Dir, r.Dir), lent.Repo.Ref, lent.Repo.Base, lent.Repo.Branch
+		dir, repo, base, branch = lent.Repo.Dir, lent.Repo.Ref, lent.Repo.Base, lent.Repo.Branch
 	}
 	where := dir
 	if repo != "" {
@@ -414,7 +409,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	spec.Command = agent.Command
 	spec.RepoSkills = c.repoSkills(ctx, lent.Repo)
 	spec.Untrusted = taskUntrusted(kind, r.taint)
-	spec.Identity, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the node fetches the task
+	spec.AgentEnv, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the node fetches the task
 	spec.Folders = nil                                                                 // the same
 	if len(folders) > 0 {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders, c.resultsOn(folders[0].Node)))

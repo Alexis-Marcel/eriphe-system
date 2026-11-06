@@ -139,7 +139,7 @@ func TestTaskEnv(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://192.0.2.7:2375")
 	n := newNode(options{callbackURL: "http://eriphe-node:8790", listenAddr: "172.17.0.2:8790", egressPort: "8791"})
 	task := &Task{ID: "t-1", secret: "s3cret", Spec: TaskSpec{Repo: "x/y", TZ: "Europe/Paris",
-		Identity: map[string]string{"GH_TOKEN": "tok", "MODEL": "from-identity"}}}
+		AgentEnv: map[string]string{"GH_TOKEN": "tok", "MODEL": "from-identity"}}}
 	env := n.taskEnv(task, map[string]string{"MODEL": "from-agent", "AGENT": "a"})
 	for k, want := range map[string]string{
 		"ERIPHE_REPO": "https://github.com/x/y.git", "TZ": "Europe/Paris", "AGENT": "a", "MODEL": "from-identity",

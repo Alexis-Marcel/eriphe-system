@@ -26,13 +26,10 @@ import (
 //	{"kind": "drive-folder", "ref": "Factures",   "access": "read"}
 //	{"kind": "tool",         "ref": "github.get_*"}
 //	{"kind": "access",       "ref": "npm"}
-//	{"kind": "file",         "ref": "att_…"}
 //
-// The old fields of run_task (repo, ref, branch, dir; tools; folders) are
-// read into the same list at the edge (normalizeResources). The list is
-// kept with the task (tasks.resources); the old columns are still written,
-// and the node still gets its spec fields (repo, folders…), derived from it.
-// The same list decides the task's credentials (credentials.go) and what
+// The list is kept with the task (tasks.resources), and the node gets its
+// spec fields (repo, folders…), derived from it.
+// The same list decides the task's credentials (repo_lend.go) and what
 // a tainted turn may not lend (taintedResources).
 
 // The kinds of resources.
@@ -42,11 +39,10 @@ const (
 	resDriveFolder = "drive-folder"
 	resTool        = "tool"
 	resAccess      = "access"
-	resFile        = "file"
 )
 
 // accessDrop is the middle of the scale (accessRead and accessWrite are in
-// credentials.go).
+// repo_lend.go).
 const accessDrop = "drop"
 
 var accessRank = map[string]int{accessRead: 1, accessDrop: 2, accessWrite: 3}
@@ -61,16 +57,15 @@ var resourceKinds = map[string][]string{
 	resDriveFolder: {accessRead, accessDrop},
 	resTool:        {accessRead, accessWrite},
 	resAccess:      {}, // it has no scale: what it can do is the provider's (access.go)
-	resFile:        {accessRead},
 }
 
 // ResourceRef is one thing lent to a task. Branch, Base and Dir are a
 // repository's only.
 type ResourceRef struct {
 	Kind   string `json:"kind" jsonschema:"repo, folder, drive-folder, tool, access or file"`
-	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or drive-folder its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access its name in list_tools' accesses; file an attachment id (att_…)"`
+	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or drive-folder its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access its name in list_tools' accesses"`
 	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); drive-folder: read or drop; at most the folder's own level; tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
-	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create; with access write, the first push to it needs no approval"`
+	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create and push to; with access write, the user is asked on a card unless it is their own clean turn"`
 	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
 	Dir    string `json:"dir,omitempty" jsonschema:"repo: the working directory inside the repository, if not its root"`
 	// TrustSkills loads the agent skills a repository carries even when it
@@ -101,10 +96,9 @@ func (r ResourceRef) String() string {
 	return s
 }
 
-// normalizeResources reads a request's resources and its old fields into
-// one list, checked for its form only: what each entry names is checked
-// by resolveResources. Old folders and tools get an empty access, filled
-// there: a folder's own access, the tools' annotations.
+// normalizeResources reads a request's resources into one list, checked for
+// its form only: what each entry names is checked by resolveResources. An
+// assistant's tools get an empty access, filled there from their annotations.
 func normalizeResources(r runRequest) ([]ResourceRef, error) {
 	var out []ResourceRef
 	for i, in := range r.Resources {
@@ -114,7 +108,7 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 			TrustSkills: in.TrustSkills, Hold: in.Hold}
 		rights, ok := resourceKinds[e.Kind]
 		if !ok {
-			return nil, fmt.Errorf("resource %d: kind %q is not one of repo, folder, drive-folder, tool, access, file", i+1, in.Kind)
+			return nil, fmt.Errorf("resource %d: kind %q is not one of repo, folder, drive-folder, tool, access", i+1, in.Kind)
 		}
 		if e.Ref == "" {
 			return nil, fmt.Errorf("resource %d (%s): ref is required", i+1, e.Kind)
@@ -136,20 +130,9 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 		}
 		out = append(out, e)
 	}
-	// The old fields. A repository lent through them was always "first
-	// push asks": that is read here, whose writes ask the user.
-	if repo := strings.TrimSpace(r.Repo); repo != "" {
-		out = append(out, ResourceRef{Kind: resRepo, Ref: repo, Access: accessRead,
-			Branch: strings.TrimSpace(r.Branch), Base: strings.TrimSpace(r.Ref), Dir: strings.TrimSpace(r.Dir)})
-	}
 	for _, g := range r.Tools {
 		if g = strings.TrimSpace(g); g != "" {
 			out = append(out, ResourceRef{Kind: resTool, Ref: g})
-		}
-	}
-	for _, name := range r.Folders {
-		if name = strings.TrimSpace(name); name != "" {
-			out = append(out, ResourceRef{Kind: resFolder, Ref: name})
 		}
 	}
 	repos := 0
@@ -208,14 +191,6 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 			}
 			e.Ref = f.Name
 			own := resourceAccess(f.Access)
-			if e.Access == "" {
-				// The old folders field lent a folder with its own access,
-				// drop at most: managing it is asked for in so many words.
-				e.Access = own
-				if e.Access == accessWrite {
-					e.Access = accessDrop
-				}
-			}
 			if !atLeast(own, e.Access) {
 				return nil, fmt.Errorf("folder %q is opened to Eriphe for %s only: it cannot be lent %s", f.Name, f.Access, e.Access)
 			}
@@ -253,12 +228,6 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 			if _, ok := c.conf().Accesses[e.Ref]; !ok {
 				return nil, errNoAccess(e.Ref)
 			}
-		case resFile:
-			id := strings.TrimPrefix(e.Ref, "attachment:")
-			if _, err := c.store.attachment(id); err != nil {
-				return nil, fmt.Errorf("file %q: no such attachment in the conversation", e.Ref)
-			}
-			return nil, fmt.Errorf("file %s: attachments are not lent to tasks yet: read it with read_attachment and put what the task needs in its prompt", id)
 		}
 		// The same thing twice: once, with the higher access.
 		if i := slices.IndexFunc(out.List, func(o ResourceRef) bool { return o.key() == e.key() }); i >= 0 {
@@ -353,10 +322,10 @@ func unmarshalResources(raw string) []ResourceRef {
 }
 
 // taintedResources refuses, during a tainted turn of the brain, a task
-// lent anything that writes: a write or drop entry, a Drive folder (its
-// files server is lent whole for now). Reads still go, and tools and
-// accesses: what they may do then is asked on a card at launch
-// (access_card.go). My own message
+// lent a folder that writes, or a Drive folder (its files server is lent
+// whole for now). Reads still go, and tools, accesses and a write to a GitHub
+// repository: what they may do then is asked on a card at launch
+// (access_card.go, task_start.go). My own message
 // does not lift it: the brain asks me, and starts the task in the turn of
 // my answer.
 func (c *core) taintedResources(r runRequest) error {

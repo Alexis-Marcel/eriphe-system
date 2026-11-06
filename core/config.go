@@ -28,9 +28,6 @@ type Config struct {
 	Agents    map[string]Agent    `json:"agents"`               // what the brain can pick for a task
 	// The agent of a task that names none.
 	DefaultAgent string `json:"default_agent"`
-	// Ignored: the long-lived credentials of older versions, replaced by
-	// accesses (lent_access.go). Only said at start, if still there.
-	LegacyIdentities json.RawMessage `json:"identities,omitempty"`
 	// The brain: the built-in assistant eriphe (assistants.go). Only the
 	// file's: the merged configuration has it in Assistants.
 	Brain *BrainConfig `json:"brain,omitempty"`
@@ -197,9 +194,6 @@ func loadConfig(path string) (*Config, error) {
 const unnamedUser = "l'utilisateur"
 
 func (c *Config) complete(where string) error {
-	if len(c.LegacyIdentities) > 0 && string(c.LegacyIdentities) != "null" {
-		log.Printf("%s: identities are no longer read: declare an access in Settings → Tools, or under accesses", where)
-	}
 	if c.Listen == "" {
 		c.Listen = "127.0.0.1:8800"
 	}

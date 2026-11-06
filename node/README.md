@@ -306,7 +306,7 @@ A probe for another system is a `sessionProbe`.
 | `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `folders` (the shared folders: `{id, name, access, missing, problem, program}`, never a path; see Folders it cannot use), `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine), `syncthing` (its Syncthing's `device_id`, see Copies) |
 | `GET /v1/shares` | the folders shared on this machine: `{folders: [{id, name, access, missing, problem, program}]}`, never a path (see Shares) |
 | `DELETE /v1/shares/{id}` | take a folder off the list (eriphe-core may restrict, never add); the tasks holding it are stopped |
-| `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, identity?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex` or `acp` (with `command`) |
+| `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, agent_env?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex` or `acp` (with `command`) |
 | `GET /v1/tasks`, `GET /v1/tasks/{id}` | state, agent session, pending permissions |
 | `GET /v1/tasks/{id}/events?after=N&wait=S` | events after N, long polling |
 | `POST /v1/tasks/{id}/messages` | next user turn `{text}` (when the agent is idle) |
@@ -424,9 +424,6 @@ listener stays direct), and `NODE_USE_ENV_PROXY=1` (Node's own `fetch` ignores t
 otherwise). The relay:
 
 - knows the task by its credentials (`Proxy-Authorization: Basic`), refused once the task is over;
-- applies the task's rule, `egress` in its spec from eriphe-core: `{"mode": "internet"}` (the
-  default, also when the spec has none: the public Internet), `{"mode": "none"}`, and `allow`, a
-  list of hosts that restricts it (`github.com`, `*.npmjs.org` for any name under it);
 - connects to ports 80 and 443 only (HTTPS through `CONNECT`, plain HTTP forwarded without the
   task's credentials): git over HTTPS works, git over SSH does not;
 - resolves names itself and dials only public addresses: never loopback, RFC 1918, link-local
@@ -592,7 +589,7 @@ its ACP kind (`execute` → `Bash`, `edit`/`delete`/`move` → `Edit`, `read` �
 `url` (from the raw input, the call's location or its title).
 
 The MCP servers are the ones Claude Code gets (`runtime_mcp.go`): the spec's `mcp_servers` (the
-brain's `eriphe-core`; a `${NAME}` in a URL or header is read from the task's identity) and the
+brain's `eriphe-core`; a `${NAME}` in a URL or header is read from the task's environment) and the
 catalog servers at `<callback>/mcp/<name>` with the task's secret as bearer, but for the node's
 `eriphe_node` (`approve`), which only Claude Code's `--permission-prompt-tool` needs. They go as
 ACP's `McpServerHttp` (`{"type":"http","name","url","headers":[{"name","value"}]}`), so only to

@@ -419,7 +419,7 @@ func TestFolderTaskSeveralFolders(t *testing.T) {
 	if len(p.Hosts) != 0 || !errors.As(err, &waiting) || !strings.Contains(err.Error(), "up to date") || !strings.Contains(err.Error(), "nas") {
 		t.Fatalf("waits for the copy: %+v %v", p, err)
 	}
-	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Folders: []string{"Docs", "Media"}, Node: "mac"}); err == nil || !strings.Contains(err.Error(), "nor copied") {
+	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Docs", "Media"), Node: "mac"}); err == nil || !strings.Contains(err.Error(), "nor copied") {
 		t.Fatalf("pinned on a machine without them all: %v", err)
 	}
 	// No machine holds them all: not lent together.

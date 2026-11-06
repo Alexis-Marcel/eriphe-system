@@ -150,8 +150,8 @@ func TestAccessInjectsTheSecret(t *testing.T) {
 		t.Errorf("body = %q", svc.body)
 	}
 	// The log has the use, never the secret.
-	entries, _ := c.store.credentialLog(task.ID, 10)
-	if len(entries) != 1 || entries[0].Tool != accessLogTool || entries[0].Repo != "npm" || entries[0].Host != accessHost || entries[0].Decision != decideAllow {
+	entries, _ := c.store.accessLog(task.ID, 10)
+	if len(entries) != 1 || entries[0].Tool != accessLogTool || entries[0].Target != "npm" || entries[0].Host != accessHost || entries[0].Decision != decideAllow {
 		t.Fatalf("log = %+v", entries)
 	}
 	if strings.Contains(entries[0].Reason, accessSecret) {
@@ -170,7 +170,7 @@ func TestAccessNeverSendsTheNodesSecret(t *testing.T) {
 		t.Errorf("Authorization = %q", v)
 	}
 	// It asked for no secret: nothing to log.
-	if entries, _ := c.store.credentialLog(task.ID, 10); len(entries) != 0 {
+	if entries, _ := c.store.accessLog(task.ID, 10); len(entries) != 0 {
 		t.Errorf("log = %+v", entries)
 	}
 }
@@ -289,7 +289,7 @@ func TestAccessOnApprovalAsksAtLaunch(t *testing.T) {
 	if svc.calls() != 0 {
 		t.Fatal("it went out before the yes")
 	}
-	entries, _ := c.store.credentialLog(task.ID, 10)
+	entries, _ := c.store.accessLog(task.ID, 10)
 	if len(entries) != 1 || entries[0].Decision != decideDeny {
 		t.Errorf("log = %+v", entries)
 	}
@@ -400,7 +400,7 @@ func TestAccessRulesKeepToTheirWord(t *testing.T) {
 		t.Errorf("override = %q", v)
 	}
 	viaRelay(c, "nas", task.ID, accessHost+":443", "GET", "/x%0aforged", placeholderAuth(task.ID), nil)
-	entries, _ := c.store.credentialLog(task.ID, 1)
+	entries, _ := c.store.accessLog(task.ID, 1)
 	if len(entries) != 1 || entries[0].Decision != decideDeny || strings.Contains(entries[0].Reason, "\n") {
 		t.Errorf("log = %+v", entries)
 	}

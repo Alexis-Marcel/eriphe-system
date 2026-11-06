@@ -46,18 +46,6 @@ func TestGuardControl(t *testing.T) {
 	}
 }
 
-func TestHostAllowed(t *testing.T) {
-	allow := []string{"github.com", "*.npmjs.org"}
-	for host, want := range map[string]bool{
-		"github.com": true, "GitHub.com.": true, "api.github.com": false, "evilgithub.com": false,
-		"registry.npmjs.org": true, "a.b.npmjs.org": true, "npmjs.org": false, "npmjs.org.evil.com": false,
-	} {
-		if got := hostAllowed(allow, host); got != want {
-			t.Errorf("hostAllowed(%s) = %v", host, got)
-		}
-	}
-}
-
 // testRelay is a relay with a fake resolver, whose public addresses all
 // lead to upstream, and one task, t-1, with secret s.
 type testRelay struct {
@@ -76,7 +64,7 @@ type testRelay struct {
 }
 
 func newTestRelay(t *testing.T, upstream string, resolve func(n int, host string) []string) *testRelay {
-	r := &testRelay{rule: EgressRule{Mode: egressInternet}}
+	r := &testRelay{}
 	listener := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "node listener") }))
 	t.Cleanup(listener.Close)
 	seen := map[string]bool{}
@@ -311,16 +299,6 @@ func TestEgressRules(t *testing.T) {
 	if code, _, _ := r.connect(t, "github.com:22", auth); code != http.StatusForbidden {
 		t.Errorf("port 22: %d", code)
 	}
-	r.rule = EgressRule{Mode: egressInternet, Allow: []string{"github.com", "*.npmjs.org"}}
-	for target, want := range map[string]int{"github.com:443": 200, "registry.npmjs.org:443": 200, "example.com:443": 403} {
-		if code, _, _ := r.connect(t, target, auth); code != want {
-			t.Errorf("allowlist %s: %d", target, code)
-		}
-	}
-	r.rule = EgressRule{Mode: egressNone}
-	if code, _, _ := r.connect(t, "github.com:443", auth); code != http.StatusForbidden {
-		t.Errorf("mode none: %d", code)
-	}
 }
 
 // A self-hosted model server on the LAN: its declared host:port is
@@ -336,7 +314,7 @@ func TestEgressModelServer(t *testing.T) {
 		return []string{"140.82.121.4"}
 	})
 	auth := basic("t-1", "s")
-	r.rule = EgressRule{Mode: egressInternet, Endpoints: []string{"192.168.1.20:11434", "LLM.lan.:8000", "evil.lan:80",
+	r.rule = EgressRule{Endpoints: []string{"192.168.1.20:11434", "LLM.lan.:8000", "evil.lan:80",
 		"127.0.0.1:11434", "169.254.169.254:80", "[fe80::1]:11434", "0.0.0.0:11434", "224.0.0.1:11434"}}
 	// The declared server, by address and by name, CONNECT and plain HTTP.
 	if code, _, _ := r.connect(t, "192.168.1.20:11434", auth); code != http.StatusOK {
@@ -371,11 +349,6 @@ func TestEgressModelServer(t *testing.T) {
 	if code, _, _ := r.connect(t, "github.com:443", auth); code != http.StatusOK {
 		t.Errorf("internet: %d", code)
 	}
-	// A task without egress reaches no model server either.
-	r.rule.Mode = egressNone
-	if code, _, _ := r.connect(t, "192.168.1.20:11434", auth); code != http.StatusForbidden {
-		t.Errorf("mode none: %d", code)
-	}
 }
 
 func TestEndpointControl(t *testing.T) {
@@ -405,11 +378,11 @@ func TestEgressAuthorizer(t *testing.T) {
 	n := newNode(options{})
 	task := &Task{ID: "t-1", secret: "s", State: stateRunning}
 	n.tasks["t-1"] = task
-	if et, ok := n.egressAuthorizer("t-1", "s"); !ok || et.rule.Mode != egressInternet {
+	if et, ok := n.egressAuthorizer("t-1", "s"); !ok || len(et.rule.Endpoints) != 0 {
 		t.Errorf("default rule: %v %+v", ok, et)
 	}
-	task.Spec.Egress = &EgressRule{Mode: egressNone}
-	if et, ok := n.egressAuthorizer("t-1", "s"); !ok || et.rule.Mode != egressNone {
+	task.Spec.Egress = &EgressRule{Endpoints: []string{"192.0.2.10:11434"}}
+	if et, ok := n.egressAuthorizer("t-1", "s"); !ok || len(et.rule.Endpoints) != 1 {
 		t.Errorf("spec rule: %+v", et)
 	}
 	if _, ok := n.egressAuthorizer("t-1", "x"); ok {

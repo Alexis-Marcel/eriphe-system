@@ -145,7 +145,7 @@ another header, stays a placeholder; a request that carries none goes as it is. 
 grid, since Eriphe sees the use of the secret and not what the program does with it. `approval` is
 asked on the card of a task's start, once for the task, by the user only; `free` holds on a clean
 start, and asks on any other, as a tool's Free writes do. An access lent with `hold` does nothing
-until its release. Each use, and each refusal, is in the `credential_log`, shown in the task's
+until its release. Each use, and each refusal, is in the `access_log`, shown in the task's
 details. It ends with its task.
 
 What this does not do:
@@ -156,7 +156,7 @@ What this does not do:
 - The node sees an access's requests, though not its secret. A client that pins its certificates
   fails on that access, and so does gRPC (HTTP/1.1 only), and a presigned URL cannot be made from a
   placeholder.
-- Each use is one row of `credential_log`, written before the request goes, and the table is not
+- Each use is one row of `access_log`, written before the request goes, and the table is not
   pruned: a large install through an access makes many rows, and the task's details show the latest.
 - It stops a secret from being stolen, not from being used: the real limit is set at the provider.
 - What a task reads through an access is external content, and does not taint the task: Eriphe does
@@ -183,15 +183,12 @@ the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (p
   eriphe-core decides and dials that exact address, carrying SSH's encrypted bytes. So a node need
   not reach the machine. A machine eriphe-core cannot reach answers 502, and the node dials it
   itself. Each connection, login
-  and refusal goes in `credential_log` (tool `access`). A task lent an SSH access no longer gets the
+  and refusal goes in `access_log` (tool `access`). A task lent an SSH access no longer gets the
   built-in ask on `ssh`, `scp`, `sftp` and `rsync`: the access was decided, and reaches that machine only.
 - **What it does not do.** SSH lends everything the remote account can do: Eriphe sees the logins,
   not the commands, and `sudo` is the machine's to set. Use a dedicated account. The host key is
   pinned in the task's own `ssh` configuration, which a task can change: it protects a task from
   another machine, not a machine from the task.
-
-`identities`, the long-lived secrets handed to a task as they were, are gone: `core.json`'s are
-ignored, with a line in the log. An HTTP token becomes an access; declare it with the same variable.
 
 **Harness cards.** What each runtime can do, as the node drives it, is one entry of `harnesses`
 (`harnesses.go`): MCP servers, how it takes a system prompt (a flag, developer instructions, an
@@ -236,8 +233,7 @@ brain, through OpenCode:
 - When a node fetches a task of such an agent, eriphe-core adds `model_endpoint` (`base_url`, and
   `key_env` with a key) to its spec and that one `host:port` to a copy of its egress rule
   (`endpoints`): the node's relay lets the task reach that server, even on the LAN or another
-  port, and nothing else of the LAN (`node/README.md`, Egress). A task without egress (`none`)
-  gets no endpoint.
+  port, and nothing else of the LAN (`node/README.md`, Egress).
 - Nothing is assumed of the models but tool calling. Pick one made for it (Qwen 3, Llama 3.1+,
   Mistral…), and give it enough context: Ollama's default is small, and its documentation
   recommends 16k to 32k tokens for tool calling (`OLLAMA_CONTEXT_LENGTH=32768`, or `num_ctx` in a
@@ -299,8 +295,7 @@ the lending node → the server:               <model-server>/v1/{path}
   secrets stop here: the server gets the provider's key (`secret`), if any, which is never lent
   to a task.
 - The task's spec carries `model_endpoint: {"relay": true}`, no address and no key; its egress
-  rule is unchanged (its node is reached directly, as for its catalog servers), so it works with
-  egress `none` too.
+  rule is unchanged (its node is reached directly, as for its catalog servers).
 - Answers stream through as they come (`FlushInterval: -1` at every hop): a chat completion's
   server-sent events arrive token by token.
 - The lending machine must be connected: otherwise the task's request fails with `502` ("the
@@ -410,7 +405,7 @@ account](#google-accounts-gmail-calendar-drive) Google refused, until it is reco
 
 **Grants.** A task is lent catalog tools as [resources](#resources) of kind `tool`: a server name
 (all its tools) or `server.tool`, where the tool may hold `*` globs (`notion`, `github.get_*`,
-`github.list_issues`); the old `tools` field of `run_task` still works. The grant is stored on
+`github.list_issues`). The grant is stored on
 the task. The brain's is `brain.tools` plus, without configuration, every read-only tool of the
 servers trusted for their annotations (see the brain). Catalog tools need an agent whose runtime
 takes MCP servers.
@@ -657,7 +652,7 @@ whatever address it dials) and one client certificate per node.
 | `list_agents` | agents, when to use each, and whether a node can run them now |
 | `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
 | `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
-| `run_task` | start a task: prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo); the old fields (`repo/ref/branch/dir`, `tools`, `folders`, `identities`) still work |
+| `run_task` | start a task: prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read`, `drop` or `manage`), `max`, `copyable`, where a task finds it, and `machines`: every machine holding it (its own, then its copies), each `online` and `up_to_date` or not; a task may run on any up to date |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
@@ -1027,17 +1022,11 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 | `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
 | `drive-folder` | a Google Drive folder, by name | `read`, `drop` (at most the folder's own) | for now, the files server whole (it reaches every Drive folder given to Eriphe, each with its own access) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
-| `file` | an attachment of the conversation (`att_…`) | `read` | not yet: refused with a clear error |
 
 The access defaults to `read` (for a tool, to what its annotations say). Each entry is checked
 against what the user opened: an unknown folder or server is refused, and so is a `drop` on a
-folder opened for reading, or a `write` on a folder not at `manage`. The old fields are read into
-the same list: `repo/ref/branch/dir` become a `repo` entry with access `read` (its pushes ask, as
-they always did), `tools` become `tool` entries, `folders` become `folder` entries with the
-folder's own access, `drop` at most. The list is kept with the
-task (`tasks.resources`, JSON; empty for tasks from before it); the old columns (`tools`, `folders`,
-`dir`) are still written, and the node still gets its spec fields (`repo`, `folders`…), derived from
-the list.
+folder opened for reading, or a `write` on a folder not at `manage`. The list is kept with the task
+(`tasks.resources`, JSON), and the node gets its spec fields (`repo`, `folders`…), derived from it.
 
 **A repository's skills** (`.claude/skills`, `.agents/skills`, `.opencode/skills`: instructions
 and scripts its agents load by themselves) load only from the user's own repositories
@@ -1057,8 +1046,7 @@ resources, what it needs is granted, it is logged in `decisions` (`release mail.
 brain is told the answer. An entry lent outright beside a held one wins.
 
 **On a tainted turn** (the brain read external content), `run_task` refuses a folder with `write` or
-`drop`, `trust_skills`, a Drive folder (its files server is lent whole for now) and any legacy
-`identities`: the brain asks the user and starts the task in the turn of their answer. Reads still
+`drop`, `trust_skills` and a Drive folder (its files server is lent whole for now): the brain asks the user and starts the task in the turn of their answer. Reads still
 go, and tools, accesses and a GitHub repository for `write`: what they may do is asked on a card at
 launch, Free included.
 
@@ -1153,7 +1141,7 @@ its push. When that takes the user's yes, the task does not start: it is kept `p
 `desired` `held` (no node is given it, no placement moves it, its `pending_reason` says why) and the
 user gets one card in the conversation (kind `taskstart`, [conversation cards](#workspace-web)),
 « Pour pousser `eriphe/x` sur owner/repo, il me faut ton accord. ». Oui keeps the approval
-(`credential_grants`, logged "approved at launch": a write to that repository, by git or gh, for the
+(`repo_grants`, logged "approved at launch": a write to that repository, by git or gh, for the
 rest of the task) and lets the task go; Non stops it and tells the brain. Like every card, only the
 user's click or a plain yes or no of theirs decides it, never the brain (`answer_task` has nothing
 to answer on a held task; `stop_task` cancels it). A task authorised in advance for a watch needs no
@@ -1167,9 +1155,9 @@ rights until ten minutes before it ends. Without the app, git goes with the GitH
 token (**fallback**): it stays in eriphe-core too, each request is checked against the repository
 lent, and the log says so. gh cannot use it, and the Tools page says to create the app.
 
-**The log.** Every request is kept (`credential_log`: time, task, tool, host, repository, access,
-decision, by whom, source, reason), and shown in the task's details ("Accès demandés") and by `GET /v1/tasks/{id}/credentials`. Approvals are in
-`credential_grants`.
+**The log.** Every request is kept (`access_log`: time, task, tool, host, repository, access,
+decision, by whom, source, reason), and shown in the task's details ("Accès demandés") and by `GET /v1/tasks/{id}/access-log`. Approvals are in
+`repo_grants`.
 
 **What it does not stop.** What is lent is usable: a task talked into something by a page it read
 can push to the branch it was lent, and the limit is then the token and the repository's protection
@@ -1897,7 +1885,7 @@ handlers are thin layers over the methods behind the MCP tools.
 | `GET /v1/tasks?all=1` | worker tasks, the most recent first; active ones only without `all`; the brain too while it waits for a permission |
 | `GET /v1/tasks/{id}?events=N` | the task's status (as `task_status`) with its last N events (20) |
 | `GET /v1/tasks/{id}/events?after=N&wait=S` | events after seq N, waiting up to S seconds (max 120) for new ones; a finished task answers at once |
-| `GET /v1/tasks/{id}/credentials` | what the task used, as [GitHub in a task] says(#github-in-a-task), the latest first: time, tool, host, repo, access, decision, by whom, source |
+| `GET /v1/tasks/{id}/access-log` | what the task used, as [GitHub in a task](#github-in-a-task) says, the latest first: time, tool, host, repo, access, decision, by whom, source |
 | `POST /v1/tasks/{id}/answer` | `{reply, allow}`: allow or deny the pending permission (`allow` set), or reply to an idle task |
 | `POST /v1/tasks/{id}/stop` | stop the task's agent |
 
@@ -2733,7 +2721,7 @@ safe place: without it the vault does not open. A key that does not open what th
 is refused at start (and the vault stays closed).
 
 Every field that names a secret file also takes `vault:<name>`: `token_file`, a provider's
-`secret`, an identity's `file`, a brain MCP server's `token_file`:
+`secret`, a brain MCP server's `token_file`:
 
 ```json
 "providers": {"openrouter": {"kind": "openrouter-api", "secret": "vault:openrouter"}}

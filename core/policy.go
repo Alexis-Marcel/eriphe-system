@@ -96,7 +96,7 @@ var builtinDeny = []Rule{
 	rule("Bash", shellBoundary+`rm\s+([^;&|]*\s)?(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\s([^;&|]*\s)?['"]?/work/folders|`+
 		shellBoundary+`rm\s+([^;&|]*\s)?['"]?/work/folders[^;&|]*\s(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(\s|$|[;&|])`,
 		decideDeny, "suppression récursive interdite dans un dossier prêté (rm -r)"),
-	rule("Bash", `git\s+push\b[^;&|]*(\s|:)(main|master)(\s|$|[;&|])`, decideDeny, "pousser sur main est interdit : pousse une branche"),
+	rule("Bash", `git\s+push\b[^;&|]*(\s|:|refs/heads/)(main|master)(\s|$|[;&|'")])`, decideDeny, "pousser sur main est interdit : pousse une branche"),
 	rule("Bash", `git\s+push\b[^;&|]*(\s--force\b|\s-f\b|\s--force-with-lease\b|\s\+\S)`, decideDeny, "forcer un push est interdit"),
 	rule("Bash", `\$\{?(`+secretVars+`)\b|/proc/[^/\s]+/environ|`+shellBoundary+`(printenv|env|export\s+-p|set)\s*($|[;&|>])|\.credentials\.json|eriphe-codex|codex/auth\.json|git\s+config\b[^;&|]*credential`,
 		decideDeny, "lire les secrets de la tâche est interdit"),
@@ -326,7 +326,7 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 // container: its own tools (shell, files, web), not a lent catalog tool.
 // The container is the boundary: what leaves it goes through
 // the node's mounts (a folder's level), its egress filter and the
-// credentials eriphe-core lends (credentials.go), never through the shell
+// credentials eriphe-core lends (repo_lend.go), never through the shell
 // rules above, which only stop mistakes. So what the policy left undecided
 // there is allowed, without waking the brain.
 func inContainer(tool string) bool {

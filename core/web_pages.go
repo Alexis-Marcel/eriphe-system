@@ -335,13 +335,13 @@ func (w *web) handleBrainRetry(rw http.ResponseWriter, r *http.Request, s *sessi
 
 // taskDetail is a task's drawer.
 type taskDetail struct {
-	Card        taskCard
-	Events      []EventRow
-	Credentials []CredentialEntry // what it asked for (credentials.go)
-	Grants      []accessNeed      // the tool accesses the user granted it (access_card.go)
-	Perm        *permView
-	Flash       string
-	OK          bool
+	Card    taskCard
+	Events  []EventRow
+	Reached []AccessEntry // what it used (repo_lend.go)
+	Grants  []accessNeed  // the tool accesses the user granted it (access_card.go)
+	Perm    *permView
+	Flash   string
+	OK      bool
 }
 
 func (w *web) detail(id string) (*taskDetail, error) {
@@ -350,7 +350,7 @@ func (w *web) detail(id string) (*taskDetail, error) {
 		return nil, err
 	}
 	d := &taskDetail{Card: w.card(st)}
-	d.Credentials, _ = w.c.store.credentialLog(id, 20)
+	d.Reached, _ = w.c.store.accessLog(id, 20)
 	d.Grants = w.c.store.accessGrants(id)
 	for _, e := range st.Recent {
 		switch e.Type {

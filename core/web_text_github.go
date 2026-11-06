@@ -1,7 +1,7 @@
 package main
 
 // The words of Settings → Tools → GitHub (web_github.go) and of a task's
-// credentials (credentials.go).
+// credentials (repo_lend.go).
 
 func init() {
 	for lang, words := range githubStrings {
@@ -95,9 +95,6 @@ var githubStrings = map[string]map[string]string{
 		"cred.title":              "Accès demandés",
 		"cred.allow":              "prêté",
 		"cred.deny":               "refusé",
-		"cred.ask":                "demandé",
-		"cred.none":               "aucun service",
-		"cred.error":              "erreur",
 		"cred.byuser":             "ta réponse",
 		"cred.fallback":           "Avec le jeton de l'outil GitHub (pas d'app GitHub).",
 	},
@@ -184,9 +181,6 @@ var githubStrings = map[string]map[string]string{
 		"cred.title":              "Access asked for",
 		"cred.allow":              "lent",
 		"cred.deny":               "refused",
-		"cred.ask":                "asked",
-		"cred.none":               "no service",
-		"cred.error":              "error",
 		"cred.byuser":             "your answer",
 		"cred.fallback":           "With the GitHub tool's own token (no GitHub App).",
 	},

@@ -593,8 +593,12 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 	cs := connectTo(t, newMCPServer(c))
 	run := func(tools ...string) *mcp.CallToolResult {
 		args := map[string]any{"prompt": "do it"}
-		if tools != nil {
-			args["tools"] = tools
+		var lent []map[string]any
+		for _, ref := range tools {
+			lent = append(lent, map[string]any{"kind": resTool, "ref": ref})
+		}
+		if lent != nil {
+			args["resources"] = lent
 		}
 		out, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "run_task", Arguments: args})
 		if err != nil {

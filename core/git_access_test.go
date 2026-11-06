@@ -28,16 +28,20 @@ const pushBody = "0000PACKdata"
 
 func TestReadGitCall(t *testing.T) {
 	for raw, want := range map[string]gitCall{
-		"GET /o/r.git/info/refs?service=git-upload-pack":  {repo: "o/r", access: accessRead},
-		"GET /o/r/info/refs?service=git-upload-pack":      {repo: "o/r", access: accessRead},
-		"GET /o/r.git/info/refs":                          {repo: "o/r", access: accessRead},
-		"POST /o/r.git/git-upload-pack":                   {repo: "o/r", access: accessRead},
-		"GET /o/r.git/info/refs?service=git-receive-pack": {repo: "o/r", access: accessWrite},
-		"POST /o/r.git/git-receive-pack":                  {repo: "o/r", access: accessWrite},
-		"POST /o/r.git/info/lfs/objects/batch":            {repo: "o/r", access: accessRead, lfs: true},
-		"GET /o/r/archive/main.zip":                       {},
-		"GET /login":                                      {},
-		"PUT /o/r.git/git-receive-pack":                   {},
+		"GET /o/r.git/info/refs?service=git-upload-pack":        {repo: "o/r", access: accessRead},
+		"GET /o/r/info/refs?service=git-upload-pack":            {repo: "o/r", access: accessRead},
+		"GET /o/r.git/info/refs":                                {repo: "o/r", access: accessRead},
+		"POST /o/r.git/git-upload-pack":                         {repo: "o/r", access: accessRead},
+		"GET /o/r.git/info/refs?service=git-receive-pack":       {repo: "o/r", access: accessWrite},
+		"POST /o/r.git/git-receive-pack":                        {repo: "o/r", access: accessWrite},
+		"POST /o/r.git/info/lfs/objects/batch":                  {repo: "o/r", access: accessRead, lfs: true},
+		"GET /o/r/archive/main.zip":                             {},
+		"GET /login":                                            {},
+		"POST /o/r/info/lfs/../../../v/x/git-receive-pack":      {},
+		"POST /o/r/./git-receive-pack":                          {},
+		"POST /o/r/info/lfs/%2e%2e/%2e%2e/v/x/git-receive-pack": {},
+		"POST /o/r/info%2Flfs/objects/batch":                    {},
+		"PUT /o/r.git/git-receive-pack":                         {},
 	} {
 		method, target, _ := strings.Cut(raw, " ")
 		uri, err := url.ParseRequestURI(target)
@@ -109,8 +113,8 @@ func TestGitTokenGoesInOnTheWayOut(t *testing.T) {
 	if echo := rec.Header().Get("X-Echo"); strings.Contains(echo, base64.StdEncoding.EncodeToString([]byte("x-access-token:ghs_x"))) || echo != gitAuth(task.ID) {
 		t.Errorf("the answer holds %q", echo)
 	}
-	log, _ := c.store.credentialLog(task.ID, 10)
-	if len(log) == 0 || log[0].Tool != "git" || log[0].Repo != "owner/repo" || log[0].Decision != decideAllow || log[0].Source != sourceApp {
+	log, _ := c.store.accessLog(task.ID, 10)
+	if len(log) == 0 || log[0].Tool != "git" || log[0].Target != "owner/repo" || log[0].Decision != decideAllow || log[0].Source != sourceApp {
 		t.Fatalf("log %+v", log)
 	}
 }
@@ -148,7 +152,7 @@ func TestGitDecidesEachRequest(t *testing.T) {
 		t.Fatal("it reached GitHub")
 	}
 	// Lent for read, no yes makes it a write: the lend is what is decided.
-	c.store.grantCredential(task.ID, "owner/repo", accessWrite)
+	c.store.grantRepo(task.ID, "owner/repo", accessWrite)
 	if rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/git-receive-pack", auth, pushBody, nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("lent for read: %d %s", rec.Code, rec.Body)
 	}
@@ -163,7 +167,7 @@ func TestGitWriteIsDecidedAtLaunch(t *testing.T) {
 	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushBody, nil); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "user's approval") {
 		t.Fatalf("not approved: %d %s", rec.Code, rec.Body)
 	}
-	c.store.grantCredential(task.ID, "owner/repo", accessWrite)
+	c.store.grantRepo(task.ID, "owner/repo", accessWrite)
 	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushBody, nil); rec.Code != 200 {
 		t.Fatalf("approved: %d %s", rec.Code, rec.Body)
 	}
@@ -358,9 +362,22 @@ func TestGitLFSWritesWhereTheTaskMayWrite(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	log, _ := c.store.credentialLog(task.ID, 10)
-	if len(log) == 0 || log[0].Access != accessWrite {
+	log, _ := c.store.accessLog(task.ID, 10)
+	if len(log) == 0 || log[0].Action != accessWrite {
 		t.Fatalf("log %+v", log)
+	}
+}
+
+// Without the App the token could write anything: what cannot be told from a
+// read is not one.
+func TestGitLFSWithoutTheApp(t *testing.T) {
+	c, task, svc := gitCore(t, false, ResourceRef{Kind: resRepo, Ref: "owner/repo", Access: accessRead})
+	currentVault().remove(githubAppVault)
+	currentVault().set("server.github.token", "github_pat_long_lived")
+	calls := svc.calls()
+	rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/info/lfs/objects/batch", gitAuth(task.ID), "{}", nil)
+	if rec.Code != http.StatusForbidden || svc.calls() != calls {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 }
 
@@ -398,8 +415,8 @@ func TestGhTokenGoesInOnTheWayOut(t *testing.T) {
 	if perms, _ := json.Marshal(f.mints()[0]["permissions"]); string(perms) != `{"checks":"read","contents":"read","issues":"write","pull_requests":"write"}` {
 		t.Fatalf("permissions: %s", perms)
 	}
-	log, _ := c.store.credentialLog(task.ID, 10)
-	if len(log) == 0 || log[0].Tool != ghLogTool || log[0].Repo != "owner/repo" || log[0].Access != accessWrite || log[0].Decision != decideAllow {
+	log, _ := c.store.accessLog(task.ID, 10)
+	if len(log) == 0 || log[0].Tool != ghLogTool || log[0].Target != "owner/repo" || log[0].Action != accessWrite || log[0].Decision != decideAllow {
 		t.Fatalf("log %+v", log)
 	}
 }
@@ -448,26 +465,3 @@ func TestGhRepoOf(t *testing.T) {
 }
 
 // A token that writes holds only what may be written; one owner per token.
-func TestGhRepos(t *testing.T) {
-	lent := []repoGrant{{Repo: "o/a", Access: accessRead}, {Repo: "o/b", Access: accessWrite}, {Repo: "other/c", Access: accessWrite}}
-	writes := func(repo, access string) bool { return access == accessRead || repo == "o/b" }
-	for _, r := range []struct {
-		named  string
-		allows func(string, string) bool
-		repos  []string
-		access string
-	}{
-		{"", writes, []string{"o/b"}, accessWrite},
-		{"", func(repo, access string) bool { return access == accessRead || repo == "other/c" }, []string{"other/c"}, accessWrite},
-		{"o/a", writes, []string{"o/a"}, accessRead},
-		{"O/B", writes, []string{"o/b"}, accessWrite},
-		{"", func(_, access string) bool { return access == accessRead }, []string{"o/a", "o/b"}, accessRead},
-		{"o/elsewhere", writes, nil, accessRead},
-		{"", func(string, string) bool { return false }, nil, accessRead},
-	} {
-		repos, access := ghRepos(r.named, lent, r.allows)
-		if !slices.Equal(repos, r.repos) || access != r.access {
-			t.Errorf("%q: %v %s", r.named, repos, access)
-		}
-	}
-}

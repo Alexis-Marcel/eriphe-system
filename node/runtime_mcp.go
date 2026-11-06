@@ -28,7 +28,7 @@ func mcpServersFor(callback string, t *Task) ([]mcpServer, error) {
 	spec := t.Spec
 	var out []mcpServer
 	for name, def := range spec.MCPServers {
-		s, err := parseMCPServer(name, def, spec.Identity)
+		s, err := parseMCPServer(name, def, spec.AgentEnv)
 		if err != nil {
 			return nil, err
 		}

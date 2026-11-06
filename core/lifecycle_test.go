@@ -63,16 +63,16 @@ func TestDeclarativeLifecycle(t *testing.T) {
 		Tasks []nodeAssignment `json:"tasks"`
 	}
 
-	task, err := c.runTask(context.Background(), runRequest{Prompt: "count the lines", Repo: "owner/repo"})
+	task, err := c.runTask(context.Background(), runRequest{Prompt: "count the lines", Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var a assignments
 	call("GET", "/v1/node/assignments?rev=0&wait=0", nil, &a)
 	if len(a.Tasks) != 1 || a.Tasks[0].Desired != desiredRunning || a.Tasks[0].Spec.Prompt != "count the lines" ||
-		a.Tasks[0].Spec.Identity["CLAUDE_CODE_OAUTH_TOKEN"] != "tok" || a.Tasks[0].Spec.Model != "sonnet" ||
+		a.Tasks[0].Spec.AgentEnv["CLAUDE_CODE_OAUTH_TOKEN"] != "tok" || a.Tasks[0].Spec.Model != "sonnet" ||
 		a.Tasks[0].Spec.TZ != "Europe/Paris" || a.Tasks[0].Spec.AppendSystemPrompt != workerVoice(defaultDisplayName) ||
-		a.Tasks[0].Spec.Egress == nil || a.Tasks[0].Spec.Egress.Mode != "internet" {
+		a.Tasks[0].Spec.Egress == nil {
 		t.Fatalf("assignment = %+v", a)
 	}
 	var stored string
@@ -184,7 +184,7 @@ func TestSelfHostedAssignment(t *testing.T) {
 	}
 	spec := a.Tasks[0].Spec
 	if spec.Model != "selfhosted/qwen3:8b" || spec.ModelEndpoint == nil || spec.ModelEndpoint.BaseURL != "http://192.0.2.10:11434/v1" ||
-		spec.ModelEndpoint.KeyEnv != "" || len(spec.Identity) != 0 || spec.Egress == nil || spec.Egress.Mode != "internet" ||
+		spec.ModelEndpoint.KeyEnv != "" || len(spec.AgentEnv) != 0 || spec.Egress == nil ||
 		len(spec.Egress.Endpoints) != 1 || spec.Egress.Endpoints[0] != "192.0.2.10:11434" {
 		t.Fatalf("spec %+v, endpoint %+v, egress %+v", spec, spec.ModelEndpoint, spec.Egress)
 	}
