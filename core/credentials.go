@@ -18,7 +18,7 @@ import (
 
 // Credentials on demand. A task asks for the access it needs when it needs
 // it, through the standard extension points of its tools: eriphe-cred is
-// git's credential helper and gh's wrapper in every task (node/cred). It
+// git's credential helper in every task (node/cred). It
 // asks the task's node, which asks eriphe-core:
 //
 //	POST /v1/node/tasks/{id}/credential   {protocol, host, path, access, tool}   (node secret)
@@ -327,7 +327,7 @@ func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) cred
 	case decideAsk:
 		a.Permission = map[string]any{"host": d.Host, "repo": d.Repo, "access": req.Access, "tool": tool, "reason": d.Reason}
 	case decideAllow:
-		m, err := c.mintGitHub(ctx, t.ID, d.Repo, req.Access, tool == "gh")
+		m, err := c.mintGitHub(ctx, t.ID, d.Repo, req.Access, false)
 		if err != nil {
 			a = credAnswer{Decision: decideDeny, Reason: "cannot give a credential: " + err.Error()}
 			source = "error"

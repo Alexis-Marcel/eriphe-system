@@ -169,3 +169,22 @@ func TestFolderNames(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// The placeholder of a task's access to GitHub is no token of its own: git
+// stays with eriphe-cred, which can wait for the user's approval.
+func TestGHPlaceholderLeavesGitToItsHelper(t *testing.T) {
+	task := &Task{ID: "t-1", secret: "s3cret", Spec: TaskSpec{Accesses: []TaskAccess{
+		{Name: "github-api", Hosts: []string{"api.github.com:443"}, Env: "GH_TOKEN", Placeholder: "eriphe-git-t-1"}}}}
+	env := map[string]string{"GH_TOKEN": "eriphe-git-t-1"}
+	if ownGitToken(task, env) {
+		t.Fatal("the placeholder taken for a token")
+	}
+	if !ownGitToken(task, map[string]string{"GH_TOKEN": "ghp_given"}) || ownGitToken(task, map[string]string{}) {
+		t.Fatal("a token given to the task")
+	}
+	for name, script := range map[string]string{"entrypoint": entrypoint, "save": saveWorkScript} {
+		if strings.Contains(script, `[ -z "$GH_TOKEN" ]`) {
+			t.Errorf("%s reads GH_TOKEN to choose git's credentials", name)
+		}
+	}
+}

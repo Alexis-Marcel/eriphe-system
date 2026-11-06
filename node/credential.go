@@ -10,8 +10,8 @@ import (
 )
 
 // Credentials on demand. A task's standard tools ask for the access they
-// need when they need it, through eriphe-cred (git's credential helper, gh's
-// wrapper), which calls this node's task listener with the task's own secret:
+// need when they need it, through eriphe-cred (git's credential helper),
+// which calls this node's task listener with the task's own secret:
 //
 //	POST /v1/task/credential   {protocol, host, path, access}  (task secret)
 //

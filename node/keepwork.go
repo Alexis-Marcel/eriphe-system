@@ -29,7 +29,7 @@ const keptDir = "kept"
 // branches no remote has), pushed=1 when the push went through, left=N
 // (those still not on a remote), and the push's own words when it failed.
 const saveWorkScript = `cd /work/repo 2>/dev/null || { echo "ahead=0"; exit 0; }
-if [ -z "$GH_TOKEN" ] && [ -n "$ERIPHE_CRED_URL" ] && [ -x ` + injectDir + `/bin/eriphe-cred ]; then
+if [ -z "$ERIPHE_GIT_OWN_TOKEN" ] && [ -n "$ERIPHE_CRED_URL" ] && [ -x ` + injectDir + `/bin/eriphe-cred ]; then
   export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=` + injectDir + `/bin/eriphe-cred \
     GIT_CONFIG_KEY_1=credential.useHttpPath GIT_CONFIG_VALUE_1=true
 fi

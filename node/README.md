@@ -528,7 +528,7 @@ among its [accesses](#accesses), so git's `password` is a placeholder, and the t
 eriphe-core; the node never sees it.
 
 Every task gets `ERIPHE_CRED_URL` (`<callback-url>/v1/task/credential`) and `ERIPHE_TASK_SECRET`.
-Its entrypoint makes git use the helper when it is there and the task has no `GH_TOKEN` identity:
+Its entrypoint makes git use the helper when it is there and the task has no token of its own in `GH_TOKEN` (the placeholder of its access to GitHub is not one):
 `GIT_CONFIG_COUNT=2`, `credential.helper=/opt/eriphe/bin/eriphe-cred`,
 `credential.useHttpPath=true`, before the clone (a private repository clones through it too).
 

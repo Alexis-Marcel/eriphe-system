@@ -70,7 +70,7 @@ func lentGit(taskID string, list []ResourceRef) []nodeAccess {
 // says. Not so for a task started before, or on an older node: it gets its
 // token as it always did, or it could not work at all.
 func gitRelayed(req credRequest) bool {
-	return req.Tool != "gh" && slices.Contains(req.Relayed, gitTarget)
+	return slices.Contains(req.Relayed, gitTarget)
 }
 
 // gitCall is what a request to github.com is, for git.
