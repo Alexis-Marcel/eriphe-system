@@ -287,6 +287,16 @@ func TestToolPageExceptionsAndLocked(t *testing.T) {
 		strings.Contains(body, `name="shortcut"`) {
 		t.Fatalf("a tool of the file: %s", body)
 	}
+	// Its exceptions are a grid like the one above, with a fourth choice:
+	// a radio per value, its category's checked, nothing to change on a tool of the file.
+	for _, value := range []string{"", gridFree, gridApproval, gridNever} {
+		if !strings.Contains(body, `<input type="radio" name="exception-create_issue" value="`+value+`"`) {
+			t.Errorf("no exception radio for %q", value)
+		}
+	}
+	if !strings.Contains(body, `value="" aria-label="create_issue : Comme sa catégorie" checked disabled>`) || strings.Contains(body, `<select name="exception-`) {
+		t.Errorf("exceptions: %s", body)
+	}
 	before := c.conf().Servers["github"]
 	if _, _, h := tw.post("/settings/tools/github/access", url.Values{"grid-send": {gridFree}}, csrf); h.Get("HX-Redirect") != "" {
 		t.Fatal("a tool of the file was changed")
