@@ -135,7 +135,6 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 	if err != nil {
 		return out, nil, err
 	}
-	away := w.brainAway()
 	for _, t := range tasks {
 		if finished(t.State) && len(out.Done) >= 6 {
 			continue
@@ -150,7 +149,7 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 			continue
 		}
 		out.Active = append(out.Active, card)
-		for _, p := range w.shownPermissions(st, away) {
+		for _, p := range w.shownPermissions(st) {
 			input, _ := p["input"].(map[string]any)
 			tool := fmt.Sprint(p["tool_name"])
 			pid := fmt.Sprint(p["id"])
@@ -190,31 +189,17 @@ func (w *web) needsUser(st *taskStatus) bool {
 	return false
 }
 
-// shownPermissions are the pending requests of a task the user is shown:
-// the ones that are theirs (by the policy, handed over by the assistant, or
-// left by it at the end of its turn: lend.go), and any while the assistant
-// is away (off, or stopped by an error). What the assistant answers between
-// itself and its tasks is not the user's to see; a task's own page still
-// shows them all.
-func (w *web) shownPermissions(st *taskStatus, away bool) []map[string]any {
+// shownPermissions are the pending requests of a task the user answers here:
+// all of them, but for those a card of the conversation asks.
+func (w *web) shownPermissions(st *taskStatus) []map[string]any {
 	var out []map[string]any
 	for _, p := range st.PendingPermissions {
 		pid := fmt.Sprint(p["id"])
-		if w.c.store.answered(st.Task.ID, pid) || w.c.accessAsked(st.Task.ID, pid) {
-			continue // a card of the conversation asks it
-		}
-		if away || w.c.store.userOnly(st.Task.ID, pid) != "" {
+		if !w.c.store.answered(st.Task.ID, pid) && !w.c.accessAsked(st.Task.ID, pid) {
 			out = append(out, p)
 		}
 	}
 	return out
-}
-
-// brainAway tells whether the assistant cannot answer its tasks now: not
-// set up, off, or stopped by an error (an account out of credit…).
-func (w *web) brainAway() bool {
-	s := w.brainState()
-	return (s != "" && s != "thinking") || w.c.brainErrorOpen() > 0
 }
 
 // hasPending tells whether a task still waits for that permission.

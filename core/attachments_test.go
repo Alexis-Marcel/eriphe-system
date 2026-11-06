@@ -302,12 +302,9 @@ func TestReadAttachmentImage(t *testing.T) {
 	if !ok || im.MIMEType != "image/png" || !bytes.Equal(im.Data, img) {
 		t.Fatalf("image: %+v", res.Content[1])
 	}
-	// Reading it taints the turn: no allowing, no lending tools that act.
+	// Reading it taints the turn: no lending tools that act.
 	if tainted := c.turnTaint(); !containsStr(tainted, "read_attachment") {
 		t.Fatalf("taint: %v", tainted)
-	}
-	if err := c.taintedAllow("t-brain", "p1"); err == nil {
-		t.Fatal("a tainted turn allowed a permission")
 	}
 	d, err := c.decideBrainWrite(kindFact, "", scanResult{})
 	if err != nil || d.Status != memProposed {

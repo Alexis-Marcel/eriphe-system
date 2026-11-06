@@ -531,13 +531,16 @@ func (c *core) status(id string, n int) (*taskStatus, error) {
 // deny, with an optional message) or the agent's question (a new turn). The
 // answer goes to the task's inbox, which its node delivers. permission names
 // the request answered; it may be empty when only one is pending. by says
-// who answers: some permissions are the user's alone.
+// who answers: the policy or the user, never the brain, which only replies.
 func (c *core) answer(ctx context.Context, id, permission, reply string, allow *bool, by string) (string, error) {
 	st, err := c.status(id, 0)
 	if err != nil {
 		return "", err
 	}
 	if len(st.PendingPermissions) > 0 || permission != "" {
+		if by == byBrain {
+			return "", fmt.Errorf("a permission is never yours to answer: it is %s's, on a card", c.conf().User)
+		}
 		var p map[string]any
 		for _, q := range st.PendingPermissions {
 			if permission == "" || fmt.Sprint(q["id"]) == permission {
@@ -560,11 +563,6 @@ func (c *core) answer(ctx context.Context, id, permission, reply string, allow *
 		pid := fmt.Sprint(p["id"])
 		if reason := c.store.userOnly(id, pid); reason != "" && by != byUser {
 			return "", fmt.Errorf("this permission is %s's decision alone (%s): relay it, do not answer it", c.conf().User, reason)
-		}
-		if by == byBrain && *allow {
-			if err := c.taintedAllow(id, pid); err != nil {
-				return "", err
-			}
 		}
 		if err := c.store.addInbox(id, "permission", map[string]any{"id": pid, "allow": *allow, "message": reply, "by": by}); err != nil {
 			return "", err

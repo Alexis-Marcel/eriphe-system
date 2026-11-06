@@ -10,7 +10,7 @@ import (
 // A small model behind an OpenAI-compatible server sometimes writes the
 // tool call it means to make as its answer, instead of making it:
 //
-//	eriphe-core_answer_task {"task_id":"…","allow":true}
+//	eriphe-core_answer_task {"task_id":"…","reply":"oui"}
 //
 // Such a reply is never shown to the user: it is logged, and the brain is
 // asked once to call the tool instead (brainToolCallText).

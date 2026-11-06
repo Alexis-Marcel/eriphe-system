@@ -604,17 +604,6 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 	c.turn.start(1, 1, 0)
 	c.brainCalledCatalog("b-1", "github", "get_issue")
 	wait("t-1", "p1")
-	yes := true
-	_, err := c.answer(ctx, "t-1", "p1", "", &yes, byBrain)
-	if err == nil || !strings.Contains(err.Error(), "forwarded to Sam") {
-		t.Fatalf("tainted allow = %v", err)
-	}
-	if items, _ := c.store.inbox("t-1"); len(items) != 0 || c.store.userOnly("t-1", "p1") == "" {
-		t.Fatalf("not forwarded to me: %+v", items)
-	}
-	if _, err := c.answer(ctx, "t-1", "p1", "", &yes, byUser); err != nil {
-		t.Fatal(err)
-	}
 	for _, tools := range [][]string{{"github"}, {"github.create_issue"}, {"notes"}} {
 		if out := run(tools...); out.IsError || !strings.Contains(resultText(out), "approval to start") {
 			t.Fatalf("tainted run_task with %v = %s", tools, resultText(out))
@@ -637,10 +626,6 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 	}
 
 	c.turn.start(2, 2, 0)
-	wait("t-2", "p2")
-	if _, err := c.answer(ctx, "t-2", "p2", "", &yes, byBrain); err != nil {
-		t.Fatalf("clean allow = %v", err)
-	}
 	if out := run("github"); out.IsError {
 		t.Fatalf("clean run_task = %s", resultText(out))
 	}

@@ -13,7 +13,7 @@ import (
 var instructions = `Eriphe's control plane. You delegate work to agents running as tasks on nodes (machines).
 Pick the agent of each task from list_agents, by what it is good at; empty means the default one.
 Write each task prompt so it stands alone: the agent does not see this conversation.
-After run_task, call task_status with wait (e.g. 120) rather than polling: it returns as soon as the task needs you or ends. A task in waiting_permission needs allow or deny through answer_task.
+After run_task, call task_status with wait (e.g. 120) rather than polling: it returns as soon as the task needs you or ends. A task in waiting_permission waits for the user, on a card: you have nothing to answer.
 A task in idle has finished its turn: read last_text, then either answer its question with answer_task,
 or stop_task when the work is done. Never invent a task's result: read it with task_status.
 Everything a task is lent goes in run_task's resources, one entry {kind, ref, access} per thing, access read < drop < write, the least it needs:
@@ -139,27 +139,25 @@ func newMCPServer(c *core) *mcp.Server {
 		})
 
 	type answerIn struct {
-		TaskID       string `json:"task_id"`
-		PermissionID string `json:"permission_id,omitempty" jsonschema:"the permission answered (from its event); needed when the task waits for several"`
-		Reply        string `json:"reply,omitempty" jsonschema:"answer to the agent's question, or the reason given with a permission decision"`
-		Allow        *bool  `json:"allow,omitempty" jsonschema:"for a task waiting for a permission: true to allow, false to deny"`
+		TaskID string `json:"task_id"`
+		Reply  string `json:"reply,omitempty" jsonschema:"answer to the agent's question"`
 		// Checks fix a misconfigured contract (contract.go).
 		Checks []taskCheck `json:"checks,omitempty" jsonschema:"to fix a misconfigured contract of an idle task: all its checks, replacing the contract's; they run when its next turn ends (reply optional)"`
 		// Release asks the user to release tools lent held back (access_card.go).
 		Release []string `json:"release,omitempty" jsonschema:"tools or accesses the task was lent held back (run_task resources with hold), as their ref there (mail.move): the user is asked on a card, and only their yes authorizes them"`
 	}
-	tool(s, "answer_task", "Answer what a task waits for: allow or deny its pending permission, or reply to its question; with checks, fix its contract's misconfigured checks; with release, ask the user on a card to release the tools it was lent held back.",
+	tool(s, "answer_task", "Answer what a task waits for: reply to its question; with checks, fix its contract's misconfigured checks; with release, ask the user on a card to release the tools it was lent held back.",
 		func(ctx context.Context, in answerIn) (map[string]string, error) {
 			if len(in.Release) > 0 {
 				res, err := c.releaseTools(in.TaskID, in.Release)
-				if err != nil || in.Reply == "" && in.Allow == nil && in.Checks == nil {
+				if err != nil || in.Reply == "" && in.Checks == nil {
 					return map[string]string{"result": res}, err
 				}
 				var more string
 				if in.Checks != nil {
 					more, err = c.fixChecks(ctx, in.TaskID, in.Checks, in.Reply)
 				} else {
-					more, err = c.answer(ctx, in.TaskID, in.PermissionID, in.Reply, in.Allow, byBrain)
+					more, err = c.answer(ctx, in.TaskID, "", in.Reply, nil, byBrain)
 				}
 				if err != nil {
 					return map[string]string{"result": res}, fmt.Errorf("%s, but: %w", res, err)
@@ -170,7 +168,7 @@ func newMCPServer(c *core) *mcp.Server {
 				res, err := c.fixChecks(ctx, in.TaskID, in.Checks, in.Reply)
 				return map[string]string{"result": res}, err
 			}
-			res, err := c.answer(ctx, in.TaskID, in.PermissionID, in.Reply, in.Allow, byBrain)
+			res, err := c.answer(ctx, in.TaskID, "", in.Reply, nil, byBrain)
 			return map[string]string{"result": res}, err
 		})
 
