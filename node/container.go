@@ -13,9 +13,21 @@ import (
 
 func containerName(t *Task) string { return "eriphe-task-" + t.ID }
 
+// repoToolsScript installs what a lent repository needs and the image lacks:
+// git, and gh for its pull requests and issues. No repository, neither.
+const repoToolsScript = `if [ -n "$ERIPHE_REPO" ]; then
+  tools=""
+  command -v git >/dev/null 2>&1 || tools="git"
+  command -v gh >/dev/null 2>&1 || tools="$tools gh"
+  if [ -n "$tools" ] && command -v apt-get >/dev/null 2>&1; then
+    echo "eriphe: installing $tools" >&2
+    { apt-get update -qq && apt-get install -y -qq $tools; } >&2 || echo "eriphe: could not install $tools" >&2
+  fi
+fi`
+
 // The container puts the injected agent first in PATH, makes the cache's
 // apt directories, writes the bundle of a task with accesses (egress_access.go), sets up ssh and its agent for SSH accesses (egress_ssh.go), clones the repository if asked (once: /work is kept across
-// restarts; git is installed first if the image lacks it), makes what it
+// restarts; a repository's tools are installed first if the image lacks them), makes what it
 // writes group-writable when it has folders (the user's group shares
 // them), asks the node for the toolchains the repository names and puts
 // them first in PATH (toolchain.go), then becomes the agent its runtime names. Nothing it prints
@@ -28,11 +40,8 @@ cd /work
 if [ -n "$ERIPHE_FOLDERS" ]; then umask 002; fi
 ` + accessBundleScript + `
 ` + sshAccessScript + `
+` + repoToolsScript + `
 if [ -n "$ERIPHE_REPO" ] && [ ! -d repo ]; then
-  if ! command -v git >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
-    echo "eriphe: installing git" >&2
-    { apt-get update -qq && apt-get install -y -qq git; } >&2
-  fi
   git clone --quiet ${ERIPHE_REF:+--branch "$ERIPHE_REF"} "$ERIPHE_REPO" repo >&2
   cd repo
   if [ -n "$ERIPHE_BRANCH" ]; then git checkout --quiet -B "$ERIPHE_BRANCH" >&2; fi
