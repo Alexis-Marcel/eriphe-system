@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -100,8 +101,8 @@ func TestGitGetsAPlaceholder(t *testing.T) {
 	if a := c.credential(ctx, task, credRequest{Protocol: "https", Host: "github.com", Path: "owner/repo.git", Access: accessRead, Tool: "git"}); !strings.HasPrefix(a.Password, "ghs_") {
 		t.Fatalf("not relayed: %+v", a)
 	}
-	// gh keeps its token, with no right to the contents.
-	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: accessWrite, Tool: "gh", Relayed: relayed}); !strings.HasPrefix(a.Password, "ghs_") {
+	// The wrapper of a task started before gh's relay keeps its token.
+	if a := c.credential(ctx, task, credRequest{Host: "api.github.com", Path: "owner/repo", Access: accessWrite, Tool: ghLogTool, Relayed: relayed}); !strings.HasPrefix(a.Password, "ghs_") {
 		t.Fatalf("gh: %+v", a)
 	}
 	// A refusal stays one.
@@ -112,8 +113,11 @@ func TestGitGetsAPlaceholder(t *testing.T) {
 
 func TestGitReachesTheNodeWithoutAToken(t *testing.T) {
 	got := lentGit("t-1", []ResourceRef{lentRepo})
-	if len(got) != 1 || !slices.Equal(got[0].Hosts, []string{gitTarget}) || got[0].Placeholder != gitPlaceholder("t-1") || got[0].Env == "" {
+	if len(got) != 2 || !slices.Equal(got[0].Hosts, []string{gitTarget}) || got[0].Placeholder != gitPlaceholder("t-1") || got[0].Env == "" {
 		t.Fatalf("%+v", got)
+	}
+	if !slices.Equal(got[1].Hosts, []string{ghTarget}) || got[1].Placeholder != gitPlaceholder("t-1") || got[1].Env != "GH_TOKEN" {
+		t.Fatalf("gh: %+v", got[1])
 	}
 	if got := lentGit("t-1", []ResourceRef{{Kind: resRepo, Ref: "https://gitlab.example.org/o/r"}, npm}); got != nil {
 		t.Fatalf("not GitHub: %+v", got)
@@ -376,5 +380,106 @@ func TestGitBranchIsToldToTheTask(t *testing.T) {
 	c, _, _ := gitCore(t, true, lentRepo)
 	if text := c.accessInstructions([]ResourceRef{lentRepo}); !strings.Contains(text, "the branch eriphe/fix") {
 		t.Fatalf("instructions: %q", text)
+	}
+}
+
+// viaRelayGh sends what the relay sends for a request of gh.
+func viaRelayGh(c *core, taskID, method, target string) *httptest.ResponseRecorder {
+	return viaRelayBody(c, "nas", taskID, method, target, "token "+gitPlaceholder(taskID), "{}", map[string]string{accessHostHeader: ghTarget})
+}
+
+// gh holds the placeholder and its token goes in on the way out, on /graphql
+// too, which is not classified: the task never sees the token.
+func TestGhTokenGoesInOnTheWayOut(t *testing.T) {
+	c := startCore(t)
+	f := newFakeGitHub(t)
+	withApp(t, c, f)
+	task := lendAccess(t, c, true, lentRepo)
+	svc := startService(t)
+	rec := viaRelayGh(c, task.ID, "POST", "/graphql")
+	if rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	got := svc.last(t)
+	if got.Header.Get("Authorization") != "token ghs_x" || got.Host != "api.github.com" {
+		t.Fatalf("Authorization %q, Host %q", got.Header.Get("Authorization"), got.Host)
+	}
+	if echo := rec.Header().Get("X-Echo"); strings.Contains(echo, "ghs_x") {
+		t.Fatalf("the answer holds %q", echo)
+	}
+	if perms, _ := json.Marshal(f.mints()[0]["permissions"]); string(perms) != `{"checks":"read","contents":"read","issues":"write","pull_requests":"write"}` {
+		t.Fatalf("permissions: %s", perms)
+	}
+	log, _ := c.store.credentialLog(task.ID, 10)
+	if len(log) == 0 || log[0].Tool != ghLogTool || log[0].Repo != "owner/repo" || log[0].Access != accessWrite || log[0].Decision != decideAllow {
+		t.Fatalf("log %+v", log)
+	}
+}
+
+// A repository not lent is refused when the request names it, and nothing
+// goes out; a request with no placeholder goes as it is, with no token.
+func TestGhStaysOnItsRepository(t *testing.T) {
+	c, task, svc := gitCore(t, true, lentRepo)
+	if rec := viaRelayGh(c, task.ID, "GET", "/repos/owner/elsewhere/pulls"); rec.Code != http.StatusForbidden {
+		t.Fatalf("another repository: %d %s", rec.Code, rec.Body)
+	}
+	if n := svc.calls(); n != 0 {
+		t.Fatalf("%d requests went out", n)
+	}
+	rec := viaRelayBody(c, "nas", task.ID, "GET", "/repos/owner/repo", "", "", map[string]string{accessHostHeader: ghTarget})
+	if rec.Code != 200 || svc.last(t).Header.Get("Authorization") != "" {
+		t.Fatalf("no placeholder: %d %q", rec.Code, svc.last(t).Header.Get("Authorization"))
+	}
+}
+
+// Without the App, only the tool's own token could go: gh is told why, and
+// nothing leaves.
+func TestGhNeedsTheApp(t *testing.T) {
+	c, task, svc := gitCore(t, true, lentRepo)
+	if err := currentVault().remove(githubAppVault); err != nil {
+		t.Fatal(err)
+	}
+	rec := viaRelayGh(c, task.ID, "GET", "/repos/owner/repo")
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "GitHub App") || svc.calls() != 0 {
+		t.Fatalf("%d %s, %d calls", rec.Code, rec.Body, svc.calls())
+	}
+}
+
+func TestGhRepoOf(t *testing.T) {
+	for path, want := range map[string]string{
+		"/repos/o/r":          "o/r",
+		"/repos/o/r/pulls/12": "o/r",
+		"/graphql":            "",
+		"/user":               "",
+		"/repos/o":            "",
+	} {
+		if got := ghRepoOf(path); got != want {
+			t.Errorf("%s: %q", path, got)
+		}
+	}
+}
+
+// A token that writes holds only what may be written; one owner per token.
+func TestGhRepos(t *testing.T) {
+	lent := []repoGrant{{Repo: "o/a", Access: accessRead}, {Repo: "o/b", Access: accessWrite}, {Repo: "other/c", Access: accessWrite}}
+	writes := func(repo, access string) bool { return access == accessRead || repo == "o/b" }
+	for _, r := range []struct {
+		named  string
+		allows func(string, string) bool
+		repos  []string
+		access string
+	}{
+		{"", writes, []string{"o/b"}, accessWrite},
+		{"", func(repo, access string) bool { return access == accessRead || repo == "other/c" }, []string{"other/c"}, accessWrite},
+		{"o/a", writes, []string{"o/a"}, accessRead},
+		{"O/B", writes, []string{"o/b"}, accessWrite},
+		{"", func(_, access string) bool { return access == accessRead }, []string{"o/a", "o/b"}, accessRead},
+		{"o/elsewhere", writes, nil, accessRead},
+		{"", func(string, string) bool { return false }, nil, accessRead},
+	} {
+		repos, access := ghRepos(r.named, lent, r.allows)
+		if !slices.Equal(repos, r.repos) || access != r.access {
+			t.Errorf("%q: %v %s", r.named, repos, access)
+		}
 	}
 }

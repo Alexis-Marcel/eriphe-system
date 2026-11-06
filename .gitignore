@@ -1,6 +1,7 @@
 .DS_Store
 ._*
 /node/node
+/node/cred/cred
 /node/eriphe-node
 /core/core
 /core/eriphe-core

@@ -6,8 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -163,41 +161,6 @@ func TestGitAccessWalksUp(t *testing.T) {
 	}
 }
 
-func TestRepoOfURL(t *testing.T) {
-	for in, want := range map[string]string{
-		"https://github.com/owner/repo.git":     "owner/repo",
-		"https://github.com/owner/repo":         "owner/repo",
-		"git@github.com:owner/repo.git":         "owner/repo",
-		"ssh://git@github.com/owner/repo":       "owner/repo",
-		"owner/repo":                            "owner/repo",
-		"github.com/owner/repo":                 "owner/repo",
-		"https://gitlab.com/owner/repo.git":     "",
-		"https://github.com/owner":              "",
-		"https://x-access-token@github.com/o/r": "o/r",
-		"":                                      "",
-	} {
-		if got := repoOfURL(in); got != want {
-			t.Errorf("%q: %q, want %q", in, got, want)
-		}
-	}
-}
-
-type fakeGhEnv struct {
-	vars   map[string]string
-	origin string
-	ran    []string
-	env    []string
-}
-
-func (f *fakeGhEnv) getenv(k string) string  { return f.vars[k] }
-func (f *fakeGhEnv) realGh() (string, error) { return "/usr/bin/gh", nil }
-func (f *fakeGhEnv) originURL() string       { return f.origin }
-func (f *fakeGhEnv) environ() []string       { return []string{"PATH=/usr/bin"} }
-func (f *fakeGhEnv) exec(path string, args, env []string) error {
-	f.ran, f.env = append([]string{path}, args...), env
-	return nil
-}
-
 func hasEnv(env []string, kv string) bool {
 	for _, e := range env {
 		if e == kv {
@@ -207,108 +170,11 @@ func hasEnv(env []string, kv string) bool {
 	return false
 }
 
-func TestGhGetsATokenForItsRepo(t *testing.T) {
-	f := &fakeNode{status: 200, answer: answer{Username: "x-access-token", Password: "ghs_pr"}}
-	c := f.serve(t)
-	e := &fakeGhEnv{origin: "https://github.com/owner/repo.git"}
-	if code := runGh([]string{"pr", "create", "--draft", "--fill"}, c, e); code != 0 {
-		t.Fatalf("exit %d", code)
-	}
-	if len(f.got) != 1 || f.got[0] != (request{Protocol: "https", Host: "api.github.com", Path: "owner/repo", Access: "write", Tool: "gh"}) {
-		t.Fatalf("asked %+v", f.got)
-	}
-	if strings.Join(e.ran, " ") != "/usr/bin/gh gh pr create --draft --fill" || !hasEnv(e.env, "GH_TOKEN=ghs_pr") {
-		t.Fatalf("ran %v with %v", e.ran, e.env)
-	}
-
-	// gh api names its repository in its endpoint.
-	runGh([]string{"api", "repos/someone/thing/pulls", "--jq", ".[].title"}, c, e)
-	if last := f.got[len(f.got)-1]; last.Path != "someone/thing" || last.Access != "read" {
-		t.Fatalf("gh api asked %+v", last)
-	}
-	// Its version or help need no token.
-	n := len(f.got)
-	runGh([]string{"--version"}, c, e)
-	runGh([]string{"pr", "create", "--help"}, c, e)
-	if len(f.got) != n || e.ran[2] != "pr" {
-		t.Fatalf("asked for gh's help: %+v", f.got[n:])
-	}
-
-	// -R wins over the remote; a read asks for read.
-	runGh([]string{"pr", "view", "12", "-R", "other/thing"}, c, e)
-	if last := f.got[len(f.got)-1]; last.Path != "other/thing" || last.Access != "read" {
-		t.Fatalf("asked %+v", last)
-	}
-}
-
-func TestGhRefused(t *testing.T) {
-	f := &fakeNode{status: 403, answer: answer{Reason: "denied by the user"}}
-	e := &fakeGhEnv{origin: "git@github.com:owner/repo.git"}
-	if code := runGh([]string{"pr", "merge", "1"}, f.serve(t), e); code != 1 || e.ran != nil {
-		t.Fatalf("exit %d, ran %v", code, e.ran)
-	}
-}
-
-func TestGhWithOwnTokenOrNoRepo(t *testing.T) {
-	f := &fakeNode{status: 200, answer: answer{Password: "ghs"}}
-	c := f.serve(t)
-	e := &fakeGhEnv{vars: map[string]string{"GH_TOKEN": "mine"}, origin: "https://github.com/o/r"}
-	runGh([]string{"pr", "list"}, c, e)
-	e2 := &fakeGhEnv{}
-	runGh([]string{"api", "/user"}, c, e2)
-	if len(f.got) != 0 || e.ran == nil || e2.ran == nil || hasEnv(e2.env, "GH_TOKEN=ghs") {
-		t.Fatalf("asked %+v; ran %v and %v", f.got, e.ran, e2.ran)
-	}
-}
-
-func TestGhAccess(t *testing.T) {
-	for args, want := range map[string]string{
-		"pr list":                         "read",
-		"pr view 3 --comments":            "read",
-		"pr create --fill":                "write",
-		"pr merge 3":                      "write",
-		"issue comment 4 -b hi":           "write",
-		"issue list -R o/r":               "read",
-		"run view 9 --log":                "read",
-		"api repos/o/r/pulls":             "read",
-		"api -X GET search/issues -f q=x": "read",
-		"api repos/o/r/issues -f title=x": "write",
-		"api --method PATCH repos/o/r":    "write",
-		"repo clone o/r":                  "write",
-		"auth status":                     "write",
-		"":                                "read",
-	} {
-		if got := ghAccess(strings.Fields(args)); got != want {
-			t.Errorf("gh %s: %q, want %q", args, got, want)
-		}
-	}
-}
-
 func TestAskErrors(t *testing.T) {
 	f := &fakeNode{status: 500, answer: answer{Reason: "core unreachable"}}
 	_, err := f.serve(t).ask(request{Host: "github.com"})
 	var refused *refusedError
 	if err == nil || errors.As(err, &refused) || !strings.Contains(err.Error(), "core unreachable") {
 		t.Fatalf("err = %v", err)
-	}
-}
-
-// The wrapper, copied as gh ahead of the real one, finds the real one
-// further on the PATH (installed later by apt, say), never itself.
-func TestRealGhSkipsTheWrapper(t *testing.T) {
-	self, _ := os.Executable()
-	selfDir := filepath.Dir(self)
-	if err := os.WriteFile(filepath.Join(selfDir, "gh"), []byte("copy"), 0o755); err != nil {
-		t.Skip("cannot write next to the test binary")
-	}
-	t.Cleanup(func() { os.Remove(filepath.Join(selfDir, "gh")) })
-	usr := t.TempDir()
-	t.Setenv("PATH", selfDir+string(os.PathListSeparator)+usr)
-	if _, err := (osEnv{}).realGh(); err == nil || !strings.Contains(err.Error(), "apt-get install") {
-		t.Fatalf("no real gh yet: %v", err)
-	}
-	os.WriteFile(filepath.Join(usr, "gh"), []byte("#!/bin/sh\n"), 0o755)
-	if p, err := (osEnv{}).realGh(); err != nil || p != filepath.Join(usr, "gh") {
-		t.Fatalf("real gh %q %v", p, err)
 	}
 }

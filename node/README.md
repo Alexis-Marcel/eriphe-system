@@ -528,18 +528,16 @@ among its [accesses](#accesses), so git's `password` is a placeholder, and the t
 eriphe-core; the node never sees it.
 
 Every task gets `ERIPHE_CRED_URL` (`<callback-url>/v1/task/credential`) and `ERIPHE_TASK_SECRET`.
-Its entrypoint makes git use the helper when it is there and the task has no `GH_TOKEN` identity:
+Its entrypoint makes git use the helper when it is there and the task has no token of its own in `GH_TOKEN` (the placeholder of its access to GitHub is not one):
 `GIT_CONFIG_COUNT=2`, `credential.helper=/opt/eriphe/bin/eriphe-cred`,
 `credential.useHttpPath=true`, before the clone (a private repository clones through it too).
 
 **`eriphe-cred`** (`cred/`, a module of its own, standard library only; also the SSH agent and
 tunnel of [SSH accesses](#accesses)) is one of the
 [injected programs](#injected-programs-optbin): the node's image ships it for both Linux
-architectures in `/usr/local/share/eriphe/task-bin/linux-{amd64,arm64}/`, as `eriphe-cred` and as
-`gh` (a copy, since links are not copied), so every task finds both in `/opt/eriphe/bin`, first on
-its `PATH`. `gh` is then the wrapper: it runs the real gh found further on the `PATH`, skipping
-`/opt/eriphe/bin` (gh the agent installs with apt, in `/usr/bin`, works the same; without one,
-it says how to install it). On a Mac with Apple's container, install.sh takes the `linux-arm64`
+architectures in `/usr/local/share/eriphe/task-bin/linux-{amd64,arm64}/`, so every task finds it in
+`/opt/eriphe/bin`, first on its `PATH`. `gh` is the real one, which the agent installs with apt
+when it needs it: it holds a placeholder in `GH_TOKEN`, as an [access](#accesses) of the task. On a Mac with Apple's container, install.sh takes the `linux-arm64`
 folder from the image with eriphe-node and passes it as `-task-bin`. Without eriphe-cred in
 `/opt/eriphe/bin` (an older node image, or `-task-bin` pointing elsewhere), git is not set up and
 tasks behave as before.

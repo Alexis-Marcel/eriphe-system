@@ -198,19 +198,14 @@ func TestMintInstallationToken(t *testing.T) {
 		t.Fatalf("not reused: %+v, %d mints", a, len(f.mints()))
 	}
 
-	// A write, once approved, gets contents:write; gh gets pull requests and issues.
+	// A write, once approved, gets contents:write.
 	c.store.credentialAnswered(task.ID, map[string]any{"host": "github.com", "repo": "owner/repo", "access": "write"}, decideAllow, byUser, "")
 	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "owner/repo.git", Access: "write"}); a.Password != "ghs_xx" {
 		t.Fatalf("write: %+v", a)
 	}
-	if a := c.credential(ctx, task, credRequest{Host: "api.github.com", Path: "owner/repo", Access: "write", Tool: "gh"}); a.Password != "ghs_xxx" {
-		t.Fatalf("gh write: %+v", a)
-	}
 	mints = f.mints()
-	w, _ := json.Marshal(mints[1]["permissions"])
-	g, _ := json.Marshal(mints[2]["permissions"])
-	if string(w) != `{"contents":"write"}` || string(g) != `{"checks":"read","contents":"read","issues":"write","pull_requests":"write"}` {
-		t.Fatalf("permissions: git %s, gh %s", w, g)
+	if w, _ := json.Marshal(mints[1]["permissions"]); string(w) != `{"contents":"write"}` {
+		t.Fatalf("permissions: %s", w)
 	}
 }
 

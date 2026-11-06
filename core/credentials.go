@@ -18,7 +18,7 @@ import (
 
 // Credentials on demand. A task asks for the access it needs when it needs
 // it, through the standard extension points of its tools: eriphe-cred is
-// git's credential helper and gh's wrapper in every task (node/cred). It
+// git's credential helper in every task (node/cred). It
 // asks the task's node, which asks eriphe-core:
 //
 //	POST /v1/node/tasks/{id}/credential   {protocol, host, path, access, tool}   (node secret)
@@ -35,8 +35,7 @@ import (
 // token, long-lived and not limited to the repository: the user approves
 // it first. Every request is logged (credential_log) and shown in the
 // task's details. git gets a placeholder rather than the token, which goes
-// in on the way out (git_access.go); gh still gets the token, until its
-// actions go through the catalog.
+// in on the way out (git_access.go), and so does gh's, with the app only.
 //
 // A task from before resources has none kept: its repository is the one it
 // was asked to work on (spec.Repo), lent for read, and the service is lent
@@ -248,7 +247,7 @@ func decideCredential(p *Policy, req credRequest, f credFacts) credDecision {
 		case g.Access == accessWrite && g.Branch != "":
 			// Lent for write on a branch by my own (untainted) turn: that was
 			// my approval of the first push, and of the pull request gh opens
-			// from it. A push elsewhere, a merge or a release asks (policy.go).
+			// from it.
 			d.Reason = "lent for write to " + d.Repo + " on " + g.Branch
 		case g.Access == accessWrite:
 			ask, d.Reason = true, "first push to "+d.Repo+" in this task"
@@ -327,7 +326,7 @@ func (c *core) credential(ctx context.Context, t *TaskRow, req credRequest) cred
 	case decideAsk:
 		a.Permission = map[string]any{"host": d.Host, "repo": d.Repo, "access": req.Access, "tool": tool, "reason": d.Reason}
 	case decideAllow:
-		m, err := c.mintGitHub(ctx, t.ID, d.Repo, req.Access, tool == "gh")
+		m, err := c.mintGitHub(ctx, t.ID, d.Repo, req.Access, tool == ghLogTool) // gh's: a task started before its relay
 		if err != nil {
 			a = credAnswer{Decision: decideDeny, Reason: "cannot give a credential: " + err.Error()}
 			source = "error"
@@ -595,19 +594,30 @@ func githubPermissions(access string, api bool) map[string]string {
 // App for that one repository and those rights, or else the GitHub tool's
 // own token.
 func (c *core) mintGitHub(ctx context.Context, taskID, repo, access string, api bool) (minted, error) {
+	return c.mintGitHubFor(ctx, taskID, []string{repo}, access, api)
+}
+
+// mintGitHubFor is mintGitHub for repositories of one owner: a request of gh
+// may name none of them (git_access.go).
+func (c *core) mintGitHubFor(ctx context.Context, taskID string, repos []string, access string, api bool) (minted, error) {
 	app, err := loadGitHubApp()
 	if err == nil {
 		perms := githubPermissions(access, api)
-		key := fmt.Sprintf("%s|%s|%v", taskID, strings.ToLower(repo), perms)
+		key := fmt.Sprintf("%s|%s|%v", taskID, strings.ToLower(strings.Join(repos, ",")), perms)
 		if m, ok := c.creds.get(key, time.Now()); ok {
 			return m, nil
 		}
-		owner, name, _ := strings.Cut(repo, "/")
+		owner, name, _ := strings.Cut(repos[0], "/")
 		inst, err := c.github.installationFor(ctx, app, owner, name)
 		if err != nil {
 			return minted{}, err
 		}
-		tok, exp, err := c.github.installationToken(ctx, app, inst, []string{name}, perms)
+		names := make([]string, 0, len(repos))
+		for _, r := range repos {
+			_, n, _ := strings.Cut(r, "/")
+			names = append(names, n)
+		}
+		tok, exp, err := c.github.installationToken(ctx, app, inst, names, perms)
 		if err != nil {
 			return minted{}, err
 		}

@@ -411,8 +411,12 @@ func (c *core) taskAccessHandler() http.Handler {
 		}
 		gitScrub := strings.NewReplacer()
 		if git {
+			put := c.gitRequest
+			if target == ghTarget {
+				put = c.ghRequest
+			}
 			var goesOn bool
-			if gitScrub, goesOn = c.gitRequest(w, t, r, uri); !goesOn {
+			if gitScrub, goesOn = put(w, t, r, uri); !goesOn {
 				return
 			}
 		}

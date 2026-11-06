@@ -1,6 +1,6 @@
 // eriphe-cred gives the standard tools of a task the credentials they ask
 // for, when they ask for them, from Eriphe: it is git's credential helper
-// and a wrapper of gh. It asks the task's node, with the task's own secret;
+// and the SSH agent. It asks the task's node, with the task's own secret;
 // the node asks eriphe-core, which decides (is the service lent to the task,
 // is the repository allowed, read or write, does the user approve) and
 // mints a short-lived token for that one repository. No long-lived secret
@@ -9,8 +9,6 @@
 // relay (core/git_access.go). This helper need not know.
 //
 //	eriphe-cred get|store|erase   git's credential helper protocol (stdin, stdout)
-//	eriphe-cred gh ARGS...        runs the real gh with a token for this one command
-//	gh ARGS...                    the same, when installed as gh ahead of the real one on PATH
 //	eriphe-cred ssh-agent         the SSH agent of a task with an SSH access (ssh.go)
 //	eriphe-cred tunnel HOST PORT  ssh's ProxyCommand, through the node's relay
 //
@@ -26,7 +24,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -43,20 +40,14 @@ const (
 )
 
 func main() {
-	name := filepath.Base(os.Args[0])
 	args := os.Args[1:]
-	if name == "gh" {
-		os.Exit(runGh(args, newClient(), osEnv{}))
-	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: eriphe-cred get|store|erase (git credential helper), eriphe-cred gh ARGS..., eriphe-cred version")
+		fmt.Fprintln(os.Stderr, "usage: eriphe-cred get|store|erase (git credential helper), eriphe-cred ssh-agent, eriphe-cred tunnel HOST PORT, eriphe-cred version")
 		os.Exit(2)
 	}
 	switch args[0] {
 	case "get", "store", "erase":
 		os.Exit(runGit(args[0], os.Stdin, os.Stdout, os.Stderr, newClient(), gitAccess))
-	case "gh":
-		os.Exit(runGh(args[1:], newClient(), osEnv{}))
 	case "ssh-agent":
 		os.Exit(runSSHAgent(os.Stderr))
 	case "tunnel":
@@ -76,7 +67,7 @@ type request struct {
 	Host     string `json:"host"`
 	Path     string `json:"path,omitempty"`
 	Access   string `json:"access"`
-	Tool     string `json:"tool,omitempty"` // git or gh, for the log
+	Tool     string `json:"tool,omitempty"` // for the log
 }
 
 // answer is the node's: a credential, or why not.
@@ -277,42 +268,4 @@ var ancestors = func() [][]string {
 		pid, _ = strconv.Atoi(fields[1])
 	}
 	return out
-}
-
-// repoOfURL reads owner/name from a GitHub remote: https://github.com/o/r.git,
-// git@github.com:o/r.git, ssh://git@github.com/o/r, or o/r itself.
-func repoOfURL(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	path := raw
-	if u, err := url.Parse(raw); err == nil && u.Scheme != "" && u.Host != "" {
-		if !isGitHub(u.Hostname()) {
-			return ""
-		}
-		path = u.Path
-	} else if host, p, ok := strings.Cut(raw, ":"); ok && strings.Contains(host, "@") {
-		_, h, _ := strings.Cut(host, "@")
-		if !isGitHub(h) {
-			return ""
-		}
-		path = p
-	} else if parts := strings.Split(strings.Trim(raw, "/"), "/"); len(parts) == 3 {
-		// HOST/OWNER/REPO, as gh's -R takes it.
-		if !isGitHub(parts[0]) {
-			return ""
-		}
-		path = parts[1] + "/" + parts[2]
-	}
-	parts := strings.Split(strings.Trim(strings.TrimSuffix(strings.Trim(path, "/"), ".git"), "/"), "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return ""
-	}
-	return parts[0] + "/" + parts[1]
-}
-
-func isGitHub(host string) bool {
-	host = strings.ToLower(host)
-	return host == "github.com" || host == "www.github.com" || host == "api.github.com"
 }
