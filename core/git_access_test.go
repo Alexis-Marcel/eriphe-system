@@ -88,25 +88,16 @@ func viaRelayBody(c *core, node, taskID, method, target, auth, body string, more
 func TestGitGetsAPlaceholder(t *testing.T) {
 	c, task, _ := gitCore(t, true, lentRepo)
 	ctx := context.Background()
-	relayed := []string{gitTarget}
 	for _, host := range []string{"github.com", "www.github.com", "api.github.com", "github.com:443"} {
 		for _, tool := range []string{"git", "", "anything"} {
-			a := c.credential(ctx, task, credRequest{Protocol: "https", Host: host, Path: "owner/repo.git", Access: accessWrite, Tool: tool, Relayed: relayed})
+			a := c.credential(ctx, task, credRequest{Protocol: "https", Host: host, Path: "owner/repo.git", Access: accessWrite, Tool: tool})
 			if a.Decision != decideAllow || a.Password != gitPlaceholder(task.ID) || !a.Expires.IsZero() {
 				t.Fatalf("%s %s: %+v", host, tool, a)
 			}
 		}
 	}
-	// A task from before, or on an older node: its token, or it stops working.
-	if a := c.credential(ctx, task, credRequest{Protocol: "https", Host: "github.com", Path: "owner/repo.git", Access: accessRead, Tool: "git"}); !strings.HasPrefix(a.Password, "ghs_") {
-		t.Fatalf("not relayed: %+v", a)
-	}
-	// The wrapper of a task started before gh's relay keeps its token.
-	if a := c.credential(ctx, task, credRequest{Host: "api.github.com", Path: "owner/repo", Access: accessWrite, Tool: ghLogTool, Relayed: relayed}); !strings.HasPrefix(a.Password, "ghs_") {
-		t.Fatalf("gh: %+v", a)
-	}
 	// A refusal stays one.
-	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "other/repo.git", Access: accessRead, Tool: "git", Relayed: relayed}); a.Decision != decideDeny || a.Password != "" {
+	if a := c.credential(ctx, task, credRequest{Host: "github.com", Path: "other/repo.git", Access: accessRead, Tool: "git"}); a.Decision != decideDeny || a.Password != "" {
 		t.Fatalf("other: %+v", a)
 	}
 }
@@ -178,10 +169,29 @@ func TestGitDecidesEachRequest(t *testing.T) {
 	if svc.calls() != calls {
 		t.Fatal("it reached GitHub")
 	}
-	// Approved by the user, the same push goes.
-	c.store.grantCredential(task.ID, "github", "owner/repo", accessWrite)
-	if rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/git-receive-pack", auth, pushBody, nil); rec.Code != 200 {
+	// Lent for read, no yes makes it a write: the lend is what is decided.
+	c.store.grantCredential(task.ID, "owner/repo", accessWrite)
+	if rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/git-receive-pack", auth, pushBody, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("lent for read: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// A write lent on a start that is not the user's own waits for their yes on
+// the card; once lent, it goes, whatever the task reads next.
+func TestGitWriteIsDecidedAtLaunch(t *testing.T) {
+	c, task, _ := gitCore(t, false, lentRepo)
+	auth := gitAuth(task.ID)
+	const push = "/owner/repo.git/git-receive-pack"
+	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushBody, nil); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "user's approval") {
+		t.Fatalf("not approved: %d %s", rec.Code, rec.Body)
+	}
+	c.store.grantCredential(task.ID, "owner/repo", accessWrite)
+	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushBody, nil); rec.Code != 200 {
 		t.Fatalf("approved: %d %s", rec.Code, rec.Body)
+	}
+	c.store.addEvents(task.ID, []EventRow{{Seq: 1, Type: "tool_use", Data: map[string]any{"name": "WebFetch", "input": map[string]any{"url": "https://example.org"}}}})
+	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushBody, nil); rec.Code != 200 {
+		t.Fatalf("after reading a page: %d %s", rec.Code, rec.Body)
 	}
 }
 

@@ -170,7 +170,7 @@ func TestGitHubAddChoice(t *testing.T) {
 		t.Fatalf("choice: %d", code)
 	}
 	for _, want := range []string{"Recommandé", "App GitHub d", "Jeton personnel", `href="/settings/github"`,
-		"Rien à approuver", "accord chaque fois", "provider=token", `data-hash="add/github/token"`} {
+		"ouvrent leur PR", "pas gh", "provider=token", `data-hash="add/github/token"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("choice lacks %q", want)
 		}

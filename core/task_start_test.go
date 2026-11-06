@@ -66,12 +66,22 @@ func assignedIDs(t *testing.T, c *core) []string {
 // pushReq is the git push of the lent branch.
 var pushReq = credRequest{Protocol: "https", Host: "github.com", Path: "owner/repo.git", Access: accessWrite, Tool: "git"}
 
+// launchWrite lends a repository for write on a branch, on a start that is
+// not the user's own.
 func launchWrite(t *testing.T, c *core) *TaskRow {
 	t.Helper()
-	task, err := c.runTask(context.Background(), runRequest{Prompt: "fix the menu", askStart: true, Resources: []ResourceRef{
+	return launchWriteAs(t, c, false)
+}
+
+func launchWriteAs(t *testing.T, c *core, clean bool) *TaskRow {
+	t.Helper()
+	task, err := c.runTask(context.Background(), runRequest{Prompt: "fix the menu", askStart: true, cleanStart: clean, Resources: []ResourceRef{
 		{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/x"}}})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if clean {
+		c.store.set(lentByUserKey(task.ID), "1")
 	}
 	return task
 }
@@ -89,10 +99,9 @@ func startCard(t *testing.T, c *core) (convoCard, bool) {
 	return xs[0], true
 }
 
-// Without the GitHub App, a write repository's push would need the tool's
-// long-lived token: the user is asked on one card at launch, and the task
-// does not start until they answer.
-func TestTaskStartHeldOnFallbackToken(t *testing.T) {
+// A write lent by a start that is not the user's own is asked on one card at
+// launch, as an access is, and the task does not start until they answer.
+func TestTaskStartHeld(t *testing.T) {
 	c := startCore(t)
 	task := launchWrite(t, c)
 	got, _ := c.store.task(task.ID)
@@ -112,8 +121,7 @@ func TestTaskStartHeldOnFallbackToken(t *testing.T) {
 	}
 	_, p := c.liveCard(x)
 	fr, en := p.Text("fr"), p.Text("en")
-	if fr != "Pour pousser `eriphe/x` sur owner/repo, j'utiliserai le jeton GitHub de l'outil, qui n'est pas limité à ce dépôt." ||
-		!strings.Contains(en, "GitHub tool's own token") {
+	if fr != "Pour pousser `eriphe/x` sur owner/repo, il me faut ton accord." || en != "To push `eriphe/x` to owner/repo, I need your approval." {
 		t.Fatalf("card text %q / %q", fr, en)
 	}
 	// It goes with the brain's next message of the turn.
@@ -126,13 +134,13 @@ func TestTaskStartHeldOnFallbackToken(t *testing.T) {
 	if _, err := c.answer(context.Background(), task.ID, "", "", &allow, byBrain); err == nil {
 		t.Fatal("the brain answered a held start")
 	}
-	if !c.heldTask(task.ID) || c.store.credentialGranted(task.ID, serviceAtLaunch, "owner/repo", accessWrite) {
+	if !c.heldTask(task.ID) || c.store.credentialGranted(task.ID, "owner/repo", accessWrite) {
 		t.Fatal("decided without the user")
 	}
 }
 
-// Oui records the grant and starts the task; its push is then allowed
-// with the fallback token, without a second ask.
+// Oui records the grant and starts the task; its push is then allowed,
+// whatever it reads meanwhile.
 func TestTaskStartApproved(t *testing.T) {
 	c := startCore(t)
 	task := launchWrite(t, c)
@@ -145,7 +153,7 @@ func TestTaskStartApproved(t *testing.T) {
 	}
 	got, _ := c.store.task(task.ID)
 	a := c.credential(context.Background(), got, pushReq)
-	if a.Decision != decideAllow || a.Password != "github_pat_long_lived" {
+	if a.Decision != decideAllow || a.Password != gitPlaceholder(task.ID) {
 		t.Fatalf("push after the launch approval: %+v", a)
 	}
 	log, _ := c.store.credentialLog(task.ID, 10)
@@ -155,11 +163,9 @@ func TestTaskStartApproved(t *testing.T) {
 	if _, err := c.decideCard(context.Background(), x.ID, false, "web"); err == nil {
 		t.Fatal("decided twice")
 	}
-	// Once the task has read external content, the launch approval no
-	// longer covers its push: it asks, as before.
 	c.store.addEvents(task.ID, []EventRow{{Seq: 1, Type: "tool_use", Data: map[string]any{"name": "WebFetch", "input": map[string]any{"url": "https://example.org"}}}})
-	if a := c.credential(context.Background(), got, pushReq); a.Decision != decideAsk || !strings.Contains(a.Reason, "WebFetch") {
-		t.Fatalf("tainted after launch: %+v", a)
+	if a := c.credential(context.Background(), got, pushReq); a.Decision != decideAllow {
+		t.Fatalf("after reading a page: %+v", a)
 	}
 }
 
@@ -173,7 +179,7 @@ func TestTaskStartDeclined(t *testing.T) {
 		t.Fatalf("%+v %v", x, err)
 	}
 	got, _ := c.store.task(task.ID)
-	if got.State != stateStopped || slices.Contains(assignedIDs(t, c), task.ID) || c.store.credentialGranted(task.ID, serviceAtLaunch, "owner/repo", accessWrite) {
+	if got.State != stateStopped || slices.Contains(assignedIDs(t, c), task.ID) || c.store.credentialGranted(task.ID, "owner/repo", accessWrite) {
 		t.Fatalf("declined start: %+v", got)
 	}
 	msgs, _ := c.store.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE role = ?`, roleEvent)
@@ -189,17 +195,21 @@ func TestTaskStartDeclined(t *testing.T) {
 	}
 }
 
-// With the GitHub App, the push gets a token for that one repository and
-// is allowed: the task starts at once, without a card.
-func TestTaskStartWithGitHubApp(t *testing.T) {
+// The user's own clean start lends a write on its branch outright, with the
+// App or without: the task starts at once, without a card.
+func TestTaskStartClean(t *testing.T) {
+	bare := startCore(t)
+	if task := launchWriteAs(t, bare, true); bare.heldTask(task.ID) {
+		t.Fatal("held without the app")
+	}
 	c := startCore(t)
 	withApp(t, c, newFakeGitHub(t))
-	task := launchWrite(t, c)
+	task := launchWriteAs(t, c, true)
 	if c.heldTask(task.ID) || !slices.Contains(assignedIDs(t, c), task.ID) {
 		t.Fatal("held with the app")
 	}
 	if _, ok := startCard(t, c); ok {
-		t.Fatal("a card with the app")
+		t.Fatal("a card on a clean start")
 	}
 	// It pushes, and opens its pull request with gh, without a question.
 	got, _ := c.store.task(task.ID)
@@ -219,18 +229,23 @@ func TestTaskStartWithGitHubApp(t *testing.T) {
 	}
 }
 
-// A credential rule that asks is foreseen too, and said so.
-func TestTaskStartRuleAsks(t *testing.T) {
+// A watch authorised in advance needs no card: the yes given for it covers
+// the repository too, even with no branch declared.
+func TestTaskStartApprovedInAdvance(t *testing.T) {
 	c := startCore(t)
 	withApp(t, c, newFakeGitHub(t))
-	c.base.Policy = &Policy{Credentials: []CredentialRule{{Repo: "owner/*", Access: accessWrite, Decision: decideAsk}}}
-	c.snap.Load().Policy = c.base.Policy
-	task := launchWrite(t, c)
-	if !c.heldTask(task.ID) {
-		t.Fatal("not held")
+	task, err := c.runTask(context.Background(), runRequest{Prompt: "fix the menu", askStart: true, cleanStart: true, approvedInAdvance: true,
+		Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite}}})
+	if err != nil || c.heldTask(task.ID) {
+		t.Fatalf("held: %v", err)
 	}
-	x, _ := startCard(t, c)
-	if _, p := c.liveCard(x); !strings.Contains(p.Text("fr"), "ta règle d'accès") {
-		t.Fatalf("text %q", p.Text("fr"))
+	if _, ok := startCard(t, c); ok {
+		t.Fatal("a card for a task authorised in advance")
+	}
+	c.store.set(lentByUserKey(task.ID), "1")
+	c.grantLent(task)
+	got, _ := c.store.task(task.ID)
+	if a := c.credential(context.Background(), got, pushReq); a.Decision != decideAllow {
+		t.Fatalf("push: %+v", a)
 	}
 }

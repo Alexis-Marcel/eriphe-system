@@ -8,18 +8,15 @@ import (
 	"time"
 )
 
-// A task's crossings, decided at launch. What a task lent by run_task will
-// need of the user's (a push with the GitHub tool's own long-lived token,
-// a write a credential rule asks for, a write on a tainted start) is
-// foreseen with the same decision as the push itself (decideCredential),
-// and asked once, when the task starts, rather than when it pushes, maybe
-// half an hour later. The task waits meanwhile: it is kept, pending, with
-// desired "held", which no node sees and no placement moves. The user gets
-// one card in the conversation (convo_cards.go, kind taskstart): Oui
-// records the credential grants the push's own approval would
-// (credential_grants), so the push is allowed without asking again as
-// long as the task reads no external content, and lets the task go; Non stops it and tells the brain. As every card, the
-// brain cannot decide it. What is not foreseen still asks when it happens.
+// A task's crossings, decided at launch. What a task lent by run_task needs
+// of the user's (a write to a repository not lent outright by a clean start)
+// is foreseen with the same decision as the push itself (decideCredential),
+// and asked once, when the task starts. The task waits meanwhile: it is kept,
+// pending, with desired "held", which no node sees and no placement moves.
+// The user gets one card in the conversation (convo_cards.go, kind
+// taskstart): Oui records the grants (credential_grants, access_grants), and
+// lets the task go; Non stops it and tells the brain. As every card, the
+// brain cannot decide it.
 
 const taskStartSchema = `CREATE TABLE IF NOT EXISTS task_starts (
 	id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,11 +39,6 @@ const (
 	startProposed = "proposed"
 	startApproved = "approved"
 	startRejected = "rejected"
-
-	// serviceAtLaunch keeps the grants given on a start's card apart from
-	// those given at the push: they hold only while the task has read no
-	// external content, which the user could not know of at launch.
-	serviceAtLaunch = "github-at-launch"
 )
 
 // startNeed is one thing a task will need of the user's: a write to a
@@ -60,65 +52,30 @@ type startNeed struct {
 	Category string `json:"category,omitempty"`
 	Account  string `json:"account,omitempty"`
 	Branch   string `json:"branch,omitempty"`
-	Fallback bool   `json:"fallback,omitempty"` // the GitHub tool's own token, not limited to the repository
-	Rule     bool   `json:"rule,omitempty"`     // a line of policy.credentials asks
-	Tainted  bool   `json:"tainted,omitempty"`  // started on a tainted turn
-	Reason   string `json:"reason"`             // the policy's, in English, for the log
+	Reason   string `json:"reason"` // the policy's, in English, for the log
 }
 
-// startNeeds foresees what the lent resources will need of the user's: for
-// each GitHub repository lent for write, the decision its push will get.
-// Nothing with the GitHub App and a declared branch: its token is minted
-// for that one repository and allowed, as at push time.
-func (c *core) startNeeds(list []ResourceRef, tainted []string) []startNeed {
+// startNeeds foresees what the lent repositories will need of the user's:
+// for each one lent for write, the decision its push will get.
+func (c *core) startNeeds(list []ResourceRef, clean bool) []startNeed {
 	var repos []repoGrant
 	for _, e := range list {
 		if r := githubRepo(e.Ref); e.Kind == resRepo && r != "" {
 			repos = append(repos, repoGrant{Repo: r, Access: e.Access, Branch: e.Branch})
 		}
 	}
-	if len(repos) == 0 {
-		return nil
-	}
-	_, appErr := loadGitHubApp()
-	fallback := appErr == errNoGitHubApp
-	if fallback {
-		if _, err := c.githubToolToken(); err != nil {
-			return nil // the push would be refused anyway: nothing to ask
-		}
-	}
-	p := c.conf().Policy
 	var out []startNeed
 	for _, g := range repos {
 		if g.Access != accessWrite {
-			continue // a push there is not foreseen: it asks if it comes
-		}
-		req := credRequest{Protocol: "https", Host: "github.com", Path: g.Repo, Access: accessWrite, Tool: "git"}
-		facts := credFacts{Kind: "worker", Repos: repos, Lent: true, Tainted: tainted, Fallback: fallback}
-		d := decideCredential(p, req, facts)
-		if d.Decision != decideAsk {
 			continue
 		}
-		n := startNeed{Repo: d.Repo, Access: accessWrite, Branch: g.Branch, Fallback: fallback, Reason: d.Reason}
-		facts.Fallback = false
-		if decideCredential(p, req, facts).Decision == decideAsk {
-			n.Rule = credentialRuleAsks(p, d.Host, d.Repo, accessWrite)
-			n.Tainted = !n.Rule && len(tainted) > 0
+		req := credRequest{Protocol: "https", Host: "github.com", Path: g.Repo, Access: accessWrite, Tool: gitLogTool}
+		d := decideCredential(req, credFacts{Kind: "worker", Repos: repos, Lent: true, Clean: clean})
+		if d.Decision == decideAsk {
+			out = append(out, startNeed{Repo: d.Repo, Access: accessWrite, Branch: g.Branch, Reason: d.Reason})
 		}
-		out = append(out, n)
 	}
 	return out
-}
-
-// credentialRuleAsks: the first line of policy.credentials for this write
-// asks.
-func credentialRuleAsks(p *Policy, host, repo, access string) bool {
-	for _, r := range p.credentialRules() {
-		if r.matches(host, repo, access) {
-			return r.Decision == decideAsk
-		}
-	}
-	return false
 }
 
 // holdTask keeps the start of a task for the user's answer: its card goes
@@ -216,19 +173,7 @@ func startText(needs []startNeed, lang string) string {
 		if n.Branch != "" {
 			target = fmt.Sprintf(tr(lang, "taskstart.target.branch"), n.Branch, n.Repo)
 		}
-		key := "taskstart.ask"
-		switch {
-		case n.Fallback:
-			key = "taskstart.fallback"
-		case n.Rule:
-			key = "taskstart.rule"
-		case n.Tainted:
-			key = "taskstart.tainted"
-		}
-		line := fmt.Sprintf(tr(lang, key), target)
-		if n.Fallback && (n.Rule || n.Tainted) {
-			line += " " + tr(lang, map[bool]string{true: "taskstart.also.rule", false: "taskstart.also.tainted"}[n.Rule])
-		}
+		line := fmt.Sprintf(tr(lang, "taskstart.ask"), target)
 		lines = append(lines, line)
 	}
 	return strings.Join(append(lines, accessStartText(needs, lang)...), " ")
@@ -264,7 +209,7 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 			c.store.grantAccess(s.TaskID, accessNeed{n.Server, n.Category, n.Account})
 			continue
 		}
-		c.store.grantCredential(s.TaskID, serviceAtLaunch, n.Repo, n.Access)
+		c.store.grantCredential(s.TaskID, n.Repo, n.Access)
 		c.store.logCredential(s.TaskID, "git", "github.com", n.Repo, n.Access, decideAllow, byUser, "", "approved at launch: "+n.Reason)
 	}
 	c.store.db.Exec(`UPDATE tasks SET desired = ?, pending_reason = '', updated = ? WHERE id = ? AND desired = ?`,

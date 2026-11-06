@@ -492,9 +492,8 @@ new access token is used. The database file is as sensitive as `/secrets`.
 - Every call is a permission request first, under the policy below; the proxy enforces it with
   tickets.
 - git and gh in a task get [credentials on demand](#credentials-on-demand): a one-hour token for one
-  repository, decided by the policy, approved by the user for a first push, and logged; git's goes
-  in on the way out and stays out of the task; a vendor's long-lived token is used only as the
-  flagged fallback, without a GitHub App.
+  repository, decided at launch as any lend, and logged; it goes in on the way out and stays out of
+  the task. Without a GitHub App, the tool's own token stays in eriphe-core the same way.
 - What servers say (descriptions, results, errors) is data for the agents, never instructions:
   the brain's prompt says so, and the policy, not the brain, decides what reaches a third party.
 
@@ -786,7 +785,7 @@ is kept in `task_harness` for the measures. The brain's prompt no longer counts 
 
 **No work lost on stop.** Before a task's container is removed (stopped by the brain, a budget or
 "the same failure twice"), its node pushes the commits no remote has on the branch the task was
-lent, through the task's own credential helper (the policy and credentials still decide), or keeps
+lent, through the task's own credential helper (the same decision applies), or keeps
 the repository on the node (see eriphe-node's README). Its `work` event says which: the brain hears
 it with the stop, even a stop of its own when the work was kept.
 
@@ -1057,10 +1056,11 @@ calls is authorized, whatever the grid or a grant says (`lend.go`). The brain as
 resources, what it needs is granted, it is logged in `decisions` (`release mail.move`), and the
 brain is told the answer. An entry lent outright beside a held one wins.
 
-**On a tainted turn** (the brain read external content), `run_task` refuses any `write` or `drop`
-entry, `trust_skills`, a Drive folder (its files server is lent whole for now) and any legacy
+**On a tainted turn** (the brain read external content), `run_task` refuses a folder with `write` or
+`drop`, `trust_skills`, a Drive folder (its files server is lent whole for now) and any legacy
 `identities`: the brain asks the user and starts the task in the turn of their answer. Reads still
-go, and tools: what they may do is asked on a card at launch, Free writes included.
+go, and tools, accesses and a GitHub repository for `write`: what they may do is asked on a card at
+launch, Free included.
 
 ## Skills
 
@@ -1127,20 +1127,22 @@ the node relays it to `POST /v1/node/tasks/{id}/credential` with its own secret 
 | not `https`, no repository (git without `useHttpPath`), an access other than `read`/`write` | deny |
 | the brain | deny: it works through its tools |
 | no GitHub repository is lent to the task: no `repo` [resource](#resources) on GitHub (a task from before resources: no GitHub catalog server in its grant) | deny |
-| the first rule of `policy.credentials` that matches (host and repo globs, access) | its decision: `allow`, `ask` (once per task), `deny` |
-| no rule: a repository its `repo` resource covers (a task from before resources: its `repo`, as `read`) | read: allow; write (git's push, gh's pull request) with access `write` and a declared `branch`: allow (the user's own turn lent it so; a tainted turn cannot); any other write (access `read`, no branch): ask, the first time in the task |
-| no rule: another repository | deny |
-| a write allowed so far, by a task that read external content (an external catalog tool, a page, a web search) or was started on a tainted turn of the brain | ask |
-| allowed so far, without the GitHub App (the fallback below) | ask, the first time in the task |
+| another repository than the one its `repo` resource covers | deny |
+| a read of it | allow |
+| a write (git's push, gh's pull request) to a repository lent for `read` | deny, at once: a push is not lent |
+| a write on the declared `branch` of a repository lent for `write`, on a clean start (the user's own clean turn, or a watch they authorised) | allow |
+| any other write: no declared branch, or a start that is not clean | the user's yes on the start's card, else deny |
 
-A repository lent for `write` on a branch makes its first push there approved, and the pull request
-gh opens from it. gh's token writes pull requests and issues, never contents: GitHub itself refuses
-it a merge, a release, a repository's settings or its secrets. A built-in ask stays on `gh pr merge`,
-for a mistake.
+What is decided is the lend, at launch, as for an [access](../node/README.md#accesses): what the task reads afterwards
+changes nothing, and nothing waits in a command. The same rules hold with the GitHub App or without.
+
+gh's token writes pull requests and issues, never contents: GitHub itself refuses it a merge, a
+release, a repository's settings or its secrets. A task that must merge is lent the catalog's GitHub
+tool, under its grid.
 
 **git holds no token.** For a task lent a GitHub repository, the node's relay decrypts `github.com`
 as a host of an [access](../node/README.md#accesses), and `eriphe-cred` gets a placeholder where it would get the
-token, once the decision above is made, an approval included. The token is minted here and goes in
+token, once the decision above is made. The token is minted here and goes in
 on the way out (`git_access.go`). gh goes the same way, to `api.github.com`: its requests are not
 classified (much of it is one `POST /graphql`). Its token is for the repository a REST path names,
 which must be lent, or else for those lent, of one owner; when some may be written, for those only,
@@ -1154,13 +1156,9 @@ are not classified:
 git → the node's relay → eriphe-core (decides, mints) → GitHub
 ```
 
-The node says which hosts a task's relay decrypts, whatever the task sent: a task started before
-this, or on an older node, still gets the token. A node older than eriphe-core takes the placeholder
-in `GH_TOKEN` for a token of the task's: its git gets no approval card, and a write not granted is refused.
-
 - **Each request is decided again**, from what it is and not from what the helper said: a push is
-  `git-receive-pack`, whatever `eriphe-cred` asked for, and a placeholder proves nothing. A write
-  that needs an approval the task did not get is refused here (403), not asked.
+  `git-receive-pack`, whatever `eriphe-cred` asked for, and a placeholder proves nothing. A refusal
+  is a 403 with its reason in plain text, which git shows as `remote: …`.
 - **What is pushed is not read**, as for any access: what is decided is the lend, a repository, read
   or write. The `branch` lent is what the task is told to push to, and the real limit is the
   provider's: a token for that one repository, and the repository's protection rules on GitHub. The
@@ -1169,55 +1167,33 @@ in `GH_TOKEN` for a token of the task's: its git gets no approval card, and a wr
   download. So they cross eriphe-core too, and a program that refuses the task's certificate fails
   on `github.com`. Large File Storage is a write when the task may write there, else a read.
 
-```json
-"policy": {"credentials": [
-  {"repo": "my-org/docs", "access": "read", "decision": "allow"},
-  {"repo": "me/site", "access": "write", "decision": "allow", "reason": "Eriphe publishes the site"},
-  {"repo": "my-org/infra*", "decision": "deny", "reason": "never from a task"}
-]}
-```
-
-**Approval.** "Ask" goes through the task's permission flow: the node asks a permission
-`Credential` (`write github.com/owner/repo`), which only the user may answer (the policy marks it
-so, the brain's answer is refused), on the approval card of the workspace like any other. The
-tool waits meanwhile. Once allowed, the approval holds for that repository (a write covers reads)
-for the rest of the task, and the node asks eriphe-core again, which mints.
-
-**Asked at launch.** What a task started by `run_task` will need of the user is foreseen when it
-starts, with the same decision (`startNeeds`, `task_start.go`): for each GitHub repository lent
-for `write`, its push by git (on its branch, if declared). When that would ask (the fallback token
-without the GitHub App, a `policy.credentials` rule that asks, a tainted start, no declared
-branch), the task does not start: it is kept `pending` with `desired` `held` (no node is given it,
-no placement moves it, its `pending_reason` says why) and the user gets one card in the
-conversation (kind `taskstart`, [conversation cards](#workspace-web)), « Pour pousser `eriphe/x`
-sur owner/repo, j'utiliserai le jeton GitHub de l'outil, qui n'est pas limité à ce dépôt. ». Oui
-keeps the same approval as the push's own (`credential_grants`, logged "approved at launch": a
-write to that repository, by git or gh, for the rest of the task, as long as it reads no external
-content: after that, its push asks again) and lets the task go, so its push is allowed without
-asking again; Non stops it and tells the brain.
-Like every card, only the user's click or a plain yes or no of theirs decides it, never the brain
-(`answer_task` has nothing to answer on a held task; `stop_task` cancels it). With the GitHub App
-and a declared branch nothing is asked and the task starts at once. What is not foreseen (a push
-to a repository lent for read, a task that reads external content on the way) still asks when it
-happens.
+**Asked at launch.** What a task started by `run_task` needs of the user is foreseen when it starts,
+with the same decision (`startNeeds`, `task_start.go`): for each GitHub repository lent for `write`,
+its push. When that takes the user's yes, the task does not start: it is kept `pending` with
+`desired` `held` (no node is given it, no placement moves it, its `pending_reason` says why) and the
+user gets one card in the conversation (kind `taskstart`, [conversation cards](#workspace-web)),
+« Pour pousser `eriphe/x` sur owner/repo, il me faut ton accord. ». Oui keeps the approval
+(`credential_grants`, logged "approved at launch": a write to that repository, by git or gh, for the
+rest of the task) and lets the task go; Non stops it and tells the brain. Like every card, only the
+user's click or a plain yes or no of theirs decides it, never the brain (`answer_task` has nothing
+to answer on a held task; `stop_task` cancels it). A task authorised in advance for a watch needs no
+card: that yes covers its repository.
 
 **The credential.** With [the GitHub App](#the-github-app), an installation token restricted to the
 one repository and the rights asked for, valid one hour: git reads `contents: read` or `write`; gh
 reads `contents`, `pull_requests`, `issues`, `checks`, or writes `pull_requests` and `issues`
-(never `contents: write`: a merge is not a task's). git gets `password_expiry_utc`; eriphe-core
-reuses a token for the same task and rights until ten minutes before it ends. Without the app, the
-GitHub tool's own bearer token is lent instead (**fallback**): long-lived and not limited to the
-repository, it is lent only once the user approves it (an `ask`, then held for that repository for
-the rest of the task), and flagged in the log, in eriphe-core's log (`WARNING: long-lived token lent`) and in
-the task's details, and the Tools page says to create the app.
+(never `contents: write`: a merge is not a task's). eriphe-core reuses a token for the same task and
+rights until ten minutes before it ends. Without the app, git goes with the GitHub tool's own bearer
+token (**fallback**): it stays in eriphe-core too, each request is checked against the repository
+lent, and the log says so. gh cannot use it, and the Tools page says to create the app.
 
 **The log.** Every request is kept (`credential_log`: time, task, tool, host, repository, access,
-decision, by whom, source, reason), with the user's answers to the approvals, and shown in the
-task's details ("Accès demandés") and by `GET /v1/tasks/{id}/credentials`. Approvals are in
+decision, by whom, source, reason), and shown in the task's details ("Accès demandés") and by `GET /v1/tasks/{id}/credentials`. Approvals are in
 `credential_grants`.
 
-**What it does not stop.** The token is in the task for the tool that asked (an hour, one
-repository): a task that leaks it leaks that much. The task's secret, which eriphe-cred uses, is
+**What it does not stop.** What is lent is usable: a task talked into something by a page it read
+can push to the branch it was lent, and the limit is then the token and the repository's protection
+rules on GitHub. The task's secret, which eriphe-cred uses, is
 in the task's environment (the egress relay's address already carries it): the agent could ask
 for a credential itself, which is no more than git can, and the policy denies reading it
 (`$ERIPHE_TASK_SECRET`) like the other secrets.
@@ -1811,8 +1787,8 @@ put there, so it is treated as external content, like a mail or a page:
   turn that reads it (`folder:<names>`), as `task_status` of such a task does: the memory only
   proposes what that turn remembers, and the brain may not allow a permission (see
   memory_trust.go);
-- on a tainted turn, `run_task` refuses to lend a folder with `drop` or `write`, as it refuses
-  every `write` or `drop` entry and catalog tools that act; folders to read still go;
+- on a tainted turn, `run_task` refuses to lend a folder with `drop` or `write`; folders to read
+  still go;
 - the permission policy applies to the task as to any other, and Docker refuses any write in the
   folder but in `Eriphe/`.
 
@@ -2039,10 +2015,9 @@ Eriphe may do on it (its [access level](#access-levels), four cards); the rest (
 local server runs) is under the advanced options. GitHub first asks how to connect, the two ways
 side by side: [Eriphe's GitHub App](#the-github-app) (recommended: the user picks the repositories,
 each task gets a one-hour token for its repository only, commits and PRs appear as the app,
-nothing to approve for a task's push and PR on its branch, about five minutes to set up once; it
-leads to Settings → Tools → GitHub) or a personal token (quick, acts as the user on everything the
-token reaches, long-lived, so each push of a task waits for the user's approval; its form says so
-and links back to the app). A GitHub connection on a token shows "Passer à l'app" in the list and
+about five minutes to set up once; it leads to Settings → Tools → GitHub) or a personal token
+(quick, acts as the user on everything the token reaches, long-lived; git works with it, gh does
+not, so no pull request from a task; its form says so and links back to the app). A GitHub connection on a token shows "Passer à l'app" in the list and
 in its form. In the list (`web_tools_groups.go`), each account is a card, as a phone's Settings →
 Accounts: the provider's mark, the address, "Google · Mail, Agenda, Drive", then a row for each
 of its services (Mail, Agenda, Drive) with its state, access, reconnect, edit and remove. A Google

@@ -93,7 +93,7 @@ func newMCPServer(c *core) *mcp.Server {
 			in.approvedInAdvance = granted
 			t, err := c.runTask(ctx, in)
 			if err == nil && len(tainted) > 0 && !granted {
-				// Started on a tainted turn: its writes ask me (credentials.go).
+				// What it may do was decided at its start, this is why (access_card.go).
 				c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(tainted, ", "))
 			}
 			if err == nil && in.cleanStart {
