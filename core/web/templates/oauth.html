@@ -1,7 +1,6 @@
 {{define "head"}}{{if .Data.Next}}<meta http-equiv="refresh" content="0;url={{.Data.Next}}">{{else if not .Data.Error}}<meta http-equiv="refresh" content="2;url=/settings/tools?connected={{urlquery .Data.Name}}">{{end}}{{end}}
 {{define "main"}}
 <div class="auth">
-  <div class="auth-glow" aria-hidden="true"></div>
   <div class="auth-card oauth-card">
     {{if .Data.Error}}
     <span class="oauth-mark bad" aria-hidden="true">{{template "i-x"}}</span>

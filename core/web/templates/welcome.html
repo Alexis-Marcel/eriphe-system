@@ -1,7 +1,6 @@
 {{/* The first-run wizard (web_welcome.go): the account is made, then the assistant's name, the AI account, the start. */}}
 {{define "main"}}{{with .Data}}
 <div class="auth welcome">
-  <div class="auth-glow" aria-hidden="true"></div>
   <section class="auth-card welcome-card" aria-labelledby="welcome-title">
     <span class="auth-mark" aria-hidden="true">{{template "logo"}}</span>
     <h1 id="welcome-title">{{t "welcome.title"}}</h1>
