@@ -35,3 +35,26 @@ func TestStylesheetsKeepTheLook(t *testing.T) {
 		}
 	}
 }
+
+// A tint is a colour the stylesheet knows, and a name keeps its own.
+func TestTints(t *testing.T) {
+	css, err := webFS.ReadFile("web/static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range tints {
+		if !strings.Contains(string(css), ".tint-"+name+",") {
+			t.Errorf("no .tint-%s in app.css", name)
+		}
+	}
+	if tint("compta") != tint("compta") {
+		t.Error("a name changes colour")
+	}
+	seen := map[string]bool{}
+	for _, name := range []string{"compta", "photos", "maison", "notes", "agenda", "banque"} {
+		seen[tint(name)] = true
+	}
+	if len(seen) < 2 {
+		t.Errorf("every name wears the same colour: %v", seen)
+	}
+}

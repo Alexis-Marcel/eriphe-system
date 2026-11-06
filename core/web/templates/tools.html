@@ -104,7 +104,7 @@
 {{define "tool-row"}}
     {{if .Mark}}<span class="mark preset-mark mark-{{.Mark}}" aria-hidden="true">{{template "preset-icon" .Mark}}</span>
     {{else if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
-    {{else}}<span class="mark {{if eq .Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
+    {{else}}<span class="mark tint-{{tint .Name}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
     <div class="tool-main">
       <div class="tool-head">
         <h3{{if not (or .Account .Label)}} class="mono"{{end}}>{{.Title}}</h3>
@@ -287,7 +287,7 @@
   <a class="back" href="{{.BackURL}}">{{template "i-back"}}{{if and (not .Edit) (not .Choose) .Picked}}{{t (printf "pick.%s.back" .PickKind)}}{{else if and .Choose .Edit}}{{tf "tools.editof" .Title}}{{else if .Edit}}{{t "settings.tools"}}{{else}}{{t "tools.add"}}{{end}}</a>
   <div class="form-title">
     {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
-    {{else}}<span class="mark {{if eq .Preset.Kind "local"}}mark-local{{end}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
+    {{else}}<span class="mark tint-{{tint .Name}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
     <h2>{{if .Edit}}{{tf "tools.editof" .Title}}{{else}}{{t (printf "preset.%s.title" .Preset.ID)}}{{end}}</h2>
   </div>
   {{if .Choose}}<p>{{t (printf "pick.%s.lead" .PickKind)}}</p>
@@ -321,7 +321,7 @@
   <div class="step-body">
     <div class="form-title">
       {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
-      {{else}}<span class="mark" aria-hidden="true">{{initial .Name}}</span>{{end}}
+      {{else}}<span class="mark tint-{{tint .Name}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
       <h3 id="step-title">{{if .Edit}}{{tf "tools.editof" .Title}}{{else}}{{t (printf "preset.%s.title" .Preset.ID)}}{{end}}</h3>
     </div>
     {{if .Choose}}<p class="step-lead">{{t (printf "pick.%s.lead" .PickKind)}}</p>
@@ -376,7 +376,7 @@
   <div class="step-body">
     <div class="form-title">
       {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
-      {{else}}<span class="mark" aria-hidden="true">{{initial .Name}}</span>{{end}}
+      {{else}}<span class="mark tint-{{tint .Name}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
       <h3 id="step-title">{{tf "leaving.title" .Service}}</h3>
     </div>
     <div class="test-result test-start tool-status" role="status"><span class="pulse" aria-hidden="true"></span>
@@ -665,7 +665,7 @@
   <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
   <div class="form-title">
     {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
-    {{else}}<span class="mark" aria-hidden="true">{{initial .Name}}</span>{{end}}
+    {{else}}<span class="mark tint-{{tint .Name}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
     <h2>{{tf "access.pagetitle" .Title}}</h2>
   </div>
   <p>{{t "access.pagelead"}}</p>
@@ -732,7 +732,7 @@
   </header>
   {{if .Accesses}}<ul class="tools">{{range .Accesses}}
   <li class="tool" id="lent-{{.Name}}">
-    <span class="mark" aria-hidden="true">{{initial .Name}}</span>
+    <span class="mark tint-{{tint .Name}}" aria-hidden="true">{{initial .Name}}</span>
     <div class="tool-main">
       <div class="tool-head"><h3 class="mono">{{.Name}}</h3>{{template "src-tag" .Source}}{{if .Untested}} <span class="chip srv-needs_auth">{{t "lent.untested"}}</span>{{end}}</div>
       {{if .Use}}<p class="use">{{.Use}}</p>{{end}}
