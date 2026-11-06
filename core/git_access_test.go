@@ -388,6 +388,23 @@ func TestGitBranchIsToldToTheTask(t *testing.T) {
 	}
 }
 
+// A placeholder looks like no authentication: a task is told gh works, where
+// it does.
+func TestGhIsToldToTheTask(t *testing.T) {
+	c, _, _ := gitCore(t, true, lentRepo)
+	if text := c.accessInstructions([]ResourceRef{lentRepo}); !strings.Contains(text, "gh is installed and already signed in for "+lentRepo.Ref) || !strings.Contains(text, "not as drafts") {
+		t.Fatalf("write: %q", text)
+	}
+	read := ResourceRef{Kind: resRepo, Ref: "owner/repo", Access: accessRead}
+	if text := c.accessInstructions([]ResourceRef{read}); !strings.Contains(text, ", to read") {
+		t.Fatalf("read: %q", text)
+	}
+	currentVault().remove(githubAppVault)
+	if text := c.accessInstructions([]ResourceRef{read}); strings.Contains(text, "gh is installed") {
+		t.Fatalf("without the App: %q", text)
+	}
+}
+
 // viaRelayGh sends what the relay sends for a request of gh.
 func viaRelayGh(c *core, taskID, method, target string) *httptest.ResponseRecorder {
 	return viaRelayBody(c, "nas", taskID, method, target, "token "+gitPlaceholder(taskID), "{}", map[string]string{accessHostHeader: ghTarget})
