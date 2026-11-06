@@ -22,7 +22,7 @@ const (
 	stateFailed            = "failed"
 )
 
-// TaskSpec is what eriphe-core assigns. The identity (environment
+// TaskSpec is what eriphe-core assigns. AgentEnv (environment
 // variables) is lent for this task only.
 type TaskSpec struct {
 	Runtime  string            `json:"runtime"`             // agent in the container: claude-code, opencode, codex or acp

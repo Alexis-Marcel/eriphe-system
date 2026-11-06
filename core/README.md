@@ -2,7 +2,7 @@
 
 Eriphe's control plane (v0): it keeps the state of nodes and tasks in SQLite, schedules tasks on
 nodes, follows them, lends accesses, and gives the brain its tools over MCP. One binary, with
-k8s-like modules: `store`, `api`/`mcp`, `scheduler`, controllers, `identity`.
+k8s-like modules: `store`, `api`/`mcp`, `scheduler`, controllers.
 
 ```sh
 go build -o eriphe-core .
@@ -39,7 +39,7 @@ with the setup code ABCD-EFGH`) creates the owner's password, and a short wizard
 assistant (the user chooses its name) and connects the AI account it thinks with
 (a Claude subscription's `claude setup-token`, or any other kind of Settings → Agents, with its
 usual agents). The brain starts as soon as a machine has joined.
-Nothing else is on by default: no tool, no policy rule, no identity; the catalog's tools (Home
+Nothing else is on by default: no tool, no policy rule, no access; the catalog's tools (Home
 Assistant, GitHub, mail…) are added from Settings → Tools.
 
 An installer gets a join token for the machine's own node without the workspace:
@@ -1112,11 +1112,9 @@ release, a repository's settings or its secrets. A task that must merge is lent 
 tool, under its grid.
 
 **No token in the task.** The token is minted here and goes in on the way out (`git_access.go`).
-gh's requests, to `api.github.com`, are not classified (much of it is one `POST /graphql`). Its token is for the repository a REST path names,
-which must be lent, or else for those lent, of one owner; when some may be written, for those only,
-with write rights, so that it holds nothing lent for read. So with several repositories lent, a
-request that names none may not reach all of them. A write not allowed yet gets a token that reads,
-and GitHub refuses the write. A read with no token to be had (a public repository the App is not on)
+gh's requests, to `api.github.com`, are not classified (much of it is one `POST /graphql`). It works on the one repository
+the task is lent: a REST path naming another is refused, and its token is for that repository, with
+write rights if a write is allowed, otherwise read rights, so GitHub refuses the write. A read with no token to be had (a public repository the App is not on)
 goes without one. gh needs the GitHub App: the tool's own token holds everything, and gh's requests
 are not classified:
 
@@ -1155,7 +1153,7 @@ rights until ten minutes before it ends. Without the app, git goes with the GitH
 token (**fallback**): it stays in eriphe-core too, each request is checked against the repository
 lent, and the log says so. gh cannot use it, and the Tools page says to create the app.
 
-**The log.** Every request is kept (`access_log`: time, task, tool, host, repository, access,
+**The log.** Every request is kept (`access_log`: time, task, tool, host, target, action,
 decision, by whom, source, reason), and shown in the task's details ("Accès demandés") and by `GET /v1/tasks/{id}/access-log`. Approvals are in
 `repo_grants`.
 
@@ -1885,7 +1883,7 @@ handlers are thin layers over the methods behind the MCP tools.
 | `GET /v1/tasks?all=1` | worker tasks, the most recent first; active ones only without `all`; the brain too while it waits for a permission |
 | `GET /v1/tasks/{id}?events=N` | the task's status (as `task_status`) with its last N events (20) |
 | `GET /v1/tasks/{id}/events?after=N&wait=S` | events after seq N, waiting up to S seconds (max 120) for new ones; a finished task answers at once |
-| `GET /v1/tasks/{id}/access-log` | what the task used, as [GitHub in a task](#github-in-a-task) says, the latest first: time, tool, host, repo, access, decision, by whom, source |
+| `GET /v1/tasks/{id}/access-log` | what the task used, as [GitHub in a task](#github-in-a-task) says, the latest first: time, tool, host, target, action, decision, by whom, source |
 | `POST /v1/tasks/{id}/answer` | `{reply, allow}`: allow or deny the pending permission (`allow` set), or reply to an idle task |
 | `POST /v1/tasks/{id}/stop` | stop the task's agent |
 
