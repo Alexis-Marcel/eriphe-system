@@ -8,7 +8,7 @@
 .kmark-google-api { background: #4285f4; }
 .kmark-mistral-api { background: #fa520f; }
 .kmark-openrouter-api { background: #6467f2; }
-.kmark-openai-compatible { background: #0f766e; }
+.kmark-openai-compatible { background: var(--primary); }
 .btn .kmark { width: 22px; height: 22px; border-radius: 6px; box-shadow: none; background: color-mix(in srgb, currentColor 14%, transparent); }
 .btn .kmark svg { width: 14px; height: 14px; }
 

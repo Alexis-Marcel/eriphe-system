@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"hash/fnv"
 	"html"
 	"html/template"
 	"net/url"
@@ -677,6 +678,7 @@ func templateFuncs(lang string) template.FuncMap {
 		"has":      func(key string) bool { return tr(lang, key) != key },
 		"logo":     presetLogo,
 		"initial":  func(s string) string { return strings.ToUpper(string([]rune(s + "?")[:1])) },
+		"tint":     tint,
 		"finished": finished,
 		"mismatch": func(m mismatch) string { return m.Text(lang) }, // receipt.go
 		"money":    func(usd float64) string { return money(lang, usd) },
@@ -864,4 +866,15 @@ func link(u, text string) string {
 		return text
 	}
 	return `<a href="` + html.EscapeString(p.String()) + `" target="_blank" rel="noopener noreferrer">` + text + `</a>`
+}
+
+// tints are the colours a named object can wear (the .tint-* of app.css).
+var tints = []string{"violet", "blue", "sky", "teal", "green", "amber", "orange", "pink"}
+
+// tint gives a name its colour, always the same one: a tool without a logo of
+// its own stays recognisable from one page to the next.
+func tint(name string) string {
+	h := fnv.New32a()
+	h.Write([]byte(name))
+	return tints[h.Sum32()%uint32(len(tints))]
 }
