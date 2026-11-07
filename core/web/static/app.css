@@ -681,9 +681,13 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
    settings go in two levels, their list then a page. */
 @media (max-width: 860px) {
   :root { --topbar: 54px; }
-  .topbar { padding: 0 12px 0 16px; }
+  .topbar { padding: 0 max(12px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); }
 
-  .workspace, .workspace.side-off { grid-template-columns: 1fr; }
+  .workspace, .workspace.side-off { grid-template-columns: minmax(0, 1fr); }
+  .chat, .chat-scroll, .chat-inner, .messages { min-width: 0; max-width: 100%; }
+  .bubble pre, .prose pre { max-width: 100%; }
+  .bubble table, .prose table { display: block; max-width: 100%; overflow-x: auto; }
+  .bubble img { max-width: 100%; height: auto; }
   .workspace .side, .workspace.side-off .side {
     position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; top: calc(env(safe-area-inset-top) + 40px);
     display: flex; flex-direction: column; padding: 0; overflow: hidden;
