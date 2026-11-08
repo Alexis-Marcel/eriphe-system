@@ -279,18 +279,29 @@ func (c *core) turnTaintBut(pending map[string]int) []string {
 	if id == "" {
 		return tainted
 	}
-	// Every event of the turn, page by page: a long turn has more than one.
+	tainted, _ = c.eventsTaint(id, eventSeq, tainted, pending)
+	return tainted
+}
+
+// eventsTaint adds to tainted what a task's events after seq read: a
+// catalog tool of a server not trusted, the web (but the page reads still
+// pending). It returns the last event seen.
+func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[string]int) ([]string, int) {
+	// Every event, page by page: a long turn has more than one.
 	var events []EventRow
-	for after := eventSeq; ; {
+	for after := seq; ; {
 		page, err := c.store.eventsAfter(id, after, 500)
 		if err != nil {
-			return append(tainted, "events.unreadable") // not known: as if it read something
+			return append(tainted, "events.unreadable"), seq // not known: as if it read something
 		}
 		events = append(events, page...)
 		if len(page) < 500 {
 			break
 		}
 		after = page[len(page)-1].Seq
+	}
+	if len(events) > 0 {
+		seq = events[len(events)-1].Seq
 	}
 	trusted := c.conf().memoryConfig().TrustedServers
 	for _, e := range events {
@@ -318,7 +329,7 @@ func (c *core) turnTaintBut(pending map[string]int) []string {
 			}
 		}
 	}
-	return tainted
+	return tainted, seq
 }
 
 // Reading back is reading too. A memory of external trust (a task's

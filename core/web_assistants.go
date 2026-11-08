@@ -29,6 +29,8 @@ type assistantCard struct {
 	Choices     []agentView // the agents that can run it
 	Plain       string      // how it is doing, in plain words: available, replying, stopped or noai
 	ReportsTo   string      // the display name of the one it reports to; the brain's helpers only
+	Powers      []string    // what it may do, in words; the brain's helpers only
+	Wakes       []string    // what wakes it, in words
 }
 
 // plainStatus is how an assistant is doing, as the page says it: no AI
@@ -79,6 +81,17 @@ func (w *web) assistantCards(r *http.Request, v agentsPage) []assistantCard {
 		}
 		if l := tr(lang, "assistants.role."+av.Spec.Role); l != "assistants.role."+av.Spec.Role {
 			card.RoleLabel = l
+		}
+		for _, p := range av.Spec.powers() {
+			if l := tr(lang, "assistants.power."+p); l != "assistants.power."+p {
+				card.Powers = append(card.Powers, l)
+			}
+		}
+		for _, x := range av.Spec.Triggers {
+			kind, arg, _ := strings.Cut(x, ":")
+			if l := tr(lang, "assistants.wake."+kind); l != "assistants.wake."+kind {
+				card.Wakes = append(card.Wakes, fmt.Sprintf(l, strings.TrimSpace(arg)))
+			}
 		}
 		if a, ok := m.Agents[av.Spec.Agent]; ok {
 			card.AgentModel = modelLabel(m.Providers[a.Provider].Kind, a.Runtime, a.Model)

@@ -147,7 +147,7 @@ func truncate(s string, n int) string {
 // writes; what it asks for is decided by brainPermission.
 func init() {
 	assistantRoles[assistantRoleBrain] = assistantRole{
-		Powers: []string{powerTalksToUser, powerReceivesConversation, powerLaunchesTasks, powerLendsResources},
+		Powers: []string{powerTalksToUser, powerReceivesConversation, powerLaunchesTasks, powerLendsResources, powerNotifies},
 		Prompt: brainPrompt, StartPrompt: brainStartPrompt, Triggers: []string{triggerConversation, triggerClock},
 		Profile: "brain", FreeReads: true, Network: true, Streams: true,
 		// Its harness's web search is allowed (brain_web.go); its page
@@ -172,7 +172,7 @@ func init() {
 	}
 	assistantTriggers[triggerConversation] = assistantTrigger{
 		relay: func(c *core, a Assistant, t *TaskRow) {
-			if assistantRoles[a.Role].can(powerTalksToUser) { // checked with its role (checkAssistant)
+			if a.can(powerTalksToUser) { // checked with its role (checkAssistant)
 				c.relayBrainOutput(a, t)
 			}
 		},

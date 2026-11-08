@@ -50,13 +50,25 @@ func (c *core) taskMCPHandler() http.Handler {
 		}
 		server := r.PathValue("server")
 		if server == selfServer {
-			// eriphe-core's own tools, for an assistant whose role launches tasks,
-			// without self_url: what the bearer token gives at /mcp.
-			if a, r, ok := c.assistantOf(t); !ok || !r.can(powerLaunchesTasks) || a.SelfURL != "" || c.self == nil {
+			// eriphe-core's own tools, for an assistant that launches tasks,
+			// without self_url: what the bearer token gives at /mcp. Any other
+			// assistant gets its own, as its powers say (assistant_tools.go).
+			a, _, ok := c.assistantOf(t)
+			var s *mcp.Server
+			switch {
+			case !ok:
+			case a.can(powerLaunchesTasks):
+				if a.SelfURL == "" {
+					s = c.self
+				}
+			case hasOwnTools(a):
+				s = c.assistantServer(a, t)
+			}
+			if s == nil {
 				http.Error(w, "this task has no access to "+server, http.StatusForbidden)
 				return
 			}
-			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.self)))
+			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, s)))
 			return
 		}
 		grant := c.taskGrant(t)
@@ -149,6 +161,18 @@ func (c *core) brainFreeReads() []string {
 	var out []string
 	for _, r := range c.lentTools() {
 		if name := claudeToolName(r.server, r.tool); c.freeRead(name) && !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// freeReadsIn are the free reads a grant covers, as its agent names them:
+// allowed in advance to an assistant that is lent them.
+func (c *core) freeReadsIn(grant []string) []string {
+	var out []string
+	for _, r := range c.lentTools() {
+		if name := claudeToolName(r.server, r.tool); grantAllows(grant, r.server, r.tool) && c.freeRead(name) && !slices.Contains(out, name) {
 			out = append(out, name)
 		}
 	}

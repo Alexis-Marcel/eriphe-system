@@ -62,6 +62,14 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 }
 
 func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
+	return c.notifyAs(in, notifyFromBrain, c.turnTaint(), true)
+}
+
+// notifyAs is notify for the brain or for an assistant with the power
+// (source notifyFromAssistant): tainted is why the turn or the session
+// that writes it read external content. Only the brain's goes in the
+// conversation, as what it said.
+func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversation bool) (map[string]any, error) {
 	text, why := strings.TrimSpace(in.Text), strings.TrimSpace(in.Why)
 	switch {
 	case text == "" || why == "":
@@ -73,14 +81,13 @@ func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
 	if scan.Reject != "" {
 		return nil, fmt.Errorf("refused: %s", scan.Reject)
 	}
-	tainted := c.turnTaint()
 	if len(tainted) > 0 && urlRe2.MatchString(text+" "+why) {
 		// What a tainted turn writes may carry a link out (EchoLeak): text only.
 		return nil, errors.New("refused: this turn read external content, so a notification holds no link: write it as text")
 	}
 	ref, topicNote := c.notifyTopic(in.Ref)
 	n := &notification{Text: truncate(text, notifyTextMax), Why: truncate(why, notifyWhyMax),
-		Ref: truncate(ref, 100), Source: notifyFromBrain, Tainted: strings.Join(tainted, ", ")}
+		Ref: truncate(ref, 100), Source: source, Tainted: strings.Join(tainted, ", ")}
 	// The message goes in the conversation with the push, and is not pushed again as a question.
 	c.relayMu.Lock()
 	defer c.relayMu.Unlock()
@@ -88,7 +95,7 @@ func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if n.Outcome == levelNow {
+	if n.Outcome == levelNow && conversation {
 		if seq, err := c.store.addMessage(roleBrain, n.Text, true); err == nil {
 			c.store.set(notifiedKey(int(seq)), "1")
 			c.markBrainMessage(int(seq))
@@ -103,10 +110,12 @@ func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
 	if topicNote != "" {
 		out["topic"] = topicNote
 	}
-	switch n.Outcome {
-	case levelNow:
+	switch {
+	case n.Outcome == levelNow && conversation:
 		out["note"] = "Sent, and written in the conversation: do not repeat it; answer [rien] if you have nothing else to say."
-	case levelBrief:
+	case n.Outcome == levelNow:
+		out["note"] = "Sent."
+	case n.Outcome == levelBrief:
 		out["note"] = "Not sent: held for the next brief. Do not say it was sent."
 	default:
 		out["note"] = "Not sent: a rule of the user's says never for this."

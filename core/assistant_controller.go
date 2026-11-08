@@ -29,11 +29,16 @@ import (
 // does. A new role is one more card (brain.go has the brain's).
 type assistantRole struct {
 	// What its assistants may do (assistantPowers): checked where it is
-	// decided, never read from a name.
-	Powers      []string
-	Prompt      string   // its built-in standing instructions
-	StartPrompt string   // its first turn, unless firstPrompt gives it
-	Triggers    []string // its triggers when its spec names none
+	// decided, never read from a name. An assistant has these or fewer
+	// (Assistant.Powers); DefaultPowers when its spec names none, all of
+	// Powers when DefaultPowers is empty.
+	Powers        []string
+	DefaultPowers []string
+	Prompt        string   // its built-in standing instructions
+	StartPrompt   string   // its first turn, unless firstPrompt gives it
+	Triggers      []string // its triggers when its spec names none
+	// The kinds of trigger its assistants may have; empty: those of Triggers.
+	Wakes []string
 	// The node profile that keeps its sessions between its tasks;
 	// assistant-<name> by default.
 	Profile      string
@@ -71,25 +76,103 @@ const (
 	powerLaunchesTasks = "launchesTasks"
 	// It lends the tasks it starts their resources (run_task's).
 	powerLendsResources = "lendsResources"
+	// It tells the user something on its own, with notify: the code decides
+	// when, as for the brain's (assistant_tools.go).
+	powerNotifies = "notifies"
+	// It reports to the brain what it sees, with report: an event in the
+	// conversation, which the brain judges (assistant_tools.go).
+	powerReports = "reports"
 )
 
-var assistantPowers = []string{powerTalksToUser, powerReceivesConversation, powerLaunchesTasks, powerLendsResources}
+// The closed list of powers. An assistant other than the brain never talks
+// to the user nor launches a task: it reports to the brain, the only voice
+// and the only orchestrator, or notifies when the user gave it that power.
+var assistantPowers = []string{powerTalksToUser, powerReceivesConversation, powerLaunchesTasks, powerLendsResources,
+	powerNotifies, powerReports}
 
 func (r assistantRole) can(power string) bool { return slices.Contains(r.Powers, power) }
 
-// check tells whether a role's powers hold together: what hears the
+func (r assistantRole) defaultPowers() []string {
+	if len(r.DefaultPowers) > 0 {
+		return r.DefaultPowers
+	}
+	return r.Powers
+}
+
+// wakes are the kinds of trigger its assistants may have.
+func (r assistantRole) wakes() []string {
+	if len(r.Wakes) > 0 {
+		return r.Wakes
+	}
+	var out []string
+	for _, t := range r.Triggers {
+		out = append(out, triggerKind(t))
+	}
+	return out
+}
+
+// checkPowers tells whether powers hold together: what hears the
 // conversation answers in it, and only what starts tasks lends to them.
-func (r assistantRole) check() error {
-	for _, p := range r.Powers {
+func checkPowers(ps []string) error {
+	for _, p := range ps {
 		if !slices.Contains(assistantPowers, p) {
 			return fmt.Errorf("unknown power %q", p)
 		}
 	}
 	switch {
-	case r.can(powerReceivesConversation) && !r.can(powerTalksToUser):
+	case slices.Contains(ps, powerReceivesConversation) && !slices.Contains(ps, powerTalksToUser):
 		return fmt.Errorf("%s needs %s", powerReceivesConversation, powerTalksToUser)
-	case r.can(powerLendsResources) && !r.can(powerLaunchesTasks):
+	case slices.Contains(ps, powerLendsResources) && !slices.Contains(ps, powerLaunchesTasks):
 		return fmt.Errorf("%s needs %s", powerLendsResources, powerLaunchesTasks)
+	}
+	return nil
+}
+
+// checkTriggers tells whether triggers are of kinds the role allows, each
+// with an argument its card accepts.
+func checkTriggers(r assistantRole, triggers []string) error {
+	for _, t := range triggers {
+		kind := triggerKind(t)
+		card, ok := assistantTriggers[kind]
+		if !ok || !slices.Contains(r.wakes(), kind) {
+			return fmt.Errorf("trigger %q is not one of its role's: %s", t, strings.Join(r.wakes(), ", "))
+		}
+		_, arg, _ := strings.Cut(t, ":")
+		switch {
+		case card.check != nil:
+			if err := card.check(strings.TrimSpace(arg)); err != nil {
+				return fmt.Errorf("trigger %q: %w", t, err)
+			}
+		case strings.Contains(t, ":"):
+			return fmt.Errorf("trigger %q takes no argument", t)
+		}
+	}
+	return nil
+}
+
+// check tells whether a role's card holds together: its powers, its
+// defaults among them, its triggers among its wakes.
+func (r assistantRole) check() error {
+	if err := checkPowers(r.Powers); err != nil {
+		return err
+	}
+	for _, p := range r.DefaultPowers {
+		if !r.can(p) {
+			return fmt.Errorf("default power %q is not one of its powers", p)
+		}
+	}
+	if err := checkPowers(r.defaultPowers()); err != nil {
+		return err
+	}
+	for _, w := range r.Wakes {
+		if _, ok := assistantTriggers[w]; !ok {
+			return fmt.Errorf("unknown trigger kind %q", w)
+		}
+	}
+	if err := checkTriggers(r, r.Triggers); err != nil {
+		return err
+	}
+	switch {
 	case slices.Contains(r.Triggers, triggerConversation) && !r.can(powerReceivesConversation):
 		return fmt.Errorf("the %s trigger needs %s", triggerConversation, powerReceivesConversation)
 	case slices.Contains(r.Triggers, triggerClock) && !r.can(powerReceivesConversation):
@@ -101,6 +184,7 @@ func (r assistantRole) check() error {
 // assistantTrigger is a trigger's card: what it brings an assistant at
 // idle, and where what the assistant says goes.
 type assistantTrigger struct {
+	check   func(arg string) error                                                    // its argument; nil: it takes none
 	relay   func(c *core, a Assistant, t *TaskRow)                                    // its new events, out
 	wrote   func(c *core, a Assistant, t *TaskRow, events bool, draft string)         // its node's report (Streams)
 	deliver func(c *core, ctx context.Context, a Assistant, t *TaskRow) (bool, error) // what waits, in: true if a turn started
@@ -247,8 +331,8 @@ func (c *core) awaitAlwaysOn(a Assistant, r assistantRole) bool {
 // followAssistant keeps up with a running assistant's task: its triggers'
 // relays, its session, and its failures once a turn went through.
 func (c *core) followAssistant(a Assistant, st AssistantStatus, t *TaskRow) {
-	for _, tr := range a.triggers() {
-		if h := assistantTriggers[tr].relay; h != nil {
+	for _, kind := range a.wakeKinds() {
+		if h := assistantTriggers[kind].relay; h != nil {
 			h(c, a, t)
 		}
 	}
@@ -301,8 +385,8 @@ func (c *core) restartIfChanged(ctx context.Context, a Assistant, t *TaskRow) (s
 // deliverAssistant gives an idle assistant what its triggers have for it:
 // one turn at a time.
 func (c *core) deliverAssistant(ctx context.Context, a Assistant, t *TaskRow) error {
-	for _, tr := range a.triggers() {
-		h := assistantTriggers[tr].deliver
+	for _, kind := range a.wakeKinds() {
+		h := assistantTriggers[kind].deliver
 		if h == nil {
 			continue
 		}
@@ -355,7 +439,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	// added when its node fetches the task: the others go through its
 	// approval path.
 	var allowed []string
-	if r.can(powerLaunchesTasks) {
+	if a.can(powerLaunchesTasks) || hasOwnTools(a) {
 		allowed = append(allowed, "mcp__"+selfServer)
 	}
 	allowed = append(allowed, r.AllowedTools...)
@@ -444,6 +528,11 @@ func (c *core) assistantSpecHash(a Assistant) string {
 	if n := a.displayName(); a.Role == assistantRoleBrain && n != defaultDisplayName || a.Role != assistantRoleBrain && n != a.Name {
 		spec = append(spec, n)
 	}
+	// Its powers are its own tools, which its agent lists once: other
+	// powers restart it. None set keeps the fingerprint it had before.
+	if len(a.Powers) > 0 {
+		spec = append(spec, a.Powers)
+	}
 	json.NewEncoder(h).Encode(spec)
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -491,6 +580,8 @@ func (c *core) assistantToolsHash(a Assistant) string {
 	json.NewEncoder(h).Encode(grant)
 	if assistantRoles[a.Role].FreeReads {
 		json.NewEncoder(h).Encode(c.brainFreeReads()) // allowed in advance when it starts
+	} else if reads := c.freeReadsIn(grant); len(reads) > 0 {
+		json.NewEncoder(h).Encode(reads)
 	}
 	for _, name := range grantServers(grant) {
 		if _, ok := c.conf().Servers[name]; !ok {
@@ -549,7 +640,7 @@ func assistantToken(token string) string {
 // eriphe-core wherever it is, and the assistant holds no token.
 func (c *core) assistantServers(a Assistant, r assistantRole) map[string]any {
 	servers := map[string]any{}
-	if r.can(powerLaunchesTasks) && a.SelfURL != "" {
+	if a.can(powerLaunchesTasks) && a.SelfURL != "" {
 		servers[selfServer] = map[string]any{
 			"type": "http", "url": a.SelfURL, "headers": map[string]string{"Authorization": "Bearer " + assistantToken(c.token)},
 			"alwaysLoad": true}
@@ -586,9 +677,12 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 	// they never wait for a permission. The node reads them when it starts.
 	if r.FreeReads {
 		spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), c.brainFreeReads()...)
+	} else if reads := c.freeReadsIn(c.assistantGrant(a)); len(reads) > 0 {
+		// Another's: the free reads among the tools lent to it.
+		spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), reads...)
 	}
 	spec.MCPServers = c.assistantServers(a, r)
-	if r.can(powerLaunchesTasks) && a.SelfURL == "" {
+	if a.can(powerLaunchesTasks) && a.SelfURL == "" || !a.can(powerLaunchesTasks) && hasOwnTools(a) {
 		spec.Servers = append(spec.Servers, selfServer) // relayed by its node
 		// Its own tools, used nearly every turn and named by its concept
 		// map: loaded upfront, never searched for first.

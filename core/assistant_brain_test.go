@@ -18,7 +18,7 @@ func TestAssistantRolePowers(t *testing.T) {
 	}
 	brain := assistantRoles[assistantRoleBrain]
 	for _, p := range assistantPowers {
-		if !brain.can(p) {
+		if !brain.can(p) && p != powerReports { // it reports to nobody
 			t.Errorf("the brain cannot %s", p)
 		}
 	}

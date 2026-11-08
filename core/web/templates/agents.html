@@ -201,6 +201,8 @@
       {{with .Status.LastError}}<div class="alert-box" role="alert">{{template "problem" (problem "task" .)}}</div>{{end}}
       <dl class="kv">
         <div><dt>{{t "assistants.agent"}}</dt><dd>{{if .Spec.Agent}}<span class="mono">{{.Spec.Agent}}</span>{{if .AgentModel}} <span class="muted small">{{.AgentModel}}</span>{{end}}{{else}}<span class="muted">{{t "assistants.noagent"}}</span>{{end}}{{if .AgentLocked}} {{template "src-tag" "config"}}{{end}}</dd></div>
+        {{if .Powers}}<div><dt>{{t "assistants.powers"}}</dt><dd>{{range .Powers}}<span class="tag">{{.}}</span>{{end}}</dd></div>{{end}}
+        {{if eq .Spec.Role "assistant"}}<div><dt>{{t "assistants.wakes"}}</dt><dd>{{range .Wakes}}<span class="tag">{{.}}</span>{{else}}<span class="muted small">{{t "assistants.nowake"}}</span>{{end}}</dd></div>{{end}}
         <div><dt>{{t "assistants.tools"}}</dt><dd>{{range .Spec.Tools}}<span class="tag mono">{{.}}</span>{{end}}{{if .FreeReads}}<span class="muted small">{{if .Spec.Tools}}{{t "assistants.plusfree"}}{{else}}{{t "assistants.onlyfree"}}{{end}}</span>{{else if not .Spec.Tools}}<span class="muted small">{{t "assistants.notools"}}</span>{{end}}{{if .ToolsLocked}} {{template "src-tag" "config"}}{{end}}</dd></div>
         {{if .Status.Task}}<div><dt>{{t "assistants.task"}}</dt><dd><a class="mono" href="/tasks/{{.Status.Task}}">{{.Status.Task}}</a>{{if .Status.State}} <span class="muted small">{{.Status.State}}</span>{{end}}</dd></div>{{end}}
         <div><dt>{{t "assistants.lastturn"}}</dt><dd>{{if .Status.LastTurn}}{{ago .LastTurn}}{{else}}<span class="muted">{{t "time.never"}}</span>{{end}}</dd></div>
