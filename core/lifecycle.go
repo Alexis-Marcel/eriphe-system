@@ -215,8 +215,8 @@ func (c *core) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 	isAssistant := c.isAssistantTask(id)
 	if owner, ok := c.reportingAssistant(id); ok {
-		for _, tr := range owner.triggers() {
-			if h := assistantTriggers[tr].wrote; h != nil {
+		for _, kind := range owner.wakeKinds() {
+			if h := assistantTriggers[kind].wrote; h != nil {
 				h(c, owner, t, len(in.Events) > 0, in.Draft)
 			}
 		}

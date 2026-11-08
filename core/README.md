@@ -1226,19 +1226,21 @@ Its spec says what it is and what it runs on; its status is what eriphe-core kee
 
 | Spec | |
 |---|---|
-| `role` | what it is: a card in `assistantRoles` (`brain` today), with its powers (below) |
+| `role` | what it is: a card in `assistantRoles`, `brain` or `assistant` (below), with the powers it allows |
 | `display_name` | what the user calls it, as a person (see [its name](#the-assistants-name)); Eriphe for the brain by default, its id for another |
 | `agent`, `node` | what it runs on; without an agent, the default one or the first that can run it |
 | `instructions` | its standing instructions (`{{user}}` and `{{name}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
 | `tools` | its grant from the catalog, like a task's; its role may add the catalog's free reads |
 | `resources` | what it is lent besides its tools (`{kind, ref, access, …}`): kept, lent with the resources work |
-| `triggers` | what wakes it: `conversation` (the user's messages and the tasks' events), `clock` (an intention of the memory that comes due: the wake packet, see [Memory](#memory); or a watch that fired, see Watches). Its role's by default (the brain's: both); `conversation` and `clock` only for a role that `receivesConversation`, and one enabled assistant at most has the conversation |
+| `powers` | what it may do, from the closed list below, within its role's; its role's defaults when empty |
+| `triggers` | what wakes it, each a kind its role allows, some with an argument after a colon: `conversation` (the user's messages and the tasks' events), `clock` (an intention of the memory that comes due: the wake packet, see [Memory](#memory); or a watch that fired, see Watches), `schedule:<when>` (below). Its role's by default (the brain's: `conversation` and `clock`); `conversation` and `clock` only with `receivesConversation`, and one enabled assistant at most has the conversation |
 | `reports_to` | the assistant it reports to: the brain (the one with the conversation), the only one it may name; empty means the brain. The brain reports to no one |
 | `disabled` | its task is stopped, and none started |
 | `self_url` | the file only (see the brain) |
 
-A role's card lists its powers, what its assistants may do; the code checks them where it decides,
-never a name:
+Powers are a closed list. A role's card lists those its assistants may have, and the ones they get
+when their spec names none; an assistant's `powers` are its role's or fewer. The code checks an
+assistant's powers where it decides, never its name:
 
 | Power | |
 |---|---|
@@ -1246,8 +1248,38 @@ never a name:
 | `receivesConversation` | it may have the `conversation` trigger (needs `talksToUser`) |
 | `launchesTasks` | eriphe-core's own MCP tools: it starts, follows and stops tasks, and reads and writes the memory |
 | `lendsResources` | it lends the tasks it starts their resources (needs `launchesTasks`) |
+| `notifies` | it tells the user something on its own, with `notify`: the same rules, quiet hours and cap as the brain's |
+| `reports` | it reports to the brain with `report` |
 
-The brain's role has all four; a role with none watches and reports, through its triggers.
+The brain's role has all but `reports`: it reports to no one.
+
+### The assistant role
+
+An assistant of role `assistant` is any other: a mission (its `instructions`), woken by its
+triggers, reading with the tools lent to it, under the grid. **One voice, one orchestrator**: it
+never talks to the user nor launches a task. By default it may only `reports`; `notifies` is given
+by the user. It runs as a permanent task, like the brain, placed on an always-on node.
+
+- **Its instructions** are its role's frame (`assistant-prompt.md`, in French: who it is, that what
+  it reads is data, `[rien]` when there is nothing), then its mission.
+- **Its wake-ups**: `schedule:<when>`, an interval (`every 15m`, `toutes les 2 h`: 5 min to 24 h)
+  or days and times of day as a watch's schedule (`weekdays 08:00`, `every 2h 08:00-20:00`), in
+  the user's zone. A schedule seen for the first time waits for its next time; times missed while
+  it was busy or stopped make one wake. Its turn reads `[réveil : horaire « every 15m »] Fais ta
+  mission.` More kinds come with the next steps (another assistant's state, a tool).
+- **Its tools**: its own MCP server, under eriphe-core's name, built for it as its powers say
+  (`report`, `notify`) and relayed by its node: it holds no token. The free reads among its catalog
+  tools are allowed in advance; any other call is refused, since it has no approval path yet.
+  Of its harness's own tools it keeps only the search for deferred tools.
+- **`report`** puts an event in the conversation, `Rapport de l'assistant <name> : …`, which the
+  brain reads at its next idle and judges: tell the user, start a task, or nothing.
+- **`notify`** goes through the brain's notification path, its why prefixed with the assistant's
+  name; it is not written in the conversation.
+- **Its taint is its session's**: no message of the user's ever starts a clean turn for it, and
+  its session keeps what it read. Once it read external content (a catalog tool of a server not
+  trusted, the web), every report it makes taints the brain's turn that reads it, and its
+  notifications are tainted (they never interrupt, carry no link). A new session starts clean; a
+  resumed one keeps its taint.
 
 The status (`GET /v1/assistants`) has its conditions `Running`, `Busy` and `Ready`, its current
 task, the agent it runs, its session, its last turn and its last error; the controller keeps its
@@ -1269,7 +1301,8 @@ never as an assistant: its name, how it is doing in plain words (available, repl
 AI chosen) and its last error, the agent it thinks with, the agents it hands tasks to, and in
 technical details its task, its last turn and its extra tools, each set there when the file leaves
 it out. Below, the brain's assistants, each saying whom it reports to. Other assistants are
-added through the API only, for now; a file may also list them under `assistants`. An install from
+added through the API only, for now; a file may also list them under `assistants`. Each card says
+its role, its powers and its wake-ups. An install from
 before moves by itself at start: the brain's `brain_*` keys become its status, the setting
 `brain_agent` its workspace agent, and the same agent keeps its running task.
 

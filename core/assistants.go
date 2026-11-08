@@ -61,8 +61,12 @@ type Assistant struct {
 	// TODO: lend them at start, once an assistant's resources have their
 	// approval path and taint gate; until then they are checked and kept.
 	Resources []ResourceRef `json:"resources,omitempty"`
-	// What wakes it: conversation (the user's messages, the tasks' events).
-	// Later source:<name> and schedule. Empty: its role's.
+	// What it may do, from the closed list of powers (assistantPowers),
+	// within what its role allows. Empty: its role's defaults.
+	Powers []string `json:"powers,omitempty"`
+	// What wakes it, each a kind its role allows (assistantTriggers), some
+	// with an argument after a colon: conversation (the user's messages,
+	// the tasks' events), clock, schedule:<when>. Empty: its role's.
 	Triggers []string `json:"triggers,omitempty"`
 	// The assistant it reports to: the brain, the only one it may name.
 	// Empty: the brain, for any but the brain.
@@ -81,7 +85,39 @@ func (a Assistant) triggers() []string {
 	return assistantRoles[a.Role].Triggers
 }
 
-func (a Assistant) has(trigger string) bool { return slices.Contains(a.triggers(), trigger) }
+// has tells whether one of its triggers is of this kind.
+func (a Assistant) has(kind string) bool {
+	return slices.ContainsFunc(a.triggers(), func(t string) bool { return triggerKind(t) == kind })
+}
+
+// wakeKinds are the kinds of its triggers, each once, in their order.
+func (a Assistant) wakeKinds() []string {
+	var out []string
+	for _, t := range a.triggers() {
+		if k := triggerKind(t); !slices.Contains(out, k) {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// triggerKind is a trigger's kind: what comes before its argument.
+func triggerKind(t string) string {
+	kind, _, _ := strings.Cut(t, ":")
+	return strings.TrimSpace(kind)
+}
+
+// powers are what it may do: its own, or its role's defaults.
+func (a Assistant) powers() []string {
+	if len(a.Powers) > 0 {
+		return a.Powers
+	}
+	return assistantRoles[a.Role].defaultPowers()
+}
+
+// can tells whether it has a power: checked where it is used, never read
+// from a name (checkAssistant keeps its powers within its role's).
+func (a Assistant) can(power string) bool { return slices.Contains(a.powers(), power) }
 
 // displayName is what the user calls it.
 func (a Assistant) displayName() string {
@@ -209,6 +245,9 @@ func overlay(file, ws Assistant) Assistant {
 	if len(a.Resources) == 0 {
 		a.Resources = ws.Resources
 	}
+	if len(a.Powers) == 0 {
+		a.Powers = ws.Powers
+	}
 	if len(a.Triggers) == 0 {
 		a.Triggers = ws.Triggers
 	}
@@ -239,6 +278,8 @@ func readOnlyField(file, ws Assistant) string {
 		return "tools"
 	case len(ws.Resources) > 0 && len(file.Resources) > 0 && !reflect.DeepEqual(ws.Resources, file.Resources):
 		return "resources"
+	case len(ws.Powers) > 0 && len(file.Powers) > 0 && !slices.Equal(ws.Powers, file.Powers):
+		return "powers"
 	case len(ws.Triggers) > 0 && len(file.Triggers) > 0 && !slices.Equal(ws.Triggers, file.Triggers):
 		return "triggers"
 	case ws.ReportsTo != "" && file.ReportsTo != "" && ws.ReportsTo != file.ReportsTo:
@@ -357,9 +398,18 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 	if err := r.check(); err != nil {
 		return fmt.Errorf("%s: role %s: %w", what, a.Role, err)
 	}
-	// What hears the conversation is the brain: its role says it may.
+	// Its powers are its role's, or fewer, and hold together.
+	for _, p := range a.Powers {
+		if !r.can(p) {
+			return fmt.Errorf("%s: power %q is not for an assistant of role %s: %s are", what, p, a.Role, strings.Join(r.Powers, ", "))
+		}
+	}
+	if err := checkPowers(a.powers()); err != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	// What hears the conversation is the brain: its powers say it may.
 	for _, tr := range []string{triggerConversation, triggerClock} {
-		if a.has(tr) && !r.can(powerReceivesConversation) {
+		if a.has(tr) && !a.can(powerReceivesConversation) {
 			return fmt.Errorf("%s: the %s trigger is for a role that receives the conversation, not %s", what, tr, a.Role)
 		}
 	}
@@ -368,10 +418,8 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 			return fmt.Errorf("%s: %w", what, err)
 		}
 	}
-	for _, t := range a.Triggers {
-		if _, ok := assistantTriggers[t]; !ok {
-			return fmt.Errorf("%s: trigger %q is not supported (yet): conversation and clock are", what, t)
-		}
+	if err := checkTriggers(r, a.Triggers); err != nil {
+		return fmt.Errorf("%s: %w", what, err)
 	}
 	if a.Agent != "" && len(c.Agents) > 0 { // none: it waits for one
 		ag, ok := c.Agents[a.Agent]
@@ -555,6 +603,13 @@ type AssistantStatus struct {
 	AccountStamp   string `json:"account_stamp,omitempty"` // a digest of its account's key when it started
 	ToolsHash      string `json:"tools_hash,omitempty"`
 	SeenSeq        int    `json:"seen_seq,omitempty"` // its events relayed
+
+	// The assistant role's (assistant_tools.go): when each schedule wakes
+	// it next, and why its session is tainted, read up to its task's event
+	// TaintSeq.
+	Wakes    map[string]int64 `json:"wakes,omitempty"`
+	Tainted  []string         `json:"tainted,omitempty"`
+	TaintSeq int              `json:"taint_seq,omitempty"`
 
 	// The conversation's: its start answer kept quiet, the profile it has,
 	// the context pack owed to a session that was not resumed.

@@ -41,7 +41,7 @@ const (
 // node: one that talks to the user, hears the conversation, or is woken
 // by triggers.
 func (r assistantRole) resident() bool {
-	return r.can(powerTalksToUser) || r.can(powerReceivesConversation) || len(r.Triggers) > 0
+	return r.can(powerTalksToUser) || r.can(powerReceivesConversation) || len(r.Triggers) > 0 || len(r.Wakes) > 0
 }
 
 // residentKind tells whether tasks of this kind are resident.
