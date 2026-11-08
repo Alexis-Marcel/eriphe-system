@@ -459,7 +459,7 @@ For each other computer (or a second NAS):
 
 ## 7. Optional: the phone, away from home, tools
 
-- **Remote access and the phone app.** Settings → Access (Réglages → Accès):
+- **Remote access and the phone app.** Settings → Access → Web workspace (Réglages → Accès → Espace web):
   **Turn on**, **Log in to Tailscale** (a free account), **Enable HTTPS** once. The page then shows
   an `https://<name>.<tailnet>.ts.net` address and a QR code. On the phone: install the Tailscale
   app and sign in with the same account, open that address, and add it to the home screen (Settings

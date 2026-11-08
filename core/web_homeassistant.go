@@ -9,7 +9,7 @@ import (
 // Settings → Tools → Home Assistant: Eriphe drives the house through Home
 // Assistant's MCP server, a tool of the catalog like any other (the
 // home-assistant preset). The house's voice is a channel, with a token of
-// its own made in Settings → Channels (web_channels.go, channel_in.go); this
+// its own made in Settings → Access (web_access_list.go, channel_in.go); this
 // page points there.
 
 type homeAssistantView struct {

@@ -526,7 +526,7 @@ func TestHAVoice(t *testing.T) {
 
 	// The spot: a fresh, personal room, a channel listening that reaches it.
 	c, f := haCore(t)
-	ha, _, _ := c.addChannel("Home Assistant", false, carrySentence)
+	ha, _, _ := c.addChannel(apiHomeAssistant, "Home Assistant", false, carrySentence)
 	spot.Channel = ha.ID
 	go c.out.take(context.Background(), ha.ID, []string{"Salon"}, 5*time.Second)
 	time.Sleep(50 * time.Millisecond)
@@ -614,8 +614,8 @@ func TestHAWeb(t *testing.T) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
-	if _, body, _ := tw.do("GET", "/settings/notifications", nil, nil); !strings.Contains(body, "Ajoute un canal qui dit une phrase") ||
-		!strings.Contains(body, `href="/settings/channels#added"`) {
+	if _, body, _ := tw.do("GET", "/settings/notifications", nil, nil); !strings.Contains(body, "Ajoute un accès qui dit une phrase") ||
+		!strings.Contains(body, `href="/settings/access/new/home-assistant"`) {
 		t.Error("the voice line usable without a channel")
 	}
 	_, body, _ = tw.do("GET", "/settings/approve", nil, nil)
@@ -626,7 +626,7 @@ func TestHAWeb(t *testing.T) {
 	if len(c.haMappings(ruleProposed)) != 0 {
 		t.Fatal("not approved")
 	}
-	c.addChannel("Home Assistant", false, carrySentence)
+	c.addChannel(apiHomeAssistant, "Home Assistant", false, carrySentence)
 	if _, body, _ := tw.do("GET", "/settings/notifications", nil, nil); strings.Contains(body, "Ajoute un canal qui dit une phrase") {
 		t.Error("the voice line still unusable with a channel")
 	}

@@ -381,7 +381,7 @@ func TestPushRoutes(t *testing.T) {
 	if code != 200 || !strings.Contains(body, tw.c.push.pub) {
 		t.Fatalf("key: %d %s", code, body)
 	}
-	if code, body, _ := tw.do("GET", "/settings/notifications", nil, nil); code != 200 || !strings.Contains(body, `data-push-key="`+tw.c.push.pub+`"`) {
+	if code, body, _ := tw.do("GET", "/settings/access/app", nil, nil); code != 200 || !strings.Contains(body, `data-push-key="`+tw.c.push.pub+`"`) {
 		t.Fatalf("page: %d", code)
 	}
 	b := newBrowser(t, tw.c.push.pub)

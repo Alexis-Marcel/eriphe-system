@@ -41,16 +41,16 @@ func TestWebRemoteExposed(t *testing.T) {
 		}
 		return rec.Body.String()
 	}
-	if body := get("https://192.168.1.2:8443/settings/remote", "192.168.1.20:5000"); strings.Contains(body, "répond sur Internet") ||
+	if body := get("https://192.168.1.2:8443/settings/access/web", "192.168.1.20:5000"); strings.Contains(body, "répond sur Internet") ||
 		!strings.Contains(body, "ne répond que sur ton réseau local") {
 		t.Fatalf("local page:\n%s", body)
 	}
 	// Through an SSH tunnel (a server in the cloud): no local network to speak of.
-	if body := get("https://127.0.0.1:8443/settings/remote", "172.17.0.1:5000"); strings.Contains(body, "ton réseau local") ||
+	if body := get("https://127.0.0.1:8443/settings/access/web", "172.17.0.1:5000"); strings.Contains(body, "ton réseau local") ||
 		!strings.Contains(body, "par un tunnel SSH") {
 		t.Fatalf("page through a tunnel:\n%s", body)
 	}
-	for _, c := range [][2]string{{"https://203.0.113.5:8443/settings/remote", "192.168.1.20:5000"}, {"https://192.168.1.2:8443/settings/remote", "203.0.113.9:5000"}} {
+	for _, c := range [][2]string{{"https://203.0.113.5:8443/settings/access/web", "192.168.1.20:5000"}, {"https://192.168.1.2:8443/settings/access/web", "203.0.113.9:5000"}} {
 		body := get(c[0], c[1])
 		if !strings.Contains(body, "répond sur Internet") || strings.Contains(body, "ne répond que sur ton réseau local") ||
 			strings.Contains(body, "rien n&#39;est exposé") || !strings.Contains(body, "#eriphe-on-a-vps") {
@@ -61,8 +61,8 @@ func TestWebRemoteExposed(t *testing.T) {
 
 func TestWebRemotePages(t *testing.T) {
 	tw, h, csrf := newRemoteWeb(t)
-	code, body, _ := tw.do("GET", "/settings/remote", nil, nil)
-	if code != 200 || !strings.Contains(body, "Activer l&#39;accès à distance") || !strings.Contains(body, `href="/settings/remote" aria-current="page"`) ||
+	code, body, _ := tw.do("GET", "/settings/access/web", nil, nil)
+	if code != 200 || !strings.Contains(body, "Activer l&#39;accès à distance") || !strings.Contains(body, `href="/settings/access" aria-current="page"`) ||
 		!strings.Contains(body, "/static/remote.js") {
 		t.Fatalf("off page: %d\n%s", code, body)
 	}
@@ -74,7 +74,7 @@ func TestWebRemotePages(t *testing.T) {
 		t.Fatalf("enable: %d %s", code, body)
 	}
 	h.phase(phaseLogin)
-	_, body, _ = tw.do("GET", "/settings/remote", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/access/web", nil, nil)
 	if !strings.Contains(body, `href="https://login.tailscale.com/a/abc123"`) || !strings.Contains(body, "Se connecter à Tailscale") ||
 		!strings.Contains(body, "Google, Apple ou Microsoft") {
 		t.Fatalf("login page:\n%s", body)
@@ -86,14 +86,14 @@ func TestWebRemotePages(t *testing.T) {
 		f.httpsURL = "https://login.tailscale.com/f/serve?node=abc"
 	})
 	h.wait("consent", func(v remoteView) bool { return v.HTTPSURL != "" })
-	_, body, _ = tw.do("GET", "/settings/remote", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/access/web", nil, nil)
 	if !strings.Contains(body, `href="https://login.tailscale.com/f/serve?node=abc"`) || !strings.Contains(body, "journaux publics des certificats") {
 		t.Fatalf("https page:\n%s", body)
 	}
 
 	f.set(func(f *fakeTailnet) { f.st = running(true, h.clock.now().Add(5*24*time.Hour)) })
 	h.phase(phaseReady)
-	_, body, _ = tw.do("GET", "/settings/remote", nil, map[string]string{"Cookie": "lang=en"})
+	_, body, _ = tw.do("GET", "/settings/access/web", nil, map[string]string{"Cookie": "lang=en"})
 	for _, want := range []string{"https://" + testTSName, `<svg class="qr"`, "apps.apple.com", "play.google.com",
 		"Add to the home screen", "The Tailscale login expires on", "Log in again", "https://" + testTSName + ":8800"} {
 		if !strings.Contains(body, want) {
@@ -250,7 +250,7 @@ func TestWebRemoteLogoutAndTexts(t *testing.T) {
 	if err := h.r.configure("maison", ""); err != nil {
 		t.Fatal(err)
 	}
-	_, body, _ := tw.do("GET", "/settings/remote", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/access/web", nil, nil)
 	if !strings.Contains(body, "(maison.…ts.net)") || strings.Contains(body, "(eriphe.…ts.net)") {
 		t.Fatalf("hostname hint:\n%s", body)
 	}
@@ -259,7 +259,7 @@ func TestWebRemoteLogoutAndTexts(t *testing.T) {
 	h.next = &fakeTailnet{st: running(true, time.Time{}), certGate: gate, logoutErr: errors.New("timeout")}
 	h.r.enable()
 	h.phase(phaseCert)
-	_, body, _ = tw.do("GET", "/settings/remote", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/access/web", nil, nil)
 	if !strings.Contains(body, "Certificat en préparation") || strings.Contains(body, `id="remote-url"`) {
 		t.Fatalf("cert phase:\n%s", body)
 	}
@@ -336,24 +336,19 @@ func TestQRSVG(t *testing.T) {
 	}
 }
 
-// Settings → Access gathers the ways to talk to Eriphe, in three sections:
-// from the web (the remote access), the mobile app (installing the
-// workspace). Telegram's old addresses, in Notifications and Access, lead
-// to Channels (early.js).
-func TestWebAccessPage(t *testing.T) {
+// The web's page: its back link, its lead, then the live part and the
+// advanced settings, in both languages; Access is the current entry.
+func TestWebAccessWebPage(t *testing.T) {
 	tw, _, _ := newRemoteWeb(t)
 	for lang, words := range map[string][]string{
-		"fr": {"<h2>Accès</h2>", "Où ouvrir Eriphe : depuis le web et sur ton téléphone. Telegram et la voix sont dans Canaux.", "Depuis le web", "App mobile"},
-		"en": {"<h2>Access</h2>", "Where to open Eriphe: from the web and on your phone. Telegram and the voice are in Channels.", "From the web", "Mobile app"},
+		"fr": {"Accès</a>", "<h2>Espace web</h2>", "sans rien ouvrir sur ta box"},
+		"en": {"Access</a>", "<h2>Web workspace</h2>", "without opening anything on your router"},
 	} {
-		code, body, _ := tw.do("GET", "/settings/remote", nil, map[string]string{"Cookie": "lang=" + lang})
+		code, body, _ := tw.do("GET", "/settings/access/web", nil, map[string]string{"Cookie": "lang=" + lang})
 		if code != 200 {
 			t.Fatalf("%s: GET: %d", lang, code)
 		}
-		order := []string{words[0], words[1],
-			`<a href="#web">`, `<a href="#app">`,
-			`id="web"`, words[2], `id="remote-live"`, "remote-advanced",
-			`id="app"`, words[3], `data-install`, `data-install-button`, `data-platform="ios"`}
+		order := []string{`<a class="back" href="/settings/access">`, words[0], words[1], words[2], `id="remote-live"`, "remote-advanced"}
 		at := 0
 		for _, want := range order {
 			i := strings.Index(body[at:], want)
@@ -362,18 +357,11 @@ func TestWebAccessPage(t *testing.T) {
 			}
 			at += i + len(want)
 		}
-		if strings.Contains(body, `hx-post="/channels/settings"`) {
-			t.Errorf("%s: the default channels moved along with the bot", lang)
+		if strings.Contains(body, "data-install") || strings.Contains(body, `id="tg-panel"`) {
+			t.Errorf("%s: the app or Telegram is still on the web's page", lang)
 		}
-		if n := strings.Count(body, `<a href="/settings/remote" aria-current="page">`); n != 1 {
+		if n := strings.Count(body, `<a href="/settings/access" aria-current="page">`); n != 1 {
 			t.Errorf("%s: Access is not the current entry: %d", lang, n)
 		}
-	}
-	early, err := webFS.ReadFile("web/static/early.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(early), `location.hash === "#telegram"`) || !strings.Contains(string(early), `location.replace("/settings/channels#telegram")`) {
-		t.Error("Telegram's old addresses do not lead to Channels")
 	}
 }

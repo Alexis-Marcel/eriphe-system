@@ -1,0 +1,178 @@
+{{/* Settings → Access (web_access_list.go): every way into Eriphe, one row
+     each, as the tools are listed; "Ajouter un accès" opens the catalog.
+     Each row opens its page: the web (remote.html), the mobile app (its
+     install and notifications, push.html), Telegram (push.html) or an API
+     access (below). */}}
+
+{{define "access-page"}}
+{{if eq .View "access-web"}}{{template "access-web" .}}
+{{else if eq .View "access-app"}}{{template "access-app" .}}
+{{else if eq .View "access-telegram"}}{{template "access-telegram" .}}
+{{else if eq .View "access-api"}}{{template "access-api" .}}
+{{else if eq .View "access-new"}}{{template "access-new" .}}
+{{else}}{{template "access" .}}{{end}}
+{{end}}
+
+{{define "add-access-btn"}}<a class="btn btn-primary" href="/settings/access/new" data-dialog="access-dlg" aria-haspopup="dialog">{{template "i-plus"}}{{t "acc.add"}}</a>{{end}}
+{{define "access-back"}}<a class="back" href="/settings/access">{{template "i-back"}}{{t "settings.access"}}</a>{{end}}
+
+{{/* An access's mark: Home Assistant's own, else an icon on its colour. */}}
+{{define "access-mark"}}{{if eq . "home-assistant"}}<span class="mark preset-mark mark-home-assistant" aria-hidden="true">{{template "preset-icon" .}}</span>
+{{else}}<span class="mark access-mark access-{{.}}" aria-hidden="true">{{if eq . "web"}}{{template "i-globe"}}{{else if eq . "app"}}{{template "i-phone"}}{{else if eq . "telegram"}}{{template "i-send"}}{{else}}{{template "i-plug"}}{{end}}</span>{{end}}{{end}}
+
+{{define "access"}}{{with .Data}}
+<header class="page-head page-head-row">
+  <div><h2>{{t "settings.access"}}</h2><p>{{t "acc.lead"}}</p></div>
+  {{template "add-access-btn"}}
+</header>
+<ul class="tools access-list">
+{{range .Rows}}
+  <li class="tool access-row">
+    {{template "access-mark" .Kind}}
+    <div class="tool-main">
+      <div class="tool-head">
+        <h3><a href="{{.URL}}" class="stretched">{{if .Name}}{{.Name}}{{else}}{{t (printf "acc.kind.%s" .Kind)}}{{end}}</a></h3>
+        <span class="chip {{.Chip}}"><span class="pulse" aria-hidden="true"></span>{{if .Count}}{{tf .Label .Count}}{{else}}{{t .Label}}{{end}}</span>
+      </div>
+      <p class="muted small meta-line">{{t (printf "chan.speaker.%s" .Speaker)}}{{with .Carries}} {{t (printf "chan.carries.%s" .)}}{{end}}</p>
+      {{with .Detail}}<p class="small mono meta-line">{{.}}</p>{{end}}
+    </div>
+    <div class="tool-actions"><span class="btn btn-ghost sm" aria-hidden="true">{{t "acc.configure"}}</span></div>
+  </li>
+{{end}}
+</ul>
+
+<dialog class="modal finder-dlg access-dlg" id="access-dlg" aria-labelledby="access-dlg-title">
+  <div class="finder-top">
+    <h3 id="access-dlg-title">{{t "acc.add"}}</h3>
+    {{template "dlg-close"}}
+  </div>
+  <div class="finder-results">{{template "access-catalog" .Catalog}}</div>
+</dialog>
+{{end}}{{end}}
+
+{{/* The catalog: what can be added, each to its page. */}}
+{{define "access-catalog"}}
+<p class="small muted">{{t "acc.catalog.lead"}}</p>
+<ul class="ftiles access-tiles">{{range .}}
+  <li><a class="ftile" href="{{.URL}}">
+    {{template "access-mark" .ID}}
+    <span class="ftile-text">
+      <span class="ftile-name"><b>{{t (printf "acc.kind.%s" .ID)}}</b>
+        {{if .Added}}<span class="ftile-added" title="{{t "gallery.added"}}">{{template "i-check"}}<span class="sr-only">{{t "gallery.added"}}</span></span>{{end}}</span>
+      <small>{{t (printf "acc.kind.%s.desc" .ID)}}</small>
+    </span>
+  </a></li>{{end}}
+</ul>
+{{end}}
+
+{{/* Without JavaScript, the catalog is a page. */}}
+{{define "access-new"}}{{with .Data}}
+<header class="page-head">
+  {{template "access-back"}}
+  <h2>{{t "acc.add"}}</h2>
+</header>
+{{template "access-catalog" .Catalog}}
+{{end}}{{end}}
+
+{{/* The web: the remote access (remote.html). */}}
+{{define "access-web"}}
+<header class="page-head">
+  {{template "access-back"}}
+  <h2>{{t "acc.kind.web"}}</h2>
+  <p>{{t "remote.lead"}}</p>
+</header>
+<div id="remote-live" class="remote-live" data-remote-live>{{template "remote-status" .}}</div>
+{{template "remote-advanced" .}}
+{{end}}
+
+{{/* The mobile app: installing the workspace (app.js), then its
+     notifications on this device and the devices told (push.html). */}}
+{{define "access-app"}}
+<header class="page-head">
+  {{template "access-back"}}
+  <h2>{{t "acc.kind.app"}}</h2>
+  <p>{{t "acc.app.lead"}}</p>
+</header>
+<section class="panel app-install" aria-labelledby="install-title" id="install" data-install>
+  <h4 id="install-title" class="notif-sub">{{t "install.title"}} <span class="tag tag-ok" data-installed hidden>{{t "install.done"}}</span></h4>
+  <p class="small muted" data-install-lead>{{t "install.lead"}} {{t "install.notifyhint"}}</p>
+  <div class="actions" data-install-prompt hidden><button class="btn btn-primary sm" type="button" data-install-button>{{template "i-plus"}}{{t "install.button"}}</button></div>
+  <ul class="install-how">
+    <li data-platform="ios"><b>iPhone, iPad</b><span>{{t "install.ios"}}</span></li>
+    <li data-platform="android"><b>Android</b><span>{{t "install.android"}}</span></li>
+    <li data-platform="desktop"><b>{{t "install.computer"}}</b><span>{{t "install.desktop"}}</span></li>
+  </ul>
+</section>
+{{template "push-panel" .}}
+<details class="panel advanced">
+  <summary><span class="adv-title">{{t "screen.title"}}</span><span class="muted small">{{t "screen.summary"}}</span></summary>
+  <pre class="mono small" id="screen-details"></pre>
+</details>
+{{end}}
+
+{{/* Telegram's bot and the link to the user's account (push.html). */}}
+{{define "access-telegram"}}
+<header class="page-head">
+  {{template "access-back"}}
+  <h2>{{t "acc.kind.telegram"}}</h2>
+</header>
+<section class="panel" aria-labelledby="tg-title" id="tg-panel">{{template "telegram" .Data}}</section>
+{{end}}
+
+{{/* An API access (channels_added.go): adding one, or its own page. Each
+     form answers with the whole body. */}}
+{{define "access-api"}}{{template "access-api-body" .Data}}{{end}}
+{{define "access-api-frag"}}{{template "access-api-body" .Data}}{{end}}
+
+{{define "access-api-body"}}
+<div id="access-api">
+<header class="page-head">
+  {{template "access-back"}}
+  {{if .New}}<h2>{{t (printf "acc.kind.%s" .Kind)}}</h2><p>{{t "acc.api.newlead"}}</p>
+  {{else}}<h2>{{.Name}}</h2>
+  <p>{{if .Trusted}}<span class="tag tag-accent">{{t "chan.trusted.tag"}}</span>{{else}}<span class="tag">{{t "chan.untrusted.tag"}}</span>{{end}}
+    {{t (printf "acc.kind.%s" .Kind)}} · {{tf "acc.api.since" (date .Created)}}</p>{{end}}
+</header>
+{{with .Error}}<p class="alert" role="alert">{{.}}</p>{{end}}
+{{if .Token}}<section class="panel" aria-label="{{t "chan.token"}}">{{template "channel-token" .}}</section>{{end}}
+<section class="panel" aria-labelledby="api-how-title">
+  <h4 id="api-how-title" class="notif-sub">{{t "acc.api.how"}}</h4>
+  <p class="small">{{t (printf "acc.api.how.%s" .Kind)}}</p>
+  <p class="small muted">{{t "acc.api.speaker"}}</p>
+</section>
+<section class="panel" aria-labelledby="api-set-title">
+  <h4 id="api-set-title" class="notif-sub">{{if .New}}{{t "acc.api.settings.new"}}{{else}}{{t "acc.api.settings"}}{{end}}</h4>
+  <form class="stack-form" hx-post="/settings/access/api{{if not .New}}/{{.ID}}{{end}}" hx-target="#access-api" hx-swap="outerHTML" hx-disabled-elt="find button">
+    {{if .New}}<input type="hidden" name="kind" value="{{.Kind}}">{{end}}
+    {{template "channel-fields" .}}
+    <div class="actions">
+      {{if .New}}<button class="btn btn-primary sm" type="submit">{{t "chan.add.button"}}</button>
+      {{else}}<button class="btn btn-soft sm" type="submit">{{t "channels.save"}}</button>
+      <button class="btn btn-ghost sm" type="button" hx-post="/settings/access/api/{{.ID}}/token" hx-target="#access-api" hx-swap="outerHTML" hx-confirm="{{tf "chan.tokenconfirm" .Name}}">{{t "chan.token.replace"}}</button>
+      <button class="btn btn-danger-ghost sm" type="button" hx-post="/settings/access/api/{{.ID}}/remove" hx-swap="none" hx-confirm="{{tf "acc.api.removeconfirm" .Name}}">{{t "chan.remove"}}</button>{{end}}
+    </div>
+  </form>
+</section>
+</div>
+{{end}}
+
+{{define "channel-fields"}}
+<label class="field"><span>{{t "chan.name"}}</span><input type="text" name="name" value="{{.Name}}" required maxlength="40" placeholder="{{t "acc.api.nameph"}}"></label>
+<label class="switch"><input type="checkbox" role="switch" name="trusted" value="1"{{if .Trusted}} checked{{end}}>
+  <span><b>{{t "chan.trusted"}}</b><small>{{t "chan.trusted.hint"}}</small></span></label>
+<label class="field"><span>{{t "chan.carries"}}</span><select name="carries">
+  <option value=""{{if not .Carries}} selected{{end}}>{{t "chan.carries.opt.none"}}</option>
+  <option value="sentence"{{if eq .Carries "sentence"}} selected{{end}}>{{t "chan.carries.opt.sentence"}}</option>
+</select></label>
+{{end}}
+
+{{define "channel-token"}}
+<p class="ok-note" role="status">{{t "chan.token.once"}}</p>
+<div class="cmd">
+  <h4>{{t "chan.token.url"}}</h4>
+  <div class="code"><pre id="channel-url">{{.Core}}</pre><button class="btn btn-soft sm" type="button" data-copy="channel-url">{{t "machines.copy"}}</button></div>
+  <h4>{{t "chan.token"}}</h4>
+  <div class="code"><pre id="channel-tok">{{.Token}}</pre><button class="btn btn-soft sm" type="button" data-copy="channel-tok">{{t "machines.copy"}}</button></div>
+</div>
+{{end}}

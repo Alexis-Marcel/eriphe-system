@@ -13,14 +13,12 @@ import (
 	"time"
 )
 
-// Settings → Access: the ways to talk to Eriphe. From the web, the remote
-// access (remote.go): turn it on, log in to Tailscale, enable HTTPS once,
-// then the address and its QR code for the phone; its state follows tsnet
-// live, over an event stream. Then installing the workspace as an app.
-// Telegram's bot is a channel (Settings → Channels, web_channels.go).
+// Settings → Access → the web (web_access_list.go): the remote access
+// (remote.go). Turn it on, log in to Tailscale, enable HTTPS once, then the
+// address and its QR code for the phone; its state follows tsnet live, over
+// an event stream.
 
 func (w *web) remoteRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /settings/remote", w.auth(w.handleRemote))
 	mux.Handle("GET /settings/remote/events", w.auth(w.handleRemoteEvents))
 	mux.Handle("POST /settings/remote/enable", w.auth(w.remoteAction(func(r *remoteAccess, _ *http.Request) error { return r.enable() })))
 	mux.Handle("POST /settings/remote/disable", w.auth(w.remoteAction(func(r *remoteAccess, _ *http.Request) error { return r.disable() })))
@@ -89,11 +87,6 @@ func (w *web) remotePage(r *http.Request) remotePage {
 		}
 	}
 	return p
-}
-
-func (w *web) handleRemote(rw http.ResponseWriter, r *http.Request, s *session) {
-	p := w.remotePage(r)
-	w.render(rw, r, s, "settings", "", page{Title: "settings.remote", Nav: "settings", Tab: "remote", Data: p})
 }
 
 // handleRemoteEvents sends the live part of the page whenever it changes.

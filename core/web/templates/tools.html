@@ -1023,7 +1023,7 @@
   <p>{{t "drive.alt.lead"}}</p>
   <ol class="steps">
     {{if .Remote}}<li>{{t "drive.alt.remoteon"}} <a href="{{.Remote}}/settings/drive">{{.Remote}}</a></li>
-    {{else}}<li>{{t "drive.alt.remote"}} <a href="/settings/remote">{{t "drive.alt.remotelink"}}</a></li>{{end}}
+    {{else}}<li>{{t "drive.alt.remote"}} <a href="/settings/access/web">{{t "drive.alt.remotelink"}}</a></li>{{end}}
     <li>{{t "drive.alt.domain"}}</li>
     <li>{{t "drive.alt.desktop"}} <a href="/settings/folders">{{t "drive.alt.folders"}}</a></li>
   </ol>
@@ -1171,7 +1171,7 @@
 </section>
 <section class="panel" aria-labelledby="ha-voice-title">
   <h3 id="ha-voice-title">{{template "i-chat"}}{{t "ha.voice"}}</h3>
-  <p class="muted">{{t "ha.voicemoved"}} <a href="/settings/channels#added">{{t "settings.channels"}}</a>.</p>
+  <p class="muted">{{t "ha.voicemoved"}} <a href="/settings/access">{{t "settings.access"}}</a>.</p>
 </section>
 {{end}}{{end}}
 

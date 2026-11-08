@@ -10,7 +10,7 @@
         },
         "data_description": {
           "url": "Address of eriphe-core on the local network, for example http://192.0.2.2:8800.",
-          "token": "The token of the channel you added in eriphe-core (Settings > Channels)."
+          "token": "The token of the access you added in eriphe-core (Settings > Access)."
         }
       },
       "reconfigure": {
@@ -22,7 +22,7 @@
         },
         "data_description": {
           "url": "Address of eriphe-core on the local network, for example http://192.0.2.2:8800.",
-          "token": "The token of the channel you added in eriphe-core (Settings > Channels)."
+          "token": "The token of the access you added in eriphe-core (Settings > Access)."
         }
       }
     },

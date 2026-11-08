@@ -10,7 +10,7 @@
         },
         "data_description": {
           "url": "Adresse d'eriphe-core sur le réseau local, par exemple http://192.0.2.2:8800.",
-          "token": "Le jeton du canal ajouté dans eriphe-core (Réglages > Canaux)."
+          "token": "Le jeton de l'accès ajouté dans eriphe-core (Réglages > Accès)."
         }
       },
       "reconfigure": {
@@ -22,7 +22,7 @@
         },
         "data_description": {
           "url": "Adresse d'eriphe-core sur le réseau local, par exemple http://192.0.2.2:8800.",
-          "token": "Le jeton du canal ajouté dans eriphe-core (Réglages > Canaux)."
+          "token": "Le jeton de l'accès ajouté dans eriphe-core (Réglages > Accès)."
         }
       }
     },

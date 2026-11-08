@@ -1462,12 +1462,13 @@ tasks under way, the intentions under way (the due ones first), the last day's e
 messages between the user and the brain, the newest kept, within about 8,000 tokens (`brain_context.go`). It is quoted
 data; events are left out, since they carry what tasks said. eriphe-core logs its size.
 
-## Channels the user adds (Home Assistant, shortcuts, scripts)
+## API accesses the user adds (Home Assistant, shortcuts, scripts)
 
 For Eriphe a channel is text in and text out. Besides the built-in ones (the workspace, push,
-Telegram: below), the user adds any app that talks with text in Settings → Channels
-(`channels_added.go`, `web_channels.go`): a name, a token shown once (`ech_…`, only its hash kept,
-replaced or removed on the page), and what the user declares of it:
+Telegram: below), the user adds any app that talks with text as an API access, from the catalog of
+Settings → Access (`channels_added.go`, `web_access_list.go`): its kind (Home Assistant, or an app
+or script; kept with it, for its mark and its help), a name, a token shown once (`ech_…`, only its
+hash kept, replaced or removed on its page), and what the user declares of it:
 
 - **trusted or not** (not, by default). Trusted: what comes through it is the user's own words, as
   in the workspace, and a plain yes there answers a card. Not trusted: anyone, or anything, may have
@@ -2049,18 +2050,25 @@ valider with a discreet count), not of the main navigation.
 
 The settings come in four groups: Assistant (the memory, "Ce que Jarvis sait de toi", still at
 `/memory`, the watches, the agents, the skills), Connexions (tools, folders), Appareils & accès
-(devices, access, channels, notifications) and Mon espace (account, the Journal, À valider); an entry is marked
+(devices, access, notifications) and Mon espace (account, the Journal, À valider); an entry is marked
 when it needs a look (an update, a tool in error, a refused key). On a phone the settings say the
 way back, "‹ Conversation". The pages that moved keep their addresses as redirects:
 `/settings/happened` and `/activity` lead to the Journal, `/activity/approve` and
 `/memory?view=inbox` to À valider, `/settings/where` to its section of Notifications, and
-`/settings/notifications#telegram` and `/settings/remote#telegram` (in the browser) to Telegram in
-Channels. **Access** (`/settings/remote`) gathers where to open the assistant: from the web (remote
-access, below) and the mobile app (installing the workspace). **Channels** (`/settings/channels`,
-`web_channels.go`) lists every channel (`channels.go`) with its direction, who it guarantees speaks
-and what it carries, sets up Telegram's bot, and adds, changes and removes the user's channels
-(each with its token, its trust, what it may say and whether its app listens); push leads to its
-devices in Notifications.
+`/settings/remote` and `/settings/channels` to Access, whose sections (`#web`, `#app`, `#telegram`,
+and `/settings/notifications#push` and `#telegram`) lead, in the browser, to each access's page.
+**Access** (`/settings/access`, `web_access_list.go`, `access.html`) lists every way into the
+assistant, one row each as the tools are listed: the web workspace and the mobile app always, then
+Telegram once its bot is set, then the API accesses. Each row says who speaks through it, what it
+carries and its state (the remote access's phase, the devices told, the account linked, whether
+the app listens), and opens its page: the web (`/settings/access/web`: the remote access, below),
+the mobile app (`/settings/access/app`: installing the workspace, this device's notifications and
+the devices told), Telegram (`/settings/access/telegram`) or an API access
+(`/settings/access/api/{id}`: its trust, what it may say, its token replaced, removed). **Ajouter
+un accès** opens the catalog (`entryCatalog`; `/settings/access/new` without JavaScript): Telegram,
+Home Assistant (not trusted, says a sentence, with the integration's steps) or any app or script.
+An access carries the conversation; a tool acts. **Notifications** keeps the router's order, the
+default channels, the rules and what was sent.
 The conversation shows the user's messages and the assistant's answers. The events given to the
 brain (a tool or an agent added, a task's turn over, a permission asked) are its notes and are not
 shown; a task that failed, was stopped or was lost is one short line that opens its drawer. When
@@ -2759,7 +2767,7 @@ eriphe-core can join the owner's private Tailscale network (a *tailnet*) by itse
 embedded Tailscale ([tsnet](https://tailscale.com/kb/1244/tsnet), BSD-3): the workspace and the
 API are then reachable from every device of that tailnet, at home and away, in HTTPS with a
 certificate browsers trust, and nothing is opened on the router. It is off by default and turned on
-from the workspace, **Settings → Access** (Depuis le web; owner only):
+from the workspace, **Settings → Access → Espace web** (owner only):
 
 1. **Turn on remote access** starts Tailscale (machine name `eriphe` by default).
 2. **Log in to Tailscale** opens Tailscale's login page (a free account with Google, Apple or

@@ -6,7 +6,7 @@ Kept free of Home Assistant imports so the client modules can be tested alone.
 DOMAIN = "eriphe"
 
 # The integration is one of the channels the user adds in eriphe-core
-# (Settings > Channels): text in, text out, on the channel's token.
+# (Settings > Access): text in, text out, on the channel's token.
 CHANNEL_PATH = "/v1/channel"
 
 # What eriphe-core says in a room: a request kept open, which answers as

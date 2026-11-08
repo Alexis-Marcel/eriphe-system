@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// Channels the user adds (Settings → Channels): any app that talks to
+// Channels the user adds (Settings → Access, as API accesses): any app that talks to
 // Eriphe with text, through one generic endpoint (channel_in.go,
 // channel_out.go), known by its token. For Eriphe a channel is text in and
 // text out; what matters is what the user declares of it, once and
@@ -39,7 +39,13 @@ INSERT INTO channels (name, token_hash, trusted, carries, created)
   WHERE key = 'voice_token_hash' AND value != '' AND NOT EXISTS (SELECT 1 FROM channels WHERE token_hash = kv.value);
 DELETE FROM kv WHERE key = 'voice_token_hash';`
 
-func init() { extraSchema = append(extraSchema, channelsSchema) }
+func init() {
+	extraSchema = append(extraSchema, channelsSchema)
+	// Added with Settings → Access: the kind of each, its mark and its help.
+	// Those from before are Home Assistant's former voice, or any app.
+	extraColumns = append(extraColumns, `ALTER TABLE channels ADD COLUMN kind TEXT NOT NULL DEFAULT ''`,
+		`UPDATE channels SET kind = CASE WHEN name = 'Home Assistant' THEN 'home-assistant' ELSE 'api' END WHERE kind = ''`)
+}
 
 const (
 	maxChannels       = 20
@@ -50,6 +56,7 @@ const (
 // addedChannel is a channel the user added.
 type addedChannel struct {
 	ID      int64
+	Kind    string // apiHomeAssistant or apiGeneric (web_access_list.go)
 	Name    string
 	Trusted bool
 	Carries string // "" (nothing) or carrySentence
@@ -97,7 +104,7 @@ func tokenHash(tok string) string {
 }
 
 // addChannel adds a channel and returns its token, shown once.
-func (c *core) addChannel(name string, trusted bool, carries string) (addedChannel, string, error) {
+func (c *core) addChannel(kind, name string, trusted bool, carries string) (addedChannel, string, error) {
 	var ch addedChannel
 	name, err := checkChannelName(name)
 	if err != nil {
@@ -113,8 +120,8 @@ func (c *core) addChannel(name string, trusted bool, carries string) (addedChann
 	if err != nil {
 		return ch, "", err
 	}
-	res, err := c.store.db.Exec(`INSERT INTO channels (name, token_hash, trusted, carries, created) VALUES (?, ?, ?, ?, ?)`,
-		name, hash, trusted, carries, time.Now().Unix())
+	res, err := c.store.db.Exec(`INSERT INTO channels (kind, name, token_hash, trusted, carries, created) VALUES (?, ?, ?, ?, ?, ?)`,
+		apiKind(kind), name, hash, trusted, carries, time.Now().Unix())
 	if err != nil {
 		return ch, "", fmt.Errorf("a channel is already named %q", name)
 	}
@@ -172,12 +179,12 @@ func (c *core) updateChannel(id int64, set string, args ...any) error {
 	return nil
 }
 
-const channelCols = `id, name, trusted, carries, created`
+const channelCols = `id, kind, name, trusted, carries, created`
 
 func scanChannel(row interface{ Scan(...any) error }) (addedChannel, error) {
 	var ch addedChannel
 	var created int64
-	err := row.Scan(&ch.ID, &ch.Name, &ch.Trusted, &ch.Carries, &created)
+	err := row.Scan(&ch.ID, &ch.Kind, &ch.Name, &ch.Trusted, &ch.Carries, &created)
 	ch.Created = time.Unix(created, 0)
 	return ch, err
 }
@@ -218,7 +225,7 @@ func (c *core) channelOf(r *http.Request) (addedChannel, bool) {
 		var hash string
 		var ch addedChannel
 		var created int64
-		if rows.Scan(&hash, &ch.ID, &ch.Name, &ch.Trusted, &ch.Carries, &created) == nil &&
+		if rows.Scan(&hash, &ch.ID, &ch.Kind, &ch.Name, &ch.Trusted, &ch.Carries, &created) == nil &&
 			subtle.ConstantTimeCompare([]byte(hash), []byte(want)) == 1 {
 			ch.Created = time.Unix(created, 0)
 			return ch, true
