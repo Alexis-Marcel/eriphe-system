@@ -37,7 +37,7 @@ func TestChannelOutEndpoint(t *testing.T) {
 		}
 	}
 	ha := c.addedChannels()[0]
-	_, otherTok, _ := c.addChannel("Écran", false, carrySentence)
+	_, otherTok, _ := c.addChannel(apiGeneric, "Écran", false, carrySentence)
 	c.announce(pushNote{}, routeTarget{Step: stepVoice, Device: fmt.Sprintf("channel:%d", ha.ID), Label: "Salon"})
 	if _, got := outGet(t, c, otherTok, ""); len(got) != 0 {
 		t.Fatalf("another channel got it: %+v", got)

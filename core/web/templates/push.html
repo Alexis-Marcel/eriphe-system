@@ -1,9 +1,9 @@
 {{/* Settings → Notifications (web_push.go): one page, three sections.
-     Où te prévenir: this device's notifications, the devices, the router's
-     order (web_where.go) and the default channels (web_telegram.go); Règles
-     et heures calmes (web_notify.go); Envoyées: what the brain said, with
-     the user's feedback, and what the router did. Installing the app and
-     Telegram's bot are in Settings → Access (remote.html). app.js does the
+     Où te prévenir: the router's order (web_where.go) and the default
+     channels (web_telegram.go); Règles et heures calmes (web_notify.go);
+     Envoyées: what the brain said, with the user's feedback, and what the
+     router did. This device's notifications, the devices, installing the
+     app and Telegram's bot are in Settings → Access (access.html). app.js does the
      browser's part: it tells what this browser can do, asks for the
      permission on a tap, subscribes and sends the subscription. A rule is
      asked of the brain: the page shows it and deletes it. */}}
@@ -19,6 +19,20 @@
 </nav>
 
 <h3 class="section-title" id="where">{{template "i-route"}}{{t "settings.where"}}</h3>
+<p class="small muted">{{t "notif.pushmoved"}} <a href="/settings/access/app">{{t "acc.kind.app"}}</a></p>
+<div id="where-body" class="where">{{template "where-body" .Data.Where}}</div>
+<section class="panel" aria-labelledby="channels-title" id="channels">{{template "channels-settings" .Data.Channels}}</section>
+
+<h3 class="section-title" id="rules">{{template "i-moon"}}{{t "rule.title"}}</h3>
+<section class="panel" aria-label="{{t "rule.title"}}" id="notify-rules">{{template "notify-rules" .Data.Notify}}</section>
+
+<h3 class="section-title" id="sent">{{template "i-bell"}}{{t "notif.sent"}}</h3>
+{{template "notify-sent" .Data}}
+{{end}}
+
+{{/* Access → App mobile (access.html): this device's notifications, its
+     test, and the devices told. */}}
+{{define "push-panel"}}
 <section class="panel" aria-labelledby="push-title" id="push" data-push-key="{{.Data.Key}}"
   data-msg-unsupported="{{t "push.unsupported"}}" data-msg-insecure="{{t "push.insecure"}}" data-msg-ios="{{t "push.ios"}}"
   data-msg-denied="{{t "push.denied"}}" data-msg-failed="{{t "push.failed"}}" data-msg-off="{{t "push.off"}}">
@@ -32,23 +46,10 @@
     <input type="hidden" name="id" id="push-test-id">
     <button class="btn btn-soft sm" type="submit">{{template "i-bell"}}{{t "push.test"}}</button>
   </form>
-  <p class="small muted">{{t "push.ioshint"}} <a href="/settings/remote#app">{{t "push.installlink"}}</a></p>
+  <p class="small muted">{{t "push.ioshint"}} <a href="#install">{{t "push.installlink"}}</a></p>
   <h4 class="notif-sub">{{t "push.devices"}}</h4>
   <div id="push-devices">{{template "push-devices" .}}</div>
 </section>
-<div id="where-body" class="where">{{template "where-body" .Data.Where}}</div>
-<section class="panel" aria-labelledby="channels-title" id="channels">{{template "channels-settings" .Data.Channels}}</section>
-
-<h3 class="section-title" id="rules">{{template "i-moon"}}{{t "rule.title"}}</h3>
-<section class="panel" aria-label="{{t "rule.title"}}" id="notify-rules">{{template "notify-rules" .Data.Notify}}</section>
-
-<h3 class="section-title" id="sent">{{template "i-bell"}}{{t "notif.sent"}}</h3>
-{{template "notify-sent" .Data}}
-
-<details class="panel advanced">
-  <summary><span class="adv-title">{{t "screen.title"}}</span><span class="muted small">{{t "screen.summary"}}</span></summary>
-  <pre class="mono small" id="screen-details"></pre>
-</details>
 {{end}}
 
 {{/* The devices told, each with its kind for the router (web_where.go). */}}
@@ -56,7 +57,7 @@
 {{if .Data.Devices}}<ul class="list push-list">{{range .Data.Devices}}
   <li data-push-id="{{.ID}}">
     <div class="list-main"><span class="strong">{{.Label}} <span class="tag tag-accent" data-this-device hidden>{{t "push.this"}}</span></span><span class="small muted">{{tf "push.since" (date .Created)}}</span></div>
-    <form hx-post="/where/device" hx-trigger="change" hx-target="#where-body">
+    <form hx-post="/where/device" hx-trigger="change" hx-swap="none">
       <input type="hidden" name="sub" value="{{.ID}}">
       <select name="kind" aria-label="{{t "where.kind"}} {{.Label}}">{{$c := .Choice}}{{$k := .Kind}}
         <option value=""{{if eq $c ""}} selected{{end}}>{{tf "where.kind.auto" (t (printf "where.kind.%s" $k))}}</option>
@@ -135,7 +136,7 @@
 {{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{t (printf "rule.ch.%s" .Channels)}}{{end}}{{if .Also}} · {{t "rule.also"}} <span class="mono">{{.Also}}</span>{{end}}{{if .Never}} · {{t "rule.never"}} <span class="mono">{{.Never}}</span>{{end}}{{end}}</span>
 {{if .Why}}<span class="small muted">{{.Why}}</span>{{end}}{{end}}
 
-{{/* Access → Telegram (web_telegram.go, telegram.go): Telegram's bot and
+{{/* Access → Telegram (access.html, web_telegram.go, telegram.go): Telegram's bot and
      the link to the user's account. The token is never shown back. */}}
 {{define "telegram-frag"}}{{template "telegram" .Data}}{{end}}
 

@@ -23,7 +23,7 @@
 {{if eq .Tab "agents"}}<link rel="stylesheet" href="/static/agents.css?v={{.Version}}">{{end}}
 <script src="/static/htmx.min.js?v=2.0.4" defer></script>
 <script src="/static/app.js?v={{.Version}}" defer></script>
-{{if eq .Tab "remote"}}<script src="/static/remote.js?v={{.Version}}" defer></script>{{end}}
+{{if eq .View "access-web"}}<script src="/static/remote.js?v={{.Version}}" defer></script>{{end}}
 {{block "head" .}}{{end}}
 </head>
 <body class="{{if .Nav}}shell nav-{{.Nav}}{{else}}bare{{end}}" data-lang="{{.Lang}}">

@@ -20,7 +20,7 @@ import (
 )
 
 // Telegram, a channel of notify the user can answer from. The user makes a
-// bot with BotFather and pastes its token in Settings → Channels (kept in
+// bot with BotFather and pastes its token in Settings → Access (kept in
 // the vault, never shown or logged again); eriphe-core shows a one-time
 // code, the user sends it to the bot, and the Telegram account that sent
 // it is the only one ever heard. Everything else is ignored and counted,

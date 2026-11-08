@@ -296,7 +296,7 @@ func (w *web) handleSSOCallback(rw http.ResponseWriter, r *http.Request) {
 	if f == nil || err != nil || subtle.ConstantTimeCompare([]byte(hashToken(c.Value)), []byte(f.binding)) != 1 {
 		if f != nil && f.test {
 			w.endTrial("failed", ssoClaims{}, "")
-			w.moveOn(rw, r, "/settings/account?sso=failed")
+			w.moveOn(rw, r, "/settings/access/web?sso=failed")
 			return
 		}
 		w.loginFailed(rw, r, si, http.StatusBadRequest, "sso.expired")
@@ -323,7 +323,7 @@ func (w *web) handleSSOCallback(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("web: sign-in with %s failed: %v", a.OIDC.Issuer, err)
 		if f.test {
 			w.endTrial("failed", claims, "")
-			w.moveOn(rw, r, "/settings/account?sso=failed")
+			w.moveOn(rw, r, "/settings/access/web?sso=failed")
 			return
 		}
 		w.loginFailed(rw, r, si, http.StatusBadRequest, "sso.failed")
@@ -333,7 +333,7 @@ func (w *web) handleSSOCallback(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("web: sign-in by %s (sub %s) refused: not in the allowed list", claims.who(), claims.Sub)
 		if f.test {
 			w.endTrial("notallowed", claims, "")
-			w.moveOn(rw, r, "/settings/account?sso=notallowed")
+			w.moveOn(rw, r, "/settings/access/web?sso=notallowed")
 			return
 		}
 		w.refuse(rw, r, si)
@@ -344,7 +344,7 @@ func (w *web) handleSSOCallback(rw http.ResponseWriter, r *http.Request) {
 		// the provider, so that the change of mode keeps them in.
 		w.c.store.db.Exec(`UPDATE web_sessions SET via = ? WHERE id = ?`, viaOIDC, f.session)
 		w.endTrial("ok", claims, signinPrint(a, secret))
-		w.moveOn(rw, r, "/settings/account?sso=ok")
+		w.moveOn(rw, r, "/settings/access/web?sso=ok")
 		return
 	}
 	if _, err := w.newSession(rw, viaOIDC); err != nil {

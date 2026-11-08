@@ -776,7 +776,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
    enough to carry white. */
 .tint-violet, .nav-group > a[href="/memory"], .nav-group > a[href="/settings/account"] { --tint: #7c3aed; }
 .tint-blue, .nav-group > a[href="/settings/agents"] { --tint: #2563eb; }
-.tint-sky, .nav-group > a[href="/settings/watches"], .nav-group > a[href="/settings/remote"] { --tint: #0284c7; }
+.tint-sky, .nav-group > a[href="/settings/watches"], .nav-group > a[href="/settings/access"] { --tint: #0284c7; }
 .tint-teal, .nav-group > a[href="/settings/tools"] { --tint: #0d9488; }
 .tint-green, .nav-group > a[href="/settings/context"], .nav-group > a[href="/settings/approve"] { --tint: #16a34a; }
 .tint-amber, .nav-group > a[href="/settings/folders"] { --tint: #d97706; }
@@ -821,6 +821,13 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .mark-notion { background: #191919; }
 .mark-github { background: #24292f; }
 .mark-home-assistant { background: #18bcf2; }
+/* Settings → Access: each way in, an icon on its colour. */
+.access-mark .i { width: 20px; height: 20px; stroke: currentColor; }
+.access-web { --tint: #0284c7; }
+.access-app { --tint: #7c3aed; }
+.access-telegram { --tint: #229ed9; }
+.access-api { --tint: #64748b; }
+.access-row { position: relative; }
 .mark-gdrive { background: #1a73e8; }
 .mark-google { background: #4285f4; }
 @media (prefers-color-scheme: dark) { .mark-notion, .mark-github { background: #3a3a40; } }

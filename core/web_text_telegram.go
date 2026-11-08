@@ -1,6 +1,6 @@
 package main
 
-// The words of Settings → Channels (web_telegram.go, the channels templates
+// The words of Settings → Access (web_telegram.go, the access templates
 // of templates/push.html), and of what the bot says on Telegram (telegram.go).
 
 func init() {

@@ -178,8 +178,8 @@ func TestNotificationsOnePage(t *testing.T) {
 		t.Fatalf("GET: %d", code)
 	}
 	order := []string{`<a href="#where">`, `<a href="#rules">`, `<a href="#sent">`,
-		`id="where"`, `id="push"`, `href="/settings/remote#app"`, `id="push-devices"`, `id="where-body"`, "Eriphe ouvert devant toi",
-		"Aucun compte relié.", `<a href="/settings/channels#telegram">Configurer dans Canaux</a>`,
+		`id="where"`, `href="/settings/access/app"`, `id="where-body"`, "Eriphe ouvert devant toi",
+		"Aucun compte relié.", `<a href="/settings/access/telegram">Configurer dans Accès</a>`,
 		`id="channels"`, `hx-post="/channels/settings"`, `id="rules"`, `id="notify-rules"`, "project:site", `hx-post="/notify/rules/1/delete"`, `class="ask"`,
 		`id="sent"`, "Dernières décisions"}
 	at := 0
@@ -190,7 +190,7 @@ func TestNotificationsOnePage(t *testing.T) {
 		}
 		at += i + len(want)
 	}
-	for _, gone := range []string{`class="rule-form"`, `name="match"`, `data-install`, `id="tg-panel"`, `name="token"`, `href="#channels"`} {
+	for _, gone := range []string{`class="rule-form"`, `name="match"`, `data-install`, `id="push"`, `id="push-devices"`, `id="tg-panel"`, `name="token"`, `href="#channels"`} {
 		if strings.Contains(body, gone) {
 			t.Errorf("the page still has %q", gone)
 		}

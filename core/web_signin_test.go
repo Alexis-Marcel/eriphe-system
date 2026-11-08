@@ -557,7 +557,7 @@ func TestSigninSettings(t *testing.T) {
 	if code, body, _ := tw.do("GET", f.signIn(h.Get("HX-Redirect")), nil, nil); code != http.StatusOK || !strings.Contains(body, "sso=notallowed") {
 		t.Fatalf("test sign-in, not allowed: %d %s", code, body)
 	}
-	if _, body, _ := tw.do("GET", "/settings/account?sso=notallowed", nil, nil); !strings.Contains(body, "someone") {
+	if _, body, _ := tw.do("GET", "/settings/access/web?sso=notallowed", nil, nil); !strings.Contains(body, "someone") {
 		t.Fatal("the test sign-in does not say who it was")
 	}
 	if _, body, _ := tw.post("/settings/signin", form, csrf); !strings.Contains(body, "abord la connexion") {
@@ -568,7 +568,7 @@ func TestSigninSettings(t *testing.T) {
 	if code, body, _ := tw.do("GET", f.signIn(h.Get("HX-Redirect")), nil, nil); code != http.StatusOK || !strings.Contains(body, "sso=ok") {
 		t.Fatalf("test sign-in: %d %s", code, body)
 	}
-	_, body, _ := tw.do("GET", "/settings/account?sso=ok", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/access/web?sso=ok", nil, nil)
 	if strings.Contains(body, "client-secret-value") || !strings.Contains(body, "réussie") {
 		t.Fatal("the account page shows the secret, or not the test")
 	}
@@ -588,7 +588,7 @@ func TestSigninSettings(t *testing.T) {
 		t.Fatal("the secret is in the settings")
 	}
 	// The session that changed the mode is still in.
-	if code, body, _ := tw.do("GET", "/settings/account", nil, nil); code != http.StatusOK || strings.Contains(body, "client-secret-value") {
+	if code, body, _ := tw.do("GET", "/settings/access/web", nil, nil); code != http.StatusOK || strings.Contains(body, "client-secret-value") {
 		t.Fatalf("after the switch: %d", code)
 	}
 	// Another allowed list needs another test.
@@ -650,7 +650,7 @@ func TestSigninFromConfig(t *testing.T) {
 	}
 	tw.w.fileAuth = w.fileAuth
 	csrf := tw.sessionToken()
-	if _, body, _ := tw.do("GET", "/settings/account", nil, nil); !strings.Contains(body, "tag-lock") {
+	if _, body, _ := tw.do("GET", "/settings/access/web", nil, nil); !strings.Contains(body, "tag-lock") {
 		t.Fatal("no configuration tag")
 	}
 	if _, body, _ := tw.post("/settings/signin", url.Values{"mode": {modePassword}}, csrf); !strings.Contains(body, "fichier de configuration") {
@@ -681,7 +681,7 @@ func TestAuthResetCommand(t *testing.T) {
 // CSS shows only the chosen mode's (app.css, .signin-form).
 func TestSigninPageModes(t *testing.T) {
 	tw, _ := oidcWeb(t, modeOIDC, nil)
-	_, body, _ := tw.do("GET", "/settings/account", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/access/web", nil, nil)
 	for _, want := range []string{`value="oidc" checked`, `class="choices if-oidc"`, `class="choices if-proxy"`,
 		`class="choices if-delegated"`, `class="warn-note if-none"`, `name="oidc_issuer"`, `name="trusted"`, `name="external_url"`,
 		`name="unauthorized_url"`, `name="local_password"`, "Proxy qui authentifie", "(OpenID Connect)"} {

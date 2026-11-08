@@ -12,11 +12,7 @@ func init() {
 
 var remoteStrings = map[string]map[string]string{
 	"fr": {
-		"settings.remote":             "Accès",
-		"access.lead":                 "Où ouvrir {{name}} : depuis le web et sur ton téléphone. Telegram et la voix sont dans Canaux.",
-		"access.web":                  "Depuis le web",
-		"access.app":                  "App mobile",
-		"access.telegram":             "Telegram",
+		"settings.access":             "Accès",
 		"remote.title":                "Accès à distance",
 		"remote.lead":                 "Parle à {{name}} depuis ton téléphone ou ton ordinateur, où que tu sois, sans rien ouvrir sur ta box : ton espace rejoint ton réseau privé Tailscale, et seuls tes appareils y ont accès.",
 		"remote.unavailable":          "L'accès à distance n'est pas disponible sur ce serveur.",
@@ -115,11 +111,7 @@ var remoteStrings = map[string]map[string]string{
 		"machines.via.remote":         "À distance",
 	},
 	"en": {
-		"settings.remote":             "Access",
-		"access.lead":                 "Where to open {{name}}: from the web and on your phone. Telegram and the voice are in Channels.",
-		"access.web":                  "From the web",
-		"access.app":                  "Mobile app",
-		"access.telegram":             "Telegram",
+		"settings.access":             "Access",
 		"remote.title":                "Remote access",
 		"remote.lead":                 "Talk to {{name}} from your phone or computer, wherever you are, without opening anything on your router: your workspace joins your private Tailscale network, and only your devices can reach it.",
 		"remote.unavailable":          "Remote access is not available on this server.",

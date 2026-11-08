@@ -476,7 +476,7 @@ func TestDriveUnusableOrigin(t *testing.T) {
 		raw, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		body := string(raw)
-		if !strings.Contains(body, want) || !strings.Contains(body, "https://"+host) || !strings.Contains(body, `href="/settings/remote"`) ||
+		if !strings.Contains(body, want) || !strings.Contains(body, "https://"+host) || !strings.Contains(body, `href="/settings/access/web"`) ||
 			!strings.Contains(body, "ts.net") || !strings.Contains(body, "Google Drive pour ordinateur") ||
 			!strings.Contains(body, `href="/settings/folders"`) || strings.Contains(body, `hx-post="/settings/drive/connect"`) {
 			t.Fatalf("%s: %s", host, body)

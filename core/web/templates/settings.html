@@ -8,9 +8,8 @@
     {{else if eq .Tab "tools"}}{{if eq .View "form"}}{{template "tool-page" .}}{{else if eq .View "gallery"}}{{template "tool-gallery" .}}{{else if eq .View "discover"}}{{template "discover-page" .}}{{else if eq .View "drive"}}{{template "drive-page" .}}{{else if eq .View "google"}}{{template "google-page" .}}{{else if eq .View "github"}}{{template "github-page" .}}{{else if eq .View "github-post"}}{{template "github-post" .}}{{else if eq .View "home-assistant"}}{{template "home-assistant" .}}{{else if eq .View "access"}}{{template "tool-access-page" .}}{{else if eq .View "lent-access"}}{{template "lent-access-page" .}}{{else}}{{template "tools" .}}{{end}}
     {{else if eq .Tab "folders"}}{{template "folders" .}}
     {{else if eq .Tab "skills"}}{{if eq .View "skill"}}{{template "skill-page" .}}{{else}}{{template "skills" .}}{{end}}
-    {{else if eq .Tab "remote"}}{{template "remote" .}}
+    {{else if eq .Tab "access"}}{{template "access-page" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
-    {{else if eq .Tab "channels"}}{{template "channels" .}}
     {{else if eq .Tab "watches"}}{{template "watches" .}}
     {{else if eq .Tab "context"}}{{template "context" .}}
     {{else if eq .Tab "learned"}}{{template "learned-page" .}}
@@ -368,7 +367,7 @@ eriphe-core runs its new version, and the cards and "Update all" ask again
 {{if .Error}}<p class="alert" role="alert">{{t .Error}}</p>{{else}}
 {{if .Rejoin}}<p class="alert" role="status">{{tf "machines.rejoinlead" .Name}}</p>{{end}}
 <p class="ok-note" role="status">{{tf "machines.expires" (date .Expires)}}</p>
-{{if .Away}}<p class="notice">{{tf "machines.localaway" .Away}}</p>{{else if .Local}}<p class="notice">{{t "machines.localurl"}} <a href="/settings/account#device-fallback">{{t "machines.localset"}}</a></p>{{end}}
+{{if .Away}}<p class="notice">{{tf "machines.localaway" .Away}}</p>{{else if .Local}}<p class="notice">{{t "machines.localurl"}} <a href="/settings/access/web#device-fallback">{{t "machines.localset"}}</a></p>{{end}}
 <div class="cmd">
   <h4>{{t "machines.unix"}}</h4>
   <p class="muted small">{{t "machines.unixlead"}}</p>
@@ -434,8 +433,6 @@ is shown again. . is a joinWait. */}}
     <button type="submit" name="lang" value="en" {{if eq .Lang "en"}}aria-pressed="true"{{else}}aria-pressed="false"{{end}}>English</button>
   </form>
 </section>
-{{template "address" .Data.Address}}
-{{template "signin" .Data}}
 <section class="panel" aria-labelledby="pw-title">
   <h3 id="pw-title">{{t "account.password"}}</h3>
   <form class="stack-form" hx-post="/settings/password" hx-target="#password-result" data-reset>
@@ -458,7 +455,7 @@ is shown again. . is a joinWait. */}}
 {{if .Updates.Core}}<p class="small center"><a class="update-available" href="/settings/devices#updates"><b class="new-dot" aria-hidden="true"></b>{{t "update.available"}}</a></p>{{end}}
 {{end}}
 
-{{/* My space → the workspace's address, the trusted proxies, and the devices'
+{{/* Access → Web workspace → the workspace's address, the trusted proxies, and the devices'
 second address (web_address.go). . is an addressView. */}}
 {{define "address"}}
 <section class="panel" aria-labelledby="address-title">

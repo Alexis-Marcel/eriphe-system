@@ -92,15 +92,15 @@ func (w *web) wherePage(lang string) wherePage {
 			}
 		case stepVoice:
 			if !c.voiceReady() {
-				l.Usable, l.Hint, l.Link = false, "where.hint.voice", "/settings/channels#added"
+				l.Usable, l.Hint, l.Link = false, "where.hint.voice", "/settings/access/new/home-assistant"
 			}
 		case stepPhone:
 			if !hasKind[kindPhone] {
 				l.Usable, l.Hint = false, "where.hint.phone"
 			}
 		case stepTelegram:
-			if !telegram { // set up in Settings → Access (remote.html)
-				l.Usable, l.Hint, l.Link = false, "where.hint.telegram", "/settings/channels#telegram"
+			if !telegram { // set up in Settings → Access
+				l.Usable, l.Hint, l.Link = false, "where.hint.telegram", "/settings/access/telegram"
 			}
 		}
 		v.Lines = append(v.Lines, l)

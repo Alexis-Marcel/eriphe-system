@@ -12,8 +12,14 @@ if (location.pathname === "/settings" && matchMedia("(min-width: 861px)").matche
   location.replace("/memory");
 }
 
-// Telegram moved from Notifications to Access, then to Channels: its old
-// addresses, in links already shared, lead to the new place.
-if ((location.pathname === "/settings/notifications" || location.pathname === "/settings/remote") && location.hash === "#telegram") {
-  location.replace("/settings/channels#telegram");
+// Each access has its page now (Settings → Access): the sections of the
+// former pages, in links already shared, lead to it. /settings/remote and
+// /settings/channels answer with /settings/access, keeping the section.
+{
+  const page = { "#web": "web", "#app": "app", "#telegram": "telegram", "#push": "app" }[location.hash];
+  const path = location.pathname;
+  const moved = path === "/settings/access" || (path === "/settings/notifications" && (page === "telegram" || location.hash === "#push"));
+  if (page && moved) {
+    location.replace("/settings/access/" + page);
+  }
 }

@@ -29,7 +29,9 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/drive", "tools", "/settings/tools"},
 		{"/settings/folders", "folders", ""},
 		{"/settings/skills", "skills", ""},
-		{"/settings/remote", "remote", ""},
+		{"/settings/access", "access", ""},
+		{"/settings/access/web", "access", "/settings/access"},
+		{"/settings/access/app", "access", "/settings/access"},
 		{"/settings/notifications", "notifications", ""},
 		{"/settings/watches", "watches", ""},
 		{"/settings/account", "account", ""},
@@ -136,7 +138,7 @@ func TestSettingsNavGroups(t *testing.T) {
 	nav = nav[:strings.Index(nav, "</nav>")]
 	order := []string{"Assistant", `href="/memory"`, `href="/settings/watches"`, `href="/settings/agents"`, `href="/settings/skills"`,
 		"Connexions", `href="/settings/tools"`, `href="/settings/folders"`,
-		"Appareils &amp; accès", `href="/settings/devices"`, `href="/settings/remote"`, `href="/settings/notifications"`,
+		"Appareils &amp; accès", `href="/settings/devices"`, `href="/settings/access"`, `href="/settings/notifications"`,
 		"Mon espace", `href="/settings/account"`}
 	at := 0
 	for _, want := range order {

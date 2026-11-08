@@ -218,11 +218,11 @@ func TestWebJoinLocalAddress(t *testing.T) {
 	csrf := tw.setup()
 	_, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"desk"}}, csrf)
 	if !strings.Contains(body, "-core http://127.0.0.1:8800") || !strings.Contains(body, "ne marche que sur cet ordinateur") ||
-		!strings.Contains(body, `href="/settings/account#device-fallback"`) || !strings.Contains(body, "tunnel SSH") {
+		!strings.Contains(body, `href="/settings/access/web#device-fallback"`) || !strings.Contains(body, "tunnel SSH") {
 		t.Fatalf("join on the loopback: %s", body)
 	}
-	if _, acc, _ := tw.do("GET", "/settings/account", nil, nil); !strings.Contains(acc, `id="device-fallback"`) {
-		t.Error("the account page lacks the devices' second address")
+	if _, acc, _ := tw.do("GET", "/settings/access/web", nil, nil); !strings.Contains(acc, `id="device-fallback"`) {
+		t.Error("the web page lacks the devices' second address")
 	}
 	// With the devices' second address, the command gives it: another device uses it.
 	tw.w.c.store.set(deviceFallbackKey, "http://100.64.0.2:8800")
