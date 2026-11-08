@@ -210,5 +210,8 @@ func (c *core) turnHead(now time.Time) string {
 	if line := c.contextLine(now); line != "" {
 		head += "\n" + line
 	}
+	if line := c.assistantsLine(now); line != "" {
+		head += "\n" + line // what its assistants know, closed values only (assistant_state.go)
+	}
 	return head
 }

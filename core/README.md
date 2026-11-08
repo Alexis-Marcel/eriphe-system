@@ -1281,6 +1281,36 @@ by the user. It runs as a permanent task, like the brain, placed on an always-on
   notifications are tainted (they never interrupt, carry no link). A new session starts clean; a
   resumed one keeps its taint.
 
+### An assistant's state
+
+What an assistant knows now, typed (`assistant_state.go`). Its schema is its spec's `state`: up to
+20 fields, each
+
+| Key | |
+|---|---|
+| `name` | lowercase letters, digits and `_` |
+| `type` | `choice` (with `values`, 1 to 30), `number`, `date` (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, the user's zone), `text` (500 characters), or `rows`: a list of rows whose `columns` are such fields (no rows in rows), at most `max_rows` (50 by default, up to 200), keyed by the column `key` if any |
+| `ttl` | its validity, `15m`, `4h`, `2d` (1 min to 30 days); 24 h by default. Expired, it reads unknown |
+| `summary` | in the brain's line: a closed field, or rows by their count; never a text |
+
+Its one writer is the assistant, with its own tool `set_state`, checked by code: a value off its
+type or list, an unknown field refuse the whole call, nothing written; `null` clears a field; rows
+with a key take the whole list or `{"upsert": [rows], "remove": [keys]}`. Its tool `state` reads it
+back. Its instructions describe the fields, in French. The whole state holds at most 64 KB; each
+write goes in its history (`assistant_state_log`), kept 7 days and 2000 writes per assistant. It
+goes with the assistant when it is removed; a value its schema no longer takes reads unknown. For
+now an assistant that launches tasks (the brain) has no state.
+
+**Taint per field**: a closed field (a choice, a number, a date, rows of them) never taints; a
+text, or rows with a text column, keeps why its writer's session was tainted when it wrote it.
+
+**The brain's line**: each brain turn opens with `[assistants : …]` after the context line, one
+part per enabled assistant with summary fields, closed values only, and the age of the oldest:
+`[assistants : Vigie : prod ok, incidents 2, mails 3 (il y a 4 min)]`. It never taints. Settings →
+Agents shows each assistant's state, with its age and whether it was written after reading
+external content; `GET /v1/assistants/{name}` returns it as `state`. The state orients, never
+authorises: the grid, the cards and the approvals never read it.
+
 The status (`GET /v1/assistants`) has its conditions `Running`, `Busy` and `Ready`, its current
 task, the agent it runs, its session, its last turn and its last error; the controller keeps its
 restarts there too (table `assistant_status`).

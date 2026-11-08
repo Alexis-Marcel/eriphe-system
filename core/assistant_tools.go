@@ -81,12 +81,14 @@ func assistantInstructions(c *core, a Assistant, mission string) string {
 	if mission = strings.TrimSpace(mission); mission == "" {
 		mission = noMission
 	}
-	return frame + "\n## Ta mission\n\n" + mission + "\n"
+	return frame + "\n## Ta mission\n\n" + mission + "\n" + stateInstructions(a.State)
 }
 
 // hasOwnTools tells whether an assistant that launches no task has tools
 // of its own (assistantServer).
-func hasOwnTools(a Assistant) bool { return a.can(powerReports) || a.can(powerNotifies) }
+func hasOwnTools(a Assistant) bool {
+	return a.can(powerReports) || a.can(powerNotifies) || len(a.State) > 0
+}
 
 // The schedule trigger.
 
@@ -201,6 +203,16 @@ func (c *core) assistantServer(a Assistant, _ *TaskRow) *mcp.Server {
 	if a.can(powerNotifies) {
 		tool(s, "notify", "Tell the user something yourself, now or at the next brief, with why, when your mission asks for it. eriphe-core decides what happens: quiet hours, a daily cap and the user's rules may keep a now for the brief, and what you write after reading external content never interrupts. The result says what happened: never say a notification was sent if it was not.",
 			func(ctx context.Context, in notifyIn) (map[string]any, error) { return c.assistantNotify(a, in) })
+	}
+	if len(a.State) > 0 {
+		tool(s, "set_state", "Write what you know now, in your state's fields (your instructions list them with their types). Checked by eriphe-core: a value off its type or list refuses the whole call, nothing written. A value expires after its validity and reads unknown.",
+			func(ctx context.Context, in setStateIn) (map[string]any, error) {
+				return c.setState(a, in, c.assistantTaint(a), c.notifyTime())
+			})
+		tool(s, "state", "Your state as it is now: each field's value (null: unknown, never set or expired), when it was set and until when it holds.",
+			func(ctx context.Context, _ struct{}) (map[string]any, error) {
+				return map[string]any{"state": c.assistantState(a, c.notifyTime())}, nil
+			})
 	}
 	return s
 }
