@@ -68,6 +68,8 @@ type Assistant struct {
 	// with an argument after a colon: conversation (the user's messages,
 	// the tasks' events), clock, schedule:<when>. Empty: its role's.
 	Triggers []string `json:"triggers,omitempty"`
+	// The schema of what it knows now, its typed state (assistant_state.go).
+	State []StateField `json:"state,omitempty"`
 	// The assistant it reports to: the brain, the only one it may name.
 	// Empty: the brain, for any but the brain.
 	ReportsTo string `json:"reports_to,omitempty"`
@@ -251,6 +253,9 @@ func overlay(file, ws Assistant) Assistant {
 	if len(a.Triggers) == 0 {
 		a.Triggers = ws.Triggers
 	}
+	if len(a.State) == 0 {
+		a.State = ws.State
+	}
 	if a.ReportsTo == "" {
 		a.ReportsTo = ws.ReportsTo
 	}
@@ -282,6 +287,8 @@ func readOnlyField(file, ws Assistant) string {
 		return "powers"
 	case len(ws.Triggers) > 0 && len(file.Triggers) > 0 && !slices.Equal(ws.Triggers, file.Triggers):
 		return "triggers"
+	case len(ws.State) > 0 && len(file.State) > 0 && !reflect.DeepEqual(ws.State, file.State):
+		return "state"
 	case ws.ReportsTo != "" && file.ReportsTo != "" && ws.ReportsTo != file.ReportsTo:
 		return "reports_to"
 	}
@@ -420,6 +427,12 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 	}
 	if err := checkTriggers(r, a.Triggers); err != nil {
 		return fmt.Errorf("%s: %w", what, err)
+	}
+	if err := checkStateSchema(a.State); err != nil {
+		return fmt.Errorf("%s.state: %w", what, err)
+	}
+	if len(a.State) > 0 && a.can(powerLaunchesTasks) {
+		return fmt.Errorf("%s.state: a typed state is for an assistant without the brain's tools, for now", what)
 	}
 	if a.Agent != "" && len(c.Agents) > 0 { // none: it waits for one
 		ag, ok := c.Agents[a.Agent]
@@ -654,6 +667,9 @@ func (c *core) dropAssistantStatus(name string) {
 	defer c.asst.mu.Unlock()
 	delete(c.asst.m, name)
 	c.store.db.Exec(`DELETE FROM assistant_status WHERE name = ?`, name)
+	// What it knew goes with it.
+	c.store.db.Exec(`DELETE FROM assistant_state WHERE assistant = ?`, name)
+	c.store.db.Exec(`DELETE FROM assistant_state_log WHERE assistant = ?`, name)
 }
 
 func (c *core) assistantStatusNames() []string {
@@ -786,6 +802,7 @@ type assistantView struct {
 	FileSets []string          `json:"file_sets,omitempty"` // the fields the file sets: read-only
 	Spec     Assistant         `json:"spec"`
 	Status   assistantStatusUI `json:"status"`
+	State    []stateValue      `json:"state,omitempty"` // what it knows now, by its schema
 }
 
 type assistantStatusUI struct {
@@ -802,6 +819,9 @@ type assistantStatusUI struct {
 func (c *core) assistantView(a Assistant) assistantView {
 	st := c.assistantStatus(a.Name)
 	v := assistantView{Name: a.Name, Source: c.assistantSource(a.Name), Spec: a}
+	if len(a.State) > 0 {
+		v.State = c.assistantState(a, c.notifyTime())
+	}
 	for f, set := range c.fileSets(a.Name) {
 		if set {
 			v.FileSets = append(v.FileSets, f)
