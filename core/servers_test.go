@@ -56,10 +56,6 @@ func TestServersConfig(t *testing.T) {
 		t.Error("brain.tools with a bad glob accepted")
 	}
 	cfg.Brain.Tools = nil
-	cfg.Brain.MCPServers = map[string]MCPServer{"github": {URL: "https://x"}}
-	if err := checkBrain(); err == nil {
-		t.Error("a server both in servers and brain.mcp_servers accepted")
-	}
 }
 
 func TestGrants(t *testing.T) {

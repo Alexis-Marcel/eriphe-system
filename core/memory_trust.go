@@ -263,9 +263,8 @@ func (c *core) brainCalledCatalog(taskID, server, tool string) {
 }
 
 // turnTaint is why the brain's current turn is tainted, if it is: the
-// proxy's record, and the turn's own events for the MCP servers the brain
-// reaches without eriphe-core (the deprecated brain.mcp_servers) and the
-// web tools.
+// proxy's record, and the turn's own events for its MCP tools (in case one
+// reached its harness another way) and the web tools.
 func (c *core) turnTaint() []string {
 	return c.turnTaintBut(nil)
 }

@@ -1236,7 +1236,7 @@ Its spec says what it is and what it runs on; its status is what eriphe-core kee
 | `triggers` | what wakes it: `conversation` (the user's messages and the tasks' events), `clock` (an intention of the memory that comes due: the wake packet, see [Memory](#memory); or a watch that fired, see Watches). Its role's by default (the brain's: both); `conversation` and `clock` only for a role that `receivesConversation`, and one enabled assistant at most has the conversation |
 | `reports_to` | the assistant it reports to: the brain (the one with the conversation), the only one it may name; empty means the brain. The brain reports to no one |
 | `disabled` | its task is stopped, and none started |
-| `self_url`, `mcp_servers` | the file only (see the brain) |
+| `self_url` | the file only (see the brain) |
 
 A role's card lists its powers, what its assistants may do; the code checks them where it decides,
 never a name:
@@ -1363,9 +1363,6 @@ network (localhost, a loopback, private, link-local or CGNAT IP, a name without 
 conversation), unless the URL is written in the user's own message of that turn. Reads asked
 together are judged on the taint before them. Every decision is logged (`brain: WebFetch …`) and
 kept in the decisions table. A read, like a search, taints the turn.
-
-`brain.mcp_servers` (servers given to the brain directly, with their token, and allowed without
-asking) still works but is deprecated: move each to `servers` and add it to `brain.tools`. A `token_env` token must move to a file.
 
 It gets one turn per event: my messages (`POST /v1/messages {text}`) and what happens to its workers
 (a permission request, the end of a turn, a stop), several at once if they queued during a turn.

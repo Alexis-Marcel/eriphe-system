@@ -277,11 +277,6 @@ func (c *Config) secretRefs() []secretRef {
 	for name, a := range c.Accesses {
 		add("accesses."+name+".secret", a.Secret, name)
 	}
-	if c.Brain != nil {
-		for name, s := range c.Brain.MCPServers {
-			add("brain.mcp_servers."+name+".token_file", s.TokenFile, name)
-		}
-	}
 	for name, srv := range c.Servers {
 		if srv.Auth != nil {
 			add("servers."+name+".auth.bearer_file", srv.Auth.BearerFile, name)

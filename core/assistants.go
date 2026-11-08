@@ -69,10 +69,8 @@ type Assistant struct {
 	ReportsTo string `json:"reports_to,omitempty"`
 
 	// The configuration file's only: eriphe-core's MCP URL as seen from its
-	// node (without it, its node relays eriphe-core's tools), and the
-	// deprecated MCP servers given to it with their token.
-	SelfURL    string               `json:"self_url,omitempty"`
-	MCPServers map[string]MCPServer `json:"mcp_servers,omitempty"`
+	// node (without it, its node relays eriphe-core's tools).
+	SelfURL string `json:"self_url,omitempty"`
 }
 
 // triggers are the assistant's, or its role's.
@@ -170,7 +168,7 @@ func (a Assistant) standingPrompt() (string, error) {
 // assistant is the built-in assistant the file's brain section describes.
 func (b *BrainConfig) assistant() Assistant {
 	return Assistant{Name: brainAssistant, Role: assistantRoleBrain, DisplayName: b.DisplayName, Agent: b.Agent, Node: b.Node,
-		InstructionsFile: b.PromptFile, SelfURL: b.SelfURL, Tools: b.Tools, MCPServers: b.MCPServers}
+		InstructionsFile: b.PromptFile, SelfURL: b.SelfURL, Tools: b.Tools}
 }
 
 // fileAssistants are the configuration file's: its assistants, and the
@@ -388,11 +386,6 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 			return fmt.Errorf("%s: agent %q runs %s, the %s needs a runtime that takes MCP servers and a system prompt", what, a.Agent, ag.Runtime, a.Role)
 		}
 	}
-	for s := range a.MCPServers {
-		if _, ok := c.Servers[s]; ok {
-			return fmt.Errorf("%s: mcp_servers.%s is also in servers: keep only the catalog entry", what, s)
-		}
-	}
 	// It may be granted a tool added in the workspace: an unknown server is
 	// checked for its form only, and left out until it exists (assistantTools).
 	for _, g := range a.Tools {
@@ -409,12 +402,9 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 // checkFileAssistants checks the file's assistants alone, before the
 // workspace's catalog: their agents may be the workspace's.
 func (c *Config) checkFileAssistants() error {
-	for n, a := range c.Assistants {
+	for n := range c.Assistants {
 		if n == brainAssistant && c.Brain != nil {
 			return fmt.Errorf("assistants.%s: the brain section is this assistant: keep only one", n)
-		}
-		if len(a.MCPServers) > 0 {
-			return fmt.Errorf("assistants.%s: mcp_servers is deprecated: use servers and tools", n)
 		}
 	}
 	m := *c
@@ -427,7 +417,7 @@ func (c *Config) checkFileAssistants() error {
 
 // putAssistant adds or replaces a workspace assistant, or sets what the
 // file leaves out of one of its own. The workspace may not name files or
-// tokens: instructions_file, self_url and mcp_servers are the file's.
+// tokens: instructions_file and self_url are the file's.
 func (c *core) putAssistant(name string, a Assistant) error {
 	c.catalogMu.Lock()
 	defer c.catalogMu.Unlock()
@@ -438,8 +428,8 @@ func (c *core) putAssistantLocked(name string, a Assistant, event string) error 
 	if err := checkEntryName(kindAssistant, name); err != nil {
 		return err
 	}
-	if a.InstructionsFile != "" || a.SelfURL != "" || len(a.MCPServers) > 0 {
-		return errInvalid(errors.New("instructions_file, self_url and mcp_servers belong to the configuration file"))
+	if a.InstructionsFile != "" || a.SelfURL != "" {
+		return errInvalid(errors.New("instructions_file and self_url belong to the configuration file"))
 	}
 	a.Name = name
 	a.DisplayName = normalizeDisplayName(a.DisplayName)
@@ -764,9 +754,6 @@ func (c *core) assistantView(a Assistant) assistantView {
 	}
 	sort.Strings(v.FileSets)
 	v.Spec.Triggers = a.triggers()
-	if v.Spec.MCPServers != nil {
-		v.Spec.MCPServers = nil // their tokens' places are the file's business
-	}
 	u := assistantStatusUI{Task: st.Task, Agent: st.Agent, Session: st.Session, LastError: st.LastError, Failures: st.Failures}
 	if st.LastTurn > 0 {
 		t := time.Unix(st.LastTurn, 0)

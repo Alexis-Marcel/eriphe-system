@@ -71,18 +71,8 @@ type BrainConfig struct {
 	// Tools is the brain's grant from the catalog, like a task's: server
 	// names or server.tool globs.
 	Tools []string `json:"tools,omitempty"`
-	// Deprecated: MCP servers given to the brain directly, with their token,
-	// and allowed without asking. Move them to servers and brain.tools.
-	MCPServers map[string]MCPServer `json:"mcp_servers,omitempty"`
-}
-
-// MCPServer is an extra HTTP MCP server for the brain; its bearer token
-// comes from a file or an environment variable of the brain's process.
-// Deprecated: see BrainConfig.MCPServers.
-type MCPServer struct {
-	URL       string `json:"url"`
-	TokenFile string `json:"token_file,omitempty"`
-	TokenEnv  string `json:"token_env,omitempty"`
+	// MCPServers are refused (check): every tool goes through the catalog.
+	MCPServers map[string]json.RawMessage `json:"mcp_servers,omitempty"`
 }
 
 // defaultData is where eriphe-core keeps its files without a configuration
@@ -223,7 +213,7 @@ func (c *Config) complete(where string) error {
 		return fmt.Errorf("%s: %w", where, err)
 	}
 	if c.Brain != nil && len(c.Brain.MCPServers) > 0 {
-		log.Printf("%s: brain.mcp_servers is deprecated: move them to servers and brain.tools", where)
+		return fmt.Errorf("%s: brain.mcp_servers is gone: move them to servers and brain.tools", where)
 	}
 	if err := c.checkFileAssistants(); err != nil {
 		return fmt.Errorf("%s: %w", where, err)
