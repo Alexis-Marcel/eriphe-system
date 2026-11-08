@@ -277,10 +277,10 @@ func TestAccessOnApprovalAsksAtLaunch(t *testing.T) {
 	}
 	_, id, _ := parseProposalRef(card.Ref)
 	s, _ := c.taskStart(id)
-	if got := startText(s.Needs, "en"); !strings.Contains(got, "use the access npm") {
+	if got := startText(s.Needs, "en"); !strings.Contains(got, "use the credential npm") {
 		t.Errorf("card = %q", got)
 	}
-	if got := startText(s.Needs, "fr"); !strings.Contains(got, "utiliser l'accès npm") {
+	if got := startText(s.Needs, "fr"); !strings.Contains(got, "utiliser l'identifiant npm") {
 		t.Errorf("card = %q", got)
 	}
 	if rec := viaRelay(c, "nas", task.ID, accessHost+":443", "GET", "/", placeholderAuth(task.ID), nil); rec.Code != 403 {
@@ -435,7 +435,7 @@ func TestAccessSecretOnTheVaultPage(t *testing.T) {
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	code, body, _ := tw.post("/settings/secrets", url.Values{"name": {"other"}, "value": {"x"}}, csrf)
-	if code != 200 || !strings.Contains(body, "Accès npm") {
+	if code != 200 || !strings.Contains(body, "Identifiant npm") {
 		t.Fatalf("%d %s", code, body)
 	}
 }
@@ -618,7 +618,7 @@ func TestAccessPage(t *testing.T) {
 	csrf := tw.setup()
 	form := url.Values{"name": {"npm"}, "use": {"publish"}, "hosts": {accessHost + "\n\nupload.example.org:8443\n"}, "env": {"NPM_TOKEN"},
 		"secret": {accessSecret}, "value": {gridFree}, "rules": {"GET /v1/*\n"}}
-	if code, body, h := tw.post("/settings/accesses", form, csrf); code != 200 || h.Get("HX-Redirect") == "" {
+	if code, body, h := tw.post("/settings/credentials", form, csrf); code != 200 || h.Get("HX-Redirect") == "" {
 		t.Fatalf("add: %d %s", code, body)
 	}
 	a := c.conf().Accesses["npm"]
@@ -626,17 +626,17 @@ func TestAccessPage(t *testing.T) {
 		t.Fatalf("access = %+v", a)
 	}
 	if code, body, _ := tw.do("GET", "/settings/tools?savedaccess=npm", nil, nil); code != 200 || !strings.Contains(body, accessHost) ||
-		strings.Contains(body, accessSecret) || !strings.Contains(html.UnescapeString(body), "Accès « npm » enregistré") {
+		strings.Contains(body, accessSecret) || !strings.Contains(html.UnescapeString(body), "Identifiant « npm » enregistré") {
 		t.Fatalf("list: %d", code)
 	}
-	code, body, _ := tw.do("GET", "/settings/accesses/npm/edit", nil, nil)
+	code, body, _ := tw.do("GET", "/settings/credentials/npm/edit", nil, nil)
 	if code != 200 || !strings.Contains(body, "upload.example.org:8443") || strings.Contains(body, accessSecret) {
 		t.Fatalf("edit: %d", code)
 	}
 	// Saved without its secret: it stays.
 	form.Del("secret")
 	form.Set("value", gridApproval)
-	if code, body, h := tw.post("/settings/accesses/npm", form, csrf); code != 200 || h.Get("HX-Redirect") == "" {
+	if code, body, h := tw.post("/settings/credentials/npm", form, csrf); code != 200 || h.Get("HX-Redirect") == "" {
 		t.Fatalf("save: %d %s", code, body)
 	}
 	if got, _ := vaultSecret("access.npm.secret"); got != accessSecret || c.conf().Accesses["npm"].Value != gridApproval {
@@ -644,15 +644,15 @@ func TestAccessPage(t *testing.T) {
 	}
 	// A refusal stays on the form.
 	form.Set("env", "PATH")
-	if _, body, h := tw.post("/settings/accesses/npm", form, csrf); h.Get("HX-Redirect") != "" || !strings.Contains(body, "lent-form") ||
+	if _, body, h := tw.post("/settings/credentials/npm", form, csrf); h.Get("HX-Redirect") != "" || !strings.Contains(body, "lent-form") ||
 		!strings.Contains(html.UnescapeString(body), "ne peut pas tenir le substitut") {
 		t.Fatalf("refused: %s", body)
 	}
 	// Removed from its row, as a tool is.
-	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, `<form hx-post="/settings/accesses/npm/delete"`) {
+	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, `<form hx-post="/settings/credentials/npm/delete"`) {
 		t.Fatal("no way to remove it from the list")
 	}
-	if code, body, h := tw.post("/settings/accesses/npm/delete", nil, csrf); code != 200 || h.Get("HX-Redirect") == "" {
+	if code, body, h := tw.post("/settings/credentials/npm/delete", nil, csrf); code != 200 || h.Get("HX-Redirect") == "" {
 		t.Fatalf("delete: %d %s", code, body)
 	}
 	if _, ok := c.conf().Accesses["npm"]; ok {
@@ -674,7 +674,28 @@ func TestAccessOfTheFileIsReadOnly(t *testing.T) {
 	}
 	tw := newTestWebFor(t, c)
 	tw.setup()
-	if code, _, h := tw.do("GET", "/settings/accesses/npm/edit", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/settings/tools" {
+	if code, _, h := tw.do("GET", "/settings/credentials/npm/edit", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/settings/tools" {
 		t.Errorf("edit: %d", code)
+	}
+}
+
+// The credentials' former address leads to the new one, query and all.
+func TestCredentialsMoved(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	for from, to := range map[string]string{
+		"/settings/accesses/new?kind=ssh": "/settings/credentials/new?kind=ssh",
+		"/settings/accesses/npm/edit":     "/settings/credentials/npm/edit",
+	} {
+		if code, _, h := tw.do("GET", from, nil, nil); code != 301 || h.Get("Location") != to {
+			t.Errorf("GET %s: %d %s", from, code, h.Get("Location"))
+		}
+	}
+	// The tools page names them credentials, in both languages.
+	for lang, want := range map[string]string{"fr": "<h3>Identifiants</h3>", "en": "<h3>Credentials</h3>"} {
+		_, body, _ := tw.do("GET", "/settings/tools", nil, map[string]string{"Cookie": "lang=" + lang})
+		if !strings.Contains(body, `id="credentials"`) || !strings.Contains(body, want) || !strings.Contains(body, `href="/settings/credentials/new"`) {
+			t.Errorf("%s: the tools page does not name them credentials", lang)
+		}
 	}
 }

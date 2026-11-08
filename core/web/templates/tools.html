@@ -729,11 +729,11 @@
 
 {{/* What tasks use with their own programs, below the tools. . is a toolsPage. */}}
 {{define "lent-accesses"}}
-<section class="stack" id="accesses">
+<section class="stack" id="credentials">
   <header class="page-head page-head-row">
     <div><h3>{{t "lent.title"}}</h3><p class="muted small">{{t "lent.lead"}}</p></div>
-    <div class="tool-actions"><a class="btn btn-soft sm" href="/settings/accesses/new">{{template "i-plus"}}{{t "lent.add"}}</a>
-    <a class="btn btn-soft sm" href="/settings/accesses/new?kind=ssh">{{template "i-plus"}}{{t "lent.addssh"}}</a></div>
+    <div class="tool-actions"><a class="btn btn-soft sm" href="/settings/credentials/new">{{template "i-plus"}}{{t "lent.add"}}</a>
+    <a class="btn btn-soft sm" href="/settings/credentials/new?kind=ssh">{{template "i-plus"}}{{t "lent.addssh"}}</a></div>
   </header>
   {{if .Accesses}}<ul class="tools">{{range .Accesses}}
   <li class="tool" id="lent-{{.Name}}">
@@ -743,8 +743,8 @@
       {{if .Use}}<p class="use">{{.Use}}</p>{{end}}
       <p class="muted small meta-line"><span class="mono">{{.Hosts}}</span>{{if .Env}} · <span class="mono">${{.Env}}</span>{{end}} · {{t (printf "lent.value.%s" .Value)}}</p>
     </div>
-    {{if .Editable}}<div class="tool-actions"><a class="btn btn-ghost sm" href="/settings/accesses/{{.Name}}/edit">{{t "lent.edit"}}</a>
-      <form hx-post="/settings/accesses/{{.Name}}/delete" hx-confirm="{{tf "lent.removeconfirm" .Name}}" class="inline"><button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form></div>{{end}}
+    {{if .Editable}}<div class="tool-actions"><a class="btn btn-ghost sm" href="/settings/credentials/{{.Name}}/edit">{{t "lent.edit"}}</a>
+      <form hx-post="/settings/credentials/{{.Name}}/delete" hx-confirm="{{tf "lent.removeconfirm" .Name}}" class="inline"><button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form></div>{{end}}
   </li>{{end}}</ul>
   {{else}}<p class="muted small">{{t "lent.empty"}}</p>{{end}}
 </section>
@@ -752,7 +752,7 @@
 
 {{/* An access's form. . is an accessForm. */}}
 {{define "lent-access-form"}}{{if .SSH}}{{template "lent-ssh-form" .}}{{else}}
-<form class="panel stack" id="lent-form" hx-post="{{if .Edit}}/settings/accesses/{{.Name}}{{else}}/settings/accesses{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
+<form class="panel stack" id="lent-form" hx-post="{{if .Edit}}/settings/credentials/{{.Name}}{{else}}/settings/credentials{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
   <div class="form-grid">
     <label class="field"><span>{{t "lent.name"}}</span>
@@ -797,7 +797,7 @@
 
 {{/* An SSH access's form: its key is made on saving. . is an accessForm. */}}
 {{define "lent-ssh-form"}}
-<form class="panel stack" id="lent-form" hx-post="{{if .Edit}}/settings/accesses/{{.Name}}{{else}}/settings/accesses{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
+<form class="panel stack" id="lent-form" hx-post="{{if .Edit}}/settings/credentials/{{.Name}}{{else}}/settings/credentials{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
   <input type="hidden" name="kind" value="ssh">
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
   <div class="form-grid">
@@ -845,7 +845,7 @@
   {{if .Fingerprint}}<p class="small muted">{{t "lent.ssh.pinned"}} <span class="mono">{{.Fingerprint}}</span></p>
   {{else}}<p class="small notice-line">{{t "lent.ssh.notpinned"}}</p>{{end}}
   <div id="lent-ssh-result" aria-live="polite"></div>
-  <form class="actions" hx-post="/settings/accesses/{{.Name}}/test" hx-target="#lent-ssh-result" hx-disabled-elt="find button"><button class="btn btn-soft" type="submit">{{t "lent.ssh.test"}}</button></form>
+  <form class="actions" hx-post="/settings/credentials/{{.Name}}/test" hx-target="#lent-ssh-result" hx-disabled-elt="find button"><button class="btn btn-soft" type="submit">{{t "lent.ssh.test"}}</button></form>
 </section>
 {{end}}
 {{define "lent-ssh-test"}}{{with .Data}}<p class="alert" role="alert">{{t .Key}}</p>{{if .Found}}<p class="small muted">{{t "lent.test.found"}} <span class="mono">{{.Found}}</span></p>{{end}}{{end}}{{end}}
@@ -859,7 +859,7 @@
 </header>
 {{if and .SSH .Edit}}{{template "lent-ssh-key" .}}{{end}}
 {{template "lent-access-form" .}}
-{{if .Edit}}<form class="actions" hx-post="/settings/accesses/{{.Name}}/delete" hx-confirm="{{tf "lent.removeconfirm" .Name}}"><button class="btn btn-ghost sm" type="submit">{{t "lent.remove"}}</button></form>{{end}}
+{{if .Edit}}<form class="actions" hx-post="/settings/credentials/{{.Name}}/delete" hx-confirm="{{tf "lent.removeconfirm" .Name}}"><button class="btn btn-ghost sm" type="submit">{{t "lent.remove"}}</button></form>{{end}}
 {{end}}{{end}}
 
 {{define "tool-form"}}{{with .Data}}{{$c := .Preset.Compact}}

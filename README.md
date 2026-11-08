@@ -139,7 +139,7 @@ Eriphe is designed like a small Kubernetes:
 - **Tasks are isolated.** Each task is a container with its own secret, on a network that reaches
   only its node, and the agent is root in it, not on the machine. The catalog's credentials stay in
   eriphe-core (a task calls a server through its node, only for the servers it was granted), and so
-  do its accesses, SSH keys and GitHub tokens: it holds a placeholder. The one long-lived secret in a
+  do its credentials, SSH keys and GitHub tokens: it holds a placeholder. The one long-lived secret in a
   task is its agent's key for the model provider.
 - **Egress relay.** A task's only way to the Internet is its node's relay, which never dials the
   LAN, loopback or metadata addresses.

@@ -63,7 +63,7 @@ var resourceKinds = map[string][]string{
 // repository's only.
 type ResourceRef struct {
 	Kind   string `json:"kind" jsonschema:"repo, folder, drive-folder, tool, access or file"`
-	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or drive-folder its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access its name in list_tools' accesses"`
+	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or drive-folder its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access (a credential) its name in list_tools' accesses"`
 	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); drive-folder: read or drop; at most the folder's own level; tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
 	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create and push to; with access write, the user is asked on a card unless it is their own clean turn"`
 	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
