@@ -36,7 +36,6 @@ func (w *web) activityRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/happened", moved("/settings/journal", true))
 	mux.Handle("GET /activity", moved("/settings/journal", true))
 	mux.Handle("GET /activity/approve", moved("/settings/approve", false))
-	mux.Handle("GET /settings/channels", moved("/settings/remote#telegram", false))
 	mux.Handle("GET /settings/where", moved("/settings/notifications#where", false))
 }
 

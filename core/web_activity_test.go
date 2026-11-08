@@ -20,7 +20,6 @@ func TestActivityRedirects(t *testing.T) {
 		"/activity":             "/settings/journal",
 		"/activity?kind=access": "/settings/journal?kind=access",
 		"/activity/approve":     "/settings/approve",
-		"/settings/channels":    "/settings/remote#telegram",
 		"/settings/where":       "/settings/notifications#where",
 		"/memory?view=inbox":    "/settings/approve",
 	} {
@@ -101,7 +100,7 @@ func TestNavWithoutActivity(t *testing.T) {
 			t.Errorf("the settings lack %q", want)
 		}
 	}
-	for _, gone := range []string{"/settings/happened", "/settings/channels", "/settings/where"} {
+	for _, gone := range []string{"/settings/happened", "/settings/where"} {
 		if strings.Contains(body, `href="`+gone+`"`) {
 			t.Errorf("the settings still list %s", gone)
 		}
@@ -180,7 +179,7 @@ func TestNotificationsOnePage(t *testing.T) {
 	}
 	order := []string{`<a href="#where">`, `<a href="#rules">`, `<a href="#sent">`,
 		`id="where"`, `id="push"`, `href="/settings/remote#app"`, `id="push-devices"`, `id="where-body"`, "Eriphe ouvert devant toi",
-		"Aucun compte relié.", `<a href="/settings/remote#telegram">Configurer dans Accès</a>`,
+		"Aucun compte relié.", `<a href="/settings/channels#telegram">Configurer dans Canaux</a>`,
 		`id="channels"`, `hx-post="/channels/settings"`, `id="rules"`, `id="notify-rules"`, "project:site", `hx-post="/notify/rules/1/delete"`, `class="ask"`,
 		`id="sent"`, "Dernières décisions"}
 	at := 0

@@ -474,7 +474,7 @@ func TestWebTelegramChannels(t *testing.T) {
 	tw.c.tg.api, tw.c.tg.client = f.srv.URL, f.srv.Client()
 	t.Cleanup(tw.c.tg.stop)
 
-	code, body, _ := tw.do("GET", "/settings/remote", nil, nil)
+	code, body, _ := tw.do("GET", "/settings/channels", nil, nil)
 	if code != 200 || !strings.Contains(body, "pas de bout en bout") || !strings.Contains(body, `name="token"`) {
 		t.Fatalf("GET: %d", code)
 	}

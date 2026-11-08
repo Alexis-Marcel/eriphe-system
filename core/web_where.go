@@ -100,7 +100,7 @@ func (w *web) wherePage(lang string) wherePage {
 			}
 		case stepTelegram:
 			if !telegram { // set up in Settings → Access (remote.html)
-				l.Usable, l.Hint, l.Link = false, "where.hint.telegram", "/settings/remote#telegram"
+				l.Usable, l.Hint, l.Link = false, "where.hint.telegram", "/settings/channels#telegram"
 			}
 		}
 		v.Lines = append(v.Lines, l)

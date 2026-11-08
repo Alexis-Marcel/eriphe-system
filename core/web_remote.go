@@ -16,8 +16,8 @@ import (
 // Settings → Access: the ways to talk to Eriphe. From the web, the remote
 // access (remote.go): turn it on, log in to Tailscale, enable HTTPS once,
 // then the address and its QR code for the phone; its state follows tsnet
-// live, over an event stream. Then installing the workspace as an app, and
-// Telegram's bot (web_telegram.go).
+// live, over an event stream. Then installing the workspace as an app.
+// Telegram's bot is a channel (Settings → Channels, web_channels.go).
 
 func (w *web) remoteRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/remote", w.auth(w.handleRemote))
@@ -39,9 +39,8 @@ type remotePage struct {
 	remoteView
 	QR       template.HTML
 	HasVault bool
-	Exposed  string       // the public address this page was reached at, or from: the workspace is on the internet
-	Loopback bool         // the page was opened at 127.0.0.1: on Eriphe's machine, or through an SSH tunnel
-	Telegram channelsPage // the bot's panel (web_telegram.go); the whole page only
+	Exposed  string // the public address this page was reached at, or from: the workspace is on the internet
+	Loopback bool   // the page was opened at 127.0.0.1: on Eriphe's machine, or through an SSH tunnel
 }
 
 // loopbackAt tells whether r reached the workspace at a loopback address
@@ -94,7 +93,6 @@ func (w *web) remotePage(r *http.Request) remotePage {
 
 func (w *web) handleRemote(rw http.ResponseWriter, r *http.Request, s *session) {
 	p := w.remotePage(r)
-	p.Telegram = w.channelsPage()
 	w.render(rw, r, s, "settings", "", page{Title: "settings.remote", Nav: "settings", Tab: "remote", Data: p})
 }
 

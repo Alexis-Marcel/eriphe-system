@@ -25,7 +25,7 @@ import (
 //	GET  /v1/voice  {"name"}: what the user calls the assistant, for the agent's name
 //
 // The answer is NDJSON: {"delta": "…"} lines, then {"done": true, "text",
-// "continue"}. Home Assistant has its own token (Settings → Tools → Home Assistant), which
+// "continue"}. Home Assistant has its own token (Settings → Channels → the voice), which
 // can only talk to the brain, and fetch what to say (voice_out.go).
 //
 // The voice is a channel (channels.go) that guarantees only that someone

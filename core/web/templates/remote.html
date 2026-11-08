@@ -10,7 +10,7 @@
 {{define "remote"}}
 <header class="page-head"><h2>{{t "settings.remote"}}</h2><p>{{t "access.lead"}}</p></header>
 <nav class="pill-tabs" aria-label="{{t "settings.remote"}}">
-  <a href="#web">{{t "access.web"}}</a><a href="#app">{{t "access.app"}}</a><a href="#telegram">{{t "access.telegram"}}</a>
+  <a href="#web">{{t "access.web"}}</a><a href="#app">{{t "access.app"}}</a>
 </nav>
 
 <h3 class="section-title" id="web">{{template "i-globe"}}{{t "access.web"}}</h3>
@@ -29,9 +29,6 @@
     <li data-platform="desktop"><b>{{t "install.computer"}}</b><span>{{t "install.desktop"}}</span></li>
   </ul>
 </section>
-
-<h3 class="section-title" id="telegram">{{template "i-chat"}}{{t "access.telegram"}}</h3>
-<section class="panel" aria-labelledby="tg-title" id="tg-panel">{{template "telegram" .Data.Telegram}}</section>
 {{end}}
 
 {{define "remote-steps"}}
