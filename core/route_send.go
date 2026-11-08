@@ -89,23 +89,8 @@ func (c *core) broadcast(n pushNote) ([]routeTarget, string) {
 	}
 	var sent []routeTarget
 	for _, ch := range c.channelsOf(n) {
-		switch ch {
-		case chanPush:
-			if c.push == nil {
-				continue
-			}
-			c.push.deliver(n)
-			subs, _ := c.push.subscriptions()
-			for _, s := range subs {
-				if n.OnlyFor == "" || s.ID == n.OnlyFor {
-					sent = append(sent, routeTarget{Step: stepBroadcast, Device: s.ID, Label: s.Label})
-				}
-			}
-		case chanTelegram:
-			if c.tg != nil && c.tg.linked() {
-				c.tg.deliver(n)
-				sent = append(sent, routeTarget{Step: stepTelegram, Label: "Telegram"})
-			}
+		if k, ok := channelKindOf(ch); ok && k.sends() {
+			sent = append(sent, k.deliver(c, n)...)
 		}
 	}
 	return sent, ""

@@ -2338,7 +2338,19 @@ The interruption bench (`notify_eval_test.go`, `testdata/notifyeval`) runs with 
 the decision on labelled cases (accuracy, precision and recall of "now", night wake-ups no rule
 allows: none, injection cases blocked: all).
 
-**Channels: push and Telegram** (`channels.go`, `telegram.go`, `web_telegram.go`). What is sent
+**Channels** (`channels.go`): how the user and Eriphe talk, one notion apart from the tools, which
+act. Each channel has its own connection and secret, and says, in `channelKinds`:
+
+| Channel | Direction | Who speaks (inbound) | What it carries (outbound) |
+|---|---|---|---|
+| `workspace` (and the CLI) | receives | the user: their session or token | |
+| `push` | notifies | | the notification's text |
+| `telegram` | both | the user's account, verified with a code | the notification's text |
+| `voice` (Home Assistant) | both | someone in the room, maybe not the user | only a sentence the code writes, through the router's voice line |
+
+A notification or a rule may name only the channels it is broadcast on (`push`, `telegram`).
+
+**Push and Telegram** (`channels.go`, `telegram.go`, `web_telegram.go`). What is sent
 (`tell`) goes by the user's channels: web push and Telegram, all by default, a narrower default in
 Settings → Notifications (Où te prévenir), or a topic rule's own (`channels`: `push`, `telegram` or both). The decision
 above is unchanged; the channels only say where a "now" goes. Telegram, two-way, without an
