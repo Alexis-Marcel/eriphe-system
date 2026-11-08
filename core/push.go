@@ -69,7 +69,7 @@ type pushNote struct {
 	OnlyFor string            // one subscription's id; all of them when empty
 	React   string            // where its 👍 / 👎 / « pas maintenant » buttons answer (notify.go)
 	// For the other channels (channels.go).
-	Channels string // where it goes: push, telegram or both; the default channels when empty
+	Channels string // where it goes: push, telegram or both (channels.go); the default channels when empty
 	Notif    int64  // the notification it tells, whose feedback its buttons give
 	Why      string // the notification's why
 	Waiting  bool   // a question of the brain's to the user (pushWaiting)

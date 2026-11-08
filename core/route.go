@@ -60,7 +60,7 @@ func stepChannel(step string) string {
 		return chanTelegram
 	}
 	if step == stepVoice {
-		return stepVoice
+		return chanVoice
 	}
 	return chanPush
 }
