@@ -835,21 +835,16 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    `$CODEX_HOME`…). OpenCode's and Codex's requests (the `opencode` and
    `codex` runtimes) come under Claude Code's tool names (`Bash`, `Edit`, `Write`, `WebFetch`…)
    with the same inputs, so the same rules apply;
-2. a catalog tool at Never, and a call that must name its account: the proxy would refuse them, so
-   no rule lifts them;
-3. the configuration's `policy.rules`, first match wins:
-   `{"tool": "Bash", "match": "^go test", "decision": "allow"}` (`tool` is a name, a glob such as
-   `mcp__*`, or names joined by `|`; `match` is a regular expression on the command, path or URL;
-   `decision` is `allow`, `deny` or `ask`);
-4. a tool lent [held back](#resources) is the user's until its release: neither a grant of its
+2. a catalog tool at Never, and a call that must name its account: the proxy would refuse them;
+3. a tool lent [held back](#resources) is the user's until its release: neither a grant of its
    category nor a free read lifts that;
-5. for a catalog tool, its **exception**, then the actions the user allowed for good ("Toujours
+4. for a catalog tool, its **exception**, then the actions the user allowed for good ("Toujours
    autoriser", [below](#access-levels)), then its **category's value** in the
    [grid](#access-grid) of the account the call names: On approval asks on a
    [card](#the-approval-card), Free is allowed;
-6. an MCP tool out of the catalog: refused at once, it is not lent. There is no built-in ask on a command: what a task reaches
+5. an MCP tool out of the catalog: refused at once, it is not lent. There is no built-in ask on a command: what a task reaches
    with a secret is what it was lent, decided at launch, and Free asks nothing;
-7. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
+6. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
    `Write`, `Edit`, `WebFetch`…) is allowed (`inContainer`). The container
    is the boundary: what leaves it goes through the node's mounts (a folder's level), its egress
    filter and the credentials eriphe-core lends, which the shell rules above cannot replace (they
@@ -1364,15 +1359,13 @@ Settings → Tools, Free, On approval or Never, for the brain only (a task's web
 On approval is a card for each search and page; a yes lets that one through. Each read is decided by eriphe-core
 (`brain_web.go`). A URL that is not http(s), carries credentials, or names this machine or the local
 network (localhost, a loopback, private, link-local or CGNAT IP, a name without a dot or under
-`.local`, `.lan`, `.internal`, `.home.arpa`…) is refused; a policy rule on `WebFetch` that denies or
-asks wins; on a clean turn the read is allowed; on a tainted turn it is the user's (told in the
+`.local`, `.lan`, `.internal`, `.home.arpa`…) is refused; on a clean turn the read is allowed; on a tainted turn it is the user's (told in the
 conversation), unless the URL is written in the user's own message of that turn. Reads asked
 together are judged on the taint before them. Every decision is logged (`brain: WebFetch …`) and
 kept in the decisions table. A read, like a search, taints the turn.
 
 `brain.mcp_servers` (servers given to the brain directly, with their token, and allowed without
-asking) still works but is deprecated: move each to `servers`, add it to `brain.tools`, and add
-policy rules for what the brain may use without asking. A `token_env` token must move to a file.
+asking) still works but is deprecated: move each to `servers` and add it to `brain.tools`. A `token_env` token must move to a file.
 
 It gets one turn per event: my messages (`POST /v1/messages {text}`) and what happens to its workers
 (a permission request, the end of a turn, a stop), several at once if they queued during a turn.

@@ -284,9 +284,8 @@ func TestChatGPTNeedsTheVault(t *testing.T) {
 }
 
 func TestPolicyDeniesCodexSecrets(t *testing.T) {
-	p := &Policy{}
 	for _, cmd := range []string{"cat /tmp/eriphe-codex/auth.json", "echo $ERIPHE_CODEX_AUTH", "ls $CODEX_HOME", "cat ~/.codex/auth.json", "cat /profile/codex/auth.json"} {
-		if d, why := p.decide("Bash", map[string]any{"command": cmd}); d != decideDeny {
+		if d, why := decideWith("Bash", map[string]any{"command": cmd}, catalogFacts{}, nil); d != decideDeny {
 			t.Errorf("%s: %s %s", cmd, d, why)
 		}
 	}

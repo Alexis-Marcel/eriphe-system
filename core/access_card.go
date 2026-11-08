@@ -53,7 +53,7 @@ const (
 )
 
 // accessReason tells whether a decision to ask comes from the grid, and so
-// is asked on a card; a rule's goes as a permission, with its input.
+// is asked on a card.
 func accessReason(reason string) bool { return reason == approvalReason || reason == uncleanReason }
 
 // accessNeed is one category of one account a task needs the user's yes for.

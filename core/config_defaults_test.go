@@ -157,16 +157,14 @@ func TestOldConfigUnchanged(t *testing.T) {
 		"agents": {"opus": {"runtime": "claude-code", "provider": "anthropic", "model": "opus"}},
 		"default_agent": "opus",
 		"brain": {"node": "nas", "agent": "opus", "prompt_file": "`+prompt+`", "self_url": "http://eriphe-core:8800/mcp",
-			"mcp_servers": {"extra": {"url": "http://extra.example.org/mcp"}}, "tools": ["docs"]},
-		"policy": {"rules": [{"tool": "Bash", "match": "^go test", "decision": "allow"}]}}`), 0o600)
+			"mcp_servers": {"extra": {"url": "http://extra.example.org/mcp"}}, "tools": ["docs"]}}`), 0o600)
 	c, err := loadOrDefault(path, filepath.Join(dir, "data"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	b := c.Brain
 	if c.Listen != "0.0.0.0:8800" || c.PublicURL != "http://nas.example.org:8800" || c.Web.Listen != "0.0.0.0:8443" ||
-		c.TokenFile != "/secrets/core-token" || c.DB != "/data/core.db" || c.User != "Sam" || c.DefaultAgent != "opus" ||
-		len(c.Policy.Rules) != 1 {
+		c.TokenFile != "/secrets/core-token" || c.DB != "/data/core.db" || c.User != "Sam" || c.DefaultAgent != "opus" {
 		t.Fatalf("config = %+v", c)
 	}
 	if b.Node != "nas" || b.Agent != "opus" || b.SelfURL != "http://eriphe-core:8800/mcp" || b.MCPServers["extra"].URL == "" ||
@@ -190,5 +188,16 @@ func TestBuiltinBrainPrompt(t *testing.T) {
 	}
 	if _, err := (&BrainConfig{PromptFile: "/nonexistent/brain.md"}).assistant().standingPrompt(); err == nil {
 		t.Fatal("a missing prompt file is not an error")
+	}
+}
+
+// A file with permission rules does not start: without them it could allow
+// what they denied.
+func TestRetiredPolicyRefused(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "core.json")
+	os.WriteFile(path, []byte(`{"token_file": "/secrets/core-token", "policy": {"rules": [{"tool": "Bash", "decision": "deny"}]}}`), 0o600)
+	if _, err := loadOrDefault(path, filepath.Join(dir, "data")); err == nil || !strings.Contains(err.Error(), "policy.rules") {
+		t.Fatalf("load = %v", err)
 	}
 }

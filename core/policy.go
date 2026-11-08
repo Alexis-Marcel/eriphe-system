@@ -17,15 +17,14 @@ import (
 //     wholesale, pushing to main, forcing a push, reading secrets);
 //  2. a catalog tool at Never, by its exception or its category, and a call
 //     that must name its account;
-//  3. the rules of the configuration, first match wins;
-//  4. a tool lent held back is the user's until its release;
-//  5. a catalog tool's exception, then the actions the user allowed for good
+//  3. a tool lent held back is the user's until its release;
+//  4. a catalog tool's exception, then the actions the user allowed for good
 //     ("Toujours autoriser", Free exceptions that do not lift a Never);
-//  6. its category's value in the grid of the account the call names: On
+//  5. its category's value in the grid of the account the call names: On
 //     approval is the user's, Free is allowed, unless it writes on a tainted
 //     turn or a task that did not start cleanly: then it is On approval too;
-//  7. an MCP tool the catalog does not know is the user's decision;
-//  8. anything else is for the brain to judge. No catalog call gets here.
+//  6. an MCP tool the catalog does not know is refused: it is not lent;
+//  7. anything else acts in the task's container, and no rule stops it.
 //
 // Every decision, whoever takes it, is recorded in the decisions table.
 
@@ -43,43 +42,19 @@ const (
 	byUser   = "user"
 )
 
-// Rule is one line of the policy: a tool (a name or a glob, e.g. "Bash" or
+// Rule is one line of the built-in policy: a tool (a name or a glob, e.g. "Bash" or
 // "mcp__*"), a regular expression on what the tool acts on (a command, a
 // path, a URL), a decision and its reason.
 type Rule struct {
-	Tool     string `json:"tool"`
-	Match    string `json:"match,omitempty"`
-	Decision string `json:"decision"` // allow, deny or ask
-	Reason   string `json:"reason,omitempty"`
+	Tool     string
+	Match    string
+	Decision string // allow, deny or ask
+	Reason   string
 	re       *regexp.Regexp
 	// account, set, holds the rule to the calls that name this account
 	// (an action allowed for good for one account: access.go); "" those
 	// that name none.
 	account *string
-}
-
-type Policy struct {
-	Rules []Rule `json:"rules,omitempty"`
-}
-
-func (p *Policy) compile() error {
-	for i := range p.Rules {
-		r := &p.Rules[i]
-		if r.Tool == "" {
-			return fmt.Errorf("policy rule %d: tool is required", i+1)
-		}
-		if r.Decision != decideAllow && r.Decision != decideDeny && r.Decision != decideAsk {
-			return fmt.Errorf("policy rule %d: decision must be allow, deny or ask", i+1)
-		}
-		if r.Match != "" {
-			re, err := regexp.Compile(r.Match)
-			if err != nil {
-				return fmt.Errorf("policy rule %d: %w", i+1, err)
-			}
-			r.re = re
-		}
-	}
-	return nil
 }
 
 func rule(tool, match, decision, reason string) Rule {
@@ -152,24 +127,10 @@ func (r Rule) forTool(tool string) bool {
 	return false
 }
 
-// names tells whether a rule of the configuration is about a tool.
-func (p *Policy) names(tool string) bool {
-	for _, r := range p.rules() {
-		if r.forTool(tool) {
-			return true
-		}
-	}
-	return false
-}
-
-// decide applies the policy to a permission request.
-func (p *Policy) decide(tool string, input map[string]any) (decision, reason string) {
-	return p.decideWith(tool, input, catalogFacts{}, nil)
-}
-
-// decideWith is decide knowing what the catalog says of the tool and the
-// actions the user allowed for good (remembered: access.go).
-func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, remembered []Rule) (decision, reason string) {
+// decideWith applies the policy to a permission request, knowing what the
+// catalog says of the tool and the actions the user allowed for good
+// (remembered: access.go).
+func decideWith(tool string, input map[string]any, f catalogFacts, remembered []Rule) (decision, reason string) {
 	subj := subject(tool, input)
 	for _, r := range builtinDeny {
 		if r.matches(tool, subj) {
@@ -180,12 +141,7 @@ func (p *Policy) decideWith(tool string, input map[string]any, f catalogFacts, r
 		return decideDeny, noAccountReason
 	}
 	if f.value == gridNever {
-		return decideDeny, neverReason // no rule lifts it: the proxy would refuse the call
-	}
-	for _, r := range p.rules() {
-		if r.matches(tool, subj) {
-			return r.Decision, r.Reason
-		}
+		return decideDeny, neverReason // the proxy would refuse the call
 	}
 	if f.held {
 		return decideAsk, heldReason
@@ -266,14 +222,7 @@ func (c *core) decideFacts(tool string, input map[string]any, f catalogFacts) (d
 	if strings.HasPrefix(tool, "mcp__") {
 		remembered = c.store.allowedRules()
 	}
-	return c.conf().Policy.decideWith(tool, input, f, remembered)
-}
-
-func (p *Policy) rules() []Rule {
-	if p == nil {
-		return nil
-	}
-	return p.Rules
+	return decideWith(tool, input, f, remembered)
 }
 
 // applyPolicy answers the new permission requests of a worker, or marks them

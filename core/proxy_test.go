@@ -277,19 +277,6 @@ func TestCatalogPolicy(t *testing.T) {
 			t.Errorf("%s = %q, want %q", tc.tool, got, tc.want)
 		}
 	}
-	c.conf().Policy = &Policy{Rules: []Rule{
-		{Tool: "mcp__github__create_issue", Match: `"title":"\[eriphe\]`, Decision: decideAllow},
-		{Tool: "mcp__github__get_issue", Decision: decideDeny},
-	}}
-	if err := c.conf().Policy.compile(); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := c.decide("mcp__github__create_issue", map[string]any{"title": "[eriphe] x"}); got != decideAllow {
-		t.Errorf("rule on the input = %q", got)
-	}
-	if got, _ := c.decide("mcp__github__get_issue", nil); got != decideDeny {
-		t.Errorf("deny rule before the read-only default = %q", got)
-	}
 }
 
 // list_tools: status, use, tools with short descriptions, the connect hint.
@@ -384,14 +371,6 @@ func TestBrainGrant(t *testing.T) {
 	}
 	if s := strings.Join(c.specServers(&TaskRow{Kind: "brain"}), ","); s != "github,notes" {
 		t.Fatalf("servers = %s", s)
-	}
-	// A rule of mine about a read sends it through the permission flow.
-	c.conf().Policy = &Policy{Rules: []Rule{{Tool: "mcp__github__get_*", Match: "secret", Decision: decideAsk}}}
-	if err := c.conf().Policy.compile(); err != nil {
-		t.Fatal(err)
-	}
-	if g := c.brainFreeReads(); len(g) != 0 {
-		t.Fatalf("free reads despite a rule = %v", g)
 	}
 	// A tool name is never a glob.
 	if g := globEscape("get*[x]?"); !grantAllows([]string{"s." + g}, "s", "get*[x]?") || grantAllows([]string{"s." + g}, "s", "getxx?") {

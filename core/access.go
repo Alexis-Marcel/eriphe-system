@@ -187,7 +187,7 @@ const noAccountReason = "ses comptes n'ont pas le même accès : l'appel doit no
 func (f catalogFacts) free() bool { return f.value == gridFree }
 
 // Actions allowed for good: "Toujours autoriser cette action" on a
-// permission. Each is a rule of the policy, evaluated after the file's. On
+// permission. Each is a rule of the policy. On
 // a server of several accounts, an action is allowed for the account the
 // call named, not for the others.
 
@@ -315,7 +315,7 @@ func (c *core) rememberCheck(tool string, input map[string]any) (server string, 
 	if _, inCatalog := c.conf().Servers[server]; !ok || !inCatalog {
 		return "", errors.New("only an action of a catalog tool can be allowed for good")
 	}
-	if d, why := c.conf().Policy.decideWith(tool, input, c.pool.facts(tool, input), nil); d == decideDeny {
+	if d, why := decideWith(tool, input, c.pool.facts(tool, input), nil); d == decideDeny {
 		return "", fmt.Errorf("Eriphe's policy refuses this action (%s): it cannot be allowed for good", why)
 	}
 	return server, nil

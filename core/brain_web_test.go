@@ -153,16 +153,12 @@ func TestBrainWebFetchLocal(t *testing.T) {
 	}
 }
 
-func TestBrainWebSearchAndRules(t *testing.T) {
+func TestBrainWebSearch(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	ownerSays(c, "Cherche")
-	c.conf().Policy = &Policy{Rules: []Rule{{Tool: "WebFetch", Match: `blocked\.example`, Decision: decideDeny, Reason: "non"}}}
-	if err := c.conf().Policy.compile(); err != nil {
-		t.Fatal(err)
-	}
-	brainAsks(t, c, [2]any{"WebSearch", map[string]any{"query": "météo"}}, fetch("https://blocked.example/"), [2]any{"Bash", map[string]any{"command": "ls"}})
+	brainAsks(t, c, [2]any{"WebSearch", map[string]any{"query": "météo"}}, [2]any{"Bash", map[string]any{"command": "ls"}})
 	got := answers(t, c)
-	if !got["WebSearch"] || got["https://blocked.example/"] || got["Bash"] {
+	if !got["WebSearch"] || got["Bash"] {
 		t.Fatalf("answers = %v", got)
 	}
 	// The search taints: a read after it is mine.
