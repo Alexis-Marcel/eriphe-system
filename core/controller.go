@@ -390,6 +390,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	var needs []startNeed
 	if kind == "worker" && r.askStart && !r.approvedInAdvance {
 		needs = append(c.startNeeds(lent.List, r.cleanStart), c.accessStartNeeds(lent.List, r.cleanStart)...) // task_start.go
+		needs = append(needs, c.folderNeeds(lent.List, r.cleanStart)...)                                      // folder_values.go
 	}
 	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model,
 		Dir: where, Title: r.title(), Prompt: r.Prompt, State: statePending,

@@ -299,8 +299,8 @@ func TestFolderTaskWaitsForItsMachine(t *testing.T) {
 	}
 }
 
-// A tainted turn may lend folders to read, not one to write in; the result
-// of a task that read folders taints the turn that reads it.
+// A tainted turn may lend folders, a write being asked on the start's card;
+// the result of a task that read folders taints the turn that reads it.
 func TestFolderTaint(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
@@ -311,10 +311,13 @@ func TestFolderTaint(t *testing.T) {
 	if err := c.taintedResources(runRequest{Resources: folderRefs("Photos")}); err != nil {
 		t.Fatalf("read-only folder on a tainted turn: %v", err)
 	}
-	if err := c.taintedResources(runRequest{Resources: folderRefs("Photos", "Clients")}); err == nil || !strings.Contains(err.Error(), "Clients") {
+	if err := c.taintedResources(runRequest{Resources: folderRefs("Photos", "Clients")}); err != nil {
 		t.Fatalf("drop folder on a tainted turn: %v", err)
 	}
-	// Lent for reading only, a drop folder still goes.
+	if n := c.folderNeeds(folderRefs("Photos", "Clients"), false); len(n) != 1 || n[0].Folder != "Clients" || n[0].Access != accessDrop {
+		t.Fatalf("needs on an unclean start: %+v", n)
+	}
+	// Lent for reading only, a drop folder asks nothing.
 	if err := c.taintedResources(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessRead}}}); err != nil {
 		t.Fatalf("drop folder lent read on a tainted turn: %v", err)
 	}
@@ -515,8 +518,8 @@ func TestManageFolderSpec(t *testing.T) {
 		t.Fatalf("clean turn: %v", err)
 	}
 	c.turn.taint("gmail.read")
-	if err := c.taintedResources(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessWrite}}}); err == nil {
-		t.Fatal("managed on a tainted turn")
+	if err := c.taintedResources(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessWrite}}}); err != nil {
+		t.Fatalf("managed on a tainted turn: %v", err)
 	}
 	// Lowered to drop since: the task is mounted at drop.
 	c.lowerFolder(ctx, "Clients", folderDrop, false)
@@ -594,5 +597,91 @@ func TestFolderHTTPError(t *testing.T) {
 		if errors.As(c.err, &fe) && !strings.Contains(rec.Body.String(), `"code":"`+fe.Code+`"`) {
 			t.Errorf("%v: body %s", c.err, rec.Body)
 		}
+	}
+}
+
+// A folder's writes are Free by default, or On approval: then its task
+// waits for the user's yes on its start card, and a no stops it.
+func TestFolderValues(t *testing.T) {
+	c, store := foldersCore(t)
+	ctx := context.Background()
+	if n := c.folderNeeds(folderRefs("Clients"), true); len(n) != 0 {
+		t.Fatalf("free on a clean start: %+v", n)
+	}
+	if err := c.setFolderValue("Clients", accessDrop, "maybe"); err == nil {
+		t.Fatal("a bad value accepted")
+	}
+	if err := c.setFolderValue("Clients", accessRead, gridApproval); err == nil {
+		t.Fatal("a value for reading accepted")
+	}
+	if err := c.setFolderValue("Nowhere", accessDrop, gridApproval); err == nil {
+		t.Fatal("an unknown folder accepted")
+	}
+	if err := c.setFolderValue("Clients", accessDrop, gridApproval); err != nil {
+		t.Fatal(err)
+	}
+	f, _ := store.folder("Clients")
+	if c.folderValue(f, accessDrop) != gridApproval || c.folderValue(f, folderManage) != gridFree {
+		t.Fatal("values not kept apart")
+	}
+	if n := c.folderNeeds(folderRefs("Photos", "Clients"), true); len(n) != 1 || n[0].Folder != "Clients" {
+		t.Fatalf("approval on a clean start: %+v", n)
+	}
+	if n := c.folderNeeds([]ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessRead}}, true); len(n) != 0 {
+		t.Fatalf("a read asked: %+v", n)
+	}
+
+	// The start waits for the card, which says what it asks.
+	task, err := c.runTask(ctx, runRequest{Prompt: "sort", Resources: folderRefs("Clients"), askStart: true, cleanStart: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.heldTask(task.ID) {
+		t.Fatal("not held")
+	}
+	ids := c.proposedStarts()
+	if len(ids) != 1 {
+		t.Fatalf("starts %v", ids)
+	}
+	s, _ := c.taskStart(ids[0])
+	if got := startText(s.Needs, "fr"); got != "Pour déposer des fichiers dans le dossier Clients, il me faut ton accord." {
+		t.Fatalf("text %q", got)
+	}
+	if got := startText(s.Needs, "en"); got != "To add files to the folder Clients, I need your approval." {
+		t.Fatalf("text %q", got)
+	}
+	if err := c.decideTaskStart(ids[0], true); err != nil || c.heldTask(task.ID) {
+		t.Fatalf("yes: %v", err)
+	}
+
+	// Free again: no card.
+	if err := c.setFolderValue("Clients", accessDrop, gridFree); err != nil {
+		t.Fatal(err)
+	}
+	if n := c.folderNeeds(folderRefs("Clients"), true); len(n) != 0 {
+		t.Fatalf("free again: %+v", n)
+	}
+}
+
+// Settings → Dossiers sets a folder's values: drop for a drop folder,
+// nothing for one to read.
+func TestWebFolderValues(t *testing.T) {
+	c, store := foldersCore(t)
+	tw := newTestWebFor(t, c)
+	csrf := tw.setup()
+	_, body, _ := tw.do("GET", "/settings/folders", nil, nil)
+	if strings.Count(body, `hx-post="/settings/folders/value"`) != 1 || !strings.Contains(body, "Sur accord") {
+		t.Fatalf("page: %d value forms", strings.Count(body, `hx-post="/settings/folders/value"`))
+	}
+	code, _, h := tw.post("/settings/folders/value", url.Values{"name": {"Clients"}, "level": {"drop"}, "value": {"approval"}}, csrf)
+	if code != 200 || !strings.Contains(h.Get("HX-Trigger"), "ok") {
+		t.Fatalf("set: %d %v", code, h)
+	}
+	f, _ := store.folder("Clients")
+	if c.folderValue(f, accessDrop) != gridApproval {
+		t.Fatal("not kept")
+	}
+	if _, _, h := tw.post("/settings/folders/value", url.Values{"name": {"Gone"}, "level": {"drop"}, "value": {"approval"}}, csrf); strings.Contains(h.Get("HX-Trigger"), `"ok":true`) {
+		t.Fatalf("unknown folder: %v", h)
 	}
 }

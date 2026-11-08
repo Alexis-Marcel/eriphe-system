@@ -613,7 +613,11 @@ type folderView struct {
 	Source string `json:"source"`          // machine or google-drive
 	Mount  string `json:"mount,omitempty"` // a machine's: where a task finds it
 	Online bool   `json:"online"`
-	Lend   string `json:"lend"`               // how the brain lends it to a task
+	Lend   string `json:"lend"` // how the brain lends it to a task
+	// A machine's folder: who decides a task's writes, free or approval
+	// (folder_values.go).
+	Drop   string `json:"drop,omitempty"`
+	Manage string `json:"manage,omitempty"`
 	Drive  string `json:"drive_id,omitempty"` // a Drive folder's id
 	// A machine's folder: its copies on the user's other machines
 	// (folder_copies.go), the machines that may keep one, and whether its
@@ -658,6 +662,7 @@ func (c *core) folderViews() ([]folderView, error) {
 	for _, f := range fs {
 		fv := folderView{Folder: f, Source: sourceMachine, Mount: f.mountPath(), Online: online[f.Node],
 			Lend: lendHint(resFolder, f.Name, f.Access)}
+		fv.Drop, fv.Manage = c.folderValue(f, accessDrop), c.folderValue(f, folderManage)
 		fv.Copies, fv.CopyTo = sv.copiesOf(f)
 		fv.ICloud = sv.iCloudHint(f)
 		fv.Machines = sv.holdersOf(f)

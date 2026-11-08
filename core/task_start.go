@@ -51,8 +51,11 @@ type startNeed struct {
 	Server   string `json:"server,omitempty"`
 	Category string `json:"category,omitempty"`
 	Account  string `json:"account,omitempty"`
-	Branch   string `json:"branch,omitempty"`
-	Reason   string `json:"reason"` // the policy's, in English, for the log
+	// Folder: a folder lent to write in, Access its level, drop or manage
+	// (folder_values.go).
+	Folder string `json:"folder,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	Reason string `json:"reason"` // the policy's, in English, for the log
 }
 
 // startNeeds foresees what the lent repositories will need of the user's:
@@ -94,7 +97,7 @@ func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string) error {
 func needsLog(needs []startNeed) string {
 	var parts []string
 	for _, n := range needs {
-		parts = append(parts, strings.TrimSpace(n.Access+" "+n.Repo+n.Server+" "+n.Account)+" ("+n.Reason+")")
+		parts = append(parts, strings.TrimSpace(n.Access+" "+n.Repo+n.Server+n.Folder+" "+n.Account)+" ("+n.Reason+")")
 	}
 	return strings.Join(parts, "; ")
 }
@@ -164,8 +167,8 @@ func (c *core) taskStartProposal(p proposal) proposal {
 func startText(needs []startNeed, lang string) string {
 	var lines []string
 	for _, n := range needs {
-		if n.Server != "" {
-			continue // said together below
+		if n.Server != "" || n.Folder != "" {
+			continue // said below
 		}
 		target := fmt.Sprintf(tr(lang, "taskstart.target.repo"), n.Repo)
 		if n.Branch != "" {
@@ -174,6 +177,7 @@ func startText(needs []startNeed, lang string) string {
 		line := fmt.Sprintf(tr(lang, "taskstart.ask"), target)
 		lines = append(lines, line)
 	}
+	lines = append(lines, folderStartText(needs, lang)...)
 	return strings.Join(append(lines, accessStartText(needs, lang)...), " ")
 }
 
@@ -206,6 +210,9 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 		if n.Server != "" {
 			c.store.grantAccess(s.TaskID, accessNeed{n.Server, n.Category, n.Account})
 			continue
+		}
+		if n.Folder != "" {
+			continue // its mount is the task's from the start: the yes lets it go
 		}
 		c.store.grantRepo(s.TaskID, n.Repo, n.Access)
 		c.store.logAccess(s.TaskID, "git", "github.com", n.Repo, n.Access, decideAllow, byUser, "", "approved at launch: "+n.Reason)
