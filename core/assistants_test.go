@@ -214,8 +214,7 @@ func TestAssistantFileReadOnly(t *testing.T) {
 	wantKey(t, c.editAssistant(brainAssistant, assistantEdit{Tools: []string{"mail"}, SetTools: true}), "catalog.readonly")
 	wantKey(t, c.deleteAssistant(brainAssistant), "catalog.readonly")
 	// Files and tokens are the file's.
-	for _, a := range []Assistant{{Role: roleTest, InstructionsFile: "/etc/passwd"}, {Role: roleTest, SelfURL: "http://x/mcp"},
-		{Role: roleTest, MCPServers: map[string]MCPServer{"x": {URL: "http://x"}}}} {
+	for _, a := range []Assistant{{Role: roleTest, InstructionsFile: "/etc/passwd"}, {Role: roleTest, SelfURL: "http://x/mcp"}} {
 		if err := c.putAssistant("other", a); err == nil {
 			t.Errorf("%+v accepted", a)
 		}

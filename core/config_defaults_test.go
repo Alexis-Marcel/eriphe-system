@@ -157,7 +157,7 @@ func TestOldConfigUnchanged(t *testing.T) {
 		"agents": {"opus": {"runtime": "claude-code", "provider": "anthropic", "model": "opus"}},
 		"default_agent": "opus",
 		"brain": {"node": "nas", "agent": "opus", "prompt_file": "`+prompt+`", "self_url": "http://eriphe-core:8800/mcp",
-			"mcp_servers": {"extra": {"url": "http://extra.example.org/mcp"}}, "tools": ["docs"]}}`), 0o600)
+			"tools": ["docs"]}}`), 0o600)
 	c, err := loadOrDefault(path, filepath.Join(dir, "data"))
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +167,7 @@ func TestOldConfigUnchanged(t *testing.T) {
 		c.TokenFile != "/secrets/core-token" || c.DB != "/data/core.db" || c.User != "Sam" || c.DefaultAgent != "opus" {
 		t.Fatalf("config = %+v", c)
 	}
-	if b.Node != "nas" || b.Agent != "opus" || b.SelfURL != "http://eriphe-core:8800/mcp" || b.MCPServers["extra"].URL == "" ||
+	if b.Node != "nas" || b.Agent != "opus" || b.SelfURL != "http://eriphe-core:8800/mcp" ||
 		strings.Join(b.Tools, ",") != "docs" {
 		t.Fatalf("brain = %+v", b)
 	}
@@ -188,6 +188,16 @@ func TestBuiltinBrainPrompt(t *testing.T) {
 	}
 	if _, err := (&BrainConfig{PromptFile: "/nonexistent/brain.md"}).assistant().standingPrompt(); err == nil {
 		t.Fatal("a missing prompt file is not an error")
+	}
+}
+
+// A brain with servers of its own does not start: every tool is the catalog's.
+func TestBrainMCPServersRefused(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "core.json")
+	os.WriteFile(path, []byte(`{"token_file": "/secrets/core-token", "brain": {"mcp_servers": {"x": {"url": "http://x.example.org/mcp"}}}}`), 0o600)
+	if _, err := loadOrDefault(path, filepath.Join(dir, "data")); err == nil || !strings.Contains(err.Error(), "brain.mcp_servers") {
+		t.Fatalf("load = %v", err)
 	}
 }
 

@@ -353,15 +353,12 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	}
 	// Its catalog tools are not allowed in advance, but for its free reads,
 	// added when its node fetches the task: the others go through its
-	// approval path. The deprecated mcp_servers still are.
+	// approval path.
 	var allowed []string
 	if r.can(powerLaunchesTasks) {
 		allowed = append(allowed, "mcp__"+selfServer)
 	}
 	allowed = append(allowed, r.AllowedTools...)
-	for _, name := range slices.Sorted(maps.Keys(a.MCPServers)) {
-		allowed = append(allowed, "mcp__"+name)
-	}
 	profile := r.Profile
 	if profile == "" {
 		profile = "assistant-" + a.Name
@@ -547,31 +544,17 @@ func assistantToken(token string) string {
 
 // assistantServers are an assistant's MCP servers, with their tokens:
 // eriphe-core's own at self_url, if its role launches tasks, with the
-// assistant's token, and the ones the file lists. Without self_url,
+// assistant's token. Without self_url,
 // eriphe-core's own goes through the node (spec.Servers): the node reaches
 // eriphe-core wherever it is, and the assistant holds no token.
-func (c *core) assistantServers(a Assistant, r assistantRole) (map[string]any, error) {
+func (c *core) assistantServers(a Assistant, r assistantRole) map[string]any {
 	servers := map[string]any{}
 	if r.can(powerLaunchesTasks) && a.SelfURL != "" {
 		servers[selfServer] = map[string]any{
 			"type": "http", "url": a.SelfURL, "headers": map[string]string{"Authorization": "Bearer " + assistantToken(c.token)},
 			"alwaysLoad": true}
 	}
-	for name, srv := range a.MCPServers {
-		def := map[string]any{"type": "http", "url": srv.URL}
-		switch {
-		case srv.TokenFile != "":
-			tok, err := readSecret(srv.TokenFile)
-			if err != nil {
-				return nil, fmt.Errorf("mcp %s: %w", name, err)
-			}
-			def["headers"] = map[string]string{"Authorization": "Bearer " + tok}
-		case srv.TokenEnv != "":
-			def["headers"] = map[string]string{"Authorization": "Bearer ${" + srv.TokenEnv + "}"}
-		}
-		servers[name] = def
-	}
-	return servers, nil
+	return servers
 }
 
 // reportingAssistant is the assistant whose current task id is.
@@ -604,10 +587,7 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 	if r.FreeReads {
 		spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), c.brainFreeReads()...)
 	}
-	var err error
-	if spec.MCPServers, err = c.assistantServers(a, r); err != nil {
-		return err
-	}
+	spec.MCPServers = c.assistantServers(a, r)
 	if r.can(powerLaunchesTasks) && a.SelfURL == "" {
 		spec.Servers = append(spec.Servers, selfServer) // relayed by its node
 		// Its own tools, used nearly every turn and named by its concept
