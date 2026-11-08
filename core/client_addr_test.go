@@ -133,7 +133,7 @@ func TestSigninNoneOnlyFromLocalNetwork(t *testing.T) {
 	if _, body, _ := tw.post("/settings/signin", none, csrf); !strings.Contains(body, "auth none") || tw.w.signin().cfg.mode() != modePassword {
 		t.Fatalf("none from an unknown address: %s", body)
 	}
-	if _, body, _ := tw.do("GET", "/settings/account", nil, nil); !strings.Contains(body, "eriphe-core auth none") {
+	if _, body, _ := tw.do("GET", "/settings/access/web", nil, nil); !strings.Contains(body, "eriphe-core auth none") {
 		t.Fatal("the page does not say why")
 	}
 	withGateway(t)

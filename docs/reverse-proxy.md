@@ -91,7 +91,7 @@ updates at once (Caddy does it for `text/event-stream` anyway).
 
 ## 2. Tell Eriphe its address and its proxy
 
-Open the workspace (at its local address, the first time), then **Settings → Account (Mon espace) →
+Open the workspace (at its local address, the first time), then **Settings → Access → Web workspace →
 Workspace address**:
 
 - **Workspace address**: `https://eriphe.example.org`, without a path. The sign-in with a provider
@@ -124,7 +124,7 @@ settings are the file's as a whole.
 
 ## 3. Sign in with your identity provider (optional)
 
-With the address set, Settings → Account → Sign-in → **Identity provider** (OpenID Connect:
+With the address set, Settings → Access → Web workspace → Sign-in → **Identity provider** (OpenID Connect:
 Authentik, Authelia, Keycloak, PocketID…):
 
 1. At the provider, create a confidential OAuth2/OpenID client with the redirect URI

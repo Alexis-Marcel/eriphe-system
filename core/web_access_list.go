@@ -195,8 +195,16 @@ func (w *web) handleAccessCatalog(rw http.ResponseWriter, r *http.Request, s *se
 	w.accessRender(rw, r, s, "access-new", w.entryPage())
 }
 
+// webAccessPage is the web's page: the remote access, then the workspace's
+// address (web_address.go) and how one signs in to it (web_signin.go).
+type webAccessPage struct {
+	remotePage
+	Address addressView
+	Signin  signinView
+}
+
 func (w *web) handleAccessWeb(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.accessRender(rw, r, s, "access-web", w.remotePage(r))
+	w.accessRender(rw, r, s, "access-web", webAccessPage{remotePage: w.remotePage(r), Address: w.addressView(r), Signin: w.signinView(r)})
 }
 
 func (w *web) handleAccessApp(rw http.ResponseWriter, r *http.Request, s *session) {

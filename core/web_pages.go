@@ -791,14 +791,15 @@ func (s *Store) decisions(offset, limit int) ([]decisionRow, error) {
 
 // accountPage is "Mon espace": the sign-in, and the keys and passwords the
 // vault holds, to replace or delete (each is typed in its own tool's page).
+// accountPage is My space → Account: the language, the password, the
+// secrets. The workspace's address and its sign-in are on Access → Web
+// workspace (web_access_list.go).
 type accountPage struct {
-	signinView
-	Address addressView // web_address.go
 	Secrets secretsView
 }
 
 func (w *web) handleAccount(rw http.ResponseWriter, r *http.Request, s *session) {
-	v := accountPage{signinView: w.signinView(r), Address: w.addressView(r), Secrets: w.secrets("", false)}
+	v := accountPage{Secrets: w.secrets("", false)}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.account", Nav: "settings", Tab: "account", Data: v})
 }
 

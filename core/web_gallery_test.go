@@ -158,8 +158,9 @@ func TestAccountSecrets(t *testing.T) {
 		!strings.Contains(body[i:], "gardé chiffré") {
 		t.Error("the saved keys' section")
 	}
-	if !strings.Contains(body, `name="lang" value="fr"`) || !strings.Contains(body, "signin-form") {
-		t.Error("the account page lost its sign-in")
+	// The sign-in and the address moved to Access → Web workspace.
+	if !strings.Contains(body, `name="lang" value="fr"`) || strings.Contains(body, "signin-form") || strings.Contains(body, `name="external_url"`) {
+		t.Error("the account page: the language, without the sign-in nor the address")
 	}
 }
 

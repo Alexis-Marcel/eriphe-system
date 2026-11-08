@@ -75,15 +75,23 @@
 {{template "access-catalog" .Catalog}}
 {{end}}{{end}}
 
-{{/* The web: the remote access (remote.html). */}}
+{{/* The web: the remote access (remote.html), then the workspace's
+     address and its sign-in (settings.html). */}}
 {{define "access-web"}}
 <header class="page-head">
   {{template "access-back"}}
   <h2>{{t "acc.kind.web"}}</h2>
-  <p>{{t "remote.lead"}}</p>
+  <p>{{t "acc.web.lead"}}</p>
 </header>
+<nav class="pill-tabs" aria-label="{{t "acc.kind.web"}}">
+  <a href="#remote">{{t "acc.web.remote"}}</a><a href="#address">{{t "address.title"}}</a><a href="#signin">{{t "signin.title"}}</a>
+</nav>
+<h3 class="section-title" id="remote">{{template "i-globe"}}{{t "acc.web.remote"}}</h3>
+<p class="muted">{{t "remote.lead"}}</p>
 <div id="remote-live" class="remote-live" data-remote-live>{{template "remote-status" .}}</div>
 {{template "remote-advanced" .}}
+<div id="address">{{template "address" .Data.Address}}</div>
+<div id="signin">{{template "signin" .Data.Signin}}</div>
 {{end}}
 
 {{/* The mobile app: installing the workspace (app.js), then its

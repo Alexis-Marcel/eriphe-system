@@ -348,7 +348,8 @@ func TestWebAccessWebPage(t *testing.T) {
 		if code != 200 {
 			t.Fatalf("%s: GET: %d", lang, code)
 		}
-		order := []string{`<a class="back" href="/settings/access">`, words[0], words[1], words[2], `id="remote-live"`, "remote-advanced"}
+		order := []string{`<a class="back" href="/settings/access">`, words[0], words[1], `<a href="#remote">`, `<a href="#address">`, `<a href="#signin">`,
+			words[2], `id="remote-live"`, "remote-advanced", `id="address"`, `name="external_url"`, `id="device-fallback"`, `id="signin"`, "signin-form"}
 		at := 0
 		for _, want := range order {
 			i := strings.Index(body[at:], want)

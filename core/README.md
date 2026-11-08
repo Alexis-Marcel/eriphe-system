@@ -2061,7 +2061,8 @@ and `/settings/notifications#push` and `#telegram`) lead, in the browser, to eac
 assistant, one row each as the tools are listed: the web workspace and the mobile app always, then
 Telegram once its bot is set, then the API accesses. Each row says who speaks through it, what it
 carries and its state (the remote access's phase, the devices told, the account linked, whether
-the app listens), and opens its page: the web (`/settings/access/web`: the remote access, below),
+the app listens), and opens its page: the web (`/settings/access/web`: the remote access, below, then the workspace's address and how one
+signs in, which were in Account),
 the mobile app (`/settings/access/app`: installing the workspace, this device's notifications and
 the devices told), Telegram (`/settings/access/telegram`) or an API access
 (`/settings/access/api/{id}`: its trust, what it may say, its token replaced, removed). **Ajouter
@@ -2159,7 +2160,7 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 | `hostnames` | names and addresses for the self-signed certificate, besides `public_url`'s host, the machine's name, `localhost` and its interfaces' addresses |
 | `lang` | `fr` or `en`; without it, the browser's language (`Accept-Language`: French when it prefers French, English otherwise); each browser can switch in Settings, which wins |
 | `session_days` | how long a login lasts, 30 by default (a week without use ends it sooner) |
-| `auth` | how one signs in: see [Signing in](#signing-in); without it, Settings → Account says |
+| `auth` | how one signs in: see [Signing in](#signing-in); without it, Settings → Access → Web workspace says |
 | `external_url` | the workspace's address, e.g. `https://eriphe.example.org`: see [the reverse proxy guide](../docs/reverse-proxy.md); `auth.external_url` works too, this one wins |
 
 **First start.** With no password yet, eriphe-core logs a one-time setup code:
@@ -2202,7 +2203,7 @@ The bearer-token API is unchanged for the CLI and the nodes.
 
 ### Signing in
 
-The workspace has one owner; how they sign in is set in Settings → Account → Connexion, or in
+The workspace has one owner; how they sign in is set in Settings → Access → Web workspace → Connexion, or in
 the configuration file's `web.auth`, which then wins (the page shows the settings with a
 configuration tag and cannot change them).
 
@@ -2269,7 +2270,7 @@ file's settings, and says so.
 > count its gateway as local, but another relay on the way could hide them too). Better: do not
 > publish it on the internet at all (install/README.md, Eriphe on a VPS).
 
-**Changing the mode keeps you in.** Settings → Account → Connexion shows the four modes as
+**Changing the mode keeps you in.** Settings → Access → Web workspace → Connexion shows the four modes as
 cards, and below them only the chosen mode's settings (the others stay in the form, so it saves
 the same without JavaScript); "Aucune" shows a warning instead. "Tester" reads the
 provider's discovery document; "Essayer la connexion" signs in once at the provider with the
@@ -2292,7 +2293,7 @@ in the vault (`vault:workspace-oidc`) and never shown back.
 | Field of `web.auth` | What |
 |---|---|
 | `mode` | `password` (default), `oidc`, `proxy` or `none` |
-| `external_url` | the workspace's address (Settings → Account → Adresse de l'espace): the provider's redirect, the tools' and Google Drive's OAuth redirect, and an origin the forms may come from behind a proxy that changes the host |
+| `external_url` | the workspace's address (Settings → Access → Web workspace → Adresse de l'espace): the provider's redirect, the tools' and Google Drive's OAuth redirect, and an origin the forms may come from behind a proxy that changes the host |
 | `unauthorized_url` | where visitors who may not enter go; the private page without it |
 | `no_local_password` | `true`: no password from the local network in `oidc` and `proxy` modes |
 | `oidc.issuer`, `oidc.client_id` | the provider's issuer (exactly as it announces it, trailing slash included) and the client |
@@ -2315,7 +2316,7 @@ trusting the self-signed certificate (Traefik's `serversTransport` with `insecur
 its fingerprint), and set the workspace's address. The [reverse proxy guide](../docs/reverse-proxy.md)
 has Traefik, Nginx Proxy Manager and Caddy.
 
-- **The workspace's address** (Settings → Account → Adresse de l'espace, or `web.external_url` /
+- **The workspace's address** (Settings → Access → Web workspace → Adresse de l'espace, or `web.external_url` /
   `web.auth.external_url`, one value): the provider's sign-in comes back to it, the tools' and
   Google Drive's OAuth redirect URI is `<address>/oauth/callback`, and forms sent from it are the
   workspace's own. A sign-in or an authorization started from another address (the LAN one)

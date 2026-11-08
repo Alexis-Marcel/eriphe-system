@@ -198,7 +198,7 @@ func TestLimiterForwarded(t *testing.T) {
 func TestAddressPanel(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
-	_, body, _ := tw.do("GET", "/settings/account", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/access/web", nil, nil)
 	hasAll(t, "panel", body, "Adresse de l&#39;espace", `name="external_url"`, `name="trusted"`, `name="device_fallback"`,
 		"docs/reverse-proxy.md", "En ce moment : https://127.0.0.1:")
 	for _, bad := range []url.Values{{"external_url": {"http://eriphe.example.org"}}, {"external_url": {"https://eriphe.example.org/eriphe"}},
@@ -238,7 +238,7 @@ func TestAddressLocked(t *testing.T) {
 	}
 	tw.w.cfg.ExternalURL = w.cfg.ExternalURL
 	csrf := tw.setup()
-	_, body, _ := tw.do("GET", "/settings/account", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/access/web", nil, nil)
 	hasAll(t, "locked", body, "tag-lock", "<fieldset class=\"choices\" disabled>")
 	tw.post("/settings/address", url.Values{"external_url": {"https://other.example.org"}, "device_fallback": {"http://100.64.0.2:8800"}}, csrf)
 	if tw.w.address() != "https://eriphe.example.org" || tw.w.deviceFallback() != "http://100.64.0.2:8800" {
