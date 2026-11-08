@@ -117,7 +117,8 @@ func TestCardNoRefusesWhatWaits(t *testing.T) {
 	}
 }
 
-// The brain cannot answer what a card asks.
+// The brain answers no permission: neither what a card asks, nor one nothing
+// marked as the user's.
 func TestBrainCannotAnswerAccess(t *testing.T) {
 	c := newMailCore(t, "")
 	waitingTask(c, "t-1")
@@ -125,6 +126,14 @@ func TestBrainCannotAnswerAccess(t *testing.T) {
 	yes := true
 	if _, err := c.answer(context.Background(), "t-1", "p-1", "", &yes, byBrain); err == nil {
 		t.Fatal("the brain answered a card's request")
+	}
+	c.store.addEvents("t-1", []EventRow{{Seq: 9, Time: time.Now(), Type: "permission",
+		Data: map[string]any{"id": "p-2", "tool_name": "Bash"}}})
+	if _, err := c.answer(context.Background(), "t-1", "p-2", "", &yes, byBrain); err == nil {
+		t.Fatal("the brain answered a permission")
+	}
+	if items, _ := c.store.inbox("t-1"); len(items) != 0 {
+		t.Fatalf("inbox = %+v", items)
 	}
 }
 

@@ -1,10 +1,5 @@
 package main
 
-import (
-	"fmt"
-	"strconv"
-)
-
 // What a task is lent is what it may reach, not what it may do: the grid
 // decides each call (access_grid.go). The lend only says how a task
 // started, which a Free write depends on (decideTask).
@@ -49,34 +44,4 @@ func (c *core) turnFromUser() bool {
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE role = ? AND seq BETWEEN ? AND ? AND via != ?`,
 		roleUser, from, to, automationVia).Scan(&n)
 	return n > 0
-}
-
-// brainLeftPermissions hands the user what the brain did not answer: a
-// task's request it was told of before the turn that just ended, still
-// pending. It ended its turn on it: it said it to the user, or could not
-// decide. Either way the decision is the user's now.
-func (c *core) brainLeftPermissions() {
-	tasks, err := c.store.tasks(true, 50)
-	if err != nil {
-		return
-	}
-	for _, t := range tasks {
-		if t.Kind != "worker" {
-			continue
-		}
-		st, err := c.status(t.ID, 0)
-		if err != nil {
-			continue
-		}
-		for _, p := range st.PendingPermissions {
-			pid := fmt.Sprint(p["id"])
-			if c.store.answered(t.ID, pid) || c.store.userOnly(t.ID, pid) != "" {
-				continue
-			}
-			seq, _ := strconv.Atoi(c.store.get("notified_perm:" + t.ID + ":" + pid))
-			if seq > 0 && c.store.isDelivered(seq) {
-				c.store.markUserOnly(t.ID, pid, c.conf().assistantName()+" ne l'a pas tranchée")
-			}
-		}
-	}
 }

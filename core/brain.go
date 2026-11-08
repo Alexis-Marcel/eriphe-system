@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -55,10 +54,10 @@ func (c *core) notifyBrain(id, state string) {
 			}
 			told = append(told, pid)
 			in, _ := json.Marshal(p["input"])
-			line := fmt.Sprintf("La tâche %s (nœud %s) demande une permission (permission_id %s) : %v %s", t.ID, t.Node, pid, p["tool_name"], truncate(string(in), 400))
+			line := fmt.Sprintf("La tâche %s (nœud %s) demande une permission : %v %s", t.ID, t.Node, p["tool_name"], truncate(string(in), 400))
 			if reason := c.store.userOnly(t.ID, pid); reason != "" && c.accessAsked(t.ID, pid) {
 				line += fmt.Sprintf("\nUne carte le demande déjà à %s (%s) : ne relaie pas, tu ne peux pas y répondre.", c.conf().User, reason)
-			} else if reason != "" {
+			} else {
 				line += fmt.Sprintf("\nCette décision revient à %s seul (%s) : relaie-lui la demande, tu ne peux pas y répondre.", c.conf().User, reason)
 			}
 			if text != "" {
@@ -97,9 +96,7 @@ func (c *core) notifyBrain(id, state string) {
 	}
 	seq, err := c.store.addMessage(roleEvent, text, false)
 	for _, pid := range told {
-		// Its event's message: once given to the brain, a turn that ends
-		// without an answer hands the request to the user (lend.go).
-		c.store.set("notified_perm:"+t.ID+":"+pid, strconv.FormatInt(max(seq, 1), 10))
+		c.store.set("notified_perm:"+t.ID+":"+pid, "1") // told once
 	}
 	if err == nil && fromFolders {
 		// Delivered, it taints the turn that reads it.
@@ -407,9 +404,8 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 			}
 		}
 		if e.Type == "turn_end" {
-			c.watchTurnEnded(e.Seq)  // what the brain did of a watch's wake
-			c.cardsTurnEnded()       // what it proposed after its last message
-			c.brainLeftPermissions() // what it did not answer is the user's (lend.go)
+			c.watchTurnEnded(e.Seq) // what the brain did of a watch's wake
+			c.cardsTurnEnded()      // what it proposed after its last message
 		}
 		if e.Type == "turn_end" && failed != "" {
 			c.brainFailed(failed, "turn")

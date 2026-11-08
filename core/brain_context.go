@@ -185,11 +185,10 @@ func (c *core) packTasks() (decisions, tasks []string) {
 		}
 		for _, perm := range st.PendingPermissions {
 			pid := fmt.Sprint(perm["id"])
-			who := "à toi de répondre (answer_task)"
-			if reason := c.store.userOnly(t.ID, pid); reason != "" && c.accessAsked(t.ID, pid) {
+			reason := c.store.userOnly(t.ID, pid)
+			who := fmt.Sprintf("à %s seul (%s) : relaie-la-lui", user, reason)
+			if c.accessAsked(t.ID, pid) {
 				who = fmt.Sprintf("une carte la demande déjà à %s (%s) : ne la relaie pas", user, reason)
-			} else if reason != "" {
-				who = fmt.Sprintf("à %s seul (%s) : relaie-la-lui", user, reason)
 			}
 			decisions = append(decisions, truncate(fmt.Sprintf("- permission %s de la tâche %s, %v, %s", pid, t.ID, perm["tool_name"], who), packLineMax))
 		}
@@ -251,13 +250,12 @@ func (c *core) brainFirstPrompt(resume bool) string {
 	pack, st := c.contextPack()
 	log.Printf("brain: context pack for a fresh session: %d chars (~%d tokens), %d messages, %d older left out",
 		st.Chars, st.Tokens(), st.Messages, st.Dropped)
-	return fmt.Sprintf(brainFreshPrompt, c.conf().User) + "\n\n" + pack
+	return brainFreshPrompt + "\n\n" + pack
 }
 
-// brainFreshPrompt opens a fresh session: what waits for the brain alone
-// would otherwise wait for a turn that may not come.
+// brainFreshPrompt opens a fresh session.
 const brainFreshPrompt = "Tu démarres dans une session neuve. Lis tes consignes et l'état du fil ci-dessous. " +
-	"Si une permission t'attend (pas celles qui reviennent à %s), réponds-y avec answer_task ; ne fais rien d'autre pour l'instant, puis réponds seulement « Prêt. »."
+	"Ne fais rien d'autre pour l'instant, puis réponds seulement « Prêt. »."
 
 // packForDelivery is the pack owed to a session that was not resumed, if any.
 func (c *core) packForDelivery(a Assistant) string {

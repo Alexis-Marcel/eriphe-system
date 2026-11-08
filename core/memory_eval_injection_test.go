@@ -101,12 +101,12 @@ func injectionCases() []injectionCase {
 			}
 			return nil
 		}},
-		{"tainted-turn-cannot-allow", func(t *testing.T) error {
+		{"catalog-read-taints", func(t *testing.T) error {
 			c, _ := testMemoryCore(t)
 			ownerSays(c, "Résume mes mails")
 			c.brainCalledCatalog("t-brain", "mail", "read")
-			if err := c.taintedAllow("t-brain", "p1"); err == nil {
-				return fmt.Errorf("a tainted turn allowed a permission")
+			if len(c.turnTaint()) == 0 {
+				return fmt.Errorf("a catalog read did not taint the turn")
 			}
 			return nil
 		}},
@@ -185,8 +185,8 @@ func injectionCases() []injectionCase {
 			if got, _ := c.mem.intention(x.ID); got.Surfaced != 1 {
 				return fmt.Errorf("not delivered: %+v", got)
 			}
-			if err := c.taintedAllow("t-brain", "p1"); err == nil {
-				return fmt.Errorf("the wake turn allowed a permission")
+			if len(c.turnTaint()) == 0 {
+				return fmt.Errorf("the wake turn is not tainted")
 			}
 			return nil
 		}},

@@ -36,6 +36,7 @@ func TestContextPackContent(t *testing.T) {
 		{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p1", "tool_name": "Bash", "input": map[string]any{"command": "make"}}},
 		{Seq: 2, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p2", "tool_name": "mcp__github__create_release"}},
 	})
+	c.store.markUserOnly("t-ask", "p1", "publier")
 	c.store.markUserOnly("t-ask", "p2", "publier")
 	c.store.insertTask(&TaskRow{ID: "t-done", Kind: "worker", Runtime: "claude-code", State: stateStopped, Prompt: "Ancienne tâche"})
 
@@ -51,7 +52,6 @@ func TestContextPackContent(t *testing.T) {
 		"Envoyer le devis au garage", "en retard",
 		"Revue du budget avec Sam",
 		"t-run [running] nœud nas, agent small, owner/repo@eriphe/issue-3", "Corrige l'issue 3 et ouvre une PR",
-		"permission p1 de la tâche t-ask, Bash, à toi de répondre",
 		"permission p2 de la tâche t-ask, mcp__github__create_release, à Sam seul (publier)",
 		"1 souvenir(s) proposé(s)",
 		"#1] Où en est l'issue 3 ?",
@@ -142,7 +142,7 @@ func TestContextPackOnlyFresh(t *testing.T) {
 	}
 	task := startedBrain(t, c, false)
 	if !strings.HasPrefix(task.Prompt, "Tu démarres dans une session neuve") ||
-		!strings.Contains(task.Prompt, "à Sam)") || !strings.Contains(task.Prompt, "Rappelle-moi le devis") {
+		strings.Contains(task.Prompt, "answer_task") || !strings.Contains(task.Prompt, "Rappelle-moi le devis") {
 		t.Fatalf("fresh session got: %q", task.Prompt)
 	}
 	if brainStatus(c).Resume != "" {
