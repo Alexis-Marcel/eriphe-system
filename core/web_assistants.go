@@ -31,6 +31,15 @@ type assistantCard struct {
 	ReportsTo   string      // the display name of the one it reports to; the brain's helpers only
 	Powers      []string    // what it may do, in words; the brain's helpers only
 	Wakes       []string    // what wakes it, in words
+	State       []stateItem // what it knows now
+}
+
+// stateItem is a field of an assistant's state, as its card shows it.
+type stateItem struct {
+	Name    string
+	Value   string // "" when unknown
+	Set     time.Time
+	Tainted bool // written after reading external content
 }
 
 // plainStatus is how an assistant is doing, as the page says it: no AI
@@ -86,6 +95,18 @@ func (w *web) assistantCards(r *http.Request, v agentsPage) []assistantCard {
 			if l := tr(lang, "assistants.power."+p); l != "assistants.power."+p {
 				card.Powers = append(card.Powers, l)
 			}
+		}
+		for i, v := range av.State {
+			l := stateItem{Name: v.Field, Set: v.Set, Tainted: v.Tainted != ""}
+			if v.Value != nil {
+				f := av.Spec.State[i]
+				if rows, ok := v.Value.([]any); ok {
+					l.Value = fmt.Sprintf(tr(lang, "assistants.rows"), len(rows))
+				} else {
+					l.Value = summaryValue(f, v.Value)
+				}
+			}
+			card.State = append(card.State, l)
 		}
 		for _, x := range av.Spec.Triggers {
 			kind, arg, _ := strings.Cut(x, ":")

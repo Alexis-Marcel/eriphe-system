@@ -297,11 +297,14 @@ func TestAssistantNotify(t *testing.T) {
 func TestWebAssistantPowers(t *testing.T) {
 	tw, c, _ := catalogWeb(t, func(cfg *Config) { cfg.Brain = &BrainConfig{} })
 	if err := c.putAssistant("prod", Assistant{Role: assistantRoleAssistant, Disabled: true, Powers: []string{powerReports, powerNotifies},
-		Triggers: []string{"schedule:every 15m"}}); err != nil {
+		Triggers: []string{"schedule:every 15m"}, State: testState}); err != nil {
 		t.Fatal(err)
 	}
+	c.setState(c.conf().Assistants["prod"], setStateIn{Values: map[string]any{"prod": "ok", "note": "Lent.",
+		"mails": []any{map[string]any{"id": "m1"}}}}, []string{"mcp__mail__read_message"}, time.Now())
 	code, body, _ := tw.do("GET", "/settings/agents", nil, nil)
-	for _, want := range []string{`id="assistant-prod"`, "rend compte à Eriphe", "te prévient", "horaire : every 15m"} {
+	for _, want := range []string{`id="assistant-prod"`, "rend compte à Eriphe", "te prévient", "horaire : every 15m",
+		"Ce qu&#39;il sait", `<span class="strong">ok</span>`, "lignes : 1", "lu dehors", `<span class="mono">incidents</span> <span class="muted">inconnu</span>`} {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Errorf("page %d without %q", code, want)
 		}
