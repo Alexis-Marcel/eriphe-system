@@ -1390,6 +1390,19 @@ without markdown. The answer comes back as NDJSON, `{"delta"}` lines then `{"don
 counts. Without a word within 10 s (another turn, a long job), the voice answers « Je m'en occupe,
 je te préviens » and the answer stays in the conversation.
 
+**The voice is a channel** (`channels.go`) that guarantees only that someone is in the room, maybe
+not the user. Its sentence taints the brain's turn (`voix`): the brain reads and answers freely,
+but a write goes on a card, and a card is never answered aloud (a spoken « oui » is not taken).
+The voice says « Je te l'ai mis à confirmer sur ton téléphone. » and a notice, in the code's words,
+goes to the user's phone or computer, opening the card.
+
+**Speakers** are the voice's outbound side, on the same token (`voice_out.go`): the integration
+keeps `GET /v1/voice/announce?wait=50` open and answers each `{"announcements": [{"id", "entity",
+"text"}]}` itself, with `assist_satellite.announce` (or `tts.speak` with the house's first `tts`
+entity for a media player). eriphe-core never calls Home Assistant to speak. What waits more than a
+minute is dropped (10 at most), and the router's voice line is used only while the integration has
+listened within two minutes.
+
 **An automation is not the user.** A sentence from no device, no satellite and no Home Assistant
 user (`from_user`, which the integration sets when the conversation's context has a user) is an
 automation's. It may only send a closed request, `brief` (the point of the moment, read aloud);
@@ -1920,13 +1933,13 @@ at the brief and the return point, never in the quiet hours, at night (22:00–0
 source says do not disturb, in a Focus or while busy; the brain says it in a sentence and the
 cards come with its message. A card that stops a task is not one of these: if its turn wrote
 nothing (a turn that failed), it goes with the brain's next message, whatever the hour. A plain yes or no answers a card in words only when the message is
-the user's own (workspace, Telegram or voice from a device; never `/v1/messages`, whose token may
+the user's own (workspace or Telegram; never the voice, where anyone in the room speaks, nor `/v1/messages`, whose token may
 be lent to the brain, nor an automation), is nothing but a yes or a no, has no file, comes right
 after a recent message of the brain's written in a clean turn that shows exactly one waiting card,
 whose proposal is not drawn from external content; anything else is the brain's to read, or the
 buttons'. The brain has no tool that decides a card. On Telegram, a card follows the reply or the
 notification it goes with, with Oui / Non buttons answered from the linked account only (none in
-"alerts only"); the voice asks the one card of its answer aloud. A read of `since` adds a
+"alerts only"); the voice never asks a card aloud: it says the card waits on the phone, where a notice goes. A read of `since` adds a
 foldable digest card (the items, with links to the tasks) to the brain's next message, and a
 spontaneous message (a notification) has a "Pourquoi ?" with its why and subject.
 
@@ -2510,9 +2523,9 @@ preset; nothing to install), over Home Assistant's WebSocket API:
    refreshed every minute while connected. Reconnects with a growing wait (5 s to 5 min), starts
    again when the mappings, the level or the switch change, and reads the house again every day.
    Unmapped entities, names and attributes never enter the context.
-4. **Speak**: a `voice` mapping makes the router's voice line usable (above). eriphe-core calls
-   `assist_satellite.announce` (or `tts.speak` with the house's first `tts` entity for a media
-   player) through the REST API. An urgent watch's fixed message is said instead of the generic
+4. **Speak**: a `voice` mapping makes the router's voice line usable (above), while the
+   integration listens; the sentence goes out through the voice channel (`GET
+   /v1/voice/announce`, above), never with the tool's token. An urgent watch's fixed message is said instead of the generic
    sentence, and may go through the quiet hours, only when the user turned `voice_for_urgent` on
    (the page, or `setting`). A rule's `never: voice` keeps it out; `also: voice` does not turn the
    line on.

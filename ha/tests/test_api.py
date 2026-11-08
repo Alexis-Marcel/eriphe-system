@@ -43,12 +43,32 @@ async def _name(request: web.Request) -> web.Response:
     return web.json_response({"name": "Jarvis"})
 
 
+ANNOUNCEMENTS = [
+    {
+        "id": 1,
+        "entity": "assist_satellite.salon",
+        "text": "Sam, Eriphe a quelque chose pour toi.",
+    },
+    {"id": 2, "entity": "media_player.tv", "text": " "},
+    {"id": 3, "text": "no entity"},
+    "not an object",
+]
+
+
+async def _announce(request: web.Request) -> web.Response:
+    if request.headers.get("Authorization") != f"Bearer {TOKEN}":
+        return web.json_response({"error": "bad token"}, status=401)
+    assert request.query.get("wait") == "50"
+    return web.json_response({"announcements": ANNOUNCEMENTS})
+
+
 def _run(test, named=True):
     async def main():
         app = web.Application()
         app.router.add_post("/v1/voice", _voice)
         if named:
             app.router.add_get("/v1/voice", _name)
+            app.router.add_get("/v1/voice/announce", _announce)
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -115,3 +135,50 @@ def test_voice_brain_unavailable():
                 pass
 
     _run(test)
+
+
+def test_announcements():
+    async def test(session, url):
+        return await api.EripheClient(session, url, TOKEN).async_announcements()
+
+    assert _run(test) == [
+        api.Announcement(
+            "assist_satellite.salon", "Sam, Eriphe a quelque chose pour toi."
+        )
+    ]
+
+
+def test_announcements_bad_token_and_older_core():
+    async def bad(session, url):
+        with pytest.raises(api.InvalidAuth):
+            await api.EripheClient(session, url, "wrong").async_announcements()
+
+    async def older(session, url):
+        with pytest.raises(api.NotSupported):
+            await api.EripheClient(session, url, TOKEN).async_announcements()
+
+    _run(bad)
+    _run(older, named=False)
+
+
+def test_service_call():
+    say = "Sam, Eriphe a quelque chose pour toi."
+    sat = api.Announcement("assist_satellite.salon", say)
+    assert api.service_call(sat, []) == (
+        "assist_satellite",
+        "announce",
+        {"entity_id": "assist_satellite.salon", "message": say},
+    )
+    tv = api.Announcement("media_player.tv", say)
+    assert api.service_call(tv, ["tts.piper", "tts.cloud"]) == (
+        "tts",
+        "speak",
+        {
+            "entity_id": "tts.cloud",
+            "media_player_entity_id": "media_player.tv",
+            "message": say,
+        },
+    )
+    assert api.service_call(tv, []) is None
+    for entity in ["light.salon", "lock.porte", "script.anything", "assist_satellite"]:
+        assert api.service_call(api.Announcement(entity, say), ["tts.piper"]) is None

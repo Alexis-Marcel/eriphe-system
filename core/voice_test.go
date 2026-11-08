@@ -127,6 +127,11 @@ func TestVoiceReply(t *testing.T) {
 	if msgs[0].Via != "voix, Bureau" || msgs[0].Text != "allume ici" {
 		t.Fatalf("message = %+v", msgs[0])
 	}
+	// Anyone in the room may have said it: it taints its turn, so a write
+	// goes on a card.
+	if got := c.store.get(taintKey(msgs[0].Seq)); got != taintVoice {
+		t.Fatalf("taint = %q", got)
+	}
 	// The brain's turn shows where it was said.
 	c.store.db.Exec(`UPDATE messages SET delivered = 0 WHERE seq = ?`, msgs[0].Seq)
 	if pending, _ := c.store.undelivered(); len(pending) == 0 || pending[0].Via != "voix, Bureau" {

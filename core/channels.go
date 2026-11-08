@@ -69,6 +69,9 @@ type channelKind struct {
 	// sending a note there, with what it reached.
 	ready   func(c *core) bool
 	deliver func(c *core, n pushNote) []routeTarget
+	// Every outbound channel: sending a note to one target the router
+	// picked (route.go) on one of its lines.
+	reach func(c *core, n pushNote, logID int64, t routeTarget)
 }
 
 func (k channelKind) in() bool  { return k.Dir&dirIn != 0 }
@@ -97,6 +100,18 @@ var channelKinds = []channelKind{
 				}
 			}
 			return sent
+		},
+		reach: func(c *core, n pushNote, logID int64, t routeTarget) {
+			if c.push == nil {
+				return
+			}
+			if t.Step == stepInApp {
+				c.push.queueInApp(t.Tabs, inApp{ID: logID, Body: n.Body, URL: n.URL})
+				return
+			}
+			one := n
+			one.OnlyFor = t.Device
+			c.push.deliver(one)
 		}},
 	// Telegram, the account the user verified (telegram.go).
 	{ID: chanTelegram, Dir: dirBoth, Speaker: speakerAccount, Carries: carryText,
@@ -107,11 +122,35 @@ var channelKinds = []channelKind{
 			}
 			c.tg.deliver(n)
 			return []routeTarget{{Step: stepTelegram, Label: "Telegram"}}
+		},
+		reach: func(c *core, n pushNote, _ int64, _ routeTarget) {
+			if c.tg != nil {
+				c.tg.deliver(n)
+			}
 		}},
-	// The voice of the house (voice.go): someone in the room speaks; a
-	// speaker says only a sentence the code writes, and only through the
-	// router's voice line (route.go).
-	{ID: chanVoice, Dir: dirBoth, Speaker: speakerRoom, Carries: carrySentence},
+	// The voice of the house (voice.go, voice_out.go): someone in the room
+	// speaks, maybe not the user; a speaker says only a sentence the code
+	// writes, on the router's voice line (route.go), never a note's text.
+	{ID: chanVoice, Dir: dirBoth, Speaker: speakerRoom, Carries: carrySentence,
+		reach: func(c *core, n pushNote, _ int64, t routeTarget) { c.announce(n, t) }},
+}
+
+// isUser: what comes in through it is the user's own words.
+func (k channelKind) isUser() bool { return k.Speaker == speakerUser || k.Speaker == speakerAccount }
+
+// viaChannel is the channel a message came in by, from where it says it
+// was written (Message.Via): the voice's "voix, Salon" and its
+// automations, Telegram, else the workspace.
+func viaChannel(via string) channelKind {
+	id := chanWorkspace
+	switch {
+	case via == viaTelegram:
+		id = chanTelegram
+	case via == automationVia || via == voiceVia("", false) || strings.HasPrefix(via, voiceVia("", false)+", "):
+		id = chanVoice
+	}
+	k, _ := channelKindOf(id)
+	return k
 }
 
 // channelKindOf is the channel of that id.

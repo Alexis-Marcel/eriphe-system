@@ -1,5 +1,6 @@
 """Config flow and conversation agent, inside a test Home Assistant."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 from unittest.mock import patch
@@ -10,7 +11,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from homeassistant import config_entries
 from homeassistant.components import conversation
 from homeassistant.const import CONF_TOKEN, CONF_URL
-from homeassistant.core import Context, HomeAssistant
+from homeassistant.core import Context, HomeAssistant, ServiceCall
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import (
     area_registry as ar,
@@ -19,13 +20,15 @@ from homeassistant.helpers import (
 )
 from homeassistant.setup import async_setup_component
 
-from custom_components.eriphe.api import CannotConnect, InvalidAuth
+from custom_components.eriphe import async_speak
+from custom_components.eriphe.api import Announcement, CannotConnect, InvalidAuth
 from custom_components.eriphe.const import DOMAIN, FALLBACK_SPEECH
 from custom_components.eriphe.stream import Delta, Done
 
 URL = "http://192.0.2.2:8800"
 VALIDATE = "custom_components.eriphe.api.EripheClient.async_validate"
 VOICE = "custom_components.eriphe.api.EripheClient.async_voice"
+ANNOUNCEMENTS = "custom_components.eriphe.api.EripheClient.async_announcements"
 AGENT = "conversation.eriphe"
 
 
@@ -33,6 +36,18 @@ AGENT = "conversation.eriphe"
 async def setup_core(hass: HomeAssistant) -> None:
     """Set up what conversation needs before Eriphe pulls it in."""
     assert await async_setup_component(hass, "homeassistant", {})
+
+
+@pytest.fixture(autouse=True)
+def no_announcements():
+    """The speakers' request never leaves the test: it waits, like an idle core."""
+
+    async def idle(self) -> list[Announcement]:
+        await asyncio.Event().wait()
+        return []
+
+    with patch(ANNOUNCEMENTS, idle):
+        yield
 
 
 async def test_user_flow(hass: HomeAssistant) -> None:
@@ -202,3 +217,51 @@ async def test_no_control_feature(hass: HomeAssistant, entry: MockConfigEntry) -
     assert state.attributes.get("supported_features", 0) == 0
     info = conversation.async_get_agent_info(hass, AGENT)
     assert info is not None and info.supports_streaming
+
+
+async def test_speaks_on_the_speakers(hass: HomeAssistant) -> None:
+    """What eriphe-core has to say is said by the integration itself."""
+    said: list[tuple[str, dict[str, Any]]] = []
+
+    async def record(call: ServiceCall) -> None:
+        said.append((f"{call.domain}.{call.service}", dict(call.data)))
+
+    hass.services.async_register("assist_satellite", "announce", record)
+    hass.services.async_register("tts", "speak", record)
+    hass.states.async_set("tts.piper", "unknown")
+    batches = [
+        [
+            Announcement(
+                "assist_satellite.salon", "Sam, Eriphe a quelque chose pour toi."
+            ),
+            Announcement("media_player.tv", "Sam, Eriphe a quelque chose pour toi."),
+            Announcement("lock.porte", "unlock"),
+        ]
+    ]
+
+    class Client:
+        async def async_announcements(self) -> list[Announcement]:
+            if batches:
+                return batches.pop()
+            raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await async_speak(hass, Client())
+    await hass.async_block_till_done()
+    assert said == [
+        (
+            "assist_satellite.announce",
+            {
+                "entity_id": "assist_satellite.salon",
+                "message": "Sam, Eriphe a quelque chose pour toi.",
+            },
+        ),
+        (
+            "tts.speak",
+            {
+                "entity_id": "tts.piper",
+                "media_player_entity_id": "media_player.tv",
+                "message": "Sam, Eriphe a quelque chose pour toi.",
+            },
+        ),
+    ]

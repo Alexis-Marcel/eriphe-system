@@ -7,12 +7,13 @@ import, so it can be tested without Home Assistant installed.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 import logging
 from typing import Any
 
 import aiohttp
 
-from .const import DEFAULT_NAME, VOICE_PATH
+from .const import ANNOUNCE_PATH, ANNOUNCE_WAIT, DEFAULT_NAME, VOICE_PATH
 from .stream import Event, StreamError, iter_events
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,6 +22,11 @@ _LOGGER = logging.getLogger(__name__)
 # last ~60 s: allow 90 s between two reads, and no total limit.
 VOICE_TIMEOUT = aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=90)
 VALIDATE_TIMEOUT = aiohttp.ClientTimeout(total=10)
+# The announcements' request waits up to ANNOUNCE_WAIT seconds for something
+# to say.
+ANNOUNCE_TIMEOUT = aiohttp.ClientTimeout(
+    total=None, sock_connect=10, sock_read=ANNOUNCE_WAIT + 30
+)
 
 
 class EripheError(Exception):
@@ -43,6 +49,10 @@ class UnexpectedResponse(EripheError):
     """eriphe-core answered something this client does not understand."""
 
 
+class NotSupported(EripheError):
+    """eriphe-core is older than what was asked (404)."""
+
+
 class EripheClient:
     """Talk to eriphe-core."""
 
@@ -50,6 +60,7 @@ class EripheClient:
         """Keep the session, the base URL and the token."""
         self._session = session
         self._url = url.rstrip("/") + VOICE_PATH
+        self._announce_url = url.rstrip("/") + ANNOUNCE_PATH
         self._headers = {"Authorization": f"Bearer {token}"}
 
     async def async_validate(self) -> str:
@@ -109,6 +120,81 @@ class EripheClient:
             raise CannotConnect(str(err) or type(err).__name__) from err
         except StreamError as err:
             raise UnexpectedResponse(str(err)) from err
+
+    async def async_announcements(self) -> list[Announcement]:
+        """Wait for what eriphe-core has to say on a speaker.
+
+        Returns as soon as there is something, or after about ANNOUNCE_WAIT
+        seconds with an empty list. Malformed items are left out.
+        """
+        try:
+            async with self._session.get(
+                self._announce_url,
+                params={"wait": str(ANNOUNCE_WAIT)},
+                headers=self._headers,
+                timeout=ANNOUNCE_TIMEOUT,
+            ) as resp:
+                if resp.status == 404:
+                    raise NotSupported("eriphe-core does not speak on speakers yet")
+                await _raise_for_status(resp)
+                body = await resp.json(content_type=None)
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise CannotConnect(str(err) or type(err).__name__) from err
+        except ValueError as err:
+            raise UnexpectedResponse(str(err)) from err
+        items = body.get("announcements") if isinstance(body, dict) else None
+        if not isinstance(items, list):
+            raise UnexpectedResponse("no announcements in the answer")
+        return [a for item in items if (a := Announcement.parse(item))]
+
+
+@dataclass(frozen=True)
+class Announcement:
+    """One sentence for one speaker, written by eriphe-core."""
+
+    entity: str
+    text: str
+
+    @classmethod
+    def parse(cls, item: Any) -> Announcement | None:
+        """Read one item; None if it is not one."""
+        if not isinstance(item, dict):
+            return None
+        entity, text = item.get("entity"), item.get("text")
+        if not isinstance(entity, str) or not isinstance(text, str) or not text.strip():
+            return None
+        return cls(entity, text.strip())
+
+
+def service_call(
+    announcement: Announcement, tts_entities: list[str]
+) -> tuple[str, str, dict[str, Any]] | None:
+    """The service that says an announcement, or None.
+
+    A satellite announces; a media player is spoken to by the house's first
+    text-to-speech entity. Nothing else is ever called, whatever eriphe-core
+    sends.
+    """
+    domain, _, name = announcement.entity.partition(".")
+    if not name:
+        return None
+    if domain == "assist_satellite":
+        return (
+            "assist_satellite",
+            "announce",
+            {"entity_id": announcement.entity, "message": announcement.text},
+        )
+    if domain == "media_player" and tts_entities:
+        return (
+            "tts",
+            "speak",
+            {
+                "entity_id": sorted(tts_entities)[0],
+                "media_player_entity_id": announcement.entity,
+                "message": announcement.text,
+            },
+        )
+    return None
 
 
 async def _raise_for_status(resp: aiohttp.ClientResponse) -> None:

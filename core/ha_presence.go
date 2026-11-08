@@ -30,7 +30,8 @@ import (
 //     attribute, no other entity;
 //  4. speak (route.go): a speaker mapped to a room is the router's "voice"
 //     line, used only when the user is in that room now, by a personal
-//     signal, with a text the code writes (ha_voice in this file).
+//     signal, with a text the code writes (voiceText), said through the
+//     voice channel (voice_out.go), never with this token.
 //
 // A signal only makes Eriphe quieter, except that one line, which is held
 // to more: a fresh, personal room, a "now" from a clean turn, outside the
@@ -98,7 +99,6 @@ type haState struct {
 	lastErr      string
 	roomPersonal bool // the room signal now is a personal one
 	kick         chan struct{}
-	said         []string // tests: what was announced
 }
 
 func (h *haState) kickChan() chan struct{} {
@@ -701,39 +701,3 @@ func (c *core) voiceText(n pushNote) string {
 	}
 	return fmt.Sprintf("%s, %s a quelque chose pour toi.", user, c.conf().assistantName())
 }
-
-// announce says the text on the speaker: assist_satellite.announce, or
-// tts.speak (the house's first tts entity) for a media player.
-func (c *core) announce(n pushNote, t routeTarget) {
-	entity, ok := strings.CutPrefix(t.Device, voiceDevice)
-	if !ok {
-		return
-	}
-	text := c.voiceText(n)
-	c.ha.mu.Lock()
-	if c.ha.said != nil {
-		c.ha.said = append(c.ha.said, entity+": "+text)
-	}
-	c.ha.mu.Unlock()
-	e, err := c.haLink()
-	if err != nil {
-		log.Printf("voice: %v", err)
-		return
-	}
-	ctx := context.Background()
-	if strings.HasPrefix(entity, "assist_satellite.") {
-		if err = haCall(ctx, e, "assist_satellite", "announce", map[string]any{"entity_id": entity, "message": text}); err != nil {
-			log.Printf("voice: %v", err)
-		}
-		return
-	}
-	tts := c.ha.cached().TTS
-	if len(tts) == 0 {
-		return
-	}
-	if err := haCall(ctx, e, "tts", "speak", map[string]any{"entity_id": tts[0], "media_player_entity_id": entity, "message": text}); err != nil {
-		log.Printf("voice: %v", err)
-	}
-}
-
-const voiceDevice = "voice:"

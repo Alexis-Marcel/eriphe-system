@@ -66,3 +66,20 @@ func TestChannelsNothingSetUp(t *testing.T) {
 		}
 	}
 }
+
+// A message's channel, from where it says it was written: only the
+// workspace and Telegram are the user's own words.
+func TestViaChannel(t *testing.T) {
+	for via, want := range map[string]string{
+		"": chanWorkspace, firstRunVia: chanWorkspace, viaTelegram: chanTelegram,
+		"voix": chanVoice, "voix, Salon": chanVoice, automationVia: chanVoice,
+	} {
+		k := viaChannel(via)
+		if k.ID != want {
+			t.Errorf("%q: %s, want %s", via, k.ID, want)
+		}
+		if k.isUser() != (want != chanVoice) {
+			t.Errorf("%q: the user's own words: %v", via, k.isUser())
+		}
+	}
+}

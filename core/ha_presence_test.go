@@ -559,23 +559,28 @@ func TestHAVoice(t *testing.T) {
 	fixed := pushNote{Body: map[string]string{"fr": "Alerte boutique : la prod ne répond plus"}, Route: routeNote{Fixed: true}}
 	c.announce(fixed, routeTarget{Step: stepVoice, Device: voiceDevice + "assist_satellite.salon"})
 	c.announce(pushNote{}, routeTarget{Step: stepVoice, Device: voiceDevice + "media_player.tv"})
+	c.announce(pushNote{}, routeTarget{Step: stepVoice, Device: voiceDevice + "light.salon"}) // not a speaker
 	f.mu.Lock()
 	calls := slices.Clone(f.calls)
 	f.mu.Unlock()
-	if len(calls) != 4 {
-		t.Fatalf("calls %q", calls)
+	if len(calls) != 0 {
+		t.Fatalf("eriphe-core called Home Assistant itself: %q", calls)
 	}
-	for _, call := range calls[:2] {
-		if !strings.HasPrefix(call, "assist_satellite/announce ") || !strings.Contains(call, "Sam, ") || !strings.Contains(call, "a quelque chose pour toi") ||
-			strings.Contains(call, "Ignore") {
-			t.Errorf("call %q", call)
+	said := c.voice.pop(time.Now())
+	if len(said) != 4 {
+		t.Fatalf("said %+v", said)
+	}
+	for _, a := range said[:2] {
+		if a.Entity != "assist_satellite.salon" || !strings.HasPrefix(a.Text, "Sam, ") || !strings.Contains(a.Text, "a quelque chose pour toi") ||
+			strings.Contains(a.Text, "Ignore") {
+			t.Errorf("said %+v", a)
 		}
 	}
-	if !strings.Contains(calls[2], "Sam, Alerte boutique") {
-		t.Errorf("fixed %q", calls[2])
+	if !strings.HasPrefix(said[2].Text, "Sam, Alerte boutique") {
+		t.Errorf("fixed %+v", said[2])
 	}
-	if !strings.HasPrefix(calls[3], "tts/speak ") || !strings.Contains(calls[3], `"entity_id":"tts.piper"`) || !strings.Contains(calls[3], `"media_player_entity_id":"media_player.tv"`) {
-		t.Errorf("tts %q", calls[3])
+	if said[3].Entity != "media_player.tv" {
+		t.Errorf("media player %+v", said[3])
 	}
 }
 

@@ -1,7 +1,9 @@
 # Eriphe for Home Assistant
 
-A conversation agent that hands Home Assistant's Assist pipeline every sentence it cannot handle
-locally to `eriphe-core`, and speaks its answer as it streams in (Piper starts reading before the end).
+The voice of the house, both ways, on one token: a conversation agent that hands Home Assistant's
+Assist pipeline every sentence it cannot handle locally to `eriphe-core`, and speaks its answer as it
+streams in (Piper starts reading before the end); and the speakers, on which it says what
+`eriphe-core` has to tell you.
 Home Assistant stays Eriphe's body, not a second brain: simple commands ("allume la lumière du
 bureau") are still handled by Home Assistant itself, everything else goes to Eriphe.
 
@@ -55,13 +57,38 @@ home, the TV is on) goes to `POST /v1/context` as a signal, with a source token 
 « Ce qu'Eriphe sait de toi » (see `core/README.md`, the context), for example with a
 `rest_command`. Simpler: with Home Assistant's tool in Eriphe's catalog, `eriphe-core` can
 follow the entities you approve itself (people, room sensors, the bed, the TV, a satellite to speak
-in a room), with the same token and nothing to set up here.
+in a room), with that tool's token; it speaks through this integration (below).
 
 `eriphe-core` answers NDJSON: `{"delta": "..."}` lines, streamed into the chat log as they come,
 then `{"done": true, "text": "...", "continue": false}`. `continue` decides whether the satellite
 listens again. If `eriphe-core` cannot be reached, refuses the token or has no brain available, the
 agent says "Je n'arrive pas à joindre Eriphe." (with your assistant's name) instead of failing; if
 the stream breaks after a partial answer, it adds "La connexion avec Eriphe a été coupée.".
+
+## The speakers
+
+While the integration is set up, it keeps one request open on `eriphe-core`, with the same token:
+
+```
+GET {url}/v1/voice/announce?wait=50
+Authorization: Bearer {token}
+
+{"announcements": [{"id": 1, "entity": "assist_satellite.salon", "text": "Sam, Eriphe a quelque chose pour toi."}]}
+```
+
+It answers at once when there is something to say, or after 50 s with an empty list, and the
+integration asks again. Each sentence is said by Home Assistant itself: `assist_satellite.announce`
+on a satellite, `tts.speak` with the house's first `tts` entity on a media player. Nothing else is
+ever called, whatever comes back. The sentence is written by `eriphe-core`'s code (never a
+notification's text), for the speaker of the room you are in, and only on the "voice" line of
+« Où te prévenir ». `eriphe-core` never calls Home Assistant to speak, and never borrows the token
+of its Home Assistant tool. If `eriphe-core` cannot be reached, the integration tries again (5 s
+growing to 5 min); an `eriphe-core` older than the speakers is asked again every hour.
+
+**Anyone in the room may be speaking.** What is said to a satellite joins the conversation as
+yours, but `eriphe-core` takes it as coming from someone in the room: Eriphe reads and answers
+freely, but anything it would change goes on a card that you confirm on your phone or in the
+workspace. A « oui » said aloud never confirms it.
 
 ## Develop
 

@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"slices"
 	"sort"
@@ -319,29 +317,4 @@ func haFocusEntity(id string) bool {
 
 func haSleepWord(id string) bool {
 	return strings.Contains(id, "sleep") || strings.Contains(id, "sommeil") || strings.Contains(id, "nuit") || strings.Contains(id, "night")
-}
-
-// haCall calls a service through the REST API: an announce, a speech.
-func haCall(ctx context.Context, e haEndpoint, domain, service string, data map[string]any) error {
-	raw, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(ctx, haCallTime)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.Base+"/api/services/"+domain+"/"+service, bytes.NewReader(raw))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+e.Token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("home assistant: %w", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("home assistant: %s.%s: %s", domain, service, resp.Status)
-	}
-	return nil
 }
