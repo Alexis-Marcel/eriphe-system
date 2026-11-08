@@ -225,7 +225,7 @@ func (c *core) routeSignals(now time.Time) routeSignals {
 	if cx, err := c.notifyContext(); err == nil {
 		_, sig.Quiet = quietAt(cx.Rules, cx.Now)
 	}
-	sig.Voice, _ = c.haVoiceSpot(now)
+	sig.Voice, _ = c.voiceSpot(now)
 	if c.push == nil {
 		return sig
 	}

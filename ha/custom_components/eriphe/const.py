@@ -7,6 +7,12 @@ DOMAIN = "eriphe"
 
 VOICE_PATH = "/v1/voice"
 
+# What eriphe-core says on the house's speakers: a request kept open, which
+# answers as soon as there is something to say or after ANNOUNCE_WAIT
+# seconds with nothing.
+ANNOUNCE_PATH = "/v1/voice/announce"
+ANNOUNCE_WAIT = 50
+
 # The assistant's name until eriphe-core gives the one the user chose (GET
 # VOICE_PATH): the entry's title, the agent's device name.
 DEFAULT_NAME = "Eriphe"

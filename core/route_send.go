@@ -96,26 +96,11 @@ func (c *core) broadcast(n pushNote) ([]routeTarget, string) {
 	return sent, ""
 }
 
-// reach sends a note to targets, each by its line.
+// reach sends a note to targets, each by the channel of its line.
 func (c *core) reach(n pushNote, logID int64, targets []routeTarget) {
 	for _, t := range targets {
-		switch t.Step {
-		case stepInApp:
-			if c.push != nil {
-				c.push.queueInApp(t.Tabs, inApp{ID: logID, Body: n.Body, URL: n.URL})
-			}
-		case stepComputer, stepPhone:
-			if c.push != nil {
-				one := n
-				one.OnlyFor = t.Device
-				c.push.deliver(one)
-			}
-		case stepTelegram:
-			if c.tg != nil {
-				c.tg.deliver(n)
-			}
-		case stepVoice:
-			go c.announce(n, t)
+		if k, ok := channelKindOf(stepChannel(t.Step)); ok && k.reach != nil {
+			k.reach(c, n, logID, t)
 		}
 	}
 }

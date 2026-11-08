@@ -693,7 +693,8 @@ func cardAnswerKey(seq int) string { return fmt.Sprintf("card_answer:%d", seq) }
 // resolveByText lets a message of the user's answer a card in words. Only
 // when all of this holds, else the brain reads it and asks, or the user
 // clicks: the message is the user's own (not an automation's, not an
-// event), a plain yes or no and nothing else, without a file; it comes
+// event), through a channel that guarantees it is them (not the voice,
+// where anyone in the room speaks), a plain yes or no and nothing else, without a file; it comes
 // right after a message of the brain's, recent, written in a clean turn,
 // that shows exactly one card, still waiting; and that proposal does not
 // come from external content.
@@ -705,7 +706,7 @@ func (c *core) resolveByText(ctx context.Context, seq int) (convoCard, bool) {
 		return none, false
 	}
 	me, brain := msgs[0], msgs[1]
-	if me.Seq != seq || me.Role != roleUser || brain.Role != roleBrain || me.Via == automationVia {
+	if me.Seq != seq || me.Role != roleUser || brain.Role != roleBrain || !viaChannel(me.Via).isUser() {
 		return none, false
 	}
 	if len(me.Attachments) > 0 {
@@ -734,19 +735,28 @@ func (c *core) resolveByText(ctx context.Context, seq int) (convoCard, bool) {
 	return x, true
 }
 
-// voiceCardQuestion is the short spoken question of the one card still
-// waiting on the brain's answer to message seq; "" if there is not
-// exactly one, or if it may carry someone else's words.
-func (c *core) voiceCardQuestion(seq int, lang string) string {
+// voiceCardConfirm is what the voice says when the brain's answer to
+// message seq left a card: anyone in the room may have spoken, so a card
+// is never answered aloud; the user confirms it on their phone or in the
+// workspace, where it is sent (voiceCardNote). "" without one.
+func (c *core) voiceCardConfirm(seq int, lang string) (convoCard, string) {
 	xs, err := c.cardsWhere(`seq > ? AND kind != ? AND state = ?`, seq, cardDigest, cardPending)
-	if err != nil || len(xs) != 1 {
-		return ""
+	if err != nil || len(xs) == 0 {
+		return convoCard{}, ""
 	}
-	x, p := c.liveCard(xs[0])
-	if x.State != cardPending || p.Tainted != "" || x.Kind == cardAccess {
-		return ""
+	return xs[0], tr(lang, "card.voice.confirm")
+}
+
+// voiceCardNote tells the user, on their phone or computer, that what was
+// asked aloud waits for their yes: the code's words, never the card's.
+func voiceCardNote(x convoCard) pushNote {
+	url := "/"
+	if x.Seq > 0 {
+		url = fmt.Sprintf("/#m%d", x.Seq)
 	}
-	return fmt.Sprintf(tr(lang, "card.voice.ask"), spoken(truncate(p.Text(lang), 160)))
+	n := waitingNote(tr("fr", "card.voice.note"), url, fmt.Sprintf("voice-card-%d", x.ID))
+	n.Body["en"] = assistantName() + " is waiting for your answer: " + tr("en", "card.voice.note")
+	return n
 }
 
 // cardAnswerLine tells the brain what a message of the user's decided.

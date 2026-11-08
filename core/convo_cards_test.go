@@ -471,20 +471,27 @@ func TestDigestAndWhy(t *testing.T) {
 	}
 }
 
-// The voice asks the one card that came with its answer, short; two are
-// not asked aloud.
-func TestVoiceCardQuestion(t *testing.T) {
+// A card that came with the voice's answer is never asked aloud: the voice
+// says it waits on the phone, with the code's words, and a spoken "oui"
+// does not answer it.
+func TestVoiceCardConfirm(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	seq, _ := c.store.addMessageVia(roleUser, "Moins de notifications pour les factures", "voix, Salon", false)
-	proposedRule(t, c, "facture", "")
+	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "D'accord.")
-	if q := c.voiceCardQuestion(int(seq), "fr"); q != "Je te propose : facture → au brief. Oui ou non ?" {
-		t.Fatalf("question %q", q)
+	x, say := c.voiceCardConfirm(int(seq), "fr")
+	if say != "Je te l'ai mis à confirmer sur ton téléphone." || x.Ref != cardOf(t, c, cardRule, r.ID).Ref {
+		t.Fatalf("say %q, card %+v", say, x)
 	}
-	proposedRule(t, c, "banque", "")
-	brainSays(c, "Et la banque.")
-	if q := c.voiceCardQuestion(int(seq), "fr"); q != "" {
-		t.Fatalf("two cards asked aloud: %q", q)
+	if n := voiceCardNote(x); strings.Contains(n.Body["fr"], "facture") || !strings.Contains(n.Body["fr"], "à voix haute") {
+		t.Fatalf("note %q", n.Body["fr"])
+	}
+	yes, _ := c.store.addMessageVia(roleUser, "oui", "voix, Salon", false)
+	if _, ok := c.resolveByText(context.Background(), int(yes)); ok {
+		t.Fatal("a spoken yes answered a card")
+	}
+	if x := cardOf(t, c, cardRule, r.ID); x.State != cardPending {
+		t.Fatalf("card %s", x.State)
 	}
 }
 

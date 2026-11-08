@@ -19,8 +19,9 @@ import (
 //     that computer only;
 //  3. at home → the voice in the room: a speaker Home Assistant has in the
 //     room a fresh, personal signal puts the user in, for a "now" from a
-//     clean turn, outside the quiet hours, with a text the code writes
-//     (ha_presence.go);
+//     clean turn, outside the quiet hours, with a text the code writes,
+//     while Home Assistant's integration listens (the voice channel,
+//     voice_out.go);
 //  4. otherwise → the phone, then Telegram.
 //
 // The user orders these lines, turns each off, and sets the delay

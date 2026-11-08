@@ -26,7 +26,13 @@ import (
 //
 // The answer is NDJSON: {"delta": "…"} lines, then {"done": true, "text",
 // "continue"}. Home Assistant has its own token (Settings → Tools → Home Assistant), which
-// can only talk to the brain.
+// can only talk to the brain, and fetch what to say (voice_out.go).
+//
+// The voice is a channel (channels.go) that guarantees only that someone
+// is in the room, maybe not the user: what it says joins the conversation
+// as theirs, but taints the turn. The brain answers and reads freely; a
+// write goes on a card, which the user confirms on their phone or in the
+// workspace, never aloud.
 
 const (
 	voiceTokenKey    = "voice_token_hash"
@@ -99,7 +105,12 @@ func voiceVia(area string, automation bool) string {
 const (
 	automationVia   = "Home Assistant, automatisation"
 	taintAutomation = "homeassistant.automation"
+	// taintVoice: a sentence said to a speaker, by anyone in the room.
+	taintVoice = "voix"
 )
+
+// voiceCardKey marks a card whose notice went to the user's phone.
+func voiceCardKey(id int64) string { return fmt.Sprintf("voice_card:%d", id) }
 
 // automationRequests are what an automation may ask, and how the code
 // words it for the brain.
@@ -169,9 +180,12 @@ func (c *core) handleVoice(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
+		// Anyone in the room may be speaking (the voice channel, channels.go):
+		// the sentence taints its turn, so a write it leads to goes on a card,
+		// which is never answered aloud (resolveByText, voiceCardConfirm).
 		seq, err = c.store.addMessageVia(roleUser, strings.TrimSpace(in.Text), voiceVia(in.Area, false), false)
 		if err == nil {
-			c.resolveByText(r.Context(), int(seq)) // "oui" to the question just asked (convo_cards.go)
+			err = c.store.set(taintKey(int(seq)), taintVoice)
 		}
 	}
 	if err != nil {
@@ -195,16 +209,22 @@ func (c *core) handleVoice(w http.ResponseWriter, r *http.Request) {
 		hold, max = automationWait, automationWait
 	}
 	text := c.voiceReply(r.Context(), int(seq), hold, max, func(delta string) { emit(map[string]string{"delta": delta}) })
-	// A proposal that came with the answer is asked aloud, short; a plain
-	// "oui" or "non" answers it, under the same rule as in writing.
-	if !automation && text != voiceHolding {
+	// A card the answer left is confirmed on the user's phone, never aloud:
+	// the voice says so, and the card's notice goes there.
+	if !automation {
 		lang := "fr"
 		if strings.HasPrefix(strings.ToLower(in.Language), "en") {
 			lang = "en"
 		}
-		if q := c.voiceCardQuestion(int(seq), lang); q != "" && !strings.HasSuffix(strings.TrimSpace(text), "?") {
-			emit(map[string]string{"delta": " " + q})
-			text = strings.TrimSpace(text + " " + q)
+		if x, say := c.voiceCardConfirm(int(seq), lang); say != "" {
+			if text != voiceHolding {
+				emit(map[string]string{"delta": " " + say})
+				text = strings.TrimSpace(text + " " + say)
+			}
+			if c.store.get(voiceCardKey(x.ID)) == "" {
+				c.store.set(voiceCardKey(x.ID), "1")
+				c.tell(voiceCardNote(x))
+			}
 		}
 	}
 	emit(map[string]any{"done": true, "text": text, "continue": strings.HasSuffix(text, "?")})
