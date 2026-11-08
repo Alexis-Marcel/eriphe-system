@@ -26,6 +26,19 @@
         <select name="access" {{if eq (len .Lower) 1}}disabled{{end}}>{{range .Lower}}<option value="{{.}}" {{if eq . $access}}selected{{end}}>{{t (printf "folders.access.%s" .)}}</option>{{end}}</select></label>
       </form>
       {{if ne .Max .Access}}<p class="muted small">{{tf "folders.lowered" (t (printf "folders.access.%s" .Max))}}</p>{{end}}
+      {{if ne .Access "read"}}{{$name := .Name}}
+      <div class="folder-values">
+        {{range $level, $value := dict "drop" .Drop "manage" .Manage}}{{if or (eq $level "drop") (eq $access "manage")}}
+        <form hx-post="/settings/folders/value" hx-trigger="change" class="folder-level">
+          <input type="hidden" name="name" value="{{$name}}">
+          <input type="hidden" name="level" value="{{$level}}">
+          <label class="field"><span>{{t (printf "folders.value.%s" $level)}}</span>
+          <select name="value">{{range list "free" "approval"}}<option value="{{.}}" {{if eq . $value}}selected{{end}}>{{t (printf "folders.value.%s" .)}}</option>{{end}}</select></label>
+        </form>
+        {{end}}{{end}}
+        <p class="muted small">{{t "folders.valuehint"}}</p>
+      </div>
+      {{end}}
       {{if .Copyable}}
       <details class="folder-copies"{{if .Copies}} open{{end}}>
         <summary>{{t "folders.copies"}}{{if .Copies}} · {{len .Copies}}{{end}}</summary>

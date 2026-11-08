@@ -17,6 +17,7 @@ func (w *web) folderRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/folders", w.auth(w.handleFolders))
 	mux.Handle("POST /settings/folders/delete", w.auth(w.handleDeleteFolder))
 	mux.Handle("POST /settings/folders/level", w.auth(w.handleLowerFolder))
+	mux.Handle("POST /settings/folders/value", w.auth(w.handleFolderValue)) // folder_values.go
 	mux.Handle("POST /settings/folders/nocopy", w.auth(w.handleLowerFolder))
 	mux.Handle("POST /settings/folders/copies", w.auth(w.handleFolderCopies))
 }
@@ -223,4 +224,20 @@ func (w *web) handleLowerFolder(rw http.ResponseWriter, r *http.Request, s *sess
 	log.Printf("web: folder %s lowered (access %q, no copies %v)", name, access, nocopy)
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)
+}
+
+// handleFolderValue sets who decides a folder's drop or manage: free or
+// approval.
+func (w *web) handleFolderValue(rw http.ResponseWriter, r *http.Request, s *session) {
+	name, level, value := r.PostFormValue("name"), r.PostFormValue("level"), r.PostFormValue("value")
+	if err := w.c.setFolderValue(name, level, value); err != nil {
+		if errors.Is(err, errNoFolder) {
+			w.toast(rw, tr(w.lang(r), "folders.err.gone"), false)
+		} else {
+			w.toast(rw, err.Error(), false)
+		}
+		return
+	}
+	log.Printf("web: folder %s: %s %s", name, level, value)
+	w.toast(rw, tr(w.lang(r), "folders.valuesaved"), true)
 }

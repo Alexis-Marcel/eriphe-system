@@ -353,6 +353,7 @@ func (c *core) taintedResources(r runRequest) error {
 		}
 		switch {
 		case isGitHubRepo(e): // a write is asked on the start's card (task_start.go)
+		case e.Kind == resFolder: // a write is asked on the start's card (folder_values.go)
 		case e.Access == accessWrite || e.Access == accessDrop:
 			writes = append(writes, e.String())
 		case e.Kind == resDriveFolder:

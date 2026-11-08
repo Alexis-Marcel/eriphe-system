@@ -1691,6 +1691,14 @@ which eriphe-files reads and enforces itself, and is lent through that catalog t
 refuses it with that hint. Drive folders are added on Settings → Tools → Google Drive; "Ne plus
 partager" in Settings → Dossiers removes either kind.
 
+**Who decides a write.** The level says what a task may reach; who decides is set per folder,
+like a tool's grid: lending it at `drop`, and at `manage` (lent as `write`), is Free (the default)
+or On approval ("Sur accord"), two selectors under the level in Settings → Dossiers (`POST
+/settings/folders/value`, kept by machine and id, `folder_values.go`). On approval is asked on the
+task's [start card](#the-approval-card), once per task, before it starts; so is a Free write of a
+task that did not start cleanly (a tainted turn, or a turn that is not the user's). Reads are
+always free. A yes lets the task go with its mount; a no stops it.
+
 **Sharing one** is done on the machine; Settings → Dossiers lists, machine by machine, what is
 shared there, each folder with a level selector that offers only its level and those below, a
 "Peut être copié" badge with "Ne plus copier", and whether it is there now; one "Comment partager ?"
@@ -1745,8 +1753,8 @@ put there, so it is treated as external content, like a mail or a page:
 - the event that brings the brain the result of a task that read folders says so, and taints the
   turn that reads it (`folder:<names>`), as `task_status` of such a task does: the memory only
   proposes what that turn remembers (see memory_trust.go);
-- on a tainted turn, `run_task` refuses to lend a folder with `drop` or `write`; folders to read
-  still go;
+- on a tainted turn, a folder lent with `drop` or `write` is asked on the start's card (see
+  [who decides a write](#folders)); folders to read still go;
 - the permission policy applies to the task as to any other, and Docker refuses any write in the
   folder but in `Eriphe/`.
 
