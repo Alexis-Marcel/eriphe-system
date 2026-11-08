@@ -183,6 +183,7 @@ func newMCPServer(c *core) *mcp.Server {
 	registerNotifyTools(s, c)     // notify, notifications, rule
 	registerSinceTools(s, c)      // since
 	registerWatchTools(s, c)      // watch, watches, update_watch
+	registerAssistantTools(s, c)  // assistants, assistant_view
 	return s
 }
 
