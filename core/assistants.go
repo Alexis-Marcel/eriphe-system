@@ -70,6 +70,8 @@ type Assistant struct {
 	Triggers []string `json:"triggers,omitempty"`
 	// The schema of what it knows now, its typed state (assistant_state.go).
 	State []StateField `json:"state,omitempty"`
+	// Its views: named filters over its state, read tools (assistant_views.go).
+	Views []StateView `json:"views,omitempty"`
 	// The assistant it reports to: the brain, the only one it may name.
 	// Empty: the brain, for any but the brain.
 	ReportsTo string `json:"reports_to,omitempty"`
@@ -256,6 +258,9 @@ func overlay(file, ws Assistant) Assistant {
 	if len(a.State) == 0 {
 		a.State = ws.State
 	}
+	if len(a.Views) == 0 {
+		a.Views = ws.Views
+	}
 	if a.ReportsTo == "" {
 		a.ReportsTo = ws.ReportsTo
 	}
@@ -289,6 +294,8 @@ func readOnlyField(file, ws Assistant) string {
 		return "triggers"
 	case len(ws.State) > 0 && len(file.State) > 0 && !reflect.DeepEqual(ws.State, file.State):
 		return "state"
+	case len(ws.Views) > 0 && len(file.Views) > 0 && !reflect.DeepEqual(ws.Views, file.Views):
+		return "views"
 	case ws.ReportsTo != "" && file.ReportsTo != "" && ws.ReportsTo != file.ReportsTo:
 		return "reports_to"
 	}
@@ -430,6 +437,9 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 	}
 	if err := checkStateSchema(a.State); err != nil {
 		return fmt.Errorf("%s.state: %w", what, err)
+	}
+	if err := checkViews(a.Views, a.State); err != nil {
+		return fmt.Errorf("%s.views: %w", what, err)
 	}
 	if len(a.State) > 0 && a.can(powerLaunchesTasks) {
 		return fmt.Errorf("%s.state: a typed state is for an assistant without the brain's tools, for now", what)

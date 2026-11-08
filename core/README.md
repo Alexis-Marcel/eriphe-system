@@ -1311,6 +1311,30 @@ Agents shows each assistant's state, with its age and whether it was written aft
 external content; `GET /v1/assistants/{name}` returns it as `state`. The state orients, never
 authorises: the grid, the cards and the approvals never read it.
 
+### An assistant's views
+
+Named filters over its state, run by code, that it exposes as read tools (`assistant_views.go`).
+Its spec's `views`, up to 10:
+
+| Key | |
+|---|---|
+| `name`, `about` | its name (as a field's), and what it gives in a few words |
+| `field` | a field of its state |
+| `where`, `sort`, `limit`, `columns` | rows only: the rows whose columns have these values (checked against them), sorted by a column (`-recu` descending), at most `limit` (20 by default), with these columns only |
+| `history` | a field's history over a window, `24h` to `7d`, newest first; not for rows |
+
+A view costs no model and answers with its freshness: `fresh` (known, not expired, its assistant
+running), when it was written and until when it holds, and a note when its assistant is late,
+failing or turned off, so that the brain reads the source tool itself: it is never blocked.
+
+The brain reads them with two tools of eriphe-core's own, under the concept `assistant`:
+`assistants` (every assistant, its status, powers and wake-ups, its closed values, its text fields
+by name only, its views) and `assistant_view` (`assistant`, `view`, `n` to cut rows). Both are
+free; `assistants` never taints, and a view taints the brain's turn (`assistant:<name>`) only when
+what it returns is not closed (a text, or rows with a text column) and was written by a tainted
+session. Another assistant will read views when it is lent them, with the links between assistants.
+Settings → Agents lists each assistant's views.
+
 The status (`GET /v1/assistants`) has its conditions `Running`, `Busy` and `Ready`, its current
 task, the agent it runs, its session, its last turn and its last error; the controller keeps its
 restarts there too (table `assistant_status`).
