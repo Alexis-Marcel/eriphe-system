@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -19,9 +20,9 @@ import (
 //     that computer only;
 //  3. at home → the voice in the room: a speaker Home Assistant has in the
 //     room a fresh, personal signal puts the user in, for a "now" from a
-//     clean turn, outside the quiet hours, with a text the code writes,
-//     while Home Assistant's integration listens (the voice channel,
-//     voice_out.go);
+//     clean turn, outside the quiet hours, with a text the code writes, by
+//     a channel the user added that carries a sentence and reaches that
+//     room (channel_out.go);
 //  4. otherwise → the phone, then Telegram.
 //
 // The user orders these lines, turns each off, and sets the delay
@@ -61,7 +62,7 @@ func stepChannel(step string) string {
 		return chanTelegram
 	}
 	if step == stepVoice {
-		return chanVoice
+		return stepVoice // a channel the user added that carries a sentence (channel_out.go)
 	}
 	return chanPush
 }
@@ -121,7 +122,7 @@ type routeDevice struct {
 type routeSignals struct {
 	Devices  []routeDevice // the newest subscription first
 	Telegram bool          // a Telegram account is linked
-	Voice    voiceSpot     // a speaker in the room the user is in now (ha_presence.go); Entity "" if none
+	Voice    voiceSpot     // a channel that says a sentence in the room the user is in now (channel_out.go); Channel 0 if none
 	Quiet    bool          // the quiet hours are on
 }
 
@@ -205,7 +206,7 @@ func route(n routeNote, sig routeSignals, set routeSettings, tried []string) rou
 // on (a rule's "also" does not turn it on); never in the quiet hours,
 // but for an urgent watch's fixed message when the user said so.
 func voiceAllowed(n routeNote, sig routeSignals, set routeSettings) bool {
-	if n.Level != levelNow || n.Tainted || sig.Voice.Entity == "" || slices.Contains(set.Off, stepVoice) {
+	if n.Level != levelNow || n.Tainted || sig.Voice.Channel == 0 || slices.Contains(set.Off, stepVoice) {
 		return false
 	}
 	return !sig.Quiet || n.Fixed && n.Urgent && set.VoiceUrgent
@@ -269,8 +270,8 @@ func pickTarget(step string, sig routeSignals, used []string) (routeTarget, bool
 			return routeTarget{Step: step, Device: best.ID, Label: best.Label}, true
 		}
 	case stepVoice:
-		if sig.Voice.Entity != "" && !slices.Contains(used, voiceDevice+sig.Voice.Entity) {
-			return routeTarget{Step: step, Device: voiceDevice + sig.Voice.Entity, Label: sig.Voice.Room}, true
+		if dev := fmt.Sprintf("%s%d", voiceDevice, sig.Voice.Channel); sig.Voice.Channel != 0 && !slices.Contains(used, dev) {
+			return routeTarget{Step: step, Device: dev, Label: sig.Voice.Room}, true
 		}
 	case stepPhone:
 		var best *routeDevice

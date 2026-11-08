@@ -9,11 +9,16 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TOKEN, CONF_URL, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import (
+    area_registry as ar,
+    device_registry as dr,
+    entity_registry as er,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import EripheClient, EripheError, InvalidAuth, NotSupported, service_call
+from .api import EripheClient, EripheError, InvalidAuth, NotSupported, Speakers
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,34 +51,55 @@ async def async_unload_entry(hass: HomeAssistant, entry: EripheConfigEntry) -> b
 
 
 async def async_speak(hass: HomeAssistant, client: EripheClient) -> None:
-    """Say on the house's speakers what eriphe-core has to say, for ever.
+    """Say in the house's rooms what eriphe-core has to say, for ever.
 
-    The voice's outbound side: one request kept open on eriphe-core with the
-    voice's token; eriphe-core never calls Home Assistant to speak.
+    The channel's outbound side: one request kept open on eriphe-core with
+    the channel's token, telling the areas this house can speak in; each
+    sentence comes with its area, said by a speaker there. eriphe-core never
+    calls Home Assistant.
     """
     wait = RETRY_MIN
     while True:
+        speakers = async_speakers(hass)
         try:
-            announcements = await client.async_announcements()
+            messages = await client.async_out(speakers.places())
         except NotSupported:
             await asyncio.sleep(RETRY_NOT_SUPPORTED)
             continue
         except EripheError as err:
             level = logging.WARNING if isinstance(err, InvalidAuth) else logging.DEBUG
-            _LOGGER.log(level, "Eriphe's speakers: %s", err)
+            _LOGGER.log(level, "Eriphe's channel: %s", err)
             await asyncio.sleep(wait)
             wait = min(wait * 2, RETRY_MAX)
             continue
         wait = RETRY_MIN
-        tts = hass.states.async_entity_ids("tts")
-        for announcement in announcements:
-            if (call := service_call(announcement, tts)) is None:
-                _LOGGER.debug("Eriphe asked to speak on %s", announcement.entity)
+        speakers = async_speakers(hass)
+        for message in messages:
+            if (call := speakers.service_call(message)) is None:
+                _LOGGER.debug(
+                    "Eriphe asked to speak in %r, which has no speaker", message.place
+                )
                 continue
             domain, service, data = call
             try:
                 await hass.services.async_call(domain, service, data)
             except (HomeAssistantError, vol.Invalid) as err:
-                _LOGGER.warning(
-                    "Eriphe could not speak on %s: %s", announcement.entity, err
-                )
+                _LOGGER.warning("Eriphe could not speak in %s: %s", message.place, err)
+
+
+@callback
+def async_speakers(hass: HomeAssistant) -> Speakers:
+    """The house's satellites and media players, by the name of their area."""
+    speakers = Speakers(tts=hass.states.async_entity_ids("tts"))
+    entities = er.async_get(hass)
+    devices = dr.async_get(hass)
+    areas = ar.async_get(hass)
+    for entity_id in hass.states.async_entity_ids(("assist_satellite", "media_player")):
+        entry = entities.async_get(entity_id)
+        area_id = entry.area_id if entry else None
+        if not area_id and entry and entry.device_id:
+            device = devices.async_get(entry.device_id)
+            area_id = device.area_id if device else None
+        if area_id and (area := areas.async_get_area(area_id)):
+            speakers.add(area.name, entity_id)
+    return speakers

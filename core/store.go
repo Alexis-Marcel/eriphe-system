@@ -554,7 +554,7 @@ func (s *Store) undeliver(from, to int) error {
 }
 
 // markDelivered also keeps the last message when the brain was given them:
-// what it says after belongs to that turn (voice.go).
+// what it says after belongs to that turn (channel_in.go).
 func (s *Store) markDelivered(upTo int) error {
 	if _, err := s.db.Exec(`UPDATE messages SET delivered = 1 WHERE seq <= ? AND role != 'brain'`, upTo); err != nil {
 		return err

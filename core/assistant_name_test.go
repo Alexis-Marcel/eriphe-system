@@ -198,12 +198,12 @@ func TestWebAssistantName(t *testing.T) {
 	}
 }
 
-// Home Assistant reads the assistant's name with its voice token, for its
-// conversation agent.
+// An app reads the assistant's name with its channel's token (Home
+// Assistant, for its conversation agent).
 func TestVoiceName(t *testing.T) {
 	keepName(t)
 	c, tok := voiceCore(t)
-	srv := httptest.NewServer(http.HandlerFunc(c.handleVoiceInfo))
+	srv := httptest.NewServer(http.HandlerFunc(c.handleChannelInfo))
 	defer srv.Close()
 	get := func(token string) (int, string) {
 		req, _ := http.NewRequest("GET", srv.URL, nil)

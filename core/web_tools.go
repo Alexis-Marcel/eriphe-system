@@ -32,7 +32,6 @@ type toolView struct {
 	Problem string     // why it does not start, in words; the raw error stays in Error
 	Scope   tokenScope // how its credential follows its access level (access.go)
 	Allowed int        // its actions allowed without asking
-	Voice   bool       // Home Assistant's: it has a voice token
 	Token   bool       // OAuth: a credential is stored (it may have expired)
 	// Google is the Google account the tool reads (google.go), one that
 	// must be connected again first; Reconnect, it must.
@@ -107,10 +106,6 @@ type toolsPage struct {
 	Waiting  bool   // a tool is starting: the list refreshes itself until it is up
 	Follow   string // ?tool=: the tool just saved, its row followed and lit
 	New      bool   // ?new=1: … a new one, at the top of the list
-	// Home Assistant talks to Eriphe (its voice token) but Eriphe has no
-	// tool of it: its entry is still in the list (web_homeassistant.go).
-	VoiceOnly bool
-	Voice     bool // Home Assistant has a voice token
 }
 
 // RefreshURL is the list asking for itself again: the tool followed stays
@@ -188,17 +183,12 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
 	v := toolsPage{}
 	conf := w.c.conf()
-	v.Voice = w.c.store.get(voiceTokenKey) != ""
-	v.VoiceOnly = v.Voice
 	q := r.URL.Query()
 	if n := q.Get("tool"); followKey.MatchString(n) {
 		v.Follow, v.New = n, q.Get("new") != "" // a tool, or an account's row (its Key)
 	}
 	for _, sv := range w.servers() {
-		for _, t := range w.toolRows(lang, conf, sv, v.Voice) {
-			if t.Preset.ID == "home-assistant" {
-				v.VoiceOnly = false
-			}
+		for _, t := range w.toolRows(lang, conf, sv) {
 			if t.Key() == v.Follow || t.Account != "" && sv.Name == v.Follow && v.New {
 				st := statusOf(lang, sv)
 				st.Row = t.RowURL()
@@ -269,8 +259,8 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 var followKey = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
 
 // toolRow is one tool of the list.
-func (w *web) toolRow(lang string, conf *Config, sv serverView, voice bool) toolView {
-	t := toolView{serverView: sv, Source: sv.Source, Voice: voice}
+func (w *web) toolRow(lang string, conf *Config, sv serverView) toolView {
+	t := toolView{serverView: sv, Source: sv.Source}
 	t.Preset, t.Detail = presetOf(lang, conf.Servers[sv.Name])
 	if t.Preset.ID == "github" {
 		t.Detail = githubDetail(lang, conf.Servers[sv.Name])

@@ -99,6 +99,10 @@ func (c *core) broadcast(n pushNote) ([]routeTarget, string) {
 // reach sends a note to targets, each by the channel of its line.
 func (c *core) reach(n pushNote, logID int64, targets []routeTarget) {
 	for _, t := range targets {
+		if t.Step == stepVoice {
+			c.announce(n, t) // a channel the user added (channel_out.go)
+			continue
+		}
 		if k, ok := channelKindOf(stepChannel(t.Step)); ok && k.reach != nil {
 			k.reach(c, n, logID, t)
 		}

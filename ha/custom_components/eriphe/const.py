@@ -5,16 +5,17 @@ Kept free of Home Assistant imports so the client modules can be tested alone.
 
 DOMAIN = "eriphe"
 
-VOICE_PATH = "/v1/voice"
+# The integration is one of the channels the user adds in eriphe-core
+# (Settings > Channels): text in, text out, on the channel's token.
+CHANNEL_PATH = "/v1/channel"
 
-# What eriphe-core says on the house's speakers: a request kept open, which
-# answers as soon as there is something to say or after ANNOUNCE_WAIT
-# seconds with nothing.
-ANNOUNCE_PATH = "/v1/voice/announce"
-ANNOUNCE_WAIT = 50
+# What eriphe-core says in a room: a request kept open, which answers as
+# soon as there is something to say or after OUT_WAIT seconds with nothing.
+OUT_PATH = "/v1/channel/out"
+OUT_WAIT = 50
 
 # The assistant's name until eriphe-core gives the one the user chose (GET
-# VOICE_PATH): the entry's title, the agent's device name.
+# CHANNEL_PATH): the entry's title, the agent's device name.
 DEFAULT_NAME = "Eriphe"
 
 # Spoken when eriphe-core cannot be reached or fails before saying anything;

@@ -32,10 +32,6 @@ func TestChannelKinds(t *testing.T) {
 	if got := sendChannels(); !slices.Equal(got, []string{chanPush, chanTelegram}) {
 		t.Errorf("send channels: %v", got)
 	}
-	voice, ok := channelKindOf(chanVoice)
-	if !ok || voice.Speaker != speakerRoom || voice.Carries != carrySentence || voice.sends() {
-		t.Errorf("voice: %+v", voice)
-	}
 	if ws, _ := channelKindOf(chanWorkspace); ws.Speaker != speakerUser || ws.out() {
 		t.Errorf("workspace: %+v", ws)
 	}
@@ -45,7 +41,8 @@ func TestChannelKinds(t *testing.T) {
 }
 
 // Only the channels a note is broadcast on may be named by a rule or the
-// default: never the voice, which only the router's line reaches.
+// default: never a channel the user added, which only the router's voice
+// line reaches.
 func TestCheckChannelsOnlySendChannels(t *testing.T) {
 	for _, in := range []string{"voice", "workspace", "push,voice"} {
 		if _, err := checkChannels(in); err == nil {
@@ -63,23 +60,6 @@ func TestChannelsNothingSetUp(t *testing.T) {
 	for _, k := range channelKinds {
 		if k.sends() && (k.ready(c) || len(k.deliver(c, pushNote{})) > 0) {
 			t.Errorf("%s: reached without being set up", k.ID)
-		}
-	}
-}
-
-// A message's channel, from where it says it was written: only the
-// workspace and Telegram are the user's own words.
-func TestViaChannel(t *testing.T) {
-	for via, want := range map[string]string{
-		"": chanWorkspace, firstRunVia: chanWorkspace, viaTelegram: chanTelegram,
-		"voix": chanVoice, "voix, Salon": chanVoice, automationVia: chanVoice,
-	} {
-		k := viaChannel(via)
-		if k.ID != want {
-			t.Errorf("%q: %s, want %s", via, k.ID, want)
-		}
-		if k.isUser() != (want != chanVoice) {
-			t.Errorf("%q: the user's own words: %v", via, k.isUser())
 		}
 	}
 }

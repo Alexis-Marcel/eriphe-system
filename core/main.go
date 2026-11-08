@@ -102,10 +102,15 @@ func main() {
 	), token, assistantToken(token)))
 	mux.Handle("POST /v1/messages", bearer(token, http.HandlerFunc(c.handlePostMessage)))
 	mux.Handle("GET /v1/messages", bearer(token, http.HandlerFunc(c.handleGetMessages)))
-	mux.Handle("POST /v1/voice", http.HandlerFunc(c.handleVoice)) // Home Assistant's own token (voice.go)
-	mux.Handle("GET /v1/voice", http.HandlerFunc(c.handleVoiceInfo))
-	mux.Handle("GET /v1/voice/announce", http.HandlerFunc(c.handleVoiceAnnounce)) // what it says on a speaker (voice_out.go)
-	mux.Handle("POST /v1/context", http.HandlerFunc(c.handleContext))             // a token per source, closed values (context_sources.go)
+	// The channels the user added, each with its own token (channel_in.go,
+	// channel_out.go); /v1/voice is the same, for Home Assistant's
+	// integration before it moved.
+	mux.Handle("POST /v1/channel", http.HandlerFunc(c.handleChannelIn))
+	mux.Handle("GET /v1/channel", http.HandlerFunc(c.handleChannelInfo))
+	mux.Handle("GET /v1/channel/out", http.HandlerFunc(c.handleChannelOut))
+	mux.Handle("POST /v1/voice", http.HandlerFunc(c.handleChannelIn))
+	mux.Handle("GET /v1/voice", http.HandlerFunc(c.handleChannelInfo))
+	mux.Handle("POST /v1/context", http.HandlerFunc(c.handleContext)) // a token per source, closed values (context_sources.go)
 	c.taskRoutes(mux, token)
 	c.serverRoutes(mux, token)
 	c.catalogRoutes(mux, token)

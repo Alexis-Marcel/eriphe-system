@@ -62,7 +62,7 @@ type core struct {
 	tg          *telegram        // the user's Telegram bot (telegram.go); nil without the workspace
 	known       contextStore     // the user's context: signals in memory only (context.go)
 	ha          haState          // Home Assistant as a source of presence (ha_presence.go)
-	voice       voiceOut         // what the voice says on the house's speakers (voice_out.go)
+	out         channelOut       // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex       // one escalation pass at a time (route_send.go)
 
 	github *githubClient // Eriphe's GitHub App (github_app.go)

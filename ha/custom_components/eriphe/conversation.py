@@ -81,15 +81,14 @@ class EripheConversationEntity(conversation.ConversationEntity):
         body = build_request(
             user_input.text,
             language=user_input.language,
-            conversation_id=chat_log.conversation_id,
-            device_id=user_input.device_id,
-            satellite_id=user_input.satellite_id,
-            area=_async_resolve_area(
+            place=_async_resolve_area(
                 self.hass, user_input.device_id, user_input.satellite_id
             ),
-            # An automation's context has no user: eriphe-core keeps it
-            # from speaking as the user.
-            from_user=user_input.context.user_id is not None,
+            # An automation's context has no user, and no device: it sends
+            # the answer on, so it waits longer.
+            automation=user_input.device_id is None
+            and user_input.satellite_id is None
+            and user_input.context.user_id is None,
         )
         outcome = _Outcome()
         async for _content in chat_log.async_add_delta_content_stream(

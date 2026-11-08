@@ -33,31 +33,29 @@ class Done:
 Event = Delta | Done
 
 
+# An automation sends the answer on: it may wait this long for a first word.
+AUTOMATION_WAIT = 80
+
+
 def build_request(
     text: str,
     *,
     language: str | None = None,
-    conversation_id: str | None = None,
-    device_id: str | None = None,
-    satellite_id: str | None = None,
-    area: str | None = None,
-    from_user: bool = False,
+    place: str | None = None,
+    automation: bool = False,
 ) -> dict[str, Any]:
-    """Return the body of a voice request, without its empty fields.
+    """Return the body of a channel request, without its empty fields.
 
-    ``from_user`` says a person of the house typed or said the sentence
-    (Home Assistant's context has a user). Without it, and without a device
-    or satellite, eriphe-core takes the sentence as an automation's, which
-    may only ask a closed request ("brief"), never speak as the user.
+    ``place`` is the area the sentence came from. An automation (no device,
+    no satellite, no user) waits longer for the answer, which it sends on;
+    eriphe-core takes it like any sentence of this channel, as the user set
+    it up (trusted or not).
     """
     body: dict[str, Any] = {
         "text": text,
         "language": language,
-        "conversation_id": conversation_id,
-        "device_id": device_id,
-        "satellite_id": satellite_id,
-        "area": area,
-        "from_user": from_user,
+        "place": place,
+        "wait": AUTOMATION_WAIT if automation else None,
     }
     return {key: value for key, value in body.items() if value}
 

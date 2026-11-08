@@ -1,9 +1,13 @@
-{{/* Settings → Channels (web_channels.go): every way the user and Eriphe
-     talk, with what each guarantees; Telegram and the voice set up here. */}}
+{{/* Settings → Channels (web_channels.go): the built-in channels with what
+     each guarantees, Telegram set up here, then the channels the user adds. */}}
 {{define "channels"}}{{with .Data}}
 <header class="page-head"><h2>{{t "settings.channels"}}</h2><p>{{t "chan.lead"}}</p></header>
+<nav class="pill-tabs" aria-label="{{t "settings.channels"}}">
+  <a href="#builtin">{{t "chan.builtin"}}</a><a href="#telegram">{{t "access.telegram"}}</a><a href="#added">{{t "chan.added"}}</a>
+</nav>
 
-<section class="panel" aria-label="{{t "settings.channels"}}">
+<h3 class="section-title" id="builtin">{{template "i-chat"}}{{t "chan.builtin"}}</h3>
+<section class="panel" aria-label="{{t "chan.builtin"}}">
 <ul class="list channel-list">
 {{range .Rows}}
   <li id="chan-{{.ID}}">
@@ -22,17 +26,63 @@
 <h3 class="section-title" id="telegram">{{template "i-chat"}}{{t "access.telegram"}}</h3>
 <section class="panel" aria-labelledby="tg-title" id="tg-panel">{{template "telegram" .Telegram}}</section>
 
-<h3 class="section-title" id="voice">{{template "i-chat"}}{{t "chan.name.voice"}}</h3>
-<section class="panel" aria-labelledby="ha-voice-title">
-  <h4 id="ha-voice-title" class="notif-sub">{{t "ha.voice"}}</h4>
-  <p class="muted">{{t "chan.voice.lead"}}</p>
-  <p class="muted small">{{t "voice.only"}}</p>
-  {{if .Voice.Token}}<p class="ok-note" role="status">{{t "voice.has"}}</p>
-  <p class="small{{if not .Voice.Listening}} muted{{end}}" role="status">{{if .Voice.Listening}}{{t "chan.voice.listening"}}{{else}}{{t "chan.voice.deaf"}}{{end}}</p>{{end}}
-  <p class="small muted">{{if .Voice.Speakers}}{{t "chan.voice.speakers"}}{{else}}{{t "chan.voice.nospeaker"}}{{end}} <a href="/settings/context">{{t "chan.voice.speakerslink"}}</a></p>
-  <form hx-post="/settings/voice-token" hx-target="#voice-result" hx-swap="innerHTML"{{if .Voice.Token}} hx-confirm="{{t "voice.replaceconfirm"}}"{{end}}>
-    <button class="btn {{if .Voice.Token}}btn-soft{{else}}btn-primary{{end}}" type="submit">{{if .Voice.Token}}{{t "voice.replace"}}{{else}}{{t "voice.create"}}{{end}}</button>
-  </form>
-  <div id="voice-result"></div>
-</section>
+<h3 class="section-title" id="added">{{template "i-plug"}}{{t "chan.added"}}</h3>
+<p class="muted">{{t "chan.added.lead"}}</p>
+{{template "channels-added-body" .Added}}
 {{end}}{{end}}
+
+{{define "channels-added"}}{{template "channels-added-body" .Data}}{{end}}
+
+{{define "channels-added-body"}}
+<div id="channels-added">
+{{with .Error}}<p class="alert" role="alert">{{.}}</p>{{end}}
+{{range .Channels}}
+<section class="panel" aria-labelledby="ch-{{.ID}}-title" id="ch-{{.ID}}">
+  <h4 id="ch-{{.ID}}-title" class="notif-sub">{{.Name}}
+    {{if .Trusted}}<span class="tag tag-accent">{{t "chan.trusted.tag"}}</span>{{else}}<span class="tag">{{t "chan.untrusted.tag"}}</span>{{end}}
+    {{if eq .Carries "sentence"}}{{if .Listening}}<span class="tag tag-ok">{{t "chan.listening"}}</span>{{else}}<span class="tag">{{t "chan.deaf"}}</span>{{end}}{{end}}</h4>
+  <p class="small muted">{{if .Trusted}}{{t "chan.speaker.trusted"}}{{else}}{{t "chan.speaker.anyone"}}{{end}}
+    {{if eq .Carries "sentence"}}{{t "chan.carries.sentence"}}{{else}}{{t "chan.carries.none"}}{{end}}</p>
+  {{if eq $.TokenFor .ID}}{{template "channel-token" $}}{{end}}
+  <details class="rule-edit"><summary class="small">{{t "chan.change"}}</summary>
+  <form class="stack-form" hx-post="/settings/channels/{{.ID}}" hx-target="#channels-added" hx-swap="outerHTML">
+    {{template "channel-fields" .}}
+    <div class="actions">
+      <button class="btn btn-soft sm" type="submit">{{t "channels.save"}}</button>
+      <button class="btn btn-ghost sm" type="button" hx-post="/settings/channels/{{.ID}}/token" hx-target="#channels-added" hx-swap="outerHTML" hx-confirm="{{tf "chan.tokenconfirm" .Name}}">{{t "chan.token.replace"}}</button>
+      <button class="btn btn-danger-ghost sm" type="button" hx-post="/settings/channels/{{.ID}}/remove" hx-target="#channels-added" hx-swap="outerHTML" hx-confirm="{{tf "chan.removeconfirm" .Name}}">{{t "chan.remove"}}</button>
+    </div>
+  </form></details>
+</section>
+{{end}}
+{{if not .Max}}
+<section class="panel" aria-labelledby="ch-new-title">
+  <h4 id="ch-new-title" class="notif-sub">{{t "chan.add"}}</h4>
+  <form class="stack-form" hx-post="/settings/channels/add" hx-target="#channels-added" hx-swap="outerHTML" data-reset>
+    {{template "channel-fields" .Blank}}
+    <div class="actions"><button class="btn btn-primary sm" type="submit">{{t "chan.add.button"}}</button></div>
+  </form>
+</section>
+{{end}}
+</div>
+{{end}}
+
+{{define "channel-fields"}}
+<label class="field"><span>{{t "chan.name"}}</span><input type="text" name="name" value="{{.Name}}" required maxlength="40" placeholder="Home Assistant"></label>
+<label class="switch"><input type="checkbox" role="switch" name="trusted" value="1"{{if .Trusted}} checked{{end}}>
+  <span><b>{{t "chan.trusted"}}</b><small>{{t "chan.trusted.hint"}}</small></span></label>
+<label class="field"><span>{{t "chan.carries"}}</span><select name="carries">
+  <option value=""{{if not .Carries}} selected{{end}}>{{t "chan.carries.opt.none"}}</option>
+  <option value="sentence"{{if eq .Carries "sentence"}} selected{{end}}>{{t "chan.carries.opt.sentence"}}</option>
+</select></label>
+{{end}}
+
+{{define "channel-token"}}
+<p class="ok-note" role="status">{{t "chan.token.once"}}</p>
+<div class="cmd">
+  <h4>{{t "chan.token.url"}}</h4>
+  <div class="code"><pre id="channel-url">{{.Core}}</pre><button class="btn btn-soft sm" type="button" data-copy="channel-url">{{t "machines.copy"}}</button></div>
+  <h4>{{t "chan.token"}}</h4>
+  <div class="code"><pre id="channel-tok">{{.Token}}</pre><button class="btn btn-soft sm" type="button" data-copy="channel-tok">{{t "machines.copy"}}</button></div>
+</div>
+{{end}}

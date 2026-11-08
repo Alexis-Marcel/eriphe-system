@@ -336,7 +336,7 @@ func TestContextEntryPoint(t *testing.T) {
 	if err != nil || !strings.HasPrefix(tok, ctxTokenPrefix) {
 		t.Fatalf("%v %q", err, tok)
 	}
-	voice, _ := c.newVoiceToken()
+	_, voice, _ := c.addChannel("Home Assistant", false, "")
 	for _, bad := range []string{"", "ecx_nope", voice, c.token, strings.TrimPrefix(tok, ctxTokenPrefix)} {
 		if code, _ := contextPost(t, c, bad, `{"kind":"place","value":"home"}`); code != http.StatusUnauthorized {
 			t.Errorf("token %q: %d", bad, code)
