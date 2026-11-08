@@ -195,9 +195,8 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /settings/machines/{name}/forget", w.auth(w.handleForget))
 	mux.Handle("POST /settings/machines/{name}/rejoin", w.auth(w.handleRejoinCommand))
 	mux.Handle("GET /settings/home-assistant", w.auth(w.handleHomeAssistant))
-	mux.Handle("GET /settings/channels", w.auth(w.handleChannels)) // web_channels.go
-	mux.Handle("POST /settings/voice-token", w.auth(w.handleVoiceToken))
-	w.agentRoutes(mux) // web_agents.go
+	w.channelsSettingsRoutes(mux) // web_channels.go
+	w.agentRoutes(mux)            // web_agents.go
 	mux.Handle("GET /settings/tools", w.auth(w.handleTools))
 	mux.Handle("GET /settings/tools/new", w.auth(w.handleNewTool))
 	mux.Handle("GET /settings/tools/add", w.auth(w.handleGallery)) // web_gallery.go

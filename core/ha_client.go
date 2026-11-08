@@ -192,12 +192,11 @@ type haEntity struct {
 }
 
 // haHouse is what discovery found: the candidates for presence, the
-// house's areas, and its text-to-speech entities.
+// house's areas.
 type haHouse struct {
 	At       time.Time
 	Entities []haEntity
 	Areas    []string
-	TTS      []string
 	Partial  bool // the registries could not be read (a user that is not an admin): no areas
 }
 
@@ -268,10 +267,6 @@ func (h *haConn) discover(ctx context.Context) (haHouse, error) {
 	}
 	for _, s := range states {
 		domain, _, _ := strings.Cut(s.ID, ".")
-		if domain == "tts" {
-			house.TTS = append(house.TTS, s.ID)
-			continue
-		}
 		r := regs[s.ID]
 		class := r.class
 		if class == "" {
@@ -284,15 +279,14 @@ func (h *haConn) discover(ctx context.Context) (haHouse, error) {
 		}
 	}
 	sort.Slice(house.Entities, func(i, j int) bool { return house.Entities[i].ID < house.Entities[j].ID })
-	slices.Sort(house.TTS)
 	return house, nil
 }
 
-// haCandidate tells an entity that may say something of presence, or
-// speak in a room. Everything else in the house is left out.
+// haCandidate tells an entity that may say something of presence.
+// Everything else in the house is left out.
 func haCandidate(e haEntity) bool {
 	switch e.Domain {
-	case "person", "device_tracker", "media_player", "assist_satellite":
+	case "person", "device_tracker", "media_player":
 		return true
 	case "binary_sensor":
 		return slices.Contains([]string{"occupancy", "presence", "motion"}, e.Class) || haFocusEntity(e.ID)

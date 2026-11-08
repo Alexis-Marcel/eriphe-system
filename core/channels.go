@@ -8,12 +8,14 @@ import (
 
 // Channels are how the user and Eriphe talk: one notion for everything the
 // conversation goes through, apart from the tools (the catalog), which act.
-// Each channel says, written down in channelKinds:
+// The built-in ones are in channelKinds; the user adds others, any app
+// that talks with text (channels_added.go). Each channel says:
 //
 //   - its direction: it receives (the user talks to Eriphe), it notifies
 //     (Eriphe tells the user), or both;
 //   - who it guarantees speaks, inbound: the user (their session or token),
-//     their verified account, someone in the room, an automation;
+//     their verified account; for an added channel, what the user declared
+//     (trusted, or anyone);
 //   - what it may carry, outbound: a full text, or only a sentence the code
 //     writes;
 //   - its own connection and secret, never another's.
@@ -31,7 +33,6 @@ const (
 	chanWorkspace = "workspace"
 	chanPush      = "push"
 	chanTelegram  = "telegram"
-	chanVoice     = "voice"
 
 	notifyChannelsKey = "notify_channels" // the default channels; all when empty
 )
@@ -49,7 +50,6 @@ const (
 const (
 	speakerUser    = "user"    // the user's own session or token
 	speakerAccount = "account" // the user's account, verified on the channel
-	speakerRoom    = "room"    // someone in the room, maybe not the user
 )
 
 // What an outbound channel may carry.
@@ -128,29 +128,6 @@ var channelKinds = []channelKind{
 				c.tg.deliver(n)
 			}
 		}},
-	// The voice of the house (voice.go, voice_out.go): someone in the room
-	// speaks, maybe not the user; a speaker says only a sentence the code
-	// writes, on the router's voice line (route.go), never a note's text.
-	{ID: chanVoice, Dir: dirBoth, Speaker: speakerRoom, Carries: carrySentence,
-		reach: func(c *core, n pushNote, _ int64, t routeTarget) { c.announce(n, t) }},
-}
-
-// isUser: what comes in through it is the user's own words.
-func (k channelKind) isUser() bool { return k.Speaker == speakerUser || k.Speaker == speakerAccount }
-
-// viaChannel is the channel a message came in by, from where it says it
-// was written (Message.Via): the voice's "voix, Salon" and its
-// automations, Telegram, else the workspace.
-func viaChannel(via string) channelKind {
-	id := chanWorkspace
-	switch {
-	case via == viaTelegram:
-		id = chanTelegram
-	case via == automationVia || via == voiceVia("", false) || strings.HasPrefix(via, voiceVia("", false)+", "):
-		id = chanVoice
-	}
-	k, _ := channelKindOf(id)
-	return k
 }
 
 // channelKindOf is the channel of that id.

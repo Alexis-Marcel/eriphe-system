@@ -21,14 +21,14 @@ from homeassistant.helpers import (
 from homeassistant.setup import async_setup_component
 
 from custom_components.eriphe import async_speak
-from custom_components.eriphe.api import Announcement, CannotConnect, InvalidAuth
+from custom_components.eriphe.api import CannotConnect, InvalidAuth, Message
 from custom_components.eriphe.const import DOMAIN, FALLBACK_SPEECH
 from custom_components.eriphe.stream import Delta, Done
 
 URL = "http://192.0.2.2:8800"
 VALIDATE = "custom_components.eriphe.api.EripheClient.async_validate"
 VOICE = "custom_components.eriphe.api.EripheClient.async_voice"
-ANNOUNCEMENTS = "custom_components.eriphe.api.EripheClient.async_announcements"
+OUT = "custom_components.eriphe.api.EripheClient.async_out"
 AGENT = "conversation.eriphe"
 
 
@@ -39,14 +39,14 @@ async def setup_core(hass: HomeAssistant) -> None:
 
 
 @pytest.fixture(autouse=True)
-def no_announcements():
-    """The speakers' request never leaves the test: it waits, like an idle core."""
+def no_out():
+    """The outbound request never leaves the test: it waits, like an idle core."""
 
-    async def idle(self) -> list[Announcement]:
+    async def idle(self, places: list[str]) -> list[Message]:
         await asyncio.Event().wait()
         return []
 
-    with patch(ANNOUNCEMENTS, idle):
+    with patch(OUT, idle):
         yield
 
 
@@ -156,9 +156,7 @@ async def test_streamed_answer(hass: HomeAssistant, entry: MockConfigEntry) -> N
         {
             "text": "Quelle température ?",
             "language": "fr",
-            "conversation_id": result.conversation_id,
-            "device_id": device.id,
-            "area": "Bureau",
+            "place": "Bureau",
         }
     ]
 
@@ -183,8 +181,7 @@ async def test_area_of_the_satellite(
             agent_id=AGENT,
             satellite_id=satellite.entity_id,
         )
-    assert sent[0]["satellite_id"] == "assist_satellite.kitchen"
-    assert sent[0]["area"] == "Cuisine"
+    assert sent[0] == {"text": "Allume", "language": "fr", "place": "Cuisine"}
 
 
 async def test_done_only_and_no_continue(
@@ -219,8 +216,8 @@ async def test_no_control_feature(hass: HomeAssistant, entry: MockConfigEntry) -
     assert info is not None and info.supports_streaming
 
 
-async def test_speaks_on_the_speakers(hass: HomeAssistant) -> None:
-    """What eriphe-core has to say is said by the integration itself."""
+async def test_speaks_in_the_room(hass: HomeAssistant) -> None:
+    """What eriphe-core has to say is said in its room by the integration itself."""
     said: list[tuple[str, dict[str, Any]]] = []
 
     async def record(call: ServiceCall) -> None:
@@ -229,18 +226,30 @@ async def test_speaks_on_the_speakers(hass: HomeAssistant) -> None:
     hass.services.async_register("assist_satellite", "announce", record)
     hass.services.async_register("tts", "speak", record)
     hass.states.async_set("tts.piper", "unknown")
+    areas = ar.async_get(hass)
+    entities = er.async_get(hass)
+    for area_name, domain, object_id in [
+        ("Salon", "assist_satellite", "salon"),
+        ("Bureau", "media_player", "bureau"),
+    ]:
+        area = areas.async_create(area_name)
+        entry = entities.async_get_or_create(
+            domain, "test", object_id, suggested_object_id=object_id
+        )
+        entities.async_update_entity(entry.entity_id, area_id=area.id)
+        hass.states.async_set(entry.entity_id, "idle")
+    places: list[list[str]] = []
     batches = [
         [
-            Announcement(
-                "assist_satellite.salon", "Sam, Eriphe a quelque chose pour toi."
-            ),
-            Announcement("media_player.tv", "Sam, Eriphe a quelque chose pour toi."),
-            Announcement("lock.porte", "unlock"),
+            Message("Sam, Eriphe a quelque chose pour toi.", "Salon"),
+            Message("Sam, Eriphe a quelque chose pour toi.", "bureau"),
+            Message("unlock", "Garage"),
         ]
     ]
 
     class Client:
-        async def async_announcements(self) -> list[Announcement]:
+        async def async_out(self, asked: list[str]) -> list[Message]:
+            places.append(asked)
             if batches:
                 return batches.pop()
             raise asyncio.CancelledError
@@ -248,6 +257,7 @@ async def test_speaks_on_the_speakers(hass: HomeAssistant) -> None:
     with pytest.raises(asyncio.CancelledError):
         await async_speak(hass, Client())
     await hass.async_block_till_done()
+    assert places[0] == ["Bureau", "Salon"]
     assert said == [
         (
             "assist_satellite.announce",
@@ -260,7 +270,7 @@ async def test_speaks_on_the_speakers(hass: HomeAssistant) -> None:
             "tts.speak",
             {
                 "entity_id": "tts.piper",
-                "media_player_entity_id": "media_player.tv",
+                "media_player_entity_id": "media_player.bureau",
                 "message": "Sam, Eriphe a quelque chose pour toi.",
             },
         ),

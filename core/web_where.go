@@ -91,8 +91,8 @@ func (w *web) wherePage(lang string) wherePage {
 				continue
 			}
 		case stepVoice:
-			if !c.haVoiceReady() {
-				l.Usable, l.Hint = false, "where.hint.voice"
+			if !c.voiceReady() {
+				l.Usable, l.Hint, l.Link = false, "where.hint.voice", "/settings/channels#added"
 			}
 		case stepPhone:
 			if !hasKind[kindPhone] {

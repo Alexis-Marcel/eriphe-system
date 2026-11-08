@@ -10,6 +10,8 @@ package main
 // tools once, but until the user approves its release on a card
 // (access_card.go) a Free does not hold for it.
 
+import "slices"
+
 // heldTool tells whether a task's resources hold a tool back: lent held,
 // and covered by no entry lent outright.
 func heldTool(list []ResourceRef, server, tool string) bool {
@@ -34,14 +36,23 @@ func heldTool(list []ResourceRef, server, tool string) bool {
 func lentByUserKey(id string) string { return "lent_by_user:" + id }
 
 // turnFromUser tells whether the brain's turn going on was started by a
-// message of mine, not an automation's.
+// message of mine, not one from a channel the user did not trust.
 func (c *core) turnFromUser() bool {
 	from, to := c.turn.span()
 	if from == 0 {
 		return false
 	}
-	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE role = ? AND seq BETWEEN ? AND ? AND via != ?`,
-		roleUser, from, to, automationVia).Scan(&n)
-	return n > 0
+	rows, err := c.store.db.Query(`SELECT seq FROM messages WHERE role = ? AND seq BETWEEN ? AND ?`, roleUser, from, to)
+	if err != nil {
+		return false
+	}
+	var seqs []int
+	for rows.Next() {
+		var seq int
+		if rows.Scan(&seq) == nil {
+			seqs = append(seqs, seq)
+		}
+	}
+	rows.Close()
+	return slices.ContainsFunc(seqs, func(seq int) bool { return !c.fromUntrusted(seq) })
 }

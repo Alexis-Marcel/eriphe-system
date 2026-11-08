@@ -12,21 +12,11 @@
 {{if .Alert}}<p class="alert" role="alert">{{.Alert}}</p>{{end}}
 {{range $name, $why := .Skipped}}<p class="alert" role="alert">{{tf "catalog.skipped" $name}} <span class="small">{{short $why 200}}</span></p>{{end}}
 <div id="tools-body">
-{{if or .Tools .VoiceOnly}}
+{{if .Tools}}
 <ul class="tools" id="tools-list"{{if .Waiting}} hx-get="{{.RefreshURL}}" hx-trigger="load delay:2s" hx-select="#tools-list" hx-swap="outerHTML"{{end}}>
 {{range .Groups}}{{if .Owner}}{{template "account-card" .}}{{else if .Single}}
   <li class="tool" id="tool-{{.Single.Key}}">{{template "tool-row" .Single}}</li>
 {{else}}{{template "tool-group" .}}{{end}}{{end}}
-{{if .VoiceOnly}}
-  <li class="tool">
-    <span class="mark preset-mark mark-home-assistant" aria-hidden="true">{{template "preset-icon" "home-assistant"}}</span>
-    <div class="tool-main">
-      <div class="tool-head"><h3>{{t "preset.home-assistant.title"}}</h3></div>
-      <p class="muted small meta-line">{{t "ha.voiceonly"}}</p>
-    </div>
-    <div class="tool-actions"><a class="btn btn-ghost sm" href="/settings/home-assistant">{{t "ha.manage"}}</a></div>
-  </li>
-{{end}}
 </ul>
 {{else}}<div class="empty tools-empty"><span class="empty-art" aria-hidden="true">{{template "i-plug"}}</span><p>{{t "tools.empty"}}</p>{{template "add-tool-btn"}}</div>{{end}}
 </div>
@@ -120,7 +110,6 @@
       <p class="muted small meta-line">
         {{if .Detail}}{{.Detail}}{{else if eq .Kind "local"}}{{t "tools.local"}}{{else}}<span class="mono">{{.URL}}</span> · {{t (printf "auth.%s" .Auth)}}{{end}}
         {{if eq .Kind "local"}}{{if .Node}} · {{.Node}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
-        {{if and (eq .Preset.ID "home-assistant") .Voice}} · {{t "ha.voiceon"}}{{end}}
         · <a class="access-tag level-{{.Access}}" href="{{.AccessURL}}" title="{{t (printf "access.%s" .Access)}} — {{t (printf "access.%s.hint" .Access)}}">{{t (printf "access.%s.short" .Access)}}</a>
         {{if .Allowed}} · <a class="muted" href="{{.AllowedURL}}">{{if eq .Allowed 1}}{{t "allowed.count1"}}{{else}}{{tf "allowed.count" .Allowed}}{{end}}</a>{{end}}
       </p>
@@ -1182,16 +1171,7 @@
 </section>
 <section class="panel" aria-labelledby="ha-voice-title">
   <h3 id="ha-voice-title">{{template "i-chat"}}{{t "ha.voice"}}</h3>
-  <p class="muted">{{t "ha.voicemoved"}} <a href="/settings/channels#voice">{{t "settings.channels"}}</a>.</p>
+  <p class="muted">{{t "ha.voicemoved"}} <a href="/settings/channels#added">{{t "settings.channels"}}</a>.</p>
 </section>
 {{end}}{{end}}
 
-{{define "voice-token"}}{{with .Data}}
-<p class="ok-note" role="status">{{t "voice.once"}}</p>
-<div class="cmd">
-  <h4>{{t "voice.url"}}</h4>
-  <div class="code"><pre id="voice-url">{{.Core}}</pre><button class="btn btn-soft sm" type="button" data-copy="voice-url">{{t "machines.copy"}}</button></div>
-  <h4>{{t "voice.token"}}</h4>
-  <div class="code"><pre id="voice-tok">{{.Token}}</pre><button class="btn btn-soft sm" type="button" data-copy="voice-tok">{{t "machines.copy"}}</button></div>
-</div>
-{{end}}{{end}}

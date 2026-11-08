@@ -616,8 +616,7 @@ whatever address it dials) and one client certificate per node.
   they carry `-ca-hash`. On the tailnet, `:8800` keeps its Tailscale certificate (publicly trusted:
   the address to give the CLI or Home Assistant away from home) and asks for a node's certificate
   too.
-- **No token in clear over the internet.** A call with the API's token (or Home Assistant's voice
-  token) over plain HTTP from a public address is refused (403): the token already crossed the
+- **No token in clear over the internet.** A call with the API's token (or a channel's token) over plain HTTP from a public address is refused (403): the token already crossed the
   internet in clear, and a setup like that should fail at once rather than leak it at every call.
   Plain HTTP stays open to private, loopback, link-local and Tailscale addresses (and to the
   Docker gateway, which may be the host itself); TLS works from anywhere. Node requests (join,
@@ -1289,7 +1288,7 @@ its own), the memory's nightly extraction, the conversation's messages about it,
 workspace's words (`{{name}}` in the texts of `web_text*.go`, French elision included: « Tâches
 de {{name}} » reads « Tâches d'Eriphe »), the pages' title suffix and the brand next to the logo,
 the login page, the installed app (`/manifest.webmanifest` is served with its `name` and
-`short_name`), Home Assistant's conversation agent (`GET /v1/voice`), and the results subfolder
+`short_name`), an added channel's app (`GET /v1/channel`, Home Assistant's conversation agent), and the results subfolder
 of a machine's folders lent with `drop` (below). The software keeps its name: the logo glyph, the
 images and binaries, the install scripts, eriphe-core and eriphe-node, the GitHub and Google apps
 and the OAuth client, the certificate authority, the app passwords and tokens named Eriphe, the
@@ -1376,41 +1375,50 @@ tasks under way, the intentions under way (the due ones first), the last day's e
 messages between the user and the brain, the newest kept, within about 8,000 tokens (`brain_context.go`). It is quoted
 data; events are left out, since they carry what tasks said. eriphe-core logs its size.
 
-## Voice (Home Assistant)
+## Channels the user adds (Home Assistant, shortcuts, scripts)
 
-Home Assistant's Assist pipeline keeps what it understands (simple commands of the house, handled
-locally) and hands the rest to the assistant through its conversation agent (`../ha/`), which calls
-`POST /v1/voice` with its own token (and `GET /v1/voice` for the assistant's name, `{"name"}`, which
-the agent takes as its own) (Settings → Channels → the house's voice; Settings → Tools → Home
-Assistant, where Eriphe drives the house through Home Assistant's MCP server, points there; only
-the token's hash is kept, and it can do nothing else). The sentence joins the conversation like any of mine, marked with the
-room (`[Sam 12:00 #N · voix, Bureau]`), and the brain answers it in the same thread, short and
-without markdown. The answer comes back as NDJSON, `{"delta"}` lines then `{"done", "text",
-"continue"}`, from the brain's draft as it writes. Only what it says after reading the sentence
-counts. Without a word within 10 s (another turn, a long job), the voice answers « Je m'en occupe,
-je te préviens » and the answer stays in the conversation.
+For Eriphe a channel is text in and text out. Besides the built-in ones (the workspace, push,
+Telegram: below), the user adds any app that talks with text in Settings → Channels
+(`channels_added.go`, `web_channels.go`): a name, a token shown once (`ech_…`, only its hash kept,
+replaced or removed on the page), and what the user declares of it:
 
-**The voice is a channel** (`channels.go`) that guarantees only that someone is in the room, maybe
-not the user. Its sentence taints the brain's turn (`voix`): the brain reads and answers freely,
-but a write goes on a card, and a card is never answered aloud (a spoken « oui » is not taken).
-The voice says « Je te l'ai mis à confirmer sur ton téléphone. » and a notice, in the code's words,
-goes to the user's phone or computer, opening the card.
+- **trusted or not** (not, by default). Trusted: what comes through it is the user's own words, as
+  in the workspace, and a plain yes there answers a card. Not trusted: anyone, or anything, may have
+  written it (someone in the room, an automation, a relay). Its message taints the brain's turn
+  (`canal:<name>`): the brain reads, answers and proposes freely, but a write goes on a card, and a
+  yes sent through the channel never decides one. The answer then says « Je te l'ai mis à confirmer
+  sur ton téléphone. » and a notice, in the code's words, goes to the user, opening the card. Its
+  turn is not the user's for what that allows (`turnFromUser`), and no queued proposal joins it;
+- **what it may say**: nothing, or a sentence the code writes, said in the room the user is in
+  (the router's voice line, below).
 
-**Speakers** are the voice's outbound side, on the same token (`voice_out.go`): the integration
-keeps `GET /v1/voice/announce?wait=50` open and answers each `{"announcements": [{"id", "entity",
-"text"}]}` itself, with `assist_satellite.announce` (or `tts.speak` with the house's first `tts`
-entity for a media player). eriphe-core never calls Home Assistant to speak. What waits more than a
-minute is dropped (10 at most), and the router's voice line is used only while the integration has
-listened within two minutes.
+```
+POST /v1/channel      {"text", "language"?, "place"?, "wait"?}   → NDJSON {"delta"} … {"done", "text", "continue"}
+GET  /v1/channel      {"name", "channel"}                          the assistant's name, the channel's
+GET  /v1/channel/out?wait=50&places=Salon,Bureau  → {"messages": [{"id", "text", "place"}]}
+```
 
-**An automation is not the user.** A sentence from no device, no satellite and no Home Assistant
-user (`from_user`, which the integration sets when the conversation's context has a user) is an
-automation's. It may only send a closed request, `brief` (the point of the moment, read aloud);
-anything else is refused (400). The request arrives as an event worded by the code (`[événement
-… · Home Assistant, automatisation]`), never as the user's message, and its turn is tainted: the
-brain may answer and propose, never act nor authorise. It waits up to 80 s for the answer it sends
-on. What an automation knows of the house (someone came home, the TV is on) goes to `POST
-/v1/context` as a signal, with a source token of its own.
+The text joins the conversation like any of mine, marked with the channel and its place
+(`[Sam 12:00 #N · Home Assistant, Bureau]`, `· canal sans confiance` when not trusted), and the
+brain answers it in the same thread; with a place, short and without markdown, as it is most often
+read aloud. The answer streams back from the brain's draft as it writes; only what it says after
+reading the text counts. Without a word within `wait` seconds (10 by default, at most 80 for an
+automation that sends the answer on), it answers « Je m'en occupe, je te préviens » and the answer
+stays in the conversation. There is no other case: an automation is a channel like any other, its
+trust what the user set.
+
+The outbound request stays open (55 s at most) and answers as soon as something is to be said; the
+app says the places it reaches (`places`; none: anywhere) and maps a place to its own speaker.
+What waits more than a minute is dropped (10 at most per channel). eriphe-core never calls the
+app. `POST` and `GET /v1/voice` are the same as `/v1/channel`, for Home Assistant's integration
+before it moved; Home Assistant's former voice token became the channel "Home Assistant", not
+trusted, saying a sentence.
+
+**Home Assistant** (`../ha/`) is such a channel: its Assist pipeline keeps what it understands
+(simple commands of the house) and hands the rest to Eriphe with the area of the satellite as the
+place; it keeps the outbound request open with the areas that have a satellite or a media player,
+and says each sentence on a speaker of its area. What an automation knows of the house (someone
+came home, the TV is on) goes to `POST /v1/context` as a signal, with a source token of its own.
 
 ## Google accounts (Gmail, Calendar, Drive)
 
@@ -1933,13 +1941,13 @@ at the brief and the return point, never in the quiet hours, at night (22:00–0
 source says do not disturb, in a Focus or while busy; the brain says it in a sentence and the
 cards come with its message. A card that stops a task is not one of these: if its turn wrote
 nothing (a turn that failed), it goes with the brain's next message, whatever the hour. A plain yes or no answers a card in words only when the message is
-the user's own (workspace or Telegram; never the voice, where anyone in the room speaks, nor `/v1/messages`, whose token may
-be lent to the brain, nor an automation), is nothing but a yes or a no, has no file, comes right
+the user's own (workspace, Telegram or a trusted channel; never a channel the user did not trust, nor `/v1/messages`, whose token may
+be lent to the brain), is nothing but a yes or a no, has no file, comes right
 after a recent message of the brain's written in a clean turn that shows exactly one waiting card,
 whose proposal is not drawn from external content; anything else is the brain's to read, or the
 buttons'. The brain has no tool that decides a card. On Telegram, a card follows the reply or the
 notification it goes with, with Oui / Non buttons answered from the linked account only (none in
-"alerts only"); the voice never asks a card aloud: it says the card waits on the phone, where a notice goes. A read of `since` adds a
+"alerts only"); a channel the user did not trust never answers a card: it says the card waits on the phone, where a notice goes. A read of `since` adds a
 foldable digest card (the items, with links to the tasks) to the brain's next message, and a
 spontaneous message (a notification) has a "Pourquoi ?" with its why and subject.
 
@@ -1963,9 +1971,9 @@ way back, "‹ Conversation". The pages that moved keep their addresses as redir
 Channels. **Access** (`/settings/remote`) gathers where to open the assistant: from the web (remote
 access, below) and the mobile app (installing the workspace). **Channels** (`/settings/channels`,
 `web_channels.go`) lists every channel (`channels.go`) with its direction, who it guarantees speaks
-and what it carries, and sets up Telegram's bot and the house's voice (its token, whether Home
-Assistant's integration listens, a link to map the speakers); push leads to its devices in
-Notifications.
+and what it carries, sets up Telegram's bot, and adds, changes and removes the user's channels
+(each with its token, its trust, what it may say and whether its app listens); push leads to its
+devices in Notifications.
 The conversation shows the user's messages and the assistant's answers. The events given to the
 brain (a tool or an agent added, a task's turn over, a permission asked) are its notes and are not
 shown; a task that failed, was stopped or was lost is one short line that opens its drawer. When
@@ -2356,16 +2364,17 @@ the decision on labelled cases (accuracy, precision and recall of "now", night w
 allows: none, injection cases blocked: all).
 
 **Channels** (`channels.go`): how the user and Eriphe talk, one notion apart from the tools, which
-act. Each channel has its own connection and secret, and says, in `channelKinds`:
+act. Each channel has its own connection and secret. The built-in ones, in `channelKinds`:
 
 | Channel | Direction | Who speaks (inbound) | What it carries (outbound) |
 |---|---|---|---|
 | `workspace` (and the CLI) | receives | the user: their session or token | |
 | `push` | notifies | | the notification's text |
 | `telegram` | both | the user's account, verified with a code | the notification's text |
-| `voice` (Home Assistant) | both | someone in the room, maybe not the user | only a sentence the code writes, through the router's voice line |
 
-A notification or a rule may name only the channels it is broadcast on (`push`, `telegram`).
+The user adds others, trusted or not, saying a sentence in the user's room or nothing (above,
+"Channels the user adds"). A notification or a rule may name only the channels it is broadcast on
+(`push`, `telegram`).
 
 **Push and Telegram** (`channels.go`, `telegram.go`, `web_telegram.go`). What is sent
 (`tell`) goes by the user's channels: web push and Telegram, all by default, a narrower default in
@@ -2409,8 +2418,9 @@ eriphe-core already has, never from the model nor the notification's text:
 2. a computer in use (its node reports the machine's idle time under 2 minutes, not locked, not
    to be disturbed: a game or a meeting in front, the context below) → a push to that computer's
    subscription only;
-3. the voice in the room: a Home Assistant speaker mapped to the room a fresh (under 2 minutes),
-   personal signal of Home Assistant puts the user in (below), for a "now" from a clean turn,
+3. the voice in the room: a channel the user added that says a sentence, listening and reaching
+   the room a fresh (under 2 minutes), personal signal of Home Assistant puts the user in (below),
+   for a "now" from a clean turn,
    outside the quiet hours, on a line the user turned on (off by default); it says a sentence the
    code writes (« Sam, Eriphe a quelque chose pour toi. »), never the notification's text;
 4. otherwise the phone (subscriptions whose label, the user's choice or the browser says phone;
@@ -2514,7 +2524,7 @@ preset; nothing to install), over Home Assistant's WebSocket API:
    discovery: `home` (person, device_tracker → `place`), `room` (an occupancy sensor's area, or a
    room tracker's state → `room`), `asleep` (a bed's occupancy or a sleep switch →
    `home_activity` `sleep`), `tv` (a media player playing → `home_activity` `tv`), `dnd` (focus →
-   `focus`), `voice` (a satellite or a media player with an area, for the router). Applied when the
+   `focus`). Applied when the
    user asks in a clean turn, citing their message; otherwise kept as a proposal (`ha_mappings`,
    state `proposed`) in À valider. The page lists the mappings in force and removes them; a room
    mapping adds the area (or, for a room tracker, the house's areas) to the user's rooms. A
@@ -2527,9 +2537,8 @@ preset; nothing to install), over Home Assistant's WebSocket API:
    refreshed every minute while connected. Reconnects with a growing wait (5 s to 5 min), starts
    again when the mappings, the level or the switch change, and reads the house again every day.
    Unmapped entities, names and attributes never enter the context.
-4. **Speak**: a `voice` mapping makes the router's voice line usable (above), while the
-   integration listens; the sentence goes out through the voice channel (`GET
-   /v1/voice/announce`, above), never with the tool's token. An urgent watch's fixed message is said instead of the generic
+4. **Speak**: the room opens the router's voice line (above), said by a channel the user added that
+   reaches it (`GET /v1/channel/out`, above), never with the tool's token. An urgent watch's fixed message is said instead of the generic
    sentence, and may go through the quiet hours, only when the user turned `voice_for_urgent` on
    (the page, or `setting`). A rule's `never: voice` keeps it out; `also: voice` does not turn the
    line on.

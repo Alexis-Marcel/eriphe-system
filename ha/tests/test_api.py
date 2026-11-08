@@ -30,7 +30,7 @@ async def _voice(request: web.Request) -> web.StreamResponse:
     resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
     await resp.prepare(request)
     await resp.write(b'{"delta": "Bon')
-    await resp.write(b'jour"}\n{"delta": " ' + body.get("area", "").encode() + b'"}\n')
+    await resp.write(b'jour"}\n{"delta": " ' + body.get("place", "").encode() + b'"}\n')
     done = {"done": True, "text": "Bonjour", "continue": True}
     await resp.write(json.dumps(done).encode() + b"\n")
     await resp.write_eof()
@@ -43,32 +43,30 @@ async def _name(request: web.Request) -> web.Response:
     return web.json_response({"name": "Jarvis"})
 
 
-ANNOUNCEMENTS = [
-    {
-        "id": 1,
-        "entity": "assist_satellite.salon",
-        "text": "Sam, Eriphe a quelque chose pour toi.",
-    },
-    {"id": 2, "entity": "media_player.tv", "text": " "},
-    {"id": 3, "text": "no entity"},
+MESSAGES = [
+    {"id": 1, "text": "Sam, Eriphe a quelque chose pour toi.", "place": "Salon"},
+    {"id": 2, "text": " ", "place": "Salon"},
+    {"id": 3, "place": "Salon"},
+    {"id": 4, "text": "x", "place": 3},
     "not an object",
 ]
 
 
-async def _announce(request: web.Request) -> web.Response:
+async def _out(request: web.Request) -> web.Response:
     if request.headers.get("Authorization") != f"Bearer {TOKEN}":
         return web.json_response({"error": "bad token"}, status=401)
     assert request.query.get("wait") == "50"
-    return web.json_response({"announcements": ANNOUNCEMENTS})
+    assert request.query.get("places") == "Bureau,Salon"
+    return web.json_response({"messages": MESSAGES})
 
 
 def _run(test, named=True):
     async def main():
         app = web.Application()
-        app.router.add_post("/v1/voice", _voice)
+        app.router.add_post("/v1/channel", _voice)
         if named:
-            app.router.add_get("/v1/voice", _name)
-            app.router.add_get("/v1/voice/announce", _announce)
+            app.router.add_get("/v1/channel", _name)
+            app.router.add_get("/v1/channel/out", _out)
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -118,7 +116,7 @@ def test_validate_cannot_connect():
 def test_voice_streams_events():
     async def test(session, url):
         client = api.EripheClient(session, url, TOKEN)
-        body = stream.build_request("Salut", language="fr", area="Bureau")
+        body = stream.build_request("Salut", language="fr", place="Bureau")
         return [event async for event in client.async_voice(body)]
 
     events = _run(test)
@@ -137,48 +135,60 @@ def test_voice_brain_unavailable():
     _run(test)
 
 
-def test_announcements():
+def test_out():
     async def test(session, url):
-        return await api.EripheClient(session, url, TOKEN).async_announcements()
-
-    assert _run(test) == [
-        api.Announcement(
-            "assist_satellite.salon", "Sam, Eriphe a quelque chose pour toi."
+        return await api.EripheClient(session, url, TOKEN).async_out(
+            ["Bureau", "Salon"]
         )
-    ]
+
+    assert _run(test) == [api.Message("Sam, Eriphe a quelque chose pour toi.", "Salon")]
 
 
-def test_announcements_bad_token_and_older_core():
+def test_out_bad_token_and_older_core():
     async def bad(session, url):
         with pytest.raises(api.InvalidAuth):
-            await api.EripheClient(session, url, "wrong").async_announcements()
+            await api.EripheClient(session, url, "wrong").async_out([])
 
     async def older(session, url):
         with pytest.raises(api.NotSupported):
-            await api.EripheClient(session, url, TOKEN).async_announcements()
+            await api.EripheClient(session, url, TOKEN).async_out([])
 
     _run(bad)
     _run(older, named=False)
 
 
-def test_service_call():
+def test_speakers():
     say = "Sam, Eriphe a quelque chose pour toi."
-    sat = api.Announcement("assist_satellite.salon", say)
-    assert api.service_call(sat, []) == (
+    speakers = api.Speakers(tts=["tts.piper", "tts.cloud"])
+    speakers.add("Salon", "media_player.tv")
+    speakers.add("Salon", "assist_satellite.salon")
+    speakers.add("Bureau", "media_player.bureau")
+    speakers.add("Cuisine", "light.cuisine")  # not a speaker
+    assert speakers.places() == ["Bureau", "Salon"]
+    # A satellite first; the place matched without case.
+    assert speakers.service_call(api.Message(say, "salon")) == (
         "assist_satellite",
         "announce",
         {"entity_id": "assist_satellite.salon", "message": say},
     )
-    tv = api.Announcement("media_player.tv", say)
-    assert api.service_call(tv, ["tts.piper", "tts.cloud"]) == (
+    assert speakers.service_call(api.Message(say, "Bureau")) == (
         "tts",
         "speak",
         {
             "entity_id": "tts.cloud",
-            "media_player_entity_id": "media_player.tv",
+            "media_player_entity_id": "media_player.bureau",
             "message": say,
         },
     )
-    assert api.service_call(tv, []) is None
-    for entity in ["light.salon", "lock.porte", "script.anything", "assist_satellite"]:
-        assert api.service_call(api.Announcement(entity, say), ["tts.piper"]) is None
+    # A room with no speaker, or no room in a house of several: silence.
+    assert speakers.service_call(api.Message(say, "Cuisine")) is None
+    assert speakers.service_call(api.Message(say)) is None
+    # Without text-to-speech, a media player cannot speak.
+    mute = api.Speakers()
+    mute.add("Salon", "media_player.tv")
+    assert mute.places() == []
+    one = api.Speakers()
+    one.add("Salon", "assist_satellite.salon")
+    assert (
+        one.service_call(api.Message(say))[2]["entity_id"] == "assist_satellite.salon"
+    )

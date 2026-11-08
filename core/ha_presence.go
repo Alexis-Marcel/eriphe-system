@@ -13,7 +13,7 @@ import (
 )
 
 // Home Assistant as a source of presence (context.go), adapted to each
-// house, in four steps:
+// house, in three steps:
 //
 //  1. discover (code, no model): the registries and the states, filtered
 //     to the entities that may say something of presence (ha_client.go);
@@ -27,16 +27,15 @@ import (
 //     under the source "ha", refreshed every minute while connected and
 //     fading within three minutes when Home Assistant is out of reach.
 //     Nothing else from the house enters the context: no name, no
-//     attribute, no other entity;
-//  4. speak (route.go): a speaker mapped to a room is the router's "voice"
-//     line, used only when the user is in that room now, by a personal
-//     signal, with a text the code writes (voiceText), said through the
-//     voice channel (voice_out.go), never with this token.
+//     attribute, no other entity.
 //
-// A signal only makes Eriphe quieter, except that one line, which is held
-// to more: a fresh, personal room, a "now" from a clean turn, outside the
-// quiet hours (an urgent watch's fixed message may go through them only if
-// the user turned on voice_for_urgent), and never the notification's text.
+// A signal only makes Eriphe quieter, except the room, which opens the
+// router's "voice" line: a sentence the code writes, said in that room by a
+// channel the user added that reaches it (channel_out.go), never with this
+// token. That line is held to more: a fresh, personal room, a "now" from a
+// clean turn, outside the quiet hours (an urgent watch's fixed message may
+// go through them only if the user turned on voice_for_urgent), and never
+// the notification's text.
 
 const (
 	srcHA = "ha"
@@ -47,7 +46,6 @@ const (
 	haAsleep = "asleep" // home_activity sleep (a bed's occupancy, a sleep mode)
 	haTV     = "tv"     // home_activity tv (a media player playing)
 	haDND    = "dnd"    // focus on or off (the companion app's focus, a do not disturb switch)
-	haVoice  = "voice"  // a speaker of a room: the router's voice line
 
 	haTTL         = 3 * time.Minute // a signal of the house, refreshed every minute while connected
 	haRefresh     = time.Minute
@@ -61,7 +59,7 @@ const (
 	voiceUrgentKey = "voice_urgent" // "on": an urgent watch's fixed message may be said aloud, at any hour
 )
 
-var haSignalNames = []string{haHome, haRoom, haAsleep, haTV, haDND, haVoice}
+var haSignalNames = []string{haHome, haRoom, haAsleep, haTV, haDND}
 
 // haBackoffMin is the first wait before a reconnection (shorter in tests).
 var haBackoffMin = 5 * time.Second
@@ -70,7 +68,8 @@ const haMappingsSchema = `CREATE TABLE IF NOT EXISTS ha_mappings (
   id INTEGER PRIMARY KEY AUTOINCREMENT, signal TEXT NOT NULL, entity TEXT NOT NULL,
   room TEXT NOT NULL DEFAULT '', personal INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL,
   why TEXT NOT NULL DEFAULT '', source_ref TEXT NOT NULL DEFAULT '', tainted TEXT NOT NULL DEFAULT '',
-  created INTEGER NOT NULL);`
+  created INTEGER NOT NULL);
+DELETE FROM ha_mappings WHERE signal = 'voice';`
 
 func init() { extraSchema = append(extraSchema, haMappingsSchema) }
 
@@ -177,16 +176,6 @@ func checkMapping(signal, entity string, house haHouse) (haMapping, error) {
 			return bad("dnd comes from the companion app's focus sensor or a do not disturb switch (input_boolean)")
 		}
 		m.Personal = haFocusEntity(e.ID)
-	case haVoice:
-		switch {
-		case e.Domain != "assist_satellite" && e.Domain != "media_player":
-			return bad("voice is an assist_satellite or a media_player")
-		case e.Area == "":
-			return bad("the speaker is in no area of Home Assistant")
-		case e.Domain == "media_player" && len(house.TTS) == 0:
-			return bad("a media_player speaks through a tts entity, and the house has none")
-		}
-		m.Room = e.Area
 	}
 	return m, nil
 }
@@ -253,7 +242,7 @@ func haSignals(maps []haMapping, states map[string]haEntityState, rooms []string
 	}
 	best := map[string]pick{}
 	for _, m := range maps {
-		if m.State != ruleActive || m.Signal == haVoice {
+		if m.State != ruleActive {
 			continue
 		}
 		st, ok := states[m.Entity]
@@ -479,13 +468,7 @@ func (c *core) haFollowing() []haMapping {
 	if p.Level == 0 || slices.Contains(p.Off, srcHA) {
 		return nil
 	}
-	var out []haMapping
-	for _, m := range c.haMappings(ruleActive) {
-		if m.Signal != haVoice {
-			out = append(out, m)
-		}
-	}
-	return out
+	return c.haMappings(ruleActive)
 }
 
 // haSession is one connection: discover, subscribe to the mapped entities
@@ -638,23 +621,16 @@ func (c *core) haStatus() (connected bool, lastErr string) {
 	return c.ha.connected, c.ha.lastErr
 }
 
-// The voice in the room.
+// The room the user is in, for the voice line (channel_out.go).
 
-// voiceSpot is a speaker in the room the user is in now.
-type voiceSpot struct {
-	Entity string
-	Room   string
-}
-
-// haVoiceSpot is where the voice can reach the user now: a speaker mapped
-// to the room a fresh, personal signal of Home Assistant puts them in,
-// while they are not said away.
-func (c *core) haVoiceSpot(now time.Time) (voiceSpot, bool) {
+// haUserRoom is the room a fresh, personal signal of Home Assistant puts the
+// user in now, while they are not said away.
+func (c *core) haUserRoom(now time.Time) (string, bool) {
 	c.ha.mu.Lock()
 	personal := c.ha.roomPersonal
 	c.ha.mu.Unlock()
 	if !personal {
-		return voiceSpot{}, false
+		return "", false
 	}
 	room, place := "", ""
 	for _, s := range c.liveSignals(now) {
@@ -670,20 +646,7 @@ func (c *core) haVoiceSpot(now time.Time) (voiceSpot, bool) {
 			place = s.Value
 		}
 	}
-	if room == "" || place == "away" {
-		return voiceSpot{}, false
-	}
-	for _, m := range c.haMappings(ruleActive) {
-		if m.Signal == haVoice && strings.EqualFold(m.Room, room) {
-			return voiceSpot{Entity: m.Entity, Room: room}, true
-		}
-	}
-	return voiceSpot{}, false
-}
-
-// haVoiceReady: a speaker is mapped, so the voice line can be used.
-func (c *core) haVoiceReady() bool {
-	return slices.ContainsFunc(c.haMappings(ruleActive), func(m haMapping) bool { return m.Signal == haVoice })
+	return room, room != "" && place != "away"
 }
 
 func (c *core) voiceUrgent() bool { return c.store.get(voiceUrgentKey) == "on" }

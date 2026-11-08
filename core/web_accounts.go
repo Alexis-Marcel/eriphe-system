@@ -52,15 +52,15 @@ func rowKey(server, account string) string {
 }
 
 // accountRows are the rows of a server of accounts: one for each.
-func (w *web) accountRows(lang string, conf *Config, sv serverView, voice bool) []toolView {
+func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 	srv := conf.Servers[sv.Name]
 	svc, cfg, ok := accountsOf(srv)
 	if !ok || len(cfg.Accounts) == 0 {
-		return []toolView{w.toolRow(lang, conf, sv, voice)}
+		return []toolView{w.toolRow(lang, conf, sv)}
 	}
 	var out []toolView
 	for _, a := range cfg.Accounts {
-		t := w.toolRow(lang, conf, sv, voice)
+		t := w.toolRow(lang, conf, sv)
 		t.Account, t.Preset, t.Detail = a.Name, accountPreset(svc, a), accountDetail(lang, svc, a)
 		st := svcServer{Name: sv.Name, Server: srv}
 		t.Access = st.level(a.Name)
@@ -113,10 +113,10 @@ func accountProduct(lang string, svc accountService, a svcAccount) string {
 
 // driveRows are the rows of Google Drive: one under each Google account
 // whose Drive it reads, with that account's folders.
-func (w *web) driveRows(lang string, conf *Config, sv serverView, voice bool, fc filesConfig) []toolView {
+func (w *web) driveRows(lang string, conf *Config, sv serverView, fc filesConfig) []toolView {
 	var out []toolView
 	for _, a := range fc.Accounts {
-		t := w.toolRow(lang, conf, sv, voice)
+		t := w.toolRow(lang, conf, sv)
 		n := 0
 		for _, f := range fc.Folders {
 			if strings.EqualFold(f.Account, a.Name) || f.Account == "" && len(fc.Accounts) == 1 {
@@ -136,15 +136,15 @@ func (w *web) driveRows(lang string, conf *Config, sv serverView, voice bool, fc
 }
 
 // toolRows are the rows of one server of the list.
-func (w *web) toolRows(lang string, conf *Config, sv serverView, voice bool) []toolView {
+func (w *web) toolRows(lang string, conf *Config, sv serverView) []toolView {
 	srv := conf.Servers[sv.Name]
 	if _, _, ok := accountsOf(srv); ok {
-		return w.accountRows(lang, conf, sv, voice)
+		return w.accountRows(lang, conf, sv)
 	}
 	if fc, ok := filesConfigOf(srv); ok && len(fc.Accounts) > 0 && w.c.source(kindServer, sv.Name) == sourceWorkspace {
-		return w.driveRows(lang, conf, sv, voice, fc)
+		return w.driveRows(lang, conf, sv, fc)
 	}
-	return []toolView{w.toolRow(lang, conf, sv, voice)}
+	return []toolView{w.toolRow(lang, conf, sv)}
 }
 
 // Key names the row in its ids: the tool, or the tool and its account.

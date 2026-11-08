@@ -184,7 +184,7 @@ func (w *web) handleToolRow(rw http.ResponseWriter, r *http.Request, s *session)
 		if sv.Name != name {
 			continue
 		}
-		for _, t := range w.toolRows(lang, w.c.conf(), sv, w.c.store.get(voiceTokenKey) != "") {
+		for _, t := range w.toolRows(lang, w.c.conf(), sv) {
 			if !strings.EqualFold(t.rowAccount(), account) {
 				continue
 			}

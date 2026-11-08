@@ -1,4 +1,4 @@
-"""Tests of the voice request body and the NDJSON answer stream."""
+"""Tests of the channel request body and the NDJSON answer stream."""
 
 import asyncio
 
@@ -98,26 +98,20 @@ def test_decoder_keeps_the_tail():
 
 
 def test_build_request_omits_empty_fields():
-    assert stream.build_request(
-        "Allume la lumière",
-        language="fr",
-        conversation_id="01ABC",
-        device_id=None,
-        satellite_id="assist_satellite.kitchen",
-        area="",
-    ) == {
+    assert stream.build_request("Allume la lumière", language="fr", place="") == {
         "text": "Allume la lumière",
         "language": "fr",
-        "conversation_id": "01ABC",
-        "satellite_id": "assist_satellite.kitchen",
+    }
+    assert stream.build_request("Allume", place="Cuisine") == {
+        "text": "Allume",
+        "place": "Cuisine",
     }
 
 
-def test_build_request_says_a_person_spoke():
-    # A person typing in Home Assistant's chat has no device: from_user tells
-    # eriphe-core it is not an automation.
-    assert stream.build_request("Bonjour", from_user=True) == {
-        "text": "Bonjour",
-        "from_user": True,
+def test_build_request_lets_an_automation_wait():
+    # An automation sends the answer on: it waits longer for it. eriphe-core
+    # takes its text like any of the channel's.
+    assert stream.build_request("Fais le point", automation=True) == {
+        "text": "Fais le point",
+        "wait": stream.AUTOMATION_WAIT,
     }
-    assert "from_user" not in stream.build_request("brief")

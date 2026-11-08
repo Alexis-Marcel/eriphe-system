@@ -215,6 +215,9 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		if m.Via != "" {
 			ref += " · " + m.Via
 		}
+		if m.Role == roleUser && c.fromUntrusted(m.Seq) {
+			ref += " · canal sans confiance" // maybe not the user's words (channels_added.go)
+		}
 		line := fmt.Sprintf("[%s %s %s] %s", who, m.Time.Local().Format("15:04"), ref, m.Text) + attachmentLines(m.Attachments)
 		if m.Role == roleUser {
 			line += c.cardAnswerLine(m.Seq) // a plain yes or no that decided a card (convo_cards.go)
@@ -222,7 +225,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		parts = append(parts, line)
 	}
 	// The user is here: a few queued proposals go with the answer, at a good moment.
-	if slices.ContainsFunc(msgs, func(m Message) bool { return m.Role == roleUser && m.Via != automationVia }) {
+	if slices.ContainsFunc(msgs, func(m Message) bool { return m.Role == roleUser && !c.fromUntrusted(m.Seq) }) {
 		if offer := c.offerCards(c.notifyTime()); offer != "" {
 			parts = append(parts, offer)
 		}

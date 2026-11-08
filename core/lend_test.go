@@ -122,8 +122,8 @@ func TestShownPermissions(t *testing.T) {
 	}
 }
 
-// A turn is the user's when one of their messages started it, not an
-// automation's nor an event's.
+// A turn is the user's when one of their messages started it, not one
+// from a channel the user did not trust nor an event.
 func TestTurnFromUser(t *testing.T) {
 	c := newMailCore(t, "")
 	ev, _ := c.store.addMessage(roleEvent, "une veille", true)
@@ -131,10 +131,11 @@ func TestTurnFromUser(t *testing.T) {
 	if c.turnFromUser() {
 		t.Error("an event's turn is the user's")
 	}
-	auto, _ := c.store.addMessageVia(roleUser, "lumière", automationVia, true)
+	auto, _ := c.store.addMessageVia(roleUser, "lumière", "Home Assistant", true)
+	c.store.set(taintKey(int(auto)), channelTaint("Home Assistant"))
 	c.turn.start(int(auto), int(auto), 0)
 	if c.turnFromUser() {
-		t.Error("an automation's turn is the user's")
+		t.Error("an untrusted channel's turn is the user's")
 	}
 	mine, _ := c.store.addMessage(roleUser, "Ok pour supprimer les mails", true)
 	c.turn.start(int(mine), int(mine), 0)

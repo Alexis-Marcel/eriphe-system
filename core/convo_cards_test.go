@@ -274,12 +274,13 @@ func TestCardAnsweredInWords(t *testing.T) {
 			brainSays(c, "Je propose ça ?")
 			return brainSays(c, "oui")
 		}, "brain"},
-		"an automation": {func() int {
+		"a channel not trusted": {func() int {
 			proposedRule(t, c, "g1", "")
 			brainSays(c, "Je propose ça ?")
-			seq, _ := c.store.addMessageVia(roleUser, "oui", automationVia, false)
+			seq, _ := c.store.addMessageVia(roleUser, "oui", "Home Assistant", false)
+			c.store.set(taintKey(int(seq)), channelTaint("Home Assistant"))
 			return int(seq)
-		}, "automation"},
+		}, "untrusted"},
 	} {
 		seq := tc.setup()
 		if x, ok := c.resolveByText(ctx, seq); ok {
@@ -471,22 +472,24 @@ func TestDigestAndWhy(t *testing.T) {
 	}
 }
 
-// A card that came with the voice's answer is never asked aloud: the voice
-// says it waits on the phone, with the code's words, and a spoken "oui"
-// does not answer it.
-func TestVoiceCardConfirm(t *testing.T) {
+// A card that came with the answer to a channel not trusted is never
+// answered there: the answer says it waits on the phone, with the code's
+// words, and a "oui" sent through it does not answer it.
+func TestChannelCardConfirm(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
-	seq, _ := c.store.addMessageVia(roleUser, "Moins de notifications pour les factures", "voix, Salon", false)
+	seq, _ := c.store.addMessageVia(roleUser, "Moins de notifications pour les factures", "Home Assistant, Salon", false)
+	c.store.set(taintKey(int(seq)), channelTaint("Home Assistant"))
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "D'accord.")
-	x, say := c.voiceCardConfirm(int(seq), "fr")
+	x, say := c.channelCardConfirm(int(seq), "fr")
 	if say != "Je te l'ai mis à confirmer sur ton téléphone." || x.Ref != cardOf(t, c, cardRule, r.ID).Ref {
 		t.Fatalf("say %q, card %+v", say, x)
 	}
-	if n := voiceCardNote(x); strings.Contains(n.Body["fr"], "facture") || !strings.Contains(n.Body["fr"], "à voix haute") {
+	if n := channelCardNote(x); strings.Contains(n.Body["fr"], "facture") || !strings.Contains(n.Body["fr"], "canal sans confiance") {
 		t.Fatalf("note %q", n.Body["fr"])
 	}
-	yes, _ := c.store.addMessageVia(roleUser, "oui", "voix, Salon", false)
+	yes, _ := c.store.addMessageVia(roleUser, "oui", "Home Assistant, Salon", false)
+	c.store.set(taintKey(int(yes)), channelTaint("Home Assistant"))
 	if _, ok := c.resolveByText(context.Background(), int(yes)); ok {
 		t.Fatal("a spoken yes answered a card")
 	}
