@@ -1381,9 +1381,9 @@ data; events are left out, since they carry what tasks said. eriphe-core logs it
 Home Assistant's Assist pipeline keeps what it understands (simple commands of the house, handled
 locally) and hands the rest to the assistant through its conversation agent (`../ha/`), which calls
 `POST /v1/voice` with its own token (and `GET /v1/voice` for the assistant's name, `{"name"}`, which
-the agent takes as its own) (Settings → Tools → Home Assistant, the page that has both
-ways: Eriphe driving the house through Home Assistant's MCP server, and the house's voice talking
-to Eriphe; only the token's hash is kept, and it can do nothing else). The sentence joins the conversation like any of mine, marked with the
+the agent takes as its own) (Settings → Channels → the house's voice; Settings → Tools → Home
+Assistant, where Eriphe drives the house through Home Assistant's MCP server, points there; only
+the token's hash is kept, and it can do nothing else). The sentence joins the conversation like any of mine, marked with the
 room (`[Sam 12:00 #N · voix, Bureau]`), and the brain answers it in the same thread, short and
 without markdown. The answer comes back as NDJSON, `{"delta"}` lines then `{"done", "text",
 "continue"}`, from the brain's draft as it writes. Only what it says after reading the sentence
@@ -1954,14 +1954,18 @@ valider with a discreet count), not of the main navigation.
 
 The settings come in four groups: Assistant (the memory, "Ce que Jarvis sait de toi", still at
 `/memory`, the watches, the agents, the skills), Connexions (tools, folders), Appareils & accès
-(devices, access, notifications) and Mon espace (account, the Journal, À valider); an entry is marked
+(devices, access, channels, notifications) and Mon espace (account, the Journal, À valider); an entry is marked
 when it needs a look (an update, a tool in error, a refused key). On a phone the settings say the
 way back, "‹ Conversation". The pages that moved keep their addresses as redirects:
 `/settings/happened` and `/activity` lead to the Journal, `/activity/approve` and
 `/memory?view=inbox` to À valider, `/settings/where` to its section of Notifications, and
-`/settings/channels` (like `/settings/notifications#telegram`, in the browser) to Telegram in Access.
-**Access** (`/settings/remote`) gathers the ways to talk to the assistant: from the web (remote access,
-below), the mobile app (installing the workspace) and Telegram's bot.
+`/settings/notifications#telegram` and `/settings/remote#telegram` (in the browser) to Telegram in
+Channels. **Access** (`/settings/remote`) gathers where to open the assistant: from the web (remote
+access, below) and the mobile app (installing the workspace). **Channels** (`/settings/channels`,
+`web_channels.go`) lists every channel (`channels.go`) with its direction, who it guarantees speaks
+and what it carries, and sets up Telegram's bot and the house's voice (its token, whether Home
+Assistant's integration listens, a link to map the speakers); push leads to its devices in
+Notifications.
 The conversation shows the user's messages and the assistant's answers. The events given to the
 brain (a tool or an agent added, a task's turn over, a permission asked) are its notes and are not
 shown; a task that failed, was stopped or was lost is one short line that opens its drawer. When

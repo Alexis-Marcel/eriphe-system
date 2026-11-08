@@ -6,11 +6,11 @@ import (
 	"strings"
 )
 
-// Settings → Tools → Home Assistant: the house both ways, on one page.
-// Eriphe drives the house through Home Assistant's MCP server, a tool of
-// the catalog like any other (the home-assistant preset); the house's
-// voice talks to Eriphe through POST /v1/voice, with a token of its own
-// that can only talk to the brain (voice.go).
+// Settings → Tools → Home Assistant: Eriphe drives the house through Home
+// Assistant's MCP server, a tool of the catalog like any other (the
+// home-assistant preset). The house's voice is a channel, with a token of
+// its own made in Settings → Channels (web_channels.go, voice.go); this
+// page points there.
 
 type homeAssistantView struct {
 	Tools []serverView // the catalog's tools that are a Home Assistant

@@ -13,7 +13,7 @@ func init() {
 var remoteStrings = map[string]map[string]string{
 	"fr": {
 		"settings.remote":             "Accès",
-		"access.lead":                 "Où et comment parler à {{name}} : web, téléphone, Telegram.",
+		"access.lead":                 "Où ouvrir {{name}} : depuis le web et sur ton téléphone. Telegram et la voix sont dans Canaux.",
 		"access.web":                  "Depuis le web",
 		"access.app":                  "App mobile",
 		"access.telegram":             "Telegram",
@@ -116,7 +116,7 @@ var remoteStrings = map[string]map[string]string{
 	},
 	"en": {
 		"settings.remote":             "Access",
-		"access.lead":                 "Where and how to talk to {{name}}: web, phone, Telegram.",
+		"access.lead":                 "Where to open {{name}}: from the web and on your phone. Telegram and the voice are in Channels.",
 		"access.web":                  "From the web",
 		"access.app":                  "Mobile app",
 		"access.telegram":             "Telegram",

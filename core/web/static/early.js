@@ -12,8 +12,8 @@ if (location.pathname === "/settings" && matchMedia("(min-width: 861px)").matche
   location.replace("/memory");
 }
 
-// Telegram moved from Notifications to Access: its old address, in links
-// already shared, leads to the new place.
-if (location.pathname === "/settings/notifications" && location.hash === "#telegram") {
-  location.replace("/settings/remote#telegram");
+// Telegram moved from Notifications to Access, then to Channels: its old
+// addresses, in links already shared, lead to the new place.
+if ((location.pathname === "/settings/notifications" || location.pathname === "/settings/remote") && location.hash === "#telegram") {
+  location.replace("/settings/channels#telegram");
 }

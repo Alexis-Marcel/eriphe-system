@@ -1,0 +1,38 @@
+{{/* Settings → Channels (web_channels.go): every way the user and Eriphe
+     talk, with what each guarantees; Telegram and the voice set up here. */}}
+{{define "channels"}}{{with .Data}}
+<header class="page-head"><h2>{{t "settings.channels"}}</h2><p>{{t "chan.lead"}}</p></header>
+
+<section class="panel" aria-label="{{t "settings.channels"}}">
+<ul class="list channel-list">
+{{range .Rows}}
+  <li id="chan-{{.ID}}">
+    <div class="list-main">
+      <span class="strong">{{t (printf "chan.name.%s" .ID)}} <span class="tag">{{t (printf "chan.dir.%s" .Dir)}}</span>
+        {{if .Ready}}<span class="tag tag-ok">{{t "chan.ready"}}</span>{{else}}<span class="tag">{{t "chan.notset"}}</span>{{end}}</span>
+      {{with .Speaker}}<span class="small muted">{{t (printf "chan.speaker.%s" .)}}</span>{{end}}
+      {{with .Carries}}<span class="small muted">{{t (printf "chan.carries.%s" .)}}</span>{{end}}
+    </div>
+    {{with .Link}}<a class="btn btn-ghost sm" href="{{.}}">{{t "chan.setup"}}</a>{{end}}
+  </li>
+{{end}}
+</ul>
+</section>
+
+<h3 class="section-title" id="telegram">{{template "i-chat"}}{{t "access.telegram"}}</h3>
+<section class="panel" aria-labelledby="tg-title" id="tg-panel">{{template "telegram" .Telegram}}</section>
+
+<h3 class="section-title" id="voice">{{template "i-chat"}}{{t "chan.name.voice"}}</h3>
+<section class="panel" aria-labelledby="ha-voice-title">
+  <h4 id="ha-voice-title" class="notif-sub">{{t "ha.voice"}}</h4>
+  <p class="muted">{{t "chan.voice.lead"}}</p>
+  <p class="muted small">{{t "voice.only"}}</p>
+  {{if .Voice.Token}}<p class="ok-note" role="status">{{t "voice.has"}}</p>
+  <p class="small{{if not .Voice.Listening}} muted{{end}}" role="status">{{if .Voice.Listening}}{{t "chan.voice.listening"}}{{else}}{{t "chan.voice.deaf"}}{{end}}</p>{{end}}
+  <p class="small muted">{{if .Voice.Speakers}}{{t "chan.voice.speakers"}}{{else}}{{t "chan.voice.nospeaker"}}{{end}} <a href="/settings/context">{{t "chan.voice.speakerslink"}}</a></p>
+  <form hx-post="/settings/voice-token" hx-target="#voice-result" hx-swap="innerHTML"{{if .Voice.Token}} hx-confirm="{{t "voice.replaceconfirm"}}"{{end}}>
+    <button class="btn {{if .Voice.Token}}btn-soft{{else}}btn-primary{{end}}" type="submit">{{if .Voice.Token}}{{t "voice.replace"}}{{else}}{{t "voice.create"}}{{end}}</button>
+  </form>
+  <div id="voice-result"></div>
+</section>
+{{end}}{{end}}

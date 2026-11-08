@@ -338,23 +338,22 @@ func TestQRSVG(t *testing.T) {
 
 // Settings → Access gathers the ways to talk to Eriphe, in three sections:
 // from the web (the remote access), the mobile app (installing the
-// workspace) and Telegram's bot. Telegram's old address in Notifications
-// leads there (early.js).
+// workspace). Telegram's old addresses, in Notifications and Access, lead
+// to Channels (early.js).
 func TestWebAccessPage(t *testing.T) {
 	tw, _, _ := newRemoteWeb(t)
 	for lang, words := range map[string][]string{
-		"fr": {"<h2>Accès</h2>", "Où et comment parler à Eriphe : web, téléphone, Telegram.", "Depuis le web", "App mobile", "Parle à Eriphe depuis Telegram"},
-		"en": {"<h2>Access</h2>", "Where and how to talk to Eriphe: web, phone, Telegram.", "From the web", "Mobile app", "Talk to Eriphe from Telegram"},
+		"fr": {"<h2>Accès</h2>", "Où ouvrir Eriphe : depuis le web et sur ton téléphone. Telegram et la voix sont dans Canaux.", "Depuis le web", "App mobile"},
+		"en": {"<h2>Access</h2>", "Where to open Eriphe: from the web and on your phone. Telegram and the voice are in Channels.", "From the web", "Mobile app"},
 	} {
 		code, body, _ := tw.do("GET", "/settings/remote", nil, map[string]string{"Cookie": "lang=" + lang})
 		if code != 200 {
 			t.Fatalf("%s: GET: %d", lang, code)
 		}
 		order := []string{words[0], words[1],
-			`<a href="#web">`, `<a href="#app">`, `<a href="#telegram">`,
+			`<a href="#web">`, `<a href="#app">`,
 			`id="web"`, words[2], `id="remote-live"`, "remote-advanced",
-			`id="app"`, words[3], `data-install`, `data-install-button`, `data-platform="ios"`,
-			`id="telegram"`, `id="tg-panel"`, words[4]}
+			`id="app"`, words[3], `data-install`, `data-install-button`, `data-platform="ios"`}
 		at := 0
 		for _, want := range order {
 			i := strings.Index(body[at:], want)
@@ -374,7 +373,7 @@ func TestWebAccessPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(early), `location.hash === "#telegram"`) || !strings.Contains(string(early), `location.replace("/settings/remote#telegram")`) {
-		t.Error("/settings/notifications#telegram does not lead to Access")
+	if !strings.Contains(string(early), `location.hash === "#telegram"`) || !strings.Contains(string(early), `location.replace("/settings/channels#telegram")`) {
+		t.Error("Telegram's old addresses do not lead to Channels")
 	}
 }
