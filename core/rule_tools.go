@@ -87,7 +87,7 @@ const eventRuleToolText = `An event rule (kind event, or when given) has a when,
 	`A one-off time is an intention (intend), not a rule.`
 
 func registerRuleListTools(s *mcp.Server, c *core) {
-	tool(s, "rules", "The user's event rules: when they fire, their condition and action, state (active, paused, proposed), next fire, and their last runs (what was done: notified, said, silent, skipped when the condition did not hold). The notification rules and quiet hours are in notifications.",
+	tool(s, "rules", "The user's event rules: when they fire, their condition and action, state (active, paused, proposed), next fire, and their last runs (what was done: notified, said, silent, skipped when the condition did not hold), and their last 30 days (fires, cards during their wakes: many means a standing approval may be missing, corrections, what your turns cost). The notification rules and quiet hours are in notifications.",
 		func(ctx context.Context, in rulesIn) (map[string]any, error) {
 			return c.brainRules(in)
 		})
@@ -221,6 +221,7 @@ type eventRuleView struct {
 	Urgent   string     `json:"urgent_message,omitempty"`
 	Incident bool       `json:"incident_open,omitempty"`
 	Runs     []runView  `json:"runs,omitempty"`
+	Stats    *ruleStats `json:"last_30_days,omitempty"`
 }
 
 // grantView is an authorised action as the brain sees it.
@@ -263,6 +264,8 @@ func (c *core) viewRule(w *rule, history int) eventRuleView {
 		v.Action = &grantView{Call: grantCallName(g), Input: g.Input, UsesLeft: g.Left(), Expires: at(g.Expires), State: g.State}
 	}
 	if history > 0 {
+		st := c.ruleStatsOf(w, statsSince(c.notifyTime()))
+		v.Stats = &st
 		for _, r := range c.recentRuns(w.ID, history) {
 			rv := runView{Fired: at(r.Fired), Cause: r.Cause, Outcome: r.Outcome, Action: r.Action}
 			if !r.External {

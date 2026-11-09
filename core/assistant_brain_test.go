@@ -113,7 +113,7 @@ func TestWebBrainCard(t *testing.T) {
 	hasAll(t, "brain card", body, "Eriphe, ton cerveau", "Arrêté", `name="display_name" value="Eriphe"`, "Réfléchit avec",
 		`hx-post="/settings/brain-agent"`, "Ses tâches", fmt.Sprintf("parmi tes %d agents", n),
 		`<details class="advanced-opts brain-details">`, "Détails techniques", "Outils en plus", "les lectures libres du catalogue",
-		"Les assistants d&#39;Eriphe", "Aucun pour l&#39;instant. Ce seront des aides")
+		"Ton équipe", "Aucun pour l&#39;instant. Ce seront des aides")
 	hasNone(t, "brain card", body, `hx-post="/settings/assistants/eriphe"`, `class="assistant"`, "Running", "assistants.")
 	// After the agents it chooses from.
 	if i, j := strings.Index(body, "ton cerveau"), strings.Index(body, `class="grid agents-grid"`); i < 0 || j < 0 || i < j {
@@ -145,7 +145,7 @@ func TestWebBrainCard(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, body, _ = tw.do("GET", "/settings/agents?brain=saved", nil, nil)
-	hasAll(t, "helpers", body, "Jarvis redémarre", "Jarvis, ton cerveau", "Les assistants de Jarvis", `id="assistant-watch"`, "Vigie",
+	hasAll(t, "helpers", body, "Jarvis redémarre", "Jarvis, ton cerveau", "Ton équipe", `id="assistant-watch"`, "Vigie",
 		"Rend compte à Jarvis", `hx-post="/settings/assistants/watch"`)
 	hasNone(t, "helpers", body, "Aucun pour l&#39;instant. Ce seront des aides")
 	if strings.Count(body, `class="assistant"`) != 1 {
@@ -156,7 +156,21 @@ func TestWebBrainCard(t *testing.T) {
 	tw.do("POST", "/lang", url.Values{"csrf": {csrf}, "lang": {"en"}}, nil)
 	_, body, _ = tw.do("GET", "/settings/agents", nil, nil)
 	hasAll(t, "in English", body, "Jarvis, your brain", "Stopped", "Thinks with", "Its tasks", fmt.Sprintf("among your %d agents", n),
-		"Technical details", "Extra tools", "Jarvis&#39;s assistants", "Reports to Jarvis")
+		"Technical details", "Extra tools", "Your team", "Reports to Jarvis")
+
+	// A team member of the assistant role: who reads its facts, what wakes
+	// it, its last 30 days.
+	if err := c.putAssistant("tri", Assistant{Role: assistantRoleAssistant, DisplayName: "Tri", Disabled: true, State: testState, Facts: []string{"context"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.addRule(&rule{Name: "Tri horaire", Source: sourceSchedule, Spec: ruleWhen{Schedule: "daily 07:00"}, Prompt: "Trie.",
+		Act: "assistant:tri", State: watchActive, By: "owner"}); err != nil {
+		t.Fatal(err)
+	}
+	tw.do("POST", "/lang", url.Values{"csrf": {csrf}, "lang": {"fr"}}, nil)
+	_, body, _ = tw.do("GET", "/settings/agents", nil, nil)
+	hasAll(t, "team", body, `id="assistant-tri"`, "Qui lit ses faits", "Jarvis, dans son résumé", "Faits qu&#39;on lui prête",
+		"Ces 30 jours", "0 réveils", "l&#39;assistant Tri se réveille")
 }
 
 // "Check now" asks the registry at once, a minute apart at most, and
