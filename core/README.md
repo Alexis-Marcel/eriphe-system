@@ -1,7 +1,7 @@
 # eriphe-core
 
 Eriphe's control plane (v0): it keeps the state of nodes and tasks in SQLite, schedules tasks on
-nodes, follows them, lends accesses, and gives the brain its tools over MCP. One binary, with
+nodes, follows them, lends credentials, and gives the brain its tools over MCP. One binary, with
 k8s-like modules: `store`, `api`/`mcp`, `scheduler`, controllers.
 
 ```sh
@@ -123,9 +123,12 @@ The brain is an agent too (`brain.agent`, or Settings → Agents when the file n
 it restarts the brain once its turn is over, on its session if the harness is the same, or on a
 fresh one with the context pack. Its runtime must take MCP servers and a system prompt. The provider's credential is lent to each task.
 
-**Accesses.** An access is what a real program in a task uses with a secret: a package registry, an
-API with a key. It is declared in Settings → Tools (Accesses) or under `accesses`, and lent as a
-resource, `{"kind": "access", "ref": "npm"}`; `list_tools` shows them to the brain.
+**Credentials.** A credential (FR « identifiant ») is what a real program in a task uses with a
+secret: a package registry, an API with a key. It is declared in Settings → Tools (Credentials,
+`/settings/credentials`; the former `/settings/accesses` redirects) or under `accesses`, and lent
+as a resource, `{"kind": "access", "ref": "npm"}`; `list_tools` shows them to the brain. The file,
+the API and the store still call them accesses; the word "access" in the workspace is for the ways
+into Eriphe (Settings → Access).
 
 | Field | What |
 |---|---|
@@ -162,7 +165,7 @@ What this does not do:
 - What a task reads through an access is external content, and does not taint the task: Eriphe does
   not read a program's traffic, as it does not read its shell output. The page says so too.
 
-**SSH accesses.** An access of kind `ssh` is a machine a task configures with the real `ssh`, and
+**SSH credentials.** A credential of kind `ssh` is a machine a task configures with the real `ssh`, and
 so `scp`, `rsync` or Ansible (`core/lent_ssh.go`). Settings → Tools, "Add an SSH machine" (also a tile of "Add a tool"), asks for
 the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (port 22 by default),
 `user`, `secret` (a private key file) and `host_key`.

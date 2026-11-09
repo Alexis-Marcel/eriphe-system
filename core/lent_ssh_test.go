@@ -319,12 +319,12 @@ func TestSSHAccessPage(t *testing.T) {
 	c := startCore(t)
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
-	if code, body, _ := tw.do("GET", "/settings/accesses/new?kind=ssh", nil, nil); code != 200 || !strings.Contains(body, `name="user"`) || strings.Contains(body, `name="secret"`) {
+	if code, body, _ := tw.do("GET", "/settings/credentials/new?kind=ssh", nil, nil); code != 200 || !strings.Contains(body, `name="user"`) || strings.Contains(body, `name="secret"`) {
 		t.Fatalf("%d: the new page: %s", code, body)
 	}
 	form := url.Values{"kind": {"ssh"}, "name": {"box"}, "use": {"the build machine"}, "hosts": {sshHost}, "user": {"sam"}, "value": {gridApproval}}
-	code, body, h := tw.post("/settings/accesses", form, csrf)
-	if code != 200 || h.Get("HX-Redirect") != "/settings/accesses/box/edit" {
+	code, body, h := tw.post("/settings/credentials", form, csrf)
+	if code != 200 || h.Get("HX-Redirect") != "/settings/credentials/box/edit" {
 		t.Fatalf("%d %s: %s", code, h.Get("HX-Redirect"), body)
 	}
 	a := c.conf().Accesses["box"]
@@ -332,12 +332,12 @@ func TestSSHAccessPage(t *testing.T) {
 		t.Fatalf("%+v", a)
 	}
 	public, _ := a.sshPublicKey("box")
-	_, body, _ = tw.do("GET", "/settings/accesses/box/edit", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/credentials/box/edit", nil, nil)
 	secret, _ := readSecret(a.Secret)
 	if !strings.Contains(html.UnescapeString(body), public) || strings.Contains(body, secret) || strings.Contains(body, "PRIVATE KEY") {
 		t.Fatalf("the page: %s", body)
 	}
-	if !strings.Contains(body, "/settings/accesses/box/test") {
+	if !strings.Contains(body, "/settings/credentials/box/test") {
 		t.Fatal("no test button")
 	}
 	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, "sam@"+sshHost+":22") {
@@ -345,21 +345,21 @@ func TestSSHAccessPage(t *testing.T) {
 	}
 	// A key pasted from ssh-keyscan is kept as a key.
 	form.Set("host_key", sshHost+" "+testHostKey)
-	if code, body, _ := tw.post("/settings/accesses/box", form, csrf); code != 200 {
+	if code, body, _ := tw.post("/settings/credentials/box", form, csrf); code != 200 {
 		t.Fatalf("%d %s", code, body)
 	}
 	if got := c.conf().Accesses["box"].HostKey; got != testHostKey {
 		t.Fatalf("host key %q", got)
 	}
 	form.Set("host_key", "not a key")
-	if _, body, h := tw.post("/settings/accesses/box", form, csrf); h.Get("HX-Redirect") != "" || !strings.Contains(body, "lent-form") {
+	if _, body, h := tw.post("/settings/credentials/box", form, csrf); h.Get("HX-Redirect") != "" || !strings.Contains(body, "lent-form") {
 		t.Fatalf("a bad key: %s", body)
 	}
 	// The machine cannot be reached: the page says what to do.
 	saved := sshDial
 	sshDial = func(context.Context, string) (net.Conn, error) { return nil, errors.New("no route") }
 	t.Cleanup(func() { sshDial = saved })
-	if code, body, h := tw.post("/settings/accesses/box/test", nil, csrf); code != 200 || h.Get("HX-Redirect") != "" || !strings.Contains(body, "alert") {
+	if code, body, h := tw.post("/settings/credentials/box/test", nil, csrf); code != 200 || h.Get("HX-Redirect") != "" || !strings.Contains(body, "alert") {
 		t.Fatalf("%d: %s", code, body)
 	}
 }

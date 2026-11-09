@@ -134,11 +134,11 @@ func (w *web) handleSaveAccess(rw http.ResponseWriter, r *http.Request, s *sessi
 	w.notify()
 	if f.SSH() {
 		// Its public key, to put on the machine, and the test.
-		rw.Header().Set("HX-Redirect", "/settings/accesses/"+url.PathEscape(f.Name)+"/edit")
+		rw.Header().Set("HX-Redirect", "/settings/credentials/"+url.PathEscape(f.Name)+"/edit")
 		rw.WriteHeader(http.StatusOK)
 		return
 	}
-	rw.Header().Set("HX-Redirect", "/settings/tools?savedaccess="+url.QueryEscape(f.Name)+"#accesses")
+	rw.Header().Set("HX-Redirect", "/settings/tools?savedaccess="+url.QueryEscape(f.Name)+"#credentials")
 	rw.WriteHeader(http.StatusOK)
 }
 
@@ -150,7 +150,7 @@ func (w *web) handleDeleteAccess(rw http.ResponseWriter, r *http.Request, s *ses
 	}
 	log.Printf("web: access %s removed", name)
 	w.notify()
-	rw.Header().Set("HX-Redirect", "/settings/tools?removedaccess="+url.QueryEscape(name)+"#accesses")
+	rw.Header().Set("HX-Redirect", "/settings/tools?removedaccess="+url.QueryEscape(name)+"#credentials")
 	rw.WriteHeader(http.StatusOK)
 }
 
@@ -160,7 +160,7 @@ func (w *web) handleTestAccess(rw http.ResponseWriter, r *http.Request, s *sessi
 	name := r.PathValue("name")
 	found, err := w.c.testSSH(r.Context(), name)
 	if err == nil {
-		rw.Header().Set("HX-Redirect", "/settings/accesses/"+url.PathEscape(name)+"/edit?tested=1")
+		rw.Header().Set("HX-Redirect", "/settings/credentials/"+url.PathEscape(name)+"/edit?tested=1")
 		rw.WriteHeader(http.StatusOK)
 		return
 	}

@@ -35,8 +35,8 @@ type galleryPage struct {
 // accessTiles are what a task's programs use with a secret, in the gallery
 // too: not tools of the catalog (web_lent_access.go), but where one looks.
 var accessTiles = []toolPreset{
-	{ID: "access-ssh", Link: "/settings/accesses/new?kind=ssh"},
-	{ID: "access-http", Link: "/settings/accesses/new"},
+	{ID: "access-ssh", Link: "/settings/credentials/new?kind=ssh"},
+	{ID: "access-http", Link: "/settings/credentials/new"},
 }
 
 // popularPresets open the gallery, before its categories.
