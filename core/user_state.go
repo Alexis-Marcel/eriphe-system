@@ -198,7 +198,7 @@ func span(d time.Duration) string {
 }
 
 // turnHead opens each of the brain's turns: the time, the user's state,
-// then their context (context.go) when its level is on.
+// then what holds for them now (situations.go).
 func (c *core) turnHead(now time.Time) string {
 	head := nowLine(now)
 	s, err := c.userState()
@@ -207,11 +207,8 @@ func (c *core) turnHead(now time.Time) string {
 		return head
 	}
 	head += "\n" + s.line(c.conf().User)
-	if line := c.contextLine(now); line != "" {
-		head += "\n" + line
-	}
-	if line := c.assistantsLine(now); line != "" {
-		head += "\n" + line // what its assistants know, closed values only (assistant_state.go)
+	if b := c.nowBlock(now); b != "" {
+		head += "\n" + b
 	}
 	return head
 }

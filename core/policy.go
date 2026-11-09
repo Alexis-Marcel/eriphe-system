@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -241,6 +242,9 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 		tool := fmt.Sprint(e.Data["tool_name"])
 		input, _ := e.Data["input"].(map[string]any)
 		decision, reason := c.decideTask(t, tool, input)
+		if slices.Contains(taskMemTools(), tool) {
+			decision, reason = decideAllow, "its memory (situations.go)"
+		}
 		if decision == decideNoRule && inContainer(tool) {
 			decision = decideAllow
 		}

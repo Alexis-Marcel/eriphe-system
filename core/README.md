@@ -3219,7 +3219,7 @@ are never shown back nor logged.
 Eriphe's own memory, separate from the vault, in `memory.db` next to the database (SQLite, full
 text search with FTS5, accents ignored). It points at the vault (`links`) rather than copying it.
 A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `commitment`,
-`lesson`, `decision`, `progress`), a subject (`owner`, `person:<slug>`, `client:<slug>`,
+`lesson`, `decision`, `progress`, `situation`), a subject (`owner`, `person:<slug>`, `client:<slug>`,
 `project:<name>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
 what is temporary; `occurred_at` for an episode; `due_at` and `state` for a commitment), where it
 comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`), a trust level (`owner`,
@@ -3234,6 +3234,22 @@ choice and its reason, superseded when reversed) and **progress** cards: one cur
 project, client job or goal, with a `state` (`active`, `blocked`, `done`, `paused`) and a text
 saying what is done, under way, blocked and left; each change supersedes the card, so the chain
 is its history.
+
+**En ce moment** (`situations.go`). A `situation` is where the user is or what they do for a
+while (« en vacances à Lyon jusqu'à dimanche »): subject `owner` by default, and a `valid_to`,
+required (a date alone is its whole day). The situations valid now, active only (one drawn from
+someone else's content is proposed and shows once approved), newest first, at most 10, open
+every brain turn under `[en ce moment]`, each with its end, and the instructions of every worker
+task (`append_system_prompt`, at its start). Nothing typed: the brain writes one when the user
+says it, a triggered skill when it reads it (a calendar, a home). When its end passes, it is
+gone.
+
+**Tasks read it.** Every worker task has a memory server of its own, `eriphe-memory`, relayed by
+its node (`/v1/tasks/<id>/mcp/eriphe-memory`; the name is reserved in the catalog): `recall`,
+current facts only, allowed without a card. A triggered skill's run also has `remember` (fact,
+person, episode, decision, progress, situation; never the user's profile, preferences or
+lessons): `source_kind` `task`, `source_ref` `task:<id>`, first party when the task is clean,
+`external` and only proposed when it read someone else's content.
 
 The brain's tools (on `/mcp`): `remember`, `recall`, `update_memory`, `forget`, and for what is
 owed `intend`, `intentions`, `update_intention`; for what it learned `learned` and `unlearn` ([below](#what-eriphe-learned)). Results are data, quoted.

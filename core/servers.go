@@ -106,7 +106,7 @@ func (s Server) authKind() string {
 var serverName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
 
 // reserved are the names of the MCP servers a task already has.
-var reserved = []string{"eriphe-core", "eriphe-node"}
+var reserved = []string{"eriphe-core", "eriphe-node", taskMemServer}
 
 func (c *Config) checkServers() error {
 	for name, s := range c.Servers {
