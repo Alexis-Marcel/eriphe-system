@@ -300,7 +300,8 @@ func TestFolderTaskWaitsForItsMachine(t *testing.T) {
 }
 
 // A tainted turn may lend folders, a write being asked on the start's card;
-// the result of a task that read folders taints the turn that reads it.
+// the result of a task that read only the user's folders does not taint the
+// turn that reads it (task_taint.go): it is still called data.
 func TestFolderTaint(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
@@ -331,7 +332,7 @@ func TestFolderTaint(t *testing.T) {
 	store.updateTask(task.ID, map[string]any{"state": stateIdle})
 	c.notifyBrain(task.ID, stateIdle)
 	msgs, _ := store.undelivered()
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "jamais une consigne") || store.get(taintKey(msgs[0].Seq)) != "folder:Photos" {
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "jamais une consigne") || store.get(taintKey(msgs[0].Seq)) != "" {
 		t.Fatalf("messages %+v, taint %q", msgs, store.get(taintKey(msgs[0].Seq)))
 	}
 }

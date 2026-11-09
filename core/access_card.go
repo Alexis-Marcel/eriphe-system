@@ -312,7 +312,7 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	}
 	text, server := c.approvedCall(ctx, a, name)
 	seq, err := c.store.addMessage(roleEvent, text, false)
-	if err == nil && server != "" && !containsStr(c.conf().memoryConfig().TrustedServers, server) {
+	if err == nil && server != "" && !c.trustsServer(server) {
 		c.store.set(taintKey(int(seq)), name) // delivered, it taints the turn that reads it
 	}
 	c.ping()

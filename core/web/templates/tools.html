@@ -112,6 +112,7 @@
         {{if eq .Kind "local"}}{{if .Node}} · {{.Node}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
         · <a class="access-tag level-{{.Access}}" href="{{.AccessURL}}" title="{{t (printf "access.%s" .Access)}} — {{t (printf "access.%s.hint" .Access)}}">{{t (printf "access.%s.short" .Access)}}</a>
         {{if .Allowed}} · <a class="muted" href="{{.AllowedURL}}">{{if eq .Allowed 1}}{{t "allowed.count1"}}{{else}}{{tf "allowed.count" .Allowed}}{{end}}</a>{{end}}
+        {{if .TrustedContent}} · <a class="tag tag-accent" href="{{.TrustURL}}" title="{{t "trust.on"}}">{{t "trust.tag"}}</a>{{end}}
       </p>
       {{if .Scope.Reconnect}}<p class="small notice-line">{{tf "access.reconnect" .Name}}{{if eq .Preset.Form "drive"}} <a href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</p>{{end}}
       {{with .Follow}}{{template "tool-status-line" .}}
@@ -646,8 +647,24 @@
   {{else}}<div class="actions"><button class="btn btn-primary" type="submit">{{t "access.save"}}</button></div>{{end}}
 </form>
 <section class="panel stack">{{template "token-note" .}}{{with .Connection}}<a class="btn btn-ghost sm" href="{{.}}">{{t "access.connection"}}</a>{{end}}</section>
+{{template "tool-trust" .}}
 {{template "allowed-actions" .}}
 </div>{{end}}
+
+{{/* Whether what the tool returns is the user's own (tool_trust.go): the one
+     taint rule's mark, for the whole server. . is a toolAccess. */}}
+{{define "tool-trust"}}
+<section class="panel stack" id="trust-{{.Name}}">
+  <header><h3>{{t "trust.title"}}</h3><p class="muted small">{{t "trust.lead"}}</p></header>
+  <form hx-post="/settings/tools/{{.Name}}/trust{{.Query}}" hx-trigger="change" hx-target="#trust-{{.Name}}" hx-swap="outerHTML">
+    <input type="hidden" name="set" value="1">
+    <label class="switch"><input type="checkbox" role="switch" name="trusted" value="1"{{if .ContentTrusted}} checked{{end}}>
+      <span><b>{{t "trust.label"}}</b><small>{{if .ContentTrusted}}{{t "trust.on"}}{{else}}{{t "trust.off"}}{{end}}</small></span></label>
+  </form>
+  {{if .TrustSaved}}<p class="ok-note" role="status">{{t "trust.saved"}}</p>{{end}}
+</section>
+{{end}}
+{{define "tool-trust-frag"}}{{template "tool-trust" .Data}}{{end}}
 {{define "tool-access-frag"}}{{template "tool-access" .Data}}{{end}}
 
 {{define "tool-access-page"}}{{with .Data}}

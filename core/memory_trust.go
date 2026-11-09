@@ -251,12 +251,29 @@ func (t *brainTurn) snapshot() (from, to, eventSeq int, tainted []string) {
 	return t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...)
 }
 
-// brainCalledCatalog is the proxy's hook: the brain called a catalog tool.
+// calledCatalog is the proxy's hook: a task called a catalog tool. A tool
+// not marked trusted (tool_trust.go) taints the brain's turn, or the task
+// that called it (taskRead).
+func (c *core) calledCatalog(taskID, server, tool string) {
+	if taskID == "" {
+		return
+	}
+	if taskID == c.brainTaskID() {
+		c.brainCalledCatalog(taskID, server, tool)
+		return
+	}
+	if !c.trustsServer(server) {
+		c.taskRead(taskID, claudeToolName(server, tool))
+	}
+}
+
+// brainCalledCatalog taints the brain's turn with a call to a tool not
+// trusted.
 func (c *core) brainCalledCatalog(taskID, server, tool string) {
 	if taskID == "" || taskID != c.brainTaskID() {
 		return
 	}
-	if containsStr(c.conf().memoryConfig().TrustedServers, server) {
+	if c.trustsServer(server) {
 		return
 	}
 	c.turn.taint(server + "." + tool)
@@ -283,6 +300,9 @@ func (c *core) turnTaintBut(pending map[string]int) []string {
 	return tainted
 }
 
+// eventsUnreadable taints what read a task whose events could not be read.
+const eventsUnreadable = "events.unreadable"
+
 // eventsTaint adds to tainted what a task's events after seq read: a
 // catalog tool of a server not trusted, the web (but the page reads still
 // pending). It returns the last event seen.
@@ -292,7 +312,7 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 	for after := seq; ; {
 		page, err := c.store.eventsAfter(id, after, 500)
 		if err != nil {
-			return append(tainted, "events.unreadable"), seq // not known: as if it read something
+			return append(tainted, eventsUnreadable), seq // not known: as if it read something
 		}
 		events = append(events, page...)
 		if len(page) < 500 {
@@ -303,7 +323,7 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 	if len(events) > 0 {
 		seq = events[len(events)-1].Seq
 	}
-	trusted := c.conf().memoryConfig().TrustedServers
+	trusted := c.trustedServers()
 	for _, e := range events {
 		if e.Type != "tool_use" {
 			continue
@@ -316,7 +336,7 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 		case strings.HasPrefix(name, "mcp__eriphe-core__"):
 		case strings.HasPrefix(name, "mcp__"):
 			server, _, _ := strings.Cut(strings.TrimPrefix(name, "mcp__"), "__")
-			if !containsStr(trusted, server) && !containsStr(tainted, name) {
+			if !trusted[server] && !containsStr(tainted, name) {
 				tainted = append(tainted, name)
 			}
 		case name == "WebFetch" || name == "WebSearch":

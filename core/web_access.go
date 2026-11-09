@@ -63,6 +63,10 @@ type toolAccess struct {
 	Inherited map[string]string
 	// Connection is the page of its connection, when it has one.
 	Connection string
+	// ContentTrusted: the user marked the tool trusted, for the whole
+	// server (tool_trust.go); TrustSaved, just changed.
+	ContentTrusted bool
+	TrustSaved     bool
 }
 
 // gridRow is one category of a grid.
@@ -82,7 +86,8 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 		return toolAccess{}, false
 	}
 	v := toolAccess{Name: name, Access: srv.level(), Locked: w.c.source(kindServer, name) != sourceWorkspace,
-		Auth: srv.authKind(), Scope: w.c.tokenScope(name, srv), Allowed: w.c.store.allowedActions(name)}
+		Auth: srv.authKind(), Scope: w.c.tokenScope(name, srv), Allowed: w.c.store.allowedActions(name),
+		ContentTrusted: w.c.trustsServer(name)}
 	v.Preset, _ = presetOf(lang, srv)
 	if svc, cfg, isSvc := accountsOf(srv); isSvc && account != "" {
 		i := cfg.index(account)
@@ -288,6 +293,30 @@ func (w *web) handleSaveToolAccess(rw http.ResponseWriter, r *http.Request, s *s
 	}
 	rw.Header().Set("HX-Redirect", "/settings/tools/"+url.PathEscape(name)+"/access"+q)
 	rw.WriteHeader(http.StatusOK)
+}
+
+// handleToolTrust marks a tool trusted or not (tool_trust.go), any tool of
+// the catalog, the configuration file's too: it is the user's to say.
+func (w *web) handleToolTrust(rw http.ResponseWriter, r *http.Request, s *session) {
+	name := r.PathValue("name")
+	if _, ok := w.c.conf().Servers[name]; !ok || r.PostFormValue("set") == "" {
+		http.Error(rw, "unknown tool", http.StatusBadRequest)
+		return
+	}
+	trusted := r.PostFormValue("trusted") != ""
+	if err := w.c.setServerTrust(name, trusted, trustByUser); err != nil {
+		w.toast(rw, err.Error(), false)
+		return
+	}
+	log.Printf("web: tool %s: trusted %v", name, trusted)
+	w.notify()
+	v, ok := w.toolAccessOf(w.lang(r), name, r.URL.Query().Get("account"))
+	if !ok {
+		http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther)
+		return
+	}
+	v.TrustSaved = true
+	w.render(rw, r, s, "settings", "tool-trust-frag", page{Data: v})
 }
 
 // handleForgetAction removes an allowed action: the tool asks again.

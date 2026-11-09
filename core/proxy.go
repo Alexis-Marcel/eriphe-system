@@ -275,7 +275,7 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	default:
 		return toolError("this call was not allowed through Eriphe's permissions: ask for it as usual")
 	}
-	c.brainCalledCatalog(taskID, u.name, tool) // what the brain reads taints its turn's memory writes
+	c.calledCatalog(taskID, u.name, tool) // what a task reads taints it, and the brain's turn (memory_trust.go)
 	start := time.Now()
 	res, err := u.call(ctx, tool, args)
 	log.Printf("task %s: %s.%s %dms err=%v", taskID, u.name, tool, time.Since(start).Milliseconds(), err != nil)
@@ -336,20 +336,23 @@ func (s *Store) useTicket(taskID, tool string, input map[string]any) bool {
 
 // serverInfo is what the CLI and the brain see of a catalog server.
 type serverInfo struct {
-	Name             string     `json:"name"`
-	Use              string     `json:"use"`
-	Kind             string     `json:"kind"`   // remote or local
-	Source           string     `json:"source"` // config (the file) or workspace
-	URL              string     `json:"url,omitempty"`
-	Auth             string     `json:"auth"`   // bearer, oauth, none or local
-	Access           string     `json:"access"` // what Eriphe may do on it (access.go)
-	TrustAnnotations bool       `json:"trust_annotations,omitempty"`
-	Status           string     `json:"status"`
-	Error            string     `json:"error,omitempty"`
-	Connect          string     `json:"connect,omitempty"` // what the user runs when it needs an authorization
-	RedirectURI      string     `json:"redirect_uri,omitempty"`
-	ToolCount        int        `json:"tool_count"`
-	Tools            []toolInfo `json:"tools,omitempty"`
+	Name             string `json:"name"`
+	Use              string `json:"use"`
+	Kind             string `json:"kind"`   // remote or local
+	Source           string `json:"source"` // config (the file) or workspace
+	URL              string `json:"url,omitempty"`
+	Auth             string `json:"auth"`   // bearer, oauth, none or local
+	Access           string `json:"access"` // what Eriphe may do on it (access.go)
+	TrustAnnotations bool   `json:"trust_annotations,omitempty"`
+	// TrustedContent: the user marked it trusted (tool_trust.go): what it
+	// returns is theirs, and reading it taints nothing.
+	TrustedContent bool       `json:"trusted_content,omitempty"`
+	Status         string     `json:"status"`
+	Error          string     `json:"error,omitempty"`
+	Connect        string     `json:"connect,omitempty"` // what the user runs when it needs an authorization
+	RedirectURI    string     `json:"redirect_uri,omitempty"`
+	ToolCount      int        `json:"tool_count"`
+	Tools          []toolInfo `json:"tools,omitempty"`
 	// Version is what the server says it is; Want, for one of Eriphe's own
 	// tools that is not eriphe-core's version, the one it must be.
 	Version string `json:"version,omitempty"`
@@ -370,12 +373,13 @@ type toolInfo struct {
 // each tool with a short description.
 func (c *core) listServers(only string, withTools bool) []serverInfo {
 	out := []serverInfo{}
+	trusted := c.trustedServers()
 	for name, s := range c.conf().Servers {
 		if only != "" && name != only {
 			continue
 		}
 		info := serverInfo{Name: name, Use: s.Use, Kind: "remote", URL: s.URL, Auth: s.authKind(),
-			Access: s.level(), TrustAnnotations: s.trusts(), Status: statusConnecting, Source: sourceWorkspace}
+			Access: s.level(), TrustAnnotations: s.trusts(), TrustedContent: trusted[name], Status: statusConnecting, Source: sourceWorkspace}
 		if _, ok := c.base.Servers[name]; ok {
 			info.Source = sourceConfig
 		}

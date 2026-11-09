@@ -211,8 +211,9 @@ func (w *web) routes() http.Handler {
 	mux.Handle("GET /settings/tools/{name}/access", w.auth(w.handleToolAccess)) // web_access.go
 	mux.Handle("POST /settings/tools/{name}/access", w.auth(w.handleSaveToolAccess))
 	mux.Handle("POST /settings/tools/{name}/allowed/delete", w.auth(w.handleForgetAction))
-	mux.Handle("POST /settings/web", w.auth(w.handleWebValue))             // web_lent_access.go
-	mux.Handle("GET /settings/credentials/new", w.auth(w.handleNewAccess)) // web_lent_access.go
+	mux.Handle("POST /settings/tools/{name}/trust", w.auth(w.handleToolTrust)) // tool_trust.go
+	mux.Handle("POST /settings/web", w.auth(w.handleWebValue))                 // web_lent_access.go
+	mux.Handle("GET /settings/credentials/new", w.auth(w.handleNewAccess))     // web_lent_access.go
 	// Their former address, from before they were called credentials.
 	mux.HandleFunc("GET /settings/accesses/{rest...}", func(rw http.ResponseWriter, r *http.Request) {
 		u := "/settings/credentials/" + r.PathValue("rest")

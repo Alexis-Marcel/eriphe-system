@@ -52,7 +52,7 @@ func newMCPServer(c *core) *mcp.Server {
 	type toolsIn struct {
 		Server string `json:"server,omitempty" jsonschema:"only this server; empty for the whole catalog"`
 	}
-	tool(s, "list_tools", "The tool catalog: MCP servers, what each is for, whether it is ready or needs the user to connect it, and its tools (name, short description, read-only by the server's own annotation, category: read, change, delete or send, value: free, approval or never, and accounts: its value in each account). A tool at never is not listed. Lend them to a task with run_task's resources, {kind: tool, ref: server or server.tool glob}. Also the accesses: what a task's own programs use with a secret it never holds (name, what it is for, hosts, the variable with its placeholder, value: free or approval), lent as {kind: access, ref: name}; one with a user is a machine over SSH.",
+	tool(s, "list_tools", "The tool catalog: MCP servers, what each is for, whether it is ready or needs the user to connect it, and its tools (name, short description, read-only by the server's own annotation, category: read, change, delete or send, value: free, approval or never, and accounts: its value in each account). A server with trusted_content was marked trusted by the user in Settings → Tools: reading it does not taint your turn; any other does. A tool at never is not listed. Lend them to a task with run_task's resources, {kind: tool, ref: server or server.tool glob}. Also the accesses: what a task's own programs use with a secret it never holds (name, what it is for, hosts, the variable with its placeholder, value: free or approval), lent as {kind: access, ref: name}; one with a user is a machine over SSH.",
 		func(ctx context.Context, in toolsIn) (map[string]any, error) {
 			out := map[string]any{
 				"servers":  c.listServers(in.Server, true),
@@ -122,9 +122,10 @@ func newMCPServer(c *core) *mcp.Server {
 				c.waitForChange(ctx, in.TaskID, time.Duration(min(in.Wait, 120))*time.Second)
 			}
 			st, err := c.status(in.TaskID, in.Events)
-			if err == nil && st.Task.Folders != "" {
-				// What it says comes from the user's files: data, never instructions.
-				c.turn.taint(folderTaint(st.Task.Folders))
+			if err == nil {
+				if why := c.taskResultTaint(st.Task.ID); why != "" {
+					c.turn.taint(why) // what it says may carry what it read (task_taint.go)
+				}
 			}
 			return st, err
 		})
