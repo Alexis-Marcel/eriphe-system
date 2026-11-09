@@ -54,7 +54,7 @@ func newGoogle(a AccountConfig, timeout time.Duration) (*google, error) {
 	if err != nil {
 		return nil, err
 	}
-	tokenURL := cmpOr(a.TokenURL, googleToken)
+	tokenURL := cmpOr(a.TokenURL, c.TokenURL, googleToken)
 	cfg := &oauth2.Config{ClientID: c.ClientID, ClientSecret: c.ClientSecret,
 		Endpoint: oauth2.Endpoint{TokenURL: tokenURL, AuthStyle: oauth2.AuthStyleInParams}}
 	base := &http.Client{Timeout: timeout}
@@ -65,11 +65,13 @@ func newGoogle(a AccountConfig, timeout time.Duration) (*google, error) {
 		upload: strings.TrimRight(cmpOr(a.UploadURL, googleUpload), "/"), http: hc, scopes: a.Scopes}, nil
 }
 
-func cmpOr(a, b string) string {
-	if a != "" {
-		return a
+func cmpOr(s ...string) string {
+	for _, v := range s {
+		if v != "" {
+			return v
+		}
 	}
-	return b
+	return ""
 }
 
 func (g *google) CanWrite() bool {

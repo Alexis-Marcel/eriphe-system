@@ -51,7 +51,8 @@ JSON in `FILES_CONFIG`, or a file in `FILES_CONFIG_FILE` (or `-config`); eriphe-
 ```
 
 - `auth`: exactly one of `token_env`, `token_file`, holding
-  `{"client_id", "client_secret", "refresh_token"}`. The access token is refreshed in memory
+  `{"client_id", "client_secret", "refresh_token", "token_url"}` (`token_url` is where to refresh
+  it, Google's when absent, as in tokens lent before it was given). The access token is refreshed in memory
   (`golang.org/x/oauth2`) and never written; a revoked token gives an error that says to reconnect
   in the workspace.
 - `scopes`: what the user granted. `drive.readonly` reads; dropping files needs `drive`.

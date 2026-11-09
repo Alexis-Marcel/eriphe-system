@@ -110,8 +110,9 @@ or guessed from the address), an account needs only `address` and `auth`:
 - `auth`: exactly one of `password_env`, `password_file`, `oauth_token_env`, `oauth_token_file`. The
   secret is read again at each connection, so a token file refreshed by eriphe-core is picked up.
   A token file may hold the bare token or an OAuth JSON response with `access_token`. It may also
-  hold a refresh grant, `{"client_id", "client_secret", "refresh_token"}`, as eriphe-core lends it
-  for a Google account (Gmail with XOAUTH2, scope `https://mail.google.com/`): the access token is
+  hold a refresh grant, `{"client_id", "client_secret", "refresh_token", "token_url"}`, as
+  eriphe-core lends it for an account connected with a provider's sign-in (`token_url` is where to
+  refresh it, Google's when absent, as in tokens lent before it was given; Gmail with XOAUTH2, scope `https://mail.google.com/`): the access token is
   then refreshed here, in memory (`refresh.go`), never written nor logged; a refresh token Google
   refuses gives an error that says to reconnect the account in Eriphe.
 - `read_only`: the account is only read (eriphe-core sets it for an account it gives read-only
