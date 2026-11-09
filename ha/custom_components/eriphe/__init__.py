@@ -54,7 +54,8 @@ async def async_speak(hass: HomeAssistant, client: EripheClient) -> None:
     """Say in the house's rooms what eriphe-core has to say, for ever.
 
     The channel's outbound side: one request kept open on eriphe-core with
-    the channel's token, telling the areas this house can speak in; each
+    the channel's token, telling the areas this house can speak in and
+    those where someone is now (eriphe-core speaks only there); each
     sentence comes with its area, said by a speaker there. eriphe-core never
     calls Home Assistant.
     """
@@ -62,7 +63,9 @@ async def async_speak(hass: HomeAssistant, client: EripheClient) -> None:
     while True:
         speakers = async_speakers(hass)
         try:
-            messages = await client.async_out(speakers.places())
+            messages = await client.async_out(
+                speakers.places(), async_occupied(hass, speakers.places())
+            )
         except NotSupported:
             await asyncio.sleep(RETRY_NOT_SUPPORTED)
             continue
@@ -85,6 +88,39 @@ async def async_speak(hass: HomeAssistant, client: EripheClient) -> None:
                 await hass.services.async_call(domain, service, data)
             except (HomeAssistantError, vol.Invalid) as err:
                 _LOGGER.warning("Eriphe could not speak in %s: %s", message.place, err)
+
+
+# The sensors that say someone is in an area.
+PRESENCE_CLASSES = ("occupancy", "presence", "motion")
+
+
+@callback
+def async_occupied(hass: HomeAssistant, places: list[str]) -> list[str]:
+    """The areas among places where a presence, occupancy or motion sensor is on.
+
+    Home Assistant decides where the user is, with its own sensors; it
+    tells eriphe-core only the area names, never a sensor.
+    """
+    entities = er.async_get(hass)
+    devices = dr.async_get(hass)
+    areas = ar.async_get(hass)
+    wanted = {p.casefold(): p for p in places}
+    here: set[str] = set()
+    for state in hass.states.async_all("binary_sensor"):
+        if (
+            state.state != "on"
+            or state.attributes.get("device_class") not in PRESENCE_CLASSES
+        ):
+            continue
+        entry = entities.async_get(state.entity_id)
+        area_id = entry.area_id if entry else None
+        if not area_id and entry and entry.device_id:
+            device = devices.async_get(entry.device_id)
+            area_id = device.area_id if device else None
+        if area_id and (area := areas.async_get_area(area_id)):
+            if (name := wanted.get(area.name.casefold())) is not None:
+                here.add(name)
+    return sorted(here)
 
 
 @callback

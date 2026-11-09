@@ -61,7 +61,6 @@ type core struct {
 	notifyClock func() time.Time // the time of notify's decisions (notify.go); nil: now
 	tg          *telegram        // the user's Telegram bot (telegram.go); nil without the workspace
 	obs         observations     // the machines' locked, idle, do not disturb, in memory only (observe.go)
-	ha          haState          // the Home Assistant entities the user follows (ha_follow.go)
 	events      eventBus         // the event journal's subscribers (event_journal.go)
 	skillRuns   skillRunner      // the triggered skills (skill_runs.go)
 	out         channelOut       // what goes out through the channels the user added (channel_out.go)

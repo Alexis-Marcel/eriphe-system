@@ -120,17 +120,25 @@ class EripheClient:
         except StreamError as err:
             raise UnexpectedResponse(str(err)) from err
 
-    async def async_out(self, places: list[str]) -> list[Message]:
+    async def async_out(
+        self, places: list[str], here: list[str] | None = None
+    ) -> list[Message]:
         """Wait for what eriphe-core has to say in a room.
 
-        ``places`` are the areas this house can speak in. Returns as soon as
+        ``places`` are the areas this house can speak in; ``here`` those of
+        them where someone is now (an occupancy, presence or motion sensor
+        on), where eriphe-core's voice line may speak. Returns as soon as
         there is something, or after about OUT_WAIT seconds with an empty
         list. Malformed items are left out.
         """
         try:
             async with self._session.get(
                 self._out_url,
-                params={"wait": str(OUT_WAIT), "places": ",".join(places)},
+                params={
+                    "wait": str(OUT_WAIT),
+                    "places": ",".join(places),
+                    "here": ",".join(here or []),
+                },
                 headers=self._headers,
                 timeout=OUT_TIMEOUT,
             ) as resp:

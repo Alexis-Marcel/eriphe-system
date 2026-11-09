@@ -10,7 +10,6 @@
     {{else if eq .Tab "skills"}}{{if eq .View "skill"}}{{template "skill-page" .}}{{else}}{{template "skills" .}}{{end}}
     {{else if eq .Tab "access"}}{{template "access-page" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
-    {{else if eq .Tab "observe"}}{{template "observe" .}}
     {{else if eq .Tab "learned"}}{{template "learned-page" .}}
     {{else if eq .Tab "journal"}}{{template "journal-page" .}}
     {{else if eq .Tab "approve"}}{{template "approve-page" .}}
@@ -80,7 +79,7 @@ latest version and its button follow eriphe-core's. . is a machineView. */}}
 {{define "device-foot-fragment"}}{{template "device-foot" .Data}}{{end}}
 {{define "device-foot"}}
 <div class="device-foot" id="device-foot-{{.Name}}"{{if .Update.Pending}} hx-get="/settings/devices/{{.Name}}/update?id={{.Update.Pending.ID}}" {{template "update-poll" .Update}}{{else if .Update.AfterCore}} hx-get="/settings/devices/{{.Name}}/update" {{template "update-poll" .Update}}{{else}} hx-get="/settings/devices/{{.Name}}/update" {{template "update-follow"}}{{end}}>
-  <p class="muted small device-version">{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}} · {{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}} · {{end}}{{if .Version}}<span class="mono">eriphe-node {{ver .Version}}</span>{{if and .Update.Latest (not .Update.Pending)}} <span class="mono">→ {{ver .Update.Latest}}</span>{{end}}{{end}}{{if .Update.Pin}} · {{tf "updates.pinned" .Update.Pin}}{{end}}</p>
+  <p class="muted small device-version">{{if .Online}}{{if .Presence}}{{t (printf "machines.presence.%s" .Presence)}}{{if and (eq .Presence "idle") .IdleMin}} ({{tf "machines.idlemin" .IdleMin}}){{end}}{{if .DND}} · {{t "machines.dnd"}}{{end}} · {{end}}{{if .Active}}{{tf "machines.active" .Active}} · {{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}} · {{end}}{{if .Version}}<span class="mono">eriphe-node {{ver .Version}}</span>{{if and .Update.Latest (not .Update.Pending)}} <span class="mono">→ {{ver .Update.Latest}}</span>{{end}}{{end}}{{if .Update.Pin}} · {{tf "updates.pinned" .Update.Pin}}{{end}}</p>
   {{template "machine-update" .Update}}
   {{if .NoTLS}}<p class="muted small">{{t "machines.notls"}}</p>{{end}}
 </div>

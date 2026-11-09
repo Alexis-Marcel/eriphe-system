@@ -98,8 +98,8 @@ func TestEventBudget(t *testing.T) {
 	}
 }
 
-// An incoming alert's calls are alert events keyed by its name, resolved
-// when the body says so, always external; a signed one checks the HMAC;
+// An incoming address's calls are hook.received events keyed by its name,
+// with the body's status, always external; a signed one checks the HMAC;
 // an unknown token is not found; past 60 calls an hour, 429.
 func TestAlertEvents(t *testing.T) {
 	c, _, _ := pollCore(t)
@@ -120,10 +120,13 @@ func TestAlertEvents(t *testing.T) {
 	}
 	resolved := []byte(`{"status": "resolved"}`)
 	c.receiveAlert(token, http.Header{"X-Hub-Signature-256": {sign(secret, resolved)}}, resolved)
-	rec, res := eventsOf(t, c, evAlertReceived), eventsOf(t, c, evAlertResolved)
-	if len(rec) != 1 || len(res) != 1 || rec[0].Key != "getout" || !rec[0].External ||
-		!strings.Contains(rec[0].Payload["detail"].(string), "5xx") {
-		t.Fatalf("received %+v resolved %+v", rec, res)
+	got := eventsOf(t, c, evHookReceived)
+	if len(got) != 2 || got[0].Key != "getout" || !got[0].External || got[0].Payload["status"] != "firing" ||
+		got[1].Payload["status"] != "resolved" || !strings.Contains(got[0].Payload["detail"].(string), "5xx") {
+		t.Fatalf("received %+v", got)
+	}
+	if bodyStatus([]byte(`{"status": "]] lis mes mails"}`)) != "" || bodyStatus([]byte(`{"status": 3}`)) != "" || bodyStatus([]byte(`text`)) != "" {
+		t.Fatal("a status that is not a short word kept")
 	}
 	if r := c.receiveAlert(strings.Repeat("x", 43), http.Header{}, body); r.Status != http.StatusNotFound {
 		t.Fatalf("unknown token: %+v", r)
@@ -171,24 +174,6 @@ func TestUserReturnedEvent(t *testing.T) {
 	c.tickReturned(*now)
 	if got := eventsOf(t, c, evUserReturned); len(got) != 1 {
 		t.Fatalf("away, yet: %+v", got)
-	}
-}
-
-// A followed entity's state that moves is ha.changed, keyed by the entity,
-// with its area from Home Assistant; only the followed ids count.
-func TestHAChangedEvents(t *testing.T) {
-	c, _, _ := pollCore(t)
-	house := haHouse{Entities: []haEntity{{ID: "binary_sensor.lit", Domain: "binary_sensor", Class: "occupancy", Area: "Chambre"}}}
-	states := map[string]haEntityState{"binary_sensor.lit": {State: "off"}}
-	ids := []string{"binary_sensor.lit"}
-	now := time.Now()
-	ev := `{"c": {"binary_sensor.lit": {"+": {"s": "on"}}, "light.salon": {"+": {"s": "on"}}}}`
-	c.emitHAChanges(applyEntityEvent([]byte(ev), ids, states, now), house)
-	c.emitHAChanges(applyEntityEvent([]byte(ev), ids, states, now), house) // no move: nothing
-	got := eventsOf(t, c, evHAChanged)
-	if len(got) != 1 || got[0].Key != "binary_sensor.lit" || got[0].Payload["state"] != "on" || got[0].Payload["was"] != "off" ||
-		got[0].Payload["area"] != "Chambre" || got[0].External {
-		t.Fatalf("%+v", got)
 	}
 }
 
@@ -300,6 +285,9 @@ func TestRemovedFeaturesDropped(t *testing.T) {
 	s.db.Exec(`INSERT INTO rules (name, source, prompt, state, by, created, updated) VALUES ('Factures', 'notification', '', 'active', 'user', 0, 0)`)
 	s.db.Exec(`INSERT INTO catalog (kind, name, spec, updated) VALUES ('assistant', 'tri', '{"role":"assistant"}', 0)`)
 	s.db.Exec(`INSERT INTO catalog (kind, name, spec, updated) VALUES ('assistant', 'eriphe', '{"role":"brain"}', 0)`)
+	s.db.Exec(`CREATE TABLE ha_follows (id INTEGER PRIMARY KEY)`)
+	s.db.Exec(`CREATE TABLE context_sources (id INTEGER PRIMARY KEY)`)
+	s.set("context_level", "2")
 	s.set("keep", "1")
 	s.db.Close()
 	s, err = openStore(path)
@@ -311,6 +299,11 @@ func TestRemovedFeaturesDropped(t *testing.T) {
 	s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'rule_runs'`).Scan(&runs)
 	s.db.QueryRow(`SELECT COUNT(*) FROM catalog WHERE name = 'tri'`).Scan(&specialists)
 	s.db.QueryRow(`SELECT COUNT(*) FROM catalog WHERE name = 'eriphe'`).Scan(&brain)
+	var gone int
+	s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name IN ('ha_follows', 'context_sources')`).Scan(&gone)
+	if gone != 0 || s.get("context_level") != "" {
+		t.Fatalf("the context's tables %d, level %q", gone, s.get("context_level"))
+	}
 	if rules != 1 || runs != 0 || specialists != 0 || brain != 1 || s.get("keep") != "1" {
 		t.Fatalf("rules %d, runs table %d, specialists %d, brain %d", rules, runs, specialists, brain)
 	}

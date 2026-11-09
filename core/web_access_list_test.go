@@ -98,7 +98,7 @@ func TestWebAccessAPI(t *testing.T) {
 	if _, body, _ := tw.do("GET", "/settings/access/api/"+id, nil, nil); strings.Contains(body, tok) || !strings.Contains(body, "sans confiance") {
 		t.Fatal("the token is shown again, or the trust is not")
 	}
-	go c.out.take(context.Background(), chs[0].ID, nil, time.Second)
+	go c.out.take(context.Background(), chs[0].ID, nil, nil, time.Second)
 	time.Sleep(50 * time.Millisecond)
 	if _, body, _ := tw.do("GET", "/settings/access", nil, nil); !strings.Contains(body, ">écoute<") {
 		t.Fatal("listening not shown")
