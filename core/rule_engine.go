@@ -526,6 +526,7 @@ func (c *core) taskEnded(id, state string) {
 		return
 	}
 	c.ruleEnded("task", fmt.Sprintf("la tâche %s s'est terminée (%s)", id, state))
+	c.emitLogged(journalEvent{Kind: evTaskEnded, Key: id, Source: "task", Payload: map[string]any{"task": id, "state": state}})
 }
 
 // The actions.

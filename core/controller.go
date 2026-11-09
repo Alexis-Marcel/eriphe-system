@@ -62,6 +62,7 @@ type core struct {
 	tg          *telegram        // the user's Telegram bot (telegram.go); nil without the workspace
 	known       contextStore     // the user's context: signals in memory only (context.go)
 	ha          haState          // Home Assistant as a source of presence (ha_presence.go)
+	events      eventBus         // the event journal's subscribers (event_journal.go)
 	out         channelOut       // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex       // one escalation pass at a time (route_send.go)
 
@@ -107,7 +108,8 @@ func newCore(cfg *Config, store *Store) *core {
 	c.pool = newPool(store, m.Servers)
 	c.pool.appToken = c.github.toolToken // the GitHub tool on the app
 	c.pool.appTokenRefused = c.github.dropToolToken
-	c.pool.authHold = c.googleHold // a Google account to connect again (google.go)
+	c.pool.authHold = c.googleHold      // a Google account to connect again (google.go)
+	c.pool.opened = c.watchServerEvents // the servers' events (event_sources.go)
 	// Local servers are services, reached on their node.
 	c.pool.dialLocal = func(ctx context.Context, name string, _ json.RawMessage) (mcp.Transport, error) {
 		return c.dialService(ctx, name)

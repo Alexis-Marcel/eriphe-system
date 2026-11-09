@@ -49,6 +49,9 @@ type pool struct {
 	// again (a Google account Google refused, google.go): why, and where the
 	// user does it; "" when it does not wait.
 	authHold func(name string) (why, where string)
+	// opened hands a server's new session to the event journal
+	// (event_sources.go), which reads its events if it has some.
+	opened func(ctx context.Context, server string, sess *mcp.ClientSession)
 
 	mu      sync.Mutex
 	ctx     context.Context // set by run; servers added later start in it
@@ -336,7 +339,21 @@ func (u *upstream) open(ctx context.Context) (*mcp.ClientSession, error) {
 	u.mu.Lock()
 	u.session, u.tools, u.status, u.err = sess, tools, statusReady, ""
 	u.mu.Unlock()
+	go u.sessionOpened()
 	return sess, nil
+}
+
+// sessionOpened tells whoever listens of the server's new session.
+func (u *upstream) sessionOpened() {
+	u.mu.Lock()
+	sess := u.session
+	u.mu.Unlock()
+	if sess == nil || u.p.opened == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	u.p.opened(ctx, u.name, sess)
 }
 
 func listTools(ctx context.Context, sess *mcp.ClientSession) ([]*mcp.Tool, error) {

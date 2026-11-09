@@ -42,6 +42,7 @@ const (
 	feedMessage      = "message"
 	feedWatch        = "watch"   // the watches' runs (watch.go)
 	feedLearned      = "learned" // the learning journal (learning.go)
+	feedEvent        = "event"   // the event journal (event_journal.go)
 
 	feedOwn      = "own"
 	feedExternal = "external"
@@ -55,7 +56,7 @@ const (
 	taintSince     = "since.external"
 )
 
-var feedKinds = []string{feedTask, feedNotification, feedIntention, feedMessage, feedWatch, feedLearned}
+var feedKinds = []string{feedTask, feedNotification, feedIntention, feedMessage, feedWatch, feedLearned, feedEvent}
 
 // happening is one item of the feed.
 type happening struct {
@@ -102,6 +103,7 @@ var feedSources = map[string]feedSource{
 	feedMessage:      messageHappenings,
 	feedWatch:        ruleHappenings,
 	feedLearned:      learnedHappenings,
+	feedEvent:        eventHappenings,
 }
 
 // feed is what happened since from, of these kinds (all if none), oldest

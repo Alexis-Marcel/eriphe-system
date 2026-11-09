@@ -181,6 +181,7 @@ func (c *core) tickPoll(ctx context.Context, w *rule, now time.Time) {
 		cause = causeRecovered
 	}
 	st.Known, st.Hit, st.Value = true, hit, value
+	c.emitPoll(w, cause, excerpt)
 	switch cause { // its incidents, deduplicated by code (rule_incidents.go)
 	case causePoll:
 		c.openIncident(w, now)

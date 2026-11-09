@@ -61,6 +61,13 @@ at each start, and the container stays read-only.
 - **Events**: each sync that finds something reports a change per folder (new, gone, flags):
   `Mailer.OnChange`, the hook for change notifications, and one log line with counts and
   duration (no subjects, addresses or bodies are ever logged).
+- **New mail for eriphe-core**: a message that lands in an account's INBOX after the cache's
+  first sync, received less than 24 hours ago, is a `mail.received` event (key: the account;
+  payload: account, id, from, subject, date). The server offers its last 200 events as the MCP
+  resource `eriphe://events`, JSON `{"epoch", "events": [{"seq", "kind", "key", "at",
+  "payload"}]}`, oldest first; `seq` grows within an `epoch`, a new one at each start.
+  eriphe-core reads it every minute into its event journal (core/README.md, Events). Without
+  the cache there are no events.
 - Gmail labels and categories are not cached: `go-imap` v2 does not fetch `X-GM-LABELS`.
 
 | Env | Default | |

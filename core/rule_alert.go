@@ -108,6 +108,7 @@ func (c *core) receiveAlert(token string, h http.Header, body []byte) alertResul
 		urgent = c.urgentTransition(w, !alertResolved(body))
 	}
 	c.fireRule(w, &ruleRun{Cause: causeAlert, Detail: alertDetail(body), External: true, Urgent: urgent})
+	c.emitAlert(w, body)
 	return alertResult{http.StatusAccepted, "ok"}
 }
 

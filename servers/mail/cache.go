@@ -91,6 +91,16 @@ func cacheOptionsFromEnv() (o CacheOptions, ok bool, err error) {
 type MailboxChange struct {
 	Account, Folder  string
 	New, Gone, Flags int
+	// Added are the new messages, when the folder was already known: none
+	// at its first sync, nor when its UIDVALIDITY changed.
+	Added []Added
+}
+
+// Added is a new message of a folder: its summary, and when the server
+// got it (INTERNALDATE), not the date its sender wrote.
+type Added struct {
+	Summary
+	Received time.Time
 }
 
 // StartCache starts filling and watching the cache of every account. It
@@ -494,6 +504,11 @@ func (mc *mailCache) syncFolder(c *imapclient.Client, name string, condstore boo
 		}
 	}
 	ch.New, ch.Gone, ch.Flags = len(hs), len(gone), len(flags)
+	if !fresh {
+		for _, h := range hs {
+			ch.Added = append(ch.Added, Added{Summary: h.Summary, Received: h.internal})
+		}
+	}
 	return ch, nil
 }
 

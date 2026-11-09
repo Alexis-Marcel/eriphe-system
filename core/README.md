@@ -1312,6 +1312,40 @@ revoke its token); otherwise a new one comes, named as suggested, at the presets
 writes on approval). The page then says which (`?added=`, `?switched=`); reloading it does nothing
 again.
 
+## Events
+
+The event journal (`event_journal.go`, `event_sources.go`) is where everything that happens is
+written, whatever its source, without being interpreted: triggered skills (#275) will subscribe
+to it, and the brain reads it with `since` (kind `event`). An event has a kind, a key that
+groups the events of one thing, its source, a short payload (JSON, 4 KB at most, each string
+cut to 500 characters) and whether it is **external**: written by someone else. Whatever reads
+an external payload is tainted; `since` names an external event without quoting it unless
+`include_external`. Table `event_journal`, kept 30 days; a source past 600 events an hour has
+the rest dropped.
+
+| Kind | Source | Key | External |
+|---|---|---|---|
+| `mail.received` | the mail server (any server offering `eriphe://events`, below) | the account | unless the server is trusted |
+| `alert.received`, `alert.resolved` | an `alerte` rule's webhook; resolved when the body's top-level `status` is `resolved` | the rule's name | yes |
+| `tool.alert`, `tool.recovered`, `tool.changed` | an `outil` rule's poll, on a confirmed transition | the rule's name | unless the tool's server is trusted |
+| `task.ended` | a worker task's end | the task | no |
+| `session.ended` | a work session's end | `session:<id>` | no |
+| `user.returned` | the user's first activity after an absence of an hour or more | | no |
+| `ha.changed` | a signal of Home Assistant's mapped entities changes value | the signal | no (closed values) |
+
+**A server's events.** A catalog server that offers the MCP resource `eriphe://events` has
+events: eriphe-core reads it when the server's session opens, then every minute (the servers
+run stateless behind their node, so they cannot push). The resource is JSON, `{"epoch": "…",
+"events": [{"seq", "kind", "key", "at", "payload"}]}`, the server's last events, oldest first;
+`seq` grows within an `epoch`, a new one at each start. eriphe-core keeps per server the epoch,
+seq and time of the last event it took: within an epoch it takes the higher seqs, from a new one
+the events after that time; a server seen for the first time has its backlog skipped. A server
+cannot emit one of eriphe-core's families (`alert.`, `tool.`, `task.`, `session.`, `user.`,
+`ha.`, `time.`, `skill.`).
+
+The alert and poll sources still live in their rules; they move out of them when the rules go
+(#278).
+
 ## Assistants
 
 An assistant is a long-lived agent that owns one task, as a Kubernetes Deployment owns its Pod.
