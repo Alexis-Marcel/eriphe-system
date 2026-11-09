@@ -82,7 +82,7 @@ const (
 	cardsOfferedKey = "cards_offered_at"
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess, cardApproval, cardNewAssistant}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess, cardApproval, cardNewAssistant, cardSkill}
 
 // cardUnlearn is an undo of the learning journal the brain proposed on a
 // tainted turn (learning_tools.go).
@@ -284,6 +284,8 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		return c.accessProposal(p) // access_card.go
 	case cardSession:
 		return c.sessionProposal(p) // session_engine.go
+	case cardSkill:
+		return c.skillProposal(p) // skill_write.go
 	case cardUnlearn:
 		if c.mem == nil {
 			return p
@@ -382,6 +384,19 @@ func (c *core) pendingProposals() []proposal {
 	for _, id := range c.proposedSessionAsks() {
 		add(cardSession, id)
 	}
+	if rows, err := c.store.db.Query(`SELECT rowid FROM skills WHERE pending != '' AND source = ?`, skillFromEriphe); err == nil {
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			if rows.Scan(&id) == nil {
+				ids = append(ids, id)
+			}
+		}
+		rows.Close()
+		for _, id := range ids {
+			add(cardSkill, id)
+		}
+	}
 	if m := c.mem; m != nil {
 		rows, err := m.db.Query(`SELECT id FROM learning_log WHERE undo = ? AND status != ? ORDER BY id`, undoProposed, learnReverted)
 		if err == nil {
@@ -449,6 +464,8 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.decideAccess(ctx, id, approve)
 	case cardSession:
 		return c.decideSessionAsk(ctx, id, approve)
+	case cardSkill:
+		return c.decideSkill(id, approve)
 	case cardUnlearn:
 		if approve {
 			_, err := c.unlearn(id, "owner", p.Why, nil)

@@ -221,6 +221,10 @@ type skillManifest struct {
 	Description  string
 	AllowedTools string // shown, never honoured: Eriphe's permissions decide
 	Body         string // the instructions, after the front matter
+	// Its trigger, as written (skill_triggers.go): when, every, model,
+	// tools, can.
+	When, Every, Model, Tools, Can string
+	Trigger                        *skillTrigger
 }
 
 // The name of a skill (agentskills.io): lowercase letters, digits and
@@ -274,13 +278,16 @@ func parseSkillMD(raw []byte) (skillManifest, error) {
 		keys[k] = v
 	}
 	m.Name, m.Description, m.AllowedTools = keys["name"], keys["description"], keys["allowed-tools"]
+	m.When, m.Every, m.Model, m.Tools, m.Can = keys["when"], keys["every"], keys["model"], keys["tools"], keys["can"]
 	switch {
 	case !skillName.MatchString(m.Name):
 		return m, skillErr("skills.err.name", m.Name)
 	case m.Description == "" || utf8.RuneCountInString(m.Description) > 1024:
 		return m, skillErr("skills.err.description", "")
 	}
-	return m, nil
+	var err error
+	m.Trigger, err = parseSkillTrigger(m)
+	return m, err
 }
 
 // scriptExts are the files that run, whatever their folder.

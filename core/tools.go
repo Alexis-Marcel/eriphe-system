@@ -181,6 +181,7 @@ func newMCPServer(c *core) *mcp.Server {
 	registerLearningTools(s, c)   // learned, unlearn
 	registerAttachmentTools(s, c) // read_attachment
 	registerSkillTools(s, c)      // list_skills, read_skill
+	registerSkillWriteTool(s, c)  // write_skill (skill_write.go)
 	registerNotifyTools(s, c)     // notify, notifications, rule
 	registerSinceTools(s, c)      // since
 	registerRuleListTools(s, c)   // rules, update_rule (rule is with notify's tools)

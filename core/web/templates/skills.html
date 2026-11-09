@@ -43,6 +43,7 @@
 <header class="page-head">
   <h2 class="mono">{{.Skill.Name}}</h2>
   <p>{{.Shown.Manifest.Description}}</p>
+  {{with .Shown.Manifest.Trigger}}<p><strong>{{t "skills.trigger"}}</strong> : {{.Text $.Lang}}</p>{{end}}
 </header>
 
 {{if .Skill.Pending}}

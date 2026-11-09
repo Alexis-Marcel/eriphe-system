@@ -1312,6 +1312,49 @@ revoke its token); otherwise a new one comes, named as suggested, at the presets
 writes on approval). The page then says which (`?added=`, `?switched=`); reloading it does nothing
 again.
 
+## Triggered skills
+
+A skill whose `SKILL.md` has a `when` runs by itself (`skill_triggers.go`, `skill_runs.go`), as a
+task in the background, never as a turn of the conversation: the brain is not woken and its
+turn is not tainted. Its front matter:
+
+| Key | |
+|---|---|
+| `when` | an event kind of the [journal](#events) (`mail.received`), with filters on its key or payload (`alert.received key=getout`, `ha.changed signal=place value=away`); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules) |
+| `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
+| `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
+| `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
+| `can` | what its tasks may start: `start-session` (#276) |
+
+The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
+the rest of the skill, as one version: Settings → Skills shows it in words, and a change is a new
+version, read with its diff.
+
+- **A run** is a worker task with the skill's description and instructions, then its events
+  (kind, key, time, payload), and nothing of the conversation. It is lent the skill's tools with
+  no start card: the user approved the skill. An external event taints it from its start
+  (`task_taint:<id>`), so its writes ask a card as a tainted task's do; a time trigger or own
+  events start it clean.
+- **Its last message** is what it tells the user: a notification, why « Skill « name » », ref
+  `skill:<name>`, its link-free rules when the task is tainted; `[rien]` tells nothing, `[brief]`
+  first holds it for the brief. Then its task stops. The brain is not told of its state; its
+  permissions are the user's, as any task's.
+- **One run open per skill and key**: the key's new events wait, and when its turn ends, its task
+  gets them as a message instead of a second task.
+- **Time triggers** run at their times, in the user's zone; a trigger seen for the first time (or
+  approved again) waits for its next time; times missed while eriphe-core was down make one run.
+- **Limits**: 100 runs a skill in 24 hours (a run past it is kept `refused`), 50 events a run;
+  a triggered task's own end never triggers a skill.
+- **Tables**: `skill_queue` (events waiting, by skill and key), `skill_runs` (skill, version, key,
+  events, task, state `running`, `done`, `silent`, `failed` or `refused`, its last message or why).
+
+**Written by Eriphe.** The brain's `write_skill` (name, description, instructions, `when`,
+`every`, `model`, `tools`, `can`) writes a `SKILL.md` and adds it as a version waiting for
+approval (source `eriphe`), checked as an upload is (its model an agent, its tools catalog
+servers). Its card (kind `skill`) says the trigger in words and the instructions; the yes approves
+exactly that version, the no drops it. Written on a tainted turn, the card says so. A triggered
+task has no such tool.
+
 ## Events
 
 The event journal (`event_journal.go`, `event_sources.go`) is where everything that happens is
