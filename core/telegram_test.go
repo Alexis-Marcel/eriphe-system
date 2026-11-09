@@ -162,7 +162,7 @@ func linked(c *core) {
 	c.tg.forget(tgCodeKey)
 	c.store.set(tgUserKey, fmt.Sprint(userTG))
 	c.store.set(tgChatKey, fmt.Sprint(userTG))
-	c.store.set(tgSeenKey, fmt.Sprint(c.store.lastMessageSeq()))
+	c.store.set(channelSeenKey(tgChannel), fmt.Sprint(c.store.lastMessageSeq()))
 	currentVault().set(telegramSecret, fakeBotToken)
 }
 
@@ -312,7 +312,7 @@ func TestTelegramNotifyAndFeedback(t *testing.T) {
 func TestTelegramAlertsOnly(t *testing.T) {
 	c, _, f := telegramCore(t)
 	linked(c)
-	c.store.set(tgDetailKey, detailAlert)
+	c.store.set(channelDetailKey(tgChannel), detailAlert)
 	c.tell(pushNote{Body: map[string]string{"fr": "Ta banque a écrit : solde 1234 €"}, URL: "/settings/notifications?n=9", Notif: 9, Why: "un mail"})
 	c.tg.pending.Wait()
 	sent := f.sentMessages()
@@ -327,7 +327,7 @@ func TestTelegramAlertsOnly(t *testing.T) {
 	// A reply too.
 	c.store.addMessageVia(roleUser, "et mon solde ?", viaTelegram, false)
 	c.store.addMessage(roleBrain, "Ton solde est de 1234 €.", true)
-	c.telegramReplies()
+	c.channelReplies()
 	c.tg.pending.Wait()
 	if text := lastText(f); strings.Contains(text, "1234") || !strings.Contains(text, "t'a répondu") {
 		t.Fatalf("reply %q", text)
@@ -346,7 +346,7 @@ func TestTelegramRepliesRouted(t *testing.T) {
 	c.store.set(notifiedKey(int(seq)), "1")
 	c.store.addMessage(roleEvent, "tâche finie", false)
 	c.store.addMessage(roleBrain, "Les tests passent.", true)
-	c.telegramReplies()
+	c.channelReplies()
 	c.tg.pending.Wait()
 	var texts []string
 	for _, m := range f.sentMessages() {
@@ -366,37 +366,63 @@ func TestTelegramRepliesRouted(t *testing.T) {
 
 	c.store.addMessage(roleUser, "Depuis l'espace", false)
 	c.store.addMessage(roleBrain, "Réponse dans l'espace.", true)
-	c.telegramReplies()
+	c.channelReplies()
 	c.tg.pending.Wait()
 	if len(f.sentMessages()) != 2 || c.tg.routing() {
 		t.Fatalf("a reply to the workspace went to Telegram: %v", f.sentMessages())
 	}
 }
 
-// What is the user's to approve is told with a link, never with a button;
-// no button but a notification's feedback does anything.
-func TestTelegramApprovalsStayInTheWorkspace(t *testing.T) {
+// Telegram is the user's own account, a trusted channel: a task's
+// permission comes with Allow and Deny, which answer it as the workspace
+// does, from the linked account only; a user_only one too. In "alerts
+// only", no button: never approve what cannot be read. A button of no
+// kind does nothing.
+func TestTelegramAnswersPermissions(t *testing.T) {
 	c, _, f := telegramCore(t)
 	linked(c)
 	c.tg.restart()
-	c.tell(waitingNote("github.merge acme/site#7", "/#perm-t-1-p-1", "perm-t-1-p-1"))
+	addTask(t, c, "t-1", stateRunning)
+	c.store.addEvents("t-1", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
+		Data: map[string]any{"id": "p-1", "tool_name": "mcp__github__merge_pull_request"}}})
+	c.store.markUserOnly("t-1", "p-1", "a merge")
+	note := waitingNote("github.merge acme/site#7", "/#perm-t-1-p-1", "perm-t-1-p-1")
+	note.Perm = &notePerm{Task: "t-1", ID: "p-1"}
+	c.tell(note)
 	c.tg.pending.Wait()
 	sent := f.sentMessages()
-	if len(sent) != 1 || sent[0]["reply_markup"] != nil || !strings.Contains(fmt.Sprint(sent[0]["text"]), "https://eriphe.example.org/#perm-t-1-p-1") {
+	if len(sent) != 1 || !strings.Contains(fmt.Sprint(sent[0]["reply_markup"]), "pm:t-1:p-1:y") ||
+		!strings.Contains(fmt.Sprint(sent[0]["text"]), "https://eriphe.example.org/#perm-t-1-p-1") {
 		t.Fatalf("sent %v", sent)
 	}
-	for _, data := range []string{"perm:t-1:p-1:yes", "approve", "fb:0:up", "fb:1:yes", "fb:x:up"} {
-		if _, _, ok := parseFeedbackData(data); ok {
-			t.Errorf("%q is taken as a button", data)
-		}
-	}
-	f.callback(userTG, "perm:t-1:p-1:yes")
+	f.callback(strangerTG, "pm:t-1:p-1:y")
+	f.callback(userTG, "approve")
 	waitUntil(t, func() bool { return len(f.answers()) == 1 })
-	if a := f.answers()[0]; a["text"] != "" {
-		t.Errorf("a foreign button was acted on: %v", a)
-	}
 	if c.store.answered("t-1", "p-1") {
-		t.Fatal("a permission was answered from Telegram")
+		t.Fatal("answered by a stranger, or by a foreign button")
+	}
+	f.callback(userTG, "pm:t-1:p-1:y")
+	waitUntil(t, func() bool { return c.store.answered("t-1", "p-1") })
+	waitUntil(t, func() bool { return len(f.answers()) == 2 })
+	if a := f.answers()[1]; a["text"] != tr("fr", "perm.allowed") {
+		t.Errorf("answer %v", a)
+	}
+	f.callback(userTG, "pm:t-1:p-1:n")
+	waitUntil(t, func() bool { return len(f.answers()) == 3 })
+	if a := f.answers()[2]; a["text"] != tr("fr", "perm.changed") {
+		t.Errorf("a second answer: %v", a)
+	}
+
+	c.setChannelDetail(tgChannel, detailAlert)
+	c.tell(note)
+	c.tg.pending.Wait()
+	if last := f.sentMessages()[len(f.sentMessages())-1]; last["reply_markup"] != nil {
+		t.Fatalf("buttons in alerts only: %v", last)
+	}
+	for _, data := range []string{"pm:t-1:p-1", "pm::p-1:y", "pm:t-1:p-1:yes", "perm:t-1:p-1:y"} {
+		if _, _, ok := parsePermData(data); ok {
+			t.Errorf("%q is taken as a permission's button", data)
+		}
 	}
 }
 
@@ -495,11 +521,11 @@ func TestWebTelegramChannels(t *testing.T) {
 	if _, body, _ := tw.do("GET", "/channels/telegram", nil, nil); !strings.Contains(body, "@sam") || !strings.Contains(body, "Délier") {
 		t.Fatalf("linked: %s", body)
 	}
-	if code, body, _ := tw.post("/channels/settings", url.Values{"detail": {"alert"}, "channel": {"telegram"}}, csrf); code != 200 ||
-		tw.c.store.get(tgDetailKey) != detailAlert || tw.c.defaultChannels() != "telegram" || !strings.Contains(body, `hx-target="#channels"`) {
-		t.Fatalf("settings: %d %q %q", code, tw.c.store.get(tgDetailKey), tw.c.defaultChannels())
+	if code, body, _ := tw.post("/channels/settings", url.Values{"detail-telegram": {"alert"}, "channel": {"telegram"}}, csrf); code != 200 ||
+		tw.c.store.get(channelDetailKey(tgChannel)) != detailAlert || tw.c.defaultChannels() != "telegram" || !strings.Contains(body, `hx-target="#channels"`) {
+		t.Fatalf("settings: %d %q %q", code, tw.c.store.get(channelDetailKey(tgChannel)), tw.c.defaultChannels())
 	}
-	if _, _, h := tw.post("/channels/settings", url.Values{"detail": {"full"}}, csrf); !strings.Contains(h.Get("HX-Trigger"), "canal") {
+	if _, _, h := tw.post("/channels/settings", url.Values{"detail-telegram": {"full"}}, csrf); !strings.Contains(h.Get("HX-Trigger"), "canal") {
 		t.Errorf("no channel accepted: %s", h.Get("HX-Trigger"))
 	}
 	if _, body, _ := tw.do("GET", "/settings/notifications", nil, nil); strings.Contains(body, "Aucun compte relié.") {
@@ -528,5 +554,37 @@ func TestCheckChannels(t *testing.T) {
 	r := notifyRule{Kind: ruleTopic, Match: "project:x", Outcome: levelNow, Channels: "mail"}
 	if r.check() == nil {
 		t.Error("a rule with an unknown channel was accepted")
+	}
+}
+
+// Telegram's state from before it was a channel like the others moves to
+// its channel's keys: its detail, what it read, whether the user writes
+// from it, where its messages and cards went, and a proposed setting.
+func TestTelegramStateMigrated(t *testing.T) {
+	c, _, _ := telegramCore(t)
+	st := c.store
+	for k, v := range map[string]string{"telegram_detail": "alert", "telegram_seen": "5", "telegram_route": "1",
+		"telegram_lang": "en", "tg_msg:3": "1", "tg_notif:4": "1"} {
+		st.set(k, v)
+	}
+	st.db.Exec(`INSERT INTO setting_proposals (name, value, created) VALUES ('telegram_detail', 'alert', 1)`)
+	st.db.Exec(`INSERT INTO convo_cards (ref, kind, created, tg) VALUES ('rule:9', 'rule', 1, 1)`)
+	var card int64
+	st.db.QueryRow(`SELECT id FROM convo_cards WHERE ref = 'rule:9'`).Scan(&card)
+	for _, q := range extraColumns {
+		st.db.Exec(q)
+	}
+	if c.channelDetail(tgChannel) != detailAlert || st.get(channelSeenKey(tgChannel)) != "5" || !c.channelRouting(tgChannel) ||
+		st.get(channelLangKey) != "en" || st.get(channelMsgKey(tgChannel, 3)) == "" || st.get(channelNotifKey(tgChannel, 4)) == "" ||
+		st.get(channelCardSentKey(tgChannel, card)) == "" {
+		t.Fatal("not migrated")
+	}
+	var name, value string
+	st.db.QueryRow(`SELECT name, value FROM setting_proposals`).Scan(&name, &value)
+	if name != setDetail || value != "telegram alert" {
+		t.Fatalf("proposal %q %q", name, value)
+	}
+	if _, err := checkSetting(name, value); err != nil {
+		t.Fatal(err)
 	}
 }

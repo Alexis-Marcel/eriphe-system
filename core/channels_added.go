@@ -65,8 +65,16 @@ type addedChannel struct {
 }
 
 // A channel's name is quoted into the brain's turn: letters, digits,
-// spaces and a few marks, short; never one of the built-in channels'.
-var reservedChannelNames = []string{"Telegram", firstRunVia, "Eriphe"}
+// spaces and a few marks, short; never one of eriphe-core's own channels'.
+func reservedChannelNames() []string {
+	out := []string{firstRunVia, "Eriphe"}
+	for _, k := range channelKinds {
+		if k.Label != "" {
+			out = append(out, k.Label)
+		}
+	}
+	return out
+}
 
 func checkChannelName(name string) (string, error) {
 	name = strings.Join(strings.Fields(notPlace.ReplaceAllString(name, " ")), " ")
@@ -76,7 +84,7 @@ func checkChannelName(name string) (string, error) {
 	if name == "" {
 		return "", errors.New("a channel needs a name")
 	}
-	if slices.ContainsFunc(reservedChannelNames, func(r string) bool { return strings.EqualFold(r, name) }) {
+	if slices.ContainsFunc(reservedChannelNames(), func(r string) bool { return strings.EqualFold(r, name) }) {
 		return "", fmt.Errorf("%q is a name of Eriphe's own", name)
 	}
 	return name, nil

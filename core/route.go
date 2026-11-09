@@ -23,7 +23,8 @@ import (
 //     clean turn, outside the quiet hours, with a text the code writes, by
 //     a channel the user added that carries a sentence and reaches that
 //     room (channel_out.go);
-//  4. otherwise → the phone, then Telegram.
+//  4. otherwise → the phone, then each channel with a line of its own
+//     (channels.go: a chat app's bot), in the order they registered.
 //
 // The user orders these lines, turns each off, and sets the delay
 // (Settings → Où te prévenir). A "now" not seen within the delay (urgent:
@@ -38,7 +39,6 @@ const (
 	stepComputer = "computer"
 	stepVoice    = "voice"
 	stepPhone    = "phone"
-	stepTelegram = "telegram"
 
 	kindComputer = "computer"
 	kindPhone    = "phone"
@@ -53,35 +53,56 @@ const (
 	maxEscalation   = 2 // steps after the first
 )
 
-// routeSteps are the lines, in their default order.
-var routeSteps = []string{stepInApp, stepComputer, stepVoice, stepPhone, stepTelegram}
+// routeSteps are the lines of the user's devices and the voice, in their
+// default order; routeLines adds each channel's own.
+var routeSteps = []string{stepInApp, stepComputer, stepVoice, stepPhone}
+
+// routeLines are every line, in their default order: the devices' and the
+// voice, then one per channel with a line (channels.go).
+func routeLines() []string {
+	out := slices.Clone(routeSteps)
+	for _, k := range lineChannels() {
+		out = append(out, k.ID)
+	}
+	return out
+}
+
+// isChannelLine tells a channel's own line.
+func isChannelLine(step string) bool {
+	k, ok := channelKindOf(step)
+	return ok && k.Line
+}
 
 // stepChannel is the channel of a line, as a rule's channels name them.
 func stepChannel(step string) string {
-	if step == stepTelegram {
-		return chanTelegram
-	}
-	if step == stepVoice {
+	switch {
+	case isChannelLine(step):
+		return step
+	case step == stepVoice:
 		return stepVoice // a channel the user added that carries a sentence (channel_out.go)
 	}
 	return chanPush
 }
 
-// checkSteps normalises a list of lines, "phone,telegram": known ones, each
-// once, in the default order; "" stays "".
+// linesText lists the lines for a message: "inapp, computer, voice, phone, …".
+func linesText() string { return strings.Join(routeLines(), ", ") }
+
+// checkSteps normalises a list of lines, "phone,<a channel>": known ones,
+// each once, in the default order; "" stays "".
 func checkSteps(s string) (string, error) {
+	lines := routeLines()
 	var out []string
 	for _, st := range strings.Split(strings.ToLower(s), ",") {
 		st = strings.TrimSpace(st)
 		switch {
 		case st == "":
-		case !slices.Contains(routeSteps, st):
-			return "", errors.New("lines are inapp, computer, voice, phone or telegram")
+		case !slices.Contains(lines, st):
+			return "", errors.New("lines are " + linesText())
 		case !slices.Contains(out, st):
 			out = append(out, st)
 		}
 	}
-	slices.SortFunc(out, func(a, b string) int { return slices.Index(routeSteps, a) - slices.Index(routeSteps, b) })
+	slices.SortFunc(out, func(a, b string) int { return slices.Index(lines, a) - slices.Index(lines, b) })
 	return strings.Join(out, ","), nil
 }
 
@@ -97,7 +118,7 @@ type routeNote struct {
 	Level   string `json:"level,omitempty"`   // now escalates; anything else does not
 	Urgent  bool   `json:"urgent,omitempty"`  // a rule "even at night": a shorter delay
 	Tainted bool   `json:"tainted,omitempty"` // drawn from external content: no line added, no escalation
-	Only    string `json:"only,omitempty"`    // a rule's channels: push, telegram
+	Only    string `json:"only,omitempty"`    // a rule's channels: push, or a channel's id
 	Also    string `json:"also,omitempty"`    // a rule's lines added to the first
 	Never   string `json:"never,omitempty"`   // a rule's lines forbidden
 	Fixed   bool   `json:"fixed,omitempty"`   // an urgent skill's fixed message, the user's own words
@@ -121,10 +142,10 @@ type routeDevice struct {
 
 // routeSignals are the signals, read at the moment of routing.
 type routeSignals struct {
-	Devices  []routeDevice // the newest subscription first
-	Telegram bool          // a Telegram account is linked
-	Voice    voiceSpot     // a channel that says a sentence in the room the user is in now (channel_out.go); Channel 0 if none
-	Quiet    bool          // the quiet hours are on
+	Devices  []routeDevice   // the newest subscription first
+	Channels map[string]bool // the channels with a line of their own that reach the user now, by id
+	Voice    voiceSpot       // a channel that says a sentence in the room the user is in now (channel_out.go); Channel 0 if none
+	Quiet    bool            // the quiet hours are on
 }
 
 // routeSettings are the user's (Settings → Où te prévenir).
@@ -159,9 +180,9 @@ type routePlan struct {
 func route(n routeNote, sig routeSignals, set routeSettings, tried []string) routePlan {
 	order := set.Order
 	if len(order) == 0 {
-		order = routeSteps
+		order = routeLines()
 	}
-	if slices.Contains(routeSteps, n.First) && !n.Tainted {
+	if slices.Contains(routeLines(), n.First) && !n.Tainted {
 		// The writer's choice goes first; the others keep their order. A
 		// tainted turn's choice is not followed: what it read may have asked.
 		order = append([]string{n.First}, slices.DeleteFunc(slices.Clone(order), func(s string) bool { return s == n.First })...)
@@ -289,9 +310,9 @@ func pickTarget(step string, sig routeSignals, used []string) (routeTarget, bool
 		if best != nil {
 			return routeTarget{Step: step, Device: best.ID, Label: best.Label}, true
 		}
-	case stepTelegram:
-		if sig.Telegram && !slices.Contains(used, stepTelegram) {
-			return routeTarget{Step: step, Label: "Telegram"}, true
+	default:
+		if k, ok := channelKindOf(step); ok && k.Line && sig.Channels[step] && !slices.Contains(used, step) {
+			return routeTarget{Step: step, Label: k.Label}, true
 		}
 	}
 	return routeTarget{}, false

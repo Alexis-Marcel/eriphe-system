@@ -19,7 +19,10 @@ import (
 	"time"
 )
 
-// Telegram, a channel of notify the user can answer from. The user makes a
+// Telegram, one of the channels eriphe-core talks to for the user
+// (channels.go): registered as any, a line of the router's of its own, the
+// user writing from it and answered there (channel_relay.go). Nothing
+// outside this file, telegram_cards.go and web_telegram.go knows it. The user makes a
 // bot with BotFather and pastes its token in Settings → Access (kept in
 // the vault, never shown or logged again); eriphe-core shows a one-time
 // code, the user sends it to the bot, and the Telegram account that sent
@@ -30,10 +33,11 @@ import (
 // wait after a failure, and only while a token is set.
 //
 //   - Out: what tell sends (channels.go) — a notification with its
-//     👍 / 👎 / « pas maintenant » buttons, a question or a permission that
-//     waits for the user — and the brain's replies to what the user wrote
-//     from Telegram. "Alerts only" sends a nudge and a link instead of the
-//     words: Telegram bots are not end-to-end encrypted.
+//     👍 / 👎 / « pas maintenant » buttons, a question, or a task's
+//     permission with Allow / Deny — and the brain's replies to what the
+//     user wrote from Telegram (channel_relay.go). "Alerts only" sends a
+//     nudge and a link instead of the words: Telegram bots are not
+//     end-to-end encrypted.
 //   - In: a text from the linked account joins the conversation as the
 //     user's own message, marked "· Telegram"; it is the user speaking
 //     (a clean turn) because the sender's id is checked. Files and voice
@@ -41,10 +45,9 @@ import (
 //   - A proposal of the brain's (a rule, a memory, a watch…) that goes
 //     with a message sent there comes as a card with Oui / Non buttons,
 //     which answer that proposal alone, from the linked account only
-//     (telegram_cards.go). A permission of a task's is never approvable
-//     from Telegram, a user_only one least of all: the message says what
-//     waits and links to the workspace. The other buttons are a
-//     notification's feedback.
+//     (telegram_cards.go). The linked account is the user: a trusted
+//     channel, whose buttons answer as the workspace's, a task's
+//     permission too. The other buttons are a notification's feedback.
 
 const (
 	telegramSecret = "telegram-bot" // the bot's token, in the vault
@@ -56,15 +59,9 @@ const (
 	tgCodeKey    = "telegram_code"    // the linking code: CODE|expiry|tries
 	tgOffsetKey  = "telegram_offset"  // the next update to read
 	tgIgnoredKey = "telegram_ignored" // what came from anyone else, counted
-	tgDetailKey  = "telegram_detail"  // full or alert
-	tgLangKey    = "telegram_lang"    // the language of what it sends
-	tgSeenKey    = "telegram_seen"    // the last message telegramReplies read
-	tgRouteKey   = "telegram_route"   // "1" while the user's last message came from Telegram
 
-	viaTelegram = "Telegram"
-
-	detailFull  = "full"
-	detailAlert = "alert"
+	tgChannel   = "telegram" // its channel's id, and its line's (channels.go)
+	viaTelegram = "Telegram" // what the user writes there is marked with it
 
 	tgCodeTTL   = 10 * time.Minute
 	tgCodeTries = 10   // wrong codes before the code is dropped
@@ -96,6 +93,46 @@ type telegram struct {
 	qmu     sync.Mutex
 	queue   []tgOut // what post sends, in order
 	sending bool
+}
+
+func init() {
+	registerChannel(channelKind{ID: tgChannel, Label: viaTelegram, Dir: dirBoth, Speaker: speakerAccount, Carries: carryText,
+		Line: true, Page: "/settings/access/telegram",
+		ready: func(c *core) bool { return c.tg != nil && c.tg.linked() },
+		deliver: func(c *core, n pushNote) []routeTarget {
+			if c.tg == nil || !c.tg.linked() {
+				return nil
+			}
+			c.tg.deliver(n)
+			return []routeTarget{{Step: tgChannel, Label: viaTelegram}}
+		},
+		reach: func(c *core, n pushNote, _ int64, _ routeTarget) {
+			if c.tg != nil {
+				c.tg.deliver(n)
+			}
+		},
+		reply:  func(c *core, m Message) { c.tg.reply(m) },
+		card:   func(c *core, x convoCard, p proposal) { c.tg.card(x, p) },
+		routes: telegramRoutes,
+		start:  startTelegram,
+		entry:  telegramEntry,
+	})
+	// Its state from before it was a channel like the others: how much it
+	// is told, what it read, whether the user writes from it, and what
+	// went there.
+	extraColumns = append(extraColumns,
+		`UPDATE setting_proposals SET name = 'channel_detail', value = 'telegram ' || value WHERE name = 'telegram_detail'`,
+		`UPDATE kv SET key = 'channel_detail:telegram' WHERE key = 'telegram_detail'
+		  AND NOT EXISTS (SELECT 1 FROM kv WHERE key = 'channel_detail:telegram')`,
+		`UPDATE kv SET key = 'channel_lang' WHERE key = 'telegram_lang' AND NOT EXISTS (SELECT 1 FROM kv WHERE key = 'channel_lang')`,
+		`UPDATE kv SET key = 'channel_seen:telegram' WHERE key = 'telegram_seen'
+		  AND NOT EXISTS (SELECT 1 FROM kv WHERE key = 'channel_seen:telegram')`,
+		`UPDATE kv SET key = 'channel_route:telegram' WHERE key = 'telegram_route'
+		  AND NOT EXISTS (SELECT 1 FROM kv WHERE key = 'channel_route:telegram')`,
+		`UPDATE OR IGNORE kv SET key = 'channel_msg:telegram:' || substr(key, 8) WHERE key LIKE 'tg_msg:%'`,
+		`UPDATE OR IGNORE kv SET key = 'channel_notif:telegram:' || substr(key, 10) WHERE key LIKE 'tg_notif:%'`,
+		`INSERT OR IGNORE INTO kv (key, value) SELECT 'channel_card:telegram:' || id, '1' FROM convo_cards WHERE tg = 1`,
+		`UPDATE convo_cards SET tg = 2 WHERE tg = 1`)
 }
 
 func newTelegram(c *core) *telegram {
@@ -228,17 +265,11 @@ func (t *telegram) kvInt(key string) int64 {
 
 func (t *telegram) linked() bool         { return t.kvInt(tgUserKey) != 0 && t.kvInt(tgChatKey) != 0 }
 func (t *telegram) isUser(id int64) bool { return id != 0 && id == t.kvInt(tgUserKey) }
-func (t *telegram) routing() bool        { return t.c.store.get(tgRouteKey) == "1" }
-
-func (t *telegram) detail() string {
-	if t.c.store.get(tgDetailKey) == detailAlert {
-		return detailAlert
-	}
-	return detailFull
-}
+func (t *telegram) routing() bool        { return t.c.channelRouting(tgChannel) }
+func (t *telegram) detail() string       { return t.c.channelDetail(tgChannel) }
 
 func (t *telegram) lang() string {
-	if t.c.store.get(tgLangKey) == "en" {
+	if t.c.store.get(channelLangKey) == "en" {
 		return "en"
 	}
 	return "fr"
@@ -283,7 +314,7 @@ func (t *telegram) setToken(ctx context.Context, token string) error {
 		if err := v.set(telegramSecret, token); err != nil {
 			return err
 		}
-		t.forget(tgUserKey, tgChatKey, tgNameKey, tgCodeKey, tgOffsetKey, tgRouteKey, tgIgnoredKey)
+		t.forget(tgUserKey, tgChatKey, tgNameKey, tgCodeKey, tgOffsetKey, channelRouteKey(tgChannel), tgIgnoredKey)
 	}
 	t.c.store.set(tgBotKey, me.Username)
 	log.Printf("telegram: bot @%s set", me.Username)
@@ -297,13 +328,13 @@ func (t *telegram) removeToken() {
 	if v := currentVault(); v != nil {
 		v.remove(telegramSecret)
 	}
-	t.forget(tgUserKey, tgChatKey, tgNameKey, tgCodeKey, tgOffsetKey, tgRouteKey, tgBotKey, tgIgnoredKey)
+	t.forget(tgUserKey, tgChatKey, tgNameKey, tgCodeKey, tgOffsetKey, channelRouteKey(tgChannel), tgBotKey, tgIgnoredKey)
 	t.setErr("")
 	log.Printf("telegram: bot removed")
 }
 
 func (t *telegram) unlink() {
-	t.forget(tgUserKey, tgChatKey, tgNameKey, tgRouteKey)
+	t.forget(tgUserKey, tgChatKey, tgNameKey, channelRouteKey(tgChannel))
 	log.Printf("telegram: account unlinked")
 }
 
@@ -324,7 +355,7 @@ func (t *telegram) newCode(lang string) string {
 	code := string(b)
 	t.c.store.set(tgCodeKey, fmt.Sprintf("%s|%d|0", code, time.Now().Add(tgCodeTTL).Unix()))
 	if lang == "en" || lang == "fr" {
-		t.c.store.set(tgLangKey, lang)
+		t.c.store.set(channelLangKey, lang)
 	}
 	return code
 }
@@ -496,14 +527,14 @@ func (t *telegram) tryLink(ctx context.Context, token string, m *tgMessage) {
 	st.set(tgChatKey, strconv.FormatInt(m.Chat.ID, 10))
 	st.set(tgNameKey, truncate(name, 64))
 	st.set(tgCodeKey, "")
-	st.set(tgRouteKey, "")
-	st.set(tgSeenKey, strconv.Itoa(st.lastMessageSeq()))
+	st.set(channelRouteKey(tgChannel), "")
+	st.set(channelSeenKey(tgChannel), strconv.Itoa(st.lastMessageSeq()))
 	log.Printf("telegram: account linked")
 	t.send(ctx, token, m.Chat.ID, tr(t.lang(), "tg.linked"), nil)
 }
 
-// onCallback: a notification's button, from the linked account only. No
-// other button exists: nothing is approved from Telegram.
+// onCallback: a button, from the linked account only: a card's, a task's
+// permission's, or a notification's feedback.
 func (t *telegram) onCallback(ctx context.Context, token string, q *tgCallback) {
 	if !t.isUser(q.From.ID) {
 		t.ignore()
@@ -512,6 +543,10 @@ func (t *telegram) onCallback(ctx context.Context, token string, q *tgCallback) 
 	lang, answer := t.lang(), ""
 	if id, yes, ok := parseCardData(q.Data); ok {
 		t.onCardButton(ctx, token, q, id, yes)
+		return
+	}
+	if p, allow, ok := parsePermData(q.Data); ok {
+		t.onPermButton(ctx, token, q, p, allow)
 		return
 	}
 	if id, fb, ok := parseFeedbackData(q.Data); ok {
@@ -598,9 +633,7 @@ func (t *telegram) deliver(n pushNote) {
 	if n.Waiting && t.routing() {
 		return // the user writes from Telegram: the brain's reply goes there already
 	}
-	if n.Notif > 0 {
-		t.c.store.set(tgNotifKey(n.Notif), "1") // its message's cards follow it there (telegramCards)
-	}
+	t.c.channelNoteSent(tgChannel, n.Notif) // its message's cards follow it there (channel_relay.go)
 	t.post(t.compose(n))
 }
 
@@ -618,6 +651,12 @@ func (t *telegram) compose(n pushNote) (string, *tgKeyboard) {
 		body += "\n" + tr(lang, "notif.why") + " " + n.Why
 	}
 	text := joinLines(truncate(body, tgTextMax-300), link)
+	if n.Perm != nil && len(permData(*n.Perm, true)) <= 64 {
+		return text, &tgKeyboard{Rows: [][]tgButton{{
+			{Text: "✓ " + tr(lang, "perm.allow"), Data: permData(*n.Perm, true)},
+			{Text: "✕ " + tr(lang, "perm.deny"), Data: permData(*n.Perm, false)},
+		}}}
+	}
 	if n.Notif <= 0 {
 		return text, nil
 	}
@@ -653,48 +692,9 @@ func (t *telegram) test(ctx context.Context) error {
 	return t.send(ctx, token, chat, joinLines(tr(t.lang(), "tg.test"), t.link("/")), nil)
 }
 
-// telegramReplies sends to Telegram the brain's messages that answer what
-// the user wrote there: those after a message of theirs from Telegram, up
-// to their next message from anywhere else. A message that went through
-// notify was decided there.
-func (c *core) telegramReplies() {
-	t := c.tg
-	if t == nil || !t.linked() {
-		return
-	}
-	st := c.store
-	seen, err := strconv.Atoi(st.get(tgSeenKey))
-	if err != nil {
-		st.set(tgSeenKey, strconv.Itoa(st.lastMessageSeq())) // from now on
-		return
-	}
-	c.relayMu.Lock() // a brain message being written is marked first (brainNotify)
-	defer c.relayMu.Unlock()
-	msgs, err := st.messagesAfter(seen, 50)
-	if err != nil || len(msgs) == 0 {
-		return
-	}
-	route := t.routing()
-	for _, m := range msgs {
-		switch m.Role {
-		case roleUser:
-			route = m.Via == viaTelegram
-		case roleBrain:
-			if route && strings.TrimSpace(m.Text) != "" && st.get(notifiedKey(m.Seq)) == "" {
-				t.reply(m)
-			}
-		}
-	}
-	if route {
-		st.set(tgRouteKey, "1")
-	} else {
-		st.set(tgRouteKey, "")
-	}
-	st.set(tgSeenKey, strconv.Itoa(msgs[len(msgs)-1].Seq))
-}
-
+// reply sends the brain's message that answers what the user wrote from
+// Telegram (channel_relay.go).
 func (t *telegram) reply(m Message) {
-	t.c.store.set(tgMsgKey(m.Seq), "1") // its cards follow it there (telegramCards)
 	if t.detail() == detailAlert {
 		t.post(joinLines(tr(t.lang(), "tg.replied"), t.link(fmt.Sprintf("/#m%d", m.Seq))), nil)
 		return

@@ -32,7 +32,8 @@ import (
 // own VAPID key, kept in its data folder and never logged.
 //
 // Everything goes through tell (route_send.go), which also reaches the
-// user on Telegram and picks the device (route.go), and a push service that no longer knows a subscription
+// user on their other channels (channels.go) and picks the device
+// (route.go), and a push service that no longer knows a subscription
 // (404, 410) has it removed.
 
 const pushSchema = `CREATE TABLE IF NOT EXISTS push_subscriptions (
@@ -69,13 +70,19 @@ type pushNote struct {
 	OnlyFor string            // one subscription's id; all of them when empty
 	React   string            // where its 👍 / 👎 / « pas maintenant » buttons answer (notify.go)
 	// For the other channels (channels.go).
-	Channels string // where it goes: push, telegram or both (channels.go); the default channels when empty
+	Channels string // where it goes: push, other channels, or several (channels.go); the default channels when empty
 	Notif    int64  // the notification it tells, whose feedback its buttons give
 	Why      string // the notification's why
 	Waiting  bool   // a question of the brain's to the user (pushWaiting)
+	// A task's permission that waits for the user (pushWaiting): a channel
+	// with buttons offers Allow and Deny, which answer it as the workspace.
+	Perm *notePerm
 	// For the router (route.go): its level and its rule, never a device.
 	Route routeNote
 }
+
+// notePerm is a task's permission a note tells.
+type notePerm struct{ Task, ID string }
 
 // pushPayload is what the service worker receives (sw.js).
 type pushPayload struct {

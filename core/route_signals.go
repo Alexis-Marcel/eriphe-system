@@ -140,12 +140,13 @@ func (c *core) routeSettings() routeSettings {
 	if c.store.get(routeModeKey) == routeOn {
 		set.Mode = routeOn
 	}
+	lines := routeLines()
 	for _, s := range splitList(c.store.get(routeOrderKey)) {
-		if slices.Contains(routeSteps, s) && !slices.Contains(set.Order, s) {
+		if slices.Contains(lines, s) && !slices.Contains(set.Order, s) {
 			set.Order = append(set.Order, s)
 		}
 	}
-	for _, s := range routeSteps {
+	for _, s := range lines {
 		if !slices.Contains(set.Order, s) {
 			set.Order = append(set.Order, s)
 		}
@@ -156,8 +157,10 @@ func (c *core) routeSettings() routeSettings {
 		// channels the user left out.
 		set.Off = []string{stepVoice}
 		def := c.defaultChannels()
-		if !containsChannel(def, chanTelegram) {
-			set.Off = append(set.Off, stepTelegram)
+		for _, k := range lineChannels() {
+			if !containsChannel(def, k.ID) {
+				set.Off = append(set.Off, k.ID)
+			}
 		}
 	case "none":
 	default:
@@ -188,9 +191,11 @@ func (c *core) saveRouteLines(order, off []string) {
 
 // routeSignals reads the signals now.
 func (c *core) routeSignals(now time.Time) routeSignals {
-	var sig routeSignals
-	if c.tg != nil {
-		sig.Telegram = c.tg.linked()
+	sig := routeSignals{Channels: map[string]bool{}}
+	for _, k := range lineChannels() {
+		if k.ready != nil && k.ready(c) {
+			sig.Channels[k.ID] = true
+		}
 	}
 	if cx, err := c.notifyContext(); err == nil {
 		_, sig.Quiet = quietAt(cx.Rules, cx.Now)

@@ -73,7 +73,7 @@ var conceptBench = []benchRow{
 		settingCall(setCap, "2"),
 		ruleCall(ruleIn{Kind: "cap", Match: "2"}), "setting"},
 	{"Sur Telegram, envoie juste un signal, pas le texte", "setting",
-		settingCall(setTgDetail, "alert"),
+		settingCall(setDetail, "telegram alert"),
 		rememberCall(kindPreference, "Sur Telegram, seulement un signal, pas le texte des notifications"), "setting"},
 	{"Je préfère des réponses courtes, sans emoji", "memory",
 		rememberCall(kindPreference, "Préfère des réponses courtes, sans emoji"),
@@ -213,7 +213,7 @@ func TestSettingAppliedOrProposed(t *testing.T) {
 	}
 	for _, bad := range []settingIn{
 		{Name: setCap, Value: "99"}, {Name: setOrder, Value: "fax"}, {Name: setZone, Value: "Mars/Olympus"},
-		{Name: setZone, Value: "../../etc/passwd"}, {Name: setTgDetail, Value: "all"}, {Name: "quiet", Value: "23:00"},
+		{Name: setZone, Value: "../../etc/passwd"}, {Name: setDetail, Value: "telegram all"}, {Name: setDetail, Value: "nowhere alert"}, {Name: "quiet", Value: "23:00"},
 		{Name: setDelay, Value: "0"},
 	} {
 		bad.Why, bad.SourceRef = "x", ref(seq)
@@ -223,8 +223,8 @@ func TestSettingAppliedOrProposed(t *testing.T) {
 	}
 	// Not asked in this turn: only proposed, and nothing changes.
 	other := ownerSays(c, "Quel temps fait-il ?")
-	out, err = c.brainSetting(settingIn{Name: setTgDetail, Value: "alert", Why: "Il lit Telegram en public.", SourceRef: ref(other)})
-	if err != nil || out["proposed"] == nil || c.store.get(tgDetailKey) == detailAlert {
+	out, err = c.brainSetting(settingIn{Name: setDetail, Value: "telegram alert", Why: "Il lit Telegram en public.", SourceRef: ref(other)})
+	if err != nil || out["proposed"] == nil || c.store.get(channelDetailKey(tgChannel)) == detailAlert {
 		t.Fatalf("%v %v", out, err)
 	}
 	// Tainted: only proposed, even when asked.
@@ -238,7 +238,7 @@ func TestSettingAppliedOrProposed(t *testing.T) {
 	if len(ps) != 2 || ps[1].Value != "America/New_York" || ps[1].Tainted == "" {
 		t.Fatalf("proposals %+v", ps)
 	}
-	if err := c.decideSetting(ps[0].ID, true); err != nil || c.store.get(tgDetailKey) != detailAlert {
+	if err := c.decideSetting(ps[0].ID, true); err != nil || c.store.get(channelDetailKey(tgChannel)) != detailAlert {
 		t.Fatalf("approve: %v", err)
 	}
 	if err := c.decideSetting(ps[1].ID, false); err != nil || c.store.get("notify_zone") != "Europe/Paris" {

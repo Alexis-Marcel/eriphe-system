@@ -20,7 +20,7 @@ type notifyIn struct {
 	Text  string `json:"text" jsonschema:"what to tell the user, in French, one or two sentences, plain text"`
 	Level string `json:"level" jsonschema:"now (worth interrupting: within the hour) or brief (can wait for the next brief)"`
 	Why   string `json:"why" jsonschema:"why you tell it, in French, one sentence the user sees on opening it (the source, what triggered it)"`
-	Where string `json:"where,omitempty" jsonschema:"the line to try first, from where_now: inapp, computer, voice, phone or telegram; empty lets the router choose (best, unless you have a reason). Lines off, the quiet hours and the user's rules still apply"`
+	Where string `json:"where,omitempty" jsonschema:"the line to try first, from where_now: inapp, computer, voice, phone, or a channel's own line (where_now lists them); empty lets the router choose (best, unless you have a reason). Lines off, the quiet hours and the user's rules still apply"`
 	Ref   string `json:"ref,omitempty" jsonschema:"what it is about, the key rules match: a known topic (notifications lists them) before a new one; project:<name> and person:<slug> as in the memory, source:<server>, a one-word topic (facture), task:<id>, intention:<id>"`
 }
 
@@ -36,9 +36,9 @@ type ruleIn struct {
 	Match     string `json:"match,omitempty" jsonschema:"for topic: the ref it applies to, as given to notify; project:getout also matches project:getout:prod"`
 	Outcome   string `json:"outcome,omitempty" jsonschema:"for topic: now, brief or never"`
 	Night     bool   `json:"night,omitempty" jsonschema:"for topic with outcome now: even in the quiet hours and over the daily cap; only if the user said so"`
-	Channels  string `json:"channels,omitempty" jsonschema:"for topic: where its notifications go, push, telegram or push,telegram; the user's default channels when empty"`
-	Also      string `json:"also,omitempty" jsonschema:"for topic: lines added to the first device, only if the user asked: phone, telegram or computer ('Getout: on the phone too')"`
-	Never     string `json:"never,omitempty" jsonschema:"for topic: lines it never goes by: voice, telegram, phone, computer or inapp"`
+	Channels  string `json:"channels,omitempty" jsonschema:"for topic: where its notifications go: push, a channel's id (where_now lists them), or several comma-separated; the user's default channels when empty"`
+	Also      string `json:"also,omitempty" jsonschema:"for topic: lines added to the first device, only if the user asked: phone, computer or a channel's line ('Getout: on the phone too')"`
+	Never     string `json:"never,omitempty" jsonschema:"for topic: lines it never goes by: voice, phone, computer, inapp or a channel's line"`
 	Days      string `json:"days,omitempty" jsonschema:"for quiet: all, weekdays (the nights before a weekday) or weekend (Friday and Saturday nights); all by default"`
 	From      string `json:"from,omitempty" jsonschema:"for quiet: when the quiet hours start, HH:MM"`
 	To        string `json:"to,omitempty" jsonschema:"for quiet: when they end, HH:MM"`
@@ -51,11 +51,11 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in notifyIn) (map[string]any, error) {
 			return c.brainNotify(in)
 		})
-	tool(s, "notifications", "What you told the user on your own and how they took it (useful, not useful, not now), what waits for the brief, the notification rules (active and proposed), the quiet hours in force and the window the user's activity suggests, the known topics (the refs to reuse in notify and rule), and the settings (device order, lines off, daily cap, time zone, Telegram detail).",
+	tool(s, "notifications", "What you told the user on your own and how they took it (useful, not useful, not now), what waits for the brief, the notification rules (active and proposed), the quiet hours in force and the window the user's activity suggests, the known topics (the refs to reuse in notify and rule), and the settings (device order, lines off, daily cap, time zone, each channel's detail).",
 		func(ctx context.Context, in notificationsIn) (map[string]any, error) {
 			return c.brainNotifications(in)
 		})
-	tool(s, "rule", "Write a notification rule of the user's: what to do with notifications about a topic ref (now, brief, never, even at night, and by which lines), or the quiet hours; or delete a notification rule. A preference about being told lives here, never in remember; general settings (device order, daily cap, time zone, Telegram detail) are setting. A topic's match is a known topic (notifications lists them): a new one matches only if notify gives that same ref. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
+	tool(s, "rule", "Write a notification rule of the user's: what to do with notifications about a topic ref (now, brief, never, even at night, and by which lines), or the quiet hours; or delete a notification rule. A preference about being told lives here, never in remember; general settings (device order, daily cap, time zone, a channel's detail) are setting. A topic's match is a known topic (notifications lists them): a new one matches only if notify gives that same ref. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})
@@ -78,8 +78,8 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 		return nil, errors.New("text and why are needed")
 	case in.Level != levelNow && in.Level != levelBrief:
 		return nil, errors.New("level is now or brief")
-	case in.Where != "" && !slices.Contains(routeSteps, in.Where):
-		return nil, errors.New("where is one of inapp, computer, voice, phone, telegram, or empty")
+	case in.Where != "" && !slices.Contains(routeLines(), in.Where):
+		return nil, errors.New("where is one of " + linesText() + ", or empty")
 	}
 	scan := scanMemoryText(text, why, in.Ref)
 	if scan.Reject != "" {
@@ -318,7 +318,7 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 		r.Kind = ruleTopic
 	}
 	if r.Kind != ruleTopic && r.Kind != ruleQuiet {
-		return nil, errors.New("kind is topic or quiet; the device order, lines off, daily cap, time zone and Telegram detail are settings: setting")
+		return nil, errors.New("kind is topic or quiet; the device order, lines off, daily cap, time zone and a channel's detail are settings: setting")
 	}
 	var topicNote string
 	if r.Kind == ruleTopic {

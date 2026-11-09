@@ -88,7 +88,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 				}
 			}
 			// The cards: attached to a message already shown, or decided
-			// (here, on Telegram, in words): each sent again when it changed.
+			// (here, on a channel, in words): each sent again when it changed.
 			var b strings.Builder
 			for _, x := range w.liveCards() {
 				if x.Seq > after {

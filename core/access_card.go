@@ -361,7 +361,7 @@ func (c *core) approvedCall(ctx context.Context, a accessQuestion, name string) 
 
 // newAccessAsk keeps a question and shows its card now: the brain or the
 // task is stopped on it, so no later message will carry it. It goes to
-// Telegram as well (telegramCards).
+// the channels the user writes from as well (channelCards).
 func (c *core) newAccessAsk(a accessQuestion) int64 {
 	refs := ""
 	if len(a.Refs) > 0 {

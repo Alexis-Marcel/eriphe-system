@@ -173,7 +173,7 @@ func TestWebAccessMoved(t *testing.T) {
 func TestAccessWords(t *testing.T) {
 	for _, lang := range []string{"fr", "en"} {
 		keys := []string{"settings.access", "acc.lead", "acc.add", "acc.app.none", "acc.app.device", "acc.app.devices", "acc.tg.linked", "acc.tg.notlinked"}
-		for _, k := range []string{entryWeb, entryApp, entryTelegram, apiGeneric} {
+		for _, k := range []string{entryWeb, entryApp, tgChannel, apiGeneric} {
 			keys = append(keys, "acc.kind."+k, "acc.kind."+k+".desc")
 		}
 		keys = append(keys, "acc.api.how."+apiGeneric)

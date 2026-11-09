@@ -59,7 +59,7 @@ type core struct {
 
 	push        *pusher          // notifications on the user's devices (push.go); nil without the workspace
 	notifyClock func() time.Time // the time of notify's decisions (notify.go); nil: now
-	tg          *telegram        // the user's Telegram bot (telegram.go); nil without the workspace
+	tg          *telegram        // a channel's own state (telegram.go, registered in channels.go); nil without the workspace
 	obs         observations     // the machines' locked, idle, do not disturb, in memory only (observe.go)
 	events      eventBus         // the event journal's subscribers (event_journal.go)
 	skillRuns   skillRunner      // the triggered skills (skill_runs.go)

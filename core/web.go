@@ -98,7 +98,7 @@ func newWeb(c *core, cfg WebConfig) (*web, error) {
 		return nil, err
 	}
 	w.startPush()     // web_push.go
-	w.startTelegram() // web_telegram.go
+	w.startChannels() // web_channels.go
 	return w, nil
 }
 
@@ -256,7 +256,7 @@ func (w *web) routes() http.Handler {
 	w.githubRoutes(mux)   // web_github.go
 	w.welcomeRoutes(mux)  // web_welcome.go
 	w.pushRoutes(mux)     // web_push.go
-	w.channelRoutes(mux)  // web_telegram.go
+	w.channelRoutes(mux)  // web_channels.go
 	w.whereRoutes(mux)    // web_where.go
 	w.alertRoutes(mux)    // web_alerts.go
 	w.activityRoutes(mux) // web_activity.go

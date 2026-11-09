@@ -21,7 +21,7 @@ var settingStrings = map[string]map[string]string{
 		"setting.name.move_on_after_minutes": "Minutes avant l'appareil suivant",
 		"setting.name.daily_cap":             "Notifications « maintenant » par jour",
 		"setting.name.time_zone":             "Fuseau horaire",
-		"setting.name.telegram_detail":       "Ce que Telegram reçoit (full : le texte ; alert : un signal)",
+		"setting.name.channel_detail":        "Ce qu'un canal reçoit (full : le texte ; alert : un signal)",
 		"setting.name.voice_for_urgent":      "Dire à voix haute le message d'un skill urgent (on / off)",
 	},
 	"en": {
@@ -33,7 +33,7 @@ var settingStrings = map[string]map[string]string{
 		"setting.name.move_on_after_minutes": "Minutes before the next device",
 		"setting.name.daily_cap":             "“Now” notifications a day",
 		"setting.name.time_zone":             "Time zone",
-		"setting.name.telegram_detail":       "What Telegram gets (full: the text; alert: a signal)",
+		"setting.name.channel_detail":        "What a channel gets (full: the text; alert: a signal)",
 		"setting.name.voice_for_urgent":      "Say an urgent skill's message aloud (on / off)",
 	},
 }

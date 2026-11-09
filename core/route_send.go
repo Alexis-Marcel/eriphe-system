@@ -14,7 +14,7 @@ import (
 // target, then the next if the notification is not seen in time.
 //
 // Seen is: opened (its push or link), answered (👍 / 👎 / « pas
-// maintenant », here or on Telegram), or shown in a tab in front of the
+// maintenant », here or on a channel), or shown in a tab in front of the
 // user. A pass every half minute sends what was not seen to the next
 // target (escalateDue).
 

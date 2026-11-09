@@ -7,21 +7,17 @@ import (
 	"log"
 	"strconv"
 	"strings"
-	"time"
 )
 
-// The conversation's cards on Telegram (convo_cards.go): a card goes there
-// after the message it is attached to, when that message went there (a
-// reply to what the user wrote from Telegram, or a notification), with Oui
-// and Non buttons. A button answers its card only, through the same code
-// as the workspace's, and only from the linked account (onCallback checks
-// the sender before anything). "Alerts only" sends no card: a button must
-// never approve what the user cannot read. A task's raw permission never
-// comes here (a command, a JSON input): what the grid asks does, one
-// readable sentence (access_card.go).
+// Buttons on Telegram: a card of the conversation's (convo_cards.go), sent
+// after the message it is attached to (channel_relay.go), with Oui and
+// Non; and a task's permission that waits, with Allow and Deny. A button
+// answers its card or its permission only, through the same code as the
+// workspace's, and only from the linked account (onCallback checks the
+// sender before anything): the user's own answer. "Alerts only" sends no
+// card and no permission's buttons: a button must never approve what the
+// user cannot read.
 
-func tgMsgKey(seq int) string    { return fmt.Sprintf("tg_msg:%d", seq) }
-func tgNotifKey(id int64) string { return fmt.Sprintf("tg_notif:%d", id) }
 func cardData(id int64, yes bool) string {
 	if yes {
 		return fmt.Sprintf("pc:%d:y", id)
@@ -39,83 +35,78 @@ func parseCardData(s string) (int64, bool, bool) {
 	return id, parts[2] == "y", err == nil && id > 0
 }
 
-// blocksATask tells whether a card stops a task until it is answered: it
-// goes to Telegram whatever its message did.
-func blocksATask(kind string) bool { return kind == cardTaskStart || kind == cardAccess }
-
-// sentToTelegram tells whether a message of the brain's went to Telegram.
-func (c *core) sentToTelegram(seq int) bool {
-	if c.store.get(tgMsgKey(seq)) != "" {
-		return true
+// permData is a permission's button: pm:<task>:<permission>:<y|n>. Telegram
+// takes 64 bytes of data: a longer one has no buttons (compose).
+func permData(p notePerm, allow bool) string {
+	a := "n"
+	if allow {
+		a = "y"
 	}
-	var id int64
-	if c.store.db.QueryRow(`SELECT id FROM notifications WHERE msg = ?`, seq).Scan(&id) != nil {
-		return false
-	}
-	return c.store.get(tgNotifKey(id)) != ""
+	return "pm:" + p.Task + ":" + p.ID + ":" + a
 }
 
-// telegramCards sends the cards still waiting whose message went to Telegram.
-func (c *core) telegramCards() {
-	t := c.tg
-	if t == nil || !t.linked() || t.detail() == detailAlert {
-		return
+func parsePermData(s string) (notePerm, bool, bool) {
+	parts := strings.Split(s, ":")
+	if len(parts) != 4 || parts[0] != "pm" || parts[1] == "" || parts[2] == "" || (parts[3] != "y" && parts[3] != "n") {
+		return notePerm{}, false, false
 	}
-	xs, err := c.cardsWhere(`seq > 0 AND tg = 0 AND state = ? AND kind != ? AND attached >= ? ORDER BY id`,
-		cardPending, cardDigest, time.Now().Add(-24*time.Hour).Unix())
-	if err != nil {
-		return
-	}
+	return notePerm{Task: parts[1], ID: parts[2]}, parts[3] == "y", true
+}
+
+// card sends a card with its Oui and Non.
+func (t *telegram) card(x convoCard, p proposal) {
 	lang := t.lang()
-	for _, x := range xs {
-		if !blocksATask(x.Kind) && !c.sentToTelegram(x.Seq) {
-			continue
-		}
-		x, p := c.liveCard(x)
-		c.store.db.Exec(`UPDATE convo_cards SET tg = 1 WHERE id = ?`, x.ID)
-		if x.State != cardPending {
-			continue
-		}
-		t.post(cardTelegramText(x, p, lang), &tgKeyboard{Rows: [][]tgButton{{
-			{Text: "✓ " + tr(lang, "card.yes"), Data: cardData(x.ID, true)},
-			{Text: "✕ " + tr(lang, "card.no"), Data: cardData(x.ID, false)},
-		}}})
-	}
-}
-
-// cardTelegramText is a card as Telegram shows it, in plain text.
-func cardTelegramText(x convoCard, p proposal, lang string) string {
-	text := tr(lang, "card.kind."+x.Kind) + "\n" + truncate(p.Text(lang), 600)
-	for _, f := range p.FieldsIn(lang) {
-		text += "\n" + f.Name + " : " + truncate(oneLine(f.Value), 200)
-	}
-	if p.Why != "" {
-		text += "\n" + truncate(p.Why, 300)
-	}
-	if p.Tainted != "" {
-		text += "\n(" + tr(lang, "notif.tainted") + ")"
-	}
-	return text + "\n\n" + tr(lang, "card.tg.change")
+	t.post(cardText(x, p, lang), &tgKeyboard{Rows: [][]tgButton{{
+		{Text: "✓ " + tr(lang, "card.yes"), Data: cardData(x.ID, true)},
+		{Text: "✕ " + tr(lang, "card.no"), Data: cardData(x.ID, false)},
+	}}})
 }
 
 // onCardButton answers a card from Telegram; the sender was checked.
 func (t *telegram) onCardButton(ctx context.Context, token string, q *tgCallback, id int64, yes bool) {
 	lang := t.lang()
-	x, err := t.c.decideCard(ctx, id, yes, "telegram")
+	x, err := t.c.decideCard(ctx, id, yes, tgChannel)
 	answer := tr(lang, "card.did."+x.State)
 	switch {
 	case errors.Is(err, errCardDecided):
 		answer = tr(lang, "card.already")
 	case err != nil:
-		answer = tr(lang, "card.tg.failed")
+		answer = tr(lang, "card.channel.failed")
 		log.Printf("telegram: card %d: %v", id, err)
 	}
+	t.answered(ctx, token, q, answer, x.State != cardPending, tr(lang, "card.state."+x.State))
+}
+
+// onPermButton answers a task's permission from Telegram; the sender was
+// checked.
+func (t *telegram) onPermButton(ctx context.Context, token string, q *tgCallback, p notePerm, allow bool) {
+	lang := t.lang()
+	err := t.c.answerPermission(ctx, p, allow)
+	answer, state := tr(lang, "perm.denied"), tr(lang, "perm.denied")
+	if allow {
+		answer, state = tr(lang, "perm.allowed"), tr(lang, "perm.allowed")
+	}
+	switch {
+	case errors.Is(err, errPermGone):
+		answer = tr(lang, "perm.changed")
+	case err != nil:
+		answer = tr(lang, "card.channel.failed")
+		log.Printf("telegram: permission %s/%s: %v", p.Task, p.ID, err)
+	}
+	if err == nil {
+		t.c.ping()
+	}
+	t.answered(ctx, token, q, answer, err == nil, state)
+}
+
+// answered tells the button's answer, and once decided, says so under the
+// message, without its buttons.
+func (t *telegram) answered(ctx context.Context, token string, q *tgCallback, answer string, decided bool, state string) {
 	if err := t.call(ctx, token, "answerCallbackQuery", map[string]any{"callback_query_id": q.ID, "text": answer}, nil); err != nil {
 		log.Printf("%v", err)
 	}
-	// The card's message says what was decided, without its buttons.
-	if q.Message != nil && q.Message.MessageID != 0 && x.State != cardPending {
-		text := strings.TrimSpace(q.Message.Text) + "\n\n→ " + tr(lang, "card.state."+x.State)
+	if q.Message != nil && q.Message.MessageID != 0 && decided {
+		text := strings.TrimSpace(q.Message.Text) + "\n\n→ " + state
 		if err := t.call(ctx, token, "editMessageText", map[string]any{"chat_id": q.Message.Chat.ID, "message_id": q.Message.MessageID,
 			"text": truncate(text, tgTextMax)}, nil); err != nil {
 			log.Printf("%v", err)
