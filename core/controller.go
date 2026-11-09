@@ -429,6 +429,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	spec.Untrusted = taskUntrusted(kind, r.taint)
 	spec.AgentEnv, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the node fetches the task
 	spec.Folders = nil                                                                 // the same
+	if kind == "worker" {
+		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + c.taskNowText()) // situations.go
+	}
 	if len(folders) > 0 {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders, c.resultsOn(folders[0].Node)))
 	}

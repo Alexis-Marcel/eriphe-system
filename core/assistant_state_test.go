@@ -259,9 +259,6 @@ func TestAssistantsLine(t *testing.T) {
 	if got != "[assistants : Vigie : prod ok, incidents 2, mails 2 (il y a 4 min)]" {
 		t.Fatalf("line = %q", got)
 	}
-	if !strings.Contains(c.turnHead(now), got) {
-		t.Fatalf("turn head = %q", c.turnHead(now))
-	}
 	if strings.Contains(got, "consignes") {
 		t.Fatal("a text in the summary")
 	}

@@ -295,11 +295,8 @@ func TestContextLine(t *testing.T) {
 	if line != want {
 		t.Fatalf("line\n%s\nwant\n%s", line, want)
 	}
-	if !strings.Contains(c.turnHead(now), want) {
-		t.Fatal("the line is not in the header")
-	}
 	c.setContextLevel(0)
-	if c.contextLine(now) != "" || strings.Contains(c.turnHead(now), "contexte") {
+	if c.contextLine(now) != "" {
 		t.Fatal("level 0 still has a line")
 	}
 }

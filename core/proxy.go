@@ -71,6 +71,10 @@ func (c *core) taskMCPHandler() http.Handler {
 			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, s)))
 			return
 		}
+		if server == taskMemServer && !isRoleKind(t.Kind) && c.mem != nil {
+			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskMemoryServer(t)))) // situations.go
+			return
+		}
 		grant := c.taskGrant(t)
 		if !slices.Contains(grantServers(grant), server) || c.pool.get(server) == nil {
 			http.Error(w, "this task has no access to "+server, http.StatusForbidden)

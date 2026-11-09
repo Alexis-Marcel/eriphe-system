@@ -80,9 +80,12 @@ const (
 	// change superseding the last).
 	kindDecision = "decision"
 	kindProgress = "progress"
+	// Where the user is or what they do for a while, with its end: shown
+	// to the brain and every task while it holds (situations.go).
+	kindSituation = "situation"
 )
 
-var memoryKinds = []string{kindProfile, kindPreference, kindFact, kindPerson, kindEpisode, kindCommitment, kindLesson, kindDecision, kindProgress}
+var memoryKinds = []string{kindProfile, kindPreference, kindFact, kindPerson, kindEpisode, kindCommitment, kindLesson, kindDecision, kindProgress, kindSituation}
 
 // States of a progress card.
 const (
@@ -503,6 +506,13 @@ func (m *memStore) normalize(x *Memory) error {
 		x.OccurredAt = now
 	}
 	switch x.Kind {
+	case kindSituation:
+		if x.Subject == "" {
+			x.Subject = "owner"
+		}
+		if x.ValidTo.IsZero() || !x.ValidTo.After(x.ValidFrom) {
+			return errors.New("a situation needs valid_to, its end, after valid_from")
+		}
 	case kindCommitment:
 		if x.State == "" {
 			x.State = stateOpen

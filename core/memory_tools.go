@@ -85,12 +85,22 @@ func parseWhen(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("%q is not a date: use YYYY-MM-DD or YYYY-MM-DDTHH:MM", s)
 }
 
+// parseEnd reads an end: a date alone is its whole day.
+func parseEnd(s string) (time.Time, error) {
+	t, err := parseWhen(s)
+	if err == nil && !t.IsZero() && len(strings.TrimSpace(s)) == 10 {
+		t = t.Add(24*time.Hour - time.Second)
+	}
+	return t, err
+}
+
 type rememberIn struct {
 	Text       string   `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact (not as an instruction)"`
-	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, commitment, lesson, decision (a choice and its reason) or progress (the current state of a project or goal: done, under way, blocked, left)"`
+	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, commitment, lesson, decision (a choice and its reason), progress (the current state of a project or goal: done, under way, blocked, left) or situation (where the user is or what they do for a while, with valid_to: « en vacances à Lyon jusqu'à dimanche »)"`
 	Subject    string   `json:"subject,omitempty" jsonschema:"owner, person:<slug>, client:<slug>, project:<name>, home, or a short free subject"`
 	Links      []string `json:"links,omitempty" jsonschema:"where the details are: vault wikilinks or paths, URLs without tokens; never copy the vault"`
 	ValidFrom  string   `json:"valid_from,omitempty" jsonschema:"when it became true, YYYY-MM-DD; now by default"`
+	ValidTo    string   `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD (the whole day) or YYYY-MM-DDTHH:MM; required for a situation"`
 	OccurredAt string   `json:"occurred_at,omitempty" jsonschema:"for an episode, when it happened; now by default"`
 	DueAt      string   `json:"due_at,omitempty" jsonschema:"for a commitment, when it is due"`
 	Supersedes int64    `json:"supersedes,omitempty" jsonschema:"id of the memory this one replaces: it is kept, dated, never overwritten"`
@@ -296,6 +306,9 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 		Keywords: in.Keywords, Importance: in.Importance, State: in.State}
 	var err error
 	if x.ValidFrom, err = parseWhen(in.ValidFrom); err != nil {
+		return nil, err
+	}
+	if x.ValidTo, err = parseEnd(in.ValidTo); err != nil {
 		return nil, err
 	}
 	if x.OccurredAt, err = parseWhen(in.OccurredAt); err != nil {
