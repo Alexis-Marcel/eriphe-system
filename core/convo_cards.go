@@ -252,6 +252,8 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		return c.taskStartProposal(p) // task_start.go
 	case cardAccess:
 		return c.accessProposal(p) // access_card.go
+	case cardSession:
+		return c.sessionProposal(p) // session_engine.go
 	case cardUnlearn:
 		if c.mem == nil {
 			return p
@@ -341,6 +343,9 @@ func (c *core) pendingProposals() []proposal {
 	for _, id := range c.proposedAccess() {
 		add(cardAccess, id)
 	}
+	for _, id := range c.proposedSessionAsks() {
+		add(cardSession, id)
+	}
 	if m := c.mem; m != nil {
 		rows, err := m.db.Query(`SELECT id FROM learning_log WHERE undo = ? AND status != ? ORDER BY id`, undoProposed, learnReverted)
 		if err == nil {
@@ -402,6 +407,8 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.decideTaskStart(id, approve)
 	case cardAccess:
 		return c.decideAccess(ctx, id, approve)
+	case cardSession:
+		return c.decideSessionAsk(ctx, id, approve)
 	case cardUnlearn:
 		if approve {
 			_, err := c.unlearn(id, "owner", p.Why, nil)
@@ -453,7 +460,7 @@ func (c *core) attachTurnCards(seq int) {
 // the task waits on them, so the offer's quiet hours are not for them. One
 // whose task stopped meanwhile stays out of the conversation.
 func (c *core) claimBlockingCards() {
-	xs, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind IN (?, ?)`, cardPending, cardTaskStart, cardAccess)
+	xs, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind IN (?, ?, ?)`, cardPending, cardTaskStart, cardAccess, cardSession)
 	if err != nil {
 		return
 	}

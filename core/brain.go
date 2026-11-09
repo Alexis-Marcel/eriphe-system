@@ -30,6 +30,9 @@ func (c *core) notifyBrain(id, state string) {
 	}
 	c.logTask(id, state, outcome.receipt) // for since (since.go)
 	c.pushTaskEnded(id, state)            // and on the user's devices (push.go)
+	if c.sessionTaskChanged(id, state, outcome) {
+		return // a session's step: its lead hears of it (session_engine.go)
+	}
 	if c.memoryTaskChanged(id, state) {
 		return // the memory's own tasks are eriphe-core's (memory_extract.go)
 	}

@@ -184,6 +184,7 @@ func newMCPServer(c *core) *mcp.Server {
 	registerSinceTools(s, c)      // since
 	registerWatchTools(s, c)      // watch, watches, update_watch
 	registerAssistantTools(s, c)  // assistants, assistant_view
+	registerSessionTools(s, c)    // session_tools.go
 	return s
 }
 

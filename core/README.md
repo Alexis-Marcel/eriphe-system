@@ -826,6 +826,44 @@ verified and not verified side by side, the checks with the end of a failed one'
 mismatches. The last receipt is kept in `task_harness`. The night's memory extraction reads a
 finished task's receipt instead of its last message (still external).
 
+### Work sessions (`sessions.go`, `session_engine.go`)
+
+A **session** is work of several steps toward one goal: rebuild a service, find a brand name, make
+a video, not only code. An assistant has no end; a session has one (a goal, a plan, checkpoints);
+a task is one step.
+
+| Who | Does |
+|---|---|
+| Brain | opens the session with the user (`start_session`: title, goal, `done_when`, budget, steps), the only voice |
+| Lead | judges each step on its evidence (`settle_step`: accept, retry, reject), amends the plan (`amend_session`), closes it (`end_session`). The brain for now |
+| Engine (code, no model) | starts each step once those it comes `after` are accepted, in parallel, passes them their outputs, asks the cards, holds the limits |
+| User | approves the plan, answers the choices and approvals, gives more time |
+
+A step is a `task` (prompt, agent, resources, contract, as `run_task`'s), a `choice` (a question
+and 2 to 6 options, recorded with `choose_step` in the turn of the user's answer) or an `approval`
+(a yes or no card). Its statuses: `waiting`, `running`, `reported` (its agent says it is done: a
+claim), `verified` (its checks passed), `accepted`, `rejected`, `blocked` (its task failed or
+stopped), `dropped`. A step whose checks failed, or whose receipt claims what they deny, cannot be
+accepted.
+
+- **The plan card** (card kind `session`) is the user's approval of the steps as planned: they start
+  without asking again, their resources granted as for a watch the user authorised. A step added
+  later asks its own start card.
+- **One writer per scope**: two steps writing the same repository branch or folder never run at
+  once; the second waits.
+- **Handoff**: a task step's prompt gets the session's goal, `done_when` and the outputs of the
+  steps it comes after (the agent's last message, or what the lead gave on accepting).
+- **Limits held by the code**: 2 retries per step (a retry answers the idle task with what to fix,
+  or starts a new one), 2 plan changes without asking (then a card), a budget of running time (60
+  minutes by default; past it the session pauses, the running steps finish, and a card offers more
+  time). The brain never gives itself more time.
+- Each step's end reaches the lead as an event `[session N « title »]`, instead of the task's own;
+  a session complete or stuck is told once. `sessions` and `session_status` read them;
+  `stop_session` stops the tasks and withdraws the cards. The engine's pass runs every 15 seconds
+  with the nodes' check: budgets, and steps whose task ended while eriphe-core was down.
+- Tables: `sessions`, `session_steps`, `session_asks` (what a session asks, one card each),
+  `session_log`.
+
 ## Permission policy
 
 Every permission request of a worker goes through a policy written in code before the brain hears
