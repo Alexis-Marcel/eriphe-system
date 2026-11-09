@@ -27,6 +27,7 @@ type watchCard struct {
 	*rule
 	Runs  []*ruleRun
 	Grant *standingApproval // its standing approval, proposed or given
+	Stats ruleStats         // the last statsDays (team_stats.go)
 }
 
 // freshHook is a webhook address just made, shown this once.
@@ -50,7 +51,8 @@ func (w *web) watchesPage() watchesPage {
 			v.Proposed++
 			continue
 		}
-		card := watchCard{rule: x, Runs: w.c.recentRuns(x.ID, watchPageRuns), Grant: w.c.ruleApproval(x.ID)}
+		card := watchCard{rule: x, Runs: w.c.recentRuns(x.ID, watchPageRuns), Grant: w.c.ruleApproval(x.ID),
+			Stats: w.c.ruleStatsOf(x, statsSince(w.c.notifyTime()))}
 		if x.Source == sourceSchedule || x.Source == sourceReturn {
 			v.Routines = append(v.Routines, card)
 		} else {

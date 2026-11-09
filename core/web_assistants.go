@@ -32,6 +32,11 @@ type assistantCard struct {
 	Powers      []string    // what it may do, in words; the brain's helpers only
 	Wakes       []string    // what wakes it, in words
 	State       []stateItem // what it knows now
+	// The team (#244 step 6): the rules that wake it, who reads its
+	// facts, the facts it is lent, and what it did and cost lately.
+	WakeRules []string
+	Readers   []string
+	Stats     assistantStats
 }
 
 // stateItem is a field of an assistant's state, as its card shows it.
@@ -113,6 +118,13 @@ func (w *web) assistantCards(r *http.Request, v agentsPage) []assistantCard {
 			if l := tr(lang, "assistants.wake."+kind); l != "assistants.wake."+kind {
 				card.Wakes = append(card.Wakes, fmt.Sprintf(l, strings.TrimSpace(arg)))
 			}
+		}
+		if av.Spec.Role == assistantRoleAssistant {
+			for _, x := range w.c.wakeRules(av.Name) {
+				card.WakeRules = append(card.WakeRules, ruleSentence(x, lang, av.Spec.displayName()))
+			}
+			card.Readers = readersText(w.c.factReadersOf(av.Name), lang)
+			card.Stats = w.c.assistantStatsOf(av.Spec, statsSince(w.c.notifyTime()))
 		}
 		if a, ok := m.Agents[av.Spec.Agent]; ok {
 			card.AgentModel = modelLabel(m.Providers[a.Provider].Kind, a.Runtime, a.Model)
@@ -240,4 +252,21 @@ func (c *core) editAssistant(name string, e assistantEdit) error {
 
 func equalGrant(a, b []string) bool {
 	return strings.Join(a, ",") == strings.Join(b, ",")
+}
+
+// readersText says who reads an assistant's facts, in words.
+func readersText(r factReaders, lang string) []string {
+	var out []string
+	if r.Summary {
+		out = append(out, tr(lang, "team.reader.summary"))
+	} else {
+		out = append(out, tr(lang, "team.reader.brain"))
+	}
+	for _, n := range r.Rules {
+		out = append(out, fmt.Sprintf(tr(lang, "team.reader.rule"), n))
+	}
+	for _, n := range r.Assistants {
+		out = append(out, fmt.Sprintf(tr(lang, "team.reader.assistant"), n))
+	}
+	return out
 }

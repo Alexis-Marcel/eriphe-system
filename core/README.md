@@ -1489,6 +1489,21 @@ the last 30 days, where its harness said (`turnCost`), or "not known yet". On th
 makes the assistant and its rules (`then assistant:<name>`, by the owner) at once, all or nothing;
 on the no, nothing.
 
+### The team
+
+Settings → Agents shows the brain's assistants as **the user's team** (« Ton équipe »): for each
+one of the assistant role, besides its agent, powers, state, views and tools, the rules that wake
+it (as Settings → Règles says them), who reads its facts (the brain, in its summary line or when it
+asks; the rules whose `fait` or `if` names them; the assistants lent them), the facts it is lent,
+and its last 30 days (`team_stats.go`): wakes by its rules, turns and their cost where its harness
+said, reports, notifications and how many the user found not useful or not now, values written.
+Its cost is its tasks' (table `assistant_tasks`, kept as the controller starts them; a task of
+before it is not counted). Settings → Règles gives each rule its last 30 days too: fires, those
+its condition held back, cards made during its wakes of the brain (from the wake to its end, an
+hour at most), corrections of its notifications, what the brain's turns then cost; three cards or
+more say a standing approval may be missing. The brain reads the same in `assistants` and `rules`
+(`last_30_days`).
+
 The status (`GET /v1/assistants`) has its conditions `Running`, `Busy` and `Ready`, its current
 task, the agent it runs, its session, its last turn and its last error; the controller keeps its
 restarts there too (table `assistant_status`).

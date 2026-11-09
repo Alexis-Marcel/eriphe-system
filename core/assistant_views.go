@@ -338,6 +338,11 @@ type assistantEntry struct {
 	State   map[string]any `json:"state,omitempty"` // closed fields: value, or null unknown; rows by count
 	Texts   []string       `json:"text_fields,omitempty"`
 	Views   []viewEntry    `json:"views,omitempty"`
+	// The team (#244 step 6): the rules that wake it, the facts it is
+	// lent, and its last statsDays.
+	WakeRules []string        `json:"woken_by_rules,omitempty"`
+	Lent      []string        `json:"lent_facts,omitempty"`
+	Stats     *assistantStats `json:"last_30_days,omitempty"`
 }
 
 type viewEntry struct {
@@ -378,7 +383,14 @@ func (c *core) assistantEntries(now time.Time) []assistantEntry {
 		}
 		av := c.assistantView(a)
 		e := assistantEntry{Name: a.Name, Display: a.displayName(), Status: plainStatus(av), Error: av.Status.LastError,
-			Powers: a.powers(), Wakes: a.Triggers}
+			Powers: a.powers(), Wakes: a.Triggers, Lent: a.Facts}
+		if a.Role == assistantRoleAssistant {
+			for _, w := range c.wakeRules(a.Name) {
+				e.WakeRules = append(e.WakeRules, w.Name)
+			}
+			st := c.assistantStatsOf(a, statsSince(now))
+			e.Stats = &st
+		}
 		vals := c.assistantState(a, now)
 		for i, f := range a.State {
 			if e.State == nil {

@@ -477,6 +477,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	if err != nil {
 		return err
 	}
+	c.noteAssistantTask(a.Name, t.ID) // its cost is its tasks' (team_stats.go)
 	// Before its status names the new task: what its role carries over
 	// from the previous one is read from it.
 	if r.started != nil {

@@ -42,6 +42,8 @@
     {{with .Grant}}<span class="small"><span class="tag tag-warn">{{t "watch.grant"}}</span>{{if eq .State "proposed"}} <span class="muted">{{t "watch.grant.proposed"}}</span>{{end}} <span class="mono">{{.Tool}} {{.Input}}</span>
       · {{tf "watch.grant.left" .Left (date .Expires)}}
       <button class="btn btn-ghost sm" hx-post="/event-rules/{{.RuleID}}/revoke" hx-target="#event-rules">{{t "watch.grant.revoke"}}</button></span>{{end}}
+    {{with .Stats}}{{if .Fires}}<span class="small muted">{{tf "rule.stats" .Fires .Skipped .Cards .Corrections}}{{if .Usage.Costed}} · {{tf "team.cost" .Usage.CostUSD}}{{end}}</span>
+      {{if .Hint}}<span class="small"><span class="tag tag-warn">{{t "rule.stats.many"}}</span></span>{{end}}{{end}}{{end}}
     {{if .Runs}}<details class="rule-edit"><summary class="small">{{t "watch.runs"}}</summary><ul class="watch-runs small muted">{{range .Runs}}<li>{{template "event-rule-run" .}}</li>{{end}}</ul></details>{{end}}</div>
     <div class="actions">
     {{if eq .State "paused"}}<button class="btn btn-soft sm" hx-post="/event-rules/{{.ID}}/resume" hx-target="#event-rules">{{t "watch.resume"}}</button>
