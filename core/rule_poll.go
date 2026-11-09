@@ -201,7 +201,9 @@ func (c *core) tickPoll(ctx context.Context, w *rule, now time.Time) {
 			log.Printf("rule %d: %s", w.ID, note)
 		}
 	}
-	c.fireRule(w, &ruleRun{Cause: cause, Detail: excerpt, External: true, Urgent: urgent})
+	// What a tool the user marked trusted returns is theirs (tool_trust.go):
+	// its wake is clean, as the brain's own call to it would be.
+	c.fireRule(w, &ruleRun{Cause: cause, Detail: excerpt, External: !c.trustsServer(w.Spec.Server), Urgent: urgent})
 }
 
 // transition tells whether a look differs from the last confirmed state.

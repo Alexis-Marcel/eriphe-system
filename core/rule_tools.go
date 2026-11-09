@@ -80,7 +80,7 @@ const eventRuleToolText = `An event rule (kind event, or when given) has a when,
 	`outil (a read-only catalog tool's result, polled, crosses a cond or changes; on the transition and on recovery), alerte (a service calls the rule's webhook; ` +
 	`the user gets its address in Settings → Règles), fait (a closed fact changes, or becomes a value: context.place becomes home), fin (a task or a work session ends). ` +
 	`If: a condition on closed facts and the time, never a text. Then: brain (wake you with its prompt; you then speak through notify, or answer [rien]), ` +
-	`assistant:<name> (wake that assistant with its prompt), or notify (eriphe-core sends its fixed text itself). What outil and alerte bring is external: their wake is tainted. ` +
+	`assistant:<name> (wake that assistant with its prompt), or notify (eriphe-core sends its fixed text itself). What outil and alerte bring is external: their wake is tainted, but for an outil rule on a tool the user marked trusted (Settings → Tools). ` +
 	`A rule may carry one standing approval (grant): one exact action the user asks for in this clean turn, proposed on a card; once they say yes there, you may call exactly it on the rule's wake without asking. ` +
 	`An outil or alerte rule the user asks to be woken for at any hour is urgent: eriphe-core itself sends its fixed urgent_message, once per incident. ` +
 	`For outil and alerte, never choose urgency, condition or action for the user: called without them, it creates nothing and returns what is missing, to ask the user in one short message. ` +

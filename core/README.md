@@ -2955,7 +2955,12 @@ token and secret, and no condition, whose action wakes the brain. `/settings/wat
 - **External content.** What `outil` and `alerte` bring is kept with the run as external: the wake
   quotes it as data and taints the turn (`watch.outil`, `watch.alerte`), so what it notifies goes to
   the brief at most (the bench has these cases), it may not lend a task
-  anything that writes; `since` names it without quoting it.
+  anything that writes; `since` names it without quoting it. One exception, the one taint rule's:
+  an `outil` rule on a tool the user marked trusted (Settings → Tools) brings the user's own
+  content. Its run is not external, its wake is clean, and a task started then starts as on any
+  clean turn. The mark is read when the rule fires: a tool untrusted since makes the next run external.
+  Trusting a tool trusts all it returns: a Grafana query that returns log lines or labels written
+  by someone else should stay untrusted.
 - **History and silences.** Each run keeps what the brain did (notified, said, silent, acted, or
   missed, dropped), in Settings and in `since`; the next brief lists the watches that stayed silent
   since the last one.

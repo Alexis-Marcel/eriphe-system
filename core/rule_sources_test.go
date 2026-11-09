@@ -242,6 +242,46 @@ func TestPollWakeIsTainted(t *testing.T) {
 	}
 }
 
+// A tool the user marked trusted brings their own content: the wake of an
+// outil rule on it is clean, quotes the result as theirs, and a tool
+// untrusted since makes the next run external again.
+func TestPollWakeOnTrustedTool(t *testing.T) {
+	c, mon, now := pollCore(t)
+	w := pollWatch(t, c, &pollCond{Kind: condCompare, Path: "data.state", Op: "ne", Value: "up"})
+	if err := c.setServerTrust("monitor", true, trustByUser); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	mon.set("down", "2.0.1")
+	c.ruleTick(ctx)
+	*now = now.Add(pollConfirm)
+	c.ruleTick(ctx)
+	if runs := runsOf(t, c, w.ID); len(runs) != 1 || runs[0].External {
+		t.Fatalf("runs %+v", runs)
+	}
+	if err := tendBrain(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	text, _ := lastInbox(t, c)["text"].(string)
+	if !strings.Contains(text, "marqué de confiance") || strings.Contains(text, "contenu extérieur") || !strings.Contains(text, "down") {
+		t.Errorf("wake:\n%s", text)
+	}
+	if tainted := c.turnTaint(); len(tainted) != 0 {
+		t.Fatalf("a trusted tool's wake is tainted: %v", tainted)
+	}
+
+	// Untrusted since: the recovery is external.
+	c.setServerTrust("monitor", false, trustByUser)
+	mon.set("up", "2.0.1")
+	*now = now.Add(time.Minute)
+	c.ruleTick(ctx)
+	*now = now.Add(pollConfirm)
+	c.ruleTick(ctx)
+	if runs := runsOf(t, c, w.ID); len(runs) != 2 || !runs[1].External {
+		t.Fatalf("after the mark was removed: %+v", runs)
+	}
+}
+
 func sign(secret string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
