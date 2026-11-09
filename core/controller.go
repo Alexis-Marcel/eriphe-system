@@ -63,6 +63,7 @@ type core struct {
 	known       contextStore     // the user's context: signals in memory only (context.go)
 	ha          haState          // Home Assistant as a source of presence (ha_presence.go)
 	events      eventBus         // the event journal's subscribers (event_journal.go)
+	skillRuns   skillRunner      // the triggered skills (skill_runs.go)
 	out         channelOut       // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex       // one escalation pass at a time (route_send.go)
 

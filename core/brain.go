@@ -29,7 +29,10 @@ func (c *core) notifyBrain(id, state string) {
 		}
 	}
 	c.logTask(id, state, outcome.receipt) // for since (since.go)
-	c.pushTaskEnded(id, state)            // and on the user's devices (push.go)
+	if c.skillTaskChanged(id, state, outcome) {
+		return // a triggered skill's: it tells the user itself (skill_runs.go)
+	}
+	c.pushTaskEnded(id, state) // and on the user's devices (push.go)
 	if c.sessionTaskChanged(id, state, outcome) {
 		return // a session's step: its lead hears of it (session_engine.go)
 	}
