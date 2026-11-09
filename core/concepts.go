@@ -28,9 +28,10 @@ var concepts = []concept{
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
 	{"assistant", "assistants, assistant_view", "what your assistants know now, beyond the [assistants] line: their state, and the views they expose (urgent mails, today's incidents)"},
 	{"task", "run_task", "long or heavy work, by an agent on a machine"},
+	{"session", "start_session, session_status, settle_step, amend_session", "work of several steps toward one goal (a plan, steps in parallel, checkpoints for the user), not only code"},
 }
 
-const conceptMapEN = "memory, intention, watch, rule, setting, notify, since, assistant, task"
+const conceptMapEN = "memory, intention, watch, rule, setting, notify, since, assistant, task, session"
 
 var conceptLinesEN = func() string {
 	var b strings.Builder
