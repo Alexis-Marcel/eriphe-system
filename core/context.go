@@ -26,9 +26,10 @@ import (
 //
 // A signal is a kind and a value from a closed list, with its source, when
 // it came and when it expires. A value off the list is refused: no free
-// text from a source ever reaches the model. Signals live in memory only,
-// a few minutes to a few hours, and fade to unknown when they expire;
-// nothing is written to the database.
+// text from a source ever reaches the model. Signals are ephemeral facts
+// owned by "context" (facts.go), written by code: they live in memory
+// only, a few minutes to a few hours, and fade to unknown when they
+// expire; nothing is written to the database.
 //
 // What reads them: the router (route.go), which skips a device that is
 // locked, idle or not to be disturbed, and the brain's state header
@@ -187,11 +188,12 @@ func parseRooms(s string) []string {
 	return out
 }
 
-// contextStore keeps the signals, in memory only. Its zero value is empty
-// and ready.
+// contextStore keeps the signals as ephemeral facts owned by "context"
+// (facts.go), in memory only: one per source and kind. Its zero value is
+// empty and ready.
 type contextStore struct {
+	mem  factMemory
 	mu   sync.Mutex
-	sigs map[string]ctxSignal // by source and kind
 	seen map[string]time.Time // when each source last sent something
 }
 
@@ -213,42 +215,47 @@ func (s *contextStore) lastSeen(source string) (time.Time, bool) {
 	return t, ok
 }
 
-func (s *contextStore) put(sig ctxSignal) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.sigs == nil {
-		s.sigs = map[string]ctxSignal{}
+// signalFact is a signal as the fact its source writes.
+func signalFact(sig ctxSignal) fact {
+	f := fact{Owner: ownerContext, Field: sig.Kind, Value: sig.Value, Set: sig.At, Expires: sig.Until, Writer: sig.Source, Closed: true}
+	if sig.Reason != "" || sig.Idle > 0 {
+		f.Detail = map[string]any{}
+		if sig.Reason != "" {
+			f.Detail["reason"] = sig.Reason
+		}
+		if sig.Idle > 0 {
+			f.Detail["idle"] = sig.Idle
+		}
 	}
-	s.sigs[sig.Source+"|"+sig.Kind] = sig
+	return f
 }
+
+// factSignal is the signal a context's fact holds.
+func factSignal(f fact) ctxSignal {
+	sig := ctxSignal{Kind: f.Field, Source: f.Writer, At: f.Set, Until: f.Expires}
+	sig.Value, _ = f.Value.(string)
+	sig.Reason, _ = f.Detail["reason"].(string)
+	sig.Idle, _ = f.Detail["idle"].(time.Duration)
+	return sig
+}
+
+func (s *contextStore) put(sig ctxSignal) { s.mem.put(signalFact(sig)) }
 
 // forget drops a source's signals, or one kind of them ("" for all).
 func (s *contextStore) forget(source, kind string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for k, sig := range s.sigs {
-		if sig.Source == source && (kind == "" || sig.Kind == kind) {
-			delete(s.sigs, k)
-		}
-	}
+	s.mem.forget(ownerContext, source, kind)
 	if kind == "" {
+		s.mu.Lock()
 		delete(s.seen, source)
+		s.mu.Unlock()
 	}
 }
 
 // fresh are the signals not expired at now; the expired ones are dropped.
 func (s *contextStore) fresh(now time.Time) []ctxSignal {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	var out []ctxSignal
-	for k, sig := range s.sigs {
-		if !now.Before(sig.Until) {
-			delete(s.sigs, k) // expired: unknown from now on
-			continue
-		}
-		if sig.fresh(now) {
-			out = append(out, sig)
-		}
+	for _, f := range s.mem.fresh(ownerContext, now) {
+		out = append(out, factSignal(f))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Source != out[j].Source {

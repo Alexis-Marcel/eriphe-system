@@ -131,6 +131,16 @@ func openStore(path string) (*Store, error) {
 	db.Exec(`ALTER TABLE access_log RENAME COLUMN repo TO target`)
 	db.Exec(`ALTER TABLE access_log RENAME COLUMN access TO action`)
 	db.Exec(`ALTER TABLE credential_grants RENAME TO repo_grants`)
+	// The assistants' state became the kept facts (#244 step 3).
+	if _, err := db.Exec(`ALTER TABLE assistant_state RENAME TO facts`); err == nil {
+		db.Exec(`ALTER TABLE facts RENAME COLUMN assistant TO owner`)
+		db.Exec(`ALTER TABLE facts ADD COLUMN writer TEXT NOT NULL DEFAULT ''`)
+	}
+	if _, err := db.Exec(`ALTER TABLE assistant_state_log RENAME TO facts_log`); err == nil {
+		db.Exec(`ALTER TABLE facts_log RENAME COLUMN assistant TO owner`)
+		db.Exec(`ALTER TABLE facts_log ADD COLUMN writer TEXT NOT NULL DEFAULT ''`)
+		db.Exec(`DROP INDEX IF EXISTS assistant_state_log_at`)
+	}
 	for _, q := range append([]string{schema}, extraSchema...) {
 		if _, err := db.Exec(q); err != nil {
 			return nil, err

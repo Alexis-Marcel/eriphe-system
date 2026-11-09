@@ -1347,9 +1347,36 @@ by the user. It runs as a permanent task, like the brain, placed on an always-on
   notifications are tainted (they never interrupt, carry no link). A new session starts clean; a
   resumed one keeps its taint.
 
+### Facts
+
+What Eriphe knows now lives in **one fact store** (`facts.go`). A fact is an owner's field: a value
+of a closed type (a choice, a number, a date, a text, rows of such), its time, its validity
+(expired, it reads unknown), its **provenance** (who wrote it: an assistant, `machine:<node>`,
+`src:<id>`, `ha`) and its **taint** (why its writer was tainted when it wrote it; a closed value
+never taints). Two kinds:
+
+| Kind | Owner | Written by | Where |
+|---|---|---|---|
+| kept | an assistant's name | the assistant, through `set_state`, checked against its schema | the database (`facts`, history in `facts_log`, 7 days) |
+| ephemeral | `context` | code alone, from the sources the user turned on (a node, a token source, Home Assistant's follower) | memory only, no history, gone at a restart |
+
+The context's facts are the user's (`context.place`, `context.room`, `context.focus`,
+`context.busy_until`), the house's (`context.home_activity`) and each device's
+(`context.<device>.presence`, `.dnd`, `.activity`), folded from the signals below. The names
+`context`, `eriphe`, `brain` and `user` are kept: no assistant takes them.
+
+The brain reads them in each turn (the `[contexte : …]` and `[assistants : …]` lines, closed values
+only), and with its tool **`facts`** (free, no model; `owner` to filter): each fact with its value
+if closed (rows by their count, a text by its field's name only: `assistant_view` reads it), its
+age, its validity and its writer. The router reads the context's facts. Facts orient, never
+authorise: the grid, the cards and the approvals never read them.
+
+Before #244 step 3 the kept facts were the tables `assistant_state` and `assistant_state_log`,
+keyed by `assistant`: they are renamed at start, their rows and history kept.
+
 ### An assistant's state
 
-What an assistant knows now, typed (`assistant_state.go`). Its schema is its spec's `state`: up to
+What an assistant knows now, typed (`assistant_state.go`): its kept facts. Its schema is its spec's `state`: up to
 20 fields, each
 
 | Key | |
@@ -1363,7 +1390,7 @@ Its one writer is the assistant, with its own tool `set_state`, checked by code:
 type or list, an unknown field refuse the whole call, nothing written; `null` clears a field; rows
 with a key take the whole list or `{"upsert": [rows], "remove": [keys]}`. Its tool `state` reads it
 back. Its instructions describe the fields, in French. The whole state holds at most 64 KB; each
-write goes in its history (`assistant_state_log`), kept 7 days and 2000 writes per assistant. It
+write goes in its history (`facts_log`), kept 7 days and 2000 writes per assistant. It
 goes with the assistant when it is removed; a value its schema no longer takes reads unknown. For
 now an assistant that launches tasks (the brain) has no state.
 
@@ -2634,7 +2661,8 @@ from a source ever reaches the model.
 | `focus` | 1 | the user, declared | `on`, `sleep`, `off` | 4 h, 24 h |
 | `busy` | 1 | the user, declared | `busy`, `free` (until it expires) | 1 h, 12 h |
 
-Signals live **in memory only** (`contextStore`), never in the database and with no history; an
+Signals are **ephemeral facts** owned by `context` (see Facts), written by code: they live **in
+memory only** (`contextStore`, over `factMemory`), never in the database and with no history; an
 expired one is unknown. Level 0 still keeps the activity record above (30 days), and the page says
 so. The sources:
 
@@ -2670,7 +2698,10 @@ the level and the switches with `setting` (`context_level`, `context_sources_off
 asked in a clean turn, else proposed in À valider; the first-launch interview asks the level.
 
 **Home Assistant, adapted to each house** (`ha_client.go`, `ha_presence.go`, `ha_tools.go`;
-source `ha`). With the long-lived token of the catalog's Home Assistant tool (the `home-assistant`
+source `ha`; its follower writes the context's facts like any source). Why not Home Assistant's own
+MCP server (the catalog's tool): its `GetLiveContext` returns only the entities exposed to Assist,
+by name and area with no `entity_id`, and has no subscription, so it can neither tell a mapped
+entity apart nor follow it without polling; the WebSocket follower stays. With the long-lived token of the catalog's Home Assistant tool (the `home-assistant`
 preset; nothing to install), over Home Assistant's WebSocket API:
 
 1. **Discover** (code, no model): `get_states` and the area, device and entity registries (a user

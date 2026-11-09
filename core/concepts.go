@@ -26,12 +26,12 @@ var concepts = []concept{
 	{"setting", "setting, presence_sources, map_presence", "how the user is told in general: device order, lines off, daily cap, time zone, Telegram detail; what you may know of the user, and which Home Assistant entities tell it"},
 	{"notify", "notify, notifications", "say something on your own, now or for the brief, under a known topic ref"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
-	{"assistant", "assistants, assistant_view", "what your assistants know now, beyond the [assistants] line: their state, and the views they expose (urgent mails, today's incidents)"},
+	{"fact", "facts, assistants, assistant_view", "what Eriphe knows now, typed, beyond the [contexte] and [assistants] lines: the user's context (place, room, focus, each device) written by code, each assistant's fields, and the views they expose (urgent mails, today's incidents)"},
 	{"task", "run_task", "long or heavy work, by an agent on a machine"},
 	{"session", "start_session, session_status, settle_step, amend_session", "work of several steps toward one goal (a plan, steps in parallel, checkpoints for the user), not only code"},
 }
 
-const conceptMapEN = "memory, intention, watch, rule, setting, notify, since, assistant, task, session"
+const conceptMapEN = "memory, intention, watch, rule, setting, notify, since, fact, task, session"
 
 var conceptLinesEN = func() string {
 	var b strings.Builder

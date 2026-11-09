@@ -180,7 +180,7 @@ func (c *core) runView(a Assistant, name string, n int, now time.Time) (viewResu
 	out := viewResult{Assistant: a.Name, View: v.Name}
 	if v.History != "" {
 		window, _ := parseTTL(v.History)
-		rows, err := c.store.db.Query(`SELECT value, set_at, tainted FROM assistant_state_log WHERE assistant = ? AND field = ? AND set_at >= ? ORDER BY id DESC`,
+		rows, err := c.store.db.Query(`SELECT value, set_at, tainted FROM facts_log WHERE owner = ? AND field = ? AND set_at >= ? ORDER BY id DESC`,
 			a.Name, f.Name, now.Add(-window).Unix())
 		if err != nil {
 			return out, err
@@ -347,6 +347,7 @@ type viewEntry struct {
 }
 
 func registerAssistantTools(s *mcp.Server, c *core) {
+	registerFactTools(s, c)
 	tool(s, "assistants", "Your assistants (Settings → Assistants): each one's status, powers and wake-ups, what it knows now in closed values (texts by their field's name only), and its views, which assistant_view reads. Free, no model, never tainting.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {
 			return map[string]any{"assistants": c.assistantEntries(c.notifyTime())}, nil
