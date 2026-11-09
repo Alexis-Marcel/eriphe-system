@@ -5,7 +5,7 @@ FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS src
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
-COPY *.go brain-prompt.md assistant-prompt.md ./
+COPY *.go *-prompt.md ./
 COPY web ./web
 
 # The target's binary and the Mac's are separate stages, built at the same time.
