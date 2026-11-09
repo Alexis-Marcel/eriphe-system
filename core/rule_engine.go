@@ -199,10 +199,12 @@ func (c *core) checkFactPath(path string, inCond bool, values []string) error {
 			return choices(ctxKinds[m[1]].Values)
 		}
 		return fmt.Errorf("%q: the context's facts are context.place, room, focus, busy_until, home_activity, or <device>.presence, .dnd, .activity", path)
+	case ownerRules:
+		return c.checkRuleFactPath(path, field, values)
 	}
 	a, ok := c.conf().Assistants[owner]
 	if !ok {
-		return fmt.Errorf("%q: no owner %q: context, now, or one of the user's assistants", path, owner)
+		return fmt.Errorf("%q: no owner %q: context, now, rules, or one of the user's assistants", path, owner)
 	}
 	i := slices.IndexFunc(a.State, func(f StateField) bool { return f.Name == field })
 	if i < 0 {

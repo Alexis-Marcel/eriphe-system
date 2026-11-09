@@ -181,6 +181,12 @@ func (c *core) tickPoll(ctx context.Context, w *rule, now time.Time) {
 		cause = causeRecovered
 	}
 	st.Known, st.Hit, st.Value = true, hit, value
+	switch cause { // its incidents, deduplicated by code (rule_incidents.go)
+	case causePoll:
+		c.openIncident(w, now)
+	case causeRecovered:
+		c.closeIncident(w, now)
+	}
 	var urgent int64
 	if cause != causeChanged && c.ifHolds(w, c.notifyTime()) {
 		// An urgent watch's fixed message, on the deterministic condition

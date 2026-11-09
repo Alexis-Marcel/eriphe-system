@@ -450,12 +450,15 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 	}
 	for _, o := range a.Facts {
 		switch {
-		case o == ownerContext:
+		case o == ownerContext || o == ownerRules:
 		case o == name:
 			return fmt.Errorf("%s.facts: its own facts are its state, not lent", what)
 		case !serverName.MatchString(o) || factOwnerReserved(o):
 			return fmt.Errorf("%s.facts: %q is not an owner: context, or another assistant's name", what, o)
 		}
+	}
+	if err := checkWebPower(a); err != nil {
+		return fmt.Errorf("%s: %w", what, err)
 	}
 	if len(a.State) > 0 && a.can(powerLaunchesTasks) {
 		return fmt.Errorf("%s.state: a typed state is for an assistant without the brain's tools, for now", what)

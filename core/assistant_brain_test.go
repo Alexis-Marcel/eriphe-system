@@ -18,7 +18,8 @@ func TestAssistantRolePowers(t *testing.T) {
 	}
 	brain := assistantRoles[assistantRoleBrain]
 	for _, p := range assistantPowers {
-		if !brain.can(p) && p != powerReports { // it reports to nobody
+		// It reports to nobody; its web is its own path (brain_web.go).
+		if !brain.can(p) && p != powerReports && p != powerReadsWeb {
 			t.Errorf("the brain cannot %s", p)
 		}
 	}

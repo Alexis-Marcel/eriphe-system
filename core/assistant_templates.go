@@ -80,7 +80,7 @@ var assistantTemplates = []assistantTemplate{
 	{
 		Name: "veille-techno", Kind: templateAssistant,
 		About:       "Watches the web on the user's topics on a schedule and writes what is new as typed rows, with one sentence for the brief.",
-		Needs:       "a web search or fetch tool of the catalog (list_tools), and the topics, in its mission",
+		Needs:       "the topics, in its mission (replace <les sujets>); it reads the web itself (readsWeb), so it is lent no tool and no fact",
 		Why:         []string{whyBoundary, whyWake},
 		DisplayName: "Veille techno",
 		Mission: "Tu fais la veille technique de {{user}} sur ces sujets : <les sujets>. À chaque réveil, cherche ce qui est nouveau depuis ton dernier " +
@@ -100,8 +100,9 @@ var assistantTemplates = []assistantTemplate{
 		Views: []StateView{
 			{Name: "importantes", Field: "nouveautes", Where: map[string]any{"importance": "haute"}, Sort: "-date", About: "les nouveautés importantes"},
 			{Name: "recentes", Field: "nouveautes", Sort: "-date", Limit: 10, About: "les dernières nouveautés"},
+			{Name: "brief", Field: "brief", About: "sa phrase pour le brief"},
 		},
-		Powers: []string{powerReports},
+		Powers: []string{powerReports, powerReadsWeb},
 		Wake: []ruleEventIn{{Name: "Veille techno", Source: sourceSchedule, Schedule: "daily 06:30",
 			Prompt: "Fais ta veille du jour."}},
 	},
