@@ -72,6 +72,10 @@ type Assistant struct {
 	State []StateField `json:"state,omitempty"`
 	// Its views: named filters over its state, read tools (assistant_views.go).
 	Views []StateView `json:"views,omitempty"`
+	// The facts it is lent besides its own: owners, context or another
+	// assistant's name (#244 step 6). It reads only these, closed values
+	// only, with its facts tool; none lent, it reads none.
+	Facts []string `json:"facts,omitempty"`
 	// The assistant it reports to: the brain, the only one it may name.
 	// Empty: the brain, for any but the brain.
 	ReportsTo string `json:"reports_to,omitempty"`
@@ -443,6 +447,15 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 	}
 	if err := checkViews(a.Views, a.State); err != nil {
 		return fmt.Errorf("%s.views: %w", what, err)
+	}
+	for _, o := range a.Facts {
+		switch {
+		case o == ownerContext:
+		case o == name:
+			return fmt.Errorf("%s.facts: its own facts are its state, not lent", what)
+		case !serverName.MatchString(o) || factOwnerReserved(o):
+			return fmt.Errorf("%s.facts: %q is not an owner: context, or another assistant's name", what, o)
+		}
 	}
 	if len(a.State) > 0 && a.can(powerLaunchesTasks) {
 		return fmt.Errorf("%s.state: a typed state is for an assistant without the brain's tools, for now", what)
