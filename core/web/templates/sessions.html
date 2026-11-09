@@ -1,0 +1,147 @@
+{{/* The work sessions (web_sessions.go): the list, and a session's page.
+     Its live part follows the session through /sessions/{id}/events
+     (sessions.js); the line to the lead stays outside it, so what the
+     user types is never replaced. */}}
+
+{{define "main"}}{{if eq .View "sessions"}}{{template "sessions-index" .Data}}{{else}}{{template "session-page" .Data}}{{end}}{{end}}
+
+{{define "sessions-index"}}
+<div class="sess-wrap">
+  <a class="back" href="/">{{template "i-back"}}{{t "sessions.back"}}</a>
+  <header class="sess-index-head">
+    <h1>{{t "sessions.title"}}</h1>
+    <p>{{t "sessions.lead"}}</p>
+  </header>
+  {{if .}}<ul class="sess-rows">{{range .}}<li>{{template "session-row" .}}</li>{{end}}</ul>
+  {{else}}<div class="sess-empty">
+    <span class="empty-art" aria-hidden="true">{{template "i-tasks"}}</span>
+    <p><b>{{t "sessions.none"}}</b></p>
+    <p class="muted">{{t "sessions.none.how"}}</p>
+    <a class="btn btn-primary sm" href="/">{{t "sessions.none.go"}}</a>
+  </div>{{end}}
+</div>
+{{end}}
+
+{{/* A session in a list: its state, its title, its steps as a strip. */}}
+{{define "session-row"}}
+<a class="sess-row{{if .Waits}} waits{{end}}" href="/sessions/{{.ID}}">
+  <span class="chip chip-sess-{{.State}}"><span class="pulse" aria-hidden="true"></span>{{if .Waits}}{{t "sessions.waits"}}{{else}}{{t (printf "sess.state.%s" .State)}}{{end}}</span>
+  <span class="sess-row-main">
+    <b>{{.Title}}</b>
+    <span class="muted small">{{short .Goal 140}}</span>
+  </span>
+  <span class="sess-row-end">
+    {{template "sess-strip" .Progress}}
+    <span class="muted small">{{tf "sessions.progress" .Done .Total}}</span>
+    <time class="muted small" datetime="{{iso .Updated}}">{{ago .Updated}}</time>
+  </span>
+</a>
+{{end}}
+
+{{define "session-page"}}
+<div class="sess-wrap">
+  <a class="back" href="/sessions">{{template "i-back"}}{{t "sessions.title"}}</a>
+  <div id="session-live" class="sess-live" data-session-live="/sessions/{{.ID}}/events">{{template "session-body" .}}</div>
+  {{if and .Active .LeadName}}
+  <form class="sess-say" hx-post="/sessions/{{.ID}}/lead" hx-target="#session-live" hx-swap="innerHTML" hx-disabled-elt="find button" data-reset>
+    <label for="sess-say-text">{{tf "sessions.say" .LeadName}}</label>
+    <div class="sess-say-row">
+      <textarea id="sess-say-text" name="text" rows="2" maxlength="2000" required placeholder="{{t "sessions.say.ph"}}"></textarea>
+      <button class="btn btn-soft sm" type="submit">{{template "i-send"}}{{t "sessions.say.send"}}</button>
+    </div>
+    <p class="muted small">{{t "sessions.say.hint"}}</p>
+  </form>
+  {{end}}
+</div>
+<div id="drawer" class="drawer" aria-live="polite"></div>
+{{end}}
+
+{{define "session-live"}}{{template "session-body" .Data}}{{end}}
+
+{{define "session-body"}}
+<header class="sess-head">
+  <div class="sess-head-main">
+    <span class="chip chip-sess-{{.State}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "sess.state.%s" .State)}}{{if .Held}} · {{t (printf "sess.held.%s" .Held)}}{{end}}</span>
+    <h1>{{.Title}}</h1>
+    <p class="sess-goal">{{.Goal}}</p>
+  </div>
+  {{if .Active}}<div class="sess-actions">
+    {{if eq .State "running"}}<button class="btn btn-soft sm" type="button" hx-post="/sessions/{{.ID}}/pause" hx-target="#session-live" hx-swap="innerHTML">{{t "sessions.pause"}}</button>{{end}}
+    {{if eq .State "paused"}}<button class="btn btn-primary sm" type="button" hx-post="/sessions/{{.ID}}/resume" hx-target="#session-live" hx-swap="innerHTML">{{if .Held}}{{t "sessions.resume.more"}}{{else}}{{t "sessions.resume"}}{{end}}</button>{{end}}
+    <button class="btn btn-danger-ghost sm" type="button" hx-post="/sessions/{{.ID}}/stop" hx-target="#session-live" hx-swap="innerHTML" hx-confirm="{{tf "sessions.stop.confirm" .Title}}">{{t "sessions.stop"}}</button>
+  </div>{{end}}
+</header>
+
+<dl class="sess-facts">
+  {{if .DoneWhen}}<div class="fact-done"><dt>{{t "sessions.donewhen"}}</dt><dd>{{.DoneWhen}}</dd></div>{{end}}
+  <div><dt>{{t "sessions.time"}}</dt><dd><meter min="0" max="100" low="70" high="90" optimum="0" value="{{.Percent}}" aria-label="{{t "sessions.time"}}">{{.Percent}} %</meter><span>{{tf "sessions.minutes" .Minutes .Budget}}</span></dd></div>
+  <div><dt>{{t "sessions.ledby"}}</dt><dd>{{if .LeadName}}{{.LeadName}}{{if .LeadBusy}} <span class="muted">{{t "sessions.lead.busy"}}</span>{{end}}{{else}}{{name}}{{end}}</dd></div>
+  <div><dt>{{t "sessions.steps"}}</dt><dd>{{tf "sessions.progress" (index .Counts "accepted") .Total}}</dd></div>
+</dl>
+
+{{if or .Asks .Choices}}
+<section class="sess-waits" aria-labelledby="sess-waits-t">
+  <h2 id="sess-waits-t">{{t "sessions.waits.title"}}</h2>
+  {{if .Asks}}<div class="pcards">{{range .Asks}}{{template "card" .}}{{end}}</div>{{end}}
+  {{range .Choices}}
+  <article class="sess-choice">
+    <h3>{{.Title}}</h3>
+    <p>{{.Question}}</p>
+    <form class="choice-opts" hx-post="/sessions/{{$.ID}}/choose" hx-target="#session-live" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="step" value="{{.Key}}">
+      {{range .Options}}<button class="btn btn-soft sm" type="submit" name="option" value="{{.}}">{{.}}</button>{{end}}
+    </form>
+  </article>
+  {{end}}
+</section>
+{{end}}
+
+{{if .Summary}}{{if eq .State "done"}}<section class="sess-summary" aria-labelledby="sess-sum-t"><h2 id="sess-sum-t">{{t "sessions.summary"}}</h2><div class="md">{{md .Summary}}</div></section>{{end}}{{end}}
+
+<div class="sess-grid">
+  <section class="sess-plan" aria-labelledby="sess-plan-t">
+    <h2 id="sess-plan-t">{{t "sessions.plan"}}</h2>
+    <ol class="stages">{{range .Stages}}
+      <li class="stage{{if .Final}} stage-final{{end}}">
+        <h3 class="stage-n">{{if .Final}}{{t "sessions.stage.final"}}{{else}}{{tf "sessions.stage" .N}}{{end}}{{if gt (len .Steps) 1}} <span class="muted">{{tf "sessions.stage.together" (len .Steps)}}</span>{{end}}</h3>
+        <ul class="steps">{{range .Steps}}{{template "step" .}}{{end}}</ul>
+      </li>{{end}}
+    </ol>
+    <p class="proof-legend muted small">
+      <span><i class="proof proof-claimed" aria-hidden="true"></i>{{t "proof.claimed"}}</span>
+      <span><i class="proof proof-verified" aria-hidden="true">{{template "i-check"}}</i>{{t "proof.verified"}}</span>
+      <span><i class="proof proof-accepted" aria-hidden="true">{{template "i-check"}}</i>{{t "proof.accepted"}}</span>
+      <span><i class="proof proof-failed" aria-hidden="true">{{template "i-x"}}</i>{{t "proof.failed"}}</span>
+    </p>
+  </section>
+  <aside class="sess-log" aria-labelledby="sess-log-t">
+    <h2 id="sess-log-t">{{t "sessions.log"}}</h2>
+    {{if .Log}}<ol>{{range .Log}}<li class="log-{{.Who}}"><time datetime="{{iso .At}}">{{clock .At}}</time><b>{{t (printf "sessions.who.%s" .Who)}}</b><span>{{.Text}}</span></li>{{end}}</ol>
+    {{else}}<p class="muted small">{{t "sessions.log.none"}}</p>{{end}}
+  </aside>
+</div>
+{{end}}
+
+{{/* A step: its proof mark, its title and status, what it runs on, the
+     lead's last word, and its output and evidence folded. */}}
+{{define "step"}}
+<li class="step st-{{.Status}}{{if .Failed}} failed{{end}}" id="step-{{.Key}}">
+  <div class="step-head">
+    <i class="proof proof-{{.Proof}}" aria-hidden="true">{{if or (eq .Proof "verified") (eq .Proof "accepted")}}{{template "i-check"}}{{else if or (eq .Proof "failed") (eq .Proof "rejected")}}{{template "i-x"}}{{end}}</i>
+    <h4>{{.Title}}</h4>
+    <span class="step-status">{{if and .Failed (or (eq .Status "reported") (eq .Status "verified"))}}{{t "step.status.failed"}}{{else}}{{t (printf "step.status.%s" .Status)}}{{end}}</span>
+  </div>
+  <p class="step-meta">
+    {{if eq .Kind "task"}}<span>{{template "i-bot"}}{{if .Agent}}{{.Agent}}{{else}}{{t "sessions.agent.default"}}{{end}}</span>{{range .Resources}}{{if eq .Kind "repo"}}<span class="mono">{{template "i-branch"}}{{.Ref}}{{if .Branch}}@{{.Branch}}{{end}}</span>{{else if or (eq .Kind "folder") (eq .Kind "drive-folder")}}<span>{{template "i-folder"}}{{.Ref}}</span>{{end}}{{end}}
+    {{else if eq .Kind "choice"}}<span>{{t "step.kind.choice"}}</span>{{else}}<span>{{t "step.kind.approval"}}</span>{{end}}
+    {{if .Tries}}<span>{{tf "sessions.try" .Tries}}</span>{{end}}
+    {{if .TaskLink}}<a href="{{.TaskLink}}" hx-get="{{.TaskLink}}" hx-target="#drawer" hx-swap="innerHTML">{{t "sessions.task.open"}}</a>{{end}}
+  </p>
+  {{if .Question}}<p class="step-q">{{.Question}}</p>{{end}}
+  {{if .Note}}<p class="step-note">{{.Note}}</p>{{end}}
+  {{if and .Output (ne .Kind "task")}}<p class="step-picked">{{.Output}}</p>{{end}}
+  {{if and .Output (eq .Kind "task")}}<details class="step-more" data-keep="out-{{.Key}}"><summary>{{t "sessions.output"}}</summary><div class="step-out">{{.Output}}</div></details>{{end}}
+  {{if .Evidence}}<details class="step-more" data-keep="ev-{{.Key}}"><summary>{{t "sessions.evidence"}}</summary><pre class="step-out">{{.Evidence}}</pre></details>{{end}}
+</li>
+{{end}}
+

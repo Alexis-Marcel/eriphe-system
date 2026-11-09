@@ -260,6 +260,7 @@ func (w *web) routes() http.Handler {
 	w.whereRoutes(mux)    // web_where.go
 	w.watchRoutes(mux)    // web_watch.go
 	w.activityRoutes(mux) // web_activity.go
+	w.sessionRoutes(mux)  // web_sessions.go
 	w.cardRoutes(mux)     // web_convo_cards.go
 	w.contextRoutes(mux)  // web_context.go
 	return w.headers(mux)

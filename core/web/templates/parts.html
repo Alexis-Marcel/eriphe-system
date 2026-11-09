@@ -103,6 +103,7 @@
 {{end}}
 
 {{define "tasks"}}
+{{template "side-sessions" .Sessions}}
 <div class="side-head"><h2>{{t "tasks.title"}}</h2>{{if .Active}}<span class="count" data-count="{{len .Active}}">{{len .Active}}</span>{{end}}</div>
 {{if .Active}}<ul class="cards">{{range .Active}}<li>{{template "taskcard" .}}</li>{{end}}</ul>
 {{else}}<div class="empty-side"><span class="empty-art" aria-hidden="true">{{template "i-tasks"}}</span><p>{{t "tasks.none"}}</p></div>{{end}}
@@ -355,3 +356,23 @@ to the page it belongs to (its .back). */}}
 {{/* What the brain sets when asked (a rule, a watch): the page says how to
 ask it, in the conversation, rather than a form. */}}
 {{define "ask"}}<p class="ask">{{template "i-chat"}}<span>{{t .}}</span> <a href="/">{{t "ask.go"}}</a></p>{{end}}
+
+{{/* One mark per step, in the plan's order, coloured by its status. */}}
+{{define "sess-strip"}}<span class="sess-strip" aria-hidden="true">{{range .}}<i class="st-{{.}}"></i>{{end}}</span>{{end}}
+
+{{/* The sessions running, on top of the tasks panel (parts.html). */}}
+{{define "side-sessions"}}{{if .}}
+<section class="side-sess" aria-labelledby="side-sess-t">
+  <div class="side-sub"><h3 id="side-sess-t">{{t "sessions.title"}}</h3><a class="small" href="/sessions">{{t "sessions.all"}}</a></div>
+  <ul class="cards">{{range .}}<li>
+    <article class="card sess-card{{if .Waits}} needs-you{{end}}">
+      <div class="card-top">
+        <span class="chip chip-sess-{{.State}}"><span class="pulse" aria-hidden="true"></span>{{if .Waits}}{{t "sessions.waits"}}{{else}}{{t (printf "sess.state.%s" .State)}}{{end}}</span>
+        <span class="muted small">{{tf "sessions.progress" .Done .Total}}</span>
+      </div>
+      <h3><a class="stretched" href="/sessions/{{.ID}}">{{.Title}}</a></h3>
+      {{template "sess-strip" .Progress}}
+    </article>
+  </li>{{end}}</ul>
+</section>
+{{end}}{{end}}

@@ -877,6 +877,18 @@ folders) and given the goal and what each step produced; only its receipt with s
 failed check closes the session. Otherwise the lead hears what is missing; after 2 checks that fail,
 the decision goes back to the user through the brain.
 
+**The work interface** (`web_sessions.go`, `sessions.html`, `sessions.css`, `sessions.js`):
+`/sessions` lists them; `/sessions/{id}` shows one, kept live by its own event stream
+(`/sessions/{id}/events`, event `session`, the page's live part re-rendered on each change). From top
+to bottom: its state, goal and actions (pause, resume, stop); its facts (`done_when`, time against the
+budget, its lead, steps accepted); **what waits for the user** (the plan card, start cards, choices
+as buttons); the summary once done; the plan as stages on a rail (a step stands one stage after the
+deepest step it needs, those of one stage run together, the final check last); the log. Each step
+wears a mark for how far its evidence goes: a ring for what the agent claims, a check inside for what
+the checks verified, filled once the lead accepted, a red cross for a failed check or a rejection.
+Under the live part, a line to the lead (`POST /sessions/{id}/lead`) is queued on its inbox as the
+user's words. The tasks panel of the home page shows the sessions in progress first.
+
 ## Permission policy
 
 Every permission request of a worker goes through a policy written in code before the brain hears
