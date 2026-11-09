@@ -18,7 +18,7 @@ import (
 
 type sinceIn struct {
 	T               string   `json:"t" jsonschema:"from when: an RFC3339 time, YYYY-MM-DD or YYYY-MM-DDTHH:MM (the user's zone), away (since the user left, before their return) or last_brief"`
-	Kinds           []string `json:"kinds,omitempty" jsonschema:"only these kinds: task, notification, intention, message, watch, learned; all by default"`
+	Kinds           []string `json:"kinds,omitempty" jsonschema:"only these kinds: task, notification, intention, message, watch, learned, event; all by default"`
 	Limit           int      `json:"limit,omitempty" jsonschema:"at most this many items, 50 by default, 200 at most"`
 	IncludeExternal bool     `json:"include_external,omitempty" jsonschema:"also quote the items drawn from external content; this taints the turn"`
 }
@@ -34,7 +34,7 @@ type happeningView struct {
 }
 
 func registerSinceTools(s *mcp.Server, c *core) {
-	tool(s, "since", "What happened since a time, from every source, oldest first: tasks (started, finished with their receipt's verdict, waiting, failed, stopped), your notifications (sent, held for the brief, dropped, the user's feedback), intentions (due, done, snoozed, cancelled), messages, watches (fired, and what you did: notified, said, silent) and what you learned (learned: memories and skills added, changed, removed, undone). t may be away (since the user left) or last_brief. Each item has a ref to read it in full with the other tools, and a trust: own, or external (not quoted unless include_external, which taints this turn). Only what it lists happened.",
+	tool(s, "since", "What happened since a time, from every source, oldest first: tasks (started, finished with their receipt's verdict, waiting, failed, stopped), your notifications (sent, held for the brief, dropped, the user's feedback), intentions (due, done, snoozed, cancelled), messages, watches (fired, and what you did: notified, said, silent), what you learned (learned: memories and skills added, changed, removed, undone) and the event journal (event: a mail received, an alert, a polled tool, a task or session ended, the user back, a Home Assistant change; its payload is external when someone else wrote it). t may be away (since the user left) or last_brief. Each item has a ref to read it in full with the other tools, and a trust: own, or external (not quoted unless include_external, which taints this turn). Only what it lists happened.",
 		func(ctx context.Context, in sinceIn) (map[string]any, error) {
 			return c.brainSince(in)
 		})

@@ -96,7 +96,8 @@ type haState struct {
 	house        haHouse
 	connected    bool
 	lastErr      string
-	roomPersonal bool // the room signal now is a personal one
+	roomPersonal bool              // the room signal now is a personal one
+	published    map[string]string // the value of each signal last published, for ha.changed
 	kick         chan struct{}
 }
 
@@ -607,6 +608,7 @@ func (c *core) haPublish(maps []haMapping, states map[string]haEntityState) {
 	now := time.Now()
 	sigs, personal := haSignals(maps, states, c.contextPrefs().Rooms, now)
 	c.known.forget(srcHA, "")
+	c.emitHAChanges(sigs)
 	c.putSignals(sigs)
 	c.known.saw(srcHA, now)
 	c.ha.mu.Lock()

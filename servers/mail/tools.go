@@ -211,6 +211,7 @@ func ptr[T any](v T) *T { return &v }
 
 func newServer(m *Mailer, version string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "eriphe-mail", Version: version}, &mcp.ServerOptions{Instructions: instructions})
+	addEvents(s, m, newEventLog()) // events.go
 	ro := &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: ptr(false)}
 
 	tool(s, "list_accounts", "List the configured mail accounts.", ro,
