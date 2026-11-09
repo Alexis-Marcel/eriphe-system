@@ -213,8 +213,11 @@ func (c *core) tickSkills(ctx context.Context, now time.Time) {
 			byKey[e.Key] = append(byKey[e.Key], e)
 		}
 		for _, key := range keys {
-			if c.openRun(sk.Name, key) != nil {
-				continue // they wait for it (skillTaskChanged)
+			if r := c.openRun(sk.Name, key); r != nil {
+				if s, ok := c.liveSession(r); ok && r.State != skillRunOpen {
+					c.toRunSession(r, s, byKey[key]) // its session's lead gets them (skill_cards.go)
+				}
+				continue // they wait for its task (skillTaskChanged)
 			}
 			c.startSkillRun(ctx, sk, key, byKey[key], now)
 		}
@@ -270,9 +273,12 @@ func scanSkillRun(row interface{ Scan(...any) error }) (*skillRun, error) {
 	return &r, nil
 }
 
+// openRun is a run of the skill and key still open: its task, or the work
+// session it opened (skill_cards.go).
 func (c *core) openRun(skill, key string) *skillRun {
-	r, err := scanSkillRun(c.store.db.QueryRow(`SELECT `+skillRunCols+` FROM skill_runs WHERE skill = ? AND key = ? AND state = ? ORDER BY id DESC LIMIT 1`,
-		skill, key, skillRunOpen))
+	r, err := scanSkillRun(c.store.db.QueryRow(`SELECT `+skillRunCols+` FROM skill_runs WHERE skill = ? AND key = ?
+		AND (state = ? OR (session != 0 AND session IN (SELECT id FROM sessions WHERE state IN (?, ?, ?)))) ORDER BY id DESC LIMIT 1`,
+		skill, key, skillRunOpen, sessProposed, sessRunning, sessPaused))
 	if err != nil {
 		return nil
 	}
@@ -408,6 +414,9 @@ const skillVoice = "You run in the background, started by one of the user's skil
 func skillRunPrompt(sk triggeredSkill, events []journalEvent, now time.Time) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Skill « %s » : %s\n\n%s\n\n", sk.Name, sk.Manifest.Description, sk.Manifest.Body)
+	if s := skillCanText(sk.Trigger); s != "" {
+		b.WriteString(strings.TrimSpace(s) + "\n\n")
+	}
 	if len(events) == 0 {
 		fmt.Fprintf(&b, "[déclenchement : horaire « %s », %s]\n", strings.TrimSpace(strings.TrimPrefix(sk.Trigger.When, whenTime)),
 			now.Format("2006-01-02 15:04"))
@@ -500,25 +509,58 @@ func (c *core) joinWaiting(ctx context.Context, r *skillRun) bool {
 	return true
 }
 
-// tellRun ends a run with its last message: a notification unless [rien].
+// tellRun ends a run with its last message: a work session it asks for,
+// its urgent text, its kept calls on one card, and a notification unless
+// [rien].
 func (c *core) tellRun(r *skillRun, text string) {
+	var st *skillTrigger
+	if m, ok := c.skillManifestOf(r.SHA); ok {
+		st = m.Trigger
+	}
+	in, text, perr := sessionOfMessage(text)
+	note := ""
+	switch {
+	case perr != nil:
+		note = perr.Error()
+	case in != nil:
+		note = c.runSession(context.Background(), r, st, in)
+	}
 	level := levelNow
+	if rest, ok := strings.CutPrefix(text, "[urgent]"); ok {
+		text = strings.TrimSpace(rest)
+		c.runUrgent(r, st)
+	}
 	if rest, ok := strings.CutPrefix(text, "[brief]"); ok {
 		level, text = levelBrief, strings.TrimSpace(rest)
 	}
-	if text == "" || strings.HasPrefix(text, "[rien]") {
-		c.endRun(r.ID, skillRunSilent, "")
+	calls := 0
+	for _, a := range c.runAsks(r.ID) {
+		if a.State == startProposed {
+			calls++
+		}
+	}
+	silent := text == "" || strings.HasPrefix(text, "[rien]")
+	note = strings.TrimSpace(strings.Join([]string{text, note}, "\n"))
+	state := skillRunDone
+	if silent && calls == 0 {
+		state = skillRunSilent
+	}
+	c.endRun(r.ID, state, note)
+	if silent && calls == 0 {
 		return
+	}
+	if silent {
+		text = fmt.Sprintf(tr("fr", "card.runcalls"), r.Skill, calls)
+	}
+	if calls > 0 {
+		c.cardProposed(cardRunCalls, r.ID) // with the message below (convo_cards.go)
 	}
 	var tainted []string
 	if why := c.taskResultTaint(r.Task); why != "" {
 		tainted = []string{why}
 	}
-	_, err := c.notifyAs(notifyIn{Text: truncate(oneLine(text), notifyTextMax), Level: level,
-		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill}, notifyFromSkill, tainted, false)
-	if err != nil {
-		c.endRun(r.ID, skillRunDone, text+" · not told: "+err.Error())
-		return
+	if _, err := c.notifyAs(notifyIn{Text: truncate(oneLine(text), notifyTextMax), Level: level,
+		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill}, notifyFromSkill, tainted, calls > 0); err != nil {
+		c.endRun(r.ID, state, note+"\n· not told: "+err.Error())
 	}
-	c.endRun(r.ID, skillRunDone, text)
 }

@@ -82,7 +82,7 @@ const (
 	cardsOfferedKey = "cards_offered_at"
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess, cardApproval, cardNewAssistant, cardSkill}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess, cardApproval, cardNewAssistant, cardSkill, cardRunCalls}
 
 // cardUnlearn is an undo of the learning journal the brain proposed on a
 // tainted turn (learning_tools.go).
@@ -286,6 +286,8 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		return c.sessionProposal(p) // session_engine.go
 	case cardSkill:
 		return c.skillProposal(p) // skill_write.go
+	case cardRunCalls:
+		return c.runCallsProposal(p) // skill_cards.go
 	case cardUnlearn:
 		if c.mem == nil {
 			return p
@@ -397,6 +399,9 @@ func (c *core) pendingProposals() []proposal {
 			add(cardSkill, id)
 		}
 	}
+	for _, id := range c.runsWithCalls() {
+		add(cardRunCalls, id)
+	}
 	if m := c.mem; m != nil {
 		rows, err := m.db.Query(`SELECT id FROM learning_log WHERE undo = ? AND status != ? ORDER BY id`, undoProposed, learnReverted)
 		if err == nil {
@@ -466,6 +471,8 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.decideSessionAsk(ctx, id, approve)
 	case cardSkill:
 		return c.decideSkill(id, approve)
+	case cardRunCalls:
+		return c.decideRunCalls(ctx, id, approve)
 	case cardUnlearn:
 		if approve {
 			_, err := c.unlearn(id, "owner", p.Why, nil)
