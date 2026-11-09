@@ -41,7 +41,7 @@ func voiceCore(t *testing.T) (*core, string) {
 	setBrain(c, &BrainConfig{Agent: "small"})
 	c.store.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateIdle})
 	setBrainTask(c, "t-brain")
-	_, tok, err := c.addChannel(apiHomeAssistant, "Home Assistant", false, carrySentence)
+	_, tok, err := c.addChannel("Home Assistant", false, carrySentence)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestChannelTrust(t *testing.T) {
 		t.Fatalf("untrusted = %+v", msgs)
 	}
 
-	_, mine, err := c.addChannel(apiGeneric, "Raccourci", true, "")
+	_, mine, err := c.addChannel("Raccourci", true, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,11 +184,11 @@ func TestChannelTrust(t *testing.T) {
 	}
 	// Names: unique, never a built-in one, cleaned.
 	for _, bad := range []string{"Raccourci", "telegram", "  ", "Eriphe"} {
-		if _, _, err := c.addChannel(apiGeneric, bad, false, ""); err == nil {
+		if _, _, err := c.addChannel(bad, false, ""); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
 	}
-	if _, _, err := c.addChannel(apiGeneric, "Écran", false, "text"); err == nil {
+	if _, _, err := c.addChannel("Écran", false, "text"); err == nil {
 		t.Error("a channel carrying the text accepted")
 	}
 }

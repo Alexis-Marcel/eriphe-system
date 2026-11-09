@@ -137,12 +137,10 @@ func TestAssistantNameWords(t *testing.T) {
 	for _, c := range []struct{ lang, key, want string }{
 		{"fr", "devices.sees", "Ce que Jarvis voit ici"},
 		{"fr", "devices.can", "Ce que Jarvis peut faire ici"},
-		{"fr", "ha.drive", "Jarvis pilote la maison"},
 		{"fr", "tasks.label", "Tâches de Jarvis"},
 		{"fr", "chat.placeholder", "Écris à Jarvis…"},
 		{"en", "devices.sees", "What Jarvis sees here"},
 		{"en", "tasks.label", "Jarvis's tasks"},
-		{"en", "ha.drive", "Jarvis drives the house"},
 	} {
 		if got := tr(c.lang, c.key); got != c.want {
 			t.Errorf("%s %s = %q, want %q", c.lang, c.key, got, c.want)

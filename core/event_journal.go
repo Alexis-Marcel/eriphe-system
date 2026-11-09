@@ -39,7 +39,6 @@ func init() { extraSchema = append(extraSchema, eventJournalSchema) }
 // The kinds eriphe-core itself emits. A server may emit others of its own
 // (mail.received is the mail server's), never one of these families.
 const (
-	evMailReceived = "mail.received"
 	evHookReceived = "hook.received" // an incoming address was called (incoming_hooks.go)
 	evTaskEnded    = "task.ended"
 	evSessionEnded = "session.ended"

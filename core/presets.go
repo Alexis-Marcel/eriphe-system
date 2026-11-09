@@ -26,7 +26,8 @@ type toolPreset struct {
 	URL   string
 	Auth  string // none, bearer or oauth
 	Trust bool   // the default of "what Eriphe may do without asking": reads free
-	// The address differs per person (Home Assistant's host): the form asks for it.
+	// The address differs per person (a host of their own): the form asks
+	// for it, and a tool whose address ends with URL's path is this preset's.
 	AskURL bool
 	// The gallery: its category (presets_online.go) and its tags.
 	Category  string
@@ -78,8 +79,6 @@ func (p toolPreset) Page() string {
 		return "/settings/drive"
 	case p.Form == "google":
 		return "/settings/google"
-	case p.ID == "home-assistant":
-		return "/settings/home-assistant" // both ways: its tools, and its voice (web_homeassistant.go)
 	case p.ID == "remote":
 		return "/settings/tools/add/other" // its address first: Eriphe finds how to sign in (discover.go)
 	}
@@ -112,7 +111,27 @@ func presetByURL(u string) (toolPreset, bool) {
 			return p, true
 		}
 	}
+	for _, p := range toolPresets {
+		if p.asked(u) {
+			return p, true
+		}
+	}
 	return toolPreset{}, false
+}
+
+// asked tells an address of a preset whose host is the user's own: any
+// host, with the path of the preset's URL ("http://<ip>/api/mcp").
+func (p toolPreset) asked(u string) bool {
+	if !p.AskURL || p.Kind != "remote" {
+		return false
+	}
+	_, rest, ok := strings.Cut(p.URL, "://")
+	i := strings.Index(rest, "/")
+	if !ok || i < 0 {
+		return false
+	}
+	pu, err := url.Parse(u)
+	return err == nil && pu.Host != "" && strings.TrimSuffix(pu.Path, "/") == strings.TrimSuffix(rest[i:], "/")
 }
 
 func presetByID(id string) (toolPreset, bool) {

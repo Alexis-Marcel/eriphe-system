@@ -14,9 +14,9 @@ on the house itself through Home Assistant's MCP Server.
 
 It is not in HACS yet: install it by hand.
 
-1. In the workspace, **Settings > Access > Add an access > Home Assistant**: the form comes filled
-   (named Home Assistant, **Trusted** off since anyone in the room can talk to a satellite, and
-   **A sentence in your room** so that the speakers can tell you things). Add it, then copy the
+1. In the workspace, **Settings > Access > Add an access > API access**: name it (Home
+   Assistant), leave **Trusted** off since anyone in the room can talk to a satellite, and pick
+   **A sentence in your room** so that the speakers can tell you things. Add it, then copy the
    address and the token it shows once.
 2. Copy `custom_components/eriphe` into Home Assistant's `/config/custom_components/`
    (so that `/config/custom_components/eriphe/manifest.json` exists).

@@ -103,16 +103,22 @@ func TestEventBudget(t *testing.T) {
 // an unknown token is not found; past 60 calls an hour, 429.
 func TestAlertEvents(t *testing.T) {
 	c, _, _ := pollCore(t)
-	if _, _, err := c.newAlertHook("Get Out!", false); err == nil {
+	if _, _, err := c.newAlertHook("Get Out!", false, ""); err == nil {
 		t.Fatal("a bad name accepted")
 	}
-	token, secret, err := c.newAlertHook("getout", true)
+	if _, _, err := c.newAlertHook("bad", true, "X Bad: header"); err == nil {
+		t.Fatal("a bad header name accepted")
+	}
+	token, secret, err := c.newAlertHook("getout", true, "X-Hub-Signature-256")
 	if err != nil || secret == "" {
 		t.Fatal(secret, err)
 	}
 	body := []byte(`{"status": "firing", "title": "5xx > 2%"}`)
 	if r := c.receiveAlert(token, http.Header{}, body); r.Status != http.StatusUnauthorized {
 		t.Fatalf("unsigned: %+v", r)
+	}
+	if r := c.receiveAlert(token, http.Header{"X-Eriphe-Signature": {sign(secret, body)}}, body); r.Status != http.StatusUnauthorized {
+		t.Fatalf("signed in another header than the address's: %+v", r)
 	}
 	h := http.Header{"X-Hub-Signature-256": {sign(secret, body)}}
 	if r := c.receiveAlert(token, h, body); r.Status != http.StatusAccepted {
@@ -131,15 +137,40 @@ func TestAlertEvents(t *testing.T) {
 	if r := c.receiveAlert(strings.Repeat("x", 43), http.Header{}, body); r.Status != http.StatusNotFound {
 		t.Fatalf("unknown token: %+v", r)
 	}
-	plain, _, _ := c.newAlertHook("nas", false)
+	plain, _, _ := c.newAlertHook("nas", false, "X-Ignored")
 	for i := 0; i < alertPerHour; i++ {
 		c.receiveAlert(plain, http.Header{}, body)
 	}
 	if r := c.receiveAlert(plain, http.Header{}, body); r.Status != http.StatusTooManyRequests {
 		t.Fatalf("past the limit: %+v", r)
 	}
-	if hs := c.alertHooks(); len(hs) != 2 || hs[0].Name != "getout" || !hs[0].Signed {
+	if hs := c.alertHooks(); len(hs) != 2 || hs[0].Name != "getout" || !hs[0].Signed || hs[0].SigHeader != "X-Hub-Signature-256" || hs[1].SigHeader != "" {
 		t.Fatalf("hooks %+v", hs)
+	}
+	// Signed with no header named: X-Eriphe-Signature.
+	tok2, secret2, _ := c.newAlertHook("deploy", true, "")
+	if r := c.receiveAlert(tok2, http.Header{"X-Eriphe-Signature": {sign(secret2, body)}}, body); r.Status != http.StatusAccepted {
+		t.Fatalf("default header: %+v", r)
+	}
+}
+
+// A hook signed before the header was the user's keeps the three it was
+// read from.
+func TestAlertHookOldSignedKeepsHeaders(t *testing.T) {
+	c, _, _ := pollCore(t)
+	token, secret, err := c.newAlertHook("old", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.store.db.Exec(`UPDATE alert_hooks SET sig_header = '' WHERE name = 'old'`)
+	for _, q := range extraColumns {
+		c.store.db.Exec(q)
+	}
+	body := []byte(`{"status": "firing"}`)
+	for _, h := range []string{"X-Hub-Signature-256", "X-Grafana-Alerting-Signature", "X-Eriphe-Signature"} {
+		if r := c.receiveAlert(token, http.Header{h: {sign(secret, body)}}, body); r.Status != http.StatusAccepted {
+			t.Fatalf("%s: %+v", h, r)
+		}
 	}
 }
 
@@ -236,7 +267,7 @@ func TestServerEvents(t *testing.T) {
 	es.set("e1", "mail.received", "mail.received", "mail.received", "user.returned")
 	c.readServerEvents(ctx, "mail", sess)
 	got := eventsOf(t, c, "")
-	if len(got) != 1 || got[0].Kind != evMailReceived || got[0].Source != "server:mail" || !got[0].External ||
+	if len(got) != 1 || got[0].Kind != "mail.received" || got[0].Source != "server:mail" || !got[0].External ||
 		got[0].Payload["subject"] != "n°3" {
 		t.Fatalf("new in the epoch: %+v", got)
 	}
@@ -248,7 +279,7 @@ func TestServerEvents(t *testing.T) {
 	es.set("e2", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received")
 	c.setServerTrust("mail", true, trustByUser)
 	c.readServerEvents(ctx, "mail", sess)
-	got = eventsOf(t, c, evMailReceived)
+	got = eventsOf(t, c, "mail.received")
 	if len(got) != 2 || got[1].Payload["subject"] != "n°5" || got[1].External {
 		t.Fatalf("after a restart: %+v", got)
 	}

@@ -2715,8 +2715,9 @@ incoming address (`incoming_hooks.go`), made in Settings → Skills, lets any sy
 something: `POST https://<workspace>/hooks/in/<token>` (the former `/hooks/alert/<token>` still
 works), named (the key of its `hook.received` events, with the body's `status` when it is a short
 word: `when: hook.received key=getout status=firing`), signed with an HMAC-SHA256 secret if asked (in the vault,
-`alert-hook-<id>`; `X-Hub-Signature-256`, `X-Grafana-Alerting-Signature` or
-`X-Eriphe-Signature`), its body (64 KiB) kept as external content, 60 calls an hour at most (429).
+`alert-hook-<id>`), read from the header the user names for that address (`X-Eriphe-Signature`
+by default; `X-Hub-Signature-256` for GitHub, `X-Grafana-Alerting-Signature` for Grafana; an
+address signed before keeps those three), its body (64 KiB) kept as external content, 60 calls an hour at most (429).
 A tool to watch is a time skill that calls it. At start the event rules, their runs and incidents,
 the standing approvals and the specialist assistants are dropped (no migration); the notification
 rules and the quiet hours stay (below).

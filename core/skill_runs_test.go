@@ -82,7 +82,7 @@ func TestSkillRunBatches(t *testing.T) {
 	addTriggered(t, c, "---\nname: mails-rdv\ndescription: les rendez-vous des mails\nwhen: mail.received\nevery: 15m\ntools: [monitor]\n---\nRepère les rendez-vous.\n")
 	ctx := context.Background()
 	for i, subject := range []string{"RDV le 8", "Promo", "Facture"} {
-		c.emit(journalEvent{Kind: evMailReceived, Key: "perso", Source: "server:mail", External: true,
+		c.emit(journalEvent{Kind: "mail.received", Key: "perso", Source: "server:mail", External: true,
 			At: now.Add(time.Duration(i*5) * time.Minute), Payload: map[string]any{"subject": subject}})
 	}
 	c.emit(journalEvent{Kind: "calendar.changed", Source: "server:calendar", At: *now}) // not its kind
@@ -202,7 +202,7 @@ func TestSkillRunSilentAndTime(t *testing.T) {
 func TestSkillRunRefused(t *testing.T) {
 	c, now := skillCore(t)
 	addTriggered(t, c, "---\nname: x\ndescription: y\nwhen: mail.received\nmodel: nobody\n---\nz\n")
-	c.emit(journalEvent{Kind: evMailReceived, Source: "server:mail", At: *now})
+	c.emit(journalEvent{Kind: "mail.received", Source: "server:mail", At: *now})
 	c.tickSkills(context.Background(), *now)
 	if rs := runsOfSkill(t, c, "x"); len(rs) != 1 || rs[0].State != skillRunRefused || rs[0].Note == "" {
 		t.Fatalf("%+v", rs)
@@ -232,7 +232,7 @@ func TestWriteSkill(t *testing.T) {
 		!strings.Contains(p.Fields[0].Value, "mail.received") {
 		t.Fatalf("card %+v %q", p, p.Text("fr"))
 	}
-	c.emit(journalEvent{Kind: evMailReceived, Source: "server:mail", At: *now})
+	c.emit(journalEvent{Kind: "mail.received", Source: "server:mail", At: *now})
 	c.tickSkills(context.Background(), now.Add(time.Hour))
 	if rs := runsOfSkill(t, c, "mails-rdv"); len(rs) != 0 {
 		t.Fatal("ran before its approval")

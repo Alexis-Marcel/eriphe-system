@@ -66,7 +66,7 @@ func (t toolView) Removable() bool {
 }
 
 func editable(source string, p toolPreset, auth string) bool {
-	return source == sourceWorkspace && p.ID != "home-assistant" && auth != "github-app" && p.Form != "drive" && p.Form != "google"
+	return source == sourceWorkspace && auth != "github-app" && p.Form != "drive" && p.Form != "google"
 }
 
 // AccessURL is the tool's page, every row's Edit (web_access.go); AllowedURL,
@@ -129,12 +129,11 @@ func (v toolsPage) RefreshURL() string {
 func presetOf(lang string, s Server) (toolPreset, string) {
 	if !s.local() {
 		if p, ok := presetByURL(s.URL); ok {
+			if p.AskURL {
+				u, _ := url.Parse(s.URL)
+				return p, tr(lang, "preset."+p.ID+".title") + " · " + u.Host
+			}
 			return p, tr(lang, "preset."+p.ID+".title")
-		}
-		if homeAssistantURL(s.URL) {
-			p, _ := presetByID("home-assistant")
-			u, _ := url.Parse(s.URL)
-			return p, tr(lang, "preset.home-assistant.title") + " · " + u.Host
 		}
 		return toolPreset{}, ""
 	}

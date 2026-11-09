@@ -92,7 +92,7 @@ func (w *web) wherePage(lang string) wherePage {
 			}
 		case stepVoice:
 			if !c.voiceReady() {
-				l.Usable, l.Hint, l.Link = false, "where.hint.voice", "/settings/access/new/home-assistant"
+				l.Usable, l.Hint, l.Link = false, "where.hint.voice", "/settings/access/new/"+apiGeneric
 			}
 		case stepPhone:
 			if !hasKind[kindPhone] {

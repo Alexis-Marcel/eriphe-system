@@ -84,7 +84,7 @@ func TestAddDialogSteps(t *testing.T) {
 		{"/settings/tools/new?preset=todoist", "add/todoist", "/settings/tools/add", "add",
 			[]string{`name="token"`, `name="dialog" value="1"`}},
 		{"/settings/tools/new?preset=home-assistant", "add/home-assistant", "/settings/tools/add", "add",
-			[]string{`name="url"`, `name="token"`, `<a href="/settings/home-assistant">Page Home Assistant</a>`}},
+			[]string{`name="url"`, `name="token"`}},
 		{"/settings/tools/new?preset=github", "add/github", "/settings/tools/add", "add",
 			[]string{`<a class="btn btn-primary" href="/settings/github">`, `data-step data-hash="add/github/token"`}},
 		{"/settings/tools/new?preset=github&provider=token", "add/github/token", "/settings/tools/new?preset=github", "add/github",
