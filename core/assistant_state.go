@@ -13,7 +13,8 @@ import (
 	"unicode/utf8"
 )
 
-// An assistant's state: what it knows now, typed. Its schema is part of
+// An assistant's state: what it knows now, typed: its kept facts
+// (facts.go), whose owner is the assistant. Its schema is part of
 // its spec (Assistant.State): fields, each a choice from a list, a number,
 // a date, a text, or a list of rows whose columns are such fields. Its one
 // writer is the assistant itself, through set_state, checked by code: a
@@ -33,13 +34,18 @@ import (
 // #244 step 2c. The state orients, never authorises: the grid, the cards
 // and the approvals never read it.
 
-const assistantStateSchema = `CREATE TABLE IF NOT EXISTS assistant_state (
-  assistant TEXT NOT NULL, field TEXT NOT NULL, value TEXT NOT NULL, set_at INTEGER NOT NULL,
-  expires INTEGER NOT NULL, tainted TEXT NOT NULL DEFAULT '', PRIMARY KEY (assistant, field));
-CREATE TABLE IF NOT EXISTS assistant_state_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, assistant TEXT NOT NULL, field TEXT NOT NULL, value TEXT NOT NULL,
-  set_at INTEGER NOT NULL, tainted TEXT NOT NULL DEFAULT '');
-CREATE INDEX IF NOT EXISTS assistant_state_log_at ON assistant_state_log (assistant, set_at);`
+// Its kept facts (facts.go): owner is the assistant's name, writer who
+// wrote it. Before #244 step 3 the tables were assistant_state and
+// assistant_state_log, keyed by assistant (renamed at start: store.go).
+const assistantStateSchema = `CREATE TABLE IF NOT EXISTS facts (
+  owner TEXT NOT NULL, field TEXT NOT NULL, value TEXT NOT NULL, set_at INTEGER NOT NULL,
+  expires INTEGER NOT NULL, tainted TEXT NOT NULL DEFAULT '', writer TEXT NOT NULL DEFAULT '', PRIMARY KEY (owner, field));
+CREATE TABLE IF NOT EXISTS facts_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, owner TEXT NOT NULL, field TEXT NOT NULL, value TEXT NOT NULL,
+  set_at INTEGER NOT NULL, tainted TEXT NOT NULL DEFAULT '', writer TEXT NOT NULL DEFAULT '');
+CREATE INDEX IF NOT EXISTS facts_log_at ON facts_log (owner, set_at);
+UPDATE facts SET writer = owner WHERE writer = '';
+UPDATE facts_log SET writer = owner WHERE writer = '';`
 
 func init() { extraSchema = append(extraSchema, assistantStateSchema) }
 
@@ -320,7 +326,7 @@ func (v stateValue) known(now time.Time) bool { return v.Value != nil && now.Bef
 // longer takes, reads unknown.
 func (c *core) assistantState(a Assistant, now time.Time) []stateValue {
 	kept := map[string]stateValue{}
-	rows, err := c.store.db.Query(`SELECT field, value, set_at, expires, tainted FROM assistant_state WHERE assistant = ?`, a.Name)
+	rows, err := c.store.db.Query(`SELECT field, value, set_at, expires, tainted FROM facts WHERE owner = ?`, a.Name)
 	if err == nil {
 		for rows.Next() {
 			var v stateValue
@@ -425,10 +431,10 @@ func (c *core) setState(a Assistant, in setStateIn, tainted []string, now time.T
 	set := []string{}
 	for _, w := range writes {
 		if w.val == nil {
-			if _, err := tx.Exec(`DELETE FROM assistant_state WHERE assistant = ? AND field = ?`, a.Name, w.f.Name); err != nil {
+			if _, err := tx.Exec(`DELETE FROM facts WHERE owner = ? AND field = ?`, a.Name, w.f.Name); err != nil {
 				return nil, err
 			}
-			tx.Exec(`INSERT INTO assistant_state_log (assistant, field, value, set_at) VALUES (?, ?, 'null', ?)`, a.Name, w.f.Name, now.Unix())
+			tx.Exec(`INSERT INTO facts_log (owner, field, value, set_at, writer) VALUES (?, ?, 'null', ?, ?)`, a.Name, w.f.Name, now.Unix(), a.Name)
 			set = append(set, w.f.Name)
 			continue
 		}
@@ -437,21 +443,21 @@ func (c *core) setState(a Assistant, in setStateIn, tainted []string, now time.T
 		if !w.f.closed() {
 			t = why // a closed value never taints
 		}
-		if _, err := tx.Exec(`INSERT INTO assistant_state (assistant, field, value, set_at, expires, tainted) VALUES (?, ?, ?, ?, ?, ?)
-			ON CONFLICT(assistant, field) DO UPDATE SET value = excluded.value, set_at = excluded.set_at, expires = excluded.expires, tainted = excluded.tainted`,
-			a.Name, w.f.Name, string(raw), now.Unix(), now.Add(w.f.ttl()).Unix(), t); err != nil {
+		if _, err := tx.Exec(`INSERT INTO facts (owner, field, value, set_at, expires, tainted, writer) VALUES (?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(owner, field) DO UPDATE SET value = excluded.value, set_at = excluded.set_at, expires = excluded.expires, tainted = excluded.tainted, writer = excluded.writer`,
+			a.Name, w.f.Name, string(raw), now.Unix(), now.Add(w.f.ttl()).Unix(), t, a.Name); err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(`INSERT INTO assistant_state_log (assistant, field, value, set_at, tainted) VALUES (?, ?, ?, ?, ?)`,
-			a.Name, w.f.Name, string(raw), now.Unix(), t); err != nil {
+		if _, err := tx.Exec(`INSERT INTO facts_log (owner, field, value, set_at, tainted, writer) VALUES (?, ?, ?, ?, ?, ?)`,
+			a.Name, w.f.Name, string(raw), now.Unix(), t, a.Name); err != nil {
 			return nil, err
 		}
 		set = append(set, w.f.Name)
 	}
 	// A few days of history, and no more than its cap.
-	tx.Exec(`DELETE FROM assistant_state_log WHERE assistant = ? AND set_at < ?`, a.Name, now.Add(-stateKeep).Unix())
-	tx.Exec(`DELETE FROM assistant_state_log WHERE assistant = ? AND id NOT IN
-		(SELECT id FROM assistant_state_log WHERE assistant = ? ORDER BY id DESC LIMIT ?)`, a.Name, a.Name, maxStateLog)
+	tx.Exec(`DELETE FROM facts_log WHERE owner = ? AND set_at < ?`, a.Name, now.Add(-stateKeep).Unix())
+	tx.Exec(`DELETE FROM facts_log WHERE owner = ? AND id NOT IN
+		(SELECT id FROM facts_log WHERE owner = ? ORDER BY id DESC LIMIT ?)`, a.Name, a.Name, maxStateLog)
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}

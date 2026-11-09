@@ -401,6 +401,9 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 	if !serverName.MatchString(name) {
 		return fmt.Errorf("assistant %q: a name of lowercase letters, digits and dashes, up to 32", name)
 	}
+	if name != brainAssistant && factOwnerReserved(name) {
+		return fmt.Errorf("assistant %q: a name Eriphe keeps for its own facts", name)
+	}
 	what := "assistant " + name
 	if name == brainAssistant {
 		what = "brain" // as the file names it
@@ -678,8 +681,8 @@ func (c *core) dropAssistantStatus(name string) {
 	delete(c.asst.m, name)
 	c.store.db.Exec(`DELETE FROM assistant_status WHERE name = ?`, name)
 	// What it knew goes with it.
-	c.store.db.Exec(`DELETE FROM assistant_state WHERE assistant = ?`, name)
-	c.store.db.Exec(`DELETE FROM assistant_state_log WHERE assistant = ?`, name)
+	c.store.db.Exec(`DELETE FROM facts WHERE owner = ?`, name)
+	c.store.db.Exec(`DELETE FROM facts_log WHERE owner = ?`, name)
 }
 
 func (c *core) assistantStatusNames() []string {

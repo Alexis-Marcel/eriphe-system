@@ -160,12 +160,12 @@ func TestSetState(t *testing.T) {
 	}
 	// Each write is in its history, for a few days.
 	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM assistant_state_log WHERE assistant = 'prod'`).Scan(&n)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM facts_log WHERE owner = 'prod'`).Scan(&n)
 	if n != 4 {
 		t.Fatalf("history = %d", n)
 	}
 	c.setState(a, setStateIn{Values: map[string]any{"incidents": 3.0}}, nil, now.Add(8*24*time.Hour))
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM assistant_state_log WHERE assistant = 'prod'`).Scan(&n)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM facts_log WHERE owner = 'prod'`).Scan(&n)
 	if n != 1 {
 		t.Fatalf("history after a week = %d", n)
 	}
@@ -293,7 +293,7 @@ func TestAssistantStateTools(t *testing.T) {
 	c.deleteAssistant("prod")
 	c.tendAssistants(t.Context(), "tok")
 	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM assistant_state WHERE assistant = 'prod'`).Scan(&n)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM facts WHERE owner = 'prod'`).Scan(&n)
 	if n != 0 {
 		t.Fatalf("%d values kept", n)
 	}
