@@ -77,31 +77,19 @@ func (c *core) tickReturned(now time.Time) {
 		"away_minutes": int(a.Back.Sub(a.Left) / time.Minute)}})
 }
 
-// emitHAChanges writes ha.changed for each house signal whose value moved
-// since the last publish. The first publish only records them.
-func (c *core) emitHAChanges(sigs []ctxSignal) {
-	now := map[string]string{}
-	for _, s := range sigs {
-		now[s.Kind] = s.Value
-	}
-	c.ha.mu.Lock()
-	prev, first := c.ha.published, c.ha.published == nil
-	c.ha.published = now
-	c.ha.mu.Unlock()
-	if first {
-		return
-	}
-	for _, k := range sortedKeys(now) {
-		if prev[k] != now[k] {
-			c.emitLogged(journalEvent{Kind: evHAChanged, Key: k, Source: "ha",
-				Payload: map[string]any{"signal": k, "value": now[k], "was": prev[k]}})
+// emitHAChanges writes ha.changed for each followed entity whose state
+// moved (ha_follow.go): the entity, its state and the former one, and its
+// area and domain from Home Assistant. Keyed by the entity.
+func (c *core) emitHAChanges(moves []haMove, house haHouse) {
+	for _, m := range moves {
+		p := map[string]any{"entity": m.Entity, "state": haStateShown(m.State), "was": haStateShown(m.Was)}
+		if e, ok := house.entity(m.Entity); ok {
+			p["domain"] = e.Domain
+			if e.Area != "" {
+				p["area"] = e.Area
+			}
 		}
-	}
-	for k, v := range prev {
-		if _, ok := now[k]; !ok {
-			c.emitLogged(journalEvent{Kind: evHAChanged, Key: k, Source: "ha",
-				Payload: map[string]any{"signal": k, "value": "", "was": v}})
-		}
+		c.emitLogged(journalEvent{Kind: evHAChanged, Key: m.Entity, Source: srcHA, Payload: p})
 	}
 }
 

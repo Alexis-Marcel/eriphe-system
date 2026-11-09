@@ -1,0 +1,56 @@
+{{/* Settings → Ce qu'Eriphe observe (web_observe.go): the machines and the
+     followed Home Assistant entities, live; following and unfollowing; the
+     voice for an urgent skill's fixed message. */}}
+
+{{define "i-pulse"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg>{{end}}
+
+{{define "observe"}}{{with .Data}}
+<header class="page-head"><h2>{{t "obs.title"}}</h2><p>{{t "obs.lead"}}</p></header>
+<div id="observe" class="stack">{{template "observe-body" .}}</div>
+{{end}}{{end}}
+{{define "observe-frag"}}{{template "observe-body" .Data}}{{end}}
+
+{{define "observe-body"}}
+<section class="panel" aria-labelledby="obs-live-title">
+  <h3 id="obs-live-title">{{template "i-pulse"}}{{t "obs.live"}}</h3>
+  <div id="observe-live" hx-get="/settings/observe/live" hx-trigger="every 15s" hx-swap="innerHTML">{{template "observe-live-body" .Live}}</div>
+  <p class="small muted">{{t "obs.live.lead"}}</p>
+</section>
+
+<section class="panel" aria-labelledby="obs-ha-title">
+  <h3 id="obs-ha-title">{{template "i-plug"}}{{t "obs.ha"}}</h3>
+  {{if .Live.HALinked}}
+  <p class="small muted">{{t "obs.ha.lead"}}</p>
+  {{if .Live.Followed}}<ul class="list">{{range .Live.Followed}}
+  <li><div class="list-main"><span><span class="mono">{{.Entity}}</span>{{if .Name}} ({{.Name}}){{end}}</span>{{if .Area}}<span class="small muted">{{.Area}}</span>{{end}}</div>
+    <form hx-post="/settings/observe/unfollow" hx-target="#observe"><input type="hidden" name="entity" value="{{.Entity}}">
+    <button class="btn btn-ghost sm" type="submit" aria-label="{{t "obs.unfollow"}} {{.Entity}}" title="{{t "obs.unfollow"}}">{{template "i-x"}}</button></form>
+  </li>{{end}}</ul>
+  {{else}}<p class="muted small">{{t "obs.ha.none"}}</p>{{end}}
+  {{if .Candidates}}<form class="row-form row-form-2" hx-post="/settings/observe/follow" hx-target="#observe">
+    <label class="field"><span>{{t "obs.follow"}}</span><select name="entity">{{range .Candidates}}
+      <option value="{{.ID}}">{{.ID}}{{if .Name}} · {{.Name}}{{end}}{{if .Area}} · {{.Area}}{{end}}</option>{{end}}</select></label>
+    <button class="btn btn-soft sm" type="submit">{{template "i-plus"}}{{t "obs.follow.add"}}</button>
+  </form>{{end}}
+  {{if .Proposed}}<p class="small"><a href="/settings/approve#presence">{{tf "obs.proposed" .Proposed}}</a></p>{{end}}
+  <form class="list-main" hx-post="/settings/observe/voice-urgent" hx-trigger="change" hx-target="#observe">
+    <label class="switch"><input type="checkbox" name="on" value="1"{{if .VoiceUrgent}} checked{{end}}>
+      <span><b>{{t "obs.voiceurgent"}}</b><small>{{t "obs.voiceurgent.hint"}}</small></span></label>
+  </form>
+  {{template "ask" "obs.ask"}}
+  {{else}}<p class="muted small">{{t "obs.ha.unlinked"}} <a href="/settings/home-assistant">{{t "obs.ha.connect"}}</a></p>{{end}}
+</section>
+{{end}}
+
+{{define "observe-live"}}{{template "observe-live-body" .Data}}{{end}}
+{{define "observe-live-body"}}
+<ul class="list">
+  {{range .Machines}}<li><div class="list-main"><span class="strong">{{.Name}}</span>
+    <span class="small">{{if .Presence}}{{t (printf "obs.presence.%s" .Presence)}}{{if and (eq .Presence "idle") .IdleMin}} · {{tf "obs.idle.min" .IdleMin}}{{end}}{{else}}{{t "obs.unknown"}}{{end}}{{if .DND}} → <span class="tag tag-warn">{{t "obs.dnd"}}</span>{{if .Reason}} ({{t (printf "obs.reason.%s" .Reason)}}){{end}}{{end}}</span></div></li>{{end}}
+  {{if not .Machines}}<li><div class="list-main"><span class="strong">{{t "obs.machines"}}</span><span class="small muted">{{t "obs.machines.none"}}</span></div></li>{{end}}
+  {{range .Followed}}<li><div class="list-main"><span class="strong mono">{{.Entity}}</span>
+    <span class="small">{{if .State}}{{.State}}{{if not .Changed.IsZero}} · {{tf "obs.since" (ago .Changed)}}{{end}}{{else}}{{t "obs.unknown"}}{{end}}{{if .Area}} · {{.Area}}{{end}}</span></div></li>{{end}}
+  {{if and .HALinked .Followed (not .HAOn)}}<li><div class="list-main"><span class="small"><span class="tag tag-warn">{{t "obs.ha.off"}}</span>{{if .HAErr}} {{.HAErr}}{{end}}</span></div></li>{{end}}
+  {{if .Room}}<li><div class="list-main"><span class="strong">{{t "obs.room"}}</span><span class="small">{{.Room}}</span></div></li>{{end}}
+</ul>
+{{end}}

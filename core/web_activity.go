@@ -11,7 +11,7 @@ import (
 // reads with since (since.go), by kind, the tool accesses among them (the
 // decisions' journal); and « À valider », where everything the brain
 // proposed and the user has not answered yet waits: permissions,
-// memories, intentions, notification rules, watches, settings, presence,
+// memories, intentions, notification rules, settings, followed entities,
 // and the quiet hours the activity suggests. Both are fallbacks: what
 // happens is told in the conversation, and a proposal is asked there, on
 // a card (convo_cards.go). The Activité tab they had leads here.
@@ -156,7 +156,7 @@ type approvals struct {
 	Intents  []intentCard
 	Rules    []notifyRule
 	Settings []settingProposal
-	Presence []haMapping // Home Assistant entities the brain proposes to follow (ha_presence.go)
+	Presence []haFollow // Home Assistant entities the brain proposes to follow (ha_follow.go)
 	Quiet    []quietSuggestion
 }
 
@@ -189,7 +189,7 @@ func (w *web) approvals() approvals {
 	}
 	a.Rules, _ = w.c.notifyRules(ruleProposed)
 	a.Settings, _ = w.c.settingProposals()
-	a.Presence = w.c.haMappings(ruleProposed)
+	a.Presence = w.c.haFollows(ruleProposed)
 	a.Quiet = w.c.suggestQuiet()
 	return a
 }
@@ -211,7 +211,7 @@ func (w *web) approvalCount() int {
 	if ps, err := w.c.settingProposals(); err == nil {
 		n += len(ps)
 	}
-	n += len(w.c.haMappings(ruleProposed))
+	n += len(w.c.haFollows(ruleProposed))
 	return n
 }
 

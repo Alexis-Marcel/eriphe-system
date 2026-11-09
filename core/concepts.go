@@ -23,14 +23,15 @@ var concepts = []concept{
 	{"intention", "intend, intentions, update_intention", "something owed or to do once: at a date and time (remind me at 14:00), or the next time a name comes up"},
 	{"skill", "write_skill, list_skills, read_skill", "what comes back or reacts on its own: a skill with when (an event: a mail, an alert, the user's return, a task's end; or a time) runs as a task in the background and tells the user with its last message; also know-how followed when asked"},
 	{"rule", "rule", "what to do with notifications about a topic (now, brief, never, even at night, which lines), and the quiet hours"},
-	{"setting", "setting, presence_sources, map_presence", "how the user is told in general: device order, lines off, daily cap, time zone, Telegram detail; what you may know of the user, and which Home Assistant entities tell it"},
+	{"setting", "setting", "how the user is told in general: device order, lines off, daily cap, time zone, Telegram detail, an urgent skill said aloud"},
+	{"where", "where_now, ha_entities, follow_entity", "where a notification would reach the user now (lines, devices, the voice's room, the followed Home Assistant entities), and which entities of the house are followed"},
 	{"notify", "notify, notifications", "say something on your own, now or for the brief, under a known topic ref"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
 	{"task", "run_task", "long or heavy work, by an agent on a machine"},
 	{"session", "start_session, session_status, settle_step, amend_session", "work of several steps toward one goal (a plan, steps in parallel, checkpoints for the user), not only code"},
 }
 
-const conceptMapEN = "memory, intention, skill, rule, setting, notify, since, task, session"
+const conceptMapEN = "memory, intention, skill, rule, setting, where, notify, since, task, session"
 
 var conceptLinesEN = func() string {
 	var b strings.Builder

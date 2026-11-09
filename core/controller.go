@@ -60,8 +60,8 @@ type core struct {
 	push        *pusher          // notifications on the user's devices (push.go); nil without the workspace
 	notifyClock func() time.Time // the time of notify's decisions (notify.go); nil: now
 	tg          *telegram        // the user's Telegram bot (telegram.go); nil without the workspace
-	known       contextStore     // the user's context: signals in memory only (context.go)
-	ha          haState          // Home Assistant as a source of presence (ha_presence.go)
+	obs         observations     // the machines' locked, idle, do not disturb, in memory only (observe.go)
+	ha          haState          // the Home Assistant entities the user follows (ha_follow.go)
 	events      eventBus         // the event journal's subscribers (event_journal.go)
 	skillRuns   skillRunner      // the triggered skills (skill_runs.go)
 	out         channelOut       // what goes out through the channels the user added (channel_out.go)
@@ -176,7 +176,7 @@ func (c *core) refreshNode(ctx context.Context, n *nodeClient) {
 	var info json.RawMessage
 	err := errOffline
 	if n.connected() {
-		info, err = n.info(ctx, c.nodeLevel(n.name)) // what it may tell of its user (context_sources.go)
+		info, err = n.info(ctx, nodeContextLevel) // locked, idle, do not disturb (route_signals.go)
 	}
 	if err == nil {
 		// The folders shared or unshared there, and those eriphe-core took
@@ -191,7 +191,7 @@ func (c *core) refreshNode(ctx context.Context, n *nodeClient) {
 	if err == nil {
 		info = c.takeIdle(n.name, info, time.Now()) // in memory only (route_signals.go)
 	} else {
-		c.known.forget(srcMachine+n.name, "") // a node gone says nothing more
+		c.obs.forget(n.name) // a node gone says nothing more
 	}
 	if err := c.store.setNodeStatus(n.name, err == nil, info); err != nil {
 		log.Printf("store: %v", err)

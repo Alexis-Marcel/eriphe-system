@@ -16,7 +16,7 @@ import (
 
 // The user's session, told to eriphe-core with the node's status (GET
 // /v1/node "context", beside "idle"), at the level eriphe-core asks for
-// (?context=N, the user's choice on the page « Ce qu'Eriphe sait de toi »):
+// (?context=N; eriphe-core asks 1, for its router: core/route_signals.go):
 //
 //   - 0, or no level (an older eriphe-core): nothing more than before;
 //   - 1: whether the machine is not to be disturbed, and why, as a class

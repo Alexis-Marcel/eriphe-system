@@ -110,7 +110,6 @@ func main() {
 	mux.Handle("GET /v1/channel/out", http.HandlerFunc(c.handleChannelOut))
 	mux.Handle("POST /v1/voice", http.HandlerFunc(c.handleChannelIn))
 	mux.Handle("GET /v1/voice", http.HandlerFunc(c.handleChannelInfo))
-	mux.Handle("POST /v1/context", http.HandlerFunc(c.handleContext)) // a token per source, closed values (context_sources.go)
 	c.taskRoutes(mux, token)
 	c.serverRoutes(mux, token)
 	c.catalogRoutes(mux, token)

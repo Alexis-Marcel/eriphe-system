@@ -778,7 +778,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .tint-blue, .nav-group > a[href="/settings/agents"] { --tint: #2563eb; }
 .tint-sky, .nav-group > a[href="/settings/watches"], .nav-group > a[href="/settings/access"] { --tint: #0284c7; }
 .tint-teal, .nav-group > a[href="/settings/tools"] { --tint: #0d9488; }
-.tint-green, .nav-group > a[href="/settings/context"], .nav-group > a[href="/settings/approve"] { --tint: #16a34a; }
+.tint-green, .nav-group > a[href="/settings/observe"], .nav-group > a[href="/settings/approve"] { --tint: #16a34a; }
 .tint-amber, .nav-group > a[href="/settings/folders"] { --tint: #d97706; }
 .tint-orange, .nav-group > a[href="/settings/skills"] { --tint: #ea580c; }
 .tint-pink, .nav-group > a[href="/settings/learned"] { --tint: #db2777; }
@@ -1443,9 +1443,6 @@ dialog.modal[open] { max-height: calc(100dvh - 32px - env(safe-area-inset-top) -
 .install-how li.current { background: var(--accent-soft); }
 .push-list li { flex-wrap: wrap; }
 
-/* Settings → Ce qu'Eriphe sait de toi */
-.ctx-privacy { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; color: var(--muted); }
-#context-live .mono, #context pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 #push-state:empty { display: none; }
 
 /* Installed on a phone (iOS standalone): 100dvh can stop short of the screen's

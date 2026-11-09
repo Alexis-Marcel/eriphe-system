@@ -11,7 +11,7 @@ import (
 // The router's signals and settings (route.go). The signals are numbers
 // and flags: a tab in front, a machine's idle seconds, whether it is not
 // to be disturbed, a device's kind. No screen, no app name, no window. What
-// a machine says is kept as context signals (context.go), in memory only,
+// a machine says is kept as an observation (observe.go), in memory only,
 // a few minutes at most, never in the database.
 
 const (
@@ -35,38 +35,43 @@ type nodeIdle struct {
 }
 
 // nodeSession is what a node says of the user's session beside its idle
-// time (GET /v1/node "context", node/context.go), at the level eriphe-core
-// asked for: whether the machine is not to be disturbed and why, and at
-// level 2 the category of the app in front. Never an app's name.
+// time (GET /v1/node "context", node/context.go): whether the machine is
+// not to be disturbed and why. eriphe-core asks at level 1, so a node never
+// computes the category of the app in front.
 type nodeSession struct {
-	Known    bool   `json:"known"`
-	DND      bool   `json:"dnd,omitempty"`
-	Reason   string `json:"reason,omitempty"`
-	Activity string `json:"activity,omitempty"`
+	Known  bool   `json:"known"`
+	DND    bool   `json:"dnd,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
-// takeIdle keeps what a node says of its machine as context signals, in
-// memory only (context.go), and returns its info without it, as it is
+// nodeContextLevel is the level eriphe-core asks a node for: presence and
+// do not disturb, never the app in front (node/context.go).
+const nodeContextLevel = 1
+
+// takeIdle keeps what a node says of its machine as an observation, in
+// memory only (observe.go), and returns its info without it, as it is
 // stored.
 func (c *core) takeIdle(name string, info json.RawMessage, now time.Time) json.RawMessage {
 	var all map[string]json.RawMessage
 	if json.Unmarshal(info, &all) != nil {
 		return info
 	}
-	source := srcMachine + name
-	c.known.forget(source, "")
-	var sigs []ctxSignal
+	m := machineObs{At: now}
 	var idle nodeIdle
 	if raw, ok := all["idle"]; ok && json.Unmarshal(raw, &idle) == nil && idle.Known && idle.Seconds >= 0 {
-		sigs = append(sigs, presenceSignal(source, idle, now))
+		m.IdleKnown, m.Idle, m.Locked = true, time.Duration(idle.Seconds)*time.Second, idle.Locked
 	}
 	var sess nodeSession
-	if raw, ok := all["context"]; ok && json.Unmarshal(raw, &sess) == nil && sess.Known {
-		sigs = append(sigs, sessionSignals(source, sess, now)...)
+	if raw, ok := all["context"]; ok && json.Unmarshal(raw, &sess) == nil && sess.Known && sess.DND {
+		m.DND = true
+		if slices.Contains(dndReasons, sess.Reason) {
+			m.Reason = sess.Reason // a reason off the list: not to be disturbed all the same, without it
+		}
 	}
-	if len(sigs) > 0 {
-		c.putSignals(sigs)
-		c.known.saw(source, now)
+	if m.IdleKnown || m.DND {
+		c.obs.put(name, m)
+	} else {
+		c.obs.forget(name)
 	}
 	delete(all, "idle")
 	delete(all, "context")
@@ -77,48 +82,13 @@ func (c *core) takeIdle(name string, info json.RawMessage, now time.Time) json.R
 	return out
 }
 
-// presenceSignal is a node's idle time as a signal: locked, idle (two
-// minutes or more) or active, with the idle time for the router.
-func presenceSignal(source string, idle nodeIdle, now time.Time) ctxSignal {
-	v := "active"
-	switch {
-	case idle.Locked:
-		v = "locked"
-	case time.Duration(idle.Seconds)*time.Second >= activeIdle:
-		v = "idle"
-	}
-	return ctxSignal{Kind: sigPresence, Value: v, Idle: time.Duration(idle.Seconds) * time.Second, Source: source, At: now, Until: now.Add(idleFresh)}
-}
-
-// sessionSignals are a node's session as signals, each checked against
-// its closed list: a value off it is dropped, never kept as said.
-func sessionSignals(source string, s nodeSession, now time.Time) []ctxSignal {
-	var out []ctxSignal
-	dnd := ctxInput{Kind: sigDND, Value: "off"}
-	if s.DND {
-		dnd = ctxInput{Kind: sigDND, Value: "on", Reason: s.Reason}
-	}
-	if sig, err := checkSignal(dnd, nil, source, now); err == nil {
-		out = append(out, sig)
-	} else if s.DND { // a reason off the list: still not to be disturbed, without it
-		out = append(out, ctxSignal{Kind: sigDND, Value: "on", Source: source, At: now, Until: now.Add(idleFresh)})
-	}
-	if s.Activity != "" {
-		if sig, err := checkSignal(ctxInput{Kind: sigActivity, Value: s.Activity}, nil, source, now); err == nil {
-			out = append(out, sig)
-		}
-	}
-	return out
-}
-
-// idleOf is a node's idle time now, if it reported one lately and the
-// context lets it count.
+// idleOf is a node's idle time now, if it reported one lately.
 func (c *core) idleOf(name string, now time.Time) (nodeIdle, bool) {
-	d, ok := c.userContext(now).device(srcMachine + name)
-	if !ok || d.Presence == "" {
+	m, ok := c.obs.machine(name, now)
+	if !ok || !m.IdleKnown {
 		return nodeIdle{}, false
 	}
-	return nodeIdle{Known: true, Seconds: int64(d.Idle / time.Second), Locked: d.Presence == "locked"}, true
+	return nodeIdle{Known: true, Seconds: int64(m.Idle / time.Second), Locked: m.Locked}, true
 }
 
 // devicePref is the user's say on a subscription.
@@ -231,15 +201,14 @@ func (c *core) routeSignals(now time.Time) routeSignals {
 	}
 	subs, _ := c.push.subscriptions()
 	prefs := c.devicePrefs()
-	ctx := c.userContext(now)
 	tabs := c.push.frontTabs()
 	index := map[string]int{}
 	for _, s := range subs {
 		p := prefs[s.ID]
 		d := routeDevice{ID: s.ID, Label: s.Label, Kind: subKind(s, p), App: strings.Contains(s.Label, " · "+tr("fr", "push.app")) ||
 			strings.Contains(s.Label, " · "+tr("en", "push.app")), Push: true}
-		if p.Node != "" {
-			applyContext(&d, ctx, srcMachine+p.Node)
+		if m, ok := c.obs.machine(p.Node, now); ok && p.Node != "" {
+			applyMachine(&d, m)
 		}
 		index[s.ID] = len(sig.Devices)
 		sig.Devices = append(sig.Devices, d)
@@ -265,19 +234,12 @@ func (c *core) routeSignals(now time.Time) routeSignals {
 	return sig
 }
 
-// applyContext gives a device what the context says of its machine: its
-// idle time, locked, not to be disturbed. Each of these only takes the
-// device out of a line (route.go): none puts it in one.
-func applyContext(d *routeDevice, u userCtx, source string) {
-	m, ok := u.device(source)
-	if !ok {
-		return
-	}
-	if m.Presence != "" {
-		d.IdleKnown, d.Idle, d.Locked = true, m.Idle, m.Presence == "locked"
-		if m.Presence == "idle" && m.Idle < activeIdle {
-			d.Idle = activeIdle // said idle without a number: idle all the same
-		}
+// applyMachine gives a device what its machine's node says: its idle
+// time, locked, not to be disturbed. Each of these only takes the device
+// out of a line (route.go): none puts it in one.
+func applyMachine(d *routeDevice, m machineObs) {
+	if m.IdleKnown {
+		d.IdleKnown, d.Idle, d.Locked = true, m.Idle, m.Locked
 	}
 	d.DND = m.DND
 }

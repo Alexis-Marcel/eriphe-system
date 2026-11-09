@@ -387,8 +387,8 @@ func checkAssistant(c *Config, name string, a Assistant) error {
 	if !serverName.MatchString(name) {
 		return fmt.Errorf("assistant %q: a name of lowercase letters, digits and dashes, up to 32", name)
 	}
-	if name != brainAssistant && factOwnerReserved(name) {
-		return fmt.Errorf("assistant %q: a name Eriphe keeps for its own facts", name)
+	if name != brainAssistant && slices.Contains([]string{"context", "eriphe", "brain", "user"}, strings.ToLower(name)) {
+		return fmt.Errorf("assistant %q: a name Eriphe keeps for itself", name)
 	}
 	what := "assistant " + name
 	if name == brainAssistant {

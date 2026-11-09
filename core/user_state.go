@@ -116,9 +116,6 @@ func (c *core) userState() (userState, error) {
 			s.Busy = until
 		}
 	}
-	if until := c.userContext(now).Busy; until.After(s.Busy) {
-		s.Busy = until // declared by a source of the user's (context.go)
-	}
 	s.Quiet, s.InQuiet = quietAt(cx.Rules, now)
 	if s.InQuiet {
 		s.QuietOn = clockAfter(now, s.Quiet.To)

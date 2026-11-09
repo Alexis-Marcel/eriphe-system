@@ -14,7 +14,7 @@ import (
 	"github.com/coder/websocket"
 )
 
-// Home Assistant's own API, for presence (ha_presence.go): eriphe-core
+// Home Assistant's own API, for the followed entities (ha_follow.go): eriphe-core
 // reads the house's registries and follows a few entities over HA's
 // WebSocket API, and asks a speaker to announce, with the long-lived token
 // the user gave the catalog's Home Assistant tool (the home-assistant

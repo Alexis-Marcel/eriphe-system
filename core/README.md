@@ -1319,7 +1319,7 @@ turn is not tainted. Its front matter:
 
 | Key | |
 |---|---|
-| `when` | an event kind of the [journal](#events) (`mail.received`), with filters on its key or payload (`alert.received key=getout`, `ha.changed signal=place value=away`); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules) |
+| `when` | an event kind of the [journal](#events) (`mail.received`), with filters on its key or payload (`alert.received key=getout`, `ha.changed entity=person.sam state=not_home`); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules) |
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
@@ -1406,7 +1406,7 @@ the rest dropped.
 | `task.ended` | a worker task's end | the task | no |
 | `session.ended` | a work session's end | `session:<id>` | no |
 | `user.returned` | the user's first activity after an absence of an hour or more | | no |
-| `ha.changed` | a signal of Home Assistant's mapped entities changes value | the signal | no (closed values) |
+| `ha.changed` | a Home Assistant entity the user follows changes state (`state`, `was`, `domain`, `area`) | the entity | no (short states, cleaned) |
 
 **A server's events.** A catalog server that offers the MCP resource `eriphe://events` has
 events: eriphe-core reads it when the server's session opens, then every minute (the servers
@@ -1594,8 +1594,8 @@ trusted, saying a sentence.
 **Home Assistant** (`../ha/`) is such a channel: its Assist pipeline keeps what it understands
 (simple commands of the house) and hands the rest to Eriphe with the area of the satellite as the
 place; it keeps the outbound request open with the areas that have a satellite or a media player,
-and says each sentence on a speaker of its area. What an automation knows of the house (someone
-came home, the TV is on) goes to `POST /v1/context` as a signal, with a source token of its own.
+and says each sentence on a speaker of its area. What the house says of the user comes from the
+entities they follow (What Eriphe observes, below).
 
 ## Google accounts (Gmail, Calendar, Drive)
 
@@ -2644,108 +2644,55 @@ hour is away, and a gap of an hour or more is an absence. "Busy until" comes fro
 none yet: reading a connected calendar on every turn would cost a call each time and taint every
 turn; a source that keeps free/busy times only (never titles) joins there.
 
-**What Eriphe knows about you: the context** (`context.go`, `context_sources.go`,
-`web_context.go`, Settings → Ce qu'Eriphe sait de toi). One concept for where the user is and
-what they do, turned on by the user: a **level** (`context_level`: 0 Rien, 1 Présence, 2
-Contexte; unset is 1, what a Mac's node already told) that is only a preset, and a **switch per
-source** (`context_off`). Sources put **signals**: a kind and a value from a closed list, with
-the source, when it came and when it expires. A value off its list is refused, so no free text
-from a source ever reaches the model.
+**What Eriphe observes** (`observe.go`, `ha_follow.go`, `where_now.go`, `web_observe.go`,
+Settings → Ce qu'Eriphe observe). No context subsystem, no levels, no signals: observations, read
+as they are, and the model chooses what to make of them. The user's situation ("in Lyon until
+Sunday") is dated memory (`situation`, shown under « En ce moment »).
 
-| Kind | Level | About | Values | Time to live (default, max) |
-|---|---|---|---|---|
-| `presence` | 1 | a device | `active`, `idle`, `locked` | 2 min, 10 min |
-| `dnd` | 1 | a device | `on` (with a `reason`: `game`, `meeting`, `fullscreen`, `mic`, `focus`), `off` | 2 min, 12 h |
-| `activity` | 2 | a device | `game`, `meeting`, `code`, `web`, `video`, `music`, `chat`, `other` | 2 min, 12 h |
-| `place` | 1 | the user | `home`, `away` | 12 h, 24 h |
-| `room` | 1 | the user | one of the user's rooms, listed on the page (`context_rooms`) | 15 min, 1 h |
-| `home_activity` | 2 | the house | `tv`, `sleep`, `office`, `cooking`, `other` | 15 min, 12 h |
-| `focus` | 1 | the user, declared | `on`, `sleep`, `off` | 4 h, 24 h |
-| `busy` | 1 | the user, declared | `busy`, `free` (until it expires) | 1 h, 12 h |
+- **The machines.** With its status (`GET /v1/node?context=1`), a node tells `idle` (seconds,
+  locked) and `context` (`{known, dnd, reason}`, worked out on the machine: `node/context.go`;
+  eriphe-core never asks level 2, so the app in front is never computed). Kept **in memory only**
+  (`observations`), for two minutes, never stored with the node's info; a reason off its list
+  (`game`, `meeting`, `fullscreen`, `mic`, `focus`) is dropped. The router reads it for the node
+  tied to a subscription: a device locked, idle or not to be disturbed is skipped by every line, as
+  if it were not there; a machine not to be disturbed also holds the cards for a better moment.
+  It only ever makes Eriphe quieter.
+- **The house: the entities the user follows.** With the long-lived token of the catalog's Home
+  Assistant tool (the `home-assistant` preset), over Home Assistant's WebSocket API. Why not Home
+  Assistant's own MCP server: its `GetLiveContext` returns only the entities exposed to Assist, by
+  name and area with no `entity_id`, and has no subscription.
+  1. **Discover** (code, no model): `get_states` and the area, device and entity registries (a
+     user that is not an administrator may be refused the registries: then states only, no
+     areas), filtered to the candidates: `person`, `device_tracker`, `binary_sensor` of class
+     `occupancy`, `presence` or `motion`, room tracker sensors (`*_area`, `*_room`: Bermuda,
+     ESPresense), `media_player`, the companion app's focus, sleep or do not disturb
+     `input_boolean`s. Each with its id, domain, class, area and state; never an attribute.
+  2. **Follow** (the user's say): `ha_entities` shows the candidates and the followed entities
+     (names and areas are the user's text, so it taints the turn); `follow_entity(entity, stop?,
+     why, source_ref)` follows one at once when the user asks in a clean turn, citing their
+     message, else proposes it on a card (`ha_follows`, state `proposed`); stopping needs the
+     user's say. The page lists them, follows from the candidates and stops following.
+  3. **Read** (code only, `followHA`): while something is followed, one `subscribe_entities` to
+     those entities only; reconnects with a growing wait (5 s to 5 min), starts again when the list
+     changes, reads the house again every day. Each move of a followed entity's state is an event
+     `ha.changed` keyed by the entity, with `state`, `was`, `domain` and `area`: a skill triggers on
+     it (`when: ha.changed entity=binary_sensor.bed state=on`).
+  4. **Speak**: the room the user is in (a followed room tracker of theirs first, else the area of
+     the followed occupancy sensor that turned on last; none while a followed person or tracker is
+     away) opens the router's voice line, said by a channel the user added that reaches it
+     (`GET /v1/channel/out`, above), never with the tool's token. It says the code's sentence; an
+     urgent skill's fixed message instead, and through the quiet hours, only when the user turned
+     `voice_for_urgent` on. A rule's `never: voice` keeps it out.
+- **Where a notification goes: `where_now` and `notify`'s `where`.** `where_now` gives the brain
+  what the router sees: each line and whether it reaches the user (and on which device, Telegram or
+  room), the devices as their machines say, the voice's room, the quiet hours and the followed
+  entities with their state. `notify(…, where)` puts that line first (`routeNote.First`, a closed
+  value); without it the router keeps its order. The lines off, the quiet hours and the rules still
+  win, and a tainted turn's `where` is ignored.
 
-Signals are **ephemeral facts** owned by `context` (see Facts), written by code: they live **in
-memory only** (`contextStore`, over `factMemory`), never in the database and with no history; an
-expired one is unknown. Level 0 still keeps the activity record above (30 days), and the page says
-so. The sources:
-
-- **`machine:<node>`**: with its status (`GET /v1/node?context=N`, N the level for that node, 0
-  when it is off), a node tells `idle` (seconds, locked) and `context` (`{known, dnd, reason,
-  activity}`, worked out on the machine: `node/context.go`). They become `presence`, `dnd` and
-  `activity` signals for two minutes; neither is stored with the node's info.
-- **`src:<id>`**: a source made on the page, with its own token (`ecx_…`, shown once, only its
-  hash kept, revoked on the page), for an iPhone shortcut, a Home Assistant automation or a script:
-
-  ```
-  POST /v1/context
-  Authorization: Bearer ecx_…
-  {"kind": "place", "value": "home"}
-  {"signals": [{"kind": "focus", "value": "on", "ttl_minutes": 60}, {"kind": "room", "value": "Salon"}]}
-  ```
-
-  At most 8 signals, 4 KiB, no unknown field; one bad value refuses the whole request (400, with the
-  allowed values). A signal the level or the source's switch keeps out is counted, not an error:
-  `{"accepted": 1, "ignored": 1}`. The token can do nothing else; plain HTTP from the internet is
-  refused. A device signal from such a source is about that source (the page and the header name
-  it), not tied to a push subscription.
-
-**Only quieter.** The router reads `presence` and `dnd` of the node tied to a subscription: a
-device locked, idle or not to be disturbed is skipped by every line (in the app, the computer,
-the last-resort computer), as if it were not there (the bench checks exactly that). A signal never
-adds a line, never moves a notification on, never pierces the quiet hours, never wakes the brain
-nor reaches the conversation, never authorises anything. The brain's header gets one line, written
-by the code from the closed values, under the user's state, only when something is known and the
-level is above 0: `[contexte : studio : actif · jeu · ne pas déranger (jeu) · maison : à la maison,
-Salon · Focus active]`; a declared `busy` feeds the state's « occupé jusqu'à ». The brain changes
-the level and the switches with `setting` (`context_level`, `context_sources_off`), applied when
-asked in a clean turn, else proposed in À valider; the first-launch interview asks the level.
-
-**Home Assistant, adapted to each house** (`ha_client.go`, `ha_presence.go`, `ha_tools.go`;
-source `ha`; its follower writes the context's facts like any source). Why not Home Assistant's own
-MCP server (the catalog's tool): its `GetLiveContext` returns only the entities exposed to Assist,
-by name and area with no `entity_id`, and has no subscription, so it can neither tell a mapped
-entity apart nor follow it without polling; the WebSocket follower stays. With the long-lived token of the catalog's Home Assistant tool (the `home-assistant`
-preset; nothing to install), over Home Assistant's WebSocket API:
-
-1. **Discover** (code, no model): `get_states` and the area, device and entity registries (a user
-   that is not an administrator may be refused the registries: then states only, no areas), kept
-   in memory, filtered to the candidates: `person`, `device_tracker`, `binary_sensor` of class
-   `occupancy`, `presence` or `motion`, room tracker sensors (`*_area`, `*_room`: Bermuda,
-   ESPresense), `media_player`, `assist_satellite`, the companion app's focus, sleep or do not
-   disturb `input_boolean`s, and the `tts` entities. Each with its id, domain, class, area and
-   state; never an attribute.
-2. **Map** (the brain proposes, the user approves): `presence_sources` shows the candidates, which
-   signal each could give, and the mappings; names and areas are the user's text, so it taints the
-   turn. `map_presence(signal, entity, why, source_ref)` checks the entity in code against
-   discovery: `home` (person, device_tracker → `place`), `room` (an occupancy sensor's area, or a
-   room tracker's state → `room`), `asleep` (a bed's occupancy or a sleep switch →
-   `home_activity` `sleep`), `tv` (a media player playing → `home_activity` `tv`), `dnd` (focus →
-   `focus`). Applied when the
-   user asks in a clean turn, citing their message; otherwise kept as a proposal (`ha_mappings`,
-   state `proposed`) in À valider. The page lists the mappings in force and removes them; a room
-   mapping adds the area (or, for a room tracker, the house's areas) to the user's rooms. A
-   mapping is personal (about the user) for a person, a tracker, a room tracker or the focus, and
-   the house's otherwise.
-3. **Follow** (code only, `followHA`): while there are mappings, the level is above 0 and the
-   source is on, one `subscribe_entities` to the mapped entities only; their states become
-   closed signals (`haSignals`: per kind, a personal mapping first, then the newest change;
-   a room off the user's list is dropped), put under `ha` with a time to live of 3 minutes and
-   refreshed every minute while connected. Reconnects with a growing wait (5 s to 5 min), starts
-   again when the mappings, the level or the switch change, and reads the house again every day.
-   Unmapped entities, names and attributes never enter the context.
-4. **Speak**: the room opens the router's voice line (above), said by a channel the user added that
-   reaches it (`GET /v1/channel/out`, above), never with the tool's token. An urgent skill's fixed message is said instead of the generic
-   sentence, and may go through the quiet hours, only when the user turned `voice_for_urgent` on
-   (the page, or `setting`). A rule's `never: voice` keeps it out; `also: voice` does not turn the
-   line on.
-
-**For the next sources.** A source puts signals with `checkSignal` (or `checkSignals`) then
-`putSignals`, under a source name of its own; it never calls the brain. A new kind or value goes in `ctxKinds` (and in the page's words), with its level.
-A machine whose node cannot see the session (Windows, in WSL) gets it from a session helper's file
-(`ERIPHE_SESSION_FILE`, `node/context.go`).
-
-The bench (`context_test.go`): every value off a list refused, every kind expiring, the levels and
-switches, a busy device as if absent (every combination), the router skipping a device in a game,
-the header's line, the entry point's tokens.
+At start, the former mappings' entities become followed ones (`ha_mappings` dropped), and the
+signal context's table and settings (`context_sources`, `context_level`, `context_off`,
+`context_rooms`) are dropped; `POST /v1/context` is gone.
 
 - **`since(t, kinds?, limit?, include_external?)`** returns one chronological feed since `t` (an
   RFC3339 time, `YYYY-MM-DD[THH:MM]` in the user's zone, `away`: since the user left before their
