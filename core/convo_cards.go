@@ -53,7 +53,7 @@ const convoCardsSchema = `CREATE TABLE IF NOT EXISTS convo_cards (
 	attached INTEGER NOT NULL DEFAULT 0,
 	decided  INTEGER NOT NULL DEFAULT 0,
 	by       TEXT NOT NULL DEFAULT '',
-	tg       INTEGER NOT NULL DEFAULT 0
+	tg       INTEGER NOT NULL DEFAULT 0 -- no longer read: where a card went is per channel (channel_relay.go)
 );
 CREATE INDEX IF NOT EXISTS convo_cards_seq ON convo_cards (seq);`
 
@@ -102,8 +102,7 @@ type convoCard struct {
 	Created  time.Time
 	Attached time.Time
 	Decided  time.Time
-	By       string // web, telegram, text, or page (the fallback page)
-	TG       bool   // sent to Telegram
+	By       string // web, a channel's id, text, or page (the fallback page)
 }
 
 func proposalRef(kind string, id int64) string { return kind + ":" + strconv.FormatInt(id, 10) }
@@ -114,12 +113,12 @@ func parseProposalRef(ref string) (string, int64, bool) {
 	return kind, id, ok && err == nil && id > 0 && slices.Contains(proposalKinds, kind)
 }
 
-const cardColumns = `id, ref, kind, seq, turn, state, text, created, attached, decided, by, tg`
+const cardColumns = `id, ref, kind, seq, turn, state, text, created, attached, decided, by`
 
 func scanCard(row interface{ Scan(...any) error }) (convoCard, error) {
 	var x convoCard
 	var created, attached, decided int64
-	err := row.Scan(&x.ID, &x.Ref, &x.Kind, &x.Seq, &x.Turn, &x.State, &x.Text, &created, &attached, &decided, &x.By, &x.TG)
+	err := row.Scan(&x.ID, &x.Ref, &x.Kind, &x.Seq, &x.Turn, &x.State, &x.Text, &created, &attached, &decided, &x.By)
 	x.Created, x.Attached, x.Decided = unixOrZero(created), unixOrZero(attached), unixOrZero(decided)
 	return x, err
 }
@@ -658,7 +657,7 @@ func (c *core) digestItems(x convoCard) (digestSpec, []happening) {
 
 // cardNote tells the brain where its proposal waits: on a card, with its message.
 func cardNote(user string) string {
-	return "A card with Oui / Non goes with your message in the conversation (and on Telegram when " + user + " writes from there): " +
+	return "A card with Oui / Non goes with your message in the conversation (and on the channel " + user + " writes from, if any): " +
 		"say what you propose in one natural sentence, never as a list of pending items; " + user + " answers on the card, never you."
 }
 

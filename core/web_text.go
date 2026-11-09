@@ -604,7 +604,9 @@ func templateFuncs(lang string) template.FuncMap {
 		"size":      func(b int64) string { return byteSize(lang, b) },
 		"filesize":  func(b int64) string { return fileSize(lang, b) },
 		"join":      strings.Join,
-		"list":      func(s ...string) []string { return s },
+		// channelNames are a list of channels' names: "Appareils et <a channel>".
+		"channelNames": func(ids string) string { return channelNames(lang, ids) },
+		"list":         func(s ...string) []string { return s },
 		"dict": func(kv ...any) map[string]any {
 			m := map[string]any{}
 			for i := 0; i+1 < len(kv); i += 2 {

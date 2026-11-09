@@ -9,35 +9,41 @@ import (
 // Settings → Access: every way into Eriphe, one row each, as the tools are
 // listed. Two are always there: the web (the remote access, web_remote.go)
 // and the mobile app (installing the workspace, its notifications and the
-// devices told, web_push.go). The others are added from a catalog:
-// Telegram's bot (web_telegram.go) and the API accesses (channels_added.go),
-// any app or script holding a token (Home Assistant's integration is one). Each row says who
+// devices told, web_push.go). The others are added from a catalog: the
+// channels eriphe-core talks to (channels.go: a chat app's bot, each with
+// its own page) and the API accesses (channels_added.go), any app or
+// script holding a token (Home Assistant's integration is one). Each row says who
 // speaks through it and what it may carry, and opens its own page.
 
 const (
-	entryWeb      = "web"
-	entryApp      = "app"
-	entryTelegram = "telegram"
+	entryWeb = "web"
+	entryApp = "app"
 	// An API access (channels.kind): any app holding a token.
 	apiGeneric = "api"
 )
 
 // entryKind is an entry of the catalog.
 type entryKind struct {
-	ID      string // telegram, or a kind of API access
+	ID      string // a channel's (channels.go), or an API access's kind
 	Name    string // an API access's name to start with ("" for the generic one)
 	Carries string // and what it may say
 }
 
-// entryCatalog is what the user may add, in the catalog's order. Every API
-// access starts not trusted: the user says otherwise.
-var entryCatalog = []entryKind{
-	{ID: entryTelegram},
-	{ID: apiGeneric},
+// entryCatalog is what the user may add, in the catalog's order: the
+// channels with a page of their own, then an API access, which starts not
+// trusted: the user says otherwise.
+func entryCatalog() []entryKind {
+	var out []entryKind
+	for _, k := range channelKinds {
+		if k.Page != "" {
+			out = append(out, entryKind{ID: k.ID})
+		}
+	}
+	return append(out, entryKind{ID: apiGeneric})
 }
 
 func entryKindOf(id string) (entryKind, bool) {
-	for _, k := range entryCatalog {
+	for _, k := range entryCatalog() {
 		if k.ID == id {
 			return k, true
 		}
@@ -47,7 +53,7 @@ func entryKindOf(id string) (entryKind, bool) {
 
 // entryRow is a row of the list.
 type entryRow struct {
-	Kind    string // web, app, telegram or a kind of API access: its mark
+	Kind    string // web, app, a channel's id or a kind of API access: its mark
 	Name    string // an API access's own; the others are named by the page's words
 	URL     string // its page
 	Speaker string // inbound, who speaks: chan.speaker.*
@@ -75,7 +81,7 @@ func (r entryRow) Chip() string {
 type entryTile struct {
 	entryKind
 	URL   string
-	Added bool // Telegram, already set up
+	Added bool // a channel with its own page, already set up
 }
 
 type entryPage struct {
@@ -113,21 +119,16 @@ func (w *web) entryPage() entryPage {
 		}
 	}
 	v.Rows = append(v.Rows, app)
-	// Telegram, once a bot is set.
-	tg := w.channelsPage()
-	if tg.Set {
-		row := entryRow{Kind: entryTelegram, URL: "/settings/access/telegram", Speaker: speakerAccount, Carries: carryText,
-			State: "wait", Label: "acc.tg.notlinked"}
-		if tg.Bot != "" {
-			row.Detail = "@" + tg.Bot
+	// The channels eriphe-core talks to, once set up.
+	set := map[string]bool{}
+	for _, k := range channelKinds {
+		if k.entry == nil {
+			continue
 		}
-		switch {
-		case tg.Error != "":
-			row.State, row.Label = "bad", "tg.failing"
-		case tg.Linked:
-			row.State, row.Label = "on", "acc.tg.linked"
+		if row, ok := k.entry(w); ok {
+			set[k.ID] = true
+			v.Rows = append(v.Rows, row)
 		}
-		v.Rows = append(v.Rows, row)
 	}
 	// The API accesses.
 	now := time.Now()
@@ -147,8 +148,8 @@ func (w *web) entryPage() entryPage {
 		}
 		v.Rows = append(v.Rows, row)
 	}
-	for _, k := range entryCatalog {
-		v.Catalog = append(v.Catalog, entryTile{entryKind: k, URL: "/settings/access/new/" + k.ID, Added: k.ID == entryTelegram && tg.Set})
+	for _, k := range entryCatalog() {
+		v.Catalog = append(v.Catalog, entryTile{entryKind: k, URL: "/settings/access/new/" + k.ID, Added: set[k.ID]})
 	}
 	return v
 }
@@ -159,7 +160,6 @@ func (w *web) accessRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/access/new/{kind}", w.auth(w.handleAccessNew))
 	mux.Handle("GET /settings/access/web", w.auth(w.handleAccessWeb))
 	mux.Handle("GET /settings/access/app", w.auth(w.handleAccessApp))
-	mux.Handle("GET /settings/access/telegram", w.auth(w.handleAccessTelegram))
 	mux.Handle("GET /settings/access/api/{id}", w.auth(w.handleAccessAPI))
 	mux.Handle("POST /settings/access/api", w.auth(w.handleAPIAdd))
 	mux.Handle("POST /settings/access/api/{id}", w.auth(w.handleAPISet))
@@ -202,10 +202,6 @@ func (w *web) handleAccessApp(rw http.ResponseWriter, r *http.Request, s *sessio
 	w.accessRender(rw, r, s, "access-app", w.notificationsPage(w.lang(r)))
 }
 
-func (w *web) handleAccessTelegram(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.accessRender(rw, r, s, "access-telegram", w.channelsPage())
-}
-
 // apiAccessView is an API access's page, or the form adding one.
 type apiAccessView struct {
 	addedChannel
@@ -216,16 +212,16 @@ type apiAccessView struct {
 	Core  string
 }
 
-// handleAccessNew is the page adding what the catalog offers: Telegram's
-// own, or an API access's form filled as its kind says.
+// handleAccessNew is the page adding what the catalog offers: a channel's
+// own page, or an API access's form.
 func (w *web) handleAccessNew(rw http.ResponseWriter, r *http.Request, s *session) {
 	k, ok := entryKindOf(r.PathValue("kind"))
 	if !ok {
 		http.NotFound(rw, r)
 		return
 	}
-	if k.ID == entryTelegram {
-		http.Redirect(rw, r, "/settings/access/telegram", http.StatusSeeOther)
+	if ch, ok := channelKindOf(k.ID); ok && ch.Page != "" {
+		http.Redirect(rw, r, ch.Page, http.StatusSeeOther)
 		return
 	}
 	if len(w.c.addedChannels()) >= maxChannels {

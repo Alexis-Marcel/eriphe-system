@@ -229,7 +229,7 @@ func TestWherePage(t *testing.T) {
 		t.Fatalf("mode: %d", code)
 	}
 	if code, _, _ := tw.post("/where/line", url.Values{"step": {"telegram"}, "on": {""}}, csrf); code != 200 ||
-		!slices.Contains(tw.c.routeSettings().Off, stepTelegram) {
+		!slices.Contains(tw.c.routeSettings().Off, tgChannel) {
 		t.Fatalf("off: %d %v", code, tw.c.routeSettings().Off)
 	}
 	if code, _, _ := tw.post("/where/line", url.Values{"step": {"voice"}, "action": {"up"}}, csrf); code != 200 ||

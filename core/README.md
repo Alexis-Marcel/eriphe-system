@@ -1022,7 +1022,7 @@ yes may answer something else. A card never holds the brain: its call is answere
 run, the card keeps the exact input, and a yes runs it from eriphe-core, however late and even after
 the brain restarted, if the tool is still allowed; the result, or a no, comes back as an event. The
 same call asked again is the same card. A brain's card says the action in words and lists the call's
-parameters by name, the long ones folded, on Telegram too; never the raw call. A call on a pull request
+parameters by name, the long ones folded, on a channel the user writes from too; never the raw call. A call on a pull request
 adds its title and the start of its description, read with the tool itself when the card is made. A task's card is shown:
 
 1. **at launch**, on its start's card, for what it is lent outright: it waits (`held`) for the answer;
@@ -1031,9 +1031,10 @@ adds its title and the start of its description, read with the tool itself when 
 
 A card at the first call or on release has a message of its own, the question, which notifies as
 any question does. These cards and a start's go to
-Telegram as well, whatever the messages around them did, answered from the linked account only
-("Alerts only" sends none): whoever holds the user's Telegram session can approve, as they can
-approve proposals. A task's raw permissions (a rule's `ask`, a command) stay out of Telegram. The
+the channels the user writes from as well (Telegram), whatever the messages around them did,
+answered from the linked account only ("Alerts only" sends none): that account is the user, a
+trusted channel, so its buttons answer as the workspace's. A task's raw permission (a rule's `ask`,
+a command) comes there too, with Allow and Deny. The
 answers are kept in `decisions`, and a grant shows in the task's drawer. A no refuses what waits;
 the next call asks again.
 
@@ -1395,8 +1396,8 @@ or several:
 | Role | What it is | Examples |
 |---|---|---|
 | **Tool** (MCP, the catalog) | actions and reads, called by the brain or a skill, under the access grid | Home Assistant, mail, calendar, GitHub, Grafana |
-| **Input channel** | where the user talks to Eriphe: the conversation | the workspace, Telegram, Home Assistant's Assist |
-| **Output channel** | where Eriphe tells the user | push, Telegram, a speaker through Home Assistant's integration |
+| **Input channel** | where the user talks to Eriphe: the conversation | the workspace, a messaging app (Telegram), Home Assistant's Assist |
+| **Output channel** | where Eriphe tells the user | push, a messaging app (Telegram), a speaker through Home Assistant's integration |
 | **Event source** | "something happened", which starts triggered skills | a server publishing `eriphe://events` (the mail server), or any system calling an incoming address (Grafana, a Home Assistant automation, a shortcut) |
 
 An input channel is **not** an event: what the user writes is the conversation, answered at once
@@ -2138,7 +2139,7 @@ the user's own (workspace, Telegram or a trusted channel; never a channel the us
 be lent to the brain), is nothing but a yes or a no, has no file, comes right
 after a recent message of the brain's written in a clean turn that shows exactly one waiting card,
 whose proposal is not drawn from external content; anything else is the brain's to read, or the
-buttons'. The brain has no tool that decides a card. On Telegram, a card follows the reply or the
+buttons'. The brain has no tool that decides a card. On a channel the user writes from (Telegram), a card follows the reply or the
 notification it goes with, with Oui / Non buttons answered from the linked account only (none in
 "alerts only"); a channel the user did not trust never answers a card: it says the card waits on the phone, where a notice goes. A read of `since` adds a
 foldable digest card (the items, with links to the tasks) to the brain's next message, and a
@@ -2164,15 +2165,16 @@ way back, "‹ Conversation". The pages that moved keep their addresses as redir
 and `/settings/notifications#push` and `#telegram`) lead, in the browser, to each access's page.
 **Access** (`/settings/access`, `web_access_list.go`, `access.html`) lists every way into the
 assistant, one row each as the tools are listed: the web workspace and the mobile app always, then
-Telegram once its bot is set, then the API accesses. Each row says who speaks through it, what it
+each adapter once set up (Telegram, its bot), then the API accesses. Each row says who speaks through it, what it
 carries and its state (the remote access's phase, the devices told, the account linked, whether
 the app listens), and opens its page: the web (`/settings/access/web`: the remote access, below, then the workspace's address and how one
 signs in, which were in Account),
 the mobile app (`/settings/access/app`: installing the workspace, this device's notifications and
 the devices told), Telegram (`/settings/access/telegram`) or an API access
 (`/settings/access/api/{id}`: its trust, what it may say, its token replaced, removed). **Ajouter
-un accès** opens the catalog (`entryCatalog`; `/settings/access/new` without JavaScript): Telegram,
-Home Assistant (not trusted, says a sentence, with the integration's steps) or any app or script.
+un accès** opens the catalog (`entryCatalog`; `/settings/access/new` without JavaScript): each
+adapter with a page of its own (Telegram), or an API access for any app or script (Home
+Assistant's integration is one: not trusted, says a sentence).
 An access carries the conversation; a tool acts. **Notifications** keeps the router's order, the
 default channels, the rules and what was sent.
 The conversation shows the user's messages and the assistant's answers. The events given to the
@@ -2552,7 +2554,7 @@ a level; the code decides (`decideNotify`, no model):
   `notifications`; a new label of a known word family is kept under the known topic, and a new one
   is flagged to the brain with the known ones.
 - **Settings through the brain** (`settings_brain.go`, tool `setting`): the device order, the lines
-  off, the delay before the next line, the daily cap, the time zone and the Telegram detail. Applied
+  off, the delay before the next line, the daily cap, the time zone and a channel's detail. Applied
   only when the user asked in that clean turn; otherwise kept in `setting_proposals` and approved in
   À valider, then written to the same keys Settings uses (one place per setting).
 
@@ -2571,22 +2573,40 @@ the decision on labelled cases (accuracy, precision and recall of "now", night w
 allows: none, injection cases blocked: all).
 
 **Channels** (`channels.go`): how the user and Eriphe talk, one notion apart from the tools, which
-act. Each channel has its own connection and secret. The built-in ones, in `channelKinds`:
+act. Each channel has its own connection and secret. eriphe-core treats every channel the same:
+what the user writes from one joins the conversation as from the workspace, and what goes out is
+routed by the same code. The workspace and push are eriphe-core's own; a service eriphe-core talks
+to for the user, such as a messaging app's bot, is an adapter that registers itself as one more
+channel (`registerChannel`, from its own file: `telegram.go`; Discord would be another), with its
+name, its direction, who speaks, what it carries, its line, its setup page and how it sends a
+reply, a card and a notification. Nothing outside the adapter names it: the router, the settings,
+the brain's tools and prompt, the cards and Settings → Access go through the registry.
 
 | Channel | Direction | Who speaks (inbound) | What it carries (outbound) |
 |---|---|---|---|
 | `workspace` (and the CLI) | receives | the user: their session or token | |
 | `push` | notifies | | the notification's text |
-| `telegram` | both | the user's account, verified with a code | the notification's text |
+| `telegram` (an adapter) | both | the user's account, verified with a code | the notification's text, with buttons |
 
-The user adds others, trusted or not, saying a sentence in the user's room or nothing (above,
-"Channels the user adds"). A notification or a rule may name only the channels it is broadcast on
-(`push`, `telegram`).
+Trust has two levels: trusted (the user's session, their verified account, an app the user said
+they trust), whose words are the user's and whose buttons answer every card, a task's permission
+too; or not (an app anyone near may speak through), whose turn is tainted. The user adds API
+accesses, trusted or not, saying a sentence in the user's room or nothing (above, "Channels the
+user adds"). A notification or a rule may name only the channels it is broadcast on (`push` and
+the adapters', by id).
 
-**Push and Telegram** (`channels.go`, `telegram.go`, `web_telegram.go`). What is sent
-(`tell`) goes by the user's channels: web push and Telegram, all by default, a narrower default in
+**What goes back to a channel the user writes from** (`channel_relay.go`), the same for every
+adapter: the brain's messages that follow a message the user wrote there, until their next
+message from elsewhere (`channelReplies`); the cards that go with them, and those a task waits on
+(`channelCards`); how much it is told, per channel (`channel_detail:<id>`: `full`, or `alert`, a
+nudge and a link instead of any text; Settings → Notifications and the brain's `setting`
+`channel_detail`, "telegram alert"); and a task's permission, answered with `answerPermission` as
+the workspace does.
+
+**Push and Telegram** (`channels.go`, `telegram.go`, `telegram_cards.go`, `web_telegram.go`). What is sent
+(`tell`) goes by the user's channels: web push and each adapter, all by default, a narrower default in
 Settings → Notifications (Où te prévenir), or a topic rule's own (`channels`: `push`, `telegram` or both). The decision
-above is unchanged; the channels only say where a "now" goes. Telegram, two-way, without an
+above is unchanged; the channels only say where a "now" goes. Telegram, the first adapter, two-way, without an
 inbound port:
 
 - **Setup.** The user creates a bot with BotFather and pastes its token in Settings → Access (Telegram):
@@ -2599,21 +2619,23 @@ inbound port:
 - **Polling.** `getUpdates` long polling (50 s), with a wait from 1 s doubling to 5 min after a
   failure (or Telegram's `retry_after`); it runs only while a token is set, and stops on removal.
 - **Out.** A notification carries inline buttons 👍 / 👎 / « pas maintenant » (`fb:<id>:<r>`,
-  accepted from the linked account only, recorded like the push's); questions and permissions
-  waiting for the user are told with a link to the workspace. The brain's messages that follow a
-  message the user wrote on Telegram, until their next message from elsewhere, are sent back there
-  (`telegramReplies`). "Alerts only" sends "Eriphe a quelque chose pour toi" and a link instead of
-  any text, replies included. Telegram bots are not end-to-end encrypted, and Settings says so.
+  accepted from the linked account only, recorded like the push's); a question waiting for the user
+  is told with a link to the workspace, a task's permission with Allow and Deny
+  (`pm:<task>:<permission>:<y|n>`, answered as the workspace's buttons, a user_only one too). The
+  brain's replies go back there (`channel_relay.go`). "Alerts only" sends "Eriphe a quelque chose
+  pour toi" and a link instead of any text, replies included, and no buttons that approve. Telegram
+  bots are not end-to-end encrypted (a bot chat is never a secret chat), and Settings says so.
 - **In.** A text from the linked account joins the conversation as the user's message, `via`
   `Telegram` (`[Sam 09:12 #41 · Telegram]` for the brain): a clean turn, because the sender's id
   is checked. Files, photos and voice notes are not read; the bot says so.
-- **Proposals as cards, permissions in the workspace.** A proposal of the brain's (a rule, a memory,
-  an intention, a setting, a presence mapping) that goes with a reply or a notification
-  sent there comes as a card with Oui / Non buttons (`pc:<card>:<y|n>`), answered from the linked
-  account only, through the same code as the workspace's cards (`telegram_cards.go`); none in
-  "alerts only". The [access card](#the-approval-card) of a catalog tool goes there too. A task's
-  raw permission (a command, a JSON input) is never approved from Telegram: one that is the user's
-  (user_only) is told with what waits and a link.
+- **Proposals as cards.** A proposal of the brain's (a rule, a memory, an intention, a setting)
+  that goes with a reply or a notification sent there comes as a card with Oui / Non buttons
+  (`pc:<card>:<y|n>`), answered from the linked account only, through the same code as the
+  workspace's cards (`telegram_cards.go`); none in "alerts only". The
+  [access card](#the-approval-card) of a catalog tool goes there too.
+- **From before.** Its former keys (`telegram_detail`, `telegram_seen`, `telegram_route`,
+  `telegram_lang`, `tg_msg:*`, `tg_notif:*`, the cards' `tg` column and a proposed
+  `telegram_detail`) are moved at start to the channel's (`channel_detail:telegram`, …).
 
 **Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
 A pure function, `route(note, signals, settings, tried)`, picks one device at a time from signals
@@ -2631,7 +2653,7 @@ eriphe-core already has, never from the model nor the notification's text:
    outside the quiet hours, on a line the user turned on (off by default); it says a sentence the
    code writes (« Sam, Eriphe a quelque chose pour toi. »), never the notification's text;
 4. otherwise the phone (subscriptions whose label, the user's choice or the browser says phone;
-   the installed app first), then Telegram.
+   the installed app first), then each adapter's own line (Telegram), in the order registered.
 
 A tab left in front on a machine its node says is idle, locked or not to be disturbed is not the
 user. A "now" not seen
@@ -2679,7 +2701,7 @@ occupancy and motion sensors; eriphe-core knows no sensor. The voice line is use
 a channel listens and says a place.
 
 **Where a notification goes: `where_now` and `notify`'s `where`.** `where_now` gives the brain what
-the router sees: each line and whether it reaches the user (and on which device, Telegram or
+the router sees: each line and whether it reaches the user (and on which device, channel or
 room), the devices as their machines say, the voice's room and the quiet hours. `notify(…, where)`
 puts that line first (`routeNote.First`, a closed value); without it the router keeps its order.
 The lines off, the quiet hours and the rules still win, and a tainted turn's `where` is ignored.

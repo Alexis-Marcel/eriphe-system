@@ -246,7 +246,7 @@ func (c *core) recallRules(query, subject string, all bool) []recalledRule {
 	if err != nil || len(rules) == 0 {
 		return nil
 	}
-	all = all || notifyPrefRe.MatchString(query)
+	all = all || notifyPrefRe().MatchString(query)
 	words := map[string]bool{}
 	for _, w := range memWords(query) {
 		if !queryStop(w) {

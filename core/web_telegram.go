@@ -3,26 +3,49 @@ package main
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 )
 
 // Telegram's bot token and the link to the user's account, in Settings →
-// Access; how much it says there and the default channels of notify, in
-// Settings → Notifications → Où te prévenir (telegram.go, channels.go).
+// Access (telegram.go). How much it says there and the default channels
+// are every channel's (web_channels.go).
 
-func (w *web) channelRoutes(mux *http.ServeMux) {
+func telegramRoutes(w *web, mux *http.ServeMux) {
+	mux.Handle("GET /settings/access/telegram", w.auth(w.handleAccessTelegram))
 	mux.Handle("GET /channels/telegram", w.auth(w.handleTelegramState))
 	mux.Handle("POST /channels/telegram/token", http.MaxBytesHandler(w.auth(w.handleTelegramToken), 4<<10))
 	mux.Handle("POST /channels/telegram/remove", w.auth(w.handleTelegramRemove))
 	mux.Handle("POST /channels/telegram/code", w.auth(w.handleTelegramCode))
 	mux.Handle("POST /channels/telegram/unlink", w.auth(w.handleTelegramUnlink))
 	mux.Handle("POST /channels/telegram/test", w.auth(w.handleTelegramTest))
-	mux.Handle("POST /channels/settings", w.auth(w.handleChannelSettings))
+}
+
+func (w *web) handleAccessTelegram(rw http.ResponseWriter, r *http.Request, s *session) {
+	w.accessRender(rw, r, s, "access-telegram", w.telegramPage())
+}
+
+// telegramEntry is its row in Settings → Access, once a bot is set.
+func telegramEntry(w *web) (entryRow, bool) {
+	tg := w.telegramPage()
+	if !tg.Set {
+		return entryRow{}, false
+	}
+	row := entryRow{Kind: tgChannel, URL: "/settings/access/telegram", Speaker: speakerAccount, Carries: carryText,
+		State: "wait", Label: "acc.tg.notlinked"}
+	if tg.Bot != "" {
+		row.Detail = "@" + tg.Bot
+	}
+	switch {
+	case tg.Error != "":
+		row.State, row.Label = "bad", "tg.failing"
+	case tg.Linked:
+		row.State, row.Label = "on", "acc.tg.linked"
+	}
+	return row, true
 }
 
 // startTelegram opens the Telegram channel, polling while a bot is set.
-func (w *web) startTelegram() {
+func startTelegram(w *web) {
 	t := newTelegram(w.c)
 	t.base = func() string {
 		if a := w.address(); a != "" {
@@ -39,8 +62,8 @@ func (w *web) startTelegram() {
 	t.restart()
 }
 
-// channelsPage is what the page shows; never the token.
-type channelsPage struct {
+// telegramPage is what the page shows; never the token.
+type telegramPage struct {
 	VaultOpen bool
 	Bot       string // the bot's @username, once a token is set
 	Set       bool   // a token is set
@@ -49,17 +72,12 @@ type channelsPage struct {
 	Linked    bool
 	Name      string // the linked account
 	Code      string // the code to send, while one waits
-	Detail    string
 	Ignored   int64
-	Push      bool // the default channels
-	Telegram  bool
 }
 
-func (w *web) channelsPage() channelsPage {
+func (w *web) telegramPage() telegramPage {
 	t, st := w.c.tg, w.c.store
-	v := channelsPage{VaultOpen: currentVault() != nil, Detail: detailFull}
-	def := w.c.defaultChannels()
-	v.Push, v.Telegram = containsChannel(def, chanPush), containsChannel(def, chanTelegram)
+	v := telegramPage{VaultOpen: currentVault() != nil}
 	if t == nil {
 		return v
 	}
@@ -67,27 +85,18 @@ func (w *web) channelsPage() channelsPage {
 	v.Bot = st.get(tgBotKey)
 	v.Running, v.Error = t.running(), t.err()
 	v.Linked, v.Name = t.linked(), st.get(tgNameKey)
-	v.Detail, v.Ignored = t.detail(), t.kvInt(tgIgnoredKey)
+	v.Ignored = t.kvInt(tgIgnoredKey)
 	if v.Set && !v.Linked {
 		v.Code, _ = t.pendingCode()
 	}
 	return v
 }
 
-func containsChannel(list, ch string) bool {
-	for _, c := range strings.Split(list, ",") {
-		if c == ch {
-			return true
-		}
-	}
-	return false
-}
-
 func (w *web) renderTelegram(rw http.ResponseWriter, r *http.Request, s *session, msg string, ok bool) {
 	if msg != "" {
 		rw.Header().Set("HX-Trigger", hxTrigger(msg, ok, true))
 	}
-	w.render(rw, r, s, "settings", "telegram-frag", page{Data: w.channelsPage()})
+	w.render(rw, r, s, "settings", "telegram-frag", page{Data: w.telegramPage()})
 }
 
 // handleTelegramState is the Telegram panel, polled while a code waits.
@@ -146,26 +155,4 @@ func (w *web) handleTelegramTest(rw http.ResponseWriter, r *http.Request, _ *ses
 		return
 	}
 	w.toast(rw, tr(lang, "tg.test.sent"), true)
-}
-
-// handleChannelSettings keeps how much Telegram is told and the default channels.
-func (w *web) handleChannelSettings(rw http.ResponseWriter, r *http.Request, s *session) {
-	lang := w.lang(r)
-	detail := r.PostFormValue("detail")
-	if detail != detailFull && detail != detailAlert {
-		http.Error(rw, "detail is full or alert", http.StatusBadRequest)
-		return
-	}
-	channels, err := checkChannels(strings.Join(r.PostForm["channel"], ","))
-	if err != nil || channels == "" {
-		w.toast(rw, tr(lang, "channels.err.none"), false)
-		return
-	}
-	w.c.store.set(tgDetailKey, detail)
-	w.c.store.set(notifyChannelsKey, channels)
-	if lang == "fr" || lang == "en" {
-		w.c.store.set(tgLangKey, lang)
-	}
-	rw.Header().Set("HX-Trigger", hxTrigger(tr(lang, "channels.saved"), true, true))
-	w.render(rw, r, s, "settings", "channels-frag", page{Data: w.channelsPage()})
 }

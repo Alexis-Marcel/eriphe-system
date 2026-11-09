@@ -14,8 +14,8 @@ import (
 // Settings → Notifications: one page for the whole subject. Its first
 // section is the notifications of this device (push.go) and the devices
 // told, the router's order (web_where.go) and the default channels
-// (web_telegram.go); the rules and what was sent (web_notify.go) follow.
-// Installing the app and Telegram's bot are in Settings → Access. The page subscribes after the user turns the
+// (web_channels.go); the rules and what was sent (web_notify.go) follow.
+// Installing the app and the channels' own setup are in Settings → Access. The page subscribes after the user turns the
 // switch on; the tabs say whether they are in front, so that nothing
 // buzzes while the user is looking.
 
@@ -52,7 +52,7 @@ type notificationsPage struct {
 	Off      bool         // no key: notifications cannot work here
 	Notify   notifyPage   // what the brain told, its rules (web_notify.go)
 	Where    wherePage    // the router's order (web_where.go)
-	Channels channelsPage // the default channels (web_telegram.go)
+	Channels channelsPage // the default channels (web_channels.go)
 }
 
 func (w *web) notificationsPage(lang string) notificationsPage {
@@ -228,8 +228,8 @@ func (w *web) followWaiting(stop <-chan struct{}) {
 	tick := time.NewTicker(3 * time.Second)
 	defer tick.Stop()
 	for {
-		w.c.telegramReplies() // first: it says whether replies go to Telegram (telegram.go)
-		w.c.telegramCards()   // then the cards that go with them (telegram_cards.go)
+		w.c.channelReplies() // first: it says whether replies go to a channel (channel_relay.go)
+		w.c.channelCards()   // then the cards that go with them
 		w.pushWaiting()
 		select {
 		case <-stop:
@@ -254,7 +254,9 @@ func (w *web) pushWaiting() {
 			}
 			st.set(key, "1")
 			short := strings.TrimSpace(pv.Tool + " " + truncate(strings.Join(strings.Fields(pv.Subject), " "), 100))
-			w.c.tell(waitingNote(short, "/#perm-"+pv.Task.ID+"-"+pv.ID, "perm-"+pv.Task.ID+"-"+pv.ID))
+			note := waitingNote(short, "/#perm-"+pv.Task.ID+"-"+pv.ID, "perm-"+pv.Task.ID+"-"+pv.ID)
+			note.Perm = &notePerm{Task: pv.Task.ID, ID: pv.ID}
+			w.c.tell(note)
 		}
 	}
 	seen, err := strconv.Atoi(st.get("push_msg_seen"))
@@ -275,7 +277,7 @@ func (w *web) pushWaiting() {
 		}
 		if q, ok := asksUser(m.Text); ok {
 			note := waitingNote(q, fmt.Sprintf("/#m%d", m.Seq), "ask")
-			note.Waiting = true // on Telegram, a reply there may carry it already (telegram.go)
+			note.Waiting = true // on a channel the user writes from, a reply there may carry it already
 			w.c.tell(note)
 		}
 	}

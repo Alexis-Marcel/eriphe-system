@@ -3,6 +3,7 @@ package main
 import (
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // The brain's concepts, one per need, and the hints that send it to the
@@ -23,7 +24,7 @@ var concepts = []concept{
 	{"intention", "intend, intentions, update_intention", "something owed or to do once: at a date and time (remind me at 14:00), or the next time a name comes up"},
 	{"skill", "write_skill, list_skills, read_skill", "what comes back or reacts on its own: a skill with when (an event: a mail, an alert, the user's return, a task's end; or a time) runs as a task in the background and tells the user with its last message; also know-how followed when asked"},
 	{"rule", "rule", "what to do with notifications about a topic (now, brief, never, even at night, which lines), and the quiet hours"},
-	{"setting", "setting", "how the user is told in general: device order, lines off, daily cap, time zone, Telegram detail, an urgent skill said aloud"},
+	{"setting", "setting", "how the user is told in general: device order, lines off, daily cap, time zone, a channel's detail, an urgent skill said aloud"},
 	{"where", "where_now", "where a notification would reach the user now: lines, devices, the room a voice channel says they are in"},
 	{"notify", "notify, notifications", "say something on your own, now or for the brief, under a known topic ref"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
@@ -46,7 +47,11 @@ var conceptLinesEN = func() string {
 // notifyPrefRe: wording about how, when or where the user is told. A
 // preference of that sort is enforced by code, so it is a rule or a
 // setting, not a memory.
-var notifyPrefRe = regexp.MustCompile(`(?i)(pr[ée]vien|pr[ée]ven(ir|u|ue)|notif|r[ée]veill|d[ée]rang|heures? calmes?|interromp|ne me (dis|parle|dérange)|pas de messages?|plus de messages?|telegram|quiet hours|notify|notification|wake me|disturb|interrupt)`)
+// A channel's name is among it (built once the channels are registered).
+var notifyPrefRe = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`(?i)(pr[ée]vien|pr[ée]ven(ir|u|ue)|notif|r[ée]veill|d[ée]rang|heures? calmes?|interromp|ne me (dis|parle|dérange)|pas de messages?|plus de messages?|quiet hours|notify|notification|wake me|disturb|interrupt` +
+		channelWords() + `)`)
+})
 
 // recurringRe: something that comes back on a schedule.
 var recurringRe = regexp.MustCompile(`(?i)(tou(s|tes) les (jours|matins|soirs|semaines|mois|lundis|mardis|mercredis|jeudis|vendredis|samedis|dimanches|week-?ends|\d+ ?(h|heures|minutes|jours))|chaque (jour|matin|soir|semaine|mois|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week-?end)|every (day|morning|evening|week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d+ ?(h|hours|minutes|days))|\bdaily\b|\bweekly\b|quotidien|hebdomadaire)`)
@@ -57,7 +62,7 @@ var oneOffRe = regexp.MustCompile(`(?i)(\d{4}-\d{2}-\d{2}|\b\d{1,2}/\d{1,2}\b|de
 const (
 	hintIntendNotWatch = "A rule comes back on a schedule; a one-off time is an intention: intend (kind reminder, remind_at YYYY-MM-DDTHH:MM)."
 	hintWatchNotIntend = "What comes back on a schedule is a rule: an intention fires once. Use rule (kind event, when horaire, schedule like daily 07:00 or monday 09:00) when the user asks for it."
-	hintRuleNotMemory  = "How, when or where the user is told is enforced by code, so it is not a memory: write it as a rule (rule: a topic, or the quiet hours) or a setting (setting: device order, lines off, daily cap, time zone, Telegram detail). recall shows the rules with the memories."
+	hintRuleNotMemory  = "How, when or where the user is told is enforced by code, so it is not a memory: write it as a rule (rule: a topic, or the quiet hours) or a setting (setting: device order, lines off, daily cap, time zone, a channel's detail). recall shows the rules with the memories."
 
 	hintIntentionNotMemory = "What is owed or to do is an intention, with its date: intend (reminder, commitment, promise or waiting_for)."
 )
@@ -66,7 +71,7 @@ const (
 func rememberRedirect(kind, text string) string {
 	switch kind {
 	case kindPreference, kindProfile, kindLesson:
-		if notifyPrefRe.MatchString(text) {
+		if notifyPrefRe().MatchString(text) {
 			return hintRuleNotMemory + " Only if it is about how you behave in the conversation, not about notifications, call remember again with about_conversation."
 		}
 	case "reminder", "intention", "promise", "waiting_for", "todo":

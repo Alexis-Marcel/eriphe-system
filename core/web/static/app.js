@@ -353,7 +353,7 @@ function eripheInApp(notes) {
       badge();
       refreshDrawer();
     });
-    // A card changed (decided here, on Telegram or in words), or was
+    // A card changed (decided here, on a channel or in words), or was
     // attached to a message already shown: put it in place, by its id.
     es.addEventListener("cards", (e) => {
       const stick = nearBottom();

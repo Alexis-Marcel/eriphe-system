@@ -25,6 +25,7 @@ func (w *web) whereRoutes(mux *http.ServeMux) {
 
 type whereLine struct {
 	Step        string
+	Name        string // a channel's line: its name (the others are named by the page's words)
 	On          bool
 	Usable      bool   // what it needs is there
 	Hint        string // what it needs, when it is not
@@ -82,10 +83,10 @@ func (w *web) wherePage(lang string) wherePage {
 			}
 		}
 	}
-	telegram := c.tg != nil && c.tg.linked()
 	for _, step := range set.Order {
 		l := whereLine{Step: step, On: !slices.Contains(set.Off, step), Usable: true}
 		switch step {
+		case stepInApp:
 		case stepComputer:
 			if !hasKind[kindComputer] {
 				continue
@@ -98,9 +99,14 @@ func (w *web) wherePage(lang string) wherePage {
 			if !hasKind[kindPhone] {
 				l.Usable, l.Hint = false, "where.hint.phone"
 			}
-		case stepTelegram:
-			if !telegram { // set up in Settings → Access
-				l.Usable, l.Hint, l.Link = false, "where.hint.telegram", "/settings/access/telegram"
+		default:
+			k, ok := channelKindOf(step)
+			if !ok {
+				continue
+			}
+			l.Name = k.Label
+			if k.ready == nil || !k.ready(c) { // set up in Settings → Access
+				l.Usable, l.Hint, l.Link = false, "where.hint.channel", k.Page
 			}
 		}
 		v.Lines = append(v.Lines, l)
@@ -150,10 +156,14 @@ func (w *web) whereNodes(computers []whereDevice, prefs map[string]devicePref) [
 	return out
 }
 
-// describeTarget words a target: "sur ce Mac · Chrome, dans l'appli".
+// describeTarget words a target: "sur ce Mac · Chrome, dans l'appli"; a
+// channel's line, by its name.
 func describeTarget(lang string, t routeTarget) string {
+	if isChannelLine(t.Step) {
+		return t.Label
+	}
 	s := tr(lang, "where.step."+t.Step)
-	if t.Label != "" && t.Step != stepTelegram {
+	if t.Label != "" {
 		s += " · " + t.Label
 	}
 	return s
@@ -212,7 +222,7 @@ func (w *web) handleWhereMode(rw http.ResponseWriter, r *http.Request, s *sessio
 func (w *web) handleWhereLine(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
 	step := r.PostFormValue("step")
-	if !slices.Contains(routeSteps, step) {
+	if !slices.Contains(routeLines(), step) {
 		http.Error(rw, "unknown line", http.StatusBadRequest)
 		return
 	}

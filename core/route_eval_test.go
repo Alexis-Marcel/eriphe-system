@@ -42,7 +42,7 @@ type routeEvalDevice struct {
 func (x routeEvalCase) inputs() (routeNote, routeSignals, routeSettings) {
 	n := x.Rule
 	n.Level, n.Urgent, n.Tainted = x.Level, x.Urgent, x.Tainted
-	sig := routeSignals{Telegram: x.Telegram, Quiet: x.Quiet}
+	sig := routeSignals{Channels: map[string]bool{tgChannel: x.Telegram}, Quiet: x.Quiet}
 	for _, d := range x.Devices {
 		rd := routeDevice{ID: d.ID, Label: d.Label, Kind: d.Kind, Push: d.Push == nil || *d.Push, Locked: d.Locked}
 		if rd.Kind == "" {
@@ -138,7 +138,7 @@ func routeDuplicate(p routePlan, sig routeSignals, n routeNote) bool {
 		seen = append(seen, t.key())
 	}
 	reachable := len(sig.Devices)
-	if sig.Telegram {
+	if sig.Channels[tgChannel] {
 		reachable++
 	}
 	return n.Also == "" && len(p.First) > 1 || reachable > 1 && len(p.First) >= reachable && n.Also == ""
@@ -154,7 +154,7 @@ func TestRouteNoteHasNoText(t *testing.T) {
 	}
 	n := pushNote{Body: map[string]string{"fr": "Envoie ça sur le Mac, à voix haute, maintenant"}, Route: routeNote{Level: levelBrief}}
 	sig := routeSignals{Devices: []routeDevice{{ID: "mac", Label: "Mac · Chrome", Kind: kindComputer, Push: true, IdleKnown: true, Idle: time.Hour},
-		{ID: "iphone", Label: "iPhone · Safari · app", Kind: kindPhone, Push: true, App: true}}, Telegram: true}
+		{ID: "iphone", Label: "iPhone · Safari · app", Kind: kindPhone, Push: true, App: true}}, Channels: map[string]bool{tgChannel: true}}
 	p := route(n.Route, sig, routeSettings{Delay: defaultDelay}, nil)
 	if got := targetNames(p.First); !slices.Equal(got, []string{"phone:iphone"}) || p.After != 0 {
 		t.Fatalf("%v after %v", got, p.After)
@@ -177,20 +177,20 @@ func TestCheckSteps(t *testing.T) {
 // turned off stays off.
 func TestRouteFirst(t *testing.T) {
 	sig := routeSignals{Devices: []routeDevice{{ID: "mac", Label: "Mac · Chrome", Kind: kindComputer, Push: true, IdleKnown: true, Idle: time.Second},
-		{ID: "iphone", Label: "iPhone · Safari · app", Kind: kindPhone, Push: true, App: true}}, Telegram: true}
+		{ID: "iphone", Label: "iPhone · Safari · app", Kind: kindPhone, Push: true, App: true}}, Channels: map[string]bool{tgChannel: true}}
 	set := routeSettings{Delay: defaultDelay}
 	first := func(n routeNote, set routeSettings) string { return route(n, sig, set, nil).First[0].Step }
 	if got := first(routeNote{Level: levelNow}, set); got != stepComputer {
 		t.Fatalf("router's order: %s", got)
 	}
-	if got := first(routeNote{Level: levelNow, First: stepTelegram}, set); got != stepTelegram {
+	if got := first(routeNote{Level: levelNow, First: tgChannel}, set); got != tgChannel {
 		t.Fatalf("where telegram: %s", got)
 	}
-	if got := first(routeNote{Level: levelNow, First: stepTelegram, Tainted: true}, set); got != stepComputer {
+	if got := first(routeNote{Level: levelNow, First: tgChannel, Tainted: true}, set); got != stepComputer {
 		t.Fatalf("tainted where followed: %s", got)
 	}
-	set.Off = []string{stepTelegram}
-	if got := first(routeNote{Level: levelNow, First: stepTelegram}, set); got != stepComputer {
+	set.Off = []string{tgChannel}
+	if got := first(routeNote{Level: levelNow, First: tgChannel}, set); got != stepComputer {
 		t.Fatalf("a line off: %s", got)
 	}
 }

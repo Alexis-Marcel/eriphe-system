@@ -297,14 +297,14 @@ func TestBlockingCardsGoToTelegram(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.attachTurnCards(int(seq))
-	c.store.set(tgDetailKey, detailAlert)
-	c.telegramCards()
+	c.store.set(channelDetailKey(tgChannel), detailAlert)
+	c.channelCards()
 	c.tg.pending.Wait()
 	if sent := f.sentMessages(); len(sent) != 0 {
 		t.Fatalf("alerts only sent %v", sent)
 	}
-	c.store.set(tgDetailKey, detailFull)
-	c.telegramCards()
+	c.store.set(channelDetailKey(tgChannel), detailFull)
+	c.channelCards()
 	c.tg.pending.Wait()
 	sent := f.sentMessages()
 	if len(sent) != 2 || !strings.Contains(fmt.Sprint(sent[0]["reply_markup"]), "pc:") {

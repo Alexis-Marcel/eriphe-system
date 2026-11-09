@@ -1,9 +1,9 @@
 {{/* Settings → Notifications (web_push.go): one page, three sections.
      Où te prévenir: the router's order (web_where.go) and the default
-     channels (web_telegram.go); Règles et heures calmes (web_notify.go);
+     channels (web_channels.go); Règles et heures calmes (web_notify.go);
      Envoyées: what the brain said, with the user's feedback, and what the
      router did. This device's notifications, the devices, installing the
-     app and Telegram's bot are in Settings → Access (access.html). app.js does the
+     app and each channel's own setup are in Settings → Access (access.html). app.js does the
      browser's part: it tells what this browser can do, asks for the
      permission on a tap, subscribes and sends the subscription. A rule is
      asked of the brain: the page shows it and deletes it. */}}
@@ -133,7 +133,7 @@
 {{end}}
 {{define "notify-rules-frag"}}{{template "notify-rules" .Data}}{{end}}
 
-{{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{t (printf "rule.ch.%s" .Channels)}}{{end}}{{if .Also}} · {{t "rule.also"}} <span class="mono">{{.Also}}</span>{{end}}{{if .Never}} · {{t "rule.never"}} <span class="mono">{{.Never}}</span>{{end}}{{end}}</span>
+{{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{channelNames .Channels}}{{end}}{{if .Also}} · {{t "rule.also"}} <span class="mono">{{.Also}}</span>{{end}}{{if .Never}} · {{t "rule.never"}} <span class="mono">{{.Never}}</span>{{end}}{{end}}</span>
 {{if .Why}}<span class="small muted">{{.Why}}</span>{{end}}{{end}}
 
 {{/* Access → Telegram (access.html, web_telegram.go, telegram.go): Telegram's bot and
@@ -180,20 +180,21 @@
 {{end}}
 
 {{/* Notifications → Où te prévenir: the default channels of the brain's
-     notifications, and how much Telegram is told (web_telegram.go). */}}
+     notifications, and how much each channel that carries text is told
+     (web_channels.go). */}}
 {{define "channels-frag"}}{{template "channels-settings" .Data}}{{end}}
 
 {{define "channels-settings"}}
 <h4 id="channels-title" class="notif-sub">{{t "channels.settings"}}</h4>
 <form class="stack-form" hx-post="/channels/settings" hx-target="#channels">
   <fieldset><legend class="small">{{t "channels.default"}}</legend>
-    <label class="check"><input type="checkbox" name="channel" value="push"{{if .Push}} checked{{end}}> {{t "channels.push"}}</label>
-    <label class="check"><input type="checkbox" name="channel" value="telegram"{{if .Telegram}} checked{{end}}> Telegram</label>
+    {{range .Channels}}<label class="check"><input type="checkbox" name="channel" value="{{.ID}}"{{if .On}} checked{{end}}> {{if .Label}}{{.Label}}{{else}}{{t (printf "channels.%s" .ID)}}{{end}}</label>
+    {{end}}
   </fieldset>
-  <fieldset><legend class="small">{{t "tg.detail"}}</legend>
-    <label class="check"><input type="radio" name="detail" value="full"{{if eq .Detail "full"}} checked{{end}}> {{t "tg.detail.full"}}</label>
-    <label class="check"><input type="radio" name="detail" value="alert"{{if eq .Detail "alert"}} checked{{end}}> {{t "tg.detail.alert"}}</label>
-  </fieldset>
+  {{range .Channels}}{{if .Detail}}<fieldset><legend class="small">{{tf "channels.detail" .Label}}</legend>
+    <label class="check"><input type="radio" name="detail-{{.ID}}" value="full"{{if eq .Detail "full"}} checked{{end}}> {{t "channels.detail.full"}}</label>
+    <label class="check"><input type="radio" name="detail-{{.ID}}" value="alert"{{if eq .Detail "alert"}} checked{{end}}> {{t "channels.detail.alert"}}</label>
+  </fieldset>{{end}}{{end}}
   <div class="actions"><button class="btn btn-soft sm" type="submit">{{t "channels.save"}}</button></div>
 </form>
 {{end}}
@@ -223,7 +224,7 @@
         <input type="hidden" name="step" value="{{.Step}}">
         <label class="switch">
           <input type="checkbox" name="on" value="1"{{if and .On .Usable}} checked{{end}}{{if not .Usable}} disabled{{end}}>
-          <span><b>{{t (printf "where.line.%s" .Step)}}</b><small>{{if .Hint}}{{t .Hint}}{{else}}{{t (printf "where.line.%s.hint" .Step)}}{{end}}{{with .Link}} <a href="{{.}}">{{t "where.hint.configure"}}</a>{{end}}</small></span>
+          <span><b>{{if .Name}}{{.Name}}{{else}}{{t (printf "where.line.%s" .Step)}}{{end}}</b><small>{{if .Hint}}{{t .Hint}}{{else if .Name}}{{t "where.line.channel.hint"}}{{else}}{{t (printf "where.line.%s.hint" .Step)}}{{end}}{{with .Link}} <a href="{{.}}">{{t "where.hint.configure"}}</a>{{end}}</small></span>
         </label>
       </form>
       <div class="where-move">

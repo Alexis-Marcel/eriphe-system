@@ -491,8 +491,8 @@ func TestTelegramCards(t *testing.T) {
 	c.store.addMessageVia(roleUser, "Trop de factures en notification", viaTelegram, false)
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "Je ne te préviens plus des factures avant le brief ?")
-	c.telegramReplies()
-	c.telegramCards()
+	c.channelReplies()
+	c.channelCards()
 	c.tg.pending.Wait()
 	sent := f.sentMessages()
 	if len(sent) != 2 || !strings.Contains(fmt.Sprint(sent[1]["text"]), "facture → au brief") {
@@ -503,7 +503,7 @@ func TestTelegramCards(t *testing.T) {
 	if !strings.Contains(kb, cardData(x.ID, true)) || !strings.Contains(kb, cardData(x.ID, false)) {
 		t.Fatalf("no buttons: %s", kb)
 	}
-	c.telegramCards()
+	c.channelCards()
 	c.tg.pending.Wait()
 	if len(f.sentMessages()) != 2 {
 		t.Fatal("a card was sent twice")
@@ -527,13 +527,13 @@ func TestTelegramCards(t *testing.T) {
 		t.Fatal("the rule is not in force")
 	}
 	// Alerts only: no card, a button must never approve unread words.
-	c.store.set(tgDetailKey, detailAlert)
+	c.store.set(channelDetailKey(tgChannel), detailAlert)
 	proposedRule(t, c, "banque", "")
 	c.store.addMessageVia(roleUser, "Et la banque ?", viaTelegram, false)
 	brainSays(c, "Je fais pareil pour la banque ?")
 	before := len(f.sentMessages())
-	c.telegramReplies()
-	c.telegramCards()
+	c.channelReplies()
+	c.channelCards()
 	c.tg.pending.Wait()
 	for _, m := range f.sentMessages()[before:] {
 		if m["reply_markup"] != nil {
