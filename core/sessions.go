@@ -241,6 +241,9 @@ func (s *stepSpec) normalize() error {
 	if !stepKeyRE.MatchString(s.Key) {
 		return fmt.Errorf("step key %q: 1 to 24 lowercase letters, digits and dashes", s.Key)
 	}
+	if s.Key == finalStep {
+		return fmt.Errorf("step key %q is the final check's", s.Key)
+	}
 	if s.Title == "" {
 		return fmt.Errorf("step %s: a title is needed", s.Key)
 	}

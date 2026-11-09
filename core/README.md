@@ -835,7 +835,7 @@ a task is one step.
 | Who | Does |
 |---|---|
 | Brain | opens the session with the user (`start_session`: title, goal, `done_when`, budget, steps), the only voice |
-| Lead | judges each step on its evidence (`settle_step`: accept, retry, reject), amends the plan (`amend_session`), closes it (`end_session`). The brain for now |
+| Lead | a temporary assistant (role `lead`, `session_lead.go`): judges each step on its evidence (`settle_step`: accept, retry, reject), amends the plan (`amend_session`), closes it (`end_session`), reports to the brain. The brain when no agent can run one |
 | Engine (code, no model) | starts each step once those it comes `after` are accepted, in parallel, passes them their outputs, asks the cards, holds the limits |
 | User | approves the plan, answers the choices and approvals, gives more time |
 
@@ -863,6 +863,19 @@ accepted.
   with the nodes' check: budgets, and steps whose task ended while eriphe-core was down.
 - Tables: `sessions`, `session_steps`, `session_asks` (what a session asks, one card each),
   `session_log`.
+
+**The session lead** is born when the user approves the plan (`lead-<id>`, « Chef de session N ») and
+goes when the session ends. Its trigger `session:<id>` wakes it with what happened to its steps
+(`session_inbox`), one turn at a time; its own tools are `session`, `settle_step`,
+`amend_session`, `end_session` and `report`. It never talks to the user nor starts a task. The
+brain no longer judges a session that has a lead: it passes the user's words with `tell_lead`, and
+hears the lead's reports, the choices to ask, the budget's card and the end.
+
+**The final objective check**: `end_session` on a session with a `done_when` adds a last step,
+`final-check`, a fresh agent lent read-only what the steps wrote (their repository branches and
+folders) and given the goal and what each step produced; only its receipt with status `done` and no
+failed check closes the session. Otherwise the lead hears what is missing; after 2 checks that fail,
+the decision goes back to the user through the brain.
 
 ## Permission policy
 

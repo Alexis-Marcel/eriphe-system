@@ -59,6 +59,9 @@ type assistantRole struct {
 	// assistant works through its MCP tools.
 	permission func(c *core, ctx context.Context, a Assistant, t *TaskRow) error
 	failing    func(c *core, a Assistant) // its starts keep failing
+	// ownTools adds its role's own tools to its MCP server, besides its
+	// powers' (assistantServer).
+	ownTools func(c *core, s *mcp.Server, a Assistant)
 }
 
 // assistantRoles by name. Each card registers itself (init).
