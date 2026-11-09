@@ -1364,6 +1364,22 @@ version, read with its diff.
 - **Tables**: `skill_queue` (events waiting, by skill and key), `skill_runs` (skill, version, key,
   events, task, state `running`, `done`, `silent`, `failed` or `refused`, its last message or why).
 
+**What it did** (`skill_report.go`). Settings → Skills says each approved skill's trigger in words.
+A triggered skill's page lists its runs over 30 days, the latest first:
+- when it ran, and its state (running, done, nothing to say, failed, not started);
+- its events (kind, key, a few words of their subject);
+- its task and the session it opened;
+- its last message;
+- the actions it proposed, each answered there on its own (`POST
+  /settings/skills/<name>/calls/<ask>/approve|reject`: a yes runs it as kept);
+- whether it told the user, and its cost where the harness gave one;
+- whether it read someone else's content.
+
+Above them, the totals: runs, done, silent, failed, cards accepted, refused and waiting, and cost.
+While a run is going, the part reloads every 5 seconds (`GET /settings/skills/<name>/runs`). The
+brain reads the same with **`skill_runs`** (`name`, `limit`; free). It gets the events' kinds and
+keys and the runs' outcomes, but not their text: what a run read stays on its page.
+
 **Written by Eriphe.** The brain's `write_skill` (name, description, instructions, `when`,
 `every`, `model`, `tools`, `can`, `urgent`) writes a `SKILL.md` and adds it as a version waiting for
 approval (source `eriphe`), checked as an upload is (its model an agent, its tools catalog

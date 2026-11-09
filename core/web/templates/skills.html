@@ -15,6 +15,7 @@
     </div>
     <h3 class="tile-title">{{template "i-skill"}}<a href="/settings/skills/{{.Name}}" class="stretched mono">{{.Name}}</a></h3>
     <p class="muted small skill-desc">{{.Description}}</p>
+    {{with index $.Data.Triggers .Name}}<p class="small skill-trigger">{{.}}</p>{{end}}
     <p class="muted small">{{tf "skills.files" .Files}}</p>
   </li>
 {{end}}
@@ -94,6 +95,8 @@
 </section>
 {{end}}
 
+{{if .Shown.Manifest.Trigger}}{{template "skill-runs" .}}{{end}}
+
 {{if .Diff}}
 <section class="panel" aria-labelledby="diff-title">
   <h3 id="diff-title">{{if .Update}}{{t "skills.diff"}}{{else}}{{t "skills.content"}}{{end}}</h3>
@@ -129,3 +132,29 @@
   </form>
 </section>
 {{end}}{{end}}
+
+
+{{define "skill-runs-frag"}}{{template "skill-runs" .Data}}{{end}}
+
+{{define "skill-runs"}}
+<section class="panel skill-runs" id="skill-runs" aria-labelledby="runs-title" aria-live="polite"
+  {{if .Live}}hx-get="/settings/skills/{{.Skill.Name}}/runs" hx-trigger="every 5s" hx-swap="outerHTML"{{end}}>
+  <h3 id="runs-title">{{t "skills.runs"}}</h3>
+  {{with .Totals}}<p class="muted small">{{tf "skills.totals" .Runs .Done .Silent .Failed}}{{if or .Accepted .Refused .Waiting}} · {{tf "skills.cards" .Accepted .Refused .Waiting}}{{end}}{{if .CostUSD}} · {{tf "skills.cost" .CostUSD}}{{end}}</p>{{end}}
+  {{if .Runs}}<ul class="list run-list">
+  {{range .Runs}}<li id="run-{{.ID}}">
+    <div class="list-main">
+      <span><span class="tag{{if eq .State "done"}} tag-ok{{else if or (eq .State "failed") (eq .State "refused")}} tag-no{{else if eq .State "running"}} tag-warn{{end}}">{{t (printf "skills.run.%s" .State)}}</span>
+        {{date .At}}{{if .Task}} · <a class="mono" href="/tasks/{{.Task}}">{{.Task}}</a>{{end}}{{if .Session}} · <a href="/sessions/{{.Session}}">{{tf "skills.session" .Session}}</a>{{end}}</span>
+      {{if .Events}}<span class="small muted">{{range $i, $e := .Events}}{{if $i}} · {{end}}<span class="mono">{{$e.Kind}}</span>{{if $e.Key}} {{$e.Key}}{{end}}{{if $e.Summary}} « {{$e.Summary}} »{{end}}{{end}}</span>{{end}}
+      {{if .Note}}<span class="small run-note">{{.Note}}</span>{{end}}
+      {{range .Asks}}<span class="small run-ask"><span class="strong">{{.Verb}}</span> {{.Value}}
+        {{if eq .State "proposed"}}<button class="btn btn-primary sm" hx-post="/settings/skills/{{$.Skill.Name}}/calls/{{.ID}}/approve" hx-target="#skill-runs" hx-swap="outerHTML">{{t "skills.call.yes"}}</button>
+        <button class="btn btn-ghost sm" hx-post="/settings/skills/{{$.Skill.Name}}/calls/{{.ID}}/reject" hx-target="#skill-runs" hx-swap="outerHTML">{{t "skills.call.no"}}</button>
+        {{else}}<span class="tag">{{t (printf "skills.answer.%s" .State)}}</span>{{end}}</span>{{end}}
+      <span class="small muted">{{if .Told}}{{t "skills.run.told"}}{{end}}{{if .Calls}}{{if .Told}} · {{end}}{{tf "skills.run.calls" .Calls}} : {{t (printf "skills.answer.%s" .Answer)}}{{end}}{{if .CostUSD}} · {{tf "skills.cost" .CostUSD}}{{end}}{{if .External}} · <span class="tag" title="{{t "skills.run.externalhint"}}">{{t "skills.run.external"}}</span>{{end}}</span>
+    </div>
+  </li>{{end}}
+  </ul>{{else}}<p class="muted">{{t "skills.run.none"}}</p>{{end}}
+</section>
+{{end}}
