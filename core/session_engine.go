@@ -271,8 +271,8 @@ func (c *core) sessionTaskChanged(id, state string, outcome turnOutcome) bool {
 		return true
 	}
 	var taint []string
-	if tst.Task.Folders != "" {
-		taint = append(taint, folderTaint(tst.Task.Folders))
+	if why := c.taskResultTaint(id); why != "" {
+		taint = append(taint, why) // what it read (task_taint.go)
 	}
 	switch state {
 	case stateIdle:

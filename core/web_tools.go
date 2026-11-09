@@ -77,6 +77,9 @@ func (t toolView) AccessURL() string {
 
 func (t toolView) AllowedURL() string { return t.AccessURL() + "#allowed-" + t.Key() }
 
+// TrustURL is where its trust mark is changed (tool_trust.go).
+func (t toolView) TrustURL() string { return t.AccessURL() + "#trust-" + t.Name }
+
 // SignIn is the row's way to sign in to an OAuth service, only when it
 // is needed: "connect" when it never was, "reconnect" when the
 // authorization expired, was revoked or lacks a right; "google" when the

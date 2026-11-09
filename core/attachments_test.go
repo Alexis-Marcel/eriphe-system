@@ -302,18 +302,31 @@ func TestReadAttachmentImage(t *testing.T) {
 	if !ok || im.MIMEType != "image/png" || !bytes.Equal(im.Data, img) {
 		t.Fatalf("image: %+v", res.Content[1])
 	}
-	// Reading it taints the turn: no lending tools that act.
-	if tainted := c.turnTaint(); !containsStr(tainted, "read_attachment") {
-		t.Fatalf("taint: %v", tainted)
+	// The user's own attachment is theirs, as their message: no taint.
+	if tainted := c.turnTaint(); len(tainted) != 0 {
+		t.Fatalf("the user's attachment tainted the turn: %v", tainted)
 	}
 	d, err := c.decideBrainWrite(kindFact, "", scanResult{})
-	if err != nil || d.Status != memProposed {
-		t.Fatalf("a tainted turn's memory: %+v %v", d, err)
+	if err != nil || d.Status != memActive {
+		t.Fatalf("a clean turn's memory: %+v %v", d, err)
 	}
-	// The next message of mine starts a clean turn.
-	ownerSays(c, "thanks")
-	if tainted := c.turnTaint(); len(tainted) != 0 {
-		t.Fatalf("still tainted: %v", tainted)
+}
+
+// An attachment of a message from a channel the user did not trust taints
+// the turn, as that message does.
+func TestReadAttachmentUntrustedChannel(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	a := attach(t, c, "screenshot.png", pngBytes(t))
+	stored, err := c.store.attachment(a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.store.set(taintKey(stored.Seq), channelTaint("Salon"))
+	if res := callReadAttachment(t, c, map[string]any{"id": a.ID}); res.IsError {
+		t.Fatalf("result: %+v", res)
+	}
+	if tainted := c.turnTaint(); !containsStr(tainted, channelTaint("Salon")) {
+		t.Fatalf("taint: %v", tainted)
 	}
 }
 
@@ -334,8 +347,8 @@ func TestReadAttachmentText(t *testing.T) {
 	if got := res.Content[0].(*mcp.TextContent).Text; !strings.HasSuffix(got, "\n\nTHE END") {
 		t.Fatalf("rest: %q", got)
 	}
-	if !containsStr(c.turnTaint(), "read_attachment") {
-		t.Fatal("reading a text did not taint the turn")
+	if tainted := c.turnTaint(); len(tainted) != 0 {
+		t.Fatalf("reading the user's text tainted the turn: %v", tainted)
 	}
 }
 

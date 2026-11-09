@@ -101,8 +101,11 @@ func registerSessionTools(s *mcp.Server, c *core) {
 			v, err := c.sessionView(in.Session, 20)
 			if err == nil {
 				for _, st := range v.Steps {
-					if t, err := c.store.task(st.Task); err == nil && t.Folders != "" {
-						c.turn.taint(folderTaint(t.Folders)) // what it says comes from the user's files
+					if st.Task == "" {
+						continue
+					}
+					if why := c.taskResultTaint(st.Task); why != "" {
+						c.turn.taint(why) // what it says may carry what it read (task_taint.go)
 					}
 				}
 			}

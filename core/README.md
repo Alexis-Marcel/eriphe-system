@@ -432,6 +432,33 @@ permission prompt.
 short description, read-only by the server's own annotation), and the command that connects it
 when it needs an authorization. Descriptions come from the servers: they are marked untrusted.
 
+**One taint rule** (`tool_trust.go`, `task_taint.go`). The brain's turn, an assistant's session and
+a task are tainted once they read what comes neither from the user nor from Eriphe:
+
+- What the user brings through a channel that guarantees it is them is theirs: their messages and
+  their attachments (`read_attachment` does not taint; an attachment of a message from a channel
+  the user did not trust taints as that message does). So are what they lent of their own: their
+  folders, their repository, the skills they approved.
+- **A catalog tool taints unless it is marked trusted**, by the user, visibly: Settings → Tools,
+  the tool's page (`/settings/tools/{name}/access`, "Ce qu'il rapporte", a switch for the whole
+  server, the configuration file's tools too) and a "de confiance" tag on its row; `list_tools`
+  gives it as `trusted_content`. None is trusted by default; mark only a tool whose results are the
+  user's own (their notes). The mark is kept in the store (`tool_trust`, a row per decision); a tool
+  removed from the catalog leaves it untrusted, so a new one of the same name starts untrusted.
+  The older `memory.trusted_servers` is migrated at start-up, each name once: a mark removed in
+  the page stays removed. The web (`WebFetch`, `WebSearch`) always taints.
+- **A tainted task or assistant returns tainted text.** A worker task is tainted when it was
+  started on a tainted turn, when it called a tool not trusted (seen by the proxy, which every
+  catalog call crosses, and in its events), when it read the web, or when its events cannot be
+  read. The event of its turn's end then says so and taints the turn that reads it
+  (`task:<id>`), as `task_status` and a session's report of it do; a task that read only the
+  user's own and trusted tools does not. A closed value (a choice, a number, a date, a count of
+  rows) never taints, whoever wrote it (assistant state).
+- **The limit: a task's shell traffic is not read.** What a program fetches with `curl`, a package
+  install, a request through a lent credential (an access), a `git pull` from someone else's remote:
+  Eriphe sees none of it, so it does not taint the task. Lend such a task nothing that acts, or
+  read its result as data anyway.
+
 ### OAuth and `eriphe connect`
 
 `{"oauth": {}}` follows the MCP authorization spec with the go-sdk's authorization code handler:
@@ -959,7 +986,7 @@ the default: Read free, the rest on approval. A level [below](#access-levels) re
 a server has one of its own. Every tool's **Edit** opens its page (Settings → Tools,
 `/settings/tools/{name}/access`, `?account=` for an account's): the grid, shortcuts that fill it,
 whether the server's annotations are believed, the collapsed panel of exceptions, its credential,
-its allowed actions, and a link to its connection (its form, or the page of Google, Drive, Home
+whether what it returns is trusted (the [one taint rule](#tool-catalog)), its allowed actions, and a link to its connection (its form, or the page of Google, Drive, Home
 Assistant or GitHub). A tool of the configuration file shows its grid, changed in the file. In the
 file:
 
@@ -1922,12 +1949,12 @@ node refuses anything not in its list. A task drops or manages only where its en
 never above the folder's level now: a folder lowered since is mounted at its new level (a task
 from before resources: drop wherever its folder's level allows it). A task's `folders` lists their names.
 
-**What is read there is data.** A folder holds whatever the user (or anyone who sent them a file)
-put there, so it is treated as external content, like a mail or a page:
+**A folder is the user's own.** The user shared it on their machine and lent it: under the
+[one taint rule](#tool-catalog), reading it does not taint a task, so its result does not
+taint the brain's turn by itself (a task taints by what else it read: a tool not trusted, the web).
+What it says of the folder is still data, never instructions, and the event says so:
 
-- the event that brings the brain the result of a task that read folders says so, and taints the
-  turn that reads it (`folder:<names>`), as `task_status` of such a task does: the memory only
-  proposes what that turn remembers (see memory_trust.go);
+- the event that brings the brain the result of a task that read folders names them, as data;
 - on a tainted turn, a folder lent with `drop` or `write` is asked on the start's card (see
   [who decides a write](#folders)); folders to read still go;
 - the permission policy applies to the task as to any other, and Docker refuses any write in the
@@ -3007,8 +3034,8 @@ time ("que s'est-il passé hier ?") lists that time. Current facts only otherwis
 
 **Trust is enforced in code.** Only the user's own messages (`source_ref` naming a message of role
 `user`) create or change a profile, preference or lesson. A brain turn that called an external
-catalog tool (seen by the proxy, or in the turn's events for servers it reaches directly and the
-web tools) is tainted: what it remembers is only `proposed`, unless the user's message of that
+catalog tool not marked trusted (seen by the proxy, or in the turn's events for servers it reaches
+directly and the web tools; the [one taint rule](#tool-catalog)) is tainted: what it remembers is only `proposed`, unless the user's message of that
 same turn asked for it. A tainted turn also cannot act: `run_task` lending tools
 that are not all believed reads (a write, a server not trusted for its annotations) is refused;
 a task with reads only, or no catalog tool, still starts. The user's own message of that turn
@@ -3059,14 +3086,14 @@ run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable fr
   "busy_day": 20,
   "extraction": true,
   "backup_dir": "/backups/memory",
-  "backup_keep": 14,
-  "trusted_servers": ["notes"]
+  "backup_keep": 14
 }
 ```
 
 All keys are optional: `db` defaults to `memory.db` next to `db`, `agent` to the catalog's `haiku`
-if there is one, else the default agent; `trusted_servers` lists catalog servers whose results do
-not taint a turn (none by default).
+if there is one, else the default agent. The older `trusted_servers` (catalog servers whose results
+do not taint a turn) is still read, once per name, at start-up: each is marked trusted in Settings →
+Tools, where the mark is changed since (see the [one taint rule](#tool-catalog)).
 
 ### What Eriphe learned
 

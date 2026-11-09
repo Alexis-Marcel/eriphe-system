@@ -722,6 +722,7 @@ func (c *core) deleteServer(name string) error {
 	return c.commit(d, change{forget: []string{name},
 		persist: func() error {
 			c.store.forgetActions(name)
+			c.setServerTrust(name, false, trustByRemove) // a new tool of this name starts untrusted (tool_trust.go)
 			return c.store.deleteCatalog(kindServer, name)
 		},
 		event: fmt.Sprintf("Catalogue : l'outil « %s » a été retiré depuis l'espace de travail ; ne le prête plus aux tâches.", name)})

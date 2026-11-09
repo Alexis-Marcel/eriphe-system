@@ -33,9 +33,10 @@ import (
 // The brain lends folders to a task by name, like catalog tools: the task
 // runs on the folder's machine (or waits for it) and gets it mounted at
 // /work/folders/<name>, writable only as far as it is lent, as Docker
-// enforces it (node/shares.go). What a task reads there is data, never
-// instructions: its result taints the brain's turn, and a turn that read
-// external content may not lend a folder's drop or manage level.
+// enforces it (node/shares.go). A folder is the user's own: reading it does
+// not taint the task (task_taint.go), though what it says of it is data,
+// never instructions; and a turn that read external content may not lend a
+// folder's drop or manage level without a card.
 //
 // Folders given from here before (the folders table) are no longer lent:
 // the workspace shows them to be shared again on their machine
@@ -583,16 +584,9 @@ func folderInstructions(fs []*Folder, results string) string {
 	return b.String()
 }
 
-// folderTaint is the taint of reading what a task found in its folders.
-func folderTaint(names string) string {
-	if names == "" {
-		return ""
-	}
-	return "folder:" + names
-}
-
 // taintKey marks a message whose delivery taints the brain's turn: the
-// result of a task that read the user's folders (brain.go, tendBrain).
+// result of a tainted task (brain.go, task_taint.go), a message from a
+// channel not trusted, a tool's result run on a card.
 func taintKey(seq int) string { return fmt.Sprintf("taint_msg:%d", seq) }
 
 // Sources of a folder: a machine (this file), or the user's Google Drive

@@ -34,8 +34,9 @@ type MemoryConfig struct {
 	Extraction  *bool  `json:"extraction,omitempty"`   // false turns the automatic extraction off
 	BackupDir   string `json:"backup_dir,omitempty"`   // nightly copies; memory-backups next to memory.db by default
 	BackupKeep  int    `json:"backup_keep,omitempty"`  // nightly copies kept, 14 by default
-	// Catalog servers whose results do not taint the brain's turn (their
-	// content is the user's own, e.g. the vault). None by default.
+	// TrustedServers is the older place of the trusted tools: each name is
+	// migrated once at start-up into Settings → Tools, where the mark is
+	// shown and changed since (tool_trust.go).
 	TrustedServers []string `json:"trusted_servers,omitempty"`
 }
 
