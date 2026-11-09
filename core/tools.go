@@ -76,31 +76,20 @@ func newMCPServer(c *core) *mcp.Server {
 
 	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). Returns the task with its id. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
 		func(ctx context.Context, in runRequest) (*TaskRow, error) {
-			// Exactly the task the user said yes to for good, for this rule (standing_approval.go)?
-			task, cerr := canonicalTask(in)
-			granted := cerr == nil && c.useApproval(grantTask, "run_task", task)
-			if !granted {
-				if err := c.taintedResources(in); err != nil { // resources.go
-					return nil, err
-				}
+			if err := c.taintedResources(in); err != nil { // resources.go
+				return nil, err
 			}
 			tainted := c.turnTaint()
 			in.askStart = true // what is the user's is asked now, not at the push (task_start.go)
-			if !granted {
-				in.taint = tainted
-			}
-			in.cleanStart = granted || (len(tainted) == 0 && c.turnFromUser())
-			in.approvedInAdvance = granted
+			in.taint = tainted
+			in.cleanStart = len(tainted) == 0 && c.turnFromUser()
 			t, err := c.runTask(ctx, in)
-			if err == nil && len(tainted) > 0 && !granted {
+			if err == nil && len(tainted) > 0 {
 				// What it may do was decided at its start, this is why (access_card.go).
 				c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(tainted, ", "))
 			}
 			if err == nil && in.cleanStart {
 				c.store.set(lentByUserKey(t.ID), "1") // a clean start (lend.go)
-			}
-			if err == nil && granted {
-				c.grantLent(t) // the user's yes was given in advance (access_card.go)
 			}
 			return t, err
 		})
@@ -184,8 +173,6 @@ func newMCPServer(c *core) *mcp.Server {
 	registerSkillWriteTool(s, c)  // write_skill (skill_write.go)
 	registerNotifyTools(s, c)     // notify, notifications, rule
 	registerSinceTools(s, c)      // since
-	registerRuleListTools(s, c)   // rules, update_rule (rule is with notify's tools)
-	registerAssistantTools(s, c)  // assistants, assistant_view
 	registerSessionTools(s, c)    // session_tools.go
 	return s
 }

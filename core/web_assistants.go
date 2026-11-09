@@ -10,10 +10,9 @@ import (
 )
 
 // Settings → Agents: the brain at the top, in plain words (its name, the
-// agent it thinks with, how it is doing), then its own assistants, which
-// report to it. The brain is an assistant underneath, never shown as one.
-// The workspace sets what the file leaves out of them; new ones come
-// through the API (assistants.go).
+// agent it thinks with, how it is doing). The brain is an assistant
+// underneath, never shown as one. The workspace sets what the file leaves
+// out of it.
 
 type assistantCard struct {
 	assistantView
@@ -31,20 +30,6 @@ type assistantCard struct {
 	ReportsTo   string      // the display name of the one it reports to; the brain's helpers only
 	Powers      []string    // what it may do, in words; the brain's helpers only
 	Wakes       []string    // what wakes it, in words
-	State       []stateItem // what it knows now
-	// The team (#244 step 6): the rules that wake it, who reads its
-	// facts, the facts it is lent, and what it did and cost lately.
-	WakeRules []string
-	Readers   []string
-	Stats     assistantStats
-}
-
-// stateItem is a field of an assistant's state, as its card shows it.
-type stateItem struct {
-	Name    string
-	Value   string // "" when unknown
-	Set     time.Time
-	Tainted bool // written after reading external content
 }
 
 // plainStatus is how an assistant is doing, as the page says it: no AI
@@ -101,30 +86,11 @@ func (w *web) assistantCards(r *http.Request, v agentsPage) []assistantCard {
 				card.Powers = append(card.Powers, l)
 			}
 		}
-		for i, v := range av.State {
-			l := stateItem{Name: v.Field, Set: v.Set, Tainted: v.Tainted != ""}
-			if v.Value != nil {
-				f := av.Spec.State[i]
-				if rows, ok := v.Value.([]any); ok {
-					l.Value = fmt.Sprintf(tr(lang, "assistants.rows"), len(rows))
-				} else {
-					l.Value = summaryValue(f, v.Value)
-				}
-			}
-			card.State = append(card.State, l)
-		}
 		for _, x := range av.Spec.Triggers {
 			kind, arg, _ := strings.Cut(x, ":")
 			if l := tr(lang, "assistants.wake."+kind); l != "assistants.wake."+kind {
 				card.Wakes = append(card.Wakes, fmt.Sprintf(l, strings.TrimSpace(arg)))
 			}
-		}
-		if av.Spec.Role == assistantRoleAssistant {
-			for _, x := range w.c.wakeRules(av.Name) {
-				card.WakeRules = append(card.WakeRules, ruleSentence(x, lang, av.Spec.displayName()))
-			}
-			card.Readers = readersText(w.c.factReadersOf(av.Name), lang)
-			card.Stats = w.c.assistantStatsOf(av.Spec, statsSince(w.c.notifyTime()))
 		}
 		if a, ok := m.Agents[av.Spec.Agent]; ok {
 			card.AgentModel = modelLabel(m.Providers[a.Provider].Kind, a.Runtime, a.Model)
@@ -252,21 +218,4 @@ func (c *core) editAssistant(name string, e assistantEdit) error {
 
 func equalGrant(a, b []string) bool {
 	return strings.Join(a, ",") == strings.Join(b, ",")
-}
-
-// readersText says who reads an assistant's facts, in words.
-func readersText(r factReaders, lang string) []string {
-	var out []string
-	if r.Summary {
-		out = append(out, tr(lang, "team.reader.summary"))
-	} else {
-		out = append(out, tr(lang, "team.reader.brain"))
-	}
-	for _, n := range r.Rules {
-		out = append(out, fmt.Sprintf(tr(lang, "team.reader.rule"), n))
-	}
-	for _, n := range r.Assistants {
-		out = append(out, fmt.Sprintf(tr(lang, "team.reader.assistant"), n))
-	}
-	return out
 }

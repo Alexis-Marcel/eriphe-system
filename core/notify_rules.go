@@ -75,7 +75,26 @@ const notifyRulesSchema = `CREATE TABLE IF NOT EXISTS notify_rules (
   state TEXT NOT NULL, why TEXT NOT NULL DEFAULT '', source_ref TEXT NOT NULL DEFAULT '',
   tainted TEXT NOT NULL DEFAULT '', by TEXT NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL);`
 
+// rulesSchema is the table notification rules are kept in (source
+// notification). It held the event rules too, removed with #278: their rows
+// and runs are dropped at start, with the tables of what went with them.
+const rulesSchema = `CREATE TABLE IF NOT EXISTS rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, source TEXT NOT NULL,
+  spec TEXT NOT NULL DEFAULT '{}', prompt TEXT NOT NULL, brief INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL, why TEXT NOT NULL DEFAULT '', source_ref TEXT NOT NULL DEFAULT '',
+  tainted TEXT NOT NULL DEFAULT '', by TEXT NOT NULL, next_at INTEGER, last_fired INTEGER,
+  mark INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL,
+  act TEXT NOT NULL DEFAULT '');`
+
 func init() {
+	extraSchema = append(extraSchema, rulesSchema)
+	extraColumns = append(extraColumns, `ALTER TABLE rules ADD COLUMN act TEXT NOT NULL DEFAULT ''`,
+		`DELETE FROM rules WHERE source != 'notification'`,
+		`DROP TABLE IF EXISTS rule_runs`, `DROP TABLE IF EXISTS rule_incidents`, `DROP TABLE IF EXISTS standing_approvals`,
+		`DROP TABLE IF EXISTS assistant_tasks`, `DROP TABLE IF EXISTS assistant_proposals`,
+		`DELETE FROM kv WHERE key = 'watch_turn'`,
+		// The specialist assistants went with them (role assistant): no migration.
+		`DELETE FROM catalog WHERE kind = 'assistant' AND json_extract(spec, '$.role') = 'assistant'`)
 	storeMigrations = append(storeMigrations, migrateNotifyRules)
 	// Added with the channels (channels.go): where a topic's notifications go
 	// (on a table of before #244 step 5, until it is moved).

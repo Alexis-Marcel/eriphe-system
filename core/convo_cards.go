@@ -64,7 +64,6 @@ const (
 	cardMemory    = "memory"
 	cardIntention = "intention"
 	cardRule      = "rule"
-	cardWatch     = "watch"
 	cardSetting   = "setting"
 	cardPresence  = "presence"
 	cardDigest    = "digest"
@@ -82,7 +81,7 @@ const (
 	cardsOfferedKey = "cards_offered_at"
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess, cardApproval, cardNewAssistant, cardSkill, cardRunCalls}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls}
 
 // cardUnlearn is an undo of the learning journal the brain proposed on a
 // tainted turn (learning_tools.go).
@@ -234,34 +233,6 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		}
 		p.Pending, p.Tainted, p.Why, p.Outcome = r.State == ruleProposed, r.Tainted, r.Why, cardApproved
 		p.text = func(lang string) string { return ruleText(r, lang) }
-	case cardNewAssistant:
-		x, err := c.assistantProposal(id)
-		if err != nil {
-			return p
-		}
-		p.Pending, p.Tainted = x.State == proposalWaiting, x.Tainted
-		switch x.State {
-		case proposalMade:
-			p.Outcome = cardApproved
-		case proposalRefused:
-			p.Outcome = cardRejected
-		}
-		p.text = func(lang string) string { return c.newAssistantText(x, lang) }
-		p.fields = func(lang string) []cardField { return c.newAssistantFields(x, lang) }
-	case cardApproval:
-		g, err := c.standingApproval(id)
-		if err != nil {
-			return p
-		}
-		p.Pending, p.Why, p.Outcome = g.State == approvalProposed && g.Revoked.IsZero(), "", cardApproved
-		p.text = func(lang string) string { return c.approvalText(g, lang) }
-	case cardWatch:
-		w, err := c.rule(id)
-		if err != nil {
-			return p
-		}
-		p.Pending, p.Tainted, p.Why, p.Outcome = w.State == watchProposed, w.Tainted, w.Why, cardApproved
-		p.text = func(string) string { return w.Name + " · " + w.When() }
 	case cardSetting:
 		var name, value, why, tainted string
 		err := c.store.db.QueryRow(`SELECT name, value, why, tainted FROM setting_proposals WHERE id = ?`, id).Scan(&name, &value, &why, &tainted)
@@ -358,21 +329,10 @@ func (c *core) pendingProposals() []proposal {
 			add(cardRule, r.ID)
 		}
 	}
-	if ws, err := c.rules(watchProposed); err == nil {
-		for _, w := range ws {
-			add(cardWatch, w.ID)
-		}
-	}
 	if ps, err := c.settingProposals(); err == nil {
 		for _, s := range ps {
 			add(cardSetting, s.ID)
 		}
-	}
-	for _, g := range c.proposedApprovals() {
-		add(cardApproval, g.ID)
-	}
-	for _, x := range c.waitingAssistantProposals() {
-		add(cardNewAssistant, x.ID)
 	}
 	for _, m := range c.haMappings(ruleProposed) {
 		add(cardPresence, m.ID)
@@ -449,16 +409,6 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 			return err
 		}
 		return c.deleteNotifyRule(id)
-	case cardWatch:
-		if approve {
-			_, err := c.setRuleState(id, watchActive)
-			return err
-		}
-		return c.deleteRule(id)
-	case cardApproval:
-		return c.decideApproval(id, approve)
-	case cardNewAssistant:
-		return c.decideNewAssistant(id, approve)
 	case cardSetting:
 		return c.decideSetting(id, approve)
 	case cardPresence:

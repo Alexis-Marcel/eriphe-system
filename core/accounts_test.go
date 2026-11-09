@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"net/url"
 	"strings"
 	"testing"
@@ -42,8 +41,6 @@ func TestMergeAccountServers(t *testing.T) {
 		accessReads, "mon agenda", nil, credentials{"env:CALENDAR_PASSWORD": "cal-pw"})
 	c.store.allowAction("mail-bob", "mcp__mail-bob__mark", "")
 	c.store.allowAction("mail", "mcp__mail__create_draft", "")
-	spec, _ := json.Marshal(ruleWhen{Server: "mail-bob", Tool: "search_messages", Args: map[string]any{"unread": true}, Every: 30})
-	c.store.db.Exec(`INSERT INTO rules (name, source, spec, prompt, state, by, created, updated) VALUES ('bob', 'outil', ?, 'x', 'active', 'user', 0, 0)`, string(spec))
 	if err := c.putAssistant("lecteur", Assistant{Role: roleTest, Disabled: true, Tools: []string{"mail-bob.search_messages", "mail", "agenda-icloud"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -87,14 +84,6 @@ func TestMergeAccountServers(t *testing.T) {
 	}
 	if len(got) != 2 || got["mcp__mail__mark"] != "bob@example.org" || got["mcp__mail__create_draft"] != "sam@example.org" {
 		t.Errorf("allowed: %v", got)
-	}
-	// The watch calls the merged server, for bob's mailbox.
-	var raw string
-	c.store.db.QueryRow(`SELECT spec FROM rules WHERE name = 'bob'`).Scan(&raw)
-	var w ruleWhen
-	json.Unmarshal([]byte(raw), &w)
-	if w.Server != "mail" || w.Args["account"] != "bob@example.org" || w.Args["unread"] != true {
-		t.Errorf("watch: %s", raw)
 	}
 	// The assistant is lent the merged server.
 	if tools := c.conf().Assistants["lecteur"].Tools; strings.Join(tools, ",") != "mail.search_messages,mail,agenda-icloud" {
@@ -275,8 +264,6 @@ func TestCalendarsOfOneAddress(t *testing.T) {
 		}
 		st, _ := c.serviceServer(calendarService)
 		c.store.allowAction(st.Name, "mcp__"+st.Name+"__create_event", "sam@example.org")
-		spec, _ := json.Marshal(ruleWhen{Server: st.Name, Tool: "list_events", Args: map[string]any{"account": "sam@example.org"}, Every: 30})
-		c.store.db.Exec(`INSERT INTO rules (name, source, spec, prompt, state, by, created, updated) VALUES ('rdv', 'outil', ?, 'x', 'active', 'user', 0, 0)`, string(spec))
 
 		if err := google(c); err != nil {
 			t.Fatal(err)
@@ -294,11 +281,6 @@ func TestCalendarsOfOneAddress(t *testing.T) {
 		}
 		if got := c.store.allowedActions(st.Name); len(got) != 1 || got[0].Account != "sam@example.org (iCloud)" {
 			t.Errorf("allowed: %+v", got)
-		}
-		var raw string
-		c.store.db.QueryRow(`SELECT spec FROM rules WHERE name = 'rdv'`).Scan(&raw)
-		if !strings.Contains(raw, `"account":"sam@example.org (iCloud)"`) {
-			t.Errorf("watch: %s", raw)
 		}
 		// Google connected again replaces its own account only.
 		if err := google(c); err != nil {

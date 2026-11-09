@@ -265,7 +265,7 @@ func (c *core) announceReport(id string, fields map[string]any, events, isAssist
 		if finished(s) {
 			c.bump() // the task leaves its node's assignments
 			if !isAssistant {
-				c.taskEnded(id, s) // the rules on a task's end (rule_engine.go)
+				c.taskEnded(id, s)
 			}
 		}
 		if isAssistant {

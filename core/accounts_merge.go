@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"net/url"
 	"regexp"
@@ -134,69 +133,13 @@ func (c *core) mergeService(svc accountService, all []svcServer) error {
 	for _, st := range all[1:] {
 		a := of[st.Name]
 		c.store.moveActions(st.Name, target.Name, a)
-		c.moveWatches(st.Name, target.Name, a)
 		c.moveAssistantTools(st.Name, target.Name)
 		if err := c.deleteServer(st.Name); err != nil {
 			return err
 		}
 	}
-	if a := of[target.Name]; a != "" {
-		c.moveWatches(target.Name, target.Name, a)
-	}
 	log.Printf("accounts: %d %s servers made one, %s, with %d accounts", len(all), svc.ID, target.Name, len(cfg.Accounts))
 	return nil
-}
-
-// moveWatches has the watches that call a server's tool call the one left
-// instead, for the account they read (a server of one account read it
-// alone).
-func (c *core) moveWatches(from, to, account string) {
-	c.updateWatches(func(spec map[string]any) bool {
-		if spec["server"] != from {
-			return false
-		}
-		spec["server"] = to
-		args, _ := spec["args"].(map[string]any)
-		if args == nil {
-			args = map[string]any{}
-		}
-		if _, named := args["account"]; !named && account != "" {
-			args["account"] = account
-		}
-		spec["args"] = args
-		return true
-	})
-}
-
-// updateWatches changes the watches' specs: change says whether it
-// changed one.
-func (c *core) updateWatches(change func(spec map[string]any) bool) {
-	rows, err := c.store.db.Query(`SELECT id, spec FROM rules WHERE source != ?`, sourceNotification)
-	if err != nil {
-		return
-	}
-	type update struct {
-		id   int64
-		spec string
-	}
-	var updates []update
-	for rows.Next() {
-		var id int64
-		var raw string
-		if rows.Scan(&id, &raw) != nil {
-			continue
-		}
-		var spec map[string]any
-		if json.Unmarshal([]byte(raw), &spec) != nil || !change(spec) {
-			continue
-		}
-		next, _ := json.Marshal(spec)
-		updates = append(updates, update{id, string(next)})
-	}
-	rows.Close()
-	for _, u := range updates {
-		c.store.db.Exec(`UPDATE rules SET spec = ? WHERE id = ?`, u.spec, u.id)
-	}
 }
 
 // moveAssistantTools lends the workspace's assistants lent a server the

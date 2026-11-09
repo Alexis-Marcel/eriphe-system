@@ -51,8 +51,7 @@ func (c *core) taskMCPHandler() http.Handler {
 		server := r.PathValue("server")
 		if server == selfServer {
 			// eriphe-core's own tools, for an assistant that launches tasks,
-			// without self_url: what the bearer token gives at /mcp. Any other
-			// assistant gets its own, as its powers say (assistant_tools.go).
+			// without self_url: what the bearer token gives at /mcp.
 			a, _, ok := c.assistantOf(t)
 			var s *mcp.Server
 			switch {
@@ -62,7 +61,7 @@ func (c *core) taskMCPHandler() http.Handler {
 					s = c.self
 				}
 			case hasOwnTools(a):
-				s = c.assistantServer(a, t)
+				s = c.assistantServer(a, t) // the lead's (assistant_own_tools.go)
 			}
 			if s == nil {
 				http.Error(w, "this task has no access to "+server, http.StatusForbidden)

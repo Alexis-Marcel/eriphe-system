@@ -79,7 +79,7 @@ func TestFeedMergesSources(t *testing.T) {
 	if items[0].Ref != "task:t-1" || items[2].Ref == "" || items[4].Ref == "" {
 		t.Errorf("refs %+v", items)
 	}
-	only, _, _ := c.feed(at(t, "2026-11-04", "07:00"), []string{feedIntention, feedWatch}, 50)
+	only, _, _ := c.feed(at(t, "2026-11-04", "07:00"), []string{feedIntention}, 50)
 	if len(only) != 1 || only[0].Kind != feedIntention {
 		t.Errorf("kinds: %+v", only)
 	}

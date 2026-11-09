@@ -1,15 +1,11 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Facts: what Eriphe knows now, in one typed store (#244 step 3). A fact
@@ -166,106 +162,6 @@ func (c *core) contextFacts(now time.Time) []fact {
 		}
 	}
 	return out
-}
-
-// assistantFacts are an assistant's facts now, one per field of its schema.
-func (c *core) assistantFacts(a Assistant, now time.Time) []fact {
-	vals := c.assistantState(a, now)
-	out := make([]fact, 0, len(vals))
-	for i, f := range a.State {
-		v := vals[i]
-		out = append(out, fact{Owner: a.Name, Field: f.Name, Value: v.Value, Set: v.Set, Expires: v.Expires,
-			Writer: a.Name, Tainted: v.Tainted, Closed: f.closed(), Kept: true})
-	}
-	return out
-}
-
-// allFacts are every fact now: the context's, the rules' (their
-// incidents, rule_incidents.go), then each enabled assistant's, by name.
-func (c *core) allFacts(now time.Time) []fact {
-	out := append(c.contextFacts(now), c.ruleFacts(now)...)
-	m := c.conf()
-	for _, n := range sortedKeys(m.Assistants) {
-		if a := m.Assistants[n]; !a.Disabled {
-			out = append(out, c.assistantFacts(a, now)...)
-		}
-	}
-	return out
-}
-
-// The brain's read: the facts tool.
-
-type factsIn struct {
-	Owner string `json:"owner,omitempty" jsonschema:"context, rules, or an assistant's name; empty for all"`
-}
-
-type factView struct {
-	Fact    string         `json:"fact"` // owner.field
-	Value   any            `json:"value,omitempty"`
-	Unknown bool           `json:"unknown,omitempty"`
-	Age     string         `json:"age,omitempty"`
-	Until   *time.Time     `json:"valid_until,omitempty"`
-	Writer  string         `json:"written_by,omitempty"`
-	Detail  map[string]any `json:"detail,omitempty"`
-	Note    string         `json:"note,omitempty"`
-}
-
-func registerFactTools(s *mcp.Server, c *core) {
-	tool(s, "facts", "What Eriphe knows now, as typed facts: the user's context (owner context: place, room, focus, busy_until, home_activity, and each device's presence, dnd, activity), written by code from the sources the user turned on; the rules' (owner rules: each outil rule's incident open or closed, incidents_7d, since, one per outage); and each assistant's fields. Closed values only (a choice, a number, a date, rows by their count); a text is named, not quoted: read it with assistant_view. Each with its age and who wrote it; unknown when expired. Free, no model. Facts orient, never authorise.",
-		func(ctx context.Context, in factsIn) (map[string]any, error) {
-			return c.brainFacts(in, c.notifyTime())
-		})
-}
-
-func (c *core) brainFacts(in factsIn, now time.Time) (map[string]any, error) {
-	owner := strings.TrimSpace(in.Owner)
-	var views []factView
-	owners := map[string]bool{}
-	for _, f := range c.allFacts(now) {
-		owners[f.Owner] = true
-		if owner != "" && !strings.EqualFold(f.Owner, owner) {
-			continue
-		}
-		views = append(views, factShown(f, now))
-	}
-	if owner != "" && len(views) == 0 && !owners[owner] && owner != ownerContext {
-		return nil, fmt.Errorf("no owner %q: context, or one of your assistants", owner)
-	}
-	out := map[string]any{"facts": views}
-	if p := c.contextPrefs(); p.Level == 0 {
-		out["context"] = "off: the user set what Eriphe may know of them to « Rien »"
-	} else if !owners[ownerContext] {
-		out["context"] = "nothing known now: no source said anything lately"
-	}
-	return out, nil
-}
-
-// factShown is a fact as the brain reads it: closed values, a text by its
-// field's name only.
-func factShown(f fact, now time.Time) factView {
-	v := factView{Fact: f.id(), Writer: f.Writer, Detail: f.Detail}
-	if !f.known(now) {
-		v.Unknown = true
-		return v
-	}
-	v.Age = shortAge(now.Sub(f.Set))
-	until := f.Expires
-	v.Until = &until
-	switch x := f.Value.(type) {
-	case []any:
-		v.Value = len(x)
-		v.Note = "rows, by their count: read them with assistant_view"
-		if !f.Closed {
-			v.Note = "rows with a text, by their count: read them with assistant_view"
-		}
-	default:
-		if f.Closed {
-			v.Value = f.Value
-		} else {
-			v.Note = "a text: read it with assistant_view"
-		}
-	}
-	return v
 }
 
 // factOwnerReserved tells whether a name is an owner no assistant may take.

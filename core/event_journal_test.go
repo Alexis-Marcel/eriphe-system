@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -97,53 +98,45 @@ func TestEventBudget(t *testing.T) {
 	}
 }
 
-// An outil rule's confirmed transitions are tool events, external unless
-// the tool's server is trusted.
-func TestPollEvents(t *testing.T) {
-	c, mon, now := pollCore(t)
-	pollWatch(t, c, &pollCond{Kind: condCompare, Path: "data.state", Op: "ne", Value: "up"})
-	ctx := context.Background()
-	mon.set("down", "2.0.1")
-	c.ruleTick(ctx)
-	if got := eventsOf(t, c, ""); len(got) != 0 {
-		t.Fatalf("an unconfirmed transition emitted: %+v", got)
-	}
-	*now = now.Add(pollConfirm)
-	c.ruleTick(ctx)
-	got := eventsOf(t, c, evToolAlert)
-	if len(got) != 1 || !got[0].External || got[0].Key != "Le site" || !strings.Contains(got[0].Payload["result"].(string), "down") {
-		t.Fatalf("tool.alert: %+v", got)
-	}
-	c.setServerTrust("monitor", true, trustByUser)
-	mon.set("up", "2.0.1")
-	*now = now.Add(time.Minute)
-	c.ruleTick(ctx)
-	*now = now.Add(pollConfirm)
-	c.ruleTick(ctx)
-	if got := eventsOf(t, c, evToolRecovered); len(got) != 1 || got[0].External {
-		t.Fatalf("tool.recovered on a trusted tool: %+v", got)
-	}
-}
-
-// An alerte rule's webhook calls are alert events, resolved when the body
-// says so; always external.
+// An incoming alert's calls are alert events keyed by its name, resolved
+// when the body says so, always external; a signed one checks the HMAC;
+// an unknown token is not found; past 60 calls an hour, 429.
 func TestAlertEvents(t *testing.T) {
 	c, _, _ := pollCore(t)
-	seq := ownerSays(c, "Préviens-moi quand Grafana envoie une alerte")
-	out, err := c.brainEventRule(ruleEventIn{Name: "getout", Source: "alert", Prompt: "Regarde", SourceRef: ref(seq),
-		Urgency: urgencyNormal, NoAction: true})
-	if err != nil {
-		t.Fatal(err)
+	if _, _, err := c.newAlertHook("Get Out!", false); err == nil {
+		t.Fatal("a bad name accepted")
 	}
-	token, _, _ := c.newWatchHook(out["rule"].(eventRuleView).ID)
-	if r := c.receiveAlert(token, http.Header{}, []byte(`{"status": "firing", "title": "5xx > 2%"}`)); r.Status != http.StatusAccepted {
+	token, secret, err := c.newAlertHook("getout", true)
+	if err != nil || secret == "" {
+		t.Fatal(secret, err)
+	}
+	body := []byte(`{"status": "firing", "title": "5xx > 2%"}`)
+	if r := c.receiveAlert(token, http.Header{}, body); r.Status != http.StatusUnauthorized {
+		t.Fatalf("unsigned: %+v", r)
+	}
+	h := http.Header{"X-Hub-Signature-256": {sign(secret, body)}}
+	if r := c.receiveAlert(token, h, body); r.Status != http.StatusAccepted {
 		t.Fatal(r)
 	}
-	c.receiveAlert(token, http.Header{}, []byte(`{"status": "resolved"}`))
+	resolved := []byte(`{"status": "resolved"}`)
+	c.receiveAlert(token, http.Header{"X-Hub-Signature-256": {sign(secret, resolved)}}, resolved)
 	rec, res := eventsOf(t, c, evAlertReceived), eventsOf(t, c, evAlertResolved)
 	if len(rec) != 1 || len(res) != 1 || rec[0].Key != "getout" || !rec[0].External ||
 		!strings.Contains(rec[0].Payload["detail"].(string), "5xx") {
 		t.Fatalf("received %+v resolved %+v", rec, res)
+	}
+	if r := c.receiveAlert(strings.Repeat("x", 43), http.Header{}, body); r.Status != http.StatusNotFound {
+		t.Fatalf("unknown token: %+v", r)
+	}
+	plain, _, _ := c.newAlertHook("nas", false)
+	for i := 0; i < alertPerHour; i++ {
+		c.receiveAlert(plain, http.Header{}, body)
+	}
+	if r := c.receiveAlert(plain, http.Header{}, body); r.Status != http.StatusTooManyRequests {
+		t.Fatalf("past the limit: %+v", r)
+	}
+	if hs := c.alertHooks(); len(hs) != 2 || hs[0].Name != "getout" || !hs[0].Signed {
+		t.Fatalf("hooks %+v", hs)
 	}
 }
 
@@ -291,4 +284,33 @@ func monSession(t *testing.T, mon *fakeMonitor) *mcp.ClientSession {
 	}
 	t.Cleanup(func() { sess.Close() })
 	return sess
+}
+
+// An existing database starts without the event rules, their runs and the
+// specialist assistants; notification rules and the rest are kept.
+func TestRemovedFeaturesDropped(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "core.db")
+	s, err := openStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.db.Exec(`CREATE TABLE rule_runs (id INTEGER PRIMARY KEY)`)
+	s.db.Exec(`INSERT INTO rules (name, source, prompt, state, by, created, updated) VALUES ('Revue', 'horaire', 'x', 'active', 'user', 0, 0)`)
+	s.db.Exec(`INSERT INTO rules (name, source, prompt, state, by, created, updated) VALUES ('Factures', 'notification', '', 'active', 'user', 0, 0)`)
+	s.db.Exec(`INSERT INTO catalog (kind, name, spec, updated) VALUES ('assistant', 'tri', '{"role":"assistant"}', 0)`)
+	s.db.Exec(`INSERT INTO catalog (kind, name, spec, updated) VALUES ('assistant', 'eriphe', '{"role":"brain"}', 0)`)
+	s.set("keep", "1")
+	s.db.Close()
+	s, err = openStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rules, runs, specialists, brain int
+	s.db.QueryRow(`SELECT COUNT(*) FROM rules`).Scan(&rules)
+	s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'rule_runs'`).Scan(&runs)
+	s.db.QueryRow(`SELECT COUNT(*) FROM catalog WHERE name = 'tri'`).Scan(&specialists)
+	s.db.QueryRow(`SELECT COUNT(*) FROM catalog WHERE name = 'eriphe'`).Scan(&brain)
+	if rules != 1 || runs != 0 || specialists != 0 || brain != 1 || s.get("keep") != "1" {
+		t.Fatalf("rules %d, runs table %d, specialists %d, brain %d", rules, runs, specialists, brain)
+	}
 }

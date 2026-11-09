@@ -3,9 +3,9 @@
 
 {{define "skills"}}
 <header class="page-head"><h2>{{t "settings.skills"}}</h2><p>{{t "skills.lead"}}</p></header>
-{{if .Data}}
+{{if .Data.Skills}}
 <ul class="grid">
-{{range .Data}}
+{{range .Data.Skills}}
   <li class="tile skill{{if not .Active}} is-cut{{end}}">
     <div class="tile-head">
       {{if .Pending}}<span class="tag tag-warn">{{if .Approved}}{{t "skills.updatewaits"}}{{else}}{{t "skills.waits"}}{{end}}</span>
@@ -35,6 +35,26 @@
     <div id="skill-result"></div>
   </form>
   <p class="muted small">{{t "skills.safety"}}</p>
+</section>
+
+<section class="panel" id="alerts" aria-labelledby="alerts-title">
+  <h3 id="alerts-title">{{t "alerts.title"}}</h3>
+  <p class="muted">{{t "alerts.lead"}}</p>
+  {{with .Data.Fresh}}<div class="notice" role="status">
+    <p>{{tf "alerts.fresh" .Name}}</p>
+    <p class="mono small">{{.URL}}</p>
+    {{if .Secret}}<p class="small">{{t "alerts.secret"}} <span class="mono">{{.Secret}}</span></p>{{end}}
+  </div>{{end}}
+  {{if .Data.Alerts}}<ul class="plain-list">
+  {{range .Data.Alerts}}<li><span class="mono">{{.Name}}</span>{{if .Signed}} <span class="tag">{{t "alerts.signed"}}</span>{{end}}
+    <span class="muted small">when: alert.received key={{.Name}}</span>
+    <form method="post" action="/settings/alerts/{{.ID}}/delete" class="inline"><button class="btn btn-link" type="submit">{{t "alerts.delete"}}</button></form></li>
+  {{end}}</ul>{{end}}
+  <form class="stack-form" method="post" action="/settings/alerts">
+    <label>{{t "alerts.name"}} <input name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="getout"></label>
+    <label class="check"><input type="checkbox" name="signed" checked> {{t "alerts.sign"}}</label>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">{{t "alerts.add"}}</button></div>
+  </form>
 </section>
 {{end}}
 

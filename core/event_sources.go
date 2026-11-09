@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -76,27 +75,6 @@ func (c *core) tickReturned(now time.Time) {
 	c.emitLogged(journalEvent{Kind: evUserReturned, Source: "user", At: a.Back, Payload: map[string]any{
 		"left": a.Left.In(loc).Format(time.RFC3339), "back": a.Back.In(loc).Format(time.RFC3339),
 		"away_minutes": int(a.Back.Sub(a.Left) / time.Minute)}})
-}
-
-// emitAlert writes an alerte rule's webhook call.
-func (c *core) emitAlert(w *rule, body []byte) {
-	kind := evAlertReceived
-	if alertResolved(body) {
-		kind = evAlertResolved
-	}
-	c.emitLogged(journalEvent{Kind: kind, Key: w.Name, Source: fmt.Sprintf("alert:%d", w.ID), External: true,
-		Payload: map[string]any{"rule": w.Name, "detail": alertDetail(body)}})
-}
-
-// emitPoll writes an outil rule's confirmed transition.
-func (c *core) emitPoll(w *rule, cause, excerpt string) {
-	kind := map[string]string{causePoll: evToolAlert, causeRecovered: evToolRecovered, causeChanged: evToolChanged}[cause]
-	if kind == "" {
-		return
-	}
-	c.emitLogged(journalEvent{Kind: kind, Key: w.Name, Source: fmt.Sprintf("poll:%d", w.ID),
-		External: !c.trustsServer(w.Spec.Server),
-		Payload:  map[string]any{"rule": w.Name, "server": w.Spec.Server, "tool": w.Spec.Tool, "result": excerpt}})
 }
 
 // emitHAChanges writes ha.changed for each house signal whose value moved
@@ -285,4 +263,13 @@ func reservedEventKind(kind string) bool {
 		}
 	}
 	return false
+}
+
+// taskEnded is the lifecycle's hook: a worker task finished.
+func (c *core) taskEnded(id, state string) {
+	t, err := c.store.task(id)
+	if err != nil || t.Kind != "worker" {
+		return
+	}
+	c.emitLogged(journalEvent{Kind: evTaskEnded, Key: id, Source: "task", Payload: map[string]any{"task": id, "state": state}})
 }

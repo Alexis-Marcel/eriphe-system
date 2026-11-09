@@ -21,17 +21,16 @@ type concept struct {
 var concepts = []concept{
 	{"memory", "remember, recall", "what you must know about the user: facts, people, decisions, a project's progress, how they want you to talk"},
 	{"intention", "intend, intentions, update_intention", "something owed or to do once: at a date and time (remind me at 14:00), or the next time a name comes up"},
-	{"rule", "rule, rules, update_rule", "what comes back or reacts on its own, as when, if, then: when at times of day (horaire), on the user's return (retour), a fact changing (fait), a tool's result changing (outil), a service alerting (alerte), a task or session ending (fin); if closed facts and the time hold; then wake you, wake an assistant, or notify a fixed text. And what to do with notifications about a topic (now, brief, never, even at night, which lines), and the quiet hours"},
+	{"skill", "write_skill, list_skills, read_skill", "what comes back or reacts on its own: a skill with when (an event: a mail, an alert, the user's return, a task's end; or a time) runs as a task in the background and tells the user with its last message; also know-how followed when asked"},
+	{"rule", "rule", "what to do with notifications about a topic (now, brief, never, even at night, which lines), and the quiet hours"},
 	{"setting", "setting, presence_sources, map_presence", "how the user is told in general: device order, lines off, daily cap, time zone, Telegram detail; what you may know of the user, and which Home Assistant entities tell it"},
 	{"notify", "notify, notifications", "say something on your own, now or for the brief, under a known topic ref"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
-	{"fact", "facts, assistants, assistant_view", "what Eriphe knows now, typed, beyond the [contexte] and [assistants] lines: the user's context (place, room, focus, each device) written by code, the incidents of outil rules, each assistant's fields, and the views they expose (urgent mails, today's incidents)"},
-	{"assistant", "templates, propose_assistant", "a specialist that writes facts with a model, woken by rules, made by the user on its creation card: only when a rule will not do (it reads untrusted content for you, has tools of its own, needs a model on its own wake, or works in parallel)"},
 	{"task", "run_task", "long or heavy work, by an agent on a machine"},
 	{"session", "start_session, session_status, settle_step, amend_session", "work of several steps toward one goal (a plan, steps in parallel, checkpoints for the user), not only code"},
 }
 
-const conceptMapEN = "memory, intention, rule, setting, notify, since, fact, assistant, task, session"
+const conceptMapEN = "memory, intention, skill, rule, setting, notify, since, task, session"
 
 var conceptLinesEN = func() string {
 	var b strings.Builder

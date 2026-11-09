@@ -591,8 +591,7 @@ func (c *core) closeLocked(s Session, state, summary string) {
 	}
 	c.setSession(s.ID, fields)
 	c.closeAsks(s.ID)
-	c.dropLead(s)                                                                          // session_lead.go
-	c.ruleEnded("session", fmt.Sprintf("la session #%d s'est terminée (%s)", s.ID, state)) // rule_engine.go
+	c.dropLead(s) // session_lead.go
 	c.emitLogged(journalEvent{Kind: evSessionEnded, Key: fmt.Sprintf("session:%d", s.ID), Source: "session",
 		Payload: map[string]any{"session": s.ID, "state": state}})
 }

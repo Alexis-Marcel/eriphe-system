@@ -50,16 +50,12 @@ func (c *core) intentionsTick() {
 }
 
 // deliverClock wakes an idle assistant that holds the conversation: for
-// the intentions that are due and that it was not told of, else for a
-// watch that fired (watch_tick.go).
+// the intentions that are due and that it was not told of.
 func (c *core) deliverClock(ctx context.Context, a Assistant, t *TaskRow) (bool, error) {
 	if !a.can(powerReceivesConversation) {
 		return false, nil
 	}
-	if started, err := c.deliverIntentions(ctx, a, t); started || err != nil {
-		return started, err
-	}
-	return c.deliverRule(ctx, a, t)
+	return c.deliverIntentions(ctx, a, t)
 }
 
 // deliverIntentions wakes it with the due intentions.
@@ -71,7 +67,6 @@ func (c *core) deliverIntentions(ctx context.Context, a Assistant, t *TaskRow) (
 	if err != nil || len(due) == 0 {
 		return false, err
 	}
-	c.endRuleTurn() // a watch turn whose end was not seen
 	p, err := c.wakePacket()
 	if err != nil {
 		return false, err

@@ -29,7 +29,7 @@ func TestActivityRedirects(t *testing.T) {
 		}
 	}
 	// The addresses that stayed still answer.
-	for _, path := range []string{"/settings/notifications?n=1", "/settings/rules", "/settings/devices"} {
+	for _, path := range []string{"/settings/notifications?n=1", "/settings/devices"} {
 		if code, _, _ := tw.do("GET", path, nil, nil); code != 200 {
 			t.Errorf("GET %s: %d", path, code)
 		}
@@ -122,8 +122,6 @@ func TestApprovals(t *testing.T) {
 	mustIntend(t, m, &Intention{Text: "Régler la facture du fournisseur", DueAt: m.now().Add(48 * time.Hour), State: intentProposed,
 		SourceKind: srcExtraction, Trust: trustExternal})
 	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "source:mail", Outcome: levelBrief, State: ruleProposed, By: "brain", Why: "Trop de mails."})
-	w, _ := c.addRule(&rule{Name: "Revue du dimanche", Source: sourceSchedule, Spec: ruleWhen{Schedule: "sunday 18:00"},
-		Prompt: "Fais la revue", State: watchProposed, By: "brain"})
 	c.store.insertTask(&TaskRow{ID: "t-perm", Agent: "small", Runtime: "claude-code", Prompt: "Publish", State: stateWaitingPermission})
 	c.store.addEvents("t-perm", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-1", "tool_name": "Bash",
 		"input": map[string]any{"command": "npm publish"}}}})
@@ -136,8 +134,7 @@ func TestApprovals(t *testing.T) {
 		`id="memory"`, "Le colis arrive jeudi", `hx-post="/memory/1/approve"`,
 		"Régler la facture du fournisseur", `hx-post="/memory/intention/1/approve"`,
 		`id="rules"`, "Trop de mails.", `hx-post="/notify/rules/1/approve"`,
-		`id="event-rules"`, "Revue du dimanche", `hx-post="/event-rules/` + idText(w.ID) + `/approve"`,
-		`hx-trigger="memory-changed from:body"`, `<span class="nav-count">4</span>`,
+		`hx-trigger="memory-changed from:body"`, `<span class="nav-count">3</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("À valider lacks %q", want)
@@ -157,7 +154,7 @@ func TestApprovals(t *testing.T) {
 	}
 	// English.
 	tw.hc.Jar.SetCookies(mustURL(tw.srv.URL), []*http.Cookie{{Name: "lang", Value: "en"}})
-	if _, body, _ := tw.do("GET", "/settings/approve", nil, nil); !strings.Contains(body, "To approve") || !strings.Contains(body, "Routines and watches") {
+	if _, body, _ := tw.do("GET", "/settings/approve", nil, nil); !strings.Contains(body, "To approve") {
 		t.Error("no English")
 	}
 }
