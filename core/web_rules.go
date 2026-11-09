@@ -7,12 +7,12 @@ import (
 
 // Settings → Veilles (watch.go): the routines (at a time of day, on the
 // user's return) and the watches (a tool polled, an alert's webhook), each
-// with its last runs. The brain writes them when asked (watch_tools.go):
+// with its last runs. The brain writes them when asked (rule_tools.go):
 // the page shows them, pauses, resumes and deletes them; what it proposes
 // waits in « À valider » (web_activity.go). An alerte watch's webhook
-// address (and its signing secret) is made here and shown once; an
-// authorised action is shown, and revoked, here. The webhook itself
-// (watch_alert.go) is served beside, without a session.
+// address (and its signing secret) is made here and shown once; a standing
+// approval is shown, and revoked, here (it is given on its card). The
+// webhook itself (rule_alert.go) is served beside, without a session.
 
 const watchPageRuns = 5
 
@@ -26,7 +26,7 @@ func (w *web) watchRoutes(mux *http.ServeMux) {
 type watchCard struct {
 	*rule
 	Runs  []*ruleRun
-	Grant *watchGrant // its live authorised action
+	Grant *standingApproval // its standing approval, proposed or given
 }
 
 // freshHook is a webhook address just made, shown this once.
@@ -50,7 +50,7 @@ func (w *web) watchesPage() watchesPage {
 			v.Proposed++
 			continue
 		}
-		card := watchCard{rule: x, Runs: w.c.recentRuns(x.ID, watchPageRuns), Grant: w.c.liveGrant(x.ID)}
+		card := watchCard{rule: x, Runs: w.c.recentRuns(x.ID, watchPageRuns), Grant: w.c.ruleApproval(x.ID)}
 		if x.Source == sourceSchedule || x.Source == sourceReturn {
 			v.Routines = append(v.Routines, card)
 		} else {
@@ -91,7 +91,7 @@ func (w *web) handleWatchAction(rw http.ResponseWriter, r *http.Request, s *sess
 	case "reject", "delete":
 		err = w.c.deleteRule(id)
 	case "revoke":
-		w.c.revokeGrants(id, "revoked in Settings")
+		w.c.revokeApprovals(id, "revoked in Settings")
 	case "hook":
 		token, secret, err := w.c.newWatchHook(id)
 		if err != nil {

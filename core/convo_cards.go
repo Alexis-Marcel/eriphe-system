@@ -82,7 +82,7 @@ const (
 	cardsOfferedKey = "cards_offered_at"
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess, cardApproval}
 
 // cardUnlearn is an undo of the learning journal the brain proposed on a
 // tainted turn (learning_tools.go).
@@ -225,6 +225,13 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		}
 		p.Pending, p.Tainted, p.Why, p.Outcome = r.State == ruleProposed, r.Tainted, r.Why, cardApproved
 		p.text = func(lang string) string { return ruleText(r, lang) }
+	case cardApproval:
+		g, err := c.standingApproval(id)
+		if err != nil {
+			return p
+		}
+		p.Pending, p.Why, p.Outcome = g.State == approvalProposed && g.Revoked.IsZero(), "", cardApproved
+		p.text = func(lang string) string { return c.approvalText(g, lang) }
 	case cardWatch:
 		w, err := c.rule(id)
 		if err != nil {
@@ -334,6 +341,9 @@ func (c *core) pendingProposals() []proposal {
 			add(cardSetting, s.ID)
 		}
 	}
+	for _, g := range c.proposedApprovals() {
+		add(cardApproval, g.ID)
+	}
 	for _, m := range c.haMappings(ruleProposed) {
 		add(cardPresence, m.ID)
 	}
@@ -399,6 +409,8 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 			return err
 		}
 		return c.deleteRule(id)
+	case cardApproval:
+		return c.decideApproval(id, approve)
 	case cardSetting:
 		return c.decideSetting(id, approve)
 	case cardPresence:

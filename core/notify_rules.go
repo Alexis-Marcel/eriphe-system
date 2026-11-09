@@ -1,8 +1,11 @@
 package main
 
 import (
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -20,7 +23,51 @@ import (
 // The brain writes a rule only when the user asked for it in this very
 // turn, a clean one; otherwise the rule is only proposed, and the user
 // approves it in Settings, where every rule is shown, edited and deleted.
+//
+// They are rules (rule_engine.go) on the event "notification": kept in the
+// table rules with the source notification, their parameters in spec,
+// applied by code when a notification is decided (decideNotify), never by
+// the timer. Before #244 step 5 they had a table of their own,
+// notify_rules, moved at start (migrateNotifyRules).
 
+const sourceNotification = "notification"
+
+// notifySpec is a notification rule's parameters, kept as the rule's spec.
+type notifySpec struct {
+	Kind     string `json:"kind"`
+	Match    string `json:"match,omitempty"`
+	Outcome  string `json:"outcome,omitempty"`
+	Night    bool   `json:"night,omitempty"`
+	Channels string `json:"channels,omitempty"`
+	Also     string `json:"also,omitempty"`
+	Never    string `json:"never,omitempty"`
+	Days     string `json:"days,omitempty"`
+	From     int    `json:"from,omitempty"`
+	To       int    `json:"to,omitempty"`
+}
+
+func (r notifyRule) spec() notifySpec {
+	return notifySpec{r.Kind, r.Match, r.Outcome, r.Night, r.Channels, r.Also, r.Never, r.Days, r.From, r.To}
+}
+
+// ruleName is how a notification rule is named among the rules.
+func (r notifyRule) ruleName() string {
+	if r.Kind == ruleQuiet {
+		return "Heures calmes " + r.Window()
+	}
+	return "Notifications " + r.Match
+}
+
+// act is what a notification rule does to a notification: deliver it its
+// way, or hold it in the quiet hours.
+func (r notifyRule) act() string {
+	if r.Kind == ruleQuiet {
+		return "quiet"
+	}
+	return "deliver"
+}
+
+// The table of before #244 step 5, read once by migrateNotifyRules.
 const notifyRulesSchema = `CREATE TABLE IF NOT EXISTS notify_rules (
   id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, match TEXT NOT NULL DEFAULT '',
   outcome TEXT NOT NULL DEFAULT '', night INTEGER NOT NULL DEFAULT 0, days TEXT NOT NULL DEFAULT 'all',
@@ -29,8 +76,9 @@ const notifyRulesSchema = `CREATE TABLE IF NOT EXISTS notify_rules (
   tainted TEXT NOT NULL DEFAULT '', by TEXT NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL);`
 
 func init() {
-	extraSchema = append(extraSchema, notifyRulesSchema)
-	// Added with the channels (channels.go): where a topic's notifications go.
+	storeMigrations = append(storeMigrations, migrateNotifyRules)
+	// Added with the channels (channels.go): where a topic's notifications go
+	// (on a table of before #244 step 5, until it is moved).
 	extraColumns = append(extraColumns, `ALTER TABLE notify_rules ADD COLUMN channels TEXT NOT NULL DEFAULT ''`)
 	// Added with the router (route.go): lines a topic adds, or forbids.
 	extraColumns = append(extraColumns, `ALTER TABLE notify_rules ADD COLUMN also TEXT NOT NULL DEFAULT ''`,
@@ -164,13 +212,11 @@ func (r notifyRule) same(o notifyRule) bool {
 	return r.Kind == o.Kind && r.Match == o.Match && r.Days == o.Days
 }
 
-const ruleCols = `id, kind, match, outcome, night, days, quiet_from, quiet_to, state, why, source_ref, tainted, by, created, channels, also, never_on`
-
 func (c *core) notifyRules(states ...string) ([]notifyRule, error) {
-	q := `SELECT ` + ruleCols + ` FROM notify_rules`
-	var args []any
+	q := `SELECT id, spec, state, why, source_ref, tainted, by, created FROM rules WHERE source = ?`
+	args := []any{sourceNotification}
 	if len(states) > 0 {
-		q += ` WHERE state IN (?` + strings.Repeat(", ?", len(states)-1) + `)`
+		q += ` AND state IN (?` + strings.Repeat(", ?", len(states)-1) + `)`
 		for _, s := range states {
 			args = append(args, s)
 		}
@@ -183,11 +229,17 @@ func (c *core) notifyRules(states ...string) ([]notifyRule, error) {
 	var out []notifyRule
 	for rows.Next() {
 		var r notifyRule
+		var spec string
 		var created int64
-		if err := rows.Scan(&r.ID, &r.Kind, &r.Match, &r.Outcome, &r.Night, &r.Days, &r.From, &r.To, &r.State, &r.Why,
-			&r.SourceRef, &r.Tainted, &r.By, &created, &r.Channels, &r.Also, &r.Never); err != nil {
+		if err := rows.Scan(&r.ID, &spec, &r.State, &r.Why, &r.SourceRef, &r.Tainted, &r.By, &created); err != nil {
 			return nil, err
 		}
+		var sp notifySpec
+		if json.Unmarshal([]byte(spec), &sp) != nil {
+			continue
+		}
+		r.Kind, r.Match, r.Outcome, r.Night, r.Channels, r.Also, r.Never, r.Days, r.From, r.To =
+			sp.Kind, sp.Match, sp.Outcome, sp.Night, sp.Channels, sp.Also, sp.Never, sp.Days, sp.From, sp.To
 		r.Created = time.Unix(created, 0)
 		out = append(out, r)
 	}
@@ -222,34 +274,93 @@ func (c *core) addNotifyRule(r notifyRule) (notifyRule, error) {
 	if r.State == ruleActive {
 		// The same topic in its canonical form: a rule kept before the
 		// vocabulary (factures) is replaced by its new form (facture).
-		rows, err := tx.Query(`SELECT id, match FROM notify_rules WHERE state = 'active' AND kind = ? AND days = ?`, r.Kind, r.Days)
+		rows, err := tx.Query(`SELECT id, spec FROM rules WHERE source = ? AND state = 'active'`, sourceNotification)
 		if err != nil {
 			return r, err
 		}
 		var old []int64
 		for rows.Next() {
 			var id int64
-			var match string
-			if rows.Scan(&id, &match) == nil && (match == r.Match || r.Kind == ruleTopic && canonRef(match) == r.Match) {
+			var raw string
+			var sp notifySpec
+			if rows.Scan(&id, &raw) != nil || json.Unmarshal([]byte(raw), &sp) != nil || sp.Kind != r.Kind || sp.Days != r.Days {
+				continue
+			}
+			if sp.Match == r.Match || r.Kind == ruleTopic && canonRef(sp.Match) == r.Match {
 				old = append(old, id)
 			}
 		}
 		rows.Close()
 		for _, id := range old {
-			if _, err := tx.Exec(`DELETE FROM notify_rules WHERE id = ?`, id); err != nil {
+			if _, err := tx.Exec(`DELETE FROM rules WHERE id = ?`, id); err != nil {
 				return r, err
 			}
 		}
 	}
-	res, err := tx.Exec(`INSERT INTO notify_rules (kind, match, outcome, night, days, quiet_from, quiet_to, state, why, source_ref,
-		tainted, by, created, updated, channels, also, never_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.Kind, r.Match, r.Outcome, r.Night, r.Days, r.From, r.To, r.State, r.Why, r.SourceRef, r.Tainted, r.By, now, now, r.Channels, r.Also, r.Never)
+	id, err := insertNotifyRule(tx, r, now)
 	if err != nil {
 		return r, err
 	}
-	r.ID, _ = res.LastInsertId()
+	r.ID = id
 	r.Created = time.Unix(now, 0)
 	return r, tx.Commit()
+}
+
+// insertNotifyRule writes a notification rule as a rule.
+func insertNotifyRule(tx interface {
+	Exec(string, ...any) (sql.Result, error)
+}, r notifyRule, now int64) (int64, error) {
+	spec, _ := json.Marshal(r.spec())
+	res, err := tx.Exec(`INSERT INTO rules (name, source, spec, prompt, state, why, source_ref, tainted, by, created, updated, act)
+		VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)`, r.ruleName(), sourceNotification, string(spec), r.State, r.Why, r.SourceRef,
+		r.Tainted, r.By, now, now, r.act())
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// migrateNotifyRules moves the table notify_rules of before #244 step 5
+// into rules, each a rule on the notification event, and points the cards
+// that propose one at its new id.
+func migrateNotifyRules(db *sql.DB) error {
+	rows, err := db.Query(`SELECT id, kind, match, outcome, night, days, quiet_from, quiet_to, state, why, source_ref, tainted, by,
+		created, channels, also, never_on FROM notify_rules ORDER BY id`)
+	if err != nil {
+		return nil // no such table: moved already, or never made
+	}
+	var olds []notifyRule
+	for rows.Next() {
+		var r notifyRule
+		var created int64
+		if rows.Scan(&r.ID, &r.Kind, &r.Match, &r.Outcome, &r.Night, &r.Days, &r.From, &r.To, &r.State, &r.Why,
+			&r.SourceRef, &r.Tainted, &r.By, &created, &r.Channels, &r.Also, &r.Never) == nil {
+			r.Created = time.Unix(created, 0)
+			olds = append(olds, r)
+		}
+	}
+	rows.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, r := range olds {
+		id, err := insertNotifyRule(tx, r, r.Created.Unix())
+		if err != nil {
+			return fmt.Errorf("moving notification rule %d: %w", r.ID, err)
+		}
+		// Through a mark of their own, so that a new id equal to an old one is not moved twice.
+		tx.Exec(`UPDATE convo_cards SET ref = ? WHERE ref = ?`, fmt.Sprintf("rulemoved:%d", id), fmt.Sprintf("%s:%d", cardRule, r.ID))
+	}
+	tx.Exec(`UPDATE convo_cards SET ref = 'rule:' || substr(ref, 11) WHERE ref LIKE 'rulemoved:%'`)
+	if _, err := tx.Exec(`DROP TABLE notify_rules`); err != nil {
+		return err
+	}
+	if len(olds) > 0 {
+		log.Printf("rules: %d notification rules moved into rules (#244 step 5)", len(olds))
+	}
+	return tx.Commit()
 }
 
 // approveNotifyRule makes a proposed rule active: the user's say.
@@ -261,7 +372,7 @@ func (c *core) approveNotifyRule(id int64) (notifyRule, error) {
 	if r.State != ruleProposed {
 		return r, errors.New("not proposed")
 	}
-	if _, err := c.store.db.Exec(`DELETE FROM notify_rules WHERE id = ?`, id); err != nil {
+	if _, err := c.store.db.Exec(`DELETE FROM rules WHERE id = ? AND source = ?`, id, sourceNotification); err != nil {
 		return r, err
 	}
 	r.State = ruleActive
@@ -269,7 +380,7 @@ func (c *core) approveNotifyRule(id int64) (notifyRule, error) {
 }
 
 func (c *core) deleteNotifyRule(id int64) error {
-	res, err := c.store.db.Exec(`DELETE FROM notify_rules WHERE id = ?`, id)
+	res, err := c.store.db.Exec(`DELETE FROM rules WHERE id = ? AND source = ?`, id, sourceNotification)
 	if err != nil {
 		return err
 	}

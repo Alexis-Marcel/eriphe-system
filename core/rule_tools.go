@@ -45,8 +45,8 @@ type ruleEventIn struct {
 	Topic string `json:"topic,omitempty" jsonschema:"for then notify: the topic ref its notification goes under (notify's ref)"`
 	Level string `json:"level,omitempty" jsonschema:"for then notify: now or brief (brief by default)"`
 
-	Action   *grantAction `json:"grant,omitempty" jsonschema:"one exact action the user authorises in advance for this rule (a catalog tool with exact args, or a run_task), in their own words in this clean turn; used by you on its wake without asking"`
-	NoAction bool         `json:"no_action,omitempty" jsonschema:"for outil and alerte: true when the user answered that nothing is done automatically (no action authorised in advance)"`
+	Action   *grantAction `json:"grant,omitempty" jsonschema:"a standing approval: one exact action the user asks for in this clean turn (a catalog tool with exact args, or a run_task), proposed on a card; once they say yes there, you call exactly it on the rule's wake without asking"`
+	NoAction bool         `json:"no_action,omitempty" jsonschema:"for outil and alerte: true when the user answered that nothing is done automatically (no standing approval)"`
 
 	Urgency        string `json:"urgency,omitempty" jsonschema:"for outil and alerte, as the user answered: urgent (wake them at any hour with urgent_message, over the quiet hours and the cap) or normal (the usual rules); never chosen for them"`
 	UrgentMessage  string `json:"urgent_message,omitempty" jsonschema:"for urgency urgent: the short fixed message the user validated, in French, sent by eriphe-core itself when the condition becomes true; nothing of what the tool or the alert says goes in it"`
@@ -59,7 +59,7 @@ type rulesIn struct {
 
 type updateRuleIn struct {
 	ID        int64        `json:"id"`
-	Action    string       `json:"action" jsonschema:"pause, resume, edit, delete, grant (authorise one exact action in advance, with grant), revoke (end it), urgent (make an outil or alerte rule wake the user at any hour, with urgent_message) or not_urgent"`
+	Action    string       `json:"action" jsonschema:"pause, resume, edit, delete, grant (propose a standing approval of one exact action, with grant, on a card), revoke (end it), urgent (make an outil or alerte rule wake the user at any hour, with urgent_message) or not_urgent"`
 	Grant     *grantAction `json:"grant,omitempty" jsonschema:"for grant: the exact action, as rule's action"`
 	Every     int          `json:"every_minutes,omitempty"`
 	Cond      *pollCond    `json:"cond,omitempty"`
@@ -81,7 +81,7 @@ const eventRuleToolText = `An event rule (kind event, or when given) has a when,
 	`the user gets its address in Settings → Règles), fait (a closed fact changes, or becomes a value: context.place becomes home), fin (a task or a work session ends). ` +
 	`If: a condition on closed facts and the time, never a text. Then: brain (wake you with its prompt; you then speak through notify, or answer [rien]), ` +
 	`assistant:<name> (wake that assistant with its prompt), or notify (eriphe-core sends its fixed text itself). What outil and alerte bring is external: their wake is tainted. ` +
-	`A rule may carry one exact action the user authorises in advance (action), which you may then call on its wake without asking. ` +
+	`A rule may carry one standing approval (grant): one exact action the user asks for in this clean turn, proposed on a card; once they say yes there, you may call exactly it on the rule's wake without asking. ` +
 	`An outil or alerte rule the user asks to be woken for at any hour is urgent: eriphe-core itself sends its fixed urgent_message, once per incident. ` +
 	`For outil and alerte, never choose urgency, condition or action for the user: called without them, it creates nothing and returns what is missing, to ask the user in one short message. ` +
 	`A one-off time is an intention (intend), not a rule.`
@@ -91,7 +91,7 @@ func registerRuleListTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in rulesIn) (map[string]any, error) {
 			return c.brainRules(in)
 		})
-	tool(s, "update_rule", "Pause, resume, edit (name, schedule, after, prompt, brief, every, cond, if) or delete an event rule, grant or revoke its action authorised in advance, or make it urgent or not, when the user asks for it in this turn (cite their message). An edit revokes its authorised action. A notification rule is deleted with rule (action delete).",
+	tool(s, "update_rule", "Pause, resume, edit (name, schedule, after, prompt, brief, every, cond, if) or delete an event rule, propose (grant) or revoke its standing approval, or make it urgent or not, when the user asks for it in this turn (cite their message). An edit revokes its standing approval. A notification rule is deleted with rule (action delete).",
 		func(ctx context.Context, in updateRuleIn) (map[string]any, error) {
 			return c.brainUpdateRule(in)
 		})
@@ -152,7 +152,7 @@ func (c *core) brainEventRule(in ruleEventIn) (map[string]any, error) {
 		return nil, err
 	}
 	if in.Action != nil && state != watchActive {
-		return nil, fmt.Errorf("refused: an action is authorised in advance only with a rule the user asks for in this clean turn (%s)", why)
+		return nil, fmt.Errorf("refused: a standing approval is proposed only with a rule the user asks for in this clean turn (%s)", why)
 	}
 	if in.Urgency == urgencyUrgent {
 		// Never on a proposal or a tainted turn: urgent is the user's word only.
@@ -177,12 +177,15 @@ func (c *core) brainEventRule(in ruleEventIn) (map[string]any, error) {
 	}
 	out := map[string]any{}
 	if in.Action != nil {
-		if _, err := c.grantWatchAction(got, *in.Action, in.SourceRef); err != nil {
+		if _, err := c.proposeApproval(got, *in.Action, in.SourceRef); err != nil {
 			c.deleteRule(got.ID) // all or nothing
 			return nil, err
 		}
 	}
 	out["rule"] = c.viewRule(got, 0)
+	if in.Action != nil {
+		out["approval"] = approvalNote(c.conf().User)
+	}
 	switch {
 	case got.State == watchProposed:
 		c.cardProposed(cardWatch, got.ID)
@@ -221,6 +224,7 @@ type grantView struct {
 	Input    string `json:"input"`
 	UsesLeft int    `json:"uses_left"`
 	Expires  string `json:"expires"`
+	State    string `json:"state"` // proposed until the user's yes on its card, then active
 }
 
 type runView struct {
@@ -250,8 +254,8 @@ func (c *core) viewRule(w *rule, history int) eventRuleView {
 			v.Webhook = "made (its address is the user's; you never see it)"
 		}
 	}
-	if g := c.liveGrant(w.ID); g != nil {
-		v.Action = &grantView{Call: grantCallName(g), Input: g.Input, UsesLeft: g.Left(), Expires: at(g.Expires)}
+	if g := c.ruleApproval(w.ID); g != nil {
+		v.Action = &grantView{Call: grantCallName(g), Input: g.Input, UsesLeft: g.Left(), Expires: at(g.Expires), State: g.State}
 	}
 	if history > 0 {
 		for _, r := range c.recentRuns(w.ID, history) {
@@ -291,14 +295,14 @@ func (c *core) brainUpdateRule(in updateRuleIn) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if in.Action == "grant" { // its own, stricter checks (watch_grant.go)
+	if in.Action == "grant" { // its own, stricter checks (standing_approval.go)
 		if in.Grant == nil {
 			return nil, errors.New("grant needs grant: the exact action")
 		}
-		if _, err := c.grantWatchAction(w, *in.Grant, in.SourceRef); err != nil {
+		if _, err := c.proposeApproval(w, *in.Grant, in.SourceRef); err != nil {
 			return nil, err
 		}
-		return map[string]any{"rule": c.viewRule(w, 0)}, nil
+		return map[string]any{"rule": c.viewRule(w, 0), "approval": approvalNote(c.conf().User)}, nil
 	}
 	if in.Action == "urgent" { // the user's word, in a clean turn, asking to be woken
 		if err := c.urgentWrite(in.SourceRef); err != nil {
@@ -335,9 +339,9 @@ func (c *core) brainUpdateRule(in updateRuleIn) (map[string]any, error) {
 		w, err = c.setRuleState(w.ID, watchActive)
 	case "edit":
 		err = c.editRule(w, in)
-		c.revokeGrants(w.ID, "the rule changed")
+		c.revokeApprovals(w.ID, "the rule changed")
 	case "revoke":
-		c.revokeGrants(w.ID, "revoked at the user's word")
+		c.revokeApprovals(w.ID, "revoked at the user's word")
 	case "not_urgent":
 		err = c.setWatchUrgent(w, "", false)
 	default:
@@ -411,4 +415,10 @@ func ruleMissing(w *rule, in ruleEventIn) []string {
 		missing = append(missing, "action (anything done automatically, or no_action)")
 	}
 	return missing
+}
+
+// approvalNote tells the brain a standing approval is only proposed: it
+// holds once the user says yes on its card.
+func approvalNote(user string) string {
+	return "The standing approval is only proposed: it holds once " + user + " says yes on its card. " + cardNote(user) + " Do not say it is in place."
 }

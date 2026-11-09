@@ -292,8 +292,8 @@ func (c *core) ruleWake(w *rule, r *ruleRun, now time.Time) string {
 		b.WriteString(c.briefLines(now))
 	}
 	b.WriteString("\nSa consigne, écrite avec " + user + " :\n```text\n" + strings.ReplaceAll(w.Prompt, "```", "'''") + "\n```\n")
-	if g := c.liveGrant(w.ID); g != nil {
-		fmt.Fprintf(&b, "%s t'a autorisé d'avance une seule action pour cette règle, à appeler exactement ainsi si la consigne le demande : "+
+	if g := c.liveApproval(w.ID); g != nil {
+		fmt.Fprintf(&b, "%s t'a donné un accord permanent pour une seule action de cette règle, à appeler exactement ainsi si la consigne le demande : "+
 			"%s %s (encore %d fois, jusqu'au %s). Toute autre action attend son accord, comme d'habitude.\n",
 			user, grantCallName(g), g.Input, g.Left(), g.Expires.In(now.Location()).Format("2006-01-02 15:04"))
 	}
@@ -304,7 +304,7 @@ func (c *core) ruleWake(w *rule, r *ruleRun, now time.Time) string {
 }
 
 // grantCallName is how the brain calls a grant's action: server.tool, or run_task.
-func grantCallName(g *watchGrant) string {
+func grantCallName(g *standingApproval) string {
 	if server, tool, ok := splitToolName(g.Tool); ok {
 		return server + "." + tool
 	}

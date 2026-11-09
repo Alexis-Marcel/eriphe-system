@@ -131,6 +131,11 @@ func openStore(path string) (*Store, error) {
 	db.Exec(`ALTER TABLE access_log RENAME COLUMN repo TO target`)
 	db.Exec(`ALTER TABLE access_log RENAME COLUMN access TO action`)
 	db.Exec(`ALTER TABLE credential_grants RENAME TO repo_grants`)
+	// The watches' grants became standing approvals (#244 step 5).
+	if _, err := db.Exec(`ALTER TABLE watch_grants RENAME TO standing_approvals`); err == nil {
+		db.Exec(`ALTER TABLE standing_approvals RENAME COLUMN watch_id TO rule_id`)
+		db.Exec(`DROP INDEX IF EXISTS watch_grants_watch`)
+	}
 	// The watches became rules (#244 step 4): same rows, ids, history and
 	// webhook tokens.
 	if _, err := db.Exec(`ALTER TABLE watches RENAME TO rules`); err == nil {
@@ -213,8 +218,17 @@ func openStore(path string) (*Store, error) {
 	// (machine_updates.go). "At night" for all stays on; the rest goes.
 	db.Exec(`INSERT OR IGNORE INTO kv (key, value) SELECT 'update_night', '1' FROM kv WHERE key = 'update_policy' AND value = 'night'`)
 	db.Exec(`DELETE FROM kv WHERE key = 'update_policy' OR key LIKE 'update_policy:%'`)
+	for _, m := range storeMigrations {
+		if err := m(db); err != nil {
+			return nil, err
+		}
+	}
 	return &Store{db: db, dir: filepath.Dir(path)}, nil
 }
+
+// storeMigrations move data between tables once the schema is there; each
+// does nothing once done.
+var storeMigrations []func(*sql.DB) error
 
 // joinToken is what a join token allows: joining as Name, and if Rejoin,
 // replacing the secret of the node already registered under that name.

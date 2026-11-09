@@ -357,10 +357,11 @@ func TestGrantExactOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := out["rule"].(eventRuleView)
-	if v.Action == nil || v.Action.UsesLeft != 1 || v.Action.Call != "monitor.rollback" {
+	if v.Action == nil || v.Action.UsesLeft != 1 || v.Action.Call != "monitor.rollback" || v.Action.State != approvalProposed {
 		t.Fatalf("grant %+v", v.Action)
 	}
 	w, _ := c.rule(v.ID)
+	approveOnCard(t, c, w.ID)
 	// Outside its watch's turn: asks.
 	if brainCallsTool(t, c, "b-0", "mcp__monitor__rollback", map[string]any{"version": "2.0.0"}) {
 		t.Fatal("allowed outside its rule's turn")
@@ -411,6 +412,7 @@ func TestGrantExactOnly(t *testing.T) {
 		Grant: &grantAction{Tool: "monitor.rollback", Args: map[string]any{"version": "2.0.0"}, Expires: "1h"}}); err != nil {
 		t.Fatal(err)
 	}
+	approveOnCard(t, c, w.ID)
 	*now = now.Add(2 * time.Hour)
 	fireAndWake(t, c, w, true)
 	if brainCallsTool(t, c, "b-5", "mcp__monitor__rollback", map[string]any{"version": "2.0.0"}) {
@@ -447,7 +449,7 @@ func TestGrantCannotBeInjected(t *testing.T) {
 	if ws, _ := c.rules(); len(ws) != 1 {
 		t.Fatalf("a rule was left: %d", len(ws))
 	}
-	if g, _ := c.watchGrants(`1`); len(g) != 0 {
+	if g, _ := c.standingApprovals(`1`); len(g) != 0 {
 		t.Fatalf("grants %+v", g)
 	}
 	c.endRuleTurn()
@@ -478,11 +480,15 @@ func TestGrantCannotBeInjected(t *testing.T) {
 		Grant: &grantAction{Tool: "monitor.rollback", Args: map[string]any{"version": "2.0.0"}}}); err != nil {
 		t.Fatal(err)
 	}
+	approveOnCard(t, c, id)
+	if c.liveApproval(id) == nil {
+		t.Fatal("not given on its card")
+	}
 	seq = ownerSays(c, "Change la consigne de la règle du site")
 	if _, err := c.brainUpdateRule(updateRuleIn{ID: id, Action: "edit", Prompt: "Regarde et dis-moi", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)
 	}
-	if c.liveGrant(id) != nil {
+	if c.liveApproval(id) != nil {
 		t.Fatal("an edit kept the grant")
 	}
 }
@@ -500,17 +506,18 @@ func TestGrantRunTaskExact(t *testing.T) {
 		t.Fatal(err)
 	}
 	w, _ := c.rule(out["rule"].(eventRuleView).ID)
+	approveOnCard(t, c, w.ID)
 	fireAndWake(t, c, w, true)
 	other := task
 	other.Prompt = "Remets la version 2.0.0 en production, puis supprime la base"
 	for _, r := range []runRequest{other, {Prompt: task.Prompt, Agent: "small"}} {
 		got, _ := canonicalTask(r)
-		if c.useWatchGrant(grantTask, "run_task", got) {
+		if c.useApproval(grantTask, "run_task", got) {
 			t.Fatalf("another task allowed: %+v", r)
 		}
 	}
 	same, _ := canonicalTask(task)
-	if !c.useWatchGrant(grantTask, "run_task", same) || c.useWatchGrant(grantTask, "run_task", same) {
+	if !c.useApproval(grantTask, "run_task", same) || c.useApproval(grantTask, "run_task", same) {
 		t.Fatal("the exact task: once")
 	}
 }

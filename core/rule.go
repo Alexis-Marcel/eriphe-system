@@ -329,19 +329,20 @@ func scanRule(row interface{ Scan(...any) error }) (*rule, error) {
 var errNoRule = errors.New("no such rule")
 
 func (c *core) rule(id int64) (*rule, error) {
-	w, err := scanRule(c.store.db.QueryRow(`SELECT `+eventRuleCols+` FROM rules WHERE id = ?`, id))
+	w, err := scanRule(c.store.db.QueryRow(`SELECT `+eventRuleCols+` FROM rules WHERE id = ? AND source != ?`, id, sourceNotification))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errNoRule
 	}
 	return w, err
 }
 
-// rules lists the rules in these states (all if none), by id.
+// rules lists the event rules in these states (all if none), by id: not
+// the notification rules, which notifyRules reads.
 func (c *core) rules(states ...string) ([]*rule, error) {
-	q := `SELECT ` + eventRuleCols + ` FROM rules`
-	var args []any
+	q := `SELECT ` + eventRuleCols + ` FROM rules WHERE source != ?`
+	args := []any{sourceNotification}
 	if len(states) > 0 {
-		q += ` WHERE state IN (` + placeholders(len(states)) + `)`
+		q += ` AND state IN (` + placeholders(len(states)) + `)`
 		for _, s := range states {
 			args = append(args, s)
 		}
@@ -382,7 +383,7 @@ func (c *core) addRule(w *rule) (*rule, error) {
 		return nil, err
 	}
 	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM rules`).Scan(&n)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM rules WHERE source != ?`, sourceNotification).Scan(&n)
 	if n >= watchMax {
 		return nil, fmt.Errorf("at most %d rules: delete one first", watchMax)
 	}
@@ -441,7 +442,7 @@ func (c *core) setRuleState(id int64, state string) (*rule, error) {
 
 // deleteRule removes a watch and its history.
 func (c *core) deleteRule(id int64) error {
-	res, err := c.store.db.Exec(`DELETE FROM rules WHERE id = ?`, id)
+	res, err := c.store.db.Exec(`DELETE FROM rules WHERE id = ? AND source != ?`, id, sourceNotification)
 	if err != nil {
 		return err
 	}
@@ -449,7 +450,7 @@ func (c *core) deleteRule(id int64) error {
 		return errNoRule
 	}
 	c.store.db.Exec(`DELETE FROM rule_runs WHERE rule_id = ?`, id)
-	c.revokeGrants(id, "rule deleted")
+	c.revokeApprovals(id, "rule deleted")
 	return nil
 }
 
