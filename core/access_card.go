@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS access_asks (
 
 func init() {
 	extraSchema = append(extraSchema, accessCardSchema)
-	extraColumns = append(extraColumns, `ALTER TABLE access_asks ADD COLUMN input TEXT NOT NULL DEFAULT ''`)
+	extraColumns = append(extraColumns, `ALTER TABLE access_asks ADD COLUMN input TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE access_asks ADD COLUMN run INTEGER NOT NULL DEFAULT 0`) // a triggered skill's run (skill_cards.go)
 }
 
 const (
@@ -215,19 +216,20 @@ type accessQuestion struct {
 	Refs       []string
 	Tainted    string
 	State      string
+	Run        int64 // a triggered skill's run: its card is the run's (skill_cards.go)
 }
 
 func (c *core) accessAskOf(id int64) (accessQuestion, error) {
 	var a accessQuestion
 	var refs string
-	err := c.store.db.QueryRow(`SELECT id, task_id, permission_id, server, category, account, call, input, refs, tainted, state FROM access_asks WHERE id = ?`, id).
-		Scan(&a.ID, &a.TaskID, &a.Permission, &a.Need.Server, &a.Need.Category, &a.Need.Account, &a.Call, &a.Input, &refs, &a.Tainted, &a.State)
+	err := c.store.db.QueryRow(`SELECT id, task_id, permission_id, server, category, account, call, input, refs, tainted, state, run FROM access_asks WHERE id = ?`, id).
+		Scan(&a.ID, &a.TaskID, &a.Permission, &a.Need.Server, &a.Need.Category, &a.Need.Account, &a.Call, &a.Input, &refs, &a.Tainted, &a.State, &a.Run)
 	json.Unmarshal([]byte(refs), &a.Refs)
 	return a, err
 }
 
 func (c *core) proposedAccess() []int64 {
-	rows, err := c.store.db.Query(`SELECT id FROM access_asks WHERE state = ? ORDER BY id`, startProposed)
+	rows, err := c.store.db.Query(`SELECT id FROM access_asks WHERE state = ? AND run = 0 ORDER BY id`, startProposed)
 	if err != nil {
 		return nil
 	}
@@ -305,6 +307,11 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	ctx, cancel := context.WithTimeout(context.Background(), approvedCallTimeout)
 	defer cancel()
 	name, _, _ := strings.Cut(a.Call, " ")
+	if a.Run != 0 {
+		text, _ := c.approvedCall(ctx, a, name)
+		c.runCallDone(a, text) // a run's: the brain is not told (skill_cards.go)
+		return
+	}
 	if name == webFetchTool || name == webSearchTool {
 		c.store.addMessage(roleEvent, c.allowPage(a), false)
 		c.ping()
@@ -549,6 +556,10 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 		}
 		name, _, _ := strings.Cut(a.Call, " ")
 		c.store.logDecision(a.TaskID, a.Permission, name, nil, decideDeny, byUser, "refusé sur la carte")
+		if a.Run != 0 {
+			c.runCallDone(a, fmt.Sprintf("%s a refusé : %s n'est pas exécutée.", c.conf().User, name))
+			return nil
+		}
 		c.store.addMessage(roleEvent, fmt.Sprintf("%s a refusé sur la carte : %s n'est pas exécutée.", c.conf().User, name), false)
 		c.ping()
 		return nil

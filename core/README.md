@@ -1324,7 +1324,8 @@ turn is not tainted. Its front matter:
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
-| `can` | what its tasks may start: `start-session` (#276) |
+| `can` | what its tasks may start: `start-session`, a work session |
+| `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run asks |
 
 The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
 the rest of the skill, as one version: Settings → Skills shows it in words, and a change is a new
@@ -1343,13 +1344,29 @@ version, read with its diff.
   gets them as a message instead of a second task.
 - **Time triggers** run at their times, in the user's zone; a trigger seen for the first time (or
   approved again) waits for its next time; times missed while eriphe-core was down make one run.
+- **Its calls the user must approve never hold it** (`skill_cards.go`): as the brain's, each is
+  kept with its exact input (`access_asks.run`), and the task is told it did not run and goes on.
+  When the run ends, they show on one card (kind `runcalls`), attached to its message (or to « the
+  skill proposes N actions » when it said `[rien]`): each action with its parameters. The yes runs
+  them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
+- **A work session**: with `can: [start-session]`, the run is told it may end its last message with
+  a fenced ` ```session ` block holding `start_session`'s JSON. eriphe-core opens it (`by`
+  `skill:<name>`, tainted as the run). Its plan starts at once when every step only reads, writes
+  on a branch of its repository or calls catalog tools, each call still under the grid: the
+  skill's approval stands for it. A folder lent beyond read, a credential, a file, or a write
+  without a branch: the plan waits for its card. While the session is open, it is the run's: the
+  events of its key go to its lead (`tellLead`), not to a new run. Merging and deploying stay the
+  user's, on the session's cards. Without `can`, the block is ignored and the note says why.
+- **Urgent**: with `urgent: <text>`, a last message that starts with `[urgent]` sends that fixed
+  text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the run
+  read enters it: a tainted run cannot write what wakes the user.
 - **Limits**: 100 runs a skill in 24 hours (a run past it is kept `refused`), 50 events a run;
   a triggered task's own end never triggers a skill.
 - **Tables**: `skill_queue` (events waiting, by skill and key), `skill_runs` (skill, version, key,
   events, task, state `running`, `done`, `silent`, `failed` or `refused`, its last message or why).
 
 **Written by Eriphe.** The brain's `write_skill` (name, description, instructions, `when`,
-`every`, `model`, `tools`, `can`) writes a `SKILL.md` and adds it as a version waiting for
+`every`, `model`, `tools`, `can`, `urgent`) writes a `SKILL.md` and adds it as a version waiting for
 approval (source `eriphe`), checked as an upload is (its model an agent, its tools catalog
 servers). Its card (kind `skill`) says the trigger in words and the instructions; the yes approves
 exactly that version, the no drops it. Written on a tainted turn, the card says so. A triggered

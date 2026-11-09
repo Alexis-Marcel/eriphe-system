@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // A skill's trigger: what makes it run by itself (skill_runs.go). Its
@@ -44,6 +45,7 @@ type skillTrigger struct {
 	Model    string
 	Tools    []string
 	Can      []string
+	Urgent   string // the fixed text of an urgent run (skill_cards.go)
 }
 
 var (
@@ -56,7 +58,7 @@ var (
 // someone follows it.
 func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 	if m.When == "" {
-		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "can": m.Can} {
+		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "can": m.Can, "urgent": m.Urgent} {
 			if v != "" {
 				return nil, skillErr("skills.err.nowhen", k)
 			}
@@ -102,6 +104,12 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 		if !serverName.MatchString(t) {
 			return nil, skillErr("skills.err.tools", t)
 		}
+	}
+	if u := strings.TrimSpace(m.Urgent); u != "" {
+		if utf8.RuneCountInString(u) > urgentTextMax || urlRe2.MatchString(u) {
+			return nil, skillErr("skills.err.urgent", u)
+		}
+		st.Urgent = u
 	}
 	st.Can = frontList(m.Can)
 	for _, c := range st.Can {
@@ -185,6 +193,9 @@ func (st *skillTrigger) Text(lang string) string {
 	}
 	if slices.Contains(st.Can, canSession) {
 		parts = append(parts, tr(lang, "skills.trigger.session"))
+	}
+	if st.Urgent != "" {
+		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.urgent"), st.Urgent))
 	}
 	return strings.Join(parts, " · ")
 }

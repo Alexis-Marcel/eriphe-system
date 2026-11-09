@@ -258,6 +258,10 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 			c.store.recordDecision(id, pid, tool, input, decision, byPolicy, reason)
 		case decideAsk:
 			if t != nil && accessReason(reason) {
+				if r := c.runOfTask(t.ID); r != nil {
+					c.askRunCall(t, r, pid, tool, input) // kept for the run's card, the task goes on (skill_cards.go)
+					continue
+				}
 				c.askTaskAccess(t, pid, tool, input, reason) // a card, once per category (access_card.go)
 				left = true
 				continue

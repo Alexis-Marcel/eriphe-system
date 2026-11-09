@@ -30,7 +30,8 @@ type writeSkillIn struct {
 	Every        string   `json:"every,omitempty" jsonschema:"with when on an event: batch them, at most one run per period (15m, 1h, 1d): the run gets every event of the period"`
 	Model        string   `json:"model,omitempty" jsonschema:"an agent of list_agents for its runs: a small one to sort mail; the default one if empty"`
 	Tools        []string `json:"tools,omitempty" jsonschema:"the catalog servers its runs are lent (list_tools): mail, calendar…; each call is still decided by the user's grid"`
-	Can          []string `json:"can,omitempty" jsonschema:"what its runs may start: start-session"`
+	Can          []string `json:"can,omitempty" jsonschema:"what its runs may start: start-session, a work session (investigate, fix, open a pull request)"`
+	Urgent       string   `json:"urgent,omitempty" jsonschema:"with when: a fixed message (160 characters, no link) sent at any hour when a run starts its last message with [urgent]: « Prod GetOut en panne, regarde Eriphe »"`
 }
 
 func registerSkillWriteTool(s *mcp.Server, c *core) {
@@ -60,6 +61,9 @@ func writtenSkillMD(in writeSkillIn) string {
 	}
 	if len(in.Can) > 0 {
 		fmt.Fprintf(&b, "can: [%s]\n", strings.Join(in.Can, ", "))
+	}
+	if u := oneLine(in.Urgent); u != "" {
+		fmt.Fprintf(&b, "urgent: %s\n", u)
 	}
 	b.WriteString("---\n\n")
 	b.WriteString(strings.TrimSpace(in.Instructions))
