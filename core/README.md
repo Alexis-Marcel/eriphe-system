@@ -1034,8 +1034,8 @@ any question does. These cards and a start's go to
 Telegram as well, whatever the messages around them did, answered from the linked account only
 ("Alerts only" sends none): whoever holds the user's Telegram session can approve, as they can
 approve proposals. A task's raw permissions (a rule's `ask`, a command) stay out of Telegram. The
-answers are kept in `decisions`, and a grant shows in the task's drawer. A task exactly authorised
-in advance for a watch needs no card. A no refuses what waits; the next call asks again.
+answers are kept in `decisions`, and a grant shows in the task's drawer. A task the user gave a
+standing approval for, for a rule, needs no other card. A no refuses what waits; the next call asks again.
 
 ### Access levels
 
@@ -1233,8 +1233,8 @@ user gets one card in the conversation (kind `taskstart`, [conversation cards](#
 (`repo_grants`, logged "approved at launch": a write to that repository, by git or gh, for the
 rest of the task) and lets the task go; Non stops it and tells the brain. Like every card, only the
 user's click or a plain yes or no of theirs decides it, never the brain (`answer_task` has nothing
-to answer on a held task; `stop_task` cancels it). A task authorised in advance for a watch needs no
-card: that yes covers its repository.
+to answer on a held task; `stop_task` cancels it). A task under a rule's standing approval needs no
+other card: the yes on its approval card covers its repository.
 
 **The credential.** With [the GitHub App](#the-github-app), an installation token restricted to the
 one repository and the rights asked for, valid one hour: git reads `contents: read` or `write`; gh
@@ -2543,6 +2543,11 @@ a level; the code decides (`decideNotify`, no model):
   cites the user's message of the turn, which speaks of being told); otherwise, and always on a
   tainted turn, they are proposed and the user approves them in À valider (a card in the conversation); Settings →
   Notifications shows every rule in force, to delete (a new or changed one is asked of the brain).
+  Since #244 step 5 the topic rules and the quiet hours are rules too: rows of `rules` with source
+  `notification` (their kind, match, outcome, nights, lines and hours in the JSON `spec`; `act`
+  `deliver` or `quiet`), read by `notifyRules` only, never fired by the rule tick. The table of
+  before (`notify_rules`) is moved into `rules` at start (`storeMigrations`), with new ids, and the
+  cards on them follow.
 - **Adaptive quiet hours, never applied alone.** eriphe-core records cheap signals of activity (the
   user's messages, a workspace tab in front, in 10-minute buckets kept 30 days, reactions to
   notifications) and of unwelcome moments (« pas maintenant »), and suggests a window per kind of
@@ -2883,15 +2888,21 @@ token and secret, and no condition, whose action wakes the brain. `/settings/wat
 - **History and silences.** Each run keeps what the brain did (notified, said, silent, acted, or
   missed, dropped), in Settings and in `since`; the next brief lists the watches that stayed silent
   since the last one.
-- **An action authorised in advance** (`watch_grants`). A watch may carry one exact action: a catalog
+- **A standing approval** (`standing_approval.go`, table `standing_approvals`; « Accord
+  permanent »). A rule may carry one exact action: a catalog
   tool with exact arguments, or a `run_task` with a fixed prompt, agent, resources and contract;
-  `max_uses` 1 by default (10 at most), an expiry (7 days by default, 90 at most). It is written only
-  on a turn that read nothing external, citing the user's message of that turn, which must authorise
-  it; never from a tainted turn, so an injected payload can neither make nor widen one; editing the
-  watch revokes it, and the user revokes it in Settings. On that watch's own wake turn, tainted or
+  `max_uses` 1 by default (10 at most), an expiry (7 days by default, 90 at most). The brain proposes
+  it only on a turn that read nothing external, citing the user's message of that turn, which must
+  ask for it; never from a tainted turn, so an injected payload can neither make nor widen one. It
+  is then a card (kind `approval`) naming the exact call, its uses and expiry, and, when its rule
+  fires on facts (`fait`, or an `if` on facts other than `now.*`), that facts can be wrong; it holds
+  only once the user says yes there (state `proposed`, then `active`; a no revokes it). Editing the
+  rule revokes it, and the user revokes it in Settings → Règles, which also shows a proposed one.
+  The watches' grants of before (`watch_grants`) are renamed at start and stay active: the user had
+  said yes to them. On that watch's own wake turn, tainted or
   not, the call whose canonical input hashes the same is let through by the policy (a ticket, a
   decision on record, `byPolicy`), counted atomically; any other tool or argument still goes to the
-  user. A built-in or configured denial is never granted. Each use is logged (`WATCH GRANT USED`),
+  user. A built-in or configured denial is never granted. Each use is logged (`STANDING APPROVAL USED`),
   recorded with the run (`acted`), written in the conversation and notified to the user.
 - **Urgent watches** (`watch_urgent.go`). A tainted wake never interrupts, so an `outil` or `alerte`
   watch could never wake the user at night; an urgent one does, bound to that watch, its condition

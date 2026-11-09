@@ -171,7 +171,7 @@ func (c *core) moveWatches(from, to, account string) {
 // updateWatches changes the watches' specs: change says whether it
 // changed one.
 func (c *core) updateWatches(change func(spec map[string]any) bool) {
-	rows, err := c.store.db.Query(`SELECT id, spec FROM rules`)
+	rows, err := c.store.db.Query(`SELECT id, spec FROM rules WHERE source != ?`, sourceNotification)
 	if err != nil {
 		return
 	}
