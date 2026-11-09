@@ -37,30 +37,37 @@ import (
 // user approves it in Settings, where every watch is listed, paused, edited
 // and deleted.
 
-const watchSchema = `CREATE TABLE IF NOT EXISTS watches (
+const watchSchema = `CREATE TABLE IF NOT EXISTS rules (
   id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, source TEXT NOT NULL,
   spec TEXT NOT NULL DEFAULT '{}', prompt TEXT NOT NULL, brief INTEGER NOT NULL DEFAULT 0,
   state TEXT NOT NULL, why TEXT NOT NULL DEFAULT '', source_ref TEXT NOT NULL DEFAULT '',
   tainted TEXT NOT NULL DEFAULT '', by TEXT NOT NULL, next_at INTEGER, last_fired INTEGER,
   mark INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS watch_runs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, watch_id INTEGER NOT NULL, fired INTEGER NOT NULL,
+CREATE TABLE IF NOT EXISTS rule_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id INTEGER NOT NULL, fired INTEGER NOT NULL,
   cause TEXT NOT NULL, due INTEGER, detail TEXT NOT NULL DEFAULT '', external INTEGER NOT NULL DEFAULT 0,
   woke INTEGER, outcome TEXT NOT NULL, notification INTEGER, action TEXT NOT NULL DEFAULT '', ended INTEGER);
-CREATE INDEX IF NOT EXISTS watch_runs_watch ON watch_runs (watch_id, id);
-CREATE INDEX IF NOT EXISTS watch_runs_fired ON watch_runs (fired);`
+CREATE INDEX IF NOT EXISTS rule_runs_rule ON rule_runs (rule_id, id);
+CREATE INDEX IF NOT EXISTS rule_runs_fired ON rule_runs (fired);`
 
 func init() {
 	extraSchema = append(extraSchema, watchSchema)
 	// Added with the sources outil and alerte: the poll's state, the webhook's token hash.
-	extraColumns = append(extraColumns, `ALTER TABLE watches ADD COLUMN poll TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE watches ADD COLUMN hook TEXT NOT NULL DEFAULT ''`)
+	extraColumns = append(extraColumns, `ALTER TABLE rules ADD COLUMN poll TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE rules ADD COLUMN hook TEXT NOT NULL DEFAULT ''`)
 	// Added with urgent watches (watch_urgent.go): the fixed message, whether
 	// the recovery is urgent too, the open incident; and the run's message.
-	extraColumns = append(extraColumns, `ALTER TABLE watches ADD COLUMN urgent TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE watches ADD COLUMN urgent_recovery INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE watches ADD COLUMN incident INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE watch_runs ADD COLUMN urgent INTEGER`)
+	// Added with rules (#244 step 4): the condition on facts, and the
+	// action ("" wakes the brain).
+	extraColumns = append(extraColumns, `ALTER TABLE rules ADD COLUMN cond TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE rules ADD COLUMN act TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE rules ADD COLUMN act_text TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE rules ADD COLUMN act_ref TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE rules ADD COLUMN act_level TEXT NOT NULL DEFAULT ''`)
+	extraColumns = append(extraColumns, `ALTER TABLE rules ADD COLUMN urgent TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE rules ADD COLUMN urgent_recovery INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE rules ADD COLUMN incident INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE rule_runs ADD COLUMN urgent INTEGER`)
 }
 
 const (
@@ -68,6 +75,8 @@ const (
 	sourceReturn   = "retour"
 	sourcePoll     = "outil"
 	sourceAlert    = "alerte"
+	sourceFact     = "fait" // a fact changes, or becomes a value (rule_engine.go)
+	sourceEnd      = "fin"  // a task or a work session ends (rule_engine.go)
 
 	watchActive   = "active"
 	watchPaused   = "paused"
@@ -80,9 +89,10 @@ const (
 	runNotified = "notified" // it called notify
 	runSaid     = "said"     // it wrote in the conversation only
 	runSilent   = "silent"   // "[rien]"
-	runActed    = "acted"    // it used the watch's authorised action
+	runActed    = "acted"    // it used the rule's authorised action
 	runMissed   = "missed"   // too late to be worth waking for (eriphe-core was down)
-	runDropped  = "dropped"  // the watch was paused or deleted before the wake
+	runDropped  = "dropped"  // the rule was paused or deleted before the wake
+	runSkipped  = "skipped"  // its condition (if) did not hold: nothing done
 
 	watchNameMax   = 80
 	watchPromptMax = 1000
@@ -93,14 +103,15 @@ const (
 )
 
 var (
-	watchSources = []string{sourceSchedule, sourceReturn, sourcePoll, sourceAlert}
+	watchSources = []string{sourceSchedule, sourceReturn, sourcePoll, sourceAlert, sourceFact, sourceEnd}
 	// Their English names, which the brain may use too.
 	watchSourceAliases = map[string]string{"schedule": sourceSchedule, "return": sourceReturn, "tool": sourcePoll,
-		"poll": sourcePoll, "alert": sourceAlert, "webhook": sourceAlert}
+		"poll": sourcePoll, "alert": sourceAlert, "webhook": sourceAlert,
+		"fact": sourceFact, "end": sourceEnd, "task_end": sourceEnd, "ends": sourceEnd}
 )
 
-// watchSpec is what a source needs, kept as JSON.
-type watchSpec struct {
+// ruleWhen is what a source needs, kept as JSON.
+type ruleWhen struct {
 	Schedule string `json:"schedule,omitempty"`      // horaire
 	After    int    `json:"after_minutes,omitempty"` // retour: the absence it takes, in minutes
 
@@ -110,19 +121,27 @@ type watchSpec struct {
 	Tool   string         `json:"tool,omitempty"`
 	Args   map[string]any `json:"args,omitempty"`
 	Every  int            `json:"every_minutes,omitempty"`
-	Cond   *watchCond     `json:"cond,omitempty"`
+	Cond   *pollCond      `json:"cond,omitempty"`
 	Judge  string         `json:"judge,omitempty"` // a yes/no question for the judge (judge.go), after the condition
 
 	// alerte: the sender signs its calls (HMAC-SHA256, its secret in the vault).
 	Signed bool `json:"signed,omitempty"`
+
+	// fait: the fact (owner.field, closed) it follows, and the value it
+	// waits for ("" for any change).
+	Fact    string `json:"fact,omitempty"`
+	Becomes string `json:"becomes,omitempty"`
+
+	// fin: what ends, task or session ("" for both).
+	Ends string `json:"ends,omitempty"`
 }
 
-// watch is one watch.
-type watch struct {
+// rule is one rule.
+type rule struct {
 	ID        int64
 	Name      string
 	Source    string
-	Spec      watchSpec
+	Spec      ruleWhen
 	Prompt    string // what the brain is asked to do when it fires
 	Brief     bool   // a brief: its wake writes last_brief (since.go)
 	State     string
@@ -143,10 +162,21 @@ type watch struct {
 	Urgent         string
 	UrgentRecovery bool
 	Incident       int64
+
+	// If: a condition on closed facts and the time (rule_engine.go), tested
+	// when the event comes; "" always holds.
+	If string
+	// Then: what it does (rule_engine.go): "" wakes the brain with Prompt;
+	// assistant:<name> wakes that assistant with Prompt; notify sends
+	// ActText under the topic ActRef, now or for the brief (ActLevel).
+	Act      string
+	ActText  string
+	ActRef   string
+	ActLevel string
 }
 
 // returnAfter is the absence a retour watch waits for.
-func (w *watch) returnAfter() time.Duration {
+func (w *rule) returnAfter() time.Duration {
 	if w.Spec.After <= 0 {
 		return defaultReturnAfter
 	}
@@ -154,7 +184,7 @@ func (w *watch) returnAfter() time.Duration {
 }
 
 // When says when it fires, for people and the brain.
-func (w *watch) When() string {
+func (w *rule) When() string {
 	switch w.Source {
 	case sourceSchedule:
 		return w.Spec.Schedule
@@ -164,12 +194,19 @@ func (w *watch) When() string {
 		return fmt.Sprintf("%s.%s / %d min", w.Spec.Server, w.Spec.Tool, w.Spec.Every)
 	case sourceAlert:
 		return "webhook"
+	case sourceFact:
+		if w.Spec.Becomes != "" {
+			return w.Spec.Fact + " → " + w.Spec.Becomes
+		}
+		return w.Spec.Fact
+	case sourceEnd:
+		return orStr(w.Spec.Ends, "task, session")
 	}
 	return ""
 }
 
 // check validates a watch and normalises it.
-func (w *watch) check() error {
+func (w *rule) check() error {
 	w.Name = strings.Join(strings.Fields(w.Name), " ")
 	w.Prompt = strings.TrimSpace(w.Prompt)
 	w.Why = truncate(strings.TrimSpace(w.Why), notifyWhyMax)
@@ -179,19 +216,21 @@ func (w *watch) check() error {
 	switch {
 	case w.Name == "" || utf8.RuneCountInString(w.Name) > watchNameMax:
 		return fmt.Errorf("name is 1 to %d characters", watchNameMax)
-	case w.Prompt == "" || utf8.RuneCountInString(w.Prompt) > watchPromptMax:
+	case w.Act != actNotify && (w.Prompt == "" || utf8.RuneCountInString(w.Prompt) > watchPromptMax):
 		return fmt.Errorf("prompt is 1 to %d characters: what to do when it fires", watchPromptMax)
+	case utf8.RuneCountInString(w.Prompt) > watchPromptMax:
+		return fmt.Errorf("prompt is at most %d characters", watchPromptMax)
 	case !containsStr(watchSources, w.Source):
 		return fmt.Errorf("source is %s", strings.Join(watchSources, " or "))
 	}
 	switch w.Source {
 	case sourceSchedule:
-		w.Spec = watchSpec{Schedule: strings.Join(strings.Fields(w.Spec.Schedule), " ")}
+		w.Spec = ruleWhen{Schedule: strings.Join(strings.Fields(w.Spec.Schedule), " ")}
 		if _, err := parseSchedule(w.Spec.Schedule); err != nil {
 			return err
 		}
 	case sourceReturn:
-		w.Spec = watchSpec{After: w.Spec.After}
+		w.Spec = ruleWhen{After: w.Spec.After}
 		if w.Spec.After == 0 {
 			w.Spec.After = int(defaultReturnAfter.Minutes())
 		}
@@ -201,13 +240,23 @@ func (w *watch) check() error {
 	case sourcePoll:
 		return w.checkPoll()
 	case sourceAlert:
-		w.Spec = watchSpec{Signed: w.Spec.Signed}
+		w.Spec = ruleWhen{Signed: w.Spec.Signed}
+	case sourceFact:
+		w.Spec = ruleWhen{Fact: strings.TrimSpace(w.Spec.Fact), Becomes: strings.TrimSpace(w.Spec.Becomes)}
+		if w.Spec.Fact == "" {
+			return errors.New("fact is the fact it follows, owner.field: context.place, prod.etat")
+		}
+	case sourceEnd:
+		w.Spec = ruleWhen{Ends: strings.ToLower(strings.TrimSpace(w.Spec.Ends))}
+		if w.Spec.Ends != "" && w.Spec.Ends != "task" && w.Spec.Ends != "session" {
+			return errors.New("ends is task, session, or empty for both")
+		}
 	}
-	return nil
+	return w.checkThen()
 }
 
 // CondText says an outil watch's condition, for people and the brain.
-func (w *watch) CondText() string {
+func (w *rule) CondText() string {
 	c := w.Spec.Cond
 	if c == nil {
 		return ""
@@ -225,9 +274,12 @@ func (w *watch) CondText() string {
 	return "call fails"
 }
 
-// checkWatch is check, and for an outil watch that eriphe-core may call its tool.
-func (c *core) checkWatch(w *watch) error {
+// checkRule is check, and for an outil watch that eriphe-core may call its tool.
+func (c *core) checkRule(w *rule) error {
 	if err := w.check(); err != nil {
+		return err
+	}
+	if err := c.checkRuleFacts(w); err != nil {
 		return err
 	}
 	if w.Source == sourcePoll {
@@ -255,17 +307,17 @@ func parseAfter(s string) (int, error) {
 	return int(d.Minutes()), nil
 }
 
-const watchCols = `id, name, source, spec, prompt, brief, state, why, source_ref, tainted, by, next_at, last_fired, mark, created,
-	poll, hook, urgent, urgent_recovery, incident`
+const eventRuleCols = `id, name, source, spec, prompt, brief, state, why, source_ref, tainted, by, next_at, last_fired, mark, created,
+	poll, hook, urgent, urgent_recovery, incident, cond, act, act_text, act_ref, act_level`
 
-func scanWatch(row interface{ Scan(...any) error }) (*watch, error) {
-	var w watch
+func scanRule(row interface{ Scan(...any) error }) (*rule, error) {
+	var w rule
 	var spec, poll string
 	var next, last sql.NullInt64
 	var created int64
 	if err := row.Scan(&w.ID, &w.Name, &w.Source, &spec, &w.Prompt, &w.Brief, &w.State, &w.Why, &w.SourceRef, &w.Tainted,
 		&w.By, &next, &last, &w.Mark, &created, &poll, &w.Hook,
-		&w.Urgent, &w.UrgentRecovery, &w.Incident); err != nil {
+		&w.Urgent, &w.UrgentRecovery, &w.Incident, &w.If, &w.Act, &w.ActText, &w.ActRef, &w.ActLevel); err != nil {
 		return nil, err
 	}
 	json.Unmarshal([]byte(spec), &w.Spec)
@@ -274,19 +326,19 @@ func scanWatch(row interface{ Scan(...any) error }) (*watch, error) {
 	return &w, nil
 }
 
-var errNoWatch = errors.New("no such watch")
+var errNoRule = errors.New("no such rule")
 
-func (c *core) watch(id int64) (*watch, error) {
-	w, err := scanWatch(c.store.db.QueryRow(`SELECT `+watchCols+` FROM watches WHERE id = ?`, id))
+func (c *core) rule(id int64) (*rule, error) {
+	w, err := scanRule(c.store.db.QueryRow(`SELECT `+eventRuleCols+` FROM rules WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errNoWatch
+		return nil, errNoRule
 	}
 	return w, err
 }
 
-// watches lists the watches in these states (all if none), by id.
-func (c *core) watches(states ...string) ([]*watch, error) {
-	q := `SELECT ` + watchCols + ` FROM watches`
+// rules lists the rules in these states (all if none), by id.
+func (c *core) rules(states ...string) ([]*rule, error) {
+	q := `SELECT ` + eventRuleCols + ` FROM rules`
 	var args []any
 	if len(states) > 0 {
 		q += ` WHERE state IN (` + placeholders(len(states)) + `)`
@@ -299,9 +351,9 @@ func (c *core) watches(states ...string) ([]*watch, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []*watch
+	var out []*rule
 	for rows.Next() {
-		w, err := scanWatch(rows)
+		w, err := scanRule(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -311,7 +363,7 @@ func (c *core) watches(states ...string) ([]*watch, error) {
 }
 
 // schedule sets when an active watch of source horaire fires next, from now.
-func (c *core) schedule(w *watch, now time.Time) {
+func (c *core) schedule(w *rule, now time.Time) {
 	w.NextAt = time.Time{}
 	if w.State == watchActive && w.Source == sourcePoll {
 		w.NextAt = now // its first look, at the next tick
@@ -324,23 +376,25 @@ func (c *core) schedule(w *watch, now time.Time) {
 	}
 }
 
-// addWatch keeps a checked watch.
-func (c *core) addWatch(w *watch) (*watch, error) {
-	if err := c.checkWatch(w); err != nil {
+// addRule keeps a checked watch.
+func (c *core) addRule(w *rule) (*rule, error) {
+	if err := c.checkRule(w); err != nil {
 		return nil, err
 	}
 	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM watches`).Scan(&n)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM rules`).Scan(&n)
 	if n >= watchMax {
-		return nil, fmt.Errorf("at most %d watches: delete one first", watchMax)
+		return nil, fmt.Errorf("at most %d rules: delete one first", watchMax)
 	}
 	now := c.notifyTime()
 	c.schedule(w, now)
 	spec, _ := json.Marshal(w.Spec)
-	res, err := c.store.db.Exec(`INSERT INTO watches (name, source, spec, prompt, brief, state, why, source_ref, tainted, by,
-		next_at, mark, created, updated, urgent, urgent_recovery) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	res, err := c.store.db.Exec(`INSERT INTO rules (name, source, spec, prompt, brief, state, why, source_ref, tainted, by,
+		next_at, mark, created, updated, urgent, urgent_recovery, cond, act, act_text, act_ref, act_level)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		w.Name, w.Source, string(spec), w.Prompt, w.Brief, w.State, w.Why, w.SourceRef, w.Tainted, w.By,
-		unixOrNil(w.NextAt), now.Unix(), now.Unix(), now.Unix(), w.Urgent, w.UrgentRecovery && w.Urgent != "")
+		unixOrNil(w.NextAt), now.Unix(), now.Unix(), now.Unix(), w.Urgent, w.UrgentRecovery && w.Urgent != "",
+		w.If, w.Act, w.ActText, w.ActRef, w.ActLevel)
 	if err != nil {
 		return nil, err
 	}
@@ -349,59 +403,60 @@ func (c *core) addWatch(w *watch) (*watch, error) {
 	return w, nil
 }
 
-// saveWatch writes a changed watch back: its fields, its state, its next fire.
-func (c *core) saveWatch(w *watch) error {
-	if err := c.checkWatch(w); err != nil {
+// saveRule writes a changed watch back: its fields, its state, its next fire.
+func (c *core) saveRule(w *rule) error {
+	if err := c.checkRule(w); err != nil {
 		return err
 	}
 	now := c.notifyTime()
 	c.schedule(w, now)
 	spec, _ := json.Marshal(w.Spec)
 	w.Poll, w.Incident = pollState{}, 0 // a watch changed or resumed looks afresh
-	res, err := c.store.db.Exec(`UPDATE watches SET name = ?, source = ?, spec = ?, prompt = ?, brief = ?, state = ?, why = ?,
-		next_at = ?, updated = ?, poll = '', incident = 0 WHERE id = ?`, w.Name, w.Source, string(spec), w.Prompt, w.Brief, w.State, w.Why,
-		unixOrNil(w.NextAt), now.Unix(), w.ID)
+	res, err := c.store.db.Exec(`UPDATE rules SET name = ?, source = ?, spec = ?, prompt = ?, brief = ?, state = ?, why = ?,
+		next_at = ?, updated = ?, poll = '', incident = 0, cond = ?, act = ?, act_text = ?, act_ref = ?, act_level = ? WHERE id = ?`,
+		w.Name, w.Source, string(spec), w.Prompt, w.Brief, w.State, w.Why,
+		unixOrNil(w.NextAt), now.Unix(), w.If, w.Act, w.ActText, w.ActRef, w.ActLevel, w.ID)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return errNoWatch
+		return errNoRule
 	}
 	return nil
 }
 
-// setWatchState pauses, resumes or approves a watch. A watch that starts
+// setRuleState pauses, resumes or approves a watch. A watch that starts
 // again does not fire for what happened while it was off.
-func (c *core) setWatchState(id int64, state string) (*watch, error) {
-	w, err := c.watch(id)
+func (c *core) setRuleState(id int64, state string) (*rule, error) {
+	w, err := c.rule(id)
 	if err != nil {
 		return nil, err
 	}
 	if state == watchActive && w.State != watchActive && w.Source == sourceReturn {
-		c.store.db.Exec(`UPDATE watches SET mark = ? WHERE id = ?`, c.notifyTime().Unix(), id)
+		c.store.db.Exec(`UPDATE rules SET mark = ? WHERE id = ?`, c.notifyTime().Unix(), id)
 	}
 	w.State = state
-	return w, c.saveWatch(w)
+	return w, c.saveRule(w)
 }
 
-// deleteWatch removes a watch and its history.
-func (c *core) deleteWatch(id int64) error {
-	res, err := c.store.db.Exec(`DELETE FROM watches WHERE id = ?`, id)
+// deleteRule removes a watch and its history.
+func (c *core) deleteRule(id int64) error {
+	res, err := c.store.db.Exec(`DELETE FROM rules WHERE id = ?`, id)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return errNoWatch
+		return errNoRule
 	}
-	c.store.db.Exec(`DELETE FROM watch_runs WHERE watch_id = ?`, id)
-	c.revokeGrants(id, "watch deleted")
+	c.store.db.Exec(`DELETE FROM rule_runs WHERE rule_id = ?`, id)
+	c.revokeGrants(id, "rule deleted")
 	return nil
 }
 
-// watchRun is one firing of a watch, and what came of it.
-type watchRun struct {
+// ruleRun is one firing of a watch, and what came of it.
+type ruleRun struct {
 	ID           int64
-	WatchID      int64
+	RuleID       int64
 	Fired        time.Time
 	Cause        string    // time, late, return…
 	Due          time.Time // when it was meant to fire
@@ -415,14 +470,14 @@ type watchRun struct {
 	Urgent       int64 // the notification eriphe-core sent itself for an urgent watch (watch_urgent.go)
 }
 
-const runCols = `id, watch_id, fired, cause, due, detail, external, woke, outcome, COALESCE(notification, 0), action, ended,
+const runCols = `id, rule_id, fired, cause, due, detail, external, woke, outcome, COALESCE(notification, 0), action, ended,
 	COALESCE(urgent, 0)`
 
-func scanRun(row interface{ Scan(...any) error }) (*watchRun, error) {
-	var r watchRun
+func scanRun(row interface{ Scan(...any) error }) (*ruleRun, error) {
+	var r ruleRun
 	var fired int64
 	var due, woke, ended sql.NullInt64
-	if err := row.Scan(&r.ID, &r.WatchID, &fired, &r.Cause, &due, &r.Detail, &r.External, &woke, &r.Outcome,
+	if err := row.Scan(&r.ID, &r.RuleID, &fired, &r.Cause, &due, &r.Detail, &r.External, &woke, &r.Outcome,
 		&r.Notification, &r.Action, &ended, &r.Urgent); err != nil {
 		return nil, err
 	}
@@ -430,13 +485,13 @@ func scanRun(row interface{ Scan(...any) error }) (*watchRun, error) {
 	return &r, nil
 }
 
-func (c *core) watchRuns(where string, args ...any) ([]*watchRun, error) {
-	rows, err := c.store.db.Query(`SELECT `+runCols+` FROM watch_runs WHERE `+where, args...)
+func (c *core) ruleRuns(where string, args ...any) ([]*ruleRun, error) {
+	rows, err := c.store.db.Query(`SELECT `+runCols+` FROM rule_runs WHERE `+where, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []*watchRun
+	var out []*ruleRun
 	for rows.Next() {
 		r, err := scanRun(rows)
 		if err != nil {
@@ -448,18 +503,18 @@ func (c *core) watchRuns(where string, args ...any) ([]*watchRun, error) {
 }
 
 // recentRuns are a watch's last runs, newest first.
-func (c *core) recentRuns(id int64, n int) []*watchRun {
-	runs, _ := c.watchRuns(`watch_id = ? ORDER BY id DESC LIMIT ?`, id, n)
+func (c *core) recentRuns(id int64, n int) []*ruleRun {
+	runs, _ := c.ruleRuns(`rule_id = ? ORDER BY id DESC LIMIT ?`, id, n)
 	return runs
 }
 
-// watchHappenings are the watches' runs for since: each firing, and what
+// ruleHappenings are the watches' runs for since: each firing, and what
 // the brain did of it once its turn ended. A run's detail drawn from
 // outside is external: named, not quoted, unless asked for.
-func watchHappenings(c *core, from time.Time, limit int) ([]happening, error) {
-	rows, err := c.store.db.Query(`SELECT r.watch_id, r.fired, r.cause, r.detail, r.external, r.outcome, COALESCE(r.ended, 0),
+func ruleHappenings(c *core, from time.Time, limit int) ([]happening, error) {
+	rows, err := c.store.db.Query(`SELECT r.rule_id, r.fired, r.cause, r.detail, r.external, r.outcome, COALESCE(r.ended, 0),
 		COALESCE(r.notification, 0), r.action, COALESCE(w.name, '')
-		FROM watch_runs r LEFT JOIN watches w ON w.id = r.watch_id
+		FROM rule_runs r LEFT JOIN rules w ON w.id = r.rule_id
 		WHERE r.fired >= ? OR r.ended >= ? ORDER BY r.id LIMIT ?`, from.Unix(), from.Unix(), limit)
 	if err != nil {
 		return nil, err

@@ -388,7 +388,11 @@ func (c *core) restartIfChanged(ctx context.Context, a Assistant, t *TaskRow) (s
 // deliverAssistant gives an idle assistant what its triggers have for it:
 // one turn at a time.
 func (c *core) deliverAssistant(ctx context.Context, a Assistant, t *TaskRow) error {
-	for _, kind := range a.wakeKinds() {
+	kinds := a.wakeKinds()
+	if a.Role == assistantRoleAssistant && !slices.Contains(kinds, triggerRule) {
+		kinds = append(kinds, triggerRule) // a rule that names it wakes it (rule_engine.go)
+	}
+	for _, kind := range kinds {
 		h := assistantTriggers[kind].deliver
 		if h == nil {
 			continue

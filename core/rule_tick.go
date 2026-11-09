@@ -37,15 +37,15 @@ const (
 	causeReturn = "return"
 
 	watchTurnKey = "watch_turn"
-	taintWatch   = "watch.external" // a watch proposed from external content, then approved
+	taintWatch   = "watch.external" // a rule proposed from external content, then approved
 )
 
-// runWatches is the watches' timer.
-func (c *core) runWatches(ctx context.Context) {
+// runRules is the watches' timer.
+func (c *core) runRules(ctx context.Context) {
 	tick := time.NewTicker(watchTickEvery)
 	defer tick.Stop()
 	for {
-		c.watchTick(ctx)
+		c.ruleTick(ctx)
 		select {
 		case <-ctx.Done():
 			return
@@ -54,9 +54,9 @@ func (c *core) runWatches(ctx context.Context) {
 	}
 }
 
-// watchTick fires the active watches whose moment has come.
-func (c *core) watchTick(ctx context.Context) {
-	ws, err := c.watches(watchActive)
+// ruleTick fires the active watches whose moment has come.
+func (c *core) ruleTick(ctx context.Context) {
+	ws, err := c.rules(watchActive)
 	if err != nil {
 		log.Printf("watch: %v", err)
 		return
@@ -64,8 +64,14 @@ func (c *core) watchTick(ctx context.Context) {
 	now := c.notifyTime()
 	var activity []time.Time // read once, for the retour watches
 	read := false
+	var lookup func(string) (string, bool) // read once, for the fait rules
 	for _, w := range ws {
 		switch w.Source {
+		case sourceFact:
+			if lookup == nil {
+				lookup = c.factLookup(now)
+			}
+			c.tickFact(w, lookup)
 		case sourceSchedule:
 			c.tickSchedule(w, now)
 		case sourceReturn:
@@ -81,7 +87,7 @@ func (c *core) watchTick(ctx context.Context) {
 
 // tickSchedule fires a horaire watch whose time has come, once, and sets
 // its next time from now: the times missed meanwhile are not made up.
-func (c *core) tickSchedule(w *watch, now time.Time) {
+func (c *core) tickSchedule(w *rule, now time.Time) {
 	if w.NextAt.IsZero() || w.NextAt.After(now) {
 		if w.NextAt.IsZero() {
 			c.reschedule(w, now)
@@ -92,25 +98,25 @@ func (c *core) tickSchedule(w *watch, now time.Time) {
 	c.reschedule(w, now)
 	switch {
 	case late > watchLateMax:
-		c.recordRun(w, &watchRun{Cause: causeLate, Due: due, Outcome: runMissed, Ended: now,
+		c.recordRun(w, &ruleRun{Cause: causeLate, Due: due, Outcome: runMissed, Ended: now,
 			Detail: fmt.Sprintf("prévue le %s, eriphe-core ne tournait pas", due.Format("2006-01-02 15:04"))})
 	case late > watchLate:
-		c.fireWatch(w, &watchRun{Cause: causeLate, Due: due})
+		c.fireRule(w, &ruleRun{Cause: causeLate, Due: due})
 	default:
-		c.fireWatch(w, &watchRun{Cause: causeTime, Due: due})
+		c.fireRule(w, &ruleRun{Cause: causeTime, Due: due})
 	}
 }
 
-func (c *core) reschedule(w *watch, now time.Time) {
+func (c *core) reschedule(w *rule, now time.Time) {
 	c.schedule(w, now)
-	c.store.db.Exec(`UPDATE watches SET next_at = ? WHERE id = ?`, unixOrNil(w.NextAt), w.ID)
+	c.store.db.Exec(`UPDATE rules SET next_at = ? WHERE id = ?`, unixOrNil(w.NextAt), w.ID)
 }
 
 // tickReturn fires a retour watch once per return: the user's last absence
 // is long enough, they came back within the last awayAfter, and this
 // return is not one it fired for already (mark), nor one from before the
 // watch was made or resumed.
-func (c *core) tickReturn(w *watch, activity []time.Time, now time.Time) {
+func (c *core) tickReturn(w *rule, activity []time.Time, now time.Time) {
 	a, ok := lastAbsenceIn(activity, now)
 	switch {
 	case !ok || a.Back.IsZero():
@@ -118,7 +124,7 @@ func (c *core) tickReturn(w *watch, activity []time.Time, now time.Time) {
 	case a.Back.Sub(a.Left) < w.returnAfter(), now.Sub(a.Back) >= awayAfter, a.Back.Unix() <= w.Mark:
 		return
 	}
-	res, err := c.store.db.Exec(`UPDATE watches SET mark = ? WHERE id = ? AND mark < ?`, a.Back.Unix(), w.ID, a.Back.Unix())
+	res, err := c.store.db.Exec(`UPDATE rules SET mark = ? WHERE id = ? AND mark < ?`, a.Back.Unix(), w.ID, a.Back.Unix())
 	if err != nil {
 		return
 	}
@@ -126,65 +132,80 @@ func (c *core) tickReturn(w *watch, activity []time.Time, now time.Time) {
 		return // fired meanwhile
 	}
 	loc := now.Location()
-	c.fireWatch(w, &watchRun{Cause: causeReturn, Due: a.Back,
+	c.fireRule(w, &ruleRun{Cause: causeReturn, Due: a.Back,
 		Detail: fmt.Sprintf("parti à %s, de retour à %s après %s d'absence", a.Left.In(loc).Format("2006-01-02 15:04"),
 			a.Back.In(loc).Format("15:04"), span(a.Back.Sub(a.Left)))})
 }
 
-// fireWatch records a pending run and pings the controller, unless one is
-// already pending for this watch.
-func (c *core) fireWatch(w *watch, r *watchRun) {
+// fireRule tests the rule's condition, then does its action: a notify
+// rule's at once; otherwise it records a pending run for the brain or the
+// assistant it wakes and pings the controller, unless one is already
+// pending for this rule.
+func (c *core) fireRule(w *rule, r *ruleRun) {
+	if !c.ifHolds(w, c.notifyTime()) {
+		r.Outcome, r.Ended = runSkipped, c.notifyTime()
+		c.recordRun(w, r)
+		return
+	}
+	if w.Act == actNotify {
+		c.doNotify(w, r)
+		return
+	}
 	var pending int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM watch_runs WHERE watch_id = ? AND outcome = ?`, w.ID, runPending).Scan(&pending)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM rule_runs WHERE rule_id = ? AND outcome = ?`, w.ID, runPending).Scan(&pending)
 	if pending > 0 {
-		log.Printf("watch %d: already waiting for the brain, not fired again", w.ID)
+		log.Printf("rule %d: already waiting for the brain, not fired again", w.ID)
 		return
 	}
 	r.Outcome = runPending
 	if c.recordRun(w, r) {
-		log.Printf("watch %d (%s): fired, %s", w.ID, w.Source, r.Cause)
+		log.Printf("rule %d (%s): fired, %s", w.ID, w.Source, r.Cause)
 		c.ping()
 	}
 }
 
 // recordRun keeps a run, and the watch's last fire.
-func (c *core) recordRun(w *watch, r *watchRun) bool {
+func (c *core) recordRun(w *rule, r *ruleRun) bool {
 	now := c.notifyTime()
-	r.WatchID, r.Fired = w.ID, now
-	res, err := c.store.db.Exec(`INSERT INTO watch_runs (watch_id, fired, cause, due, detail, external, outcome, ended, urgent)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, w.ID, now.Unix(), r.Cause, unixOrNil(r.Due), truncate(r.Detail, 4000), r.External,
-		r.Outcome, unixOrNil(r.Ended), nullID(r.Urgent))
+	r.RuleID, r.Fired = w.ID, now
+	res, err := c.store.db.Exec(`INSERT INTO rule_runs (rule_id, fired, cause, due, detail, external, outcome, ended, urgent, notification)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, w.ID, now.Unix(), r.Cause, unixOrNil(r.Due), truncate(r.Detail, 4000), r.External,
+		r.Outcome, unixOrNil(r.Ended), nullID(r.Urgent), nullID(r.Notification))
 	if err != nil {
-		log.Printf("watch %d: %v", w.ID, err)
+		log.Printf("rule %d: %v", w.ID, err)
 		return false
 	}
 	r.ID, _ = res.LastInsertId()
-	c.store.db.Exec(`UPDATE watches SET last_fired = ? WHERE id = ?`, now.Unix(), w.ID)
+	c.store.db.Exec(`UPDATE rules SET last_fired = ? WHERE id = ?`, now.Unix(), w.ID)
 	return true
 }
 
 // pendingRun is the oldest run waiting for the brain.
-func (c *core) pendingRun() (*watchRun, *watch) {
+func (c *core) pendingRun() (*ruleRun, *rule) { return c.pendingRunFor("") }
+
+// pendingRunFor is the oldest run waiting for whom a rule wakes: "" the
+// brain, assistant:<name> an assistant.
+func (c *core) pendingRunFor(act string) (*ruleRun, *rule) {
 	for {
-		runs, err := c.watchRuns(`outcome = ? ORDER BY id LIMIT 1`, runPending)
+		runs, err := c.ruleRuns(`outcome = ? AND rule_id IN (SELECT id FROM rules WHERE act = ?) ORDER BY id LIMIT 1`, runPending, act)
 		if err != nil || len(runs) == 0 {
 			return nil, nil
 		}
 		r := runs[0]
-		w, err := c.watch(r.WatchID)
+		w, err := c.rule(r.RuleID)
 		if err == nil && w.State == watchActive {
 			return r, w
 		}
 		// Paused or deleted meanwhile: its run is not woken for.
-		c.store.db.Exec(`UPDATE watch_runs SET outcome = ?, ended = ? WHERE id = ?`, runDropped, c.notifyTime().Unix(), r.ID)
+		c.store.db.Exec(`UPDATE rule_runs SET outcome = ?, ended = ? WHERE id = ?`, runDropped, c.notifyTime().Unix(), r.ID)
 	}
 }
 
-// watchTurn is the wake turn of a watch, kept (kv watch_turn) from its
+// ruleTurn is the wake turn of a watch, kept (kv watch_turn) from its
 // delivery to its end.
-type watchTurn struct {
+type ruleTurn struct {
 	Run      int64 `json:"run"`
-	Watch    int64 `json:"watch"`
+	Rule     int64 `json:"rule"`
 	EventSeq int   `json:"event_seq"` // the brain task's last event before the wake
 	Woke     int64 `json:"woke"`      // unix
 	Brief    bool  `json:"brief,omitempty"`
@@ -192,21 +213,21 @@ type watchTurn struct {
 	NotifID  int64 `json:"notif_id"` // the last notification before the wake
 }
 
-func (c *core) currentWatchTurn() (watchTurn, bool) {
-	var wt watchTurn
+func (c *core) currentRuleTurn() (ruleTurn, bool) {
+	var wt ruleTurn
 	raw := c.store.get(watchTurnKey)
 	return wt, raw != "" && json.Unmarshal([]byte(raw), &wt) == nil && wt.Run > 0
 }
 
-// deliverWatch wakes an idle brain for the oldest pending run.
-func (c *core) deliverWatch(ctx context.Context, a Assistant, t *TaskRow) (bool, error) {
+// deliverRule wakes an idle brain for the oldest pending run.
+func (c *core) deliverRule(ctx context.Context, a Assistant, t *TaskRow) (bool, error) {
 	r, w := c.pendingRun()
 	if r == nil {
 		return false, nil
 	}
-	c.endWatchTurn() // a previous one whose end was not seen
+	c.endRuleTurn() // a previous one whose end was not seen
 	now := c.notifyTime()
-	text := c.turnHead(now) + "\n\n" + c.watchWake(w, r, now)
+	text := c.turnHead(now) + "\n\n" + c.ruleWake(w, r, now)
 	// The brief and the return point are the good moments for what waits:
 	// the cards go with the notify that tells them (convo_cards.go).
 	if (w.Brief || w.Source == sourceReturn) && w.Tainted == "" && !r.External {
@@ -223,7 +244,7 @@ func (c *core) deliverWatch(ctx context.Context, a Assistant, t *TaskRow) (bool,
 	}
 	c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Quiet = false })
 	c.setWakeTurn(nil) // its answer is not a notification by itself: the brain uses notify
-	wt := watchTurn{Run: r.ID, Watch: w.ID, EventSeq: t.LastSeq, Woke: now.Unix(), Brief: w.Brief, MsgSeq: c.store.lastMessageSeq()}
+	wt := ruleTurn{Run: r.ID, Rule: w.ID, EventSeq: t.LastSeq, Woke: now.Unix(), Brief: w.Brief, MsgSeq: c.store.lastMessageSeq()}
 	c.store.db.QueryRow(`SELECT COALESCE(MAX(id), 0) FROM notifications`).Scan(&wt.NotifID)
 	raw, _ := json.Marshal(wt)
 	c.store.set(watchTurnKey, string(raw))
@@ -231,17 +252,17 @@ func (c *core) deliverWatch(ctx context.Context, a Assistant, t *TaskRow) (bool,
 		c.store.set(watchTurnKey, "")
 		return false, err
 	}
-	c.store.db.Exec(`UPDATE watch_runs SET outcome = ?, woke = ? WHERE id = ?`, runWoke, now.Unix(), r.ID)
-	log.Printf("%s: woken for watch %d (run %d)", c.assistantLog(a), w.ID, r.ID)
+	c.store.db.Exec(`UPDATE rule_runs SET outcome = ?, woke = ? WHERE id = ?`, runWoke, now.Unix(), r.ID)
+	log.Printf("%s: woken for rule %d (run %d)", c.assistantLog(a), w.ID, r.ID)
 	return true, nil
 }
 
-// watchWake is what the brain reads when a watch wakes it.
-func (c *core) watchWake(w *watch, r *watchRun, now time.Time) string {
+// ruleWake is what the brain reads when a watch wakes it.
+func (c *core) ruleWake(w *rule, r *ruleRun, now time.Time) string {
 	user := c.conf().User
 	var b strings.Builder
-	fmt.Fprintf(&b, "[veille #%d « %s » %s · %s %s]\n", w.ID, packQuote(w.Name), now.Format("15:04"), w.Source, packQuote(w.When()))
-	b.WriteString("Personne ne t'a écrit : eriphe-core te réveille pour une veille qu'" + user + " a mise en place.\n")
+	fmt.Fprintf(&b, "[règle #%d « %s » %s · %s %s]\n", w.ID, packQuote(w.Name), now.Format("15:04"), w.Source, packQuote(w.When()))
+	b.WriteString("Personne ne t'a écrit : eriphe-core te réveille pour une règle qu'" + user + " a mise en place.\n")
 	switch r.Cause {
 	case causeLate:
 		fmt.Fprintf(&b, "Elle était prévue à %s : eriphe-core ne tournait pas, elle part en retard, une seule fois.\n", r.Due.In(now.Location()).Format("15:04"))
@@ -254,11 +275,11 @@ func (c *core) watchWake(w *watch, r *watchRun, now time.Time) string {
 	case causeChanged:
 		fmt.Fprintf(&b, "Le résultat de %s.%s a changé (vérifié deux fois).\n", w.Spec.Server, w.Spec.Tool)
 	case causeAlert:
-		b.WriteString("Un service a appelé l'adresse de cette veille.\n")
+		b.WriteString("Un service a appelé l'adresse de cette règle.\n")
 	}
 	if r.Urgent > 0 {
 		if n, err := c.notificationByID(r.Urgent); err == nil {
-			fmt.Fprintf(&b, "Cette veille est urgente : eriphe-core a déjà envoyé lui-même à %s le message fixe qu'il a validé, « %s » (%s). "+
+			fmt.Fprintf(&b, "Cette règle est urgente : eriphe-core a déjà envoyé lui-même à %s le message fixe qu'il a validé, « %s » (%s). "+
 				"Ne le répète pas ; ton analyse passe par `notify` comme d'habitude, sans urgence à toi : ce tour est contaminé, elle ira au brief.\n",
 				user, packQuote(n.Text), map[string]string{levelNow: "envoyé", levelBrief: "gardé pour le brief"}[n.Outcome])
 		}
@@ -272,13 +293,13 @@ func (c *core) watchWake(w *watch, r *watchRun, now time.Time) string {
 	}
 	b.WriteString("\nSa consigne, écrite avec " + user + " :\n```text\n" + strings.ReplaceAll(w.Prompt, "```", "'''") + "\n```\n")
 	if g := c.liveGrant(w.ID); g != nil {
-		fmt.Fprintf(&b, "%s t'a autorisé d'avance une seule action pour cette veille, à appeler exactement ainsi si la consigne le demande : "+
+		fmt.Fprintf(&b, "%s t'a autorisé d'avance une seule action pour cette règle, à appeler exactement ainsi si la consigne le demande : "+
 			"%s %s (encore %d fois, jusqu'au %s). Toute autre action attend son accord, comme d'habitude.\n",
 			user, grantCallName(g), g.Input, g.Left(), g.Expires.In(now.Location()).Format("2006-01-02 15:04"))
 	}
 	b.WriteString("Fais ce qu'elle dit, sans rien lancer d'autre. Pour dire quelque chose à " + user +
 		", passe par `notify` (`now` ou `brief`, avec la raison). S'il n'y a rien d'utile, réponds seulement « [rien] » : " +
-		"le silence est bien, et il est noté dans l'historique de la veille.")
+		"le silence est bien, et il est noté dans l'historique de la règle.")
 	return b.String()
 }
 
@@ -315,7 +336,7 @@ func (c *core) learnedForBrief(now time.Time) string {
 // silentSince lists the watches that fired and stayed silent since a time:
 // a brief says what was seen and judged not worth telling.
 func (c *core) silentSince(from, now time.Time) string {
-	rows, err := c.store.db.Query(`SELECT r.fired, r.cause, COALESCE(w.name, '') FROM watch_runs r LEFT JOIN watches w ON w.id = r.watch_id
+	rows, err := c.store.db.Query(`SELECT r.fired, r.cause, COALESCE(w.name, '') FROM rule_runs r LEFT JOIN rules w ON w.id = r.rule_id
 		WHERE r.outcome = ? AND r.fired >= ? ORDER BY r.id LIMIT 20`, runSilent, from.Unix())
 	if err != nil {
 		return ""
@@ -332,21 +353,21 @@ func (c *core) silentSince(from, now time.Time) string {
 	if len(lines) == 0 {
 		return ""
 	}
-	return "Les veilles qui se sont déclenchées depuis sans que tu dises rien (dis-en un mot si c'est utile) :\n" + strings.Join(lines, "\n") + "\n"
+	return "Les règles qui se sont déclenchées depuis sans que tu dises rien (dis-en un mot si c'est utile) :\n" + strings.Join(lines, "\n") + "\n"
 }
 
-// watchTurnEnded is the relay's hook: the brain's turn ended at event seq.
-func (c *core) watchTurnEnded(seq int) {
-	if wt, ok := c.currentWatchTurn(); ok && seq > wt.EventSeq {
-		c.endWatchTurn()
+// ruleTurnEnded is the relay's hook: the brain's turn ended at event seq.
+func (c *core) ruleTurnEnded(seq int) {
+	if wt, ok := c.currentRuleTurn(); ok && seq > wt.EventSeq {
+		c.endRuleTurn()
 	}
 }
 
-// endWatchTurn records what the brain did of the watch turn going on, if
+// endRuleTurn records what the brain did of the watch turn going on, if
 // any: notified (a notification made since its wake), said (a message in
 // the conversation), or silent. A brief's end is the new last_brief.
-func (c *core) endWatchTurn() {
-	wt, ok := c.currentWatchTurn()
+func (c *core) endRuleTurn() {
+	wt, ok := c.currentRuleTurn()
 	if !ok {
 		return
 	}
@@ -366,10 +387,10 @@ func (c *core) endWatchTurn() {
 		outcome = runSaid
 	}
 	// An action already recorded (acted) is kept.
-	c.store.db.Exec(`UPDATE watch_runs SET outcome = CASE WHEN outcome = ? THEN outcome ELSE ? END, notification = ?, ended = ?
+	c.store.db.Exec(`UPDATE rule_runs SET outcome = CASE WHEN outcome = ? THEN outcome ELSE ? END, notification = ?, ended = ?
 		WHERE id = ?`, runActed, outcome, nullID(notif), now.Unix(), wt.Run)
 	if wt.Brief {
 		c.store.set(lastBriefKey, fmt.Sprint(wt.Woke))
 	}
-	log.Printf("watch %d: run %d ended, %s", wt.Watch, wt.Run, outcome)
+	log.Printf("rule %d: run %d ended, %s", wt.Rule, wt.Run, outcome)
 }

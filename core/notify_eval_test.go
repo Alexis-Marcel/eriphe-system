@@ -208,7 +208,7 @@ func runWatchEval(t *testing.T, cases []watchEvalCase) ruleEvalScore {
 		c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 		var id int64
 		if x.Raise { // a watch Sam made earlier, not urgent
-			w := mustWatch(t, c, &watch{Name: "Boutique", Source: sourceAlert, Prompt: "Regarde"})
+			w := mustWatch(t, c, &rule{Name: "Boutique", Source: sourceAlert, Prompt: "Regarde"})
 			id = w.ID
 		}
 		seq := ownerSays(c, x.OwnerSays)
@@ -222,23 +222,23 @@ func runWatchEval(t *testing.T, cases []watchEvalCase) ruleEvalScore {
 		got := "refused"
 		switch {
 		case x.Raise:
-			if _, err := c.brainUpdateWatch(updateWatchIn{ID: id, Action: "urgent", UrgentMessage: x.Message, SourceRef: src}); err == nil {
+			if _, err := c.brainUpdateRule(updateRuleIn{ID: id, Action: "urgent", UrgentMessage: x.Message, SourceRef: src}); err == nil {
 				got = "plain"
 			}
 		case x.Ask:
-			out, err := c.brainWatch(watchIn{Name: "Boutique", Source: "alerte", Prompt: "Regarde", SourceRef: src})
+			out, err := c.brainEventRule(ruleEventIn{Name: "Boutique", Source: "alerte", Prompt: "Regarde", SourceRef: src})
 			if err == nil && out["missing"] != nil {
 				got = "missing"
 			} else if err == nil {
 				got = "plain"
 			}
 		default:
-			if _, err := c.brainWatch(watchIn{Name: "Boutique", Source: "alerte", Prompt: "Regarde", Urgency: urgencyUrgent,
+			if _, err := c.brainEventRule(ruleEventIn{Name: "Boutique", Source: "alerte", Prompt: "Regarde", Urgency: urgencyUrgent,
 				UrgentMessage: x.Message, NoAction: true, SourceRef: src}); err == nil {
 				got = "plain"
 			}
 		}
-		if ws, _ := c.watches(); len(ws) > 0 && ws[0].Urgent != "" {
+		if ws, _ := c.rules(); len(ws) > 0 && ws[0].Urgent != "" {
 			got = "urgent"
 			if ws[0].Urgent != x.Message {
 				t.Errorf("%s: fixed message %q, want %q", x.ID, ws[0].Urgent, x.Message)

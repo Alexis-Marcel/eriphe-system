@@ -36,7 +36,7 @@ import (
 const (
 	urgentTextMax = 160
 
-	notifyFromUrgent = "urgent" // what eriphe-core sends itself for an urgent watch
+	notifyFromUrgent = "urgent" // what eriphe-core sends itself for an urgent rule
 	urgentRecovered  = " : revenu à la normale"
 )
 
@@ -46,13 +46,13 @@ var urgentRequest = regexp.MustCompile(`(?i)(r[ée]veill|wake|m[êe]me la nuit|l
 
 // checkUrgent validates an urgent watch's fixed message, for a watch of
 // this source and condition.
-func checkUrgent(w *watch, text string) (string, error) {
+func checkUrgent(w *rule, text string) (string, error) {
 	text = strings.Join(strings.Fields(text), " ")
 	switch {
 	case w.Source != sourcePoll && w.Source != sourceAlert:
-		return "", errors.New("only an outil or alerte watch can be urgent")
+		return "", errors.New("only an outil or alerte rule can be urgent")
 	case w.Source == sourcePoll && (w.Spec.Cond == nil || w.Spec.Cond.Kind == condChanged):
-		return "", errors.New("an urgent outil watch needs a condition that recovers: compare or status")
+		return "", errors.New("an urgent outil rule needs a condition that recovers: compare or status")
 	case text == "" || utf8.RuneCountInString(text) > urgentTextMax:
 		return "", fmt.Errorf("urgent_message is 1 to %d characters: the fixed text the user validated", urgentTextMax)
 	case urlRe2.MatchString(text):
@@ -69,13 +69,13 @@ func checkUrgent(w *watch, text string) (string, error) {
 // woken.
 func (c *core) urgentWrite(sourceRef string) error {
 	if tainted := c.turnTaint(); len(tainted) > 0 {
-		return fmt.Errorf("refused: this turn read external content (%s): a watch is made urgent only in a turn that read nothing from outside, in %s's own words", strings.Join(tainted, ", "), c.conf().User)
+		return fmt.Errorf("refused: this turn read external content (%s): a rule is made urgent only in a turn that read nothing from outside, in %s's own words", strings.Join(tainted, ", "), c.conf().User)
 	}
 	from, to, _, _ := c.turn.snapshot()
 	msg, owner := c.ownerMessage(sourceRef)
 	switch {
 	case !owner || from == 0 || msg.Seq < from || msg.Seq > to:
-		return errors.New("refused: an urgent watch needs the user's message of this turn that asks for it (source_ref msg:N)")
+		return errors.New("refused: an urgent rule needs the user's message of this turn that asks for it (source_ref msg:N)")
 	case !urgentRequest.MatchString(msg.Text):
 		return errors.New("refused: the user's message it cites does not ask to be woken or reached at any hour")
 	}
@@ -84,12 +84,12 @@ func (c *core) urgentWrite(sourceRef string) error {
 
 // setWatchUrgent makes an active watch urgent with its fixed message, or
 // not urgent (text ""). Its incident starts afresh.
-func (c *core) setWatchUrgent(w *watch, text string, recovery bool) error {
+func (c *core) setWatchUrgent(w *rule, text string, recovery bool) error {
 	if text != "" && w.State != watchActive {
-		return errors.New("refused: the watch is not active: the user approves it first")
+		return errors.New("refused: the rule is not active: the user approves it first")
 	}
 	recovery = recovery && text != ""
-	_, err := c.store.db.Exec(`UPDATE watches SET urgent = ?, urgent_recovery = ?, incident = 0, updated = ? WHERE id = ?`,
+	_, err := c.store.db.Exec(`UPDATE rules SET urgent = ?, urgent_recovery = ?, incident = 0, updated = ? WHERE id = ?`,
 		text, recovery, c.notifyTime().Unix(), w.ID)
 	if err == nil {
 		w.Urgent, w.UrgentRecovery, w.Incident = text, recovery, 0
@@ -101,37 +101,37 @@ func (c *core) setWatchUrgent(w *watch, text string, recovery bool) error {
 // (hit) or false again, before the brain is woken. It sends the fixed
 // message once per incident, or the recovery when one was open, and
 // returns the notification sent, 0 if none. Nothing external enters it.
-func (c *core) urgentTransition(w *watch, hit bool) int64 {
+func (c *core) urgentTransition(w *rule, hit bool) int64 {
 	if w.Urgent == "" {
 		return 0
 	}
 	now := c.notifyTime().Unix()
-	q := `UPDATE watches SET incident = ? WHERE id = ? AND urgent != '' AND incident = 0`
+	q := `UPDATE rules SET incident = ? WHERE id = ? AND urgent != '' AND incident = 0`
 	args := []any{now, w.ID}
 	if !hit {
-		q, args = `UPDATE watches SET incident = 0 WHERE id = ? AND incident != 0`, []any{w.ID}
+		q, args = `UPDATE rules SET incident = 0 WHERE id = ? AND incident != 0`, []any{w.ID}
 	}
 	res, err := c.store.db.Exec(q, args...)
 	if err != nil {
-		log.Printf("watch %d: urgent: %v", w.ID, err)
+		log.Printf("rule %d: urgent: %v", w.ID, err)
 		return 0
 	}
 	if k, _ := res.RowsAffected(); k != 1 {
 		return 0 // already sent for this incident, or none to recover from
 	}
 	text, urgent := w.Urgent, true
-	why := "Ta veille « " + w.Name + " » est urgente : tu as demandé à être prévenu à toute heure, avec ce message."
+	why := "Ta règle « " + w.Name + " » est urgente : tu as demandé à être prévenu à toute heure, avec ce message."
 	if !hit {
 		text, urgent = truncate(w.Name+urgentRecovered, notifyTextMax), w.UrgentRecovery
-		why = "Ta veille urgente « " + w.Name + " » est revenue à la normale."
+		why = "Ta règle urgente « " + w.Name + " » est revenue à la normale."
 	}
 	n := &notification{Text: text, Why: why, Ref: fmt.Sprintf("watch:%d", w.ID), Source: notifyFromUrgent}
 	n, err = c.notify(n, notifyItem{Level: levelNow, Ref: n.Ref, Asked: true, Urgent: urgent})
 	if err != nil {
-		log.Printf("watch %d: urgent: %v", w.ID, err)
+		log.Printf("rule %d: urgent: %v", w.ID, err)
 		return 0
 	}
-	log.Printf("watch %d: urgent message %d (%s, %s)", w.ID, n.ID, map[bool]string{true: "incident", false: "recovered"}[hit], n.Outcome)
+	log.Printf("rule %d: urgent message %d (%s, %s)", w.ID, n.ID, map[bool]string{true: "incident", false: "recovered"}[hit], n.Outcome)
 	return n.ID
 }
 

@@ -30,7 +30,7 @@ type notificationsIn struct {
 type ruleIn struct {
 	Action    string `json:"action,omitempty" jsonschema:"add (by default; it replaces the rule for the same match or nights) or delete"`
 	ID        int64  `json:"id,omitempty" jsonschema:"for delete: the rule's id"`
-	Kind      string `json:"kind,omitempty" jsonschema:"topic (what to do with notifications about a ref) or quiet (the quiet hours); topic by default"`
+	Kind      string `json:"kind,omitempty" jsonschema:"event (when, if, then: give event), topic (what to do with notifications about a ref) or quiet (the quiet hours); topic by default, event when event is given"`
 	Match     string `json:"match,omitempty" jsonschema:"for topic: the ref it applies to, as given to notify; project:getout also matches project:getout:prod"`
 	Outcome   string `json:"outcome,omitempty" jsonschema:"for topic: now, brief or never"`
 	Night     bool   `json:"night,omitempty" jsonschema:"for topic with outcome now: even in the quiet hours and over the daily cap; only if the user said so"`
@@ -42,6 +42,8 @@ type ruleIn struct {
 	To        string `json:"to,omitempty" jsonschema:"for quiet: when they end, HH:MM"`
 	Why       string `json:"why" jsonschema:"why this rule, in French, one sentence: what the user said, or the feedback or activity it comes from"`
 	SourceRef string `json:"source_ref,omitempty" jsonschema:"the user's message of this turn that asks for it, msg:N; without it the rule is only proposed"`
+
+	Event *ruleEventIn `json:"event,omitempty" jsonschema:"for kind event: the rule's name, when, if, then and what they need"`
 }
 
 func registerNotifyTools(s *mcp.Server, c *core) {
@@ -53,7 +55,7 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in notificationsIn) (map[string]any, error) {
 			return c.brainNotifications(in)
 		})
-	tool(s, "rule", "Write or delete a notification rule of the user's: what to do with notifications about a topic ref (now, brief, never, even at night, and by which lines), or the quiet hours. This is where a preference about being told lives, never in remember; general settings (device order, daily cap, time zone, Telegram detail) are setting. The match is a known topic (notifications lists them): a new one matches only if notify gives that same ref. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider).",
+	tool(s, "rule", "Write a rule of the user's: an event rule (when, if, then: what comes back or reacts on its own), or a notification rule: what to do with notifications about a topic ref (now, brief, never, even at night, and by which lines), or the quiet hours; or delete a notification rule. A preference about being told lives here, never in remember; general settings (device order, daily cap, time zone, Telegram detail) are setting. A topic's match is a known topic (notifications lists them): a new one matches only if notify gives that same ref. "+eventRuleToolText+" Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})
@@ -302,6 +304,14 @@ func (c *core) brainNotifications(in notificationsIn) (map[string]any, error) {
 const taintNotification = "notification.external"
 
 func (c *core) brainRule(in ruleIn) (map[string]any, error) {
+	if in.Kind == kindEvent || in.Kind == "" && in.Event != nil {
+		if in.Event == nil {
+			return nil, errors.New("an event rule needs event: name, when, prompt (or then notify and text)")
+		}
+		ev := *in.Event
+		ev.Why, ev.SourceRef = orStr(ev.Why, in.Why), orStr(ev.SourceRef, in.SourceRef)
+		return c.brainEventRule(ev)
+	}
 	switch in.Action {
 	case "", "add":
 	case "delete":

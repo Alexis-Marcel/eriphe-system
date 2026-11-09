@@ -106,7 +106,7 @@ func canonicalArgs(args map[string]any) string {
 
 // grantWatchAction writes a watch's authorised action, replacing its
 // previous one. Only on a clean turn, citing the user's message of it.
-func (c *core) grantWatchAction(w *watch, a grantAction, sourceRef string) (*watchGrant, error) {
+func (c *core) grantWatchAction(w *rule, a grantAction, sourceRef string) (*watchGrant, error) {
 	if tainted := c.turnTaint(); len(tainted) > 0 {
 		return nil, fmt.Errorf("refused: this turn read external content (%s): an action is authorised in advance only in a turn that read nothing from outside, in %s's own words", strings.Join(tainted, ", "), c.conf().User)
 	}
@@ -257,7 +257,7 @@ func (c *core) revokeGrants(watchID int64, why string) {
 // watch being woken for carries, still live; it counts the use, records
 // the run as acted, and tells the user. False for anything else.
 func (c *core) useWatchGrant(kind, tool, input string) bool {
-	wt, ok := c.currentWatchTurn()
+	wt, ok := c.currentRuleTurn()
 	if !ok {
 		return false
 	}
@@ -265,27 +265,27 @@ func (c *core) useWatchGrant(kind, tool, input string) bool {
 	hash := hashToken(kind + "\n" + tool + "\n" + input)
 	res, err := c.store.db.Exec(`UPDATE watch_grants SET uses = uses + 1 WHERE id = (SELECT id FROM watch_grants
 		WHERE watch_id = ? AND kind = ? AND tool = ? AND input_hash = ? AND revoked IS NULL AND uses < max_uses AND expires > ?
-		ORDER BY id DESC LIMIT 1)`, wt.Watch, kind, tool, hash, now.Unix())
+		ORDER BY id DESC LIMIT 1)`, wt.Rule, kind, tool, hash, now.Unix())
 	if err != nil {
 		return false
 	}
 	if n, _ := res.RowsAffected(); n != 1 {
 		return false
 	}
-	w, _ := c.watch(wt.Watch)
-	name := fmt.Sprintf("#%d", wt.Watch)
+	w, _ := c.rule(wt.Rule)
+	name := fmt.Sprintf("#%d", wt.Rule)
 	if w != nil {
 		name = w.Name
 	}
 	action := truncate(tool+" "+input, 300)
-	log.Printf("WATCH GRANT USED: watch %d (%s), run %d: %s", wt.Watch, name, wt.Run, action)
-	c.store.db.Exec(`UPDATE watch_runs SET outcome = ?, action = ? WHERE id = ?`, runActed, action, wt.Run)
+	log.Printf("WATCH GRANT USED: watch %d (%s), run %d: %s", wt.Rule, name, wt.Run, action)
+	c.store.db.Exec(`UPDATE rule_runs SET outcome = ?, action = ? WHERE id = ?`, runActed, action, wt.Run)
 	text := fmt.Sprintf("Veille « %s » : j'ai utilisé l'action que tu avais autorisée d'avance : %s.", name, truncate(tool+" "+input, 200))
 	c.store.addMessage(roleBrain, "("+text+")", true)
 	n := &notification{Text: truncate(text, notifyTextMax), Why: "Une action autorisée d'avance par toi a été utilisée, sans te redemander.",
-		Ref: fmt.Sprintf("watch:%d", wt.Watch), Source: notifyFromWatch}
+		Ref: fmt.Sprintf("watch:%d", wt.Rule), Source: notifyFromWatch}
 	if _, err := c.notify(n, notifyItem{Level: levelNow, Ref: n.Ref, Asked: true}); err != nil {
-		log.Printf("watch %d: telling the user of the action: %v", wt.Watch, err)
+		log.Printf("watch %d: telling the user of the action: %v", wt.Rule, err)
 	}
 	return true
 }

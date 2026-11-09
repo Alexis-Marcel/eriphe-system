@@ -21,8 +21,7 @@ type concept struct {
 var concepts = []concept{
 	{"memory", "remember, recall", "what you must know about the user: facts, people, decisions, a project's progress, how they want you to talk"},
 	{"intention", "intend, intentions, update_intention", "something owed or to do once: at a date and time (remind me at 14:00), or the next time a name comes up"},
-	{"watch", "watch, watches, update_watch", "what comes back on its own: at times of day (horaire), on the user's return (retour), when a tool's result changes (outil), when a service alerts (alerte)"},
-	{"rule", "rule", "what to do with notifications about a topic (now, brief, never, even at night, which lines), and the quiet hours"},
+	{"rule", "rule, rules, update_rule", "what comes back or reacts on its own, as when, if, then: when at times of day (horaire), on the user's return (retour), a fact changing (fait), a tool's result changing (outil), a service alerting (alerte), a task or session ending (fin); if closed facts and the time hold; then wake you, wake an assistant, or notify a fixed text. And what to do with notifications about a topic (now, brief, never, even at night, which lines), and the quiet hours"},
 	{"setting", "setting, presence_sources, map_presence", "how the user is told in general: device order, lines off, daily cap, time zone, Telegram detail; what you may know of the user, and which Home Assistant entities tell it"},
 	{"notify", "notify, notifications", "say something on your own, now or for the brief, under a known topic ref"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
@@ -31,7 +30,7 @@ var concepts = []concept{
 	{"session", "start_session, session_status, settle_step, amend_session", "work of several steps toward one goal (a plan, steps in parallel, checkpoints for the user), not only code"},
 }
 
-const conceptMapEN = "memory, intention, watch, rule, setting, notify, since, fact, task, session"
+const conceptMapEN = "memory, intention, rule, setting, notify, since, fact, task, session"
 
 var conceptLinesEN = func() string {
 	var b strings.Builder
@@ -55,8 +54,8 @@ var recurringRe = regexp.MustCompile(`(?i)(tou(s|tes) les (jours|matins|soirs|se
 var oneOffRe = regexp.MustCompile(`(?i)(\d{4}-\d{2}-\d{2}|\b\d{1,2}/\d{1,2}\b|demain|aujourd'?hui|ce soir|tomorrow|today|tonight|\bonce\b|une fois|dans \d+|\bin \d+|\ble \d{1,2}\b|\bon the \d)`)
 
 const (
-	hintIntendNotWatch = "A watch comes back on a schedule; a one-off time is an intention: intend (kind reminder, remind_at YYYY-MM-DDTHH:MM)."
-	hintWatchNotIntend = "What comes back on a schedule is a watch: an intention fires once. Use watch (source horaire, schedule like daily 07:00 or monday 09:00) when the user asks for it."
+	hintIntendNotWatch = "A rule comes back on a schedule; a one-off time is an intention: intend (kind reminder, remind_at YYYY-MM-DDTHH:MM)."
+	hintWatchNotIntend = "What comes back on a schedule is a rule: an intention fires once. Use rule (kind event, when horaire, schedule like daily 07:00 or monday 09:00) when the user asks for it."
 	hintRuleNotMemory  = "How, when or where the user is told is enforced by code, so it is not a memory: write it as a rule (rule: a topic, or the quiet hours) or a setting (setting: device order, lines off, daily cap, time zone, Telegram detail). recall shows the rules with the memories."
 
 	hintIntentionNotMemory = "What is owed or to do is an intention, with its date: intend (reminder, commitment, promise or waiting_for)."

@@ -16,21 +16,21 @@ func TestWatchRoutes(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
 	c := tw.c
-	p, err := c.addWatch(&watch{Name: "Revue du dimanche", Source: sourceSchedule, Spec: watchSpec{Schedule: "sunday 18:00"},
+	p, err := c.addRule(&rule{Name: "Revue du dimanche", Source: sourceSchedule, Spec: ruleWhen{Schedule: "sunday 18:00"},
 		Prompt: "Fais la revue de la semaine", State: watchProposed, By: "brain", Tainted: "mail.read"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := c.addWatch(&watch{Name: "Point au retour", Source: sourceReturn, Spec: watchSpec{After: 240}, Prompt: "Fais le point",
+	r, err := c.addRule(&rule{Name: "Point au retour", Source: sourceReturn, Spec: ruleWhen{After: 240}, Prompt: "Fais le point",
 		State: watchActive, By: "owner"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.addWatch(&watch{Name: "GitHub", Source: sourceAlert, Prompt: "Regarde", State: watchActive, By: "owner"}); err != nil {
+	if _, err := c.addRule(&rule{Name: "GitHub", Source: sourceAlert, Prompt: "Regarde", State: watchActive, By: "owner"}); err != nil {
 		t.Fatal(err)
 	}
-	code, body, _ := tw.do("GET", "/settings/watches", nil, nil)
-	if code != 200 || strings.Contains(body, "Revue du dimanche") || !strings.Contains(body, `href="/settings/approve#watches"`) ||
+	code, body, _ := tw.do("GET", "/settings/rules", nil, nil)
+	if code != 200 || strings.Contains(body, "Revue du dimanche") || !strings.Contains(body, `href="/settings/approve#event-rules"`) ||
 		!strings.Contains(body, "Point au retour") || !strings.Contains(body, "Lui demander") || strings.Contains(body, `hx-post="/watches"`) {
 		t.Fatalf("page %d", code)
 	}
@@ -40,25 +40,25 @@ func TestWatchRoutes(t *testing.T) {
 		t.Fatal("routines and watches are not apart")
 	}
 	if _, body, _ := tw.do("GET", "/settings/approve", nil, nil); !strings.Contains(body, "Revue du dimanche") ||
-		!strings.Contains(body, "Après un contenu extérieur") || !strings.Contains(body, `hx-post="/watches/`+idText(p.ID)+`/approve"`) {
+		!strings.Contains(body, "Après un contenu extérieur") || !strings.Contains(body, `hx-post="/event-rules/`+idText(p.ID)+`/approve"`) {
 		t.Fatal("the proposed watch is not in À valider")
 	}
 	h := map[string]string{"X-CSRF-Token": csrf}
-	if code, body, _ := tw.do("POST", "/watches/"+idText(p.ID)+"/approve", url.Values{}, h); code != 200 || !strings.Contains(body, "Revue du dimanche") {
+	if code, body, _ := tw.do("POST", "/event-rules/"+idText(p.ID)+"/approve", url.Values{}, h); code != 200 || !strings.Contains(body, "Revue du dimanche") {
 		t.Fatalf("approve %d %s", code, body)
 	}
 	if code, _, _ := tw.do("POST", "/watches", url.Values{"name": {"x"}, "source": {"retour"}, "prompt": {"y"}}, h); code == 200 {
 		t.Fatal("the form to write a watch is still there")
 	}
-	tw.do("POST", "/watches/"+idText(r.ID)+"/pause", url.Values{}, h)
-	if w, _ := c.watch(r.ID); w.State != watchPaused {
+	tw.do("POST", "/event-rules/"+idText(r.ID)+"/pause", url.Values{}, h)
+	if w, _ := c.rule(r.ID); w.State != watchPaused {
 		t.Fatalf("pause %s", w.State)
 	}
-	tw.do("POST", "/watches/"+idText(r.ID)+"/resume", url.Values{}, h)
-	if code, _, _ := tw.do("POST", "/watches/"+idText(p.ID)+"/delete", url.Values{}, h); code != 200 {
+	tw.do("POST", "/event-rules/"+idText(r.ID)+"/resume", url.Values{}, h)
+	if code, _, _ := tw.do("POST", "/event-rules/"+idText(p.ID)+"/delete", url.Values{}, h); code != 200 {
 		t.Fatalf("delete %d", code)
 	}
-	if ws, _ := c.watches(); len(ws) != 2 || ws[0].State != watchActive {
+	if ws, _ := c.rules(); len(ws) != 2 || ws[0].State != watchActive {
 		t.Fatalf("after delete %+v", ws)
 	}
 }
@@ -70,17 +70,17 @@ func TestWatchHookRoutes(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
 	c := tw.c
-	w, err := c.addWatch(&watch{Name: "GitHub", Source: sourceAlert, Prompt: "Regarde", State: watchActive, By: "owner"})
+	w, err := c.addRule(&rule{Name: "GitHub", Source: sourceAlert, Prompt: "Regarde", State: watchActive, By: "owner"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	h := map[string]string{"X-CSRF-Token": csrf}
-	code, body, _ := tw.do("POST", "/watches/"+idText(w.ID)+"/hook", url.Values{}, h)
+	code, body, _ := tw.do("POST", "/event-rules/"+idText(w.ID)+"/hook", url.Values{}, h)
 	m := regexp.MustCompile(`value="(https://[^"]+/hooks/watch/([A-Za-z0-9_-]+))"`).FindStringSubmatch(body)
 	if code != 200 || m == nil {
 		t.Fatalf("hook %d %s", code, body)
 	}
-	if code, body, _ := tw.do("GET", "/settings/watches", nil, nil); code != 200 || strings.Contains(body, m[2]) {
+	if code, body, _ := tw.do("GET", "/settings/rules", nil, nil); code != 200 || strings.Contains(body, m[2]) {
 		t.Fatal("the address is shown again")
 	}
 	post := func(token string, n int) int {
@@ -102,7 +102,7 @@ func TestWatchHookRoutes(t *testing.T) {
 	if runs := runsOf(t, c, w.ID); len(runs) != 1 || !runs[0].External {
 		t.Fatalf("runs %+v", runs)
 	}
-	tw.do("POST", "/watches/"+idText(w.ID)+"/hook", url.Values{}, h)
+	tw.do("POST", "/event-rules/"+idText(w.ID)+"/hook", url.Values{}, h)
 	if got := post(m[2], 10); got != http.StatusNotFound {
 		t.Fatalf("old address %d", got)
 	}
