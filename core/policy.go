@@ -57,7 +57,7 @@ type Rule struct {
 	account *string
 }
 
-func rule(tool, match, decision, reason string) Rule {
+func policyRule(tool, match, decision, reason string) Rule {
 	return Rule{Tool: tool, Match: match, Decision: decision, Reason: reason, re: regexp.MustCompile(match)}
 }
 
@@ -68,17 +68,17 @@ const (
 
 var builtinDeny = []Rule{
 	// The task's container is its own: only what it was lent is worth a guard.
-	rule("Bash", shellBoundary+`rm\s+([^;&|]*\s)?(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\s([^;&|]*\s)?['"]?/work/folders|`+
+	policyRule("Bash", shellBoundary+`rm\s+([^;&|]*\s)?(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\s([^;&|]*\s)?['"]?/work/folders|`+
 		shellBoundary+`rm\s+([^;&|]*\s)?['"]?/work/folders[^;&|]*\s(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(\s|$|[;&|])`,
 		decideDeny, "suppression récursive interdite dans un dossier prêté (rm -r)"),
-	rule("Bash", `git\s+push\b[^;&|]*(\s|:|refs/heads/)(main|master)(\s|$|[;&|'")])`, decideDeny, "pousser sur main est interdit : pousse une branche"),
-	rule("Bash", `git\s+push\b[^;&|]*(\s--force\b|\s-f\b|\s--force-with-lease\b|\s\+\S)`, decideDeny, "forcer un push est interdit"),
-	rule("Bash", `\$\{?(`+secretVars+`)\b|/proc/[^/\s]+/environ|`+shellBoundary+`(printenv|env|export\s+-p|set)\s*($|[;&|>])|\.credentials\.json|eriphe-codex|codex/auth\.json|git\s+config\b[^;&|]*credential`,
+	policyRule("Bash", `git\s+push\b[^;&|]*(\s|:|refs/heads/)(main|master)(\s|$|[;&|'")])`, decideDeny, "pousser sur main est interdit : pousse une branche"),
+	policyRule("Bash", `git\s+push\b[^;&|]*(\s--force\b|\s-f\b|\s--force-with-lease\b|\s\+\S)`, decideDeny, "forcer un push est interdit"),
+	policyRule("Bash", `\$\{?(`+secretVars+`)\b|/proc/[^/\s]+/environ|`+shellBoundary+`(printenv|env|export\s+-p|set)\s*($|[;&|>])|\.credentials\.json|eriphe-codex|codex/auth\.json|git\s+config\b[^;&|]*credential`,
 		decideDeny, "lire les secrets de la tâche est interdit"),
 }
 
 var builtinAsk = []Rule{
-	rule("mcp__*", ``, decideAsk, "cet outil n'est pas dans le catalogue d'Eriphe"),
+	policyRule("mcp__*", ``, decideAsk, "cet outil n'est pas dans le catalogue d'Eriphe"),
 }
 
 // subject is what a tool acts on, which rules match against: for an MCP

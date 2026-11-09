@@ -2567,11 +2567,12 @@ a level; the code decides (`decideNotify`, no model):
   À valider, then written to the same keys Settings uses (one place per setting).
 
 **The brain's concepts** (`concepts.go`). One concept per need: memory (what the brain must know),
-intention (owed or to do once), watch (comes back on its own), rule (how to be told about a topic,
-quiet hours), setting (how to be told in general), notify, since, task. What the code enforces is
+intention (owed or to do once), rule (what comes back or reacts on its own: when, if, then; and
+how to be told about a topic, quiet hours), setting (how to be told in general), notify, since,
+fact, task, session. What the code enforces is
 never a memory: `recall` returns the matching rules typed as rules, and the tools refuse the
 wrong concept with a hint naming the right one (`remember` of a notification preference → `rule`
-or `setting`; `watch` at a one-off time → `intend`; a recurring `intend` → `watch`). The concept
+or `setting`; an event rule at a one-off time → `intend`; a recurring `intend` → `rule`). The concept
 bench (`concepts_test.go`) checks, without a model, that each request's right call is taken and its
 wrong one redirected, and that the map is in the MCP instructions and the prompt.
 
@@ -2790,13 +2791,46 @@ the header's line, the entry point's tokens.
   user, by kind, since they were last here (the start of their last absence; the last 24 hours if
   none), or the last 24 hours or 7 days, external items marked.
 
-**Watches** (`watch.go`, `watch_schedule.go`, `watch_tick.go`, `watch_poll.go`, `watch_alert.go`,
-`watch_grant.go`, `judge.go`, `watch_tools.go`, `web_watch.go`).
-What wakes the brain on its own, besides a due intention: one tool, `watch(name, source, schedule |
-after, prompt, brief?)`, with `watches` (each with its last runs) and `update_watch` (pause, resume,
-edit, delete). The brief, the point made on the user's return and the weekly review are not
-features of their own: they are watches whose prompt composes `since`, `notifications` and
+**Rules** (`rule.go`, `rule_engine.go`, `rule_schedule.go`, `rule_tick.go`, `rule_poll.go`,
+`rule_alert.go`, `rule_urgent.go`, `watch_grant.go`, `judge.go`, `rule_tools.go`, `web_rules.go`).
+What Eriphe does on its own, besides a due intention: **when** an event comes, **if** a condition
+on closed facts holds, **then** one action from a closed list, all run by code, no model. The
+brain writes one with `rule` (`kind: event`, the rule in `event`: `name`, `when`, what the source
+needs, `if`, `then`, `prompt`), lists them with `rules` (each with its last runs) and changes them
+with `update_rule` (pause, resume, edit, delete); the same `rule` writes the notification rules and
+the quiet hours (below). The brief, the point made on the user's return and the weekly review are
+not features of their own: they are rules whose prompt composes `since`, `notifications` and
 `notify`, which the brain suggests and never imposes.
+
+Before #244 step 4 these were **watches** (tables `watches`, `watch_runs`; tools `watch`,
+`watches`, `update_watch`; Settings → Veilles). At start the tables are renamed `rules` and
+`rule_runs` (`watch_id` → `rule_id`): every watch is a rule with the same id, history, webhook
+token and secret, and no condition, whose action wakes the brain. `/settings/watches` redirects to
+`/settings/rules`; the webhook address `/hooks/watch/<token>` is unchanged.
+
+- **When** (`when`): `horaire`, `retour`, `outil`, `alerte` (below), and:
+  - `fait`: a closed fact (`fact`, owner.field: `context.place`, `prod.etat`; see Facts) changes,
+    or becomes `becomes`. Looked at every 30 s; the first look only notes the value; a change to
+    or from unknown counts. Its detail is written by code from closed values, so it taints nothing.
+    « Quand je rentre » is `fait` on `context.place` becoming `home`.
+  - `fin`: a worker task ends (stopped, failed, lost) or a work session closes (`ends`: `task`,
+    `session`, or both). Its detail names the task or session by id, never by its title.
+- **If** (`if`, at most 300 characters and 8 terms): `path op value` joined by `and` (`et`), those
+  groups by `or` (`ou`); `op` is `=`, `!=`, `<`, `>`, `<=`, `>=`, or `in (a, b)`. A path is a
+  **closed** fact (a choice, a number, a date, rows by their count; never a text, so what a
+  tainted writer wrote cannot steer a rule) or the time: `now.day` (`mon` … `sun`, `weekday`,
+  `weekend`) and `now.time` (`HH:MM`, the user's zone). Paths and choice values are checked when
+  the rule is written. Numbers compare as numbers, the rest as words (dates and times compare
+  right). A term on an unknown fact is false. Tested when the event comes: false, the run is
+  recorded `skipped` and nothing is done (an urgent message neither).
+  `context.place = home and now.time >= 18:00` · `now.day in (weekday)` · `prod.incidents > 2`.
+- **Then** (`then`): `brain` (the default: wake the brain with `prompt`, below);
+  `assistant:<name>` (wake that assistant at its next idle with `prompt` and the event's detail;
+  external content is fenced and taints its session); `notify` (eriphe-core sends `text`, the
+  user's own words, under `topic`, `now` or `brief`, through the usual rules, quiet hours and cap;
+  the run is `notified`).
+- **Settings → Règles** (`/settings/rules`) shows each rule as one sentence, « Quand …, si …,
+  alors … », with its state and last runs.
 
 - **Sources.** `horaire`: days and times of day in the user's zone (`daily 07:00`, `weekdays
   07:00`, `weekend 09:30`, `sunday 18:00`, `monday,thursday 09:00`, `every 2h 08:00-20:00`; the
@@ -2810,7 +2844,7 @@ features of their own: they are watches whose prompt composes `since`, `notifica
   each; more than 6 hours late, the run is recorded as missed and nothing wakes. One run waits for
   the brain at a time per watch; a paused or deleted watch's waiting run is dropped.
 - **The wake.** At the brain's next idle, after any due intention, the clock trigger delivers
-  `[veille #N « nom » HH:MM · source …]`, the cause (late, the return and the absence), for a brief
+  `[règle #N « nom » HH:MM · source …]`, the cause (late, the return and the absence), for a brief
   where the last brief was, and the watch's prompt; the brain answers through `notify` or with
   `[rien]`. It goes on with the current turn, as an intention's wake does; a watch that was
   proposed on a tainted turn (then approved) taints it. When its turn ends (or before the next
@@ -2819,7 +2853,7 @@ features of their own: they are watches whose prompt composes `since`, `notifica
   `since("last_brief")`.
 - **Who writes them.** The brain writes a watch only when the user asked for it in that clean turn
   (its `source_ref` cites the user's message of the turn); otherwise, and always on a tainted turn,
-  it is proposed and the user approves it in **À valider (a card in the conversation)**. Settings → Veilles lists the routines
+  it is proposed and the user approves it in **À valider (a card in the conversation)**. Settings → Règles lists the routines
   (horaire, retour) apart from the watches (outil, alerte), each with its last runs, to pause,
   resume or delete; there is no form: the user asks the brain, and the page says how.
   Changing or deleting one takes the user's word in a clean turn. Names and prompts go through the

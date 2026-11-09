@@ -89,13 +89,13 @@
     </div>
   </li>{{end}}</ul>
 </section>{{end}}
-{{if .Watches}}<section class="approve-group" id="watches" aria-labelledby="ap-watches">
+{{if .Watches}}<section class="approve-group" id="event-rules" aria-labelledby="ap-watches">
   <h3 id="ap-watches">{{t "approve.watches"}} <span class="count">{{len .Watches}}</span></h3>
   <ul class="list">{{range .Watches}}
-  <li><div class="list-main">{{template "watch-line" .}}{{if .Tainted}}<span class="small"><span class="tag tag-no" title="{{.Tainted}}">{{t "notif.tainted"}}</span></span>{{end}}</div>
+  <li><div class="list-main">{{template "event-rule-line" .}}{{if .Tainted}}<span class="small"><span class="tag tag-no" title="{{.Tainted}}">{{t "notif.tainted"}}</span></span>{{end}}</div>
     <div class="actions">
-      <button class="btn btn-primary sm" hx-post="/watches/{{.ID}}/approve" hx-swap="none">{{template "i-check"}}{{t "watch.approve"}}</button>
-      <button class="btn btn-ghost sm" hx-post="/watches/{{.ID}}/reject" hx-swap="none">{{template "i-x"}}{{t "watch.reject"}}</button>
+      <button class="btn btn-primary sm" hx-post="/event-rules/{{.ID}}/approve" hx-swap="none">{{template "i-check"}}{{t "watch.approve"}}</button>
+      <button class="btn btn-ghost sm" hx-post="/event-rules/{{.ID}}/reject" hx-swap="none">{{template "i-x"}}{{t "watch.reject"}}</button>
     </div>
   </li>{{end}}</ul>
 </section>{{end}}

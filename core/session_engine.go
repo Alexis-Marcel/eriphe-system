@@ -591,7 +591,8 @@ func (c *core) closeLocked(s Session, state, summary string) {
 	}
 	c.setSession(s.ID, fields)
 	c.closeAsks(s.ID)
-	c.dropLead(s) // session_lead.go
+	c.dropLead(s)                                                                          // session_lead.go
+	c.ruleEnded("session", fmt.Sprintf("la session #%d s'est terminée (%s)", s.ID, state)) // rule_engine.go
 }
 
 // pauseSession stops starting steps; those running finish.

@@ -33,7 +33,7 @@ func intendCall(text, kind, remind string) benchCall {
 
 func watchCall(name, schedule string) benchCall {
 	return func(c *core, seq int) (map[string]any, error) {
-		return c.brainWatch(watchIn{Name: name, Source: sourceSchedule, Schedule: schedule, Prompt: name, SourceRef: ref(seq)})
+		return c.brainEventRule(ruleEventIn{Name: name, Source: sourceSchedule, Schedule: schedule, Prompt: name, SourceRef: ref(seq)})
 	}
 }
 
@@ -63,12 +63,12 @@ var conceptBench = []benchRow{
 	{"Rappelle-moi le 12 à 9 h de payer le loyer", "intention",
 		intendCall("Payer le loyer", "reminder", "2026-11-12T09:00"),
 		watchCall("Loyer", "2026-11-12 09:00"), "intend"},
-	{"Rappelle-moi chaque lundi de faire ma revue", "watch",
+	{"Rappelle-moi chaque lundi de faire ma revue", "rule",
 		watchCall("Revue du lundi", "monday 09:00"),
-		intendCall("Faire ma revue chaque lundi", "reminder", "2026-11-09T09:00"), "watch"},
-	{"Tous les matins à 7 h, fais-moi le brief", "watch",
+		intendCall("Faire ma revue chaque lundi", "reminder", "2026-11-09T09:00"), "rule"},
+	{"Tous les matins à 7 h, fais-moi le brief", "rule",
 		watchCall("Brief du matin", "daily 07:00"),
-		rememberCall("routine", "Brief tous les matins à 7 h"), "watch"},
+		rememberCall("routine", "Brief tous les matins à 7 h"), "rule"},
 	{"Ne me dérange pas après 23 h", "rule",
 		ruleCall(ruleIn{Kind: ruleQuiet, From: "23:00", To: "08:00"}),
 		rememberCall(kindPreference, "Ne veut pas être dérangé après 23 h"), "rule"},

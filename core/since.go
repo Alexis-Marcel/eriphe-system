@@ -100,7 +100,7 @@ var feedSources = map[string]feedSource{
 	feedNotification: notificationHappenings,
 	feedIntention:    intentionHappenings,
 	feedMessage:      messageHappenings,
-	feedWatch:        watchHappenings,
+	feedWatch:        ruleHappenings,
 	feedLearned:      learnedHappenings,
 }
 

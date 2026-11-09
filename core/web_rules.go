@@ -17,14 +17,15 @@ import (
 const watchPageRuns = 5
 
 func (w *web) watchRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /settings/watches", w.auth(w.handleWatches))
-	mux.Handle("POST /watches/{id}/{action}", w.auth(w.handleWatchAction))
+	mux.Handle("GET /settings/rules", w.auth(w.handleWatches))
+	mux.Handle("GET /settings/watches", http.RedirectHandler("/settings/rules", http.StatusMovedPermanently)) // its address before #244
+	mux.Handle("POST /event-rules/{id}/{action}", w.auth(w.handleWatchAction))
 	mux.HandleFunc("POST "+hookPath+"{token}", w.handleWatchHook)
 }
 
 type watchCard struct {
-	*watch
-	Runs  []*watchRun
+	*rule
+	Runs  []*ruleRun
 	Grant *watchGrant // its live authorised action
 }
 
@@ -43,13 +44,13 @@ type watchesPage struct {
 
 func (w *web) watchesPage() watchesPage {
 	v := watchesPage{Zone: w.c.notifyZone().String()}
-	ws, _ := w.c.watches()
+	ws, _ := w.c.rules()
 	for _, x := range ws {
 		if x.State == watchProposed {
 			v.Proposed++
 			continue
 		}
-		card := watchCard{watch: x, Runs: w.c.recentRuns(x.ID, watchPageRuns), Grant: w.c.liveGrant(x.ID)}
+		card := watchCard{rule: x, Runs: w.c.recentRuns(x.ID, watchPageRuns), Grant: w.c.liveGrant(x.ID)}
 		if x.Source == sourceSchedule || x.Source == sourceReturn {
 			v.Routines = append(v.Routines, card)
 		} else {
@@ -60,7 +61,7 @@ func (w *web) watchesPage() watchesPage {
 }
 
 func (w *web) handleWatches(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "settings", "", page{Title: "settings.watches", Nav: "settings", Tab: "watches", Data: w.watchesPage()})
+	w.render(rw, r, s, "settings", "", page{Title: "settings.rules", Nav: "settings", Tab: "rules", Data: w.watchesPage()})
 }
 
 func (w *web) renderWatches(rw http.ResponseWriter, r *http.Request, s *session, msg string) {
@@ -71,7 +72,7 @@ func (w *web) renderWatchesWith(rw http.ResponseWriter, r *http.Request, s *sess
 	rw.Header().Set("HX-Trigger", hxTrigger(msg, true, true))
 	v := w.watchesPage()
 	v.Fresh = fresh
-	w.render(rw, r, s, "settings", "watches-frag", page{Data: v})
+	w.render(rw, r, s, "settings", "rules-frag", page{Data: v})
 }
 
 func (w *web) handleWatchAction(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -84,11 +85,11 @@ func (w *web) handleWatchAction(rw http.ResponseWriter, r *http.Request, s *sess
 	action := r.PathValue("action")
 	switch action {
 	case "approve", "resume":
-		_, err = w.c.setWatchState(id, watchActive)
+		_, err = w.c.setRuleState(id, watchActive)
 	case "pause":
-		_, err = w.c.setWatchState(id, watchPaused)
+		_, err = w.c.setRuleState(id, watchPaused)
 	case "reject", "delete":
-		err = w.c.deleteWatch(id)
+		err = w.c.deleteRule(id)
 	case "revoke":
 		w.c.revokeGrants(id, "revoked in Settings")
 	case "hook":

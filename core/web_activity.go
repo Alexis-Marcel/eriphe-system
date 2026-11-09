@@ -142,7 +142,7 @@ func happenedLink(ref string) string {
 	case "intention":
 		return "/memory?view=commitments"
 	case "watch":
-		return "/settings/watches#watch-" + id
+		return "/settings/rules#watch-" + id
 	case "learned":
 		return "/settings/learned#learned-" + id
 	}
@@ -191,9 +191,9 @@ func (w *web) approvals() approvals {
 		}
 	}
 	a.Rules, _ = w.c.notifyRules(ruleProposed)
-	if ws, err := w.c.watches(watchProposed); err == nil {
+	if ws, err := w.c.rules(watchProposed); err == nil {
 		for _, x := range ws {
-			a.Watches = append(a.Watches, watchCard{watch: x})
+			a.Watches = append(a.Watches, watchCard{rule: x})
 		}
 	}
 	a.Settings, _ = w.c.settingProposals()
@@ -216,7 +216,7 @@ func (w *web) approvalCount() int {
 	if rules, err := w.c.notifyRules(ruleProposed); err == nil {
 		n += len(rules)
 	}
-	if ws, err := w.c.watches(watchProposed); err == nil {
+	if ws, err := w.c.rules(watchProposed); err == nil {
 		n += len(ws)
 	}
 	if ps, err := w.c.settingProposals(); err == nil {

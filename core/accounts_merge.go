@@ -171,7 +171,7 @@ func (c *core) moveWatches(from, to, account string) {
 // updateWatches changes the watches' specs: change says whether it
 // changed one.
 func (c *core) updateWatches(change func(spec map[string]any) bool) {
-	rows, err := c.store.db.Query(`SELECT id, spec FROM watches`)
+	rows, err := c.store.db.Query(`SELECT id, spec FROM rules`)
 	if err != nil {
 		return
 	}
@@ -195,7 +195,7 @@ func (c *core) updateWatches(change func(spec map[string]any) bool) {
 	}
 	rows.Close()
 	for _, u := range updates {
-		c.store.db.Exec(`UPDATE watches SET spec = ? WHERE id = ?`, u.spec, u.id)
+		c.store.db.Exec(`UPDATE rules SET spec = ? WHERE id = ?`, u.spec, u.id)
 	}
 }
 

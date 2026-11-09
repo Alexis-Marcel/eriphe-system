@@ -50,12 +50,12 @@ func hookSecretName(id int64) string { return fmt.Sprintf("watch-hook-%d", id) }
 // secret if it is signed; both are returned this once. A new one replaces
 // the old: the previous address stops working.
 func (c *core) newWatchHook(id int64) (token, secret string, err error) {
-	w, err := c.watch(id)
+	w, err := c.rule(id)
 	if err != nil {
 		return "", "", err
 	}
 	if w.Source != sourceAlert {
-		return "", "", errors.New("only an alerte watch has a webhook")
+		return "", "", errors.New("only an alerte rule has a webhook")
 	}
 	token = randomToken(32)
 	if w.Spec.Signed {
@@ -68,7 +68,7 @@ func (c *core) newWatchHook(id int64) (token, secret string, err error) {
 			return "", "", err
 		}
 	}
-	_, err = c.store.db.Exec(`UPDATE watches SET hook = ? WHERE id = ?`, hashToken(token), id)
+	_, err = c.store.db.Exec(`UPDATE rules SET hook = ? WHERE id = ?`, hashToken(token), id)
 	return token, secret, err
 }
 
@@ -84,27 +84,30 @@ func (c *core) receiveAlert(token string, h http.Header, body []byte) alertResul
 	if len(token) < 20 || len(token) > 100 {
 		return notFound
 	}
-	w, err := scanWatch(c.store.db.QueryRow(`SELECT `+watchCols+` FROM watches WHERE hook = ? AND source = ?`,
+	w, err := scanRule(c.store.db.QueryRow(`SELECT `+eventRuleCols+` FROM rules WHERE hook = ? AND source = ?`,
 		hashToken(token), sourceAlert))
 	if err != nil {
 		return notFound
 	}
 	if w.Spec.Signed && !c.signedBy(w.ID, h, body) {
-		log.Printf("watch %d: a webhook call without a valid signature was refused", w.ID)
+		log.Printf("rule %d: a webhook call without a valid signature was refused", w.ID)
 		return alertResult{http.StatusUnauthorized, "bad signature"}
 	}
 	if w.State != watchActive {
-		return alertResult{http.StatusConflict, "this watch is paused"}
+		return alertResult{http.StatusConflict, "this rule is paused"}
 	}
 	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM watch_runs WHERE watch_id = ? AND fired >= ?`, w.ID,
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM rule_runs WHERE rule_id = ? AND fired >= ?`, w.ID,
 		c.notifyTime().Add(-time.Hour).Unix()).Scan(&n)
 	if n >= alertPerHour {
 		return alertResult{http.StatusTooManyRequests, "too many calls"}
 	}
 	// An urgent watch's fixed message, before the brain looks (watch_urgent.go).
-	urgent := c.urgentTransition(w, !alertResolved(body))
-	c.fireWatch(w, &watchRun{Cause: causeAlert, Detail: alertDetail(body), External: true, Urgent: urgent})
+	var urgent int64
+	if c.ifHolds(w, c.notifyTime()) { // its condition holds the whole event back, the urgent message too
+		urgent = c.urgentTransition(w, !alertResolved(body))
+	}
+	c.fireRule(w, &ruleRun{Cause: causeAlert, Detail: alertDetail(body), External: true, Urgent: urgent})
 	return alertResult{http.StatusAccepted, "ok"}
 }
 

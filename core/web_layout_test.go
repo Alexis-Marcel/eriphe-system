@@ -33,7 +33,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/access/web", "access", "/settings/access"},
 		{"/settings/access/app", "access", "/settings/access"},
 		{"/settings/notifications", "notifications", ""},
-		{"/settings/watches", "watches", ""},
+		{"/settings/rules", "rules", ""},
 		{"/settings/account", "account", ""},
 	} {
 		code, body, _ := tw.do("GET", tc.path, nil, nil)
@@ -136,7 +136,7 @@ func TestSettingsNavGroups(t *testing.T) {
 	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
 	nav := body[strings.Index(body, `<nav class="settings-nav"`):]
 	nav = nav[:strings.Index(nav, "</nav>")]
-	order := []string{"Assistant", `href="/memory"`, `href="/settings/watches"`, `href="/settings/agents"`, `href="/settings/skills"`,
+	order := []string{"Assistant", `href="/memory"`, `href="/settings/rules"`, `href="/settings/agents"`, `href="/settings/skills"`,
 		"Connexions", `href="/settings/tools"`, `href="/settings/folders"`,
 		"Appareils &amp; accès", `href="/settings/devices"`, `href="/settings/access"`, `href="/settings/notifications"`,
 		"Mon espace", `href="/settings/account"`}

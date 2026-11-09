@@ -131,6 +131,14 @@ func openStore(path string) (*Store, error) {
 	db.Exec(`ALTER TABLE access_log RENAME COLUMN repo TO target`)
 	db.Exec(`ALTER TABLE access_log RENAME COLUMN access TO action`)
 	db.Exec(`ALTER TABLE credential_grants RENAME TO repo_grants`)
+	// The watches became rules (#244 step 4): same rows, ids, history and
+	// webhook tokens.
+	if _, err := db.Exec(`ALTER TABLE watches RENAME TO rules`); err == nil {
+		db.Exec(`ALTER TABLE watch_runs RENAME TO rule_runs`)
+		db.Exec(`ALTER TABLE rule_runs RENAME COLUMN watch_id TO rule_id`)
+		db.Exec(`DROP INDEX IF EXISTS watch_runs_watch`)
+		db.Exec(`DROP INDEX IF EXISTS watch_runs_fired`)
+	}
 	// The assistants' state became the kept facts (#244 step 3).
 	if _, err := db.Exec(`ALTER TABLE assistant_state RENAME TO facts`); err == nil {
 		db.Exec(`ALTER TABLE facts RENAME COLUMN assistant TO owner`)

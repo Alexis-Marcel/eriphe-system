@@ -226,7 +226,7 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		p.Pending, p.Tainted, p.Why, p.Outcome = r.State == ruleProposed, r.Tainted, r.Why, cardApproved
 		p.text = func(lang string) string { return ruleText(r, lang) }
 	case cardWatch:
-		w, err := c.watch(id)
+		w, err := c.rule(id)
 		if err != nil {
 			return p
 		}
@@ -324,7 +324,7 @@ func (c *core) pendingProposals() []proposal {
 			add(cardRule, r.ID)
 		}
 	}
-	if ws, err := c.watches(watchProposed); err == nil {
+	if ws, err := c.rules(watchProposed); err == nil {
 		for _, w := range ws {
 			add(cardWatch, w.ID)
 		}
@@ -395,10 +395,10 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.deleteNotifyRule(id)
 	case cardWatch:
 		if approve {
-			_, err := c.setWatchState(id, watchActive)
+			_, err := c.setRuleState(id, watchActive)
 			return err
 		}
-		return c.deleteWatch(id)
+		return c.deleteRule(id)
 	case cardSetting:
 		return c.decideSetting(id, approve)
 	case cardPresence:

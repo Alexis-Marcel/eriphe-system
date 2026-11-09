@@ -107,7 +107,7 @@ func TestCardKinds(t *testing.T) {
 	m := c.mem
 	mem := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Sam préfère le train", Status: memProposed, SourceKind: srcBrain})
 	in := mustIntend(t, m, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
-	w, _ := c.addWatch(&watch{Name: "Revue du dimanche", Source: sourceSchedule, Spec: watchSpec{Schedule: "sunday 18:00"},
+	w, _ := c.addRule(&rule{Name: "Revue du dimanche", Source: sourceSchedule, Spec: ruleWhen{Schedule: "sunday 18:00"},
 		Prompt: "Fais la revue", State: watchProposed, By: "brain"})
 	sid, _ := c.proposeSetting(settingProposal{Name: setCap, Value: "3", Why: "Trop de notifications."})
 	for _, p := range []struct {
@@ -140,7 +140,7 @@ func TestCardKinds(t *testing.T) {
 	if x, _ := m.intention(in.ID); x.State != intentCancelled {
 		t.Error("the intention is not cancelled")
 	}
-	if x, _ := c.watch(w.ID); x.State != watchActive {
+	if x, _ := c.rule(w.ID); x.State != watchActive {
 		t.Error("the watch is not active")
 	}
 	if c.notifyCap() != 3 {
@@ -329,7 +329,7 @@ func TestBrainCannotApprove(t *testing.T) {
 			}
 		}
 	}
-	w, _ := c.addWatch(&watch{Name: "Revue", Source: sourceSchedule, Spec: watchSpec{Schedule: "sunday 18:00"},
+	w, _ := c.addRule(&rule{Name: "Revue", Source: sourceSchedule, Spec: ruleWhen{Schedule: "sunday 18:00"},
 		Prompt: "Fais la revue", State: watchProposed, By: "brain"})
 	in := mustIntend(t, c.mem, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
 	mem := mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Sam préfère le train", Status: memProposed, SourceKind: srcBrain})
@@ -346,7 +346,7 @@ func TestBrainCannotApprove(t *testing.T) {
 			t.Errorf("%s changed a proposal: %v", name, out.Content)
 		}
 	}
-	if x, _ := c.watch(w.ID); x.State != watchProposed {
+	if x, _ := c.rule(w.ID); x.State != watchProposed {
 		t.Error("the brain approved a watch")
 	}
 	if x, _ := c.mem.intention(in.ID); x.State != intentProposed {

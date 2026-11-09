@@ -53,8 +53,8 @@ const (
 
 var condOps = []string{"eq", "ne", "gt", "ge", "lt", "le", "contains"}
 
-// watchCond is the deterministic test of an outil watch.
-type watchCond struct {
+// pollCond is the deterministic test of an outil watch.
+type pollCond struct {
 	Kind  string `json:"kind"`
 	Path  string `json:"path,omitempty"` // data.items.0.state; the whole result if empty
 	Op    string `json:"op,omitempty"`
@@ -75,12 +75,12 @@ type pollState struct {
 
 // checkPoll validates an outil watch's shape (the catalog is checked by
 // checkPollTool, which needs the core).
-func (w *watch) checkPoll() error {
+func (w *rule) checkPoll() error {
 	s := w.Spec
-	w.Spec = watchSpec{Server: strings.TrimSpace(s.Server), Tool: strings.TrimSpace(s.Tool), Args: s.Args, Every: s.Every,
+	w.Spec = ruleWhen{Server: strings.TrimSpace(s.Server), Tool: strings.TrimSpace(s.Tool), Args: s.Args, Every: s.Every,
 		Cond: s.Cond, Judge: strings.TrimSpace(s.Judge)}
 	if w.Spec.Server == "" || w.Spec.Tool == "" {
-		return errors.New("an outil watch names a catalog server and one of its read-only tools")
+		return errors.New("an outil rule names a catalog server and one of its read-only tools")
 	}
 	if w.Spec.Every == 0 {
 		w.Spec.Every = pollEveryDefault
@@ -93,7 +93,7 @@ func (w *watch) checkPoll() error {
 	}
 	c := w.Spec.Cond
 	if c == nil {
-		c = &watchCond{Kind: condChanged}
+		c = &pollCond{Kind: condChanged}
 		w.Spec.Cond = c
 	}
 	switch c.Kind {
@@ -114,7 +114,7 @@ func (w *watch) checkPoll() error {
 
 // checkPollTool tells whether eriphe-core may call an outil watch's tool
 // on its own: a free read of the brain's.
-func (c *core) checkPollTool(w *watch) error {
+func (c *core) checkPollTool(w *rule) error {
 	server, tool := w.Spec.Server, w.Spec.Tool
 	if _, ok := c.conf().Servers[server]; !ok || c.pool.get(server) == nil {
 		return fmt.Errorf("%s is not a server of the catalog", server)
@@ -124,16 +124,16 @@ func (c *core) checkPollTool(w *watch) error {
 	}
 	name := claudeToolName(server, tool)
 	if !c.pool.readOnly(name) {
-		return fmt.Errorf("%s.%s is not read-only (by its own annotation, on a server believed for it): a watch only reads", server, tool)
+		return fmt.Errorf("%s.%s is not read-only (by its own annotation, on a server believed for it): a rule only reads", server, tool)
 	}
 	if !c.freeRead(name) {
-		return fmt.Errorf("a rule of the policy names %s.%s: a watch calls free reads only", server, tool)
+		return fmt.Errorf("a rule of the policy names %s.%s: a rule calls free reads only", server, tool)
 	}
 	return nil
 }
 
 // tickPoll calls an outil watch's tool when its time has come.
-func (c *core) tickPoll(ctx context.Context, w *watch, now time.Time) {
+func (c *core) tickPoll(ctx context.Context, w *rule, now time.Time) {
 	if w.NextAt.After(now) {
 		return
 	}
@@ -142,7 +142,7 @@ func (c *core) tickPoll(ctx context.Context, w *watch, now time.Time) {
 	defer func() {
 		st.Checked = now.Unix()
 		raw, _ := json.Marshal(st)
-		c.store.db.Exec(`UPDATE watches SET poll = ?, next_at = ? WHERE id = ?`, string(raw), next.Unix(), w.ID)
+		c.store.db.Exec(`UPDATE rules SET poll = ?, next_at = ? WHERE id = ?`, string(raw), next.Unix(), w.ID)
 	}()
 	if err := c.checkPollTool(w); err != nil {
 		st.Error = err.Error() // its access changed: it waits, and Settings says why
@@ -168,7 +168,7 @@ func (c *core) tickPoll(ctx context.Context, w *watch, now time.Time) {
 		return
 	case hit != st.PendHit || value != st.PendValue:
 		st.Pending = false // it flapped: nothing happened
-		log.Printf("watch %d: a transition did not hold on its second look", w.ID)
+		log.Printf("rule %d: a transition did not hold on its second look", w.ID)
 		return
 	}
 	st.Pending = false
@@ -182,25 +182,25 @@ func (c *core) tickPoll(ctx context.Context, w *watch, now time.Time) {
 	}
 	st.Known, st.Hit, st.Value = true, hit, value
 	var urgent int64
-	if cause != causeChanged {
+	if cause != causeChanged && c.ifHolds(w, c.notifyTime()) {
 		// An urgent watch's fixed message, on the deterministic condition
 		// alone, before any judge or the brain (watch_urgent.go).
 		urgent = c.urgentTransition(w, hit)
 	}
 	if hit || cause == causeChanged {
 		if ok, note := judgeAllows(ctx, w.Spec.Judge, excerpt); !ok {
-			log.Printf("watch %d: the judge held the wake back", w.ID)
+			log.Printf("rule %d: the judge held the wake back", w.ID)
 			return
 		} else if note != "" {
-			log.Printf("watch %d: %s", w.ID, note)
+			log.Printf("rule %d: %s", w.ID, note)
 		}
 	}
-	c.fireWatch(w, &watchRun{Cause: cause, Detail: excerpt, External: true, Urgent: urgent})
+	c.fireRule(w, &ruleRun{Cause: cause, Detail: excerpt, External: true, Urgent: urgent})
 }
 
 // transition tells whether a look differs from the last confirmed state.
 // Before any, the condition is taken as false: true at the first look wakes.
-func transition(w *watch, st pollState, hit bool, value string) bool {
+func transition(w *rule, st pollState, hit bool, value string) bool {
 	if w.Spec.Cond.Kind == condChanged {
 		return value != st.Value
 	}
@@ -209,7 +209,7 @@ func transition(w *watch, st pollState, hit bool, value string) bool {
 
 // pollOnce calls the tool and tests the condition: whether it holds, the
 // value it saw (hashed, for changed) and an excerpt of the result.
-func (c *core) pollOnce(ctx context.Context, w *watch) (hit bool, value, excerpt string, err error) {
+func (c *core) pollOnce(ctx context.Context, w *rule) (hit bool, value, excerpt string, err error) {
 	u := c.pool.get(w.Spec.Server)
 	if u == nil {
 		return false, "", "", errors.New("server gone")
