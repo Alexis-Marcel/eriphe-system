@@ -10,7 +10,7 @@ import (
 // The brain's tools for work sessions (sessions.go): it opens them with
 // the user and, until a session has a lead of its own, leads them.
 
-const sessionNote = "The user approves the plan on a card in the conversation; the planned steps then start without asking again. You are told of each step as an event [session N « title »]: judge it with settle_step."
+const sessionNote = "The user approves the plan on a card in the conversation; the planned steps then start without asking again, and the session gets its lead, a temporary assistant that judges each step and reports to you what the user must know or decide. Without one, you lead it: each step reaches you as an event [session N « title »], judged with settle_step."
 
 type sessionIDIn struct {
 	Session int64 `json:"session_id"`
@@ -40,6 +40,11 @@ type chooseIn struct {
 type endIn struct {
 	Session int64  `json:"session_id"`
 	Summary string `json:"summary" jsonschema:"what the session did and where its results are, for the user, in their language"`
+}
+
+type tellLeadIn struct {
+	Session int64  `json:"session_id"`
+	Text    string `json:"text" jsonschema:"what the user said or wants, in French"`
 }
 
 type sessionsIn struct {
@@ -106,6 +111,9 @@ func registerSessionTools(s *mcp.Server, c *core) {
 
 	tool(s, "settle_step", "Judge a step of a session that reported its work or stopped, on its evidence: accept, retry (at most 2 per step; say what to fix) or reject. A report is only a claim: a step whose checks failed cannot be accepted. Accepting lets the steps after it start.",
 		func(ctx context.Context, in settleIn) (Step, error) {
+			if err := c.leadOnly(in.Session); err != nil {
+				return Step{}, err
+			}
 			return c.settleStep(ctx, in.Session, in.Step, in.Verdict, in.Note, in.Output, "brain")
 		})
 
@@ -117,6 +125,9 @@ func registerSessionTools(s *mcp.Server, c *core) {
 						return nil, err
 					}
 				}
+			}
+			if err := c.leadOnly(in.Session); err != nil {
+				return nil, err
 			}
 			note, err := c.amendSession(ctx, in.Session, amendIn{Add: in.Add, Drop: in.Drop}, in.Why, "brain")
 			return map[string]any{"note": note}, err
@@ -130,12 +141,21 @@ func registerSessionTools(s *mcp.Server, c *core) {
 			return c.chooseStep(ctx, in.Session, in.Step, in.Option, "user")
 		})
 
-	tool(s, "end_session", "Close a session once every step is accepted, rejected, dropped or blocked, with a summary for the user. Check the goal's done_when first.",
+	tool(s, "end_session", "Close a session you lead once every step is accepted, rejected, dropped or blocked, with a summary for the user. With a done_when, a fresh agent checks the objective first; you are told of its verdict.",
 		func(ctx context.Context, in endIn) (map[string]any, error) {
-			if err := c.endSession(in.Session, in.Summary, "brain"); err != nil {
+			if err := c.leadOnly(in.Session); err != nil {
 				return nil, err
 			}
-			return map[string]any{"ok": true}, nil
+			note, err := c.finishSession(ctx, in.Session, in.Summary, "brain")
+			return map[string]any{"note": note}, err
+		})
+
+	tool(s, "tell_lead", "Tell a session's lead what the user wants (a change of direction, an answer it asked for): it reads it at its next wake. For a session with a lead of its own.",
+		func(ctx context.Context, in tellLeadIn) (map[string]any, error) {
+			if err := c.tellLeadFromBrain(in.Session, in.Text, c.turnTaint()); err != nil {
+				return nil, err
+			}
+			return map[string]any{"note": "Passed to the lead."}, nil
 		})
 
 	tool(s, "stop_session", "Stop a session the user wants stopped: its running tasks stop, its cards are withdrawn.",

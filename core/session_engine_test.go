@@ -90,6 +90,19 @@ func reports(t *testing.T, c *core, st Step, text string, extra ...EventRow) {
 	c.notifyBrain(st.Task, stateIdle)
 }
 
+// told is the last thing the session's lead was told: its own lead's
+// inbox, or the brain's events.
+func told(t *testing.T, c *core, s Session) string {
+	t.Helper()
+	s, _ = c.session(s.ID)
+	if !c.hasLead(s) {
+		return lastEvent(t, c)
+	}
+	var text string
+	c.store.db.QueryRow(`SELECT text FROM session_inbox WHERE session = ? ORDER BY id DESC LIMIT 1`, s.ID).Scan(&text)
+	return text
+}
+
 func receiptOf(text, summary string) string {
 	return text + "\n\n```json\n" + `{"receipt": {"status": "done", "summary": "` + summary + `"}}` + "\n```"
 }
@@ -126,7 +139,7 @@ func TestSessionRuns(t *testing.T) {
 	if st := stepOf(t, c, s, "names"); st.Status != stepReported || st.Output != "Names: Lumen, Rivet, Ocre." {
 		t.Fatalf("names after its turn: %+v", st)
 	}
-	if msg := lastEvent(t, c); !strings.Contains(msg, "[session") || !strings.Contains(msg, "settle_step") {
+	if msg := told(t, c, s); !strings.Contains(msg, "settle_step") {
 		t.Errorf("the lead heard %q", msg)
 	}
 	if _, err := c.settleStep(ctx, s.ID, "names", verdictAccept, "", "", "brain"); err != nil {
@@ -156,20 +169,31 @@ func TestSessionRuns(t *testing.T) {
 	if _, p := c.liveCard(ok); !strings.Contains(p.Text("fr"), "Keep the first free name?") {
 		t.Errorf("approval card %q", p.Text("fr"))
 	}
-	if err := c.endSession(s.ID, "done", "brain"); err == nil {
+	if _, err := c.finishSession(ctx, s.ID, "done", "lead"); err == nil {
 		t.Error("a session closed with a step waiting for the user")
 	}
 	if _, err := c.decideCard(ctx, ok.ID, true, "web"); err != nil {
 		t.Fatal(err)
 	}
-	if msg := lastEvent(t, c); !strings.Contains(msg, "Toutes les étapes sont acceptées") {
+	if msg := told(t, c, s); !strings.Contains(msg, "Toutes les étapes sont acceptées") {
 		t.Errorf("the lead heard %q", msg)
 	}
-	if err := c.endSession(s.ID, "Lumen it is.", "brain"); err != nil {
+	if _, err := c.finishSession(ctx, s.ID, "Lumen it is.", "lead"); err != nil {
 		t.Fatal(err)
 	}
+	final := stepOf(t, c, s, finalStep)
+	if final.Status != stepRunning || final.Task == "" {
+		t.Fatalf("no final check: %+v", final)
+	}
+	if s, _ = c.session(s.ID); s.State != sessRunning {
+		t.Fatalf("closed before the objective was checked: %s", s.State)
+	}
+	reports(t, c, final, receiptOf("Lumen is picked and free.", "objective met"))
 	if s, _ = c.session(s.ID); s.State != sessDone || s.Summary != "Lumen it is." {
 		t.Errorf("session %+v", s)
+	}
+	if msg := lastEvent(t, c); !strings.Contains(msg, "Session close") || !strings.Contains(msg, "Lumen it is.") {
+		t.Errorf("the brain heard %q", msg)
 	}
 }
 
@@ -216,7 +240,7 @@ func TestSessionChecksHold(t *testing.T) {
 	}
 	reports(t, c, stepOf(t, c, s, "market"), receiptOf("Shops.", "market"))
 	c.settleStep(ctx, s.ID, "market", verdictAccept, "", "", "brain")
-	if msg := lastEvent(t, c); !strings.Contains(msg, "Plus rien ne peut avancer") || !strings.Contains(msg, "names") {
+	if msg := told(t, c, s); !strings.Contains(msg, "Plus rien ne peut avancer") || !strings.Contains(msg, "names") {
 		t.Errorf("a stuck session was not told: %q", msg)
 	}
 }

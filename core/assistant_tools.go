@@ -204,6 +204,9 @@ func (c *core) assistantServer(a Assistant, _ *TaskRow) *mcp.Server {
 		tool(s, "notify", "Tell the user something yourself, now or at the next brief, with why, when your mission asks for it. eriphe-core decides what happens: quiet hours, a daily cap and the user's rules may keep a now for the brief, and what you write after reading external content never interrupts. The result says what happened: never say a notification was sent if it was not.",
 			func(ctx context.Context, in notifyIn) (map[string]any, error) { return c.assistantNotify(a, in) })
 	}
+	if h := assistantRoles[a.Role].ownTools; h != nil {
+		h(c, s, a)
+	}
 	if len(a.State) > 0 {
 		tool(s, "set_state", "Write what you know now, in your state's fields (your instructions list them with their types). Checked by eriphe-core: a value off its type or list refuses the whole call, nothing written. A value expires after its validity and reads unknown.",
 			func(ctx context.Context, in setStateIn) (map[string]any, error) {

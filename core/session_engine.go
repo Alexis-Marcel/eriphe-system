@@ -146,16 +146,18 @@ func (c *core) advanceLocked(ctx context.Context, id int64) {
 	if busy {
 		return
 	}
-	complete := !slices.ContainsFunc(steps, func(st Step) bool { return st.Status != stepAccepted && st.Status != stepDropped })
+	complete := !slices.ContainsFunc(steps, func(st Step) bool {
+		return st.Key != finalStep && st.Status != stepAccepted && st.Status != stepDropped
+	})
 	switch {
 	case complete && s.told != "complete":
 		c.setSession(id, map[string]any{"told": "complete"})
 		c.logSession(id, "engine", "Toutes les étapes sont acceptées.")
-		c.tellLead(s, "Toutes les étapes sont acceptées. Vérifie l'objectif"+doneWhenOf(s)+", puis clos la session avec end_session et un résumé pour "+c.conf().User+".", nil)
+		c.tellLead(s, "Toutes les étapes sont acceptées. Clos la session avec end_session et un résumé pour "+c.conf().User+closeNote(s), nil)
 	case !complete && s.told != "stalled":
 		var stuck []string
 		for _, st := range steps {
-			if st.Status == stepRejected || st.Status == stepBlocked {
+			if st.Key != finalStep && (st.Status == stepRejected || st.Status == stepBlocked) {
 				stuck = append(stuck, fmt.Sprintf("« %s » (%s, %s)", st.Title, st.Key, st.Status))
 			}
 		}
@@ -165,11 +167,11 @@ func (c *core) advanceLocked(ctx context.Context, id int64) {
 	}
 }
 
-func doneWhenOf(s Session) string {
+func closeNote(s Session) string {
 	if s.DoneWhen == "" {
-		return ""
+		return "."
 	}
-	return " (« " + s.DoneWhen + " »)"
+	return " : un agent neuf vérifiera d'abord l'objectif (« " + s.DoneWhen + " »)."
 }
 
 // startStep starts one step: its task, or its question to the user.
@@ -187,7 +189,7 @@ func (c *core) startStep(ctx context.Context, s Session, st Step, steps []Step) 
 			return err
 		}
 		c.logSession(s.ID, "engine", fmt.Sprintf("L'étape « %s » attend le choix de %s.", st.Title, c.conf().User))
-		c.tellLead(s, fmt.Sprintf("L'étape « %s » (%s) attend le choix de %s : %s\nOptions : %s.\nPose-lui la question ; sa réponse s'enregistre avec choose_step, ou sur la page de la session.",
+		c.tellBrain(s, fmt.Sprintf("L'étape « %s » (%s) attend le choix de %s : %s\nOptions : %s.\nPose-lui la question ; sa réponse s'enregistre avec choose_step, ou sur la page de la session.",
 			st.Title, st.Key, c.conf().User, st.Question, strings.Join(st.Options, " · ")), nil)
 		return nil
 	}
@@ -278,6 +280,10 @@ func (c *core) sessionTaskChanged(id, state string, outcome turnOutcome) bool {
 		if r == nil {
 			r = tst.Receipt
 		}
+		if st.Key == finalStep {
+			c.judgeFinal(s, st, r, strings.TrimSpace(tst.LastText)) // session_lead.go
+			return true
+		}
 		failed := !r.missing() && (len(r.failedChecks()) > 0 || r.Unsupported)
 		verified := !r.missing() && len(r.Checks) > 0 && !failed
 		status, word := stepReported, "non vérifiée : aucun contrôle ne l'a regardée"
@@ -314,10 +320,20 @@ func (c *core) sessionTaskChanged(id, state string, outcome turnOutcome) bool {
 	return true
 }
 
-// tellLead tells the session's lead what happened: the brain, for now, as
-// an event of the conversation. taint is why it may carry what someone
-// else wrote.
+// tellLead tells the session's lead what happened: its own lead, or the
+// brain when it has none. taint is why it may carry what someone else
+// wrote.
 func (c *core) tellLead(s Session, text string, taint []string) {
+	if c.hasLead(s) {
+		c.queueLead(s, text, taint) // session_lead.go
+		return
+	}
+	c.tellBrain(s, text, taint)
+}
+
+// tellBrain tells the brain, as an event of the conversation: what the
+// user must hear or answer.
+func (c *core) tellBrain(s Session, text string, taint []string) {
 	line := fmt.Sprintf("[session %d « %s »] %s", s.ID, s.Title, text)
 	seq, err := c.store.addMessage(roleEvent, line, true)
 	if err != nil {
@@ -544,31 +560,6 @@ func (c *core) chooseStep(ctx context.Context, id int64, key, option, by string)
 	return c.step(id, key)
 }
 
-// endSession closes a session whose steps are all over, with its summary.
-func (c *core) endSession(id int64, summary, by string) error {
-	sessionMu.Lock()
-	defer sessionMu.Unlock()
-	s, err := c.session(id)
-	if err != nil {
-		return err
-	}
-	if s.State != sessRunning && s.State != sessPaused {
-		return fmt.Errorf("the session is %s", s.State)
-	}
-	if summary = strings.TrimSpace(summary); summary == "" {
-		return errors.New("a summary for the user is needed")
-	}
-	steps, _ := c.steps(id)
-	for _, st := range steps {
-		if !st.done() && st.Status != stepBlocked {
-			return fmt.Errorf("step %s is %s: judge it first, or stop the session", st.Key, st.Status)
-		}
-	}
-	c.closeSession(s, sessDone, summary)
-	c.logSession(id, by, "Session close : "+summary)
-	return nil
-}
-
 // stopSession stops a session: its tasks stop, its cards are withdrawn.
 func (c *core) stopSession(ctx context.Context, id int64, by string) error {
 	sessionMu.Lock()
@@ -587,12 +578,12 @@ func (c *core) stopSession(ctx context.Context, id int64, by string) error {
 			c.setStep(id, st.Key, map[string]any{"status": stepBlocked, "note": "session stopped", "ended": time.Now().Unix()})
 		}
 	}
-	c.closeSession(s, sessStopped, "")
+	c.closeLocked(s, sessStopped, "")
 	c.logSession(id, by, "Session arrêtée.")
 	return nil
 }
 
-func (c *core) closeSession(s Session, state, summary string) {
+func (c *core) closeLocked(s Session, state, summary string) {
 	now := time.Now()
 	fields := map[string]any{"state": state, "ended": now.Unix(), "held": "", "spent": int64(s.elapsed(now) / time.Second), "since": 0}
 	if summary != "" {
@@ -600,6 +591,7 @@ func (c *core) closeSession(s Session, state, summary string) {
 	}
 	c.setSession(s.ID, fields)
 	c.closeAsks(s.ID)
+	c.dropLead(s) // session_lead.go
 }
 
 // pauseSession stops starting steps; those running finish.
@@ -667,8 +659,12 @@ func (c *core) holdForBudget(s Session) {
 	c.pauseLocked(s, heldBudget)
 	c.ask(s.ID, askBudget, "", "", map[string]int{"minutes": budgetMore(s)})
 	c.logSession(s.ID, "engine", fmt.Sprintf("Budget de %d min atteint : session en pause, %s est interrogé sur une carte.", s.Budget, c.conf().User))
-	c.tellLead(s, fmt.Sprintf("Le budget de %d min est atteint : rien de nouveau ne démarre, les étapes en cours finissent. Une carte demande à %s s'il donne %d min de plus.",
-		s.Budget, c.conf().User, budgetMore(s)), nil)
+	text := fmt.Sprintf("Le budget de %d min est atteint : rien de nouveau ne démarre, les étapes en cours finissent. Une carte demande à %s s'il donne %d min de plus.",
+		s.Budget, c.conf().User, budgetMore(s))
+	c.tellBrain(s, text, nil)
+	if c.hasLead(s) {
+		c.queueLead(s, text, nil)
+	}
 }
 
 // sessionsTick is the engine's pass, every 15 seconds: the budgets, the
@@ -801,15 +797,18 @@ func (c *core) decideSessionAsk(ctx context.Context, id int64, approve bool) err
 	switch a.Kind {
 	case askPlan:
 		if !approve {
-			c.closeSession(s, sessDeclined, "")
+			c.closeLocked(s, sessDeclined, "")
 			c.logSession(s.ID, "user", "Plan refusé.")
-			c.tellLead(s, user+" a refusé le plan : la session est close. Demande-lui ce qu'il faut changer avant d'en ouvrir une autre.", nil)
+			c.tellBrain(s, user+" a refusé le plan : la session est close. Demande-lui ce qu'il faut changer avant d'en ouvrir une autre.", nil)
 			return nil
 		}
 		now := time.Now().Unix()
 		c.setSession(s.ID, map[string]any{"state": sessRunning, "started": now, "since": now})
 		c.logSession(s.ID, "user", "Plan approuvé.")
-		c.tellLead(s, user+" a approuvé le plan : les premières étapes démarrent. Tu seras prévenu de chaque étape.", nil)
+		c.createLead(s) // session_lead.go
+		if s, err = c.session(s.ID); err == nil && !c.hasLead(s) {
+			c.tellBrain(s, user+" a approuvé le plan : les premières étapes démarrent. Tu seras prévenu de chaque étape.", nil)
+		}
 	case askAmend:
 		var in amendIn
 		json.Unmarshal(a.Payload, &in)
