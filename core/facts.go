@@ -180,10 +180,10 @@ func (c *core) assistantFacts(a Assistant, now time.Time) []fact {
 	return out
 }
 
-// allFacts are every fact now: the context's, then each enabled
-// assistant's, by name.
+// allFacts are every fact now: the context's, the rules' (their
+// incidents, rule_incidents.go), then each enabled assistant's, by name.
 func (c *core) allFacts(now time.Time) []fact {
-	out := c.contextFacts(now)
+	out := append(c.contextFacts(now), c.ruleFacts(now)...)
 	m := c.conf()
 	for _, n := range sortedKeys(m.Assistants) {
 		if a := m.Assistants[n]; !a.Disabled {
@@ -196,7 +196,7 @@ func (c *core) allFacts(now time.Time) []fact {
 // The brain's read: the facts tool.
 
 type factsIn struct {
-	Owner string `json:"owner,omitempty" jsonschema:"context, or an assistant's name; empty for all"`
+	Owner string `json:"owner,omitempty" jsonschema:"context, rules, or an assistant's name; empty for all"`
 }
 
 type factView struct {
@@ -211,7 +211,7 @@ type factView struct {
 }
 
 func registerFactTools(s *mcp.Server, c *core) {
-	tool(s, "facts", "What Eriphe knows now, as typed facts: the user's context (owner context: place, room, focus, busy_until, home_activity, and each device's presence, dnd, activity), written by code from the sources the user turned on, and each assistant's fields. Closed values only (a choice, a number, a date, rows by their count); a text is named, not quoted: read it with assistant_view. Each with its age and who wrote it; unknown when expired. Free, no model. Facts orient, never authorise.",
+	tool(s, "facts", "What Eriphe knows now, as typed facts: the user's context (owner context: place, room, focus, busy_until, home_activity, and each device's presence, dnd, activity), written by code from the sources the user turned on; the rules' (owner rules: each outil rule's incident open or closed, incidents_7d, since, one per outage); and each assistant's fields. Closed values only (a choice, a number, a date, rows by their count); a text is named, not quoted: read it with assistant_view. Each with its age and who wrote it; unknown when expired. Free, no model. Facts orient, never authorise.",
 		func(ctx context.Context, in factsIn) (map[string]any, error) {
 			return c.brainFacts(in, c.notifyTime())
 		})

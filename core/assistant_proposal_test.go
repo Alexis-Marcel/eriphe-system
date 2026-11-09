@@ -124,7 +124,7 @@ func TestProposeAssistantOnCard(t *testing.T) {
 	}
 
 	// Another, refused: nothing made.
-	out, err = c.proposeAssistant(proposeAssistantIn{Template: "veille-techno", Name: "veille", Tools: []string{"web"},
+	out, err = c.proposeAssistant(proposeAssistantIn{Template: "veille-techno", Name: "veille",
 		Mission: "Tu fais la veille de {{user}} sur Go et SQLite.", Why: "Il lit le web à ta place."})
 	if err != nil {
 		t.Fatal(err)

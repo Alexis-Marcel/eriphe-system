@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -154,6 +155,9 @@ func (c *core) proposeAssistant(in proposeAssistantIn) (map[string]any, error) {
 	if strings.TrimSpace(in.Mission) == "" {
 		return nil, errors.New("mission is needed: what it does, in French, from the user's words")
 	}
+	if templateHole.MatchString(in.Mission) {
+		return nil, fmt.Errorf("mission: fill %s with the user's words", templateHole.FindString(in.Mission))
+	}
 	spec := Assistant{Name: name, Role: assistantRoleAssistant, DisplayName: normalizeDisplayName(in.DisplayName),
 		Instructions: strings.TrimSpace(in.Mission), Tools: in.Tools, Facts: in.Facts, Powers: in.Powers, Views: in.Views}
 	for _, f := range in.State {
@@ -166,8 +170,8 @@ func (c *core) proposeAssistant(in proposeAssistantIn) (map[string]any, error) {
 		return nil, err
 	}
 	for _, o := range spec.Facts {
-		if _, ok := m.Assistants[o]; !ok && o != ownerContext {
-			return nil, fmt.Errorf("facts: no assistant %q: context, or one of your assistants", o)
+		if _, ok := m.Assistants[o]; !ok && o != ownerContext && o != ownerRules {
+			return nil, fmt.Errorf("facts: no assistant %q: context, rules, or one of your assistants", o)
 		}
 	}
 	if len(in.Wake) == 0 || len(in.Wake) > maxAssistantWake {
@@ -197,6 +201,9 @@ func (c *core) proposeAssistant(in proposeAssistantIn) (map[string]any, error) {
 	return map[string]any{"proposal": id, "note": "Only proposed, on its creation card: it exists once " + c.conf().User +
 		" says yes there. " + cardNote(c.conf().User) + " Do not say it is set up."}, nil
 }
+
+// templateHole is a part of a template's mission the brain fills.
+var templateHole = regexp.MustCompile(`<[a-zà-ÿ' ]+>`)
 
 func fillFromTemplate(in proposeAssistantIn, t assistantTemplate) proposeAssistantIn {
 	if in.Name == "" {

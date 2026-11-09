@@ -683,7 +683,7 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 	}
 	spec.SystemNetwork = r.Network
 	spec.Stream = r.Streams
-	spec.HarnessTools = r.HarnessTools
+	spec.HarnessTools = assistantHarnessTools(a, r)
 	// One memory: eriphe-core's, not Claude Code's own.
 	if spec.AgentEnv == nil {
 		spec.AgentEnv = map[string]string{}

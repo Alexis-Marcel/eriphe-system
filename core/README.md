@@ -1489,6 +1489,28 @@ the last 30 days, where its harness said (`turnCost`), or "not known yet". On th
 makes the assistant and its rules (`then assistant:<name>`, by the owner) at once, all or nothing;
 on the no, nothing.
 
+### Real cases (#244 step 8)
+
+- **GetOut production, with no assistant.** An `outil` rule (the `surveiller-service` template, on a
+  Grafana query every 5 minutes) keeps its incidents, deduplicated by code (`rule_incidents.go`,
+  table `rule_incidents`): one opens when its condition becomes true, confirmed on a second look,
+  and closes when it recovers; a true condition seen again while one is open opens nothing. They
+  are closed facts owned by `rules`: `rules.r<id>.incident` (`open`, `closed`; unknown before its
+  first look, or while its look fails with none open), `rules.r<id>.incidents_7d`,
+  `rules.r<id>.since`. A condition, a `fait` rule, the brain's `facts` and an assistant lent
+  `rules` read them. The rule wakes the brain on the transition; the prompt has it notify, then
+  start an investigation (a task, or a session), a fix going through a PR merged on a card.
+- **Mail triage**, an assistant from `tri-mails`: one row per mail, its views, a rule may count its
+  rows (`tri-mails.mails > 0`).
+- **Tech watch**, an assistant from `veille-techno`, woken daily, that reads the web itself: the
+  power `readsWeb` (assistant role only; `assistant_web.go`) gives it its harness's search and page
+  reader. A URL is a way out, so an assistant that reads the web is lent no catalog tool and no
+  fact: it holds nothing to send. Each read is decided as the brain's are: a local or credentialed
+  URL is refused; the web's value in Settings → Tools holds (Never refuses, On approval refuses too:
+  an assistant never waits on a card); anything else of its harness is refused. Its `brief` view is
+  read at the brief. The template's mission keeps `<les sujets>` until the brain fills it with the
+  user's words; `propose_assistant` refuses a mission with a hole.
+
 ### The team
 
 Settings → Agents shows the brain's assistants as **the user's team** (« Ton équipe »): for each

@@ -25,7 +25,7 @@ var concepts = []concept{
 	{"setting", "setting, presence_sources, map_presence", "how the user is told in general: device order, lines off, daily cap, time zone, Telegram detail; what you may know of the user, and which Home Assistant entities tell it"},
 	{"notify", "notify, notifications", "say something on your own, now or for the brief, under a known topic ref"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
-	{"fact", "facts, assistants, assistant_view", "what Eriphe knows now, typed, beyond the [contexte] and [assistants] lines: the user's context (place, room, focus, each device) written by code, each assistant's fields, and the views they expose (urgent mails, today's incidents)"},
+	{"fact", "facts, assistants, assistant_view", "what Eriphe knows now, typed, beyond the [contexte] and [assistants] lines: the user's context (place, room, focus, each device) written by code, the incidents of outil rules, each assistant's fields, and the views they expose (urgent mails, today's incidents)"},
 	{"assistant", "templates, propose_assistant", "a specialist that writes facts with a model, woken by rules, made by the user on its creation card: only when a rule will not do (it reads untrusted content for you, has tools of its own, needs a model on its own wake, or works in parallel)"},
 	{"task", "run_task", "long or heavy work, by an agent on a machine"},
 	{"session", "start_session, session_status, settle_step, amend_session", "work of several steps toward one goal (a plan, steps in parallel, checkpoints for the user), not only code"},
