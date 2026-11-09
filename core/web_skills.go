@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -21,18 +22,36 @@ func (w *web) skillRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/skills", w.auth(w.handleSkills))
 	mux.Handle("POST /settings/skills", w.auth(w.handleUploadSkill))
 	mux.Handle("GET /settings/skills/{name}", w.auth(w.handleSkill))
+	mux.Handle("GET /settings/skills/{name}/runs", w.auth(w.handleSkillRuns))
+	mux.Handle("POST /settings/skills/{name}/calls/{id}/{action}", w.auth(w.handleRunCall))
 	mux.Handle("POST /settings/skills/{name}/approve", w.auth(w.handleApproveSkill))
 	mux.Handle("POST /settings/skills/{name}/reject", w.auth(w.handleRejectSkill))
 	mux.Handle("POST /settings/skills/{name}/enable", w.auth(w.handleEnableSkill))
 	mux.Handle("POST /settings/skills/{name}/delete", w.auth(w.handleDeleteSkill))
 }
 
+// skillRuns are a skill's runs and totals; live while one is open.
+func (w *web) skillRuns(name string) ([]runView, skillTotals, bool) {
+	runs, tot := w.c.skillReport(name, skillRunsShown, w.c.notifyTime())
+	live := len(runs) > 0 && runs[0].State == skillRunOpen
+	return runs, tot, live
+}
+
+// handleSkillRuns is the runs' part of a skill's page, reloaded while a run
+// is going.
+func (w *web) handleSkillRuns(rw http.ResponseWriter, r *http.Request, s *session) {
+	d := skillPage{Skill: &Skill{Name: r.PathValue("name")}}
+	d.Runs, d.Totals, d.Live = w.skillRuns(d.Skill.Name)
+	w.render(rw, r, s, "settings", "skill-runs-frag", page{Data: d})
+}
+
 // skillsPage is Settings → Skills: the skills, and the incoming alerts
 // their triggers may name (alert_hooks.go).
 type skillsPage struct {
-	Skills any
-	Alerts []alertHook
-	Fresh  *freshHook // an alert just made: its address and secret, shown once
+	Skills   any
+	Triggers map[string]string // a triggered skill's trigger, in words
+	Alerts   []alertHook
+	Fresh    *freshHook // an alert just made: its address and secret, shown once
 }
 
 type freshHook struct{ Name, URL, Secret string }
@@ -48,7 +67,7 @@ func (w *web) renderSkills(rw http.ResponseWriter, r *http.Request, s *session, 
 		return
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.skills", Nav: "settings", Tab: "skills",
-		Data: skillsPage{Skills: skills, Alerts: w.c.alertHooks(), Fresh: fresh}})
+		Data: skillsPage{Skills: skills, Triggers: w.triggerTexts(w.lang(r)), Alerts: w.c.alertHooks(), Fresh: fresh}})
 }
 
 // skillFileView is a file of the version shown.
@@ -66,6 +85,9 @@ type skillPage struct {
 	Scripts int
 	Diff    []fileDiff // with a pending version: what changed since the approved one, or all of it
 	Update  bool       // the pending version replaces an approved one
+	Runs    []runView  // a triggered skill's last runs (skill_report.go)
+	Totals  skillTotals
+	Live    bool // a run is going: its runs reload
 }
 
 func (w *web) handleSkill(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -75,6 +97,7 @@ func (w *web) handleSkill(rw http.ResponseWriter, r *http.Request, s *session) {
 		return
 	}
 	d := skillPage{Skill: k}
+	d.Runs, d.Totals, d.Live = w.skillRuns(k.Name)
 	if d.Shown, err = w.c.store.skillVersion(orStr(k.Pending, k.Approved)); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -238,3 +261,45 @@ func (v skillFileView) Human() string { return humanSize(int64(v.Size)) }
 
 // Short is the start of a version's hash, as the page shows it.
 func (v *skillVersion) Short() string { return v.SHA[:min(12, len(v.SHA))] }
+
+// triggerTexts say each approved skill's trigger in words.
+func (w *web) triggerTexts(lang string) map[string]string {
+	out := map[string]string{}
+	ks, err := w.c.store.skills()
+	if err != nil {
+		return out
+	}
+	for _, k := range ks {
+		if k.Approved == "" {
+			continue
+		}
+		if m, ok := w.c.skillManifestOf(k.Approved); ok && m.Trigger != nil {
+			out[k.Name] = m.Trigger.Text(lang)
+		}
+	}
+	return out
+}
+
+// handleRunCall answers one action a run proposed: yes runs it as kept, no
+// drops it; the others of its card wait for theirs.
+func (w *web) handleRunCall(rw http.ResponseWriter, r *http.Request, s *session) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	a, err := w.c.accessAskOf(id)
+	if err != nil || a.Run == 0 {
+		http.NotFound(rw, r)
+		return
+	}
+	if run := w.c.runByID(a.Run); run == nil || run.Skill != r.PathValue("name") {
+		http.NotFound(rw, r)
+		return
+	}
+	approve := r.PathValue("action") == "approve"
+	if err := w.c.decideAccess(r.Context(), id, approve); err != nil && err != errCardDecided {
+		w.toast(rw, w.formError(r, err), false)
+		return
+	}
+	w.c.bump()
+	d := skillPage{Skill: &Skill{Name: r.PathValue("name")}}
+	d.Runs, d.Totals, d.Live = w.skillRuns(d.Skill.Name)
+	w.render(rw, r, s, "settings", "skill-runs-frag", page{Data: d})
+}
