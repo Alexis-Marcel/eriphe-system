@@ -54,8 +54,8 @@ type core struct {
 	syncMu     sync.Mutex
 	syncPushed sync.Map
 
-	cloud  cloudFlows  // Google authorizations in progress (cloud.go)
-	google googleWatch // the Google accounts' changes and checks (google.go)
+	signIns signInFlows // sign-ins in progress (oauth_client.go)
+	google  googleWatch // the Google accounts' changes and checks (google.go)
 
 	push        *pusher          // notifications on the user's devices (push.go); nil without the workspace
 	notifyClock func() time.Time // the time of notify's decisions (notify.go); nil: now

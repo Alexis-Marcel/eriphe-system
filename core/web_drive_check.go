@@ -19,7 +19,7 @@ import (
 // "Test the connection" on the Google Drive page, without a consent on
 // Google's side: a line per check, each ✓ or ✗.
 //
-//  1. The workspace's address: one Google takes as a redirect (googleOrigin).
+//  1. The workspace's address: one Google takes as a redirect (signInProvider.refuses).
 //  2. The client id and secret: a code exchange with a made-up code. Google
 //     checks the client first: invalid_client (or unauthorized_client) is a
 //     client it does not know or a wrong secret, invalid_grant is a client
@@ -97,7 +97,7 @@ func (c *core) testDrive(ctx context.Context, lang, origin string) driveTest {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	add, hc := d.add, d.hc
 
-	why := googleOrigin(origin)
+	why := providerGoogle.refuses(origin)
 	if why != "" {
 		add("err", "drive.origin."+why, origin)
 	} else {
@@ -115,7 +115,7 @@ func (c *core) testDrive(ctx context.Context, lang, origin string) driveTest {
 		hide := func(s string) string { return strings.ReplaceAll(s, app.Secret, "••••") }
 		form := url.Values{"grant_type": {"authorization_code"}, "code": {driveTestCode}, "redirect_uri": {redirect},
 			"client_id": {app.ID}, "client_secret": {app.Secret}}
-		code, desc, _, err := googleToken(ctx, hc, form)
+		code, desc, _, err := providerGoogle.tokenCall(ctx, hc, form)
 		switch {
 		case err != nil:
 			d.netFail(err)
@@ -179,7 +179,7 @@ func (c *core) testDriveToken(ctx context.Context, d *driveChecker) {
 		return
 	}
 	hide := strings.NewReplacer(tok.ClientSecret, "••••", tok.RefreshToken, "••••").Replace
-	code, desc, access, err := googleToken(ctx, hc, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tok.RefreshToken},
+	code, desc, access, err := providerGoogle.tokenCall(ctx, hc, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tok.RefreshToken},
 		"client_id": {tok.ClientID}, "client_secret": {tok.ClientSecret}})
 	switch {
 	case err != nil:
@@ -258,41 +258,13 @@ func (c *core) testDriveToken(ctx context.Context, d *driveChecker) {
 	}
 }
 
-// googleToken posts to Google's token endpoint: the error code and its
-// description when Google refuses, else the access token.
-func googleToken(ctx context.Context, hc *http.Client, form url.Values) (code, desc, access string, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, googleOAuth.TokenURL, strings.NewReader(form.Encode()))
-	if err != nil {
-		return "", "", "", err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-	resp, err := hc.Do(req)
-	if err != nil {
-		return "", "", "", err
-	}
-	defer resp.Body.Close()
-	var body struct {
-		Error       string `json:"error"`
-		Description string `json:"error_description"`
-		Access      string `json:"access_token"`
-	}
-	if json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&body) != nil && resp.StatusCode != http.StatusOK {
-		return "http " + strconv.Itoa(resp.StatusCode), "", "", nil
-	}
-	if body.Error == "" && resp.StatusCode != http.StatusOK {
-		body.Error = "http " + strconv.Itoa(resp.StatusCode)
-	}
-	return body.Error, body.Description, body.Access, nil
-}
-
 // googleAuthorize asks for the authorization URL a Connect would open, and
 // reads where Google sends the browser, never following it: "ok" for its
 // sign-in, "mismatch" for a redirect URI the client does not list,
 // "client" for a client it does not know, "net" when Google could not be
 // asked, else "other" with Google's error code (or the HTTP status).
 func googleAuthorize(ctx context.Context, hc *http.Client, clientID, redirect string) (state, code string) {
-	cfg := &oauth2.Config{ClientID: clientID, Endpoint: googleOAuth, RedirectURL: redirect, Scopes: []string{scopeDriveReadonly}}
+	cfg := &oauth2.Config{ClientID: clientID, Endpoint: providerGoogle.Endpoint, RedirectURL: redirect, Scopes: []string{scopeDriveReadonly}}
 	u := cfg.AuthCodeURL(randomToken(18), oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(oauth2.GenerateVerifier()),
 		oauth2.SetAuthURLParam("prompt", "consent"))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)

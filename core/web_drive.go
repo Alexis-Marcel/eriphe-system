@@ -20,7 +20,7 @@ type driveView struct {
 	driveState
 	Origin    string // this workspace, as the browser reaches it
 	Callback  string // the redirect URI to register in the Google app
-	OriginWhy string // why Google refuses that redirect (googleOrigin), or ""
+	OriginWhy string // why Google refuses that redirect (signInProvider.refuses), or ""
 	Remote    string // the tailnet address, when remote access gives one Google takes
 	ClientID  string // the saved Google app's client id, or ""
 	Status    string // the files server's: ready, connecting…
@@ -42,9 +42,9 @@ func (w *web) driveRoutes(mux *http.ServeMux) {
 func (w *web) driveView(r *http.Request) driveView {
 	v := driveView{driveState: w.c.driveState(), Origin: w.origin(r), Connected: r.URL.Query().Get("connected") != ""}
 	v.Callback = v.Origin + "/oauth/callback"
-	v.OriginWhy = googleOrigin(v.Origin)
+	v.OriginWhy = providerGoogle.refuses(v.Origin)
 	if v.OriginWhy != "" && w.c.remote != nil {
-		if u := w.c.remote.current().URL(); u != "" && googleOrigin(u) == "" {
+		if u := w.c.remote.current().URL(); u != "" && providerGoogle.refuses(u) == "" {
 			v.Remote = u
 		}
 	}

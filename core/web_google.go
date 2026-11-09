@@ -23,7 +23,7 @@ import (
 type googleView struct {
 	Origin    string // this workspace, as the browser reaches it
 	Callback  string // the redirect URI to register in the Google app
-	OriginWhy string // why Google refuses that redirect (googleOrigin), or ""
+	OriginWhy string // why Google refuses that redirect (signInProvider.refuses), or ""
 	Remote    string // the tailnet address, when remote access gives one Google takes
 	ClientID  string // the saved Google app's client id, or ""
 	Scopes    string // the scopes to declare in the console, to copy
@@ -77,9 +77,9 @@ func (w *web) googleView(r *http.Request) googleView {
 	v := googleView{Origin: w.origin(r), APIs: googleAPIs,
 		Scopes: strings.Join([]string{scopeMail, scopeCalendar, scopeDrive, scopeDriveReadonly}, ",")}
 	v.Callback = v.Origin + "/oauth/callback"
-	v.OriginWhy = googleOrigin(v.Origin)
+	v.OriginWhy = providerGoogle.refuses(v.Origin)
 	if v.OriginWhy != "" && w.c.remote != nil {
-		if u := w.c.remote.current().URL(); u != "" && googleOrigin(u) == "" {
+		if u := w.c.remote.current().URL(); u != "" && providerGoogle.refuses(u) == "" {
 			v.Remote = u
 		}
 	}
@@ -183,9 +183,9 @@ func readGoogleClient(rw http.ResponseWriter, r *http.Request) (oauthApp, []stri
 		if rerr != nil {
 			raw = nil
 		}
-		return parseGoogleClient(raw)
+		return providerGoogle.parseClient(raw)
 	}
-	app, err := checkGoogleClient(r.PostFormValue("client_id"), r.PostFormValue("client_secret"))
+	app, err := providerGoogle.checkClient(r.PostFormValue("client_id"), r.PostFormValue("client_secret"))
 	return app, nil, err
 }
 

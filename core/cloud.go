@@ -2,25 +2,16 @@ package main
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/netip"
-	"net/url"
 	"slices"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"golang.org/x/net/publicsuffix"
-	"golang.org/x/oauth2"
 )
 
 // Cloud storage as a source of Folders: Google Drive now (Dropbox and
@@ -34,21 +25,8 @@ import (
 // with the workspace's own https://<workspace>/oauth/callback as its
 // redirect. The page guides them through it (web_drive.go,
 // docs/google.md); the client id and secret are kept in the vault
-// (googleClientVault), never shown back:
-//
-//	workspace → Google (PKCE, state = e1.<payload>.<mac>)
-//	Google → <workspace>/oauth/callback?code&state   (in the browser)
-//	workspace: checks the state's MAC, the flow and the browser's cookie,
-//	           exchanges the code with the client secret and the PKCE verifier
-//
-// The state's payload is the workspace's origin, a random flow id and an
-// expiry, signed with HMAC-SHA256 under a key only this eriphe-core has: a
-// state it did not make, or one replayed, is refused here.
-//
-// Google takes a redirect only at an https address whose host is a name
-// ending in a public top-level domain (or localhost): googleOrigin tells a
-// workspace reached at a raw IP address or at a .local name, which cannot
-// connect Drive, and the page says what to do instead.
+// (googleClientVault), never shown back. The sign-in itself is the neutral
+// flow of oauth_client.go.
 
 const (
 	filesServer    = "fichiers"
@@ -57,24 +35,10 @@ const (
 	driveTokenEnv  = "FILES_GOOGLE_TOKEN" // an account's is FILES_GOOGLE_TOKEN_<hash> (driveTokenEnvOf)
 
 	googleClientVault = "google-drive-client" // the user's own client, in the vault
-	googleClientIDEnd = ".apps.googleusercontent.com"
-	stateVersion      = "e1"
-	stateKeyName      = "cloud_state_key"
-	cloudFlowExpiry   = 15 * time.Minute
 
 	scopeDrive         = "https://www.googleapis.com/auth/drive"
 	scopeDriveReadonly = "https://www.googleapis.com/auth/drive.readonly"
 )
-
-// googleOAuth are Google's endpoints; tests replace them.
-var googleOAuth = oauth2.Endpoint{
-	AuthURL:   "https://accounts.google.com/o/oauth2/v2/auth",
-	TokenURL:  "https://oauth2.googleapis.com/token",
-	AuthStyle: oauth2.AuthStyleInParams,
-}
-
-// cloudHTTP exchanges codes; tests replace it.
-var cloudHTTP = &http.Client{Timeout: 30 * time.Second}
 
 // CloudConfig is what an older configuration may still carry, from when
 // Eriphe had a shared Google app behind a sign-in relay: both fields are
@@ -93,12 +57,6 @@ func (c *Config) legacyCloud() string {
 		return ""
 	}
 	return "cloud: google_client_file and bounce_url are not used any more: connect Google Drive with your own Google app (Settings → Tools → Google Drive)"
-}
-
-// oauthApp is an OAuth client: the user's own Google app.
-type oauthApp struct {
-	ID     string `json:"client_id"`
-	Secret string `json:"client_secret"`
 }
 
 var errNoGoogleClient = errors.New("no Google client")
@@ -130,179 +88,6 @@ func storeGoogleClient(app oauthApp) error {
 	}
 	raw, _ := json.Marshal(app)
 	return v.set(googleClientVault, string(raw))
-}
-
-// parseGoogleClient reads the client JSON the Google Cloud console
-// downloads: {"web": {"client_id", "client_secret", "redirect_uris", …}}
-// (the flat {"client_id", "client_secret"} also works). A Desktop client
-// ({"installed": …}) is refused: Google takes only loopback redirects for
-// it, which a workspace cannot use. It also returns the redirect URIs the
-// file lists, if any.
-func parseGoogleClient(raw []byte) (oauthApp, []string, error) {
-	type client struct {
-		oauthApp
-		RedirectURIs []string `json:"redirect_uris"`
-	}
-	var doc struct {
-		Web       *client `json:"web"`
-		Installed *client `json:"installed"`
-		client
-	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return oauthApp{}, nil, &catalogError{http.StatusBadRequest, "drive.badjson", "", errors.New("not a client JSON")}
-	}
-	if doc.Installed != nil {
-		return oauthApp{}, nil, &catalogError{http.StatusBadRequest, "drive.desktop", "", errors.New("a Desktop client: create a Web application client")}
-	}
-	c := doc.client
-	if doc.Web != nil {
-		c = *doc.Web
-	}
-	app, err := checkGoogleClient(c.ID, c.Secret)
-	return app, c.RedirectURIs, err
-}
-
-// checkGoogleClient checks a client id and secret as typed.
-func checkGoogleClient(id, secret string) (oauthApp, error) {
-	app := oauthApp{ID: strings.TrimSpace(id), Secret: strings.TrimSpace(secret)}
-	if app.ID == "" || app.Secret == "" {
-		return oauthApp{}, &catalogError{http.StatusBadRequest, "drive.ownmissing", "", errors.New("the client id and secret are required")}
-	}
-	if !strings.HasSuffix(app.ID, googleClientIDEnd) || strings.ContainsAny(app.ID+app.Secret, " \t\r\n\"'<>") || len(app.ID)+len(app.Secret) > 512 {
-		return oauthApp{}, &catalogError{http.StatusBadRequest, "drive.badclient", "", errors.New("not a Google client id and secret")}
-	}
-	return app, nil
-}
-
-// googleOrigin says why Google would refuse <origin>/oauth/callback as an
-// authorized redirect URI, or "" if it takes it (developers.google.com/
-// identity/protocols/oauth2/web-server, "Redirect URI validation rules"):
-// "ip" for a raw IP address other than a loopback one, "local" for a name
-// whose top-level domain is not a public one (eriphe.local, nas.lan, a
-// single label), "http" for plain http except to localhost.
-func googleOrigin(origin string) string {
-	u, err := url.Parse(origin)
-	if err != nil || u.Hostname() == "" {
-		return "local"
-	}
-	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
-	if ip, err := netip.ParseAddr(host); err == nil {
-		if ip.IsLoopback() {
-			return ""
-		}
-		return "ip"
-	}
-	if host == "localhost" {
-		return ""
-	}
-	labels := strings.Split(host, ".")
-	tld := labels[len(labels)-1]
-	if suffix, icann := publicsuffix.PublicSuffix(tld); len(labels) < 2 || !icann || suffix != tld ||
-		host == "home.arpa" || strings.HasSuffix(host, ".home.arpa") {
-		return "local"
-	}
-	if u.Scheme != "https" {
-		return "http"
-	}
-	return ""
-}
-
-// The state.
-
-type statePayload struct {
-	Origin  string `json:"w"` // the workspace, scheme://host[:port]
-	Nonce   string `json:"n"` // the flow
-	Expires int64  `json:"x"` // unix seconds
-}
-
-// stateKey is this installation's key for the states, made once.
-func (c *core) stateKey() []byte {
-	c.cloud.mu.Lock()
-	defer c.cloud.mu.Unlock()
-	if k, err := hex.DecodeString(c.store.get(stateKeyName)); err == nil && len(k) == 32 {
-		return k
-	}
-	k := make([]byte, 32)
-	rand.Read(k)
-	c.store.set(stateKeyName, hex.EncodeToString(k))
-	return k
-}
-
-func signState(key []byte, p statePayload) string {
-	raw, _ := json.Marshal(p)
-	body := stateVersion + "." + base64.RawURLEncoding.EncodeToString(raw)
-	m := hmac.New(sha256.New, key)
-	m.Write([]byte(body))
-	return body + "." + base64.RawURLEncoding.EncodeToString(m.Sum(nil))
-}
-
-var errBadState = errors.New("this authorization is not valid any more: connect again")
-
-// openState checks a state's MAC and expiry and reads it.
-func openState(key []byte, s string, now time.Time) (statePayload, error) {
-	parts := strings.Split(s, ".")
-	if len(s) > 1024 || len(parts) != 3 || parts[0] != stateVersion {
-		return statePayload{}, errBadState
-	}
-	mac, err := base64.RawURLEncoding.DecodeString(parts[2])
-	m := hmac.New(sha256.New, key)
-	m.Write([]byte(parts[0] + "." + parts[1]))
-	if err != nil || !hmac.Equal(mac, m.Sum(nil)) {
-		return statePayload{}, errBadState
-	}
-	raw, _ := base64.RawURLEncoding.DecodeString(parts[1])
-	var p statePayload
-	if json.Unmarshal(raw, &p) != nil || now.Unix() > p.Expires {
-		return statePayload{}, errBadState
-	}
-	return p, nil
-}
-
-// isCloudState tells a state of ours from a state of the go-sdk's flows.
-func isCloudState(s string) bool { return strings.HasPrefix(s, stateVersion+".") }
-
-// The flows.
-
-type cloudFlow struct {
-	origin   string
-	verifier string
-	binding  string // hash of the browser's flow cookie
-	config   *oauth2.Config
-	lang     string
-	expires  time.Time
-	services []string // the Google services asked for (google.go)
-	back     string   // the page the browser goes back to
-}
-
-type cloudFlows struct {
-	mu    sync.Mutex
-	flows map[string]*cloudFlow
-}
-
-func (f *cloudFlows) put(id string, fl *cloudFlow) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.flows == nil {
-		f.flows = map[string]*cloudFlow{}
-	}
-	for k, old := range f.flows {
-		if time.Now().After(old.expires) {
-			delete(f.flows, k)
-		}
-	}
-	f.flows[id] = fl
-}
-
-// take hands a flow out once.
-func (f *cloudFlows) take(id string) *cloudFlow {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	fl := f.flows[id]
-	delete(f.flows, id)
-	if fl == nil || time.Now().After(fl.expires) {
-		return nil
-	}
-	return fl
 }
 
 // The files server's configuration, as servers/files reads it.

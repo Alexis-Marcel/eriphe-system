@@ -1672,7 +1672,7 @@ refuses everything else, and can only create files, in `Eriphe/`. eriphe-core ru
 authorization, keeps the refresh token in the vault, and lends it to the service's environment on
 its node; it never enters a task or a task's spec.
 
-Settings → Tools → Google Drive (`/settings/drive`, `web_drive.go`, the logic in `cloud.go`):
+Settings → Tools → Google Drive (`/settings/drive`, `web_drive.go`, the logic in `cloud.go`, the sign-in in `oauth_client.go`):
 
 1. **Your Google app**: the guide, then the client JSON (or id and secret) of the user's own
    Google app ([below](#your-own-google-app)), kept in the vault; the same as the Google page's.
@@ -1740,15 +1740,18 @@ The payload is `{"w": "<workspace origin>", "n": "<flow id>", "x": <expiry>}`, t
 only this eriphe-core has (`cloud_state_key` in the store, made once): a state it did not make, or
 replayed, is refused at its callback. The flow is bound to the browser like the other workspace
 flows (the `__Host-eriphe-oauth` cookie, its hash kept with the flow): another browser with the
-same link is refused. The refresh token goes to the vault with the client id and secret, once per
-account (`google.<hash>.token`), which the servers need to refresh it.
+same link is refused. This flow is not Google's own: `oauth_client.go` runs it for any provider
+given as data (`signin_providers.go`: endpoints, revocation, extra authorization parameters, what
+a client id looks like, which redirects it takes); Google is its first entry. The refresh token
+goes to the vault with the client id and secret, once per account (`google.<hash>.token`), which
+the servers need to refresh it.
 
 ### Addresses Google takes
 
 Google checks an authorized redirect URI against its
 [validation rules](https://developers.google.com/identity/protocols/oauth2/web-server#uri-validation):
 https (http only for localhost), no raw IP address (loopback ones aside), and a host whose
-top-level domain is on the public suffix list. `googleOrigin` applies them to the workspace's
+top-level domain is on the public suffix list. The provider's `public-https` redirect rule applies them to the workspace's
 origin (`publicsuffix`, ICANN section; `home.arpa` counts as local): a workspace opened at
 `https://192.168.1.2:8443` or `https://eriphe.local` cannot connect Google, and the page says so
 instead of showing the guide, with what to do:
