@@ -416,7 +416,7 @@ func TestConnectionPages(t *testing.T) {
 		want         string
 	}{
 		{toolPreset{}, "oauth", sourceWorkspace, "/settings/tools/x/edit"},
-		{toolPreset{ID: "home-assistant"}, "bearer", sourceWorkspace, "/settings/home-assistant"},
+		{toolPreset{ID: "home-assistant"}, "bearer", sourceWorkspace, "/settings/tools/x/edit"}, // a tool like any other
 		{toolPreset{ID: "github"}, "github-app", sourceWorkspace, "/settings/github"},
 		{toolPreset{Form: "drive"}, "none", sourceWorkspace, "/settings/drive"},
 		{toolPreset{Form: "google"}, "none", sourceWorkspace, "/settings/google"},

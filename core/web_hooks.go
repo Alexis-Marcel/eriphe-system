@@ -16,7 +16,7 @@ func (w *web) alertRoutes(mux *http.ServeMux) {
 
 func (w *web) handleNewAlert(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.FormValue("name")
-	token, secret, err := w.c.newAlertHook(name, r.FormValue("signed") == "on")
+	token, secret, err := w.c.newAlertHook(name, r.FormValue("signed") == "on", r.FormValue("header"))
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return

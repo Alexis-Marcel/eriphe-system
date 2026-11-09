@@ -16,9 +16,8 @@
 {{define "add-access-btn"}}<a class="btn btn-primary" href="/settings/access/new" data-dialog="access-dlg" aria-haspopup="dialog">{{template "i-plus"}}{{t "acc.add"}}</a>{{end}}
 {{define "access-back"}}<a class="back" href="/settings/access">{{template "i-back"}}{{t "settings.access"}}</a>{{end}}
 
-{{/* An access's mark: Home Assistant's own, else an icon on its colour. */}}
-{{define "access-mark"}}{{if eq . "home-assistant"}}<span class="mark preset-mark mark-home-assistant" aria-hidden="true">{{template "preset-icon" .}}</span>
-{{else}}<span class="mark access-mark access-{{.}}" aria-hidden="true">{{if eq . "web"}}{{template "i-globe"}}{{else if eq . "app"}}{{template "i-phone"}}{{else if eq . "telegram"}}{{template "i-send"}}{{else}}{{template "i-plug"}}{{end}}</span>{{end}}{{end}}
+{{/* An access's mark: an icon on its colour. */}}
+{{define "access-mark"}}<span class="mark access-mark access-{{.}}" aria-hidden="true">{{if eq . "web"}}{{template "i-globe"}}{{else if eq . "app"}}{{template "i-phone"}}{{else if eq . "telegram"}}{{template "i-send"}}{{else}}{{template "i-plug"}}{{end}}</span>{{end}}
 
 {{define "access"}}{{with .Data}}
 <header class="page-head page-head-row">

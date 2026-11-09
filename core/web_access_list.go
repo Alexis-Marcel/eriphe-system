@@ -11,16 +11,15 @@ import (
 // and the mobile app (installing the workspace, its notifications and the
 // devices told, web_push.go). The others are added from a catalog:
 // Telegram's bot (web_telegram.go) and the API accesses (channels_added.go),
-// Home Assistant or any app or script holding a token. Each row says who
+// any app or script holding a token (Home Assistant's integration is one). Each row says who
 // speaks through it and what it may carry, and opens its own page.
 
 const (
 	entryWeb      = "web"
 	entryApp      = "app"
 	entryTelegram = "telegram"
-	// The kinds of API access, kept with each (channels.kind).
-	apiHomeAssistant = "home-assistant"
-	apiGeneric       = "api"
+	// An API access (channels.kind): any app holding a token.
+	apiGeneric = "api"
 )
 
 // entryKind is an entry of the catalog.
@@ -34,7 +33,6 @@ type entryKind struct {
 // access starts not trusted: the user says otherwise.
 var entryCatalog = []entryKind{
 	{ID: entryTelegram},
-	{ID: apiHomeAssistant, Name: "Home Assistant", Carries: carrySentence},
 	{ID: apiGeneric},
 }
 
@@ -45,14 +43,6 @@ func entryKindOf(id string) (entryKind, bool) {
 		}
 	}
 	return entryKind{}, false
-}
-
-// apiKind is a stored kind of API access, or the generic one.
-func apiKind(kind string) string {
-	if kind == apiHomeAssistant {
-		return kind
-	}
-	return apiGeneric
 }
 
 // entryRow is a row of the list.
@@ -142,7 +132,7 @@ func (w *web) entryPage() entryPage {
 	// The API accesses.
 	now := time.Now()
 	for _, ch := range c.addedChannels() {
-		row := entryRow{Kind: apiKind(ch.Kind), Name: ch.Name, URL: "/settings/access/api/" + strconv.FormatInt(ch.ID, 10),
+		row := entryRow{Kind: apiGeneric, Name: ch.Name, URL: "/settings/access/api/" + strconv.FormatInt(ch.ID, 10),
 			Speaker: "anyone", Carries: "none", State: "on", Label: "chan.ready"}
 		if ch.Trusted {
 			row.Speaker = "trusted"
@@ -176,7 +166,8 @@ func (w *web) accessRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/access/api/{id}/token", w.auth(w.handleAPIToken))
 	mux.Handle("POST /settings/access/api/{id}/remove", w.auth(w.handleAPIRemove))
 	// Where these pages were before, in links already shared.
-	for from, to := range map[string]string{"/settings/remote": "/settings/access", "/settings/channels": "/settings/access"} {
+	for from, to := range map[string]string{"/settings/remote": "/settings/access", "/settings/channels": "/settings/access",
+		"/settings/home-assistant": "/settings/tools"} {
 		mux.HandleFunc("GET "+from, func(rw http.ResponseWriter, r *http.Request) {
 			http.Redirect(rw, r, to, http.StatusMovedPermanently)
 		})
@@ -263,8 +254,8 @@ func (w *web) apiAnswer(rw http.ResponseWriter, r *http.Request, s *session, v a
 }
 
 func (w *web) handleAPIAdd(rw http.ResponseWriter, r *http.Request, s *session) {
-	kind := apiKind(r.PostFormValue("kind"))
-	ch, tok, err := w.c.addChannel(kind, r.PostFormValue("name"), r.PostFormValue("trusted") == "1", r.PostFormValue("carries"))
+	kind := apiGeneric
+	ch, tok, err := w.c.addChannel(r.PostFormValue("name"), r.PostFormValue("trusted") == "1", r.PostFormValue("carries"))
 	if err != nil {
 		w.apiAnswer(rw, r, s, apiAccessView{New: true, Error: err.Error(), addedChannel: addedChannel{Kind: kind,
 			Name: r.PostFormValue("name"), Trusted: r.PostFormValue("trusted") == "1", Carries: r.PostFormValue("carries")}})

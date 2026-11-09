@@ -28,8 +28,9 @@ import (
 //   - outbound, what it may carry: nothing, or a neutral sentence the code
 //     writes, said where the user is (a speaker in their room).
 //
-// Home Assistant's voice is one of them. Its former token (voice_token_hash)
-// became the channel "Home Assistant", not trusted, carrying a sentence.
+// Home Assistant's voice, through its integration (ha/), is one of them,
+// like any other app. Its former token (voice_token_hash) became the
+// channel "Home Assistant", not trusted, carrying a sentence.
 
 const channelsSchema = `CREATE TABLE IF NOT EXISTS channels (
   id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE COLLATE NOCASE, token_hash TEXT NOT NULL,
@@ -41,10 +42,10 @@ DELETE FROM kv WHERE key = 'voice_token_hash';`
 
 func init() {
 	extraSchema = append(extraSchema, channelsSchema)
-	// Added with Settings → Access: the kind of each, its mark and its help.
-	// Those from before are Home Assistant's former voice, or any app.
+	// Every added channel is an API access, whatever app holds its token;
+	// a kind of Home Assistant's own was folded into it.
 	extraColumns = append(extraColumns, `ALTER TABLE channels ADD COLUMN kind TEXT NOT NULL DEFAULT ''`,
-		`UPDATE channels SET kind = CASE WHEN name = 'Home Assistant' THEN 'home-assistant' ELSE 'api' END WHERE kind = ''`)
+		`UPDATE channels SET kind = 'api' WHERE kind IN ('', 'home-assistant')`)
 }
 
 const (
@@ -56,7 +57,7 @@ const (
 // addedChannel is a channel the user added.
 type addedChannel struct {
 	ID      int64
-	Kind    string // apiHomeAssistant or apiGeneric (web_access_list.go)
+	Kind    string // apiGeneric (web_access_list.go)
 	Name    string
 	Trusted bool
 	Carries string // "" (nothing) or carrySentence
@@ -104,7 +105,7 @@ func tokenHash(tok string) string {
 }
 
 // addChannel adds a channel and returns its token, shown once.
-func (c *core) addChannel(kind, name string, trusted bool, carries string) (addedChannel, string, error) {
+func (c *core) addChannel(name string, trusted bool, carries string) (addedChannel, string, error) {
 	var ch addedChannel
 	name, err := checkChannelName(name)
 	if err != nil {
@@ -121,7 +122,7 @@ func (c *core) addChannel(kind, name string, trusted bool, carries string) (adde
 		return ch, "", err
 	}
 	res, err := c.store.db.Exec(`INSERT INTO channels (kind, name, token_hash, trusted, carries, created) VALUES (?, ?, ?, ?, ?, ?)`,
-		apiKind(kind), name, hash, trusted, carries, time.Now().Unix())
+		apiGeneric, name, hash, trusted, carries, time.Now().Unix())
 	if err != nil {
 		return ch, "", fmt.Errorf("a channel is already named %q", name)
 	}

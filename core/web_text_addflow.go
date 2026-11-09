@@ -36,8 +36,6 @@ var addFlowStrings = map[string]map[string]string{
 		"drivestep.page":      "Tout cela tient sur une page à part, où tu reviens pour changer les dossiers.",
 		"drivestep.go":        "Ouvrir le guide",
 		"drivestep.manage":    "Gérer Google Drive",
-		"ha.formhint":         "La voix de la maison (Assist) se règle sur la page de Home Assistant.",
-		"ha.formlink":         "Page Home Assistant",
 	},
 	"en": {
 		"step.back":           "Back",
@@ -62,7 +60,5 @@ var addFlowStrings = map[string]map[string]string{
 		"drivestep.page":      "All of it is on a page of its own, where you come back to change the folders.",
 		"drivestep.go":        "Open the guide",
 		"drivestep.manage":    "Manage Google Drive",
-		"ha.formhint":         "The house's voice (Assist) is set on the Home Assistant page.",
-		"ha.formlink":         "Home Assistant page",
 	},
 }

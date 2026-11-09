@@ -47,13 +47,15 @@
     {{if .Secret}}<p class="small">{{t "alerts.secret"}} <span class="mono">{{.Secret}}</span></p>{{end}}
   </div>{{end}}
   {{if .Data.Alerts}}<ul class="plain-list">
-  {{range .Data.Alerts}}<li><span class="mono">{{.Name}}</span>{{if .Signed}} <span class="tag">{{t "alerts.signed"}}</span>{{end}}
+  {{range .Data.Alerts}}<li><span class="mono">{{.Name}}</span>{{if .Signed}} <span class="tag" title="{{.SigHeader}}">{{t "alerts.signed"}}</span>{{end}}
     <span class="muted small">when: hook.received key={{.Name}}</span>
     <form method="post" action="/settings/alerts/{{.ID}}/delete" class="inline"><button class="btn btn-link" type="submit">{{t "alerts.delete"}}</button></form></li>
   {{end}}</ul>{{end}}
   <form class="stack-form" method="post" action="/settings/alerts">
     <label>{{t "alerts.name"}} <input name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="getout"></label>
     <label class="check"><input type="checkbox" name="signed" checked> {{t "alerts.sign"}}</label>
+    <label>{{t "alerts.header"}} <input name="header" pattern="[A-Za-z0-9][A-Za-z0-9-]{0,63}" placeholder="X-Eriphe-Signature"></label>
+    <p class="muted small">{{t "alerts.headerhint"}}</p>
     <div class="form-actions"><button class="btn btn-primary" type="submit">{{t "alerts.add"}}</button></div>
   </form>
 </section>

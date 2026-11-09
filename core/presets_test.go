@@ -29,3 +29,17 @@ func TestGuessMailProvider(t *testing.T) {
 		}
 	}
 }
+
+// A preset whose host is the user's own is known by its URL's path, on any
+// host; one with a fixed address by its address.
+func TestPresetByAskedURL(t *testing.T) {
+	if p, ok := presetByURL("http://192.0.2.10:8123/api/mcp"); !ok || p.ID != "home-assistant" {
+		t.Fatalf("%+v %v", p, ok)
+	}
+	if p, ok := presetByURL("https://mcp.linear.app/mcp"); !ok || p.ID != "linear" {
+		t.Fatalf("%+v %v", p, ok)
+	}
+	if _, ok := presetByURL("http://192.0.2.10:8123/other"); ok {
+		t.Fatal("another path matched")
+	}
+}

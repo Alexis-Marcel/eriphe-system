@@ -16,10 +16,10 @@ import (
 func TestWebAccessList(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	if _, _, err := tw.c.addChannel(apiHomeAssistant, "Home Assistant", false, carrySentence); err != nil {
+	if _, _, err := tw.c.addChannel("Home Assistant", false, carrySentence); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := tw.c.addChannel(apiGeneric, "Raccourci", true, ""); err != nil {
+	if _, _, err := tw.c.addChannel("Raccourci", true, ""); err != nil {
 		t.Fatal(err)
 	}
 	for lang, words := range map[string][]string{
@@ -46,7 +46,7 @@ func TestWebAccessList(t *testing.T) {
 			t.Errorf("%s: Access is not the current entry: %d", lang, n)
 		}
 		for _, want := range []string{`href="/settings/access/web"`, `href="/settings/access/app"`, `href="/settings/access/api/1"`, `href="/settings/access/api/2"`,
-			`href="/settings/access/new/telegram"`, `href="/settings/access/new/home-assistant"`, `href="/settings/access/new/api"`, `data-dialog="access-dlg"`} {
+			`href="/settings/access/new/telegram"`, `href="/settings/access/new/api"`, `data-dialog="access-dlg"`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s: no %s", lang, want)
 			}
@@ -56,12 +56,16 @@ func TestWebAccessList(t *testing.T) {
 		}
 	}
 	// Without JavaScript, the catalog is a page.
-	if code, body, _ := tw.do("GET", "/settings/access/new", nil, nil); code != 200 || !strings.Contains(body, `href="/settings/access/new/home-assistant"`) {
+	if code, body, _ := tw.do("GET", "/settings/access/new", nil, nil); code != 200 || !strings.Contains(body, `href="/settings/access/new/api"`) ||
+		strings.Contains(body, "/settings/access/new/home-assistant") {
 		t.Fatalf("catalog page: %d", code)
 	}
 	// Telegram's entry leads to its page; an unknown kind is not found.
 	if code, _, h := tw.do("GET", "/settings/access/new/telegram", nil, nil); code != 303 || h.Get("Location") != "/settings/access/telegram" {
 		t.Fatalf("telegram: %d %s", code, h.Get("Location"))
+	}
+	if code, _, _ := tw.do("GET", "/settings/access/new/home-assistant", nil, nil); code != 404 {
+		t.Fatalf("Home Assistant is no kind of its own: %d", code)
 	}
 	if code, _, _ := tw.do("GET", "/settings/access/new/discord", nil, nil); code != 404 {
 		t.Fatalf("an unknown kind: %d", code)
@@ -77,9 +81,8 @@ func TestWebAccessAPI(t *testing.T) {
 	c := tw.c
 	tokRe := regexp.MustCompile(`ech_[0-9a-f]{64}`)
 
-	_, body, _ := tw.do("GET", "/settings/access/new/home-assistant", nil, nil)
-	for _, want := range []string{"<h2>Home Assistant</h2>", `name="kind" value="home-assistant"`, `value="Home Assistant"`,
-		`<option value="sentence" selected>`, "Appareils et services", `hx-post="/settings/access/api"`} {
+	_, body, _ := tw.do("GET", "/settings/access/new/api", nil, nil)
+	for _, want := range []string{`name="kind" value="api"`, "Appareils et services", `hx-post="/settings/access/api"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("the form lacks %q", want)
 		}
@@ -87,10 +90,10 @@ func TestWebAccessAPI(t *testing.T) {
 	if strings.Contains(body, `name="trusted" value="1" checked`) {
 		t.Fatal("trusted by default")
 	}
-	code, body, h := tw.post("/settings/access/api", url.Values{"kind": {"home-assistant"}, "name": {"Home Assistant"}, "carries": {"sentence"}}, csrf)
+	code, body, h := tw.post("/settings/access/api", url.Values{"kind": {"api"}, "name": {"Home Assistant"}, "carries": {"sentence"}}, csrf)
 	tok := tokRe.FindString(body)
 	chs := c.addedChannels()
-	if code != 200 || tok == "" || len(chs) != 1 || chs[0].Kind != apiHomeAssistant || chs[0].Trusted || chs[0].Carries != carrySentence ||
+	if code != 200 || tok == "" || len(chs) != 1 || chs[0].Kind != apiGeneric || chs[0].Trusted || chs[0].Carries != carrySentence ||
 		h.Get("HX-Push-Url") != "/settings/access/api/"+idText(chs[0].ID) || !strings.Contains(body, `id="access-api"`) {
 		t.Fatalf("add: %d %+v %v", code, chs, h)
 	}
@@ -105,7 +108,7 @@ func TestWebAccessAPI(t *testing.T) {
 	}
 
 	_, body, _ = tw.post("/settings/access/api/"+id, url.Values{"name": {"Maison"}, "trusted": {"1"}, "carries": {""}}, csrf)
-	if ch, _ := c.addedChannel(chs[0].ID); ch.Name != "Maison" || !ch.Trusted || ch.Carries != "" || ch.Kind != apiHomeAssistant || !strings.Contains(body, "de confiance") {
+	if ch, _ := c.addedChannel(chs[0].ID); ch.Name != "Maison" || !ch.Trusted || ch.Carries != "" || ch.Kind != apiGeneric || !strings.Contains(body, "de confiance") {
 		t.Fatalf("set: %+v", ch)
 	}
 	// A second with the same name: refused, the form kept.
@@ -137,8 +140,9 @@ func TestWebAccessAPI(t *testing.T) {
 func TestWebAccessMoved(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	for _, from := range []string{"/settings/remote", "/settings/channels"} {
-		if code, _, h := tw.do("GET", from, nil, nil); code != 301 || h.Get("Location") != "/settings/access" {
+	for from, to := range map[string]string{"/settings/remote": "/settings/access", "/settings/channels": "/settings/access",
+		"/settings/home-assistant": "/settings/tools"} {
+		if code, _, h := tw.do("GET", from, nil, nil); code != 301 || h.Get("Location") != to {
 			t.Errorf("GET %s: %d %s", from, code, h.Get("Location"))
 		}
 	}
@@ -169,12 +173,10 @@ func TestWebAccessMoved(t *testing.T) {
 func TestAccessWords(t *testing.T) {
 	for _, lang := range []string{"fr", "en"} {
 		keys := []string{"settings.access", "acc.lead", "acc.add", "acc.app.none", "acc.app.device", "acc.app.devices", "acc.tg.linked", "acc.tg.notlinked"}
-		for _, k := range []string{entryWeb, entryApp, entryTelegram, apiHomeAssistant, apiGeneric} {
+		for _, k := range []string{entryWeb, entryApp, entryTelegram, apiGeneric} {
 			keys = append(keys, "acc.kind."+k, "acc.kind."+k+".desc")
 		}
-		for _, k := range []string{apiHomeAssistant, apiGeneric} {
-			keys = append(keys, "acc.api.how."+k)
-		}
+		keys = append(keys, "acc.api.how."+apiGeneric)
 		for _, s := range []string{speakerUser, speakerAccount, "trusted", "anyone"} {
 			keys = append(keys, "chan.speaker."+s)
 		}
@@ -189,20 +191,21 @@ func TestAccessWords(t *testing.T) {
 	}
 }
 
-// The API accesses from before kinds: Home Assistant's former voice is
-// Home Assistant's, the others generic.
+// Every API access is generic: from before kinds, or of Home Assistant's
+// former kind.
 func TestChannelKindMigration(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	c.addChannel(apiHomeAssistant, "Home Assistant", false, carrySentence)
-	c.addChannel(apiGeneric, "Script", false, "")
-	c.store.db.Exec(`UPDATE channels SET kind = ''`)
+	c.addChannel("Home Assistant", false, carrySentence)
+	c.addChannel("Script", false, "")
+	c.store.db.Exec(`UPDATE channels SET kind = 'home-assistant' WHERE name = 'Home Assistant'`)
+	c.store.db.Exec(`UPDATE channels SET kind = '' WHERE name = 'Script'`)
 	for _, q := range extraColumns {
 		if strings.Contains(q, "channels") {
 			c.store.db.Exec(q)
 		}
 	}
 	chs := c.addedChannels()
-	if len(chs) != 2 || chs[0].Kind != apiHomeAssistant || chs[1].Kind != apiGeneric {
+	if len(chs) != 2 || chs[0].Kind != apiGeneric || chs[1].Kind != apiGeneric {
 		t.Fatalf("%+v", chs)
 	}
 }

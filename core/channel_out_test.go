@@ -38,7 +38,7 @@ func TestChannelOutEndpoint(t *testing.T) {
 		}
 	}
 	ha := c.addedChannels()[0]
-	_, otherTok, _ := c.addChannel(apiGeneric, "Écran", false, carrySentence)
+	_, otherTok, _ := c.addChannel("Écran", false, carrySentence)
 	c.announce(pushNote{}, routeTarget{Step: stepVoice, Device: fmt.Sprintf("channel:%d", ha.ID), Label: "Salon"})
 	if _, got := outGet(t, c, otherTok, ""); len(got) != 0 {
 		t.Fatalf("another channel got it: %+v", got)
@@ -113,7 +113,7 @@ func TestVoiceSpotNeedsListener(t *testing.T) {
 // itself knows no sensor.
 func TestVoiceWhereTheChannelSays(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
-	ch, _, err := c.addChannel(apiHomeAssistant, "Home Assistant", false, carrySentence)
+	ch, _, err := c.addChannel("Home Assistant", false, carrySentence)
 	if err != nil {
 		t.Fatal(err)
 	}
