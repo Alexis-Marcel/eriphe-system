@@ -14,7 +14,7 @@ func TestSkillTriggerParse(t *testing.T) {
 	for _, ok := range []string{
 		"", "when: mail.received\n", "when: alert.received key=getout\nevery: 15m\n",
 		"when: time weekdays 08:00\nmodel: small\n", "when: mail.received\ntools: [mail, calendar]\ncan: [start-session]\n",
-		"when: ha.changed signal=place value=away\nevery: 1d\n",
+		"when: ha.changed entity=person.sam state=not_home\nevery: 1d\n",
 	} {
 		if _, err := parseSkillMD(front(ok)); err != nil {
 			t.Errorf("%q refused: %v", ok, err)
@@ -38,9 +38,9 @@ func TestSkillTriggerParse(t *testing.T) {
 	if s := tr.Text("fr"); !strings.Contains(s, "alert.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "session") {
 		t.Fatalf("text %q", s)
 	}
-	m, _ = parseSkillMD(front("when: ha.changed signal=place value=away\n"))
-	if !m.Trigger.matches(journalEvent{Kind: evHAChanged, Payload: map[string]any{"signal": "place", "value": "away"}}) ||
-		m.Trigger.matches(journalEvent{Kind: evHAChanged, Payload: map[string]any{"signal": "place", "value": "home"}}) {
+	m, _ = parseSkillMD(front("when: ha.changed entity=binary_sensor.lit state=on\n"))
+	if !m.Trigger.matches(journalEvent{Kind: evHAChanged, Payload: map[string]any{"entity": "binary_sensor.lit", "state": "on"}}) ||
+		m.Trigger.matches(journalEvent{Kind: evHAChanged, Payload: map[string]any{"entity": "binary_sensor.lit", "state": "off"}}) {
 		t.Fatal("payload filters")
 	}
 }

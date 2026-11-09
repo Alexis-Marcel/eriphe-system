@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ type notifyIn struct {
 	Text  string `json:"text" jsonschema:"what to tell the user, in French, one or two sentences, plain text"`
 	Level string `json:"level" jsonschema:"now (worth interrupting: within the hour) or brief (can wait for the next brief)"`
 	Why   string `json:"why" jsonschema:"why you tell it, in French, one sentence the user sees on opening it (the source, what triggered it)"`
+	Where string `json:"where,omitempty" jsonschema:"the line to try first, from where_now: inapp, computer, voice, phone or telegram; empty lets the router choose (best, unless you have a reason). Lines off, the quiet hours and the user's rules still apply"`
 	Ref   string `json:"ref,omitempty" jsonschema:"what it is about, the key rules match: a known topic (notifications lists them) before a new one; project:<name> and person:<slug> as in the memory, source:<server>, a one-word topic (facture), task:<id>, intention:<id>"`
 }
 
@@ -57,8 +59,9 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})
-	registerSettingTools(s, c)  // setting
-	registerPresenceTools(s, c) // presence_sources, map_presence (ha_tools.go)
+	registerSettingTools(s, c) // setting
+	registerHATools(s, c)      // ha_entities, follow_entity (ha_tools.go)
+	registerWhereNow(s, c)     // where_now (where_now.go)
 }
 
 func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
@@ -76,6 +79,8 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 		return nil, errors.New("text and why are needed")
 	case in.Level != levelNow && in.Level != levelBrief:
 		return nil, errors.New("level is now or brief")
+	case in.Where != "" && !slices.Contains(routeSteps, in.Where):
+		return nil, errors.New("where is one of inapp, computer, voice, phone, telegram, or empty")
 	}
 	scan := scanMemoryText(text, why, in.Ref)
 	if scan.Reject != "" {
@@ -91,7 +96,7 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 	// The message goes in the conversation with the push, and is not pushed again as a question.
 	c.relayMu.Lock()
 	defer c.relayMu.Unlock()
-	n, err := c.notify(n, notifyItem{Level: in.Level, Ref: n.Ref, Tainted: len(tainted) > 0})
+	n, err := c.notify(n, notifyItem{Level: in.Level, Ref: n.Ref, Tainted: len(tainted) > 0, Where: in.Where})
 	if err != nil {
 		return nil, err
 	}

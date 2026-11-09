@@ -232,8 +232,8 @@ Windows, from the session helper (see The user's session); elsewhere (Linux, Lim
 
 ### The user's session (context)
 
-eriphe-core asks with a level, `GET /v1/node?context=N`, the user's choice on the page « Ce
-qu'Eriphe sait de toi » (`core/context.go`). At 0 the node tells nothing of the user (`idle` too
+eriphe-core asks with a level, `GET /v1/node?context=N`; it asks 1 (`core/route_signals.go`), so
+the category of the app in front (level 2) is no longer computed for it. At 0 the node tells nothing of the user (`idle` too
 is `{"known": false}`); without the parameter (an older eriphe-core), `idle` as before and nothing
 more. From 1, it also reports `context`:
 

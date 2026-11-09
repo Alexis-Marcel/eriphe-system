@@ -148,7 +148,7 @@ func routeDuplicate(p routePlan, sig routeSignals, n routeNote) bool {
 func TestRouteNoteHasNoText(t *testing.T) {
 	nt := reflect.TypeFor[routeNote]()
 	for i := range nt.NumField() {
-		if f := nt.Field(i); f.Type.Kind() != reflect.Bool && !slices.Contains([]string{"Level", "Only", "Also", "Never"}, f.Name) {
+		if f := nt.Field(i); f.Type.Kind() != reflect.Bool && !slices.Contains([]string{"Level", "Only", "Also", "Never", "First"}, f.Name) {
 			t.Fatalf("routeNote carries %s", f.Name)
 		}
 	}
@@ -170,5 +170,27 @@ func TestCheckSteps(t *testing.T) {
 	}
 	if got := moveLine([]string{"inapp", "computer", "voice", "phone"}, "phone", true, map[string]bool{"inapp": true, "phone": true, "computer": true}); !slices.Equal(got, []string{"inapp", "phone", "computer", "voice"}) {
 		t.Fatalf("moved %v", got)
+	}
+}
+
+// notify's where puts its line first, unless the turn is tainted; a line
+// turned off stays off.
+func TestRouteFirst(t *testing.T) {
+	sig := routeSignals{Devices: []routeDevice{{ID: "mac", Label: "Mac · Chrome", Kind: kindComputer, Push: true, IdleKnown: true, Idle: time.Second},
+		{ID: "iphone", Label: "iPhone · Safari · app", Kind: kindPhone, Push: true, App: true}}, Telegram: true}
+	set := routeSettings{Delay: defaultDelay}
+	first := func(n routeNote, set routeSettings) string { return route(n, sig, set, nil).First[0].Step }
+	if got := first(routeNote{Level: levelNow}, set); got != stepComputer {
+		t.Fatalf("router's order: %s", got)
+	}
+	if got := first(routeNote{Level: levelNow, First: stepTelegram}, set); got != stepTelegram {
+		t.Fatalf("where telegram: %s", got)
+	}
+	if got := first(routeNote{Level: levelNow, First: stepTelegram, Tainted: true}, set); got != stepComputer {
+		t.Fatalf("tainted where followed: %s", got)
+	}
+	set.Off = []string{stepTelegram}
+	if got := first(routeNote{Level: levelNow, First: stepTelegram}, set); got != stepComputer {
+		t.Fatalf("a line off: %s", got)
 	}
 }

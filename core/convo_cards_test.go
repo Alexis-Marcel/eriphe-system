@@ -416,11 +416,7 @@ func TestCardsOfferedAtTheRightMoment(t *testing.T) {
 		},
 		"dnd": func(c *core) time.Time {
 			now := at(t, "2026-11-04", "10:00")
-			s, err := checkSignal(ctxInput{Kind: sigDND, Value: "on", Reason: "game"}, nil, "machine:pc", now)
-			if err != nil {
-				t.Fatal(err)
-			}
-			c.putSignals([]ctxSignal{s})
+			c.obs.put("pc", machineObs{DND: true, Reason: "game", At: now})
 			return now
 		},
 	} {

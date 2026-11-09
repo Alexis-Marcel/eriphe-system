@@ -100,7 +100,8 @@ type routeNote struct {
 	Only    string `json:"only,omitempty"`    // a rule's channels: push, telegram
 	Also    string `json:"also,omitempty"`    // a rule's lines added to the first
 	Never   string `json:"never,omitempty"`   // a rule's lines forbidden
-	Fixed   bool   `json:"fixed,omitempty"`   // an urgent watch's fixed message, the user's own words
+	Fixed   bool   `json:"fixed,omitempty"`   // an urgent skill's fixed message, the user's own words
+	First   string `json:"first,omitempty"`   // the line the writer chose to try first (notify's where), a closed value; ignored when tainted; the rules and the lines off still apply
 }
 
 // routeDevice is one of the user's devices as the router sees it.
@@ -159,6 +160,11 @@ func route(n routeNote, sig routeSignals, set routeSettings, tried []string) rou
 	order := set.Order
 	if len(order) == 0 {
 		order = routeSteps
+	}
+	if slices.Contains(routeSteps, n.First) && !n.Tainted {
+		// The writer's choice goes first; the others keep their order. A
+		// tainted turn's choice is not followed: what it read may have asked.
+		order = append([]string{n.First}, slices.DeleteFunc(slices.Clone(order), func(s string) bool { return s == n.First })...)
 	}
 	var picks []routeTarget
 	used := slices.Clone(tried)

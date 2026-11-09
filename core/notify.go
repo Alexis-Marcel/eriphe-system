@@ -112,6 +112,7 @@ type notifyItem struct {
 	Ref     string // what it is about: project:getout, intention:12…
 	Asked   bool   // the user asked for it in their own words: not counted in the cap
 	Tainted bool   // drawn from external content
+	Where   string // the line the writer would try first (where_now.go); "" for the router's order
 	// Urgent is set by eriphe-core only, never by the brain: the fixed
 	// message of a watch the user marked urgent, on its condition
 	// (watch_urgent.go). It goes through the quiet hours and the cap.
@@ -236,7 +237,7 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 	log.Printf("notify: %d %s → %s (%s)", n.ID, it.Level, d.Outcome, d.Reason)
 	if d.Outcome == levelNow {
 		note := notifyNote(n)
-		note.Route = routeNote{Level: levelNow, Tainted: it.Tainted, Fixed: n.Source == notifyFromUrgent}
+		note.Route = routeNote{Level: levelNow, Tainted: it.Tainted, Fixed: n.Source == notifyFromUrgent, First: it.Where}
 		if r := topicRule(cx.Rules, it.Ref); r != nil {
 			note.Channels = r.Channels // the rule's channels, else the default (channels.go)
 			note.Route.Only, note.Route.Also, note.Route.Never = r.Channels, r.Also, r.Never

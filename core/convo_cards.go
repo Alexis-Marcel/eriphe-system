@@ -18,7 +18,7 @@ import (
 // plutôt qu'un tableau de bord" (2026-11-01): what waits for the user's
 // approval is asked where they talk to the assistant, not on a page of its
 // own. A card is bound by the code to exactly one proposal (a memory, an
-// intention, a notification rule, a watch, a setting, a presence mapping):
+// intention, a notification rule, a watch, a setting, an entity to follow):
 // its Oui and Non call that proposal's own approval, and nothing else does.
 //
 //   - A proposal the brain makes in a turn is attached to the message it
@@ -242,13 +242,13 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		p.Pending, p.Tainted, p.Why = true, tainted, why
 		p.text = func(lang string) string { return tr(lang, "setting.name."+name) + " : " + value }
 	case cardPresence:
-		i := slices.IndexFunc(c.haMappings(""), func(m haMapping) bool { return m.ID == id })
+		i := slices.IndexFunc(c.haFollows(""), func(f haFollow) bool { return f.ID == id })
 		if i < 0 {
 			return p
 		}
-		m := c.haMappings("")[i]
-		p.Pending, p.Tainted, p.Why, p.Outcome = m.State == ruleProposed, m.Tainted, m.Why, cardApproved
-		p.text = func(lang string) string { return tr(lang, "ctx.ha.signal."+m.Signal) + " ← " + m.Entity }
+		f := c.haFollows("")[i]
+		p.Pending, p.Tainted, p.Why, p.Outcome = f.State == ruleProposed, f.Tainted, f.Why, cardApproved
+		p.text = func(lang string) string { return tr(lang, "obs.follow") + " " + f.Entity }
 	case cardTaskStart:
 		return c.taskStartProposal(p) // task_start.go
 	case cardAccess:
@@ -334,8 +334,8 @@ func (c *core) pendingProposals() []proposal {
 			add(cardSetting, s.ID)
 		}
 	}
-	for _, m := range c.haMappings(ruleProposed) {
-		add(cardPresence, m.ID)
+	for _, f := range c.haFollows(ruleProposed) {
+		add(cardPresence, f.ID)
 	}
 	for _, id := range c.proposedStarts() { // task_start.go
 		add(cardTaskStart, id)
@@ -412,7 +412,7 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 	case cardSetting:
 		return c.decideSetting(id, approve)
 	case cardPresence:
-		return c.decideMapping(ctx, id, approve)
+		return c.decideFollow(ctx, id, approve)
 	case cardTaskStart:
 		return c.decideTaskStart(id, approve)
 	case cardAccess:
@@ -585,17 +585,8 @@ func (c *core) proposalMoment(now time.Time) (bool, string) {
 	if h := now.Hour(); h >= nightFrom || h < nightTo {
 		return false, "night"
 	}
-	u := c.userContext(now)
-	for _, d := range u.Devices {
-		if d.DND {
-			return false, "dnd"
-		}
-	}
-	if u.Focus != "" && u.Focus != "off" {
-		return false, "focus"
-	}
-	if u.Busy.After(now) {
-		return false, "busy"
+	if c.obs.anyDND(now) {
+		return false, "dnd"
 	}
 	return true, ""
 }

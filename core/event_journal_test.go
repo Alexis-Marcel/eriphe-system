@@ -174,19 +174,20 @@ func TestUserReturnedEvent(t *testing.T) {
 	}
 }
 
-// Home Assistant's signals: a change of value is ha.changed; the first
-// publish only records them.
+// A followed entity's state that moves is ha.changed, keyed by the entity,
+// with its area from Home Assistant; only the followed ids count.
 func TestHAChangedEvents(t *testing.T) {
 	c, _, _ := pollCore(t)
-	c.emitHAChanges([]ctxSignal{{Kind: sigPlace, Value: "home"}, {Kind: sigRoom, Value: "salon"}})
-	if got := eventsOf(t, c, evHAChanged); len(got) != 0 {
-		t.Fatalf("first publish: %+v", got)
-	}
-	c.emitHAChanges([]ctxSignal{{Kind: sigPlace, Value: "away"}, {Kind: sigRoom, Value: "salon"}})
-	c.emitHAChanges([]ctxSignal{{Kind: sigPlace, Value: "away"}})
+	house := haHouse{Entities: []haEntity{{ID: "binary_sensor.lit", Domain: "binary_sensor", Class: "occupancy", Area: "Chambre"}}}
+	states := map[string]haEntityState{"binary_sensor.lit": {State: "off"}}
+	ids := []string{"binary_sensor.lit"}
+	now := time.Now()
+	ev := `{"c": {"binary_sensor.lit": {"+": {"s": "on"}}, "light.salon": {"+": {"s": "on"}}}}`
+	c.emitHAChanges(applyEntityEvent([]byte(ev), ids, states, now), house)
+	c.emitHAChanges(applyEntityEvent([]byte(ev), ids, states, now), house) // no move: nothing
 	got := eventsOf(t, c, evHAChanged)
-	if len(got) != 2 || got[0].Key != sigPlace || got[0].Payload["value"] != "away" || got[0].External ||
-		got[1].Key != sigRoom || got[1].Payload["value"] != "" {
+	if len(got) != 1 || got[0].Key != "binary_sensor.lit" || got[0].Payload["state"] != "on" || got[0].Payload["was"] != "off" ||
+		got[0].Payload["area"] != "Chambre" || got[0].External {
 		t.Fatalf("%+v", got)
 	}
 }
