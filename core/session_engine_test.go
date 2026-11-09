@@ -353,3 +353,26 @@ func TestSessionDeclined(t *testing.T) {
 		t.Error("a step of a declined plan started")
 	}
 }
+
+// The brain opens a session through its tool, as JSON: only proposed,
+// with its plan card, until the user approves.
+func TestStartSessionTool(t *testing.T) {
+	c := startCore(t)
+	out, isErr := callBrainTool(t, c, "start_session", map[string]any{
+		"title": "Brand name", "goal": "Find a name for the shop.", "budget_minutes": 30,
+		"steps": []any{
+			map[string]any{"key": "names", "title": "Find names", "prompt": "Propose ten names."},
+			map[string]any{"key": "pick", "title": "Pick one", "kind": "choice", "question": "Which one?", "options": []any{"Lumen", "Rivet"}, "after": []any{"names"}},
+		}})
+	if isErr || !strings.Contains(out["note"].(string), "Only proposed") {
+		t.Fatalf("start_session: %v", out)
+	}
+	ss, _ := c.sessions(true, 10)
+	if len(ss) != 1 || ss[0].State != sessProposed || ss[0].Budget != 30 {
+		t.Fatalf("sessions %+v", ss)
+	}
+	sessionCard(t, c, askPlan)
+	if out, isErr := callBrainTool(t, c, "settle_step", map[string]any{"session_id": ss[0].ID, "step": "names", "verdict": "accept"}); !isErr {
+		t.Errorf("a step of a proposed session was judged: %v", out)
+	}
+}
