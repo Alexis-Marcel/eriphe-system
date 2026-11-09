@@ -123,15 +123,20 @@ func (c *core) eventRuleWrite(sourceRef string, scan scanResult) (state, why str
 	return watchActive, "", nil
 }
 
+// ruleFromEvent is the rule an event of the rule tool describes.
+func ruleFromEvent(in ruleEventIn, after int) *rule {
+	return &rule{Name: in.Name, Source: strings.ToLower(strings.TrimSpace(in.Source)), Prompt: in.Prompt, Brief: in.Brief, Why: in.Why, By: "brain",
+		Spec: ruleWhen{Schedule: in.Schedule, After: after, Server: in.Server, Tool: in.Tool, Args: in.Args, Every: in.Every,
+			Cond: in.Cond, Judge: in.Judge, Signed: in.Signed, Fact: in.Fact, Becomes: in.Becomes, Ends: in.Ends},
+		If: in.If, Act: strings.ToLower(strings.TrimSpace(in.Then)), ActText: in.Text, ActRef: in.Topic, ActLevel: in.Level}
+}
+
 func (c *core) brainEventRule(in ruleEventIn) (map[string]any, error) {
 	after, err := parseAfter(in.After)
 	if err != nil {
 		return nil, err
 	}
-	w := &rule{Name: in.Name, Source: strings.ToLower(strings.TrimSpace(in.Source)), Prompt: in.Prompt, Brief: in.Brief, Why: in.Why, By: "brain",
-		Spec: ruleWhen{Schedule: in.Schedule, After: after, Server: in.Server, Tool: in.Tool, Args: in.Args, Every: in.Every,
-			Cond: in.Cond, Judge: in.Judge, Signed: in.Signed, Fact: in.Fact, Becomes: in.Becomes, Ends: in.Ends},
-		If: in.If, Act: strings.ToLower(strings.TrimSpace(in.Then)), ActText: in.Text, ActRef: in.Topic, ActLevel: in.Level}
+	w := ruleFromEvent(in, after)
 	src := w.Source
 	if a, ok := watchSourceAliases[src]; ok {
 		src = a

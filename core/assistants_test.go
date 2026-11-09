@@ -309,6 +309,13 @@ func slicesContain(xs []string, x string) bool {
 func TestAssistantStatus(t *testing.T) {
 	c := brainCore(t, &BrainConfig{})
 	ctx := context.Background()
+	// The catalog ready first: a server that comes up later changes the
+	// brain's free reads, which restarts its task.
+	for name := range c.conf().Servers {
+		if u := c.pool.get(name); u != nil {
+			waitStatus(t, u, statusReady)
+		}
+	}
 	cond := func() string {
 		v := c.assistantView(*c.conf().brain())
 		var out []string

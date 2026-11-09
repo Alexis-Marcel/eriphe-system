@@ -82,7 +82,7 @@ const (
 	cardsOfferedKey = "cards_offered_at"
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess, cardApproval}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardWatch, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess, cardApproval, cardNewAssistant}
 
 // cardUnlearn is an undo of the learning journal the brain proposed on a
 // tainted turn (learning_tools.go).
@@ -167,6 +167,15 @@ type proposal struct {
 	Fields    []cardField // the parameters of a call to approve
 	Extracted bool        // from the memory's extraction, not from a turn of the brain's
 	text      func(lang string) string
+	fields    func(lang string) []cardField // Fields in the user's language, when they have words of ours
+}
+
+// FieldsIn are its fields, with the words of lang.
+func (p proposal) FieldsIn(lang string) []cardField {
+	if p.fields != nil {
+		return p.fields(lang)
+	}
+	return p.Fields
 }
 
 // Text is what it proposes, in a line, with the words of lang.
@@ -225,6 +234,20 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		}
 		p.Pending, p.Tainted, p.Why, p.Outcome = r.State == ruleProposed, r.Tainted, r.Why, cardApproved
 		p.text = func(lang string) string { return ruleText(r, lang) }
+	case cardNewAssistant:
+		x, err := c.assistantProposal(id)
+		if err != nil {
+			return p
+		}
+		p.Pending, p.Tainted = x.State == proposalWaiting, x.Tainted
+		switch x.State {
+		case proposalMade:
+			p.Outcome = cardApproved
+		case proposalRefused:
+			p.Outcome = cardRejected
+		}
+		p.text = func(lang string) string { return c.newAssistantText(x, lang) }
+		p.fields = func(lang string) []cardField { return c.newAssistantFields(x, lang) }
 	case cardApproval:
 		g, err := c.standingApproval(id)
 		if err != nil {
@@ -344,6 +367,9 @@ func (c *core) pendingProposals() []proposal {
 	for _, g := range c.proposedApprovals() {
 		add(cardApproval, g.ID)
 	}
+	for _, x := range c.waitingAssistantProposals() {
+		add(cardNewAssistant, x.ID)
+	}
 	for _, m := range c.haMappings(ruleProposed) {
 		add(cardPresence, m.ID)
 	}
@@ -411,6 +437,8 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.deleteRule(id)
 	case cardApproval:
 		return c.decideApproval(id, approve)
+	case cardNewAssistant:
+		return c.decideNewAssistant(id, approve)
 	case cardSetting:
 		return c.decideSetting(id, approve)
 	case cardPresence:

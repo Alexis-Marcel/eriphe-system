@@ -544,6 +544,10 @@ func (c *core) assistantSpecHash(a Assistant) string {
 	if len(a.State) > 0 {
 		spec = append(spec, a.State)
 	}
+	// The facts it is lent are a tool of its own.
+	if len(a.Facts) > 0 {
+		spec = append(spec, a.Facts)
+	}
 	json.NewEncoder(h).Encode(spec)
 	return hex.EncodeToString(h.Sum(nil))
 }

@@ -70,7 +70,7 @@ func (w *web) cardView(x convoCard, lang string) cardView {
 	if t := p.Text(lang); t != "" {
 		v.Text = t
 	}
-	v.Why, v.Tainted, v.Fields = p.Why, p.Tainted, p.Fields
+	v.Why, v.Tainted, v.Fields = p.Why, p.Tainted, p.FieldsIn(lang)
 	return v
 }
 

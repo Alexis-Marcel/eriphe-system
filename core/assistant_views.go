@@ -348,6 +348,8 @@ type viewEntry struct {
 
 func registerAssistantTools(s *mcp.Server, c *core) {
 	registerFactTools(s, c)
+	registerTemplateTools(s, c)
+	registerProposalTools(s, c)
 	tool(s, "assistants", "Your assistants (Settings → Assistants): each one's status, powers and wake-ups, what it knows now in closed values (texts by their field's name only), and its views, which assistant_view reads. Free, no model, never tainting.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {
 			return map[string]any{"assistants": c.assistantEntries(c.notifyTime())}, nil

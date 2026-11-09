@@ -1452,8 +1452,42 @@ The brain reads them with two tools of eriphe-core's own, under the concept `ass
 by name only, its views) and `assistant_view` (`assistant`, `view`, `n` to cut rows). Both are
 free; `assistants` never taints, and a view taints the brain's turn (`assistant:<name>`) only when
 what it returns is not closed (a text, or rows with a text column) and was written by a tainted
-session. Another assistant will read views when it is lent them, with the links between assistants.
-Settings → Agents lists each assistant's views.
+session. Settings → Agents lists each assistant's views.
+
+### Lent facts
+
+An assistant reads only its own state, and the facts it is lent: its spec's `facts`, owners
+(`context`, or another assistant's name; never its own, never a name Eriphe keeps). It reads them
+with a tool of its own, `facts` (an `owner` among them, or all), closed values only, as the
+brain's `facts` shows them; an owner it is not lent is refused. Its instructions name them.
+
+### Creation by Eriphe
+
+The brain proposes an assistant; the user makes it on its **creation card** (#244 step 6,
+`assistant_proposal.go`, `assistant_templates.go`). A rule comes first: `propose_assistant`
+refuses without one of an assistant's reasons (`justification`: `boundary`, it reads untrusted
+content so the brain does not have to; `tools`, tools or rights of its own; `wake`, a wake-up of
+its own that needs a model; `parallel`, work beside the brain's) and a sentence of why a rule
+would not do (`why`).
+
+**Templates** (`templates`, free): code reads an assistant's facts (views, conditions, the summary
+line), so their schema is known in advance. `tri-mails` (rows of mails: category, urgency, waits
+for a reply, due date, received; views `urgents`, `derniers`, `attend_reponse`; woken every hour,
+07:00–22:00) and `veille-techno` (rows of what is new, with a sentence for the brief; woken daily)
+are assistants; `surveiller-service` is a rule (`outil`, every 5 minutes, on the call failing),
+not an assistant. The brain fills what is the user's (the tools to lend, the topics, the times)
+and may override any part.
+
+`propose_assistant` checks the assistant as it would be made (`checkAssistant`), its lent facts,
+and its wake rules (1 to 3, rule's events that only wake it: no `then`, grant, urgency nor text;
+no `alerte`, whose address is the user's), then keeps it in `assistant_proposals` and puts it on
+a card (kind `newassistant`). The card shows the six blocks: the assistant and its mission, the
+facts it writes and those it is lent, the events and the rules that wake it (as Settings → Règles
+says them), its channels (its powers), its tools; then why, where to see it, and its estimated
+cost: its wakes in the next 30 days (those on a schedule) times what a turn of its model cost over
+the last 30 days, where its harness said (`turnCost`), or "not known yet". On the yes, eriphe-core
+makes the assistant and its rules (`then assistant:<name>`, by the owner) at once, all or nothing;
+on the no, nothing.
 
 The status (`GET /v1/assistants`) has its conditions `Running`, `Busy` and `Ready`, its current
 task, the agent it runs, its session, its last turn and its last error; the controller keeps its
