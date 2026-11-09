@@ -27,13 +27,28 @@ func (w *web) skillRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/skills/{name}/delete", w.auth(w.handleDeleteSkill))
 }
 
+// skillsPage is Settings → Skills: the skills, and the incoming alerts
+// their triggers may name (alert_hooks.go).
+type skillsPage struct {
+	Skills any
+	Alerts []alertHook
+	Fresh  *freshHook // an alert just made: its address and secret, shown once
+}
+
+type freshHook struct{ Name, URL, Secret string }
+
 func (w *web) handleSkills(rw http.ResponseWriter, r *http.Request, s *session) {
+	w.renderSkills(rw, r, s, nil)
+}
+
+func (w *web) renderSkills(rw http.ResponseWriter, r *http.Request, s *session, fresh *freshHook) {
 	skills, err := w.c.store.skills()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.render(rw, r, s, "settings", "", page{Title: "settings.skills", Nav: "settings", Tab: "skills", Data: skills})
+	w.render(rw, r, s, "settings", "", page{Title: "settings.skills", Nav: "settings", Tab: "skills",
+		Data: skillsPage{Skills: skills, Alerts: w.c.alertHooks(), Fresh: fresh}})
 }
 
 // skillFileView is a file of the version shown.

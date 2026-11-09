@@ -388,11 +388,7 @@ func (c *core) restartIfChanged(ctx context.Context, a Assistant, t *TaskRow) (s
 // deliverAssistant gives an idle assistant what its triggers have for it:
 // one turn at a time.
 func (c *core) deliverAssistant(ctx context.Context, a Assistant, t *TaskRow) error {
-	kinds := a.wakeKinds()
-	if a.Role == assistantRoleAssistant && !slices.Contains(kinds, triggerRule) {
-		kinds = append(kinds, triggerRule) // a rule that names it wakes it (rule_engine.go)
-	}
-	for _, kind := range kinds {
+	for _, kind := range a.wakeKinds() {
 		h := assistantTriggers[kind].deliver
 		if h == nil {
 			continue
@@ -477,7 +473,6 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	if err != nil {
 		return err
 	}
-	c.noteAssistantTask(a.Name, t.ID) // its cost is its tasks' (team_stats.go)
 	// Before its status names the new task: what its role carries over
 	// from the previous one is read from it.
 	if r.started != nil {
@@ -540,14 +535,6 @@ func (c *core) assistantSpecHash(a Assistant) string {
 	// powers restart it. None set keeps the fingerprint it had before.
 	if len(a.Powers) > 0 {
 		spec = append(spec, a.Powers)
-	}
-	// Its state is described in its instructions.
-	if len(a.State) > 0 {
-		spec = append(spec, a.State)
-	}
-	// The facts it is lent are a tool of its own.
-	if len(a.Facts) > 0 {
-		spec = append(spec, a.Facts)
 	}
 	json.NewEncoder(h).Encode(spec)
 	return hex.EncodeToString(h.Sum(nil))
@@ -683,7 +670,7 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 	}
 	spec.SystemNetwork = r.Network
 	spec.Stream = r.Streams
-	spec.HarnessTools = assistantHarnessTools(a, r)
+	spec.HarnessTools = slices.Clone(r.HarnessTools)
 	// One memory: eriphe-core's, not Claude Code's own.
 	if spec.AgentEnv == nil {
 		spec.AgentEnv = map[string]string{}

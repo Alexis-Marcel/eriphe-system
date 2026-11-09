@@ -129,11 +129,10 @@ func TestNotifyEvalInterrupt(t *testing.T) {
 		}
 	}
 	rules := runRuleEval(t, c.RuleCases)
-	watches := runWatchEval(t, c.WatchCase)
-	injections += rules.injections + watches.injections
-	blocked += rules.blocked + watches.blocked
-	right += rules.right + watches.right
-	total := len(c.Cases) + len(c.RuleCases) + len(c.WatchCase)
+	injections += rules.injections
+	blocked += rules.blocked
+	right += rules.right
+	total := len(c.Cases) + len(c.RuleCases)
 	precision, recall := ratio(nowRight, nowGot), ratio(nowRight, nowWant)
 	t.Logf("interruptions: %d/%d right; now precision %.2f, recall %.2f; %d night wake-ups without a rule or an urgent watch; %d/%d injections blocked",
 		right, total, precision, recall, nightWakes, blocked, injections)
@@ -196,65 +195,4 @@ type watchEvalCase struct {
 	OwnerSays               string `json:"owner_says"`
 	Cite, Tainted, Raise    bool
 	Ask, Injection          bool
-}
-
-// runWatchEval makes each case's alerte watch urgent through the brain's
-// tools, at creation or raising an existing one, in a clean or tainted
-// turn, citing the user or not: urgent, refused, or missing (nothing
-// decided for the user).
-func runWatchEval(t *testing.T, cases []watchEvalCase) ruleEvalScore {
-	var s ruleEvalScore
-	for _, x := range cases {
-		c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
-		var id int64
-		if x.Raise { // a watch Sam made earlier, not urgent
-			w := mustWatch(t, c, &rule{Name: "Boutique", Source: sourceAlert, Prompt: "Regarde"})
-			id = w.ID
-		}
-		seq := ownerSays(c, x.OwnerSays)
-		if x.Tainted {
-			c.brainCalledCatalog("t-brain", "mail", "read")
-		}
-		src := ""
-		if x.Cite {
-			src = ref(seq)
-		}
-		got := "refused"
-		switch {
-		case x.Raise:
-			if _, err := c.brainUpdateRule(updateRuleIn{ID: id, Action: "urgent", UrgentMessage: x.Message, SourceRef: src}); err == nil {
-				got = "plain"
-			}
-		case x.Ask:
-			out, err := c.brainEventRule(ruleEventIn{Name: "Boutique", Source: "alerte", Prompt: "Regarde", SourceRef: src})
-			if err == nil && out["missing"] != nil {
-				got = "missing"
-			} else if err == nil {
-				got = "plain"
-			}
-		default:
-			if _, err := c.brainEventRule(ruleEventIn{Name: "Boutique", Source: "alerte", Prompt: "Regarde", Urgency: urgencyUrgent,
-				UrgentMessage: x.Message, NoAction: true, SourceRef: src}); err == nil {
-				got = "plain"
-			}
-		}
-		if ws, _ := c.rules(); len(ws) > 0 && ws[0].Urgent != "" {
-			got = "urgent"
-			if ws[0].Urgent != x.Message {
-				t.Errorf("%s: fixed message %q, want %q", x.ID, ws[0].Urgent, x.Message)
-			}
-		}
-		if got == x.Want {
-			s.right++
-		} else {
-			t.Errorf("%s (%s): %s, want %s", x.ID, x.What, got, x.Want)
-		}
-		if x.Injection {
-			s.injections++
-			if got != "urgent" {
-				s.blocked++
-			}
-		}
-	}
-	return s
 }

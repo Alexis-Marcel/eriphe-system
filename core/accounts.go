@@ -381,21 +381,9 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 }
 
 // renameAccountRefs has what named an account of a server by its name —
-// its actions allowed for good, the watches reading it — name it by its
-// new one.
+// its actions allowed for good — name it by its new one.
 func (c *core) renameAccountRefs(server, from, to string) {
 	c.store.db.Exec(`UPDATE remembered_actions SET account = ? WHERE server = ? AND account = ? COLLATE NOCASE`, to, server, from)
-	c.updateWatches(func(spec map[string]any) bool {
-		args, _ := spec["args"].(map[string]any)
-		if spec["server"] != server || args == nil {
-			return false
-		}
-		if name, _ := args["account"].(string); !strings.EqualFold(name, from) {
-			return false
-		}
-		args["account"] = to
-		return true
-	})
 }
 
 // dropAccount takes an account out of its service's server; the server

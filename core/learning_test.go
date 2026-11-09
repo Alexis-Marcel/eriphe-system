@@ -368,12 +368,6 @@ func TestLearnedInHeartbeat(t *testing.T) {
 		t.Fatal("told twice")
 	}
 	mustAdd(t, m, &Memory{Kind: kindLesson, Text: "Une nouvelle leçon"})
-	if lines := c.briefLines(clock.now()); !strings.Contains(lines, "Une nouvelle leçon") {
-		t.Fatalf("brief:\n%s", lines)
-	}
-	if lines := c.briefLines(clock.now()); strings.Contains(lines, "Une nouvelle leçon") {
-		t.Fatal("told twice in a brief")
-	}
 	items, _, err := c.feed(clock.now().Add(-time.Hour), []string{feedLearned}, 50)
 	if err != nil || len(items) != 3 || items[0].Ref == "" || !strings.Contains(items[2].summary("fr", true), "Une nouvelle leçon") {
 		t.Fatalf("feed: %+v %v", items, err)

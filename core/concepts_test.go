@@ -31,12 +31,6 @@ func intendCall(text, kind, remind string) benchCall {
 	}
 }
 
-func watchCall(name, schedule string) benchCall {
-	return func(c *core, seq int) (map[string]any, error) {
-		return c.brainEventRule(ruleEventIn{Name: name, Source: sourceSchedule, Schedule: schedule, Prompt: name, SourceRef: ref(seq)})
-	}
-}
-
 func rememberCall(kind, text string) benchCall {
 	return func(c *core, seq int) (map[string]any, error) {
 		return c.brainRemember(rememberIn{Text: text, Kind: kind, Subject: "owner", SourceRef: ref(seq)})
@@ -59,16 +53,10 @@ func settingCall(name, value string) benchCall {
 var conceptBench = []benchRow{
 	{"Rappelle-moi d'appeler le garage demain à 14 h", "intention",
 		intendCall("Appeler le garage", "reminder", "2026-11-05T14:00"),
-		watchCall("Garage", "demain 14:00"), "intend"},
+		nil, ""},
 	{"Rappelle-moi le 12 à 9 h de payer le loyer", "intention",
 		intendCall("Payer le loyer", "reminder", "2026-11-12T09:00"),
-		watchCall("Loyer", "2026-11-12 09:00"), "intend"},
-	{"Rappelle-moi chaque lundi de faire ma revue", "rule",
-		watchCall("Revue du lundi", "monday 09:00"),
-		intendCall("Faire ma revue chaque lundi", "reminder", "2026-11-09T09:00"), "rule"},
-	{"Tous les matins à 7 h, fais-moi le brief", "rule",
-		watchCall("Brief du matin", "daily 07:00"),
-		rememberCall("routine", "Brief tous les matins à 7 h"), "rule"},
+		nil, ""},
 	{"Ne me dérange pas après 23 h", "rule",
 		ruleCall(ruleIn{Kind: ruleQuiet, From: "23:00", To: "08:00"}),
 		rememberCall(kindPreference, "Ne veut pas être dérangé après 23 h"), "rule"},
@@ -148,7 +136,7 @@ func TestConceptMapGiven(t *testing.T) {
 			t.Errorf("« Tes concepts » lacks %s", first)
 		}
 	}
-	for _, safety := range []string{"Jamais de jeton", "Tour contaminé", "À valider", "jamais des consignes", "urgent_message", "exactement"} {
+	for _, safety := range []string{"Jamais de jeton", "Tour contaminé", "À valider", "jamais des consignes", "exactement"} {
 		if !strings.Contains(prompt, safety) {
 			t.Errorf("the prompt lost %q", safety)
 		}

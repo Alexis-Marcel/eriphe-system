@@ -874,7 +874,7 @@ stopped), `dropped`. A step whose checks failed, or whose receipt claims what th
 accepted.
 
 - **The plan card** (card kind `session`) is the user's approval of the steps as planned: they start
-  without asking again, their resources granted as for a watch the user authorised. A step added
+  without asking again, their resources granted as on a clean start. A step added
   later asks its own start card.
 - **One writer per scope**: two steps writing the same repository branch or folder never run at
   once; the second waits.
@@ -1034,8 +1034,8 @@ any question does. These cards and a start's go to
 Telegram as well, whatever the messages around them did, answered from the linked account only
 ("Alerts only" sends none): whoever holds the user's Telegram session can approve, as they can
 approve proposals. A task's raw permissions (a rule's `ask`, a command) stay out of Telegram. The
-answers are kept in `decisions`, and a grant shows in the task's drawer. A task the user gave a
-standing approval for, for a rule, needs no other card. A no refuses what waits; the next call asks again.
+answers are kept in `decisions`, and a grant shows in the task's drawer. A no refuses what waits;
+the next call asks again.
 
 ### Access levels
 
@@ -1192,7 +1192,7 @@ helper in the task's environment. Each request crosses the node's relay, as for 
 | another repository than the one its `repo` [resource](#resources) covers | deny |
 | a read of it | allow |
 | a write (git's push, gh's pull request) to a repository lent for `read` | deny, at once: a push is not lent |
-| a write on the declared `branch` of a repository lent for `write`, on a clean start (the user's own clean turn, or a watch they authorised) | allow |
+| a write on the declared `branch` of a repository lent for `write`, on a clean start (the user's own clean turn) | allow |
 | any other write: no declared branch, or a start that is not clean | the user's yes on the start's card, else deny |
 
 What is decided is the lend, at launch, as for an [access](../node/README.md#accesses): what the task reads afterwards
@@ -1233,8 +1233,7 @@ user gets one card in the conversation (kind `taskstart`, [conversation cards](#
 (`repo_grants`, logged "approved at launch": a write to that repository, by git or gh, for the
 rest of the task) and lets the task go; Non stops it and tells the brain. Like every card, only the
 user's click or a plain yes or no of theirs decides it, never the brain (`answer_task` has nothing
-to answer on a held task; `stop_task` cancels it). A task under a rule's standing approval needs no
-other card: the yes on its approval card covers its repository.
+to answer on a held task; `stop_task` cancels it).
 
 **The credential.** With [the GitHub App](#the-github-app), an installation token restricted to the
 one repository and the rights asked for, valid one hour: git reads `contents: read` or `write`; gh
@@ -1409,241 +1408,30 @@ The alert and poll sources still live in their rules; they move out of them when
 ## Assistants
 
 An assistant is a long-lived agent that owns one task, as a Kubernetes Deployment owns its Pod.
-Its spec says what it is and what it runs on; its status is what eriphe-core keeps of its task:
+Two are built in, and there are no others: **the brain** (`eriphe`, role `brain`: the only voice
+and the only orchestrator, see [The brain](#the-brain)) and each work session's **lead** (role
+`lead`, see the sessions). What used to be a specialist assistant (role `assistant`, with a typed
+state, views, lent facts and a team page) is a [triggered skill](#triggered-skills) now: a task in
+the background, started by an event or a time, that tells the user with its last message. The
+specialist assistants a workspace had are dropped at start (#278), with no migration.
+
+Their spec says what they are and what they run on; their status is what eriphe-core keeps of
+their task:
 
 | Spec | |
 |---|---|
-| `role` | what it is: a card in `assistantRoles`, `brain` or `assistant` (below), with the powers it allows |
-| `display_name` | what the user calls it, as a person (see [its name](#the-assistants-name)); Eriphe for the brain by default, its id for another |
+| `role` | `brain` or `lead`, with the powers it allows |
+| `display_name` | what the user calls the brain, as a person (see [its name](#the-assistants-name)); Eriphe by default |
 | `agent`, `node` | what it runs on; without an agent, the default one or the first that can run it |
 | `instructions` | its standing instructions (`{{user}}` and `{{name}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
 | `tools` | its grant from the catalog, like a task's; its role may add the catalog's free reads |
-| `resources` | what it is lent besides its tools (`{kind, ref, access, …}`): kept, lent with the resources work |
-| `powers` | what it may do, from the closed list below, within its role's; its role's defaults when empty |
-| `triggers` | what wakes it, each a kind its role allows, some with an argument after a colon: `conversation` (the user's messages and the tasks' events), `clock` (an intention of the memory that comes due: the wake packet, see [Memory](#memory); or a watch that fired, see Watches), `schedule:<when>` (below). Its role's by default (the brain's: `conversation` and `clock`); `conversation` and `clock` only with `receivesConversation`, and one enabled assistant at most has the conversation |
-| `reports_to` | the assistant it reports to: the brain (the one with the conversation), the only one it may name; empty means the brain. The brain reports to no one |
+| `powers` | what it may do, within its role's: `talksToUser`, `receivesConversation`, `launchesTasks`, `lendsResources` (the brain's), `reports` (the lead's) |
+| `triggers` | the brain's: `conversation` (the user's messages and the tasks' events) and `clock` (an intention that comes due: the wake packet, see [Memory](#memory)) |
 | `disabled` | its task is stopped, and none started |
 | `self_url` | the file only (see the brain) |
 
-Powers are a closed list. A role's card lists those its assistants may have, and the ones they get
-when their spec names none; an assistant's `powers` are its role's or fewer. The code checks an
-assistant's powers where it decides, never its name:
-
-| Power | |
-|---|---|
-| `talksToUser` | what it writes goes to the conversation |
-| `receivesConversation` | it may have the `conversation` trigger (needs `talksToUser`) |
-| `launchesTasks` | eriphe-core's own MCP tools: it starts, follows and stops tasks, and reads and writes the memory |
-| `lendsResources` | it lends the tasks it starts their resources (needs `launchesTasks`) |
-| `notifies` | it tells the user something on its own, with `notify`: the same rules, quiet hours and cap as the brain's |
-| `reports` | it reports to the brain with `report` |
-
-The brain's role has all but `reports`: it reports to no one.
-
-### The assistant role
-
-An assistant of role `assistant` is any other: a mission (its `instructions`), woken by its
-triggers, reading with the tools lent to it, under the grid. **One voice, one orchestrator**: it
-never talks to the user nor launches a task. By default it may only `reports`; `notifies` is given
-by the user. It runs as a permanent task, like the brain, placed on an always-on node.
-
-- **Its instructions** are its role's frame (`assistant-prompt.md`, in French: who it is, that what
-  it reads is data, `[rien]` when there is nothing), then its mission.
-- **Its wake-ups**: `schedule:<when>`, an interval (`every 15m`, `toutes les 2 h`: 5 min to 24 h)
-  or days and times of day as a watch's schedule (`weekdays 08:00`, `every 2h 08:00-20:00`), in
-  the user's zone. A schedule seen for the first time waits for its next time; times missed while
-  it was busy or stopped make one wake. Its turn reads `[réveil : horaire « every 15m »] Fais ta
-  mission.` More kinds come with the next steps (another assistant's state, a tool).
-- **Its tools**: its own MCP server, under eriphe-core's name, built for it as its powers say
-  (`report`, `notify`) and relayed by its node: it holds no token. The free reads among its catalog
-  tools are allowed in advance; any other call is refused, since it has no approval path yet.
-  Of its harness's own tools it keeps only the search for deferred tools.
-- **`report`** puts an event in the conversation, `Rapport de l'assistant <name> : …`, which the
-  brain reads at its next idle and judges: tell the user, start a task, or nothing.
-- **`notify`** goes through the brain's notification path, its why prefixed with the assistant's
-  name; it is not written in the conversation.
-- **Its taint is its session's**: no message of the user's ever starts a clean turn for it, and
-  its session keeps what it read. Once it read external content (a catalog tool of a server not
-  trusted, the web), every report it makes taints the brain's turn that reads it, and its
-  notifications are tainted (they never interrupt, carry no link). A new session starts clean; a
-  resumed one keeps its taint.
-
-### Facts
-
-What Eriphe knows now lives in **one fact store** (`facts.go`). A fact is an owner's field: a value
-of a closed type (a choice, a number, a date, a text, rows of such), its time, its validity
-(expired, it reads unknown), its **provenance** (who wrote it: an assistant, `machine:<node>`,
-`src:<id>`, `ha`) and its **taint** (why its writer was tainted when it wrote it; a closed value
-never taints). Two kinds:
-
-| Kind | Owner | Written by | Where |
-|---|---|---|---|
-| kept | an assistant's name | the assistant, through `set_state`, checked against its schema | the database (`facts`, history in `facts_log`, 7 days) |
-| ephemeral | `context` | code alone, from the sources the user turned on (a node, a token source, Home Assistant's follower) | memory only, no history, gone at a restart |
-
-The context's facts are the user's (`context.place`, `context.room`, `context.focus`,
-`context.busy_until`), the house's (`context.home_activity`) and each device's
-(`context.<device>.presence`, `.dnd`, `.activity`), folded from the signals below. The names
-`context`, `eriphe`, `brain` and `user` are kept: no assistant takes them.
-
-The brain reads them in each turn (the `[contexte : …]` and `[assistants : …]` lines, closed values
-only), and with its tool **`facts`** (free, no model; `owner` to filter): each fact with its value
-if closed (rows by their count, a text by its field's name only: `assistant_view` reads it), its
-age, its validity and its writer. The router reads the context's facts. Facts orient, never
-authorise: the grid, the cards and the approvals never read them.
-
-Before #244 step 3 the kept facts were the tables `assistant_state` and `assistant_state_log`,
-keyed by `assistant`: they are renamed at start, their rows and history kept.
-
-### An assistant's state
-
-What an assistant knows now, typed (`assistant_state.go`): its kept facts. Its schema is its spec's `state`: up to
-20 fields, each
-
-| Key | |
-|---|---|
-| `name` | lowercase letters, digits and `_` |
-| `type` | `choice` (with `values`, 1 to 30), `number`, `date` (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, the user's zone), `text` (500 characters), or `rows`: a list of rows whose `columns` are such fields (no rows in rows), at most `max_rows` (50 by default, up to 200), keyed by the column `key` if any |
-| `ttl` | its validity, `15m`, `4h`, `2d` (1 min to 30 days); 24 h by default. Expired, it reads unknown |
-| `summary` | in the brain's line: a closed field, or rows by their count; never a text |
-
-Its one writer is the assistant, with its own tool `set_state`, checked by code: a value off its
-type or list, an unknown field refuse the whole call, nothing written; `null` clears a field; rows
-with a key take the whole list or `{"upsert": [rows], "remove": [keys]}`. Its tool `state` reads it
-back. Its instructions describe the fields, in French. The whole state holds at most 64 KB; each
-write goes in its history (`facts_log`), kept 7 days and 2000 writes per assistant. It
-goes with the assistant when it is removed; a value its schema no longer takes reads unknown. For
-now an assistant that launches tasks (the brain) has no state.
-
-**Taint per field**: a closed field (a choice, a number, a date, rows of them) never taints; a
-text, or rows with a text column, keeps why its writer's session was tainted when it wrote it.
-
-**The brain's line**: each brain turn opens with `[assistants : …]` after the context line, one
-part per enabled assistant with summary fields, closed values only, and the age of the oldest:
-`[assistants : Vigie : prod ok, incidents 2, mails 3 (il y a 4 min)]`. It never taints. Settings →
-Agents shows each assistant's state, with its age and whether it was written after reading
-external content; `GET /v1/assistants/{name}` returns it as `state`. The state orients, never
-authorises: the grid, the cards and the approvals never read it.
-
-### An assistant's views
-
-Named filters over its state, run by code, that it exposes as read tools (`assistant_views.go`).
-Its spec's `views`, up to 10:
-
-| Key | |
-|---|---|
-| `name`, `about` | its name (as a field's), and what it gives in a few words |
-| `field` | a field of its state |
-| `where`, `sort`, `limit`, `columns` | rows only: the rows whose columns have these values (checked against them), sorted by a column (`-recu` descending), at most `limit` (20 by default), with these columns only |
-| `history` | a field's history over a window, `24h` to `7d`, newest first; not for rows |
-
-A view costs no model and answers with its freshness: `fresh` (known, not expired, its assistant
-running), when it was written and until when it holds, and a note when its assistant is late,
-failing or turned off, so that the brain reads the source tool itself: it is never blocked.
-
-The brain reads them with two tools of eriphe-core's own, under the concept `assistant`:
-`assistants` (every assistant, its status, powers and wake-ups, its closed values, its text fields
-by name only, its views) and `assistant_view` (`assistant`, `view`, `n` to cut rows). Both are
-free; `assistants` never taints, and a view taints the brain's turn (`assistant:<name>`) only when
-what it returns is not closed (a text, or rows with a text column) and was written by a tainted
-session. Settings → Agents lists each assistant's views.
-
-### Lent facts
-
-An assistant reads only its own state, and the facts it is lent: its spec's `facts`, owners
-(`context`, or another assistant's name; never its own, never a name Eriphe keeps). It reads them
-with a tool of its own, `facts` (an `owner` among them, or all), closed values only, as the
-brain's `facts` shows them; an owner it is not lent is refused. Its instructions name them.
-
-### Creation by Eriphe
-
-The brain proposes an assistant; the user makes it on its **creation card** (#244 step 6,
-`assistant_proposal.go`, `assistant_templates.go`). A rule comes first: `propose_assistant`
-refuses without one of an assistant's reasons (`justification`: `boundary`, it reads untrusted
-content so the brain does not have to; `tools`, tools or rights of its own; `wake`, a wake-up of
-its own that needs a model; `parallel`, work beside the brain's) and a sentence of why a rule
-would not do (`why`).
-
-**Templates** (`templates`, free): code reads an assistant's facts (views, conditions, the summary
-line), so their schema is known in advance. `tri-mails` (rows of mails: category, urgency, waits
-for a reply, due date, received; views `urgents`, `derniers`, `attend_reponse`; woken every hour,
-07:00–22:00) and `veille-techno` (rows of what is new, with a sentence for the brief; woken daily)
-are assistants; `surveiller-service` is a rule (`outil`, every 5 minutes, on the call failing),
-not an assistant. The brain fills what is the user's (the tools to lend, the topics, the times)
-and may override any part.
-
-`propose_assistant` checks the assistant as it would be made (`checkAssistant`), its lent facts,
-and its wake rules (1 to 3, rule's events that only wake it: no `then`, grant, urgency nor text;
-no `alerte`, whose address is the user's), then keeps it in `assistant_proposals` and puts it on
-a card (kind `newassistant`). The card shows the six blocks: the assistant and its mission, the
-facts it writes and those it is lent, the events and the rules that wake it (as Settings → Règles
-says them), its channels (its powers), its tools; then why, where to see it, and its estimated
-cost: its wakes in the next 30 days (those on a schedule) times what a turn of its model cost over
-the last 30 days, where its harness said (`turnCost`), or "not known yet". On the yes, eriphe-core
-makes the assistant and its rules (`then assistant:<name>`, by the owner) at once, all or nothing;
-on the no, nothing.
-
-### Real cases (#244 step 8)
-
-- **GetOut production, with no assistant.** An `outil` rule (the `surveiller-service` template, on a
-  Grafana query every 5 minutes) keeps its incidents, deduplicated by code (`rule_incidents.go`,
-  table `rule_incidents`): one opens when its condition becomes true, confirmed on a second look,
-  and closes when it recovers; a true condition seen again while one is open opens nothing. They
-  are closed facts owned by `rules`: `rules.r<id>.incident` (`open`, `closed`; unknown before its
-  first look, or while its look fails with none open), `rules.r<id>.incidents_7d`,
-  `rules.r<id>.since`. A condition, a `fait` rule, the brain's `facts` and an assistant lent
-  `rules` read them. The rule wakes the brain on the transition; the prompt has it notify, then
-  start an investigation (a task, or a session), a fix going through a PR merged on a card.
-- **Mail triage**, an assistant from `tri-mails`: one row per mail, its views, a rule may count its
-  rows (`tri-mails.mails > 0`).
-- **Tech watch**, an assistant from `veille-techno`, woken daily, that reads the web itself: the
-  power `readsWeb` (assistant role only; `assistant_web.go`) gives it its harness's search and page
-  reader. A URL is a way out, so an assistant that reads the web is lent no catalog tool and no
-  fact: it holds nothing to send. Each read is decided as the brain's are: a local or credentialed
-  URL is refused; the web's value in Settings → Tools holds (Never refuses, On approval refuses too:
-  an assistant never waits on a card); anything else of its harness is refused. Its `brief` view is
-  read at the brief. The template's mission keeps `<les sujets>` until the brain fills it with the
-  user's words; `propose_assistant` refuses a mission with a hole.
-
-### The team
-
-Settings → Agents shows the brain's assistants as **the user's team** (« Ton équipe »): for each
-one of the assistant role, besides its agent, powers, state, views and tools, the rules that wake
-it (as Settings → Règles says them), who reads its facts (the brain, in its summary line or when it
-asks; the rules whose `fait` or `if` names them; the assistants lent them), the facts it is lent,
-and its last 30 days (`team_stats.go`): wakes by its rules, turns and their cost where its harness
-said, reports, notifications and how many the user found not useful or not now, values written.
-Its cost is its tasks' (table `assistant_tasks`, kept as the controller starts them; a task of
-before it is not counted). Settings → Règles gives each rule its last 30 days too: fires, those
-its condition held back, cards made during its wakes of the brain (from the wake to its end, an
-hour at most), corrections of its notifications, what the brain's turns then cost; three cards or
-more say a standing approval may be missing. The brain reads the same in `assistants` and `rules`
-(`last_30_days`).
-
-The status (`GET /v1/assistants`) has its conditions `Running`, `Busy` and `Ready`, its current
-task, the agent it runs, its session, its last turn and its last error; the controller keeps its
-restarts there too (table `assistant_status`).
-
-One controller keeps every assistant as its spec says: an enabled assistant has exactly one task;
-one that fails starts again after 5 s, then doubling up to 5 min, on its session while the resume
-works; a change of its agent, instructions, name, node or resources, or of the tools its grant reaches,
-restarts it once its turn is over; a disabled or removed one has its task stopped. In
-eriphe-core's first minute, it waits for the trusted servers still connecting. What an assistant
-gets comes from its role's card, never from its name, as a runtime's from its harness card: its
-powers (eriphe-core's own tools among them), its free reads, the system network, streaming, the harness tools
-allowed in advance, its node profile, its first turn and its approval path. What wakes it and
-where its words go come from its triggers' cards.
-
-The brain is the built-in assistant `eriphe`, of role `brain`: the `brain` section of the file is
-its spec (read-only like the file's other entries). Settings → Agents opens on it, as "the brain",
-never as an assistant: its name, how it is doing in plain words (available, replying, stopped, no
-AI chosen) and its last error, the agent it thinks with, the agents it hands tasks to, and in
-technical details its task, its last turn and its extra tools, each set there when the file leaves
-it out. Below, the brain's assistants, each saying whom it reports to. Other assistants are
-added through the API only, for now; a file may also list them under `assistants`. Each card says
-its role, its powers and its wake-ups. An install from
-before moves by itself at start: the brain's `brain_*` keys become its status, the setting
-`brain_agent` its workspace agent, and the same agent keeps its running task.
+The lead's own tools (`report`, and its role's) are an MCP server of its own, under
+eriphe-core's name, relayed by its node (`assistant_own_tools.go`): it holds no token.
 
 ### The assistant's name
 
@@ -2047,13 +1835,13 @@ Two calendars can share an address: an Apple account's and a Google account's. T
 accounts. The Google one keeps the address as its name (the Google account finds its calendar by
 it); the other is named after where it is (`sam@example.org (iCloud)`, or its server's host). A
 Google account connected after an Apple calendar of its address renames that calendar, which keeps
-its secret, its level, what was allowed for it and its watches. The same calendar added twice is
+its secret, its level and what was allowed for it. The same calendar added twice is
 refused.
 
 Before, each account was a server of its own (`mail`, `mail-sam`, `agenda-icloud`…). At start,
 `mergeAccountServers` (`accounts_merge.go`) makes them one, under the service's own name when one
 has it: each account keeps its secret's vault reference (nothing is asked again) and the level of
-the server it was; the actions allowed for good, the watches (which then name `account`) and the
+the server it was; the actions allowed for good and the
 assistants lent a server move to the one left. Two calendars of one address are both kept, named
 as above. It does nothing once they are one.
 
@@ -2293,7 +2081,7 @@ Eriphe's own interface, served by eriphe-core on its own HTTPS listener: the con
 Eriphe in the middle, its tasks on the side as live cards (machine, agent, repository and branch,
 state, the pull request or document the agent mentioned), the permissions waiting for an answer
 inline in the conversation (Yes / No, with an optional reason for the agent), and the settings. The assistant manages: what the brain can set itself
-(a rule, a watch, a memory, an intention) is asked of it in the conversation, and its pages show
+(a notification rule, a memory, an intention) is asked of it in the conversation, and its pages show
 the state, say why, and undo, with a line saying how to ask rather than a form.
 The conversation is the one main screen; the header has two buttons, Tâches (a badge counts the
 running tasks, and turns urgent when one waits for the user) and Réglages. On a wide screen Tâches
@@ -2303,7 +2091,7 @@ the conversation on its tasks (`/#tasks-panel`).
 
 **Conversation first** (`convo_cards.go`, `web_convo_cards.go`, `templates/convo.html`). What waits
 for the user's approval is asked where they talk to the assistant: every proposal (a memory, an
-intention, a notification rule, a watch, a setting, a presence mapping, the start of a task that
+intention, a notification rule, a setting, a presence mapping, the start of a task that
 needs something of theirs: [asked at launch](#github-in-a-task)) is a card bound by the code
 to that one proposal, under the brain's message of the turn that made it (or its last message of
 the turn), with Oui, Non (the proposal's own approve and reject) and Modifier (the composer is
@@ -2325,16 +2113,16 @@ foldable digest card (the items, with links to the tasks) to the brain's next me
 spontaneous message (a notification) has a "Pourquoi ?" with its why and subject.
 
 The **Journal** (`/settings/journal`, `web_activity.go`) is the black box: the feed the brain reads
-with `since` (below), by kind (tasks, notifications, watches with their silences, intentions,
+with `since` (below), by kind (tasks, notifications, intentions,
 messages) and period; its "tool accesses" kind is the journal of decisions, paged. **À valider**
 (`/settings/approve`) is the fallback where whatever still waits is listed: the permissions of
-tasks, memories and intentions, notification rules, watches, settings, presence, and the quiet
+tasks, memories and intentions, notification rules, settings, presence, and the quiet
 hours the activity suggests (to adopt in one tap). Each is approved or rejected with its own
 action, its card says so, and the list reloads itself. Both are entries of the settings (À
 valider with a discreet count), not of the main navigation.
 
 The settings come in four groups: Assistant (the memory, "Ce que Jarvis sait de toi", still at
-`/memory`, the watches, the agents, the skills), Connexions (tools, folders), Appareils & accès
+`/memory`, the agents, the skills), Connexions (tools, folders), Appareils & accès
 (devices, access, notifications) and Mon espace (account, the Journal, À valider); an entry is marked
 when it needs a look (an update, a tool in error, a refused key). On a phone the settings say the
 way back, "‹ Conversation". The pages that moved keep their addresses as redirects:
@@ -2690,7 +2478,7 @@ a level; the code decides (`decideNotify`, no model):
 - **Quiet hours always hold.** The window is a rule (data): for every night, or for the nights
   before a weekday or a weekend day, 4 to 16 hours long; without one, the seed 22:00–08:00. A
   "now" inside it waits for the brief, unless a topic rule of the user's says "even at night", or it
-  is the fixed message of a watch the user marked urgent (below).
+  is the fixed message of a skill the user marked urgent (`urgent`).
   The time zone is the configuration's, or the one set in Settings.
 - **A daily cap** of "now" (4 by default, 0 to 20 in Settings), besides reminders the user asked
   for in their own words; over it, the brief.
@@ -2742,7 +2530,7 @@ how to be told about a topic, quiet hours), setting (how to be told in general),
 fact, task, session. What the code enforces is
 never a memory: `recall` returns the matching rules typed as rules, and the tools refuse the
 wrong concept with a hint naming the right one (`remember` of a notification preference → `rule`
-or `setting`; an event rule at a one-off time → `intend`; a recurring `intend` → `rule`). The concept
+or `setting`; a one-off time → `intend`; something recurring → a skill with `when`). The concept
 bench (`concepts_test.go`) checks, without a model, that each request's right call is taken and its
 wrong one redirected, and that the map is in the MCP instructions and the prompt.
 
@@ -2788,7 +2576,7 @@ inbound port:
   `Telegram` (`[Sam 09:12 #41 · Telegram]` for the brain): a clean turn, because the sender's id
   is checked. Files, photos and voice notes are not read; the bot says so.
 - **Proposals as cards, permissions in the workspace.** A proposal of the brain's (a rule, a memory,
-  an intention, a watch, a setting, a presence mapping) that goes with a reply or a notification
+  an intention, a setting, a presence mapping) that goes with a reply or a notification
   sent there comes as a card with Oui / Non buttons (`pc:<card>:<y|n>`), answered from the linked
   account only, through the same code as the workspace's cards (`telegram_cards.go`); none in
   "alerts only". The [access card](#the-approval-card) of a catalog tool goes there too. A task's
@@ -2929,7 +2717,7 @@ preset; nothing to install), over Home Assistant's WebSocket API:
    again when the mappings, the level or the switch change, and reads the house again every day.
    Unmapped entities, names and attributes never enter the context.
 4. **Speak**: the room opens the router's voice line (above), said by a channel the user added that
-   reaches it (`GET /v1/channel/out`, above), never with the tool's token. An urgent watch's fixed message is said instead of the generic
+   reaches it (`GET /v1/channel/out`, above), never with the tool's token. An urgent skill's fixed message is said instead of the generic
    sentence, and may go through the quiet hours, only when the user turned `voice_for_urgent` on
    (the page, or `setting`). A rule's `never: voice` keeps it out; `also: voice` does not turn the
    line on.
@@ -2949,8 +2737,7 @@ the header's line, the entry point's tokens.
   finished with their receipt's verdict in numbers, waiting, failed, stopped, from the append-only
   `task_log` written where the brain is told), notifications (sent, held, dropped, feedback),
   intentions (due, done, snoozed, cancelled, from `intention_log`), the user's and the brain's
-  messages (short; a brain message sent as a notification is that notification), and the watches'
-  runs (fired, and what the brain did of them). Each item has a time, kind, event, summary written by code, a ref
+  messages (short; a brain message sent as a notification is that notification). Each item has a time, kind, event, summary written by code, a ref
   for drill-down (`task:`, `notification:`, `intention:`, `msg:`) and a trust, `own` or
   `external` (a notification or brain message written in a tainted turn, an intention drawn from
   external content, a task started on a tainted turn).
@@ -2961,145 +2748,20 @@ the header's line, the entry point's tokens.
   user, by kind, since they were last here (the start of their last absence; the last 24 hours if
   none), or the last 24 hours or 7 days, external items marked.
 
-**Rules** (`rule.go`, `rule_engine.go`, `rule_schedule.go`, `rule_tick.go`, `rule_poll.go`,
-`rule_alert.go`, `rule_urgent.go`, `watch_grant.go`, `judge.go`, `rule_tools.go`, `web_rules.go`).
-What Eriphe does on its own, besides a due intention: **when** an event comes, **if** a condition
-on closed facts holds, **then** one action from a closed list, all run by code, no model. The
-brain writes one with `rule` (`kind: event`, the rule in `event`: `name`, `when`, what the source
-needs, `if`, `then`, `prompt`), lists them with `rules` (each with its last runs) and changes them
-with `update_rule` (pause, resume, edit, delete); the same `rule` writes the notification rules and
-the quiet hours (below). The brief, the point made on the user's return and the weekly review are
-not features of their own: they are rules whose prompt composes `since`, `notifications` and
-`notify`, which the brain suggests and never imposes.
-
-Before #244 step 4 these were **watches** (tables `watches`, `watch_runs`; tools `watch`,
-`watches`, `update_watch`; Settings → Veilles). At start the tables are renamed `rules` and
-`rule_runs` (`watch_id` → `rule_id`): every watch is a rule with the same id, history, webhook
-token and secret, and no condition, whose action wakes the brain. `/settings/watches` redirects to
-`/settings/rules`; the webhook address `/hooks/watch/<token>` is unchanged.
-
-- **When** (`when`): `horaire`, `retour`, `outil`, `alerte` (below), and:
-  - `fait`: a closed fact (`fact`, owner.field: `context.place`, `prod.etat`; see Facts) changes,
-    or becomes `becomes`. Looked at every 30 s; the first look only notes the value; a change to
-    or from unknown counts. Its detail is written by code from closed values, so it taints nothing.
-    « Quand je rentre » is `fait` on `context.place` becoming `home`.
-  - `fin`: a worker task ends (stopped, failed, lost) or a work session closes (`ends`: `task`,
-    `session`, or both). Its detail names the task or session by id, never by its title.
-- **If** (`if`, at most 300 characters and 8 terms): `path op value` joined by `and` (`et`), those
-  groups by `or` (`ou`); `op` is `=`, `!=`, `<`, `>`, `<=`, `>=`, or `in (a, b)`. A path is a
-  **closed** fact (a choice, a number, a date, rows by their count; never a text, so what a
-  tainted writer wrote cannot steer a rule) or the time: `now.day` (`mon` … `sun`, `weekday`,
-  `weekend`) and `now.time` (`HH:MM`, the user's zone). Paths and choice values are checked when
-  the rule is written. Numbers compare as numbers, the rest as words (dates and times compare
-  right). A term on an unknown fact is false. Tested when the event comes: false, the run is
-  recorded `skipped` and nothing is done (an urgent message neither).
-  `context.place = home and now.time >= 18:00` · `now.day in (weekday)` · `prod.incidents > 2`.
-- **Then** (`then`): `brain` (the default: wake the brain with `prompt`, below);
-  `assistant:<name>` (wake that assistant at its next idle with `prompt` and the event's detail;
-  external content is fenced and taints its session); `notify` (eriphe-core sends `text`, the
-  user's own words, under `topic`, `now` or `brief`, through the usual rules, quiet hours and cap;
-  the run is `notified`).
-- **Settings → Règles** (`/settings/rules`) shows each rule as one sentence, « Quand …, si …,
-  alors … », with its state and last runs.
-
-- **Sources.** `horaire`: days and times of day in the user's zone (`daily 07:00`, `weekdays
-  07:00`, `weekend 09:30`, `sunday 18:00`, `monday,thursday 09:00`, `every 2h 08:00-20:00`; the
-  French words too). Each fire is a wall-clock time of its day, computed day by day, so a daylight
-  saving change neither skips a day nor fires twice. `retour`: the user comes back after an absence
-  of `after` or more (3 h by default, 1 h to 7 days), from the activity signals of `user_state.go`;
-  once per return (the return it fired for is kept), only within the hour after it, never for a
-  return from before the watch was made or resumed.
-- **Firing, without a model.** A timer (every 30 s) fires what is due and records a run; the next
-  time is kept in the database, so a restart picks it up. Missed times fire once late, never once
-  each; more than 6 hours late, the run is recorded as missed and nothing wakes. One run waits for
-  the brain at a time per watch; a paused or deleted watch's waiting run is dropped.
-- **The wake.** At the brain's next idle, after any due intention, the clock trigger delivers
-  `[règle #N « nom » HH:MM · source …]`, the cause (late, the return and the absence), for a brief
-  where the last brief was, and the watch's prompt; the brain answers through `notify` or with
-  `[rien]`. It goes on with the current turn, as an intention's wake does; a watch that was
-  proposed on a tainted turn (then approved) taints it. When its turn ends (or before the next
-  delivery) the run records what the brain did: `notified`, `said` (in the conversation only) or
-  `silent`. A brief's wake becomes the kv `last_brief` once its turn ended, for
-  `since("last_brief")`.
-- **Who writes them.** The brain writes a watch only when the user asked for it in that clean turn
-  (its `source_ref` cites the user's message of the turn); otherwise, and always on a tainted turn,
-  it is proposed and the user approves it in **À valider (a card in the conversation)**. Settings → Règles lists the routines
-  (horaire, retour) apart from the watches (outil, alerte), each with its last runs, to pause,
-  resume or delete; there is no form: the user asks the brain, and the page says how.
-  Changing or deleting one takes the user's word in a clean turn. Names and prompts go through the
-  memory's scanner.
-- **`outil`: polling a tool, without a model.** eriphe-core calls a catalog tool itself (the pool's
-  session, outside any task) with fixed arguments every N minutes (1 at least, 5 by default). Only
-  a free read of the brain's: read-only by its own annotation on a server believed for it, lent to
-  the brain, named by no rule of the policy; checked when written and before every call (a change of
-  access makes the watch wait, its reason shown). The condition is deterministic: `changed` (the
-  value at a dotted path, or the whole result; the first look is the baseline), `compare` (`eq`,
-  `ne`, `gt`, `ge`, `lt`, `le` as numbers when both are, `contains`) or `status` (the call fails or
-  the tool answers an error). It wakes only on a transition, and on the recovery, each confirmed by
-  a second call 30 s later (a flap wakes nobody).
-- **`alerte`: a webhook per watch.** `POST https://<workspace>/hooks/watch/<token>` on the
-  workspace's HTTPS server, without a session: the token (32 random bytes) is made in Settings and
-  shown once, only its hash kept, never seen by the model; a new one replaces the old. A signed
-  watch also gets a secret (in the vault, `watch-hook-<id>`) and checks the body's HMAC-SHA256 in
-  `X-Hub-Signature-256` (GitHub: a webhook with this address, `application/json`, the secret),
-  `X-Grafana-Alerting-Signature` (Grafana: a Webhook contact point with the secret as HMAC signature)
-  or `X-Eriphe-Signature` (`sha256=<hex>`). Body 64 KiB at most (413), kept cut to 4,000
-  characters without invisible characters; 60 calls an hour at most (429); a paused watch answers
-  409.
-- **External content.** What `outil` and `alerte` bring is kept with the run as external: the wake
-  quotes it as data and taints the turn (`watch.outil`, `watch.alerte`), so what it notifies goes to
-  the brief at most (the bench has these cases), it may not lend a task
-  anything that writes; `since` names it without quoting it. One exception, the one taint rule's:
-  an `outil` rule on a tool the user marked trusted (Settings → Tools) brings the user's own
-  content. Its run is not external, its wake is clean, and a task started then starts as on any
-  clean turn. The mark is read when the rule fires: a tool untrusted since makes the next run external.
-  Trusting a tool trusts all it returns: a Grafana query that returns log lines or labels written
-  by someone else should stay untrusted.
-- **History and silences.** Each run keeps what the brain did (notified, said, silent, acted, or
-  missed, dropped), in Settings and in `since`; the next brief lists the watches that stayed silent
-  since the last one.
-- **A standing approval** (`standing_approval.go`, table `standing_approvals`; « Accord
-  permanent »). A rule may carry one exact action: a catalog
-  tool with exact arguments, or a `run_task` with a fixed prompt, agent, resources and contract;
-  `max_uses` 1 by default (10 at most), an expiry (7 days by default, 90 at most). The brain proposes
-  it only on a turn that read nothing external, citing the user's message of that turn, which must
-  ask for it; never from a tainted turn, so an injected payload can neither make nor widen one. It
-  is then a card (kind `approval`) naming the exact call, its uses and expiry, and, when its rule
-  fires on facts (`fait`, or an `if` on facts other than `now.*`), that facts can be wrong; it holds
-  only once the user says yes there (state `proposed`, then `active`; a no revokes it). Editing the
-  rule revokes it, and the user revokes it in Settings → Règles, which also shows a proposed one.
-  The watches' grants of before (`watch_grants`) are renamed at start and stay active: the user had
-  said yes to them. On that watch's own wake turn, tainted or
-  not, the call whose canonical input hashes the same is let through by the policy (a ticket, a
-  decision on record, `byPolicy`), counted atomically; any other tool or argument still goes to the
-  user. A built-in or configured denial is never granted. Each use is logged (`STANDING APPROVAL USED`),
-  recorded with the run (`acted`), written in the conversation and notified to the user.
-- **Urgent watches** (`watch_urgent.go`). A tainted wake never interrupts, so an `outil` or `alerte`
-  watch could never wake the user at night; an urgent one does, bound to that watch, its condition
-  and its text. It carries a short fixed message the user validated (« Alerte boutique : la prod ne
-  répond plus »), set only on a clean turn citing the user's message of it that asks to be woken or
-  reached at any hour (`watch` `urgency: urgent` with `urgent_message`, or `update_watch`
-  `urgent`); a proposal or a tainted turn can neither set nor raise it, and the text holds no link
-  and passes the scanner. An `outil` watch must use `compare` or `status` (a condition that
-  recovers). When the condition becomes true (the deterministic test, confirmed; or a call to the
-  authenticated webhook), eriphe-core itself sends that message, never anything the tool or sender
-  said, as a "now" through the router (`reason: watch`, the urgent delay), over the quiet hours and
-  the daily cap, before any judge or the brain. Once per incident (`incident` on the watch): not
-  again until it recovers (`outil`: the condition false again; `alerte`: a call whose top-level
-  `status` is `resolved`, as Grafana and Alertmanager send), which sends « <name> : revenu à la
-  normale » under the usual rules, urgent too only if the user asked (`urgent_recovery`). A pause,
-  resume or edit starts afresh. The brain is then woken as before, tainted, told the message went:
-  what it adds goes through `notify` with no urgency of its own. Settings shows the fixed message
-  on the watch; the bench's `u-*` and `w-*` cases cover it.
-- **Asking before writing.** For `outil` and `alerte`, `watch` never decides the sensitive points for
-  the user: without `urgency` (`urgent` or `normal`), an `outil` condition, or `action` /
-  `no_action`, it writes nothing and returns `missing`, which the brain asks in one short message
-  with the watch's defaults; other fields (every, name, signed) default.
-- **The judge** (`judge.go`): an interface shaped like a decision model's API (`Ask(state,
-  questions) → probabilities`) that an `outil` condition may ask a yes/no question after the
-  deterministic test. Only `none` exists: without a judge, the condition alone decides. A judge may
-  only hold a wake back, never make one or act; Jev (with the user's own key) or a local model
-  (Ollama logprobs) come once a bench shows they catch what rules miss.
+**No rules any more** (#278). What Eriphe did on its own through event rules (a schedule, the
+user's return, a polled tool, an incoming alert, a fact, a task's end), with their standing
+approvals and urgent watches, is a [triggered skill](#triggered-skills) now: `when` names the event
+or the time, the skill's instructions say what to do, and its run tells the user with its last
+message. The brief, the return point and the weekly review are skills too (`when: time daily
+08:00`, `when: user.returned`), whose runs read what happened with `since` (`t: last_run`). An
+incoming alert is an address of its own (`alert_hooks.go`), made in Settings → Skills:
+`POST https://<workspace>/hooks/alert/<token>`, named (the key of its `alert.received` and
+`alert.resolved` events), signed with an HMAC-SHA256 secret if asked (in the vault,
+`alert-hook-<id>`; `X-Hub-Signature-256`, `X-Grafana-Alerting-Signature` or
+`X-Eriphe-Signature`), its body (64 KiB) kept as external content, 60 calls an hour at most (429).
+A tool to watch is a time skill that calls it. At start the event rules, their runs and incidents,
+the standing approvals and the specialist assistants are dropped (no migration); the notification
+rules and the quiet hours stay (below).
 
 ## Remote access (Tailscale)
 

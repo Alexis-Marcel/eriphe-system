@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -235,4 +236,14 @@ func boolInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// sortedKeys are a map's keys, sorted.
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
 }

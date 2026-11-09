@@ -64,7 +64,7 @@ type happenedPage struct {
 }
 
 var (
-	happenedKinds  = []string{feedTask, feedNotification, feedIntention, feedMessage, feedWatch, feedLearned, feedAccess}
+	happenedKinds  = []string{feedTask, feedNotification, feedIntention, feedMessage, feedLearned, feedAccess}
 	happenedRanges = []string{"last", "day", "week"}
 )
 
@@ -141,8 +141,6 @@ func happenedLink(ref string) string {
 		return "/settings/notifications?n=" + id + "#notif-" + id
 	case "intention":
 		return "/memory?view=commitments"
-	case "watch":
-		return "/settings/rules#watch-" + id
 	case "learned":
 		return "/settings/learned#learned-" + id
 	}
@@ -157,7 +155,6 @@ type approvals struct {
 	Memories []memCard
 	Intents  []intentCard
 	Rules    []notifyRule
-	Watches  []watchCard
 	Settings []settingProposal
 	Presence []haMapping // Home Assistant entities the brain proposes to follow (ha_presence.go)
 	Quiet    []quietSuggestion
@@ -165,7 +162,7 @@ type approvals struct {
 
 // Count is all that waits; Remember, the memories and intentions.
 func (a approvals) Count() int {
-	return len(a.Perms) + a.Remember() + len(a.Rules) + len(a.Watches) + len(a.Settings) + len(a.Presence)
+	return len(a.Perms) + a.Remember() + len(a.Rules) + len(a.Settings) + len(a.Presence)
 }
 
 func (a approvals) Remember() int { return len(a.Memories) + len(a.Intents) }
@@ -191,11 +188,6 @@ func (w *web) approvals() approvals {
 		}
 	}
 	a.Rules, _ = w.c.notifyRules(ruleProposed)
-	if ws, err := w.c.rules(watchProposed); err == nil {
-		for _, x := range ws {
-			a.Watches = append(a.Watches, watchCard{rule: x})
-		}
-	}
 	a.Settings, _ = w.c.settingProposals()
 	a.Presence = w.c.haMappings(ruleProposed)
 	a.Quiet = w.c.suggestQuiet()
@@ -215,9 +207,6 @@ func (w *web) approvalCount() int {
 	}
 	if rules, err := w.c.notifyRules(ruleProposed); err == nil {
 		n += len(rules)
-	}
-	if ws, err := w.c.rules(watchProposed); err == nil {
-		n += len(ws)
 	}
 	if ps, err := w.c.settingProposals(); err == nil {
 		n += len(ps)

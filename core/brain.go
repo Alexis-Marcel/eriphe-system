@@ -253,7 +253,6 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		parts = append([]string{pack}, parts...)
 	}
 	c.setWakeTurn(nil) // what it says now answers these, not a due intention
-	c.endRuleTurn()    // nor a watch (watch_tick.go)
 	// Only a message of mine starts a clean turn: events alone go on with this one.
 	if slices.ContainsFunc(msgs, func(m Message) bool { return m.Role == roleUser }) {
 		c.turn.start(msgs[0].Seq, msgs[len(msgs)-1].Seq, t.LastSeq)
@@ -322,12 +321,6 @@ func (c *core) brainPermissionOne(ctx context.Context, t *TaskRow, p map[string]
 	server, _, catalog := splitToolName(tool)
 	if catalog && slices.Contains(grantServers(c.taskGrant(t)), server) {
 		decision, reason := c.decideBrainCall(tool, input, pending)
-		if decision == decideAsk && c.useApproval(grantTool, normalizeToolName(tool), canonicalArgs(input)) {
-			// Exactly the action the user authorised in advance for the watch being woken for (watch_grant.go).
-			yes := true
-			_, err := c.answer(ctx, t.ID, pid, "action autorisée d'avance par une règle", &yes, byPolicy)
-			return err
-		}
 		switch decision {
 		case decideAsk:
 			if accessReason(reason) {
@@ -418,8 +411,7 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 			}
 		}
 		if e.Type == "turn_end" {
-			c.ruleTurnEnded(e.Seq) // what the brain did of a watch's wake
-			c.cardsTurnEnded()     // what it proposed after its last message
+			c.cardsTurnEnded() // what it proposed after its last message
 		}
 		if e.Type == "turn_end" && failed != "" {
 			c.brainFailed(failed, "turn")

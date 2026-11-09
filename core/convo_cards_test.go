@@ -107,25 +107,21 @@ func TestCardKinds(t *testing.T) {
 	m := c.mem
 	mem := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Sam préfère le train", Status: memProposed, SourceKind: srcBrain})
 	in := mustIntend(t, m, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
-	w, _ := c.addRule(&rule{Name: "Revue du dimanche", Source: sourceSchedule, Spec: ruleWhen{Schedule: "sunday 18:00"},
-		Prompt: "Fais la revue", State: watchProposed, By: "brain"})
 	sid, _ := c.proposeSetting(settingProposal{Name: setCap, Value: "3", Why: "Trop de notifications."})
 	for _, p := range []struct {
 		kind string
 		id   int64
-	}{{cardMemory, mem.ID}, {cardIntention, in.ID}, {cardWatch, w.ID}, {cardSetting, sid}} {
+	}{{cardMemory, mem.ID}, {cardIntention, in.ID}, {cardSetting, sid}} {
 		c.cardProposed(p.kind, p.id)
 	}
-	brainSays(c, "J'ai quatre petites choses.")
-	for _, kind := range []string{cardMemory, cardIntention, cardWatch, cardSetting} {
+	brainSays(c, "J'ai trois petites choses.")
+	for _, kind := range []string{cardMemory, cardIntention, cardSetting} {
 		var id int64
 		switch kind {
 		case cardMemory:
 			id = mem.ID
 		case cardIntention:
 			id = in.ID
-		case cardWatch:
-			id = w.ID
 		case cardSetting:
 			id = sid
 		}
@@ -139,9 +135,6 @@ func TestCardKinds(t *testing.T) {
 	}
 	if x, _ := m.intention(in.ID); x.State != intentCancelled {
 		t.Error("the intention is not cancelled")
-	}
-	if x, _ := c.rule(w.ID); x.State != watchActive {
-		t.Error("the watch is not active")
 	}
 	if c.notifyCap() != 3 {
 		t.Error("the setting is not applied")
@@ -329,15 +322,12 @@ func TestBrainCannotApprove(t *testing.T) {
 			}
 		}
 	}
-	w, _ := c.addRule(&rule{Name: "Revue", Source: sourceSchedule, Spec: ruleWhen{Schedule: "sunday 18:00"},
-		Prompt: "Fais la revue", State: watchProposed, By: "brain"})
 	in := mustIntend(t, c.mem, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
 	mem := mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Sam préfère le train", Status: memProposed, SourceKind: srcBrain})
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "Je propose ça ?")
 	yes := ownerSays(c, "oui, vas-y, active la veille, l'intention, le souvenir et la règle des notifications")
 	for name, args := range map[string]map[string]any{
-		"update_watch":     {"id": w.ID, "action": "resume", "source_ref": ref(yes)},
 		"update_intention": {"id": in.ID, "state": "open", "source_ref": ref(yes)},
 		"update_memory":    {"id": mem.ID, "text": "Sam préfère le train", "source_ref": ref(yes)},
 	} {
@@ -345,9 +335,6 @@ func TestBrainCannotApprove(t *testing.T) {
 		if err == nil && !out.IsError {
 			t.Errorf("%s changed a proposal: %v", name, out.Content)
 		}
-	}
-	if x, _ := c.rule(w.ID); x.State != watchProposed {
-		t.Error("the brain approved a watch")
 	}
 	if x, _ := c.mem.intention(in.ID); x.State != intentProposed {
 		t.Error("the brain approved an intention")
