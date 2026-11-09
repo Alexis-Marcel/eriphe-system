@@ -48,7 +48,7 @@
   </div>{{end}}
   {{if .Data.Alerts}}<ul class="plain-list">
   {{range .Data.Alerts}}<li><span class="mono">{{.Name}}</span>{{if .Signed}} <span class="tag">{{t "alerts.signed"}}</span>{{end}}
-    <span class="muted small">when: alert.received key={{.Name}}</span>
+    <span class="muted small">when: hook.received key={{.Name}}</span>
     <form method="post" action="/settings/alerts/{{.ID}}/delete" class="inline"><button class="btn btn-link" type="submit">{{t "alerts.delete"}}</button></form></li>
   {{end}}</ul>{{end}}
   <form class="stack-form" method="post" action="/settings/alerts">

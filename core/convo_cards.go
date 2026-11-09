@@ -18,7 +18,7 @@ import (
 // plutôt qu'un tableau de bord" (2026-11-01): what waits for the user's
 // approval is asked where they talk to the assistant, not on a page of its
 // own. A card is bound by the code to exactly one proposal (a memory, an
-// intention, a notification rule, a watch, a setting, an entity to follow):
+// intention, a notification rule, a watch, a setting):
 // its Oui and Non call that proposal's own approval, and nothing else does.
 //
 //   - A proposal the brain makes in a turn is attached to the message it
@@ -65,7 +65,6 @@ const (
 	cardIntention = "intention"
 	cardRule      = "rule"
 	cardSetting   = "setting"
-	cardPresence  = "presence"
 	cardDigest    = "digest"
 
 	cardPending  = "pending"
@@ -81,7 +80,7 @@ const (
 	cardsOfferedKey = "cards_offered_at"
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardPresence, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls}
 
 // cardUnlearn is an undo of the learning journal the brain proposed on a
 // tainted turn (learning_tools.go).
@@ -241,14 +240,6 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		}
 		p.Pending, p.Tainted, p.Why = true, tainted, why
 		p.text = func(lang string) string { return tr(lang, "setting.name."+name) + " : " + value }
-	case cardPresence:
-		i := slices.IndexFunc(c.haFollows(""), func(f haFollow) bool { return f.ID == id })
-		if i < 0 {
-			return p
-		}
-		f := c.haFollows("")[i]
-		p.Pending, p.Tainted, p.Why, p.Outcome = f.State == ruleProposed, f.Tainted, f.Why, cardApproved
-		p.text = func(lang string) string { return tr(lang, "obs.follow") + " " + f.Entity }
 	case cardTaskStart:
 		return c.taskStartProposal(p) // task_start.go
 	case cardAccess:
@@ -334,9 +325,6 @@ func (c *core) pendingProposals() []proposal {
 			add(cardSetting, s.ID)
 		}
 	}
-	for _, f := range c.haFollows(ruleProposed) {
-		add(cardPresence, f.ID)
-	}
 	for _, id := range c.proposedStarts() { // task_start.go
 		add(cardTaskStart, id)
 	}
@@ -411,8 +399,6 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.deleteNotifyRule(id)
 	case cardSetting:
 		return c.decideSetting(id, approve)
-	case cardPresence:
-		return c.decideFollow(ctx, id, approve)
 	case cardTaskStart:
 		return c.decideTaskStart(id, approve)
 	case cardAccess:

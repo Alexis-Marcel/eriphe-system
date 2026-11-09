@@ -14,21 +14,16 @@ import (
 // The event journal's sources (event_journal.go), besides those that call
 // emit where they are (a task's or a session's end):
 //
-//   - an alerte rule's webhook: alert.received, or alert.resolved when the
-//     body's top-level status says so (Grafana's, Alertmanager's). Key: the
-//     rule's name. External.
-//   - an outil rule's poll, on a confirmed transition: tool.alert,
-//     tool.recovered or tool.changed. Key: the rule's name. External unless
-//     the tool's server is marked trusted (tool_trust.go), as its wake is.
+//   - an incoming address (incoming_hooks.go): hook.received, keyed by the
+//     address's name, with the body's status when it has one. External.
 //   - the user's return after an absence of awayAfter or more:
 //     user.returned, with how long they were away.
-//   - Home Assistant's mapped entities: ha.changed when a signal's value
-//     changes. Closed values: never external.
 //   - any catalog server that offers the resource eriphe://events: the mail
-//     server's mail.received. See serverEvents below.
+//     server's mail.received, or another server's own kinds. See
+//     serverEvents below.
 //
-// The alert and poll sources still live in their rules: they move out of
-// them when the rules go (#278).
+// eriphe-core knows no tool by its name: a tool that has something to tell
+// publishes eriphe://events, or its system calls an incoming address.
 
 const (
 	serverEventsURI  = "eriphe://events"
@@ -75,22 +70,6 @@ func (c *core) tickReturned(now time.Time) {
 	c.emitLogged(journalEvent{Kind: evUserReturned, Source: "user", At: a.Back, Payload: map[string]any{
 		"left": a.Left.In(loc).Format(time.RFC3339), "back": a.Back.In(loc).Format(time.RFC3339),
 		"away_minutes": int(a.Back.Sub(a.Left) / time.Minute)}})
-}
-
-// emitHAChanges writes ha.changed for each followed entity whose state
-// moved (ha_follow.go): the entity, its state and the former one, and its
-// area and domain from Home Assistant. Keyed by the entity.
-func (c *core) emitHAChanges(moves []haMove, house haHouse) {
-	for _, m := range moves {
-		p := map[string]any{"entity": m.Entity, "state": haStateShown(m.State), "was": haStateShown(m.Was)}
-		if e, ok := house.entity(m.Entity); ok {
-			p["domain"] = e.Domain
-			if e.Area != "" {
-				p["area"] = e.Area
-			}
-		}
-		c.emitLogged(journalEvent{Kind: evHAChanged, Key: m.Entity, Source: srcHA, Payload: p})
-	}
 }
 
 // Events from a catalog server. A server that has events offers the

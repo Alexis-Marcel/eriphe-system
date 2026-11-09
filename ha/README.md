@@ -55,10 +55,12 @@ it sends on. Empty fields are left out.
 `eriphe-core` takes every sentence of this channel the same way, as you set the channel up: not
 trusted, what is said joins the conversation but Eriphe takes it as maybe not yours. It reads and
 answers freely, but anything it would change goes on a card that you confirm on your phone or in the
-workspace; a « oui » said aloud never confirms it. With Home Assistant's tool in Eriphe's catalog, `eriphe-core`
-follows the entities you choose (people, room sensors, the bed, the TV), with that tool's token,
-on the page « Ce qu'Eriphe observe »: each change is an event your skills can be triggered by, and
-the room you are in tells where a sentence is said (see `core/README.md`, What Eriphe observes).
+workspace; a « oui » said aloud never confirms it. With each request for what to say, the integration also tells the areas
+where someone is now (an occupancy, presence or motion sensor on): eriphe-core's voice line
+speaks only there. What the house has to tell Eriphe (you came home, you went to bed) goes from
+an automation (`rest_command`) to an incoming address made in Eriphe's Settings → Skills, as any
+system's; a skill reacts to it (`when: hook.received key=<name>`). To read the house, Eriphe uses
+Home Assistant's tool in its catalog, like any tool.
 
 `eriphe-core` answers NDJSON: `{"delta": "..."}` lines, streamed into the chat log as they come,
 then `{"done": true, "text": "...", "continue": false}`. `continue` decides whether the satellite

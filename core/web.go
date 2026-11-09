@@ -129,7 +129,7 @@ func (w *web) parse() error {
 }
 
 // sharedTemplates are the files of definitions every page has, not pages.
-var sharedTemplates = []string{"parts", "catalog", "tools", "google", "agents", "remote", "folders", "push", "skills", "cards", "observe", "convo", "activity", "learned", "access"}
+var sharedTemplates = []string{"parts", "catalog", "tools", "google", "agents", "remote", "folders", "push", "skills", "cards", "convo", "activity", "learned", "access"}
 
 // notify wakes the event streams at once, rather than at their next tick.
 func (w *web) notify() {
@@ -263,7 +263,6 @@ func (w *web) routes() http.Handler {
 	w.activityRoutes(mux) // web_activity.go
 	w.sessionRoutes(mux)  // web_sessions.go
 	w.cardRoutes(mux)     // web_convo_cards.go
-	w.observeRoutes(mux)  // web_observe.go
 	return w.headers(mux)
 }
 
@@ -527,7 +526,6 @@ func (c *core) serveWeb(cfg *Config) error {
 	handler := w.routes()
 	go w.followWaiting(nil) // push notifications of what waits for the user (web_push.go)
 	go c.followRoutes(nil)  // the next device for what was not seen (route_send.go)
-	go c.followHA(nil)      // the Home Assistant entities the user follows (ha_follow.go)
 	if c.remote != nil {
 		// The same workspace on the tailnet, once remote access is on (remote.go).
 		c.remote.setWorkspace(tailnetHandler(c.remote.name, handler))

@@ -94,7 +94,12 @@ func init() {
 		`DROP TABLE IF EXISTS assistant_tasks`, `DROP TABLE IF EXISTS assistant_proposals`,
 		`DELETE FROM kv WHERE key = 'watch_turn'`,
 		// The specialist assistants went with them (role assistant): no migration.
-		`DELETE FROM catalog WHERE kind = 'assistant' AND json_extract(spec, '$.role') = 'assistant'`)
+		`DELETE FROM catalog WHERE kind = 'assistant' AND json_extract(spec, '$.role') = 'assistant'`,
+		// The signal context and Home Assistant's follower went with #278:
+		// Home Assistant is a tool and channels like any other.
+		`DROP TABLE IF EXISTS ha_mappings`, `DROP TABLE IF EXISTS ha_follows`, `DROP TABLE IF EXISTS context_sources`,
+		`DELETE FROM kv WHERE key IN ('context_level', 'context_off', 'context_rooms')`,
+		`DELETE FROM convo_cards WHERE kind = 'presence'`)
 	storeMigrations = append(storeMigrations, migrateNotifyRules)
 	// Added with the channels (channels.go): where a topic's notifications go
 	// (on a table of before #244 step 5, until it is moved).

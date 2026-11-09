@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -14,17 +15,19 @@ import (
 // app holding its token keeps a request open here, and shows or says what
 // comes. Eriphe never calls the app.
 //
-//	GET /v1/channel/out?wait=50&places=Salon,Bureau  {"messages": [{"id", "text", "place"}]}
+//	GET /v1/channel/out?wait=50&places=Salon,Bureau&here=Salon  {"messages": [{"id", "text", "place"}]}
 //
 // The request answers at once when something waits, else after wait
 // seconds (at most channelPollMax) with an empty list. What waits longer
 // than channelOutTTL is dropped: late, it would be said to an empty room.
 //
 // A channel that carries a sentence is the router's "voice" line (route.go):
-// a sentence the code writes, never a notification's text, said in the
-// room the user is in now. The app tells the places it reaches (places;
-// none: anywhere), and maps a place to its own speaker; the line is used
-// only while the app listens and reaches that room.
+// a sentence the code writes, never a notification's text, said where the
+// user is now. The app tells the places it reaches (places; none:
+// anywhere) and, with its own means, those where the user is now (here:
+// Home Assistant's integration uses the house's presence sensors); it maps
+// a place to its own speaker. eriphe-core knows no tool nor sensor: the
+// line is used only while the app listens and says where the user is.
 
 const (
 	channelPollMax   = 55 * time.Second
@@ -48,6 +51,7 @@ type channelListener struct {
 	open     int       // requests waiting now
 	lastPoll time.Time // the end of the last one
 	places   []string  // what the app said it reaches; none: anywhere
+	here     []string  // where the app says the user is now
 	wake     chan struct{}
 }
 
@@ -85,6 +89,17 @@ func (o *channelOut) reaches(id int64, place string, now time.Time) bool {
 		return false
 	}
 	return len(l.places) == 0 || slices.ContainsFunc(l.places, func(p string) bool { return strings.EqualFold(p, place) })
+}
+
+// hereNow is where the app says the user is, while it listens.
+func (o *channelOut) hereNow(id int64, now time.Time) []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	l := o.by[id]
+	if l == nil || l.open == 0 && (l.lastPoll.IsZero() || now.Sub(l.lastPoll) >= channelListening) {
+		return nil
+	}
+	return slices.Clone(l.here)
 }
 
 // listening: the app has a request open, or had one lately.
@@ -129,13 +144,14 @@ func (o *channelOut) pop(id int64, now time.Time) []channelMessage {
 
 // take answers one request of a channel's app: what waits, or what comes
 // within wait.
-func (o *channelOut) take(ctx context.Context, id int64, places []string, wait time.Duration) []channelMessage {
+func (o *channelOut) take(ctx context.Context, id int64, places, here []string, wait time.Duration) []channelMessage {
 	o.mu.Lock()
 	l := o.get(id)
 	l.open++
 	if places != nil {
 		l.places = places
 	}
+	l.here = here
 	wake := l.wake
 	o.mu.Unlock()
 	defer func() {
@@ -179,11 +195,18 @@ func (c *core) handleChannelOut(w http.ResponseWriter, r *http.Request) {
 			places = append(places, p)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"messages": c.out.take(r.Context(), ch.ID, places, wait)})
+	var here []string
+	for _, p := range strings.Split(q.Get("here"), ",") {
+		if p = cleanPlace(p); p != "" && len(here) < channelPlacesMax {
+			here = append(here, p)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"messages": c.out.take(r.Context(), ch.ID, places, here, wait)})
 }
 
 // voiceSpot is where the voice line reaches the user now: a channel that
-// carries a sentence, listening, reaching the room they are in.
+// carries a sentence, listening, that says where the user is and reaches
+// it.
 type voiceSpot struct {
 	Channel int64
 	Name    string
@@ -191,16 +214,37 @@ type voiceSpot struct {
 }
 
 func (c *core) voiceSpot(now time.Time) (voiceSpot, bool) {
-	room, ok := c.haUserRoom(now)
-	if !ok {
-		return voiceSpot{}, false
-	}
 	for _, ch := range c.addedChannels() {
-		if ch.Carries == carrySentence && c.out.reaches(ch.ID, room, now) {
-			return voiceSpot{Channel: ch.ID, Name: ch.Name, Room: room}, true
+		if ch.Carries != carrySentence {
+			continue
+		}
+		for _, room := range c.out.hereNow(ch.ID, now) {
+			if c.out.reaches(ch.ID, room, now) {
+				return voiceSpot{Channel: ch.ID, Name: ch.Name, Room: room}, true
+			}
 		}
 	}
 	return voiceSpot{}, false
+}
+
+// voiceUrgentKey: "on": an urgent skill's fixed message may be said aloud,
+// at any hour.
+const voiceUrgentKey = "voice_urgent"
+
+func (c *core) voiceUrgent() bool { return c.store.get(voiceUrgentKey) == "on" }
+
+// voiceText is what the voice says: written by the code, never the
+// notification's text nor anything external. An urgent skill's fixed
+// message (the user's own words, approved with the skill) only when the
+// user turned voice_for_urgent on.
+func (c *core) voiceText(n pushNote) string {
+	user := c.conf().User
+	if n.Route.Fixed && c.voiceUrgent() {
+		if text := strings.TrimSpace(n.Body["fr"]); text != "" {
+			return user + ", " + text
+		}
+	}
+	return fmt.Sprintf("%s, %s a quelque chose pour toi.", user, c.conf().assistantName())
 }
 
 // voiceReady: a channel carries a sentence, so the voice line can be used.

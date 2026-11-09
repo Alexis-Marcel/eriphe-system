@@ -60,7 +60,6 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 			return c.brainRule(in)
 		})
 	registerSettingTools(s, c) // setting
-	registerHATools(s, c)      // ha_entities, follow_entity (ha_tools.go)
 	registerWhereNow(s, c)     // where_now (where_now.go)
 }
 

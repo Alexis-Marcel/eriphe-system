@@ -57,6 +57,7 @@ async def _out(request: web.Request) -> web.Response:
         return web.json_response({"error": "bad token"}, status=401)
     assert request.query.get("wait") == "50"
     assert request.query.get("places") == "Bureau,Salon"
+    assert request.query.get("here") in ("", "Salon")
     return web.json_response({"messages": MESSAGES})
 
 
@@ -138,7 +139,7 @@ def test_voice_brain_unavailable():
 def test_out():
     async def test(session, url):
         return await api.EripheClient(session, url, TOKEN).async_out(
-            ["Bureau", "Salon"]
+            ["Bureau", "Salon"], ["Salon"]
         )
 
     assert _run(test) == [api.Message("Sam, Eriphe a quelque chose pour toi.", "Salon")]

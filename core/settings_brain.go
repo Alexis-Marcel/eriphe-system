@@ -36,7 +36,7 @@ const (
 	setCap      = "daily_cap"             // "now" notifications a day
 	setZone     = "time_zone"             // the user's IANA zone, or default
 	setTgDetail = "telegram_detail"       // full or alert
-	setVoiceUrg = "voice_for_urgent"      // on: an urgent skill's fixed message is said aloud too, at any hour (ha_follow.go)
+	setVoiceUrg = "voice_for_urgent"      // on: an urgent skill's fixed message is said aloud too, at any hour (channel_out.go)
 )
 
 var settingNames = []string{setOrder, setOff, setDelay, setCap, setZone, setTgDetail, setVoiceUrg}

@@ -10,7 +10,7 @@ import (
 // startedRun fires a skill on one alert and returns its run.
 func startedRun(t *testing.T, c *core, now *time.Time, skill string) *skillRun {
 	t.Helper()
-	c.emit(journalEvent{Kind: evAlertReceived, Key: "getout", Source: "alert:1", External: true, At: *now, Payload: map[string]any{"detail": "5xx"}})
+	c.emit(journalEvent{Kind: evHookReceived, Key: "getout", Source: "alert:1", External: true, At: *now, Payload: map[string]any{"detail": "5xx"}})
 	c.tickSkills(context.Background(), *now)
 	rs := runsOfSkill(t, c, skill)
 	if len(rs) != 1 || rs[0].Task == "" {
@@ -55,7 +55,7 @@ func runCard(c *core, kind string) (proposal, bool) {
 // note, not to the brain.
 func TestSkillRunCallsCard(t *testing.T) {
 	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: alert.received\ntools: [monitor]\n---\nEnquête.\n")
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: hook.received\ntools: [monitor]\n---\nEnquête.\n")
 	r := startedRun(t, c, now, "prod")
 	ev := []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
 		Data: map[string]any{"id": "p1", "tool_name": "mcp__monitor__rollback", "input": map[string]any{"version": "2.0.0"}}}}
@@ -100,7 +100,7 @@ func TestSkillRunCallsCard(t *testing.T) {
 // A run silent but for its calls still shows them.
 func TestSkillRunCallsSilent(t *testing.T) {
 	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: alert.received\ntools: [monitor]\n---\nEnquête.\n")
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: hook.received\ntools: [monitor]\n---\nEnquête.\n")
 	r := startedRun(t, c, now, "prod")
 	ev := []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
 		Data: map[string]any{"id": "p1", "tool_name": "mcp__monitor__rollback", "input": map[string]any{"version": "2.0.0"}}}}
@@ -129,7 +129,7 @@ const sessionBlock = "Erreur 500 sur /api/login depuis la 2.0.1, je lance une se
 // only reads starts at once; the events of its key go to its lead.
 func TestSkillRunOpensSession(t *testing.T) {
 	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: alert.received\ncan: [start-session]\n---\nEnquête.\n")
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: hook.received\ncan: [start-session]\n---\nEnquête.\n")
 	r := startedRun(t, c, now, "prod")
 	task, _ := c.store.task(r.Task)
 	if !strings.Contains(task.Prompt, "```session") {
@@ -148,7 +148,7 @@ func TestSkillRunOpensSession(t *testing.T) {
 		t.Fatalf("notifications %+v", ns)
 	}
 	// Another alert of its key: no new run, its session's lead is told.
-	c.emit(journalEvent{Kind: evAlertReceived, Key: "getout", Source: "alert:1", External: true, At: now.Add(time.Minute)})
+	c.emit(journalEvent{Kind: evHookReceived, Key: "getout", Source: "alert:1", External: true, At: now.Add(time.Minute)})
 	c.tickSkills(context.Background(), now.Add(time.Minute))
 	if rs := runsOfSkill(t, c, "prod"); len(rs) != 1 {
 		t.Fatalf("a new run while its session is open: %+v", rs)
@@ -168,7 +168,7 @@ func TestSkillRunSessionLimits(t *testing.T) {
 		t.Fatal("safePlan")
 	}
 	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: alert.received\n---\nEnquête.\n")
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: hook.received\n---\nEnquête.\n")
 	r := startedRun(t, c, now, "prod")
 	task, _ := c.store.task(r.Task)
 	if strings.Contains(task.Prompt, "```session") {
@@ -185,7 +185,7 @@ func TestSkillRunSessionLimits(t *testing.T) {
 
 // urgent: the fixed text is sent once per run, whatever the run wrote.
 func TestSkillRunUrgent(t *testing.T) {
-	front := "---\nname: x\ndescription: y\nwhen: alert.received\nurgent: %s\n---\nz\n"
+	front := "---\nname: x\ndescription: y\nwhen: hook.received\nurgent: %s\n---\nz\n"
 	for _, bad := range []string{"voir https://evil.example.org", strings.Repeat("a", urgentTextMax+1)} {
 		if _, err := parseSkillMD([]byte(strings.Replace(front, "%s", bad, 1))); err == nil {
 			t.Errorf("%q accepted", bad)

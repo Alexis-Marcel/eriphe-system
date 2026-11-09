@@ -1319,7 +1319,7 @@ turn is not tainted. Its front matter:
 
 | Key | |
 |---|---|
-| `when` | an event kind of the [journal](#events) (`mail.received`), with filters on its key or payload (`alert.received key=getout`, `ha.changed entity=person.sam state=not_home`); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules) |
+| `when` | an event kind of the [journal](#events) (`mail.received`), with filters on its key or payload (`hook.received key=getout status=firing`); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules) |
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
@@ -1389,6 +1389,23 @@ task has no such tool.
 
 ## Events
 
+**Four roles, no tool by name.** eriphe-core knows roles, not tools; any tool or system holds one
+or several:
+
+| Role | What it is | Examples |
+|---|---|---|
+| **Tool** (MCP, the catalog) | actions and reads, called by the brain or a skill, under the access grid | Home Assistant, mail, calendar, GitHub, Grafana |
+| **Input channel** | where the user talks to Eriphe: the conversation | the workspace, Telegram, Home Assistant's Assist |
+| **Output channel** | where Eriphe tells the user | push, Telegram, a speaker through Home Assistant's integration |
+| **Event source** | "something happened", which starts triggered skills | a server publishing `eriphe://events` (the mail server), or any system calling an incoming address (Grafana, a Home Assistant automation, a shortcut) |
+
+An input channel is **not** an event: what the user writes is the conversation, answered at once
+by the brain alone, with the user's authority (a message can be cited to apply a setting, a « oui »
+answers a card). An event is everything else, external by default, and starts skills, never the
+conversation. What the user does without writing becomes an event only as code derives it
+(`user.returned`). Eriphe reads a tool when it needs to know (who is home, the next meeting): no
+follower, no state kept in eriphe-core.
+
 The event journal (`event_journal.go`, `event_sources.go`) is where everything that happens is
 written, whatever its source, without being interpreted: triggered skills (#275) will subscribe
 to it, and the brain reads it with `since` (kind `event`). An event has a kind, a key that
@@ -1401,12 +1418,10 @@ the rest dropped.
 | Kind | Source | Key | External |
 |---|---|---|---|
 | `mail.received` | the mail server (any server offering `eriphe://events`, below) | the account | unless the server is trusted |
-| `alert.received`, `alert.resolved` | an `alerte` rule's webhook; resolved when the body's top-level `status` is `resolved` | the rule's name | yes |
-| `tool.alert`, `tool.recovered`, `tool.changed` | an `outil` rule's poll, on a confirmed transition | the rule's name | unless the tool's server is trusted |
+| `hook.received` | an incoming address was called (below); `status` from the body's top-level `status` when it is a short word (`firing`, `resolved`) | the address's name | yes |
 | `task.ended` | a worker task's end | the task | no |
 | `session.ended` | a work session's end | `session:<id>` | no |
 | `user.returned` | the user's first activity after an absence of an hour or more | | no |
-| `ha.changed` | a Home Assistant entity the user follows changes state (`state`, `was`, `domain`, `area`) | the entity | no (short states, cleaned) |
 
 **A server's events.** A catalog server that offers the MCP resource `eriphe://events` has
 events: eriphe-core reads it when the server's session opens, then every minute (the servers
@@ -1415,8 +1430,8 @@ run stateless behind their node, so they cannot push). The resource is JSON, `{"
 `seq` grows within an `epoch`, a new one at each start. eriphe-core keeps per server the epoch,
 seq and time of the last event it took: within an epoch it takes the higher seqs, from a new one
 the events after that time; a server seen for the first time has its backlog skipped. A server
-cannot emit one of eriphe-core's families (`alert.`, `tool.`, `task.`, `session.`, `user.`,
-`ha.`, `time.`, `skill.`).
+cannot emit one of eriphe-core's families (`hook.`, `task.`, `session.`, `user.`, `time.`,
+`skill.`).
 
 The alert and poll sources still live in their rules; they move out of them when the rules go
 (#278).
@@ -1594,8 +1609,9 @@ trusted, saying a sentence.
 **Home Assistant** (`../ha/`) is such a channel: its Assist pipeline keeps what it understands
 (simple commands of the house) and hands the rest to Eriphe with the area of the satellite as the
 place; it keeps the outbound request open with the areas that have a satellite or a media player,
-and says each sentence on a speaker of its area. What the house says of the user comes from the
-entities they follow (What Eriphe observes, below).
+and says each sentence on a speaker of its area; with each request it also says the areas where
+someone is now (its presence sensors), where the voice line speaks (below). What the house has to
+tell (someone came home) goes from an automation to an incoming address, as any system's.
 
 ## Google accounts (Gmail, Calendar, Drive)
 
@@ -2644,55 +2660,33 @@ hour is away, and a gap of an hour or more is an absence. "Busy until" comes fro
 none yet: reading a connected calendar on every turn would cost a call each time and taint every
 turn; a source that keeps free/busy times only (never titles) joins there.
 
-**What Eriphe observes** (`observe.go`, `ha_follow.go`, `where_now.go`, `web_observe.go`,
-Settings → Ce qu'Eriphe observe). No context subsystem, no levels, no signals: observations, read
-as they are, and the model chooses what to make of them. The user's situation ("in Lyon until
-Sunday") is dated memory (`situation`, shown under « En ce moment »).
+**What Eriphe observes of the machines** (`observe.go`). No context subsystem: with its status
+(`GET /v1/node?context=1`), a node tells `idle` (seconds, locked) and `context` (`{known, dnd,
+reason}`, worked out on the machine: `node/context.go`; eriphe-core never asks level 2, so the
+app in front is never computed). Kept **in memory only**, for two minutes, never stored with the
+node's info; a reason off its list (`game`, `meeting`, `fullscreen`, `mic`, `focus`) is dropped.
+Settings → Devices shows it on each machine (in use, idle, locked, do not disturb). The router
+reads it for the node tied to a subscription: a device locked, idle or not to be disturbed is
+skipped by every line; a machine not to be disturbed also holds the cards for a better moment. It
+only ever makes Eriphe quieter. The user's situation ("in Lyon until Sunday") is dated memory
+(`situation`); anything else (who is home, the next meeting) Eriphe reads from a tool when it
+needs it.
 
-- **The machines.** With its status (`GET /v1/node?context=1`), a node tells `idle` (seconds,
-  locked) and `context` (`{known, dnd, reason}`, worked out on the machine: `node/context.go`;
-  eriphe-core never asks level 2, so the app in front is never computed). Kept **in memory only**
-  (`observations`), for two minutes, never stored with the node's info; a reason off its list
-  (`game`, `meeting`, `fullscreen`, `mic`, `focus`) is dropped. The router reads it for the node
-  tied to a subscription: a device locked, idle or not to be disturbed is skipped by every line, as
-  if it were not there; a machine not to be disturbed also holds the cards for a better moment.
-  It only ever makes Eriphe quieter.
-- **The house: the entities the user follows.** With the long-lived token of the catalog's Home
-  Assistant tool (the `home-assistant` preset), over Home Assistant's WebSocket API. Why not Home
-  Assistant's own MCP server: its `GetLiveContext` returns only the entities exposed to Assist, by
-  name and area with no `entity_id`, and has no subscription.
-  1. **Discover** (code, no model): `get_states` and the area, device and entity registries (a
-     user that is not an administrator may be refused the registries: then states only, no
-     areas), filtered to the candidates: `person`, `device_tracker`, `binary_sensor` of class
-     `occupancy`, `presence` or `motion`, room tracker sensors (`*_area`, `*_room`: Bermuda,
-     ESPresense), `media_player`, the companion app's focus, sleep or do not disturb
-     `input_boolean`s. Each with its id, domain, class, area and state; never an attribute.
-  2. **Follow** (the user's say): `ha_entities` shows the candidates and the followed entities
-     (names and areas are the user's text, so it taints the turn); `follow_entity(entity, stop?,
-     why, source_ref)` follows one at once when the user asks in a clean turn, citing their
-     message, else proposes it on a card (`ha_follows`, state `proposed`); stopping needs the
-     user's say. The page lists them, follows from the candidates and stops following.
-  3. **Read** (code only, `followHA`): while something is followed, one `subscribe_entities` to
-     those entities only; reconnects with a growing wait (5 s to 5 min), starts again when the list
-     changes, reads the house again every day. Each move of a followed entity's state is an event
-     `ha.changed` keyed by the entity, with `state`, `was`, `domain` and `area`: a skill triggers on
-     it (`when: ha.changed entity=binary_sensor.bed state=on`).
-  4. **Speak**: the room the user is in (a followed room tracker of theirs first, else the area of
-     the followed occupancy sensor that turned on last; none while a followed person or tracker is
-     away) opens the router's voice line, said by a channel the user added that reaches it
-     (`GET /v1/channel/out`, above), never with the tool's token. It says the code's sentence; an
-     urgent skill's fixed message instead, and through the quiet hours, only when the user turned
-     `voice_for_urgent` on. A rule's `never: voice` keeps it out.
-- **Where a notification goes: `where_now` and `notify`'s `where`.** `where_now` gives the brain
-  what the router sees: each line and whether it reaches the user (and on which device, Telegram or
-  room), the devices as their machines say, the voice's room, the quiet hours and the followed
-  entities with their state. `notify(…, where)` puts that line first (`routeNote.First`, a closed
-  value); without it the router keeps its order. The lines off, the quiet hours and the rules still
-  win, and a tainted turn's `where` is ignored.
+**Where the user is, for the voice.** A channel that says sentences tells, with its open request
+(`GET /v1/channel/out?…&here=Salon`), where the user is now, among the places it reaches
+(`channel_out.go`). Home Assistant's integration works it out with the house's presence,
+occupancy and motion sensors; eriphe-core knows no sensor. The voice line is used only while such
+a channel listens and says a place.
 
-At start, the former mappings' entities become followed ones (`ha_mappings` dropped), and the
-signal context's table and settings (`context_sources`, `context_level`, `context_off`,
-`context_rooms`) are dropped; `POST /v1/context` is gone.
+**Where a notification goes: `where_now` and `notify`'s `where`.** `where_now` gives the brain what
+the router sees: each line and whether it reaches the user (and on which device, Telegram or
+room), the devices as their machines say, the voice's room and the quiet hours. `notify(…, where)`
+puts that line first (`routeNote.First`, a closed value); without it the router keeps its order.
+The lines off, the quiet hours and the rules still win, and a tainted turn's `where` is ignored.
+
+At start, the signal context's and Home Assistant follower's tables and settings (`ha_mappings`,
+`ha_follows`, `context_sources`, `context_level`, `context_off`, `context_rooms`) are dropped;
+`POST /v1/context` is gone.
 
 - **`since(t, kinds?, limit?, include_external?)`** returns one chronological feed since `t` (an
   RFC3339 time, `YYYY-MM-DD[THH:MM]` in the user's zone, `away`: since the user left before their
@@ -2717,9 +2711,10 @@ approvals and urgent watches, is a [triggered skill](#triggered-skills) now: `wh
 or the time, the skill's instructions say what to do, and its run tells the user with its last
 message. The brief, the return point and the weekly review are skills too (`when: time daily
 08:00`, `when: user.returned`), whose runs read what happened with `since` (`t: last_run`). An
-incoming alert is an address of its own (`alert_hooks.go`), made in Settings → Skills:
-`POST https://<workspace>/hooks/alert/<token>`, named (the key of its `alert.received` and
-`alert.resolved` events), signed with an HMAC-SHA256 secret if asked (in the vault,
+incoming address (`incoming_hooks.go`), made in Settings → Skills, lets any system tell
+something: `POST https://<workspace>/hooks/in/<token>` (the former `/hooks/alert/<token>` still
+works), named (the key of its `hook.received` events, with the body's `status` when it is a short
+word: `when: hook.received key=getout status=firing`), signed with an HMAC-SHA256 secret if asked (in the vault,
 `alert-hook-<id>`; `X-Hub-Signature-256`, `X-Grafana-Alerting-Signature` or
 `X-Eriphe-Signature`), its body (64 KiB) kept as external content, 60 calls an hour at most (429).
 A tool to watch is a time skill that calls it. At start the event rules, their runs and incidents,

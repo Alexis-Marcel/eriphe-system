@@ -14,7 +14,7 @@ import (
 // SKILL.md says it in its front matter, next to name and description:
 //
 //	when: mail.received                      an event kind (event_journal.go)
-//	when: alert.received key=getout          with filters: the event's key, or a payload field
+//	when: hook.received key=getout           with filters: the event's key, or a payload field
 //	when: time weekdays 08:00                at times of day (rule_schedule.go's schedules)
 //	every: 15m                               batch: at most one task per period, with every event since
 //	model: haiku                             the agent its tasks run with (Settings → Agents)

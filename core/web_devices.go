@@ -15,6 +15,11 @@ import (
 
 func (w *web) deviceRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/devices", w.auth(w.handleMachines))
+	for _, old := range []string{"/settings/context", "/settings/observe"} { // the pages of what Eriphe knew or observed
+		mux.Handle("GET "+old, w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
+			http.Redirect(rw, r, "/settings/devices", http.StatusSeeOther)
+		}))
+	}
 	mux.Handle("POST /settings/devices/join", w.auth(w.handleJoinCommand))
 	mux.Handle("GET /settings/devices/{name}", w.auth(w.handleDevice))
 	mux.Handle("GET /settings/devices/{name}/wait", w.auth(w.handleJoinWait))

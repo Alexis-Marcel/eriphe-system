@@ -477,6 +477,11 @@ type machineView struct {
 	Workers bool
 	// Whether Eriphe may wake it (web_wake.go).
 	Wake wakeView
+	// What its node says of the user's session now (observe.go): active,
+	// idle or locked, and not to be disturbed; "" when it cannot tell.
+	Presence string
+	IdleMin  int
+	DND      bool
 }
 
 // deviceViews are the devices' cards, in the order of nodes, with the
@@ -497,6 +502,9 @@ func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, 
 			System: systemKey(nodeInstall(n, info), n.OS), Arch: n.Arch, Update: updates.Rows[i+1],
 			Workers: len(info.Runtimes) > 0, NoTLS: tls && n.CertExpires.IsZero()}
 		m.Wake = w.wakeView(n, info)
+		if o, ok := w.c.obs.machine(n.Name, time.Now()); ok {
+			m.Presence, m.IdleMin, m.DND = o.presence(), int(o.Idle/time.Minute), o.DND
+		}
 		for _, f := range folders {
 			if f.Node == n.Name {
 				m.Folders = append(m.Folders, f)

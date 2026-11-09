@@ -14,8 +14,9 @@ import (
 // observations, not a context: closed values, no app name, no window, and
 // they only make Eriphe quieter (a locked, idle or busy machine is skipped).
 // The user's situation ("in Lyon until Sunday") is dated memory
-// (situations.go); the house is what Home Assistant says of the entities
-// the user follows (ha_follow.go).
+// (situations.go); the room they are in is what a voice channel says
+// (channel_out.go); anything else, Eriphe reads from a tool when it needs
+// it.
 
 // dndReasons are the reasons a node may give for not to be disturbed.
 var dndReasons = []string{"game", "meeting", "fullscreen", "mic", "focus"}

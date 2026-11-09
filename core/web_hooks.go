@@ -9,6 +9,7 @@ import (
 // shown its address and secret once; make a new token; remove one.
 func (w *web) alertRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+hookPath+"{token}", w.handleAlertHook)
+	mux.HandleFunc("POST "+hookPathOld+"{token}", w.handleAlertHook) // its former path
 	mux.Handle("POST /settings/alerts", w.auth(w.handleNewAlert))
 	mux.Handle("POST /settings/alerts/{id}/delete", w.auth(w.handleDeleteAlert))
 }

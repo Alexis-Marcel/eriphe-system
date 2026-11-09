@@ -18,16 +18,21 @@ import (
 	"time"
 )
 
-// Incoming alerts: a service (Grafana, Alertmanager, GitHub, a script)
-// calls a webhook of its own, on the workspace's HTTPS address:
+// Incoming addresses: any system that has something to tell (Grafana,
+// Alertmanager, GitHub, a Home Assistant automation, an iPhone shortcut, a
+// script) calls an address of its own, on the workspace's HTTPS address:
 //
-//	POST https://<workspace>/hooks/alert/<token>
+//	POST https://<workspace>/hooks/in/<token>
 //
-// Each is named (getout): the name is the key of the events it writes,
-// alert.received, or alert.resolved when the body's top-level status is
-// "resolved" (Grafana, Alertmanager). A skill reacts to them (when:
-// alert.received key=getout). The token is 32 random bytes, shown once in
-// Settings → Skills; only its hash is kept. A signed hook also checks the
+// eriphe-core knows no sender: each address is named (getout), and each
+// call writes one event hook.received keyed by that name, with the body's
+// top-level "status" when it has one (firing, resolved: Grafana's and
+// Alertmanager's convention, as many others) and the body as detail. A
+// skill reacts to them (when: hook.received key=getout status=firing).
+// /hooks/alert/<token>, the former path, still works.
+//
+// The token is 32 random bytes, shown once in Settings → Skills; only its
+// hash is kept. A signed hook also checks the
 // body's HMAC-SHA256 with a secret made at the same time (kept in the
 // vault, alert-hook-<id>), in X-Hub-Signature-256 ("sha256=<hex>"),
 // X-Grafana-Alerting-Signature or X-Eriphe-Signature.
@@ -40,7 +45,8 @@ const (
 	alertBodyMax   = 64 << 10
 	alertDetailMax = 4000
 	alertPerHour   = 60
-	hookPath       = "/hooks/alert/"
+	hookPath       = "/hooks/in/"
+	hookPathOld    = "/hooks/alert/"
 	urgentTextMax  = 160
 
 	notifyFromUrgent = "urgent" // a skill's fixed urgent text (skill_cards.go)
@@ -149,12 +155,11 @@ func (c *core) receiveAlert(token string, h http.Header, body []byte) alertResul
 	if n >= alertPerHour {
 		return alertResult{http.StatusTooManyRequests, "too many calls"}
 	}
-	kind := evAlertReceived
-	if alertResolved(body) {
-		kind = evAlertResolved
+	p := map[string]any{"hook": hk.Name, "detail": alertDetail(body)}
+	if st := bodyStatus(body); st != "" {
+		p["status"] = st
 	}
-	c.emitLogged(journalEvent{Kind: kind, Key: hk.Name, Source: alertSource(hk.ID), External: true,
-		Payload: map[string]any{"alert": hk.Name, "detail": alertDetail(body)}})
+	c.emitLogged(journalEvent{Kind: evHookReceived, Key: hk.Name, Source: alertSource(hk.ID), External: true, Payload: p})
 	return alertResult{http.StatusAccepted, "ok"}
 }
 
@@ -178,13 +183,21 @@ func (c *core) signedBy(id int64, h http.Header, body []byte) bool {
 	return false
 }
 
-// alertResolved tells whether a call says its alert is resolved: a
-// top-level "status": "resolved" (Grafana, Alertmanager).
-func alertResolved(body []byte) bool {
+// bodyStatus is the body's top-level "status", when it is a short word
+// (firing, resolved), lowercased; "" otherwise.
+func bodyStatus(body []byte) string {
 	var v struct {
-		Status string `json:"status"`
+		Status any `json:"status"`
 	}
-	return json.Unmarshal(body, &v) == nil && strings.EqualFold(strings.TrimSpace(v.Status), "resolved")
+	if json.Unmarshal(body, &v) != nil {
+		return ""
+	}
+	s, _ := v.Status.(string)
+	s = strings.ToLower(strings.TrimSpace(s))
+	if !alertNameRe.MatchString(s) {
+		return ""
+	}
+	return s
 }
 
 // alertDetail is the body as kept: compact JSON, or text, without
