@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -14,19 +12,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Cloud storage as a source of Folders: Google Drive now (Dropbox and
-// OneDrive later), served to tasks by eriphe-files (servers/files), a local
-// server like eriphe-mail. eriphe-core runs the OAuth authorization, keeps
-// the refresh token in the vault and lends it to the files service on its
-// node, like a password: it never enters a task.
-//
-// Each user brings their own Google app, as with Home Assistant: an OAuth
-// client "Web application" they create once in their Google Cloud project,
-// with the workspace's own https://<workspace>/oauth/callback as its
-// redirect. The page guides them through it (web_drive.go,
-// docs/google.md); the client id and secret are kept in the vault
-// (connection_apps.go), never shown back. The sign-in itself is the neutral
-// flow of oauth_client.go.
+// Cloud storage as a source of places: eriphe-files (servers/files), a
+// local server like eriphe-mail, serves an account's folders to tasks.
+// eriphe-core runs the sign-in (oauth_client.go), keeps the refresh token in
+// the vault and lends it to the files service on its node, like a password:
+// it never enters a task. The app the sign-in uses is the user's own, kept
+// in the vault (connection_apps.go); its places are picked on the tool's
+// page (places.go, web_places.go).
 
 const (
 	filesServer    = "fichiers"
@@ -59,58 +51,6 @@ type DriveFolder struct {
 	Access  string `json:"access"` // read, or drop: also new files in its Eriphe/ subfolder
 }
 
-// driveState is the files server as the workspace shows it.
-type driveState struct {
-	Exists   bool // the server is in the catalog
-	Mine     bool // … and it is the workspace's eriphe-files
-	CanWrite bool // an account granted the scope that creates files
-	Accounts []driveAccountView
-	Folders  []DriveFolder
-}
-
-// driveAccountView is one account of the files server.
-type driveAccountView struct {
-	Name     string // the Google address; "google" for a Drive connected before accounts
-	CanWrite bool
-}
-
-func (c *core) driveState() driveState {
-	srv, ok := c.conf().Servers[filesServer]
-	if !ok {
-		return driveState{}
-	}
-	fc, ok := filesConfigOf(srv)
-	st := driveState{Exists: true, Mine: ok && c.source(kindServer, filesServer) == sourceWorkspace, Folders: fc.Folders}
-	for _, a := range fc.Accounts {
-		t, _ := signInOf(toolDrive, a.signInProvider())
-		_, w := t.granted(a.Scopes)
-		st.Accounts = append(st.Accounts, driveAccountView{Name: a.Name, CanWrite: w})
-		st.CanWrite = st.CanWrite || w
-	}
-	return st
-}
-
-// canWrite tells whether an account of the files server may create files.
-func (st driveState) canWrite(account string) bool {
-	for _, a := range st.Accounts {
-		if strings.EqualFold(a.Name, account) {
-			return a.CanWrite
-		}
-	}
-	return false
-}
-
-// driveAccountName finds the account a folder is taken from: the one
-// named, or the only one.
-func (st driveState) driveAccountName(account string) (string, bool) {
-	for _, a := range st.Accounts {
-		if strings.EqualFold(a.Name, account) || account == "" && len(st.Accounts) == 1 {
-			return a.Name, true
-		}
-	}
-	return "", false
-}
-
 func filesConfigOf(srv Server) (filesConfig, bool) {
 	if !srv.local() {
 		return filesConfig{}, false
@@ -125,9 +65,6 @@ func filesConfigOf(srv Server) (filesConfig, bool) {
 	}
 	return fc, true
 }
-
-// cloudFolders are the cloud Folders, for the Folder object.
-func (c *core) cloudFolders() []DriveFolder { return c.driveState().Folders }
 
 // driveTokenEnvOf is the environment variable of an account's token in the
 // files server.
@@ -220,83 +157,6 @@ func (c *core) dropDriveAccount(email string) error {
 	}, nil)
 }
 
-// addDriveFolder gives a folder of an account to Eriphe, or changes its
-// access. account may be empty with one account.
-func (c *core) addDriveFolder(account, id, name, access string) error {
-	id, name = strings.TrimSpace(id), strings.Join(strings.Fields(name), " ")
-	if id == "" || name == "" || len(name) > 120 || (access != "read" && access != "drop") {
-		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("a folder needs an id, a name and an access")}
-	}
-	st := c.driveState()
-	if st.Exists && !st.Mine {
-		return &catalogError{http.StatusConflict, "conn.taken", filesServer, errors.New("a tool named " + filesServer + " already exists")}
-	}
-	for _, f := range st.Folders {
-		if f.ID == id {
-			account = f.Account
-		}
-	}
-	account, ok := st.driveAccountName(account)
-	if !ok {
-		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("no such account of the drive")}
-	}
-	if access == "drop" && !st.canWrite(account) {
-		return &catalogError{http.StatusBadRequest, "conn.readonly", "", errors.New("the drive was connected for reading only")}
-	}
-	return c.putDrive("", func(fc *filesConfig) {
-		for i, f := range fc.Folders {
-			if f.ID == id {
-				fc.Folders[i].Access = access
-				return
-			}
-		}
-		final := name
-		for n := 2; slices.ContainsFunc(fc.Folders, func(f DriveFolder) bool { return strings.EqualFold(f.Name, final) }); n++ {
-			final = fmt.Sprintf("%s (%d)", name, n)
-		}
-		fc.Folders = append(fc.Folders, DriveFolder{Name: final, Account: account, ID: id, Access: access})
-	}, nil)
-}
-
-func (c *core) removeDriveFolder(id string) error {
-	return c.putDrive("", func(fc *filesConfig) {
-		fc.Folders = slices.DeleteFunc(fc.Folders, func(f DriveFolder) bool { return f.ID == id })
-	}, nil)
-}
-
-// browseDrive lists an account's folders through the files server's setup
-// tool, which tasks never get.
-func (c *core) browseDrive(ctx context.Context, account, parent, page string) ([]driveItem, string, error) {
-	u := c.pool.get(filesServer)
-	if u == nil {
-		return nil, "", errors.New("the drive is not connected")
-	}
-	in := map[string]string{"parent": parent}
-	if account != "" {
-		in["account"] = account
-	}
-	if page != "" {
-		in["page_token"] = page
-	}
-	args, _ := json.Marshal(in)
-	res, err := u.call(ctx, "browse_folders", args)
-	if err != nil {
-		return nil, "", err
-	}
-	if res.IsError {
-		return nil, "", errors.New(resultText(res))
-	}
-	var out struct {
-		Folders []driveItem `json:"folders"`
-		Next    string      `json:"next_page_token"`
-	}
-	raw, _ := json.Marshal(res.StructuredContent)
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, "", err
-	}
-	return out.Folders, out.Next, nil
-}
-
 func resultText(r *mcp.CallToolResult) string {
 	var b strings.Builder
 	for _, c := range r.Content {
@@ -310,11 +170,5 @@ func resultText(r *mcp.CallToolResult) string {
 // setupTool tells a tool a server keeps for eriphe-core's workspace
 // (eriphe-files' browse_folders, which sees every folder name of the
 // account): the pool leaves it out of the server's tools, so no grant, no
-// task and not the brain ever get it; only browseDrive calls it.
+// task and not the brain ever get it; only browsePlaces calls it.
 func setupTool(t *mcp.Tool) bool { return t.Meta["eriphe/setup"] == true }
-
-type driveItem struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Link string `json:"link"`
-}

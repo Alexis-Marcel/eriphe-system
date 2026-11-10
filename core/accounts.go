@@ -24,12 +24,12 @@ import (
 //
 // An account is added to the server (made the first time), changed or
 // taken out of it (the server goes with the last one), from the account's
-// form or from a Google account's page. Each account keeps its own access
+// form or from a connection (connection_tools.go). Each account keeps its own access
 // level (Server.AccountAccess, access.go): the server is also told to keep
 // read only the accounts whose level is read only. Its secret is a
 // variable of its own in the server's environment: a password bound by the
-// catalog (MAIL_PASSWORD_<hash>), or the Google account's token in the
-// vault (MAIL_GOOGLE_TOKEN_<hash>).
+// catalog (MAIL_PASSWORD_<hash>), or the connection's token in the vault
+// (MAIL_GOOGLE_TOKEN_<hash> for the accounts of before, legacy.go).
 //
 // Before, each account was a server of its own (mail, mail-sam, agenda…):
 // mergeAccountServers makes them one at start (accounts_merge.go).
@@ -251,17 +251,17 @@ type accountPut struct {
 	Replace string     // the account changed, by its name; "" adds one
 	Account svcAccount // its auth names no variable: it gets its own
 	Level   string     // "" keeps the account's level (reads free for a new one)
-	Secret  *EnvValue  // its secret's reference (a Google token); nil keeps it, or takes Password
+	Secret  *EnvValue  // its secret's reference (a connection's token); nil keeps it, or takes Password
 	// Password, typed, goes to the vault with the account.
 	Password string
 	Timezone string // calendar: the server's zone, if given
 }
 
 // putAccount adds an account to its service's server, made if need be, or
-// changes one. A Google account connected again (Secret) replaces the
-// account of its address; two calendars of one address (an Apple
-// account's, a Google account's) are two accounts, the Google one named
-// by the address and the other named apart (freeName).
+// changes one. An account connected again (Secret) replaces the account of
+// its address; two calendars of one address (one with a password, one on a
+// connection) are two accounts, the connection's named by the address and
+// the other named apart (freeName).
 func (c *core) putAccount(svc accountService, in accountPut) error {
 	st, exists := c.serviceServer(svc)
 	a := in.Account
@@ -284,14 +284,14 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 	for k, v := range st.Server.AccountAccess {
 		access[k] = v
 	}
-	var renamed [2]string // an account of another kind that gave its name to a Google account
+	var renamed [2]string // an account of another kind that gave its name to a connection's
 	if same := cfg.index(a.Name); same >= 0 && same != at {
 		other := cfg.Accounts[same]
 		switch {
 		case svc.sameAccount(other, a) && in.Secret == nil:
 			return errAccountExists
 		case svc.sameAccount(other, a):
-			at = same // the same address connected with Google: it takes its place
+			at = same // the same address on a connection: it takes its place
 		case in.Secret != nil && !other.signedIn():
 			// An account on a connection is named by its address (the
 			// connection's identity): the other one, an Apple calendar of the same

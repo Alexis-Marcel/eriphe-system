@@ -514,9 +514,11 @@ func (c *core) tokenScope(name string, s Server) tokenScope {
 		}
 		t.Scoped = true
 		for _, a := range fc.Accounts {
-			t.Granted = grantedRead
-			if slices.Contains(a.Scopes, scopeDrive) {
+			si, _ := signInOf(toolDrive, a.signInProvider())
+			if _, write := si.granted(a.Scopes); write {
 				t.Granted = grantedWrite
+			} else if t.Granted == "" {
+				t.Granted = grantedRead
 			}
 		}
 	}

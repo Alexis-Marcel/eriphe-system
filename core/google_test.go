@@ -165,8 +165,8 @@ func TestGoogleAccounts(t *testing.T) {
 	if env, _ := lendService(runOf(t, c.core, "mail")); !strings.Contains(env[samMail], "the-refresh-2") {
 		t.Fatal("the mail server does not read the new token")
 	}
-	if st := c.driveState(); len(st.Accounts) != 1 || st.Accounts[0].Name != "sam@example.org" || !st.CanWrite {
-		t.Fatalf("drive: %+v", st)
+	if acc := c.placeAccounts(filesServer); len(acc) != 1 || acc[0].Name != "sam@example.org" || !acc[0].CanWrite {
+		t.Fatalf("drive: %+v", acc)
 	}
 	// In the tools list, Drive is a service of the account's card, with
 	// that account's folders, and there is nothing left to add.
@@ -325,7 +325,9 @@ func TestGoogleTakesOverLegacyDrive(t *testing.T) {
 	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
 	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
 	putLegacyDrive(t, c.core, "fr", `{"client_id":"x","refresh_token":"old"}`)
-	if err := c.addDriveFolder("", "compta", "Compta", "drop"); err != nil {
+	if err := c.putDrive("", func(fc *filesConfig) {
+		fc.Folders = append(fc.Folders, DriveFolder{Name: "Compta", ID: "compta", Access: accessDrop})
+	}, nil); err != nil {
 		t.Fatal(err)
 	}
 	googleSignIn(t, tw, g, csrf, url.Values{"service": {"drive"}, "write": {"1"}})
