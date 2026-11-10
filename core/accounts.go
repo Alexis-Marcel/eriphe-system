@@ -34,34 +34,6 @@ import (
 // (TOOL_TOKEN_<hash>). The configuration and its keys are the contract of
 // Eriphe's tool servers (servers/README.md).
 
-// accountService is the mail, the calendar or the files.
-type accountService struct {
-	ID    string // its kind of tool (toolKinds); the mail's and the calendar's preset
-	Base  string // the catalog name it is made under
-	Image string
-	Use   string // the text key of what it is for
-	Mark  string // its icon in an account's card
-	// Scopes: its configuration holds the scopes each account was granted.
-	Scopes bool
-	// AccountLevels: each account has its own access level (a mailbox read
-	// only beside another free); without, the server's level holds for all
-	// (the files', whose places each have their own access).
-	AccountLevels bool
-	// ByName: two accounts of one name are one account (a mailbox is its
-	// address); without, they are also where they are (a calendar).
-	ByName bool
-}
-
-var (
-	mailService = accountService{ID: toolMail, Base: "mail", Image: mailImage,
-		Use: "preset.mail.use", Mark: "mail", AccountLevels: true, ByName: true}
-	calendarService = accountService{ID: toolCalendar, Base: "agenda", Image: calendarImage,
-		Use: "preset.calendar.use", Mark: "calendar", AccountLevels: true}
-	filesService = accountService{ID: toolDrive, Base: filesServer, Image: filesImage,
-		Use: "preset." + filesPreset + ".use", Mark: filesPreset, Scopes: true, ByName: true}
-	accountServices = []accountService{mailService, calendarService, filesService}
-)
-
 // The contract's variables (servers/README.md): the configuration, and the
 // stems of an account's secret, followed by _<hash> (accountEnv).
 const (
@@ -71,35 +43,37 @@ const (
 )
 
 // serviceOf finds the service a server's image gives.
-func serviceOf(spec RunSpec) (accountService, bool) {
-	for _, svc := range accountServices {
+func serviceOf(spec RunSpec) (toolCard, bool) {
+	for _, svc := range toolCards {
 		if strings.HasPrefix(spec.Image, svc.Image) {
 			return svc, true
 		}
 	}
-	return accountService{}, false
+	return toolCard{}, false
 }
 
 // serviceByID finds a service by its id (mail, calendar).
-func serviceByID(id string) (accountService, bool) {
-	for _, svc := range accountServices {
+func serviceByID(id string) (toolCard, bool) {
+	for _, svc := range toolCards {
 		if svc.ID == id {
 			return svc, true
 		}
 	}
-	return accountService{}, false
+	return toolCard{}, false
 }
 
 // placesKey is where its configuration keeps its places, "" without
 // (places.go).
-func (svc accountService) placesKey() string {
-	for _, k := range placeKeepers {
-		if k.Image == svc.Image {
-			return k.Key
-		}
+func (svc toolCard) placesKey() string {
+	if svc.Places == nil {
+		return ""
 	}
-	return ""
+	return svc.Places.Key
 }
+
+// use is the text key of what it is for, and mark its icon.
+func (svc toolCard) use() string  { return "preset." + svc.Preset + ".use" }
+func (svc toolCard) mark() string { return svc.Preset }
 
 // svcAccount is an account as eriphe-mail, eriphe-calendar or eriphe-files
 // reads it; what one of them does not know is left empty (and out of the
@@ -198,7 +172,7 @@ func (cfg svcConfig) index(name string) int {
 // mailbox is its address, whoever connects it; a calendar is also where it
 // is (an Apple account and a Google account can have the same address,
 // and are two calendars).
-func (svc accountService) sameAccount(x, y svcAccount) bool {
+func (svc toolCard) sameAccount(x, y svcAccount) bool {
 	if svc.ByName {
 		return true
 	}
@@ -240,7 +214,7 @@ func accountEnv(stem, name string) string {
 
 // svcConfigOf reads a server's configuration, if it is a server of the
 // service.
-func svcConfigOf(svc accountService, spec RunSpec) (svcConfig, bool) {
+func svcConfigOf(svc toolCard, spec RunSpec) (svcConfig, bool) {
 	if !strings.HasPrefix(spec.Image, svc.Image) {
 		return svcConfig{}, false
 	}
@@ -277,7 +251,7 @@ func (st svcServer) level(name string) string {
 
 // serviceServers are the workspace servers of a service, the one under
 // its own name first: one once they are merged.
-func (c *core) serviceServers(svc accountService) []svcServer {
+func (c *core) serviceServers(svc toolCard) []svcServer {
 	var out []svcServer
 	for name, s := range c.conf().Servers {
 		if !s.local() || c.source(kindServer, name) != sourceWorkspace {
@@ -298,7 +272,7 @@ func (c *core) serviceServers(svc accountService) []svcServer {
 }
 
 // serviceServer is the workspace server of a service.
-func (c *core) serviceServer(svc accountService) (svcServer, bool) {
+func (c *core) serviceServer(svc toolCard) (svcServer, bool) {
 	if all := c.serviceServers(svc); len(all) > 0 {
 		return all[0], true
 	}
@@ -306,17 +280,17 @@ func (c *core) serviceServer(svc accountService) (svcServer, bool) {
 }
 
 // accountsOf is a server's accounts, if it is the server of a service.
-func accountsOf(s Server) (accountService, svcConfig, bool) {
+func accountsOf(s Server) (toolCard, svcConfig, bool) {
 	if !s.local() {
-		return accountService{}, svcConfig{}, false
+		return toolCard{}, svcConfig{}, false
 	}
 	spec, err := decodeRun(s.Run)
 	if err != nil {
-		return accountService{}, svcConfig{}, false
+		return toolCard{}, svcConfig{}, false
 	}
 	svc, ok := serviceOf(spec)
 	if !ok {
-		return accountService{}, svcConfig{}, false
+		return toolCard{}, svcConfig{}, false
 	}
 	cfg, ok := svcConfigOf(svc, spec)
 	return svc, cfg, ok
@@ -345,7 +319,7 @@ type accountPut struct {
 // its address; two calendars of one address (one with a password, one on a
 // connection) are two accounts, the connection's named by the address and
 // the other named apart (freeName).
-func (c *core) putAccount(svc accountService, in accountPut) error {
+func (c *core) putAccount(svc toolCard, in accountPut) error {
 	st, exists := c.serviceServer(svc)
 	a := in.Account
 	if strings.TrimSpace(a.Name) == "" {
@@ -353,7 +327,7 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 	}
 	if !exists {
 		st = svcServer{Name: c.freeServerName(svc.Base, a.Name), Spec: RunSpec{Image: svc.Image, Transport: transportStdio},
-			Server: Server{Use: tr(in.Lang, svc.Use)}}
+			Server: Server{Use: tr(in.Lang, svc.use())}}
 		if !svc.AccountLevels {
 			st.Server = st.Server.withLevel(accessReads)
 		}
@@ -457,7 +431,7 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 			})
 		}
 	}
-	if svc == calendarService {
+	if svc.ID == toolCalendar {
 		cfg.Timezone = cmpOr(in.Timezone, cmpOr(cfg.Timezone, c.conf().TimeZone))
 	}
 	srv := st.Server
@@ -495,7 +469,7 @@ func (c *core) renameAccountRefs(server, from, to string) {
 
 // dropAccount takes an account out of its service's server; the server
 // goes with its last account.
-func (c *core) dropAccount(svc accountService, name string) error {
+func (c *core) dropAccount(svc toolCard, name string) error {
 	st, ok := c.serviceServer(svc)
 	if !ok || st.Config.index(name) < 0 {
 		return errAccountUnknown
@@ -609,7 +583,7 @@ func (c *core) setAccountLevel(server, account, level string) error {
 // writeService writes a service's server: its configuration, each
 // account's secret (env holds the new ones; the others keep theirs) and
 // read_only for the accounts kept read only.
-func (c *core) writeService(svc accountService, st svcServer, srv Server, cfg svcConfig, env map[string]EnvValue, creds credentials, exists bool) error {
+func (c *core) writeService(svc toolCard, st svcServer, srv Server, cfg svcConfig, env map[string]EnvValue, creds credentials, exists bool) error {
 	for i := range cfg.Accounts {
 		a, ok := srv.accountAccesses()[cfg.Accounts[i].Name]
 		cfg.Accounts[i].ReadOnly = svc.AccountLevels && ok && a.level() == accessReadOnly

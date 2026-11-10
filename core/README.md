@@ -1616,7 +1616,7 @@ tell (someone came home) goes from an automation to an incoming address, as any 
 ## Google accounts (Gmail, Calendar, Drive)
 
 One sign-in per Google account gives Eriphe any of Gmail, Google Calendar and Google Drive
-(`connection_tools.go` with Google's rows of `toolSignIns`). Nothing in the workspace is Google's
+(`connection_tools.go` with Google's rows of the tools' cards, `tool_cards.go`). Nothing in the workspace is Google's
 own: the Google, Gmail, Google Calendar and Google Drive tiles are connection presets
 (`Form: "connection"`, `Provider: "google"`) that open the provider's connect page,
 `/settings/connections/google` (`?tool=` ticks some; `web_connections.go`); the account is then a
@@ -1700,16 +1700,26 @@ never shown nor logged.
 
 ### Tools on a connection
 
-A tool says what it needs of an account at a provider as data, `toolSignIns` in
-`signin_providers.go` (`connection_tools.go`): its kind (`mail`, `calendar`, `drive`), the
+A tool says what it needs of an account at a provider as data, the `SignIns` of its card in
+`tool_cards.go` (`connection_tools.go`): for its kind (`mail`, `calendar`, `drive`), the
 provider, the scopes it reads with and, if they differ, the scopes it writes with, and what its
 account is in the tool's configuration (the account's `provider` there, and whether the identity
 is also its address or its username). A sign-in asks for the scopes of the tools ticked only
 (the write ones when the tool may write and is not set to read only), keeps the connection, then
 makes each tool granted read its token: a mailbox or a calendar is an account of the one `mail` or
-`agenda` (its variable `MAIL_GOOGLE_TOKEN_<hash>` or `CALENDAR_GOOGLE_TOKEN_<hash>`, names kept for
-the installs that have them), a drive an account of `fichiers`. A provider that serves the mail
-or the calendar is one row more, no code.
+`agenda`, a drive an account of `fichiers` (its variable `TOOL_TOKEN_<hash>`). A provider that
+serves the mail or the calendar is one row more, no code.
+
+### Tool cards
+
+Each local tool eriphe-core launches and configures with several accounts has a **card**
+(`tool_cards.go`): its kind, the catalog name it is made under, its image, its preset (words and
+icon), whether it runs the image of eriphe-core's version, whether each account has its own
+level, whether two accounts of one name are one, whether its configuration holds the scopes
+granted, what it needs at each provider (`SignIns`) and where it keeps its places (`Places`).
+core reads the cards: a server is matched to its card by its image, and nothing else in core names
+an image of Eriphe's tools (`TestNoToolImageInLogic`). Another image is another card, no code
+(`TestAnyToolCard`). What the configuration holds is [the servers' contract](../servers/README.md).
 
 ### Connections
 
@@ -1976,10 +1986,9 @@ server reads and enforces itself, and is lent as `{kind: place}` (its tool whole
 
 A place is what a tool reaches inside it and the user picked, with its own access (`read`, or
 `drop`: also new files in its results subfolder): a drive's folders (`places.go`). A tool has
-places when its data says where it keeps them (`placeKeepers`: its image, the JSON variable of its
-environment and the key of the list in it; eriphe-files keeps them as `folders` in
-`FILES_CONFIG`), so it is found by having places, never by its name, and an install's folders are
-its places as they are, with no migration. The tool browses them with a setup tool
+places when its card says where it keeps them (`Places`: the key of the list in its
+`TOOL_CONFIG`, `places`, and its setup tool that browses them), so it is found by having places,
+never by its name. The tool browses them with a setup tool
 (`eriphe/setup`, never given to a task). Lent to a task as `{kind: place}`, a place lends its whole
 tool.
 

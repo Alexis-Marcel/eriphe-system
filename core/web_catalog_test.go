@@ -130,7 +130,7 @@ func TestWebPresetsAreValid(t *testing.T) {
 	}
 	mail := c.conf().runSpecs["mail"]
 	env := accountEnv(toolPasswordEnv, "someone@gmail.com")
-	if mail.Image != mailImage || mail.Env[env].File != "vault:service.mail."+strings.ToLower(env) ||
+	if mail.Image != mailService.Image || mail.Env[env].File != "vault:service.mail."+strings.ToLower(env) ||
 		!strings.Contains(mail.Env[toolConfigEnv].Value, `"address":"someone@gmail.com"`) || !strings.Contains(mail.Env[toolConfigEnv].Value, `"password_env":"`+env+`"`) {
 		t.Fatalf("mail = %+v", mail)
 	}

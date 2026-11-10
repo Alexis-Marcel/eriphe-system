@@ -192,10 +192,13 @@ func checkServices(specs map[string]RunSpec) (map[string]RunSpec, error) {
 // (.github/workflows/ci.yml): 0.79.0 for a release, sha-<commit> for a
 // build of main. A development build ("dev") and an image named with its
 // tag or digest are left as they are.
-var ownServiceImages = []string{mailImage, calendarImage, filesImage}
+// ownImage tells one of Eriphe's own images, by its card.
+func ownImage(image string) bool {
+	return slices.ContainsFunc(toolCards, func(c toolCard) bool { return c.OwnVersion && c.Image == image })
+}
 
 func pinnedImage(image, version string) string {
-	if !slices.Contains(ownServiceImages, image) {
+	if !ownImage(image) {
 		return image
 	}
 	switch _, sha, dev := strings.Cut(version, "-dev+"); {
@@ -221,7 +224,7 @@ func ownToolVersion(s Server) string {
 	if i := strings.LastIndexByte(image, ':'); i > strings.LastIndexByte(image, '/') {
 		image = image[:i]
 	}
-	if !slices.Contains(ownServiceImages, image) {
+	if !ownImage(image) {
 		return ""
 	}
 	return version

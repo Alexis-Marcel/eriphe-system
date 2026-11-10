@@ -95,7 +95,7 @@ func TestConnectionOfAnyProvider(t *testing.T) {
 func TestAccountVariablesNameNoProvider(t *testing.T) {
 	c := newDynamicCore(t, nil).core
 	ref := &EnvValue{File: vaultPrefix + "connection.sam.token"}
-	for _, svc := range accountServices {
+	for _, svc := range toolCards {
 		si, _ := signInOf(svc.ID, providerGoogle.Name)
 		if err := c.putAccount(svc, accountPut{Lang: "fr", Account: si.account("sam@example.org"), Secret: ref}); err != nil {
 			t.Fatal(err)
@@ -105,7 +105,7 @@ func TestAccountVariablesNameNoProvider(t *testing.T) {
 		Account: svcAccount{Name: "bob@example.org", Address: "bob@example.org", Provider: "ovh"}}); err != nil {
 		t.Fatal(err)
 	}
-	for _, svc := range accountServices {
+	for _, svc := range toolCards {
 		st, ok := c.serviceServer(svc)
 		if !ok {
 			t.Fatalf("%s: no server", svc.ID)

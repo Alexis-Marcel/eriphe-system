@@ -14,14 +14,12 @@ import (
 )
 
 // providerData are the files where a provider's name may be written: its
-// data (sign-in providers, presets and their gallery, the model
-// providers), the words of the workspace, and what installs from before
-// connections still hold (legacy.go). Everywhere else, a provider is data
-// read from them, never a case in the code.
+// data (sign-in providers, the tools' cards, presets and their gallery, the
+// model providers) and the words of the workspace. Everywhere else, a
+// provider is data read from them, never a case in the code.
 var providerData = []string{
-	"signin_providers.go", "presets.go", "presets_online.go", "web_gallery.go",
+	"signin_providers.go", "tool_cards.go", "presets.go", "presets_online.go", "web_gallery.go",
 	"agents_kinds.go", "providers_check.go", "policy.go",
-	"legacy.go",
 }
 
 // providerName is what the guard looks for: Google's products by name.
@@ -134,6 +132,32 @@ func TestRuntimeGuardCatches(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "x.go")
 	os.WriteFile(file, []byte("package main\n\n// Like codex.\nfunc isCodex(r string) bool { return r == \"codex\" }\n"), 0o600)
 	if hits := literalHits(t, file, func(s string) bool { return s == `"codex"` }); len(hits) != 1 {
+		t.Fatalf("hits: %v", hits)
+	}
+}
+
+// toolImage is what the tools guard looks for: an image of Eriphe's tools.
+var toolImage = regexp.MustCompile(`eriphe-(mail|calendar|files)\b`)
+
+// No logic file of core names one of its tools' images in a string: a
+// tool is its card (tool_cards.go), found by what it declares.
+func TestNoToolImageInLogic(t *testing.T) {
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || f == "tool_cards.go" {
+			continue
+		}
+		for _, hit := range literalHits(t, f, toolImage.MatchString) {
+			t.Errorf("%s names a tool's image: %s (it is data: tool_cards.go)", f, hit)
+		}
+	}
+}
+
+// The guard catches an image in a string, and lets a comment be.
+func TestToolImageGuardCatches(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "x.go")
+	os.WriteFile(file, []byte("package main\n\n// eriphe-mail, for instance.\nvar img = \"ghcr.io/x/eriphe-mail\"\n"), 0o600)
+	if hits := literalHits(t, file, toolImage.MatchString); len(hits) != 1 {
 		t.Fatalf("hits: %v", hits)
 	}
 }

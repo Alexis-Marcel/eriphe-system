@@ -296,7 +296,7 @@ func TestAccessChoiceMapsToPolicy(t *testing.T) {
 
 // serviceAccount is an account of the mail or of the calendar, by its
 // name, and its secret as the server reads it.
-func serviceAccount(t *testing.T, c *core, svc accountService, name string) (svcAccount, string) {
+func serviceAccount(t *testing.T, c *core, svc toolCard, name string) (svcAccount, string) {
 	t.Helper()
 	st, ok := c.serviceServer(svc)
 	if !ok {
