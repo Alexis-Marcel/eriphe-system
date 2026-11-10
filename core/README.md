@@ -1728,8 +1728,11 @@ icon), whether it runs the image of eriphe-core's version, whether each account 
 level, whether two accounts of one name are one, whether its configuration holds the scopes
 granted, what it needs at each provider (`SignIns`) and where it keeps its places (`Places`).
 core reads the cards: a server is matched to its card by its image, and nothing else in core names
-an image of Eriphe's tools (`TestNoToolImageInLogic`). Another image is another card, no code
-(`TestAnyToolCard`). What the configuration holds is [the servers' contract](../servers/README.md).
+an image of Eriphe's tools (`TestNoToolImageInLogic`), a card or a kind by name, or GitHub
+(`TestNoToolInLogic`): only the catalog's data and GitHub's own files (the app, its page, and git and
+gh through it; `toolData`) do; a provider's page and client are registered from its file
+(`providerRoutes`, `providerStarts`), and a tool that goes on an app's connection or a token says so
+in its preset (`AppPage`). Another image is another card, no code (`TestAnyToolCard`). What the configuration holds is [the servers' contract](../servers/README.md).
 
 ### Connections
 

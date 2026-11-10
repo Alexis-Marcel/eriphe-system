@@ -94,12 +94,13 @@ var (
 )
 
 // checkAccessEnv tells whether a variable may hold a placeholder: what a
-// credential may not take (agents.go), and the bundle's. GitHub's token
+// credential may not take (agents.go), and the bundle's. git's token
 // variables are a credential's own: a placeholder is what they should hold.
 func checkAccessEnv(env string) error {
-	switch env {
-	case "GH_TOKEN", "GITHUB_TOKEN":
+	if slices.Contains(gitTokenEnvs, env) {
 		return nil
+	}
+	switch env {
 	case "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "PIP_CERT":
 		return fmt.Errorf("its variable %s is the system's, not a credential's", env)
 	}
@@ -550,7 +551,7 @@ func (c *core) checkLentAccesses(list []ResourceRef) error {
 			continue
 		}
 		a := c.conf().Accesses[e.Ref]
-		if a.Env == gitAccessEnv && slices.ContainsFunc(list, isGitHubRepo) {
+		if a.Env == gitAccessEnv && slices.ContainsFunc(list, isRepoRef) {
 			return fmt.Errorf("access %s uses the variable %s, which holds the placeholder of the repository lent: rename it", e.Ref, gitAccessEnv)
 		}
 		if a.isSSH() {
@@ -577,7 +578,7 @@ func (c *core) accessInstructions(list []ResourceRef) string {
 		if e.Kind == resRepo && e.Access == accessWrite && e.Branch != "" {
 			repos = append(repos, "You are lent "+e.Ref+" to push to the branch "+e.Branch+": push there, and nowhere else in this repository.")
 		}
-		if _, err := loadGitHubApp(); e.Kind == resRepo && err == nil {
+		if e.Kind == resRepo && c.gitConnected() {
 			repos = append(repos, ghInstructions(e))
 		}
 		a, ok := conf.Accesses[e.Ref]

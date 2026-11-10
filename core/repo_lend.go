@@ -52,9 +52,9 @@ func isGitHubHost(host string) bool {
 
 var repoPart = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
-// githubRepo reads owner/name from a path (owner/name.git), a GitHub URL
+// repoOf reads owner/name from a path (owner/name.git), a GitHub URL
 // (https://github.com/owner/name, git@github.com:owner/name.git) or owner/name.
-func githubRepo(raw string) string {
+func repoOf(raw string) string {
 	raw = strings.TrimSpace(raw)
 	p := raw
 	if u, err := url.Parse(raw); err == nil && u.Scheme != "" && u.Host != "" {
@@ -141,7 +141,7 @@ func notApproved(why string) string {
 func lentRepos(list []ResourceRef) []repoGrant {
 	var out []repoGrant
 	for _, e := range list {
-		if r := githubRepo(e.Ref); e.Kind == resRepo && r != "" {
+		if r := repoOf(e.Ref); e.Kind == resRepo && r != "" {
 			out = append(out, repoGrant{Repo: r, Access: e.Access, Branch: e.Branch})
 		}
 	}
@@ -295,6 +295,13 @@ func githubPermissions(access string, api bool) map[string]string {
 	default:
 		return map[string]string{"contents": "read", "pull_requests": "read", "issues": "read", "checks": "read"}
 	}
+}
+
+// gitConnected tells whether git can be lent anything: Eriphe's GitHub App
+// is there.
+func (c *core) gitConnected() bool {
+	_, err := loadGitHubApp()
+	return err == nil
 }
 
 // mintGitHub makes the credential: an installation token of the GitHub

@@ -78,7 +78,9 @@ func splitDir(dir string) (repo, branch string) {
 	if at := strings.LastIndex(dir, "@"); at > strings.LastIndex(dir, "/") && at > 0 {
 		repo, branch = dir[:at], dir[at+1:]
 	}
-	repo = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(repo, "https://"), "github.com/"), ".git")
+	if r := repoOf(repo); r != "" {
+		repo = r
+	}
 	return repo, branch
 }
 

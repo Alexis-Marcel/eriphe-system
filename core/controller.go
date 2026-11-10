@@ -66,7 +66,7 @@ type core struct {
 	out         channelOut       // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex       // one escalation pass at a time (route_send.go)
 
-	github *githubClient // Eriphe's GitHub App (github_app.go)
+	appClients // the clients of the providers that mint tokens (github_app.go)
 	// minters are the providers whose connections core mints tokens for,
 	// by name (connections.go).
 	minters map[string]tokenMinter
@@ -106,9 +106,11 @@ func newCore(cfg *Config, store *Store) *core {
 		raw, _ := json.Marshal(st)
 		store.set("brain_turn", string(raw))
 	}
-	c.github = newGitHubClient()
 	c.pool = newPool(store, m.Servers)
-	c.minters = map[string]tokenMinter{githubProvider: c.github}
+	c.minters = map[string]tokenMinter{}
+	for _, start := range providerStarts {
+		start(c)
+	}
 	c.pool.connToken = c.connectionToken // a tool on a connection that mints its tokens
 	c.pool.connRefused = c.connectionRefused
 	c.pool.authHold = c.connectionHold  // an account to connect again (connections.go)

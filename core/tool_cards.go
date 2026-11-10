@@ -36,6 +36,16 @@ type toolCard struct {
 	Account *accountShape
 }
 
+// The kinds of tools a connection can serve.
+const (
+	toolMail     = "mail"     // mailService
+	toolCalendar = "calendar" // calendarService
+	toolFiles    = "files"    // filesService
+)
+
+// toolKinds are the kinds, in the order they are shown.
+var toolKinds = []string{toolMail, toolCalendar, toolFiles}
+
 var (
 	mailService = toolCard{ID: toolMail, Base: "mail", Image: "ghcr.io/alexis-marcel/eriphe-mail", Preset: "mail",
 		OwnVersion: true, AccountLevels: true,

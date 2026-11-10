@@ -30,16 +30,6 @@ import (
 // Nothing here names a provider: the tools a provider serves, and how,
 // are rows of the tools' cards.
 
-// The kinds of tools a connection can serve.
-const (
-	toolMail     = "mail"     // mailService
-	toolCalendar = "calendar" // calendarService
-	toolFiles    = "files"    // filesService
-)
-
-// toolKinds are the kinds, in the order they are shown.
-var toolKinds = []string{toolMail, toolCalendar, toolFiles}
-
 // toolSignIn is what a kind of tool needs of a connection at a provider.
 type toolSignIn struct {
 	Tool     string   // a toolKinds

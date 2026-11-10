@@ -54,7 +54,7 @@ func TestGitHubRepo(t *testing.T) {
 		"owner":                             "",
 		"own er/repo":                       "",
 	} {
-		if got := githubRepo(in); got != want {
+		if got := repoOf(in); got != want {
 			t.Errorf("%q: %q, want %q", in, got, want)
 		}
 	}

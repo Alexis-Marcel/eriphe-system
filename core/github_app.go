@@ -40,7 +40,18 @@ import (
 // accounts it is installed on.
 const githubProvider = "github"
 
-func init() { mintersLabel[githubProvider] = "GitHub" }
+func init() {
+	mintersLabel[githubProvider] = "GitHub"
+	providerStarts = append(providerStarts, func(c *core) {
+		c.github = newGitHubClient()
+		c.minters[githubProvider] = c.github
+	})
+}
+
+// appClients are the core's clients of the providers that mint tokens.
+type appClients struct {
+	github *githubClient // Eriphe's GitHub App
+}
 
 var errNoGitHubApp = errors.New("no GitHub App")
 
