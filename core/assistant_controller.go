@@ -558,14 +558,6 @@ func standingInstructions(raw, user, name string) string {
 	return strings.NewReplacer("{{user}}", user, "{{name}}", name).Replace(raw)
 }
 
-// legacyAgentHash is the fingerprint the brain kept before it was an
-// assistant (kv brain_agent): its agent's name and spec.
-func (c *core) legacyAgentHash(a Assistant) string {
-	h := sha256.New()
-	json.NewEncoder(h).Encode([]any{a.Agent, c.conf().Agents[a.Agent]})
-	return hex.EncodeToString(h.Sum(nil))
-}
-
 // assistantToolsHash fingerprints what an assistant's agent gets of the
 // catalog: its grant, and the tools of the servers it reaches. It is ""
 // while one of them is not ready, not to restart it for a passing outage,

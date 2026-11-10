@@ -338,22 +338,18 @@ func TestFolderTaint(t *testing.T) {
 }
 
 // Settings → Folders: the folders each machine shares, how to share one
-// there, those given from here before, and no longer sharing one. Nothing
+// there, and no longer sharing one. Nothing
 // browses a machine or adds a folder any more.
 func TestWebFolders(t *testing.T) {
 	c, store, shares := foldersCoreShares(t)
-	store.db.Exec(`INSERT INTO folders (name, node, share, path, access, created) VALUES ('Factures', 'nas', 'data', 'Compta/Factures', 'drop', 1), ('Photos', 'nas', 'media', 'Photos', 'read', 1)`)
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	code, body, _ := tw.do("GET", "/settings/folders", nil, nil)
 	for _, want := range []string{"Clients", `<option value="drop" selected>À côté</option>`, `id="folders-pc"`, "Aucun dossier partagé sur cet appareil.",
-		`data-dialog="share-how-dlg"`, "Comment partager ?", `id="share-how-dlg"`, "docker exec eriphe eriphe share add /mnt/user/Clients", "--manage", "Gérer", "Factures", "data:/Compta/Factures", "À partager de nouveau sur l&#39;appareil"} {
+		`data-dialog="share-how-dlg"`, "Comment partager ?", `id="share-how-dlg"`, "docker exec eriphe eriphe share add /mnt/user/Clients", "--manage", "Gérer"} {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Fatalf("page lacks %q: %d %s", want, code, body)
 		}
-	}
-	if strings.Contains(body, "media:/Photos") {
-		t.Fatal("a folder shared again is still to share again")
 	}
 	// Only equal or lower levels are offered; read offers nothing to choose.
 	if strings.Contains(body, `<option value="manage"`) || !strings.Contains(body, `<select name="access" disabled>`) {
@@ -367,11 +363,7 @@ func TestWebFolders(t *testing.T) {
 	if code, _, _ := tw.post("/settings/folders", url.Values{"node": {"nas"}, "share": {"data"}, "path": {"Clients"}, "name": {"x"}}, csrf); code == 200 {
 		t.Fatalf("shared from the workspace: %d", code)
 	}
-	code, _, h := tw.post("/settings/folders/delete", url.Values{"source": {"legacy"}, "name": {"Factures"}}, csrf)
-	if l, _ := store.legacyFolders(); code != 200 || h.Get("HX-Refresh") != "true" || len(l) != 1 {
-		t.Fatalf("forget: %d %v", code, l)
-	}
-	code, _, h = tw.post("/settings/folders/delete", url.Values{"source": {"machine"}, "name": {"Clients"}}, csrf)
+	code, _, h := tw.post("/settings/folders/delete", url.Values{"source": {"machine"}, "name": {"Clients"}}, csrf)
 	if _, err := store.folder("Clients"); code != 200 || h.Get("HX-Refresh") != "true" || err == nil || !slices.Equal(shares.gone(), []string{"f1"}) {
 		t.Fatalf("delete: %d %v %v", code, err, shares.gone())
 	}

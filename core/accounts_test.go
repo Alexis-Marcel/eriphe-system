@@ -6,99 +6,6 @@ import (
 	"testing"
 )
 
-// oldServer puts a server of one account, as they were before the
-// accounts of a service were one server.
-func oldServer(t *testing.T, c *core, name, image, configEnv, config, level, use string, env map[string]EnvValue, creds credentials) {
-	t.Helper()
-	if env == nil {
-		env = map[string]EnvValue{}
-	}
-	env[configEnv] = EnvValue{Value: config}
-	raw := marshalRun(RunSpec{Image: image, Transport: transportStdio, Env: env})
-	if err := c.putServer(putCreate, name, Server{Use: use, Run: raw}.withLevel(level), creds); err != nil {
-		t.Fatalf("%s: %v", name, err)
-	}
-}
-
-// The servers of one account each are made one at start: every account,
-// its secret, its level; what was allowed for good, the watches and the
-// assistants follow. It runs once.
-func TestMergeAccountServers(t *testing.T) {
-	cc := newDynamicCore(t, nil)
-	c := cc.core
-	bobRef := legacyGoogleSecret("bob@example.org")
-	if err := currentVault().set(bobRef, `{"refresh_token":"bob"}`); err != nil {
-		t.Fatal(err)
-	}
-	c.store.set(legacyAccountsKey, `[{"email":"bob@example.org","scopes":["`+scopeMail+`"]}]`)
-	c.migrateConnections()
-	oldServer(t, c, "mail", mailImage, "MAIL_CONFIG",
-		`{"accounts":[{"name":"mail","address":"sam@example.org","provider":"gmail","auth":{"password_env":"MAIL_PASSWORD"}}]}`,
-		accessFree, "mes mails : lire, chercher", nil, credentials{"env:MAIL_PASSWORD": "sam-pw"})
-	oldServer(t, c, "mail-bob", mailImage, "MAIL_CONFIG",
-		`{"accounts":[{"name":"bob@example.org","address":"bob@example.org","provider":"gmail","auth":{"oauth_token_env":"MAIL_GOOGLE_TOKEN"}}]}`,
-		accessReadOnly, "mes mails : lire, chercher (bob@example.org)", map[string]EnvValue{mailTokenEnv: {File: vaultPrefix + bobRef}}, nil)
-	oldServer(t, c, "agenda-icloud", calendarImage, "CALENDAR_CONFIG",
-		`{"timezone":"Europe/Paris","accounts":[{"name":"icloud","provider":"icloud","username":"sam@example.net","auth":{"password_env":"CALENDAR_PASSWORD"}}]}`,
-		accessReads, "mon agenda", nil, credentials{"env:CALENDAR_PASSWORD": "cal-pw"})
-	c.store.allowAction("mail-bob", "mcp__mail-bob__mark", "")
-	c.store.allowAction("mail", "mcp__mail__create_draft", "")
-	if err := c.putAssistant("lecteur", Assistant{Role: roleTest, Disabled: true, Tools: []string{"mail-bob.search_messages", "mail", "agenda-icloud"}}); err != nil {
-		t.Fatal(err)
-	}
-
-	c.mergeAccountServers()
-
-	if _, ok := c.conf().Servers["mail-bob"]; ok {
-		t.Fatal("mail-bob stays")
-	}
-	mail, ok := c.serviceServer(mailService)
-	if !ok || mail.Name != "mail" || len(mail.Config.Accounts) != 2 {
-		t.Fatalf("mail: %+v", mail)
-	}
-	if mail.Server.Use != "mes mails : lire, chercher" {
-		t.Errorf("use: %q", mail.Server.Use)
-	}
-	sam, pw := serviceAccount(t, c, mailService, "sam@example.org")
-	if pw != "sam-pw" || sam.Auth.PasswordEnv != accountEnv(mailSecretEnv, "sam@example.org") || sam.ReadOnly {
-		t.Errorf("sam: %+v %q", sam, pw)
-	}
-	bob, _ := serviceAccount(t, c, mailService, "bob@example.org")
-	if !bob.signedIn() || mail.Spec.Env[bob.secretEnv()].File != vaultPrefix+bobRef || !bob.ReadOnly {
-		t.Errorf("bob: %+v %+v", bob, mail.Spec.Env)
-	}
-	if lv := mail.Server.AccountAccess; lv["sam@example.org"] != accessFree || lv["bob@example.org"] != accessReadOnly {
-		t.Errorf("levels: %v", lv)
-	}
-	if tools := c.googleTools("bob@example.org"); len(tools) != 1 || tools[0].Name != "mail" {
-		t.Errorf("bob's tools: %+v", tools)
-	}
-	// The calendar alone is made one too: named after its username.
-	cal, _ := c.serviceServer(calendarService)
-	if a, pw := serviceAccount(t, c, calendarService, "sam@example.net"); cal.Name != "agenda-icloud" || pw != "cal-pw" || a.Provider != "icloud" ||
-		cal.Config.Timezone != "Europe/Paris" || cal.Server.AccountAccess["sam@example.net"] != accessReads {
-		t.Errorf("calendar: %s %+v %q", cal.Name, a, pw)
-	}
-	// What was allowed, for its account.
-	got := map[string]string{}
-	for _, a := range c.store.allowedActions("") {
-		got[a.Tool] = a.Account
-	}
-	if len(got) != 2 || got["mcp__mail__mark"] != "bob@example.org" || got["mcp__mail__create_draft"] != "sam@example.org" {
-		t.Errorf("allowed: %v", got)
-	}
-	// The assistant is lent the merged server.
-	if tools := c.conf().Assistants["lecteur"].Tools; strings.Join(tools, ",") != "mail.search_messages,mail,agenda-icloud" {
-		t.Errorf("assistant: %v", tools)
-	}
-	// Once one, nothing changes.
-	before := c.conf().Servers["mail"]
-	c.mergeAccountServers()
-	if after := c.conf().Servers["mail"]; string(after.Run) != string(before.Run) {
-		t.Errorf("merged again: %s", after.Run)
-	}
-}
-
 // The levels of the accounts reach the server: an account read only is
 // read only in the server's configuration too, from its form or its
 // access page; the other accounts are not touched.
@@ -177,45 +84,6 @@ func TestGoogleHoldWithOtherAccounts(t *testing.T) {
 	}
 }
 
-// An Apple calendar and a Google calendar of one address are two
-// calendars: the merge keeps both, the Google one under the address.
-func TestMergeKeepsTwoCalendarsOfOneAddress(t *testing.T) {
-	cc := newDynamicCore(t, nil)
-	c := cc.core
-	ref := legacyGoogleSecret("sam@example.org")
-	if err := currentVault().set(ref, `{"refresh_token":"sam"}`); err != nil {
-		t.Fatal(err)
-	}
-	oldServer(t, c, "agenda", calendarImage, "CALENDAR_CONFIG",
-		`{"accounts":[{"name":"icloud","provider":"icloud","username":"sam@example.org","auth":{"password_env":"CALENDAR_PASSWORD"}}]}`,
-		accessFree, "mon agenda", nil, credentials{"env:CALENDAR_PASSWORD": "apple-pw"})
-	oldServer(t, c, "agenda-sam", calendarImage, "CALENDAR_CONFIG",
-		`{"accounts":[{"name":"sam@example.org","provider":"google","username":"sam@example.org","auth":{"oauth_token_env":"CALENDAR_GOOGLE_TOKEN"}}]}`,
-		accessReadOnly, "mon agenda (sam@example.org)", map[string]EnvValue{calTokenEnv: {File: vaultPrefix + ref}}, nil)
-	c.store.allowAction("agenda", "mcp__agenda__create_event", "")
-
-	c.mergeAccountServers()
-
-	cal, ok := c.serviceServer(calendarService)
-	if !ok || len(cal.Config.Accounts) != 2 {
-		t.Fatalf("calendar: %+v", cal.Config.Accounts)
-	}
-	google, _ := serviceAccount(t, c, calendarService, "sam@example.org")
-	if !google.signedIn() || cal.Spec.Env[google.secretEnv()].File != vaultPrefix+ref || !google.ReadOnly {
-		t.Errorf("google: %+v", google)
-	}
-	apple, pw := serviceAccount(t, c, calendarService, "sam@example.org (iCloud)")
-	if apple.signedIn() || apple.Provider != "icloud" || pw != "apple-pw" || apple.ReadOnly {
-		t.Errorf("apple: %+v %q", apple, pw)
-	}
-	if lv := cal.Server.AccountAccess; lv["sam@example.org"] != accessReadOnly || lv["sam@example.org (iCloud)"] != accessFree {
-		t.Errorf("levels: %v", lv)
-	}
-	if a := c.store.allowedActions("agenda"); len(a) != 1 || a[0].Account != "sam@example.org (iCloud)" {
-		t.Errorf("allowed: %+v", a)
-	}
-}
-
 // An Apple calendar added beside a Google calendar of its address is
 // named apart; a Google account connected after an Apple calendar of its
 // address takes the address, the Apple one keeps its secret, its level,
@@ -224,7 +92,7 @@ func TestMergeKeepsTwoCalendarsOfOneAddress(t *testing.T) {
 func TestCalendarsOfOneAddress(t *testing.T) {
 	apple := svcAccount{Name: "sam@example.org", Provider: "icloud", Username: "sam@example.org", URL: "https://caldav.icloud.com"}
 	google := func(c *core) error {
-		ref := legacyGoogleSecret("sam@example.org")
+		ref := "connection.sam.token"
 		currentVault().set(ref, `{"refresh_token":"sam"}`)
 		return c.putAccount(calendarService, accountPut{Lang: "fr", Account: googleCalendarAccount("sam@example.org"),
 			Secret: &EnvValue{File: vaultPrefix + ref}})

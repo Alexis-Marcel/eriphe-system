@@ -378,21 +378,3 @@ func isConnectionSecret(name string) bool {
 	parts := strings.Split(name, ".")
 	return len(parts) == 3 && (parts[0] == "connection" || parts[0] == legacySecretPrefix) && parts[2] == "token"
 }
-
-// addTokenURL writes where to refresh a kept token in it, if it does not
-// say.
-func addTokenURL(v *Vault, name, tokenURL string) {
-	raw, err := v.get(name)
-	if err != nil {
-		return
-	}
-	var tok map[string]any
-	if json.Unmarshal([]byte(raw), &tok) != nil || tok["token_url"] != nil {
-		return
-	}
-	tok["token_url"] = tokenURL
-	out, _ := json.Marshal(tok)
-	if err := v.set(name, string(out)); err != nil {
-		log.Printf("connections: a token kept as before: %v", err)
-	}
-}

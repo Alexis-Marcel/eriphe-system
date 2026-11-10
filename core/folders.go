@@ -37,10 +37,6 @@ import (
 // not taint the task (task_taint.go), though what it says of it is data,
 // never instructions; and a turn that read external content may not lend a
 // folder's drop or manage level without a card.
-//
-// Folders given from here before (the folders table) are no longer lent:
-// the workspace shows them to be shared again on their machine
-// (legacyFolders).
 
 const (
 	folderRead   = "read"   // read only
@@ -93,9 +89,6 @@ type sharedFolder struct {
 
 func init() {
 	extraSchema = append(extraSchema, `
-CREATE TABLE IF NOT EXISTS folders (
-  name TEXT PRIMARY KEY COLLATE NOCASE, node TEXT NOT NULL, share TEXT NOT NULL,
-  path TEXT NOT NULL, access TEXT NOT NULL DEFAULT 'read', created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS folders_unshared (
   node TEXT NOT NULL, id TEXT NOT NULL, PRIMARY KEY (node, id));
 CREATE TABLE IF NOT EXISTS folders_lowered (
@@ -223,43 +216,6 @@ func (s *Store) lastInfo(node string) nodeInfo {
 		json.Unmarshal([]byte(raw), &info)
 	}
 	return info
-}
-
-// legacyFolder is a folder given from the workspace before folders were
-// shared on their machine: shown, never lent.
-type legacyFolder struct {
-	Name, Node, Share, Path, Access string
-	Created                         time.Time
-}
-
-func (s *Store) legacyFolders() ([]legacyFolder, error) {
-	rows, err := s.db.Query(`SELECT name, node, share, path, access, created FROM folders ORDER BY name COLLATE NOCASE`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []legacyFolder
-	for rows.Next() {
-		var f legacyFolder
-		var created int64
-		if err := rows.Scan(&f.Name, &f.Node, &f.Share, &f.Path, &f.Access, &created); err != nil {
-			return nil, err
-		}
-		f.Created = time.Unix(created, 0)
-		out = append(out, f)
-	}
-	return out, rows.Err()
-}
-
-func (s *Store) deleteLegacyFolder(name string) error {
-	res, err := s.db.Exec(`DELETE FROM folders WHERE name = ?`, name)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return errNoFolder
-	}
-	return nil
 }
 
 // validFolderName is a name a person gives ("Clients", "Factures 2026"),

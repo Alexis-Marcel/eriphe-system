@@ -317,32 +317,6 @@ func TestGoogleReconnect(t *testing.T) {
 	waitStatus(t, c.pool.get("mail"), statusReady)
 }
 
-// A Drive connected before Google accounts is taken over, with its folders,
-// by the first account that connects Drive.
-func TestGoogleTakesOverLegacyDrive(t *testing.T) {
-	g := newFakeGoogle(t)
-	tw, c, csrf := filesCore(t, nil)
-	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
-	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
-	putLegacyDrive(t, c.core, "fr", `{"client_id":"x","refresh_token":"old"}`)
-	if err := c.putDrive("", func(fc *filesConfig) {
-		fc.Folders = append(fc.Folders, DriveFolder{Name: "Compta", ID: "compta", Access: accessDrop})
-	}, nil); err != nil {
-		t.Fatal(err)
-	}
-	googleSignIn(t, tw, g, csrf, url.Values{"service": {"drive"}, "write": {"1"}})
-	fc, _ := filesConfigOf(c.conf().Servers[filesServer])
-	if len(fc.Accounts) != 1 || fc.Accounts[0].Name != "sam@example.org" || fc.Folders[0].Account != "sam@example.org" || fc.Folders[0].Access != "drop" {
-		t.Fatalf("taken over: %+v", fc)
-	}
-	if spec := runOf(t, c.core, filesServer); spec.Env[driveTokenEnv].File != "" {
-		t.Fatal("the old token stays")
-	}
-	if _, err := currentVault().get("service.fichiers.files_google_token"); err == nil {
-		t.Fatal("the old token stays in the vault")
-	}
-}
-
 func TestIDTokenEmail(t *testing.T) {
 	if e := idTokenEmail(fakeIDToken("sam@example.org")); e != "sam@example.org" {
 		t.Fatalf("email %q", e)
