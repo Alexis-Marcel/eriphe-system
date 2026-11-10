@@ -1661,6 +1661,18 @@ Eriphe" when Google refuses their refresh.
 Gmail with an app password (the Mail form's other Gmail) stays for a workspace Google cannot send
 back to (a local address, [below](#addresses-google-takes)).
 
+### Connection apps
+
+A connection app is the user's own OAuth client at a provider (`connection_apps.go`), made once
+and used for every account signed in there. Its page, Settings → Tools → `/settings/apps/<provider>`,
+is built from the provider's data (`signin_providers.go`): the steps in the provider's console
+(their texts are `app.<provider>.<step>` in the text tables, with a link and, where a step needs
+it, the scopes to declare or the redirect URI to paste, each with a Copy button), the client id's
+form, whether the console gives a JSON file, and the redirect rule (`public-https`: the page says
+when this workspace's address is refused, and what to do). The client goes to the vault as
+`app.<provider>.client`. Whether the client lists the redirect URI is not probed: the Drive test
+says what to check in the console.
+
 ### Connections
 
 A connection is one account signed in at one provider (`connections.go`, the `connections` table):
@@ -1743,8 +1755,10 @@ the workspace's own `<origin>/oauth/callback`, where `<origin>` is the address t
 reaches the workspace at (`web.origin`); the page shows it with a Copy button. Its id and secret
 are given on the page, as the JSON the console downloads (`{"web": {"client_id",
 "client_secret", "redirect_uris", …}}`, the flat `{"client_id", "client_secret"}` also works) or
-typed, and kept in the vault as one secret, `google-drive-client` (`PUT /v1/secrets/
-google-drive-client` sets it too); the secret is never shown back or logged. A Desktop client
+typed, and kept in the vault as one secret, `app.google.client` (`PUT /v1/secrets/
+app.google.client` sets it too; `google-drive-client`, its name before, is still read until the
+app is saved again); the secret is never shown back or logged. It is a
+[connection app](#connection-apps). A Desktop client
 (`{"installed": …}`) is refused: Google sends it only to loopback redirects. A JSON whose
 `redirect_uris` lack this workspace's URI is kept, with a warning.
 

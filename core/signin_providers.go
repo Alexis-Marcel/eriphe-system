@@ -1,9 +1,13 @@
 package main
 
-import "golang.org/x/oauth2"
+import (
+	"strings"
+
+	"golang.org/x/oauth2"
+)
 
 // The providers an account signs in at (oauth_client.go), as data: adding
-// one is an entry here, not code.
+// one is an entry here, and its guide's texts in the text tables, not code.
 
 var providerGoogle = &signInProvider{
 	Name:  "google",
@@ -25,6 +29,23 @@ var providerGoogle = &signInProvider{
 	ClientIDSuffix: ".apps.googleusercontent.com",
 	Redirect:       redirectPublicHTTPS,
 	ForgetAt:       "myaccount.google.com/connections",
+	App: appGuide{
+		Steps: []appStep{
+			{Text: "app.google.project", Link: "https://console.cloud.google.com/projectcreate", LinkText: "console.cloud.google.com › New project"},
+			{Text: "app.google.apis", Link: "https://console.cloud.google.com/flows/enableapi?apiid=gmail.googleapis.com,caldav.googleapis.com,drive.googleapis.com",
+				LinkText: "Gmail API, CalDAV API, Google Drive API"},
+			{Text: "app.google.branding", Link: "https://console.cloud.google.com/auth/overview", LinkText: "Google Auth Platform"},
+			{Text: "app.google.audience", Link: "https://console.cloud.google.com/auth/audience", LinkText: "Audience"},
+			{Text: "app.google.scopes", Link: "https://console.cloud.google.com/auth/scopes", LinkText: "Data access", Copy: appCopyScopes},
+			{Text: "app.google.client", Link: "https://console.cloud.google.com/auth/clients/create", LinkText: "Clients › Create client", Copy: appCopyCallback},
+			{Text: "app.google.secret"},
+		},
+		Scopes:        strings.Join([]string{scopeMail, scopeCalendar, scopeDrive, scopeDriveReadonly}, ","),
+		Source:        "https://support.google.com/cloud/answer/15549945",
+		JSON:          true,
+		IDPlaceholder: "….apps.googleusercontent.com",
+		Legacy:        "google-drive-client",
+	},
 }
 
 // signInProviders are the providers, by name.
