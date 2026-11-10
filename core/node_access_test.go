@@ -229,12 +229,6 @@ func TestWebDevices(t *testing.T) {
 			t.Errorf("GET /settings/devices lacks %q", want)
 		}
 	}
-	if _, old, _ := tw.do("GET", "/settings/machines", nil, nil); !strings.Contains(old, "Ce qu&#39;Eriphe voit ici") {
-		t.Error("the old address no longer shows the devices")
-	}
-	if code, _, h := tw.do("GET", "/settings/machines/nas", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/settings/devices/nas" {
-		t.Errorf("old device address: %d %s", code, h.Get("Location"))
-	}
 
 	_, body, _ = tw.do("GET", "/settings/devices/nas", nil, nil)
 	for _, want := range []string{"Journal des accès", "Dossier ouvert à Eriphe", "Clients", "Couper l&#39;accès"} {

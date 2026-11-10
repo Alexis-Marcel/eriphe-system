@@ -22,21 +22,6 @@ func (w *web) activityRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/journal", w.auth(w.handleActivity))
 	mux.Handle("GET /settings/approve", w.auth(w.handleApprovals))
 	mux.Handle("POST /settings/proposals/{id}/{action}", w.auth(w.handleSettingProposal))
-	// The old addresses, in notifications already sent and in the brain's
-	// messages: they keep working.
-	moved := func(to string, keep bool) http.Handler {
-		return w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
-			u := to
-			if keep && r.URL.RawQuery != "" {
-				u += "?" + r.URL.RawQuery
-			}
-			http.Redirect(rw, r, u, http.StatusSeeOther)
-		})
-	}
-	mux.Handle("GET /settings/happened", moved("/settings/journal", true))
-	mux.Handle("GET /activity", moved("/settings/journal", true))
-	mux.Handle("GET /activity/approve", moved("/settings/approve", false))
-	mux.Handle("GET /settings/where", moved("/settings/notifications#where", false))
 }
 
 // feedAccess is the tool accesses' filter: the decisions' journal, paged,

@@ -140,7 +140,7 @@ func TestAddDialogSteps(t *testing.T) {
 func TestEditInDialog(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
 	key := rowKey("mail", "sam@gmail.com")
-	form := url.Values{"preset": {"mail"}, "access": {"read"}, "mail_provider": {"gmail"},
+	form := url.Values{"preset": {"mail"}, "access": {accessReads}, "mail_provider": {"gmail"},
 		"address": {"sam@gmail.com"}, "password": {"abcd efgh ijkl mnop"}}
 	if code, _, h := tw.post("/settings/tools", form, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=mail&tool="+key+"&new=1" {
 		t.Fatalf("save: %d %v", code, h)
@@ -200,7 +200,7 @@ func TestEditInDialog(t *testing.T) {
 func TestSavedRowFollowsTheTool(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
 	key := rowKey("mail", "sam@gmail.com")
-	form := url.Values{"preset": {"mail"}, "access": {"read"}, "mail_provider": {"gmail"},
+	form := url.Values{"preset": {"mail"}, "access": {accessReads}, "mail_provider": {"gmail"},
 		"address": {"sam@gmail.com"}, "password": {"abcd efgh ijkl mnop"}, "dialog": {"1"}}
 	code, body, h := tw.post("/settings/tools", form, csrf)
 	if code != 200 || h.Get("HX-Reswap") != "none" || body != "" ||
@@ -252,10 +252,6 @@ func TestSavedRowFollowsTheTool(t *testing.T) {
 	}
 	if _, _, h := tw.do("GET", "/settings/tools/nope/row", nil, map[string]string{"HX-Request": "true"}); h.Get("HX-Refresh") != "true" {
 		t.Errorf("gone: %v", h)
-	}
-	// The older way back (#added/<name>, its step's address): the list.
-	if code, _, h := tw.do("GET", "/settings/tools/docs/added", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/settings/tools?tool=docs" {
-		t.Errorf("added: %d %s", code, h.Get("Location"))
 	}
 	// The list's flash no longer says it can be used at once.
 	_, page, _ := tw.do("GET", "/settings/tools?saved=mail", nil, nil)
@@ -362,7 +358,7 @@ func TestRowSignIn(t *testing.T) {
 // but their fields ask the browser to keep what was typed in them.
 func TestRefusedFormKeepsTypedSecrets(t *testing.T) {
 	tw, _, csrf := catalogWeb(t, nil)
-	form := url.Values{"preset": {"calendar"}, "access": {"read"}, "cal_provider": {"icloud"},
+	form := url.Values{"preset": {"calendar"}, "access": {accessReads}, "cal_provider": {"icloud"},
 		"cal_user": {"sam@icloud.com"}, "password": {"abcd-efgh-ijkl-mnop"}, "timezone": {"Europe/Paris"}, "dialog": {"1"}}
 	if code, _, h := tw.post("/settings/tools", form, csrf); code != 200 || h.Get("HX-Trigger") == "" {
 		t.Fatalf("first save: %d %v", code, h)

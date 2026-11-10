@@ -678,24 +678,3 @@ func TestAccessOfTheFileIsReadOnly(t *testing.T) {
 		t.Errorf("edit: %d", code)
 	}
 }
-
-// The credentials' former address leads to the new one, query and all.
-func TestCredentialsMoved(t *testing.T) {
-	tw := newTestWeb(t)
-	tw.setup()
-	for from, to := range map[string]string{
-		"/settings/accesses/new?kind=ssh": "/settings/credentials/new?kind=ssh",
-		"/settings/accesses/npm/edit":     "/settings/credentials/npm/edit",
-	} {
-		if code, _, h := tw.do("GET", from, nil, nil); code != 301 || h.Get("Location") != to {
-			t.Errorf("GET %s: %d %s", from, code, h.Get("Location"))
-		}
-	}
-	// The tools page names them credentials, in both languages.
-	for lang, want := range map[string]string{"fr": "<h3>Identifiants</h3>", "en": "<h3>Credentials</h3>"} {
-		_, body, _ := tw.do("GET", "/settings/tools", nil, map[string]string{"Cookie": "lang=" + lang})
-		if !strings.Contains(body, `id="credentials"`) || !strings.Contains(body, want) || !strings.Contains(body, `href="/settings/credentials/new"`) {
-			t.Errorf("%s: the tools page does not name them credentials", lang)
-		}
-	}
-}

@@ -257,7 +257,7 @@ func TestVendorPageThenConnect(t *testing.T) {
 func TestAccessChoiceMapsToPolicy(t *testing.T) {
 	tw, c, f, csrf := pendingWeb(t)
 	form := oauthToolForm(f) // its tool "search" is read-only
-	form.Set("access", "read")
+	form.Set("access", accessReads)
 	authURL := startConnectForm(t, tw, csrf, "/settings/tools", form)
 	code, state := f.authorize(authURL)
 	callback(t, tw, "code="+code+"&state="+url.QueryEscape(state))
@@ -354,7 +354,7 @@ func TestMailProviderForms(t *testing.T) {
 		}
 	}
 	post := func(name, provider, address string, extra url.Values) (int, string, http.Header) {
-		form := url.Values{"preset": {"mail"}, "name": {name}, "use": {"mails"}, "access": {"read"}, "mail_provider": {provider},
+		form := url.Values{"preset": {"mail"}, "name": {name}, "use": {"mails"}, "access": {accessReads}, "mail_provider": {provider},
 			"address": {address}, "password": {"abcd efgh ijkl mnop"}}
 		for k, v := range extra {
 			form[k] = v
@@ -439,7 +439,7 @@ func TestMailProviderForms(t *testing.T) {
 // Another mailbox on an edit: the old password is not reused.
 func TestMailSwitchNeedsPassword(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
-	form := url.Values{"preset": {"mail"}, "name": {"mail"}, "use": {"mails"}, "access": {"read"}, "mail_provider": {"gmail"},
+	form := url.Values{"preset": {"mail"}, "name": {"mail"}, "use": {"mails"}, "access": {accessReads}, "mail_provider": {"gmail"},
 		"address": {"sam@gmail.com"}, "password": {"gmail-pw"}}
 	if code, _, h := tw.post("/settings/tools", form, csrf); code != 200 || h.Get("HX-Redirect") == "" {
 		t.Fatal("add")
@@ -520,7 +520,7 @@ func TestCalendarProviderForms(t *testing.T) {
 		t.Fatal("iCloud asks for an address")
 	}
 	post := func(name, provider string, extra url.Values) string {
-		form := url.Values{"preset": {"calendar"}, "name": {name}, "use": {"agenda"}, "access": {"read"}, "cal_provider": {provider},
+		form := url.Values{"preset": {"calendar"}, "name": {name}, "use": {"agenda"}, "access": {accessReads}, "cal_provider": {provider},
 			"cal_user": {"sam@icloud.com"}, "password": {"pw"}, "timezone": {"Europe/Paris"}}
 		for k, v := range extra {
 			form[k] = v
@@ -570,7 +570,7 @@ func TestAdvancedOptionsStillWork(t *testing.T) {
 		!strings.Contains(adv, `value="https://api.githubcopilot.com/mcp/"`) || strings.Contains(main, `name="trust"`) {
 		t.Fatalf("github form: %s", main)
 	}
-	gh := url.Values{"preset": {"github"}, "name": {"github"}, "use": {"GitHub"}, "access": {"read"}, "kind": {"remote"},
+	gh := url.Values{"preset": {"github"}, "name": {"github"}, "use": {"GitHub"}, "access": {accessReads}, "kind": {"remote"},
 		"url": {"https://ghe.example.com/mcp/"}, "auth": {"bearer"}, "token": {"github_pat_x"}, "timeout": {"30"}}
 	if code, body, h := tw.post("/settings/tools", gh, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=github&tool=github&new=1" {
 		t.Fatalf("github save: %d %s", code, body)

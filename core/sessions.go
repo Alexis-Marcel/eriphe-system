@@ -228,7 +228,7 @@ func writeScopes(rs []ResourceRef) []string {
 		switch r.Kind {
 		case resRepo:
 			out = append(out, "repo:"+strings.ToLower(r.Ref)+"@"+r.Branch)
-		case resFolder, resPlace, resDriveFolder:
+		case resFolder, resPlace:
 			out = append(out, r.key())
 		}
 	}

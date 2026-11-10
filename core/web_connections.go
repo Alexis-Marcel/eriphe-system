@@ -19,12 +19,6 @@ func (w *web) connectionRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/connections/{provider}", w.auth(w.handleConnectionPage))
 	mux.Handle("POST /settings/connections/{provider}/connect", w.auth(w.handleConnectionConnect))
 	mux.Handle("POST /settings/connections/{provider}/remove", w.auth(w.handleConnectionRemove))
-	// The pages before connections, kept as addresses.
-	for _, old := range oldConnectionPages { // legacy.go
-		mux.HandleFunc("GET "+old, func(rw http.ResponseWriter, r *http.Request) {
-			http.Redirect(rw, r, "/settings/tools", http.StatusMovedPermanently)
-		})
-	}
 }
 
 // connectionBacks are the pages a sign-in may go back to.

@@ -125,7 +125,7 @@ fresh one with the context pack. Its runtime must take MCP servers and a system 
 
 **Credentials.** A credential (FR « identifiant ») is what a real program in a task uses with a
 secret: a package registry, an API with a key. It is declared in Settings → Tools (Credentials,
-`/settings/credentials`; the former `/settings/accesses` redirects) or under `accesses`, and lent
+`/settings/credentials`) or under `accesses`, and lent
 as a resource, `{"kind": "access", "ref": "npm"}`; `list_tools` shows them to the brain. The file,
 the API and the store still call them accesses; the word "access" in the workspace is for the ways
 into Eriphe (Settings → Access).
@@ -1115,7 +1115,7 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 |---|---|---|---|
 | `repo` | `owner/name` on GitHub, or a git URL; `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` | cloned into `/work/repo`; [credentials](#github-in-a-task) for it; its skills if it is the user's own or trusted (below); one per task |
 | `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
-| `place` | a tool's place (a Google Drive folder), by name; `drive-folder` is read as `place` | `read`, `drop` (at most the place's own) | its tool whole (it reaches every place given to Eriphe, each with its own access) |
+| `place` | a tool's place (a Google Drive folder), by name | `read`, `drop` (at most the place's own) | its tool whole (it reaches every place given to Eriphe, each with its own access) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
 
 The access defaults to `read` (for a tool, to what its annotations say). Each entry is checked
@@ -1627,8 +1627,7 @@ own: the Google, Gmail, Google Calendar and Google Drive tiles are connection pr
 card of the tools list ([above](#connections)). The user's own Google app
 ([below](#your-own-google-app)) is set up once for every service and every account on its
 [app page](#connection-apps), `/settings/apps/google`, whose guide turns the three APIs on with one
-link (Gmail, CalDAV, Drive) and gives the scopes and the redirect URI to copy. `/settings/google`
-and `/settings/drive`, the pages before, send to Settings → Tools.
+link (Gmail, CalDAV, Drive) and gives the scopes and the redirect URI to copy.
 
 | Service | Scope | Server |
 |---|---|---|
@@ -1989,7 +1988,7 @@ environment and the key of the list in it; eriphe-files keeps them as `folders` 
 `FILES_CONFIG`), so it is found by having places, never by its name, and an install's folders are
 its places as they are, with no migration. The tool browses them with a setup tool
 (`eriphe/setup`, never given to a task). Lent to a task as `{kind: place}`, a place lends its whole
-tool. `{kind: drive-folder}`, the name before, is read as a place for good.
+tool.
 
 **Its page.** Settings → Tools → the tool → Lieux (`/settings/tools/{name}/places`,
 `web_places.go`) lists the places given, each read or read and drop, to change or take back, and
@@ -2131,7 +2130,7 @@ work on it is an extra (a node that reports runtimes). Settings → Appareils sh
 first what Eriphe sees there (its Folders, with their right, or "Rien d'ouvert" and a link to share
 one), then what it can do there ("Faire travailler des agents", oui or non, its system, its CPUs,
 memory, runtimes and labels), then its status and update, as before (`web_pages.go`,
-`web_devices.go`). The addresses under `/settings/machines` still lead there.
+`web_devices.go`).
 
 **Access log.** eriphe-core records what it did on each device (`node_access.go`, `node_log`
 table): a folder listed (`list`, with `share:/path`), a folder opened or closed (`share`,
@@ -2251,11 +2250,7 @@ The settings come in four groups: Assistant (the memory, "Ce que Jarvis sait de 
 `/memory`, the agents, the skills), Connexions (tools, folders), Appareils & accès
 (devices, access, notifications) and Mon espace (account, the Journal, À valider); an entry is marked
 when it needs a look (an update, a tool in error, a refused key). On a phone the settings say the
-way back, "‹ Conversation". The pages that moved keep their addresses as redirects:
-`/settings/happened` and `/activity` lead to the Journal, `/activity/approve` and
-`/memory?view=inbox` to À valider, `/settings/where` to its section of Notifications, and
-`/settings/remote` and `/settings/channels` to Access, whose sections (`#web`, `#app`, `#telegram`,
-and `/settings/notifications#push` and `#telegram`) lead, in the browser, to each access's page.
+way back, "‹ Conversation".
 **Access** (`/settings/access`, `web_access_list.go`, `access.html`) lists every way into the
 assistant, one row each as the tools are listed: the web workspace and the mobile app always, then
 each adapter once set up (Telegram, its bot), then the API accesses. Each row says who speaks through it, what it
@@ -2827,8 +2822,7 @@ or the time, the skill's instructions say what to do, and its run tells the user
 message. The brief, the return point and the weekly review are skills too (`when: time daily
 08:00`, `when: user.returned`), whose runs read what happened with `since` (`t: last_run`). An
 incoming address (`incoming_hooks.go`), made in Settings → Skills, lets any system tell
-something: `POST https://<workspace>/hooks/in/<token>` (the former `/hooks/alert/<token>` still
-works), named (the key of its `hook.received` events, with the body's `status` when it is a short
+something: `POST https://<workspace>/hooks/in/<token>`, named (the key of its `hook.received` events, with the body's `status` when it is a short
 word: `when: hook.received key=getout status=firing`), signed with an HMAC-SHA256 secret if asked (in the vault,
 `alert-hook-<id>`), read from the header the user names for that address (`X-Eriphe-Signature`
 by default; `X-Hub-Signature-256` for GitHub, `X-Grafana-Alerting-Signature` for Grafana; an

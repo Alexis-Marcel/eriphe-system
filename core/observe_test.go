@@ -49,9 +49,4 @@ func TestDevicesShowPresence(t *testing.T) {
 	if !strings.Contains(body, "inactive (10 min)") || !strings.Contains(body, "ne pas déranger") {
 		t.Errorf("the page lacks the machine's state")
 	}
-	for _, old := range []string{"/settings/context", "/settings/observe"} {
-		if code, _, h := tw.do("GET", old, nil, nil); code != 303 || h.Get("Location") != "/settings/devices" {
-			t.Errorf("%s: %d %s", old, code, h.Get("Location"))
-		}
-	}
 }

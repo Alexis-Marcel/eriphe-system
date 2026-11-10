@@ -283,25 +283,25 @@ func TestWebUpdates(t *testing.T) {
 	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true,"status":{"id":"u-1","outcome":"rolled_back","message":"eriphe-node did not connect","to":"0.0.2","at":"2026-10-28T03:10:00Z"}}}`)
 	setNode(t, tw.c, "nas", `{"os":"linux","version":"0.0.1"}`)
 
-	_, body, _ := tw.do("GET", "/settings/machines", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	for _, want := range []string{"Mises à jour", "Mettre à jour automatiquement la nuit", "Mise à jour disponible",
 		"La mise à jour a échoué, version précédente remise", "eriphe-node did not connect",
 		`value="node:pc"`, "docker compose pull &amp;&amp; docker compose up -d", "--rollback"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("GET /settings/machines lacks %q", want)
+			t.Errorf("GET /settings/devices lacks %q", want)
 		}
 	}
 	for _, gone := range []string{"Me prévenir", "Jamais", "Comme les autres", "Revenir à la version précédente", `value="node:nas"`,
 		"curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s</pre>"} {
 		if strings.Contains(body, gone) {
-			t.Errorf("GET /settings/machines still has %q", gone)
+			t.Errorf("GET /settings/devices still has %q", gone)
 		}
 	}
 
 	if code, _, _ := tw.do("POST", "/settings/updates/night", url.Values{"night": {"1"}}, h); code != 200 || !tw.c.nightUpdates() {
 		t.Fatalf("switch on: %d", code)
 	}
-	if _, body, _ = tw.do("GET", "/settings/machines", nil, nil); !strings.Contains(body, `role="switch" name="night" value="1" hx-post="/settings/updates/night" hx-trigger="change" checked`) {
+	if _, body, _ = tw.do("GET", "/settings/devices", nil, nil); !strings.Contains(body, `role="switch" name="night" value="1" hx-post="/settings/updates/night" hx-trigger="change" checked`) {
 		t.Error("the switch does not show on")
 	}
 	if tw.do("POST", "/settings/updates/night", url.Values{}, h); tw.c.nightUpdates() {
@@ -312,7 +312,7 @@ func TestWebUpdates(t *testing.T) {
 	if r := tw.c.pendingUpdate("node:pc"); r == nil || r.Auto || r.Action != "update" || !strings.Contains(body, `id="device-foot-pc"`) {
 		t.Fatalf("update now: %+v %v\n%s", r, hdr, body)
 	}
-	_, body, _ = tw.do("GET", "/settings/machines", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
 	if !strings.Contains(body, "Mise à jour demandée") {
 		t.Error("the request does not show")
 	}
@@ -391,10 +391,10 @@ func TestMachineSystem(t *testing.T) {
 	if len(nodes) != 2 || nodes[0].OS != "darwin" || nodes[0].Arch != "arm64" || nodes[0].Install != "macos" || nodes[1].OS != "linux" {
 		t.Fatalf("nodes = %+v", nodes)
 	}
-	_, body, _ := tw.do("GET", "/settings/machines", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	for _, want := range []string{"macOS (Apple container)", "Linux (Docker Compose)"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("GET /settings/machines lacks %q", want)
+			t.Errorf("GET /settings/devices lacks %q", want)
 		}
 	}
 }

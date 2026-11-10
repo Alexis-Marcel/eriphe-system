@@ -225,7 +225,7 @@ func safePlan(steps []stepSpec) bool {
 					return false
 				}
 			case "tool":
-			case "folder", "place", "drive-folder":
+			case "folder", "place":
 				if rr.Access != "" && rr.Access != "read" {
 					return false
 				}

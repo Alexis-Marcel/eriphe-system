@@ -290,7 +290,7 @@ func TestWebUpdateNotice(t *testing.T) {
 	tw.c.store.setNodeStatus("nas", true, []byte(`{"version":"0.3.0"}`))
 
 	// No answer from the registry yet: nothing.
-	for _, path := range []string{"/settings/machines", "/settings/account"} {
+	for _, path := range []string{"/settings/devices", "/settings/account"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, "Mise à jour disponible") {
 			t.Errorf("GET %s tells of a new version before any check", path)
 		}
@@ -299,7 +299,7 @@ func TestWebUpdateNotice(t *testing.T) {
 	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
 	tw.c.updates = newUpdates(f.srv.URL)
 	tw.c.updates.check(context.Background())
-	_, body, _ := tw.do("GET", "/settings/machines", nil, nil)
+	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	// eriphe-core and pc are behind, neither has an updater: one command each, for its system.
 	if n := strings.Count(body, `<span class="update-available" title=`); n != 2 {
 		t.Errorf("%d machines told to update, want eriphe-core and pc", n)
@@ -307,7 +307,7 @@ func TestWebUpdateNotice(t *testing.T) {
 	for _, want := range []string{"Mise à jour disponible", "0.3.0", "curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s<",
 		"docker compose pull &amp;&amp; docker compose up -d", `class="new-dot"`} {
 		if !strings.Contains(body, want) {
-			t.Errorf("GET /settings/machines lacks %q", want)
+			t.Errorf("GET /settings/devices lacks %q", want)
 		}
 	}
 	if strings.Contains(body, "install.ps1 | iex") {
@@ -323,7 +323,7 @@ func TestWebUpdateNotice(t *testing.T) {
 	// A local build never claims to be behind.
 	version = "dev"
 	tw.c.store.setNodeStatus("pc", true, []byte(`{"version":"0.3.0"}`))
-	for _, path := range []string{"/", "/settings/machines", "/settings/account"} {
+	for _, path := range []string{"/", "/settings/devices", "/settings/account"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, "new-dot") || strings.Contains(body, "update-available") {
 			t.Errorf("GET %s tells of a new version with everything up to date", path)
 		}

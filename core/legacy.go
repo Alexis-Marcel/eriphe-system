@@ -24,7 +24,3 @@ var legacyProvider = providerGoogle
 
 // signInProvider is the provider a files account is signed in at.
 func (a filesAccount) signInProvider() string { return cmpOr(a.Provider, legacyProvider.Name) }
-
-// oldConnectionPages are the pages before connections, kept as addresses
-// that lead to Settings → Tools.
-var oldConnectionPages = []string{"/settings/google", "/settings/drive"}

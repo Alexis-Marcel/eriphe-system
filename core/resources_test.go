@@ -44,7 +44,7 @@ func TestNormalizeResources(t *testing.T) {
 	for name, r := range map[string]runRequest{
 		"is not one of":              {Resources: []ResourceRef{{Kind: "mailbox", Ref: "x"}}},
 		"ref is required":            {Resources: []ResourceRef{{Kind: "folder"}}},
-		"takes access read or drop":  {Resources: []ResourceRef{{Kind: "drive-folder", Ref: "Clients", Access: "write"}}},
+		"takes access read or drop":  {Resources: []ResourceRef{{Kind: "place", Ref: "Clients", Access: "write"}}},
 		"takes access read or write": {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Access: "drop"}}},
 		"a repo's only":              {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", Branch: "x"}}},
 		"trust_skills are a repo":    {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", TrustSkills: true}}},
@@ -104,8 +104,8 @@ func TestResolveFolders(t *testing.T) {
 	if len(l.List) != 1 || l.List[0].Access != accessDrop {
 		t.Fatalf("merged %+v", l.List)
 	}
-	// A place lends its tool; drive-folder is read as a place.
-	for _, kind := range []string{resPlace, resDriveFolder} {
+	// A place lends its tool.
+	for _, kind := range []string{resPlace} {
 		l, err = c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: kind, Ref: "devis", Access: accessDrop}}})
 		if err != nil || len(l.Grant) != 1 || l.Grant[0] != filesServer || l.List[0].Ref != "Devis" || l.List[0].Kind != resPlace || len(l.Folders) != 0 {
 			t.Fatalf("%s: %+v %v", kind, l, err)
@@ -211,7 +211,7 @@ func TestTaintedResources(t *testing.T) {
 	withDrive(t, c, DriveFolder{Name: "Factures", ID: "d1", Access: folderRead})
 	c.conf().User = "Sam"
 	refused := []runRequest{
-		{Resources: []ResourceRef{{Kind: resDriveFolder, Ref: "Factures"}}},
+		{Resources: []ResourceRef{{Kind: resPlace, Ref: "Factures"}}},
 		{Resources: []ResourceRef{{Kind: resRepo, Ref: "someone/tool", TrustSkills: true}}},
 	}
 	allowed := []runRequest{

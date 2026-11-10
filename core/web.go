@@ -183,17 +183,13 @@ func (w *web) routes() http.Handler {
 	mux.Handle("GET /settings", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
 		w.render(rw, r, s, "settings", "", page{Title: "settings.title", Nav: "settings", View: "index"})
 	}))
-	w.deviceRoutes(mux)                                            // web_devices.go
-	mux.Handle("GET /settings/machines", w.auth(w.handleMachines)) // its address before devices
-	mux.Handle("POST /settings/machines/join", w.auth(w.handleJoinCommand))
+	w.deviceRoutes(mux) // web_devices.go
 	mux.Handle("POST /settings/updates/night", w.auth(w.handleNightUpdates))
 	mux.Handle("POST /settings/updates/request", w.auth(w.handleUpdateNow))
 	mux.Handle("GET /settings/updates/core", w.auth(w.handleUpdateState))
 	mux.Handle("GET /settings/updates/all", w.auth(w.handleUpdateAllButton))
 	mux.Handle("POST /settings/updates/all", w.auth(w.handleUpdateAll))
 	mux.Handle("POST /settings/updates/check", w.auth(w.handleCheckUpdates))
-	mux.Handle("POST /settings/machines/{name}/forget", w.auth(w.handleForget))
-	mux.Handle("POST /settings/machines/{name}/rejoin", w.auth(w.handleRejoinCommand))
 	w.accessRoutes(mux) // web_access_list.go
 	w.agentRoutes(mux)  // web_agents.go
 	mux.Handle("GET /settings/tools", w.auth(w.handleTools))
@@ -205,7 +201,6 @@ func (w *web) routes() http.Handler {
 	mux.Handle("GET /settings/tools/{name}/edit", w.auth(w.handleEditTool))
 	mux.Handle("POST /settings/tools/{name}", w.auth(w.handleSaveTool))
 	mux.Handle("POST /settings/tools/{name}/delete", w.auth(w.handleDeleteTool))
-	mux.Handle("GET /settings/tools/{name}/added", w.auth(w.handleToolAdded)) // web_tools_dialog.go
 	mux.Handle("GET /settings/tools/{name}/row", w.auth(w.handleToolRow))
 	mux.Handle("GET /settings/tools/{name}/access", w.auth(w.handleToolAccess)) // web_access.go
 	mux.Handle("POST /settings/tools/{name}/access", w.auth(w.handleSaveToolAccess))
@@ -213,14 +208,6 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /settings/tools/{name}/trust", w.auth(w.handleToolTrust)) // tool_trust.go
 	mux.Handle("POST /settings/web", w.auth(w.handleWebValue))                 // web_lent_access.go
 	mux.Handle("GET /settings/credentials/new", w.auth(w.handleNewAccess))     // web_lent_access.go
-	// Their former address, from before they were called credentials.
-	mux.HandleFunc("GET /settings/accesses/{rest...}", func(rw http.ResponseWriter, r *http.Request) {
-		u := "/settings/credentials/" + r.PathValue("rest")
-		if r.URL.RawQuery != "" {
-			u += "?" + r.URL.RawQuery
-		}
-		http.Redirect(rw, r, u, http.StatusMovedPermanently)
-	})
 	mux.Handle("GET /settings/credentials/{name}/edit", w.auth(w.handleEditAccess))
 	mux.Handle("POST /settings/credentials", w.auth(w.handleSaveAccess))
 	mux.Handle("POST /settings/credentials/{name}", w.auth(w.handleSaveAccess))
@@ -228,10 +215,6 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /settings/credentials/{name}/test", w.auth(w.handleTestAccess))
 	mux.Handle("POST /settings/tool-test", w.auth(w.handleTestTool))
 	mux.Handle("POST /settings/tool-test/{name}", w.auth(w.handleTestTool))
-	// The vault and the tools were one page: its address leads to the tools.
-	mux.Handle("GET /settings/accounts", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
-		http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther)
-	}))
 	mux.Handle("POST /settings/secrets", w.auth(w.handleSetSecret))
 	mux.Handle("POST /settings/secrets/import", w.auth(w.handleImportSecret))
 	mux.Handle("POST /settings/secrets/{name}/delete", w.auth(w.handleDeleteSecret))

@@ -179,10 +179,6 @@ func (w *web) memoryCounts(p *memoryPage) {
 
 func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) {
 	q := r.URL.Query()
-	if q.Get("view") == "inbox" { // the proposals moved to « À valider »
-		http.Redirect(rw, r, "/settings/approve", http.StatusSeeOther)
-		return
-	}
 	p := memoryPage{View: q.Get("view"), Q: strings.TrimSpace(q.Get("q")), Kind: q.Get("kind"), Subject: strings.TrimSpace(q.Get("subject")),
 		Past: q.Get("past") == "1", Kinds: memoryKinds, Budget: profileBudget}
 	if !containsStr(memoryViews, p.View) {

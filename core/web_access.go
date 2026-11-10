@@ -18,12 +18,10 @@ import (
 // their allowed actions the workspace's. Its connection has its form, or
 // a page of its own.
 
-// formAccess reads the access level a form posted: one of the levels;
-// "read" was the older forms' "reads free", and "trust" the API's.
+// formAccess reads the access level a form posted: one of the levels, or
+// the API's "trust" for reads free.
 func formAccess(v string, trust bool) string {
 	switch {
-	case v == "read":
-		return accessReads
 	case v != "" && validAccess(v):
 		return v
 	case trust:

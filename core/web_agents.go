@@ -835,9 +835,6 @@ func readSelfHostedForm(r *http.Request, pp *providerPost) {
 	f.Where, f.Node = r.PostFormValue("where"), r.PostFormValue("node")
 	ticked := postedTicks(r)
 	f.Picker = modelPicker{Manual: r.PostFormValue("models"), Picks: pickModels(pp.usedModels, ticked, f.Edit, nil)}
-	if ticked == nil {
-		ticked = r.PostForm["model"] // without the list's marker, as an older page posts
-	}
 	pp.p.Models = modelLines(strings.Join(append(slices.Clone(ticked), f.Picker.Manual), "\n"))
 	if f.Where == whereNode {
 		pp.p.Node = f.Node

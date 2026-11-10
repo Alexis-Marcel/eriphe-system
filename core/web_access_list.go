@@ -165,13 +165,6 @@ func (w *web) accessRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/access/api/{id}", w.auth(w.handleAPISet))
 	mux.Handle("POST /settings/access/api/{id}/token", w.auth(w.handleAPIToken))
 	mux.Handle("POST /settings/access/api/{id}/remove", w.auth(w.handleAPIRemove))
-	// Where these pages were before, in links already shared.
-	for from, to := range map[string]string{"/settings/remote": "/settings/access", "/settings/channels": "/settings/access",
-		"/settings/home-assistant": "/settings/tools"} {
-		mux.HandleFunc("GET "+from, func(rw http.ResponseWriter, r *http.Request) {
-			http.Redirect(rw, r, to, http.StatusMovedPermanently)
-		})
-	}
 }
 
 func (w *web) accessRender(rw http.ResponseWriter, r *http.Request, s *session, view string, data any) {

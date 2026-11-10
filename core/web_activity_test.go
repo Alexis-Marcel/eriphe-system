@@ -8,34 +8,6 @@ import (
 	"time"
 )
 
-// The pages that moved lead to their new place, with what the address
-// carried: links in sent notifications, in the brain's messages and to the
-// old Activité tab keep working.
-func TestActivityRedirects(t *testing.T) {
-	tw := newTestWeb(t)
-	tw.setup()
-	for from, to := range map[string]string{
-		"/settings/happened":                      "/settings/journal",
-		"/settings/happened?range=week&kind=task": "/settings/journal?range=week&kind=task",
-		"/activity":             "/settings/journal",
-		"/activity?kind=access": "/settings/journal?kind=access",
-		"/activity/approve":     "/settings/approve",
-		"/settings/where":       "/settings/notifications#where",
-		"/memory?view=inbox":    "/settings/approve",
-	} {
-		code, _, h := tw.do("GET", from, nil, nil)
-		if code != http.StatusSeeOther || h.Get("Location") != to {
-			t.Errorf("GET %s: %d to %q, want %q", from, code, h.Get("Location"), to)
-		}
-	}
-	// The addresses that stayed still answer.
-	for _, path := range []string{"/settings/notifications?n=1", "/settings/devices"} {
-		if code, _, _ := tw.do("GET", path, nil, nil); code != 200 {
-			t.Errorf("GET %s: %d", path, code)
-		}
-	}
-}
-
 // The Journal is a discreet entry of the settings, no longer a tab of the
 // main navigation: its feed filters by kind and period, and the tool
 // accesses are the decisions' journal, paged.

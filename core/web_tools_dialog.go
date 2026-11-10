@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -118,17 +117,6 @@ func (w *web) toolSaved(rw http.ResponseWriter, r *http.Request, name, kind stri
 	rw.Header().Set("HX-Trigger", hxEvents(map[string]any{"tool-saved": ev}))
 	rw.Header().Set("HX-Reswap", "none")
 	rw.WriteHeader(http.StatusOK)
-}
-
-// handleToolAdded (GET /settings/tools/{name}/added) is the older way
-// back after a save: the list, with the tool's row followed.
-func (w *web) handleToolAdded(rw http.ResponseWriter, r *http.Request, s *session) {
-	name := r.PathValue("name")
-	if w.c.source(kindServer, name) == "" {
-		http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther)
-		return
-	}
-	http.Redirect(rw, r, "/settings/tools?tool="+url.QueryEscape(name), http.StatusSeeOther)
 }
 
 // toolStatus is the line that follows a tool just saved, in its row:

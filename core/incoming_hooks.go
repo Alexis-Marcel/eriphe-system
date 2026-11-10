@@ -29,7 +29,6 @@ import (
 // top-level "status" when it has one (firing, resolved: Grafana's and
 // Alertmanager's convention, as many others) and the body as detail. A
 // skill reacts to them (when: hook.received key=getout status=firing).
-// /hooks/alert/<token>, the former path, still works.
 //
 // The token is 32 random bytes, shown once in Settings → Skills; only its
 // hash is kept. A signed hook also checks the body's HMAC-SHA256 with a
@@ -46,7 +45,6 @@ const (
 	alertDetailMax = 4000
 	alertPerHour   = 60
 	hookPath       = "/hooks/in/"
-	hookPathOld    = "/hooks/alert/"
 	urgentTextMax  = 160
 
 	notifyFromUrgent = "urgent" // a skill's fixed urgent text (skill_cards.go)

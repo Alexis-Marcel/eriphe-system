@@ -17,7 +17,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 	for _, tc := range []struct{ path, tab, up string }{ // up: a sub-page's page
 		{"/memory", "memory", ""},
 		{"/settings/devices", "devices", ""},
-		{"/settings/machines", "devices", ""},
+		{"/settings/devices", "devices", ""},
 		{"/settings/agents", "agents", ""},
 		{"/settings/agents/new", "agents", "/settings/agents"},
 		{"/settings/providers/new", "agents", "/settings/agents"},

@@ -34,11 +34,10 @@ import (
 
 // The kinds of resources.
 const (
-	resRepo        = "repo"
-	resFolder      = "folder"
-	resDriveFolder = "drive-folder" // read as a place (places.go)
-	resTool        = "tool"
-	resAccess      = "access"
+	resRepo   = "repo"
+	resFolder = "folder"
+	resTool   = "tool"
+	resAccess = "access"
 )
 
 // accessDrop is the middle of the scale (accessRead and accessWrite are in
@@ -79,7 +78,7 @@ type ResourceRef struct {
 // key tells two entries for the same thing apart from different ones.
 func (r ResourceRef) key() string {
 	switch r.Kind {
-	case resFolder, resPlace, resDriveFolder:
+	case resFolder, resPlace:
 		return r.Kind + "|" + strings.ToLower(r.Ref)
 	}
 	return r.Kind + "|" + r.Ref
@@ -106,9 +105,6 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 			Access: strings.ToLower(strings.TrimSpace(in.Access)),
 			Branch: strings.TrimSpace(in.Branch), Base: strings.TrimSpace(in.Base), Dir: strings.TrimSpace(in.Dir),
 			TrustSkills: in.TrustSkills, Hold: in.Hold}
-		if e.Kind == resDriveFolder {
-			e.Kind = resPlace
-		}
 		rights, ok := resourceKinds[e.Kind]
 		if !ok {
 			return nil, fmt.Errorf("resource %d: kind %q is not one of repo, folder, place, tool, access", i+1, in.Kind)

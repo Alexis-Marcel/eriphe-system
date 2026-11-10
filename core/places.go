@@ -21,8 +21,7 @@ import (
 //
 // A place is lent to a task as {kind: place, ref: <its name>}; lending a
 // place lends its whole tool, which reaches every place given to Eriphe,
-// each with its own access. {kind: drive-folder} is read as a place, for
-// good: tasks and skills written before places name it so.
+// each with its own access.
 
 const resPlace = "place"
 
