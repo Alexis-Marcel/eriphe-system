@@ -2,7 +2,7 @@ package main
 
 import "testing"
 
-// guessMailProvider reads the provider of the well-known domains only.
+// The mail card guesses the provider of the well-known domains only.
 func TestGuessMailProvider(t *testing.T) {
 	for in, want := range map[string]string{
 		"sam@gmail.com":        "gmail",
@@ -24,8 +24,8 @@ func TestGuessMailProvider(t *testing.T) {
 		"no-domain":            "",
 		"":                     "",
 	} {
-		if got := guessMailProvider(in); got != want {
-			t.Errorf("guessMailProvider(%q) = %q, want %q", in, got, want)
+		if got := mailShape.guess(in); got != want {
+			t.Errorf("guess(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

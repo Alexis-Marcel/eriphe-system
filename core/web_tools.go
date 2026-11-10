@@ -359,13 +359,12 @@ type toolForm struct {
 	Node, Needs, Prefers, User         string
 	Volume, Egress, Writable           bool
 	Env                                []envRow
-	// Mail and calendar: the kind of account comes first (Choose), then
-	// its own form. Account is the account edited, in its service's
-	// server (accounts.go).
+	// An account of a tool with a card (account_forms.go): the kind of
+	// account comes first (Choose), then its own form. Account is the
+	// account edited, in its service's server (accounts.go).
 	Account   string
-	Mail      mailForm
-	Calendar  calendarForm
-	SecretSet bool // their password is set
+	Acct      accountForm
+	SecretSet bool // its password is set
 	Choose    bool // the kind of account is to be picked
 	Switched  bool // an edit moved to another account: a new password is needed
 	// GitHub: Eriphe's app or a personal token comes first (Choose); Way
@@ -421,9 +420,43 @@ func (w *web) reauthLevels(name string, s Server) []string {
 	return out
 }
 
-// IsAccount tells the form of a mailbox or a calendar account: an account
+// IsAccount tells the form of an account of a tool with a card: an account
 // of its service's one server, without a name or a use of its own.
-func (f toolForm) IsAccount() bool { return f.Preset.Form == "mail" || f.Preset.Form == "calendar" }
+func (f toolForm) IsAccount() bool { return f.Preset.Form == "account" }
+
+// Card is the card of the tool an account form is of.
+func (f toolForm) Card() toolCard {
+	card, _ := serviceByID(f.Preset.Card)
+	return card
+}
+
+// Shape is how an account form is made; nil for another form.
+func (f toolForm) Shape() *accountShape {
+	if !f.IsAccount() {
+		return nil
+	}
+	return f.Card().Account
+}
+
+// Choice is the kind of account picked, and Choices the ones offered.
+func (f toolForm) Choice() accountChoice { c, _ := f.Shape().choice(f.Acct.Choice); return c }
+func (f toolForm) Choices() []accountChoice {
+	if s := f.Shape(); s != nil {
+		return s.offered()
+	}
+	return nil
+}
+
+// Fields are the fields of the account's choice, the advanced ones apart;
+// Options the server's options the form sets (accountShape.Server).
+func (f toolForm) Fields(advanced bool) []accountField { return f.Shape().fields(f.Choice(), advanced) }
+func (f toolForm) Options() []accountField             { return f.Shape().Server }
+
+// Fill fills a pattern of the shape's words with a choice: "mailp.%s.note".
+func (f toolForm) Fill(pattern, choice string) string { return fill(pattern, choice) }
+
+// SignInPage is where a choice signed in at a provider is connected.
+func (c accountChoice) SignInPage(card string) string { return connectPage(c.SignIn, card) }
 
 // Title is what an edit's form is of: the account, or the tool.
 func (f toolForm) Title() string { return cmpOr(f.Account, f.Name) }
@@ -440,34 +473,27 @@ func (f toolForm) PickURL() string {
 }
 
 // PickKind names the choice the form starts with, for its words
-// (pick.<kind>.*): mail, calendar, or github (the app or a token).
+// (pick.<kind>.*): the tool's kind (mail, calendar), or github (the app or
+// a token).
 func (f toolForm) PickKind() string {
 	if f.Preset.ID == "github" {
 		return "github"
 	}
-	return f.Preset.Form
+	return f.Preset.Card
 }
 
 // Picked is what was picked from that choice, if anything.
 func (f toolForm) Picked() string {
-	switch {
-	case f.Way != "":
+	if f.Way != "" {
 		return f.Way
-	case f.Preset.Form == "calendar":
-		return f.Calendar.Provider
 	}
-	return f.Mail.Provider
+	return f.Acct.Choice
 }
-
-// MailChoices and CalChoices are the kinds of account offered.
-func (f toolForm) MailChoices() []mailChoice {
-	return slices.DeleteFunc(slices.Clone(mailChoices), func(c mailChoice) bool { return c.Hidden })
-}
-func (f toolForm) CalChoices() []calChoice { return calChoices }
 
 // Testable tells whether "Test the connection" says something useful: not
-// for a vendor's OAuth service, whose sign-in is the test.
-func (f toolForm) Testable() bool { return !f.Preset.Vendor() }
+// for a vendor's OAuth service, whose sign-in is the test, nor for an
+// account, which its server tests once saved (web_tools_dialog.go).
+func (f toolForm) Testable() bool { return !f.Preset.Vendor() && !f.IsAccount() }
 
 // serviceTitle is how the form and the flash name an OAuth service: the
 // title of the preset it comes from, else "" (the tool's own name is used).
@@ -496,11 +522,11 @@ func newToolForm(lang string, p toolPreset) toolForm {
 	if k := "preset." + p.ID + ".use"; tr(lang, k) != k {
 		f.Use = tr(lang, k)
 	}
-	if p.Form == "calendar" {
-		f.Calendar = calendarForm{Timezone: "Europe/Paris"}
-	}
-	if p.Form == "mail" || p.Form == "calendar" {
-		f.Kind = "local"
+	if f.IsAccount() {
+		f.Kind, f.Acct.Values = "local", map[string]string{}
+		for _, o := range f.Options() {
+			f.Acct.Values[o.Name] = o.Default
+		}
 	}
 	f.Env = padEnv(nil)
 	return f
@@ -566,16 +592,14 @@ func readToolForm(r *http.Request) toolForm {
 		Image: v("image"), Transport: v("transport"), Port: v("port"), Path: v("path"), Args: r.PostFormValue("args"),
 		Node: v("node"), Needs: v("needs"), Prefers: v("prefers"), User: v("user"),
 		Volume: on("volume"), Egress: on("egress"), Writable: on("writable"),
-		Mail: mailForm{Address: v("address"), Provider: v("mail_provider"), IMAPHost: v("imap_host"), SMTPHost: v("smtp_host"),
-			IMAPPort: v("imap_port"), SMTPPort: v("smtp_port"), Username: v("mail_user")},
-		Calendar: calendarForm{Provider: v("cal_provider"), URL: v("cal_url"), Username: v("cal_user"), Timezone: v("timezone")},
-		Account:  v("account")}
+		Account: v("account")}
 	f.Access = formAccess(v("access"), on("trust"))
 	f.InDialog = on("dialog")
 	if slug := slugName(f.Name); slug != "" {
 		f.Name = slug
 	}
 	f.Preset, _ = presetByID(v("preset"))
+	f.Acct = readAccountForm(f.Shape(), v)
 	n, _ := strconv.Atoi(r.PostFormValue("env_count"))
 	for i := 0; i < min(n, 50); i++ {
 		name := v(fmt.Sprintf("env_name_%d", i))
@@ -748,30 +772,25 @@ func pickAccount(f *toolForm, provider string) {
 		}
 		return
 	}
-	switch f.Preset.Form {
-	case "mail":
-		c, ok := mailChoiceByID(provider)
-		switch {
-		case ok && !c.Soon && !c.Hidden && c.Page == "":
-			if f.Edit && c.ID != f.Mail.Provider {
-				f.Mail, f.SecretSet, f.Switched = mailForm{Address: f.Mail.Address, Provider: c.ID}, false, true
+	s := f.Shape()
+	if s == nil {
+		return
+	}
+	c, ok := s.choice(provider)
+	switch {
+	case ok && !c.Soon && !c.Hidden && c.SignIn == "":
+		if f.Edit && c.ID != f.Acct.Choice {
+			// Another kind of account: its login and the server's options
+			// stay, a new password is needed.
+			keep := map[string]string{s.NameBy: f.Acct.Values[s.NameBy]}
+			for _, o := range s.Server {
+				keep[o.Name] = f.Acct.Values[o.Name]
 			}
-			f.Mail.Provider = c.ID
-		case provider == "choose" || !f.Edit:
-			f.Choose = true
+			f.Acct.Values, f.SecretSet, f.Switched = keep, false, true
 		}
-	case "calendar":
-		c, ok := calChoiceByID(provider)
-		switch {
-		case ok && !c.Soon && c.Page == "":
-			if f.Edit && c.ID != f.Calendar.Provider {
-				f.Calendar = calendarForm{Provider: c.ID, Username: f.Calendar.Username, Timezone: f.Calendar.Timezone}
-				f.SecretSet, f.Switched = false, true
-			}
-			f.Calendar.Provider = c.ID
-		case provider == "choose" || !f.Edit:
-			f.Choose = true
-		}
+		f.Acct.Choice = c.ID
+	case provider == "choose" || !f.Edit:
+		f.Choose = true
 	}
 }
 
@@ -803,10 +822,14 @@ func (w *web) handleNewTool(rw http.ResponseWriter, r *http.Request, s *session)
 		}
 	}
 	pickAccount(&f, r.URL.Query().Get("provider"))
-	if p.Form == "mail" || p.Form == "calendar" {
+	if f.IsAccount() {
 		f.Name = "" // an account of the service's one server (accounts.go)
-		if st, ok := w.c.serviceServer(calendarService); ok && p.Form == "calendar" && st.Config.Timezone != "" {
-			f.Calendar.Timezone = st.Config.Timezone // one zone for the calendar
+		if st, ok := w.c.serviceServer(f.Card()); ok {
+			for _, o := range f.Options() { // one zone for the calendar
+				if v := st.Config.option(o.Key); v != "" {
+					f.Acct.Values[o.Name] = v
+				}
+			}
 		}
 	} else if f.Name != "" {
 		// a second account of a kind: a name of its own, not one taken
@@ -874,7 +897,7 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 		}
 		return
 	}
-	if f.Preset.Form == "mail" || f.Preset.Form == "calendar" {
+	if f.IsAccount() {
 		w.saveAccount(rw, r, s, f, name, old) // web_accounts.go
 		return
 	}
@@ -1000,8 +1023,8 @@ func (w *web) handleDeleteTool(rw http.ResponseWriter, r *http.Request, s *sessi
 // without the spaces of a provider that shows it in groups (SpacedPassword).
 func accountPassword(r *http.Request, f toolForm) string {
 	pw := r.PostFormValue("password")
-	if c, ok := mailChoiceByID(f.Mail.Provider); ok && f.Preset.Form == "mail" && c.SpacedPassword {
-		pw = strings.ReplaceAll(pw, " ", "")
+	if s := f.Shape(); s != nil {
+		return s.password(f.Acct, pw)
 	}
 	return pw
 }

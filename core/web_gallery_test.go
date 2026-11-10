@@ -1,16 +1,9 @@
 package main
 
 import (
-	"bufio"
-	"crypto/tls"
-	"crypto/x509"
-	"fmt"
 	"html"
-	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -374,11 +367,11 @@ func TestMailProviderForms(t *testing.T) {
 			continue
 		}
 		a := mailConfig(t, c, tc.address)
-		if a.Provider != tc.wantProvider || a.Address != tc.address || a.Name != tc.address || a.Auth.PasswordEnv != accountEnv(toolPasswordEnv, tc.address) {
+		if a.Provider != tc.wantProvider || a.get("address") != tc.address || a.Name != tc.address || a.Auth.PasswordEnv != accountEnv(toolPasswordEnv, tc.address) {
 			t.Errorf("%s: %+v", tc.provider, a)
 		}
-		if tc.wantIMAP != "" && (a.IMAP == nil || a.IMAP.Host != tc.wantIMAP || a.IMAP.Port != 993 || a.SMTP.Host != "smtp.free.fr" || a.SMTP.Port != 465) {
-			t.Errorf("%s: servers %+v %+v", tc.provider, a.IMAP, a.SMTP)
+		if tc.wantIMAP != "" && (a.get("imap.host") != tc.wantIMAP || a.get("imap.port") != "993" || a.get("smtp.host") != "smtp.free.fr" || a.get("smtp.port") != "465") {
+			t.Errorf("%s: servers %+v", tc.provider, a.Fields)
 		}
 		// It edits back in its own form.
 		_, body, _ := tw.do("GET", "/settings/tools/mail/edit?account="+tc.address, nil, nil)
@@ -408,8 +401,8 @@ func TestMailProviderForms(t *testing.T) {
 		t.Fatalf("other: %d %s", code, body)
 	}
 	a := mailConfig(t, c, "sam@example.org")
-	if a.IMAP.Host != "mail.example.org" || a.IMAP.Port != 993 || a.SMTP.Port != 587 || a.Username != "sam" || a.Provider != "" {
-		t.Fatalf("other: %+v %+v %+v", a, a.IMAP, a.SMTP)
+	if a.get("imap.host") != "mail.example.org" || a.get("imap.port") != "993" || a.get("smtp.port") != "587" || a.get("username") != "sam" || a.Provider != "" {
+		t.Fatalf("other: %+v", a)
 	}
 	_, body, _ = tw.do("GET", "/settings/tools/mail/edit?account=sam@example.org", nil, nil)
 	if adv := advancedPart(t, body); !strings.Contains(adv, `name="smtp_port" value="587"`) || !strings.Contains(adv, `name="mail_user" value="sam"`) {
@@ -471,7 +464,7 @@ func TestMailSwitchNeedsPassword(t *testing.T) {
 	if _, body, _ := tw.post("/settings/tools/mail", form, csrf); !strings.Contains(html.UnescapeString(body), "Ce n'est plus le même compte") {
 		t.Fatalf("switch without password: %s", body)
 	}
-	if a := mailConfig(t, c, "sam@gmail.com"); a.Address != "sam@gmail.com" {
+	if a := mailConfig(t, c, "sam@gmail.com"); a.get("address") != "sam@gmail.com" {
 		t.Fatal("the refused switch was saved")
 	}
 	form.Set("password", "free-pw")
@@ -479,7 +472,7 @@ func TestMailSwitchNeedsPassword(t *testing.T) {
 		t.Fatal("switch")
 	}
 	a, pw := serviceAccount(t, c.core, mailService, "sam@free.fr")
-	if a.IMAP.Host != "imap.free.fr" || pw != "free-pw" || c.conf().Servers["mail"].AccountAccess["sam@free.fr"] != accessAsk {
+	if a.get("imap.host") != "imap.free.fr" || pw != "free-pw" || c.conf().Servers["mail"].AccountAccess["sam@free.fr"] != accessAsk {
 		t.Fatalf("switched: %+v %q %v", a, pw, c.conf().Servers["mail"].AccountAccess)
 	}
 	if st, _ := c.serviceServer(mailService); len(st.Config.Accounts) != 1 {
@@ -532,13 +525,22 @@ func TestCalendarProviderForms(t *testing.T) {
 	post("c-next", "nextcloud", url.Values{"cal_url": {"https://cloud.example.org/remote.php/dav"}, "cal_user": {"sam"}, "timezone": {"America/New_York"}})
 	// One calendar server for both, in the zone given last.
 	st, _ := c.serviceServer(calendarService)
-	for name, want := range map[string]calendarForm{
-		"sam@icloud.com":        {Provider: "icloud", Username: "sam@icloud.com", Timezone: "America/New_York"},
-		"sam@cloud.example.org": {Provider: "nextcloud", URL: "https://cloud.example.org/remote.php/dav", Username: "sam", Timezone: "America/New_York"},
+	if tz := st.Config.option("timezone"); tz != "America/New_York" {
+		t.Errorf("zone %q", tz)
+	}
+	for name, want := range map[string]accountForm{
+		"sam@icloud.com":        {Choice: "icloud", Values: map[string]string{"cal_user": "sam@icloud.com"}},
+		"sam@cloud.example.org": {Choice: "nextcloud", Values: map[string]string{"cal_url": "https://cloud.example.org/remote.php/dav", "cal_user": "sam"}},
 	} {
 		a, pw := serviceAccount(t, c.core, calendarService, name)
-		if got, ok := calendarFormOf(a, st.Config.Timezone); !ok || got != want || pw != "pw" {
+		got, ok := calendarShape.formOf(a)
+		if !ok || got.Choice != want.Choice || pw != "pw" {
 			t.Errorf("%s = %+v %q", name, got, pw)
+		}
+		for k, v := range want.Values {
+			if got.Values[k] != v {
+				t.Errorf("%s: %s = %q, want %q", name, k, got.Values[k], v)
+			}
 		}
 	}
 	if st.Name != "agenda" || len(st.Config.Accounts) != 2 {
@@ -607,97 +609,27 @@ func TestSlugName(t *testing.T) {
 	}
 }
 
-// fakeIMAP accepts one login over TLS.
-func fakeIMAP(t *testing.T, user, pass string) (port int) {
-	t.Helper()
-	srv := httptest.NewUnstartedServer(nil)
-	srv.StartTLS() // only for its certificate
-	cert := srv.TLS.Certificates[0]
-	pool := x509.NewCertPool()
-	pool.AddCert(srv.Certificate())
-	srv.Close()
-	testRoots = pool
-	t.Cleanup(func() { testRoots = nil })
-	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{cert}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ln.Close() })
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go func(conn net.Conn) {
-				defer conn.Close()
-				fmt.Fprintf(conn, "* OK fake ready\r\n")
-				line, _ := bufio.NewReader(conn).ReadString('\n')
-				if line == fmt.Sprintf("a1 LOGIN %q %q\r\n", user, pass) {
-					fmt.Fprintf(conn, "a1 OK logged in\r\n")
-				} else {
-					fmt.Fprintf(conn, "a1 NO [AUTHENTICATIONFAILED] Invalid credentials\r\n")
-				}
-			}(conn)
+// After a save, the row that follows a ready tool asks its server to sign
+// the account in (test_account): a refused one says so, with the server's
+// reason, and the way out is to change it.
+func TestRowTestsTheAccount(t *testing.T) {
+	tw, c, _ := filesCore(t, nil)
+	for _, name := range []string{"sam@example.org", "bob@example.org"} {
+		a := svcAccount{Name: name, Provider: "google"}
+		if err := c.putAccount(filesService, accountPut{Lang: "fr", Account: a, Secret: &EnvValue{File: "vault:t." + name}}); err != nil {
+			t.Fatal(err)
 		}
-	}()
-	return ln.Addr().(*net.TCPAddr).Port
-}
-
-// "Test the connection" tries a mailbox's password over IMAP, and a
-// calendar's over CalDAV.
-func TestAccountConnectionTest(t *testing.T) {
-	tw, _, csrf := catalogWeb(t, nil)
-	port := fakeIMAP(t, "sam@example.org", "good-pw")
-	form := url.Values{"preset": {"mail"}, "name": {"mail"}, "use": {"mails"}, "mail_provider": {"other"}, "address": {"sam@example.org"},
-		"imap_host": {"127.0.0.1"}, "smtp_host": {"127.0.0.1"}, "imap_port": {strconv.Itoa(port)}, "password": {"good-pw"}}
-	test := func(path string, form url.Values) string {
-		_, body, _ := tw.post(path, form, csrf)
+	}
+	waitStatus(t, c.pool.get(filesService.Base), statusReady)
+	row := func(account string) string {
+		_, body, _ := tw.do("GET", "/settings/tools/"+filesService.Base+"/row?account="+url.QueryEscape(account), nil, nil)
 		return html.UnescapeString(body)
 	}
-	if b := test("/settings/tool-test", form); !strings.Contains(b, "test-ok") || !strings.Contains(b, "sam@example.org accepte") {
-		t.Fatalf("good password: %s", b)
+	if b := row("sam@example.org"); strings.Contains(b, "ne se connecte pas") {
+		t.Errorf("sam refused: %s", b)
 	}
-	form.Set("password", "bad-pw")
-	if b := test("/settings/tool-test", form); !strings.Contains(b, "Mot de passe refusé") || strings.Contains(b, "bad-pw") {
-		t.Fatalf("bad password: %s", b)
-	}
-	// An edit of the same mailbox tries the stored password.
-	form.Set("password", "good-pw")
-	tw.post("/settings/tools", form, csrf)
-	form.Del("password")
-	form.Set("account", "sam@example.org")
-	if b := test("/settings/tool-test/mail", form); !strings.Contains(b, "test-ok") {
-		t.Fatalf("stored password: %s", b)
-	}
-	form.Set("mail_provider", "outlook")
-	if b := test("/settings/tool-test", form); !strings.Contains(b, "bientôt") {
-		t.Fatalf("outlook: %s", b)
-	}
-	// CalDAV.
-	dav := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if u, p, ok := r.BasicAuth(); r.Method != "PROPFIND" || !ok || u != "sam" || p != "cal-pw" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		w.WriteHeader(http.StatusMultiStatus)
-	}))
-	defer dav.Close()
-	pool := x509.NewCertPool()
-	pool.AddCert(dav.Certificate())
-	testRoots = pool
-	cal := url.Values{"preset": {"calendar"}, "name": {"agenda"}, "use": {"agenda"}, "cal_provider": {"caldav"}, "cal_url": {dav.URL},
-		"cal_user": {"sam"}, "password": {"cal-pw"}}
-	if b := test("/settings/tool-test", cal); !strings.Contains(b, "test-ok") {
-		t.Fatalf("calendar: %s", b)
-	}
-	cal.Set("password", "nope")
-	if b := test("/settings/tool-test", cal); !strings.Contains(b, "refusé par l'agenda") {
-		t.Fatalf("calendar refused: %s", b)
-	}
-	// The test needs the session's CSRF token like any form.
-	if code, _, _ := tw.post("/settings/tool-test", cal, "forged"); code != http.StatusForbidden {
-		t.Fatalf("forged test: %d", code)
+	if b := row("bob@example.org"); !strings.Contains(b, "ce compte ne se connecte pas") || !strings.Contains(b, "token revoked: reconnect") {
+		t.Errorf("bob: %s", b)
 	}
 }
 

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // "Add a tool" in two steps, in the tools page's dialog: the search
@@ -161,6 +163,22 @@ func statusOf(lang string, sv serverView) toolStatus {
 	return v
 }
 
+// checkAccount asks a ready tool with accounts to sign one in, as it uses
+// it (its setup tool test_account): a refused password shows on the row
+// that follows the save. A tool without the setup tool stays as it is.
+func (w *web) checkAccount(ctx context.Context, lang string, st *toolStatus, server, account string) {
+	if !hasAccounts(w.c.conf().Servers[server]) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	why, err := w.c.testAccount(ctx, server, account)
+	if err != nil || why == "" {
+		return
+	}
+	st.State, st.Text, st.Hint, st.Detail, st.Edit = "err", tr(lang, "added.refused"), tr(lang, "added.refusedhint"), why, true
+}
+
 // handleToolRow is a followed tool's row alone (GET
 // /settings/tools/{name}/row), asked again until the tool settles.
 func (w *web) handleToolRow(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -175,6 +193,9 @@ func (w *web) handleToolRow(rw http.ResponseWriter, r *http.Request, s *session)
 			}
 			st := statusOf(lang, sv)
 			st.Row = t.RowURL()
+			if st.State == "ok" && account != "" {
+				w.checkAccount(r.Context(), lang, &st, name, t.rowAccount())
+			}
 			t.Follow = &st
 			w.render(rw, r, s, "settings", "tool-row-frag", page{Data: t})
 			return

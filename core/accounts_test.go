@@ -75,7 +75,7 @@ func TestGoogleHoldWithOtherAccounts(t *testing.T) {
 	if why, _ := c.connectionHold("mail"); why == "" {
 		t.Fatal("bob alone, refused: not held")
 	}
-	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: svcAccount{Name: "sam@example.org", Address: "sam@example.org", Provider: "ovh"},
+	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: svcAccount{Name: "sam@example.org", Provider: "ovh", Fields: map[string]any{"address": "sam@example.org"}},
 		Password: "pw"}); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestGoogleHoldWithOtherAccounts(t *testing.T) {
 // what was allowed and its watches under another name. The same calendar
 // twice is still refused.
 func TestCalendarsOfOneAddress(t *testing.T) {
-	apple := svcAccount{Name: "sam@example.org", Provider: "icloud", Username: "sam@example.org", URL: "https://caldav.icloud.com"}
+	apple := svcAccount{Name: "sam@example.org", Provider: "icloud", Fields: map[string]any{"username": "sam@example.org", "url": "https://caldav.icloud.com"}}
 	google := func(c *core) error {
 		ref := "connection.sam.token"
 		currentVault().set(ref, `{"refresh_token":"sam"}`)

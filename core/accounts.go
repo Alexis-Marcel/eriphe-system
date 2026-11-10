@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -52,6 +53,20 @@ func serviceOf(spec RunSpec) (toolCard, bool) {
 	return toolCard{}, false
 }
 
+// hasAccounts says whether a server is a tool with a card, whose
+// accounts its setup tools test.
+func hasAccounts(srv Server) bool {
+	if !srv.local() {
+		return false
+	}
+	spec, err := decodeRun(srv.Run)
+	if err != nil {
+		return false
+	}
+	_, ok := serviceOf(spec)
+	return ok
+}
+
 // serviceByID finds a service by its id (mail, calendar).
 func serviceByID(id string) (toolCard, bool) {
 	for _, svc := range toolCards {
@@ -75,20 +90,111 @@ func (svc toolCard) placesKey() string {
 func (svc toolCard) use() string  { return "preset." + svc.Preset + ".use" }
 func (svc toolCard) mark() string { return svc.Preset }
 
-// svcAccount is an account as eriphe-mail, eriphe-calendar or eriphe-files
-// reads it; what one of them does not know is left empty (and out of the
-// JSON).
+// svcAccount is an account as the tool's server reads it: what eriphe-core
+// itself reads of every account, and the rest as the form or the sign-in
+// made it (Fields: "address", "url", "imap": {"host", "port"}…).
 type svcAccount struct {
-	Name     string        `json:"name"`
-	Address  string        `json:"address,omitempty"` // mail
-	Provider string        `json:"provider,omitempty"`
-	URL      string        `json:"url,omitempty"` // calendar
-	Username string        `json:"username,omitempty"`
-	IMAP     *mailEndpoint `json:"imap,omitempty"`
-	SMTP     *mailEndpoint `json:"smtp,omitempty"`
-	Auth     svcAuth       `json:"auth"`
-	ReadOnly bool          `json:"read_only,omitempty"`
-	Scopes   []string      `json:"scopes,omitempty"` // files: what its connection granted
+	Name     string
+	Provider string // the provider the server knows it at, if any
+	Auth     svcAuth
+	ReadOnly bool
+	Scopes   []string // what its connection granted, for a server told (Scopes)
+	Fields   map[string]any
+}
+
+// svcAccountKeys are the keys of svcAccount's own fields.
+var svcAccountKeys = []string{"name", "provider", "auth", "read_only", "scopes"}
+
+func (a *svcAccount) UnmarshalJSON(b []byte) error {
+	var all map[string]any
+	if err := json.Unmarshal(b, &all); err != nil {
+		return err
+	}
+	var own struct {
+		Name     string   `json:"name"`
+		Provider string   `json:"provider"`
+		Auth     svcAuth  `json:"auth"`
+		ReadOnly bool     `json:"read_only"`
+		Scopes   []string `json:"scopes"`
+	}
+	if err := json.Unmarshal(b, &own); err != nil {
+		return err
+	}
+	for _, k := range svcAccountKeys {
+		delete(all, k)
+	}
+	*a = svcAccount{Name: own.Name, Provider: own.Provider, Auth: own.Auth, ReadOnly: own.ReadOnly, Scopes: own.Scopes, Fields: all}
+	return nil
+}
+
+func (a svcAccount) MarshalJSON() ([]byte, error) {
+	out := maps.Clone(a.Fields)
+	if out == nil {
+		out = map[string]any{}
+	}
+	out["name"], out["auth"] = a.Name, a.Auth
+	if a.Provider != "" {
+		out["provider"] = a.Provider
+	}
+	if a.ReadOnly {
+		out["read_only"] = true
+	}
+	if len(a.Scopes) > 0 {
+		out["scopes"] = a.Scopes
+	}
+	return json.Marshal(out)
+}
+
+// get is a field's value as text, by its key ("imap.host"); "" without.
+func (a svcAccount) get(key string) string {
+	if key == "provider" {
+		return a.Provider
+	}
+	var v any = a.Fields
+	for _, k := range strings.Split(key, ".") {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return ""
+		}
+		v = m[k]
+	}
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	case string:
+		return x
+	}
+	return fmt.Sprint(v)
+}
+
+// set gives a field its value, by its key.
+func (a *svcAccount) set(key string, v any) {
+	if key == "provider" {
+		a.Provider = fmt.Sprint(v)
+		return
+	}
+	if a.Fields == nil {
+		a.Fields = map[string]any{}
+	}
+	parts := strings.Split(key, ".")
+	m := a.Fields
+	for _, k := range parts[:len(parts)-1] {
+		next, ok := m[k].(map[string]any)
+		if !ok {
+			next = map[string]any{}
+			m[k] = next
+		} else {
+			next = maps.Clone(next)
+			m[k] = next
+		}
+		m = next
+	}
+	if n, ok := v.(int); ok {
+		v = float64(n)
+	}
+	m[parts[len(parts)-1]] = v
 }
 
 type svcAuth struct {
@@ -107,7 +213,6 @@ func (a svcAccount) signedIn() bool { return a.Auth.TokenEnv != "" }
 // svcConfig is the server's configuration; what eriphe-core does not
 // change in it (the files' places, a server's options) is kept as it is.
 type svcConfig struct {
-	Timezone string       `json:"timezone,omitempty"` // calendar
 	Accounts []svcAccount `json:"accounts"`
 	rest     map[string]json.RawMessage
 }
@@ -121,7 +226,6 @@ func (cfg *svcConfig) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &p.rest); err != nil {
 		return err
 	}
-	delete(p.rest, "timezone")
 	delete(p.rest, "accounts")
 	*cfg = svcConfig(p)
 	return nil
@@ -132,15 +236,43 @@ func (cfg svcConfig) MarshalJSON() ([]byte, error) {
 	if out == nil {
 		out = map[string]json.RawMessage{}
 	}
-	if cfg.Timezone != "" {
-		out["timezone"], _ = json.Marshal(cfg.Timezone)
-	}
 	accounts := cfg.Accounts
 	if accounts == nil {
 		accounts = []svcAccount{}
 	}
 	out["accounts"], _ = json.Marshal(accounts)
 	return json.Marshal(out)
+}
+
+// option is one of the server's options in its configuration, as text.
+func (cfg svcConfig) option(key string) string {
+	var v string
+	json.Unmarshal(cfg.rest[key], &v)
+	return v
+}
+
+// withOption is the configuration with an option set ("" takes it out).
+func (cfg svcConfig) withOption(key, v string) svcConfig {
+	cfg.rest = maps.Clone(cfg.rest)
+	if cfg.rest == nil {
+		cfg.rest = map[string]json.RawMessage{}
+	}
+	if v == "" {
+		delete(cfg.rest, key)
+	} else {
+		cfg.rest[key], _ = json.Marshal(v)
+	}
+	return cfg
+}
+
+// sameName tells two accounts of one name that are also the same login
+// (its NameBy field): a calendar named apart is still the one typed again.
+func (svc toolCard) sameName(x, y svcAccount) bool {
+	if svc.Account == nil {
+		return true
+	}
+	k := svc.Account.key(svc.Account.NameBy)
+	return strings.EqualFold(x.get(k), y.get(k))
 }
 
 // withPlaces is the configuration with a change of the places it keeps
@@ -173,24 +305,27 @@ func (cfg svcConfig) index(name string) int {
 // is (an Apple account and a Google account can have the same address,
 // and are two calendars).
 func (svc toolCard) sameAccount(x, y svcAccount) bool {
-	if svc.ByName {
-		return true
+	for _, k := range svc.SameBy {
+		if !strings.EqualFold(x.get(k), y.get(k)) {
+			return false
+		}
 	}
-	return strings.EqualFold(x.Provider, y.Provider) && strings.EqualFold(x.URL, y.URL)
+	return true
 }
 
 // freeName is a name for a that no other account has (skip is its own
 // place, -1 for a new one): its own, else with where it is
 // ("sam@example.org (iCloud)"), else numbered.
-func (cfg svcConfig) freeName(a svcAccount, skip int) string {
+func (svc toolCard) freeName(cfg svcConfig, a svcAccount, skip int) string {
 	taken := func(n string) bool { i := cfg.index(n); return i >= 0 && i != skip }
 	if !taken(a.Name) {
 		return a.Name
 	}
-	where, known := tr("en", "calp."+a.Provider), a.Provider != "" && a.Provider != "caldav"
-	if !known || where == "calp."+a.Provider {
-		where = cmpOr(a.Provider, "2")
-		if u, err := url.Parse(a.URL); err == nil && u.Hostname() != "" {
+	where := cmpOr(a.Provider, "2")
+	if s := svc.Account; s != nil {
+		if c := s.choiceOf(a); c.ID != "" && !c.Custom {
+			where = tr("en", s.Words+"."+c.ID) // a provider of its own: "iCloud"
+		} else if u, err := url.Parse(a.get(s.key(s.NameHost))); s.NameHost != "" && err == nil && u.Hostname() != "" {
 			where = u.Hostname()
 		}
 	}
@@ -311,7 +446,7 @@ type accountPut struct {
 	Scopes  []string   // what the connection granted, for a service that is told (Scopes)
 	// Password, typed, goes to the vault with the account.
 	Password string
-	Timezone string // calendar: the server's zone, if given
+	Options  map[string]string // the server's options of the form (accountShape.Server), by field
 }
 
 // putAccount adds an account to its service's server, made if need be, or
@@ -356,7 +491,7 @@ func (c *core) putAccount(svc toolCard, in accountPut) error {
 			// An account on a connection is named by its address (the
 			// connection's identity): the other one, an Apple calendar of the same
 			// address, takes another name and keeps its secret and level.
-			name := cfg.freeName(other, -1) // its own name counts: it gives it up
+			name := svc.freeName(cfg, other, -1) // its own name counts: it gives it up
 			for k, v := range access {
 				if strings.EqualFold(k, other.Name) {
 					delete(access, k)
@@ -367,11 +502,11 @@ func (c *core) putAccount(svc toolCard, in accountPut) error {
 			cfg.Accounts[same].Name = name
 		default:
 			for i, x := range cfg.Accounts { // already named apart
-				if i != at && svc.sameAccount(x, a) && strings.EqualFold(x.Username, a.Username) && in.Secret == nil {
+				if i != at && svc.sameAccount(x, a) && svc.sameName(x, a) && in.Secret == nil {
 					return errAccountExists
 				}
 			}
-			a.Name = cfg.freeName(a, at) // two calendars of one address
+			a.Name = svc.freeName(cfg, a, at) // two calendars of one address
 		}
 	}
 	var old svcAccount
@@ -431,8 +566,14 @@ func (c *core) putAccount(svc toolCard, in accountPut) error {
 			})
 		}
 	}
-	if svc.ID == toolCalendar {
-		cfg.Timezone = cmpOr(in.Timezone, cmpOr(cfg.Timezone, c.conf().TimeZone))
+	if svc.Account != nil {
+		for _, fl := range svc.Account.Server {
+			v := cmpOr(in.Options[fl.Name], cfg.option(fl.Key))
+			if fl.Kind == "zone" {
+				v = cmpOr(v, c.conf().TimeZone)
+			}
+			cfg = cfg.withOption(fl.Key, v)
+		}
 	}
 	srv := st.Server
 	if svc.AccountLevels {

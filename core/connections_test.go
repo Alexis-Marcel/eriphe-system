@@ -66,7 +66,7 @@ func TestConnectionOfAnyProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: svcAccount{Name: "sam@example.org", Address: "sam@example.org", Provider: "other"},
+	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: svcAccount{Name: "sam@example.org", Provider: "other", Fields: map[string]any{"address": "sam@example.org"}},
 		Secret: &EnvValue{File: vaultPrefix + cn.Secret}}); err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestAccountVariablesNameNoProvider(t *testing.T) {
 		}
 	}
 	if err := c.putAccount(mailService, accountPut{Lang: "fr", Password: "pw",
-		Account: svcAccount{Name: "bob@example.org", Address: "bob@example.org", Provider: "ovh"}}); err != nil {
+		Account: svcAccount{Name: "bob@example.org", Provider: "ovh", Fields: map[string]any{"address": "bob@example.org"}}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, svc := range toolCards {
