@@ -569,7 +569,7 @@ latest release (`updates.go`), at start and then every hour of the wall clock (e
 after a failure; a machine that slept checks when it wakes); Settings → Devices, opened with an
 answer older than 15 minutes, asks again in the background; "Vérifier maintenant" in Settings →
 Devices → Updates asks at once (once a minute at most) and says when it last did. A machine is behind when it runs a release older than that one
-(semver order, `version.go`), or a build from before the releases (`sha-<commit>`); a build of
+(semver order, `version.go`); a build of
 `main` or a local one never says so, as someone is testing it. The images publish their `latest`
 tag each on its own, as their build ends: while a release is half published (eriphe-node's
 `latest` out, eriphe-core's or eriphe-base's not yet), the latest release is the older one, which
@@ -1497,10 +1497,7 @@ the former ones, newest first (`former`, kept in the settings `results_name` and
 (`/work/folders/<name>/Jarvis`). On a folder's next use after a rename, the node renames a former
 results folder to the new name; if a folder of the new name is already there (the user's own, say),
 nothing is merged: the former one stays in use, mounted under the new name, and the node says so
-(a `results_conflict` event, in the device's access log, to rename or merge by hand). A node
-older than this names nothing and writes in `Eriphe/`: for a node that does not report
-`results_named` (nor runs a release from 0.7.0), the worker is told `Eriphe/`, the folder that node
-really mounts, so a rename never points a task at a path it cannot write.
+(a `results_conflict` event, in the device's access log, to rename or merge by hand).
 
 ## The brain
 

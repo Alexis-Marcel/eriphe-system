@@ -8,8 +8,7 @@ import (
 
 // Versions (README, Versions). A release is X.Y.Z, from the Git tag vX.Y.Z;
 // a build of main is X.Y.Z-dev+<commit>, X.Y.Z being the last release; a
-// local build is "dev". Builds from before the releases were sha-<commit>:
-// older than any release.
+// local build is "dev".
 
 // semver is a version as semver.org has it; build metadata (after the +)
 // never orders.
@@ -134,27 +133,19 @@ func cmpInt(a, b int) int {
 	return 0
 }
 
-// legacyVersion tells whether a version is a build from before the
-// releases (sha-<commit>).
-func legacyVersion(s string) bool { return strings.HasPrefix(s, "sha-") }
-
-// publishedVersion tells whether a version comes from CI (a release, a
-// build of main, or a build from before the releases), not a local build.
+// publishedVersion tells whether a version comes from CI (a release or a
+// build of main), not a local build.
 func publishedVersion(s string) bool {
 	_, ok := parseVersion(s)
-	return ok || legacyVersion(s)
+	return ok
 }
 
 // versionBehind tells whether a build is older than the latest release. A
-// build of main (or a local one) never is: it is someone testing; a build
-// from before the releases always is.
+// build of main (or a local one) never is: it is someone testing.
 func versionBehind(running, latest string) bool {
 	l, ok := parseVersion(latest)
 	if !ok || !l.release() {
 		return false
-	}
-	if legacyVersion(running) {
-		return true
 	}
 	r, ok := parseVersion(running)
 	if !ok || r.dev() {

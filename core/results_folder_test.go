@@ -62,16 +62,9 @@ func TestResultsFolderFollowsTheName(t *testing.T) {
 		t.Fatalf("default: %+v %q", f, prompt)
 	}
 
-	// Named Jarvis, on a node too old to name the folder: the worker is
-	// told Eriphe/, where that node really mounts it.
+	// Named Jarvis: Jarvis/, the former names, newest first.
 	setBrain(c, &BrainConfig{DisplayName: "Jarvis"})
 	c.noteResultsName(c.conf())
-	f, prompt = folder()
-	if !strings.Contains(prompt, "/work/folders/Clients/Eriphe/") || strings.Contains(prompt, "Jarvis/") {
-		t.Fatalf("old node: %q", prompt)
-	}
-	// Its node updated: Jarvis/, the former names, newest first.
-	setNodeInfo(t, store, "nas", map[string]any{"results_named": true})
 	f, prompt = folder()
 	if f.Results != "Jarvis" || !slices.Equal(f.Former, []string{"Eriphe"}) || !strings.Contains(prompt, "/work/folders/Clients/Jarvis/") {
 		t.Fatalf("Jarvis: %+v %q", f, prompt)
@@ -87,13 +80,6 @@ func TestResultsFolderFollowsTheName(t *testing.T) {
 	c.noteResultsName(c.conf())
 	if f, _ = folder(); f.Results != "Jarvis" || !slices.Equal(f.Former, []string{"Alfred", "Eriphe"}) {
 		t.Fatalf("back: %+v", f)
-	}
-
-	// A release of eriphe-node names it too; a build of main by its flag only.
-	for v, want := range map[string]bool{"0.6.4": false, "0.7.0": true, "0.7.1": true, "0.7.0-dev+abc": false, "": false, "sha-abc": false} {
-		if got := nodeNamesResults(nodeInfo{Version: v}); got != want {
-			t.Errorf("version %q: %v", v, got)
-		}
 	}
 
 	// Its node kept the former one: said in the device's log.

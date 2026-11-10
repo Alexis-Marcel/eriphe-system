@@ -431,7 +431,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + c.taskNowText()) // situations.go
 	}
 	if len(folders) > 0 {
-		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders, c.resultsOn(folders[0].Node)))
+		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders, c.resultsName()))
 	}
 	if s := c.accessInstructions(lent.List); s != "" {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + s)

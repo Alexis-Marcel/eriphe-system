@@ -25,7 +25,7 @@ import (
 // which holds it. A digest would say that `latest` changed, not which
 // version it is, and eriphe-core does not know the digest of the image it
 // runs from. A build is behind when it is a release older than latest's
-// (semver), or a build from before the releases (sha-<commit>); a build of
+// (semver); a build of
 // main (X.Y.Z-dev+<commit>) or a local one (dev) never is (version.go). The
 // registry unreachable, nothing is said: the last answer stays, and the
 // error is logged once. Settings → Devices may also check now, once a
