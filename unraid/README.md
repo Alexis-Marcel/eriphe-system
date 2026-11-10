@@ -28,9 +28,7 @@ The template runs the launcher hardened (Extra Parameters: `--cap-drop=ALL --cap
 --cap-add=DAC_OVERRIDE --cap-add=FOWNER --read-only --tmpfs /tmp --security-opt
 no-new-privileges`): it keeps only what it needs to write eriphe-core's folder. A container made
 from an earlier template keeps its own settings: add them by hand (Docker → eriphe → Edit →
-Advanced View → Extra Parameters), and remove its **Shares** variable (`ERIPHE_SHARES`), no longer
-used. Its folders shared stay shared: the update turns them into folders given one by one
-([install/README.md, One container](../install/README.md#one-container-nas-any-linux-with-docker)).
+Advanced View → Extra Parameters).
 
 The containers it makes show on the Docker page as containers without a template (eriphe-core,
 eriphe-node, eriphe-engine, eriphe-syncthing): leave them to it, it recreates them on updates. To remove
