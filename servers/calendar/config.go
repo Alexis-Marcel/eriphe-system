@@ -48,10 +48,10 @@ type AccountConfig struct {
 // again at each request, so a token file refreshed by eriphe-core is used
 // without a restart.
 type AuthConfig struct {
-	PasswordEnv    string `json:"password_env,omitempty"`
-	PasswordFile   string `json:"password_file,omitempty"`
-	TokenEnv  string `json:"token_env,omitempty"`
-	TokenFile string `json:"token_file,omitempty"`
+	PasswordEnv  string `json:"password_env,omitempty"`
+	PasswordFile string `json:"password_file,omitempty"`
+	TokenEnv     string `json:"token_env,omitempty"`
+	TokenFile    string `json:"token_file,omitempty"`
 }
 
 func (a AuthConfig) oauth() bool { return a.TokenEnv != "" || a.TokenFile != "" }
