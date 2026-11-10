@@ -21,7 +21,7 @@ func setup(t *testing.T, right string, scopes ...string) (*fakeDrive, *Files) {
 		scopes = []string{scopeDrive}
 	}
 	cfg := &Config{Accounts: []AccountConfig{d.account(scopes...)},
-		Folders: []FolderConfig{{Name: "Compta", ID: "compta", Access: right}}}
+		Places: []PlaceConfig{{Name: "Compta", ID: "compta", Access: right}}}
 	if err := cfg.normalize(); err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestTokenURLFromTheToken(t *testing.T) {
 	acc := d.account(scopeDrive)
 	acc.TokenURL = ""
 	t.Setenv("FILES_TEST_TOKEN", `{"client_id":"client-1","client_secret":"secret-1","refresh_token":"`+fakeRefresh+`","token_url":"`+d.srv.URL+`/token"}`)
-	cfg := &Config{Accounts: []AccountConfig{acc}, Folders: []FolderConfig{{Name: "Compta", ID: "compta"}}}
+	cfg := &Config{Accounts: []AccountConfig{acc}, Places: []PlaceConfig{{Name: "Compta", ID: "compta"}}}
 	if err := cfg.normalize(); err != nil {
 		t.Fatal(err)
 	}
@@ -349,14 +349,14 @@ func TestConfig(t *testing.T) {
 	for _, c := range []struct {
 		json, err string
 	}{
-		{`{"accounts":[` + acct + `],"folders":[{"name":"A","id":"1"}]}`, ""},
+		{`{"accounts":[` + acct + `],"places":[{"name":"A","id":"1"}]}`, ""},
 		{`{"accounts":[]}`, "no accounts"},
 		{`{"accounts":[{"provider":"dropbox","auth":{"token_env":"X"}}]}`, "provider is one of"},
 		{`{"accounts":[{"provider":"google","auth":{}}]}`, "exactly one"},
-		{`{"accounts":[` + acct + `],"folders":[{"name":"A","id":"1","access":"delete"}]}`, "access is read or drop"},
-		{`{"accounts":[` + acct + `],"folders":[{"name":"A","id":"1"},{"name":"a","id":"2"}]}`, "duplicate"},
-		{`{"accounts":[` + acct + `],"folders":[{"name":"A","id":"1","account":"other"}]}`, "no account"},
-		{`{"accounts":[` + acct + `],"folders":[{"name":"A"}]}`, "name and id"},
+		{`{"accounts":[` + acct + `],"places":[{"name":"A","id":"1","access":"delete"}]}`, "access is read or drop"},
+		{`{"accounts":[` + acct + `],"places":[{"name":"A","id":"1"},{"name":"a","id":"2"}]}`, "duplicate"},
+		{`{"accounts":[` + acct + `],"places":[{"name":"A","id":"1","account":"other"}]}`, "no account"},
+		{`{"accounts":[` + acct + `],"places":[{"name":"A"}]}`, "name and id"},
 		{`{"accounts":[` + acct + `],"oops":1}`, "unknown field"},
 	} {
 		cfg, err := LoadConfig(c.json, "")
@@ -365,8 +365,8 @@ func TestConfig(t *testing.T) {
 			t.Errorf("%s: %v", c.json, err)
 		case c.err != "" && (err == nil || !strings.Contains(err.Error(), c.err)):
 			t.Errorf("%s: %v, want %q", c.json, err, c.err)
-		case c.err == "" && (cfg.Folders[0].Access != accessRead || cfg.Folders[0].Account != "drive"):
-			t.Errorf("defaults: %+v", cfg.Folders[0])
+		case c.err == "" && (cfg.Places[0].Access != accessRead || cfg.Places[0].Account != "drive"):
+			t.Errorf("defaults: %+v", cfg.Places[0])
 		}
 	}
 }

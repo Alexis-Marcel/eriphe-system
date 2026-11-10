@@ -72,8 +72,8 @@ func TestAccessScale(t *testing.T) {
 // withDrive gives the core a files server with Drive folders.
 func withDrive(t *testing.T, c *core, folders ...Place) {
 	t.Helper()
-	fc, _ := json.Marshal(map[string]any{"accounts": []any{}, "folders": folders})
-	run, _ := json.Marshal(map[string]any{"image": filesImage + ":1", "transport": "stdio", "env": map[string]string{filesConfigEnv: string(fc)}})
+	fc, _ := json.Marshal(map[string]any{"accounts": []any{}, "places": folders})
+	run, _ := json.Marshal(map[string]any{"image": filesImage + ":1", "transport": "stdio", "env": map[string]string{toolConfigEnv: string(fc)}})
 	if c.base.Servers == nil {
 		c.base.Servers = map[string]Server{}
 	}

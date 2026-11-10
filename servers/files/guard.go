@@ -48,7 +48,7 @@ type cachedItem struct {
 
 // Folder is one configured Folder, with its account.
 type Folder struct {
-	FolderConfig
+	PlaceConfig
 	acct *account
 
 	mu      sync.Mutex
@@ -65,8 +65,8 @@ func NewFiles(cfg *Config) (*Files, error) {
 		}
 		f.accounts[strings.ToLower(a.Name)] = &account{name: a.Name, p: p, cache: map[string]cachedItem{}, now: time.Now}
 	}
-	for _, fc := range cfg.Folders {
-		f.folders = append(f.folders, &Folder{FolderConfig: fc, acct: f.accounts[strings.ToLower(fc.Account)]})
+	for _, fc := range cfg.Places {
+		f.folders = append(f.folders, &Folder{PlaceConfig: fc, acct: f.accounts[strings.ToLower(fc.Account)]})
 	}
 	return f, nil
 }

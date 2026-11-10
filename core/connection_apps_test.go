@@ -7,14 +7,12 @@ import (
 	"testing"
 )
 
-// The Google app kept before connection apps is read where it was, and
-// saving the app again moves it to app.google.client.
-func TestAppClientLegacy(t *testing.T) {
+// The app saved is kept as app.<provider>.client, its secret never shown
+// back.
+func TestAppClientSave(t *testing.T) {
 	tw, _, csrf := filesCore(t, nil)
-	v := currentVault()
-	v.set("google-drive-client", `{"client_id":"`+testClientID+`","client_secret":"`+testClientSecret+`"}`)
-	if app, err := googleClient(); err != nil || app.ID != testClientID {
-		t.Fatalf("legacy: %+v %v", app, err)
+	if err := storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret}); err != nil {
+		t.Fatal(err)
 	}
 	_, body, _ := tw.do("GET", "/settings/apps/google", nil, nil)
 	if !strings.Contains(body, testClientID) || strings.Contains(body, testClientSecret) {
@@ -24,9 +22,6 @@ func TestAppClientLegacy(t *testing.T) {
 		"client_secret": {"GOCSPX-new"}, "back": {"/settings/connections/google"}}, csrf)
 	if code != 200 || !strings.Contains(body, "Ton app est enregistrée") || !strings.Contains(body, `href="/settings/connections/google"`) || strings.Contains(body, "GOCSPX-new") {
 		t.Fatalf("save: %d %s", code, body)
-	}
-	if _, err := v.get("google-drive-client"); err == nil {
-		t.Fatal("the legacy secret stays")
 	}
 	if app, err := appClient(providerGoogle); err != nil || app.ID != "456-def"+providerGoogle.ClientIDSuffix {
 		t.Fatalf("saved: %+v %v", app, err)

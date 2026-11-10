@@ -25,11 +25,11 @@ var version = "dev"
 func main() {
 	transport := flag.String("transport", env("MCP_TRANSPORT", "stdio"), "stdio or http")
 	addr := flag.String("addr", env("MCP_ADDR", ":8080"), "listen address for http")
-	configFile := flag.String("config", os.Getenv("CALENDAR_CONFIG_FILE"), "configuration file (JSON); CALENDAR_CONFIG holds it inline")
+	configFile := flag.String("config", os.Getenv("TOOL_CONFIG_FILE"), "configuration file (JSON); TOOL_CONFIG holds it inline")
 	flag.Parse()
 	log.SetOutput(os.Stderr)
 
-	cfg, err := LoadConfig(os.Getenv("CALENDAR_CONFIG"), *configFile)
+	cfg, err := LoadConfig(os.Getenv("TOOL_CONFIG"), *configFile)
 	if err != nil {
 		log.Fatal(err)
 	}

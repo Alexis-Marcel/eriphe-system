@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// Config is the server configuration, read as JSON from CALENDAR_CONFIG or
-// from the file named by CALENDAR_CONFIG_FILE (or -config).
+// Config is the server configuration, read as JSON from TOOL_CONFIG or
+// from the file named by TOOL_CONFIG_FILE (or -config).
 type Config struct {
 	// Timezone used to read and show times without an offset; default
 	// Europe/Paris (or TZ).
@@ -50,11 +50,11 @@ type AccountConfig struct {
 type AuthConfig struct {
 	PasswordEnv    string `json:"password_env,omitempty"`
 	PasswordFile   string `json:"password_file,omitempty"`
-	OAuthTokenEnv  string `json:"oauth_token_env,omitempty"`
-	OAuthTokenFile string `json:"oauth_token_file,omitempty"`
+	TokenEnv  string `json:"token_env,omitempty"`
+	TokenFile string `json:"token_file,omitempty"`
 }
 
-func (a AuthConfig) oauth() bool { return a.OAuthTokenEnv != "" || a.OAuthTokenFile != "" }
+func (a AuthConfig) oauth() bool { return a.TokenEnv != "" || a.TokenFile != "" }
 
 var caldavURLs = map[string]string{
 	"icloud":   "https://caldav.icloud.com",
@@ -74,7 +74,7 @@ func LoadConfig(text, file string) (*Config, error) {
 			return nil, err
 		}
 	default:
-		return nil, errors.New("no configuration: set CALENDAR_CONFIG or CALENDAR_CONFIG_FILE")
+		return nil, errors.New("no configuration: set TOOL_CONFIG or TOOL_CONFIG_FILE")
 	}
 	var cfg Config
 	dec := json.NewDecoder(strings.NewReader(string(b)))
@@ -126,13 +126,13 @@ func (a *AccountConfig) normalize() error {
 		a.Name = a.Provider
 	}
 	n := 0
-	for _, s := range []string{a.Auth.PasswordEnv, a.Auth.PasswordFile, a.Auth.OAuthTokenEnv, a.Auth.OAuthTokenFile} {
+	for _, s := range []string{a.Auth.PasswordEnv, a.Auth.PasswordFile, a.Auth.TokenEnv, a.Auth.TokenFile} {
 		if s != "" {
 			n++
 		}
 	}
 	if n != 1 {
-		return errors.New("auth needs exactly one of password_env, password_file, oauth_token_env, oauth_token_file")
+		return errors.New("auth needs exactly one of password_env, password_file, token_env, token_file")
 	}
 	switch a.Provider {
 	case "microsoft":
@@ -174,10 +174,10 @@ func (a *AccountConfig) secret() (string, error) {
 	switch {
 	case a.Auth.PasswordEnv != "":
 		v, from = os.Getenv(a.Auth.PasswordEnv), a.Auth.PasswordEnv
-	case a.Auth.OAuthTokenEnv != "":
-		v, from = os.Getenv(a.Auth.OAuthTokenEnv), a.Auth.OAuthTokenEnv
+	case a.Auth.TokenEnv != "":
+		v, from = os.Getenv(a.Auth.TokenEnv), a.Auth.TokenEnv
 	default:
-		from = a.Auth.PasswordFile + a.Auth.OAuthTokenFile
+		from = a.Auth.PasswordFile + a.Auth.TokenFile
 		b, err := os.ReadFile(from)
 		if err != nil {
 			return "", fmt.Errorf("read secret: %w", err)

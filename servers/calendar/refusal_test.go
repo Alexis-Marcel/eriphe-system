@@ -33,7 +33,7 @@ func TestGoogleRefusal(t *testing.T) {
 		}))
 		t.Setenv("CAL_TOKEN", "s3cret-value")
 		a := &AccountConfig{Name: "sam@example.org", Provider: c.provider, URL: srv.URL + "/caldav/v2/", Username: "sam@example.org",
-			Auth: AuthConfig{OAuthTokenEnv: "CAL_TOKEN"}}
+			Auth: AuthConfig{TokenEnv: "CAL_TOKEN"}}
 		if c.provider != "google" {
 			a.Auth = AuthConfig{PasswordEnv: "CAL_TOKEN"}
 		}

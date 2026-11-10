@@ -32,7 +32,7 @@ func TestRefreshGrant(t *testing.T) {
 		return string(raw)
 	}
 	t.Setenv("CALENDAR_GOOGLE_TOKEN", grant("rt-1"))
-	a := AccountConfig{Name: "perso", Auth: AuthConfig{OAuthTokenEnv: "CALENDAR_GOOGLE_TOKEN"}}
+	a := AccountConfig{Name: "perso", Auth: AuthConfig{TokenEnv: "CALENDAR_GOOGLE_TOKEN"}}
 	for i := 0; i < 3; i++ {
 		if s, err := a.secret(); err != nil || s != "fresh" {
 			t.Fatalf("secret: %q %v", s, err)

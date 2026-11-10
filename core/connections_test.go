@@ -38,7 +38,7 @@ func TestCollectConnectionSecrets(t *testing.T) {
 	v := currentVault()
 	cn, _, _ := c.keepConnection("google", "sam@example.org", nil, `{}`)
 	inUse := "connection.bob.token"
-	for _, name := range []string{inUse, "google.0123456789ab.token", "connection.feedfacecafe.token", "other.secret"} {
+	for _, name := range []string{inUse, "connection.feedfacecafe.token", "other.secret"} {
 		v.set(name, "x")
 	}
 	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: gmailAccount("bob@example.org"),
@@ -47,7 +47,7 @@ func TestCollectConnectionSecrets(t *testing.T) {
 	}
 	c.collectConnectionSecrets()
 	for name, want := range map[string]bool{cn.Secret: true, inUse: true, "other.secret": true,
-		"google.0123456789ab.token": false, "connection.feedfacecafe.token": false} {
+		"connection.feedfacecafe.token": false} {
 		if _, err := v.get(name); (err == nil) != want {
 			t.Errorf("%s kept: %v, want %v", name, err == nil, want)
 		}
@@ -87,5 +87,38 @@ func TestConnectionOfAnyProvider(t *testing.T) {
 	c.checkConnection(context.Background(), cn)
 	if why, _ := c.connectionHold("mail"); why != "" {
 		t.Fatalf("still held: %s", why)
+	}
+}
+
+// The variables core writes for an account are the contract's
+// (TOOL_CONFIG, TOOL_PASSWORD_<h>, TOOL_TOKEN_<h>): none names a provider.
+func TestAccountVariablesNameNoProvider(t *testing.T) {
+	c := newDynamicCore(t, nil).core
+	ref := &EnvValue{File: vaultPrefix + "connection.sam.token"}
+	for _, svc := range accountServices {
+		si, _ := signInOf(svc.ID, providerGoogle.Name)
+		if err := c.putAccount(svc, accountPut{Lang: "fr", Account: si.account("sam@example.org"), Secret: ref}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.putAccount(mailService, accountPut{Lang: "fr", Password: "pw",
+		Account: svcAccount{Name: "bob@example.org", Address: "bob@example.org", Provider: "ovh"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, svc := range accountServices {
+		st, ok := c.serviceServer(svc)
+		if !ok {
+			t.Fatalf("%s: no server", svc.ID)
+		}
+		for name := range st.Spec.Env {
+			if name != toolConfigEnv && !strings.HasPrefix(name, toolPasswordEnv+"_") && !strings.HasPrefix(name, toolTokenEnv+"_") {
+				t.Errorf("%s writes %s", svc.ID, name)
+			}
+			for p := range signInProviders {
+				if strings.Contains(strings.ToLower(name), p) {
+					t.Errorf("%s: %s names %s", svc.ID, name, p)
+				}
+			}
+		}
 	}
 }

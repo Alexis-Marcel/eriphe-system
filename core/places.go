@@ -37,7 +37,7 @@ type placeKeeper struct {
 
 // placeKeepers are the tools that have places.
 var placeKeepers = []placeKeeper{
-	{Image: filesImage, Env: filesConfigEnv, Key: "folders", Browse: "browse_folders", Kind: toolDrive},
+	{Image: filesImage, Env: toolConfigEnv, Key: "places", Browse: "browse_folders", Kind: toolDrive},
 }
 
 // Place is a place given to Eriphe, as its tool keeps it.

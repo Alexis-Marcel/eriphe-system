@@ -29,22 +29,17 @@ import (
 // level (Server.AccountAccess, access.go): the server is also told to keep
 // read only the accounts whose level is read only. Its secret is a
 // variable of its own in the server's environment: a password bound by the
-// catalog (MAIL_PASSWORD_<hash>), or the connection's token in the vault
-// (MAIL_GOOGLE_TOKEN_<hash> for the accounts of before, legacy.go).
+// catalog (TOOL_PASSWORD_<hash>), or the connection's token in the vault
+// (TOOL_TOKEN_<hash>). The configuration and its keys are the contract of
+// Eriphe's tool servers (servers/README.md).
 
 // accountService is the mail, the calendar or the files.
 type accountService struct {
-	ID          string // its kind of tool (toolKinds); the mail's and the calendar's preset
-	Base        string // the catalog name it is made under
-	Image       string
-	ConfigEnv   string // the variable of its configuration
-	PasswordEnv string // the stem of an account's password variable; "": accounts are connections only
-	TokenEnv    string // the stem of a connection's token variable
-	Use         string // the text key of what it is for
-	Mark        string // its icon in an account's card
-	// PlainToken: auth names a token's variable token_env, not
-	// oauth_token_env.
-	PlainToken bool
+	ID    string // its kind of tool (toolKinds); the mail's and the calendar's preset
+	Base  string // the catalog name it is made under
+	Image string
+	Use   string // the text key of what it is for
+	Mark  string // its icon in an account's card
 	// Scopes: its configuration holds the scopes each account was granted.
 	Scopes bool
 	// AccountLevels: each account has its own access level (a mailbox read
@@ -57,13 +52,21 @@ type accountService struct {
 }
 
 var (
-	mailService = accountService{ID: toolMail, Base: "mail", Image: mailImage, ConfigEnv: "MAIL_CONFIG",
-		PasswordEnv: mailSecretEnv, TokenEnv: mailTokenEnv, Use: "preset.mail.use", Mark: "mail", AccountLevels: true, ByName: true}
-	calendarService = accountService{ID: toolCalendar, Base: "agenda", Image: calendarImage, ConfigEnv: "CALENDAR_CONFIG",
-		PasswordEnv: calSecretEnv, TokenEnv: calTokenEnv, Use: "preset.calendar.use", Mark: "calendar", AccountLevels: true}
-	filesService = accountService{ID: toolDrive, Base: filesServer, Image: filesImage, ConfigEnv: filesConfigEnv,
-		TokenEnv: driveTokenEnv, Use: "preset." + filesPreset + ".use", Mark: filesPreset, PlainToken: true, Scopes: true, ByName: true}
+	mailService = accountService{ID: toolMail, Base: "mail", Image: mailImage,
+		Use: "preset.mail.use", Mark: "mail", AccountLevels: true, ByName: true}
+	calendarService = accountService{ID: toolCalendar, Base: "agenda", Image: calendarImage,
+		Use: "preset.calendar.use", Mark: "calendar", AccountLevels: true}
+	filesService = accountService{ID: toolDrive, Base: filesServer, Image: filesImage,
+		Use: "preset." + filesPreset + ".use", Mark: filesPreset, Scopes: true, ByName: true}
 	accountServices = []accountService{mailService, calendarService, filesService}
+)
+
+// The contract's variables (servers/README.md): the configuration, and the
+// stems of an account's secret, followed by _<hash> (accountEnv).
+const (
+	toolConfigEnv   = "TOOL_CONFIG"
+	toolPasswordEnv = "TOOL_PASSWORD"
+	toolTokenEnv    = "TOOL_TOKEN"
 )
 
 // serviceOf finds the service a server's image gives.
@@ -114,18 +117,17 @@ type svcAccount struct {
 }
 
 type svcAuth struct {
-	PasswordEnv   string `json:"password_env,omitempty"`
-	OAuthTokenEnv string `json:"oauth_token_env,omitempty"`
-	TokenEnv      string `json:"token_env,omitempty"`
+	PasswordEnv string `json:"password_env,omitempty"`
+	TokenEnv    string `json:"token_env,omitempty"`
 }
 
 // secretEnv is the variable of the account's secret.
 func (a svcAccount) secretEnv() string {
-	return cmpOr(a.Auth.PasswordEnv, cmpOr(a.Auth.OAuthTokenEnv, a.Auth.TokenEnv))
+	return cmpOr(a.Auth.PasswordEnv, a.Auth.TokenEnv)
 }
 
 // signedIn tells an account on a connection's token.
-func (a svcAccount) signedIn() bool { return a.Auth.OAuthTokenEnv != "" || a.Auth.TokenEnv != "" }
+func (a svcAccount) signedIn() bool { return a.Auth.TokenEnv != "" }
 
 // svcConfig is the server's configuration; what eriphe-core does not
 // change in it (the files' places, a server's options) is kept as it is.
@@ -242,7 +244,7 @@ func svcConfigOf(svc accountService, spec RunSpec) (svcConfig, bool) {
 		return svcConfig{}, false
 	}
 	var cfg svcConfig
-	if json.Unmarshal([]byte(spec.Env[svc.ConfigEnv].Value), &cfg) != nil {
+	if json.Unmarshal([]byte(spec.Env[toolConfigEnv].Value), &cfg) != nil {
 		return svcConfig{}, false
 	}
 	return cfg, true
@@ -408,18 +410,15 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 	if level == "" {
 		level = accessReads
 	}
-	stem := svc.PasswordEnv
+	stem := toolPasswordEnv
 	if in.Secret != nil {
-		stem = svc.TokenEnv
+		stem = toolTokenEnv
 	}
 	env := accountEnv(stem, a.Name)
 	a.Auth = svcAuth{}
-	switch {
-	case in.Secret != nil && svc.PlainToken:
+	if in.Secret != nil {
 		a.Auth.TokenEnv = env
-	case in.Secret != nil:
-		a.Auth.OAuthTokenEnv = env
-	default:
+	} else {
 		a.Auth.PasswordEnv = env
 	}
 	if svc.Scopes {
@@ -615,7 +614,7 @@ func (c *core) writeService(svc accountService, st svcServer, srv Server, cfg sv
 		cfg.Accounts[i].ReadOnly = svc.AccountLevels && ok && a.level() == accessReadOnly
 	}
 	raw, _ := json.Marshal(cfg)
-	next := map[string]EnvValue{svc.ConfigEnv: {Value: string(raw)}}
+	next := map[string]EnvValue{toolConfigEnv: {Value: string(raw)}}
 	for _, a := range cfg.Accounts {
 		e := a.secretEnv()
 		if v, ok := env[e]; ok {

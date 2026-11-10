@@ -371,10 +371,8 @@ func (c *core) collectConnectionSecrets() {
 	}
 }
 
-// isConnectionSecret tells a connection's token by its vault name: the
-// ones made now, and the ones accounts had before connections
-// (legacySecretPrefix).
+// isConnectionSecret tells a connection's token by its vault name.
 func isConnectionSecret(name string) bool {
 	parts := strings.Split(name, ".")
-	return len(parts) == 3 && (parts[0] == "connection" || parts[0] == legacySecretPrefix) && parts[2] == "token"
+	return len(parts) == 3 && parts[0] == "connection" && parts[2] == "token"
 }
