@@ -37,9 +37,8 @@ import (
 // LaunchAgents, Syncthing): the updater runs the installer of that version
 // when its layout is newer. What it cannot do alone (a step that needs the
 // Mac's password, or an administrator's PowerShell) it leaves for the user,
-// in update-needs; an updater from before the layouts cannot bring one at
-// all. The node reports both (needs), and eriphe-core tells the user, with
-// the command to run.
+// in update-needs. The node reports it (needs), and eriphe-core tells the
+// user, with the command to run.
 
 const (
 	updaterFile = "updater"
@@ -80,8 +79,7 @@ func (u updateRequest) valid() bool {
 // updates is the node's side of the updates: the request it holds until no
 // task runs, and the last one it handed to the updater.
 type updates struct {
-	root    string
-	install string // how the node was installed (install.go)
+	root string
 
 	mu      sync.Mutex
 	pending *updateRequest // waiting for the tasks to end
@@ -193,42 +191,37 @@ func (u *updates) info() map[string]any {
 	}
 	if up != nil {
 		out["layout"] = layoutOf(up)
-		if n := u.needs(up); n != nil {
+		if n := u.needs(); n != nil {
 			out["needs"] = n
 		}
 	}
 	return out
 }
 
-// layoutOf is the install's layout the updater's file says: 1 from an
-// installer from before the layouts.
+// layoutOf is the install's layout the updater's file says: 0 when it says
+// none (eriphe-launcher's, which brings its own).
 func layoutOf(up map[string]string) int {
 	n, err := strconv.Atoi(up["layout"])
 	if err != nil || n < 1 {
-		return 1
+		return 0
 	}
 	return n
 }
 
 // needs is what the machine's install waits for from its user, if
-// anything: the step the updater left (update-needs), or the install
-// command once on an install of layout 1, older than this build's, which
-// its updater cannot bring (it is from before the layouts; or the layout
-// is incomplete, as a Mac's without Syncthing). An updater of a later
-// layout brings this build's by itself, at its next update; so does
+// anything: the step the updater left (update-needs). The updater brings
+// this build's layout by itself, at its next update; so does
 // eriphe-launcher (docker), as it updates itself.
-func (u *updates) needs(up map[string]string) map[string]any {
-	if nd := keyValues(filepath.Join(u.root, needsFile)); nd != nil {
-		why := nd["why"]
-		if !needsWhy[why] {
-			why = "layout"
-		}
-		return map[string]any{"why": why}
+func (u *updates) needs() map[string]any {
+	nd := keyValues(filepath.Join(u.root, needsFile))
+	if nd == nil {
+		return nil
 	}
-	if installLayout > 1 && layoutOf(up) == 1 && u.install != "docker" {
-		return map[string]any{"why": "layout"}
+	why := nd["why"]
+	if !needsWhy[why] {
+		why = "layout"
 	}
-	return nil
+	return map[string]any{"why": why}
 }
 
 // running counts the tasks an update would interrupt: an agent at work or

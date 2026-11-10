@@ -49,9 +49,6 @@ var runtimes = map[string]agentRuntime{
 }
 
 func runtimeFor(name string) (agentRuntime, error) {
-	if name == "" {
-		name = "claude-code" // tasks from before runtimes were named
-	}
 	rt, ok := runtimes[name]
 	if !ok {
 		return nil, fmt.Errorf("unknown runtime %q", name)

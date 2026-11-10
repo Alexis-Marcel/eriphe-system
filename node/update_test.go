@@ -167,10 +167,9 @@ func TestInstallLayout(t *testing.T) {
 	}
 }
 
-// What the install waits for from its user: the step the updater left, or
-// the install command once on an install from before the layouts, which
-// its updater cannot bring; nothing once at this layout, without an
-// updater, or under eriphe-launcher, which brings its own.
+// What the install waits for from its user: the step the updater left;
+// nothing otherwise, without an updater, or under eriphe-launcher, which
+// brings its own.
 func TestUpdateNeeds(t *testing.T) {
 	needs := func(install, updater, needsFile string) any {
 		t.Helper()
@@ -181,7 +180,7 @@ func TestUpdateNeeds(t *testing.T) {
 		if needsFile != "" {
 			os.WriteFile(filepath.Join(root, "update-needs"), []byte(needsFile), 0o600)
 		}
-		u := &updates{root: root, install: install}
+		u := &updates{root: root}
 		return u.info()["needs"]
 	}
 	now := fmt.Sprintf("version=1\npin=\nchannel=\nlayout=%d\n", installLayout)
@@ -189,8 +188,7 @@ func TestUpdateNeeds(t *testing.T) {
 		name, install, updater, needs, want string
 	}{
 		{"at its layout", "macos", now, "", ""},
-		{"an updater from before the layouts", "linux", "version=1\npin=\n", "", "layout"},
-		{"a layout not all there", "macos", "version=1\nlayout=1\n", "", "layout"},
+		{"an older layout", "linux", "version=1\nlayout=1\n", "", ""},
 		{"eriphe-launcher", "docker", "version=1\npin=\n", "", ""},
 		{"no updater", "", "", "", ""},
 		{"the password", "macos", now, "why=password\nlayout=2\n", "password"},

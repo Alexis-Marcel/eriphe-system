@@ -18,17 +18,15 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import EripheClient, EripheError, InvalidAuth, NotSupported, Speakers
+from .api import EripheClient, EripheError, InvalidAuth, Speakers
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.CONVERSATION]
 
-# Waits before asking eriphe-core again after a failure, growing to the max;
-# an eriphe-core older than the speakers is asked again rarely.
+# Waits before asking eriphe-core again after a failure, growing to the max.
 RETRY_MIN = 5
 RETRY_MAX = 300
-RETRY_NOT_SUPPORTED = 3600
 
 type EripheConfigEntry = ConfigEntry[EripheClient]
 
@@ -66,9 +64,6 @@ async def async_speak(hass: HomeAssistant, client: EripheClient) -> None:
             messages = await client.async_out(
                 speakers.places(), async_occupied(hass, speakers.places())
             )
-        except NotSupported:
-            await asyncio.sleep(RETRY_NOT_SUPPORTED)
-            continue
         except EripheError as err:
             level = logging.WARNING if isinstance(err, InvalidAuth) else logging.DEBUG
             _LOGGER.log(level, "Eriphe's channel: %s", err)

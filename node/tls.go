@@ -31,15 +31,14 @@ import (
 //     TLS handshake the CA whose public key has that hash, and pins it.
 //     Without a hash, an https:// address must have a publicly trusted
 //     certificate (eriphe-core's tailnet one); plain http:// still joins.
-//   - A node without a certificate (one that joined over plain HTTP, or
-//     before TLS) asks for one with its secret (POST /v1/node/certificate),
+//   - A node without a certificate (one that joined over plain HTTP) asks for one with its secret (POST /v1/node/certificate),
 //     and pins the CA that comes with it. From then on it reaches every
 //     http:// address of eriphe-core as https://, on the same port.
 //   - It asks for a new one with its current one when a third of its life
 //     is left.
 //
 // node.json keeps the CA, the certificate and its key; its addresses stay
-// as given, so an older version still runs on plain HTTP with it.
+// as given.
 
 // coreServerName is the name in eriphe-core's certificate for the nodes,
 // checked whatever the address (an IP, a container's name).
@@ -70,12 +69,11 @@ type tlsState struct {
 	path    string     // node.json, where a new certificate is saved; empty: none is asked for
 	certify sync.Mutex // one request for a certificate at a time
 
-	tlsMu   sync.Mutex
-	pin     string // -ca-hash, until the CA is known
-	pool    *x509.CertPool
-	caCert  *x509.Certificate
-	client  *tls.Certificate
-	saidOld bool // the node said eriphe-core gives no certificates
+	tlsMu  sync.Mutex
+	pin    string // -ca-hash, until the CA is known
+	pool   *x509.CertPool
+	caCert *x509.Certificate
+	client *tls.Certificate
 
 	clients sync.Once
 	dial    *http.Client // join, connect, reachable: gives up quickly
@@ -261,9 +259,6 @@ func (t *tlsState) needsCert(now time.Time) bool {
 	return leaf.NotAfter.Sub(now) < leaf.NotAfter.Sub(leaf.NotBefore)/3
 }
 
-// errNoCertificates is an eriphe-core that predates TLS for machines.
-var errNoCertificates = errors.New("eriphe-core gives no certificates (an older version): staying on plain HTTP")
-
 // getCert gets the node its first certificate, or a new one, from the first
 // of eriphe-core's addresses that answers, and saves it in node.json.
 func (s *state) getCert() error {
@@ -298,10 +293,7 @@ func (s *state) getCert() error {
 			return &unreachableError{u, err}
 		}
 		defer resp.Body.Close()
-		switch {
-		case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed:
-			return errNoCertificates
-		case resp.StatusCode != http.StatusOK:
+		if resp.StatusCode != http.StatusOK {
 			msg, _ := io.ReadAll(io.LimitReader(resp.Body, 500))
 			return fmt.Errorf("certificate: %s: %s", resp.Status, bytes.TrimSpace(msg))
 		}
@@ -383,18 +375,7 @@ func parseCert(p string) (*x509.Certificate, error) {
 // certifyNow is getCert, logged: an error never keeps the node from
 // connecting as it can.
 func (s *state) certifyNow() {
-	err := s.getCert()
-	switch {
-	case err == nil:
-	case errors.Is(err, errNoCertificates):
-		s.tlsMu.Lock()
-		said := s.saidOld
-		s.saidOld = true
-		s.tlsMu.Unlock()
-		if !said {
-			log.Printf("tls: %v", err)
-		}
-	default:
+	if err := s.getCert(); err != nil {
 		log.Printf("tls: %v", err)
 	}
 }

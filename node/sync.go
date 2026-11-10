@@ -98,9 +98,9 @@ func (n *node) sync(s *state) {
 		var out struct {
 			Rev      int64               `json:"rev"`
 			Tasks    []assignment        `json:"tasks"`
-			Services []serviceAssignment `json:"services"` // none from an eriphe-core without services
-			Update   *updateRequest      `json:"update"`   // none from an eriphe-core without updates
-			Prepare  *prepareSpec        `json:"prepare"`  // what to have ready (inject.go); none from an older eriphe-core
+			Services []serviceAssignment `json:"services"`
+			Update   *updateRequest      `json:"update"`  // none when no update is asked
+			Prepare  *prepareSpec        `json:"prepare"` // what to have ready (inject.go)
 		}
 		err := c.do(context.Background(), http.MethodGet, fmt.Sprintf("/v1/node/assignments?rev=%d&wait=30", rev), nil, &out)
 		if err != nil {

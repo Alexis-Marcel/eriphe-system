@@ -17,18 +17,14 @@ import (
 // An OAuth secret may be a refresh grant rather than an access token:
 // {"client_id", "client_secret", "refresh_token", "token_url"}, as eriphe-core
 // lends it for an account connected with a provider's sign-in; "token_url"
-// is where the provider refreshes it, Google's when absent (tokens lent
-// before it was given). The access
-// token is then refreshed here, in memory, shortly before it ends; it is
-// never written nor logged.
-
-const googleTokenURL = "https://oauth2.googleapis.com/token"
+// is where the provider refreshes it. The access token is then refreshed
+// here, in memory, shortly before it ends; it is never written nor logged.
 
 type refreshGrant struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
 	RefreshToken string `json:"refresh_token"`
-	TokenURL     string `json:"token_url,omitempty"`
+	TokenURL     string `json:"token_url"`
 }
 
 // errRevoked is a refresh token the provider refused: the user must
@@ -53,12 +49,15 @@ func accessToken(secret string) (token string, ok bool, err error) {
 	if g.ClientID == "" {
 		return "", true, errors.New("the refresh grant has no client_id")
 	}
+	if g.TokenURL == "" {
+		return "", true, errors.New("the refresh grant has no token_url")
+	}
 	key := sha256.Sum256([]byte(secret))
 	refreshers.Lock()
 	ts := refreshers.m[key]
 	if ts == nil {
 		cfg := &oauth2.Config{ClientID: g.ClientID, ClientSecret: g.ClientSecret,
-			Endpoint: oauth2.Endpoint{TokenURL: cmpOr(g.TokenURL, googleTokenURL), AuthStyle: oauth2.AuthStyleInParams}}
+			Endpoint: oauth2.Endpoint{TokenURL: g.TokenURL, AuthStyle: oauth2.AuthStyleInParams}}
 		ctx := context.WithValue(context.Background(), oauth2.HTTPClient, refreshHTTP)
 		ts = oauth2.ReuseTokenSource(nil, cfg.TokenSource(ctx, &oauth2.Token{RefreshToken: g.RefreshToken}))
 		refreshers.m[key] = ts
@@ -73,11 +72,4 @@ func accessToken(secret string) (token string, ok bool, err error) {
 		return "", true, fmt.Errorf("refreshing the access token: %w", err)
 	}
 	return tok.AccessToken, true, nil
-}
-
-func cmpOr(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }

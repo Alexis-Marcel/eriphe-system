@@ -39,9 +39,8 @@ func TestParseCores(t *testing.T) {
 	}
 }
 
-// A node.json of an older version (one address) still loads, and keeps its
-// format until a second address is added.
-func TestStateCompat(t *testing.T) {
+// A node.json keeps one address in "core", several in "cores" alone.
+func TestStateAddresses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "node.json")
 	os.WriteFile(path, []byte(`{"core":"http://nas:8800","name":"pc","secret":"s"}`), 0o600)
 	s, err := loadState(path)
@@ -63,14 +62,14 @@ func TestStateCompat(t *testing.T) {
 	var raw map[string]any
 	b, _ := os.ReadFile(path)
 	json.Unmarshal(b, &raw)
-	if raw["core"] != "http://nas:8800" || len(raw["cores"].([]any)) != 2 || raw["secret"] != "s" {
+	if _, ok := raw["core"]; ok || len(raw["cores"].([]any)) != 2 || raw["secret"] != "s" {
 		t.Fatalf("saved: %s", b)
 	}
 	s.setURLs([]string{"https://eriphe.tail1234.ts.net:8800"})
 	s.save(path)
 	b, _ = os.ReadFile(path)
-	if strings.Contains(string(b), "cores") {
-		t.Fatalf("one address, saved with cores: %s", b)
+	if strings.Contains(string(b), "cores") || !strings.Contains(string(b), `"core": "https://eriphe.tail1234.ts.net:8800"`) {
+		t.Fatalf("one address, saved: %s", b)
 	}
 }
 
@@ -89,7 +88,7 @@ func TestJoinFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Secret != "the-secret" || s.Core != lan || !slices.Equal(s.Cores, []string{lan, core.URL}) {
+	if s.Secret != "the-secret" || s.Core != "" || !slices.Equal(s.Cores, []string{lan, core.URL}) {
 		t.Fatalf("joined: %+v", s)
 	}
 	saved, _ := loadState(path)

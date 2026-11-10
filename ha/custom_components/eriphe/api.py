@@ -48,10 +48,6 @@ class UnexpectedResponse(EripheError):
     """eriphe-core answered something this client does not understand."""
 
 
-class NotSupported(EripheError):
-    """eriphe-core is older than what was asked (404)."""
-
-
 class EripheClient:
     """Talk to eriphe-core."""
 
@@ -85,8 +81,7 @@ class EripheClient:
     async def async_name(self) -> str:
         """Return what the user calls their assistant, or Eriphe.
 
-        An eriphe-core without the name (older than it) or that fails to
-        give it leaves the default.
+        An eriphe-core that fails to give it leaves the default.
         """
         try:
             async with self._session.get(
@@ -142,8 +137,6 @@ class EripheClient:
                 headers=self._headers,
                 timeout=OUT_TIMEOUT,
             ) as resp:
-                if resp.status == 404:
-                    raise NotSupported("eriphe-core has no channels yet")
                 await _raise_for_status(resp)
                 body = await resp.json(content_type=None)
         except (aiohttp.ClientError, TimeoutError) as err:

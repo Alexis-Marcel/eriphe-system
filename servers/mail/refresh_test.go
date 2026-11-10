@@ -47,7 +47,12 @@ func TestRefreshGrant(t *testing.T) {
 	if !errors.Is(err, errRevoked) || !strings.Contains(err.Error(), "reconnect") || strings.Contains(err.Error(), "rt-2") {
 		t.Fatalf("revoked: %v", err)
 	}
-	// An access token response is still read as before.
+	// A refresh grant without token_url is refused, saying so.
+	t.Setenv("MAIL_GOOGLE_TOKEN", `{"client_id":"cid","client_secret":"cs","refresh_token":"rt-3"}`)
+	if _, err := a.secret(); err == nil || !strings.Contains(err.Error(), "token_url") {
+		t.Fatalf("no token_url: %v", err)
+	}
+	// An access token response is still read.
 	t.Setenv("MAIL_GOOGLE_TOKEN", `{"access_token":"at"}`)
 	if s, err := a.secret(); err != nil || s != "at" {
 		t.Fatalf("access token: %q %v", s, err)
