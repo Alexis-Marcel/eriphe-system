@@ -113,7 +113,7 @@ func TestAccessCompatibility(t *testing.T) {
 		v     string
 		trust bool
 		want  string
-	}{{"read", false, accessReads}, {"ask", true, accessAsk}, {"", true, accessReads}, {"", false, accessAsk},
+	}{{"read", false, accessAsk}, {"ask", true, accessAsk}, {"", true, accessReads}, {"", false, accessAsk},
 		{"free", false, accessFree}, {"read-only", false, accessReadOnly}, {"bogus", false, accessAsk}} {
 		if got := formAccess(tc.v, tc.trust); got != tc.want {
 			t.Errorf("formAccess(%q, %v) = %s, want %s", tc.v, tc.trust, got, tc.want)

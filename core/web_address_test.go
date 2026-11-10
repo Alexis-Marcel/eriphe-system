@@ -255,19 +255,19 @@ func TestJoinTwoAddresses(t *testing.T) {
 	csrf := tw.setup()
 	host := strings.TrimPrefix(tw.srv.URL, "https://")
 	lan := "http://" + host[:strings.LastIndex(host, ":")] + ":8800"
-	_, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"laptop"}}, csrf)
+	_, body, _ := tw.post("/settings/devices/join", url.Values{"name": {"laptop"}}, csrf)
 	hasAll(t, "one address", body, "--core "+lan+" ")
 	hasNone(t, "one address", body, ",http")
 
 	tw.c.store.set(deviceFallbackKey, "http://100.64.0.2:8800")
 	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
 	hasAll(t, "choice", body, `name="via" value="both"`, "http://100.64.0.2:8800")
-	_, body, _ = tw.post("/settings/machines/join", url.Values{"name": {"laptop"}, "via": {"both"}}, csrf)
+	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"laptop"}, "via": {"both"}}, csrf)
 	both := lan + ",http://100.64.0.2:8800"
 	hasAll(t, "two addresses", body, "sh -s -- --core "+both+" ", "$env:ERIPHE_CORE='"+both+"';",
 		"-Core '"+both+"'", "ERIPHE_CORE: "+both+"\n", "eriphe-node -core "+both+" ")
-	_, body, _ = tw.post("/settings/machines/join", url.Values{"name": {"laptop"}, "via": {"remote"}}, csrf)
+	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"laptop"}, "via": {"remote"}}, csrf)
 	hasAll(t, "away only", body, "--core http://100.64.0.2:8800 ")
-	_, body, _ = tw.post("/settings/machines/join", url.Values{"name": {"laptop"}, "via": {"lan"}}, csrf)
+	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"laptop"}, "via": {"lan"}}, csrf)
 	hasNone(t, "lan only", body, "100.64.0.2")
 }

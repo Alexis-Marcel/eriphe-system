@@ -135,39 +135,6 @@ func TestWebAccessAPI(t *testing.T) {
 	}
 }
 
-// The former pages lead to Access, and their sections to each access's
-// page (early.js).
-func TestWebAccessMoved(t *testing.T) {
-	tw := newTestWeb(t)
-	tw.setup()
-	for from, to := range map[string]string{"/settings/remote": "/settings/access", "/settings/channels": "/settings/access",
-		"/settings/home-assistant": "/settings/tools"} {
-		if code, _, h := tw.do("GET", from, nil, nil); code != 301 || h.Get("Location") != to {
-			t.Errorf("GET %s: %d %s", from, code, h.Get("Location"))
-		}
-	}
-	early, err := webFS.ReadFile("web/static/early.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{`"#telegram": "telegram"`, `"#push": "app"`, `"#app": "app"`, `location.replace("/settings/access/" + page)`} {
-		if !strings.Contains(string(early), want) {
-			t.Errorf("early.js lacks %s", want)
-		}
-	}
-	// The app's page has the install, the push switch and the devices; the
-	// notifications page only links to it.
-	_, body, _ := tw.do("GET", "/settings/access/app", nil, nil)
-	for _, want := range []string{`data-install`, `id="push"`, `id="push-toggle"`, `id="push-devices"`, `href="#install"`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the app's page lacks %s", want)
-		}
-	}
-	if _, body, _ := tw.do("GET", "/settings/access/telegram", nil, nil); !strings.Contains(body, `id="tg-panel"`) {
-		t.Error("Telegram's page has no panel")
-	}
-}
-
 // Every kind of access has its words in both languages, and those of what
 // rows say.
 func TestAccessWords(t *testing.T) {

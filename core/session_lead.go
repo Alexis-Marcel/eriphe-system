@@ -333,7 +333,7 @@ func (c *core) finalSpec(s Session, steps []Step) stepSpec {
 		}
 		fmt.Fprintf(&b, "\n### Step « %s » (%s)\n%s\n", st.Title, st.Status, truncate(orStr(st.Output, st.Evidence), 1500))
 		for _, r := range st.Resources {
-			if r.Kind != resRepo && r.Kind != resFolder && r.Kind != resPlace && r.Kind != resDriveFolder {
+			if r.Kind != resRepo && r.Kind != resFolder && r.Kind != resPlace {
 				continue
 			}
 			r.Access, r.Hold = accessRead, false

@@ -483,7 +483,7 @@ func TestWebMachinesTLS(t *testing.T) {
 	tw.c.startMachineTLS()
 	csrf := tw.setup()
 	hash := tw.c.machines.hash
-	_, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"desk"}}, csrf)
+	_, body, _ := tw.post("/settings/devices/join", url.Values{"name": {"desk"}}, csrf)
 	for _, want := range []string{"-name desk -ca-hash " + hash, "ERIPHE_CA_HASH: " + hash, "-CaHash " + hash,
 		"--name desk --ca-hash " + hash + "</pre>", "-Name desk -CaHash " + hash + "</pre>"} {
 		if !strings.Contains(body, want) {
@@ -491,19 +491,19 @@ func TestWebMachinesTLS(t *testing.T) {
 		}
 	}
 	tw.c.store.registerNode("nas", hashSecret("s"))
-	_, body, _ = tw.do("GET", "/settings/machines", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
 	i := strings.Index(body, `<details class="panel advanced" id="machines-advanced">`)
 	if i < 0 || !strings.Contains(body[i:], hash) || strings.Count(body, hash) != 1 || !strings.Contains(body, "Connexion non chiffrée") {
 		t.Fatalf("machines page:\n%s", body)
 	}
-	if strings.Contains(body, "N'accepter que les machines en TLS") || strings.Contains(body, "/settings/machines/tls") {
+	if strings.Contains(body, "N'accepter que les machines en TLS") || strings.Contains(body, "/settings/devices/tls") {
 		t.Fatal("the TLS switch is still there")
 	}
 	tw.c.store.setNodeCert("nas", hashSecret("s"), "1f", time.Now().Add(time.Hour))
-	if _, body, _ = tw.do("GET", "/settings/machines", nil, nil); strings.Contains(body, "Connexion non chiffrée") {
+	if _, body, _ = tw.do("GET", "/settings/devices", nil, nil); strings.Contains(body, "Connexion non chiffrée") {
 		t.Fatal("a machine with its certificate is shown without")
 	}
-	if code, _, _ := tw.post("/settings/machines/tls", url.Values{"tls_only": {"0"}}, csrf); code == http.StatusOK {
+	if code, _, _ := tw.post("/settings/devices/tls", url.Values{"tls_only": {"0"}}, csrf); code == http.StatusOK {
 		t.Fatalf("the workspace still opens the plain path: %d", code)
 	}
 }

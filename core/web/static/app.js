@@ -784,17 +784,10 @@ function lit(name) {
       // back at the page; when it was opened on a step (a link to
       // #add/…), the address drops it, so the next event keeps it closed
       closing = false;
-      if (/^#(add|edit|added)(\/|$)/.test(location.hash)) history.replaceState(null, "", location.pathname + location.search);
+      if (/^#(add|edit)(\/|$)/.test(location.hash)) history.replaceState(null, "", location.pathname + location.search);
       return;
     }
     const hash = decodeURIComponent(location.hash.slice(1));
-    // the older way back after a save (#added/<name>): the list, its row lit
-    const added = /^added\/(.+)$/.exec(hash);
-    if (added) {
-      history.replaceState(null, "", location.pathname + location.search);
-      if (d.open) { follow = { name: added[1] }; return d.close(); }
-      return showTool({ name: added[1] });
-    }
     if (!/^(add|edit)(\/|$)/.test(hash)) {
       shown = "";
       if (d.open) d.close();

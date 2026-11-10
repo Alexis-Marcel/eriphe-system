@@ -10,23 +10,14 @@ import (
 
 // Settings → Devices: the devices connected to Eriphe (web_pages.go has
 // their cards), each one's page with its access log, and "Cut access"
-// (node_access.go). The addresses under /settings/machines, from before
-// devices, still work.
+// (node_access.go).
 
 func (w *web) deviceRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/devices", w.auth(w.handleMachines))
-	for _, old := range []string{"/settings/context", "/settings/observe"} { // the pages of what Eriphe knew or observed
-		mux.Handle("GET "+old, w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
-			http.Redirect(rw, r, "/settings/devices", http.StatusSeeOther)
-		}))
-	}
 	mux.Handle("POST /settings/devices/join", w.auth(w.handleJoinCommand))
 	mux.Handle("GET /settings/devices/{name}", w.auth(w.handleDevice))
 	mux.Handle("GET /settings/devices/{name}/wait", w.auth(w.handleJoinWait))
 	mux.Handle("GET /settings/devices/{name}/update", w.auth(w.handleUpdateState)) // web_updates.go
-	mux.Handle("GET /settings/machines/{name}", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
-		http.Redirect(rw, r, "/settings/devices/"+r.PathValue("name"), http.StatusSeeOther)
-	}))
 	mux.Handle("POST /settings/devices/{name}/forget", w.auth(w.handleForget))
 	mux.Handle("POST /settings/devices/{name}/rejoin", w.auth(w.handleRejoinCommand))
 	mux.Handle("POST /settings/devices/{name}/suspend", w.auth(w.handleDeviceAccess(true)))

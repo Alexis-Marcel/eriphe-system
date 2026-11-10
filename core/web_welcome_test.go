@@ -216,7 +216,7 @@ func TestWebNoWelcome(t *testing.T) {
 func TestWebJoinLocalAddress(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
-	_, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"desk"}}, csrf)
+	_, body, _ := tw.post("/settings/devices/join", url.Values{"name": {"desk"}}, csrf)
 	if !strings.Contains(body, "-core http://127.0.0.1:8800") || !strings.Contains(body, "ne marche que sur cet ordinateur") ||
 		!strings.Contains(body, `href="/settings/access/web#device-fallback"`) || !strings.Contains(body, "tunnel SSH") {
 		t.Fatalf("join on the loopback: %s", body)
@@ -226,14 +226,14 @@ func TestWebJoinLocalAddress(t *testing.T) {
 	}
 	// With the devices' second address, the command gives it: another device uses it.
 	tw.w.c.store.set(deviceFallbackKey, "http://100.64.0.2:8800")
-	_, body, _ = tw.post("/settings/machines/join", url.Values{"name": {"desk1"}}, csrf)
+	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"desk1"}}, csrf)
 	if !strings.Contains(body, "-core http://127.0.0.1:8800,http://100.64.0.2:8800") || !strings.Contains(body, "seconde adresse que la commande donne, http://100.64.0.2:8800") ||
 		strings.Contains(body, "#device-fallback") {
 		t.Fatalf("join on the loopback with a second address: %s", body)
 	}
 	tw.w.c.store.set(deviceFallbackKey, "")
 	tw.c.conf().PublicURL = "http://core.example.org:8800"
-	_, body, _ = tw.post("/settings/machines/join", url.Values{"name": {"desk2"}}, csrf)
+	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"desk2"}}, csrf)
 	if !strings.Contains(body, "-core http://core.example.org:8800") || strings.Contains(body, "ne marche que sur cet ordinateur") {
 		t.Fatalf("join with public_url: %s", body)
 	}

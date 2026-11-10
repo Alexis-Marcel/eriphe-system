@@ -333,12 +333,12 @@ func TestWebPagesRender(t *testing.T) {
 	pages := map[string][]string{
 		"/": {"Fix the &lt;b&gt;form&lt;/b&gt;", "<strong>small</strong>", "Cette décision te revient", "npm publish",
 			`name="permission" value="p-1"`, "PR #7", "acme/site", "fix-form", "Attend ta réponse", "Terminées récemment"},
-		"/tasks/t-run":       {"go test ./...", "Arrêter la tâche", "PR #7"},
-		"/tasks/t-idle":      {"Répondre à l&#39;agent", "Shall I send it?"},
-		"/tasks/t-perm":      {"d-perm-t-perm-p-1"},
-		"/settings/machines": {"box", "En ligne", "Hors ligne", "16 Go", "gpu", `eriphe-node 0.1.0-dev <small class="mono">7654321</small>`},
-		"/settings/agents":   {"small", "quick things", "Par défaut", "Prêt"},
-		"/settings/tools":    {"github", "Home Assistant", "/settings/tools/new?preset=mail"},
+		"/tasks/t-run":      {"go test ./...", "Arrêter la tâche", "PR #7"},
+		"/tasks/t-idle":     {"Répondre à l&#39;agent", "Shall I send it?"},
+		"/tasks/t-perm":     {"d-perm-t-perm-p-1"},
+		"/settings/devices": {"box", "En ligne", "Hors ligne", "16 Go", "gpu", `eriphe-node 0.1.0-dev <small class="mono">7654321</small>`},
+		"/settings/agents":  {"small", "quick things", "Par défaut", "Prêt"},
+		"/settings/tools":   {"github", "Home Assistant", "/settings/tools/new?preset=mail"},
 		"/settings/tools/new?preset=home-assistant": {"/api/mcp", `name="token"`, `value="bearer" checked`},
 		"/settings/tools/new?preset=mail":           {"provider=gmail", "provider=free", "provider=other", "Bientôt"},
 		"/settings/tools/new?preset=mail&provider=gmail": {`name="address"`, `name="password"`, "myaccount.google.com/apppasswords",
@@ -387,7 +387,7 @@ func TestJoinCommandPublishedPort(t *testing.T) {
 	_, own, _ := net.SplitHostPort(tw.c.conf().Listen)
 	for env, want := range map[string]string{"18800": ":18800 ", "": ":" + own + " ", "80a": ":" + own + " ", "70000": ":" + own + " "} {
 		t.Setenv("ERIPHE_API_PORT", env)
-		_, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"desk" + strings.ToLower(env)}}, csrf)
+		_, body, _ := tw.post("/settings/devices/join", url.Values{"name": {"desk" + strings.ToLower(env)}}, csrf)
 		if !strings.Contains(body, "--core http://"+host+want) {
 			t.Errorf("ERIPHE_API_PORT=%q: no --core http://%s%s in the join command", env, host, want)
 		}
@@ -406,7 +406,7 @@ func TestJoinCommandHTTPSWithCA(t *testing.T) {
 	}
 	tw.c.machines = ca
 	u, _ := url.Parse(tw.srv.URL)
-	_, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"desk"}}, csrf)
+	_, body, _ := tw.post("/settings/devices/join", url.Values{"name": {"desk"}}, csrf)
 	if !strings.Contains(body, "--core https://"+u.Hostname()+":") || !strings.Contains(body, ca.hash) {
 		t.Fatalf("join command: %s", body)
 	}
@@ -423,7 +423,7 @@ func TestJoinCommandAssistantName(t *testing.T) {
 		want bool
 	}{{"Jarvis", true}, {"Élise Dupont-Ray", true}, {"Eriphe", false}, {"Jo's", false}, {"Jo’s", false}} {
 		setAssistantName(c.name)
-		_, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"pc" + strconv.Itoa(i)}}, csrf)
+		_, body, _ := tw.post("/settings/devices/join", url.Values{"name": {"pc" + strconv.Itoa(i)}}, csrf)
 		body = html.UnescapeString(body)
 		for _, want := range []string{
 			" --assistant-name '" + c.name + "'</pre>",
@@ -444,7 +444,7 @@ func TestJoinCommandAssistantName(t *testing.T) {
 func TestWebAddMachine(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
-	code, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"desk"}, "labels": {"gpu"}}, csrf)
+	code, body, _ := tw.post("/settings/devices/join", url.Values{"name": {"desk"}, "labels": {"gpu"}}, csrf)
 	m := regexp.MustCompile(`-join-token ([0-9a-f]{16}\.[0-9a-f]{48}) -name desk -labels gpu`).FindStringSubmatch(body)
 	if code != 200 || m == nil {
 		t.Fatalf("join command: %d %s", code, body)
@@ -476,14 +476,14 @@ func TestWebAddMachine(t *testing.T) {
 	if _, err := tw.c.store.joinNode(hashSecret(m[1]), "desk", hashSecret("s")); err != nil {
 		t.Fatalf("the token shown does not join: %v", err)
 	}
-	if _, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"Bad Name"}}, csrf); strings.Contains(body, "-join-token") {
+	if _, body, _ := tw.post("/settings/devices/join", url.Values{"name": {"Bad Name"}}, csrf); strings.Contains(body, "-join-token") {
 		t.Fatal("a bad name got a token")
 	}
 	// A taken name gets no token; the machine's own action gives a rejoin one.
-	if _, body, _ := tw.post("/settings/machines/join", url.Values{"name": {"desk"}}, csrf); strings.Contains(body, "-join-token") {
+	if _, body, _ := tw.post("/settings/devices/join", url.Values{"name": {"desk"}}, csrf); strings.Contains(body, "-join-token") {
 		t.Fatal("a taken name got a join token")
 	}
-	_, body, _ = tw.post("/settings/machines/desk/rejoin", url.Values{}, csrf)
+	_, body, _ = tw.post("/settings/devices/desk/rejoin", url.Values{}, csrf)
 	m = regexp.MustCompile(`-join-token ([0-9a-f]{16}\.[0-9a-f]{48}) -name desk`).FindStringSubmatch(body)
 	if m == nil || !strings.Contains(body, "-Rejoin") {
 		t.Fatalf("rejoin command: %s", body)
@@ -494,7 +494,7 @@ func TestWebAddMachine(t *testing.T) {
 	if !tw.c.store.checkNode("desk", hashSecret("s2")) {
 		t.Fatal("the new secret is not the node's")
 	}
-	if _, body, _ := tw.post("/settings/machines/ghost/rejoin", url.Values{}, csrf); strings.Contains(body, "-join-token") {
+	if _, body, _ := tw.post("/settings/devices/ghost/rejoin", url.Values{}, csrf); strings.Contains(body, "-join-token") {
 		t.Fatal("an unknown machine got a rejoin token")
 	}
 }

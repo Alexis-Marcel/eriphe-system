@@ -102,21 +102,21 @@ func TestWebRemotePages(t *testing.T) {
 	}
 
 	// The join command offers the tailnet's address once ready.
-	_, body, _ = tw.do("GET", "/settings/machines", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
 	if !strings.Contains(body, `name="via" value="both"`) {
 		t.Fatal("no choice of address on the machines page")
 	}
-	_, body, _ = tw.post("/settings/machines/join", url.Values{"name": {"laptop"}, "via": {"both"}}, csrf)
+	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"laptop"}, "via": {"both"}}, csrf)
 	host := strings.TrimPrefix(tw.srv.URL, "https://")
 	host = host[:strings.LastIndex(host, ":")]
 	if !strings.Contains(body, "ERIPHE_CORE: http://"+host+":8800,https://"+testTSName+":8800") {
 		t.Fatalf("join, both:\n%s", body)
 	}
-	_, body, _ = tw.post("/settings/machines/join", url.Values{"name": {"laptop"}, "via": {"remote"}}, csrf)
+	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"laptop"}, "via": {"remote"}}, csrf)
 	if !strings.Contains(body, "-core https://"+testTSName+":8800 ") {
 		t.Fatalf("join, remote:\n%s", body)
 	}
-	_, body, _ = tw.post("/settings/machines/join", url.Values{"name": {"laptop"}, "via": {"lan"}}, csrf)
+	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"laptop"}, "via": {"lan"}}, csrf)
 	if strings.Contains(body, testTSName) {
 		t.Fatalf("join, lan:\n%s", body)
 	}
@@ -127,7 +127,7 @@ func TestWebRemotePages(t *testing.T) {
 	if v := h.r.current(); v.Phase != phaseOff {
 		t.Fatalf("after disable: %+v", v)
 	}
-	_, body, _ = tw.do("GET", "/settings/machines", nil, nil)
+	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
 	if strings.Contains(body, `name="via"`) {
 		t.Fatal("choice of address while remote access is off")
 	}
@@ -232,11 +232,11 @@ func TestWebRemoteJoinAtTailnetAddress(t *testing.T) {
 		}
 		return rec.Body.String()
 	}
-	if body := do("GET", "/settings/machines", nil); strings.Contains(body, `name="via"`) {
+	if body := do("GET", "/settings/devices", nil); strings.Contains(body, `name="via"`) {
 		t.Fatal("a choice of address at the tailnet's address")
 	}
 	for _, via := range []string{"", "both", "lan", "remote"} {
-		body := do("POST", "/settings/machines/join", url.Values{"name": {"laptop"}, "via": {via}})
+		body := do("POST", "/settings/devices/join", url.Values{"name": {"laptop"}, "via": {via}})
 		if n := strings.Count(body, "ERIPHE_CORE: https://"+testTSName+":8800\n"); n != 1 || strings.Contains(body, "http://"+testTSName) {
 			t.Fatalf("join via %q at the tailnet address (%d):\n%s", via, n, body)
 		}
