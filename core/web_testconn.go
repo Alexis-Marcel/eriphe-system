@@ -97,10 +97,6 @@ func (w *web) handleTestTool(rw http.ResponseWriter, r *http.Request, s *session
 	var v testView
 	kind := "remote"
 	switch {
-	case f.Preset.Form == "mail":
-		kind, v = "mail", w.testMail(r, f, old)
-	case f.Preset.Form == "calendar":
-		kind, v = "calendar", w.testCalendar(r, f, old)
 	case f.Kind == "local":
 		kind, v = "local", w.testLocal(r, f, old)
 	default:
@@ -299,9 +295,6 @@ func testTransport() *http.Transport {
 	t.Proxy = nil
 	t.TLSHandshakeTimeout = testConnTimeout
 	t.ResponseHeaderTimeout = testConnTimeout
-	if testRoots != nil {
-		t.TLSClientConfig = &tls.Config{RootCAs: testRoots}
-	}
 	return t
 }
 

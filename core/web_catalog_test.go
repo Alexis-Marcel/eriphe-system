@@ -117,8 +117,8 @@ func TestWebPresetsAreValid(t *testing.T) {
 			continue
 		}
 		name := "p-" + p.ID
-		if p.Form == "mail" || p.Form == "calendar" {
-			name = map[string]string{"mail": "mail", "calendar": "agenda"}[p.Form] // the service's one server
+		if card, ok := serviceByID(p.Card); ok {
+			name = card.Base // the tool's one server
 		}
 		srv := c.conf().Servers[name]
 		if srv.Use == "" || srv.TrustAnnotations != p.Trust || srv.level() != p.level() {

@@ -445,23 +445,19 @@
 </form>
 {{end}}{{end}}
 
-{{/* The kinds of mailbox or calendar account, each with its logo. */}}
-{{define "account-picker"}}{{if eq .PickKind "github"}}{{template "github-choice" .}}{{else}}
+{{/* The kinds of account of a tool with a card, each with its logo
+     (account_forms.go). */}}
+{{define "account-picker"}}{{if eq .PickKind "github"}}{{template "github-choice" .}}{{else}}{{$s := .Shape}}
 <section class="panel picker">
   <ul class="providers">
-  {{if eq .Preset.Form "mail"}}{{range .MailChoices}}
-    <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else if .Page}}<a class="provider provider-google" href="{{.Page}}">{{else}}<a class="provider{{if eq .ID $.Mail.Provider}} current{{end}}" href="{{$.PickURL}}{{.ID}}" data-step data-hash="{{$.StepHash .ID}}">{{end}}
+  {{range .Choices}}
+    <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else if .SignIn}}<a class="provider provider-{{.SignIn}}" href="{{.SignInPage $.Preset.Card}}">{{else}}<a class="provider{{if eq .ID $.Acct.Choice}} current{{end}}" href="{{$.PickURL}}{{.ID}}" data-step data-hash="{{$.StepHash .ID}}">{{end}}
       <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "account-icon" .ID}}</span>
-      <span class="provider-text"><b>{{t (printf "mailp.%s" .ID)}}</b><small>{{if .Soon}}<span class="soon-tag">{{t "pick.soon"}}</span>{{else}}{{t (printf "mailp.%s.domains" .ID)}}{{end}}</small></span>
+      <span class="provider-text"><b>{{t (printf "%s.%s" $s.Words .ID)}}</b><small>{{if .Soon}}<span class="soon-tag">{{t "pick.soon"}}</span>{{else}}{{t ($.Fill $s.Pick .ID)}}{{end}}</small></span>
     {{if .Soon}}</div>{{else}}</a>{{end}}</li>
-  {{end}}{{else}}{{range .CalChoices}}
-    <li>{{if .Soon}}<div class="provider soon" aria-disabled="true">{{else if .Page}}<a class="provider provider-google" href="{{.Page}}">{{else}}<a class="provider{{if eq .ID $.Calendar.Provider}} current{{end}}" href="{{$.PickURL}}{{.ID}}" data-step data-hash="{{$.StepHash .ID}}">{{end}}
-      <span class="pmark pmark-{{.ID}}" aria-hidden="true">{{template "account-icon" .ID}}</span>
-      <span class="provider-text"><b>{{t (printf "calp.%s" .ID)}}</b><small>{{if .Soon}}<span class="soon-tag">{{t "pick.soon"}}</span>{{else}}{{t (printf "calp.%s.desc" .ID)}}{{end}}</small></span>
-    {{if .Soon}}</div>{{else}}</a>{{end}}</li>
-  {{end}}{{end}}
+  {{end}}
   </ul>
-  <p class="muted small soon-why">{{t (printf "pick.%s.soonwhy" .Preset.Form)}}</p>
+  <p class="muted small soon-why">{{t $s.SoonWhy}}</p>
 </section>
 {{end}}{{end}}
 
@@ -642,34 +638,30 @@
 {{template "tool-access" .}}
 {{end}}{{end}}
 
-{{define "mail-fields"}}{{$c := .Mail.Choice}}{{$id := $c.ID}}
-  <input type="hidden" name="mail_provider" value="{{$id}}">
-  {{template "account-head" dict "ID" $id "Title" (t (printf "mailp.%s" $id)) "Note" (t (printf "mailp.%s.note" $id)) "Change" (and .Edit (printf "%schoose" .PickURL)) "Hash" (.StepHash "choose")}}
-  {{if $c.Soon}}<p class="alert" role="alert">{{t (printf "mailp.%s.soonlong" $id)}}</p>{{end}}
+{{/* An account's form, from its tool's card: the fields of its choice
+     (account_forms.go). . is a toolForm. */}}
+{{define "account-fields"}}{{$s := .Shape}}{{$c := .Choice}}{{$id := $c.ID}}
+  <input type="hidden" name="{{$s.ChoiceField}}" value="{{$id}}">
+  {{template "account-head" dict "ID" $id "Title" (t (printf "%s.%s" $s.Words $id)) "Note" (t (.Fill $s.Note $id)) "Change" (and .Edit (printf "%schoose" .PickURL)) "Hash" (.StepHash "choose")}}
+  {{if and $c.Soon $s.Soon}}<p class="alert" role="alert">{{t (.Fill $s.Soon $id)}}</p>{{end}}
   {{if .Switched}}<p class="notice">{{t "form.switched"}}</p>{{end}}
   <div class="form-grid">
-    <label class="field span-2"><span>{{t "mail.address"}}</span>
-      <input type="text" name="address" value="{{.Mail.Address}}" inputmode="email" autocomplete="email" spellcheck="false" placeholder="{{tor (printf "mailp.%s.placeholder" $id) "mailp.other.placeholder"}}"></label>
-    {{if eq $id "other"}}
-    <label class="field"><span>{{t "mail.imap"}}</span><input type="text" name="imap_host" value="{{.Mail.IMAPHost}}" spellcheck="false" autocapitalize="off" class="mono" placeholder="imap.exemple.fr"></label>
-    <label class="field"><span>{{t "mail.smtp"}}</span><input type="text" name="smtp_host" value="{{.Mail.SMTPHost}}" spellcheck="false" autocapitalize="off" class="mono" placeholder="smtp.exemple.fr"></label>
-    {{end}}
-    {{if $c.AppPass}}{{template "secret-field" dict "Name" "password" "Label" (t "mail.password") "Hint" (t "mail.passwordhint") "IsSet" .SecretSet "Keep" .Error}}
-    {{else}}{{template "secret-field" dict "Name" "password" "Label" (t "mail.boxpassword") "Hint" (tor (printf "mailp.%s.passwordhint" $id) "mail.boxpasswordhint") "IsSet" .SecretSet "Keep" .Error}}{{end}}
+    {{range .Fields false}}{{template "account-field" dict "F" . "C" $id "Form" $}}{{end}}
+    {{if $c.AppPass}}{{template "secret-field" dict "Name" "password" "Label" (t $s.Password.AppLabel) "Hint" (t $s.Password.AppHint) "IsSet" .SecretSet "Keep" .Error}}
+    {{else}}{{template "secret-field" dict "Name" "password" "Label" (t $s.Password.Label) "Hint" (tor (.Fill (or $s.Password.HintOf "-") $id) $s.Password.Hint) "IsSet" .SecretSet "Keep" .Error}}{{end}}
   </div>
-  {{template "howto" dict "Title" (t (printf "mailp.%s.howtotitle" $id)) "Steps" (steps (printf "mailp.%s.steps" $id)) "Link" $c.Link "Note" (and $c.AppPass (t "mail.howto.safe"))}}
+  {{template "howto" dict "Title" (t (.Fill $s.Howto $id)) "Steps" (steps (.Fill $s.Steps $id)) "Link" $c.Link "Note" (and $c.AppPass $s.Password.HowtoNote (t $s.Password.HowtoNote))}}
 {{end}}
 
-{{define "cal-fields"}}{{$c := .Calendar.Choice}}{{$id := $c.ID}}
-  <input type="hidden" name="cal_provider" value="{{$id}}">
-  {{template "account-head" dict "ID" $id "Title" (t (printf "calp.%s" $id)) "Note" (t (printf "calp.%s.desc" $id)) "Change" (and .Edit (printf "%schoose" .PickURL)) "Hash" (.StepHash "choose")}}
-  {{if .Switched}}<p class="notice">{{t "form.switched"}}</p>{{end}}
-  <div class="form-grid">
-    {{if $c.NeedsURL}}<label class="field span-2"><span>{{t "cal.url"}}</span><input type="text" name="cal_url" value="{{.Calendar.URL}}" inputmode="url" spellcheck="false" autocapitalize="off" class="mono" placeholder="{{t (printf "calp.%s.urlplaceholder" $id)}}" aria-describedby="cu-h"><small id="cu-h">{{t (printf "calp.%s.urlhint" $id)}}</small></label>{{end}}
-    <label class="field"><span>{{t (printf "calp.%s.user" $id)}}</span><input type="text" name="cal_user" value="{{.Calendar.Username}}" spellcheck="false" autocapitalize="off" autocomplete="username" placeholder="{{t (printf "calp.%s.userplaceholder" $id)}}"></label>
-    {{template "secret-field" dict "Name" "password" "Label" (t "cal.password") "Hint" (t "cal.passwordhint") "IsSet" .SecretSet "Keep" .Error}}
-  </div>
-  {{template "howto" dict "Title" (t "cal.howtotitle") "Steps" (steps (printf "calp.%s.steps" $id)) "Link" $c.Link "Note" ""}}
+{{/* One field of an account's form. . is a dict: F the field, C the
+     choice, Form the toolForm. */}}
+{{define "account-field"}}{{$f := .F}}{{$c := .C}}
+  <label class="field{{if $f.Wide}} span-2{{end}}{{if eq $f.Kind "zone"}} narrow-2{{end}}"><span>{{t ($f.LabelKey $c)}}</span>
+    <input type="text" name="{{$f.Name}}" value="{{.Form.Acct.Value $f.Name}}" spellcheck="false"{{if ne $f.Kind "email"}} autocapitalize="off"{{end}}
+      {{- if eq $f.Kind "email"}} inputmode="email" autocomplete="email"{{else if eq $f.Kind "url"}} inputmode="url" class="mono"{{else if eq $f.Kind "port"}} inputmode="numeric"{{else if eq $f.Kind "user"}} autocomplete="username"{{else if or (eq $f.Kind "host") (eq $f.Kind "zone")}} class="mono"{{end}}
+      {{- if $f.Example}} placeholder="{{$f.Example}}"{{else if $f.Placeholder}} placeholder="{{tor ($f.PlaceholderKey $c) (or $f.Else ($f.PlaceholderKey $c))}}"{{end}}
+      {{- if $f.Hint}} aria-describedby="{{$f.Name}}-h"{{end}}>
+    {{- if $f.Hint}}<small id="{{$f.Name}}-h">{{t ($f.HintKey $c)}}</small>{{end}}</label>
 {{end}}
 
 {{define "generic-fields"}}{{$c := .Preset.Compact}}
@@ -841,15 +833,14 @@
 {{if .Edit}}<form class="actions" hx-post="/settings/credentials/{{.Name}}/delete" hx-confirm="{{tf "lent.removeconfirm" .Name}}"><button class="btn btn-ghost sm" type="submit">{{t "lent.remove"}}</button></form>{{end}}
 {{end}}{{end}}
 
-{{define "tool-form"}}{{with .Data}}{{$c := .Preset.Compact}}
+{{define "tool-form"}}{{with .Data}}{{$c := .Preset.Compact}}{{$tf := .}}
 <form class="panel tool-form{{if .OrigOAuth}} orig-oauth{{.ReauthClass}}{{end}}" id="tool-form" hx-post="{{if .Edit}}/settings/tools/{{.Name}}{{else}}/settings/tools{{end}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
   <input type="hidden" name="preset" value="{{.Preset.ID}}">
   {{with .Account}}<input type="hidden" name="account" value="{{.}}">{{end}}
   {{if .InDialog}}<input type="hidden" name="dialog" value="1">{{end}}
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
 
-  {{if eq .Preset.Form "mail"}}{{template "mail-fields" .}}
-  {{else if eq .Preset.Form "calendar"}}{{template "cal-fields" .}}
+  {{if .IsAccount}}{{template "account-fields" .}}
   {{else}}{{template "generic-fields" .}}{{end}}
 
   {{if not .IsAccount}}<div class="form-grid name-row">{{template "name-field" .}}{{template "use-field" .}}</div>{{end}}
@@ -860,14 +851,9 @@
   <details class="advanced-opts" {{if and .Error (not $c)}}open{{end}}>
     <summary>{{t "form.advanced"}}</summary>
     <div class="stack">
-      {{if eq .Preset.Form "mail"}}{{if eq .Mail.Provider "other"}}
-      <div class="form-grid">
-        <label class="field"><span>{{t "mail.imapport"}}</span><input type="text" name="imap_port" value="{{.Mail.IMAPPort}}" inputmode="numeric" placeholder="993"></label>
-        <label class="field"><span>{{t "mail.smtpport"}}</span><input type="text" name="smtp_port" value="{{.Mail.SMTPPort}}" inputmode="numeric" placeholder="465"><small>{{t "mail.smtpporthint"}}</small></label>
-        <label class="field span-2"><span>{{t "mail.username"}}</span><input type="text" name="mail_user" value="{{.Mail.Username}}" spellcheck="false" autocapitalize="off" placeholder="{{t "mail.usernameplaceholder"}}"></label>
-      </div>{{end}}
-      {{else if eq .Preset.Form "calendar"}}
-      <label class="field narrow-2"><span>{{t "cal.tz"}}</span><input type="text" name="timezone" value="{{.Calendar.Timezone}}" spellcheck="false" class="mono"><small>{{t "cal.tzhint"}}</small></label>
+      {{if .IsAccount}}{{$adv := .Fields true}}{{if $adv}}
+      <div class="form-grid">{{range $adv}}{{template "account-field" dict "F" . "C" $tf.Choice.ID "Form" $tf}}{{end}}</div>{{end}}
+      {{range .Options}}{{template "account-field" dict "F" . "C" $tf.Choice.ID "Form" $tf}}{{end}}
       {{else if $c}}{{if .Preset.FixedURL}}{{template "url-field" .}}{{end}}{{template "auth-choices" .}}
       {{end}}
       <label class="field narrow"><span>{{t "form.timeout"}}</span><input type="text" name="timeout" value="{{.Timeout}}" inputmode="numeric" placeholder="600"><small>{{t "form.timeouthint"}}</small></label>

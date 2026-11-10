@@ -29,7 +29,7 @@ func TestToolOfAnotherVersion(t *testing.T) {
 		}
 		return ct, nil
 	}
-	if err := cc.putAccount(mailService, accountPut{Lang: "fr", Account: svcAccount{Name: "sam@example.org", Address: "sam@example.org", Provider: "ovh"},
+	if err := cc.putAccount(mailService, accountPut{Lang: "fr", Account: svcAccount{Name: "sam@example.org", Provider: "ovh", Fields: map[string]any{"address": "sam@example.org"}},
 		Password: "pw"}); err != nil {
 		t.Fatal(err)
 	}

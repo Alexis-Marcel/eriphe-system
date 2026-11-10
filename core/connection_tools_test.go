@@ -17,7 +17,7 @@ func TestToolOnAnyProvider(t *testing.T) {
 	old := toolCards
 	cards := slices.Clone(toolCards)
 	cards[0].SignIns = append(slices.Clone(cards[0].SignIns), toolSignIn{Provider: f.Name, Read: []string{"mail.read"},
-		AccountProvider: "example", AccountAddress: true})
+		AccountProvider: "example", AccountFields: []string{"address"}})
 	toolCards = cards
 	t.Cleanup(func() { delete(signInProviders, f.Name); toolCards = old })
 
@@ -51,7 +51,7 @@ func TestToolOnAnyProvider(t *testing.T) {
 		t.Fatalf("connection %v, mail %+v", ok, mail.Config.Accounts)
 	}
 	a := mail.Config.Accounts[0]
-	if a.Provider != "example" || a.Address != "sam@example.org" || mail.Spec.Env[a.secretEnv()].File != vaultPrefix+cn.Secret {
+	if a.Provider != "example" || a.get("address") != "sam@example.org" || mail.Spec.Env[a.secretEnv()].File != vaultPrefix+cn.Secret {
 		t.Fatalf("account %+v, env %+v", a, mail.Spec.Env)
 	}
 	if got, ok := c.connectionBySecret(mail, a); !ok || got.ID != cn.ID {

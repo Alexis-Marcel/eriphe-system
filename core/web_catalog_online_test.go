@@ -32,7 +32,7 @@ func TestOnlineCatalog(t *testing.T) {
 			t.Errorf("preset %s: category %q", p.ID, p.Category)
 		}
 		if !strings.Contains(string(css), ".mark-"+p.ID+" ") && !strings.Contains(string(css), ".mark-"+p.ID+",") && p.ID != "remote" && p.ID != "local" &&
-			p.Form != "mail" && p.Form != "calendar" {
+			p.Form != "account" {
 			t.Errorf("preset %s has no colour in app.css", p.ID)
 		}
 		if p.FixedURL() {

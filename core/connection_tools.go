@@ -49,10 +49,9 @@ type toolSignIn struct {
 	// when it may write; none when Read does both.
 	Write []string
 	// Account is its account in the tool's configuration: Name is the
-	// identity; AccountAddress and AccountUsername set those to it too.
+	// identity, and AccountFields are its keys set to it too.
 	AccountProvider string
-	AccountAddress  bool
-	AccountUsername bool
+	AccountFields   []string
 }
 
 // toolSignIns are what each kind of tool needs of an account at a
@@ -132,11 +131,8 @@ func (t toolSignIn) granted(scopes []string) (ok, write bool) {
 // account is the identity's account in the tool's configuration.
 func (t toolSignIn) account(identity string) svcAccount {
 	a := svcAccount{Name: identity, Provider: t.AccountProvider}
-	if t.AccountAddress {
-		a.Address = identity
-	}
-	if t.AccountUsername {
-		a.Username = identity
+	for _, k := range t.AccountFields {
+		a.set(k, identity)
 	}
 	return a
 }

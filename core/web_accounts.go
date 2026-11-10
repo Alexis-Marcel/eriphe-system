@@ -39,14 +39,10 @@ func accountPreset(svc toolCard, a svcAccount) toolPreset {
 
 // accountDetail is an account's line: "Gmail · sam@example.org".
 func accountDetail(lang string, svc toolCard, a svcAccount) string {
-	switch {
-	case a.signedIn():
+	if a.signedIn() || svc.Account == nil {
 		return productName(lang, accountProvider(svc, a), svc.ID) + " · " + a.Name
-	case svc.ID == toolMail:
-		f, _ := mailFormOf(a)
-		return tr(lang, "mailp."+f.Provider) + " · " + a.Address
 	}
-	return tr(lang, "calp."+a.Provider) + " · " + a.Username
+	return accountProduct(lang, svc, a) + " · " + cmpOr(a.get(svc.Account.key(svc.Account.NameBy)), a.Name)
 }
 
 // rowKey is the part of an account's row ids that names it: a short hash
@@ -102,14 +98,14 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 // the account signed in at its provider all the same).
 func accountOwner(svc toolCard, a svcAccount) (address, provider string) {
 	address, provider = a.Name, a.Provider
-	switch {
-	case a.signedIn():
+	switch s := svc.Account; {
+	case a.signedIn() || s == nil:
 		return a.Name, cmpOr(accountProvider(svc, a), a.Provider)
-	case svc.ID == toolMail:
-		f, _ := mailFormOf(a)
-		address, provider = cmpOr(a.Address, a.Name), f.Provider
-	case strings.Contains(a.Username, "@"):
-		address = a.Username
+	default:
+		provider = cmpOr(s.choiceOf(a).ID, a.Provider)
+		if login := a.get(s.key(s.NameBy)); strings.Contains(login, "@") {
+			address = login
+		}
 	}
 	if t, ok := signInByAccount(svc.ID, provider); ok {
 		provider = t.Provider
@@ -120,14 +116,10 @@ func accountOwner(svc toolCard, a svcAccount) (address, provider string) {
 // accountProduct is the line of a service in its account's card: what it
 // is at its provider ("Gmail", "Google Agenda", "iCloud").
 func accountProduct(lang string, svc toolCard, a svcAccount) string {
-	switch {
-	case a.signedIn():
+	if a.signedIn() || svc.Account == nil {
 		return productName(lang, accountProvider(svc, a), svc.ID)
-	case svc.ID == toolMail:
-		f, _ := mailFormOf(a)
-		return tr(lang, "mailp."+f.Provider)
 	}
-	return tr(lang, "calp."+a.Provider)
+	return tr(lang, svc.Account.Words+"."+svc.Account.choiceOf(a).ID)
 }
 
 // toolRows are the rows of one server of the list.
@@ -194,7 +186,7 @@ func (w *web) accountOfRequest(r *http.Request, server string) (toolCard, svcAcc
 }
 
 // toolFormOfAccount fills the form of an account, for an edit; ok is false
-// for an account on a Google account (its page, not a form).
+// for an account signed in at a provider (its card, not a form).
 func (w *web) toolFormOfAccount(name string, srv Server, svc toolCard, a svcAccount) (toolForm, bool) {
 	_, cfg, _ := accountsOf(srv)
 	f := toolForm{Edit: true, Name: name, Use: srv.Use, Kind: "local", Auth: "none", Account: a.Name,
@@ -202,22 +194,26 @@ func (w *web) toolFormOfAccount(name string, srv Server, svc toolCard, a svcAcco
 	f.Preset, _ = presetByID(svc.ID)
 	spec, _ := decodeRun(srv.Run)
 	f.SecretSet = a.Auth.PasswordEnv != "" && spec.Env[a.Auth.PasswordEnv].File != ""
+	s := svc.Account
+	if s == nil || f.Preset.Form != "account" {
+		return f, false
+	}
 	var ok bool
-	if svc.ID == toolMail {
-		f.Mail, ok = mailFormOf(a)
-	} else {
-		f.Calendar, ok = calendarFormOf(a, cfg.Timezone)
+	f.Acct, ok = s.formOf(a)
+	for _, o := range s.Server {
+		f.Acct.Values[o.Name] = cmpOr(cfg.option(o.Key), o.Default)
 	}
 	return f, ok
 }
 
-// saveAccount saves the form of a mailbox or a calendar account: one more
-// account of its service, or the one edited (name, f.Account).
+// saveAccount saves the form of an account of a tool with a card: one
+// more account of its service, or the one edited (name, f.Account).
 func (w *web) saveAccount(rw http.ResponseWriter, r *http.Request, s *session, f toolForm, name string, old *Server) {
 	fail := func(err error) { w.accountFormAgain(rw, r, s, f, name, old, err) }
-	svc := mailService
-	if f.Preset.Form == "calendar" {
-		svc = calendarService
+	svc, shape := f.Card(), f.Shape()
+	if shape == nil {
+		fail(errInvalid(errors.New("no account form")))
+		return
 	}
 	var prev *svcAccount
 	if f.Edit {
@@ -229,25 +225,15 @@ func (w *web) saveAccount(rw http.ResponseWriter, r *http.Request, s *session, f
 		}
 		prev = &a
 	}
-	var a svcAccount
-	var err error
-	moved := false
-	if svc.ID == toolMail {
-		a, err = f.Mail.account(prev)
-		if prev != nil {
-			p, _ := mailFormOf(*prev)
-			moved = !p.same(f.Mail)
-		}
-	} else {
-		a, err = f.Calendar.account()
-		if prev != nil {
-			p, _ := calendarFormOf(*prev, "")
-			moved = !p.same(f.Calendar)
-		}
-	}
-	if err != nil {
+	if err := shape.normalize(&f.Acct, prev); err != nil {
 		fail(err)
 		return
+	}
+	a := shape.account(f.Acct)
+	moved := false
+	if prev != nil {
+		p, _ := shape.formOf(*prev)
+		moved = !shape.same(p, f.Acct)
 	}
 	pw := accountPassword(r, f)
 	if strings.TrimSpace(pw) == "" && (prev == nil || moved || prev.signedIn()) {
@@ -262,8 +248,9 @@ func (w *web) saveAccount(rw http.ResponseWriter, r *http.Request, s *session, f
 	if prev != nil {
 		in.Replace = prev.Name
 	}
-	if svc.ID == toolCalendar {
-		in.Timezone = f.Calendar.Timezone
+	in.Options = map[string]string{}
+	for _, o := range shape.Server {
+		in.Options[o.Name] = f.Acct.Values[o.Name]
 	}
 	if err := w.c.putAccount(svc, in); err != nil {
 		fail(err)
@@ -301,12 +288,7 @@ func (w *web) accountFormAgain(rw http.ResponseWriter, r *http.Request, s *sessi
 	if old != nil && f.Account != "" {
 		if svc, a, ok := w.accountOfRequest(r, name); ok {
 			back, _ := w.toolFormOfAccount(name, *old, svc, a)
-			switch f.Preset.Form {
-			case "mail":
-				f.SecretSet = back.SecretSet && back.Mail.same(f.Mail)
-			case "calendar":
-				f.SecretSet = back.SecretSet && back.Calendar.same(f.Calendar)
-			}
+			f.SecretSet = back.SecretSet && svc.Account != nil && svc.Account.same(back.Acct, f.Acct)
 			f.Switched = !f.SecretSet && back.SecretSet
 			if v, ok := w.toolAccessOf(w.lang(r), name, a.Name); ok {
 				f.AccessView = &v

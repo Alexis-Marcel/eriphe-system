@@ -45,14 +45,14 @@ var connectionStrings = map[string]map[string]string{
 		"places.count":       "%d lieux",
 
 		// The connection presets' words (presets.go).
-		"preset.gdrive.title":  "Google Drive",
-		"preset.gdrive.desc":   "Donner des dossiers à {{name}} : lire, chercher, déposer ses résultats.",
-		"preset.gdrive.use":    "les dossiers que l'utilisateur a confiés à Eriphe dans Google Drive : lister, chercher, lire ; déposer des résultats dans leur sous-dossier Eriphe/ quand il l'a permis",
-		"preset.google.title":  "Google",
-		"preset.google.desc":   "Gmail, Google Agenda et Google Drive, avec une seule connexion à ton compte Google.",
-		"mailp.google":         "Gmail avec ton compte Google",
-		"mailp.google.domains": "Recommandé : une connexion, sans mot de passe d'application",
-		"presets.google":       "Ce service se connecte avec ton compte Google : Réglages › Outils › Ajouter › Google.",
+		"preset.gdrive.title":   "Google Drive",
+		"preset.gdrive.desc":    "Donner des dossiers à {{name}} : lire, chercher, déposer ses résultats.",
+		"preset.gdrive.use":     "les dossiers que l'utilisateur a confiés à Eriphe dans Google Drive : lister, chercher, lire ; déposer des résultats dans leur sous-dossier Eriphe/ quand il l'a permis",
+		"preset.google.title":   "Google",
+		"preset.google.desc":    "Gmail, Google Agenda et Google Drive, avec une seule connexion à ton compte Google.",
+		"mailp.google":          "Gmail avec ton compte Google",
+		"mailp.google.domains":  "Recommandé : une connexion, sans mot de passe d'application",
+		"presets.signin.google": "Ce service se connecte avec ton compte Google : Réglages › Outils › Ajouter › Google.",
 
 		// Errors of a sign-in, of an app and of places (catalogError keys).
 		"conn.noclient":   "Donne d'abord l'ID client et le code secret de ton app chez ce fournisseur.",
@@ -144,14 +144,14 @@ var connectionStrings = map[string]map[string]string{
 		"places.count":       "%d places",
 
 		// The connection presets' words (presets.go).
-		"preset.gdrive.title":  "Google Drive",
-		"preset.gdrive.desc":   "Give folders to {{name}}: read, search, drop its results.",
-		"preset.gdrive.use":    "the folders the user gave to Eriphe in Google Drive: list, search, read; drop results in their Eriphe/ subfolder where allowed",
-		"preset.google.title":  "Google",
-		"preset.google.desc":   "Gmail, Google Calendar and Google Drive, with one sign-in to your Google account.",
-		"mailp.google":         "Gmail with your Google account",
-		"mailp.google.domains": "Recommended: one sign-in, no app password",
-		"presets.google":       "This service connects with your Google account: Settings › Tools › Add › Google.",
+		"preset.gdrive.title":   "Google Drive",
+		"preset.gdrive.desc":    "Give folders to {{name}}: read, search, drop its results.",
+		"preset.gdrive.use":     "the folders the user gave to Eriphe in Google Drive: list, search, read; drop results in their Eriphe/ subfolder where allowed",
+		"preset.google.title":   "Google",
+		"preset.google.desc":    "Gmail, Google Calendar and Google Drive, with one sign-in to your Google account.",
+		"mailp.google":          "Gmail with your Google account",
+		"mailp.google.domains":  "Recommended: one sign-in, no app password",
+		"presets.signin.google": "This service connects with your Google account: Settings › Tools › Add › Google.",
 
 		"conn.noclient":   "First give the client ID and secret of your app at this provider.",
 		"conn.badplace":   "This place cannot be added.",
