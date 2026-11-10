@@ -104,3 +104,34 @@ func TestAppTest(t *testing.T) {
 		t.Fatal("no test on the app page")
 	}
 }
+
+// Beside Save, the test checks the app typed before it is saved, and says
+// what the form lacks.
+func TestAppTestTyped(t *testing.T) {
+	g := newFakeGoogle(t)
+	tw, _, csrf := filesCore(t, nil)
+	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
+	_, page, _ := tw.do("GET", "/settings/apps/google", nil, nil)
+	save := strings.Index(page, `type="submit">Enregistrer`)
+	if save < 0 || !strings.Contains(page[save:save+300], `hx-post="/settings/apps/google/test"`) {
+		t.Fatalf("no test beside Save: %s", page)
+	}
+	test := func(form url.Values) string {
+		t.Helper()
+		code, body, _ := tw.post("/settings/apps/google/test", form, csrf)
+		if code != 200 {
+			t.Fatalf("test: %d %s", code, body)
+		}
+		return html.UnescapeString(body)
+	}
+	if body := test(url.Values{"client_id": {testClientID}, "client_secret": {testClientSecret}}); !strings.Contains(body, "Google reconnaît ton app ("+testClientID+")") ||
+		strings.Contains(body, testClientSecret) {
+		t.Fatalf("typed: %s", body)
+	}
+	if _, err := appClient(providerGoogle); err == nil {
+		t.Fatal("the test saved the app")
+	}
+	if body := test(url.Values{"client_id": {testClientID}}); !strings.Contains(body, "tous deux nécessaires") {
+		t.Fatalf("no secret: %s", body)
+	}
+}
