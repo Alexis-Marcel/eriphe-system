@@ -72,7 +72,7 @@ func TestVersionBehind(t *testing.T) {
 		{"dev", "0.2.0", false},
 		{"", "0.2.0", false},
 		{"unknown", "0.2.0", false},
-		{"sha-d06ac28", "0.1.0", true}, // from before the releases
+		{"sha-d06ac28", "0.1.0", false}, // not a version
 		// latest is not a release (unknown yet, or an image of before them).
 		{"0.1.0", "", false},
 		{"0.1.0", "sha-d06ac28", false},
@@ -96,7 +96,7 @@ func TestSameVersion(t *testing.T) {
 		{"0.1.0", "0.2.0", false},
 		{"0.2.0", "0.1.0", false},
 		{"0.1.0-dev+aaaaaaa", "0.1.0-dev+bbbbbbb", false},
-		{"sha-d06ac28", "0.1.0", false},
+		{"sha-d06ac28", "0.1.0", true}, // not published: never asked to update
 		{"dev", "0.1.0", true},
 		{"0.1.0", "dev", true},
 		{"", "0.1.0", true},
@@ -133,29 +133,10 @@ func TestUpdatesReleases(t *testing.T) {
 		t.Fatalf("latest eriphe-core = %q", u.version("eriphe-core"))
 	}
 	for running, behind := range map[string]bool{"0.1.0": true, "0.2.0": false, "0.2.1": false,
-		"0.2.0-dev+abc1234": false, "0.1.0-dev+abc1234": false, "sha-abc1234": true} {
+		"0.2.0-dev+abc1234": false, "0.1.0-dev+abc1234": false, "sha-abc1234": false} {
 		if got := u.behind("eriphe-core", running); got != behind {
 			t.Errorf("behind(%s) = %t", running, got)
 		}
-	}
-}
-
-// A node from before the releases (sha-<commit>) gets its request without
-// eriphe-core's version, which it would refuse to read.
-func TestNodeUpdateRequestLegacyNode(t *testing.T) {
-	c := newUpdateCore(t, "0.1.0")
-	setNode(t, c, "old", `{"version":"sha-d06ac28","update":{"updater":true}}`)
-	setNode(t, c, "new", `{"version":"0.0.1","update":{"updater":true}}`)
-	for _, n := range []string{"old", "new"} {
-		if _, err := c.requestUpdate("node:"+n, "update", false); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if u := assignmentUpdate(t, c, "old"); u == nil || u.Core != "" {
-		t.Errorf("old node: %+v", u)
-	}
-	if u := assignmentUpdate(t, c, "new"); u == nil || u.Core != "0.1.0" {
-		t.Errorf("new node: %+v", u)
 	}
 }
 
@@ -170,7 +151,7 @@ func TestNodeBehindCore(t *testing.T) {
 		{"0.2.0-dev+aaaaaaa", "0.1.0", false},
 		{"0.1.0-dev+aaaaaaa", "0.1.0", true},
 		{"0.1.0-dev+aaaaaaa", "0.1.0-dev+bbbbbbb", true}, // cannot be ordered: follow eriphe-core
-		{"sha-d06ac28", "0.1.0", true},
+		{"sha-d06ac28", "0.1.0", false},
 		{"0.1.0", "sha-d06ac28", false},
 		{"dev", "0.1.0", false},
 		{"0.1.0", "dev", false},

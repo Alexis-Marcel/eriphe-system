@@ -199,7 +199,7 @@ func (c *core) logResults(t *TaskRow, events []EventRow) {
 	if len(drop) == 0 && len(manage) == 0 {
 		return
 	}
-	results := c.resultsOn(t.Node)
+	results := c.resultsName()
 	for _, ev := range events {
 		if ev.Type != "tool_use" {
 			continue

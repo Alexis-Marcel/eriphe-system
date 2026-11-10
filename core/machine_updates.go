@@ -401,8 +401,8 @@ func newUpdateID() string {
 }
 
 // sameVersion tells whether a node runs eriphe-core's own build. Only
-// published builds compare (a release, a build of main, or one from before
-// the releases): a local one (dev) never asks for an update.
+// published builds compare (a release or a build of main): a local one
+// (dev) never asks for an update.
 func sameVersion(node, core string) bool {
 	return node == core || !publishedVersion(node) || !publishedVersion(core)
 }
@@ -413,12 +413,6 @@ func sameVersion(node, core string) bool {
 // same version cannot be ordered: the node follows eriphe-core's.
 func nodeBehindCore(node, core string) bool {
 	if sameVersion(node, core) {
-		return false
-	}
-	if legacyVersion(node) {
-		return true
-	}
-	if legacyVersion(core) {
 		return false
 	}
 	n, ok := parseVersion(node)
@@ -490,16 +484,6 @@ func (c *core) nodeUpdateRequest(name string) *nodeUpdate {
 		}
 	}
 	u := &nodeUpdate{ID: r.ID, Action: r.Action, Core: version, Auto: r.Auto}
-	// A node from before the releases (sha-<commit>) drops a request with a
-	// version it cannot read: without one, its updater takes latest.
-	if !legacyVersion(version) {
-		nodes, _ := c.store.nodes()
-		for _, n := range nodes {
-			if n.Name == name && legacyVersion(parseInfo(n).Version) {
-				u.Core = ""
-			}
-		}
-	}
 	return u
 }
 
