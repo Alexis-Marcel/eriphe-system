@@ -391,7 +391,7 @@ holds their credentials and is the only one to reach them: **a task never sees a
 | Field | What |
 |---|---|
 | `url` | a remote server (streamable HTTP) |
-| `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"github_app": true}` (an installation token of Eriphe's GitHub App, refreshed before it ends; with `"account"`, from that account's or organization's installation: see [GitHub in a task](#the-github-app)), `{"none": true}` |
+| `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"connection": "<id>"}` (a connection whose provider mints the tokens, refreshed before they end: Eriphe's GitHub App on one account's or organization's installation, see [GitHub in a task](#the-github-app)), `{"none": true}` |
 | `run` | instead of `url` and `auth`: a local server, a container a node runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
 | `use` | what it is for, for the brain |
 | `access` | what Eriphe may do on it: `read-only`, `reads`, `free` or `ask` (see [access levels](#access-levels)); without it, `trust_annotations` says |
@@ -1290,11 +1290,14 @@ repository (`GET /repos/{owner}/{repo}/installation`) and asks
 `POST /app/installations/{id}/access_tokens` with `repositories` and `permissions`. Git
 credentials of tasks always find the installation per repository, whatever the connections.
 
-**GitHub connections on the app.** A catalog tool on the app is
-`{"auth": {"github_app": true, "account": "acme"}}`: its tokens come from the installation on that
-account or organization (without `account`, the owner's, or the only one), with its repositories
-and rights (reading only for a read-only tool), renewed five minutes before they end, cached per
-account. One name is one connection with its own rights, so `github` can use the user's
+**GitHub connections on the app.** Each account or organization the app is installed on is a
+[connection](#connections) of the provider `github`, which mints its tokens instead of signing in:
+it keeps no secret (the app's key is the app's), and its check asks GitHub whether the app is
+still installed there (no longer: lapsed, its tools held). A catalog tool on it is
+`{"auth": {"connection": "<id>"}}` (`ServerAuth.Connection`; the pool's `connToken`): its tokens
+come from that installation, with its repositories and rights (reading only for a read-only
+tool), renewed five minutes before they end, cached per account, and dropped once GitHub refuses
+one. One name is one connection with its own rights, so `github` can use the user's
 installation and `github-acme` the organization's. The page lists the GitHub connections with
 their account, offers a connection for each installation that has none (a name suggested:
 `github`, `github-<account>`), and a "Passer à l'app" for each one on a token, with the account

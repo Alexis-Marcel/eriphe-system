@@ -368,20 +368,20 @@ func TestGitHubToolTokenReadOnly(t *testing.T) {
 	c, _ := credCore(t, "")
 	f := newFakeGitHub(t)
 	withApp(t, c, f)
-	if _, err := c.github.toolToken(context.Background(), "", true); err != nil {
+	if _, err := c.github.mint(context.Background(), "", true); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ := json.Marshal(f.mints()[0])
 	if string(raw) != `{"permissions":{"checks":"read","contents":"read","issues":"read","metadata":"read","pull_requests":"read"}}` {
 		t.Fatalf("read-only token asked with %s", raw)
 	}
-	if _, err := c.github.toolToken(context.Background(), "", false); err != nil || len(f.mints()) != 2 {
+	if _, err := c.github.mint(context.Background(), "", false); err != nil || len(f.mints()) != 2 {
 		t.Fatalf("the full token reused the read-only one: %v, %d mints", err, len(f.mints()))
 	}
 	if raw, _ := json.Marshal(f.mints()[1]); string(raw) != `{}` {
 		t.Fatalf("full token asked with %s", raw)
 	}
-	if s := c.tokenScope("github", Server{URL: "https://api.githubcopilot.com/mcp/", Auth: &ServerAuth{GitHubApp: true}, Access: accessReadOnly}); !s.Scoped || s.Granted != grantedRead {
+	if s := c.tokenScope("github", Server{URL: "https://api.githubcopilot.com/mcp/", Auth: &ServerAuth{Connection: "0123456789ab"}, Access: accessReadOnly}); !s.Scoped || s.Granted != grantedRead {
 		t.Fatalf("app scope: %+v", s)
 	}
 }

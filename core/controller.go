@@ -67,7 +67,10 @@ type core struct {
 	routeMu     sync.Mutex       // one escalation pass at a time (route_send.go)
 
 	github *githubClient // Eriphe's GitHub App (github_app.go)
-	tokens tokenCache    // tokens minted for tasks, while they last (repo_lend.go)
+	// minters are the providers whose connections core mints tokens for,
+	// by name (connections.go).
+	minters map[string]tokenMinter
+	tokens  tokenCache // tokens minted for tasks, while they last (repo_lend.go)
 
 	catalogMu sync.Mutex // one change of the catalog at a time
 	dyn       dynamicCatalog
@@ -105,8 +108,9 @@ func newCore(cfg *Config, store *Store) *core {
 	}
 	c.github = newGitHubClient()
 	c.pool = newPool(store, m.Servers)
-	c.pool.appToken = c.github.toolToken // the GitHub tool on the app
-	c.pool.appTokenRefused = c.github.dropToolToken
+	c.minters = map[string]tokenMinter{githubProvider: c.github}
+	c.pool.connToken = c.connectionToken // a tool on a connection that mints its tokens
+	c.pool.connRefused = c.connectionRefused
 	c.pool.authHold = c.connectionHold  // an account to connect again (connections.go)
 	c.pool.opened = c.watchServerEvents // the servers' events (event_sources.go)
 	// Local servers are services, reached on their node.

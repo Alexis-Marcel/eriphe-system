@@ -19,43 +19,96 @@ func TestGitHubToolTokenAccount(t *testing.T) {
 	withApp(t, c, f)
 	ctx := context.Background()
 
-	tok, err := c.github.toolToken(ctx, "acme", false)
+	tok, err := c.github.mint(ctx, "acme", false)
 	if err != nil || tok != "ghs_acme_x" || len(f.orgMint) != 1 || len(f.mints()) != 0 {
 		t.Fatalf("acme: %q %v (org mints %d, owner mints %d)", tok, err, len(f.orgMint), len(f.mints()))
 	}
 	// Cached per account, case aside; the owner's is another token.
-	if tok, _ := c.github.toolToken(ctx, "ACME", false); tok != "ghs_acme_x" || len(f.orgMint) != 1 {
+	if tok, _ := c.github.mint(ctx, "ACME", false); tok != "ghs_acme_x" || len(f.orgMint) != 1 {
 		t.Fatalf("acme again: %q", tok)
 	}
-	if tok, err := c.github.toolToken(ctx, "", false); err != nil || tok != "ghs_x" {
+	if tok, err := c.github.mint(ctx, "", false); err != nil || tok != "ghs_x" {
 		t.Fatalf("owner: %q %v", tok, err)
 	}
-	if _, err := c.github.toolToken(ctx, "nobody", false); err == nil || !strings.Contains(err.Error(), "not installed on nobody") {
+	if _, err := c.github.mint(ctx, "nobody", false); err == nil || !strings.Contains(err.Error(), "not installed on nobody") {
 		t.Fatalf("an account without the app: %v", err)
 	}
 
-	// The pool asks with the server's account.
+	// The pool asks with the server's connection.
 	var asked []string
-	p := &pool{appToken: func(_ context.Context, account string, readOnly bool) (string, error) {
-		asked = append(asked, account)
+	p := &pool{connToken: func(_ context.Context, id string, readOnly bool) (string, error) {
+		asked = append(asked, id)
 		return "tok", nil
 	}}
 	u := &upstream{p: p, name: "github-acme", srv: Server{URL: "https://api.githubcopilot.com/mcp/", Use: "GitHub",
-		Auth: &ServerAuth{GitHubApp: true, Account: "acme"}}}
-	if _, err := p.dialServer(ctx, u); err != nil || len(asked) != 1 || asked[0] != "acme" {
+		Auth: &ServerAuth{Connection: "0123456789ab"}}}
+	if _, err := p.dialServer(ctx, u); err != nil || len(asked) != 1 || asked[0] != "0123456789ab" {
 		t.Fatalf("dial: %v, asked %v", err, asked)
 	}
 }
 
-func TestServerAccountNeedsTheApp(t *testing.T) {
+// A tool on the app's connection gets its tokens through the connection,
+// from its account's installation; one the app no longer reaches lapses.
+func TestGitHubConnectionMints(t *testing.T) {
+	cc := newDynamicCore(t, nil)
+	f := newFakeGitHub(t)
+	f.org = true
+	withApp(t, cc.core, f)
+	cn, err := cc.keepMinted(githubProvider, "acme")
+	if err != nil || cn.Secret != "" {
+		t.Fatalf("kept: %+v %v", cn, err)
+	}
+	if again, _ := cc.keepMinted(githubProvider, "ACME"); again.ID != cn.ID {
+		t.Fatalf("twice: %+v", again)
+	}
+	if tok, err := cc.connectionToken(t.Context(), cn.ID, false); err != nil || tok != "ghs_acme_x" {
+		t.Fatalf("token: %q %v", tok, err)
+	}
+	if why, err := cc.checkConnection(t.Context(), cn); why != "" || err != nil {
+		t.Fatalf("check: %q %v", why, err)
+	}
+	gone, _ := cc.keepMinted(githubProvider, "nobody")
+	if why, err := cc.checkConnection(t.Context(), gone); why != lapsedRevoked || err != nil {
+		t.Fatalf("not installed: %q %v", why, err)
+	}
+	if _, err := cc.connectionToken(t.Context(), "0123456789ab", false); err == nil {
+		t.Fatal("a token of no connection")
+	}
+	srv := Server{URL: "https://api.githubcopilot.com/mcp/", Use: "GitHub", Auth: &ServerAuth{Connection: gone.ID}}
+	if err := cc.putServer(putCreate, "github-nobody", srv, nil); err != nil {
+		t.Fatal(err)
+	}
+	if why, _ := cc.connectionHold("github-nobody"); !strings.Contains(why, "GitHub account nobody") {
+		t.Fatalf("held: %q", why)
+	}
+	if tools := cc.connectionTools(gone); len(tools) != 1 || tools[0] != "github-nobody" {
+		t.Fatalf("tools: %v", tools)
+	}
+	cc.dropConnection(t.Context(), gone)
+	if _, err := loadGitHubApp(); err != nil {
+		t.Fatalf("the app went with a connection: %v", err)
+	}
+}
+
+// appAccount is the account of a server's connection on the app.
+func appAccount(c *core, s Server) string {
+	if s.authKind() != "connection" {
+		return ""
+	}
+	for _, cn := range c.connectionsOf(s) {
+		return cn.Identity
+	}
+	return ""
+}
+
+func TestServerOnAConnection(t *testing.T) {
 	for _, tc := range []struct {
 		auth ServerAuth
 		ok   bool
 	}{
-		{ServerAuth{GitHubApp: true, Account: "acme"}, true},
-		{ServerAuth{GitHubApp: true}, true},
-		{ServerAuth{BearerFile: "/x", Account: "acme"}, false},
-		{ServerAuth{GitHubApp: true, Account: "not an account"}, false},
+		{ServerAuth{Connection: "0123456789ab"}, true},
+		{ServerAuth{Connection: "0123456789ab", BearerFile: "/x"}, false},
+		{ServerAuth{Connection: "not an id"}, false},
 	} {
 		a := tc.auth
 		c := &Config{Servers: map[string]Server{"github": {URL: "https://api.githubcopilot.com/mcp/", Auth: &a, Use: "GitHub"}}}
@@ -106,7 +159,7 @@ func TestGitHubSwitchTokenToApp(t *testing.T) {
 		t.Fatalf("switch: %d %v", code, h)
 	}
 	s := cc.conf().Servers["github-acme"]
-	if s.Auth == nil || !s.Auth.GitHubApp || s.Auth.Account != "acme" || s.Auth.BearerFile != "" || s.level() != accessFree || s.Use != "GitHub for acme" {
+	if appAccount(cc.core, s) != "acme" || s.Auth.BearerFile != "" || s.level() != accessFree || s.Use != "GitHub for acme" {
 		t.Fatalf("switched %+v %+v", s, s.Auth)
 	}
 	if a := cc.store.allowedActions("github-acme"); len(a) != 1 || a[0].Tool != "create_issue" {
@@ -148,10 +201,10 @@ func TestGitHubConnectionPerAccount(t *testing.T) {
 		t.Fatalf("acme's: %v", h)
 	}
 	conf := cc.conf()
-	if a := conf.Servers["github"].Auth; a == nil || !a.GitHubApp || a.Account != "" {
-		t.Fatalf("github %+v", a)
+	if a := appAccount(cc.core, conf.Servers["github"]); a != "owner" {
+		t.Fatalf("github %q", a)
 	}
-	if s := conf.Servers["github-acme"]; s.Auth == nil || s.Auth.Account != "acme" || !strings.Contains(s.Use, "(acme)") {
+	if s := conf.Servers["github-acme"]; appAccount(cc.core, s) != "acme" || !strings.Contains(s.Use, "(acme)") {
 		t.Fatalf("github-acme %+v", s)
 	}
 	// Not over a tool that is not GitHub's.
@@ -220,7 +273,7 @@ func TestGitHubConnectionOnInstall(t *testing.T) {
 		t.Fatalf("acme: %d %v", code, h)
 	}
 	s := cc.conf().Servers["github-acme"]
-	if s.Auth == nil || !s.Auth.GitHubApp || s.Auth.Account != "acme" || s.level() != accessReads {
+	if appAccount(cc.core, s) != "acme" || s.level() != accessReads {
 		t.Fatalf("github-acme %+v %+v", s, s.Auth)
 	}
 	if _, body, _ := tw.do("GET", "/settings/github?added=github-acme", nil, nil); !strings.Contains(body, "« github-acme » est dans tes outils") ||
@@ -241,7 +294,7 @@ func TestGitHubConnectionOnInstall(t *testing.T) {
 	if code != http.StatusSeeOther || h.Get("Location") != "/settings/github?switched=github&revoke=1" {
 		t.Fatalf("owner: %d %v", code, h)
 	}
-	if s := cc.conf().Servers["github"]; s.Auth == nil || !s.Auth.GitHubApp || s.Auth.Account != "" || s.level() != accessFree {
+	if s := cc.conf().Servers["github"]; appAccount(cc.core, s) != "owner" || s.level() != accessFree {
 		t.Fatalf("github %+v", s)
 	}
 }
@@ -281,7 +334,7 @@ func TestGitHubRefusedToolTokenDropped(t *testing.T) {
 	f := newFakeGitHub(t)
 	withApp(t, c, f)
 	ctx := context.Background()
-	if tok, err := c.github.toolToken(ctx, "", false); err != nil || tok != "ghs_x" {
+	if tok, err := c.github.mint(ctx, "", false); err != nil || tok != "ghs_x" {
 		t.Fatalf("first: %q %v", tok, err)
 	}
 	refused := 0
@@ -293,8 +346,8 @@ func TestGitHubRefusedToolTokenDropped(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer api.Close()
-	tt := tokenTransport{source: func(ctx context.Context) (string, error) { return c.github.toolToken(ctx, "", false) },
-		refused: func() { refused++; c.github.dropToolToken("", false) }, base: http.DefaultTransport}
+	tt := tokenTransport{source: func(ctx context.Context) (string, error) { return c.github.mint(ctx, "", false) },
+		refused: func() { refused++; c.github.refused("", false) }, base: http.DefaultTransport}
 	client := &http.Client{Transport: tt}
 	resp, err := client.Get(api.URL)
 	if err != nil || resp.StatusCode != http.StatusUnauthorized || refused != 1 {

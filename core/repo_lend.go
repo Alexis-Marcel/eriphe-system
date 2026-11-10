@@ -156,12 +156,9 @@ func lentRepos(list []ResourceRef) []repoGrant {
 	return out
 }
 
-// isGitHubServer: GitHub's remote MCP server, one on the GitHub App, or the
-// one named github.
+// isGitHubServer: GitHub's remote MCP server (the app's connections put
+// theirs there), or the one named github.
 func isGitHubServer(name string, s Server) bool {
-	if s.Auth != nil && s.Auth.GitHubApp {
-		return true
-	}
 	if u, err := url.Parse(s.URL); err == nil && strings.EqualFold(u.Hostname(), "api.githubcopilot.com") {
 		return true
 	}

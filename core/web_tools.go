@@ -75,7 +75,7 @@ func (t toolView) ConnLabel() string { return providerLabel(t.ConnProvider) }
 func (t toolView) PlacesURL() string { return "/settings/tools/" + t.Name + "/places" }
 
 func editable(source string, p toolPreset, auth string) bool {
-	return source == sourceWorkspace && auth != "github-app" && p.Form != "connection"
+	return source == sourceWorkspace && auth != "connection" && p.Form != "connection"
 }
 
 // AccessURL is the tool's page, every row's Edit (web_access.go); AllowedURL,
@@ -284,9 +284,6 @@ var followKey = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
 func (w *web) toolRow(lang string, conf *Config, sv serverView) toolView {
 	t := toolView{serverView: sv, Source: sv.Source}
 	t.Preset, t.Detail = presetOf(lang, conf.Servers[sv.Name])
-	if t.Preset.ID == "github" {
-		t.Detail = githubDetail(lang, conf.Servers[sv.Name])
-	}
 	t.Scope = w.c.tokenScope(sv.Name, conf.Servers[sv.Name])
 	t.Allowed = len(w.c.store.allowedActions(sv.Name))
 	if sv.Auth == "oauth" {
@@ -298,6 +295,9 @@ func (w *web) toolRow(lang string, conf *Config, sv serverView) toolView {
 			t.Connection, t.ConnProvider, t.Reconnect = a.Identity, a.Provider, a.Lapsed != ""
 		}
 	}
+	if t.Preset.ID == "github" {
+		t.Detail = githubDetail(lang, conf.Servers[sv.Name], t.Connection)
+	}
 	_, _, t.Places = keeperOf(conf.Servers[sv.Name])
 	t.Places = t.Places && sv.Source == sourceWorkspace
 	t.Pending, t.Placed = startState(sv)
@@ -307,18 +307,12 @@ func (w *web) toolRow(lang string, conf *Config, sv serverView) toolView {
 	return t
 }
 
-// githubDetail is the line of a GitHub connection: on the app, and from
-// which account's installation; or on a personal token.
-func githubDetail(lang string, s Server) string {
+// githubDetail is the line of a GitHub tool: on the app, and on which
+// account's connection; or on a personal token.
+func githubDetail(lang string, s Server, account string) string {
 	d := tr(lang, "preset.github.title")
 	switch s.authKind() {
-	case "github-app":
-		account := s.Auth.Account
-		if account == "" {
-			if app, err := loadGitHubApp(); err == nil {
-				account = app.Owner
-			}
-		}
+	case "connection":
 		d += " · " + tr(lang, "github.viaapp")
 		if account != "" {
 			d += " · " + account

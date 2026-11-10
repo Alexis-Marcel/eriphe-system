@@ -57,16 +57,13 @@ type Server struct {
 }
 
 // ServerAuth is how eriphe-core authenticates to a remote server: exactly
-// one of a bearer token in a file, OAuth, Eriphe's GitHub App (an
-// installation token, refreshed; github_app.go), or none.
+// one of a bearer token in a file, OAuth, a connection whose provider
+// mints its short tokens (its id; connections.go), or none.
 type ServerAuth struct {
 	BearerFile string       `json:"bearer_file,omitempty"`
 	OAuth      *OAuthConfig `json:"oauth,omitempty"`
-	GitHubApp  bool         `json:"github_app,omitempty"`
-	// Account, with github_app: the GitHub account or organization whose
-	// installation of the app this connection uses; empty, the app owner's.
-	Account string `json:"account,omitempty"`
-	None    bool   `json:"none,omitempty"`
+	Connection string       `json:"connection,omitempty"`
+	None       bool         `json:"none,omitempty"`
 }
 
 // OAuthConfig configures the authorization code flow of the MCP
@@ -94,8 +91,8 @@ func (s Server) authKind() string {
 		return "oauth"
 	case s.Auth.BearerFile != "":
 		return "bearer"
-	case s.Auth.GitHubApp:
-		return "github-app"
+	case s.Auth.Connection != "":
+		return "connection"
 	default:
 		return "none"
 	}
@@ -146,19 +143,19 @@ func (c *Config) checkServers() error {
 		}
 		a := s.Auth
 		if a == nil {
-			return fmt.Errorf(`server %s: auth is required: {"bearer_file": ...}, {"oauth": {...}}, {"github_app": true} or {"none": true}`, name)
+			return fmt.Errorf(`server %s: auth is required: {"bearer_file": ...}, {"oauth": {...}}, {"connection": "<id>"} or {"none": true}`, name)
 		}
 		n := 0
-		for _, set := range []bool{a.BearerFile != "", a.OAuth != nil, a.GitHubApp, a.None} {
+		for _, set := range []bool{a.BearerFile != "", a.OAuth != nil, a.Connection != "", a.None} {
 			if set {
 				n++
 			}
 		}
 		if n != 1 {
-			return fmt.Errorf("server %s: auth is exactly one of bearer_file, oauth, github_app or none", name)
+			return fmt.Errorf("server %s: auth is exactly one of bearer_file, oauth, connection or none", name)
 		}
-		if a.Account != "" && (!a.GitHubApp || !githubLogin.MatchString(a.Account)) {
-			return fmt.Errorf("server %s: auth account is a GitHub account or organization name, with github_app", name)
+		if a.Connection != "" && !connectionID.MatchString(a.Connection) {
+			return fmt.Errorf("server %s: auth connection is a connection's id", name)
 		}
 		if o := a.OAuth; o != nil {
 			if o.ClientSecretFile != "" && o.ClientIDFile == "" {

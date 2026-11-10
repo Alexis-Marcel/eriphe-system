@@ -30,9 +30,17 @@ import (
 //
 // The app mints the credentials of tasks: an installation token restricted
 // to one repository and the rights asked for, valid one hour
-// (POST /app/installations/{id}/access_tokens). The GitHub MCP tool can use
-// it too ({"auth": {"github_app": true}}): an installation token, refreshed
-// before it ends. One GitHub connection for the tool and for git.
+// (POST /app/installations/{id}/access_tokens). Each installation is a
+// connection (connections.go) whose tokens the app mints: the GitHub MCP
+// tool on it ({"auth": {"connection": "<id>"}}) gets an installation
+// token, refreshed before it ends. One GitHub connection for the tool and
+// for git.
+
+// githubProvider is the app's provider of connections, its identities the
+// accounts it is installed on.
+const githubProvider = "github"
+
+func init() { mintersLabel[githubProvider] = "GitHub" }
 
 var errNoGitHubApp = errors.New("no GitHub App")
 
@@ -332,12 +340,12 @@ type toolKey struct {
 	readOnly bool
 }
 
-// toolToken is a GitHub MCP tool's token on the app: an installation token
-// of the installation on account (empty: the app owner's, or the only
-// one), with all its repositories, and all its rights or (readOnly) their
-// reading only, renewed five minutes before it ends. Each GitHub
-// connection names its account: one app, several connections.
-func (g *githubClient) toolToken(ctx context.Context, account string, readOnly bool) (string, error) {
+// mint is a GitHub MCP tool's token on the app's connection of account:
+// an installation token of the installation there (empty: the app
+// owner's, or the only one), with all its repositories, and all its rights
+// or (readOnly) their reading only, renewed five minutes before it ends.
+// One app, a connection per account it is installed on.
+func (g *githubClient) mint(ctx context.Context, account string, readOnly bool) (string, error) {
 	app, err := loadGitHubApp()
 	if err != nil {
 		if err == errNoGitHubApp {
@@ -397,14 +405,34 @@ func pickInstallation(app *githubApp, list []githubInstallation, account string)
 	return inst, nil
 }
 
-// dropToolToken forgets the cached tool token of account: GitHub refused
-// it, so the next call mints a new one from the installation there now (an
-// app uninstalled and installed again has a new installation, and the
+// refused forgets the cached tool token of account: GitHub refused it, so
+// the next call mints a new one from the installation there now (an app
+// uninstalled and installed again has a new installation, and the
 // former's tokens are revoked).
-func (g *githubClient) dropToolToken(account string, readOnly bool) {
+func (g *githubClient) refused(account string, readOnly bool) {
 	g.mu.Lock()
 	delete(g.toolToks, toolKey{strings.ToLower(account), readOnly})
 	g.mu.Unlock()
+}
+
+// check says why the connection of account no longer works: no app here
+// any more, or no installation on that account.
+func (g *githubClient) check(ctx context.Context, account string) (string, error) {
+	app, err := loadGitHubApp()
+	if errors.Is(err, errNoGitHubApp) {
+		return lapsedBadClient, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	list, err := g.installations(ctx, app)
+	if err != nil {
+		return "", err
+	}
+	if _, err := pickInstallation(app, list, account); err != nil {
+		return lapsedRevoked, nil
+	}
+	return "", nil
 }
 
 // forget drops the cached tool tokens (the app was removed or replaced).
