@@ -19,7 +19,7 @@ import (
 // One server for each service, whatever the number of accounts: the mail
 // is one eriphe-mail with every mailbox, the calendar one eriphe-calendar
 // with every calendar account, the files one eriphe-files with every
-// drive, so the brain searches all the mail, lists the week's events and
+// files account, so the brain searches all the mail, lists the week's events and
 // finds free time across every account in one call. The servers take
 // several accounts (servers/mail, servers/calendar, servers/files); each
 // tool names the account it touches in its "account" argument, and refuses

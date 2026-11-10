@@ -72,7 +72,7 @@ var connectionStrings = map[string]map[string]string{
 		// What a kind of tool is at a provider, by "conn.product.<provider>.<kind>".
 		"conn.product.google.mail":     "Gmail",
 		"conn.product.google.calendar": "Google Agenda",
-		"conn.product.google.drive":    "Google Drive",
+		"conn.product.google.files":    "Google Drive",
 
 		// Connect an account (web_connections.go).
 		"conn.title":     "Connecter un compte",
@@ -169,7 +169,7 @@ var connectionStrings = map[string]map[string]string{
 
 		"conn.product.google.mail":     "Gmail",
 		"conn.product.google.calendar": "Google Calendar",
-		"conn.product.google.drive":    "Google Drive",
+		"conn.product.google.files":    "Google Drive",
 
 		"conn.title":     "Connect an account",
 		"conn.heading":   "Connect a %s account",

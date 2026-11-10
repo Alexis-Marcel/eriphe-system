@@ -22,9 +22,9 @@ var providerData = []string{
 	"agents_kinds.go", "providers_check.go", "policy.go",
 }
 
-// providerName is what the guard looks for: Google's products by name.
-// "drive" is a kind of tool, like mail and calendar, and not looked for.
-var providerName = regexp.MustCompile(`(?i)google|gmail|gdrive`)
+// providerName is what the guard looks for: Google's products by name. A
+// files tool is "files", with places: a drive is one provider's word.
+var providerName = regexp.MustCompile(`(?i)google|gmail|drive`)
 
 // No logic file of core names a provider: in its code (identifiers and
 // strings; comments may give one as an example), a provider is data.

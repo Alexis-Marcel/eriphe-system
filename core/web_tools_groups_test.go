@@ -22,8 +22,8 @@ func TestGroupTools(t *testing.T) {
 	tools := []toolView{
 		svc("agenda", "calendar", "sam@example.org", "google", "sam@example.org"),
 		svc("agenda", "calendar", "sam@example.org", "icloud", ""), // an Apple calendar of the same address
-		svc(filesService.Base, "drive", "sam@example.org", "google", "sam@example.org"),
-		svc(filesService.Base, "drive", "bob@example.org", "google", "bob@example.org"),
+		svc(filesService.Base, "files", "sam@example.org", "google", "sam@example.org"),
+		svc(filesService.Base, "files", "bob@example.org", "google", "bob@example.org"),
 		row("gh-1", "github", "GitHub · acme"),
 		svc("mail", "mail", "SAM@example.org", "google", "sam@example.org"),
 		svc("mail", "mail", "sam@example.org", "icloud", ""),
@@ -49,7 +49,7 @@ func TestGroupTools(t *testing.T) {
 			got = append(got, g.Preset.ID+"["+strings.Join(accounts, ",")+"]")
 		}
 	}
-	want := "google:sam@example.org[mail+calendar+drive] icloud:sam@example.org[mail+calendar] google:bob@example.org[drive] github[acme,sam] ovh:pro@example.net[mail] notion x"
+	want := "google:sam@example.org[mail+calendar+files] icloud:sam@example.org[mail+calendar] google:bob@example.org[files] github[acme,sam] ovh:pro@example.net[mail] notion x"
 	if strings.Join(got, " ") != want {
 		t.Fatalf("groups:\n%s\nwant\n%s", strings.Join(got, " "), want)
 	}

@@ -15,14 +15,14 @@ import (
 // signed in at a provider (its card's SignIns, tool_cards.go): the scopes
 // for reading and for writing, and what its account is in its
 // configuration. One sign-in at a provider can serve several tools at once
-// (the mail, the calendar and the drive of one account): it asks for the
+// (the mail, the calendar and the files of one account): it asks for the
 // scopes of the tools ticked only, the provider keeping what was granted
 // before, and the connection's token is then read by each tool's server
 // from the vault, in its environment:
 //
 //	mail      eriphe-mail, an account of the one mail server
 //	calendar  eriphe-calendar, an account of the one calendar server
-//	drive     eriphe-files, an account of the one files server
+//	files     eriphe-files, an account of the one files server
 //
 // Each has a card (tool_cards.go): an account is put in its server
 // and taken out of it the same way for the three.
@@ -34,11 +34,11 @@ import (
 const (
 	toolMail     = "mail"     // mailService
 	toolCalendar = "calendar" // calendarService
-	toolDrive    = "drive"    // filesService
+	toolFiles    = "files"    // filesService
 )
 
 // toolKinds are the kinds, in the order they are shown.
-var toolKinds = []string{toolMail, toolCalendar, toolDrive}
+var toolKinds = []string{toolMail, toolCalendar, toolFiles}
 
 // toolSignIn is what a kind of tool needs of a connection at a provider.
 type toolSignIn struct {

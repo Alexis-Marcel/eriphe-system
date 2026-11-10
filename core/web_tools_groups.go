@@ -9,7 +9,7 @@ import (
 //
 //   - each account is a card: a Google account, an Apple account, a
 //     mailbox… with its address, who gives it, and a row for each of its
-//     services (Mail, Agenda, Drive) — the same row as a lone tool: its
+//     services (Mail, Agenda, Fichiers) — the same row as a lone tool: its
 //     state, its access, edit, remove. A connected account's card has its
 //     actions: reconnect, remove, add the tools it does not have yet.
 //     The servers stay one per service (accounts.go): only the list is by
@@ -57,7 +57,7 @@ func (g toolGroup) Count() int {
 // Key names an account's card in its ids.
 func (g toolGroup) Key() string { return rowKey("acct", g.Provider+":"+g.Owner) }
 
-// Tools are an account's services, in their order: mail, calendar, drive.
+// Tools are an account's services, in their order: mail, calendar, files.
 func (g toolGroup) Tools() []toolView {
 	var out []toolView
 	for _, a := range g.Accounts {

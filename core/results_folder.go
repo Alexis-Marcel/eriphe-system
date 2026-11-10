@@ -14,7 +14,7 @@ import (
 // name and the former ones; the node renames a former results folder to
 // the current name on next use, or, when a folder of the new name is
 // already there, keeps the former one and says so (a results_conflict
-// event, in the device's access log). Google Drive folders keep Eriphe/.
+// event, in the device's access log). A tool's places keep Eriphe/.
 
 const (
 	defaultResults = "Eriphe"

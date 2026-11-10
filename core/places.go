@@ -13,7 +13,7 @@ import (
 )
 
 // Places: what a tool reaches inside it and the user picked, each with its
-// own access: a drive's folders. A tool that has places browses them with
+// own access: the folders of a files tool. A tool that has places browses them with
 // a setup tool (eriphe/setup, which tasks never get: setupTool) and keeps
 // the ones picked in its own configuration, where its server enforces
 // them; where is data (its card's Places, tool_cards.go), so a tool is

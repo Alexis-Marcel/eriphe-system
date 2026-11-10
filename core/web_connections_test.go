@@ -55,7 +55,7 @@ func TestConnectionRoutes(t *testing.T) {
 	// The card: who gives it, the tool it could add, and its removal.
 	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
 	body = body[strings.Index(body, `id="tools-list"`):strings.Index(body, `id="add-dlg"`)]
-	for _, want := range []string{"Google · Mail", `hx-post="/settings/connections/google/connect"`, `name="tool" value="drive"`,
+	for _, want := range []string{"Google · Mail", `hx-post="/settings/connections/google/connect"`, `name="tool" value="files"`,
 		`hx-post="/settings/connections/google/remove"`, "Retirer ce compte"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("tools list lacks %q", want)
@@ -67,7 +67,7 @@ func TestConnectionRoutes(t *testing.T) {
 
 	// Adding Drive asks for its scope only, for that account.
 	g.scope = scopeMail + " " + scopeDrive
-	q, _ = connectionSignIn(t, tw, g, csrf, "google", url.Values{"tool": {"drive"}, "account": {"sam@example.org"}, "write": {"1"}})
+	q, _ = connectionSignIn(t, tw, g, csrf, "google", url.Values{"tool": {"files"}, "account": {"sam@example.org"}, "write": {"1"}})
 	if q.Get("scope") != "openid email "+scopeDrive || q.Get("login_hint") != "sam@example.org" {
 		t.Fatalf("add drive: %v", q)
 	}
@@ -106,7 +106,7 @@ func TestPlacesPage(t *testing.T) {
 	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
 	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
 	g.scope = scopeDriveReadonly
-	connectionSignIn(t, tw, g, csrf, "google", url.Values{"tool": {"drive"}})
+	connectionSignIn(t, tw, g, csrf, "google", url.Values{"tool": {"files"}})
 	waitStatus(t, c.pool.get(filesService.Base), statusReady)
 
 	if code, _, _ := tw.do("GET", "/settings/tools/nothing/places", nil, nil); code != 404 {

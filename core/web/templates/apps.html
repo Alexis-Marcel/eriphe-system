@@ -61,7 +61,7 @@
 
 {{/* The steps in the provider's console. . is an appView. */}}
 {{define "app-guide"}}{{$v := .}}
-<ol class="steps drive-guide">
+<ol class="steps app-guide">
   {{range $i, $s := .Provider.App.Steps}}<li>{{t .Text}}{{with .Link}} <a href="{{.}}" target="_blank" rel="noopener noreferrer">{{$s.LinkText}}</a>{{end}}
     {{with $v.Copy .Copy}}<div class="code one-line"><pre id="app-copy-{{$i}}">{{.}}</pre><button class="btn btn-soft sm" type="button" data-copy="app-copy-{{$i}}">{{t "machines.copy"}}</button></div>{{end}}</li>
   {{end}}

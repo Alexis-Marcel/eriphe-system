@@ -52,7 +52,7 @@ var (
 			{Provider: "google", Read: []string{scopeCalendar}, AccountProvider: "google", AccountFields: []string{"username"}},
 		},
 		Account: &calendarShape}
-	filesService = toolCard{ID: toolDrive, Base: "fichiers", Image: "ghcr.io/alexis-marcel/eriphe-files", Preset: "gdrive",
+	filesService = toolCard{ID: toolFiles, Base: "fichiers", Image: "ghcr.io/alexis-marcel/eriphe-files", Preset: "gdrive",
 		OwnVersion: true, Scopes: true,
 		SignIns: []toolSignIn{
 			// Google Drive: read only, or also create files.

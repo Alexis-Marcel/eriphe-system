@@ -168,7 +168,7 @@ type lentResources struct {
 	Repo    *ResourceRef  // its repository, if any
 	Folders []*Folder     // its machine's folders, each with the access lent (≤ the folder's own)
 	Machine string        // the machine of its folders
-	Grant   []string      // its catalog grant: the tools, and the files server for a Drive folder
+	Grant   []string      // its catalog grant: the tools, and the tool of a place
 }
 
 // resolveResources checks each entry against what the user opened and
@@ -321,7 +321,7 @@ func unmarshalResources(raw string) []ResourceRef {
 }
 
 // taintedResources refuses, during a tainted turn of the brain, a task
-// lent a folder that writes, or a Drive folder (its files server is lent
+// lent a folder that writes, or a place (its tool is lent
 // whole for now). Reads still go, and tools, accesses and a write to a GitHub
 // repository: what they may do then is asked on a card at launch
 // (access_card.go, task_start.go). My own message
