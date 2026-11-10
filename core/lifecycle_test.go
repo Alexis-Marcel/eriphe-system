@@ -34,6 +34,7 @@ func TestDeclarativeLifecycle(t *testing.T) {
 	c := newCore(cfg, store)
 	store.registerNode("pc", hashSecret("node-secret"))
 	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	giveRepos(t, c, "owner/repo")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/node/assignments", c.handleAssignments)

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -24,9 +23,8 @@ import (
 // nothing waits in a command: what is not lent is refused at once, with its
 // reason. The token that goes in is short-lived, for that one repository and
 // those rights only: a GitHub App installation token, one hour
-// (github_app.go). Without the app, the GitHub tool's own token: it never
-// leaves eriphe-core either, the same rules apply, and each request of git is
-// checked against the repository lent. Every request is logged
+// (github_app.go), and only for a repository the user gave to Eriphe, a
+// place of the app's connection (connection_places.go). Every request is logged
 // (access_log) and shown in the task's details.
 
 const (
@@ -80,13 +78,9 @@ func githubRepo(raw string) string {
 
 // repoFacts is what the decision needs to know of the task.
 type repoFacts struct {
-	Repos []repoGrant // the GitHub repositories lent to it
-	Clean bool        // a clean start (lend.go)
-	// Fallback: there is no GitHub App, so the token is the GitHub tool's
-	// own, good for every repository: gh, whose requests do not always name
-	// one, cannot use it.
-	Fallback bool
-	Granted  func(repo, access string) bool
+	Repos   []repoGrant // the GitHub repositories lent to it
+	Clean   bool        // a clean start (lend.go)
+	Granted func(repo, access string) bool
 }
 
 // repoGrant is a GitHub repository lent to a task: owner/name, its access
@@ -135,8 +129,6 @@ func decideRepo(repo, access string, f repoFacts) repoDecision {
 func (c *core) repoFacts(t *TaskRow) repoFacts {
 	facts := repoFacts{Repos: lentRepos(t.Resources), Clean: c.store.get(lentByUserKey(t.ID)) != ""}
 	facts.Granted = func(repo, access string) bool { return c.store.repoGranted(t.ID, repo, access) }
-	_, appErr := loadGitHubApp()
-	facts.Fallback = appErr == errNoGitHubApp
 	return facts
 }
 
@@ -198,12 +190,9 @@ type AccessEntry struct {
 	Action   string    `json:"action"`
 	Decision string    `json:"decision"`
 	By       string    `json:"by"`
-	Source   string    `json:"source,omitempty"` // github-app or tool-token, when lent
+	Source   string    `json:"source,omitempty"` // github-app, when lent
 	Reason   string    `json:"reason,omitempty"`
 }
-
-// Fallback: the long-lived token was lent.
-func (e AccessEntry) Fallback() bool { return e.Source == sourceToolToken }
 
 func (s *Store) accessLog(taskID string, limit int) ([]AccessEntry, error) {
 	rows, err := s.db.Query(`SELECT time, tool, host, target, action, decision, by, source, reason FROM access_log
@@ -251,8 +240,7 @@ func (s *Store) taskSpec(id string) (nodeTaskSpec, error) {
 
 // Where a lent credential comes from.
 const (
-	sourceApp       = "github-app"
-	sourceToolToken = "tool-token"
+	sourceApp = "github-app"
 )
 
 type minted struct {
@@ -310,8 +298,7 @@ func githubPermissions(access string, api bool) map[string]string {
 }
 
 // mintGitHub makes the credential: an installation token of the GitHub
-// App for that one repository and those rights, or else the GitHub tool's
-// own token.
+// App for that one repository and those rights.
 func (c *core) mintGitHub(ctx context.Context, taskID, repo, access string, api bool) (minted, error) {
 	app, err := loadGitHubApp()
 	if err == nil {
@@ -333,30 +320,8 @@ func (c *core) mintGitHub(ctx context.Context, taskID, repo, access string, api 
 		c.tokens.put(key, m)
 		return m, nil
 	}
-	if err != errNoGitHubApp {
-		return minted{}, err
-	}
-	tok, err := c.githubToolToken()
-	if err != nil {
+	if err == errNoGitHubApp {
 		return minted{}, fmt.Errorf("GitHub is not connected for git: create Eriphe's GitHub App in Settings → Tools → GitHub")
 	}
-	return minted{Username: "x-access-token", Password: tok, Source: sourceToolToken}, nil
-}
-
-// githubToolToken is the bearer token of the GitHub catalog server, if it
-// has one: the fallback without an app.
-func (c *core) githubToolToken() (string, error) {
-	conf := c.conf()
-	names := make([]string, 0, len(conf.Servers))
-	for name := range conf.Servers {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	for _, name := range names {
-		s := conf.Servers[name]
-		if isGitHubServer(name, s) && s.Auth != nil && s.Auth.BearerFile != "" {
-			return readSecret(s.Auth.BearerFile)
-		}
-	}
-	return "", errNoSecret
+	return minted{}, err
 }

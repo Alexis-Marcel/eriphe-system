@@ -121,6 +121,7 @@ type githubConn struct {
 	Name     string
 	Auth     string // connection (on the app), bearer, oauth…
 	Account  string // on the app: its connection's account
+	ConnID   string // and that connection, whose places are its repositories
 	ReadOnly bool   // the configuration file's
 }
 
@@ -142,7 +143,7 @@ func (w *web) githubConns() []githubConn {
 		}
 		c := githubConn{Name: name, Auth: s.authKind(), ReadOnly: w.c.source(kindServer, name) == sourceConfig}
 		for _, cn := range w.c.connectionsOf(s) {
-			c.Account = cn.Identity
+			c.Account, c.ConnID = cn.Identity, cn.ID
 		}
 		out = append(out, c)
 	}

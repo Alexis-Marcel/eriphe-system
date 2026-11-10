@@ -46,6 +46,7 @@ func (f *fakeShares) gone() []string {
 // machine "pc" sharing nothing.
 func foldersCore(t *testing.T) (*core, *Store) {
 	c, store, _ := foldersCoreShares(t)
+	giveRepos(t, c, "owner/site")
 	return c, store
 }
 

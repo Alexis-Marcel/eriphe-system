@@ -368,15 +368,13 @@ func TestGitLFSWritesWhereTheTaskMayWrite(t *testing.T) {
 	}
 }
 
-// Without the App the token could write anything: what cannot be told from a
-// read is not one.
-func TestGitLFSWithoutTheApp(t *testing.T) {
+// Without the App, git gets no token at all: nothing leaves.
+func TestGitWithoutTheApp(t *testing.T) {
 	c, task, svc := gitCore(t, false, ResourceRef{Kind: resRepo, Ref: "owner/repo", Access: accessRead})
 	currentVault().remove(githubAppVault)
-	currentVault().set("server.github.token", "github_pat_long_lived")
 	calls := svc.calls()
 	rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/info/lfs/objects/batch", gitAuth(task.ID), "{}", nil)
-	if rec.Code != http.StatusForbidden || svc.calls() != calls {
+	if rec.Code != http.StatusBadGateway || svc.calls() != calls {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 }
@@ -454,15 +452,14 @@ func TestGhStaysOnItsRepository(t *testing.T) {
 	}
 }
 
-// Without the App, only the tool's own token could go: gh is told why, and
-// nothing leaves.
+// Without the App, gh is told why, and nothing leaves.
 func TestGhNeedsTheApp(t *testing.T) {
 	c, task, svc := gitCore(t, true, lentRepo)
 	if err := currentVault().remove(githubAppVault); err != nil {
 		t.Fatal(err)
 	}
 	rec := viaRelayGh(c, task.ID, "GET", "/repos/owner/repo")
-	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "GitHub App") || svc.calls() != 0 {
+	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "GitHub App") || svc.calls() != 0 {
 		t.Fatalf("%d %s, %d calls", rec.Code, rec.Body, svc.calls())
 	}
 }

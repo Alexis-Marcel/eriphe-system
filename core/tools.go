@@ -74,6 +74,15 @@ func newMCPServer(c *core) *mcp.Server {
 			}, err
 		})
 
+	tool(s, "list_repos", "The GitHub repositories the user gave to Eriphe (the places of the GitHub App's connections, Settings → Tools → GitHub → Lieux): repo (owner/name) and access (read, or write: it may be lent for write, which still asks the user at launch unless it is a clean start on a declared branch). A task is lent only one of these, as {kind: repo, ref: <repo>}; nothing here adds one.",
+		func(ctx context.Context, _ struct{}) (map[string]any, error) {
+			var repos []map[string]string
+			for _, p := range c.repoPlaces() {
+				repos = append(repos, map[string]string{"repo": p.ID, "access": p.Access})
+			}
+			return map[string]any{"repos": repos}, nil
+		})
+
 	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). Returns the task with its id. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
 		func(ctx context.Context, in runRequest) (*TaskRow, error) {
 			if err := c.taintedResources(in); err != nil { // resources.go

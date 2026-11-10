@@ -273,7 +273,7 @@ func (r runRequest) title() string {
 type runRequest struct {
 	Title     string        `json:"title,omitempty" jsonschema:"what the user reads for this task, in a few words in their language: Écrire le README de portfolio. Not the agent's instructions"`
 	Prompt    string        `json:"prompt" jsonschema:"what the agent must do, self-contained: it does not see this conversation"`
-	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository cloned into /work/repo (repo, with branch, base, dir), the user's folders and the places of their tools (folder, place; see list_folders), catalog tools (tool; see list_tools), accesses a program uses, a package registry or an API key (access; see list_tools); only what it needs, with the least access"`
+	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository the user gave to Eriphe cloned into /work/repo (repo, with branch, base, dir; see list_repos), the user's folders and the places of their tools (folder, place; see list_folders), catalog tools (tool; see list_tools), accesses a program uses, a package registry or an API key (access; see list_tools); only what it needs, with the least access"`
 	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
 	Node      string        `json:"node,omitempty" jsonschema:"node name; empty lets the scheduler choose"`
 	// Contract: what must be true at the end, for a task that changes

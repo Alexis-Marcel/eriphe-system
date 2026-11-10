@@ -415,6 +415,49 @@ func (g *githubClient) refused(account string, readOnly bool) {
 	g.mu.Unlock()
 }
 
+// browse lists the repositories of the installation on account, to give
+// them as places: a token that reads their metadata only, a hundred a
+// page (page is GitHub's page number).
+func (g *githubClient) browse(ctx context.Context, account, page string) ([]placeItem, string, error) {
+	app, err := loadGitHubApp()
+	if err != nil {
+		return nil, "", err
+	}
+	list, err := g.installations(ctx, app)
+	if err != nil {
+		return nil, "", err
+	}
+	inst, err := pickInstallation(app, list, account)
+	if err != nil {
+		return nil, "", err
+	}
+	tok, _, err := g.installationToken(ctx, app, inst, nil, map[string]string{"metadata": "read"})
+	if err != nil {
+		return nil, "", err
+	}
+	n, _ := strconv.Atoi(page)
+	n = max(n, 1)
+	var out struct {
+		Total int `json:"total_count"`
+		Repos []struct {
+			FullName string `json:"full_name"`
+			HTMLURL  string `json:"html_url"`
+		} `json:"repositories"`
+	}
+	if err := g.do(ctx, http.MethodGet, fmt.Sprintf("/installation/repositories?per_page=100&page=%d", n), "token "+tok, nil, &out); err != nil {
+		return nil, "", err
+	}
+	items := make([]placeItem, 0, len(out.Repos))
+	for _, r := range out.Repos {
+		items = append(items, placeItem{ID: r.FullName, Name: r.FullName, Link: r.HTMLURL})
+	}
+	next := ""
+	if n*100 < out.Total {
+		next = strconv.Itoa(n + 1)
+	}
+	return items, next, nil
+}
+
 // check says why the connection of account no longer works: no app here
 // any more, or no installation on that account.
 func (g *githubClient) check(ctx context.Context, account string) (string, error) {

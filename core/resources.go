@@ -62,7 +62,7 @@ var resourceKinds = map[string][]string{
 // repository's only.
 type ResourceRef struct {
 	Kind   string `json:"kind" jsonschema:"repo, folder, place, tool, access or file"`
-	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or place its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access (a credential) its name in list_tools' accesses"`
+	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL, one of list_repos; folder or place its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access (a credential) its name in list_tools' accesses"`
 	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); place: read or drop; at most the place's own level; tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
 	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create and push to; with access write, the user is asked on a card unless it is their own clean turn"`
 	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
@@ -180,6 +180,16 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 	for _, e := range list {
 		switch e.Kind {
 		case resRepo:
+			// A repository given to Eriphe: a place of the GitHub App's
+			// connection (connection_places.go), at most at its access.
+			repo := githubRepo(e.Ref)
+			p := c.repoPlace(repo)
+			if repo == "" || p == nil {
+				return nil, fmt.Errorf("repository %q is not given to Eriphe: the user gives it in Settings → Tools → GitHub → Lieux (see list_repos)", e.Ref)
+			}
+			if !atLeast(p.Access, e.Access) {
+				return nil, fmt.Errorf("repository %q is given to Eriphe for %s only: it cannot be lent %s", p.ID, p.Access, e.Access)
+			}
 		case resFolder:
 			f, err := c.store.folder(e.Ref)
 			if err != nil {
