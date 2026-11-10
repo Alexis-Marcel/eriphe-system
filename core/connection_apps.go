@@ -144,7 +144,8 @@ const appTestCode = "eriphe-connection-test"
 // per check, each ✓ or ✗:
 //
 //  1. The workspace's address: one the provider takes as a redirect.
-//  2. The client id and secret: a code exchange with a made-up code. The
+//  2. The client id and secret (typed, when the form gives them, else the
+//     app saved): a code exchange with a made-up code. The
 //     provider checks the client first: invalid_client (or
 //     unauthorized_client) is a client it does not know or a wrong
 //     secret, invalid_grant a client it knows that sent a bad code, as
@@ -155,7 +156,7 @@ const appTestCode = "eriphe-connection-test"
 //     (checkConnection, which also marks it).
 //
 // The secret and the tokens are never shown nor logged.
-func (c *core) testApp(ctx context.Context, lang, origin string, p *signInProvider) []testView {
+func (c *core) testApp(ctx context.Context, lang, origin string, p *signInProvider, typed *oauthApp) []testView {
 	var out []testView
 	add := func(state, key string, args ...any) *testView {
 		out = append(out, testView{State: state, Text: fmt.Sprintf(tr(lang, key), args...)})
@@ -175,6 +176,9 @@ func (c *core) testApp(ctx context.Context, lang, origin string, p *signInProvid
 	}
 	redirect := origin + "/oauth/callback"
 	app, err := appClient(p)
+	if typed != nil {
+		app, err = *typed, nil
+	}
 	switch {
 	case errors.Is(err, errNoAppClient):
 		add("info", "app.test.noclient")
@@ -218,6 +222,21 @@ func (c *core) testApp(ctx context.Context, lang, origin string, p *signInProvid
 	return out
 }
 
+// appTyped is the app typed in the form, not yet saved, when it gives one:
+// the test then checks it rather than the app saved.
+func appTyped(p *signInProvider, rw http.ResponseWriter, r *http.Request) (*oauthApp, error) {
+	r.Body = http.MaxBytesReader(rw, r.Body, 64<<10)
+	if r.ParseMultipartForm(64<<10) != nil {
+		r.ParseForm()
+	}
+	file := r.MultipartForm != nil && len(r.MultipartForm.File["client_json"]) > 0
+	if !file && strings.TrimSpace(r.PostFormValue("client_id")+r.PostFormValue("client_secret")) == "" {
+		return nil, nil
+	}
+	app, _, err := readAppClient(p, rw, r)
+	return &app, err
+}
+
 func (w *web) handleAppTest(rw http.ResponseWriter, r *http.Request, s *session) {
 	p := w.appProvider(rw, r)
 	if p == nil {
@@ -225,9 +244,14 @@ func (w *web) handleAppTest(rw http.ResponseWriter, r *http.Request, s *session)
 	}
 	lines := []testView{{State: "err", Text: tr(w.lang(r), "test.ratelimit")}}
 	if w.testLimit.allow(s.ID, w.now()) {
+		typed, err := appTyped(p, rw, r)
+		if err != nil {
+			w.render(rw, r, s, "settings", "app-test", page{Data: []testView{{State: "err", Text: w.connError(r, err)}}})
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 3*testConnTimeout)
 		defer cancel()
-		lines = w.c.testApp(ctx, w.lang(r), w.origin(r), p)
+		lines = w.c.testApp(ctx, w.lang(r), w.origin(r), p, typed)
 		log.Printf("web: the %s app was tested", p.Label) // never the client nor a token
 	}
 	w.render(rw, r, s, "settings", "app-test", page{Data: lines})

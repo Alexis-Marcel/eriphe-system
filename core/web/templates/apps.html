@@ -10,13 +10,12 @@
   <p>{{tf "app.lead" .Provider.Label}}</p>
 </header>
 {{template "app-wrap" .}}
-<section class="panel">
-  <h3>{{template "i-plug"}}{{t "app.test.title"}}</h3>
-  <p class="small muted">{{t "app.test.lead"}}</p>
-  <div class="actions"><button class="btn btn-soft test-btn" type="button" hx-post="/settings/apps/{{.Provider.Name}}/test" hx-target="#app-test" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{t "test.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button></div>
-  <div id="app-test" class="test-box stack" aria-live="polite"></div>
-</section>
 {{end}}{{end}}
+
+{{/* Test, beside the button it goes with: in the form, the app typed
+     (else the app saved); out of it, the app saved. Its lines go in the
+     next test box. . is an appView. */}}
+{{define "app-test-btn"}}<button class="btn btn-soft test-btn" type="button" hx-post="/settings/apps/{{.Provider.Name}}/test" hx-target="next .test-box" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this" title="{{t "app.test.lead"}}">{{template "i-plug"}}<span class="when-idle">{{t "test.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button>{{end}}
 
 {{/* The app test's lines (connection_apps.go). */}}
 {{define "app-test"}}{{range .Data}}{{template "test-line" .}}{{end}}{{end}}
@@ -44,6 +43,8 @@
 {{else if .ClientID}}
 <section class="panel">
   <p class="small">{{t "app.current"}} <span class="mono">{{.ClientID}}</span> · {{t "app.secretkept"}}</p>
+  <div class="actions">{{template "app-test-btn" .}}</div>
+  <div class="test-box stack" aria-live="polite"></div>
   <details{{if .Error}} open{{end}}>
     <summary>{{t "app.replace"}}</summary>
     <div class="stack">{{template "app-guide" .}}{{template "app-client-form" .}}</div>
@@ -80,6 +81,7 @@
     <label class="field"><span>{{t "app.clientid"}}</span><input type="text" name="client_id" spellcheck="false" autocomplete="off" class="mono" placeholder="{{.Provider.App.IDPlaceholder}}"></label>
     <label class="field"><span>{{t "app.clientsecret"}}</span><input type="password" name="client_secret" autocomplete="new-password" spellcheck="false"></label>
   </div>
-  <div class="actions"><button class="btn btn-primary" type="submit">{{t "app.save"}}</button></div>
+  <div class="actions"><button class="btn btn-primary" type="submit">{{t "app.save"}}</button>{{template "app-test-btn" .}}</div>
+  <div class="test-box stack" aria-live="polite"></div>
 </form>
 {{end}}

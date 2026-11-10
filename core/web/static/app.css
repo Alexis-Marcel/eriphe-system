@@ -992,6 +992,10 @@ dialog.modal.finder-dlg.on-step[open] { height: fit-content; max-height: min(760
 .form-grid.name-row { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
 .form-grid.name-row .span-2 { grid-column: auto; }
 .stack { display: grid; gap: 16px; }
+/* A grid's items are as wide as their content by default: a long line
+   that does not wrap (a command, scopes to copy) would widen the page.
+   They take the grid's width, and such a line scrolls in its own box. */
+.stack > *, .panel > *, .steps > li { min-width: 0; }
 .field.narrow { max-width: 240px; }
 .field.narrow-2 { max-width: 360px; }
 .set-pill { display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px 1px 5px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); font-weight: 600; }
