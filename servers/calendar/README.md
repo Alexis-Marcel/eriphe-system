@@ -8,6 +8,7 @@ Microsoft Graph. Secrets are app passwords or OAuth access tokens lent by eriphe
 | Tool | What | Hints |
 |---|---|---|
 | `list_accounts` | accounts and the default time zone | read-only |
+| `test_account` | setup only (`_meta: {"eriphe/setup": true}`, never given to a task or the brain): sign one account in and list its calendars as the server will, and say whether it works, or why not, never the secret | read-only |
 | `list_calendars` | calendars of one or all accounts | read-only |
 | `list_events` | events in a range (default today + 7 days), all calendars unless one is given, recurring events expanded, optional text filter; from the cache within its window | read-only |
 | `get_event` | one event with its description | read-only |

@@ -390,7 +390,7 @@ func TestToolAnnotations(t *testing.T) {
 	for _, tl := range res.Tools {
 		got[tl.Name] = tl.Annotations
 	}
-	if len(got) != 8 {
+	if len(got) != 9 {
 		t.Errorf("tools: %v", got)
 	}
 	for _, n := range []string{"list_accounts", "list_calendars", "list_events", "get_event", "find_free_time"} {

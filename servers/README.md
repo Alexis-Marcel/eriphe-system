@@ -26,8 +26,12 @@ they are when it rewrites the configuration.
 ## Setup tools
 
 A tool marked `_meta: {"eriphe/setup": true}` is kept for eriphe-core's workspace: the pool leaves
-it out of the server's tools, so no task and not the brain ever get it. `files` serves
-`browse_folders`, which lists an account's folders for the places page.
+it out of the server's tools, so no task and not the brain ever get it.
+
+| Tool | Arguments | Answer |
+|---|---|---|
+| `test_account` | `account` (may be left out with one account) | `{ok, error}`: whether the account signs in as the server uses it, and why not; never the secret |
+| `browse_places` (a server with places) | `account`, `parent` (none: the roots), `page_token` | `{places: [{id, name, link}], next_page_token}` |
 
 Each server's README gives its tools and its account fields: [mail](mail/README.md),
 [calendar](calendar/README.md), [files](files/README.md).

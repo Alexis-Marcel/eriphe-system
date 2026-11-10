@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -228,16 +229,25 @@ func filesCore(t *testing.T, mutate func(*Config)) (*testWeb, *catalogCore, stri
 		mcp.AddTool(s, &mcp.Tool{Name: "list_files"}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
 			return nil, map[string]any{}, nil
 		})
-		mcp.AddTool(s, &mcp.Tool{Name: "browse_folders", Meta: mcp.Meta{"eriphe/setup": true}},
+		mcp.AddTool(s, &mcp.Tool{Name: "test_account", Meta: mcp.Meta{"eriphe/setup": true}},
+			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+				Account string `json:"account,omitempty"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				if in.Account == "bob@example.org" {
+					return nil, map[string]any{"ok": false, "error": "token revoked: reconnect"}, nil
+				}
+				return nil, map[string]any{"ok": true}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "browse_places", Meta: mcp.Meta{"eriphe/setup": true}},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 				Account string `json:"account,omitempty"`
 				Parent  string `json:"parent,omitempty"`
 				Page    string `json:"page_token,omitempty"`
 			}) (*mcp.CallToolResult, map[string]any, error) {
 				if in.Parent == "" {
-					return nil, map[string]any{"folders": []map[string]string{{"id": "root-id", "name": "My Drive"}}}, nil
+					return nil, map[string]any{"places": []map[string]string{{"id": "root-id", "name": "My Drive"}}}, nil
 				}
-				return nil, map[string]any{"folders": []map[string]string{{"id": "compta", "name": "Compta"}}}, nil
+				return nil, map[string]any{"places": []map[string]string{{"id": "compta", "name": "Compta"}}}, nil
 			})
 		ct, st := mcp.NewInMemoryTransports()
 		if _, err := s.Connect(context.Background(), st, nil); err != nil {
@@ -626,5 +636,29 @@ func TestFilesAccountsPath(t *testing.T) {
 	}
 	if _, ok := c.conf().Servers[filesServer]; ok {
 		t.Fatal("the server outlived its last account")
+	}
+}
+
+// testAccount asks the server's setup tool, which tasks never get.
+func TestTestAccountThroughTheServer(t *testing.T) {
+	_, c, _ := filesCore(t, nil)
+	for _, name := range []string{"sam@example.org", "bob@example.org"} {
+		a := svcAccount{Name: name, Provider: "google"}
+		if err := c.putAccount(filesService, accountPut{Lang: "fr", Account: a, Secret: &EnvValue{File: "vault:t." + name}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitStatus(t, c.pool.get(filesServer), statusReady)
+	if why, err := c.testAccount(t.Context(), filesServer, "sam@example.org"); why != "" || err != nil {
+		t.Errorf("sam: %q %v", why, err)
+	}
+	if why, err := c.testAccount(t.Context(), filesServer, "bob@example.org"); why != "token revoked: reconnect" || err != nil {
+		t.Errorf("bob: %q %v", why, err)
+	}
+	if _, _, tools := c.pool.get(filesServer).snapshot(); slices.ContainsFunc(tools, func(t *mcp.Tool) bool { return t.Name == "test_account" }) {
+		t.Error("test_account lent")
+	}
+	if _, err := c.testAccount(t.Context(), "nothing", "x"); err == nil {
+		t.Error("a server that does not run")
 	}
 }

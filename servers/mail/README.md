@@ -9,6 +9,7 @@ access token lent by eriphe-core and used with XOAUTH2 (the server never runs an
 | Tool | What | Hints |
 |---|---|---|
 | `list_accounts` | configured accounts | read-only |
+| `test_account` | setup only (`_meta: {"eriphe/setup": true}`, never given to a task or the brain): sign one account in over IMAP as the server will, and say whether it works, or why not, never the secret | read-only |
 | `list_folders` | folders with their role (inbox, drafts, sent, trash, archive, junk, all) and counts | read-only |
 | `search_messages` | search one or all accounts (text, from, to, subject, since, before, unread, flagged, folder, limit), newest first, with snippets; from the cache when it can | read-only |
 | `read_message` | headers, text body (HTML converted), attachments listed, not downloaded; body fenced as untrusted; from the cache when it can | read-only |

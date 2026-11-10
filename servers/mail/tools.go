@@ -211,6 +211,13 @@ func ptr[T any](v T) *T { return &v }
 
 func newServer(m *Mailer, version string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "eriphe-mail", Version: version}, &mcp.ServerOptions{Instructions: instructions})
+	addTestAccount(s, func(ctx context.Context, name string) error {
+		a, err := m.account(name)
+		if err == nil {
+			err = a.session(ctx, func(*imapclient.Client) error { return nil })
+		}
+		return err
+	})
 	addEvents(s, m, newEventLog()) // events.go
 	ro := &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: ptr(false)}
 

@@ -37,7 +37,7 @@ type placeKeeper struct {
 
 // placeKeepers are the tools that have places.
 var placeKeepers = []placeKeeper{
-	{Image: filesImage, Env: toolConfigEnv, Key: "places", Browse: "browse_folders", Kind: toolDrive},
+	{Image: filesImage, Env: toolConfigEnv, Key: "places", Browse: "browse_places", Kind: toolDrive},
 }
 
 // Place is a place given to Eriphe, as its tool keeps it.
@@ -243,12 +243,12 @@ func (c *core) browsePlaces(ctx context.Context, tool, account, parent, page str
 		return nil, "", errors.New(resultText(res))
 	}
 	var out struct {
-		Folders []placeItem `json:"folders"`
-		Next    string      `json:"next_page_token"`
+		Places []placeItem `json:"places"`
+		Next   string      `json:"next_page_token"`
 	}
 	raw, _ := json.Marshal(res.StructuredContent)
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, "", err
 	}
-	return out.Folders, out.Next, nil
+	return out.Places, out.Next, nil
 }

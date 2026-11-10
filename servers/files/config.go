@@ -16,9 +16,10 @@ type Config struct {
 	// Places are the only folders the tools reach: each one and what is
 	// inside it, nothing else of the account.
 	Places []PlaceConfig `json:"places,omitempty"`
-	// Setup serves browse_folders, which lists an account's folders (names
-	// only) so that eriphe-core's workspace can offer them. eriphe-core never
-	// lends it to a task. Default on; false leaves it out.
+	// Setup serves the setup tools: browse_places, which lists an account's
+	// folders (names only) so that eriphe-core's workspace can offer them, and
+	// test_account. eriphe-core never lends them to a task. Default on; false
+	// leaves them out.
 	Setup *bool `json:"setup,omitempty"`
 	// MaxChars caps the text read_file returns (default 50000).
 	MaxChars int `json:"max_chars,omitempty"`

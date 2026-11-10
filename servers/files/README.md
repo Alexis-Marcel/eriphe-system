@@ -20,7 +20,8 @@ environment, never through a task.
 | `search_files` | files whose name or content holds a text, in one folder or all | read-only |
 | `read_file` | a file's content: Google Docs as markdown (or text, pdf), Sheets as CSV of the first sheet (or pdf), Slides as text (or pdf), Drawings as png (or pdf); Word documents as their text; text files as they are; images and PDFs as such. Text is fenced as untrusted | read-only |
 | `write_file` | a new file in the folder's `Eriphe/` subfolder (made if needed), plain or converted to a Google Doc / Sheet; a taken name gets a number, nothing is ever replaced | not destructive |
-| `browse_folders` | setup only: an account's folders (names, no files) from My Drive, Shared with me and the shared drives, for the workspace to offer. Marked `_meta: {"eriphe/setup": true}`: eriphe-core leaves it out of the server's tools, so no task and not the brain ever get it | read-only |
+| `browse_places` | setup only: an account's folders (names, no files) from My Drive, Shared with me and the shared drives, for the workspace to offer. Marked `_meta: {"eriphe/setup": true}`: eriphe-core leaves it out of the server's tools, so no task and not the brain ever get it | read-only |
+| `test_account` | setup only: sign one account in (its token refreshed and its drive read) and say whether it works, or why not, never the token | read-only |
 
 Every id a tool takes is checked against the folder it names: its parents are walked up through
 the Drive API (cached for a minute) until the folder is found, or refused ("this item is not in
@@ -57,7 +58,7 @@ JSON in `TOOL_CONFIG`, or a file in `TOOL_CONFIG_FILE` (or `-config`); eriphe-co
   in the workspace.
 - `scopes`: what the user granted. `drive.readonly` reads; dropping files needs `drive`.
 - `places`: `access` is `read` (default) or `drop`. `account` may be left out with one account.
-- `setup`: `false` leaves `browse_folders` out. Limits: `max_chars` (50000), `max_bytes` per file
+- `setup`: `false` leaves the setup tools (`browse_places`, `test_account`) out. Limits: `max_chars` (50000), `max_bytes` per file
   read or written (20 MB), `timeout_seconds` (60).
 
 ## Running

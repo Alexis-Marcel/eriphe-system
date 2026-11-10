@@ -1753,11 +1753,11 @@ Settings → Tools → Add → Google Drive (the logic in `cloud.go`, the sign-i
    the tool connects with `drive.readonly` whatever the box says.
 3. **Choose**: once the service runs, the tool's [places](#places) page browses each account's folders (a chip per account
    when there are several) (My Drive, Shared with
-   me, shared drives) through the server's `browse_folders`, and each one is given "en lecture" or
+   me, shared drives) through the server's `browse_places`, and each one is given "en lecture" or
    "lecture + dépôt". The chosen folders are written in the service's `TOOL_CONFIG` (`places`), which
    restarts it; removing one, or changing its access, does the same.
 
-`browse_folders` is marked `_meta: {"eriphe/setup": true}`: the pool leaves such a tool out of a
+`browse_places` is marked `_meta: {"eriphe/setup": true}`: the pool leaves such a tool out of a
 server's tools (`setupTool`, `listTools`), so no grant, no task and not the brain can see or call
 it; only the workspace calls it (`browseDrive`).
 
