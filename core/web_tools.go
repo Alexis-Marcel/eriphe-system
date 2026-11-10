@@ -33,7 +33,7 @@ type toolView struct {
 	Scope   tokenScope // how its credential follows its access level (access.go)
 	Allowed int        // its actions allowed without asking
 	Token   bool       // OAuth: a credential is stored (it may have expired)
-	// Google is the Google account the tool reads (google.go), one that
+	// Google is the account the tool reads (connections.go), one that
 	// must be connected again first; Reconnect, it must.
 	Google    string
 	Reconnect bool

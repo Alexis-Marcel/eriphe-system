@@ -46,7 +46,7 @@ type pool struct {
 	// installation it came from was removed, or the app replaced.
 	appTokenRefused func(account string, readOnly bool)
 	// authHold tells a server that waits for the user to connect an account
-	// again (a Google account Google refused, google.go): why, and where the
+	// again (a connection its provider refused, connections.go): why, and where the
 	// user does it; "" when it does not wait.
 	authHold func(name string) (why, where string)
 	// opened hands a server's new session to the event journal

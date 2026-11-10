@@ -37,7 +37,7 @@ func TestMergeAccountServers(t *testing.T) {
 		accessFree, "mes mails : lire, chercher", nil, credentials{"env:MAIL_PASSWORD": "sam-pw"})
 	oldServer(t, c, "mail-bob", mailImage, "MAIL_CONFIG",
 		`{"accounts":[{"name":"bob@example.org","address":"bob@example.org","provider":"gmail","auth":{"oauth_token_env":"MAIL_GOOGLE_TOKEN"}}]}`,
-		accessReadOnly, "mes mails : lire, chercher (bob@example.org)", map[string]EnvValue{mailGoogleEnv: {File: vaultPrefix + bobRef}}, nil)
+		accessReadOnly, "mes mails : lire, chercher (bob@example.org)", map[string]EnvValue{mailTokenEnv: {File: vaultPrefix + bobRef}}, nil)
 	oldServer(t, c, "agenda-icloud", calendarImage, "CALENDAR_CONFIG",
 		`{"timezone":"Europe/Paris","accounts":[{"name":"icloud","provider":"icloud","username":"sam@example.net","auth":{"password_env":"CALENDAR_PASSWORD"}}]}`,
 		accessReads, "mon agenda", nil, credentials{"env:CALENDAR_PASSWORD": "cal-pw"})
@@ -64,7 +64,7 @@ func TestMergeAccountServers(t *testing.T) {
 		t.Errorf("sam: %+v %q", sam, pw)
 	}
 	bob, _ := serviceAccount(t, c, mailService, "bob@example.org")
-	if !bob.google() || mail.Spec.Env[bob.secretEnv()].File != vaultPrefix+bobRef || !bob.ReadOnly {
+	if !bob.signedIn() || mail.Spec.Env[bob.secretEnv()].File != vaultPrefix+bobRef || !bob.ReadOnly {
 		t.Errorf("bob: %+v %+v", bob, mail.Spec.Env)
 	}
 	if lv := mail.Server.AccountAccess; lv["sam@example.org"] != accessFree || lv["bob@example.org"] != accessReadOnly {
@@ -161,7 +161,7 @@ func TestGoogleHoldWithOtherAccounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.markConnection(bob.ID, lapsedRevoked)
-	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: googleAccountFor(mailService, "bob@example.org"),
+	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: gmailAccount("bob@example.org"),
 		Secret: &EnvValue{File: vaultPrefix + bob.Secret}}); err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestMergeKeepsTwoCalendarsOfOneAddress(t *testing.T) {
 		accessFree, "mon agenda", nil, credentials{"env:CALENDAR_PASSWORD": "apple-pw"})
 	oldServer(t, c, "agenda-sam", calendarImage, "CALENDAR_CONFIG",
 		`{"accounts":[{"name":"sam@example.org","provider":"google","username":"sam@example.org","auth":{"oauth_token_env":"CALENDAR_GOOGLE_TOKEN"}}]}`,
-		accessReadOnly, "mon agenda (sam@example.org)", map[string]EnvValue{calGoogleEnv: {File: vaultPrefix + ref}}, nil)
+		accessReadOnly, "mon agenda (sam@example.org)", map[string]EnvValue{calTokenEnv: {File: vaultPrefix + ref}}, nil)
 	c.store.allowAction("agenda", "mcp__agenda__create_event", "")
 
 	c.mergeAccountServers()
@@ -201,11 +201,11 @@ func TestMergeKeepsTwoCalendarsOfOneAddress(t *testing.T) {
 		t.Fatalf("calendar: %+v", cal.Config.Accounts)
 	}
 	google, _ := serviceAccount(t, c, calendarService, "sam@example.org")
-	if !google.google() || cal.Spec.Env[google.secretEnv()].File != vaultPrefix+ref || !google.ReadOnly {
+	if !google.signedIn() || cal.Spec.Env[google.secretEnv()].File != vaultPrefix+ref || !google.ReadOnly {
 		t.Errorf("google: %+v", google)
 	}
 	apple, pw := serviceAccount(t, c, calendarService, "sam@example.org (iCloud)")
-	if apple.google() || apple.Provider != "icloud" || pw != "apple-pw" || apple.ReadOnly {
+	if apple.signedIn() || apple.Provider != "icloud" || pw != "apple-pw" || apple.ReadOnly {
 		t.Errorf("apple: %+v %q", apple, pw)
 	}
 	if lv := cal.Server.AccountAccess; lv["sam@example.org"] != accessReadOnly || lv["sam@example.org (iCloud)"] != accessFree {
@@ -226,7 +226,7 @@ func TestCalendarsOfOneAddress(t *testing.T) {
 	google := func(c *core) error {
 		ref := legacyGoogleSecret("sam@example.org")
 		currentVault().set(ref, `{"refresh_token":"sam"}`)
-		return c.putAccount(calendarService, accountPut{Lang: "fr", Account: googleAccountFor(calendarService, "sam@example.org"),
+		return c.putAccount(calendarService, accountPut{Lang: "fr", Account: googleCalendarAccount("sam@example.org"),
 			Secret: &EnvValue{File: vaultPrefix + ref}})
 	}
 
@@ -238,7 +238,7 @@ func TestCalendarsOfOneAddress(t *testing.T) {
 		if err := c.putAccount(calendarService, accountPut{Lang: "fr", Account: apple, Password: "apple-pw"}); err != nil {
 			t.Fatal(err)
 		}
-		if a, _ := serviceAccount(t, c, calendarService, "sam@example.org"); !a.google() {
+		if a, _ := serviceAccount(t, c, calendarService, "sam@example.org"); !a.signedIn() {
 			t.Errorf("the address is not Google's: %+v", a)
 		}
 		if a, pw := serviceAccount(t, c, calendarService, "sam@example.org (iCloud)"); a.Provider != "icloud" || pw != "apple-pw" {
@@ -275,7 +275,7 @@ func TestCalendarsOfOneAddress(t *testing.T) {
 		if len(st.Config.Accounts) != 2 {
 			t.Fatalf("accounts: %+v", st.Config.Accounts)
 		}
-		if a, _ := serviceAccount(t, c, calendarService, "sam@example.org"); !a.google() {
+		if a, _ := serviceAccount(t, c, calendarService, "sam@example.org"); !a.signedIn() {
 			t.Errorf("Google did not take the address: %+v", a)
 		}
 		a, pw := serviceAccount(t, c, calendarService, "sam@example.org (iCloud)")

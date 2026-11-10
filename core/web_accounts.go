@@ -22,7 +22,7 @@ import (
 // for one on its token, else the service's.
 func accountPreset(svc accountService, a svcAccount) toolPreset {
 	id := svc.ID
-	if a.google() {
+	if a.signedIn() {
 		id = "google"
 	}
 	p, _ := presetByID(id)
@@ -32,8 +32,8 @@ func accountPreset(svc accountService, a svcAccount) toolPreset {
 // accountDetail is an account's line: "Gmail · sam@example.org".
 func accountDetail(lang string, svc accountService, a svcAccount) string {
 	switch {
-	case a.google():
-		return tr(lang, "google."+svc.Google) + " · " + a.Name
+	case a.signedIn():
+		return tr(lang, "google."+svc.ID) + " · " + a.Name
 	case svc == mailService:
 		f, _ := mailFormOf(a)
 		return tr(lang, "mailp."+f.Provider) + " · " + a.Address
@@ -66,7 +66,7 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 		t.Access = st.level(a.Name)
 		t.Allowed = len(w.c.store.accountActions(sv.Name, a.Name))
 		t.Google, t.Reconnect = "", false
-		if g, ok := w.c.googleAccount(a.Name); ok && a.google() {
+		if g, ok := w.c.connectionBySecret(svcServer{Name: sv.Name, Server: srv}, a); ok {
 			t.Google, t.Reconnect = g.Identity, g.Lapsed != ""
 		}
 		t.Scope = tokenScope{}
@@ -84,7 +84,7 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 func accountOwner(svc accountService, a svcAccount) (address, provider string) {
 	address, provider = a.Name, a.Provider
 	switch {
-	case a.google():
+	case a.signedIn():
 		return a.Name, "google"
 	case svc == mailService:
 		f, _ := mailFormOf(a)
@@ -102,8 +102,8 @@ func accountOwner(svc accountService, a svcAccount) (address, provider string) {
 // is at its provider ("Gmail", "Google Agenda", "iCloud").
 func accountProduct(lang string, svc accountService, a svcAccount) string {
 	switch {
-	case a.google():
-		return tr(lang, "google."+svc.Google)
+	case a.signedIn():
+		return tr(lang, "google."+svc.ID)
 	case svc == mailService:
 		f, _ := mailFormOf(a)
 		return tr(lang, "mailp."+f.Provider)
@@ -123,11 +123,11 @@ func (w *web) driveRows(lang string, conf *Config, sv serverView, fc filesConfig
 				n++
 			}
 		}
-		t.Drive, t.Part, t.Label, t.Mark = a.Name, googleDrive, tr(lang, "acct.svc."+googleDrive), "gdrive"
+		t.Drive, t.Part, t.Label, t.Mark = a.Name, toolDrive, tr(lang, "acct.svc."+toolDrive), "gdrive"
 		t.Owner, t.Provider = a.Name, "google"
 		t.Detail = tr(lang, "preset.gdrive.title") + " · " + driveCount(lang, n)
 		t.Google, t.Reconnect = a.Name, false
-		if g, ok := w.c.googleAccount(a.Name); ok {
+		if g, ok := w.c.connectionOf(cmpOr(a.Provider, providerGoogle.Name), a.Name); ok {
 			t.Reconnect = g.Lapsed != ""
 		}
 		out = append(out, t)
@@ -259,7 +259,7 @@ func (w *web) saveAccount(rw http.ResponseWriter, r *http.Request, s *session, f
 		return
 	}
 	pw := accountPassword(r, f)
-	if strings.TrimSpace(pw) == "" && (prev == nil || moved || prev.google()) {
+	if strings.TrimSpace(pw) == "" && (prev == nil || moved || prev.signedIn()) {
 		if moved {
 			fail(errors.New("form.newpassword"))
 		} else {
@@ -333,7 +333,7 @@ func (w *web) deleteAccount(rw http.ResponseWriter, r *http.Request, name string
 		w.toast(rw, w.formError(r, errAccountUnknown), false)
 		return
 	}
-	if a.google() {
+	if a.signedIn() {
 		// the Google account's page takes it away, with its token
 		w.toast(rw, tr(w.lang(r), "accounts.googleremove"), false)
 		return

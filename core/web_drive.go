@@ -85,9 +85,9 @@ func (w *web) handleDriveClient(rw http.ResponseWriter, r *http.Request, s *sess
 // handleDriveConnect connects a Google account for Drive: the Google flow
 // (web_google.go) with Drive alone, back to this page.
 func (w *web) handleDriveConnect(rw http.ResponseWriter, r *http.Request, s *session) {
-	in := googleConnect{Services: []string{googleDrive}, Write: r.PostFormValue("write") != "",
+	in := connectAsk{Provider: providerGoogle.Name, Tools: []string{toolDrive}, Write: r.PostFormValue("write") != "",
 		Hint: r.PostFormValue("account"), Back: "/settings/drive"}
-	w.startGoogleFlow(rw, r, s, in, "drive-connect-result", func(err error) any {
+	w.startSignInFlow(rw, r, s, in, "drive-connect-result", func(err error) any {
 		v := w.driveView(r)
 		v.Error = w.driveError(r, err)
 		return v

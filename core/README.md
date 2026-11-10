@@ -1617,7 +1617,8 @@ tell (someone came home) goes from an automation to an incoming address, as any 
 ## Google accounts (Gmail, Calendar, Drive)
 
 One sign-in per Google account gives Eriphe any of Gmail, Google Calendar and Google Drive
-(`google.go`; Settings → Tools → Google, `/settings/google`, `web_google.go`). The user's own
+(`connection_tools.go` with Google's rows of `toolSignIns`; Settings → Tools → Google,
+`/settings/google`, `web_google.go`). The user's own
 Google app ([below](#your-own-google-app)) is set up once for every service and every account; the
 page's guide turns the three APIs on with one link (Gmail, CalDAV, Drive) and gives the scopes and
 the redirect URI to copy.
@@ -1672,6 +1673,19 @@ form, whether the console gives a JSON file, and the redirect rule (`public-http
 when this workspace's address is refused, and what to do). The client goes to the vault as
 `app.<provider>.client`. Whether the client lists the redirect URI is not probed: the Drive test
 says what to check in the console.
+
+### Tools on a connection
+
+A tool says what it needs of an account at a provider as data, `toolSignIns` in
+`signin_providers.go` (`connection_tools.go`): its kind (`mail`, `calendar`, `drive`), the
+provider, the scopes it reads with and, if they differ, the scopes it writes with, and what its
+account is in the tool's configuration (the account's `provider` there, and whether the identity
+is also its address or its username). A sign-in asks for the scopes of the tools ticked only
+(the write ones when the tool may write and is not set to read only), keeps the connection, then
+makes each tool granted read its token: a mailbox or a calendar is an account of the one `mail` or
+`agenda` (its variable `MAIL_GOOGLE_TOKEN_<hash>` or `CALENDAR_GOOGLE_TOKEN_<hash>`, names kept for
+the installs that have them), a drive an account of `fichiers`. A provider that serves the mail
+or the calendar is one row more, no code.
 
 ### Connections
 
@@ -1797,7 +1811,7 @@ instead of showing the guide, with what to do:
 - or, with no Google app at all, "Google Drive for desktop" on an always-on computer, its synced
   folder given as a folder of that machine ([Folders](#folders)).
 
-`startGoogle` refuses such an origin too (`drive.origin.ip`, `drive.origin.local`,
+`startSignIn` refuses such an origin too (`drive.origin.ip`, `drive.origin.local`,
 `drive.origin.http`).
 
 ### Testing or In production

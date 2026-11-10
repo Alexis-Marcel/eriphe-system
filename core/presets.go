@@ -64,7 +64,7 @@ var toolPresets = []toolPreset{
 	// connects the account and picks the folders (web_drive.go).
 	{ID: "gdrive", Form: "drive", Name: filesServer, Mark: "GD", Kind: "local", Trust: true},
 	// One Google account for Gmail, Google Calendar and Google Drive: its
-	// page signs in once with the services ticked (google.go, web_google.go).
+	// page signs in once with the services ticked (connection_tools.go, web_google.go).
 	{ID: "google", Form: "google", Name: "google", Mark: "G", Kind: "local", Trust: true},
 	{ID: "remote", Form: "generic", Mark: "↗", Kind: "remote", Auth: "none"},
 	{ID: "local", Form: "generic", Mark: "▣", Kind: "local"},
@@ -359,7 +359,7 @@ func mailFormOf(a svcAccount) (mailForm, bool) {
 	} else if f.Provider == "" {
 		f.Provider = guessMailProvider(a.Address)
 	}
-	return f, !a.google()
+	return f, !a.signedIn()
 }
 
 // Calendar: a CalDAV account of eriphe-calendar with an app password
@@ -492,7 +492,7 @@ func (f calendarForm) account() (svcAccount, error) {
 func calendarFormOf(a svcAccount, zone string) (calendarForm, bool) {
 	c, ok := calChoiceByID(a.Provider)
 	return calendarForm{Provider: a.Provider, URL: a.URL, Username: a.Username, Timezone: zone},
-		!a.google() && ok && !c.Soon && c.Page == ""
+		!a.signedIn() && ok && !c.Soon && c.Page == ""
 }
 
 func marshalRun(spec RunSpec) json.RawMessage {

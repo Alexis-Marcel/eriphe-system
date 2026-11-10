@@ -1,15 +1,11 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
-	"time"
 )
 
 // Settings → Tools → Google (/settings/google): the user's own Google app,
@@ -18,7 +14,7 @@ import (
 // each one with its services (Mail, Calendar, Drive), its state, a way to
 // add a service, to reconnect it and to remove it, and "Add a Google
 // account" with the services to tick. One sign-in per account asks for the
-// services ticked only (google.go).
+// services ticked only (connection_tools.go).
 
 type googleView struct {
 	Origin    string // this workspace, as the browser reaches it
@@ -60,7 +56,26 @@ type googleServiceView struct {
 func (v googleView) Has(service string) bool { return slices.Contains(v.Add, service) }
 
 // AllServices are the services, in their order, for the template.
-func (v googleView) AllServices() []string { return googleServices }
+func (v googleView) AllServices() []string { return googleServices() }
+
+// googleServices are the kinds of tools a Google account serves.
+func googleServices() []string { return toolsAt(providerGoogle.Name) }
+
+// googleAccounts are the Google accounts connected.
+func (c *core) googleAccounts() []connection { return c.connectionsAt(providerGoogle.Name) }
+
+func (c *core) googleAccount(email string) (connection, bool) {
+	return c.connectionOf(providerGoogle.Name, email)
+}
+
+// googleTools are the tools of a Google account, by kind.
+func (c *core) googleTools(email string) []connTool {
+	cn, ok := c.googleAccount(email)
+	if !ok {
+		return nil
+	}
+	return c.connectionKinds(cn)
+}
 
 func (w *web) googleRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/google", w.auth(w.handleGoogle))
@@ -89,17 +104,17 @@ func (w *web) googleView(r *http.Request) googleView {
 	q := r.URL.Query()
 	v.Connected = q.Get("connected") != ""
 	for _, m := range strings.Split(q.Get("missing"), ",") {
-		if slices.Contains(googleServices, m) {
+		if slices.Contains(googleServices(), m) {
 			v.Missing = append(v.Missing, m)
 		}
 	}
 	for _, a := range strings.Split(q.Get("add"), ",") {
-		if slices.Contains(googleServices, a) {
+		if slices.Contains(googleServices(), a) {
 			v.Add = append(v.Add, a)
 		}
 	}
 	if len(v.Add) == 0 {
-		v.Add = googleServices
+		v.Add = googleServices()
 	}
 	v.Accounts = w.googleAccountViews(w.lang(r))
 	for _, a := range v.Accounts {
@@ -117,7 +132,7 @@ func (w *web) googleAccountViews(lang string) []googleAccountView {
 		av := googleAccountView{Email: a.Identity, Reconnect: a.Lapsed != ""}
 		have := map[string]bool{}
 		for _, t := range w.c.googleTools(a.Identity) {
-			sv := googleServiceView{Service: t.Service, Tool: t.Name}
+			sv := googleServiceView{Service: t.Kind, Tool: t.Name}
 			srv := serverView{serverInfo: serverInfo{Name: t.Name, Kind: "local"}}
 			if u := w.c.pool.get(t.Name); u != nil {
 				srv.Status, _, _ = u.snapshot()
@@ -132,9 +147,9 @@ func (w *web) googleAccountViews(lang string) []googleAccountView {
 				sv.Problem = serviceProblem(lang, srv)
 			}
 			av.Services = append(av.Services, sv)
-			have[t.Service] = true
+			have[t.Kind] = true
 		}
-		for _, s := range googleServices {
+		for _, s := range googleServices() {
 			if !have[s] {
 				av.Others = append(av.Others, s)
 			}
@@ -193,18 +208,18 @@ func readGoogleClient(rw http.ResponseWriter, r *http.Request) (oauthApp, []stri
 // or reconnects one (account=, with its services).
 func (w *web) handleGoogleConnect(rw http.ResponseWriter, r *http.Request, s *session) {
 	r.ParseForm()
-	in := googleConnect{Services: r.PostForm["service"], Write: r.PostFormValue("write") != "",
+	in := connectAsk{Provider: providerGoogle.Name, Tools: r.PostForm["service"], Write: r.PostFormValue("write") != "",
 		Hint: strings.TrimSpace(r.PostFormValue("account")), Back: "/settings/google"}
 	if in.Hint != "" && r.PostFormValue("reconnect") != "" {
 		// Reconnect: the services it has, Drive with the rights it had.
-		in.Services = nil
+		in.Tools = nil
 		for _, t := range w.c.googleTools(in.Hint) {
-			in.Services = append(in.Services, t.Service)
+			in.Tools = append(in.Tools, t.Kind)
 		}
-		if a, ok := w.c.googleAccount(in.Hint); ok && len(in.Services) == 0 {
-			for _, sv := range googleServices {
-				if grants(a.Scopes, sv) {
-					in.Services = append(in.Services, sv)
+		if a, ok := w.c.googleAccount(in.Hint); ok && len(in.Tools) == 0 {
+			for _, k := range googleServices() {
+				if t, _ := signInOf(k, a.Provider); func() bool { ok, _ := t.granted(a.Scopes); return ok }() {
+					in.Tools = append(in.Tools, k)
 				}
 			}
 		}
@@ -213,70 +228,16 @@ func (w *web) handleGoogleConnect(rw http.ResponseWriter, r *http.Request, s *se
 	if back := r.PostFormValue("back"); back == "/settings/tools" {
 		in.Back = back
 	}
-	w.startGoogleFlow(rw, r, s, in, "google-connect-result", func(err error) any {
+	w.startSignInFlow(rw, r, s, in, "google-connect-result", func(err error) any {
 		v := w.googleView(r)
 		v.Error = w.driveError(r, err)
 		return v
 	})
 }
 
-// startGoogleFlow sends the browser to Google, or shows why not in the
-// fragment given.
-func (w *web) startGoogleFlow(rw http.ResponseWriter, r *http.Request, s *session, in googleConnect, frag string, view func(error) any) {
-	if !w.atAddress(rw, r) {
-		return
-	}
-	in.Origin, in.Lang = w.origin(r), w.lang(r)
-	in.Binding = w.oauthBinding(rw, r)
-	authURL, err := w.c.startGoogle(in)
-	if err != nil {
-		w.render(rw, r, s, "settings", frag, page{Data: view(err)})
-		return
-	}
-	rw.Header().Set("HX-Redirect", authURL)
-	rw.WriteHeader(http.StatusOK)
-}
-
-// handleGoogleCallback is the end of a Google authorization, at the
-// workspace's /oauth/callback, where Google sends the browser back.
-func (w *web) handleGoogleCallback(rw http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	binding := ""
-	if c, err := r.Cookie(oauthCookie); err == nil {
-		binding = hashToken(c.Value)
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
-	defer cancel()
-	res, err := w.c.finishGoogle(ctx, w.origin(r), q.Get("state"), q.Get("code"), q.Get("error"), binding)
-	back := res.Back
-	if back == "" {
-		back = "/settings/google"
-	}
-	v := oauthDone{Name: "Google", Back: back}
-	if err != nil {
-		if errors.Is(err, errBadState) {
-			rw.WriteHeader(http.StatusBadRequest)
-			err = errors.New(tr(w.lang(r), "oauth.expired"))
-		}
-		v.Error = w.driveError(r, err)
-		log.Printf("web: Google: authorization failed")
-	} else {
-		// A page of this site, then the settings: the session cookie
-		// (SameSite=Strict) is not sent on the redirect from Google.
-		u := url.Values{"connected": {"1"}}
-		if len(res.Missing) > 0 {
-			u.Set("missing", strings.Join(res.Missing, ","))
-		}
-		v.Next = back + "?" + u.Encode()
-		log.Printf("web: Google: connected")
-	}
-	w.notify()
-	w.render(rw, r, nil, "oauth", "", page{Title: "oauth.title", Data: v})
-}
-
 // handleGoogleRemove takes a Google account away, with its services.
 func (w *web) handleGoogleRemove(rw http.ResponseWriter, r *http.Request, s *session) {
-	err := w.c.removeGoogleAccount(r.Context(), r.PostFormValue("account"))
+	err := w.c.removeConnection(r.Context(), providerGoogle.Name, r.PostFormValue("account"))
 	v := w.googleView(r)
 	if err != nil {
 		v.Error = w.driveError(r, err)

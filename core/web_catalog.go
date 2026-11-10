@@ -158,7 +158,7 @@ type oauthDone struct {
 func (w *web) handleOAuthCallback(rw http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if isSignInState(q.Get("state")) {
-		w.handleGoogleCallback(rw, r) // a Google account (web_google.go)
+		w.handleSignInCallback(rw, r) // an account's sign-in (web_signin_flow.go)
 		return
 	}
 	u, f := w.c.pool.flowByState(q.Get("state"))
