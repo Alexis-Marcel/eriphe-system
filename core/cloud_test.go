@@ -482,11 +482,11 @@ func TestDriveUnusableOrigin(t *testing.T) {
 			t.Fatalf("%s: %s", host, body)
 		}
 	}
-	_, err := c.startGoogle(googleConnect{Services: []string{googleDrive}, Origin: "https://192.168.1.2:8443", Binding: "b"})
+	_, err := c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "https://192.168.1.2:8443", Binding: "b"})
 	wantKey(t, err, "drive.origin.ip")
-	_, err = c.startGoogle(googleConnect{Services: []string{googleDrive}, Origin: "https://eriphe.local", Binding: "b"})
+	_, err = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "https://eriphe.local", Binding: "b"})
 	wantKey(t, err, "drive.origin.local")
-	_, err = c.startGoogle(googleConnect{Services: []string{googleDrive}, Origin: "http://eriphe.example.org", Binding: "b"})
+	_, err = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "http://eriphe.example.org", Binding: "b"})
 	wantKey(t, err, "drive.origin.http")
 }
 
@@ -513,20 +513,20 @@ func TestDriveRefusals(t *testing.T) {
 	tw, c, _ := filesCore(t, nil)
 	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
 	// Denied at Google: nothing saved.
-	authURL, err := c.startGoogle(googleConnect{Services: []string{googleDrive}, Origin: tw.srv.URL, Binding: "b"})
+	authURL, err := c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: tw.srv.URL, Binding: "b"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	u, _ := url.Parse(authURL)
-	_, err = c.finishGoogle(context.Background(), tw.srv.URL, u.Query().Get("state"), "", "access_denied", "b")
+	_, err = c.finishAccountSignIn(context.Background(), tw.srv.URL, u.Query().Get("state"), "", "access_denied", "b")
 	wantKey(t, err, "drive.denied")
 	if _, ok := c.conf().Servers[filesServer]; ok {
 		t.Fatal("saved after a refusal")
 	}
 	// A state for another workspace is refused here.
-	authURL, _ = c.startGoogle(googleConnect{Services: []string{googleDrive}, Origin: "https://eriphe.example.org", Binding: "b"})
+	authURL, _ = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "https://eriphe.example.org", Binding: "b"})
 	u, _ = url.Parse(authURL)
-	if _, err := c.finishGoogle(context.Background(), tw.srv.URL, u.Query().Get("state"), "the-code", "", "b"); err != errBadState {
+	if _, err := c.finishAccountSignIn(context.Background(), tw.srv.URL, u.Query().Get("state"), "the-code", "", "b"); err != errBadState {
 		t.Fatalf("other origin: %v", err)
 	}
 	// A tool of the same name that is not eriphe-files is left alone.
@@ -541,4 +541,16 @@ func samSecret(t *testing.T, c *core) string {
 		t.Fatal("no connection for sam")
 	}
 	return cn.Secret
+}
+
+// gmailAccount and googleCalendarAccount are a Google account's mailbox and
+// calendar, as their tool data makes them.
+func gmailAccount(email string) svcAccount {
+	t, _ := signInOf(toolMail, "google")
+	return t.account(email)
+}
+
+func googleCalendarAccount(email string) svcAccount {
+	t, _ := signInOf(toolCalendar, "google")
+	return t.account(email)
 }

@@ -61,7 +61,7 @@ func (g toolGroup) Tools() []toolView {
 		out = append(out, a.Tools...)
 	}
 	slices.SortStableFunc(out, func(x, y toolView) int {
-		return slices.Index(googleServices, x.Part) - slices.Index(googleServices, y.Part)
+		return slices.Index(toolKinds, x.Part) - slices.Index(toolKinds, y.Part)
 	})
 	return out
 }
@@ -166,7 +166,7 @@ func groupTools(tools []toolView) []toolGroup {
 		g := &out[i]
 		if g.Owner != "" {
 			if g.Google != "" {
-				for _, s := range googleServices {
+				for _, s := range googleServices() {
 					if !slices.ContainsFunc(g.Accounts[0].Tools, func(t toolView) bool { return t.Part == s }) {
 						g.Others = append(g.Others, s)
 					}

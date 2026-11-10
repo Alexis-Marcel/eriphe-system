@@ -100,7 +100,7 @@ func TestGoogleAccounts(t *testing.T) {
 	sam, _ := c.googleAccount("sam@example.org")
 	ref := sam.Secret
 	mail, cal := runOf(t, c.core, "mail"), runOf(t, c.core, "agenda")
-	samMail, samCal := accountEnv(mailGoogleEnv, "sam@example.org"), accountEnv(calGoogleEnv, "sam@example.org")
+	samMail, samCal := accountEnv(mailTokenEnv, "sam@example.org"), accountEnv(calTokenEnv, "sam@example.org")
 	if mail.Env[samMail].File != vaultPrefix+ref || cal.Env[samCal].File != vaultPrefix+ref ||
 		!strings.Contains(mail.Env["MAIL_CONFIG"].Value, `"oauth_token_env":"`+samMail+`"`) ||
 		!strings.Contains(cal.Env["CALENDAR_CONFIG"].Value, `"provider":"google"`) || !strings.Contains(cal.Env["CALENDAR_CONFIG"].Value, "Europe/Paris") {
@@ -215,7 +215,7 @@ func TestGoogleAccounts(t *testing.T) {
 	// A second account, for mail: one more account of the same server.
 	g.email, g.scope, g.refresh = "bob@example.org", scopeMail, "bob-refresh"
 	googleSignIn(t, tw, g, csrf, url.Values{"service": {"mail"}})
-	bobMail := accountEnv(mailGoogleEnv, "bob@example.org")
+	bobMail := accountEnv(mailTokenEnv, "bob@example.org")
 	if spec := runOf(t, c.core, "mail"); spec.Env[bobMail].File != vaultPrefix+bobSecret(t, c.core) ||
 		spec.Env[samMail].File != vaultPrefix+ref || !strings.Contains(spec.Env["MAIL_CONFIG"].Value, `"name":"bob@example.org"`) {
 		t.Fatalf("second account: %+v", spec)

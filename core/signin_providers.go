@@ -50,3 +50,23 @@ var providerGoogle = &signInProvider{
 
 // signInProviders are the providers, by name.
 var signInProviders = map[string]*signInProvider{providerGoogle.Name: providerGoogle}
+
+// Google's scopes for the tools.
+const (
+	scopeMail          = "https://mail.google.com/"
+	scopeCalendar      = "https://www.googleapis.com/auth/calendar"
+	scopeDrive         = "https://www.googleapis.com/auth/drive"
+	scopeDriveReadonly = "https://www.googleapis.com/auth/drive.readonly"
+)
+
+// toolSignIns are what each kind of tool needs of an account at a provider
+// (connection_tools.go).
+var toolSignIns = []toolSignIn{
+	// Gmail over IMAP and SMTP with XOAUTH2: the whole mailbox; Eriphe
+	// holds the account's level itself.
+	{Tool: toolMail, Provider: "google", Read: []string{scopeMail}, AccountProvider: "gmail", AccountAddress: true},
+	// Google Calendar over CalDAV.
+	{Tool: toolCalendar, Provider: "google", Read: []string{scopeCalendar}, AccountProvider: "google", AccountUsername: true},
+	// Google Drive: read only, or also create files.
+	{Tool: toolDrive, Provider: "google", Read: []string{scopeDriveReadonly}, Write: []string{scopeDrive}},
+}

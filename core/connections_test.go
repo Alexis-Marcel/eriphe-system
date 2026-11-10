@@ -16,7 +16,7 @@ func TestMigrateConnections(t *testing.T) {
 	currentVault().set(bobRef, `{"client_id":"id","refresh_token":"bob","token_url":"https://token.example.org"}`)
 	c.store.set(legacyAccountsKey, `[{"email":"sam@example.org","scopes":["`+scopeMail+`"],"checked":5},`+
 		`{"email":"bob@example.org","scopes":["`+scopeMail+`"],"reconnect":"the Google app it was connected with is refused"}]`)
-	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: googleAccountFor(mailService, "bob@example.org"),
+	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: gmailAccount("bob@example.org"),
 		Secret: &EnvValue{File: vaultPrefix + bobRef}}); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestCollectConnectionSecrets(t *testing.T) {
 	for _, name := range []string{inUse, "google.0123456789ab.token", "connection.feedfacecafe.token", "other.secret"} {
 		v.set(name, "x")
 	}
-	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: googleAccountFor(mailService, "bob@example.org"),
+	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: gmailAccount("bob@example.org"),
 		Secret: &EnvValue{File: vaultPrefix + inUse}}); err != nil {
 		t.Fatal(err)
 	}

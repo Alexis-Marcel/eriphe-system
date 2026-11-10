@@ -41,16 +41,15 @@ type accountService struct {
 	Image       string
 	ConfigEnv   string // the variable of its configuration
 	PasswordEnv string // the stem of an account's password variable
-	GoogleEnv   string // the stem of a Google account's token variable
+	TokenEnv    string // the stem of a connection's token variable
 	Use         string // the text key of what it is for
-	Google      string // the Google service it gives (google.go)
 }
 
 var (
 	mailService = accountService{ID: "mail", Base: "mail", Image: mailImage, ConfigEnv: "MAIL_CONFIG",
-		PasswordEnv: mailSecretEnv, GoogleEnv: mailGoogleEnv, Use: "preset.mail.use", Google: googleMail}
+		PasswordEnv: mailSecretEnv, TokenEnv: mailTokenEnv, Use: "preset.mail.use"}
 	calendarService = accountService{ID: "calendar", Base: "agenda", Image: calendarImage, ConfigEnv: "CALENDAR_CONFIG",
-		PasswordEnv: calSecretEnv, GoogleEnv: calGoogleEnv, Use: "preset.calendar.use", Google: googleCalendar}
+		PasswordEnv: calSecretEnv, TokenEnv: calTokenEnv, Use: "preset.calendar.use"}
 	accountServices = []accountService{mailService, calendarService}
 )
 
@@ -64,10 +63,10 @@ func serviceOf(spec RunSpec) (accountService, bool) {
 	return accountService{}, false
 }
 
-// serviceByGoogle finds the service of a Google service (mail, calendar).
-func serviceByGoogle(g string) (accountService, bool) {
+// serviceByID finds a service by its id (mail, calendar).
+func serviceByID(id string) (accountService, bool) {
 	for _, svc := range accountServices {
-		if svc.Google == g {
+		if svc.ID == id {
 			return svc, true
 		}
 	}
@@ -96,8 +95,15 @@ type svcAuth struct {
 // secretEnv is the variable of the account's secret.
 func (a svcAccount) secretEnv() string { return cmpOr(a.Auth.PasswordEnv, a.Auth.OAuthTokenEnv) }
 
-// google tells an account on a Google account's token.
-func (a svcAccount) google() bool { return a.Auth.OAuthTokenEnv != "" }
+// signedIn tells an account on a connection's token.
+func (a svcAccount) signedIn() bool { return a.Auth.OAuthTokenEnv != "" }
+
+// The stems of a connection's token variable; their names stay those of
+// the installs that have them.
+const (
+	mailTokenEnv = "MAIL_GOOGLE_TOKEN"
+	calTokenEnv  = "CALENDAR_GOOGLE_TOKEN"
+)
 
 // svcConfig is the server's configuration.
 type svcConfig struct {
@@ -289,9 +295,9 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 			return errAccountExists
 		case svc.sameAccount(other, a):
 			at = same // the same address connected with Google: it takes its place
-		case in.Secret != nil && !other.google():
-			// A Google account is named by its address (google.go finds
-			// it so): the other one, an Apple calendar of the same
+		case in.Secret != nil && !other.signedIn():
+			// An account on a connection is named by its address (the
+			// connection's identity): the other one, an Apple calendar of the same
 			// address, takes another name and keeps its secret and level.
 			name := cfg.freeName(other, -1) // its own name counts: it gives it up
 			for k, v := range access {
@@ -324,7 +330,7 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 	}
 	stem := svc.PasswordEnv
 	if in.Secret != nil {
-		stem = svc.GoogleEnv
+		stem = svc.TokenEnv
 	}
 	env := accountEnv(stem, a.Name)
 	a.Auth = svcAuth{}

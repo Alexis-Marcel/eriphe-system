@@ -41,7 +41,7 @@ func (c *core) mergeAccountServers() {
 func merged(svc accountService, st svcServer) bool {
 	for _, a := range st.Config.Accounts {
 		e := a.secretEnv()
-		if e == svc.PasswordEnv || e == svc.GoogleEnv || st.level(a.Name) == "" {
+		if e == svc.PasswordEnv || e == svc.TokenEnv || st.level(a.Name) == "" {
 			return false
 		}
 		if _, ok := st.Server.AccountAccess[a.Name]; !ok {
@@ -79,12 +79,12 @@ func (c *core) mergeService(svc accountService, all []svcServer) error {
 		cfg.Timezone = cmpOr(cfg.Timezone, st.Config.Timezone)
 	}
 	// The Google accounts first: one keeps its address as its name
-	// (google.go finds it so), and another account of that address is
+	// (its connection's identity), and another account of that address is
 	// named apart.
 	for _, google := range []bool{true, false} {
 		for _, st := range all {
 			for _, a := range st.Config.Accounts {
-				if a.google() != google {
+				if a.signedIn() != google {
 					continue
 				}
 				name := mergedName(svc, a)
@@ -101,12 +101,12 @@ func (c *core) mergeService(svc accountService, all []svcServer) error {
 				}
 				v := st.Spec.Env[a.secretEnv()]
 				stem := svc.PasswordEnv
-				if a.google() {
-					stem = svc.GoogleEnv
+				if a.signedIn() {
+					stem = svc.TokenEnv
 				}
 				level := st.level(a.Name)
 				a.Name, a.Auth = name, svcAuth{}
-				if stem == svc.GoogleEnv {
+				if stem == svc.TokenEnv {
 					a.Auth.OAuthTokenEnv = accountEnv(stem, name)
 				} else {
 					a.Auth.PasswordEnv = accountEnv(stem, name)

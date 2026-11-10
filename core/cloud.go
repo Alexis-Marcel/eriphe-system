@@ -33,9 +33,6 @@ const (
 	filesImage     = "ghcr.io/alexis-marcel/eriphe-files"
 	filesConfigEnv = "FILES_CONFIG"
 	driveTokenEnv  = "FILES_GOOGLE_TOKEN" // an account's is FILES_GOOGLE_TOKEN_<hash> (driveTokenEnvOf)
-
-	scopeDrive         = "https://www.googleapis.com/auth/drive"
-	scopeDriveReadonly = "https://www.googleapis.com/auth/drive.readonly"
 )
 
 // CloudConfig is what an older configuration may still carry, from when
@@ -113,7 +110,8 @@ func (c *core) driveState() driveState {
 	fc, ok := filesConfigOf(srv)
 	st := driveState{Exists: true, Mine: ok && c.source(kindServer, filesServer) == sourceWorkspace, Folders: fc.Folders}
 	for _, a := range fc.Accounts {
-		w := slices.Contains(a.Scopes, scopeDrive)
+		t, _ := signInOf(toolDrive, cmpOr(a.Provider, providerGoogle.Name))
+		_, w := t.granted(a.Scopes)
 		st.Accounts = append(st.Accounts, driveAccountView{Name: a.Name, CanWrite: w})
 		st.CanWrite = st.CanWrite || w
 	}
@@ -211,7 +209,7 @@ func (c *core) putDrive(lang string, change func(*filesConfig), env map[string]E
 // FILES_GOOGLE_TOKEN) is taken over by the first account connected: its
 // folders stay. Without the scope that writes, the account's folders fall
 // back to read.
-func (c *core) putDriveAccount(lang, email string, scopes []string, secret string) error {
+func (c *core) putDriveAccount(lang, provider, email string, scopes []string, write bool, secret string) error {
 	tokenEnv := driveTokenEnvOf(email)
 	env := map[string]EnvValue{tokenEnv: {File: vaultPrefix + secret}}
 	return c.putDrive(lang, func(fc *filesConfig) {
@@ -226,12 +224,12 @@ func (c *core) putDriveAccount(lang, email string, scopes []string, secret strin
 					}
 				}
 			}
-			fc.Accounts = append(fc.Accounts, filesAccount{Name: email, Provider: "google"})
+			fc.Accounts = append(fc.Accounts, filesAccount{Name: email, Provider: provider})
 			i = len(fc.Accounts) - 1
 		}
 		fc.Accounts[i].Scopes = scopes
 		fc.Accounts[i].Auth.TokenEnv = tokenEnv
-		if !slices.Contains(scopes, scopeDrive) {
+		if !write {
 			for k := range fc.Folders {
 				if strings.EqualFold(fc.Folders[k].Account, email) {
 					fc.Folders[k].Access = "read"
