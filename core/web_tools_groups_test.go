@@ -22,8 +22,8 @@ func TestGroupTools(t *testing.T) {
 	tools := []toolView{
 		svc("agenda", "calendar", "sam@example.org", "google", "sam@example.org"),
 		svc("agenda", "calendar", "sam@example.org", "icloud", ""), // an Apple calendar of the same address
-		svc(filesServer, "drive", "sam@example.org", "google", "sam@example.org"),
-		svc(filesServer, "drive", "bob@example.org", "google", "bob@example.org"),
+		svc(filesService.Base, "drive", "sam@example.org", "google", "sam@example.org"),
+		svc(filesService.Base, "drive", "bob@example.org", "google", "bob@example.org"),
 		row("gh-1", "github", "GitHub · acme"),
 		svc("mail", "mail", "SAM@example.org", "google", "sam@example.org"),
 		svc("mail", "mail", "sam@example.org", "icloud", ""),

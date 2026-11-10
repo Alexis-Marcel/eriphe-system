@@ -339,9 +339,9 @@ func TestDriveRoundTrip(t *testing.T) {
 	}
 
 	// eriphe-files runs with the token from the vault, never in its spec.
-	srv := c.conf().Servers[filesServer]
+	srv := c.conf().Servers[filesService.Base]
 	spec, _ := decodeRun(srv.Run)
-	if !strings.HasPrefix(spec.Image, filesImage) || spec.Env[accountEnv(toolTokenEnv, "sam@example.org")].File != "vault:"+samSecret(t, c.core) ||
+	if !strings.HasPrefix(spec.Image, filesService.Image) || spec.Env[accountEnv(toolTokenEnv, "sam@example.org")].File != "vault:"+samSecret(t, c.core) ||
 		strings.Contains(string(srv.Run), "the-refresh") || !srv.TrustAnnotations {
 		t.Fatalf("server: %s", srv.Run)
 	}
@@ -354,17 +354,17 @@ func TestDriveRoundTrip(t *testing.T) {
 	if tok["refresh_token"] != "the-refresh" || tok["client_id"] != testClientID || tok["client_secret"] != testClientSecret {
 		t.Fatalf("token lent: %v", tok)
 	}
-	if acc := c.placeAccounts(filesServer); len(acc) != 1 || !acc[0].CanWrite || len(c.places()) != 0 {
+	if acc := c.placeAccounts(filesService.Base); len(acc) != 1 || !acc[0].CanWrite || len(c.places()) != 0 {
 		t.Fatalf("accounts: %+v", acc)
 	}
 
 	// The folders, through the files server's setup tool, which tasks never get.
-	waitStatus(t, c.pool.get(filesServer), statusReady)
-	_, _, tools := c.pool.get(filesServer).snapshot()
+	waitStatus(t, c.pool.get(filesService.Base), statusReady)
+	_, _, tools := c.pool.get(filesService.Base).snapshot()
 	if len(tools) != 1 || tools[0].Name != "list_files" {
 		t.Fatalf("tools lent: %v", tools)
 	}
-	places := "/settings/tools/" + filesServer + "/places"
+	places := "/settings/tools/" + filesService.Base + "/places"
 	if _, body, _ := tw.do("GET", places+"/browse?parent=root-id&name=My+Drive", nil, nil); !strings.Contains(body, "Compta") ||
 		!strings.Contains(body, `value="drop"`) {
 		t.Fatalf("browse: %s", body)
@@ -374,8 +374,8 @@ func TestDriveRoundTrip(t *testing.T) {
 		t.Fatalf("add: %d %s", code, body)
 	}
 	tw.post(places, url.Values{"id": {"other"}, "name": {"Compta"}, "access": {"read"}}, csrf)
-	_, fc, _ := accountsOf(c.conf().Servers[filesServer])
-	if f := c.places(); len(f) != 2 || f[0] != (Place{Tool: filesServer, Name: "Compta", Account: "sam@example.org", ID: "compta", Access: "drop"}) ||
+	_, fc, _ := accountsOf(c.conf().Servers[filesService.Base])
+	if f := c.places(); len(f) != 2 || f[0] != (Place{Tool: filesService.Base, Name: "Compta", Account: "sam@example.org", ID: "compta", Access: "drop"}) ||
 		f[1].Name != "Compta (2)" || fc.Accounts[0].Auth.TokenEnv != accountEnv(toolTokenEnv, "sam@example.org") {
 		t.Fatalf("folders: %+v %+v", f, fc)
 	}
@@ -392,7 +392,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	if _, body, _ := tw.do("GET", "/settings/folders", nil, nil); !strings.Contains(body, "Compta (2)") || !strings.Contains(body, "Dans ton Google Drive") {
 		t.Fatalf("folders page: %s", body)
 	}
-	if fs, _ := c.folderViews(); len(fs) != 2 || fs[0].Source != sourcePlace || fs[0].PlaceID != "compta" || fs[0].Tool != filesServer || !strings.Contains(fs[0].Lend, filesServer) {
+	if fs, _ := c.folderViews(); len(fs) != 2 || fs[0].Source != sourcePlace || fs[0].PlaceID != "compta" || fs[0].Tool != filesService.Base || !strings.Contains(fs[0].Lend, filesService.Base) {
 		t.Fatalf("views: %+v", fs)
 	}
 	if _, _, err := c.folderGrant([]string{"compta"}); err == nil || !strings.Contains(err.Error(), "is a place") {
@@ -402,7 +402,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	if f := c.places(); len(f) != 1 || f[0].ID != "compta" {
 		t.Fatalf("after remove: %+v", f)
 	}
-	if spec, _ := decodeRun(c.conf().Servers[filesServer].Run); spec.Env[accountEnv(toolTokenEnv, "sam@example.org")].File == "" {
+	if spec, _ := decodeRun(c.conf().Servers[filesService.Base].Run); spec.Env[accountEnv(toolTokenEnv, "sam@example.org")].File == "" {
 		t.Fatal("a folder change lost the token")
 	}
 
@@ -411,10 +411,10 @@ func TestDriveRoundTrip(t *testing.T) {
 	_, _, h = tw.post("/settings/connections/google/connect", url.Values{"tool": {toolDrive}}, csrf)
 	state = g.authorize(t, h.Get("HX-Redirect"))
 	tw.do("GET", "/oauth/callback?code=the-code&state="+url.QueryEscape(state), nil, nil)
-	if acc, f := c.placeAccounts(filesServer), c.places(); acc[0].CanWrite || f[0].Access != accessRead {
+	if acc, f := c.placeAccounts(filesService.Base), c.places(); acc[0].CanWrite || f[0].Access != accessRead {
 		t.Fatalf("read only: %+v %+v", acc, f)
 	}
-	if err := c.givePlace(filesServer, "", "compta", "Compta", accessDrop); err == nil {
+	if err := c.givePlace(filesService.Base, "", "compta", "Compta", accessDrop); err == nil {
 		t.Fatal("write right without the scope")
 	}
 }
@@ -531,7 +531,7 @@ func TestDriveRefusals(t *testing.T) {
 	u, _ := url.Parse(authURL)
 	_, err = c.finishAccountSignIn(context.Background(), tw.srv.URL, u.Query().Get("state"), "", "access_denied", "b")
 	wantKey(t, err, "conn.denied")
-	if _, ok := c.conf().Servers[filesServer]; ok {
+	if _, ok := c.conf().Servers[filesService.Base]; ok {
 		t.Fatal("saved after a refusal")
 	}
 	// A state for another workspace is refused here.
@@ -541,8 +541,8 @@ func TestDriveRefusals(t *testing.T) {
 		t.Fatalf("other origin: %v", err)
 	}
 	// A tool of the same name that is not eriphe-files is left alone.
-	c.putServer(putCreate, filesServer, Server{URL: "https://x.example/mcp", Auth: &ServerAuth{None: true}, Use: "x"}, nil)
-	if err := c.givePlace(filesServer, "", "a", "A", accessRead); err == nil {
+	c.putServer(putCreate, filesService.Base, Server{URL: "https://x.example/mcp", Auth: &ServerAuth{None: true}, Use: "x"}, nil)
+	if err := c.givePlace(filesService.Base, "", "a", "A", accessRead); err == nil {
 		t.Fatal("a place given to a tool that keeps none")
 	}
 }
@@ -583,15 +583,15 @@ func TestFilesTokenScopeOfAccounts(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		return c.conf().Servers[filesServer].withLevel(accessReads)
+		return c.conf().Servers[filesService.Base].withLevel(accessReads)
 	}
-	if s := c.tokenScope(filesServer, put([]string{scopeDrive}, []string{scopeDriveReadonly})); s.Granted != grantedWrite || s.Reconnect {
+	if s := c.tokenScope(filesService.Base, put([]string{scopeDrive}, []string{scopeDriveReadonly})); s.Granted != grantedWrite || s.Reconnect {
 		t.Errorf("a writer, then a reader: %+v", s)
 	}
-	if s := c.tokenScope(filesServer, put([]string{scopeDriveReadonly}, []string{scopeDrive})); s.Granted != grantedWrite || s.Reconnect {
+	if s := c.tokenScope(filesService.Base, put([]string{scopeDriveReadonly}, []string{scopeDrive})); s.Granted != grantedWrite || s.Reconnect {
 		t.Errorf("a reader, then a writer: %+v", s)
 	}
-	if s := c.tokenScope(filesServer, put([]string{scopeDriveReadonly})); s.Granted != grantedRead || !s.Reconnect {
+	if s := c.tokenScope(filesService.Base, put([]string{scopeDriveReadonly})); s.Granted != grantedRead || !s.Reconnect {
 		t.Errorf("readers only: %+v", s)
 	}
 }
@@ -612,10 +612,10 @@ func TestFilesAccountsPath(t *testing.T) {
 	put("sam@example.org", scopeDrive)
 	put("bob@example.org", scopeDrive)
 	st, ok := c.serviceServer(filesService)
-	if !ok || st.Name != filesServer || len(st.Config.Accounts) != 2 || len(st.Server.AccountAccess) != 0 {
+	if !ok || st.Name != filesService.Base || len(st.Config.Accounts) != 2 || len(st.Server.AccountAccess) != 0 {
 		t.Fatalf("server: %+v", st)
 	}
-	if err := c.changePlaces(filesServer, func([]Place) ([]Place, error) {
+	if err := c.changePlaces(filesService.Base, func([]Place) ([]Place, error) {
 		return []Place{{Name: "Compta", Account: "sam@example.org", ID: "a", Access: accessDrop},
 			{Name: "Photos", Account: "bob@example.org", ID: "b", Access: accessDrop}}, nil
 	}); err != nil {
@@ -634,7 +634,7 @@ func TestFilesAccountsPath(t *testing.T) {
 	if err := c.dropAccount(filesService, "bob@example.org"); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := c.conf().Servers[filesServer]; ok {
+	if _, ok := c.conf().Servers[filesService.Base]; ok {
 		t.Fatal("the server outlived its last account")
 	}
 }
@@ -648,14 +648,14 @@ func TestTestAccountThroughTheServer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	waitStatus(t, c.pool.get(filesServer), statusReady)
-	if why, err := c.testAccount(t.Context(), filesServer, "sam@example.org"); why != "" || err != nil {
+	waitStatus(t, c.pool.get(filesService.Base), statusReady)
+	if why, err := c.testAccount(t.Context(), filesService.Base, "sam@example.org"); why != "" || err != nil {
 		t.Errorf("sam: %q %v", why, err)
 	}
-	if why, err := c.testAccount(t.Context(), filesServer, "bob@example.org"); why != "token revoked: reconnect" || err != nil {
+	if why, err := c.testAccount(t.Context(), filesService.Base, "bob@example.org"); why != "token revoked: reconnect" || err != nil {
 		t.Errorf("bob: %q %v", why, err)
 	}
-	if _, _, tools := c.pool.get(filesServer).snapshot(); slices.ContainsFunc(tools, func(t *mcp.Tool) bool { return t.Name == "test_account" }) {
+	if _, _, tools := c.pool.get(filesService.Base).snapshot(); slices.ContainsFunc(tools, func(t *mcp.Tool) bool { return t.Name == "test_account" }) {
 		t.Error("test_account lent")
 	}
 	if _, err := c.testAccount(t.Context(), "nothing", "x"); err == nil {

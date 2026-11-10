@@ -137,7 +137,7 @@ func TestGoogleAccounts(t *testing.T) {
 	if err != nil || !strings.Contains(env[samMail], `"refresh_token":"the-refresh"`) {
 		t.Fatalf("lent: %v %v", env, err)
 	}
-	if _, ok := c.conf().Servers[filesServer]; ok {
+	if _, ok := c.conf().Servers[filesService.Base]; ok {
 		t.Fatal("Drive connected without being asked")
 	}
 	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
@@ -165,7 +165,7 @@ func TestGoogleAccounts(t *testing.T) {
 	if env, _ := lendService(runOf(t, c.core, "mail")); !strings.Contains(env[samMail], "the-refresh-2") {
 		t.Fatal("the mail server does not read the new token")
 	}
-	if acc := c.placeAccounts(filesServer); len(acc) != 1 || acc[0].Name != "sam@example.org" || !acc[0].CanWrite {
+	if acc := c.placeAccounts(filesService.Base); len(acc) != 1 || acc[0].Name != "sam@example.org" || !acc[0].CanWrite {
 		t.Fatalf("drive: %+v", acc)
 	}
 	// In the tools list, Drive is a service of the account's card, with
@@ -173,30 +173,30 @@ func TestGoogleAccounts(t *testing.T) {
 	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
 	body = body[strings.Index(body, `id="tools-list"`):]
 	body = body[:strings.Index(body, `id="add-dlg"`)]
-	driveRow := rowKey(filesServer, "sam@example.org")
+	driveRow := rowKey(filesService.Base, "sam@example.org")
 	if !strings.Contains(body, "Google · Mail, Agenda, Drive") || !strings.Contains(body, `id="tool-`+driveRow+`"`) || !strings.Contains(body, "<h3>Drive</h3>") ||
 		!strings.Contains(body, "Google Drive · aucun lieu") || strings.Contains(body, "Ajouter à ce compte") || strings.Count(body, `class="tool-group`) != 1 ||
-		strings.Contains(body, `hx-post="/settings/tools/`+filesServer+`/delete"`) || !strings.Contains(body, `href="/settings/tools/`+filesServer+`/places"`) {
+		strings.Contains(body, `hx-post="/settings/tools/`+filesService.Base+`/delete"`) || !strings.Contains(body, `href="/settings/tools/`+filesService.Base+`/places"`) {
 		t.Fatalf("tools list with Drive: %s", body)
 	}
-	if _, s, _ := tw.do("GET", "/settings/tools/"+filesServer+"/row?account=sam@example.org", nil, map[string]string{"HX-Request": "true"}); !strings.Contains(s, "<h3>Drive</h3>") {
+	if _, s, _ := tw.do("GET", "/settings/tools/"+filesService.Base+"/row?account=sam@example.org", nil, map[string]string{"HX-Request": "true"}); !strings.Contains(s, "<h3>Drive</h3>") {
 		t.Errorf("drive row: %s", s)
 	}
 
 	// Its services just added are starting, not in error (their first
 	// dial fails until they run): the accounts ask for themselves again.
-	for _, name := range []string{"mail", "agenda", filesServer} {
+	for _, name := range []string{"mail", "agenda", filesService.Base} {
 		u := c.pool.get(name)
 		u.mu.Lock()
 		u.status, u.err = statusError, "service "+name+" has no node: not placed yet"
 		u.mu.Unlock()
 	}
-	for _, name := range []string{"mail", "agenda", filesServer} {
+	for _, name := range []string{"mail", "agenda", filesService.Base} {
 		if _, err := c.store.assignService(name, "nasa"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, name := range []string{"mail", "agenda", filesServer} {
+	for _, name := range []string{"mail", "agenda", filesService.Base} {
 		if err := c.store.updateService(name, map[string]any{"state": stateFailed, "error": "pull access denied for x"}); err != nil {
 			t.Fatal(err)
 		}
@@ -293,7 +293,7 @@ func TestGoogleReconnect(t *testing.T) {
 		t.Fatalf("the brain was told %d times: %+v", told, msgs)
 	}
 	waitStatus(t, c.pool.get("mail"), statusNeedsAuth)
-	waitStatus(t, c.pool.get(filesServer), statusNeedsAuth)
+	waitStatus(t, c.pool.get(filesService.Base), statusNeedsAuth)
 	if s := c.listServers("mail", false); s[0].Connect != "Settings → Tools → Google → Reconnect sam@example.org" {
 		t.Fatalf("list_tools: %+v", s[0])
 	}

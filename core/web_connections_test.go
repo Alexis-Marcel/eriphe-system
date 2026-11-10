@@ -107,12 +107,12 @@ func TestPlacesPage(t *testing.T) {
 	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
 	g.scope = scopeDriveReadonly
 	connectionSignIn(t, tw, g, csrf, "google", url.Values{"tool": {"drive"}})
-	waitStatus(t, c.pool.get(filesServer), statusReady)
+	waitStatus(t, c.pool.get(filesService.Base), statusReady)
 
 	if code, _, _ := tw.do("GET", "/settings/tools/nothing/places", nil, nil); code != 404 {
 		t.Fatalf("a tool of no places: %d", code)
 	}
-	base := "/settings/tools/" + filesServer + "/places"
+	base := "/settings/tools/" + filesService.Base + "/places"
 	if code, body, _ := tw.do("GET", base, nil, nil); code != 200 || !strings.Contains(body, "Aucun lieu") || !strings.Contains(body, base+"/browse") {
 		t.Fatalf("page: %d %s", code, mainPart(t, body))
 	}
@@ -127,7 +127,7 @@ func TestPlacesPage(t *testing.T) {
 	if _, body, _ := tw.post(base, url.Values{"id": {"compta"}, "name": {"Compta"}, "access": {"read"}}, csrf); !strings.Contains(body, "Compta") || strings.Contains(body, `role="alert"`) {
 		t.Fatalf("give: %s", body)
 	}
-	if p := c.placeNamed("compta"); p == nil || p.Account != "sam@example.org" || p.Access != accessRead || p.Tool != filesServer {
+	if p := c.placeNamed("compta"); p == nil || p.Account != "sam@example.org" || p.Access != accessRead || p.Tool != filesService.Base {
 		t.Fatalf("place: %+v", p)
 	}
 	if _, body, _ := tw.do("GET", base+"/browse?parent=root-id", nil, hx); !strings.Contains(body, "Lecture</span>") {

@@ -73,11 +73,11 @@ func TestAccessScale(t *testing.T) {
 func withDrive(t *testing.T, c *core, folders ...Place) {
 	t.Helper()
 	fc, _ := json.Marshal(map[string]any{"accounts": []any{}, "places": folders})
-	run, _ := json.Marshal(map[string]any{"image": filesImage + ":1", "transport": "stdio", "env": map[string]string{toolConfigEnv: string(fc)}})
+	run, _ := json.Marshal(map[string]any{"image": filesService.Image + ":1", "transport": "stdio", "env": map[string]string{toolConfigEnv: string(fc)}})
 	if c.base.Servers == nil {
 		c.base.Servers = map[string]Server{}
 	}
-	c.base.Servers[filesServer] = Server{Run: run, Use: "files"}
+	c.base.Servers[filesService.Base] = Server{Run: run, Use: "files"}
 	c.snap.Store(mergeCatalog(c.base, c.dyn))
 }
 
@@ -107,7 +107,7 @@ func TestResolveFolders(t *testing.T) {
 	// A place lends its tool.
 	for _, kind := range []string{resPlace} {
 		l, err = c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: kind, Ref: "devis", Access: accessDrop}}})
-		if err != nil || len(l.Grant) != 1 || l.Grant[0] != filesServer || l.List[0].Ref != "Devis" || l.List[0].Kind != resPlace || len(l.Folders) != 0 {
+		if err != nil || len(l.Grant) != 1 || l.Grant[0] != filesService.Base || l.List[0].Ref != "Devis" || l.List[0].Kind != resPlace || len(l.Folders) != 0 {
 			t.Fatalf("%s: %+v %v", kind, l, err)
 		}
 	}

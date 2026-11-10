@@ -390,13 +390,13 @@ func TestServicesOnAlwaysOnNodes(t *testing.T) {
 // eriphe-core.
 func TestPinnedImage(t *testing.T) {
 	for _, c := range []struct{ image, version, want string }{
-		{mailImage, "0.79.0", mailImage + ":0.79.0"},
-		{calendarImage, "0.79.0", calendarImage + ":0.79.0"},
-		{filesImage, "1.2.0-rc.1", filesImage + ":1.2.0-rc.1"},
-		{mailImage, "0.79.0-dev+abc1234", mailImage + ":sha-abc1234"},
-		{mailImage, "dev", mailImage},
-		{mailImage, "", mailImage},
-		{mailImage + ":0.70.0", "0.79.0", mailImage + ":0.70.0"}, // named with its tag: kept
+		{mailService.Image, "0.79.0", mailService.Image + ":0.79.0"},
+		{calendarService.Image, "0.79.0", calendarService.Image + ":0.79.0"},
+		{filesService.Image, "1.2.0-rc.1", filesService.Image + ":1.2.0-rc.1"},
+		{mailService.Image, "0.79.0-dev+abc1234", mailService.Image + ":sha-abc1234"},
+		{mailService.Image, "dev", mailService.Image},
+		{mailService.Image, "", mailService.Image},
+		{mailService.Image + ":0.70.0", "0.79.0", mailService.Image + ":0.70.0"}, // named with its tag: kept
 		{"mcp/time", "0.79.0", "mcp/time"},
 		{"ghcr.io/alexis-marcel/eriphe-base", "0.79.0", "ghcr.io/alexis-marcel/eriphe-base"},
 	} {
@@ -412,14 +412,14 @@ func TestOwnServicesFollowTheVersion(t *testing.T) {
 	was := version
 	t.Cleanup(func() { version = was })
 	c, store := newServiceCore(t)
-	specs := map[string]RunSpec{"mail": {Image: mailImage, Transport: "stdio"}, "time": {Image: "mcp/time", Transport: "stdio"}}
+	specs := map[string]RunSpec{"mail": {Image: mailService.Image, Transport: "stdio"}, "time": {Image: "mcp/time", Transport: "stdio"}}
 	version = "0.78.0"
 	if err := c.registerServices(specs); err != nil {
 		t.Fatal(err)
 	}
 	mail, _ := store.service("mail")
 	timeSvc, _ := store.service("time")
-	if mail.Spec.Image != mailImage+":0.78.0" || timeSvc.Spec.Image != "mcp/time" {
+	if mail.Spec.Image != mailService.Image+":0.78.0" || timeSvc.Spec.Image != "mcp/time" {
 		t.Fatalf("images: %s %s", mail.Spec.Image, timeSvc.Spec.Image)
 	}
 	version = "0.79.0"
@@ -428,7 +428,7 @@ func TestOwnServicesFollowTheVersion(t *testing.T) {
 	}
 	after, _ := store.service("mail")
 	timeAfter, _ := store.service("time")
-	if after.Spec.Image != mailImage+":0.79.0" || after.Hash == mail.Hash || timeAfter.Hash != timeSvc.Hash {
+	if after.Spec.Image != mailService.Image+":0.79.0" || after.Hash == mail.Hash || timeAfter.Hash != timeSvc.Hash {
 		t.Fatalf("after the update: %s %s→%s, time %s→%s", after.Spec.Image, mail.Hash, after.Hash, timeSvc.Hash, timeAfter.Hash)
 	}
 }

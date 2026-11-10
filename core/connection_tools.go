@@ -12,7 +12,7 @@ import (
 )
 
 // Tools on a connection: a tool says, as data, what it needs of an account
-// signed in at a provider (toolSignIns, signin_providers.go): the scopes
+// signed in at a provider (its card's SignIns, tool_cards.go): the scopes
 // for reading and for writing, and what its account is in its
 // configuration. One sign-in at a provider can serve several tools at once
 // (the mail, the calendar and the drive of one account): it asks for the
@@ -24,11 +24,11 @@ import (
 //	calendar  eriphe-calendar, an account of the one calendar server
 //	drive     eriphe-files, an account of the one files server
 //
-// Each is an accountService (accounts.go): an account is put in its server
+// Each has a card (tool_cards.go): an account is put in its server
 // and taken out of it the same way for the three.
 //
 // Nothing here names a provider: the tools a provider serves, and how,
-// are its rows in toolSignIns.
+// are rows of the tools' cards.
 
 // The kinds of tools a connection can serve.
 const (
@@ -55,9 +55,22 @@ type toolSignIn struct {
 	AccountUsername bool
 }
 
+// toolSignIns are what each kind of tool needs of an account at a
+// provider: its card's (tool_cards.go).
+func toolSignIns() []toolSignIn {
+	var out []toolSignIn
+	for _, card := range toolCards {
+		for _, t := range card.SignIns {
+			t.Tool = card.ID
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // signInOf finds what a kind of tool needs at a provider.
 func signInOf(tool, provider string) (toolSignIn, bool) {
-	for _, t := range toolSignIns {
+	for _, t := range toolSignIns() {
 		if t.Tool == tool && t.Provider == provider {
 			return t, true
 		}
@@ -69,7 +82,7 @@ func signInOf(tool, provider string) (toolSignIn, bool) {
 // signed in at, from what its configuration names (AccountProvider): a
 // Gmail's "gmail", a Google calendar's "google".
 func signInByAccount(tool, accountProvider string) (toolSignIn, bool) {
-	for _, t := range toolSignIns {
+	for _, t := range toolSignIns() {
 		if t.Tool == tool && t.AccountProvider == accountProvider {
 			return t, true
 		}

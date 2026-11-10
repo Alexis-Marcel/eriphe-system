@@ -20,7 +20,7 @@ import (
 // (web_connections.go).
 
 // accountProvider is the provider an account signed in is at, or "".
-func accountProvider(svc accountService, a svcAccount) string {
+func accountProvider(svc toolCard, a svcAccount) string {
 	if t, ok := signInByAccount(svc.ID, a.Provider); ok && a.signedIn() {
 		return t.Provider
 	}
@@ -29,7 +29,7 @@ func accountProvider(svc accountService, a svcAccount) string {
 
 // accountPreset is the preset an account comes from: its provider's for
 // one signed in, else the service's.
-func accountPreset(svc accountService, a svcAccount) toolPreset {
+func accountPreset(svc toolCard, a svcAccount) toolPreset {
 	if p, ok := connectionPreset(accountProvider(svc, a), svc.ID); ok {
 		return p
 	}
@@ -38,11 +38,11 @@ func accountPreset(svc accountService, a svcAccount) toolPreset {
 }
 
 // accountDetail is an account's line: "Gmail · sam@example.org".
-func accountDetail(lang string, svc accountService, a svcAccount) string {
+func accountDetail(lang string, svc toolCard, a svcAccount) string {
 	switch {
 	case a.signedIn():
 		return productName(lang, accountProvider(svc, a), svc.ID) + " · " + a.Name
-	case svc == mailService:
+	case svc.ID == toolMail:
 		f, _ := mailFormOf(a)
 		return tr(lang, "mailp."+f.Provider) + " · " + a.Address
 	}
@@ -88,7 +88,7 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 		t.Scope = tokenScope{}
 		t.Part, t.Label = svc.ID, tr(lang, "acct.svc."+svc.ID)
 		t.Owner, t.Provider = accountOwner(svc, a)
-		t.Mark, t.Detail = svc.Mark, accountProduct(lang, svc, a)
+		t.Mark, t.Detail = svc.mark(), accountProduct(lang, svc, a)
 		if key := svc.placesKey(); key != "" {
 			t.Detail += " · " + placeCount(lang, len(placesOfAccount(sv.Name, srv, a.Name, len(cfg.Accounts))))
 		}
@@ -100,12 +100,12 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 // accountOwner is the account a mailbox or a calendar is of, for its card:
 // its address, and who gives it (a Gmail on a password is the mailbox of
 // the account signed in at its provider all the same).
-func accountOwner(svc accountService, a svcAccount) (address, provider string) {
+func accountOwner(svc toolCard, a svcAccount) (address, provider string) {
 	address, provider = a.Name, a.Provider
 	switch {
 	case a.signedIn():
 		return a.Name, cmpOr(accountProvider(svc, a), a.Provider)
-	case svc == mailService:
+	case svc.ID == toolMail:
 		f, _ := mailFormOf(a)
 		address, provider = cmpOr(a.Address, a.Name), f.Provider
 	case strings.Contains(a.Username, "@"):
@@ -119,11 +119,11 @@ func accountOwner(svc accountService, a svcAccount) (address, provider string) {
 
 // accountProduct is the line of a service in its account's card: what it
 // is at its provider ("Gmail", "Google Agenda", "iCloud").
-func accountProduct(lang string, svc accountService, a svcAccount) string {
+func accountProduct(lang string, svc toolCard, a svcAccount) string {
 	switch {
 	case a.signedIn():
 		return productName(lang, accountProvider(svc, a), svc.ID)
-	case svc == mailService:
+	case svc.ID == toolMail:
 		f, _ := mailFormOf(a)
 		return tr(lang, "mailp."+f.Provider)
 	}
@@ -181,10 +181,10 @@ func (t toolView) Title() string { return cmpOr(t.Label, cmpOr(t.Account, t.Name
 // accountOfRequest is the account a request is about (?account=, or the
 // form's account), as the server has it; "" for a server without accounts
 // or an account it does not hold.
-func (w *web) accountOfRequest(r *http.Request, server string) (accountService, svcAccount, bool) {
+func (w *web) accountOfRequest(r *http.Request, server string) (toolCard, svcAccount, bool) {
 	svc, cfg, ok := accountsOf(w.c.conf().Servers[server])
 	if !ok {
-		return accountService{}, svcAccount{}, false
+		return toolCard{}, svcAccount{}, false
 	}
 	name := cmpOr(r.URL.Query().Get("account"), r.PostFormValue("account"))
 	if i := cfg.index(name); i >= 0 {
@@ -195,7 +195,7 @@ func (w *web) accountOfRequest(r *http.Request, server string) (accountService, 
 
 // toolFormOfAccount fills the form of an account, for an edit; ok is false
 // for an account on a Google account (its page, not a form).
-func (w *web) toolFormOfAccount(name string, srv Server, svc accountService, a svcAccount) (toolForm, bool) {
+func (w *web) toolFormOfAccount(name string, srv Server, svc toolCard, a svcAccount) (toolForm, bool) {
 	_, cfg, _ := accountsOf(srv)
 	f := toolForm{Edit: true, Name: name, Use: srv.Use, Kind: "local", Auth: "none", Account: a.Name,
 		Access: svcServer{Server: srv}.level(a.Name), Transport: transportStdio, Egress: true}
@@ -203,7 +203,7 @@ func (w *web) toolFormOfAccount(name string, srv Server, svc accountService, a s
 	spec, _ := decodeRun(srv.Run)
 	f.SecretSet = a.Auth.PasswordEnv != "" && spec.Env[a.Auth.PasswordEnv].File != ""
 	var ok bool
-	if svc == mailService {
+	if svc.ID == toolMail {
 		f.Mail, ok = mailFormOf(a)
 	} else {
 		f.Calendar, ok = calendarFormOf(a, cfg.Timezone)
@@ -232,7 +232,7 @@ func (w *web) saveAccount(rw http.ResponseWriter, r *http.Request, s *session, f
 	var a svcAccount
 	var err error
 	moved := false
-	if svc == mailService {
+	if svc.ID == toolMail {
 		a, err = f.Mail.account(prev)
 		if prev != nil {
 			p, _ := mailFormOf(*prev)
@@ -262,7 +262,7 @@ func (w *web) saveAccount(rw http.ResponseWriter, r *http.Request, s *session, f
 	if prev != nil {
 		in.Replace = prev.Name
 	}
-	if svc == calendarService {
+	if svc.ID == toolCalendar {
 		in.Timezone = f.Calendar.Timezone
 	}
 	if err := w.c.putAccount(svc, in); err != nil {

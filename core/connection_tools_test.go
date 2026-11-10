@@ -14,10 +14,12 @@ import (
 func TestToolOnAnyProvider(t *testing.T) {
 	f := newFakeProvider(t)
 	signInProviders[f.Name] = f.signInProvider
-	old := toolSignIns
-	toolSignIns = append(slices.Clone(toolSignIns), toolSignIn{Tool: toolMail, Provider: f.Name, Read: []string{"mail.read"},
+	old := toolCards
+	cards := slices.Clone(toolCards)
+	cards[0].SignIns = append(slices.Clone(cards[0].SignIns), toolSignIn{Provider: f.Name, Read: []string{"mail.read"},
 		AccountProvider: "example", AccountAddress: true})
-	t.Cleanup(func() { delete(signInProviders, f.Name); toolSignIns = old })
+	toolCards = cards
+	t.Cleanup(func() { delete(signInProviders, f.Name); toolCards = old })
 
 	c := newDynamicCore(t, nil).core
 	if got := toolsAt(f.Name); len(got) != 1 || got[0] != toolMail {

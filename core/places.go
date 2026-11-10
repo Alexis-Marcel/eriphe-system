@@ -16,8 +16,8 @@ import (
 // own access: a drive's folders. A tool that has places browses them with
 // a setup tool (eriphe/setup, which tasks never get: setupTool) and keeps
 // the ones picked in its own configuration, where its server enforces
-// them; where is data (placeKeepers), so a tool is found by having places,
-// never by its name.
+// them; where is data (its card's Places, tool_cards.go), so a tool is
+// found by having places, never by its name.
 //
 // A place is lent to a task as {kind: place, ref: <its name>}; lending a
 // place lends its whole tool, which reaches every place given to Eriphe,
@@ -25,19 +25,18 @@ import (
 
 const resPlace = "place"
 
-// placeKeeper says where a tool's server keeps its places: a JSON
-// variable of its environment, and the key of the list in it.
+// placeKeeper says, on a tool's card, where its server keeps its places:
+// the key of the list in its configuration (TOOL_CONFIG), and its setup tool
+// that browses them.
 type placeKeeper struct {
-	Image  string // the server's image, without its tag
-	Env    string
 	Key    string
-	Browse string // its setup tool that browses them
-	Kind   string // the kind of tool it is on a connection (connection_tools.go)
+	Browse string
 }
 
-// placeKeepers are the tools that have places.
-var placeKeepers = []placeKeeper{
-	{Image: filesImage, Env: toolConfigEnv, Key: "places", Browse: "browse_places", Kind: toolDrive},
+// keeping is a server that has places: its card and its spec.
+type keeping struct {
+	*placeKeeper
+	Card toolCard
 }
 
 // Place is a place given to Eriphe, as its tool keeps it.
@@ -49,21 +48,21 @@ type Place struct {
 	Access  string `json:"access"`  // read, or drop: also new files in its results subfolder
 }
 
-// keeperOf finds where a server keeps its places, if it has any.
-func keeperOf(srv Server) (placeKeeper, RunSpec, bool) {
+// keeperOf finds where a server keeps its places, if it has any: its
+// card's.
+func keeperOf(srv Server) (keeping, RunSpec, bool) {
 	if !srv.local() {
-		return placeKeeper{}, RunSpec{}, false
+		return keeping{}, RunSpec{}, false
 	}
 	spec, err := decodeRun(srv.Run)
 	if err != nil {
-		return placeKeeper{}, RunSpec{}, false
+		return keeping{}, RunSpec{}, false
 	}
-	for _, k := range placeKeepers {
-		if strings.HasPrefix(spec.Image, k.Image) {
-			return k, spec, true
-		}
+	card, ok := serviceOf(spec)
+	if !ok || card.Places == nil {
+		return keeping{}, RunSpec{}, false
 	}
-	return placeKeeper{}, RunSpec{}, false
+	return keeping{card.Places, card}, spec, true
 }
 
 // placesIn reads a server's places.
@@ -73,7 +72,7 @@ func placesIn(name string, srv Server) []Place {
 		return nil
 	}
 	var doc map[string]json.RawMessage
-	if json.Unmarshal([]byte(spec.Env[k.Env].Value), &doc) != nil {
+	if json.Unmarshal([]byte(spec.Env[toolConfigEnv].Value), &doc) != nil {
 		return nil
 	}
 	var list []Place
@@ -135,7 +134,7 @@ func (c *core) placeAccounts(tool string) []placeAccount {
 	}
 	var out []placeAccount
 	for _, cn := range c.connectionsOf(srv) {
-		t, _ := signInOf(k.Kind, cn.Provider)
+		t, _ := signInOf(k.Card.ID, cn.Provider)
 		_, write := t.granted(cn.Scopes)
 		out = append(out, placeAccount{Name: cn.Identity, CanWrite: write})
 	}
@@ -150,7 +149,7 @@ func (c *core) changePlaces(tool string, change func([]Place) ([]Place, error)) 
 		return errNoFolder
 	}
 	var doc map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(spec.Env[k.Env].Value), &doc); err != nil {
+	if err := json.Unmarshal([]byte(spec.Env[toolConfigEnv].Value), &doc); err != nil {
 		return err
 	}
 	list := placesIn(tool, srv)
@@ -161,7 +160,7 @@ func (c *core) changePlaces(tool string, change func([]Place) ([]Place, error)) 
 	doc[k.Key], _ = json.Marshal(list)
 	raw, _ := json.Marshal(doc)
 	env := maps.Clone(spec.Env)
-	env[k.Env] = EnvValue{Value: string(raw)}
+	env[toolConfigEnv] = EnvValue{Value: string(raw)}
 	spec.Env = env
 	srv.Run = marshalRun(spec)
 	return c.putServer(putUpdate, tool, srv, nil)
