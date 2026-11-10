@@ -104,16 +104,18 @@ func TestResolveFolders(t *testing.T) {
 	if len(l.List) != 1 || l.List[0].Access != accessDrop {
 		t.Fatalf("merged %+v", l.List)
 	}
-	// Drive folders lend the files server, for now.
-	l, err = c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resDriveFolder, Ref: "devis", Access: accessDrop}}})
-	if err != nil || len(l.Grant) != 1 || l.Grant[0] != filesServer || l.List[0].Ref != "Devis" || len(l.Folders) != 0 {
-		t.Fatalf("drive: %+v %v", l, err)
+	// A place lends its tool; drive-folder is read as a place.
+	for _, kind := range []string{resPlace, resDriveFolder} {
+		l, err = c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: kind, Ref: "devis", Access: accessDrop}}})
+		if err != nil || len(l.Grant) != 1 || l.Grant[0] != filesServer || l.List[0].Ref != "Devis" || l.List[0].Kind != resPlace || len(l.Folders) != 0 {
+			t.Fatalf("%s: %+v %v", kind, l, err)
+		}
 	}
 	for want, r := range map[string]ResourceRef{
 		"for read only: it cannot be lent drop": {Kind: resFolder, Ref: "Photos", Access: accessDrop},
-		"is in Google Drive":                    {Kind: resFolder, Ref: "Factures"},
-		"is on a machine":                       {Kind: resDriveFolder, Ref: "Clients"},
-		"Drive folder \"Factures\" is opened":   {Kind: resDriveFolder, Ref: "Factures", Access: accessDrop},
+		"is a place of the tool fichiers":       {Kind: resFolder, Ref: "Factures"},
+		"is on a machine":                       {Kind: resPlace, Ref: "Clients"},
+		"place \"Factures\" is opened":          {Kind: resPlace, Ref: "Factures", Access: accessDrop},
 		"unknown":                               {Kind: resFolder, Ref: "Nope"},
 	} {
 		if _, err := c.resolveRequest(runRequest{Resources: []ResourceRef{r}}); err == nil || !strings.Contains(err.Error(), want) {
@@ -256,7 +258,7 @@ func TestRunTaskSchema(t *testing.T) {
 		}
 		raw, _ := json.Marshal(tl.InputSchema)
 		s := string(raw)
-		for _, want := range []string{`"resources"`, `"kind"`, `"access"`, "drive-folder"} {
+		for _, want := range []string{`"resources"`, `"kind"`, `"access"`, "place"} {
 			if !strings.Contains(s, want) {
 				t.Errorf("schema lacks %s: %s", want, s)
 			}
