@@ -10,8 +10,8 @@ import (
 //   - each account is a card: a Google account, an Apple account, a
 //     mailbox… with its address, who gives it, and a row for each of its
 //     services (Mail, Agenda, Drive) — the same row as a lone tool: its
-//     state, its access, edit, remove. A Google account's card has its
-//     actions: manage, reconnect, add the services it does not have yet.
+//     state, its access, edit, remove. A connected account's card has its
+//     actions: reconnect, remove, add the tools it does not have yet.
 //     The servers stay one per service (accounts.go): only the list is by
 //     account. An Apple calendar and a Google calendar of one address are
 //     two cards;
@@ -25,12 +25,15 @@ type toolGroup struct {
 	Single   *toolView // a kind with one tool: its row alone
 	Accounts []toolAccount
 
-	// An account's card: its address, who gives it (google, icloud…), and
-	// for a Google account, the account and the services it could add.
+	// An account's card: its address, who gives it (google, icloud…).
 	Owner        string
 	Provider     string
 	ProviderName string // "Google", "iCloud"; "" for an IMAP or CalDAV of no name
-	Google       string
+	// Connection is the account signed in at ConnProvider, for a card of
+	// a connected account (connections.go); Others, the kinds of tools it
+	// could add.
+	Connection   string
+	ConnProvider string
 	Reconnect    bool
 	Others       []string
 }
@@ -84,8 +87,8 @@ func (g toolGroup) AddStep() bool { return strings.HasPrefix(g.AddURL(), "/setti
 // accountLabel is the account a tool is for, from its line: what follows
 // its last " · " ("GitHub · via l'app · acme").
 func accountLabel(t toolView) string {
-	if t.Google != "" {
-		return t.Google
+	if t.Connection != "" {
+		return t.Connection
 	}
 	if i := strings.LastIndex(t.Detail, " · "); i >= 0 {
 		return t.Detail[i+len(" · "):]
@@ -120,10 +123,12 @@ func groupTools(tools []toolView) []toolGroup {
 			i, ok := index["acct "+key]
 			if !ok {
 				name := t.Detail // the provider, for a mailbox or a calendar on a password
-				switch t.Provider {
-				case "google":
-					name = "Google"
-				case "other", "caldav":
+				switch {
+				case t.Connection != "":
+					name = providerLabel(t.ConnProvider)
+				case signInProviders[t.Provider] != nil: // a mailbox on a password at a provider one signs in at
+					name = providerLabel(t.Provider)
+				case t.Provider == "other" || t.Provider == "caldav":
 					name = ""
 				}
 				out = append(out, toolGroup{Owner: t.Owner, Provider: t.Provider, ProviderName: name, Accounts: []toolAccount{{Label: t.Owner}}})
@@ -132,8 +137,8 @@ func groupTools(tools []toolView) []toolGroup {
 			}
 			g := &out[i]
 			g.Accounts[0].Tools = append(g.Accounts[0].Tools, t)
-			if t.Provider == "google" && t.Google != "" {
-				g.Google = t.Google
+			if t.Connection != "" {
+				g.Connection, g.ConnProvider = t.Connection, t.ConnProvider
 				g.Reconnect = g.Reconnect || t.Reconnect
 			}
 			continue
@@ -165,8 +170,8 @@ func groupTools(tools []toolView) []toolGroup {
 	for i := range out {
 		g := &out[i]
 		if g.Owner != "" {
-			if g.Google != "" {
-				for _, s := range googleServices() {
+			if g.Connection != "" {
+				for _, s := range toolsAt(g.ConnProvider) {
 					if !slices.ContainsFunc(g.Accounts[0].Tools, func(t toolView) bool { return t.Part == s }) {
 						g.Others = append(g.Others, s)
 					}

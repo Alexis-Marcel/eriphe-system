@@ -59,8 +59,8 @@
 {{end}}
 
 {{/* An account's card: its address, who gives it, a row for each of its
-     services; a Google account's actions: manage, reconnect, and the
-     services it could add. . is a toolGroup with an Owner. */}}
+     services; a connected account's actions: reconnect, remove, and the
+     tools it could add (web_connections.go). . is a toolGroup with an Owner. */}}
 {{define "account-card"}}
   <li class="tool-group account-card{{if .Reconnect}} account-card-bad{{end}}" id="{{.Key}}" aria-labelledby="{{.Key}}-t">
     <div class="group-head">
@@ -68,24 +68,25 @@
       <div class="group-title account-title">
         <h3 id="{{.Key}}-t">{{.Owner}}</h3>
         <span class="muted small">{{with .ProviderName}}{{.}} · {{end}}{{join .Services ", "}}</span>
-        {{if .Reconnect}}<span class="chip srv-needs_auth"><span class="pulse" aria-hidden="true"></span>{{t "google.toreconnect"}}</span>{{end}}
+        {{if .Reconnect}}<span class="chip srv-needs_auth"><span class="pulse" aria-hidden="true"></span>{{t "conn.toreconnect"}}</span>{{end}}
       </div>
-      {{if .Google}}<div class="group-actions">
-        {{if .Reconnect}}{{template "google-reconnect" dict "Account" .Google "Target" (printf "%s-r" .Key) "Back" "/settings/tools" "Primary" true}}{{end}}
-        <a class="btn btn-ghost sm" href="/settings/google">{{t "google.manage"}}</a>
+      {{if .Connection}}<div class="group-actions">
+        {{if .Reconnect}}{{template "connection-reconnect" dict "Provider" .ConnProvider "Account" .Connection "Target" (printf "%s-r" .Key) "Primary" true}}{{end}}
+        <form class="inline" hx-post="/settings/connections/{{.ConnProvider}}/remove" hx-confirm="{{tf "conn.removeconfirm" .Connection}}">
+          <input type="hidden" name="account" value="{{.Connection}}"><button class="link-btn danger" type="submit">{{t "conn.remove"}}</button></form>
       </div>{{end}}
     </div>
-    {{if .Reconnect}}<p class="small notice-line">{{tf "google.rowreconnect" .Google}}</p>{{end}}
+    {{if .Reconnect}}<p class="small notice-line">{{tf "conn.rowreconnect" .ProviderName .Connection}}</p>{{end}}
     <ul class="tools">{{range .Tools}}<li class="tool" id="tool-{{.Key}}">{{template "tool-row" .}}</li>{{end}}</ul>
     {{if .Others}}<div class="account-add">
       <span class="muted small">{{t "acct.addservice"}}</span>
-      {{range .Others}}<form class="inline" hx-post="/settings/google/connect" hx-target="#{{$.Key}}-r" hx-disabled-elt="find button">
-        <input type="hidden" name="account" value="{{$.Google}}"><input type="hidden" name="service" value="{{.}}">
+      {{range .Others}}<form class="inline" hx-post="/settings/connections/{{$.ConnProvider}}/connect" hx-target="#{{$.Key}}-r" hx-disabled-elt="find button">
+        <input type="hidden" name="account" value="{{$.Connection}}"><input type="hidden" name="tool" value="{{.}}">
         <input type="hidden" name="write" value="1"><input type="hidden" name="back" value="/settings/tools">
-        <button class="btn btn-soft sm" type="submit">{{template "i-plus"}}{{t (printf "google.%s" .)}}</button>
+        <button class="btn btn-soft sm" type="submit">{{template "i-plus"}}{{t (printf "acct.svc.%s" .)}}</button>
       </form>{{end}}
     </div>{{end}}
-    {{if .Google}}<div id="{{.Key}}-r" aria-live="polite"></div>{{end}}
+    {{if .Connection}}<div id="{{.Key}}-r" aria-live="polite"></div>{{end}}
   </li>
 {{end}}
 
@@ -99,7 +100,7 @@
     <div class="tool-main">
       <div class="tool-head">
         <h3{{if not (or .Account .Label)}} class="mono"{{end}}>{{.Title}}</h3>
-        {{if .Reconnect}}<span class="chip srv-needs_auth"><span class="pulse" aria-hidden="true"></span>{{t "google.toreconnect"}}</span>
+        {{if .Reconnect}}<span class="chip srv-needs_auth"><span class="pulse" aria-hidden="true"></span>{{t "conn.toreconnect"}}</span>
         {{else if .Pending}}<span class="chip srv-pending"><span class="pulse" aria-hidden="true"></span>{{if .Placed}}{{t "server.starting"}}{{else}}{{t "server.pending"}}{{end}}</span>
         {{else}}<span class="chip srv-{{.Status}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "server.%s" .Status)}}</span>{{end}}
         {{if eq .Status "ready"}}<span class="muted small">{{if eq .ToolCount 1}}{{t "tools.count1"}}{{else}}{{tf "tools.count" .ToolCount}}{{end}}</span>{{end}}
@@ -116,7 +117,7 @@
       </p>
       {{if .Scope.Reconnect}}<p class="small notice-line">{{tf "access.reconnect" .Name}}{{if eq .Preset.Form "drive"}} <a href="/settings/drive">{{t "access.reconnectdrive"}}</a>{{end}}</p>{{end}}
       {{with .Follow}}{{template "tool-status-line" .}}
-      {{else}}{{if and .Reconnect .Part}}{{else if .Reconnect}}<p class="small notice-line">{{tf "google.rowreconnect" .Google}}</p>
+      {{else}}{{if and .Reconnect .Part}}{{else if .Reconnect}}<p class="small notice-line">{{tf "conn.rowreconnect" .ConnLabel .Connection}}</p>
       {{else if .Problem}}<div class="problem small"><p class="problem-text">{{.Problem}}</p>{{with .Error}}<details class="problem-details"><summary>{{t "problem.details"}}</summary><code>{{short . 1200}}</code></details>{{end}}</div>
       {{else if .Pending}}<p class="small muted">{{if .Placed}}{{t "problem.tool.pending"}}{{else}}{{t "tools.pendinghint"}}{{end}}</p>
       {{else if eq .SignIn "reconnect"}}<p class="small notice-line">{{t "tools.expired"}}</p>
@@ -125,14 +126,14 @@
       <div id="connect-{{.Key}}" class="connect-box"></div>
     </div>
     <div class="tool-actions">
-      {{if eq .SignIn "google"}}{{if not .Part}}{{template "google-reconnect" dict "Account" .Google "Target" (printf "connect-%s" .Key) "Back" "/settings/tools"}}{{end}}
+      {{if eq .SignIn "connection"}}{{if not .Part}}{{template "connection-reconnect" dict "Provider" .ConnProvider "Account" .Connection "Target" (printf "connect-%s" .Key)}}{{end}}
       {{else}}{{with .SignIn}}<form hx-post="/settings/servers/{{$.Name}}/connect" hx-target="#connect-{{$.Key}}" hx-disabled-elt="find button" class="inline">
         <button class="btn btn-primary sm" type="submit">{{t (printf "tools.%s" .)}}</button></form>{{end}}{{end}}
       {{if and (eq .Preset.ID "google") (eq .Source "workspace") (not .Part)}}<a class="btn btn-ghost sm" href="/settings/google">{{t "google.manage"}}</a>{{end}}
       {{if eq .Preset.ID "github"}}{{if eq .Auth "github-app"}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>
       {{else if eq .Source "workspace"}}<a class="btn btn-soft sm" href="/settings/github?switch={{.Name}}#gh-conn-{{.Name}}">{{t "github.switch"}}</a>
       {{else}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>{{end}}{{end}}
-      {{if and (eq .Preset.Form "drive") (eq .Source "workspace")}}<a class="btn btn-ghost sm" href="/settings/drive">{{t "drive.folders"}}</a>{{end}}
+      {{if .Places}}<a class="btn btn-ghost sm" href="{{.PlacesURL}}">{{t "conn.places"}}</a>{{end}}
       {{if and .Follow .Follow.Edit .Editable}}<a class="btn btn-soft sm" href="{{.EditURL}}" data-step-open="add-dlg" data-hash="{{.EditHash}}">{{t "catalog.edit"}}</a>
       {{else}}<a class="btn btn-ghost sm" href="{{.AccessURL}}">{{t "catalog.edit"}}</a>{{end}}
       {{if .Removable}}<form hx-post="/settings/tools/{{.Name}}/delete" hx-confirm="{{if .Account}}{{tf "accounts.removeconfirm" .Account}}{{else}}{{tf "tools.removeconfirm" .Name}}{{end}}" class="inline">

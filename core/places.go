@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"maps"
+	"net/http"
 	"slices"
 	"sort"
 	"strings"
@@ -29,11 +33,12 @@ type placeKeeper struct {
 	Env    string
 	Key    string
 	Browse string // its setup tool that browses them
+	Kind   string // the kind of tool it is on a connection (connection_tools.go)
 }
 
 // placeKeepers are the tools that have places.
 var placeKeepers = []placeKeeper{
-	{Image: filesImage, Env: filesConfigEnv, Key: "folders", Browse: "browse_folders"},
+	{Image: filesImage, Env: filesConfigEnv, Key: "folders", Browse: "browse_folders", Kind: toolDrive},
 }
 
 // Place is a place given to Eriphe, as its tool keeps it.
@@ -113,9 +118,33 @@ func (c *core) placeNamed(name string) *Place {
 	return &all[i]
 }
 
-// removePlace takes a place out of its tool's configuration, which
-// restarts its server.
-func (c *core) removePlace(tool, id string) error {
+// placeAccount is an account of a tool with places, and whether places
+// may be given to it to write in (its connection granted the tool's
+// scopes that write).
+type placeAccount struct {
+	Name     string
+	CanWrite bool
+}
+
+// placeAccounts are the accounts a tool's places are taken from: its
+// connections.
+func (c *core) placeAccounts(tool string) []placeAccount {
+	srv := c.conf().Servers[tool]
+	k, _, ok := keeperOf(srv)
+	if !ok {
+		return nil
+	}
+	var out []placeAccount
+	for _, cn := range c.connectionsOf(srv) {
+		t, _ := signInOf(k.Kind, cn.Provider)
+		_, write := t.granted(cn.Scopes)
+		out = append(out, placeAccount{Name: cn.Identity, CanWrite: write})
+	}
+	return out
+}
+
+// changePlaces rewrites a tool's places, which restarts its server.
+func (c *core) changePlaces(tool string, change func([]Place) ([]Place, error)) error {
 	srv, ok := c.conf().Servers[tool]
 	k, spec, has := keeperOf(srv)
 	if !ok || !has {
@@ -125,12 +154,11 @@ func (c *core) removePlace(tool, id string) error {
 	if err := json.Unmarshal([]byte(spec.Env[k.Env].Value), &doc); err != nil {
 		return err
 	}
-	var list []json.RawMessage
-	json.Unmarshal(doc[k.Key], &list)
-	list = slices.DeleteFunc(list, func(raw json.RawMessage) bool {
-		var p Place
-		return json.Unmarshal(raw, &p) == nil && p.ID == id
-	})
+	list := placesIn(tool, srv)
+	list, err := change(list)
+	if err != nil {
+		return err
+	}
 	doc[k.Key], _ = json.Marshal(list)
 	raw, _ := json.Marshal(doc)
 	env := maps.Clone(spec.Env)
@@ -138,4 +166,90 @@ func (c *core) removePlace(tool, id string) error {
 	spec.Env = env
 	srv.Run = marshalRun(spec)
 	return c.putServer(putUpdate, tool, srv, nil)
+}
+
+// removePlace takes a place out of its tool.
+func (c *core) removePlace(tool, id string) error {
+	return c.changePlaces(tool, func(list []Place) ([]Place, error) {
+		return slices.DeleteFunc(list, func(p Place) bool { return p.ID == id }), nil
+	})
+}
+
+// givePlace gives a place of an account of a tool to Eriphe, or changes
+// its access; account may be empty with one account. Its name is made
+// unique among the tool's places.
+func (c *core) givePlace(tool, account, id, name, access string) error {
+	id, name = strings.TrimSpace(id), strings.Join(strings.Fields(name), " ")
+	if id == "" || name == "" || len(name) > 120 || (access != accessRead && access != accessDrop) {
+		return &catalogError{http.StatusBadRequest, "drive.badfolder", "", errors.New("a place needs an id, a name and an access")}
+	}
+	accounts := c.placeAccounts(tool)
+	return c.changePlaces(tool, func(list []Place) ([]Place, error) {
+		for _, p := range list {
+			if p.ID == id {
+				account = p.Account
+			}
+		}
+		i := slices.IndexFunc(accounts, func(a placeAccount) bool {
+			return strings.EqualFold(a.Name, account) || account == "" && len(accounts) == 1
+		})
+		if i < 0 {
+			return nil, &catalogError{http.StatusBadRequest, "drive.badfolder", "", errors.New("no such account")}
+		}
+		if access == accessDrop && !accounts[i].CanWrite {
+			return nil, &catalogError{http.StatusBadRequest, "drive.readonly", "", errors.New("the account was connected for reading only")}
+		}
+		for j, p := range list {
+			if p.ID == id {
+				list[j].Access = access
+				return list, nil
+			}
+		}
+		final := name
+		for n := 2; slices.ContainsFunc(list, func(p Place) bool { return strings.EqualFold(p.Name, final) }); n++ {
+			final = fmt.Sprintf("%s (%d)", name, n)
+		}
+		return append(list, Place{Name: final, Account: accounts[i].Name, ID: id, Access: access}), nil
+	})
+}
+
+// placeItem is a place as a tool's browsing shows it.
+type placeItem struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Link string `json:"link"`
+}
+
+// browsePlaces lists an account's places under parent through the tool's
+// setup tool, which tasks never get.
+func (c *core) browsePlaces(ctx context.Context, tool, account, parent, page string) ([]placeItem, string, error) {
+	k, _, ok := keeperOf(c.conf().Servers[tool])
+	u := c.pool.get(tool)
+	if !ok || u == nil {
+		return nil, "", errors.New(tool + " does not run")
+	}
+	in := map[string]string{"parent": parent}
+	if account != "" {
+		in["account"] = account
+	}
+	if page != "" {
+		in["page_token"] = page
+	}
+	args, _ := json.Marshal(in)
+	res, err := u.call(ctx, k.Browse, args)
+	if err != nil {
+		return nil, "", err
+	}
+	if res.IsError {
+		return nil, "", errors.New(resultText(res))
+	}
+	var out struct {
+		Folders []placeItem `json:"folders"`
+		Next    string      `json:"next_page_token"`
+	}
+	raw, _ := json.Marshal(res.StructuredContent)
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, "", err
+	}
+	return out.Folders, out.Next, nil
 }

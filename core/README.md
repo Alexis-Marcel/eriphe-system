@@ -1662,6 +1662,15 @@ Eriphe" when Google refuses their refresh.
 Gmail with an app password (the Mail form's other Gmail) stays for a workspace Google cannot send
 back to (a local address, [below](#addresses-google-takes)).
 
+**In the Tools list.** Each connected account is a card (`web_tools_groups.go`), whatever its
+provider: its tools, "Ajouter à ce compte" for a kind of tool its provider serves and it has not
+(`toolsAt`), "Reconnecter" when it lapsed, and "Retirer ce compte". Their routes name the provider
+as data (`web_connections.go`): `POST /settings/connections/{provider}/connect` signs in for the
+tools ticked (`tool=`, several, `write=`, `account=` to add to an account), or reconnects one
+(`account=` and `reconnect=1`: the tools it has, or else the ones its scopes serve, with the rights
+they had); `POST /settings/connections/{provider}/remove` (`account=`) removes it, as above. A
+tool that has places shows "Lieux", its page ([places](#places)).
+
 ### Connection apps
 
 A connection app is the user's own OAuth client at a provider (`connection_apps.go`), made once
@@ -1967,6 +1976,14 @@ environment and the key of the list in it; eriphe-files keeps them as `folders` 
 its places as they are, with no migration. The tool browses them with a setup tool
 (`eriphe/setup`, never given to a task). Lent to a task as `{kind: place}`, a place lends its whole
 tool. `{kind: drive-folder}`, the name before, is read as a place for good.
+
+**Its page.** Settings → Tools → the tool → Lieux (`/settings/tools/{name}/places`,
+`web_places.go`) lists the places given, each read or read and drop, to change or take back, and
+browses the tool's accounts (its connections) to pick more: `GET …/places/browse` (`account=`,
+`parent=`, `page=`) calls its setup tool, `POST …/places` (`account=`, `id=`, `name=`,
+`access=read|drop`) gives one or changes its access, `POST …/places/remove` (`id=`) takes it back.
+A place to drop into needs an account connected with the tool's scopes that write. A change
+rewrites the tool's configuration, which restarts its server.
 
 **Who decides a write.** The level says what a task may reach; who decides is set per folder,
 like a tool's grid: lending it at `drop`, and at `manage` (lent as `write`), is Free (the default)
