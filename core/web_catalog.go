@@ -157,7 +157,7 @@ type oauthDone struct {
 
 func (w *web) handleOAuthCallback(rw http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	if isCloudState(q.Get("state")) {
+	if isSignInState(q.Get("state")) {
 		w.handleGoogleCallback(rw, r) // a Google account (web_google.go)
 		return
 	}

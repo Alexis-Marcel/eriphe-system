@@ -49,12 +49,12 @@ func TestStateSignature(t *testing.T) {
 	if _, err := openState(key, s, now.Add(2*time.Minute)); err != errBadState {
 		t.Errorf("expired: %v", err)
 	}
-	if !isCloudState(s) || isCloudState("Zm9vYmFy") {
-		t.Error("isCloudState")
+	if !isSignInState(s) || isSignInState("Zm9vYmFy") {
+		t.Error("isSignInState")
 	}
 }
 
-// TestGoogleOrigin holds googleOrigin to Google's rules for an authorized
+// TestGoogleOrigin holds signInProvider.refuses to Google's rules for an authorized
 // redirect URI: https, no raw IP address (loopback ones aside), a host
 // ending in a public top-level domain.
 func TestGoogleOrigin(t *testing.T) {
@@ -82,7 +82,7 @@ func TestGoogleOrigin(t *testing.T) {
 		"https://Eriphe.Example.ORG.":        "",
 		"https://eriphe.example.invalidtld0": "local",
 	} {
-		if got := googleOrigin(origin); got != want {
+		if got := providerGoogle.refuses(origin); got != want {
 			t.Errorf("%s: %q, want %q", origin, got, want)
 		}
 	}
@@ -90,23 +90,23 @@ func TestGoogleOrigin(t *testing.T) {
 
 func TestParseGoogleClient(t *testing.T) {
 	const id, secret = "123-abc.apps.googleusercontent.com", "GOCSPX-the-secret"
-	app, uris, err := parseGoogleClient([]byte(`{"web":{"client_id":"` + id + `","project_id":"eriphe","auth_uri":"https://accounts.google.com/o/oauth2/auth",` +
+	app, uris, err := providerGoogle.parseClient([]byte(`{"web":{"client_id":"` + id + `","project_id":"eriphe","auth_uri":"https://accounts.google.com/o/oauth2/auth",` +
 		`"client_secret":"` + secret + `","redirect_uris":["https://eriphe.example.org/oauth/callback"]}}`))
 	if err != nil || app != (oauthApp{ID: id, Secret: secret}) || len(uris) != 1 || uris[0] != "https://eriphe.example.org/oauth/callback" {
 		t.Fatalf("web: %+v %v %v", app, uris, err)
 	}
-	if app, _, err := parseGoogleClient([]byte(` {"client_id":" ` + id + ` ","client_secret":"` + secret + `"}`)); err != nil || app.ID != id {
+	if app, _, err := providerGoogle.parseClient([]byte(` {"client_id":" ` + id + ` ","client_secret":"` + secret + `"}`)); err != nil || app.ID != id {
 		t.Fatalf("flat: %+v %v", app, err)
 	}
-	_, _, err = parseGoogleClient([]byte(`{"installed":{"client_id":"` + id + `","client_secret":"` + secret + `","redirect_uris":["http://localhost"]}}`))
+	_, _, err = providerGoogle.parseClient([]byte(`{"installed":{"client_id":"` + id + `","client_secret":"` + secret + `","redirect_uris":["http://localhost"]}}`))
 	wantKey(t, err, "drive.desktop")
-	_, _, err = parseGoogleClient([]byte(`client_id=x`))
+	_, _, err = providerGoogle.parseClient([]byte(`client_id=x`))
 	wantKey(t, err, "drive.badjson")
-	_, _, err = parseGoogleClient([]byte(`{"web":{"client_id":"` + id + `"}}`))
+	_, _, err = providerGoogle.parseClient([]byte(`{"web":{"client_id":"` + id + `"}}`))
 	wantKey(t, err, "drive.ownmissing")
-	_, err = checkGoogleClient(secret, id) // swapped
+	_, err = providerGoogle.checkClient(secret, id) // swapped
 	wantKey(t, err, "drive.badclient")
-	_, err = checkGoogleClient(id, "two words")
+	_, err = providerGoogle.checkClient(id, "two words")
 	wantKey(t, err, "drive.badclient")
 }
 
@@ -164,9 +164,9 @@ func newFakeGoogle(t *testing.T) *fakeGoogle {
 			"token_type": "Bearer", "scope": "openid https://www.googleapis.com/auth/userinfo.email " + g.scope, "id_token": fakeIDToken(g.email)})
 	}))
 	t.Cleanup(g.srv.Close)
-	old, oldHTTP, oldRevoke := googleOAuth, cloudHTTP, googleRevokeURL
-	googleOAuth.AuthURL, googleOAuth.TokenURL, cloudHTTP, googleRevokeURL = g.srv.URL+"/auth", g.srv.URL+"/token", g.srv.Client(), g.srv.URL+"/revoke"
-	t.Cleanup(func() { googleOAuth, cloudHTTP, googleRevokeURL = old, oldHTTP, oldRevoke })
+	old, oldHTTP := *providerGoogle, signInHTTP
+	providerGoogle.Endpoint.AuthURL, providerGoogle.Endpoint.TokenURL, signInHTTP, providerGoogle.RevokeURL = g.srv.URL+"/auth", g.srv.URL+"/token", g.srv.Client(), g.srv.URL+"/revoke"
+	t.Cleanup(func() { *providerGoogle, signInHTTP = old, oldHTTP })
 	return g
 }
 

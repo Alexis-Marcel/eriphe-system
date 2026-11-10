@@ -100,9 +100,9 @@ func newGoogleCheck(t *testing.T) *googleCheck {
 		}
 	}))
 	t.Cleanup(g.srv.Close)
-	old, oldAPI := googleOAuth, driveAPI
-	googleOAuth.AuthURL, googleOAuth.TokenURL, driveAPI = g.srv.URL+"/auth", g.srv.URL+"/token", g.srv.URL+"/drive/v3"
-	t.Cleanup(func() { googleOAuth, driveAPI = old, oldAPI })
+	old, oldAPI := *providerGoogle, driveAPI
+	providerGoogle.Endpoint.AuthURL, providerGoogle.Endpoint.TokenURL, driveAPI = g.srv.URL+"/auth", g.srv.URL+"/token", g.srv.URL+"/drive/v3"
+	t.Cleanup(func() { *providerGoogle, driveAPI = old, oldAPI })
 	return g
 }
 
@@ -159,7 +159,7 @@ func TestDriveTest(t *testing.T) {
 	}
 
 	// An unknown client: the client line says it, no redirect line.
-	storeGoogleClient(oauthApp{ID: "999-zzz" + googleClientIDEnd, Secret: testClientSecret})
+	storeGoogleClient(oauthApp{ID: "999-zzz" + providerGoogle.ClientIDSuffix, Secret: testClientSecret})
 	body = driveTestBody(t, tw, csrf)
 	wantLines(t, body, "est refusé", "The OAuth client was not found.")
 	if strings.Contains(body, "adresse de retour") {
@@ -270,9 +270,9 @@ func TestDriveTestToken(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	old, oldAPI := googleOAuth, driveAPI
-	googleOAuth.TokenURL, driveAPI = srv.URL+"/token", srv.URL+"/drive/v3"
-	t.Cleanup(func() { googleOAuth, driveAPI = old, oldAPI })
+	old, oldAPI := *providerGoogle, driveAPI
+	providerGoogle.Endpoint.TokenURL, driveAPI = srv.URL+"/token", srv.URL+"/drive/v3"
+	t.Cleanup(func() { *providerGoogle, driveAPI = old, oldAPI })
 
 	connect := func(refresh string) {
 		t.Helper()

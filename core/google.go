@@ -3,22 +3,17 @@ package main
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/oauth2"
 )
 
 // Google accounts: one sign-in for Gmail, Google Calendar and Google Drive.
@@ -67,9 +62,6 @@ const (
 // googleServices are the services one Google account can give, in the
 // order they are shown.
 var googleServices = []string{googleMail, googleCalendar, googleDrive}
-
-// googleRevokeURL revokes a token at Google; tests replace it.
-var googleRevokeURL = "https://oauth2.googleapis.com/revoke"
 
 // googleAccount is a Google account connected, as eriphe-core keeps it
 // (its token is in the vault, never here).
@@ -244,9 +236,9 @@ type googleConnect struct {
 	Lang     string   // the words of the tools' use, if they are created
 }
 
-// googleScopes are the scopes a Connect asks for.
+// googleScopes are the services' scopes a Connect asks for.
 func (c *core) googleScopes(in googleConnect) []string {
-	scopes := []string{"openid", "email"}
+	var scopes []string // beside the identity, which the sign-in asks for
 	for _, s := range googleServices {
 		if !slices.Contains(in.Services, s) {
 			continue
@@ -282,25 +274,8 @@ func (c *core) startGoogle(in googleConnect) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if why := googleOrigin(in.Origin); why != "" {
-		return "", &catalogError{http.StatusBadRequest, "drive.origin." + why, in.Origin, errors.New("Google takes no redirect to " + in.Origin)}
-	}
-	cfg := &oauth2.Config{ClientID: app.ID, ClientSecret: app.Secret, Endpoint: googleOAuth,
-		RedirectURL: in.Origin + "/oauth/callback", Scopes: c.googleScopes(in)}
-	nonce := randomToken(18)
-	fl := &cloudFlow{origin: in.Origin, verifier: oauth2.GenerateVerifier(), binding: in.Binding, config: cfg,
-		lang: in.Lang, expires: time.Now().Add(cloudFlowExpiry), services: in.Services, back: in.Back}
-	c.cloud.put(nonce, fl)
-	state := signState(c.stateKey(), statePayload{Origin: in.Origin, Nonce: nonce, Expires: fl.expires.Unix()})
-	opts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(fl.verifier),
-		// prompt=consent: Google gives a refresh token at every consent, not only the first.
-		oauth2.SetAuthURLParam("prompt", "consent"),
-		// The scopes granted before stay with the new token: a service added keeps the others.
-		oauth2.SetAuthURLParam("include_granted_scopes", "true")}
-	if in.Hint != "" {
-		opts = append(opts, oauth2.SetAuthURLParam("login_hint", in.Hint))
-	}
-	return cfg.AuthCodeURL(state, opts...), nil
+	return c.startSignIn(providerGoogle, app, signInStart{Origin: in.Origin, Binding: in.Binding,
+		Scopes: c.googleScopes(in), Hint: in.Hint, Lang: in.Lang, Back: in.Back, Asked: in.Services})
 }
 
 // googleResult is what a connection did.
@@ -312,47 +287,20 @@ type googleResult struct {
 }
 
 // finishGoogle takes Google's answer, as the workspace's callback received
-// it: it checks the state, the flow and the browser, exchanges the code,
-// keeps the account's token and gives it to the services' servers.
+// it: the neutral flow checks it and exchanges the code, then the account's
+// token is kept and given to the services' servers.
 func (c *core) finishGoogle(ctx context.Context, origin, state, code, errCode, binding string) (googleResult, error) {
-	p, err := openState(c.stateKey(), state, time.Now())
+	fl, tok, err := c.finishSignIn(ctx, origin, state, code, errCode, binding)
+	var res googleResult
+	if fl != nil {
+		res.Back = fl.back
+	}
 	if err != nil {
-		return googleResult{}, err
+		return res, err
 	}
-	fl := c.cloud.take(p.Nonce)
-	if fl == nil || fl.origin != p.Origin || p.Origin != origin ||
-		subtle.ConstantTimeCompare([]byte(fl.binding), []byte(binding)) != 1 {
-		return googleResult{}, errBadState
-	}
-	res := googleResult{Back: fl.back}
-	if errCode != "" {
-		if errCode == "access_denied" {
-			return res, &catalogError{http.StatusBadRequest, "drive.denied", "", errors.New("access denied")}
-		}
-		return res, fmt.Errorf("Google refused: %s", errCode)
-	}
-	if code == "" {
-		return res, errors.New("no code in the redirect")
-	}
-	tok, err := fl.config.Exchange(context.WithValue(ctx, oauth2.HTTPClient, cloudHTTP), code, oauth2.VerifierOption(fl.verifier))
-	if err != nil {
-		var re *oauth2.RetrieveError
-		if errors.As(err, &re) {
-			return res, fmt.Errorf("Google refused the code: %s %s", re.ErrorCode, re.ErrorDescription)
-		}
-		return res, fmt.Errorf("exchanging the code: %w", err)
-	}
-	if tok.RefreshToken == "" {
-		return res, errors.New("Google gave no refresh token: remove Eriphe's access at myaccount.google.com/connections, then connect again")
-	}
-	email := idTokenEmail(fmt.Sprint(tok.Extra("id_token")))
-	if email == "" {
-		return res, &catalogError{http.StatusBadRequest, "google.noemail", "", errors.New("Google did not say which account was connected")}
-	}
-	res.Email = email
-	scopes := strings.Fields(fmt.Sprint(tok.Extra("scope")))
-	for _, s := range fl.services {
-		if grants(scopes, s) {
+	res.Email = tok.Identity
+	for _, s := range fl.asked {
+		if grants(tok.Scopes, s) {
 			res.Added = append(res.Added, s)
 		} else {
 			res.Missing = append(res.Missing, s)
@@ -361,38 +309,10 @@ func (c *core) finishGoogle(ctx context.Context, origin, state, code, errCode, b
 	if len(res.Added) == 0 {
 		return res, &catalogError{http.StatusBadRequest, "google.noscope", "", errors.New("none of the services asked for was granted")}
 	}
-	secret, _ := json.Marshal(map[string]string{"client_id": fl.config.ClientID, "client_secret": fl.config.ClientSecret,
-		"refresh_token": tok.RefreshToken})
-	if err := c.connectGoogle(fl.lang, email, scopes, string(secret), res.Added); err != nil {
+	if err := c.connectGoogle(fl.lang, tok.Identity, tok.Scopes, tok.secret(fl), res.Added); err != nil {
 		return res, err
 	}
 	return res, nil
-}
-
-// idTokenEmail reads the address in an ID token. It came straight from
-// Google's token endpoint over TLS, which OpenID Connect takes in place of
-// checking its signature (Core 1.0, 3.1.3.7).
-func idTokenEmail(idToken string) string {
-	parts := strings.Split(idToken, ".")
-	if len(parts) != 3 {
-		return ""
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
-	if err != nil {
-		return ""
-	}
-	var claims struct {
-		Email    string `json:"email"`
-		Verified *bool  `json:"email_verified"`
-	}
-	if json.Unmarshal(raw, &claims) != nil || (claims.Verified != nil && !*claims.Verified) {
-		return ""
-	}
-	e := strings.TrimSpace(claims.Email)
-	if !strings.Contains(e, "@") || len(e) > 254 || strings.ContainsAny(e, " \t\r\n\"<>") {
-		return ""
-	}
-	return e
 }
 
 // connectGoogle keeps an account's token and makes its services' servers
@@ -513,12 +433,7 @@ func (c *core) removeGoogleAccount(ctx context.Context, email string) error {
 	ref := googleSecret(email)
 	if v := currentVault(); v != nil {
 		if raw, err := v.get(ref); err == nil {
-			var tok struct {
-				RefreshToken string `json:"refresh_token"`
-			}
-			if json.Unmarshal([]byte(raw), &tok) == nil && tok.RefreshToken != "" {
-				revokeGoogle(ctx, tok.RefreshToken)
-			}
+			providerGoogle.revoke(ctx, raw)
 		}
 		v.remove(ref)
 	}
@@ -529,21 +444,6 @@ func (c *core) removeGoogleAccount(ctx context.Context, email string) error {
 	c.google.mu.Unlock()
 	log.Printf("google: account removed")
 	return nil
-}
-
-// revokeGoogle asks Google to forget a token; a failure leaves it to the
-// user (myaccount.google.com/connections).
-func revokeGoogle(ctx context.Context, token string) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, googleRevokeURL, strings.NewReader(url.Values{"token": {token}}.Encode()))
-	if err != nil {
-		return
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if resp, err := cloudHTTP.Do(req); err == nil {
-		resp.Body.Close()
-	}
 }
 
 // The check of the accounts.
@@ -579,28 +479,13 @@ func (c *core) googleTick(ctx context.Context, now time.Time) {
 // token, and marks the account to reconnect if Google refuses it. Google
 // out of reach changes nothing.
 func (c *core) checkGoogle(ctx context.Context, email string) {
-	why := ""
-	raw, err := readSecret(vaultPrefix + googleSecret(email))
-	var tok struct {
-		ClientID     string `json:"client_id"`
-		ClientSecret string `json:"client_secret"`
-		RefreshToken string `json:"refresh_token"`
-	}
-	if err != nil || json.Unmarshal([]byte(raw), &tok) != nil || tok.RefreshToken == "" {
-		why = googleNoToken
-	} else {
-		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		code, _, _, err := googleToken(cctx, cloudHTTP, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tok.RefreshToken},
-			"client_id": {tok.ClientID}, "client_secret": {tok.ClientSecret}})
-		cancel()
-		switch {
-		case err != nil:
+	why := googleNoToken
+	if raw, err := readSecret(vaultPrefix + googleSecret(email)); err == nil {
+		res, err := providerGoogle.checkRefresh(ctx, raw)
+		if err != nil {
 			return // out of reach: checked again later
-		case code == "invalid_grant":
-			why = googleRevoked
-		case code == "invalid_client" || code == "unauthorized_client" || code == "deleted_client":
-			why = googleBadClient
 		}
+		why = map[int]string{refreshWorks: "", refreshRevoked: googleRevoked, refreshBadClient: googleBadClient, refreshUnreadable: googleNoToken}[res]
 	}
 	c.markGoogle(email, why)
 }
