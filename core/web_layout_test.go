@@ -25,7 +25,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/tools", "tools", ""},
 		{"/settings/tools/add", "tools", "/settings/tools"},
 		{"/settings/tools/new?preset=home-assistant", "tools", "/settings/tools"},
-		{"/settings/drive", "tools", "/settings/tools"},
+		{"/settings/connections/google", "tools", "/settings/tools"},
 		{"/settings/folders", "folders", ""},
 		{"/settings/skills", "skills", ""},
 		{"/settings/access", "access", ""},

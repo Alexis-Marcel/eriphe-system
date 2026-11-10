@@ -77,7 +77,7 @@ func (t toolView) ConnLabel() string { return providerLabel(t.ConnProvider) }
 func (t toolView) PlacesURL() string { return "/settings/tools/" + t.Name + "/places" }
 
 func editable(source string, p toolPreset, auth string) bool {
-	return source == sourceWorkspace && auth != "github-app" && p.Form != "drive" && p.Form != "google"
+	return source == sourceWorkspace && auth != "github-app" && p.Form != "connection"
 }
 
 // AccessURL is the tool's page, every row's Edit (web_access.go); AllowedURL,
@@ -162,8 +162,12 @@ func presetOf(lang string, s Server) (toolPreset, string) {
 		return p, ""
 	}
 	if fc, ok := filesConfigOf(Server{Run: marshalRun(spec)}); ok {
-		p, _ := presetByID("gdrive")
-		return p, tr(lang, "preset.gdrive.title") + " · " + driveCount(lang, len(fc.Folders))
+		provider := providerGoogle.Name
+		if len(fc.Accounts) > 0 {
+			provider = fc.Accounts[0].signInProvider()
+		}
+		p, _ := connectionPreset(provider, toolDrive)
+		return p, productName(lang, provider, toolDrive) + " · " + placeCount(lang, len(fc.Folders))
 	}
 	return toolPreset{}, ""
 }
@@ -240,6 +244,18 @@ func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
 		v.Flash = fmt.Sprintf(tr(lang, "tools.connectedflash"), n)
 		if title := serviceTitle(lang, "", conf.Servers[n].URL); title != "" {
 			v.Flash = fmt.Sprintf(tr(lang, "tools.connectedas"), title)
+		}
+	}
+	if q.Get("connected") == "1" {
+		v.Flash = tr(lang, "conn.connected")
+		var missing []string
+		for _, k := range strings.Split(q.Get("missing"), ",") {
+			if slices.Contains(toolKinds, k) {
+				missing = append(missing, tr(lang, "acct.svc."+k))
+			}
+		}
+		if len(missing) > 0 {
+			v.Alert = fmt.Sprintf(tr(lang, "conn.missing"), strings.Join(missing, ", "))
 		}
 	}
 	if n := q.Get("notconnected"); n != "" && serverName.MatchString(n) {
@@ -771,9 +787,10 @@ func (w *web) handleNewTool(rw http.ResponseWriter, r *http.Request, s *session)
 	if !ok {
 		p, _ = presetByID("remote")
 	}
-	if p.Form == "drive" || p.Form == "google" {
+	if p.Form == "connection" {
 		if inDialog(r) {
-			w.render(rw, r, s, "settings", p.Form+"-step", page{Data: driveStep{Added: w.addedPresets(w.lang(r))[p.ID]}})
+			rw.Header().Set("HX-Redirect", p.Page())
+			rw.WriteHeader(http.StatusOK)
 			return
 		}
 		http.Redirect(rw, r, p.Page(), http.StatusSeeOther)
@@ -817,7 +834,7 @@ func (w *web) handleEditTool(rw http.ResponseWriter, r *http.Request, s *session
 	if svc, a, ok := w.accountOfRequest(r, name); ok {
 		af, editable := w.toolFormOfAccount(name, srv, svc, a)
 		if !editable {
-			http.Redirect(rw, r, "/settings/google", http.StatusSeeOther) // a Google account's page
+			http.Redirect(rw, r, "/settings/tools", http.StatusSeeOther) // an account signed in: its card
 			return
 		}
 		f = af

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -286,21 +287,23 @@ func (c *core) connectionTick(ctx context.Context, now time.Time) {
 
 // checkConnection asks the provider for an access token with the
 // connection's refresh token, and marks it lapsed if the provider refuses
-// it. A provider out of reach changes nothing.
-func (c *core) checkConnection(ctx context.Context, cn connection) {
+// it: it returns why ("" when it works). A provider out of reach changes
+// nothing, and returns its error.
+func (c *core) checkConnection(ctx context.Context, cn connection) (string, error) {
 	p := signInProviders[cn.Provider]
 	if p == nil {
-		return
+		return "", errors.New("no such provider")
 	}
 	why := lapsedNoToken
 	if raw, err := readSecret(vaultPrefix + cn.Secret); err == nil {
 		res, err := p.checkRefresh(ctx, raw)
 		if err != nil {
-			return // out of reach: checked again later
+			return "", err // out of reach: checked again later
 		}
 		why = map[int]string{refreshWorks: "", refreshRevoked: lapsedRevoked, refreshBadClient: lapsedBadClient, refreshUnreadable: lapsedNoToken}[res]
 	}
 	c.markConnection(cn.ID, why)
+	return why, nil
 }
 
 // markConnection records the outcome of a check; the first refusal holds

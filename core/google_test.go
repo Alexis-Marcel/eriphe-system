@@ -4,17 +4,38 @@ import (
 	"context"
 	"encoding/json"
 	"html"
+	"maps"
 	"net/url"
 	"strings"
 	"testing"
 )
 
-// googleSignIn connects through the Google page as the browser would: the
+// The Google accounts connected, for the tests.
+func (c *core) googleAccounts() []connection { return c.connectionsAt(providerGoogle.Name) }
+
+func (c *core) googleAccount(email string) (connection, bool) {
+	return c.connectionOf(providerGoogle.Name, email)
+}
+
+// googleTools are the tools of a Google account, by kind.
+func (c *core) googleTools(email string) []connTool {
+	cn, ok := c.googleAccount(email)
+	if !ok {
+		return nil
+	}
+	return c.connectionKinds(cn)
+}
+
+// googleSignIn connects through the connect route as the browser would: the
 // form, Google's consent (the fake), and the way back. It returns the
 // authorization URL's query and where the result page sends the browser.
 func googleSignIn(t *testing.T, tw *testWeb, g *fakeGoogle, csrf string, form url.Values) (url.Values, string) {
 	t.Helper()
-	code, body, h := tw.post("/settings/google/connect", form, csrf)
+	form = maps.Clone(form)
+	if form["service"] != nil { // the tools ticked, as the Google page named them
+		form["tool"], form["service"] = form["service"], nil
+	}
+	code, body, h := tw.post("/settings/connections/google/connect", form, csrf)
 	authURL := h.Get("HX-Redirect")
 	if code != 200 || authURL == "" {
 		t.Fatalf("connect: %d %s", code, body)
@@ -53,39 +74,33 @@ func TestGoogleAccounts(t *testing.T) {
 	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
 
 	// Found from "Add a tool", and from the kinds of mailbox and calendar.
-	if _, body, _ := tw.do("GET", "/settings/tools/add", nil, nil); !strings.Contains(body, `href="/settings/google"`) {
+	if _, body, _ := tw.do("GET", "/settings/tools/add", nil, nil); !strings.Contains(body, `href="/settings/connections/google"`) {
 		t.Fatal("no Google tile")
 	}
-	if _, body, _ := tw.do("GET", "/settings/tools/new?preset=mail", nil, nil); !strings.Contains(body, `href="/settings/google?add=mail"`) ||
+	if _, body, _ := tw.do("GET", "/settings/tools/new?preset=mail", nil, nil); !strings.Contains(body, `href="/settings/connections/google?tool=mail"`) ||
 		!strings.Contains(body, "Gmail avec ton compte Google") {
 		t.Fatalf("mail picker: %s", body)
 	}
-	if _, body, _ := tw.do("GET", "/settings/tools/new?preset=calendar", nil, nil); !strings.Contains(body, `href="/settings/google?add=calendar"`) {
+	if _, body, _ := tw.do("GET", "/settings/tools/new?preset=calendar", nil, nil); !strings.Contains(body, `href="/settings/connections/google?tool=calendar"`) {
 		t.Fatalf("calendar picker: %s", body)
 	}
 
-	// The guide first: once for every service, with what to copy.
-	_, body, _ := tw.do("GET", "/settings/google", nil, nil)
-	for _, want := range []string{"Crée ton app Google", "pour tous les services et tous tes comptes", googleAPIs,
-		`<pre id="google-scopes">` + scopeMail + "," + scopeCalendar, `data-copy="google-scopes"`,
-		`<pre id="google-callback">` + tw.srv.URL + "/oauth/callback</pre>", `data-copy="google-callback"`} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("guide lacks %q: %s", want, body)
-		}
+	// The app first, from the connect page.
+	_, body, _ := tw.do("GET", "/settings/connections/google", nil, nil)
+	if !strings.Contains(body, "Créer mon app") || !strings.Contains(body, `href="/settings/apps/google?back=`) ||
+		strings.Contains(body, `hx-post="/settings/connections/google/connect"`) {
+		t.Fatalf("connect before the app: %s", mainPart(t, body))
 	}
-	if strings.Contains(body, `hx-post="/settings/google/connect"`) {
-		t.Fatal("connect before the Google app")
-	}
-	if _, body, _ = tw.post("/settings/google/client", url.Values{"client_id": {testClientID}, "client_secret": {testClientSecret}}, csrf); !strings.Contains(body, "Se connecter avec Google") ||
-		strings.Contains(body, testClientSecret) {
+	if _, body, _ = tw.post("/settings/apps/google", url.Values{"client_id": {testClientID}, "client_secret": {testClientSecret}}, csrf); strings.Contains(body, testClientSecret) ||
+		!strings.Contains(body, testClientID) {
 		t.Fatalf("client saved: %s", body)
 	}
-	if _, body, _ := tw.do("GET", "/settings/google?add=calendar", nil, nil); strings.Contains(body, `value="mail" checked`) ||
-		!strings.Contains(body, `value="calendar" checked`) {
-		t.Fatalf("?add=calendar: %s", body)
+	if _, body, _ := tw.do("GET", "/settings/connections/google?tool=calendar", nil, nil); strings.Contains(body, `value="mail" checked`) ||
+		!strings.Contains(body, `value="calendar" checked`) || !strings.Contains(body, "Google Agenda") {
+		t.Fatalf("?tool=calendar: %s", mainPart(t, body))
 	}
-	if _, body, _ = tw.post("/settings/google/connect", url.Values{}, csrf); !strings.Contains(body, "Coche au moins un service") {
-		t.Fatalf("no service: %s", body)
+	if _, body, _ = tw.post("/settings/connections/google/connect", url.Values{}, csrf); !strings.Contains(body, "Coche au moins un outil") {
+		t.Fatalf("no tool: %s", body)
 	}
 
 	// Mail and calendar, in one sign-in.
@@ -94,7 +109,7 @@ func TestGoogleAccounts(t *testing.T) {
 	if q.Get("scope") != "openid email "+scopeMail+" "+scopeCalendar || q.Get("include_granted_scopes") != "true" || q.Get("login_hint") != "" {
 		t.Fatalf("auth query %v", q)
 	}
-	if next != "/settings/google?connected=1" {
+	if next != "/settings/tools?connected=1" {
 		t.Fatalf("next %q", next)
 	}
 	sam, _ := c.googleAccount("sam@example.org")
@@ -131,14 +146,6 @@ func TestGoogleAccounts(t *testing.T) {
 		t.Fatalf("tools list: %s", body)
 	}
 
-	// The service it does not use follows the others, with its own button,
-	// before the account's actions.
-	_, body, _ = tw.do("GET", "/settings/google", nil, nil)
-	drive, actions := strings.Index(body, `<input type="hidden" name="service" value="drive">`), strings.Index(body, `class="gaccount-actions"`)
-	if drive < 0 || actions < drive || !strings.Contains(body, "Pas encore ajouté") || strings.Contains(body, `class="inline gadd"`) {
-		t.Fatalf("drive to add: %s", body)
-	}
-
 	// Drive added to the same account: its scope alone, the account named.
 	g.scope, g.refresh = scopeMail+" "+scopeCalendar+" "+scopeDrive, "the-refresh-2"
 	q, _ = googleSignIn(t, tw, g, csrf, url.Values{"service": {"drive"}, "account": {"sam@example.org"}, "write": {"1"}})
@@ -154,11 +161,6 @@ func TestGoogleAccounts(t *testing.T) {
 	if st := c.driveState(); len(st.Accounts) != 1 || st.Accounts[0].Name != "sam@example.org" || !st.CanWrite {
 		t.Fatalf("drive: %+v", st)
 	}
-	_, body, _ = tw.do("GET", "/settings/google", nil, nil)
-	if !strings.Contains(body, "sam@example.org") || !strings.Contains(body, "Choisir des dossiers") || strings.Contains(body, "the-refresh") ||
-		strings.Contains(body, testClientSecret) {
-		t.Fatalf("google page: %s", body)
-	}
 	// In the tools list, Drive is a service of the account's card, with
 	// that account's folders, and there is nothing left to add.
 	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
@@ -166,7 +168,7 @@ func TestGoogleAccounts(t *testing.T) {
 	body = body[:strings.Index(body, `id="add-dlg"`)]
 	driveRow := rowKey(filesServer, "sam@example.org")
 	if !strings.Contains(body, "Google · Mail, Agenda, Drive") || !strings.Contains(body, `id="tool-`+driveRow+`"`) || !strings.Contains(body, "<h3>Drive</h3>") ||
-		!strings.Contains(body, "Google Drive · aucun dossier") || strings.Contains(body, "Ajouter à ce compte") || strings.Count(body, `class="tool-group`) != 1 ||
+		!strings.Contains(body, "Google Drive · aucun lieu") || strings.Contains(body, "Ajouter à ce compte") || strings.Count(body, `class="tool-group`) != 1 ||
 		strings.Contains(body, `hx-post="/settings/tools/`+filesServer+`/delete"`) || !strings.Contains(body, `href="/settings/tools/`+filesServer+`/places"`) {
 		t.Fatalf("tools list with Drive: %s", body)
 	}
@@ -182,27 +184,15 @@ func TestGoogleAccounts(t *testing.T) {
 		u.status, u.err = statusError, "service "+name+" has no node: not placed yet"
 		u.mu.Unlock()
 	}
-	_, body, _ = tw.do("GET", "/settings/google", nil, nil)
-	if !strings.Contains(body, "En attente d&#39;un appareil") || strings.Contains(body, ">Erreur<") {
-		t.Fatalf("waiting for a machine: %s", body)
-	}
 	for _, name := range []string{"mail", "agenda", filesServer} {
 		if _, err := c.store.assignService(name, "nasa"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	_, body, _ = tw.do("GET", "/settings/google", nil, nil)
-	if !strings.Contains(body, "Démarrage…") || strings.Contains(body, ">Erreur<") ||
-		!strings.Contains(body, `id="g-accounts" aria-labelledby="g-accounts-t" hx-get="/settings/google"`) {
-		t.Fatalf("starting: %s", body)
-	}
 	for _, name := range []string{"mail", "agenda", filesServer} {
 		if err := c.store.updateService(name, map[string]any{"state": stateFailed, "error": "pull access denied for x"}); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if _, body, _ = tw.do("GET", "/settings/google", nil, nil); !strings.Contains(body, "nasa") || strings.Contains(body, "Démarrage…") {
-		t.Fatalf("failed: %s", body)
 	}
 	// In the tools list, a row says the state of its service on its
 	// machine, never which service of the account it is.
@@ -232,17 +222,17 @@ func TestGoogleAccounts(t *testing.T) {
 
 	// A service Google did not grant is said.
 	g.scope = scopeMail
-	if _, next := googleSignIn(t, tw, g, csrf, url.Values{"service": {"mail", "calendar"}, "account": {"bob@example.org"}}); next != "/settings/google?connected=1&missing=calendar" {
+	if _, next := googleSignIn(t, tw, g, csrf, url.Values{"service": {"mail", "calendar"}, "account": {"bob@example.org"}}); next != "/settings/tools?connected=1&missing=calendar" {
 		t.Fatalf("missing: %q", next)
 	}
-	if _, body, _ := tw.do("GET", "/settings/google?connected=1&missing=calendar", nil, nil); !strings.Contains(body, "Google n&#39;a pas donné l&#39;accès à Google Agenda") {
+	if _, body, _ := tw.do("GET", "/settings/tools?connected=1&missing=calendar", nil, nil); !strings.Contains(body, "Le fournisseur n&#39;a pas donné l&#39;accès à : Agenda") {
 		t.Fatalf("missing: %s", body)
 	}
 
 	// Removed: its tool, its token, and its authorization at Google.
 	bobRef := bobSecret(t, c.core)
-	if _, body, _ := tw.post("/settings/google/remove", url.Values{"account": {"bob@example.org"}}, csrf); strings.Contains(body, "bob@example.org") {
-		t.Fatalf("removed: %s", body)
+	if code, _, h := tw.post("/settings/connections/google/remove", url.Values{"account": {"bob@example.org"}}, csrf); code != 200 || h.Get("HX-Refresh") != "true" {
+		t.Fatalf("removed: %d", code)
 	}
 	if spec := runOf(t, c.core, "mail"); spec.Env[bobMail].File != "" || strings.Contains(spec.Env["MAIL_CONFIG"].Value, "bob@") ||
 		spec.Env[samMail].File != vaultPrefix+ref {
@@ -306,9 +296,6 @@ func TestGoogleReconnect(t *testing.T) {
 	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
 	if !strings.Contains(body, "Le compte Google sam@example.org est à reconnecter") || !strings.Contains(body, `name="reconnect" value="1"`) {
 		t.Fatalf("tools list: %s", body)
-	}
-	if _, body, _ := tw.do("GET", "/settings/google", nil, nil); !strings.Contains(body, "À reconnecter") {
-		t.Fatalf("google page: %s", body)
 	}
 
 	// One click: the services it had, Drive with its rights.

@@ -48,7 +48,7 @@ func (w *web) handleSignInCallback(rw http.ResponseWriter, r *http.Request) {
 			rw.WriteHeader(http.StatusBadRequest)
 			err = errors.New(tr(w.lang(r), "oauth.expired"))
 		}
-		v.Error = w.driveError(r, err)
+		v.Error = w.connError(r, err)
 		log.Printf("web: a sign-in failed")
 	} else {
 		// A page of this site, then the settings: the session cookie

@@ -78,6 +78,10 @@ type filesAccount struct {
 	Scopes []string `json:"scopes,omitempty"`
 }
 
+// signInProvider is the provider the account is signed in at: an account
+// written before providers were named is the first one's, Google.
+func (a filesAccount) signInProvider() string { return cmpOr(a.Provider, providerGoogle.Name) }
+
 // DriveFolder is a folder of the cloud given to Eriphe: the Folder object's
 // cloud source (eriphe-files enforces it).
 type DriveFolder struct {
@@ -110,7 +114,7 @@ func (c *core) driveState() driveState {
 	fc, ok := filesConfigOf(srv)
 	st := driveState{Exists: true, Mine: ok && c.source(kindServer, filesServer) == sourceWorkspace, Folders: fc.Folders}
 	for _, a := range fc.Accounts {
-		t, _ := signInOf(toolDrive, cmpOr(a.Provider, providerGoogle.Name))
+		t, _ := signInOf(toolDrive, a.signInProvider())
 		_, w := t.granted(a.Scopes)
 		st.Accounts = append(st.Accounts, driveAccountView{Name: a.Name, CanWrite: w})
 		st.CanWrite = st.CanWrite || w
@@ -174,7 +178,7 @@ func (c *core) putDrive(lang string, change func(*filesConfig), env map[string]E
 	if exists {
 		var ok bool
 		if fc, ok = filesConfigOf(srv); !ok || c.source(kindServer, filesServer) != sourceWorkspace {
-			return &catalogError{http.StatusConflict, "drive.taken", filesServer, errors.New("a tool named " + filesServer + " already exists")}
+			return &catalogError{http.StatusConflict, "conn.taken", filesServer, errors.New("a tool named " + filesServer + " already exists")}
 		}
 		spec, _ = decodeRun(srv.Run)
 	}
@@ -252,11 +256,11 @@ func (c *core) dropDriveAccount(email string) error {
 func (c *core) addDriveFolder(account, id, name, access string) error {
 	id, name = strings.TrimSpace(id), strings.Join(strings.Fields(name), " ")
 	if id == "" || name == "" || len(name) > 120 || (access != "read" && access != "drop") {
-		return &catalogError{http.StatusBadRequest, "drive.badfolder", "", errors.New("a folder needs an id, a name and an access")}
+		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("a folder needs an id, a name and an access")}
 	}
 	st := c.driveState()
 	if st.Exists && !st.Mine {
-		return &catalogError{http.StatusConflict, "drive.taken", filesServer, errors.New("a tool named " + filesServer + " already exists")}
+		return &catalogError{http.StatusConflict, "conn.taken", filesServer, errors.New("a tool named " + filesServer + " already exists")}
 	}
 	for _, f := range st.Folders {
 		if f.ID == id {
@@ -265,10 +269,10 @@ func (c *core) addDriveFolder(account, id, name, access string) error {
 	}
 	account, ok := st.driveAccountName(account)
 	if !ok {
-		return &catalogError{http.StatusBadRequest, "drive.badfolder", "", errors.New("no such Google Drive account")}
+		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("no such Google Drive account")}
 	}
 	if access == "drop" && !st.canWrite(account) {
-		return &catalogError{http.StatusBadRequest, "drive.readonly", "", errors.New("Google Drive was connected for reading only")}
+		return &catalogError{http.StatusBadRequest, "conn.readonly", "", errors.New("Google Drive was connected for reading only")}
 	}
 	return c.putDrive("", func(fc *filesConfig) {
 		for i, f := range fc.Folders {

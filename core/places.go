@@ -181,7 +181,7 @@ func (c *core) removePlace(tool, id string) error {
 func (c *core) givePlace(tool, account, id, name, access string) error {
 	id, name = strings.TrimSpace(id), strings.Join(strings.Fields(name), " ")
 	if id == "" || name == "" || len(name) > 120 || (access != accessRead && access != accessDrop) {
-		return &catalogError{http.StatusBadRequest, "drive.badfolder", "", errors.New("a place needs an id, a name and an access")}
+		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("a place needs an id, a name and an access")}
 	}
 	accounts := c.placeAccounts(tool)
 	return c.changePlaces(tool, func(list []Place) ([]Place, error) {
@@ -194,10 +194,10 @@ func (c *core) givePlace(tool, account, id, name, access string) error {
 			return strings.EqualFold(a.Name, account) || account == "" && len(accounts) == 1
 		})
 		if i < 0 {
-			return nil, &catalogError{http.StatusBadRequest, "drive.badfolder", "", errors.New("no such account")}
+			return nil, &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("no such account")}
 		}
 		if access == accessDrop && !accounts[i].CanWrite {
-			return nil, &catalogError{http.StatusBadRequest, "drive.readonly", "", errors.New("the account was connected for reading only")}
+			return nil, &catalogError{http.StatusBadRequest, "conn.readonly", "", errors.New("the account was connected for reading only")}
 		}
 		for j, p := range list {
 			if p.ID == id {

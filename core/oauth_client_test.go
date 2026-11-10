@@ -124,7 +124,7 @@ func TestSignInFlow(t *testing.T) {
 	authURL, _ = c.startSignIn(f.signInProvider, app, in)
 	u, _ = url.Parse(authURL)
 	fl, _, err = c.finishSignIn(context.Background(), in.Origin, u.Query().Get("state"), "", "access_denied", "b")
-	wantKey(t, err, "drive.denied")
+	wantKey(t, err, "conn.denied")
 	if fl == nil || fl.back != "/back" {
 		t.Fatalf("denied: %+v", fl)
 	}
@@ -170,7 +170,7 @@ func TestSignInProviderRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := p.checkClient("abc.example.com", "s")
-	wantKey(t, err, "drive.badclient")
+	wantKey(t, err, "conn.badclient")
 	if p.refuses("http://192.0.2.1") != "" {
 		t.Error("no rule: any redirect")
 	}
@@ -180,7 +180,7 @@ func TestSignInProviderRules(t *testing.T) {
 	}
 	c := signInCore(t)
 	_, err = c.startSignIn(p, oauthApp{ID: "a", Secret: "b"}, signInStart{Origin: "https://eriphe.local"})
-	wantKey(t, err, "drive.origin.local")
+	wantKey(t, err, "app.origin.local")
 }
 
 // signInCore is a core with only a store, for the flows.

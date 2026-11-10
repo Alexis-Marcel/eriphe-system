@@ -1,0 +1,48 @@
+{{/* Settings → Tools → connect an account at a provider (web_connections.go), and the account's buttons in the tools list. */}}
+
+{{define "connect-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
+  <div class="form-title">
+    <span class="mark preset-mark mark-{{.Provider.Name}}" aria-hidden="true">{{template "preset-icon" .Provider.Name}}</span>
+    <h2>{{tf "conn.heading" .Provider.Label}}</h2>
+  </div>
+  <p>{{t "conn.lead"}}</p>
+</header>
+<div class="stack">
+{{if .OriginWhy}}
+<section class="panel">
+  <h3>{{template "i-link"}}{{tf "app.origin.title" .Provider.Label}}</h3>
+  <p class="alert" role="alert">{{tf (printf "app.origin.%s" .OriginWhy) .Origin}}</p>
+  <p><a href="/settings/apps/{{.Provider.Name}}?back={{urlquery (printf "/settings/connections/%s" .Provider.Name)}}">{{t "app.alt.lead"}}</a></p>
+</section>
+{{else if not .App}}
+<section class="panel">
+  <p>{{tf "conn.noapp" .Provider.Label}}</p>
+  <div class="actions"><a class="btn btn-primary" href="/settings/apps/{{.Provider.Name}}?back={{urlquery (printf "/settings/connections/%s" .Provider.Name)}}">{{t "conn.setapp"}}</a></div>
+</section>
+{{else}}
+<section class="panel">
+  <form class="stack" hx-post="/settings/connections/{{.Provider.Name}}/connect" hx-target="#connect-result" hx-disabled-elt="find button[type=submit]">
+    <input type="hidden" name="back" value="/settings/tools">
+    <fieldset class="field"><legend>{{t "conn.tools"}}</legend>
+      {{range .Tools}}<label class="check"><input type="checkbox" name="tool" value="{{.Kind}}"{{if .Ticked}} checked{{end}}> {{.Product}}</label>{{end}}
+    </fieldset>
+    <label class="check"><input type="checkbox" name="write" value="1" checked> {{t "conn.write"}}</label>
+    <p class="small muted">{{t "conn.writehint"}}</p>
+    <div id="connect-result" aria-live="polite"></div>
+    <div class="actions"><button class="btn btn-primary" type="submit">{{template "i-link"}}{{t "conn.connect"}}</button></div>
+  </form>
+  <p class="small muted">{{tf "conn.app" .Provider.Label}} <span class="mono">{{.App}}</span> · <a href="/settings/apps/{{.Provider.Name}}?back={{urlquery (printf "/settings/connections/%s" .Provider.Name)}}">{{t "conn.changeapp"}}</a></p>
+</section>
+{{end}}
+</div>
+{{end}}{{end}}
+
+{{/* An account's buttons in the tools list: reconnect it with its tools.
+     . is a dict: Provider, Account, Target (the id of the box for an error), Primary. */}}
+{{define "connection-reconnect"}}<form class="inline" hx-post="/settings/connections/{{.Provider}}/connect" hx-target="#{{.Target}}" hx-disabled-elt="find button">
+  <input type="hidden" name="account" value="{{.Account}}"><input type="hidden" name="reconnect" value="1">
+  <button class="btn {{if .Primary}}btn-primary{{else}}btn-ghost{{end}} sm" type="submit">{{t "conn.reconnect"}}</button></form>{{end}}
+
+{{define "connection-result"}}{{with .Data}}{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}{{end}}{{end}}

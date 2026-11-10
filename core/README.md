@@ -1617,11 +1617,15 @@ tell (someone came home) goes from an automation to an incoming address, as any 
 ## Google accounts (Gmail, Calendar, Drive)
 
 One sign-in per Google account gives Eriphe any of Gmail, Google Calendar and Google Drive
-(`connection_tools.go` with Google's rows of `toolSignIns`; Settings → Tools → Google,
-`/settings/google`, `web_google.go`). The user's own
-Google app ([below](#your-own-google-app)) is set up once for every service and every account; the
-page's guide turns the three APIs on with one link (Gmail, CalDAV, Drive) and gives the scopes and
-the redirect URI to copy.
+(`connection_tools.go` with Google's rows of `toolSignIns`). Nothing in the workspace is Google's
+own: the Google, Gmail, Google Calendar and Google Drive tiles are connection presets
+(`Form: "connection"`, `Provider: "google"`) that open the provider's connect page,
+`/settings/connections/google` (`?tool=` ticks some; `web_connections.go`); the account is then a
+card of the tools list ([above](#connections)). The user's own Google app
+([below](#your-own-google-app)) is set up once for every service and every account on its
+[app page](#connection-apps), `/settings/apps/google`, whose guide turns the three APIs on with one
+link (Gmail, CalDAV, Drive) and gives the scopes and the redirect URI to copy. `/settings/google`
+and `/settings/drive`, the pages before, send to Settings → Tools.
 
 | Service | Scope | Server |
 |---|---|---|
@@ -1629,7 +1633,7 @@ the redirect URI to copy.
 | `calendar` | `https://www.googleapis.com/auth/calendar` (CalDAV) | eriphe-calendar, an account of `agenda`, provider `google` |
 | `drive` | `…/auth/drive`, or `drive.readonly` without "drop results" | eriphe-files, `fichiers`, one account of it per Google account |
 
-**Connect.** The page ticks the services, and Connect asks Google for `openid email` and their
+**Connect.** The connect page ticks the tools, and "Se connecter" asks Google for `openid email` and their
 scopes only, with `access_type=offline`, `prompt=consent`, PKCE, the signed state of
 [the Drive flow](#your-own-google-app) and `include_granted_scopes=true`: a service added later to
 the same account (its `login_hint`) asks for that one alone, and Google's answer covers what the
@@ -1680,8 +1684,15 @@ is built from the provider's data (`signin_providers.go`): the steps in the prov
 it, the scopes to declare or the redirect URI to paste, each with a Copy button), the client id's
 form, whether the console gives a JSON file, and the redirect rule (`public-https`: the page says
 when this workspace's address is refused, and what to do). The client goes to the vault as
-`app.<provider>.client`. Whether the client lists the redirect URI is not probed: the Drive test
-says what to check in the console.
+`app.<provider>.client`. Whether the client lists the redirect URI is not probed: the test says
+what to check in the console.
+
+**Test** (`POST /settings/apps/<provider>/test`, `testApp`) checks without the provider's consent,
+a line each: the workspace's address (the redirect rule); the client, with a code exchange of a
+made-up code (`invalid_grant` is a client the provider knows, `invalid_client` a wrong id or
+secret); the redirect URI to check; then each account connected there, its refresh token for an
+access token (`checkConnection`, which marks it to reconnect when refused). Secrets and tokens are
+never shown nor logged.
 
 ### Tools on a connection
 
@@ -1728,17 +1739,16 @@ refuses everything else, and can only create files, in `Eriphe/`. eriphe-core ru
 authorization, keeps the refresh token in the vault, and lends it to the service's environment on
 its node; it never enters a task or a task's spec.
 
-Settings → Tools → Google Drive (`/settings/drive`, `web_drive.go`, the logic in `cloud.go`, the sign-in in `oauth_client.go`):
+Settings → Tools → Add → Google Drive (the logic in `cloud.go`, the sign-in in `oauth_client.go`):
 
-1. **Your Google app**: the guide, then the client JSON (or id and secret) of the user's own
-   Google app ([below](#your-own-google-app)), kept in the vault; the same as the Google page's.
-2. **Connect**: "Connecter Google Drive" is the [Google account](#google-accounts-gmail-calendar-drive)
-   flow with Drive alone; "Permettre à Eriphe de
-   déposer des résultats" asks for the scope that writes. The account comes back connected, and the
+1. **Your Google app**: the [app page](#connection-apps), with the client JSON (or id and secret)
+   of the user's own Google app ([below](#your-own-google-app)), kept in the vault.
+2. **Connect**: the connect page with Drive ticked, the [Google account](#google-accounts-gmail-calendar-drive)
+   flow; "Permettre à Eriphe d'écrire" asks for the scope that writes. The account comes back connected, and the
    workspace creates the catalog server `fichiers` (image `ghcr.io/alexis-marcel/eriphe-files`,
    access `reads`: its reads are free, `write_file` is the user's to allow). Set to read only,
    the tool connects with `drive.readonly` whatever the box says.
-3. **Choose**: once the service runs, the page browses each account's folders (a chip per account
+3. **Choose**: once the service runs, the tool's [places](#places) page browses each account's folders (a chip per account
    when there are several) (My Drive, Shared with
    me, shared drives) through the server's `browse_folders`, and each one is given "en lecture" or
    "lecture + dépôt". The chosen folders are written in the service's `FILES_CONFIG`, which

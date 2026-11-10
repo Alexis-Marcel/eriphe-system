@@ -62,6 +62,28 @@ func signInOf(tool, provider string) (toolSignIn, bool) {
 	return toolSignIn{}, false
 }
 
+// signInByAccount finds the provider an account of a kind of tool is
+// signed in at, from what its configuration names (AccountProvider): a
+// Gmail's "gmail", a Google calendar's "google".
+func signInByAccount(tool, accountProvider string) (toolSignIn, bool) {
+	for _, t := range toolSignIns {
+		if t.Tool == tool && t.AccountProvider == accountProvider {
+			return t, true
+		}
+	}
+	return toolSignIn{}, false
+}
+
+// productName is what a kind of tool is called at a provider ("Gmail"),
+// from the words of the workspace; the provider's name when it has none.
+func productName(lang, provider, kind string) string {
+	key := "conn.product." + provider + "." + kind
+	if s := tr(lang, key); s != key {
+		return s
+	}
+	return providerLabel(provider)
+}
+
 // toolsAt are the kinds of tools a provider serves, in their order.
 func toolsAt(provider string) []string {
 	var out []string
@@ -209,11 +231,11 @@ func (c *core) startAccountSignIn(in connectAsk) (string, error) {
 	}
 	in.Tools = slices.DeleteFunc(slices.Clone(in.Tools), func(k string) bool { return !slices.Contains(toolsAt(p.Name), k) })
 	if len(in.Tools) == 0 {
-		return "", &catalogError{http.StatusBadRequest, "google.noservice", "", errors.New("pick at least one service")}
+		return "", &catalogError{http.StatusBadRequest, "conn.notool", "", errors.New("pick at least one service")}
 	}
 	app, err := appClient(p)
 	if errors.Is(err, errNoAppClient) {
-		return "", &catalogError{http.StatusBadRequest, "drive.noclient", "", err}
+		return "", &catalogError{http.StatusBadRequest, "conn.noclient", "", err}
 	}
 	if err != nil {
 		return "", err
@@ -254,7 +276,7 @@ func (c *core) finishAccountSignIn(ctx context.Context, origin, state, code, err
 		res.Missing = append(res.Missing, k)
 	}
 	if len(res.Added) == 0 {
-		return res, &catalogError{http.StatusBadRequest, "google.noscope", "", errors.New("none of the services asked for was granted")}
+		return res, &catalogError{http.StatusBadRequest, "conn.noscope", "", errors.New("none of the services asked for was granted")}
 	}
 	return res, c.connectTools(fl.lang, res.Provider, tok.Identity, tok.Scopes, tok.secret(fl), res.Added)
 }
@@ -300,7 +322,7 @@ func (c *core) connectTools(lang, provider, identity string, scopes []string, se
 func (c *core) removeConnection(ctx context.Context, provider, identity string) error {
 	cn, ok := c.connectionOf(provider, identity)
 	if !ok {
-		return &catalogError{http.StatusNotFound, "google.unknown", "", fmt.Errorf("no such %s account", providerLabel(provider))}
+		return &catalogError{http.StatusNotFound, "conn.unknown", "", fmt.Errorf("no such %s account", providerLabel(provider))}
 	}
 	var errs []error
 	for _, t := range c.connectionKinds(cn) {

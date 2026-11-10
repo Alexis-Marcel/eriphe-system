@@ -10,7 +10,16 @@
   <p>{{tf "app.lead" .Provider.Label}}</p>
 </header>
 {{template "app-wrap" .}}
+<section class="panel">
+  <h3>{{template "i-plug"}}{{t "app.test.title"}}</h3>
+  <p class="small muted">{{t "app.test.lead"}}</p>
+  <div class="actions"><button class="btn btn-soft test-btn" type="button" hx-post="/settings/apps/{{.Provider.Name}}/test" hx-target="#app-test" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{t "test.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button></div>
+  <div id="app-test" class="test-box stack" aria-live="polite"></div>
+</section>
 {{end}}{{end}}
+
+{{/* The app test's lines (connection_apps.go). */}}
+{{define "app-test"}}{{range .Data}}{{template "test-line" .}}{{end}}{{end}}
 
 {{define "app-wrap-frag"}}{{template "app-wrap" .Data}}{{end}}
 
@@ -27,9 +36,9 @@
   <p class="alert" role="alert">{{tf (printf "app.origin.%s" .OriginWhy) .Origin}}</p>
   <p>{{t "app.alt.lead"}}</p>
   <ol class="steps">
-    {{if .Remote}}<li>{{t "drive.alt.remoteon"}} <a href="{{.Remote}}/settings/apps/{{.Provider.Name}}">{{.Remote}}</a></li>
-    {{else}}<li>{{t "drive.alt.remote"}} <a href="/settings/access/web">{{t "drive.alt.remotelink"}}</a></li>{{end}}
-    <li>{{t "drive.alt.domain"}}</li>
+    {{if .Remote}}<li>{{t "app.alt.remoteon"}} <a href="{{.Remote}}/settings/apps/{{.Provider.Name}}">{{.Remote}}</a></li>
+    {{else}}<li>{{t "app.alt.remote"}} <a href="/settings/access/web">{{t "app.alt.remotelink"}}</a></li>{{end}}
+    <li>{{t "app.alt.domain"}}</li>
   </ol>
 </section>
 {{else if .ClientID}}

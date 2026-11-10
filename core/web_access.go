@@ -140,10 +140,8 @@ func connectionPage(name, account string, p toolPreset, auth, source string) str
 		return "/settings/tools/" + url.PathEscape(name) + "/edit" + accountQuery(account)
 	case auth == "github-app" || p.ID == "github":
 		return "/settings/github"
-	case p.Form == "drive":
-		return "/settings/drive"
-	case p.Form == "google" || p.ID == "google":
-		return "/settings/google"
+	case p.Form == "connection":
+		return "/settings/tools" // its account's card
 	}
 	return ""
 }

@@ -101,8 +101,8 @@ func TestWebPresetsAreValid(t *testing.T) {
 		"local":          {"image": {"mcp/sequentialthinking"}, "use": {"think"}, "transport": {"stdio"}, "egress": {"1"}},
 	}
 	for _, p := range toolPresets {
-		if p.Form == "drive" || p.Form == "google" {
-			continue // its own page (web_drive_test.go)
+		if p.Form == "connection" {
+			continue // an account signed in (web_connections_test.go)
 		}
 		f := newToolForm("fr", p)
 		form := url.Values{"preset": {p.ID}, "name": {"p-" + p.ID}, "use": {f.Use}, "kind": {f.Kind}, "url": {f.URL}, "auth": {f.Auth},

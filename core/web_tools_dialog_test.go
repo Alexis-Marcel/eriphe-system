@@ -91,8 +91,6 @@ func TestAddDialogSteps(t *testing.T) {
 			[]string{`name="token"`, `<a href="/settings/github">`}},
 		{"/settings/tools/new?preset=local", "add/local", "/settings/tools/add", "add",
 			[]string{`name="image"`, `name="dialog" value="1"`}},
-		{"/settings/tools/new?preset=gdrive", "add/gdrive", "/settings/tools/add", "add",
-			[]string{`<a class="btn btn-primary" href="/settings/drive">Ouvrir le guide</a>`, "app Google à toi"}},
 		{"/settings/tools/add/other", "add/remote", "/settings/tools/add", "add",
 			[]string{`hx-post="/settings/tools/add/other"`, `data-step data-hash="add/remote/form"`, `<div id="discover-result"`}},
 	} {
