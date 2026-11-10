@@ -75,6 +75,9 @@ type signInProvider struct {
 	// ForgetAt is where the user removes the app's access, when the
 	// provider gives no new refresh token while it still has one.
 	ForgetAt string
+	// App is how the user makes their own app at the provider
+	// (connection_apps.go).
+	App appGuide
 }
 
 // signInHTTP talks to the providers; tests replace it.

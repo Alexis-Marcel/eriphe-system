@@ -148,12 +148,13 @@ func TestDriveTest(t *testing.T) {
 	body := driveTestBody(t, tw, csrf)
 	wantLines(t, body, "test-ok", "Google accepte l'adresse de ton espace", "Pas encore d'app Google", "pas encore connecté")
 
-	// A wrong secret, and a redirect URI the client does not list.
+	// A wrong secret: no redirect line.
 	storeGoogleClient(oauthApp{ID: testClientID, Secret: "GOCSPX-wrong"})
-	g.redirects = []string{"https://elsewhere.example.org/oauth/callback"}
 	body = driveTestBody(t, tw, csrf)
-	wantLines(t, body, "L'identifiant ou le code secret de ton app Google est refusé", "The provided client secret is invalid.",
-		"n'est pas enregistrée", "ajoute exactement "+callback, "test-err")
+	wantLines(t, body, "L'identifiant ou le code secret de ton app Google est refusé", "The provided client secret is invalid.", "test-err")
+	if strings.Contains(body, "Adresse de retour") {
+		t.Fatalf("a redirect line for a refused client: %s", body)
+	}
 	if strings.Contains(body, "GOCSPX-wrong") {
 		t.Fatal("the secret is shown")
 	}
@@ -166,12 +167,11 @@ func TestDriveTest(t *testing.T) {
 		t.Fatalf("a redirect line for an unknown client: %s", body)
 	}
 
-	// The right app, its redirect registered.
+	// The right app: the redirect URI to check, Google's sign-in never asked.
 	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
-	g.redirects = []string{callback}
 	body = driveTestBody(t, tw, csrf)
-	wantLines(t, body, "Google reconnaît ton app ("+testClientID+")", "L'adresse de retour "+callback+" est bien enregistrée")
-	if strings.Contains(body, "test-err") || g.signins == 0 || g.followings != 0 {
+	wantLines(t, body, "Google reconnaît ton app ("+testClientID+")", "Adresse de retour à vérifier", "exactement "+callback+".")
+	if strings.Contains(body, "test-err") || g.signins != 0 || g.followings != 0 {
 		t.Fatalf("signins %d, followed %d: %s", g.signins, g.followings, body)
 	}
 
@@ -197,7 +197,7 @@ func TestDriveTest(t *testing.T) {
 	// In English.
 	tw.do("POST", "/lang", url.Values{"csrf": {csrf}, "lang": {"en"}}, nil)
 	body = driveTestBody(t, tw, csrf)
-	wantLines(t, body, "Google takes your workspace's address", "Google knows your app", "is registered in your Google app",
+	wantLines(t, body, "Google takes your workspace's address", "Google knows your app", "Redirect URI to check",
 		"Google withdrew the Google Drive authorization", "Reconnect Google Drive")
 	g.refresh = checkRefresh
 	wantLines(t, driveTestBody(t, tw, csrf), "Connected as sam@example.com (Sam Doe). 3.2 GB used of 15 GB.")
@@ -220,21 +220,6 @@ func TestDriveTestOrigin(t *testing.T) {
 	}
 	if g.signins != 0 {
 		t.Fatal("the authorization was asked")
-	}
-}
-
-// Google's own authError (an invalid_client, as accounts.google.com sent it).
-func TestAuthErrorCode(t *testing.T) {
-	for in, want := range map[string]string{
-		"Cg5pbnZhbGlkX2NsaWVudBIfVGhlIE9BdXRoIGNsaWVudCB3YXMgbm90IGZvdW5kLiCRAw": "invalid_client",
-		authError("redirect_uri_mismatch"):                                       "redirect_uri_mismatch",
-		"":                                                                       "",
-		"not base64 !":                                                           "",
-		base64.RawURLEncoding.EncodeToString([]byte{0x12, 2, 'h', 'i'}): "",
-	} {
-		if got := authErrorCode(in); got != want {
-			t.Errorf("authErrorCode(%q) = %q, want %q", in, got, want)
-		}
 	}
 }
 

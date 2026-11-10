@@ -1,0 +1,76 @@
+{{/* Settings → Tools → a provider's app (connection_apps.go): the user's own OAuth client, guided from the provider's data. */}}
+
+{{define "app-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="{{.Back}}">{{template "i-back"}}{{t "settings.tools"}}</a>
+  <div class="form-title">
+    <span class="mark preset-mark mark-{{.Provider.Name}}" aria-hidden="true">{{template "preset-icon" .Provider.Name}}</span>
+    <h2>{{tf "app.heading" .Provider.Label}}</h2>
+  </div>
+  <p>{{tf "app.lead" .Provider.Label}}</p>
+</header>
+{{template "app-wrap" .}}
+{{end}}{{end}}
+
+{{define "app-wrap-frag"}}{{template "app-wrap" .Data}}{{end}}
+
+{{/* . is an appView. */}}
+{{define "app-wrap"}}
+<div id="app-wrap" class="stack">
+{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+{{if eq .Saved "ok"}}<p class="ok-note" role="status">{{t "app.saved"}} <a href="{{.Back}}">{{t "app.continue"}}</a></p>
+{{else if .Saved}}<p class="notice" role="status">{{tf "app.noredirect" .Saved}}</p>{{end}}
+
+{{if .OriginWhy}}
+<section class="panel" id="app-origin">
+  <h3>{{template "i-link"}}{{tf "app.origin.title" .Provider.Label}}</h3>
+  <p class="alert" role="alert">{{tf (printf "app.origin.%s" .OriginWhy) .Origin}}</p>
+  <p>{{t "app.alt.lead"}}</p>
+  <ol class="steps">
+    {{if .Remote}}<li>{{t "drive.alt.remoteon"}} <a href="{{.Remote}}/settings/apps/{{.Provider.Name}}">{{.Remote}}</a></li>
+    {{else}}<li>{{t "drive.alt.remote"}} <a href="/settings/access/web">{{t "drive.alt.remotelink"}}</a></li>{{end}}
+    <li>{{t "drive.alt.domain"}}</li>
+  </ol>
+</section>
+{{else if .ClientID}}
+<section class="panel">
+  <p class="small">{{t "app.current"}} <span class="mono">{{.ClientID}}</span> · {{t "app.secretkept"}}</p>
+  <details{{if .Error}} open{{end}}>
+    <summary>{{t "app.replace"}}</summary>
+    <div class="stack">{{template "app-guide" .}}{{template "app-client-form" .}}</div>
+  </details>
+</section>
+{{else}}
+<section class="panel">
+  <h3>{{template "i-key"}}{{t "app.guide"}}</h3>
+  {{template "app-guide" .}}
+  {{template "app-client-form" .}}
+</section>
+{{end}}
+</div>
+{{end}}
+
+{{/* The steps in the provider's console. . is an appView. */}}
+{{define "app-guide"}}{{$v := .}}
+<ol class="steps drive-guide">
+  {{range $i, $s := .Provider.App.Steps}}<li>{{t .Text}}{{with .Link}} <a href="{{.}}" target="_blank" rel="noopener noreferrer">{{$s.LinkText}}</a>{{end}}
+    {{with $v.Copy .Copy}}<div class="code one-line"><pre id="app-copy-{{$i}}">{{.}}</pre><button class="btn btn-soft sm" type="button" data-copy="app-copy-{{$i}}">{{t "machines.copy"}}</button></div>{{end}}</li>
+  {{end}}
+</ol>
+{{with .Provider.App.Source}}<p class="small muted"><a href="{{.}}" target="_blank" rel="noopener noreferrer">{{t "app.source"}}</a></p>{{end}}
+{{end}}
+
+{{define "app-client-form"}}
+<form class="stack" hx-post="/settings/apps/{{.Provider.Name}}" hx-encoding="multipart/form-data" hx-target="#app-wrap" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="back" value="{{.Back}}">
+  {{if .Provider.App.JSON}}
+  <label class="field"><span>{{t "app.json"}}</span><input type="file" name="client_json" accept=".json,application/json"><small>{{t "app.jsonhint"}}</small></label>
+  <p class="small muted">{{t "app.or"}}</p>
+  {{end}}
+  <div class="form-grid">
+    <label class="field"><span>{{t "app.clientid"}}</span><input type="text" name="client_id" spellcheck="false" autocomplete="off" class="mono" placeholder="{{.Provider.App.IDPlaceholder}}"></label>
+    <label class="field"><span>{{t "app.clientsecret"}}</span><input type="password" name="client_secret" autocomplete="new-password" spellcheck="false"></label>
+  </div>
+  <div class="actions"><button class="btn btn-primary" type="submit">{{t "app.save"}}</button></div>
+</form>
+{{end}}

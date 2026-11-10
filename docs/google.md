@@ -65,7 +65,7 @@ local address, the Google page says so and offers:
    afterwards, only its last four characters stay visible). Click **Download JSON**, or copy both.
 8. **In Eriphe**, Settings → Tools → Google: give the downloaded `client_secret_….json`, or
    paste the client ID and secret → **Save my Google app**. The secret goes to the vault
-   (`google-drive-client`) and is never shown again; "Replace my Google app" takes another one.
+   (`app.google.client`) and is never shown again; "Replace my Google app" takes another one.
 9. **Connect an account**: tick the services (Gmail, Google Calendar, Google Drive) and, for
    Drive, "Allow Eriphe to drop results" if Eriphe may add files (always in an `Eriphe` subfolder
    of the folders you allow) → **Sign in with Google**. "Google hasn't verified this app" is your
@@ -89,9 +89,8 @@ this workspace's, the page says so.
 - the client ID and secret: a code exchange with a made-up code. Google checks the client before
   the code: `invalid_client` means an unknown client or a wrong secret, `invalid_grant` means
   Google knows the client (and refuses the made-up code, as expected);
-- the redirect URI: the authorization request a Connect would open, without following it. Google
-  answers a redirect URI the client does not list with `redirect_uri_mismatch`, before any
-  sign-in. Any other answer, the page says to check the URI in the console;
+- the redirect URI: not asked of Google; the page shows the exact URI the client must list in
+  the console (**Clients** → your client → **Authorized redirect URIs**);
 - once connected: the stored authorization, refreshed, then the Drive account it is for. An
   `invalid_grant` there is an authorization Google withdrew (the 7 days of Testing, or revoked):
   **Reconnect**.

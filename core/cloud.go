@@ -25,7 +25,7 @@ import (
 // with the workspace's own https://<workspace>/oauth/callback as its
 // redirect. The page guides them through it (web_drive.go,
 // docs/google.md); the client id and secret are kept in the vault
-// (googleClientVault), never shown back. The sign-in itself is the neutral
+// (connection_apps.go), never shown back. The sign-in itself is the neutral
 // flow of oauth_client.go.
 
 const (
@@ -33,8 +33,6 @@ const (
 	filesImage     = "ghcr.io/alexis-marcel/eriphe-files"
 	filesConfigEnv = "FILES_CONFIG"
 	driveTokenEnv  = "FILES_GOOGLE_TOKEN" // an account's is FILES_GOOGLE_TOKEN_<hash> (driveTokenEnvOf)
-
-	googleClientVault = "google-drive-client" // the user's own client, in the vault
 
 	scopeDrive         = "https://www.googleapis.com/auth/drive"
 	scopeDriveReadonly = "https://www.googleapis.com/auth/drive.readonly"
@@ -59,36 +57,13 @@ func (c *Config) legacyCloud() string {
 	return "cloud: google_client_file and bounce_url are not used any more: connect Google Drive with your own Google app (Settings → Tools → Google Drive)"
 }
 
-var errNoGoogleClient = errors.New("no Google client")
+// errNoGoogleClient is a Google app not saved yet.
+var errNoGoogleClient = errNoAppClient
 
-// googleClient reads the user's Google app from the vault.
-func googleClient() (oauthApp, error) {
-	v := currentVault()
-	if v == nil {
-		return oauthApp{}, errNoVault
-	}
-	raw, err := v.get(googleClientVault)
-	if errors.Is(err, errNoSecret) {
-		return oauthApp{}, errNoGoogleClient
-	}
-	if err != nil {
-		return oauthApp{}, err
-	}
-	var app oauthApp
-	if json.Unmarshal([]byte(raw), &app) != nil || app.ID == "" || app.Secret == "" {
-		return oauthApp{}, errNoGoogleClient
-	}
-	return app, nil
-}
+// googleClient reads the user's Google app (connection_apps.go).
+func googleClient() (oauthApp, error) { return appClient(providerGoogle) }
 
-func storeGoogleClient(app oauthApp) error {
-	v := currentVault()
-	if v == nil {
-		return errNoVault
-	}
-	raw, _ := json.Marshal(app)
-	return v.set(googleClientVault, string(raw))
-}
+func storeGoogleClient(app oauthApp) error { return storeAppClient(providerGoogle, app) }
 
 // The files server's configuration, as servers/files reads it.
 
