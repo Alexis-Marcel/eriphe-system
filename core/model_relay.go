@@ -44,7 +44,7 @@ func (c *core) modelHost(t *TaskRow) (string, string, error) {
 		return "", "", err
 	}
 	p := cfg.Providers[a.Provider]
-	if p.Kind != selfHostedKind || p.Node == "" || a.Runtime != "opencode" {
+	if p.Kind != selfHostedKind || p.Node == "" || !harnessOf(a.Runtime).ModelServer {
 		return "", "", errors.New("this task's agent uses no model behind a node")
 	}
 	key := ""

@@ -462,7 +462,8 @@ func (w *web) handleSaveAgent(rw http.ResponseWriter, r *http.Request, s *sessio
 		model = fullModel(f.Kind.ID, f.Runtime, f.ModelOther)
 	}
 	var command []string
-	if f.Runtime == "acp" {
+	byCommand := harnessOf(f.Runtime).ByCommand
+	if byCommand {
 		// Its model is its own; its command is what names it.
 		model, command = "", commandLines(f.Command)
 		if len(command) > 0 {
@@ -478,7 +479,7 @@ func (w *web) handleSaveAgent(rw http.ResponseWriter, r *http.Request, s *sessio
 			f.Name = slug(f.Name + "-" + f.Provider)
 		}
 	}
-	if f.Runtime == "acp" {
+	if byCommand {
 		model = ""
 	}
 	a := Agent{Runtime: f.Runtime, Provider: f.Provider, Model: model, Use: f.Use, Needs: words(f.Needs), Image: f.Image, Command: command}
@@ -495,9 +496,9 @@ func (w *web) handleSaveAgent(rw http.ResponseWriter, r *http.Request, s *sessio
 		err = errors.New("agents.noprovider")
 	case a.Use == "":
 		err = errors.New("form.nouse")
-	case f.Runtime == "acp" && len(command) == 0:
+	case byCommand && len(command) == 0:
 		err = errors.New("agents.nocommand")
-	case f.Runtime != "acp" && f.Model == modelOther && strings.TrimSpace(f.ModelOther) == "":
+	case !byCommand && f.Model == modelOther && strings.TrimSpace(f.ModelOther) == "":
 		err = errors.New("agents.nomodel")
 	default:
 		err = w.c.putAgent(mode, f.Name, a)
@@ -815,7 +816,7 @@ func (w *web) readProviderForm(r *http.Request, s *session, m *Config) *provider
 		f.Presets = append(f.Presets, presetChoice{Preset: ps.Name, Checked: slices.Contains(pp.checked, ps.Name)})
 	}
 	pp.key = pastedKey(r.PostFormValue("key"))
-	if f.Kind.ID == "chatgpt-subscription" {
+	if f.Kind.SignIn {
 		// The credential is the sign-in's, not a pasted key.
 		pp.login, pp.key = r.PostFormValue("login"), ""
 		f.Login = chatgptLogins.status(pp.login, s.ID)
@@ -852,9 +853,9 @@ func (w *web) providerFormError(r *http.Request, s *session, m *Config, pp *prov
 	switch {
 	case f.Kind.ID == "":
 		return errors.New("providers.nokind")
-	case f.Kind.ID == "chatgpt-subscription" && p.Secret == "" && key == "":
+	case f.Kind.SignIn && p.Secret == "" && key == "":
 		return errors.New("cglogin.notyet")
-	case f.Kind.ID != "chatgpt-subscription" && !selfHosted && strings.TrimSpace(key) == "" && p.Secret == "":
+	case !f.Kind.SignIn && !selfHosted && strings.TrimSpace(key) == "" && p.Secret == "":
 		return errors.New("form.nokey")
 	case f.Kind.CustomEnv && checkCredentialEnv(f.Env) != nil:
 		return errors.New("providers.badenv")
@@ -1056,7 +1057,7 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 			return
 		}
 		if strings.TrimSpace(key) == "" {
-			if p.Kind == "chatgpt-subscription" {
+			if k, _ := kindOf(p.Kind); k.SignIn {
 				show(w.checkChatGPT(r, n))
 				return
 			}

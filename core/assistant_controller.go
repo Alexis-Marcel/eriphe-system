@@ -457,11 +457,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	// carries the thread over instead (brain_context.go).
 	_, agent, _ := c.conf().agent(a.Agent)
 	st := c.assistantStatus(a.Name)
-	runtime := st.SessionRuntime
-	if runtime == "" {
-		runtime = "claude-code" // sessions kept before their harness was
-	}
-	if resume && st.Session != "" && runtime == agent.Runtime {
+	if resume && st.Session != "" && st.SessionRuntime == agent.Runtime {
 		extra.Resume = st.Session
 	}
 	first := r.StartPrompt

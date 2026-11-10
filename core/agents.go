@@ -99,8 +99,8 @@ func checkProviderEntry(name string, p Provider) error {
 		return fmt.Errorf("provider %s: a %s provider's variable is %s, it takes no env", name, p.Kind, k.Env)
 	}
 	// Its sign-in is refreshed, and the new tokens kept: in the vault.
-	if p.Kind == "chatgpt-subscription" && !strings.HasPrefix(p.Secret, vaultPrefix) {
-		return fmt.Errorf("provider %s: a ChatGPT subscription is signed in from the workspace, its secret is vault:<name>", name)
+	if k.SignIn && !strings.HasPrefix(p.Secret, vaultPrefix) {
+		return fmt.Errorf("provider %s: a %s provider is signed in from the workspace, its secret is vault:<name>", name, p.Kind)
 	}
 	return nil
 }
@@ -137,7 +137,7 @@ func (c *Config) checkAgentEntry(name string, a Agent) error {
 	if want := k.ModelNS + "/"; harnessOf(a.Runtime).ProviderModels && !strings.HasPrefix(a.Model, want) {
 		return fmt.Errorf("agent %s: an %s model with a %s provider is %s<model>, not %q", name, a.Runtime, p.Kind, want, a.Model)
 	}
-	if a.Runtime == "acp" {
+	if harnessOf(a.Runtime).ByCommand {
 		if err := checkACPCommand(a.Command); err != nil {
 			return fmt.Errorf("agent %s: %w", name, err)
 		}
@@ -145,7 +145,7 @@ func (c *Config) checkAgentEntry(name string, a Agent) error {
 			return fmt.Errorf("agent %s: an ACP agent runs the model of its own settings or command, not %q", name, a.Model)
 		}
 	} else if len(a.Command) > 0 {
-		return fmt.Errorf("agent %s: only an acp agent takes a command, not a %s one", name, a.Runtime)
+		return fmt.Errorf("agent %s: a %s agent takes no command", name, a.Runtime)
 	}
 	for _, pref := range a.Prefers {
 		// Labels are free text, but a preference is one word.
@@ -171,7 +171,8 @@ func (c *Config) agent(name string) (string, Agent, error) {
 // lendAgent reads the credential of an agent's provider for one task.
 func (c *Config) lendAgent(a Agent) (map[string]string, error) {
 	p := c.Providers[a.Provider]
-	if p.Kind == "chatgpt-subscription" {
+	k, _ := kindOf(p.Kind)
+	if k.SignIn {
 		env, err := lendChatGPT(p.Secret)
 		if err != nil {
 			return nil, fmt.Errorf("provider %s: %w", a.Provider, err)
@@ -187,7 +188,6 @@ func (c *Config) lendAgent(a Agent) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", a.Provider, err)
 	}
-	k, _ := kindOf(p.Kind)
 	if k.CustomEnv {
 		return map[string]string{p.Env: v}, nil
 	}
@@ -204,7 +204,7 @@ func (c *Config) modelEndpoint(agentName string, env map[string]string, spec *no
 		return
 	}
 	p := c.Providers[a.Provider]
-	if p.Kind != selfHostedKind || a.Runtime != "opencode" {
+	if p.Kind != selfHostedKind || !harnessOf(a.Runtime).ModelServer {
 		return
 	}
 	if p.Node != "" {

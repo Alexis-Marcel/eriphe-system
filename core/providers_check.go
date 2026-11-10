@@ -56,14 +56,11 @@ func checkProvider(ctx context.Context, lang, kind, key string) testView {
 	if other := misplaced(kind, key); other != "" {
 		return bad("ptest.misplaced", tr(lang, "kind."+other))
 	}
-	if kind == "claude-subscription" {
-		if !strings.HasPrefix(key, "sk-ant-oat") || len(key) < 40 {
+	if k, _ := kindOf(kind); k.Untested != "" {
+		if k.Prefix != "" && (!strings.HasPrefix(key, k.Prefix) || len(key) < k.MinLen) {
 			return bad("ptest.notoken")
 		}
-		return testView{State: "info", Text: tr(lang, "ptest.subscription")}
-	}
-	if kind == "chatgpt-subscription" {
-		return testView{State: "info", Text: tr(lang, "ptest.chatgpt")}
+		return testView{State: "info", Text: tr(lang, k.Untested)}
 	}
 	endpoint, ok := checkEndpoints[kind]
 	if !ok {

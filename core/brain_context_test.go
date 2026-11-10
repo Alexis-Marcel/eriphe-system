@@ -133,7 +133,7 @@ func startedBrain(t *testing.T, c *core, resume bool) *TaskRow {
 func TestContextPackOnlyFresh(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	say(t, c, roleUser, "Rappelle-moi le devis", true)
-	setBrainStatus(c, func(st *AssistantStatus) { st.Session = "s-1" })
+	setBrainStatus(c, func(st *AssistantStatus) { st.Session, st.SessionRuntime = "s-1", "claude-code" })
 	if task := startedBrain(t, c, true); task.Prompt != brainStartPrompt {
 		t.Fatalf("resumed session got: %q", task.Prompt)
 	}

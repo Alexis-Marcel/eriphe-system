@@ -113,7 +113,7 @@ func TestResidentMovesOffOfflineNode(t *testing.T) {
 	if task, _ := c.store.task(old); task.Node != "laptop" {
 		t.Fatalf("fallback on %q", task.Node)
 	}
-	setBrainStatus(c.core, func(st *AssistantStatus) { st.Session = "s-1" })
+	setBrainStatus(c.core, func(st *AssistantStatus) { st.Session, st.SessionRuntime = "s-1", "claude-code" })
 	c.store.updateTask(old, map[string]any{"state": stateIdle})
 	c.store.addMessage(roleUser, "Tu es là ?", false)
 	c.tendAssistants(ctx, "tok") // delivered to its inbox
