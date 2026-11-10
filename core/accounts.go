@@ -100,10 +100,7 @@ func (a svcAccount) signedIn() bool { return a.Auth.OAuthTokenEnv != "" }
 
 // The stems of a connection's token variable; their names stay those of
 // the installs that have them.
-const (
-	mailTokenEnv = "MAIL_GOOGLE_TOKEN"
-	calTokenEnv  = "CALENDAR_GOOGLE_TOKEN"
-)
+const ()
 
 // svcConfig is the server's configuration.
 type svcConfig struct {

@@ -32,35 +32,7 @@ const (
 	filesServer    = "fichiers"
 	filesImage     = "ghcr.io/alexis-marcel/eriphe-files"
 	filesConfigEnv = "FILES_CONFIG"
-	driveTokenEnv  = "FILES_GOOGLE_TOKEN" // an account's is FILES_GOOGLE_TOKEN_<hash> (driveTokenEnvOf)
 )
-
-// CloudConfig is what an older configuration may still carry, from when
-// Eriphe had a shared Google app behind a sign-in relay: both fields are
-// read and ignored (legacyCloud says so at start). A Drive connected
-// through that app keeps working until its client is deleted; connecting
-// again takes the user's own app.
-type CloudConfig struct {
-	GoogleClientFile string `json:"google_client_file,omitempty"`
-	BounceURL        string `json:"bounce_url,omitempty"`
-}
-
-// legacyCloud is the log line for a configuration that still names the
-// shared app, or "".
-func (c *Config) legacyCloud() string {
-	if c.Cloud == nil || (c.Cloud.GoogleClientFile == "" && c.Cloud.BounceURL == "") {
-		return ""
-	}
-	return "cloud: google_client_file and bounce_url are not used any more: connect Google Drive with your own Google app (Settings → Tools → Google Drive)"
-}
-
-// errNoGoogleClient is a Google app not saved yet.
-var errNoGoogleClient = errNoAppClient
-
-// googleClient reads the user's Google app (connection_apps.go).
-func googleClient() (oauthApp, error) { return appClient(providerGoogle) }
-
-func storeGoogleClient(app oauthApp) error { return storeAppClient(providerGoogle, app) }
 
 // The files server's configuration, as servers/files reads it.
 
@@ -77,10 +49,6 @@ type filesAccount struct {
 	} `json:"auth"`
 	Scopes []string `json:"scopes,omitempty"`
 }
-
-// signInProvider is the provider the account is signed in at: an account
-// written before providers were named is the first one's, Google.
-func (a filesAccount) signInProvider() string { return cmpOr(a.Provider, providerGoogle.Name) }
 
 // DriveFolder is a folder of the cloud given to Eriphe: the Folder object's
 // cloud source (eriphe-files enforces it).
@@ -187,7 +155,7 @@ func (c *core) putDrive(lang string, change func(*filesConfig), env map[string]E
 		if exists {
 			return c.deleteServer(filesServer)
 		}
-		return errors.New("Google Drive is not connected")
+		return errors.New("the drive is not connected")
 	}
 	raw, _ := json.Marshal(fc)
 	next := map[string]EnvValue{filesConfigEnv: {Value: string(raw)}}
@@ -202,7 +170,8 @@ func (c *core) putDrive(lang string, change func(*filesConfig), env map[string]E
 	mode := putUpdate
 	if !exists {
 		mode = putCreate
-		srv = Server{Use: tr(lang, "preset.gdrive.use")}.withLevel(accessReads)
+		p, _ := connectionPreset(fc.Accounts[0].signInProvider(), toolDrive)
+		srv = Server{Use: tr(lang, "preset."+p.ID+".use")}.withLevel(accessReads)
 	}
 	srv.Run = marshalRun(spec)
 	return c.putServer(mode, filesServer, srv, nil)
@@ -269,10 +238,10 @@ func (c *core) addDriveFolder(account, id, name, access string) error {
 	}
 	account, ok := st.driveAccountName(account)
 	if !ok {
-		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("no such Google Drive account")}
+		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("no such account of the drive")}
 	}
 	if access == "drop" && !st.canWrite(account) {
-		return &catalogError{http.StatusBadRequest, "conn.readonly", "", errors.New("Google Drive was connected for reading only")}
+		return &catalogError{http.StatusBadRequest, "conn.readonly", "", errors.New("the drive was connected for reading only")}
 	}
 	return c.putDrive("", func(fc *filesConfig) {
 		for i, f := range fc.Folders {
@@ -300,7 +269,7 @@ func (c *core) removeDriveFolder(id string) error {
 func (c *core) browseDrive(ctx context.Context, account, parent, page string) ([]driveItem, string, error) {
 	u := c.pool.get(filesServer)
 	if u == nil {
-		return nil, "", errors.New("Google Drive is not connected")
+		return nil, "", errors.New("the drive is not connected")
 	}
 	in := map[string]string{"parent": parent}
 	if account != "" {

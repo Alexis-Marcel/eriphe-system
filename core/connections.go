@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -373,77 +372,11 @@ func (c *core) collectConnectionSecrets() {
 }
 
 // isConnectionSecret tells a connection's token by its vault name: the
-// ones made now, and the ones Google accounts had before connections.
+// ones made now, and the ones accounts had before connections
+// (legacySecretPrefix).
 func isConnectionSecret(name string) bool {
 	parts := strings.Split(name, ".")
-	return len(parts) == 3 && (parts[0] == "connection" || parts[0] == "google") && parts[2] == "token"
-}
-
-// The migration.
-
-// legacyAccountsKey is where Google accounts were kept before connections.
-const legacyAccountsKey = "google_accounts"
-
-// migrateConnections makes a connection of each account kept before
-// connections. Its token keeps its vault name, so no tool's environment
-// changes; it gets where to refresh it.
-func (c *core) migrateConnections() {
-	raw := c.store.get(legacyAccountsKey)
-	if raw == "" {
-		return
-	}
-	var list []struct {
-		Email     string   `json:"email"`
-		Scopes    []string `json:"scopes,omitempty"`
-		Reconnect string   `json:"reconnect,omitempty"`
-		Checked   int64    `json:"checked,omitempty"`
-	}
-	if err := json.Unmarshal([]byte(raw), &list); err != nil {
-		log.Printf("connections: the Google accounts could not be read: %v", err)
-		return
-	}
-	p := providerGoogle
-	now := time.Now().Unix()
-	err := func() error {
-		tx, err := c.store.db.Begin()
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-		for _, a := range list {
-			lapsed := a.Reconnect
-			if lapsed == "the Google app it was connected with is refused" {
-				lapsed = lapsedBadClient
-			}
-			scopes, _ := json.Marshal(a.Scopes)
-			if _, err := tx.Exec(`INSERT OR IGNORE INTO connections (id, provider, identity, scopes, secret, lapsed, checked, created)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, newConnectionID(), p.Name, a.Email, string(scopes), legacyGoogleSecret(a.Email),
-				lapsed, a.Checked, now); err != nil {
-				return err
-			}
-		}
-		if _, err := tx.Exec(`DELETE FROM kv WHERE key = ?`, legacyAccountsKey); err != nil {
-			return err
-		}
-		return tx.Commit()
-	}()
-	if err != nil {
-		log.Printf("connections: the Google accounts were not moved: %v", err)
-		return
-	}
-	if v := currentVault(); v != nil {
-		for _, a := range list {
-			addTokenURL(v, legacyGoogleSecret(a.Email), p.Endpoint.TokenURL)
-		}
-	}
-	log.Printf("connections: %d Google account(s) are connections now", len(list))
-}
-
-// legacyGoogleSecret is the vault name a Google account's token had before
-// connections; it keeps it.
-func legacyGoogleSecret(email string) string {
-	h := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(email))))
-	return "google." + hex.EncodeToString(h[:6]) + ".token"
+	return len(parts) == 3 && (parts[0] == "connection" || parts[0] == legacySecretPrefix) && parts[2] == "token"
 }
 
 // addTokenURL writes where to refresh a kept token in it, if it does not

@@ -363,17 +363,18 @@ device" on its card: that token lets it take its name over (on Windows, add `-Re
 
 To give Eriphe folders of a Google Drive: Settings → Tools → Add a tool → **Google Drive**.
 
-1. Create your own Google app, once: the page lists the steps in the Google Cloud console and shows
-   the exact redirect URI to paste (`https://<workspace>/oauth/callback`), with a Copy button; then
-   give it the JSON the console downloads (or the client ID and secret). The same steps, with
-   Google's rules and sources: [docs/google-drive.md](../docs/google-drive.md).
-2. "Connecter Google Drive" opens Google's page. Tick "Permettre à Eriphe de déposer des
-   résultats" first if Eriphe may add files (always in an `Eriphe` subfolder of the folders you
-   allow; it never changes or deletes yours); without it, Eriphe only reads. Google says "Google
+1. Create your own Google app, once: "Créer mon app" leads to its page, which lists the steps in
+   the Google Cloud console and shows the exact redirect URI to paste
+   (`https://<workspace>/oauth/callback`), with a Copy button; then give it the JSON the console
+   downloads (or the client ID and secret). The same steps, with Google's rules and sources:
+   [docs/google.md](../docs/google.md). "Tester" on that page checks it.
+2. Back on the connect page, Drive is ticked: tick "Permettre à Eriphe d'écrire" if Eriphe may add
+   files (always in an `Eriphe` subfolder of the folders you allow; it never changes or deletes
+   yours); without it, Eriphe only reads. "Se connecter" opens Google's page. Google says "Google
    hasn't verified this app": it is your own app. Click "Advanced", then "Go to Eriphe".
-3. Back in the workspace, wait a few seconds for the Files server to start on a machine, then open
-   the folders and give each one "en lecture" or "lecture + dépôt". Eriphe sees only those folders
-   and what is inside them.
+3. Back in Settings → Tools, the account is a card; wait a few seconds for the Files server to
+   start on a machine, then open **Lieux** on its Drive row and give each folder "Donner en
+   lecture" or "Lecture + dépôt". Eriphe sees only those folders and what is inside them.
 
 Google only sends back to an https address whose name ends in a public domain: a workspace opened
 at an IP address (`https://192.168.1.2:8443`) or at `eriphe.local` cannot connect Drive. Turn on

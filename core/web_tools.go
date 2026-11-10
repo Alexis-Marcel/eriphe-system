@@ -162,7 +162,7 @@ func presetOf(lang string, s Server) (toolPreset, string) {
 		return p, ""
 	}
 	if fc, ok := filesConfigOf(Server{Run: marshalRun(spec)}); ok {
-		provider := providerGoogle.Name
+		provider := filesAccount{}.signInProvider()
 		if len(fc.Accounts) > 0 {
 			provider = fc.Accounts[0].signInProvider()
 		}
@@ -1003,12 +1003,11 @@ func (w *web) handleDeleteTool(rw http.ResponseWriter, r *http.Request, s *sessi
 	rw.WriteHeader(http.StatusOK)
 }
 
-// accountPassword is the password typed for a mailbox or calendar account.
-// Google shows its app passwords in groups of four letters: the spaces
-// copied with them are not part of it.
+// accountPassword is the password typed for a mailbox or calendar account,
+// without the spaces of a provider that shows it in groups (SpacedPassword).
 func accountPassword(r *http.Request, f toolForm) string {
 	pw := r.PostFormValue("password")
-	if f.Preset.Form == "mail" && f.Mail.Provider == "gmail" {
+	if c, ok := mailChoiceByID(f.Mail.Provider); ok && f.Preset.Form == "mail" && c.SpacedPassword {
 		pw = strings.ReplaceAll(pw, " ", "")
 	}
 	return pw

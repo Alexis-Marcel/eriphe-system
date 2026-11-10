@@ -61,9 +61,6 @@ func main() {
 	// The container runs in UTC: every time shown to me or the brain is in my zone.
 	time.Local = cfg.location
 	log.Printf("time zone: %s", cfg.TimeZone)
-	if m := cfg.legacyCloud(); m != "" {
-		log.Print(m)
-	}
 	store, err := openStore(cfg.DB)
 	if err != nil {
 		log.Fatalf("store: %v", err)

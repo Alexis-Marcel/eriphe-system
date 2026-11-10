@@ -346,7 +346,7 @@ func (w *web) deleteAccount(rw http.ResponseWriter, r *http.Request, name string
 	}
 	if a.signedIn() {
 		// the Google account's page takes it away, with its token
-		w.toast(rw, tr(w.lang(r), "accounts.googleremove"), false)
+		w.toast(rw, tr(w.lang(r), "accounts.connremove"), false)
 		return
 	}
 	if err := w.c.dropAccount(svc, a.Name); err != nil {

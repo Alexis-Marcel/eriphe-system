@@ -38,8 +38,6 @@ type Config struct {
 	Servers map[string]Server `json:"servers,omitempty"`
 	// What tasks use with their own programs, its secret kept here (lent_access.go).
 	Accesses map[string]Access `json:"accesses,omitempty"`
-	// Ignored: the shared Google app of older versions (cloud.go, legacyCloud).
-	Cloud *CloudConfig `json:"cloud,omitempty"`
 
 	// The run specs of the catalog's local servers, by name (services.go).
 	runSpecs map[string]RunSpec
