@@ -65,8 +65,7 @@ func TestAddDialogTiles(t *testing.T) {
 }
 
 // Each kind of preset has its step: the form (or the kinds of account)
-// with a way back, Google Drive what it takes and its page, "Autre service"
-// its address. Without the dialog, each is its own page as before.
+// with a way back, "Autre service" its address. Without the dialog, each is its own page as before.
 func TestAddDialogSteps(t *testing.T) {
 	tw, _, _ := catalogWeb(t, nil)
 	for _, tc := range []struct {
@@ -122,13 +121,7 @@ func TestAddDialogSteps(t *testing.T) {
 			if h == nil {
 				plain += map[bool]string{true: "&", false: "?"}[strings.Contains(plain, "?")] + "dialog=1"
 			}
-			code, page, hdr := tw.do("GET", plain, nil, h)
-			if strings.Contains(tc.path, "gdrive") {
-				if code != http.StatusSeeOther || hdr.Get("Location") != "/settings/drive" {
-					t.Errorf("drive without the dialog: %d %s", code, hdr.Get("Location"))
-				}
-				continue
-			}
+			code, page, _ := tw.do("GET", plain, nil, h)
 			if code != 200 || !strings.Contains(page, "<html") || !strings.Contains(page, `class="back"`) || strings.Contains(page, `name="dialog"`) {
 				t.Errorf("%s without the dialog (%v): %d, not its page", tc.path, h, code)
 			}

@@ -258,10 +258,6 @@ func entrySecret(prefix, name, slot string) string {
 	return s
 }
 
-func serverSecretPrefix(name string) []string {
-	return []string{"server." + name + ".", "service." + name + "."}
-}
-
 // envSlot is the slot of a local server's environment variable.
 func envSlot(env string) string { return strings.ToLower(env) }
 

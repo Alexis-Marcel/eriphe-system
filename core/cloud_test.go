@@ -344,9 +344,8 @@ func TestDriveRoundTrip(t *testing.T) {
 	if tok["refresh_token"] != "the-refresh" || tok["client_id"] != testClientID || tok["client_secret"] != testClientSecret {
 		t.Fatalf("token lent: %v", tok)
 	}
-	st := c.driveState()
-	if !st.Mine || !st.CanWrite || len(st.Folders) != 0 {
-		t.Fatalf("state: %+v", st)
+	if acc := c.placeAccounts(filesServer); len(acc) != 1 || !acc[0].CanWrite || len(c.places()) != 0 {
+		t.Fatalf("accounts: %+v", acc)
 	}
 
 	// The folders, through the files server's setup tool, which tasks never get.
@@ -390,7 +389,7 @@ func TestDriveRoundTrip(t *testing.T) {
 		t.Fatalf("a Drive folder lent as a machine's: %v", err)
 	}
 	tw.post("/settings/folders/delete", url.Values{"source": {sourcePlace}, "name": {"Compta (2)"}}, csrf)
-	if f := c.cloudFolders(); len(f) != 1 || f[0].ID != "compta" {
+	if f := c.places(); len(f) != 1 || f[0].ID != "compta" {
 		t.Fatalf("after remove: %+v", f)
 	}
 	if spec, _ := decodeRun(c.conf().Servers[filesServer].Run); spec.Env[driveTokenEnvOf("sam@example.org")].File == "" {
@@ -402,10 +401,10 @@ func TestDriveRoundTrip(t *testing.T) {
 	_, _, h = tw.post("/settings/connections/google/connect", url.Values{"tool": {toolDrive}}, csrf)
 	state = g.authorize(t, h.Get("HX-Redirect"))
 	tw.do("GET", "/oauth/callback?code=the-code&state="+url.QueryEscape(state), nil, nil)
-	if st := c.driveState(); st.CanWrite || st.Folders[0].Access != "read" {
-		t.Fatalf("read only: %+v", st)
+	if acc, f := c.placeAccounts(filesServer), c.places(); acc[0].CanWrite || f[0].Access != accessRead {
+		t.Fatalf("read only: %+v %+v", acc, f)
 	}
-	if err := c.addDriveFolder("", "compta", "Compta", "drop"); err == nil {
+	if err := c.givePlace(filesServer, "", "compta", "Compta", accessDrop); err == nil {
 		t.Fatal("write right without the scope")
 	}
 }
@@ -533,7 +532,9 @@ func TestDriveRefusals(t *testing.T) {
 	}
 	// A tool of the same name that is not eriphe-files is left alone.
 	c.putServer(putCreate, filesServer, Server{URL: "https://x.example/mcp", Auth: &ServerAuth{None: true}, Use: "x"}, nil)
-	wantKey(t, c.addDriveFolder("", "a", "A", "read"), "conn.taken")
+	if err := c.givePlace(filesServer, "", "a", "A", accessRead); err == nil {
+		t.Fatal("a place given to a tool that keeps none")
+	}
 }
 
 func samSecret(t *testing.T, c *core) string {
@@ -571,5 +572,34 @@ func putLegacyDrive(t *testing.T, c *core, lang, tok string) {
 	}, map[string]EnvValue{driveTokenEnv: {File: vaultPrefix + ref}})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The files tool can write when one of its accounts granted writing,
+// whichever comes last, and only reconnects when none did.
+func TestFilesTokenScopeOfAccounts(t *testing.T) {
+	_, c, _ := filesCore(t, nil)
+	put := func(scopes ...[]string) Server {
+		t.Helper()
+		if err := c.putDrive("fr", func(fc *filesConfig) {
+			fc.Accounts = nil
+			for i, s := range scopes {
+				a := filesAccount{Name: string(rune('a'+i)) + "@example.org", Provider: "google", Scopes: s}
+				a.Auth.TokenEnv = driveTokenEnvOf(a.Name)
+				fc.Accounts = append(fc.Accounts, a)
+			}
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+		return c.conf().Servers[filesServer].withLevel(accessReads)
+	}
+	if s := c.tokenScope(filesServer, put([]string{scopeDrive}, []string{scopeDriveReadonly})); s.Granted != grantedWrite || s.Reconnect {
+		t.Errorf("a writer, then a reader: %+v", s)
+	}
+	if s := c.tokenScope(filesServer, put([]string{scopeDriveReadonly}, []string{scopeDrive})); s.Granted != grantedWrite || s.Reconnect {
+		t.Errorf("a reader, then a writer: %+v", s)
+	}
+	if s := c.tokenScope(filesServer, put([]string{scopeDriveReadonly})); s.Granted != grantedRead || !s.Reconnect {
+		t.Errorf("readers only: %+v", s)
 	}
 }

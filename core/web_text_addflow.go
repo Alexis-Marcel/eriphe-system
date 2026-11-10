@@ -32,10 +32,6 @@ var addFlowStrings = map[string]map[string]string{
 		"leaving.title":       "Direction %s",
 		"leaving.lead":        "%s te demande d'autoriser Eriphe. Une fois fait, tu reviens ici et {{name}} vérifie la connexion.",
 		"leaving.go":          "Continuer vers %s",
-		"drivestep.needs":     "Il faut une app Google à toi, créée dans ta console Google Cloud (quelques minutes, pas à pas), ton accord sur le compte, puis les dossiers que tu donnes à {{name}}.",
-		"drivestep.page":      "Tout cela tient sur une page à part, où tu reviens pour changer les dossiers.",
-		"drivestep.go":        "Ouvrir le guide",
-		"drivestep.manage":    "Gérer Google Drive",
 	},
 	"en": {
 		"step.back":           "Back",
@@ -56,9 +52,5 @@ var addFlowStrings = map[string]map[string]string{
 		"leaving.title":       "Off to %s",
 		"leaving.lead":        "%s asks you to authorize Eriphe. Once done, you come back here and {{name}} checks the connection.",
 		"leaving.go":          "Continue to %s",
-		"drivestep.needs":     "It takes a Google app of your own, made in your Google Cloud console (a few minutes, step by step), your consent on the account, then the folders you give to {{name}}.",
-		"drivestep.page":      "All of it is on a page of its own, where you come back to change the folders.",
-		"drivestep.go":        "Open the guide",
-		"drivestep.manage":    "Manage Google Drive",
 	},
 }

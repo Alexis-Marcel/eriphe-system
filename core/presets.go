@@ -360,7 +360,7 @@ func (f mailForm) account(old *svcAccount) (svcAccount, error) {
 }
 
 // mailFormOf reads the form back from a mailbox of eriphe-mail; ok is
-// false for one on a Google account's token (its page, not this form).
+// false for one on a connection's token (Settings → Tools, not this form).
 func mailFormOf(a svcAccount) (mailForm, bool) {
 	f := mailForm{Address: a.Address, Provider: a.Provider}
 	if a.IMAP != nil && a.SMTP != nil {
@@ -387,9 +387,9 @@ func mailFormOf(a svcAccount) (mailForm, bool) {
 
 // Calendar: a CalDAV account of eriphe-calendar with an app password
 // (accounts.go).
-// Google Calendar is connected with the Google account (its page,
-// web_google.go); Microsoft needs an OAuth token lent by eriphe-core, which
-// it does not do yet: it is shown as coming soon.
+// A calendar on a connection is added from Settings → Tools, with the
+// account (web_connections.go); Microsoft needs an OAuth token lent by
+// eriphe-core, which it does not do yet: it is shown as coming soon.
 type calChoice struct {
 	ID       string
 	NeedsURL bool   // the server's address is asked
