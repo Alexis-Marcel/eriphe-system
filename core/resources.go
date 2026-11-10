@@ -52,11 +52,11 @@ func atLeast(a, b string) bool { return accessRank[a] >= accessRank[b] && access
 
 // resourceKinds are the kinds and the rights each takes.
 var resourceKinds = map[string][]string{
-	resRepo:        {accessRead, accessWrite},
-	resFolder:      {accessRead, accessDrop, accessWrite},
-	resPlace:       {accessRead, accessDrop},
-	resTool:        {accessRead, accessWrite},
-	resAccess:      {}, // it has no scale: what it can do is the provider's (access.go)
+	resRepo:   {accessRead, accessWrite},
+	resFolder: {accessRead, accessDrop, accessWrite},
+	resPlace:  {accessRead, accessDrop},
+	resTool:   {accessRead, accessWrite},
+	resAccess: {}, // it has no scale: what it can do is the provider's (access.go)
 }
 
 // ResourceRef is one thing lent to a task. Branch, Base and Dir are a

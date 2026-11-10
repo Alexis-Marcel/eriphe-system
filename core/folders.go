@@ -610,8 +610,8 @@ type folderView struct {
 	Lend   string `json:"lend"` // how the brain lends it to a task
 	// A machine's folder: who decides a task's writes, free or approval
 	// (folder_values.go).
-	Drop   string `json:"drop,omitempty"`
-	Manage string `json:"manage,omitempty"`
+	Drop    string `json:"drop,omitempty"`
+	Manage  string `json:"manage,omitempty"`
 	Tool    string `json:"tool,omitempty"`     // a place's tool
 	PlaceID string `json:"place_id,omitempty"` // … and its id there
 	// A machine's folder: its copies on the user's other machines
