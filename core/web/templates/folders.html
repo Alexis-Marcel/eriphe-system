@@ -110,7 +110,7 @@
   {{range .Data.Drive}}
     <li class="tile">
       <div class="tile-head">
-        <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>Google Drive</span>
+        <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{.Tool}}</span>
         <span class="tile-actions">
         <form hx-post="/settings/folders/delete" hx-confirm="{{tf "folders.deleteconfirm" .Name}}" class="inline">
           <input type="hidden" name="source" value="{{.Source}}">

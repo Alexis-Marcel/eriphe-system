@@ -1103,7 +1103,7 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 "resources": [
   {"kind": "repo", "ref": "me/site", "access": "write", "branch": "eriphe/fix-menu", "base": "main"},
   {"kind": "folder", "ref": "Clients", "access": "drop"},
-  {"kind": "drive-folder", "ref": "Factures"},
+  {"kind": "place", "ref": "Factures"},
   {"kind": "tool", "ref": "github.get_*"}
 ]
 ```
@@ -1112,7 +1112,7 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 |---|---|---|---|
 | `repo` | `owner/name` on GitHub, or a git URL; `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` | cloned into `/work/repo`; [credentials](#github-in-a-task) for it; its skills if it is the user's own or trusted (below); one per task |
 | `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
-| `drive-folder` | a Google Drive folder, by name | `read`, `drop` (at most the folder's own) | for now, the files server whole (it reaches every Drive folder given to Eriphe, each with its own access) |
+| `place` | a tool's place (a Google Drive folder), by name; `drive-folder` is read as `place` | `read`, `drop` (at most the place's own) | its tool whole (it reaches every place given to Eriphe, each with its own access) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
 
 The access defaults to `read` (for a tool, to what its annotations say). Each entry is checked
@@ -1948,15 +1948,25 @@ that list, and may only restrict it: take a folder off, lower its level, turn it
 cannot add a folder, raise one (not even back to `max`), nor look into a machine. A name shared by two machines is told
 apart as `Name (machine)`.
 
-**Two sources, one list.** A folder is on a machine (here) or in the user's Google Drive (see
-[Google Drive](#google-drive-cloud-folders)). Settings → Dossiers, `GET /v1/folders` and
-`list_folders` show both, each with its `source` (`machine` or `google-drive`) and `lend`, how a
-task gets it. Each source keeps its own store and its own enforcement: a machine's folder is in its node's list
-and mounted by its node; a Drive folder stays in the files server's `FILES_CONFIG`,
-which eriphe-files reads and enforces itself, and is lent through that catalog tool (`tools:
-["fichiers"]`, which reaches every Drive folder given to Eriphe), not through `folders`, which
-refuses it with that hint. Drive folders are added on Settings → Tools → Google Drive; "Ne plus
-partager" in Settings → Dossiers removes either kind.
+**Two sources, one list.** A folder is on a machine (here) or a tool's place (a Google Drive
+folder, see [Places](#places)). Settings → Dossiers, `GET /v1/folders` and `list_folders` show
+both, each with its `source` (`machine`, or `place` with its `tool` and `place_id`) and `lend`, how
+a task gets it. Each source keeps its own store and its own enforcement: a machine's folder is in
+its node's list and mounted by its node; a place stays in its tool's configuration, which its
+server reads and enforces itself, and is lent as `{kind: place}` (its tool whole), not through
+`folders`, which refuses it with that hint. Drive folders are added on Settings → Tools → Google
+Drive; "Ne plus partager" in Settings → Dossiers removes either kind.
+
+### Places
+
+A place is what a tool reaches inside it and the user picked, with its own access (`read`, or
+`drop`: also new files in its results subfolder): a drive's folders (`places.go`). A tool has
+places when its data says where it keeps them (`placeKeepers`: its image, the JSON variable of its
+environment and the key of the list in it; eriphe-files keeps them as `folders` in
+`FILES_CONFIG`), so it is found by having places, never by its name, and an install's folders are
+its places as they are, with no migration. The tool browses them with a setup tool
+(`eriphe/setup`, never given to a task). Lent to a task as `{kind: place}`, a place lends its whole
+tool. `{kind: drive-folder}`, the name before, is read as a place for good.
 
 **Who decides a write.** The level says what a task may reach; who decides is set per folder,
 like a tool's grid: lending it at `drop`, and at `manage` (lent as `write`), is Free (the default)

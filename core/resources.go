@@ -23,7 +23,7 @@ import (
 //
 //	{"kind": "repo",         "ref": "owner/site", "access": "write", "branch": "eriphe/fix", "base": "main"}
 //	{"kind": "folder",       "ref": "Clients",    "access": "drop"}
-//	{"kind": "drive-folder", "ref": "Factures",   "access": "read"}
+//	{"kind": "place",        "ref": "Factures",   "access": "read"}
 //	{"kind": "tool",         "ref": "github.get_*"}
 //	{"kind": "access",       "ref": "npm"}
 //
@@ -36,7 +36,7 @@ import (
 const (
 	resRepo        = "repo"
 	resFolder      = "folder"
-	resDriveFolder = "drive-folder"
+	resDriveFolder = "drive-folder" // read as a place (places.go)
 	resTool        = "tool"
 	resAccess      = "access"
 )
@@ -52,19 +52,19 @@ func atLeast(a, b string) bool { return accessRank[a] >= accessRank[b] && access
 
 // resourceKinds are the kinds and the rights each takes.
 var resourceKinds = map[string][]string{
-	resRepo:        {accessRead, accessWrite},
-	resFolder:      {accessRead, accessDrop, accessWrite},
-	resDriveFolder: {accessRead, accessDrop},
-	resTool:        {accessRead, accessWrite},
-	resAccess:      {}, // it has no scale: what it can do is the provider's (access.go)
+	resRepo:   {accessRead, accessWrite},
+	resFolder: {accessRead, accessDrop, accessWrite},
+	resPlace:  {accessRead, accessDrop},
+	resTool:   {accessRead, accessWrite},
+	resAccess: {}, // it has no scale: what it can do is the provider's (access.go)
 }
 
 // ResourceRef is one thing lent to a task. Branch, Base and Dir are a
 // repository's only.
 type ResourceRef struct {
-	Kind   string `json:"kind" jsonschema:"repo, folder, drive-folder, tool, access or file"`
-	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or drive-folder its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access (a credential) its name in list_tools' accesses"`
-	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); drive-folder: read or drop; at most the folder's own level; tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
+	Kind   string `json:"kind" jsonschema:"repo, folder, place, tool, access or file"`
+	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name on GitHub or a git URL; folder or place its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access (a credential) its name in list_tools' accesses"`
+	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); place: read or drop; at most the place's own level; tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
 	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create and push to; with access write, the user is asked on a card unless it is their own clean turn"`
 	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
 	Dir    string `json:"dir,omitempty" jsonschema:"repo: the working directory inside the repository, if not its root"`
@@ -79,7 +79,7 @@ type ResourceRef struct {
 // key tells two entries for the same thing apart from different ones.
 func (r ResourceRef) key() string {
 	switch r.Kind {
-	case resFolder, resDriveFolder:
+	case resFolder, resPlace, resDriveFolder:
 		return r.Kind + "|" + strings.ToLower(r.Ref)
 	}
 	return r.Kind + "|" + r.Ref
@@ -106,9 +106,12 @@ func normalizeResources(r runRequest) ([]ResourceRef, error) {
 			Access: strings.ToLower(strings.TrimSpace(in.Access)),
 			Branch: strings.TrimSpace(in.Branch), Base: strings.TrimSpace(in.Base), Dir: strings.TrimSpace(in.Dir),
 			TrustSkills: in.TrustSkills, Hold: in.Hold}
+		if e.Kind == resDriveFolder {
+			e.Kind = resPlace
+		}
 		rights, ok := resourceKinds[e.Kind]
 		if !ok {
-			return nil, fmt.Errorf("resource %d: kind %q is not one of repo, folder, drive-folder, tool, access", i+1, in.Kind)
+			return nil, fmt.Errorf("resource %d: kind %q is not one of repo, folder, place, tool, access", i+1, in.Kind)
 		}
 		if e.Ref == "" {
 			return nil, fmt.Errorf("resource %d (%s): ref is required", i+1, e.Kind)
@@ -184,8 +187,8 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 		case resFolder:
 			f, err := c.store.folder(e.Ref)
 			if err != nil {
-				if c.driveFolder(e.Ref) != nil {
-					return nil, fmt.Errorf("folder %q is in Google Drive: lend it as {kind: drive-folder, ref: %q}", e.Ref, e.Ref)
+				if p := c.placeNamed(e.Ref); p != nil {
+					return nil, fmt.Errorf("folder %q is a place of the tool %s: lend it as {kind: place, ref: %q}", e.Ref, p.Tool, e.Ref)
 				}
 				return nil, fmt.Errorf("folder %q: unknown (see list_folders)", e.Ref)
 			}
@@ -195,21 +198,21 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 				return nil, fmt.Errorf("folder %q is opened to Eriphe for %s only: it cannot be lent %s", f.Name, f.Access, e.Access)
 			}
 			names = append(names, f.Name)
-		case resDriveFolder:
-			d := c.driveFolder(e.Ref)
-			if d == nil {
+		case resPlace:
+			p := c.placeNamed(e.Ref)
+			if p == nil {
 				if _, err := c.store.folder(e.Ref); err == nil {
 					return nil, fmt.Errorf("folder %q is on a machine: lend it as {kind: folder, ref: %q}", e.Ref, e.Ref)
 				}
-				return nil, fmt.Errorf("Drive folder %q: unknown (see list_folders)", e.Ref)
+				return nil, fmt.Errorf("place %q: unknown (see list_folders)", e.Ref)
 			}
-			e.Ref = d.Name
-			if !atLeast(orStr(d.Access, accessRead), e.Access) {
-				return nil, fmt.Errorf("Drive folder %q is opened to Eriphe for %s only: it cannot be lent %s", d.Name, d.Access, e.Access)
+			e.Ref = p.Name
+			if !atLeast(p.Access, e.Access) {
+				return nil, fmt.Errorf("place %q is opened to Eriphe for %s only: it cannot be lent %s", p.Name, p.Access, e.Access)
 			}
-			// For now the files server is lent whole: it reaches every Drive
-			// folder given to Eriphe, and enforces each one's access itself.
-			grant = append(grant, filesServer)
+			// Its tool is lent whole: it reaches every place given to
+			// Eriphe, and enforces each one's access itself.
+			grant = append(grant, p.Tool)
 		case resTool:
 			if _, err := c.conf().checkGrant([]string{e.Ref}); err != nil {
 				return nil, err
@@ -356,9 +359,9 @@ func (c *core) taintedResources(r runRequest) error {
 		case e.Kind == resFolder: // a write is asked on the start's card (folder_values.go)
 		case e.Access == accessWrite || e.Access == accessDrop:
 			writes = append(writes, e.String())
-		case e.Kind == resDriveFolder:
-			if len(c.actingGrant([]string{filesServer})) > 0 {
-				acting = append(acting, e.String()+" through "+filesServer+", which can write in every Drive folder")
+		case e.Kind == resPlace:
+			if p := c.placeNamed(e.Ref); p != nil && len(c.actingGrant([]string{p.Tool})) > 0 {
+				acting = append(acting, e.String()+" through "+p.Tool+", which can write in every place")
 			}
 		}
 	}

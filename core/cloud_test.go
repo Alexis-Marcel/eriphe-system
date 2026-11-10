@@ -377,13 +377,13 @@ func TestDriveRoundTrip(t *testing.T) {
 	if _, body, _ := tw.do("GET", "/settings/folders", nil, nil); !strings.Contains(body, "Compta (2)") || !strings.Contains(body, "Dans ton Google Drive") {
 		t.Fatalf("folders page: %s", body)
 	}
-	if fs, _ := c.folderViews(); len(fs) != 2 || fs[0].Source != sourceDrive || fs[0].Drive != "compta" || !strings.Contains(fs[0].Lend, filesServer) {
+	if fs, _ := c.folderViews(); len(fs) != 2 || fs[0].Source != sourcePlace || fs[0].PlaceID != "compta" || fs[0].Tool != filesServer || !strings.Contains(fs[0].Lend, filesServer) {
 		t.Fatalf("views: %+v", fs)
 	}
-	if _, _, err := c.folderGrant([]string{"compta"}); err == nil || !strings.Contains(err.Error(), "Google Drive") {
+	if _, _, err := c.folderGrant([]string{"compta"}); err == nil || !strings.Contains(err.Error(), "is a place") {
 		t.Fatalf("a Drive folder lent as a machine's: %v", err)
 	}
-	tw.post("/settings/folders/delete", url.Values{"source": {sourceDrive}, "name": {"Compta (2)"}}, csrf)
+	tw.post("/settings/folders/delete", url.Values{"source": {sourcePlace}, "name": {"Compta (2)"}}, csrf)
 	if f := c.cloudFolders(); len(f) != 1 || f[0].ID != "compta" {
 		t.Fatalf("after remove: %+v", f)
 	}

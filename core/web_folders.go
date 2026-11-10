@@ -131,7 +131,7 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 	}
 	d.Guides = shareGuides(d.Machines)
 	for _, v := range views {
-		if v.Source == sourceDrive {
+		if v.Source == sourcePlace {
 			d.Drive = append(d.Drive, v)
 		}
 	}
@@ -148,15 +148,15 @@ func hasFolder(fs []folderView, name string) bool {
 }
 
 // handleDeleteFolder stops sharing a folder: on its machine (taken off its
-// list there), in Google Drive, or one given from here before.
+// list there), a tool's place, or one given from here before.
 func (w *web) handleDeleteFolder(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PostFormValue("name")
 	var err error
 	switch r.PostFormValue("source") {
-	case sourceDrive:
-		// A Drive folder lives in the files server's configuration (cloud.go).
-		if d := w.c.driveFolder(name); d != nil {
-			err = w.c.removeDriveFolder(d.ID)
+	case sourcePlace:
+		// A place lives in its tool's configuration (places.go).
+		if p := w.c.placeNamed(name); p != nil {
+			err = w.c.removePlace(p.Tool, p.ID)
 		} else {
 			err = errNoFolder
 		}

@@ -437,8 +437,8 @@ func (c *core) folderGrant(names []string) ([]*Folder, string, error) {
 	for _, name := range names {
 		f, err := c.store.folder(strings.TrimSpace(name))
 		if err != nil {
-			if c.driveFolder(name) != nil {
-				return nil, "", fmt.Errorf("folder %q is in Google Drive: lend it as {kind: drive-folder, ref: %q}", name, name)
+			if c.placeNamed(name) != nil {
+				return nil, "", fmt.Errorf("folder %q is a place of a tool: lend it as {kind: place, ref: %q}", name, name)
 			}
 			return nil, "", fmt.Errorf("folder %q: unknown (see list_folders)", name)
 		}
@@ -589,30 +589,31 @@ func folderInstructions(fs []*Folder, results string) string {
 // channel not trusted, a tool's result run on a card.
 func taintKey(seq int) string { return fmt.Sprintf("taint_msg:%d", seq) }
 
-// Sources of a folder: a machine (this file), or the user's Google Drive
-// (cloud.go). Both are Folders with a name and an access, listed together;
-// each keeps its own store and enforcement: a machine's folder is in the
-// folders table and mounted by its node, a Drive folder is in the files
-// server's FILES_CONFIG, which eriphe-files reads and enforces itself, and
-// reached through that catalog tool.
+// Sources of a folder: a machine (this file), or a tool's place
+// (places.go). Both are Folders with a name and an access, listed
+// together; each keeps its own store and enforcement: a machine's folder
+// is in the folders table and mounted by its node, a place is in its
+// tool's configuration, which its server enforces itself, and reached
+// through that catalog tool.
 const (
 	sourceMachine = "machine"
-	sourceDrive   = "google-drive"
+	sourcePlace   = "place"
 )
 
 // folderView is a folder for the brain and the workspace, with whether
 // its machine (or the Drive's server) is online, and how a task gets it.
 type folderView struct {
 	*Folder
-	Source string `json:"source"`          // machine or google-drive
+	Source string `json:"source"`          // machine or place
 	Mount  string `json:"mount,omitempty"` // a machine's: where a task finds it
 	Online bool   `json:"online"`
 	Lend   string `json:"lend"` // how the brain lends it to a task
 	// A machine's folder: who decides a task's writes, free or approval
 	// (folder_values.go).
-	Drop   string `json:"drop,omitempty"`
-	Manage string `json:"manage,omitempty"`
-	Drive  string `json:"drive_id,omitempty"` // a Drive folder's id
+	Drop    string `json:"drop,omitempty"`
+	Manage  string `json:"manage,omitempty"`
+	Tool    string `json:"tool,omitempty"`     // a place's tool
+	PlaceID string `json:"place_id,omitempty"` // … and its id there
 	// A machine's folder: its copies on the user's other machines
 	// (folder_copies.go), the machines that may keep one, and whether its
 	// machine cannot send files iCloud Drive keeps in the cloud only.
@@ -623,16 +624,6 @@ type folderView struct {
 	// first then those keeping a copy, each online or not and up to date
 	// or not: a task may run on any of them up to date (folder_copies.go).
 	Machines []folderHolder `json:"machines,omitempty"`
-}
-
-// driveFolder is the Drive folder of that name, if any.
-func (c *core) driveFolder(name string) *DriveFolder {
-	for _, f := range c.cloudFolders() {
-		if strings.EqualFold(f.Name, strings.TrimSpace(name)) {
-			return &f
-		}
-	}
-	return nil
 }
 
 func (c *core) folderViews() ([]folderView, error) {
@@ -662,14 +653,15 @@ func (c *core) folderViews() ([]folderView, error) {
 		fv.Machines = sv.holdersOf(f)
 		out = append(out, fv)
 	}
-	ready := false
-	if u := c.pool.get(filesServer); u != nil {
-		st, _, _ := u.snapshot()
-		ready = st == statusReady
-	}
-	for _, d := range c.cloudFolders() {
-		out = append(out, folderView{Folder: &Folder{Name: d.Name, Access: d.Access}, Source: sourceDrive, Online: ready,
-			Drive: d.ID, Lend: lendHint(resDriveFolder, d.Name, orStr(d.Access, folderRead))})
+	for _, p := range c.places() {
+		ready := false
+		if u := c.pool.get(p.Tool); u != nil {
+			st, _, _ := u.snapshot()
+			ready = st == statusReady
+		}
+		out = append(out, folderView{Folder: &Folder{Name: p.Name, Access: p.Access}, Source: sourcePlace, Online: ready,
+			Tool: p.Tool, PlaceID: p.ID, Lend: lendHint(resPlace, p.Name, p.Access) + "; the task gets the " + p.Tool +
+				" tool, which reaches every place given to Eriphe, each with its own access"})
 	}
 	slices.SortStableFunc(out, func(a, b folderView) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
 	return out, nil
@@ -685,9 +677,6 @@ func lendHint(kind, name, access string) string {
 		hint += `, or "access": "drop" to let the task add its results in its results subfolder`
 	case folderManage:
 		hint += `, or "access": "drop" to let the task add its results in its results subfolder, or "access": "write" to let it change the folder itself (create, change, rename, delete; its machine takes a snapshot first)`
-	}
-	if kind == resDriveFolder {
-		hint += "; for now the task gets the " + filesServer + " tool, which reaches every Drive folder given to Eriphe, each with its own access"
 	}
 	return hint
 }
