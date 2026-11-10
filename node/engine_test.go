@@ -142,7 +142,7 @@ func TestPrepareNow(t *testing.T) {
 		}
 	}
 
-	// From an older eriphe-core: the default image only.
+	// Nothing to prepare: the default image only.
 	cli, dir := fakeCLI(t, "true")
 	n := newNode(options{root: t.TempDir(), docker: cli, image: "worker"})
 	n.prepareNow(nil)

@@ -79,7 +79,7 @@ type TaskSpec struct {
 
 	// The checks of the task's contract, run in its container when a turn
 	// ends, and how many times a failed one goes back to the agent
-	// (turnend.go). None from an eriphe-core without contracts.
+	// (turnend.go). None without a contract.
 	Checks      []TaskCheck `json:"checks,omitempty"`
 	CheckRounds int         `json:"check_rounds,omitempty"`
 
@@ -312,7 +312,7 @@ type node struct {
 
 func newNode(o options) *node {
 	return &node{opt: o, tasks: map[string]*Task{}, services: map[string]*service{}, retired: map[string]*service{}, kick: make(chan struct{}, 1),
-		upd: &updates{root: o.root, install: o.install}, awake: newKeepAwake(o.root), agents: newAgentStore(o.root, o.taskBin), toolchains: newToolchainStore(o.root), prep: preparer{wake: make(chan struct{}, 1)}, access: newAccessState(o.root)}
+		upd: &updates{root: o.root}, awake: newKeepAwake(o.root), agents: newAgentStore(o.root, o.taskBin), toolchains: newToolchainStore(o.root), prep: preparer{wake: make(chan struct{}, 1)}, access: newAccessState(o.root)}
 }
 
 func (n *node) poke() {
@@ -357,6 +357,7 @@ func (n *node) get(id string) *Task {
 func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
+	level := requestLevel(r.URL.Query().Get("context")) // context.go
 	runtimes := []string{}
 	ei := n.engine().info(ctx)
 	if ei.version != "" {
@@ -384,9 +385,9 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		// Its Syncthing's device ID, for the copies of shared folders (syncthing.go).
 		"syncthing": n.syncthingInfo(ctx),
 		// How long the machine's keyboard and mouse have been idle (idle.go).
-		"idle": userIdle(ctx, r.URL.Query()),
+		"idle": userIdle(ctx, level),
 		// What it may tell of the user's session, at the level asked (context.go).
-		"context": machineSession(ctx, requestLevel(r.URL.Query().Get("context"))),
+		"context": machineSession(ctx, level),
 	})
 }
 

@@ -27,3 +27,12 @@ func TestCustomACPCommand(t *testing.T) {
 		t.Errorf("absolute path refused: %v", err)
 	}
 }
+
+// A task always names its runtime: none, or one this node lacks, is unknown.
+func TestRuntimeUnnamed(t *testing.T) {
+	for _, name := range []string{"", "gemini"} {
+		if rt, err := runtimeFor(name); err == nil || rt != nil {
+			t.Errorf("runtime %q: %v, %v", name, rt, err)
+		}
+	}
+}

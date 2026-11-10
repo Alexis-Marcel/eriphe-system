@@ -19,7 +19,7 @@ import (
 // so a laptop works at home and away. It tries them in order when it
 // connects, uses the one that answered for everything else, and moves back
 // to a preferred one as soon as it answers again. node.json keeps them in
-// "cores"; "core" stays the first one, for older versions.
+// "core" when there is one, in "cores" when there are several.
 
 // coreState is the node's view of its addresses; state embeds it.
 type coreState struct {
@@ -81,9 +81,10 @@ func (s *state) setURLs(urls []string) bool {
 	if len(urls) == 0 || slices.Equal(urls, s.saved()) {
 		return false
 	}
-	s.Core = urls[0]
-	s.Cores = nil
-	if len(urls) > 1 {
+	s.Core, s.Cores = "", nil
+	if len(urls) == 1 {
+		s.Core = urls[0]
+	} else {
 		s.Cores = urls
 	}
 	return true

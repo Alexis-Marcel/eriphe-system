@@ -89,7 +89,7 @@ def test_validate_accepts_400():
     _run(test)
 
 
-def test_name_of_an_older_core():
+def test_name_default():
     async def test(session, url):
         assert await api.EripheClient(session, url, TOKEN).async_validate() == "Eriphe"
 
@@ -145,17 +145,12 @@ def test_out():
     assert _run(test) == [api.Message("Sam, Eriphe a quelque chose pour toi.", "Salon")]
 
 
-def test_out_bad_token_and_older_core():
+def test_out_bad_token():
     async def bad(session, url):
         with pytest.raises(api.InvalidAuth):
             await api.EripheClient(session, url, "wrong").async_out([])
 
-    async def older(session, url):
-        with pytest.raises(api.NotSupported):
-            await api.EripheClient(session, url, TOKEN).async_out([])
-
     _run(bad)
-    _run(older, named=False)
 
 
 def test_speakers():

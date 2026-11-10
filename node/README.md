@@ -34,16 +34,15 @@ shows the CA of that hash: a machine in the middle cannot get the join token. It
 eriphe-core for a client certificate of its own (the key never leaves the node), presents it on
 every request, and asks for a new one when a third of its life is left. Without `-ca-hash`:
 
-- an `http://` address still joins, as before, and the node gets the CA and its certificate right
+- an `http://` address still joins, and the node gets the CA and its certificate right
   after, then moves to TLS (it trusts the network for that first exchange, as for the join);
 - an `https://` address must have a publicly trusted certificate, as eriphe-core's Tailscale one
   (`https://eriphe.<tailnet>.ts.net:8800`); eriphe-core's own is refused.
 
 `node.json` keeps the CA (`ca`), the certificate (`cert`) and its key (`key`), next to the secret:
-it stays 0600, a secret of the machine. The addresses stay as given, so an older eriphe-node still
-runs with it, on plain HTTP. A node that joined before TLS needs nothing: on its next connection it
-asks for its certificate with its secret and moves to TLS by itself (against an older eriphe-core,
-which gives none, it stays on plain HTTP). Given `-ca-hash` then, it checks the CA it receives
+it stays 0600, a secret of the machine. The addresses stay as given. A node without a certificate
+needs nothing: on its next connection it asks for its certificate with its secret and moves to TLS
+by itself. Given `-ca-hash` then, it checks the CA it receives
 against it; given a `-ca-hash` that is not the CA it already pinned, it refuses to start.
 To join again under the same name (a reinstalled machine), delete `node.json` and use a rejoin token
 (`eriphe-core join-token -name pc -rejoin`, or "Réinscrire cet appareil" in the workspace): a plain
@@ -60,8 +59,7 @@ eriphe-node -core http://192.0.2.10:8800,https://eriphe.tail1234.ts.net:8800 -jo
 The node connects to the first one that answers (an address that does not answer within 5 s is
 skipped), uses it for everything, and, when it is on a later one, checks every 2 minutes whether
 an earlier one answers again and moves back there: a laptop works at home and away. `node.json`
-keeps them in `cores` (`core` stays the first one, so an older node.json still works and an older
-version still reads the new one). Given again on a later run, `-core` replaces the saved
+keeps one address in `core`, several in `cores`. Given again on a later run, `-core` replaces the saved
 addresses, e.g. to add the remote one to a machine that already joined. The workspace's "Connect a
 device" offers both addresses once remote access is ready.
 
@@ -81,10 +79,7 @@ device" offers both addresses once remote access is ready.
 - **NAS** (or by hand on Linux): run the image with the root at the same path inside and outside, attached to the
   task network (`-task-network`, see Networks) so that tasks reach it at `-callback-url`, with no Docker
   access but eriphe-node engine (`-engine-url`, see [The engine](#eriphe-node-engine)), never the socket
-  itself; see `deploy/nas/compose.yaml` and `deploy/README.md`. The image has no docker CLI. Before the
-  engine, the node reached Docker through `eriphe-node docker-proxy`, a socket proxy now gone: in the
-  container of an install from before, `docker-proxy` only waits, until the install's next layout
-  replaces it with the engine (install/README.md, The machines update themselves). A node that
+  itself; see `deploy/nas/compose.yaml` and `deploy/README.md`. The image has no docker CLI. A node that
   cannot reach its engine (or Docker) at start connects all the same, with no runtime to offer, says
   so in its log ("no container engine here"), and starts again once the engine answers. Until then
   it runs nothing: its tasks stay assigned and wait ("N task(s) wait for it"), and it touches no
@@ -191,16 +186,13 @@ update themselves):
 | `update-needs` | the installer the updater ran | `why`: a step left for the user (`password`, `admin`, `layout`) |
 
 `GET /v1/node` reports them as `update`: `{updater, pin, waiting, requested, status, layout,
-needs}`. Without `updater` (an install from before, or a node set up by hand) the node writes
+needs}`. Without `updater` (a node set up by hand) the node writes
 nothing and eriphe-core offers no update.
 
 An update also brings the machine to the install's layout of its version (install/README.md,
 The machines update themselves): what an install puts there besides eriphe-node, such as
-Syncthing. This build is made for layout 2 (`installLayout`, install.sh's `LAYOUT`). `needs` says
-what the install waits for from its user: `update-needs` when there is one, else `layout` on an
-install of layout 1, whose updater cannot bring a layout at all (an updater from before them, or
-a layout not all there, as a Mac's without Syncthing); not under eriphe-launcher, which brings its
-own. Only the reason: the command to run is eriphe-core's, for how the machine was installed.
+Syncthing. This build is made for layout 4 (`installLayout`, install.sh's `LAYOUT`). `needs` says
+what the install waits for from its user: `update-needs` when there is one. Only the reason: the command to run is eriphe-core's, for how the machine was installed.
 
 ## Sleep
 
@@ -234,8 +226,7 @@ Windows, from the session helper (see The user's session); elsewhere (Linux, Lim
 
 eriphe-core asks with a level, `GET /v1/node?context=N`; it asks 1 (`core/route_signals.go`), so
 the category of the app in front (level 2) is no longer computed for it. At 0 the node tells nothing of the user (`idle` too
-is `{"known": false}`); without the parameter (an older eriphe-core), `idle` as before and nothing
-more. From 1, it also reports `context`:
+is `{"known": false}`), nor without the parameter. From 1, it also reports `context`:
 
 ```json
 {"known": true, "dnd": true, "reason": "game", "activity": "game"}
@@ -487,8 +478,7 @@ to decrypt: `{name, ssh: {target, user, host_key, public_key}}`, and never a pri
   upgrades `GET /v1/node/tasks/{id}/ssh/connect?target=host:port` (`eriphe-ssh`), through the
   core relay on a Mac, and eriphe-core decides and dials. So a node
   that cannot reach the LAN, as a Mac's, still reaches the machine, with no right of its own.
-- A machine eriphe-core cannot reach (502, the decision taken) is dialed from the node itself, and
-  so is any machine with an eriphe-core older than this node, after asking it: private addresses
+- A machine eriphe-core cannot reach (502, the decision taken) is dialed from the node itself: private addresses
   included, as for a model server, never the loopback, link-local addresses or multicast. Any other
   host or port of the LAN stays refused, and so does a task with egress `none`.
 
@@ -820,8 +810,8 @@ newer image under the same tag), the node pulls the default image and those imag
 no configured agent uses is never downloaded. A task whose agent is unpacked starts at once,
 without asking the registry (also offline); otherwise its container starts once the node has
 unpacked it (the task stays `running` meanwhile). `agents_ready` in `GET /v1/node` tells the
-scheduler, which prefers such a node (`core/scheduler.go`). An eriphe-core from before sends no
-`prepare`: the node pulls its default image only, and unpacks an agent at its first task.
+scheduler, which prefers such a node (`core/scheduler.go`). Without a
+`prepare`, the node pulls its default image only, and unpacks an agent at its first task.
 
 ### Injected programs (`/opt/eriphe/bin`)
 
@@ -1181,8 +1171,7 @@ Explorer's "Share with Eriphe..." on Windows (below).
 
 **The list** is `shares.json` in the node's data (`-root`, mode 0600): `{id, name, path, access,
 max, copyable, added}` per folder, the path absolute and resolved; `access` is the level now
-(`read`, `drop` or `manage`), `max` the level chosen on the machine (empty in a list from before
-levels: `access`), `copyable` true when the user allowed copies. `GET /v1/node` and `GET
+(`read`, `drop` or `manage`), `max` the level chosen on the machine (empty: `access`), `copyable` true when the user allowed copies. `GET /v1/node` and `GET
 /v1/shares` report `{id, name, access, max, copyable, missing}`, never the path. The command changes it under a lock file
 (`shares.lock`); the node reads it at every use (`GET /v1/node`, a mount) and looks at it every two
 seconds: a folder taken off, or lowered below the level a task holds it at, stops the tasks that
@@ -1276,8 +1265,7 @@ folder's own now too: `write` on a read-only folder is `read_only`, `manage` on 
 - `--mount type=bind,src=<folder>,dst=/work/folders/<name>,readonly`;
 - with `manage`, instead, `--mount type=bind,src=<folder>,dst=/work/folders/<name>`, writable,
   once a snapshot of the folder is taken (below): without one, the task does not start. What the
-  task writes there as root goes back to the folder's owner, as for `Eriphe/` (`handback.go`). An
-  older node ignores `manage` and mounts the folder read-only;
+  task writes there as root goes back to the folder's owner, as for `Eriphe/` (`handback.go`);
 - with `write`, `--mount type=bind,src=<folder>/<results>,dst=/work/folders/<name>/<results>`,
   refused on a `:ro` place. `<results>` is the results subfolder eriphe-core names after the
   assistant (`results` in the folder's spec; `Eriphe` when it gives none). The node creates it if it

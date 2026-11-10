@@ -92,7 +92,7 @@ JSON in `CALENDAR_CONFIG`, or a file in `CALENDAR_CONFIG_FILE` (or `-config`):
   read again at each request (a refreshed token file is picked up). An OAuth secret may also be a
   refresh grant, `{"client_id", "client_secret", "refresh_token", "token_url"}`, as eriphe-core
   lends it for an account connected with a provider's sign-in (`token_url` is where to refresh it,
-  Google's when absent, as in tokens lent before it was given): the access token is then refreshed here, in memory (`refresh.go`), never written
+  required): the access token is then refreshed here, in memory (`refresh.go`), never written
   nor logged; a refresh token Google refuses gives an error that says to reconnect the account in
   Eriphe. When Google refuses a request (403), its reason is read from the body (`refusal.go`): the
   CalDAV API turned off in the Google Cloud project of the user's Google app (it is not the Google

@@ -308,10 +308,10 @@ type TaskFolder struct {
 	ID    string `json:"id"`              // in the list of shared folders; nothing else is mounted
 	Write bool   `json:"write,omitempty"` // results may be dropped in its results subfolder, if shared so
 	// Manage: the whole folder is writable, if shared so; a snapshot of it
-	// is taken first. An older node ignores it: the folder is read-only.
+	// is taken first.
 	Manage bool `json:"manage,omitempty"`
 	// With Write: the results subfolder's name (the assistant's), and its
-	// former names, newest first. Empty from an older eriphe-core: Eriphe.
+	// former names, newest first. Empty: Eriphe.
 	Results string   `json:"results,omitempty"`
 	Former  []string `json:"former,omitempty"`
 	// Copy: the folder is lent from the copy this machine keeps of it, by

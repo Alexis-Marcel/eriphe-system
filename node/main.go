@@ -96,10 +96,6 @@ func main() {
 		runWakeSend(os.Args[2:]) // the short-lived container that wakes a machine (wake.go)
 		return
 	}
-	if len(os.Args) > 1 && os.Args[1] == "docker-proxy" {
-		proxyGone() // an install from before the engine, until its layout (engine_remote.go)
-		return
-	}
 	if len(os.Args) > 1 && os.Args[1] == "engine" {
 		runEngine(os.Args[2:]) // the node's engine, which holds the Docker socket (engine_server.go)
 		return

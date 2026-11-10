@@ -24,8 +24,8 @@ const tunnelProto = "eriphe-tunnel"
 
 // state is what the node keeps after joining, in <root>/node.json.
 type state struct {
-	Core   string   `json:"core"`
-	Cores  []string `json:"cores,omitempty"` // all of eriphe-core's addresses, preferred first (cores.go)
+	Core   string   `json:"core,omitempty"`  // eriphe-core's address, when it has one (cores.go)
+	Cores  []string `json:"cores,omitempty"` // all of eriphe-core's addresses, preferred first, when several
 	Name   string   `json:"name"`
 	Secret string   `json:"secret"`
 

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"net/url"
 	"os"
 	"regexp"
 	"slices"
@@ -18,7 +17,7 @@ import (
 // /v1/node "context", beside "idle"), at the level eriphe-core asks for
 // (?context=N; eriphe-core asks 1, for its router: core/route_signals.go):
 //
-//   - 0, or no level (an older eriphe-core): nothing more than before;
+//   - 0, or no level: nothing of the user;
 //   - 1: whether the machine is not to be disturbed, and why, as a class
 //     (game, meeting, fullscreen, mic, focus);
 //   - 2: also the category of the app in front (game, meeting, code, web,
@@ -163,10 +162,9 @@ func parseAppInfo(out []byte) frontApp {
 type helperFile = usersession.File
 
 // userIdle is the machine's idle time as told: from this system, else from
-// a session helper; nothing at level 0. An eriphe-core older than levels
-// (no ?context) gets it as before.
-func userIdle(ctx context.Context, q url.Values) idleState {
-	if q.Has("context") && requestLevel(q.Get("context")) < 1 {
+// a session helper; nothing at level 0 (or no level).
+func userIdle(ctx context.Context, level int) idleState {
+	if level < 1 {
 		return idleState{}
 	}
 	if s := machineIdle(ctx); s.Known {

@@ -476,9 +476,6 @@ func humanBytes(n int64) string {
 // mount, taken until the container is gone.
 func (n *node) injection(ctx context.Context, t *Task) (string, error) {
 	pkg, ok := agentPackages[t.Spec.Runtime]
-	if t.Spec.Runtime == "" {
-		pkg, ok = agentPackages["claude-code"]
-	}
 	if !ok || n.opt.agentImage == "" {
 		pkg = noAgent
 	}
@@ -494,7 +491,7 @@ func (n *node) injection(ctx context.Context, t *Task) (string, error) {
 
 // prepareSpec is what eriphe-core says this node should have ready: the
 // runtimes of its configured agents and the images they name (assignments,
-// prepare). None from an older eriphe-core.
+// prepare). Nil when it gives none: the default image only.
 type prepareSpec struct {
 	Runtimes []string `json:"runtimes"`
 	Images   []string `json:"images"`

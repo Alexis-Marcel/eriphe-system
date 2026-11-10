@@ -162,7 +162,7 @@ func TestHelperSession(t *testing.T) {
 }
 
 // The status tells the session at the level asked, and nothing of the user
-// at level 0; an eriphe-core without levels gets the idle time as before.
+// at level 0 or without a level.
 func TestNodeStatusLevel(t *testing.T) {
 	n := newNode(options{docker: filepath.Join(t.TempDir(), "no-docker")})
 	get := func(q string) map[string]json.RawMessage {
@@ -175,8 +175,8 @@ func TestNodeStatusLevel(t *testing.T) {
 	if got := get("?context=0"); string(got["context"]) != `{"known":false}` || string(got["idle"]) != `{"known":false}` {
 		t.Fatalf("level 0 told %s %s", got["context"], got["idle"])
 	}
-	if got := get(""); string(got["context"]) != `{"known":false}` {
-		t.Fatalf("no level told %s", got["context"])
+	if got := get(""); string(got["context"]) != `{"known":false}` || string(got["idle"]) != `{"known":false}` {
+		t.Fatalf("no level told %s %s", got["context"], got["idle"])
 	}
 }
 
