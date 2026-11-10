@@ -26,3 +26,6 @@ var providerGoogle = &signInProvider{
 	Redirect:       redirectPublicHTTPS,
 	ForgetAt:       "myaccount.google.com/connections",
 }
+
+// signInProviders are the providers, by name.
+var signInProviders = map[string]*signInProvider{providerGoogle.Name: providerGoogle}

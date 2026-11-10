@@ -67,7 +67,7 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 		t.Allowed = len(w.c.store.accountActions(sv.Name, a.Name))
 		t.Google, t.Reconnect = "", false
 		if g, ok := w.c.googleAccount(a.Name); ok && a.google() {
-			t.Google, t.Reconnect = g.Email, g.Reconnect != ""
+			t.Google, t.Reconnect = g.Identity, g.Lapsed != ""
 		}
 		t.Scope = tokenScope{}
 		t.Part, t.Label = svc.ID, tr(lang, "acct.svc."+svc.ID)
@@ -128,7 +128,7 @@ func (w *web) driveRows(lang string, conf *Config, sv serverView, fc filesConfig
 		t.Detail = tr(lang, "preset.gdrive.title") + " · " + driveCount(lang, n)
 		t.Google, t.Reconnect = a.Name, false
 		if g, ok := w.c.googleAccount(a.Name); ok {
-			t.Reconnect = g.Reconnect != ""
+			t.Reconnect = g.Lapsed != ""
 		}
 		out = append(out, t)
 	}

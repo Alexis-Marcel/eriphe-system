@@ -273,9 +273,9 @@ func (w *web) toolRow(lang string, conf *Config, sv serverView) toolView {
 		_, tok, _ := w.c.store.oauthToken(sv.Name)
 		t.Token = tok != nil
 	}
-	for _, a := range w.c.googleOwners(conf.Servers[sv.Name]) {
-		if t.Google == "" || a.Reconnect != "" && !t.Reconnect {
-			t.Google, t.Reconnect = a.Email, a.Reconnect != ""
+	for _, a := range w.c.connectionsOf(conf.Servers[sv.Name]) {
+		if t.Google == "" || a.Lapsed != "" && !t.Reconnect {
+			t.Google, t.Reconnect = a.Identity, a.Lapsed != ""
 		}
 	}
 	t.Pending, t.Placed = startState(sv)

@@ -114,9 +114,9 @@ func (w *web) googleAccountViews(lang string) []googleAccountView {
 	drive := w.c.driveState()
 	var out []googleAccountView
 	for _, a := range w.c.googleAccounts() {
-		av := googleAccountView{Email: a.Email, Reconnect: a.Reconnect != ""}
+		av := googleAccountView{Email: a.Identity, Reconnect: a.Lapsed != ""}
 		have := map[string]bool{}
-		for _, t := range w.c.googleTools(a.Email) {
+		for _, t := range w.c.googleTools(a.Identity) {
 			sv := googleServiceView{Service: t.Service, Tool: t.Name}
 			srv := serverView{serverInfo: serverInfo{Name: t.Name, Kind: "local"}}
 			if u := w.c.pool.get(t.Name); u != nil {
@@ -140,7 +140,7 @@ func (w *web) googleAccountViews(lang string) []googleAccountView {
 			}
 		}
 		for _, f := range drive.Folders {
-			if strings.EqualFold(f.Account, a.Email) {
+			if strings.EqualFold(f.Account, a.Identity) {
 				av.Folders++
 			}
 		}
