@@ -31,7 +31,6 @@ func TestDecideRepo(t *testing.T) {
 		{"no branch", "owner/repo", accessWrite, repoFacts{Repos: write, Clean: true}, decideAsk, "no branch"},
 		{"approved", "owner/repo", accessWrite, repoFacts{Repos: write, Granted: granted("owner/repo@write")}, decideAllow, "approved"},
 		{"a read approval is not a write", "owner/repo", accessWrite, repoFacts{Repos: write, Granted: granted("owner/repo@read")}, decideAsk, ""},
-		{"without the App, the same", "owner/repo", accessWrite, repoFacts{Repos: branch, Clean: true, Fallback: true}, decideAllow, "lent for write"},
 		{"another repository", "owner/other", accessRead, repoFacts{Repos: read}, decideDeny, "not the repository"},
 		{"nothing lent", "owner/repo", accessRead, repoFacts{}, decideDeny, "not the repository"},
 	}
@@ -92,16 +91,12 @@ func credCore(t *testing.T, tools string) (*core, *TaskRow) {
 	return c, task
 }
 
-// Without the GitHub App the rules are the same, and the token is the tool's.
-func TestMintFallbackToolToken(t *testing.T) {
+// Without the GitHub App, git gets nothing: the GitHub tool's own token is
+// never lent.
+func TestMintNeedsTheApp(t *testing.T) {
 	c, task := credCore(t, "github.get_*")
-	m, err := c.mintGitHub(context.Background(), task.ID, "owner/repo", accessRead, false)
-	if err != nil || m.Password != "github_pat_long_lived" || m.Username != "x-access-token" || m.Source != sourceToolToken {
-		t.Fatalf("fallback: %+v %v", m, err)
-	}
-	currentVault().remove("server.github.token")
-	if _, err := c.mintGitHub(context.Background(), task.ID, "owner/repo", accessRead, false); err == nil {
-		t.Fatal("nothing to lend")
+	if _, err := c.mintGitHub(context.Background(), task.ID, "owner/repo", accessRead, false); err == nil || !strings.Contains(err.Error(), "GitHub App") {
+		t.Fatalf("without the app: %v", err)
 	}
 }
 
@@ -120,13 +115,13 @@ func TestTokenCache(t *testing.T) {
 // The task's details show what it asked for, and which token it was.
 func TestCredentialsInTaskDetails(t *testing.T) {
 	c, task := credCore(t, "github")
-	c.store.logAccess(task.ID, gitLogTool, "github.com", "owner/repo", accessRead, decideAllow, byPolicy, sourceToolToken, "")
+	c.store.logAccess(task.ID, gitLogTool, "github.com", "owner/repo", accessRead, decideAllow, byPolicy, sourceApp, "")
 	c.store.logAccess(task.ID, gitLogTool, "github.com", "owner/other", accessRead, decideDeny, byPolicy, "", "not lent")
 	tw := newTestWebFor(t, c)
 	tw.setup()
 	code, body, _ := tw.do("GET", "/tasks/"+task.ID, nil, nil)
 	if code != 200 || !strings.Contains(body, "Accès demandés") || !strings.Contains(body, "read github.com/owner/other") ||
-		!strings.Contains(body, "refusé") || !strings.Contains(body, "outil GitHub (pas") {
+		!strings.Contains(body, "refusé") {
 		t.Fatalf("details: %d %s", code, body)
 	}
 }

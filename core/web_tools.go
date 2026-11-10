@@ -41,6 +41,9 @@ type toolView struct {
 	Reconnect    bool
 	// Places tells a tool that has places, picked on its page (places.go).
 	Places bool
+	// ConnPlaces is the connection whose places it uses, for a remote tool
+	// on a connection that mints its tokens (connection_places.go).
+	ConnPlaces string
 	// Follow is the line that follows a tool just saved, in its row, until
 	// it is up or says why not (web_tools_dialog.go).
 	Follow *toolStatus
@@ -297,6 +300,9 @@ func (w *web) toolRow(lang string, conf *Config, sv serverView) toolView {
 	}
 	if t.Preset.ID == "github" {
 		t.Detail = githubDetail(lang, conf.Servers[sv.Name], t.Connection)
+	}
+	if cn := conf.Servers[sv.Name].authConnection(); cn != "" && sv.Source == sourceWorkspace {
+		t.ConnPlaces = cn
 	}
 	_, _, t.Places = keeperOf(conf.Servers[sv.Name])
 	t.Places = t.Places && sv.Source == sourceWorkspace

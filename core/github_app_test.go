@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
@@ -100,7 +101,15 @@ func (f *fakeGitHubAPI) serve(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(tok, "ghs_acme_") {
 			n = 3
 		}
-		json.NewEncoder(w).Encode(map[string]any{"total_count": n, "repositories": []any{}})
+		repos := []any{}
+		for i := range n {
+			name := fmt.Sprintf("owner/repo-%d", i+1)
+			if n == 3 {
+				name = fmt.Sprintf("acme/repo-%d", i+1)
+			}
+			repos = append(repos, map[string]any{"full_name": name, "html_url": "https://github.com/" + name})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"total_count": n, "repositories": repos})
 		return
 	}
 	if !f.checkJWT(r) {

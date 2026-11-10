@@ -29,6 +29,7 @@ var githubStrings = map[string]map[string]string{
 		"github.conns":            "Connexions GitHub",
 		"github.connslead":        "Une connexion, un nom, ses propres droits. Sur l'app, chacune agit sur les dépôts d'un compte ou d'une organisation.",
 		"github.viaapp":           "app GitHub",
+		"github.repoplaces":       "Dépôts donnés à Eriphe",
 		"github.viatoken":         "jeton personnel",
 		"github.connname":         "Nom de la connexion",
 		"github.addconn":          "Ajouter la connexion",
@@ -96,7 +97,6 @@ var githubStrings = map[string]map[string]string{
 		"cred.allow":              "prêté",
 		"cred.deny":               "refusé",
 		"cred.byuser":             "ta réponse",
-		"cred.fallback":           "Avec le jeton de l'outil GitHub (pas d'app GitHub).",
 	},
 	"en": {
 		"github.title":            "GitHub",
@@ -115,6 +115,7 @@ var githubStrings = map[string]map[string]string{
 		"github.conns":            "GitHub connections",
 		"github.connslead":        "One connection, one name, its own rights. On the app, each one acts on the repositories of one account or organization.",
 		"github.viaapp":           "GitHub App",
+		"github.repoplaces":       "Repositories given to Eriphe",
 		"github.viatoken":         "personal token",
 		"github.connname":         "Connection name",
 		"github.addconn":          "Add the connection",
@@ -182,6 +183,5 @@ var githubStrings = map[string]map[string]string{
 		"cred.allow":              "lent",
 		"cred.deny":               "refused",
 		"cred.byuser":             "your answer",
-		"cred.fallback":           "With the GitHub tool's own token (no GitHub App).",
 	},
 }

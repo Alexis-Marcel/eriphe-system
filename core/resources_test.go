@@ -209,6 +209,7 @@ func TestRepoFromResource(t *testing.T) {
 func TestTaintedResources(t *testing.T) {
 	c := newCatalogCore(t)
 	withDrive(t, c, Place{Name: "Factures", ID: "d1", Access: folderRead})
+	giveRepos(t, c, "someone/tool", "owner/repo")
 	c.conf().User = "Sam"
 	refused := []runRequest{
 		{Resources: []ResourceRef{{Kind: resPlace, Ref: "Factures"}}},

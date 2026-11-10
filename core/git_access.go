@@ -114,15 +114,8 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 	}
 	facts := c.repoFacts(t)
 	if call.lfs {
-		switch {
-		case decideRepo(call.repo, accessWrite, facts).Decision == decideAllow:
+		if decideRepo(call.repo, accessWrite, facts).Decision == decideAllow {
 			call.access = accessWrite // it may be an upload: what the task may write, it may store
-		case facts.Fallback:
-			// Its path does not tell an upload, and the tool's token could write.
-			why := "Large File Storage needs a write lent, or Eriphe's GitHub App"
-			refuse(why)
-			http.Error(w, why, http.StatusForbidden)
-			return none, false
 		}
 	}
 	d := decideRepo(call.repo, call.access, facts)
@@ -184,11 +177,6 @@ func (c *core) ghRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, uri
 		return none, false
 	}
 	facts := c.repoFacts(t)
-	if facts.Fallback {
-		// The tool's own token holds everything, and these requests are not
-		// classified: only a token of the App, limited as lent, goes here.
-		return refuse(http.StatusForbidden, "", "gh needs Eriphe's GitHub App: create it in Settings → Tools → GitHub")
-	}
 	named := ghRepoOf(uri.Path)
 	repos := facts.Repos
 	if len(repos) != 1 || named != "" && !strings.EqualFold(named, repos[0].Repo) {

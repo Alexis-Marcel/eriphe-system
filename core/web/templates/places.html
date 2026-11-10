@@ -4,14 +4,14 @@
 <header class="page-head">
   <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
   <div class="form-title"><h2>{{tf "places.heading" .Tool}}</h2></div>
-  <p>{{t "places.lead"}}</p>
+  <p>{{t .Lead}}</p>
 </header>
 <div class="stack">
 {{template "places-list" .}}
 {{if .Accounts}}
 <section class="panel" aria-labelledby="places-pick-t">
   <h3 id="places-pick-t">{{template "i-plus"}}{{t "places.pick"}}</h3>
-  {{if eq .Status "ready"}}<div hx-get="/settings/tools/{{.Tool}}/places/browse" hx-trigger="load" hx-swap="outerHTML"><p class="muted small">…</p></div>
+  {{if eq .Status "ready"}}<div hx-get="{{.Base}}/browse" hx-trigger="load" hx-swap="outerHTML"><p class="muted small">…</p></div>
   {{else}}<p class="muted">{{t "places.notready"}}</p>{{end}}
 </section>
 {{else}}<p class="muted">{{t "places.noaccount"}}</p>{{end}}
@@ -30,13 +30,13 @@
     <span class="place-name">{{.Name}}{{if $v.Many}} <small class="muted">{{.Account}}</small>{{end}}</span>
     <span class="chip">{{t (printf "places.access.%s" .Access)}}</span>
     <span class="place-actions">
-      {{if eq .Access "read"}}{{if $v.CanWrite .Account}}<form hx-post="/settings/tools/{{$v.Tool}}/places" hx-target="#places-list" hx-swap="outerHTML" class="inline">
-        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="access" value="drop">
-        <button class="link-btn" type="submit">{{t "places.allowwrite"}}</button></form>{{end}}
-      {{else}}<form hx-post="/settings/tools/{{$v.Tool}}/places" hx-target="#places-list" hx-swap="outerHTML" class="inline">
+      {{if eq .Access "read"}}{{if $v.CanWrite .Account}}<form hx-post="{{$v.Base}}" hx-target="#places-list" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="access" value="{{$v.Write}}">
+        <button class="link-btn" type="submit">{{t (printf "places.allowwrite.%s" $v.Write)}}</button></form>{{end}}
+      {{else}}<form hx-post="{{$v.Base}}" hx-target="#places-list" hx-swap="outerHTML" class="inline">
         <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="access" value="read">
         <button class="link-btn" type="submit">{{t "places.readonly"}}</button></form>{{end}}
-      <form hx-post="/settings/tools/{{$v.Tool}}/places/remove" hx-target="#places-list" hx-swap="outerHTML" class="inline">
+      <form hx-post="{{$v.Base}}/remove" hx-target="#places-list" hx-swap="outerHTML" class="inline">
         <input type="hidden" name="id" value="{{.ID}}"><button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
     </span>
   </li>{{end}}
@@ -44,7 +44,7 @@
 </section>
 {{end}}
 
-{{define "places-browse"}}{{with .Data}}{{$b := .}}{{$acc := urlquery .Account}}{{$u := printf "/settings/tools/%s/places/browse" .Tool}}
+{{define "places-browse"}}{{with .Data}}{{$b := .}}{{$acc := urlquery .Account}}{{$u := printf "%s/browse" .Base}}
 <div id="places-browse" class="stack">
   {{if .Accounts}}<p class="place-accounts small" role="group" aria-label="{{t "places.accounts"}}">{{t "places.accounts"}}
     {{range .Accounts}}<button class="fchip" type="button" aria-pressed="{{if eq . $b.Account}}true{{else}}false{{end}}" hx-get="{{$u}}?account={{urlquery .}}" hx-target="#places-browse" hx-swap="outerHTML">{{.}}</button>{{end}}</p>{{end}}
@@ -54,12 +54,12 @@
   {{range .Items}}<li>
     <span class="place-name">{{.Name}}</span>
     <span class="place-actions">
-      <button class="btn btn-ghost sm" type="button" hx-get="{{$u}}?account={{$acc}}&amp;parent={{urlquery .ID}}&amp;name={{urlquery .Name}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.open"}}</button>
+      {{if not $b.Flat}}<button class="btn btn-ghost sm" type="button" hx-get="{{$u}}?account={{$acc}}&amp;parent={{urlquery .ID}}&amp;name={{urlquery .Name}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.open"}}</button>{{end}}
       {{if ne .ID "shared-with-me"}}{{with index $b.Given .ID}}<span class="chip">{{t (printf "places.access.%s" .)}}</span>{{else}}
-      <form hx-post="/settings/tools/{{$b.Tool}}/places" hx-target="#places-list" hx-swap="outerHTML" class="inline">
+      <form hx-post="{{$b.Base}}" hx-target="#places-list" hx-swap="outerHTML" class="inline">
         <input type="hidden" name="account" value="{{$b.Account}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}">
         <button class="btn btn-soft sm" type="submit" name="access" value="read">{{t "places.give"}}</button>
-        {{if $b.CanWrite}}<button class="btn btn-soft sm" type="submit" name="access" value="drop">{{t "places.givewrite"}}</button>{{end}}
+        {{if $b.CanWrite}}<button class="btn btn-soft sm" type="submit" name="access" value="{{$b.Write}}">{{t (printf "places.givewrite.%s" $b.Write)}}</button>{{end}}
       </form>{{end}}{{end}}
     </span>
   </li>{{else}}<li class="muted small">{{t "places.empty"}}</li>{{end}}

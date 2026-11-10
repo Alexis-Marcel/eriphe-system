@@ -29,7 +29,6 @@ func startCore(t *testing.T) *core {
 	}
 	setVault(v)
 	t.Cleanup(func() { setVault(nil) })
-	v.set("server.github.token", "github_pat_long_lived")
 	cfg := &Config{
 		User:         "Sam",
 		Providers:    map[string]Provider{"anthropic": {Kind: "claude-subscription", Secret: secret}},
@@ -41,6 +40,8 @@ func startCore(t *testing.T) *core {
 	c := newCore(cfg, store)
 	store.registerNode("nas", hashSecret("x"))
 	store.setNodeStatus("nas", true, []byte(`{"runtimes":["claude-code"],"cpus":8}`))
+	giveRepos(t, c, "owner/repo", "owner/site")
+	withApp(t, c, newFakeGitHub(t))
 	return c
 }
 
@@ -229,7 +230,7 @@ func TestTaskStartClean(t *testing.T) {
 // With GitHub not connected, a yes could give nothing: no card.
 func TestTaskStartNotConnected(t *testing.T) {
 	c := startCore(t)
-	currentVault().remove("server.github.token")
+	currentVault().remove(githubAppVault)
 	if task := launchWrite(t, c); c.heldTask(task.ID) {
 		t.Fatal("a card for what cannot work")
 	}

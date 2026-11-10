@@ -161,6 +161,7 @@ func (c *core) dropConnection(ctx context.Context, cn connection) {
 	c.conns.mu.Lock()
 	c.store.db.Exec(`DELETE FROM connections WHERE id = ?`, cn.ID)
 	c.conns.mu.Unlock()
+	c.dropConnectionPlaces(cn.ID)
 }
 
 // specSecrets are the vault secrets a local server's spec reads.
@@ -413,6 +414,9 @@ type tokenMinter interface {
 	// check says why the connection no longer works ("" when it does); an
 	// error when the provider is out of reach.
 	check(ctx context.Context, identity string) (string, error)
+	// browse lists what the account reaches, to give places from
+	// (connection_places.go), a page at a time.
+	browse(ctx context.Context, identity, page string) ([]placeItem, string, error)
 }
 
 // mintersLabel are the minting providers' names as the user knows them.

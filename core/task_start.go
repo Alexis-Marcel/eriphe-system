@@ -63,9 +63,7 @@ type startNeed struct {
 func (c *core) startNeeds(list []ResourceRef, clean bool) []startNeed {
 	repos := lentRepos(list)
 	if _, err := loadGitHubApp(); err == errNoGitHubApp {
-		if _, err := c.githubToolToken(); err != nil {
-			return nil // GitHub is not connected: a yes would give nothing
-		}
+		return nil // GitHub is not connected: a yes would give nothing
 	}
 	var out []startNeed
 	for _, g := range repos {

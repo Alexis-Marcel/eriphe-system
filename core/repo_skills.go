@@ -2,9 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
-	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -57,22 +56,8 @@ func (c *core) ownRepo(ctx context.Context, ref string) (bool, error) {
 			return false, nil
 		}
 		return err == nil, err
-	case err != errNoGitHubApp:
-		return false, err
-	}
-	tok, err := c.githubToolToken()
-	if err != nil {
+	case errors.Is(err, errNoGitHubApp):
 		return false, nil // no GitHub at all: nothing is known to be the user's
 	}
-	var out struct {
-		Permissions struct {
-			Admin bool `json:"admin"`
-			Push  bool `json:"push"`
-		} `json:"permissions"`
-	}
-	err = c.github.do(ctx, http.MethodGet, "/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name), "token "+tok, nil, &out)
-	if ge, ok := err.(*githubError); ok && ge.Status == http.StatusNotFound {
-		return false, nil
-	}
-	return err == nil && (out.Permissions.Admin || out.Permissions.Push), err
+	return false, err
 }
