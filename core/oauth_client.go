@@ -305,10 +305,11 @@ type signedIn struct {
 	Refresh  string
 }
 
-// secret is the token as the vault keeps it and a tool's server reads it.
+// secret is the token as the vault keeps it and a tool's server reads it,
+// with where to refresh it.
 func (s signedIn) secret(fl *signInFlow) string {
 	raw, _ := json.Marshal(map[string]string{"client_id": fl.config.ClientID, "client_secret": fl.config.ClientSecret,
-		"refresh_token": s.Refresh})
+		"refresh_token": s.Refresh, "token_url": fl.config.Endpoint.TokenURL})
 	return string(raw)
 }
 
@@ -413,6 +414,7 @@ type lentToken struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
 	RefreshToken string `json:"refresh_token"`
+	TokenURL     string `json:"token_url,omitempty"`
 }
 
 // What a refresh says of a token.

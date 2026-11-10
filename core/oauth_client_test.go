@@ -112,7 +112,7 @@ func TestSignInFlow(t *testing.T) {
 		t.Fatalf("finish: %+v %+v %v", fl, tok, err)
 	}
 	var kept lentToken
-	if json.Unmarshal([]byte(tok.secret(fl)), &kept) != nil || kept != (lentToken{"app-id", "app-secret", "rt"}) {
+	if json.Unmarshal([]byte(tok.secret(fl)), &kept) != nil || kept != (lentToken{"app-id", "app-secret", "rt", f.srv.URL + "/token"}) {
 		t.Fatalf("secret %s", tok.secret(fl))
 	}
 	// Replayed: the flow was handed out once.

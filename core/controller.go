@@ -54,8 +54,8 @@ type core struct {
 	syncMu     sync.Mutex
 	syncPushed sync.Map
 
-	signIns signInFlows // sign-ins in progress (oauth_client.go)
-	google  googleWatch // the Google accounts' changes and checks (google.go)
+	signIns signInFlows     // sign-ins in progress (oauth_client.go)
+	conns   connectionWatch // the connections' changes and checks (connections.go)
 
 	push        *pusher          // notifications on the user's devices (push.go); nil without the workspace
 	notifyClock func() time.Time // the time of notify's decisions (notify.go); nil: now
@@ -99,6 +99,7 @@ func newCore(cfg *Config, store *Store) *core {
 	c.noteFirstRun(m)
 	c.loadAssistants()
 	c.migrateTrustedServers() // memory.trusted_servers, into Settings → Tools (tool_trust.go)
+	c.migrateConnections()    // the Google accounts, as connections (connections.go)
 	c.turn.load(store.get("brain_turn"), c.brainTaskID() != "")
 	c.turn.keep = func(st brainTurnState) {
 		raw, _ := json.Marshal(st)
@@ -108,7 +109,7 @@ func newCore(cfg *Config, store *Store) *core {
 	c.pool = newPool(store, m.Servers)
 	c.pool.appToken = c.github.toolToken // the GitHub tool on the app
 	c.pool.appTokenRefused = c.github.dropToolToken
-	c.pool.authHold = c.googleHold      // a Google account to connect again (google.go)
+	c.pool.authHold = c.connectionHold  // an account to connect again (connections.go)
 	c.pool.opened = c.watchServerEvents // the servers' events (event_sources.go)
 	// Local servers are services, reached on their node.
 	c.pool.dialLocal = func(ctx context.Context, name string, _ json.RawMessage) (mcp.Transport, error) {
@@ -161,11 +162,11 @@ func (c *core) checkNodes(ctx context.Context) {
 	}
 	c.followUpdates()
 	c.autoUpdates(time.Now())
-	c.replaceStranded()           // placement.go
-	c.harnessTick(time.Now())     // retries due, time budgets (task_retry.go)
-	c.sessionsTick(time.Now())    // the work sessions' engine (session_engine.go)
-	c.placeServices()             // also when no node answers: a node gone too long loses its services
-	c.googleTick(ctx, time.Now()) // the Google accounts' tokens, now and then (google.go)
+	c.replaceStranded()               // placement.go
+	c.harnessTick(time.Now())         // retries due, time budgets (task_retry.go)
+	c.sessionsTick(time.Now())        // the work sessions' engine (session_engine.go)
+	c.placeServices()                 // also when no node answers: a node gone too long loses its services
+	c.connectionTick(ctx, time.Now()) // the connections' tokens, now and then (connections.go)
 }
 
 // refreshNode records whether a node answers, and what it offers. A node

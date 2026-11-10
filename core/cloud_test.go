@@ -326,7 +326,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	// eriphe-files runs with the token from the vault, never in its spec.
 	srv := c.conf().Servers[filesServer]
 	spec, _ := decodeRun(srv.Run)
-	if !strings.HasPrefix(spec.Image, filesImage) || spec.Env[driveTokenEnvOf("sam@example.org")].File != "vault:"+googleSecret("sam@example.org") ||
+	if !strings.HasPrefix(spec.Image, filesImage) || spec.Env[driveTokenEnvOf("sam@example.org")].File != "vault:"+samSecret(t, c.core) ||
 		strings.Contains(string(srv.Run), "the-refresh") || !srv.TrustAnnotations {
 		t.Fatalf("server: %s", srv.Run)
 	}
@@ -532,4 +532,13 @@ func TestDriveRefusals(t *testing.T) {
 	// A tool of the same name that is not eriphe-files is left alone.
 	c.putServer(putCreate, filesServer, Server{URL: "https://x.example/mcp", Auth: &ServerAuth{None: true}, Use: "x"}, nil)
 	wantKey(t, c.addDriveFolder("", "a", "A", "read"), "drive.taken")
+}
+
+func samSecret(t *testing.T, c *core) string {
+	t.Helper()
+	cn, ok := c.googleAccount("sam@example.org")
+	if !ok {
+		t.Fatal("no connection for sam")
+	}
+	return cn.Secret
 }

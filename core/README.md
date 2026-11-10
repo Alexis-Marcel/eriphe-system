@@ -1634,8 +1634,8 @@ scopes only, with `access_type=offline`, `prompt=consent`, PKCE, the signed stat
 the same account (its `login_hint`) asks for that one alone, and Google's answer covers what the
 account granted before. The address comes from the ID token of the token endpoint's answer (over
 TLS, which OpenID Connect takes in place of its signature). The refresh token, with the client id
-and secret, is kept **once per account** in the vault (`google.<hash>.token`), and each service's
-server reads it from there in its environment (`MAIL_GOOGLE_TOKEN_<hash>`,
+and secret and where to refresh it (`token_url`), is kept **once per account**: the account is a
+[connection](#connections) and its token is in the vault, and each service's server reads it from there in its environment (`MAIL_GOOGLE_TOKEN_<hash>`,
 `CALENDAR_GOOGLE_TOKEN_<hash>`, `FILES_GOOGLE_TOKEN_<hash>`), refreshing its access token itself: the token never enters a task or
 a spec. Which servers belong to an account is read from their specs (that vault reference). A
 service Google did not grant (its box unticked on Google's page) is said back. Connecting again
@@ -1648,8 +1648,8 @@ accounts, each with its services, their tools and states, "Ajouter" for a servic
 "Reconnecter" and "Retirer ce compte" (its servers and Drive folders go, its token leaves the vault
 and is revoked at Google, `oauth2.googleapis.com/revoke`).
 
-**To reconnect.** Every 30 minutes (`googleTick`, with the nodes' check) eriphe-core asks Google
-for an access token with each account's refresh token. `invalid_grant` (revoked, or the 7 days of
+**To reconnect.** Every 30 minutes (`connectionTick`, with the nodes' check) eriphe-core asks
+Google for an access token with each account's refresh token ([connections](#connections)). `invalid_grant` (revoked, or the 7 days of
 an app in Testing) or a refused client marks the account "À reconnecter": its servers are held in
 `needs_auth` (the pool's `authHold`; a server with another working account is not), a call says
 why, `list_tools` gives as `connect` where to do it (`Settings → Tools → Google → Reconnect
@@ -1660,6 +1660,27 @@ Eriphe" when Google refuses their refresh.
 
 Gmail with an app password (the Mail form's other Gmail) stays for a workspace Google cannot send
 back to (a local address, [below](#addresses-google-takes)).
+
+### Connections
+
+A connection is one account signed in at one provider (`connections.go`, the `connections` table):
+its provider, its identity (the address), the scopes it granted, the vault name of its token, and
+whether it lapsed. There is one per identity, shared by every tool that reads it; which tools do
+is read from their specs (the vault reference of the token), never kept twice. Nothing in it names
+a provider: the provider's data (`signin_providers.go`) says how to refresh and revoke.
+
+- **Token.** A new connection keeps its token as `connection.<id>.token`; signing in again
+  overwrites it under the same name, so no tool's environment changes. A Google account connected
+  before connections keeps its `google.<hash>.token`: at start the `google_accounts` list becomes
+  connections (once), and each token gets its `token_url`.
+- **Check.** `connectionTick` asks each provider, every 30 minutes, for an access token. A refusal
+  (`invalid_grant`, or a refused client) lapses the connection: the tools that hold no other
+  working account are held in `needs_auth` (`connectionHold`, the pool's `authHold`), and the brain
+  is told once, in the provider's name. Signing in again lifts it. A provider out of reach changes
+  nothing.
+- **Removed.** Removing an account removes its tools first, then its token, revoked at the
+  provider. The check also collects the tokens (`connection.*.token`, `google.*.token`) no
+  connection and no tool reads.
 
 ## Google Drive (cloud Folders)
 

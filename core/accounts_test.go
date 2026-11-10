@@ -26,10 +26,12 @@ func oldServer(t *testing.T, c *core, name, image, configEnv, config, level, use
 func TestMergeAccountServers(t *testing.T) {
 	cc := newDynamicCore(t, nil)
 	c := cc.core
-	bobRef := googleSecret("bob@example.org")
+	bobRef := legacyGoogleSecret("bob@example.org")
 	if err := currentVault().set(bobRef, `{"refresh_token":"bob"}`); err != nil {
 		t.Fatal(err)
 	}
+	c.store.set(legacyAccountsKey, `[{"email":"bob@example.org","scopes":["`+scopeMail+`"]}]`)
+	c.migrateConnections()
 	oldServer(t, c, "mail", mailImage, "MAIL_CONFIG",
 		`{"accounts":[{"name":"mail","address":"sam@example.org","provider":"gmail","auth":{"password_env":"MAIL_PASSWORD"}}]}`,
 		accessFree, "mes mails : lire, chercher", nil, credentials{"env:MAIL_PASSWORD": "sam-pw"})
@@ -154,22 +156,23 @@ func TestAccountLevelReachesTheServer(t *testing.T) {
 func TestGoogleHoldWithOtherAccounts(t *testing.T) {
 	cc := newDynamicCore(t, nil)
 	c := cc.core
-	c.updateGoogleAccounts(func([]googleAccount) []googleAccount {
-		return []googleAccount{{Email: "bob@example.org", Scopes: []string{scopeMail}, Reconnect: googleRevoked}}
-	})
-	currentVault().set(googleSecret("bob@example.org"), `{"refresh_token":"bob"}`)
-	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: googleAccountFor(mailService, "bob@example.org"),
-		Secret: &EnvValue{File: vaultPrefix + googleSecret("bob@example.org")}}); err != nil {
+	bob, _, err := c.keepConnection(providerGoogle.Name, "bob@example.org", []string{scopeMail}, `{"refresh_token":"bob"}`)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if why, _ := c.googleHold("mail"); why == "" {
+	c.markConnection(bob.ID, lapsedRevoked)
+	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: googleAccountFor(mailService, "bob@example.org"),
+		Secret: &EnvValue{File: vaultPrefix + bob.Secret}}); err != nil {
+		t.Fatal(err)
+	}
+	if why, _ := c.connectionHold("mail"); why == "" {
 		t.Fatal("bob alone, refused: not held")
 	}
 	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: svcAccount{Name: "sam@example.org", Address: "sam@example.org", Provider: "ovh"},
 		Password: "pw"}); err != nil {
 		t.Fatal(err)
 	}
-	if why, _ := c.googleHold("mail"); why != "" {
+	if why, _ := c.connectionHold("mail"); why != "" {
 		t.Fatalf("held with another mailbox: %s", why)
 	}
 }
@@ -179,7 +182,7 @@ func TestGoogleHoldWithOtherAccounts(t *testing.T) {
 func TestMergeKeepsTwoCalendarsOfOneAddress(t *testing.T) {
 	cc := newDynamicCore(t, nil)
 	c := cc.core
-	ref := googleSecret("sam@example.org")
+	ref := legacyGoogleSecret("sam@example.org")
 	if err := currentVault().set(ref, `{"refresh_token":"sam"}`); err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +224,7 @@ func TestMergeKeepsTwoCalendarsOfOneAddress(t *testing.T) {
 func TestCalendarsOfOneAddress(t *testing.T) {
 	apple := svcAccount{Name: "sam@example.org", Provider: "icloud", Username: "sam@example.org", URL: "https://caldav.icloud.com"}
 	google := func(c *core) error {
-		ref := googleSecret("sam@example.org")
+		ref := legacyGoogleSecret("sam@example.org")
 		currentVault().set(ref, `{"refresh_token":"sam"}`)
 		return c.putAccount(calendarService, accountPut{Lang: "fr", Account: googleAccountFor(calendarService, "sam@example.org"),
 			Secret: &EnvValue{File: vaultPrefix + ref}})

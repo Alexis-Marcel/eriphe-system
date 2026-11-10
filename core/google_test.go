@@ -97,7 +97,8 @@ func TestGoogleAccounts(t *testing.T) {
 	if next != "/settings/google?connected=1" {
 		t.Fatalf("next %q", next)
 	}
-	ref := googleSecret("sam@example.org")
+	sam, _ := c.googleAccount("sam@example.org")
+	ref := sam.Secret
 	mail, cal := runOf(t, c.core, "mail"), runOf(t, c.core, "agenda")
 	samMail, samCal := accountEnv(mailGoogleEnv, "sam@example.org"), accountEnv(calGoogleEnv, "sam@example.org")
 	if mail.Env[samMail].File != vaultPrefix+ref || cal.Env[samCal].File != vaultPrefix+ref ||
@@ -215,7 +216,7 @@ func TestGoogleAccounts(t *testing.T) {
 	g.email, g.scope, g.refresh = "bob@example.org", scopeMail, "bob-refresh"
 	googleSignIn(t, tw, g, csrf, url.Values{"service": {"mail"}})
 	bobMail := accountEnv(mailGoogleEnv, "bob@example.org")
-	if spec := runOf(t, c.core, "mail"); spec.Env[bobMail].File != vaultPrefix+googleSecret("bob@example.org") ||
+	if spec := runOf(t, c.core, "mail"); spec.Env[bobMail].File != vaultPrefix+bobSecret(t, c.core) ||
 		spec.Env[samMail].File != vaultPrefix+ref || !strings.Contains(spec.Env["MAIL_CONFIG"].Value, `"name":"bob@example.org"`) {
 		t.Fatalf("second account: %+v", spec)
 	}
@@ -239,6 +240,7 @@ func TestGoogleAccounts(t *testing.T) {
 	}
 
 	// Removed: its tool, its token, and its authorization at Google.
+	bobRef := bobSecret(t, c.core)
 	if _, body, _ := tw.post("/settings/google/remove", url.Values{"account": {"bob@example.org"}}, csrf); strings.Contains(body, "bob@example.org") {
 		t.Fatalf("removed: %s", body)
 	}
@@ -246,7 +248,7 @@ func TestGoogleAccounts(t *testing.T) {
 		spec.Env[samMail].File != vaultPrefix+ref {
 		t.Fatalf("its account stays, or sam's went: %+v", spec)
 	}
-	if _, err := currentVault().get(googleSecret("bob@example.org")); err == nil {
+	if _, err := currentVault().get(bobRef); err == nil {
 		t.Fatal("its token stays")
 	}
 	if len(g.revokes) != 1 || g.revokes[0] != "bob-refresh" {
@@ -269,22 +271,23 @@ func TestGoogleReconnect(t *testing.T) {
 	googleSignIn(t, tw, g, csrf, url.Values{"service": {"mail", "drive"}, "write": {"1"}})
 	waitStatus(t, c.pool.get("mail"), statusReady)
 
-	c.checkGoogle(context.Background(), "sam@example.org")
-	if a, _ := c.googleAccount("sam@example.org"); a.Reconnect != "" || g.refreshes != 1 {
+	check := func() { a, _ := c.googleAccount("sam@example.org"); c.checkConnection(context.Background(), a) }
+	check()
+	if a, _ := c.googleAccount("sam@example.org"); a.Lapsed != "" || g.refreshes != 1 {
 		t.Fatalf("a working account: %+v, %d refreshes", a, g.refreshes)
 	}
 	g.revoked = true
-	c.checkGoogle(context.Background(), "sam@example.org")
-	if a, _ := c.googleAccount("sam@example.org"); a.Reconnect == "" {
+	check()
+	if a, _ := c.googleAccount("sam@example.org"); a.Lapsed == "" {
 		t.Fatal("not marked")
 	}
-	c.checkGoogle(context.Background(), "sam@example.org") // told once
+	check() // told once
 	told := 0
 	msgs, _ := c.store.messagesAfter(0, 100)
 	for _, m := range msgs {
 		if m.Role == roleEvent && strings.Contains(m.Text, "Google a retiré l'autorisation du compte sam@example.org") {
 			told++
-			if !strings.Contains(m.Text, "mail, fichiers") || !strings.Contains(m.Text, "révoquée") || !strings.Contains(m.Text, "Reconnecter") {
+			if !strings.Contains(m.Text, "fichiers, mail") || !strings.Contains(m.Text, "révoquée") || !strings.Contains(m.Text, "Reconnecter") {
 				t.Fatalf("event: %s", m.Text)
 			}
 		}
@@ -314,7 +317,7 @@ func TestGoogleReconnect(t *testing.T) {
 	if q.Get("scope") != "openid email "+scopeMail+" "+scopeDrive || q.Get("login_hint") != "sam@example.org" || next != "/settings/tools?connected=1" {
 		t.Fatalf("reconnect: %v %q", q, next)
 	}
-	if a, _ := c.googleAccount("sam@example.org"); a.Reconnect != "" {
+	if a, _ := c.googleAccount("sam@example.org"); a.Lapsed != "" {
 		t.Fatal("still to reconnect")
 	}
 	waitStatus(t, c.pool.get("mail"), statusReady)
@@ -353,4 +356,13 @@ func TestIDTokenEmail(t *testing.T) {
 			t.Errorf("%q: %q", bad, e)
 		}
 	}
+}
+
+func bobSecret(t *testing.T, c *core) string {
+	t.Helper()
+	cn, ok := c.googleAccount("bob@example.org")
+	if !ok {
+		t.Fatal("no connection for bob")
+	}
+	return cn.Secret
 }
