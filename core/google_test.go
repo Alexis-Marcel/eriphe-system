@@ -10,6 +10,13 @@ import (
 	"testing"
 )
 
+// The Google app, for the tests (connection_apps.go).
+var errNoGoogleClient = errNoAppClient
+
+func googleClient() (oauthApp, error) { return appClient(providerGoogle) }
+
+func storeGoogleClient(app oauthApp) error { return storeAppClient(providerGoogle, app) }
+
 // The Google accounts connected, for the tests.
 func (c *core) googleAccounts() []connection { return c.connectionsAt(providerGoogle.Name) }
 

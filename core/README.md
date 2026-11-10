@@ -511,7 +511,11 @@ new access token is used. The database file is as sensitive as `/secrets`.
 ### Security model
 
 - Vendor credentials live in `/secrets` (bearer tokens, OAuth clients) and in eriphe-core's
-  database (OAuth tokens). They go from eriphe-core to the server only, never to a node or a task.
+  database (OAuth tokens). A remote server's go from eriphe-core to that server only. A local
+  service of Eriphe's own (the mail, the calendar, the files) reads its account's token in its
+  environment, lent by eriphe-core to the node that runs it, which passes it to that service's
+  container only ([connections](#connections)): a token is never in a task, a task's spec or a
+  service's spec, and never in a node's other containers.
 - A task reaches only its node, with its own secret, and only the servers of its grant; the node
   reaches eriphe-core with its secret, and only for its own running tasks.
 - Every call is a permission request first, under the policy below; the proxy enforces it with
@@ -1675,6 +1679,15 @@ tools ticked (`tool=`, several, `write=`, `account=` to add to an account), or r
 they had); `POST /settings/connections/{provider}/remove` (`account=`) removes it, as above. A
 tool that has places shows "Lieux", its page ([places](#places)).
 
+**Providers are data.** No logic file of core names a provider: Google, Gmail and its products
+are rows of `signin_providers.go`, presets of `presets.go`, words of the text tables, and the names
+installs from before connections still hold (`legacy.go`: the token variables
+`MAIL_GOOGLE_TOKEN_<hash>`, `CALENDAR_GOOGLE_TOKEN_<hash>`, `FILES_GOOGLE_TOKEN_<hash>`, the vault
+names `google.<hash>.token`, the old addresses). `TestNoProviderInLogic` fails when a name or a
+string of another file names one (comments may, as examples); "drive" is a kind of tool, like mail
+and calendar, not a provider. An older configuration's `cloud` (the shared app of before) is
+ignored.
+
 ### Connection apps
 
 A connection app is the user's own OAuth client at a provider (`connection_apps.go`), made once
@@ -1973,8 +1986,8 @@ both, each with its `source` (`machine`, or `place` with its `tool` and `place_i
 a task gets it. Each source keeps its own store and its own enforcement: a machine's folder is in
 its node's list and mounted by its node; a place stays in its tool's configuration, which its
 server reads and enforces itself, and is lent as `{kind: place}` (its tool whole), not through
-`folders`, which refuses it with that hint. Drive folders are added on Settings → Tools → Google
-Drive; "Ne plus partager" in Settings → Dossiers removes either kind.
+`folders`, which refuses it with that hint. A tool's places are added on its places page (Settings
+→ Tools → the tool → Lieux); "Ne plus partager" in Settings → Dossiers removes either kind.
 
 ### Places
 
@@ -2303,10 +2316,10 @@ about five minutes to set up once; it leads to Settings → Tools → GitHub) or
 not, so no pull request from a task; its form says so and links back to the app). A GitHub connection on a token shows "Passer à l'app" in the list and
 in its form. In the list (`web_tools_groups.go`), each account is a card, as a phone's Settings →
 Accounts: the provider's mark, the address, "Google · Mail, Agenda, Drive", then a row for each
-of its services (Mail, Agenda, Drive) with its state, access, reconnect, edit and remove. A Google
-account's card has its actions: "Gérer" (Settings → Tools → Google), reconnect, and the Google
-services it does not have yet ("Ajouter à ce compte"). Drive is a row under each Google account,
-with that account's folders. A Gmail on a password goes in the card of its Google address; an
+of its services (Mail, Agenda, Drive) with its state, access, reconnect, edit and remove. A
+connected account's card has its actions ([connections](#connections)): reconnect, "Retirer ce
+compte", and the tools its provider serves that it does not have yet ("Ajouter à ce compte").
+Drive is a row under each account it reads, with that account's places and "Lieux". A Gmail on a password goes in the card of its Google address; an
 Apple account's mail and calendar are one card, an Apple calendar and a Google calendar of one
 address two. Only the list is by account: the servers stay one per service. The other tools of
 one kind (GitHub, Notion…) make one card when there are several: the kind, how many accounts and
@@ -2315,8 +2328,8 @@ plain row. Mails and Agenda first ask which kind of account
 (Gmail, iCloud, Orange, Free, OVHcloud, Fastmail or any IMAP server; iCloud, Fastmail, Nextcloud or
 any CalDAV server) and run `eriphe-mail` and `eriphe-calendar` with its password; "Test the
 connection" tries that password (IMAP login, CalDAV PROPFIND). "Gmail avec ton compte Google"
-(first, recommended) and Google Agenda lead to Settings → Tools → Google, one sign-in for Gmail,
-Calendar and Drive ([Google accounts](#google-accounts-gmail-calendar-drive)); the Google tile of
+(first, recommended) and Google Agenda lead to Google's connect page, one sign-in for Gmail,
+Calendar and Drive ([Google accounts](#google-accounts-gmail-calendar-drive)); the Google tiles of
 "Add a tool" too. Outlook, Microsoft 365 and Microsoft calendars are shown as coming soon. A vendor's OAuth service (Linear, Notion and the catalog's) opens a short page (name, use, access), then "Se
 connecter à Linear" saves and signs in at once; the tool is added only once authorized. Settings →
 Tools also edits and removes the workspace's own tools, and connects again those that use OAuth

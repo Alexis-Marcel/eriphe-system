@@ -195,11 +195,14 @@ type mailChoice struct {
 	Soon     bool   // not supported yet
 	Hidden   bool   // not offered, only read back
 	Page     string // connected on a page of its own (an account signed in), not with the form
+	// SpacedPassword: the provider shows its app passwords in groups of
+	// four letters; the spaces copied with them are not part of it.
+	SpacedPassword bool
 }
 
 var mailChoices = []mailChoice{
 	{ID: "google", Page: connectPage("google", toolMail)},
-	{ID: "gmail", Provider: "gmail", AppPass: true, Link: "https://myaccount.google.com/apppasswords"},
+	{ID: "gmail", Provider: "gmail", AppPass: true, SpacedPassword: true, Link: "https://myaccount.google.com/apppasswords"},
 	{ID: "icloud", Provider: "icloud", AppPass: true, Link: "https://account.apple.com/account/manage"},
 	{ID: "outlook", Provider: "outlook", Soon: true},
 	{ID: "orange", Provider: "orange", AppPass: true, Link: "https://espace-client.orange.fr/"},

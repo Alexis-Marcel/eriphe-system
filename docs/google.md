@@ -3,8 +3,9 @@
 Eriphe reaches Google with **your own Google app**: an OAuth client you create once in your own
 Google Cloud project, like Home Assistant's Google integrations. Nobody else holds its key, and no
 Eriphe server is in the path: Google sends your browser straight back to your workspace. It takes a
-few minutes, **once for every service and every Google account**. Settings → Tools → Google shows
-these same steps, with your workspace's exact redirect URI and the scopes, each with a Copy button.
+few minutes, **once for every service and every Google account**. Its page in Eriphe (Settings →
+Tools → Add → Google → "Create my app", at `/settings/apps/google`) shows these same steps, with
+your workspace's exact redirect URI and the scopes, each with a Copy button.
 
 Then each Google account is **one sign-in**: tick the services Eriphe may use (Gmail, Google
 Calendar, Google Drive), sign in at Google, and Eriphe asks only for those services' access. A
@@ -24,11 +25,11 @@ Google only sends back to an **authorized redirect URI** that follows its rules
   `*.home.arpa` or a bare name are refused.
 
 Eriphe's redirect URI is `<the address you open Eriphe at>/oauth/callback`. If you open Eriphe at a
-local address, the Google page says so and offers:
+local address, the app page says so and offers:
 
 1. **Remote access** (Settings → Access): Tailscale gives Eriphe an
    `https://<name>.<tailnet>.ts.net` address with a real certificate, which Google takes. Open the
-   Google page at that address and follow the steps from there.
+   app page at that address and follow the steps from there.
 2. **Your own domain**: put Eriphe behind your reverse proxy at, for instance,
    `https://eriphe.example.org`, and set it as the workspace address ([reverse proxy
    guide](reverse-proxy.md)): the redirect URI is then `https://eriphe.example.org/oauth/callback`.
@@ -57,25 +58,27 @@ local address, the Google page says so and offers:
    → **Add to table** → **Update** → **Save**.
 6. **Clients** (<https://console.cloud.google.com/auth/clients/create>): **Create client** →
    Application type **Web application**, Name `Eriphe`; under **Authorized redirect URIs**, **Add
-   URI** and paste exactly the URI the Google page shows, e.g.
+   URI** and paste exactly the URI the app page shows, e.g.
    `https://eriphe.tail1234.ts.net/oauth/callback` (no final slash) → **Create**. No "Authorized
    JavaScript origins" are needed.
 7. **Keep the client**: Google shows the client ID and secret once
    ([Manage OAuth clients](https://support.google.com/cloud/answer/15549257): the secret is hashed
    afterwards, only its last four characters stay visible). Click **Download JSON**, or copy both.
-8. **In Eriphe**, Settings → Tools → Google: give the downloaded `client_secret_….json`, or
-   paste the client ID and secret → **Save my Google app**. The secret goes to the vault
-   (`app.google.client`) and is never shown again; "Replace my Google app" takes another one.
-9. **Connect an account**: tick the services (Gmail, Google Calendar, Google Drive) and, for
-   Drive, "Allow Eriphe to drop results" if Eriphe may add files (always in an `Eriphe` subfolder
-   of the folders you allow) → **Sign in with Google**. "Google hasn't verified this app" is your
+8. **In Eriphe**, on the app page: give the downloaded `client_secret_….json`, or paste the
+   client ID and secret → **Save**. The secret goes to the vault (`app.google.client`) and is
+   never shown again; "Replace" takes another one.
+9. **Connect an account**: Settings → Tools → Add → Google (or Gmail, Google Calendar, Google
+   Drive) opens the connect page: tick the tools and "Allow Eriphe to write" if Eriphe may send,
+   add events or drop results (always in an `Eriphe` subfolder of the places you allow) → **Sign
+   in**. "Google hasn't verified this app" is your
    own app: **Advanced** → **Go to Eriphe**, and allow what is asked (Google may show a box per
    service: one left unticked is said back in the workspace).
-10. **Drive: choose folders**: Settings → Tools → Google Drive, once the Files server runs, open the
-    folders and give each one "read" or "read + drop".
-11. **Another account**: "Add a Google account" on the same page, with its own services. Each
-    account has its own tools (`mail`, `mail-<name>`, `agenda`…); Drive folders of every account
-    are in the one Files tool.
+10. **Drive: choose folders**: in Settings → Tools, the Drive row's **Places**, once the Files
+    server runs: open the folders and give each one "read" or "read + drop".
+11. **Another account**: the connect page again, with its own tools. Each account is a card in
+    Settings → Tools, with "Add to this account", "Reconnect" and "Remove this account"; every
+    account's mailbox is an account of the one `mail` tool, its calendar of `agenda`, its Drive
+    folders in the one Files tool.
 
 A Desktop client ("installed" in the JSON) is refused: Google sends it only to loopback addresses,
 which a workspace on another machine cannot use. If the uploaded JSON lists redirect URIs and not
@@ -83,7 +86,7 @@ this workspace's, the page says so.
 
 ## Test the connection
 
-**Test connection** on the Google Drive page checks, without going through Google's consent:
+**Test** on the app page checks, without going through Google's consent:
 
 - the workspace's address: one Google takes as a redirect;
 - the client ID and secret: a code exchange with a made-up code. Google checks the client before
@@ -91,9 +94,9 @@ this workspace's, the page says so.
   Google knows the client (and refuses the made-up code, as expected);
 - the redirect URI: not asked of Google; the page shows the exact URI the client must list in
   the console (**Clients** → your client → **Authorized redirect URIs**);
-- once connected: the stored authorization, refreshed, then the Drive account it is for. An
-  `invalid_grant` there is an authorization Google withdrew (the 7 days of Testing, or revoked):
-  **Reconnect**.
+- each account connected: its stored authorization, refreshed. An `invalid_grant` there is an
+  authorization Google withdrew (the 7 days of Testing, or revoked): the account is marked to
+  reconnect, and its card in Settings → Tools has **Reconnect**.
 
 ## Testing or In production
 

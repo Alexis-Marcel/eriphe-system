@@ -494,7 +494,8 @@ func TestDriveUnusableOrigin(t *testing.T) {
 	wantKey(t, err, "app.origin.http")
 }
 
-// An older configuration that names the shared app still loads.
+// An older configuration that names the shared app still loads: its
+// "cloud" is ignored.
 func TestLegacyCloudConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "core.json")
@@ -504,11 +505,8 @@ func TestLegacyCloudConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(cfg.legacyCloud(), "own Google app") {
-		t.Fatalf("legacy: %q", cfg.legacyCloud())
-	}
-	if (&Config{}).legacyCloud() != "" {
-		t.Fatal("a log line without the old fields")
+	if cfg.DB == "" {
+		t.Fatal("not read")
 	}
 }
 

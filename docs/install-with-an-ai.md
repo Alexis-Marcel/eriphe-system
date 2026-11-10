@@ -478,8 +478,8 @@ For each other computer (or a second NAS):
   they do it, in the workspace.
 - **Google** (Gmail, Google Calendar, Google Drive) needs the person's own Google app, created
   once in their Google Cloud console for every service and every account: follow
-  [docs/google.md](google.md) with them, step by step (Settings → Tools → Google). Google refuses a
-  workspace opened at an IP address: turn on Remote access first and open the Google page at the
+  [docs/google.md](google.md) with them, step by step (Settings → Tools → Add → Google). Google refuses a
+  workspace opened at an IP address: turn on Remote access first and open the app page at the
   `ts.net` address. "Google hasn't verified this app" is expected (it is their own app):
   **Advanced** → **Go to Eriphe**.
 - **GitHub**: Settings → Tools → GitHub → "Créer l'app GitHub d'Eriphe" (see

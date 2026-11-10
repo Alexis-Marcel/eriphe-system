@@ -81,10 +81,10 @@ func (c *core) mergeService(svc accountService, all []svcServer) error {
 	// The Google accounts first: one keeps its address as its name
 	// (its connection's identity), and another account of that address is
 	// named apart.
-	for _, google := range []bool{true, false} {
+	for _, signedIn := range []bool{true, false} {
 		for _, st := range all {
 			for _, a := range st.Config.Accounts {
-				if a.signedIn() != google {
+				if a.signedIn() != signedIn {
 					continue
 				}
 				name := mergedName(svc, a)
