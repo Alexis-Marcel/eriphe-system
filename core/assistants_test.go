@@ -97,6 +97,7 @@ func TestBrainIsAnAssistant(t *testing.T) {
 // A change of its instructions restarts the idle brain, as another agent does.
 func TestAssistantSpecHashRestart(t *testing.T) {
 	c := brainCore(t, &BrainConfig{})
+	waitStatus(t, c.pool.get("docs"), statusReady) // its tools, before the brain counts them
 	ctx := context.Background()
 	c.tendAssistants(ctx, "tok")
 	id := brainStatus(c.core).Task
