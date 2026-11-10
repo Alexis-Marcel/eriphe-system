@@ -40,13 +40,10 @@ CREATE TABLE IF NOT EXISTS access_asks (
 	tainted       TEXT NOT NULL DEFAULT '',
 	state         TEXT NOT NULL DEFAULT 'proposed',
 	created       INTEGER NOT NULL,
-	decided       INTEGER NOT NULL DEFAULT 0);`
+	decided       INTEGER NOT NULL DEFAULT 0,
+	run           INTEGER NOT NULL DEFAULT 0); -- a triggered skill's run (skill_cards.go)`
 
-func init() {
-	extraSchema = append(extraSchema, accessCardSchema)
-	extraColumns = append(extraColumns, `ALTER TABLE access_asks ADD COLUMN input TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE access_asks ADD COLUMN run INTEGER NOT NULL DEFAULT 0`) // a triggered skill's run (skill_cards.go)
-}
+func init() { extraSchema = append(extraSchema, accessCardSchema) }
 
 const (
 	cardAccess    = "access"

@@ -233,10 +233,6 @@ func (k *taskContract) instruction() string {
 	return b.String()
 }
 
-func init() {
-	extraColumns = append(extraColumns, `ALTER TABLE task_harness ADD COLUMN contract TEXT NOT NULL DEFAULT ''`)
-}
-
 // fixedChecksReply is the agent's next turn when the brain fixed the
 // checks and gave no reply of its own.
 const fixedChecksReply = "Eriphe fixed the checks of your task's contract (one could not run). Make sure the work is done, then end your turn with your receipt: the checks run again when it ends."

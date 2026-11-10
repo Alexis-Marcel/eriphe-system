@@ -189,15 +189,14 @@ type memStore struct {
 	owner func() string
 }
 
-// memoryMigration is one step of the schema: SQL, then Go for what SQL
-// cannot do. Forward only; each runs once, in its own transaction.
-type memoryMigration struct {
-	sql string
-	fn  func(tx *sql.Tx) error
-}
+// memorySchemaVersion is the schema memory.db is at; meta.schema_version
+// says it. A new file is made at it; a file at another is refused, never
+// changed.
+const memorySchemaVersion = 5
 
-// memoryMigrations are applied in order; meta.schema_version is how many ran.
-var memoryMigrations = []memoryMigration{{sql: `CREATE TABLE memories (
+// memorySchema is memory.db's own tables; the intentions' and the
+// lessons' are with them (intentionsSchema, learningSchema).
+const memorySchema = `CREATE TABLE memories (
 	  id INTEGER PRIMARY KEY AUTOINCREMENT,
 	  kind TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', text TEXT NOT NULL,
 	  links TEXT NOT NULL DEFAULT '[]',
@@ -209,76 +208,15 @@ var memoryMigrations = []memoryMigration{{sql: `CREATE TABLE memories (
 	  pinned INTEGER NOT NULL DEFAULT 0, confidence REAL NOT NULL DEFAULT 1,
 	  use_count INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER,
 	  flags TEXT NOT NULL DEFAULT '', deleted_at INTEGER, updated_at INTEGER NOT NULL,
-	  embedding BLOB);
+	  embedding BLOB,
+	  keywords TEXT NOT NULL DEFAULT '',   -- the extraction's, for the full-text index
+	  importance INTEGER NOT NULL DEFAULT 3,
+	  stems TEXT NOT NULL DEFAULT '',      -- the French stems, a shadow column of the index (memoryStems)
+	  basis TEXT NOT NULL DEFAULT '');
 	CREATE INDEX memories_status_kind ON memories (status, kind);
 	CREATE INDEX memories_subject ON memories (subject);
 	CREATE INDEX memories_due ON memories (due_at) WHERE kind = 'commitment';
-	CREATE VIRTUAL TABLE memories_fts USING fts5(text, subject, content='memories', content_rowid='id',
-	  tokenize='unicode61 remove_diacritics 2');
-	CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
-	  INSERT INTO memories_fts (rowid, text, subject) VALUES (new.id, new.text, new.subject); END;
-	CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
-	  INSERT INTO memories_fts (memories_fts, rowid, text, subject) VALUES ('delete', old.id, old.text, old.subject); END;
-	CREATE TRIGGER memories_au AFTER UPDATE OF text, subject ON memories BEGIN
-	  INSERT INTO memories_fts (memories_fts, rowid, text, subject) VALUES ('delete', old.id, old.text, old.subject);
-	  INSERT INTO memories_fts (rowid, text, subject) VALUES (new.id, new.text, new.subject); END;
-	CREATE TABLE memory_log (
-	  seq INTEGER PRIMARY KEY AUTOINCREMENT, memory_id INTEGER NOT NULL, time INTEGER NOT NULL,
-	  who TEXT NOT NULL, op TEXT NOT NULL, before TEXT, after TEXT, reason TEXT NOT NULL DEFAULT '');
-	CREATE INDEX memory_log_memory ON memory_log (memory_id);
-	CREATE TRIGGER memory_log_append_only BEFORE UPDATE ON memory_log BEGIN
-	  SELECT RAISE(ABORT, 'memory_log is append-only'); END;
-	CREATE TABLE extraction_runs (
-	  id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, upto INTEGER NOT NULL,
-	  task_id TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
-	  started INTEGER NOT NULL, finished INTEGER, applied INTEGER NOT NULL DEFAULT 0);
-	CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);`},
-	{fn: migrateSearchKeys},
-	{sql: `ALTER TABLE memories ADD COLUMN basis TEXT NOT NULL DEFAULT ''`},
-	{fn: migrateIntentions},
-	{sql: learningSchema}, // learning.go
-}
-
-// migrateSearchKeys (schema 2) gives the full-text index its keys: the
-// extraction's keywords, and the French stems in a shadow column. The FTS
-// table is derived data: it is dropped and rebuilt from memories, whose
-// rows only gain columns (keywords, importance 3, stems).
-func migrateSearchKeys(tx *sql.Tx) error {
-	for _, q := range []string{
-		`DROP TRIGGER IF EXISTS memories_ai`, `DROP TRIGGER IF EXISTS memories_ad`, `DROP TRIGGER IF EXISTS memories_au`,
-		`DROP TABLE IF EXISTS memories_fts`,
-		`ALTER TABLE memories ADD COLUMN keywords TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE memories ADD COLUMN importance INTEGER NOT NULL DEFAULT 3`,
-		`ALTER TABLE memories ADD COLUMN stems TEXT NOT NULL DEFAULT ''`,
-	} {
-		if _, err := tx.Exec(q); err != nil {
-			return err
-		}
-	}
-	rows, err := tx.Query(`SELECT id, text, subject FROM memories`)
-	if err != nil {
-		return err
-	}
-	type row struct {
-		id            int64
-		text, subject string
-	}
-	var all []row
-	for rows.Next() {
-		var r row
-		if err := rows.Scan(&r.id, &r.text, &r.subject); err != nil {
-			rows.Close()
-			return err
-		}
-		all = append(all, r)
-	}
-	rows.Close()
-	for _, r := range all {
-		if _, err := tx.Exec(`UPDATE memories SET stems = ? WHERE id = ?`, memoryStems(r.text, r.subject, ""), r.id); err != nil {
-			return err
-		}
-	}
-	_, err = tx.Exec(`CREATE VIRTUAL TABLE memories_fts USING fts5(text, subject, keywords, stems, content='memories', content_rowid='id',
+	CREATE VIRTUAL TABLE memories_fts USING fts5(text, subject, keywords, stems, content='memories', content_rowid='id',
 	  tokenize='unicode61 remove_diacritics 2');
 	CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
 	  INSERT INTO memories_fts (rowid, text, subject, keywords, stems) VALUES (new.id, new.text, new.subject, new.keywords, new.stems); END;
@@ -289,9 +227,17 @@ func migrateSearchKeys(tx *sql.Tx) error {
 	  INSERT INTO memories_fts (memories_fts, rowid, text, subject, keywords, stems)
 	    VALUES ('delete', old.id, old.text, old.subject, old.keywords, old.stems);
 	  INSERT INTO memories_fts (rowid, text, subject, keywords, stems) VALUES (new.id, new.text, new.subject, new.keywords, new.stems); END;
-	INSERT INTO memories_fts (memories_fts) VALUES ('rebuild');`)
-	return err
-}
+	CREATE TABLE memory_log (
+	  seq INTEGER PRIMARY KEY AUTOINCREMENT, memory_id INTEGER NOT NULL, time INTEGER NOT NULL,
+	  who TEXT NOT NULL, op TEXT NOT NULL, before TEXT, after TEXT, reason TEXT NOT NULL DEFAULT '');
+	CREATE INDEX memory_log_memory ON memory_log (memory_id);
+	CREATE TRIGGER memory_log_append_only BEFORE UPDATE ON memory_log BEGIN
+	  SELECT RAISE(ABORT, 'memory_log is append-only'); END;
+	CREATE TABLE extraction_runs (
+	  id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, upto INTEGER NOT NULL,
+	  task_id TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
+	  started INTEGER NOT NULL, finished INTEGER, applied INTEGER NOT NULL DEFAULT 0);
+	CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);`
 
 // memoryStems is a memory's stems column: its text, the name in its
 // subject (person:paul: paul) and its keywords.
@@ -328,37 +274,27 @@ func (m *memStore) migrate() error {
 	if m.db.QueryRow(`SELECT value FROM meta WHERE key = 'schema_version'`).Scan(&v) == nil {
 		fmt.Sscan(v, &version)
 	}
-	if version > len(memoryMigrations) {
-		return fmt.Errorf("memory.db is at schema %d, newer than this eriphe-core (%d)", version, len(memoryMigrations))
+	switch version {
+	case memorySchemaVersion:
+		return nil
+	case 0:
+	default:
+		return fmt.Errorf("memory.db is at schema %d, this eriphe-core reads %d", version, memorySchemaVersion)
 	}
-	for i := version; i < len(memoryMigrations); i++ {
-		tx, err := m.db.Begin()
-		if err != nil {
-			return err
-		}
-		step := memoryMigrations[i]
-		if step.sql != "" {
-			if _, err := tx.Exec(step.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d: %w", i+1, err)
-			}
-		}
-		if step.fn != nil {
-			if err := step.fn(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d: %w", i+1, err)
-			}
-		}
-		if _, err := tx.Exec(`INSERT INTO meta (key, value) VALUES ('schema_version', ?)
-			ON CONFLICT(key) DO UPDATE SET value = excluded.value`, fmt.Sprint(i+1)); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if err := tx.Commit(); err != nil {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{memorySchema, intentionsSchema, learningSchema} {
+		if _, err := tx.Exec(q); err != nil {
 			return err
 		}
 	}
-	return nil
+	if _, err := tx.Exec(`INSERT INTO meta (key, value) VALUES ('schema_version', ?)`, fmt.Sprint(memorySchemaVersion)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (m *memStore) schemaVersion() int {

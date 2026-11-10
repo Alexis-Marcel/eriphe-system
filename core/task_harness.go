@@ -13,17 +13,11 @@ import (
 func init() {
 	extraSchema = append(extraSchema, `CREATE TABLE IF NOT EXISTS task_harness (
   task_id TEXT PRIMARY KEY, receipt TEXT NOT NULL DEFAULT '', repairs INTEGER NOT NULL DEFAULT 0,
-  repair_turn INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0)`)
-}
-
-// The columns of the retries and budgets (task_retry.go).
-func init() {
-	extraColumns = append(extraColumns,
-		`ALTER TABLE task_harness ADD COLUMN retries INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE task_harness ADD COLUMN retry_at INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE task_harness ADD COLUMN last_failure TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE task_harness ADD COLUMN failures TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE task_harness ADD COLUMN stop_reason TEXT NOT NULL DEFAULT ''`)
+  repair_turn INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0,
+  contract TEXT NOT NULL DEFAULT '', -- its contract (contract.go)
+  -- the retries and budgets (task_retry.go)
+  retries INTEGER NOT NULL DEFAULT 0, retry_at INTEGER NOT NULL DEFAULT 0, last_failure TEXT NOT NULL DEFAULT '',
+  failures TEXT NOT NULL DEFAULT '', stop_reason TEXT NOT NULL DEFAULT '')`)
 }
 
 // harnessRow is a task's row of task_harness.

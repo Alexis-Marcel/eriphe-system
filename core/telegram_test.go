@@ -556,35 +556,3 @@ func TestCheckChannels(t *testing.T) {
 		t.Error("a rule with an unknown channel was accepted")
 	}
 }
-
-// Telegram's state from before it was a channel like the others moves to
-// its channel's keys: its detail, what it read, whether the user writes
-// from it, where its messages and cards went, and a proposed setting.
-func TestTelegramStateMigrated(t *testing.T) {
-	c, _, _ := telegramCore(t)
-	st := c.store
-	for k, v := range map[string]string{"telegram_detail": "alert", "telegram_seen": "5", "telegram_route": "1",
-		"telegram_lang": "en", "tg_msg:3": "1", "tg_notif:4": "1"} {
-		st.set(k, v)
-	}
-	st.db.Exec(`INSERT INTO setting_proposals (name, value, created) VALUES ('telegram_detail', 'alert', 1)`)
-	st.db.Exec(`INSERT INTO convo_cards (ref, kind, created, tg) VALUES ('rule:9', 'rule', 1, 1)`)
-	var card int64
-	st.db.QueryRow(`SELECT id FROM convo_cards WHERE ref = 'rule:9'`).Scan(&card)
-	for _, q := range extraColumns {
-		st.db.Exec(q)
-	}
-	if c.channelDetail(tgChannel) != detailAlert || st.get(channelSeenKey(tgChannel)) != "5" || !c.channelRouting(tgChannel) ||
-		st.get(channelLangKey) != "en" || st.get(channelMsgKey(tgChannel, 3)) == "" || st.get(channelNotifKey(tgChannel, 4)) == "" ||
-		st.get(channelCardSentKey(tgChannel, card)) == "" {
-		t.Fatal("not migrated")
-	}
-	var name, value string
-	st.db.QueryRow(`SELECT name, value FROM setting_proposals`).Scan(&name, &value)
-	if name != setDetail || value != "telegram alert" {
-		t.Fatalf("proposal %q %q", name, value)
-	}
-	if _, err := checkSetting(name, value); err != nil {
-		t.Fatal(err)
-	}
-}

@@ -32,7 +32,8 @@ const webAuthSchema = `CREATE TABLE IF NOT EXISTS web_owner (
   id INTEGER PRIMARY KEY CHECK (id = 1), hash TEXT NOT NULL, updated INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS web_sessions (
   id TEXT PRIMARY KEY, csrf TEXT NOT NULL, created INTEGER NOT NULL,
-  seen INTEGER NOT NULL, expires INTEGER NOT NULL);`
+  seen INTEGER NOT NULL, expires INTEGER NOT NULL,
+  via TEXT NOT NULL DEFAULT 'password'); -- how it was opened (web_signin.go)`
 
 func init() { extraSchema = append(extraSchema, webAuthSchema) }
 

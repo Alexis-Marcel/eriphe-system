@@ -190,22 +190,3 @@ func TestAccessWords(t *testing.T) {
 		}
 	}
 }
-
-// Every API access is generic: from before kinds, or of Home Assistant's
-// former kind.
-func TestChannelKindMigration(t *testing.T) {
-	c, _ := testMemoryCore(t)
-	c.addChannel("Home Assistant", false, carrySentence)
-	c.addChannel("Script", false, "")
-	c.store.db.Exec(`UPDATE channels SET kind = 'home-assistant' WHERE name = 'Home Assistant'`)
-	c.store.db.Exec(`UPDATE channels SET kind = '' WHERE name = 'Script'`)
-	for _, q := range extraColumns {
-		if strings.Contains(q, "channels") {
-			c.store.db.Exec(q)
-		}
-	}
-	chs := c.addedChannels()
-	if len(chs) != 2 || chs[0].Kind != apiGeneric || chs[1].Kind != apiGeneric {
-		t.Fatalf("%+v", chs)
-	}
-}

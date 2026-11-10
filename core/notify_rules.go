@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -67,17 +66,8 @@ func (r notifyRule) act() string {
 	return "deliver"
 }
 
-// The table of before #244 step 5, read once by migrateNotifyRules.
-const notifyRulesSchema = `CREATE TABLE IF NOT EXISTS notify_rules (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, match TEXT NOT NULL DEFAULT '',
-  outcome TEXT NOT NULL DEFAULT '', night INTEGER NOT NULL DEFAULT 0, days TEXT NOT NULL DEFAULT 'all',
-  quiet_from INTEGER NOT NULL DEFAULT 0, quiet_to INTEGER NOT NULL DEFAULT 0,
-  state TEXT NOT NULL, why TEXT NOT NULL DEFAULT '', source_ref TEXT NOT NULL DEFAULT '',
-  tainted TEXT NOT NULL DEFAULT '', by TEXT NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL);`
-
 // rulesSchema is the table notification rules are kept in (source
-// notification). It held the event rules too, removed with #278: their rows
-// and runs are dropped at start, with the tables of what went with them.
+// notification).
 const rulesSchema = `CREATE TABLE IF NOT EXISTS rules (
   id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, source TEXT NOT NULL,
   spec TEXT NOT NULL DEFAULT '{}', prompt TEXT NOT NULL, brief INTEGER NOT NULL DEFAULT 0,
@@ -86,28 +76,7 @@ const rulesSchema = `CREATE TABLE IF NOT EXISTS rules (
   mark INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL,
   act TEXT NOT NULL DEFAULT '');`
 
-func init() {
-	extraSchema = append(extraSchema, rulesSchema)
-	extraColumns = append(extraColumns, `ALTER TABLE rules ADD COLUMN act TEXT NOT NULL DEFAULT ''`,
-		`DELETE FROM rules WHERE source != 'notification'`,
-		`DROP TABLE IF EXISTS rule_runs`, `DROP TABLE IF EXISTS rule_incidents`, `DROP TABLE IF EXISTS standing_approvals`,
-		`DROP TABLE IF EXISTS assistant_tasks`, `DROP TABLE IF EXISTS assistant_proposals`,
-		`DELETE FROM kv WHERE key = 'watch_turn'`,
-		// The specialist assistants went with them (role assistant): no migration.
-		`DELETE FROM catalog WHERE kind = 'assistant' AND json_extract(spec, '$.role') = 'assistant'`,
-		// The signal context and Home Assistant's follower went with #278:
-		// Home Assistant is a tool and channels like any other.
-		`DROP TABLE IF EXISTS ha_mappings`, `DROP TABLE IF EXISTS ha_follows`, `DROP TABLE IF EXISTS context_sources`,
-		`DELETE FROM kv WHERE key IN ('context_level', 'context_off', 'context_rooms')`,
-		`DELETE FROM convo_cards WHERE kind = 'presence'`)
-	storeMigrations = append(storeMigrations, migrateNotifyRules)
-	// Added with the channels (channels.go): where a topic's notifications go
-	// (on a table of before #244 step 5, until it is moved).
-	extraColumns = append(extraColumns, `ALTER TABLE notify_rules ADD COLUMN channels TEXT NOT NULL DEFAULT ''`)
-	// Added with the router (route.go): lines a topic adds, or forbids.
-	extraColumns = append(extraColumns, `ALTER TABLE notify_rules ADD COLUMN also TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE notify_rules ADD COLUMN never_on TEXT NOT NULL DEFAULT ''`)
-}
+func init() { extraSchema = append(extraSchema, rulesSchema) }
 
 const (
 	ruleTopic = "topic"
@@ -342,49 +311,6 @@ func insertNotifyRule(tx interface {
 		return 0, err
 	}
 	return res.LastInsertId()
-}
-
-// migrateNotifyRules moves the table notify_rules of before #244 step 5
-// into rules, each a rule on the notification event, and points the cards
-// that propose one at its new id.
-func migrateNotifyRules(db *sql.DB) error {
-	rows, err := db.Query(`SELECT id, kind, match, outcome, night, days, quiet_from, quiet_to, state, why, source_ref, tainted, by,
-		created, channels, also, never_on FROM notify_rules ORDER BY id`)
-	if err != nil {
-		return nil // no such table: moved already, or never made
-	}
-	var olds []notifyRule
-	for rows.Next() {
-		var r notifyRule
-		var created int64
-		if rows.Scan(&r.ID, &r.Kind, &r.Match, &r.Outcome, &r.Night, &r.Days, &r.From, &r.To, &r.State, &r.Why,
-			&r.SourceRef, &r.Tainted, &r.By, &created, &r.Channels, &r.Also, &r.Never) == nil {
-			r.Created = time.Unix(created, 0)
-			olds = append(olds, r)
-		}
-	}
-	rows.Close()
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	for _, r := range olds {
-		id, err := insertNotifyRule(tx, r, r.Created.Unix())
-		if err != nil {
-			return fmt.Errorf("moving notification rule %d: %w", r.ID, err)
-		}
-		// Through a mark of their own, so that a new id equal to an old one is not moved twice.
-		tx.Exec(`UPDATE convo_cards SET ref = ? WHERE ref = ?`, fmt.Sprintf("rulemoved:%d", id), fmt.Sprintf("%s:%d", cardRule, r.ID))
-	}
-	tx.Exec(`UPDATE convo_cards SET ref = 'rule:' || substr(ref, 11) WHERE ref LIKE 'rulemoved:%'`)
-	if _, err := tx.Exec(`DROP TABLE notify_rules`); err != nil {
-		return err
-	}
-	if len(olds) > 0 {
-		log.Printf("rules: %d notification rules moved into rules (#244 step 5)", len(olds))
-	}
-	return tx.Commit()
 }
 
 // approveNotifyRule makes a proposed rule active: the user's say.

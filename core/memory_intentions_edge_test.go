@@ -1,7 +1,6 @@
 package main
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -46,32 +45,5 @@ func TestIntentionEdges(t *testing.T) {
 	m.surfaced(p.Due, "test")
 	if p, _ = m.wakePacket(); len(p.Pending) != 1 || p.Pending[0].ID != ext.ID || strings.Contains(p.render("Sam"), "SECRET") {
 		t.Fatalf("pending external quoted:\n%s", p.render("Sam"))
-	}
-}
-
-// The upgrade does not wake the brain for every old late commitment.
-func TestMigrationLateCommitments(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "memory.db")
-	m, err := openMemory(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mustAdd(t, m, &Memory{Kind: kindCommitment, Text: "Rendre le livre", DueAt: time.Now().AddDate(0, 0, -10)})
-	for _, q := range []string{`DROP TABLE intentions`, `DROP TABLE intention_log`, `UPDATE meta SET value = '3' WHERE key = 'schema_version'`} {
-		if _, err := m.db.Exec(q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	m.db.Close()
-	if m, err = openMemory(path); err != nil {
-		t.Fatal(err)
-	}
-	defer m.db.Close()
-	xs, _ := m.intentions(intentDue)
-	if len(xs) != 1 || !xs[0].Overdue(time.Now()) {
-		t.Fatalf("late commitment: %+v", xs)
-	}
-	if again, _ := m.toSurface(); len(again) != 0 {
-		t.Fatalf("a wake for an old late commitment: %v", again)
 	}
 }

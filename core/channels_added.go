@@ -29,24 +29,14 @@ import (
 //     writes, said where the user is (a speaker in their room).
 //
 // Home Assistant's voice, through its integration (ha/), is one of them,
-// like any other app. Its former token (voice_token_hash) became the
-// channel "Home Assistant", not trusted, carrying a sentence.
+// like any other app.
 
 const channelsSchema = `CREATE TABLE IF NOT EXISTS channels (
   id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE COLLATE NOCASE, token_hash TEXT NOT NULL,
-  trusted INTEGER NOT NULL DEFAULT 0, carries TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL);
-INSERT INTO channels (name, token_hash, trusted, carries, created)
-  SELECT 'Home Assistant', value, 0, 'sentence', CAST(strftime('%s', 'now') AS INTEGER) FROM kv
-  WHERE key = 'voice_token_hash' AND value != '' AND NOT EXISTS (SELECT 1 FROM channels WHERE token_hash = kv.value);
-DELETE FROM kv WHERE key = 'voice_token_hash';`
+  trusted INTEGER NOT NULL DEFAULT 0, carries TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL,
+  kind TEXT NOT NULL DEFAULT ''); -- every added channel is an API access (api), whatever app holds its token`
 
-func init() {
-	extraSchema = append(extraSchema, channelsSchema)
-	// Every added channel is an API access, whatever app holds its token;
-	// a kind of Home Assistant's own was folded into it.
-	extraColumns = append(extraColumns, `ALTER TABLE channels ADD COLUMN kind TEXT NOT NULL DEFAULT ''`,
-		`UPDATE channels SET kind = 'api' WHERE kind IN ('', 'home-assistant')`)
-}
+func init() { extraSchema = append(extraSchema, channelsSchema) }
 
 const (
 	maxChannels       = 20

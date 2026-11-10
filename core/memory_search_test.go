@@ -1,8 +1,6 @@
 package main
 
 import (
-	"database/sql"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -105,64 +103,5 @@ func TestRecallTimeInQuestion(t *testing.T) {
 	}
 	if xs, _ = m.recall(recallQuery{Query: "Que s'est-il passé le 19 septembre ?"}); len(xs) == 0 || xs[0].ID != ep.ID {
 		t.Errorf("19 septembre: %v", ids(xs))
-	}
-}
-
-// The memory.db of the previous version (schema 1) is migrated in place:
-// every memory and its history kept, the index rebuilt with the stems.
-func TestMemoryMigrationFromSchema1(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "memory.db")
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`, memoryMigrations[0].sql,
-		`INSERT INTO meta (key, value) VALUES ('schema_version', '1')`,
-		`INSERT INTO memories (kind, subject, text, links, valid_from, recorded_at, source_kind, trust, status, pinned, updated_at)
-		 VALUES ('profile', 'owner', 'Sam est graphiste', '[]', 1, 1, 'owner', 'owner', 'active', 1, 1),
-		        ('fact', 'person:noe', 'Les anniversaires de Noé se fêtent en octobre', '[]', 1, 1, 'extraction', 'owner', 'active', 0, 1),
-		        ('episode', 'task', 'Résumé des mails', '[]', 1, 1, 'extraction', 'external', 'proposed', 0, 1)`,
-		`INSERT INTO memory_log (memory_id, time, who, op, reason) VALUES (2, 1, 'brain', 'add', '')`,
-	} {
-		if _, err := db.Exec(q); err != nil {
-			t.Fatalf("%v: %s", err, q)
-		}
-	}
-	db.Close()
-	m, err := openMemory(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer m.db.Close()
-	if v := m.schemaVersion(); v != len(memoryMigrations) {
-		t.Fatalf("schema %d", v)
-	}
-	if n := m.count(`1 = 1`); n != 3 {
-		t.Fatalf("%d memories after the migration", n)
-	}
-	x, _ := m.memory(2)
-	if x.Importance != 3 || x.Keywords != "" || x.Text != "Les anniversaires de Noé se fêtent en octobre" {
-		t.Fatalf("migrated memory: %+v", x)
-	}
-	if h, _ := m.history(2); len(h) != 1 {
-		t.Fatalf("history: %+v", h)
-	}
-	if xs, _ := m.recall(recallQuery{Query: "anniversaire"}); len(xs) != 1 || xs[0].ID != 2 {
-		t.Fatalf("stems of an old memory: %v", ids(xs))
-	}
-	// The index follows the changes made after.
-	if _, err := m.update(2, memoryPatch{Text: ptr("Noé aime le vélo")}, "test", ""); err != nil {
-		t.Fatal(err)
-	}
-	if xs, _ := m.recall(recallQuery{Query: "anniversaire"}); len(xs) != 0 {
-		t.Fatalf("old text still indexed: %v", ids(xs))
-	}
-	if xs, _ := m.recall(recallQuery{Query: "vélos"}); len(xs) != 1 {
-		t.Fatalf("new text not indexed: %v", ids(xs))
-	}
-	var integrity string
-	m.db.QueryRow(`INSERT INTO memories_fts (memories_fts) VALUES ('integrity-check')`).Scan(&integrity)
-	if _, err := m.db.Exec(`INSERT INTO memories_fts (memories_fts) VALUES ('integrity-check')`); err != nil {
-		t.Fatalf("index integrity: %v", err)
 	}
 }

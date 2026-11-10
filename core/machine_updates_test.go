@@ -55,8 +55,7 @@ func assignmentUpdate(t *testing.T, c *core, name string) *nodeUpdate {
 	return out.Update
 }
 
-// One switch for all machines, off by default; the choices of before
-// (for all and for each machine) go, "at night for all" staying on.
+// One switch for all machines, off by default.
 func TestNightUpdatesSwitch(t *testing.T) {
 	c := newUpdateCore(t, "0.1.0")
 	if c.nightUpdates() {
@@ -69,34 +68,6 @@ func TestNightUpdatesSwitch(t *testing.T) {
 		t.Fatalf("off: %v", err)
 	}
 
-	for _, tc := range []struct {
-		all  string
-		want bool
-	}{{"night", true}, {"notify", false}, {"never", false}, {"", false}} {
-		path := filepath.Join(t.TempDir(), "core.db")
-		s, err := openStore(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if tc.all != "" {
-			s.set("update_policy", tc.all)
-		}
-		s.set("update_policy:node:pc", "never")
-		s.set("update_policy:core", "night")
-		s.db.Close()
-		if s, err = openStore(path); err != nil {
-			t.Fatal(err)
-		}
-		if got := s.get(updateNightKey) == "1"; got != tc.want {
-			t.Errorf("%q for all: at night %t, want %t", tc.all, got, tc.want)
-		}
-		var left int
-		s.db.QueryRow(`SELECT COUNT(*) FROM kv WHERE key LIKE 'update_policy%'`).Scan(&left)
-		if left != 0 {
-			t.Errorf("%q for all: %d choices left", tc.all, left)
-		}
-		s.db.Close()
-	}
 }
 
 // A request reaches the node in its assignments, with eriphe-core's own

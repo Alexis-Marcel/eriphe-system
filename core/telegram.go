@@ -117,22 +117,6 @@ func init() {
 		start:  startTelegram,
 		entry:  telegramEntry,
 	})
-	// Its state from before it was a channel like the others: how much it
-	// is told, what it read, whether the user writes from it, and what
-	// went there.
-	extraColumns = append(extraColumns,
-		`UPDATE setting_proposals SET name = 'channel_detail', value = 'telegram ' || value WHERE name = 'telegram_detail'`,
-		`UPDATE kv SET key = 'channel_detail:telegram' WHERE key = 'telegram_detail'
-		  AND NOT EXISTS (SELECT 1 FROM kv WHERE key = 'channel_detail:telegram')`,
-		`UPDATE kv SET key = 'channel_lang' WHERE key = 'telegram_lang' AND NOT EXISTS (SELECT 1 FROM kv WHERE key = 'channel_lang')`,
-		`UPDATE kv SET key = 'channel_seen:telegram' WHERE key = 'telegram_seen'
-		  AND NOT EXISTS (SELECT 1 FROM kv WHERE key = 'channel_seen:telegram')`,
-		`UPDATE kv SET key = 'channel_route:telegram' WHERE key = 'telegram_route'
-		  AND NOT EXISTS (SELECT 1 FROM kv WHERE key = 'channel_route:telegram')`,
-		`UPDATE OR IGNORE kv SET key = 'channel_msg:telegram:' || substr(key, 8) WHERE key LIKE 'tg_msg:%'`,
-		`UPDATE OR IGNORE kv SET key = 'channel_notif:telegram:' || substr(key, 10) WHERE key LIKE 'tg_notif:%'`,
-		`INSERT OR IGNORE INTO kv (key, value) SELECT 'channel_card:telegram:' || id, '1' FROM convo_cards WHERE tg = 1`,
-		`UPDATE convo_cards SET tg = 2 WHERE tg = 1`)
 }
 
 func newTelegram(c *core) *telegram {

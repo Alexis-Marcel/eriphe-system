@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -269,64 +267,4 @@ func TestExtractionIntentions(t *testing.T) {
 	if prompt := c.extractionPrompt(time.Now().Format("2006-01-02"), nil); !strings.Contains(prompt, fmt.Sprintf("intention=%d", ext.ID)) || !strings.Contains(prompt, "INTENT_UPDATE") {
 		t.Fatalf("prompt:\n%s", prompt)
 	}
-}
-
-// Schema 3 to 4: the commitment memories move into intentions, their
-// state kept; the memories are archived, with their history and a log
-// entry naming the intention. Nothing is deleted.
-func TestMigrationMovesCommitments(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "memory.db")
-	m, err := openMemory(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	open := mustAdd(t, m, &Memory{Kind: kindCommitment, Text: "Préparer le devis", DueAt: time.Now().Add(48 * time.Hour)})
-	done := mustAdd(t, m, &Memory{Kind: kindCommitment, Text: "Payer le loyer", State: stateDone})
-	dropped := mustAdd(t, m, &Memory{Kind: kindCommitment, Text: "Voir le garage", State: stateDropped})
-	prop := mustAdd(t, m, &Memory{Kind: kindCommitment, Text: "Payer la facture du mail", Status: memProposed, SourceKind: srcExtraction, Trust: trustExternal})
-	fact := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Sam a un vélo"})
-	// Back to schema 3, as the previous version left it.
-	for _, q := range []string{`DROP TABLE intentions`, `DROP TABLE intention_log`, `UPDATE meta SET value = '3' WHERE key = 'schema_version'`} {
-		if _, err := m.db.Exec(q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	m.db.Close()
-	m, err = openMemory(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer m.db.Close()
-	all, _ := m.intentions(intentProposed, intentOpen, intentDue, intentSnoozed, intentDone, intentCancelled)
-	state := map[string]*Intention{}
-	for _, x := range all {
-		state[x.Text] = x
-	}
-	if len(all) != 4 || state["Préparer le devis"].State != intentOpen || state["Payer le loyer"].State != intentDone ||
-		state["Voir le garage"].State != intentCancelled || state["Payer la facture du mail"].State != intentProposed ||
-		state["Payer la facture du mail"].Trust != trustExternal || state["Préparer le devis"].MemoryID != open.ID {
-		t.Fatalf("moved: %+v", all)
-	}
-	if !state["Préparer le devis"].DueAt.Equal(open.DueAt.Truncate(time.Second)) {
-		t.Fatalf("due date: %v, was %v", state["Préparer le devis"].DueAt, open.DueAt)
-	}
-	for _, id := range []int64{open.ID, done.ID, dropped.ID, prop.ID} {
-		x, err := m.memory(id)
-		if err != nil || x.Status != memArchived {
-			t.Fatalf("memory %d: %+v %v", id, x, err)
-		}
-		h, _ := m.history(id)
-		if last := h[len(h)-1]; last.Op != "archive" || !strings.Contains(last.Reason, "moved to intention") {
-			t.Fatalf("history of %d: %+v", id, last)
-		}
-	}
-	if x, _ := m.memory(fact.ID); x.Status != memActive {
-		t.Fatalf("a fact touched: %+v", x)
-	}
-	var n int
-	m.db.QueryRow(`SELECT COUNT(*) FROM memories`).Scan(&n)
-	if n != 5 {
-		t.Fatalf("%d memories", n)
-	}
-	_ = sql.ErrNoRows
 }
