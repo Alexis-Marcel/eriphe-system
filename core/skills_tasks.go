@@ -24,20 +24,6 @@ type nodeSkill struct {
 // skillsDir is where a task finds the user's skills.
 const skillsDir = "/run/eriphe/skills/.claude/skills"
 
-// skillsNative tells whether the task's agent loads the mounted skills by
-// itself. Claude Code and Codex keep every skill off in a task on a
-// repository that is not the user's (node/skills.go): theirs are then
-// listed in the task's instructions, as for an ACP agent, which loads none.
-func skillsNative(runtime string, repoSkillsOff bool) bool {
-	switch runtime {
-	case "opencode":
-		return true
-	case "claude-code", "", "codex":
-		return !repoSkillsOff
-	}
-	return false
-}
-
 // skillsIndex tells a task's agent where the user's skills are, when it
 // does not load them itself.
 func skillsIndex(skills []Skill) string {
@@ -60,7 +46,9 @@ func (c *core) lendSkills(spec *nodeTaskSpec) {
 	for _, k := range skills {
 		spec.Skills = append(spec.Skills, nodeSkill{Name: k.Name, SHA256: k.Approved})
 	}
-	if !skillsNative(spec.Runtime, spec.Repo != "" && !spec.RepoSkills) {
+	// A harness that loads none, or keeps them off on this repository,
+	// gets them listed in the task's instructions (harnesses.go).
+	if !harnessOf(spec.Runtime).loadsSkills(spec.Repo != "" && !spec.RepoSkills) {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + skillsIndex(skills))
 	}
 }

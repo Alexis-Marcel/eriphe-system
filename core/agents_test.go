@@ -229,7 +229,7 @@ func TestACPAgentsConfig(t *testing.T) {
 		}, "its own settings"},
 		{"a command for another runtime", func(c *Config) {
 			c.Agents["kimi"] = Agent{Runtime: "opencode", Provider: "gemini", Model: "google/gemini-4-argon", Command: []string{"opencode"}}
-		}, "only an acp agent"},
+		}, "takes no command"},
 		{"acp with a known provider", func(c *Config) {
 			c.Agents["qwen"] = Agent{Runtime: "acp", Provider: "gemini", Command: []string{"qwen"}}
 		}, "cannot use"},

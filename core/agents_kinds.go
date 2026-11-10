@@ -77,6 +77,14 @@ type providerKind struct {
 	// read images and PDFs; of an open catalog, only tool calling is assumed.
 	Unlisted modelCaps
 	Presets  []agentPreset
+	// SignIn: its credential is a sign-in made in the workspace and kept
+	// fresh in the vault (chatgpt.go), not a pasted key.
+	SignIn bool
+	// Untested is said, as a text key, instead of a call that checks the
+	// credential: none is cheap. With a Prefix, a credential is still
+	// checked for its shape: that start, and MinLen at least.
+	Untested string
+	MinLen   int
 }
 
 // Runtime is the runtime its agents run unless told otherwise.
@@ -104,10 +112,10 @@ var claudePresets = []agentPreset{
 // first, then pay-per-use keys.
 var providerKinds = []providerKind{
 	{ID: "claude-subscription", Billing: billSubscription, Name: "claude", Runtimes: []string{"claude-code"},
-		Env: "CLAUDE_CODE_OAUTH_TOKEN", Prefix: "sk-ant-oat", Unlisted: claudeCaps,
+		Env: "CLAUDE_CODE_OAUTH_TOKEN", Prefix: "sk-ant-oat", MinLen: 40, Untested: "ptest.subscription", Unlisted: claudeCaps,
 		Models: map[string][]modelChoice{"claude-code": claudeModels}, Presets: claudePresets},
 	{ID: "chatgpt-subscription", Billing: billSubscription, Name: "chatgpt", Runtimes: []string{"codex"},
-		Env: codexAuthEnv, Unlisted: codexCaps, // chatgpt.go
+		Env: codexAuthEnv, SignIn: true, Untested: "ptest.chatgpt", Unlisted: codexCaps, // chatgpt.go
 		Models: map[string][]modelChoice{"codex": {
 			{"gpt-6.1-sol", "GPT-6.1 Sol", "model.gpt", codexCaps},
 			{"gpt-6-luna", "GPT-6 Luna", "model.small", codexCaps},

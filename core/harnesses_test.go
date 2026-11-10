@@ -51,14 +51,14 @@ func TestHarnessCards(t *testing.T) {
 	}
 	// Claude Code does all the core asks of a runtime, as before the card.
 	if want := (harness{MCP: true, SystemPrompt: promptFlag, Streams: true, PDFInToolResult: true, ImageInToolResult: true,
-		BuiltinWebSearch: true, BuiltinWebFetch: true, Resume: true, AutoModel: true}); harnessOf("claude-code") != want {
+		BuiltinWebSearch: true, BuiltinWebFetch: true, Resume: true, AutoModel: true, Skills: skillsTrusted}); harnessOf("claude-code") != want {
 		t.Errorf("claude-code = %+v", harnessOf("claude-code"))
 	}
 	if h := harnessOf("codex"); h.PDFInToolResult || !h.ImageInToolResult || !h.canBeBrain() {
 		t.Errorf("codex = %+v", h)
 	}
 	// Any other ACP agent: the MCP servers, and nothing else counted on.
-	if h := harnessOf("acp"); h != (harness{MCP: true, SystemPrompt: promptPrepended, AutoModel: true}) || h.takesSystemPrompt() || h.canBeBrain() {
+	if h := harnessOf("acp"); h != (harness{MCP: true, SystemPrompt: promptPrepended, AutoModel: true, ByCommand: true}) || h.takesSystemPrompt() || h.canBeBrain() {
 		t.Errorf("acp = %+v", h)
 	}
 	if harnessOf("magic") != (harness{}) || harnessOf("magic").canBeBrain() {

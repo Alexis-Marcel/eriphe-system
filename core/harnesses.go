@@ -14,6 +14,13 @@ const (
 	promptInstructions = "instructions" // a file in OpenCode's instructions
 )
 
+// How a harness takes the user's skills, mounted in the task.
+const (
+	skillsListed  = ""        // it loads none: they are listed in the task's instructions
+	skillsLoaded  = "loaded"  // it loads them by itself
+	skillsTrusted = "trusted" // … but keeps every skill off in a repository not the user's (node/skills.go)
+)
+
 type harness struct {
 	MCP               bool   // takes the task's MCP servers: Eriphe's, the catalog's
 	SystemPrompt      string // how it takes standing instructions: prompt*
@@ -25,6 +32,9 @@ type harness struct {
 	Resume            bool   // takes up a previous session again
 	AutoModel         bool   // runs a model of its own choice when the agent names none
 	ProviderModels    bool   // its model names start with the provider's (openrouter/<model>)
+	ByCommand         bool   // an agent of it is its command (Agent.Command), which picks the model
+	Skills            string // how it takes the user's skills: skills*
+	ModelServer       bool   // reaches a self-hosted model server by its address (Task.ModelEndpoint)
 }
 
 // harnesses by runtime. MCP for codex and opencode, and their standing
@@ -34,24 +44,30 @@ var harnesses = map[string]harness{
 	// Native stream-json. A PDF is saved and read with its own Read,
 	// without asking (tested with 2.1.311).
 	"claude-code": {MCP: true, SystemPrompt: promptFlag, Streams: true, PDFInToolResult: true, ImageInToolResult: true,
-		BuiltinWebSearch: true, BuiltinWebFetch: true, Resume: true, AutoModel: true},
+		BuiltinWebSearch: true, BuiltinWebFetch: true, Resume: true, AutoModel: true, Skills: skillsTrusted},
 	// Native app-server. A PDF becomes a JSON text of its bytes: it gets the text.
 	"codex": {MCP: true, SystemPrompt: promptDeveloper, Streams: true, ImageInToolResult: true,
-		BuiltinWebSearch: true, Resume: true},
+		BuiltinWebSearch: true, Resume: true, Skills: skillsTrusted},
 	// ACP. A PDF is passed to the model inline. Its webfetch is built in
 	// (asked for); its websearch is denied (node/runtime_opencode.go).
 	"opencode": {MCP: true, SystemPrompt: promptInstructions, Streams: true, PDFInToolResult: true, ImageInToolResult: true,
-		BuiltinWebFetch: true, Resume: true, ProviderModels: true},
+		BuiltinWebFetch: true, Resume: true, ProviderModels: true, Skills: skillsLoaded, ModelServer: true},
 	// Any other ACP agent, by its command (Goose, Qwen Code…). What ACP
 	// itself gives, the MCP servers; nothing else is counted on: no system
 	// prompt in ACP v1 (its RFD is a draft), so the instructions come first
 	// in the prompt, and it cannot be the brain. Its model is its own.
-	"acp": {MCP: true, SystemPrompt: promptPrepended, AutoModel: true},
+	"acp": {MCP: true, SystemPrompt: promptPrepended, AutoModel: true, ByCommand: true},
 }
 
 // harnessOf is a runtime's card; an unknown runtime can do nothing.
 func harnessOf(runtime string) harness {
 	return harnesses[runtime]
+}
+
+// loadsSkills tells whether its agent loads the mounted skills by itself;
+// repoSkillsOff: the task is on a repository that is not the user's.
+func (h harness) loadsSkills(repoSkillsOff bool) bool {
+	return h.Skills == skillsLoaded || h.Skills == skillsTrusted && !repoSkillsOff
 }
 
 // takesSystemPrompt tells whether standing instructions reach it as such,

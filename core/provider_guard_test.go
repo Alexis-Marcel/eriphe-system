@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -80,6 +81,59 @@ func TestProviderGuardCatches(t *testing.T) {
 	file := filepath.Join(dir, "x.go")
 	os.WriteFile(file, []byte("package main\n\n// Gmail, for instance.\nfunc gmailCase(p string) bool { return p == \"google\" }\n"), 0o600)
 	if hits := providerHits(t, file); len(hits) != 2 {
+		t.Fatalf("hits: %v", hits)
+	}
+}
+
+// runtimeData are the files where a runtime or a kind of model provider
+// is named: their cards (harnesses.go, agents_kinds.go) and the URLs a
+// provider's key is tested at.
+var runtimeData = []string{"harnesses.go", "agents_kinds.go", "providers_check.go"}
+
+// No logic file of core names a runtime or a kind of model provider in a
+// string: what one can do is on its card, read by the code.
+func TestNoRuntimeInLogic(t *testing.T) {
+	names := map[string]bool{}
+	for r := range harnesses {
+		names[strconv.Quote(r)] = true
+	}
+	for _, k := range providerKinds {
+		names[strconv.Quote(k.ID)] = true
+	}
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || strings.HasPrefix(f, "web_text") || slices.Contains(runtimeData, f) {
+			continue
+		}
+		for _, hit := range literalHits(t, f, func(s string) bool { return names[s] }) {
+			t.Errorf("%s names a runtime or a provider kind: %s (put what it means on its card: harnesses.go, agents_kinds.go)", f, hit)
+		}
+	}
+}
+
+// literalHits are the strings of a file that match, with their line.
+func literalHits(t *testing.T, file string, match func(string) bool) []string {
+	t.Helper()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, file, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hits []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		if x, ok := n.(*ast.BasicLit); ok && x.Kind == token.STRING && match(x.Value) {
+			hits = append(hits, fset.Position(n.Pos()).String()+" "+x.Value)
+		}
+		return true
+	})
+	return hits
+}
+
+// The runtime guard catches a runtime's name in a string, not in a comment.
+func TestRuntimeGuardCatches(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "x.go")
+	os.WriteFile(file, []byte("package main\n\n// Like codex.\nfunc isCodex(r string) bool { return r == \"codex\" }\n"), 0o600)
+	if hits := literalHits(t, file, func(s string) bool { return s == `"codex"` }); len(hits) != 1 {
 		t.Fatalf("hits: %v", hits)
 	}
 }
