@@ -293,13 +293,6 @@ func (g *google) fetch(ctx context.Context, u, mime string, max int64) (Content,
 	return Content{MimeType: mime, Data: data}, nil
 }
 
-func (g *google) CreateFolder(ctx context.Context, parentID, name string) (Item, error) {
-	meta, _ := json.Marshal(map[string]any{"name": name, "mimeType": mimeFolder, "parents": []string{parentID}})
-	var f driveFile
-	err := g.call(ctx, http.MethodPost, g.url("/files", url.Values{"fields": {itemFields}}), bytes.NewReader(meta), "application/json", &f)
-	return f.item(), err
-}
-
 func (g *google) CreateFile(ctx context.Context, parentID, name, mimeType string, data []byte, convert bool) (Item, error) {
 	meta := map[string]any{"name": name, "parents": []string{parentID}}
 	if convert {
@@ -321,4 +314,16 @@ func (g *google) CreateFile(ctx context.Context, parentID, name, mimeType string
 	var f driveFile
 	err := g.call(ctx, http.MethodPost, u, &body, "multipart/related; boundary="+w.Boundary(), &f)
 	return f.item(), err
+}
+
+func (g *google) UpdateFile(ctx context.Context, id, mimeType string, data []byte) (Item, error) {
+	u := g.upload + "/files/" + url.PathEscape(id) + "?" + url.Values{"uploadType": {"media"}, "supportsAllDrives": {"true"}, "fields": {itemFields}}.Encode()
+	var f driveFile
+	err := g.call(ctx, http.MethodPatch, u, bytes.NewReader(data), mimeType, &f)
+	return f.item(), err
+}
+
+func (g *google) Trash(ctx context.Context, id string) error {
+	body, _ := json.Marshal(map[string]bool{"trashed": true})
+	return g.call(ctx, http.MethodPatch, g.url("/files/"+url.PathEscape(id), url.Values{"fields": {"id"}}), bytes.NewReader(body), "application/json", nil)
 }

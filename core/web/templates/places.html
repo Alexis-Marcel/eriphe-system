@@ -1,9 +1,60 @@
-{{/* Settings → Tools → a tool's places (web_places.go): the ones given, and the tool's own browsing to pick more. */}}
+{{/* Settings → Tools → an account → Folders (web_places.go): one list, the
+     folders given first with their cases, then the account's folders to
+     give more. Below, a connection's repositories. */}}
+
+{{define "tool-folders-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
+  <div class="form-title"><h2>{{tf "places.heading" .Account}}</h2></div>
+  <p>{{t "places.lead"}}</p>
+</header>
+{{template "tool-folders" .}}
+{{end}}{{end}}
+
+{{define "tool-folders-frag"}}{{template "tool-folders" .Data}}{{end}}
+
+{{/* . is a toolFolders. */}}
+{{define "tool-folders"}}{{$v := .}}{{$u := printf "%s?account=%s" .Base (urlquery .Account)}}
+<section class="panel stack" id="tool-folders">
+  {{if .Parent}}<p class="place-path"><button class="link-btn" type="button" hx-get="{{$u}}" hx-target="#tool-folders" hx-swap="outerHTML">{{t "places.top"}}</button> <b>{{.Name}}</b></p>{{end}}
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  {{if not .CanWrite}}<p class="muted small">{{t "places.ceiling"}}</p>{{end}}
+  <ul class="place-list">
+  {{range .Items}}{{$it := .}}<li{{if .Given}} class="given"{{end}}>
+    <span class="place-name">{{if .Given}}{{template "i-check"}}{{end}}{{.Name}}</span>
+    <span class="place-actions">
+      {{if .Given}}
+      {{range .Cases}}<form hx-post="{{$v.Base}}/case" hx-trigger="change" hx-target="#tool-folders" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="account" value="{{$v.Account}}"><input type="hidden" name="parent" value="{{$v.Parent}}"><input type="hidden" name="parent_name" value="{{$v.Name}}">
+        <input type="hidden" name="id" value="{{$it.ID}}"><input type="hidden" name="category" value="{{.Category}}">
+        <label class="small">{{t (printf "grid.cat.%s" .Category)}}
+          <select name="value"{{if .Greyed}} disabled title="{{t "places.ceiling"}}"{{end}}>
+            <option value=""{{if not .Own}} selected{{end}}>{{tf "places.follow" (t (printf "grid.%s" .Account))}}</option>
+            {{$own := .Own}}{{range list "free" "approval" "never"}}<option value="{{.}}"{{if eq . $own}} selected{{end}}>{{t (printf "grid.%s" .)}}</option>{{end}}
+          </select></label>
+      </form>{{end}}
+      <form hx-post="{{$v.Base}}/remove" hx-target="#tool-folders" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="account" value="{{$v.Account}}"><input type="hidden" name="parent" value="{{$v.Parent}}"><input type="hidden" name="parent_name" value="{{$v.Name}}">
+        <input type="hidden" name="id" value="{{.ID}}"><button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
+      {{else}}
+      <button class="btn btn-ghost sm" type="button" hx-get="{{$u}}&amp;parent={{urlquery .ID}}&amp;name={{urlquery .Name}}" hx-target="#tool-folders" hx-swap="outerHTML">{{t "places.open"}}</button>
+      {{if ne .ID "shared-with-me"}}<form hx-post="{{$v.Base}}" hx-target="#tool-folders" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="account" value="{{$v.Account}}"><input type="hidden" name="parent" value="{{$v.Parent}}"><input type="hidden" name="parent_name" value="{{$v.Name}}">
+        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}">
+        <button class="btn btn-soft sm" type="submit">{{t "places.givefolder"}}</button></form>{{end}}
+      {{end}}
+    </span>
+  </li>{{else}}<li class="muted small">{{if eq $v.Status "ready"}}{{t "places.empty"}}{{else}}{{t "places.notready"}}{{end}}</li>{{end}}
+  </ul>
+  {{if and (ne .Status "ready") .Items}}<p class="muted small">{{t "places.notready"}}</p>{{end}}
+  {{if .Next}}<button class="btn btn-ghost sm" type="button" hx-get="{{$u}}&amp;parent={{urlquery .Parent}}&amp;name={{urlquery .Name}}&amp;page={{urlquery .Next}}" hx-target="#tool-folders" hx-swap="outerHTML">{{t "places.more"}}</button>{{end}}
+</section>
+{{end}}
 
 {{define "places-page"}}{{with .Data}}
 <header class="page-head">
   <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
-  <div class="form-title"><h2>{{tf "places.heading" .Tool}}</h2></div>
+  <div class="form-title"><h2>{{tf "repos.heading" .Tool}}</h2></div>
   <p>{{t .Lead}}</p>
 </header>
 <div class="stack">

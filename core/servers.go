@@ -48,6 +48,10 @@ type Server struct {
 	Exceptions map[string]string `json:"exceptions,omitempty"`
 	// AccountGrids is a grid per account, in the place of account_access.
 	AccountGrids map[string]accountGrid `json:"account_grids,omitempty"`
+	// PlaceGrids are the exceptions of a server's places (places.go), by
+	// the place's id: a case left empty follows the place's account, a case
+	// set goes above or below it (placeAccess).
+	PlaceGrids map[string]accessGrid `json:"place_grids,omitempty"`
 	// Timeout of one tool call, in seconds (default 600).
 	Timeout int `json:"timeout,omitempty"`
 	// AlwaysLoad has a harness that defers MCP tools until they are searched

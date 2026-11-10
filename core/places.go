@@ -26,11 +26,12 @@ import (
 const resPlace = "place"
 
 // placeKeeper says, on a tool's card, where its server keeps its places:
-// the key of the list in its configuration (TOOL_CONFIG), and its setup tool
-// that browses them.
+// the key of the list in its configuration (TOOL_CONFIG), its setup tool
+// that browses them, and the argument its tools name a place in.
 type placeKeeper struct {
 	Key    string
 	Browse string
+	Arg    string
 }
 
 // keeping is a server that has places: its card and its spec.
@@ -39,13 +40,16 @@ type keeping struct {
 	Card toolCard
 }
 
-// Place is a place given to Eriphe, as its tool keeps it.
+// Place is a place given to Eriphe, as its tool keeps it. What a task may
+// do there is its server's grid (Server.PlaceGrids, access_grid.go), which
+// eriphe-core holds call by call; for a connection's place (a repository,
+// connection_places.go), its Access.
 type Place struct {
-	Tool    string `json:"-"`       // the catalog server that has it
-	Name    string `json:"name"`    // how tools name it
-	Account string `json:"account"` // the tool's account it is in
-	ID      string `json:"id"`      // its id at the tool
-	Access  string `json:"access"`  // read, or drop: also new files in its results subfolder
+	Tool    string `json:"-"`                // the catalog server that has it
+	Name    string `json:"name"`             // how tools name it
+	Account string `json:"account"`          // the tool's account it is in
+	ID      string `json:"id"`               // its id at the tool
+	Access  string `json:"access,omitempty"` // a connection's place: read or write
 }
 
 // keeperOf finds where a server keeps its places, if it has any: its
@@ -79,7 +83,7 @@ func placesIn(name string, srv Server) []Place {
 	json.Unmarshal(doc[k.Key], &list)
 	for i := range list {
 		list[i].Tool = name
-		list[i].Access = orStr(list[i].Access, accessRead)
+		list[i].Access = ""
 	}
 	return list
 }
@@ -105,6 +109,37 @@ func (c *core) places() []Place {
 	return out
 }
 
+// placeMost is the most a place may be lent: write when one of its cases
+// above Lire is not never, else read.
+func (c *core) placeMost(p Place) string {
+	srv := c.conf().Servers[p.Tool]
+	k, _, _ := keeperOf(srv)
+	a := srv.placeAccess(p)
+	for _, cat := range k.Card.cases() {
+		if cat != catRead && a.grid.value(cat) != gridNever {
+			return accessWrite
+		}
+	}
+	for _, v := range a.exceptions {
+		if v != gridNever && !a.ceiling {
+			return accessWrite
+		}
+	}
+	return accessRead
+}
+
+// placeRights are a place's cases, as the brain is told them.
+func (c *core) placeRights(p Place) map[string]string {
+	srv := c.conf().Servers[p.Tool]
+	k, _, _ := keeperOf(srv)
+	a := srv.placeAccess(p)
+	out := map[string]string{}
+	for _, cat := range k.Card.cases() {
+		out[cat] = a.grid.value(cat)
+	}
+	return out
+}
+
 // placeNamed is the place of that name, if any.
 func (c *core) placeNamed(name string) *Place {
 	name = strings.TrimSpace(name)
@@ -116,9 +151,9 @@ func (c *core) placeNamed(name string) *Place {
 	return &all[i]
 }
 
-// placeAccount is an account of a tool with places, and whether places
-// may be given to it to write in (its connection granted the tool's
-// scopes that write).
+// placeAccount is an account of a tool with places, and whether its
+// credential can write (its connection granted the tool's scopes that
+// write): without, its places only read (readCeilings).
 type placeAccount struct {
 	Name     string
 	CanWrite bool
@@ -157,13 +192,29 @@ func (c *core) changePlaces(tool string, change func([]Place) ([]Place, error)) 
 	if err != nil {
 		return err
 	}
+	for i := range list {
+		list[i].Tool, list[i].Access = "", ""
+	}
 	doc[k.Key], _ = json.Marshal(list)
 	raw, _ := json.Marshal(doc)
 	env := maps.Clone(spec.Env)
 	env[toolConfigEnv] = EnvValue{Value: string(raw)}
 	spec.Env = env
 	srv.Run = marshalRun(spec)
+	srv.PlaceGrids = keepPlaceGrids(srv.PlaceGrids, list)
 	return c.putServer(putUpdate, tool, srv, nil)
+}
+
+// keepPlaceGrids are the exceptions of the places still given.
+func keepPlaceGrids(grids map[string]accessGrid, list []Place) map[string]accessGrid {
+	out := maps.Clone(grids)
+	maps.DeleteFunc(out, func(id string, g accessGrid) bool {
+		return g == (accessGrid{}) || !slices.ContainsFunc(list, func(p Place) bool { return p.ID == id })
+	})
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // removePlace takes a place out of its tool.
@@ -173,20 +224,19 @@ func (c *core) removePlace(tool, id string) error {
 	})
 }
 
-// givePlace gives a place of an account of a tool to Eriphe, or changes
-// its access; account may be empty with one account. Its name is made
-// unique among the tool's places.
-func (c *core) givePlace(tool, account, id, name, access string) error {
+// givePlace gives a place of an account of a tool to Eriphe; account may
+// be empty with one account. Its name is made unique among the tool's
+// places. It follows its account's grid until it has exceptions of its own
+// (setPlaceCase).
+func (c *core) givePlace(tool, account, id, name string) error {
 	id, name = strings.TrimSpace(id), strings.Join(strings.Fields(name), " ")
-	if id == "" || name == "" || len(name) > 120 || (access != accessRead && access != accessDrop) {
-		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("a place needs an id, a name and an access")}
+	if id == "" || name == "" || len(name) > 120 {
+		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("a place needs an id and a name")}
 	}
 	accounts := c.placeAccounts(tool)
 	return c.changePlaces(tool, func(list []Place) ([]Place, error) {
-		for _, p := range list {
-			if p.ID == id {
-				account = p.Account
-			}
+		if slices.ContainsFunc(list, func(p Place) bool { return p.ID == id }) {
+			return list, nil
 		}
 		i := slices.IndexFunc(accounts, func(a placeAccount) bool {
 			return strings.EqualFold(a.Name, account) || account == "" && len(accounts) == 1
@@ -194,21 +244,47 @@ func (c *core) givePlace(tool, account, id, name, access string) error {
 		if i < 0 {
 			return nil, &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("no such account")}
 		}
-		if access == accessDrop && !accounts[i].CanWrite {
-			return nil, &catalogError{http.StatusBadRequest, "conn.readonly", "", errors.New("the account was connected for reading only")}
-		}
-		for j, p := range list {
-			if p.ID == id {
-				list[j].Access = access
-				return list, nil
-			}
-		}
 		final := name
 		for n := 2; slices.ContainsFunc(list, func(p Place) bool { return strings.EqualFold(p.Name, final) }); n++ {
 			final = fmt.Sprintf("%s (%d)", name, n)
 		}
-		return append(list, Place{Name: final, Account: accounts[i].Name, ID: id, Access: access}), nil
+		return append(list, Place{Name: final, Account: accounts[i].Name, ID: id}), nil
 	})
+}
+
+// setPlaceCase gives one case of a place its own value, above or below its
+// account's; "" has it follow its account again. A case its tool has not
+// (its card's Cases) is refused.
+func (c *core) setPlaceCase(tool, id, category, value string) error {
+	srv, ok := c.conf().Servers[tool]
+	k, _, has := keeperOf(srv)
+	if !ok || !has || c.source(kindServer, tool) != sourceWorkspace {
+		return errReadOnly(kindServer, tool)
+	}
+	if !slices.Contains(k.Card.cases(), category) || value != "" && !slices.Contains(gridValues, value) {
+		return errInvalid(errors.New("a case is one of the tool's, its value free, approval, never or empty"))
+	}
+	if !slices.ContainsFunc(placesIn(tool, srv), func(p Place) bool { return p.ID == id }) {
+		return errNoFolder
+	}
+	grids := maps.Clone(srv.PlaceGrids)
+	if grids == nil {
+		grids = map[string]accessGrid{}
+	}
+	g := grids[id]
+	switch category {
+	case catRead:
+		g.Read = value
+	case catChange:
+		g.Change = value
+	case catDelete:
+		g.Delete = value
+	case catSend:
+		g.Send = value
+	}
+	grids[id] = g
+	srv.PlaceGrids = keepPlaceGrids(grids, placesIn(tool, srv))
+	return c.putServer(putUpdate, tool, srv, nil)
 }
 
 // placeItem is a place as a tool's browsing shows it.
@@ -250,4 +326,55 @@ func (c *core) browsePlaces(ctx context.Context, tool, account, parent, page str
 		return nil, "", err
 	}
 	return out.Places, out.Next, nil
+}
+
+// legacyPlaces reads the places of a tool kept before their rights were
+// the grid's (the NAS, once): a place at read becomes Lire only, one at
+// drop Modifier without Supprimer, so nothing is widened; the access goes
+// from the configuration, which its server no longer takes. The tool's
+// level stays each account's until one gets its own.
+func legacyPlaces(s Server) Server {
+	k, spec, ok := keeperOf(s)
+	if !ok {
+		return s
+	}
+	var doc map[string]json.RawMessage
+	if json.Unmarshal([]byte(spec.Env[toolConfigEnv].Value), &doc) != nil {
+		return s
+	}
+	var list []map[string]any
+	if json.Unmarshal(doc[k.Key], &list) != nil {
+		return s
+	}
+	changed := false
+	grids := maps.Clone(s.PlaceGrids)
+	for _, p := range list {
+		access, has := p["access"].(string)
+		if !has {
+			continue
+		}
+		delete(p, "access")
+		changed = true
+		id, _ := p["id"].(string)
+		if grids == nil {
+			grids = map[string]accessGrid{}
+		}
+		switch access {
+		case accessDrop:
+			grids[id] = accessGrid{Delete: gridNever}
+		default:
+			grids[id] = accessGrid{Change: gridNever, Delete: gridNever}
+		}
+	}
+	if !changed {
+		return s
+	}
+	doc[k.Key], _ = json.Marshal(list)
+	raw, _ := json.Marshal(doc)
+	env := maps.Clone(spec.Env)
+	env[toolConfigEnv] = EnvValue{Value: string(raw)}
+	spec.Env = env
+	s.Run = marshalRun(spec)
+	s.PlaceGrids = grids
+	return s
 }

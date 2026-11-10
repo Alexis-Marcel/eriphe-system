@@ -20,8 +20,7 @@ type toolCard struct {
 	// Scopes: its configuration holds the scopes each account was granted.
 	Scopes bool
 	// AccountLevels: each account has its own access level (a mailbox read
-	// only beside another free); without, the server's level holds for all
-	// (the files', whose places each have their own access).
+	// only beside another free); without, the server's level holds for all.
 	AccountLevels bool
 	// SameBy: two accounts of one name are one account when these keys of
 	// theirs are equal too (a calendar is also where it is); none: one name
@@ -31,9 +30,20 @@ type toolCard struct {
 	SignIns []toolSignIn
 	// Places: it has places, kept in its configuration (places.go).
 	Places *placeKeeper
+	// Cases are the categories its tools can fall in (access_grid.go),
+	// the only rows of its grid; none: all of them.
+	Cases []string
 	// Account is its account's form (account_forms.go); nil: its accounts
 	// are connections only.
 	Account *accountShape
+}
+
+// cases are the categories of its grid.
+func (t toolCard) cases() []string {
+	if len(t.Cases) == 0 {
+		return categories
+	}
+	return t.Cases
 }
 
 // The kinds of tools a connection can serve.
@@ -63,12 +73,13 @@ var (
 		},
 		Account: &calendarShape}
 	filesService = toolCard{ID: toolFiles, Base: "fichiers", Image: "ghcr.io/alexis-marcel/eriphe-files", Preset: "gdrive",
-		OwnVersion: true, Scopes: true,
+		OwnVersion: true, Scopes: true, AccountLevels: true,
 		SignIns: []toolSignIn{
-			// Google Drive: read only, or also create files.
+			// Google Drive: read only, or also add, modify and trash files.
 			{Provider: "google", Read: []string{scopeDriveReadonly}, Write: []string{scopeDrive}, AccountProvider: "google"},
 		},
-		Places: &placeKeeper{Key: "places", Browse: "browse_places"}}
+		// Nothing of a folder is sent anywhere: no Envoyer.
+		Places: &placeKeeper{Key: "places", Browse: "browse_places", Arg: "folder"}, Cases: []string{catRead, catChange, catDelete}}
 
 	// toolCards are the cards, in the order their kinds are shown.
 	toolCards = []toolCard{mailService, calendarService, filesService}

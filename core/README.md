@@ -1085,7 +1085,7 @@ lets a tool do more.
 | Tool | Read only | Otherwise |
 |---|---|---|
 | OAuth server whose advertised scopes (`scopes_supported` of its protected resource metadata) split into reads and writes by their names: `write`, `delete`, `create`, `edit`, `update`, `manage`, `request`, `generate`… name a write (Linear, Calendly, Dropbox, Evernote, Airtable, Canva, Miro, Sentry, Supabase…; the preset table `tokenScopes` fixes Todoist's `data:read` and Hugging Face's) | the advertised scopes that name no write (`read`, `files.content.read`, `boards:read openid email`) | all the advertised scopes |
-| Google Drive | `drive.readonly` | `drive` (when "drop results" is ticked) |
+| Google Drive | `drive.readonly` | `drive` (when "Permettre à Eriphe d'écrire" is ticked) |
 | GitHub tool on Eriphe's GitHub App | installation token with `contents`, `pull_requests`, `issues`, `metadata`, `checks` at `read` | the app's rights |
 | IMAP/CalDAV password, Home Assistant token, bearer token, OAuth without a read-only scope (Notion's `default`, Stripe's `mcp`, Fastmail, where the consent screen chooses) | Eriphe holds to the level itself: "Le jeton permet plus : Eriphe s'en tient à la lecture" | |
 
@@ -1116,7 +1116,7 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 |---|---|---|---|
 | `repo` | `owner/name` on GitHub, or a git URL, given to Eriphe (`list_repos`); `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` (at most the repository's own) | cloned into `/work/repo`; [credentials](#github-in-a-task) for it; its skills if it is the user's own or trusted (below); one per task |
 | `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
-| `place` | a tool's place (a folder of a files tool, such as Google Drive's), by name | `read`, `drop` (at most the place's own) | its tool whole (it reaches every place given to Eriphe, each with its own access) |
+| `place` | a tool's place (a folder of a files tool, such as Google Drive's), by name | `read`, `write` (when one of its cases above Lire is not Never) | its tool whole (it reaches every place given to Eriphe, each call held to its place's rights) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
 
 The access defaults to `read` (for a tool, to what its annotations say). Each entry is checked
@@ -1249,7 +1249,7 @@ tool's own token is never lent), and the Tools page says to create the app.
 
 **The repositories given.** A task is lent only a repository the user gave to Eriphe: the
 [places](#places) of the app's connections (`connection_places.go`), picked per installation on
-Settings → Tools → GitHub → "Dépôts donnés à Eriphe" (or the GitHub tool's "Lieux"), from the
+Settings → Tools → GitHub → "Dépôts donnés à Eriphe" (or the GitHub tool's "Dépôts"), from the
 installation's repositories, each `read` or `write`. A lend asks at most the repository's own access
 (`resolveResources`), a write still goes through its card at launch, and the brain reads them with
 `list_repos`. A connection removed takes its repositories with it.
@@ -1496,8 +1496,7 @@ the login page, the installed app (`/manifest.webmanifest` is served with its `n
 of a machine's folders lent with `drop` (below). The software keeps its name: the logo glyph, the
 images and binaries, the install scripts, eriphe-core and eriphe-node, the GitHub and Google apps
 and the OAuth client, the certificate authority, the app passwords and tokens named Eriphe, the
-Home Assistant integration's domain, the system texts that name the software, and the results
-subfolder of a tool's places, `Eriphe/`.
+Home Assistant integration's domain, and the system texts that name the software.
 
 **The results folder.** A machine's folder lent with `drop` takes results in a subfolder named
 after the assistant: `Eriphe/` until it has another name, then `Jarvis/` (the display name as a
@@ -1655,8 +1654,8 @@ service Google did not grant (its box unticked on Google's page) is said back. C
 writes the new token for every service of the account, and the nodes restart them with it.
 
 **Several accounts.** Every account's mailbox is an account of the one `mail`, its calendar an
-account of the one `agenda`, its Drive folders in the one `fichiers`, each folder naming its
-account. The page lists the
+account of the one `agenda`, its Drive an account of the one `fichiers` with its own grid, each
+folder naming its account. The page lists the
 accounts, each with its services, their tools and states, "Ajouter" for a service it has not,
 "Reconnecter" and "Retirer ce compte" (its servers and Drive folders go, its token leaves the vault
 and is revoked at Google, `oauth2.googleapis.com/revoke`).
@@ -1681,7 +1680,7 @@ as data (`web_connections.go`): `POST /settings/connections/{provider}/connect` 
 tools ticked (`tool=`, several, `write=`, `account=` to add to an account), or reconnects one
 (`account=` and `reconnect=1`: the tools it has, or else the ones its scopes serve, with the rights
 they had); `POST /settings/connections/{provider}/remove` (`account=`) removes it, as above. A
-tool that has places shows "Lieux", its page ([places](#places)).
+tool that has places shows "Dossiers", its page ([places](#places)).
 
 **Providers are data.** No logic file of core names a provider: Google, Gmail and its products
 are rows of `signin_providers.go`, presets of `presets.go` and words of the text tables; the variables
@@ -1757,11 +1756,19 @@ a provider: the provider's data (`signin_providers.go`) says how to refresh and 
 ## Google Drive (cloud Folders)
 
 A folder of the user's Google Drive becomes a Folder given to Eriphe: a name, the cloud as its
-source, and an access, `read` or `drop` (read, and drop results in its `Eriphe/` subfolder; the
-originals are never changed). Tasks reach it through `eriphe-files` (servers/files), a local
-server like eriphe-mail, which **enforces the folders itself**: it takes only the folder ids it was
+source, and its rights, set like any tool's: **Lire · Modifier · Supprimer**, each free, on
+approval or never (no Envoyer: nothing of a folder is sent anywhere, so the case is not shown).
+Modifier adds a file or replaces one's content (Drive keeps the old versions); Supprimer moves to
+the trash, where a file stays 30 days. Each Drive account has its grid (the card's
+`AccountLevels`), and each folder may set a case of its own, above or below its account's:
+an action's exception wins, then the folder's case, then the account's (`placeAccess`,
+`access_grid.go`). A call is held to the folder it names (its `folder` argument, the card's
+`Places.Arg`); one naming none takes the strictest of the folders, and must name one when they
+differ on a write. Tasks reach it through `eriphe-files` (servers/files), a local server like
+eriphe-mail, which **keeps every call inside the folders**: it takes only the folder ids it was
 configured with and what is inside them (it walks each id's parents up through the Drive API),
-refuses everything else, and can only create files, in `Eriphe/`. eriphe-core runs the
+refuses everything else, never touches the folder itself, and keeps an account core marks
+`read_only` to reading. eriphe-core runs the
 authorization, keeps the refresh token in the vault, and lends it to the service's environment on
 its node; it never enters a task or a task's spec.
 
@@ -1771,14 +1778,14 @@ Settings → Tools → Add → Google Drive (the logic in `cloud.go`, the sign-i
    of the user's own Google app ([below](#your-own-google-app)), kept in the vault.
 2. **Connect**: the connect page with Drive ticked, the [Google account](#google-accounts-gmail-calendar-drive)
    flow; "Permettre à Eriphe d'écrire" asks for the scope that writes. The account comes back connected, and the
-   workspace creates the catalog server `fichiers` (image `ghcr.io/alexis-marcel/eriphe-files`,
-   access `reads`: its reads are free, `write_file` is the user's to allow). Set to read only,
-   the tool connects with `drive.readonly` whatever the box says.
-3. **Choose**: once the service runs, the tool's [places](#places) page browses each account's folders (a chip per account
-   when there are several) (My Drive, Shared with
-   me, shared drives) through the server's `browse_places`, and each one is given "en lecture" or
-   "lecture + dépôt". The chosen folders are written in the service's `TOOL_CONFIG` (`places`), which
-   restarts it; removing one, or changing its access, does the same.
+   workspace creates the catalog server `fichiers` (image `ghcr.io/alexis-marcel/eriphe-files`),
+   the account at `reads`: its reads are free, the rest on approval. Set to read only, the tool
+   connects with `drive.readonly` whatever the box says.
+3. **Choose**: once the service runs, each account's "Dossiers" button opens that account's
+   [folders](#places): one list, the folders given first with their cases, then the account's own
+   (My Drive, Shared with me, shared drives), browsed through the server's `browse_places`, each
+   given with "Donner". The chosen folders are written in the service's `TOOL_CONFIG` (`places`),
+   which restarts it; their cases are the server's `place_grids`, by folder id.
 
 `browse_places` is marked `_meta: {"eriphe/setup": true}`: the pool leaves such a tool out of a
 server's tools (`setupTool`, `listTools`), so no grant, no task and not the brain can see or call
@@ -1788,17 +1795,17 @@ it; only the workspace calls it (`browsePlaces`, `places.go`).
 
 | Asked | When | Why |
 |---|---|---|
-| `https://www.googleapis.com/auth/drive.readonly` | "drop results" unticked | list, search and read inside the chosen folders, which can be any folder of the account, shared ones included |
-| `https://www.googleapis.com/auth/drive` | "drop results" ticked (the default) | the above, and create `Eriphe/` and new files inside a chosen folder |
+| `https://www.googleapis.com/auth/drive.readonly` | "Permettre à Eriphe d'écrire" unticked | list, search and read inside the chosen folders, which can be any folder of the account, shared ones included |
+| `https://www.googleapis.com/auth/drive` | "Permettre à Eriphe d'écrire" ticked (the default) | the above, and add, modify and trash files inside a chosen folder |
 
 `drive.file` is not enough: it only reaches files the app created or that the user opened with
-Google's Picker, so it can neither list a folder the user already has nor create `Eriphe/` inside
-it. Both scopes kept are **restricted** at Google: an app that is not verified shows "Google
+Google's Picker, so it can neither list a folder the user already has nor write inside it. Both scopes kept are **restricted** at Google: an app that is not verified shows "Google
 hasn't verified this app" (the user goes through "Advanced") and is limited to 100 users, which
 is no limit for a user's own app.
-`drive` lets the token change anything in the Drive: eriphe-files has no call that does
-(only creations, only in `Eriphe/` of a `drop` folder). Reconnected read only, every folder falls
-back to `read`. `prompt=consent` and `access_type=offline` make Google give a refresh token at each
+`drive` lets the token change anything in the Drive: eriphe-files has no call that reaches
+outside the folders, nor one that deletes for good. An account at `drive.readonly` is its
+ceiling: its Modifier and Supprimer are greyed, with the reason, on its grid and on each of its
+folders, and count as Never (`readCeilings`); nothing is taken out of view. `prompt=consent` and `access_type=offline` make Google give a refresh token at each
 connection.
 
 ### Your own Google app
@@ -1993,25 +2000,26 @@ a task gets it. Each source keeps its own store and its own enforcement: a machi
 its node's list and mounted by its node; a place stays in its tool's configuration, which its
 server reads and enforces itself, and is lent as `{kind: place}` (its tool whole), not through
 `folders`, which refuses it with that hint. A tool's places are added on its places page (Settings
-→ Tools → the tool → Lieux); "Ne plus partager" in Settings → Dossiers removes either kind.
+→ Tools → an account → Dossiers); "Ne plus partager" in Settings → Dossiers removes either kind.
 
 ### Places
 
-A place is what a tool reaches inside it and the user picked, with its own access (`read`, or
-`drop`: also new files in its results subfolder): a drive's folders (`places.go`). A tool has
+A place is what a tool reaches inside it and the user picked: a drive's folders (`places.go`).
+It follows its account's grid, or sets a case of its own (the server's `place_grids`). A tool has
 places when its card says where it keeps them (`Places`: the key of the list in its
-`TOOL_CONFIG`, `places`, and its setup tool that browses them), so it is found by having places,
+`TOOL_CONFIG`, `places`, its setup tool that browses them, and the argument its tools name one
+in), so it is found by having places,
 never by its name. The tool browses them with a setup tool
 (`eriphe/setup`, never given to a task). Lent to a task as `{kind: place}`, a place lends its whole
 tool.
 
-**Its page.** Settings → Tools → the tool → Lieux (`/settings/tools/{name}/places`,
-`web_places.go`) lists the places given, each read or read and drop, to change or take back, and
-browses the tool's accounts (its connections) to pick more: `GET …/places/browse` (`account=`,
-`parent=`, `page=`) calls its setup tool, `POST …/places` (`account=`, `id=`, `name=`,
-`access=read|drop`) gives one or changes its access, `POST …/places/remove` (`id=`) takes it back.
-A place to drop into needs an account connected with the tool's scopes that write. A change
-rewrites the tool's configuration, which restarts its server.
+**Its page.** Settings → Tools → an account → Dossiers (`/settings/tools/{name}/places?account=`,
+`web_places.go`) is one list: the account's folders given, first, each with a selector per case
+("Comme le compte (…)", Libre, Sur accord, Jamais) and "Retirer", then the account's own folders,
+browsed through its setup tool (`parent=`, `name=`, `page=`), each with "Donner". `POST …/places`
+(`account=`, `id=`, `name=`) gives one, `POST …/places/case` (`id=`, `category=`, `value=`, empty
+to follow the account) sets a case, `POST …/places/remove` (`id=`) takes it back. Giving or
+taking back rewrites the tool's configuration, which restarts its server.
 
 **Who decides a write.** The level says what a task may reach; who decides is set per folder,
 like a tool's grid: lending it at `drop`, and at `manage` (lent as `write`), is Free (the default)
@@ -2320,7 +2328,7 @@ Accounts: the provider's mark, the address, "Google · Mail, Agenda, Drive", the
 of its services (Mail, Agenda, Fichiers) with its state, access, reconnect, edit and remove. A
 connected account's card has its actions ([connections](#connections)): reconnect, "Retirer ce
 compte", and the tools its provider serves that it does not have yet ("Ajouter à ce compte").
-The files tool is a row under each account it reads, with that account's places and "Lieux". A Gmail on a password goes in the card of its Google address; an
+The files tool is a row under each account it reads, with that account's folders and "Dossiers". A Gmail on a password goes in the card of its Google address; an
 Apple account's mail and calendar are one card, an Apple calendar and a Google calendar of one
 address two. Only the list is by account: the servers stay one per service. The other tools of
 one kind (GitHub, Notion…) make one card when there are several: the kind, how many accounts and

@@ -53,7 +53,7 @@ func atLeast(a, b string) bool { return accessRank[a] >= accessRank[b] && access
 var resourceKinds = map[string][]string{
 	resRepo:   {accessRead, accessWrite},
 	resFolder: {accessRead, accessDrop, accessWrite},
-	resPlace:  {accessRead, accessDrop},
+	resPlace:  {accessRead, accessWrite},
 	resTool:   {accessRead, accessWrite},
 	resAccess: {}, // it has no scale: what it can do is the provider's (access.go)
 }
@@ -63,7 +63,7 @@ var resourceKinds = map[string][]string{
 type ResourceRef struct {
 	Kind   string `json:"kind" jsonschema:"repo, folder, place, tool, access or file"`
 	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name or a git URL, one of list_repos; folder or place its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access (a credential) its name in list_tools' accesses"`
-	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); place: read or drop; at most the place's own level; tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
+	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); place: read, or write to add, modify or trash files where the place's rights allow (each call is still held to them); tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
 	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create and push to; with access write, the user is asked on a card unless it is their own clean turn"`
 	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
 	Dir    string `json:"dir,omitempty" jsonschema:"repo: the working directory inside the repository, if not its root"`
@@ -213,11 +213,11 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 				return nil, fmt.Errorf("place %q: unknown (see list_folders)", e.Ref)
 			}
 			e.Ref = p.Name
-			if !atLeast(p.Access, e.Access) {
-				return nil, fmt.Errorf("place %q is opened to Eriphe for %s only: it cannot be lent %s", p.Name, p.Access, e.Access)
+			if most := c.placeMost(*p); !atLeast(most, e.Access) {
+				return nil, fmt.Errorf("place %q is opened to Eriphe for %s only: it cannot be lent %s", p.Name, most, e.Access)
 			}
 			// Its tool is lent whole: it reaches every place given to
-			// Eriphe, and enforces each one's access itself.
+			// Eriphe, each call held to its place's rights (placeAccess).
 			grant = append(grant, p.Tool)
 		case resTool:
 			if _, err := c.conf().checkGrant([]string{e.Ref}); err != nil {

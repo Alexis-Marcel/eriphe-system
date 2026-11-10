@@ -13,9 +13,8 @@ import (
 // what is inside them. Every id a tool is given is checked against the
 // Folder it names by walking its parents up through the provider (a file
 // moved out of the Folder is out at once, within the cache's minute); a
-// shortcut is judged by its target. The server never modifies or deletes
-// an item: it only creates new files, in the Eriphe/ subfolder of a Folder
-// with the drop access.
+// shortcut is judged by its target. A Folder itself is never modified nor
+// trashed, only what is inside it.
 
 // errOutside is the refusal of anything not in the Folder.
 var errOutside = errors.New("this item is not in the folder: only the folders given to Eriphe can be reached")
@@ -33,8 +32,9 @@ type Files struct {
 }
 
 type account struct {
-	name string
-	p    Provider
+	name     string
+	p        Provider
+	readOnly bool // the user lets Eriphe only read it
 
 	mu    sync.Mutex
 	cache map[string]cachedItem
@@ -50,9 +50,6 @@ type cachedItem struct {
 type Folder struct {
 	PlaceConfig
 	acct *account
-
-	mu      sync.Mutex
-	results string // the id of its Eriphe/ subfolder, once found
 }
 
 func NewFiles(cfg *Config) (*Files, error) {
@@ -63,7 +60,7 @@ func NewFiles(cfg *Config) (*Files, error) {
 		if err != nil {
 			return nil, fmt.Errorf("account %q: %w", a.Name, err)
 		}
-		f.accounts[strings.ToLower(a.Name)] = &account{name: a.Name, p: p, cache: map[string]cachedItem{}, now: time.Now}
+		f.accounts[strings.ToLower(a.Name)] = &account{name: a.Name, p: p, readOnly: a.ReadOnly, cache: map[string]cachedItem{}, now: time.Now}
 	}
 	for _, fc := range cfg.Places {
 		f.folders = append(f.folders, &Folder{PlaceConfig: fc, acct: f.accounts[strings.ToLower(fc.Account)]})
@@ -206,34 +203,13 @@ func (fo *Folder) item(ctx context.Context, id string) (Item, error) {
 	return it, nil
 }
 
-// resultsFolder finds or makes the Folder's Eriphe/ subfolder.
-func (fo *Folder) resultsFolder(ctx context.Context) (string, error) {
-	fo.mu.Lock()
-	defer fo.mu.Unlock()
-	if fo.results != "" {
-		return fo.results, nil
+// writable refuses a change in a Folder whose account may not change it.
+func (fo *Folder) writable() error {
+	switch {
+	case fo.acct.readOnly:
+		return fmt.Errorf("the account of folder %q is read only for Eriphe: the user can change that in the workspace", fo.Name)
+	case !fo.acct.p.CanWrite():
+		return errors.New("the account was connected for reading only: reconnect it in the workspace allowing Eriphe to change files")
 	}
-	token := ""
-	for range 20 {
-		items, next, err := fo.acct.p.List(ctx, fo.ID, true, token)
-		if err != nil {
-			return "", err
-		}
-		for _, it := range items {
-			if it.Folder && it.Name == resultsFolder {
-				fo.results = it.ID
-				return it.ID, nil
-			}
-		}
-		if token = next; token == "" {
-			break
-		}
-	}
-	it, err := fo.acct.p.CreateFolder(ctx, fo.ID, resultsFolder)
-	if err != nil {
-		return "", err
-	}
-	fo.acct.remember(it)
-	fo.results = it.ID
-	return it.ID, nil
+	return nil
 }

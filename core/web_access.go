@@ -67,8 +67,12 @@ type toolAccess struct {
 	TrustSaved     bool
 }
 
-// gridRow is one category of a grid.
-type gridRow struct{ Category, Value string }
+// gridRow is one category of a grid; Greyed, above what its credential can
+// do (readCeilings).
+type gridRow struct {
+	Category, Value string
+	Greyed          bool
+}
 
 // toolException is one tool of the exceptions' panel; Value is "" when it
 // follows its category.
@@ -109,8 +113,12 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 			}
 		}
 	}
-	for _, c := range categories {
-		v.Rows = append(v.Rows, gridRow{c, access.grid.value(c)})
+	cases := categories
+	if svc, _, isSvc := accountsOf(srv); isSvc {
+		cases = svc.cases()
+	}
+	for _, c := range cases {
+		v.Rows = append(v.Rows, gridRow{Category: c, Value: access.grid.value(c), Greyed: access.ceiling && c != catRead})
 	}
 	v.Trusted, v.Own = access.trusted, own
 	if u := w.c.pool.get(name); u != nil {
@@ -165,11 +173,13 @@ func (w *web) handleToolAccess(rw http.ResponseWriter, r *http.Request, s *sessi
 }
 
 // formGrid reads the grid a page posted, each category required.
-func formGrid(r *http.Request) (accessGrid, error) {
+// A category the page does not show (not one of the tool's cases) keeps its
+// value; one greyed is not posted either.
+func formGrid(r *http.Request, v toolAccess) (accessGrid, error) {
 	g := accessGrid{r.PostFormValue("grid-read"), r.PostFormValue("grid-change"), r.PostFormValue("grid-delete"), r.PostFormValue("grid-send")}
-	for _, c := range categories {
-		if r.PostFormValue("grid-"+c) == "" {
-			return g, errInvalid(errors.New("grid: " + c + " has no value"))
+	for _, row := range v.Rows {
+		if r.PostFormValue("grid-"+row.Category) == "" && !row.Greyed {
+			return g, errInvalid(errors.New("grid: " + row.Category + " has no value"))
 		}
 	}
 	return g, nil
@@ -224,7 +234,7 @@ func (w *web) saveGrid(r *http.Request, name, account string, srv Server, v tool
 	if svc, cfg, isSvc := accountsOf(srv); isSvc && svc.AccountLevels && account == "" && len(cfg.Accounts) > 0 {
 		return errInvalid(errors.New("grid: choose one of its accounts"))
 	}
-	g, err := formGrid(r)
+	g, err := formGrid(r, v)
 	if err != nil {
 		return err
 	}
