@@ -503,13 +503,13 @@ func (c *core) tokenScope(name string, s Server) tokenScope {
 			}
 		}
 	default:
-		fc, ok := filesConfigOf(s)
-		if !ok {
+		svc, cfg, ok := accountsOf(s)
+		if !ok || !svc.Scopes {
 			return t
 		}
 		t.Scoped = true
-		for _, a := range fc.Accounts {
-			si, _ := signInOf(toolDrive, a.signInProvider())
+		for _, a := range cfg.Accounts {
+			si, _ := signInByAccount(svc.ID, a.Provider)
 			if _, write := si.granted(a.Scopes); write {
 				t.Granted = grantedWrite
 			} else if t.Granted == "" {

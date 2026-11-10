@@ -331,7 +331,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	// eriphe-files runs with the token from the vault, never in its spec.
 	srv := c.conf().Servers[filesServer]
 	spec, _ := decodeRun(srv.Run)
-	if !strings.HasPrefix(spec.Image, filesImage) || spec.Env[driveTokenEnvOf("sam@example.org")].File != "vault:"+samSecret(t, c.core) ||
+	if !strings.HasPrefix(spec.Image, filesImage) || spec.Env[accountEnv(driveTokenEnv, "sam@example.org")].File != "vault:"+samSecret(t, c.core) ||
 		strings.Contains(string(srv.Run), "the-refresh") || !srv.TrustAnnotations {
 		t.Fatalf("server: %s", srv.Run)
 	}
@@ -340,7 +340,7 @@ func TestDriveRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	var tok map[string]string
-	json.Unmarshal([]byte(env[driveTokenEnvOf("sam@example.org")]), &tok)
+	json.Unmarshal([]byte(env[accountEnv(driveTokenEnv, "sam@example.org")]), &tok)
 	if tok["refresh_token"] != "the-refresh" || tok["client_id"] != testClientID || tok["client_secret"] != testClientSecret {
 		t.Fatalf("token lent: %v", tok)
 	}
@@ -364,10 +364,10 @@ func TestDriveRoundTrip(t *testing.T) {
 		t.Fatalf("add: %d %s", code, body)
 	}
 	tw.post(places, url.Values{"id": {"other"}, "name": {"Compta"}, "access": {"read"}}, csrf)
-	fc, _ := filesConfigOf(c.conf().Servers[filesServer])
-	if len(fc.Folders) != 2 || fc.Folders[0] != (DriveFolder{Name: "Compta", Account: "sam@example.org", ID: "compta", Access: "drop"}) ||
-		fc.Folders[1].Name != "Compta (2)" || fc.Accounts[0].Auth.TokenEnv != driveTokenEnvOf("sam@example.org") {
-		t.Fatalf("folders: %+v", fc)
+	_, fc, _ := accountsOf(c.conf().Servers[filesServer])
+	if f := c.places(); len(f) != 2 || f[0] != (Place{Tool: filesServer, Name: "Compta", Account: "sam@example.org", ID: "compta", Access: "drop"}) ||
+		f[1].Name != "Compta (2)" || fc.Accounts[0].Auth.TokenEnv != accountEnv(driveTokenEnv, "sam@example.org") {
+		t.Fatalf("folders: %+v %+v", f, fc)
 	}
 	if code, body, _ := tw.do("GET", places, nil, nil); code != 200 || !strings.Contains(body, "Compta (2)") ||
 		!strings.Contains(body, `hx-get="`+places+`/browse"`) {
@@ -392,7 +392,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	if f := c.places(); len(f) != 1 || f[0].ID != "compta" {
 		t.Fatalf("after remove: %+v", f)
 	}
-	if spec, _ := decodeRun(c.conf().Servers[filesServer].Run); spec.Env[driveTokenEnvOf("sam@example.org")].File == "" {
+	if spec, _ := decodeRun(c.conf().Servers[filesServer].Run); spec.Env[accountEnv(driveTokenEnv, "sam@example.org")].File == "" {
 		t.Fatal("a folder change lost the token")
 	}
 
@@ -564,15 +564,14 @@ func TestFilesTokenScopeOfAccounts(t *testing.T) {
 	_, c, _ := filesCore(t, nil)
 	put := func(scopes ...[]string) Server {
 		t.Helper()
-		if err := c.putDrive("fr", func(fc *filesConfig) {
-			fc.Accounts = nil
-			for i, s := range scopes {
-				a := filesAccount{Name: string(rune('a'+i)) + "@example.org", Provider: "google", Scopes: s}
-				a.Auth.TokenEnv = driveTokenEnvOf(a.Name)
-				fc.Accounts = append(fc.Accounts, a)
+		if st, ok := c.serviceServer(filesService); ok {
+			c.deleteServer(st.Name)
+		}
+		for i, s := range scopes {
+			a := svcAccount{Name: string(rune('a'+i)) + "@example.org", Provider: "google"}
+			if err := c.putAccount(filesService, accountPut{Lang: "fr", Account: a, Secret: &EnvValue{File: "vault:t" + a.Name}, Scopes: s}); err != nil {
+				t.Fatal(err)
 			}
-		}, nil); err != nil {
-			t.Fatal(err)
 		}
 		return c.conf().Servers[filesServer].withLevel(accessReads)
 	}
@@ -584,5 +583,48 @@ func TestFilesTokenScopeOfAccounts(t *testing.T) {
 	}
 	if s := c.tokenScope(filesServer, put([]string{scopeDriveReadonly})); s.Granted != grantedRead || !s.Reconnect {
 		t.Errorf("readers only: %+v", s)
+	}
+}
+
+// The files go through the accounts path of the mail and the calendar: an
+// account dropped takes its places with it and leaves the others', one
+// connected again for reading only puts its places back to read, and the
+// last one takes the server.
+func TestFilesAccountsPath(t *testing.T) {
+	_, c, _ := filesCore(t, nil)
+	put := func(name string, scopes ...string) {
+		t.Helper()
+		a := svcAccount{Name: name, Provider: "google"}
+		if err := c.putAccount(filesService, accountPut{Lang: "fr", Account: a, Secret: &EnvValue{File: "vault:t." + name}, Scopes: scopes}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("sam@example.org", scopeDrive)
+	put("bob@example.org", scopeDrive)
+	st, ok := c.serviceServer(filesService)
+	if !ok || st.Name != filesServer || len(st.Config.Accounts) != 2 || len(st.Server.AccountAccess) != 0 {
+		t.Fatalf("server: %+v", st)
+	}
+	if err := c.changePlaces(filesServer, func([]Place) ([]Place, error) {
+		return []Place{{Name: "Compta", Account: "sam@example.org", ID: "a", Access: accessDrop},
+			{Name: "Photos", Account: "bob@example.org", ID: "b", Access: accessDrop}}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	put("sam@example.org", scopeDriveReadonly)
+	if p := c.places(); len(p) != 2 || p[0].Access != accessRead || p[1].Access != accessDrop {
+		t.Fatalf("read only again: %+v", p)
+	}
+	if err := c.dropAccount(filesService, "sam@example.org"); err != nil {
+		t.Fatal(err)
+	}
+	if p := c.places(); len(p) != 1 || p[0].Name != "Photos" {
+		t.Fatalf("after drop: %+v", p)
+	}
+	if err := c.dropAccount(filesService, "bob@example.org"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := c.conf().Servers[filesServer]; ok {
+		t.Fatal("the server outlived its last account")
 	}
 }

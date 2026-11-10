@@ -48,14 +48,12 @@ type toolView struct {
 	// calendar or drive (not Service, the state of its service on its
 	// machine); Owner the account's address and Provider who
 	// gives it (google, icloud…), the card it is in; Label its heading
-	// there and Mark its icon. Drive is the Google account whose Drive the
-	// row is.
+	// there and Mark its icon.
 	Part     string
 	Label    string
 	Owner    string
 	Provider string
 	Mark     string
-	Drive    string
 }
 
 // Editable tells a tool changed with its form, in the dialog; the others
@@ -67,7 +65,7 @@ func (t toolView) Editable() bool { return editable(t.Source, t.Preset, t.Auth) 
 // account on a password (a connected account's goes with it, from its
 // card).
 func (t toolView) Removable() bool {
-	return t.Source == sourceWorkspace && t.Drive == "" && (t.Account == "" || t.Connection == "")
+	return t.Source == sourceWorkspace && (t.Account == "" || t.Connection == "")
 }
 
 // ConnLabel is the name of the provider of the account the tool reads.
@@ -152,22 +150,17 @@ func presetOf(lang string, s Server) (toolPreset, string) {
 	if err != nil {
 		return toolPreset{}, ""
 	}
-	if svc, cfg, ok := accountsOf(s); ok {
-		// The mail or the calendar, every account (accounts.go); one
-		// account says which, and comes from where it does.
+	if svc, cfg, ok := accountsOf(Server{Run: marshalRun(spec)}); ok {
+		// The service, every account (accounts.go); one account says which,
+		// and comes from where it does.
 		if len(cfg.Accounts) == 1 {
 			return accountPreset(svc, cfg.Accounts[0]), accountDetail(lang, svc, cfg.Accounts[0])
 		}
-		p, _ := presetByID(svc.ID)
-		return p, ""
-	}
-	if fc, ok := filesConfigOf(Server{Run: marshalRun(spec)}); ok {
-		provider := filesAccount{}.signInProvider()
-		if len(fc.Accounts) > 0 {
-			provider = fc.Accounts[0].signInProvider()
+		p, ok := presetByID(svc.ID)
+		if !ok && len(cfg.Accounts) > 0 {
+			p = accountPreset(svc, cfg.Accounts[0])
 		}
-		p, _ := connectionPreset(provider, toolDrive)
-		return p, productName(lang, provider, toolDrive) + " · " + placeCount(lang, len(fc.Folders))
+		return p, ""
 	}
 	return toolPreset{}, ""
 }

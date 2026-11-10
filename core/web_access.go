@@ -87,7 +87,7 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 		Auth: srv.authKind(), Scope: w.c.tokenScope(name, srv), Allowed: w.c.store.allowedActions(name),
 		ContentTrusted: w.c.trustsServer(name)}
 	v.Preset, _ = presetOf(lang, srv)
-	if svc, cfg, isSvc := accountsOf(srv); isSvc && account != "" {
+	if svc, cfg, isSvc := accountsOf(srv); isSvc && svc.AccountLevels && account != "" {
 		i := cfg.index(account)
 		if i < 0 {
 			return toolAccess{}, false
@@ -221,7 +221,7 @@ func (v toolAccess) posted(r *http.Request) toolAccess {
 // saveGrid gives a tool, or one of its accounts, the grid of the page. A
 // server of several accounts has no grid of its own: they each do.
 func (w *web) saveGrid(r *http.Request, name, account string, srv Server, v toolAccess) error {
-	if _, cfg, isSvc := accountsOf(srv); isSvc && account == "" && len(cfg.Accounts) > 0 {
+	if svc, cfg, isSvc := accountsOf(srv); isSvc && svc.AccountLevels && account == "" && len(cfg.Accounts) > 0 {
 		return errInvalid(errors.New("grid: choose one of its accounts"))
 	}
 	g, err := formGrid(r)

@@ -22,7 +22,10 @@ import (
 //
 //	mail      eriphe-mail, an account of the one mail server
 //	calendar  eriphe-calendar, an account of the one calendar server
-//	drive     eriphe-files, an account of the files server
+//	drive     eriphe-files, an account of the one files server
+//
+// Each is an accountService (accounts.go): an account is put in its server
+// and taken out of it the same way for the three.
 //
 // Nothing here names a provider: the tools a provider serves, and how,
 // are its rows in toolSignIns.
@@ -31,7 +34,7 @@ import (
 const (
 	toolMail     = "mail"     // mailService
 	toolCalendar = "calendar" // calendarService
-	toolDrive    = "drive"    // the files server (cloud.go)
+	toolDrive    = "drive"    // filesService
 )
 
 // toolKinds are the kinds, in the order they are shown.
@@ -127,13 +130,8 @@ func (t toolSignIn) account(identity string) svcAccount {
 
 // toolKindOf tells which kind of tool a server's image gives, or "".
 func toolKindOf(spec RunSpec) string {
-	if svc, ok := serviceOf(spec); ok {
-		return svc.ID
-	}
-	if strings.HasPrefix(spec.Image, filesImage) {
-		return toolDrive
-	}
-	return ""
+	svc, _ := serviceOf(spec)
+	return svc.ID
 }
 
 // connTool is a catalog server that reads a connection's token.
@@ -180,20 +178,12 @@ func (c *core) connectionBySecret(st svcServer, a svcAccount) (connection, bool)
 // kindReadOnly tells whether the tool of a kind is set to read only: it
 // then gets a token that reads, whatever the page asked.
 func (c *core) kindReadOnly(kind string) bool {
-	name := filesServer
-	if kind != toolDrive {
-		svc, ok := serviceByID(kind)
-		if !ok {
-			return false
-		}
-		st, ok := c.serviceServer(svc)
-		if !ok {
-			return false
-		}
-		name = st.Name
+	svc, ok := serviceByID(kind)
+	if !ok {
+		return false
 	}
-	srv, ok := c.conf().Servers[name]
-	return ok && srv.level() == accessReadOnly
+	st, ok := c.serviceServer(svc)
+	return ok && st.Server.level() == accessReadOnly
 }
 
 // The sign-in.
@@ -298,17 +288,11 @@ func (c *core) connectTools(lang, provider, identity string, scopes []string, se
 	var errs []error
 	for _, k := range tools {
 		t, _ := signInOf(k, provider)
-		switch {
-		case k == toolDrive:
-			// Its scopes may have changed (read only, or not).
-			_, write := t.granted(scopes)
-			errs = append(errs, c.putDriveAccount(lang, provider, identity, scopes, write, cn.Secret))
-		case have[k]:
-		default:
-			if svc, ok := serviceByID(k); ok {
-				errs = append(errs, c.putAccount(svc, accountPut{Lang: lang, Account: t.account(identity), Secret: ref}))
-			}
+		svc, ok := serviceByID(k)
+		if !ok || have[k] && !svc.Scopes { // a service told the scopes is told them again: they may have changed
+			continue
 		}
+		errs = append(errs, c.putAccount(svc, accountPut{Lang: lang, Account: t.account(identity), Secret: ref, Scopes: scopes}))
 	}
 	if wasLapsed {
 		c.connectionWoken(cn)
@@ -317,8 +301,8 @@ func (c *core) connectTools(lang, provider, identity string, scopes []string, se
 	return errors.Join(errs...)
 }
 
-// removeConnection takes an account away: its tools (and its drive
-// folders), its token in the vault, then its authorization at the provider.
+// removeConnection takes an account away: its tools (and its places), its
+// token in the vault, then its authorization at the provider.
 func (c *core) removeConnection(ctx context.Context, provider, identity string) error {
 	cn, ok := c.connectionOf(provider, identity)
 	if !ok {
@@ -326,10 +310,6 @@ func (c *core) removeConnection(ctx context.Context, provider, identity string) 
 	}
 	var errs []error
 	for _, t := range c.connectionKinds(cn) {
-		if t.Kind == toolDrive {
-			errs = append(errs, c.dropDriveAccount(identity))
-			continue
-		}
 		if svc, ok := serviceByID(t.Kind); ok && c.source(kindServer, t.Name) == sourceWorkspace {
 			errs = append(errs, c.dropAccount(svc, identity))
 		}
