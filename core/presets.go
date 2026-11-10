@@ -67,7 +67,7 @@ var toolPresets = []toolPreset{
 	{ID: "calendar", Form: "calendar", Name: "agenda", Mark: "31", Kind: "local", Trust: true},
 	// Accounts signed in at a provider (connection_tools.go): one sign-in
 	// for the tools ticked; a tool with places has them picked on its page.
-	{ID: "gdrive", Form: "connection", Provider: "google", Tools: []string{toolDrive}, Name: filesServer, Mark: "GD", Kind: "local", Trust: true},
+	{ID: filesPreset, Form: "connection", Provider: "google", Tools: []string{toolDrive}, Name: filesServer, Mark: "GD", Kind: "local", Trust: true},
 	{ID: "google", Form: "connection", Provider: "google", Name: "google", Mark: "G", Kind: "local", Trust: true},
 	{ID: "remote", Form: "generic", Mark: "↗", Kind: "remote", Auth: "none"},
 	{ID: "local", Form: "generic", Mark: "▣", Kind: "local"},
@@ -162,6 +162,9 @@ func presetByID(id string) (toolPreset, bool) {
 	}
 	return toolPreset{}, false
 }
+
+// filesPreset is the preset of the files service: its words and its icon.
+const filesPreset = "gdrive"
 
 const (
 	mailImage     = "ghcr.io/alexis-marcel/eriphe-mail"

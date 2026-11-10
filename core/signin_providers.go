@@ -68,5 +68,5 @@ var toolSignIns = []toolSignIn{
 	// Google Calendar over CalDAV.
 	{Tool: toolCalendar, Provider: "google", Read: []string{scopeCalendar}, AccountProvider: "google", AccountUsername: true},
 	// Google Drive: read only, or also create files.
-	{Tool: toolDrive, Provider: "google", Read: []string{scopeDriveReadonly}, Write: []string{scopeDrive}},
+	{Tool: toolDrive, Provider: "google", Read: []string{scopeDriveReadonly}, Write: []string{scopeDrive}, AccountProvider: "google"},
 }

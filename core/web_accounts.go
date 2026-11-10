@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -58,6 +59,14 @@ func rowKey(server, account string) string {
 	return server + "-" + hex.EncodeToString(h[:4])
 }
 
+// placesOfAccount are the places of a server that are in one of its
+// accounts; one without an account is in the only one.
+func placesOfAccount(name string, srv Server, account string, accounts int) []Place {
+	return slices.DeleteFunc(placesIn(name, srv), func(p Place) bool {
+		return !strings.EqualFold(p.Account, account) && (p.Account != "" || accounts != 1)
+	})
+}
+
 // accountRows are the rows of a server of accounts: one for each.
 func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 	srv := conf.Servers[sv.Name]
@@ -79,7 +88,10 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 		t.Scope = tokenScope{}
 		t.Part, t.Label = svc.ID, tr(lang, "acct.svc."+svc.ID)
 		t.Owner, t.Provider = accountOwner(svc, a)
-		t.Mark, t.Detail = svc.ID, accountProduct(lang, svc, a)
+		t.Mark, t.Detail = svc.Mark, accountProduct(lang, svc, a)
+		if key := svc.placesKey(); key != "" {
+			t.Detail += " · " + placeCount(lang, len(placesOfAccount(sv.Name, srv, a.Name, len(cfg.Accounts))))
+		}
 		out = append(out, t)
 	}
 	return out
@@ -118,42 +130,11 @@ func accountProduct(lang string, svc accountService, a svcAccount) string {
 	return tr(lang, "calp."+a.Provider)
 }
 
-// driveRows are the rows of a files server: one under each account whose
-// drive it reads, with that account's places.
-func (w *web) driveRows(lang string, conf *Config, sv serverView, fc filesConfig) []toolView {
-	var out []toolView
-	for _, a := range fc.Accounts {
-		t := w.toolRow(lang, conf, sv)
-		n := 0
-		for _, f := range fc.Folders {
-			if strings.EqualFold(f.Account, a.Name) || f.Account == "" && len(fc.Accounts) == 1 {
-				n++
-			}
-		}
-		provider := a.signInProvider()
-		t.Drive, t.Part, t.Label = a.Name, toolDrive, tr(lang, "acct.svc."+toolDrive)
-		if p, ok := connectionPreset(provider, toolDrive); ok {
-			t.Mark = p.ID
-		}
-		t.Owner, t.Provider = a.Name, provider
-		t.Detail = productName(lang, provider, toolDrive) + " · " + placeCount(lang, n)
-		t.Connection, t.ConnProvider, t.Reconnect = a.Name, provider, false
-		if g, ok := w.c.connectionOf(t.ConnProvider, a.Name); ok {
-			t.Reconnect = g.Lapsed != ""
-		}
-		out = append(out, t)
-	}
-	return out
-}
-
 // toolRows are the rows of one server of the list.
 func (w *web) toolRows(lang string, conf *Config, sv serverView) []toolView {
 	srv := conf.Servers[sv.Name]
 	if _, _, ok := accountsOf(srv); ok {
 		return w.accountRows(lang, conf, sv)
-	}
-	if fc, ok := filesConfigOf(srv); ok && len(fc.Accounts) > 0 && w.c.source(kindServer, sv.Name) == sourceWorkspace {
-		return w.driveRows(lang, conf, sv, fc)
 	}
 	return []toolView{w.toolRow(lang, conf, sv)}
 }
@@ -161,9 +142,8 @@ func (w *web) toolRows(lang string, conf *Config, sv serverView) []toolView {
 // Key names the row in its ids: the tool, or the tool and its account.
 func (t toolView) Key() string { return rowKey(t.Name, t.rowAccount()) }
 
-// rowAccount is the account the row is of its server: an account of the
-// mail or the calendar, or the Google account of a Drive row.
-func (t toolView) rowAccount() string { return cmpOr(t.Account, t.Drive) }
+// rowAccount is the account the row is of its server, "" for a tool's.
+func (t toolView) rowAccount() string { return t.Account }
 
 // accountQuery is "?account=…" for an account's row, "" for a tool's.
 func accountQuery(account string) string {

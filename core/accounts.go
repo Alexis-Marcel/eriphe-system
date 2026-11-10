@@ -16,9 +16,10 @@ import (
 
 // One server for each service, whatever the number of accounts: the mail
 // is one eriphe-mail with every mailbox, the calendar one eriphe-calendar
-// with every calendar account, so the brain searches all the mail, lists
-// the week's events and finds free time across every account in one call.
-// Both servers take several accounts (servers/mail, servers/calendar); each
+// with every calendar account, the files one eriphe-files with every
+// drive, so the brain searches all the mail, lists the week's events and
+// finds free time across every account in one call. The servers take
+// several accounts (servers/mail, servers/calendar, servers/files); each
 // tool names the account it touches in its "account" argument, and refuses
 // ids of another.
 //
@@ -31,23 +32,38 @@ import (
 // catalog (MAIL_PASSWORD_<hash>), or the connection's token in the vault
 // (MAIL_GOOGLE_TOKEN_<hash> for the accounts of before, legacy.go).
 
-// accountService is the mail or the calendar.
+// accountService is the mail, the calendar or the files.
 type accountService struct {
-	ID          string // its preset: mail or calendar
+	ID          string // its kind of tool (toolKinds); the mail's and the calendar's preset
 	Base        string // the catalog name it is made under
 	Image       string
 	ConfigEnv   string // the variable of its configuration
-	PasswordEnv string // the stem of an account's password variable
+	PasswordEnv string // the stem of an account's password variable; "": accounts are connections only
 	TokenEnv    string // the stem of a connection's token variable
 	Use         string // the text key of what it is for
+	Mark        string // its icon in an account's card
+	// PlainToken: auth names a token's variable token_env, not
+	// oauth_token_env.
+	PlainToken bool
+	// Scopes: its configuration holds the scopes each account was granted.
+	Scopes bool
+	// AccountLevels: each account has its own access level (a mailbox read
+	// only beside another free); without, the server's level holds for all
+	// (the files', whose places each have their own access).
+	AccountLevels bool
+	// ByName: two accounts of one name are one account (a mailbox is its
+	// address); without, they are also where they are (a calendar).
+	ByName bool
 }
 
 var (
-	mailService = accountService{ID: "mail", Base: "mail", Image: mailImage, ConfigEnv: "MAIL_CONFIG",
-		PasswordEnv: mailSecretEnv, TokenEnv: mailTokenEnv, Use: "preset.mail.use"}
-	calendarService = accountService{ID: "calendar", Base: "agenda", Image: calendarImage, ConfigEnv: "CALENDAR_CONFIG",
-		PasswordEnv: calSecretEnv, TokenEnv: calTokenEnv, Use: "preset.calendar.use"}
-	accountServices = []accountService{mailService, calendarService}
+	mailService = accountService{ID: toolMail, Base: "mail", Image: mailImage, ConfigEnv: "MAIL_CONFIG",
+		PasswordEnv: mailSecretEnv, TokenEnv: mailTokenEnv, Use: "preset.mail.use", Mark: "mail", AccountLevels: true, ByName: true}
+	calendarService = accountService{ID: toolCalendar, Base: "agenda", Image: calendarImage, ConfigEnv: "CALENDAR_CONFIG",
+		PasswordEnv: calSecretEnv, TokenEnv: calTokenEnv, Use: "preset.calendar.use", Mark: "calendar", AccountLevels: true}
+	filesService = accountService{ID: toolDrive, Base: filesServer, Image: filesImage, ConfigEnv: filesConfigEnv,
+		TokenEnv: driveTokenEnv, Use: "preset." + filesPreset + ".use", Mark: filesPreset, PlainToken: true, Scopes: true, ByName: true}
+	accountServices = []accountService{mailService, calendarService, filesService}
 )
 
 // serviceOf finds the service a server's image gives.
@@ -70,8 +86,20 @@ func serviceByID(id string) (accountService, bool) {
 	return accountService{}, false
 }
 
-// svcAccount is an account as eriphe-mail or eriphe-calendar reads it;
-// what one of them does not know is left empty (and out of the JSON).
+// placesKey is where its configuration keeps its places, "" without
+// (places.go).
+func (svc accountService) placesKey() string {
+	for _, k := range placeKeepers {
+		if k.Image == svc.Image {
+			return k.Key
+		}
+	}
+	return ""
+}
+
+// svcAccount is an account as eriphe-mail, eriphe-calendar or eriphe-files
+// reads it; what one of them does not know is left empty (and out of the
+// JSON).
 type svcAccount struct {
 	Name     string        `json:"name"`
 	Address  string        `json:"address,omitempty"` // mail
@@ -82,27 +110,81 @@ type svcAccount struct {
 	SMTP     *mailEndpoint `json:"smtp,omitempty"`
 	Auth     svcAuth       `json:"auth"`
 	ReadOnly bool          `json:"read_only,omitempty"`
+	Scopes   []string      `json:"scopes,omitempty"` // files: what its connection granted
 }
 
 type svcAuth struct {
 	PasswordEnv   string `json:"password_env,omitempty"`
 	OAuthTokenEnv string `json:"oauth_token_env,omitempty"`
+	TokenEnv      string `json:"token_env,omitempty"`
 }
 
 // secretEnv is the variable of the account's secret.
-func (a svcAccount) secretEnv() string { return cmpOr(a.Auth.PasswordEnv, a.Auth.OAuthTokenEnv) }
+func (a svcAccount) secretEnv() string {
+	return cmpOr(a.Auth.PasswordEnv, cmpOr(a.Auth.OAuthTokenEnv, a.Auth.TokenEnv))
+}
 
 // signedIn tells an account on a connection's token.
-func (a svcAccount) signedIn() bool { return a.Auth.OAuthTokenEnv != "" }
+func (a svcAccount) signedIn() bool { return a.Auth.OAuthTokenEnv != "" || a.Auth.TokenEnv != "" }
 
-// The stems of a connection's token variable; their names stay those of
-// the installs that have them.
-const ()
-
-// svcConfig is the server's configuration.
+// svcConfig is the server's configuration; what eriphe-core does not
+// change in it (the files' places, a server's options) is kept as it is.
 type svcConfig struct {
 	Timezone string       `json:"timezone,omitempty"` // calendar
 	Accounts []svcAccount `json:"accounts"`
+	rest     map[string]json.RawMessage
+}
+
+func (cfg *svcConfig) UnmarshalJSON(b []byte) error {
+	type plain svcConfig
+	var p plain
+	if err := json.Unmarshal(b, &p); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, &p.rest); err != nil {
+		return err
+	}
+	delete(p.rest, "timezone")
+	delete(p.rest, "accounts")
+	*cfg = svcConfig(p)
+	return nil
+}
+
+func (cfg svcConfig) MarshalJSON() ([]byte, error) {
+	out := maps.Clone(cfg.rest)
+	if out == nil {
+		out = map[string]json.RawMessage{}
+	}
+	if cfg.Timezone != "" {
+		out["timezone"], _ = json.Marshal(cfg.Timezone)
+	}
+	accounts := cfg.Accounts
+	if accounts == nil {
+		accounts = []svcAccount{}
+	}
+	out["accounts"], _ = json.Marshal(accounts)
+	return json.Marshal(out)
+}
+
+// withPlaces is the configuration with a change of the places it keeps
+// under key (places.go); a configuration without them is left as it is.
+func (cfg svcConfig) withPlaces(key string, change func([]Place) []Place) svcConfig {
+	if key == "" {
+		return cfg
+	}
+	var list []Place
+	json.Unmarshal(cfg.rest[key], &list)
+	list = change(list)
+	cfg.rest = maps.Clone(cfg.rest)
+	if cfg.rest == nil {
+		cfg.rest = map[string]json.RawMessage{}
+	}
+	if len(list) == 0 {
+		delete(cfg.rest, key)
+	} else {
+		cfg.rest[key], _ = json.Marshal(list)
+	}
+	return cfg
 }
 
 func (cfg svcConfig) index(name string) int {
@@ -114,7 +196,7 @@ func (cfg svcConfig) index(name string) int {
 // is (an Apple account and a Google account can have the same address,
 // and are two calendars).
 func (svc accountService) sameAccount(x, y svcAccount) bool {
-	if svc == mailService {
+	if svc.ByName {
 		return true
 	}
 	return strings.EqualFold(x.Provider, y.Provider) && strings.EqualFold(x.URL, y.URL)
@@ -249,6 +331,7 @@ type accountPut struct {
 	Account svcAccount // its auth names no variable: it gets its own
 	Level   string     // "" keeps the account's level (reads free for a new one)
 	Secret  *EnvValue  // its secret's reference (a connection's token); nil keeps it, or takes Password
+	Scopes  []string   // what the connection granted, for a service that is told (Scopes)
 	// Password, typed, goes to the vault with the account.
 	Password string
 	Timezone string // calendar: the server's zone, if given
@@ -268,6 +351,9 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 	if !exists {
 		st = svcServer{Name: c.freeServerName(svc.Base, a.Name), Spec: RunSpec{Image: svc.Image, Transport: transportStdio},
 			Server: Server{Use: tr(in.Lang, svc.Use)}}
+		if !svc.AccountLevels {
+			st.Server = st.Server.withLevel(accessReads)
+		}
 	}
 	cfg := st.Config
 	at := -1
@@ -328,10 +414,16 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 	}
 	env := accountEnv(stem, a.Name)
 	a.Auth = svcAuth{}
-	if in.Secret != nil {
+	switch {
+	case in.Secret != nil && svc.PlainToken:
+		a.Auth.TokenEnv = env
+	case in.Secret != nil:
 		a.Auth.OAuthTokenEnv = env
-	} else {
+	default:
 		a.Auth.PasswordEnv = env
+	}
+	if svc.Scopes {
+		a.Scopes = in.Scopes
 	}
 	creds := credentials{}
 	secret := EnvValue{}
@@ -352,18 +444,33 @@ func (c *core) putAccount(svc accountService, in accountPut) error {
 	} else {
 		cfg.Accounts = append(cfg.Accounts, a)
 	}
+	if t, ok := signInByAccount(svc.ID, a.Provider); ok && a.signedIn() && svc.Scopes {
+		if _, write := t.granted(a.Scopes); !write {
+			// Connected again for reading only: its places no longer take files.
+			cfg = cfg.withPlaces(svc.placesKey(), func(list []Place) []Place {
+				for i := range list {
+					if strings.EqualFold(list[i].Account, a.Name) {
+						list[i].Access = accessRead
+					}
+				}
+				return list
+			})
+		}
+	}
 	if svc == calendarService {
 		cfg.Timezone = cmpOr(in.Timezone, cmpOr(cfg.Timezone, c.conf().TimeZone))
 	}
-	levels := map[string]string{}
-	for k, v := range access {
-		if !strings.EqualFold(k, old.Name) || old.Name == "" {
-			levels[k] = v
-		}
-	}
-	levels[a.Name] = level
 	srv := st.Server
-	srv.AccountAccess = levels
+	if svc.AccountLevels {
+		levels := map[string]string{}
+		for k, v := range access {
+			if !strings.EqualFold(k, old.Name) || old.Name == "" {
+				levels[k] = v
+			}
+		}
+		levels[a.Name] = level
+		srv.AccountAccess = levels
+	}
 	if g, ok := srv.AccountGrids[old.Name]; ok && !strings.EqualFold(old.Name, a.Name) {
 		srv.AccountGrids = withoutAccount(srv.AccountGrids, old.Name) // renamed: its grid goes with it
 		srv.AccountGrids[a.Name] = g
@@ -395,10 +502,13 @@ func (c *core) dropAccount(svc accountService, name string) error {
 	}
 	cfg := st.Config
 	gone := cfg.Accounts[cfg.index(name)]
-	cfg.Accounts = slices.Delete(cfg.Accounts, cfg.index(name), cfg.index(name)+1)
+	cfg.Accounts = slices.Delete(slices.Clone(cfg.Accounts), cfg.index(name), cfg.index(name)+1)
 	if len(cfg.Accounts) == 0 {
 		return c.deleteServer(st.Name)
 	}
+	cfg = cfg.withPlaces(svc.placesKey(), func(list []Place) []Place {
+		return slices.DeleteFunc(list, func(p Place) bool { return strings.EqualFold(p.Account, gone.Name) })
+	})
 	srv := st.Server
 	srv.AccountGrids = withoutAccount(st.Server.AccountGrids, gone.Name)
 	srv.AccountAccess = map[string]string{}
@@ -418,7 +528,7 @@ func (c *core) dropAccount(svc accountService, name string) error {
 func (c *core) setAccountGrid(server, account string, g accountGrid) error {
 	srv, ok := c.conf().Servers[server]
 	svc, cfg, isSvc := accountsOf(srv)
-	if !ok || !isSvc || c.source(kindServer, server) != sourceWorkspace {
+	if !ok || !isSvc || !svc.AccountLevels || c.source(kindServer, server) != sourceWorkspace {
 		return errReadOnly(kindServer, server)
 	}
 	i := cfg.index(account)
@@ -471,7 +581,7 @@ func (c *core) setAccountLevel(server, account, level string) error {
 	}
 	srv, ok := c.conf().Servers[server]
 	svc, cfg, isSvc := accountsOf(srv)
-	if !ok || !isSvc || c.source(kindServer, server) != sourceWorkspace {
+	if !ok || !isSvc || !svc.AccountLevels || c.source(kindServer, server) != sourceWorkspace {
 		return errReadOnly(kindServer, server)
 	}
 	i := cfg.index(account)
@@ -502,7 +612,7 @@ func (c *core) setAccountLevel(server, account, level string) error {
 func (c *core) writeService(svc accountService, st svcServer, srv Server, cfg svcConfig, env map[string]EnvValue, creds credentials, exists bool) error {
 	for i := range cfg.Accounts {
 		a, ok := srv.accountAccesses()[cfg.Accounts[i].Name]
-		cfg.Accounts[i].ReadOnly = ok && a.level() == accessReadOnly
+		cfg.Accounts[i].ReadOnly = svc.AccountLevels && ok && a.level() == accessReadOnly
 	}
 	raw, _ := json.Marshal(cfg)
 	next := map[string]EnvValue{svc.ConfigEnv: {Value: string(raw)}}

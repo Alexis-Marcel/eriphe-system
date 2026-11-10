@@ -70,9 +70,9 @@ func TestAccessScale(t *testing.T) {
 }
 
 // withDrive gives the core a files server with Drive folders.
-func withDrive(t *testing.T, c *core, folders ...DriveFolder) {
+func withDrive(t *testing.T, c *core, folders ...Place) {
 	t.Helper()
-	fc, _ := json.Marshal(filesConfig{Folders: folders})
+	fc, _ := json.Marshal(map[string]any{"accounts": []any{}, "folders": folders})
 	run, _ := json.Marshal(map[string]any{"image": filesImage + ":1", "transport": "stdio", "env": map[string]string{filesConfigEnv: string(fc)}})
 	if c.base.Servers == nil {
 		c.base.Servers = map[string]Server{}
@@ -84,7 +84,7 @@ func withDrive(t *testing.T, c *core, folders ...DriveFolder) {
 // Each entry is checked against what the user opened, and never gets more.
 func TestResolveFolders(t *testing.T) {
 	c, _ := foldersCore(t)
-	withDrive(t, c, DriveFolder{Name: "Factures", ID: "d1", Access: folderRead}, DriveFolder{Name: "Devis", ID: "d2", Access: folderDrop})
+	withDrive(t, c, Place{Name: "Factures", ID: "d1", Access: folderRead}, Place{Name: "Devis", ID: "d2", Access: folderDrop})
 
 	// The old field lends a folder with its own access; a resource, read unless it says drop.
 	l, err := c.resolveRequest(runRequest{Resources: folderRefs("clients", "Photos")})
@@ -208,7 +208,7 @@ func TestRepoFromResource(t *testing.T) {
 // On a tainted turn, run_task lends reads only, of every kind.
 func TestTaintedResources(t *testing.T) {
 	c := newCatalogCore(t)
-	withDrive(t, c, DriveFolder{Name: "Factures", ID: "d1", Access: folderRead})
+	withDrive(t, c, Place{Name: "Factures", ID: "d1", Access: folderRead})
 	c.conf().User = "Sam"
 	refused := []runRequest{
 		{Resources: []ResourceRef{{Kind: resPlace, Ref: "Factures"}}},

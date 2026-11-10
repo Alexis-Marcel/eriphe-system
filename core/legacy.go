@@ -10,17 +10,9 @@ package main
 const (
 	mailTokenEnv  = "MAIL_GOOGLE_TOKEN"
 	calTokenEnv   = "CALENDAR_GOOGLE_TOKEN"
-	driveTokenEnv = "FILES_GOOGLE_TOKEN" // an account's is FILES_GOOGLE_TOKEN_<hash> (driveTokenEnvOf)
+	driveTokenEnv = "FILES_GOOGLE_TOKEN"
 )
 
 // legacySecretPrefix starts the vault name of an account's token from
 // before connections: google.<hash>.token.
 const legacySecretPrefix = "google"
-
-// legacyProvider is the provider of an account written before providers
-// were named: a files account of no provider, the accounts kept before
-// connections.
-var legacyProvider = providerGoogle
-
-// signInProvider is the provider a files account is signed in at.
-func (a filesAccount) signInProvider() string { return cmpOr(a.Provider, legacyProvider.Name) }
