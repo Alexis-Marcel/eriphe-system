@@ -219,18 +219,18 @@ func TestMintNotInstalled(t *testing.T) {
 func TestGitHubToolToken(t *testing.T) {
 	c, _ := credCore(t, "")
 	f := newFakeGitHub(t)
-	if _, err := c.github.toolToken(context.Background(), "", false); err == nil {
+	if _, err := c.github.mint(context.Background(), "", false); err == nil {
 		t.Fatal("a tool token without an app")
 	}
 	withApp(t, c, f)
-	tok, err := c.github.toolToken(context.Background(), "", false)
+	tok, err := c.github.mint(context.Background(), "", false)
 	if err != nil || tok != "ghs_x" {
 		t.Fatalf("tool token %q %v", tok, err)
 	}
 	if raw, _ := json.Marshal(f.mints()[0]); string(raw) != `{}` {
 		t.Fatalf("asked with %s", raw)
 	}
-	tok, _ = c.github.toolToken(context.Background(), "", false)
+	tok, _ = c.github.mint(context.Background(), "", false)
 	if tok != "ghs_x" || len(f.mints()) != 1 {
 		t.Fatalf("not reused: %q", tok)
 	}
@@ -238,25 +238,20 @@ func TestGitHubToolToken(t *testing.T) {
 	c.github.mu.Lock()
 	c.github.toolToks[toolKey{}] = cachedToken{tok: "ghs_x", exp: time.Now().Add(3 * time.Minute)}
 	c.github.mu.Unlock()
-	if tok, err := c.github.toolToken(context.Background(), "", false); err != nil || tok != "ghs_xx" || len(f.mints()) != 2 {
+	if tok, err := c.github.mint(context.Background(), "", false); err != nil || tok != "ghs_xx" || len(f.mints()) != 2 {
 		t.Fatalf("renewal: %q %v, %d mints", tok, err, len(f.mints()))
 	}
 }
 
 func TestServerOnGitHubApp(t *testing.T) {
-	ok := &Config{Servers: map[string]Server{"github": {URL: "https://api.githubcopilot.com/mcp/", Auth: &ServerAuth{GitHubApp: true}, Use: "GitHub"}}}
+	ok := &Config{Servers: map[string]Server{"github": {URL: "https://api.githubcopilot.com/mcp/", Auth: &ServerAuth{Connection: "0123456789ab"}, Use: "GitHub"}}}
 	if err := ok.checkServers(); err != nil {
 		t.Fatal(err)
 	}
-	if k := ok.Servers["github"].authKind(); k != "github-app" {
+	if k := ok.Servers["github"].authKind(); k != "connection" {
 		t.Fatalf("kind %q", k)
 	}
-	both := &Config{Servers: map[string]Server{"github": {URL: "https://api.githubcopilot.com/mcp/",
-		Auth: &ServerAuth{GitHubApp: true, BearerFile: "/x"}, Use: "GitHub"}}}
-	if both.checkServers() == nil {
-		t.Fatal("two authentications accepted")
-	}
-	if !isGitHubServer("gh", Server{Auth: &ServerAuth{GitHubApp: true}}) || isGitHubServer("notion", Server{URL: "https://mcp.notion.com/mcp"}) {
+	if !isGitHubServer("gh", Server{URL: "https://api.githubcopilot.com/mcp/"}) || isGitHubServer("notion", Server{URL: "https://mcp.notion.com/mcp"}) {
 		t.Fatal("isGitHubServer")
 	}
 }
@@ -391,7 +386,7 @@ func TestGitHubToolOnApp(t *testing.T) {
 		t.Fatalf("tool: %d %v", code, h)
 	}
 	s := cc.conf().Servers["github"]
-	if s.Auth == nil || !s.Auth.GitHubApp || s.URL != "https://api.githubcopilot.com/mcp/" || !s.TrustAnnotations {
+	if appAccount(cc.core, s) == "" || s.URL != "https://api.githubcopilot.com/mcp/" || !s.TrustAnnotations {
 		t.Fatalf("tool %+v", s)
 	}
 }

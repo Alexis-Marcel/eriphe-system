@@ -136,9 +136,9 @@ func connectionPage(name, account string, p toolPreset, auth, source string) str
 	switch {
 	case editable(source, p, auth):
 		return "/settings/tools/" + url.PathEscape(name) + "/edit" + accountQuery(account)
-	case auth == "github-app" || p.ID == "github":
+	case p.ID == "github":
 		return "/settings/github"
-	case p.Form == "connection":
+	case auth == "connection" || p.Form == "connection":
 		return "/settings/tools" // its account's card
 	}
 	return ""

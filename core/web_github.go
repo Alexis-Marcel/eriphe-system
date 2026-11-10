@@ -119,8 +119,8 @@ type githubView struct {
 // githubConn is a GitHub connection of the catalog.
 type githubConn struct {
 	Name     string
-	Auth     string // github-app, bearer, oauth…
-	Account  string // on the app: its installation's account ("" the owner's)
+	Auth     string // connection (on the app), bearer, oauth…
+	Account  string // on the app: its connection's account
 	ReadOnly bool   // the configuration file's
 }
 
@@ -141,8 +141,8 @@ func (w *web) githubConns() []githubConn {
 			continue
 		}
 		c := githubConn{Name: name, Auth: s.authKind(), ReadOnly: w.c.source(kindServer, name) == sourceConfig}
-		if s.Auth != nil {
-			c.Account = s.Auth.Account
+		for _, cn := range w.c.connectionsOf(s) {
+			c.Account = cn.Identity
 		}
 		out = append(out, c)
 	}
@@ -152,7 +152,7 @@ func (w *web) githubConns() []githubConn {
 // usesInstallation tells a connection on the app that takes its tokens
 // from the installation on login.
 func (c githubConn) usesInstallation(login, owner string, only bool) bool {
-	if c.Auth != "github-app" {
+	if c.Auth != "connection" {
 		return false
 	}
 	if c.Account == "" {
@@ -166,13 +166,13 @@ func (w *web) githubView(ctx context.Context, r *http.Request) githubView {
 	v := githubView{Vault: currentVault() != nil, Suffix: w.c.conf().User,
 		Created: q.Get("created") != "", Installed: q.Get("installed") != "", Conns: w.githubConns()}
 	for _, c := range v.Conns {
-		if c.Name == q.Get("switch") && c.Auth != "github-app" {
+		if c.Name == q.Get("switch") && c.Auth != "connection" {
 			v.Switch = c.Name
 		}
-		if c.Name == q.Get("switched") && c.Auth == "github-app" {
+		if c.Name == q.Get("switched") && c.Auth == "connection" {
 			v.Switched, v.Revoke = c.Name, q.Get("revoke") != ""
 		}
-		if c.Name == q.Get("added") && c.Auth == "github-app" {
+		if c.Name == q.Get("added") && c.Auth == "connection" {
 			v.Added = c.Name
 		}
 	}
@@ -291,7 +291,7 @@ func (w *web) connectInstallation(v githubView, id, lang string) (name string, s
 	conf := w.c.conf()
 	srv, exists := conf.Servers[base]
 	name = inst.Suggest
-	if exists && isGitHubServer(base, srv) && srv.authKind() != "github-app" && w.c.source(kindServer, base) != sourceConfig {
+	if exists && isGitHubServer(base, srv) && srv.authKind() != "connection" && w.c.source(kindServer, base) != sourceConfig {
 		name, switched = base, true
 	} else {
 		srv, exists = Server{}, false
@@ -489,6 +489,10 @@ func (c *core) putGitHubConnection(name string, srv Server, exists bool, account
 			Grid: srv.Grid, Exceptions: srv.Exceptions, AccountGrids: srv.AccountGrids}
 		srv.URL = "https://api.githubcopilot.com/mcp/"
 	}
-	srv.Auth = &ServerAuth{GitHubApp: true, Account: account}
+	cn, err := c.keepMinted(githubProvider, orStr(account, owner))
+	if err != nil {
+		return had, err
+	}
+	srv.Auth = &ServerAuth{Connection: cn.ID}
 	return had, c.putServer(putUpsert, name, srv, nil)
 }

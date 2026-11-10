@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -110,6 +111,9 @@ func (c *core) connectionOf(provider, identity string) (connection, bool) {
 	return cn, err == nil
 }
 
+// connectionID is what newConnectionID makes.
+var connectionID = regexp.MustCompile(`^[0-9a-f]{12}$`)
+
 // newConnectionID is a connection's id, which names its token in the vault.
 func newConnectionID() string {
 	b := make([]byte, 6)
@@ -146,7 +150,7 @@ func (c *core) keepConnection(provider, identity string, scopes []string, token 
 // dropConnection forgets a connection: its token in the vault, then its
 // authorization at the provider. Its tools are the caller's to remove first.
 func (c *core) dropConnection(ctx context.Context, cn connection) {
-	if v := currentVault(); v != nil {
+	if v := currentVault(); v != nil && cn.Secret != "" {
 		if raw, err := v.get(cn.Secret); err == nil {
 			if p := signInProviders[cn.Provider]; p != nil {
 				p.revoke(ctx, raw)
@@ -171,12 +175,15 @@ func specSecrets(spec RunSpec) []string {
 	return refs
 }
 
-// connectionTools are the catalog's local servers that read a
-// connection's token, by name.
+// connectionTools are the catalog's servers on a connection, by name:
+// the local ones that read its token, the remote ones it mints tokens for.
 func (c *core) connectionTools(cn connection) []string {
 	var out []string
 	for name, s := range c.conf().Servers {
 		if !s.local() {
+			if s.Auth != nil && s.Auth.Connection == cn.ID {
+				out = append(out, name)
+			}
 			continue
 		}
 		if spec, err := decodeRun(s.Run); err == nil && slices.Contains(specSecrets(spec), cn.Secret) {
@@ -187,9 +194,13 @@ func (c *core) connectionTools(cn connection) []string {
 	return out
 }
 
-// connectionsOf are the connections whose token a server reads.
+// connectionsOf are the connections whose token a server reads, or that
+// mints its tokens.
 func (c *core) connectionsOf(s Server) []connection {
 	if !s.local() {
+		if cn, ok := c.connectionByID(s.authConnection()); ok {
+			return []connection{cn}
+		}
 		return nil
 	}
 	spec, err := decodeRun(s.Run)
@@ -241,6 +252,9 @@ func providerLabel(name string) string {
 	if p := signInProviders[name]; p != nil {
 		return p.Label
 	}
+	if m := mintersLabel[name]; m != "" {
+		return m
+	}
 	return name
 }
 
@@ -289,6 +303,14 @@ func (c *core) connectionTick(ctx context.Context, now time.Time) {
 // it: it returns why ("" when it works). A provider out of reach changes
 // nothing, and returns its error.
 func (c *core) checkConnection(ctx context.Context, cn connection) (string, error) {
+	if m := c.minters[cn.Provider]; m != nil {
+		why, err := m.check(ctx, cn.Identity)
+		if err != nil {
+			return "", err // out of reach: checked again later
+		}
+		c.markConnection(cn.ID, why)
+		return why, nil
+	}
 	p := signInProviders[cn.Provider]
 	if p == nil {
 		return "", errors.New("no such provider")
@@ -375,4 +397,79 @@ func (c *core) collectConnectionSecrets() {
 func isConnectionSecret(name string) bool {
 	parts := strings.Split(name, ".")
 	return len(parts) == 3 && parts[0] == "connection" && parts[2] == "token"
+}
+
+// Connections whose provider mints tokens: no sign-in and no secret of
+// their own (an app's installation on an account, github_app.go). Core
+// mints each server's short tokens on it, all its rights or reading only,
+// and the connection lapses when the provider no longer can.
+
+// tokenMinter is a provider that mints its connections' tokens.
+type tokenMinter interface {
+	// mint is a token of the connection of identity, renewed before it
+	// ends; refused forgets it once a server refused it.
+	mint(ctx context.Context, identity string, readOnly bool) (string, error)
+	refused(identity string, readOnly bool)
+	// check says why the connection no longer works ("" when it does); an
+	// error when the provider is out of reach.
+	check(ctx context.Context, identity string) (string, error)
+}
+
+// mintersLabel are the minting providers' names as the user knows them.
+var mintersLabel = map[string]string{}
+
+// authConnection is the connection a remote server is on, "" if none.
+func (s Server) authConnection() string {
+	if s.local() || s.Auth == nil {
+		return ""
+	}
+	return s.Auth.Connection
+}
+
+// connectionByID finds a connection by its id.
+func (c *core) connectionByID(id string) (connection, bool) {
+	if id == "" {
+		return connection{}, false
+	}
+	cn, err := scanConnection(c.store.db.QueryRow(`SELECT `+connectionColumns+` FROM connections WHERE id = ?`, id))
+	return cn, err == nil
+}
+
+// keepMinted is the connection of identity at a minting provider, kept
+// the first time: it holds no secret.
+func (c *core) keepMinted(provider, identity string) (connection, error) {
+	if c.minters[provider] == nil {
+		return connection{}, errors.New("no such provider")
+	}
+	identity = strings.TrimSpace(identity)
+	c.conns.mu.Lock()
+	defer c.conns.mu.Unlock()
+	if cn, ok := c.connectionOf(provider, identity); ok {
+		return cn, nil
+	}
+	cn := connection{ID: newConnectionID(), Provider: provider, Identity: identity, Checked: time.Now().Unix()}
+	_, err := c.store.db.Exec(`INSERT INTO connections (id, provider, identity, scopes, secret, lapsed, checked, created)
+		VALUES (?, ?, ?, '[]', '', '', ?, ?)`, cn.ID, provider, identity, cn.Checked, cn.Checked)
+	return cn, err
+}
+
+// connectionToken is a server's token on a minted connection (the pool's
+// connToken).
+func (c *core) connectionToken(ctx context.Context, id string, readOnly bool) (string, error) {
+	cn, ok := c.connectionByID(id)
+	if !ok {
+		return "", errors.New("the connection of this tool is gone: connect it again")
+	}
+	m := c.minters[cn.Provider]
+	if m == nil {
+		return "", errors.New(providerLabel(cn.Provider) + " does not mint tokens")
+	}
+	return m.mint(ctx, cn.Identity, readOnly)
+}
+
+// connectionRefused forgets a minted token a server refused.
+func (c *core) connectionRefused(id string, readOnly bool) {
+	if cn, ok := c.connectionByID(id); ok && c.minters[cn.Provider] != nil {
+		c.minters[cn.Provider].refused(cn.Identity, readOnly)
+	}
 }

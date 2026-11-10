@@ -38,13 +38,12 @@ type pool struct {
 	dialLocal func(ctx context.Context, name string, run json.RawMessage) (mcp.Transport, error)
 	// http is the client for remote servers and their authorization servers.
 	http *http.Client
-	// appToken is the GitHub App's token for a server on it (github_app.go),
-	// from the installation on the server's account (empty: the app
-	// owner's), with read permissions only for a read-only server.
-	appToken func(ctx context.Context, account string, readOnly bool) (string, error)
-	// appTokenRefused drops that token once GitHub refuses it (401): the
-	// installation it came from was removed, or the app replaced.
-	appTokenRefused func(account string, readOnly bool)
+	// connToken is a short token of a connection for a server on it,
+	// minted by its provider (connections.go), all its rights or reading
+	// only; connRefused drops it once the server refuses it (401): the next
+	// call mints a new one.
+	connToken   func(ctx context.Context, id string, readOnly bool) (string, error)
+	connRefused func(id string, readOnly bool)
 	// authHold tells a server that waits for the user to connect an account
 	// again (a connection its provider refused, connections.go): why, and where the
 	// user does it; "" when it does not wait.
@@ -179,19 +178,19 @@ func (p *pool) dialServer(ctx context.Context, u *upstream) (mcp.Transport, erro
 			return nil, err
 		}
 		t.HTTPClient = &http.Client{Transport: bearerTransport{token: tok, base: http.DefaultTransport}}
-	case "github-app":
-		if p.appToken == nil {
-			return nil, errors.New("no GitHub App here")
+	case "connection":
+		if p.connToken == nil {
+			return nil, errors.New("no connection mints tokens here")
 		}
 		readOnly := u.srv.level() == accessReadOnly
-		account := u.srv.Auth.Account
-		source := func(ctx context.Context) (string, error) { return p.appToken(ctx, account, readOnly) }
+		id := u.srv.Auth.Connection
+		source := func(ctx context.Context) (string, error) { return p.connToken(ctx, id, readOnly) }
 		if _, err := source(ctx); err != nil {
 			return nil, err
 		}
 		refused := func() {
-			if p.appTokenRefused != nil {
-				p.appTokenRefused(account, readOnly)
+			if p.connRefused != nil {
+				p.connRefused(id, readOnly)
 			}
 		}
 		t.HTTPClient = &http.Client{Transport: tokenTransport{source: source, refused: refused, base: http.DefaultTransport}}

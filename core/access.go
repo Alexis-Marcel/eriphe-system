@@ -482,8 +482,8 @@ type tokenScope struct {
 func (c *core) tokenScope(name string, s Server) tokenScope {
 	var t tokenScope
 	switch {
-	case s.authKind() == "github-app":
-		// A new installation token each hour, with the level's permissions.
+	case s.authKind() == "connection":
+		// A new token each hour, minted, with the level's permissions.
 		t.Scoped, t.Granted = true, grantedWrite
 		if s.level() == accessReadOnly {
 			t.Granted = grantedRead

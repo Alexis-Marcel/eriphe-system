@@ -129,7 +129,7 @@
       {{if eq .SignIn "connection"}}{{if not .Part}}{{template "connection-reconnect" dict "Provider" .ConnProvider "Account" .Connection "Target" (printf "connect-%s" .Key)}}{{end}}
       {{else}}{{with .SignIn}}<form hx-post="/settings/servers/{{$.Name}}/connect" hx-target="#connect-{{$.Key}}" hx-disabled-elt="find button" class="inline">
         <button class="btn btn-primary sm" type="submit">{{t (printf "tools.%s" .)}}</button></form>{{end}}{{end}}
-      {{if eq .Preset.ID "github"}}{{if eq .Auth "github-app"}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>
+      {{if eq .Preset.ID "github"}}{{if eq .Auth "connection"}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>
       {{else if eq .Source "workspace"}}<a class="btn btn-soft sm" href="/settings/github?switch={{.Name}}#gh-conn-{{.Name}}">{{t "github.switch"}}</a>
       {{else}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>{{end}}{{end}}
       {{if .Places}}<a class="btn btn-ghost sm" href="{{.PlacesURL}}">{{t "conn.places"}}</a>{{end}}
@@ -392,8 +392,8 @@
   <h3>{{template "i-plug"}}{{t "github.conns"}}</h3>
   <p class="muted small">{{t "github.connslead"}}</p>
   <ul class="plain-list gh-conns">{{range .Conns}}<li id="gh-conn-{{.Name}}"{{if eq .Name $switch}} class="lit"{{end}}>
-    <div><b class="mono">{{.Name}}</b> <span class="muted small">· {{if eq .Auth "github-app"}}{{t "github.viaapp"}}{{with or .Account $owner}} · {{.}}{{end}}{{else if eq .Auth "bearer"}}{{t "github.viatoken"}}{{else}}{{t (printf "auth.%s" .Auth)}}{{end}}</span></div>
-    {{if ne .Auth "github-app"}}{{if .ReadOnly}}<p class="small notice-line">{{tf "github.toolconfig" .Name}}</p>
+    <div><b class="mono">{{.Name}}</b> <span class="muted small">· {{if eq .Auth "connection"}}{{t "github.viaapp"}}{{with or .Account $owner}} · {{.}}{{end}}{{else if eq .Auth "bearer"}}{{t "github.viatoken"}}{{else}}{{t (printf "auth.%s" .Auth)}}{{end}}</span></div>
+    {{if ne .Auth "connection"}}{{if .ReadOnly}}<p class="small notice-line">{{tf "github.toolconfig" .Name}}</p>
     {{else if not $owner}}<p class="small muted">{{t "github.switchfirst"}}</p>
     {{else if not $insts}}<p class="small muted">{{t "github.switchinstall"}}</p>
     {{else}}<form hx-post="/settings/github/tool" hx-disabled-elt="find button" class="gh-add">
