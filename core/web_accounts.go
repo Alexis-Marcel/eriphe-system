@@ -65,9 +65,9 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 		st := svcServer{Name: sv.Name, Server: srv}
 		t.Access = st.level(a.Name)
 		t.Allowed = len(w.c.store.accountActions(sv.Name, a.Name))
-		t.Google, t.Reconnect = "", false
+		t.Connection, t.ConnProvider, t.Reconnect = "", "", false
 		if g, ok := w.c.connectionBySecret(svcServer{Name: sv.Name, Server: srv}, a); ok {
-			t.Google, t.Reconnect = g.Identity, g.Lapsed != ""
+			t.Connection, t.ConnProvider, t.Reconnect = g.Identity, g.Provider, g.Lapsed != ""
 		}
 		t.Scope = tokenScope{}
 		t.Part, t.Label = svc.ID, tr(lang, "acct.svc."+svc.ID)
@@ -126,8 +126,8 @@ func (w *web) driveRows(lang string, conf *Config, sv serverView, fc filesConfig
 		t.Drive, t.Part, t.Label, t.Mark = a.Name, toolDrive, tr(lang, "acct.svc."+toolDrive), "gdrive"
 		t.Owner, t.Provider = a.Name, "google"
 		t.Detail = tr(lang, "preset.gdrive.title") + " · " + driveCount(lang, n)
-		t.Google, t.Reconnect = a.Name, false
-		if g, ok := w.c.connectionOf(cmpOr(a.Provider, providerGoogle.Name), a.Name); ok {
+		t.Connection, t.ConnProvider, t.Reconnect = a.Name, cmpOr(a.Provider, providerGoogle.Name), false
+		if g, ok := w.c.connectionOf(t.ConnProvider, a.Name); ok {
 			t.Reconnect = g.Lapsed != ""
 		}
 		out = append(out, t)

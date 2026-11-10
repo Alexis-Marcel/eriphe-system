@@ -126,8 +126,8 @@ func TestGoogleAccounts(t *testing.T) {
 	body = body[:strings.Index(body, `id="add-dlg"`)]
 	if !strings.Contains(body, `<h3 id="`+card+`-t">sam@example.org</h3>`) || !strings.Contains(body, "Google · Mail, Agenda") ||
 		!strings.Contains(body, "<h3>Mail</h3>") || !strings.Contains(body, "<h3>Agenda</h3>") || !strings.Contains(body, "Google Agenda") ||
-		strings.Contains(body, `/settings/tools/mail/edit"`) || strings.Count(body, `href="/settings/google"`) != 1 ||
-		!strings.Contains(body, "Ajouter à ce compte") || !strings.Contains(body, `<input type="hidden" name="service" value="drive">`) {
+		strings.Contains(body, `/settings/tools/mail/edit"`) || !strings.Contains(body, `hx-post="/settings/connections/google/remove"`) ||
+		!strings.Contains(body, "Ajouter à ce compte") || !strings.Contains(body, `<input type="hidden" name="tool" value="drive">`) {
 		t.Fatalf("tools list: %s", body)
 	}
 
@@ -167,7 +167,7 @@ func TestGoogleAccounts(t *testing.T) {
 	driveRow := rowKey(filesServer, "sam@example.org")
 	if !strings.Contains(body, "Google · Mail, Agenda, Drive") || !strings.Contains(body, `id="tool-`+driveRow+`"`) || !strings.Contains(body, "<h3>Drive</h3>") ||
 		!strings.Contains(body, "Google Drive · aucun dossier") || strings.Contains(body, "Ajouter à ce compte") || strings.Count(body, `class="tool-group`) != 1 ||
-		strings.Contains(body, `hx-post="/settings/tools/`+filesServer+`/delete"`) || !strings.Contains(body, `href="/settings/drive"`) {
+		strings.Contains(body, `hx-post="/settings/tools/`+filesServer+`/delete"`) || !strings.Contains(body, `href="/settings/tools/`+filesServer+`/places"`) {
 		t.Fatalf("tools list with Drive: %s", body)
 	}
 	if _, s, _ := tw.do("GET", "/settings/tools/"+filesServer+"/row?account=sam@example.org", nil, map[string]string{"HX-Request": "true"}); !strings.Contains(s, "<h3>Drive</h3>") {

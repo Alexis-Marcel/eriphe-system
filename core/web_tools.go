@@ -33,10 +33,14 @@ type toolView struct {
 	Scope   tokenScope // how its credential follows its access level (access.go)
 	Allowed int        // its actions allowed without asking
 	Token   bool       // OAuth: a credential is stored (it may have expired)
-	// Google is the account the tool reads (connections.go), one that
-	// must be connected again first; Reconnect, it must.
-	Google    string
-	Reconnect bool
+	// Connection is the account the tool reads (connections.go), one that
+	// must be connected again first, and ConnProvider the provider it is
+	// signed in at; Reconnect, it must be connected again.
+	Connection   string
+	ConnProvider string
+	Reconnect    bool
+	// Places tells a tool that has places, picked on its page (places.go).
+	Places bool
 	// Follow is the line that follows a tool just saved, in its row, until
 	// it is up or says why not (web_tools_dialog.go).
 	Follow *toolStatus
@@ -60,10 +64,17 @@ type toolView struct {
 func (t toolView) Editable() bool { return editable(t.Source, t.Preset, t.Auth) }
 
 // Removable tells a row with its own removal: a workspace tool, or an
-// account on a password (a Google account's goes with it, on its page).
+// account on a password (a connected account's goes with it, from its
+// card).
 func (t toolView) Removable() bool {
-	return t.Source == sourceWorkspace && t.Drive == "" && (t.Account == "" || t.Preset.ID != "google")
+	return t.Source == sourceWorkspace && t.Drive == "" && (t.Account == "" || t.Connection == "")
 }
+
+// ConnLabel is the name of the provider of the account the tool reads.
+func (t toolView) ConnLabel() string { return providerLabel(t.ConnProvider) }
+
+// PlacesURL is the page of the tool's places (web_places.go).
+func (t toolView) PlacesURL() string { return "/settings/tools/" + t.Name + "/places" }
 
 func editable(source string, p toolPreset, auth string) bool {
 	return source == sourceWorkspace && auth != "github-app" && p.Form != "drive" && p.Form != "google"
@@ -82,13 +93,13 @@ func (t toolView) TrustURL() string { return t.AccessURL() + "#trust-" + t.Name 
 
 // SignIn is the row's way to sign in to an OAuth service, only when it
 // is needed: "connect" when it never was, "reconnect" when the
-// authorization expired, was revoked or lacks a right; "google" when the
-// Google account it reads must be connected again (web_google.go). Otherwise the
+// authorization expired, was revoked or lacks a right; "connection" when
+// the account it reads must be connected again (web_connections.go). Otherwise the
 // level, changed with the form, is what asks for a new token.
 func (t toolView) SignIn() string {
 	switch {
 	case t.Reconnect:
-		return "google"
+		return "connection"
 	case t.Auth != "oauth" || t.Status != statusNeedsAuth:
 		return ""
 	case t.Token:
@@ -274,10 +285,12 @@ func (w *web) toolRow(lang string, conf *Config, sv serverView) toolView {
 		t.Token = tok != nil
 	}
 	for _, a := range w.c.connectionsOf(conf.Servers[sv.Name]) {
-		if t.Google == "" || a.Lapsed != "" && !t.Reconnect {
-			t.Google, t.Reconnect = a.Identity, a.Lapsed != ""
+		if t.Connection == "" || a.Lapsed != "" && !t.Reconnect {
+			t.Connection, t.ConnProvider, t.Reconnect = a.Identity, a.Provider, a.Lapsed != ""
 		}
 	}
+	_, _, t.Places = keeperOf(conf.Servers[sv.Name])
+	t.Places = t.Places && sv.Source == sourceWorkspace
 	t.Pending, t.Placed = startState(sv)
 	if t.Pending {
 		t.Problem = serviceProblem(lang, sv)

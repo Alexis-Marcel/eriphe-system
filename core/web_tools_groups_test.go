@@ -13,9 +13,9 @@ func TestGroupTools(t *testing.T) {
 	}
 	svc := func(name, service, owner, provider, google string) toolView {
 		t := row(name, service, "")
-		t.Part, t.Label, t.Owner, t.Provider, t.Google = service, service, owner, provider, google
+		t.Part, t.Label, t.Owner, t.Provider, t.Connection = service, service, owner, provider, google
 		if google != "" {
-			t.Preset = p("google")
+			t.Preset, t.ConnProvider = p("google"), providerGoogle.Name
 		}
 		return t
 	}
@@ -54,14 +54,14 @@ func TestGroupTools(t *testing.T) {
 		t.Fatalf("groups:\n%s\nwant\n%s", strings.Join(got, " "), want)
 	}
 	sam, apple, bob, ovh := groups[0], groups[1], groups[2], groups[4]
-	if sam.Google != "sam@example.org" || sam.Reconnect || len(sam.Others) != 0 {
+	if sam.Connection != "sam@example.org" || sam.Reconnect || len(sam.Others) != 0 {
 		t.Errorf("sam: %+v", sam)
 	}
-	if bob.Google != "bob@example.org" || !bob.Reconnect || strings.Join(bob.Others, ",") != "mail,calendar" {
+	if bob.Connection != "bob@example.org" || !bob.Reconnect || strings.Join(bob.Others, ",") != "mail,calendar" {
 		t.Errorf("bob: reconnect %v, others %v", bob.Reconnect, bob.Others)
 	}
-	if apple.Google != "" || apple.Others != nil || ovh.Google != "" {
-		t.Error("an account of no Google has Google's actions")
+	if apple.Connection != "" || apple.Others != nil || ovh.Connection != "" {
+		t.Error("an account not signed in has a connection's actions")
 	}
 	if apple.Key() == sam.Key() {
 		t.Error("two cards, one id")

@@ -1,0 +1,77 @@
+{{/* Settings → Tools → a tool's places (web_places.go): the ones given, and the tool's own browsing to pick more. */}}
+
+{{define "places-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
+  <div class="form-title"><h2>{{tf "places.heading" .Tool}}</h2></div>
+  <p>{{t "places.lead"}}</p>
+</header>
+<div class="stack">
+{{template "places-list" .}}
+{{if .Accounts}}
+<section class="panel" aria-labelledby="places-pick-t">
+  <h3 id="places-pick-t">{{template "i-plus"}}{{t "places.pick"}}</h3>
+  {{if eq .Status "ready"}}<div hx-get="/settings/tools/{{.Tool}}/places/browse" hx-trigger="load" hx-swap="outerHTML"><p class="muted small">…</p></div>
+  {{else}}<p class="muted">{{t "places.notready"}}</p>{{end}}
+</section>
+{{else}}<p class="muted">{{t "places.noaccount"}}</p>{{end}}
+</div>
+{{end}}{{end}}
+
+{{define "places-list-frag"}}{{template "places-list" .Data}}{{end}}
+
+{{/* . is a placesView. */}}
+{{define "places-list"}}{{$v := .}}
+<section class="panel" id="places-list">
+  <h3>{{template "i-check"}}{{t "places.given"}}</h3>
+  {{if $v.Error}}<p class="alert" role="alert">{{$v.Error}}</p>{{end}}
+  {{if $v.Places}}<ul class="drive-list">
+  {{range $v.Places}}<li>
+    <span class="drive-name">{{.Name}}{{if $v.Many}} <small class="muted">{{.Account}}</small>{{end}}</span>
+    <span class="chip">{{t (printf "places.access.%s" .Access)}}</span>
+    <span class="drive-actions">
+      {{if eq .Access "read"}}{{if $v.CanWrite .Account}}<form hx-post="/settings/tools/{{$v.Tool}}/places" hx-target="#places-list" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="access" value="drop">
+        <button class="link-btn" type="submit">{{t "places.allowwrite"}}</button></form>{{end}}
+      {{else}}<form hx-post="/settings/tools/{{$v.Tool}}/places" hx-target="#places-list" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="access" value="read">
+        <button class="link-btn" type="submit">{{t "places.readonly"}}</button></form>{{end}}
+      <form hx-post="/settings/tools/{{$v.Tool}}/places/remove" hx-target="#places-list" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="id" value="{{.ID}}"><button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
+    </span>
+  </li>{{end}}
+  </ul>{{else}}<p class="muted">{{t "places.none"}}</p>{{end}}
+</section>
+{{end}}
+
+{{define "places-browse"}}{{with .Data}}{{$b := .}}{{$acc := urlquery .Account}}{{$u := printf "/settings/tools/%s/places/browse" .Tool}}
+<div id="places-browse" class="stack">
+  {{if .Accounts}}<p class="drive-accounts small" role="group" aria-label="{{t "places.accounts"}}">{{t "places.accounts"}}
+    {{range .Accounts}}<button class="fchip" type="button" aria-pressed="{{if eq . $b.Account}}true{{else}}false{{end}}" hx-get="{{$u}}?account={{urlquery .}}" hx-target="#places-browse" hx-swap="outerHTML">{{.}}</button>{{end}}</p>{{end}}
+  {{if .Parent}}<p class="drive-path"><button class="link-btn" type="button" hx-get="{{$u}}?account={{$acc}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.top"}}</button> <b>{{.Name}}</b></p>{{end}}
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  <ul class="drive-list">
+  {{range .Items}}<li>
+    <span class="drive-name">{{.Name}}</span>
+    <span class="drive-actions">
+      <button class="btn btn-ghost sm" type="button" hx-get="{{$u}}?account={{$acc}}&amp;parent={{urlquery .ID}}&amp;name={{urlquery .Name}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.open"}}</button>
+      {{if ne .ID "shared-with-me"}}{{with index $b.Given .ID}}<span class="chip">{{t (printf "places.access.%s" .)}}</span>{{else}}
+      <form hx-post="/settings/tools/{{$b.Tool}}/places" hx-target="#places-list" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="account" value="{{$b.Account}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}">
+        <button class="btn btn-soft sm" type="submit" name="access" value="read">{{t "places.give"}}</button>
+        {{if $b.CanWrite}}<button class="btn btn-soft sm" type="submit" name="access" value="drop">{{t "places.givewrite"}}</button>{{end}}
+      </form>{{end}}{{end}}
+    </span>
+  </li>{{else}}<li class="muted small">{{t "places.empty"}}</li>{{end}}
+  </ul>
+  {{if .Next}}<button class="btn btn-ghost sm" type="button" hx-get="{{$u}}?account={{$acc}}&amp;parent={{urlquery .Parent}}&amp;name={{urlquery .Name}}&amp;page={{urlquery .Next}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.more"}}</button>{{end}}
+</div>
+{{end}}{{end}}
+
+{{/* An account's buttons in the tools list: reconnect it with its tools.
+     . is a dict: Provider, Account, Target (the id of the box for an error), Primary. */}}
+{{define "connection-reconnect"}}<form class="inline" hx-post="/settings/connections/{{.Provider}}/connect" hx-target="#{{.Target}}" hx-disabled-elt="find button">
+  <input type="hidden" name="account" value="{{.Account}}"><input type="hidden" name="reconnect" value="1">
+  <button class="btn {{if .Primary}}btn-primary{{else}}btn-ghost{{end}} sm" type="submit">{{t "conn.reconnect"}}</button></form>{{end}}
+
+{{define "connection-result"}}{{with .Data}}{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}{{end}}{{end}}
