@@ -445,8 +445,7 @@ a task are tainted once they read what comes neither from the user nor from Erip
   gives it as `trusted_content`. None is trusted by default; mark only a tool whose results are the
   user's own (their notes). The mark is kept in the store (`tool_trust`, a row per decision); a tool
   removed from the catalog leaves it untrusted, so a new one of the same name starts untrusted.
-  The older `memory.trusted_servers` is migrated at start-up, each name once: a mark removed in
-  the page stays removed. The web (`WebFetch`, `WebSearch`) always taints.
+  The web (`WebFetch`, `WebSearch`) always taints.
 - **A tainted task or assistant returns tainted text.** A worker task is tainted when it was
   started on a tainted turn, when it called a tool not trusted (seen by the proxy, which every
   catalog call crosses, and in its events), when it read the web, or when its events cannot be
@@ -1730,8 +1729,7 @@ a provider: the provider's data (`signin_providers.go`) says how to refresh and 
 
 - **Token.** A new connection keeps its token as `connection.<id>.token`; signing in again
   overwrites it under the same name, so no tool's environment changes. A Google account connected
-  before connections keeps its `google.<hash>.token`: at start the `google_accounts` list becomes
-  connections (once), and each token gets its `token_url`.
+  before connections keeps its `google.<hash>.token`.
 - **Check.** `connectionTick` asks each provider, every 30 minutes, for an access token. A refusal
   (`invalid_grant`, or a refused client) lapses the connection: the tools that hold no other
   working account are held in `needs_auth` (`connectionHold`, the pool's `authHold`), and the brain
@@ -1954,13 +1952,6 @@ it); the other is named after where it is (`sam@example.org (iCloud)`, or its se
 Google account connected after an Apple calendar of its address renames that calendar, which keeps
 its secret, its level and what was allowed for it. The same calendar added twice is
 refused.
-
-Before, each account was a server of its own (`mail`, `mail-sam`, `agenda-icloud`…). At start,
-`mergeAccountServers` (`accounts_merge.go`) makes them one, under the service's own name when one
-has it: each account keeps its secret's vault reference (nothing is asked again) and the level of
-the server it was; the actions allowed for good and the
-assistants lent a server move to the one left. Two calendars of one address are both kept, named
-as above. It does nothing once they are one.
 
 ## Folders
 
@@ -3098,9 +3089,8 @@ run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable fr
 ```
 
 All keys are optional: `db` defaults to `memory.db` next to `db`, `agent` to the catalog's `haiku`
-if there is one, else the default agent. The older `trusted_servers` (catalog servers whose results
-do not taint a turn) is still read, once per name, at start-up: each is marked trusted in Settings →
-Tools, where the mark is changed since (see the [one taint rule](#tool-catalog)).
+if there is one, else the default agent. Trusted tools (whose results do not taint a turn) are
+marked in Settings → Tools (see the [one taint rule](#tool-catalog)).
 
 ### What Eriphe learned
 

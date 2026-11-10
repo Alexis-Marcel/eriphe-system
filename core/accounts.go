@@ -30,9 +30,6 @@ import (
 // variable of its own in the server's environment: a password bound by the
 // catalog (MAIL_PASSWORD_<hash>), or the connection's token in the vault
 // (MAIL_GOOGLE_TOKEN_<hash> for the accounts of before, legacy.go).
-//
-// Before, each account was a server of its own (mail, mail-sam, agenda…):
-// mergeAccountServers makes them one at start (accounts_merge.go).
 
 // accountService is the mail or the calendar.
 type accountService struct {

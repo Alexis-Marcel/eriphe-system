@@ -7,26 +7,6 @@ import (
 	"time"
 )
 
-// memory.trusted_servers is migrated into the store at start-up, each name
-// once: a mark the user removed is not put back, a name added later is.
-func TestTrustedServersMigration(t *testing.T) {
-	c, _ := testMemoryCore(t) // its configuration trusts "vault"
-	if !c.trustsServer("vault") || c.trustsServer("mail") {
-		t.Fatalf("migrated: %v", c.trustedServers())
-	}
-	if err := c.setServerTrust("vault", false, trustByUser); err != nil {
-		t.Fatal(err)
-	}
-	c.base.Memory.TrustedServers = []string{"vault", "notes"}
-	c.migrateTrustedServers() // a restart
-	if c.trustsServer("vault") {
-		t.Fatal("a mark the user removed came back")
-	}
-	if !c.trustsServer("notes") {
-		t.Fatal("a name added to the file was not taken")
-	}
-}
-
 // A tool taints unless it is marked trusted: the brain's turn through the
 // proxy and through its events.
 func TestUntrustedToolTaints(t *testing.T) {

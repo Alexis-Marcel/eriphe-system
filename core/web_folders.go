@@ -30,13 +30,11 @@ type folderMachine struct {
 	NAS     bool   // Eriphe runs there in Docker
 	Lima    bool   // a Mac with the Lima VM
 	Folders []folderView
-	Legacy  []legacyFolder // given from here before: to share again there
 }
 
 type foldersData struct {
 	Machines []folderMachine
 	Drive    []folderView // the Google Drive folders (cloud.go)
-	Legacy   bool         // some folders are to share again on their machine
 	Guides   []shareGuide // how to share a folder, one guide per system
 }
 
@@ -102,11 +100,6 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	legacy, err := w.c.store.legacyFolders()
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
 	var d foldersData
 	for _, n := range nodes {
 		if n.Suspended {
@@ -120,13 +113,6 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 				m.Folders = append(m.Folders, v)
 			}
 		}
-		for _, l := range legacy {
-			// Shared again there under the same name: nothing more to do.
-			if l.Node == n.Name && !hasFolder(m.Folders, l.Name) {
-				m.Legacy = append(m.Legacy, l)
-				d.Legacy = true
-			}
-		}
 		d.Machines = append(d.Machines, m)
 	}
 	d.Guides = shareGuides(d.Machines)
@@ -138,17 +124,8 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 	w.render(rw, r, s, "settings", "", page{Title: "settings.folders", Nav: "settings", Tab: "folders", Data: d})
 }
 
-func hasFolder(fs []folderView, name string) bool {
-	for _, f := range fs {
-		if strings.EqualFold(f.Name, name) || strings.EqualFold(strings.TrimSuffix(f.Name, " ("+f.Node+")"), name) {
-			return true
-		}
-	}
-	return false
-}
-
 // handleDeleteFolder stops sharing a folder: on its machine (taken off its
-// list there), a tool's place, or one given from here before.
+// list there), or a tool's place.
 func (w *web) handleDeleteFolder(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PostFormValue("name")
 	var err error
@@ -160,8 +137,6 @@ func (w *web) handleDeleteFolder(rw http.ResponseWriter, r *http.Request, s *ses
 		} else {
 			err = errNoFolder
 		}
-	case "legacy":
-		err = w.c.store.deleteLegacyFolder(name)
 	default:
 		err = w.c.removeFolder(r.Context(), name)
 	}

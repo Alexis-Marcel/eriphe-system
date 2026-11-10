@@ -98,8 +98,6 @@ func newCore(cfg *Config, store *Store) *core {
 	c.noteResultsName(m)
 	c.noteFirstRun(m)
 	c.loadAssistants()
-	c.migrateTrustedServers() // memory.trusted_servers, into Settings → Tools (tool_trust.go)
-	c.migrateConnections()    // the Google accounts, as connections (connections.go)
 	c.turn.load(store.get("brain_turn"), c.brainTaskID() != "")
 	c.turn.keep = func(st brainTurnState) {
 		raw, _ := json.Marshal(st)

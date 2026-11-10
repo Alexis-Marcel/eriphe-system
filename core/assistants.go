@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"maps"
 	"net/http"
 	"os"
@@ -722,12 +721,7 @@ func isRoleKind(kind string) bool {
 	return ok
 }
 
-// The kv keys the brain kept before it was an assistant.
-var legacyBrainKeys = []string{"brain_task", "brain_failures", "brain_next_start", "brain_session", "brain_session_runtime",
-	"brain_resume", "brain_agent", "brain_tools", "brain_seen_seq", "brain_quiet", "brain_profile", "brain_pack_due"}
-
-// loadAssistants reads the statuses, and moves the brain's from the kv
-// keys it had before it was an assistant.
+// loadAssistants reads the statuses.
 func (c *core) loadAssistants() {
 	c.asst.m = map[string]*AssistantStatus{}
 	if rows, err := c.store.db.Query(`SELECT name, status FROM assistant_status`); err == nil {
@@ -740,42 +734,6 @@ func (c *core) loadAssistants() {
 		}
 		rows.Close()
 	}
-	b := c.conf().Assistants[brainAssistant]
-	if _, ok := c.asst.m[brainAssistant]; ok || b.Role != assistantRoleBrain {
-		return
-	}
-	kv := map[string]string{}
-	for _, k := range legacyBrainKeys {
-		if v := c.store.get(k); v != "" {
-			kv[k] = v
-		}
-	}
-	if len(kv) == 0 {
-		return
-	}
-	num := func(k string) int64 {
-		var n int64
-		fmt.Sscan(kv[k], &n)
-		return n
-	}
-	// The same agent as before keeps its task: only another one restarts it.
-	spec := kv["brain_agent"]
-	if spec != "" && spec == c.legacyAgentHash(b) {
-		spec = c.assistantSpecHash(b)
-	}
-	c.updateAssistant(brainAssistant, func(st *AssistantStatus) {
-		*st = AssistantStatus{Task: kv["brain_task"], Failures: int(num("brain_failures")), NextStart: num("brain_next_start"),
-			Session: kv["brain_session"], SessionRuntime: kv["brain_session_runtime"], Resume: kv["brain_resume"],
-			SpecHash: spec, ToolsHash: kv["brain_tools"], SeenSeq: int(num("brain_seen_seq")),
-			Quiet: kv["brain_quiet"] != "", Profile: kv["brain_profile"], PackDue: kv["brain_pack_due"] != ""}
-		if t, err := c.store.task(st.Task); err == nil {
-			st.Agent = t.Agent
-		}
-	})
-	for _, k := range legacyBrainKeys {
-		c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, k)
-	}
-	log.Printf("assistants: the brain's state moved to the assistant %s (task %s)", brainAssistant, kv["brain_task"])
 }
 
 // Conditions, as the API and the workspace show them.

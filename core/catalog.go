@@ -53,7 +53,6 @@ const (
 	settingDefaultAgent = "default_agent"
 	// Before the brain was an assistant: its agent, now the workspace's
 	// edit of the assistant eriphe (loadCatalog moves it).
-	settingBrainAgent = "brain_agent"
 )
 
 // dynamicCatalog is what the workspace added.
@@ -398,18 +397,14 @@ func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string)
 		return d, skipped
 	}
 	order := map[string]int{kindSetting: 0, kindProvider: 1, kindAgent: 2, kindServer: 3, kindAccess: 4, kindAssistant: 5}
-	brainAgent := "" // the setting of before the brain was an assistant
 	sort.SliceStable(rows, func(i, j int) bool { return order[rows[i].Kind] < order[rows[j].Kind] })
 	for _, r := range rows {
 		try := d.clone()
 		var err error
 		switch r.Kind {
 		case kindSetting:
-			switch r.Name {
-			case settingDefaultAgent:
+			if r.Name == settingDefaultAgent {
 				json.Unmarshal(r.Spec, &d.DefaultAgent)
-			case settingBrainAgent:
-				json.Unmarshal(r.Spec, &brainAgent)
 			}
 			continue
 		case kindAssistant:
@@ -462,7 +457,6 @@ func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string)
 		}
 		d = try
 	}
-	migrateBrainAgent(base, store, &d, brainAgent)
 	return d, skipped
 }
 
@@ -806,26 +800,4 @@ func (c *core) setDefaultAgent(name string) error {
 	d.DefaultAgent = name
 	return c.commit(d, change{persist: func() error { return c.store.putCatalog(kindSetting, settingDefaultAgent, name) },
 		event: fmt.Sprintf("Catalogue : l'agent par défaut est maintenant « %s ».", name)})
-}
-
-// migrateBrainAgent moves the brain's agent of before it was an assistant
-// (the setting brain_agent) to the workspace's edit of the assistant
-// eriphe, unless it has one.
-func migrateBrainAgent(base *Config, store *Store, d *dynamicCatalog, agent string) {
-	if agent == "" {
-		return
-	}
-	defer store.deleteCatalog(kindSetting, settingBrainAgent)
-	file, ok := fileAssistants(base)[brainAssistant]
-	if ws, done := d.Assistants[brainAssistant]; !ok || file.Agent != "" || (done && ws.Agent != "") {
-		return // no brain, or its agent is the file's, or already moved
-	}
-	ws := d.Assistants[brainAssistant]
-	ws.Agent = agent
-	if err := store.putCatalog(kindAssistant, brainAssistant, ws); err != nil {
-		log.Printf("catalog: brain_agent: %v", err)
-		return
-	}
-	d.Assistants[brainAssistant] = ws
-	log.Printf("catalog: the brain's agent %s moved to the assistant %s", agent, brainAssistant)
 }

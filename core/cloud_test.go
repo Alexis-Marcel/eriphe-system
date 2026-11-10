@@ -558,23 +558,6 @@ func googleCalendarAccount(email string) svcAccount {
 	return t.account(email)
 }
 
-// putLegacyDrive writes a files server as it was before Google accounts:
-// one account named "google", on its own token.
-func putLegacyDrive(t *testing.T, c *core, lang, tok string) {
-	t.Helper()
-	const ref = "service.fichiers.files_google_token"
-	if err := currentVault().set(ref, tok); err != nil {
-		t.Fatal(err)
-	}
-	err := c.putDrive(lang, func(fc *filesConfig) {
-		fc.Accounts = []filesAccount{{Name: "google", Provider: "google", Scopes: []string{scopeDrive}}}
-		fc.Accounts[0].Auth.TokenEnv = driveTokenEnv
-	}, map[string]EnvValue{driveTokenEnv: {File: vaultPrefix + ref}})
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 // The files tool can write when one of its accounts granted writing,
 // whichever comes last, and only reconnects when none did.
 func TestFilesTokenScopeOfAccounts(t *testing.T) {

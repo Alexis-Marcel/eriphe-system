@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"time"
 )
 
@@ -14,11 +13,9 @@ import (
 //
 // The mark is per server, kept in the store (tool_trust) rather than in
 // the catalog, so a tool of the configuration file is marked the same way.
-// A row is a decision: trusted or not, by whom. The configuration's older
-// memory.trusted_servers is migrated at start-up, each name once
-// (INSERT OR IGNORE): a mark the user removed since is not put back, and a
-// name added there later is still taken. A tool removed from the catalog
-// keeps a row, untrusted, so a new tool of the same name starts untrusted.
+// A row is a decision: trusted or not, by whom. A tool removed from the
+// catalog keeps a row, untrusted, so a new tool of the same name starts
+// untrusted.
 
 const toolTrustSchema = `CREATE TABLE IF NOT EXISTS tool_trust (
 	server  TEXT PRIMARY KEY,
@@ -31,29 +28,8 @@ func init() { extraSchema = append(extraSchema, toolTrustSchema) }
 
 const (
 	trustByUser   = "user"   // Settings → Tools
-	trustByConfig = "config" // migrated from memory.trusted_servers
 	trustByRemove = "remove" // the tool left the catalog
 )
-
-// migrateTrustedServers takes the configuration's memory.trusted_servers
-// into the store, once per name.
-func (c *core) migrateTrustedServers() {
-	var m MemoryConfig
-	if c.base.Memory != nil {
-		m = *c.base.Memory
-	}
-	now := time.Now().Unix()
-	for _, name := range m.TrustedServers {
-		res, err := c.store.db.Exec(`INSERT OR IGNORE INTO tool_trust (server, trusted, by, updated) VALUES (?, 1, ?, ?)`, name, trustByConfig, now)
-		if err != nil {
-			log.Printf("trust: %s: %v", name, err)
-			continue
-		}
-		if n, _ := res.RowsAffected(); n > 0 {
-			log.Printf("trust: %s is trusted, from memory.trusted_servers; it is now changed in Settings → Tools", name)
-		}
-	}
-}
 
 // trustedServers is the set of the servers marked trusted.
 func (c *core) trustedServers() map[string]bool {

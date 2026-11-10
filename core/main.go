@@ -75,8 +75,7 @@ func main() {
 	}
 	c := newCore(cfg, store)
 	c.token = token
-	c.startMachineTLS()     // machine_tls.go
-	c.mergeAccountServers() // one server per service for every account (accounts_merge.go)
+	c.startMachineTLS() // machine_tls.go
 	// Eriphe's memory, in its own file: without it, the rest still works.
 	if c.mem, err = openMemory(cfg.memoryConfig().DB); err != nil {
 		log.Printf("memory: %v", err)

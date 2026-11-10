@@ -78,26 +78,6 @@
   {{end}}
   </ul>
   {{else}}<p class="muted">{{t "folders.none"}}</p>{{end}}
-  {{if .Legacy}}
-  <ul class="grid">
-  {{range .Legacy}}
-    <li class="tile">
-      <div class="tile-head">
-        <span class="chips"><span class="tag">{{t "folders.reshare"}}</span></span>
-        <span class="tile-actions">
-        <form hx-post="/settings/folders/delete" hx-confirm="{{tf "folders.deleteconfirm" .Name}}" class="inline">
-          <input type="hidden" name="source" value="legacy">
-          <input type="hidden" name="name" value="{{.Name}}">
-          <button class="link-btn" type="submit">{{t "folders.forget"}}</button>
-        </form>
-        </span>
-      </div>
-      <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
-      <p class="muted small mono folder-src">{{.Share}}:/{{.Path}}</p>
-    </li>
-  {{end}}
-  </ul>
-  {{end}}
 </section>
 {{else}}
 <div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-folder"}}</span><p>{{t "folders.nomachine"}}</p></div>

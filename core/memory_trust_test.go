@@ -28,8 +28,9 @@ func testMemoryCore(t *testing.T) (*core, *fakeClock) {
 		Providers: map[string]Provider{"p": {Kind: "claude-subscription", Secret: secret}},
 		Agents: map[string]Agent{"small": {Runtime: "claude-code", Provider: "p", Use: "quick things"},
 			"haiku": {Runtime: "claude-code", Provider: "p", Use: "cheap"}},
-		Memory: &MemoryConfig{TrustedServers: []string{"vault"}}, Brain: &BrainConfig{}}
+		Memory: &MemoryConfig{}, Brain: &BrainConfig{}}
 	c := newCore(cfg, s)
+	c.setServerTrust("vault", true, trustByUser)
 	// A node that has gone offline: tasks wait for it.
 	s.registerNode("nas", hashSecret("a"))
 	s.setNodeStatus("nas", true, []byte(`{"runtimes":["claude-code"]}`))

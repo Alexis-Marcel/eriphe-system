@@ -6,47 +6,6 @@ import (
 	"testing"
 )
 
-// An install with Google accounts keeps them as connections: their tokens
-// keep their vault names (no tool's environment changes), a lapsed one
-// stays lapsed, and the tokens learn where to refresh.
-func TestMigrateConnections(t *testing.T) {
-	c := newDynamicCore(t, nil).core
-	samRef, bobRef := legacyGoogleSecret("sam@example.org"), legacyGoogleSecret("bob@example.org")
-	currentVault().set(samRef, `{"client_id":"id","refresh_token":"sam"}`)
-	currentVault().set(bobRef, `{"client_id":"id","refresh_token":"bob","token_url":"https://token.example.org"}`)
-	c.store.set(legacyAccountsKey, `[{"email":"sam@example.org","scopes":["`+scopeMail+`"],"checked":5},`+
-		`{"email":"bob@example.org","scopes":["`+scopeMail+`"],"reconnect":"the Google app it was connected with is refused"}]`)
-	if err := c.putAccount(mailService, accountPut{Lang: "fr", Account: gmailAccount("bob@example.org"),
-		Secret: &EnvValue{File: vaultPrefix + bobRef}}); err != nil {
-		t.Fatal(err)
-	}
-
-	c.migrateConnections()
-	c.migrateConnections() // once
-
-	list := c.connections()
-	if len(list) != 2 || c.store.get(legacyAccountsKey) != "" {
-		t.Fatalf("connections %+v", list)
-	}
-	sam, _ := c.connectionOf("google", "SAM@example.org")
-	bob, _ := c.connectionOf("google", "bob@example.org")
-	if sam.Secret != samRef || sam.Lapsed != "" || sam.Checked != 5 || sam.Scopes[0] != scopeMail || bob.Secret != bobRef || bob.Lapsed != lapsedBadClient {
-		t.Fatalf("sam %+v, bob %+v", sam, bob)
-	}
-	if raw, _ := currentVault().get(samRef); !strings.Contains(raw, `"token_url":"`+providerGoogle.Endpoint.TokenURL+`"`) || !strings.Contains(raw, `"refresh_token":"sam"`) {
-		t.Errorf("sam's token: %s", raw)
-	}
-	if raw, _ := currentVault().get(bobRef); !strings.Contains(raw, "https://token.example.org") {
-		t.Errorf("bob's token_url was replaced: %s", raw)
-	}
-	if tools := c.connectionTools(bob); len(tools) != 1 || tools[0] != "mail" {
-		t.Errorf("bob's tools %v", tools)
-	}
-	if why, where := c.connectionHold("mail"); !strings.Contains(why, "bob@example.org") || where != "Settings → Tools → Google → Reconnect bob@example.org" {
-		t.Errorf("hold %q %q", why, where)
-	}
-}
-
 // One connection per identity: signing in again keeps its secret and lifts
 // its lapse; a new identity gets a token of its own.
 func TestKeepConnection(t *testing.T) {
@@ -78,7 +37,7 @@ func TestCollectConnectionSecrets(t *testing.T) {
 	c := newDynamicCore(t, nil).core
 	v := currentVault()
 	cn, _, _ := c.keepConnection("google", "sam@example.org", nil, `{}`)
-	inUse := legacyGoogleSecret("bob@example.org")
+	inUse := "connection.bob.token"
 	for _, name := range []string{inUse, "google.0123456789ab.token", "connection.feedfacecafe.token", "other.secret"} {
 		v.set(name, "x")
 	}

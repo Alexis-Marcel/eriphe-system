@@ -115,25 +115,14 @@ func (c *core) putDrive(lang string, change func(*filesConfig), env map[string]E
 }
 
 // putDriveAccount gives a Google account to the files server, reading the
-// token kept in the vault as secret, or updates its scopes. A Drive connected before accounts existed (its token in
-// FILES_GOOGLE_TOKEN) is taken over by the first account connected: its
-// folders stay. Without the scope that writes, the account's folders fall
-// back to read.
+// token kept in the vault as secret, or updates its scopes. Without the
+// scope that writes, the account's folders fall back to read.
 func (c *core) putDriveAccount(lang, provider, email string, scopes []string, write bool, secret string) error {
 	tokenEnv := driveTokenEnvOf(email)
 	env := map[string]EnvValue{tokenEnv: {File: vaultPrefix + secret}}
 	return c.putDrive(lang, func(fc *filesConfig) {
 		i := slices.IndexFunc(fc.Accounts, func(a filesAccount) bool { return strings.EqualFold(a.Name, email) })
 		if i < 0 {
-			if j := slices.IndexFunc(fc.Accounts, func(a filesAccount) bool { return a.Auth.TokenEnv == driveTokenEnv }); j >= 0 {
-				old := fc.Accounts[j].Name
-				fc.Accounts = slices.Delete(fc.Accounts, j, j+1)
-				for k := range fc.Folders {
-					if fc.Folders[k].Account == old || fc.Folders[k].Account == "" {
-						fc.Folders[k].Account = email
-					}
-				}
-			}
 			fc.Accounts = append(fc.Accounts, filesAccount{Name: email, Provider: provider})
 			i = len(fc.Accounts) - 1
 		}
