@@ -11,7 +11,7 @@ func TestPresets(t *testing.T) {
 	cfg, err := LoadConfig(`{"accounts":[
 	  {"name":"perso","address":"someone@gmail.com","auth":{"password_env":"GMAIL_APP_PASSWORD"}},
 	  {"address":"someone@icloud.com","auth":{"password_file":"/run/secrets/icloud"}},
-	  {"name":"work","address":"me@corp.example","provider":"office365","auth":{"oauth_token_file":"/data/ms-token"}},
+	  {"name":"work","address":"me@corp.example","provider":"office365","auth":{"token_file":"/data/ms-token"}},
 	  {"name":"ovh","address":"me@my-domain.example","provider":"ovh","auth":{"password_env":"OVH"}},
 	  {"name":"own","address":"me@self.example","imap":{"host":"mail.self.example","port":143},"smtp":{"host":"mail.self.example","port":587},
 	   "auth":{"password_env":"OWN"},"folders":{"Archive":"Old"}}]}`, "")
@@ -54,7 +54,7 @@ func TestConfigErrors(t *testing.T) {
 	for want, js := range map[string]string{
 		"no accounts":       `{"accounts":[]}`,
 		"address":           `{"accounts":[{"name":"x","auth":{"password_env":"X"}}]}`,
-		"exactly one":       `{"accounts":[{"address":"a@gmail.com","auth":{"password_env":"X","oauth_token_env":"Y"}}]}`,
+		"exactly one":       `{"accounts":[{"address":"a@gmail.com","auth":{"password_env":"X","token_env":"Y"}}]}`,
 		"host is required":  `{"accounts":[{"address":"a@unknown.example","auth":{"password_env":"X"}}]}`,
 		"unknown provider":  `{"accounts":[{"address":"a@x.example","provider":"aol","auth":{"password_env":"X"}}]}`,
 		"duplicate":         `{"accounts":[{"name":"a","address":"a@gmail.com","auth":{"password_env":"X"}},{"name":"A","address":"b@gmail.com","auth":{"password_env":"X"}}]}`,
@@ -72,7 +72,7 @@ func TestSecrets(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "tok")
 	os.WriteFile(f, []byte(`{"access_token":"abc","expires_in":3600}`), 0o600)
-	a := AccountConfig{Auth: AuthConfig{OAuthTokenFile: f}}
+	a := AccountConfig{Auth: AuthConfig{TokenFile: f}}
 	if s, err := a.secret(); err != nil || s != "abc" {
 		t.Errorf("json token: %q %v", s, err)
 	}

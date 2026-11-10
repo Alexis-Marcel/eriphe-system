@@ -1638,8 +1638,8 @@ the same account (its `login_hint`) asks for that one alone, and Google's answer
 account granted before. The address comes from the ID token of the token endpoint's answer (over
 TLS, which OpenID Connect takes in place of its signature). The refresh token, with the client id
 and secret and where to refresh it (`token_url`), is kept **once per account**: the account is a
-[connection](#connections) and its token is in the vault, and each service's server reads it from there in its environment (`MAIL_GOOGLE_TOKEN_<hash>`,
-`CALENDAR_GOOGLE_TOKEN_<hash>`, `FILES_GOOGLE_TOKEN_<hash>`), refreshing its access token itself: the token never enters a task or
+[connection](#connections) and its token is in the vault, and each service's server reads it from there in its environment
+(`TOOL_TOKEN_<hash>`, [the servers' contract](../servers/README.md)), refreshing its access token itself: the token never enters a task or
 a spec. Which servers belong to an account is read from their specs (that vault reference). A
 service Google did not grant (its box unticked on Google's page) is said back. Connecting again
 writes the new token for every service of the account, and the nodes restart them with it.
@@ -1674,13 +1674,10 @@ they had); `POST /settings/connections/{provider}/remove` (`account=`) removes i
 tool that has places shows "Lieux", its page ([places](#places)).
 
 **Providers are data.** No logic file of core names a provider: Google, Gmail and its products
-are rows of `signin_providers.go`, presets of `presets.go`, words of the text tables, and the names
-installs from before connections still hold (`legacy.go`: the token variables
-`MAIL_GOOGLE_TOKEN_<hash>`, `CALENDAR_GOOGLE_TOKEN_<hash>`, `FILES_GOOGLE_TOKEN_<hash>`, the vault
-names `google.<hash>.token`, the old addresses). `TestNoProviderInLogic` fails when a name or a
+are rows of `signin_providers.go`, presets of `presets.go` and words of the text tables; the variables
+core writes name no provider (`TestAccountVariablesNameNoProvider`). `TestNoProviderInLogic` fails when a name or a
 string of another file names one (comments may, as examples); "drive" is a kind of tool, like mail
-and calendar, not a provider. An older configuration's `cloud` (the shared app of before) is
-ignored.
+and calendar, not a provider.
 
 ### Connection apps
 
@@ -1757,7 +1754,7 @@ Settings → Tools → Add → Google Drive (the logic in `cloud.go`, the sign-i
 3. **Choose**: once the service runs, the tool's [places](#places) page browses each account's folders (a chip per account
    when there are several) (My Drive, Shared with
    me, shared drives) through the server's `browse_folders`, and each one is given "en lecture" or
-   "lecture + dépôt". The chosen folders are written in the service's `FILES_CONFIG`, which
+   "lecture + dépôt". The chosen folders are written in the service's `TOOL_CONFIG` (`places`), which
    restarts it; removing one, or changing its access, does the same.
 
 `browse_folders` is marked `_meta: {"eriphe/setup": true}`: the pool leaves such a tool out of a

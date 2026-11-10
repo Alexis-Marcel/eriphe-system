@@ -564,7 +564,7 @@ func TestXOAUTH2WithRefreshedToken(t *testing.T) {
 	cfg, err := LoadConfig(`{"accounts":[{"name":"gmail","address":"me@gmail.example",
 	  "imap":{"host":"127.0.0.1","port":`+itoa(im.port())+`,"security":"tls"},
 	  "smtp":{"host":"127.0.0.1","port":`+itoa(sm.port())+`,"security":"starttls"},
-	  "auth":{"oauth_token_file":"`+tokenFile+`"},"save_sent":false,"ca_file":"`+ca+`"}]}`, "")
+	  "auth":{"token_file":"`+tokenFile+`"},"save_sent":false,"ca_file":"`+ca+`"}]}`, "")
 	if err != nil {
 		t.Fatal(err)
 	}

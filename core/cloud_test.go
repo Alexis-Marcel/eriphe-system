@@ -331,7 +331,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	// eriphe-files runs with the token from the vault, never in its spec.
 	srv := c.conf().Servers[filesServer]
 	spec, _ := decodeRun(srv.Run)
-	if !strings.HasPrefix(spec.Image, filesImage) || spec.Env[accountEnv(driveTokenEnv, "sam@example.org")].File != "vault:"+samSecret(t, c.core) ||
+	if !strings.HasPrefix(spec.Image, filesImage) || spec.Env[accountEnv(toolTokenEnv, "sam@example.org")].File != "vault:"+samSecret(t, c.core) ||
 		strings.Contains(string(srv.Run), "the-refresh") || !srv.TrustAnnotations {
 		t.Fatalf("server: %s", srv.Run)
 	}
@@ -340,7 +340,7 @@ func TestDriveRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	var tok map[string]string
-	json.Unmarshal([]byte(env[accountEnv(driveTokenEnv, "sam@example.org")]), &tok)
+	json.Unmarshal([]byte(env[accountEnv(toolTokenEnv, "sam@example.org")]), &tok)
 	if tok["refresh_token"] != "the-refresh" || tok["client_id"] != testClientID || tok["client_secret"] != testClientSecret {
 		t.Fatalf("token lent: %v", tok)
 	}
@@ -366,7 +366,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	tw.post(places, url.Values{"id": {"other"}, "name": {"Compta"}, "access": {"read"}}, csrf)
 	_, fc, _ := accountsOf(c.conf().Servers[filesServer])
 	if f := c.places(); len(f) != 2 || f[0] != (Place{Tool: filesServer, Name: "Compta", Account: "sam@example.org", ID: "compta", Access: "drop"}) ||
-		f[1].Name != "Compta (2)" || fc.Accounts[0].Auth.TokenEnv != accountEnv(driveTokenEnv, "sam@example.org") {
+		f[1].Name != "Compta (2)" || fc.Accounts[0].Auth.TokenEnv != accountEnv(toolTokenEnv, "sam@example.org") {
 		t.Fatalf("folders: %+v %+v", f, fc)
 	}
 	if code, body, _ := tw.do("GET", places, nil, nil); code != 200 || !strings.Contains(body, "Compta (2)") ||
@@ -392,7 +392,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	if f := c.places(); len(f) != 1 || f[0].ID != "compta" {
 		t.Fatalf("after remove: %+v", f)
 	}
-	if spec, _ := decodeRun(c.conf().Servers[filesServer].Run); spec.Env[accountEnv(driveTokenEnv, "sam@example.org")].File == "" {
+	if spec, _ := decodeRun(c.conf().Servers[filesServer].Run); spec.Env[accountEnv(toolTokenEnv, "sam@example.org")].File == "" {
 		t.Fatal("a folder change lost the token")
 	}
 

@@ -16,9 +16,8 @@ import (
 // (places.go, web_places.go).
 
 const (
-	filesServer    = "fichiers"
-	filesImage     = "ghcr.io/alexis-marcel/eriphe-files"
-	filesConfigEnv = "FILES_CONFIG"
+	filesServer = "fichiers"
+	filesImage  = "ghcr.io/alexis-marcel/eriphe-files"
 )
 
 func resultText(r *mcp.CallToolResult) string {

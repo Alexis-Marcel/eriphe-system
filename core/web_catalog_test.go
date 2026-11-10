@@ -129,13 +129,13 @@ func TestWebPresetsAreValid(t *testing.T) {
 		}
 	}
 	mail := c.conf().runSpecs["mail"]
-	env := accountEnv(mailSecretEnv, "someone@gmail.com")
+	env := accountEnv(toolPasswordEnv, "someone@gmail.com")
 	if mail.Image != mailImage || mail.Env[env].File != "vault:service.mail."+strings.ToLower(env) ||
-		!strings.Contains(mail.Env["MAIL_CONFIG"].Value, `"address":"someone@gmail.com"`) || !strings.Contains(mail.Env["MAIL_CONFIG"].Value, `"password_env":"`+env+`"`) {
+		!strings.Contains(mail.Env[toolConfigEnv].Value, `"address":"someone@gmail.com"`) || !strings.Contains(mail.Env[toolConfigEnv].Value, `"password_env":"`+env+`"`) {
 		t.Fatalf("mail = %+v", mail)
 	}
 	cal := c.conf().runSpecs["agenda"]
-	if !strings.Contains(cal.Env["CALENDAR_CONFIG"].Value, `"provider":"icloud"`) || cal.Env[accountEnv(calSecretEnv, "someone@icloud.com")].File == "" {
+	if !strings.Contains(cal.Env[toolConfigEnv].Value, `"provider":"icloud"`) || cal.Env[accountEnv(toolPasswordEnv, "someone@icloud.com")].File == "" {
 		t.Fatalf("calendar = %+v", cal)
 	}
 	if _, err := c.store.service("mail"); err != nil {

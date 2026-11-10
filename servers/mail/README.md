@@ -86,7 +86,7 @@ the bodies (50 MB at most).
 
 ## Configuration
 
-JSON in `MAIL_CONFIG`, or a file in `MAIL_CONFIG_FILE` (or `-config`). With a known provider (given
+JSON in `TOOL_CONFIG`, or a file in `TOOL_CONFIG_FILE` (or `-config`). With a known provider (given
 or guessed from the address), an account needs only `address` and `auth`:
 
 ```json
@@ -95,7 +95,7 @@ or guessed from the address), an account needs only `address` and `auth`:
     {"name": "perso", "address": "someone@gmail.com", "display_name": "Some One",
      "auth": {"password_env": "GMAIL_APP_PASSWORD"}},
     {"name": "work", "address": "me@corp.example", "provider": "office365",
-     "auth": {"oauth_token_file": "/data/ms-token"}},
+     "auth": {"token_file": "/data/ms-token"}},
     {"name": "own", "address": "me@self.example",
      "imap": {"host": "mail.self.example", "port": 993},
      "smtp": {"host": "mail.self.example", "port": 587},
@@ -107,7 +107,7 @@ or guessed from the address), an account needs only `address` and `auth`:
 - Presets: `gmail`, `icloud`, `outlook` (Outlook.com, Hotmail), `office365`, `orange`, `ovh`,
   `fastmail`. Guessed from gmail.com, icloud.com/me.com/mac.com, outlook.*/hotmail.*/live.*,
   orange.fr/wanadoo.fr, fastmail.com.
-- `auth`: exactly one of `password_env`, `password_file`, `oauth_token_env`, `oauth_token_file`. The
+- `auth`: exactly one of `password_env`, `password_file`, `token_env`, `token_file`. The
   secret is read again at each connection, so a token file refreshed by eriphe-core is picked up.
   A token file may hold the bare token or an OAuth JSON response with `access_token`. It may also
   hold a refresh grant, `{"client_id", "client_secret", "refresh_token", "token_url"}`, as
@@ -127,9 +127,9 @@ or guessed from the address), an account needs only `address` and `auth`:
 ## Running
 
 ```sh
-docker run -i --rm --read-only --cap-drop ALL -e MAIL_CONFIG -e GMAIL_APP_PASSWORD \
+docker run -i --rm --read-only --cap-drop ALL -e TOOL_CONFIG -e GMAIL_APP_PASSWORD \
   ghcr.io/alexis-marcel/eriphe-mail                  # stdio
-docker run --rm --read-only --cap-drop ALL -p 8080:8080 -e MAIL_CONFIG -e GMAIL_APP_PASSWORD \
+docker run --rm --read-only --cap-drop ALL -p 8080:8080 -e TOOL_CONFIG -e GMAIL_APP_PASSWORD \
   -e MCP_TOKEN_FILE=/run/secrets/token ghcr.io/alexis-marcel/eriphe-mail -transport http
 ```
 

@@ -36,7 +36,7 @@ func newEnv(t *testing.T) *testEnv {
 	cfg, err := LoadConfig(`{"timezone":"Europe/Paris","accounts":[
 	  {"name":"icloud","provider":"caldav","url":"`+s1.URL+`/","username":"me@icloud.example","auth":{"password_env":"ICLOUD_PW"}},
 	  {"name":"cloud","provider":"nextcloud","url":"`+s2.URL+`/","username":"me","auth":{"password_env":"NC_PW"}},
-	  {"name":"work","provider":"microsoft","graph_url":"`+s3.URL+`/v1.0","auth":{"oauth_token_env":"MS_TOKEN"}}]}`, "")
+	  {"name":"work","provider":"microsoft","graph_url":"`+s3.URL+`/v1.0","auth":{"token_env":"MS_TOKEN"}}]}`, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func TestGraph(t *testing.T) {
 	// eriphe-core refreshes the token in a file.
 	f := filepath.Join(t.TempDir(), "ms")
 	os.WriteFile(f, []byte(`{"access_token":"ms-token-2"}`), 0o600)
-	e.cfg.Accounts[2].Auth = AuthConfig{OAuthTokenFile: f}
+	e.cfg.Accounts[2].Auth = AuthConfig{TokenFile: f}
 	e.graph.mu.Lock()
 	e.graph.token = "ms-token-2"
 	e.graph.mu.Unlock()
@@ -411,9 +411,9 @@ func TestToolAnnotations(t *testing.T) {
 func TestConfig(t *testing.T) {
 	cfg, err := LoadConfig(`{"accounts":[
 	  {"name":"icloud","provider":"icloud","username":"me@icloud.com","auth":{"password_env":"ICLOUD_APP_PASSWORD"}},
-	  {"provider":"google","username":"me@gmail.com","auth":{"oauth_token_file":"/data/google-token"}},
+	  {"provider":"google","username":"me@gmail.com","auth":{"token_file":"/data/google-token"}},
 	  {"provider":"fastmail","username":"me@fastmail.com","auth":{"password_file":"/run/secrets/fm"}},
-	  {"provider":"microsoft","auth":{"oauth_token_env":"MS"}}]}`, "")
+	  {"provider":"microsoft","auth":{"token_env":"MS"}}]}`, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +430,7 @@ func TestConfig(t *testing.T) {
 		"needs an OAuth":      `{"accounts":[{"provider":"microsoft","auth":{"password_env":"X"}}]}`,
 		"username is require": `{"accounts":[{"provider":"icloud","auth":{"password_env":"X"}}]}`,
 		"unknown provider":    `{"accounts":[{"provider":"yahoo","auth":{"password_env":"X"}}]}`,
-		"timezone":            `{"timezone":"Mars/Olympus","accounts":[{"provider":"microsoft","auth":{"oauth_token_env":"X"}}]}`,
+		"timezone":            `{"timezone":"Mars/Olympus","accounts":[{"provider":"microsoft","auth":{"token_env":"X"}}]}`,
 		"exactly one":         `{"accounts":[{"provider":"microsoft","auth":{}}]}`,
 	} {
 		if _, err := LoadConfig(js, ""); err == nil || !strings.Contains(err.Error(), want) {

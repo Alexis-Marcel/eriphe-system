@@ -67,7 +67,7 @@ Memory: about 1 KB per occurrence (more with long descriptions): a few MB for a 
 
 ## Configuration
 
-JSON in `CALENDAR_CONFIG`, or a file in `CALENDAR_CONFIG_FILE` (or `-config`):
+JSON in `TOOL_CONFIG`, or a file in `TOOL_CONFIG_FILE` (or `-config`):
 
 ```json
 {
@@ -76,8 +76,8 @@ JSON in `CALENDAR_CONFIG`, or a file in `CALENDAR_CONFIG_FILE` (or `-config`):
     {"name": "icloud", "provider": "icloud", "username": "someone@icloud.com",
      "auth": {"password_env": "ICLOUD_APP_PASSWORD"}},
     {"name": "google", "provider": "google", "username": "someone@gmail.com",
-     "auth": {"oauth_token_file": "/data/google-token"}},
-    {"name": "work", "provider": "microsoft", "auth": {"oauth_token_file": "/data/ms-token"}},
+     "auth": {"token_file": "/data/google-token"}},
+    {"name": "work", "provider": "microsoft", "auth": {"token_file": "/data/ms-token"}},
     {"name": "cloud", "provider": "nextcloud", "url": "https://cloud.example/remote.php/dav",
      "username": "me", "auth": {"password_env": "NEXTCLOUD_PASSWORD"}}
   ]
@@ -88,7 +88,7 @@ JSON in `CALENDAR_CONFIG`, or a file in `CALENDAR_CONFIG_FILE` (or `-config`):
   scope `https://www.googleapis.com/auth/calendar`), `fastmail` (app password), `nextcloud` or
   `caldav` (any server, `url` required, https only), `microsoft` (Graph, token with
   `Calendars.ReadWrite`).
-- `auth`: exactly one of `password_env`, `password_file`, `oauth_token_env`, `oauth_token_file`,
+- `auth`: exactly one of `password_env`, `password_file`, `token_env`, `token_file`,
   read again at each request (a refreshed token file is picked up). An OAuth secret may also be a
   refresh grant, `{"client_id", "client_secret", "refresh_token", "token_url"}`, as eriphe-core
   lends it for an account connected with a provider's sign-in (`token_url` is where to refresh it,
@@ -105,7 +105,7 @@ JSON in `CALENDAR_CONFIG`, or a file in `CALENDAR_CONFIG_FILE` (or `-config`):
 ## Running
 
 ```sh
-docker run -i --rm --read-only --cap-drop ALL -e CALENDAR_CONFIG -e ICLOUD_APP_PASSWORD \
+docker run -i --rm --read-only --cap-drop ALL -e TOOL_CONFIG -e ICLOUD_APP_PASSWORD \
   ghcr.io/alexis-marcel/eriphe-calendar               # stdio
 ```
 

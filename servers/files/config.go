@@ -9,13 +9,13 @@ import (
 	"strings"
 )
 
-// Config is the server configuration, read as JSON from FILES_CONFIG or from
-// the file named by FILES_CONFIG_FILE (or -config).
+// Config is the server configuration, read as JSON from TOOL_CONFIG or from
+// the file named by TOOL_CONFIG_FILE (or -config).
 type Config struct {
 	Accounts []AccountConfig `json:"accounts"`
-	// Folders are the only places the tools reach: each one and what is
+	// Places are the only folders the tools reach: each one and what is
 	// inside it, nothing else of the account.
-	Folders []FolderConfig `json:"folders,omitempty"`
+	Places []PlaceConfig `json:"places,omitempty"`
 	// Setup serves browse_folders, which lists an account's folders (names
 	// only) so that eriphe-core's workspace can offer them. eriphe-core never
 	// lends it to a task. Default on; false leaves it out.
@@ -51,9 +51,9 @@ type AuthConfig struct {
 	TokenFile string `json:"token_file,omitempty"`
 }
 
-// FolderConfig is one Folder given to Eriphe: a folder of an account, by its
+// PlaceConfig is one place given to Eriphe: a folder of an account, by its
 // provider id, and what Eriphe may do there.
-type FolderConfig struct {
+type PlaceConfig struct {
 	Name    string `json:"name"`    // how tools name it
 	Account string `json:"account"` // an account name; may be empty with one account
 	ID      string `json:"id"`      // the provider's folder id
@@ -81,7 +81,7 @@ func LoadConfig(text, file string) (*Config, error) {
 			return nil, err
 		}
 	default:
-		return nil, errors.New("no configuration: set FILES_CONFIG or FILES_CONFIG_FILE")
+		return nil, errors.New("no configuration: set TOOL_CONFIG or TOOL_CONFIG_FILE")
 	}
 	var cfg Config
 	dec := json.NewDecoder(strings.NewReader(string(b)))
@@ -128,30 +128,30 @@ func (cfg *Config) normalize() error {
 		accounts[key] = true
 	}
 	folders := map[string]bool{}
-	for i := range cfg.Folders {
-		f := &cfg.Folders[i]
+	for i := range cfg.Places {
+		f := &cfg.Places[i]
 		f.Name, f.ID = strings.TrimSpace(f.Name), strings.TrimSpace(f.ID)
 		if f.Name == "" || f.ID == "" {
-			return fmt.Errorf("folder %d: name and id are required", i+1)
+			return fmt.Errorf("place %d: name and id are required", i+1)
 		}
 		if f.Account == "" {
 			if len(cfg.Accounts) != 1 {
-				return fmt.Errorf("folder %q: account is required with several accounts", f.Name)
+				return fmt.Errorf("place %q: account is required with several accounts", f.Name)
 			}
 			f.Account = cfg.Accounts[0].Name
 		}
 		if !accounts[strings.ToLower(f.Account)] {
-			return fmt.Errorf("folder %q: no account %q", f.Name, f.Account)
+			return fmt.Errorf("place %q: no account %q", f.Name, f.Account)
 		}
 		if f.Access == "" {
 			f.Access = accessRead
 		}
 		if f.Access != accessRead && f.Access != accessDrop {
-			return fmt.Errorf("folder %q: access is read or drop", f.Name)
+			return fmt.Errorf("place %q: access is read or drop", f.Name)
 		}
 		key := strings.ToLower(f.Name)
 		if folders[key] {
-			return fmt.Errorf("folder %q: duplicate name", f.Name)
+			return fmt.Errorf("place %q: duplicate name", f.Name)
 		}
 		folders[key] = true
 	}

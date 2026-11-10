@@ -37,9 +37,6 @@ type appGuide struct {
 	// JSON: the console downloads the client as a JSON file, taken as is.
 	JSON          bool
 	IDPlaceholder string
-	// Legacy is where the client was kept before connection apps: read
-	// until the app is saved again.
-	Legacy string
 }
 
 // appStep is one step of the guide: a text key, a link, what to copy.
@@ -62,9 +59,6 @@ func appClient(p *signInProvider) (oauthApp, error) {
 		return oauthApp{}, errNoVault
 	}
 	raw, err := v.get(appVault(p))
-	if errors.Is(err, errNoSecret) && p.App.Legacy != "" {
-		raw, err = v.get(p.App.Legacy)
-	}
 	if errors.Is(err, errNoSecret) {
 		return oauthApp{}, errNoAppClient
 	}
@@ -78,21 +72,14 @@ func appClient(p *signInProvider) (oauthApp, error) {
 	return app, nil
 }
 
-// storeAppClient keeps the user's app at a provider; the name it had
-// before goes.
+// storeAppClient keeps the user's app at a provider.
 func storeAppClient(p *signInProvider, app oauthApp) error {
 	v := currentVault()
 	if v == nil {
 		return errNoVault
 	}
 	raw, _ := json.Marshal(app)
-	if err := v.set(appVault(p), string(raw)); err != nil {
-		return err
-	}
-	if p.App.Legacy != "" {
-		v.remove(p.App.Legacy)
-	}
-	return nil
+	return v.set(appVault(p), string(raw))
 }
 
 // readAppClient reads the app posted: the JSON the console downloads, or

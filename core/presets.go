@@ -169,8 +169,6 @@ const filesPreset = "gdrive"
 const (
 	mailImage     = "ghcr.io/alexis-marcel/eriphe-mail"
 	calendarImage = "ghcr.io/alexis-marcel/eriphe-calendar"
-	mailSecretEnv = "MAIL_PASSWORD"
-	calSecretEnv  = "CALENDAR_PASSWORD"
 )
 
 // Mail: an account of eriphe-mail with a password (accounts.go). The user picks the

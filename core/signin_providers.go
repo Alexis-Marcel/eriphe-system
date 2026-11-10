@@ -44,7 +44,6 @@ var providerGoogle = &signInProvider{
 		Source:        "https://support.google.com/cloud/answer/15549945",
 		JSON:          true,
 		IDPlaceholder: "….apps.googleusercontent.com",
-		Legacy:        "google-drive-client",
 	},
 }
 

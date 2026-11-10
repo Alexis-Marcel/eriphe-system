@@ -35,15 +35,15 @@ access is `read`, or an account connected without the scope that writes.
 
 ## Configuration
 
-JSON in `FILES_CONFIG`, or a file in `FILES_CONFIG_FILE` (or `-config`); eriphe-core writes it:
+JSON in `TOOL_CONFIG`, or a file in `TOOL_CONFIG_FILE` (or `-config`); eriphe-core writes it:
 
 ```json
 {
   "accounts": [
-    {"name": "google", "provider": "google", "auth": {"token_env": "FILES_GOOGLE_TOKEN"},
+    {"name": "google", "provider": "google", "auth": {"token_env": "TOOL_TOKEN"},
      "scopes": ["https://www.googleapis.com/auth/drive"]}
   ],
-  "folders": [
+  "places": [
     {"name": "Compta", "account": "google", "id": "1AbC…", "access": "drop"},
     {"name": "Photos", "account": "google", "id": "1XyZ…"}
   ]
@@ -56,14 +56,14 @@ JSON in `FILES_CONFIG`, or a file in `FILES_CONFIG_FILE` (or `-config`); eriphe-
   (`golang.org/x/oauth2`) and never written; a revoked token gives an error that says to reconnect
   in the workspace.
 - `scopes`: what the user granted. `drive.readonly` reads; dropping files needs `drive`.
-- `folders`: `access` is `read` (default) or `drop`. `account` may be left out with one account.
+- `places`: `access` is `read` (default) or `drop`. `account` may be left out with one account.
 - `setup`: `false` leaves `browse_folders` out. Limits: `max_chars` (50000), `max_bytes` per file
   read or written (20 MB), `timeout_seconds` (60).
 
 ## Running
 
 ```sh
-docker run -i --rm --read-only --cap-drop ALL -e FILES_CONFIG -e FILES_GOOGLE_TOKEN \
+docker run -i --rm --read-only --cap-drop ALL -e TOOL_CONFIG -e TOOL_TOKEN \
   ghcr.io/alexis-marcel/eriphe-files                  # stdio
 ```
 

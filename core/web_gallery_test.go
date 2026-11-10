@@ -304,7 +304,7 @@ func serviceAccount(t *testing.T, c *core, svc accountService, name string) (svc
 	}
 	a, ok := st.account(name)
 	if !ok {
-		t.Fatalf("%s: no account %s in %s", svc.ID, name, st.Spec.Env[svc.ConfigEnv].Value)
+		t.Fatalf("%s: no account %s in %s", svc.ID, name, st.Spec.Env[toolConfigEnv].Value)
 	}
 	secret, _ := readSecret(c.conf().runSpecs[st.Name].Env[a.secretEnv()].File)
 	return a, secret
@@ -374,7 +374,7 @@ func TestMailProviderForms(t *testing.T) {
 			continue
 		}
 		a := mailConfig(t, c, tc.address)
-		if a.Provider != tc.wantProvider || a.Address != tc.address || a.Name != tc.address || a.Auth.PasswordEnv != accountEnv(mailSecretEnv, tc.address) {
+		if a.Provider != tc.wantProvider || a.Address != tc.address || a.Name != tc.address || a.Auth.PasswordEnv != accountEnv(toolPasswordEnv, tc.address) {
 			t.Errorf("%s: %+v", tc.provider, a)
 		}
 		if tc.wantIMAP != "" && (a.IMAP == nil || a.IMAP.Host != tc.wantIMAP || a.IMAP.Port != 993 || a.SMTP.Host != "smtp.free.fr" || a.SMTP.Port != 465) {
