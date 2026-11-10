@@ -36,6 +36,10 @@ type toolPreset struct {
 	// provider serves): its tile leads to the connect page.
 	Provider string
 	Tools    []string
+	// AppPage: the tool also goes on a connection made on that page (an
+	// app's installation, connections.go), offered before its token; its
+	// row says which way it is on, and links there.
+	AppPage string
 }
 
 var toolPresets = []toolPreset{
@@ -51,7 +55,7 @@ var toolPresets = []toolPreset{
 	// personal access token as a bearer token; it has no dynamic client
 	// registration.
 	{ID: "github", Form: "generic", Name: "github", Mark: "GH", Kind: "remote",
-		URL: "https://api.githubcopilot.com/mcp/", Auth: "bearer", Trust: true},
+		URL: "https://api.githubcopilot.com/mcp/", Auth: "bearer", Trust: true, AppPage: "/settings/github"},
 	// https://www.home-assistant.io/integrations/mcp_server/ : the MCP Server
 	// integration serves /api/mcp; a long-lived access token (profile →
 	// security) is a bearer token like for the rest of Home Assistant's API.

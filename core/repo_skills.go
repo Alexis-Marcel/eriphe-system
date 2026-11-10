@@ -43,7 +43,7 @@ func (c *core) repoSkills(ctx context.Context, repo *ResourceRef) bool {
 
 // ownRepo tells whether a repository is the user's own (see above).
 func (c *core) ownRepo(ctx context.Context, ref string) (bool, error) {
-	repo := githubRepo(ref)
+	repo := repoOf(ref)
 	if repo == "" {
 		return false, nil
 	}

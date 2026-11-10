@@ -322,10 +322,10 @@ var credentialEnv = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
 
 // reservedEnv are variables a credential must not take: the container's
 // own, the node's and eriphe's, and those that change how a program runs.
-var reservedEnv = []string{"PATH", "HOME", "USER", "SHELL", "PWD", "TERM", "LANG", "TZ", "TMPDIR",
-	"GH_TOKEN", "GITHUB_TOKEN", "NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS", "NODE_TLS_REJECT_UNAUTHORIZED",
+var reservedEnv = append([]string{"PATH", "HOME", "USER", "SHELL", "PWD", "TERM", "LANG", "TZ", "TMPDIR",
+	"NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS", "NODE_TLS_REJECT_UNAUTHORIZED",
 	"SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "PYTHONPATH", "PYTHONSTARTUP",
-	"BASH_ENV", "ENV", "PROMPT_COMMAND", "IFS"}
+	"BASH_ENV", "ENV", "PROMPT_COMMAND", "IFS"}, gitTokenEnvs...)
 
 var reservedEnvPrefixes = []string{"ERIPHE_", "LD_", "DYLD_", "GIT_", "MISE_", "XDG_", "DOCKER_", "NPM_CONFIG_"}
 

@@ -62,8 +62,8 @@ type startNeed struct {
 // for each one lent for write, the decision its push will get.
 func (c *core) startNeeds(list []ResourceRef, clean bool) []startNeed {
 	repos := lentRepos(list)
-	if _, err := loadGitHubApp(); err == errNoGitHubApp {
-		return nil // GitHub is not connected: a yes would give nothing
+	if !c.gitConnected() {
+		return nil // git is not connected: a yes would give nothing
 	}
 	var out []startNeed
 	for _, g := range repos {
@@ -213,7 +213,7 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 			continue // its mount is the task's from the start: the yes lets it go
 		}
 		c.store.grantRepo(s.TaskID, n.Repo, n.Access)
-		c.store.logAccess(s.TaskID, "git", "github.com", n.Repo, n.Access, decideAllow, byUser, "", "approved at launch: "+n.Reason)
+		c.store.logAccess(s.TaskID, "git", gitHost, n.Repo, n.Access, decideAllow, byUser, "", "approved at launch: "+n.Reason)
 	}
 	c.store.db.Exec(`UPDATE tasks SET desired = ?, pending_reason = '', updated = ? WHERE id = ? AND desired = ?`,
 		desiredRunning, time.Now().Unix(), s.TaskID, desiredHeld)

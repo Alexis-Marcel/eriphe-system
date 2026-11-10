@@ -393,7 +393,7 @@
   <h3>{{template "i-plug"}}{{t "github.conns"}}</h3>
   <p class="muted small">{{t "github.connslead"}}</p>
   <ul class="plain-list gh-conns">{{range .Conns}}<li id="gh-conn-{{.Name}}"{{if eq .Name $switch}} class="lit"{{end}}>
-    <div><b class="mono">{{.Name}}</b> <span class="muted small">· {{if eq .Auth "connection"}}{{t "github.viaapp"}}{{with or .Account $owner}} · {{.}}{{end}}{{else if eq .Auth "bearer"}}{{t "github.viatoken"}}{{else}}{{t (printf "auth.%s" .Auth)}}{{end}}</span>{{with .ConnID}} · <a class="small" href="/settings/connections/{{.}}/places">{{t "github.repoplaces"}}</a>{{end}}</div>
+    <div><b class="mono">{{.Name}}</b> <span class="muted small">· {{if eq .Auth "connection"}}{{t "tools.viaapp"}}{{with or .Account $owner}} · {{.}}{{end}}{{else if eq .Auth "bearer"}}{{t "tools.viatoken"}}{{else}}{{t (printf "auth.%s" .Auth)}}{{end}}</span>{{with .ConnID}} · <a class="small" href="/settings/connections/{{.}}/places">{{t "github.repoplaces"}}</a>{{end}}</div>
     {{if ne .Auth "connection"}}{{if .ReadOnly}}<p class="small notice-line">{{tf "github.toolconfig" .Name}}</p>
     {{else if not $owner}}<p class="small muted">{{t "github.switchfirst"}}</p>
     {{else if not $insts}}<p class="small muted">{{t "github.switchinstall"}}</p>

@@ -74,7 +74,7 @@ func newMCPServer(c *core) *mcp.Server {
 			}, err
 		})
 
-	tool(s, "list_repos", "The GitHub repositories the user gave to Eriphe (the places of the GitHub App's connections, Settings → Tools → GitHub → Lieux): repo (owner/name) and access (read, or write: it may be lent for write, which still asks the user at launch unless it is a clean start on a declared branch). A task is lent only one of these, as {kind: repo, ref: <repo>}; nothing here adds one.",
+	tool(s, "list_repos", "The repositories the user gave to Eriphe (the places of the git connections, picked in Settings → Tools): repo (owner/name) and access (read, or write: it may be lent for write, which still asks the user at launch unless it is a clean start on a declared branch). A task is lent only one of these, as {kind: repo, ref: <repo>}; nothing here adds one.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {
 			var repos []map[string]string
 			for _, p := range c.repoPlaces() {

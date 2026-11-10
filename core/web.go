@@ -66,6 +66,10 @@ type web struct {
 	wake chan struct{} // closed and replaced when something happens here
 }
 
+// providerRoutes are the pages a connection's provider brings, registered
+// from its own file (web_github.go).
+var providerRoutes []func(*web, *http.ServeMux)
+
 func newWeb(c *core, cfg WebConfig) (*web, error) {
 	if cfg.Listen == "" {
 		cfg.Listen = "0.0.0.0:8443"
@@ -237,7 +241,6 @@ func (w *web) routes() http.Handler {
 	w.folderRoutes(mux)     // web_folders.go
 	w.skillRoutes(mux)      // web_skills.go
 	w.learnedRoutes(mux)    // web_learned.go
-	w.githubRoutes(mux)     // web_github.go
 	w.welcomeRoutes(mux)    // web_welcome.go
 	w.pushRoutes(mux)       // web_push.go
 	w.channelRoutes(mux)    // web_channels.go
@@ -246,6 +249,9 @@ func (w *web) routes() http.Handler {
 	w.activityRoutes(mux)   // web_activity.go
 	w.sessionRoutes(mux)    // web_sessions.go
 	w.cardRoutes(mux)       // web_convo_cards.go
+	for _, routes := range providerRoutes {
+		routes(w, mux)
+	}
 	return w.headers(mux)
 }
 

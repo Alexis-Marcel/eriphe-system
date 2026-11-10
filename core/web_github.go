@@ -30,6 +30,8 @@ import (
 //     it in the vault, and sends the browser back here, where it installs
 //     the app on the repositories Eriphe may work on.
 
+func init() { providerRoutes = append(providerRoutes, (*web).githubRoutes) }
+
 func (w *web) githubRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/github", w.auth(w.handleGitHub))
 	mux.Handle("POST /settings/github/create", w.auth(w.handleGitHubCreate))

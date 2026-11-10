@@ -30,7 +30,12 @@ import (
 // repository and the repository's own protection rules. The shell rules
 // (policy.go) stop a push to main or a forced one by mistake, no more.
 
+// gitTokenEnvs are the variables git and gh read their token from: a
+// task's placeholder, never a credential's of its own.
+var gitTokenEnvs = []string{"GH_TOKEN", "GITHUB_TOKEN"}
+
 const (
+	gitHost   = "github.com"
 	gitTarget = "github.com:443"
 	ghTarget  = "api.github.com:443"
 	// gitAccessName and gitAccessEnv are how the node gets GitHub, as an
@@ -48,12 +53,12 @@ const (
 // gitPlaceholder is what a task's git holds in place of a token.
 func gitPlaceholder(taskID string) string { return "eriphe-git-" + taskID }
 
-func isGitHubRepo(e ResourceRef) bool { return e.Kind == resRepo && githubRepo(e.Ref) != "" }
+func isRepoRef(e ResourceRef) bool { return e.Kind == resRepo && repoOf(e.Ref) != "" }
 
 // lentGit is GitHub as the node gets it, for a task lent a repository there.
 // Reads go this way too: one path for all of a repository.
 func lentGit(taskID string, list []ResourceRef) []nodeAccess {
-	if !slices.ContainsFunc(list, isGitHubRepo) {
+	if !slices.ContainsFunc(list, isRepoRef) {
 		return nil
 	}
 	return []nodeAccess{{Name: gitAccessName, Hosts: []string{gitTarget, ghTarget}, Env: gitAccessEnv, Placeholder: gitPlaceholder(taskID)}}
@@ -76,7 +81,7 @@ func readGitCall(method string, uri *url.URL) gitCall {
 	if len(parts) != 3 {
 		return gitCall{}
 	}
-	repo := githubRepo(parts[0] + "/" + parts[1])
+	repo := repoOf(parts[0] + "/" + parts[1])
 	switch rest := parts[2]; {
 	case rest == gitReceivePack && method == http.MethodPost:
 		return gitCall{repo: repo, access: accessWrite}
@@ -92,7 +97,7 @@ func readGitCall(method string, uri *url.URL) gitCall {
 
 // gitLent: this request is one for the git path of the task.
 func gitLent(t *TaskRow, target string) bool {
-	return (target == gitTarget || target == ghTarget) && slices.ContainsFunc(t.Resources, isGitHubRepo)
+	return (target == gitTarget || target == ghTarget) && slices.ContainsFunc(t.Resources, isRepoRef)
 }
 
 // gitRequest decides a request to github.com and puts the token in. It tells
@@ -158,7 +163,7 @@ func ghRepoOf(path string) string {
 	if len(parts) < 3 || parts[0] != "repos" {
 		return ""
 	}
-	return githubRepo(parts[1] + "/" + parts[2])
+	return repoOf(parts[1] + "/" + parts[2])
 }
 
 // ghRequest puts gh's token in a request to api.github.com, as gitRequest

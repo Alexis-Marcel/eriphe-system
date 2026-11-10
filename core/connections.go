@@ -419,6 +419,10 @@ type tokenMinter interface {
 	browse(ctx context.Context, identity, page string) ([]placeItem, string, error)
 }
 
+// providerStarts make the minting providers' clients, registered from
+// their own files (github_app.go).
+var providerStarts []func(*core)
+
 // mintersLabel are the minting providers' names as the user knows them.
 var mintersLabel = map[string]string{}
 
