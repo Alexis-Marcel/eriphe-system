@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -190,37 +189,5 @@ func TestChannelTrust(t *testing.T) {
 	}
 	if _, _, err := c.addChannel("Écran", false, "text"); err == nil {
 		t.Error("a channel carrying the text accepted")
-	}
-}
-
-// Home Assistant's former token became the channel "Home Assistant", not
-// trusted, saying a sentence; the voice's speaker mappings are gone.
-func TestVoiceTokenMigrates(t *testing.T) {
-	dir := t.TempDir()
-	s, err := openStore(filepath.Join(dir, "core.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.set("voice_token_hash", tokenHash("evt_old"))
-	s.db.Exec(`INSERT INTO ha_mappings (signal, entity, state, created) VALUES ('voice', 'assist_satellite.salon', 'active', 0), ('room', 'sensor.x', 'active', 0)`)
-	s.db.Close()
-	s, err = openStore(filepath.Join(dir, "core.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := &core{store: s}
-	chs := c.addedChannels()
-	if len(chs) != 1 || chs[0].Name != "Home Assistant" || chs[0].Trusted || chs[0].Carries != carrySentence || s.get("voice_token_hash") != "" {
-		t.Fatalf("channels %+v", chs)
-	}
-	req := httptest.NewRequest("POST", "/v1/voice", nil)
-	req.Header.Set("Authorization", "Bearer evt_old")
-	if ch, ok := c.channelOf(req); !ok || ch.ID != chs[0].ID {
-		t.Fatal("the former token does not open its channel")
-	}
-	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM ha_mappings WHERE signal = 'voice'`).Scan(&n)
-	if n != 0 {
-		t.Fatal("a speaker mapping is left")
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"os"
@@ -55,8 +56,8 @@ func TestMemorySchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := m.schemaVersion(); v != len(memoryMigrations) {
-		t.Fatalf("schema %d, want %d", v, len(memoryMigrations))
+	if v := m.schemaVersion(); v != memorySchemaVersion {
+		t.Fatalf("schema %d, want %d", v, memorySchemaVersion)
 	}
 	mustAdd(t, m, &Memory{Kind: kindFact, Text: "Le NAS a 5 Go de mémoire libre"})
 	m.db.Close()
@@ -69,15 +70,21 @@ func TestMemorySchema(t *testing.T) {
 	if n := m.count(`1 = 1`); n != 1 {
 		t.Fatalf("%d memories after reopening", n)
 	}
+	// A file at another schema is refused, never changed.
+	m.db.Exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`)
+	m.db.Close()
+	if _, err := openMemory(path); err == nil || !strings.Contains(err.Error(), "schema 4") {
+		t.Fatalf("another schema: %v", err)
+	}
+	x, _ := sql.Open("sqlite", path)
+	x.Exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`)
+	x.Close()
+	if m, err = openMemory(path); err != nil {
+		t.Fatal(err)
+	}
 	// The log is append-only.
 	if _, err := m.db.Exec(`UPDATE memory_log SET who = 'x'`); err == nil {
 		t.Fatal("the log could be rewritten")
-	}
-	// A newer schema is refused.
-	m.db.Exec(`UPDATE meta SET value = '99' WHERE key = 'schema_version'`)
-	m.db.Close()
-	if _, err := openMemory(path); err == nil || !strings.Contains(err.Error(), "newer") {
-		t.Fatalf("newer schema: %v", err)
 	}
 }
 

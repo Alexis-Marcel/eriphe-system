@@ -657,8 +657,6 @@ func (c *core) dropAssistantStatus(name string) {
 	delete(c.asst.m, name)
 	c.store.db.Exec(`DELETE FROM assistant_status WHERE name = ?`, name)
 	// What it knew goes with it.
-	c.store.db.Exec(`DELETE FROM facts WHERE owner = ?`, name)
-	c.store.db.Exec(`DELETE FROM facts_log WHERE owner = ?`, name)
 }
 
 func (c *core) assistantStatusNames() []string {

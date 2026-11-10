@@ -38,14 +38,10 @@ import (
 
 const pushSchema = `CREATE TABLE IF NOT EXISTS push_subscriptions (
   id TEXT PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL,
-  lang TEXT NOT NULL, label TEXT NOT NULL, created INTEGER NOT NULL);`
+  lang TEXT NOT NULL, label TEXT NOT NULL, created INTEGER NOT NULL,
+  ua_kind TEXT NOT NULL DEFAULT ''); -- a phone's browser or a computer's, from its user agent (route.go)`
 
-func init() {
-	extraSchema = append(extraSchema, pushSchema)
-	// Added with the router (route.go): a phone's browser or a computer's,
-	// from its user agent when it subscribed.
-	extraColumns = append(extraColumns, `ALTER TABLE push_subscriptions ADD COLUMN ua_kind TEXT NOT NULL DEFAULT ''`)
-}
+func init() { extraSchema = append(extraSchema, pushSchema) }
 
 const (
 	pushKeyFile = "push-vapid.key"

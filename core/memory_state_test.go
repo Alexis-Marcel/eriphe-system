@@ -1,9 +1,7 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -102,32 +100,4 @@ func TestExtractionDurableState(t *testing.T) {
 	if !strings.Contains(out, `time="2026-09-08 10:05 Tue"`) {
 		t.Fatalf("segment date: %s", out)
 	}
-}
-
-// Schema 2 to 3: every memory kept, its basis unknown.
-func TestMemoryMigrationBasis(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "memory.db")
-	m, err := openMemory(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mustAdd(t, m, &Memory{Kind: kindFact, Text: "Sam a un vélo cargo", Keywords: "transport"})
-	// Back to schema 2, as a database of the previous version would be.
-	for _, q := range []string{`ALTER TABLE memories DROP COLUMN basis`, `DROP TABLE intentions`, `DROP TABLE intention_log`} {
-		if _, err := m.db.Exec(q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	m.db.Exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`)
-	m.db.Close()
-	m, err = openMemory(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer m.db.Close()
-	xs, err := m.recall(recallQuery{Query: "vélos"})
-	if err != nil || len(xs) != 1 || xs[0].Basis != "" || xs[0].Keywords != "transport" {
-		t.Fatalf("after the migration: %+v %v", xs, err)
-	}
-	_ = sql.ErrNoRows
 }

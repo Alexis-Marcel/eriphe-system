@@ -197,12 +197,7 @@ const allowedSchema = `CREATE TABLE IF NOT EXISTS remembered_actions (
   tool TEXT NOT NULL, account TEXT NOT NULL DEFAULT '', server TEXT NOT NULL, time INTEGER NOT NULL,
   PRIMARY KEY (tool, account));`
 
-func init() {
-	extraSchema = append(extraSchema, allowedSchema)
-	extraColumns = append(extraColumns,
-		`INSERT OR IGNORE INTO remembered_actions (tool, account, server, time) SELECT tool, '', server, time FROM allowed_actions`,
-		`DROP TABLE allowed_actions`)
-}
+func init() { extraSchema = append(extraSchema, allowedSchema) }
 
 // allowedAction is one action allowed without asking.
 type allowedAction struct {

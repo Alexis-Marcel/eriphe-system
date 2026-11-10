@@ -92,21 +92,39 @@ type EventRow struct {
 const schema = `
 CREATE TABLE IF NOT EXISTS nodes (
   name TEXT PRIMARY KEY, url TEXT NOT NULL, online INTEGER NOT NULL DEFAULT 0,
-  info TEXT, last_seen INTEGER NOT NULL DEFAULT 0);
+  info TEXT, last_seen INTEGER NOT NULL DEFAULT 0,
+  secret_hash TEXT NOT NULL DEFAULT '',  -- a node is known by the hash of its secret
+  cert_serial TEXT NOT NULL DEFAULT '',  -- its client certificate's serial (machine_tls.go)
+  prev_serial TEXT NOT NULL DEFAULT '',  -- the one before, valid while it moves to the new one
+  cert_expires INTEGER NOT NULL DEFAULT 0,
+  os TEXT NOT NULL DEFAULT '', arch TEXT NOT NULL DEFAULT '', install TEXT NOT NULL DEFAULT '', -- its last report
+  suspended INTEGER NOT NULL DEFAULT 0); -- "Cut access" (node_access.go)
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, node TEXT NOT NULL, node_task_id TEXT NOT NULL DEFAULT '',
-  runtime TEXT NOT NULL, model TEXT NOT NULL DEFAULT '', identity TEXT NOT NULL DEFAULT '',
+  runtime TEXT NOT NULL, model TEXT NOT NULL DEFAULT '',
   dir TEXT NOT NULL, prompt TEXT NOT NULL, state TEXT NOT NULL,
   session_id TEXT NOT NULL DEFAULT '', last_seq INTEGER NOT NULL DEFAULT 0,
-  created INTEGER NOT NULL, updated INTEGER NOT NULL);
+  created INTEGER NOT NULL, updated INTEGER NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'worker', agent TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '',
+  spec TEXT NOT NULL DEFAULT '',             -- what its node reads (lifecycle.go)
+  desired TEXT NOT NULL DEFAULT 'running',   -- run or stop
+  pending_reason TEXT NOT NULL DEFAULT '',   -- why it waits for a node
+  tools TEXT NOT NULL DEFAULT '', folders TEXT NOT NULL DEFAULT '',
+  resources TEXT NOT NULL DEFAULT '',        -- all it is lent, as JSON (resources.go)
+  pinned INTEGER NOT NULL DEFAULT 0);        -- its node given by hand (placement.go)
 CREATE TABLE IF NOT EXISTS messages (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL,
-  role TEXT NOT NULL, text TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0);
+  role TEXT NOT NULL, text TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0,
+  via TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS inbox (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, kind TEXT NOT NULL,
   data TEXT NOT NULL, created INTEGER NOT NULL, acked INTEGER NOT NULL DEFAULT 0);
-CREATE TABLE IF NOT EXISTS join_tokens (hash TEXT PRIMARY KEY, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS join_tokens (
+  hash TEXT PRIMARY KEY, expires INTEGER NOT NULL,
+  name TEXT NOT NULL DEFAULT '',      -- the node it is for
+  rejoin INTEGER NOT NULL DEFAULT 0,  -- it may replace that node's secret
+  id TEXT NOT NULL DEFAULT '');       -- its public id (id.secret)
 CREATE TABLE IF NOT EXISTS events (
   task_id TEXT NOT NULL, seq INTEGER NOT NULL, time INTEGER NOT NULL,
   type TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (task_id, seq));
@@ -115,120 +133,19 @@ CREATE TABLE IF NOT EXISTS events (
 // extraSchema holds the tables of other modules (the policy's decisions).
 var extraSchema []string
 
-// extraColumns are columns added to those tables later: each fails, and is
-// ignored, once the column is there.
-var extraColumns []string
-
 func openStore(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	// The log and the grants of tasks, under their names of before.
-	db.Exec(`DROP INDEX IF EXISTS credential_log_task`)
-	db.Exec(`ALTER TABLE credential_log RENAME TO access_log`)
-	db.Exec(`ALTER TABLE access_log RENAME COLUMN repo TO target`)
-	db.Exec(`ALTER TABLE access_log RENAME COLUMN access TO action`)
-	db.Exec(`ALTER TABLE credential_grants RENAME TO repo_grants`)
-	// The watches' grants became standing approvals (#244 step 5).
-	if _, err := db.Exec(`ALTER TABLE watch_grants RENAME TO standing_approvals`); err == nil {
-		db.Exec(`ALTER TABLE standing_approvals RENAME COLUMN watch_id TO rule_id`)
-		db.Exec(`DROP INDEX IF EXISTS watch_grants_watch`)
-	}
-	// The watches became rules (#244 step 4): same rows, ids, history and
-	// webhook tokens.
-	if _, err := db.Exec(`ALTER TABLE watches RENAME TO rules`); err == nil {
-		db.Exec(`ALTER TABLE watch_runs RENAME TO rule_runs`)
-		db.Exec(`ALTER TABLE rule_runs RENAME COLUMN watch_id TO rule_id`)
-		db.Exec(`DROP INDEX IF EXISTS watch_runs_watch`)
-		db.Exec(`DROP INDEX IF EXISTS watch_runs_fired`)
-	}
-	// The assistants' state became the kept facts (#244 step 3).
-	if _, err := db.Exec(`ALTER TABLE assistant_state RENAME TO facts`); err == nil {
-		db.Exec(`ALTER TABLE facts RENAME COLUMN assistant TO owner`)
-		db.Exec(`ALTER TABLE facts ADD COLUMN writer TEXT NOT NULL DEFAULT ''`)
-	}
-	if _, err := db.Exec(`ALTER TABLE assistant_state_log RENAME TO facts_log`); err == nil {
-		db.Exec(`ALTER TABLE facts_log RENAME COLUMN assistant TO owner`)
-		db.Exec(`ALTER TABLE facts_log ADD COLUMN writer TEXT NOT NULL DEFAULT ''`)
-		db.Exec(`DROP INDEX IF EXISTS assistant_state_log_at`)
-	}
 	for _, q := range append([]string{schema}, extraSchema...) {
 		if _, err := db.Exec(q); err != nil {
 			return nil, err
 		}
 	}
-	for _, q := range extraColumns {
-		db.Exec(q)
-	}
-	// Added after v0: which tasks are the brain rather than workers.
-	db.Exec(`ALTER TABLE tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'worker'`)
-	db.Exec(`ALTER TABLE tasks ADD COLUMN agent TEXT NOT NULL DEFAULT ''`)
-	db.Exec(`ALTER TABLE tasks ADD COLUMN title TEXT NOT NULL DEFAULT ''`)
-	// Added with the declarative lifecycle: what the task should be, which its
-	// node reads, and what it should do (run or stop).
-	db.Exec(`ALTER TABLE tasks ADD COLUMN spec TEXT NOT NULL DEFAULT ''`)
-	db.Exec(`ALTER TABLE tasks ADD COLUMN desired TEXT NOT NULL DEFAULT 'running'`)
-	// Tasks started before it have no spec for their node to read: they are lost.
-	db.Exec(`UPDATE tasks SET state = 'lost' WHERE spec = '' AND state NOT IN ('stopped', 'failed', 'lost')`)
-	// Added with joining: a node is known by the hash of its secret. Nodes
-	// from the configuration file, which had none, are gone.
-	if _, err := db.Exec(`ALTER TABLE nodes ADD COLUMN secret_hash TEXT NOT NULL DEFAULT ''`); err == nil {
-		db.Exec(`DELETE FROM nodes WHERE secret_hash = ''`)
-	}
-	// Added with the two-pass scheduler: a task can wait, without a node,
-	// for one that is offline now.
-	db.Exec(`ALTER TABLE tasks ADD COLUMN pending_reason TEXT NOT NULL DEFAULT ''`)
-	db.Exec(`ALTER TABLE messages ADD COLUMN via TEXT NOT NULL DEFAULT ''`)
-	// Added with the sign-in modes: how a session was opened (web_signin.go).
-	db.Exec(`ALTER TABLE web_sessions ADD COLUMN via TEXT NOT NULL DEFAULT 'password'`)
-	// Added with the tool catalog: what a task may use of it.
-	db.Exec(`ALTER TABLE tasks ADD COLUMN tools TEXT NOT NULL DEFAULT ''`)
-	// Added with folders: the user's folders a task may read (folders.go).
-	db.Exec(`ALTER TABLE tasks ADD COLUMN folders TEXT NOT NULL DEFAULT ''`)
-	// Added with resources: all a task is lent, as JSON (resources.go);
-	// '' for the tasks from before, which keep their old columns only.
-	db.Exec(`ALTER TABLE tasks ADD COLUMN resources TEXT NOT NULL DEFAULT ''`)
-	// Added with named join tokens: the node a token is for, whether it may
-	// replace that node's secret, and its public id (id.secret). Older
-	// tokens have no name: they can join a new name only.
-	db.Exec(`ALTER TABLE join_tokens ADD COLUMN name TEXT NOT NULL DEFAULT ''`)
-	db.Exec(`ALTER TABLE join_tokens ADD COLUMN rejoin INTEGER NOT NULL DEFAULT 0`)
-	db.Exec(`ALTER TABLE join_tokens ADD COLUMN id TEXT NOT NULL DEFAULT ''`)
-	// Added with TLS for machines: the serial of the node's client
-	// certificate, the one before it (still valid while the node moves to
-	// the new one), and when the current one ends.
-	db.Exec(`ALTER TABLE nodes ADD COLUMN cert_serial TEXT NOT NULL DEFAULT ''`)
-	db.Exec(`ALTER TABLE nodes ADD COLUMN prev_serial TEXT NOT NULL DEFAULT ''`)
-	db.Exec(`ALTER TABLE nodes ADD COLUMN cert_expires INTEGER NOT NULL DEFAULT 0`)
-	// Added with the machine's system on its card: the last one it
-	// reported, kept while it is offline.
-	db.Exec(`ALTER TABLE nodes ADD COLUMN os TEXT NOT NULL DEFAULT ''`)
-	db.Exec(`ALTER TABLE nodes ADD COLUMN arch TEXT NOT NULL DEFAULT ''`)
-	db.Exec(`ALTER TABLE nodes ADD COLUMN install TEXT NOT NULL DEFAULT ''`)
-	// Added with "Cut access" (node_access.go): the device stays registered,
-	// and Eriphe neither reaches it nor lets it in.
-	db.Exec(`ALTER TABLE nodes ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0`)
-	// Added with placement classes (placement.go): a task given its node
-	// by hand stays bound to it.
-	db.Exec(`ALTER TABLE tasks ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`)
-	// Updates had a choice for all machines and for each one (tell me, at
-	// night, never); now one switch, at night or not, for all of them
-	// (machine_updates.go). "At night" for all stays on; the rest goes.
-	db.Exec(`INSERT OR IGNORE INTO kv (key, value) SELECT 'update_night', '1' FROM kv WHERE key = 'update_policy' AND value = 'night'`)
-	db.Exec(`DELETE FROM kv WHERE key = 'update_policy' OR key LIKE 'update_policy:%'`)
-	for _, m := range storeMigrations {
-		if err := m(db); err != nil {
-			return nil, err
-		}
-	}
 	return &Store{db: db, dir: filepath.Dir(path)}, nil
 }
-
-// storeMigrations move data between tables once the schema is there; each
-// does nothing once done.
-var storeMigrations []func(*sql.DB) error
 
 // joinToken is what a join token allows: joining as Name, and if Rejoin,
 // replacing the secret of the node already registered under that name.

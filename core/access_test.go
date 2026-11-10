@@ -504,22 +504,3 @@ func TestRememberedPerAccount(t *testing.T) {
 		t.Fatalf("forgotten = %q", got)
 	}
 }
-
-// What was allowed for good before the actions had accounts stays.
-func TestRememberedActionsMoveToTheirTable(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	s, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.db.Exec(`DROP TABLE remembered_actions`)
-	s.db.Exec(`CREATE TABLE allowed_actions (tool TEXT PRIMARY KEY, server TEXT NOT NULL, time INTEGER NOT NULL)`)
-	s.db.Exec(`INSERT INTO allowed_actions VALUES ('mcp__github__create_issue', 'github', 1)`)
-	s.db.Close()
-	if s, err = openStore(path); err != nil {
-		t.Fatal(err)
-	}
-	if a := s.allowedActions(""); len(a) != 1 || a[0].Tool != "mcp__github__create_issue" || a[0].Account != "" {
-		t.Fatalf("after: %+v", a)
-	}
-}

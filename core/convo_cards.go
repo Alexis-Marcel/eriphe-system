@@ -52,8 +52,7 @@ const convoCardsSchema = `CREATE TABLE IF NOT EXISTS convo_cards (
 	created  INTEGER NOT NULL,
 	attached INTEGER NOT NULL DEFAULT 0,
 	decided  INTEGER NOT NULL DEFAULT 0,
-	by       TEXT NOT NULL DEFAULT '',
-	tg       INTEGER NOT NULL DEFAULT 0 -- no longer read: where a card went is per channel (channel_relay.go)
+	by       TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS convo_cards_seq ON convo_cards (seq);`
 

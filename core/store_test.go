@@ -57,38 +57,3 @@ func TestStore(t *testing.T) {
 		t.Fatalf("missing task: %v", err)
 	}
 }
-
-// A database of before keeps its log and its grants under their new names.
-func TestAccessLogRename(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	old, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{
-		`DROP TABLE access_log`, `DROP TABLE repo_grants`,
-		`CREATE TABLE credential_log (time INTEGER NOT NULL, task_id TEXT NOT NULL, tool TEXT NOT NULL, host TEXT NOT NULL, repo TEXT NOT NULL,
-		  access TEXT NOT NULL, decision TEXT NOT NULL, by TEXT NOT NULL, source TEXT NOT NULL, reason TEXT NOT NULL)`,
-		`CREATE INDEX credential_log_task ON credential_log (task_id, time)`,
-		`CREATE TABLE credential_grants (task_id TEXT NOT NULL, service TEXT NOT NULL, repo TEXT NOT NULL,
-		  access TEXT NOT NULL, time INTEGER NOT NULL, PRIMARY KEY (task_id, service, repo, access))`,
-		`INSERT INTO credential_log VALUES (1, 't-1', 'git', 'github.com', 'owner/repo', 'read', 'allow', 'policy', '', '')`,
-		`INSERT INTO credential_grants VALUES ('t-1', 'github', 'owner/repo', 'write', 1)`,
-	} {
-		if _, err := old.db.Exec(q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	old.db.Close()
-	s, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	log, err := s.accessLog("t-1", 10)
-	if err != nil || len(log) != 1 || log[0].Target != "owner/repo" || log[0].Action != accessRead {
-		t.Fatalf("log %+v %v", log, err)
-	}
-	if !s.repoGranted("t-1", "owner/repo", accessWrite) {
-		t.Fatal("the grant was lost")
-	}
-}

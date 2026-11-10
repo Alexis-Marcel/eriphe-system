@@ -1447,8 +1447,7 @@ Two are built in, and there are no others: **the brain** (`eriphe`, role `brain`
 and the only orchestrator, see [The brain](#the-brain)) and each work session's **lead** (role
 `lead`, see the sessions). What used to be a specialist assistant (role `assistant`, with a typed
 state, views, lent facts and a team page) is a [triggered skill](#triggered-skills) now: a task in
-the background, started by an event or a time, that tells the user with its last message. The
-specialist assistants a workspace had are dropped at start (#278), with no migration.
+the background, started by an event or a time, that tells the user with its last message.
 
 Their spec says what they are and what they run on; their status is what eriphe-core keeps of
 their task:
@@ -2625,9 +2624,7 @@ a level; the code decides (`decideNotify`, no model):
   Notifications shows every rule in force, to delete (a new or changed one is asked of the brain).
   Since #244 step 5 the topic rules and the quiet hours are rules too: rows of `rules` with source
   `notification` (their kind, match, outcome, nights, lines and hours in the JSON `spec`; `act`
-  `deliver` or `quiet`), read by `notifyRules` only, never fired by the rule tick. The table of
-  before (`notify_rules`) is moved into `rules` at start (`storeMigrations`), with new ids, and the
-  cards on them follow.
+  `deliver` or `quiet`), read by `notifyRules` only, never fired by the rule tick.
 - **Adaptive quiet hours, never applied alone.** eriphe-core records cheap signals of activity (the
   user's messages, a workspace tab in front, in 10-minute buckets kept 30 days, reactions to
   notifications) and of unwelcome moments (« pas maintenant »), and suggests a window per kind of
@@ -2726,9 +2723,6 @@ inbound port:
   (`pc:<card>:<y|n>`), answered from the linked account only, through the same code as the
   workspace's cards (`telegram_cards.go`); none in "alerts only". The
   [access card](#the-approval-card) of a catalog tool goes there too.
-- **From before.** Its former keys (`telegram_detail`, `telegram_seen`, `telegram_route`,
-  `telegram_lang`, `tg_msg:*`, `tg_notif:*`, the cards' `tg` column and a proposed
-  `telegram_detail`) are moved at start to the channel's (`channel_detail:telegram`, …).
 
 **Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
 A pure function, `route(note, signals, settings, tried)`, picks one device at a time from signals
@@ -2831,11 +2825,8 @@ something: `POST https://<workspace>/hooks/in/<token>` (the former `/hooks/alert
 works), named (the key of its `hook.received` events, with the body's `status` when it is a short
 word: `when: hook.received key=getout status=firing`), signed with an HMAC-SHA256 secret if asked (in the vault,
 `alert-hook-<id>`), read from the header the user names for that address (`X-Eriphe-Signature`
-by default; `X-Hub-Signature-256` for GitHub, `X-Grafana-Alerting-Signature` for Grafana; an
-address signed before keeps those three), its body (64 KiB) kept as external content, 60 calls an hour at most (429).
-A tool to watch is a time skill that calls it. At start the event rules, their runs and incidents,
-the standing approvals and the specialist assistants are dropped (no migration); the notification
-rules and the quiet hours stay (below).
+by default; `X-Hub-Signature-256` for GitHub, `X-Grafana-Alerting-Signature` for Grafana), its body (64 KiB) kept as external content, 60 calls an hour at most (429).
+A tool to watch is a time skill that calls it.
 
 ## Remote access (Tailscale)
 
@@ -3009,9 +3000,7 @@ is still due; never periodically. An intention drawn from external content stays
 the user approves it; approved, it may remind, never act: the wake turn that reads it is tainted
 (`intention.external`), and so is a turn whose `intentions` tool returns one. The Memory page lists
 them (Intentions) with done, snooze (an hour, tomorrow 9:00), cancel and reopen; proposed ones are
-approved or rejected in À valider (a card in the conversation). Schema 4 moved the `commitment` memories into the
-table (state kept; each memory archived, with a log entry naming its intention; one already late
-is due and listed, without waking the brain); a `commitment` written since becomes an intention.
+approved or rejected in À valider (a card in the conversation). A `commitment` written becomes an intention.
 An assistant whose spec lists its `triggers` gets the clock only if `clock` is among them.
 
 **Search.** The full-text index holds each memory's text, subject, `keywords` (other words to find
@@ -3094,7 +3083,7 @@ marked in Settings → Tools (see the [one taint rule](#tool-catalog)).
 
 ### What Eriphe learned
 
-The learning journal (`learning.go`, table `learning_log` in `memory.db`, schema 5) records every
+The learning journal (`learning.go`, table `learning_log` in `memory.db`) records every
 change to what steers Eriphe: a memory of kind `lesson`, `preference`, `decision` or `profile` (or
 pinned) made active, changed (superseded or edited in place) or forgotten, and every change of a
 skill's approved version (approved, replaced, deleted). A proposal is not learned until approved.

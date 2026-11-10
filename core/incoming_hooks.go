@@ -54,16 +54,10 @@ const (
 
 const alertHooksSchema = `CREATE TABLE IF NOT EXISTS alert_hooks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, hook TEXT NOT NULL,
-  signed INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL);`
+  signed INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL,
+  sig_header TEXT NOT NULL DEFAULT ''); -- the header a signed hook reads its signature from, the user's`
 
-func init() {
-	extraSchema = append(extraSchema, alertHooksSchema)
-	// The header a signed hook reads its signature from, the user's; a
-	// hook signed before kept the three it was read from.
-	extraColumns = append(extraColumns, `ALTER TABLE alert_hooks ADD COLUMN sig_header TEXT NOT NULL DEFAULT ''`,
-		`UPDATE alert_hooks SET sig_header = 'X-Hub-Signature-256,X-Grafana-Alerting-Signature,X-Eriphe-Signature'
-		  WHERE signed = 1 AND sig_header = ''`)
-}
+func init() { extraSchema = append(extraSchema, alertHooksSchema) }
 
 const defaultSigHeader = "X-Eriphe-Signature"
 

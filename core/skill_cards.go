@@ -37,10 +37,6 @@ const (
 
 var sessionBlockRe = regexp.MustCompile("(?s)```session\\s*\\n(.*?)```")
 
-func init() {
-	extraColumns = append(extraColumns, `ALTER TABLE skill_runs ADD COLUMN session INTEGER NOT NULL DEFAULT 0`)
-}
-
 // askRunCall keeps a run's call for its card and answers the task: not run.
 func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[string]any) {
 	if c.store.answered(t.ID, pid) {

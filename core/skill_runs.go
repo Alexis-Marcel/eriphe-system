@@ -43,7 +43,8 @@ CREATE INDEX IF NOT EXISTS skill_queue_skill ON skill_queue (skill, at);
 CREATE TABLE IF NOT EXISTS skill_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT, skill TEXT NOT NULL, sha TEXT NOT NULL, key TEXT NOT NULL DEFAULT '',
   events TEXT NOT NULL DEFAULT '[]', task TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
-  external INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, ended INTEGER);
+  external INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, ended INTEGER,
+  session INTEGER NOT NULL DEFAULT 0); -- it may start a working session (skill_cards.go)
 CREATE INDEX IF NOT EXISTS skill_runs_skill ON skill_runs (skill, id);
 CREATE INDEX IF NOT EXISTS skill_runs_task ON skill_runs (task);`
 

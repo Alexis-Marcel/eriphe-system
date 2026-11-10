@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -154,26 +153,6 @@ func TestAlertEvents(t *testing.T) {
 	}
 }
 
-// A hook signed before the header was the user's keeps the three it was
-// read from.
-func TestAlertHookOldSignedKeepsHeaders(t *testing.T) {
-	c, _, _ := pollCore(t)
-	token, secret, err := c.newAlertHook("old", true, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.store.db.Exec(`UPDATE alert_hooks SET sig_header = '' WHERE name = 'old'`)
-	for _, q := range extraColumns {
-		c.store.db.Exec(q)
-	}
-	body := []byte(`{"status": "firing"}`)
-	for _, h := range []string{"X-Hub-Signature-256", "X-Grafana-Alerting-Signature", "X-Eriphe-Signature"} {
-		if r := c.receiveAlert(token, http.Header{h: {sign(secret, body)}}, body); r.Status != http.StatusAccepted {
-			t.Fatalf("%s: %+v", h, r)
-		}
-	}
-}
-
 // A worker task's end is task.ended.
 func TestTaskEndedEvent(t *testing.T) {
 	c, _, _ := pollCore(t)
@@ -301,41 +280,4 @@ func monSession(t *testing.T, mon *fakeMonitor) *mcp.ClientSession {
 	}
 	t.Cleanup(func() { sess.Close() })
 	return sess
-}
-
-// An existing database starts without the event rules, their runs and the
-// specialist assistants; notification rules and the rest are kept.
-func TestRemovedFeaturesDropped(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	s, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.db.Exec(`CREATE TABLE rule_runs (id INTEGER PRIMARY KEY)`)
-	s.db.Exec(`INSERT INTO rules (name, source, prompt, state, by, created, updated) VALUES ('Revue', 'horaire', 'x', 'active', 'user', 0, 0)`)
-	s.db.Exec(`INSERT INTO rules (name, source, prompt, state, by, created, updated) VALUES ('Factures', 'notification', '', 'active', 'user', 0, 0)`)
-	s.db.Exec(`INSERT INTO catalog (kind, name, spec, updated) VALUES ('assistant', 'tri', '{"role":"assistant"}', 0)`)
-	s.db.Exec(`INSERT INTO catalog (kind, name, spec, updated) VALUES ('assistant', 'eriphe', '{"role":"brain"}', 0)`)
-	s.db.Exec(`CREATE TABLE ha_follows (id INTEGER PRIMARY KEY)`)
-	s.db.Exec(`CREATE TABLE context_sources (id INTEGER PRIMARY KEY)`)
-	s.set("context_level", "2")
-	s.set("keep", "1")
-	s.db.Close()
-	s, err = openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var rules, runs, specialists, brain int
-	s.db.QueryRow(`SELECT COUNT(*) FROM rules`).Scan(&rules)
-	s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'rule_runs'`).Scan(&runs)
-	s.db.QueryRow(`SELECT COUNT(*) FROM catalog WHERE name = 'tri'`).Scan(&specialists)
-	s.db.QueryRow(`SELECT COUNT(*) FROM catalog WHERE name = 'eriphe'`).Scan(&brain)
-	var gone int
-	s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name IN ('ha_follows', 'context_sources')`).Scan(&gone)
-	if gone != 0 || s.get("context_level") != "" {
-		t.Fatalf("the context's tables %d, level %q", gone, s.get("context_level"))
-	}
-	if rules != 1 || runs != 0 || specialists != 0 || brain != 1 || s.get("keep") != "1" {
-		t.Fatalf("rules %d, runs table %d, specialists %d, brain %d", rules, runs, specialists, brain)
-	}
 }
