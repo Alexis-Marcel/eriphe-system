@@ -75,7 +75,9 @@ func (t toolView) Removable() bool {
 func (t toolView) ConnLabel() string { return providerLabel(t.ConnProvider) }
 
 // PlacesURL is the page of the tool's places (web_places.go).
-func (t toolView) PlacesURL() string { return "/settings/tools/" + t.Name + "/places" }
+func (t toolView) PlacesURL() string {
+	return "/settings/tools/" + t.Name + "/places" + accountQuery(t.Account)
+}
 
 func editable(source string, p toolPreset, auth string) bool {
 	return source == sourceWorkspace && auth != "connection" && p.Form != "connection"

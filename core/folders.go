@@ -570,6 +570,8 @@ type folderView struct {
 	Manage  string `json:"manage,omitempty"`
 	Tool    string `json:"tool,omitempty"`     // a place's tool
 	PlaceID string `json:"place_id,omitempty"` // … and its id there
+	// Rights: a place's, each case of its tool free, approval or never.
+	Rights map[string]string `json:"rights,omitempty"`
 	// A machine's folder: its copies on the user's other machines
 	// (folder_copies.go), the machines that may keep one, and whether its
 	// machine cannot send files iCloud Drive keeps in the cloud only.
@@ -615,9 +617,10 @@ func (c *core) folderViews() ([]folderView, error) {
 			st, _, _ := u.snapshot()
 			ready = st == statusReady
 		}
-		out = append(out, folderView{Folder: &Folder{Name: p.Name, Access: p.Access}, Source: sourcePlace, Online: ready,
-			Tool: p.Tool, PlaceID: p.ID, Lend: lendHint(resPlace, p.Name, p.Access) + "; the task gets the " + p.Tool +
-				" tool, which reaches every place given to Eriphe, each with its own access"})
+		most := c.placeMost(p)
+		out = append(out, folderView{Folder: &Folder{Name: p.Name, Access: most}, Source: sourcePlace, Online: ready,
+			Tool: p.Tool, PlaceID: p.ID, Rights: c.placeRights(p), Lend: lendHint(resPlace, p.Name, most) + "; the task gets the " + p.Tool +
+				" tool, which reaches every place given to Eriphe, each call held to its place's rights"})
 	}
 	slices.SortStableFunc(out, func(a, b folderView) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
 	return out, nil
@@ -629,6 +632,10 @@ func lendHint(kind, name, access string) string {
 	raw, _ := json.Marshal(ResourceRef{Kind: kind, Ref: name, Access: accessRead})
 	hint := "run_task resources: [" + string(raw) + "]"
 	switch access {
+	case accessWrite:
+		if kind == resPlace {
+			hint += `, or "access": "write" to let the task add, modify or trash files there, as its rights allow`
+		}
 	case folderDrop:
 		hint += `, or "access": "drop" to let the task add its results in its results subfolder`
 	case folderManage:

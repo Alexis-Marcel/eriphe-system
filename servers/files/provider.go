@@ -9,9 +9,10 @@ import (
 
 // A Provider is one cloud storage API: Google Drive now, Dropbox and
 // OneDrive later. It only knows items by id; which items a call may reach
-// is the guard's business (guard.go), never the provider's. A provider has
-// no call that modifies or deletes an existing item: the server cannot
-// touch the user's originals even by mistake.
+// is the guard's business (guard.go), never the provider's. It changes an
+// item only in ways the provider can undo: a new version of a file (Google
+// keeps the old ones), or the trash (where a file stays 30 days); it never
+// deletes one for good.
 type Provider interface {
 	// Get reads one item's metadata, with its parents.
 	Get(ctx context.Context, id string) (Item, error)
@@ -23,15 +24,19 @@ type Provider interface {
 	// (markdown, text, csv or pdf; "" for the provider's best text), any
 	// other file as stored. At most max bytes.
 	Read(ctx context.Context, it Item, format string, max int64) (Content, error)
-	// CreateFolder makes a new folder in parent.
-	CreateFolder(ctx context.Context, parentID, name string) (Item, error)
 	// CreateFile makes a new file in parent; convert asks the provider to
 	// turn it into its native document (Google Docs, Sheets).
 	CreateFile(ctx context.Context, parentID, name, mimeType string, data []byte, convert bool) (Item, error)
+	// UpdateFile replaces a file's content with data of mimeType, as a new
+	// version of it.
+	UpdateFile(ctx context.Context, id, mimeType string, data []byte) (Item, error)
+	// Trash moves an item to the trash.
+	Trash(ctx context.Context, id string) error
 	// Roots are the top places to browse from: the user's own drive, shared
 	// drives, what was shared with them.
 	Roots(ctx context.Context) ([]Item, error)
-	// CanWrite tells whether the granted scopes allow creating files.
+	// CanWrite tells whether the granted scopes allow adding, modifying and
+	// trashing files.
 	CanWrite() bool
 }
 

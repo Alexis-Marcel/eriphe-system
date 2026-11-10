@@ -69,12 +69,13 @@ local address, the app page says so and offers:
    never shown again; "Replace" takes another one.
 9. **Connect an account**: Settings → Tools → Add → Google (or Gmail, Google Calendar, Google
    Drive) opens the connect page: tick the tools and "Allow Eriphe to write" if Eriphe may send,
-   add events or drop results (always in an `Eriphe` subfolder of the places you allow) → **Sign
+   add events or add, modify and trash files in the Drive folders you give → **Sign
    in**. "Google hasn't verified this app" is your
    own app: **Advanced** → **Go to Eriphe**, and allow what is asked (Google may show a box per
    service: one left unticked is said back in the workspace).
-10. **Drive: choose folders**: in Settings → Tools, the Drive row's **Places**, once the Files
-    server runs: open the folders and give each one "read" or "read + drop".
+10. **Drive: choose folders**: in Settings → Tools, the Drive row's **Folders**, once the Files
+    server runs: open the folders and **Give** the ones Eriphe may reach. Each follows the
+    account's rights (Read, Change, Delete), or gets its own on its line.
 11. **Another account**: the connect page again, with its own tools. Each account is a card in
     Settings → Tools, with "Add to this account", "Reconnect" and "Remove this account"; every
     account's mailbox is an account of the one `mail` tool, its calendar of `agenda`, its Drive

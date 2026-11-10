@@ -2,8 +2,8 @@
 // Eriphe in their cloud storage: Google Drive now, Dropbox and OneDrive
 // later behind the same tools. It reaches only the folders it is
 // configured with and what is inside them, reads files (Google documents
-// exported to text), and adds new files to a writable folder's Eriphe/
-// subfolder; it never modifies or deletes the user's files. Its OAuth
+// exported to text), and, where the user allows it, adds, modifies and
+// trashes files; it never deletes one for good. Its OAuth
 // token is lent by eriphe-core, which ran the authorization.
 package main
 

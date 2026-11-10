@@ -34,9 +34,13 @@ type AccountConfig struct {
 	Name     string     `json:"name"`
 	Provider string     `json:"provider"` // google; dropbox and onedrive later
 	Auth     AuthConfig `json:"auth"`
-	// Scopes the user granted, as the token response said: dropping files
-	// needs a scope that allows it (Google: drive).
+	// Scopes the user granted, as the token response said: adding,
+	// modifying or trashing a file needs a scope that allows it (Google:
+	// drive).
 	Scopes []string `json:"scopes,omitempty"`
+	// ReadOnly keeps the account to reading, whatever its scopes: eriphe-core
+	// sets it when the user lets Eriphe only read it.
+	ReadOnly bool `json:"read_only,omitempty"`
 	// APIURL, UploadURL and TokenURL replace the provider's endpoints (tests).
 	APIURL    string `json:"api_url,omitempty"`
 	UploadURL string `json:"upload_url,omitempty"`
@@ -53,22 +57,14 @@ type AuthConfig struct {
 }
 
 // PlaceConfig is one place given to Eriphe: a folder of an account, by its
-// provider id, and what Eriphe may do there.
+// provider id. What Eriphe may do there (read, modify, trash) is eriphe-core's
+// to decide, call by call, like any tool's access; the server only keeps
+// every call inside the places and a read-only account to reading.
 type PlaceConfig struct {
 	Name    string `json:"name"`    // how tools name it
 	Account string `json:"account"` // an account name; may be empty with one account
 	ID      string `json:"id"`      // the provider's folder id
-	// Access is read (list, search, read), or drop: read and also create new
-	// files in the folder's Eriphe/ subfolder. Never modify or delete.
-	Access string `json:"access"`
 }
-
-const (
-	accessRead = "read"
-	accessDrop = "drop"
-	// resultsFolder is the subfolder of a writable Folder where new files go.
-	resultsFolder = "Eriphe"
-)
 
 // LoadConfig reads the configuration from the JSON text or, if empty, the file.
 func LoadConfig(text, file string) (*Config, error) {
@@ -143,12 +139,6 @@ func (cfg *Config) normalize() error {
 		}
 		if !accounts[strings.ToLower(f.Account)] {
 			return fmt.Errorf("place %q: no account %q", f.Name, f.Account)
-		}
-		if f.Access == "" {
-			f.Access = accessRead
-		}
-		if f.Access != accessRead && f.Access != accessDrop {
-			return fmt.Errorf("place %q: access is read or drop", f.Name)
 		}
 		key := strings.ToLower(f.Name)
 		if folders[key] {

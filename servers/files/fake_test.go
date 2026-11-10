@@ -33,7 +33,8 @@ type fakeDrive struct {
 
 type fakeFile struct {
 	driveFile
-	content map[string]string // by mime type: the media, or an export
+	content  map[string]string // by mime type: the media, or an export
+	uploaded string            // the last new version: its type and content
 }
 
 const fakeRefresh = "refresh-1"
@@ -106,14 +107,21 @@ func (d *fakeDrive) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		json.NewEncoder(w).Encode(f.driveFile)
-	case r.Method == http.MethodPost && path == "/drive/v3/files":
-		var meta driveFile
-		json.NewDecoder(r.Body).Decode(&meta)
-		d.next++
-		f := d.add(fmt.Sprintf("new-%d", d.next), meta.Name, meta.MimeType, meta.Parents[0], nil)
-		json.NewEncoder(w).Encode(f.driveFile)
 	case r.Method == http.MethodPost && path == "/upload/drive/v3/files" && q.Get("uploadType") == "multipart":
 		d.upload(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/upload/drive/v3/files/") && q.Get("uploadType") == "media":
+		f := d.file(strings.TrimPrefix(path, "/upload/drive/v3/files/"))
+		body, _ := io.ReadAll(r.Body)
+		f.uploaded = r.Header.Get("Content-Type") + " " + string(body)
+		json.NewEncoder(w).Encode(f.driveFile)
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/drive/v3/files/"):
+		f := d.file(strings.TrimPrefix(path, "/drive/v3/files/"))
+		var meta struct {
+			Trashed bool `json:"trashed"`
+		}
+		json.NewDecoder(r.Body).Decode(&meta)
+		f.Trashed = meta.Trashed
+		json.NewEncoder(w).Encode(map[string]string{"id": f.ID})
 	default:
 		d.t.Errorf("fake drive: unexpected %s %s", r.Method, r.URL)
 		http.Error(w, "unexpected", http.StatusBadRequest)

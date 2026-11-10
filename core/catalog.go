@@ -434,7 +434,7 @@ func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string)
 				if _, ok := base.Servers[r.Name]; ok {
 					err = errors.New("shadowed by the configuration file")
 				}
-				try.Servers[r.Name] = s
+				try.Servers[r.Name] = legacyPlaces(s)
 			}
 		case kindAccess:
 			var a Access

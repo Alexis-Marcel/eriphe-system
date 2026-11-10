@@ -365,31 +365,33 @@ func TestDriveRoundTrip(t *testing.T) {
 		t.Fatalf("tools lent: %v", tools)
 	}
 	places := "/settings/tools/" + filesService.Base + "/places"
-	if _, body, _ := tw.do("GET", places+"/browse?parent=root-id&name=My+Drive", nil, nil); !strings.Contains(body, "Compta") ||
-		!strings.Contains(body, `value="drop"`) {
+	if _, body, _ := tw.do("GET", places+"?account=sam%40example.org&parent=root-id&name=My+Drive", nil, nil); !strings.Contains(body, "Compta") ||
+		!strings.Contains(body, `value="compta"`) || strings.Contains(body, `value="drop"`) {
 		t.Fatalf("browse: %s", body)
 	}
-	if code, body, _ := tw.post(places, url.Values{"id": {"compta"}, "name": {"Compta"}, "access": {"drop"}}, csrf); code != 200 ||
-		!strings.Contains(body, "Lecture &#43; dépôt") {
+	if code, body, _ := tw.post(places, url.Values{"id": {"compta"}, "name": {"Compta"}, "account": {"sam@example.org"}}, csrf); code != 200 ||
+		!strings.Contains(body, "Comme le compte (Sur accord)") || !strings.Contains(body, `name="category" value="change"`) ||
+		strings.Contains(body, `name="category" value="send"`) {
 		t.Fatalf("add: %d %s", code, body)
 	}
-	tw.post(places, url.Values{"id": {"other"}, "name": {"Compta"}, "access": {"read"}}, csrf)
+	tw.post(places, url.Values{"id": {"other"}, "name": {"Compta"}}, csrf)
 	_, fc, _ := accountsOf(c.conf().Servers[filesService.Base])
-	if f := c.places(); len(f) != 2 || f[0] != (Place{Tool: filesService.Base, Name: "Compta", Account: "sam@example.org", ID: "compta", Access: "drop"}) ||
+	if f := c.places(); len(f) != 2 || f[0] != (Place{Tool: filesService.Base, Name: "Compta", Account: "sam@example.org", ID: "compta"}) ||
 		f[1].Name != "Compta (2)" || fc.Accounts[0].Auth.TokenEnv != accountEnv(toolTokenEnv, "sam@example.org") {
 		t.Fatalf("folders: %+v %+v", f, fc)
 	}
-	if code, body, _ := tw.do("GET", places, nil, nil); code != 200 || !strings.Contains(body, "Compta (2)") ||
-		!strings.Contains(body, `hx-get="`+places+`/browse"`) {
+	// The given ones first, in one list, then the account's own to give.
+	if code, body, _ := tw.do("GET", places+"?account=sam%40example.org", nil, nil); code != 200 || !strings.Contains(body, "Compta (2)") ||
+		!strings.Contains(body, "Dossiers de sam@example.org") || strings.Index(body, "Compta (2)") > strings.Index(body, "My Drive") {
 		t.Fatalf("places page: %d %s", code, body)
 	}
-	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, "Google Drive · 2 lieux") ||
-		!strings.Contains(body, `href="`+places+`"`) {
+	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, "Google Drive · 2 dossiers") ||
+		!strings.Contains(body, `href="`+places+`?account=sam%40example.org"`) {
 		t.Fatalf("tools list: %s", body)
 	}
 	// One list of folders with the machines' (folders.go): in Settings →
 	// Folders and for the brain, lent through the files tool, not mounted.
-	if _, body, _ := tw.do("GET", "/settings/folders", nil, nil); !strings.Contains(body, "Compta (2)") || !strings.Contains(body, "Dans les lieux de tes outils") {
+	if _, body, _ := tw.do("GET", "/settings/folders", nil, nil); !strings.Contains(body, "Compta (2)") || !strings.Contains(body, "Dans les dossiers de tes outils") {
 		t.Fatalf("folders page: %s", body)
 	}
 	if fs, _ := c.folderViews(); len(fs) != 2 || fs[0].Source != sourcePlace || fs[0].PlaceID != "compta" || fs[0].Tool != filesService.Base || !strings.Contains(fs[0].Lend, filesService.Base) {
@@ -406,16 +408,21 @@ func TestDriveRoundTrip(t *testing.T) {
 		t.Fatal("a folder change lost the token")
 	}
 
-	// Reconnected read only: the write rights go.
+	// Reconnected read only: Modifier and Supprimer are greyed, the folder
+	// stays given.
 	g.scope = scopeDriveReadonly
 	_, _, h = tw.post("/settings/connections/google/connect", url.Values{"tool": {toolFiles}}, csrf)
 	state = g.authorize(t, h.Get("HX-Redirect"))
 	tw.do("GET", "/oauth/callback?code=the-code&state="+url.QueryEscape(state), nil, nil)
-	if acc, f := c.placeAccounts(filesService.Base), c.places(); acc[0].CanWrite || f[0].Access != accessRead {
+	if acc, f := c.placeAccounts(filesService.Base), c.places(); acc[0].CanWrite || len(f) != 1 {
 		t.Fatalf("read only: %+v %+v", acc, f)
 	}
-	if err := c.givePlace(filesService.Base, "", "compta", "Compta", accessDrop); err == nil {
-		t.Fatal("write right without the scope")
+	if _, body, _ := tw.do("GET", places+"?account=sam%40example.org", nil, nil); strings.Count(body, `disabled title="Ce compte a été connecté en lecture seule`) != 2 {
+		t.Fatalf("greyed: %s", body)
+	}
+	if _, body, _ := tw.do("GET", "/settings/tools/"+filesService.Base+"/access?account=sam%40example.org", nil, nil); !strings.Contains(body, "Impossible : ce compte") ||
+		strings.Contains(body, `name="grid-send"`) {
+		t.Fatalf("access page: %s", body)
 	}
 }
 
@@ -542,7 +549,7 @@ func TestDriveRefusals(t *testing.T) {
 	}
 	// A tool of the same name that is not eriphe-files is left alone.
 	c.putServer(putCreate, filesService.Base, Server{URL: "https://x.example/mcp", Auth: &ServerAuth{None: true}, Use: "x"}, nil)
-	if err := c.givePlace(filesService.Base, "", "a", "A", accessRead); err == nil {
+	if err := c.givePlace(filesService.Base, "", "a", "A"); err == nil {
 		t.Fatal("a place given to a tool that keeps none")
 	}
 }
@@ -591,7 +598,8 @@ func TestFilesTokenScopeOfAccounts(t *testing.T) {
 	if s := c.tokenScope(filesService.Base, put([]string{scopeDriveReadonly}, []string{scopeDrive})); s.Granted != grantedWrite || s.Reconnect {
 		t.Errorf("a reader, then a writer: %+v", s)
 	}
-	if s := c.tokenScope(filesService.Base, put([]string{scopeDriveReadonly})); s.Granted != grantedRead || !s.Reconnect {
+	// Readers only: their accounts read only (readCeilings), nothing to reconnect for.
+	if s := c.tokenScope(filesService.Base, put([]string{scopeDriveReadonly})); s.Granted != grantedRead || s.Reconnect {
 		t.Errorf("readers only: %+v", s)
 	}
 }
@@ -612,23 +620,26 @@ func TestFilesAccountsPath(t *testing.T) {
 	put("sam@example.org", scopeDrive)
 	put("bob@example.org", scopeDrive)
 	st, ok := c.serviceServer(filesService)
-	if !ok || st.Name != filesService.Base || len(st.Config.Accounts) != 2 || len(st.Server.AccountAccess) != 0 {
+	if !ok || st.Name != filesService.Base || len(st.Config.Accounts) != 2 || len(st.Server.AccountAccess) != 2 {
 		t.Fatalf("server: %+v", st)
 	}
 	if err := c.changePlaces(filesService.Base, func([]Place) ([]Place, error) {
-		return []Place{{Name: "Compta", Account: "sam@example.org", ID: "a", Access: accessDrop},
-			{Name: "Photos", Account: "bob@example.org", ID: "b", Access: accessDrop}}, nil
+		return []Place{{Name: "Compta", Account: "sam@example.org", ID: "a"}, {Name: "Photos", Account: "bob@example.org", ID: "b"}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := c.setPlaceCase(filesService.Base, "a", catDelete, gridFree); err != nil {
+		t.Fatal(err)
+	}
 	put("sam@example.org", scopeDriveReadonly)
-	if p := c.places(); len(p) != 2 || p[0].Access != accessRead || p[1].Access != accessDrop {
+	srv := c.conf().Servers[filesService.Base]
+	if p := c.places(); len(p) != 2 || srv.placeAccess(p[0]).grid.value(catDelete) != gridNever || srv.placeAccess(p[1]).grid.value(catChange) != gridApproval {
 		t.Fatalf("read only again: %+v", p)
 	}
 	if err := c.dropAccount(filesService, "sam@example.org"); err != nil {
 		t.Fatal(err)
 	}
-	if p := c.places(); len(p) != 1 || p[0].Name != "Photos" {
+	if p := c.places(); len(p) != 1 || p[0].Name != "Photos" || c.conf().Servers[filesService.Base].PlaceGrids != nil {
 		t.Fatalf("after drop: %+v", p)
 	}
 	if err := c.dropAccount(filesService, "bob@example.org"); err != nil {

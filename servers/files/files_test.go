@@ -12,7 +12,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func setup(t *testing.T, right string, scopes ...string) (*fakeDrive, *Files) {
+func setup(t *testing.T, scopes ...string) (*fakeDrive, *Files) {
+	return setupAccount(t, false, scopes...)
+}
+
+func setupAccount(t *testing.T, readOnly bool, scopes ...string) (*fakeDrive, *Files) {
 	t.Helper()
 	d := newFakeDrive(t)
 	d.tree()
@@ -20,8 +24,9 @@ func setup(t *testing.T, right string, scopes ...string) (*fakeDrive, *Files) {
 	if len(scopes) == 0 {
 		scopes = []string{scopeDrive}
 	}
-	cfg := &Config{Accounts: []AccountConfig{d.account(scopes...)},
-		Places: []PlaceConfig{{Name: "Compta", ID: "compta", Access: right}}}
+	acct := d.account(scopes...)
+	acct.ReadOnly = readOnly
+	cfg := &Config{Accounts: []AccountConfig{acct}, Places: []PlaceConfig{{Name: "Compta", ID: "compta"}}}
 	if err := cfg.normalize(); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +69,7 @@ func call(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any)
 }
 
 func TestOnlyTheGivenFolders(t *testing.T) {
-	_, f := setup(t, accessRead)
+	_, f := setup(t)
 	cs := session(t, f)
 	for _, c := range []struct {
 		tool string
@@ -99,7 +104,7 @@ func TestOnlyTheGivenFolders(t *testing.T) {
 }
 
 func TestAncestryCache(t *testing.T) {
-	d, f := setup(t, accessRead)
+	d, f := setup(t)
 	ctx := context.Background()
 	fo := f.folders[0]
 	if _, err := fo.item(ctx, "deep"); err != nil {
@@ -119,7 +124,7 @@ func TestAncestryCache(t *testing.T) {
 }
 
 func TestSearchKeepsTheFolders(t *testing.T) {
-	_, f := setup(t, accessRead)
+	_, f := setup(t)
 	cs := session(t, f)
 	_, text := call(t, cs, "search_files", map[string]any{"text": "budget"})
 	var out searchOut
@@ -142,7 +147,7 @@ func TestSearchKeepsTheFolders(t *testing.T) {
 }
 
 func TestExportGoogleDocuments(t *testing.T) {
-	_, f := setup(t, accessRead)
+	_, f := setup(t)
 	cs := session(t, f)
 	_, text := call(t, cs, "read_file", map[string]any{"id": "notes"})
 	if !strings.Contains(text, untrustedStart+"\n# Notes\n\nbudget 2026\n"+untrustedEnd) || !strings.Contains(text, `"mime_type":"text/markdown"`) {
@@ -170,70 +175,135 @@ func TestExportGoogleDocuments(t *testing.T) {
 	}
 }
 
-func TestWriteOnlyIntoEriphe(t *testing.T) {
-	d, f := setup(t, accessDrop)
+func TestWriteInTheFolder(t *testing.T) {
+	d, f := setup(t)
 	cs := session(t, f)
 	_, text := call(t, cs, "write_file", map[string]any{"name": "résumé.md", "content": "# Résumé"})
 	var out writeOut
 	json.Unmarshal([]byte(text), &out)
-	if out.Path != "Compta/Eriphe/résumé.md" {
+	if out.Folder != "Compta" || d.files[out.ID].Parents[0] != "compta" {
 		t.Fatalf("write: %s", text)
-	}
-	d.mu.Lock()
-	dir := d.files[d.files[out.ID].Parents[0]]
-	d.mu.Unlock()
-	if dir.Name != resultsFolder || dir.Parents[0] != "compta" || dir.MimeType != mimeFolder {
-		t.Errorf("written into %+v, want Compta/Eriphe", dir.driveFile)
 	}
 	if got := d.files[out.ID].content["text/markdown"]; got != "# Résumé" {
 		t.Errorf("content %q", got)
 	}
-	// Same name: a new file next to it, never a replacement; Eriphe/ made once.
+	// Same name: a new file next to it, never a replacement.
 	_, text = call(t, cs, "write_file", map[string]any{"name": "résumé.md", "content": "v2", "convert": true})
 	json.Unmarshal([]byte(text), &out)
 	if out.Name != "résumé (2).md" || d.files[out.ID].MimeType != mimeDoc {
 		t.Errorf("second write: %s", text)
 	}
+	// In a subfolder, never outside the folder.
+	_, text = call(t, cs, "write_file", map[string]any{"name": "x.txt", "content": "x", "parent": "sub"})
+	json.Unmarshal([]byte(text), &out)
+	if d.files[out.ID].Parents[0] != "sub" {
+		t.Errorf("in a subfolder: %s", text)
+	}
+	for _, parent := range []string{"perso", "root-id", "facture"} {
+		if res, text := call(t, cs, "write_file", map[string]any{"name": "x.txt", "content": "x", "parent": parent}); !res.IsError {
+			t.Errorf("parent %s: %s", parent, text)
+		}
+	}
 	// A name cannot climb out.
 	_, text = call(t, cs, "write_file", map[string]any{"name": "../../Perso/x.txt", "content": "x"})
 	json.Unmarshal([]byte(text), &out)
-	if d.files[out.ID].Parents[0] != dir.ID || strings.Contains(out.Name, "/") {
+	if d.files[out.ID].Parents[0] != "compta" || strings.Contains(out.Name, "/") {
 		t.Errorf("name with a path: %s", text)
-	}
-	folders := 0
-	d.mu.Lock()
-	for _, w := range d.writes {
-		if !strings.HasPrefix(w, "POST ") {
-			t.Errorf("a call that is not a creation: %s", w)
-		}
-		if w == "POST /drive/v3/files" {
-			folders++
-		}
-	}
-	d.mu.Unlock()
-	if folders != 1 {
-		t.Errorf("%d folders created, want one Eriphe/", folders)
 	}
 }
 
-func TestWriteRefused(t *testing.T) {
-	d, f := setup(t, accessRead)
-	res, text := call(t, session(t, f), "write_file", map[string]any{"name": "a.txt", "content": "x"})
-	if !res.IsError || !strings.Contains(text, "read only") {
-		t.Errorf("read folder: %s", text)
+func TestUpdateFile(t *testing.T) {
+	d, f := setup(t)
+	cs := session(t, f)
+	for _, c := range []struct {
+		id, content, mime string
+	}{
+		{"facture", "facture 43", "text/plain"},
+		{"notes", "# Notes v2", "text/markdown"},
+		{"sheet", "a,b\n3,4", "text/csv"},
+	} {
+		res, text := call(t, cs, "update_file", map[string]any{"id": c.id, "content": c.content})
+		if res.IsError {
+			t.Fatalf("update %s: %s", c.id, text)
+		}
+		d.mu.Lock()
+		got := d.files[c.id].uploaded
+		d.mu.Unlock()
+		if got != c.mime+" "+c.content {
+			t.Errorf("update %s: uploaded %q", c.id, got)
+		}
 	}
-	_, f = setup(t, accessDrop, scopeDriveReadonly)
-	res, text = call(t, session(t, f), "write_file", map[string]any{"name": "a.txt", "content": "x"})
-	if !res.IsError || !strings.Contains(text, "reading only") {
-		t.Errorf("read-only scope: %s", text)
+	for _, c := range []struct{ id, want string }{
+		{"secret", "not in the folder"},
+		{"compta", "folder given to Eriphe itself"},
+		{"sub", "folder, not a file"},
+	} {
+		if res, text := call(t, cs, "update_file", map[string]any{"id": c.id, "content": "x"}); !res.IsError || !strings.Contains(text, c.want) {
+			t.Errorf("update %s: %s, want %q", c.id, text, c.want)
+		}
 	}
-	if len(d.writes) != 0 {
-		t.Errorf("writes: %v", d.writes)
+}
+
+func TestTrashFile(t *testing.T) {
+	d, f := setup(t)
+	cs := session(t, f)
+	if res, text := call(t, cs, "trash_file", map[string]any{"id": "deep"}); res.IsError || !strings.Contains(text, "30 days") {
+		t.Fatalf("trash: %s", text)
+	}
+	d.mu.Lock()
+	trashed := d.files["deep"].Trashed
+	d.mu.Unlock()
+	if !trashed {
+		t.Error("not in the trash")
+	}
+	if res, _ := call(t, cs, "read_file", map[string]any{"id": "deep"}); !res.IsError {
+		t.Error("a trashed file is still read")
+	}
+	for _, id := range []string{"compta", "secret", "root-id"} {
+		if res, text := call(t, cs, "trash_file", map[string]any{"id": id}); !res.IsError {
+			t.Errorf("trash %s: %s", id, text)
+		}
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, w := range d.writes {
+		if strings.Contains(w, "DELETE") {
+			t.Errorf("deleted for good: %s", w)
+		}
+	}
+}
+
+func TestChangeRefused(t *testing.T) {
+	for _, c := range []struct {
+		readOnly bool
+		scope    string
+		want     string
+	}{
+		{true, scopeDrive, "read only for Eriphe"},
+		{false, scopeDriveReadonly, "reading only"},
+	} {
+		d, f := setupAccount(t, c.readOnly, c.scope)
+		cs := session(t, f)
+		for _, call1 := range []struct {
+			tool string
+			args map[string]any
+		}{
+			{"write_file", map[string]any{"name": "a.txt", "content": "x"}},
+			{"update_file", map[string]any{"id": "facture", "content": "x"}},
+			{"trash_file", map[string]any{"id": "facture"}},
+		} {
+			if res, text := call(t, cs, call1.tool, call1.args); !res.IsError || !strings.Contains(text, c.want) {
+				t.Errorf("%s (read only %v, %s): %s", call1.tool, c.readOnly, c.scope, text)
+			}
+		}
+		if len(d.writes) != 0 {
+			t.Errorf("writes: %v", d.writes)
+		}
 	}
 }
 
 func TestTokenRefresh(t *testing.T) {
-	d, f := setup(t, accessRead)
+	d, f := setup(t)
 	d.expiresIn = 1 // within oauth2's expiry delta: every request refreshes
 	cs := session(t, f)
 	for range 2 {
@@ -246,7 +316,7 @@ func TestTokenRefresh(t *testing.T) {
 	}
 
 	// A token still valid is reused.
-	d, f = setup(t, accessRead)
+	d, f = setup(t)
 	cs = session(t, f)
 	call(t, cs, "list_files", nil)
 	call(t, cs, "read_file", map[string]any{"id": "deep"})
@@ -255,7 +325,7 @@ func TestTokenRefresh(t *testing.T) {
 	}
 
 	// Revoked: the error says what to do.
-	d, f = setup(t, accessRead)
+	d, f = setup(t)
 	d.revoked = true
 	res, text := call(t, session(t, f), "list_files", nil)
 	if !res.IsError || !strings.Contains(text, "reconnect Google Drive") {
@@ -266,7 +336,7 @@ func TestTokenRefresh(t *testing.T) {
 // The lent token says where the provider refreshes it; the account's own
 // token_url (tests) comes first, and Google's is the default.
 func TestTokenURLFromTheToken(t *testing.T) {
-	d, _ := setup(t, accessRead)
+	d, _ := setup(t)
 	acc := d.account(scopeDrive)
 	acc.TokenURL = ""
 	t.Setenv("FILES_TEST_TOKEN", `{"client_id":"client-1","client_secret":"secret-1","refresh_token":"`+fakeRefresh+`","token_url":"`+d.srv.URL+`/token"}`)
@@ -291,7 +361,7 @@ func TestTokenURLFromTheToken(t *testing.T) {
 }
 
 func TestSetupToolsAreSetupOnly(t *testing.T) {
-	_, f := setup(t, accessRead)
+	_, f := setup(t)
 	cs := session(t, f)
 	tools, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
@@ -321,7 +391,7 @@ func TestSetupToolsAreSetupOnly(t *testing.T) {
 }
 
 func TestNoFolderYet(t *testing.T) {
-	_, f := setup(t, accessRead)
+	_, f := setup(t)
 	f.folders = nil
 	res, text := call(t, session(t, f), "list_files", nil)
 	if !res.IsError || !strings.Contains(text, "no folder was given") {
@@ -353,7 +423,7 @@ func TestConfig(t *testing.T) {
 		{`{"accounts":[]}`, "no accounts"},
 		{`{"accounts":[{"provider":"dropbox","auth":{"token_env":"X"}}]}`, "provider is one of"},
 		{`{"accounts":[{"provider":"google","auth":{}}]}`, "exactly one"},
-		{`{"accounts":[` + acct + `],"places":[{"name":"A","id":"1","access":"delete"}]}`, "access is read or drop"},
+		{`{"accounts":[` + acct + `],"places":[{"name":"A","id":"1","access":"read"}]}`, "unknown field"},
 		{`{"accounts":[` + acct + `],"places":[{"name":"A","id":"1"},{"name":"a","id":"2"}]}`, "duplicate"},
 		{`{"accounts":[` + acct + `],"places":[{"name":"A","id":"1","account":"other"}]}`, "no account"},
 		{`{"accounts":[` + acct + `],"places":[{"name":"A"}]}`, "name and id"},
@@ -365,7 +435,7 @@ func TestConfig(t *testing.T) {
 			t.Errorf("%s: %v", c.json, err)
 		case c.err != "" && (err == nil || !strings.Contains(err.Error(), c.err)):
 			t.Errorf("%s: %v, want %q", c.json, err, c.err)
-		case c.err == "" && (cfg.Places[0].Access != accessRead || cfg.Places[0].Account != "drive"):
+		case c.err == "" && cfg.Places[0].Account != "drive":
 			t.Errorf("defaults: %+v", cfg.Places[0])
 		}
 	}
@@ -382,11 +452,11 @@ func TestCleanName(t *testing.T) {
 // test_account signs the account in as the server uses it, and says why
 // not: a revoked token.
 func TestTestAccount(t *testing.T) {
-	_, f := setup(t, accessRead)
+	_, f := setup(t)
 	if _, text := call(t, session(t, f), "test_account", map[string]any{"account": ""}); !strings.Contains(text, `"ok":true`) {
 		t.Errorf("ok: %s", text)
 	}
-	d, f := setup(t, accessRead)
+	d, f := setup(t)
 	d.revoked = true
 	_, text := call(t, session(t, f), "test_account", nil)
 	if !strings.Contains(text, `"ok":false`) || !strings.Contains(text, "reconnect") {

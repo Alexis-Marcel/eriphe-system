@@ -553,19 +553,6 @@ func (c *core) putAccount(svc toolCard, in accountPut) error {
 	} else {
 		cfg.Accounts = append(cfg.Accounts, a)
 	}
-	if t, ok := signInByAccount(svc.ID, a.Provider); ok && a.signedIn() && svc.Scopes {
-		if _, write := t.granted(a.Scopes); !write {
-			// Connected again for reading only: its places no longer take files.
-			cfg = cfg.withPlaces(svc.placesKey(), func(list []Place) []Place {
-				for i := range list {
-					if strings.EqualFold(list[i].Account, a.Name) {
-						list[i].Access = accessRead
-					}
-				}
-				return list
-			})
-		}
-	}
 	if svc.Account != nil {
 		for _, fl := range svc.Account.Server {
 			v := cmpOr(in.Options[fl.Name], cfg.option(fl.Key))
@@ -621,10 +608,13 @@ func (c *core) dropAccount(svc toolCard, name string) error {
 	if len(cfg.Accounts) == 0 {
 		return c.deleteServer(st.Name)
 	}
+	var places []Place
 	cfg = cfg.withPlaces(svc.placesKey(), func(list []Place) []Place {
-		return slices.DeleteFunc(list, func(p Place) bool { return strings.EqualFold(p.Account, gone.Name) })
+		places = slices.DeleteFunc(list, func(p Place) bool { return strings.EqualFold(p.Account, gone.Name) })
+		return places
 	})
 	srv := st.Server
+	srv.PlaceGrids = keepPlaceGrids(srv.PlaceGrids, places)
 	srv.AccountGrids = withoutAccount(st.Server.AccountGrids, gone.Name)
 	srv.AccountAccess = map[string]string{}
 	for k, v := range st.Server.AccountAccess {

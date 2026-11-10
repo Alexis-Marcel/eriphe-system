@@ -42,15 +42,15 @@ func TestNormalizeResources(t *testing.T) {
 		t.Fatalf("explicit = %+v", got)
 	}
 	for name, r := range map[string]runRequest{
-		"is not one of":              {Resources: []ResourceRef{{Kind: "mailbox", Ref: "x"}}},
-		"ref is required":            {Resources: []ResourceRef{{Kind: "folder"}}},
-		"takes access read or drop":  {Resources: []ResourceRef{{Kind: "place", Ref: "Clients", Access: "write"}}},
-		"takes access read or write": {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Access: "drop"}}},
-		"a repo's only":              {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", Branch: "x"}}},
-		"trust_skills are a repo":    {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", TrustSkills: true}}},
-		"one repository per task":    {Resources: []ResourceRef{{Kind: "repo", Ref: "o/a"}, {Kind: "repo", Ref: "o/b"}}},
-		"not a branch name":          {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Branch: "--force"}}},
-		"inside the repository":      {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Dir: "../etc"}}},
+		"is not one of":                      {Resources: []ResourceRef{{Kind: "mailbox", Ref: "x"}}},
+		"ref is required":                    {Resources: []ResourceRef{{Kind: "folder"}}},
+		"a place takes access read or write": {Resources: []ResourceRef{{Kind: "place", Ref: "Clients", Access: "drop"}}},
+		"a repo takes access read or write":  {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Access: "drop"}}},
+		"a repo's only":                      {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", Branch: "x"}}},
+		"trust_skills are a repo":            {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", TrustSkills: true}}},
+		"one repository per task":            {Resources: []ResourceRef{{Kind: "repo", Ref: "o/a"}, {Kind: "repo", Ref: "o/b"}}},
+		"not a branch name":                  {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Branch: "--force"}}},
+		"inside the repository":              {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Dir: "../etc"}}},
 	} {
 		if _, err := normalizeResources(r); err == nil || !strings.Contains(err.Error(), name) {
 			t.Errorf("%s: %v", name, err)
@@ -70,21 +70,30 @@ func TestAccessScale(t *testing.T) {
 }
 
 // withDrive gives the core a files server with Drive folders.
+// withDrive gives the drive folders: one whose Access is read gets
+// Modifier and Supprimer never, the others follow the tool.
 func withDrive(t *testing.T, c *core, folders ...Place) {
 	t.Helper()
+	grids := map[string]accessGrid{}
+	for i, f := range folders {
+		if f.Access == folderRead {
+			grids[f.ID] = accessGrid{Change: gridNever, Delete: gridNever}
+		}
+		folders[i].Access = ""
+	}
 	fc, _ := json.Marshal(map[string]any{"accounts": []any{}, "places": folders})
 	run, _ := json.Marshal(map[string]any{"image": filesService.Image + ":1", "transport": "stdio", "env": map[string]string{toolConfigEnv: string(fc)}})
 	if c.base.Servers == nil {
 		c.base.Servers = map[string]Server{}
 	}
-	c.base.Servers[filesService.Base] = Server{Run: run, Use: "files"}
+	c.base.Servers[filesService.Base] = Server{Run: run, Use: "files", PlaceGrids: grids}
 	c.snap.Store(mergeCatalog(c.base, c.dyn))
 }
 
 // Each entry is checked against what the user opened, and never gets more.
 func TestResolveFolders(t *testing.T) {
 	c, _ := foldersCore(t)
-	withDrive(t, c, Place{Name: "Factures", ID: "d1", Access: folderRead}, Place{Name: "Devis", ID: "d2", Access: folderDrop})
+	withDrive(t, c, Place{Name: "Factures", ID: "d1", Access: folderRead}, Place{Name: "Devis", ID: "d2"})
 
 	// The old field lends a folder with its own access; a resource, read unless it says drop.
 	l, err := c.resolveRequest(runRequest{Resources: folderRefs("clients", "Photos")})
@@ -106,7 +115,7 @@ func TestResolveFolders(t *testing.T) {
 	}
 	// A place lends its tool.
 	for _, kind := range []string{resPlace} {
-		l, err = c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: kind, Ref: "devis", Access: accessDrop}}})
+		l, err = c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: kind, Ref: "devis", Access: accessWrite}}})
 		if err != nil || len(l.Grant) != 1 || l.Grant[0] != filesService.Base || l.List[0].Ref != "Devis" || l.List[0].Kind != resPlace || len(l.Folders) != 0 {
 			t.Fatalf("%s: %+v %v", kind, l, err)
 		}
@@ -115,7 +124,7 @@ func TestResolveFolders(t *testing.T) {
 		"for read only: it cannot be lent drop": {Kind: resFolder, Ref: "Photos", Access: accessDrop},
 		"is a place of the tool fichiers":       {Kind: resFolder, Ref: "Factures"},
 		"is on a machine":                       {Kind: resPlace, Ref: "Clients"},
-		"place \"Factures\" is opened":          {Kind: resPlace, Ref: "Factures", Access: accessDrop},
+		"place \"Factures\" is opened":          {Kind: resPlace, Ref: "Factures", Access: accessWrite},
 		"unknown":                               {Kind: resFolder, Ref: "Nope"},
 	} {
 		if _, err := c.resolveRequest(runRequest{Resources: []ResourceRef{r}}); err == nil || !strings.Contains(err.Error(), want) {
