@@ -63,15 +63,12 @@ SESSION_MOUNT=/run/eriphe-session
 # and an updater that updates to an image whose LAYOUT is newer than the
 # machine's runs that script with --layout, which brings the machine to it
 # (install/README.md, The machines update themselves). node/update.go's
-# installLayout is the same number. 1: before it was counted; 2: Syncthing,
-# and the updaters that apply a layout; 3: eriphe-node engine in place of the
-# socket proxy.
+# installLayout is the same number. Every machine is at layout 4: Syncthing,
+# the updaters that apply a layout, eriphe-node engine with the Docker
+# socket, and eriphe-launcher on a NAS and on Windows.
 LAYOUT=4
 
 REGISTRY=ghcr.io/alexis-marcel
-# The socket proxy of earlier installs, removed with Eriphe: the node's own
-# image holds the socket now (eriphe-node engine).
-LEGACY_PROXY=wollomatic/socket-proxy
 
 # images: the image references, at the pinned version (--version: a release,
 # or edge for main) or latest, the latest release. Fixed here, in the
@@ -325,7 +322,7 @@ set -eu
 CONF=$(q "$CONF") DATA=$(q "$DATA") CORE_UID=$CORE_UID
 MODE=$(q "${MODE:-}") NODE_NAME=$(q "${NAME:-}") ASSISTANT=$(q "$ASSISTANT")
 IMAGES=$(q "${NODE_IMAGE:-} ${WORKER_IMAGE:-} $SYNCTHING_IMAGE$([ "${MODE:-}" = core ] && printf ' %s' "${CORE_IMAGE:-}")")
-ALL_REPOS=$(q "$LEGACY_PROXY syncthing/syncthing $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
+ALL_REPOS=$(q "syncthing/syncthing $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
 EOF
 	cat <<'EOF'
 die() { printf 'eriphe: %s\n' "$*" >&2; exit 1; }
@@ -1313,14 +1310,10 @@ recreate() {
   fi
   # The engine is the node's image (eriphe-node engine): the node and the
   # engine speak the same version of its API, so it takes the node's
-  # version, first. So does the socket proxy of a project from before the
-  # engine (eriphe-node docker-proxy) until its layout replaces it; an
-  # older project's proxy is another image, left as it is.
-  for s in engine docker-proxy; do
-    if [ "$(docker inspect -f '{{.Config.Image}}' "eriphe-$s" 2>/dev/null)" = "$NODE_IMAGE" ]; then
-      start "$s" "$NODE_IMAGE" || return 1
-    fi
-  done
+  # version, first.
+  if [ "$(docker inspect -f '{{.Config.Image}}' eriphe-engine 2>/dev/null)" = "$NODE_IMAGE" ]; then
+    start engine "$NODE_IMAGE" || return 1
+  fi
   start node "$NODE_IMAGE"
   ok=$?
   syncthing_again
@@ -1691,9 +1684,6 @@ put() { printf '%s' "$2" | base64 -d > "$1.new" && mv "$1.new" "$1"; }
 put "$CONF/compose.yaml" "$COMPOSE"
 put "$CONF/.env" "$ENVF"
 put "$CONF/install.conf" "$INSTALL_CONF"
-# The socket proxy of a project from before eriphe-node engine: the engine
-# replaces it (its service is no longer in the project).
-docker rm -f eriphe-docker-proxy >/dev/null 2>&1 || true
 # Syncthing's home (its keys, its configuration with its API key) and the
 # node's copies, root's only.
 mkdir -p "$DATA/syncthing" "$DATA/node/sync"
@@ -1784,19 +1774,11 @@ if [ -n "${MODELS_URL:-}" ]; then
 fi
 if [ "$MODE" = core ]; then
   echo "eriphe-step: Started"
-  # The setup code, while there is no password (kept until it is used); an
-  # older eriphe-core has no auth setup-code: its log says it.
-  if code=$(docker exec eriphe-core eriphe-core auth setup-code 2>"$CONF/setup-code.err"); then
-    code=$(printf '%s' "$code" | tr -d '[:space:]')
-  elif grep -q 'has a password' "$CONF/setup-code.err"; then
-    code=
-  else
-    code=$(docker logs eriphe-core 2>&1 | sed -n 's/.*with the setup code \([A-Za-z0-9-]*\).*/\1/p' | tail -n 1)
-  fi
-  rm -f "$CONF/setup-code.err"
-  echo "setup_code=$code" >&3
-  # The tailnet's address, when remote access is on (an older eriphe-core
-  # has no remote-address: nothing then).
+  # The setup code, while there is no password (kept until it is used):
+  # none once it has one.
+  code=$(docker exec eriphe-core eriphe-core auth setup-code 2>/dev/null) || code=
+  echo "setup_code=$(printf '%s' "$code" | tr -d '[:space:]')" >&3
+  # The tailnet's address, when remote access is on.
   echo "remote=$(docker exec eriphe-core eriphe-core remote-address 2>/dev/null)" >&3
   c=eriphe-core
 else
@@ -2963,30 +2945,34 @@ fetch() {
   if ! "$CONTAINER" run --rm --progress none --entrypoint cp --mount "type=bind,source=$t,target=/out" \
       "$2" "/usr/local/share/eriphe/darwin-arm64/eriphe-$1" /out/ >/dev/null 2>&1 || [ ! -s "$t/eriphe-$1" ]; then
     rm -rf "$t"
-    why="$2 has no Mac binary (an image from before Apple's container)"
+    why="$2 has no Mac binary"
     return 1
   fi
   chmod 755 "$t/eriphe-$1"
   mv "$t/eriphe-$1" "$3/eriphe-$1"
   rm -rf "$t"
   # The node's programs for tasks, built for Linux: the tasks are Linux VMs.
-  # An image from before them has none.
   if [ "$1" = node ]; then
     t=$(mktemp -d "$STATE/fetch.XXXXXX")
-    if "$CONTAINER" run --rm --progress none --entrypoint cp --mount "type=bind,source=$t,target=/out" \
-        "$2" -R /usr/local/share/eriphe/task-bin/linux-arm64 /out/ >/dev/null 2>&1 && [ -d "$t/linux-arm64" ]; then
-      rm -rf "$3/task-bin"
-      mkdir -p "$3/task-bin"
-      mv "$t/linux-arm64" "$3/task-bin/"
+    if ! "$CONTAINER" run --rm --progress none --entrypoint cp --mount "type=bind,source=$t,target=/out" \
+        "$2" -R /usr/local/share/eriphe/task-bin/linux-arm64 /out/ >/dev/null 2>&1 || [ ! -d "$t/linux-arm64" ]; then
+      rm -rf "$t"
+      why="$2 has no programs for tasks"
+      return 1
     fi
+    rm -rf "$3/task-bin"
+    mkdir -p "$3/task-bin"
+    mv "$t/linux-arm64" "$3/task-bin/"
     rm -rf "$t"
-    # Its build's install.sh, for its layout (layout); none in an image
-    # from before it.
+    # Its build's install.sh, for its layout (layout).
     t=$(mktemp -d "$STATE/fetch.XXXXXX")
-    if "$CONTAINER" run --rm --progress none --entrypoint cp --mount "type=bind,source=$t,target=/out" \
-        "$2" /usr/local/share/eriphe/install.sh /out/ >/dev/null 2>&1 && [ -s "$t/install.sh" ]; then
-      mv "$t/install.sh" "$3/install.sh"
+    if ! "$CONTAINER" run --rm --progress none --entrypoint cp --mount "type=bind,source=$t,target=/out" \
+        "$2" /usr/local/share/eriphe/install.sh /out/ >/dev/null 2>&1 || [ ! -s "$t/install.sh" ]; then
+      rm -rf "$t"
+      why="$2 has no install.sh"
+      return 1
     fi
+    mv "$t/install.sh" "$3/install.sh"
     rm -rf "$t"
   fi
   v=$(label "$2")

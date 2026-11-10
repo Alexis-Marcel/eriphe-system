@@ -238,12 +238,6 @@ none` works).
   workspace leaves the lists within seconds; one not on the host now (a disk away) is not copied
   until it is back. `docker exec eriphe-node eriphe-node share add` now prints
   the launcher's command instead.
-- **Places of before.** An install from before this version gave eriphe-node whole places
-  (`ERIPHE_SHARES`, `shares=/mnt/user`). On its first start after the update, the launcher turns
-  the folders shared in them (the node's list) into its own list, each given alone, a `:ro`
-  place's read-only (the engine mounts it read-only only), with no action needed; a place with nothing shared simply goes. A folder
-  that no longer passes the checks above is logged and given to Eriphe no more (the workspace
-  shows it missing). `ERIPHE_SHARES` is ignored afterwards: remove it from the container.
 - **Uninstall.** `docker exec eriphe eriphe-launcher uninstall` removes the containers it made, the
   task and service containers, the networks, the `eriphe-cache` and `eriphe-cache-untrusted` volumes and Eriphe's images; the
   data folder stays (`uninstall --data` empties it too). It then stops the launcher and keeps it
@@ -468,7 +462,7 @@ installer puts on the host side, does the rest, as root there:
 | Linux | `/opt/eriphe/update.sh`, run by `eriphe-update.service` (systemd) | when a request is dropped (`eriphe-update.path`), and every 10 minutes (`eriphe-update.timer`) |
 | macOS with Apple's container | `~/.eriphe/update.sh`, run by the LaunchAgent `org.eriphe.update`: the new `eriphe-node` (and `eriphe-core`) taken from their images, restarted and checked, the previous ones kept in `~/.eriphe/update/previous.*` | when a request is dropped (`WatchPaths`), and every 10 minutes |
 | macOS in Lima's VM | the same as Linux, in the VM (Ubuntu, systemd): nothing more on the Mac | the same |
-| Windows | the launcher's, in the distribution: as One container below (an install from before the launcher: `/usr/local/bin/eriphe-update`, until it moves to it) | when a request is dropped (it looks every 5 s) |
+| Windows | the launcher's, in the distribution: as One container below | when a request is dropped (it looks every 5 s) |
 | One container | `install.sh`'s updater, in `/data/launcher/update.sh`, run by the launcher, which then updates itself ([One container](#one-container-nas-any-linux-with-docker)) | when a request is dropped (it looks every 5 s) |
 
 How a request goes:
@@ -521,7 +515,7 @@ images (or binaries) pass their check, and also on an update that finds the buil
 |---|---|---|
 | Linux, and in Lima's VM | the image's `install.sh --layout`: the same compose project, `.env`, units, `eriphe-share` as an install writes, with the images in place (only a new component's image, Syncthing's, is pulled), then up and checked | root, as it runs |
 | macOS with Apple's container | the image's `install.sh --layout`: the settings, the LaunchAgents and the components (Syncthing, checked against its checksum and Kastelo AB's signature as an install checks it), with the binaries in place; its own LaunchAgent is rewritten, loaded as it is at the next login | you, as it runs |
-| Windows | as one container below; an install from before the launcher: the distribution's setup of the image's `install.ps1`, then `eriphe-node-run` again, which moves it to the launcher ([Windows](#windows)) | root in the distribution |
+| Windows | as one container below | root in the distribution |
 | One container | nothing: eriphe-launcher writes the layout of its own install.sh at every start, and updates itself after the machine (its new image's layout, with Syncthing's image pulled) | |
 
 The updater's lock is held throughout, what the layout rewrites is kept, and if a step fails it is
@@ -530,18 +524,12 @@ put back, the services it added go, and the whole update goes back as for a fail
 it asks nothing and runs only on an installed machine.
 
 A step that needs more than the updater has is left as it was, and everything else is done: on a
-Mac, the relay's LaunchDaemon or a newer Apple container (the password); on Windows, what
-install.ps1 does on Windows' side (`$adminLayout`: scheduled tasks, the session helper, the
-firewall) or a new `wsl.conf`; in Lima's VM, the whole layout (the Mac's install writes it). The
-updater then writes `update-needs` in the node's folder (`why=password`, `admin` or `layout`), the
-node reports it, and the device's card in Réglages › Appareils (Settings › Devices) says « Cette
-mise à jour a besoin de toi » ("This update needs you"), with the install command of that machine
-to copy: in the Mac's Terminal, or an administrator PowerShell. Running it does the rest and
-clears it.
-
-A machine whose updater is from before the layouts (installed before this release, Syncthing's
-included) cannot bring one: its next update takes the new images only, and the card then asks for
-its install command once; from then on, its updates bring the layouts by themselves.
+Mac, the relay's LaunchDaemon or a newer Apple container (the password); in Lima's VM, the
+whole layout (the Mac's install writes it). The updater then writes `update-needs` in the node's
+folder (`why=password` or `layout`), the node reports it, and the device's card in Réglages ›
+Appareils (Settings › Devices) says « Cette mise à jour a besoin de toi » ("This update needs
+you"), with the install command of that machine to copy in the Mac's Terminal. Running it does
+the rest and clears it.
 
 **A version of your choice.** By default a machine follows `latest`, the releases.
 
@@ -650,11 +638,7 @@ a NAS:
   with every capability dropped but `DAC_READ_SEARCH`, the node's root and the shared places
   mounted read-only (with eriphe-launcher, the host's `/`, as mounted when the engine starts: a
   disk mounted later is seen once the engine is made again, at the next update or `docker restart
-  eriphe-engine`). An install from before it had `eriphe-docker-proxy` instead: its next update
-  brings the engine and removes the proxy (layout 3, [the machines update
-  themselves](#the-machines-update-themselves)). Node images have no proxy since: on such an
-  install, the update's new node connects first without any runtime ("no container engine here"
-  in its log), then the layout brings the engine.
+  eriphe-engine`).
 - `eriphe-node`: read-only root, every capability dropped but those that hand the task folders to
   the tasks' user, its root at `/var/lib/eriphe/node` (`node.json`: its identity), and each shared
   place at the same path (read-only for a `:ro` one), told to it in `ERIPHE_NODE_SHARES`.
@@ -1017,18 +1001,6 @@ failed pull changes nothing.
 **Running it again** writes the settings again (`/etc/eriphe-node.env` in the distribution), makes
 the launcher's container again with them (`eriphe-node-run` does, from that file), and keeps the
 node's identity; the launcher brings the rest to its version.
-
-**From before the launcher.** An install of an earlier version ran eriphe-node as a binary in the
-distribution, as root, next to dockerd, with its own updater. Running the install command again
-moves it to the launcher; so does its own updater, at its next update, once a release raises the
-layout: the new `eriphe-node-run` stops that node, eriphe-core and Syncthing, moves their data
-(`/var/lib/eriphe-node`, `/var/lib/eriphe-core`, `/var/lib/eriphe-syncthing`) into
-`/var/lib/eriphe`, leaves a link at each old path, and starts the launcher, whose list of the
-folders shared starts from the node's. The node keeps its identity, eriphe-core its data, Syncthing
-its copies. Once the node is connected through the launcher, what the old install left goes (the
-binary, its updater, its Syncthing build). If the node does not connect within 150 s while the old
-updater waits for it, the move is undone (data back, eriphe-core of before started again) and that
-updater puts the old install back, as for any failed update.
 
 **From the LAN to eriphe-core (core mode).** WSL 2 puts the distribution behind a NAT of its own
 that only Windows' localhost reaches. Windows forwards ports 8800 (API, nodes) and 8443 (or `-ApiPort`, `-WebPort`)

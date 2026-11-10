@@ -42,10 +42,9 @@ LAUNCHER_REPO=${ERIPHE_LAUNCHER_REPO:-$REGISTRY/eriphe} # another for a test reg
 SWAP=eriphe-launcher-swap
 OS=Linux NATIVE='' INSTALL=docker
 MOUNTINFO=${ERIPHE_MOUNTINFO:-/proc/self/mountinfo}
-# The folders shared, one host path a line (:ro: a read-only one, kept from
-# a place of an earlier install); the engine's copy of it, in a folder of
-# the data the node never sees (proxy/, its name from the socket proxy of
-# before the engine); the folders Syncthing has now (it may copy them).
+# The folders shared, one host path a line (:ro: a read-only one); the
+# engine's copy of it, in a folder of the data the node never sees (proxy/);
+# the folders Syncthing has now (it may copy them).
 FOLDERS=$CONF/folders
 BINDS=$DATA/proxy/binds
 COPIED_NOW=$CONF/copied
@@ -163,8 +162,6 @@ settings() {
 	/*) ;;
 	*) die "ERIPHE_SESSION_DIR=$SESSION_DIR is not an absolute path" ;;
 	esac
-	[ -z "${ERIPHE_SHARES:-}" ] ||
-		log "ERIPHE_SHARES is no longer used: remove it from this container's settings. Share a folder with: $SHARE_COMMAND add <folder>"
 	WEB_PORT=${ERIPHE_WEB_PORT:-8443} API_PORT=${ERIPHE_API_PORT:-8800}
 	for p in "$WEB_PORT" "$API_PORT"; do
 		if ! printf '%s' "$p" | grep -Eq '^[1-9][0-9]{0,4}$' || [ "$p" -gt 65535 ]; then
@@ -280,18 +277,11 @@ folder_ok() {
 # folder, sees the host's / read-only; no symlink on the way, nothing
 # sensitive or private in it or above it. It says why not.
 folder_check() {
-	rc=0
-	out=$(docker run --rm --network none --read-only --cap-drop ALL --cap-add DAC_READ_SEARCH \
+	if out=$(docker run --rm --network none --read-only --cap-drop ALL --cap-add DAC_READ_SEARCH \
 		--security-opt no-new-privileges --user 0:0 --mount type=bind,src=/,dst=/host,readonly \
-		--entrypoint eriphe-node "$NODE_IMAGE" share check -host /host -data "$HOST_DATA" "$1" 2>&1) || rc=$?
-	case $rc:$out in
-	0:*) return 0 ;;
-	*"no eriphe-node in"* | 2:*)
-		# A node from before eriphe share: no share check, it wants its data.
-		echo "this eriphe-node cannot check a folder yet: update Eriphe first (Settings › Devices › Update, or docker exec ${SELF_NAME:-eriphe} eriphe-launcher update)"
-		return 1
-		;;
-	esac
+		--entrypoint eriphe-node "$NODE_IMAGE" share check -host /host -data "$HOST_DATA" "$1" 2>&1); then
+		return 0
+	fi
 	out=$(printf '%s\n' "$out" | tail -n 1)
 	out=${out#"eriphe-node share: "}
 	printf '%s\n' "${out#"$1: "}"
@@ -325,45 +315,6 @@ set_folders() {
 
 # drop_folders LINES: those lines off the launcher's list.
 drop_folders() { set_folders "$(folders | grep -Fxv -- "$1" || true)"; }
-
-# folders_migrate: an install from before, with places (ERIPHE_SHARES,
-# shares=/mnt/user), gets the folders shared in them as its list, each
-# checked again (a :ro place's read-only); the places themselves go. Once.
-folders_migrate() {
-	[ ! -f "$FOLDERS" ] || return 0
-	places=${ERIPHE_SHARES:-$(sed -n 's/^shares=//p' "$CONF/install.conf" 2>/dev/null | head -n 1)}
-	list=''
-	if [ -n "$places" ]; then
-		shared=$(shared_paths) || {
-			log "the node's list of shared folders cannot be read: its folders are kept for the next start"
-			return 0
-		}
-		while IFS= read -r p; do
-			[ -n "$p" ] || continue
-			ro='' found=''
-			set -f
-			old_ifs=$IFS IFS=,
-			for s in $places; do
-				pl=${s#*=} r=''
-				case $pl in *:ro) pl=${pl%:ro} r=:ro ;; esac
-				case $p/ in "${pl%/}"/*) found=1 ro=$r && break ;; esac
-			done
-			IFS=$old_ifs
-			set +f
-			[ -n "$found" ] || continue
-			if why=$(folder_ok "$p"); then
-				list="$list$p$ro$NL"
-			else
-				log "$p is no longer given to Eriphe: $why"
-			fi
-		done <<EOF
-$shared
-EOF
-	fi
-	mkdir -p "$CONF"
-	set_folders "$list"
-	[ -z "$places" ] || log "the places ($places) are gone: each of the $(folders | grep -c . || true) folders shared is now given alone"
-}
 
 # lan_address: the host's address on the LAN, from a short-lived container
 # on the host's network (this one has none of its own to tell).
@@ -439,7 +390,6 @@ run() {
 	fi
 	mkdir -p "$CONF"
 	chmod 700 "$CONF"
-	folders_migrate
 	# What the node no longer shares leaves the list.
 	if gone=$(unshared) && [ -n "$gone" ]; then
 		drop_folders "$gone"
@@ -792,7 +742,6 @@ share_ready() {
 	discover
 	exec 8>"$CONF/apply.lock"
 	! command -v flock >/dev/null 2>&1 || flock 8
-	folders_migrate
 	PULL=missing UPDATE_BY=loop
 	settings
 	on_steps host_docker
@@ -926,7 +875,7 @@ uninstall() {
 	[ -z "$ids" ] || docker rm -f $ids >/dev/null
 	docker network rm eriphe-tasks eriphe-system eriphe-docker >/dev/null 2>&1 || true
 	docker volume rm eriphe-cache eriphe-cache-untrusted >/dev/null 2>&1 || true
-	for repo in $LEGACY_PROXY $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core; do
+	for repo in $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core; do
 		refs=$(docker images --format '{{.Repository}}:{{.Tag}}' "$repo" | grep -v ':<none>$' || true)
 		# shellcheck disable=SC2086 # one argument per image
 		[ -z "$refs" ] || docker image rm $refs >/dev/null 2>&1 || true

@@ -52,7 +52,6 @@ if [ "$1 $2 $3 $4 $5" = "exec eriphe-node eriphe-node share remove" ]; then
   exit 0
 fi
 case $* in
-*"share check -host /host -data /mnt/user/appdata/eriphe /mnt/user/Old") echo "eriphe-node share: no eriphe-node in /data: give its data folder with -root" >&2; exit 1 ;;
 *"share check -host /host -data /mnt/user/appdata/eriphe /mnt/user/Secret") echo "eriphe-node share: /mnt/user/Secret: this folder holds .ssh, which is never shared: share a folder inside it" >&2; exit 1 ;;
 "inspect -f {{.Id}} "*) echo 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef ;;
 "inspect -f {{.Name}} "*) echo /eriphe ;;
@@ -108,9 +107,6 @@ out=$(run_in 'discover; settings; INFO=; settle; echo "$MODE $NAME $CORE_URL pin
 echo ghcr.io/alexis-marcel/eriphe:edge >"$T/ref"
 out=$(launcher ERIPHE_WEB_PORT=8843 sh -c ". '$here/eriphe-launcher'; discover; settings; INFO=; settle; echo \"pin=\$PIN shares=\$SHARES \$WEB_PORT\"" 2>&1)
 [ "$out" = "pin=edge shares= 8843" ] || fail "settings: $out"
-# ERIPHE_SHARES, the places of before, is no longer used: said so.
-out=$(launcher ERIPHE_SHARES=shares=/mnt/user sh -c ". '$here/eriphe-launcher'; discover; settings; echo \"shares=\$SHARES\"" 2>&1)
-case $out in *"ERIPHE_SHARES is no longer used"*"docker exec eriphe eriphe share add"*"shares=") ;; *) fail "ERIPHE_SHARES: $out" ;; esac
 out=$(launcher ERIPHE_VERSION=0.7.0 sh -c ". '$here/eriphe-launcher'; discover; settings; echo \"pin=\$PIN\"" 2>&1)
 [ "$out" = pin=0.7.0 ] || fail "ERIPHE_VERSION: $out"
 echo ghcr.io/alexis-marcel/eriphe:latest >"$T/ref"
@@ -150,34 +146,11 @@ for bad in "mnt/user/Docs" "/" "/mnt/user/Docs/" "/mnt/user/../user/Docs" "/mnt/
 	case $out in "" | *ok) fail "folder_ok takes $bad: $out" ;; esac
 done
 
-# An install of before with places: the folders shared in them become the
-# list, each given alone, a :ro place's read-only; what is not in a place,
-# or no longer passes, goes; once.
 reset_folders() {
 	rm -rf "$T/data"
 	mkdir -p "$T/data/launcher" "$T/data/node"
 	: >"$T/calls"
 }
-reset_folders
-printf 'mode=core\nshares=shares=/mnt/user,media=/mnt/media:ro\n' >"$T/data/launcher/install.conf"
-cat >"$T/data/node/shares.json" <<'EOF'
-{"folders": [{"id": "a", "name": "1 PROJECTS", "path": "/mnt/user/1 PROJECTS", "access": "drop"},
- {"id": "b", "name": "Films", "path": "/mnt/media/Films", "access": "read"},
- {"id": "c", "name": "Other", "path": "/srv/other", "access": "read"},
- {"id": "d", "name": "Plex", "path": "/mnt/user/appdata/plex", "access": "read"}]}
-EOF
-run_in 'discover; folders_migrate' >"$T/out"
-[ "$(cat "$T/data/launcher/folders")" = "/mnt/user/1 PROJECTS
-/mnt/media/Films:ro" ] || fail "migration: $(cat "$T/data/launcher/folders")"
-has "$T/out" "/mnt/user/appdata/plex is no longer given to Eriphe" "migration (a folder refused)"
-has "$T/out" "each of the 2 folders shared is now given alone" "migration"
-echo '{"folders": []}' >"$T/data/node/shares.json"
-run_in 'discover; folders_migrate' >/dev/null
-[ "$(grep -c . "$T/data/launcher/folders")" = 2 ] || fail "migration, again"
-# From ERIPHE_SHARES, kept in the container's settings; places with nothing shared simply go.
-reset_folders
-launcher ERIPHE_SHARES=shares=/mnt/user sh -c ". '$here/eriphe-launcher'; discover; folders_migrate" >/dev/null 2>&1
-{ [ -f "$T/data/launcher/folders" ] && [ ! -s "$T/data/launcher/folders" ]; } || fail "migration, nothing shared"
 
 # ---- the compose project: the host's paths; no folder for the node, its
 # ---- engine reading the list, Syncthing the folders it may copy only
@@ -269,10 +242,6 @@ for bad in /mnt/user/appdata/plex /mnt/user/Secret; do
 done
 [ "$out" = "Not shared: /mnt/user/Secret: this folder holds .ssh, which is never shared: share a folder inside it" ] ||
 	fail "share add, the node's reason: $out"
-# A node from before eriphe share cannot check: update first.
-out=$(share_in add /mnt/user/Old) && fail "share add with an older node passes"
-case $out in *"cannot check a folder yet: update Eriphe first"*) ;; *) fail "share add with an older node: $out" ;; esac
-keep_calls
 # Refused by the node: off the list again, the engine's too.
 share_in add /mnt/user/Docs /mnt/user/Refused >/dev/null && fail "share add of a folder the node refuses passes"
 [ "$(cat "$T/data/launcher/folders")" = "/mnt/user/1 PROJECTS
@@ -359,35 +328,6 @@ hasnt "$C" "docker-proxy" "new install (no socket proxy)"
 has "$C" "- /mnt/user/appdata/eriphe/proxy:/etc/eriphe-engine:ro" "new install (the list of the folders shared)"
 [ -f "$T/data/proxy/binds" ] || fail "new install: no list of the folders shared for the engine"
 has "$T/calls" "up -d --pull never --remove-orphans" "new install (up)"
-# An install from before the engine: its compose project has the socket
-# proxy and the node reaches Docker through it. Made again with the engine;
-# the proxy's container removed, before anything starts; the folders shared
-# stay in the same list.
-cat >"$C" <<'EOF'
-name: eriphe
-services:
-  docker-proxy:
-    container_name: eriphe-docker-proxy
-    command: ["docker-proxy", "-listen", ":2375", "-bind-file", "/etc/eriphe-proxy/binds"]
-  node:
-    container_name: eriphe-node
-    environment:
-      DOCKER_HOST: tcp://eriphe-docker-proxy:2375
-EOF
-echo '/mnt/user/1 PROJECTS' >"$T/data/launcher/folders"
-echo '{}' >"$T/data/node/node.json"
-: >"$T/calls"
-stack_in
-has "$C" 'command: ["engine", "-listen", ":8792"' "update from the proxy (the engine)"
-has "$C" "ERIPHE_ENGINE_URL: http://eriphe-engine:8792" "update from the proxy (the node's engine)"
-hasnt "$C" "DOCKER_HOST" "update from the proxy (the node's Docker)"
-hasnt "$C" "docker-proxy" "update from the proxy (the proxy's service)"
-r=$(grep -n '^rm -f eriphe-docker-proxy$' "$T/calls" | cut -d : -f 1)
-u=$(grep -n ' up -d --pull never --remove-orphans$' "$T/calls" | head -n 1 | cut -d : -f 1)
-if [ -z "$r" ] || [ -z "$u" ] || [ "$r" -gt "$u" ]; then
-	fail "update from the proxy: its container removed, then the stack up ($(tr '\n' '|' <"$T/calls"))"
-fi
-[ "$(cat "$T/data/proxy/binds")" = "/mnt/user/1 PROJECTS" ] || fail "update from the proxy: the engine's list: $(cat "$T/data/proxy/binds")"
 rm -rf "$T/data"
 mkdir -p "$T/data"
 
@@ -425,11 +365,8 @@ mkdir -p "$T/data/launcher"
 stack_in
 cmp -s "$C" "$T/compose.default" || fail "the settings kept from the run before: $(diff "$T/compose.default" "$C")"
 has "$E" "ERIPHE_WAKE_MAC='00:00:5e:00:53:01'" "the wake card, found again"
-# The share command in what the launcher says.
 rm -rf "$T/data"
 mkdir -p "$T/data"
-out=$(launcher ERIPHE_SHARE_COMMAND='eriphe share' ERIPHE_SHARES=shares=/mnt/user sh -c ". '$here/eriphe-launcher'; discover; settings" 2>&1 || true)
-case $out in *"Share a folder with: eriphe share add <folder>"*) ;; *) fail "the share command, said: $out" ;; esac
 for bad in "ERIPHE_WAKE_BROADCAST=192.0.2.255" "ERIPHE_WAKE_MAC=00:00:5e:00:53" "ERIPHE_WAKE_MAC=00:00:00:00:00:00" \
 	"ERIPHE_WAKE_MAC=00:00:5e:00:53:zz" "ERIPHE_WAKE_MAC=," "ERIPHE_WAKE_MAC=00:00:5e:00:53:01 ERIPHE_WAKE_BROADCAST=192.0.2.256" \
 	"ERIPHE_WAKE_MAC=00:00:5e:00:53:01 ERIPHE_WAKE_BROADCAST=fe80::1" "ERIPHE_SESSION_DIR=mnt/session" "ERIPHE_SESSION_DIR=/" \
@@ -517,7 +454,7 @@ has "$T/calls" "update.sh" "local update --now"
 cat >"$T/inspect.json" <<EOF
 {"Id": "$ID", "Name": "/eriphe", "Image": "sha256:old",
  "Config": {"Hostname": "0123456789ab", "Image": "ghcr.io/alexis-marcel/eriphe:latest",
-  "Env": ["ERIPHE_SHARES=shares=/mnt/user", "PATH=/usr/bin", "ERIPHE_LAUNCHER_VERSION=0.7.0"],
+  "Env": ["ERIPHE_NODE_LABELS=gpu", "PATH=/usr/bin", "ERIPHE_LAUNCHER_VERSION=0.7.0"],
   "Cmd": ["run"], "Entrypoint": ["/usr/local/bin/eriphe-launcher"], "WorkingDir": "",
   "Labels": {"net.unraid.docker.managed": "dockerman", "org.opencontainers.image.version": "0.7.0"}},
  "HostConfig": {"Binds": ["/var/run/docker.sock:/var/run/docker.sock", "/mnt/user/appdata/eriphe:/data"], "RestartPolicy": {"Name": "unless-stopped"}},
@@ -525,7 +462,7 @@ cat >"$T/inspect.json" <<EOF
 EOF
 img='{"Env": ["PATH=/usr/bin", "ERIPHE_LAUNCHER_VERSION=0.7.0"], "Cmd": ["run"], "Entrypoint": ["/usr/local/bin/eriphe-launcher"], "WorkingDir": "", "Labels": {"org.opencontainers.image.version": "0.7.0"}}'
 run_in "create_body \"\$(cat '$T/inspect.json')\" '$img'" >"$T/body.json"
-want='{"Env":["ERIPHE_SHARES=shares=/mnt/user"],"Labels":{"net.unraid.docker.managed":"dockerman"},"Binds":["/var/run/docker.sock:/var/run/docker.sock","/mnt/user/appdata/eriphe:/data"],"Restart":"unless-stopped","Networks":{"bridge":{"IPAMConfig":null,"Aliases":[]}},"Hostname":null,"Cmd":null,"Entrypoint":null}'
+want='{"Env":["ERIPHE_NODE_LABELS=gpu"],"Labels":{"net.unraid.docker.managed":"dockerman"},"Binds":["/var/run/docker.sock:/var/run/docker.sock","/mnt/user/appdata/eriphe:/data"],"Restart":"unless-stopped","Networks":{"bridge":{"IPAMConfig":null,"Aliases":[]}},"Hostname":null,"Cmd":null,"Entrypoint":null}'
 got=$(jq -c '{Env, Labels, Binds: .HostConfig.Binds, Restart: .HostConfig.RestartPolicy.Name, Networks: .NetworkingConfig.EndpointsConfig, Hostname, Cmd, Entrypoint}' "$T/body.json")
 [ "$got" = "$want" ] || fail "create body: $got"
 
@@ -1223,98 +1160,6 @@ linux_update u-24 sha256:b
 has "$LL/data/node/update-status" "outcome=ok" "Linux updater under eriphe-launcher"
 hasnt "$LL/calls" "create r/eriphe-node" "Linux updater under eriphe-launcher"
 hasnt "$LL/calls" "installer" "Linux updater under eriphe-launcher"
-# ---- a layout-2 Linux install (the socket proxy) updated to this build
-
-# Its own updater, as install.sh wrote it then (testdata), runs this
-# build's images: the proxy's container and the node again from the new
-# node image first (it has no proxy any more, and the node starts without
-# Docker: node/engine_remote.go, withoutEngine), the node connected, then
-# the image's install.sh --layout, which brings the engine. The image's
-# install.sh is faked past its LAYOUT line, this one's.
-LP=$T/layout2
-mkdir -p "$LP/fake" "$LP/conf" "$LP/data/node"
-export LP
-cp "$here/testdata/linux-update-layout2.sh" "$LP/conf/update.sh"
-printf "CONF='%s' DATA='%s' CORE_UID=%s MODE='' PIN=''\nCORE_IMAGE='c' NODE_IMAGE='r/eriphe-node:latest' WORKER_IMAGE='r/eriphe-base:latest'\nLAYOUT=2 BY='systemd' INSTALL='linux'\n" \
-	"$LP/conf" "$LP/data" "$(id -u)" >"$LP/conf/update.conf"
-cat >"$LP/conf/compose.yaml" <<'EOF'
-services:
-  docker-proxy:
-    container_name: eriphe-docker-proxy
-    command: ["docker-proxy", "-listen", ":2375"]
-  node:
-    environment:
-      DOCKER_HOST: tcp://eriphe-docker-proxy:2375
-EOF
-cat >"$LP/fake/docker" <<'EOF'
-#!/bin/sh
-echo "docker $*" >>"$LP/calls"
-tag=$(cat "$LP/tag" 2>/dev/null || echo sha256:a)
-case $* in
-"inspect -f {{.Image}} eriphe-node") cat "$LP/running" ;;
-"inspect -f {{.Image}} eriphe-docker-proxy") cat "$LP/proxy" ;;
-"inspect -f {{.Config.Image}} eriphe-docker-proxy") echo r/eriphe-node:latest ;;
-"inspect -f {{.State.Status}} {{.RestartCount}} "*) echo "running 0" ;;
-"inspect "*) exit 1 ;;
-"image inspect -f {{.Id}} r/eriphe-node:latest") echo "$tag" ;;
-"image inspect -f {{.Id}} "*) echo sha256:w ;;
-"image inspect -f "*sha256:b) echo 0.70.0 ;;
-"image inspect -f "*) echo 0.66.0 ;;
-"pull -q r/eriphe-node:latest") echo sha256:b >"$LP/tag" ;;
-"tag sha256:"*" r/eriphe-node:latest") echo "$2" >"$LP/tag" ;;
-"create r/eriphe-node:latest") echo c1 ;;
-"cp c1:/usr/local/share/eriphe/install.sh "*) cp "$LP/installer" "$3" ;;
-"logs --since "*) [ "$(cat "$LP/running")" = sha256:b ] && echo "no container engine here: connected all the same" && echo "connected to eriphe-core" ;;
-*" up -d --pull never --no-deps node") cp "$LP/tag" "$LP/running" ;;
-*" up -d --pull never --no-deps docker-proxy") cp "$LP/tag" "$LP/proxy" ;;
-esac
-exit 0
-EOF
-{
-	grep '^LAYOUT=' "$here/install.sh"
-	cat <<'EOF'
-echo "installer $* image=$ERIPHE_NODE_IMAGE" >>"$LP/calls"
-printf 'services:\n  engine:\n  node:\n    environment:\n      ERIPHE_ENGINE_URL: http://eriphe-engine:8792\n' >"$LP/conf/compose.yaml"
-sed 's/^LAYOUT=.*/LAYOUT=3 BY=systemd/' "$LP/conf/update.conf" >"$LP/conf/update.conf.new" && mv "$LP/conf/update.conf.new" "$LP/conf/update.conf"
-EOF
-} >"$LP/installer"
-printf '#!/bin/sh\nexit 0\n' >"$LP/fake/flock"
-chmod +x "$LP/fake/docker" "$LP/fake/flock"
-echo sha256:a >"$LP/running"
-echo sha256:a >"$LP/proxy"
-printf 'id=u-30\naction=update\ncore=\nauto=0\n' >"$LP/data/node/update-requested"
-PATH="$LP/fake:$PATH" ERIPHE_UPDATE_HEALTH=4 ERIPHE_UPDATE_ROOT="$LP/root" sh "$LP/conf/update.sh" 2>/dev/null
-has "$LP/data/node/update-status" "outcome=ok" "layout-2 update"
-has "$LP/data/node/update-status" "to=0.70.0" "layout-2 update"
-[ "$(cat "$LP/proxy")" = sha256:b ] || fail "layout-2 update: the proxy's container not on the new image"
-has "$LP/calls" "installer --layout image=r/eriphe-node:latest" "layout-2 update: this build's layout"
-has "$LP/conf/compose.yaml" "ERIPHE_ENGINE_URL: http://eriphe-engine:8792" "layout-2 update: the engine"
-hasnt "$LP/conf/compose.yaml" "docker-proxy" "layout-2 update: the proxy"
-has "$LP/conf/update.conf" "LAYOUT=3" "layout-2 update: its layout"
-
-# ---- the Windows updater: the layout it takes from the node image's install.ps1
-
-# The updater of an install from before the launcher (testdata), its own
-# lines that read install.ps1 (the layout's numbers, the setup of the
-# distribution, Syncthing's build, gone with the launcher), run on this
-# install.ps1: what the distribution's updater would apply to move to it.
-W=$T/win
-mkdir -p "$W/state"
-cp "$here/install.ps1" "$W/state/install.ps1"
-cp "$here/testdata/wsl-update-layout3.sh" "$W/update"
-{
-	echo 'log() { :; }; uname() { echo x86_64; }'
-	sed -n '/^ps_number()/p' "$W/update"
-	sed -n '/^layout() {/,/^  if ! grep -q /p' "$W/update" | sed '1d; $d'
-	echo 'echo "n=$n admin=$admin v=$v st=$st"'
-} >"$W/read.sh"
-out=$(STATE=$W/state sh "$W/read.sh" 2>&1)
-[ "$out" = "n=$layout admin=1 v= st=" ] || fail "Windows updater, install.ps1's layout: $out"
-has "$W/state/layout-setup.sh" "cat > /usr/local/bin/eriphe-node-run <<'EOF'" "Windows updater, the distribution's setup"
-has "$W/state/layout-setup.sh" "docker run -d --name eriphe --restart unless-stopped" "Windows updater, the setup starts the launcher"
-sh -n "$W/state/layout-setup.sh" || fail "Windows updater: the setup it takes does not parse"
-[ ! -s "$W/state/layout-syncthing.sh" ] || fail "Windows updater: a Syncthing of the distribution to set up"
-
 # install.sh --layout is the updaters' alone: no other option.
 out=$(installer 'parse_args --layout --core-mode; layout_run')
 case $out in *"--layout takes no other option"*) ;; *) fail "--layout with an option: $out" ;; esac
