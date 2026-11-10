@@ -43,8 +43,9 @@ type AccountConfig struct {
 }
 
 // AuthConfig names where the account's token is: exactly one of the two. It
-// holds a JSON object {"client_id", "client_secret", "refresh_token"} (the
-// "authorized_user" form of Google's credentials), from eriphe-core's vault.
+// holds a JSON object {"client_id", "client_secret", "refresh_token",
+// "token_url"} from eriphe-core's vault; "token_url" is where the provider
+// refreshes it, Google's when absent (tokens lent before it was given).
 type AuthConfig struct {
 	TokenEnv  string `json:"token_env,omitempty"`
 	TokenFile string `json:"token_file,omitempty"`
@@ -162,6 +163,7 @@ type credentials struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
 	RefreshToken string `json:"refresh_token"`
+	TokenURL     string `json:"token_url,omitempty"`
 }
 
 // credentials reads the account's token now.

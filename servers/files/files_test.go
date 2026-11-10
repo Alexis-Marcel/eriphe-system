@@ -263,6 +263,33 @@ func TestTokenRefresh(t *testing.T) {
 	}
 }
 
+// The lent token says where the provider refreshes it; the account's own
+// token_url (tests) comes first, and Google's is the default.
+func TestTokenURLFromTheToken(t *testing.T) {
+	d, _ := setup(t, accessRead)
+	acc := d.account(scopeDrive)
+	acc.TokenURL = ""
+	t.Setenv("FILES_TEST_TOKEN", `{"client_id":"client-1","client_secret":"secret-1","refresh_token":"`+fakeRefresh+`","token_url":"`+d.srv.URL+`/token"}`)
+	cfg := &Config{Accounts: []AccountConfig{acc}, Folders: []FolderConfig{{Name: "Compta", ID: "compta"}}}
+	if err := cfg.normalize(); err != nil {
+		t.Fatal(err)
+	}
+	f, err := NewFiles(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res, text := call(t, session(t, f), "list_files", nil); res.IsError || d.refreshes != 1 {
+		t.Fatalf("refreshed %d times: %s", d.refreshes, text)
+	}
+	if c, _ := acc.credentials(); cmpOr(acc.TokenURL, c.TokenURL, googleToken) != d.srv.URL+"/token" {
+		t.Error("the token's token_url")
+	}
+	t.Setenv("FILES_TEST_TOKEN", `{"client_id":"client-1","refresh_token":"r"}`)
+	if c, _ := acc.credentials(); cmpOr(acc.TokenURL, c.TokenURL, googleToken) != googleToken {
+		t.Error("Google by default")
+	}
+}
+
 func TestBrowseIsSetupOnly(t *testing.T) {
 	_, f := setup(t, accessRead)
 	cs := session(t, f)

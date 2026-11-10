@@ -15,8 +15,10 @@ import (
 )
 
 // An OAuth secret may be a refresh grant rather than an access token:
-// {"client_id", "client_secret", "refresh_token"} (and "token_url" in tests),
-// as eriphe-core lends it for an account connected with Google. The access
+// {"client_id", "client_secret", "refresh_token", "token_url"}, as eriphe-core
+// lends it for an account connected with a provider's sign-in; "token_url"
+// is where the provider refreshes it, Google's when absent (tokens lent
+// before it was given). The access
 // token is then refreshed here, in memory, shortly before it ends; it is
 // never written nor logged.
 
