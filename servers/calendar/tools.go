@@ -361,6 +361,13 @@ func ptr[T any](v T) *T { return &v }
 
 func newServer(c *Calendars, version string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "eriphe-calendar", Version: version}, &mcp.ServerOptions{Instructions: instructions})
+	addTestAccount(s, func(ctx context.Context, name string) error {
+		a, err := c.account(name)
+		if err == nil {
+			_, err = a.p.Calendars(ctx)
+		}
+		return err
+	})
 	ro := &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: ptr(false)}
 
 	tool(s, "list_accounts", "List the configured calendar accounts and the default time zone.", ro,

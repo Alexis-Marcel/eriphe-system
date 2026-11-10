@@ -31,7 +31,8 @@ func resultText(r *mcp.CallToolResult) string {
 }
 
 // setupTool tells a tool a server keeps for eriphe-core's workspace
-// (eriphe-files' browse_folders, which sees every folder name of the
-// account): the pool leaves it out of the server's tools, so no grant, no
-// task and not the brain ever get it; only browsePlaces calls it.
+// (servers/README.md: browse_places, which sees every folder name of the
+// account, and test_account): the pool leaves it out of the server's tools,
+// so no grant, no task and not the brain ever get it; only browsePlaces and
+// testAccount call them.
 func setupTool(t *mcp.Tool) bool { return t.Meta["eriphe/setup"] == true }

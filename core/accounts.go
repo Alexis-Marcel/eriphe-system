@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -636,4 +637,34 @@ func (c *core) writeService(svc accountService, st svcServer, srv Server, cfg sv
 		mode = putCreate
 	}
 	return c.putServer(mode, st.Name, srv, creds)
+}
+
+// testAccount asks a service's server to sign one of its accounts in, as
+// it uses it (its setup tool test_account, servers/README.md): "" when it
+// works, else why not, in the server's words.
+func (c *core) testAccount(ctx context.Context, server, account string) (string, error) {
+	u := c.pool.get(server)
+	if u == nil {
+		return "", errors.New(server + " does not run")
+	}
+	args, _ := json.Marshal(map[string]string{"account": account})
+	res, err := u.call(ctx, "test_account", args)
+	if err != nil {
+		return "", err
+	}
+	if res.IsError {
+		return "", errors.New(resultText(res))
+	}
+	var out struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	raw, _ := json.Marshal(res.StructuredContent)
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", err
+	}
+	if out.OK {
+		return "", nil
+	}
+	return cmpOr(out.Error, "refused"), nil
 }

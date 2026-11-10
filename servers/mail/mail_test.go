@@ -506,7 +506,7 @@ func TestToolAnnotations(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]string{"list_accounts": "read", "list_folders": "read", "search_messages": "read", "read_message": "read",
-		"create_draft": "change", "mark": "change", "move": "change", "trash": "delete", "send_message": "send"}
+		"create_draft": "change", "mark": "change", "move": "change", "trash": "delete", "send_message": "send", "test_account": "read"}
 	for _, tool := range res.Tools {
 		a, got := tool.Annotations, "send"
 		if tool.Name == "send_message" && (a == nil || a.DestructiveHint == nil || !*a.DestructiveHint) {

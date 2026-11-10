@@ -290,7 +290,7 @@ func TestTokenURLFromTheToken(t *testing.T) {
 	}
 }
 
-func TestBrowseIsSetupOnly(t *testing.T) {
+func TestSetupToolsAreSetupOnly(t *testing.T) {
 	_, f := setup(t, accessRead)
 	cs := session(t, f)
 	tools, err := cs.ListTools(context.Background(), nil)
@@ -298,15 +298,15 @@ func TestBrowseIsSetupOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tl := range tools.Tools {
-		if (tl.Name == "browse_folders") != (tl.Meta["eriphe/setup"] == true) {
+		if (tl.Name == "browse_places" || tl.Name == "test_account") != (tl.Meta["eriphe/setup"] == true) {
 			t.Errorf("%s: meta %v", tl.Name, tl.Meta)
 		}
 	}
-	_, text := call(t, cs, "browse_folders", nil)
+	_, text := call(t, cs, "browse_places", nil)
 	if !strings.Contains(text, `"id":"root-id"`) || !strings.Contains(text, sharedWithMe) || !strings.Contains(text, `"Team"`) {
 		t.Errorf("roots: %s", text)
 	}
-	_, text = call(t, cs, "browse_folders", map[string]any{"parent": "root-id"})
+	_, text = call(t, cs, "browse_places", map[string]any{"parent": "root-id"})
 	if !strings.Contains(text, "Compta") || !strings.Contains(text, "Perso") || strings.Contains(text, "facture") {
 		t.Errorf("folders only: %s", text)
 	}
@@ -314,8 +314,8 @@ func TestBrowseIsSetupOnly(t *testing.T) {
 	f.cfg.Setup = &off
 	tools, _ = session(t, f).ListTools(context.Background(), nil)
 	for _, tl := range tools.Tools {
-		if tl.Name == "browse_folders" {
-			t.Error("browse_folders with setup off")
+		if tl.Name == "browse_places" || tl.Name == "test_account" {
+			t.Errorf("%s with setup off", tl.Name)
 		}
 	}
 }
@@ -376,5 +376,20 @@ func TestCleanName(t *testing.T) {
 		if got := cleanName(in); got != want {
 			t.Errorf("%q: %q, want %q", in, got, want)
 		}
+	}
+}
+
+// test_account signs the account in as the server uses it, and says why
+// not: a revoked token.
+func TestTestAccount(t *testing.T) {
+	_, f := setup(t, accessRead)
+	if _, text := call(t, session(t, f), "test_account", map[string]any{"account": ""}); !strings.Contains(text, `"ok":true`) {
+		t.Errorf("ok: %s", text)
+	}
+	d, f := setup(t, accessRead)
+	d.revoked = true
+	_, text := call(t, session(t, f), "test_account", nil)
+	if !strings.Contains(text, `"ok":false`) || !strings.Contains(text, "reconnect") {
+		t.Errorf("revoked: %s", text)
 	}
 }
