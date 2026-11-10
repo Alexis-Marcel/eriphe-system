@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"slices"
+	"strings"
 )
 
 // Connection apps: the user's own OAuth client at a provider, made once in
@@ -133,16 +137,118 @@ func (v appView) Copy(what string) string {
 }
 
 // appBacks are the pages the app page may go back to.
-var appBacks = []string{"/settings/tools", "/settings/google", "/settings/drive"}
+// (and a provider's connect page, /settings/connections/<provider>).
+var appBacks = []string{"/settings/tools"}
+
+func appBack(p *signInProvider, back string) bool {
+	return slices.Contains(appBacks, back) || back == connectPage(p.Name)
+}
 
 func (w *web) appRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/apps/{provider}", w.auth(w.handleApp))
 	mux.Handle("POST /settings/apps/{provider}", w.auth(w.handleAppSave))
+	mux.Handle("POST /settings/apps/{provider}/test", w.auth(w.handleAppTest))
+}
+
+// appTestCode is the made-up code of the client check.
+const appTestCode = "eriphe-connection-test"
+
+// testApp checks a provider's app without a consent on its side, a line
+// per check, each ✓ or ✗:
+//
+//  1. The workspace's address: one the provider takes as a redirect.
+//  2. The client id and secret: a code exchange with a made-up code. The
+//     provider checks the client first: invalid_client (or
+//     unauthorized_client) is a client it does not know or a wrong
+//     secret, invalid_grant a client it knows that sent a bad code, as
+//     expected here.
+//  3. The redirect URI: not asked (providers say it only on their sign-in
+//     pages); the line says what to check in the console.
+//  4. Each account connected at it: its refresh token for an access token
+//     (checkConnection, which also marks it).
+//
+// The secret and the tokens are never shown nor logged.
+func (c *core) testApp(ctx context.Context, lang, origin string, p *signInProvider) []testView {
+	var out []testView
+	add := func(state, key string, args ...any) *testView {
+		out = append(out, testView{State: state, Text: fmt.Sprintf(tr(lang, key), args...)})
+		return &out[len(out)-1]
+	}
+	unreachable := func(err error) {
+		l := add("err", "app.test.unreachable", p.Label)
+		if key := netErrorKey(err); key != "" {
+			l.Detail = tr(lang, key)
+		}
+	}
+	why := p.refuses(origin)
+	if why != "" {
+		add("err", "app.origin."+why, origin)
+	} else {
+		add("ok", "app.test.origin", p.Label, origin)
+	}
+	redirect := origin + "/oauth/callback"
+	app, err := appClient(p)
+	switch {
+	case errors.Is(err, errNoAppClient):
+		add("info", "app.test.noclient")
+	case err != nil:
+		add("err", "app.test.clientunreadable")
+	default:
+		hide := func(s string) string { return truncate(strings.ReplaceAll(s, app.Secret, "••••"), 200) }
+		code, desc, _, err := p.tokenCall(ctx, signInHTTP, url.Values{"grant_type": {"authorization_code"}, "code": {appTestCode},
+			"redirect_uri": {redirect}, "client_id": {app.ID}, "client_secret": {app.Secret}})
+		bad := code == "invalid_client" || code == "unauthorized_client"
+		switch {
+		case err != nil:
+			unreachable(err)
+		case code == "invalid_grant":
+			add("ok", "app.test.clientok", p.Label, app.ID)
+		case bad:
+			add("err", "app.test.clientbad").Detail = hide(desc)
+		default:
+			add("err", "app.test.clientother", p.Label, hide(strings.TrimSpace(code+" "+desc)))
+		}
+		if why == "" && !bad {
+			add("info", "app.test.redirectcheck", redirect)
+		}
+	}
+	conns := c.connectionsAt(p.Name)
+	if len(conns) == 0 {
+		add("info", "app.test.noaccount")
+	}
+	for _, cn := range conns {
+		lapsed, err := c.checkConnection(ctx, cn)
+		switch {
+		case err != nil:
+			unreachable(err)
+		case lapsed == "":
+			add("ok", "app.test.account.ok", cn.Identity)
+		default:
+			key := map[string]string{lapsedRevoked: "revoked", lapsedBadClient: "badclient"}[lapsed]
+			add("err", "app.test.account."+cmpOr(key, "notoken"), cn.Identity)
+		}
+	}
+	return out
+}
+
+func (w *web) handleAppTest(rw http.ResponseWriter, r *http.Request, s *session) {
+	p := w.appProvider(rw, r)
+	if p == nil {
+		return
+	}
+	lines := []testView{{State: "err", Text: tr(w.lang(r), "test.ratelimit")}}
+	if w.testLimit.allow(s.ID, w.now()) {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*testConnTimeout)
+		defer cancel()
+		lines = w.c.testApp(ctx, w.lang(r), w.origin(r), p)
+		log.Printf("web: the %s app was tested", p.Label) // never the client nor a token
+	}
+	w.render(rw, r, s, "settings", "app-test", page{Data: lines})
 }
 
 func (w *web) appView(r *http.Request, p *signInProvider) appView {
 	v := appView{Provider: p, Origin: w.origin(r), Back: "/settings/tools"}
-	if b := r.FormValue("back"); slices.Contains(appBacks, b) {
+	if b := r.FormValue("back"); appBack(p, b) {
 		v.Back = b
 	}
 	v.Callback = v.Origin + "/oauth/callback"
@@ -183,7 +289,7 @@ func (w *web) handleAppSave(rw http.ResponseWriter, r *http.Request, s *session)
 	}
 	v := w.appView(r, p)
 	if err != nil {
-		v.Error = w.driveError(r, err)
+		v.Error = w.connError(r, err)
 	} else {
 		log.Printf("web: the %s app was saved", p.Label)
 		v.ClientID, v.Saved = app.ID, "ok"

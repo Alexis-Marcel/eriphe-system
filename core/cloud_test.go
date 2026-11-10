@@ -99,15 +99,15 @@ func TestParseGoogleClient(t *testing.T) {
 		t.Fatalf("flat: %+v %v", app, err)
 	}
 	_, _, err = providerGoogle.parseClient([]byte(`{"installed":{"client_id":"` + id + `","client_secret":"` + secret + `","redirect_uris":["http://localhost"]}}`))
-	wantKey(t, err, "drive.desktop")
+	wantKey(t, err, "conn.desktop")
 	_, _, err = providerGoogle.parseClient([]byte(`client_id=x`))
-	wantKey(t, err, "drive.badjson")
+	wantKey(t, err, "conn.badjson")
 	_, _, err = providerGoogle.parseClient([]byte(`{"web":{"client_id":"` + id + `"}}`))
-	wantKey(t, err, "drive.ownmissing")
+	wantKey(t, err, "conn.ownmissing")
 	_, err = providerGoogle.checkClient(secret, id) // swapped
-	wantKey(t, err, "drive.badclient")
+	wantKey(t, err, "conn.badclient")
 	_, err = providerGoogle.checkClient(id, "two words")
-	wantKey(t, err, "drive.badclient")
+	wantKey(t, err, "conn.badclient")
 }
 
 // fakeGoogle is Google's authorization server for the code exchange.
@@ -150,6 +150,11 @@ func newFakeGoogle(t *testing.T) *fakeGoogle {
 				return
 			}
 			json.NewEncoder(w).Encode(map[string]any{"access_token": "at2", "expires_in": 3600, "token_type": "Bearer"})
+			return
+		}
+		if f.Get("code") == appTestCode && f.Get("client_id") != g.clientID {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid_client", "error_description": "The OAuth client was not found."})
 			return
 		}
 		if r.URL.Path != "/token" || f.Get("grant_type") != "authorization_code" || f.Get("code") != "the-code" ||
@@ -260,31 +265,31 @@ func TestDriveRoundTrip(t *testing.T) {
 	tw, c, csrf := filesCore(t, nil)
 	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
 
-	if _, body, _ := tw.do("GET", "/settings/tools/add", nil, nil); !strings.Contains(body, `href="/settings/drive"`) {
+	connectDrive := url.Values{"tool": {toolDrive}, "write": {"1"}}
+	if _, body, _ := tw.do("GET", "/settings/tools/add", nil, nil); !strings.Contains(body, `href="/settings/connections/google?tool=drive"`) {
 		t.Fatal("no Google Drive tile")
 	}
-	// No Google app yet: the guide, and no Connect.
-	if code, body, _ := tw.do("GET", "/settings/drive", nil, nil); code != 200 || !strings.Contains(body, "Crée ton app Google") ||
-		strings.Contains(body, `hx-post="/settings/drive/connect"`) {
-		t.Fatalf("drive page: %d %s", code, body)
+	// No Google app yet: the way to make it, and no Connect.
+	if code, body, _ := tw.do("GET", "/settings/connections/google?tool=drive", nil, nil); code != 200 || !strings.Contains(body, "Créer mon app") ||
+		strings.Contains(body, `hx-post="/settings/connections/google/connect"`) {
+		t.Fatalf("connect page: %d %s", code, body)
 	}
-	_, body, _ := tw.post("/settings/drive/connect", nil, csrf)
+	_, body, _ := tw.post("/settings/connections/google/connect", connectDrive, csrf)
 	if !strings.Contains(body, "Donne d&#39;abord") {
 		t.Fatalf("connect without an app: %s", body)
 	}
-	if _, body, _ := tw.post("/settings/drive/client", url.Values{"client_id": {testClientID}}, csrf); !strings.Contains(body, "tous deux nécessaires") {
+	if _, body, _ := tw.post("/settings/apps/google", url.Values{"client_id": {testClientID}}, csrf); !strings.Contains(body, "tous deux nécessaires") {
 		t.Fatalf("no secret: %s", body)
 	}
-	code, body, _ := tw.post("/settings/drive/client", url.Values{"client_id": {testClientID}, "client_secret": {testClientSecret}}, csrf)
-	if code != 200 || !strings.Contains(body, "Ton app Google est enregistrée") || !strings.Contains(body, testClientID) ||
-		!strings.Contains(body, "Connecter Google Drive") || strings.Contains(body, testClientSecret) {
+	code, body, _ := tw.post("/settings/apps/google", url.Values{"client_id": {testClientID}, "client_secret": {testClientSecret}}, csrf)
+	if code != 200 || !strings.Contains(body, "Ton app est enregistrée") || !strings.Contains(body, testClientID) || strings.Contains(body, testClientSecret) {
 		t.Fatalf("save: %d %s", code, body)
 	}
-	if code, body, _ := tw.do("GET", "/settings/drive", nil, nil); code != 200 || strings.Contains(body, testClientSecret) ||
-		!strings.Contains(body, `hx-post="/settings/drive/connect"`) {
-		t.Fatalf("drive page: %d %s", code, body)
+	if code, body, _ := tw.do("GET", "/settings/connections/google?tool=drive", nil, nil); code != 200 || strings.Contains(body, testClientSecret) ||
+		!strings.Contains(body, `hx-post="/settings/connections/google/connect"`) || !strings.Contains(body, `value="drive" checked`) {
+		t.Fatalf("connect page: %d %s", code, body)
 	}
-	code, body, h := tw.post("/settings/drive/connect", url.Values{"write": {"1"}}, csrf)
+	code, body, h := tw.post("/settings/connections/google/connect", connectDrive, csrf)
 	authURL := h.Get("HX-Redirect")
 	if code != 200 || authURL == "" {
 		t.Fatalf("connect: %d %s", code, body)
@@ -306,14 +311,14 @@ func TestDriveRoundTrip(t *testing.T) {
 		t.Fatalf("another browser: %d", code)
 	}
 	// That refusal used the flow up: connect again.
-	_, _, h = tw.post("/settings/drive/connect", url.Values{"write": {"1"}}, csrf)
+	_, _, h = tw.post("/settings/connections/google/connect", connectDrive, csrf)
 	state = g.authorize(t, h.Get("HX-Redirect"))
 	back = tw.srv.URL + "/oauth/callback?" + url.Values{"code": {"the-code"}, "state": {state}}.Encode()
 	if code, _, _ := tw.do("GET", "/oauth/callback?code=the-code&state="+url.QueryEscape(state[:len(state)-2]+"AA"), nil, nil); code != http.StatusBadRequest {
 		t.Fatalf("forged state: %d", code)
 	}
 	code, body, _ = tw.do("GET", strings.TrimPrefix(back, tw.srv.URL), nil, nil)
-	if code != 200 || !strings.Contains(body, `url=/settings/drive?connected=1`) || strings.Contains(body, "the-code") {
+	if code != 200 || !strings.Contains(body, `url=/settings/tools?connected=1`) || strings.Contains(body, "the-code") {
 		t.Fatalf("callback: %d %s", code, body)
 	}
 	if g.exchanges != 1 {
@@ -350,26 +355,27 @@ func TestDriveRoundTrip(t *testing.T) {
 	if len(tools) != 1 || tools[0].Name != "list_files" {
 		t.Fatalf("tools lent: %v", tools)
 	}
-	if _, body, _ := tw.do("GET", "/settings/drive/browse?parent=root-id&name=My+Drive", nil, nil); !strings.Contains(body, "Compta") ||
+	places := "/settings/tools/" + filesServer + "/places"
+	if _, body, _ := tw.do("GET", places+"/browse?parent=root-id&name=My+Drive", nil, nil); !strings.Contains(body, "Compta") ||
 		!strings.Contains(body, `value="drop"`) {
 		t.Fatalf("browse: %s", body)
 	}
-	if code, body, _ := tw.post("/settings/drive/folders", url.Values{"id": {"compta"}, "name": {"Compta"}, "access": {"drop"}}, csrf); code != 200 ||
-		!strings.Contains(body, "dépôt dans Eriphe/") {
+	if code, body, _ := tw.post(places, url.Values{"id": {"compta"}, "name": {"Compta"}, "access": {"drop"}}, csrf); code != 200 ||
+		!strings.Contains(body, "Lecture &#43; dépôt") {
 		t.Fatalf("add: %d %s", code, body)
 	}
-	tw.post("/settings/drive/folders", url.Values{"id": {"other"}, "name": {"Compta"}, "access": {"read"}}, csrf)
+	tw.post(places, url.Values{"id": {"other"}, "name": {"Compta"}, "access": {"read"}}, csrf)
 	fc, _ := filesConfigOf(c.conf().Servers[filesServer])
 	if len(fc.Folders) != 2 || fc.Folders[0] != (DriveFolder{Name: "Compta", Account: "sam@example.org", ID: "compta", Access: "drop"}) ||
 		fc.Folders[1].Name != "Compta (2)" || fc.Accounts[0].Auth.TokenEnv != driveTokenEnvOf("sam@example.org") {
 		t.Fatalf("folders: %+v", fc)
 	}
-	if code, body, _ := tw.do("GET", "/settings/drive", nil, nil); code != 200 || !strings.Contains(body, "Compta (2)") ||
-		!strings.Contains(body, `hx-get="/settings/drive/browse"`) || !strings.Contains(body, "Reconnecter") {
-		t.Fatalf("drive page: %d %s", code, body)
+	if code, body, _ := tw.do("GET", places, nil, nil); code != 200 || !strings.Contains(body, "Compta (2)") ||
+		!strings.Contains(body, `hx-get="`+places+`/browse"`) {
+		t.Fatalf("places page: %d %s", code, body)
 	}
-	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, "Google Drive · 2 dossiers") ||
-		!strings.Contains(body, `href="/settings/drive"`) {
+	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, "Google Drive · 2 lieux") ||
+		!strings.Contains(body, `href="`+places+`"`) {
 		t.Fatalf("tools list: %s", body)
 	}
 	// One list of folders with the machines' (folders.go): in Settings →
@@ -393,7 +399,7 @@ func TestDriveRoundTrip(t *testing.T) {
 
 	// Reconnected read only: the write rights go.
 	g.scope = scopeDriveReadonly
-	_, _, h = tw.post("/settings/drive/connect", nil, csrf)
+	_, _, h = tw.post("/settings/connections/google/connect", url.Values{"tool": {toolDrive}}, csrf)
 	state = g.authorize(t, h.Get("HX-Redirect"))
 	tw.do("GET", "/oauth/callback?code=the-code&state="+url.QueryEscape(state), nil, nil)
 	if st := c.driveState(); st.CanWrite || st.Folders[0].Access != "read" {
@@ -410,9 +416,8 @@ func TestDriveRoundTrip(t *testing.T) {
 func TestDriveClientUpload(t *testing.T) {
 	tw, _, csrf := filesCore(t, nil)
 	callback := tw.srv.URL + "/oauth/callback"
-	_, body, _ := tw.do("GET", "/settings/drive", nil, nil)
-	if !strings.Contains(body, `<pre id="drive-callback">`+callback+`</pre>`) || !strings.Contains(body, `data-copy="drive-callback"`) ||
-		!strings.Contains(body, "Web application") || !strings.Contains(body, "Authorized redirect URIs") || !strings.Contains(body, "7 jours") {
+	_, body, _ := tw.do("GET", "/settings/apps/google", nil, nil)
+	if !strings.Contains(body, callback+`</pre>`) || !strings.Contains(body, `data-copy="app-copy-`) || !strings.Contains(body, `name="client_json"`) {
 		t.Fatalf("guide: %s", body)
 	}
 	upload := func(file string) string {
@@ -422,7 +427,7 @@ func TestDriveClientUpload(t *testing.T) {
 		w, _ := mw.CreateFormFile("client_json", "client_secret_123.json")
 		w.Write([]byte(file))
 		mw.Close()
-		req, _ := http.NewRequest("POST", tw.srv.URL+"/settings/drive/client", &buf)
+		req, _ := http.NewRequest("POST", tw.srv.URL+"/settings/apps/google", &buf)
 		req.Header.Set("Content-Type", mw.FormDataContentType())
 		req.Header.Set("X-CSRF-Token", csrf)
 		req.Header.Set("HX-Request", "true")
@@ -445,13 +450,13 @@ func TestDriveClientUpload(t *testing.T) {
 		t.Fatalf("upload: %s", body)
 	}
 	body = upload(`{"web":{"client_id":"` + testClientID + `","client_secret":"` + testClientSecret + `","redirect_uris":["` + callback + `"]}}`)
-	if !strings.Contains(body, "Ton app Google est enregistrée") || strings.Contains(body, testClientSecret) {
+	if !strings.Contains(body, "Ton app est enregistrée") || strings.Contains(body, testClientSecret) {
 		t.Fatalf("upload: %s", body)
 	}
 	if app, err := googleClient(); err != nil || app != (oauthApp{ID: testClientID, Secret: testClientSecret}) {
 		t.Fatalf("vault: %+v %v", app, err)
 	}
-	if _, body, _ := tw.do("GET", "/settings/drive", nil, nil); strings.Contains(body, testClientSecret) || !strings.Contains(body, "jamais réaffiché") {
+	if _, body, _ := tw.do("GET", "/settings/apps/google", nil, nil); strings.Contains(body, testClientSecret) || !strings.Contains(body, "jamais réaffiché") {
 		t.Fatalf("page: %s", body)
 	}
 }
@@ -461,10 +466,10 @@ func TestDriveUnusableOrigin(t *testing.T) {
 	tw, c, _ := filesCore(t, nil)
 	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
 	for host, want := range map[string]string{
-		"192.168.1.2:8443": "Google n&#39;accepte pas d&#39;adresse IP",
+		"192.168.1.2:8443": "ce fournisseur n&#39;accepte pas d&#39;adresse IP",
 		"eriphe.local":     "un nom qui finit par un domaine public",
 	} {
-		req, _ := http.NewRequest("GET", tw.srv.URL+"/settings/drive", nil)
+		req, _ := http.NewRequest("GET", tw.srv.URL+"/settings/apps/google", nil)
 		req.Host = host
 		for _, ck := range tw.hc.Jar.Cookies(req.URL) {
 			req.AddCookie(ck)
@@ -477,17 +482,16 @@ func TestDriveUnusableOrigin(t *testing.T) {
 		resp.Body.Close()
 		body := string(raw)
 		if !strings.Contains(body, want) || !strings.Contains(body, "https://"+host) || !strings.Contains(body, `href="/settings/access/web"`) ||
-			!strings.Contains(body, "ts.net") || !strings.Contains(body, "Google Drive pour ordinateur") ||
-			!strings.Contains(body, `href="/settings/folders"`) || strings.Contains(body, `hx-post="/settings/drive/connect"`) {
+			!strings.Contains(body, "ts.net") || strings.Contains(body, `name="client_id"`) {
 			t.Fatalf("%s: %s", host, body)
 		}
 	}
 	_, err := c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "https://192.168.1.2:8443", Binding: "b"})
-	wantKey(t, err, "drive.origin.ip")
+	wantKey(t, err, "app.origin.ip")
 	_, err = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "https://eriphe.local", Binding: "b"})
-	wantKey(t, err, "drive.origin.local")
+	wantKey(t, err, "app.origin.local")
 	_, err = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "http://eriphe.example.org", Binding: "b"})
-	wantKey(t, err, "drive.origin.http")
+	wantKey(t, err, "app.origin.http")
 }
 
 // An older configuration that names the shared app still loads.
@@ -519,7 +523,7 @@ func TestDriveRefusals(t *testing.T) {
 	}
 	u, _ := url.Parse(authURL)
 	_, err = c.finishAccountSignIn(context.Background(), tw.srv.URL, u.Query().Get("state"), "", "access_denied", "b")
-	wantKey(t, err, "drive.denied")
+	wantKey(t, err, "conn.denied")
 	if _, ok := c.conf().Servers[filesServer]; ok {
 		t.Fatal("saved after a refusal")
 	}
@@ -531,7 +535,7 @@ func TestDriveRefusals(t *testing.T) {
 	}
 	// A tool of the same name that is not eriphe-files is left alone.
 	c.putServer(putCreate, filesServer, Server{URL: "https://x.example/mcp", Auth: &ServerAuth{None: true}, Use: "x"}, nil)
-	wantKey(t, c.addDriveFolder("", "a", "A", "read"), "drive.taken")
+	wantKey(t, c.addDriveFolder("", "a", "A", "read"), "conn.taken")
 }
 
 func samSecret(t *testing.T, c *core) string {
@@ -553,4 +557,21 @@ func gmailAccount(email string) svcAccount {
 func googleCalendarAccount(email string) svcAccount {
 	t, _ := signInOf(toolCalendar, "google")
 	return t.account(email)
+}
+
+// putLegacyDrive writes a files server as it was before Google accounts:
+// one account named "google", on its own token.
+func putLegacyDrive(t *testing.T, c *core, lang, tok string) {
+	t.Helper()
+	const ref = "service.fichiers.files_google_token"
+	if err := currentVault().set(ref, tok); err != nil {
+		t.Fatal(err)
+	}
+	err := c.putDrive(lang, func(fc *filesConfig) {
+		fc.Accounts = []filesAccount{{Name: "google", Provider: "google", Scopes: []string{scopeDrive}}}
+		fc.Accounts[0].Auth.TokenEnv = driveTokenEnv
+	}, map[string]EnvValue{driveTokenEnv: {File: vaultPrefix + ref}})
+	if err != nil {
+		t.Fatal(err)
+	}
 }

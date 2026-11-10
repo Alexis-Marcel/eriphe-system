@@ -140,3 +140,13 @@ func TestPlacesPage(t *testing.T) {
 		t.Fatal("still given")
 	}
 }
+
+// The pages before connections send to the tools list.
+func TestOldConnectionPages(t *testing.T) {
+	tw, _, _ := filesCore(t, nil)
+	for _, old := range []string{"/settings/google", "/settings/drive"} {
+		if code, _, h := tw.do("GET", old, nil, nil); code != 301 || h.Get("Location") != "/settings/tools" {
+			t.Errorf("%s: %d %s", old, code, h.Get("Location"))
+		}
+	}
+}

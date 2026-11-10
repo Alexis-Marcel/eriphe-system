@@ -93,10 +93,10 @@ type oauthApp struct {
 func (p *signInProvider) checkClient(id, secret string) (oauthApp, error) {
 	app := oauthApp{ID: strings.TrimSpace(id), Secret: strings.TrimSpace(secret)}
 	if app.ID == "" || app.Secret == "" {
-		return oauthApp{}, &catalogError{http.StatusBadRequest, "drive.ownmissing", "", errors.New("the client id and secret are required")}
+		return oauthApp{}, &catalogError{http.StatusBadRequest, "conn.ownmissing", "", errors.New("the client id and secret are required")}
 	}
 	if !strings.HasSuffix(app.ID, p.ClientIDSuffix) || strings.ContainsAny(app.ID+app.Secret, " \t\r\n\"'<>") || len(app.ID)+len(app.Secret) > 512 {
-		return oauthApp{}, &catalogError{http.StatusBadRequest, "drive.badclient", "", errors.New("not a " + p.Label + " client id and secret")}
+		return oauthApp{}, &catalogError{http.StatusBadRequest, "conn.badclient", p.ClientIDSuffix, errors.New("not a " + p.Label + " client id and secret")}
 	}
 	return app, nil
 }
@@ -118,10 +118,10 @@ func (p *signInProvider) parseClient(raw []byte) (oauthApp, []string, error) {
 		client
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return oauthApp{}, nil, &catalogError{http.StatusBadRequest, "drive.badjson", "", errors.New("not a client JSON")}
+		return oauthApp{}, nil, &catalogError{http.StatusBadRequest, "conn.badjson", "", errors.New("not a client JSON")}
 	}
 	if doc.Installed != nil {
-		return oauthApp{}, nil, &catalogError{http.StatusBadRequest, "drive.desktop", "", errors.New("a Desktop client: create a Web application client")}
+		return oauthApp{}, nil, &catalogError{http.StatusBadRequest, "conn.desktop", "", errors.New("a Desktop client: create a Web application client")}
 	}
 	c := doc.client
 	if doc.Web != nil {
@@ -282,7 +282,7 @@ type signInStart struct {
 // where to send the browser.
 func (c *core) startSignIn(p *signInProvider, app oauthApp, in signInStart) (string, error) {
 	if why := p.refuses(in.Origin); why != "" {
-		return "", &catalogError{http.StatusBadRequest, "drive.origin." + why, in.Origin, errors.New(p.Label + " takes no redirect to " + in.Origin)}
+		return "", &catalogError{http.StatusBadRequest, "app.origin." + why, in.Origin, errors.New(p.Label + " takes no redirect to " + in.Origin)}
 	}
 	cfg := &oauth2.Config{ClientID: app.ID, ClientSecret: app.Secret, Endpoint: p.Endpoint,
 		RedirectURL: in.Origin + "/oauth/callback", Scopes: append(append([]string{}, p.Scopes...), in.Scopes...)}
@@ -333,7 +333,7 @@ func (c *core) finishSignIn(ctx context.Context, origin, state, code, errCode, b
 	p := fl.provider
 	if errCode != "" {
 		if errCode == "access_denied" {
-			return fl, signedIn{}, &catalogError{http.StatusBadRequest, "drive.denied", "", errors.New("access denied")}
+			return fl, signedIn{}, &catalogError{http.StatusBadRequest, "conn.denied", "", errors.New("access denied")}
 		}
 		return fl, signedIn{}, fmt.Errorf("%s refused: %s", p.Label, errCode)
 	}
@@ -353,7 +353,7 @@ func (c *core) finishSignIn(ctx context.Context, origin, state, code, errCode, b
 	}
 	email := idTokenEmail(fmt.Sprint(tok.Extra("id_token")))
 	if email == "" {
-		return fl, signedIn{}, &catalogError{http.StatusBadRequest, "google.noemail", "", errors.New(p.Label + " did not say which account was connected")}
+		return fl, signedIn{}, &catalogError{http.StatusBadRequest, "conn.noemail", "", errors.New(p.Label + " did not say which account was connected")}
 	}
 	return fl, signedIn{Identity: email, Scopes: strings.Fields(fmt.Sprint(tok.Extra("scope"))), Refresh: tok.RefreshToken}, nil
 }

@@ -146,7 +146,7 @@ func TestAssistantNameWords(t *testing.T) {
 			t.Errorf("%s %s = %q, want %q", c.lang, c.key, got, c.want)
 		}
 	}
-	if got := tr("fr", "drive.step.project"); !strings.Contains(got, "« Eriphe »") {
+	if got := tr("fr", "app.google.project"); !strings.Contains(got, "« Eriphe »") {
 		t.Errorf("the Google app is renamed: %q", got)
 	}
 	if got := tr("fr", "folders.access.droplead"); !strings.HasPrefix(got, "Jarvis lit") || !strings.Contains(got, "« Jarvis »") {

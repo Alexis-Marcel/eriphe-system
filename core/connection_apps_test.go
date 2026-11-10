@@ -21,8 +21,8 @@ func TestAppClientLegacy(t *testing.T) {
 		t.Fatalf("page: %s", body)
 	}
 	code, body, _ := tw.post("/settings/apps/google", url.Values{"client_id": {"456-def" + providerGoogle.ClientIDSuffix},
-		"client_secret": {"GOCSPX-new"}, "back": {"/settings/google"}}, csrf)
-	if code != 200 || !strings.Contains(body, "Ton app est enregistrée") || !strings.Contains(body, `href="/settings/google"`) || strings.Contains(body, "GOCSPX-new") {
+		"client_secret": {"GOCSPX-new"}, "back": {"/settings/connections/google"}}, csrf)
+	if code != 200 || !strings.Contains(body, "Ton app est enregistrée") || !strings.Contains(body, `href="/settings/connections/google"`) || strings.Contains(body, "GOCSPX-new") {
 		t.Fatalf("save: %d %s", code, body)
 	}
 	if _, err := v.get("google-drive-client"); err == nil {
@@ -69,5 +69,43 @@ func TestAppPage(t *testing.T) {
 	}
 	if _, err := currentVault().get("app.example.client"); err != nil {
 		t.Fatal("not in the vault under its name")
+	}
+}
+
+// The app's test, without the provider's consent: the address, the client,
+// then each account connected, which it marks.
+func TestAppTest(t *testing.T) {
+	g := newFakeGoogle(t)
+	tw, c, csrf := filesCore(t, nil)
+	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
+	test := func() string {
+		t.Helper()
+		code, body, _ := tw.post("/settings/apps/google/test", nil, csrf)
+		if code != 200 {
+			t.Fatalf("test: %d %s", code, body)
+		}
+		return html.UnescapeString(body)
+	}
+	if body := test(); !strings.Contains(body, "Google accepte l'adresse de ton espace") || !strings.Contains(body, "Pas encore d'app") ||
+		!strings.Contains(body, "Aucun compte connecté") {
+		t.Fatalf("no app: %s", body)
+	}
+	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
+	g.scope = scopeMail
+	googleSignIn(t, tw, g, csrf, url.Values{"service": {"mail"}})
+	if body := test(); !strings.Contains(body, "Google reconnaît ton app ("+testClientID+")") || !strings.Contains(body, tw.srv.URL+"/oauth/callback") ||
+		!strings.Contains(body, "Le compte sam@example.org est connecté") || strings.Contains(body, testClientSecret) {
+		t.Fatalf("working: %s", body)
+	}
+	g.clientID = "999-zzz" + providerGoogle.ClientIDSuffix // the app was deleted at Google
+	body := test()
+	if !strings.Contains(body, "est refusé") || !strings.Contains(body, "L'autorisation du compte sam@example.org a été retirée") {
+		t.Fatalf("refused: %s", body)
+	}
+	if cn, _ := c.googleAccount("sam@example.org"); cn.Lapsed == "" {
+		t.Fatal("the test did not mark the account")
+	}
+	if _, body, _ := tw.do("GET", "/settings/apps/google", nil, nil); !strings.Contains(body, `hx-post="/settings/apps/google/test"`) {
+		t.Fatal("no test on the app page")
 	}
 }

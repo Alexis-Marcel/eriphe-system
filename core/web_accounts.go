@@ -15,17 +15,24 @@ import (
 // service is one server (accounts.go), but the list shows a row for each
 // account, as before, with its own state, access level, actions allowed
 // without asking, form and removal. A mailbox or a calendar on a password
-// is changed with its form; one on a Google account, from that account's
-// page (web_google.go).
+// is changed with its form; one signed in, from its account's card
+// (web_connections.go).
 
-// accountPreset is the preset an account comes from: the Google account
-// for one on its token, else the service's.
-func accountPreset(svc accountService, a svcAccount) toolPreset {
-	id := svc.ID
-	if a.signedIn() {
-		id = "google"
+// accountProvider is the provider an account signed in is at, or "".
+func accountProvider(svc accountService, a svcAccount) string {
+	if t, ok := signInByAccount(svc.ID, a.Provider); ok && a.signedIn() {
+		return t.Provider
 	}
-	p, _ := presetByID(id)
+	return ""
+}
+
+// accountPreset is the preset an account comes from: its provider's for
+// one signed in, else the service's.
+func accountPreset(svc accountService, a svcAccount) toolPreset {
+	if p, ok := connectionPreset(accountProvider(svc, a), svc.ID); ok {
+		return p
+	}
+	p, _ := presetByID(svc.ID)
 	return p
 }
 
@@ -33,7 +40,7 @@ func accountPreset(svc accountService, a svcAccount) toolPreset {
 func accountDetail(lang string, svc accountService, a svcAccount) string {
 	switch {
 	case a.signedIn():
-		return tr(lang, "google."+svc.ID) + " · " + a.Name
+		return productName(lang, accountProvider(svc, a), svc.ID) + " · " + a.Name
 	case svc == mailService:
 		f, _ := mailFormOf(a)
 		return tr(lang, "mailp."+f.Provider) + " · " + a.Address
@@ -79,21 +86,21 @@ func (w *web) accountRows(lang string, conf *Config, sv serverView) []toolView {
 }
 
 // accountOwner is the account a mailbox or a calendar is of, for its card:
-// its address, and who gives it (a Gmail on a password is the Google
-// account's mailbox all the same).
+// its address, and who gives it (a Gmail on a password is the mailbox of
+// the account signed in at its provider all the same).
 func accountOwner(svc accountService, a svcAccount) (address, provider string) {
 	address, provider = a.Name, a.Provider
 	switch {
 	case a.signedIn():
-		return a.Name, "google"
+		return a.Name, cmpOr(accountProvider(svc, a), a.Provider)
 	case svc == mailService:
 		f, _ := mailFormOf(a)
 		address, provider = cmpOr(a.Address, a.Name), f.Provider
 	case strings.Contains(a.Username, "@"):
 		address = a.Username
 	}
-	if provider == "gmail" {
-		provider = "google"
+	if t, ok := signInByAccount(svc.ID, provider); ok {
+		provider = t.Provider
 	}
 	return address, cmpOr(provider, "other")
 }
@@ -103,7 +110,7 @@ func accountOwner(svc accountService, a svcAccount) (address, provider string) {
 func accountProduct(lang string, svc accountService, a svcAccount) string {
 	switch {
 	case a.signedIn():
-		return tr(lang, "google."+svc.ID)
+		return productName(lang, accountProvider(svc, a), svc.ID)
 	case svc == mailService:
 		f, _ := mailFormOf(a)
 		return tr(lang, "mailp."+f.Provider)
@@ -111,8 +118,8 @@ func accountProduct(lang string, svc accountService, a svcAccount) string {
 	return tr(lang, "calp."+a.Provider)
 }
 
-// driveRows are the rows of Google Drive: one under each Google account
-// whose Drive it reads, with that account's folders.
+// driveRows are the rows of a files server: one under each account whose
+// drive it reads, with that account's places.
 func (w *web) driveRows(lang string, conf *Config, sv serverView, fc filesConfig) []toolView {
 	var out []toolView
 	for _, a := range fc.Accounts {
@@ -123,10 +130,14 @@ func (w *web) driveRows(lang string, conf *Config, sv serverView, fc filesConfig
 				n++
 			}
 		}
-		t.Drive, t.Part, t.Label, t.Mark = a.Name, toolDrive, tr(lang, "acct.svc."+toolDrive), "gdrive"
-		t.Owner, t.Provider = a.Name, "google"
-		t.Detail = tr(lang, "preset.gdrive.title") + " · " + driveCount(lang, n)
-		t.Connection, t.ConnProvider, t.Reconnect = a.Name, cmpOr(a.Provider, providerGoogle.Name), false
+		provider := a.signInProvider()
+		t.Drive, t.Part, t.Label = a.Name, toolDrive, tr(lang, "acct.svc."+toolDrive)
+		if p, ok := connectionPreset(provider, toolDrive); ok {
+			t.Mark = p.ID
+		}
+		t.Owner, t.Provider = a.Name, provider
+		t.Detail = productName(lang, provider, toolDrive) + " · " + placeCount(lang, n)
+		t.Connection, t.ConnProvider, t.Reconnect = a.Name, provider, false
 		if g, ok := w.c.connectionOf(t.ConnProvider, a.Name); ok {
 			t.Reconnect = g.Lapsed != ""
 		}

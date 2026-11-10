@@ -418,8 +418,7 @@ func TestConnectionPages(t *testing.T) {
 		{toolPreset{}, "oauth", sourceWorkspace, "/settings/tools/x/edit"},
 		{toolPreset{ID: "home-assistant"}, "bearer", sourceWorkspace, "/settings/tools/x/edit"}, // a tool like any other
 		{toolPreset{ID: "github"}, "github-app", sourceWorkspace, "/settings/github"},
-		{toolPreset{Form: "drive"}, "none", sourceWorkspace, "/settings/drive"},
-		{toolPreset{Form: "google"}, "none", sourceWorkspace, "/settings/google"},
+		{toolPreset{Form: "connection", Provider: "google"}, "none", sourceWorkspace, "/settings/tools"}, // its account's card
 		{toolPreset{}, "bearer", sourceConfig, ""},
 	} {
 		if got := connectionPage("x", "", tc.p, tc.auth, tc.source); got != tc.want {

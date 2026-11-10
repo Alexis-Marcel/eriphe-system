@@ -67,11 +67,3 @@
   {{if .Next}}<button class="btn btn-ghost sm" type="button" hx-get="{{$u}}?account={{$acc}}&amp;parent={{urlquery .Parent}}&amp;name={{urlquery .Name}}&amp;page={{urlquery .Next}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.more"}}</button>{{end}}
 </div>
 {{end}}{{end}}
-
-{{/* An account's buttons in the tools list: reconnect it with its tools.
-     . is a dict: Provider, Account, Target (the id of the box for an error), Primary. */}}
-{{define "connection-reconnect"}}<form class="inline" hx-post="/settings/connections/{{.Provider}}/connect" hx-target="#{{.Target}}" hx-disabled-elt="find button">
-  <input type="hidden" name="account" value="{{.Account}}"><input type="hidden" name="reconnect" value="1">
-  <button class="btn {{if .Primary}}btn-primary{{else}}btn-ghost{{end}} sm" type="submit">{{t "conn.reconnect"}}</button></form>{{end}}
-
-{{define "connection-result"}}{{with .Data}}{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}{{end}}{{end}}

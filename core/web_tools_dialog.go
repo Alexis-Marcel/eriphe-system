@@ -88,9 +88,6 @@ func (f toolForm) BackHash() string {
 	return "add"
 }
 
-// driveStep is Google Drive's step: what it takes, and its page.
-type driveStep struct{ Added bool }
-
 // leavingStep is the step shown while the browser goes to an OAuth
 // service to authorize Eriphe; it comes back to the tools page, whose
 // dialog then follows the tool (pending.go, web_catalog.go).

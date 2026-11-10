@@ -77,8 +77,8 @@ func TestAddressResolution(t *testing.T) {
 		tw.w.publicURL(r) != "https://eriphe.example.org" || tw.w.elsewhere(r) != "https://eriphe.example.org" {
 		t.Fatalf("workspace's: %q %q", tw.w.origin(r), tw.w.elsewhere(r))
 	}
-	if v := tw.w.driveView(r); v.Callback != "https://eriphe.example.org/oauth/callback" {
-		t.Fatalf("Drive's redirect URI: %s", v.Callback)
+	if v := tw.w.appView(r, providerGoogle); v.Callback != "https://eriphe.example.org/oauth/callback" {
+		t.Fatalf("the app's redirect URI: %s", v.Callback)
 	}
 	if tw.w.addressLocked() {
 		t.Fatal("locked without a file")
@@ -217,7 +217,7 @@ func TestAddressPanel(t *testing.T) {
 		t.Fatalf("saved: %+v %q", si.cfg, tw.w.deviceFallback())
 	}
 	// The page is no longer at the address: connecting a tool says where to go.
-	if _, _, h := tw.post("/settings/drive/connect", nil, csrf); !strings.Contains(h.Get("HX-Trigger"), "eriphe.example.org") {
+	if _, _, h := tw.post("/settings/connections/google/connect", url.Values{"tool": {"drive"}}, csrf); !strings.Contains(h.Get("HX-Trigger"), "eriphe.example.org") {
 		t.Fatalf("connect from elsewhere: %v", h)
 	}
 	// The provider's sign-in starts at the address.

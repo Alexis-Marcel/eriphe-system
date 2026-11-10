@@ -34,6 +34,11 @@ type toolPreset struct {
 	Paid      bool // a paid plan of the service is needed
 	Beta      bool // the service's server is in beta
 	ReadsOnly bool // the service only reads
+	// A preset of Form "connection" is an account signed in at Provider
+	// (a signInProviders name) for its Tools (toolKinds; none: all the
+	// provider serves): its tile leads to the connect page.
+	Provider string
+	Tools    []string
 }
 
 var toolPresets = []toolPreset{
@@ -60,14 +65,31 @@ var toolPresets = []toolPreset{
 	// tools are marked read-only, the others are not.
 	{ID: "mail", Form: "mail", Name: "mail", Mark: "@", Kind: "local", Trust: true},
 	{ID: "calendar", Form: "calendar", Name: "agenda", Mark: "31", Kind: "local", Trust: true},
-	// servers/files: the folders given to Eriphe in Google Drive. Its page
-	// connects the account and picks the folders (web_drive.go).
-	{ID: "gdrive", Form: "drive", Name: filesServer, Mark: "GD", Kind: "local", Trust: true},
-	// One Google account for Gmail, Google Calendar and Google Drive: its
-	// page signs in once with the services ticked (connection_tools.go, web_google.go).
-	{ID: "google", Form: "google", Name: "google", Mark: "G", Kind: "local", Trust: true},
+	// Accounts signed in at a provider (connection_tools.go): one sign-in
+	// for the tools ticked; a tool with places has them picked on its page.
+	{ID: "gdrive", Form: "connection", Provider: "google", Tools: []string{toolDrive}, Name: filesServer, Mark: "GD", Kind: "local", Trust: true},
+	{ID: "google", Form: "connection", Provider: "google", Name: "google", Mark: "G", Kind: "local", Trust: true},
 	{ID: "remote", Form: "generic", Mark: "↗", Kind: "remote", Auth: "none"},
 	{ID: "local", Form: "generic", Mark: "▣", Kind: "local"},
+}
+
+// connectionPreset is the preset of an account signed in at a provider
+// for a kind of tool: the one for that kind alone, else the provider's.
+func connectionPreset(provider, kind string) (toolPreset, bool) {
+	var out toolPreset
+	found := false
+	for _, p := range toolPresets {
+		if p.Form != "connection" || p.Provider != provider {
+			continue
+		}
+		if len(p.Tools) == 1 && p.Tools[0] == kind {
+			return p, true
+		}
+		if len(p.Tools) == 0 && !found {
+			out, found = p, true
+		}
+	}
+	return out, found
 }
 
 // Page is where the preset's tile leads.
@@ -75,10 +97,8 @@ func (p toolPreset) Page() string {
 	switch {
 	case p.Link != "":
 		return p.Link
-	case p.Form == "drive":
-		return "/settings/drive"
-	case p.Form == "google":
-		return "/settings/google"
+	case p.Form == "connection":
+		return connectPage(p.Provider, p.Tools...)
 	case p.ID == "remote":
 		return "/settings/tools/add/other" // its address first: Eriphe finds how to sign in (discover.go)
 	}
@@ -174,11 +194,11 @@ type mailChoice struct {
 	Link     string // where the password is made
 	Soon     bool   // not supported yet
 	Hidden   bool   // not offered, only read back
-	Page     string // connected on a page of its own (a Google account), not with the form
+	Page     string // connected on a page of its own (an account signed in), not with the form
 }
 
 var mailChoices = []mailChoice{
-	{ID: "google", Page: "/settings/google?add=mail"},
+	{ID: "google", Page: connectPage("google", toolMail)},
 	{ID: "gmail", Provider: "gmail", AppPass: true, Link: "https://myaccount.google.com/apppasswords"},
 	{ID: "icloud", Provider: "icloud", AppPass: true, Link: "https://account.apple.com/account/manage"},
 	{ID: "outlook", Provider: "outlook", Soon: true},
@@ -372,7 +392,7 @@ type calChoice struct {
 	NeedsURL bool   // the server's address is asked
 	Link     string // where the app password is made
 	Soon     bool
-	Page     string // connected on a page of its own (a Google account), not with the form
+	Page     string // connected on a page of its own (an account signed in), not with the form
 }
 
 var calChoices = []calChoice{
@@ -380,7 +400,7 @@ var calChoices = []calChoice{
 	{ID: "fastmail", Link: "https://app.fastmail.com/settings/security"},
 	{ID: "nextcloud", NeedsURL: true},
 	{ID: "caldav", NeedsURL: true},
-	{ID: "google", Page: "/settings/google?add=calendar"},
+	{ID: "google", Page: connectPage("google", toolCalendar)},
 	{ID: "microsoft", Soon: true},
 }
 

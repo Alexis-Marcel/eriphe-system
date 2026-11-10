@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -41,6 +42,17 @@ type placesBrowse struct {
 	CanWrite     bool
 	Given        map[string]string // place id → its access, for the ones already given
 	Error        string
+}
+
+// placeCount is "no place", "1 place", "3 places".
+func placeCount(lang string, n int) string {
+	switch n {
+	case 0:
+		return tr(lang, "places.count0")
+	case 1:
+		return tr(lang, "places.count1")
+	}
+	return fmt.Sprintf(tr(lang, "places.count"), n)
 }
 
 func (w *web) placeRoutes(mux *http.ServeMux) {
@@ -99,7 +111,7 @@ func (w *web) handlePlacesBrowse(rw http.ResponseWriter, r *http.Request, s *ses
 	defer cancel()
 	var err error
 	if v.Items, v.Next, err = w.c.browsePlaces(ctx, tool, v.Account, v.Parent, q.Get("page")); err != nil {
-		v.Error = w.driveError(r, err)
+		v.Error = w.connError(r, err)
 	}
 	w.render(rw, r, s, "settings", "places-browse", page{Data: v})
 }
@@ -120,7 +132,7 @@ func (w *web) handlePlaceRemove(rw http.ResponseWriter, r *http.Request, s *sess
 func (w *web) placesAgain(rw http.ResponseWriter, r *http.Request, s *session, tool string, err error) {
 	v := w.placesView(tool)
 	if err != nil {
-		v.Error = w.driveError(r, err)
+		v.Error = w.connError(r, err)
 	} else {
 		w.notify()
 	}
