@@ -1115,7 +1115,7 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 |---|---|---|---|
 | `repo` | `owner/name` on GitHub, or a git URL; `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` | cloned into `/work/repo`; [credentials](#github-in-a-task) for it; its skills if it is the user's own or trusted (below); one per task |
 | `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
-| `place` | a tool's place (a Google Drive folder), by name | `read`, `drop` (at most the place's own) | its tool whole (it reaches every place given to Eriphe, each with its own access) |
+| `place` | a tool's place (a folder of a files tool, such as Google Drive's), by name | `read`, `drop` (at most the place's own) | its tool whole (it reaches every place given to Eriphe, each with its own access) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
 
 The access defaults to `read` (for a tool, to what its annotations say). Each entry is checked
@@ -1141,7 +1141,7 @@ resources, what it needs is granted, it is logged in `decisions` (`release mail.
 brain is told the answer. An entry lent outright beside a held one wins.
 
 **On a tainted turn** (the brain read external content), `run_task` refuses a folder with `write` or
-`drop`, `trust_skills` and a Drive folder (its files server is lent whole for now): the brain asks the user and starts the task in the turn of their answer. Reads still
+`drop`, `trust_skills` and a place (its tool is lent whole for now): the brain asks the user and starts the task in the turn of their answer. Reads still
 go, and tools, accesses and a GitHub repository for `write`: what they may do is asked on a card at
 launch, Free included.
 
@@ -1487,7 +1487,7 @@ of a machine's folders lent with `drop` (below). The software keeps its name: th
 images and binaries, the install scripts, eriphe-core and eriphe-node, the GitHub and Google apps
 and the OAuth client, the certificate authority, the app passwords and tokens named Eriphe, the
 Home Assistant integration's domain, the system texts that name the software, and the results
-subfolder of Google Drive folders, `Eriphe/`.
+subfolder of a tool's places, `Eriphe/`.
 
 **The results folder.** A machine's folder lent with `drop` takes results in a subfolder named
 after the assistant: `Eriphe/` until it has another name, then `Jarvis/` (the display name as a
@@ -1769,7 +1769,7 @@ Settings → Tools → Add → Google Drive (the logic in `cloud.go`, the sign-i
 
 `browse_places` is marked `_meta: {"eriphe/setup": true}`: the pool leaves such a tool out of a
 server's tools (`setupTool`, `listTools`), so no grant, no task and not the brain can see or call
-it; only the workspace calls it (`browseDrive`).
+it; only the workspace calls it (`browsePlaces`, `places.go`).
 
 ### Scopes
 
@@ -2304,10 +2304,10 @@ about five minutes to set up once; it leads to Settings → Tools → GitHub) or
 not, so no pull request from a task; its form says so and links back to the app). A GitHub connection on a token shows "Passer à l'app" in the list and
 in its form. In the list (`web_tools_groups.go`), each account is a card, as a phone's Settings →
 Accounts: the provider's mark, the address, "Google · Mail, Agenda, Drive", then a row for each
-of its services (Mail, Agenda, Drive) with its state, access, reconnect, edit and remove. A
+of its services (Mail, Agenda, Fichiers) with its state, access, reconnect, edit and remove. A
 connected account's card has its actions ([connections](#connections)): reconnect, "Retirer ce
 compte", and the tools its provider serves that it does not have yet ("Ajouter à ce compte").
-Drive is a row under each account it reads, with that account's places and "Lieux". A Gmail on a password goes in the card of its Google address; an
+The files tool is a row under each account it reads, with that account's places and "Lieux". A Gmail on a password goes in the card of its Google address; an
 Apple account's mail and calendar are one card, an Apple calendar and a Google calendar of one
 address two. Only the list is by account: the servers stay one per service. The other tools of
 one kind (GitHub, Notion…) make one card when there are several: the kind, how many accounts and

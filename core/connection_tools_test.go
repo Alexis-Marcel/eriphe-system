@@ -75,7 +75,7 @@ func TestToolOnAnyProvider(t *testing.T) {
 // What a tool is granted: the drive reads with its read scope, writes with
 // its write scope; the mail needs its one scope.
 func TestToolGranted(t *testing.T) {
-	drive, _ := signInOf(toolDrive, "google")
+	drive, _ := signInOf(toolFiles, "google")
 	for _, x := range []struct {
 		scopes    string
 		ok, write bool

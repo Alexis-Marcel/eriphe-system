@@ -45,7 +45,7 @@ type toolView struct {
 	// it is up or says why not (web_tools_dialog.go).
 	Follow *toolStatus
 	// A service of an account (web_tools_groups.go): Part is mail,
-	// calendar or drive (not Service, the state of its service on its
+	// calendar or files (not Service, the state of its service on its
 	// machine); Owner the account's address and Provider who
 	// gives it (google, icloud…), the card it is in; Label its heading
 	// there and Mark its icon.
@@ -57,7 +57,7 @@ type toolView struct {
 }
 
 // Editable tells a tool changed with its form, in the dialog; the others
-// have a page of their own (Google Drive, Home Assistant, the GitHub App)
+// have a page of their own (a tool with places, Home Assistant, the GitHub App)
 // or are the configuration file's.
 func (t toolView) Editable() bool { return editable(t.Source, t.Preset, t.Auth) }
 

@@ -214,7 +214,7 @@ func (c *core) connectionHold(name string) (why, where string) {
 	if !ok {
 		return "", ""
 	}
-	// Held when every account it holds is a connection lapsed: a drive of
+	// Held when every account it holds is a connection lapsed: files tool of
 	// two accounts still serves the folders of the one that works, the mail
 	// still reads the other mailboxes.
 	owners := c.connectionsOf(s)

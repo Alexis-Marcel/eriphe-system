@@ -17,8 +17,8 @@ import (
 // tool's access (its level, its credential, its allowed actions).
 // Without JavaScript, each step is its own page, as before (web_tools.go).
 //
-// Google Drive needs a long guide (an app of one's own in the Google Cloud
-// console, then the folders to give): its step only says what it takes and
+// A tool with places needs a long guide (an app of one's own at the
+// provider, then the places to give): its step only says what it takes and
 // leads to its page. Home Assistant and GitHub have their form in the
 // dialog, with a link to their own page for the rest (the voice, the app).
 

@@ -217,7 +217,7 @@ func TestAddressPanel(t *testing.T) {
 		t.Fatalf("saved: %+v %q", si.cfg, tw.w.deviceFallback())
 	}
 	// The page is no longer at the address: connecting a tool says where to go.
-	if _, _, h := tw.post("/settings/connections/google/connect", url.Values{"tool": {"drive"}}, csrf); !strings.Contains(h.Get("HX-Trigger"), "eriphe.example.org") {
+	if _, _, h := tw.post("/settings/connections/google/connect", url.Values{"tool": {"files"}}, csrf); !strings.Contains(h.Get("HX-Trigger"), "eriphe.example.org") {
 		t.Fatalf("connect from elsewhere: %v", h)
 	}
 	// The provider's sign-in starts at the address.

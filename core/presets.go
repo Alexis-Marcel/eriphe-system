@@ -64,7 +64,7 @@ var toolPresets = []toolPreset{
 	{ID: "calendar", Form: "account", Card: toolCalendar, Name: "agenda", Mark: "31", Kind: "local", Trust: true},
 	// Accounts signed in at a provider (connection_tools.go): one sign-in
 	// for the tools ticked; a tool with places has them picked on its page.
-	{ID: "gdrive", Form: "connection", Provider: "google", Tools: []string{toolDrive}, Name: "fichiers", Mark: "GD", Kind: "local", Trust: true},
+	{ID: "gdrive", Form: "connection", Provider: "google", Tools: []string{toolFiles}, Name: "fichiers", Mark: "GD", Kind: "local", Trust: true},
 	{ID: "google", Form: "connection", Provider: "google", Name: "google", Mark: "G", Kind: "local", Trust: true},
 	{ID: "remote", Form: "generic", Mark: "↗", Kind: "remote", Auth: "none"},
 	{ID: "local", Form: "generic", Mark: "▣", Kind: "local"},

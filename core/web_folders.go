@@ -34,7 +34,7 @@ type folderMachine struct {
 
 type foldersData struct {
 	Machines []folderMachine
-	Drive    []folderView // the Google Drive folders (cloud.go)
+	Places   []folderView // the places of tools (places.go)
 	Guides   []shareGuide // how to share a folder, one guide per system
 }
 
@@ -118,7 +118,7 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 	d.Guides = shareGuides(d.Machines)
 	for _, v := range views {
 		if v.Source == sourcePlace {
-			d.Drive = append(d.Drive, v)
+			d.Places = append(d.Places, v)
 		}
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.folders", Nav: "settings", Tab: "folders", Data: d})

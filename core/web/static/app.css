@@ -1301,12 +1301,12 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 }
 
 /* Google Drive: the folders given to Eriphe, and the ones to pick from. */
-.drive-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.drive-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 8px; }
-.drive-list li:hover { background: var(--surface-2); }
-.drive-name { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
-.drive-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.drive-path { display: flex; align-items: center; gap: 8px; margin: 0; }
+.place-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.place-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 8px; }
+.place-list li:hover { background: var(--surface-2); }
+.place-name { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
+.place-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.place-path { display: flex; align-items: center; gap: 8px; margin: 0; }
 
 /* Settings → Devices → Updates: eriphe-core's own line. */
 .update-core-row { display: grid; gap: 10px; padding: 14px 16px; border-radius: 10px; background: var(--surface-2); }
@@ -1625,7 +1625,7 @@ details.app-install > * + * { margin-top: 10px; }
 .gservice-name { font-weight: 600; min-width: 9em; }
 .gaccount-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .inline-check { display: inline-flex; align-items: center; gap: 4px; }
-.drive-accounts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.place-accounts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 /* Settings → Tools: a kind of tool with several accounts, as one card. */
 .tool-group { list-style: none; display: grid; gap: 10px; padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-sm); }

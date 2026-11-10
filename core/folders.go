@@ -557,7 +557,7 @@ const (
 )
 
 // folderView is a folder for the brain and the workspace, with whether
-// its machine (or the Drive's server) is online, and how a task gets it.
+// its machine (or the server of its tool) is online, and how a task gets it.
 type folderView struct {
 	*Folder
 	Source string `json:"source"`          // machine or place

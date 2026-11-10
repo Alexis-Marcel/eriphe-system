@@ -83,11 +83,11 @@
 <div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-folder"}}</span><p>{{t "folders.nomachine"}}</p></div>
 {{end}}
 
-{{if .Data.Drive}}
-<section class="panel" aria-labelledby="folders-drive">
-  <h3 id="folders-drive">{{t "folders.drive"}}</h3>
+{{if .Data.Places}}
+<section class="panel" aria-labelledby="folders-places">
+  <h3 id="folders-places">{{t "folders.places"}}</h3>
   <ul class="grid">
-  {{range .Data.Drive}}
+  {{range .Data.Places}}
     <li class="tile">
       <div class="tile-head">
         <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{.Tool}}</span>

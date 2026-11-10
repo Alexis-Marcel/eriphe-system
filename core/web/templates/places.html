@@ -25,11 +25,11 @@
 <section class="panel" id="places-list">
   <h3>{{template "i-check"}}{{t "places.given"}}</h3>
   {{if $v.Error}}<p class="alert" role="alert">{{$v.Error}}</p>{{end}}
-  {{if $v.Places}}<ul class="drive-list">
+  {{if $v.Places}}<ul class="place-list">
   {{range $v.Places}}<li>
-    <span class="drive-name">{{.Name}}{{if $v.Many}} <small class="muted">{{.Account}}</small>{{end}}</span>
+    <span class="place-name">{{.Name}}{{if $v.Many}} <small class="muted">{{.Account}}</small>{{end}}</span>
     <span class="chip">{{t (printf "places.access.%s" .Access)}}</span>
-    <span class="drive-actions">
+    <span class="place-actions">
       {{if eq .Access "read"}}{{if $v.CanWrite .Account}}<form hx-post="/settings/tools/{{$v.Tool}}/places" hx-target="#places-list" hx-swap="outerHTML" class="inline">
         <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="access" value="drop">
         <button class="link-btn" type="submit">{{t "places.allowwrite"}}</button></form>{{end}}
@@ -46,14 +46,14 @@
 
 {{define "places-browse"}}{{with .Data}}{{$b := .}}{{$acc := urlquery .Account}}{{$u := printf "/settings/tools/%s/places/browse" .Tool}}
 <div id="places-browse" class="stack">
-  {{if .Accounts}}<p class="drive-accounts small" role="group" aria-label="{{t "places.accounts"}}">{{t "places.accounts"}}
+  {{if .Accounts}}<p class="place-accounts small" role="group" aria-label="{{t "places.accounts"}}">{{t "places.accounts"}}
     {{range .Accounts}}<button class="fchip" type="button" aria-pressed="{{if eq . $b.Account}}true{{else}}false{{end}}" hx-get="{{$u}}?account={{urlquery .}}" hx-target="#places-browse" hx-swap="outerHTML">{{.}}</button>{{end}}</p>{{end}}
-  {{if .Parent}}<p class="drive-path"><button class="link-btn" type="button" hx-get="{{$u}}?account={{$acc}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.top"}}</button> <b>{{.Name}}</b></p>{{end}}
+  {{if .Parent}}<p class="place-path"><button class="link-btn" type="button" hx-get="{{$u}}?account={{$acc}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.top"}}</button> <b>{{.Name}}</b></p>{{end}}
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
-  <ul class="drive-list">
+  <ul class="place-list">
   {{range .Items}}<li>
-    <span class="drive-name">{{.Name}}</span>
-    <span class="drive-actions">
+    <span class="place-name">{{.Name}}</span>
+    <span class="place-actions">
       <button class="btn btn-ghost sm" type="button" hx-get="{{$u}}?account={{$acc}}&amp;parent={{urlquery .ID}}&amp;name={{urlquery .Name}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.open"}}</button>
       {{if ne .ID "shared-with-me"}}{{with index $b.Given .ID}}<span class="chip">{{t (printf "places.access.%s" .)}}</span>{{else}}
       <form hx-post="/settings/tools/{{$b.Tool}}/places" hx-target="#places-list" hx-swap="outerHTML" class="inline">

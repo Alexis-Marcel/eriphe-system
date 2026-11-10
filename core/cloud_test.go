@@ -275,12 +275,12 @@ func TestDriveRoundTrip(t *testing.T) {
 	tw, c, csrf := filesCore(t, nil)
 	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
 
-	connectDrive := url.Values{"tool": {toolDrive}, "write": {"1"}}
-	if _, body, _ := tw.do("GET", "/settings/tools/add", nil, nil); !strings.Contains(body, `href="/settings/connections/google?tool=drive"`) {
+	connectDrive := url.Values{"tool": {toolFiles}, "write": {"1"}}
+	if _, body, _ := tw.do("GET", "/settings/tools/add", nil, nil); !strings.Contains(body, `href="/settings/connections/google?tool=files"`) {
 		t.Fatal("no Google Drive tile")
 	}
 	// No Google app yet: the way to make it, and no Connect.
-	if code, body, _ := tw.do("GET", "/settings/connections/google?tool=drive", nil, nil); code != 200 || !strings.Contains(body, "Créer mon app") ||
+	if code, body, _ := tw.do("GET", "/settings/connections/google?tool=files", nil, nil); code != 200 || !strings.Contains(body, "Créer mon app") ||
 		strings.Contains(body, `hx-post="/settings/connections/google/connect"`) {
 		t.Fatalf("connect page: %d %s", code, body)
 	}
@@ -295,8 +295,8 @@ func TestDriveRoundTrip(t *testing.T) {
 	if code != 200 || !strings.Contains(body, "Ton app est enregistrée") || !strings.Contains(body, testClientID) || strings.Contains(body, testClientSecret) {
 		t.Fatalf("save: %d %s", code, body)
 	}
-	if code, body, _ := tw.do("GET", "/settings/connections/google?tool=drive", nil, nil); code != 200 || strings.Contains(body, testClientSecret) ||
-		!strings.Contains(body, `hx-post="/settings/connections/google/connect"`) || !strings.Contains(body, `value="drive" checked`) {
+	if code, body, _ := tw.do("GET", "/settings/connections/google?tool=files", nil, nil); code != 200 || strings.Contains(body, testClientSecret) ||
+		!strings.Contains(body, `hx-post="/settings/connections/google/connect"`) || !strings.Contains(body, `value="files" checked`) {
 		t.Fatalf("connect page: %d %s", code, body)
 	}
 	code, body, h := tw.post("/settings/connections/google/connect", connectDrive, csrf)
@@ -389,7 +389,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	}
 	// One list of folders with the machines' (folders.go): in Settings →
 	// Folders and for the brain, lent through the files tool, not mounted.
-	if _, body, _ := tw.do("GET", "/settings/folders", nil, nil); !strings.Contains(body, "Compta (2)") || !strings.Contains(body, "Dans ton Google Drive") {
+	if _, body, _ := tw.do("GET", "/settings/folders", nil, nil); !strings.Contains(body, "Compta (2)") || !strings.Contains(body, "Dans les lieux de tes outils") {
 		t.Fatalf("folders page: %s", body)
 	}
 	if fs, _ := c.folderViews(); len(fs) != 2 || fs[0].Source != sourcePlace || fs[0].PlaceID != "compta" || fs[0].Tool != filesService.Base || !strings.Contains(fs[0].Lend, filesService.Base) {
@@ -408,7 +408,7 @@ func TestDriveRoundTrip(t *testing.T) {
 
 	// Reconnected read only: the write rights go.
 	g.scope = scopeDriveReadonly
-	_, _, h = tw.post("/settings/connections/google/connect", url.Values{"tool": {toolDrive}}, csrf)
+	_, _, h = tw.post("/settings/connections/google/connect", url.Values{"tool": {toolFiles}}, csrf)
 	state = g.authorize(t, h.Get("HX-Redirect"))
 	tw.do("GET", "/oauth/callback?code=the-code&state="+url.QueryEscape(state), nil, nil)
 	if acc, f := c.placeAccounts(filesService.Base), c.places(); acc[0].CanWrite || f[0].Access != accessRead {
@@ -495,11 +495,11 @@ func TestDriveUnusableOrigin(t *testing.T) {
 			t.Fatalf("%s: %s", host, body)
 		}
 	}
-	_, err := c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "https://192.168.1.2:8443", Binding: "b"})
+	_, err := c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolFiles}, Origin: "https://192.168.1.2:8443", Binding: "b"})
 	wantKey(t, err, "app.origin.ip")
-	_, err = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "https://eriphe.local", Binding: "b"})
+	_, err = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolFiles}, Origin: "https://eriphe.local", Binding: "b"})
 	wantKey(t, err, "app.origin.local")
-	_, err = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "http://eriphe.example.org", Binding: "b"})
+	_, err = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolFiles}, Origin: "http://eriphe.example.org", Binding: "b"})
 	wantKey(t, err, "app.origin.http")
 }
 
@@ -524,7 +524,7 @@ func TestDriveRefusals(t *testing.T) {
 	tw, c, _ := filesCore(t, nil)
 	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
 	// Denied at Google: nothing saved.
-	authURL, err := c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: tw.srv.URL, Binding: "b"})
+	authURL, err := c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolFiles}, Origin: tw.srv.URL, Binding: "b"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -535,7 +535,7 @@ func TestDriveRefusals(t *testing.T) {
 		t.Fatal("saved after a refusal")
 	}
 	// A state for another workspace is refused here.
-	authURL, _ = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolDrive}, Origin: "https://eriphe.example.org", Binding: "b"})
+	authURL, _ = c.startAccountSignIn(connectAsk{Provider: "google", Tools: []string{toolFiles}, Origin: "https://eriphe.example.org", Binding: "b"})
 	u, _ = url.Parse(authURL)
 	if _, err := c.finishAccountSignIn(context.Background(), tw.srv.URL, u.Query().Get("state"), "the-code", "", "b"); err != errBadState {
 		t.Fatalf("other origin: %v", err)

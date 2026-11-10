@@ -149,13 +149,13 @@ func TestGoogleAccounts(t *testing.T) {
 	if !strings.Contains(body, `<h3 id="`+card+`-t">sam@example.org</h3>`) || !strings.Contains(body, "Google · Mail, Agenda") ||
 		!strings.Contains(body, "<h3>Mail</h3>") || !strings.Contains(body, "<h3>Agenda</h3>") || !strings.Contains(body, "Google Agenda") ||
 		strings.Contains(body, `/settings/tools/mail/edit"`) || !strings.Contains(body, `hx-post="/settings/connections/google/remove"`) ||
-		!strings.Contains(body, "Ajouter à ce compte") || !strings.Contains(body, `<input type="hidden" name="tool" value="drive">`) {
+		!strings.Contains(body, "Ajouter à ce compte") || !strings.Contains(body, `<input type="hidden" name="tool" value="files">`) {
 		t.Fatalf("tools list: %s", body)
 	}
 
 	// Drive added to the same account: its scope alone, the account named.
 	g.scope, g.refresh = scopeMail+" "+scopeCalendar+" "+scopeDrive, "the-refresh-2"
-	q, _ = googleSignIn(t, tw, g, csrf, url.Values{"service": {"drive"}, "account": {"sam@example.org"}, "write": {"1"}})
+	q, _ = googleSignIn(t, tw, g, csrf, url.Values{"service": {"files"}, "account": {"sam@example.org"}, "write": {"1"}})
 	if q.Get("scope") != "openid email "+scopeDrive || q.Get("login_hint") != "sam@example.org" {
 		t.Fatalf("auth query %v", q)
 	}
@@ -204,7 +204,7 @@ func TestGoogleAccounts(t *testing.T) {
 	// In the tools list, a row says the state of its service on its
 	// machine, never which service of the account it is.
 	_, body, _ = tw.do("GET", "/settings/tools", nil, nil)
-	if strings.Contains(body, "service.mail") || strings.Contains(body, "service.calendar") || strings.Contains(body, "service.drive") ||
+	if strings.Contains(body, "service.mail") || strings.Contains(body, "service.calendar") || strings.Contains(body, "service.files") ||
 		strings.Count(body, " · "+tr("fr", "service."+stateFailed)) < 3 {
 		t.Fatalf("service state: %s", body[strings.Index(body, `id="tools-list"`):strings.Index(body, `id="add-dlg"`)])
 	}
@@ -265,7 +265,7 @@ func TestGoogleReconnect(t *testing.T) {
 	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
 	storeGoogleClient(oauthApp{ID: testClientID, Secret: testClientSecret})
 	g.scope = scopeMail + " " + scopeDrive
-	googleSignIn(t, tw, g, csrf, url.Values{"service": {"mail", "drive"}, "write": {"1"}})
+	googleSignIn(t, tw, g, csrf, url.Values{"service": {"mail", "files"}, "write": {"1"}})
 	waitStatus(t, c.pool.get("mail"), statusReady)
 
 	check := func() { a, _ := c.googleAccount("sam@example.org"); c.checkConnection(context.Background(), a) }
