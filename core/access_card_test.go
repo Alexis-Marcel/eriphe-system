@@ -288,7 +288,7 @@ func TestAccountGridFollowsTheAccount(t *testing.T) {
 func TestBlockingCardsGoToTelegram(t *testing.T) {
 	c, _, f := telegramCore(t)
 	linked(c)
-	c.tg.restart()
+	tgOf(c).restart()
 	waitingTask(c, "t-1")
 	c.newAccessAsk(accessQuestion{TaskID: "t-1", Permission: "p-1", Need: accessNeed{"mail", catChange, ""}})
 	seq, _ := c.store.addMessage(roleBrain, "Je lance la tâche.", true)
@@ -299,13 +299,13 @@ func TestBlockingCardsGoToTelegram(t *testing.T) {
 	c.attachTurnCards(int(seq))
 	c.store.set(channelDetailKey(tgChannel), detailAlert)
 	c.channelCards()
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	if sent := f.sentMessages(); len(sent) != 0 {
 		t.Fatalf("alerts only sent %v", sent)
 	}
 	c.store.set(channelDetailKey(tgChannel), detailFull)
 	c.channelCards()
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	sent := f.sentMessages()
 	if len(sent) != 2 || !strings.Contains(fmt.Sprint(sent[0]["reply_markup"]), "pc:") {
 		t.Fatalf("sent %v", sent)

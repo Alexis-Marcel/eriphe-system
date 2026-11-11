@@ -59,12 +59,13 @@ type core struct {
 
 	push        *pusher          // notifications on the user's devices (push.go); nil without the workspace
 	notifyClock func() time.Time // the time of notify's decisions (notify.go); nil: now
-	tg          *telegram        // a channel's own state (telegram.go, registered in channels.go); nil without the workspace
-	obs         observations     // the machines' locked, idle, do not disturb, in memory only (observe.go)
-	events      eventBus         // the event journal's subscribers (event_journal.go)
-	skillRuns   skillRunner      // the triggered skills (skill_runs.go)
-	out         channelOut       // what goes out through the channels the user added (channel_out.go)
-	routeMu     sync.Mutex       // one escalation pass at a time (route_send.go)
+	botsMu      sync.Mutex
+	bots        map[string]*botChannel // the bot channels at work, by id (bot_channel.go); none without the workspace
+	obs         observations           // the machines' locked, idle, do not disturb, in memory only (observe.go)
+	events      eventBus               // the event journal's subscribers (event_journal.go)
+	skillRuns   skillRunner            // the triggered skills (skill_runs.go)
+	out         channelOut             // what goes out through the channels the user added (channel_out.go)
+	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)
 	// minters are the providers whose connections core mints tokens for,

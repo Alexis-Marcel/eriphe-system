@@ -2713,10 +2713,12 @@ act. Each channel has its own connection and secret. eriphe-core treats every ch
 what the user writes from one joins the conversation as from the workspace, and what goes out is
 routed by the same code. The workspace and push are eriphe-core's own; a service eriphe-core talks
 to for the user, such as a messaging app's bot, is an adapter that registers itself as one more
-channel (`registerChannel`, from its own file: `telegram.go`; Discord would be another), with its
-name, its direction, who speaks, what it carries, its line, its setup page and how it sends a
-reply, a card and a notification. Nothing outside the adapter names it: the router, the settings,
-the brain's tools and prompt, the cards and Settings → Access go through the registry.
+channel (`registerChannel`), with its name, its direction, who speaks, what it carries, its line,
+its setup page and how it sends a reply, a card and a notification. A messaging app where the user
+links their own account to a bot is a **bot channel** (below): it registers with `registerBot` and
+writes only its transport. Nothing outside the adapter names it: the router, the settings, the
+brain's tools and prompt, the cards and Settings → Access go through the registry
+(`TestBotChannelsNamedByTheirFilesOnly` checks it).
 
 | Channel | Direction | Who speaks (inbound) | What it carries (outbound) |
 |---|---|---|---|
@@ -2739,36 +2741,52 @@ nudge and a link instead of any text; Settings → Notifications and the brain's
 `channel_detail`, "telegram alert"); and a task's permission, answered with `answerPermission` as
 the workspace does.
 
-**Push and Telegram** (`channels.go`, `telegram.go`, `telegram_cards.go`, `web_telegram.go`). What is sent
-(`tell`) goes by the user's channels: web push and each adapter, all by default, a narrower default in
-Settings → Notifications (Où te prévenir), or a topic rule's own (`channels`: `push`, `telegram` or both). The decision
-above is unchanged; the channels only say where a "now" goes. Telegram, the first adapter, two-way, without an
-inbound port:
+**Push and the bot channels** (`channels.go`, `bot_channel.go`, `bot_channel_cards.go`,
+`web_bot_channel.go`, `templates/bot.html`). What is sent (`tell`) goes by the user's channels: web
+push and each adapter, all by default, a narrower default in Settings → Notifications (Où te
+prévenir), or a topic rule's own (`channels`: `push`, `telegram` or both). The decision above is
+unchanged; the channels only say where a "now" goes.
 
-- **Setup.** The user creates a bot with BotFather and pastes its token in Settings → Access (Telegram):
-  checked with `getMe`, kept in the vault (`telegram-bot`), never shown, logged or put in an error
-  (the Bot API puts it in the URL: errors are stripped of both). Eriphe then shows a one-time code
-  (10 minutes, 10 wrong tries); the private-chat account that sends it to the bot (or opens
-  `t.me/<bot>?start=<code>`) is recorded, user id and chat id. Only that user id is heard; any
-  other sender, group or bot is ignored, counted in Settings and never answered. Unlink, change or
-  remove the token (a new bot asks for a new link).
-- **Polling.** `getUpdates` long polling (50 s), with a wait from 1 s doubling to 5 min after a
-  failure (or Telegram's `retry_after`); it runs only while a token is set, and stops on removal.
-- **Out.** A notification carries inline buttons 👍 / 👎 / « pas maintenant » (`fb:<id>:<r>`,
-  accepted from the linked account only, recorded like the push's); a question waiting for the user
-  is told with a link to the workspace, a task's permission with Allow and Deny
-  (`pm:<task>:<permission>:<y|n>`, answered as the workspace's buttons, a user_only one too). The
-  brain's replies go back there (`channel_relay.go`). "Alerts only" sends "Eriphe a quelque chose
-  pour toi" and a link instead of any text, replies included, and no buttons that approve. Telegram
-  bots are not end-to-end encrypted (a bot chat is never a secret chat), and Settings says so.
-- **In.** A text from the linked account joins the conversation as the user's message, `via`
-  `Telegram` (`[Sam 09:12 #41 · Telegram]` for the brain): a clean turn, because the sender's id
-  is checked. Files, photos and voice notes are not read; the bot says so.
+A bot channel is two-way, without an inbound port. Everything below is the bot channel's, once,
+for every service; a service writes only its **transport** (`botTransport`: check a token, listen
+one round, send a message with buttons, answer a button), its words (`acc.kind.<id>`,
+`acc.kind.<id>.desc`, `<id>.how`, `<id>.privacy`) and its `registerBot` (`botSpec`: id, label,
+icon, longest text, longest button data, the token's form, a link that opens the bot with the
+code). Its routes (`/settings/access/<id>`, `/channels/<id>/…`), page, row, store keys
+(`<id>_user`, `<id>_chat`, …) and vault secret (`<id>-bot`) follow from its id.
+
+- **Setup.** The user creates a bot and pastes its token in Settings → Access: checked by the
+  transport, kept in the vault, never shown, logged or put in an error (the bot channel strips it
+  from whatever the transport returns). Eriphe then shows a one-time code (10 minutes, 10 wrong
+  tries); the private-chat account that sends it to the bot is recorded, user id and chat id. Only
+  that user id is heard; any other sender, group or bot is ignored, counted in Settings and never
+  answered. Unlink, change or remove the token (a new bot asks for a new link).
+- **Listening.** The transport listens one round at a time (a long poll, a connection until it
+  drops); after a failed round the wait goes from 1 s doubling to 5 min (or what the service asks
+  for); it runs only while a token is set, and stops on removal.
+- **Out.** A notification carries buttons 👍 / 👎 / « pas maintenant » (`fb:<id>:<r>`, accepted
+  from the linked account only, recorded like the push's); a question waiting for the user is told
+  with a link to the workspace, a task's permission with Allow and Deny
+  (`pm:<task>:<permission>:<y|n>`, answered as the workspace's buttons, a user_only one too; none
+  when longer than the service's button data). The brain's replies go back there
+  (`channel_relay.go`). "Alerts only" sends "Eriphe a quelque chose pour toi" and a link instead of
+  any text, replies included, and no buttons that approve.
+- **In.** A text from the linked account joins the conversation as the user's message, `via` the
+  channel's label (`[Sam 09:12 #41 · Telegram]` for the brain): a clean turn, because the sender's
+  id is checked. Files, photos and voice notes are not read; the bot says so.
 - **Proposals as cards.** A proposal of the brain's (a rule, a memory, an intention, a setting)
   that goes with a reply or a notification sent there comes as a card with Oui / Non buttons
   (`pc:<card>:<y|n>`), answered from the linked account only, through the same code as the
-  workspace's cards (`telegram_cards.go`); none in "alerts only". The
-  [access card](#the-approval-card) of a catalog tool goes there too.
+  workspace's cards; none in "alerts only". The [access card](#the-approval-card) of a catalog
+  tool goes there too.
+
+**Telegram** (`telegram.go`), the first transport: the user creates a bot with BotFather; the
+token is checked with `getMe`; `getUpdates` long polling (50 s, Telegram's `retry_after`
+followed); `sendMessage` with an inline keyboard (4,000 characters, 64 bytes of button data);
+`answerCallbackQuery`, then `editMessageText` once decided; the code also comes as
+`/start <code>`, from `t.me/<bot>?start=<code>`. The Bot API puts the token in the URL: its
+errors name neither. Telegram bots are not end-to-end encrypted (a bot chat is never a secret
+chat), and Settings says so.
 
 **Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
 A pure function, `route(note, signals, settings, tried)`, picks one device at a time from signals

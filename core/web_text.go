@@ -583,6 +583,8 @@ func templateFuncs(lang string) template.FuncMap {
 		// name is what the user calls their assistant: the pages' title and brand.
 		"name": assistantName,
 		"tf":   func(key string, args ...any) string { return fmt.Sprintf(tr(lang, key), args...) },
+		// botIcon is a bot channel's mark in Settings → Access (bot_channel.go).
+		"botIcon": func(id string) string { return botSpecs[id].Icon },
 		"ago": func(t time.Time) string {
 			return ago(lang, t, time.Now())
 		},

@@ -487,13 +487,13 @@ func TestChannelCardConfirm(t *testing.T) {
 func TestTelegramCards(t *testing.T) {
 	c, _, f := telegramCore(t)
 	linked(c)
-	c.tg.restart()
+	tgOf(c).restart()
 	c.store.addMessageVia(roleUser, "Trop de factures en notification", viaTelegram, false)
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "Je ne te préviens plus des factures avant le brief ?")
 	c.channelReplies()
 	c.channelCards()
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	sent := f.sentMessages()
 	if len(sent) != 2 || !strings.Contains(fmt.Sprint(sent[1]["text"]), "facture → au brief") {
 		t.Fatalf("sent %v", sent)
@@ -504,7 +504,7 @@ func TestTelegramCards(t *testing.T) {
 		t.Fatalf("no buttons: %s", kb)
 	}
 	c.channelCards()
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	if len(f.sentMessages()) != 2 {
 		t.Fatal("a card was sent twice")
 	}
@@ -534,7 +534,7 @@ func TestTelegramCards(t *testing.T) {
 	before := len(f.sentMessages())
 	c.channelReplies()
 	c.channelCards()
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	for _, m := range f.sentMessages()[before:] {
 		if m["reply_markup"] != nil {
 			t.Fatalf("a card in alerts only: %v", m)

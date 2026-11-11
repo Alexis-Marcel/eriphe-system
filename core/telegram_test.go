@@ -149,21 +149,31 @@ func telegramCore(t *testing.T) (*core, *browser, *fakeTelegram) {
 	c, b := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	openTestVault(t, c.store)
 	f := newFakeTelegram(t)
-	tg := newTelegram(c)
-	tg.api, tg.client = f.srv.URL, f.srv.Client()
+	tg := newBotChannel(c, tgChannel)
+	onFake(tg, f)
 	tg.base = func() string { return "https://eriphe.example.org" }
-	c.tg = tg
+	c.setBot(tg)
 	t.Cleanup(tg.stop)
 	return c, b, f
 }
 
+// tgOf is the Telegram channel at work.
+func tgOf(c *core) *botChannel { return c.bot(tgChannel) }
+
+// onFake points a Telegram channel at the fake Bot API.
+func onFake(b *botChannel, f *fakeTelegram) {
+	tr := b.tr.(*telegram)
+	tr.api, tr.client = f.srv.URL, f.srv.Client()
+}
+
 // linked links the user's account directly, as the code would.
 func linked(c *core) {
-	c.tg.forget(tgCodeKey)
-	c.store.set(tgUserKey, fmt.Sprint(userTG))
-	c.store.set(tgChatKey, fmt.Sprint(userTG))
+	tg := tgOf(c)
+	tg.forget("code")
+	tg.set("user", fmt.Sprint(userTG))
+	tg.set("chat", fmt.Sprint(userTG))
 	c.store.set(channelSeenKey(tgChannel), fmt.Sprint(c.store.lastMessageSeq()))
-	currentVault().set(telegramSecret, fakeBotToken)
+	currentVault().set(tg.secret(), fakeBotToken)
 }
 
 func lastText(f *fakeTelegram) string {
@@ -177,25 +187,25 @@ func lastText(f *fakeTelegram) string {
 // The account that sends the code is linked; only it is heard after.
 func TestTelegramLinkAndListen(t *testing.T) {
 	c, _, f := telegramCore(t)
-	if err := c.tg.setToken(context.Background(), "not a token"); err == nil {
+	if err := tgOf(c).setToken(context.Background(), "not a token"); err == nil {
 		t.Fatal("a malformed token was accepted")
 	}
-	if err := c.tg.setToken(context.Background(), fakeBotToken); err != nil {
+	if err := tgOf(c).setToken(context.Background(), fakeBotToken); err != nil {
 		t.Fatal(err)
 	}
-	if c.store.get(tgBotKey) != "sam_eriphe_bot" || !c.tg.running() {
-		t.Fatalf("bot %q, running %v", c.store.get(tgBotKey), c.tg.running())
+	if tgOf(c).get("bot") != "sam_eriphe_bot" || !tgOf(c).running() {
+		t.Fatalf("bot %q, running %v", tgOf(c).get("bot"), tgOf(c).running())
 	}
 	f.message(strangerTG, "hello") // before any code: ignored
-	code := c.tg.newCode("fr")
+	code := tgOf(c).newCode("fr")
 	f.message(strangerTG, "WRONGCODE")
 	f.message(userTG, "/start "+strings.ToLower(code))
-	waitUntil(t, c.tg.linked)
-	if c.store.get(tgUserKey) != fmt.Sprint(userTG) || c.store.get(tgNameKey) != "@sam" {
-		t.Fatalf("linked to %q (%q)", c.store.get(tgUserKey), c.store.get(tgNameKey))
+	waitUntil(t, tgOf(c).linked)
+	if tgOf(c).get("user") != fmt.Sprint(userTG) || tgOf(c).get("name") != "@sam" {
+		t.Fatalf("linked to %q (%q)", tgOf(c).get("user"), tgOf(c).get("name"))
 	}
 	waitUntil(t, func() bool { return strings.Contains(lastText(f), "relié") })
-	if code, _ := c.tg.pendingCode(); code != "" {
+	if code, _ := tgOf(c).pendingCode(); code != "" {
 		t.Error("the code is still valid after use")
 	}
 
@@ -207,7 +217,7 @@ func TestTelegramLinkAndListen(t *testing.T) {
 	if len(msgs) != 1 || msgs[0].Role != roleUser || msgs[0].Text != "Quoi de neuf ?" || msgs[0].Via != viaTelegram {
 		t.Fatalf("conversation %+v", msgs)
 	}
-	if n := c.tg.kvInt(tgIgnoredKey); n != 3 {
+	if n := tgOf(c).getInt("ignored"); n != 3 {
 		t.Errorf("%d ignored, want 3", n)
 	}
 	for _, m := range f.sentMessages() {
@@ -225,9 +235,9 @@ func TestTelegramLinkAndListen(t *testing.T) {
 		t.Error("an attachment joined the conversation")
 	}
 
-	c.tg.unlink()
+	tgOf(c).unlink()
 	f.message(userTG, "encore là ?")
-	waitUntil(t, func() bool { return c.tg.kvInt(tgIgnoredKey) == 4 })
+	waitUntil(t, func() bool { return tgOf(c).getInt("ignored") == 4 })
 	if c.store.lastMessageSeq() != msgs[0].Seq {
 		t.Error("an unlinked account was heard")
 	}
@@ -236,12 +246,12 @@ func TestTelegramLinkAndListen(t *testing.T) {
 // A code expires after its tries.
 func TestTelegramCodeTries(t *testing.T) {
 	c, _, _ := telegramCore(t)
-	code := c.tg.newCode("en")
-	for i := 0; i < tgCodeTries; i++ {
-		c.tg.tryLink(context.Background(), "", &tgMessage{From: &tgUser{ID: strangerTG}, Chat: tgChat{ID: strangerTG, Type: "private"}, Text: "NOPE"})
+	code := tgOf(c).newCode("en")
+	for i := 0; i < botCodeTries; i++ {
+		tgOf(c).tryLink(context.Background(), "", botEvent{User: fmt.Sprint(strangerTG), Chat: fmt.Sprint(strangerTG), Private: true, Text: "NOPE"})
 	}
-	c.tg.tryLink(context.Background(), "", &tgMessage{From: &tgUser{ID: userTG}, Chat: tgChat{ID: userTG, Type: "private"}, Text: code})
-	if c.tg.linked() {
+	tgOf(c).tryLink(context.Background(), "", botEvent{User: fmt.Sprint(userTG), Chat: fmt.Sprint(userTG), Private: true, Text: code})
+	if tgOf(c).linked() {
 		t.Fatal("a code was used after too many wrong tries")
 	}
 }
@@ -251,13 +261,13 @@ func TestTelegramCodeTries(t *testing.T) {
 func TestTelegramNotifyAndFeedback(t *testing.T) {
 	c, b, f := telegramCore(t)
 	linked(c)
-	c.tg.restart()
+	tgOf(c).restart()
 	ownerSays(c, "Préviens-moi quand la PR est fusionnée")
 	out, err := c.brainNotify(notifyIn{Text: "La PR 42 est fusionnée.", Level: levelNow, Why: "Tu m'as demandé de te prévenir.", Ref: "project:site"})
 	if err != nil || out["outcome"] != levelNow {
 		t.Fatalf("%v %v", out, err)
 	}
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	c.push.pending.Wait()
 	if len(b.received()) != 1 {
 		t.Fatalf("pushed %d", len(b.received()))
@@ -291,7 +301,7 @@ func TestTelegramNotifyAndFeedback(t *testing.T) {
 	ownerSays(c, "Préviens-moi pour getout et le site")
 	c.brainNotify(notifyIn{Text: "Getout est en panne.", Level: levelNow, Why: "Une alerte.", Ref: "project:getout:prod"})
 	c.brainNotify(notifyIn{Text: "Le site est en ligne.", Level: levelNow, Why: "Le déploiement.", Ref: "project:site"})
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	c.push.pending.Wait()
 	if got := b.received(); len(got) != 2 || got[1].Body != "Le site est en ligne." {
 		t.Fatalf("pushed %+v", got)
@@ -302,7 +312,7 @@ func TestTelegramNotifyAndFeedback(t *testing.T) {
 	// The default channels: push only.
 	c.store.set(notifyChannelsKey, "push")
 	c.tell(pushNote{Body: map[string]string{"fr": "Tâche finie : x"}, URL: "/"})
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	if len(f.sentMessages()) != 2 {
 		t.Fatal("the default channels were not followed")
 	}
@@ -314,7 +324,7 @@ func TestTelegramAlertsOnly(t *testing.T) {
 	linked(c)
 	c.store.set(channelDetailKey(tgChannel), detailAlert)
 	c.tell(pushNote{Body: map[string]string{"fr": "Ta banque a écrit : solde 1234 €"}, URL: "/settings/notifications?n=9", Notif: 9, Why: "un mail"})
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	sent := f.sentMessages()
 	if len(sent) != 1 || sent[0]["reply_markup"] != nil {
 		t.Fatalf("sent %v", sent)
@@ -328,7 +338,7 @@ func TestTelegramAlertsOnly(t *testing.T) {
 	c.store.addMessageVia(roleUser, "et mon solde ?", viaTelegram, false)
 	c.store.addMessage(roleBrain, "Ton solde est de 1234 €.", true)
 	c.channelReplies()
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	if text := lastText(f); strings.Contains(text, "1234") || !strings.Contains(text, "t'a répondu") {
 		t.Fatalf("reply %q", text)
 	}
@@ -347,7 +357,7 @@ func TestTelegramRepliesRouted(t *testing.T) {
 	c.store.addMessage(roleEvent, "tâche finie", false)
 	c.store.addMessage(roleBrain, "Les tests passent.", true)
 	c.channelReplies()
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	var texts []string
 	for _, m := range f.sentMessages() {
 		texts = append(texts, fmt.Sprint(m["text"]))
@@ -359,7 +369,7 @@ func TestTelegramRepliesRouted(t *testing.T) {
 	note := waitingNote("Tu valides ?", "/#m9", "ask")
 	note.Waiting = true
 	c.tell(note)
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	if len(f.sentMessages()) != 2 {
 		t.Fatal("a question was sent twice")
 	}
@@ -367,8 +377,8 @@ func TestTelegramRepliesRouted(t *testing.T) {
 	c.store.addMessage(roleUser, "Depuis l'espace", false)
 	c.store.addMessage(roleBrain, "Réponse dans l'espace.", true)
 	c.channelReplies()
-	c.tg.pending.Wait()
-	if len(f.sentMessages()) != 2 || c.tg.routing() {
+	tgOf(c).pending.Wait()
+	if len(f.sentMessages()) != 2 || tgOf(c).routing() {
 		t.Fatalf("a reply to the workspace went to Telegram: %v", f.sentMessages())
 	}
 }
@@ -381,7 +391,7 @@ func TestTelegramRepliesRouted(t *testing.T) {
 func TestTelegramAnswersPermissions(t *testing.T) {
 	c, _, f := telegramCore(t)
 	linked(c)
-	c.tg.restart()
+	tgOf(c).restart()
 	addTask(t, c, "t-1", stateRunning)
 	c.store.addEvents("t-1", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
 		Data: map[string]any{"id": "p-1", "tool_name": "mcp__github__merge_pull_request"}}})
@@ -389,7 +399,7 @@ func TestTelegramAnswersPermissions(t *testing.T) {
 	note := waitingNote("github.merge acme/site#7", "/#perm-t-1-p-1", "perm-t-1-p-1")
 	note.Perm = &notePerm{Task: "t-1", ID: "p-1"}
 	c.tell(note)
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	sent := f.sentMessages()
 	if len(sent) != 1 || !strings.Contains(fmt.Sprint(sent[0]["reply_markup"]), "pm:t-1:p-1:y") ||
 		!strings.Contains(fmt.Sprint(sent[0]["text"]), "https://eriphe.example.org/#perm-t-1-p-1") {
@@ -415,7 +425,7 @@ func TestTelegramAnswersPermissions(t *testing.T) {
 
 	c.setChannelDetail(tgChannel, detailAlert)
 	c.tell(note)
-	c.tg.pending.Wait()
+	tgOf(c).pending.Wait()
 	if last := f.sentMessages()[len(f.sentMessages())-1]; last["reply_markup"] != nil {
 		t.Fatalf("buttons in alerts only: %v", last)
 	}
@@ -431,7 +441,7 @@ func TestTelegramBackoffAndStop(t *testing.T) {
 	c, _, f := telegramCore(t)
 	var mu sync.Mutex
 	var waits []time.Duration
-	c.tg.sleep = func(ctx context.Context, d time.Duration) bool {
+	tgOf(c).sleep = func(ctx context.Context, d time.Duration) bool {
 		mu.Lock()
 		waits = append(waits, d)
 		mu.Unlock()
@@ -443,7 +453,7 @@ func TestTelegramBackoffAndStop(t *testing.T) {
 	var logs bytes.Buffer
 	log.SetOutput(&logs)
 	t.Cleanup(func() { log.SetOutput(io.Discard) })
-	if err := c.tg.setToken(context.Background(), fakeBotToken); err != nil {
+	if err := tgOf(c).setToken(context.Background(), fakeBotToken); err != nil {
 		t.Fatal(err)
 	}
 	waitUntil(t, func() bool { return f.pollCount() >= 5 })
@@ -453,11 +463,11 @@ func TestTelegramBackoffAndStop(t *testing.T) {
 	if got != "[1s 2s 4s]" {
 		t.Fatalf("waits %s", got)
 	}
-	if c.tg.err() != "" {
-		t.Errorf("error kept after a success: %q", c.tg.err())
+	if tgOf(c).err() != "" {
+		t.Errorf("error kept after a success: %q", tgOf(c).err())
 	}
-	c.tg.removeToken()
-	if c.tg.running() || c.tg.token() != "" {
+	tgOf(c).removeToken()
+	if tgOf(c).running() || tgOf(c).token() != "" {
 		t.Fatal("still running after removal")
 	}
 	n := f.pollCount()
@@ -469,7 +479,7 @@ func TestTelegramBackoffAndStop(t *testing.T) {
 		t.Fatalf("logs: %s", logs.String())
 	}
 
-	if d := nextBackoff(4*time.Minute, &tgError{Code: 502}); d != tgBackoffMax {
+	if d := nextBackoff(4*time.Minute, &tgError{Code: 502}); d != botBackoffMax {
 		t.Errorf("not capped: %s", d)
 	}
 	if d := nextBackoff(time.Second, &tgError{Code: 429, RetryAfter: 30}); d != 30*time.Second {
@@ -481,11 +491,11 @@ func TestTelegramBackoffAndStop(t *testing.T) {
 func TestTelegramTokenNeverInErrors(t *testing.T) {
 	c, _, f := telegramCore(t)
 	f.srv.Close() // connection refused: Go's error names the URL
-	err := c.tg.setToken(context.Background(), fakeBotToken)
+	err := tgOf(c).setToken(context.Background(), fakeBotToken)
 	if err == nil || strings.Contains(err.Error(), fakeBotToken) || strings.Contains(err.Error(), "/bot") {
 		t.Fatalf("error %v", err)
 	}
-	if c.tg.token() != "" {
+	if tgOf(c).token() != "" {
 		t.Fatal("a token Telegram did not check was kept")
 	}
 }
@@ -497,27 +507,27 @@ func TestWebTelegramChannels(t *testing.T) {
 	csrf := tw.setup()
 	openTestVault(t, tw.c.store)
 	f := newFakeTelegram(t)
-	tw.c.tg.api, tw.c.tg.client = f.srv.URL, f.srv.Client()
-	t.Cleanup(tw.c.tg.stop)
+	onFake(tgOf(tw.c), f)
+	t.Cleanup(tgOf(tw.c).stop)
 
 	code, body, _ := tw.do("GET", "/settings/access/telegram", nil, nil)
 	if code != 200 || !strings.Contains(body, "pas de bout en bout") || !strings.Contains(body, `name="token"`) {
 		t.Fatalf("GET: %d", code)
 	}
 	if code, body, _ := tw.post("/channels/telegram/token", url.Values{"token": {"123:wrong_token_wrong_token_wrong"}}, csrf); code != 200 ||
-		!strings.Contains(body, "") || tw.c.tg.token() != "" {
+		!strings.Contains(body, "") || tgOf(tw.c).token() != "" {
 		t.Fatalf("a wrong token: %d", code)
 	}
 	if code, body, _ := tw.post("/channels/telegram/token", url.Values{"token": {fakeBotToken}}, csrf); code != 200 || !strings.Contains(body, "@sam_eriphe_bot") {
 		t.Fatalf("token: %d %s", code, body)
 	}
 	_, body, _ = tw.post("/channels/telegram/code", url.Values{}, csrf)
-	pending, _ := tw.c.tg.pendingCode()
+	pending, _ := tgOf(tw.c).pendingCode()
 	if pending == "" || !strings.Contains(body, pending) || !strings.Contains(body, "https://t.me/sam_eriphe_bot?start="+pending) {
 		t.Fatalf("code %q: %s", pending, body)
 	}
 	f.message(userTG, pending)
-	waitUntil(t, tw.c.tg.linked)
+	waitUntil(t, tgOf(tw.c).linked)
 	if _, body, _ := tw.do("GET", "/channels/telegram", nil, nil); !strings.Contains(body, "@sam") || !strings.Contains(body, "Délier") {
 		t.Fatalf("linked: %s", body)
 	}
@@ -537,7 +547,7 @@ func TestWebTelegramChannels(t *testing.T) {
 		}
 	}
 	tw.post("/channels/telegram/remove", url.Values{}, csrf)
-	if tw.c.tg.token() != "" || tw.c.tg.linked() || tw.c.tg.running() {
+	if tgOf(tw.c).token() != "" || tgOf(tw.c).linked() || tgOf(tw.c).running() {
 		t.Fatal("not removed")
 	}
 }

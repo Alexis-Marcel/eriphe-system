@@ -136,49 +136,6 @@
 {{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{channelNames .Channels}}{{end}}{{if .Also}} · {{t "rule.also"}} <span class="mono">{{.Also}}</span>{{end}}{{if .Never}} · {{t "rule.never"}} <span class="mono">{{.Never}}</span>{{end}}{{end}}</span>
 {{if .Why}}<span class="small muted">{{.Why}}</span>{{end}}{{end}}
 
-{{/* Access → Telegram (access.html, web_telegram.go, telegram.go): Telegram's bot and
-     the link to the user's account. The token is never shown back. */}}
-{{define "telegram-frag"}}{{template "telegram" .Data}}{{end}}
-
-{{define "telegram"}}
-<h3 id="tg-title">{{template "i-chat"}}{{t "tg.title"}}</h3>
-<p class="small muted">{{t "tg.lead"}}</p>
-<p class="notice">{{t "tg.privacy"}}</p>
-{{if not .VaultOpen}}<p class="small muted">{{t "tg.err.vault"}}</p>
-{{else if not .Set}}
-<p class="small">{{t "tg.how"}}</p>
-<form class="stack-form" hx-post="/channels/telegram/token" hx-target="#tg-panel" hx-disabled-elt="find button">
-  <label class="field"><span>{{t "tg.token"}}</span><input type="password" name="token" autocomplete="off" required maxlength="120" placeholder="123456:ABC…"></label>
-  <div class="actions"><button class="btn btn-primary sm" type="submit">{{t "tg.token.save"}}</button></div>
-</form>
-{{else}}
-<p class="small">{{if .Bot}}{{tf "tg.bot" .Bot}}{{else}}{{t "tg.botset"}}{{end}}{{if .Error}} · <span class="tag tag-no" title="{{.Error}}">{{t "tg.failing"}}</span>{{end}}</p>
-{{if .Linked}}
-<p class="small"><span class="tag tag-ok">{{t "tg.linked.tag"}}</span> {{.Name}}</p>
-<div class="actions">
-  <form hx-post="/channels/telegram/test" hx-swap="none"><button class="btn btn-soft sm" type="submit">{{t "tg.test.button"}}</button></form>
-  <form hx-post="/channels/telegram/unlink" hx-target="#tg-panel" hx-confirm="{{t "tg.unlinkconfirm"}}"><button class="btn btn-ghost sm" type="submit">{{t "tg.unlink"}}</button></form>
-</div>
-{{else if .Code}}
-<div hx-get="/channels/telegram" hx-trigger="every 3s" hx-target="#tg-panel">
-  <p>{{t "tg.sendcode"}} <b class="mono">{{.Code}}</b></p>
-  {{if .Bot}}<p class="small"><a href="https://t.me/{{.Bot}}?start={{.Code}}" target="_blank" rel="noopener">{{t "tg.openbot"}}</a></p>{{end}}
-  <p class="small muted">{{t "tg.codehint"}}</p>
-</div>
-{{else}}
-<form hx-post="/channels/telegram/code" hx-target="#tg-panel"><button class="btn btn-primary sm" type="submit">{{t "tg.link"}}</button></form>
-{{end}}
-{{if .Ignored}}<p class="small muted">{{tf "tg.ignored" .Ignored}}</p>{{end}}
-<p class="small muted">{{t "tg.approvals"}}</p>
-<details class="rule-edit"><summary class="small">{{t "tg.change"}}</summary>
-<form class="stack-form" hx-post="/channels/telegram/token" hx-target="#tg-panel" hx-disabled-elt="find button">
-  <label class="field"><span>{{t "tg.token"}}</span><input type="password" name="token" autocomplete="off" required maxlength="120"></label>
-  <div class="actions"><button class="btn btn-soft sm" type="submit">{{t "tg.token.save"}}</button>
-  <button class="btn btn-danger-ghost sm" type="button" hx-post="/channels/telegram/remove" hx-target="#tg-panel" hx-confirm="{{t "tg.removeconfirm"}}">{{t "tg.remove"}}</button></div>
-</form></details>
-{{end}}
-{{end}}
-
 {{/* Notifications → Où te prévenir: the default channels of the brain's
      notifications, and how much each channel that carries text is told
      (web_channels.go). */}}
