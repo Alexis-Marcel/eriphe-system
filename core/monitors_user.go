@@ -33,10 +33,6 @@ func (c *core) saveMonitor(name string, s monitorSpec) error {
 	if why := c.monitorWhy(s); why != "" {
 		return errors.New(why)
 	}
-	if err := c.oneFollower(name, s); err != nil {
-		return err
-	}
-	defer c.freshStart(s)
 	raw, _ := json.Marshal(s)
 	now := time.Now().Unix()
 	m, err := c.monitorNamed(name)
@@ -79,41 +75,7 @@ func (c *core) pauseMonitor(name string, pause bool) error {
 		state = monitorPaused
 	}
 	_, err = c.store.db.Exec(`UPDATE monitors SET state = ?, look = '{}', next_at = 0, updated = ? WHERE id = ?`, state, time.Now().Unix(), m.ID)
-	if !pause {
-		c.freshStart(m.Spec)
-	}
 	return err
-}
-
-// freshStart makes a monitor that follows a server skip what the server
-// published before: its first read is a baseline, as a poll's first look.
-func (c *core) freshStart(s monitorSpec) {
-	if s.Way == wayFollow {
-		c.store.set(eventsCursorKey+s.Server, "")
-	}
-}
-
-// oneFollower: a server's events are followed by one monitor at most.
-func (c *core) oneFollower(name string, s monitorSpec) error {
-	if s.Way != wayFollow {
-		return nil
-	}
-	if f := c.followerOf(s.Server, false); f != nil && f.Name != name {
-		return fmt.Errorf("the monitor %q already follows %s", f.Name, s.Server)
-	}
-	return nil
-}
-
-// followerOf is the monitor that follows a server's events (on only, or
-// in any state).
-func (c *core) followerOf(server string, onOnly bool) *monitor {
-	ms, _ := c.monitors()
-	for _, m := range ms {
-		if m.Spec.Way == wayFollow && m.Spec.Server == server && (!onOnly || m.State == monitorOn) {
-			return m
-		}
-	}
-	return nil
 }
 
 // deleteMonitor removes a monitor; its events stay in the journal.
@@ -149,9 +111,9 @@ func (c *core) tryLook(ctx context.Context, s monitorSpec) (tried, error) {
 		return t, err
 	}
 	if s.Way != wayPoll {
-		return t, errors.New("only a monitor that polls a tool is tried")
+		return t, errors.New("only a monitor that polls is tried")
 	}
-	if why := c.toolWhy(s); why != "" {
+	if why := c.sourceWhy(s); why != "" {
 		return t, errors.New(why)
 	}
 	got, err := c.callMonitor(ctx, s)
@@ -196,8 +158,8 @@ func (c *core) tryMonitorSaid(ctx context.Context, name string, s monitorSpec) (
 		}
 		s = m.Spec
 	}
-	if s.Way == wayPoll && c.toolWhy(s) == "" && !c.trustsServer(s.Server) {
-		c.turn.taint(s.Server + "." + s.Tool)
+	if s.Way == wayPoll && c.sourceWhy(s) == "" && !c.trustsServer(s.Server) {
+		c.turn.taint(s.source())
 	}
 	t, err := c.tryLook(ctx, s)
 	if err != nil {
@@ -263,29 +225,36 @@ func (c *core) skillsFollowing(name string) []string {
 	return out
 }
 
-// unfollowedStreams are the catalog servers that publish events and that
-// no monitor follows yet.
-func (c *core) unfollowedStreams() []string {
-	c.events.cursorMu.Lock()
-	var out []string
-	for name, ok := range c.events.servers {
-		if ok {
-			out = append(out, name)
-		}
-	}
-	c.events.cursorMu.Unlock()
-	sort.Strings(out)
-	return slices.DeleteFunc(out, func(s string) bool { return c.followerOf(s, false) != nil })
-}
-
-// monitorTools are the tools a monitor may call now: the brain's free
-// reads, as server.tool.
-func (c *core) monitorTools() []string {
+// monitorSources are what a monitor may look at now: the brain's free
+// reads, as server.tool, then the catalog servers' resources, as server
+// and URI (monitorSpec.source).
+func (c *core) monitorSources() []string {
 	var out []string
 	for _, t := range c.lentTools() {
-		if c.toolWhy(monitorSpec{Server: t.server, Tool: t.tool}) == "" {
+		if c.sourceWhy(monitorSpec{Server: t.server, Tool: t.tool}) == "" {
 			out = append(out, t.server+"."+t.tool)
 		}
 	}
-	return out
+	var res []string
+	for name := range c.conf().Servers {
+		if u := c.pool.get(name); u != nil {
+			for _, uri := range u.resourceURIs() {
+				res = append(res, monitorSpec{Server: name, Resource: uri}.source())
+			}
+		}
+	}
+	sort.Strings(res)
+	return append(out, res...)
+}
+
+// sourceOf reads a source as monitorSources gives it into s.
+func sourceOf(src string, s *monitorSpec) bool {
+	src = strings.TrimSpace(src)
+	if server, uri, ok := strings.Cut(src, " "); ok {
+		s.Server, s.Resource = server, strings.TrimSpace(uri)
+		return server != "" && s.Resource != ""
+	}
+	server, tool, ok := strings.Cut(src, ".")
+	s.Server, s.Tool = server, tool
+	return ok
 }

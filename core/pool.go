@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -15,7 +16,8 @@ import (
 )
 
 // The upstream pool keeps one MCP session per catalog server, like a
-// controller: it connects, lists the server's tools and keeps them cached
+// controller: it connects, lists the server's tools (and its resources, which
+// monitors may read) and keeps them cached
 // (refreshed on tools/list_changed), and reconnects with backoff when the
 // session drops. Tasks' calls go through these sessions (proxy.go).
 
@@ -48,9 +50,6 @@ type pool struct {
 	// again (a connection its provider refused, connections.go): why, and where the
 	// user does it; "" when it does not wait.
 	authHold func(name string) (why, where string)
-	// opened hands a server's new session to the event journal
-	// (event_sources.go), which reads its events if it has some.
-	opened func(ctx context.Context, server string, sess *mcp.ClientSession)
 
 	mu      sync.Mutex
 	ctx     context.Context // set by run; servers added later start in it
@@ -69,6 +68,7 @@ type upstream struct {
 	err       string
 	session   *mcp.ClientSession
 	tools     []*mcp.Tool
+	resources []string  // its resources' URIs, which a monitor may read (monitors.go)
 	needsAuth string    // why the server wants an authorization, set by the OAuth gate
 	flow      *authFlow // a `eriphe connect` in progress
 	// The OAuth client typed in the form of a pending server, in memory
@@ -326,6 +326,9 @@ func (u *upstream) open(ctx context.Context) (*mcp.ClientSession, error) {
 		ToolListChangedHandler: func(context.Context, *mcp.ToolListChangedRequest) {
 			go u.refreshTools()
 		},
+		ResourceListChangedHandler: func(context.Context, *mcp.ResourceListChangedRequest) {
+			go u.refreshResources()
+		},
 	})
 	sess, err := client.Connect(ctx, tr, nil)
 	if err != nil {
@@ -337,23 +340,44 @@ func (u *upstream) open(ctx context.Context) (*mcp.ClientSession, error) {
 		return nil, err
 	}
 	u.mu.Lock()
-	u.session, u.tools, u.status, u.err = sess, tools, statusReady, ""
+	u.session, u.tools, u.resources, u.status, u.err = sess, tools, nil, statusReady, ""
 	u.mu.Unlock()
-	go u.sessionOpened()
+	go u.refreshResources()
 	return sess, nil
 }
 
-// sessionOpened tells whoever listens of the server's new session.
-func (u *upstream) sessionOpened() {
+// refreshResources lists the server's resources again, if it has some.
+func (u *upstream) refreshResources() {
 	u.mu.Lock()
 	sess := u.session
 	u.mu.Unlock()
-	if sess == nil || u.p.opened == nil {
+	if sess == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	u.p.opened(ctx, u.name, sess)
+	var uris []string
+	if r := sess.InitializeResult(); r != nil && r.Capabilities != nil && r.Capabilities.Resources != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		for res, err := range sess.Resources(ctx, nil) {
+			if err != nil {
+				log.Printf("server %s: resources: %v", u.name, err)
+				return
+			}
+			uris = append(uris, res.URI)
+		}
+	}
+	u.mu.Lock()
+	if u.session == sess {
+		u.resources = uris
+	}
+	u.mu.Unlock()
+}
+
+// resourceURIs are the server's resources, as last listed.
+func (u *upstream) resourceURIs() []string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return slices.Clone(u.resources)
 }
 
 func listTools(ctx context.Context, sess *mcp.ClientSession) ([]*mcp.Tool, error) {
@@ -435,18 +459,9 @@ func (u *upstream) held() string {
 
 // call forwards one tool call, within the server's timeout.
 func (u *upstream) call(ctx context.Context, tool string, args json.RawMessage) (*mcp.CallToolResult, error) {
-	if why := u.held(); why != "" {
-		_, where := u.p.authHold(u.name)
-		return nil, fmt.Errorf("server %s cannot be used: %s; the user reconnects it in the workspace (%s)", u.name, why, where)
-	}
-	u.mu.Lock()
-	sess, status, errText := u.session, u.status, u.err
-	u.mu.Unlock()
-	if sess == nil {
-		if status == statusNeedsAuth {
-			return nil, fmt.Errorf("server %s needs an authorization: the user must run `eriphe connect %s`", u.name, u.name)
-		}
-		return nil, fmt.Errorf("server %s is not connected (%s %s)", u.name, status, errText)
+	sess, err := u.live()
+	if err != nil {
+		return nil, err
 	}
 	timeout := time.Duration(u.srv.Timeout) * time.Second
 	if timeout == 0 {
@@ -468,6 +483,33 @@ func (u *upstream) call(ctx context.Context, tool string, args json.RawMessage) 
 		}
 	}
 	return res, err
+}
+
+// live is the server's session, or why it cannot be used.
+func (u *upstream) live() (*mcp.ClientSession, error) {
+	if why := u.held(); why != "" {
+		_, where := u.p.authHold(u.name)
+		return nil, fmt.Errorf("server %s cannot be used: %s; the user reconnects it in the workspace (%s)", u.name, why, where)
+	}
+	u.mu.Lock()
+	sess, status, errText := u.session, u.status, u.err
+	u.mu.Unlock()
+	if sess == nil {
+		if status == statusNeedsAuth {
+			return nil, fmt.Errorf("server %s needs an authorization: the user must run `eriphe connect %s`", u.name, u.name)
+		}
+		return nil, fmt.Errorf("server %s is not connected (%s %s)", u.name, status, errText)
+	}
+	return sess, nil
+}
+
+// read reads one of the server's resources.
+func (u *upstream) read(ctx context.Context, uri string) (*mcp.ReadResourceResult, error) {
+	sess, err := u.live()
+	if err != nil {
+		return nil, err
+	}
+	return sess.ReadResource(ctx, &mcp.ReadResourceParams{URI: uri})
 }
 
 // readOnly tells whether a catalog tool, by its Claude Code name, is

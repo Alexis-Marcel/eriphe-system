@@ -12,8 +12,8 @@ func TestSkillTriggerParse(t *testing.T) {
 		return []byte("---\nname: x\ndescription: y\n" + extra + "---\nDo it.\n")
 	}
 	for _, ok := range []string{
-		"", "when: mail.received\n", "when: monitor.received key=getout\nevery: 15m\n",
-		"when: time weekdays 08:00\nmodel: small\n", "when: mail.received\ntools: [mail, calendar]\ncan: [start-session]\n",
+		"", "when: monitor.new\n", "when: monitor.received key=getout\nevery: 15m\n",
+		"when: time weekdays 08:00\nmodel: small\n", "when: monitor.new\ntools: [mail, calendar]\ncan: [start-session]\n",
 		"when: monitor.received key=maison status=couche\nevery: 1d\n",
 		"when: monitor.failed, monitor.recovered key=getout-prod\n", "when: monitor.failed,monitor.recovered\n",
 	} {
@@ -22,10 +22,10 @@ func TestSkillTriggerParse(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{
-		"every: 15m\n", "when: Mail\n", "when: mail.received key\n", "when: time\n", "when: time weekdays 08:00\nevery: 1h\n",
-		"when: mail.received\nevery: 2m\n", "when: mail.received\nevery: 3d\n", "when: mail.received\ncan: [delete-all]\n",
-		"when: mail.received\ntools: [Bad Name]\n",
-		"when: mail.received, time\n", "when: mail.received, Mail\n", "when: a.b, c.d, e.f, g.h, i.j, k.l\n", "when: , key=x\n",
+		"every: 15m\n", "when: Mail\n", "when: monitor.new key\n", "when: time\n", "when: time weekdays 08:00\nevery: 1h\n",
+		"when: monitor.new\nevery: 2m\n", "when: monitor.new\nevery: 3d\n", "when: monitor.new\ncan: [delete-all]\n",
+		"when: monitor.new\ntools: [Bad Name]\n",
+		"when: monitor.new, time\n", "when: monitor.new, Mail\n", "when: a.b, c.d, e.f, g.h, i.j, k.l\n", "when: , key=x\n",
 	} {
 		if _, err := parseSkillMD(front(bad)); err == nil {
 			t.Errorf("%q accepted", bad)
@@ -34,7 +34,7 @@ func TestSkillTriggerParse(t *testing.T) {
 	m, _ := parseSkillMD(front("when: monitor.received key=getout\nevery: 15m\ntools: [monitor]\ncan: [start-session]\n"))
 	tr := m.Trigger
 	if !tr.matches(journalEvent{Kind: evMonitorReceived, Key: "GetOut"}) || tr.matches(journalEvent{Kind: evMonitorReceived, Key: "other"}) ||
-		tr.matches(journalEvent{Kind: "mail.received", Key: "getout"}) {
+		tr.matches(journalEvent{Kind: "monitor.new", Key: "getout"}) {
 		t.Fatal("matches")
 	}
 	if s := tr.Text("fr"); !strings.Contains(s, "monitor.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "session") {
@@ -91,10 +91,10 @@ func runsOfSkill(t *testing.T, c *core, name string) []*skillRun {
 // external, lent the skill's tools, with no start card.
 func TestSkillRunBatches(t *testing.T) {
 	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: mails-rdv\ndescription: les rendez-vous des mails\nwhen: mail.received\nevery: 15m\ntools: [monitor]\n---\nRepère les rendez-vous.\n")
+	addTriggered(t, c, "---\nname: mails-rdv\ndescription: les rendez-vous des mails\nwhen: monitor.new\nevery: 15m\ntools: [monitor]\n---\nRepère les rendez-vous.\n")
 	ctx := context.Background()
 	for i, subject := range []string{"RDV le 8", "Promo", "Facture"} {
-		c.emit(journalEvent{Kind: "mail.received", Key: "perso", Source: "server:mail", External: true,
+		c.emit(journalEvent{Kind: "monitor.new", Key: "perso", Source: "monitor:mails", External: true,
 			At: now.Add(time.Duration(i*5) * time.Minute), Payload: map[string]any{"subject": subject}})
 	}
 	c.emit(journalEvent{Kind: "calendar.changed", Source: "server:calendar", At: *now}) // not its kind
@@ -108,7 +108,7 @@ func TestSkillRunBatches(t *testing.T) {
 		t.Fatalf("runs %+v", *rs[0])
 	}
 	task, _ := c.store.task(rs[0].Task)
-	for _, want := range []string{"Repère les rendez-vous", "RDV le 8", "Facture", "mail.received"} {
+	for _, want := range []string{"Repère les rendez-vous", "RDV le 8", "Facture", "monitor.new"} {
 		if !strings.Contains(task.Prompt, want) {
 			t.Errorf("the prompt lacks %q:\n%s", want, task.Prompt)
 		}
@@ -213,8 +213,8 @@ func TestSkillRunSilentAndTime(t *testing.T) {
 // A run that cannot start (an agent that does not exist) is kept refused.
 func TestSkillRunRefused(t *testing.T) {
 	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: x\ndescription: y\nwhen: mail.received\nmodel: nobody\n---\nz\n")
-	c.emit(journalEvent{Kind: "mail.received", Source: "server:mail", At: *now})
+	addTriggered(t, c, "---\nname: x\ndescription: y\nwhen: monitor.new\nmodel: nobody\n---\nz\n")
+	c.emit(journalEvent{Kind: "monitor.new", Source: "monitor:mails", At: *now})
 	c.tickSkills(context.Background(), *now)
 	if rs := runsOfSkill(t, c, "x"); len(rs) != 1 || rs[0].State != skillRunRefused || rs[0].Note == "" {
 		t.Fatalf("%+v", rs)
@@ -226,7 +226,7 @@ func TestSkillRunRefused(t *testing.T) {
 func TestWriteSkill(t *testing.T) {
 	c, now := skillCore(t)
 	out, err := c.writeSkill(writeSkillIn{Name: "mails-rdv", Description: "Les rendez-vous des mails",
-		Instructions: "Repère les rendez-vous et propose de les ajouter.", When: "mail.received", Every: "15m", Tools: []string{"monitor"}},
+		Instructions: "Repère les rendez-vous et propose de les ajouter.", When: "monitor.new", Every: "15m", Tools: []string{"monitor"}},
 		[]string{"mail.read_message"})
 	if err != nil {
 		t.Fatal(err)
@@ -241,10 +241,10 @@ func TestWriteSkill(t *testing.T) {
 		}
 	}
 	if !p.Pending || p.Tainted == "" || !strings.Contains(p.Text("fr"), "mails-rdv") || len(p.Fields) != 2 ||
-		!strings.Contains(p.Fields[0].Value, "mail.received") {
+		!strings.Contains(p.Fields[0].Value, "monitor.new") {
 		t.Fatalf("card %+v %q", p, p.Text("fr"))
 	}
-	c.emit(journalEvent{Kind: "mail.received", Source: "server:mail", At: *now})
+	c.emit(journalEvent{Kind: "monitor.new", Source: "monitor:mails", At: *now})
 	c.tickSkills(context.Background(), now.Add(time.Hour))
 	if rs := runsOfSkill(t, c, "mails-rdv"); len(rs) != 0 {
 		t.Fatal("ran before its approval")

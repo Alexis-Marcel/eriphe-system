@@ -9,26 +9,24 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func readEvents(t *testing.T, cs *mcp.ClientSession) (epoch string, events []serverEvent) {
+func readReceived(t *testing.T, cs *mcp.ClientSession) []receivedMail {
 	t.Helper()
-	res, err := cs.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: eventsURI})
+	res, err := cs.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: receivedURI})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var doc struct {
-		Epoch  string        `json:"epoch"`
-		Events []serverEvent `json:"events"`
+		Messages []receivedMail `json:"messages"`
 	}
 	if err := json.Unmarshal([]byte(res.Contents[0].Text), &doc); err != nil {
 		t.Fatal(err)
 	}
-	return doc.Epoch, doc.Events
+	return doc.Messages
 }
 
-// A message that lands in the INBOX after the first sync is a
-// mail.received event of the resource eriphe://events; the first sync's
-// messages are not.
-func TestEventsOfNewMail(t *testing.T) {
+// A message that lands in the INBOX after the first sync is listed in the
+// resource mail://received; the first sync's messages are not.
+func TestReceivedMail(t *testing.T) {
 	e := newEnv(t, rev2)
 	m, err := NewMailer(e.cfg)
 	if err != nil {
@@ -59,37 +57,32 @@ func TestEventsOfNewMail(t *testing.T) {
 	}
 	t.Cleanup(func() { cs.Close() })
 
-	epoch, evs := readEvents(t, cs)
-	if epoch == "" || len(evs) != 0 {
-		t.Fatalf("before any new mail: %q %+v", epoch, evs)
+	if got := readReceived(t, cs); len(got) != 0 {
+		t.Fatalf("before any new mail: %+v", got)
 	}
 	deliver(t, e.alice, "INBOX", samMail)
-	waitFor(t, "the event", func() bool { _, evs = readEvents(t, cs); return len(evs) == 1 })
-	ev := evs[0]
-	if ev.Seq != 1 || ev.Kind != "mail.received" || ev.Key != "perso" || ev.Payload["subject"] != "Lunch" ||
-		ev.Payload["from"] == "" || ev.Payload["id"] == "" {
-		t.Fatalf("event %+v", ev)
-	}
-	if again, _ := readEvents(t, cs); again != epoch {
-		t.Fatal("the epoch changed within a run")
+	var got []receivedMail
+	waitFor(t, "the message", func() bool { got = readReceived(t, cs); return len(got) == 1 })
+	if r := got[0]; r.Account != "perso" || r.Subject != "Lunch" || r.From == "" || r.ID == "" {
+		t.Fatalf("message %+v", r)
 	}
 }
 
 // Only the INBOX counts, a message received long ago is not news, and the
-// log keeps its last events.
-func TestEventLog(t *testing.T) {
-	l := newEventLog()
+// list keeps its last messages.
+func TestReceivedLog(t *testing.T) {
+	l := &receivedLog{}
 	now := time.Now()
 	l.mailChanged(MailboxChange{Account: "perso", Folder: "Sent", Added: []Added{{Summary{ID: "1"}, now}}}, now)
 	l.mailChanged(MailboxChange{Account: "perso", Folder: "INBOX", Added: []Added{
 		{Summary{ID: "2", Subject: "old"}, now.Add(-48 * time.Hour)}, {Summary{ID: "3", Subject: "new"}, now}}}, now)
-	if len(l.events) != 1 || l.events[0].Payload["id"] != "3" {
-		t.Fatalf("%+v", l.events)
+	if len(l.mails) != 1 || l.mails[0].ID != "3" {
+		t.Fatalf("%+v", l.mails)
 	}
-	for i := 0; i < eventsKept+5; i++ {
-		l.add("mail.received", "perso", now, nil)
+	for i := 0; i < receivedKept+5; i++ {
+		l.add(receivedMail{ID: "x"})
 	}
-	if len(l.events) != eventsKept || l.events[0].Seq != 7 || l.events[eventsKept-1].Seq != int64(eventsKept+6) {
-		t.Fatalf("kept %d, from %d to %d", len(l.events), l.events[0].Seq, l.events[len(l.events)-1].Seq)
+	if len(l.mails) != receivedKept || l.mails[0].ID != "x" {
+		t.Fatalf("kept %d, first %+v", len(l.mails), l.mails[0])
 	}
 }

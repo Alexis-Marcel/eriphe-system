@@ -113,8 +113,7 @@ func newCore(cfg *Config, store *Store) *core {
 	}
 	c.pool.connToken = c.connectionToken // a tool on a connection that mints its tokens
 	c.pool.connRefused = c.connectionRefused
-	c.pool.authHold = c.connectionHold  // an account to connect again (connections.go)
-	c.pool.opened = c.watchServerEvents // the servers' events (event_sources.go)
+	c.pool.authHold = c.connectionHold // an account to connect again (connections.go)
 	// Local servers are services, reached on their node.
 	c.pool.dialLocal = func(ctx context.Context, name string, _ json.RawMessage) (mcp.Transport, error) {
 		return c.dialService(ctx, name)

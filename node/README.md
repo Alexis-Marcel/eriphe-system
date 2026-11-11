@@ -1476,7 +1476,7 @@ The node is the only client of the server's process, over the container's stdin 
 and instructions), so several sessions of eriphe-core share one process. Caveats: the process sees
 one client, so whatever state it keeps between calls (a selected mailbox, a login, a working
 directory) is shared by every session; tools and resources are relayed (the mail server's
-`eriphe://events`, which eriphe-core follows), not prompts, resource templates, its
+`mail://received`, which a monitor reads), not prompts, resource templates, its
 notifications (progress, logs) or its requests (sampling, elicitation). The bridge outlives the
 container: during a restart a call fails ("restarting"), and when it is back the same sessions go
 on, its tools and resources listed again (`list_changed` if they changed). Sessions idle for an hour, and
