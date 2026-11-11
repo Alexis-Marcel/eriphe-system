@@ -391,6 +391,7 @@ func checkEntryName(kind, name string) error {
 func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string) {
 	d := newDynamic()
 	skipped := map[string]string{}
+	legacyRepoPlaces(store) // connection_places.go
 	rows, err := store.catalogRows()
 	if err != nil {
 		log.Printf("catalog: %v", err)

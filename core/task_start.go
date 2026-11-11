@@ -10,7 +10,8 @@ import (
 
 // A task's crossings, decided at launch. What a task lent by run_task needs
 // of the user's (a write to a repository not lent outright by a clean start)
-// is foreseen with the same decision as the push itself (decideRepo),
+// is foreseen with the same decision as the push itself (decideRepo), for
+// the case its lend names (its branch, or the default branch),
 // and asked once, when the task starts. The task waits meanwhile: it is kept,
 // pending, with desired "held", which no node sees and no placement moves.
 // The user gets one card in the conversation (convo_cards.go, kind
@@ -70,8 +71,15 @@ func (c *core) startNeeds(list []ResourceRef, clean bool) []startNeed {
 		if g.Access != accessWrite {
 			continue
 		}
-		if d := decideRepo(g.Repo, accessWrite, repoFacts{Repos: repos, Clean: clean}); d.Decision == decideAsk {
-			out = append(out, startNeed{Repo: g.Repo, Access: accessWrite, Branch: g.Branch, Reason: d.Reason})
+		// What the lend says it does: its work branch is Modifier, the
+		// default branch (no branch given) Envoyer. Supprimer is not asked
+		// ahead: a deletion goes only where it is free.
+		cat := catChange
+		if g.Branch == "" {
+			cat = catSend
+		}
+		if d := decideRepo(g.Repo, cat, repoFacts{Repos: repos, Clean: clean, Case: c.repoCase}); d.Decision == decideAsk {
+			out = append(out, startNeed{Repo: g.Repo, Access: accessWrite, Category: cat, Branch: g.Branch, Reason: d.Reason})
 		}
 	}
 	return out
@@ -168,6 +176,10 @@ func startText(needs []startNeed, lang string) string {
 		if n.Server != "" || n.Folder != "" {
 			continue // said below
 		}
+		if n.Category == catSend {
+			lines = append(lines, fmt.Sprintf(tr(lang, "taskstart.repo."+n.Category), n.Repo))
+			continue
+		}
 		target := fmt.Sprintf(tr(lang, "taskstart.target.repo"), n.Repo)
 		if n.Branch != "" {
 			target = fmt.Sprintf(tr(lang, "taskstart.target.branch"), n.Branch, n.Repo)
@@ -212,7 +224,7 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 		if n.Folder != "" {
 			continue // its mount is the task's from the start: the yes lets it go
 		}
-		c.store.grantRepo(s.TaskID, n.Repo, n.Access)
+		c.store.grantRepo(s.TaskID, n.Repo, cmpOr(n.Category, catChange))
 		c.store.logAccess(s.TaskID, "git", gitHost, n.Repo, n.Access, decideAllow, byUser, "", "approved at launch: "+n.Reason)
 	}
 	c.store.db.Exec(`UPDATE tasks SET desired = ?, pending_reason = '', updated = ? WHERE id = ? AND desired = ?`,

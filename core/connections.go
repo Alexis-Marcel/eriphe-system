@@ -161,7 +161,6 @@ func (c *core) dropConnection(ctx context.Context, cn connection) {
 	c.conns.mu.Lock()
 	c.store.db.Exec(`DELETE FROM connections WHERE id = ?`, cn.ID)
 	c.conns.mu.Unlock()
-	c.dropConnectionPlaces(cn.ID)
 }
 
 // specSecrets are the vault secrets a local server's spec reads.

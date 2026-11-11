@@ -66,7 +66,7 @@ func assignedIDs(t *testing.T, c *core) []string {
 
 // mayPush is the decision on a push to the repository lent.
 func mayPush(c *core, t *TaskRow) repoDecision {
-	return decideRepo("owner/repo", accessWrite, c.repoFacts(t))
+	return decideRepo("owner/repo", catChange, c.repoFacts(t))
 }
 
 // launchWrite lends a repository for write on a branch, on a start that is
@@ -137,7 +137,7 @@ func TestTaskStartHeld(t *testing.T) {
 	if _, err := c.answer(context.Background(), task.ID, "", "", &allow, byBrain); err == nil {
 		t.Fatal("the brain answered a held start")
 	}
-	if !c.heldTask(task.ID) || c.store.repoGranted(task.ID, "owner/repo", accessWrite) {
+	if !c.heldTask(task.ID) || c.store.repoGranted(task.ID, "owner/repo", catChange) {
 		t.Fatal("decided without the user")
 	}
 }
@@ -181,7 +181,7 @@ func TestTaskStartDeclined(t *testing.T) {
 		t.Fatalf("%+v %v", x, err)
 	}
 	got, _ := c.store.task(task.ID)
-	if got.State != stateStopped || slices.Contains(assignedIDs(t, c), task.ID) || c.store.repoGranted(task.ID, "owner/repo", accessWrite) {
+	if got.State != stateStopped || slices.Contains(assignedIDs(t, c), task.ID) || c.store.repoGranted(task.ID, "owner/repo", catChange) {
 		t.Fatalf("declined start: %+v", got)
 	}
 	msgs, _ := c.store.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE role = ?`, roleEvent)
@@ -252,7 +252,8 @@ func TestTaskStartApprovedInAdvance(t *testing.T) {
 	c.store.set(lentByUserKey(task.ID), "1")
 	c.grantLent(task)
 	got, _ := c.store.task(task.ID)
-	if d := mayPush(c, got); d.Decision != decideAllow {
+	// No branch: it pushes the default branch, Envoyer, approved ahead.
+	if d := decideRepo("owner/repo", catSend, c.repoFacts(got)); d.Decision != decideAllow {
 		t.Fatalf("push: %+v", d)
 	}
 }

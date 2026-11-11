@@ -112,6 +112,10 @@ func (f *fakeGitHubAPI) serve(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"total_count": n, "repositories": repos})
 		return
 	}
+	if r.URL.Path == "/repos/owner/repo" && strings.HasPrefix(r.Header.Get("Authorization"), "token ghs_") {
+		io.WriteString(w, `{"full_name": "owner/repo", "default_branch": "main"}`)
+		return
+	}
 	if !f.checkJWT(r) {
 		w.WriteHeader(http.StatusUnauthorized)
 		io.WriteString(w, `{"message":"A JSON web token could not be decoded"}`)

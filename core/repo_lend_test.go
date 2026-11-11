@@ -9,33 +9,42 @@ import (
 	"time"
 )
 
+// A use of a repository is held to the lend and to the repository's case:
+// never is refused, free goes on the user's own start, approval (or free on
+// another start) needs the yes of the start's card, for that case only.
 func TestDecideRepo(t *testing.T) {
 	granted := func(repos ...string) func(string, string) bool {
-		return func(repo, access string) bool { return slices.Contains(repos, repo+"@"+access) }
+		return func(repo, cat string) bool { return slices.Contains(repos, repo+"@"+cat) }
+	}
+	cases := func(change, delete, send string) func(string, string) string {
+		return func(_, cat string) string {
+			return map[string]string{catChange: change, catDelete: delete, catSend: send}[cat]
+		}
 	}
 	read := []repoGrant{{Repo: "owner/repo", Access: accessRead}}
 	write := []repoGrant{{Repo: "owner/repo", Access: accessWrite}}
-	branch := []repoGrant{{Repo: "owner/repo", Access: accessWrite, Branch: "eriphe/fix"}}
-	cases := []struct {
-		name         string
-		repo, access string
-		facts        repoFacts
-		want, reason string
+	free := cases(gridFree, gridApproval, gridNever)
+	for _, c := range []struct {
+		name           string
+		repo, category string
+		facts          repoFacts
+		want, reason   string
 	}{
-		{"a read of its repository", "owner/repo", accessRead, repoFacts{Repos: read}, decideAllow, "own repository"},
-		{"case does not matter", "Owner/Repo", accessRead, repoFacts{Repos: read}, decideAllow, ""},
-		{"lent for read takes no push", "owner/repo", accessWrite, repoFacts{Repos: read}, decideDeny, "for read"},
-		{"not even with a yes", "owner/repo", accessWrite, repoFacts{Repos: read, Granted: granted("owner/repo@write")}, decideDeny, "for read"},
-		{"a branch on a clean start", "owner/repo", accessWrite, repoFacts{Repos: branch, Clean: true}, decideAllow, "lent for write"},
-		{"a branch, not the user's own start", "owner/repo", accessWrite, repoFacts{Repos: branch}, decideAsk, "not the user's own"},
-		{"no branch", "owner/repo", accessWrite, repoFacts{Repos: write, Clean: true}, decideAsk, "no branch"},
-		{"approved", "owner/repo", accessWrite, repoFacts{Repos: write, Granted: granted("owner/repo@write")}, decideAllow, "approved"},
-		{"a read approval is not a write", "owner/repo", accessWrite, repoFacts{Repos: write, Granted: granted("owner/repo@read")}, decideAsk, ""},
-		{"another repository", "owner/other", accessRead, repoFacts{Repos: read}, decideDeny, "not the repository"},
-		{"nothing lent", "owner/repo", accessRead, repoFacts{}, decideDeny, "not the repository"},
-	}
-	for _, c := range cases {
-		d := decideRepo(c.repo, c.access, c.facts)
+		{"a read of its repository", "owner/repo", catRead, repoFacts{Repos: read}, decideAllow, "own repository"},
+		{"case does not matter", "Owner/Repo", catRead, repoFacts{Repos: read}, decideAllow, ""},
+		{"lent for read takes no push", "owner/repo", catChange, repoFacts{Repos: read, Case: free}, decideDeny, "for read"},
+		{"not even with a yes", "owner/repo", catChange, repoFacts{Repos: read, Case: free, Granted: granted("owner/repo@change")}, decideDeny, "for read"},
+		{"free on a clean start", "owner/repo", catChange, repoFacts{Repos: write, Case: free, Clean: true}, decideAllow, "free"},
+		{"free, not the user's own start", "owner/repo", catChange, repoFacts{Repos: write, Case: free}, decideAsk, "not the user's own"},
+		{"on approval, even clean", "owner/repo", catDelete, repoFacts{Repos: write, Case: free, Clean: true}, decideAsk, "on approval"},
+		{"approved", "owner/repo", catDelete, repoFacts{Repos: write, Case: free, Granted: granted("owner/repo@delete")}, decideAllow, "approved"},
+		{"another case's yes is not this one's", "owner/repo", catDelete, repoFacts{Repos: write, Case: free, Granted: granted("owner/repo@change")}, decideAsk, ""},
+		{"never, even approved", "owner/repo", catSend, repoFacts{Repos: write, Case: free, Clean: true, Granted: granted("owner/repo@send")}, decideDeny, "never"},
+		{"no rules: never", "owner/repo", catChange, repoFacts{Repos: write, Clean: true}, decideDeny, "never"},
+		{"another repository", "owner/other", catRead, repoFacts{Repos: read}, decideDeny, "not the repository"},
+		{"nothing lent", "owner/repo", catRead, repoFacts{}, decideDeny, "not the repository"},
+	} {
+		d := decideRepo(c.repo, c.category, c.facts)
 		if d.Decision != c.want || !strings.Contains(d.Reason, c.reason) {
 			t.Errorf("%s: %s (%s), want %s (%q)", c.name, d.Decision, d.Reason, c.want, c.reason)
 		}

@@ -16,16 +16,17 @@ import (
 // and gh use it as a token, and each request crosses the node's relay to
 // eriphe-core (git_access.go), which decides, deny by default (decideRepo):
 // the repository must be lent to the task, as a repo resource (resources.go),
-// with enough access. What is decided is the lend, at launch, as for any
-// access (lent_access.go): a read needs nothing; a write on a declared branch
-// needs a clean start (lend.go); anything else the user's yes on the start's
-// card (task_start.go). What the task reads afterwards changes nothing, and
-// nothing waits in a command: what is not lent is refused at once, with its
-// reason. The token that goes in is short-lived, for that one repository and
-// those rights only: a GitHub App installation token, one hour
-// (github_app.go), and only for a repository the user gave to Eriphe, a
-// place of the app's connection (connection_places.go). Every request is logged
-// (access_log) and shown in the task's details.
+// for write to push, and the push is held to the repository's case
+// (connection_places.go): Modifier for a branch, Supprimer to delete one,
+// Envoyer for the default branch or a tag. What is decided is the lend, at
+// launch, as for any access (lent_access.go): a case never is refused; a
+// free one needs a clean start (lend.go); one on approval, or a free one
+// otherwise, the user's yes on the start's card (task_start.go). What the
+// task reads afterwards changes nothing, and nothing waits in a command:
+// what is not lent is refused at once, with its reason. The token that goes
+// in is short-lived, for that one repository and those rights only: a
+// GitHub App installation token, one hour (github_app.go). Every request is
+// logged (access_log) and shown in the task's details.
 
 const (
 	accessRead  = "read"
@@ -80,7 +81,9 @@ func repoOf(raw string) string {
 type repoFacts struct {
 	Repos   []repoGrant // the GitHub repositories lent to it
 	Clean   bool        // a clean start (lend.go)
-	Granted func(repo, access string) bool
+	Granted func(repo, category string) bool
+	// Case is a repository's value of a case (repoCase); nil: never.
+	Case func(repo, category string) string
 }
 
 // repoGrant is a GitHub repository lent to a task: owner/name, its access
@@ -105,30 +108,41 @@ type repoDecision struct {
 	Decision, Reason string
 }
 
-// decideRepo applies the lend to a use of a repository, deny by default.
-func decideRepo(repo, access string, f repoFacts) repoDecision {
+// repoCaseWords say a case of a repository in the log and to the task.
+var repoCaseWords = map[string]string{catChange: "a push to a branch", catDelete: "a branch deletion", catSend: "a push to the default branch or a tag"}
+
+// decideRepo applies the lend and the repository's case to a use of it
+// (read, or one of repoWriteCases), deny by default.
+func decideRepo(repo, category string, f repoFacts) repoDecision {
 	g := covering(f.Repos, repo)
+	what := repoCaseWords[category]
+	value := gridNever
+	if f.Case != nil {
+		value = f.Case(repo, category)
+	}
 	switch {
 	case g == nil:
 		return repoDecision{decideDeny, repo + " is not the repository this task was asked to work on"}
-	case access != accessWrite:
+	case category == catRead:
 		return repoDecision{decideAllow, "the task's own repository"}
 	case g.Access != accessWrite:
 		return repoDecision{decideDeny, repo + " is lent to this task for read: it cannot push there"}
-	case g.Branch != "" && f.Clean:
-		return repoDecision{decideAllow, "lent for write to " + repo + " on " + g.Branch}
-	case f.Granted != nil && f.Granted(repo, accessWrite):
+	case value == gridNever:
+		return repoDecision{decideDeny, what + " of " + repo + " is never allowed to Eriphe (its rules, Settings → Tools → GitHub)"}
+	case value == gridFree && f.Clean:
+		return repoDecision{decideAllow, what + " of " + repo + ", free, on the user's own start"}
+	case f.Granted != nil && f.Granted(repo, category):
 		return repoDecision{decideAllow, "approved by the user at launch"}
-	case g.Branch == "":
-		return repoDecision{decideAsk, "a write to " + repo + " with no branch declared"}
+	case value == gridApproval:
+		return repoDecision{decideAsk, what + " of " + repo + " is on approval"}
 	}
-	return repoDecision{decideAsk, "a write to " + repo + " on a start that is not the user's own"}
+	return repoDecision{decideAsk, what + " of " + repo + " on a start that is not the user's own"}
 }
 
 // repoFacts is what is known of a task when a use is decided.
 func (c *core) repoFacts(t *TaskRow) repoFacts {
-	facts := repoFacts{Repos: lentRepos(t.Resources), Clean: c.store.get(lentByUserKey(t.ID)) != ""}
-	facts.Granted = func(repo, access string) bool { return c.store.repoGranted(t.ID, repo, access) }
+	facts := repoFacts{Repos: lentRepos(t.Resources), Clean: c.store.get(lentByUserKey(t.ID)) != "", Case: c.repoCase}
+	facts.Granted = func(repo, category string) bool { return c.store.repoGranted(t.ID, repo, category) }
 	return facts
 }
 
@@ -160,18 +174,18 @@ func isGitHubServer(name string, s Server) bool {
 // taskTaintKey marks a task started on a tainted turn of the brain.
 func taskTaintKey(id string) string { return "task_taint:" + id }
 
-// grantRepo keeps the user's yes on a start's card for the rest of the task.
-func (s *Store) grantRepo(taskID, repo, access string) {
+// grantRepo keeps the user's yes on a start's card, for one case of a
+// repository, for the rest of the task.
+func (s *Store) grantRepo(taskID, repo, category string) {
 	s.db.Exec(`INSERT OR IGNORE INTO repo_grants (task_id, service, repo, access, time) VALUES (?, 'github', ?, ?, ?)`,
-		taskID, strings.ToLower(repo), access, time.Now().Unix())
+		taskID, strings.ToLower(repo), category, time.Now().Unix())
 }
 
-// repoGranted: the user approved this access, or a write, to the
-// repository in this task.
-func (s *Store) repoGranted(taskID, repo, access string) bool {
+// repoGranted: the user approved this case of the repository in this task.
+func (s *Store) repoGranted(taskID, repo, category string) bool {
 	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM repo_grants WHERE task_id = ? AND repo = ? AND (access = ? OR access = 'write')`,
-		taskID, strings.ToLower(repo), access).Scan(&n)
+	s.db.QueryRow(`SELECT COUNT(*) FROM repo_grants WHERE task_id = ? AND repo = ? AND access = ?`,
+		taskID, strings.ToLower(repo), category).Scan(&n)
 	return n > 0
 }
 

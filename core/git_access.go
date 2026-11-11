@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"errors"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -25,10 +29,12 @@ import (
 // for the task's one repository (ghRequest).
 //
 // As for any access, what is decided is the lend: a repository, read or
-// write. What is pushed is not read. The branch lent is what the task is
-// told to push to, and the rest is the provider's, a token for that one
-// repository and the repository's own protection rules. The shell rules
-// (policy.go) stop a push to main or a forced one by mistake, no more.
+// write, and, for a push, the case of each ref it updates (decideRepo):
+// a deletion is Supprimer, the default branch or a tag Envoyer, any other
+// branch Modifier. The commands are read at the head of the push; what is
+// pushed is not. The rest is the provider's: a token for that one
+// repository and the repository's own protection rules (a forced push is
+// Modifier, left to them).
 
 // gitTokenEnvs are the variables git and gh read their token from: a
 // task's placeholder, never a credential's of its own.
@@ -69,6 +75,7 @@ type gitCall struct {
 	repo   string // owner/name, if it is a call of git's
 	access string
 	lfs    bool // Large File Storage: its path does not tell an upload
+	push   bool // the push itself, whose commands say what it updates
 }
 
 // readGitCall reads a request's path.
@@ -84,7 +91,7 @@ func readGitCall(method string, uri *url.URL) gitCall {
 	repo := repoOf(parts[0] + "/" + parts[1])
 	switch rest := parts[2]; {
 	case rest == gitReceivePack && method == http.MethodPost:
-		return gitCall{repo: repo, access: accessWrite}
+		return gitCall{repo: repo, access: accessWrite, push: true}
 	case rest == "info/refs" && uri.Query().Get("service") == gitReceivePack:
 		return gitCall{repo: repo, access: accessWrite}
 	case strings.HasPrefix(rest, "info/lfs/"):
@@ -118,13 +125,7 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 		log.Printf("git: task %s: %s %s refused: %s", t.ID, r.Method, call.repo, line)
 	}
 	facts := c.repoFacts(t)
-	if call.lfs {
-		if decideRepo(call.repo, accessWrite, facts).Decision == decideAllow {
-			call.access = accessWrite // it may be an upload: what the task may write, it may store
-		}
-	}
-	d := decideRepo(call.repo, call.access, facts)
-	if d.Decision != decideAllow {
+	deny := func(d repoDecision) (*strings.Replacer, bool) {
 		why := d.Reason
 		if d.Decision == decideAsk {
 			why = notApproved(why)
@@ -133,14 +134,106 @@ func (c *core) gitRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, ur
 		http.Error(w, why, http.StatusForbidden)
 		return none, false
 	}
+	if call.lfs {
+		if mayWrite(call.repo, facts) {
+			call.access = accessWrite // it may be an upload: what the task may write, it may store
+		}
+	}
+	d := decideRepo(call.repo, catRead, facts)
+	if call.access == accessWrite {
+		// The discovery of a push, or an upload: one case at least must go.
+		if d = decideRepo(call.repo, catChange, facts); !mayWrite(call.repo, facts) {
+			return deny(d)
+		}
+		d = repoDecision{decideAllow, "a write the repository's cases allow"}
+	}
+	if d.Decision != decideAllow {
+		return deny(d)
+	}
 	m, err := c.mintGitHub(r.Context(), t.ID, call.repo, call.access, false)
 	if err != nil {
 		refuse("cannot give a credential: " + err.Error())
 		http.Error(w, "eriphe-core cannot get a token for "+call.repo, http.StatusBadGateway)
 		return none, false
 	}
+	if call.push {
+		cmds, body, err := pushCommands(r.Body)
+		if err != nil || r.Header.Get("Content-Encoding") != "" {
+			return deny(repoDecision{decideDeny, "eriphe-core cannot read which branches this push updates"})
+		}
+		r.Body = struct {
+			io.Reader
+			io.Closer
+		}{body, r.Body}
+		main, err := c.github.defaultBranch(r.Context(), call.repo, m.Password)
+		if err != nil {
+			return deny(repoDecision{decideDeny, "eriphe-core cannot read the default branch of " + call.repo + ": " + err.Error()})
+		}
+		for _, cmd := range cmds {
+			if d = decideRepo(call.repo, cmd.category(main), facts); d.Decision != decideAllow {
+				return deny(repoDecision{d.Decision, cmd.Ref + ": " + d.Reason})
+			}
+		}
+	}
 	c.store.logAccess(t.ID, gitLogTool, "github.com", call.repo, call.access, decideAllow, byPolicy, m.Source, d.Reason)
 	return putGitHubToken(r, placeholder, m.Password), true
+}
+
+// mayWrite: one of the repository's write cases goes for this task.
+func mayWrite(repo string, f repoFacts) bool {
+	return slices.ContainsFunc(repoWriteCases, func(cat string) bool { return decideRepo(repo, cat, f).Decision == decideAllow })
+}
+
+// pushCommand is one ref a push updates.
+type pushCommand struct{ Old, New, Ref string }
+
+// category is the case of the repository the command is: a deletion
+// Supprimer, the default branch or a tag Envoyer, any other ref Modifier.
+func (p pushCommand) category(defaultBranch string) string {
+	switch {
+	case strings.Trim(p.New, "0") == "":
+		return catDelete
+	case p.Ref == "refs/heads/"+defaultBranch, strings.HasPrefix(p.Ref, "refs/tags/"):
+		return catSend
+	}
+	return catChange
+}
+
+// pushCommands reads the commands at the head of a push (git's pkt-lines,
+// up to the flush), and gives the body back whole to forward.
+func pushCommands(body io.Reader) ([]pushCommand, io.Reader, error) {
+	var head bytes.Buffer
+	in := io.TeeReader(body, &head)
+	var cmds []pushCommand
+	for range 10000 {
+		var size [4]byte
+		if _, err := io.ReadFull(in, size[:]); err != nil {
+			return nil, nil, err
+		}
+		n, err := strconv.ParseUint(string(size[:]), 16, 16)
+		switch {
+		case err != nil:
+			return nil, nil, err
+		case n == 0: // the flush; alone, git's probe of a large push
+			return cmds, io.MultiReader(&head, body), nil
+		case n < 4:
+			return nil, nil, errors.New("not a push")
+		}
+		line := make([]byte, n-4)
+		if _, err := io.ReadFull(in, line); err != nil {
+			return nil, nil, err
+		}
+		text, _, _ := strings.Cut(string(line), "\x00") // the first line's capabilities
+		if strings.HasPrefix(text, "shallow ") {
+			continue
+		}
+		f := strings.Fields(text)
+		if len(f) != 3 {
+			return nil, nil, errors.New("not a push")
+		}
+		cmds = append(cmds, pushCommand{f[0], f[1], f[2]})
+	}
+	return nil, nil, errors.New("too many refs in one push")
 }
 
 // putGitHubToken swaps the token in, and tells what takes it out of the
@@ -188,8 +281,8 @@ func (c *core) ghRequest(w http.ResponseWriter, t *TaskRow, r *http.Request, uri
 		return refuse(http.StatusForbidden, named, orStr(named, "GitHub")+" is not lent to this task")
 	}
 	repo, access := repos[0].Repo, accessRead
-	if decideRepo(repo, accessWrite, facts).Decision == decideAllow {
-		access = accessWrite
+	if decideRepo(repo, catChange, facts).Decision == decideAllow {
+		access = accessWrite // pull requests and issues: Modifier
 	}
 	m, err := c.mintGitHub(r.Context(), t.ID, repo, access, true)
 	if err != nil && access == accessRead {
