@@ -53,6 +53,11 @@ func fakeMCPServer() *mcp.Server {
 	mcp.AddTool(s, &mcp.Tool{Name: "pid"}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: strconv.Itoa(os.Getpid())}}}, nil, nil
 	})
+	s.AddResource(&mcp.Resource{URI: "eriphe://events", Name: "events", MIMEType: "application/json"},
+		func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: "eriphe://events", MIMEType: "application/json",
+				Text: `{"pid": ` + strconv.Itoa(os.Getpid()) + `}`}}}, nil
+		})
 	mcp.AddTool(s, &mcp.Tool{Name: "crash"}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
 		os.Exit(3)
 		return nil, nil, nil
@@ -270,6 +275,23 @@ func TestServiceStdioBridge(t *testing.T) {
 	if pidA == "" || pidA != pidB {
 		t.Fatalf("sessions do not share the process: %q %q", pidA, pidB)
 	}
+	// Its resources too (the mail server's events).
+	if init := a.InitializeResult(); init.Capabilities.Resources == nil {
+		t.Errorf("no resources capability: %+v", init.Capabilities)
+	}
+	var uris []string
+	for r, err := range b.Resources(context.Background(), nil) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		uris = append(uris, r.URI)
+	}
+	if !slices.Equal(uris, []string{"eriphe://events"}) {
+		t.Fatalf("resources = %v", uris)
+	}
+	if got := readText(t, a, "eriphe://events"); got != `{"pid": `+pidA+`}` {
+		t.Fatalf("events = %q", got)
+	}
 
 	// A crash: the service restarts, the same sessions go on with a new process.
 	callText(t, a, "crash", nil)
@@ -281,6 +303,9 @@ func TestServiceStdioBridge(t *testing.T) {
 	}
 	if got, err := callText(t, a, "echo", map[string]any{"text": "again"}); err != nil || got != "again" {
 		t.Fatalf("echo after restart = %q, %v", got, err)
+	}
+	if got := readText(t, b, "eriphe://events"); got != `{"pid": `+pid+`}` {
+		t.Fatalf("events after restart = %q", got)
 	}
 	if s.lastErr != "" {
 		t.Errorf("error kept after recovery: %q", s.lastErr)
@@ -425,4 +450,17 @@ func TestLiveService(t *testing.T) {
 	if len(tools) == 0 {
 		t.Fatal("no tools")
 	}
+}
+
+// readText reads a resource's text through a session.
+func readText(t *testing.T, cs *mcp.ClientSession, uri string) string {
+	t.Helper()
+	r, err := cs.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: uri})
+	if err != nil {
+		t.Fatalf("read %s: %v", uri, err)
+	}
+	if len(r.Contents) != 1 {
+		t.Fatalf("read %s: %+v", uri, r.Contents)
+	}
+	return r.Contents[0].Text
 }

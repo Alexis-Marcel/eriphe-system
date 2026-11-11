@@ -1472,13 +1472,14 @@ reaches (`service_mcp.go`). `GET /v1/node` says `"services": true` when Docker a
 ### stdio: the bridge
 
 The node is the only client of the server's process, over the container's stdin and stdout
-(go-sdk `IOTransport`), and serves its tools again as its own MCP server (with the server's name
+(go-sdk `IOTransport`), and serves its tools and resources again as its own MCP server (with the server's name
 and instructions), so several sessions of eriphe-core share one process. Caveats: the process sees
 one client, so whatever state it keeps between calls (a selected mailbox, a login, a working
-directory) is shared by every session; only tools are relayed, not resources, prompts, its
+directory) is shared by every session; tools and resources are relayed (the mail server's
+`eriphe://events`, which eriphe-core follows), not prompts, resource templates, its
 notifications (progress, logs) or its requests (sampling, elicitation). The bridge outlives the
 container: during a restart a call fails ("restarting"), and when it is back the same sessions go
-on, its tools listed again (`tools/list_changed` if they changed). Sessions idle for an hour, and
+on, its tools and resources listed again (`list_changed` if they changed). Sessions idle for an hour, and
 all of them when the node restarts, are dropped: the client opens a new one.
 
 ### http: the proxy
