@@ -438,13 +438,24 @@ func (c *core) cardProposed(kind string, id int64) {
 	if !p.Pending {
 		return
 	}
+	c.cardAgain(p)
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, turn, text, created) VALUES (?, ?, 1, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET turn = 1 WHERE seq = 0`, proposalRef(kind, id), kind, p.Text("fr"), time.Now().Unix())
 }
 
-// syncCards gives every waiting proposal without a card one, queued.
+// cardAgain: the same proposal waits again after its card was decided (a
+// change of a skill or a monitor already approved). Its card waits again,
+// queued, rather than staying decided under an old message.
+func (c *core) cardAgain(p proposal) {
+	c.store.db.Exec(`UPDATE convo_cards SET seq = 0, turn = 0, state = ?, text = ?, created = ?, attached = 0, decided = 0, by = ''
+		WHERE ref = ? AND state != ?`, cardPending, p.Text("fr"), time.Now().Unix(), proposalRef(p.Kind, p.ID), cardPending)
+}
+
+// syncCards gives every waiting proposal without a waiting card one,
+// queued.
 func (c *core) syncCards() {
 	for _, p := range c.pendingProposals() {
+		c.cardAgain(p)
 		c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)`,
 			proposalRef(p.Kind, p.ID), p.Kind, p.Text("fr"), time.Now().Unix())
 	}
