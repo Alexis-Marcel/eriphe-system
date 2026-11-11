@@ -394,6 +394,7 @@ holds their credentials and is the only one to reach them: **a task never sees a
 | `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"connection": "<id>"}` (a connection whose provider mints the tokens, refreshed before they end: Eriphe's GitHub App on one account's or organization's installation, see [GitHub in a task](#the-github-app)), `{"none": true}` |
 | `run` | instead of `url` and `auth`: a local server, a container a node runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
 | `use` | what it is for, for the brain |
+| `title` | the user's own name for it, shown on its card and as its page's heading (set there, `POST /settings/tools/{name}/title`); the key stays its technical name, in its tools' names, and a new title restarts nothing |
 | `access` | what Eriphe may do on it: `read-only`, `reads`, `free` or `ask` (see [access levels](#access-levels)); without it, `ask` |
 | `always_load` | its tools are loaded upfront by a harness that otherwise searches for them (Claude Code's tool search): one model round trip less before the first call; for a few tools needed fast, such as the house |
 | `timeout` | seconds for one tool call (600) |
@@ -2856,7 +2857,8 @@ eriphe-core can join the owner's private Tailscale network (a *tailnet*) by itse
 embedded Tailscale ([tsnet](https://tailscale.com/kb/1244/tsnet), BSD-3): the workspace and the
 API are then reachable from every device of that tailnet, at home and away, in HTTPS with a
 certificate browsers trust, and nothing is opened on the router. It is off by default and turned on
-from the workspace, **Settings → Access → Espace web** (owner only):
+from the workspace, **Settings → Access → Espace web** (owner only; its entry's badge is the address
+the workspace is opened at, the remote access's state under it):
 
 1. **Turn on remote access** starts Tailscale (machine name `eriphe` by default).
 2. **Log in to Tailscale** opens Tailscale's login page (a free account with Google, Apple or

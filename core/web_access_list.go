@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -61,7 +62,9 @@ type entryRow struct {
 	State   string // on, wait, bad or off: the chip's colour
 	Label   string // the chip's words (a key), with Count if it has a %d
 	Count   int
+	Address string // in the chip's place, shown as is: the web's address in use
 	Detail  string // shown as is: an address, a bot
+	Note    string // a key, shown under it: the remote access's state
 }
 
 // Chip is the class of its state's chip, as the tools have.
@@ -89,22 +92,26 @@ type entryPage struct {
 	Catalog []entryTile
 }
 
-func (w *web) entryPage() entryPage {
+func (w *web) entryPage(r *http.Request) entryPage {
 	var v entryPage
 	c := w.c
-	// The web: the remote access.
-	web := entryRow{Kind: entryWeb, URL: "/settings/access/web", Speaker: speakerUser, State: "off", Label: "remote.phase.off"}
+	// The web: the address it is opened at, in use; the remote access's
+	// state under it ("Désactivé" is the remote access, not the web).
+	web := entryRow{Kind: entryWeb, URL: "/settings/access/web", Speaker: speakerUser, State: "on",
+		Address: strings.TrimPrefix(strings.TrimPrefix(w.publicURL(r), "https://"), "http://"), Note: "acc.web.remoteoff"}
 	if c.remote != nil {
-		rv := c.remote.current()
-		web.Label = "remote.phase." + rv.Phase
-		switch rv.Phase {
+		switch rv := c.remote.current(); rv.Phase {
 		case phaseOff:
 		case phaseReady:
-			web.State, web.Detail = "on", rv.URL()
-		case phaseError:
-			web.State = "bad"
+			web.Note = "acc.web.remoteon"
+			if !strings.Contains(rv.URL(), web.Address) {
+				web.Detail = rv.URL()
+			}
 		default:
-			web.State = "wait"
+			web.Note = "remote.phase." + rv.Phase
+			if rv.Phase == phaseError {
+				web.State = "bad"
+			}
 		}
 	}
 	v.Rows = append(v.Rows, web)
@@ -172,11 +179,11 @@ func (w *web) accessRender(rw http.ResponseWriter, r *http.Request, s *session, 
 }
 
 func (w *web) handleAccess(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.accessRender(rw, r, s, "", w.entryPage())
+	w.accessRender(rw, r, s, "", w.entryPage(r))
 }
 
 func (w *web) handleAccessCatalog(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.accessRender(rw, r, s, "access-new", w.entryPage())
+	w.accessRender(rw, r, s, "access-new", w.entryPage(r))
 }
 
 // webAccessPage is the web's page: the remote access, then the workspace's

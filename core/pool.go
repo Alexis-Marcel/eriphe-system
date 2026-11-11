@@ -160,6 +160,7 @@ func (p *pool) sync(servers map[string]Server) {
 }
 
 func sameServer(a, b Server) bool {
+	a.Title, b.Title = "", "" // a name for the user changes no connection
 	x, _ := json.Marshal(a)
 	y, _ := json.Marshal(b)
 	return string(x) == string(y)

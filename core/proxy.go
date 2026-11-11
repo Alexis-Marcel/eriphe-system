@@ -340,6 +340,7 @@ func (s *Store) useTicket(taskID, tool string, input map[string]any) bool {
 // serverInfo is what the CLI and the brain see of a catalog server.
 type serverInfo struct {
 	Name   string `json:"name"`
+	Named  string `json:"title,omitempty"` // the user's title for it, if any
 	Use    string `json:"use"`
 	Kind   string `json:"kind"`   // remote or local
 	Source string `json:"source"` // config (the file) or workspace
@@ -380,7 +381,7 @@ func (c *core) listServers(only string, withTools bool) []serverInfo {
 		if only != "" && name != only {
 			continue
 		}
-		info := serverInfo{Name: name, Use: s.Use, Kind: "remote", URL: s.URL, Auth: s.authKind(),
+		info := serverInfo{Name: name, Named: s.Title, Use: s.Use, Kind: "remote", URL: s.URL, Auth: s.authKind(),
 			Access: s.level(), TrustedContent: trusted[name], Status: statusConnecting, Source: sourceWorkspace}
 		if _, ok := c.base.Servers[name]; ok {
 			info.Source = sourceConfig

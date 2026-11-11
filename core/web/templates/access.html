@@ -31,9 +31,10 @@
     <div class="tool-main">
       <div class="tool-head">
         <h3><a href="{{.URL}}" class="stretched">{{if .Name}}{{.Name}}{{else}}{{t (printf "acc.kind.%s" .Kind)}}{{end}}</a></h3>
-        <span class="chip {{.Chip}}"><span class="pulse" aria-hidden="true"></span>{{if .Count}}{{tf .Label .Count}}{{else}}{{t .Label}}{{end}}</span>
+        <span class="chip {{.Chip}}"><span class="pulse" aria-hidden="true"></span>{{if .Address}}<span class="mono">{{.Address}}</span>{{else if .Count}}{{tf .Label .Count}}{{else}}{{t .Label}}{{end}}</span>
       </div>
       <p class="muted small meta-line">{{t (printf "chan.speaker.%s" .Speaker)}}{{with .Carries}} {{t (printf "chan.carries.%s" .)}}{{end}}</p>
+      {{with .Note}}<p class="muted small meta-line">{{t .}}</p>{{end}}
       {{with .Detail}}<p class="small mono meta-line">{{.}}</p>{{end}}
     </div>
     <div class="tool-actions"><span class="btn btn-ghost sm" aria-hidden="true">{{t "acc.configure"}}</span></div>
