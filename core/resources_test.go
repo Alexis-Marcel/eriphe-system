@@ -71,14 +71,16 @@ func TestAccessScale(t *testing.T) {
 }
 
 // withDrive gives the core a files server with Drive folders.
-// withDrive gives the drive folders: one whose Access is read gets
-// Modifier and Supprimer never, the others follow the tool.
+// withDrive gives the drive folders, each with its own cases (nothing is
+// reached until set, rootAccess): one whose Access is read reads only, the
+// others read freely and ask for the rest.
 func withDrive(t *testing.T, c *core, folders ...Place) {
 	t.Helper()
 	grids := map[string]accessGrid{}
 	for i, f := range folders {
+		grids[f.ID] = accessGrid{gridFree, gridApproval, gridApproval, gridApproval}
 		if f.Access == accessRead {
-			grids[f.ID] = accessGrid{Change: gridNever, Delete: gridNever}
+			grids[f.ID] = accessGrid{gridFree, gridNever, gridNever, gridApproval}
 		}
 		folders[i].Access = ""
 	}

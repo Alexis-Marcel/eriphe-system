@@ -394,6 +394,7 @@ func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string)
 	legacyRepoPlaces(store)   // github_app.go
 	legacyFolderValues(store) // folder_values.go
 	legacyTrust(store)        // access_grid.go
+	legacyPlaceRoot(store)    // places.go
 	rows, err := store.catalogRows()
 	if err != nil {
 		log.Printf("catalog: %v", err)

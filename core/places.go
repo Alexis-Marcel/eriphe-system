@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"maps"
 	"net/http"
 	"slices"
@@ -40,16 +41,21 @@ type keeping struct {
 	Card toolCard
 }
 
-// Place is a place given to Eriphe, as its tool keeps it. What a task may
-// do there is its server's grid (Server.PlaceGrids, access_grid.go), which
-// eriphe-core holds call by call; for a connection's place (a repository,
-// connection_places.go), its Access.
+// Place is a place of a tool, as its tool keeps it: a folder with cases of
+// its own, or a whole account (Root) when its grid reaches it. What a task
+// may do there is the account's grid (the root of its tree, Never until
+// set) with each folder's own cases over it, from the top down to the
+// place (Server.PlaceGrids, access_grid.go), which eriphe-core holds call
+// by call; for a connection's place (a repository, connection_places.go),
+// its Access.
 type Place struct {
-	Tool    string `json:"-"`                // the catalog server that has it
-	Name    string `json:"name"`             // how tools name it
-	Account string `json:"account"`          // the tool's account it is in
-	ID      string `json:"id"`               // its id at the tool
-	Access  string `json:"access,omitempty"` // a connection's place: read or write
+	Tool    string   `json:"-"`                 // the catalog server that has it
+	Name    string   `json:"name"`              // how tools name it
+	Account string   `json:"account"`           // the tool's account it is in
+	ID      string   `json:"id"`                // its id at the tool
+	Parents []string `json:"parents,omitempty"` // its folders above, from the top of the account
+	Access  string   `json:"access,omitempty"`  // a connection's place: read or write
+	Root    bool     `json:"-"`                 // the whole account (its server's "all")
 }
 
 // keeperOf finds where a server keeps its places, if it has any: its
@@ -84,6 +90,16 @@ func placesIn(name string, srv Server) []Place {
 	for i := range list {
 		list[i].Tool = name
 		list[i].Access = ""
+	}
+	var accounts []struct {
+		Name string `json:"name"`
+		All  bool   `json:"all"`
+	}
+	json.Unmarshal(doc["accounts"], &accounts)
+	for _, a := range accounts {
+		if a.All {
+			list = append(list, Place{Tool: name, Name: a.Name, Account: a.Name, Root: true})
+		}
 	}
 	return list
 }
@@ -176,8 +192,9 @@ func (c *core) placeAccounts(tool string) []placeAccount {
 	return out
 }
 
-// changePlaces rewrites a tool's places, which restarts its server.
-func (c *core) changePlaces(tool string, change func([]Place) ([]Place, error)) error {
+// changePlaces rewrites a tool's places and their own cases (grids), which
+// restarts its server.
+func (c *core) changePlaces(tool string, change func([]Place) ([]Place, error), grids map[string]accessGrid) error {
 	srv, ok := c.conf().Servers[tool]
 	k, spec, has := keeperOf(srv)
 	if !ok || !has {
@@ -192,6 +209,7 @@ func (c *core) changePlaces(tool string, change func([]Place) ([]Place, error)) 
 	if err != nil {
 		return err
 	}
+	list = slices.DeleteFunc(list, func(p Place) bool { return p.Root }) // its account's "all"
 	for i := range list {
 		list[i].Tool, list[i].Access = "", ""
 	}
@@ -201,7 +219,7 @@ func (c *core) changePlaces(tool string, change func([]Place) ([]Place, error)) 
 	env[toolConfigEnv] = EnvValue{Value: string(raw)}
 	spec.Env = env
 	srv.Run = marshalRun(spec)
-	srv.PlaceGrids = keepPlaceGrids(srv.PlaceGrids, list)
+	srv.PlaceGrids = keepPlaceGrids(grids, list)
 	return c.putServer(putUpdate, tool, srv, nil)
 }
 
@@ -217,45 +235,20 @@ func keepPlaceGrids(grids map[string]accessGrid, list []Place) map[string]access
 	return out
 }
 
-// removePlace takes a place out of its tool.
-func (c *core) removePlace(tool, id string) error {
-	return c.changePlaces(tool, func(list []Place) ([]Place, error) {
-		return slices.DeleteFunc(list, func(p Place) bool { return p.ID == id }), nil
-	})
+// placeRef is a folder of a tool's account, as the tree names it: its id,
+// its name, and its folders above from the top of the account.
+type placeRef struct {
+	Account, ID, Name string
+	Parents           []string
 }
 
-// givePlace gives a place of an account of a tool to Eriphe; account may
-// be empty with one account. Its name is made unique among the tool's
-// places. It follows its account's grid until it has exceptions of its own
-// (setPlaceCase).
-func (c *core) givePlace(tool, account, id, name string) error {
-	id, name = strings.TrimSpace(id), strings.Join(strings.Fields(name), " ")
-	if id == "" || name == "" || len(name) > 120 {
-		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("a place needs an id and a name")}
-	}
-	accounts := c.placeAccounts(tool)
-	return c.changePlaces(tool, func(list []Place) ([]Place, error) {
-		if slices.ContainsFunc(list, func(p Place) bool { return p.ID == id }) {
-			return list, nil
-		}
-		i := slices.IndexFunc(accounts, func(a placeAccount) bool {
-			return strings.EqualFold(a.Name, account) || account == "" && len(accounts) == 1
-		})
-		if i < 0 {
-			return nil, &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("no such account")}
-		}
-		final := name
-		for n := 2; slices.ContainsFunc(list, func(p Place) bool { return strings.EqualFold(p.Name, final) }); n++ {
-			final = fmt.Sprintf("%s (%d)", name, n)
-		}
-		return append(list, Place{Name: final, Account: accounts[i].Name, ID: id}), nil
-	})
-}
-
-// setPlaceCase gives one case of a place its own value, above or below its
-// account's; "" has it follow its account again. A case its tool has not
-// (its card's Cases) is refused.
-func (c *core) setPlaceCase(tool, id, category, value string) error {
+// setPlaceCase gives one case of a folder its own value, above or below
+// what it follows (its parent's, up to its account's); "" has it follow
+// again. A folder with a case of its own is kept as a place of its tool
+// (its server then knows it, the deepest place deciding); one whose cases
+// all follow is not. A case its tool has not (its card's Cases) is
+// refused.
+func (c *core) setPlaceCase(tool string, ref placeRef, category, value string) error {
 	srv, ok := c.conf().Servers[tool]
 	k, _, has := keeperOf(srv)
 	if !ok || !has || c.source(kindServer, tool) != sourceWorkspace {
@@ -264,27 +257,45 @@ func (c *core) setPlaceCase(tool, id, category, value string) error {
 	if !slices.Contains(k.Card.cases(), category) || value != "" && !slices.Contains(gridValues, value) {
 		return errInvalid(errors.New("a case is one of the tool's, its value free, approval, never or empty"))
 	}
-	if !slices.ContainsFunc(placesIn(tool, srv), func(p Place) bool { return p.ID == id }) {
+	ref.ID, ref.Name = strings.TrimSpace(ref.ID), strings.Join(strings.Fields(ref.Name), " ")
+	accounts := c.placeAccounts(tool)
+	i := slices.IndexFunc(accounts, func(a placeAccount) bool {
+		return strings.EqualFold(a.Name, ref.Account) || ref.Account == "" && len(accounts) == 1
+	})
+	if ref.ID == "" || ref.ID == "shared-with-me" || i < 0 && len(accounts) > 0 {
 		return errNoFolder
+	}
+	if i >= 0 { // a tool without connections names its accounts its own way
+		ref.Account = accounts[i].Name
+	}
+	g := srv.PlaceGrids[ref.ID].with(category, value)
+	known := slices.ContainsFunc(placesIn(tool, srv), func(p Place) bool { return p.ID == ref.ID && !p.Root })
+	if g != (accessGrid{}) && !known && (ref.Name == "" || len(ref.Name) > 120) {
+		return &catalogError{http.StatusBadRequest, "conn.badplace", "", errors.New("a folder needs a name")}
 	}
 	grids := maps.Clone(srv.PlaceGrids)
 	if grids == nil {
 		grids = map[string]accessGrid{}
 	}
-	g := grids[id]
-	switch category {
-	case catRead:
-		g.Read = value
-	case catChange:
-		g.Change = value
-	case catDelete:
-		g.Delete = value
-	case catSend:
-		g.Send = value
+	grids[ref.ID] = g
+	if known == (g != (accessGrid{})) { // the server's places stay as they are
+		srv.PlaceGrids = keepPlaceGrids(grids, placesIn(tool, srv))
+		return c.putServer(putUpdate, tool, srv, nil)
 	}
-	grids[id] = g
-	srv.PlaceGrids = keepPlaceGrids(grids, placesIn(tool, srv))
-	return c.putServer(putUpdate, tool, srv, nil)
+	return c.changePlaces(tool, func(list []Place) ([]Place, error) {
+		if known {
+			return slices.DeleteFunc(list, func(p Place) bool { return p.ID == ref.ID && !p.Root }), nil
+		}
+		final := ref.Name
+		taken := func(name string) bool { // a place's name, or a whole account's (the files server's)
+			return slices.ContainsFunc(list, func(p Place) bool { return strings.EqualFold(p.Name, name) }) ||
+				slices.ContainsFunc(accounts, func(a placeAccount) bool { return strings.EqualFold(a.Name, name) })
+		}
+		for n := 2; taken(final); n++ {
+			final = fmt.Sprintf("%s (%d)", ref.Name, n)
+		}
+		return append(list, Place{Name: final, Account: ref.Account, ID: ref.ID, Parents: ref.Parents}), nil
+	}, grids)
 }
 
 // placeItem is a place as a tool's browsing shows it.
@@ -377,4 +388,66 @@ func legacyPlaces(s Server) Server {
 	s.Run = marshalRun(spec)
 	s.PlaceGrids = grids
 	return s
+}
+
+// legacyPlaceRoot moves the accounts of the tools with places to their tree
+// (the NAS, once): an account's grid was the default of its given folders
+// only, and becomes the root of the account, Never until set. Each folder
+// given before takes the account's grid as its own cases, under what it
+// set itself, so nothing it allowed or refused changes; the account keeps
+// its action exceptions.
+func legacyPlaceRoot(store *Store) {
+	const done = "legacy_place_root"
+	if store.get(done) != "" {
+		return
+	}
+	list, err := store.catalogRows()
+	if err != nil {
+		return
+	}
+	for _, r := range list {
+		var s Server
+		if r.Kind != kindServer || json.Unmarshal(r.Spec, &s) != nil {
+			continue
+		}
+		_, cfg, isSvc := accountsOf(s)
+		if _, _, ok := keeperOf(s); !ok || !isSvc {
+			continue
+		}
+		grids := maps.Clone(s.PlaceGrids)
+		if grids == nil {
+			grids = map[string]accessGrid{}
+		}
+		accounts := map[string]accountGrid{}
+		for _, a := range cfg.Accounts {
+			old, exceptions := s.baseAccess().grid, map[string]string(nil)
+			for name, g := range s.AccountGrids {
+				if strings.EqualFold(name, a.Name) {
+					old, exceptions = g.Grid, g.Exceptions
+				}
+			}
+			for name, level := range s.AccountAccess {
+				if strings.EqualFold(name, a.Name) {
+					old = levelGrid(level)
+				}
+			}
+			full := accessGrid{old.value(catRead), old.value(catChange), old.value(catDelete), old.value(catSend)}
+			for _, p := range placesIn(r.Name, s) {
+				if !p.Root && (strings.EqualFold(p.Account, a.Name) || p.Account == "" && len(cfg.Accounts) == 1) {
+					grids[p.ID] = full.over(grids[p.ID])
+				}
+			}
+			accounts[a.Name] = accountGrid{Grid: neverGrid, Exceptions: exceptions}
+		}
+		s.PlaceGrids, s.AccountGrids, s.AccountAccess = grids, accounts, nil
+		if len(s.PlaceGrids) == 0 {
+			s.PlaceGrids = nil
+		}
+		if err := store.putCatalog(kindServer, r.Name, s); err != nil {
+			log.Printf("catalog: %s: its tree: %v", r.Name, err)
+			return
+		}
+		log.Printf("catalog: %s: each account is now the root of its folders, Never until set; its folders kept what they had", r.Name)
+	}
+	store.set(done, "1")
 }

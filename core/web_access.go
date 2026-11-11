@@ -67,6 +67,9 @@ type toolAccess struct {
 	Named string
 	// Use is what the tool is for, the sentence the brain reads.
 	Use string
+	// Tree is an account's tree of folders, for a tool with places
+	// (web_places.go): its root is the account's grid.
+	Tree *placeTree
 }
 
 // gridRow is one category of a grid; Greyed, above what its credential can
@@ -137,6 +140,9 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 	}
 	slices.SortFunc(v.Tools, func(a, b toolException) int { return strings.Compare(a.Name, b.Name) })
 	v.Connection = connectionPage(name, v.Account, v.Preset, srv.authKind(), w.c.source(kindServer, name))
+	if t, ok := w.placeTreeOf(lang, name, v.Account); ok {
+		v.Tree = &t
+	}
 	return v, true
 }
 
@@ -178,6 +184,13 @@ func (w *web) handleToolAccess(rw http.ResponseWriter, r *http.Request, s *sessi
 // A category the page does not show (not one of the tool's cases) keeps its
 // value; one greyed is not posted either.
 func formGrid(r *http.Request, v toolAccess) (accessGrid, error) {
+	if v.Tree != nil { // its grid is its tree's root, set in its drawer: kept as it is
+		var g accessGrid
+		for _, row := range v.Rows {
+			g = g.with(row.Category, row.Value)
+		}
+		return g, nil
+	}
 	g := accessGrid{r.PostFormValue("grid-read"), r.PostFormValue("grid-change"), r.PostFormValue("grid-delete"), r.PostFormValue("grid-send")}
 	for _, row := range v.Rows {
 		if r.PostFormValue("grid-"+row.Category) == "" && !row.Greyed {

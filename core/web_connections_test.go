@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -100,10 +101,11 @@ func TestConnectionRoutes(t *testing.T) {
 	}
 }
 
-// A tool's folders are picked on its account's page: one list, the given
-// ones first with their cases, then the account's own, browsed through its
-// setup tool; a folder's case goes above or below its account's.
-func TestPlacesPage(t *testing.T) {
+// A tool's folders are a tree on its account's page: the root, the
+// account's grid, Never until set; a folder follows its parent, or has
+// cases of its own, set in its drawer, which keep it in the tool's
+// configuration; back to following, it is no longer kept.
+func TestPlaceTree(t *testing.T) {
 	g := newFakeGoogle(t)
 	tw, c, csrf := filesCore(t, nil)
 	g.clientID, g.secret, g.redirect = testClientID, testClientSecret, tw.srv.URL+"/oauth/callback"
@@ -111,48 +113,61 @@ func TestPlacesPage(t *testing.T) {
 	connectionSignIn(t, tw, g, csrf, "google", url.Values{"tool": {"files"}})
 	waitStatus(t, c.pool.get(filesService.Base), statusReady)
 
-	if code, _, _ := tw.do("GET", "/settings/tools/nothing/places", nil, nil); code != 404 {
+	if code, _, _ := tw.do("GET", "/settings/tools/nothing/tree", nil, nil); code != 404 {
 		t.Fatalf("a tool of no places: %d", code)
 	}
-	base := "/settings/tools/" + filesService.Base + "/places"
-	if code, body, _ := tw.do("GET", base, nil, nil); code != 200 || !strings.Contains(body, "Dossiers de sam@example.org") || !strings.Contains(body, "My Drive") {
-		t.Fatalf("page: %d %s", code, mainPart(t, body))
+	base := "/settings/tools/" + filesService.Base + "/tree"
+	if code, body, _ := tw.do("GET", base+"?account=sam%40example.org", nil, nil); code != 200 || !strings.Contains(body, "My Drive") ||
+		!strings.Contains(body, "parents=root-id") || !strings.Contains(body, "Comme le compte") || strings.Contains(body, "<html") {
+		t.Fatalf("top: %d %s", code, body)
 	}
-	hx := map[string]string{"HX-Request": "true", "HX-Target": "tool-folders"}
-	_, body, _ := tw.do("GET", base+"?parent=root-id&name=My+Drive", nil, hx)
-	if !strings.Contains(body, "Compta") || !strings.Contains(body, `value="compta"`) || strings.Contains(body, "<html") {
+	_, body, _ := tw.do("GET", base+"?account=sam%40example.org&parents=root-id&pname=My+Drive", nil, nil)
+	if !strings.Contains(body, "Compta") || !strings.Contains(body, "Comme My Drive") || !strings.Contains(body, "pname=Compta") {
 		t.Fatalf("browse: %s", body)
 	}
-	if code, body, _ := tw.post(base, url.Values{"id": {"compta"}, "name": {"Compta"}, "parent": {"root-id"}, "parent_name": {"My Drive"}}, csrf); !strings.Contains(body, "Compta") || strings.Contains(body, `role="alert"`) {
-		t.Fatalf("give: %d %s", code, body)
+	// The root: the account's grid, Never until set, no column to follow.
+	if _, body, _ := tw.do("GET", base+"/grid?account=sam%40example.org", nil, nil); !strings.Contains(body, "Tout le Drive") ||
+		!strings.Contains(body, `name="case-read" value="never" aria-label="Lire : Jamais" checked`) || strings.Contains(body, `name="case-read" value=""`) {
+		t.Fatalf("root: %s", body)
 	}
-	p := c.placeNamed("compta")
-	if p == nil || p.Account != "sam@example.org" || p.Tool != filesService.Base {
-		t.Fatalf("place: %+v", p)
+	if _, body, _ := tw.post(base+"/case", url.Values{"account": {"sam@example.org"}, "case-read": {gridFree}}, csrf); strings.Contains(body, `role="alert"`) ||
+		c.conf().Servers[filesService.Base].rootAccess("sam@example.org").grid != (accessGrid{gridFree, gridNever, gridNever, gridNever}) {
+		t.Fatalf("root read: %s", body)
 	}
-	// Inside its parent, the given one comes first, with the summary of its
-	// cases and its drawer.
-	if _, body, _ := tw.do("GET", base+"?parent=root-id&name=My+Drive", nil, hx); !strings.Contains(body, "Comme le compte") || !strings.Contains(body, base+"/grid?id=compta") {
-		t.Fatalf("given, in the browse: %s", body)
+	if p := c.places(); len(p) != 1 || !p[0].Root || p[0].Name != "sam@example.org" {
+		t.Fatalf("the whole account: %+v", p)
 	}
-	// Its drawer: the tool's grid, with the column of its account's, and
-	// only the cases the tool has.
-	if code, body, _ := tw.do("GET", base+"/grid?id=compta", nil, map[string]string{"HX-Request": "true"}); code != 200 || !strings.Contains(body, `name="case-delete" value=""`) ||
-		strings.Contains(body, `name="case-send"`) || !strings.Contains(body, "Comme le compte") {
+	// A folder's drawer: its parent's column, and only the tool's cases.
+	ref := url.Values{"account": {"sam@example.org"}, "id": {"compta"}, "name": {"Compta"}, "parents": {"root-id"}, "pname": {"My Drive"}}
+	if code, body, _ := tw.do("GET", base+"/grid?"+ref.Encode(), nil, nil); code != 200 || !strings.Contains(body, `name="case-delete" value=""`) ||
+		strings.Contains(body, `name="case-send"`) || !strings.Contains(body, "Comme My Drive") || !strings.Contains(body, `aria-label="Lire : Comme My Drive (Libre)" checked`) {
 		t.Fatalf("drawer: %d %s", code, body)
 	}
-	if code, _, _ := tw.do("GET", base+"/grid?id=nothing", nil, nil); code != 404 {
-		t.Fatalf("drawer of no folder: %d", code)
-	}
 	// Supprimer free for this folder only, Modifier never: the folder's case
-	// wins over its account's, an action's exception over both. The answer
-	// is the grid, and the folder's summary in the list.
-	_, body, _ = tw.post(base+"/case", url.Values{"id": {"compta"}, "case-read": {""}, "case-change": {gridNever}, "case-delete": {gridFree}, "case-send": {gridFree}}, csrf)
+	// wins over what it follows, an action's exception over both. The
+	// answer is the grid, and the folder's summary in the list.
+	post := func(cases url.Values) string {
+		t.Helper()
+		v := url.Values{}
+		for k, x := range ref {
+			v[k] = x
+		}
+		for k, x := range cases {
+			v[k] = x
+		}
+		_, body, _ := tw.post(base+"/case", v, csrf)
+		return body
+	}
+	body = post(url.Values{"case-read": {""}, "case-change": {gridNever}, "case-delete": {gridFree}, "case-send": {gridFree}})
 	if strings.Contains(body, `role="alert"`) || !strings.Contains(body, `hx-swap-oob="true"`) || !strings.Contains(body, "Modifier : Jamais · Supprimer : Libre") {
 		t.Fatalf("cases: %s", body)
 	}
 	if g := c.conf().Servers[filesService.Base].PlaceGrids["compta"]; g != (accessGrid{Change: gridNever, Delete: gridFree}) {
 		t.Fatalf("kept: %+v", g)
+	}
+	p := c.placeNamed("compta")
+	if p == nil || p.Account != "sam@example.org" || p.Tool != filesService.Base || !slices.Equal(p.Parents, []string{"root-id"}) {
+		t.Fatalf("place: %+v", p)
 	}
 	srv := c.conf().Servers[filesService.Base]
 	trash := &mcp.Tool{Name: "trash_file", Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(true), OpenWorldHint: ptr(false)}}
@@ -170,14 +185,17 @@ func TestPlacesPage(t *testing.T) {
 	if f := c.conf().Servers[filesService.Base].toolFacts(write, map[string]any{"folder": "Compta"}); f.value != gridFree {
 		t.Fatalf("an action's exception: %+v", f)
 	}
-	if _, body, _ := tw.post(base+"/case", url.Values{"id": {"compta"}, "case-change": {gridNever}, "case-delete": {""}}, csrf); !strings.Contains(body, `hx-swap-oob="true">Modifier : Jamais</span>`) ||
-		!strings.Contains(body, `name="case-delete" value="" aria-label="Supprimer : Comme le compte (Sur accord)" checked`) {
-		t.Fatalf("back to the account's: %s", body)
+	// The root changed in its drawer keeps the account's exceptions.
+	tw.post(base+"/case", url.Values{"account": {"sam@example.org"}, "case-delete": {gridNever}}, csrf)
+	if a := c.conf().Servers[filesService.Base].AccountGrids["sam@example.org"]; a.Grid.Delete != gridNever || a.Exceptions["write_file"] != gridFree {
+		t.Fatalf("root again: %+v", a)
 	}
-	if _, body, _ := tw.post(base+"/remove", url.Values{"id": {"compta"}}, csrf); strings.Contains(body, "/grid?id=compta") {
-		t.Fatalf("remove: %s", body)
+	if body := post(url.Values{"case-change": {gridNever}, "case-delete": {""}}); !strings.Contains(body, `hx-swap-oob="true">Modifier : Jamais</span>`) ||
+		!strings.Contains(body, `name="case-delete" value="" aria-label="Supprimer : Comme My Drive (Jamais)" checked`) {
+		t.Fatalf("back to its parent's: %s", body)
 	}
-	if len(c.places()) != 0 || c.conf().Servers[filesService.Base].PlaceGrids != nil {
-		t.Fatal("still given")
+	post(url.Values{"case-change": {""}})
+	if len(c.places()) != 1 || c.conf().Servers[filesService.Base].PlaceGrids != nil {
+		t.Fatalf("still kept: %+v", c.places())
 	}
 }

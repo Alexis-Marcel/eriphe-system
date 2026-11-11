@@ -80,13 +80,7 @@
     <li class="tile">
       <div class="tile-head">
         <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{.Tool}}</span>
-        <span class="tile-actions">
-        <form hx-post="/settings/folders/delete" hx-confirm="{{tf "folders.deleteconfirm" .Name}}" class="inline">
-          <input type="hidden" name="source" value="{{.Source}}">
-          <input type="hidden" name="name" value="{{.Name}}">
-          <button class="link-btn" type="submit">{{t "folders.delete"}}</button>
-        </form>
-        </span>
+        <span class="tile-actions"><a class="link-btn" href="{{.Page}}">{{t "casegrid.open"}}</a></span>
       </div>
       <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
       <p class="chips"><span class="tag">{{t (printf "folders.access.%s" .Access)}}</span></p>

@@ -466,3 +466,49 @@ func TestLegacyTrust(t *testing.T) {
 		}
 	}
 }
+
+// The accounts of a tool with places become the root of their tree (the
+// NAS, once): each folder kept takes its account's grid under its own
+// cases, so nothing it could do changes; the account goes to Never and
+// keeps its exceptions.
+func TestLegacyPlaceRoot(t *testing.T) {
+	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := `{"accounts":[{"name":"sam@example.org","provider":"google","auth":{"token_env":"A"},"scopes":["` + scopeDrive + `"]},` +
+		`{"name":"bob@example.org","provider":"google","auth":{"token_env":"B"},"scopes":["` + scopeDrive + `"]}],` +
+		`"places":[{"name":"Compta","account":"sam@example.org","id":"c"},{"name":"Photos","account":"sam@example.org","id":"p"},{"name":"Bob","account":"bob@example.org","id":"b"}]}`
+	run, _ := json.Marshal(RunSpec{Image: filesService.Image + ":1", Transport: transportStdio, Env: map[string]EnvValue{toolConfigEnv: {Value: cfg}}})
+	srv := Server{Run: run, Use: "files", AccountAccess: map[string]string{"bob@example.org": accessReads},
+		AccountGrids: map[string]accountGrid{"sam@example.org": {Grid: accessGrid{gridFree, gridApproval, gridApproval, gridNever}, Exceptions: map[string]string{"x": gridFree}}},
+		PlaceGrids:   map[string]accessGrid{"p": {Delete: gridFree}}}
+	if err := store.putCatalog(kindServer, filesService.Base, srv); err != nil {
+		t.Fatal(err)
+	}
+	legacyPlaceRoot(store)
+	rows, _ := store.catalogRows()
+	var s Server
+	json.Unmarshal(rows[0].Spec, &s)
+	if s.PlaceGrids["c"] != (accessGrid{gridFree, gridApproval, gridApproval, gridNever}) || s.PlaceGrids["p"] != (accessGrid{gridFree, gridApproval, gridFree, gridNever}) ||
+		s.PlaceGrids["b"] != levelGrid(accessReads) {
+		t.Errorf("folders: %+v", s.PlaceGrids)
+	}
+	if s.AccountAccess != nil || s.AccountGrids["sam@example.org"].Grid != neverGrid || s.AccountGrids["sam@example.org"].Exceptions["x"] != gridFree ||
+		s.AccountGrids["bob@example.org"].Grid != neverGrid {
+		t.Errorf("accounts: %+v %+v", s.AccountAccess, s.AccountGrids)
+	}
+	for _, p := range placesIn(filesService.Base, s) { // what each could do before
+		if a := s.placeAccess(p); a.grid.value(catRead) != gridFree || a.grid.value(catChange) != gridApproval {
+			t.Errorf("%s: %+v", p.Name, a.grid)
+		}
+	}
+	// Once: a folder set back since is not given the account's grid again.
+	s.PlaceGrids = nil
+	store.putCatalog(kindServer, filesService.Base, s)
+	legacyPlaceRoot(store)
+	rows, _ = store.catalogRows()
+	if json.Unmarshal(rows[0].Spec, &s); s.PlaceGrids != nil {
+		t.Errorf("twice: %+v", s.PlaceGrids)
+	}
+}

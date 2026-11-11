@@ -499,6 +499,7 @@ type folderView struct {
 	Lend    string `json:"lend"`               // how the brain lends it to a task
 	Tool    string `json:"tool,omitempty"`     // a place's tool
 	PlaceID string `json:"place_id,omitempty"` // … and its id there
+	Page    string `json:"-"`                  // … and its account's page, where its rights are set
 	// Rights: each case free, approval or never: a machine's folder's read
 	// and change (folder_values.go), a place's its tool's.
 	Rights map[string]string `json:"rights,omitempty"`
@@ -549,6 +550,9 @@ func (c *core) folderViews() ([]folderView, error) {
 		out = append(out, fv)
 	}
 	for _, p := range c.places() {
+		if c.placeRights(p)[catRead] == gridNever {
+			continue // kept for a case set below a reached folder: not reached itself
+		}
 		ready := false
 		if u := c.pool.get(p.Tool); u != nil {
 			st, _, _ := u.snapshot()
@@ -556,7 +560,7 @@ func (c *core) folderViews() ([]folderView, error) {
 		}
 		most := c.placeMost(p)
 		out = append(out, folderView{Folder: &Folder{Name: p.Name, Access: most}, Source: sourcePlace, Online: ready,
-			Tool: p.Tool, PlaceID: p.ID, Rights: c.placeRights(p), Lend: lendHint(resPlace, p.Name, most) + "; the task gets the " + p.Tool +
+			Tool: p.Tool, PlaceID: p.ID, Page: "/settings/tools/" + p.Tool + "/access" + accountQuery(p.Account), Rights: c.placeRights(p), Lend: lendHint(resPlace, p.Name, most) + "; the task gets the " + p.Tool +
 				" tool, which reaches every place given to Eriphe, each call held to its place's rights"})
 	}
 	slices.SortStableFunc(out, func(a, b folderView) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })

@@ -282,22 +282,38 @@ func (g accessGrid) over(exceptions accessGrid) accessGrid {
 	return g
 }
 
-// placeAccess is what holds in one of a server's places: its account's
-// grid with the place's own cases over it. An action's exception stays
-// above both, and the account's ceiling above all.
-func (s Server) placeAccess(p Place) serverAccess {
-	a, ok := s.accountAccess(map[string]any{"account": p.Account})
-	if !ok {
-		a = s.baseAccess()
-	}
-	g, has := s.PlaceGrids[p.ID]
-	if !has {
+// neverGrid says Never on every case: an account's tree before anything is
+// set (rootAccess).
+var neverGrid = accessGrid{gridNever, gridNever, gridNever, gridNever}
+
+// rootAccess is an account's grid on a server with places: the root of its
+// tree, every folder's default until one sets its own; Never until set.
+func (s Server) rootAccess(account string) serverAccess {
+	if a, ok := s.accountAccess(map[string]any{"account": account}); ok {
 		return a
 	}
-	if a.ceiling {
-		g.Change, g.Delete, g.Send = "", "", ""
+	return serverAccess{grid: neverGrid, exceptions: s.Exceptions}
+}
+
+// placeAccess is what holds in one of a server's places: its account's
+// grid, then each folder's own cases over it from the top of the account
+// down to the place (a folder follows its parent). An action's exception
+// stays above all, and the account's ceiling above everything.
+func (s Server) placeAccess(p Place) serverAccess {
+	a := s.rootAccess(p.Account)
+	if p.Root {
+		return a
 	}
-	a.grid = a.grid.over(g)
+	for _, id := range append(slices.Clone(p.Parents), p.ID) {
+		g, has := s.PlaceGrids[id]
+		if !has {
+			continue
+		}
+		if a.ceiling {
+			g.Change, g.Delete, g.Send = "", "", ""
+		}
+		a.grid = a.grid.over(g)
+	}
 	return a
 }
 
