@@ -67,6 +67,21 @@ func TestMonitorsPage(t *testing.T) {
 		t.Fatalf("approve: %s", m.State)
 	}
 
+	// An address, made here: its URL and secret shown once, a listening monitor.
+	code, body, _ = tw.do("POST", "/settings/monitors/address", url.Values{"csrf": {csrf}, "name": {"grafana"}, "signed": {"on"},
+		"header": {"X-Grafana-Alerting-Signature"}}, nil)
+	if code != 200 || !strings.Contains(body, "/hooks/in/") || !strings.Contains(body, "HMAC-SHA256") {
+		t.Fatalf("address %d:\n%s", code, body)
+	}
+	if m, err := c.monitorNamed("grafana"); err != nil || m.Spec.Way != wayListen {
+		t.Fatalf("address monitor %+v, %v", m, err)
+	}
+	if _, body, _ := tw.do("GET", "/settings/monitors/grafana", nil, nil); !strings.Contains(body, "monitor.received key=grafana") || strings.Contains(body, `hx-post="/settings/monitors/try"`) {
+		t.Fatal("an address's page: its when, and no poll form")
+	}
+	if _, body, _ := tw.do("GET", "/settings/skills", nil, nil); strings.Contains(body, "/settings/alerts") {
+		t.Fatal("the skills page still makes addresses")
+	}
 	if _, _, h := tw.post("/settings/monitors/getout-prod/delete", nil, csrf); h.Get("HX-Redirect") != "/settings/monitors" {
 		t.Fatalf("delete: %v", h)
 	}

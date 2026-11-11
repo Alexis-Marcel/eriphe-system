@@ -12,7 +12,7 @@ import (
 // same with skill_runs, without what the runs read.
 func TestSkillRunsPage(t *testing.T) {
 	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: hook.received\ntools: [monitor]\n---\nEnquête.\n")
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ntools: [monitor]\n---\nEnquête.\n")
 	r := startedRun(t, c, now, "prod")
 	ev := []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
 		Data: map[string]any{"id": "p1", "tool_name": "mcp__monitor__rollback", "input": map[string]any{"version": "2.0.0"}}}}
@@ -22,7 +22,7 @@ func TestSkillRunsPage(t *testing.T) {
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	_, body, _ := tw.do("GET", "/settings/skills/prod", nil, nil)
-	hasAll(t, "a run going", body, `id="skill-runs"`, `hx-trigger="every 5s"`, "en cours", "hook.received", "« 5xx »", r.Task,
+	hasAll(t, "a run going", body, `id="skill-runs"`, `hx-trigger="every 5s"`, "en cours", "monitor.received", "« 5xx »", r.Task,
 		"1 exécution(s)")
 	endTurn(t, c, r.Task, "GetOut renvoie des 5xx : je propose de remettre la 2.0.0.")
 	_, body, _ = tw.do("GET", "/settings/skills/prod/runs", nil, nil)
@@ -38,7 +38,7 @@ func TestSkillRunsPage(t *testing.T) {
 	hasAll(t, "answered", body, "acceptées", "cartes : 1 acceptée(s)")
 	waitNote(t, c, r.ID, "rollback")
 	_, body, _ = tw.do("GET", "/settings/skills", nil, nil)
-	hasAll(t, "the list", body, "à chaque événement hook.received", `class="small skill-trigger"`)
+	hasAll(t, "the list", body, "à chaque événement monitor.received", `class="small skill-trigger"`)
 
 	out := c.brainSkillRuns(skillRunsIn{})
 	text := mustJSON(out)

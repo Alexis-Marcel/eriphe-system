@@ -23,6 +23,7 @@ func (w *web) monitorRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/monitors", w.auth(w.handleMonitors))
 	mux.Handle("POST /settings/monitors", w.auth(w.handleSaveMonitor))
 	mux.Handle("POST /settings/monitors/try", w.auth(w.handleTryMonitor))
+	mux.Handle("POST /settings/monitors/address", w.auth(w.handleNewAddress))
 	mux.Handle("GET /settings/monitors/{name}", w.auth(w.handleMonitor))
 	mux.Handle("POST /settings/monitors/{name}/{action}", w.auth(w.handleMonitorAction))
 }
@@ -42,6 +43,7 @@ type monitorView struct {
 	Skills   []string
 	Change   string // a change the brain proposed, in words
 	Tainted  string
+	Listen   bool // an incoming address
 }
 
 type monitorEventView struct {
@@ -59,7 +61,10 @@ type monitorsPage struct {
 	Monitors []monitorView
 	Tools    []string
 	Form     monitorForm
+	Fresh    *freshHook // an address just made: its URL and secret, shown once
 }
+
+type freshHook struct{ Name, URL, Secret string }
 
 type monitorPage struct {
 	Monitor monitorView
@@ -71,7 +76,7 @@ type monitorPage struct {
 func (w *web) monitorView(m *monitor, lang string, now time.Time) monitorView {
 	v := monitorView{Name: m.Name, State: m.State, Does: m.Spec.Text(lang), Waiting: m.Look.Waiting, Error: m.Look.Error,
 		Failing: m.Look.Failed, Events: w.c.monitorEventCount(m.Name, now.Add(-30*24*time.Hour)), Skills: w.c.skillsFollowing(m.Name),
-		Tainted: m.Tainted}
+		Tainted: m.Tainted, Listen: m.Spec.Way == wayListen}
 	if m.Look.Checked > 0 {
 		v.LastLook = time.Unix(m.Look.Checked, 0).In(now.Location()).Format("2006-01-02 15:04")
 	}
@@ -104,13 +109,17 @@ func formOf(name string, s monitorSpec) monitorForm {
 }
 
 func (w *web) handleMonitors(rw http.ResponseWriter, r *http.Request, s *session) {
+	w.renderMonitors(rw, r, s, nil)
+}
+
+func (w *web) renderMonitors(rw http.ResponseWriter, r *http.Request, s *session, fresh *freshHook) {
 	lang, now := w.lang(r), w.c.notifyTime()
 	ms, err := w.c.monitors()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := monitorsPage{Tools: w.c.monitorTools(), Form: monitorForm{Every: "5m", Cond: condChanged}}
+	d := monitorsPage{Tools: w.c.monitorTools(), Form: monitorForm{Every: "5m", Cond: condChanged}, Fresh: fresh}
 	for _, m := range ms {
 		d.Monitors = append(d.Monitors, w.monitorView(m, lang, now))
 	}
@@ -135,7 +144,7 @@ func (w *web) handleMonitor(rw http.ResponseWriter, r *http.Request, s *session)
 // monitorEventWords is a few words of what an event says.
 func monitorEventWords(e journalEvent) string {
 	var parts []string
-	for _, k := range []string{"value", "was", "holds", "id", "error"} {
+	for _, k := range []string{"status", "value", "was", "holds", "id", "error", "detail"} {
 		if v, ok := e.Payload[k]; ok {
 			parts = append(parts, k+" "+truncate(valueText(v), 120))
 		}
@@ -190,6 +199,19 @@ func (w *web) handleSaveMonitor(rw http.ResponseWriter, r *http.Request, s *sess
 	log.Printf("web: monitor %s saved", name)
 	rw.Header().Set("HX-Redirect", "/settings/monitors/"+url.PathEscape(strings.ToLower(strings.TrimSpace(name))))
 	rw.WriteHeader(http.StatusOK)
+}
+
+// handleNewAddress makes a monitor that listens, or a new token for one,
+// and shows its address and secret this once.
+func (w *web) handleNewAddress(rw http.ResponseWriter, r *http.Request, s *session) {
+	name := strings.ToLower(strings.TrimSpace(r.PostFormValue("name")))
+	token, secret, err := w.c.newListenMonitor(name, r.PostFormValue("signed") == "on", r.PostFormValue("header"))
+	if err != nil {
+		w.toast(rw, err.Error(), false)
+		return
+	}
+	log.Printf("web: address %s made", name)
+	w.renderMonitors(rw, r, s, &freshHook{Name: name, URL: w.publicURL(r) + hookPath + token, Secret: secret})
 }
 
 // handleTryMonitor calls the tool once and shows what the path extracts.

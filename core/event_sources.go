@@ -14,8 +14,8 @@ import (
 // The event journal's sources (event_journal.go), besides those that call
 // emit where they are (a task's or a session's end):
 //
-//   - an incoming address (incoming_hooks.go): hook.received, keyed by the
-//     address's name, with the body's status when it has one. External.
+//   - a monitor (monitors.go): it polls a tool, or listens on an incoming
+//     address (incoming_hooks.go): monitor.*, keyed by its name.
 //   - the user's return after an absence of awayAfter or more:
 //     user.returned, with how long they were away.
 //   - any catalog server that offers the resource eriphe://events: the mail

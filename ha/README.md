@@ -58,8 +58,8 @@ answers freely, but anything it would change goes on a card that you confirm on 
 workspace; a « oui » said aloud never confirms it. With each request for what to say, the integration also tells the areas
 where someone is now (an occupancy, presence or motion sensor on): eriphe-core's voice line
 speaks only there. What the house has to tell Eriphe (you came home, you went to bed) goes from
-an automation (`rest_command`) to an incoming address made in Eriphe's Settings → Skills, as any
-system's; a skill reacts to it (`when: hook.received key=<name>`). To read the house, Eriphe uses
+an automation (`rest_command`) to an incoming address made in Eriphe's Settings → Surveillance, as
+any system's; a skill reacts to it (`when: monitor.received key=<name>`). To read the house, Eriphe uses
 Home Assistant's tool in its catalog, like any tool.
 
 `eriphe-core` answers NDJSON: `{"delta": "..."}` lines, streamed into the chat log as they come,

@@ -12,9 +12,9 @@ func TestSkillTriggerParse(t *testing.T) {
 		return []byte("---\nname: x\ndescription: y\n" + extra + "---\nDo it.\n")
 	}
 	for _, ok := range []string{
-		"", "when: mail.received\n", "when: hook.received key=getout\nevery: 15m\n",
+		"", "when: mail.received\n", "when: monitor.received key=getout\nevery: 15m\n",
 		"when: time weekdays 08:00\nmodel: small\n", "when: mail.received\ntools: [mail, calendar]\ncan: [start-session]\n",
-		"when: hook.received key=maison status=couche\nevery: 1d\n",
+		"when: monitor.received key=maison status=couche\nevery: 1d\n",
 	} {
 		if _, err := parseSkillMD(front(ok)); err != nil {
 			t.Errorf("%q refused: %v", ok, err)
@@ -29,18 +29,18 @@ func TestSkillTriggerParse(t *testing.T) {
 			t.Errorf("%q accepted", bad)
 		}
 	}
-	m, _ := parseSkillMD(front("when: hook.received key=getout\nevery: 15m\ntools: [monitor]\ncan: [start-session]\n"))
+	m, _ := parseSkillMD(front("when: monitor.received key=getout\nevery: 15m\ntools: [monitor]\ncan: [start-session]\n"))
 	tr := m.Trigger
-	if !tr.matches(journalEvent{Kind: evHookReceived, Key: "GetOut"}) || tr.matches(journalEvent{Kind: evHookReceived, Key: "other"}) ||
+	if !tr.matches(journalEvent{Kind: evMonitorReceived, Key: "GetOut"}) || tr.matches(journalEvent{Kind: evMonitorReceived, Key: "other"}) ||
 		tr.matches(journalEvent{Kind: "mail.received", Key: "getout"}) {
 		t.Fatal("matches")
 	}
-	if s := tr.Text("fr"); !strings.Contains(s, "hook.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "session") {
+	if s := tr.Text("fr"); !strings.Contains(s, "monitor.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "session") {
 		t.Fatalf("text %q", s)
 	}
-	m, _ = parseSkillMD(front("when: hook.received key=getout status=firing\n"))
-	if !m.Trigger.matches(journalEvent{Kind: evHookReceived, Key: "getout", Payload: map[string]any{"status": "firing"}}) ||
-		m.Trigger.matches(journalEvent{Kind: evHookReceived, Key: "getout", Payload: map[string]any{"status": "resolved"}}) {
+	m, _ = parseSkillMD(front("when: monitor.received key=getout status=firing\n"))
+	if !m.Trigger.matches(journalEvent{Kind: evMonitorReceived, Key: "getout", Payload: map[string]any{"status": "firing"}}) ||
+		m.Trigger.matches(journalEvent{Kind: evMonitorReceived, Key: "getout", Payload: map[string]any{"status": "resolved"}}) {
 		t.Fatal("payload filters")
 	}
 }
@@ -120,17 +120,17 @@ func TestSkillRunBatches(t *testing.T) {
 // once its turn is over; then its last message is told, and it stops.
 func TestSkillRunJoinsAndTells(t *testing.T) {
 	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: hook.received\n---\nEnquête.\n")
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\n---\nEnquête.\n")
 	ctx := context.Background()
-	c.emit(journalEvent{Kind: evHookReceived, Key: "getout", Source: "alert:1", External: true, At: *now, Payload: map[string]any{"detail": "5xx"}})
+	c.emit(journalEvent{Kind: evMonitorReceived, Key: "getout", Source: "alert:1", External: true, At: *now, Payload: map[string]any{"detail": "5xx"}})
 	c.tickSkills(ctx, *now)
 	rs := runsOfSkill(t, c, "prod")
 	if len(rs) != 1 {
 		t.Fatalf("%+v", rs)
 	}
 	id := rs[0].Task
-	c.emit(journalEvent{Kind: evHookReceived, Key: "getout", Source: "alert:1", External: true, At: now.Add(time.Minute)})
-	c.emit(journalEvent{Kind: evHookReceived, Key: "autre", Source: "alert:2", External: true, At: now.Add(time.Minute)})
+	c.emit(journalEvent{Kind: evMonitorReceived, Key: "getout", Source: "alert:1", External: true, At: now.Add(time.Minute)})
+	c.emit(journalEvent{Kind: evMonitorReceived, Key: "autre", Source: "alert:2", External: true, At: now.Add(time.Minute)})
 	c.tickSkills(ctx, now.Add(time.Minute))
 	if rs := runsOfSkill(t, c, "prod"); len(rs) != 2 || rs[0].Key != "autre" {
 		t.Fatalf("another key, or the same one started again: %+v", rs)

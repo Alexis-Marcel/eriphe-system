@@ -18,27 +18,30 @@ import (
 	"time"
 )
 
-// Incoming addresses: any system that has something to tell (Grafana,
+// Incoming addresses: monitors that listen (monitors.go, way listen). Any
+// system that has something to tell and can reach Eriphe (Grafana,
 // Alertmanager, GitHub, a Home Assistant automation, an iPhone shortcut, a
-// script) calls an address of its own, on the workspace's HTTPS address:
+// script) calls the address of one:
 //
 //	POST https://<workspace>/hooks/in/<token>
 //
-// eriphe-core knows no sender: each address is named (getout), and each
-// call writes one event hook.received keyed by that name, with the body's
-// top-level "status" when it has one (firing, resolved: Grafana's and
-// Alertmanager's convention, as many others) and the body as detail. A
-// skill reacts to them (when: hook.received key=getout status=firing).
+// eriphe-core knows no sender: each call writes one monitor.received keyed
+// by the monitor's name, with the body's top-level "status" when it has one
+// (firing, resolved: Grafana's and Alertmanager's convention, as many
+// others) and the body as detail. A skill reacts to them (when:
+// monitor.received key=getout status=firing).
 //
-// The token is 32 random bytes, shown once in Settings → Skills; only its
-// hash is kept. A signed hook also checks the body's HMAC-SHA256 with a
-// secret made at the same time (kept in the vault, alert-hook-<id>), in the
-// header the user named for that address (X-Eriphe-Signature unless the
-// sender has its own), as hex, "sha256=" before it or not.
+// The token is 32 random bytes, shown once on the Monitors page; only its
+// hash is kept, in the monitor's hook. A signed address also checks the
+// body's HMAC-SHA256 with a secret made at the same time (kept in the vault,
+// monitor-hook-<id>), in the header the user named for it
+// (X-Eriphe-Signature unless the sender has its own), as hex, "sha256="
+// before it or not.
 //
 // The body (64 KiB at most) is external content: the event is external,
-// its detail cut to a few thousand characters. Past 60 calls an hour a
-// hook answers 429.
+// its detail cut to a few thousand characters. Past 60 calls an hour an
+// address answers 429; a paused one 503. The brain never makes one: its
+// token would pass through the conversation.
 
 const (
 	alertBodyMax   = 64 << 10
@@ -47,58 +50,27 @@ const (
 	hookPath       = "/hooks/in/"
 	urgentTextMax  = 160
 
-	notifyFromUrgent = "urgent" // a skill's fixed urgent text (skill_cards.go)
+	notifyFromUrgent  = "urgent" // a skill's fixed urgent text (skill_cards.go)
+	evMonitorReceived = "monitor.received"
+	defaultSigHeader  = "X-Eriphe-Signature"
 )
 
-const alertHooksSchema = `CREATE TABLE IF NOT EXISTS alert_hooks (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, hook TEXT NOT NULL,
-  signed INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL,
-  sig_header TEXT NOT NULL DEFAULT ''); -- the header a signed hook reads its signature from, the user's`
+// The addresses lived in alert_hooks before they were monitors (#360).
+const alertHooksGone = `DROP TABLE IF EXISTS alert_hooks;`
 
-func init() { extraSchema = append(extraSchema, alertHooksSchema) }
+func init() { extraSchema = append(extraSchema, alertHooksGone) }
 
-const defaultSigHeader = "X-Eriphe-Signature"
+var sigHeaderRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,63}$`)
 
-var (
-	alertNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
-	sigHeaderRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,63}$`)
-)
+func hookSecretName(id int64) string { return fmt.Sprintf("monitor-hook-%d", id) }
 
-func hookSecretName(id int64) string { return fmt.Sprintf("alert-hook-%d", id) }
-
-// alertHook is an incoming alert's webhook.
-type alertHook struct {
-	ID        int64
-	Name      string
-	Signed    bool
-	SigHeader string // where a signed hook's signature is: header names, comma-separated
-	Created   time.Time
-}
-
-func (c *core) alertHooks() []alertHook {
-	rows, err := c.store.db.Query(`SELECT id, name, signed, sig_header, created FROM alert_hooks ORDER BY name`)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var out []alertHook
-	for rows.Next() {
-		var h alertHook
-		var at int64
-		if rows.Scan(&h.ID, &h.Name, &h.Signed, &h.SigHeader, &at) == nil {
-			h.Created = time.Unix(at, 0)
-			out = append(out, h)
-		}
-	}
-	return out
-}
-
-// newAlertHook makes a hook, or a new token for one of that name (the old
-// address stops working); its token and secret are returned this once. A
-// signed one reads its signature from header, X-Eriphe-Signature if "".
-func (c *core) newAlertHook(name string, signed bool, header string) (token, secret string, err error) {
+// newListenMonitor makes a monitor that listens, or a new token for one of
+// that name (the old address stops working); its token and secret are
+// returned this once. A signed one reads its signature from header,
+// X-Eriphe-Signature if "".
+func (c *core) newListenMonitor(name string, signed bool, header string) (token, secret string, err error) {
 	name = strings.ToLower(strings.TrimSpace(name))
-	if !alertNameRe.MatchString(name) {
+	if !monitorNameRe.MatchString(name) {
 		return "", "", errors.New("a name of lowercase letters, digits and dashes: getout")
 	}
 	header = strings.TrimSpace(header)
@@ -110,34 +82,49 @@ func (c *core) newAlertHook(name string, signed bool, header string) (token, sec
 	case !sigHeaderRe.MatchString(header):
 		return "", "", errors.New("a signature header is a header name: letters, digits and dashes (X-Hub-Signature-256)")
 	}
+	var v *Vault
+	if signed {
+		if v = currentVault(); v == nil {
+			return "", "", errors.New("a signed address needs the vault, which is not open")
+		}
+	}
+	spec, _ := json.Marshal(monitorSpec{Way: wayListen, Signed: signed, SigHeader: header})
 	token = randomToken(32)
+	now := time.Now().Unix()
+	m, err := c.monitorNamed(name)
 	var id int64
-	err = c.store.db.QueryRow(`INSERT INTO alert_hooks (name, hook, signed, sig_header, created) VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(name) DO UPDATE SET hook = excluded.hook, signed = excluded.signed, sig_header = excluded.sig_header RETURNING id`,
-		name, hashToken(token), signed, header, time.Now().Unix()).Scan(&id)
-	if err != nil {
+	switch {
+	case err == sql.ErrNoRows:
+		var n int
+		c.store.db.QueryRow(`SELECT COUNT(*) FROM monitors`).Scan(&n)
+		if n >= monitorsMax {
+			return "", "", fmt.Errorf("%d monitors at most", monitorsMax)
+		}
+		res, err := c.store.db.Exec(`INSERT INTO monitors (name, state, spec, hook, created, updated) VALUES (?, ?, ?, ?, ?, ?)`,
+			name, monitorOn, string(spec), hashToken(token), now, now)
+		if err != nil {
+			return "", "", err
+		}
+		id, _ = res.LastInsertId()
+	case err != nil:
 		return "", "", err
+	case m.Spec.Way != wayListen:
+		return "", "", fmt.Errorf("%q is already a monitor that polls a tool: pick another name", name)
+	default:
+		id = m.ID
+		if _, err := c.store.db.Exec(`UPDATE monitors SET spec = ?, hook = ?, updated = ? WHERE id = ?`, string(spec), hashToken(token), now, id); err != nil {
+			return "", "", err
+		}
 	}
 	if signed {
-		v := currentVault()
-		if v == nil {
-			c.store.db.Exec(`DELETE FROM alert_hooks WHERE id = ?`, id)
-			return "", "", errors.New("a signed webhook needs the vault, which is not open")
-		}
 		secret = randomToken(32)
 		if err := v.set(hookSecretName(id), secret); err != nil {
 			return "", "", err
 		}
-	}
-	return token, secret, nil
-}
-
-func (c *core) deleteAlertHook(id int64) error {
-	if v := currentVault(); v != nil {
+	} else if v := currentVault(); v != nil {
 		v.remove(hookSecretName(id))
 	}
-	_, err := c.store.db.Exec(`DELETE FROM alert_hooks WHERE id = ?`, id)
-	return err
+	return token, secret, nil
 }
 
 // alertResult is what the webhook answers: a status, and a word for the sender.
@@ -146,47 +133,44 @@ type alertResult struct {
 	Text   string
 }
 
-// receiveAlert handles one call to a webhook.
+// receiveAlert handles one call to an address.
 func (c *core) receiveAlert(token string, h http.Header, body []byte) alertResult {
 	notFound := alertResult{http.StatusNotFound, "not found"}
 	if len(token) < 20 || len(token) > 100 {
 		return notFound
 	}
-	var hk alertHook
-	err := c.store.db.QueryRow(`SELECT id, name, signed, sig_header FROM alert_hooks WHERE hook = ?`, hashToken(token)).Scan(&hk.ID, &hk.Name, &hk.Signed, &hk.SigHeader)
-	if err == sql.ErrNoRows || err != nil {
+	m, err := scanMonitor(c.store.db.QueryRow(`SELECT `+monitorCols+` FROM monitors WHERE hook = ?`, hashToken(token)))
+	if err != nil || m.Spec.Way != wayListen {
 		return notFound
 	}
-	if hk.Signed && !c.signedBy(hk, h, body) {
-		log.Printf("alert %s: a webhook call without a valid signature was refused", hk.Name)
+	if m.Spec.Signed && !signedBy(m, h, body) {
+		log.Printf("monitor %s: a call without a valid signature was refused", m.Name)
 		return alertResult{http.StatusUnauthorized, "bad signature"}
 	}
-	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM event_journal WHERE source = ? AND at >= ?`, alertSource(hk.ID),
-		time.Now().Add(-time.Hour).Unix()).Scan(&n)
-	if n >= alertPerHour {
+	if m.State != monitorOn {
+		return alertResult{http.StatusServiceUnavailable, "paused"}
+	}
+	if c.monitorEventCount(m.Name, time.Now().Add(-time.Hour)) >= alertPerHour {
 		return alertResult{http.StatusTooManyRequests, "too many calls"}
 	}
-	p := map[string]any{"hook": hk.Name, "detail": alertDetail(body)}
+	p := map[string]any{"detail": alertDetail(body)}
 	if st := bodyStatus(body); st != "" {
 		p["status"] = st
 	}
-	c.emitLogged(journalEvent{Kind: evHookReceived, Key: hk.Name, Source: alertSource(hk.ID), External: true, Payload: p})
+	c.emitMonitor(m, evMonitorReceived, p)
 	return alertResult{http.StatusAccepted, "ok"}
 }
 
-func alertSource(id int64) string { return fmt.Sprintf("alert:%d", id) }
-
-// signedBy checks the body's HMAC against the hook's secret, in its header.
-func (c *core) signedBy(hk alertHook, h http.Header, body []byte) bool {
-	secret, err := vaultSecret(hookSecretName(hk.ID))
+// signedBy checks the body's HMAC against the address's secret, in its header.
+func signedBy(m *monitor, h http.Header, body []byte) bool {
+	secret, err := vaultSecret(hookSecretName(m.ID))
 	if err != nil || secret == "" {
 		return false
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
 	want := hex.EncodeToString(mac.Sum(nil))
-	for _, name := range strings.Split(hk.SigHeader, ",") {
+	for _, name := range strings.Split(m.Spec.SigHeader, ",") {
 		got := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(h.Get(name))), "sha256=")
 		if got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1 {
 			return true
@@ -206,7 +190,7 @@ func bodyStatus(body []byte) string {
 	}
 	s, _ := v.Status.(string)
 	s = strings.ToLower(strings.TrimSpace(s))
-	if !alertNameRe.MatchString(s) {
+	if !monitorNameRe.MatchString(s) {
 		return ""
 	}
 	return s

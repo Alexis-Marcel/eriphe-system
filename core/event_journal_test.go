@@ -97,18 +97,19 @@ func TestEventBudget(t *testing.T) {
 	}
 }
 
-// An incoming address's calls are hook.received events keyed by its name,
-// with the body's status, always external; a signed one checks the HMAC;
-// an unknown token is not found; past 60 calls an hour, 429.
+// An incoming address is a monitor that listens: its calls are
+// monitor.received events keyed by its name, external, with the body's
+// status; signed in its own header; 429 past its hour's calls; 503 paused;
+// its name cannot be a polling monitor's, nor proposed by the brain.
 func TestAlertEvents(t *testing.T) {
 	c, _, _ := pollCore(t)
-	if _, _, err := c.newAlertHook("Get Out!", false, ""); err == nil {
+	if _, _, err := c.newListenMonitor("Get Out!", false, ""); err == nil {
 		t.Fatal("a bad name accepted")
 	}
-	if _, _, err := c.newAlertHook("bad", true, "X Bad: header"); err == nil {
+	if _, _, err := c.newListenMonitor("bad", true, "X Bad: header"); err == nil {
 		t.Fatal("a bad header name accepted")
 	}
-	token, secret, err := c.newAlertHook("getout", true, "X-Hub-Signature-256")
+	token, secret, err := c.newListenMonitor("getout", true, "X-Hub-Signature-256")
 	if err != nil || secret == "" {
 		t.Fatal(secret, err)
 	}
@@ -125,7 +126,7 @@ func TestAlertEvents(t *testing.T) {
 	}
 	resolved := []byte(`{"status": "resolved"}`)
 	c.receiveAlert(token, http.Header{"X-Hub-Signature-256": {sign(secret, resolved)}}, resolved)
-	got := eventsOf(t, c, evHookReceived)
+	got := eventsOf(t, c, evMonitorReceived)
 	if len(got) != 2 || got[0].Key != "getout" || !got[0].External || got[0].Payload["status"] != "firing" ||
 		got[1].Payload["status"] != "resolved" || !strings.Contains(got[0].Payload["detail"].(string), "5xx") {
 		t.Fatalf("received %+v", got)
@@ -136,20 +137,52 @@ func TestAlertEvents(t *testing.T) {
 	if r := c.receiveAlert(strings.Repeat("x", 43), http.Header{}, body); r.Status != http.StatusNotFound {
 		t.Fatalf("unknown token: %+v", r)
 	}
-	plain, _, _ := c.newAlertHook("nas", false, "X-Ignored")
+	plain, _, _ := c.newListenMonitor("nas", false, "X-Ignored")
 	for i := 0; i < alertPerHour; i++ {
 		c.receiveAlert(plain, http.Header{}, body)
 	}
 	if r := c.receiveAlert(plain, http.Header{}, body); r.Status != http.StatusTooManyRequests {
 		t.Fatalf("past the limit: %+v", r)
 	}
-	if hs := c.alertHooks(); len(hs) != 2 || hs[0].Name != "getout" || !hs[0].Signed || hs[0].SigHeader != "X-Hub-Signature-256" || hs[1].SigHeader != "" {
-		t.Fatalf("hooks %+v", hs)
+	m, _ := c.monitorNamed("getout")
+	if m.Spec.Way != wayListen || !m.Spec.Signed || m.Spec.SigHeader != "X-Hub-Signature-256" || !strings.Contains(m.Spec.Text("fr"), "X-Hub-Signature-256") {
+		t.Fatalf("monitor %+v", m.Spec)
 	}
 	// Signed with no header named: X-Eriphe-Signature.
-	tok2, secret2, _ := c.newAlertHook("deploy", true, "")
+	tok2, secret2, _ := c.newListenMonitor("deploy", true, "")
 	if r := c.receiveAlert(tok2, http.Header{"X-Eriphe-Signature": {sign(secret2, body)}}, body); r.Status != http.StatusAccepted {
 		t.Fatalf("default header: %+v", r)
+	}
+	// A new token: the old address stops working.
+	tok3, _, _ := c.newListenMonitor("deploy", false, "")
+	if r := c.receiveAlert(tok2, http.Header{"X-Eriphe-Signature": {sign(secret2, body)}}, body); r.Status != http.StatusNotFound {
+		t.Fatalf("the old token: %+v", r)
+	}
+	c.pauseMonitor("deploy", true)
+	if r := c.receiveAlert(tok3, http.Header{}, body); r.Status != http.StatusServiceUnavailable {
+		t.Fatalf("paused: %+v", r)
+	}
+	// Names: an address is not a polling monitor, and the brain never makes one.
+	approvedMonitor(t, c, "etat", monitorSpec{Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}})
+	if _, _, err := c.newListenMonitor("etat", false, ""); err == nil {
+		t.Fatal("an address took a polling monitor's name")
+	}
+	if _, err := c.writeMonitor("getout", monitorSpec{Server: "monitor", Tool: "status"}, nil); err == nil {
+		t.Fatal("the brain changed an address")
+	}
+	if _, err := c.writeMonitor("x", monitorSpec{Way: wayListen}, nil); err == nil {
+		t.Fatal("the brain made an address")
+	}
+	// An address is never looked at by the poll loop.
+	c.tickMonitors(context.Background(), time.Now().Add(time.Hour))
+	if m, _ := c.monitorNamed("getout"); m.Look.Checked != 0 {
+		t.Fatal("an address was polled")
+	}
+	if err := c.deleteMonitor("getout"); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := vaultSecret(hookSecretName(m.ID)); s != "" {
+		t.Fatal("its secret stayed in the vault")
 	}
 }
 
