@@ -3,17 +3,19 @@
      drawer. Below, a connection's repositories, then a place's grid in its
      drawer (web_case_grid.go). */}}
 
-{{/* . is a placeTree. */}}
+{{/* . is a placeTree: the root is the first folder, open. */}}
 {{define "place-tree"}}
 <section class="panel stack place-tree" aria-labelledby="tree-h">
   <header><h3 id="tree-h">{{t "tree.title"}}</h3><p class="muted small">{{t "tree.lead"}}</p></header>
   {{if .ReadOnly}}<p class="muted small">{{t "places.ceiling"}}</p>{{end}}
-  <div class="tree-row tree-root">
-    <span class="tree-chev" aria-hidden="true"></span>
-    <button class="tree-name" type="button" hx-get="{{.Base}}/grid?account={{urlquery .Account}}" hx-target="#drawer" hx-swap="innerHTML">{{template "i-folder"}}<span>{{.Root.Title}}</span></button>
-    {{template "case-summary" (dict "G" .Root "OOB" false)}}
-  </div>
-  <ul class="tree" hx-get="{{.Base}}?account={{urlquery .Account}}" hx-trigger="load" hx-swap="innerHTML"><li class="muted small">{{t "tree.loading"}}</li></ul>
+  <ul class="tree"><li>
+    <div class="tree-row tree-root">
+      <button class="tree-chev icon-btn" type="button" aria-expanded="true" aria-label="{{tf "tree.open" .Root.Title}}" data-tree-toggle>{{template "i-chevron"}}</button>
+      <button class="tree-name" type="button" hx-get="{{.Base}}/grid?account={{urlquery .Account}}" hx-target="#drawer" hx-swap="innerHTML">{{template "i-folder"}}<span>{{.Root.Title}}</span></button>
+      {{template "case-summary" (dict "G" .Root "OOB" false)}}
+    </div>
+    <ul class="tree" hx-get="{{.Base}}?account={{urlquery .Account}}" hx-trigger="load" hx-swap="innerHTML"><li class="muted small">{{t "tree.loading"}}</li></ul>
+  </li></ul>
 </section>
 {{end}}
 

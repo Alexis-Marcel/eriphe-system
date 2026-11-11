@@ -366,9 +366,9 @@ func TestDriveRoundTrip(t *testing.T) {
 	}
 	tree := "/settings/tools/" + filesService.Base + "/tree"
 	acct := "/settings/tools/" + filesService.Base + "/access?account=sam%40example.org"
-	// The account's page is its tree: the whole Drive, Never until set, then
-	// its folders, loaded when shown, each following its parent.
-	if _, body, _ := tw.do("GET", acct, nil, nil); !strings.Contains(body, "Tout le Drive") || !strings.Contains(body, `hx-get="`+tree+`?account=sam%40example.org"`) ||
+	// The account's page is its tree: the whole Drive, Never until set and
+	// open, then its folders, loaded when shown, each following its parent.
+	if _, body, _ := tw.do("GET", acct, nil, nil); !strings.Contains(body, "Tout le Drive") || !strings.Contains(body, `aria-expanded="true" aria-label="Ouvrir ou fermer Tout le Drive"`) || !strings.Contains(body, `hx-get="`+tree+`?account=sam%40example.org"`) ||
 		strings.Contains(body, `name="grid-read"`) || !strings.Contains(body, `id="drawer"`) {
 		t.Fatalf("account page: %s", body)
 	}
