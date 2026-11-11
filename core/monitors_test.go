@@ -467,25 +467,43 @@ func TestMonitorChangeCardAgain(t *testing.T) {
 		c.store.db.QueryRow(`SELECT id, seq, turn, state FROM convo_cards WHERE ref = ?`, ref).Scan(&id, &seq, &turn, &state)
 		return
 	}
-	id, seq, _, _ := card()
+	first, seq, _, _ := card()
 	if seq != 3 {
 		t.Fatalf("the first card is not with its message: %d", seq)
 	}
-	if _, err := c.decideCard(context.Background(), id, true, "click"); err != nil {
+	if _, err := c.decideCard(context.Background(), first, true, "click"); err != nil {
 		t.Fatal(err)
 	}
 	spec.Every = 15
 	c.writeMonitor("etat", spec, nil)
-	if _, seq, turn, state := card(); state != cardPending || seq != 0 || turn != 1 {
-		t.Fatalf("the change has no card: seq %d turn %d %s", seq, turn, state)
+	id, seq, turn, state := card()
+	if id == first || state != cardPending || seq != 0 || turn != 1 {
+		t.Fatalf("the change has no card of its own: id %d (first %d) seq %d turn %d %s", id, first, seq, turn, state)
 	}
 	c.attachTurnCards(7)
 	if _, seq, _, _ := card(); seq != 7 {
 		t.Fatalf("the change's card is not with this turn's message: %d", seq)
 	}
+	// The first card stays decided under its message, and says no proposal.
+	old, err := c.card(first)
+	if err != nil || old.Seq != 3 || old.State != cardApproved {
+		t.Fatalf("the first card moved: %+v, %v", old, err)
+	}
+	if x, _ := c.liveCard(old); x.State != cardApproved {
+		t.Fatalf("the first card reads the new proposal: %+v", x)
+	}
+	// The new card's Oui is its own.
+	if x, err := c.decideCard(context.Background(), id, true, "click"); err != nil || x.ID != id || x.State != cardApproved {
+		t.Fatalf("the change's Oui: %+v, %v", x, err)
+	}
+	if m, _ := c.monitorNamed("etat"); m.Pending != nil || m.Spec.Every != 15 {
+		t.Fatalf("the change was not applied: %+v", m)
+	}
 
-	// A change already waiting under a decided card (before this fix): the
-	// sync gives it its card back.
+	// A change waiting under a decided card: the sync gives it a card.
+	spec.Every = 30
+	c.writeMonitor("etat", spec, nil)
+	c.cardsTurnEnded()
 	c.store.db.Exec(`UPDATE convo_cards SET state = ? WHERE ref = ?`, cardApproved, ref)
 	c.syncCards()
 	if _, seq, _, state := card(); state != cardPending || seq != 0 {
