@@ -132,7 +132,6 @@
       {{if eq .Preset.ID "github"}}{{if eq .Auth "connection"}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>
       {{else if eq .Source "workspace"}}<a class="btn btn-soft sm" href="/settings/github?switch={{.Name}}#gh-conn-{{.Name}}">{{t "github.switch"}}</a>
       {{else}}<a class="btn btn-ghost sm" href="/settings/github">{{t "github.manage"}}</a>{{end}}{{end}}
-      {{if .Places}}<a class="btn btn-ghost sm" href="{{.PlacesURL}}">{{t "conn.places"}}</a>{{end}}
       {{with .ConnPlaces}}<a class="btn btn-ghost sm" href="/settings/connections/{{.}}/places">{{t "repos.title"}}</a>{{end}}
       {{if and .Follow .Follow.Edit .Editable}}<a class="btn btn-soft sm" href="{{.EditURL}}" data-step-open="add-dlg" data-hash="{{.EditHash}}">{{t "catalog.edit"}}</a>
       {{else}}<a class="btn btn-ghost sm" href="{{.AccessURL}}">{{t "catalog.edit"}}</a>{{end}}
@@ -597,10 +596,11 @@
 
 {{/* A tool's page: its grid, its credential, its allowed actions. . is a toolAccess. */}}
 {{define "tool-access"}}<div class="stack" id="access-{{.Key}}">
+{{with .Tree}}{{template "place-tree" .}}{{end}}
 <form class="panel stack" hx-post="/settings/tools/{{.Name}}/access{{.Query}}" hx-target="#access-{{.Key}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
   {{if .Saved}}<p class="ok-note" role="status">{{t "access.saved"}}</p>{{end}}
-  {{template "access-grid" .}}
+  {{if not .Tree}}{{template "access-grid" .}}{{end}}
   {{template "access-exceptions" .}}
   {{if .Locked}}<p class="muted small">{{t "access.locked"}}</p>
   {{else}}<div class="actions"><button class="btn btn-primary" type="submit">{{t "access.save"}}</button></div>{{end}}
@@ -663,6 +663,7 @@
   <p>{{t "access.pagelead"}}</p>
 </header>
 {{template "tool-access" .}}
+{{if .Tree}}<div id="drawer" class="drawer" aria-live="polite"></div>{{end}}
 {{end}}{{end}}
 
 {{/* An account's form, from its tool's card: the fields of its choice

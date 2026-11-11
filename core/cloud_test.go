@@ -364,28 +364,31 @@ func TestDriveRoundTrip(t *testing.T) {
 	if len(tools) != 1 || tools[0].Name != "list_files" {
 		t.Fatalf("tools lent: %v", tools)
 	}
-	places := "/settings/tools/" + filesService.Base + "/places"
-	if _, body, _ := tw.do("GET", places+"?account=sam%40example.org&parent=root-id&name=My+Drive", nil, nil); !strings.Contains(body, "Compta") ||
-		!strings.Contains(body, `value="compta"`) || strings.Contains(body, `value="drop"`) {
+	tree := "/settings/tools/" + filesService.Base + "/tree"
+	acct := "/settings/tools/" + filesService.Base + "/access?account=sam%40example.org"
+	// The account's page is its tree: the whole Drive, Never until set, then
+	// its folders, loaded when shown, each following its parent.
+	if _, body, _ := tw.do("GET", acct, nil, nil); !strings.Contains(body, "Tout le Drive") || !strings.Contains(body, `hx-get="`+tree+`?account=sam%40example.org"`) ||
+		strings.Contains(body, `name="grid-read"`) || !strings.Contains(body, `id="drawer"`) {
+		t.Fatalf("account page: %s", body)
+	}
+	if _, body, _ := tw.do("GET", tree+"?account=sam%40example.org&parents=root-id&pname=My+Drive", nil, nil); !strings.Contains(body, "Compta") ||
+		!strings.Contains(body, "Comme My Drive") || !strings.Contains(body, "parents=root-id%2Ccompta") {
 		t.Fatalf("browse: %s", body)
 	}
-	if code, body, _ := tw.post(places, url.Values{"id": {"compta"}, "name": {"Compta"}, "account": {"sam@example.org"}}, csrf); code != 200 ||
-		!strings.Contains(body, "Comme le compte") || !strings.Contains(body, "/places/grid?id=compta") {
+	// A case set keeps the folder, with its parents; two of one name are told apart.
+	if code, body, _ := tw.post(tree+"/case", url.Values{"id": {"compta"}, "name": {"Compta"}, "account": {"sam@example.org"}, "parents": {"root-id"},
+		"pname": {"My Drive"}, "case-read": {gridFree}}, csrf); code != 200 || !strings.Contains(body, "Comme My Drive") || strings.Contains(body, `role="alert"`) {
 		t.Fatalf("add: %d %s", code, body)
 	}
-	tw.post(places, url.Values{"id": {"other"}, "name": {"Compta"}}, csrf)
+	tw.post(tree+"/case", url.Values{"id": {"other"}, "name": {"Compta"}, "case-read": {gridApproval}}, csrf)
 	_, fc, _ := accountsOf(c.conf().Servers[filesService.Base])
-	if f := c.places(); len(f) != 2 || f[0] != (Place{Tool: filesService.Base, Name: "Compta", Account: "sam@example.org", ID: "compta"}) ||
+	if f := c.places(); len(f) != 2 || f[0].Name != "Compta" || f[0].ID != "compta" || !slices.Equal(f[0].Parents, []string{"root-id"}) ||
 		f[1].Name != "Compta (2)" || fc.Accounts[0].Auth.TokenEnv != accountEnv(toolTokenEnv, "sam@example.org") {
 		t.Fatalf("folders: %+v %+v", f, fc)
 	}
-	// The given ones first, in one list, then the account's own to give.
-	if code, body, _ := tw.do("GET", places+"?account=sam%40example.org", nil, nil); code != 200 || !strings.Contains(body, "Compta (2)") ||
-		!strings.Contains(body, "Dossiers de sam@example.org") || strings.Index(body, "Compta (2)") > strings.Index(body, "My Drive") {
-		t.Fatalf("places page: %d %s", code, body)
-	}
 	if _, body, _ := tw.do("GET", "/settings/tools", nil, nil); !strings.Contains(body, "Google Drive · 2 dossiers") ||
-		!strings.Contains(body, `href="`+places+`?account=sam%40example.org"`) {
+		!strings.Contains(body, `href="/settings/tools/`+filesService.Base+`/access?account=sam%40example.org"`) {
 		t.Fatalf("tools list: %s", body)
 	}
 	// One list of folders with the machines' (folders.go): in Settings →
@@ -399,7 +402,8 @@ func TestDriveRoundTrip(t *testing.T) {
 	if _, _, err := c.folderGrant([]string{"compta"}); err == nil || !strings.Contains(err.Error(), "is a place") {
 		t.Fatalf("a Drive folder lent as a machine's: %v", err)
 	}
-	tw.post("/settings/folders/delete", url.Values{"source": {sourcePlace}, "name": {"Compta (2)"}}, csrf)
+	// A folder back to following its parent is no longer kept.
+	tw.post(tree+"/case", url.Values{"id": {"other"}, "case-read": {""}}, csrf)
 	if f := c.places(); len(f) != 1 || f[0].ID != "compta" {
 		t.Fatalf("after remove: %+v", f)
 	}
@@ -416,10 +420,10 @@ func TestDriveRoundTrip(t *testing.T) {
 	if acc, f := c.placeAccounts(filesService.Base), c.places(); acc[0].CanWrite || len(f) != 1 {
 		t.Fatalf("read only: %+v %+v", acc, f)
 	}
-	if _, body, _ := tw.do("GET", places+"/grid?id=compta", nil, nil); strings.Count(body, `aria-disabled="true" title="Ce compte a été connecté en lecture seule`) != 2 {
+	if _, body, _ := tw.do("GET", tree+"/grid?account=sam%40example.org&id=compta", nil, nil); strings.Count(body, `aria-disabled="true" title="Ce compte a été connecté en lecture seule`) != 2 {
 		t.Fatalf("greyed: %s", body)
 	}
-	if _, body, _ := tw.do("GET", "/settings/tools/"+filesService.Base+"/access?account=sam%40example.org", nil, nil); !strings.Contains(body, "Impossible : ce compte") ||
+	if _, body, _ := tw.do("GET", "/settings/tools/"+filesService.Base+"/access?account=sam%40example.org", nil, nil); !strings.Contains(body, "Ce compte a été connecté en lecture seule") ||
 		strings.Contains(body, `name="grid-send"`) {
 		t.Fatalf("access page: %s", body)
 	}
@@ -548,7 +552,7 @@ func TestDriveRefusals(t *testing.T) {
 	}
 	// A tool of the same name that is not eriphe-files is left alone.
 	c.putServer(putCreate, filesService.Base, Server{URL: "https://x.example/mcp", Auth: &ServerAuth{None: true}, Use: "x"}, nil)
-	if err := c.givePlace(filesService.Base, "", "a", "A"); err == nil {
+	if err := c.setPlaceCase(filesService.Base, placeRef{ID: "a", Name: "A"}, catRead, gridFree); err == nil {
 		t.Fatal("a place given to a tool that keeps none")
 	}
 }
@@ -619,15 +623,15 @@ func TestFilesAccountsPath(t *testing.T) {
 	put("sam@example.org", scopeDrive)
 	put("bob@example.org", scopeDrive)
 	st, ok := c.serviceServer(filesService)
-	if !ok || st.Name != filesService.Base || len(st.Config.Accounts) != 2 || len(st.Server.AccountAccess) != 2 {
+	if !ok || st.Name != filesService.Base || len(st.Config.Accounts) != 2 || len(st.Server.AccountGrids) != 2 || st.Server.AccountGrids["sam@example.org"].Grid != neverGrid {
 		t.Fatalf("server: %+v", st)
 	}
 	if err := c.changePlaces(filesService.Base, func([]Place) ([]Place, error) {
 		return []Place{{Name: "Compta", Account: "sam@example.org", ID: "a"}, {Name: "Photos", Account: "bob@example.org", ID: "b"}}, nil
-	}); err != nil {
+	}, map[string]accessGrid{"a": {Read: gridFree, Change: gridApproval}, "b": {Read: gridFree, Change: gridApproval}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.setPlaceCase(filesService.Base, "a", catDelete, gridFree); err != nil {
+	if err := c.setPlaceCase(filesService.Base, placeRef{Account: "sam@example.org", ID: "a"}, catDelete, gridFree); err != nil {
 		t.Fatal(err)
 	}
 	put("sam@example.org", scopeDriveReadonly)
@@ -638,7 +642,7 @@ func TestFilesAccountsPath(t *testing.T) {
 	if err := c.dropAccount(filesService, "sam@example.org"); err != nil {
 		t.Fatal(err)
 	}
-	if p := c.places(); len(p) != 1 || p[0].Name != "Photos" || c.conf().Servers[filesService.Base].PlaceGrids != nil {
+	if p := c.places(); len(p) != 1 || p[0].Name != "Photos" || len(c.conf().Servers[filesService.Base].PlaceGrids) != 1 {
 		t.Fatalf("after drop: %+v", p)
 	}
 	if err := c.dropAccount(filesService, "bob@example.org"); err != nil {

@@ -132,23 +132,11 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 	w.render(rw, r, s, "settings", "", page{Title: "settings.folders", Nav: "settings", Tab: "folders", Data: d})
 }
 
-// handleDeleteFolder stops sharing a folder: on its machine (taken off its
-// list there), or a tool's place.
+// handleDeleteFolder stops sharing a machine's folder (taken off its list
+// there). A tool's place is set on its account's page, in its tree.
 func (w *web) handleDeleteFolder(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PostFormValue("name")
-	var err error
-	switch r.PostFormValue("source") {
-	case sourcePlace:
-		// A place lives in its tool's configuration (places.go).
-		if p := w.c.placeNamed(name); p != nil {
-			err = w.c.removePlace(p.Tool, p.ID)
-		} else {
-			err = errNoFolder
-		}
-	default:
-		err = w.c.removeFolder(r.Context(), name)
-	}
-	if err != nil {
+	if err := w.c.removeFolder(r.Context(), name); err != nil {
 		w.toast(rw, tr(w.lang(r), "folders.err.gone"), false)
 		return
 	}

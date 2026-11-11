@@ -1,49 +1,39 @@
-{{/* Settings → Tools → an account → Folders (web_places.go): one list, the
-     folders given first with the summary of their cases, then the account's
-     folders to give more. Below, a connection's repositories, then a place's
-     grid in its drawer (web_case_grid.go). */}}
+{{/* A Drive account's tree, on its access page (web_places.go): the root,
+     the account's grid, then its folders as an accordion, each opening its
+     drawer. Below, a connection's repositories, then a place's grid in its
+     drawer (web_case_grid.go). */}}
 
-{{define "tool-folders-page"}}{{with .Data}}
-<header class="page-head">
-  <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
-  <div class="form-title"><h2>{{tf "places.heading" .Account}}</h2></div>
-  <p>{{t "places.lead"}}</p>
-</header>
-{{template "tool-folders" .}}
-<div id="drawer" class="drawer" aria-live="polite"></div>
-{{end}}{{end}}
-
-{{define "tool-folders-frag"}}{{template "tool-folders" .Data}}{{end}}
-
-{{/* . is a toolFolders. */}}
-{{define "tool-folders"}}{{$v := .}}{{$u := printf "%s?account=%s" .Base (urlquery .Account)}}
-<section class="panel stack" id="tool-folders">
-  {{if .Parent}}<p class="place-path"><button class="link-btn" type="button" hx-get="{{$u}}" hx-target="#tool-folders" hx-swap="outerHTML">{{t "places.top"}}</button> <b>{{.Name}}</b></p>{{end}}
-  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
-  {{if not .CanWrite}}<p class="muted small">{{t "places.ceiling"}}</p>{{end}}
-  <ul class="place-list">
-  {{range .Items}}{{$it := .}}<li{{if .Given}} class="given"{{end}}>
-    <span class="place-name">{{if .Given}}{{template "i-check"}}{{end}}{{.Name}}</span>
-    <span class="place-actions">
-      {{if .Given}}
-      {{template "case-summary" (dict "G" .Grid "OOB" false)}}
-      <button class="btn btn-soft sm" type="button" hx-get="{{$v.Base}}/grid?id={{urlquery .ID}}" hx-target="#drawer" hx-swap="innerHTML">{{t "casegrid.open"}}</button>
-      <form hx-post="{{$v.Base}}/remove" hx-target="#tool-folders" hx-swap="outerHTML" class="inline">
-        <input type="hidden" name="account" value="{{$v.Account}}"><input type="hidden" name="parent" value="{{$v.Parent}}"><input type="hidden" name="parent_name" value="{{$v.Name}}">
-        <input type="hidden" name="id" value="{{.ID}}"><button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
-      {{else}}
-      <button class="btn btn-ghost sm" type="button" hx-get="{{$u}}&amp;parent={{urlquery .ID}}&amp;name={{urlquery .Name}}" hx-target="#tool-folders" hx-swap="outerHTML">{{t "places.open"}}</button>
-      {{if ne .ID "shared-with-me"}}<form hx-post="{{$v.Base}}" hx-target="#tool-folders" hx-swap="outerHTML" class="inline">
-        <input type="hidden" name="account" value="{{$v.Account}}"><input type="hidden" name="parent" value="{{$v.Parent}}"><input type="hidden" name="parent_name" value="{{$v.Name}}">
-        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}">
-        <button class="btn btn-soft sm" type="submit">{{t "places.givefolder"}}</button></form>{{end}}
-      {{end}}
-    </span>
-  </li>{{else}}<li class="muted small">{{if eq $v.Status "ready"}}{{t "places.empty"}}{{else}}{{t "places.notready"}}{{end}}</li>{{end}}
-  </ul>
-  {{if and (ne .Status "ready") .Items}}<p class="muted small">{{t "places.notready"}}</p>{{end}}
-  {{if .Next}}<button class="btn btn-ghost sm" type="button" hx-get="{{$u}}&amp;parent={{urlquery .Parent}}&amp;name={{urlquery .Name}}&amp;page={{urlquery .Next}}" hx-target="#tool-folders" hx-swap="outerHTML">{{t "places.more"}}</button>{{end}}
+{{/* . is a placeTree. */}}
+{{define "place-tree"}}
+<section class="panel stack place-tree" aria-labelledby="tree-h">
+  <header><h3 id="tree-h">{{t "tree.title"}}</h3><p class="muted small">{{t "tree.lead"}}</p></header>
+  {{if .ReadOnly}}<p class="muted small">{{t "places.ceiling"}}</p>{{end}}
+  <div class="tree-row tree-root">
+    <span class="tree-chev" aria-hidden="true"></span>
+    <button class="tree-name" type="button" hx-get="{{.Base}}/grid?account={{urlquery .Account}}" hx-target="#drawer" hx-swap="innerHTML">{{template "i-folder"}}<span>{{.Root.Title}}</span></button>
+    {{template "case-summary" (dict "G" .Root "OOB" false)}}
+  </div>
+  <ul class="tree" hx-get="{{.Base}}?account={{urlquery .Account}}" hx-trigger="load" hx-swap="innerHTML"><li class="muted small">{{t "tree.loading"}}</li></ul>
 </section>
+{{end}}
+
+{{define "tree-level-frag"}}{{template "tree-level" .Data}}{{end}}
+
+{{/* The folders under one folder: the inside of its list. . is a treeLevel. */}}
+{{define "tree-level"}}{{$v := .}}{{$q := printf "account=%s&parents=%s&pname=%s" (urlquery .Account) (urlquery .Parents) (urlquery .PName)}}
+{{- if .Error}}<li class="alert" role="alert">{{.Error}}</li>{{end}}
+{{- if .NotReady}}<li class="muted small">{{t "places.notready"}}</li>{{end}}
+{{- range .Items}}<li>
+  <div class="tree-row">
+    <button class="tree-chev icon-btn" type="button" aria-expanded="false" aria-label="{{tf "tree.open" .Name}}" data-tree-toggle
+      hx-get="{{$v.Base}}?account={{urlquery $v.Account}}&amp;parents={{urlquery .Path}}&amp;pname={{urlquery .Name}}" hx-trigger="click once" hx-target="next .tree" hx-swap="innerHTML">{{template "i-chevron"}}</button>
+    <button class="tree-name" type="button" hx-get="{{$v.Base}}/grid?{{$q}}&amp;id={{urlquery .ID}}&amp;name={{urlquery .Name}}" hx-target="#drawer" hx-swap="innerHTML">{{template "i-folder"}}<span>{{.Name}}</span></button>
+    {{template "case-summary" (dict "G" .Grid "OOB" false)}}
+  </div>
+  <ul class="tree" hidden><li class="muted small">{{t "tree.loading"}}</li></ul>
+</li>
+{{- else}}{{if not (or .Error .NotReady)}}<li class="muted small">{{t "places.empty"}}</li>{{end}}{{end}}
+{{- if .Next}}<li><button class="btn btn-ghost sm" type="button" hx-get="{{.Base}}?{{$q}}&amp;page={{urlquery .Next}}" hx-target="closest li" hx-swap="outerHTML">{{t "places.more"}}</button></li>{{end}}
 {{end}}
 
 {{/* A connection's repositories (web_places.go, repoList). */}}
@@ -64,14 +54,12 @@
 <section class="panel stack" id="repo-list">
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
   {{if .Ceiling}}<p class="muted small">{{t "repos.ceiling"}}</p>{{end}}
-  <ul class="place-list">
-  {{range .Items}}<li{{if .Own}} class="given"{{end}}>
-    <span class="place-name">{{if .Link}}<a href="{{.Link}}" rel="noopener" target="_blank">{{.Repo}}</a>{{else}}{{.Repo}}{{end}}</span>
-    <span class="place-actions">
-      {{template "case-summary" (dict "G" .Grid "OOB" false)}}
-      <button class="btn btn-soft sm" type="button" hx-get="{{$v.Base}}/grid?id={{urlquery .Repo}}" hx-target="#drawer" hx-swap="innerHTML">{{t "casegrid.open"}}</button>
-    </span>
-  </li>{{else}}<li class="muted small">{{t "places.empty"}}</li>{{end}}
+  <ul class="tree">
+  {{range .Items}}<li><div class="tree-row">
+    <button class="tree-name" type="button" hx-get="{{$v.Base}}/grid?id={{urlquery .Repo}}" hx-target="#drawer" hx-swap="innerHTML">{{template "i-branch"}}<span>{{.Repo}}</span></button>
+    {{template "case-summary" (dict "G" .Grid "OOB" false)}}
+    {{with .Link}}<a class="icon-btn" href="{{.}}" rel="noopener" target="_blank" aria-label="{{t "repos.github"}}" title="{{t "repos.github"}}">{{template "i-link"}}</a>{{end}}
+  </div></li>{{else}}<li class="muted small">{{t "places.empty"}}</li>{{end}}
   </ul>
   {{if .Next}}<button class="btn btn-ghost sm" type="button" hx-get="{{.Base}}?page={{urlquery .Next}}" hx-target="#repo-list" hx-swap="outerHTML">{{t "places.more"}}</button>{{end}}
 </section>
@@ -101,10 +89,10 @@
   <fieldset class="access-grid">
     {{if .Follow}}<legend>{{t "casegrid.title"}}</legend>{{end}}
     <table>
-      <thead><tr><td></td>{{with .Follow}}<th scope="col">{{t .}}</th>{{end}}{{range list "free" "approval" "never"}}<th scope="col">{{t (printf "grid.%s" .)}}</th>{{end}}</tr></thead>
+      <thead><tr><td></td>{{with .Follow}}<th scope="col">{{or $g.FollowName (t .)}}</th>{{end}}{{range list "free" "approval" "never"}}<th scope="col">{{t (printf "grid.%s" .)}}</th>{{end}}</tr></thead>
       <tbody>{{range $row := .Rows}}{{$val := $row.Value $g.Follow}}<tr{{if ne $row.Category "read"}} class="above-read"{{end}}{{if $row.Greyed}} aria-disabled="true" title="{{t $g.Greyed}}"{{end}}>
         <th scope="row">{{t (printf "grid.cat.%s" $row.Category)}}<small>{{if $row.Greyed}}{{t $g.Greyed}}{{else}}{{t (printf $g.Hint $row.Category)}}{{end}}</small></th>
-        {{if $g.Follow}}<td class="case-follow"><input type="radio" name="case-{{$row.Category}}" value="" aria-label="{{t (printf "grid.cat.%s" $row.Category)}} : {{t $g.Follow}} ({{t (printf "grid.%s" $row.Follows)}})" {{if eq $val ""}}checked{{end}}{{if $row.Greyed}} disabled{{end}}><small>{{t (printf "grid.%s" $row.Follows)}}</small></td>{{end}}
+        {{if $g.Follow}}<td class="case-follow"><input type="radio" name="case-{{$row.Category}}" value="" aria-label="{{t (printf "grid.cat.%s" $row.Category)}} : {{or $g.FollowName (t $g.Follow)}} ({{t (printf "grid.%s" $row.Follows)}})" {{if eq $val ""}}checked{{end}}{{if $row.Greyed}} disabled{{end}}><small>{{t (printf "grid.%s" $row.Follows)}}</small></td>{{end}}
         {{range list "free" "approval" "never"}}<td><input type="radio" name="case-{{$row.Category}}" value="{{.}}" aria-label="{{t (printf "grid.cat.%s" $row.Category)}} : {{t (printf "grid.%s" .)}}" {{if eq . $val}}checked{{end}}{{if $row.Greyed}} disabled{{end}}></td>{{end}}
       </tr>{{end}}</tbody>
     </table>
@@ -118,5 +106,5 @@
      caseGrid, OOB to replace the one in the list. */}}
 {{define "case-summary"}}{{with .G}}<span class="case-sum small" id="sum-{{.Key}}"{{if $.OOB}} hx-swap-oob="true"{{end}}>
   {{- with .Own}}{{range $i, $r := .}}{{if $i}} · {{end}}{{tf "casegrid.sum" (t (printf "grid.cat.%s" $r.Category)) (t (printf "grid.%s" $r.Own))}}{{end}}
-  {{- else}}<span class="muted">{{t $.G.Follow}}</span>{{end -}}
+  {{- else}}<span class="muted">{{or $.G.FollowName (t $.G.Follow)}}</span>{{end -}}
 </span>{{end}}{{end}}

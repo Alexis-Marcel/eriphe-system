@@ -28,8 +28,9 @@ func TestPlacesOfAnyTool(t *testing.T) {
 	if tools := c.placeTools(); len(tools) != 1 || tools[0] != "carnets" {
 		t.Fatalf("place tools %v", tools)
 	}
-	for _, cat := range []string{catChange, catDelete, catSend} {
-		if err := c.setPlaceCase("carnets", "v2", cat, gridNever); err != nil {
+	// Nothing is reached until set (rootAccess): each its own cases.
+	for _, cs := range []struct{ id, cat, value string }{{"r1", catRead, gridFree}, {"r1", catChange, gridApproval}, {"v2", catRead, gridFree}} {
+		if err := c.setPlaceCase("carnets", placeRef{ID: cs.id}, cs.cat, cs.value); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -54,8 +55,10 @@ func TestPlacesOfAnyTool(t *testing.T) {
 		t.Fatal("a read place lent write")
 	}
 
-	if err := c.removePlace("carnets", "r1"); err != nil {
-		t.Fatal(err)
+	for _, cat := range []string{catRead, catChange} { // back to following: no longer kept
+		if err := c.setPlaceCase("carnets", placeRef{ID: "r1"}, cat, ""); err != nil {
+			t.Fatal(err)
+		}
 	}
 	spec, _ := decodeRun(c.conf().Servers["carnets"].Run)
 	var doc map[string]json.RawMessage
@@ -89,13 +92,14 @@ func TestAnyToolCard(t *testing.T) {
 	}
 	if err := c.changePlaces("carnets", func([]Place) ([]Place, error) {
 		return []Place{{Name: "Recettes", Account: "sam", ID: "r1"}}, nil
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.dropAccount(notes, "sam"); err != nil {
 		t.Fatal(err)
 	}
-	if st, _ := c.serviceServer(notes); len(st.Config.Accounts) != 1 || len(c.places()) != 0 {
+	// bob reads (its level): the whole account is its place, nothing else.
+	if st, _ := c.serviceServer(notes); len(st.Config.Accounts) != 1 || len(c.places()) != 1 || !c.places()[0].Root {
 		t.Fatalf("after drop: %+v %+v", st.Config, c.places())
 	}
 }

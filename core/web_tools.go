@@ -39,8 +39,6 @@ type toolView struct {
 	Connection   string
 	ConnProvider string
 	Reconnect    bool
-	// Places tells a tool that has places, picked on its page (places.go).
-	Places bool
 	// ConnPlaces is the connection whose places it uses, for a remote tool
 	// on a connection that mints its tokens (connection_places.go).
 	ConnPlaces string
@@ -73,11 +71,6 @@ func (t toolView) Removable() bool {
 
 // ConnLabel is the name of the provider of the account the tool reads.
 func (t toolView) ConnLabel() string { return providerLabel(t.ConnProvider) }
-
-// PlacesURL is the page of the tool's places (web_places.go).
-func (t toolView) PlacesURL() string {
-	return "/settings/tools/" + t.Name + "/places" + accountQuery(t.Account)
-}
 
 func editable(source string, p toolPreset, auth string) bool {
 	return source == sourceWorkspace && auth != "connection" && p.Form != "connection"
@@ -306,8 +299,6 @@ func (w *web) toolRow(lang string, conf *Config, sv serverView) toolView {
 	if cn := conf.Servers[sv.Name].authConnection(); cn != "" && sv.Source == sourceWorkspace {
 		t.ConnPlaces = cn
 	}
-	_, _, t.Places = keeperOf(conf.Servers[sv.Name])
-	t.Places = t.Places && sv.Source == sourceWorkspace
 	t.Pending, t.Placed = startState(sv)
 	if t.Pending {
 		t.Problem = serviceProblem(lang, sv)

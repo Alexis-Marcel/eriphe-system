@@ -570,8 +570,16 @@ func (c *core) putAccount(svc toolCard, in accountPut) error {
 				levels[k] = v
 			}
 		}
-		levels[a.Name] = level
 		srv.AccountAccess = levels
+		if svc.Places != nil && at < 0 && in.Level == "" { // a tree of folders: nothing reached until set (rootAccess)
+			srv.AccountGrids = maps.Clone(srv.AccountGrids)
+			if srv.AccountGrids == nil {
+				srv.AccountGrids = map[string]accountGrid{}
+			}
+			srv.AccountGrids[a.Name] = accountGrid{Grid: neverGrid}
+		} else {
+			levels[a.Name] = level
+		}
 	}
 	if g, ok := srv.AccountGrids[old.Name]; ok && !strings.EqualFold(old.Name, a.Name) {
 		srv.AccountGrids = withoutAccount(srv.AccountGrids, old.Name) // renamed: its grid goes with it
@@ -655,6 +663,9 @@ func (c *core) setAccountGrid(server, account string, g accountGrid) error {
 // others (toolFacts).
 func keepAccounts(srv Server, cfg svcConfig) Server {
 	base := srv.baseAccess()
+	if _, _, ok := keeperOf(srv); ok {
+		base.grid = neverGrid // a tree of folders: nothing until set (rootAccess)
+	}
 	grids := maps.Clone(srv.AccountGrids)
 	for _, a := range cfg.Accounts {
 		if _, ok := srv.accountAccess(map[string]any{"account": a.Name}); ok {
@@ -715,9 +726,19 @@ func (c *core) setAccountLevel(server, account, level string) error {
 // account's secret (env holds the new ones; the others keep theirs) and
 // read_only for the accounts kept read only.
 func (c *core) writeService(svc toolCard, st svcServer, srv Server, cfg svcConfig, env map[string]EnvValue, creds credentials, exists bool) error {
+	_, _, tree := keeperOf(srv)
 	for i := range cfg.Accounts {
 		a, ok := srv.accountAccesses()[cfg.Accounts[i].Name]
 		cfg.Accounts[i].ReadOnly = svc.AccountLevels && ok && a.level() == accessReadOnly
+		if tree { // the whole account is reached when its grid reads (places.go)
+			delete(cfg.Accounts[i].Fields, "all")
+			if srv.rootAccess(cfg.Accounts[i].Name).grid.value(catRead) != gridNever {
+				if cfg.Accounts[i].Fields == nil {
+					cfg.Accounts[i].Fields = map[string]any{}
+				}
+				cfg.Accounts[i].Fields["all"] = true
+			}
+		}
 	}
 	raw, _ := json.Marshal(cfg)
 	next := map[string]EnvValue{toolConfigEnv: {Value: string(raw)}}

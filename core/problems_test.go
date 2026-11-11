@@ -432,7 +432,7 @@ func TestAssistantNameOnPages(t *testing.T) {
 		{"fr", "github.createlead", "la description qu'Atlas lui envoie"},
 		{"fr", "github.created", "les dépôts où Atlas peut travailler"},
 		{"en", "github.create", "Create Atlas's GitHub App"},
-		{"fr", "places.lead", "qu'Atlas peut atteindre dans ce compte"},
+		{"fr", "tree.title", "Ce qu'Atlas peut atteindre"},
 	} {
 		if got := tr(c.lang, c.key); !strings.Contains(got, c.want) || strings.Contains(got, "{{name}}") {
 			t.Errorf("%s %s = %q", c.lang, c.key, got)
