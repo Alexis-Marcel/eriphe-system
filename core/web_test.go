@@ -606,6 +606,24 @@ func TestMarkdownEscapes(t *testing.T) {
 	}
 }
 
+func TestMarkdownTable(t *testing.T) {
+	got := string(markdown("Voici :\n| Environnement | Réveil |\n|---|:--:|\n| prod (`k3s`) | oui, <b>toujours</b> |\n| a \\| b | non | de trop |\n| court |\nfin"))
+	for _, want := range []string{
+		"<p>Voici :</p><table><thead><tr><th>Environnement</th><th style=\"text-align:center\">Réveil</th></tr></thead><tbody>",
+		"<tr><td>prod (<code>k3s</code>)</td><td style=\"text-align:center\">oui, &lt;b&gt;toujours&lt;/b&gt;</td></tr>",
+		"<tr><td>a | b</td><td style=\"text-align:center\">non</td></tr>",
+		"<tr><td>court</td><td style=\"text-align:center\"></td></tr></tbody></table><p>fin</p>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("markdown lacks %q: %s", want, got)
+		}
+	}
+	// Without a separator row, pipes stay text.
+	if got := string(markdown("| a | b |\n| c | d |")); strings.Contains(got, "<table") {
+		t.Errorf("table without separator: %s", got)
+	}
+}
+
 // A message may link to a page of the workspace, in the same tab; other
 // local paths and protocol-relative links stay text.
 func TestMarkdownWorkspaceLinks(t *testing.T) {
