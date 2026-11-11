@@ -444,11 +444,13 @@ func (c *core) cardProposed(kind string, id int64) {
 }
 
 // cardAgain: the same proposal waits again after its card was decided (a
-// change of a skill or a monitor already approved). Its card waits again,
-// queued, rather than staying decided under an old message.
+// change of a skill or a monitor already approved). It gets a new card:
+// the decided one stays under its message as it was, its ref set aside
+// (ref@card id, read as no proposal), so a page never shows two cards of
+// one id, the Oui of the new one landing on the old.
 func (c *core) cardAgain(p proposal) {
-	c.store.db.Exec(`UPDATE convo_cards SET seq = 0, turn = 0, state = ?, text = ?, created = ?, attached = 0, decided = 0, by = ''
-		WHERE ref = ? AND state != ?`, cardPending, p.Text("fr"), time.Now().Unix(), proposalRef(p.Kind, p.ID), cardPending)
+	c.store.db.Exec(`UPDATE convo_cards SET ref = ref || '@' || id WHERE ref = ? AND state != ?`,
+		proposalRef(p.Kind, p.ID), cardPending)
 }
 
 // syncCards gives every waiting proposal without a waiting card one,
