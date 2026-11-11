@@ -1311,6 +1311,12 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 .place-name { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
 .place-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .place-path { display: flex; align-items: center; gap: 8px; margin: 0; }
+/* A place's own rules (web_case_grid.go): their summary in a list, the
+   tool's grid in its drawer, with the column of what it follows. */
+.case-sum { color: var(--text); overflow-wrap: anywhere; }
+.case-grid .access-grid { gap: 8px; }
+.case-grid .access-grid :is(td, tbody th) { vertical-align: top; }
+.case-follow small { display: block; color: var(--muted); font-size: .72rem; }
 
 /* Settings → Devices → Updates: eriphe-core's own line. */
 .update-core-row { display: grid; gap: 10px; padding: 14px 16px; border-radius: 10px; background: var(--surface-2); }
@@ -1600,9 +1606,9 @@ details.app-install > * + * { margin-top: 10px; }
 
 /* Settings → Folders: a folder's level, and how to share one. */
 .page-head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
-.folder-level { margin-top: 8px; }
-.folder-level .field { display: flex; align-items: center; gap: 8px; }
-.folder-level select { width: auto; }
+.folder-default { display: grid; gap: 6px; margin: 4px 0 14px; max-width: 34rem; }
+.folder-default p { margin: 0; color: var(--muted); }
+.folder-rights { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .share-levels { display: grid; gap: 6px; margin: 10px 0; padding-left: 18px; }
 .share-prereq { margin: 12px 0; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); }
 .share-guide { border-top: 1px solid var(--border); padding: 10px 0; }

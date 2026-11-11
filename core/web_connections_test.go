@@ -130,19 +130,29 @@ func TestPlacesPage(t *testing.T) {
 	if p == nil || p.Account != "sam@example.org" || p.Tool != filesService.Base {
 		t.Fatalf("place: %+v", p)
 	}
-	// Inside its parent, the given one comes first, with its cases.
-	if _, body, _ := tw.do("GET", base+"?parent=root-id&name=My+Drive", nil, hx); !strings.Contains(body, `name="category" value="delete"`) {
+	// Inside its parent, the given one comes first, with the summary of its
+	// cases and its drawer.
+	if _, body, _ := tw.do("GET", base+"?parent=root-id&name=My+Drive", nil, hx); !strings.Contains(body, "Comme le compte") || !strings.Contains(body, base+"/grid?id=compta") {
 		t.Fatalf("given, in the browse: %s", body)
 	}
-	// Supprimer free for this folder only, Modifier never: the folder's case
-	// wins over its account's, an action's exception over both.
-	for cat, v := range map[string]string{catDelete: gridFree, catChange: gridNever} {
-		if _, body, _ := tw.post(base+"/case", url.Values{"id": {"compta"}, "category": {cat}, "value": {v}}, csrf); strings.Contains(body, `role="alert"`) {
-			t.Fatalf("case %s: %s", cat, body)
-		}
+	// Its drawer: the tool's grid, with the column of its account's, and
+	// only the cases the tool has.
+	if code, body, _ := tw.do("GET", base+"/grid?id=compta", nil, map[string]string{"HX-Request": "true"}); code != 200 || !strings.Contains(body, `name="case-delete" value=""`) ||
+		strings.Contains(body, `name="case-send"`) || !strings.Contains(body, "Comme le compte") {
+		t.Fatalf("drawer: %d %s", code, body)
 	}
-	if _, body, _ := tw.post(base+"/case", url.Values{"id": {"compta"}, "category": {catSend}, "value": {gridFree}}, csrf); !strings.Contains(body, `role="alert"`) {
-		t.Fatalf("a case the tool has not: %s", body)
+	if code, _, _ := tw.do("GET", base+"/grid?id=nothing", nil, nil); code != 404 {
+		t.Fatalf("drawer of no folder: %d", code)
+	}
+	// Supprimer free for this folder only, Modifier never: the folder's case
+	// wins over its account's, an action's exception over both. The answer
+	// is the grid, and the folder's summary in the list.
+	_, body, _ = tw.post(base+"/case", url.Values{"id": {"compta"}, "case-read": {""}, "case-change": {gridNever}, "case-delete": {gridFree}, "case-send": {gridFree}}, csrf)
+	if strings.Contains(body, `role="alert"`) || !strings.Contains(body, `hx-swap-oob="true"`) || !strings.Contains(body, "Modifier : Jamais · Supprimer : Libre") {
+		t.Fatalf("cases: %s", body)
+	}
+	if g := c.conf().Servers[filesService.Base].PlaceGrids["compta"]; g != (accessGrid{Change: gridNever, Delete: gridFree}) {
+		t.Fatalf("kept: %+v", g)
 	}
 	srv := c.conf().Servers[filesService.Base]
 	trash := &mcp.Tool{Name: "trash_file", Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(true), OpenWorldHint: ptr(false)}}
@@ -160,10 +170,11 @@ func TestPlacesPage(t *testing.T) {
 	if f := c.conf().Servers[filesService.Base].toolFacts(write, map[string]any{"folder": "Compta"}); f.value != gridFree {
 		t.Fatalf("an action's exception: %+v", f)
 	}
-	if _, body, _ := tw.post(base+"/case", url.Values{"id": {"compta"}, "category": {catDelete}, "value": {""}}, csrf); !strings.Contains(body, "Comme le compte (Sur accord)") {
+	if _, body, _ := tw.post(base+"/case", url.Values{"id": {"compta"}, "case-change": {gridNever}, "case-delete": {""}}, csrf); !strings.Contains(body, `hx-swap-oob="true">Modifier : Jamais</span>`) ||
+		!strings.Contains(body, `name="case-delete" value="" aria-label="Supprimer : Comme le compte (Sur accord)" checked`) {
 		t.Fatalf("back to the account's: %s", body)
 	}
-	if _, body, _ := tw.post(base+"/remove", url.Values{"id": {"compta"}}, csrf); strings.Contains(body, `name="category"`) {
+	if _, body, _ := tw.post(base+"/remove", url.Values{"id": {"compta"}}, csrf); strings.Contains(body, "/grid?id=compta") {
 		t.Fatalf("remove: %s", body)
 	}
 	if len(c.places()) != 0 || c.conf().Servers[filesService.Base].PlaceGrids != nil {

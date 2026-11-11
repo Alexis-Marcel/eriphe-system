@@ -370,8 +370,7 @@ func TestDriveRoundTrip(t *testing.T) {
 		t.Fatalf("browse: %s", body)
 	}
 	if code, body, _ := tw.post(places, url.Values{"id": {"compta"}, "name": {"Compta"}, "account": {"sam@example.org"}}, csrf); code != 200 ||
-		!strings.Contains(body, "Comme le compte (Sur accord)") || !strings.Contains(body, `name="category" value="change"`) ||
-		strings.Contains(body, `name="category" value="send"`) {
+		!strings.Contains(body, "Comme le compte") || !strings.Contains(body, "/places/grid?id=compta") {
 		t.Fatalf("add: %d %s", code, body)
 	}
 	tw.post(places, url.Values{"id": {"other"}, "name": {"Compta"}}, csrf)
@@ -417,7 +416,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	if acc, f := c.placeAccounts(filesService.Base), c.places(); acc[0].CanWrite || len(f) != 1 {
 		t.Fatalf("read only: %+v %+v", acc, f)
 	}
-	if _, body, _ := tw.do("GET", places+"?account=sam%40example.org", nil, nil); strings.Count(body, `disabled title="Ce compte a été connecté en lecture seule`) != 2 {
+	if _, body, _ := tw.do("GET", places+"/grid?id=compta", nil, nil); strings.Count(body, `aria-disabled="true" title="Ce compte a été connecté en lecture seule`) != 2 {
 		t.Fatalf("greyed: %s", body)
 	}
 	if _, body, _ := tw.do("GET", "/settings/tools/"+filesService.Base+"/access?account=sam%40example.org", nil, nil); !strings.Contains(body, "Impossible : ce compte") ||

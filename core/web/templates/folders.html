@@ -1,18 +1,11 @@
 {{define "folders"}}
 <header class="page-head page-head-row"><h2>{{t "settings.folders"}}</h2><button class="link-btn" type="button" data-dialog="share-how-dlg" aria-haspopup="dialog">{{t "folders.how"}}</button></header>
-{{range .Data.Machines}}{{$mac := eq .System "mac"}}{{$def := .Default}}{{$node := .Name}}
+{{range .Data.Machines}}{{$mac := eq .System "mac"}}
 <section class="panel" aria-labelledby="folders-{{.Name}}">
   <h3 id="folders-{{.Name}}"><span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span><a class="folder-device" href="/settings/devices/{{.Name}}">{{.Name}}</a></span></h3>
-  <div class="folder-values folder-default">
-    <span class="small">{{t "folders.default"}}</span>
-    {{range list "read" "change"}}{{$cat := .}}
-    <form hx-post="/settings/folders/case" hx-trigger="change" class="folder-level">
-      <input type="hidden" name="node" value="{{$node}}">
-      <input type="hidden" name="category" value="{{$cat}}">
-      <label class="field"><span>{{t (printf "grid.cat.%s" $cat)}}</span>
-      <select name="value">{{range list "free" "approval" "never"}}<option value="{{.}}" {{if eq . (index $def $cat)}}selected{{end}}>{{t (printf "grid.%s" .)}}</option>{{end}}</select></label>
-    </form>
-    {{end}}
+  <div class="folder-default">
+    <p class="small">{{t "folders.default"}}</p>
+    {{template "case-grid" .Default}}
   </div>
   {{if .Folders}}
   <ul class="grid">
@@ -31,20 +24,9 @@
       <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
       {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" $mac "Node" .Node "Copy" false)}}{{end}}
       <p class="chips"><span class="tag{{if eq .Access "write"}} tag-accent{{end}}">{{t (printf "folders.access.%s" .Access)}}</span></p>
-      {{$own := .Own}}{{$name := .Name}}{{$ro := ne .Access "write"}}
-      <div class="folder-values">
-        {{range list "read" "change"}}{{$cat := .}}{{$v := index $own $cat}}
-        <form hx-post="/settings/folders/case" hx-trigger="change" class="folder-level">
-          <input type="hidden" name="name" value="{{$name}}">
-          <input type="hidden" name="category" value="{{$cat}}">
-          <label class="field"><span>{{t (printf "grid.cat.%s" $cat)}}</span>
-          <select name="value"{{if and $ro (eq $cat "change")}} disabled title="{{t "folders.readonly"}}"{{end}}>
-            <option value=""{{if not $v}} selected{{end}}>{{tf "folders.follow" (t (printf "grid.%s" (index $def $cat)))}}</option>
-            {{range list "free" "approval" "never"}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{t (printf "grid.%s" .)}}</option>{{end}}
-          </select></label>
-        </form>
-        {{end}}
-        {{if $ro}}<p class="muted small">{{t "folders.readonly"}}</p>{{end}}
+      <div class="folder-rights">
+        {{template "case-summary" (dict "G" .Grid "OOB" false)}}
+        <button class="btn btn-soft sm" type="button" hx-get="/settings/folders/grid?name={{urlquery .Name}}" hx-target="#drawer" hx-swap="innerHTML">{{t "casegrid.open"}}</button>
       </div>
       {{if .Copyable}}
       <details class="folder-copies"{{if .Copies}} open{{end}}>
@@ -114,6 +96,7 @@
 </section>
 {{end}}
 <p class="muted small"><a href="/settings/tools">{{t "folders.addplace"}}</a></p>
+<div id="drawer" class="drawer" aria-live="polite"></div>
 
 <dialog class="modal modal-wide" id="share-how-dlg" aria-labelledby="share-how-title">
   <h3 id="share-how-title">{{t "folders.how"}}</h3>

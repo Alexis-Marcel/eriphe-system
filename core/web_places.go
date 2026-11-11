@@ -11,8 +11,9 @@ import (
 
 // A tool's places, on the page of one of its accounts (Settings → Tools →
 // <account> → Folders, places.go): one list, the folders given first, each
-// with its cases (Lire, Modifier, Supprimer: its account's, or its own),
-// then the account's own folders to give more, browsed through the tool.
+// with the summary of its cases (Lire, Modifier, Supprimer: its account's,
+// or its own, set in its drawer, web_case_grid.go), then the account's own
+// folders to give more, browsed through the tool.
 
 // toolFolders is the page's list: the folders of an account, the given
 // ones first.
@@ -32,14 +33,7 @@ type toolFolders struct {
 type folderItem struct {
 	placeItem
 	Given bool // its Name is then the given folder's, as tasks name it
-	Cases []folderCase
-}
-
-// folderCase is one case of a given folder: its own value, or "" to
-// follow its account's (Account).
-type folderCase struct {
-	Category, Own, Account string
-	Greyed                 bool // above its account's ceiling
+	Grid  caseGrid
 }
 
 // placeCount is "no folder", "1 folder", "3 folders".
@@ -56,9 +50,11 @@ func placeCount(lang string, n int) string {
 func (w *web) placeRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/tools/{name}/places", w.auth(w.handlePlaces))
 	mux.Handle("POST /settings/tools/{name}/places", w.auth(w.handlePlaceGive))
+	mux.Handle("GET /settings/tools/{name}/places/grid", w.auth(w.handlePlaceGrid))
 	mux.Handle("POST /settings/tools/{name}/places/case", w.auth(w.handlePlaceCase))
 	mux.Handle("POST /settings/tools/{name}/places/remove", w.auth(w.handlePlaceRemove))
 	mux.Handle("GET /settings/connections/{id}/places", w.auth(w.handleConnPlaces))
+	mux.Handle("GET /settings/connections/{id}/places/grid", w.auth(w.handleConnPlaceGrid))
 	mux.Handle("POST /settings/connections/{id}/places/case", w.auth(w.handleConnPlaceCase))
 }
 
@@ -77,7 +73,6 @@ func (w *web) placesTool(rw http.ResponseWriter, r *http.Request) (string, bool)
 // ones of them first).
 func (w *web) toolFolders(ctx context.Context, tool, account, parent, name, page string) toolFolders {
 	srv := w.c.conf().Servers[tool]
-	k, _, _ := keeperOf(srv)
 	v := toolFolders{Tool: tool, Base: "/settings/tools/" + tool + "/places", Parent: parent, Name: name}
 	accounts := w.c.placeAccounts(tool)
 	for _, a := range accounts {
@@ -89,12 +84,7 @@ func (w *web) toolFolders(ctx context.Context, tool, account, parent, name, page
 	var order []string
 	for _, p := range placesOfAccount(tool, srv, v.Account, len(accounts)) {
 		it := folderItem{placeItem: placeItem{ID: p.ID, Name: p.Name}, Given: true}
-		account := srv.placeAccess(Place{Account: p.Account}) // its account's, without its own cases
-		own := srv.PlaceGrids[p.ID]
-		for _, c := range k.Card.cases() {
-			it.Cases = append(it.Cases, folderCase{Category: c, Own: own.raw(c), Account: account.grid.value(c),
-				Greyed: !v.CanWrite && c != catRead})
-		}
+		it.Grid, _ = w.placeGrid(tool, p.ID)
 		given[p.ID] = it
 		order = append(order, p.ID)
 	}
@@ -189,10 +179,78 @@ func (w *web) handlePlaceGive(rw http.ResponseWriter, r *http.Request, s *sessio
 	}
 }
 
-func (w *web) handlePlaceCase(rw http.ResponseWriter, r *http.Request, s *session) {
-	if tool, ok := w.placesTool(rw, r); ok {
-		w.foldersAgain(rw, r, s, tool, w.c.setPlaceCase(tool, r.PostFormValue("id"), r.PostFormValue("category"), r.PostFormValue("value")))
+// placeGrid is a given folder's grid: its account's cases, and its own.
+func (w *web) placeGrid(tool, id string) (caseGrid, bool) {
+	srv := w.c.conf().Servers[tool]
+	k, _, _ := keeperOf(srv)
+	i := slices.IndexFunc(placesIn(tool, srv), func(p Place) bool { return p.ID == id })
+	if i < 0 {
+		return caseGrid{}, false
 	}
+	p := placesIn(tool, srv)[i]
+	write := false
+	for _, a := range w.c.placeAccounts(tool) {
+		if strings.EqualFold(a.Name, p.Account) {
+			write = a.CanWrite
+		}
+	}
+	g := caseGrid{Key: caseKey(p.ID), Title: p.Name, Sub: p.Account, Post: "/settings/tools/" + tool + "/places/case",
+		Hidden: map[string]string{"id": p.ID}, Follow: "places.followcol", Hint: "places.cat.%s.hint", Greyed: "places.ceiling"}
+	account := srv.placeAccess(Place{Account: p.Account}) // its account's, without its own cases
+	own := srv.PlaceGrids[p.ID]
+	for _, c := range k.Card.cases() {
+		g.Rows = append(g.Rows, caseRow{Category: c, Own: own.raw(c), Follows: account.grid.value(c), Greyed: !write && c != catRead})
+	}
+	return g.greyed(), true
+}
+
+func (w *web) handlePlaceGrid(rw http.ResponseWriter, r *http.Request, s *session) {
+	tool, ok := w.placesTool(rw, r)
+	if !ok {
+		return
+	}
+	g, ok := w.placeGrid(tool, r.URL.Query().Get("id"))
+	if !ok {
+		http.NotFound(rw, r)
+		return
+	}
+	w.render(rw, r, s, "settings", "case-drawer", page{Data: g})
+}
+
+// handlePlaceCase sets the cases of a given folder its drawer changed, and
+// answers with its grid and its summary in the list.
+func (w *web) handlePlaceCase(rw http.ResponseWriter, r *http.Request, s *session) {
+	tool, ok := w.placesTool(rw, r)
+	if !ok {
+		return
+	}
+	id := r.PostFormValue("id")
+	srv := w.c.conf().Servers[tool]
+	k, _, _ := keeperOf(srv)
+	var err error
+	for _, c := range postedCases(r, k.Card.cases(), srv.PlaceGrids[id].raw) {
+		if err = w.c.setPlaceCase(tool, id, c[0], c[1]); err != nil {
+			break
+		}
+	}
+	g, ok := w.placeGrid(tool, id)
+	if !ok {
+		http.NotFound(rw, r)
+		return
+	}
+	w.caseAnswer(rw, r, s, g, err)
+}
+
+// caseAnswer is a drawer's grid again after a change, with the place's
+// summary in the list (out of band).
+func (w *web) caseAnswer(rw http.ResponseWriter, r *http.Request, s *session, g caseGrid, err error) {
+	if err != nil {
+		g.Error = w.connError(r, err)
+	} else {
+		g.Saved = true
+		w.notify()
+	}
+	w.render(rw, r, s, "settings", "case-grid-frag", page{Data: g})
 }
 
 func (w *web) handlePlaceRemove(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -217,7 +275,7 @@ type repoList struct {
 type repoItem struct {
 	Repo, Link string
 	Own        bool
-	Cases      []folderCase
+	Grid       caseGrid
 }
 
 // placesConn is the connection of the page, if it has places.
@@ -238,17 +296,11 @@ func (w *web) repoList(ctx context.Context, cn connection, page string) repoList
 		return v
 	}
 	srv := w.c.conf().Servers[names[0]]
-	base := srv.baseAccess()
-	v.Ceiling = base.level() == accessReadOnly
+	v.Ceiling = srv.baseAccess().level() == accessReadOnly
 	item := func(repo, link string) repoItem {
-		it := repoItem{Repo: repo, Link: link}
-		own, has := srv.PlaceGrids[strings.ToLower(repo)]
-		it.Own = has
-		for _, cat := range categories {
-			it.Cases = append(it.Cases, folderCase{Category: cat, Own: own.raw(cat), Account: base.grid.value(cat),
-				Greyed: v.Ceiling && cat != catRead})
-		}
-		return it
+		_, has := srv.PlaceGrids[strings.ToLower(repo)]
+		g, _ := w.repoGrid(cn, repo)
+		return repoItem{Repo: repo, Link: link, Own: has, Grid: g}
 	}
 	var own []string
 	for id := range srv.PlaceGrids {
@@ -269,7 +321,7 @@ func (w *web) repoList(ctx context.Context, cn connection, page string) repoList
 		if _, has := srv.PlaceGrids[strings.ToLower(it.ID)]; has {
 			for i := range v.Items {
 				if strings.EqualFold(v.Items[i].Repo, it.ID) {
-					v.Items[i].Repo, v.Items[i].Link = it.ID, it.Link
+					v.Items[i].Repo, v.Items[i].Link, v.Items[i].Grid.Title = it.ID, it.Link, it.ID
 				}
 			}
 			continue
@@ -298,22 +350,58 @@ func (w *web) handleConnPlaces(rw http.ResponseWriter, r *http.Request, s *sessi
 	w.render(rw, r, s, "settings", "", page{Title: "repos.title", Nav: "settings", Tab: "tools", View: "places", Data: v})
 }
 
+// repoGrid is a repository's grid: its tool's cases, and its own.
+func (w *web) repoGrid(cn connection, repo string) (caseGrid, bool) {
+	names := w.c.connServers(cn.ID)
+	if len(names) == 0 || repoOf(repo) == "" {
+		return caseGrid{}, false
+	}
+	srv := w.c.conf().Servers[names[0]]
+	base := srv.baseAccess()
+	ceiling := base.level() == accessReadOnly
+	g := caseGrid{Key: caseKey(strings.ToLower(repo)), Title: repo, Sub: providerLabel(cn.Provider) + " · " + cn.Identity,
+		Post: "/settings/connections/" + cn.ID + "/places/case", Hidden: map[string]string{"id": repo},
+		Follow: "repos.followcol", Hint: "repos.cat.%s.hint", Greyed: "repos.ceiling"}
+	own := srv.PlaceGrids[strings.ToLower(repo)]
+	for _, cat := range categories {
+		g.Rows = append(g.Rows, caseRow{Category: cat, Own: own.raw(cat), Follows: base.grid.value(cat), Greyed: ceiling && cat != catRead})
+	}
+	return g.greyed(), true
+}
+
+func (w *web) handleConnPlaceGrid(rw http.ResponseWriter, r *http.Request, s *session) {
+	cn, ok := w.placesConn(rw, r)
+	if !ok {
+		return
+	}
+	g, ok := w.repoGrid(cn, r.URL.Query().Get("id"))
+	if !ok {
+		http.NotFound(rw, r)
+		return
+	}
+	w.render(rw, r, s, "settings", "case-drawer", page{Data: g})
+}
+
+// handleConnPlaceCase sets the cases of a repository its drawer changed.
 func (w *web) handleConnPlaceCase(rw http.ResponseWriter, r *http.Request, s *session) {
 	cn, ok := w.placesConn(rw, r)
 	if !ok {
 		return
 	}
-	err := w.c.setRepoCase(cn.ID, r.PostFormValue("id"), r.PostFormValue("category"), r.PostFormValue("value"))
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	v := w.repoList(ctx, cn, r.PostFormValue("page"))
-	if v.Error != "" {
-		v.Error = w.connError(r, fmt.Errorf("%s", v.Error))
+	repo := r.PostFormValue("id")
+	g, ok := w.repoGrid(cn, repo)
+	if !ok {
+		http.NotFound(rw, r)
+		return
 	}
-	if err != nil {
-		v.Error = w.connError(r, err)
-	} else {
-		w.notify()
+	var err error
+	for _, c := range postedCases(r, categories, func(cat string) string {
+		return g.Rows[slices.Index(categories, cat)].Own
+	}) {
+		if err = w.c.setRepoCase(cn.ID, repo, c[0], c[1]); err != nil {
+			break
+		}
 	}
-	w.render(rw, r, s, "settings", "repo-list-frag", page{Data: v})
+	g, _ = w.repoGrid(cn, repo)
+	w.caseAnswer(rw, r, s, g, err)
 }

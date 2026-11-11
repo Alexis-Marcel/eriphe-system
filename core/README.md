@@ -1207,7 +1207,9 @@ helper in the task's environment. Each request crosses the node's relay, as for 
 git: the tool's grid (Lire · Modifier · Supprimer · Envoyer) is every repository's default, and a
 repository may set a case of its own, above or below it, on Settings → Tools → GitHub →
 "Dépôts" (the tool's `place_grids`, by `owner/name`; its `place_args` say a call names its
-repository by `owner` and `repo`). A tool that only reads is its repositories' ceiling. In git, the
+repository by `owner` and `repo`): each repository a line with the summary of its own cases, its
+"Droits" opening its [grid in a drawer](#a-places-grid) (`GET /settings/connections/{id}/places/grid?id=`,
+`POST …/places/case`). A tool that only reads is its repositories' ceiling. In git, the
 relay reads the commands of a push (`pushCommands`, the pkt-lines before the pack) and decides each
 ref: a deletion is Supprimer, the default branch (asked of GitHub, kept ten minutes) or a tag is
 Envoyer, any other branch Modifier. One ref refused refuses the push, before GitHub sees it. gh's
@@ -2015,18 +2017,29 @@ never by its name. The tool browses them with a setup tool
 tool.
 
 **Its page.** Settings → Tools → an account → Dossiers (`/settings/tools/{name}/places?account=`,
-`web_places.go`) is one list: the account's folders given, first, each with a selector per case
-("Comme le compte (…)", Libre, Sur accord, Jamais) and "Retirer", then the account's own folders,
-browsed through its setup tool (`parent=`, `name=`, `page=`), each with "Donner". `POST …/places`
-(`account=`, `id=`, `name=`) gives one, `POST …/places/case` (`id=`, `category=`, `value=`, empty
-to follow the account) sets a case, `POST …/places/remove` (`id=`) takes it back. Giving or
-taking back rewrites the tool's configuration, which restarts its server.
+`web_places.go`) is one list: the account's folders given, first, each with the summary of its
+own cases, "Droits" (its [grid in a drawer](#a-places-grid), `GET …/places/grid?id=`) and
+"Retirer", then the account's own folders, browsed through its setup tool (`parent=`, `name=`,
+`page=`), each with "Donner". `POST …/places` (`account=`, `id=`, `name=`) gives one,
+`POST …/places/case` (`id=`, `case-<category>=`, empty to follow the account) sets its cases,
+`POST …/places/remove` (`id=`) takes it back. Giving or taking back rewrites the tool's
+configuration, which restarts its server.
+
+**A place's grid.** A Drive folder, a repository and a machine's folder set their rights in the
+tool's grid (Libre · Sur accord · Jamais by case), in a drawer over their list
+(`web_case_grid.go`), with one more column: "Comme le compte", "Comme l'outil" or "Comme
+l'appareil", which a case follows until it has a value of its own, the value it follows in small.
+Each change is saved at once (`case-<category>=` fields, only the ones that changed are set) and
+answers with the grid and the place's summary in the list (out of band): its own cases ("Supprimer
+: Jamais"), or that it follows. A case above what the place allows is greyed, Never, with the
+reason.
 
 **Its rights.** What Eriphe may do in a machine's folder is two cases, Lire and Modifier, each Free,
 On approval or Never, as in a tool's grid (`folder_values.go`): a default per machine (Free and Free
-until set; `POST /settings/folders/case` with `node=`, kept as `folder_grid:<node>`), and a folder
-may set a case of its own, above or below it ("Comme l'appareil (…)", `name=`, empty to follow;
-kept by machine and id, `folder_case:<node>:<id>`). A folder shared read-only greys Modifier: Never,
+until set; `POST /settings/folders/case` with `node=` and `case-<category>=`, kept as
+`folder_grid:<node>`), and a folder may set a case of its own, above or below it, in its
+[grid](#a-places-grid) (`GET /settings/folders/grid?name=`; "Comme l'appareil", `name=`, empty to
+follow; kept by machine and id, `folder_case:<node>:<id>`). A folder shared read-only greys Modifier: Never,
 with the reason. On approval is asked on the task's [start card](#the-approval-card), once per
 task, before it starts; so is a Free Modifier of a task that did not start cleanly (a tainted turn,
 or a turn that is not the user's). Never is refused when the task is lent, and a Modifier set Never
@@ -2034,8 +2047,8 @@ since mounts the folder read-only. A yes lets the task go with its mount; a no s
 values from before (`folder_value:…:manage` On approval) became Modifier On approval, once.
 
 **Sharing one** is done on the machine; Settings → Dossiers lists, machine by machine, what is
-shared there, with the machine's default rights first, then each folder with its level as a badge,
-a selector per case, a "Peut être copié" badge with "Ne plus copier", and whether it is there now;
+shared there, with the machine's default rights first (the grid, inline), then each folder with its
+level as a badge, the summary of its own cases and "Droits", a "Peut être copié" badge with "Ne plus copier", and whether it is there now;
 one "Comment partager ?" button opens a dialog with the two levels, the rights, the copy option, a reminder that the folder's device
 must be added first, and one guide per system (Mac, Windows, Linux or a NAS in Docker), open for
 the systems of the user's devices, its commands each with a copy button. Turning copies off applies
