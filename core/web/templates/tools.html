@@ -626,20 +626,40 @@
 {{define "tool-trust-frag"}}{{template "tool-trust" .Data}}{{end}}
 {{define "tool-access-frag"}}{{template "tool-access" .Data}}{{end}}
 
+{{/* An inline edit's save and cancel (tool-access-page, app.js). */}}
+{{define "ie-buttons"}}<span class="ie-actions">
+          <button class="icon-btn ie-ok" type="submit" aria-label="{{t "inline.save"}}" title="{{t "inline.save"}}">{{template "i-check"}}</button>
+          <button class="icon-btn" type="button" data-edit-cancel aria-label="{{t "inline.cancel"}}" title="{{t "inline.cancel"}}">{{template "i-x"}}</button>
+        </span>{{end}}
+
 {{define "tool-access-page"}}{{with .Data}}
 <header class="page-head">
   <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
   <div class="form-title">
     {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
     {{else}}<span class="mark tint-{{tint .Name}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
-    <h2>{{.Title}}</h2>
+    {{if and (not .Account) (not .Locked)}}<div class="inline-edit title-edit">
+      <div class="ie-view"><h2>{{.Title}}</h2><button class="icon-btn ie-pen" type="button" data-edit-open aria-label="{{t "tooltitle.edit"}}" title="{{t "tooltitle.edit"}}">{{template "i-pen"}}</button></div>
+      <form class="ie-form" hx-post="/settings/tools/{{.Name}}/title">
+        <input name="title" value="{{.Title}}" placeholder="{{.Name}}" maxlength="64" autocomplete="off" aria-label="{{t "tooltitle.label"}}">
+        {{template "ie-buttons"}}
+      </form>
+    </div>
+    {{else}}<h2>{{.Title}}</h2>{{end}}
   </div>
-  {{if and (not .Account) (not .Locked)}}<form hx-post="/settings/tools/{{.Name}}/title" class="tool-title-form inline">
-    <label class="field"><span>{{t "tooltitle.label"}}</span>
-      <input name="title" value="{{.Named}}" placeholder="{{.Name}}" maxlength="64" autocomplete="off"></label>
-    <button class="btn btn-soft sm" type="submit">{{t "tooltitle.save"}}</button>
-  </form>{{end}}
   {{if or .Named .Account}}<p class="muted small">{{tf "tooltitle.name" .Name}}</p>{{end}}
+  {{if not .Account}}<div class="tool-use">
+    <span class="tool-use-label">{{t "tooluse.label"}}</span>
+    {{if .Locked}}<p>{{if .Use}}{{.Use}}{{else}}<span class="muted">{{t "tooluse.none"}}</span>{{end}}</p>
+    {{else}}<div class="inline-edit use-edit">
+      <div class="ie-view"><p>{{if .Use}}{{.Use}}{{else}}<span class="muted">{{t "tooluse.empty"}}</span>{{end}}</p><button class="icon-btn ie-pen" type="button" data-edit-open aria-label="{{t "tooluse.edit"}}" title="{{t "tooluse.edit"}}">{{template "i-pen"}}</button></div>
+      <form class="ie-form" hx-post="/settings/tools/{{.Name}}/use">
+        <textarea name="use" rows="2" maxlength="300" placeholder="{{t "tooluse.placeholder"}}" aria-label="{{t "tooluse.label"}}" aria-describedby="tool-use-h">{{.Use}}</textarea>
+        {{template "ie-buttons"}}
+      </form>
+    </div>{{end}}
+    <small class="muted" id="tool-use-h">{{t "tooluse.hint"}}</small>
+  </div>{{end}}
   <p>{{t "access.pagelead"}}</p>
 </header>
 {{template "tool-access" .}}

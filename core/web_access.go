@@ -65,6 +65,8 @@ type toolAccess struct {
 	// Named is the user's title for the tool ("" for its name); an
 	// account's page is titled by its account.
 	Named string
+	// Use is what the tool is for, the sentence the brain reads.
+	Use string
 }
 
 // gridRow is one category of a grid; Greyed, above what its credential can
@@ -89,7 +91,7 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 	}
 	v := toolAccess{Name: name, Access: srv.level(), Locked: w.c.source(kindServer, name) != sourceWorkspace,
 		Auth: srv.authKind(), Scope: w.c.tokenScope(name, srv), Allowed: w.c.store.allowedActions(name),
-		ContentTrusted: w.c.trustsServer(name), Named: srv.Title}
+		ContentTrusted: w.c.trustsServer(name), Named: srv.Title, Use: srv.Use}
 	v.Preset, _ = presetOf(lang, srv)
 	if svc, cfg, isSvc := accountsOf(srv); isSvc && svc.AccountLevels && account != "" {
 		i := cfg.index(account)
@@ -323,6 +325,31 @@ func (w *web) handleToolTitle(rw http.ResponseWriter, r *http.Request, s *sessio
 		return
 	}
 	log.Printf("web: tool %s: title %q", name, title)
+	w.notify()
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusOK)
+}
+
+// handleToolUse sets what a workspace tool is for: the sentence the brain
+// reads to know when to use it.
+func (w *web) handleToolUse(rw http.ResponseWriter, r *http.Request, s *session) {
+	name := r.PathValue("name")
+	srv, ok := w.c.conf().Servers[name]
+	if !ok || w.c.source(kindServer, name) != sourceWorkspace {
+		http.Error(rw, "unknown tool", http.StatusBadRequest)
+		return
+	}
+	use := strings.Join(strings.Fields(r.PostFormValue("use")), " ")
+	if utf8.RuneCountInString(use) > 300 {
+		w.toast(rw, tr(w.lang(r), "tooluse.long"), false)
+		return
+	}
+	srv.Use = use
+	if err := w.c.putServer(putUpdate, name, srv, nil); err != nil {
+		w.toast(rw, err.Error(), false)
+		return
+	}
+	log.Printf("web: tool %s: what it is for changed", name)
 	w.notify()
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)

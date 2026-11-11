@@ -765,6 +765,26 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .back .i { width: 18px; height: 18px; }
 .back:hover { text-decoration: none; background: var(--surface-2); }
 .form-title { display: flex; align-items: center; gap: 12px; }
+/* An inline edit (a tool's title, what it is for): a pencil beside the
+   text, the field in its place while editing (app.js). */
+.inline-edit { min-width: 0; flex: 1 1 auto; }
+.inline-edit .ie-view { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.inline-edit .ie-form { display: none; align-items: center; gap: 4px; }
+.inline-edit.editing .ie-view { display: none; }
+.inline-edit.editing .ie-form { display: flex; }
+.ie-pen { color: var(--faint); opacity: .7; width: 30px; height: 30px; flex: none; }
+.ie-pen:hover, .ie-pen:focus-visible { color: var(--text); opacity: 1; }
+.ie-pen .i { width: 16px; height: 16px; }
+.ie-actions { display: inline-flex; gap: 2px; flex: none; }
+.ie-ok { color: var(--accent); }
+.title-edit .ie-form input { font: inherit; font-size: 1.35rem; font-weight: 650; padding: 2px 8px; width: min(28rem, 100%); }
+.tool-use { display: grid; gap: 4px; margin-top: 10px; max-width: 46rem; }
+.tool-use-label { font-size: .84rem; font-weight: 600; color: var(--muted); }
+.page-head .tool-use p { margin: 0; color: var(--text); }
+.use-edit .ie-view { align-items: flex-start; }
+.use-edit .ie-view .ie-pen { margin-top: -3px; }
+.use-edit .ie-form { align-items: flex-start; }
+.use-edit textarea { flex: 1; min-height: 3.2em; resize: vertical; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 
 .mark {
