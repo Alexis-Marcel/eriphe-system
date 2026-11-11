@@ -13,8 +13,9 @@ import (
 // the file named by TOOL_CONFIG_FILE (or -config).
 type Config struct {
 	Accounts []AccountConfig `json:"accounts"`
-	// Places are the only folders the tools reach: each one and what is
-	// inside it, nothing else of the account.
+	// Places are the folders the tools reach: each one and what is inside
+	// it, nothing else of the account (unless the account is given whole,
+	// All). They may nest: the deepest place holding an item decides.
 	Places []PlaceConfig `json:"places,omitempty"`
 	// Setup serves the setup tools: browse_places, which lists an account's
 	// folders (names only) so that eriphe-core's workspace can offer them, and
@@ -41,6 +42,11 @@ type AccountConfig struct {
 	// ReadOnly keeps the account to reading, whatever its scopes: eriphe-core
 	// sets it when the user lets Eriphe only read it.
 	ReadOnly bool `json:"read_only,omitempty"`
+	// All gives the whole account to Eriphe, as one place named after the
+	// account (its Name): every item the provider can read, its own drive,
+	// the shared drives and what was shared with the user. Its folders
+	// given as places nest in it, and decide for what they hold.
+	All bool `json:"all,omitempty"`
 	// APIURL, UploadURL and TokenURL replace the provider's endpoints (tests).
 	APIURL    string `json:"api_url,omitempty"`
 	UploadURL string `json:"upload_url,omitempty"`
@@ -64,6 +70,10 @@ type PlaceConfig struct {
 	Name    string `json:"name"`    // how tools name it
 	Account string `json:"account"` // an account name; may be empty with one account
 	ID      string `json:"id"`      // the provider's folder id
+	// Parents are the ids of the folder's ancestors, from the top of the
+	// account down, as eriphe-core saw them: a hint, never trusted by the
+	// guard, which walks the provider's real parents.
+	Parents []string `json:"parents,omitempty"`
 }
 
 // LoadConfig reads the configuration from the JSON text or, if empty, the file.
@@ -105,6 +115,7 @@ func (cfg *Config) normalize() error {
 		return errors.New("config: no accounts")
 	}
 	accounts := map[string]bool{}
+	folders := map[string]bool{} // place names, the whole accounts' included
 	for i := range cfg.Accounts {
 		a := &cfg.Accounts[i]
 		a.Name = strings.TrimSpace(a.Name)
@@ -123,8 +134,10 @@ func (cfg *Config) normalize() error {
 			return fmt.Errorf("account %q: duplicate name", a.Name)
 		}
 		accounts[key] = true
+		if a.All {
+			folders[key] = true
+		}
 	}
-	folders := map[string]bool{}
 	for i := range cfg.Places {
 		f := &cfg.Places[i]
 		f.Name, f.ID = strings.TrimSpace(f.Name), strings.TrimSpace(f.ID)
@@ -142,7 +155,7 @@ func (cfg *Config) normalize() error {
 		}
 		key := strings.ToLower(f.Name)
 		if folders[key] {
-			return fmt.Errorf("place %q: duplicate name", f.Name)
+			return fmt.Errorf("place %q: duplicate name (a whole account is a place named after it)", f.Name)
 		}
 		folders[key] = true
 	}
