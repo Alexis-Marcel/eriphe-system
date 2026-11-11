@@ -191,7 +191,7 @@ nothing and eriphe-core offers no update.
 
 An update also brings the machine to the install's layout of its version (install/README.md,
 The machines update themselves): what an install puts there besides eriphe-node, such as
-Syncthing. This build is made for layout 4 (`installLayout`, install.sh's `LAYOUT`). `needs` says
+Syncthing. This build is made for layout 5 (`installLayout`, install.sh's `LAYOUT`). `needs` says
 what the install waits for from its user: `update-needs` when there is one. Only the reason: the command to run is eriphe-core's, for how the machine was installed.
 
 ## Sleep

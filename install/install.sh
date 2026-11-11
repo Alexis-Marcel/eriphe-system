@@ -63,10 +63,11 @@ SESSION_MOUNT=/run/eriphe-session
 # and an updater that updates to an image whose LAYOUT is newer than the
 # machine's runs that script with --layout, which brings the machine to it
 # (install/README.md, The machines update themselves). node/update.go's
-# installLayout is the same number. Every machine is at layout 4: Syncthing,
-# the updaters that apply a layout, eriphe-node engine with the Docker
-# socket, and eriphe-launcher on a NAS and on Windows.
-LAYOUT=4
+# installLayout is the same number. Layout 4 brought Syncthing, the updaters
+# that apply a layout, eriphe-node engine with the Docker socket, and
+# eriphe-launcher on a NAS and on Windows; layout 5, the share menus with
+# Lecture and Modifier (eriphe-share, the Quick Action).
+LAYOUT=5
 
 REGISTRY=ghcr.io/alexis-marcel
 
