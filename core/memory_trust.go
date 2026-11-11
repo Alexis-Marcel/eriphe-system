@@ -286,9 +286,10 @@ func (c *core) turnTaint() []string {
 	return c.turnTaintBut(nil)
 }
 
-// turnTaintBut is turnTaint without the brain's page reads still waiting
-// for their answer (pending: how many per URL): a read that has not run has
-// read nothing yet, and reads asked together were chosen before any of them.
+// turnTaintBut is turnTaint without the brain's calls still waiting for
+// their answer (pending: how many per URL, or per catalog call: callKey): a
+// call that has not run has read nothing yet, and calls asked together were
+// chosen before any of them.
 func (c *core) turnTaintBut(pending map[string]int) []string {
 	pending = maps.Clone(pending)
 	_, _, eventSeq, tainted := c.turn.snapshot()
@@ -323,6 +324,24 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 	if len(events) > 0 {
 		seq = events[len(events)-1].Seq
 	}
+	// The catalog calls of the turn refused at once (a card asks the user:
+	// a yes runs them later, its result tainting as it comes): they never
+	// ran, so they read nothing.
+	asked, unrun := map[string]string{}, map[string]int{}
+	for _, e := range events {
+		switch e.Type {
+		case "permission":
+			if name, _ := e.Data["tool_name"].(string); strings.HasPrefix(name, "mcp__") {
+				asked[fmt.Sprint(e.Data["id"])] = callKey(name, e.Data["input"])
+			}
+		case "permission_answer":
+			if allow, _ := e.Data["allow"].(bool); !allow {
+				if k, ok := asked[fmt.Sprint(e.Data["id"])]; ok {
+					unrun[k]++
+				}
+			}
+		}
+	}
 	trusted := c.trustedServers()
 	for _, e := range events {
 		if e.Type != "tool_use" {
@@ -335,6 +354,14 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 		switch {
 		case strings.HasPrefix(name, "mcp__eriphe-core__"):
 		case strings.HasPrefix(name, "mcp__"):
+			if k := callKey(name, e.Data["input"]); pending[k] > 0 || unrun[k] > 0 {
+				if pending[k] > 0 {
+					pending[k]-- // waiting for its answer: not run yet
+				} else {
+					unrun[k]--
+				}
+				continue
+			}
 			server, _, _ := strings.Cut(strings.TrimPrefix(name, "mcp__"), "__")
 			if !trusted[server] && !containsStr(tainted, name) {
 				tainted = append(tainted, name)

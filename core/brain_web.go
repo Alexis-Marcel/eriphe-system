@@ -47,14 +47,25 @@ func webURL(input any) string {
 }
 
 // pendingFetches counts the page reads a brain's permissions wait on, by URL.
+// A catalog call waiting is counted too, by callKey: it has not run, so it
+// has read nothing yet (eventsTaint).
 func pendingFetches(perms []map[string]any) map[string]int {
 	out := map[string]int{}
 	for _, p := range perms {
-		if fmt.Sprint(p["tool_name"]) == webFetchTool {
+		switch name := fmt.Sprint(p["tool_name"]); {
+		case name == webFetchTool:
 			out[webURL(p["input"])]++
+		case strings.HasPrefix(name, "mcp__"):
+			out[callKey(name, p["input"])]++
 		}
 	}
 	return out
+}
+
+// callKey names one catalog call: its tool and its input.
+func callKey(name string, input any) string {
+	raw, _ := json.Marshal(input)
+	return name + " " + string(raw)
 }
 
 // brainFetch decides a brain's page read (see above).
