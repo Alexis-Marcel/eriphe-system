@@ -70,6 +70,9 @@ type botSpec struct {
 	// OpenLink is a link that opens the bot with the code typed, "" when
 	// the service has none.
 	OpenLink func(bot, code string) string
+	// Invite is a link that brings the bot where the user can write to it,
+	// from its id, "" when the service needs none.
+	Invite func(id string) string
 	// New is the service's transport, for that channel.
 	New func(b *botChannel) botTransport
 }
@@ -78,8 +81,8 @@ type botSpec struct {
 // botChannel's. No error it returns may carry the token: botChannel strips
 // it anyway.
 type botTransport interface {
-	// check tells whether the token is a bot's, and its name.
-	check(ctx context.Context, token string) (bot string, err error)
+	// check tells whether the token is a bot's, and its name and id.
+	check(ctx context.Context, token string) (bot, id string, err error)
 	// listen is one round of listening: a long poll, or a connection until
 	// it drops; each event is handled, in order, before it returns. A nil
 	// error is a round that went well.
@@ -278,7 +281,7 @@ func (b *botChannel) setToken(ctx context.Context, token string) error {
 	if v == nil {
 		return errNoVault
 	}
-	name, err := b.tr.check(ctx, token)
+	name, id, err := b.tr.check(ctx, token)
 	if err != nil {
 		return scrub(err, token)
 	}
@@ -291,6 +294,7 @@ func (b *botChannel) setToken(ctx context.Context, token string) error {
 		b.c.store.set(channelRouteKey(b.spec.ID), "")
 	}
 	b.set("bot", name)
+	b.set("bot_id", id)
 	log.Printf("%s: bot @%s set", b.spec.ID, name)
 	b.restart()
 	return nil
@@ -302,7 +306,7 @@ func (b *botChannel) removeToken() {
 	if v := currentVault(); v != nil {
 		v.remove(b.secret())
 	}
-	b.forget("user", "chat", "name", "code", "offset", "bot", "ignored")
+	b.forget("user", "chat", "name", "code", "offset", "bot", "bot_id", "ignored")
 	b.c.store.set(channelRouteKey(b.spec.ID), "")
 	b.setErr("")
 	log.Printf("%s: bot removed", b.spec.ID)

@@ -36,11 +36,11 @@ type fakeSent struct {
 
 const fakeChatToken = "fake.chat.token.0123456789"
 
-func (f *fakeChat) check(_ context.Context, token string) (string, error) {
+func (f *fakeChat) check(_ context.Context, token string) (string, string, error) {
 	if token != fakeChatToken {
-		return "", errors.New("fakechat: 401 bad token " + token) // a careless service
+		return "", "", errors.New("fakechat: 401 bad token " + token) // a careless service
 	}
-	return "sam_bot", nil
+	return "sam_bot", "42", nil
 }
 
 func (f *fakeChat) listen(ctx context.Context, token string, on func(botEvent)) error {
@@ -284,10 +284,13 @@ type fakeRetry struct {
 func (e *fakeRetry) Error() string             { return e.msg }
 func (e *fakeRetry) retryAfter() time.Duration { return e.wait }
 
-// Nothing outside a transport's own files names its service: the rest goes
-// through the channel registry and the bot channel.
+// Nothing outside a transport's own files names its channel by its id (a
+// key, a route, a class, a file): the rest goes through the channel
+// registry and the bot channel. The service's name in prose ("Discord" in
+// the gallery's list of apps) is not the channel.
 func TestBotChannelsNamedByTheirFilesOnly(t *testing.T) {
-	own := map[string][]string{"telegram": {"telegram.go", "web_text_telegram.go"}}
+	own := map[string][]string{"telegram": {"telegram.go", "web_text_telegram.go"},
+		"discord": {"discord.go", "web_text_discord.go"}}
 	files, _ := filepath.Glob("*.go")
 	tmpl, _ := filepath.Glob("web/templates/*.html")
 	for _, file := range append(files, tmpl...) {
@@ -298,7 +301,7 @@ func TestBotChannelsNamedByTheirFilesOnly(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		text := strings.ToLower(string(raw))
+		text := string(raw)
 		for id, mine := range own {
 			if !slices.Contains(mine, file) && strings.Contains(text, id) {
 				t.Errorf("%s names %s: only %v may", file, id, mine)

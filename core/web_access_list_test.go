@@ -67,7 +67,7 @@ func TestWebAccessList(t *testing.T) {
 	if code, _, _ := tw.do("GET", "/settings/access/new/home-assistant", nil, nil); code != 404 {
 		t.Fatalf("Home Assistant is no kind of its own: %d", code)
 	}
-	if code, _, _ := tw.do("GET", "/settings/access/new/discord", nil, nil); code != 404 {
+	if code, _, _ := tw.do("GET", "/settings/access/new/sms", nil, nil); code != 404 {
 		t.Fatalf("an unknown kind: %d", code)
 	}
 }

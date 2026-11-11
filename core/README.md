@@ -2766,6 +2766,7 @@ brain's tools and prompt, the cards and Settings → Access go through the regis
 | `workspace` (and the CLI) | receives | the user: their session or token | |
 | `push` | notifies | | the notification's text |
 | `telegram` (an adapter) | both | the user's account, verified with a code | the notification's text, with buttons |
+| `discord` (an adapter) | both | the user's account, verified with a code | the notification's text, with buttons |
 
 Trust has two levels: trusted (the user's session, their verified account, an app the user said
 they trust), whose words are the user's and whose buttons answer every card, a task's permission
@@ -2828,6 +2829,25 @@ followed); `sendMessage` with an inline keyboard (4,000 characters, 64 bytes of 
 `/start <code>`, from `t.me/<bot>?start=<code>`. The Bot API puts the token in the URL: its
 errors name neither. Telegram bots are not end-to-end encrypted (a bot chat is never a secret
 chat), and Settings says so.
+
+**Discord** (`discord.go`), the second: the user creates an application with a bot in Discord's
+Developer Portal and pastes its token (checked with `GET /users/@me`, sent in the
+`Authorization` header only). Discord lets a bot and a user write to each other in direct messages
+only when they share a server: once the token is set, the page links to the bot's invite
+(`oauth2/authorize?client_id=<bot>&scope=bot&permissions=0`), then the user sends the code to the
+bot in a DM. Listening is one Gateway connection per round (a WebSocket eriphe-core dials: no
+port): Hello, heartbeats at Discord's interval (a missing acknowledgement drops the connection),
+Identify with the `DIRECT_MESSAGES` intent only (a DM's content comes without the privileged
+message content intent), Resume after a drop or op 7, a new session after op 9 or a close code
+that forbids resuming; 4004 (the token) and 4014 (the intents) are failures Settings shows.
+`MESSAGE_CREATE` in a DM is the user writing (the bot's own messages are dropped; a server's
+are not the user's DM: ignored); `INTERACTION_CREATE` is a tap (Discord sends buttons over the
+Gateway while the application has no interactions endpoint URL). Out: `POST
+/channels/<dm>/messages` (2,000 characters, link previews off, mentions never ping), buttons as
+components (100-character `custom_id`); a tap is answered by its interaction's callback, which
+needs no bot token: the message updated without its buttons once decided, else an ephemeral note.
+A 429's `retry_after` is followed. Direct messages with a bot are not end-to-end encrypted, and
+Settings says so.
 
 **Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
 A pure function, `route(note, signals, settings, tried)`, picks one device at a time from signals

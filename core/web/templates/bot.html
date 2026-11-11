@@ -31,12 +31,14 @@
   <form hx-post="/channels/{{.ID}}/unlink" hx-target="#{{.ID}}-panel" hx-confirm="{{tf "bot.unlinkconfirm" .Label}}"><button class="btn btn-ghost sm" type="submit">{{t "bot.unlink"}}</button></form>
 </div>
 {{else if .Code}}
+{{if .Invite}}<p class="small"><a href="{{.Invite}}" target="_blank" rel="noopener">{{tf "bot.invite" .Label}}</a></p>{{end}}
 <div hx-get="/channels/{{.ID}}" hx-trigger="every 3s" hx-target="#{{.ID}}-panel">
   <p>{{tf "bot.sendcode" .Label}} <b class="mono">{{.Code}}</b></p>
   {{if .Open}}<p class="small"><a href="{{.Open}}" target="_blank" rel="noopener">{{tf "bot.openbot" .Label}}</a></p>{{end}}
   <p class="small muted">{{t "bot.codehint"}}</p>
 </div>
 {{else}}
+{{if .Invite}}<p class="small"><a href="{{.Invite}}" target="_blank" rel="noopener">{{tf "bot.invite" .Label}}</a></p>{{end}}
 <form hx-post="/channels/{{.ID}}/code" hx-target="#{{.ID}}-panel"><button class="btn btn-primary sm" type="submit">{{tf "bot.link" .Label}}</button></form>
 {{end}}
 {{if .Ignored}}<p class="small muted">{{tf "bot.ignored" .Ignored}}</p>{{end}}
