@@ -1,0 +1,107 @@
+{{/* Settings → Surveillance (web_monitors.go). */}}
+{{define "i-monitor"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg>{{end}}
+
+{{define "monitor-state"}}
+{{if eq .State "proposed"}}<span class="tag tag-warn">{{t "monitors.proposed"}}</span>
+{{else if .Change}}<span class="tag tag-warn">{{t "monitors.changewaits"}}</span>
+{{else if eq .State "paused"}}<span class="tag">{{t "monitors.paused"}}</span>
+{{else if .Waiting}}<span class="tag tag-warn" title="{{.Waiting}}">{{t "monitors.waiting"}}</span>
+{{else if .Failing}}<span class="tag tag-warn" title="{{.Error}}">{{t "monitors.failing"}}</span>
+{{else}}<span class="tag tag-ok">{{t "monitors.on"}}</span>{{end}}
+{{end}}
+
+{{define "monitor-form"}}
+<form class="stack-form" hx-post="/settings/monitors" hx-disabled-elt="find button">
+  <label class="field"><span>{{t "monitors.f.name"}}</span><input name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="getout-prod" value="{{.Form.Name}}" {{if .Form.Edit}}readonly{{end}}></label>
+  <label class="field"><span>{{t "monitors.f.tool"}}</span>
+    {{if .Tools}}<select name="tool" required>{{$tool := .Form.Tool}}{{range .Tools}}<option value="{{.}}" {{if eq . $tool}}selected{{end}}>{{.}}</option>{{end}}</select>
+    {{else}}<span class="muted small">{{t "monitors.notools"}}</span>{{end}}</label>
+  <p class="muted small">{{t "monitors.f.toolhint"}}</p>
+  <label class="field"><span>{{t "monitors.f.args"}}</span><textarea name="args" rows="2" spellcheck="false" class="mono" placeholder='{"service": "web"}'>{{.Form.Args}}</textarea></label>
+  <label class="field"><span>{{t "monitors.f.every"}}</span><input name="every" value="{{.Form.Every}}" placeholder="5m" pattern="\d{1,4}\s*(m|min|h|d|j)"></label>
+  <label class="field"><span>{{t "monitors.f.cond"}}</span><select name="cond">
+    <option value="changed" {{if eq .Form.Cond "changed"}}selected{{end}}>{{t "monitors.c.changed"}}</option>
+    <option value="new" {{if eq .Form.Cond "new"}}selected{{end}}>{{t "monitors.c.new"}}</option>
+    <option value="cross" {{if eq .Form.Cond "cross"}}selected{{end}}>{{t "monitors.c.cross"}}</option></select></label>
+  <label class="field"><span>{{t "monitors.f.path"}}</span><input name="path" class="mono" value="{{.Form.Path}}" placeholder="data.rules[state=firing].name"></label>
+  <p class="muted small">{{t "monitors.f.pathhint"}}</p>
+  <label class="field"><span>{{t "monitors.f.id"}}</span><input name="id" class="mono" value="{{.Form.ID}}" placeholder="uid"></label>
+  <label class="field"><span>{{t "monitors.f.above"}}</span><input name="above" inputmode="decimal" value="{{.Form.Above}}" placeholder="90"></label>
+  <label class="field"><span>{{t "monitors.f.below"}}</span><input name="below" inputmode="decimal" value="{{.Form.Below}}" placeholder="200"></label>
+  <div class="form-actions">
+    <button class="btn btn-soft" type="button" hx-post="/settings/monitors/try" hx-include="closest form" hx-target="#monitor-try" hx-swap="innerHTML">{{t "monitors.try"}}</button>
+    <button class="btn btn-primary" type="submit">{{if .Form.Edit}}{{t "monitors.save"}}{{else}}{{t "monitors.add"}}{{end}}</button>
+  </div>
+  <div id="monitor-try" aria-live="polite"></div>
+</form>
+{{end}}
+
+{{define "monitors"}}
+<header class="page-head"><h2>{{t "settings.monitors"}}</h2><p>{{t "monitors.lead"}}</p></header>
+{{if .Data.Monitors}}
+<ul class="grid">
+{{range .Data.Monitors}}
+  <li class="tile monitor{{if eq .State "paused"}} is-cut{{end}}">
+    <div class="tile-head">{{template "monitor-state" .}}</div>
+    <h3 class="tile-title">{{template "i-monitor"}}<a href="/settings/monitors/{{.Name}}" class="stretched mono">{{.Name}}</a></h3>
+    <p class="small">{{.Does}}</p>
+    <p class="muted small">{{if .LastLook}}{{tf "monitors.lastlook" .LastLook}} · {{end}}{{tf "monitors.events30" .Events}}</p>
+    <p class="muted small">{{if .Skills}}{{tf "monitors.skills" (join .Skills ", ")}}{{else}}{{t "monitors.noskill"}}{{end}}</p>
+  </li>
+{{end}}
+</ul>
+{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-monitor"}}</span><p>{{t "monitors.none"}}</p></div>{{end}}
+
+<section class="panel" aria-labelledby="monitor-add-title">
+  <h3 id="monitor-add-title">{{template "i-plus"}}{{t "monitors.addtitle"}}</h3>
+  <p class="muted">{{t "monitors.addlead"}}</p>
+  {{template "monitor-form" .Data}}
+</section>
+{{end}}
+
+{{define "monitor-page"}}
+{{with .Data.Monitor}}
+<a class="back" href="/settings/monitors">{{template "i-back"}}{{t "settings.monitors"}}</a>
+<header class="page-head"><h2 class="mono">{{.Name}}</h2><p>{{.Does}}</p></header>
+<section class="panel">
+  <div class="tile-head">{{template "monitor-state" .}}</div>
+  {{if .Waiting}}<p class="notice" role="status">{{.Waiting}}</p>{{end}}
+  {{if .Error}}<p class="notice" role="status">{{tf "monitors.lasterror" .Error}}</p>{{end}}
+  <p class="muted small">{{if .LastLook}}{{tf "monitors.lastlook" .LastLook}} · {{end}}{{tf "monitors.events30" .Events}}</p>
+  <p class="small">{{if .Skills}}{{tf "monitors.skills" (join .Skills ", ")}}{{else}}{{t "monitors.noskill"}}{{end}}</p>
+  <p class="muted small mono">when: monitor.changed key={{.Name}} · monitor.new · monitor.crossed · monitor.failed</p>
+  {{if or (eq .State "proposed") .Change}}
+  <div class="notice">
+    <p>{{if eq .State "proposed"}}{{t "monitors.proposedlead"}}{{else}}{{tf "monitors.changelead" .Change}}{{end}}</p>
+    {{if .Tainted}}<p class="small">{{tf "monitors.tainted" .Tainted}}</p>{{end}}
+    <div class="form-actions">
+      <button class="btn btn-primary sm" hx-post="/settings/monitors/{{.Name}}/approve">{{t "monitors.approve"}}</button>
+      <button class="btn btn-ghost sm" hx-post="/settings/monitors/{{.Name}}/reject">{{t "monitors.reject"}}</button>
+    </div>
+  </div>
+  {{end}}
+  <div class="form-actions">
+    {{if eq .State "on"}}<button class="btn btn-soft sm" hx-post="/settings/monitors/{{.Name}}/pause">{{t "monitors.pause"}}</button>
+    {{else if eq .State "paused"}}<button class="btn btn-soft sm" hx-post="/settings/monitors/{{.Name}}/resume">{{t "monitors.resume"}}</button>{{end}}
+    <button class="btn btn-ghost sm" hx-post="/settings/monitors/{{.Name}}/delete" hx-confirm="{{tf "monitors.deleteconfirm" .Name}}">{{t "monitors.delete"}}</button>
+  </div>
+</section>
+{{end}}
+
+<section class="panel" aria-labelledby="monitor-events-title">
+  <h3 id="monitor-events-title">{{t "monitors.lastevents"}}</h3>
+  {{if .Data.Events}}<ul class="plain-list">
+  {{range .Data.Events}}<li><span class="muted small">{{.When}}</span> <span class="mono small">{{.Kind}}</span>{{if .External}} <span class="tag" title="{{t "monitors.externalhint"}}">{{t "monitors.external"}}</span>{{end}}
+    {{with .Words}}<span class="small">{{.}}</span>{{end}}</li>
+  {{end}}</ul>
+  {{else}}<p class="muted">{{t "monitors.noevents"}}</p>{{end}}
+</section>
+
+{{if ne .Data.Monitor.State "proposed"}}
+<section class="panel" aria-labelledby="monitor-edit-title">
+  <h3 id="monitor-edit-title">{{t "monitors.edittitle"}}</h3>
+  <p class="muted">{{t "monitors.editlead"}}</p>
+  {{template "monitor-form" .Data}}
+</section>
+{{end}}
+{{end}}
