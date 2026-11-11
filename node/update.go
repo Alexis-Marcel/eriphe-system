@@ -48,7 +48,7 @@ const (
 
 	// installLayout is the install's layout this build is made for:
 	// install.sh's LAYOUT and install.ps1's $layout (TestInstallLayout).
-	installLayout = 4
+	installLayout = 5
 )
 
 // needsWhy are what update-needs may say: the install command to run

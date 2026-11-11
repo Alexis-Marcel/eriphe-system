@@ -120,7 +120,7 @@ $alpine = @{
 }
 # The install's layout, as install.sh's LAYOUT, which node/update.go's
 # installLayout is too: raise it with a release that changes the install.
-$layout = 4
+$layout = 5
 # The images, at the pinned version or latest (set once the saved settings
 # are read): the launcher's, which chooses the others, and the node's, for
 # the session helper it carries; replaced by ERIPHE_LAUNCHER_IMAGE and
