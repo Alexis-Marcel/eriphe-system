@@ -117,15 +117,22 @@ func TestConnectionPlacesPage(t *testing.T) {
 	csrf := tw.setup()
 	base := "/settings/connections/" + cn.ID + "/places"
 	if code, body, _ := tw.do("GET", base, nil, nil); code != 200 || !strings.Contains(body, "GitHub · acme") || !strings.Contains(body, "acme/repo-3") ||
-		!strings.Contains(body, "Comme l&#39;outil (Sur accord)") || !strings.Contains(body, `name="category" value="send"`) {
+		!strings.Contains(body, "Comme l&#39;outil") || !strings.Contains(body, base+"/grid?id=acme%2Frepo-3") {
 		t.Fatalf("page: %d %s", code, body)
 	}
-	_, body, _ := tw.post(base+"/case", url.Values{"id": {"acme/repo-3"}, "category": {catSend}, "value": {gridNever}}, csrf)
-	if strings.Index(body, "acme/repo-3") > strings.Index(body, "acme/repo-1") || strings.Contains(body, `role="alert"`) {
-		t.Fatalf("its own rules first: %s", body)
+	if code, body, _ := tw.do("GET", base+"/grid?id=acme/repo-3", nil, nil); code != 200 || !strings.Contains(body, `name="case-send" value=""`) ||
+		!strings.Contains(body, "Envoyer : Comme l&#39;outil (Sur accord)") {
+		t.Fatalf("drawer: %d %s", code, body)
 	}
-	if cc.repoCase("acme/repo-3", catSend) != gridNever {
+	_, body, _ := tw.post(base+"/case", url.Values{"id": {"acme/repo-3"}, "case-read": {""}, "case-send": {gridNever}}, csrf)
+	if strings.Contains(body, `role="alert"`) || !strings.Contains(body, "Envoyer : Jamais") {
+		t.Fatalf("case: %s", body)
+	}
+	if cc.repoCase("acme/repo-3", catSend) != gridNever || cc.repoCase("acme/repo-3", catRead) != gridFree {
 		t.Fatal("case not kept")
+	}
+	if _, body, _ := tw.do("GET", base, nil, nil); strings.Index(body, "acme/repo-3") > strings.Index(body, "acme/repo-1") {
+		t.Fatalf("its own rules first: %s", body)
 	}
 	if code, _, _ := tw.do("GET", "/settings/connections/0123456789ab/places", nil, nil); code != 404 {
 		t.Fatalf("no connection: %d", code)

@@ -347,8 +347,13 @@ func TestWebFolders(t *testing.T) {
 			t.Fatalf("page lacks %q: %d %s", want, code, body)
 		}
 	}
-	// Photos, shared read-only, has Modifier greyed, with the reason.
-	if strings.Count(body, `<select name="value" disabled title="Partagé en lecture seule`) != 1 || strings.Contains(body, "folders/level") || strings.Contains(body, "À côté") {
+	// Photos, shared read-only, has Modifier greyed in its drawer, with the
+	// reason.
+	if strings.Contains(body, "folders/level") || strings.Contains(body, "À côté") {
+		t.Fatalf("old levels: %s", body)
+	}
+	if _, body, _ := tw.do("GET", "/settings/folders/grid?name=Photos", nil, nil); !strings.Contains(body, `aria-disabled="true" title="Partagé en lecture seule`) ||
+		strings.Count(body, `name="case-change"`) != strings.Count(body, `name="case-change" value="`) {
 		t.Fatalf("ceiling: %s", body)
 	}
 	for _, u := range []string{"/settings/folders/browse?node=nas", "/settings/folders/browse?node=nas&share=data&path=Clients"} {
@@ -677,22 +682,26 @@ func TestWebFolderCases(t *testing.T) {
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	_, body, _ := tw.do("GET", "/settings/folders", nil, nil)
-	if strings.Count(body, `hx-post="/settings/folders/case"`) != 4*2 || !strings.Contains(body, "Comme l&#39;appareil (Libre)") {
-		t.Fatalf("page: %d case forms", strings.Count(body, `hx-post="/settings/folders/case"`))
+	if !strings.Contains(body, `name="node" value="nas"`) || !strings.Contains(body, `name="case-read" value="free"`) ||
+		!strings.Contains(body, "/settings/folders/grid?name=Clients") || !strings.Contains(body, "Comme l&#39;appareil") {
+		t.Fatalf("page: %s", mainPart(t, body))
 	}
-	code, _, h := tw.post("/settings/folders/case", url.Values{"name": {"Clients"}, "category": {"change"}, "value": {"approval"}}, csrf)
-	if code != 200 || !strings.Contains(h.Get("HX-Trigger"), "ok") {
-		t.Fatalf("set: %d %v", code, h)
+	if code, body, _ := tw.do("GET", "/settings/folders/grid?name=Clients", nil, nil); code != 200 || !strings.Contains(body, `name="case-change" value=""`) {
+		t.Fatalf("drawer: %d %s", code, body)
+	}
+	code, body, _ := tw.post("/settings/folders/case", url.Values{"name": {"Clients"}, "case-read": {""}, "case-change": {"approval"}}, csrf)
+	if code != 200 || !strings.Contains(body, "Modifier : Sur accord") || !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Fatalf("set: %d %s", code, body)
 	}
 	clients, _ := store.folder("Clients")
 	if c.folderCase(clients, catChange) != gridApproval {
 		t.Fatal("not kept")
 	}
-	code, _, h = tw.post("/settings/folders/case", url.Values{"node": {"nas"}, "category": {"read"}, "value": {"never"}}, csrf)
+	code, _, h := tw.post("/settings/folders/case", url.Values{"node": {"nas"}, "case-read": {"never"}, "case-change": {"free"}}, csrf)
 	if code != 200 || h.Get("HX-Refresh") != "true" || c.deviceGrid("nas").Read != gridNever {
 		t.Fatalf("device: %d %v", code, h)
 	}
-	if _, _, h := tw.post("/settings/folders/case", url.Values{"name": {"Gone"}, "category": {"change"}, "value": {"approval"}}, csrf); strings.Contains(h.Get("HX-Trigger"), `"ok":true`) {
+	if _, _, h := tw.post("/settings/folders/case", url.Values{"name": {"Gone"}, "case-change": {"approval"}}, csrf); strings.Contains(h.Get("HX-Trigger"), `"ok":true`) {
 		t.Fatalf("unknown folder: %v", h)
 	}
 }
