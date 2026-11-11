@@ -846,6 +846,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .access-web { --tint: #0284c7; }
 .access-app { --tint: #7c3aed; }
 .access-telegram { --tint: #229ed9; }
+.access-discord { --tint: #5865f2; }
 .access-api { --tint: #64748b; }
 .access-row { position: relative; }
 .mark-gdrive { background: #1a73e8; }

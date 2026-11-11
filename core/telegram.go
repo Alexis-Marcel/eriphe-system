@@ -140,15 +140,15 @@ func (t *telegram) call(ctx context.Context, token, method string, in, out any) 
 	return nil
 }
 
-func (t *telegram) check(ctx context.Context, token string) (string, error) {
+func (t *telegram) check(ctx context.Context, token string) (string, string, error) {
 	var me tgUser
 	if err := t.call(ctx, token, "getMe", map[string]any{}, &me); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if !me.IsBot {
-		return "", errors.New("not a bot token")
+		return "", "", errors.New("not a bot token")
 	}
-	return me.Username, nil
+	return me.Username, tgID(me.ID), nil
 }
 
 // listen is one getUpdates; the offset moves past each update handled.

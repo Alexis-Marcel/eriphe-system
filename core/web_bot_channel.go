@@ -87,6 +87,7 @@ type botPage struct {
 	Name        string // the linked account
 	Code        string // the code to send, while one waits
 	Open        string // a link that opens the bot with the code
+	Invite      string // a link that brings the bot where the user can write to it
 	Ignored     int64
 }
 
@@ -98,6 +99,9 @@ func (b *botChannel) page() botPage {
 	v.Linked, v.Name = b.linked(), b.get("name")
 	v.Ignored = b.getInt("ignored")
 	if v.Set && !v.Linked {
+		if id := b.get("bot_id"); id != "" && b.spec.Invite != nil {
+			v.Invite = b.spec.Invite(id)
+		}
 		v.Code, _ = b.pendingCode()
 		if v.Code != "" && v.Bot != "" && b.spec.OpenLink != nil {
 			v.Open = b.spec.OpenLink(v.Bot, v.Code)

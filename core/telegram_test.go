@@ -538,8 +538,8 @@ func TestWebTelegramChannels(t *testing.T) {
 	if _, _, h := tw.post("/channels/settings", url.Values{"detail-telegram": {"full"}}, csrf); !strings.Contains(h.Get("HX-Trigger"), "canal") {
 		t.Errorf("no channel accepted: %s", h.Get("HX-Trigger"))
 	}
-	if _, body, _ := tw.do("GET", "/settings/notifications", nil, nil); strings.Contains(body, "Aucun compte relié.") {
-		t.Error("Notifications still says no account is linked")
+	if _, body, _ := tw.do("GET", "/settings/notifications", nil, nil); strings.Contains(body, `<a href="/settings/access/telegram">`) {
+		t.Error("Notifications still says no Telegram account is linked")
 	}
 	for _, path := range []string{"/channels/telegram", "/settings/access", "/settings/access/telegram", "/settings/notifications", "/settings/account"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, fakeBotToken) || strings.Contains(body, "AAH-fake") {
