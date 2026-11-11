@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -510,5 +511,40 @@ func TestLegacyPlaceRoot(t *testing.T) {
 	rows, _ = store.catalogRows()
 	if json.Unmarshal(rows[0].Spec, &s); s.PlaceGrids != nil {
 		t.Errorf("twice: %+v", s.PlaceGrids)
+	}
+}
+
+// A catalog call that has not run reads nothing: the brain's write waiting
+// for its decision, or one a card asked and that was refused at once, does
+// not taint its own turn (it did before: its tool_use was counted as a
+// read, and a Free write after the user's "oui" got a card). One that ran
+// does.
+func TestUnrunCallsDoNotTaint(t *testing.T) {
+	c := newMailCore(t, accessFree)
+	c.store.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateWaitingPermission, Prompt: "brain"})
+	write := "mcp__mail__move"
+	in := map[string]any{"ids": []any{"m1"}, "to": "archive"}
+	other := map[string]any{"ids": []any{"m2"}, "to": "archive"}
+	c.store.addEvents("t-brain", []EventRow{
+		// Asked earlier in the turn, refused at once for a card.
+		{Seq: 1, Type: "tool_use", Data: map[string]any{"name": write, "input": other}},
+		{Seq: 2, Type: "permission", Data: map[string]any{"id": "p2", "tool_name": write, "input": other}},
+		{Seq: 3, Type: "permission_answer", Data: map[string]any{"id": "p2", "allow": false}},
+		// The call being decided.
+		{Seq: 4, Type: "tool_use", Data: map[string]any{"name": write, "input": in}},
+		{Seq: 5, Type: "permission", Data: map[string]any{"id": "p5", "tool_name": write, "input": in}},
+	})
+	waiting := []map[string]any{{"id": "p5", "tool_name": write, "input": in}}
+	if got, _ := c.eventsTaint("t-brain", 0, nil, pendingFetches(waiting)); len(got) != 0 {
+		t.Fatalf("calls that never ran taint the turn: %v", got)
+	}
+	// Without the call waiting counted, it is a read as before.
+	if got, _ := c.eventsTaint("t-brain", 0, nil, nil); !slices.Contains(got, write) {
+		t.Fatalf("a call not known to wait: %v", got)
+	}
+	// A read that ran taints.
+	c.store.addEvents("t-brain", []EventRow{{Seq: 6, Type: "tool_use", Data: map[string]any{"name": "mcp__mail__search_messages", "input": map[string]any{}}}})
+	if got, _ := c.eventsTaint("t-brain", 0, nil, pendingFetches(waiting)); !slices.Contains(got, "mcp__mail__search_messages") || slices.Contains(got, write) {
+		t.Fatalf("a read that ran: %v", got)
 	}
 }
