@@ -8,6 +8,7 @@
     {{else if eq .Tab "tools"}}{{if eq .View "form"}}{{template "tool-page" .}}{{else if eq .View "gallery"}}{{template "tool-gallery" .}}{{else if eq .View "discover"}}{{template "discover-page" .}}{{else if eq .View "app"}}{{template "app-page" .}}{{else if eq .View "places"}}{{template "places-page" .}}{{else if eq .View "connect"}}{{template "connect-page" .}}{{else if eq .View "github"}}{{template "github-page" .}}{{else if eq .View "github-post"}}{{template "github-post" .}}{{else if eq .View "access"}}{{template "tool-access-page" .}}{{else if eq .View "lent-access"}}{{template "lent-access-page" .}}{{else}}{{template "tools" .}}{{end}}
     {{else if eq .Tab "folders"}}{{template "folders" .}}
     {{else if eq .Tab "skills"}}{{if eq .View "skill"}}{{template "skill-page" .}}{{else}}{{template "skills" .}}{{end}}
+    {{else if eq .Tab "monitors"}}{{if eq .View "monitor"}}{{template "monitor-page" .}}{{else}}{{template "monitors" .}}{{end}}
     {{else if eq .Tab "access"}}{{template "access-page" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
     {{else if eq .Tab "learned"}}{{template "learned-page" .}}

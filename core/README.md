@@ -1497,6 +1497,14 @@ change. The result is read as JSON (its structured content, else its text).
   baseline, the no drops it. A change of an approved one waits the same way, the old one looking
   meanwhile. Written on a tainted turn, the card says so. A triggered task has no such tool.
   `monitors` (free) lists them: state, what each does, its last look, why it waits, its last error.
+- **Its page**, Settings → Surveillance (`web_monitors.go`, `monitors_user.go`): each monitor's
+  state (on, paused, waiting with why, failing with its error), what it does in words, its last
+  look, its events over 30 days and the skills whose `when` names it; its last 20 events; pause and
+  resume (from a new baseline, so what changed meanwhile is not told late), delete (its events
+  stay in the journal), and the brain's proposals answered there as on their card. The user adds
+  or edits one there: it is theirs, so it looks at once, with no card, and a change the brain
+  proposed on it is dropped. The tool picker offers only the free reads; **Try** calls the tool
+  once and shows what the path extracts (ids for `new`, the number for `cross`), nothing kept.
 - **Limits**: 50 monitors, arguments of 4 KiB, a value of 4000 characters in an event.
 - Table `monitors` (name, state `proposed`, `on` or `paused`, its spec, a change waiting, what its
   looks saw, its next look).
