@@ -47,8 +47,8 @@ const (
 
 const (
 	eventKeep        = 30 * 24 * time.Hour
-	eventPayloadMax  = 4096 // bytes of JSON
-	eventStringMax   = 500  // runes of one string value
+	eventPayloadMax  = 16 << 10 // bytes of JSON: what a skill's run reads of what happened
+	eventStringMax   = 4000     // runes of one string value
 	eventKeyMax      = 100
 	eventPerSourceHr = 600 // a source's events an hour, past which they are dropped
 )
@@ -57,14 +57,14 @@ const (
 var eventKindRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,3}$`)
 
 // reservedEventFamilies are eriphe-core's: a server cannot emit them.
-var reservedEventFamilies = []string{"hook.", "task.", "session.", "user.", "time.", "skill."}
+var reservedEventFamilies = []string{"hook.", "task.", "session.", "user.", "time.", "skill.", "monitor."}
 
 // journalEvent is one event of the journal.
 type journalEvent struct {
 	ID       int64
 	Kind     string
 	Key      string
-	Source   string // alert:<rule>, poll:<rule>, server:<name>, task, session, user, ha
+	Source   string // alert:<hook>, monitor:<name>, server:<name>, task, session, user
 	At       time.Time
 	Payload  map[string]any
 	External bool
