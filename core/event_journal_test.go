@@ -145,7 +145,7 @@ func TestAlertEvents(t *testing.T) {
 		t.Fatalf("past the limit: %+v", r)
 	}
 	m, _ := c.monitorNamed("getout")
-	if m.Spec.Way != wayListen || !m.Spec.Signed || m.Spec.SigHeader != "X-Hub-Signature-256" || !strings.Contains(m.Spec.Text("fr"), "X-Hub-Signature-256") {
+	if m.Spec.Way != wayListen || !m.Spec.Signed || m.Spec.SigHeader != "X-Hub-Signature-256" || m.Spec.Text("fr") != "note chaque appel signé de son adresse entrante (en-tête X-Hub-Signature-256)" {
 		t.Fatalf("monitor %+v", m.Spec)
 	}
 	// Signed with no header named: X-Eriphe-Signature.
