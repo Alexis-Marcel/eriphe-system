@@ -345,7 +345,7 @@ func (c *core) brainPermissionOne(ctx context.Context, t *TaskRow, p map[string]
 }
 
 // catalogSettling tells whether, in eriphe-core's first minute, a server
-// believed for its annotations is not ready yet: still connecting, or a
+// whose reads are free is not ready yet: still connecting, or a
 // local one whose node has not connected to run it. Its free reads are
 // part of the brain's tools.
 func (c *core) catalogSettling() bool {
@@ -353,7 +353,7 @@ func (c *core) catalogSettling() bool {
 		return false
 	}
 	for name := range c.conf().Servers {
-		if u := c.pool.get(name); u != nil && u.srv.trusts() {
+		if u := c.pool.get(name); u != nil && u.srv.freeReads() {
 			if status, _, _ := u.snapshot(); status != statusReady {
 				return true
 			}

@@ -212,7 +212,7 @@ func (f *fakeAS) revokeAll() {
 
 func oauthCore(t *testing.T, store *Store, f *fakeAS) (*core, context.CancelFunc) {
 	cfg := &Config{Servers: map[string]Server{"notion": {URL: f.srv.URL + "/mcp", Auth: &ServerAuth{OAuth: &OAuthConfig{}},
-		Use: "notes", TrustAnnotations: true}}}
+		Use: "notes", Access: accessReads}}}
 	c := newCore(cfg, store)
 	ctx, cancel := context.WithCancel(context.Background())
 	c.pool.run(ctx)

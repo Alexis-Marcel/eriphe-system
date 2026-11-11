@@ -394,8 +394,7 @@ holds their credentials and is the only one to reach them: **a task never sees a
 | `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"connection": "<id>"}` (a connection whose provider mints the tokens, refreshed before they end: Eriphe's GitHub App on one account's or organization's installation, see [GitHub in a task](#the-github-app)), `{"none": true}` |
 | `run` | instead of `url` and `auth`: a local server, a container a node runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
 | `use` | what it is for, for the brain |
-| `access` | what Eriphe may do on it: `read-only`, `reads`, `free` or `ask` (see [access levels](#access-levels)); without it, `trust_annotations` says |
-| `trust_annotations` | the older word for it: `true` is `reads`, `false` (the default) `ask` |
+| `access` | what Eriphe may do on it: `read-only`, `reads`, `free` or `ask` (see [access levels](#access-levels)); without it, `ask` |
 | `always_load` | its tools are loaded upfront by a harness that otherwise searches for them (Claude Code's tool search): one model round trip less before the first call; for a few tools needed fast, such as the house |
 | `timeout` | seconds for one tool call (600) |
 
@@ -976,7 +975,10 @@ A tool falls in one category by its MCP annotations, with MCP's pessimistic defa
 | Read | `readOnlyHint: true` |
 | Change | `openWorldHint: false`, `destructiveHint: false` |
 | Delete | `openWorldHint: false`, `destructiveHint` true or absent |
-| Send | `openWorldHint` true or absent: an unannotated tool, and every tool of a server whose annotations are not believed |
+| Send | `openWorldHint` true or absent: an unannotated tool |
+
+The annotations are always read. A server not to be believed is set to ask everything ("Tout sur
+accord", which its page's shortcut fills), or given an exception per action.
 
 Each category is `free`, `approval` or `never`:
 
@@ -989,23 +991,22 @@ Each category is `free`, `approval` or `never`:
 The grid is read at each call: a change applies at once, running tasks included. A row left out has
 the default: Read free, the rest on approval. A level [below](#access-levels) reads as a grid until
 a server has one of its own. Every tool's **Edit** opens its page (Settings → Tools,
-`/settings/tools/{name}/access`, `?account=` for an account's): the grid, shortcuts that fill it,
-whether the server's annotations are believed, the collapsed panel of exceptions, its credential,
+`/settings/tools/{name}/access`, `?account=` for an account's): the grid, shortcuts that fill it
+(Lecture seule, Tout sur accord, Tout libre), the collapsed panel of exceptions, its credential,
 whether what it returns is trusted (the [one taint rule](#tool-catalog)), its allowed actions, and a link to its connection (its form, or the page of Google, Drive, Home
 Assistant or GitHub). A tool of the configuration file shows its grid, changed in the file. In the
 file:
 
 ```json
-"mail": {"url": "…", "use": "…", "trust_annotations": true,
+"mail": {"url": "…", "use": "…",
   "grid": {"read": "free", "change": "free", "delete": "approval", "send": "never"},
   "exceptions": {"create_draft": "free"},
   "account_grids": {"sam@example.org": {"grid": {"send": "approval"}, "exceptions": {"move": "never"}}}}
 ```
 
-With a `grid`, `trust_annotations` says on its own whether the annotations count: without it, every
-tool is Send. `exceptions` replace a tool's category value, Never included; `account_grids` is one
+`exceptions` replace a tool's category value, Never included; `account_grids` is one
 grid per account, in the place of `account_access`, and a server's exceptions hold for its accounts.
-An account's `trust_annotations` replaces its server's. Once one account has an access of its own,
+Once one account has an access of its own,
 the others are written down with the one they had: the server's no longer speaks for them.
 A call that names no account takes the strictest of their values, and is refused when they differ,
 unless it is a read none of them refuses.
@@ -1055,11 +1056,11 @@ kept apart from **how** its credential is scoped.
 | `free` | Tout libre / Everything free | free | free, on a [clean start](#access-grid) |
 | `ask` | Tout sur accord / Everything on approval | the user's | the user's |
 
-A read is what the server itself marks `readOnlyHint`. `ask` is the former "Tout me demander":
-the server's annotations do not count. `reads` is the default of the presets; "Other…" (a server
-whose annotations nobody vouches for) starts on `ask`. An entry without `access` keeps its meaning:
-`trust_annotations: true` is `reads`, without it `ask`; the old form values (`read`, `trust`) are
-read the same way. Whatever the level, the built-in denials come first, then the file's rules.
+A read is what the server itself marks `readOnlyHint`. `ask` asks for everything, reads included.
+`reads` is the default of the presets; "Other…" (a server whose annotations nobody vouches for)
+starts on `ask`, as does an entry without `access`. The checkbox that said whether a server's
+annotations were believed is gone: the NAS's servers not believed had every case set to what Send
+was, once (`legacyTrust`), so nothing widened. Whatever the level, the built-in denials come first, then the file's rules.
 
 **Per account.** The mail and the calendar are one server each for every account (`mail`,
 `agenda`: [one server per service](#mail-and-calendar-one-server-per-service)), and each account
@@ -3045,7 +3046,7 @@ time ("que s'est-il passé hier ?") lists that time. Current facts only otherwis
 catalog tool not marked trusted (seen by the proxy, or in the turn's events for servers it reaches
 directly and the web tools; the [one taint rule](#tool-catalog)) is tainted: what it remembers is only `proposed`, unless the user's message of that
 same turn asked for it. A tainted turn also cannot act: `run_task` lending tools
-that are not all believed reads (a write, a server not trusted for its annotations) is refused;
+that are not all free reads (a write, a server that asks everything) is refused;
 a task with reads only, or no catalog tool, still starts. The user's own message of that turn
 does not lift this. Only a delivery holding a user message starts a clean turn: a delivery of
 events only (a task's permission, its end) goes on with the current turn and its taint, since

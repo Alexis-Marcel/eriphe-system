@@ -399,7 +399,7 @@ func TestGitHubToolOnApp(t *testing.T) {
 		t.Fatalf("tool: %d %v", code, h)
 	}
 	s := cc.conf().Servers["github"]
-	if appAccount(cc.core, s) == "" || s.URL != "https://api.githubcopilot.com/mcp/" || !s.TrustAnnotations {
+	if appAccount(cc.core, s) == "" || s.URL != "https://api.githubcopilot.com/mcp/" {
 		t.Fatalf("tool %+v", s)
 	}
 }

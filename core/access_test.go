@@ -91,41 +91,30 @@ func sortedCopy(s []string) []string {
 	return out
 }
 
-// Older configurations: trust_annotations alone; forms that post "read" or
-// "trust"; a bad level is refused.
+// A server without a level asks; forms that post "read"; a bad level is
+// refused.
 func TestAccessCompatibility(t *testing.T) {
-	if l := (Server{TrustAnnotations: true}).level(); l != accessReads {
-		t.Errorf("trusted = %s", l)
-	}
 	if l := (Server{}).level(); l != accessAsk {
-		t.Errorf("not trusted = %s", l)
+		t.Errorf("no level = %s", l)
 	}
 	if l := (Server{Access: accessReadOnly}).level(); l != accessReadOnly {
 		t.Errorf("access = %s", l)
 	}
-	if s := (Server{}).withLevel(accessFree); !s.TrustAnnotations || s.Access != accessFree {
+	if s := (Server{}).withLevel(accessFree); s.Access != accessFree || !s.freeReads() {
 		t.Errorf("withLevel = %+v", s)
 	}
-	if s := (Server{TrustAnnotations: true}).withLevel(accessAsk); s.TrustAnnotations {
-		t.Errorf("ask still trusts: %+v", s)
+	if s := (Server{}).withLevel(accessAsk); s.freeReads() {
+		t.Errorf("ask reads free: %+v", s)
 	}
-	for _, tc := range []struct {
-		v     string
-		trust bool
-		want  string
-	}{{"read", false, accessAsk}, {"ask", true, accessAsk}, {"", true, accessReads}, {"", false, accessAsk},
-		{"free", false, accessFree}, {"read-only", false, accessReadOnly}, {"bogus", false, accessAsk}} {
-		if got := formAccess(tc.v, tc.trust); got != tc.want {
-			t.Errorf("formAccess(%q, %v) = %s, want %s", tc.v, tc.trust, got, tc.want)
+	for v, want := range map[string]string{"read": accessAsk, "ask": accessAsk, "": accessAsk,
+		"free": accessFree, "read-only": accessReadOnly, "bogus": accessAsk} {
+		if got := formAccess(v); got != want {
+			t.Errorf("formAccess(%q) = %s, want %s", v, got, want)
 		}
 	}
 	bad := &Config{Servers: map[string]Server{"x": {URL: "https://x.example/mcp", Auth: &ServerAuth{None: true}, Use: "x", Access: "all"}}}
 	if err := bad.checkServers(); err == nil || !strings.Contains(err.Error(), "access") {
 		t.Fatalf("a bad level: %v", err)
-	}
-	var s Server
-	if err := json.Unmarshal([]byte(`{"url":"https://x","use":"x","trust_annotations":true}`), &s); err != nil || s.level() != accessReads {
-		t.Fatalf("an older entry: %+v %v", s, err)
 	}
 }
 

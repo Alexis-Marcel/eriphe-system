@@ -59,7 +59,7 @@ func newCatalogCore(t *testing.T) *core {
 		DefaultAgent: "sonnet",
 		Servers: map[string]Server{
 			"github": {URL: "https://github.example/mcp", Auth: &ServerAuth{BearerFile: write("gh", "ghp_vendor_secret")},
-				Use: "issues", TrustAnnotations: true},
+				Use: "issues", Access: accessReads},
 			"notes": {URL: "https://notes.example/mcp", Auth: &ServerAuth{None: true}, Use: "notes"},
 		},
 	}

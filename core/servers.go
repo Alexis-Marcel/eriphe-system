@@ -29,11 +29,8 @@ type Server struct {
 	Use string          `json:"use"` // what it is for, for the brain
 	// Access is what Eriphe may do on it (access.go): read-only, reads (free
 	// reads, the rest on approval), ask (everything on approval) or free.
-	// Without it, trust_annotations says: true is reads, false ask.
+	// Without it, ask.
 	Access string `json:"access,omitempty"`
-	// TrustAnnotations lets the server's own readOnlyHint count: a read-only
-	// tool of a trusted server is the brain's to allow, the others the user's.
-	TrustAnnotations bool `json:"trust_annotations,omitempty"`
 	// AccountAccess is the access level of each account of a server that
 	// holds several (the mail, the calendar), by the account's name, as
 	// the server's tools take it in their "account" argument. A call is
@@ -41,8 +38,8 @@ type Server struct {
 	// they come to together (access.go).
 	AccountAccess map[string]string `json:"account_access,omitempty"`
 	// Grid is the value of each category of tools (access_grid.go), in the
-	// place of access; trust_annotations then says on its own whether the
-	// server's annotations count: without it, every tool is Send.
+	// place of access; a tool's category is what its annotations say
+	// (toolCategory).
 	Grid *accessGrid `json:"grid,omitempty"`
 	// Exceptions give one tool, by its name, its own value.
 	Exceptions map[string]string `json:"exceptions,omitempty"`

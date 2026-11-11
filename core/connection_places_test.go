@@ -29,7 +29,7 @@ func repoTool(t *testing.T, c *core, owner string, g accessGrid) (connection, st
 	}
 	name := "gh-" + owner
 	srv := Server{URL: "https://api.githubcopilot.com/mcp/", Auth: &ServerAuth{Connection: cn.ID}, Use: "github",
-		PlaceArgs: repoPlaceArgs, Grid: &g, TrustAnnotations: true}
+		PlaceArgs: repoPlaceArgs, Grid: &g}
 	if err := c.putServer(putUpsert, name, srv, nil); err != nil {
 		t.Fatal(err)
 	}

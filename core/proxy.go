@@ -339,14 +339,13 @@ func (s *Store) useTicket(taskID, tool string, input map[string]any) bool {
 
 // serverInfo is what the CLI and the brain see of a catalog server.
 type serverInfo struct {
-	Name             string `json:"name"`
-	Use              string `json:"use"`
-	Kind             string `json:"kind"`   // remote or local
-	Source           string `json:"source"` // config (the file) or workspace
-	URL              string `json:"url,omitempty"`
-	Auth             string `json:"auth"`   // bearer, oauth, none or local
-	Access           string `json:"access"` // what Eriphe may do on it (access.go)
-	TrustAnnotations bool   `json:"trust_annotations,omitempty"`
+	Name   string `json:"name"`
+	Use    string `json:"use"`
+	Kind   string `json:"kind"`   // remote or local
+	Source string `json:"source"` // config (the file) or workspace
+	URL    string `json:"url,omitempty"`
+	Auth   string `json:"auth"`   // bearer, oauth, none or local
+	Access string `json:"access"` // what Eriphe may do on it (access.go)
 	// TrustedContent: the user marked it trusted (tool_trust.go): what it
 	// returns is theirs, and reading it taints nothing.
 	TrustedContent bool       `json:"trusted_content,omitempty"`
@@ -382,7 +381,7 @@ func (c *core) listServers(only string, withTools bool) []serverInfo {
 			continue
 		}
 		info := serverInfo{Name: name, Use: s.Use, Kind: "remote", URL: s.URL, Auth: s.authKind(),
-			Access: s.level(), TrustAnnotations: s.trusts(), TrustedContent: trusted[name], Status: statusConnecting, Source: sourceWorkspace}
+			Access: s.level(), TrustedContent: trusted[name], Status: statusConnecting, Source: sourceWorkspace}
 		if _, ok := c.base.Servers[name]; ok {
 			info.Source = sourceConfig
 		}

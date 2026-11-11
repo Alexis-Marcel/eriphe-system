@@ -574,9 +574,9 @@
   </table>
   {{if not .Locked}}<div class="grid-shortcuts">
     <button class="btn btn-soft sm" type="button" data-fill="never">{{t "access.read-only"}}</button>
+    <button class="btn btn-soft sm" type="button" data-fill="approval">{{t "access.ask"}}</button>
     <button class="btn btn-soft sm" type="button" data-fill="free">{{t "access.free"}}</button>
   </div>{{end}}
-  <label class="check"><input type="checkbox" name="trust" value="1" {{if .Trusted}}checked{{end}}><span>{{t "grid.trust"}}<small>{{t "grid.trust.hint"}}</small></span></label>
   <p class="alert free-warn" role="note">{{t "access.free.warn"}}</p>
   <small class="muted">{{t "grid.note"}}</small>
 </fieldset>{{end}}

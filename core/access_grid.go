@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"maps"
 	"slices"
 	"strings"
@@ -49,9 +51,6 @@ type accessGrid struct {
 type accountGrid struct {
 	Grid       accessGrid        `json:"grid"`
 	Exceptions map[string]string `json:"exceptions,omitempty"`
-	// Trust is whether this account believes the annotations; without it,
-	// the server's trust_annotations says.
-	Trust *bool `json:"trust_annotations,omitempty"`
 }
 
 func (g accessGrid) value(category string) string {
@@ -122,14 +121,12 @@ func levelGrid(level string) accessGrid {
 // gridLevel is the level closest to a grid, for what still speaks in levels
 // (the workspace, a credential's scopes): read only when nothing but reads
 // can happen, as the credential may then be read only.
-func gridLevel(g accessGrid, trusted bool) string {
+func gridLevel(g accessGrid) string {
 	above := []string{g.value(catChange), g.value(catDelete), g.value(catSend)}
 	all := func(v string) bool {
 		return !slices.ContainsFunc(above, func(x string) bool { return x != v })
 	}
 	switch {
-	case !trusted:
-		return accessAsk
 	case all(gridNever):
 		return accessReadOnly
 	case all(gridFree) && g.value(catRead) == gridFree:
@@ -140,11 +137,12 @@ func gridLevel(g accessGrid, trusted bool) string {
 	return accessReads
 }
 
-// toolCategory sorts a tool by its annotations, with MCP's pessimistic
-// defaults: what says nothing reaches outside, so an unannotated tool, or
-// any tool of a server whose annotations are not believed, is Send.
-func toolCategory(t *mcp.Tool, trusted bool) string {
-	if !trusted || t == nil || t.Annotations == nil {
+// toolCategory sorts a tool by its annotations, always read, with MCP's
+// pessimistic defaults: what says nothing reaches outside, so an
+// unannotated tool is Send. A server not to be believed is set to ask
+// everything ("Tout demander"), or given exceptions per action.
+func toolCategory(t *mcp.Tool) string {
+	if t == nil || t.Annotations == nil {
 		return catSend
 	}
 	a := t.Annotations
@@ -163,13 +161,12 @@ func toolCategory(t *mcp.Tool, trusted bool) string {
 type serverAccess struct {
 	grid       accessGrid
 	exceptions map[string]string
-	trusted    bool // the server's annotations are believed
 	ceiling    bool // its credential reads only: no exception goes above reading
 }
 
 // of is a tool's category and value: its exception replaces its category's.
 func (a serverAccess) of(t *mcp.Tool) (category, value string) {
-	category = toolCategory(t, a.trusted)
+	category = toolCategory(t)
 	value = a.grid.value(category)
 	if t != nil {
 		if v, ok := a.exceptions[t.Name]; ok && (!a.ceiling || category == catRead) {
@@ -184,7 +181,7 @@ func (a serverAccess) of(t *mcp.Tool) (category, value string) {
 // not know the tools, so an exception on a read tool counts too: the grid
 // still refuses the writes, the credential alone is wider than it could be.
 func (a serverAccess) level() string {
-	level := gridLevel(a.grid, a.trusted)
+	level := gridLevel(a.grid)
 	if level == accessReadOnly && !a.ceiling {
 		for _, v := range a.exceptions {
 			if v != gridNever {
@@ -198,10 +195,9 @@ func (a serverAccess) level() string {
 // baseAccess is a server's access, leaving its accounts aside.
 func (s Server) baseAccess() serverAccess {
 	if s.Grid != nil {
-		return serverAccess{grid: *s.Grid, exceptions: s.Exceptions, trusted: s.TrustAnnotations}
+		return serverAccess{grid: *s.Grid, exceptions: s.Exceptions}
 	}
-	level := s.ownLevel()
-	return serverAccess{grid: levelGrid(level), exceptions: s.Exceptions, trusted: level != accessAsk}
+	return serverAccess{grid: levelGrid(s.ownLevel()), exceptions: s.Exceptions}
 }
 
 // accountAccesses is the access of each account of a server of several; a
@@ -214,7 +210,7 @@ func (s Server) accountAccesses() map[string]serverAccess {
 	}
 	out := map[string]serverAccess{}
 	for name, level := range s.AccountAccess {
-		out[name] = serverAccess{grid: levelGrid(level), exceptions: s.Exceptions, trusted: level != accessAsk}
+		out[name] = serverAccess{grid: levelGrid(level), exceptions: s.Exceptions}
 	}
 	for name, a := range s.AccountGrids {
 		exceptions := maps.Clone(s.Exceptions)
@@ -222,11 +218,7 @@ func (s Server) accountAccesses() map[string]serverAccess {
 			exceptions = map[string]string{}
 		}
 		maps.Copy(exceptions, a.Exceptions)
-		trusted := s.TrustAnnotations
-		if a.Trust != nil {
-			trusted = *a.Trust
-		}
-		out[name] = serverAccess{grid: a.Grid, exceptions: exceptions, trusted: trusted}
+		out[name] = serverAccess{grid: a.Grid, exceptions: exceptions}
 	}
 	for name := range s.readCeilings() {
 		for k, a := range out {
@@ -451,4 +443,61 @@ func lends(s Server, t *mcp.Tool) bool {
 		}
 	}
 	return false
+}
+
+// legacyTrust moves the servers saved when a checkbox said whether their
+// annotations were believed (the NAS, once): one not believed counted every
+// tool as Send, so its grid, and each of its accounts' not believed, now
+// says Send's value for every case, as before. Its exceptions stay.
+func legacyTrust(store *Store) {
+	const done = "legacy_trust_annotations"
+	if store.get(done) != "" {
+		return
+	}
+	list, err := store.catalogRows()
+	if err != nil {
+		return
+	}
+	flat := func(g accessGrid) accessGrid {
+		v := g.value(catSend)
+		return accessGrid{Read: v, Change: v, Delete: v, Send: v}
+	}
+	for _, r := range list {
+		if r.Kind != kindServer {
+			continue
+		}
+		var s Server
+		var doc struct {
+			Trust    bool `json:"trust_annotations"`
+			Accounts map[string]struct {
+				Trust *bool `json:"trust_annotations"`
+			} `json:"account_grids"`
+		}
+		if json.Unmarshal(r.Spec, &s) != nil || json.Unmarshal(r.Spec, &doc) != nil {
+			continue
+		}
+		changed := false
+		if s.Grid != nil && !doc.Trust {
+			g := flat(*s.Grid)
+			s.Grid, changed = &g, true
+		}
+		for name, a := range s.AccountGrids {
+			trusted := doc.Trust
+			if t := doc.Accounts[name].Trust; t != nil {
+				trusted = *t
+			}
+			if !trusted {
+				a.Grid = flat(a.Grid)
+				s.AccountGrids[name], changed = a, true
+			}
+		}
+		if changed {
+			if err := store.putCatalog(kindServer, r.Name, s); err != nil {
+				log.Printf("catalog: %s: its annotations: %v", r.Name, err)
+				return
+			}
+			log.Printf("catalog: %s: its annotations were not believed: every case is now what Send was", r.Name)
+		}
+	}
+	store.set(done, "1")
 }

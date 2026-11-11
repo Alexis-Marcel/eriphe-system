@@ -586,10 +586,9 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   const grid = b.closest(".access-grid");
   grid.querySelectorAll("tbody tr").forEach((row) => {
-    const value = row.classList.contains("above-read") ? b.dataset.fill : "free";
+    const value = b.dataset.fill === "approval" || row.classList.contains("above-read") ? b.dataset.fill : "free";
     row.querySelector(`input[value="${value}"]`).checked = true;
   });
-  grid.querySelector('input[name="trust"]').checked = true;
 });
 
 function openDialog(d) {
