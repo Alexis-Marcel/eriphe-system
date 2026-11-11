@@ -157,3 +157,20 @@ func TestAccessWords(t *testing.T) {
 		}
 	}
 }
+
+// The web's badge is the address it is opened at, in use; the remote
+// access's state is said under it, not in its place.
+func TestWebEntryShowsTheAddress(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	_, body, _ := tw.do("GET", "/settings/access", nil, nil)
+	i := strings.Index(body, `href="/settings/access/web"`)
+	if i < 0 {
+		t.Fatal("no web entry")
+	}
+	row := body[i:]
+	row = row[:strings.Index(row, "</li>")]
+	if !strings.Contains(row, `<span class="mono">127.0.0.1:`) || !strings.Contains(row, "Accès à distance désactivé") || strings.Contains(row, ">Désactivé<") {
+		t.Fatalf("web entry: %s", row)
+	}
+}

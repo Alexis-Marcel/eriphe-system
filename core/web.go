@@ -210,8 +210,9 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /settings/tools/{name}/access", w.auth(w.handleSaveToolAccess))
 	mux.Handle("POST /settings/tools/{name}/allowed/delete", w.auth(w.handleForgetAction))
 	mux.Handle("POST /settings/tools/{name}/trust", w.auth(w.handleToolTrust)) // tool_trust.go
-	mux.Handle("POST /settings/web", w.auth(w.handleWebValue))                 // web_lent_access.go
-	mux.Handle("GET /settings/credentials/new", w.auth(w.handleNewAccess))     // web_lent_access.go
+	mux.Handle("POST /settings/tools/{name}/title", w.auth(w.handleToolTitle))
+	mux.Handle("POST /settings/web", w.auth(w.handleWebValue))             // web_lent_access.go
+	mux.Handle("GET /settings/credentials/new", w.auth(w.handleNewAccess)) // web_lent_access.go
 	mux.Handle("GET /settings/credentials/{name}/edit", w.auth(w.handleEditAccess))
 	mux.Handle("POST /settings/credentials", w.auth(w.handleSaveAccess))
 	mux.Handle("POST /settings/credentials/{name}", w.auth(w.handleSaveAccess))

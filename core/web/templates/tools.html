@@ -99,7 +99,7 @@
     {{else}}<span class="mark tint-{{tint .Name}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
     <div class="tool-main">
       <div class="tool-head">
-        <h3{{if not (or .Account .Label)}} class="mono"{{end}}>{{.Title}}</h3>
+        <h3{{if not (or .Named .Account .Label)}} class="mono"{{end}}>{{.Title}}</h3>
         {{if .Reconnect}}<span class="chip srv-needs_auth"><span class="pulse" aria-hidden="true"></span>{{t "conn.toreconnect"}}</span>
         {{else if .Pending}}<span class="chip srv-pending"><span class="pulse" aria-hidden="true"></span>{{if .Placed}}{{t "server.starting"}}{{else}}{{t "server.pending"}}{{end}}</span>
         {{else}}<span class="chip srv-{{.Status}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "server.%s" .Status)}}</span>{{end}}
@@ -632,8 +632,14 @@
   <div class="form-title">
     {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
     {{else}}<span class="mark tint-{{tint .Name}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
-    <h2>{{tf "access.pagetitle" .Title}}</h2>
+    <h2>{{.Title}}</h2>
   </div>
+  {{if and (not .Account) (not .Locked)}}<form hx-post="/settings/tools/{{.Name}}/title" class="tool-title-form inline">
+    <label class="field"><span>{{t "tooltitle.label"}}</span>
+      <input name="title" value="{{.Named}}" placeholder="{{.Name}}" maxlength="64" autocomplete="off"></label>
+    <button class="btn btn-soft sm" type="submit">{{t "tooltitle.save"}}</button>
+  </form>{{end}}
+  {{if or .Named .Account}}<p class="muted small">{{tf "tooltitle.name" .Name}}</p>{{end}}
   <p>{{t "access.pagelead"}}</p>
 </header>
 {{template "tool-access" .}}

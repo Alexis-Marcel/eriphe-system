@@ -27,6 +27,9 @@ type Server struct {
 	// pool.dialLocal.
 	Run json.RawMessage `json:"run,omitempty"`
 	Use string          `json:"use"` // what it is for, for the brain
+	// Title is the user's own name for it, shown in the workspace; its
+	// name (the key) stays its technical name, in its tools' names.
+	Title string `json:"title,omitempty"`
 	// Access is what Eriphe may do on it (access.go): read-only, reads (free
 	// reads, the rest on approval), ask (everything on approval) or free.
 	// Without it, ask.

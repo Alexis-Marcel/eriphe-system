@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -61,6 +62,9 @@ type toolAccess struct {
 	// server (tool_trust.go); TrustSaved, just changed.
 	ContentTrusted bool
 	TrustSaved     bool
+	// Named is the user's title for the tool ("" for its name); an
+	// account's page is titled by its account.
+	Named string
 }
 
 // gridRow is one category of a grid; Greyed, above what its credential can
@@ -85,7 +89,7 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 	}
 	v := toolAccess{Name: name, Access: srv.level(), Locked: w.c.source(kindServer, name) != sourceWorkspace,
 		Auth: srv.authKind(), Scope: w.c.tokenScope(name, srv), Allowed: w.c.store.allowedActions(name),
-		ContentTrusted: w.c.trustsServer(name)}
+		ContentTrusted: w.c.trustsServer(name), Named: srv.Title}
 	v.Preset, _ = presetOf(lang, srv)
 	if svc, cfg, isSvc := accountsOf(srv); isSvc && svc.AccountLevels && account != "" {
 		i := cfg.index(account)
@@ -151,8 +155,8 @@ func connectionPage(name, account string, p toolPreset, auth, source string) str
 // Key names the access's parts in their ids, as its row does.
 func (v toolAccess) Key() string { return rowKey(v.Name, v.Account) }
 
-// Title is whom the access is of: the tool, or the account.
-func (v toolAccess) Title() string { return cmpOr(v.Account, v.Name) }
+// Title is whom the access is of: the account, or the tool by its title.
+func (v toolAccess) Title() string { return cmpOr(v.Account, cmpOr(v.Named, v.Name)) }
 
 // Query is "?account=…" for an account's access.
 func (v toolAccess) Query() string { return accountQuery(v.Account) }
@@ -296,6 +300,34 @@ func (w *web) handleSaveToolAccess(rw http.ResponseWriter, r *http.Request, s *s
 
 // handleToolTrust marks a tool trusted or not (tool_trust.go), any tool of
 // the catalog, the configuration file's too: it is the user's to say.
+// handleToolTitle gives a workspace tool its title ("" for its name); its
+// name, in its tools' names, does not change.
+func (w *web) handleToolTitle(rw http.ResponseWriter, r *http.Request, s *session) {
+	name := r.PathValue("name")
+	srv, ok := w.c.conf().Servers[name]
+	if !ok {
+		http.Error(rw, "unknown tool", http.StatusBadRequest)
+		return
+	}
+	title := strings.Join(strings.Fields(r.PostFormValue("title")), " ")
+	if utf8.RuneCountInString(title) > 64 {
+		w.toast(rw, tr(w.lang(r), "tooltitle.long"), false)
+		return
+	}
+	if title == name {
+		title = ""
+	}
+	srv.Title = title
+	if err := w.c.putServer(putUpdate, name, srv, nil); err != nil {
+		w.toast(rw, err.Error(), false)
+		return
+	}
+	log.Printf("web: tool %s: title %q", name, title)
+	w.notify()
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusOK)
+}
+
 func (w *web) handleToolTrust(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
 	if _, ok := w.c.conf().Servers[name]; !ok || r.PostFormValue("set") == "" {

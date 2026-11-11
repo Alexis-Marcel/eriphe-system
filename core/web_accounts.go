@@ -168,7 +168,7 @@ func (t toolView) RowURL() string {
 
 // Title is the row's heading: in an account's card, its service ("Mail");
 // else the tool's name.
-func (t toolView) Title() string { return cmpOr(t.Label, cmpOr(t.Account, t.Name)) }
+func (t toolView) Title() string { return cmpOr(t.Named, cmpOr(t.Label, cmpOr(t.Account, t.Name))) }
 
 // accountOfRequest is the account a request is about (?account=, or the
 // form's account), as the server has it; "" for a server without accounts
