@@ -16,7 +16,8 @@ func TestToolTitle(t *testing.T) {
 	waitStatus(t, c.pool.get("linear"), statusReady)
 
 	_, body, _ := tw.do("GET", "/settings/tools/linear/access", nil, nil)
-	if !strings.Contains(body, "<h2>linear</h2>") || !strings.Contains(body, `hx-post="/settings/tools/linear/title"`) || strings.Contains(body, "<h2>Accès de") {
+	if !strings.Contains(body, "<h2>linear</h2>") || !strings.Contains(body, `hx-post="/settings/tools/linear/title"`) || !strings.Contains(body, "data-edit-open") ||
+		strings.Contains(body, "<h2>Accès de") {
 		t.Fatalf("page before: %s", body)
 	}
 	if code, _, h := tw.post("/settings/tools/linear/title", url.Values{"title": {"  Tickets   du travail "}}, csrf); code != 200 || h.Get("HX-Refresh") != "true" {
@@ -45,5 +46,32 @@ func TestToolTitle(t *testing.T) {
 	tw.post("/settings/tools/linear/title", url.Values{"title": {"linear"}}, csrf)
 	if c.conf().Servers["linear"].Title != "" {
 		t.Fatal("its name kept as a title")
+	}
+}
+
+// What a tool is for, the sentence the brain reads, is shown and edited on
+// its page.
+func TestToolUse(t *testing.T) {
+	tw, c, f, csrf := pendingWeb(t)
+	authURL := startConnectForm(t, tw, csrf, "/settings/tools", oauthToolForm(f))
+	code, state := f.authorize(authURL)
+	callback(t, tw, "code="+code+"&state="+url.QueryEscape(state))
+	waitStatus(t, c.pool.get("linear"), statusReady)
+
+	if code, _, h := tw.post("/settings/tools/linear/use", url.Values{"use": {"  mes   tickets du travail "}}, csrf); code != 200 || h.Get("HX-Refresh") != "true" {
+		t.Fatalf("save: %d %v", code, h)
+	}
+	if got := c.conf().Servers["linear"].Use; got != "mes tickets du travail" {
+		t.Fatalf("saved %q", got)
+	}
+	if _, body, _ := tw.do("GET", "/settings/tools/linear/access", nil, nil); !strings.Contains(body, "À quoi il sert") ||
+		!strings.Contains(body, `hx-post="/settings/tools/linear/use"`) || !strings.Contains(body, ">mes tickets du travail</textarea>") {
+		t.Fatalf("page: %s", body)
+	}
+	if code, _, h := tw.post("/settings/tools/linear/use", url.Values{"use": {strings.Repeat("x", 301)}}, csrf); code != 200 || h.Get("HX-Refresh") != "" {
+		t.Fatalf("too long saved: %d %v", code, h)
+	}
+	if code, _, _ := tw.post("/settings/tools/nothing/use", url.Values{"use": {"x"}}, csrf); code != 400 {
+		t.Fatalf("unknown tool: %d", code)
 	}
 }

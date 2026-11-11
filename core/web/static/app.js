@@ -591,6 +591,38 @@ document.addEventListener("click", (e) => {
   });
 });
 
+// An inline edit (tools.html, tool-access-page): the pencil puts the field
+// in place of the text; Escape or the cross puts the text back, Enter
+// saves (Shift+Enter is a new line in a text area).
+document.addEventListener("click", (e) => {
+  const open = e.target.closest("[data-edit-open]");
+  const cancel = e.target.closest("[data-edit-cancel]");
+  const box = (open || cancel) && (open || cancel).closest(".inline-edit");
+  if (!box) return;
+  const field = box.querySelector(".ie-form input, .ie-form textarea");
+  if (cancel) {
+    field.value = field.defaultValue;
+    box.classList.remove("editing");
+    box.querySelector("[data-edit-open]").focus();
+    return;
+  }
+  box.classList.add("editing");
+  field.focus();
+  field.setSelectionRange(field.value.length, field.value.length);
+});
+document.addEventListener("keydown", (e) => {
+  const field = e.target.closest && e.target.closest(".inline-edit.editing :is(input, textarea)");
+  if (!field) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();
+    field.closest(".inline-edit").querySelector("[data-edit-cancel]").click();
+  } else if (e.key === "Enter" && !e.shiftKey && field.tagName === "TEXTAREA") {
+    e.preventDefault();
+    field.form.requestSubmit();
+  }
+});
+
 function openDialog(d) {
   if (!d.open) d.showModal();
   const field = d.dataset.focusOnOpen && document.getElementById(d.dataset.focusOnOpen);
