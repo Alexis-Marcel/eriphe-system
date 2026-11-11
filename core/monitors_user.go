@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -128,40 +130,101 @@ func (c *core) deleteMonitor(name string) error {
 // tryMonitor calls a spec's tool once and says what its path extracts,
 // with the same checks as a look; nothing is kept.
 func (c *core) tryMonitor(ctx context.Context, s monitorSpec) (string, error) {
+	t, err := c.tryLook(ctx, s)
+	return t.Said, err
+}
+
+// tried is what one try of a spec found: in words, and what a look would
+// compare (the extracted value, the items' ids, the number).
+type tried struct {
+	Said string
+	Got  any
+	IDs  []string
+	N    float64
+}
+
+func (c *core) tryLook(ctx context.Context, s monitorSpec) (tried, error) {
+	var t tried
 	if err := s.check(); err != nil {
-		return "", err
+		return t, err
 	}
 	if s.Way != wayPoll {
-		return "", errors.New("only a monitor that polls a tool is tried")
+		return t, errors.New("only a monitor that polls a tool is tried")
 	}
 	if why := c.toolWhy(s); why != "" {
-		return "", errors.New(why)
+		return t, errors.New(why)
 	}
 	got, err := c.callMonitor(ctx, s)
 	if err != nil {
-		return "", err
+		return t, err
 	}
+	t.Got = got
 	switch s.Cond {
 	case condNew:
 		items, ok := got.([]any)
 		if !ok {
-			return "", fmt.Errorf("%q is not a list", cmpOr(s.Path, "the result"))
+			return t, fmt.Errorf("%q is not a list", cmpOr(s.Path, "the result"))
 		}
-		var ids []string
 		for _, it := range items {
 			if v, err := extract(it, s.ID); err == nil && v != nil {
-				ids = append(ids, valueText(v))
+				t.IDs = append(t.IDs, valueText(v))
 			}
 		}
-		return fmt.Sprintf("%d item(s), ids: %s", len(items), truncate(strings.Join(ids, ", "), 400)), nil
+		t.Said = fmt.Sprintf("%d item(s), ids: %s", len(items), truncate(strings.Join(t.IDs, ", "), 400))
 	case condCross:
 		n, ok := number(got)
 		if !ok {
-			return "", fmt.Errorf("%q is not a number: %s", cmpOr(s.Path, "the result"), truncate(valueText(got), 80))
+			return t, fmt.Errorf("%q is not a number: %s", cmpOr(s.Path, "the result"), truncate(valueText(got), 80))
 		}
-		return fmt.Sprint(n), nil
+		t.N, t.Said = n, fmt.Sprint(n)
+	default:
+		t.Said = truncate(valueText(got), 1000)
 	}
-	return truncate(valueText(got), 1000), nil
+	return t, nil
+}
+
+// tryMonitorSaid is the brain's try: a monitor of the user's (by name), or
+// a draft spec, called once with nothing kept nor written. For a monitor
+// that has looked, it also says whether a look now would find a change. A
+// server not trusted taints the turn, as a call of its tool would.
+func (c *core) tryMonitorSaid(ctx context.Context, name string, s monitorSpec) (map[string]any, error) {
+	var m *monitor
+	if name != "" && s.Server == "" {
+		var err error
+		if m, err = c.monitorNamed(name); err != nil {
+			return nil, fmt.Errorf("no monitor %q (monitors)", name)
+		}
+		s = m.Spec
+	}
+	if s.Way == wayPoll && c.toolWhy(s) == "" && !c.trustsServer(s.Server) {
+		c.turn.taint(s.Server + "." + s.Tool)
+	}
+	t, err := c.tryLook(ctx, s)
+	if err != nil {
+		return map[string]any{"works": false, "error": err.Error()}, nil
+	}
+	out := map[string]any{"works": true, "extracts": t.Said}
+	if m == nil || !m.Look.Known {
+		return out, nil
+	}
+	switch s.Cond {
+	case condNew:
+		n := 0
+		for _, id := range t.IDs {
+			if !slices.Contains(m.Look.Seen, id) {
+				n++
+			}
+		}
+		out["new_since_last_look"] = n
+	case condCross:
+		hit := s.Above != nil && t.N > *s.Above || s.Below != nil && t.N < *s.Below
+		out["holds"], out["held_at_last_look"] = hit, m.Look.Hit
+	default:
+		h := sha256.Sum256([]byte(valueText(t.Got)))
+		out["changed_since_last_look"] = hex.EncodeToString(h[:]) != m.Look.Value
+		out["last_value"] = m.Look.Shown
+	}
+	return out, nil
 }
 
 // monitorEvents are a monitor's last events, newest first.

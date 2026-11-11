@@ -844,6 +844,18 @@ type nameIn struct {
 	Name string `json:"name,omitempty"`
 }
 
+type tryMonitorIn struct {
+	Name   string         `json:"name,omitempty" jsonschema:"a monitor of the user's (monitors), tried as it is; or leave it empty and give a draft"`
+	Server string         `json:"server,omitempty" jsonschema:"a draft's catalog server"`
+	Tool   string         `json:"tool,omitempty" jsonschema:"a draft's read-only tool"`
+	Args   map[string]any `json:"args,omitempty"`
+	Cond   string         `json:"cond,omitempty" jsonschema:"changed (default), new or cross"`
+	Path   string         `json:"path,omitempty" jsonschema:"as write_monitor's: data.rules[state=firing].name"`
+	ID     string         `json:"id,omitempty"`
+	Above  *float64       `json:"above,omitempty"`
+	Below  *float64       `json:"below,omitempty"`
+}
+
 func registerMonitorTools(s *mcp.Server, c *core) {
 	tool(s, "write_monitor", "Propose a monitor, or a change of one: eriphe-core itself calls one read-only tool of the catalog at an interval, without a model, and writes an event when what it watches changes (monitor.changed), when a list gets a new item (monitor.new), when a number crosses a limit either way (monitor.crossed, holds true or false), or when its looks keep failing (monitor.failed, then monitor.recovered); keyed by its name. It only detects: a skill reacts to its events (write_skill with when: monitor.changed key=<name>). Use it to watch a tool that does not tell by itself (« surveille les alertes Grafana de la prod »): never a time skill that calls the tool every few minutes. A server that publishes its own events (the mail server) is followed (way follow): its events keep their kind (mail.received), keyed by the monitor's name; nothing of it reaches a skill before a monitor follows it. Nothing looks before the user approves it on its card.",
 		func(ctx context.Context, in writeMonitorIn) (map[string]any, error) {
@@ -857,6 +869,11 @@ func registerMonitorTools(s *mcp.Server, c *core) {
 			}
 			return c.writeMonitor(in.Name, monitorSpec{Way: cmpOr(strings.TrimSpace(in.Way), wayPoll), Server: in.Server, Tool: in.Tool, Args: in.Args, Every: every,
 				Cond: strings.TrimSpace(in.Cond), Path: in.Path, ID: in.ID, Above: in.Above, Below: in.Below}, c.turnTaint())
+		})
+	tool(s, "try_monitor", "Try a monitor once, without keeping or writing anything: call its tool, apply its path and say what it extracts (the value, the list's items and their ids, or the number), or why it cannot (not a free read, a path that finds nothing, not a list, not a number). Give the name of one of the user's monitors to check it works (and whether a look now would find a change since its last look), or a draft (server, tool, args, cond, path, id, above, below, as write_monitor) to try before proposing it. Only a monitor that polls a tool.",
+		func(ctx context.Context, in tryMonitorIn) (map[string]any, error) {
+			return c.tryMonitorSaid(ctx, strings.TrimSpace(in.Name), monitorSpec{Way: wayPoll, Server: in.Server, Tool: in.Tool, Args: in.Args,
+				Cond: strings.TrimSpace(in.Cond), Path: in.Path, ID: in.ID, Above: in.Above, Below: in.Below})
 		})
 	tool(s, "monitors", "The user's monitors: each one's name (the key of its events), state (on, paused, proposed), what it does in words, its last look, why it waits or its last error, and a change waiting for the user's card.",
 		func(ctx context.Context, in nameIn) (map[string]any, error) {
