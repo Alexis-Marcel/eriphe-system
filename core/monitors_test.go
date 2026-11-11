@@ -395,3 +395,43 @@ func TestTryMonitorTool(t *testing.T) {
 		t.Fatalf("an unknown monitor: %v", out)
 	}
 }
+
+// A change of a monitor already approved gets its card again: the first
+// card was decided under an old message, and the new proposal waits on it
+// with this turn's message (or queued, after an update).
+func TestMonitorChangeCardAgain(t *testing.T) {
+	c, _, _ := pollCore(t)
+	spec := monitorSpec{Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 5}
+	c.writeMonitor("etat", spec, nil)
+	c.attachTurnCards(3)
+	m, _ := c.monitorNamed("etat")
+	ref := proposalRef(cardMonitor, m.ID)
+	card := func() (id int64, seq, turn int, state string) {
+		c.store.db.QueryRow(`SELECT id, seq, turn, state FROM convo_cards WHERE ref = ?`, ref).Scan(&id, &seq, &turn, &state)
+		return
+	}
+	id, seq, _, _ := card()
+	if seq != 3 {
+		t.Fatalf("the first card is not with its message: %d", seq)
+	}
+	if _, err := c.decideCard(context.Background(), id, true, "click"); err != nil {
+		t.Fatal(err)
+	}
+	spec.Every = 15
+	c.writeMonitor("etat", spec, nil)
+	if _, seq, turn, state := card(); state != cardPending || seq != 0 || turn != 1 {
+		t.Fatalf("the change has no card: seq %d turn %d %s", seq, turn, state)
+	}
+	c.attachTurnCards(7)
+	if _, seq, _, _ := card(); seq != 7 {
+		t.Fatalf("the change's card is not with this turn's message: %d", seq)
+	}
+
+	// A change already waiting under a decided card (before this fix): the
+	// sync gives it its card back.
+	c.store.db.Exec(`UPDATE convo_cards SET state = ? WHERE ref = ?`, cardApproved, ref)
+	c.syncCards()
+	if _, seq, _, state := card(); state != cardPending || seq != 0 {
+		t.Fatalf("the sync left it decided: seq %d %s", seq, state)
+	}
+}
