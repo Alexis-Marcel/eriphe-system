@@ -1363,9 +1363,12 @@ a.provider:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-sof
 /* The whole card opens the device's page: its name is a stretched link
    (.stretched), and what the card holds that acts on its own (the menu,
    the folder links, the update buttons) sits above it. */
-.tile.device:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
-.tile.device:hover .tile-title a { text-decoration: underline; }
-.tile.device :is(.kebab, a:not(.stretched), button, form, [title]) { position: relative; z-index: 1; }
+/* Any tile whose name is a stretched link holds the link's layer: without
+   a positioned tile it would cover the whole page. */
+.tile:has(.stretched) { position: relative; transition: border-color .15s, box-shadow .15s; }
+.tile:has(.stretched):hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+.tile:has(.stretched):hover .tile-title a { text-decoration: underline; }
+.tile:has(.stretched) :is(.kebab, a:not(.stretched), button, form, [title]) { position: relative; z-index: 1; }
 .tile.device .kebab[open] { z-index: 30; }
 .device-more { align-self: flex-end; margin-top: -4px; font-size: .86rem; font-weight: 600; color: var(--accent-text); }
 .tile.device:hover .device-more { text-decoration: underline; }

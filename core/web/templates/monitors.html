@@ -12,22 +12,22 @@
 
 {{define "monitor-form"}}
 <form class="stack-form" hx-post="/settings/monitors" hx-disabled-elt="find button">
-  <label class="field"><span>{{t "monitors.f.name"}}</span><input name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="getout-prod" value="{{.Form.Name}}" {{if .Form.Edit}}readonly{{end}}></label>
+  <label class="field"><span>{{t "monitors.f.name"}}</span><input type="text" name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="getout-prod" value="{{.Form.Name}}" {{if .Form.Edit}}readonly{{end}}></label>
   <label class="field"><span>{{t "monitors.f.tool"}}</span>
     {{if .Tools}}<select name="tool" required>{{$tool := .Form.Tool}}{{range .Tools}}<option value="{{.}}" {{if eq . $tool}}selected{{end}}>{{.}}</option>{{end}}</select>
-    {{else}}<span class="muted small">{{t "monitors.notools"}}</span>{{end}}</label>
+    {{else}}<small>{{t "monitors.notools"}}</small>{{end}}</label>
   <p class="muted small">{{t "monitors.f.toolhint"}}</p>
   <label class="field"><span>{{t "monitors.f.args"}}</span><textarea name="args" rows="2" spellcheck="false" class="mono" placeholder='{"service": "web"}'>{{.Form.Args}}</textarea></label>
-  <label class="field"><span>{{t "monitors.f.every"}}</span><input name="every" value="{{.Form.Every}}" placeholder="5m" pattern="\d{1,4}\s*(m|min|h|d|j)"></label>
+  <label class="field"><span>{{t "monitors.f.every"}}</span><input type="text" name="every" value="{{.Form.Every}}" placeholder="5m" pattern="\d{1,4}\s*(m|min|h|d|j)"></label>
   <label class="field"><span>{{t "monitors.f.cond"}}</span><select name="cond">
     <option value="changed" {{if eq .Form.Cond "changed"}}selected{{end}}>{{t "monitors.c.changed"}}</option>
     <option value="new" {{if eq .Form.Cond "new"}}selected{{end}}>{{t "monitors.c.new"}}</option>
     <option value="cross" {{if eq .Form.Cond "cross"}}selected{{end}}>{{t "monitors.c.cross"}}</option></select></label>
-  <label class="field"><span>{{t "monitors.f.path"}}</span><input name="path" class="mono" value="{{.Form.Path}}" placeholder="data.rules[state=firing].name"></label>
+  <label class="field"><span>{{t "monitors.f.path"}}</span><input type="text" name="path" class="mono" value="{{.Form.Path}}" placeholder="data.rules[state=firing].name"></label>
   <p class="muted small">{{t "monitors.f.pathhint"}}</p>
-  <label class="field"><span>{{t "monitors.f.id"}}</span><input name="id" class="mono" value="{{.Form.ID}}" placeholder="uid"></label>
-  <label class="field"><span>{{t "monitors.f.above"}}</span><input name="above" inputmode="decimal" value="{{.Form.Above}}" placeholder="90"></label>
-  <label class="field"><span>{{t "monitors.f.below"}}</span><input name="below" inputmode="decimal" value="{{.Form.Below}}" placeholder="200"></label>
+  <label class="field"><span>{{t "monitors.f.id"}}</span><input type="text" name="id" class="mono" value="{{.Form.ID}}" placeholder="uid"></label>
+  <label class="field"><span>{{t "monitors.f.above"}}</span><input type="text" name="above" inputmode="decimal" value="{{.Form.Above}}" placeholder="90"></label>
+  <label class="field"><span>{{t "monitors.f.below"}}</span><input type="text" name="below" inputmode="decimal" value="{{.Form.Below}}" placeholder="200"></label>
   <div class="form-actions">
     <button class="btn btn-soft" type="button" hx-post="/settings/monitors/try" hx-include="closest form" hx-target="#monitor-try" hx-swap="innerHTML">{{t "monitors.try"}}</button>
     <button class="btn btn-primary" type="submit">{{if .Form.Edit}}{{t "monitors.save"}}{{else}}{{t "monitors.add"}}{{end}}</button>
@@ -63,7 +63,7 @@
   <h3 id="follow-title">{{template "i-plus"}}{{t "monitors.follow.title"}}</h3>
   <p class="muted">{{t "monitors.follow.lead"}}</p>
   <form class="stack-form" hx-post="/settings/monitors/follow" hx-disabled-elt="find button">
-    <label class="field"><span>{{t "monitors.f.name"}}</span><input name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="mails"></label>
+    <label class="field"><span>{{t "monitors.f.name"}}</span><input type="text" name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="mails"></label>
     <label class="field"><span>{{t "monitors.f.tool"}}</span><select name="server">{{range .Data.Streams}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
     <div class="form-actions"><button class="btn btn-primary" type="submit">{{t "monitors.follow.add"}}</button></div>
   </form>
@@ -80,9 +80,9 @@
   </div>{{end}}
   <form class="stack-form" method="post" action="/settings/monitors/address">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <label class="field"><span>{{t "monitors.f.name"}}</span><input name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="getout"></label>
+    <label class="field"><span>{{t "monitors.f.name"}}</span><input type="text" name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="getout"></label>
     <label class="check"><input type="checkbox" name="signed" checked> {{t "monitors.addr.sign"}}</label>
-    <label class="field"><span>{{t "monitors.addr.header"}}</span><input name="header" pattern="[A-Za-z0-9][A-Za-z0-9-]{0,63}" placeholder="X-Eriphe-Signature"></label>
+    <label class="field"><span>{{t "monitors.addr.header"}}</span><input type="text" name="header" pattern="[A-Za-z0-9][A-Za-z0-9-]{0,63}" placeholder="X-Eriphe-Signature"></label>
     <p class="muted small">{{t "monitors.addr.headerhint"}}</p>
     <div class="form-actions"><button class="btn btn-primary" type="submit">{{t "monitors.addr.add"}}</button></div>
   </form>

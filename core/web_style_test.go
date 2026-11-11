@@ -71,3 +71,15 @@ func TestPhoneColumnCanShrink(t *testing.T) {
 		t.Error("the phone workspace column is not minmax(0, 1fr)")
 	}
 }
+
+// A stretched link's layer stays inside its tile: every tile that holds one
+// is positioned, or a click anywhere on the page opens it.
+func TestStretchedLinksStayInTheirTile(t *testing.T) {
+	css, err := webFS.ReadFile("web/static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(css), ".tile:has(.stretched) { position: relative;") {
+		t.Fatal("a tile with a stretched link is not positioned")
+	}
+}

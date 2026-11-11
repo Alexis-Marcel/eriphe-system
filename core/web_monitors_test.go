@@ -121,3 +121,15 @@ func TestMonitorFollowPage(t *testing.T) {
 		t.Fatalf("a follower's page: its words, and no poll form:\n%s", body)
 	}
 }
+
+// The page's text fields are typed, so the stylesheet dresses them as the
+// others.
+func TestMonitorsFieldsTyped(t *testing.T) {
+	raw, err := webFS.ReadFile("web/templates/monitors.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "<input name=") {
+		t.Fatal("an input without a type")
+	}
+}
