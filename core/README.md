@@ -1348,7 +1348,7 @@ turn is not tainted. Its front matter:
 
 | Key | |
 |---|---|
-| `when` | an event kind of the [journal](#events) (`mail.received`), with filters on its key or payload (`hook.received key=getout status=firing`); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules) |
+| `when` | an event kind of the [journal](#events) (`mail.received`, `monitor.changed key=getout-prod`), with filters on its key or payload (`hook.received key=getout status=firing`); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules) |
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
@@ -1426,7 +1426,7 @@ or several:
 | **Tool** (MCP, the catalog) | actions and reads, called by the brain or a skill, under the access grid | Home Assistant, mail, calendar, GitHub, Grafana |
 | **Input channel** | where the user talks to Eriphe: the conversation | the workspace, a messaging app (Telegram), Home Assistant's Assist |
 | **Output channel** | where Eriphe tells the user | push, a messaging app (Telegram), a speaker through Home Assistant's integration |
-| **Event source** | "something happened", which starts triggered skills | a server publishing `eriphe://events` (the mail server), or any system calling an incoming address (Grafana, a Home Assistant automation, a shortcut) |
+| **Event source** | "something happened", which starts triggered skills | a [monitor](#monitors) looking at a tool that does not tell (Grafana's alerts), a server publishing `eriphe://events` (the mail server), or any system calling an incoming address (Grafana, a Home Assistant automation, a shortcut) |
 
 An input channel is **not** an event: what the user writes is the conversation, answered at once
 by the brain alone, with the user's authority (a message can be cited to apply a setting, a « oui »
@@ -1438,8 +1438,8 @@ follower, no state kept in eriphe-core.
 The event journal (`event_journal.go`, `event_sources.go`) is where everything that happens is
 written, whatever its source, without being interpreted: triggered skills (#275) will subscribe
 to it, and the brain reads it with `since` (kind `event`). An event has a kind, a key that
-groups the events of one thing, its source, a short payload (JSON, 4 KB at most, each string
-cut to 500 characters) and whether it is **external**: written by someone else. Whatever reads
+groups the events of one thing, its source, a payload (JSON, 16 KiB at most, each string
+cut to 4000 characters: what a skill's run reads of what happened) and whether it is **external**: written by someone else. Whatever reads
 an external payload is tainted; `since` names an external event without quoting it unless
 `include_external`. Table `event_journal`, kept 30 days; a source past 600 events an hour has
 the rest dropped.
@@ -1448,6 +1448,7 @@ the rest dropped.
 |---|---|---|---|
 | `mail.received` | the mail server (any server offering `eriphe://events`, below) | the account | unless the server is trusted |
 | `hook.received` | an incoming address was called (below); `status` from the body's top-level `status` when it is a short word (`firing`, `resolved`) | the address's name | yes |
+| `monitor.changed`, `monitor.new`, `monitor.failed`, `monitor.recovered` | a [monitor](#monitors) | the monitor's name | unless its server is trusted |
 | `task.ended` | a worker task's end | the task | no |
 | `session.ended` | a work session's end | `session:<id>` | no |
 | `user.returned` | the user's first activity after an absence of an hour or more | | no |
@@ -1460,10 +1461,48 @@ run stateless behind their node, so they cannot push). The resource is JSON, `{"
 seq and time of the last event it took: within an epoch it takes the higher seqs, from a new one
 the events after that time; a server seen for the first time has its backlog skipped. A server
 cannot emit one of eriphe-core's families (`hook.`, `task.`, `session.`, `user.`, `time.`,
-`skill.`).
+`skill.`, `monitor.`).
 
-The alert and poll sources still live in their rules; they move out of them when the rules go
-(#278).
+### Monitors
+
+A monitor (`monitors.go`, #357) **detects, and only that**: it writes events, and a [triggered
+skill](#triggered-skills) reacts to them. It never decides, acts or tells the user: no threshold
+(the system it watches has its own), no judge, no action, no notification. That is what the
+removed rules mixed with detection.
+
+eriphe-core calls one tool of the catalog itself, with fixed arguments, every 1 minute to 1 day,
+outside any task and without a model, and compares what a path extracts from the result with
+what it saw:
+
+| Condition | Event | Payload |
+|---|---|---|
+| `changed`: the value at `path` (the whole result if empty) is not the last one, and a second look 30 s later saw the same (a flap tells nothing) | `monitor.changed` | `value`, `was` |
+| `new`: the items of the list at `path` whose `id` was not seen (the last 1000 ids kept) | `monitor.new`, one per item | `id`, `item` |
+| three failed looks in a row, then the next good one | `monitor.failed`, `monitor.recovered` | `error` |
+
+The first look is the baseline: it tells nothing. A path is fields joined by dots, an index, `*`
+for every item of a list, `[field=value]` to keep some items: `data.rules[state=firing].name`.
+Once it went over a list its value is a list, sorted, so the same items in another order are no
+change. The result is read as JSON (its structured content, else its text).
+
+- **Keyed by its name**, so a skill follows it with `when: monitor.changed key=getout-prod`. Its
+  events are external unless its server is trusted, so the run they start is tainted.
+- **Free reads only**: the tool must be read-only by its own annotation, one of the brain's, and
+  Free in the user's grid (`freeCall`, with its arguments). Checked when it is written and before
+  every look: otherwise it waits, with why, and nothing is called.
+- **The user approves it.** The brain proposes one with `write_monitor` (name, server, tool, args,
+  every, cond, path, id): a card (kind `monitor`) says it in words; the yes turns it on from a new
+  baseline, the no drops it. A change of an approved one waits the same way, the old one looking
+  meanwhile. Written on a tainted turn, the card says so. A triggered task has no such tool.
+  `monitors` (free) lists them: state, what each does, its last look, why it waits, its last error.
+- **Limits**: 50 monitors, arguments of 4 KiB, a value of 4000 characters in an event.
+- Table `monitors` (name, state `proposed`, `on` or `paused`, its spec, a change waiting, what its
+  looks saw, its next look).
+
+The test case: `getout-prod` calls Grafana's alert rules every 2 minutes with `path`
+`data.rules[state=firing].name`; a skill `when: monitor.changed key=getout-prod` investigates and
+opens a work session. Nothing runs a model while nothing fires, and nothing reaches Eriphe from
+outside: the call goes out from eriphe-core to the tool.
 
 ## Assistants
 
@@ -2862,7 +2901,8 @@ something: `POST https://<workspace>/hooks/in/<token>`, named (the key of its `h
 word: `when: hook.received key=getout status=firing`), signed with an HMAC-SHA256 secret if asked (in the vault,
 `alert-hook-<id>`), read from the header the user names for that address (`X-Eriphe-Signature`
 by default; `X-Hub-Signature-256` for GitHub, `X-Grafana-Alerting-Signature` for Grafana), its body (64 KiB) kept as external content, 60 calls an hour at most (429).
-A tool to watch is a time skill that calls it.
+A tool that does not tell by itself is watched by a [monitor](#monitors), not by a time skill
+that calls it.
 
 ## Remote access (Tailscale)
 

@@ -142,8 +142,9 @@ func main() {
 	}
 	go c.runAssistants(context.Background(), token)
 	go c.runMemory(context.Background())
-	go c.runEvents(context.Background()) // event_sources.go
-	go c.runSkills(context.Background()) // skill_runs.go
+	go c.runEvents(context.Background())   // event_sources.go
+	go c.runSkills(context.Background())   // skill_runs.go
+	go c.runMonitors(context.Background()) // monitors.go
 	go c.updates.run(context.Background())
 	if cfg.Web != nil {
 		go func() { log.Fatalf("web: %v", c.serveWeb(cfg)) }()

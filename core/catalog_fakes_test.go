@@ -23,6 +23,7 @@ type fakeMonitor struct {
 	version string
 	failing bool
 	calls   int
+	rules   []map[string]any // alerts: Grafana-like alert rules, each uid, name, state
 }
 
 func (m *fakeMonitor) set(state, version string) {
@@ -44,6 +45,20 @@ func (m *fakeMonitor) server() *mcp.Server {
 				return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "unreachable"}}}, nil, nil
 			}
 			return nil, map[string]any{"service": in.Service, "data": map[string]any{"state": m.state, "version": m.version}}, nil
+		})
+	mcp.AddTool(s, &mcp.Tool{Name: "alerts", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+		func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			m.calls++
+			if m.failing {
+				return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "unreachable"}}}, nil, nil
+			}
+			rules := []any{}
+			for _, r := range m.rules {
+				rules = append(rules, r)
+			}
+			return nil, map[string]any{"data": map[string]any{"rules": rules}, "at": time.Now().Format(time.RFC3339Nano)}, nil
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "rollback"},
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
