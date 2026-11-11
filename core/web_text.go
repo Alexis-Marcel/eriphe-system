@@ -706,7 +706,7 @@ func byteSize(lang string, b int64) string {
 }
 
 // markdown renders the little Markdown agents write: paragraphs, lists,
-// code blocks, inline code, bold, italics, headings and links. Everything
+// code blocks, tables, inline code, bold, italics, headings and links. Everything
 // is escaped first; links are http(s), or a page of the workspace.
 func markdown(src string) template.HTML {
 	var b strings.Builder
@@ -740,6 +740,10 @@ func markdown(src string) template.HTML {
 		case trimmed == "":
 			flush()
 			closeList()
+		case strings.HasPrefix(trimmed, "|") && i+1 < len(lines) && tableSepRe.MatchString(strings.TrimSpace(lines[i+1])):
+			flush()
+			closeList()
+			i = table(&b, lines, i)
 		case headingRe.MatchString(trimmed):
 			flush()
 			closeList()
@@ -771,15 +775,82 @@ func markdown(src string) template.HTML {
 	return template.HTML(b.String())
 }
 
+// table renders the GitHub table that starts at lines[i]: a header row, a
+// separator row giving each column's alignment, then the rows that start
+// with a pipe. It returns the index of the table's last line.
+func table(b *strings.Builder, lines []string, i int) int {
+	head := tableCells(lines[i])
+	var align []string
+	for _, c := range tableCells(lines[i+1]) {
+		switch l, r := strings.HasPrefix(c, ":"), strings.HasSuffix(c, ":"); {
+		case l && r:
+			align = append(align, "center")
+		case r:
+			align = append(align, "right")
+		default:
+			align = append(align, "")
+		}
+	}
+	row := func(tag string, cells []string) {
+		b.WriteString("<tr>")
+		for j := range head {
+			c := ""
+			if j < len(cells) {
+				c = cells[j]
+			}
+			attr := ""
+			if j < len(align) && align[j] != "" {
+				attr = ` style="text-align:` + align[j] + `"`
+			}
+			b.WriteString("<" + tag + attr + ">" + inline(c) + "</" + tag + ">")
+		}
+		b.WriteString("</tr>")
+	}
+	b.WriteString("<table><thead>")
+	row("th", head)
+	b.WriteString("</thead><tbody>")
+	for i += 2; i < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i]), "|"); i++ {
+		row("td", tableCells(lines[i]))
+	}
+	b.WriteString("</tbody></table>")
+	return i - 1
+}
+
+// tableCells splits a table row on its pipes; an escaped pipe (\|) stays in
+// its cell.
+func tableCells(line string) []string {
+	line = strings.TrimSpace(line)
+	line = strings.TrimPrefix(line, "|")
+	if strings.HasSuffix(line, "|") && !strings.HasSuffix(line, `\|`) {
+		line = line[:len(line)-1]
+	}
+	var cells []string
+	var cell strings.Builder
+	for k := 0; k < len(line); k++ {
+		switch {
+		case line[k] == '\\' && k+1 < len(line) && line[k+1] == '|':
+			cell.WriteByte('|')
+			k++
+		case line[k] == '|':
+			cells = append(cells, strings.TrimSpace(cell.String()))
+			cell.Reset()
+		default:
+			cell.WriteByte(line[k])
+		}
+	}
+	return append(cells, strings.TrimSpace(cell.String()))
+}
+
 var (
-	headingRe = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
-	bulletRe  = regexp.MustCompile(`^\s*[-*•]\s+(.*)$`)
-	numberRe  = regexp.MustCompile(`^\s*\d+[.)]\s+(.*)$`)
-	codeRe    = regexp.MustCompile("`([^`]+)`")
-	boldRe    = regexp.MustCompile(`\*\*([^*]+)\*\*`)
-	italicRe  = regexp.MustCompile(`(^|[^*\w])\*([^*\s][^*]*)\*`)
-	mdLinkRe  = regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s)]+|/[^\s)]*)\)`)
-	urlRe     = regexp.MustCompile(`https?://[^\s<>()\[\]"'` + "`" + `]+`)
+	tableSepRe = regexp.MustCompile(`^\|\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$`)
+	headingRe  = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
+	bulletRe   = regexp.MustCompile(`^\s*[-*•]\s+(.*)$`)
+	numberRe   = regexp.MustCompile(`^\s*\d+[.)]\s+(.*)$`)
+	codeRe     = regexp.MustCompile("`([^`]+)`")
+	boldRe     = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+	italicRe   = regexp.MustCompile(`(^|[^*\w])\*([^*\s][^*]*)\*`)
+	mdLinkRe   = regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s)]+|/[^\s)]*)\)`)
+	urlRe      = regexp.MustCompile(`https?://[^\s<>()\[\]"'` + "`" + `]+`)
 )
 
 // inline escapes a line and renders its inline Markdown. Code spans are

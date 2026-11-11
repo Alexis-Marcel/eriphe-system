@@ -290,6 +290,9 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .bubble code, .prose code { background: var(--surface-2); padding: 1px 5px; border-radius: 6px; }
 .bubble pre code, .prose pre code { background: none; padding: 0; }
 .md-h { font-weight: 600; }
+.bubble table, .prose table, .md table { display: block; max-width: 100%; overflow-x: auto; margin: .6em 0; border-collapse: collapse; font-size: .9rem; }
+.bubble th, .bubble td, .prose th, .prose td, .md th, .md td { padding: 5px 10px; border: 1px solid var(--border); text-align: left; vertical-align: top; }
+.bubble th, .prose th, .md th { background: var(--surface-2); font-weight: 600; }
 
 .thinking .bubble { padding: 14px 18px; }
 .dots { display: inline-flex; gap: 5px; }
@@ -686,7 +689,6 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
   .workspace, .workspace.side-off { grid-template-columns: minmax(0, 1fr); }
   .chat, .chat-scroll, .chat-inner, .messages { min-width: 0; max-width: 100%; }
   .bubble pre, .prose pre { max-width: 100%; }
-  .bubble table, .prose table { display: block; max-width: 100%; overflow-x: auto; }
   .bubble img { max-width: 100%; height: auto; }
   .workspace .side, .workspace.side-off .side {
     position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; top: calc(env(safe-area-inset-top) + 40px);
