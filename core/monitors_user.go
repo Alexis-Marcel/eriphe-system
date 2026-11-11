@@ -255,7 +255,8 @@ func (c *core) monitorEventCount(name string, since time.Time) int {
 func (c *core) skillsFollowing(name string) []string {
 	var out []string
 	for _, sk := range c.triggeredSkills() {
-		if strings.HasPrefix(sk.Trigger.Kind, "monitor.") && strings.EqualFold(sk.Trigger.Filters["key"], name) {
+		monitorKind := slices.ContainsFunc(sk.Trigger.Kinds, func(k string) bool { return strings.HasPrefix(k, "monitor.") })
+		if monitorKind && strings.EqualFold(sk.Trigger.Filters["key"], name) {
 			out = append(out, sk.Name)
 		}
 	}
