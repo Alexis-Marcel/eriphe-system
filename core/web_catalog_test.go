@@ -20,7 +20,7 @@ func catalogWeb(t *testing.T, mutate func(*Config)) (*testWeb, *catalogCore, str
 func TestWebAddToolWithToken(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, nil)
 	form := url.Values{"preset": {"home-assistant"}, "name": {"maison"}, "use": {"the house"}, "kind": {"remote"},
-		"url": {"http://ha.local:8123/api/mcp"}, "auth": {"bearer"}, "token": {"ha-token-value-42"}, "trust": {"1"}}
+		"url": {"http://ha.local:8123/api/mcp"}, "auth": {"bearer"}, "token": {"ha-token-value-42"}, "access": {accessReads}}
 	// Without the token: the form comes back with why, nothing saved.
 	noTok := url.Values{}
 	for k, v := range form {
@@ -35,7 +35,7 @@ func TestWebAddToolWithToken(t *testing.T) {
 		t.Fatalf("save: %d %v %s", code, h, body)
 	}
 	srv := c.conf().Servers["maison"]
-	if srv.Auth == nil || srv.Auth.BearerFile != "vault:server.maison.token" || !srv.TrustAnnotations {
+	if srv.Auth == nil || srv.Auth.BearerFile != "vault:server.maison.token" || !srv.freeReads() {
 		t.Fatalf("server = %+v", srv)
 	}
 	waitStatus(t, c.pool.get("maison"), statusReady)
@@ -121,7 +121,7 @@ func TestWebPresetsAreValid(t *testing.T) {
 			name = card.Base // the tool's one server
 		}
 		srv := c.conf().Servers[name]
-		if srv.Use == "" || srv.TrustAnnotations != p.Trust || srv.level() != p.level() {
+		if srv.Use == "" || srv.level() != p.level() {
 			t.Errorf("preset %s: %+v", p.ID, srv)
 		}
 		if p.Kind == "remote" && (srv.URL == "" || srv.authKind() != p.Auth) {

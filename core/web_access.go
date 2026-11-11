@@ -18,14 +18,11 @@ import (
 // their allowed actions the workspace's. Its connection has its form, or
 // a page of its own.
 
-// formAccess reads the access level a form posted: one of the levels, or
-// the API's "trust" for reads free.
-func formAccess(v string, trust bool) string {
-	switch {
-	case v != "" && validAccess(v):
+// formAccess reads the access level a form posted: one of the levels, else
+// ask.
+func formAccess(v string) string {
+	if v != "" && validAccess(v) {
 		return v
-	case trust:
-		return accessReads
 	}
 	return accessAsk
 }
@@ -52,11 +49,10 @@ type toolAccess struct {
 	Allowed []allowedAction
 	Saved   bool
 	Error   string
-	// Its grid, what believing the server's annotations says, and its tools.
-	Rows    []gridRow
-	Trusted bool
-	Tools   []toolException
-	Own     map[string]string // its own exceptions, of the tools listed now or not
+	// Its grid and its tools.
+	Rows  []gridRow
+	Tools []toolException
+	Own   map[string]string // its own exceptions, of the tools listed now or not
 	// Inherited is what an account has from its server's exceptions.
 	Inherited map[string]string
 	// Connection is the page of its connection, when it has one.
@@ -120,12 +116,12 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 	for _, c := range cases {
 		v.Rows = append(v.Rows, gridRow{Category: c, Value: access.grid.value(c), Greyed: access.ceiling && c != catRead})
 	}
-	v.Trusted, v.Own = access.trusted, own
+	v.Own = own
 	if u := w.c.pool.get(name); u != nil {
 		var tools []*mcp.Tool
 		v.Status, _, tools = u.snapshot()
 		for _, t := range tools {
-			v.Tools = append(v.Tools, toolException{t.Name, toolCategory(t, access.trusted), access.exceptions[t.Name]})
+			v.Tools = append(v.Tools, toolException{t.Name, toolCategory(t), access.exceptions[t.Name]})
 		}
 	}
 	for name, value := range own { // a tool not listed now keeps its line: its exception can go
@@ -224,7 +220,6 @@ func (v toolAccess) posted(r *http.Request) toolAccess {
 			v.Tools[i].Value = r.PostForm.Get("exception-" + t.Name)
 		}
 	}
-	v.Trusted = r.PostFormValue("trust") != ""
 	return v
 }
 
@@ -238,14 +233,14 @@ func (w *web) saveGrid(r *http.Request, name, account string, srv Server, v tool
 	if err != nil {
 		return err
 	}
-	exceptions, trusted := formExceptions(r, g, v), r.PostFormValue("trust") != ""
+	exceptions := formExceptions(r, g, v)
 	if err := (Server{Grid: &g, Exceptions: exceptions}).checkAccess(); err != nil {
 		return errInvalid(err)
 	}
 	if account != "" {
-		return w.c.setAccountGrid(name, account, accountGrid{Grid: g, Exceptions: exceptions, Trust: &trusted})
+		return w.c.setAccountGrid(name, account, accountGrid{Grid: g, Exceptions: exceptions})
 	}
-	srv.Grid, srv.Exceptions, srv.TrustAnnotations = &g, exceptions, trusted
+	srv.Grid, srv.Exceptions = &g, exceptions
 	srv.Access = ""
 	return w.c.putServer(putUpdate, name, srv, nil)
 }

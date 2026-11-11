@@ -215,7 +215,7 @@ func TestVendorPageThenConnect(t *testing.T) {
 		t.Fatalf("callback: %s", body)
 	}
 	srv := c.conf().Servers["linear-pro"]
-	if srv.URL != f.srv.URL+"/mcp" || srv.authKind() != "oauth" || srv.Use != "tickets du travail" || srv.TrustAnnotations {
+	if srv.URL != f.srv.URL+"/mcp" || srv.authKind() != "oauth" || srv.Use != "tickets du travail" || srv.freeReads() {
 		t.Fatalf("server = %+v", srv)
 	}
 	// Cancelled at the vendor: nothing added, and the list says so.
@@ -255,8 +255,8 @@ func TestAccessChoiceMapsToPolicy(t *testing.T) {
 	code, state := f.authorize(authURL)
 	callback(t, tw, "code="+code+"&state="+url.QueryEscape(state))
 	waitStatus(t, c.pool.get("linear"), statusReady)
-	if !c.conf().Servers["linear"].TrustAnnotations {
-		t.Fatal("reads free did not trust the annotations")
+	if !c.conf().Servers["linear"].freeReads() {
+		t.Fatal("reads free not kept")
 	}
 	if d, _ := c.decide("mcp__linear__search", nil); d != decideAllow {
 		t.Fatalf("a read with reads free: %q", d)
@@ -271,8 +271,8 @@ func TestAccessChoiceMapsToPolicy(t *testing.T) {
 		t.Fatalf("edit: %d %v", code, h)
 	}
 	waitStatus(t, c.pool.get("linear"), statusReady)
-	if c.conf().Servers["linear"].TrustAnnotations {
-		t.Fatal("ask everything still trusts the annotations")
+	if c.conf().Servers["linear"].freeReads() {
+		t.Fatal("ask everything still reads free")
 	}
 	if d, _ := c.decide("mcp__linear__search", nil); d != decideAsk {
 		t.Fatalf("a read with ask everything: %q", d)
@@ -446,7 +446,7 @@ func TestMailSwitchNeedsPassword(t *testing.T) {
 	}
 	a, _ := serviceAccount(t, c.core, mailService, "sam@gmail.com")
 	file := c.conf().runSpecs["mail"].Env[a.secretEnv()].File
-	if pw, _ := readSecret(file); pw != "gmail-pw" || c.conf().Servers["mail"].TrustAnnotations || c.conf().Servers["mail"].AccountAccess["sam@gmail.com"] != accessAsk {
+	if pw, _ := readSecret(file); pw != "gmail-pw" || c.conf().Servers["mail"].freeReads() || c.conf().Servers["mail"].AccountAccess["sam@gmail.com"] != accessAsk {
 		t.Fatalf("same mailbox: %q %+v", pw, c.conf().Servers["mail"])
 	}
 	// The picker on an edit, then Free.
@@ -577,7 +577,7 @@ func TestAdvancedOptionsStillWork(t *testing.T) {
 	if code, body, h := tw.post("/settings/tools", gh, csrf); code != 200 || h.Get("HX-Redirect") != "/settings/tools?saved=github&tool=github&new=1" {
 		t.Fatalf("github save: %d %s", code, body)
 	}
-	if s := c.conf().Servers["github"]; s.URL != "https://ghe.example.com/mcp/" || s.Timeout != 30 || !s.TrustAnnotations {
+	if s := c.conf().Servers["github"]; s.URL != "https://ghe.example.com/mcp/" || s.Timeout != 30 || !s.freeReads() {
 		t.Fatalf("github = %+v", s)
 	}
 	// Home Assistant: the address is the user's own, asked with an example.

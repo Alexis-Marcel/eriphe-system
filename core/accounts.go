@@ -663,7 +663,7 @@ func keepAccounts(srv Server, cfg svcConfig) Server {
 		if grids == nil {
 			grids = map[string]accountGrid{}
 		}
-		grids[a.Name] = accountGrid{Grid: base.grid, Trust: &base.trusted}
+		grids[a.Name] = accountGrid{Grid: base.grid}
 	}
 	srv.AccountGrids = grids
 	return srv
@@ -734,9 +734,6 @@ func (c *core) writeService(svc toolCard, st svcServer, srv Server, cfg svcConfi
 	srv.Run = marshalRun(spec)
 	level := srv.level()
 	srv.Access = level
-	if srv.Grid == nil && len(srv.AccountGrids) == 0 {
-		srv.TrustAnnotations = level != accessAsk // with a grid, it is a switch of its own
-	}
 	mode := putUpdate
 	if !exists {
 		mode = putCreate

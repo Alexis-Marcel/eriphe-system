@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,22 +17,24 @@ import (
 func TestToolCategory(t *testing.T) {
 	no, yes := false, true
 	cases := []struct {
-		name    string
-		a       *mcp.ToolAnnotations
-		trusted bool
-		want    string
+		name string
+		a    *mcp.ToolAnnotations
+		want string
 	}{
-		{"read", &mcp.ToolAnnotations{ReadOnlyHint: true}, true, catRead},
-		{"change", &mcp.ToolAnnotations{OpenWorldHint: &no, DestructiveHint: &no}, true, catChange},
-		{"delete", &mcp.ToolAnnotations{OpenWorldHint: &no, DestructiveHint: &yes}, true, catDelete},
-		{"delete by default", &mcp.ToolAnnotations{OpenWorldHint: &no}, true, catDelete},
-		{"send", &mcp.ToolAnnotations{OpenWorldHint: &yes, DestructiveHint: &no}, true, catSend},
-		{"send by default", &mcp.ToolAnnotations{DestructiveHint: &no}, true, catSend},
-		{"unannotated", nil, true, catSend},
-		{"not believed", &mcp.ToolAnnotations{ReadOnlyHint: true}, false, catSend},
+		{"read", &mcp.ToolAnnotations{ReadOnlyHint: true}, catRead},
+		{"change", &mcp.ToolAnnotations{OpenWorldHint: &no, DestructiveHint: &no}, catChange},
+		{"delete", &mcp.ToolAnnotations{OpenWorldHint: &no, DestructiveHint: &yes}, catDelete},
+		{"delete by default", &mcp.ToolAnnotations{OpenWorldHint: &no}, catDelete},
+		{"send", &mcp.ToolAnnotations{OpenWorldHint: &yes, DestructiveHint: &no}, catSend},
+		{"send by default", &mcp.ToolAnnotations{DestructiveHint: &no}, catSend},
+		{"unannotated", nil, catSend},
+		{"annotated, empty", &mcp.ToolAnnotations{}, catSend},
+	}
+	if toolCategory(nil) != catSend {
+		t.Error("no tool is not Send")
 	}
 	for _, tc := range cases {
-		if got := toolCategory(&mcp.Tool{Name: "x", Annotations: tc.a}, tc.trusted); got != tc.want {
+		if got := toolCategory(&mcp.Tool{Name: "x", Annotations: tc.a}); got != tc.want {
 			t.Errorf("%s = %s, want %s", tc.name, got, tc.want)
 		}
 	}
@@ -48,17 +51,17 @@ func TestLevelsReadAsGrids(t *testing.T) {
 		if got := levelGrid(level); got != want {
 			t.Errorf("%s = %+v", level, got)
 		}
-		if got := gridLevel(want, level != accessAsk); got != level {
+		if got := gridLevel(want); got != level {
 			t.Errorf("%s comes back as %s", level, got)
 		}
 	}
 	// What no level says is the closest with writes, so a credential keeps them.
-	if got := gridLevel(accessGrid{Delete: gridNever, Send: gridFree}, true); got != accessReads {
+	if got := gridLevel(accessGrid{Delete: gridNever, Send: gridFree}); got != accessReads {
 		t.Errorf("a grid of its own = %s", got)
 	}
-	// Annotations not believed: every tool is Send, on approval.
+	// Ask everything: a read is still a read, on approval.
 	s := Server{Access: accessAsk}
-	if f := s.toolFacts(&mcp.Tool{Name: "x", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, nil); f.category != catSend || f.value != gridApproval {
+	if f := s.toolFacts(&mcp.Tool{Name: "x", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, nil); f.category != catRead || f.value != gridApproval {
 		t.Errorf("ask = %+v", f)
 	}
 }
@@ -90,7 +93,7 @@ func TestGridRowsAndExceptions(t *testing.T) {
 	no := false
 	move := &mcp.Tool{Name: "move", Annotations: &mcp.ToolAnnotations{OpenWorldHint: &no, DestructiveHint: &no}}
 	send := &mcp.Tool{Name: "send"}
-	s := Server{TrustAnnotations: true, Grid: &accessGrid{Change: gridNever, Send: gridFree}}
+	s := Server{Grid: &accessGrid{Change: gridNever, Send: gridFree}}
 	if lends(s, move) || !lends(s, send) {
 		t.Errorf("lent: move %v, send %v", lends(s, move), lends(s, send))
 	}
@@ -106,7 +109,7 @@ func TestAccountGrids(t *testing.T) {
 	no := false
 	move := &mcp.Tool{Name: "move", Annotations: &mcp.ToolAnnotations{OpenWorldHint: &no, DestructiveHint: &no}}
 	read := &mcp.Tool{Name: "search", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}
-	s := Server{TrustAnnotations: true, AccountGrids: map[string]accountGrid{
+	s := Server{AccountGrids: map[string]accountGrid{
 		"pro@example.org":   {Grid: accessGrid{Change: gridNever}},
 		"perso@example.org": {Grid: accessGrid{Change: gridFree}, Exceptions: map[string]string{"search": gridNever}},
 	}}
@@ -234,12 +237,12 @@ func TestToolPageSavesTheGrid(t *testing.T) {
 	code, state := f.authorize(authURL)
 	callback(t, tw, "code="+code+"&state="+url.QueryEscape(state))
 	waitStatus(t, c.pool.get("linear"), statusReady)
-	form := url.Values{"grid-read": {gridFree}, "grid-change": {gridFree}, "grid-delete": {gridApproval}, "grid-send": {gridNever}, "trust": {"1"}}
+	form := url.Values{"grid-read": {gridFree}, "grid-change": {gridFree}, "grid-delete": {gridApproval}, "grid-send": {gridNever}}
 	if code, _, h := tw.post("/settings/tools/linear/access", form, csrf); code != 200 || h.Get("HX-Redirect") == "" {
 		t.Fatalf("save: %d %v", code, h)
 	}
 	s := c.conf().Servers["linear"]
-	if s.Grid == nil || *s.Grid != (accessGrid{gridFree, gridFree, gridApproval, gridNever}) || !s.TrustAnnotations {
+	if s.Grid == nil || *s.Grid != (accessGrid{gridFree, gridFree, gridApproval, gridNever}) {
 		t.Fatalf("saved %+v", s)
 	}
 	waitStatus(t, c.pool.get("linear"), statusReady) // saved, it reconnects
@@ -250,6 +253,7 @@ func TestToolPageSavesTheGrid(t *testing.T) {
 	// A shortcut fills the grid in the page: it saves nothing, nor is it the
 	// button Enter presses.
 	if !strings.Contains(body, `type="button" data-fill="never"`) || !strings.Contains(body, `type="button" data-fill="free"`) ||
+		!strings.Contains(body, `type="button" data-fill="approval"`) || strings.Contains(body, `name="trust"`) ||
 		!strings.Contains(body, `class="alert free-warn"`) {
 		t.Fatalf("shortcuts: %s", body)
 	}
@@ -265,13 +269,6 @@ func TestToolPageSavesTheGrid(t *testing.T) {
 	// Every row is needed: a form without one resets nothing.
 	if _, _, h := tw.post("/settings/tools/linear/access", url.Values{"grid-send": {gridFree}}, csrf); h.Get("HX-Redirect") != "" {
 		t.Fatal("a partial form saved")
-	}
-	// Without the switch, the annotations do not count.
-	form.Set("grid-send", gridFree)
-	form.Del("trust")
-	tw.post("/settings/tools/linear/access", form, csrf)
-	if s := c.conf().Servers["linear"]; s.TrustAnnotations || s.trusts() {
-		t.Fatalf("trust: %+v", s)
 	}
 }
 
@@ -347,7 +344,7 @@ func TestAccountPageSavesItsGrid(t *testing.T) {
 			t.Fatalf("add %s: %d %s", addr, code, body)
 		}
 	}
-	form := url.Values{"grid-read": {gridFree}, "grid-change": {gridNever}, "grid-delete": {gridNever}, "grid-send": {gridNever}, "trust": {"1"}}
+	form := url.Values{"grid-read": {gridFree}, "grid-change": {gridNever}, "grid-delete": {gridNever}, "grid-send": {gridNever}}
 	if _, _, h := tw.post("/settings/tools/mail/access", form, csrf); h.Get("HX-Redirect") != "" {
 		t.Fatal("saved on the server of several accounts")
 	}
@@ -363,16 +360,11 @@ func TestAccountPageSavesItsGrid(t *testing.T) {
 		t.Fatalf("pro %+v perso %+v", pro, perso)
 	}
 	srv := c.conf().Servers["mail"]
-	if a, ok := srv.accountAccess(map[string]any{"account": "pro@example.org"}); !ok || a.grid.Send != gridNever || !a.trusted {
+	if a, ok := srv.accountAccess(map[string]any{"account": "pro@example.org"}); !ok || a.grid.Send != gridNever {
 		t.Fatalf("pro: %+v", a)
 	}
 	if a, ok := srv.accountAccess(map[string]any{"account": "perso@example.org"}); !ok || a.level() != accessReads {
 		t.Fatalf("perso: %+v", a)
-	}
-	form.Del("trust")
-	tw.post("/settings/tools/mail/access?account=pro%40example.org", form, csrf)
-	if a, _ := c.conf().Servers["mail"].accountAccess(map[string]any{"account": "pro@example.org"}); a.trusted {
-		t.Fatal("the switch of the account")
 	}
 }
 
@@ -380,10 +372,10 @@ func TestAccountPageSavesItsGrid(t *testing.T) {
 // others: they are written down as they were.
 func TestKeepAccounts(t *testing.T) {
 	grid := accessGrid{gridFree, gridFree, gridApproval, gridNever}
-	srv := Server{Grid: &grid, TrustAnnotations: true, AccountAccess: map[string]string{"pro@example.org": accessFree}}
+	srv := Server{Grid: &grid, AccountAccess: map[string]string{"pro@example.org": accessFree}}
 	kept := keepAccounts(srv, svcConfig{Accounts: []svcAccount{{Name: "pro@example.org"}, {Name: "perso@example.org"}}})
 	a, ok := kept.accountAccess(map[string]any{"account": "perso@example.org"})
-	if !ok || a.grid != grid || !a.trusted {
+	if !ok || a.grid != grid {
 		t.Fatalf("perso: %+v", a)
 	}
 	if _, ok := kept.AccountGrids["pro@example.org"]; ok || srv.AccountGrids != nil {
@@ -394,7 +386,7 @@ func TestKeepAccounts(t *testing.T) {
 // An exception that does more than read needs a credential that can.
 func TestExceptionKeepsTheCredential(t *testing.T) {
 	never := accessGrid{gridFree, gridNever, gridNever, gridNever}
-	s := Server{Grid: &never, TrustAnnotations: true}
+	s := Server{Grid: &never}
 	if s.level() != accessReadOnly {
 		t.Fatalf("level = %s", s.level())
 	}
@@ -423,6 +415,54 @@ func TestConnectionPages(t *testing.T) {
 	} {
 		if got := connectionPage("x", "", tc.p, tc.auth, tc.source); got != tc.want {
 			t.Errorf("%+v = %q, want %q", tc, got, tc.want)
+		}
+	}
+}
+
+// The NAS's servers saved when a checkbox said whether to believe their
+// annotations: one not believed counted every tool as Send, and keeps
+// doing so, once; one believed, or an account believed, is left as it was.
+func TestLegacyTrust(t *testing.T) {
+	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	put := func(name, spec string) {
+		if _, err := store.db.Exec(`INSERT INTO catalog (kind, name, spec, updated) VALUES (?, ?, ?, 0)`, kindServer, name, spec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("doubted", `{"url":"https://a.example/mcp","use":"a","grid":{"read":"free","change":"free","send":"never"},"exceptions":{"x":"free"}}`)
+	put("believed", `{"url":"https://b.example/mcp","use":"b","grid":{"read":"free","send":"never"},"trust_annotations":true}`)
+	put("mail", `{"url":"https://m.example/mcp","use":"m","trust_annotations":true,"account_grids":{`+
+		`"pro":{"grid":{"read":"free","send":"approval"},"trust_annotations":false},"perso":{"grid":{"read":"free","send":"never"}}}}`)
+	legacyTrust(store)
+	got := map[string]Server{}
+	rows, _ := store.catalogRows()
+	for _, r := range rows {
+		var s Server
+		json.Unmarshal(r.Spec, &s)
+		got[r.Name] = s
+	}
+	never := accessGrid{gridNever, gridNever, gridNever, gridNever}
+	if s := got["doubted"]; *s.Grid != never || s.Exceptions["x"] != gridFree {
+		t.Errorf("doubted %+v", s)
+	}
+	if s := got["believed"]; *s.Grid != (accessGrid{Read: gridFree, Send: gridNever}) {
+		t.Errorf("believed %+v", s.Grid)
+	}
+	approval := accessGrid{gridApproval, gridApproval, gridApproval, gridApproval}
+	if s := got["mail"]; s.AccountGrids["pro"].Grid != approval || s.AccountGrids["perso"].Grid != (accessGrid{Read: gridFree, Send: gridNever}) {
+		t.Errorf("mail %+v", s.AccountGrids)
+	}
+	// Once: a server saved since, without the field, is not read as doubted.
+	put("later", `{"url":"https://c.example/mcp","use":"c","grid":{"read":"free","send":"never"}}`)
+	legacyTrust(store)
+	rows, _ = store.catalogRows()
+	for _, r := range rows {
+		var s Server
+		if json.Unmarshal(r.Spec, &s); r.Name == "later" && s.Grid.Read != gridFree {
+			t.Errorf("migrated twice: %s", r.Spec)
 		}
 	}
 }

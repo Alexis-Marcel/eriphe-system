@@ -342,7 +342,7 @@ func TestDriveRoundTrip(t *testing.T) {
 	srv := c.conf().Servers[filesService.Base]
 	spec, _ := decodeRun(srv.Run)
 	if !strings.HasPrefix(spec.Image, filesService.Image) || spec.Env[accountEnv(toolTokenEnv, "sam@example.org")].File != "vault:"+samSecret(t, c.core) ||
-		strings.Contains(string(srv.Run), "the-refresh") || !srv.TrustAnnotations {
+		strings.Contains(string(srv.Run), "the-refresh") {
 		t.Fatalf("server: %s", srv.Run)
 	}
 	env, err := lendService(spec)

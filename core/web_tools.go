@@ -595,7 +595,7 @@ func readToolForm(r *http.Request) toolForm {
 		Node: v("node"), Needs: v("needs"), Prefers: v("prefers"), User: v("user"),
 		Volume: on("volume"), Egress: on("egress"), Writable: on("writable"),
 		Account: v("account")}
-	f.Access = formAccess(v("access"), on("trust"))
+	f.Access = formAccess(v("access"))
 	f.InDialog = on("dialog")
 	if slug := slugName(f.Name); slug != "" {
 		f.Name = slug
@@ -621,7 +621,7 @@ func (f toolForm) server(r *http.Request, old *Server) (Server, credentials, err
 	if old != nil {
 		s.Exceptions = old.Exceptions
 		if old.level() == f.Access { // the form shows a level: the grid behind it stays
-			s.Grid, s.AccountGrids, s.TrustAnnotations = old.Grid, old.AccountGrids, old.TrustAnnotations
+			s.Grid, s.AccountGrids = old.Grid, old.AccountGrids
 		}
 	}
 	if f.Use == "" {

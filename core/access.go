@@ -55,24 +55,20 @@ func (s Server) level() string {
 	return s.baseAccess().level()
 }
 
-// ownLevel is a server's named level. An older entry has trust_annotations
-// only: true was "reads free", false "ask me everything".
+// ownLevel is a server's named level: ask without one.
 func (s Server) ownLevel() string {
 	if s.Access != "" {
 		return s.Access
 	}
-	if s.TrustAnnotations {
-		return accessReads
-	}
 	return accessAsk
 }
 
-// trusts tells whether the server's own readOnlyHint counts.
-func (s Server) trusts() bool { return s.level() != accessAsk }
+// freeReads tells whether a server's reads may go free (it does not ask
+// everything): its read-only tools are then the brain's to call.
+func (s Server) freeReads() bool { return s.level() != accessAsk }
 
-// withLevel sets a server's access level, and trust_annotations to match
-// for whatever still reads it; a server of several accounts gets it for
-// each of them.
+// withLevel sets a server's access level; a server of several accounts
+// gets it for each of them.
 func (s Server) withLevel(level string) Server {
 	if accounts := s.accountAccesses(); len(accounts) > 0 {
 		next := map[string]string{}
@@ -82,7 +78,7 @@ func (s Server) withLevel(level string) Server {
 		s.AccountAccess = next
 	}
 	s.Grid, s.AccountGrids = nil, nil // a level replaces a grid
-	s.Access, s.TrustAnnotations = level, level != accessAsk
+	s.Access = level
 	return s
 }
 

@@ -85,7 +85,7 @@ func wantKey(t *testing.T, err error, key string) {
 
 func TestCatalogServers(t *testing.T) {
 	c := newDynamicCore(t, nil)
-	home := Server{URL: "http://ha.local:8123/api/mcp", Auth: &ServerAuth{}, Use: "the house", TrustAnnotations: true}
+	home := Server{URL: "http://ha.local:8123/api/mcp", Auth: &ServerAuth{}, Use: "the house", Access: accessReads}
 	if err := c.putServer(putCreate, "home", home, credentials{"token": "ha-long-lived"}); err != nil {
 		t.Fatal(err)
 	}

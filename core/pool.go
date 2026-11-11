@@ -470,7 +470,7 @@ func (u *upstream) call(ctx context.Context, tool string, args json.RawMessage) 
 }
 
 // readOnly tells whether a catalog tool, by its Claude Code name, is
-// read-only by its own annotations on a server trusted for them.
+// read-only by its own annotations on a server whose reads are free.
 func (p *pool) readOnly(claudeName string) bool {
 	if p == nil {
 		return false
@@ -480,7 +480,7 @@ func (p *pool) readOnly(claudeName string) bool {
 		return false
 	}
 	u := p.get(server)
-	if u == nil || !u.srv.trusts() {
+	if u == nil || !u.srv.freeReads() {
 		return false
 	}
 	t := u.toolByClaudeName(tool)

@@ -10,8 +10,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// newMailCore is a core whose catalog has a mail server trusted for its
-// annotations: a read, an action that stays in the mailbox, and a send.
+// newMailCore is a core whose catalog has a mail server at access (reads
+// free when empty): a read, an action that stays in the mailbox, and a send.
 func newMailCore(t *testing.T, access string) *core {
 	t.Helper()
 	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
@@ -19,7 +19,7 @@ func newMailCore(t *testing.T, access string) *core {
 		t.Fatal(err)
 	}
 	cfg := &Config{Servers: map[string]Server{
-		"mail": {URL: "https://mail.example/mcp", Auth: &ServerAuth{None: true}, Use: "mail", TrustAnnotations: true, Access: access},
+		"mail": {URL: "https://mail.example/mcp", Auth: &ServerAuth{None: true}, Use: "mail", Access: cmpOr(access, accessReads)},
 	}}
 	if err := cfg.checkServers(); err != nil {
 		t.Fatal(err)
