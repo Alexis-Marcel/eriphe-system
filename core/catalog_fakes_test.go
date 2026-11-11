@@ -24,6 +24,7 @@ type fakeMonitor struct {
 	failing bool
 	calls   int
 	rules   []map[string]any // alerts: Grafana-like alert rules, each uid, name, state
+	cpu     float64          // status: data.cpu
 }
 
 func (m *fakeMonitor) set(state, version string) {
@@ -44,7 +45,7 @@ func (m *fakeMonitor) server() *mcp.Server {
 			if m.failing {
 				return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "unreachable"}}}, nil, nil
 			}
-			return nil, map[string]any{"service": in.Service, "data": map[string]any{"state": m.state, "version": m.version}}, nil
+			return nil, map[string]any{"service": in.Service, "data": map[string]any{"state": m.state, "version": m.version, "cpu": m.cpu}}, nil
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "alerts", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
 		func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {

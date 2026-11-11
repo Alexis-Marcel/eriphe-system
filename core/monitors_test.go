@@ -134,6 +134,65 @@ func TestMonitorNew(t *testing.T) {
 	}
 }
 
+// cross: a measure becomes a state; only a confirmed crossing tells, either
+// way; a number already past the limit tells at once.
+func TestMonitorCross(t *testing.T) {
+	c, mon, now := pollCore(t)
+	limit := 90.0
+	mon.cpu = 47
+	approvedMonitor(t, c, "cpu", monitorSpec{Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 1,
+		Cond: condCross, Path: "data.cpu", Above: &limit})
+	at := func(min int, cpu float64) {
+		mon.cpu = cpu
+		lookAt(c, now.Add(time.Duration(2*min)*time.Minute)) // every minute: each step is due
+		lookAt(c, now.Add(time.Duration(2*min)*time.Minute+monitorConfirm))
+	}
+	at(0, 47)
+	at(1, 52)
+	at(2, 95)
+	at(3, 97)
+	at(4, 60)
+	es := eventsOf(t, c, evMonitorCrossed)
+	if len(es) != 2 || es[0].Payload["holds"] != true || es[1].Payload["holds"] != false || es[0].Payload["value"] != 95.0 || es[0].Payload["above"] != 90.0 {
+		t.Fatalf("crossed %+v", es)
+	}
+	// A spike that does not hold on its second look tells nothing.
+	mon.cpu = 99
+	lookAt(c, now.Add(12*time.Minute))
+	mon.cpu = 50
+	lookAt(c, now.Add(12*time.Minute+monitorConfirm))
+	if es := eventsOf(t, c, evMonitorCrossed); len(es) != 2 {
+		t.Fatalf("a spike told: %+v", es)
+	}
+	// Already past the limit at its first look: it tells.
+	low := 200.0
+	mon.cpu = 150
+	approvedMonitor(t, c, "prix", monitorSpec{Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 1,
+		Cond: condCross, Path: "data.cpu", Below: &low})
+	lookAt(c, now.Add(20*time.Minute))
+	lookAt(c, now.Add(20*time.Minute+monitorConfirm))
+	var prix []journalEvent
+	for _, e := range eventsOf(t, c, evMonitorCrossed) {
+		if e.Key == "prix" {
+			prix = append(prix, e)
+		}
+	}
+	if len(prix) != 1 || prix[0].Payload["below"] != 200.0 {
+		t.Fatalf("prix %+v", prix)
+	}
+	for _, s := range []monitorSpec{
+		{Server: "monitor", Tool: "status", Cond: condCross, Path: "data.cpu"},
+		{Server: "monitor", Tool: "status", Cond: condCross, Path: "data.cpu", Above: &limit, Below: &low},
+	} {
+		if _, err := c.writeMonitor("x", s, nil); err == nil {
+			t.Errorf("%+v was written", s)
+		}
+	}
+	if m, _ := c.monitorNamed("cpu"); !strings.Contains(m.Spec.Text("fr"), "au-dessus de 90") {
+		t.Fatalf("text %q", m.Spec.Text("fr"))
+	}
+}
+
 // Three failed looks in a row tell once; the next good one tells the
 // recovery; a failure is no change.
 func TestMonitorFailures(t *testing.T) {

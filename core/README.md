@@ -1448,7 +1448,7 @@ the rest dropped.
 |---|---|---|---|
 | `mail.received` | the mail server (any server offering `eriphe://events`, below) | the account | unless the server is trusted |
 | `hook.received` | an incoming address was called (below); `status` from the body's top-level `status` when it is a short word (`firing`, `resolved`) | the address's name | yes |
-| `monitor.changed`, `monitor.new`, `monitor.failed`, `monitor.recovered` | a [monitor](#monitors) | the monitor's name | unless its server is trusted |
+| `monitor.changed`, `monitor.new`, `monitor.crossed`, `monitor.failed`, `monitor.recovered` | a [monitor](#monitors) | the monitor's name | unless its server is trusted |
 | `task.ended` | a worker task's end | the task | no |
 | `session.ended` | a work session's end | `session:<id>` | no |
 | `user.returned` | the user's first activity after an absence of an hour or more | | no |
@@ -1466,9 +1466,10 @@ cannot emit one of eriphe-core's families (`hook.`, `task.`, `session.`, `user.`
 ### Monitors
 
 A monitor (`monitors.go`, #357) **detects, and only that**: it writes events, and a [triggered
-skill](#triggered-skills) reacts to them. It never decides, acts or tells the user: no threshold
-(the system it watches has its own), no judge, no action, no notification. That is what the
-removed rules mixed with detection.
+skill](#triggered-skills) reacts to them. It never decides, acts or tells the user: no judge, no
+action, no notification. That is what the removed rules mixed with detection. What can be
+computed is its own (appeared, changed, crossed); what must be understood is a skill's, with a
+small model and `every` when the events are many.
 
 eriphe-core calls one tool of the catalog itself, with fixed arguments, every 1 minute to 1 day,
 outside any task and without a model, and compares what a path extracts from the result with
@@ -1478,6 +1479,7 @@ what it saw:
 |---|---|---|
 | `changed`: the value at `path` (the whole result if empty) is not the last one, and a second look 30 s later saw the same (a flap tells nothing) | `monitor.changed` | `value`, `was` |
 | `new`: the items of the list at `path` whose `id` was not seen (the last 1000 ids kept) | `monitor.new`, one per item | `id`, `item` |
+| `cross`: the number at `path` goes `above` (or `below`) the limit, or back, confirmed the same way: a measure becomes a state, so 47 % then 52 % is nothing. Before its first look the limit counts as not crossed: a number already past it tells | `monitor.crossed` | `value`, `holds` (true past the limit, false back), `above` or `below` |
 | three failed looks in a row, then the next good one | `monitor.failed`, `monitor.recovered` | `error` |
 
 The first look is the baseline: it tells nothing. A path is fields joined by dots, an index, `*`
@@ -1491,7 +1493,7 @@ change. The result is read as JSON (its structured content, else its text).
   Free in the user's grid (`freeCall`, with its arguments). Checked when it is written and before
   every look: otherwise it waits, with why, and nothing is called.
 - **The user approves it.** The brain proposes one with `write_monitor` (name, server, tool, args,
-  every, cond, path, id): a card (kind `monitor`) says it in words; the yes turns it on from a new
+  every, cond, path, id, above, below): a card (kind `monitor`) says it in words; the yes turns it on from a new
   baseline, the no drops it. A change of an approved one waits the same way, the old one looking
   meanwhile. Written on a tainted turn, the card says so. A triggered task has no such tool.
   `monitors` (free) lists them: state, what each does, its last look, why it waits, its last error.

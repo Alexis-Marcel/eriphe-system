@@ -33,7 +33,10 @@ import (
 //   - new: the items of a list whose id was not seen give one monitor.new
 //     each;
 //   - changed: a value that is not the last one gives monitor.changed, once
-//     a second look half a minute later saw the same: a flap gives nothing.
+//     a second look half a minute later saw the same: a flap gives nothing;
+//   - cross: a number that goes above (or below) a limit, or back, gives
+//     monitor.crossed, confirmed the same way: a measure becomes a state, so
+//     47 % then 52 % is nothing, and 91 % is something.
 //
 // The first look is the baseline. Three failed looks in a row give
 // monitor.failed, the next good one monitor.recovered. Its events are
@@ -61,9 +64,11 @@ const (
 	wayPoll     = "poll"
 	condNew     = "new"
 	condChanged = "changed"
+	condCross   = "cross"
 
 	evMonitorNew       = "monitor.new"
 	evMonitorChanged   = "monitor.changed"
+	evMonitorCrossed   = "monitor.crossed"
 	evMonitorFailed    = "monitor.failed"
 	evMonitorRecovered = "monitor.recovered"
 
@@ -91,8 +96,10 @@ type monitorSpec struct {
 	Args   map[string]any `json:"args,omitempty"`
 	Every  int            `json:"every"` // minutes
 	Cond   string         `json:"cond"`
-	Path   string         `json:"path,omitempty"` // changed: the value; new: the list
-	ID     string         `json:"id,omitempty"`   // new: an item's id, a path in the item
+	Path   string         `json:"path,omitempty"`  // changed: the value; new: the list
+	ID     string         `json:"id,omitempty"`    // new: an item's id, a path in the item
+	Above  *float64       `json:"above,omitempty"` // cross: holds when the number is above
+	Below  *float64       `json:"below,omitempty"` // cross: holds when the number is below
 }
 
 // monitorLook is what its looks saw, kept between them.
@@ -103,6 +110,8 @@ type monitorLook struct {
 	Seen      []string `json:"seen,omitempty"`  // new: the ids seen, the latest last
 	Pending   bool     `json:"pending,omitempty"`
 	PendValue string   `json:"pend_value,omitempty"`
+	Hit       bool     `json:"hit,omitempty"` // cross: the limit was crossed at the last confirmed look
+	PendHit   bool     `json:"pend_hit,omitempty"`
 	Fails     int      `json:"fails,omitempty"`
 	Failed    bool     `json:"failed,omitempty"` // monitor.failed was written
 	Error     string   `json:"error,omitempty"`  // the last look's
@@ -197,9 +206,17 @@ func (s *monitorSpec) check() error {
 	if _, err := parsePath(s.Path); err != nil {
 		return err
 	}
+	if s.Cond != condCross {
+		s.Above, s.Below = nil, nil
+	}
 	switch s.Cond {
 	case "", condChanged:
 		s.Cond, s.ID = condChanged, ""
+	case condCross:
+		s.ID = ""
+		if (s.Above == nil) == (s.Below == nil) {
+			return errors.New("cross needs above or below: the limit a number crosses")
+		}
 	case condNew:
 		if s.ID == "" {
 			return errors.New("new needs id: the field that tells an item from another (id, uid)")
@@ -208,7 +225,7 @@ func (s *monitorSpec) check() error {
 			return err
 		}
 	default:
-		return errors.New("cond is new or changed")
+		return errors.New("cond is new, changed or cross")
 	}
 	return nil
 }
@@ -292,6 +309,13 @@ func (c *core) lookMonitor(ctx context.Context, m *monitor, now time.Time) {
 	switch m.Spec.Cond {
 	case condNew:
 		c.lookNew(m, &st, got)
+	case condCross:
+		pending, err := c.lookCross(m, &st, got)
+		if err != nil {
+			st.Error = err.Error()
+		} else if pending {
+			next = now.Add(monitorConfirm)
+		}
 	default:
 		if c.lookChanged(m, &st, got) {
 			next = now.Add(monitorConfirm)
@@ -346,6 +370,46 @@ func (c *core) lookChanged(m *monitor, st *monitorLook, got any) bool {
 	c.emitMonitor(m, evMonitorChanged, map[string]any{"value": jsonValue(got, shown), "was": st.Shown})
 	st.Pending, st.Value, st.Shown = false, value, shown
 	return false
+}
+
+// lookCross tells when the number crosses the limit, either way; true
+// when a crossing waits for its second look. Before the first look the
+// limit counts as not crossed: a number already past it tells at once.
+func (c *core) lookCross(m *monitor, st *monitorLook, got any) (bool, error) {
+	n, ok := number(got)
+	if !ok {
+		return false, fmt.Errorf("%q is not a number: %s", cmpOr(m.Spec.Path, "the result"), truncate(valueText(got), 80))
+	}
+	hit := m.Spec.Above != nil && n > *m.Spec.Above || m.Spec.Below != nil && n < *m.Spec.Below
+	switch {
+	case hit == st.Hit:
+		st.Known, st.Pending = true, false
+		return false, nil
+	case !st.Pending || st.PendHit != hit:
+		st.Pending, st.PendHit = true, hit
+		return true, nil
+	}
+	st.Known, st.Pending, st.Hit = true, false, hit
+	p := map[string]any{"value": n, "holds": hit}
+	if m.Spec.Above != nil {
+		p["above"] = *m.Spec.Above
+	} else {
+		p["below"] = *m.Spec.Below
+	}
+	c.emitMonitor(m, evMonitorCrossed, p)
+	return false, nil
+}
+
+// number reads a number, or a string that is one ("91.5", "91 %").
+func number(v any) (float64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return x, true
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(x), "%")), 64)
+		return f, err == nil
+	}
+	return 0, false
 }
 
 // lookNew writes one event per item not seen before.
@@ -541,6 +605,13 @@ func (s monitorSpec) Text(lang string) string {
 	if s.Cond == condNew {
 		return fmt.Sprintf(tr(lang, "monitor.text.new"), every, call, cmpOr(s.Path, tr(lang, "monitor.text.whole")), s.ID)
 	}
+	if s.Cond == condCross {
+		key, limit := "monitor.text.above", s.Above
+		if s.Below != nil {
+			key, limit = "monitor.text.below", s.Below
+		}
+		return fmt.Sprintf(tr(lang, key), every, call, cmpOr(s.Path, tr(lang, "monitor.text.whole")), strconv.FormatFloat(*limit, 'f', -1, 64))
+	}
 	return fmt.Sprintf(tr(lang, "monitor.text.changed"), every, call, cmpOr(s.Path, tr(lang, "monitor.text.whole")))
 }
 
@@ -588,7 +659,7 @@ func (c *core) writeMonitor(name string, s monitorSpec, tainted []string) (map[s
 		c.cardProposed(cardMonitor, m.ID)
 	}
 	return map[string]any{"result": "proposed; it waits for the user's approval on its card, then looks as it says. " +
-		"A skill reacts to its events with when: " + evMonitorChanged + " key=" + name + " (or " + evMonitorNew + ", " + evMonitorFailed + ")",
+		"A skill reacts to its events with when: " + evMonitorChanged + " key=" + name + " (or " + evMonitorNew + ", " + evMonitorCrossed + " holds=true, " + evMonitorFailed + ")",
 		"monitor": name}, nil
 }
 
@@ -696,9 +767,11 @@ type writeMonitorIn struct {
 	Tool   string         `json:"tool" jsonschema:"one of its read-only tools, a free read of yours"`
 	Args   map[string]any `json:"args,omitempty" jsonschema:"its fixed arguments"`
 	Every  string         `json:"every,omitempty" jsonschema:"how often it looks: 1m to 1d (2m, 15m, 1h); 5m if empty"`
-	Cond   string         `json:"cond,omitempty" jsonschema:"changed (default): an event when the value at path changes; new: one event per item of the list at path not seen before"`
+	Cond   string         `json:"cond,omitempty" jsonschema:"changed (default): an event when the value at path changes; new: one event per item of the list at path not seen before; cross: an event when the number at path goes past above or below, and when it comes back (holds true or false)"`
 	Path   string         `json:"path,omitempty" jsonschema:"what it compares in the result: fields joined by dots, * for every item of a list, [field=value] to keep some (data.rules[state=firing].name); the whole result if empty"`
 	ID     string         `json:"id,omitempty" jsonschema:"with new: the field of an item that tells it from another (id, uid)"`
+	Above  *float64       `json:"above,omitempty" jsonschema:"with cross: the limit the number goes above (90 for a CPU at 90 %)"`
+	Below  *float64       `json:"below,omitempty" jsonschema:"with cross: the limit the number goes below (200 for a price under 200)"`
 }
 
 type nameIn struct {
@@ -706,7 +779,7 @@ type nameIn struct {
 }
 
 func registerMonitorTools(s *mcp.Server, c *core) {
-	tool(s, "write_monitor", "Propose a monitor, or a change of one: eriphe-core itself calls one read-only tool of the catalog at an interval, without a model, and writes an event when what it watches changes (monitor.changed), when a list gets a new item (monitor.new), or when its looks keep failing (monitor.failed, then monitor.recovered); keyed by its name. It only detects: a skill reacts to its events (write_skill with when: monitor.changed key=<name>). Use it to watch a tool that does not tell by itself (« surveille les alertes Grafana de la prod »): never a time skill that calls the tool every few minutes. Nothing looks before the user approves it on its card.",
+	tool(s, "write_monitor", "Propose a monitor, or a change of one: eriphe-core itself calls one read-only tool of the catalog at an interval, without a model, and writes an event when what it watches changes (monitor.changed), when a list gets a new item (monitor.new), when a number crosses a limit either way (monitor.crossed, holds true or false), or when its looks keep failing (monitor.failed, then monitor.recovered); keyed by its name. It only detects: a skill reacts to its events (write_skill with when: monitor.changed key=<name>). Use it to watch a tool that does not tell by itself (« surveille les alertes Grafana de la prod »): never a time skill that calls the tool every few minutes. Nothing looks before the user approves it on its card.",
 		func(ctx context.Context, in writeMonitorIn) (map[string]any, error) {
 			every := 0
 			if e := strings.TrimSpace(in.Every); e != "" {
@@ -717,7 +790,7 @@ func registerMonitorTools(s *mcp.Server, c *core) {
 				every = int(d / time.Minute)
 			}
 			return c.writeMonitor(in.Name, monitorSpec{Way: wayPoll, Server: in.Server, Tool: in.Tool, Args: in.Args, Every: every,
-				Cond: strings.TrimSpace(in.Cond), Path: in.Path, ID: in.ID}, c.turnTaint())
+				Cond: strings.TrimSpace(in.Cond), Path: in.Path, ID: in.ID, Above: in.Above, Below: in.Below}, c.turnTaint())
 		})
 	tool(s, "monitors", "The user's monitors: each one's name (the key of its events), state (on, paused, proposed), what it does in words, its last look, why it waits or its last error, and a change waiting for the user's card.",
 		func(ctx context.Context, in nameIn) (map[string]any, error) {

@@ -21,6 +21,8 @@ var monitorStrings = map[string]map[string]string{
 		"monitor.text.changed": "toutes les %s, appelle %s et note un changement de %s",
 		"monitor.text.new":     "toutes les %s, appelle %s et note chaque nouvel élément de %s (repéré par %s)",
 		"monitor.text.whole":   "son résultat",
+		"monitor.text.above":   "toutes les %s, appelle %s et note quand %s passe au-dessus de %s, et quand il redescend",
+		"monitor.text.below":   "toutes les %s, appelle %s et note quand %s passe en dessous de %s, et quand il remonte",
 	},
 	"en": {
 		"card.kind.monitor":    "A monitor",
@@ -32,5 +34,7 @@ var monitorStrings = map[string]map[string]string{
 		"monitor.text.changed": "every %s, calls %s and notes a change of %s",
 		"monitor.text.new":     "every %s, calls %s and notes each new item of %s (told apart by %s)",
 		"monitor.text.whole":   "its result",
+		"monitor.text.above":   "every %s, calls %s and notes when %s goes above %s, and when it comes back",
+		"monitor.text.below":   "every %s, calls %s and notes when %s goes below %s, and when it comes back",
 	},
 }
