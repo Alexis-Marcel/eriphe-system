@@ -316,6 +316,11 @@ func TestMonitorTriggersSkill(t *testing.T) {
 	if !strings.Contains(task.Prompt, "monitor.changed") || !strings.Contains(task.Prompt, "2.0.1") {
 		t.Fatalf("prompt %s", task.Prompt)
 	}
+	// One skill on a monitor's failures and recoveries: listed beside it.
+	addTriggered(t, c, "---\nname: sonde\ndescription: la sonde\nwhen: monitor.failed, monitor.recovered key=getout-prod\n---\nPréviens.\n")
+	if got := c.skillsFollowing("getout-prod"); !slices.Contains(got, "sonde") || !slices.Contains(got, "prod") {
+		t.Fatalf("following %v", got)
+	}
 	// A server cannot write a monitor's kinds.
 	if !reservedEventKind(evMonitorChanged) {
 		t.Fatal("monitor. is not reserved")

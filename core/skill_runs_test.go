@@ -15,6 +15,7 @@ func TestSkillTriggerParse(t *testing.T) {
 		"", "when: mail.received\n", "when: monitor.received key=getout\nevery: 15m\n",
 		"when: time weekdays 08:00\nmodel: small\n", "when: mail.received\ntools: [mail, calendar]\ncan: [start-session]\n",
 		"when: monitor.received key=maison status=couche\nevery: 1d\n",
+		"when: monitor.failed, monitor.recovered key=getout-prod\n", "when: monitor.failed,monitor.recovered\n",
 	} {
 		if _, err := parseSkillMD(front(ok)); err != nil {
 			t.Errorf("%q refused: %v", ok, err)
@@ -24,6 +25,7 @@ func TestSkillTriggerParse(t *testing.T) {
 		"every: 15m\n", "when: Mail\n", "when: mail.received key\n", "when: time\n", "when: time weekdays 08:00\nevery: 1h\n",
 		"when: mail.received\nevery: 2m\n", "when: mail.received\nevery: 3d\n", "when: mail.received\ncan: [delete-all]\n",
 		"when: mail.received\ntools: [Bad Name]\n",
+		"when: mail.received, time\n", "when: mail.received, Mail\n", "when: a.b, c.d, e.f, g.h, i.j, k.l\n", "when: , key=x\n",
 	} {
 		if _, err := parseSkillMD(front(bad)); err == nil {
 			t.Errorf("%q accepted", bad)
@@ -37,6 +39,16 @@ func TestSkillTriggerParse(t *testing.T) {
 	}
 	if s := tr.Text("fr"); !strings.Contains(s, "monitor.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "session") {
 		t.Fatalf("text %q", s)
+	}
+	// Several kinds share the filters; the run says each event's kind.
+	m, _ = parseSkillMD(front("when: monitor.failed, monitor.recovered key=getout-prod\n"))
+	for kind, want := range map[string]bool{evMonitorFailed: true, evMonitorRecovered: true, evMonitorChanged: false} {
+		if m.Trigger.matches(journalEvent{Kind: kind, Key: "getout-prod"}) != want {
+			t.Errorf("%s: %v", kind, !want)
+		}
+	}
+	if m.Trigger.matches(journalEvent{Kind: evMonitorFailed, Key: "other"}) {
+		t.Error("the filter is not shared")
 	}
 	m, _ = parseSkillMD(front("when: monitor.received key=getout status=firing\n"))
 	if !m.Trigger.matches(journalEvent{Kind: evMonitorReceived, Key: "getout", Payload: map[string]any{"status": "firing"}}) ||

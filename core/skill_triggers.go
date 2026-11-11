@@ -15,6 +15,7 @@ import (
 //
 //	when: mail.received                      an event kind (event_journal.go)
 //	when: monitor.received key=getout        with filters: the event's key, or a payload field
+//	when: monitor.failed, monitor.recovered key=getout-prod   several kinds, the same filters
 //	when: time weekdays 08:00                at times of day (rule_schedule.go's schedules)
 //	every: 15m                               batch: at most one task per period, with every event since
 //	model: haiku                             the agent its tasks run with (Settings → Agents)
@@ -31,13 +32,15 @@ const (
 	minSkillEvery = 5 * time.Minute
 	maxSkillEvery = 24 * time.Hour
 	maxSkillTools = 10
+	maxWhenKinds  = 5
 )
 
 var skillCans = []string{canSession}
 
 // skillTrigger is a skill's parsed trigger.
 type skillTrigger struct {
-	Kind     string            // an event kind, or whenTime
+	Kind     string            // an event kind (the first), or whenTime
+	Kinds    []string          // every event kind it runs on
 	Filters  map[string]string // key=…, or a payload field=value
 	Schedule *recurrence       // for whenTime
 	When     string            // as written
@@ -67,6 +70,23 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 	}
 	st := &skillTrigger{When: m.When, Model: strings.TrimSpace(m.Model)}
 	words := strings.Fields(m.When)
+	if words[0] != whenTime {
+		// The event kinds come first, by commas or spaces, then the filters.
+		var kinds []string
+		for len(words) > 0 && !strings.Contains(words[0], "=") {
+			for _, k := range strings.Split(words[0], ",") {
+				if k != "" && !slices.Contains(kinds, k) {
+					kinds = append(kinds, k)
+				}
+			}
+			words = words[1:]
+		}
+		if len(kinds) == 0 || len(kinds) > maxWhenKinds {
+			return nil, skillErr("skills.err.when", m.When)
+		}
+		words = append([]string{kinds[0]}, words...)
+		st.Kinds = kinds
+	}
 	st.Kind = words[0]
 	switch {
 	case st.Kind == whenTime:
@@ -75,7 +95,7 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 			return nil, skillErr("skills.err.when", m.When)
 		}
 		st.Schedule = &r
-	case !eventKindRe.MatchString(st.Kind):
+	case slices.ContainsFunc(st.Kinds, func(k string) bool { return !eventKindRe.MatchString(k) || k == whenTime }):
 		return nil, skillErr("skills.err.when", m.When)
 	default:
 		for _, w := range words[1:] {
@@ -155,7 +175,7 @@ func frontList(s string) []string {
 
 // matches tells whether an event fires the trigger.
 func (st *skillTrigger) matches(e journalEvent) bool {
-	if st.Kind == whenTime || e.Kind != st.Kind {
+	if st.Kind == whenTime || !slices.Contains(st.Kinds, e.Kind) {
 		return false
 	}
 	for k, want := range st.Filters {
