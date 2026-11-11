@@ -133,7 +133,7 @@ func (w *web) parse() error {
 }
 
 // sharedTemplates are the files of definitions every page has, not pages.
-var sharedTemplates = []string{"parts", "catalog", "tools", "apps", "connections", "places", "agents", "remote", "folders", "push", "skills", "cards", "convo", "activity", "learned", "access"}
+var sharedTemplates = []string{"parts", "catalog", "tools", "apps", "connections", "places", "agents", "remote", "folders", "push", "skills", "cards", "convo", "activity", "learned", "access", "bot"}
 
 // notify wakes the event streams at once, rather than at their next tick.
 func (w *web) notify() {

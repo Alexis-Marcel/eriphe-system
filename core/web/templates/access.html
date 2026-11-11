@@ -1,13 +1,13 @@
 {{/* Settings → Access (web_access_list.go): every way into Eriphe, one row
      each, as the tools are listed; "Ajouter un accès" opens the catalog.
      Each row opens its page: the web (remote.html), the mobile app (its
-     install and notifications, push.html), a channel's own page (Telegram's: push.html) or an API
+     install and notifications, push.html), a bot channel's own page (bot.html) or an API
      access (below). */}}
 
 {{define "access-page"}}
 {{if eq .View "access-web"}}{{template "access-web" .}}
 {{else if eq .View "access-app"}}{{template "access-app" .}}
-{{else if eq .View "access-telegram"}}{{template "access-telegram" .}}
+{{else if eq .View "access-bot"}}{{template "access-bot" .}}
 {{else if eq .View "access-api"}}{{template "access-api" .}}
 {{else if eq .View "access-new"}}{{template "access-new" .}}
 {{else}}{{template "access" .}}{{end}}
@@ -17,7 +17,7 @@
 {{define "access-back"}}<a class="back" href="/settings/access">{{template "i-back"}}{{t "settings.access"}}</a>{{end}}
 
 {{/* An access's mark: an icon on its colour. */}}
-{{define "access-mark"}}<span class="mark access-mark access-{{.}}" aria-hidden="true">{{if eq . "web"}}{{template "i-globe"}}{{else if eq . "app"}}{{template "i-phone"}}{{else if eq . "telegram"}}{{template "i-send"}}{{else}}{{template "i-plug"}}{{end}}</span>{{end}}
+{{define "access-mark"}}<span class="mark access-mark access-{{.}}" aria-hidden="true">{{if eq . "web"}}{{template "i-globe"}}{{else if eq . "app"}}{{template "i-phone"}}{{else if eq (botIcon .) "send"}}{{template "i-send"}}{{else if eq (botIcon .) "chat"}}{{template "i-chat"}}{{else}}{{template "i-plug"}}{{end}}</span>{{end}}
 
 {{define "access"}}{{with .Data}}
 <header class="page-head page-head-row">
@@ -117,15 +117,6 @@
   <summary><span class="adv-title">{{t "screen.title"}}</span><span class="muted small">{{t "screen.summary"}}</span></summary>
   <pre class="mono small" id="screen-details"></pre>
 </details>
-{{end}}
-
-{{/* Telegram's bot and the link to the user's account (push.html). */}}
-{{define "access-telegram"}}
-<header class="page-head">
-  {{template "access-back"}}
-  <h2>{{t "acc.kind.telegram"}}</h2>
-</header>
-<section class="panel" aria-labelledby="tg-title" id="tg-panel">{{template "telegram" .Data}}</section>
 {{end}}
 
 {{/* An API access (channels_added.go): adding one, or its own page. Each

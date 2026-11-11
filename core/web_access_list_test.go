@@ -139,9 +139,12 @@ func TestWebAccessAPI(t *testing.T) {
 // rows say.
 func TestAccessWords(t *testing.T) {
 	for _, lang := range []string{"fr", "en"} {
-		keys := []string{"settings.access", "acc.lead", "acc.add", "acc.app.none", "acc.app.device", "acc.app.devices", "acc.tg.linked", "acc.tg.notlinked"}
-		for _, k := range []string{entryWeb, entryApp, tgChannel, apiGeneric} {
+		keys := []string{"settings.access", "acc.lead", "acc.add", "acc.app.none", "acc.app.device", "acc.app.devices", "acc.bot.linked", "acc.bot.notlinked"}
+		for _, k := range []string{entryWeb, entryApp, apiGeneric} {
 			keys = append(keys, "acc.kind."+k, "acc.kind."+k+".desc")
+		}
+		for id := range botSpecs { // a bot channel's own words
+			keys = append(keys, "acc.kind."+id, "acc.kind."+id+".desc", id+".how", id+".privacy")
 		}
 		keys = append(keys, "acc.api.how."+apiGeneric)
 		for _, s := range []string{speakerUser, speakerAccount, "trusted", "anyone"} {

@@ -12,7 +12,7 @@ import (
 // conversation goes through, apart from the tools (the catalog), which act.
 // The workspace and push are eriphe-core's own; a service eriphe-core talks
 // to for the user (a chat app's bot) registers itself as one more
-// (registerChannel, from its own file: telegram.go); the user adds others,
+// (registerChannel, from its own file; a bot channel: bot_channel.go); the user adds others,
 // any app that talks with text through a token (channels_added.go). The
 // code here and the router (route.go) know none of them by name. Each
 // channel says:
@@ -248,7 +248,7 @@ func channelNames(lang, ids string) string {
 }
 
 // channelWords are the channels' names as alternatives of a regular
-// expression, "|telegram" ("" without any), for the wording that speaks of
+// expression, "|<a channel>" ("" without any), for the wording that speaks of
 // being told.
 func channelWords() string {
 	var out string

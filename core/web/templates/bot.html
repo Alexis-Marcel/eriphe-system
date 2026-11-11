@@ -1,0 +1,51 @@
+{{/* Access → a bot channel (access.html, web_bot_channel.go, bot_channel.go):
+     its bot and the link to the user's account. The token is never shown
+     back. A channel's own words: acc.kind.<id>, <id>.how, <id>.privacy. */}}
+{{define "access-bot"}}
+<header class="page-head">
+  {{template "access-back"}}
+  <h2>{{t (printf "acc.kind.%s" .Data.ID)}}</h2>
+</header>
+<section class="panel" aria-labelledby="{{.Data.ID}}-title" id="{{.Data.ID}}-panel">{{template "bot-channel" .Data}}</section>
+{{end}}
+
+{{define "bot-frag"}}{{template "bot-channel" .Data}}{{end}}
+
+{{define "bot-channel"}}
+<h3 id="{{.ID}}-title">{{template "i-chat"}}{{tf "bot.title" .Label}}</h3>
+<p class="small muted">{{tf "bot.lead" .Label}}</p>
+<p class="notice">{{t (printf "%s.privacy" .ID)}}</p>
+{{if not .VaultOpen}}<p class="small muted">{{t "bot.err.vault"}}</p>
+{{else if not .Set}}
+<p class="small">{{t (printf "%s.how" .ID)}}</p>
+<form class="stack-form" hx-post="/channels/{{.ID}}/token" hx-target="#{{.ID}}-panel" hx-disabled-elt="find button">
+  <label class="field"><span>{{t "bot.token"}}</span><input type="password" name="token" autocomplete="off" required maxlength="120" placeholder="{{.Placeholder}}"></label>
+  <div class="actions"><button class="btn btn-primary sm" type="submit">{{t "bot.token.save"}}</button></div>
+</form>
+{{else}}
+<p class="small">{{if .Bot}}{{tf "bot.bot" .Bot}}{{else}}{{t "bot.botset"}}{{end}}{{if .Error}} · <span class="tag tag-no" title="{{.Error}}">{{t "bot.failing"}}</span>{{end}}</p>
+{{if .Linked}}
+<p class="small"><span class="tag tag-ok">{{t "bot.linked.tag"}}</span> {{.Name}}</p>
+<div class="actions">
+  <form hx-post="/channels/{{.ID}}/test" hx-swap="none"><button class="btn btn-soft sm" type="submit">{{t "bot.test.button"}}</button></form>
+  <form hx-post="/channels/{{.ID}}/unlink" hx-target="#{{.ID}}-panel" hx-confirm="{{tf "bot.unlinkconfirm" .Label}}"><button class="btn btn-ghost sm" type="submit">{{t "bot.unlink"}}</button></form>
+</div>
+{{else if .Code}}
+<div hx-get="/channels/{{.ID}}" hx-trigger="every 3s" hx-target="#{{.ID}}-panel">
+  <p>{{tf "bot.sendcode" .Label}} <b class="mono">{{.Code}}</b></p>
+  {{if .Open}}<p class="small"><a href="{{.Open}}" target="_blank" rel="noopener">{{tf "bot.openbot" .Label}}</a></p>{{end}}
+  <p class="small muted">{{t "bot.codehint"}}</p>
+</div>
+{{else}}
+<form hx-post="/channels/{{.ID}}/code" hx-target="#{{.ID}}-panel"><button class="btn btn-primary sm" type="submit">{{tf "bot.link" .Label}}</button></form>
+{{end}}
+{{if .Ignored}}<p class="small muted">{{tf "bot.ignored" .Ignored}}</p>{{end}}
+<p class="small muted">{{t "bot.approvals"}}</p>
+<details class="rule-edit"><summary class="small">{{t "bot.change"}}</summary>
+<form class="stack-form" hx-post="/channels/{{.ID}}/token" hx-target="#{{.ID}}-panel" hx-disabled-elt="find button">
+  <label class="field"><span>{{t "bot.token"}}</span><input type="password" name="token" autocomplete="off" required maxlength="120"></label>
+  <div class="actions"><button class="btn btn-soft sm" type="submit">{{t "bot.token.save"}}</button>
+  <button class="btn btn-danger-ghost sm" type="button" hx-post="/channels/{{.ID}}/remove" hx-target="#{{.ID}}-panel" hx-confirm="{{t "bot.removeconfirm"}}">{{t "bot.remove"}}</button></div>
+</form></details>
+{{end}}
+{{end}}
