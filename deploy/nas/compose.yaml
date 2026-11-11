@@ -88,8 +88,8 @@ services:
       # Same path inside and outside: the Docker daemon understands it as is.
       - /mnt/user/appdata/eriphe-system/node:/mnt/user/appdata/eriphe-system/node
       # The shares, at the same path: the node lists their directories,
-      # creates the Eriphe/ subfolder of a folder lent with the right to drop
-      # results, and mounts the folders into the tasks.
+      # takes a snapshot of a folder lent to write, and mounts the folders
+      # into the tasks.
       - /mnt/user:/mnt/user
     # eriphe-system: eriphe-core, the services, and the node's own egress;
     # eriphe-tasks: the tasks, which call it back as eriphe-node:8790 and go

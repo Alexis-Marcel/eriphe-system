@@ -33,7 +33,7 @@ import (
 // pending either way; while a folder's machine is away, a copy that was
 // complete when that machine was last seen will do (syncGrace). The
 // scheduler picks the best of them, as for any task (scheduler.go). With
-// drop or manage the task writes on the copy (for manage, after a snapshot
+// write the task writes on the copy (after a snapshot
 // of the copy, on the machine running it), and Syncthing brings that back
 // to the folder's machine, at once or when it returns. The task's level is
 // never above the folder's on its machine.
@@ -80,14 +80,13 @@ type planPeer struct {
 }
 
 type planFolder struct {
-	ID      string   `json:"id"`
-	Share   string   `json:"share"`
-	Name    string   `json:"name"`
-	Source  string   `json:"source"`
-	Role    string   `json:"role"` // source or copy
-	Access  string   `json:"access"`
-	Results string   `json:"results,omitempty"`
-	Peers   []string `json:"peers"`
+	ID     string   `json:"id"`
+	Share  string   `json:"share"`
+	Name   string   `json:"name"`
+	Source string   `json:"source"`
+	Role   string   `json:"role"` // source or copy
+	Access string   `json:"access"`
+	Peers  []string `json:"peers"`
 	// Paused: kept as it is, not synced, while a machine of the pair is
 	// suspended or has no Syncthing for now (an older version back).
 	Paused bool `json:"paused,omitempty"`
@@ -158,9 +157,6 @@ func (c *core) plan(v *syncView, node string) nodePlan {
 			continue
 		}
 		pf := planFolder{ID: syncFolderID(f.Node, f.ID), Share: f.ID, Name: f.Name, Source: f.Node, Access: f.Access}
-		if f.Access == folderDrop {
-			pf.Results = c.resultsName()
-		}
 		if !ok {
 			// Paused, with no peer: kept as it is until both are back.
 			if fc.Copy == node && !slices.ContainsFunc(p.Folders, func(g planFolder) bool { return g.ID == pf.ID }) {

@@ -4,21 +4,20 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strings"
 )
 
 // Settings → Folders (folders.go): the folders given to Eriphe, by machine,
-// each with its level (which may only be lowered from here), whether it may
-// be copied to the user's other machines (turned off from here, never on),
-// and a button that stops sharing it; and, in a dialog, how to share one:
-// on the machine that holds it, never from here.
+// with the machine's default rights and each folder's own (Lire, Modifier:
+// folder_values.go), whether it may be copied to the user's other machines
+// (turned off from here, never on), and a button that stops sharing it;
+// and, in a dialog, how to share one: on the machine that holds it, never
+// from here.
 
 func (w *web) folderRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /settings/folders", w.auth(w.handleFolders))
 	mux.Handle("POST /settings/folders/delete", w.auth(w.handleDeleteFolder))
-	mux.Handle("POST /settings/folders/level", w.auth(w.handleLowerFolder))
-	mux.Handle("POST /settings/folders/value", w.auth(w.handleFolderValue)) // folder_values.go
-	mux.Handle("POST /settings/folders/nocopy", w.auth(w.handleLowerFolder))
+	mux.Handle("POST /settings/folders/case", w.auth(w.handleFolderCase)) // folder_values.go
+	mux.Handle("POST /settings/folders/nocopy", w.auth(w.handleNoCopies))
 	mux.Handle("POST /settings/folders/copies", w.auth(w.handleFolderCopies))
 }
 
@@ -26,9 +25,10 @@ func (w *web) folderRoutes(mux *http.ServeMux) {
 type folderMachine struct {
 	Name    string
 	Online  bool
-	System  string // its share guide (shareGuide)
-	NAS     bool   // Eriphe runs there in Docker
-	Lima    bool   // a Mac with the Lima VM
+	System  string            // its share guide (shareGuide)
+	NAS     bool              // Eriphe runs there in Docker
+	Lima    bool              // a Mac with the Lima VM
+	Default map[string]string // its default rights, by case
 	Folders []folderView
 }
 
@@ -106,7 +106,7 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 			continue // its access is cut (node_access.go)
 		}
 		info := parseInfo(n)
-		m := folderMachine{Name: n.Name, Online: n.Online}
+		m := folderMachine{Name: n.Name, Online: n.Online, Default: w.c.deviceGrid(n.Name).cases(folderCases)}
 		m.System, m.NAS, m.Lima = shareSystem(nodeInstall(n, info), n.OS)
 		for _, v := range views {
 			if v.Source == sourceMachine && v.Node == n.Name {
@@ -176,36 +176,11 @@ func (w *web) handleFolderCopies(rw http.ResponseWriter, r *http.Request, s *ses
 	rw.WriteHeader(http.StatusOK)
 }
 
-// handleLowerFolder lowers a folder's level (/level, with access) or turns
-// its copies off (/nocopy): never higher, which only its machine can do.
-func (w *web) handleLowerFolder(rw http.ResponseWriter, r *http.Request, s *session) {
+// handleNoCopies turns a folder's copies off: never on, which only its
+// machine can do.
+func (w *web) handleNoCopies(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PostFormValue("name")
-	access, nocopy := r.PostFormValue("access"), strings.HasSuffix(r.URL.Path, "/nocopy")
-	if nocopy {
-		access = ""
-	}
-	if err := w.c.lowerFolder(r.Context(), name, access, nocopy); err != nil {
-		var fe *folderError
-		switch {
-		case errors.As(err, &fe) && fe.Code == "raise":
-			w.toast(rw, tr(w.lang(r), "folders.err.raise"), false)
-		case errors.Is(err, errNoFolder):
-			w.toast(rw, tr(w.lang(r), "folders.err.gone"), false)
-		default:
-			w.toast(rw, err.Error(), false)
-		}
-		return
-	}
-	log.Printf("web: folder %s lowered (access %q, no copies %v)", name, access, nocopy)
-	rw.Header().Set("HX-Refresh", "true")
-	rw.WriteHeader(http.StatusOK)
-}
-
-// handleFolderValue sets who decides a folder's drop or manage: free or
-// approval.
-func (w *web) handleFolderValue(rw http.ResponseWriter, r *http.Request, s *session) {
-	name, level, value := r.PostFormValue("name"), r.PostFormValue("level"), r.PostFormValue("value")
-	if err := w.c.setFolderValue(name, level, value); err != nil {
+	if err := w.c.noCopies(r.Context(), name); err != nil {
 		if errors.Is(err, errNoFolder) {
 			w.toast(rw, tr(w.lang(r), "folders.err.gone"), false)
 		} else {
@@ -213,6 +188,35 @@ func (w *web) handleFolderValue(rw http.ResponseWriter, r *http.Request, s *sess
 		}
 		return
 	}
-	log.Printf("web: folder %s: %s %s", name, level, value)
+	log.Printf("web: folder %s: no copies", name)
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusOK)
+}
+
+// handleFolderCase sets one case of a machine's default (node) or of a
+// folder (name, "" to follow its machine).
+func (w *web) handleFolderCase(rw http.ResponseWriter, r *http.Request, s *session) {
+	node, name := r.PostFormValue("node"), r.PostFormValue("name")
+	cat, value := r.PostFormValue("category"), r.PostFormValue("value")
+	var err error
+	if node != "" {
+		err = w.c.setDeviceCase(node, cat, value)
+	} else {
+		err = w.c.setFolderCase(name, cat, value)
+	}
+	if err != nil {
+		if errors.Is(err, errNoFolder) {
+			w.toast(rw, tr(w.lang(r), "folders.err.gone"), false)
+		} else {
+			w.toast(rw, err.Error(), false)
+		}
+		return
+	}
+	log.Printf("web: folders %s%s: %s %s", node, name, cat, cmpOr(value, "follows its machine"))
+	if node != "" {
+		rw.Header().Set("HX-Refresh", "true") // its folders' "as the machine" follow
+		rw.WriteHeader(http.StatusOK)
+		return
+	}
 	w.toast(rw, tr(w.lang(r), "folders.valuesaved"), true)
 }

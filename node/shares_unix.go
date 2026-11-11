@@ -23,26 +23,6 @@ func ownerGID(p string) int {
 // writableByUser tells whether eriphe-node's own user can write in p.
 func writableByUser(p string) bool { return syscall.Access(p, 2) == nil }
 
-// writableByTasks tells whether the tasks' user can write in a directory:
-// as its owner, through its group (other than root's, added to the task),
-// or as anyone.
-func writableByTasks(fi fs.FileInfo) bool {
-	perm := fi.Mode().Perm()
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !ok {
-		return false
-	}
-	switch {
-	case perm&0o002 != 0:
-		return true
-	case int(st.Uid) == taskUID:
-		return perm&0o200 != 0
-	case st.Gid != 0:
-		return perm&0o020 != 0
-	}
-	return false
-}
-
 // keepOwner gives a snapshot's copy the owner of its original, where the
 // node may (root with CHOWN in its container); a link is not followed.
 func keepOwner(p string, fi fs.FileInfo) {

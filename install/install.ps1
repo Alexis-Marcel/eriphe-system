@@ -522,8 +522,8 @@ function Get-ShareEnv($prof) {
 
 # The Explorer's right click, "Share with Eriphe..." (Windows 11: under "Show
 # more options"): one entry on folders, for the user signed in at the PC,
-# running eriphe-share.ps1, which asks for the level (read, next to it,
-# manage) and whether the folder may be copied to the user's other machines,
+# running eriphe-share.ps1, which asks for the level (change, the default,
+# or read) and whether the folder may be copied to the user's other machines,
 # runs eriphe-share in the distribution (the launcher's eriphe share) and
 # says how it went. Per user, in
 # their registry (HKCU\Software\Classes\Directory\shell). The former second
@@ -540,13 +540,13 @@ function Get-ShareMenuRoots($prof) {
 # The words of the right click, by the language of Windows.
 function Get-ShareWords {
   if ((Get-UICulture).TwoLetterISOLanguageName -eq "fr") {
-    $e = [char]0xE9; $a = [char]0xC0; $o = [char]0xF4
+    $e = [char]0xE9
     return @{ Menu = "Partager avec Eriphe$([char]0x2026)"; Level = "Niveau de partage avec Eriphe :"; Read = "Lecture"
-      Drop = "$a c$o$e (r$e" + "sultats dans un sous-dossier)"; Manage = "G$e" + "rer (modifier le dossier)"
+      Write = "Modifier (lire, cr$($e)er, changer, supprimer ; instantan$($e) avant)"
       Copy = "Peut $([char]0xEA)tre copi$e sur mes autres machines"; Ok = "Partager"; Cancel = "Annuler" }
   }
   @{ Menu = "Share with Eriphe$([char]0x2026)"; Level = "Level of sharing with Eriphe:"; Read = "Read"
-    Drop = "Next to it (results in a subfolder)"; Manage = "Manage (change the folder)"
+    Write = "Change (read, create, change, delete; snapshot first)"
     Copy = "May be copied to my other machines"; Ok = "Share"; Cancel = "Cancel" }
 }
 
@@ -561,7 +561,7 @@ function Install-ShareMenu($prof) {
 param([string] `$Path)
 `$distro = '$Distro'
 `$profileDir = '$($prof.Dir)'
-`$words = @{ Level = '$($w.Level)'; Read = '$($w.Read)'; Drop = '$($w.Drop)'; Manage = '$($w.Manage)'; Copy = '$($w.Copy)'; Ok = '$($w.Ok)'; Cancel = '$($w.Cancel)' }
+`$words = @{ Level = '$($w.Level)'; Read = '$($w.Read)'; Write = '$($w.Write)'; Copy = '$($w.Copy)'; Ok = '$($w.Ok)'; Cancel = '$($w.Cancel)' }
 "@
   Add-Content -Path $shareScript -Encoding UTF8 -Value @'
 Add-Type -AssemblyName System.Windows.Forms
@@ -583,9 +583,9 @@ $label = New-Object System.Windows.Forms.Label
 $label.Text = "$($words.Level)`n$(Split-Path $p -Leaf)"; $label.AutoSize = $true
 $panel.Controls.Add($label)
 $choices = @()
-foreach ($k in "Read", "Drop", "Manage") {
+foreach ($k in "Write", "Read") {
   $r = New-Object System.Windows.Forms.RadioButton
-  $r.Text = $words[$k]; $r.Tag = $k; $r.AutoSize = $true; $r.Checked = ($k -eq "Read")
+  $r.Text = $words[$k]; $r.Tag = $k; $r.AutoSize = $true; $r.Checked = ($k -eq "Write")
   $panel.Controls.Add($r); $choices += $r
 }
 $copy = New-Object System.Windows.Forms.CheckBox
@@ -605,7 +605,7 @@ if ($form.ShowDialog() -ne "OK") { exit 0 }
 $level = ($choices | Where-Object { $_.Checked }).Tag
 $rel = $p.Substring($profileDir.Length + 1) -replace '\\', '/'
 $cmd = @('-d', $distro, '-u', 'root', '--exec', '/usr/local/bin/eriphe-share', 'add')
-$cmd += switch ($level) { "Drop" { '--drop' } "Manage" { '--manage' } default { '--read' } }
+$cmd += switch ($level) { "Read" { '--read' } default { '--write' } }
 $cmd += if ($copy.Checked) { '--copyable' } else { '--copyable=false' }
 $cmd += "/mnt/eriphe/home/$rel"
 $env:WSL_UTF8 = '1'

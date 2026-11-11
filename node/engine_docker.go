@@ -38,7 +38,7 @@ func (e dockerEngine) endTask(string)                           {}
 // no way to gain privileges (no-new-privileges), a process limit, and a
 // tmpfs at /tmp (exec: builds and test binaries run from there). The root
 // filesystem is writable: what is installed goes with the container. The
-// mounts keep the rest out of reach: folders read-only but Eriphe/, the
+// mounts keep the rest out of reach: folders read-only but those lent to write, the
 // agent read-only.
 var hardening = []string{
 	"--user", "0:0",

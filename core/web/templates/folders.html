@@ -1,8 +1,19 @@
 {{define "folders"}}
 <header class="page-head page-head-row"><h2>{{t "settings.folders"}}</h2><button class="link-btn" type="button" data-dialog="share-how-dlg" aria-haspopup="dialog">{{t "folders.how"}}</button></header>
-{{range .Data.Machines}}{{$mac := eq .System "mac"}}
+{{range .Data.Machines}}{{$mac := eq .System "mac"}}{{$def := .Default}}{{$node := .Name}}
 <section class="panel" aria-labelledby="folders-{{.Name}}">
   <h3 id="folders-{{.Name}}"><span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span><a class="folder-device" href="/settings/devices/{{.Name}}">{{.Name}}</a></span></h3>
+  <div class="folder-values folder-default">
+    <span class="small">{{t "folders.default"}}</span>
+    {{range list "read" "change"}}{{$cat := .}}
+    <form hx-post="/settings/folders/case" hx-trigger="change" class="folder-level">
+      <input type="hidden" name="node" value="{{$node}}">
+      <input type="hidden" name="category" value="{{$cat}}">
+      <label class="field"><span>{{t (printf "grid.cat.%s" $cat)}}</span>
+      <select name="value">{{range list "free" "approval" "never"}}<option value="{{.}}" {{if eq . (index $def $cat)}}selected{{end}}>{{t (printf "grid.%s" .)}}</option>{{end}}</select></label>
+    </form>
+    {{end}}
+  </div>
   {{if .Folders}}
   <ul class="grid">
   {{range .Folders}}
@@ -19,26 +30,22 @@
       </div>
       <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
       {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" $mac "Node" .Node "Copy" false)}}{{end}}
-      <form hx-post="/settings/folders/level" hx-trigger="change" hx-confirm="{{tf "folders.lowerconfirm" .Name}}" class="folder-level">
-        <input type="hidden" name="name" value="{{.Name}}">
-        {{$access := .Access}}
-        <label class="field"><span>{{t "folders.level"}}</span>
-        <select name="access" {{if eq (len .Lower) 1}}disabled{{end}}>{{range .Lower}}<option value="{{.}}" {{if eq . $access}}selected{{end}}>{{t (printf "folders.access.%s" .)}}</option>{{end}}</select></label>
-      </form>
-      {{if ne .Max .Access}}<p class="muted small">{{tf "folders.lowered" (t (printf "folders.access.%s" .Max))}}</p>{{end}}
-      {{if ne .Access "read"}}{{$name := .Name}}
+      <p class="chips"><span class="tag{{if eq .Access "write"}} tag-accent{{end}}">{{t (printf "folders.access.%s" .Access)}}</span></p>
+      {{$own := .Own}}{{$name := .Name}}{{$ro := ne .Access "write"}}
       <div class="folder-values">
-        {{range $level, $value := dict "drop" .Drop "manage" .Manage}}{{if or (eq $level "drop") (eq $access "manage")}}
-        <form hx-post="/settings/folders/value" hx-trigger="change" class="folder-level">
+        {{range list "read" "change"}}{{$cat := .}}{{$v := index $own $cat}}
+        <form hx-post="/settings/folders/case" hx-trigger="change" class="folder-level">
           <input type="hidden" name="name" value="{{$name}}">
-          <input type="hidden" name="level" value="{{$level}}">
-          <label class="field"><span>{{t (printf "folders.value.%s" $level)}}</span>
-          <select name="value">{{range list "free" "approval"}}<option value="{{.}}" {{if eq . $value}}selected{{end}}>{{t (printf "folders.value.%s" .)}}</option>{{end}}</select></label>
+          <input type="hidden" name="category" value="{{$cat}}">
+          <label class="field"><span>{{t (printf "grid.cat.%s" $cat)}}</span>
+          <select name="value"{{if and $ro (eq $cat "change")}} disabled title="{{t "folders.readonly"}}"{{end}}>
+            <option value=""{{if not $v}} selected{{end}}>{{tf "folders.follow" (t (printf "grid.%s" (index $def $cat)))}}</option>
+            {{range list "free" "approval" "never"}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{t (printf "grid.%s" .)}}</option>{{end}}
+          </select></label>
         </form>
-        {{end}}{{end}}
-        <p class="muted small">{{t "folders.valuehint"}}</p>
+        {{end}}
+        {{if $ro}}<p class="muted small">{{t "folders.readonly"}}</p>{{end}}
       </div>
-      {{end}}
       {{if .Copyable}}
       <details class="folder-copies"{{if .Copies}} open{{end}}>
         <summary>{{t "folders.copies"}}{{if .Copies}} · {{len .Copies}}{{end}}</summary>
@@ -100,7 +107,7 @@
         </span>
       </div>
       <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
-      <p class="chips"><span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "folders.access.%s" .Access)}}</span></p>
+      <p class="chips"><span class="tag">{{t (printf "folders.access.%s" .Access)}}</span></p>
     </li>
   {{end}}
   </ul>
@@ -112,10 +119,10 @@
   <h3 id="share-how-title">{{t "folders.how"}}</h3>
   <p class="muted">{{t "folders.howlead"}}</p>
   <ul class="share-levels">
+    <li><b>{{t "folders.access.write"}}</b> · {{t "folders.level.write"}}</li>
     <li><b>{{t "folders.access.read"}}</b> · {{t "folders.level.read"}}</li>
-    <li><b>{{t "folders.access.drop"}}</b> · {{t "folders.level.drop"}}</li>
-    <li><b>{{t "folders.access.manage"}}</b> · {{t "folders.level.manage"}}</li>
   </ul>
+  <p class="muted small">{{t "folders.valuehint"}}</p>
   <p class="muted small">{{t "folders.copyhow"}}</p>
   <p class="share-prereq">{{t "folders.prereq"}} <a href="/settings/devices">{{t "folders.prereqlink"}}</a></p>
   {{range .Data.Guides}}

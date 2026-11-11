@@ -62,24 +62,21 @@ func ops(calls []helperCall) []string {
 // node's data, and the task gets the folder from the daemon.
 func TestHelperFolderMounts(t *testing.T) {
 	n, root := shareFixture(t)
-	manage := lendAt(t, n, "Clients", "Clients", accessManage)
-	drop := lendAt(t, n, "Photos", "Photos", accessDrop)
+	write := lendAt(t, n, "Clients", "Clients", accessWrite)
+	photos := lendAt(t, n, "Photos", "Photos", accessRead)
 	read := lendAt(t, n, "Home/Docs", "Docs", accessRead)
 	calls := fakeHelpers(t, n)
-	chownResults = func(string, int, int) error { return nil }
-	defer func() { chownResults = os.Lchown }()
 
-	task := &Task{ID: "t-1", Spec: TaskSpec{Folders: []TaskFolder{manage, drop, read}}}
+	task := &Task{ID: "t-1", Spec: TaskSpec{Folders: []TaskFolder{write, photos, read}}}
 	args, err := n.folderArgs(t, task)
 	if err != nil {
 		t.Fatal(err)
 	}
-	clients, photos, docs := filepath.Join(root, "Clients"), filepath.Join(root, "Photos"), filepath.Join(root, "Home", "Docs")
+	clients, photosDir, docs := filepath.Join(root, "Clients"), filepath.Join(root, "Photos"), filepath.Join(root, "Home", "Docs")
 	got := strings.Join(args, " ")
 	for _, want := range []string{
 		"--mount type=bind,src=" + clients + ",dst=/work/folders/Clients ",
-		"--mount type=bind,src=" + photos + ",dst=/work/folders/Photos,readonly",
-		"--mount type=bind,src=" + filepath.Join(photos, "Eriphe") + ",dst=/work/folders/Photos/Eriphe",
+		"--mount type=bind,src=" + photosDir + ",dst=/work/folders/Photos,readonly",
 		"--mount type=bind,src=" + docs + ",dst=/work/folders/Docs,readonly",
 	} {
 		if !strings.Contains(got+" ", want) {
@@ -94,26 +91,26 @@ func TestHelperFolderMounts(t *testing.T) {
 	if len(snap.mounts) != 2 || snap.mounts[0] != (helperMount{clients, true}) || snap.mounts[1].readOnly || !within(n.opt.root, snap.mounts[1].path) {
 		t.Fatalf("snapshot mounts: %v", snap.mounts)
 	}
-	snaps := n.snapshots(manage.ID)
+	snaps := n.snapshots(write.ID)
 	if len(snaps) != 1 {
 		t.Fatalf("snapshots: %+v", snaps)
 	}
-	if raw, err := os.ReadFile(filepath.Join(n.opt.root, snapshotsDir, manage.ID, snaps[0].Stamp, "files", "notes.md")); err != nil || string(raw) != "x" {
+	if raw, err := os.ReadFile(filepath.Join(n.opt.root, snapshotsDir, write.ID, snaps[0].Stamp, "files", "notes.md")); err != nil || string(raw) != "x" {
 		t.Fatalf("snapshot content: %q %v", raw, err)
 	}
-	// Only drop mounts its folder writable, for its results subfolder.
+	// A prepare mounts its folder read-only: it only checks it.
 	for _, c := range *calls {
-		if c.req.Op == "prepare" && c.req.Write != (c.req.Folder == photos) {
-			t.Errorf("prepare %s: write %v", c.req.Folder, c.req.Write)
+		if c.req.Op == "prepare" && (len(c.mounts) != 1 || !c.mounts[0].readOnly) {
+			t.Errorf("prepare %s: %v", c.req.Folder, c.mounts)
 		}
 	}
-	if fi, err := os.Stat(filepath.Join(photos, "Eriphe")); err != nil || !fi.IsDir() {
-		t.Fatalf("results subfolder: %v", err)
+	if _, err := os.Stat(filepath.Join(photosDir, "Eriphe")); err == nil {
+		t.Fatal("a results subfolder made")
 	}
-	// The handback runs in one helper, the results mounted writable.
+	// The handback runs in one helper, the folder written to mounted writable.
 	*calls = nil
 	n.handBack(task)
-	if len(*calls) != 1 || (*calls)[0].req.Op != "handback" || len((*calls)[0].mounts) != 2 {
+	if len(*calls) != 1 || (*calls)[0].req.Op != "handback" || len((*calls)[0].mounts) != 1 || (*calls)[0].mounts[0] != (helperMount{clients, false}) {
 		t.Fatalf("handback: %+v", *calls)
 	}
 
@@ -135,7 +132,7 @@ func TestHelperFolderMounts(t *testing.T) {
 // files read-only; the snapshot of the folder as it was, in another.
 func TestHelperRestore(t *testing.T) {
 	n, root := shareFixture(t)
-	tf := lendAt(t, n, "Clients", "Clients", accessManage)
+	tf := lendAt(t, n, "Clients", "Clients", accessWrite)
 	clients := filepath.Join(root, "Clients")
 	calls := fakeHelpers(t, n)
 	first, err := n.snapshot(sharedFolder{ID: tf.ID, Name: "Clients", Path: clients}, clients, "t-1")

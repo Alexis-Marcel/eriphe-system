@@ -100,18 +100,7 @@ func (c *core) setRepoCase(id, repo, category, value string) error {
 		if grids == nil {
 			grids = map[string]accessGrid{}
 		}
-		g := grids[repo]
-		switch category {
-		case catRead:
-			g.Read = value
-		case catChange:
-			g.Change = value
-		case catDelete:
-			g.Delete = value
-		case catSend:
-			g.Send = value
-		}
-		grids[repo] = g
+		grids[repo] = grids[repo].with(category, value)
 		maps.DeleteFunc(grids, func(_ string, g accessGrid) bool { return g == (accessGrid{}) })
 		if len(grids) == 0 {
 			grids = nil

@@ -132,7 +132,7 @@ Eriphe is designed like a small Kubernetes:
 - **Nodes dial out.** A node needs no open port: it keeps a tunnel to eriphe-core, which speaks the
   node's API through it. Nodes join with a single-use token bound to their name.
 - **Access stays visible and yours.** Eriphe sees only the folders you open on a device; each
-  device keeps an access log (folders listed or lent, tasks run, results dropped), and "Cut access"
+  device keeps an access log (folders listed or lent, tasks run), and "Cut access"
   stops its work, its folders and its tunnel until you restore it.
 - **TLS with per-machine certificates.** eriphe-core runs a certificate authority for its machines;
   each node gets its own client certificate (its key never leaves it) and can pin the CA's hash.

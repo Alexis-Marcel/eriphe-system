@@ -105,5 +105,5 @@ Needs Docker 28 or later (`docker version`), for the isolated gateway of `eriphe
    answers and stops, and `docker logs eriphe-engine` shows no refusal; `docker inspect eriphe-node
    --format '{{.Config.Env}}'` shows `ERIPHE_ENGINE_URL` and no `DOCKER_HOST`.
 6. Folders: Settings → Folders → "Partager un dossier" offers the machine `nas` and its place
-   `shares` (appdata does not show). With "Lecture et dépôt", the task's container has the folder
-   read-only and its `Eriphe/` subfolder writable.
+   `shares` (appdata does not show). Lent to read, the task's container has the folder read-only; lent
+   to write (Modifier), writable, after a snapshot.

@@ -95,8 +95,8 @@ func copiesCore(t *testing.T) (*core, *syncNode, *syncNode) {
 	}
 	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	mac := attachFakeSync(t, c, "mac", map[string]any{"runtimes": []string{"claude-code"},
-		"folders": []sharedFolder{{ID: "00112233445566aa", Name: "Docs", Access: folderDrop, Copyable: true},
-			{ID: "00112233445566bb", Name: "Private", Access: folderManage}},
+		"folders": []sharedFolder{{ID: "00112233445566aa", Name: "Docs", Access: accessWrite, Copyable: true},
+			{ID: "00112233445566bb", Name: "Private", Access: accessWrite}},
 		"syncthing": map[string]any{"device_id": macDevice}})
 	nas := attachFakeSync(t, c, "nas", map[string]any{"runtimes": []string{"claude-code"},
 		"syncthing": map[string]any{"device_id": nasDevice}})
@@ -117,7 +117,7 @@ func TestFolderCopiesPlan(t *testing.T) {
 	if len(mp.Peers) != 1 || mp.Peers[0] != (planPeer{"nas", nasDevice}) || len(mp.Folders) != 1 {
 		t.Fatalf("mac's plan %+v", mp)
 	}
-	if f := mp.Folders[0]; f.ID != "e-mac-00112233445566aa" || f.Role != "source" || f.Access != folderDrop || f.Results != "Eriphe" ||
+	if f := mp.Folders[0]; f.ID != "e-mac-00112233445566aa" || f.Role != "source" || f.Access != accessWrite ||
 		len(f.Peers) != 1 || f.Peers[0] != "nas" {
 		t.Fatalf("mac's folder %+v", f)
 	}
@@ -178,14 +178,14 @@ func TestFolderCopiesGo(t *testing.T) {
 	ctx := context.Background()
 	for name, undo := range map[string]func(){
 		"copies off on its machine": func() {
-			mac.set("folders", []sharedFolder{{ID: "00112233445566aa", Name: "Docs", Access: folderDrop}})
+			mac.set("folders", []sharedFolder{{ID: "00112233445566aa", Name: "Docs", Access: accessWrite}})
 			c.refreshNode(ctx, c.node("mac"))
 			c.syncAll(ctx)
 		},
 		"unshared from here": func() { c.removeFolder(ctx, "Docs") },
 		"forgotten machine":  func() { c.store.forgetMachineCopies("nas"); c.syncAll(ctx) },
 	} {
-		mac.set("folders", []sharedFolder{{ID: "00112233445566aa", Name: "Docs", Access: folderDrop, Copyable: true}})
+		mac.set("folders", []sharedFolder{{ID: "00112233445566aa", Name: "Docs", Access: accessWrite, Copyable: true}})
 		c.store.db.Exec(`DELETE FROM folders_unshared`)
 		c.refreshNode(ctx, c.node("mac"))
 		if err := c.setCopies(ctx, "Docs", []string{"nas"}); err != nil {
@@ -288,7 +288,7 @@ func TestFolderCopyStatusAndPlacement(t *testing.T) {
 	if name, _ := placeFolders(t, c, Agent{Runtime: "claude-code"}, "Docs"); name != "nas" {
 		t.Fatalf("placed on %q", name)
 	}
-	fs, err := c.specFoldersOn("nas", "Docs", []ResourceRef{{Kind: resFolder, Ref: "Docs", Access: accessDrop}})
+	fs, err := c.specFoldersOn("nas", "Docs", []ResourceRef{{Kind: resFolder, Ref: "Docs", Access: accessWrite}})
 	if err != nil || len(fs) != 1 || fs[0].Copy != "e-mac-00112233445566aa" || !fs[0].Write {
 		t.Fatalf("spec on the copy %+v %v", fs, err)
 	}
@@ -328,10 +328,9 @@ func TestFolderTaskOnAnyHolder(t *testing.T) {
 	if name, _ := placeFolders(t, c, Agent{Runtime: "claude-code"}, "Docs"); name != "mac" {
 		t.Fatalf("a tie goes by name: %q", name)
 	}
-	// Level capped at the folder's on its machine: asked to write a folder
-	// at drop, the copy is lent to drop.
+	// Lent to write: the copy is lent to write.
 	fs, err := c.specFoldersOn("nas", "Docs", []ResourceRef{{Kind: resFolder, Ref: "Docs", Access: accessWrite}})
-	if err != nil || len(fs) != 1 || fs[0].Copy != "e-mac-"+docsID || !fs[0].Write || fs[0].Manage {
+	if err != nil || len(fs) != 1 || fs[0].Copy != "e-mac-"+docsID || !fs[0].Write {
 		t.Fatalf("spec on the copy %+v %v", fs, err)
 	}
 	if fs, err := c.specFoldersOn("mac", "Docs", nil); err != nil || fs[0].Copy != "" {
@@ -381,10 +380,10 @@ func TestFolderTaskSeveralFolders(t *testing.T) {
 	c, mac, nas := copiesCore(t)
 	ctx := context.Background()
 	const musicID, mediaID = "00112233445566cc", "00112233445566dd"
-	mac.set("folders", []sharedFolder{{ID: docsID, Name: "Docs", Access: folderDrop, Copyable: true},
-		{ID: "00112233445566bb", Name: "Private", Access: folderManage}, {ID: musicID, Name: "Music", Access: folderRead, Copyable: true}})
+	mac.set("folders", []sharedFolder{{ID: docsID, Name: "Docs", Access: accessWrite, Copyable: true},
+		{ID: "00112233445566bb", Name: "Private", Access: accessWrite}, {ID: musicID, Name: "Music", Access: accessRead, Copyable: true}})
 	c.refreshNode(ctx, c.node("mac"))
-	nas.set("folders", []sharedFolder{{ID: mediaID, Name: "Media", Access: folderRead}})
+	nas.set("folders", []sharedFolder{{ID: mediaID, Name: "Media", Access: accessRead}})
 	c.refreshNode(ctx, c.node("nas"))
 	c.setCopies(ctx, "Docs", []string{"nas"})
 	c.setCopies(ctx, "Music", []string{"nas"})

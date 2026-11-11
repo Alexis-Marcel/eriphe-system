@@ -360,7 +360,7 @@ func legacyPlaces(s Server) Server {
 			grids = map[string]accessGrid{}
 		}
 		switch access {
-		case accessDrop:
+		case "drop":
 			grids[id] = accessGrid{Delete: gridNever}
 		default:
 			grids[id] = accessGrid{Change: gridNever, Delete: gridNever}

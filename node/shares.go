@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,8 +19,8 @@ import (
 // the places a folder may be shared from, on this machine only
 // (shared.go), never from eriphe-core. A task eriphe-core lends a shared
 // folder gets it mounted at /work/folders/<name>, as its level says:
-// read-only; read-only but its Eriphe/ subfolder (drop); or writable
-// whole (manage), after a snapshot of it (snapshot.go). Every path is
+// read-only, or writable whole (write), after a snapshot of it
+// (snapshot.go). Every path is
 // resolved again when it is shared and when it is used: no "..", no
 // symlink out of its root, no sensitive place (sensitiveNames), nothing of
 // eriphe-node's own data.
@@ -29,7 +28,7 @@ import (
 // shareRoot is one root this machine shares from.
 type shareRoot struct {
 	Path     string // as eriphe-node sees it, and the Docker daemon too: the same path
-	ReadOnly bool   // results may never be dropped in its folders (":ro")
+	ReadOnly bool   // its folders are never written to (":ro")
 }
 
 // shareFlag reads repeated -share name=/path[:ro] flags.
@@ -304,68 +303,19 @@ func writeShareError(w http.ResponseWriter, err error) {
 // TaskFolder is a folder eriphe-core lends a task: one shared on this
 // machine, by its id (shared.go), mounted at /work/folders/<name>.
 type TaskFolder struct {
-	Name  string `json:"name"`
-	ID    string `json:"id"`              // in the list of shared folders; nothing else is mounted
-	Write bool   `json:"write,omitempty"` // results may be dropped in its results subfolder, if shared so
-	// Manage: the whole folder is writable, if shared so; a snapshot of it
-	// is taken first.
-	Manage bool `json:"manage,omitempty"`
-	// With Write: the results subfolder's name (the assistant's), and its
-	// former names, newest first. Empty: Eriphe.
-	Results string   `json:"results,omitempty"`
-	Former  []string `json:"former,omitempty"`
+	Name string `json:"name"`
+	ID   string `json:"id"` // in the list of shared folders; nothing else is mounted
+	// Write: the whole folder is writable, if shared so; a snapshot of it
+	// is taken first. On the wire it is "manage": an older eriphe-core's
+	// "write" meant its results subfolder only, and is never read as this.
+	Write bool `json:"manage,omitempty"`
 	// Copy: the folder is lent from the copy this machine keeps of it, by
 	// its Syncthing folder id (syncfolders.go), while its own machine is
 	// away; what the task writes there goes back to it.
 	Copy string `json:"copy,omitempty"`
 }
 
-// resultsDir is where a task may write in a folder lent with Write, until
-// eriphe-core names it after the assistant.
-const resultsDir = "Eriphe"
-
-// resultsName is the folder's results subfolder, as the task sees it.
-func (tf TaskFolder) resultsName() string {
-	if validFolderName(tf.Results) && !strings.Contains(tf.Results, ",") {
-		return tf.Results
-	}
-	return resultsDir
-}
-
-// chooseResults picks the results subfolder of a folder lent with Write,
-// the folder at dir: the current name, made by ensureResults if missing.
-// A former results folder there is renamed to it, on its first use under
-// the new name. When the new name is already taken, nothing is merged: the
-// former one stays in use, and kept names it, to be said.
-func chooseResults(dir, cur string, former []string) (use, kept string) {
-	isDir := func(name string) bool {
-		fi, err := os.Lstat(filepath.Join(dir, name))
-		return err == nil && fi.IsDir() && fi.Mode()&fs.ModeSymlink == 0
-	}
-	_, err := os.Lstat(filepath.Join(dir, cur))
-	taken := err == nil
-	for _, old := range former {
-		if old == cur || !validFolderName(old) || !isDir(old) {
-			continue
-		}
-		if !taken && renameResults(filepath.Join(dir, old), filepath.Join(dir, cur)) == nil {
-			return cur, ""
-		}
-		return old, old
-	}
-	return cur, ""
-}
-
-// renameResults renames a results folder (tests replace it).
-var renameResults = os.Rename
-
-// resultsConflict says that a folder's results stay under a former name.
-func resultsConflict(t *Task, tf TaskFolder, kept string) {
-	t.emit("results_conflict", map[string]any{"folder": tf.Name, "kept": kept, "wanted": tf.resultsName(),
-		"message": fmt.Sprintf("folder %s: %s/ is already there, the results stay in %s/", tf.Name, tf.resultsName(), kept)})
-}
-
-// chownResults gives the results folder to the tasks' user (tests replace it).
+// chownResults gives a folder made for tasks (a copy) to the tasks' user (tests replace it).
 var chownResults = os.Lchown
 
 // validFolderName is a name usable as one directory of /work/folders.
@@ -376,20 +326,17 @@ func validFolderName(s string) bool {
 	return !strings.ContainsFunc(s, func(r rune) bool { return r == '/' || r == '\\' || unicode.IsControl(r) })
 }
 
-// folderMounts are the mounts of a task's folders:
-// each read-only, its results subfolder writable when lent with Write
-// (created if missing, in the folder's group, so that what the task writes
-// stays the user's to open, change and delete), the whole folder writable
-// when lent with Manage, once a snapshot of it is taken (none, no task),
-// and the folders' groups added to the task's user so that it reads what
-// the group may.
+// folderMounts are the mounts of a task's folders: each read-only, or
+// writable whole when lent with Write, once a snapshot of it is taken, and
+// the folders' groups added to the task's user so that it reads what the
+// group may.
 func (n *node) folderMounts(t *Task) ([]mount, []int, error) {
 	if n.engine().traits().explores {
 		mounts, err := n.exploredFolderMounts(t)
 		return mounts, nil, err
 	}
 	var args []mount
-	var results []string
+	var written []string
 	groups := map[int]bool{}
 	seen := map[string]bool{}
 	for _, tf := range t.Spec.Folders {
@@ -403,12 +350,12 @@ func (n *node) folderMounts(t *Task) ([]mount, []int, error) {
 		}
 		dst := "/work/folders/" + tf.Name
 		if f.helper {
-			// Checked, its results made, its snapshot taken by helpers.
+			// Checked, and its snapshot taken, by helpers.
 			a, r, gids, err := n.helperFolderMounts(t, tf, f, dst)
 			if err != nil {
 				return nil, nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 			}
-			args, results = append(args, a...), append(results, r...)
+			args, written = append(args, a...), append(written, r...)
 			for _, g := range gids {
 				groups[g] = true
 			}
@@ -417,7 +364,7 @@ func (n *node) folderMounts(t *Task) ([]mount, []int, error) {
 		if gid := ownerGID(f.real); gid > 0 {
 			groups[gid] = true
 		}
-		if tf.Manage {
+		if tf.Write {
 			if f.root.ReadOnly {
 				return nil, nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
 			}
@@ -425,35 +372,14 @@ func (n *node) folderMounts(t *Task) ([]mount, []int, error) {
 				return nil, nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 			}
 			args = append(args, mount{src: f.src, dst: dst})
-			results = append(results, f.real) // what it writes as root goes back to the folder's owner
+			written = append(written, f.real) // what it writes as root goes back to the folder's owner
 			continue
 		}
 		args = append(args, mount{src: f.src, dst: dst, readOnly: true})
-		if !tf.Write {
-			continue
-		}
-		if f.root.ReadOnly {
-			return nil, nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
-		}
-		// The task sees it under the current name, whichever is used here.
-		cur := tf.resultsName()
-		use, kept := chooseResults(f.real, cur, tf.Former)
-		if kept != "" {
-			resultsConflict(t, tf, kept)
-		}
-		gid, err := ensureResults(filepath.Join(f.real, use), ownerGID(f.real))
-		if err != nil {
-			return nil, nil, fmt.Errorf("folder %s: %w", tf.Name, err)
-		}
-		if gid > 0 {
-			groups[gid] = true
-		}
-		args = append(args, mount{src: filepath.Join(f.src, use), dst: dst + "/" + cur})
-		results = append(results, filepath.Join(f.real, use))
 	}
-	// What the task writes there as root goes back to the results folder's owner (handback.go).
+	// What the task writes there as root goes back to the folder's owner (handback.go).
 	t.mu.Lock()
-	t.results = results
+	t.written = written
 	t.mu.Unlock()
 	gids := []int{}
 	for g := range groups {
@@ -473,37 +399,4 @@ func mountSpec(fields ...string) string {
 	w.Write(fields)
 	w.Flush()
 	return strings.TrimSuffix(b.String(), "\n")
-}
-
-// ensureResults makes the results subfolder if it is missing: owned by the
-// tasks' user, in the folder's group, group-writable and setgid (what is
-// written there keeps the group). One already there must be a real
-// directory the tasks' user can write to, as its owner, through its group
-// (added to the task) or as anyone. It returns its group.
-func ensureResults(p string, gid int) (int, error) {
-	name := filepath.Base(p)
-	fi, err := os.Lstat(p)
-	if errors.Is(err, fs.ErrNotExist) {
-		if err := os.Mkdir(p, 0o775); err != nil {
-			return 0, fmt.Errorf("cannot create %s/: %w", name, err)
-		}
-		// setgid while the directory is still in the node's group: a
-		// directory keeps it through chown, but a chmod after would drop it
-		// (the node is not in the folder's group, nor has CAP_FSETID).
-		os.Chmod(p, 0o775|fs.ModeSetgid)
-		if err := chownResults(p, taskUID, gid); err != nil {
-			return 0, fmt.Errorf("cannot give %s/ to the tasks' user: %w", name, err)
-		}
-		fi, err = os.Lstat(p)
-	}
-	if err != nil {
-		return 0, err
-	}
-	if !fi.IsDir() || fi.Mode()&fs.ModeSymlink != 0 {
-		return 0, fmt.Errorf("%s/ is not a folder", name)
-	}
-	if !writableByTasks(fi) {
-		return 0, fmt.Errorf("%s/ cannot be written by the tasks' user (UID %d)", name, taskUID)
-	}
-	return ownerGID(p), nil
 }

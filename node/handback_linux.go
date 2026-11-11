@@ -6,12 +6,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// handBackDir gives what a task wrote as root in a folder's Eriphe/ to the
-// owner of Eriphe/ (handback.go): every entry owned by root, and any file
+// handBackDir gives what a task wrote as root in a folder to the folder's
+// owner (handback.go): every entry owned by root, and any file
 // with a setuid or setgid bit, which the change of owner clears (it is
 // cleared again if a file system kept it). It walks with file descriptors
 // and never follows a symbolic link: a task changing the tree meanwhile
-// cannot point the walk out of Eriphe/.
+// cannot point the walk out of the folder.
 func handBackDir(p string) (int, error) {
 	fd, err := unix.Open(p, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
@@ -24,7 +24,7 @@ func handBackDir(p string) (int, error) {
 	}
 	if st.Uid == 0 {
 		unix.Close(fd)
-		return 0, errors.New("Eriphe/ belongs to root: no one to give it to")
+		return 0, errors.New("the folder belongs to root: no one to give it to")
 	}
 	budget := maxHandBack
 	n, err := handBackFD(fd, int(st.Uid), 0, &budget)

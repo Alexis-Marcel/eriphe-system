@@ -307,7 +307,7 @@ A probe for another system is a `sessionProbe`.
 | `GET`/`POST /v1/model/{path}` | the model server it lends (`-model-server`): its `/v1/{path}`, streamed (see A model behind this node) |
 | `POST /v1/wake` | send another machine's Wake-on-LAN packets: `{macs, broadcast}` (see Waking the machine) |
 | `POST /v1/privacy/open` | on a Mac, open System Settings › Privacy & Security › Files and Folders there, nothing else (the workspace's "Allow"); 404 elsewhere (see Folders it cannot use) |
-| `PUT /v1/sync` | the copies' plan, from eriphe-core: `{peers: [{name, device_id}], folders: [{id, share, name, source, role, access, results, peers}]}` (see Copies); answers `{problems}`, what it left out and why |
+| `PUT /v1/sync` | the copies' plan, from eriphe-core: `{peers: [{name, device_id}], folders: [{id, share, name, source, role, access, peers}]}` (see Copies); answers `{problems}`, what it left out and why |
 | `GET /v1/sync/connect` | a peer's Syncthing connection, handed over by eriphe-core (`Upgrade: eriphe-sync`, `Eriphe-Sync-Peer`), on to this machine's Syncthing (see Copies) |
 
 States: `running`, `waiting_permission`, `idle` (turn over: done or asking something, the
@@ -758,20 +758,18 @@ Every task container is started with:
 - no host mount but the task's `work` and `agent` folders (or its profile), refused unless they
   are under `-root`, the agent (read-only, see Agents), the node's toolchains for a task with a
   repository (read-only, see Toolchains), and the user's folders lent to it
-  (`folders`, see Shares): read-only, but their `Eriphe/`; checked again at each start; never the
+  (`folders`, see Shares): read-only, but those lent to write; checked again at each start; never the
   Docker socket.
 
 Root in the container is not root of the machine: no capability but those three, no new privilege,
 the internal network and the egress relay as the only way out (Networks, Egress), nothing of the
 machine mounted but what is listed above. The task's folders stay the node's (0700, under the
 node's root): what a task leaves there, a setuid program included, no user of the machine reaches.
-The folders lent to it are the user's, so what it writes in their `Eriphe/` is **handed back**
-(`handback.go`): at the end of each turn, every minute while the task runs, and when its container
-is gone, every entry there owned by root goes to the owner of `Eriphe/` (UID 1000 when the node
-made it), and any file with a setuid or setgid bit loses it. The walk goes through file
-descriptors and never follows a symbolic link (a link is changed itself), so a task changing the
-tree meanwhile cannot point it elsewhere. On a NAS whose shares are `nobody:users`, the results
-are `1000:users`, mode 664, as before. Apple's container needs none of it: the Mac's file sharing
+The folders lent to it are the user's, so what it writes in a folder lent to write is **handed
+back** (`handback.go`): at the end of each turn, every minute while the task runs, and when its
+container is gone, every entry there owned by root goes to the folder's owner, and any file with a
+setuid or setgid bit loses it. The walk goes through file descriptors and never follows a symbolic
+link (a link is changed itself), so a task changing the tree meanwhile cannot point it elsewhere. Apple's container needs none of it: the Mac's file sharing
 writes everything as the Mac's user.
 
 Disk: a task's root filesystem has no size limit of its own (Docker's overlay2 has none without
@@ -991,7 +989,7 @@ LaunchAgent gives `/usr/local/bin/container`).
 | `--network eriphe-tasks`, `--add-host host.docker.internal:<gateway>` | `--network eriphe-task-<id>`, its own (below); the callback is its gateway's address |
 | `-e NAME`, `--entrypoint sh <image> -c …` | the same (`-e NAME` takes the value from the CLI's environment) |
 | `docker stop -t 10`, `docker rm -f` of strays | `container stop -t 10`, `container delete --force` of what carries `eriphe.task`, and the strays' networks |
-| `--group-add` of a folder's group, results handed back to Eriphe/'s owner | none: what the task writes lands as the Mac user's (checked: a root task's results are the Mac user's) |
+| `--group-add` of a folder's group, what is written handed back to the folder's owner | none: what the task writes lands as the Mac user's (checked: what a root task writes is the Mac user's) |
 
 `GET /v1/node` says `"engine": "container"` and `engine_version` (`docker` is empty); the images
 are container's (`container image ls`), the runtimes those the node injects.
@@ -1033,8 +1031,7 @@ shared place itself (`apple_explore.go`):
   the folder three levels down (`holds_sensitive`), not the node's own data (`~/.eriphe`: hidden,
   and a folder holding it, the home, is not shareable). The folders' paths are not even looked at
   for `missing`;
-- a task's folders are checked the same way when it starts, and `Eriphe/` is made by the explorer,
-  the folder mounted writable;
+- a task's folders are checked the same way when it starts;
 - `~/Library` is never listed nor shared from a root that holds it (mail, messages, browsers' and
   apps' data): iCloud Drive and `~/Library/CloudStorage/*` inside it are roots of their own.
 
@@ -1109,7 +1106,7 @@ than alpine (the worker's).
 `go test -run InjectLive` checks a task end to end with its agent injected, twice: Claude Code's
 `claude --version` from `/opt/eriphe/bin`, read-only; root, with a writable root filesystem;
 `apt-get install imagemagick` through the relay, the second time from the cache; a folder lent
-read-only but its `Eriphe/`, whose results end up its owner's; the listener and the relay reached,
+to write, what the task wrote there ending up its owner's; the listener and the relay reached,
 nothing else (no Internet, DNS nor LAN directly, no LAN through the relay). `TestAppleInjectLive`
 with Apple's container on a Mac (`ERIPHE_LIVE_CONTAINER=1 ERIPHE_LIVE_IMAGE=<base>
 ERIPHE_LIVE_AGENT_IMAGE=<agents> ERIPHE_LIVE_LAN=<router>:80`), `TestInjectLive` with Docker in the
@@ -1126,13 +1123,19 @@ whether it may be copied, and an opaque id, never its path; it can lend a task o
 one off the list, lower its level or turn its copies off (restricting is always allowed), but it can
 neither add a folder, raise one, nor look into the machine.
 
-Three levels, chosen when the folder is shared:
+Two levels, chosen when the folder is shared:
 
 | Level | Flag | A task lent it at that level |
 |---|---|---|
-| `read` (Lecture) | none, or `--read` | reads it: the folder is mounted read-only |
-| `drop` (À côté) | `--drop` | reads it, and writes only in its results subfolder |
-| `manage` (Gérer) | `--manage` | reads, creates, changes, renames and deletes anywhere in it; a snapshot of it is taken first |
+| `write` | none, or `--write` | reads, creates, changes, renames and deletes anywhere in it; a snapshot of it is taken first |
+| `read` | `--read` | reads it: the folder is mounted read-only; for a sensitive folder |
+
+A folder is shared to write by default (read on a `:ro` place). What a task may then do there is
+set in eriphe-core, Settings → Folders: Lire and Modifier, each free, on approval or never, a
+default per device and an exception per folder; a folder shared read-only greys Modifier. The
+lists of before the two levels are read once as `drop` → `read` (nothing widened) and `manage` →
+`write`; `--drop` and `--manage`, which right clicks installed before pass, are taken as `--read`
+and `--write`.
 
 The level chosen on the machine is the most the folder ever gets (its ceiling, `max`): eriphe-core
 may lower it (`PATCH /v1/shares/{id}` through the tunnel, `{"access": "read"}`), never raise it,
@@ -1142,7 +1145,7 @@ the synchronisation to come; eriphe-core may turn it off (`{"copyable": false}`)
 of either through the tunnel is refused (403, `raise`) and logged.
 
 ```sh
-eriphe-node share add [--name NAME] [--read|--drop|--manage] [--copyable] FOLDER...
+eriphe-node share add [--name NAME] [--read|--write] [--copyable] FOLDER...
 eriphe-node share list [--json]
 eriphe-node share remove NAME|FOLDER...                  # the tasks holding it are stopped
 eriphe-node share snapshots NAME|FOLDER                  # its snapshots, newest first
@@ -1165,13 +1168,13 @@ Options, before the command: `-root` (env `ERIPHE_ROOT`), `-share` (env `ERIPHE_
 container, which sees the places at their paths on the machine; `ERIPHE_ROOT` is set there),
 `docker exec eriphe eriphe share` with the one-container install (below),
 `~/.eriphe/bin/eriphe-share` on a Mac (the node's `node.env`), also behind the Finder's Quick
-Action "Share with Eriphe..." (`~/Library/Services`: it asks for the level and the copies with
+Action "Share with Eriphe..." (`~/Library/Services`: it asks for the level (Modifier by default, or Lecture) and the copies with
 macOS's own dialogs, `eriphe-share --ask`, and a notification says how it went), and the
 Explorer's "Share with Eriphe..." on Windows (below).
 
 **The list** is `shares.json` in the node's data (`-root`, mode 0600): `{id, name, path, access,
 max, copyable, added}` per folder, the path absolute and resolved; `access` is the level now
-(`read`, `drop` or `manage`), `max` the level chosen on the machine (empty: `access`), `copyable` true when the user allowed copies. `GET /v1/node` and `GET
+(`read` or `write`), `max` the level chosen on the machine (empty: `access`), `copyable` true when the user allowed copies. `GET /v1/node` and `GET
 /v1/shares` report `{id, name, access, max, copyable, missing}`, never the path. The command changes it under a lock file
 (`shares.lock`); the node reads it at every use (`GET /v1/node`, a mount) and looks at it every two
 seconds: a folder taken off, or lowered below the level a task holds it at, stops the tasks that
@@ -1219,13 +1222,12 @@ capability dropped but `CHOWN`, `DAC_OVERRIDE` and `FOWNER`, `no-new-privileges`
 `eriphe.helper`; the proxy allows such a container only from the node's image (`-wake-image`),
 running `folder-helper`, with no network and a read-only root. The helpers are: `check` (a
 folder's checks, at `share add` and before every lend: resolved, shareable, nothing sensitive in
-it), `prepare` (a folder lent to a task, checked again, its group for `--group-add`, with `--drop`
-its results subfolder chosen, renamed from a former name, made and handed to the tasks' user),
-`snapshot` (the copy before a `--manage` task, made in the helper from the folder, read-only,
+it), `prepare` (a folder lent to a task, checked again, and its group for `--group-add`),
+`snapshot` (the copy before a task lent the folder to write, made in the helper from the folder, read-only,
 straight into the snapshot's new folder in the node's data: nothing goes through the node, and a
 clone where the filesystem has one), `restore` (the folder emptied and the snapshot copied back,
-after a snapshot of it as it was), `handback` (results written as root given back to their
-owners, at each turn's end) and `probe` (whether each folder opens and may be written to, every
+after a snapshot of it as it was), `handback` (what was written as root given back to the
+folders' owners, at each turn's end) and `probe` (whether each folder opens and may be written to, every
 5 minutes and when the copies need it: what `GET /v1/shares` reports as `missing`). `ERIPHE_SHARE_COMMAND`, set on the node's container, makes a user's own
 `eriphe-node share add` print the launcher's command instead; `list`, `remove`, `snapshots` and
 `restore` work as before.
@@ -1255,37 +1257,24 @@ Every path is checked when it is shared, and again at every mount:
   is whole or the folder is not shared: more than 20,000 directories (`too_large`), or one the node
   cannot read (`unreadable_sub`: a task, root, might), and it is refused. On a Mac the explorer's
   tree is held to the same (more than 200,000 entries, or a folder it could not read).
-- `--drop` and `--manage` are refused on a `:ro` place.
+- `--write` is refused on a `:ro` place.
 
-A task's spec lists its folders: `folders: [{name, id, write, manage}]`. At each start the node
-takes each from the list by its id (a folder not in it is refused, `not_shared`; a level above the
-folder's own now too: `write` on a read-only folder is `read_only`, `manage` on a `drop` one
-`level`), checks it again, then gives the container:
+A task's spec lists its folders: `folders: [{name, id, manage}]`, `manage` true for a folder lent
+to write (`manage` on the wire: an older eriphe-core's `write` meant a results subfolder, and is
+never read as a write). At each start the node takes each from the list by its id (a folder not in
+it is refused, `not_shared`; `manage` on a read-only folder too, `read_only`), checks it again,
+then gives the container:
 
 - `--mount type=bind,src=<folder>,dst=/work/folders/<name>,readonly`;
 - with `manage`, instead, `--mount type=bind,src=<folder>,dst=/work/folders/<name>`, writable,
-  once a snapshot of the folder is taken (below): without one, the task does not start. What the
-  task writes there as root goes back to the folder's owner, as for `Eriphe/` (`handback.go`);
-- with `write`, `--mount type=bind,src=<folder>/<results>,dst=/work/folders/<name>/<results>`,
-  refused on a `:ro` place. `<results>` is the results subfolder eriphe-core names after the
-  assistant (`results` in the folder's spec; `Eriphe` when it gives none). The node creates it if it
-  is missing: owned by UID 1000 in the folder's group, mode 2775 (setgid: what is written there
-  keeps the group). One already there must be a real directory (a symlink of that name is refused)
-  that UID 1000 can write to. After a rename of the assistant, the spec also lists the former names
-  (`former`, newest first): the first one there is renamed to the new name, on that first use; if
-  the new name is already taken, nothing is merged: the former folder stays in use, mounted at
-  `/work/folders/<name>/<results>`, and the task gets a `results_conflict` event (`folder`,
-  `kept`, `wanted`) that eriphe-core puts in the device's access log. The node says it names the
-  results folder with `results_named: true` in `GET /v1/node`, so eriphe-core tells the workers
-  of an older node `Eriphe/`. On a Mac the explorer does
-  the same (`results` mode);
-- `--group-add` of the folder's group and of `Eriphe/`'s (not root's), so the task reads what that
-  group may, and `umask 002` in the container: what it writes is group-writable. On a NAS whose
-  shares are `nobody:users`, the results are `1000:users`, mode 664, and every account in `users`
-  can open, change and delete them;
+  once a snapshot of the folder is taken (below): without one, the task does not start; refused on
+  a `:ro` place. What the task writes there as root goes back to the folder's owner
+  (`handback.go`);
+- `--group-add` of the folder's group (not root's), so the task reads what that group may, and
+  `umask 002` in the container: what it writes is group-writable;
 - `ERIPHE_FOLDERS` with the folders' names.
 
-**Snapshots.** Before a task lent a folder to `manage` starts, the node copies the folder into its
+**Snapshots.** Before a task lent a folder to write starts, the node copies the folder into its
 own data, `snapshots/<id>/<time>/files` under `-root` (with a `meta.json`: folder, path, task,
 method, bytes copied), which no task mounts and no folder can share. A snapshot is kept
 `-snapshot-days` (7) and pruned at start, every hour and after each new one. If it fails, the task
@@ -1298,11 +1287,10 @@ does not start (fail closed), and `snapshot_failed` is logged. How the copy is m
 - elsewhere (a NAS, Linux, Windows' WSL): the tree walked without following a symlink, each file
   cloned where the file system can (`FICLONE`: btrfs, XFS), copied otherwise, with its mode, times
   and owner; what is copied, not cloned, stays within `-snapshot-limit`, beyond which the snapshot
-  fails (lower the folder to `drop`, or raise the limit).
+  fails (lend the folder to read, or raise the limit).
 
 Never hard links (`cp -al`, `rsync --link-dest`): a task writing a file in place, as most editors
-and agents do, would change the snapshot's copy with it. A folder lent to `drop` gets no snapshot:
-its originals are mounted read-only, and only the assistant's results subfolder is writable.
+and agents do, would change the snapshot's copy with it. A folder lent to read gets no snapshot.
 `eriphe-node share restore` is a local action: it first snapshots the folder as it is (so the
 restore can be undone; refused if that fails), then empties the folder and copies the snapshot
 back. Stop the tasks using the folder before. `latest` is the newest snapshot taken before a task.
@@ -1325,7 +1313,7 @@ and eriphe-node engine gives a task those only. Its `AppData` is sensitive, like
 a NAS's `appdata`. The Explorer's "Share with Eriphe..." runs `eriphe-share.ps1`
 (`%ProgramData%\eriphe-node\bin`), which asks for the level and the copies (a small Windows Forms
 window), maps the folder under `/mnt/eriphe/home` and runs `wsl -d <distro> -u root --exec
-eriphe-share add --read|--drop|--manage --copyable[=false]` in the distribution (the launcher's
+eriphe-share add --read|--write --copyable[=false]` in the distribution (the launcher's
 `eriphe share add`, which gives the engine that folder, then the node's `share add`). Writes through such a mount follow its own owner mapping (virtiofs, 9p,
 DrvFs), not the setgid rule above.
 
@@ -1399,14 +1387,11 @@ Syncthing may touch:
 | Level | The folder's machine | A copy |
 |---|---|---|
 | `read` | send only | receive only |
-| `drop` | send only, its results subfolder (the assistant's name) ignored (`/<results>`) | receive only, the same ignored |
-| `drop`'s results subfolder | a Syncthing folder of its own (`<id>-r`), both ways | both ways |
-| `manage` | both ways, with 30 days of staggered versions of what a copy deleted or replaced, in `<root>/sync/versions/<id>` (out of the folder) | both ways |
+| `write` | both ways, with 30 days of staggered versions of what a copy deleted or replaced, in `<root>/sync/versions/<id>` (out of the folder) | both ways |
 
-  Syncthing's direction is per folder, and an ignore pattern can leave a subfolder out but not make
-  it come back: the results subfolder is a folder of its own. Conflicts keep both files
-  (`.sync-conflict-…`, `maxConflicts -1`). Syncthing adds its marker `.stfolder` (and `.stignore`
-  with `drop`) at the folder's root;
+  Conflicts keep both files (`.sync-conflict-…`, `maxConflicts -1`). Syncthing adds its marker
+  `.stfolder` at the folder's root. A plan of before the two levels reads `drop` as `read` and
+  `manage` as `write`;
 - a copy no longer in the plan (copies turned off, the folder unshared or no longer copyable, a
   machine forgotten) is taken out of Syncthing and deleted, once the tasks working on it are
   stopped (`folder_revoked`, `copy_deleted` in `shares.log`); the peer's device goes with its last
@@ -1425,7 +1410,7 @@ downloaded (right-click › Keep Downloaded). Nothing asks for more rights.
 A task's spec may lend a copy in place of the folder (`folders: [{…, copy: "<id>"}]`), when
 eriphe-core places the task on this machine rather than the folder's (the copy in sync, or
 complete when the folder's machine was last seen): the node mounts `<root>/sync/copies/<id>` only
-if its plan keeps that copy of that folder, and at most at the copy's level; with `manage`, the
+if its plan keeps that copy of that folder, and at most at the copy's level; lent to write, the
 snapshot is of the copy, taken here. What the task writes there goes back to the folder's machine,
 at once or when it returns.
 

@@ -16,9 +16,10 @@ container](../install/README.md#one-container-nas-any-linux-with-docker).
 3. Its log (the container's icon → Logs) ends with the workspace's address and a setup code:
    open the WebUI, `/setup`, and give the code.
 4. Share the folders Eriphe may work with, from the NAS's terminal (the `>_` icon at the top):
-   `docker exec eriphe eriphe share add "/mnt/user/1 PROJECTS"` (read only; `--drop` lets it
-   write its results in its results subfolder, `--manage` lets it change the folder, `--copyable`
-   allows copies on your other machines). `docker exec eriphe eriphe share list` shows them,
+   `docker exec eriphe eriphe share add "/mnt/user/1 PROJECTS"` (to read and change it, a
+   snapshot taken before each task that may change it; `--read` for a sensitive folder,
+   `--copyable` allows copies on your other machines). What a task may do there is set in the
+   workspace, Settings → Folders. `docker exec eriphe eriphe share list` shows them,
    `remove` stops one. Eriphe's tasks get each folder shared alone; nothing else of the NAS, not
    `/mnt/user` nor `appdata`, is mounted into eriphe-node or its tasks. Nothing restarts: the next
    task has the folder (a task at work keeps the folders it was given until it ends); only the

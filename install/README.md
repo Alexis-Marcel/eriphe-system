@@ -212,14 +212,14 @@ none` works).
   it says so and does nothing (the task would start over), unless `--now` follows.
 - **Folders.** Nothing of the host is given to Eriphe until you share a folder, on the host:
   `docker exec eriphe eriphe share add /mnt/user/Documents` (the options of [Folders](#folders):
-  `--drop`, `--manage`, `--copyable`, `--name`; also `list`, `remove`, `snapshots`, `restore`).
+  `--read`, `--write`, `--copyable`, `--name`; also `list`, `remove`, `snapshots`, `restore`).
   The launcher keeps the list (`launcher/folders`) and writes a copy of it for eriphe-node engine
   (`proxy/binds`, a folder of the data the node never sees, mounted read-only into the engine
   only), which reads it again at each request and mounts folders from that list only
   (`:ro` ones read-only only). eriphe-node mounts **no** shared folder: a task gets the folders it
   is given from the Docker daemon when its container is made, each alone at its path, and what
-  the node does inside a folder (its checks before each lend, a results subfolder, a snapshot
-  before `--manage`, a restore, handing results back, its access checks) runs in a short-lived
+  the node does inside a folder (its checks before each lend, a snapshot before a task that may
+  change it, a restore, handing back what a task wrote, its access checks) runs in a short-lived
   container of its own image given only that folder (and the snapshot's place in its data), with
   no network, a read-only root and a task's three capabilities (node/README.md, Folder helpers).
   Syncthing sees only the folders that may be copied (`--copyable`), each at its path. Nothing
@@ -319,8 +319,7 @@ with an apostrophe is left out, and the installer says Eriphe.
 
 The device then shows on Settings → Devices, with what Eriphe sees and can do there, and its
 eriphe-node version. Its page (the "⋯" menu, "Details and log") keeps its access log: the folders
-listed, opened or lent to a task (with the right), the tasks run there, the results dropped in a
-folder's Eriphe/, for 90 days. "Cut access" in the same menu stops at once what Eriphe does there:
+listed, opened or lent to a task (with the right), the tasks run there, for 90 days. "Cut access" in the same menu stops at once what Eriphe does there:
 its tasks stop, no work goes to it, its folders are neither listed nor lent, and its connection is
 refused until "Restore access". Nothing is uninstalled. Open the workspace with
 the machine's LAN address, not `localhost`, before you generate the command: the address in it is
@@ -363,12 +362,12 @@ To give Eriphe folders of a Google Drive: Settings → Tools → Add a tool → 
    downloads (or the client ID and secret). The same steps, with Google's rules and sources:
    [docs/google.md](../docs/google.md). "Tester" on that page checks it.
 2. Back on the connect page, Drive is ticked: tick "Permettre à Eriphe d'écrire" if Eriphe may add
-   files (always in an `Eriphe` subfolder of the folders you allow; it never changes or deletes
-   yours); without it, Eriphe only reads. "Se connecter" opens Google's page. Google says "Google
+   files there; without it, Eriphe only reads. "Se connecter" opens Google's page. Google says "Google
    hasn't verified this app": it is your own app. Click "Advanced", then "Go to Eriphe".
 3. Back in Settings → Tools, the account is a card; wait a few seconds for the Files server to
-   start on a machine, then open **Lieux** on its Drive row and give each folder "Donner en
-   lecture" or "Lecture + dépôt". Eriphe sees only those folders and what is inside them.
+   start on a machine, then open **Dossiers** on its Drive row and "Donner" each folder Eriphe may
+   reach, with what it may do there (Lire, Modifier, Supprimer: free, on approval or never, as the
+   account by default). Eriphe sees only those folders and what is inside them.
 
 Google only sends back to an https address whose name ends in a public domain: a workspace opened
 at an IP address (`https://192.168.1.2:8443`) or at `eriphe.local` cannot connect Drive. Turn on
@@ -734,24 +733,25 @@ to Apple's container (in core mode, copy eriphe-core's data out of the VM first)
 
 `--share NAME=/PATH` (repeatable) declares a place of this machine whose folders you may share
 with Eriphe. You share a folder **on this machine**, never from the workspace, which only shows
-what is shared, can lower a folder's level or turn its copies off, and can stop sharing it:
+what is shared, sets what a task may do there, can turn its copies off, and can stop sharing it:
 
 ```sh
-sudo eriphe-share add /home/sam/Documents/Clients          # read
-sudo eriphe-share add --drop --name Factures /mnt/user/compta/2026
-sudo eriphe-share add --manage --copyable /home/sam/Notes  # change it; copies allowed
+sudo eriphe-share add /home/sam/Notes                      # read and change it
+sudo eriphe-share add --read --name Factures /mnt/user/compta/2026  # a sensitive folder: read only
+sudo eriphe-share add --copyable /home/sam/Documents/Clients  # copies allowed
 sudo eriphe-share list
 sudo eriphe-share snapshots Notes                          # taken before each task that may change it
 sudo eriphe-share restore Notes latest
 sudo eriphe-share remove Factures                          # the tasks using it stop
 ```
 
-Three levels: Eriphe reads the folder (read, the default); with `--drop` ("À côté") it also drops
-its results in its results subfolder, named after your assistant (`Eriphe/` by default, `Jarvis/`
-if you called it Jarvis); with `--manage` ("Gérer") it may create, change, rename and delete
-anywhere in it, the node taking a snapshot of the folder before each such task (kept 7 days,
-restored with `eriphe-share restore`). The level chosen here is the most it gets: the workspace
-can lower it, only this machine raises it (share it again). `--copyable` (off by default) allows
+Two levels: by default (`--write`) Eriphe may read the folder and create, change, rename and
+delete anywhere in it, the node taking a snapshot of the folder before each task that may change
+it (kept 7 days, restored with `eriphe-share restore`); with `--read`, for a sensitive folder, it
+only reads it. The level chosen here is the most it gets: what a task may do there, Lire and
+Modifier, each free, on approval or never, is set in the workspace (Settings → Folders: a default
+per device, an exception per folder), never above it; only this machine raises it (share it
+again). `--copyable` (off by default) allows
 copies of the folder on your other machines. eriphe-core never sees the path, only the name.
 Nothing is shared unless you say so. On a Mac with Apple's container, right-click a folder in the
 Finder, Quick Actions, "Share with Eriphe..." (named in French on a Mac in French), which asks for
@@ -777,16 +777,15 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
   What the node refuses whatever the place (node/README.md, Shares): hidden folders, keys,
   credentials and settings (`.ssh`, `.gnupg`, `.config`, `appdata`…), a folder that holds one,
   symlinks out of the place, and the node's own data.
-- A task runs as UID 1000 with the folder's group added: it reads what that group (or anyone) may
-  read. What it drops in `Eriphe/` belongs to UID 1000 and keeps the folder's group,
-  group-writable (on a NAS, `users`: every account can open, change and delete it).
+- A task runs with the folder's group added: it reads what that group (or anyone) may read. What
+  it writes in a folder lent to write is handed back to the folder's owner, group-writable.
 - **macOS with Apple's container**: the home, iCloud Drive and the cloud folders are shared by
   themselves (see What it installs), `~/Library` excepted (mail, messages, the apps' settings):
   iCloud Drive and the cloud folders inside it are places of their own. eriphe-node never opens
   them itself: a short-lived container lists them (about 0.7 s a folder), and a task's container
   mounts its folders, so macOS asks once, for Apple's `container-runtime-linux`, and the answer
   outlives Eriphe's updates (node/README.md, The container engine). What a task writes in
-  `Eriphe/` is yours, as any file you make. Files kept only in iCloud Drive or a cloud folder are
+  a folder is yours, as any file you make. Files kept only in iCloud Drive or a cloud folder are
   downloaded on the Mac before the task starts, up to 2 GB per task (`-download-limit`); a bigger
   folder fails the task with what to do: "Keep Downloaded" on it, in the Finder.
 - **macOS in Lima's VM**: `--share` is ignored (the VM sees no Mac folder). **Windows**: not yet.
@@ -933,7 +932,7 @@ own, which the launcher in WSL cannot see: `ERIPHE_WAKE_MAC`), and the ports of 
 The distribution sees no Windows drive. Only the folder of the user signed in at the PC
 (`C:\Users\<you>`) is mounted, at `/mnt/eriphe/home`, as the one place folders may be shared from:
 right-click a folder of it in File Explorer, "Show more options", "Share with Eriphe...": a small
-window asks for the level (read, next to it, manage) and whether it may be copied to your other
+window asks for the level (change, the default, or read) and whether it may be copied to your other
 machines, then says how it went. A task gets only the folders
 shared this way: the menu runs the launcher's `eriphe share add` (`wsl -d eriphe eriphe-share add
 /mnt/eriphe/home/<folder>` does the same). The menu is that user's (their registry); it works when that user is the one who

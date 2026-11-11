@@ -41,20 +41,32 @@ const (
 	sharesLock = "shares.lock"
 	sharesLog  = "shares.log"
 
-	accessRead   = "read"   // read only
-	accessDrop   = "drop"   // read, and drop results in its results subfolder ("À côté")
-	accessManage = "manage" // read, create, change, rename and delete anywhere in it ("Gérer")
+	accessRead  = "read"  // read only
+	accessWrite = "write" // read, create, change, rename and delete anywhere in it, after a snapshot
 )
 
 // accessRank orders the levels: a folder is lent at most at its own.
-var accessRank = map[string]int{accessRead: 1, accessDrop: 2, accessManage: 3}
+var accessRank = map[string]int{accessRead: 1, accessWrite: 2}
+
+// legacyLevel is a level of before the two (shares.json, a sync plan):
+// "drop" (results in a subfolder) is read, so nothing is widened, and
+// "manage" is write.
+func legacyLevel(l string) string {
+	switch l {
+	case "drop":
+		return accessRead
+	case "manage":
+		return accessWrite
+	}
+	return l
+}
 
 // sharedFolder is one folder shared on this machine.
 type sharedFolder struct {
 	ID     string `json:"id"`     // random: what eriphe-core names it by
 	Name   string `json:"name"`   // the name Eriphe knows it by
 	Path   string `json:"path"`   // absolute, resolved, as this node sees it
-	Access string `json:"access"` // its level now: read, drop or manage
+	Access string `json:"access"` // its level now: read or write
 	// Max is the level chosen on this machine; eriphe-core may have lowered
 	// Access since, never raised it. Empty before levels: Access.
 	Max string `json:"max,omitempty"`
@@ -73,13 +85,10 @@ func (f sharedFolder) ceiling() string {
 	return f.Access
 }
 
-// level is the level a task asks for a folder: manage, drop or read.
+// level is the level a task asks for a folder: write or read.
 func (tf TaskFolder) level() string {
-	switch {
-	case tf.Manage:
-		return accessManage
-	case tf.Write:
-		return accessDrop
+	if tf.Write {
+		return accessWrite
 	}
 	return accessRead
 }
@@ -101,6 +110,10 @@ func loadShared(root string) ([]sharedFolder, error) {
 	}
 	if out.Folders == nil {
 		out.Folders = []sharedFolder{}
+	}
+	for i := range out.Folders {
+		f := &out.Folders[i]
+		f.Access, f.Max = legacyLevel(f.Access), legacyLevel(f.Max)
 	}
 	return out.Folders, nil
 }
@@ -269,10 +282,7 @@ func (n *node) lentFolder(t *Task, tf TaskFolder) (*resolvedFolder, error) {
 	sf := list[i]
 	if accessRank[tf.level()] > accessRank[sf.Access] {
 		auditShare(n.opt.root, map[string]any{"event": "refused", "id": sf.ID, "name": sf.Name, "task": t.ID, "reason": "level " + sf.Access})
-		if sf.Access == accessRead {
-			return nil, shareErr(http.StatusForbidden, "read_only", "this folder is shared read-only on this machine")
-		}
-		return nil, shareErr(http.StatusForbidden, "level", "this folder is shared for %s only on this machine, not %s", sf.Access, tf.level())
+		return nil, shareErr(http.StatusForbidden, "read_only", "this folder is shared read-only on this machine")
 	}
 	if n.helper() {
 		// Checked by the helper that prepares it (helperFolderMounts).
@@ -380,7 +390,7 @@ func (n *node) shareRoutes(mux *http.ServeMux) {
 // level are stopped.
 func (n *node) lowerShared(id, access string, copyable *bool, by string) (*sharedFolder, error) {
 	if access != "" && accessRank[access] == 0 {
-		return nil, shareErr(http.StatusBadRequest, "invalid", "access %q: read, drop or manage", access)
+		return nil, shareErr(http.StatusBadRequest, "invalid", "access %q: read or write", access)
 	}
 	var out sharedFolder
 	var from string

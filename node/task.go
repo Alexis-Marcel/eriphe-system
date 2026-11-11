@@ -161,9 +161,9 @@ type Task struct {
 	ca          *taskCA         // its accesses' authority: in memory only (egress_access.go)
 
 	// The agent's directory mounted at /opt/eriphe while the container runs
-	// (inject.go), and the Eriphe/ folders it writes to (handback.go).
+	// (inject.go), and the folders it writes to (handback.go).
 	agentDir  string
-	results   []string
+	written   []string
 	onTurnEnd func()
 
 	// onIdle runs when a turn has ended and the task is idle (turnend.go);
@@ -378,8 +378,6 @@ func (n *node) handleNode(w http.ResponseWriter, r *http.Request) {
 		"update": n.upd.info(),
 		// The agents unpacked here: a task of theirs starts at once (inject.go).
 		"agents_ready": n.agents.readyRuntimes(),
-		// It names a folder's results subfolder as eriphe-core says (shares.go).
-		"results_named": true,
 		// A model server eriphe-core may reach through the tunnel (model.go).
 		"model_server": n.opt.modelServer != "",
 		// Its Syncthing's device ID, for the copies of shared folders (syncthing.go).

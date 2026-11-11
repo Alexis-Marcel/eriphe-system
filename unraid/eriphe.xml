@@ -16,7 +16,7 @@ This container is Eriphe's launcher. It creates and keeps running Eriphe's own c
 &#xD;
 First start: the container's log gives the workspace's address and a setup code. Open the WebUI (https://the NAS:8443/setup), give the code to choose your password, and the wizard connects the AI account.&#xD;
 &#xD;
-Folders: Eriphe sees no folder of the NAS until you share one, on the NAS: docker exec eriphe eriphe share add /mnt/user/Documents (--drop to let it write its results in its results subfolder, --manage to let it change the folder). The launcher lets Eriphe's tasks have that folder alone, nothing else of the NAS; nothing restarts (copies to other machines pause a few seconds when the folders copied change). Hidden folders, appdata, keys and Eriphe's own data are always refused.&#xD;
+Folders: Eriphe sees no folder of the NAS until you share one, on the NAS: docker exec eriphe eriphe share add /mnt/user/Documents (to read and change it, a snapshot taken first; --read for a sensitive folder). The launcher lets Eriphe's tasks have that folder alone, nothing else of the NAS; nothing restarts (copies to other machines pause a few seconds when the folders copied change). Hidden folders, appdata, keys and Eriphe's own data are always refused.&#xD;
 &#xD;
 To remove it: docker exec eriphe eriphe-launcher uninstall (add --data to delete its data too), then remove the container.</Overview>
   <Category>Productivity: HomeAutomation: Tools:Utilities</Category>

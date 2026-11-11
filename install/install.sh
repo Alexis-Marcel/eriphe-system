@@ -1603,7 +1603,7 @@ share_cmd() {
 	cat <<EOF
 #!/bin/sh
 # Written by install.sh: shares folders of this machine with Eriphe.
-#   eriphe-share add [--name NAME] [--drop|--manage] [--copyable] FOLDER...
+#   eriphe-share add [--name NAME] [--read|--write] [--copyable] FOLDER...
 #   eriphe-share list
 #   eriphe-share remove NAME|FOLDER...
 #   eriphe-share snapshots NAME
@@ -2453,7 +2453,7 @@ mac_share_sh() {
 	cat <<EOF
 #!/bin/sh
 # Written by install.sh: shares folders of this Mac with Eriphe.
-#   eriphe-share add [--name NAME] [--drop|--manage] [--copyable] FOLDER...
+#   eriphe-share add [--name NAME] [--read|--write] [--copyable] FOLDER...
 #   eriphe-share list
 #   eriphe-share remove NAME|FOLDER...
 #   eriphe-share snapshots NAME
@@ -2463,12 +2463,12 @@ CONTAINER=$(q "$CONTAINER")
 EOF
 	if [ "$(qa_lang)" = fr ]; then
 		cat <<'EOF'
-T_LEVEL='Niveau de partage avec Eriphe :' T_READ='Lecture' T_DROP='À côté (résultats dans un sous-dossier)' T_MANAGE='Gérer (modifier le dossier)'
+T_LEVEL='Niveau de partage avec Eriphe :' T_WRITE='Modifier (lire, créer, changer, supprimer ; instantané avant)' T_READ='Lecture'
 T_COPY='Ce dossier peut-il être copié sur tes autres machines ?' T_NO='Non' T_YES='Oui' T_CANCEL='Annuler' T_FAILED='Eriphe : non partagé'
 EOF
 	else
 		cat <<'EOF'
-T_LEVEL='Level of sharing with Eriphe:' T_READ='Read' T_DROP='Next to it (results in a subfolder)' T_MANAGE='Manage (change the folder)'
+T_LEVEL='Level of sharing with Eriphe:' T_WRITE='Change (read, create, change, delete; snapshot first)' T_READ='Read'
 T_COPY='May this folder be copied to your other machines?' T_NO='No' T_YES='Yes' T_CANCEL='Cancel' T_FAILED='Eriphe: not shared'
 EOF
 	fi
@@ -2484,11 +2484,10 @@ ask() { osascript -e 'on run argv' "$@" 2>/dev/null; }
 # outcome as a notification. Cancelled: nothing shared.
 if [ "${1:-}" = --ask ]; then
 	shift
-	level=$(ask -e 'choose from list {item 2 of argv, item 3 of argv, item 4 of argv} with prompt (item 1 of argv) default items {item 2 of argv} cancel button name (item 5 of argv)' -e 'end run' \
-		"$T_LEVEL" "$T_READ" "$T_DROP" "$T_MANAGE" "$T_CANCEL") || exit 0
+	level=$(ask -e 'choose from list {item 2 of argv, item 3 of argv} with prompt (item 1 of argv) default items {item 2 of argv} cancel button name (item 4 of argv)' -e 'end run' \
+		"$T_LEVEL" "$T_WRITE" "$T_READ" "$T_CANCEL") || exit 0
 	case $level in
-	"$T_DROP") flag=--drop ;;
-	"$T_MANAGE") flag=--manage ;;
+	"$T_WRITE") flag=--write ;;
 	"$T_READ") flag=--read ;;
 	*) exit 0 ;;
 	esac
@@ -3802,12 +3801,12 @@ outcome() {
 	if [ -n "$NATIVE" ]; then
 		shared=$(mac_shares)
 		note "Places folders may be shared from: $(printf '%s' "$shared" | sed 's/=[^,]*//g; s/,/, /g')"
-		[ -z "$shared" ] || note "To share one with Eriphe: right-click it in the Finder, Quick Actions, \"$(qa_name)\"; or $(tilde "$ERIPHE_HOME/bin/eriphe-share") add <folder> (--drop to let it drop its results next to it, --manage to let it change the folder, --copyable to allow copies on your other machines)"
+		[ -z "$shared" ] || note "To share one with Eriphe: right-click it in the Finder, Quick Actions, \"$(qa_name)\"; or $(tilde "$ERIPHE_HOME/bin/eriphe-share") add <folder> (shared to change by default, --read for a sensitive folder, --copyable to allow copies on your other machines)"
 		[ -n "$UPDATING" ] || [ -z "$shared" ] ||
 			notice "the first time a folder of Documents, the Desktop or iCloud Drive is shared, macOS asks to allow \"container-runtime-linux\". Allow it."
 	elif [ -n "$SHARES" ]; then
 		note "Places folders may be shared from: $(printf '%s' "$SHARES" | sed 's/=[^,]*//g; s/,/, /g')"
-		[ -n "${HOST_DATA:-}" ] || note "To share one with Eriphe: sudo eriphe-share add <folder> (--drop to let it drop its results next to it, --manage to let it change the folder, --copyable to allow copies on your other machines)"
+		[ -n "${HOST_DATA:-}" ] || note "To share one with Eriphe: sudo eriphe-share add <folder> (shared to change by default, --read for a sensitive folder, --copyable to allow copies on your other machines)"
 	elif [ "$OS" = Linux ] && [ -z "$UPDATING" ]; then
 		hint="--share documents=/home/<you>/Documents"
 		[ -d /mnt/user ] && hint="--share shares=/mnt/user"

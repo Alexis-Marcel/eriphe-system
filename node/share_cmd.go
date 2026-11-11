@@ -20,7 +20,7 @@ import (
 // running node, and changes the list in the node's data: nothing of it is
 // reachable from eriphe-core.
 //
-//	eriphe-node share add [--name N] [--drop|--manage] [--copyable] <folder>...
+//	eriphe-node share add [--name N] [--read|--write] [--copyable] <folder>...
 //	eriphe-node share list [--json]
 //	eriphe-node share remove <name or folder>...
 //	eriphe-node share snapshots <name or folder>
@@ -35,20 +35,21 @@ import (
 // own eriphe-node share add to it.
 const shareUsage = `eriphe-node share: share folders of this machine with Eriphe.
 
-  eriphe-node share add [--name NAME] [--read|--drop|--manage] [--copyable] FOLDER...
-      share each folder, read-only by default (--read); --drop also lets tasks drop
-      their results in its results subfolder ("next to it"); --manage lets
-      them create, change, rename and delete anything in it, a snapshot being
-      taken before each such task; --copyable allows copies of it on your
-      other machines; --name gives the name Eriphe knows it by (one folder
-      only; default: the folder's own name). The level chosen here is the
-      most Eriphe gets: the workspace may lower it, never raise it. Sharing
-      a folder already shared again sets its level and copies anew.
+  eriphe-node share add [--name NAME] [--read|--write] [--copyable] FOLDER...
+      share each folder, to change by default (--write: tasks may create,
+      change, rename and delete anything in it, a snapshot being taken before
+      each such task), or read-only (--read) for a sensitive folder;
+      --copyable allows copies of it on your other machines; --name gives
+      the name Eriphe knows it by (one folder only; default: the folder's own
+      name). The level chosen here is the most Eriphe gets: what a task may
+      do there is then set in the workspace (Settings → Folders), never above
+      it. Sharing a folder already shared again sets its level and copies
+      anew.
   eriphe-node share list [--json]
   eriphe-node share remove NAME|FOLDER...
       stop sharing; the tasks using it are stopped
   eriphe-node share snapshots NAME|FOLDER
-      the snapshots of a folder, taken before the tasks that manage it
+      the snapshots of a folder, taken before the tasks that may change it
   eriphe-node share restore NAME|FOLDER SNAPSHOT|latest
       put the folder back as it was in that snapshot (a snapshot of it as it
       is now is taken first); stop the tasks using it before
@@ -187,7 +188,7 @@ var (
 )
 
 // parseInterspersed parses flags anywhere among the arguments
-// (`add FOLDER --drop` as `add --drop FOLDER`).
+// (`add FOLDER --read` as `add --read FOLDER`).
 func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	var rest []string
 	for {
@@ -209,7 +210,10 @@ func (n *node) shareCmd(cmd string, args []string, out io.Writer) error {
 	switch cmd {
 	case "add":
 		name := fs.String("name", "", "")
-		read := fs.Bool("read", false, "") // the default, said: the right click passes it
+		read := fs.Bool("read", false, "")
+		write := fs.Bool("write", false, "")
+		// The former levels, from right clicks installed before the two:
+		// drop (results in a subfolder) is read, manage is write.
 		drop := fs.Bool("drop", false, "")
 		manage := fs.Bool("manage", false, "")
 		copyable := fs.Bool("copyable", false, "")
@@ -217,16 +221,17 @@ func (n *node) shareCmd(cmd string, args []string, out io.Writer) error {
 		if err != nil || len(paths) == 0 || (*name != "" && len(paths) > 1) {
 			return errUsage
 		}
-		if (*drop && *manage) || (*read && (*drop || *manage)) {
-			fmt.Fprintln(out, "--read, --drop and --manage: choose one")
+		*read, *write = *read || *drop, *write || *manage
+		if *read && *write {
+			fmt.Fprintln(out, "--read and --write: choose one")
 			return errUsage
 		}
-		access := accessRead
+		access := "" // write, or read on a read-only place
 		switch {
-		case *drop:
-			access = accessDrop
-		case *manage:
-			access = accessManage
+		case *read:
+			access = accessRead
+		case *write:
+			access = accessWrite
 		}
 		failed := false
 		if shareAsksNode && *copyable {
@@ -241,8 +246,8 @@ func (n *node) shareCmd(cmd string, args []string, out io.Writer) error {
 				failed = true
 				continue
 			}
-			what := map[string]string{accessRead: "read only", accessDrop: "read, and results dropped in its results subfolder",
-				accessManage: "read and changed, a snapshot taken before each task that may change it"}[f.Access]
+			what := map[string]string{accessRead: "read only",
+				accessWrite: "read and changed, a snapshot taken before each task that may change it"}[f.Access]
 			if f.Copyable {
 				what += "; may be copied to your other machines"
 			}
@@ -460,7 +465,8 @@ func (n *node) snapshotTarget(arg string) (id, name, path string, err error) {
 }
 
 // shareFolder checks a folder and adds it to the list; one shared already
-// gets the level and copies given (changed), its name too if given.
+// gets the level and copies given (changed), its name too if given. No
+// level ("") is write, or read on a read-only place.
 func (n *node) shareFolder(path, name, access string, copyable bool) (*sharedFolder, bool, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -470,8 +476,14 @@ func (n *node) shareFolder(path, name, access string, copyable bool) (*sharedFol
 	if err != nil {
 		return nil, false, err
 	}
+	if access == "" {
+		access = accessWrite
+		if f.root.ReadOnly {
+			access = accessRead
+		}
+	}
 	if access != accessRead && f.root.ReadOnly {
-		return nil, false, errors.New("this place is read-only on this machine: share it without --drop or --manage")
+		return nil, false, errors.New("this place is read-only on this machine: share it with --read")
 	}
 	named := name != ""
 	if name == "" {

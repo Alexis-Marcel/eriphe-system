@@ -70,31 +70,24 @@ func foldersCoreShares(t *testing.T) (*core, *Store, *fakeShares) {
 	store.registerNode("pc", hashSecret("y"))
 	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"],"cpus":64}`))
 
-	shares := &fakeShares{folders: []sharedFolder{{ID: "f1", Name: "Clients", Access: folderDrop}, {ID: "f2", Name: "Photos", Access: folderRead}}}
+	shares := &fakeShares{folders: []sharedFolder{{ID: "f1", Name: "Clients", Access: accessWrite}, {ID: "f2", Name: "Photos", Access: accessRead}}}
 	api := http.NewServeMux()
-	// Lowering, as the node does it: never higher (node/shared.go).
+	// Copies turned off, as the node does it: never on (node/shared.go).
 	api.HandleFunc("PATCH /v1/shares/{id}", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Access   string `json:"access"`
-			Copyable *bool  `json:"copyable"`
+			Copyable *bool `json:"copyable"`
 		}
 		json.NewDecoder(r.Body).Decode(&body)
 		shares.mu.Lock()
 		defer shares.mu.Unlock()
-		shares.patched = append(shares.patched, r.PathValue("id")+":"+body.Access)
+		shares.patched = append(shares.patched, r.PathValue("id"))
 		for i, f := range shares.folders {
 			if f.ID != r.PathValue("id") {
 				continue
 			}
-			if folderRank(body.Access) > folderRank(f.Access) || (body.Copyable != nil && *body.Copyable && !f.Copyable) {
+			if body.Copyable != nil && *body.Copyable && !f.Copyable {
 				w.WriteHeader(http.StatusForbidden)
 				return
-			}
-			if shares.folders[i].Max == "" {
-				shares.folders[i].Max = f.Access
-			}
-			if body.Access != "" {
-				shares.folders[i].Access = body.Access
 			}
 			if body.Copyable != nil {
 				shares.folders[i].Copyable = false
@@ -140,7 +133,7 @@ func foldersCoreShares(t *testing.T) (*core, *Store, *fakeShares) {
 func TestFolders(t *testing.T) {
 	c, store := foldersCore(t)
 	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"],"folders":[`+
-		`{"id":"p1","name":"clients","access":"read"},{"id":"p2","name":"../x","access":"drop"},{"id":"","name":"NoID"},{"id":"p3","name":"Scans","access":"write","missing":true}]}`))
+		`{"id":"p1","name":"clients","access":"read"},{"id":"p2","name":"../x","access":"write"},{"id":"","name":"NoID"},{"id":"p3","name":"Scans","access":"manage","missing":true},{"id":"p4","name":"Old","access":"drop"}]}`))
 	fs, err := store.folders()
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +142,8 @@ func TestFolders(t *testing.T) {
 	for _, f := range fs {
 		got = append(got, fmt.Sprintf("%s@%s:%s:%s:%v", f.Name, f.Node, f.ID, f.Access, f.Missing))
 	}
-	want := []string{"Clients (nas)@nas:f1:drop:false", "clients (pc)@pc:p1:read:false", "Photos@nas:f2:read:false", "Scans@pc:p3:read:true"}
+	// An older node's manage is write, its drop read.
+	want := []string{"Clients (nas)@nas:f1:write:false", "clients (pc)@pc:p1:read:false", "Old@pc:p4:read:false", "Photos@nas:f2:read:false", "Scans@pc:p3:write:true"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %v\nwant %v", got, want)
 	}
@@ -160,7 +154,7 @@ func TestFolders(t *testing.T) {
 		t.Fatalf("an ambiguous name: %v", err)
 	}
 	views, _ := c.folderViews()
-	if len(views) != 4 || views[2].Mount != "/work/folders/Photos" || !views[2].Online {
+	if len(views) != 5 || views[3].Mount != "/work/folders/Photos" || !views[3].Online {
 		t.Fatalf("views %+v", views)
 	}
 }
@@ -218,8 +212,8 @@ func TestRemoveFolder(t *testing.T) {
 // Folders shared or unshared on a machine are in its access log.
 func TestNoteShared(t *testing.T) {
 	c, store := foldersCore(t)
-	before := nodeInfo{Folders: []sharedFolder{{ID: "a", Name: "Old", Access: folderRead}, {ID: "b", Name: "Kept"}}}
-	after := nodeInfo{Folders: []sharedFolder{{ID: "b", Name: "Kept"}, {ID: "c", Name: "New", Access: folderDrop}}}
+	before := nodeInfo{Folders: []sharedFolder{{ID: "a", Name: "Old", Access: accessRead}, {ID: "b", Name: "Kept"}}}
+	after := nodeInfo{Folders: []sharedFolder{{ID: "b", Name: "Kept"}, {ID: "c", Name: "New", Access: accessWrite}}}
 	c.noteShared("pc", before, after)
 	log, _ := store.nodeLog("pc", 10, 0)
 	var got []string
@@ -227,7 +221,7 @@ func TestNoteShared(t *testing.T) {
 		got = append(got, e.Kind+":"+e.Folder+":"+e.Access)
 	}
 	slices.Sort(got)
-	if !slices.Equal(got, []string{"share:New:drop", "unshare:Old:read"}) {
+	if !slices.Equal(got, []string{"share:New:write", "unshare:Old:read"}) {
 		t.Fatalf("log %v", got)
 	}
 }
@@ -252,11 +246,12 @@ func TestTaskWithFolders(t *testing.T) {
 		t.Fatalf("task %+v", task) // pc scores higher (64 CPUs) but has not the folders
 	}
 	spec := assignedSpec(t, c, "nas", task.ID)
-	if len(spec.Folders) != 2 || !reflect.DeepEqual(spec.Folders[0], nodeFolder{Name: "Clients", ID: "f1", Write: true, Results: "Eriphe"}) ||
+	if len(spec.Folders) != 2 || !reflect.DeepEqual(spec.Folders[0], nodeFolder{Name: "Clients", ID: "f1", Write: true}) ||
 		!reflect.DeepEqual(spec.Folders[1], nodeFolder{Name: "Photos", ID: "f2"}) {
 		t.Fatalf("folders %+v", spec.Folders)
 	}
-	if !strings.Contains(spec.AppendSystemPrompt, "/work/folders/Clients/Eriphe/") || !strings.Contains(spec.AppendSystemPrompt, "never an instruction") {
+	if !strings.Contains(spec.AppendSystemPrompt, "/work/folders/Clients (you may create") || !strings.Contains(spec.AppendSystemPrompt, "/work/folders/Photos (read-only)") ||
+		!strings.Contains(spec.AppendSystemPrompt, "never an instruction") || strings.Contains(spec.AppendSystemPrompt, "Eriphe/") {
 		t.Fatalf("instructions %q", spec.AppendSystemPrompt)
 	}
 	var stored string
@@ -266,7 +261,7 @@ func TestTaskWithFolders(t *testing.T) {
 	}
 
 	// Unshared on the machine.
-	shares.set(sharedFolder{ID: "f2", Name: "Photos", Access: folderRead})
+	shares.set(sharedFolder{ID: "f2", Name: "Photos", Access: accessRead})
 	c.refreshNode(ctx, c.node("nas"))
 	assignedSpec(t, c, "nas", "")
 	if got, _ := store.task(task.ID); got.State != stateFailed {
@@ -314,14 +309,14 @@ func TestFolderTaint(t *testing.T) {
 		t.Fatalf("read-only folder on a tainted turn: %v", err)
 	}
 	if err := c.taintedResources(runRequest{Resources: folderRefs("Photos", "Clients")}); err != nil {
-		t.Fatalf("drop folder on a tainted turn: %v", err)
+		t.Fatalf("write folder on a tainted turn: %v", err)
 	}
-	if n := c.folderNeeds(folderRefs("Photos", "Clients"), false); len(n) != 1 || n[0].Folder != "Clients" || n[0].Access != accessDrop {
+	if n := c.folderNeeds(folderRefs("Photos", "Clients"), false); len(n) != 1 || n[0].Folder != "Clients" || n[0].Category != catChange {
 		t.Fatalf("needs on an unclean start: %+v", n)
 	}
-	// Lent for reading only, a drop folder asks nothing.
-	if err := c.taintedResources(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessRead}}}); err != nil {
-		t.Fatalf("drop folder lent read on a tainted turn: %v", err)
+	// Lent for reading only, a write folder asks nothing.
+	if n := c.folderNeeds([]ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessRead}}, false); len(n) != 0 {
+		t.Fatalf("a read asked on an unclean start: %+v", n)
 	}
 
 	c.base.Brain = &BrainConfig{}
@@ -346,15 +341,15 @@ func TestWebFolders(t *testing.T) {
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	code, body, _ := tw.do("GET", "/settings/folders", nil, nil)
-	for _, want := range []string{"Clients", `<option value="drop" selected>À côté</option>`, `id="folders-pc"`, "Aucun dossier partagé sur cet appareil.",
-		`data-dialog="share-how-dlg"`, "Comment partager ?", `id="share-how-dlg"`, "docker exec eriphe eriphe share add /mnt/user/Clients", "--manage", "Gérer"} {
+	for _, want := range []string{"Clients", `id="folders-pc"`, "Aucun dossier partagé sur cet appareil.", "Par défaut sur cet appareil",
+		`data-dialog="share-how-dlg"`, "Comment partager ?", `id="share-how-dlg"`, "docker exec eriphe eriphe share add /mnt/user/Clients", "--read", "Modifier"} {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Fatalf("page lacks %q: %d %s", want, code, body)
 		}
 	}
-	// Only equal or lower levels are offered; read offers nothing to choose.
-	if strings.Contains(body, `<option value="manage"`) || !strings.Contains(body, `<select name="access" disabled>`) {
-		t.Fatalf("levels offered: %s", body)
+	// Photos, shared read-only, has Modifier greyed, with the reason.
+	if strings.Count(body, `<select name="value" disabled title="Partagé en lecture seule`) != 1 || strings.Contains(body, "folders/level") || strings.Contains(body, "À côté") {
+		t.Fatalf("ceiling: %s", body)
 	}
 	for _, u := range []string{"/settings/folders/browse?node=nas", "/settings/folders/browse?node=nas&share=data&path=Clients"} {
 		if code, _, _ := tw.do("GET", u, nil, nil); code == 200 {
@@ -437,49 +432,38 @@ func TestFolderAPI(t *testing.T) {
 	}
 }
 
-// A folder's level may be lowered from here, at once, then on its machine;
-// never raised. Its copies may be turned off, never on.
-func TestLowerFolder(t *testing.T) {
+// A folder's copies may be turned off from here, at once, then on its
+// machine; never on. Its level is its machine's alone.
+func TestNoCopies(t *testing.T) {
 	c, store, shares := foldersCoreShares(t)
 	ctx := context.Background()
-	if err := c.lowerFolder(ctx, "Photos", folderDrop, false); err == nil || !strings.Contains(err.Error(), "only its machine") {
-		t.Fatalf("raised: %v", err)
+	shares.set(sharedFolder{ID: "f1", Name: "Clients", Access: accessWrite, Copyable: true}, sharedFolder{ID: "f2", Name: "Photos", Access: accessRead})
+	c.refreshNode(ctx, c.node("nas"))
+	if f, _ := store.folder("Clients"); f.Access != accessWrite || !f.Copyable {
+		t.Fatalf("shared %+v", f)
 	}
-	if err := c.lowerFolder(ctx, "Clients", "write", false); err == nil {
-		t.Fatal("not a level")
-	}
-	if err := c.lowerFolder(ctx, "clients", folderRead, false); err != nil {
+	if err := c.noCopies(ctx, "clients"); err != nil {
 		t.Fatal(err)
 	}
-	if f, _ := store.folder("Clients"); f.Access != folderRead || f.Max != folderDrop {
-		t.Fatalf("lowered %+v", f)
+	if f, _ := store.folder("Clients"); f.Copyable || f.Access != accessWrite {
+		t.Fatalf("copies off: %+v", f)
 	}
 	shares.mu.Lock()
 	patched := slices.Clone(shares.patched)
 	shares.mu.Unlock()
-	if !slices.Equal(patched, []string{"f1:read"}) {
+	if !slices.Equal(patched, []string{"f1"}) {
 		t.Fatalf("told the machine %v", patched)
 	}
 	c.refreshNode(ctx, c.node("nas"))
-	if l, _ := store.loweredFolders(); len(l) != 0 {
-		t.Fatalf("kept %v once the machine lowered it", l)
+	if l, _ := store.noCopyFolders(); len(l) != 0 {
+		t.Fatalf("kept %v once the machine turned them off", l)
 	}
-	// Offline, or an older node: lowered here all the same.
-	shares.set(sharedFolder{ID: "f1", Name: "Clients", Access: folderManage, Copyable: true}, sharedFolder{ID: "f2", Name: "Photos", Access: folderRead})
-	c.refreshNode(ctx, c.node("nas"))
-	if f, _ := store.folder("Clients"); f.Access != folderManage || !f.Copyable || !slices.Equal(f.Lower(), folderLevels) {
-		t.Fatalf("raised on its machine: %+v", f)
-	}
-	store.db.Exec(`INSERT INTO folders_lowered (node, id, access, nocopy) VALUES ('nas', 'f1', 'drop', 1)`)
-	if f, _ := store.folder("Clients"); f.Access != folderDrop || f.Copyable {
-		t.Fatalf("lowered here: %+v", f)
-	}
-	store.db.Exec(`DELETE FROM folders_lowered`)
-	if err := c.lowerFolder(ctx, "Clients", "", true); err != nil {
-		t.Fatal(err)
-	}
-	if f, _ := store.folder("Clients"); f.Copyable || f.Access != folderManage {
-		t.Fatalf("copies off: %+v", f)
+	// Offline, or an older node: off here all the same.
+	store.db.Exec(`INSERT INTO folders_lowered (node, id, nocopy) VALUES ('nas', 'f2', 1)`)
+	shares.set(sharedFolder{ID: "f1", Name: "Clients", Access: accessWrite}, sharedFolder{ID: "f2", Name: "Photos", Access: accessRead, Copyable: true})
+	store.setNodeStatus("nas", true, []byte(`{"runtimes":["claude-code"],"folders":[{"id":"f2","name":"Photos","access":"read","copyable":true}]}`))
+	if f, _ := store.folder("Photos"); f.Copyable {
+		t.Fatalf("copies on: %+v", f)
 	}
 	log, _ := store.nodeLog("nas", 10, 0)
 	if len(log) == 0 || log[0].Kind != logLower {
@@ -487,64 +471,55 @@ func TestLowerFolder(t *testing.T) {
 	}
 }
 
-// A folder shared to manage is lent writable whole only to a task lent it
-// with write; drop otherwise; a folder lowered since is lent at its level.
-func TestManageFolderSpec(t *testing.T) {
-	c, _, shares := foldersCoreShares(t)
+// A folder shared write is lent writable whole only to a task lent it with
+// write, and while its Modifier is not never; read otherwise.
+func TestWriteFolderSpec(t *testing.T) {
+	c, _ := foldersCore(t)
 	ctx := context.Background()
-	shares.set(sharedFolder{ID: "f1", Name: "Clients", Access: folderManage, Max: folderManage}, sharedFolder{ID: "f2", Name: "Photos", Access: folderRead})
-	c.refreshNode(ctx, c.node("nas"))
-	if _, err := c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Photos", Access: accessWrite}}}); err == nil {
-		t.Fatal("a read folder lent to write")
+	if _, err := c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Photos", Access: accessWrite}}}); err == nil || !strings.Contains(err.Error(), "shared read-only") {
+		t.Fatalf("a read folder lent to write: %v", err)
 	}
 	task, err := c.runTask(ctx, runRequest{Prompt: "tidy", Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessWrite}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	spec := assignedSpec(t, c, "nas", task.ID)
-	if len(spec.Folders) != 1 || !spec.Folders[0].Manage || spec.Folders[0].Write {
+	if len(spec.Folders) != 1 || !spec.Folders[0].Write {
 		t.Fatalf("folders %+v", spec.Folders)
+	}
+	if raw, _ := json.Marshal(spec.Folders[0]); !strings.Contains(string(raw), `"manage":true`) || strings.Contains(string(raw), `"write"`) {
+		t.Fatalf("on the wire: %s", raw) // an older node's write was drop
 	}
 	if !strings.Contains(spec.AppendSystemPrompt, "rename and delete files anywhere in it") || !strings.Contains(spec.AppendSystemPrompt, "snapshot") {
 		t.Fatalf("instructions %q", spec.AppendSystemPrompt)
 	}
-	if err := c.taintedResources(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessWrite}}}); err != nil {
-		t.Fatalf("clean turn: %v", err)
-	}
 	c.turn.taint("gmail.read")
 	if err := c.taintedResources(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessWrite}}}); err != nil {
-		t.Fatalf("managed on a tainted turn: %v", err)
+		t.Fatalf("written on a tainted turn: %v", err)
 	}
-	// Lowered to drop since: the task is mounted at drop.
-	c.lowerFolder(ctx, "Clients", folderDrop, false)
+	// Modifier never since: the task is mounted read-only, and none is lent to write.
+	c.setFolderCase("Clients", catChange, gridNever)
 	spec = assignedSpec(t, c, "nas", task.ID)
-	if len(spec.Folders) != 1 || spec.Folders[0].Manage || !spec.Folders[0].Write {
-		t.Fatalf("lowered: %+v", spec.Folders)
+	if len(spec.Folders) != 1 || spec.Folders[0].Write {
+		t.Fatalf("never: %+v", spec.Folders)
+	}
+	if _, err := c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessWrite}}}); err == nil || !strings.Contains(err.Error(), "never") {
+		t.Fatalf("lent to write under never: %v", err)
 	}
 }
 
-// Lowering from the workspace and the API.
-func TestWebLowerFolder(t *testing.T) {
+// Turning copies off from the workspace and the API; nothing raises.
+func TestWebNoCopies(t *testing.T) {
 	c, store, shares := foldersCoreShares(t)
-	shares.set(sharedFolder{ID: "f1", Name: "Clients", Access: folderManage, Copyable: true}, sharedFolder{ID: "f2", Name: "Photos", Access: folderRead})
+	shares.set(sharedFolder{ID: "f1", Name: "Clients", Access: accessWrite, Copyable: true}, sharedFolder{ID: "f2", Name: "Photos", Access: accessRead})
 	c.refreshNode(context.Background(), c.node("nas"))
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	_, body, _ := tw.do("GET", "/settings/folders", nil, nil)
-	for _, want := range []string{`<option value="manage" selected>Gérer</option>`, "Peut être copié", `hx-post="/settings/folders/nocopy"`} {
+	for _, want := range []string{"Peut être copié", `hx-post="/settings/folders/nocopy"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("page lacks %q", want)
 		}
-	}
-	code, _, h := tw.post("/settings/folders/level", url.Values{"name": {"Clients"}, "access": {"drop"}}, csrf)
-	if f, _ := store.folder("Clients"); code != 200 || h.Get("HX-Refresh") != "true" || f.Access != folderDrop {
-		t.Fatalf("lower: %d %+v", code, f)
-	}
-	if _, body, _ = tw.do("GET", "/settings/folders", nil, nil); !strings.Contains(body, "Choisi sur l&#39;appareil : Gérer") {
-		t.Fatal("the machine's level not said")
-	}
-	if _, _, h = tw.post("/settings/folders/level", url.Values{"name": {"Clients"}, "access": {"manage"}}, csrf); h.Get("HX-Refresh") == "true" {
-		t.Fatal("raised from the workspace")
 	}
 	tw.post("/settings/folders/nocopy", url.Values{"name": {"Clients"}}, csrf)
 	if f, _ := store.folder("Clients"); f.Copyable {
@@ -554,14 +529,14 @@ func TestWebLowerFolder(t *testing.T) {
 	mux := http.NewServeMux()
 	c.folderRoutes(mux, "api-token")
 	call := func(body string) (int, string) {
-		r := httptest.NewRequest("PATCH", "/v1/folders/Clients", strings.NewReader(body))
+		r := httptest.NewRequest("PATCH", "/v1/folders/Photos", strings.NewReader(body))
 		r.RemoteAddr = "127.0.0.1:1234"
 		r.Header.Set("Authorization", "Bearer api-token")
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, r)
 		return rec.Code, rec.Body.String()
 	}
-	for body, want := range map[string]int{`{"access":"manage"}`: 403, `{"copyable":true}`: 403, `nope`: 400, `{"access":"read"}`: 200} {
+	for body, want := range map[string]int{`{"copyable":true}`: 403, `nope`: 400, `{"copyable":false}`: 200} {
 		if code, out := call(body); code != want {
 			t.Errorf("%s: %d %s", body, code, out)
 		}
@@ -594,35 +569,48 @@ func TestFolderHTTPError(t *testing.T) {
 	}
 }
 
-// A folder's writes are Free by default, or On approval: then its task
-// waits for the user's yes on its start card, and a no stops it.
-func TestFolderValues(t *testing.T) {
+// A folder's rights: its machine's default, Free and Free until set, and
+// the folder's own cases above or below it; a read-only share greys
+// Modifier. On approval waits for the user's yes on the start card, a
+// change on an unclean start too; never is refused.
+func TestFolderRights(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
+	clients, _ := store.folder("Clients")
+	photos, _ := store.folder("Photos")
+	if r := c.folderRights(clients); r[catRead] != gridFree || r[catChange] != gridFree {
+		t.Fatalf("default %v", r)
+	}
+	if r := c.folderRights(photos); r[catChange] != gridNever {
+		t.Fatalf("read-only share: %v", r)
+	}
 	if n := c.folderNeeds(folderRefs("Clients"), true); len(n) != 0 {
 		t.Fatalf("free on a clean start: %+v", n)
 	}
-	if err := c.setFolderValue("Clients", accessDrop, "maybe"); err == nil {
-		t.Fatal("a bad value accepted")
+	for _, bad := range [][3]string{{"Clients", catDelete, gridFree}, {"Clients", catChange, "maybe"}, {"Nowhere", catChange, gridFree}} {
+		if err := c.setFolderCase(bad[0], bad[1], bad[2]); err == nil {
+			t.Errorf("accepted %v", bad)
+		}
 	}
-	if err := c.setFolderValue("Clients", accessRead, gridApproval); err == nil {
-		t.Fatal("a value for reading accepted")
+	if c.setDeviceCase("nas", catChange, "") == nil {
+		t.Error("a device default that follows nothing")
 	}
-	if err := c.setFolderValue("Nowhere", accessDrop, gridApproval); err == nil {
-		t.Fatal("an unknown folder accepted")
+
+	// The machine's default asks; a folder's own case goes above it.
+	c.setDeviceCase("nas", catChange, gridApproval)
+	c.setDeviceCase("nas", catRead, gridApproval)
+	if r := c.folderRights(clients); r[catRead] != gridApproval || r[catChange] != gridApproval {
+		t.Fatalf("device default %v", r)
 	}
-	if err := c.setFolderValue("Clients", accessDrop, gridApproval); err != nil {
-		t.Fatal(err)
+	if r := c.folderRights(photos); r[catChange] != gridNever {
+		t.Fatalf("ceiling under the default: %v", r)
 	}
-	f, _ := store.folder("Clients")
-	if c.folderValue(f, accessDrop) != gridApproval || c.folderValue(f, folderManage) != gridFree {
-		t.Fatal("values not kept apart")
+	c.setFolderCase("Clients", catRead, gridFree)
+	if r := c.folderRights(clients); r[catRead] != gridFree || r[catChange] != gridApproval {
+		t.Fatalf("exception %v", r)
 	}
-	if n := c.folderNeeds(folderRefs("Photos", "Clients"), true); len(n) != 1 || n[0].Folder != "Clients" {
+	if n := c.folderNeeds(folderRefs("Photos", "Clients"), true); len(n) != 2 || n[0].Folder != "Photos" || n[0].Category != catRead || n[1].Category != catChange {
 		t.Fatalf("approval on a clean start: %+v", n)
-	}
-	if n := c.folderNeeds([]ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessRead}}, true); len(n) != 0 {
-		t.Fatalf("a read asked: %+v", n)
 	}
 
 	// The start waits for the card, which says what it asks.
@@ -638,44 +626,73 @@ func TestFolderValues(t *testing.T) {
 		t.Fatalf("starts %v", ids)
 	}
 	s, _ := c.taskStart(ids[0])
-	if got := startText(s.Needs, "fr"); got != "Pour déposer des fichiers dans le dossier Clients, il me faut ton accord." {
+	if got := startText(s.Needs, "fr"); got != "Pour modifier et supprimer dans le dossier Clients, il me faut ton accord." {
 		t.Fatalf("text %q", got)
 	}
-	if got := startText(s.Needs, "en"); got != "To add files to the folder Clients, I need your approval." {
+	if got := startText(s.Needs, "en"); got != "To change and delete in the folder Clients, I need your approval." {
 		t.Fatalf("text %q", got)
 	}
 	if err := c.decideTaskStart(ids[0], true); err != nil || c.heldTask(task.ID) {
 		t.Fatalf("yes: %v", err)
 	}
 
-	// Free again: no card.
-	if err := c.setFolderValue("Clients", accessDrop, gridFree); err != nil {
-		t.Fatal(err)
-	}
+	// Its own Free again, then following the machine again.
+	c.setFolderCase("Clients", catChange, gridFree)
 	if n := c.folderNeeds(folderRefs("Clients"), true); len(n) != 0 {
 		t.Fatalf("free again: %+v", n)
 	}
+	c.setFolderCase("Clients", catChange, "")
+	c.setFolderCase("Clients", catRead, "")
+	if store.get(folderGridKey(clients)) != "" || c.folderCase(clients, catChange) != gridApproval {
+		t.Fatal("not following its machine")
+	}
+	c.setDeviceCase("nas", catRead, gridNever)
+	if _, err := c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients"}}}); err == nil || !strings.Contains(err.Error(), "read is never") {
+		t.Fatalf("read never: %v", err)
+	}
 }
 
-// Settings → Dossiers sets a folder's values: drop for a drop folder,
-// nothing for one to read.
-func TestWebFolderValues(t *testing.T) {
+// The NAS's values from before rights: manage on approval is Modifier on
+// approval; drop's go.
+func TestLegacyFolderValues(t *testing.T) {
+	c, store := foldersCore(t)
+	store.set("folder_value:nas:f1:manage", gridApproval)
+	store.set("folder_value:nas:f1:drop", gridApproval)
+	store.set("folder_value:nas:f2:manage", "")
+	legacyFolderValues(store)
+	clients, _ := store.folder("Clients")
+	if c.folderCase(clients, catChange) != gridApproval || c.folderCase(clients, catRead) != gridFree {
+		t.Fatalf("moved %v", c.folderRights(clients))
+	}
+	var n int
+	store.db.QueryRow(`SELECT COUNT(*) FROM kv WHERE key LIKE 'folder_value:%'`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("%d old values left", n)
+	}
+}
+
+// Settings → Dossiers sets a machine's default and a folder's own cases.
+func TestWebFolderCases(t *testing.T) {
 	c, store := foldersCore(t)
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	_, body, _ := tw.do("GET", "/settings/folders", nil, nil)
-	if strings.Count(body, `hx-post="/settings/folders/value"`) != 1 || !strings.Contains(body, "Sur accord") {
-		t.Fatalf("page: %d value forms", strings.Count(body, `hx-post="/settings/folders/value"`))
+	if strings.Count(body, `hx-post="/settings/folders/case"`) != 4*2 || !strings.Contains(body, "Comme l&#39;appareil (Libre)") {
+		t.Fatalf("page: %d case forms", strings.Count(body, `hx-post="/settings/folders/case"`))
 	}
-	code, _, h := tw.post("/settings/folders/value", url.Values{"name": {"Clients"}, "level": {"drop"}, "value": {"approval"}}, csrf)
+	code, _, h := tw.post("/settings/folders/case", url.Values{"name": {"Clients"}, "category": {"change"}, "value": {"approval"}}, csrf)
 	if code != 200 || !strings.Contains(h.Get("HX-Trigger"), "ok") {
 		t.Fatalf("set: %d %v", code, h)
 	}
-	f, _ := store.folder("Clients")
-	if c.folderValue(f, accessDrop) != gridApproval {
+	clients, _ := store.folder("Clients")
+	if c.folderCase(clients, catChange) != gridApproval {
 		t.Fatal("not kept")
 	}
-	if _, _, h := tw.post("/settings/folders/value", url.Values{"name": {"Gone"}, "level": {"drop"}, "value": {"approval"}}, csrf); strings.Contains(h.Get("HX-Trigger"), `"ok":true`) {
+	code, _, h = tw.post("/settings/folders/case", url.Values{"node": {"nas"}, "category": {"read"}, "value": {"never"}}, csrf)
+	if code != 200 || h.Get("HX-Refresh") != "true" || c.deviceGrid("nas").Read != gridNever {
+		t.Fatalf("device: %d %v", code, h)
+	}
+	if _, _, h := tw.post("/settings/folders/case", url.Values{"name": {"Gone"}, "category": {"change"}, "value": {"approval"}}, csrf); strings.Contains(h.Get("HX-Trigger"), `"ok":true`) {
 		t.Fatalf("unknown folder: %v", h)
 	}
 }
