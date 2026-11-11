@@ -16,8 +16,8 @@ import (
 // the node (this test) is a container on an internal task network, tasks
 // reach only it, its listener and its egress relay. Each task starts from
 // the base image with Claude Code injected, installs ImageMagick with apt
-// (the second task from the node's cache), writes to a lent folder's
-// Eriphe/, and probes the network.
+// (the second task from the node's cache), writes to a folder lent
+// to write, and probes the network.
 //
 //	ERIPHE_LIVE_DOCKER=1 ERIPHE_LIVE_IMAGE=eriphe-base:dev \
 //	ERIPHE_LIVE_AGENT_IMAGE=registry:5000/eriphe-agent-{agent}:dev \
@@ -50,7 +50,8 @@ func TestInjectLive(t *testing.T) {
 	folder := filepath.Join(share, "Clients")
 	os.MkdirAll(folder, 0o755)
 	os.WriteFile(filepath.Join(folder, "brief.txt"), []byte("a brief\n"), 0o644)
-	os.RemoveAll(filepath.Join(folder, resultsDir))
+	os.Remove(filepath.Join(folder, "result-first.txt"))
+	os.Remove(filepath.Join(folder, "result-second.txt"))
 	taskNet := envOr("ERIPHE_LIVE_TASK_NETWORK", "eriphe-tasks")
 	n := newNode(options{root: root, hostRoot: root, docker: "docker", image: os.Getenv("ERIPHE_LIVE_IMAGE"),
 		agentImage: os.Getenv("ERIPHE_LIVE_AGENT_IMAGE"), taskNetwork: taskNet, taskMemory: "2g",
@@ -100,7 +101,7 @@ func TestInjectLive(t *testing.T) {
 	}
 	want := map[string]string{"uid": "0", "rootfs_write": "yes", "agent_write": "no", "apt_rc": "0", "magick": "yes",
 		"listener": "yes", "relay_internet": "yes", "relay_lan": "no", "direct_internet": "no", "direct_dns": "no",
-		"direct_lan": "no", "clients_read": "yes", "clients_write_root": "no", "clients_write_results": "yes"}
+		"direct_lan": "no", "clients_read": "yes", "clients_write": "yes"}
 	for id, got := range results {
 		for k, v := range want {
 			if got[k] != v {
@@ -112,15 +113,19 @@ func TestInjectLive(t *testing.T) {
 		}
 	}
 	logApt(t, results)
-	// The results are Eriphe/'s owner's, not root's.
+	// What the task wrote is the folder's owner's, not root's.
+	var owner uint32
+	if fi, err := os.Lstat(folder); err == nil {
+		owner = fi.Sys().(*syscall.Stat_t).Uid
+	}
 	for _, id := range []string{"first", "second"} {
-		fi, err := os.Lstat(filepath.Join(folder, resultsDir, "result-"+id+".txt"))
+		fi, err := os.Lstat(filepath.Join(folder, "result-"+id+".txt"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		st := fi.Sys().(*syscall.Stat_t)
-		t.Logf("Eriphe/result-%s.txt: UID %d GID %d %v", id, st.Uid, st.Gid, fi.Mode())
-		if st.Uid != taskUID {
+		t.Logf("result-%s.txt: UID %d GID %d %v", id, st.Uid, st.Gid, fi.Mode())
+		if st.Uid != owner {
 			t.Errorf("result-%s.txt belongs to UID %d", id, st.Uid)
 		}
 	}
@@ -156,8 +161,7 @@ for d in /work/folders/*; do
   [ -d "$d" ] || continue
   n=$(basename "$d")
   check "${n}_read" 'cat "$d"/*.txt'
-  check "${n}_write_root" 'touch "$d/written-by-task"'
-  check "${n}_write_results" 'echo result > "$d/Eriphe/result-` + id + `.txt"'
+  check "${n}_write" 'echo result > "$d/result-` + id + `.txt"'
 done
 `
 }
@@ -243,7 +247,7 @@ func TestAppleInjectLive(t *testing.T) {
 	}
 	want := map[string]string{"uid": "0", "rootfs_write": "yes", "agent_write": "no", "apt_rc": "0", "magick": "yes",
 		"listener": "yes", "relay_internet": "yes", "relay_lan": "no", "direct_internet": "no", "direct_dns": "no",
-		"direct_lan": "no", "clients_read": "yes", "clients_write_root": "no", "clients_write_results": "yes"}
+		"direct_lan": "no", "clients_read": "yes", "clients_write": "yes"}
 	for id, got := range results {
 		for k, v := range want {
 			if got[k] != v {
@@ -256,12 +260,12 @@ func TestAppleInjectLive(t *testing.T) {
 	}
 	logApt(t, results)
 	for _, id := range []string{"first", "second"} {
-		fi, err := os.Lstat(filepath.Join(place, "Clients", resultsDir, "result-"+id+".txt"))
+		fi, err := os.Lstat(filepath.Join(place, "Clients", "result-"+id+".txt"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		st := fi.Sys().(*syscall.Stat_t)
-		t.Logf("Eriphe/result-%s.txt: UID %d GID %d %v", id, st.Uid, st.Gid, fi.Mode())
+		t.Logf("result-%s.txt: UID %d GID %d %v", id, st.Uid, st.Gid, fi.Mode())
 		if int(st.Uid) != os.Getuid() {
 			t.Errorf("result-%s.txt belongs to UID %d, not this Mac's user", id, st.Uid)
 		}

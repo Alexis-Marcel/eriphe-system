@@ -8,13 +8,13 @@ import (
 	"testing"
 )
 
-// folderRefs lends folders; Clients, opened for drop in these tests, for drop.
+// folderRefs lends folders; Clients, shared write in these tests, to write.
 func folderRefs(names ...string) []ResourceRef {
 	var out []ResourceRef
 	for _, n := range names {
 		access := accessRead
 		if strings.EqualFold(n, "Clients") {
-			access = accessDrop
+			access = accessWrite
 		}
 		out = append(out, ResourceRef{Kind: resFolder, Ref: n, Access: access})
 	}
@@ -42,15 +42,16 @@ func TestNormalizeResources(t *testing.T) {
 		t.Fatalf("explicit = %+v", got)
 	}
 	for name, r := range map[string]runRequest{
-		"is not one of":                      {Resources: []ResourceRef{{Kind: "mailbox", Ref: "x"}}},
-		"ref is required":                    {Resources: []ResourceRef{{Kind: "folder"}}},
-		"a place takes access read or write": {Resources: []ResourceRef{{Kind: "place", Ref: "Clients", Access: "drop"}}},
-		"a repo takes access read or write":  {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Access: "drop"}}},
-		"a repo's only":                      {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", Branch: "x"}}},
-		"trust_skills are a repo":            {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", TrustSkills: true}}},
-		"one repository per task":            {Resources: []ResourceRef{{Kind: "repo", Ref: "o/a"}, {Kind: "repo", Ref: "o/b"}}},
-		"not a branch name":                  {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Branch: "--force"}}},
-		"inside the repository":              {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Dir: "../etc"}}},
+		"is not one of":                       {Resources: []ResourceRef{{Kind: "mailbox", Ref: "x"}}},
+		"ref is required":                     {Resources: []ResourceRef{{Kind: "folder"}}},
+		"a place takes access read or write":  {Resources: []ResourceRef{{Kind: "place", Ref: "Clients", Access: "drop"}}},
+		"a folder takes access read or write": {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", Access: "drop"}}},
+		"a repo takes access read or write":   {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Access: "drop"}}},
+		"a repo's only":                       {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", Branch: "x"}}},
+		"trust_skills are a repo":             {Resources: []ResourceRef{{Kind: "folder", Ref: "Clients", TrustSkills: true}}},
+		"one repository per task":             {Resources: []ResourceRef{{Kind: "repo", Ref: "o/a"}, {Kind: "repo", Ref: "o/b"}}},
+		"not a branch name":                   {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Branch: "--force"}}},
+		"inside the repository":               {Resources: []ResourceRef{{Kind: "repo", Ref: "o/r", Dir: "../etc"}}},
 	} {
 		if _, err := normalizeResources(r); err == nil || !strings.Contains(err.Error(), name) {
 			t.Errorf("%s: %v", name, err)
@@ -62,7 +63,7 @@ func TestAccessScale(t *testing.T) {
 	for _, c := range []struct {
 		a, b string
 		want bool
-	}{{"read", "read", true}, {"drop", "read", true}, {"write", "drop", true}, {"read", "drop", false}, {"drop", "write", false}, {"write", "", false}} {
+	}{{"read", "read", true}, {"write", "read", true}, {"read", "write", false}, {"drop", "read", false}, {"write", "", false}} {
 		if atLeast(c.a, c.b) != c.want {
 			t.Errorf("%s ≥ %s: %v", c.a, c.b, !c.want)
 		}
@@ -76,7 +77,7 @@ func withDrive(t *testing.T, c *core, folders ...Place) {
 	t.Helper()
 	grids := map[string]accessGrid{}
 	for i, f := range folders {
-		if f.Access == folderRead {
+		if f.Access == accessRead {
 			grids[f.ID] = accessGrid{Change: gridNever, Delete: gridNever}
 		}
 		folders[i].Access = ""
@@ -93,24 +94,24 @@ func withDrive(t *testing.T, c *core, folders ...Place) {
 // Each entry is checked against what the user opened, and never gets more.
 func TestResolveFolders(t *testing.T) {
 	c, _ := foldersCore(t)
-	withDrive(t, c, Place{Name: "Factures", ID: "d1", Access: folderRead}, Place{Name: "Devis", ID: "d2"})
+	withDrive(t, c, Place{Name: "Factures", ID: "d1", Access: accessRead}, Place{Name: "Devis", ID: "d2"})
 
-	// The old field lends a folder with its own access; a resource, read unless it says drop.
+	// A resource is lent read unless it says write.
 	l, err := c.resolveRequest(runRequest{Resources: folderRefs("clients", "Photos")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(l.List) != 2 || l.List[0] != (ResourceRef{Kind: resFolder, Ref: "Clients", Access: accessDrop}) || l.List[1].Access != accessRead ||
-		l.Folders[0].Access != folderDrop || l.Machine != "nas" {
+	if len(l.List) != 2 || l.List[0] != (ResourceRef{Kind: resFolder, Ref: "Clients", Access: accessWrite}) || l.List[1].Access != accessRead ||
+		l.Folders[0].Access != accessWrite || l.Machine != "nas" {
 		t.Fatalf("legacy %+v %+v", l.List, l.Folders)
 	}
 	l, err = c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients"}}})
-	if err != nil || l.Folders[0].Access != folderRead {
+	if err != nil || l.Folders[0].Access != accessRead {
 		t.Fatalf("default read: %+v %v", l, err)
 	}
 	// The same folder twice: once, with the higher access.
-	l, _ = c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessDrop}, {Kind: resFolder, Ref: "CLIENTS", Access: accessRead}}})
-	if len(l.List) != 1 || l.List[0].Access != accessDrop {
+	l, _ = c.resolveRequest(runRequest{Resources: []ResourceRef{{Kind: resFolder, Ref: "Clients", Access: accessWrite}, {Kind: resFolder, Ref: "CLIENTS", Access: accessRead}}})
+	if len(l.List) != 1 || l.List[0].Access != accessWrite {
 		t.Fatalf("merged %+v", l.List)
 	}
 	// A place lends its tool.
@@ -121,11 +122,11 @@ func TestResolveFolders(t *testing.T) {
 		}
 	}
 	for want, r := range map[string]ResourceRef{
-		"for read only: it cannot be lent drop": {Kind: resFolder, Ref: "Photos", Access: accessDrop},
-		"is a place of the tool fichiers":       {Kind: resFolder, Ref: "Factures"},
-		"is on a machine":                       {Kind: resPlace, Ref: "Clients"},
-		"place \"Factures\" is opened":          {Kind: resPlace, Ref: "Factures", Access: accessWrite},
-		"unknown":                               {Kind: resFolder, Ref: "Nope"},
+		"shared read-only on nas":         {Kind: resFolder, Ref: "Photos", Access: accessWrite},
+		"is a place of the tool fichiers": {Kind: resFolder, Ref: "Factures"},
+		"is on a machine":                 {Kind: resPlace, Ref: "Clients"},
+		"place \"Factures\" is opened":    {Kind: resPlace, Ref: "Factures", Access: accessWrite},
+		"unknown":                         {Kind: resFolder, Ref: "Nope"},
 	} {
 		if _, err := c.resolveRequest(runRequest{Resources: []ResourceRef{r}}); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%+v: %v, want %q", r, err, want)
@@ -179,7 +180,7 @@ func TestTaskKeepsResources(t *testing.T) {
 	if spec.Repo != "owner/site" || spec.Ref != "dev" || spec.Branch != "eriphe/fix" || spec.Dir != "web" {
 		t.Fatalf("spec %+v", spec)
 	}
-	// Lent for reading: mounted read-only, though the folder allows drops.
+	// Lent for reading: mounted read-only, though the folder allows writes.
 	if len(spec.Folders) != 1 || spec.Folders[0].Write || strings.Contains(spec.AppendSystemPrompt, "Eriphe/") {
 		t.Fatalf("folders %+v, %q", spec.Folders, spec.AppendSystemPrompt)
 	}
@@ -194,7 +195,7 @@ func TestTaskKeepsResources(t *testing.T) {
 	if old, _ := store.task("t-old"); old.Resources != nil {
 		t.Fatalf("old task %+v", old.Resources)
 	}
-	if fs, _ := c.specFolders("Clients", nil); len(fs) != 1 || !fs[0].Write {
+	if fs, _ := c.specFolders("Clients", nil); len(fs) != 1 || fs[0].Write {
 		t.Fatalf("old task's folders %+v", fs)
 	}
 }
@@ -218,7 +219,7 @@ func TestRepoFromResource(t *testing.T) {
 // On a tainted turn, run_task lends reads only, of every kind.
 func TestTaintedResources(t *testing.T) {
 	c := newCatalogCore(t)
-	withDrive(t, c, Place{Name: "Factures", ID: "d1", Access: folderRead})
+	withDrive(t, c, Place{Name: "Factures", ID: "d1", Access: accessRead})
 	giveRepos(t, c, "someone/tool", "owner/repo")
 	c.conf().User = "Sam"
 	refused := []runRequest{

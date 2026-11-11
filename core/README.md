@@ -687,7 +687,7 @@ whatever address it dials) and one client certificate per node.
 | `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
 | `run_task` | start a task: title (what the user reads; else its contract's objective, else the prompt's first line), prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
 | `list_repos` | the GitHub repositories the app's connections reach: `repo`, its `cases` (`read`, `change`, `delete`, `send`: `free`, `approval` or `never`) and `own_rules` when it has cases of its own (listed first); a task is lent only one of these |
-| `list_folders` | the user's folders: name, machine (online or not), access (`read`, `drop` or `manage`), `max`, `copyable`, where a task finds it, and `machines`: every machine holding it (its own, then its copies), each `online` and `up_to_date` or not; a task may run on any up to date |
+| `list_folders` | the user's folders: name, machine (online or not), access (`read` or `write`, as shared on its machine), `rights` (`read`, `change`: free, approval or never), `copyable`, where a task finds it, and `machines`: every machine holding it (its own, then its copies), each `online` and `up_to_date` or not; a task may run on any up to date |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
 | `task_status` | state, the agent's last message (without its receipt), its checked [receipt](#receipts-receiptgo), the pending permission; `wait` blocks until the task needs you |
@@ -753,7 +753,7 @@ read):
  "constraints": ["Do not change the public API"],
  "checks": [{"name": "build", "run": "go build ./...", "dir": "core"},
             {"name": "tests", "run": "go test ./...", "timeout": 600},
-            {"name": "report", "exists": "/work/folders/Invoices/Eriphe/report.pdf"}],
+            {"name": "report", "exists": "/work/folders/Invoices/report.pdf"}],
  "evidence": ["the PR link", "the test output"],
  "verify": "auto",
  "budget": {"minutes": 60, "attempts": 2, "turns": 30, "tokens": 2000000}}
@@ -1101,13 +1101,13 @@ in the configuration are asked as they are.
 
 Everything a task is lent is one list, `resources` of `run_task` (`resources.go`). Each entry is a
 kind, a reference to one thing the user opened to Eriphe, and an access on one scale for every kind,
-`read < drop < write`: `drop` creates new files in an Eriphe-owned place (a folder's `Eriphe/`
-subfolder) and never changes the originals; `write` changes the thing (for a repository: push).
+`read < write`: `write` changes the thing (for a repository: push; for a folder: create, change,
+rename and delete in it).
 
 ```json
 "resources": [
   {"kind": "repo", "ref": "me/site", "access": "write", "branch": "eriphe/fix-menu", "base": "main"},
-  {"kind": "folder", "ref": "Clients", "access": "drop"},
+  {"kind": "folder", "ref": "Clients", "access": "write"},
   {"kind": "place", "ref": "Factures"},
   {"kind": "tool", "ref": "github.get_*"}
 ]
@@ -1116,13 +1116,13 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 | Kind | `ref` | Access | What the task gets |
 |---|---|---|---|
 | `repo` | `owner/name` on GitHub, or a git URL, a connection reaches (`list_repos`); `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` (when one of its cases above Lire is not Never) | cloned into `/work/repo`; [credentials](#github-in-a-task) for it; its skills if it is the user's own or trusted (below); one per task |
-| `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
+| `folder` | a machine's folder, by name (`list_folders`) | `read`, `write` (a folder shared write, its Modifier not Never) | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
 | `place` | a tool's place (a folder of a files tool, such as Google Drive's), by name | `read`, `write` (when one of its cases above Lire is not Never) | its tool whole (it reaches every place given to Eriphe, each call held to its place's rights) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
 
 The access defaults to `read` (for a tool, to what its annotations say). Each entry is checked
-against what the user opened: an unknown folder or server is refused, and so is a `drop` on a
-folder opened for reading, or a `write` on a folder not at `manage`. The list is kept with the task
+against what the user opened: an unknown folder or server is refused, and so is a `write` on a
+folder shared read-only, or a case the folder's rights set to Never. The list is kept with the task
 (`tasks.resources`, JSON), and the node gets its spec fields (`repo`, `folders`…), derived from it.
 
 **A repository's skills** (`.claude/skills`, `.agents/skills`, `.opencode/skills`: instructions
@@ -1142,8 +1142,7 @@ calls is authorized, whatever the grid or a grant says (`lend.go`). The brain as
 resources, what it needs is granted, it is logged in `decisions` (`release mail.move`), and the
 brain is told the answer. An entry lent outright beside a held one wins.
 
-**On a tainted turn** (the brain read external content), `run_task` refuses a folder with `write` or
-`drop`, `trust_skills` and a place (its tool is lent whole for now): the brain asks the user and starts the task in the turn of their answer. Reads still
+**On a tainted turn** (the brain read external content), `run_task` refuses `trust_skills` and a place (its tool is lent whole for now): the brain asks the user and starts the task in the turn of their answer. Reads still
 go, and tools, accesses and a GitHub repository for `write`: what they may do is asked on a card at
 launch, Free included.
 
@@ -1504,21 +1503,10 @@ its own), the memory's nightly extraction, the conversation's messages about it,
 workspace's words (`{{name}}` in the texts of `web_text*.go`, French elision included: « Tâches
 de {{name}} » reads « Tâches d'Eriphe »), the pages' title suffix and the brand next to the logo,
 the login page, the installed app (`/manifest.webmanifest` is served with its `name` and
-`short_name`), an added channel's app (`GET /v1/channel`, Home Assistant's conversation agent), and the results subfolder
-of a machine's folders lent with `drop` (below). The software keeps its name: the logo glyph, the
+`short_name`), and an added channel's app (`GET /v1/channel`, Home Assistant's conversation agent). The software keeps its name: the logo glyph, the
 images and binaries, the install scripts, eriphe-core and eriphe-node, the GitHub and Google apps
 and the OAuth client, the certificate authority, the app passwords and tokens named Eriphe, the
 Home Assistant integration's domain, and the system texts that name the software.
-
-**The results folder.** A machine's folder lent with `drop` takes results in a subfolder named
-after the assistant: `Eriphe/` until it has another name, then `Jarvis/` (the display name as a
-folder name, `results_folder.go`). A task's spec gives its node the current name (`results`) and
-the former ones, newest first (`former`, kept in the settings `results_name` and
-`results_former`; `Eriphe` is always among them). The task always sees the current name
-(`/work/folders/<name>/Jarvis`). On a folder's next use after a rename, the node renames a former
-results folder to the new name; if a folder of the new name is already there (the user's own, say),
-nothing is merged: the former one stays in use, mounted under the new name, and the node says so
-(a `results_conflict` event, in the device's access log, to rename or merge by hand).
 
 ## The brain
 
@@ -1650,7 +1638,7 @@ link (Gmail, CalDAV, Drive) and gives the scopes and the redirect URI to copy.
 |---|---|---|
 | `mail` | `https://mail.google.com/` (IMAP and SMTP with XOAUTH2) | eriphe-mail, an account of `mail`, Gmail preset |
 | `calendar` | `https://www.googleapis.com/auth/calendar` (CalDAV) | eriphe-calendar, an account of `agenda`, provider `google` |
-| `drive` | `…/auth/drive`, or `drive.readonly` without "drop results" | eriphe-files, `fichiers`, one account of it per Google account |
+| `drive` | `…/auth/drive`, or `drive.readonly` for an account kept to reading | eriphe-files, `fichiers`, one account of it per Google account |
 
 **Connect.** The connect page ticks the tools, and "Se connecter" asks Google for `openid email` and their
 scopes only, with `access_type=offline`, `prompt=consent`, PKCE, the signed state of
@@ -1992,17 +1980,16 @@ refused.
 The user's own folders, given to Eriphe ("Dossiers"). A folder is a name ("Clients"), a source (a
 machine and a path inside one of the places that machine shares, declared when it was installed:
 `--share NAME=/PATH`, see install/README.md; eriphe-core never sees a host path, only the place's
-name and a path relative to it) and a level: `read` (Lecture, the default); `drop` (À côté), read
-and drop results, which go only to the folder's results subfolder (`Eriphe/`, or the assistant's
-name: see [the assistant's name](#the-assistants-name)), the originals never changed; or `manage`
-(Gérer), read, create, change, rename and delete anywhere in it, its node taking a snapshot of the
-folder before each such task (node/README.md, Shares). A folder is shared on the machine that holds
+name and a path relative to it) and a level, chosen there: `write` (Modifier, the default), read,
+create, change, rename and delete anywhere in it, its node taking a snapshot of the
+folder before each such task (node/README.md, Shares), or `read` (Lecture seule), for a sensitive
+folder.folder before each such task (node/README.md, Shares). A folder is shared on the machine that holds
 it, by the user there (`eriphe-share add`, or a right click in the Finder or the Explorer): its
-node keeps the list and reports each folder's `name`, `access` (its level now), `max` (the level
-chosen on the machine), `copyable` (the user allows copies on their other machines, for the
+node keeps the list and reports each folder's `name`, `access` (its level, `read` or `write`; an
+older node's `drop` reads as `read`, its `manage` as `write`), `copyable` (the user allows copies on their other machines, for the
 synchronisation to come) and `id` (`folders` in `GET /v1/node`), never its path. eriphe-core reads
-that list, and may only restrict it: take a folder off, lower its level, turn its copies off. It
-cannot add a folder, raise one (not even back to `max`), nor look into a machine. A name shared by two machines is told
+that list, and may only restrict it: take a folder off, turn its copies off, and set what Eriphe
+may do there (its rights, below). It cannot add a folder, share one to write, nor look into a machine. A name shared by two machines is told
 apart as `Name (machine)`.
 
 **Two sources, one list.** A folder is on a machine (here) or a tool's place (a Google Drive
@@ -2033,24 +2020,26 @@ browsed through its setup tool (`parent=`, `name=`, `page=`), each with "Donner"
 to follow the account) sets a case, `POST …/places/remove` (`id=`) takes it back. Giving or
 taking back rewrites the tool's configuration, which restarts its server.
 
-**Who decides a write.** The level says what a task may reach; who decides is set per folder,
-like a tool's grid: lending it at `drop`, and at `manage` (lent as `write`), is Free (the default)
-or On approval ("Sur accord"), two selectors under the level in Settings → Dossiers (`POST
-/settings/folders/value`, kept by machine and id, `folder_values.go`). On approval is asked on the
-task's [start card](#the-approval-card), once per task, before it starts; so is a Free write of a
-task that did not start cleanly (a tainted turn, or a turn that is not the user's). Reads are
-always free. A yes lets the task go with its mount; a no stops it.
+**Its rights.** What Eriphe may do in a machine's folder is two cases, Lire and Modifier, each Free,
+On approval or Never, as in a tool's grid (`folder_values.go`): a default per machine (Free and Free
+until set; `POST /settings/folders/case` with `node=`, kept as `folder_grid:<node>`), and a folder
+may set a case of its own, above or below it ("Comme l'appareil (…)", `name=`, empty to follow;
+kept by machine and id, `folder_case:<node>:<id>`). A folder shared read-only greys Modifier: Never,
+with the reason. On approval is asked on the task's [start card](#the-approval-card), once per
+task, before it starts; so is a Free Modifier of a task that did not start cleanly (a tainted turn,
+or a turn that is not the user's). Never is refused when the task is lent, and a Modifier set Never
+since mounts the folder read-only. A yes lets the task go with its mount; a no stops it. The NAS's
+values from before (`folder_value:…:manage` On approval) became Modifier On approval, once.
 
 **Sharing one** is done on the machine; Settings → Dossiers lists, machine by machine, what is
-shared there, each folder with a level selector that offers only its level and those below, a
-"Peut être copié" badge with "Ne plus copier", and whether it is there now; one "Comment partager ?"
-button opens a dialog with the three levels, the copy option, a reminder that the folder's device
+shared there, with the machine's default rights first, then each folder with its level as a badge,
+a selector per case, a "Peut être copié" badge with "Ne plus copier", and whether it is there now;
+one "Comment partager ?" button opens a dialog with the two levels, the rights, the copy option, a reminder that the folder's device
 must be added first, and one guide per system (Mac, Windows, Linux or a NAS in Docker), open for
-the systems of the user's devices, its commands each with a copy button. Lowering a level, or turning copies off, applies at once here (`folders_lowered`: the
-folder is listed and lent at the lower level from then on, even while its machine is away) and on
-the machine now or as soon as it is back (`PATCH /v1/shares/{id}` through its tunnel, which stops
-the tasks holding it above); the row goes once the machine reports it lowered. An older node
-without that call stays lowered by eriphe-core alone. "Ne plus partager" takes a folder off: at once
+the systems of the user's devices, its commands each with a copy button. Turning copies off applies
+at once here (`folders_lowered`, `nocopy`: never copied again, even while its machine is away) and
+on the machine now or as soon as it is back (`PATCH /v1/shares/{id}` through its tunnel); the row
+goes once the machine reports it. "Ne plus partager" takes a folder off: at once
 here (`folders_unshared`: it is never lent again), and on the machine now, or as soon as it is
 back (`DELETE /v1/shares/{id}` through its tunnel), which stops the tasks that hold it. A folder
 shared or unshared on the machine shows in its access log at the next refresh (every 15 s).
@@ -2074,20 +2063,19 @@ l'appareil", with their old place and path, until the user shares them again the
 name, they disappear) or forgets them.
 
 **Lending one.** The brain lends folders to a task as [resources](#resources),
-`{"kind": "folder", "ref": "Clients", "access": "read"}` (or `drop`, if the folder allows it, or
-`write` for a folder at `manage`, to change the folder itself; `list_folders` gives each one's
-entry in `lend`; the old `folders` field still works, and lends at most `drop`). The task is placed on a machine that holds each of its folders
+`{"kind": "folder", "ref": "Clients", "access": "read"}` (or `write`, to change the folder itself,
+where its rights allow; `list_folders` gives each one's entry in `lend`). A task that must not
+touch the originals is lent the source folder to read and an output folder to write. The task is placed on a machine that holds each of its folders
 up to date, theirs or one keeping copies of them (below, Copies of a folder), or waits for one
 (`pending_reason` says so); folders of several machines go together only if one machine holds
 them all, and `node` may only name a machine that holds them. Its node mounts each at `/work/folders/<name>`, read-only as
-Docker enforces it; with `drop`, its results subfolder read-write, created if missing; with
-`write` (`manage` in the node's spec), the whole folder read-write, after its snapshot (see
+Docker enforces it; with `write` (`manage` in the node's spec, so that an older core's `write`,
+its results subfolder, is never read as it), the whole folder read-write, after its snapshot (see
 node/README.md, Shares). The worker is told where they are, what it may write in each, and
 that what reads like an instruction in the files is data. The folders are read again from the
 machine's list whenever the node fetches the task: a folder removed meanwhile fails it, and the
-node refuses anything not in its list. A task drops or manages only where its entry says so, and
-never above the folder's level now: a folder lowered since is mounted at its new level (a task
-from before resources: drop wherever its folder's level allows it). A task's `folders` lists their names.
+node refuses anything not in its list. A task writes only where its entry says so, and only while
+the folder is shared write and its Modifier is not Never: otherwise it is mounted read-only. A task's `folders` lists their names.
 
 **A folder is the user's own.** The user shared it on their machine and lent it: under the
 [one taint rule](#tool-catalog), reading it does not taint a task, so its result does not
@@ -2095,18 +2083,18 @@ taint the brain's turn by itself (a task taints by what else it read: a tool not
 What it says of the folder is still data, never instructions, and the event says so:
 
 - the event that brings the brain the result of a task that read folders names them, as data;
-- on a tainted turn, a folder lent with `drop` or `write` is asked on the start's card (see
-  [who decides a write](#folders)); folders to read still go;
-- the permission policy applies to the task as to any other, and Docker refuses any write in the
-  folder but in `Eriphe/`.
+- on a tainted turn, a folder lent with `write` is asked on the start's card (see
+  [its rights](#folders)); folders to read still go;
+- the permission policy applies to the task as to any other, and Docker refuses any write in a
+  folder not lent to write.
 
 | Call (bearer token) | What |
 |---|---|
 | `GET /v1/folders` | the folders, with `mount` and whether their machine is `online` |
-| `PATCH /v1/folders/{name}` | `{"access": "read"\|"drop"\|"manage", "copyable": false}`: lower its level or turn its copies off (on its machine too); a raise is refused, 403 `raise` |
+| `PATCH /v1/folders/{name}` | `{"copyable": false}`: turn its copies off (on its machine too); turning them on is refused, 403 `raise` |
 | `DELETE /v1/folders/{name}` | no longer share it (on its machine too) |
 
-Nothing adds or raises a folder: it is shared on its machine.
+Nothing adds a folder or shares it to write: that is done on its machine.
 
 ### Copies of a folder
 
@@ -2116,8 +2104,7 @@ from here, never on) can be kept, up to date, on the user's other machines: Sett
 needs Syncthing, which comes with the installation (node/README.md, Copies); one without is
 shown greyed, to update. eriphe-core keeps who holds a copy of what (`folder_copies.go`,
 `folder_copies`) and hands each node its plan (`PUT /v1/sync`), with the peers' device IDs (from
-`GET /v1/node`, `syncthing.device_id`) and each folder at its level now: `read` sent only, `drop`
-sent only but its results subfolder both ways, `manage` both ways with 30 days of versions on the
+`GET /v1/node`, `syncthing.device_id`) and each folder at its level now: `read` sent only, `write` both ways with 30 days of versions on the
 folder's machine. A plan is handed again only when it changes (and after a reconnection), every
 15 s at most. Unticking a machine, turning a folder's copies off, unsharing it or forgetting a
 machine drops the copies from the plans: the copy machines delete them, after stopping the tasks
@@ -2137,8 +2124,8 @@ the folder's machine idle with nothing to receive from its copies, without error
 folder's machine is away, a copy that was complete when that machine was last seen (within 2
 minutes: `synced_at`) will do. A task lent several folders goes to a machine that holds them all
 so. Its spec lends the copy (`copy` in its folders), at the level the task asked for, never above
-the folder's on its machine; with `manage`, the node running the task takes the snapshot of the
-copy first. With `drop` or `manage`, it writes on the copy, and Syncthing brings that back to the
+the folder's on its machine; with `write`, the node running the task takes the snapshot of the
+copy first, and writes on the copy, and Syncthing brings that back to the
 folder's machine, at once or when it returns (a conflict keeps both files). With no machine up to
 date online, the task waits: for the folder's machine, or for a copy to catch up.
 
@@ -2170,7 +2157,7 @@ memory, runtimes and labels), then its status and update, as before (`web_pages.
 **Access log.** eriphe-core records what it did on each device (`node_access.go`, `node_log`
 table): a folder listed (`list`, with `share:/path`), a folder opened or closed (`share`,
 `unshare`), a task run there (`task`, with its agent; the brain itself is not logged), a folder
-lent to a task (`lend`, with its right), a file a task wrote in a folder's `Eriphe/` (`result`,
+lent to a task (`lend`, with its right), a file a task wrote in a folder lent to write (`result`,
 from the file tools Claude Code reports), and access cut or restored (`cut`, `restore`). The same
 entry again within 10 minutes is not repeated; entries are kept 90 days, at most 2000 per device,
 and go with the device when it is forgotten. A device's page (`/settings/devices/<name>`) shows

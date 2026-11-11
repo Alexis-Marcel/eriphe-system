@@ -98,7 +98,6 @@ func newCore(cfg *Config, store *Store) *core {
 	}
 	c.snap.Store(m)
 	setAssistantName(m.assistantName())
-	c.noteResultsName(m)
 	c.noteFirstRun(m)
 	c.loadAssistants()
 	c.turn.load(store.get("brain_turn"), c.brainTaskID() != "")
@@ -437,7 +436,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + c.taskNowText()) // situations.go
 	}
 	if len(folders) > 0 {
-		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders, c.resultsName()))
+		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders))
 	}
 	if s := c.accessInstructions(lent.List); s != "" {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + s)

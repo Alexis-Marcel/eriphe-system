@@ -391,7 +391,8 @@ func checkEntryName(kind, name string) error {
 func loadCatalog(base *Config, store *Store) (dynamicCatalog, map[string]string) {
 	d := newDynamic()
 	skipped := map[string]string{}
-	legacyRepoPlaces(store) // connection_places.go
+	legacyRepoPlaces(store)   // github_app.go
+	legacyFolderValues(store) // folder_values.go
 	rows, err := store.catalogRows()
 	if err != nil {
 		log.Printf("catalog: %v", err)
@@ -565,7 +566,6 @@ func (c *core) commit(d dynamicCatalog, ch change) error {
 // applyCatalog makes the running parts follow a new snapshot.
 func (c *core) applyCatalog(m *Config) {
 	setAssistantName(m.assistantName())
-	c.noteResultsName(m)
 	if c.pool != nil {
 		c.pool.sync(m.Servers)
 	}

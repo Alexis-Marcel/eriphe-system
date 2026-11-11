@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
@@ -13,7 +11,7 @@ import (
 // node never reads a shared place itself. The Mac's file sharing (virtiofs)
 // shows every file of a mounted folder as the task's user's, and what the
 // task writes lands as the Mac user's, the one eriphe-node runs as: no group
-// to add, no owner to give, and the results folder is a plain folder of the user's.
+// to add, no owner to give.
 //
 // iCloud Drive (and the File Provider clouds: Google Drive for desktop,
 // OneDrive, Dropbox) keep files "dataless" on a Mac that optimises its
@@ -25,11 +23,9 @@ import (
 // Finder).
 
 // exploredFolderMounts are the mounts of a task's folders, with an engine
-// that explores them (folderMounts): each read-only, its results subfolder writable when lent with
-// Write, the whole folder writable when lent with Manage, once a snapshot
-// of it is taken (snapshot.go).
+// that explores them (folderMounts): each read-only, or writable whole
+// when lent with Write, once a snapshot of it is taken (snapshot.go).
 func (n *node) exploredFolderMounts(t *Task) ([]mount, error) {
-	ctx := context.Background()
 	var args []mount
 	seen := map[string]bool{}
 	budget := n.opt.downloadLimit
@@ -45,14 +41,14 @@ func (n *node) exploredFolderMounts(t *Task) ([]mount, error) {
 		if err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
-		if (tf.Write || tf.Manage) && f.root.ReadOnly {
+		if tf.Write && f.root.ReadOnly {
 			return nil, fmt.Errorf("folder %s: its place is read-only on this machine", tf.Name)
 		}
 		if budget, err = download(f.real, budget, n.opt.downloadLimit); err != nil {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		dst := "/work/folders/" + tf.Name
-		if tf.Manage {
+		if tf.Write {
 			// After the download: the snapshot holds the files themselves.
 			if err := n.snapshotLent(t, f); err != nil {
 				return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
@@ -67,20 +63,6 @@ func (n *node) exploredFolderMounts(t *Task) ([]mount, error) {
 			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
 		}
 		args = append(args, mount{src: f.real, dst: dst, readOnly: true})
-		if !tf.Write {
-			continue
-		}
-		use, err := n.exploredResults(ctx, f.real, tf)
-		if err != nil {
-			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
-		}
-		if cur := tf.resultsName(); use != cur {
-			resultsConflict(t, tf, use)
-		}
-		if err := n.engine().mountable(filepath.Join(f.real, use)); err != nil {
-			return nil, fmt.Errorf("folder %s: %w", tf.Name, err)
-		}
-		args = append(args, mount{src: filepath.Join(f.real, use), dst: dst + "/" + tf.resultsName()})
 	}
 	return args, nil
 }

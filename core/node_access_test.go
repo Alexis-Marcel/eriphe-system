@@ -31,7 +31,7 @@ func TestNodeLogStore(t *testing.T) {
 	if got, _ := store.nodeLog("pc", 10, 0); len(got) != 1 {
 		t.Fatalf("old entries shown: %+v", got)
 	}
-	store.logNode("pc", NodeLogEntry{Kind: logShare, Folder: "Clients", Access: folderRead})
+	store.logNode("pc", NodeLogEntry{Kind: logShare, Folder: "Clients", Access: accessRead})
 	var n int
 	store.db.QueryRow(`SELECT COUNT(*) FROM node_log WHERE node = 'pc'`).Scan(&n)
 	if n != 2 {
@@ -45,7 +45,7 @@ func TestNodeLogStore(t *testing.T) {
 }
 
 // Eriphe logs a folder shared on the device, lent to a task with its
-// right, the task itself, a result dropped in Eriphe/, and the folder closed.
+// right, the task itself, a file it wrote there, and the folder closed.
 func TestNodeLogRecordsAccess(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
@@ -54,7 +54,7 @@ func TestNodeLogRecordsAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.logResults(task, []EventRow{
-		{Type: "tool_use", Data: map[string]any{"name": "Write", "input": map[string]any{"file_path": "/work/folders/Clients/Eriphe/summary.md"}}},
+		{Type: "tool_use", Data: map[string]any{"name": "Write", "input": map[string]any{"file_path": "/work/folders/Clients/summary.md"}}},
 		{Type: "tool_use", Data: map[string]any{"name": "Write", "input": map[string]any{"file_path": "/work/out.md"}}},
 		{Type: "tool_use", Data: map[string]any{"name": "Bash", "input": map[string]any{"command": "ls"}}},
 	})
@@ -69,16 +69,16 @@ func TestNodeLogRecordsAccess(t *testing.T) {
 	if strings.Join(kinds, ",") != "unshare,result,lend,task,share,share" {
 		t.Fatalf("kinds %v", kinds)
 	}
-	if e := got[1]; e.Task != task.ID || e.Folder != "Clients" || e.Detail != "Eriphe/summary.md" {
+	if e := got[1]; e.Task != task.ID || e.Folder != "Clients" || e.Detail != "summary.md" {
 		t.Fatalf("result %+v", e)
 	}
-	if e := got[2]; e.Task != task.ID || e.Folder != "Clients" || e.Access != folderDrop {
+	if e := got[2]; e.Task != task.ID || e.Folder != "Clients" || e.Access != accessWrite {
 		t.Fatalf("lend %+v", e)
 	}
 	if e := got[3]; e.Task != task.ID || e.Detail != "sonnet" {
 		t.Fatalf("task %+v", e)
 	}
-	if e := got[5]; e.Folder != "Clients" || e.Access != folderDrop || e.Detail != "" {
+	if e := got[5]; e.Folder != "Clients" || e.Access != accessWrite || e.Detail != "" {
 		t.Fatalf("share %+v", e)
 	}
 	if other, _ := store.nodeLog("pc", 20, 0); len(other) != 0 {
@@ -223,7 +223,7 @@ func TestWebDevices(t *testing.T) {
 
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	for _, want := range []string{"Appareils", "Connecter un appareil", "Ce qu&#39;Eriphe voit ici", "Ce qu&#39;Eriphe peut faire ici",
-		"Faire travailler des agents", `<a href="/settings/folders">`, "Clients", "Lecture &#43; dépôt", "Rien d&#39;ouvert",
+		"Faire travailler des agents", `<a href="/settings/folders">`, "Clients", "Modifier", "Rien d&#39;ouvert",
 		`href="/settings/folders#folders-pc"`, `<a href="/settings/devices/nas" class="stretched">nas</a>`, `<span class="device-more" aria-hidden="true">Détails ›</span>`, "Couper l&#39;accès", `hx-post="/settings/devices/nas/suspend"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/devices lacks %q", want)

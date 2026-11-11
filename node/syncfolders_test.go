@@ -53,21 +53,21 @@ func putPlan(t *testing.T, n *node, p syncPlan) map[string]string {
 
 func sourcePlan(name, share, access string) planFolder {
 	return planFolder{ID: "e-mac-" + share, Share: share, Name: name, Source: "mac", Role: roleSource, Access: access,
-		Results: "Eriphe", Peers: []string{"nas"}}
+		Peers: []string{"nas"}}
 }
 
-// On the folder's machine, the folder is sent as its level says: read and
-// drop send only (drop's results subfolder, a folder of its own, both
-// ways), manage both ways with 30 days of versions out of the folder; the
-// peer's device ID is pinned at a loopback port of the node's.
+// On the folder's machine, the folder is sent as its level says: read
+// sends only, write both ways with 30 days of versions out of the folder;
+// the peer's device ID is pinned at a loopback port of the node's. A plan
+// of before the two levels reads drop as read and manage as write.
 func TestSyncSourceLevels(t *testing.T) {
 	n, f, root := syncFixture(t)
 	read := shareCopyable(t, n, "Photos", "Photos", accessRead, true)
-	drop := shareCopyable(t, n, "Clients/ACME", "ACME", accessDrop, true)
-	manage := shareCopyable(t, n, "Clients/Beta", "Beta", accessManage, true)
+	drop := shareCopyable(t, n, "Clients/ACME", "ACME", accessWrite, true)
+	manage := shareCopyable(t, n, "Clients/Beta", "Beta", accessWrite, true)
 	peers := []planPeer{{Name: "nas", DeviceID: peerDevice}}
 	problems := putPlan(t, n, syncPlan{Peers: peers, Folders: []planFolder{
-		sourcePlan("Photos", read, accessRead), sourcePlan("ACME", drop, accessDrop), sourcePlan("Beta", manage, accessManage)}})
+		sourcePlan("Photos", read, accessRead), sourcePlan("ACME", drop, "drop"), sourcePlan("Beta", manage, "manage")}})
 	if len(problems) > 0 {
 		t.Fatalf("problems %v", problems)
 	}
@@ -76,22 +76,21 @@ func TestSyncSourceLevels(t *testing.T) {
 		t.Fatalf("device %+v", d)
 	}
 	for id, want := range map[string]struct{ typ, path string }{
-		"e-mac-" + read:                 {"sendonly", filepath.Join(root, "Photos")},
-		"e-mac-" + drop:                 {"sendonly", filepath.Join(root, "Clients/ACME")},
-		"e-mac-" + drop + resultsSuffix: {"sendreceive", filepath.Join(root, "Clients/ACME/Eriphe")},
-		"e-mac-" + manage:               {"sendreceive", filepath.Join(root, "Clients/Beta")},
+		"e-mac-" + read:   {"sendonly", filepath.Join(root, "Photos")},
+		"e-mac-" + drop:   {"sendonly", filepath.Join(root, "Clients/ACME")},
+		"e-mac-" + manage: {"sendreceive", filepath.Join(root, "Clients/Beta")},
 	} {
 		got, ok := f.folders[id]
 		if !ok || got.Type != want.typ || got.Path != want.path || len(got.Devices) != 1 || got.Devices[0].DeviceID != peerDevice {
 			t.Errorf("%s: %+v, want %+v", id, got, want)
 		}
 	}
-	if ig := f.ignores["e-mac-"+drop]; len(ig) != 1 || ig[0] != "/Eriphe" {
-		t.Errorf("drop's ignores %v", ig)
+	if len(f.folders) != 3 || len(f.ignores["e-mac-"+drop]) != 0 {
+		t.Errorf("folders %v, ignores %v", f.folders, f.ignores)
 	}
 	v := f.folders["e-mac-"+manage].Versioning
 	if v.Type != "staggered" || v.Params["maxAge"] != "2592000" || !strings.HasPrefix(v.FSPath, n.syncDir()) {
-		t.Errorf("manage's versions %+v", v)
+		t.Errorf("write's versions %+v", v)
 	}
 	if f.folders["e-mac-"+read].Versioning.Type != "" || f.folders["e-mac-"+manage].MaxConflicts != -1 {
 		t.Error("versions on a read folder, or conflicts not kept")
@@ -102,11 +101,11 @@ func TestSyncSourceLevels(t *testing.T) {
 // not sent, and one asked above its level here is sent at its level.
 func TestSyncSourceCeiling(t *testing.T) {
 	n, f, _ := syncFixture(t)
-	closed := shareCopyable(t, n, "Photos", "Photos", accessManage, false)
+	closed := shareCopyable(t, n, "Photos", "Photos", accessWrite, false)
 	low := shareCopyable(t, n, "Clients/ACME", "ACME", accessRead, true)
 	peers := []planPeer{{Name: "nas", DeviceID: peerDevice}}
 	problems := putPlan(t, n, syncPlan{Peers: peers, Folders: []planFolder{
-		sourcePlan("Photos", closed, accessManage), sourcePlan("ACME", low, accessManage),
+		sourcePlan("Photos", closed, accessWrite), sourcePlan("ACME", low, accessWrite),
 		sourcePlan("Gone", "0123456789abcdef", accessRead)}})
 	if _, ok := f.folders["e-mac-"+closed]; ok || !strings.Contains(problems["e-mac-"+closed], "not to be copied") {
 		t.Errorf("not copyable: sent (%v)", problems)
@@ -115,7 +114,7 @@ func TestSyncSourceCeiling(t *testing.T) {
 		t.Errorf("not shared: %v", problems)
 	}
 	if got := f.folders["e-mac-"+low]; got.Type != "sendonly" || got.Versioning.Type != "" {
-		t.Errorf("asked manage of a read folder: %+v", got)
+		t.Errorf("asked write of a read folder: %+v", got)
 	}
 	// Unshared here: its Syncthing folder goes at the next application.
 	n.unshare(func(sf sharedFolder) bool { return sf.ID == low }, "local")
@@ -126,7 +125,7 @@ func TestSyncSourceCeiling(t *testing.T) {
 }
 
 // A copy is kept in the node's data, receive only for read, both ways for
-// manage; a copy no longer planned is removed from Syncthing and deleted,
+// write; a copy no longer planned is removed from Syncthing and deleted,
 // after the tasks working on it are stopped, and the peer's device goes.
 func TestSyncCopies(t *testing.T) {
 	n, f, _ := syncFixture(t)
@@ -170,16 +169,16 @@ func TestSyncCopies(t *testing.T) {
 		t.Fatalf("a paused copy lost its files: %v", err)
 	}
 
-	// manage: both ways on the copy too, without versions (the folder's
+	// write: both ways on the copy too, without versions (the folder's
 	// machine keeps them).
-	plan.Folders[0].Access = accessManage
+	plan.Folders[0].Access = accessWrite
 	putPlan(t, n, plan)
 	if got := f.folders[cp.ID]; got.Type != "sendreceive" || got.Versioning.Type != "" {
-		t.Fatalf("manage copy %+v", got)
+		t.Fatalf("write copy %+v", got)
 	}
-	// Lent to manage: mounted writable after a snapshot of the copy, taken
+	// Lent to write: mounted writable after a snapshot of the copy, taken
 	// here, on the machine running the task.
-	managed := &Task{ID: "t-m", State: stateRunning, Spec: TaskSpec{Folders: []TaskFolder{{Name: "Photos", ID: share, Copy: cp.ID, Manage: true}}}}
+	managed := &Task{ID: "t-m", State: stateRunning, Spec: TaskSpec{Folders: []TaskFolder{{Name: "Photos", ID: share, Copy: cp.ID, Write: true}}}}
 	if args, err := n.folderArgs(t, managed); err != nil || strings.Contains(strings.Join(args, " "), "readonly") {
 		t.Fatalf("managed copy: %v %v", args, err)
 	}
@@ -217,12 +216,11 @@ func TestSyncPlanCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, change := range map[string]func(*syncPlan){
-		"a path as id":      func(p *syncPlan) { p.Folders[0].ID = "../../etc" },
-		"id of another":     func(p *syncPlan) { p.Folders[0].ID = "e-pc-" + share },
-		"unknown role":      func(p *syncPlan) { p.Folders[0].Role = "mirror" },
-		"unknown level":     func(p *syncPlan) { p.Folders[0].Access = "write" },
-		"drop, bad results": func(p *syncPlan) { p.Folders[0].Access, p.Folders[0].Results = accessDrop, "../x" },
-		"unknown peer":      func(p *syncPlan) { p.Folders[0].Peers = []string{"pc"} },
+		"a path as id":  func(p *syncPlan) { p.Folders[0].ID = "../../etc" },
+		"id of another": func(p *syncPlan) { p.Folders[0].ID = "e-pc-" + share },
+		"unknown role":  func(p *syncPlan) { p.Folders[0].Role = "mirror" },
+		"unknown level": func(p *syncPlan) { p.Folders[0].Access = "admin" },
+		"unknown peer":  func(p *syncPlan) { p.Folders[0].Peers = []string{"pc"} },
 		"copy of two": func(p *syncPlan) {
 			p.Peers = append(p.Peers, planPeer{"pc", fakeDeviceID})
 			p.Folders[0].Peers = []string{"mac", "pc"}

@@ -15,8 +15,7 @@ import (
 //
 //   - the access log: what Eriphe did on each device (a folder listed, a
 //     folder opened or closed, a task run there, a folder lent to it, a
-//     result dropped in a folder's results subfolder, a results folder
-//     that could not take the assistant's new name), kept 90 days;
+//     file a task wrote in a folder), kept 90 days;
 //   - "Cut access": the device stays registered and installed, but
 //     eriphe-core sends it no work, refuses to list or lend its folders,
 //     drops its tunnel and lets it in again only once access is restored.
@@ -30,16 +29,13 @@ const (
 	logList    = "list"    // a folder of it listed: Detail is share:/path
 	logShare   = "share"   // a folder opened to Eriphe
 	logUnshare = "unshare" // a folder closed again
-	logLower   = "lower"   // a folder's level lowered, or its copies turned off, from here
+	logLower   = "lower"   // a folder's copies turned off, from here
 	logCopy    = "copy"    // a copy of a folder kept on it, or deleted: Detail says which
 	logTask    = "task"    // a task run on it: Detail is its agent
 	logLend    = "lend"    // a folder lent to a task, with its right
-	logResult  = "result"  // a file a task wrote in a folder's results subfolder: Detail is its path
-	// A folder whose results subfolder keeps a former name, the new one
-	// being taken (results_folder.go): Detail is "kept/ → wanted/".
-	logResultsConflict = "results_conflict"
-	logCut             = "cut"     // access cut
-	logRestore         = "restore" // access restored
+	logResult  = "result"  // a file a task wrote in a folder: Detail is its path
+	logCut     = "cut"     // access cut
+	logRestore = "restore" // access restored
 )
 
 const (
@@ -66,7 +62,7 @@ type NodeLogEntry struct {
 	Kind   string    `json:"kind"`
 	Task   string    `json:"task,omitempty"`
 	Folder string    `json:"folder,omitempty"`
-	Access string    `json:"access,omitempty"` // read or drop, for a folder
+	Access string    `json:"access,omitempty"` // read or write, for a folder
 	Detail string    `json:"detail,omitempty"`
 }
 
@@ -159,7 +155,7 @@ func (c *core) logPlaced(t *TaskRow, node string) {
 	}
 	c.logNode(node, NodeLogEntry{Kind: logTask, Task: t.ID, Detail: t.Agent})
 	for _, name := range splitNames(t.Folders) {
-		access := folderRead
+		access := accessRead
 		if f, err := c.store.folder(name); err == nil {
 			access = f.Access
 		}
@@ -167,39 +163,22 @@ func (c *core) logPlaced(t *TaskRow, node string) {
 	}
 }
 
-// logResults records the files a task wrote in the results subfolder of
-// the folders it may drop results in, or anywhere in those it may manage,
-// as its agent reports them (the file tools of Claude Code: Write, Edit,
-// MultiEdit, NotebookEdit), and the results folders its node could not
-// rename.
+// logResults records the files a task wrote in the folders it may write
+// in, as its agent reports them (the file tools of Claude Code: Write,
+// Edit, MultiEdit, NotebookEdit).
 func (c *core) logResults(t *TaskRow, events []EventRow) {
 	if t.Folders == "" {
 		return
 	}
-	for _, ev := range events {
-		if ev.Type == "results_conflict" {
-			folder, _ := ev.Data["folder"].(string)
-			kept, _ := ev.Data["kept"].(string)
-			wanted, _ := ev.Data["wanted"].(string)
-			c.logNode(t.Node, NodeLogEntry{Kind: logResultsConflict, Task: t.ID, Folder: folder, Access: folderDrop,
-				Detail: kept + "/ → " + wanted + "/"})
-		}
-	}
-	var drop, manage []string
+	var write []string
 	for _, name := range splitNames(t.Folders) {
-		f, err := c.store.folder(name)
-		switch {
-		case err != nil:
-		case f.Access == folderDrop:
-			drop = append(drop, f.Name)
-		case f.Access == folderManage:
-			manage = append(manage, f.Name)
+		if f, err := c.store.folder(name); err == nil && f.Access == accessWrite {
+			write = append(write, f.Name)
 		}
 	}
-	if len(drop) == 0 && len(manage) == 0 {
+	if len(write) == 0 {
 		return
 	}
-	results := c.resultsName()
 	for _, ev := range events {
 		if ev.Type != "tool_use" {
 			continue
@@ -214,17 +193,10 @@ func (c *core) logResults(t *TaskRow, events []EventRow) {
 		if path == "" {
 			path, _ = in["notebook_path"].(string)
 		}
-		for _, name := range drop {
-			prefix := resultsPath(&Folder{Name: name}, results)
-			if strings.HasPrefix(path, prefix) && !strings.Contains(path[len(prefix):], "..") {
-				c.logNode(t.Node, NodeLogEntry{Kind: logResult, Task: t.ID, Folder: name, Access: folderDrop,
-					Detail: results + "/" + path[len(prefix):]})
-			}
-		}
-		for _, name := range manage {
+		for _, name := range write {
 			prefix := (&Folder{Name: name}).mountPath() + "/"
 			if strings.HasPrefix(path, prefix) && !strings.Contains(path[len(prefix):], "..") {
-				c.logNode(t.Node, NodeLogEntry{Kind: logResult, Task: t.ID, Folder: name, Access: folderManage, Detail: path[len(prefix):]})
+				c.logNode(t.Node, NodeLogEntry{Kind: logResult, Task: t.ID, Folder: name, Access: accessWrite, Detail: path[len(prefix):]})
 			}
 		}
 	}

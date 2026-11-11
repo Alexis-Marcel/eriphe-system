@@ -12,17 +12,15 @@ import (
 // a reference to one thing the user opened to Eriphe, and an access on one
 // scale for every kind:
 //
-//	read < drop < write
+//	read < write
 //
-// read only reads; drop also creates new files in an Eriphe-owned place
-// (a folder's results subfolder, results_folder.go), never changing the originals; write
-// changes the thing itself (for a repository: push; for a folder shared to
-// manage: create, change, rename and delete in it). Each kind takes the
-// rights that make sense for it (resourceKinds), and an entry never gets
-// more than the user opened (a folder's own access).
+// read only reads; write changes the thing itself (for a repository: push;
+// for a folder: create, change, rename and delete in it). Each kind takes
+// the rights that make sense for it (resourceKinds), and an entry never
+// gets more than the user opened (a folder's rights, folder_values.go).
 //
 //	{"kind": "repo",         "ref": "owner/site", "access": "write", "branch": "eriphe/fix", "base": "main"}
-//	{"kind": "folder",       "ref": "Clients",    "access": "drop"}
+//	{"kind": "folder",       "ref": "Clients",    "access": "write"}
 //	{"kind": "place",        "ref": "Factures",   "access": "read"}
 //	{"kind": "tool",         "ref": "github.get_*"}
 //	{"kind": "access",       "ref": "npm"}
@@ -40,11 +38,9 @@ const (
 	resAccess = "access"
 )
 
-// accessDrop is the middle of the scale (accessRead and accessWrite are in
+// accessRank orders the scale (accessRead and accessWrite are in
 // repo_lend.go).
-const accessDrop = "drop"
-
-var accessRank = map[string]int{accessRead: 1, accessDrop: 2, accessWrite: 3}
+var accessRank = map[string]int{accessRead: 1, accessWrite: 2}
 
 // atLeast tells whether access a covers access b.
 func atLeast(a, b string) bool { return accessRank[a] >= accessRank[b] && accessRank[b] > 0 }
@@ -52,7 +48,7 @@ func atLeast(a, b string) bool { return accessRank[a] >= accessRank[b] && access
 // resourceKinds are the kinds and the rights each takes.
 var resourceKinds = map[string][]string{
 	resRepo:   {accessRead, accessWrite},
-	resFolder: {accessRead, accessDrop, accessWrite},
+	resFolder: {accessRead, accessWrite},
 	resPlace:  {accessRead, accessWrite},
 	resTool:   {accessRead, accessWrite},
 	resAccess: {}, // it has no scale: what it can do is the provider's (access.go)
@@ -63,7 +59,7 @@ var resourceKinds = map[string][]string{
 type ResourceRef struct {
 	Kind   string `json:"kind" jsonschema:"repo, folder, place, tool, access or file"`
 	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name or a git URL, one of list_repos; folder or place its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access (a credential) its name in list_tools' accesses"`
-	Access string `json:"access,omitempty" jsonschema:"read, drop or write (read < drop < write). repo: read, or write to push; folder: read, drop to add results in its results subfolder, named after the assistant, or write to change the folder itself (a folder shared to manage; its machine takes a snapshot first); place: read, or write to add, modify or trash files where the place's rights allow (each call is still held to them); tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
+	Access string `json:"access,omitempty" jsonschema:"read or write (read < write). repo: read, or write to push; folder: read, or write to change the folder itself (create, change, rename, delete; its machine takes a snapshot first), where its rights allow (list_folders); place: read, or write to add, modify or trash files where the place's rights allow (each call is still held to them); tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
 	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create and push to"`
 	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
 	Dir    string `json:"dir,omitempty" jsonschema:"repo: the working directory inside the repository, if not its root"`
@@ -199,9 +195,15 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 				return nil, fmt.Errorf("folder %q: unknown (see list_folders)", e.Ref)
 			}
 			e.Ref = f.Name
-			own := resourceAccess(f.Access)
-			if !atLeast(own, e.Access) {
-				return nil, fmt.Errorf("folder %q is opened to Eriphe for %s only: it cannot be lent %s", f.Name, f.Access, e.Access)
+			cat := catRead
+			if e.Access == accessWrite {
+				cat = catChange
+			}
+			if c.folderCase(f, cat) == gridNever {
+				if cat == catChange && f.Access != accessWrite {
+					return nil, fmt.Errorf("folder %q is shared read-only on %s: it cannot be lent write", f.Name, f.Node)
+				}
+				return nil, fmt.Errorf("folder %q: %s is never allowed (Settings → Folders)", f.Name, cat)
 			}
 			names = append(names, f.Name)
 		case resPlace:
@@ -267,7 +269,7 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 	}
 	for _, f := range fs {
 		g := *f
-		g.Access = folderAccess(lentAccess[strings.ToLower(f.Name)])
+		g.Access = cmpOr(lentAccess[strings.ToLower(f.Name)], accessRead)
 		out.Folders = append(out.Folders, &g)
 	}
 	out.Machine = machine
@@ -278,30 +280,6 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 		out.List = []ResourceRef{} // kept as [], not empty: the task has resources, none
 	}
 	return out, nil
-}
-
-// folderAccess is the access a folder is lent with, as folders name it:
-// write is manage.
-func folderAccess(access string) string {
-	switch access {
-	case accessDrop:
-		return folderDrop
-	case accessWrite:
-		return folderManage
-	}
-	return folderRead
-}
-
-// resourceAccess is a folder's level on the resources' scale: manage is
-// write.
-func resourceAccess(level string) string {
-	switch level {
-	case folderDrop:
-		return accessDrop
-	case folderManage:
-		return accessWrite
-	}
-	return accessRead
 }
 
 // resolveRequest is resolveResources for a request.
@@ -363,7 +341,7 @@ func (c *core) taintedResources(r runRequest) error {
 		switch {
 		case isRepoRef(e): // a write is asked on the start's card (task_start.go)
 		case e.Kind == resFolder: // a write is asked on the start's card (folder_values.go)
-		case e.Access == accessWrite || e.Access == accessDrop:
+		case e.Access == accessWrite:
 			writes = append(writes, e.String())
 		case e.Kind == resPlace:
 			if p := c.placeNamed(e.Ref); p != nil && len(c.actingGrant([]string{p.Tool})) > 0 {

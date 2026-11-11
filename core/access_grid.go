@@ -265,6 +265,21 @@ func (a serverAccess) capped() serverAccess {
 	return a
 }
 
+// with is the grid with one case set ("" says nothing).
+func (g accessGrid) with(category, value string) accessGrid {
+	switch category {
+	case catRead:
+		g.Read = value
+	case catChange:
+		g.Change = value
+	case catDelete:
+		g.Delete = value
+	case catSend:
+		g.Send = value
+	}
+	return g
+}
+
 // over is a grid with the cases another one sets: a place's exceptions
 // over its account's grid.
 func (g accessGrid) over(exceptions accessGrid) accessGrid {

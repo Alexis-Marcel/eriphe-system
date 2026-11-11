@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -112,7 +111,7 @@ func lend(t *testing.T, n *node, share, rel, name string, write bool) TaskFolder
 	t.Helper()
 	access := accessRead
 	if write {
-		access = accessDrop
+		access = accessWrite
 	}
 	p := filepath.Join(n.opt.shares[share].Path, filepath.FromSlash(rel))
 	var id string
@@ -143,7 +142,7 @@ func shareOut(t *testing.T, n *node, cmd string, args ...string) (string, error)
 // testShareCmd checks eriphe-node share on either engine: what may be
 // shared, under which name and right, listed, and removed.
 func testShareCmd(t *testing.T, n *node, root string) {
-	out, err := shareOut(t, n, "add", filepath.Join(root, "Clients", "ACME"), "--drop")
+	out, err := shareOut(t, n, "add", filepath.Join(root, "Clients", "ACME"), "--read")
 	if err != nil || !strings.Contains(out, `Shared with Eriphe as "ACME"`) {
 		t.Fatalf("add: %v %s", err, out)
 	}
@@ -164,7 +163,7 @@ func testShareCmd(t *testing.T, n *node, root string) {
 		"ssh link":  {filepath.Join(root, "keys")},
 		"deep":      {filepath.Join(root, "Deep")},
 		"own data":  {n.opt.root},
-		"read-only": {"--drop", filepath.Join(root, "Clients", "Beta")},
+		"read-only": {"--write", filepath.Join(root, "Clients", "Beta")},
 		"same name": {"--name", "acme", filepath.Join(root, "Clients", "Beta")},
 		"bad name":  {"--name", ".x", filepath.Join(root, "Clients", "Beta")},
 		"no such":   {filepath.Join(root, "nope")},
@@ -186,7 +185,7 @@ func testShareCmd(t *testing.T, n *node, root string) {
 	for _, f := range list {
 		names = append(names, f.Name+":"+f.Access)
 	}
-	if !slices.Equal(names, []string{"ACME:drop", "Photos de famille:read", "Clients:read"}) {
+	if !slices.Equal(names, []string{"ACME:read", "Photos de famille:write", "Clients:write"}) {
 		t.Fatalf("list %v", names)
 	}
 	if fi, err := os.Stat(filepath.Join(n.opt.root, sharesFile)); err != nil || fi.Mode().Perm() != 0o600 {
@@ -197,23 +196,23 @@ func testShareCmd(t *testing.T, n *node, root string) {
 	}
 	// eriphe-core sees names, rights and ids, never a path.
 	raw, _ := json.Marshal(n.sharedList())
-	if strings.Contains(string(raw), root) || !strings.Contains(string(raw), `"name":"ACME","access":"drop"`) {
+	if strings.Contains(string(raw), root) || !strings.Contains(string(raw), `"name":"ACME","access":"read"`) {
 		t.Fatalf("for eriphe-core: %s", raw)
 	}
 	// Shared again, the same folder gets the level and copies given here,
 	// and keeps its id and name.
 	before, _ := loadShared(n.opt.root)
-	if out, err = shareOut(t, n, "add", "--manage", "--copyable", filepath.Join(root, "Clients", "ACME")); err != nil || !strings.Contains(out, `now as "ACME" (read and changed`) || !strings.Contains(out, "copied") {
+	if out, err = shareOut(t, n, "add", "--write", "--copyable", filepath.Join(root, "Clients", "ACME")); err != nil || !strings.Contains(out, `now as "ACME" (read and changed`) || !strings.Contains(out, "copied") {
 		t.Fatalf("shared again: %v %s", err, out)
 	}
 	after, _ := loadShared(n.opt.root)
-	if len(after) != 3 || after[0].ID != before[0].ID || after[0].Access != accessManage || after[0].Max != accessManage || !after[0].Copyable {
+	if len(after) != 3 || after[0].ID != before[0].ID || after[0].Access != accessWrite || after[0].Max != accessWrite || !after[0].Copyable {
 		t.Fatalf("shared again: %+v", after[0])
 	}
-	if out, err = shareOut(t, n, "add", "--drop", "--manage", filepath.Join(root, "Photos")); err == nil {
-		t.Fatalf("--drop and --manage: %s", out)
+	if out, err = shareOut(t, n, "add", "--read", "--write", filepath.Join(root, "Photos")); err == nil {
+		t.Fatalf("--read and --write: %s", out)
 	}
-	if out, _ = shareOut(t, n, "list"); !strings.Contains(out, "COPYABLE") || !strings.Contains(out, "manage") {
+	if out, _ = shareOut(t, n, "list"); !strings.Contains(out, "COPYABLE") || !strings.Contains(out, "write") {
 		t.Fatalf("list: %s", out)
 	}
 	if out, err = shareOut(t, n, "remove", "photos de famille", filepath.Join(root, "Clients")); err != nil || strings.Count(out, "No longer shared") != 2 {
@@ -327,11 +326,7 @@ func TestRevoke(t *testing.T) {
 
 func TestFolderMounts(t *testing.T) {
 	n, root := shareFixture(t)
-	var chowned []string
-	chownResults = func(p string, uid, gid int) error { chowned = append(chowned, p); return nil }
-	defer func() { chownResults = os.Lchown }()
-
-	task := &Task{Spec: TaskSpec{Folders: []TaskFolder{
+	task := &Task{ID: "t-1", Spec: TaskSpec{Folders: []TaskFolder{
 		lend(t, n, "data", "Clients/ACME", "Clients, ACME", true),
 		lend(t, n, "data", "Photos", "Photos", false),
 	}}}
@@ -342,23 +337,18 @@ func TestFolderMounts(t *testing.T) {
 	got := strings.Join(args, " ")
 	acme := filepath.Join(root, "Clients", "ACME")
 	for _, want := range []string{
-		`--mount type=bind,src=` + acme + `,"dst=/work/folders/Clients, ACME",readonly`,
-		`--mount type=bind,src=` + acme + `/Eriphe,"dst=/work/folders/Clients, ACME/Eriphe"`,
+		`--mount type=bind,src=` + acme + `,"dst=/work/folders/Clients, ACME"`,
 		`--mount type=bind,src=` + filepath.Join(root, "Photos") + `,dst=/work/folders/Photos,readonly`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %s in\n%s", want, got)
 		}
 	}
-	fi, err := os.Lstat(filepath.Join(acme, "Eriphe"))
-	if err != nil || !fi.IsDir() || fi.Mode()&fs.ModeSetgid == 0 || fi.Mode().Perm() != 0o775 {
-		t.Fatalf("Eriphe/: %v %v", fi.Mode(), err)
+	if strings.Contains(got, `"dst=/work/folders/Clients, ACME",readonly`) || strings.Contains(got, "Eriphe") {
+		t.Errorf("a folder lent to write mounted read-only, or a results subfolder:\n%s", got)
 	}
-	if len(chowned) != 1 {
-		t.Fatalf("chowned %v", chowned)
-	}
-	if _, err := os.Stat(filepath.Join(root, "Photos", "Eriphe")); err == nil {
-		t.Fatal("Eriphe/ made in a read-only folder")
+	if _, err := os.Stat(filepath.Join(acme, "Eriphe")); err == nil {
+		t.Fatal("a results subfolder made")
 	}
 	logged, _ := os.ReadFile(filepath.Join(n.opt.root, sharesLog))
 	if strings.Count(string(logged), `"event":"mount"`) != 2 {
@@ -394,11 +384,6 @@ func TestFolderMounts(t *testing.T) {
 		if _, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{f}}}); err == nil {
 			t.Errorf("%s: mounted", name)
 		}
-	}
-	// A symlink named Eriphe would send the writes elsewhere.
-	os.Symlink(filepath.Join(root, "Photos"), filepath.Join(root, "Clients", "Beta", "Eriphe"))
-	if _, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{lend(t, n, "data", "Clients/Beta", "Beta", true)}}}); err == nil {
-		t.Error("in results: mounted")
 	}
 	p := lend(t, n, "data", "Photos", "Photos", false)
 	if _, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{p, {Name: "photos", ID: p.ID}}}}); err == nil {

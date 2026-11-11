@@ -132,7 +132,7 @@ the updates-changed event, web_updates.go). */}}
   <h4 id="sees-{{.Name}}">{{template "i-eye"}}{{t "devices.sees"}}</h4>
   {{if .Folders}}
   <ul class="device-folders">
-    {{range .Folders}}<li><a href="/settings/folders">{{template "i-folder"}}<span>{{.Name}}</span></a>{{if .Problem}}<span class="tag tag-no">{{t "devices.blocked"}}</span>{{else}}<span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "devices.access.%s" .Access)}}</span>{{end}}</li>{{end}}
+    {{range .Folders}}<li><a href="/settings/folders">{{template "i-folder"}}<span>{{.Name}}</span></a>{{if .Problem}}<span class="tag tag-no">{{t "devices.blocked"}}</span>{{else}}<span class="tag{{if eq .Access "write"}} tag-accent{{end}}">{{t (printf "devices.access.%s" .Access)}}</span>{{end}}</li>{{end}}
   </ul>
   {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" (eq .OS "darwin") "Node" .Name "Copy" false)}}{{end}}
   {{else}}
@@ -203,7 +203,7 @@ the updates-changed event, web_updates.go). */}}
   <td data-label="{{t "devices.logwhat"}}"><span class="strong">{{t (printf "devices.log.%s" .Kind)}}</span></td>
   <td data-label="{{t "devices.logdetail"}}" class="log-detail">
     {{- if .Folder}}<span class="log-folder">{{template "i-folder"}}{{.Folder}}</span>{{end}}
-    {{- if .Access}} <span class="tag{{if eq .Access "drop"}} tag-accent{{end}}">{{t (printf "devices.access.%s" .Access)}}</span>{{end}}
+    {{- if .Access}} <span class="tag{{if eq .Access "write"}} tag-accent{{end}}">{{t (printf "devices.access.%s" .Access)}}</span>{{end}}
     {{- if .Task}} <a class="mono" href="/tasks/{{.Task}}">{{.Task}}</a>{{end}}
     {{- if .Detail}} <code class="subject">{{.Detail}}</code>{{end}}
   </td>

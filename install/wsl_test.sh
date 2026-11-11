@@ -116,8 +116,8 @@ hasnt "$T/env" ERIPHE_CA_HASH "core mode: a CA to trust"
 sh "$T/eriphe-share" add --read --copyable=false "/mnt/eriphe/home/Sam Docs"
 has "$T/calls" "exec eriphe eriphe share add --read /mnt/eriphe/home/Sam Docs" "eriphe-share"
 : >"$T/calls"
-sh "$T/eriphe-share" add --drop --copyable /mnt/eriphe/home/Projects
-has "$T/calls" "exec eriphe eriphe share add --drop --copyable /mnt/eriphe/home/Projects" "eriphe-share, copyable"
+sh "$T/eriphe-share" add --read --copyable /mnt/eriphe/home/Projects
+has "$T/calls" "exec eriphe eriphe share add --read --copyable /mnt/eriphe/home/Projects" "eriphe-share, copyable"
 
 if [ "$fails" -gt 0 ]; then
 	echo "wsl_test.sh: $fails failed" >&2

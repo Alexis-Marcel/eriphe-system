@@ -29,11 +29,7 @@ import (
 //   - a copy is kept only in this node's data, <root>/sync/copies/<id>,
 //     never inside a shared folder nor anywhere eriphe-core names;
 //   - the direction follows the level. read: the folder is sent only, the
-//     copies receive only. drop: the same, but for the results subfolder
-//     (the assistant's name), a Syncthing folder of its own, synced both
-//     ways and ignored by the first one: Syncthing's direction is per
-//     folder, and an ignore pattern alone cannot make one subfolder come
-//     back. manage: both ways, and on the folder's own machine Syncthing
+//     copies receive only. write: both ways, and on the folder's own machine Syncthing
 //     keeps for 30 days what a copy deleted or replaced (staggered
 //     versioning, in <root>/sync/versions/<id>, out of the folder);
 //     conflicts keep both files (.sync-conflict).
@@ -48,7 +44,7 @@ const (
 	syncCopiesDir = "copies"
 	syncVersions  = "versions"
 	// syncVersionDays is how long the folder's machine keeps what a copy
-	// deleted or replaced, with the manage level.
+	// deleted or replaced, with the write level.
 	syncVersionDays = 30
 )
 
@@ -67,14 +63,13 @@ type planPeer struct {
 // planFolder is one folder synced: sent from here (role source), or a copy
 // kept here (role copy).
 type planFolder struct {
-	ID      string   `json:"id"`      // Syncthing's folder id, the same on every machine: e-<machine>-<share id>
-	Share   string   `json:"share"`   // the folder's id on its machine (node/shared.go)
-	Name    string   `json:"name"`    // its name, for Syncthing's label and the tasks
-	Source  string   `json:"source"`  // the machine it is shared on
-	Role    string   `json:"role"`    // source or copy
-	Access  string   `json:"access"`  // its level: read, drop or manage
-	Results string   `json:"results"` // with drop: the results subfolder's name
-	Peers   []string `json:"peers"`   // the machines it syncs with, among Peers
+	ID     string   `json:"id"`     // Syncthing's folder id, the same on every machine: e-<machine>-<share id>
+	Share  string   `json:"share"`  // the folder's id on its machine (node/shared.go)
+	Name   string   `json:"name"`   // its name, for Syncthing's label and the tasks
+	Source string   `json:"source"` // the machine it is shared on
+	Role   string   `json:"role"`   // source or copy
+	Access string   `json:"access"` // its level: read or write
+	Peers  []string `json:"peers"`  // the machines it syncs with, among Peers
 	// Paused: a copy kept as it is, not synced, while a machine of the
 	// pair is suspended or has no Syncthing for now.
 	Paused bool `json:"paused,omitempty"`
@@ -87,10 +82,8 @@ const (
 
 var syncFolderID = regexp.MustCompile(`^e-[a-z0-9][a-z0-9-]{0,31}-[0-9a-f]{16}$`)
 
-// resultsSuffix names the results subfolder's own Syncthing folder.
-const resultsSuffix = "-r"
-
-// check refuses a plan that names anything out of shape.
+// check refuses a plan that names anything out of shape; a level of before
+// the two (legacyLevel) is read as its new one.
 func (p syncPlan) check() error {
 	peers := map[string]bool{}
 	for _, pe := range p.Peers {
@@ -100,7 +93,9 @@ func (p syncPlan) check() error {
 		peers[pe.Name] = true
 	}
 	ids := map[string]bool{}
-	for _, f := range p.Folders {
+	for i := range p.Folders {
+		p.Folders[i].Access = legacyLevel(p.Folders[i].Access)
+		f := p.Folders[i]
 		switch {
 		case !syncFolderID.MatchString(f.ID) || ids[f.ID]:
 			return fmt.Errorf("folder %q: not a folder id, or twice", f.ID)
@@ -110,8 +105,6 @@ func (p syncPlan) check() error {
 			return fmt.Errorf("folder %s: role %q", f.ID, f.Role)
 		case accessRank[f.Access] == 0:
 			return fmt.Errorf("folder %s: level %q", f.ID, f.Access)
-		case f.Access == accessDrop && (!validFolderName(f.Results) || strings.ContainsAny(f.Results, ",")):
-			return fmt.Errorf("folder %s: results subfolder %q", f.ID, f.Results)
 		case !validFolderName(f.Name):
 			return fmt.Errorf("folder %s: name %q", f.ID, f.Name)
 		}
@@ -309,9 +302,8 @@ func (n *node) applySync(ctx context.Context) (map[string]string, error) {
 	return problems, nil
 }
 
-// stFolders is a planned folder as Syncthing's folders (the folder, then
-// its results subfolder with drop) and the first one's ignore patterns, or
-// why it is left out.
+// stFolders is a planned folder as Syncthing's folders and the first one's
+// ignore patterns (none now), or why it is left out.
 func (n *node) stFolders(pf planFolder, shared []sharedFolder, ids map[string]string) ([]stFolder, []string, string) {
 	var devices []stFolderDevice
 	for _, p := range pf.Peers {
@@ -350,13 +342,7 @@ func (n *node) stFolders(pf planFolder, shared []sharedFolder, ids map[string]st
 	case accessRead:
 		main.Type = map[bool]string{true: "sendonly", false: "receiveonly"}[source]
 		return []stFolder{main}, nil, ""
-	case accessDrop:
-		main.Type = map[bool]string{true: "sendonly", false: "receiveonly"}[source]
-		results := main
-		results.ID, results.Label = pf.ID+resultsSuffix, pf.Name+"/"+pf.Results
-		results.Path, results.Type = filepath.Join(path, pf.Results), "sendreceive"
-		return []stFolder{main, results}, []string{"/" + pf.Results}, ""
-	default: // manage
+	default: // write
 		main.Type = "sendreceive"
 		if source {
 			main.Versioning = stVersioning{Type: "staggered", CleanupIntervalS: 3600,

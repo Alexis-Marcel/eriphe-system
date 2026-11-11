@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"path"
@@ -31,28 +30,12 @@ import (
 // not the node's own data) apply to what it reports.
 
 // explorerScript runs in the container: $1 the path relative to the root,
-// $2 "tree" to list the folder's entries three levels down too, or "results"
-// to make its results subfolder (the folder is then mounted at $F, writable;
-// $1 is the results folder's name, $3… its former names, newest first: one
-// of them is renamed to $1 unless $1 is taken, then it stays in use).
+// $2 "tree" to list the folder's entries three levels down too.
 // It writes NUL-separated records: E code (refused), P path, D dirs…, F
 // count, T entries…, U (the tree is not whole); a list ends with an empty
-// record. ERIPHE_R and ERIPHE_F
-// stand for /r and /f in the tests.
+// record. ERIPHE_R stands for /r in the tests.
 const explorerScript = `set -u
-R=${ERIPHE_R:-/r} F=${ERIPHE_F:-/f}
-if [ "$2" = results ]; then
-  cur=$1 use=$1; shift 2
-  for old in "$@"; do
-    [ "$old" != "$cur" ] && [ -d "$F/$old" ] && [ ! -L "$F/$old" ] || continue
-    if [ -e "$F/$cur" ] || [ -L "$F/$cur" ] || ! mv "$F/$old" "$F/$cur" 2>/dev/null; then use=$old; fi
-    break
-  done
-  if [ -L "$F/$use" ] || { [ -e "$F/$use" ] && [ ! -d "$F/$use" ]; }; then printf 'E\0notdir\0'; exit 0; fi
-  mkdir -p "$F/$use" 2>/dev/null
-  if [ -d "$F/$use" ] && [ -w "$F/$use" ]; then printf 'P\0%s\0%s\0' "$F" "$use"; else printf 'E\0nowrite\0'; fi
-  exit 0
-fi
+R=${ERIPHE_R:-/r}
 p=$(realpath "$R/$1" 2>/dev/null) || { printf 'E\0not_found\0'; exit 0; }
 case $p in "$R" | "$R"/*) ;; *) printf 'E\0outside\0'; exit 0 ;; esac
 [ -d "$p" ] || { printf 'E\0not_found\0'; exit 0; }
@@ -158,10 +141,6 @@ func explorerRefusal(code string) error {
 		return shareErr(http.StatusForbidden, "unreadable", "this folder cannot be read")
 	case "private":
 		return shareErr(http.StatusForbidden, "sensitive", "this folder is hidden or sensitive")
-	case "notdir":
-		return errors.New("the results folder is not a folder")
-	case "nowrite":
-		return errors.New("the results folder cannot be written")
 	}
 	return shareErr(http.StatusNotFound, "not_found", "no such folder")
 }
@@ -251,34 +230,4 @@ func checkExplored(e *exploration) error {
 		return unreadableSub("")
 	}
 	return nil
-}
-
-// exploredResults makes the folder's results subfolder through the explorer,
-// the folder mounted writable, a former one renamed (chooseResults): it
-// returns the one in use.
-func (n *node) exploredResults(ctx context.Context, real string, tf TaskFolder) (string, error) {
-	if err := n.engine().mountable(real); err != nil {
-		return "", err
-	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	cur := tf.resultsName()
-	args := []string{cur, "results"}
-	for _, old := range tf.Former {
-		if validFolderName(old) && !strings.Contains(old, ",") {
-			args = append(args, old)
-		}
-	}
-	out, _, err := n.engine().runHelper(ctx, explorer([]mount{{src: real, dst: "/f"}}, args...))
-	if err != nil {
-		return "", fmt.Errorf("cannot make %s/: %v", cur, err)
-	}
-	e, err := parseExploration(out)
-	if err != nil {
-		return "", err
-	}
-	if e.rel == "" || !validFolderName(e.rel) {
-		return cur, nil
-	}
-	return e.rel, nil
 }

@@ -177,7 +177,7 @@ settings() {
 # Docker daemon when eriphe-node engine makes its container, which it does
 # with bind mounts from the folders of the launcher's list only ($BINDS,
 # read again at each request). What the node does in a folder (its checks,
-# a snapshot, a restore, a results subfolder) runs in a short-lived
+# a snapshot, a restore, a handback) runs in a short-lived
 # container of its image given that folder only (node/helper.go). Sharing a
 # folder, or stopping, so restarts nothing: the next task has it, or no
 # longer has it; a task at work keeps what it was given until it ends (the
@@ -481,9 +481,9 @@ summary() {
 		notice "it stays on version $PIN (ERIPHE_VERSION=latest follows the releases)."
 	fi
 	if [ -n "$(folders)" ]; then
-		note "Folders shared with Eriphe here: $SHARE_COMMAND list; to share another: $SHARE_COMMAND add <folder> (--drop to let it drop its results there)"
+		note "Folders shared with Eriphe here: $SHARE_COMMAND list; to share another: $SHARE_COMMAND add <folder> (shared to change by default, --read for a sensitive folder)"
 	else
-		notice "Eriphe opens no folder of this machine yet: share one with $SHARE_COMMAND add <folder> (--drop to let it drop its results there)."
+		notice "Eriphe opens no folder of this machine yet: share one with $SHARE_COMMAND add <folder> (shared to change by default, --read for a sensitive folder)."
 	fi
 	good_to_know
 	say ""
@@ -695,11 +695,12 @@ it, or no longer has it (a task at work keeps it until it ends); only the
 copies to your other machines pause a few seconds when the folders that may
 be copied change.
 
-  eriphe share add [--name NAME] [--read|--drop|--manage] [--copyable] FOLDER...
+  eriphe share add [--name NAME] [--read|--write] [--copyable] FOLDER...
       share each folder (its path on this machine: /mnt/user/Documents),
-      read-only by default (--read); --drop also lets tasks drop their
-      results in its results subfolder; --manage lets them create, change
-      and delete anything in it, a snapshot taken before each such task;
+      to change by default (--write: tasks may create, change and delete
+      anything in it, a snapshot taken before each such task), or
+      read-only (--read) for a sensitive folder; what a task may do there
+      is then set in the workspace (Settings, Folders);
       --copyable allows copies on your other machines; --name: the name
       Eriphe knows it by (one folder only). Again on a folder shared: its
       level and copies anew.
@@ -757,9 +758,11 @@ share_add() {
 	level='' copy='' fname='' named='' asked=''
 	while [ $# -gt 0 ]; do
 		case $1 in
-		-read | --read | -drop | --drop | -manage | --manage)
-			l=--${1##*-}
-			[ -z "$level" ] || [ "$level" = "$l" ] || die "--read, --drop and --manage: choose one"
+		-read | --read | -write | --write | -drop | --drop | -manage | --manage)
+			# --drop and --manage: the former levels, from right clicks
+			# installed before the two: read and write.
+			case $1 in *read | *drop) l=--read ;; *) l=--write ;; esac
+			[ -z "$level" ] || [ "$level" = "$l" ] || die "--read and --write: choose one"
 			level=$l
 			;;
 		-copyable | --copyable) copy=1 ;;
@@ -783,7 +786,7 @@ share_add() {
 	fi
 	[ -z "$named" ] || [ "$(printf '%s' "$asked" | grep -c .)" = 1 ] || die "--name is for one folder only"
 	share_ready
-	cur=$(folders) want=$(folders) given='' failed=''
+	cur=$(folders) want=$(folders) given='' given_ro='' failed=''
 	set -f
 	old_ifs=$IFS IFS=$NL
 	for p in $asked; do
@@ -794,9 +797,13 @@ share_add() {
 			continue
 		fi
 		if printf '%s\n' "$want" | grep -Fxq -- "$p:ro"; then
-			# Read-only, from a :ro place: written to only if asked now.
-			if [ "$level" = --drop ] || [ "$level" = --manage ]; then
+			# Read-only, from a :ro place: written to only if asked now,
+			# shared to read otherwise.
+			if [ "$level" = --write ]; then
 				want=$(printf '%s\n' "$want" | grep -Fxv -- "$p:ro" || true)$NL$p
+			elif [ -z "$level" ]; then
+				given_ro=$given_ro$p$NL
+				continue
 			fi
 		elif ! printf '%s\n' "$want" | grep -Fxq -- "$p"; then
 			if ! why=$(folder_check "$p"); then
@@ -810,29 +817,40 @@ share_add() {
 	done
 	IFS=$old_ifs
 	set +f
-	[ -n "$given" ] || exit 1
+	[ -n "$given$given_ro" ] || exit 1
 	want=$(printf '%s\n' "$want" | grep -v '^$' || true)
 	[ "$want" = "$cur" ] || set_folders "$want"
 	write_binds
 	# The node's own share add, the engine allowing the folders: its checks
 	# (in helpers given the folder), the level and the copies, its list.
-	set --
-	[ -z "$level" ] || set -- "$level"
-	[ -z "$copy" ] || set -- "$@" --copyable
-	[ -z "$named" ] || set -- "$@" --name "$fname"
-	set -f
-	IFS=$NL
-	for p in $given; do set -- "$@" "$p"; done
-	IFS=$old_ifs
-	set +f
+	# A folder kept read-only by its place is shared to read.
 	rc=0
-	docker exec -e ERIPHE_SHARE_COMMAND= eriphe-node eriphe-node share add "$@" || rc=$?
+	node_share_add "$level" "$copy" "$named" "$fname" "$given" || rc=$?
+	node_share_add --read "$copy" "$named" "$fname" "$given_ro" || rc=$?
+	given=$given$given_ro
 	if gone=$(unshared "$given") && [ -n "$gone" ]; then
 		drop_folders "$gone"
 	fi
 	sync_folders
 	[ "$rc" != 0 ] || [ -z "$failed" ] || rc=1
 	exit "$rc"
+}
+
+# node_share_add LEVEL COPY NAMED NAME FOLDERS: the node's own share add of
+# those folders (one a line), if any.
+node_share_add() {
+	[ -n "$5" ] || return 0
+	nlevel=$1 ncopy=$2 nnamed=$3 nname=$4 nfolders=$5
+	set --
+	[ -z "$nlevel" ] || set -- "$nlevel"
+	[ -z "$ncopy" ] || set -- "$@" --copyable
+	[ -z "$nnamed" ] || set -- "$@" --name "$nname"
+	set -f
+	old_ifs=$IFS IFS=$NL
+	for p in $nfolders; do set -- "$@" "$p"; done
+	IFS=$old_ifs
+	set +f
+	docker exec -e ERIPHE_SHARE_COMMAND= eriphe-node eriphe-node share add "$@"
 }
 
 # share_remove NAME|FOLDER...: the node stops sharing them (no new task

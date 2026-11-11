@@ -24,7 +24,7 @@ func lendAt(t *testing.T, n *node, rel, name, access string) TaskFolder {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	tf.Write, tf.Manage = access == accessDrop, access == accessManage
+	tf.Write = access == accessWrite
 	return tf
 }
 
@@ -34,20 +34,20 @@ func TestShareLower(t *testing.T) {
 	n, _ := shareFixture(t)
 	mux := http.NewServeMux()
 	n.routes(mux)
-	tf := lendAt(t, n, "Photos", "Photos", accessManage)
+	tf := lendAt(t, n, "Photos", "Photos", accessWrite)
 	changeShared(n.opt.root, func(l []sharedFolder) ([]sharedFolder, error) { l[0].Copyable = true; return l, nil })
 	patch := func(body string) (int, string) {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest("PATCH", "/v1/shares/"+tf.ID, strings.NewReader(body)))
 		return rec.Code, rec.Body.String()
 	}
-	if code, out := patch(`{"access":"drop"}`); code != 200 || !strings.Contains(out, `"access":"drop","max":"manage","copyable":true`) {
+	if code, out := patch(`{"access":"read"}`); code != 200 || !strings.Contains(out, `"access":"read","max":"write","copyable":true`) {
 		t.Fatalf("lower: %d %s", code, out)
 	}
 	for body, want := range map[string]int{
-		`{"access":"manage"}`: 403, // back up, even to its ceiling: only the machine
-		`{"access":"write"}`:  400,
-		`not json`:            400,
+		`{"access":"write"}`: 403, // back up, even to its ceiling: only the machine
+		`{"access":"drop"}`:  400,
+		`not json`:           400,
 	} {
 		if code, out := patch(body); code != want {
 			t.Errorf("%s: %d %s, want %d", body, code, out, want)
@@ -68,12 +68,12 @@ func TestShareLower(t *testing.T) {
 		t.Fatalf("unknown: %d", rec.Code)
 	}
 	list, _ := loadShared(n.opt.root)
-	if list[0].Access != accessRead || list[0].Max != accessManage || list[0].Copyable {
+	if list[0].Access != accessRead || list[0].Max != accessWrite || list[0].Copyable {
 		t.Fatalf("kept %+v", list[0])
 	}
 	// eriphe-core sees the ceiling, and the level now.
 	raw, _ := json.Marshal(n.sharedList())
-	if !strings.Contains(string(raw), `"access":"read","max":"manage"`) {
+	if !strings.Contains(string(raw), `"access":"read","max":"write"`) {
 		t.Fatalf("for eriphe-core: %s", raw)
 	}
 	logged, _ := os.ReadFile(filepath.Join(n.opt.root, sharesLog))
@@ -82,7 +82,7 @@ func TestShareLower(t *testing.T) {
 	}
 	// And a task asking more than the level now is refused.
 	if _, err := n.lentFolder(&Task{ID: "t"}, tf); err == nil {
-		t.Fatal("lent to manage once read only")
+		t.Fatal("lent to write once read only")
 	}
 }
 
@@ -91,14 +91,14 @@ func TestShareLower(t *testing.T) {
 func TestRevokeLowered(t *testing.T) {
 	n, _ := shareFixture(t)
 	n.opt.docker = "true"
-	m := lendAt(t, n, "Photos", "Photos", accessManage)
+	m := lendAt(t, n, "Photos", "Photos", accessWrite)
 	r := m
-	r.Manage = false
+	r.Write = false
 	manager := &Task{ID: "manager", State: stateRunning, Spec: TaskSpec{Folders: []TaskFolder{m}}}
 	reader := &Task{ID: "reader", State: stateRunning, Spec: TaskSpec{Folders: []TaskFolder{r}}}
 	n.tasks[manager.ID], n.tasks[reader.ID] = manager, reader
 	known := n.sharedLevels()
-	changeShared(n.opt.root, func(l []sharedFolder) ([]sharedFolder, error) { l[0].Access = accessDrop; return l, nil })
+	changeShared(n.opt.root, func(l []sharedFolder) ([]sharedFolder, error) { l[0].Access = accessRead; return l, nil })
 	n.compareShared(known)
 	stopped := func(t *Task) bool {
 		t.mu.Lock()
@@ -114,11 +114,11 @@ func TestRevokeLowered(t *testing.T) {
 	}
 }
 
-// A folder lent to manage is mounted writable whole, once its snapshot is
+// A folder lent to write is mounted writable whole, once its snapshot is
 // taken; without a snapshot, the task does not start.
-func TestManageMount(t *testing.T) {
+func TestWriteMount(t *testing.T) {
 	n, root := shareFixture(t)
-	tf := lendAt(t, n, "Clients", "Clients", accessManage)
+	tf := lendAt(t, n, "Clients", "Clients", accessWrite)
 	task := &Task{ID: "t-1", Spec: TaskSpec{Folders: []TaskFolder{tf}}}
 	args, err := n.folderArgs(t, task)
 	if err != nil {
@@ -128,8 +128,8 @@ func TestManageMount(t *testing.T) {
 	if got := strings.Join(args, " "); !strings.Contains(got, "--mount type=bind,src="+clients+",dst=/work/folders/Clients") || strings.Contains(got, "readonly") {
 		t.Fatalf("mounts: %s", got)
 	}
-	if len(task.results) != 1 || task.results[0] != clients {
-		t.Fatalf("handed back: %v", task.results)
+	if len(task.written) != 1 || task.written[0] != clients {
+		t.Fatalf("handed back: %v", task.written)
 	}
 	snaps := n.snapshots(tf.ID)
 	if len(snaps) != 1 || snaps[0].Task != "t-1" || snaps[0].Name != "Clients" {
@@ -138,10 +138,10 @@ func TestManageMount(t *testing.T) {
 	if raw, err := os.ReadFile(filepath.Join(n.opt.root, snapshotsDir, tf.ID, snaps[0].Stamp, "files", "notes.md")); err != nil || string(raw) != "x" {
 		t.Fatalf("snapshot content: %q %v", raw, err)
 	}
-	// A read-only place is never managed.
+	// A read-only place is never written to.
 	n.opt.shares["data"] = shareRoot{Path: root, ReadOnly: true}
 	if _, err := n.folderArgs(t, &Task{ID: "t-ro", Spec: TaskSpec{Folders: []TaskFolder{tf}}}); err == nil {
-		t.Fatal("managed on a read-only place")
+		t.Fatal("written on a read-only place")
 	}
 	n.opt.shares["data"] = shareRoot{Path: root}
 	// Fail closed.
@@ -154,19 +154,17 @@ func TestManageMount(t *testing.T) {
 		t.Fatal("a failed snapshot is listed")
 	}
 	logged, _ := os.ReadFile(filepath.Join(n.opt.root, sharesLog))
-	if !strings.Contains(string(logged), `"event":"snapshot"`) || !strings.Contains(string(logged), `"event":"snapshot_failed"`) || !strings.Contains(string(logged), `"access":"manage"`) {
+	if !strings.Contains(string(logged), `"event":"snapshot"`) || !strings.Contains(string(logged), `"event":"snapshot_failed"`) || !strings.Contains(string(logged), `"access":"write"`) {
 		t.Fatalf("shares.log:\n%s", logged)
 	}
-	// A folder lent to drop gets no snapshot.
-	d := lendAt(t, n, "Photos", "Photos", accessDrop)
-	chownResults = func(string, int, int) error { return nil }
-	defer func() { chownResults = os.Lchown }()
+	// A folder lent to read gets no snapshot.
+	d := lendAt(t, n, "Photos", "Photos", accessRead)
 	takeSnapshot = platformSnapshot
 	if _, err := n.folderArgs(t, &Task{ID: "t-3", Spec: TaskSpec{Folders: []TaskFolder{d}}}); err != nil {
 		t.Fatal(err)
 	}
 	if len(n.snapshots(d.ID)) != 0 {
-		t.Fatal("a snapshot for drop")
+		t.Fatal("a snapshot for read")
 	}
 }
 
@@ -222,7 +220,7 @@ func TestCopyTree(t *testing.T) {
 // folder as it is now), and pruned after their days.
 func TestSnapshotRestorePrune(t *testing.T) {
 	n, root := shareFixture(t)
-	tf := lendAt(t, n, "Clients", "Clients", accessManage)
+	tf := lendAt(t, n, "Clients", "Clients", accessWrite)
 	clients := filepath.Join(root, "Clients")
 	sf := sharedFolder{ID: tf.ID, Name: "Clients", Path: clients}
 	first, err := n.snapshot(sf, clients, "t-1")
@@ -293,7 +291,7 @@ func TestSnapshotRestorePrune(t *testing.T) {
 // A restore that cannot first snapshot the folder as it is changes nothing.
 func TestRestoreFailsClosed(t *testing.T) {
 	n, root := shareFixture(t)
-	tf := lendAt(t, n, "Clients", "Clients", accessManage)
+	tf := lendAt(t, n, "Clients", "Clients", accessWrite)
 	clients := filepath.Join(root, "Clients")
 	first, err := n.snapshot(sharedFolder{ID: tf.ID, Name: "Clients", Path: clients}, clients, "t-1")
 	if err != nil {
@@ -310,11 +308,11 @@ func TestRestoreFailsClosed(t *testing.T) {
 	}
 }
 
-// On a Mac, a folder lent to manage is mounted writable whole, once its
+// On a Mac, a folder lent to write is mounted writable whole, once its
 // snapshot is taken.
-func TestAppleManageMount(t *testing.T) {
+func TestAppleWriteMount(t *testing.T) {
 	n, root := appleShareFixture(t)
-	tf := lendAt(t, n, "Photos", "Photos", accessManage)
+	tf := lendAt(t, n, "Photos", "Photos", accessWrite)
 	args, err := n.folderArgs(t, &Task{ID: "t-1", Spec: TaskSpec{Folders: []TaskFolder{tf}}})
 	if err != nil {
 		t.Fatal(err)
@@ -347,7 +345,53 @@ func TestShareCmdExplicitFlags(t *testing.T) {
 	if len(list) != 1 || list[0].Access != accessRead || list[0].Max != accessRead || list[0].Copyable {
 		t.Fatalf("%+v", list)
 	}
-	if out, err := shareOut(t, n, "add", "--read", "--drop", p); err == nil {
-		t.Fatalf("--read and --drop: %s", out)
+	if out, err := shareOut(t, n, "add", "--read", "--write", p); err == nil {
+		t.Fatalf("--read and --write: %s", out)
+	}
+	// The former flags of right clicks installed before: --manage is
+	// write, --drop read.
+	if out, err := shareOut(t, n, "add", "--manage", p); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	if list, _ := loadShared(n.opt.root); list[0].Access != accessWrite {
+		t.Fatalf("--manage: %+v", list[0])
+	}
+	if out, err := shareOut(t, n, "add", "--drop", p); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	if list, _ := loadShared(n.opt.root); list[0].Access != accessRead {
+		t.Fatalf("--drop: %+v", list[0])
+	}
+}
+
+// A folder is shared to write by default, but on a read-only place, where
+// it is shared to read.
+func TestShareDefaultWrite(t *testing.T) {
+	n, root := shareFixture(t)
+	if out, err := shareOut(t, n, "add", filepath.Join(root, "Photos")); err != nil || !strings.Contains(out, "read and changed") {
+		t.Fatalf("%v %s", err, out)
+	}
+	n.opt.shares = shareFlag{"ro": {Path: root, ReadOnly: true}}
+	if out, err := shareOut(t, n, "add", filepath.Join(root, "Clients")); err != nil || !strings.Contains(out, "read only") {
+		t.Fatalf("on a read-only place: %v %s", err, out)
+	}
+	if out, err := shareOut(t, n, "add", "--write", filepath.Join(root, "Clients")); err == nil {
+		t.Fatalf("--write on a read-only place: %s", out)
+	}
+}
+
+// A list of before the two levels reads drop as read, so nothing is
+// widened, and manage as write.
+func TestLegacyLevels(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, sharesFile), []byte(`{"folders":[`+
+		`{"id":"a","name":"A","path":"/x/a","access":"drop","max":"manage"},`+
+		`{"id":"b","name":"B","path":"/x/b","access":"manage"}]}`), 0o600)
+	list, err := loadShared(root)
+	if err != nil || len(list) != 2 {
+		t.Fatal(list, err)
+	}
+	if a, b := list[0], list[1]; a.Access != accessRead || a.Max != accessWrite || b.Access != accessWrite || b.ceiling() != accessWrite {
+		t.Fatalf("%+v", list)
 	}
 }

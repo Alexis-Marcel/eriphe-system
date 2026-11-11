@@ -13,16 +13,13 @@ import (
 	"time"
 )
 
-// Snapshots: before a task that may change a folder (lent to manage) starts,
+// Snapshots: before a task that may change a folder (lent to write) starts,
 // the node keeps a copy of the folder as it was, in its own data
 // (snapshots/<id>/<time>/files under its root, which no task mounts and no
 // folder can share). It is kept -snapshot-days (7 by default), then pruned;
 // the user lists and restores them on the machine (eriphe-node share
 // snapshots, share restore). A task whose snapshot failed does not start:
 // nothing it would write could be undone.
-//
-// A folder lent to drop gets none: its originals are mounted read-only,
-// and only the assistant's own results subfolder is writable.
 //
 // How the copy is made, the cheapest way that stays a copy:
 //   - a Mac: Apple's cp -c, a clone (APFS copy-on-write): instant and free
@@ -69,7 +66,7 @@ var takeSnapshot = platformSnapshot
 // tests replace it.
 var cloneFile = cloneFileOS
 
-// snapshotLent takes the snapshot of a folder lent to a task to manage.
+// snapshotLent takes the snapshot of a folder lent to a task to write.
 func (n *node) snapshotLent(t *Task, f *resolvedFolder) error {
 	sf := f.shared
 	if sf.Path == "" {

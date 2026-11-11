@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -23,7 +22,7 @@ while [ $# -gt 0 ]; do
   --mount)
     src=${2#*source=}; src=${src%%,target=*}
     tgt=${2#*target=}; tgt=${tgt%%,*}
-    case $tgt in /r) ERIPHE_R=$src; export ERIPHE_R ;; /f) ERIPHE_F=$src; export ERIPHE_F ;; esac
+    case $tgt in /r) ERIPHE_R=$src; export ERIPHE_R ;; esac
     shift 2 ;;
   -c) script=$2; shift 2; break ;;
   *) shift ;;
@@ -63,10 +62,10 @@ func TestAppleShareCmd(t *testing.T) {
 }
 
 // Folders on a Mac: checked by the explorer, mounted with container's
-// --mount, Eriphe/ made by the explorer, no group to add.
+// --mount, a folder lent to write writable whole, no group to add.
 func TestAppleFolderMounts(t *testing.T) {
 	n, root := appleShareFixture(t)
-	task := &Task{Spec: TaskSpec{Folders: []TaskFolder{
+	task := &Task{ID: "t-1", Spec: TaskSpec{Folders: []TaskFolder{
 		lend(t, n, "data", "Clients/ACME", "ACME", true),
 		lend(t, n, "data", "Photos", "Photos", false),
 	}}}
@@ -76,18 +75,18 @@ func TestAppleFolderMounts(t *testing.T) {
 	}
 	acme := filepath.Join(root, "Clients", "ACME")
 	want := []string{
-		"--mount", "type=bind,source=" + acme + ",target=/work/folders/ACME,readonly",
-		"--mount", "type=bind,source=" + acme + "/Eriphe,target=/work/folders/ACME/Eriphe",
+		"--mount", "type=bind,source=" + acme + ",target=/work/folders/ACME",
 		"--mount", "type=bind,source=" + filepath.Join(root, "Photos") + ",target=/work/folders/Photos,readonly",
 	}
 	if !slices.Equal(args, want) {
 		t.Errorf("got\n%v\nwant\n%v", args, want)
 	}
-	if fi, err := os.Lstat(filepath.Join(acme, "Eriphe")); err != nil || !fi.IsDir() {
-		t.Errorf("Eriphe/: %v", err)
+	if _, err := os.Lstat(filepath.Join(acme, "Eriphe")); err == nil {
+		t.Error("a results subfolder made")
 	}
-	os.MkdirAll(filepath.Join(root, "Clients", "Beta"), 0o755)
-	os.Symlink(filepath.Join(root, "Photos"), filepath.Join(root, "Clients", "Beta", "Eriphe"))
+	if len(n.snapshots(task.Spec.Folders[0].ID)) != 1 {
+		t.Error("no snapshot of the folder lent to write")
+	}
 	readOnly := lend(t, n, "data", "Clients", "x", false)
 	readOnly.Write = true
 	for name, f := range map[string]TaskFolder{
@@ -97,12 +96,9 @@ func TestAppleFolderMounts(t *testing.T) {
 		"escape":     lend(t, n, "data", "escape", "x", false),
 		"through":    lend(t, n, "data", "Clients-link", "x", false),
 		"sensitive":  lend(t, n, "data", "Home", "x", false),
-		"in results": lend(t, n, "data", "Clients/Beta", "x", true),
 	} {
 		if _, err := n.folderArgs(t, &Task{Spec: TaskSpec{Folders: []TaskFolder{f}}}); err == nil {
 			t.Errorf("%s: mounted", name)
-		} else if name == "in results" && !strings.Contains(err.Error(), "not a folder") {
-			t.Errorf("in results: %v", err)
 		}
 	}
 }

@@ -52,7 +52,7 @@ type options struct {
 	// With the container engine: what the node downloads at most, in bytes,
 	// of a task's folders kept in the cloud (iCloud Drive), before it starts.
 	downloadLimit int64
-	// Snapshots of the folders lent to manage (snapshot.go): kept so many
+	// Snapshots of the folders lent to write (snapshot.go): kept so many
 	// days, and what is copied (not cloned) of a folder at most, in bytes.
 	snapshotDays  int
 	snapshotLimit int64
@@ -120,8 +120,8 @@ func main() {
 	flag.StringVar(&o.engine, "engine", envOr("ERIPHE_ENGINE", engineDocker), "what runs the tasks: docker, or container (Apple's container, on a Mac with Apple silicon and macOS 26: a micro-VM per task) (env ERIPHE_ENGINE)")
 	flag.StringVar(&o.engineURL, "engine-url", os.Getenv("ERIPHE_ENGINE_URL"), "eriphe-node engine's address, e.g. http://eriphe-engine:8792: Docker only through it, with its networks and cache volume (env ERIPHE_ENGINE_URL)")
 	downloadLimit := flag.String("download-limit", "2g", "with -engine container: what the node downloads at most of a task's folders kept in the cloud (iCloud Drive) before it starts, e.g. 2g")
-	flag.IntVar(&o.snapshotDays, "snapshot-days", envInt("ERIPHE_SNAPSHOT_DAYS", defaultSnapshotDays), "days a snapshot of a folder is kept, taken before each task lent it to manage (env ERIPHE_SNAPSHOT_DAYS)")
-	snapshotLimit := flag.String("snapshot-limit", envOr("ERIPHE_SNAPSHOT_LIMIT", defaultSnapshotLimit), "what a snapshot of a folder copies at most where its files cannot be cloned, e.g. 2g; a bigger folder is not lent to manage (env ERIPHE_SNAPSHOT_LIMIT)")
+	flag.IntVar(&o.snapshotDays, "snapshot-days", envInt("ERIPHE_SNAPSHOT_DAYS", defaultSnapshotDays), "days a snapshot of a folder is kept, taken before each task lent it to write (env ERIPHE_SNAPSHOT_DAYS)")
+	snapshotLimit := flag.String("snapshot-limit", envOr("ERIPHE_SNAPSHOT_LIMIT", defaultSnapshotLimit), "what a snapshot of a folder copies at most where its files cannot be cloned, e.g. 2g; a bigger folder is not lent to write (env ERIPHE_SNAPSHOT_LIMIT)")
 	flag.StringVar(&o.taskMemory, "task-memory", "8g", "memory limit of each task container, e.g. 8g (empty: none)")
 	flag.StringVar(&o.taskCPUs, "task-cpus", "", "CPU limit of each task container, e.g. 4 (empty: all the machine's CPUs)")
 	flag.StringVar(&o.serviceMemory, "service-memory", "1g", "memory limit of each service container (empty: none)")
@@ -144,7 +144,7 @@ func main() {
 	if err := o.shares.Set(os.Getenv("ERIPHE_NODE_SHARES")); err != nil {
 		log.Fatal(err)
 	}
-	flag.Var(o.shares, "share", "root the user may share folders from, name=/path, or name=/path:ro where results may not be dropped; the same path for this node and the Docker daemon; repeatable (env ERIPHE_NODE_SHARES: name=path,name2=path2:ro)")
+	flag.Var(o.shares, "share", "root the user may share folders from, name=/path, or name=/path:ro whose folders are never written to; the same path for this node and the Docker daemon; repeatable (env ERIPHE_NODE_SHARES: name=path,name2=path2:ro)")
 	flag.Var(volumeFlag(o.volumes), "volume", "host folder offered to tasks, name=/host/path, repeatable (env ERIPHE_NODE_VOLUMES: name=path,name2=path2)")
 	flag.Parse()
 	o.labels = parseLabels(*labels)

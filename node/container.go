@@ -75,7 +75,7 @@ var gitCredentials = []string{
 }
 
 // taskUID is the owner the node gives what it makes for tasks in the user's
-// folders (Eriphe/), and what tasks write there (handback.go); the
+// folders, and what tasks write there (handback.go); the
 // explorer and the services run as this user too. Tasks themselves run as
 // root.
 const (

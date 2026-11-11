@@ -60,7 +60,7 @@ func TestSharedListProblems(t *testing.T) {
 	skipAsRoot(t)
 	n, root := shareFixture(t)
 	locked := lendAt(t, n, "Clients/ACME", "ACME", accessRead)
-	ro := lendAt(t, n, "Clients/Beta", "Beta", accessDrop)
+	ro := lendAt(t, n, "Clients/Beta", "Beta", accessWrite)
 	gone := lendAt(t, n, "Photos", "Photos", accessRead)
 	os.Chmod(filepath.Join(root, "Clients", "ACME"), 0)
 	os.Chmod(filepath.Join(root, "Clients", "Beta"), 0o555)

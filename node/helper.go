@@ -27,15 +27,13 @@ import (
 //
 //   - check: a folder's checks, when it is shared and before every lend
 //     (resolveFolder, shareable);
-//   - prepare: a folder lent to a task, checked again, its group (for the
-//     task's --group-add), and with drop its results subfolder chosen,
-//     renamed from a former name, made and handed to the tasks' user
-//     (chooseResults, ensureResults);
-//   - snapshot: the copy of a folder before a task that manages it, made
+//   - prepare: a folder lent to a task, checked again, and its group (for
+//     the task's --group-add);
+//   - snapshot: the copy of a folder before a task that may write in it, made
 //     inside the helper straight into the node's data (the folder read-only,
 //     the snapshot's new folder writable): no copy goes through the node;
 //   - restore: a folder emptied and its snapshot copied back;
-//   - handback: what a task wrote as root given back to the results'
+//   - handback: what a task wrote as root given back to the folders'
 //     owners (handBackDir);
 //   - probe: whether each folder opens, and may be written to (access.go).
 //
@@ -53,10 +51,6 @@ type helperReq struct {
 	Levels  []string `json:"levels,omitempty"`
 	Dirs    []string `json:"dirs,omitempty"` // handback
 	Own     string   `json:"own,omitempty"`  // the node's root: never shared, nor holding a share
-	// prepare, with Write: the results subfolder and its former names.
-	Write   bool     `json:"write,omitempty"`
-	Results string   `json:"results,omitempty"`
-	Former  []string `json:"former,omitempty"`
 	// snapshot: where the copy goes (does not exist yet), and at most
 	// what it copies; restore: the snapshot's files.
 	Dst   string `json:"dst,omitempty"`
@@ -70,9 +64,6 @@ type helperResp struct {
 	TooBig  bool         `json:"too_big,omitempty"` // snapshot: errSnapshotTooBig
 	Real    string       `json:"real,omitempty"`
 	GID     int          `json:"gid,omitempty"`
-	Use     string       `json:"use,omitempty"`  // prepare: the results subfolder used
-	Kept    string       `json:"kept,omitempty"` // and the former name it stays under, if any
-	RGID    int          `json:"rgid,omitempty"`
 	Method  string       `json:"method,omitempty"`
 	Copied  int64        `json:"copied,omitempty"`
 	Notes   []accessNote `json:"notes,omitempty"` // probe, in Folders' order
@@ -165,18 +156,17 @@ func (n *node) helperCheck(path string) (*resolvedFolder, error) {
 }
 
 // helperPrepare is what folderMounts does in a folder lent to a task.
-func (n *node) helperPrepare(f *resolvedFolder, tf TaskFolder) (*helperResp, error) {
-	req := helperReq{Op: "prepare", Folder: f.src, Own: n.ownData(), Write: tf.Write && !tf.Manage, Results: tf.resultsName(), Former: tf.Former}
-	return n.helperCall(req, helperMount{f.src, !req.Write})
+func (n *node) helperPrepare(f *resolvedFolder) (*helperResp, error) {
+	return n.helperCall(helperReq{Op: "prepare", Folder: f.src, Own: n.ownData()}, helperMount{f.src, true})
 }
 
 // helperFolderMounts is folderMounts for a folder the node does not see:
 // a helper checks it again and prepares it, a snapshot is taken by another
-// for manage. It returns the task's mounts, its results folders (handed
+// for write. It returns the task's mounts, the folders it writes in (handed
 // back by helpers too) and the groups to add.
-func (n *node) helperFolderMounts(t *Task, tf TaskFolder, f *resolvedFolder, dst string) (args []mount, results []string, gids []int, err error) {
+func (n *node) helperFolderMounts(t *Task, tf TaskFolder, f *resolvedFolder, dst string) (args []mount, written []string, gids []int, err error) {
 	sf := f.shared
-	resp, err := n.helperPrepare(f, tf)
+	resp, err := n.helperPrepare(f)
 	if err == nil && filepath.Clean(resp.Real) != filepath.Clean(sf.Path) {
 		err = shareErr(403, "moved", "this folder leads elsewhere since it was shared: share it again")
 	}
@@ -188,27 +178,16 @@ func (n *node) helperFolderMounts(t *Task, tf TaskFolder, f *resolvedFolder, dst
 	if resp.GID > 0 {
 		gids = append(gids, resp.GID)
 	}
-	switch {
-	case tf.Manage:
+	if tf.Write {
 		if err := n.snapshotLent(t, f); err != nil {
 			return nil, nil, nil, err
 		}
 		args = append(args, mount{src: f.src, dst: dst})
-		results = append(results, f.src)
-	case tf.Write:
-		args = append(args, mount{src: f.src, dst: dst, readOnly: true})
-		if resp.Kept != "" {
-			resultsConflict(t, tf, resp.Kept)
-		}
-		if resp.RGID > 0 {
-			gids = append(gids, resp.RGID)
-		}
-		args = append(args, mount{src: filepath.Join(f.src, resp.Use), dst: dst + "/" + tf.resultsName()})
-		results = append(results, filepath.Join(f.src, resp.Use))
-	default:
+		written = append(written, f.src)
+	} else {
 		args = append(args, mount{src: f.src, dst: dst, readOnly: true})
 	}
-	return args, results, gids, nil
+	return args, written, gids, nil
 }
 
 // helperProbe notes whether each shared folder opens (and may be written
@@ -323,15 +302,6 @@ func doHelper(req helperReq) *helperResp {
 			return fail(err)
 		}
 		resp.Real, resp.GID = f.real, ownerGID(f.real)
-		if req.Write {
-			tf := TaskFolder{Results: req.Results, Former: req.Former}
-			use, kept := chooseResults(f.real, tf.resultsName(), req.Former)
-			gid, err := ensureResults(filepath.Join(f.real, use), resp.GID)
-			if err != nil {
-				return fail(err)
-			}
-			resp.Use, resp.Kept, resp.RGID = use, kept, gid
-		}
 	case "snapshot":
 		method, copied, err := takeSnapshot(req.Folder, req.Dst, req.Limit)
 		if err != nil {
@@ -345,7 +315,7 @@ func doHelper(req helperReq) *helperResp {
 	case "handback":
 		for _, d := range req.Dirs {
 			if _, err := handBackDir(d); err != nil {
-				log.Printf("results in %s: %v", d, err)
+				log.Printf("handback in %s: %v", d, err)
 			}
 		}
 	case "probe":

@@ -38,7 +38,7 @@ if [ "$1 $2 $3 $4 $5 $6 $7" = "exec -e ERIPHE_SHARE_COMMAND= eriphe-node eriphe-
     --copyable) c=true ;;
     /mnt/user/Refused) echo "Not shared: $a: no"; rc=1 ;;
     /*)
-      if ! grep -Fxq -- "$a" "$T/data/proxy/binds" 2>/dev/null; then echo "Not shared: $a: not in the engine's list"; rc=1; continue; fi
+      if ! grep -Fxq -e "$a" -e "$a:ro" "$T/data/proxy/binds" 2>/dev/null; then echo "Not shared: $a: not in the engine's list"; rc=1; continue; fi
       jq --arg p "$a" --argjson c "$c" '.folders |= (map(select(.path != $p)) + [{id: "x", name: ($p | split("/") | last), path: $p, access: "read", copyable: $c}])' "$L" >"$L.new" && mv "$L.new" "$L" ;;
     esac
   done
@@ -215,14 +215,14 @@ echo mode=core >"$T/data/launcher/install.conf"
 keep_calls() { cat "$T/calls" >>"$T/all-calls"; : >"$T/calls"; }
 out=$(share_in add --drop "/mnt/user/1 PROJECTS") || fail "share add: $out"
 has "$T/calls" "run --rm --network none --read-only --cap-drop ALL --cap-add DAC_READ_SEARCH --security-opt no-new-privileges --user 0:0 --mount type=bind,src=/,dst=/host,readonly --entrypoint eriphe-node ghcr.io/alexis-marcel/eriphe-node:latest share check -host /host -data /mnt/user/appdata/eriphe /mnt/user/1 PROJECTS" "share add (the node's checks, on the host, first)"
-has "$T/calls" "exec -e ERIPHE_SHARE_COMMAND= eriphe-node eriphe-node share add --drop /mnt/user/1 PROJECTS" "share add (then the node's)"
+has "$T/calls" "exec -e ERIPHE_SHARE_COMMAND= eriphe-node eriphe-node share add --read /mnt/user/1 PROJECTS" "share add (then the node's; --drop, a former flag, is --read)"
 [ "$(cat "$T/data/launcher/folders")" = "/mnt/user/1 PROJECTS" ] || fail "share add: the list"
 [ "$(cat "$B")" = "/mnt/user/1 PROJECTS" ] || fail "share add: the engine's list: $(cat "$B")"
 [ "$(syncthing_up)" = 0 ] || fail "share add of a folder not copied makes Syncthing again"
 case $out in *"pause"*) fail "share add of a folder not copied: $out" ;; esac
 keep_calls
 # Copies allowed: Syncthing alone made again, on it; said.
-out=$(share_in add --drop --copyable "/mnt/user/1 PROJECTS") || fail "share add --copyable: $out"
+out=$(share_in add --read --copyable "/mnt/user/1 PROJECTS") || fail "share add --copyable: $out"
 [ "$(syncthing_up)" = 1 ] || fail "share add --copyable: $(cat "$T/calls")"
 case $out in *"Copies to your other machines pause a few seconds"*) ;; *) fail "share add --copyable: $out" ;; esac
 has "$T/data/launcher/compose.yaml" '- "/mnt/user/1 PROJECTS:/mnt/user/1 PROJECTS"' "share add --copyable (Syncthing's mount)"
@@ -230,8 +230,21 @@ has "$T/data/launcher/compose.yaml" '- "/mnt/user/1 PROJECTS:/mnt/user/1 PROJECT
 keep_calls
 # Shared already, the same copies: its level anew, nothing made again.
 share_in add --manage --copyable "/mnt/user/1 PROJECTS" >/dev/null || fail "share add again"
-has "$T/calls" "eriphe-node share add --manage --copyable /mnt/user/1 PROJECTS" "share add again"
+has "$T/calls" "eriphe-node share add --write --copyable /mnt/user/1 PROJECTS" "share add again (--manage, a former flag, is --write)"
 [ "$(syncthing_up)" = 0 ] || fail "share add again makes Syncthing again"
+keep_calls
+# A folder kept read-only by its place (:ro): shared to read without a flag,
+# made writable by --write only.
+printf '/mnt/user/1 PROJECTS\n/mnt/media/Films:ro\n' >"$T/data/launcher/folders"
+share_in add /mnt/media/Films >/dev/null || fail "share add of a :ro folder"
+has "$T/calls" "eriphe-node share add --read /mnt/media/Films" "share add of a :ro folder: to read"
+has "$T/data/launcher/folders" "/mnt/media/Films:ro" "share add of a :ro folder: kept read-only"
+keep_calls
+share_in add --write /mnt/media/Films >/dev/null || fail "share add --write of a :ro folder"
+has "$T/calls" "eriphe-node share add --write /mnt/media/Films" "share add --write of a :ro folder"
+hasnt "$T/data/launcher/folders" "Films:ro" "share add --write of a :ro folder: writable"
+printf '/mnt/user/1 PROJECTS\n' >"$T/data/launcher/folders"
+printf '/mnt/user/1 PROJECTS\n' >"$B"
 keep_calls
 # Refused here or by the node's checks: never listed.
 for bad in /mnt/user/appdata/plex /mnt/user/Secret; do
@@ -691,8 +704,8 @@ mkdir -p "$T/here/Clients" "$T/here/add"
 # As root already: no sudo.
 sed 's/^\[ "$(id -u)" = 0 \] || exec sudo .*//' "$T/eriphe-share" >"$T/eriphe-share-root"
 rm -f "$T/calls"
-(cd "$T/here" && sh "$T/eriphe-share-root" add Clients --name Clients --drop /mnt/user/Docs) >/dev/null 2>&1
-has "$T/calls" "exec -i eriphe-node eriphe-node share -root /srv/eriphe/node add $(cd "$T/here/Clients" && pwd) --name Clients --drop /mnt/user/Docs" "eriphe-share"
+(cd "$T/here" && sh "$T/eriphe-share-root" add Clients --name Clients --read /mnt/user/Docs) >/dev/null 2>&1
+has "$T/calls" "exec -i eriphe-node eriphe-node share -root /srv/eriphe/node add $(cd "$T/here/Clients" && pwd) --name Clients --read /mnt/user/Docs" "eriphe-share"
 rm -f "$T/calls"
 (cd "$T/here" && sh "$T/eriphe-share-root" add) >/dev/null 2>&1
 has "$T/calls" "share -root /srv/eriphe/node add" "eriphe-share: the command itself is never a folder"
@@ -712,8 +725,8 @@ hasnt "$T/compose-share" "DOCKER_HOST" "install.sh's node, its Docker"
 installer 'ERIPHE_HOME=/Users/sam/.eriphe CONTAINER=/usr/local/bin/container; qa_lang() { echo fr; }; mac_share_sh' >"$T/mac-share"
 shellcheck -s sh "$T/mac-share" || fail "the Mac's eriphe-share: shellcheck"
 has "$T/mac-share" 'exec "$E/bin/eriphe-node" share -docker "$CONTAINER" "$@"' "the Mac's eriphe-share"
-has "$T/mac-share" "T_MANAGE='Gérer" "the Mac's eriphe-share: in French on a Mac in French"
-# --ask: the level and the copies asked with osascript (faked: Gérer, then
+has "$T/mac-share" "T_WRITE='Modifier" "the Mac's eriphe-share: in French on a Mac in French"
+# --ask: the level and the copies asked with osascript (faked: Modifier, then
 # Oui), then eriphe-node share add with both, the outcome as a notification.
 A=$T/ask
 mkdir -p "$A/home/bin" "$A/fake"
@@ -722,7 +735,7 @@ printf '#!/bin/sh\necho "eriphe-node $*" >>"%s/calls"\necho "Shared"\n' "$A" >"$
 cat >"$A/fake/osascript" <<'EOF'
 #!/bin/sh
 case "$*" in
-*"choose from list"*) echo "${ASK_LEVEL:-Gérer (modifier le dossier)}" ;;
+*"choose from list"*) echo "${ASK_LEVEL:-Modifier (lire, créer, changer, supprimer ; instantané avant)}" ;;
 *"display dialog"*) echo "${ASK_COPY:-Oui}" ;;
 *"display notification"*) echo "notified $*" >>"$ASK_DIR/calls" ;;
 esac
@@ -730,7 +743,7 @@ EOF
 chmod +x "$A/home/bin/eriphe-node" "$A/fake/osascript"
 sed "s|^E=.*|E='$A/home'|" "$T/mac-share" >"$A/eriphe-share"
 PATH="$A/fake:$PATH" ASK_DIR=$A sh "$A/eriphe-share" --ask "/Users/sam/Documents/Notes" >/dev/null 2>&1
-has "$A/calls" "eriphe-node share -docker /usr/local/bin/container add --manage --copyable /Users/sam/Documents/Notes" "Quick Action: the level and copies chosen"
+has "$A/calls" "eriphe-node share -docker /usr/local/bin/container add --write --copyable /Users/sam/Documents/Notes" "Quick Action: the level and copies chosen"
 has "$A/calls" "notified" "Quick Action: the outcome said"
 rm -f "$A/calls"
 PATH="$A/fake:$PATH" ASK_DIR=$A ASK_LEVEL=Lecture ASK_COPY=Non sh "$A/eriphe-share" --ask "/Users/sam/Documents/Notes" >/dev/null 2>&1

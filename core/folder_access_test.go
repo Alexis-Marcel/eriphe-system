@@ -22,8 +22,8 @@ func attachMac(t *testing.T, c *core, store *Store) *atomic.Int32 {
 	api := http.NewServeMux()
 	api.HandleFunc("GET /v1/node", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"os": "darwin", "install": "macos", "runtimes": []string{"claude-code"},
-			"folders": []sharedFolder{{ID: "m1", Name: "Notes", Access: folderRead, Problem: "denied"},
-				{ID: "m2", Name: "Music", Access: folderRead, Copyable: true, Problem: "denied", Program: "syncthing"}}})
+			"folders": []sharedFolder{{ID: "m1", Name: "Notes", Access: accessRead, Problem: "denied"},
+				{ID: "m2", Name: "Music", Access: accessRead, Copyable: true, Problem: "denied", Program: "syncthing"}}})
 	})
 	api.HandleFunc("POST /v1/privacy/open", func(w http.ResponseWriter, _ *http.Request) {
 		opened.Add(1)
@@ -48,7 +48,7 @@ func attachMac(t *testing.T, c *core, store *Store) *atomic.Int32 {
 func TestFolderBlocked(t *testing.T) {
 	c, store := foldersCore(t)
 	opened := attachMac(t, c, store)
-	store.setNodeStatus("pc", true, []byte(`{"os":"linux","runtimes":["claude-code"],"folders":[{"id":"p1","name":"Scans","access":"drop","problem":"read_only"}]}`))
+	store.setNodeStatus("pc", true, []byte(`{"os":"linux","runtimes":["claude-code"],"folders":[{"id":"p1","name":"Scans","access":"write","problem":"read_only"}]}`))
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	code, body, _ := tw.do("GET", "/settings/folders", nil, nil)

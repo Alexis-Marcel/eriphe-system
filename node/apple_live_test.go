@@ -25,8 +25,8 @@ import (
 //	ERIPHE_LIVE_CONTAINER=1 go test -run AppleLive -v
 //
 // ERIPHE_LIVE_FOLDERS lists folders of the home to lend (relative to it,
-// separated by commas; the first is lent read-only, the others with
-// Eriphe/), ERIPHE_LIVE_ICLOUD a folder of iCloud Drive lent with Eriphe/,
+// separated by commas; the first is lent read-only, the others to write,
+// a snapshot taken first), ERIPHE_LIVE_ICLOUD a folder of iCloud Drive lent to write,
 // and ERIPHE_LIVE_LAN an address of the LAN (host:port) a task must not
 // reach. The image is alpine:3.22 unless ERIPHE_LIVE_IMAGE says otherwise.
 func TestAppleLive(t *testing.T) {
@@ -148,8 +148,7 @@ for d in /work/folders/*; do
   [ -d "$d" ] || continue
   n=$(basename "$d")
   check "${n}_read" 'cat "$d"/*.txt'
-  check "${n}_write_root" 'touch "$d/written-by-task"'
-  check "${n}_write_results" 'echo result > "$d/Eriphe/result-$n.txt"'
+  check "${n}_write" 'echo result > "$d/result-$n.txt"'
 done
 `
 	task := runProbe(t, n, "probe", image, folders, probe, true)
@@ -168,12 +167,7 @@ done
 		"direct_lan": "no", "other_task": "no"}
 	for _, f := range folders {
 		want[f.Name+"_read"] = "yes"
-		want[f.Name+"_write_root"] = "no"
-		if f.Write {
-			want[f.Name+"_write_results"] = "yes"
-		} else {
-			want[f.Name+"_write_results"] = "no"
-		}
+		want[f.Name+"_write"] = map[bool]string{true: "yes", false: "no"}[f.Write]
 	}
 	for k, v := range want {
 		if got[k] != v {
@@ -200,12 +194,12 @@ done
 			}
 			name := "result-" + f.Name + ".txt"
 			out, err := exec.Command("container", "run", "--rm", "--progress", "none", "--network", "none",
-				"--mount", "type=bind,source="+filepath.Join(r.real, resultsDir)+",target=/e", "alpine:3.22",
+				"--mount", "type=bind,source="+r.real+",target=/e", "alpine:3.22",
 				"sh", "-c", `ls -ln /e/"$1" && rm -f /e/"$1"`, "sh", name).CombinedOutput()
 			if err != nil {
-				t.Errorf("no %s in %s/%s: %v %s", name, f.Name, resultsDir, err, out)
+				t.Errorf("no %s in %s: %v %s", name, f.Name, err, out)
 			} else {
-				t.Logf("%s/%s/%s, written by the task: %s", f.Name, resultsDir, name, strings.TrimSpace(string(out)))
+				t.Logf("%s/%s, written by the task: %s", f.Name, name, strings.TrimSpace(string(out)))
 			}
 		}
 	}
