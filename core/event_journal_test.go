@@ -260,9 +260,23 @@ func (s *eventServer) session(t *testing.T) *mcp.ClientSession {
 	return sess
 }
 
-// A server's events: its backlog skipped at first sight, then the new
-// ones within its epoch, and after a restart those after the last taken;
-// eriphe-core's own kinds refused; external unless the server is trusted.
+// followMonitor is a monitor that follows a server's events, on, as if
+// approved (the test's server is not in the catalog).
+func followMonitor(t *testing.T, c *core, name, server string) {
+	t.Helper()
+	spec, _ := json.Marshal(monitorSpec{Way: wayFollow, Server: server})
+	if _, err := c.store.db.Exec(`INSERT INTO monitors (name, state, spec, created, updated) VALUES (?, ?, ?, 0, 0)`,
+		name, monitorOn, string(spec)); err != nil {
+		t.Fatal(err)
+	}
+	c.freshStart(monitorSpec{Way: wayFollow, Server: server})
+}
+
+// A server's events reach the journal only once a monitor follows it: its
+// backlog skipped at first sight, then the new ones within its epoch, and
+// after a restart those after the last taken; keyed by the monitor's name,
+// the server's key kept in the payload; eriphe-core's own kinds refused;
+// external unless the server is trusted; reads that keep failing told.
 func TestServerEvents(t *testing.T) {
 	c, mon, _ := pollCore(t)
 	ctx := context.Background()
@@ -270,17 +284,25 @@ func TestServerEvents(t *testing.T) {
 	es.set("e1", "mail.received", "mail.received")
 	sess := es.session(t)
 	c.watchServerEvents(ctx, "mail", sess)
+	if !c.offersEvents("mail") {
+		t.Fatal("the server's events are not known")
+	}
+	es.set("e1", "mail.received", "mail.received", "mail.received")
+	c.readServerEvents(ctx, "mail", sess)
+	c.tickServerEvents(ctx)
+	if got := eventsOf(t, c, ""); len(got) != 0 {
+		t.Fatalf("a server no monitor follows was read: %+v", got)
+	}
+	followMonitor(t, c, "mails", "mail")
+	c.readServerEvents(ctx, "mail", sess)
 	if got := eventsOf(t, c, ""); len(got) != 0 {
 		t.Fatalf("the backlog was taken: %+v", got)
 	}
-	if !c.events.servers["mail"] {
-		t.Fatal("the server's events are not followed")
-	}
-	es.set("e1", "mail.received", "mail.received", "mail.received", "user.returned")
+	es.set("e1", "mail.received", "mail.received", "mail.received", "mail.received", "user.returned")
 	c.readServerEvents(ctx, "mail", sess)
 	got := eventsOf(t, c, "")
-	if len(got) != 1 || got[0].Kind != "mail.received" || got[0].Source != "server:mail" || !got[0].External ||
-		got[0].Payload["subject"] != "n°3" {
+	if len(got) != 1 || got[0].Kind != "mail.received" || got[0].Key != "mails" || got[0].Source != "monitor:mails" || !got[0].External ||
+		got[0].Payload["subject"] != "n°4" || got[0].Payload["key"] != "perso" {
 		t.Fatalf("new in the epoch: %+v", got)
 	}
 	c.readServerEvents(ctx, "mail", sess)
@@ -288,17 +310,36 @@ func TestServerEvents(t *testing.T) {
 		t.Fatalf("read twice: %+v", got)
 	}
 	// Restarted: a new epoch, its seqs from 1; only what is later is new.
-	es.set("e2", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received")
+	es.set("e2", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received")
 	c.setServerTrust("mail", true, trustByUser)
 	c.readServerEvents(ctx, "mail", sess)
 	got = eventsOf(t, c, "mail.received")
-	if len(got) != 2 || got[1].Payload["subject"] != "n°5" || got[1].External {
+	if len(got) != 2 || got[1].Payload["subject"] != "n°6" || got[1].External {
 		t.Fatalf("after a restart: %+v", got)
 	}
-	// A server without the resource is not followed.
+	// Paused, it is not read.
+	c.pauseMonitor("mails", true)
+	es.set("e2", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received")
+	c.readServerEvents(ctx, "mail", sess)
+	if got := eventsOf(t, c, "mail.received"); len(got) != 2 {
+		t.Fatalf("read while paused: %+v", got)
+	}
+	// Reads that keep failing: told once.
+	c.pauseMonitor("mails", false)
+	sess.Close()
+	for i := 0; i < 4; i++ {
+		c.readServerEvents(ctx, "mail", sess)
+	}
+	if got := eventsOf(t, c, evMonitorFailed); len(got) != 1 || got[0].Key != "mails" {
+		t.Fatalf("failed %+v", got)
+	}
+	// A server without the resource offers nothing to follow.
 	c.watchServerEvents(ctx, "monitor", monSession(t, mon))
-	if c.events.servers["monitor"] {
-		t.Fatal("a server without events is followed")
+	if c.offersEvents("monitor") {
+		t.Fatal("a server without events offers some")
+	}
+	if _, err := c.writeMonitor("suivi", monitorSpec{Way: wayFollow, Server: "monitor"}, nil); err == nil {
+		t.Fatal("a server without events was followed")
 	}
 }
 

@@ -316,9 +316,6 @@ func TestMonitorTriggersSkill(t *testing.T) {
 		t.Fatalf("prompt %s", task.Prompt)
 	}
 	// A server cannot write a monitor's kinds.
-	if n := c.takeServerEvents("mail", serverEventsDoc{Epoch: "e"}); n != 0 {
-		t.Fatal(n)
-	}
 	if !reservedEventKind(evMonitorChanged) {
 		t.Fatal("monitor. is not reserved")
 	}
@@ -335,6 +332,7 @@ func TestMonitorTexts(t *testing.T) {
 		{Way: wayPoll, Server: "s", Tool: "t", Every: 60, Cond: condCross, Below: &limit},
 		{Way: wayListen},
 		{Way: wayListen, Signed: true, SigHeader: "X-Eriphe-Signature"},
+		{Way: wayFollow, Server: "mail"},
 	} {
 		for _, lang := range []string{"fr", "en"} {
 			if got := s.Text(lang); strings.Contains(got, "monitor.") || strings.Contains(got, "%!") {

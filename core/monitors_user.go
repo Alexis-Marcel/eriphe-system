@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 )
@@ -26,9 +28,13 @@ func (c *core) saveMonitor(name string, s monitorSpec) error {
 	if err := s.check(); err != nil {
 		return err
 	}
-	if why := c.toolWhy(s); why != "" {
+	if why := c.monitorWhy(s); why != "" {
 		return errors.New(why)
 	}
+	if err := c.oneFollower(name, s); err != nil {
+		return err
+	}
+	defer c.freshStart(s)
 	raw, _ := json.Marshal(s)
 	now := time.Now().Unix()
 	m, err := c.monitorNamed(name)
@@ -44,7 +50,7 @@ func (c *core) saveMonitor(name string, s monitorSpec) error {
 		return err
 	case err != nil:
 		return err
-	case m.Spec.Way != wayPoll:
+	case m.Spec.Way == wayListen:
 		return fmt.Errorf("%q is an address: pick another name", name)
 	}
 	state := m.State
@@ -71,7 +77,41 @@ func (c *core) pauseMonitor(name string, pause bool) error {
 		state = monitorPaused
 	}
 	_, err = c.store.db.Exec(`UPDATE monitors SET state = ?, look = '{}', next_at = 0, updated = ? WHERE id = ?`, state, time.Now().Unix(), m.ID)
+	if !pause {
+		c.freshStart(m.Spec)
+	}
 	return err
+}
+
+// freshStart makes a monitor that follows a server skip what the server
+// published before: its first read is a baseline, as a poll's first look.
+func (c *core) freshStart(s monitorSpec) {
+	if s.Way == wayFollow {
+		c.store.set(eventsCursorKey+s.Server, "")
+	}
+}
+
+// oneFollower: a server's events are followed by one monitor at most.
+func (c *core) oneFollower(name string, s monitorSpec) error {
+	if s.Way != wayFollow {
+		return nil
+	}
+	if f := c.followerOf(s.Server, false); f != nil && f.Name != name {
+		return fmt.Errorf("the monitor %q already follows %s", f.Name, s.Server)
+	}
+	return nil
+}
+
+// followerOf is the monitor that follows a server's events (on only, or
+// in any state).
+func (c *core) followerOf(server string, onOnly bool) *monitor {
+	ms, _ := c.monitors()
+	for _, m := range ms {
+		if m.Spec.Way == wayFollow && m.Spec.Server == server && (!onOnly || m.State == monitorOn) {
+			return m
+		}
+	}
+	return nil
 }
 
 // deleteMonitor removes a monitor; its events stay in the journal.
@@ -90,6 +130,9 @@ func (c *core) deleteMonitor(name string) error {
 func (c *core) tryMonitor(ctx context.Context, s monitorSpec) (string, error) {
 	if err := s.check(); err != nil {
 		return "", err
+	}
+	if s.Way != wayPoll {
+		return "", errors.New("only a monitor that polls a tool is tried")
 	}
 	if why := c.toolWhy(s); why != "" {
 		return "", errors.New(why)
@@ -154,6 +197,21 @@ func (c *core) skillsFollowing(name string) []string {
 		}
 	}
 	return out
+}
+
+// unfollowedStreams are the catalog servers that publish events and that
+// no monitor follows yet.
+func (c *core) unfollowedStreams() []string {
+	c.events.cursorMu.Lock()
+	var out []string
+	for name, ok := range c.events.servers {
+		if ok {
+			out = append(out, name)
+		}
+	}
+	c.events.cursorMu.Unlock()
+	sort.Strings(out)
+	return slices.DeleteFunc(out, func(s string) bool { return c.followerOf(s, false) != nil })
 }
 
 // monitorTools are the tools a monitor may call now: the brain's free

@@ -18,12 +18,12 @@ import (
 //     address (incoming_hooks.go): monitor.*, keyed by its name.
 //   - the user's return after an absence of awayAfter or more:
 //     user.returned, with how long they were away.
-//   - any catalog server that offers the resource eriphe://events: the mail
-//     server's mail.received, or another server's own kinds. See
-//     serverEvents below.
+//   - a catalog server that offers the resource eriphe://events (the mail
+//     server's mail.received, or another server's own kinds), once a
+//     monitor follows it (way follow). See serverEvents below.
 //
-// eriphe-core knows no tool by its name: a tool that has something to tell
-// publishes eriphe://events, or its system calls an incoming address.
+// eriphe-core knows no tool by its name: what happens outside reaches the
+// journal only through a monitor the user approved (monitors.go).
 
 const (
 	serverEventsURI  = "eriphe://events"
@@ -82,6 +82,10 @@ func (c *core) tickReturned(now time.Time) {
 // one at each start). eriphe-core reads it when the server's session opens,
 // then every minute: the servers run stateless behind their node, so they
 // cannot push; a minute is soon enough for skills that batch their events.
+// Only a server a monitor follows is read, and its events are the
+// monitor's: keyed by its name (the server's own key stays in the payload,
+// as key, unless the payload has one), its source monitor:<name>; three
+// failed reads in a row write monitor.failed, as a poll's looks.
 // eriphe-core keeps, per server, the epoch, seq and time of the last event
 // it took: within an epoch it takes the higher seqs, from a new epoch the
 // events after that time. A server seen for the first time has its backlog
@@ -131,19 +135,27 @@ func (c *core) watchServerEvents(ctx context.Context, server string, sess *mcp.C
 		delete(c.events.servers, server)
 	}
 	c.events.cursorMu.Unlock()
-	if found {
+	if found && c.followerOf(server, true) != nil {
 		c.readServerEvents(ctx, server, sess)
 	}
 }
 
-// tickServerEvents reads the events of every server that offers some.
-func (c *core) tickServerEvents(ctx context.Context) {
+// offersEvents tells whether a server offers eriphe://events.
+func (c *core) offersEvents(server string) bool {
 	c.events.cursorMu.Lock()
+	defer c.events.cursorMu.Unlock()
+	return c.events.servers[server]
+}
+
+// tickServerEvents reads the events of every server a monitor follows.
+func (c *core) tickServerEvents(ctx context.Context) {
+	ms, _ := c.monitors()
 	var names []string
-	for name := range c.events.servers {
-		names = append(names, name)
+	for _, m := range ms {
+		if m.Spec.Way == wayFollow && m.State == monitorOn && c.offersEvents(m.Spec.Server) {
+			names = append(names, m.Spec.Server)
+		}
 	}
-	c.events.cursorMu.Unlock()
 	for _, name := range names {
 		u := c.pool.get(name)
 		if u == nil {
@@ -161,27 +173,46 @@ func (c *core) tickServerEvents(ctx context.Context) {
 	}
 }
 
-// readServerEvents reads a server's events and emits the new ones.
+// readServerEvents reads the events of a server its monitor follows, and
+// emits the new ones; the monitor keeps whether the read worked.
 func (c *core) readServerEvents(ctx context.Context, server string, sess *mcp.ClientSession) {
-	res, err := sess.ReadResource(ctx, &mcp.ReadResourceParams{URI: serverEventsURI})
-	if err != nil {
-		log.Printf("server %s: events: %v", server, err)
+	m := c.followerOf(server, true)
+	if m == nil {
 		return
 	}
+	doc, err := serverEventsOf(ctx, sess)
+	st := m.Look
+	if c.noteLook(m, &st, err) {
+		st.Known = true
+		c.takeServerEvents(m, doc)
+	} else {
+		log.Printf("server %s: events: %v", server, err)
+	}
+	st.Checked = time.Now().Unix()
+	raw, _ := json.Marshal(st)
+	c.store.db.Exec(`UPDATE monitors SET look = ? WHERE id = ?`, string(raw), m.ID)
+}
+
+func serverEventsOf(ctx context.Context, sess *mcp.ClientSession) (serverEventsDoc, error) {
 	var doc serverEventsDoc
+	res, err := sess.ReadResource(ctx, &mcp.ReadResourceParams{URI: serverEventsURI})
+	if err != nil {
+		return doc, err
+	}
 	for _, ct := range res.Contents {
 		if ct.URI == serverEventsURI && ct.Text != "" {
 			if err := json.Unmarshal([]byte(ct.Text), &doc); err != nil {
-				log.Printf("server %s: events: %v", server, err)
-				return
+				return doc, err
 			}
 		}
 	}
-	c.takeServerEvents(server, doc)
+	return doc, nil
 }
 
-// takeServerEvents emits what is new in doc, from the server's cursor.
-func (c *core) takeServerEvents(server string, doc serverEventsDoc) int {
+// takeServerEvents emits what is new in doc, from the server's cursor, as
+// its monitor's events.
+func (c *core) takeServerEvents(m *monitor, doc serverEventsDoc) int {
+	server := m.Spec.Server
 	c.events.cursorMu.Lock() // one read per server at a time
 	defer c.events.cursorMu.Unlock()
 	var cur eventsCursor
@@ -209,8 +240,16 @@ func (c *core) takeServerEvents(server string, doc serverEventsDoc) int {
 			log.Printf("server %s: events: kind %q is eriphe-core's: ignored", server, e.Kind)
 			continue
 		}
-		if _, err := c.emit(journalEvent{Kind: e.Kind, Key: e.Key, Source: "server:" + server, At: e.At,
-			Payload: e.Payload, External: !c.trustsServer(server)}); err != nil {
+		p := e.Payload
+		if p == nil {
+			p = map[string]any{}
+		}
+		if _, ok := p["key"]; !ok && e.Key != "" {
+			p["key"] = e.Key
+		}
+		p["monitor"] = m.Name
+		if _, err := c.emit(journalEvent{Kind: e.Kind, Key: m.Name, Source: "monitor:" + m.Name, At: e.At,
+			Payload: p, External: !c.trustsServer(server)}); err != nil {
 			log.Printf("server %s: events: %v", server, err)
 			continue
 		}

@@ -89,3 +89,35 @@ func TestMonitorsPage(t *testing.T) {
 		t.Fatal("still there")
 	}
 }
+
+// A server that publishes events is offered to follow, once: followed, it
+// is no longer offered, and a second monitor cannot follow it.
+func TestMonitorFollowPage(t *testing.T) {
+	c, _, _ := pollCore(t)
+	c.events.cursorMu.Lock()
+	c.events.servers = map[string]bool{"monitor": true}
+	c.events.cursorMu.Unlock()
+	tw := newTestWebFor(t, c)
+	csrf := tw.setup()
+	if _, body, _ := tw.do("GET", "/settings/monitors", nil, nil); !strings.Contains(body, `hx-post="/settings/monitors/follow"`) {
+		t.Fatal("no stream to follow offered")
+	}
+	if _, _, h := tw.post("/settings/monitors/follow", url.Values{"name": {"suivi"}, "server": {"monitor"}}, csrf); h.Get("HX-Redirect") != "/settings/monitors/suivi" {
+		t.Fatalf("follow: %v", h)
+	}
+	if m, err := c.monitorNamed("suivi"); err != nil || m.Spec.Way != wayFollow || m.State != monitorOn {
+		t.Fatalf("followed %+v, %v", m, err)
+	}
+	if _, body, _ := tw.do("GET", "/settings/monitors", nil, nil); strings.Contains(body, `hx-post="/settings/monitors/follow"`) {
+		t.Fatal("a followed stream is still offered")
+	}
+	if err := c.saveMonitor("autre", monitorSpec{Way: wayFollow, Server: "monitor"}); err == nil {
+		t.Fatal("a second monitor followed the same server")
+	}
+	if _, err := c.writeMonitor("mails", monitorSpec{Way: wayFollow, Server: "monitor"}, nil); err == nil {
+		t.Fatal("the brain proposed a second follower")
+	}
+	if _, body, _ := tw.do("GET", "/settings/monitors/suivi", nil, nil); !strings.Contains(body, "suit les événements") || strings.Contains(body, `hx-post="/settings/monitors/try"`) {
+		t.Fatalf("a follower's page: its words, and no poll form:\n%s", body)
+	}
+}
