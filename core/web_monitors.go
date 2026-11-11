@@ -24,7 +24,6 @@ func (w *web) monitorRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/monitors", w.auth(w.handleSaveMonitor))
 	mux.Handle("POST /settings/monitors/try", w.auth(w.handleTryMonitor))
 	mux.Handle("POST /settings/monitors/address", w.auth(w.handleNewAddress))
-	mux.Handle("POST /settings/monitors/follow", w.auth(w.handleFollow))
 	mux.Handle("GET /settings/monitors/{name}", w.auth(w.handleMonitor))
 	mux.Handle("POST /settings/monitors/{name}/{action}", w.auth(w.handleMonitorAction))
 }
@@ -45,7 +44,6 @@ type monitorView struct {
 	Change   string // a change the brain proposed, in words
 	Tainted  string
 	Listen   bool // an incoming address
-	Follow   bool // a server's events
 }
 
 type monitorEventView struct {
@@ -61,10 +59,9 @@ type monitorForm struct {
 
 type monitorsPage struct {
 	Monitors []monitorView
-	Tools    []string
+	Tools    []string // what a monitor may look at: tools, then resources (monitorSources)
 	Form     monitorForm
 	Fresh    *freshHook // an address just made: its URL and secret, shown once
-	Streams  []string   // the servers that publish events and no monitor follows
 }
 
 type freshHook struct{ Name, URL, Secret string }
@@ -79,7 +76,7 @@ type monitorPage struct {
 func (w *web) monitorView(m *monitor, lang string, now time.Time) monitorView {
 	v := monitorView{Name: m.Name, State: m.State, Does: m.Spec.Text(lang), Waiting: m.Look.Waiting, Error: m.Look.Error,
 		Failing: m.Look.Failed, Events: w.c.monitorEventCount(m.Name, now.Add(-30*24*time.Hour)), Skills: w.c.skillsFollowing(m.Name),
-		Tainted: m.Tainted, Listen: m.Spec.Way == wayListen, Follow: m.Spec.Way == wayFollow}
+		Tainted: m.Tainted, Listen: m.Spec.Way == wayListen}
 	if m.Look.Checked > 0 {
 		v.LastLook = time.Unix(m.Look.Checked, 0).In(now.Location()).Format("2006-01-02 15:04")
 	}
@@ -90,7 +87,7 @@ func (w *web) monitorView(m *monitor, lang string, now time.Time) monitorView {
 }
 
 func formOf(name string, s monitorSpec) monitorForm {
-	f := monitorForm{Name: name, Tool: s.Server + "." + s.Tool, Cond: s.Cond, Path: s.Path, ID: s.ID, Edit: true}
+	f := monitorForm{Name: name, Tool: s.source(), Cond: s.Cond, Path: s.Path, ID: s.ID, Edit: true}
 	if s.Every%(24*60) == 0 {
 		f.Every = strconv.Itoa(s.Every/(24*60)) + "d"
 	} else if s.Every%60 == 0 {
@@ -122,7 +119,7 @@ func (w *web) renderMonitors(rw http.ResponseWriter, r *http.Request, s *session
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := monitorsPage{Tools: w.c.monitorTools(), Form: monitorForm{Every: "5m", Cond: condChanged}, Fresh: fresh, Streams: w.c.unfollowedStreams()}
+	d := monitorsPage{Tools: w.c.monitorSources(), Form: monitorForm{Every: "5m", Cond: condChanged}, Fresh: fresh}
 	for _, m := range ms {
 		d.Monitors = append(d.Monitors, w.monitorView(m, lang, now))
 	}
@@ -136,7 +133,7 @@ func (w *web) handleMonitor(rw http.ResponseWriter, r *http.Request, s *session)
 		http.Redirect(rw, r, "/settings/monitors", http.StatusSeeOther)
 		return
 	}
-	d := monitorPage{Monitor: w.monitorView(m, lang, now), Tools: w.c.monitorTools(), Form: formOf(m.Name, m.Spec)}
+	d := monitorPage{Monitor: w.monitorView(m, lang, now), Tools: w.c.monitorSources(), Form: formOf(m.Name, m.Spec)}
 	for _, e := range w.c.monitorEvents(m.Name, monitorEventsShown) {
 		d.Events = append(d.Events, monitorEventView{When: e.At.In(now.Location()).Format("2006-01-02 15:04"), Kind: e.Kind,
 			Words: monitorEventWords(e), External: e.External})
@@ -157,10 +154,8 @@ func monitorEventWords(e journalEvent) string {
 
 // specOfForm reads the form into a spec.
 func specOfForm(r *http.Request) (string, monitorSpec, error) {
-	server, tool, ok := strings.Cut(strings.TrimSpace(r.PostFormValue("tool")), ".")
-	s := monitorSpec{Way: wayPoll, Server: server, Tool: tool, Cond: r.PostFormValue("cond"),
-		Path: r.PostFormValue("path"), ID: r.PostFormValue("id")}
-	if !ok {
+	s := monitorSpec{Way: wayPoll, Cond: r.PostFormValue("cond"), Path: r.PostFormValue("path"), ID: r.PostFormValue("id")}
+	if !sourceOf(r.PostFormValue("tool"), &s) {
 		return "", s, fmt.Errorf("pick a tool")
 	}
 	if a := strings.TrimSpace(r.PostFormValue("args")); a != "" {
@@ -217,19 +212,7 @@ func (w *web) handleNewAddress(rw http.ResponseWriter, r *http.Request, s *sessi
 	w.renderMonitors(rw, r, s, &freshHook{Name: name, URL: w.publicURL(r) + hookPath + token, Secret: secret})
 }
 
-// handleFollow makes a monitor that follows a server's events.
-func (w *web) handleFollow(rw http.ResponseWriter, r *http.Request, s *session) {
-	name := strings.ToLower(strings.TrimSpace(r.PostFormValue("name")))
-	if err := w.c.saveMonitor(name, monitorSpec{Way: wayFollow, Server: r.PostFormValue("server")}); err != nil {
-		w.toast(rw, err.Error(), false)
-		return
-	}
-	log.Printf("web: monitor %s follows %s", name, r.PostFormValue("server"))
-	rw.Header().Set("HX-Redirect", "/settings/monitors/"+url.PathEscape(name))
-	rw.WriteHeader(http.StatusOK)
-}
-
-// handleTryMonitor calls the tool once and shows what the path extracts.
+// handleTryMonitor calls the tool (or reads the resource) once and shows what the path extracts.
 func (w *web) handleTryMonitor(rw http.ResponseWriter, r *http.Request, s *session) {
 	_, spec, err := specOfForm(r)
 	got := ""

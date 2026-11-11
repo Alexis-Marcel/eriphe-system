@@ -58,18 +58,6 @@
   {{template "monitor-form" .Data}}
 </section>
 
-{{if .Data.Streams}}
-<section class="panel" id="follow" aria-labelledby="follow-title">
-  <h3 id="follow-title">{{template "i-plus"}}{{t "monitors.follow.title"}}</h3>
-  <p class="muted">{{t "monitors.follow.lead"}}</p>
-  <form class="stack-form" hx-post="/settings/monitors/follow" hx-disabled-elt="find button">
-    <label class="field"><span>{{t "monitors.f.name"}}</span><input type="text" name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="mails"></label>
-    <label class="field"><span>{{t "monitors.f.tool"}}</span><select name="server">{{range .Data.Streams}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
-    <div class="form-actions"><button class="btn btn-primary" type="submit">{{t "monitors.follow.add"}}</button></div>
-  </form>
-</section>
-{{end}}
-
 <section class="panel" id="address" aria-labelledby="address-title">
   <h3 id="address-title">{{template "i-plus"}}{{t "monitors.addr.title"}}</h3>
   <p class="muted">{{t "monitors.addr.lead"}}</p>
@@ -99,7 +87,7 @@
   {{if .Error}}<p class="notice" role="status">{{tf "monitors.lasterror" .Error}}</p>{{end}}
   <p class="muted small">{{if .LastLook}}{{tf "monitors.lastlook" .LastLook}} · {{end}}{{tf "monitors.events30" .Events}}</p>
   <p class="small">{{if .Skills}}{{tf "monitors.skills" (join .Skills ", ")}}{{else}}{{t "monitors.noskill"}}{{end}}</p>
-  <p class="muted small mono">{{if .Listen}}when: monitor.received key={{.Name}} status=firing{{else if .Follow}}when: mail.received key={{.Name}} · {{t "monitors.follow.kinds"}}{{else}}when: monitor.changed key={{.Name}} · monitor.new · monitor.crossed · monitor.failed{{end}}</p>
+  <p class="muted small mono">{{if .Listen}}when: monitor.received key={{.Name}} status=firing{{else}}when: monitor.changed key={{.Name}} · monitor.new · monitor.crossed · monitor.failed{{end}}</p>
   {{if or (eq .State "proposed") .Change}}
   <div class="notice">
     <p>{{if eq .State "proposed"}}{{t "monitors.proposedlead"}}{{else}}{{tf "monitors.changelead" .Change}}{{end}}</p>
@@ -129,7 +117,6 @@
 
 {{if .Data.Monitor.Listen}}
 <section class="panel"><p class="muted">{{t "monitors.addr.again"}}</p></section>
-{{else if .Data.Monitor.Follow}}
 {{else if ne .Data.Monitor.State "proposed"}}
 <section class="panel" aria-labelledby="monitor-edit-title">
   <h3 id="monitor-edit-title">{{t "monitors.edittitle"}}</h3>

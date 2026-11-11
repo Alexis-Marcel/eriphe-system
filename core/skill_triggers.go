@@ -13,7 +13,7 @@ import (
 // A skill's trigger: what makes it run by itself (skill_runs.go). Its
 // SKILL.md says it in its front matter, next to name and description:
 //
-//	when: mail.received                      an event kind (event_journal.go)
+//	when: monitor.new                        an event kind (event_journal.go)
 //	when: monitor.received key=getout        with filters: the event's key, or a payload field
 //	when: monitor.failed, monitor.recovered key=getout-prod   several kinds, the same filters
 //	when: time weekdays 08:00                at times of day (rule_schedule.go's schedules)

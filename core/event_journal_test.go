@@ -38,7 +38,7 @@ func TestEventJournal(t *testing.T) {
 		t.Error("a bad kind accepted")
 	}
 	long := strings.Repeat("é", 2000)
-	e, err := c.emit(journalEvent{Kind: "mail.received", Key: "perso", Source: "server:mail", External: true, At: *now,
+	e, err := c.emit(journalEvent{Kind: "monitor.new", Key: "perso", Source: "monitor:mails", External: true, At: *now,
 		Payload: map[string]any{"subject": "Rendez-vous le 8", "body": long, "a": long, "b": long, "c": long, "d": long, "e": long, "f": long, "g": long}})
 	if err != nil || e.ID == 0 {
 		t.Fatal(e, err)
@@ -61,7 +61,7 @@ func TestEventJournal(t *testing.T) {
 	}
 	items := out["items"].([]happeningView)
 	if len(items) != 2 || items[0].Trust != feedExternal || strings.Contains(items[0].Summary, "éé") ||
-		!strings.Contains(items[0].Summary, "mail.received") || !strings.Contains(items[1].Summary, "succeeded") {
+		!strings.Contains(items[0].Summary, "monitor.new") || !strings.Contains(items[1].Summary, "succeeded") {
 		t.Fatalf("since: %+v", items)
 	}
 	if len(c.turnTaint()) != 0 {
@@ -217,129 +217,6 @@ func TestUserReturnedEvent(t *testing.T) {
 	c.tickReturned(*now)
 	if got := eventsOf(t, c, evUserReturned); len(got) != 1 {
 		t.Fatalf("away, yet: %+v", got)
-	}
-}
-
-// eventServer is a catalog server that offers eriphe://events.
-type eventServer struct {
-	doc serverEventsDoc
-}
-
-func (s *eventServer) set(epoch string, events ...string) {
-	s.doc = serverEventsDoc{Epoch: epoch}
-	base := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
-	for i, kind := range events {
-		s.doc.Events = append(s.doc.Events, struct {
-			Seq     int64          `json:"seq"`
-			Kind    string         `json:"kind"`
-			Key     string         `json:"key"`
-			At      time.Time      `json:"at"`
-			Payload map[string]any `json:"payload"`
-		}{Seq: int64(i + 1), Kind: kind, Key: "perso", At: base.Add(time.Duration(i) * time.Minute),
-			Payload: map[string]any{"subject": "n°" + string(rune('1'+i))}})
-	}
-}
-
-func (s *eventServer) session(t *testing.T) *mcp.ClientSession {
-	t.Helper()
-	srv := mcp.NewServer(&mcp.Implementation{Name: "mail", Version: "1"}, nil)
-	srv.AddResource(&mcp.Resource{URI: serverEventsURI, Name: "events"},
-		func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-			raw, _ := json.Marshal(s.doc)
-			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: serverEventsURI, Text: string(raw)}}}, nil
-		})
-	ct, st := mcp.NewInMemoryTransports()
-	if _, err := srv.Connect(context.Background(), st, nil); err != nil {
-		t.Fatal(err)
-	}
-	sess, err := mcp.NewClient(&mcp.Implementation{Name: "eriphe-core"}, nil).Connect(context.Background(), ct, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { sess.Close() })
-	return sess
-}
-
-// followMonitor is a monitor that follows a server's events, on, as if
-// approved (the test's server is not in the catalog).
-func followMonitor(t *testing.T, c *core, name, server string) {
-	t.Helper()
-	spec, _ := json.Marshal(monitorSpec{Way: wayFollow, Server: server})
-	if _, err := c.store.db.Exec(`INSERT INTO monitors (name, state, spec, created, updated) VALUES (?, ?, ?, 0, 0)`,
-		name, monitorOn, string(spec)); err != nil {
-		t.Fatal(err)
-	}
-	c.freshStart(monitorSpec{Way: wayFollow, Server: server})
-}
-
-// A server's events reach the journal only once a monitor follows it: its
-// backlog skipped at first sight, then the new ones within its epoch, and
-// after a restart those after the last taken; keyed by the monitor's name,
-// the server's key kept in the payload; eriphe-core's own kinds refused;
-// external unless the server is trusted; reads that keep failing told.
-func TestServerEvents(t *testing.T) {
-	c, mon, _ := pollCore(t)
-	ctx := context.Background()
-	es := &eventServer{}
-	es.set("e1", "mail.received", "mail.received")
-	sess := es.session(t)
-	c.watchServerEvents(ctx, "mail", sess)
-	if !c.offersEvents("mail") {
-		t.Fatal("the server's events are not known")
-	}
-	es.set("e1", "mail.received", "mail.received", "mail.received")
-	c.readServerEvents(ctx, "mail", sess)
-	c.tickServerEvents(ctx)
-	if got := eventsOf(t, c, ""); len(got) != 0 {
-		t.Fatalf("a server no monitor follows was read: %+v", got)
-	}
-	followMonitor(t, c, "mails", "mail")
-	c.readServerEvents(ctx, "mail", sess)
-	if got := eventsOf(t, c, ""); len(got) != 0 {
-		t.Fatalf("the backlog was taken: %+v", got)
-	}
-	es.set("e1", "mail.received", "mail.received", "mail.received", "mail.received", "user.returned")
-	c.readServerEvents(ctx, "mail", sess)
-	got := eventsOf(t, c, "")
-	if len(got) != 1 || got[0].Kind != "mail.received" || got[0].Key != "mails" || got[0].Source != "monitor:mails" || !got[0].External ||
-		got[0].Payload["subject"] != "n°4" || got[0].Payload["key"] != "perso" {
-		t.Fatalf("new in the epoch: %+v", got)
-	}
-	c.readServerEvents(ctx, "mail", sess)
-	if got := eventsOf(t, c, ""); len(got) != 1 {
-		t.Fatalf("read twice: %+v", got)
-	}
-	// Restarted: a new epoch, its seqs from 1; only what is later is new.
-	es.set("e2", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received")
-	c.setServerTrust("mail", true, trustByUser)
-	c.readServerEvents(ctx, "mail", sess)
-	got = eventsOf(t, c, "mail.received")
-	if len(got) != 2 || got[1].Payload["subject"] != "n°6" || got[1].External {
-		t.Fatalf("after a restart: %+v", got)
-	}
-	// Paused, it is not read.
-	c.pauseMonitor("mails", true)
-	es.set("e2", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received", "mail.received")
-	c.readServerEvents(ctx, "mail", sess)
-	if got := eventsOf(t, c, "mail.received"); len(got) != 2 {
-		t.Fatalf("read while paused: %+v", got)
-	}
-	// Reads that keep failing: told once.
-	c.pauseMonitor("mails", false)
-	sess.Close()
-	for i := 0; i < 4; i++ {
-		c.readServerEvents(ctx, "mail", sess)
-	}
-	if got := eventsOf(t, c, evMonitorFailed); len(got) != 1 || got[0].Key != "mails" {
-		t.Fatalf("failed %+v", got)
-	}
-	// A server without the resource offers nothing to follow.
-	c.watchServerEvents(ctx, "monitor", monSession(t, mon))
-	if c.offersEvents("monitor") {
-		t.Fatal("a server without events offers some")
-	}
-	if _, err := c.writeMonitor("suivi", monitorSpec{Way: wayFollow, Server: "monitor"}, nil); err == nil {
-		t.Fatal("a server without events was followed")
 	}
 }
 

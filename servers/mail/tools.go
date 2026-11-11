@@ -218,7 +218,7 @@ func newServer(m *Mailer, version string) *mcp.Server {
 		}
 		return err
 	})
-	addEvents(s, m, newEventLog()) // events.go
+	addReceived(s, m, &receivedLog{}) // received.go
 	ro := &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: ptr(false)}
 
 	tool(s, "list_accounts", "List the configured mail accounts.", ro,

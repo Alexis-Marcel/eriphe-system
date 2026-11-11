@@ -16,7 +16,8 @@ import (
 )
 
 // fakeMonitor is a catalog server whose state the test sets: status (a
-// read-only tool), rollback (a tool that acts).
+// read-only tool), rollback (a tool that acts), and a resource,
+// monitor://received (the mail server's mail://received).
 type fakeMonitor struct {
 	mu      sync.Mutex
 	state   string
@@ -25,6 +26,7 @@ type fakeMonitor struct {
 	calls   int
 	rules   []map[string]any // alerts: Grafana-like alert rules, each uid, name, state
 	cpu     float64          // status: data.cpu
+	got     []map[string]any // monitor://received: messages, each id, subject
 }
 
 func (m *fakeMonitor) set(state, version string) {
@@ -60,6 +62,18 @@ func (m *fakeMonitor) server() *mcp.Server {
 				rules = append(rules, r)
 			}
 			return nil, map[string]any{"data": map[string]any{"rules": rules}, "at": time.Now().Format(time.RFC3339Nano)}, nil
+		})
+	s.AddResource(&mcp.Resource{URI: "monitor://received", Name: "received", MIMEType: "application/json"},
+		func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			m.calls++
+			msgs := []any{}
+			for _, g := range m.got {
+				msgs = append(msgs, g)
+			}
+			raw, _ := json.Marshal(map[string]any{"messages": msgs})
+			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: "monitor://received", Text: string(raw)}}}, nil
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "rollback"},
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {

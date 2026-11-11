@@ -135,6 +135,62 @@ func TestMonitorNew(t *testing.T) {
 	}
 }
 
+// A monitor reads a resource as it calls a tool (the mail server's
+// mail://received): offered with the tools, tried, its new items told; a
+// resource the server does not list, or arguments, are refused.
+func TestMonitorReadsResource(t *testing.T) {
+	c, mon, now := pollCore(t)
+	u := c.pool.get("monitor")
+	deadline := time.Now().Add(5 * time.Second)
+	for !slices.Contains(u.resourceURIs(), "monitor://received") {
+		if time.Now().After(deadline) {
+			t.Fatal("the server's resources are not listed")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := c.monitorSources(); !slices.Contains(got, "monitor monitor://received") || !slices.Contains(got, "monitor.status") {
+		t.Fatalf("sources %v", got)
+	}
+	var s monitorSpec
+	if !sourceOf("monitor monitor://received", &s) || s.Server != "monitor" || s.Resource != "monitor://received" || s.Tool != "" {
+		t.Fatalf("sourceOf %+v", s)
+	}
+	spec := monitorSpec{Server: "monitor", Resource: "monitor://received", Every: 1, Cond: condNew, Path: "messages", ID: "id"}
+	for _, bad := range []monitorSpec{
+		{Server: "monitor", Resource: "monitor://nope", Cond: condChanged},
+		{Server: "monitor", Resource: "monitor://received", Args: map[string]any{"a": 1}},
+		{Server: "monitor", Resource: "monitor://received", Tool: "status"},
+	} {
+		if err := c.saveMonitor("bad", bad); err == nil {
+			t.Errorf("saved %+v", bad)
+		}
+	}
+	mon.got = []map[string]any{{"id": "m1", "subject": "Newsletter"}}
+	if out, err := c.tryMonitorSaid(context.Background(), "", spec); err != nil || out["works"] != true {
+		t.Fatalf("try %v, %v", out, err)
+	}
+	if err := c.saveMonitor("mails", spec); err != nil {
+		t.Fatal(err)
+	}
+	lookAt(c, *now)
+	if es := eventsOf(t, c, evMonitorNew); len(es) != 0 {
+		t.Fatalf("the baseline told: %+v", es)
+	}
+	mon.got = append(mon.got, map[string]any{"id": "m2", "subject": "RDV jeudi"})
+	lookAt(c, now.Add(time.Minute))
+	es := eventsOf(t, c, evMonitorNew)
+	if len(es) != 1 || es[0].Key != "mails" || es[0].Payload["id"] != "m2" {
+		t.Fatalf("events %+v", es)
+	}
+	if item, _ := es[0].Payload["item"].(map[string]any); item["subject"] != "RDV jeudi" {
+		t.Fatalf("item %v", es[0].Payload["item"])
+	}
+	m, _ := c.monitorNamed("mails")
+	if got := m.Spec.Text("fr"); !strings.Contains(got, "monitor monitor://received") {
+		t.Fatalf("text %q", got)
+	}
+}
+
 // cross: a measure becomes a state; only a confirmed crossing tells, either
 // way; a number already past the limit tells at once.
 func TestMonitorCross(t *testing.T) {
@@ -321,10 +377,6 @@ func TestMonitorTriggersSkill(t *testing.T) {
 	if got := c.skillsFollowing("getout-prod"); !slices.Contains(got, "sonde") || !slices.Contains(got, "prod") {
 		t.Fatalf("following %v", got)
 	}
-	// A server cannot write a monitor's kinds.
-	if !reservedEventKind(evMonitorChanged) {
-		t.Fatal("monitor. is not reserved")
-	}
 }
 
 // Every way and condition is said in words, in both languages: no key
@@ -338,7 +390,7 @@ func TestMonitorTexts(t *testing.T) {
 		{Way: wayPoll, Server: "s", Tool: "t", Every: 60, Cond: condCross, Below: &limit},
 		{Way: wayListen},
 		{Way: wayListen, Signed: true, SigHeader: "X-Eriphe-Signature"},
-		{Way: wayFollow, Server: "mail"},
+		{Way: wayPoll, Server: "mail", Resource: "mail://received", Every: 5, Cond: condNew, Path: "messages", ID: "id"},
 	} {
 		for _, lang := range []string{"fr", "en"} {
 			if got := s.Text(lang); strings.Contains(got, "monitor.") || strings.Contains(got, "%!") {

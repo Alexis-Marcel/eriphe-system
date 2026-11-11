@@ -27,7 +27,7 @@ import (
 //     (a selected mailbox, a working directory, a login) is shared by every
 //     session, and its notifications (progress, logs) and its requests
 //     (sampling, elicitation) are not relayed. Its tools and its resources
-//     (the mail server's eriphe://events) are relayed. The bridge outlives
+//     (the mail server's mail://received) are relayed. The bridge outlives
 //     the container: sessions survive a restart, and the tools and
 //     resources are listed again (list_changed) when it comes back.
 

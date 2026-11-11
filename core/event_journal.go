@@ -17,9 +17,9 @@ import (
 // whatever its source, without being interpreted. Triggered skills (#275)
 // subscribe to it; the brain reads it through since (kind event).
 //
-// A source writes an event with emit: its kind (mail.received,
+// A source writes an event with emit: its kind (monitor.new,
 // monitor.received…), a key that groups the events of one thing (a monitor's
-// name, a mail account: a skill joins the events of an open key instead of
+// name: a skill joins the events of an open key instead of
 // starting again), its source, a short payload, and whether it is external:
 // written by someone else (a mail, an alert's body, a tool not trusted).
 // Whatever reads an external event's payload is tainted.
@@ -36,8 +36,7 @@ CREATE INDEX IF NOT EXISTS event_journal_kind ON event_journal (kind, at);`
 
 func init() { extraSchema = append(extraSchema, eventJournalSchema) }
 
-// The kinds eriphe-core itself emits. A server may emit others of its own
-// (mail.received is the mail server's), never one of these families.
+// The kinds eriphe-core itself emits, besides the monitors' (monitors.go).
 const (
 	evTaskEnded    = "task.ended"
 	evSessionEnded = "session.ended"
@@ -55,15 +54,12 @@ const (
 // eventKindRe: lowercase words joined by dots, two to four of them.
 var eventKindRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,3}$`)
 
-// reservedEventFamilies are eriphe-core's: a server cannot emit them.
-var reservedEventFamilies = []string{"task.", "session.", "user.", "time.", "skill.", "monitor."}
-
 // journalEvent is one event of the journal.
 type journalEvent struct {
 	ID       int64
 	Kind     string
 	Key      string
-	Source   string // alert:<hook>, monitor:<name>, server:<name>, task, session, user
+	Source   string // alert:<hook>, monitor:<name>, task, session, user
 	At       time.Time
 	Payload  map[string]any
 	External bool
@@ -71,9 +67,6 @@ type journalEvent struct {
 
 // eventBus holds the journal's subscribers and its per-source counts.
 type eventBus struct {
-	cursorMu sync.Mutex      // the servers' cursors, and servers below (event_sources.go)
-	servers  map[string]bool // the catalog servers that offer events
-
 	mu   sync.Mutex
 	subs []func(journalEvent)
 	hour int64          // the hour the counts are for
