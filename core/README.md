@@ -1501,6 +1501,11 @@ change. The result is read as JSON (its structured content, else its text).
   baseline, the no drops it. A change of an approved one waits the same way, the old one looking
   meanwhile. Written on a tainted turn, the card says so. A triggered task has no such tool.
   `monitors` (free) lists them: state, what each does, its last look, why it waits, its last error.
+  `try_monitor` (free) tries one once, with nothing kept or written: a draft before proposing it,
+  or one of the user's by name. It says what the path extracts or why it cannot, and for a monitor
+  that has looked, whether a look now would find a change (`changed_since_last_look`, the number of
+  new items, or whether the limit holds). A server not trusted taints the turn, as a call of its
+  tool would.
 - **Its page**, Settings → Surveillance (`web_monitors.go`, `monitors_user.go`): each monitor's
   state (on, paused, waiting with why, failing with its error), what it does in words, its last
   look, its events over 30 days and the skills whose `when` names it; its last 20 events; pause and

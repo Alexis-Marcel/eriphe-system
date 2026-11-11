@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -346,5 +347,51 @@ func TestMonitorTexts(t *testing.T) {
 				t.Errorf("%s: no %s", lang, k)
 			}
 		}
+	}
+}
+
+// The brain tries a monitor: a draft before proposing it, or one of the
+// user's to check it works and whether a look now would tell a change;
+// nothing is kept or written, a write is refused, and the server's words
+// taint the turn.
+func TestTryMonitorTool(t *testing.T) {
+	c, mon, now := pollCore(t)
+	mon.rules = []map[string]any{{"uid": "a", "name": "5xx", "state": "firing"}}
+	draft := map[string]any{"server": "monitor", "tool": "alerts", "path": "data.rules[state=firing].name"}
+	out, isErr := callBrainTool(t, c, "try_monitor", draft)
+	if isErr || out["works"] != true || !strings.Contains(valueText(out["extracts"]), "5xx") {
+		t.Fatalf("draft: %v", out)
+	}
+	if _, _, _, tainted := c.turn.snapshot(); !slices.Contains(tainted, "monitor.alerts") {
+		t.Fatalf("the turn is not tainted: %v", tainted)
+	}
+	if ms, _ := c.monitors(); len(ms) != 0 {
+		t.Fatal("a try kept a monitor")
+	}
+	calls := mon.calls
+	out, _ = callBrainTool(t, c, "try_monitor", map[string]any{"server": "monitor", "tool": "rollback"})
+	if out["works"] != false || mon.calls != calls {
+		t.Fatalf("a write was tried: %v", out)
+	}
+	out, _ = callBrainTool(t, c, "try_monitor", map[string]any{"server": "monitor", "tool": "alerts", "path": "data.nothing", "cond": "cross", "above": 1})
+	if out["works"] != false || !strings.Contains(valueText(out["error"]), "data.nothing") {
+		t.Fatalf("a bad path: %v", out)
+	}
+
+	approvedMonitor(t, c, "getout-prod", monitorSpec{Server: "monitor", Tool: "alerts", Every: 1, Path: "data.rules[state=firing].name"})
+	lookAt(c, *now) // the baseline
+	events := c.monitorEventCount("getout-prod", time.Unix(0, 0))
+	if out, _ = callBrainTool(t, c, "try_monitor", map[string]any{"name": "getout-prod"}); out["changed_since_last_look"] != false {
+		t.Fatalf("unchanged: %v", out)
+	}
+	mon.rules = append(mon.rules, map[string]any{"uid": "b", "name": "latence", "state": "firing"})
+	if out, _ = callBrainTool(t, c, "try_monitor", map[string]any{"name": "getout-prod"}); out["changed_since_last_look"] != true {
+		t.Fatalf("changed: %v", out)
+	}
+	if c.monitorEventCount("getout-prod", time.Unix(0, 0)) != events {
+		t.Fatal("a try wrote an event")
+	}
+	if out, _ = callBrainTool(t, c, "try_monitor", map[string]any{"name": "absent"}); out != nil && out["works"] == true {
+		t.Fatalf("an unknown monitor: %v", out)
 	}
 }
