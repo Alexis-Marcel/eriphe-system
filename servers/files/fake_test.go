@@ -35,6 +35,7 @@ type fakeFile struct {
 	driveFile
 	content  map[string]string // by mime type: the media, or an export
 	uploaded string            // the last new version: its type and content
+	shared   bool              // in Shared with me
 }
 
 const fakeRefresh = "refresh-1"
@@ -162,6 +163,12 @@ var (
 func (d *fakeDrive) list(w http.ResponseWriter, q string) {
 	var out []driveFile
 	switch m := inParents.FindStringSubmatch(q); {
+	case q == "sharedWithMe and trashed = false":
+		for _, f := range d.files {
+			if f.shared && !f.Trashed {
+				out = append(out, f.driveFile)
+			}
+		}
 	case m != nil:
 		for _, f := range d.files {
 			if len(f.Parents) > 0 && f.Parents[0] == m[1] && (m[3] == "" || f.MimeType == m[3]) && !f.Trashed {
@@ -218,8 +225,17 @@ func (d *fakeDrive) upload(w http.ResponseWriter, r *http.Request) {
 //	│   ├── Budget (a Google Sheet)
 //	│   ├── sub/deep.txt
 //	│   └── link (a shortcut to Perso/secret.txt)
-//	└── Perso (not given)
-//	    └── secret.txt
+//	├── Perso (not given)
+//	│   └── secret.txt
+//	└── Engineering (given in the nested tests)
+//	    ├── plan.txt
+//	    ├── link-api (a shortcut to api.txt)
+//	    └── teams
+//	        └── Backend (given in the nested tests, inside Engineering)
+//	            ├── api.txt
+//	            └── srv/main.txt
+//
+// and shared.txt, shared with the user from a folder they cannot see.
 func (d *fakeDrive) tree() {
 	d.add("root-id", "My Drive", mimeFolder, "", nil)
 	d.add("compta", "Compta", mimeFolder, "root-id", nil)
@@ -234,4 +250,17 @@ func (d *fakeDrive) tree() {
 	link.ShortcutDetails = &struct {
 		TargetID string `json:"targetId"`
 	}{"secret"}
+
+	d.add("eng", "Engineering", mimeFolder, "root-id", nil)
+	d.add("plan", "plan.txt", "text/plain", "eng", map[string]string{"text/plain": "roadmap plan"})
+	d.add("teams", "teams", mimeFolder, "eng", nil)
+	d.add("backend", "Backend", mimeFolder, "teams", nil)
+	d.add("api", "api.txt", "text/plain", "backend", map[string]string{"text/plain": "roadmap api"})
+	d.add("srv", "srv", mimeFolder, "backend", nil)
+	d.add("main", "main.txt", "text/plain", "srv", map[string]string{"text/plain": "roadmap main"})
+	short := d.add("link-api", "link-api", mimeShortcut, "eng", nil)
+	short.ShortcutDetails = &struct {
+		TargetID string `json:"targetId"`
+	}{"api"}
+	d.add("shared", "shared.txt", "text/plain", "hidden-folder", map[string]string{"text/plain": "roadmap shared"}).shared = true
 }

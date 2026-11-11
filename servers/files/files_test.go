@@ -18,15 +18,24 @@ func setup(t *testing.T, scopes ...string) (*fakeDrive, *Files) {
 
 func setupAccount(t *testing.T, readOnly bool, scopes ...string) (*fakeDrive, *Files) {
 	t.Helper()
-	d := newFakeDrive(t)
-	d.tree()
-	t.Setenv("FILES_TEST_TOKEN", `{"client_id":"client-1","client_secret":"secret-1","refresh_token":"`+fakeRefresh+`"}`)
 	if len(scopes) == 0 {
 		scopes = []string{scopeDrive}
 	}
-	acct := d.account(scopes...)
-	acct.ReadOnly = readOnly
-	cfg := &Config{Accounts: []AccountConfig{acct}, Places: []PlaceConfig{{Name: "Compta", ID: "compta"}}}
+	return setupPlaces(t, func(a *AccountConfig) { a.ReadOnly, a.Scopes = readOnly, scopes }, PlaceConfig{Name: "Compta", ID: "compta"})
+}
+
+// setupPlaces runs the fake Drive with one account, changed by edit, and
+// these places.
+func setupPlaces(t *testing.T, edit func(*AccountConfig), places ...PlaceConfig) (*fakeDrive, *Files) {
+	t.Helper()
+	d := newFakeDrive(t)
+	d.tree()
+	t.Setenv("FILES_TEST_TOKEN", `{"client_id":"client-1","client_secret":"secret-1","refresh_token":"`+fakeRefresh+`"}`)
+	acct := d.account(scopeDrive)
+	if edit != nil {
+		edit(&acct)
+	}
+	cfg := &Config{Accounts: []AccountConfig{acct}, Places: places}
 	if err := cfg.normalize(); err != nil {
 		t.Fatal(err)
 	}
@@ -132,8 +141,8 @@ func TestSearchKeepsTheFolders(t *testing.T) {
 	got := map[string]bool{}
 	for _, it := range out.Items {
 		got[it.ID] = true
-		if it.Folder != "Compta" {
-			t.Errorf("%s: folder %q", it.ID, it.Folder)
+		if it.Place != "Compta" {
+			t.Errorf("%s: place %q", it.ID, it.Place)
 		}
 	}
 	for _, id := range []string{"facture", "notes", "deep"} {
@@ -376,9 +385,23 @@ func TestSetupToolsAreSetupOnly(t *testing.T) {
 	if !strings.Contains(text, `"id":"root-id"`) || !strings.Contains(text, sharedWithMe) || !strings.Contains(text, `"Team"`) {
 		t.Errorf("roots: %s", text)
 	}
+	if strings.Contains(text, `"parent"`) {
+		t.Errorf("a top place with a parent: %s", text)
+	}
 	_, text = call(t, cs, "browse_places", map[string]any{"parent": "root-id"})
 	if !strings.Contains(text, "Compta") || !strings.Contains(text, "Perso") || strings.Contains(text, "facture") {
 		t.Errorf("folders only: %s", text)
+	}
+	var out browseOut
+	json.Unmarshal([]byte(text), &out)
+	for _, p := range out.Places {
+		if p.Parent != "root-id" {
+			t.Errorf("%s: parent %q, want root-id", p.Name, p.Parent)
+		}
+	}
+	_, text = call(t, cs, "browse_places", map[string]any{"parent": "teams"})
+	if !strings.Contains(text, `"id":"backend"`) || !strings.Contains(text, `"parent":"teams"`) {
+		t.Errorf("a subfolder's parent: %s", text)
 	}
 	off := false
 	f.cfg.Setup = &off
@@ -420,6 +443,9 @@ func TestConfig(t *testing.T) {
 		json, err string
 	}{
 		{`{"accounts":[` + acct + `],"places":[{"name":"A","id":"1"}]}`, ""},
+		{`{"accounts":[` + acct + `],"places":[{"name":"A","id":"1","parents":["top","mid"]}]}`, ""},
+		{`{"accounts":[{"name":"drive","provider":"google","auth":{"token_env":"X"},"all":true}],"places":[{"name":"A","id":"1"}]}`, ""},
+		{`{"accounts":[{"name":"drive","provider":"google","auth":{"token_env":"X"},"all":true}],"places":[{"name":"A","id":"1"},{"name":"Drive","id":"2"}]}`, "duplicate"},
 		{`{"accounts":[]}`, "no accounts"},
 		{`{"accounts":[{"provider":"dropbox","auth":{"token_env":"X"}}]}`, "provider is one of"},
 		{`{"accounts":[{"provider":"google","auth":{}}]}`, "exactly one"},
@@ -461,5 +487,170 @@ func TestTestAccount(t *testing.T) {
 	_, text := call(t, session(t, f), "test_account", nil)
 	if !strings.Contains(text, `"ok":false`) || !strings.Contains(text, "reconnect") {
 		t.Errorf("revoked: %s", text)
+	}
+}
+
+// nested gives Engineering and Backend, which is inside it; all gives the
+// whole account too.
+func nested(t *testing.T, all bool) (*fakeDrive, *Files) {
+	return setupPlaces(t, func(a *AccountConfig) { a.All = all },
+		PlaceConfig{Name: "Engineering", ID: "eng", Parents: []string{"root-id"}},
+		PlaceConfig{Name: "Backend", ID: "backend", Parents: []string{"root-id", "eng", "teams"}})
+}
+
+type check struct {
+	tool string
+	args map[string]any
+	ok   bool
+	want string
+}
+
+func runChecks(t *testing.T, cs *mcp.ClientSession, checks []check) {
+	t.Helper()
+	for _, c := range checks {
+		res, text := call(t, cs, c.tool, c.args)
+		if res.IsError == c.ok || !strings.Contains(text, c.want) {
+			t.Errorf("%s %v: error=%v %q, want ok=%v with %q", c.tool, c.args, res.IsError, text, c.ok, c.want)
+		}
+	}
+}
+
+const inBackend = `this item is in folder "Backend": name that folder`
+
+func TestWholeAccount(t *testing.T) {
+	d, f := nested(t, true)
+	cs := session(t, f)
+	_, text := call(t, cs, "list_folders", nil)
+	if !strings.Contains(text, `{"account":"drive","all":true,"name":"drive"}`) {
+		t.Errorf("list_folders: %s", text)
+	}
+	runChecks(t, cs, []check{
+		{"read_file", map[string]any{"folder": "drive", "id": "secret"}, true, "secret budget"},  // anywhere in the drive
+		{"read_file", map[string]any{"folder": "drive", "id": "facture"}, true, "facture 42"},    // in a folder not given
+		{"read_file", map[string]any{"folder": "drive", "id": "shared"}, true, "roadmap shared"}, // shared with the user
+		{"read_file", map[string]any{"folder": "drive", "id": "link"}, true, "secret budget"},    // a shortcut, by its target
+		{"read_file", map[string]any{"folder": "drive", "id": "nope"}, false, "not in the folder"},
+		{"read_file", map[string]any{"folder": "drive", "id": "plan"}, false, `this item is in folder "Engineering"`},
+		{"read_file", map[string]any{"folder": "drive", "id": "api"}, false, inBackend},
+		{"list_files", map[string]any{"folder": "drive", "id": "perso"}, true, "secret.txt"},
+		{"list_files", map[string]any{"folder": "drive", "id": sharedWithMe}, true, "shared.txt"},
+		{"list_files", map[string]any{"folder": "drive", "id": "eng"}, false, `this item is in folder "Engineering"`},
+		{"trash_file", map[string]any{"folder": "drive", "id": "root-id"}, false, "folder given to Eriphe itself"},
+		{"trash_file", map[string]any{"folder": "drive", "id": "root"}, false, "folder given to Eriphe itself"},
+		{"trash_file", map[string]any{"folder": "drive", "id": sharedWithMe}, false, "folder given to Eriphe itself"},
+		{"trash_file", map[string]any{"folder": "drive", "id": "eng"}, false, `this item is in folder "Engineering"`},
+		{"write_file", map[string]any{"folder": "drive", "parent": sharedWithMe, "name": "x.txt", "content": "x"}, false, "Shared with me"},
+	})
+	// Its top level: the user's own drive, Shared with me, the shared drives.
+	_, text = call(t, cs, "list_files", map[string]any{"folder": "drive"})
+	for _, want := range []string{`"id":"root-id"`, `"id":"` + sharedWithMe + `"`, `"Team"`, `"place":"drive"`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("top level: no %s in %s", want, text)
+		}
+	}
+	// Written at its top level: in the user's own drive.
+	_, text = call(t, cs, "write_file", map[string]any{"folder": "drive", "name": "top.txt", "content": "x"})
+	var out writeOut
+	json.Unmarshal([]byte(text), &out)
+	if f := d.files[out.ID]; f == nil || f.Parents[0] != "root-id" {
+		t.Errorf("write at the top: %s", text)
+	}
+	// Search without a folder searches the whole account too.
+	_, text = call(t, cs, "search_files", map[string]any{"text": "budget"})
+	if !strings.Contains(text, `"id":"secret"`) || !strings.Contains(text, `"place":"drive"`) {
+		t.Errorf("search: %s", text)
+	}
+
+	// The account not given whole: only its places, and no place named after it.
+	_, f = nested(t, false)
+	cs = session(t, f)
+	runChecks(t, cs, []check{
+		{"read_file", map[string]any{"folder": "Engineering", "id": "secret"}, false, "not in the folder"},
+		{"read_file", map[string]any{"folder": "Engineering", "id": "shared"}, false, "not in the folder"},
+		{"read_file", map[string]any{"folder": "drive", "id": "secret"}, false, "no folder"},
+	})
+	_, text = call(t, cs, "search_files", map[string]any{"text": "budget"})
+	if strings.Contains(text, `"id":"secret"`) || strings.Contains(text, `"id":"facture"`) {
+		t.Errorf("search outside the places: %s", text)
+	}
+}
+
+func TestDeepestPlaceDecides(t *testing.T) {
+	d, f := nested(t, false)
+	cs := session(t, f)
+	runChecks(t, cs, []check{
+		{"read_file", map[string]any{"folder": "Engineering", "id": "plan"}, true, "roadmap plan"},
+		{"read_file", map[string]any{"folder": "Engineering", "id": "api"}, false, inBackend},
+		{"read_file", map[string]any{"folder": "Engineering", "id": "main"}, false, inBackend}, // two levels into Backend
+		{"read_file", map[string]any{"folder": "Engineering", "id": "link-api"}, false, inBackend},
+		{"read_file", map[string]any{"folder": "Backend", "id": "api"}, true, "roadmap api"},
+		{"read_file", map[string]any{"folder": "Backend", "id": "main"}, true, "roadmap main"},
+		{"read_file", map[string]any{"folder": "Backend", "id": "plan"}, false, "not in the folder"},
+		{"list_files", map[string]any{"folder": "Engineering", "id": "teams"}, true, "Backend"},
+		{"list_files", map[string]any{"folder": "Engineering", "id": "backend"}, false, inBackend},
+		{"list_files", map[string]any{"folder": "Engineering", "id": "srv"}, false, inBackend},
+		{"list_files", map[string]any{"folder": "Backend", "id": "srv"}, true, "main.txt"},
+		{"write_file", map[string]any{"folder": "Engineering", "parent": "srv", "name": "x.txt", "content": "x"}, false, inBackend},
+		{"write_file", map[string]any{"folder": "Engineering", "parent": "backend", "name": "x.txt", "content": "x"}, false, inBackend},
+		{"update_file", map[string]any{"folder": "Engineering", "id": "api", "content": "x"}, false, inBackend},
+		{"trash_file", map[string]any{"folder": "Engineering", "id": "api"}, false, inBackend},
+		{"trash_file", map[string]any{"folder": "Engineering", "id": "backend"}, false, inBackend},
+		{"trash_file", map[string]any{"folder": "Backend", "id": "backend"}, false, "folder given to Eriphe itself"},
+		// A folder holding a nested place is not trashed through its parent.
+		{"trash_file", map[string]any{"folder": "Engineering", "id": "teams"}, false, `holds folder "Backend"`},
+	})
+	_, text := call(t, cs, "write_file", map[string]any{"folder": "Backend", "parent": "srv", "name": "x.txt", "content": "x"})
+	var out writeOut
+	json.Unmarshal([]byte(text), &out)
+	if f := d.files[out.ID]; f == nil || f.Parents[0] != "srv" || out.Folder != "Backend" {
+		t.Errorf("write in Backend: %s", text)
+	}
+	if res, text := call(t, cs, "trash_file", map[string]any{"folder": "Backend", "id": "api"}); res.IsError {
+		t.Errorf("trash in Backend: %s", text)
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.files["api"].Trashed || d.files["teams"].Trashed || d.files["backend"].Trashed {
+		t.Error("trashed the wrong items")
+	}
+}
+
+func TestPlacesInListingsAndSearch(t *testing.T) {
+	_, f := nested(t, true)
+	cs := session(t, f)
+	for _, c := range []struct {
+		tool string
+		args map[string]any
+		want map[string]string // id: its place; "" for not there
+	}{
+		{"list_files", map[string]any{"folder": "Engineering"}, map[string]string{"plan": "Engineering", "teams": "Engineering", "link-api": "Engineering"}},
+		{"list_files", map[string]any{"folder": "Engineering", "id": "teams"}, map[string]string{"backend": "Backend"}},
+		{"list_files", map[string]any{"folder": "Backend"}, map[string]string{"api": "Backend", "srv": "Backend"}},
+		{"list_files", map[string]any{"folder": "drive", "id": "root-id"}, map[string]string{"eng": "Engineering", "perso": "drive", "compta": "drive"}},
+		{"search_files", map[string]any{"text": "roadmap"}, map[string]string{"plan": "Engineering", "api": "Backend", "main": "Backend", "shared": "drive"}},
+		{"search_files", map[string]any{"folder": "Engineering", "text": "roadmap"}, map[string]string{"plan": "Engineering", "api": "Backend", "main": "Backend", "shared": ""}},
+		{"search_files", map[string]any{"folder": "Backend", "text": "roadmap"}, map[string]string{"api": "Backend", "main": "Backend", "plan": ""}},
+		{"search_files", map[string]any{"folder": "Backend", "text": "Backend"}, map[string]string{"backend": ""}}, // never the folder itself
+	} {
+		res, text := call(t, cs, c.tool, c.args)
+		if res.IsError {
+			t.Errorf("%s %v: %s", c.tool, c.args, text)
+			continue
+		}
+		var out struct {
+			Items []placedItem `json:"items"`
+		}
+		if err := json.Unmarshal([]byte(text), &out); err != nil {
+			t.Fatalf("%v: %s", err, text)
+		}
+		got := map[string]string{}
+		for _, it := range out.Items {
+			got[it.ID] = it.Place
+		}
+		for id, want := range c.want {
+			if got[id] != want {
+				t.Errorf("%s %v: %s in %q, want %q", c.tool, c.args, id, got[id], want)
+			}
+		}
 	}
 }
