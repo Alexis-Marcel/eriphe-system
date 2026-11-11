@@ -26,9 +26,10 @@ import (
 //     process. The process sees one client: whatever state it keeps
 //     (a selected mailbox, a working directory, a login) is shared by every
 //     session, and its notifications (progress, logs) and its requests
-//     (sampling, elicitation) are not relayed. Only tools are relayed. The
-//     bridge outlives the container: sessions survive a restart, and the
-//     tools are listed again (tools/list_changed) when it comes back.
+//     (sampling, elicitation) are not relayed. Its tools and its resources
+//     (the mail server's eriphe://events) are relayed. The bridge outlives
+//     the container: sessions survive a restart, and the tools and
+//     resources are listed again (list_changed) when it comes back.
 
 func (n *node) handleServiceMCP(w http.ResponseWriter, r *http.Request) {
 	s := n.getService(r.PathValue("name"))
@@ -63,7 +64,8 @@ func (n *node) handleServiceMCP(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-// bridge serves the tools of a stdio MCP server to many sessions.
+// bridge serves the tools and resources of a stdio MCP server to many
+// sessions.
 type bridge struct {
 	name string
 
@@ -72,9 +74,12 @@ type bridge struct {
 	handler http.Handler // its streamable HTTP endpoint
 	cs      *mcp.ClientSession
 	tools   map[string]bool
+	res     map[string]bool // resources, by URI
 }
 
-func newBridge(name string) *bridge { return &bridge{name: name, tools: map[string]bool{}} }
+func newBridge(name string) *bridge {
+	return &bridge{name: name, tools: map[string]bool{}, res: map[string]bool{}}
+}
 
 func (b *bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	b.mu.Lock()
@@ -90,13 +95,21 @@ func (b *bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var errRestarting = errors.New("the service is restarting, try again shortly")
 
 // serve speaks MCP with the server on r and w: it initializes, publishes
-// its tools, calls ready, and returns when the connection ends.
+// its tools and resources, calls ready, and returns when the connection
+// ends.
 func (b *bridge) serve(ctx context.Context, r io.ReadCloser, w io.WriteCloser, ready func()) error {
 	client := mcp.NewClient(&mcp.Implementation{Name: "eriphe-node", Version: "0"}, &mcp.ClientOptions{
 		ToolListChangedHandler: func(_ context.Context, req *mcp.ToolListChangedRequest) {
 			go func() {
 				if err := b.syncTools(context.Background(), req.Session); err != nil {
 					log.Printf("service %s: tools: %v", b.name, err)
+				}
+			}()
+		},
+		ResourceListChangedHandler: func(_ context.Context, req *mcp.ResourceListChangedRequest) {
+			go func() {
+				if err := b.syncResources(context.Background(), req.Session); err != nil {
+					log.Printf("service %s: resources: %v", b.name, err)
 				}
 			}()
 		},
@@ -118,6 +131,9 @@ func (b *bridge) serve(ctx context.Context, r io.ReadCloser, w io.WriteCloser, r
 			impl = init.ServerInfo
 			opts.Instructions = init.Instructions
 		}
+		if offersResources(cs) {
+			opts.Capabilities.Resources = &mcp.ResourceCapabilities{ListChanged: true}
+		}
 		b.server = mcp.NewServer(impl, opts)
 		b.handler = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return b.server },
 			&mcp.StreamableHTTPOptions{DisableLocalhostProtection: true, SessionTimeout: time.Hour})
@@ -128,6 +144,11 @@ func (b *bridge) serve(ctx context.Context, r io.ReadCloser, w io.WriteCloser, r
 		cs.Close()
 		b.detach(cs)
 		return fmt.Errorf("tools/list: %w", err)
+	}
+	if err := b.syncResources(ctx, cs); err != nil {
+		cs.Close()
+		b.detach(cs)
+		return fmt.Errorf("resources/list: %w", err)
 	}
 	ready()
 	err = cs.Wait()
@@ -184,6 +205,57 @@ func (b *bridge) syncTools(ctx context.Context, cs *mcp.ClientSession) error {
 	}
 	b.tools = seen
 	return nil
+}
+
+func offersResources(cs *mcp.ClientSession) bool {
+	init := cs.InitializeResult()
+	return init != nil && init.Capabilities != nil && init.Capabilities.Resources != nil
+}
+
+// syncResources makes the bridge's resources those of the server (none
+// when it offers none).
+func (b *bridge) syncResources(ctx context.Context, cs *mcp.ClientSession) error {
+	var res []*mcp.Resource
+	if offersResources(cs) {
+		ctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		for r, err := range cs.Resources(ctx, nil) {
+			if err != nil {
+				return err
+			}
+			res = append(res, r)
+		}
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.cs != cs {
+		return nil // an older connection
+	}
+	seen := map[string]bool{}
+	for _, r := range res {
+		b.server.AddResource(r, b.read)
+		seen[r.URI] = true
+	}
+	var gone []string
+	for uri := range b.res {
+		if !seen[uri] {
+			gone = append(gone, uri)
+		}
+	}
+	if len(gone) > 0 {
+		b.server.RemoveResources(gone...)
+	}
+	b.res = seen
+	return nil
+}
+
+// read relays a resource read to the server.
+func (b *bridge) read(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	cs := b.current()
+	if cs == nil {
+		return nil, errRestarting
+	}
+	return cs.ReadResource(ctx, &mcp.ReadResourceParams{Meta: req.Params.Meta, URI: req.Params.URI})
 }
 
 // addTool adds a tool the go-sdk may refuse (a schema that is not an object).
