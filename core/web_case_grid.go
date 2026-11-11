@@ -21,11 +21,14 @@ type caseGrid struct {
 	Post   string            // where a change goes
 	Hidden map[string]string // sent with it
 	Follow string            // the text key of the "as …" column, "" for none
-	Hint   string            // the text key pattern of a case's hint
-	Greyed string            // the text key of why a case is greyed
-	Rows   []caseRow
-	Error  string
-	Saved  bool
+	// FollowName is that column's title as is ("As Projects"), when the
+	// place follows another one by its name.
+	FollowName string
+	Hint       string // the text key pattern of a case's hint
+	Greyed     string // the text key of why a case is greyed
+	Rows       []caseRow
+	Error      string
+	Saved      bool
 }
 
 // caseRow is one case of a place: its own value ("" follows) and the

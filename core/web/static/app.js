@@ -623,6 +623,17 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// A tree's chevron opens and closes its folder: its children are fetched
+// the first time (htmx), then only shown or hidden (places.html).
+document.addEventListener("click", (e) => {
+  const chev = e.target.closest("[data-tree-toggle]");
+  if (!chev) return;
+  const list = chev.closest("li").querySelector(":scope > .tree");
+  const open = chev.getAttribute("aria-expanded") !== "true";
+  chev.setAttribute("aria-expanded", open);
+  list.hidden = !open;
+});
+
 function openDialog(d) {
   if (!d.open) d.showModal();
   const field = d.dataset.focusOnOpen && document.getElementById(d.dataset.focusOnOpen);

@@ -9,31 +9,36 @@ import (
 	"time"
 )
 
-// A tool's places, on the page of one of its accounts (Settings → Tools →
-// <account> → Folders, places.go): one list, the folders given first, each
-// with the summary of its cases (Lire, Modifier, Supprimer: its account's,
-// or its own, set in its drawer, web_case_grid.go), then the account's own
-// folders to give more, browsed through the tool.
+// A Drive account's page (Settings → Tools → <account>, places.go): its
+// tree. The root, "the whole Drive", is the account's grid, Never until
+// set; a folder follows its parent (a top folder, the account), or has
+// cases of its own, above or below, set in its drawer (web_case_grid.go).
+// Folders open as an accordion, their children browsed through the tool
+// when opened; a folder with cases of its own is kept in the tool's
+// configuration, one without is not.
 
-// toolFolders is the page's list: the folders of an account, the given
-// ones first.
-type toolFolders struct {
-	Tool, Base string
-	Account    string
-	Status     string // the tool's: ready, connecting…
-	CanWrite   bool   // the account's credential writes: else its cases above Lire are greyed
-	Parent     string // the folder browsed, "" for the top
-	Name       string // … and its name
-	Items      []folderItem
-	Next       string
-	Error      string
+// placeTree is the tree of one account, on its access page.
+type placeTree struct {
+	Base, Account string
+	ReadOnly      bool // its credential only reads: above Lire is greyed
+	Root          caseGrid
 }
 
-// folderItem is one line: a folder given, with its cases, or one to give.
-type folderItem struct {
+// treeLevel is the folders under one folder of the tree ("" for the top).
+type treeLevel struct {
+	Base, Account string
+	Parents       string // the ids from the top to this level's folder, comma separated
+	PName         string // that folder's name
+	Items         []treeItem
+	Next, Error   string
+	NotReady      bool
+}
+
+// treeItem is one folder of a level: its children's Parents, and its grid.
+type treeItem struct {
 	placeItem
-	Given bool // its Name is then the given folder's, as tasks name it
-	Grid  caseGrid
+	Path string
+	Grid caseGrid
 }
 
 // placeCount is "no folder", "1 folder", "3 folders".
@@ -48,11 +53,9 @@ func placeCount(lang string, n int) string {
 }
 
 func (w *web) placeRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /settings/tools/{name}/places", w.auth(w.handlePlaces))
-	mux.Handle("POST /settings/tools/{name}/places", w.auth(w.handlePlaceGive))
-	mux.Handle("GET /settings/tools/{name}/places/grid", w.auth(w.handlePlaceGrid))
-	mux.Handle("POST /settings/tools/{name}/places/case", w.auth(w.handlePlaceCase))
-	mux.Handle("POST /settings/tools/{name}/places/remove", w.auth(w.handlePlaceRemove))
+	mux.Handle("GET /settings/tools/{name}/tree", w.auth(w.handleTree))
+	mux.Handle("GET /settings/tools/{name}/tree/grid", w.auth(w.handleTreeGrid))
+	mux.Handle("POST /settings/tools/{name}/tree/case", w.auth(w.handleTreeCase))
 	mux.Handle("GET /settings/connections/{id}/places", w.auth(w.handleConnPlaces))
 	mux.Handle("GET /settings/connections/{id}/places/grid", w.auth(w.handleConnPlaceGrid))
 	mux.Handle("POST /settings/connections/{id}/places/case", w.auth(w.handleConnPlaceCase))
@@ -68,61 +71,69 @@ func (w *web) placesTool(rw http.ResponseWriter, r *http.Request) (string, bool)
 	return name, true
 }
 
-// toolFolders is the list of one account's folders: the given ones, then,
-// browsed through the tool, the account's folders under parent (the given
-// ones of them first).
-func (w *web) toolFolders(ctx context.Context, tool, account, parent, name, page string) toolFolders {
+// treeBase is the address of a tool's tree.
+func treeBase(tool string) string { return "/settings/tools/" + tool + "/tree" }
+
+// splitParents reads a Parents list.
+func splitParents(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, ",")
+}
+
+// placeTreeOf is an account's tree, for its page; ok is false for a tool
+// without places.
+func (w *web) placeTreeOf(lang, tool, account string) (placeTree, bool) {
+	if _, _, ok := keeperOf(w.c.conf().Servers[tool]); !ok || account == "" {
+		return placeTree{}, false
+	}
+	return placeTree{Base: treeBase(tool), Account: account, ReadOnly: !w.canWrite(tool, account), Root: w.treeGrid(lang, tool, account, placeRef{}, "")}, true
+}
+
+// canWrite tells whether an account's credential writes.
+func (w *web) canWrite(tool, account string) bool {
+	for _, a := range w.c.placeAccounts(tool) {
+		if strings.EqualFold(a.Name, account) {
+			return a.CanWrite
+		}
+	}
+	return false
+}
+
+// treeGrid is the grid of the root (ref.ID "") or of a folder: its own
+// cases, and what it follows, its parent's (pname) or the account's.
+func (w *web) treeGrid(lang, tool, account string, ref placeRef, pname string) caseGrid {
 	srv := w.c.conf().Servers[tool]
-	v := toolFolders{Tool: tool, Base: "/settings/tools/" + tool + "/places", Parent: parent, Name: name}
-	accounts := w.c.placeAccounts(tool)
-	for _, a := range accounts {
-		if strings.EqualFold(a.Name, account) || v.Account == "" {
-			v.Account, v.CanWrite = a.Name, a.CanWrite
+	k, _, _ := keeperOf(srv)
+	write := w.canWrite(tool, account)
+	g := caseGrid{Key: caseKey(account + "/" + ref.ID), Title: ref.Name, Sub: account, Post: treeBase(tool) + "/case",
+		Hidden: map[string]string{"account": account, "id": ref.ID, "name": ref.Name, "parents": strings.Join(ref.Parents, ","), "pname": pname},
+		Hint:   "places.cat.%s.hint", Greyed: "places.ceiling"}
+	if ref.ID == "" { // the root: the account's grid, nothing above it
+		g.Title = tr(lang, "tree.root")
+		root := srv.rootAccess(account)
+		for _, c := range k.Card.cases() {
+			v := root.grid.value(c)
+			g.Rows = append(g.Rows, caseRow{Category: c, Own: v, Follows: v, Greyed: !write && c != catRead})
+		}
+		return g.greyed()
+	}
+	g.Follow = "places.followcol"
+	if len(ref.Parents) > 0 {
+		g.FollowName = fmt.Sprintf(tr(lang, "tree.followas"), pname)
+	}
+	for _, p := range placesIn(tool, srv) {
+		if p.ID == ref.ID && !p.Root {
+			g.Title = p.Name
 		}
 	}
-	given := map[string]folderItem{}
-	var order []string
-	for _, p := range placesOfAccount(tool, srv, v.Account, len(accounts)) {
-		it := folderItem{placeItem: placeItem{ID: p.ID, Name: p.Name}, Given: true}
-		it.Grid, _ = w.placeGrid(tool, p.ID)
-		given[p.ID] = it
-		order = append(order, p.ID)
+	above := srv.placeAccess(Place{Account: account, Parents: ref.Parents})
+	own := srv.PlaceGrids[ref.ID]
+	for _, c := range k.Card.cases() {
+		g.Rows = append(g.Rows, caseRow{Category: c, Own: own.raw(c), Follows: above.grid.value(c), Greyed: !write && c != catRead})
 	}
-	all := func() []folderItem {
-		var out []folderItem
-		for _, id := range order {
-			out = append(out, given[id])
-		}
-		return out
-	}
-	if parent == "" {
-		v.Items = all()
-	}
-	if u := w.c.pool.get(tool); u != nil {
-		v.Status, _, _ = u.snapshot()
-	}
-	if v.Status != statusReady || v.Account == "" {
-		v.Items = all() // what is given stays in view, wherever the browsing was
-		return v
-	}
-	items, next, err := w.c.browsePlaces(ctx, tool, v.Account, parent, page)
-	if err != nil {
-		v.Error, v.Items = err.Error(), all()
-		return v
-	}
-	var mine, others []folderItem
-	for _, it := range items {
-		g, ok := given[it.ID]
-		switch {
-		case ok && parent != "":
-			g.placeItem.Link = it.Link
-			mine = append(mine, g)
-		case !ok:
-			others = append(others, folderItem{placeItem: it})
-		}
-	}
-	v.Items, v.Next = append(append(v.Items, mine...), others...), next
-	return v
+	return g.greyed()
 }
 
 // raw is a grid's own value of a category, "" when it says nothing.
@@ -138,7 +149,53 @@ func (g accessGrid) raw(category string) string {
 	return g.Send
 }
 
-func (w *web) handlePlaces(rw http.ResponseWriter, r *http.Request, s *session) {
+// treeLevelOf is the folders under parents' last, browsed through the tool;
+// while it starts, the top shows the folders kept, with cases of their own.
+func (w *web) treeLevelOf(ctx context.Context, lang, tool, account, parents, pname, page string) treeLevel {
+	v := treeLevel{Base: treeBase(tool), Account: account, Parents: parents, PName: pname}
+	chain := splitParents(parents)
+	item := func(it placeItem) treeItem {
+		path := append(slices.Clone(chain), it.ID)
+		return treeItem{placeItem: it, Path: strings.Join(path, ","),
+			Grid: w.treeGrid(lang, tool, account, placeRef{Account: account, ID: it.ID, Name: it.Name, Parents: chain}, pname)}
+	}
+	status := ""
+	if u := w.c.pool.get(tool); u != nil {
+		status, _, _ = u.snapshot()
+	}
+	if status != statusReady {
+		v.NotReady = true
+		if len(chain) == 0 {
+			srv := w.c.conf().Servers[tool]
+			for _, p := range placesOfAccount(tool, srv, account, len(w.c.placeAccounts(tool))) {
+				if !p.Root && len(p.Parents) == 0 {
+					v.Items = append(v.Items, item(placeItem{ID: p.ID, Name: p.Name}))
+				}
+			}
+		}
+		return v
+	}
+	parent := ""
+	if len(chain) > 0 {
+		parent = chain[len(chain)-1]
+	}
+	items, next, err := w.c.browsePlaces(ctx, tool, account, parent, page)
+	if err != nil {
+		v.Error = err.Error()
+		return v
+	}
+	for _, it := range items {
+		if it.ID != "shared-with-me" || len(chain) == 0 {
+			v.Items = append(v.Items, item(it))
+		}
+	}
+	v.Next = next
+	return v
+}
+
+// handleTree answers an opened folder with its children (an accordion's
+// level), or a level's next page.
+func (w *web) handleTree(rw http.ResponseWriter, r *http.Request, s *session) {
 	tool, ok := w.placesTool(rw, r)
 	if !ok {
 		return
@@ -146,99 +203,65 @@ func (w *web) handlePlaces(rw http.ResponseWriter, r *http.Request, s *session) 
 	q := r.URL.Query()
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	v := w.toolFolders(ctx, tool, q.Get("account"), q.Get("parent"), q.Get("name"), q.Get("page"))
-	if v.Error != "" {
-		v.Error = w.connError(r, fmt.Errorf("%s", v.Error))
-	}
-	if r.Header.Get("HX-Request") != "" && r.Header.Get("HX-Target") == "tool-folders" {
-		w.render(rw, r, s, "settings", "tool-folders-frag", page{Data: v})
-		return
-	}
-	w.render(rw, r, s, "settings", "", page{Title: "places.title", Nav: "settings", Tab: "tools", View: "tool-folders", Data: v})
+	v := w.treeLevelOf(ctx, w.lang(r), tool, q.Get("account"), q.Get("parents"), q.Get("pname"), q.Get("page"))
+	w.render(rw, r, s, "settings", "tree-level-frag", page{Data: v})
 }
 
-// foldersAgain answers a change with the list again, where it was.
-func (w *web) foldersAgain(rw http.ResponseWriter, r *http.Request, s *session, tool string, err error) {
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	v := w.toolFolders(ctx, tool, r.PostFormValue("account"), r.PostFormValue("parent"), r.PostFormValue("parent_name"), "")
-	if v.Error != "" {
-		v.Error = w.connError(r, fmt.Errorf("%s", v.Error))
-	}
-	if err != nil {
-		v.Error = w.connError(r, err)
-	} else {
-		w.notify()
-	}
-	w.render(rw, r, s, "settings", "tool-folders-frag", page{Data: v})
+// treeRef is the folder a request names; ID "" is the root.
+func treeRef(get func(string) string) (placeRef, string) {
+	return placeRef{Account: get("account"), ID: get("id"), Name: get("name"), Parents: splitParents(get("parents"))}, get("pname")
 }
 
-func (w *web) handlePlaceGive(rw http.ResponseWriter, r *http.Request, s *session) {
-	if tool, ok := w.placesTool(rw, r); ok {
-		w.foldersAgain(rw, r, s, tool, w.c.givePlace(tool, r.PostFormValue("account"), r.PostFormValue("id"), r.PostFormValue("name")))
-	}
-}
-
-// placeGrid is a given folder's grid: its account's cases, and its own.
-func (w *web) placeGrid(tool, id string) (caseGrid, bool) {
-	srv := w.c.conf().Servers[tool]
-	k, _, _ := keeperOf(srv)
-	i := slices.IndexFunc(placesIn(tool, srv), func(p Place) bool { return p.ID == id })
-	if i < 0 {
-		return caseGrid{}, false
-	}
-	p := placesIn(tool, srv)[i]
-	write := false
-	for _, a := range w.c.placeAccounts(tool) {
-		if strings.EqualFold(a.Name, p.Account) {
-			write = a.CanWrite
-		}
-	}
-	g := caseGrid{Key: caseKey(p.ID), Title: p.Name, Sub: p.Account, Post: "/settings/tools/" + tool + "/places/case",
-		Hidden: map[string]string{"id": p.ID}, Follow: "places.followcol", Hint: "places.cat.%s.hint", Greyed: "places.ceiling"}
-	account := srv.placeAccess(Place{Account: p.Account}) // its account's, without its own cases
-	own := srv.PlaceGrids[p.ID]
-	for _, c := range k.Card.cases() {
-		g.Rows = append(g.Rows, caseRow{Category: c, Own: own.raw(c), Follows: account.grid.value(c), Greyed: !write && c != catRead})
-	}
-	return g.greyed(), true
-}
-
-func (w *web) handlePlaceGrid(rw http.ResponseWriter, r *http.Request, s *session) {
+func (w *web) handleTreeGrid(rw http.ResponseWriter, r *http.Request, s *session) {
 	tool, ok := w.placesTool(rw, r)
 	if !ok {
 		return
 	}
-	g, ok := w.placeGrid(tool, r.URL.Query().Get("id"))
-	if !ok {
-		http.NotFound(rw, r)
-		return
-	}
-	w.render(rw, r, s, "settings", "case-drawer", page{Data: g})
+	ref, pname := treeRef(r.URL.Query().Get)
+	w.render(rw, r, s, "settings", "case-drawer", page{Data: w.treeGrid(w.lang(r), tool, ref.Account, ref, pname)})
 }
 
-// handlePlaceCase sets the cases of a given folder its drawer changed, and
-// answers with its grid and its summary in the list.
-func (w *web) handlePlaceCase(rw http.ResponseWriter, r *http.Request, s *session) {
+// handleTreeCase sets the cases its drawer changed: the root's go to the
+// account's grid (its exceptions kept), a folder's to its own.
+func (w *web) handleTreeCase(rw http.ResponseWriter, r *http.Request, s *session) {
 	tool, ok := w.placesTool(rw, r)
 	if !ok {
 		return
 	}
-	id := r.PostFormValue("id")
+	ref, pname := treeRef(r.PostFormValue)
 	srv := w.c.conf().Servers[tool]
 	k, _, _ := keeperOf(srv)
 	var err error
-	for _, c := range postedCases(r, k.Card.cases(), srv.PlaceGrids[id].raw) {
-		if err = w.c.setPlaceCase(tool, id, c[0], c[1]); err != nil {
-			break
+	if ref.ID == "" {
+		root := srv.rootAccess(ref.Account)
+		g := root.grid
+		changed := false
+		for _, c := range postedCases(r, k.Card.cases(), g.value) {
+			if c[1] != "" {
+				g, changed = g.with(c[0], c[1]), true
+			}
+		}
+		if changed {
+			err = w.c.setAccountGrid(tool, ref.Account, accountGrid{Grid: g, Exceptions: w.accountExceptions(srv, ref.Account)})
+		}
+	} else {
+		for _, c := range postedCases(r, k.Card.cases(), srv.PlaceGrids[ref.ID].raw) {
+			if err = w.c.setPlaceCase(tool, ref, c[0], c[1]); err != nil {
+				break
+			}
 		}
 	}
-	g, ok := w.placeGrid(tool, id)
-	if !ok {
-		http.NotFound(rw, r)
-		return
+	w.caseAnswer(rw, r, s, w.treeGrid(w.lang(r), tool, ref.Account, ref, pname), err)
+}
+
+// accountExceptions are an account's own exceptions.
+func (w *web) accountExceptions(srv Server, account string) map[string]string {
+	for name, g := range srv.AccountGrids {
+		if strings.EqualFold(name, account) {
+			return g.Exceptions
+		}
 	}
-	w.caseAnswer(rw, r, s, g, err)
+	return nil
 }
 
 // caseAnswer is a drawer's grid again after a change, with the place's
@@ -251,12 +274,6 @@ func (w *web) caseAnswer(rw http.ResponseWriter, r *http.Request, s *session, g 
 		w.notify()
 	}
 	w.render(rw, r, s, "settings", "case-grid-frag", page{Data: g})
-}
-
-func (w *web) handlePlaceRemove(rw http.ResponseWriter, r *http.Request, s *session) {
-	if tool, ok := w.placesTool(rw, r); ok {
-		w.foldersAgain(rw, r, s, tool, w.c.removePlace(tool, r.PostFormValue("id")))
-	}
 }
 
 // The repositories of a connection whose provider mints tokens

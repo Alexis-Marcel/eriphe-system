@@ -175,10 +175,11 @@ func (c *core) connectionBySecret(st svcServer, a svcAccount) (connection, bool)
 }
 
 // kindReadOnly tells whether the tool of a kind is set to read only: it
-// then gets a token that reads, whatever the page asked.
+// then gets a token that reads, whatever the page asked. A tool with places
+// never is: its folders say what it writes.
 func (c *core) kindReadOnly(kind string) bool {
 	svc, ok := serviceByID(kind)
-	if !ok {
+	if !ok || svc.Places != nil { // a tree of folders: its folders write, whatever its root says
 		return false
 	}
 	st, ok := c.serviceServer(svc)

@@ -1207,8 +1207,8 @@ helper in the task's environment. Each request crosses the node's relay, as for 
 git: the tool's grid (Lire · Modifier · Supprimer · Envoyer) is every repository's default, and a
 repository may set a case of its own, above or below it, on Settings → Tools → GitHub →
 "Dépôts" (the tool's `place_grids`, by `owner/name`; its `place_args` say a call names its
-repository by `owner` and `repo`): each repository a line with the summary of its own cases, its
-"Droits" opening its [grid in a drawer](#a-places-grid) (`GET /settings/connections/{id}/places/grid?id=`,
+repository by `owner` and `repo`): each repository a line with the summary of its own cases,
+its name opening its [grid in a drawer](#a-places-grid) (`GET /settings/connections/{id}/places/grid?id=`,
 `POST …/places/case`). A tool that only reads is its repositories' ceiling. In git, the
 relay reads the commands of a push (`pushCommands`, the pkt-lines before the pack) and decides each
 ref: a deletion is Supprimer, the default branch (asked of GitHub, kept ten minutes) or a tag is
@@ -1684,7 +1684,7 @@ as data (`web_connections.go`): `POST /settings/connections/{provider}/connect` 
 tools ticked (`tool=`, several, `write=`, `account=` to add to an account), or reconnects one
 (`account=` and `reconnect=1`: the tools it has, or else the ones its scopes serve, with the rights
 they had); `POST /settings/connections/{provider}/remove` (`account=`) removes it, as above. A
-tool that has places shows "Dossiers", its page ([places](#places)).
+tool that has places has them on its account's page, as a tree ([places](#places)).
 
 **Providers are data.** No logic file of core names a provider: Google, Gmail and its products
 are rows of `signin_providers.go`, presets of `presets.go` and words of the text tables; the variables
@@ -1763,12 +1763,15 @@ A folder of the user's Google Drive becomes a Folder given to Eriphe: a name, th
 source, and its rights, set like any tool's: **Lire · Modifier · Supprimer**, each free, on
 approval or never (no Envoyer: nothing of a folder is sent anywhere, so the case is not shown).
 Modifier adds a file or replaces one's content (Drive keeps the old versions); Supprimer moves to
-the trash, where a file stays 30 days. Each Drive account has its grid (the card's
-`AccountLevels`), and each folder may set a case of its own, above or below its account's:
-an action's exception wins, then the folder's case, then the account's (`placeAccess`,
-`access_grid.go`). A call is held to the folder it names (its `folder` argument, the card's
-`Places.Arg`); one naming none takes the strictest of the folders, and must name one when they
-differ on a write. Tasks reach it through `eriphe-files` (servers/files), a local server like
+the trash, where a file stays 30 days. Each Drive account is a tree: its grid (the card's
+`AccountLevels`) is the root, the whole Drive, Never until set (`rootAccess`); a folder follows
+its parent (a top folder, the account), and any folder may set a case of its own, above or below:
+an action's exception wins, then the deepest folder's case, then its parents', then the account's
+(`placeAccess`, `access_grid.go`). A call is held to the folder it names (its `folder` argument,
+the card's `Places.Arg`), and the server makes it name the deepest folder kept that holds what it
+touches; one naming none takes the strictest of the folders, and must name one when they differ
+on a write. With its root above Never, the account is itself a place, named after it (`all` in
+its `TOOL_CONFIG` account). Tasks reach it through `eriphe-files` (servers/files), a local server like
 eriphe-mail, which **keeps every call inside the folders**: it takes only the folder ids it was
 configured with and what is inside them (it walks each id's parents up through the Drive API),
 refuses everything else, never touches the folder itself, and keeps an account core marks
@@ -1783,13 +1786,12 @@ Settings → Tools → Add → Google Drive (the logic in `cloud.go`, the sign-i
 2. **Connect**: the connect page with Drive ticked, the [Google account](#google-accounts-gmail-calendar-drive)
    flow; "Permettre à Eriphe d'écrire" asks for the scope that writes. The account comes back connected, and the
    workspace creates the catalog server `fichiers` (image `ghcr.io/alexis-marcel/eriphe-files`),
-   the account at `reads`: its reads are free, the rest on approval. Set to read only, the tool
-   connects with `drive.readonly` whatever the box says.
-3. **Choose**: once the service runs, each account's "Dossiers" button opens that account's
-   [folders](#places): one list, the folders given first with their cases, then the account's own
-   (My Drive, Shared with me, shared drives), browsed through the server's `browse_places`, each
-   given with "Donner". The chosen folders are written in the service's `TOOL_CONFIG` (`places`),
-   which restarts it; their cases are the server's `place_grids`, by folder id.
+   the account at Never: nothing is reached until the user opens it.
+3. **Choose**: once the service runs, the account's page is its [tree](#places): the whole
+   Drive, then its folders (My Drive, Shared with me, shared drives), browsed through the
+   server's `browse_places`, each opening its drawer. A folder with cases of its own is written in
+   the service's `TOOL_CONFIG` (`places`, with its `parents`), which restarts it; its cases are the
+   server's `place_grids`, by folder id.
 
 `browse_places` is marked `_meta: {"eriphe/setup": true}`: the pool leaves such a tool out of a
 server's tools (`setupTool`, `listTools`), so no grant, no task and not the brain can see or call
@@ -2002,13 +2004,16 @@ both, each with its `source` (`machine`, or `place` with its `tool` and `place_i
 a task gets it. Each source keeps its own store and its own enforcement: a machine's folder is in
 its node's list and mounted by its node; a place stays in its tool's configuration, which its
 server reads and enforces itself, and is lent as `{kind: place}` (its tool whole), not through
-`folders`, which refuses it with that hint. A tool's places are added on its places page (Settings
-→ Tools → an account → Dossiers); "Ne plus partager" in Settings → Dossiers removes either kind.
+`folders`, which refuses it with that hint. A tool's places are set on its account's page
+(Settings → Tools → an account), to which their tile in Settings → Dossiers links; "Ne plus
+partager" there stops sharing a machine's folder.
 
 ### Places
 
-A place is what a tool reaches inside it and the user picked: a drive's folders (`places.go`).
-It follows its account's grid, or sets a case of its own (the server's `place_grids`). A tool has
+A place is what a tool reaches inside it: a drive's folders (`places.go`). A folder follows its
+parent, the top ones the account's grid, which is the root, Never until set; or it sets cases of
+its own (the server's `place_grids`), which keep it in the tool's configuration with its
+`parents`; back to following, it is no longer kept (`setPlaceCase`). A tool has
 places when its card says where it keeps them (`Places`: the key of the list in its
 `TOOL_CONFIG`, `places`, its setup tool that browses them, and the argument its tools name one
 in), so it is found by having places,
@@ -2016,14 +2021,18 @@ never by its name. The tool browses them with a setup tool
 (`eriphe/setup`, never given to a task). Lent to a task as `{kind: place}`, a place lends its whole
 tool.
 
-**Its page.** Settings → Tools → an account → Dossiers (`/settings/tools/{name}/places?account=`,
-`web_places.go`) is one list: the account's folders given, first, each with the summary of its
-own cases, "Droits" (its [grid in a drawer](#a-places-grid), `GET …/places/grid?id=`) and
-"Retirer", then the account's own folders, browsed through its setup tool (`parent=`, `name=`,
-`page=`), each with "Donner". `POST …/places` (`account=`, `id=`, `name=`) gives one,
-`POST …/places/case` (`id=`, `case-<category>=`, empty to follow the account) sets its cases,
-`POST …/places/remove` (`id=`) takes it back. Giving or taking back rewrites the tool's
-configuration, which restarts its server.
+**Its page.** An account's page (Settings → Tools → an account,
+`/settings/tools/{name}/access?account=`, `web_places.go`) is its tree, above its exceptions:
+"Tout le Drive", the root, then its folders as an accordion, a chevron opening one, its children
+browsed through the setup tool when first opened (`GET /settings/tools/{name}/tree?account=`,
+`parents=` the ids from the top, `pname=` the parent's name, `page=`). A click on a name opens its
+[grid in a drawer](#a-places-grid) (`GET …/tree/grid?account=&id=&name=&parents=&pname=`, no `id`
+for the root); a folder's column is "Comme <parent>" ("Comme le compte" at the top). `POST
+…/tree/case` (the same fields, `case-<category>=`, empty to follow) sets a folder's cases, or the
+root's (the account's grid, its exceptions kept). Keeping or letting go of a folder rewrites the
+tool's configuration, which restarts its server. The old account grids were the default of the
+given folders only: once (`legacyPlaceRoot`), each folder took its account's grid under its own
+cases and each account went to Never.
 
 **A place's grid.** A Drive folder, a repository and a machine's folder set their rights in the
 tool's grid (Libre · Sur accord · Jamais by case), in a drawer over their list
@@ -2342,7 +2351,7 @@ Accounts: the provider's mark, the address, "Google · Mail, Agenda, Drive", the
 of its services (Mail, Agenda, Fichiers) with its state, access, reconnect, edit and remove. A
 connected account's card has its actions ([connections](#connections)): reconnect, "Retirer ce
 compte", and the tools its provider serves that it does not have yet ("Ajouter à ce compte").
-The files tool is a row under each account it reads, with that account's folders and "Dossiers". A Gmail on a password goes in the card of its Google address; an
+The files tool is a row under each account it reads, with that account's folders, its page their tree. A Gmail on a password goes in the card of its Google address; an
 Apple account's mail and calendar are one card, an Apple calendar and a Google calendar of one
 address two. Only the list is by account: the servers stay one per service. The other tools of
 one kind (GitHub, Notion…) make one card when there are several: the kind, how many accounts and
