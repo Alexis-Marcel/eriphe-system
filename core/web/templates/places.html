@@ -51,70 +51,38 @@
 </section>
 {{end}}
 
+{{/* A connection's repositories (web_places.go, repoList). */}}
 {{define "places-page"}}{{with .Data}}
 <header class="page-head">
   <a class="back" href="/settings/tools">{{template "i-back"}}{{t "settings.tools"}}</a>
   <div class="form-title"><h2>{{tf "repos.heading" .Tool}}</h2></div>
-  <p>{{t .Lead}}</p>
+  <p>{{t "repos.lead"}}</p>
 </header>
-<div class="stack">
-{{template "places-list" .}}
-{{if .Accounts}}
-<section class="panel" aria-labelledby="places-pick-t">
-  <h3 id="places-pick-t">{{template "i-plus"}}{{t "places.pick"}}</h3>
-  {{if eq .Status "ready"}}<div hx-get="{{.Base}}/browse" hx-trigger="load" hx-swap="outerHTML"><p class="muted small">…</p></div>
-  {{else}}<p class="muted">{{t "places.notready"}}</p>{{end}}
-</section>
-{{else}}<p class="muted">{{t "places.noaccount"}}</p>{{end}}
-</div>
+{{template "repo-list" .}}
 {{end}}{{end}}
 
-{{define "places-list-frag"}}{{template "places-list" .Data}}{{end}}
+{{define "repo-list-frag"}}{{template "repo-list" .Data}}{{end}}
 
-{{/* . is a placesView. */}}
-{{define "places-list"}}{{$v := .}}
-<section class="panel" id="places-list">
-  <h3>{{template "i-check"}}{{t "places.given"}}</h3>
-  {{if $v.Error}}<p class="alert" role="alert">{{$v.Error}}</p>{{end}}
-  {{if $v.Places}}<ul class="place-list">
-  {{range $v.Places}}<li>
-    <span class="place-name">{{.Name}}{{if $v.Many}} <small class="muted">{{.Account}}</small>{{end}}</span>
-    <span class="chip">{{t (printf "places.access.%s" .Access)}}</span>
-    <span class="place-actions">
-      {{if eq .Access "read"}}{{if $v.CanWrite .Account}}<form hx-post="{{$v.Base}}" hx-target="#places-list" hx-swap="outerHTML" class="inline">
-        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="access" value="{{$v.Write}}">
-        <button class="link-btn" type="submit">{{t (printf "places.allowwrite.%s" $v.Write)}}</button></form>{{end}}
-      {{else}}<form hx-post="{{$v.Base}}" hx-target="#places-list" hx-swap="outerHTML" class="inline">
-        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="access" value="read">
-        <button class="link-btn" type="submit">{{t "places.readonly"}}</button></form>{{end}}
-      <form hx-post="{{$v.Base}}/remove" hx-target="#places-list" hx-swap="outerHTML" class="inline">
-        <input type="hidden" name="id" value="{{.ID}}"><button class="link-btn danger" type="submit">{{t "catalog.remove"}}</button></form>
-    </span>
-  </li>{{end}}
-  </ul>{{else}}<p class="muted">{{t "places.none"}}</p>{{end}}
-</section>
-{{end}}
-
-{{define "places-browse"}}{{with .Data}}{{$b := .}}{{$acc := urlquery .Account}}{{$u := printf "%s/browse" .Base}}
-<div id="places-browse" class="stack">
-  {{if .Accounts}}<p class="place-accounts small" role="group" aria-label="{{t "places.accounts"}}">{{t "places.accounts"}}
-    {{range .Accounts}}<button class="fchip" type="button" aria-pressed="{{if eq . $b.Account}}true{{else}}false{{end}}" hx-get="{{$u}}?account={{urlquery .}}" hx-target="#places-browse" hx-swap="outerHTML">{{.}}</button>{{end}}</p>{{end}}
-  {{if .Parent}}<p class="place-path"><button class="link-btn" type="button" hx-get="{{$u}}?account={{$acc}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.top"}}</button> <b>{{.Name}}</b></p>{{end}}
+{{/* . is a repoList. */}}
+{{define "repo-list"}}{{$v := .}}
+<section class="panel stack" id="repo-list">
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  {{if .Ceiling}}<p class="muted small">{{t "repos.ceiling"}}</p>{{end}}
   <ul class="place-list">
-  {{range .Items}}<li>
-    <span class="place-name">{{.Name}}</span>
+  {{range .Items}}{{$it := .}}<li{{if .Own}} class="given"{{end}}>
+    <span class="place-name">{{if .Link}}<a href="{{.Link}}" rel="noopener" target="_blank">{{.Repo}}</a>{{else}}{{.Repo}}{{end}}</span>
     <span class="place-actions">
-      {{if not $b.Flat}}<button class="btn btn-ghost sm" type="button" hx-get="{{$u}}?account={{$acc}}&amp;parent={{urlquery .ID}}&amp;name={{urlquery .Name}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.open"}}</button>{{end}}
-      {{if ne .ID "shared-with-me"}}{{with index $b.Given .ID}}<span class="chip">{{t (printf "places.access.%s" .)}}</span>{{else}}
-      <form hx-post="{{$b.Base}}" hx-target="#places-list" hx-swap="outerHTML" class="inline">
-        <input type="hidden" name="account" value="{{$b.Account}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}">
-        <button class="btn btn-soft sm" type="submit" name="access" value="read">{{t "places.give"}}</button>
-        {{if $b.CanWrite}}<button class="btn btn-soft sm" type="submit" name="access" value="{{$b.Write}}">{{t (printf "places.givewrite.%s" $b.Write)}}</button>{{end}}
-      </form>{{end}}{{end}}
+      {{range .Cases}}<form hx-post="{{$v.Base}}/case" hx-trigger="change" hx-target="#repo-list" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="page" value="{{$v.Page}}"><input type="hidden" name="id" value="{{$it.Repo}}"><input type="hidden" name="category" value="{{.Category}}">
+        <label class="small">{{t (printf "grid.cat.%s" .Category)}}
+          <select name="value"{{if .Greyed}} disabled title="{{t "repos.ceiling"}}"{{end}}>
+            <option value=""{{if not .Own}} selected{{end}}>{{tf "repos.follow" (t (printf "grid.%s" .Account))}}</option>
+            {{$own := .Own}}{{range list "free" "approval" "never"}}<option value="{{.}}"{{if eq . $own}} selected{{end}}>{{t (printf "grid.%s" .)}}</option>{{end}}
+          </select></label>
+      </form>{{end}}
     </span>
   </li>{{else}}<li class="muted small">{{t "places.empty"}}</li>{{end}}
   </ul>
-  {{if .Next}}<button class="btn btn-ghost sm" type="button" hx-get="{{$u}}?account={{$acc}}&amp;parent={{urlquery .Parent}}&amp;name={{urlquery .Name}}&amp;page={{urlquery .Next}}" hx-target="#places-browse" hx-swap="outerHTML">{{t "places.more"}}</button>{{end}}
-</div>
-{{end}}{{end}}
+  {{if .Next}}<button class="btn btn-ghost sm" type="button" hx-get="{{.Base}}?page={{urlquery .Next}}" hx-target="#repo-list" hx-swap="outerHTML">{{t "places.more"}}</button>{{end}}
+</section>
+{{end}}

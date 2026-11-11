@@ -203,13 +203,14 @@ func TestTaskKeepsResources(t *testing.T) {
 func TestRepoFromResource(t *testing.T) {
 	c, _ := credCore(t, "")
 	withApp(t, c, newFakeGitHub(t))
+	giveRepos(t, c, "owner/repo")
 	task := &TaskRow{ID: "t-2", Resources: []ResourceRef{{Kind: resRepo, Ref: "https://github.com/owner/repo.git", Access: accessWrite, Branch: "eriphe/fix"}}}
 	c.store.set(lentByUserKey(task.ID), "1")
 	facts := c.repoFacts(task)
-	if d := decideRepo("owner/repo", accessWrite, facts); d.Decision != decideAllow {
+	if d := decideRepo("owner/repo", catChange, facts); d.Decision != decideAllow {
 		t.Fatalf("push on its branch: %+v", d)
 	}
-	if d := decideRepo("owner/other", accessRead, facts); d.Decision != decideDeny {
+	if d := decideRepo("owner/other", catRead, facts); d.Decision != decideDeny {
 		t.Fatalf("other repo: %+v", d)
 	}
 }

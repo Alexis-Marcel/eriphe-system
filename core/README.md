@@ -521,7 +521,8 @@ new access token is used. The database file is as sensitive as `/secrets`.
   tickets.
 - git and gh in a task get [GitHub in a task](#github-in-a-task): a one-hour token for one
   repository, decided at launch as any lend, and logged; it goes in on the way out and stays out of
-  the task. Only a repository the user gave to Eriphe is lent, and only with the GitHub App.
+  the task. Only a repository the GitHub App reaches is lent, each push held to the repository's
+  cases (Modifier, Supprimer, Envoyer).
 - What servers say (descriptions, results, errors) is data for the agents, never instructions:
   the brain's prompt says so, and the policy, not the brain, decides what reaches a third party.
 
@@ -685,7 +686,7 @@ whatever address it dials) and one client certificate per node.
 | `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
 | `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
 | `run_task` | start a task: title (what the user reads; else its contract's objective, else the prompt's first line), prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
-| `list_repos` | the GitHub repositories the user gave to Eriphe (the places of the GitHub App's connections): `repo` and `access` (`read` or `write`); a task is lent only one of these |
+| `list_repos` | the GitHub repositories the app's connections reach: `repo`, its `cases` (`read`, `change`, `delete`, `send`: `free`, `approval` or `never`) and `own_rules` when it has cases of its own (listed first); a task is lent only one of these |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read`, `drop` or `manage`), `max`, `copyable`, where a task finds it, and `machines`: every machine holding it (its own, then its copies), each `online` and `up_to_date` or not; a task may run on any up to date |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
@@ -1114,7 +1115,7 @@ subfolder) and never changes the originals; `write` changes the thing (for a rep
 
 | Kind | `ref` | Access | What the task gets |
 |---|---|---|---|
-| `repo` | `owner/name` on GitHub, or a git URL, given to Eriphe (`list_repos`); `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` (at most the repository's own) | cloned into `/work/repo`; [credentials](#github-in-a-task) for it; its skills if it is the user's own or trusted (below); one per task |
+| `repo` | `owner/name` on GitHub, or a git URL, a connection reaches (`list_repos`); `branch` (work branch), `base` (start), `dir`; `trust_skills` | `read`, `write` (when one of its cases above Lire is not Never) | cloned into `/work/repo`; [credentials](#github-in-a-task) for it; its skills if it is the user's own or trusted (below); one per task |
 | `folder` | a machine's folder, by name (`list_folders`) | `read`, `drop`, `write` (a folder at `manage`); at most the folder's own | mounted at `/work/folders/<name>`; the task runs on its machine or one keeping it up to date (copies) |
 | `place` | a tool's place (a folder of a files tool, such as Google Drive's), by name | `read`, `write` (when one of its cases above Lire is not Never) | its tool whole (it reaches every place given to Eriphe, each call held to its place's rights) |
 | `tool` | a catalog server, or `server.tool` with globs | `read`, `write`; from the tools' annotations when empty, and `read` is refused for tools that may act | relayed through the proxy |
@@ -1197,8 +1198,19 @@ helper in the task's environment. Each request crosses the node's relay, as for 
 | another repository than the one its `repo` [resource](#resources) covers | deny |
 | a read of it | allow |
 | a write (git's push, gh's pull request) to a repository lent for `read` | deny, at once: a push is not lent |
-| a write on the declared `branch` of a repository lent for `write`, on a clean start (the user's own clean turn) | allow |
-| any other write: no declared branch, or a start that is not clean | the user's yes on the start's card, else deny |
+| a write whose case (below) is Never | deny |
+| a write whose case is Free, on a clean start (the user's own clean turn) | allow |
+| any other write: its case on approval, or a start that is not clean | the user's yes for that case on the start's card, else deny |
+
+**A repository's cases.** What Eriphe may do on a repository is one rule for the GitHub tool and for
+git: the tool's grid (Lire · Modifier · Supprimer · Envoyer) is every repository's default, and a
+repository may set a case of its own, above or below it, on Settings → Tools → GitHub →
+"Dépôts" (the tool's `place_grids`, by `owner/name`; its `place_args` say a call names its
+repository by `owner` and `repo`). A tool that only reads is its repositories' ceiling. In git, the
+relay reads the commands of a push (`pushCommands`, the pkt-lines before the pack) and decides each
+ref: a deletion is Supprimer, the default branch (asked of GitHub, kept ten minutes) or a tag is
+Envoyer, any other branch Modifier. One ref refused refuses the push, before GitHub sees it. gh's
+writes are Modifier.
 
 What is decided is the lend, at launch, as for an [access](../node/README.md#accesses): what the task reads afterwards
 changes nothing, and nothing waits in a command. The same rules hold with the GitHub App or without.
@@ -1221,21 +1233,22 @@ git → the node's relay → eriphe-core (decides, mints) → GitHub
 - **Each request is decided**, from what it is: a push is `git-receive-pack`, and a placeholder
   proves nothing. A refusal
   is a 403 with its reason in plain text, which git shows as `remote: …`.
-- **What is pushed is not read**, as for any access: what is decided is the lend, a repository, read
-  or write. The `branch` lent is what the task is told to push to, and the real limit is the
-  provider's: a token for that one repository, and the repository's protection rules on GitHub. The
-  shell rules (policy.go) stop a push to `main` or a forced one by mistake, not a script.
+- **What is pushed is not read**, only which refs it updates: what is decided is the lend and the
+  repository's cases. The `branch` lent is what the task is told to push to, and the real limit is
+  the provider's: a token for that one repository, and the repository's protection rules on GitHub.
+  The shell rules (policy.go) stop a forced push by mistake, not a script.
 - Other requests to `github.com` go as they are, with no token: a public clone, a release's
   download. So they cross eriphe-core too, and a program that refuses the task's certificate fails
   on `github.com`. Large File Storage is a write when the task may write there, else a read.
 
 **Asked at launch.** What a task started by `run_task` needs of the user is foreseen when it starts,
 with the same decision (`startNeeds`, `task_start.go`): for each GitHub repository lent for `write`,
-its push. When that takes the user's yes, the task does not start: it is kept `pending` with
+the case its lend names: Modifier for its `branch`, Envoyer without one (it pushes the default
+branch). Supprimer is not asked ahead: a deletion goes only where it is Free, on a clean start. When that takes the user's yes, the task does not start: it is kept `pending` with
 `desired` `held` (no node is given it, no placement moves it, its `pending_reason` says why) and the
 user gets one card in the conversation (kind `taskstart`, [conversation cards](#workspace-web)),
 « Pour pousser `eriphe/x` sur owner/repo, il me faut ton accord. ». Oui keeps the approval
-(`repo_grants`, logged "approved at launch": a write to that repository, by git or gh, for the
+(`repo_grants`, logged "approved at launch": that case of that repository, by git or gh, for the
 rest of the task) and lets the task go; Non stops it and tells the brain. Like every card, only the
 user's click or a plain yes or no of theirs decides it, never the brain (`answer_task` has nothing
 to answer on a held task; `stop_task` cancels it).
@@ -1247,10 +1260,9 @@ reads `contents`, `pull_requests`, `issues`, `checks`, or writes `pull_requests`
 rights until ten minutes before it ends. Without the app, git and gh get nothing (the GitHub
 tool's own token is never lent), and the Tools page says to create the app.
 
-**The repositories given.** A task is lent only a repository the user gave to Eriphe: the
-[places](#places) of the app's connections (`connection_places.go`), picked per installation on
-Settings → Tools → GitHub → "Dépôts donnés à Eriphe" (or the GitHub tool's "Dépôts"), from the
-installation's repositories, each `read` or `write`. A lend asks at most the repository's own access
+**The repositories reached.** A task is lent only a repository a GitHub tool on the app's
+connection of its owner reaches (`connection_places.go`): every repository of the installation, one
+added on GitHub at once. A lend asks write only when one of its cases above Lire is not Never
 (`resolveResources`), a write still goes through its card at launch, and the brain reads them with
 `list_repos`. A connection removed takes its repositories with it.
 

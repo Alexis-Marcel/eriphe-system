@@ -294,6 +294,34 @@ func (s Server) placeAccess(p Place) serverAccess {
 	return a
 }
 
+// namedPlace is the place a call of a server with PlaceArgs names: its
+// arguments joined, lowercased; "" when one is missing.
+func (s Server) namedPlace(input map[string]any) string {
+	var parts []string
+	for _, arg := range s.PlaceArgs {
+		v, _ := input[arg].(string)
+		if v = strings.TrimSpace(v); v == "" {
+			return ""
+		}
+		parts = append(parts, v)
+	}
+	return strings.ToLower(strings.Join(parts, "/"))
+}
+
+// argPlaceAccess is what holds in a place a server names by its arguments
+// (a repository): its grid with the place's cases over it. A server whose
+// grid only reads is its places' ceiling: no case of theirs goes above.
+func (s Server) argPlaceAccess(id string) serverAccess {
+	a := s.baseAccess()
+	if a.level() == accessReadOnly {
+		return a
+	}
+	if g, ok := s.PlaceGrids[strings.ToLower(id)]; ok {
+		a.grid = a.grid.over(g)
+	}
+	return a
+}
+
 // placeOf is the place a call names, if its server has places: by its
 // argument, or the only one when it names none.
 func (s Server) placeOf(input map[string]any) (Place, []Place, bool) {
@@ -337,6 +365,9 @@ func (s Server) toolFacts(t *mcp.Tool, input map[string]any) catalogFacts {
 	p, places, hasPlaces := s.placeOf(input)
 	if hasPlaces {
 		return newFacts(s.placeAccess(p).of(t))
+	}
+	if id := s.namedPlace(input); id != "" {
+		return newFacts(s.argPlaceAccess(id).of(t))
 	}
 	if a, ok := s.accountAccess(input); ok {
 		return newFacts(a.of(t))
@@ -389,6 +420,12 @@ func newFacts(category, value string) catalogFacts {
 func lends(s Server, t *mcp.Tool) bool {
 	_, places, _ := s.placeOf(nil)
 	accounts := s.candidates(places)
+	if len(s.PlaceArgs) > 0 {
+		accounts = append(accounts, s.baseAccess())
+		for id := range s.PlaceGrids {
+			accounts = append(accounts, s.argPlaceAccess(id))
+		}
+	}
 	if len(accounts) == 0 {
 		_, v := s.baseAccess().of(t)
 		return v != gridNever

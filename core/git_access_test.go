@@ -24,7 +24,28 @@ import (
 
 var lentRepo = ResourceRef{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/fix"}
 
-const pushBody = "0000PACKdata"
+// pushBody is a push of the task's branch, as git sends it.
+var pushBody = pushTo("refs/heads/eriphe/fix")
+
+// pushTo is a push updating refs, as git sends it: one pkt-line per ref,
+// the first with its capabilities, the flush, then the pack. A ref
+// starting with "-" is deleted.
+func pushTo(refs ...string) string {
+	var b strings.Builder
+	for i, ref := range refs {
+		old, new := strings.Repeat("1", 40), strings.Repeat("2", 40)
+		if r, ok := strings.CutPrefix(ref, "-"); ok {
+			ref, new = r, strings.Repeat("0", 40)
+		}
+		line := old + " " + new + " " + ref
+		if i == 0 {
+			line += "\x00report-status side-band-64k"
+		}
+		line += "\n"
+		fmt.Fprintf(&b, "%04x%s", len(line)+4, line)
+	}
+	return b.String() + "0000PACKdata"
+}
 
 func TestReadGitCall(t *testing.T) {
 	for raw, want := range map[string]gitCall{
@@ -33,7 +54,7 @@ func TestReadGitCall(t *testing.T) {
 		"GET /o/r.git/info/refs":                                {repo: "o/r", access: accessRead},
 		"POST /o/r.git/git-upload-pack":                         {repo: "o/r", access: accessRead},
 		"GET /o/r.git/info/refs?service=git-receive-pack":       {repo: "o/r", access: accessWrite},
-		"POST /o/r.git/git-receive-pack":                        {repo: "o/r", access: accessWrite},
+		"POST /o/r.git/git-receive-pack":                        {repo: "o/r", access: accessWrite, push: true},
 		"POST /o/r.git/info/lfs/objects/batch":                  {repo: "o/r", access: accessRead, lfs: true},
 		"GET /o/r/archive/main.zip":                             {},
 		"GET /login":                                            {},
@@ -152,7 +173,7 @@ func TestGitDecidesEachRequest(t *testing.T) {
 		t.Fatal("it reached GitHub")
 	}
 	// Lent for read, no yes makes it a write: the lend is what is decided.
-	c.store.grantRepo(task.ID, "owner/repo", accessWrite)
+	c.store.grantRepo(task.ID, "owner/repo", catChange)
 	if rec := viaRelayBody(c, "nas", task.ID, "POST", "/owner/repo.git/git-receive-pack", auth, pushBody, nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("lent for read: %d %s", rec.Code, rec.Body)
 	}
@@ -167,13 +188,56 @@ func TestGitWriteIsDecidedAtLaunch(t *testing.T) {
 	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushBody, nil); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "user's approval") {
 		t.Fatalf("not approved: %d %s", rec.Code, rec.Body)
 	}
-	c.store.grantRepo(task.ID, "owner/repo", accessWrite)
+	c.store.grantRepo(task.ID, "owner/repo", catChange)
 	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushBody, nil); rec.Code != 200 {
 		t.Fatalf("approved: %d %s", rec.Code, rec.Body)
 	}
 	c.store.addEvents(task.ID, []EventRow{{Seq: 1, Type: "tool_use", Data: map[string]any{"name": "WebFetch", "input": map[string]any{"url": "https://example.org"}}}})
 	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushBody, nil); rec.Code != 200 {
 		t.Fatalf("after reading a page: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// The relay reads which refs a push updates: the default branch or a tag
+// needs Envoyer, a deletion Supprimer, any other branch Modifier; one ref
+// refused refuses the push, before GitHub sees it.
+func TestGitPushHeldToItsCases(t *testing.T) {
+	c, task, svc := gitCore(t, true, lentRepo)
+	auth := gitAuth(task.ID)
+	const push = "/owner/repo.git/git-receive-pack"
+	for _, k := range []struct {
+		refs []string
+		code int
+		why  string
+	}{
+		{[]string{"refs/heads/eriphe/fix", "refs/heads/other"}, 200, ""},
+		{[]string{"refs/heads/eriphe/fix", "refs/heads/main"}, http.StatusForbidden, "refs/heads/main: a push to the default branch"},
+		{[]string{"refs/tags/v1"}, http.StatusForbidden, "on approval"},
+		{[]string{"-refs/heads/old"}, http.StatusForbidden, "a branch deletion"},
+		{nil, 200, ""}, // git's probe of a large push: a flush alone
+	} {
+		calls := svc.calls()
+		body := pushTo(k.refs...)
+		rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, body, nil)
+		if rec.Code != k.code || !strings.Contains(rec.Body.String(), k.why) {
+			t.Errorf("%v: %d %s", k.refs, rec.Code, rec.Body)
+		}
+		if reached := svc.calls() != calls; reached != (k.code == 200) || reached && svc.body != body {
+			t.Errorf("%v: reached GitHub %v, with %q", k.refs, reached, svc.body)
+		}
+	}
+	// Approved at launch, the default branch goes; Envoyer never, it does not.
+	c.store.grantRepo(task.ID, "owner/repo", catSend)
+	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushTo("refs/heads/main"), nil); rec.Code != 200 {
+		t.Fatalf("approved: %d %s", rec.Code, rec.Body)
+	}
+	cn, _ := c.keepMinted(githubProvider, "owner")
+	c.setRepoCase(cn.ID, "owner/repo", catSend, gridNever)
+	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, pushTo("refs/heads/main"), nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("never: %d %s", rec.Code, rec.Body)
+	}
+	if rec := viaRelayBody(c, "nas", task.ID, "POST", push, auth, "00zzbroken", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("unreadable: %d %s", rec.Code, rec.Body)
 	}
 }
 

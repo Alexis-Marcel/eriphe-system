@@ -17,7 +17,7 @@ After run_task, call task_status with wait (e.g. 120) rather than polling: it re
 A task in idle has finished its turn: read last_text, then either answer its question with answer_task,
 or stop_task when the work is done. Never invent a task's result: read it with task_status.
 Everything a task is lent goes in run_task's resources, one entry {kind, ref, access} per thing, access read < drop < write, the least it needs:
-repo (owner/name, cloned into /work/repo; branch, base, dir; write to push; read cannot push at all; with a branch, asked in the user's own clean turn, it needs no approval, otherwise the user is asked on a card when it starts), folder (by name, see list_folders; drop to add results in its results subfolder, named after the assistant; for a folder shared to manage, write to change the folder itself), place (by name, see list_folders; write to add, modify or trash files where its rights allow), tool (a catalog server or server.tool globs, see list_tools), access (what a program uses with a secret: a package registry, an API key; by name, see list_tools; it takes no access level).
+repo (owner/name, cloned into /work/repo; branch, base, dir; write to push; read cannot push at all; each push is held to the repository's cases (list_repos): a free one needs nothing in the user's own clean turn, otherwise the user is asked on a card when it starts, and a never is refused), folder (by name, see list_folders; drop to add results in its results subfolder, named after the assistant; for a folder shared to manage, write to change the folder itself), place (by name, see list_folders; write to add, modify or trash files where its rights allow), tool (a catalog server or server.tool globs, see list_tools), access (what a program uses with a secret: a package registry, an API key; by name, see list_tools; it takes no access level).
 What you lend is what the task reaches; the grid decides what it may do (list_tools gives each tool's category and value): free goes, approval is asked of the user on a card when it starts, once per category and account, and neither the user's sentence nor you can answer it. An access has no grid: free or approval, for the whole task, and the task never holds its secret. Lend only the tools it needs (mail.search_messages, mail.move), not a whole server.
 A tainted turn (one that read external content) may lend reads, tools and accesses, whose free writes and free uses are then asked on the card too, and a write on a repository or a folder, asked on the card too.
 For work the user validates before it acts (analyse, report, then act), lend the acting tools held back (hold: true): the task sees them, but they are not authorized; when the work is ready to act, answer_task with release: the user is asked on a card, and you are told their answer. A held tool may be lent on a tainted turn.
@@ -74,13 +74,16 @@ func newMCPServer(c *core) *mcp.Server {
 			}, err
 		})
 
-	tool(s, "list_repos", "The repositories the user gave to Eriphe (the places of the git connections, picked in Settings → Tools): repo (owner/name) and access (read, or write: it may be lent for write, which still asks the user at launch unless it is a clean start on a declared branch). A task is lent only one of these, as {kind: repo, ref: <repo>}; nothing here adds one.",
+	tool(s, "list_repos", "The repositories Eriphe reaches (every one its connections reach), with their cases: read, change (push to a branch, open a pull request, comment), delete (delete a branch), send (merge, push to the default branch, a tag, a release), each free (the user's own clean turn needs no card), approval (a card at launch for git, at each call for the tool) or never. Those with rules of their own come first. A task is lent one of these, as {kind: repo, ref: <repo>}, with access write when it pushes; nothing here adds one.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {
-			var repos []map[string]string
-			for _, p := range c.repoPlaces() {
-				repos = append(repos, map[string]string{"repo": p.ID, "access": p.Access})
+			ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+			defer cancel()
+			repos, problems := c.repoViews(ctx)
+			out := map[string]any{"repos": repos}
+			if len(problems) > 0 {
+				out["problems"] = problems
 			}
-			return map[string]any{"repos": repos}, nil
+			return out, nil
 		})
 
 	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). Returns the task with its id. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",

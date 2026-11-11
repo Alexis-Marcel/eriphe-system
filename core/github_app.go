@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -47,6 +48,9 @@ func init() {
 		c.minters[githubProvider] = c.github
 	})
 }
+
+// repoPlaceArgs are how the GitHub tool's calls name a repository.
+var repoPlaceArgs = []string{"owner", "repo"}
 
 // appClients are the core's clients of the providers that mint tokens.
 type appClients struct {
@@ -172,6 +176,7 @@ type githubClient struct {
 	// The GitHub tools' installation tokens, by account: with all the app's
 	// rights, and with their reading only.
 	toolToks map[toolKey]cachedToken
+	branches map[string]cachedToken // each repository's default branch (defaultBranch), by owner/name lowercased
 }
 
 // cachedToken is a token and when it ends.
@@ -234,6 +239,35 @@ func (g *githubClient) do(ctx context.Context, method, path, auth string, in, ou
 func (g *githubClient) asApp(app *githubApp) (string, error) {
 	tok, err := app.jwt(g.now())
 	return "Bearer " + tok, err
+}
+
+// defaultBranch is a repository's default branch, read with a token that
+// reaches it, kept ten minutes.
+func (g *githubClient) defaultBranch(ctx context.Context, repo, token string) (string, error) {
+	key := strings.ToLower(repo)
+	g.mu.Lock()
+	b, ok := g.branches[key]
+	g.mu.Unlock()
+	if ok && g.now().Before(b.exp) {
+		return b.tok, nil
+	}
+	var out struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	owner, name, _ := strings.Cut(repo, "/")
+	if err := g.do(ctx, http.MethodGet, "/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name), "token "+token, nil, &out); err != nil {
+		return "", err
+	}
+	if out.DefaultBranch == "" {
+		return "", errors.New("GitHub gave no default branch")
+	}
+	g.mu.Lock()
+	if g.branches == nil {
+		g.branches = map[string]cachedToken{}
+	}
+	g.branches[key] = cachedToken{out.DefaultBranch, g.now().Add(10 * time.Minute)}
+	g.mu.Unlock()
+	return out.DefaultBranch, nil
 }
 
 // installationFor is the app's installation that covers a repository.
@@ -607,4 +641,48 @@ func (t tokenTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		t.refused()
 	}
 	return resp, err
+}
+
+// legacyRepoPlaces moves the repositories given before every one was (the
+// NAS, once): the GitHub tools on a connection name them by owner and repo,
+// a repository given to read keeps Modifier,
+// Supprimer and Envoyer never, and the old table goes.
+func legacyRepoPlaces(store *Store) {
+	rows, err := store.db.Query(`SELECT connection, id, access FROM connection_places`)
+	if err != nil {
+		return // no table: nothing to move
+	}
+	read := map[string][]string{}
+	for rows.Next() {
+		var conn, id, access string
+		if rows.Scan(&conn, &id, &access) == nil {
+			if access != accessWrite {
+				read[conn] = append(read[conn], strings.ToLower(id))
+			}
+		}
+	}
+	rows.Close()
+	list, err := store.catalogRows()
+	if err != nil {
+		return
+	}
+	for _, r := range list {
+		var s Server
+		if r.Kind != kindServer || json.Unmarshal(r.Spec, &s) != nil || s.Auth == nil || s.Auth.Connection == "" || !isGitHubServer(r.Name, s) {
+			continue
+		}
+		s.PlaceArgs = repoPlaceArgs
+		for _, id := range read[s.Auth.Connection] {
+			if s.PlaceGrids == nil {
+				s.PlaceGrids = map[string]accessGrid{}
+			}
+			s.PlaceGrids[id] = accessGrid{Change: gridNever, Delete: gridNever, Send: gridNever}
+		}
+		if err := store.putCatalog(kindServer, r.Name, s); err != nil {
+			log.Printf("catalog: %s: its repositories: %v", r.Name, err)
+			return
+		}
+	}
+	store.db.Exec(`DROP TABLE connection_places`)
+	log.Printf("catalog: the repositories given are now every repository, those given to read kept to reading")
 }

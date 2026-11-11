@@ -52,6 +52,11 @@ type Server struct {
 	// the place's id: a case left empty follows the place's account, a case
 	// set goes above or below it (placeAccess).
 	PlaceGrids map[string]accessGrid `json:"place_grids,omitempty"`
+	// PlaceArgs name a place in a call of a server without places of its
+	// own to keep, joined by "/": a repository of the GitHub tool, its
+	// owner and repo. Its place_grids are then by that name, lowercased,
+	// and its own grid the default of every place.
+	PlaceArgs []string `json:"place_args,omitempty"`
 	// Timeout of one tool call, in seconds (default 600).
 	Timeout int `json:"timeout,omitempty"`
 	// AlwaysLoad has a harness that defers MCP tools until they are searched

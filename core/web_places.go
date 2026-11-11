@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -58,9 +59,7 @@ func (w *web) placeRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/tools/{name}/places/case", w.auth(w.handlePlaceCase))
 	mux.Handle("POST /settings/tools/{name}/places/remove", w.auth(w.handlePlaceRemove))
 	mux.Handle("GET /settings/connections/{id}/places", w.auth(w.handleConnPlaces))
-	mux.Handle("GET /settings/connections/{id}/places/browse", w.auth(w.handleConnPlacesBrowse))
-	mux.Handle("POST /settings/connections/{id}/places", w.auth(w.handleConnPlaceGive))
-	mux.Handle("POST /settings/connections/{id}/places/remove", w.auth(w.handleConnPlaceRemove))
+	mux.Handle("POST /settings/connections/{id}/places/case", w.auth(w.handleConnPlaceCase))
 }
 
 // placesTool is the tool of the page, if it has places.
@@ -203,44 +202,22 @@ func (w *web) handlePlaceRemove(rw http.ResponseWriter, r *http.Request, s *sess
 }
 
 // The repositories of a connection whose provider mints tokens
-// (connection_places.go), each read or read and write.
+// (connection_places.go): every one its account reaches, the ones with
+// rules of their own first, each case following the connection's tool or
+// set apart.
 
-type placesView struct {
-	Tool     string // its name, in the heading
-	Base     string // the page's address, which its forms post to
-	Write    string // the access that writes
-	Lead     string // the text that says what a place gives
-	Status   string
-	Accounts []placeAccount
-	Places   []Place
-	Error    string
+type repoList struct {
+	Tool, Base string // the connection's label, and the page's address
+	Ceiling    bool   // its tool only reads: no case goes above
+	Items      []repoItem
+	Next, Page string
+	Error      string
 }
 
-// Many tells whether the places come from several accounts.
-func (v placesView) Many() bool { return len(v.Accounts) > 1 }
-
-// CanWrite tells whether an account may get places to write in.
-func (v placesView) CanWrite(account string) bool {
-	for _, a := range v.Accounts {
-		if a.Name == account {
-			return a.CanWrite
-		}
-	}
-	return false
-}
-
-type placesBrowse struct {
-	Tool         string
-	Base, Write  string
-	Flat         bool
-	Account      string
-	Accounts     []string
-	Parent, Name string
-	Items        []placeItem
-	Next         string
-	CanWrite     bool
-	Given        map[string]string // place id → its access, for the ones already given
-	Error        string
+type repoItem struct {
+	Repo, Link string
+	Own        bool
+	Cases      []folderCase
 }
 
 // placesConn is the connection of the page, if it has places.
@@ -253,55 +230,90 @@ func (w *web) placesConn(rw http.ResponseWriter, r *http.Request) (connection, b
 	return cn, true
 }
 
-func (w *web) connPlacesView(cn connection) placesView {
-	return placesView{Tool: providerLabel(cn.Provider) + " · " + cn.Identity, Base: "/settings/connections/" + cn.ID + "/places",
-		Write: accessWrite, Lead: "places.lead.repos", Status: statusReady,
-		Accounts: []placeAccount{{Name: cn.Identity, CanWrite: true}}, Places: w.c.connectionPlaces(cn.ID)}
+func (w *web) repoList(ctx context.Context, cn connection, page string) repoList {
+	v := repoList{Tool: providerLabel(cn.Provider) + " · " + cn.Identity, Base: "/settings/connections/" + cn.ID + "/places", Page: page}
+	names := w.c.connServers(cn.ID)
+	if len(names) == 0 {
+		v.Error = "no tool on this connection"
+		return v
+	}
+	srv := w.c.conf().Servers[names[0]]
+	base := srv.baseAccess()
+	v.Ceiling = base.level() == accessReadOnly
+	item := func(repo, link string) repoItem {
+		it := repoItem{Repo: repo, Link: link}
+		own, has := srv.PlaceGrids[strings.ToLower(repo)]
+		it.Own = has
+		for _, cat := range categories {
+			it.Cases = append(it.Cases, folderCase{Category: cat, Own: own.raw(cat), Account: base.grid.value(cat),
+				Greyed: v.Ceiling && cat != catRead})
+		}
+		return it
+	}
+	var own []string
+	for id := range srv.PlaceGrids {
+		own = append(own, id)
+	}
+	slices.Sort(own)
+	if page == "" {
+		for _, id := range own {
+			v.Items = append(v.Items, item(id, ""))
+		}
+	}
+	items, next, err := w.c.browseConnection(ctx, cn.ID, page)
+	if err != nil {
+		v.Error = err.Error()
+		return v
+	}
+	for _, it := range items {
+		if _, has := srv.PlaceGrids[strings.ToLower(it.ID)]; has {
+			for i := range v.Items {
+				if strings.EqualFold(v.Items[i].Repo, it.ID) {
+					v.Items[i].Repo, v.Items[i].Link = it.ID, it.Link
+				}
+			}
+			continue
+		}
+		v.Items = append(v.Items, item(it.ID, it.Link))
+	}
+	v.Next = next
+	return v
 }
 
 func (w *web) handleConnPlaces(rw http.ResponseWriter, r *http.Request, s *session) {
-	if cn, ok := w.placesConn(rw, r); ok {
-		w.render(rw, r, s, "settings", "", page{Title: "repos.title", Nav: "settings", Tab: "tools", View: "places", Data: w.connPlacesView(cn)})
-	}
-}
-
-func (w *web) handleConnPlacesBrowse(rw http.ResponseWriter, r *http.Request, s *session) {
 	cn, ok := w.placesConn(rw, r)
 	if !ok {
 		return
 	}
-	v := placesBrowse{Tool: cn.Identity, Base: "/settings/connections/" + cn.ID + "/places", Write: accessWrite, Flat: true,
-		Account: cn.Identity, CanWrite: true, Given: map[string]string{}}
-	for _, p := range w.c.connectionPlaces(cn.ID) {
-		v.Given[p.ID] = p.Access
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	var err error
-	if v.Items, v.Next, err = w.c.browseConnection(ctx, cn.ID, r.URL.Query().Get("page")); err != nil {
-		v.Error = w.connError(r, err)
+	v := w.repoList(ctx, cn, r.URL.Query().Get("page"))
+	if v.Error != "" {
+		v.Error = w.connError(r, fmt.Errorf("%s", v.Error))
 	}
-	w.render(rw, r, s, "settings", "places-browse", page{Data: v})
+	if r.Header.Get("HX-Request") != "" && r.Header.Get("HX-Target") == "repo-list" {
+		w.render(rw, r, s, "settings", "repo-list-frag", page{Data: v})
+		return
+	}
+	w.render(rw, r, s, "settings", "", page{Title: "repos.title", Nav: "settings", Tab: "tools", View: "places", Data: v})
 }
 
-func (w *web) handleConnPlaceGive(rw http.ResponseWriter, r *http.Request, s *session) {
-	if cn, ok := w.placesConn(rw, r); ok {
-		w.connPlacesAgain(rw, r, s, cn, w.c.giveConnectionPlace(cn.ID, r.PostFormValue("id"), r.PostFormValue("access")))
+func (w *web) handleConnPlaceCase(rw http.ResponseWriter, r *http.Request, s *session) {
+	cn, ok := w.placesConn(rw, r)
+	if !ok {
+		return
 	}
-}
-
-func (w *web) handleConnPlaceRemove(rw http.ResponseWriter, r *http.Request, s *session) {
-	if cn, ok := w.placesConn(rw, r); ok {
-		w.connPlacesAgain(rw, r, s, cn, w.c.removeConnectionPlace(cn.ID, r.PostFormValue("id")))
+	err := w.c.setRepoCase(cn.ID, r.PostFormValue("id"), r.PostFormValue("category"), r.PostFormValue("value"))
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	v := w.repoList(ctx, cn, r.PostFormValue("page"))
+	if v.Error != "" {
+		v.Error = w.connError(r, fmt.Errorf("%s", v.Error))
 	}
-}
-
-func (w *web) connPlacesAgain(rw http.ResponseWriter, r *http.Request, s *session, cn connection, err error) {
-	v := w.connPlacesView(cn)
 	if err != nil {
 		v.Error = w.connError(r, err)
 	} else {
 		w.notify()
 	}
-	w.render(rw, r, s, "settings", "places-list-frag", page{Data: v})
+	w.render(rw, r, s, "settings", "repo-list-frag", page{Data: v})
 }

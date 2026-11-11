@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -74,8 +75,12 @@ func newCatalogCore(t *testing.T) *core {
 		})
 	upstreams := map[string]*mcp.Server{"github": fakeGitHub(), "notes": notes}
 	c.pool.dial = func(ctx context.Context, u *upstream) (mcp.Transport, error) {
+		srv, ok := upstreams[u.name]
+		if !ok {
+			return nil, errors.New("no such upstream")
+		}
 		ct, st := mcp.NewInMemoryTransports()
-		if _, err := upstreams[u.name].Connect(context.Background(), st, nil); err != nil {
+		if _, err := srv.Connect(context.Background(), st, nil); err != nil {
 			return nil, err
 		}
 		return ct, nil
