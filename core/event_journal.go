@@ -18,8 +18,8 @@ import (
 // subscribe to it; the brain reads it through since (kind event).
 //
 // A source writes an event with emit: its kind (mail.received,
-// hook.received…), a key that groups the events of one thing (an address's
-// source, a poll's name: a skill joins the events of an open key instead of
+// monitor.received…), a key that groups the events of one thing (a monitor's
+// name, a mail account: a skill joins the events of an open key instead of
 // starting again), its source, a short payload, and whether it is external:
 // written by someone else (a mail, an alert's body, a tool not trusted).
 // Whatever reads an external event's payload is tainted.
@@ -39,7 +39,6 @@ func init() { extraSchema = append(extraSchema, eventJournalSchema) }
 // The kinds eriphe-core itself emits. A server may emit others of its own
 // (mail.received is the mail server's), never one of these families.
 const (
-	evHookReceived = "hook.received" // an incoming address was called (incoming_hooks.go)
 	evTaskEnded    = "task.ended"
 	evSessionEnded = "session.ended"
 	evUserReturned = "user.returned"
@@ -57,7 +56,7 @@ const (
 var eventKindRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,3}$`)
 
 // reservedEventFamilies are eriphe-core's: a server cannot emit them.
-var reservedEventFamilies = []string{"hook.", "task.", "session.", "user.", "time.", "skill.", "monitor."}
+var reservedEventFamilies = []string{"task.", "session.", "user.", "time.", "skill.", "monitor."}
 
 // journalEvent is one event of the journal.
 type journalEvent struct {

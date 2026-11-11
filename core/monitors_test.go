@@ -323,3 +323,30 @@ func TestMonitorTriggersSkill(t *testing.T) {
 		t.Fatal("monitor. is not reserved")
 	}
 }
+
+// Every way and condition is said in words, in both languages: no key
+// shown raw, no argument left over.
+func TestMonitorTexts(t *testing.T) {
+	limit := 90.0
+	for _, s := range []monitorSpec{
+		{Way: wayPoll, Server: "s", Tool: "t", Every: 5, Cond: condChanged},
+		{Way: wayPoll, Server: "s", Tool: "t", Every: 5, Cond: condNew, Path: "items", ID: "id"},
+		{Way: wayPoll, Server: "s", Tool: "t", Every: 60, Cond: condCross, Above: &limit},
+		{Way: wayPoll, Server: "s", Tool: "t", Every: 60, Cond: condCross, Below: &limit},
+		{Way: wayListen},
+		{Way: wayListen, Signed: true, SigHeader: "X-Eriphe-Signature"},
+	} {
+		for _, lang := range []string{"fr", "en"} {
+			if got := s.Text(lang); strings.Contains(got, "monitor.") || strings.Contains(got, "%!") {
+				t.Errorf("%s %+v: %q", lang, s, got)
+			}
+		}
+	}
+	for _, k := range []string{"card.monitor.new", "card.monitor.update", "card.monitor.what", "card.monitor.events", "card.monitor.key", "card.kind.monitor"} {
+		for _, lang := range []string{"fr", "en"} {
+			if tr(lang, k) == k {
+				t.Errorf("%s: no %s", lang, k)
+			}
+		}
+	}
+}

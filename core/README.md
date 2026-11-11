@@ -1348,7 +1348,7 @@ turn is not tainted. Its front matter:
 
 | Key | |
 |---|---|
-| `when` | an event kind of the [journal](#events) (`mail.received`, `monitor.changed key=getout-prod`), with filters on its key or payload (`hook.received key=getout status=firing`); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules) |
+| `when` | an event kind of the [journal](#events) (`mail.received`, `monitor.changed key=getout-prod`), with filters on its key or payload (`monitor.received key=getout status=firing`); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules) |
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
@@ -1426,7 +1426,7 @@ or several:
 | **Tool** (MCP, the catalog) | actions and reads, called by the brain or a skill, under the access grid | Home Assistant, mail, calendar, GitHub, Grafana |
 | **Input channel** | where the user talks to Eriphe: the conversation | the workspace, a messaging app (Telegram), Home Assistant's Assist |
 | **Output channel** | where Eriphe tells the user | push, a messaging app (Telegram), a speaker through Home Assistant's integration |
-| **Event source** | "something happened", which starts triggered skills | a [monitor](#monitors) looking at a tool that does not tell (Grafana's alerts), a server publishing `eriphe://events` (the mail server), or any system calling an incoming address (Grafana, a Home Assistant automation, a shortcut) |
+| **Event source** | "something happened", which starts triggered skills | a [monitor](#monitors): one that polls a tool that does not tell (Grafana's alerts), or one that listens on an incoming address any system calls (Grafana, a Home Assistant automation, a shortcut); a server publishing `eriphe://events` (the mail server) |
 
 An input channel is **not** an event: what the user writes is the conversation, answered at once
 by the brain alone, with the user's authority (a message can be cited to apply a setting, a « oui »
@@ -1447,8 +1447,7 @@ the rest dropped.
 | Kind | Source | Key | External |
 |---|---|---|---|
 | `mail.received` | the mail server (any server offering `eriphe://events`, below) | the account | unless the server is trusted |
-| `hook.received` | an incoming address was called (below); `status` from the body's top-level `status` when it is a short word (`firing`, `resolved`) | the address's name | yes |
-| `monitor.changed`, `monitor.new`, `monitor.crossed`, `monitor.failed`, `monitor.recovered` | a [monitor](#monitors) | the monitor's name | unless its server is trusted |
+| `monitor.changed`, `monitor.new`, `monitor.crossed`, `monitor.failed`, `monitor.recovered`, `monitor.received` | a [monitor](#monitors) (`monitor.received`: an incoming address was called, `status` from the body's top-level `status` when it is a short word: `firing`, `resolved`) | the monitor's name | unless its server is trusted |
 | `task.ended` | a worker task's end | the task | no |
 | `session.ended` | a work session's end | `session:<id>` | no |
 | `user.returned` | the user's first activity after an absence of an hour or more | | no |
@@ -1505,6 +1504,17 @@ change. The result is read as JSON (its structured content, else its text).
   or edits one there: it is theirs, so it looks at once, with no card, and a change the brain
   proposed on it is dropped. The tool picker offers only the free reads; **Try** calls the tool
   once and shows what the path extracts (ids for `new`, the number for `cross`), nothing kept.
+- **Listening: an incoming address** (`incoming_hooks.go`, way `listen`), for a system that can
+  tell and reach Eriphe: `POST https://<workspace>/hooks/in/<token>`. Each call writes
+  `monitor.received`, keyed by the monitor's name, with the body's `status` when it is a short
+  word: `when: monitor.received key=getout status=firing`. The token (32 random bytes) is shown
+  once and kept as a hash in the monitor's `hook`; made again under the same name, the old address
+  stops working. Signed with an HMAC-SHA256 secret if asked (in the vault, `monitor-hook-<id>`),
+  read from the header the user names (`X-Eriphe-Signature` by default; `X-Hub-Signature-256`
+  for GitHub, `X-Grafana-Alerting-Signature` for Grafana). Its body (64 KiB) is external
+  content; 60 calls an hour at most (429); paused, it answers 503. Only the user makes one, on
+  the Monitors page: its token never goes through the conversation, so `write_monitor` proposes
+  only polls. The table `alert_hooks` it replaces is dropped at start.
 - **Limits**: 50 monitors, arguments of 4 KiB, a value of 4000 characters in an event.
 - Table `monitors` (name, state `proposed`, `on` or `paused`, its spec, a change waiting, what its
   looks saw, its next look).
@@ -2952,14 +2962,9 @@ user's return, a polled tool, an incoming alert, a fact, a task's end), with the
 approvals and urgent watches, is a [triggered skill](#triggered-skills) now: `when` names the event
 or the time, the skill's instructions say what to do, and its run tells the user with its last
 message. The brief, the return point and the weekly review are skills too (`when: time daily
-08:00`, `when: user.returned`), whose runs read what happened with `since` (`t: last_run`). An
-incoming address (`incoming_hooks.go`), made in Settings → Skills, lets any system tell
-something: `POST https://<workspace>/hooks/in/<token>`, named (the key of its `hook.received` events, with the body's `status` when it is a short
-word: `when: hook.received key=getout status=firing`), signed with an HMAC-SHA256 secret if asked (in the vault,
-`alert-hook-<id>`), read from the header the user names for that address (`X-Eriphe-Signature`
-by default; `X-Hub-Signature-256` for GitHub, `X-Grafana-Alerting-Signature` for Grafana), its body (64 KiB) kept as external content, 60 calls an hour at most (429).
-A tool that does not tell by itself is watched by a [monitor](#monitors), not by a time skill
-that calls it.
+08:00`, `when: user.returned`), whose runs read what happened with `since` (`t: last_run`).
+What happens outside is detected by a [monitor](#monitors): one that polls a tool that does not
+tell by itself, never a time skill that calls it; or one that listens on an incoming address.
 
 ## Remote access (Tailscale)
 

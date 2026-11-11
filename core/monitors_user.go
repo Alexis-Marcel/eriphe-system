@@ -44,6 +44,8 @@ func (c *core) saveMonitor(name string, s monitorSpec) error {
 		return err
 	case err != nil:
 		return err
+	case m.Spec.Way != wayPoll:
+		return fmt.Errorf("%q is an address: pick another name", name)
 	}
 	state := m.State
 	if state == monitorProposed {
@@ -74,6 +76,11 @@ func (c *core) pauseMonitor(name string, pause bool) error {
 
 // deleteMonitor removes a monitor; its events stay in the journal.
 func (c *core) deleteMonitor(name string) error {
+	if m, err := c.monitorNamed(name); err == nil && m.Spec.Way == wayListen {
+		if v := currentVault(); v != nil {
+			v.remove(hookSecretName(m.ID))
+		}
+	}
 	_, err := c.store.db.Exec(`DELETE FROM monitors WHERE name = ?`, name)
 	return err
 }

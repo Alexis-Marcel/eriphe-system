@@ -45,29 +45,21 @@ func (w *web) handleSkillRuns(rw http.ResponseWriter, r *http.Request, s *sessio
 	w.render(rw, r, s, "settings", "skill-runs-frag", page{Data: d})
 }
 
-// skillsPage is Settings → Skills: the skills, and the incoming alerts
-// their triggers may name (alert_hooks.go).
+// skillsPage is Settings → Skills: the skills, each triggered one's
+// trigger in words.
 type skillsPage struct {
 	Skills   any
 	Triggers map[string]string // a triggered skill's trigger, in words
-	Alerts   []alertHook
-	Fresh    *freshHook // an alert just made: its address and secret, shown once
 }
-
-type freshHook struct{ Name, URL, Secret string }
 
 func (w *web) handleSkills(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.renderSkills(rw, r, s, nil)
-}
-
-func (w *web) renderSkills(rw http.ResponseWriter, r *http.Request, s *session, fresh *freshHook) {
 	skills, err := w.c.store.skills()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.skills", Nav: "settings", Tab: "skills",
-		Data: skillsPage{Skills: skills, Triggers: w.triggerTexts(w.lang(r)), Alerts: w.c.alertHooks(), Fresh: fresh}})
+		Data: skillsPage{Skills: skills, Triggers: w.triggerTexts(w.lang(r))}})
 }
 
 // skillFileView is a file of the version shown.

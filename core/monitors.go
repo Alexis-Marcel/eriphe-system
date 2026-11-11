@@ -52,6 +52,7 @@ const monitorsSchema = `CREATE TABLE IF NOT EXISTS monitors (
   id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, state TEXT NOT NULL,
   spec TEXT NOT NULL DEFAULT '{}', pending TEXT NOT NULL DEFAULT '', -- a change the brain proposed, waiting for its card
   look TEXT NOT NULL DEFAULT '{}', next_at INTEGER NOT NULL DEFAULT 0,
+  hook TEXT NOT NULL DEFAULT '', -- listen: its token's hash (incoming_hooks.go)
   tainted TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, updated INTEGER NOT NULL);`
 
 func init() { extraSchema = append(extraSchema, monitorsSchema) }
@@ -62,6 +63,7 @@ const (
 	monitorPaused   = "paused"
 
 	wayPoll     = "poll"
+	wayListen   = "listen" // an incoming address (incoming_hooks.go)
 	condNew     = "new"
 	condChanged = "changed"
 	condCross   = "cross"
@@ -100,6 +102,9 @@ type monitorSpec struct {
 	ID     string         `json:"id,omitempty"`    // new: an item's id, a path in the item
 	Above  *float64       `json:"above,omitempty"` // cross: holds when the number is above
 	Below  *float64       `json:"below,omitempty"` // cross: holds when the number is below
+	// listen: the address checks a signature, in that header.
+	Signed    bool   `json:"signed,omitempty"`
+	SigHeader string `json:"sig_header,omitempty"`
 }
 
 // monitorLook is what its looks saw, kept between them.
@@ -185,9 +190,14 @@ func (s *monitorSpec) check() error {
 	if s.Way == "" {
 		s.Way = wayPoll
 	}
-	if s.Way != wayPoll {
-		return fmt.Errorf("way %q: poll", s.Way)
+	if s.Way == wayListen {
+		*s = monitorSpec{Way: wayListen, Signed: s.Signed, SigHeader: s.SigHeader}
+		return nil
 	}
+	if s.Way != wayPoll {
+		return fmt.Errorf("way %q: poll or listen", s.Way)
+	}
+	s.Signed, s.SigHeader = false, ""
 	if s.Server == "" || s.Tool == "" {
 		return errors.New("a monitor names a catalog server and one of its read-only tools")
 	}
@@ -271,7 +281,7 @@ func (c *core) tickMonitors(ctx context.Context, now time.Time) {
 		return
 	}
 	for _, m := range ms {
-		if m.State == monitorOn && !m.NextAt.After(now) {
+		if m.State == monitorOn && m.Spec.Way == wayPoll && !m.NextAt.After(now) {
 			c.lookMonitor(ctx, m, now)
 		}
 	}
@@ -600,6 +610,12 @@ func extract(v any, path string) (any, error) {
 
 // Text says what a monitor does, in words, for its card and its list.
 func (s monitorSpec) Text(lang string) string {
+	if s.Way == wayListen {
+		if s.Signed {
+			return fmt.Sprintf(tr(lang, "monitor.text.listensigned"), s.SigHeader)
+		}
+		return tr(lang, "monitor.text.listen")
+	}
 	every := span(time.Duration(s.Every) * time.Minute)
 	call := s.Server + "." + s.Tool
 	if s.Cond == condNew {
@@ -621,6 +637,9 @@ func (c *core) writeMonitor(name string, s monitorSpec, tainted []string) (map[s
 	name = strings.ToLower(strings.TrimSpace(name))
 	if !monitorNameRe.MatchString(name) {
 		return nil, errors.New("a name of lowercase letters, digits and dashes: getout-prod")
+	}
+	if s.Way != "" && s.Way != wayPoll {
+		return nil, errors.New("you only propose a monitor that polls a tool: an address is made by the user, on the Monitors page (its token never goes through the conversation)")
 	}
 	if err := s.check(); err != nil {
 		return nil, err
@@ -647,6 +666,8 @@ func (c *core) writeMonitor(name string, s monitorSpec, tainted []string) (map[s
 		c.cardProposed(cardMonitor, id)
 	case err != nil:
 		return nil, err
+	case m.Spec.Way != wayPoll:
+		return nil, fmt.Errorf("%q is an address the user made: pick another name", name)
 	case m.State == monitorProposed:
 		c.store.db.Exec(`UPDATE monitors SET spec = ?, tainted = ?, updated = ? WHERE id = ?`, string(raw), strings.Join(tainted, ", "), now, m.ID)
 		c.cardProposed(cardMonitor, m.ID)

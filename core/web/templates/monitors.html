@@ -57,6 +57,24 @@
   <p class="muted">{{t "monitors.addlead"}}</p>
   {{template "monitor-form" .Data}}
 </section>
+
+<section class="panel" id="address" aria-labelledby="address-title">
+  <h3 id="address-title">{{template "i-plus"}}{{t "monitors.addr.title"}}</h3>
+  <p class="muted">{{t "monitors.addr.lead"}}</p>
+  {{with .Data.Fresh}}<div class="notice" role="status">
+    <p>{{tf "monitors.addr.fresh" .Name}}</p>
+    <p class="mono small">{{.URL}}</p>
+    {{if .Secret}}<p class="small">{{t "monitors.addr.secret"}} <span class="mono">{{.Secret}}</span></p>{{end}}
+  </div>{{end}}
+  <form class="stack-form" method="post" action="/settings/monitors/address">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label class="field"><span>{{t "monitors.f.name"}}</span><input name="name" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="getout"></label>
+    <label class="check"><input type="checkbox" name="signed" checked> {{t "monitors.addr.sign"}}</label>
+    <label class="field"><span>{{t "monitors.addr.header"}}</span><input name="header" pattern="[A-Za-z0-9][A-Za-z0-9-]{0,63}" placeholder="X-Eriphe-Signature"></label>
+    <p class="muted small">{{t "monitors.addr.headerhint"}}</p>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">{{t "monitors.addr.add"}}</button></div>
+  </form>
+</section>
 {{end}}
 
 {{define "monitor-page"}}
@@ -69,7 +87,7 @@
   {{if .Error}}<p class="notice" role="status">{{tf "monitors.lasterror" .Error}}</p>{{end}}
   <p class="muted small">{{if .LastLook}}{{tf "monitors.lastlook" .LastLook}} · {{end}}{{tf "monitors.events30" .Events}}</p>
   <p class="small">{{if .Skills}}{{tf "monitors.skills" (join .Skills ", ")}}{{else}}{{t "monitors.noskill"}}{{end}}</p>
-  <p class="muted small mono">when: monitor.changed key={{.Name}} · monitor.new · monitor.crossed · monitor.failed</p>
+  <p class="muted small mono">{{if .Listen}}when: monitor.received key={{.Name}} status=firing{{else}}when: monitor.changed key={{.Name}} · monitor.new · monitor.crossed · monitor.failed{{end}}</p>
   {{if or (eq .State "proposed") .Change}}
   <div class="notice">
     <p>{{if eq .State "proposed"}}{{t "monitors.proposedlead"}}{{else}}{{tf "monitors.changelead" .Change}}{{end}}</p>
@@ -97,7 +115,9 @@
   {{else}}<p class="muted">{{t "monitors.noevents"}}</p>{{end}}
 </section>
 
-{{if ne .Data.Monitor.State "proposed"}}
+{{if .Data.Monitor.Listen}}
+<section class="panel"><p class="muted">{{t "monitors.addr.again"}}</p></section>
+{{else if ne .Data.Monitor.State "proposed"}}
 <section class="panel" aria-labelledby="monitor-edit-title">
   <h3 id="monitor-edit-title">{{t "monitors.edittitle"}}</h3>
   <p class="muted">{{t "monitors.editlead"}}</p>
