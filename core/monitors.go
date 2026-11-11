@@ -64,6 +64,7 @@ const (
 
 	wayPoll     = "poll"
 	wayListen   = "listen" // an incoming address (incoming_hooks.go)
+	wayFollow   = "follow" // a server's own events, eriphe://events (event_sources.go)
 	condNew     = "new"
 	condChanged = "changed"
 	condCross   = "cross"
@@ -190,12 +191,19 @@ func (s *monitorSpec) check() error {
 	if s.Way == "" {
 		s.Way = wayPoll
 	}
-	if s.Way == wayListen {
+	switch s.Way {
+	case wayListen:
 		*s = monitorSpec{Way: wayListen, Signed: s.Signed, SigHeader: s.SigHeader}
 		return nil
-	}
-	if s.Way != wayPoll {
-		return fmt.Errorf("way %q: poll or listen", s.Way)
+	case wayFollow:
+		if s.Server == "" {
+			return errors.New("a monitor that follows names a catalog server that publishes events")
+		}
+		*s = monitorSpec{Way: wayFollow, Server: s.Server}
+		return nil
+	case wayPoll:
+	default:
+		return fmt.Errorf("way %q: poll, follow or listen", s.Way)
 	}
 	s.Signed, s.SigHeader = false, ""
 	if s.Server == "" || s.Tool == "" {
@@ -238,6 +246,23 @@ func (s *monitorSpec) check() error {
 		return errors.New("cond is new, changed or cross")
 	}
 	return nil
+}
+
+// monitorWhy is why a monitor cannot look now, "" if it can.
+func (c *core) monitorWhy(s monitorSpec) string {
+	switch s.Way {
+	case wayFollow:
+		if _, ok := c.conf().Servers[s.Server]; !ok || c.pool.get(s.Server) == nil {
+			return fmt.Sprintf("%s is not a server of the catalog", s.Server)
+		}
+		if !c.offersEvents(s.Server) {
+			return fmt.Sprintf("%s publishes no events (eriphe://events), or is not connected yet", s.Server)
+		}
+		return ""
+	case wayListen:
+		return ""
+	}
+	return c.toolWhy(s)
 }
 
 // toolWhy is why eriphe-core may not call a monitor's tool by itself, ""
@@ -302,19 +327,9 @@ func (c *core) lookMonitor(ctx context.Context, m *monitor, now time.Time) {
 	}
 	st.Waiting = ""
 	got, err := c.callMonitor(ctx, m.Spec)
-	if err != nil {
-		st.Error, st.Pending = truncate(err.Error(), 300), false
-		st.Fails++
-		if st.Fails >= monitorFailsAfter && !st.Failed {
-			st.Failed = true
-			c.emitMonitor(m, evMonitorFailed, map[string]any{"error": st.Error})
-		}
+	if !c.noteLook(m, &st, err) {
+		st.Pending = false
 		return
-	}
-	st.Error, st.Fails = "", 0
-	if st.Failed {
-		st.Failed = false
-		c.emitMonitor(m, evMonitorRecovered, nil)
 	}
 	switch m.Spec.Cond {
 	case condNew:
@@ -331,6 +346,27 @@ func (c *core) lookMonitor(ctx context.Context, m *monitor, now time.Time) {
 			next = now.Add(monitorConfirm)
 		}
 	}
+}
+
+// noteLook keeps whether a look worked: three failures in a row write
+// monitor.failed once, the next good look monitor.recovered. True if it
+// worked.
+func (c *core) noteLook(m *monitor, st *monitorLook, err error) bool {
+	if err != nil {
+		st.Error = truncate(err.Error(), 300)
+		st.Fails++
+		if st.Fails >= monitorFailsAfter && !st.Failed {
+			st.Failed = true
+			c.emitMonitor(m, evMonitorFailed, map[string]any{"error": st.Error})
+		}
+		return false
+	}
+	st.Error, st.Fails = "", 0
+	if st.Failed {
+		st.Failed = false
+		c.emitMonitor(m, evMonitorRecovered, nil)
+	}
+	return true
 }
 
 // callMonitor calls the tool and extracts what the monitor compares.
@@ -610,6 +646,9 @@ func extract(v any, path string) (any, error) {
 
 // Text says what a monitor does, in words, for its card and its list.
 func (s monitorSpec) Text(lang string) string {
+	if s.Way == wayFollow {
+		return fmt.Sprintf(tr(lang, "monitor.text.follow"), s.Server)
+	}
 	if s.Way == wayListen {
 		if s.Signed {
 			return fmt.Sprintf(tr(lang, "monitor.text.listensigned"), s.SigHeader)
@@ -638,14 +677,17 @@ func (c *core) writeMonitor(name string, s monitorSpec, tainted []string) (map[s
 	if !monitorNameRe.MatchString(name) {
 		return nil, errors.New("a name of lowercase letters, digits and dashes: getout-prod")
 	}
-	if s.Way != "" && s.Way != wayPoll {
-		return nil, errors.New("you only propose a monitor that polls a tool: an address is made by the user, on the Monitors page (its token never goes through the conversation)")
+	if s.Way == wayListen {
+		return nil, errors.New("you propose a monitor that polls a tool or follows a server's events: an address is made by the user, on the Monitors page (its token never goes through the conversation)")
 	}
 	if err := s.check(); err != nil {
 		return nil, err
 	}
-	if why := c.toolWhy(s); why != "" {
+	if why := c.monitorWhy(s); why != "" {
 		return nil, errors.New(why)
+	}
+	if err := c.oneFollower(name, s); err != nil {
+		return nil, err
 	}
 	raw, _ := json.Marshal(s)
 	now := time.Now().Unix()
@@ -666,7 +708,7 @@ func (c *core) writeMonitor(name string, s monitorSpec, tainted []string) (map[s
 		c.cardProposed(cardMonitor, id)
 	case err != nil:
 		return nil, err
-	case m.Spec.Way != wayPoll:
+	case m.Spec.Way == wayListen:
 		return nil, fmt.Errorf("%q is an address the user made: pick another name", name)
 	case m.State == monitorProposed:
 		c.store.db.Exec(`UPDATE monitors SET spec = ?, tainted = ?, updated = ? WHERE id = ?`, string(raw), strings.Join(tainted, ", "), now, m.ID)
@@ -748,9 +790,11 @@ func (c *core) decideMonitor(id int64, approve bool) error {
 		raw, _ := json.Marshal(m.Pending)
 		_, err = c.store.db.Exec(`UPDATE monitors SET spec = ?, pending = '', look = '{}', next_at = 0, tainted = '', updated = ? WHERE id = ?`,
 			string(raw), now, id)
+		c.freshStart(*m.Pending)
 	default:
 		_, err = c.store.db.Exec(`UPDATE monitors SET state = ?, look = '{}', next_at = 0, tainted = '', updated = ? WHERE id = ?`,
 			monitorOn, now, id)
+		c.freshStart(m.Spec)
 	}
 	return err
 }
@@ -784,8 +828,9 @@ func (c *core) monitorsSaid(lang string) []map[string]any {
 
 type writeMonitorIn struct {
 	Name   string         `json:"name" jsonschema:"lowercase letters, digits and dashes: getout-prod; the key of its events"`
+	Way    string         `json:"way,omitempty" jsonschema:"poll (default): call a tool; follow: take the events a server publishes by itself (the mail server's mail.received), with server only"`
 	Server string         `json:"server" jsonschema:"the catalog server (list_tools)"`
-	Tool   string         `json:"tool" jsonschema:"one of its read-only tools, a free read of yours"`
+	Tool   string         `json:"tool,omitempty" jsonschema:"with poll: one of its read-only tools, a free read of yours"`
 	Args   map[string]any `json:"args,omitempty" jsonschema:"its fixed arguments"`
 	Every  string         `json:"every,omitempty" jsonschema:"how often it looks: 1m to 1d (2m, 15m, 1h); 5m if empty"`
 	Cond   string         `json:"cond,omitempty" jsonschema:"changed (default): an event when the value at path changes; new: one event per item of the list at path not seen before; cross: an event when the number at path goes past above or below, and when it comes back (holds true or false)"`
@@ -800,7 +845,7 @@ type nameIn struct {
 }
 
 func registerMonitorTools(s *mcp.Server, c *core) {
-	tool(s, "write_monitor", "Propose a monitor, or a change of one: eriphe-core itself calls one read-only tool of the catalog at an interval, without a model, and writes an event when what it watches changes (monitor.changed), when a list gets a new item (monitor.new), when a number crosses a limit either way (monitor.crossed, holds true or false), or when its looks keep failing (monitor.failed, then monitor.recovered); keyed by its name. It only detects: a skill reacts to its events (write_skill with when: monitor.changed key=<name>). Use it to watch a tool that does not tell by itself (« surveille les alertes Grafana de la prod »): never a time skill that calls the tool every few minutes. Nothing looks before the user approves it on its card.",
+	tool(s, "write_monitor", "Propose a monitor, or a change of one: eriphe-core itself calls one read-only tool of the catalog at an interval, without a model, and writes an event when what it watches changes (monitor.changed), when a list gets a new item (monitor.new), when a number crosses a limit either way (monitor.crossed, holds true or false), or when its looks keep failing (monitor.failed, then monitor.recovered); keyed by its name. It only detects: a skill reacts to its events (write_skill with when: monitor.changed key=<name>). Use it to watch a tool that does not tell by itself (« surveille les alertes Grafana de la prod »): never a time skill that calls the tool every few minutes. A server that publishes its own events (the mail server) is followed (way follow): its events keep their kind (mail.received), keyed by the monitor's name; nothing of it reaches a skill before a monitor follows it. Nothing looks before the user approves it on its card.",
 		func(ctx context.Context, in writeMonitorIn) (map[string]any, error) {
 			every := 0
 			if e := strings.TrimSpace(in.Every); e != "" {
@@ -810,7 +855,7 @@ func registerMonitorTools(s *mcp.Server, c *core) {
 				}
 				every = int(d / time.Minute)
 			}
-			return c.writeMonitor(in.Name, monitorSpec{Way: wayPoll, Server: in.Server, Tool: in.Tool, Args: in.Args, Every: every,
+			return c.writeMonitor(in.Name, monitorSpec{Way: cmpOr(strings.TrimSpace(in.Way), wayPoll), Server: in.Server, Tool: in.Tool, Args: in.Args, Every: every,
 				Cond: strings.TrimSpace(in.Cond), Path: in.Path, ID: in.ID, Above: in.Above, Below: in.Below}, c.turnTaint())
 		})
 	tool(s, "monitors", "The user's monitors: each one's name (the key of its events), state (on, paused, proposed), what it does in words, its last look, why it waits or its last error, and a change waiting for the user's card.",

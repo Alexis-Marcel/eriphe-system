@@ -67,8 +67,9 @@ at each start, and the container stays read-only.
   payload: account, id, from, subject, date). The server offers its last 200 events as the MCP
   resource `eriphe://events`, JSON `{"epoch", "events": [{"seq", "kind", "key", "at",
   "payload"}]}`, oldest first; `seq` grows within an `epoch`, a new one at each start.
-  eriphe-core reads it every minute into its event journal (core/README.md, Events). Without
-  the cache there are no events.
+  eriphe-core reads it every minute into its event journal once a monitor follows the server
+  (core/README.md, Monitors): the events are then keyed by the monitor's name, the account in
+  the payload. Without the cache there are no events.
 - Gmail labels and categories are not cached: `go-imap` v2 does not fetch `X-GM-LABELS`.
 
 | Env | Default | |

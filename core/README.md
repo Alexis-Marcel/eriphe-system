@@ -1446,21 +1446,26 @@ the rest dropped.
 
 | Kind | Source | Key | External |
 |---|---|---|---|
-| `mail.received` | the mail server (any server offering `eriphe://events`, below) | the account | unless the server is trusted |
+| `mail.received` | the mail server (any server offering `eriphe://events`, below), once a monitor follows it | the monitor's name (the account is in the payload) | unless the server is trusted |
 | `monitor.changed`, `monitor.new`, `monitor.crossed`, `monitor.failed`, `monitor.recovered`, `monitor.received` | a [monitor](#monitors) (`monitor.received`: an incoming address was called, `status` from the body's top-level `status` when it is a short word: `firing`, `resolved`) | the monitor's name | unless its server is trusted |
 | `task.ended` | a worker task's end | the task | no |
 | `session.ended` | a work session's end | `session:<id>` | no |
 | `user.returned` | the user's first activity after an absence of an hour or more | | no |
 
 **A server's events.** A catalog server that offers the MCP resource `eriphe://events` has
-events: eriphe-core reads it when the server's session opens, then every minute (the servers
+events, read only once a [monitor](#monitors) follows it (way `follow`; one per server):
+eriphe-core reads it when the server's session opens, then every minute (the servers
 run stateless behind their node, so they cannot push). The resource is JSON, `{"epoch": "…",
 "events": [{"seq", "kind", "key", "at", "payload"}]}`, the server's last events, oldest first;
 `seq` grows within an `epoch`, a new one at each start. eriphe-core keeps per server the epoch,
 seq and time of the last event it took: within an epoch it takes the higher seqs, from a new one
-the events after that time; a server seen for the first time has its backlog skipped. A server
-cannot emit one of eriphe-core's families (`hook.`, `task.`, `session.`, `user.`, `time.`,
-`skill.`, `monitor.`).
+the events after that time; a server seen for the first time, or followed again (approved,
+saved or resumed), has its backlog skipped. Its events keep their kind and payload and are the
+monitor's: keyed by its name (the server's own key goes in the payload as `key`, unless it has
+one), source `monitor:<name>`, so `when: mail.received key=mails account=perso`. Three failed
+reads in a row write `monitor.failed`, the next good one `monitor.recovered`. A server cannot
+emit one of eriphe-core's families (`task.`, `session.`, `user.`, `time.`, `skill.`,
+`monitor.`).
 
 ### Monitors
 
@@ -1504,6 +1509,10 @@ change. The result is read as JSON (its structured content, else its text).
   or edits one there: it is theirs, so it looks at once, with no card, and a change the brain
   proposed on it is dropped. The tool picker offers only the free reads; **Try** calls the tool
   once and shows what the path extracts (ids for `new`, the number for `cross`), nothing kept.
+- **Following: a server's own events** (`event_sources.go`, way `follow`): a server that
+  publishes `eriphe://events` (the mail server) reaches the journal only through the monitor
+  that follows it, made on its page (« Suivre les événements d'un outil ») or proposed by the
+  brain (`write_monitor` with `way: follow` and `server`). See [a server's events](#events).
 - **Listening: an incoming address** (`incoming_hooks.go`, way `listen`), for a system that can
   tell and reach Eriphe: `POST https://<workspace>/hooks/in/<token>`. Each call writes
   `monitor.received`, keyed by the monitor's name, with the body's `status` when it is a short
