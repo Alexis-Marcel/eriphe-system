@@ -2350,7 +2350,8 @@ state, the pull request or document the agent mentioned), the permissions waitin
 inline in the conversation (Yes / No, with an optional reason for the agent), and the settings. The assistant manages: what the brain can set itself
 (a notification rule, a memory, an intention) is asked of it in the conversation, and its pages show
 the state, say why, and undo, with a line saying how to ask rather than a form.
-The conversation is the one main screen; the header has two buttons, Tâches (a badge counts the
+The conversation is the one main screen; the header has three buttons, Espace composé (the
+[composed workspace](#the-composed-workspace-espace)), Tâches (a badge counts the
 running tasks, and turns urgent when one waits for the user) and Réglages. On a wide screen Tâches
 hides or shows the side panel; on a phone it opens the tasks as a sheet over the conversation
 (closed by its button, Escape or the browser's back), and from any other page it comes back to
@@ -2596,6 +2597,57 @@ page):
 - `POST /api/objects` with `{"refs": [...]}` (at most 50, the CSRF token in `X-CSRF-Token`):
   `{"objects": [{"ref", "object"} or {"ref", "error", "status"}]}`, in the order asked, each
   read on its own, 8 at once.
+
+### The composed workspace (`/espace`)
+
+A page next to the conversation, which stays, where what Eriphe composes is laid out
+(`web_espace.go`, the app in `web/espace`). It never scrolls: a fixed grid of 12 × 8 cells where
+each module takes an area by its weight (xl 30 cells, l 12, m 6, s 3; one xl at most). What does
+not fit shrinks, then becomes a chip at the top, with its source; with room left, what weighs 3 or
+more grows one step, never into xl. A ref that names no object is dropped. The layout engine
+(`web/espace/src/engine.ts`) is pure code, with its tests beside it.
+
+A click on a module opens it in focus, in the centre, with the objects related to it beside it
+(an object's `related` refs, what names it in its own, a group's members), and Eriphe comments in
+one line. Each
+module's ⋯ menu asks Eriphe about it (a message in the conversation) or keeps a remark: more,
+less, never, or a sentence; until remarks become rules (#388), they stay in the browser and the
+engine applies them. Everything arrives at once; « Présente-moi » (the button, or typed) walks
+through the modules one by one. The chat is a narrow column, wider on demand, and a message
+written there goes to the conversation. Views are generic, one per kind of [object](#objects-by-ref-objectsgo)
+(mail, agenda day, event, card, session, task, project, and the composition's groups), each with a
+short and a full form; a kind without a view shows its title.
+
+Data: `/api/composition` (#386), else the attention queue `/api/attention` laid out by weight;
+the objects, and those they relate to, from `POST /api/objects` (50 refs a request; a ref that
+cannot be read is left out); read again on the event stream's `attention` and `composition`
+events. A 401 sends the page to the sign-in. Only when neither the composition nor the attention
+queue is served (404), or on the dev server, the page shows made-up data in the same shape
+(`web/espace/src/fixtures.ts`) and says it is an example. `web/espace/src/data.ts` is the one
+place that talks to eriphe-core; card answers go to `POST /cards/{id}/yes|no`.
+
+**Building.** The app is React, Vite and Motion. Its built files are committed under
+`web/static/espace/` and embedded with the other static files, so `go build` needs no Node:
+
+```sh
+cd core/web/espace
+npm ci
+npm test            # the layout engine's tests (vitest)
+npm run build       # type checks, then writes ../static/espace/espace.js and espace.css
+npm run dev         # http://localhost:5300, on the fixtures, no eriphe-core needed
+```
+
+CI rebuilds and fails when the committed files differ from the build. The words are in
+`web_text_espace.go`, sent by `/espace/boot` in the user's language with the CSRF token;
+`web/espace/src/strings.json` is their copy for the dev server, which a Go test keeps equal
+(`ERIPHE_UPDATE_ESPACE=1 go test -run TestEspaceStrings` writes it again).
+
+**CSP.** The page keeps the workspace's policy, with no `'unsafe-inline'`: the shell
+(`templates/espace.html`) loads one script and one stylesheet; the app's words come from JSON.
+A module's place on the grid is a class (`.at-c3 .at-r0 .w-6 .h-5`), never a `style` attribute,
+which the policy refuses (`style-src-attr`). Motion animates by setting the element's style
+object from script (CSSOM), which a CSP does not govern; `AnimatePresence`'s `popLayout` mode is
+not used, since it injects a `<style>` element.
 
 ### Signing in
 

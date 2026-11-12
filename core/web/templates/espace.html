@@ -1,0 +1,23 @@
+{{/* The composed workspace's shell (web_espace.go): no inline script or
+style; the app (web/espace, built into static/espace) reads its words and
+the CSRF token from /espace/boot. */}}
+{{define "espace"}}<!doctype html>
+<html lang="{{.Lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{t "nav.espace"}} · {{name}}</title>
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#121a26">
+<meta name="csrf-token" content="{{.CSRF}}">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/espace/espace.css?v={{.Version}}">
+<script type="module" src="/static/espace/espace.js?v={{.Version}}"></script>
+</head>
+<body>
+<div id="root" data-boot="/espace/boot"><p class="espace-loading">{{t "espace.loading"}}</p></div>
+<noscript><p class="espace-loading"><a href="/">{{t "espace.convo"}}</a></p></noscript>
+</body>
+</html>{{end}}

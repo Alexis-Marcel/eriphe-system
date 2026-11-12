@@ -168,10 +168,35 @@ jobs:
         env:
           TMPDIR: /dev/shm
 
+  # The composed workspace's app (core/web/espace): its layout engine's tests, and its
+  # build, committed under core/web/static/espace so Go needs no Node, is up to date.
+  espace:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core/web/espace
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: core/web/espace/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: The committed build is the build of the sources
+        run: |
+          git add -N ../static/espace
+          git diff --exit-code -- ../static/espace || {
+            echo "::error::core/web/static/espace differs from the build: run npm run build in core/web/espace and commit it"
+            exit 1
+          }
+
   # Every test passes before any image is published (the publish job): a release tags
   # `latest`, and a workspace offers that version as soon as one image has it.
   tests:
-    needs: [scripts, node, cred, core, install, cli, mail, calendar, files]
+    needs: [scripts, node, cred, core, espace, install, cli, mail, calendar, files]
     runs-on: ubuntu-latest
     steps:
       - run: 'true'
