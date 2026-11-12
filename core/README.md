@@ -2664,6 +2664,31 @@ or more (`awaySince`), the next composition is for their return, and one is made
 **Settings → Agents → Workspace composer**: on or off, and its agent (a Sonnet one by default,
 else the default agent). Off by default; off, nothing is sent to a model.
 
+**Bench** (`testdata/composer/`): invented moments of a fictional user (an arrival after a night,
+a busy noon, a remark with a « never » rule in force, several sessions running, a quiet evening,
+a mail that tries to order the composer), each with its queue and what a good composition does:
+`front` (must be modules), `back` (must not be modules, chips are fine), `hidden` (must not be
+chosen at all), `mode`, and `fallback_front` (whether the order by weight already puts `front` in
+front). `composer_bench_test.go` runs in CI with no model: every case is valid, its reference
+`answer` passes `checkComposition` and meets the case, invented refs are cleaned, and the fallback
+does what `fallback_front` says. `composer_live_test.go` runs the cases on a real model when a
+model or the prompt changes:
+
+```sh
+cd core
+ERIPHE_LIVE_COMPOSER=1 go test -run TestComposerLive -v .
+# ERIPHE_LIVE_COMPOSER_RUNS=3 (default), ERIPHE_LIVE_COMPOSER_MODEL=sonnet (default),
+# ERIPHE_LIVE_COMPOSER_CLI=claude (default)
+```
+
+It needs no node: it calls the local Claude Code CLI (`claude -p`, signed in) with the composer's
+instructions appended to the system prompt, the same turn text as production (`composerTurn`), no
+tool, low effort and no session kept, and reports per case and in all the latency (mean, max; it
+includes the CLI's start), the cost, invalid answers, invented refs, agreement with the case and
+stability (the mean Jaccard of the modules' refs between runs). It fails only when the CLI does;
+compare its numbers before switching the composer's model. A run of every case once with Sonnet
+costs about $0.05.
+
 ### The composed workspace (`/espace`)
 
 A page next to the conversation, which stays, where what Eriphe composes is laid out
