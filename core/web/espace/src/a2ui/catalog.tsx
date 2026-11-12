@@ -385,8 +385,9 @@ const Metric = createComponentImplementation(
     const delta = num(props.delta);
     const better = props.better ?? "up";
     const mood = !delta ? "flat" : (delta > 0) === (better === "up") ? "good" : "bad";
-    const deltaText = delta === undefined ? "" : `${delta > 0 ? "+" : delta < 0 ? "−" : "±"}${number(lang, Math.abs(delta))}${unit ? ` ${unit}` : ""}`;
-    const said = delta === undefined ? "" : t(delta > 0 ? "espace.a2.delta.up" : delta < 0 ? "espace.a2.delta.down" : "espace.a2.delta.flat", deltaText);
+    const size = delta === undefined ? "" : `${number(lang, Math.abs(delta))}${unit ? ` ${unit}` : ""}`;
+    const deltaText = delta === undefined ? "" : `${delta > 0 ? "+" : delta < 0 ? "−" : "±"}${size}`;
+    const said = delta === undefined ? "" : t(delta > 0 ? "espace.a2.delta.up" : delta < 0 ? "espace.a2.delta.down" : "espace.a2.delta.flat", size);
     return (
       <div className="a2-metric">
         <p className="a2-metric-label">{props.label}</p>

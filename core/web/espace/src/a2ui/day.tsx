@@ -5,7 +5,9 @@ import { day, minutesOf, time, wall } from "./format";
 // The catalog's Day: a day's events placed by the hour, side by side when
 // they overlap, the all-day ones in a row above. Placement is classes on a
 // grid of half-hour rows (.a2-r-N starts at row N, .a2-span-N spans N
-// rows, .a2-lane-N is the column), never a style: the CSP refuses them.
+// rows, .a2-lane-N is the column of an event that overlaps another,
+// .a2-lane-all the full width of one that does not), never a style: the
+// CSP refuses them.
 
 export type DayEvent = { title: string; start: string; end?: string; place?: string; allDay?: boolean };
 
@@ -95,11 +97,11 @@ export function Day({ date, events, lang, t }: { date: string; events: DayEvent[
               <div
                 key={i}
                 role="listitem"
-                className={`a2-ev a2-r-${row(p.start)} a2-span-${Math.min(48, rows)} a2-lane-${Math.min(p.lane, LANES - 1)}${p.overlap ? " a2-ev-overlap" : ""}${rows === 1 ? " a2-ev-short" : ""}`}
+                className={`a2-ev a2-r-${row(p.start)} a2-span-${Math.min(48, rows)} ${p.overlap ? `a2-lane-${Math.min(p.lane, LANES - 1)} a2-ev-overlap` : "a2-lane-all"}${rows === 1 ? " a2-ev-short" : ""}`}
               >
-                <span className="a2-ev-time">{span(p)}</span>
                 <span className="a2-ev-title">{p.ev.title}</span>
-                {p.ev.place && rows > 1 && <span className="a2-ev-place">{p.ev.place}</span>}
+                <span className="a2-ev-time">{span(p)}</span>
+                {p.ev.place && rows > 2 && <span className="a2-ev-place">{p.ev.place}</span>}
                 {p.overlap && <span className="sr-only">{t("espace.a2.day.overlap")}</span>}
               </div>
             );

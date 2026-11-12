@@ -1,5 +1,5 @@
 import type { Lang } from "../i18n";
-import { number, shortDate, wall } from "./format";
+import { number, shortDate, time, wall } from "./format";
 
 // The catalog's Chart: one or more series as lines or bars, drawn in SVG
 // here (no chart library, nothing that injects styles). Geometry is SVG
@@ -65,14 +65,18 @@ export function Chart({ kind, series, unit, lang, label }: { kind: "line" | "bar
   const idx = new Map(xs.map((x, i) => [String(x), i]));
   const band = iw / xs.length;
   const X = (x: string | number) => PAD.l + (kind === "bar" ? band * (idx.get(String(x)) ?? 0) + band / 2 : xs.length === 1 ? iw / 2 : (iw * (idx.get(String(x)) ?? 0)) / (xs.length - 1));
+  // Dates of one day are told by their time, others by their date.
+  const oneDay = xs.every((x) => typeof x === "string" && wall(x)?.time && x.slice(0, 10) === String(xs[0]).slice(0, 10));
   const xLabel = (x: string | number) => {
     const w = typeof x === "string" ? wall(x) : null;
-    return w ? shortDate(lang, w) : typeof x === "number" ? number(lang, x) : x;
+    return w ? (oneDay ? time(lang, w) : shortDate(lang, w)) : typeof x === "number" ? number(lang, x) : x;
   };
   const yLabel = (v: number) => number(lang, v);
   const sep = lang === "fr" ? "\u202f: " : ": ";
   const withUnit = (v: number) => (unit ? `${yLabel(v)} ${unit}` : yLabel(v));
-  const shownX = xs.length <= 6 ? xs : [xs[0], xs[Math.floor((xs.length - 1) / 2)], xs[xs.length - 1]];
+  // Labels that fit: every one when they are few and short, else three.
+  const few = xs.length <= (xs.every((x) => String(xLabel(x)).length <= 5) ? 7 : 4);
+  const shownX = few ? xs : [xs[0], xs[Math.floor((xs.length - 1) / 2)], xs[xs.length - 1]];
   const cls = (i: number) => `a2-s${i < SLOTS ? i : "x"}`;
   const zero = Y(Math.max(y0, Math.min(0, y1)));
 

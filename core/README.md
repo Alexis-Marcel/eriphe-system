@@ -2818,7 +2818,8 @@ cannot be read is left out); read again on the event stream's `attention` and `c
 events. A 401 sends the page to the sign-in. Only when neither the composition nor the attention
 queue is served (404), or on the dev server, the page shows made-up data in the same shape
 (`web/espace/src/fixtures.ts`) and says it is an example. `web/espace/src/data.ts` is the one
-place that talks to eriphe-core; card answers go to `POST /cards/{id}/yes|no`.
+place that talks to eriphe-core; card answers go to `POST /cards/{id}/yes|no`, and a
+surface's proposal is read from `GET /api/proposals/{ref}`.
 
 **A2UI surfaces** (`web/espace/src/a2ui/`, epic #415). Beside the composition by ref, the page
 renders [A2UI v1.0](https://github.com/a2ui-project/a2ui) surfaces with the workspace catalog's
@@ -2831,8 +2832,48 @@ and the library's basic catalog (Lit custom elements) is never imported: the DOM
 with classes only. `adapter.ts` is all the rest of the page knows: `applyMessages(msgs)` feeds it
 the messages core sends (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`);
 `onAction(cb)` and `onError(cb)` hand back A2UI v1.0 `action` and `error` messages, ready to send.
-`catalog.tsx` names the catalog once (`CATALOG`: its id and where core serves it, `/espace/catalog/v1.json`); `catalog.test.ts` checks that every component the page implements is in `a2ui/catalog_v1.json`, with the properties it declares. Until core
-streams surfaces (#419), the dev server shows a made-up one (`a2ui/fixtures.ts`).
+`catalog.tsx` names the catalog once (`CATALOG`: its id and where core serves it, `/espace/catalog/v1.json`)
+and implements all 23 of its components, each with exactly the catalog's properties;
+`catalog.test.ts` checks both ways against `a2ui/catalog_v1.json` (every component, its
+properties and their allowed values, the icon names, the four functions). Until core
+streams surfaces (#419), the dev server shows a made-up one (`a2ui/fixtures.ts`), or with
+`?gallery` the gallery (`a2ui/gallery.json`: surfaces using every component, in French and
+English, which the component tests render and a Go test, `TestEspaceGalleryIsValid`, runs
+through `a2ui.Validate`).
+
+**The components** are shapes any tool's data can fill, never tied to one:
+
+- *Layout*: Row, Column, List (a template over a list, `emptyText`), Card (the tile's own
+  frame at the root, a quiet box inside), Tabs (the WAI-ARIA pattern: one tab stop, arrows,
+  Home, End; hidden panels stay bound), Divider.
+- *Content*: Text (a `title` is a heading), Markdown (a small reader in `markdown.tsx` that
+  makes React elements: raw HTML stays text, images show their alt text, links only to
+  http(s) or mailto, `rel="noopener noreferrer"`, in a new tab on the user's click), Image
+  (loaded only from `/espace/media?…`, the proxy of core; any other address shows its alt
+  text: a model's URL is never fetched by the page), Icon (a fixed set of inline SVG,
+  `icons.tsx`, no font).
+- *Input*: Button (with its icon), Choice, TextField, DateField; the fields write what the
+  user enters to the bound data path, as A2UI does, and an action sent later carries it.
+- *Data*: Metric (value, unit, signed delta coloured by `better`), Chart (lines or bars in
+  SVG, `chart.tsx`: one axis, a palette checked for colour blindness, a legend from two
+  series, a tooltip on each mark, the numbers in a table for screen readers), Table (columns
+  `text`, `number`, `date`), Timeline (`done`, `current`, `pending`, `failed`), Message
+  (short: the excerpt; full: the body, opened in place), Day (`day.tsx`: events on a grid of
+  half-hour rows, overlaps side by side and marked, all-day ones above), Alert (four
+  levels), Placeholder (« En préparation », a slow shimmer).
+- *Proposal* shows one proposal of Eriphe's by its own ref (`kind:id`, the `proposal` of a
+  card): `GET /api/proposals/{ref}` (`web_espace_proposal.go`) gives its text, why, fields
+  and state in the user's language, and the card that answers it (404 when no card carries
+  it); Oui and Non go to that card, `POST /cards/{id}/yes|no` with the CSRF token, then the
+  proposal is read again.
+
+Placement is classes only (the day's rows and lanes are `.a2-r-N`, `.a2-span-N`,
+`.a2-lane-N`), never a `style` attribute. Fixed words are the app's (`espace.a2.*` in
+`web_text_espace.go`), and numbers and dates follow the user's language: the adapter is made
+for it (`createAdapter(lang)`), and so are the catalog's functions (`format.ts`:
+formatString, formatNumber, formatDate, formatRelative, written here rather than taken from
+the engine's basic catalog, which would bring its whole module along). A date is written as
+its source wrote it (its wall-clock time).
 
 **Upgrading `@a2ui/*`.** The packages are pinned to an exact version (`package.json`, no `^`) and
 change often, with breaking changes in minor versions. Bump them only on purpose, in a pull request
