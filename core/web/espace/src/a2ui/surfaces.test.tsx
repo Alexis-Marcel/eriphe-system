@@ -100,7 +100,7 @@ describe("A2UI surfaces", () => {
   it("upsert components by id and delete a surface", async () => {
     await apply(surfaceFixtures("en"));
     await apply([{ version: "1.0", updateComponents: { surfaceId: "sample-today", components: [{ id: "title", component: "Text", text: "Changed" }] } }]);
-    expect(el.querySelector(".a2-column > p")?.textContent).toBe("Changed");
+    expect(el.querySelector(".a2-column > .a2-text")?.textContent).toBe("Changed");
     await apply([{ version: "1.0", deleteSurface: { surfaceId: "sample-today" } }]);
     expect(el.querySelector(".a2-surface")).toBeNull();
   });

@@ -16,7 +16,9 @@ import type { Composition, Obj, Ref } from "./types";
 // - POST /messages: what the user writes, with the ref of the module open
 //   (about), so Eriphe knows what « ça » is;
 // - POST /api/espace/gesture: what the user opened, or what left the screen
-//   unopened, which memory's extraction reads (workspace.go).
+//   unopened, which memory's extraction reads (workspace.go);
+// - GET /api/proposals/{ref}: a proposal a surface shows (the catalog's
+//   Proposal), and the card whose POST /cards/{id}/yes|no answers it.
 // No control of the page keeps a rule or a preference: the user says it to
 // Eriphe, who remembers it.
 // A request without a session gets 401: the page goes to the sign-in. Only
@@ -155,6 +157,28 @@ export async function answer(ref: Ref, yes: boolean): Promise<boolean> {
   const id = ref.match(/^card:(\d+)$/)?.[1];
   if (!id) return false;
   return post(`/cards/${id}/${yes ? "yes" : "no"}`, new URLSearchParams());
+}
+
+// A proposal as a surface shows it (proposalView, web_espace_proposal.go).
+export type ProposalView = {
+  ref: string;
+  card: number;
+  state: string; // pending, approved, rejected, gone
+  text: string;
+  why?: string;
+  tainted?: boolean;
+  fields?: { name: string; value: string }[];
+};
+
+// proposal reads a proposal by its own ref (kind:id); null when no card
+// carries it.
+export async function proposal(ref: string): Promise<ProposalView | null> {
+  return getJSON<ProposalView>(`/api/proposals/${encodeURIComponent(ref)}`);
+}
+
+// answerCard says yes or no to the card of a proposal.
+export async function answerCard(card: number, yes: boolean): Promise<boolean> {
+  return post(`/cards/${card}/${yes ? "yes" : "no"}`, new URLSearchParams());
 }
 
 // send writes to the brain, in the conversation; about is the ref of the

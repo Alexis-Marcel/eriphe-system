@@ -23,6 +23,7 @@ func (w *web) espaceRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /espace/catalog/v1.json", w.auth(w.handleEspaceCatalog))
 	mux.Handle("GET /espace/media", w.auth(w.handleMedia)) // surfaces_media.go
 	mux.Handle("POST /api/espace/gesture", http.MaxBytesHandler(w.auth(w.handleGesture), 4<<10))
+	mux.Handle("GET /api/proposals/{ref}", w.auth(w.handleProposal)) // web_espace_proposal.go
 }
 
 // gestureIn is a gesture of the user's on the workspace (workspace.go).
