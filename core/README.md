@@ -712,6 +712,7 @@ whatever address it dials) and one client certificate per node.
 | `list_tasks` | recent tasks |
 | `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources) |
 | `stop_task` | stop the agent |
+| `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write the workspace, as `brain` ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)); `run_task`'s `surface` names a placeholder for the task to fill |
 
 The scheduler takes the requested node if it is online and fits. Otherwise it works in two passes,
 like Kubernetes': it **filters** the online nodes that offer the agent's runtime and carry all its
@@ -2998,7 +2999,11 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   its author is there (a skill that exists, a lead's session not ended, a task running; the brain
   always). None given: until a day later. Code removes an ended one on the monitors' loop.
 - **Who writes**: only its author writes it again (another author's id is refused) or removes
-  it; the user and code remove any. 100 surfaces, components and data of 64 KiB each.
+  it; the brain writes and removes any (it stays its author's: a skill's next run still writes
+  it); the user and code remove any. 100 surfaces, components and data of 64 KiB each.
+- **Asks** (`askGuard`): a button's `ask` (a request to the brain) carries its author's own
+  words: a value bound to the data (`@path`, `@call`) is refused, and so is any ask written in a
+  turn that read external content, which may have written it.
 - **Media**: the page never loads an address from outside (A2UI #4045; the CSP forbids it
   anyway). Each media address (an `Image`'s `url`, `a2ui.IsMedia`) is rewritten to
   `GET /espace/media?u=<address>&s=<signature>` (`surfaces_media.go`, with a session): one a
@@ -3016,7 +3021,7 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
 | Call | Does |
 |---|---|
 | `c.surfaceWrite(author, surfaceIn) (surface, []a2ui.ValidationError, error)` | writes a new surface (`ID` empty or free) or the author's own again; validation errors for the A2UI and the bindings, an error for the rest (a refused source, a field) |
-| `c.surfaceRemove(id, by) error` | by its author, `surfaceByUser` or `surfaceByLifetime` |
+| `c.surfaceRemove(id, by) error` | by its author, the brain, `surfaceByUser` or `surfaceByLifetime` |
 | `c.surfaces() ([]surface, error)`, `c.surface(id) (surface, error)` | all (heaviest, then latest first), one (`errNoSurface`) |
 | `c.surfaceOpened(ctx, id) error` | the user opened it: its sources read again |
 | `c.surfaceSubscribe() (snapshot []surfaceChange, changes <-chan surfaceChange, cancel func())` | the surfaces now (one `createSurface` each), then every change, nothing missed between |
@@ -3045,6 +3050,45 @@ the page, with the session's cookie and CSRF token (401 without a session):
 |---|---|---|
 | `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`) | 204; 400 not a valid action, 404 no such surface, 501 an action not handled yet (only `open`, reserved, the user opened the surface) |
 | `POST /api/espace/error` | an A2UI v1.0 `error` naming its surface | 204, kept for the author (`surfaceError`); 400, 404 |
+
+### The assistants' workspace tools (`workspace_tools.go`)
+
+Any assistant writes the workspace with four tools; the **author is the caller**, never a field:
+
+| Tool | Does |
+|---|---|
+| `surface_write` | create or update a surface: `id` (empty: a new one), `title`, `components`, `data`, `sources`, `refresh {every}`, `lifetime {until \| while \| kept}`, `weight`, `why`. Its description carries a compact summary of the catalog (its components and functions, from `a2ui.Eriphe()`); a wrong surface comes back as A2UI's errors, each with its path, nothing written. Answers `id`, `author`, `waiting` (sources still reading), `failed`, `previous_error` (the last error found on it, which this write clears) |
+| `surface_remove` | remove one of the caller's surfaces |
+| `workspace_read` | each surface (id, title, author, sources, lifetime, weight, why, last update, `waiting`; for the caller's own, `failed` and the last `error`), the user's gestures of the last hour (what, ref, time) and what the brain put in front. A title or why written in a tainted turn is quoted to its author only |
+| `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand |
+
+- **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint. A
+  session's lead, on its own tools (`registerLeadTools`), as `lead:<session>`. A task or a skill's
+  run through **`eriphe-workspace`, a server Eriphe provides**: lent like any catalog server
+  (`{kind: tool, ref: eriphe-workspace}` or `eriphe-workspace.<tool>` in `run_task`'s resources,
+  `eriphe-workspace` in a skill's `tools`), checked by `checkGrant`, listed by `list_tools` under
+  `provided`, put in the task's spec by `specServers` and relayed by its node at
+  `/v1/node/tasks/<id>/mcp/eriphe-workspace` like the others (`taskMCPHandler` serves the tools its
+  grant covers; a task not lent it gets 403). The name is reserved. A skill's run writes as
+  `skill:<name>`, so its next run rewrites the same surface; any other task as `task:<id>`.
+- **No approval.** Writing a surface is not an external write: the lent tools are allowed in
+  advance (the spec's `allowedTools`), and each caller writes its own surfaces only.
+- **Delegation.** For work that takes time, the brain writes a placeholder at once (a
+  `Placeholder`) and starts a task with `run_task`'s `surface` (its id): the surface must exist,
+  the task is lent `eriphe-workspace` and told in its prompt which surface to fill. That task
+  writes that id only (an empty id is that one), as the brain's delegate (the brain's rights);
+  any other id is refused, on write and on remove (`task_surface:<id>` in the store).
+- **Never held long.** `surface_write` waits 3 s at most (`surfaceReadCap`) for the sources'
+  first read. A source still reading then is accepted waiting (`look.sources[ptr].waiting`), the
+  surface written with its composed data and the bindings under it checked against the tool's
+  `outputSchema` only; the read goes on in the background (`surfaces_late.go`), fills the surface
+  as a refresh would (`applyReads`), then the bindings are checked against what it gave. What is
+  wrong goes to the author through `surfaceError`, the page's render errors' seam: it reads it in
+  `workspace_read`, and in its next `surface_write`'s `previous_error`. A surface written again
+  meanwhile is not told about.
+- **Settings → Surfaces** (`/settings/surfaces`, `web_surfaces.go`): every surface with its title,
+  author, sources, lifetime, last update, waiting and external tags, its last error; the user
+  removes any.
 
 ### Signing in
 
