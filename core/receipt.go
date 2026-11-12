@@ -31,6 +31,10 @@ type receipt struct {
 	Risks         []string `json:"risks,omitempty"`
 	NeedsApproval []string `json:"needs_approval,omitempty"`
 	Lessons       []string `json:"lessons,omitempty"`
+	// Attention is what the agent says deserves the user's attention, its
+	// signals as kept (attention_signal.go); dropped says what was not.
+	Attention []attentionSignal `json:"attention,omitempty"`
+	dropped   []string
 }
 
 // receiptInstruction is the end of a worker's standing instruction.
@@ -122,6 +126,7 @@ func decodeReceipt(raw string) *receipt {
 	if !receiptStatuses[r.Status] {
 		return nil
 	}
+	r.Attention, r.dropped = decodeSignals(outer["attention"])
 	return r
 }
 

@@ -858,6 +858,32 @@ verified and not verified side by side, the checks with the end of a failed one'
 mismatches. The last receipt is kept in `task_harness`. The night's memory extraction reads a
 finished task's receipt instead of its last message (still external).
 
+### Attention signals (`attention_signal.go`)
+
+An assistant (a skill's run, a session lead) says what deserves the user's attention with an
+**attention signal**, a structured block rather than a prefix in its prose: in a skill's receipt
+(`attentionInstruction`, after `receiptInstruction` in `skillVoice`) or in a lead's `report`:
+
+```json
+"attention": [{"refs": ["mail:42", "agenda:2026-11-12"], "weight": 4, "why": "une facture due aujourd'hui", "say": "Ta facture est due."}]
+```
+
+`refs` name the objects it is about, `<kind>:<id>` with a kind among `mail`, `agenda`
+(`YYYY-MM-DD`), `event`, `session`, `card`, `task`, `project` and `alert`; only the form is checked, by `parseRef` (`objects.go`).
+`weight` is 5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1 background; `why` is
+cut to 80 characters, `say` is optional. One block alone, or refs given as one string, are read as
+a list. A ref of another form, a weight outside 1 to 5 (or not whole), an entry that is not an
+object are dropped and logged, never fatal; the rest of the receipt stands. Each ref of a kept
+signal enters the [attention queue](#workspace-web) (`c.attend`) with its source (`skill:<name>`,
+`assistant:<name>`), marked as drawn from external content when the run or the session read some:
+the brain reads it as data.
+
+A skill whose receipt has no block keeps working through its prefix: its message, once told, enters
+the queue as the notification it became (`alert:<id>`), weight 5 for `[urgent]`, 4 for a plain
+message, 3 for `[brief]`; `[rien]` and a notification a rule says never to are nothing. A block wins
+over the prefix (which still decides the notification), and a silent run's block still enters the
+queue. A worker's receipt carries no signal.
+
 ### Work sessions (`sessions.go`, `session_engine.go`)
 
 A **session** is work of several steps toward one goal: rebuild a service, find a brand name, make
@@ -901,7 +927,10 @@ goes when the session ends. Its trigger `session:<id>` wakes it with what happen
 (`session_inbox`), one turn at a time; its own tools are `session`, `settle_step`,
 `amend_session`, `end_session` and `report`. It never talks to the user nor starts a task. The
 brain no longer judges a session that has a lead: it passes the user's words with `tell_lead`, and
-hears the lead's reports, the choices to ask, the budget's card and the end.
+hears the lead's reports, the choices to ask, the budget's card and the end. A report may carry an
+[attention signal](#attention-signals-attention_signalgo) (`attention`, the same block as a skill's
+receipt): its items enter the attention queue with the source `assistant:lead-<id>`, and the tool's
+result lists what was `dropped`.
 
 **The final objective check**: `end_session` on a session with a `done_when` adds a last step,
 `final-check`, a fresh agent lent read-only what the steps wrote (their repository branches and
@@ -1367,7 +1396,9 @@ version, read with its diff.
   events start it clean.
 - **Its last message** is what it tells the user: a notification, why « Skill « name » », ref
   `skill:<name>`, its link-free rules when the task is tainted; `[rien]` tells nothing, `[brief]`
-  first holds it for the brief. Then its task stops. The brain is not told of its state; its
+  first holds it for the brief. What deserves the user's attention enters the attention queue,
+  from the receipt's [attention signal](#attention-signals-attention_signalgo) or else by the
+  prefix. Then its task stops. The brain is not told of its state; its
   permissions are the user's, as any task's.
 - **One run open per skill and key**: the key's new events wait, and when its turn ends, its task
   gets them as a message instead of a second task.
@@ -2351,7 +2382,8 @@ per object: a ref (`card:<id>`, `session:<id>`, `mail:<id>`…), a weight from 1
 say, its source (`brain`, `task:<id>`, `session:<id>`, `skill:<name>`) and its time. Items about the
 same ref merge (the highest weight, the latest why). A card enters it when it is shown, weighted by
 its kind (one a task or a session waits on: 4; any other proposal: 3), and leaves it once decided
-or gone. Every item is delivered as it enters for now (breakpoints come later). The workspace reads
+or gone. Assistants feed it with their [attention signals](#attention-signals-attention_signalgo);
+an item drawn from external content stays marked so, and the brain reads it as data. Every item is delivered as it enters for now (breakpoints come later). The workspace reads
 it as JSON at `GET /api/attention` (`{"items": [{ref, weight, why, say, source, time}]}`, the
 workspace's session; without one, 401) and as the event stream's `attention` event, sent when it
 changes; the brain's turn lists the open items (`[en attente de … : …]`), the heaviest first. A plain yes or no answers a card in words only when the message is

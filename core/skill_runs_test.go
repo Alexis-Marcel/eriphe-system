@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -173,6 +174,69 @@ func TestSkillRunJoinsAndTells(t *testing.T) {
 	}
 	if d := desiredOf(t, c, id); d != desiredStopped {
 		t.Fatalf("not stopped: %q", d)
+	}
+}
+
+// A skill's message goes to the attention queue: without an attention
+// block, as the notification it became, weighed by its prefix ([urgent]
+// 5, plain 4, [brief] 3, [rien] nothing); with a block, the block wins.
+func TestSkillRunAttention(t *testing.T) {
+	c, now := skillCore(t)
+	addTriggered(t, c, "---\nname: veille\ndescription: la veille\nwhen: monitor.new\n---\nRegarde.\n")
+	ctx := context.Background()
+	end := func(key, text string) *skillRun {
+		t.Helper()
+		c.emit(journalEvent{Kind: "monitor.new", Key: key, Source: "monitor:mails", At: *now})
+		c.tickSkills(ctx, *now)
+		var r *skillRun
+		for _, x := range runsOfSkill(t, c, "veille") {
+			if x.Key == key {
+				r = x
+			}
+		}
+		if r == nil {
+			t.Fatalf("no run for %s", key)
+		}
+		c.store.addEvents(r.Task, []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": text}}, {Seq: 2, Time: time.Now(), Type: "turn_end"}})
+		c.store.updateTask(r.Task, map[string]any{"state": stateIdle})
+		c.skillTaskChanged(r.Task, stateIdle, turnOutcome{})
+		return r
+	}
+	alertOf := func(r *skillRun) *attentionItem {
+		t.Helper()
+		ns, _ := c.notificationsWhere(`source = ? AND text LIKE ?`, notifyFromSkill, "%"+r.Key+"%")
+		if len(ns) != 1 {
+			return nil
+		}
+		return attentionOf(c, fmt.Sprintf("alert:%d", ns[0].ID))
+	}
+	for key, want := range map[string]int{"[urgent] Prod down, key a.": 5, "Prod slow, key b.": 4, "[brief] Prod fine, key c.": 3} {
+		k := strings.TrimSuffix(key[strings.LastIndex(key, "key ")+4:], ".")
+		it := alertOf(end(k, key))
+		if it == nil || it.Weight != want || it.Source != "skill:veille" || !strings.Contains(it.Why, "Prod") {
+			t.Errorf("%q: item %+v, want weight %d", key, it, want)
+		}
+	}
+	before := len(c.attentionOpen())
+	if end("d", "[rien]"); len(c.attentionOpen()) != before {
+		t.Errorf("[rien] went to the queue: %+v", c.attentionOpen())
+	}
+	// A block wins over the prefix: its refs, its weights; no alert item.
+	r := end("e", "[urgent] Une facture, key e.\n```json\n"+`{"receipt": {"status": "done", "attention": [`+
+		`{"refs": ["mail:42"], "weight": 2, "why": "une facture à payer"}, {"refs": ["bogus:1"], "weight": 3, "why": "x"}]}}`+"\n```")
+	if it := attentionOf(c, "mail:42"); it == nil || it.Weight != 2 || it.Source != "skill:veille" || it.Why != "une facture à payer" {
+		t.Errorf("block item %+v", it)
+	}
+	if it := alertOf(r); it != nil {
+		t.Errorf("the prefix went to the queue with a block: %+v", it)
+	}
+	if attentionOf(c, "bogus:1") != nil {
+		t.Error("a bad ref was kept")
+	}
+	// A silent run with a block: nothing told, the block in the queue.
+	end("f", "[rien]\n```json\n"+`{"receipt": {"status": "done", "attention": {"refs": ["agenda:2026-11-13"], "weight": 1, "why": "une journée calme"}}}`+"\n```")
+	if it := attentionOf(c, "agenda:2026-11-13"); it == nil || it.Weight != 1 {
+		t.Errorf("silent block item %+v", it)
 	}
 }
 
