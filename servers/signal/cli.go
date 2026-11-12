@@ -145,8 +145,7 @@ func (c *cli) once(ctx context.Context) error {
 	err = p.wait()
 
 	c.mu.Lock()
-	c.p = nil
-	c.ready = make(chan struct{})
+	c.gone(p)
 	for id, ch := range c.waiting {
 		ch <- rpcResponse{Error: &rpcError{Message: "signal-cli stopped"}}
 		delete(c.waiting, id)
@@ -255,8 +254,17 @@ func (c *cli) forget(id string) {
 func (c *cli) restart() {
 	c.mu.Lock()
 	p := c.p
+	c.gone(p) // a call from now on waits for the next one
 	c.mu.Unlock()
 	if p != nil {
 		p.kill()
+	}
+}
+
+// gone forgets p as the running signal-cli, if it still is; c.mu is held.
+func (c *cli) gone(p *proc) {
+	if p != nil && c.p == p {
+		c.p = nil
+		c.ready = make(chan struct{})
 	}
 }
