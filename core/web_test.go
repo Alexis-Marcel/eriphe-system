@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"html"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -589,6 +591,71 @@ func TestWebEventsStream(t *testing.T) {
 		}
 	}
 	t.Fatalf("no message event: %v", sc.Err())
+}
+
+// The attention queue: a JSON snapshot behind the workspace's session, and
+// the event stream's "attention" when it changes. A card made outside a
+// brain turn comes with its message and in the queue, no user message
+// needed.
+func TestWebAttention(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	anon := &testWeb{t: t, srv: tw.srv, hc: &http.Client{Transport: tw.hc.Transport, CheckRedirect: tw.hc.CheckRedirect}}
+	if code, _, _ := anon.do("GET", "/api/attention", nil, nil); code != http.StatusUnauthorized {
+		t.Fatalf("attention without a session: %d", code)
+	}
+	tw.c.attend(attentionItem{Ref: "mail:7", Weight: 2, Why: "a reply from example.org", Source: "skill:mail"})
+	code, body, h := tw.do("GET", "/api/attention", nil, nil)
+	var snap attentionView
+	if code != 200 || !strings.HasPrefix(h.Get("Content-Type"), "application/json") || json.Unmarshal([]byte(body), &snap) != nil {
+		t.Fatalf("attention: %d %q %s", code, h.Get("Content-Type"), body)
+	}
+	if len(snap.Items) != 1 || snap.Items[0].Ref != "mail:7" || snap.Items[0].Weight != 2 || snap.Items[0].Source != "skill:mail" || snap.Items[0].Time.IsZero() {
+		t.Fatalf("snapshot %+v", snap)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events?after="+strconv.Itoa(tw.c.store.lastMessageSeq()), nil)
+	resp, err := tw.hc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		tw.c.store.insertTask(&TaskRow{ID: "t-held", Kind: "worker", Title: "Fix the menu", State: statePending, Desired: desiredHeld})
+		tw.c.holdTask(&TaskRow{ID: "t-held", Title: "Fix the menu"}, []startNeed{{Server: "nas", Category: "use"}}, nil, false)
+	}()
+	sc := bufio.NewScanner(resp.Body)
+	event, sawText, sawCard, sawItem := "", false, false, false
+	for sc.Scan() {
+		line := sc.Text()
+		if v, ok := strings.CutPrefix(line, "event: "); ok {
+			event = v
+		}
+		data, ok := strings.CutPrefix(line, "data: ")
+		if !ok {
+			continue
+		}
+		switch event {
+		case "message":
+			sawText = sawText || strings.Contains(data, "Fix the menu")
+			sawCard = sawCard || strings.Contains(data, `id="card-`)
+		case "attention":
+			var v attentionView
+			if json.Unmarshal([]byte(data), &v) != nil {
+				t.Fatalf("attention event %q", data)
+			}
+			sawItem = sawItem || slices.ContainsFunc(v.Items, func(it attentionItem) bool {
+				return strings.HasPrefix(it.Ref, "card:") && it.Weight == weightBlocksATask
+			})
+		}
+		if sawText && sawCard && sawItem {
+			return
+		}
+	}
+	t.Fatalf("message %v, card %v, item %v: %v", sawText, sawCard, sawItem, sc.Err())
 }
 
 func TestMarkdownEscapes(t *testing.T) {

@@ -93,6 +93,7 @@ func newMCPServer(c *core) *mcp.Server {
 			}
 			tainted := c.turnTaint()
 			in.askStart = true // what is the user's is asked now, not at the push (task_start.go)
+			in.byBrain = true  // its card goes with the brain's message
 			in.taint = tainted
 			in.cleanStart = len(tainted) == 0 && c.turnFromUser()
 			t, err := c.runTask(ctx, in)

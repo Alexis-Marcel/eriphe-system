@@ -295,6 +295,10 @@ type runRequest struct {
 	// no card for what it is lent.
 	approvedInAdvance bool
 	taint             []string
+	// byBrain: the brain started it in its turn (run_task), so the start's
+	// card goes with its message; any other start shows its card at once
+	// (task_start.go).
+	byBrain bool
 }
 
 // workerVoice is a worker's standing instruction: its last message reaches
@@ -460,7 +464,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		return nil, err
 	}
 	if len(needs) > 0 {
-		if err := c.holdTask(t, needs, r.taint); err != nil {
+		if err := c.holdTask(t, needs, r.taint, r.byBrain); err != nil {
 			return nil, err
 		}
 	}

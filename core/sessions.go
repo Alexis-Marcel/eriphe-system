@@ -8,6 +8,7 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -558,8 +559,10 @@ func (c *core) sessionAsk(id int64) (sessionAsk, error) {
 }
 
 // ask asks the user something on a card, once per thing: an ask of the
-// same kind and step still waiting is kept.
-func (c *core) ask(session int64, kind, step, why string, payload any) (int64, error) {
+// same kind and step still waiting is kept. by is who asks it: the
+// brain's card goes with its message of this turn; anyone else's (the
+// engine, a lead, a skill) is shown at once (cardNow).
+func (c *core) ask(session int64, kind, step, why string, payload any, by string) (int64, error) {
 	var id int64
 	err := c.store.db.QueryRow(`SELECT id FROM session_asks WHERE session = ? AND kind = ? AND step = ? AND state = ?`, session, kind, step, askPending).Scan(&id)
 	if err == nil {
@@ -572,8 +575,15 @@ func (c *core) ask(session int64, kind, step, why string, payload any) (int64, e
 		return 0, err
 	}
 	id, _ = res.LastInsertId()
-	c.cardProposed(cardSession, id)
-	c.syncCards() // also when no turn of the brain's takes it
+	if by == byBrain {
+		c.cardProposed(cardSession, id)
+		return id, nil
+	}
+	title := ""
+	if s, err := c.session(session); err == nil {
+		title = s.Title
+	}
+	c.cardNow(cardSession, id, fmt.Sprintf(tr("fr", "session.ask.message"), title), "session:"+strconv.FormatInt(session, 10))
 	return id, nil
 }
 

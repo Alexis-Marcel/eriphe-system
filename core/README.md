@@ -1037,7 +1037,8 @@ adds its title and the start of its description, read with the tool itself when 
 3. **at the first call** of a category not granted yet; the calls that wait on it are answered with it.
 
 A card at the first call or on release has a message of its own, the question, which notifies as
-any question does. These cards and a start's go to
+any question does; so has a start's card when the brain did not launch the task (a session's step).
+These cards, a start's and a work session's go to
 the channels the user writes from as well (Telegram), whatever the messages around them did,
 answered from the linked account only ("Alerts only" sends none): that account is the user, a
 trusted channel, so its buttons answer as the workspace's. A task's raw permission (a rule's `ask`,
@@ -1375,7 +1376,8 @@ version, read with its diff.
 - **Its calls the user must approve never hold it** (`skill_cards.go`): as the brain's, each is
   kept with its exact input (`access_asks.run`), and the task is told it did not run and goes on.
   When the run ends, they show on one card (kind `runcalls`), attached to its message (or to « the
-  skill proposes N actions » when it said `[rien]`): each action with its parameters. The yes runs
+  skill proposes N actions » when it said `[rien]`, or when its message is held for the brief or
+  not sent, shown at once): each action with its parameters. The yes runs
   them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
 - **A work session**: with `can: [start-session]`, the run is told it may end its last message with
   a fenced ` ```session ` block holding `start_session`'s JSON. eriphe-core opens it (`by`
@@ -2334,7 +2336,24 @@ said nothing) are queued and offered three at most, once an hour at most, when t
 at the brief and the return point, never in the quiet hours, at night (22:00–07:00), when a
 source says do not disturb, in a Focus or while busy; the brain says it in a sentence and the
 cards come with its message. A card that stops a task is not one of these: if its turn wrote
-nothing (a turn that failed), it goes with the brain's next message, whatever the hour. A plain yes or no answers a card in words only when the message is
+nothing (a turn that failed), it goes with the brain's next message, whatever the hour. A card made
+outside a brain turn (the start of a task the brain did not launch, such as a session's step; what
+a session asks: its plan when a skill opened it, an approval step, a change of plan or more time;
+a skill run's calls when its message is held for the brief or not sent; an access asked at a
+task's call) is shown at once, under a message of its own written by eriphe-core as the brain's
+(`cardNow`), with no message of the user's needed; the brain is not woken for it, and nothing it
+does waits on it.
+
+**Attention queue** (`attention.go`). What needs the user is kept by code in one queue, one item
+per object: a ref (`card:<id>`, `session:<id>`, `mail:<id>`…), a weight from 1 to 5 (5 interrupts,
+4 needs the user now, 3 matters today, 2 is a glance, 1 is background), a short why, an optional
+say, its source (`brain`, `task:<id>`, `session:<id>`, `skill:<name>`) and its time. Items about the
+same ref merge (the highest weight, the latest why). A card enters it when it is shown, weighted by
+its kind (one a task or a session waits on: 4; any other proposal: 3), and leaves it once decided
+or gone. Every item is delivered as it enters for now (breakpoints come later). The workspace reads
+it as JSON at `GET /api/attention` (`{"items": [{ref, weight, why, say, source, time}]}`, the
+workspace's session; without one, 401) and as the event stream's `attention` event, sent when it
+changes; the brain's turn lists the open items (`[en attente de … : …]`), the heaviest first. A plain yes or no answers a card in words only when the message is
 the user's own (workspace, Telegram or a trusted channel; never a channel the user did not trust, nor `/v1/messages`, whose token may
 be lent to the brain), is nothing but a yes or a no, has no file, comes right
 after a recent message of the brain's written in a clean turn that shows exactly one waiting card,

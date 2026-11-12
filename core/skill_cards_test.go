@@ -208,3 +208,27 @@ func TestSkillRunUrgent(t *testing.T) {
 		t.Fatalf("urgent %+v", ns)
 	}
 }
+
+// A run whose message is held for the brief still shows its calls' card at
+// once, under a message that says only the card, not the notification.
+func TestSkillRunCallsCardHeldForBrief(t *testing.T) {
+	c, now := skillCore(t)
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ntools: [monitor]\n---\nEnquête.\n")
+	r := startedRun(t, c, now, "prod")
+	ev := []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
+		Data: map[string]any{"id": "p1", "tool_name": "mcp__monitor__rollback", "input": map[string]any{"version": "2.0.0"}}}}
+	c.store.addEvents(r.Task, ev)
+	c.applyPolicy(r.Task, ev)
+	if r = endTurn(t, c, r.Task, "[brief] Des 5xx depuis la 2.0.1 : je propose de remettre la 2.0.0."); r.State != skillRunDone {
+		t.Fatalf("run %+v", r)
+	}
+	if ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill); len(ns) != 1 || ns[0].Outcome != levelBrief {
+		t.Fatalf("notifications %+v", ns)
+	}
+	x := cardOf(t, c, cardRunCalls, r.ID)
+	shownAtOnce(t, c, x, weightProposal)
+	msgs, _ := c.store.messagesAfter(x.Seq-1, 1)
+	if strings.Contains(msgs[0].Text, "5xx") || !strings.Contains(msgs[0].Text, "prod") {
+		t.Errorf("message %q", msgs[0].Text)
+	}
+}

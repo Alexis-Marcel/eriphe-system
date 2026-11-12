@@ -85,9 +85,11 @@ func (c *core) startNeeds(list []ResourceRef, clean bool) []startNeed {
 	return out
 }
 
-// holdTask keeps the start of a task for the user's answer: its card goes
-// with the brain's next message of this turn.
-func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string) error {
+// holdTask keeps the start of a task for the user's answer. Started by the
+// brain, its card goes with the brain's next message of this turn; started
+// by anyone else (a session's step), no turn will carry it: it is shown at
+// once, with a message of its own (cardNow).
+func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string, byBrain bool) error {
 	raw, _ := json.Marshal(needs)
 	res, err := c.store.db.Exec(`INSERT INTO task_starts (task_id, needs, tainted, created) VALUES (?, ?, ?, ?)`,
 		t.ID, string(raw), strings.Join(tainted, ", "), time.Now().Unix())
@@ -95,7 +97,11 @@ func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string) error {
 		return err
 	}
 	id, _ := res.LastInsertId()
-	c.cardProposed(cardTaskStart, id)
+	if byBrain {
+		c.cardProposed(cardTaskStart, id)
+	} else {
+		c.cardNow(cardTaskStart, id, fmt.Sprintf(tr("fr", "taskstart.held.message"), t.label()), "task:"+t.ID)
+	}
 	log.Printf("task %s held for the user's approval: %s", t.ID, needsLog(needs))
 	return nil
 }

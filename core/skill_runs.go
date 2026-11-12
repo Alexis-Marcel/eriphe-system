@@ -560,8 +560,15 @@ func (c *core) tellRun(r *skillRun, text string) {
 	if why := c.taskResultTaint(r.Task); why != "" {
 		tainted = []string{why}
 	}
-	if _, err := c.notifyAs(notifyIn{Text: truncate(oneLine(text), notifyTextMax), Level: level,
-		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill}, notifyFromSkill, tainted, calls > 0); err != nil {
+	out, err := c.notifyAs(notifyIn{Text: truncate(oneLine(text), notifyTextMax), Level: level,
+		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill}, notifyFromSkill, tainted, calls > 0)
+	if err != nil {
 		c.endRun(r.ID, state, note+"\n· not told: "+err.Error())
+	}
+	if calls > 0 && (err != nil || out["outcome"] != levelNow) {
+		// Its message is held for the brief, or not sent: the card is
+		// shown now, with a message of its own that does not tell the
+		// notification.
+		c.cardNow(cardRunCalls, r.ID, fmt.Sprintf(tr("fr", "card.runcalls"), r.Skill, calls), "skill:"+r.Skill)
 	}
 }

@@ -78,7 +78,7 @@ func launchWrite(t *testing.T, c *core) *TaskRow {
 
 func launchWriteAs(t *testing.T, c *core, clean bool) *TaskRow {
 	t.Helper()
-	task, err := c.runTask(context.Background(), runRequest{Prompt: "fix the menu", askStart: true, cleanStart: clean, Resources: []ResourceRef{
+	task, err := c.runTask(context.Background(), runRequest{Prompt: "fix the menu", askStart: true, byBrain: true, cleanStart: clean, Resources: []ResourceRef{
 		{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/x"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -255,5 +255,38 @@ func TestTaskStartApprovedInAdvance(t *testing.T) {
 	// No branch: it pushes the default branch, Envoyer, approved ahead.
 	if d := decideRepo("owner/repo", catSend, c.repoFacts(got)); d.Decision != decideAllow {
 		t.Fatalf("push: %+v", d)
+	}
+}
+
+// A start that is not the brain's (a session's step) has no turn to carry
+// its card: it is shown at once, under a message of its own. One the brain
+// makes in its turn keeps its place under the brain's message.
+func TestTaskStartCardOutsideTurn(t *testing.T) {
+	c := startCore(t)
+	lent := []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/x"}}
+	task, err := c.runTask(context.Background(), runRequest{Title: "Fix the menu", Prompt: "fix the menu", askStart: true, Resources: lent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.heldTask(task.ID) {
+		t.Fatal("not held")
+	}
+	x, _ := startCard(t, c)
+	shownAtOnce(t, c, x, weightBlocksATask)
+	if msgs, _ := c.store.messagesAfter(x.Seq-1, 1); !strings.Contains(msgs[0].Text, "Fix the menu") {
+		t.Errorf("message %q", msgs[0].Text)
+	}
+	if b := c.attentionBlock(); !strings.Contains(b, cardItemRef(x.ID)) || !strings.Contains(b, "task:"+task.ID) {
+		t.Errorf("the brain's turn does not list it: %q", b)
+	}
+
+	c2 := startCore(t)
+	launchWrite(t, c2) // the brain's run_task, in its turn
+	if x, _ := startCard(t, c2); x.Seq != 0 || len(c2.attentionOpen()) != 0 {
+		t.Fatalf("a card of the brain's turn shown before its message: %+v", x)
+	}
+	seq := brainSays(c2, "Je lance la correction du menu.")
+	if x, _ := startCard(t, c2); x.Seq != seq || attentionOf(c2, cardItemRef(x.ID)) == nil {
+		t.Fatalf("card %+v, want under message %d and in the queue", x, seq)
 	}
 }

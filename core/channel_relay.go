@@ -146,9 +146,11 @@ func (c *core) channelRepliesOn(k channelKind) {
 	st.set(channelSeenKey(k.ID), strconv.Itoa(msgs[len(msgs)-1].Seq))
 }
 
-// blocksATask tells whether a card stops a task until it is answered: it
-// goes to the channels whatever its message did.
-func blocksATask(kind string) bool { return kind == cardTaskStart || kind == cardAccess }
+// blocksATask tells whether a card stops a task, or a work session, until
+// it is answered: it goes to the channels whatever its message did.
+func blocksATask(kind string) bool {
+	return kind == cardTaskStart || kind == cardAccess || kind == cardSession
+}
 
 // channelCards sends each channel the cards still waiting whose message
 // went there.
