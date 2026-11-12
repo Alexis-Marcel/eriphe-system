@@ -196,7 +196,7 @@ jobs:
   # Every test passes before any image is published (the publish job): a release tags
   # `latest`, and a workspace offers that version as soon as one image has it.
   tests:
-    needs: [scripts, node, cred, core, espace, install, cli, mail, calendar, files]
+    needs: [scripts, node, cred, core, espace, install, cli, mail, calendar, files, signal]
     runs-on: ubuntu-latest
     steps:
       - run: 'true'
@@ -393,12 +393,40 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       version-arg: true
 
+  signal:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: servers/signal
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: servers/signal/go.mod
+          cache-dependency-path: servers/signal/go.sum
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: test -z "$(gofmt -l .)"
+
+  signal-image:
+    needs: version
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      image: eriphe-signal
+      context: servers/signal
+      version: ${{ needs.version.outputs.version }}
+      version-arg: true
+
   # The images, built while the tests run and pushed by digest only on a push (image.yml),
   # published as one multi-arch manifest each under the build's tags once every test passed:
   # nothing is named, no version is published, before. One entry per image job above.
   publish:
     if: github.event_name == 'push'
-    needs: [version, tests, core-image, node-image, launcher-image, worker, mail-image, calendar-image, files-image]
+    needs: [version, tests, core-image, node-image, launcher-image, worker, mail-image, calendar-image, files-image, signal-image]
     strategy:
       fail-fast: false
       matrix:
@@ -417,6 +445,7 @@ jobs:
           - image: eriphe-mail
           - image: eriphe-calendar
           - image: eriphe-files
+          - image: eriphe-signal
     name: publish (${{ matrix.image }})
     runs-on: ubuntu-latest
     permissions:

@@ -1,7 +1,8 @@
 # Eriphe's tool servers
 
 `mail`, `calendar` and `files` are MCP servers that eriphe-core launches on a machine (a node)
-and configures. They follow one contract, so another image can take the place of one of them.
+and configures. `signal` ([signal/README.md](signal/README.md)), Eriphe's own Signal account,
+runs the same way, with setup tools only and no configuration. They follow one contract, so another image can take the place of one of them.
 
 ## Configuration
 

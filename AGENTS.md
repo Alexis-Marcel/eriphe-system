@@ -24,7 +24,7 @@ describes). You do not need to build anything: the installers download released 
 | `install/` | `install.sh` (Linux, macOS), `install.ps1` (Windows), `eriphe-launcher` (the one-container install) |
 | `unraid/` | the Unraid template of the launcher |
 | `cli/` | `eriphe`, the terminal UI (Go) |
-| `servers/` | MCP servers `mail`, `calendar`, `files` (Go, one module each) |
+| `servers/` | MCP servers `mail`, `calendar`, `files`, `signal` (Go, one module each) |
 | `ha/` | the Home Assistant integration (Python) |
 | `deploy/` | an example Docker Compose deployment |
 | `docs/` | guides for users |
@@ -40,7 +40,7 @@ Each Go module builds on its own; run the checks from its folder (CI runs the sa
 
 | Module | Checks |
 |---|---|
-| `core/`, `cli/`, `servers/mail/`, `servers/calendar/`, `servers/files/`, `node/cred/` | `go build ./... && go vet ./... && go test ./...` |
+| `core/`, `cli/`, `servers/mail/`, `servers/calendar/`, `servers/files/`, `servers/signal/`, `node/cred/` | `go build ./... && go vet ./... && go test ./...` |
 | `node/` | the same, plus `GOOS=windows go build ./...` |
 | `install/` | `sh install/lint.sh` (needs `shellcheck`), `sh install/launcher_test.sh` and `sh install/wsl_test.sh` |
 | `.github/scripts/` | `sh .github/scripts/release_test.sh` |
