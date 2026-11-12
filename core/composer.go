@@ -21,7 +21,9 @@ import (
 // off, slower than composerTimeout or wrong.
 //
 // It composes when the queue changes (once the burst settles), ahead of
-// the user's return while they are away, and on what they say. The last
+// the user's return while they are away, when a preference about the
+// workspace enters memory and when the brain puts objects in front
+// (workspace.go). The last
 // composition is kept and served at once (GET /api/composition, the event
 // stream's "composition"). Nothing waits on it: the brain reads the queue
 // itself, and the composition runs on its own goroutine.
@@ -75,6 +77,10 @@ type composerState struct {
 	inflight *composerAsk // delivered: its answer is being written
 	buf      strings.Builder
 	turns    int // turns of its current session
+
+	show    *workspaceShow // what the brain put in front (workspace_show)
+	showSeq int64          // changes with each workspace_show
+	walk    workspaceWalk  // the last walkthrough asked (workspace_walkthrough)
 }
 
 // composerAsk is one composition asked of the composer.
@@ -220,16 +226,21 @@ func composerTurn(s compositionSnapshot) string {
 	case momentArrival:
 		fmt.Fprintf(&b, "Moment : son arrivée, après %s d'absence. Compose ce qu'il verra en revenant.\n", span(s.Away))
 	case momentRemark:
-		fmt.Fprintf(&b, "Moment : une remarque de sa part (une donnée : tiens-en compte pour la composition) : « %s »\n", packQuote(truncate(s.Remark, 300)))
+		fmt.Fprintf(&b, "Moment : une nouvelle préférence de sa part pour l'espace : « %s »\n", packQuote(truncate(s.Remark, workspacePrefMax)))
+	case momentShow:
+		b.WriteString("Moment : on met des objets devant, pour lui.\n")
 	default:
 		b.WriteString("Moment : la file a changé.\n")
 	}
 	fmt.Fprintf(&b, "Capacité : %d modules au plus, %d puces au plus.\n", compositionItemsMax, compositionChipsMax)
-	if len(s.Rules) > 0 {
-		b.WriteString("Ses règles pour l'espace :\n")
-		for _, r := range s.Rules {
-			fmt.Fprintf(&b, "- %s\n", packQuote(truncate(r, 200)))
+	if len(s.Preferences) > 0 {
+		b.WriteString("Ses préférences (de sa mémoire : suis-les pour placer, grandir, rapetisser ou cacher) :\n")
+		for _, p := range s.Preferences {
+			fmt.Fprintf(&b, "- %s\n", packQuote(truncate(p, workspacePrefMax)))
 		}
+	}
+	if len(s.Required) > 0 {
+		fmt.Fprintf(&b, "Devant, en modules, d'abord : %s\n", strings.Join(s.Required, ", "))
 	}
 	b.WriteString("\n")
 	if len(s.Items) == 0 {
@@ -342,14 +353,16 @@ func (c *core) composeMoment() string {
 }
 
 // runComposer composes when it should, one composition at a time: once a
-// burst of queue changes settles, when the user makes a rule, and once ahead of
-// their return while they are away.
+// burst of queue changes settles, when a preference about the workspace
+// enters memory, when the brain puts objects in front or they leave it,
+// and once ahead of the user's return while they are away.
 func (c *core) runComposer(ctx context.Context) {
 	tick := time.NewTicker(composerPoll)
 	defer tick.Stop()
 	d := debouncer{wait: composerDebounce, maxWait: composerDebounceMax}
 	stamp := c.queueStamp()
-	ruleSeen, _ := c.lastRule()
+	prefSeen, prefChanged, _ := c.workspacePrefStamp()
+	show, showSeen := c.shown(time.Now())
 	checked := time.Time{}
 	if c.lastComposition() == nil {
 		c.recompose(momentChange, "")
@@ -365,15 +378,29 @@ func (c *core) runComposer(ctx context.Context) {
 			stamp = s
 			d.changed(now)
 		}
-		// A remark: a rule the user just made (the workspace's ⋯ menu, a
-		// write_rule card approved), not any message of theirs.
-		if rs, words := c.lastRule(); rs != ruleSeen {
-			ruleSeen = rs
-			if words != "" {
-				d = debouncer{wait: d.wait, maxWait: d.maxWait}
-				c.recompose(momentRemark, words)
-				continue
+		// The brain put objects in front, or what it put there expired.
+		if sh, seq := c.shown(now); seq != showSeen || (sh == nil) != (show == nil) {
+			show, showSeen = sh, seq
+			d = debouncer{wait: d.wait, maxWait: d.maxWait}
+			if sh != nil {
+				c.recompose(momentShow, sh.Why)
+			} else {
+				c.recompose(c.composeMoment(), "")
 			}
+			continue
+		}
+		// A preference about the workspace entered memory (or changed, or
+		// left it), not any message of the user's.
+		if ps, changed, words := c.workspacePrefStamp(); ps != prefSeen {
+			prefSeen = ps
+			d = debouncer{wait: d.wait, maxWait: d.maxWait}
+			if changed > prefChanged && words != "" {
+				c.recompose(momentRemark, words)
+			} else {
+				c.recompose(c.composeMoment(), "")
+			}
+			prefChanged = max(prefChanged, changed)
+			continue
 		}
 		if d.due(now) {
 			c.recompose(c.composeMoment(), "")

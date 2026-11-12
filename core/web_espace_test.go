@@ -54,7 +54,7 @@ func TestEspacePage(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &b); err != nil {
 		t.Fatal(err)
 	}
-	if b.CSRF != csrf || b.Lang != "fr" || b.Name != assistantName() || b.Strings["espace.present"] != "Présente-moi" {
+	if b.CSRF != csrf || b.Lang != "fr" || b.Name != assistantName() || b.Strings["espace.input.about"] != "Écris à Eriphe, sur %s" {
 		t.Errorf("boot: %+v", b)
 	}
 	if strings.Contains(b.Strings["espace.input"], "{{name}}") {

@@ -2387,9 +2387,10 @@ say, its source (`brain`, `task:<id>`, `session:<id>`, `skill:<name>`) and its t
 same ref merge (the highest weight, the latest why). A card enters it when it is made, weighted by
 its kind (one a task or a session waits on: 4; any other proposal: 3), and leaves it once decided
 or gone. Assistants feed it with their [attention signals](#attention-signals-attention_signalgo);
-an item drawn from external content stays marked so, and the brain reads it as data. The user's
-[rules](#rules-attention_rulesgo) move the weights as the queue is read, held or delivered, and
-leave out what falls to 0 (a card stays, at 1). A
+an item drawn from external content stays marked so, and the brain reads it as data. What the
+user wants shown more, less or never is not applied to the queue: it is a
+[preference in memory](#preferences-gestures-and-the-brains-tools-workspacego) the composer
+follows. A
 notification held for the brief (a skill's `[brief]`, the quiet hours, the daily cap, a tainted
 turn, « pas maintenant ») enters it as `alert:<id>` with weight 2, the item a skill's message
 becomes too. Weight 4 and 5 are delivered as they enter: nothing a running task or session
@@ -2643,44 +2644,48 @@ and none of its harness's tools (Claude Code's `--tools ""`), thinks at low effo
 starts a fresh session with each task (`Fresh`), its task stopping after 30 turns: each turn
 carries all it needs. Its instructions are `composer-prompt.md` (French).
 
-A turn holds the moment (a change, the user's return after an absence, a remark), the screen's
-capacity (6 modules, 8 chips), the user's [rules](#rules-attention_rulesgo) (`composerRules`, one
-sentence each, from `rulesContext`), the queue (ref, kind, weight, age, the object's title read within 2 s, the why), quoted
+A turn holds the moment (a change, the user's return after an absence, a new workspace
+preference, objects the brain put in front), the screen's capacity (6 modules, 8 chips), the
+user's [preferences](#preferences-gestures-and-the-brains-tools-workspacego) from memory
+(`workspacePreferences`, one sentence each), the refs that must be modules first (`workspace_show`), the queue (ref, kind, weight, age, the object's title read within 2 s, the why), quoted
 as data, and the list of refs it may use. It answers a lean JSON object (refs, weight, a why of 60
 characters at most, Eriphe's line of 140): in the study, about 3.5 s a composition with Sonnet,
 against 8–36 s with prose per item; Haiku invented refs. The worker is not given a JSON schema:
 Claude Code's `--json-schema` is fixed for a whole session, while the refs allowed change with
 each turn; the prompt names them, and code checks (`checkComposition`): a ref not in the snapshot
 is dropped, a weight clamped to 1–5, the texts cut, at most 6 items and 8 chips, and what the
-composer left out waits as a chip. An answer that is not JSON, or keeps nothing of a queue that
-has items, is invalid.
+composer left out waits as a chip. Its `hidden` (refs a preference of the user's excludes) are
+left out, neither module nor chip, except a card (it waits for the user's answer), a weight 5
+and what the brain put in front, which wait as chips. The refs the brain put in front are
+modules, first, whatever the answer (`requireFront`). An answer that is not JSON, or keeps (or
+hides) nothing of a queue that has items, is invalid.
 
 **Fallback**: when the composer is off, has no task ready, takes more than 10 s or answers
-something invalid, code composes by weight (then the latest first): the 6 heaviest as modules,
-the rest as chips. A late answer is dropped. Nothing waits on the composer: it runs on its own
-goroutine (`runComposer`), the brain reads the queue itself.
+something invalid, code composes by weight (then the latest first): what the brain put in front
+first, then the 6 heaviest as modules, the rest as chips. It reads no preference. A late answer
+is dropped. Nothing waits on the composer: it runs on its own goroutine (`runComposer`), the brain
+reads the queue itself.
 
 **When**: the queue is read every 2 s; a change composes once the burst settles (3 s after the
-last change, 15 s at most after the first). A new rule of the user's (made from a module's ⋯
-menu, or a `write_rule` card approved) composes at once, as a remark, with the rule in words; any
-other message of the user's does not. While the user has been away 20 minutes
+last change, 15 s at most after the first). A workspace preference entering memory (or changed)
+composes at once, as a remark, with its words (`workspacePrefStamp`); one leaving it composes
+again; a message of the user's does not. `workspace_show` composes at once (moment `show`), and
+again when what it put in front expires. While the user has been away 20 minutes
 or more (`awaySince`), the next composition is for their return, and one is made ahead of it.
 
 **Settings → Agents → Workspace composer**: on or off, and its agent (a Sonnet one by default,
 else the default agent). Off by default; off, nothing is sent to a model.
 
 **Bench** (`testdata/composer/`): invented moments of a fictional user (an arrival after a night,
-a busy noon, a remark with a « never » rule in force, several sessions running, a quiet evening,
+a busy noon, a new « never » preference, several sessions running, a quiet evening,
 a mail that tries to order the composer), each with its queue and what a good composition does:
-`front` (must be modules), `back` (must not be modules, chips are fine), `hidden` (must not be
-chosen at all, nor shown as a chip), `mode`, and `fallback_front` (whether the order by weight
-already puts `front` in front). A case's `rule_keys` are [rules](#rules-attention_rulesgo) in force,
-applied by code to its items (each with its `source` and the `attrs` a key may match, such as
-`from`) before the composer, as in production (`weighByRules`); `rules` are wishes in words only.
-`composer_bench_test.go` runs in CI with no model: every case is valid, its reference `answer`
-passes `checkComposition` and meets the case, invented refs are cleaned, what a rule in force
-hides never reaches the composer nor the fallback, and the fallback does what `fallback_front`
-says. `composer_live_test.go` runs the cases on a real model when a
+`front` (must be modules), `back` (must not be modules, chips are fine), `hidden` (must be
+neither module nor chip: the composer hides them), `mode`, and `fallback_front` (whether the
+order by weight already puts `front` in front). A case's `preferences` are the user's preference
+memories, as sentences, as the composer reads them. `composer_bench_test.go` runs in CI with no
+model: every case is valid, its turn names its refs and its preferences, its reference `answer`
+passes `checkComposition` and meets the case, invented refs are cleaned, and the fallback does
+what `fallback_front` says. `composer_live_test.go` runs the cases on a real model when a
 model or the prompt changes:
 
 ```sh
@@ -2698,55 +2703,48 @@ stability (the mean Jaccard of the modules' refs between runs). It fails only wh
 compare its numbers before switching the composer's model. A run of every case once with Sonnet
 costs about $0.05.
 
-### Rules (`attention_rules.go`)
+### Preferences, gestures and the brain's tools (`workspace.go`)
 
-A remark on the workspace becomes a **rule** that code applies to the attention queue every
-time, before the composer: `{id, key, delta, label, remark?, at}`, kept in the `attention_rules`
-table. `key` names a kind of object; `delta` (−5 to 5) moves the weight of every item it matches;
-the rules that match an item add up, the weight stays at 5 at most, and an item at 0 or below is
-left out of what the queue gives, held or delivered (`attentionWhere`; the item stays in the table,
-so removing the rule brings it back). A card waits for the user's answer: a rule lowers it to 1,
-never hides it. The weights at entry decide delivery (weight 4 and 5 at once); the rules decide what
-is shown and what a breakpoint delivers. A rule with delta 0 only carries a remark, for the composer. One rule per
-key: a new one replaces it (a remark alone keeps its delta).
+The workspace keeps no rule and has no fixed control but a card's Oui / Non (the user's answer
+under the access policy). How the user wants it is memory; what the brain can do with it are
+tools.
 
-The key grammar, closed and lower case:
+- **Preferences are memory.** « Les échecs de sauvegarde toujours devant », « plus de lettres de
+  news.example.org », « montre-m'en moins » are [memories](#memory) of kind `preference` with
+  subject `workspace`, written as facts about the user. The brain remembers one from the user's
+  words (`remember`; a workspace preference is never sent to `rule`, whatever its words); the
+  nightly extraction proposes one from the conversation (its prompt says how the user wants the
+  workspace is a preference worth keeping) or, inferred, from repeated gestures. A preference the
+  extraction writes waits for the user's approval, on a card, like any other. The composer's turn
+  reads the active, current ones (12 at most, the latest first) and the few other preferences
+  the queue's titles and whys recall (`workspacePreferences`), and composes at once when one
+  enters memory, changes or leaves it (`workspacePrefStamp`). A proposed preference is not read.
+- **Gestures feed memory, implicitly.** The page tells eriphe-core what the user opens
+  (`opened`) and what was in front then left the composition without being opened while the page
+  was visible (`ignored`): `POST /api/espace/gesture` with `{what, ref, title}` (204; 400 for
+  another gesture or a ref that does not parse; the workspace's session, CSRF in
+  `X-CSRF-Token`). Kept in `workspace_log`, once per ref and gesture in 10 minutes, 30 days at
+  most. The extraction reads a window's gestures as one segment of its transcript
+  (`from="workspace"`, ref `workspace:<id>`, trust external: the titles are the objects'); only
+  a repeated pattern may give an inferred preference. No counter, no score in code.
+- **A message about what is open.** A message written on `/espace` while a module is open
+  carries its ref (`POST /messages` with `about`; kept as `about_msg:<seq>` when it parses): the
+  brain reads it as `[Sam 10:02 #12 · à propos de mail:…]`, the extraction as
+  `[written about <ref>, open on the workspace]`. « Montre-m'en moins », « lance une recherche
+  là-dessus » are said in words.
+- **`workspace_show`** (`refs`, 6 at most, the most important first; `why`): puts objects in
+  front at once, queued or not. The composer composes again (moment `show`) with them as items
+  of the snapshot (weight 4 at least, the brain's why) and as modules first in every
+  composition (`requireFront`), the composer's or the fallback's, for an hour at most or until
+  the next call; no refs gives the front back to the composer.
+- **`workspace_walkthrough`** (`refs`, 12 at most, or none): the open workspace pages walk the
+  user through them one module at a time (none: through what the page shows that matters). It
+  reaches the page on the event stream's `walkthrough` event (`{id, refs, at}`), sent once to
+  each stream, and to one opened within 20 s of it; the page reads the objects it does not have.
+  « Présente-moi » is said to Eriphe, who calls it.
 
-```
-key  = kind | kind ":" attr "=" value
-kind = mail | agenda | event | session | card | task | project | alert
-```
-
-| Attribute | Kinds | Matches |
-|---|---|---|
-| `source` | every kind | who raised the item, whole (`skill:backup`) or its name (`backup`) |
-| `from` | mail | the sender's address (`sam@example.org`) or its domain (`example.org`, also `mail.example.org`) |
-| `account` | mail, event | the account |
-| `folder` | mail | the folder (`inbox`) |
-| `calendar` | event | the calendar |
-| `kind` | card | the card's kind (`memory`, `taskstart`, `monitor`…) |
-| `lead` | session | the assistant that leads it |
-| `agent` | task | the agent working on it |
-| `name` | project | the project |
-
-`mail`, `mail:from=example.org`, `alert:source=backup`, `card:kind=memory`. An object is read
-([by ref](#objects-by-ref-objectsgo)) only when a rule needs one of its attributes, within 2 s for
-the whole pass; its attributes are kept 30 minutes (a failed read is not retried for a minute),
-and an object that cannot be read in time matches by its kind and source only.
-
-- **The user's own**, from a module's ⋯ menu: `GET /api/rules` (`{"rules": [...]}`, the latest
-  first), `POST /api/rules` with `{key, delta, label, remark}` (201 and the rule; 400 for a bad key
-  or a delta out of range), `DELETE /api/rules/{id}` (204, 404). The workspace's session, the
-  CSRF token in `X-CSRF-Token` on writes; without a session, 401. 200 rules at most.
-- **The brain's**: `write_rule` (key, delta, label, remark, why) only proposes one, on a card of
-  kind `showrule` the user approves like any other write; a proposal of a tainted turn says so.
-- **Settings → Règles d'affichage** (`/settings/display`) lists the rules, removes one, and answers
-  the brain's proposals.
-- **The composer** reads them as context (`rulesContext`, through `composerRules`): their deltas
-  are applied already. A new rule composes at once, as a remark.
-
-Not yet: a session carries no project, so there is no `session:project=` key; a rule has no
-schedule (« only on Mondays » is a remark the composer reads, not code).
+The display rules of #402 are gone: their table (`attention_rules`, dropped when an older
+database opens, with their `showrule` cards: `displayRulesGone`), their API, page and tool.
 
 ### The composed workspace (`/espace`)
 
@@ -2759,13 +2757,13 @@ more grows one step, never into xl. A ref that names no object is dropped. The l
 
 A click on a module opens it in focus, in the centre, with the objects related to it beside it
 (an object's `related` refs, what names it in its own, a group's members), and Eriphe comments in
-one line. Each
-module's ⋯ menu asks Eriphe about it (a message in the conversation) or makes a
-[rule](#rules-attention_rulesgo) of a remark: more (+1), less (−1), never (−5), or a sentence (a
-remark only), for the object's narrowest key or a wider one (`POST /api/rules`). eriphe-core applies
-the rules to the queue, so the page and the engine do not apply them again. Everything arrives at once; « Présente-moi » (the button, or typed) walks
-through the modules one by one. The chat is a narrow column, wider on demand, and a message
-written there goes to the conversation. Views are generic, one per kind of [object](#objects-by-ref-objectsgo)
+one line. There is no menu and no button that keeps a rule: what the user wants of a module is
+said to Eriphe, in the chat, which sends the open module's ref with the message
+([`about`](#preferences-gestures-and-the-brains-tools-workspacego)); what they open, and what
+leaves the screen unopened, goes to eriphe-core as gestures. Everything arrives at once; a
+walkthrough, one module at a time, is something the user asks Eriphe for
+(`workspace_walkthrough`, the event stream's `walkthrough`). The chat is a narrow column, wider on
+demand, and a message written there goes to the conversation. Views are generic, one per kind of [object](#objects-by-ref-objectsgo)
 (mail, agenda day, event, card, session, task, project, and the composition's groups), each with a
 short and a full form; a kind without a view shows its title.
 

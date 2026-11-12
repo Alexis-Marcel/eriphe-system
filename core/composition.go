@@ -36,7 +36,8 @@ const (
 const (
 	momentChange  = "change"  // the queue changed while the user is here
 	momentArrival = "arrival" // the user is away: what to show on their return
-	momentRemark  = "remark"  // the user made a rule (attention_rules.go)
+	momentRemark  = "remark"  // a preference about the workspace entered memory (workspace.go)
+	momentShow    = "show"    // the brain put objects in front (workspace_show)
 	momentStart   = "start"   // eriphe-core started
 )
 
@@ -71,19 +72,14 @@ type snapshotItem struct {
 
 // compositionSnapshot is what a composition is made from.
 type compositionSnapshot struct {
-	Items  []snapshotItem
-	Moment string
-	Remark string        // the user's words, for a remark
-	Away   time.Duration // how long the user has been away, for an arrival
-	Rules  []string      // the user's rules about the workspace, in words (composerRules)
-	Now    time.Time
+	Items       []snapshotItem
+	Moment      string
+	Remark      string        // the preference that just entered memory, for a remark; why, for a show
+	Away        time.Duration // how long the user has been away, for an arrival
+	Preferences []string      // the user's preferences about the workspace, from memory (workspacePreferences)
+	Required    []string      // refs every composition shows as modules (workspace_show)
+	Now         time.Time
 }
-
-// composerRules are the user's rules the composer reads with each
-// snapshot, one sentence each (attention_rules.go). Code applies them to
-// the queue before the composer; the composer reads them to place what is
-// left.
-var composerRules = func(c *core) []string { return c.rulesContext() }
 
 func (s compositionSnapshot) item(ref string) (snapshotItem, bool) {
 	i := slices.IndexFunc(s.Items, func(it snapshotItem) bool { return it.Ref == ref })
@@ -101,7 +97,7 @@ var snapshotTitles = 2 * time.Second
 // objects.
 func (c *core) compositionSnapshot(moment, remark string, titles bool) compositionSnapshot {
 	now := time.Now()
-	s := compositionSnapshot{Moment: moment, Remark: remark, Now: now, Rules: composerRules(c)}
+	s := compositionSnapshot{Moment: moment, Remark: remark, Now: now}
 	if moment == momentArrival {
 		_, s.Away = c.awaySince(c.notifyTime())
 	}
@@ -112,7 +108,21 @@ func (c *core) compositionSnapshot(moment, remark string, titles bool) compositi
 		s.Items = append(s.Items, snapshotItem{attentionItem: it, Kind: kind})
 		refs = append(refs, it.Ref)
 	}
+	// What the brain put in front is there, queued or not.
+	if show, _ := c.shown(now); show != nil {
+		s.Required = show.Refs
+		for _, ref := range show.Refs {
+			if i := slices.Index(refs, ref); i >= 0 {
+				s.Items[i].Weight = max(s.Items[i].Weight, weightBlocksATask)
+				continue
+			}
+			kind, _, _ := strings.Cut(ref, ":")
+			s.Items = append(s.Items, snapshotItem{attentionItem: attentionItem{Ref: ref, Weight: weightBlocksATask, Why: show.Why, Source: "brain", Time: show.At}, Kind: kind})
+			refs = append(refs, ref)
+		}
+	}
 	if !titles {
+		s.Preferences = c.workspacePreferences(s.Items)
 		return s
 	}
 	if len(refs) > objectsMax {
@@ -125,6 +135,7 @@ func (c *core) compositionSnapshot(moment, remark string, titles bool) compositi
 			s.Items[i].Title = o.Object.Title
 		}
 	}
+	s.Preferences = c.workspacePreferences(s.Items)
 	return s
 }
 
@@ -156,16 +167,19 @@ type composerOutput struct {
 		Weight int    `json:"weight"`
 		Why    string `json:"why"`
 	} `json:"items"`
-	Chips []string `json:"chips"`
+	Chips  []string `json:"chips"`
+	Hidden []string `json:"hidden"` // left out on the user's preference
 }
 
 var errNoComposition = errors.New("no usable composition")
 
 // checkComposition reads what the composer answered against the snapshot:
 // a ref it does not hold is dropped, a weight clamped to 1–5, the texts cut
-// to their length, the items and chips capped. An answer that is not JSON,
-// or that keeps nothing of a queue that has items, is an error: the
-// fallback composes instead. dropped counts the refs left out.
+// to their length, the items and chips capped. What it hides on the user's
+// preference is left out, but never a card (it waits for the user's
+// answer), a weight 5 nor what the brain put in front. An answer that is
+// not JSON, or that keeps nothing of a queue that has items, is an error:
+// the fallback composes instead. dropped counts the refs left out.
 func checkComposition(raw string, s compositionSnapshot) (comp composition, dropped int, err error) {
 	var out composerOutput
 	if err := json.Unmarshal([]byte(jsonObject(raw)), &out); err != nil {
@@ -193,7 +207,16 @@ func checkComposition(raw string, s compositionSnapshot) (comp composition, drop
 		seen[it.Ref] = true
 		comp.Chips = append(comp.Chips, it.Ref)
 	}
-	if len(s.Items) > 0 && len(comp.Items)+len(comp.Chips) == 0 {
+	hidden := 0
+	for _, ref := range out.Hidden {
+		it, ok := s.item(strings.TrimSpace(ref))
+		if !ok || seen[it.Ref] || it.Kind == refCard || it.Weight >= 5 || slices.Contains(s.Required, it.Ref) {
+			continue
+		}
+		seen[it.Ref] = true
+		hidden++
+	}
+	if len(s.Items) > 0 && len(comp.Items)+len(comp.Chips)+hidden == 0 {
 		return composition{}, dropped, errNoComposition
 	}
 	// Nothing of the queue goes unseen: what the composer left out waits as
@@ -208,9 +231,11 @@ func checkComposition(raw string, s compositionSnapshot) (comp composition, drop
 	return settle(comp, s), dropped, nil
 }
 
-// settle gives a composition its mode and ambient: Eriphe in the middle
-// when there is nothing to show, the light by the heaviest module.
+// settle gives a composition what the brain put in front, as modules
+// first, then its mode and ambient: Eriphe in the middle when there is
+// nothing to show, the light by the heaviest module.
 func settle(comp composition, s compositionSnapshot) composition {
+	comp = requireFront(comp, s)
 	if len(comp.Items) == 0 {
 		comp.Mode = modeCenter
 	} else if comp.Mode != modeCenter && comp.Mode != modeSide {
@@ -225,6 +250,48 @@ func settle(comp composition, s compositionSnapshot) composition {
 			comp.Ambient = "decision"
 		}
 	}
+	return comp
+}
+
+// requireFront makes the snapshot's required refs modules, in their order
+// and ahead of the others; the modules they push out of the screen wait
+// as chips, first.
+func requireFront(comp composition, s compositionSnapshot) composition {
+	if len(s.Required) == 0 {
+		return comp
+	}
+	var front, rest []compositionItem
+	for _, ref := range s.Required {
+		it, ok := s.item(ref)
+		if !ok {
+			continue
+		}
+		mod := compositionItem{Ref: ref, Weight: max(it.Weight, weightBlocksATask), Why: truncate(oneLine(it.Why), compositionWhyMax), Say: it.Say}
+		if i := slices.IndexFunc(comp.Items, func(x compositionItem) bool { return x.Ref == ref }); i >= 0 {
+			mod.Weight = max(comp.Items[i].Weight, weightBlocksATask)
+			mod.Why = cmp.Or(comp.Items[i].Why, mod.Why)
+		}
+		front = append(front, mod)
+	}
+	for _, it := range comp.Items {
+		if !slices.Contains(s.Required, it.Ref) {
+			rest = append(rest, it)
+		}
+	}
+	chips := slices.DeleteFunc(slices.Clone(comp.Chips), func(r string) bool { return slices.Contains(s.Required, r) })
+	items := append(front, rest...)
+	if len(items) > compositionItemsMax {
+		var out []string
+		for _, it := range items[compositionItemsMax:] {
+			out = append(out, it.Ref)
+		}
+		chips = append(out, chips...)
+		items = items[:compositionItemsMax]
+	}
+	if len(chips) > compositionChipsMax {
+		chips = chips[:compositionChipsMax]
+	}
+	comp.Items, comp.Chips = items, chips
 	return comp
 }
 

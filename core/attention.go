@@ -212,15 +212,14 @@ func (c *core) attendNote(n *notification) {
 }
 
 // attentionOpen is the queue as it stands, held or delivered, the
-// heaviest and latest first, with the user's rules applied.
+// heaviest and latest first.
 func (c *core) attentionOpen() []attentionItem {
 	return c.attentionWhere(`1 ORDER BY weight DESC, time DESC`)
 }
 
-// attentionWhere reads the items that still need the user, with the
-// user's rules applied (attention_rules.go): their weights moved, those at
-// 0 or below left out, held or delivered. A card's item whose card no
-// longer waits (decided on a page, in words, or gone) leaves the queue here.
+// attentionWhere reads the items that still need the user. A card's item
+// whose card no longer waits (decided on a page, in words, or gone) leaves
+// the queue here.
 func (c *core) attentionWhere(where string, args ...any) []attentionItem {
 	rows, err := c.store.db.Query(`SELECT ref, weight, why, say, source, time, tainted, delivered,
 		CASE WHEN `+heldForBrief+` THEN 0 ELSE due END FROM attention WHERE `+where, args...)
@@ -259,7 +258,7 @@ func (c *core) attentionWhere(where string, args ...any) []attentionItem {
 		}
 		out = append(out, it)
 	}
-	return c.applyRules(out)
+	return out
 }
 
 // attentionBreak is a breakpoint: what the queue holds is delivered, the

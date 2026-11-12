@@ -229,6 +229,9 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		if m.Via != "" {
 			ref += " · " + m.Via
 		}
+		if about := c.messageAbout(m.Seq); m.Role == roleUser && about != "" {
+			ref += " · à propos de " + about // the module open on the workspace (workspace.go)
+		}
 		if m.Role == roleUser && c.fromUntrusted(m.Seq) {
 			ref += " · canal sans confiance" // maybe not the user's words (channels_added.go)
 		}

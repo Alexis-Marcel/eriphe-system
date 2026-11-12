@@ -119,7 +119,7 @@ button, input, select { font: inherit; }
   padding: 14px 16px 10px;
   background: var(--paper); color: var(--ink);
   border-radius: 16px;
-  overflow: hidden;
+  overflow: hidden; cursor: pointer;
 }
 .mod.size-xl { padding: 18px 20px 12px; border-radius: 22px; }
 .mod.size-s { padding: 8px 12px; border-radius: 12px; background: var(--paper-dim); cursor: pointer; }
@@ -149,21 +149,6 @@ button, input, select { font: inherit; }
 .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .btn.ghost { border-color: color-mix(in oklab, var(--paper) 25%, transparent); color: var(--paper); }
 .linkish { border: 0; background: none; padding: 0; color: var(--ink); text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-
-.more {
-  position: absolute; top: 6px; right: 8px; width: 30px; height: 30px; border-radius: 50%;
-  border: 0; background: transparent; color: var(--ink-soft); cursor: pointer; font-size: 18px; line-height: 1;
-}
-.more:hover { background: #1a1f2712; }
-.menu {
-  position: absolute; top: 40px; right: 8px; z-index: 4; width: min(300px, calc(100% - 16px));
-  display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: #fff; color: var(--ink);
-  box-shadow: 0 16px 40px -12px #0007; font-size: 14px;
-}
-.size-s .menu { position: fixed; top: auto; right: 24px; bottom: 24px; }
-.menu input, .menu select { width: 100%; padding: 7px 10px; border-radius: 10px; border: 1px solid #1a1f2733; background: #f6f7f4; color: var(--ink); }
-.menu-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.menu-row .btn { padding: 5px 10px; font-size: 13px; }
 
 /* The views */
 .events { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }

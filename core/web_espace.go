@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 )
 
 // The composed workspace, /espace: a page next to the conversation where
@@ -17,6 +18,26 @@ import (
 func (w *web) espaceRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /espace", w.auth(w.handleEspace))
 	mux.Handle("GET /espace/boot", w.auth(w.handleEspaceBoot))
+	mux.Handle("POST /api/espace/gesture", http.MaxBytesHandler(w.auth(w.handleGesture), 4<<10))
+}
+
+// gestureIn is a gesture of the user's on the workspace (workspace.go).
+type gestureIn struct {
+	What  string `json:"what"` // opened, ignored
+	Ref   string `json:"ref"`
+	Title string `json:"title"`
+}
+
+// handleGesture is POST /api/espace/gesture: the page says what the user
+// opened, or what left the screen unopened, for the extraction to read.
+// 204; 400 for a gesture it does not know.
+func (w *web) handleGesture(rw http.ResponseWriter, r *http.Request, _ *session) {
+	var in gestureIn
+	if json.NewDecoder(r.Body).Decode(&in) != nil || w.c.noteGesture(in.What, in.Ref, in.Title, time.Now()) != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": errGesture.Error()})
+		return
+	}
+	rw.WriteHeader(http.StatusNoContent)
 }
 
 func (w *web) handleEspace(rw http.ResponseWriter, r *http.Request, s *session) {
