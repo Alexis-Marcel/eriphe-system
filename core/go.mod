@@ -10,10 +10,12 @@ require (
 	github.com/kljensen/snowball v0.10.0
 	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.37.0
+	golang.org/x/text v0.43.0
 	modernc.org/sqlite v1.61.0
 	tailscale.com v1.104.2
 )
@@ -64,7 +66,6 @@ require (
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v1.0.1 // indirect

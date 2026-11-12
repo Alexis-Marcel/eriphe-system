@@ -2840,6 +2840,57 @@ which the policy refuses (`style-src-attr`). Motion animates by setting the elem
 object from script (CSSOM), which a CSP does not govern; `AnimatePresence`'s `popLayout` mode is
 not used, since it injects a `<style>` element.
 
+### Surfaces in A2UI (`a2ui/`)
+
+A surface, one tile of the workspace, is written by a model in
+[A2UI v1.0](https://github.com/a2ui-project/a2ui): a flat list of components, each with an `id`
+and a `component` type, one of them the `root`; children named by id (`child`, `children`),
+or a list template `{"path": "/mails", "componentId": "row"}` repeated for each item; values
+literal, bound to the surface's data (`{"@path": "/sales/total"}`, relative to the item inside a
+template) or computed by a function (`{"@call": "formatDate", "args": {…}}`). The package
+`core/a2ui` speaks it and owns the catalog of shapes a surface is made of:
+
+- **The catalog** (`a2ui/catalog_v1.json`, id `urn:eriphe:a2ui:workspace:v1`): a JSON Schema
+  2020-12 document by A2UI's catalog rules. Shapes only, never tools: Text, Markdown, Image,
+  Icon, Row, Column, List, Card, Tabs, Divider, Button, Choice, TextField, DateField, Metric,
+  Chart, Table, Timeline, Message, Day, Proposal, Alert, Placeholder; and the functions
+  formatString, formatNumber, formatDate, formatRelative. A property that carries data takes a
+  binding (Metric's `value`, Chart's `series`, Table's `rows`, Day's `events`…). Its descriptions
+  and `instructions` are for the models, in French. Served to the app, with a session, at
+  `GET /espace/catalog/v1.json`; a new version gets a new path.
+- **Validation**: `a2ui.Validate(raw)` takes one agent message or an array of them (the whole
+  life of their surfaces), `a2ui.ValidateSurface(a2ui.Surface{ID, Components, DataModel})` what
+  an author writes of one surface, `Catalog.ValidateEvent(raw)` what the page sends back
+  (`action`, `error`). First the published v1.0 schemas, embedded unchanged in `a2ui/spec/`
+  with the catalog put in place of `catalog.json`; then what a schema cannot say: exactly one
+  `root`, every child and template naming a component that exists, no cycle, ids that are
+  identifiers (UAX #31) and unique in a list, the catalog's `allowedParents` /
+  `allowedChildren`, relative paths and `@index` only inside a list template, well-formed JSON
+  pointers, the surface's `catalogId`. Errors have A2UI's shape (`code` `VALIDATION_FAILED`,
+  `UNALLOWED_PARENT` or `UNALLOWED_CHILD`, `surfaceId`, `path`, `message`; `.Event()` wraps one
+  in the renderer's `error` message): the path points at the field, and a value that may take
+  several forms gets one error about the form it was meant to be (the one whose `component` or
+  `@call` it names), not one per form.
+- **Prompt**: `a2ui.CatalogPrompt()` is a compact French section, written from the catalog
+  alone, for any assistant that writes surfaces: the catalog's instructions and examples, each
+  component with its properties (`*` required, the enum values, « ou liaison »), each function
+  with its arguments. `a2ui/testdata/catalog_prompt.md` keeps its text
+  (`ERIPHE_UPDATE_A2UI=1 go test ./a2ui -run TestPromptStable` writes it again).
+- **Loading a catalog** (`a2ui.LoadCatalog`) applies A2UI's catalog rules: the definition
+  schema, identifiers, each component's `component` const equal to its key, `$ref` only to the
+  catalog itself and the allowed common types, everything listed in `anyComponent` /
+  `anyFunction`. Nothing is ever fetched: a reference outside the embedded schemas fails.
+
+The JSON Schema validator is
+[santhosh-tekuri/jsonschema](https://github.com/santhosh-tekuri/jsonschema) v6: 2020-12 in full
+(`unevaluatedProperties`, `$dynamicRef`), the official test suite passed, no dependency beyond
+`golang.org/x/text`, structured errors with instance locations. Go's `regexp` knows no
+`\p{XID_Start}`: the schemas' identifier pattern is compiled with the Unicode categories it is
+made of. The conformance cases of the A2UI repository (`specification/v1_0/test`) run as Go
+tests (`a2ui/testdata/conformance`, with their notice), as their runner runs them with ajv.
+To move to a newer A2UI release, copy its `specification/v1_0/json` and test cases over these
+and update the commit in the two `NOTICE` files.
+
 ### Signing in
 
 The workspace has one owner; how they sign in is set in Settings → Access → Web workspace → Connexion, or in
