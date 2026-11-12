@@ -225,6 +225,14 @@ func TestQueueSurfaceRefs(t *testing.T) {
 	if items := c.attentionOpen(); len(items) != 1 || items[0].Ref != "surface:revue-du-jour" || items[0].Weight != 2 {
 		t.Fatalf("queue %+v", items)
 	}
+	// Its own surface shows it: no surface of the queue's for it.
+	if queueSurfaceID("surface:revue-du-jour") != "revue-du-jour" {
+		t.Error("an item about a surface is not shown by it")
+	}
+	c.syncQueueSurfaces()
+	if all, _ := c.surfaces(); len(all) != 1 {
+		t.Fatalf("surfaces %+v", all)
+	}
 	c.surfaceRemove("revue-du-jour", surfaceByUser)
 	if items := c.attentionOpen(); len(items) != 0 {
 		t.Fatalf("an item outlived its surface: %+v", items)
@@ -253,6 +261,13 @@ func TestOfferedProposalsInTheQueue(t *testing.T) {
 	}
 	if weights["Sam aime le thé vert"] != weightOffered || weights["Appeler le garage"] != weightOfferedDue {
 		t.Fatalf("weights %v", weights)
+	}
+	// The workspace shows them, as any item of the queue: a Proposal each.
+	c.syncQueueSurfaces()
+	for _, it := range items {
+		if sf, err := c.surface(queueSurfaceID(it.Ref)); err != nil || !strings.Contains(string(sf.Components), "Proposal") {
+			t.Errorf("no surface for %s: %v", it.Ref, err)
+		}
 	}
 	c.attendOffers() // again: nothing doubles
 	if n := len(c.attentionOpen()); n != 2 {

@@ -32,13 +32,10 @@ import (
 //     a skill, or nothing.
 //
 // The composer emits surface.stale (key and payload id: the surface; it
-// is out of date) and surface.missing (payload text: what is missing);
-// code reads their form, never their meaning.
+// is out of date) and surface.missing (payload text: what is missing)
+// (workspace_pool.go); code reads their form, never their meaning.
 
 const (
-	evSurfaceStale   = "surface.stale"
-	evSurfaceMissing = "surface.missing"
-
 	surfaceMissingQuiet = time.Hour               // the same missing tells the brain once an hour
 	surfaceMissingKey   = "surface_missing:"      // + a hash of the text: when it was told, unix
 	surfaceMissingMax   = 300                     // runes of the text the brain reads

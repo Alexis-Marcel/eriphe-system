@@ -42,8 +42,12 @@ const (
 var queueIDPart = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,40}$`)
 
 // queueSurfaceID is the surface of an item's ref: q-<kind>-<id>, or a hash
-// of the ref when its id is not one a surface's id may hold.
+// of the ref when its id is not one a surface's id may hold; the surface
+// itself for surface:<id>.
 func queueSurfaceID(ref string) string {
+	if id, ok := strings.CutPrefix(ref, refSurface+":"); ok {
+		return id // an item about a surface is shown by that surface (#423)
+	}
 	kind, id, _ := strings.Cut(strings.ToLower(ref), ":")
 	if !queueIDPart.MatchString(kind) || len(kind) > 16 {
 		kind = "item"
@@ -78,6 +82,9 @@ func (c *core) noteWorkspaceLang(lang string) {
 // queueSurface is the surface of an open item; false when it has none (a
 // card whose proposal is gone).
 func (c *core) queueSurface(it attentionItem, lang string) (surfaceIn, bool) {
+	if strings.HasPrefix(it.Ref, refSurface+":") {
+		return surfaceIn{}, false // its own surface shows it
+	}
 	in := surfaceIn{ID: queueSurfaceID(it.Ref), Weight: queueSurfaceWeight(it.Weight), Why: truncate(oneLine(it.Why), surfaceWhyMax),
 		Lifetime: surfaceLifetime{Kept: true}}
 	if it.tainted {
