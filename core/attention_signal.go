@@ -25,9 +25,6 @@ type attentionSignal struct {
 	Say    string   `json:"say,omitempty" jsonschema:"what Eriphe could tell the user of it, in French, one sentence; optional"`
 }
 
-// attentionRefKinds are the forms a ref may take: <kind>:<id>.
-var attentionRefKinds = []string{"mail", "agenda", "event", "session", "card", "task", "project", "alert"}
-
 const (
 	signalWhyMax  = 80 // runes
 	signalSayMax  = 300
@@ -44,11 +41,11 @@ const attentionInstruction = "When something deserves the user's attention, add 
 	"weight: 5 interrupts the user, 4 needs the user now, 3 matters today, 2 is a glance, 1 is background. " +
 	"Leave it out when nothing does. A ref of another form, or a weight outside 1 to 5, is dropped."
 
-// validAttentionRef tells a ref of a known form: a known kind, then an id.
+// validAttentionRef tells a ref of a known form (parseRef, objects.go),
+// short and on one line.
 func validAttentionRef(ref string) bool {
-	kind, id, ok := strings.Cut(ref, ":")
-	return ok && slices.Contains(attentionRefKinds, kind) && strings.TrimSpace(id) == id && id != "" &&
-		len(ref) <= signalRefMax && !strings.ContainsAny(ref, " \t\r\n")
+	_, err := parseRef(ref)
+	return err == nil && ref == strings.TrimSpace(ref) && len(ref) <= signalRefMax && !strings.ContainsAny(ref, "\r\n")
 }
 
 // decodeSignals reads a receipt's "attention": a list of blocks, or one

@@ -84,8 +84,9 @@ func TestReceiptAttention(t *testing.T) {
 	if r, _ := parseReceipt(doneReceipt); r.Attention != nil || r.dropped != nil {
 		t.Errorf("no block: %+v %q", r.Attention, r.dropped)
 	}
-	for ref, want := range map[string]bool{"mail:abc": true, "alert:12": true, "project:my site": false, "mail": false,
-		"skill:x": false, ":1": false, "card: 3": false} {
+	for ref, want := range map[string]bool{"mail:abc": true, "alert:12": true, "project:my site": true, "mail": false,
+		"skill:x": false, ":1": false, "card: 3": false, "card:x": false, "agenda:tomorrow": false, " mail:1": false,
+		"mail:" + strings.Repeat("x", 300): false} {
 		if validAttentionRef(ref) != want {
 			t.Errorf("ref %q: want %v", ref, want)
 		}

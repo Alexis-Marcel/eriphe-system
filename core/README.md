@@ -869,7 +869,7 @@ An assistant (a skill's run, a session lead) says what deserves the user's atten
 ```
 
 `refs` name the objects it is about, `<kind>:<id>` with a kind among `mail`, `agenda`
-(`YYYY-MM-DD`), `event`, `session`, `card`, `task`, `project` and `alert`; only the form is checked.
+(`YYYY-MM-DD`), `event`, `session`, `card`, `task`, `project` and `alert`; only the form is checked, by `parseRef` (`objects.go`).
 `weight` is 5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1 background; `why` is
 cut to 80 characters, `say` is optional. One block alone, or refs given as one string, are read as
 a list. A ref of another form, a weight outside 1 to 5 (or not whole), an entry that is not an
