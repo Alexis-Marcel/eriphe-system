@@ -44,10 +44,11 @@ var agentPackages = map[string]string{
 	"claude-code": "claude",
 	"codex":       "codex",
 	"opencode":    "opencode",
+	"vibe":        "vibe",
 }
 
 // injectedRuntimes are the runtimes this node can run in any image.
-var injectedRuntimes = []string{"claude-code", "opencode", "codex", "acp"}
+var injectedRuntimes = []string{"claude-code", "opencode", "codex", "vibe", "acp"}
 
 // noAgent is the package of a task whose agent is not injected: only the
 // helpers.

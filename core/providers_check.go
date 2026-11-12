@@ -21,11 +21,13 @@ import (
 
 // checkEndpoints are the providers' URLs, replaced in tests.
 var checkEndpoints = map[string]string{
-	"anthropic-api":  "https://api.anthropic.com/v1/models?limit=1",
-	"openai-api":     "https://api.openai.com/v1/models",
-	"google-api":     "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
-	"mistral-api":    "https://api.mistral.ai/v1/models",
-	"openrouter-api": "https://openrouter.ai/api/v1/key",
+	"anthropic-api": "https://api.anthropic.com/v1/models?limit=1",
+	"openai-api":    "https://api.openai.com/v1/models",
+	"google-api":    "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
+	"mistral-api":   "https://api.mistral.ai/v1/models",
+	// A plan's key is an API key too: the same listing.
+	"mistral-subscription": "https://api.mistral.ai/v1/models",
+	"openrouter-api":       "https://openrouter.ai/api/v1/key",
 }
 
 // misplaced tells whether a credential looks like another kind's: an API

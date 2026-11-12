@@ -46,6 +46,7 @@ var runtimes = map[string]agentRuntime{
 	"opencode":    opencodeRuntime,
 	"codex":       codexRuntime{},
 	"acp":         customACPRuntime,
+	"vibe":        vibeRuntime,
 }
 
 func runtimeFor(name string) (agentRuntime, error) {

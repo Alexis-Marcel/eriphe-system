@@ -102,6 +102,18 @@ var claudeModels = []modelChoice{
 	{"haiku", "Claude Haiku", "model.haiku", claudeCaps},
 }
 
+// mistralModels are Mistral's models for OpenCode; vibeModels Vibe's own
+// aliases (its configuration, version 3.1.1), with Vibe's default first.
+var (
+	mistralModels = []modelChoice{
+		{"mistral/mistral-large-latest", "Mistral Large", "model.mistral", modelCaps{Vision: true, PDF: true, Tools: true, Context: 262_144}},
+		{"mistral/devstral-latest", "Devstral", "model.devstral", modelCaps{Tools: true, Context: 262_144}},
+	}
+	vibeModels = []modelChoice{
+		{"mistral-medium-3.5", "Mistral Medium 3.5", "model.mistralmedium", modelCaps{Vision: true, Tools: true, Context: 262_144}},
+	}
+)
+
 var claudePresets = []agentPreset{
 	{"opus", "opus", "preset.agent.opus", false},
 	{"sonnet", "sonnet", "preset.agent.sonnet", true},
@@ -122,6 +134,15 @@ var providerKinds = []providerKind{
 		}}, Presets: []agentPreset{
 			{"gpt", "gpt-6.1-sol", "preset.agent.gpt", true},
 			{"gpt-luna", "gpt-6-luna", "preset.agent.gptlight", false},
+		}},
+	// Mistral's plans (Pro, Team) include a monthly usage shared by Vibe,
+	// Studio and the API: its key is a Mistral API key, made in Vibe's
+	// settings. Vibe is Mistral's own program; OpenCode takes the same key.
+	{ID: "mistral-subscription", Billing: billSubscription, Name: "mistral", Runtimes: []string{"vibe", "opencode"},
+		Env: "MISTRAL_API_KEY", ModelNS: "mistral", Unlisted: toolsOnlyCaps,
+		Models: map[string][]modelChoice{"vibe": vibeModels, "opencode": mistralModels},
+		Presets: []agentPreset{
+			{"mistral", "mistral-medium-3.5", "preset.agent.mistralvibe", true},
 		}},
 	{ID: "anthropic-api", Billing: billUsage, Name: "anthropic", Runtimes: []string{"claude-code", "opencode"},
 		Env: "ANTHROPIC_API_KEY", ModelNS: "anthropic", Prefix: "sk-ant-api", Unlisted: claudeCaps,
@@ -148,12 +169,9 @@ var providerKinds = []providerKind{
 			{"gemini", "google/gemini-4-argon", "preset.agent.gemini", true},
 			{"gemini-flash", "google/gemini-flash-latest", "preset.agent.small", false},
 		}},
-	{ID: "mistral-api", Billing: billUsage, Name: "mistral", Runtimes: []string{"opencode"},
+	{ID: "mistral-api", Billing: billUsage, Name: "mistral", Runtimes: []string{"opencode", "vibe"},
 		Env: "MISTRAL_API_KEY", ModelNS: "mistral", Unlisted: toolsOnlyCaps,
-		Models: map[string][]modelChoice{"opencode": {
-			{"mistral/mistral-large-latest", "Mistral Large", "model.mistral", modelCaps{Vision: true, PDF: true, Tools: true, Context: 262_144}},
-			{"mistral/devstral-latest", "Devstral", "model.devstral", modelCaps{Tools: true, Context: 262_144}},
-		}}, Presets: []agentPreset{
+		Models: map[string][]modelChoice{"opencode": mistralModels, "vibe": vibeModels}, Presets: []agentPreset{
 			{"mistral", "mistral/mistral-large-latest", "preset.agent.mistral", true},
 			{"devstral", "mistral/devstral-latest", "preset.agent.devstral", false},
 		}},

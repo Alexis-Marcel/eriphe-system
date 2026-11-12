@@ -45,7 +45,7 @@ ENV PATH=/opt/eriphe/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin
 
 # The agents eriphe-node can inject in this image (node/inject.go); acp is
 # any other ACP agent, by its command.
-LABEL eriphe.runtimes="claude-code,opencode,codex,acp"
+LABEL eriphe.runtimes="claude-code,opencode,codex,vibe,acp"
 
 WORKDIR /work
 

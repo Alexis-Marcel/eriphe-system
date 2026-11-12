@@ -62,6 +62,11 @@ func TestHarnessCards(t *testing.T) {
 	if h := harnessOf("acp"); h != (harness{MCP: true, SystemPrompt: promptPrepended, AutoModel: true, ByCommand: true}) || h.takesSystemPrompt() || h.canBeBrain() {
 		t.Errorf("acp = %+v", h)
 	}
+	// Mistral Vibe: its own model, sessions, web tools; no system prompt
+	// through ACP, so not the brain.
+	if h := harnessOf("vibe"); !h.MCP || !h.Resume || !h.AutoModel || h.ProviderModels || h.ByCommand || h.canBeBrain() || h.loadsSkills(false) {
+		t.Errorf("vibe = %+v", h)
+	}
 	if harnessOf("magic") != (harness{}) || harnessOf("magic").canBeBrain() {
 		t.Error("an unknown runtime can do something")
 	}
@@ -81,6 +86,9 @@ func TestModelCard(t *testing.T) {
 		{"openrouter-api", "opencode", "openrouter/z-ai/glm-5.3", modelCaps{Tools: true, Context: 1_048_576}},
 		{"openrouter-api", "opencode", "openrouter/some/new-model", toolsOnlyCaps},
 		{"google-api", "opencode", "google/gemini-5", geminiCaps},
+		{"mistral-subscription", "vibe", "mistral-medium-3.5", modelCaps{Vision: true, Tools: true, Context: 262_144}},
+		{"mistral-subscription", "opencode", "mistral/devstral-latest", modelCaps{Tools: true, Context: 262_144}},
+		{"mistral-api", "vibe", "", toolsOnlyCaps}, // Vibe's own
 		{"magic", "opencode", "x", modelCaps{}},
 	}
 	for _, c := range cases {
@@ -95,6 +103,15 @@ func TestModelCard(t *testing.T) {
 	}
 	if modelCard("custom-api", "acp", "") != toolsOnlyCaps {
 		t.Error("acp models")
+	}
+	// A Mistral plan runs Vibe first, Mistral's own program; a key runs
+	// OpenCode first, as before Vibe.
+	if !slices.Equal(runtimesOf("mistral-subscription"), []string{"vibe", "opencode"}) ||
+		!slices.Equal(runtimesOf("mistral-api"), []string{"opencode", "vibe"}) {
+		t.Errorf("mistral runtimes = %v, %v", runtimesOf("mistral-subscription"), runtimesOf("mistral-api"))
+	}
+	if k, _ := kindOf("mistral-subscription"); k.Billing != billSubscription || k.Env != "MISTRAL_API_KEY" || checkEndpoints[k.ID] == "" {
+		t.Errorf("mistral-subscription = %+v", k)
 	}
 	if !slices.Equal(runtimesOf("anthropic-api"), []string{"claude-code", "opencode"}) || len(runtimesOf("magic")) != 0 {
 		t.Errorf("runtimesOf = %v", runtimesOf("anthropic-api"))

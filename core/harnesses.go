@@ -59,6 +59,13 @@ var harnesses = map[string]harness{
 	// prompt in ACP v1 (its RFD is a draft), so the instructions come first
 	// in the prompt, and it cannot be the brain. Its model is its own.
 	"acp": {MCP: true, SystemPrompt: promptPrepended, AutoModel: true, ByCommand: true},
+	// Mistral Vibe, by ACP (node/runtime_vibe.go). No system prompt through
+	// ACP either, so it cannot be the brain; its folder is never trusted,
+	// so it loads no skill by itself. Its web search and page reads are
+	// its own (Mistral's), each asked. Its model is an alias of its own;
+	// without one, Vibe's default.
+	"vibe": {MCP: true, SystemPrompt: promptPrepended, Streams: true, BuiltinWebSearch: true, BuiltinWebFetch: true,
+		Resume: true, AutoModel: true},
 }
 
 // harnessOf is a runtime's card; an unknown runtime can do nothing.
