@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
+import { createAdapter } from "./a2ui/adapter";
+import { SAMPLE_SURFACE, surfaceFixtures } from "./a2ui/fixtures";
+import { Surfaces } from "./a2ui/Surfaces";
 import * as data from "./data";
 import { place, type Placed } from "./engine";
 import { useWords } from "./i18n";
@@ -88,6 +91,20 @@ export function Espace({ boot }: { boot: data.Boot }) {
     setTimeout(() => setToast((x) => (x === m ? null : x)), 2600);
   };
   const live = !!snap && !snap.sample && boot.live;
+
+  // The A2UI surfaces, beside the composition by ref until it goes (#424).
+  // eriphe-core does not send them yet (#419): on the sample, made-up ones
+  // show what the path does.
+  const [surfaces] = useState(createAdapter);
+  useEffect(() => {
+    if (!snap?.sample) return;
+    surfaces.applyMessages(surfaceFixtures(lang));
+    const off = surfaces.onAction(() => say(t("espace.sent.sample")));
+    return () => {
+      off();
+      surfaces.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: SAMPLE_SURFACE } }]);
+    };
+  }, [snap?.sample, surfaces, lang]);
 
   // What the user opens, and what left the screen unopened, are gestures
   // eriphe-core keeps for memory's extraction: no counter here.
@@ -241,6 +258,10 @@ export function Espace({ boot }: { boot: data.Boot }) {
                 </motion.div>
               ))}
             </AnimatePresence>
+          </div>
+
+          <div className="surfaces">
+            <Surfaces adapter={surfaces} />
           </div>
 
           <main className="canvas" aria-label={t("espace.canvas")}>
