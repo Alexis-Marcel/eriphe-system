@@ -51,7 +51,8 @@ func TestHarnessCards(t *testing.T) {
 	}
 	// Claude Code does all the core asks of a runtime, as before the card.
 	if want := (harness{MCP: true, SystemPrompt: promptFlag, Streams: true, PDFInToolResult: true, ImageInToolResult: true,
-		BuiltinWebSearch: true, BuiltinWebFetch: true, Resume: true, AutoModel: true, Skills: skillsTrusted}); harnessOf("claude-code") != want {
+		BuiltinWebSearch: true, BuiltinWebFetch: true, Resume: true, AutoModel: true, Skills: skillsTrusted,
+		EffortEnv: "CLAUDE_CODE_EFFORT_LEVEL"}); harnessOf("claude-code") != want {
 		t.Errorf("claude-code = %+v", harnessOf("claude-code"))
 	}
 	if h := harnessOf("codex"); h.PDFInToolResult || !h.ImageInToolResult || !h.canBeBrain() {

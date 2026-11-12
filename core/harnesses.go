@@ -35,6 +35,7 @@ type harness struct {
 	ByCommand         bool   // an agent of it is its command (Agent.Command), which picks the model
 	Skills            string // how it takes the user's skills: skills*
 	ModelServer       bool   // reaches a self-hosted model server by its address (Task.ModelEndpoint)
+	EffortEnv         string // the variable that sets how hard it thinks (low, medium, high); "" when none does
 }
 
 // harnesses by runtime. MCP for codex and opencode, and their standing
@@ -44,7 +45,8 @@ var harnesses = map[string]harness{
 	// Native stream-json. A PDF is saved and read with its own Read,
 	// without asking (tested with 2.1.311).
 	"claude-code": {MCP: true, SystemPrompt: promptFlag, Streams: true, PDFInToolResult: true, ImageInToolResult: true,
-		BuiltinWebSearch: true, BuiltinWebFetch: true, Resume: true, AutoModel: true, Skills: skillsTrusted},
+		BuiltinWebSearch: true, BuiltinWebFetch: true, Resume: true, AutoModel: true, Skills: skillsTrusted,
+		EffortEnv: "CLAUDE_CODE_EFFORT_LEVEL"},
 	// Native app-server. A PDF becomes a JSON text of its bytes: it gets the text.
 	"codex": {MCP: true, SystemPrompt: promptDeveloper, Streams: true, ImageInToolResult: true,
 		BuiltinWebSearch: true, Resume: true, Skills: skillsTrusted},

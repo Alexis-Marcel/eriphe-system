@@ -670,8 +670,8 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 		spec.AgentEnv = map[string]string{}
 	}
 	spec.AgentEnv["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
-	if r.Effort != "" && t.Runtime == "claude-code" {
-		spec.AgentEnv["CLAUDE_CODE_EFFORT_LEVEL"] = r.Effort
+	if v := harnessOf(t.Runtime).EffortEnv; r.Effort != "" && v != "" {
+		spec.AgentEnv[v] = r.Effort
 	}
 	// Its free reads, as the catalog lists them now: allowed in advance,
 	// they never wait for a permission. The node reads them when it starts.

@@ -224,7 +224,14 @@ func composerTurn(s compositionSnapshot) string {
 	default:
 		b.WriteString("Moment : la file a changé.\n")
 	}
-	fmt.Fprintf(&b, "Capacité : %d modules au plus, %d puces au plus.\n\n", compositionItemsMax, compositionChipsMax)
+	fmt.Fprintf(&b, "Capacité : %d modules au plus, %d puces au plus.\n", compositionItemsMax, compositionChipsMax)
+	if len(s.Rules) > 0 {
+		b.WriteString("Ses règles pour l'espace :\n")
+		for _, r := range s.Rules {
+			fmt.Fprintf(&b, "- %s\n", packQuote(truncate(r, 200)))
+		}
+	}
+	b.WriteString("\n")
 	if len(s.Items) == 0 {
 		b.WriteString("File d'attention : vide.\n")
 	} else {
@@ -422,6 +429,13 @@ func (c *core) setComposer(on bool, agent string) error {
 		a = Assistant{Role: assistantRoleComposer}
 	}
 	if agent != "" {
+		ag, ok := m.Agents[agent]
+		if !ok {
+			return errNotFound(kindAgent, agent)
+		}
+		if !harnessOf(ag.Runtime).canBeBrain() {
+			return errInvalid(fmt.Errorf("agent %s runs %s: the composer needs a runtime that takes a system prompt", agent, ag.Runtime))
+		}
 		a.Agent = agent
 	} else if a.Agent == "" {
 		a.Agent = composerDefaultAgent(m)

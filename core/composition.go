@@ -75,8 +75,15 @@ type compositionSnapshot struct {
 	Moment string
 	Remark string        // the user's words, for a remark
 	Away   time.Duration // how long the user has been away, for an arrival
+	Rules  []string      // the user's rules about the workspace, in words (composerRules)
 	Now    time.Time
 }
+
+// composerRules are the user's rules the composer reads with each
+// snapshot, one sentence each: the seam where the remarks turned into
+// rules (#388) come in. Code applies them to the queue before the
+// composer; the composer reads them to place what is left. None yet.
+var composerRules = func(c *core) []string { return nil }
 
 func (s compositionSnapshot) item(ref string) (snapshotItem, bool) {
 	i := slices.IndexFunc(s.Items, func(it snapshotItem) bool { return it.Ref == ref })
@@ -94,7 +101,7 @@ var snapshotTitles = 2 * time.Second
 // objects.
 func (c *core) compositionSnapshot(moment, remark string, titles bool) compositionSnapshot {
 	now := time.Now()
-	s := compositionSnapshot{Moment: moment, Remark: remark, Now: now}
+	s := compositionSnapshot{Moment: moment, Remark: remark, Now: now, Rules: composerRules(c)}
 	if moment == momentArrival {
 		_, s.Away = c.awaySince(c.notifyTime())
 	}
