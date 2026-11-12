@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
 // The composed workspace, /espace: a page next to the conversation where
@@ -18,6 +20,7 @@ import (
 func (w *web) espaceRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /espace", w.auth(w.handleEspace))
 	mux.Handle("GET /espace/boot", w.auth(w.handleEspaceBoot))
+	mux.Handle("GET /espace/catalog/v1.json", w.auth(w.handleEspaceCatalog))
 	mux.Handle("POST /api/espace/gesture", http.MaxBytesHandler(w.auth(w.handleGesture), 4<<10))
 }
 
@@ -58,6 +61,15 @@ func (w *web) handleEspaceBoot(rw http.ResponseWriter, r *http.Request, s *sessi
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(rw).Encode(b)
+}
+
+// handleEspaceCatalog is GET /espace/catalog/v1.json: the catalog of shapes
+// a surface is made of (core/a2ui), which the app's renderer reads. The
+// path carries the catalog's version: a v2 gets a path of its own.
+func (w *web) handleEspaceCatalog(rw http.ResponseWriter, r *http.Request, _ *session) {
+	rw.Header().Set("Content-Type", "application/json")
+	rw.Header().Set("Cache-Control", "no-cache")
+	rw.Write(a2ui.CatalogJSON())
 }
 
 // espaceWords are the app's words in a language, with the assistant's name.

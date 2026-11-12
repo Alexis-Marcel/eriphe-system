@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
 // /espace serves the app's shell to a session only, with the workspace's
@@ -76,6 +78,31 @@ func TestEspacePage(t *testing.T) {
 		if code != http.StatusSeeOther || h.Get("Location") != "/login" {
 			t.Errorf("GET %s without a session: %d %s", path, code, h.Get("Location"))
 		}
+	}
+}
+
+// The catalog of shapes is served to a session, as core holds it.
+func TestEspaceCatalog(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	code, body, h := tw.do("GET", "/espace/catalog/v1.json", nil, nil)
+	if code != http.StatusOK || !strings.HasPrefix(h.Get("Content-Type"), "application/json") {
+		t.Fatalf("GET /espace/catalog/v1.json: %d %s", code, h.Get("Content-Type"))
+	}
+	if body != string(a2ui.CatalogJSON()) {
+		t.Error("the served catalog is not core's")
+	}
+	var doc struct {
+		CatalogID  string         `json:"catalogId"`
+		Components map[string]any `json:"components"`
+	}
+	if err := json.Unmarshal([]byte(body), &doc); err != nil || doc.CatalogID != a2ui.CatalogID || doc.Components["Metric"] == nil {
+		t.Errorf("catalog: %v %s %d components", err, doc.CatalogID, len(doc.Components))
+	}
+	jar, _ := cookiejar.New(nil)
+	tw.hc.Jar = jar
+	if code, _, h := tw.do("GET", "/espace/catalog/v1.json", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/login" {
+		t.Errorf("without a session: %d %s", code, h.Get("Location"))
 	}
 }
 

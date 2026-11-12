@@ -1,0 +1,9 @@
+The A2UI v1.0 conformance cases, from https://github.com/a2ui-project/a2ui
+at commit e281031a7344a810efd3456e4be355415f8e65e4, copied unchanged:
+
+  cases/                specification/v1_0/test/cases/
+  testing_catalog.json  specification/v1_0/test/testing_catalog.json
+  basic_catalog.json    catalogs/basic/v1/catalog.json
+
+Copyright 2024 Google LLC and the A2UI authors.
+Licensed under the Apache License, Version 2.0: see ../../spec/LICENSE.

@@ -1,0 +1,8 @@
+The JSON Schemas in v1_0/ are A2UI protocol v1.0 (specification/v1_0/json),
+copied unchanged from https://github.com/a2ui-project/a2ui at commit
+e281031a7344a810efd3456e4be355415f8e65e4.
+
+Copyright 2024 Google LLC and the A2UI authors.
+Licensed under the Apache License, Version 2.0: see LICENSE in this folder
+(the license text of that repository's LICENSE, without the section about a
+file of it that is not copied here).
