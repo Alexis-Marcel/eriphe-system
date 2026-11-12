@@ -149,11 +149,11 @@ func (c *core) queueSkillEvent(e journalEvent) {
 		return // a triggered task's end never triggers a skill: no loop
 	}
 	queued := false
-	stale := c.staleAuthor(e) // surface_authors.go
+	stale := c.staleWake(e) // surface_authors.go
 	for _, sk := range c.triggeredSkills() {
-		// A skill hears its when, and the composer's surface.stale about
-		// one of its surfaces, whatever its when.
-		if !sk.Trigger.matches(e) && stale != "skill:"+sk.Name {
+		// A skill hears its when; lent the workspace, the composer's
+		// surface.stale about one of its surfaces too, whatever its when.
+		if !sk.Trigger.matches(e) && (stale != "skill:"+sk.Name || !containsStr(sk.Trigger.Tools, workspaceServer)) {
 			continue
 		}
 		if _, err := c.store.db.Exec(`INSERT INTO skill_queue (skill, event, key, at) VALUES (?, ?, ?, ?)`,

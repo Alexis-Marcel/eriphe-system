@@ -19,10 +19,13 @@ import (
 //     Each of its wakes reminds it while it has none (leadSurfaceNudge);
 //     code removes it when the session ends (dropSessionSurfaces).
 //   - A skill writes its surface on its trigger, lent eriphe-workspace in
-//     its tools, as skill:<name>. A surface.stale about one of its
-//     surfaces runs it, whatever its when (queueSkillEvent): a skill at
-//     fixed times hears it too. when: surface.stale id=<id> matches it as
-//     any event.
+//     its tools, as skill:<name>. when: surface.stale id=<id> matches it as
+//     any event; and a skill lent the workspace is run by a surface.stale
+//     about a surface it wrote, whatever its when (queueSkillEvent): a
+//     time trigger cannot name an event, and a skill at fixed times must
+//     hear it too. Its card and its page say so (skillTrigger.Text).
+//   - An author is woken by a surface.stale once per surfaceStaleQuiet a
+//     surface: a rewrite the composer still finds stale does not loop.
 //   - The brain writes what the user asks; a recurring request is a skill.
 //     A surface.missing (what the composer would show and nothing does)
 //     reaches it as an event of the conversation: it writes the surface,
@@ -40,6 +43,8 @@ const (
 	surfaceMissingKey   = "surface_missing:"      // + a hash of the text: when it was told, unix
 	surfaceMissingMax   = 300                     // runes of the text the brain reads
 	taintSurfaceEvent   = "event:surface.missing" // a missing drawn from external content
+	surfaceStaleQuiet   = 30 * time.Minute        // a surface's author is woken once in it
+	surfaceStaleKey     = "surface_stale:"        // + the surface: the event that woke its author and when, id:unix
 )
 
 // staleSurfaceID is the surface a surface.stale is about: its payload's
@@ -51,9 +56,10 @@ func staleSurfaceID(e journalEvent) string {
 	return strings.TrimSpace(e.Key)
 }
 
-// staleAuthor is the author of the surface a surface.stale is about; ""
-// when the event is another or the surface is gone.
-func (c *core) staleAuthor(e journalEvent) string {
+// staleWake is the author a surface.stale wakes: its surface's, once per
+// surfaceStaleQuiet a surface; "" for another event, a surface gone, or
+// within the quiet. Every listener of one event gets the same answer.
+func (c *core) staleWake(e journalEvent) string {
 	if e.Kind != evSurfaceStale {
 		return ""
 	}
@@ -61,6 +67,20 @@ func (c *core) staleAuthor(e journalEvent) string {
 	if err != nil {
 		return ""
 	}
+	at := e.At
+	if at.IsZero() {
+		at = time.Now()
+	}
+	key, id := surfaceStaleKey+s.ID, strconv.FormatInt(e.ID, 10)
+	if prev, when, ok := strings.Cut(c.store.get(key), ":"); ok {
+		if prev == id {
+			return s.Author
+		}
+		if t, err := strconv.ParseInt(when, 10, 64); err == nil && at.Sub(time.Unix(t, 0)) < surfaceStaleQuiet {
+			return ""
+		}
+	}
+	c.store.set(key, id+":"+strconv.FormatInt(at.Unix(), 10))
 	return s.Author
 }
 
@@ -73,7 +93,7 @@ func (c *core) surfaceEventHeard(e journalEvent) {
 	case evSurfaceMissing:
 		c.tellBrainMissing(e)
 	case evSurfaceStale:
-		author := c.staleAuthor(e)
+		author := c.staleWake(e)
 		raw, ok := strings.CutPrefix(author, "lead:")
 		if !ok {
 			return

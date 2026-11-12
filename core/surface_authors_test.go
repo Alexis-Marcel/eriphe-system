@@ -115,6 +115,28 @@ func TestSkillRewritesOnStale(t *testing.T) {
 	if task.Tools != workspaceServer || !strings.Contains(task.Prompt, evSurfaceStale) || !strings.Contains(task.Prompt, "même id") {
 		t.Fatalf("task %q %q", task.Tools, task.Prompt)
 	}
+	if sk := c.triggeredSkills()[0]; !strings.Contains(sk.Trigger.Text("fr"), "périmée") {
+		t.Errorf("its card does not say it: %q", sk.Trigger.Text("fr"))
+	}
+
+	// Stale again within the quiet: its author is not woken again.
+	c.store.db.Exec(`UPDATE skill_runs SET state = ?`, skillRunDone)
+	c.emit(journalEvent{Kind: evSurfaceStale, Key: "revue", Source: "composer", At: now.Add(time.Minute), Payload: map[string]any{"id": "revue"}})
+	if q, _ := c.skillQueue("revue"); len(q) != 0 {
+		t.Fatalf("woken again within the quiet: %+v", q)
+	}
+	c.emit(journalEvent{Kind: evSurfaceStale, Key: "revue", Source: "composer", At: now.Add(time.Hour), Payload: map[string]any{"id": "revue"}})
+	if q, _ := c.skillQueue("revue"); len(q) != 1 {
+		t.Fatalf("not woken after the quiet: %+v", q)
+	}
+
+	// A skill not lent the workspace is not woken by its surface.
+	addTriggered(t, c, "---\nname: tri\ndescription: le tri\nwhen: time daily 08:00\n---\nTrie.\n")
+	c.surfaceWrite("skill:tri", surfaceIn{ID: "tri", Title: "Tri", Components: comps})
+	c.emit(journalEvent{Kind: evSurfaceStale, Key: "tri", Source: "composer", At: *now, Payload: map[string]any{"id": "tri"}})
+	if q, _ := c.skillQueue("tri"); len(q) != 0 {
+		t.Fatalf("a skill without the workspace woken: %+v", q)
+	}
 }
 
 // Asked for something every morning, the brain writes a skill lent the

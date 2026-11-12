@@ -1432,6 +1432,10 @@ version, read with its diff.
   permissions are the user's, as any task's.
 - **One run open per skill and key**: the key's new events wait, and when its turn ends, its task
   gets them as a message instead of a second task.
+- **A skill lent the workspace** (`tools: [eriphe-workspace]`) also runs on a `surface.stale`
+  about a surface it wrote, whatever its `when`, a time trigger too (a time trigger cannot name an
+  event); once per 30 minutes a surface. Its card and Settings → Skills say so
+  ([who keeps which surface](#the-assistants-workspace-tools-workspace_toolsgo)).
 - **Time triggers** run at their times, in the user's zone; a trigger seen for the first time (or
   approved again) waits for its next time; times missed while eriphe-core was down make one run.
 - **Its calls the user must approve never hold it** (`skill_cards.go`): as the brain's, each is
@@ -3183,7 +3187,9 @@ Any assistant writes the workspace with four tools; the **author is the caller**
   `lifetime: kept` while the skill exists), and its run's prompt says so (`skillCanText`). It reacts
   to the composer's events with `when` like any event (`when: surface.stale id=<its surface>`), and
   a `surface.stale` about a surface it wrote runs it whatever its `when`, a skill at fixed times
-  too (`queueSkillEvent`; its run gets the event, keyed by the surface).
+  too (`queueSkillEvent`; its run gets the event, keyed by the surface; its card says so). An
+  author (a skill, a lead) is woken by a `surface.stale` once per 30 minutes a surface
+  (`staleWake`), so a rewrite the composer still finds stale does not loop.
 - **The brain** writes what the user asks; asked for something that comes back (« chaque matin »),
   it writes a skill with `tools: [eriphe-workspace]` (`write_skill` accepts the servers Eriphe
   provides) that maintains the surface. A `surface.missing` reaches it as an event of the

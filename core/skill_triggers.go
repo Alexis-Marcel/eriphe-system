@@ -20,6 +20,8 @@ import (
 //	every: 15m                               batch: at most one task per period, with every event since
 //	model: haiku                             the agent its tasks run with (Settings → Agents)
 //	tools: [mail, calendar]                  the catalog servers its tasks are lent
+//	                                         (eriphe-workspace: it keeps a surface, and a
+//	                                         surface.stale about it runs it whatever its when)
 //	can: [start-session]                     what its tasks may start (#276)
 //
 // Each is checked when the skill is added: a version with a bad trigger is
@@ -210,6 +212,9 @@ func (st *skillTrigger) Text(lang string) string {
 	}
 	if len(st.Tools) > 0 {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.tools"), strings.Join(st.Tools, ", ")))
+	}
+	if containsStr(st.Tools, workspaceServer) {
+		parts = append(parts, tr(lang, "skills.trigger.stale"))
 	}
 	if slices.Contains(st.Can, canSession) {
 		parts = append(parts, tr(lang, "skills.trigger.session"))
