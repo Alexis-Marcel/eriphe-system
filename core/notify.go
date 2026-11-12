@@ -30,7 +30,9 @@ import (
 //     interrupts: it goes to the brief at most, and is marked so. It only
 //     speaks to the user; nothing it says can act.
 //   - A "now" refused goes to the brief: it is held, listed for the brain
-//     (notifications) and in the workspace, until the brief (step 2) says it.
+//     (notifications) and in the workspace, and waits in the attention
+//     queue for the user's next return, whose release is the brief
+//     (attention.go).
 //
 // Every notification is kept with its why: the push shows the text, and
 // opening it shows why, with 👍 / 👎 / « pas maintenant ». That feedback goes
@@ -235,6 +237,9 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 	}
 	n.ID, _ = res.LastInsertId()
 	log.Printf("notify: %d %s → %s (%s)", n.ID, it.Level, d.Outcome, d.Reason)
+	if n.Held {
+		c.attendNote(n) // told at the user's next return, the brief (attention.go)
+	}
 	if d.Outcome == levelNow {
 		note := notifyNote(n)
 		note.Route = routeNote{Level: levelNow, Tainted: it.Tainted, Fixed: n.Source == notifyFromUrgent, First: it.Where}
@@ -344,7 +349,11 @@ func (c *core) notificationFeedback(id int64, fb string) (*notification, error) 
 		return nil, sql.ErrNoRows
 	}
 	c.ackNotification(id, ackFeedback) // seen: no next device (route_send.go)
-	return c.notificationByID(id)
+	n, err := c.notificationByID(id)
+	if err == nil && fb == "later" {
+		c.attendNote(n)
+	}
+	return n, err
 }
 
 // reactWithToken is a push button's answer: no session, the notification's

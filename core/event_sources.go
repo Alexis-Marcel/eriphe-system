@@ -24,14 +24,17 @@ const (
 	eventsPurgeEvery = 6 * time.Hour
 )
 
-// runEvents is the journal's timer: the user's return, and the purge.
+// runEvents is the journal's timer: the user's return, the attention
+// queue's breakpoints and caps (attention.go), and the purge.
 func (c *core) runEvents(ctx context.Context) {
+	c.subscribeEvents(c.attentionOnEvent)
 	tick := time.NewTicker(eventsTickEvery)
 	defer tick.Stop()
 	var purged time.Time
 	for {
 		now := c.notifyTime()
 		c.tickReturned(now)
+		c.attentionBreak(breakCap, now)
 		if now.Sub(purged) >= eventsPurgeEvery {
 			c.purgeEvents(now)
 			purged = now

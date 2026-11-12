@@ -133,6 +133,10 @@ CREATE TABLE IF NOT EXISTS events (
 // extraSchema holds the tables of other modules (the policy's decisions).
 var extraSchema []string
 
+// schemaFixes bring a table made by an older eriphe-core up to date (a
+// column added), after the schema: CREATE TABLE IF NOT EXISTS never does.
+var schemaFixes []func(*sql.DB) error
+
 func openStore(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
@@ -141,6 +145,11 @@ func openStore(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	for _, q := range append([]string{schema}, extraSchema...) {
 		if _, err := db.Exec(q); err != nil {
+			return nil, err
+		}
+	}
+	for _, fix := range schemaFixes {
+		if err := fix(db); err != nil {
 			return nil, err
 		}
 	}
