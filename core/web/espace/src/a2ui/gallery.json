@@ -1,0 +1,1678 @@
+{
+ "fr": [
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-day",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Aujourd'hui",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "day",
+       "sep",
+       "mails_title",
+       "mails"
+      ]
+     },
+     {
+      "id": "day",
+      "component": "Day",
+      "date": "2026-11-12",
+      "events": {
+       "@path": "/events"
+      }
+     },
+     {
+      "id": "sep",
+      "component": "Divider"
+     },
+     {
+      "id": "mails_title",
+      "component": "Text",
+      "variant": "subtitle",
+      "text": "Mails à traiter"
+     },
+     {
+      "id": "mails",
+      "component": "List",
+      "children": {
+       "path": "/messages",
+       "componentId": "mail"
+      },
+      "emptyText": "Rien à traiter"
+     },
+     {
+      "id": "mail",
+      "component": "Message",
+      "from": {
+       "@path": "from"
+      },
+      "date": {
+       "@path": "date"
+      },
+      "subject": {
+       "@path": "subject"
+      },
+      "excerpt": {
+       "@path": "snippet"
+      },
+      "body": {
+       "@path": "text"
+      }
+     }
+    ],
+    "dataModel": {
+     "events": [
+      {
+       "title": "Point d'équipe",
+       "start": "2026-11-12T09:00:00+01:00",
+       "end": "2026-11-12T09:30:00+01:00"
+      },
+      {
+       "title": "Atelier devis",
+       "start": "2026-11-12T10:00:00+01:00",
+       "end": "2026-11-12T11:30:00+01:00",
+       "place": "Salle 2"
+      },
+      {
+       "title": "Appel avec Sam",
+       "start": "2026-11-12T11:00:00+01:00",
+       "end": "2026-11-12T12:00:00+01:00"
+      },
+      {
+       "title": "Dentiste",
+       "start": "2026-11-12T14:00:00+01:00",
+       "end": "2026-11-12T14:45:00+01:00",
+       "place": "Centre"
+      },
+      {
+       "title": "Anniversaire de Sam",
+       "start": "2026-11-12",
+       "allDay": true
+      }
+     ],
+     "messages": [
+      {
+       "from": "Sam <sam@example.org>",
+       "date": "2026-11-12T08:10:00+01:00",
+       "subject": "Devis pour la terrasse",
+       "snippet": "Voici le devis revu, avec la pose comprise. Dis-moi si ça te va…",
+       "text": "Bonjour,\n\nVoici le devis revu, avec la pose comprise. Le délai reste de trois semaines.\n\nDis-moi si ça te va,\nSam"
+      },
+      {
+       "from": "L'école <info@example.org>",
+       "date": "2026-11-11T17:40:00+01:00",
+       "subject": "Sortie du 20 novembre",
+       "snippet": "Merci de rendre l'autorisation signée avant vendredi."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-figures",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Maison",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "metrics",
+       "bars",
+       "lines"
+      ]
+     },
+     {
+      "id": "metrics",
+      "component": "Row",
+      "justify": "spaceBetween",
+      "children": [
+       "cpu",
+       "disk",
+       "power"
+      ]
+     },
+     {
+      "id": "cpu",
+      "component": "Metric",
+      "label": "Processeur",
+      "value": {
+       "@path": "/cpu"
+      },
+      "unit": "%",
+      "delta": -5,
+      "better": "down",
+      "deltaLabel": "depuis hier"
+     },
+     {
+      "id": "disk",
+      "component": "Metric",
+      "label": "Disque libre",
+      "value": 1.2,
+      "unit": "To",
+      "delta": -0.1,
+      "deltaLabel": "depuis hier"
+     },
+     {
+      "id": "power",
+      "component": "Metric",
+      "label": "Consommation",
+      "value": {
+       "@call": "formatNumber",
+       "args": {
+        "value": {
+         "@path": "/kwh"
+        },
+        "decimals": 1
+       }
+      },
+      "unit": "kWh",
+      "delta": 3.4,
+      "better": "down",
+      "deltaLabel": "cette semaine"
+     },
+     {
+      "id": "bars",
+      "component": "Chart",
+      "kind": "bar",
+      "unit": "kWh",
+      "series": [
+       {
+        "name": "Maison",
+        "points": [
+         {
+          "x": "lun.",
+          "y": 12.5
+         },
+         {
+          "x": "mar.",
+          "y": 9.8
+         },
+         {
+          "x": "mer.",
+          "y": 11.2
+         },
+         {
+          "x": "jeu.",
+          "y": 14.1
+         },
+         {
+          "x": "ven.",
+          "y": 10.4
+         },
+         {
+          "x": "sam.",
+          "y": 7.9
+         },
+         {
+          "x": "dim.",
+          "y": 8.6
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "lines",
+      "component": "Chart",
+      "kind": "line",
+      "unit": "°C",
+      "series": {
+       "@path": "/temps"
+      }
+     }
+    ],
+    "dataModel": {
+     "cpu": 37,
+     "kwh": 74.46,
+     "temps": [
+      {
+       "name": "Intérieur",
+       "points": [
+        {
+         "x": "2026-11-12T06:00:00",
+         "y": 19.5
+        },
+        {
+         "x": "2026-11-12T09:00:00",
+         "y": 19.8
+        },
+        {
+         "x": "2026-11-12T12:00:00",
+         "y": 20.6
+        },
+        {
+         "x": "2026-11-12T15:00:00",
+         "y": 21.2
+        },
+        {
+         "x": "2026-11-12T18:00:00",
+         "y": 21.0
+        },
+        {
+         "x": "2026-11-12T21:00:00",
+         "y": 20.4
+        }
+       ]
+      },
+      {
+       "name": "Extérieur",
+       "points": [
+        {
+         "x": "2026-11-12T06:00:00",
+         "y": 3.1
+        },
+        {
+         "x": "2026-11-12T09:00:00",
+         "y": 4.0
+        },
+        {
+         "x": "2026-11-12T12:00:00",
+         "y": 8.2
+        },
+        {
+         "x": "2026-11-12T15:00:00",
+         "y": 10.5
+        },
+        {
+         "x": "2026-11-12T18:00:00",
+         "y": 7.4
+        },
+        {
+         "x": "2026-11-12T21:00:00",
+         "y": 5.0
+        }
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-project",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Site de l'association",
+      "child": "tabs"
+     },
+     {
+      "id": "tabs",
+      "component": "Tabs",
+      "tabs": [
+       {
+        "title": "Étapes",
+        "child": "steps"
+       },
+       {
+        "title": "Tickets",
+        "child": "tickets"
+       },
+       {
+        "title": "Note",
+        "child": "note"
+       }
+      ]
+     },
+     {
+      "id": "steps",
+      "component": "Timeline",
+      "items": [
+       {
+        "label": "Maquette",
+        "state": "done",
+        "date": "2026-11-03"
+       },
+       {
+        "label": "Contenus",
+        "state": "done",
+        "date": "2026-11-07"
+       },
+       {
+        "label": "Intégration",
+        "state": "current",
+        "detail": "Pages d'accueil et d'agenda"
+       },
+       {
+        "label": "Mise en ligne",
+        "state": "pending",
+        "date": "2026-11-20"
+       }
+      ]
+     },
+     {
+      "id": "tickets",
+      "component": "Table",
+      "columns": [
+       {
+        "key": "title",
+        "label": "Ticket",
+        "kind": "text"
+       },
+       {
+        "key": "age",
+        "label": "Âge (jours)",
+        "kind": "number"
+       },
+       {
+        "key": "due",
+        "label": "Échéance",
+        "kind": "date"
+       }
+      ],
+      "rows": {
+       "@path": "/issues"
+      },
+      "emptyText": "Aucun ticket ouvert"
+     },
+     {
+      "id": "note",
+      "component": "Markdown",
+      "text": "## Ce qui reste\n\n- Valider les **couleurs** avec Sam\n- Relire la page *Agenda*\n- Vérifier le [guide](https://example.org/guide)\n\n<script>alert(1)</script> reste du texte."
+     }
+    ],
+    "dataModel": {
+     "issues": [
+      {
+       "title": "Formulaire de contact",
+       "age": 4,
+       "due": "2026-11-14"
+      },
+      {
+       "title": "Traduction anglaise",
+       "age": 12,
+       "due": "2026-11-18"
+      },
+      {
+       "title": "Logo en SVG",
+       "age": 1,
+       "due": "2026-11-13"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-trip",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Préparer le voyage",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "late",
+       "how",
+       "note",
+       "leave",
+       "summary",
+       "actions"
+      ]
+     },
+     {
+      "id": "late",
+      "component": "Alert",
+      "level": "warning",
+      "title": "Retard",
+      "text": "Le train de 7 h 12 est annoncé avec 20 minutes de retard."
+     },
+     {
+      "id": "how",
+      "component": "Choice",
+      "label": "Comment y aller ?",
+      "options": [
+       {
+        "label": "Train",
+        "value": "train"
+       },
+       {
+        "label": "Voiture",
+        "value": "car"
+       },
+       {
+        "label": "Covoiturage",
+        "value": "share"
+       }
+      ],
+      "value": {
+       "@path": "/how"
+      }
+     },
+     {
+      "id": "note",
+      "component": "TextField",
+      "label": "Une remarque",
+      "placeholder": "Par exemple : partir tôt",
+      "value": {
+       "@path": "/note"
+      }
+     },
+     {
+      "id": "leave",
+      "component": "DateField",
+      "label": "Départ",
+      "mode": "dateTime",
+      "value": {
+       "@path": "/leave"
+      }
+     },
+     {
+      "id": "summary",
+      "component": "Text",
+      "variant": "caption",
+      "text": {
+       "@call": "formatString",
+       "args": {
+        "value": "${/count} trajets comparés"
+       }
+      }
+     },
+     {
+      "id": "actions",
+      "component": "Row",
+      "justify": "end",
+      "align": "center",
+      "children": [
+       "later",
+       "ask"
+      ]
+     },
+     {
+      "id": "later",
+      "component": "Button",
+      "label": "Plus tard",
+      "variant": "quiet",
+      "action": {
+       "event": {
+        "name": "local"
+       }
+      }
+     },
+     {
+      "id": "ask",
+      "component": "Button",
+      "label": "Demander un itinéraire",
+      "icon": "search",
+      "variant": "primary",
+      "action": {
+       "event": {
+        "name": "ask",
+        "context": {
+         "text": "Trouve-moi un itinéraire pour le voyage",
+         "how": {
+          "@path": "/how"
+         }
+        }
+       }
+      }
+     }
+    ],
+    "dataModel": {
+     "how": [
+      "train"
+     ],
+     "note": "",
+     "leave": "2026-11-20T07:12",
+     "count": 3
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-more",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "proposal",
+       "info",
+       "when",
+       "ago",
+       "icons_title",
+       "icons",
+       "image"
+      ]
+     },
+     {
+      "id": "proposal",
+      "component": "Proposal",
+      "proposalId": "rule:7"
+     },
+     {
+      "id": "info",
+      "component": "Alert",
+      "text": "Les données de cet exemple sont fictives."
+     },
+     {
+      "id": "when",
+      "component": "Text",
+      "variant": "caption",
+      "text": {
+       "@call": "formatDate",
+       "args": {
+        "value": {
+         "@path": "/updated"
+        },
+        "format": "EEEE d MMMM"
+       }
+      }
+     },
+     {
+      "id": "ago",
+      "component": "Text",
+      "variant": "caption",
+      "text": {
+       "@call": "formatRelative",
+       "args": {
+        "value": {
+         "@path": "/updated"
+        }
+       }
+      }
+     },
+     {
+      "id": "icons_title",
+      "component": "Text",
+      "variant": "subtitle",
+      "text": "Icônes"
+     },
+     {
+      "id": "icons",
+      "component": "Row",
+      "children": [
+       "i_alert",
+       "i_arrowDown",
+       "i_arrowUp",
+       "i_calendar",
+       "i_chart",
+       "i_check",
+       "i_clock",
+       "i_close",
+       "i_cloud",
+       "i_document",
+       "i_error",
+       "i_event",
+       "i_folder",
+       "i_home",
+       "i_info",
+       "i_link",
+       "i_lock",
+       "i_mail",
+       "i_message",
+       "i_money",
+       "i_note",
+       "i_person",
+       "i_phone",
+       "i_place",
+       "i_refresh",
+       "i_search",
+       "i_server",
+       "i_settings",
+       "i_star",
+       "i_task",
+       "i_trendDown",
+       "i_trendUp",
+       "i_warning"
+      ]
+     },
+     {
+      "id": "i_alert",
+      "component": "Icon",
+      "name": "alert"
+     },
+     {
+      "id": "i_arrowDown",
+      "component": "Icon",
+      "name": "arrowDown"
+     },
+     {
+      "id": "i_arrowUp",
+      "component": "Icon",
+      "name": "arrowUp"
+     },
+     {
+      "id": "i_calendar",
+      "component": "Icon",
+      "name": "calendar"
+     },
+     {
+      "id": "i_chart",
+      "component": "Icon",
+      "name": "chart"
+     },
+     {
+      "id": "i_check",
+      "component": "Icon",
+      "name": "check"
+     },
+     {
+      "id": "i_clock",
+      "component": "Icon",
+      "name": "clock"
+     },
+     {
+      "id": "i_close",
+      "component": "Icon",
+      "name": "close"
+     },
+     {
+      "id": "i_cloud",
+      "component": "Icon",
+      "name": "cloud"
+     },
+     {
+      "id": "i_document",
+      "component": "Icon",
+      "name": "document"
+     },
+     {
+      "id": "i_error",
+      "component": "Icon",
+      "name": "error"
+     },
+     {
+      "id": "i_event",
+      "component": "Icon",
+      "name": "event"
+     },
+     {
+      "id": "i_folder",
+      "component": "Icon",
+      "name": "folder"
+     },
+     {
+      "id": "i_home",
+      "component": "Icon",
+      "name": "home"
+     },
+     {
+      "id": "i_info",
+      "component": "Icon",
+      "name": "info"
+     },
+     {
+      "id": "i_link",
+      "component": "Icon",
+      "name": "link"
+     },
+     {
+      "id": "i_lock",
+      "component": "Icon",
+      "name": "lock"
+     },
+     {
+      "id": "i_mail",
+      "component": "Icon",
+      "name": "mail"
+     },
+     {
+      "id": "i_message",
+      "component": "Icon",
+      "name": "message"
+     },
+     {
+      "id": "i_money",
+      "component": "Icon",
+      "name": "money"
+     },
+     {
+      "id": "i_note",
+      "component": "Icon",
+      "name": "note"
+     },
+     {
+      "id": "i_person",
+      "component": "Icon",
+      "name": "person"
+     },
+     {
+      "id": "i_phone",
+      "component": "Icon",
+      "name": "phone"
+     },
+     {
+      "id": "i_place",
+      "component": "Icon",
+      "name": "place"
+     },
+     {
+      "id": "i_refresh",
+      "component": "Icon",
+      "name": "refresh"
+     },
+     {
+      "id": "i_search",
+      "component": "Icon",
+      "name": "search"
+     },
+     {
+      "id": "i_server",
+      "component": "Icon",
+      "name": "server"
+     },
+     {
+      "id": "i_settings",
+      "component": "Icon",
+      "name": "settings"
+     },
+     {
+      "id": "i_star",
+      "component": "Icon",
+      "name": "star"
+     },
+     {
+      "id": "i_task",
+      "component": "Icon",
+      "name": "task"
+     },
+     {
+      "id": "i_trendDown",
+      "component": "Icon",
+      "name": "trendDown"
+     },
+     {
+      "id": "i_trendUp",
+      "component": "Icon",
+      "name": "trendUp"
+     },
+     {
+      "id": "i_warning",
+      "component": "Icon",
+      "name": "warning"
+     },
+     {
+      "id": "image",
+      "component": "Image",
+      "url": "https://example.org/map.png",
+      "alt": "Plan du quartier"
+     }
+    ],
+    "dataModel": {
+     "updated": "2026-11-12T08:00:00+01:00"
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-pending",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Placeholder",
+      "text": "Prépare un résumé des factures…"
+     }
+    ]
+   }
+  }
+ ],
+ "en": [
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-day",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Today",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "day",
+       "sep",
+       "mails_title",
+       "mails"
+      ]
+     },
+     {
+      "id": "day",
+      "component": "Day",
+      "date": "2026-11-12",
+      "events": {
+       "@path": "/events"
+      }
+     },
+     {
+      "id": "sep",
+      "component": "Divider"
+     },
+     {
+      "id": "mails_title",
+      "component": "Text",
+      "variant": "subtitle",
+      "text": "Mails to handle"
+     },
+     {
+      "id": "mails",
+      "component": "List",
+      "children": {
+       "path": "/messages",
+       "componentId": "mail"
+      },
+      "emptyText": "Nothing to handle"
+     },
+     {
+      "id": "mail",
+      "component": "Message",
+      "from": {
+       "@path": "from"
+      },
+      "date": {
+       "@path": "date"
+      },
+      "subject": {
+       "@path": "subject"
+      },
+      "excerpt": {
+       "@path": "snippet"
+      },
+      "body": {
+       "@path": "text"
+      }
+     }
+    ],
+    "dataModel": {
+     "events": [
+      {
+       "title": "Team check-in",
+       "start": "2026-11-12T09:00:00+01:00",
+       "end": "2026-11-12T09:30:00+01:00"
+      },
+      {
+       "title": "Quote workshop",
+       "start": "2026-11-12T10:00:00+01:00",
+       "end": "2026-11-12T11:30:00+01:00",
+       "place": "Room 2"
+      },
+      {
+       "title": "Call with Sam",
+       "start": "2026-11-12T11:00:00+01:00",
+       "end": "2026-11-12T12:00:00+01:00"
+      },
+      {
+       "title": "Dentist",
+       "start": "2026-11-12T14:00:00+01:00",
+       "end": "2026-11-12T14:45:00+01:00",
+       "place": "Centre"
+      },
+      {
+       "title": "Sam's birthday",
+       "start": "2026-11-12",
+       "allDay": true
+      }
+     ],
+     "messages": [
+      {
+       "from": "Sam <sam@example.org>",
+       "date": "2026-11-12T08:10:00+01:00",
+       "subject": "Quote for the terrace",
+       "snippet": "Here is the revised quote, fitting included. Tell me if it works for you…",
+       "text": "Hello,\n\nHere is the revised quote, fitting included. The lead time is still three weeks.\n\nTell me if it works for you,\nSam"
+      },
+      {
+       "from": "The school <info@example.org>",
+       "date": "2026-11-11T17:40:00+01:00",
+       "subject": "Outing on 20 November",
+       "snippet": "Please return the signed form before Friday."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-figures",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Home",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "metrics",
+       "bars",
+       "lines"
+      ]
+     },
+     {
+      "id": "metrics",
+      "component": "Row",
+      "justify": "spaceBetween",
+      "children": [
+       "cpu",
+       "disk",
+       "power"
+      ]
+     },
+     {
+      "id": "cpu",
+      "component": "Metric",
+      "label": "Processor",
+      "value": {
+       "@path": "/cpu"
+      },
+      "unit": "%",
+      "delta": -5,
+      "better": "down",
+      "deltaLabel": "since yesterday"
+     },
+     {
+      "id": "disk",
+      "component": "Metric",
+      "label": "Free disk",
+      "value": 1.2,
+      "unit": "TB",
+      "delta": -0.1,
+      "deltaLabel": "since yesterday"
+     },
+     {
+      "id": "power",
+      "component": "Metric",
+      "label": "Power use",
+      "value": {
+       "@call": "formatNumber",
+       "args": {
+        "value": {
+         "@path": "/kwh"
+        },
+        "decimals": 1
+       }
+      },
+      "unit": "kWh",
+      "delta": 3.4,
+      "better": "down",
+      "deltaLabel": "this week"
+     },
+     {
+      "id": "bars",
+      "component": "Chart",
+      "kind": "bar",
+      "unit": "kWh",
+      "series": [
+       {
+        "name": "Home",
+        "points": [
+         {
+          "x": "Mon",
+          "y": 12.5
+         },
+         {
+          "x": "Tue",
+          "y": 9.8
+         },
+         {
+          "x": "Wed",
+          "y": 11.2
+         },
+         {
+          "x": "Thu",
+          "y": 14.1
+         },
+         {
+          "x": "Fri",
+          "y": 10.4
+         },
+         {
+          "x": "Sat",
+          "y": 7.9
+         },
+         {
+          "x": "Sun",
+          "y": 8.6
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "lines",
+      "component": "Chart",
+      "kind": "line",
+      "unit": "°C",
+      "series": {
+       "@path": "/temps"
+      }
+     }
+    ],
+    "dataModel": {
+     "cpu": 37,
+     "kwh": 74.46,
+     "temps": [
+      {
+       "name": "Inside",
+       "points": [
+        {
+         "x": "2026-11-12T06:00:00",
+         "y": 19.5
+        },
+        {
+         "x": "2026-11-12T09:00:00",
+         "y": 19.8
+        },
+        {
+         "x": "2026-11-12T12:00:00",
+         "y": 20.6
+        },
+        {
+         "x": "2026-11-12T15:00:00",
+         "y": 21.2
+        },
+        {
+         "x": "2026-11-12T18:00:00",
+         "y": 21.0
+        },
+        {
+         "x": "2026-11-12T21:00:00",
+         "y": 20.4
+        }
+       ]
+      },
+      {
+       "name": "Outside",
+       "points": [
+        {
+         "x": "2026-11-12T06:00:00",
+         "y": 3.1
+        },
+        {
+         "x": "2026-11-12T09:00:00",
+         "y": 4.0
+        },
+        {
+         "x": "2026-11-12T12:00:00",
+         "y": 8.2
+        },
+        {
+         "x": "2026-11-12T15:00:00",
+         "y": 10.5
+        },
+        {
+         "x": "2026-11-12T18:00:00",
+         "y": 7.4
+        },
+        {
+         "x": "2026-11-12T21:00:00",
+         "y": 5.0
+        }
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-project",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "The club's website",
+      "child": "tabs"
+     },
+     {
+      "id": "tabs",
+      "component": "Tabs",
+      "tabs": [
+       {
+        "title": "Steps",
+        "child": "steps"
+       },
+       {
+        "title": "Tickets",
+        "child": "tickets"
+       },
+       {
+        "title": "Note",
+        "child": "note"
+       }
+      ]
+     },
+     {
+      "id": "steps",
+      "component": "Timeline",
+      "items": [
+       {
+        "label": "Mock-up",
+        "state": "done",
+        "date": "2026-11-03"
+       },
+       {
+        "label": "Content",
+        "state": "done",
+        "date": "2026-11-07"
+       },
+       {
+        "label": "Build",
+        "state": "current",
+        "detail": "Home and agenda pages"
+       },
+       {
+        "label": "Go live",
+        "state": "pending",
+        "date": "2026-11-20"
+       }
+      ]
+     },
+     {
+      "id": "tickets",
+      "component": "Table",
+      "columns": [
+       {
+        "key": "title",
+        "label": "Ticket",
+        "kind": "text"
+       },
+       {
+        "key": "age",
+        "label": "Age (days)",
+        "kind": "number"
+       },
+       {
+        "key": "due",
+        "label": "Due",
+        "kind": "date"
+       }
+      ],
+      "rows": {
+       "@path": "/issues"
+      },
+      "emptyText": "No open ticket"
+     },
+     {
+      "id": "note",
+      "component": "Markdown",
+      "text": "## What is left\n\n- Agree the **colours** with Sam\n- Proofread the *Agenda* page\n- Check the [guide](https://example.org/guide)\n\n<script>alert(1)</script> stays text."
+     }
+    ],
+    "dataModel": {
+     "issues": [
+      {
+       "title": "Contact form",
+       "age": 4,
+       "due": "2026-11-14"
+      },
+      {
+       "title": "English translation",
+       "age": 12,
+       "due": "2026-11-18"
+      },
+      {
+       "title": "SVG logo",
+       "age": 1,
+       "due": "2026-11-13"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-trip",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Plan the trip",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "late",
+       "how",
+       "note",
+       "leave",
+       "summary",
+       "actions"
+      ]
+     },
+     {
+      "id": "late",
+      "component": "Alert",
+      "level": "warning",
+      "title": "Delay",
+      "text": "The 7:12 train is announced 20 minutes late."
+     },
+     {
+      "id": "how",
+      "component": "Choice",
+      "label": "How to get there?",
+      "options": [
+       {
+        "label": "Train",
+        "value": "train"
+       },
+       {
+        "label": "Car",
+        "value": "car"
+       },
+       {
+        "label": "Car share",
+        "value": "share"
+       }
+      ],
+      "value": {
+       "@path": "/how"
+      }
+     },
+     {
+      "id": "note",
+      "component": "TextField",
+      "label": "A note",
+      "placeholder": "For example: leave early",
+      "value": {
+       "@path": "/note"
+      }
+     },
+     {
+      "id": "leave",
+      "component": "DateField",
+      "label": "Leaving",
+      "mode": "dateTime",
+      "value": {
+       "@path": "/leave"
+      }
+     },
+     {
+      "id": "summary",
+      "component": "Text",
+      "variant": "caption",
+      "text": {
+       "@call": "formatString",
+       "args": {
+        "value": "${/count} routes compared"
+       }
+      }
+     },
+     {
+      "id": "actions",
+      "component": "Row",
+      "justify": "end",
+      "align": "center",
+      "children": [
+       "later",
+       "ask"
+      ]
+     },
+     {
+      "id": "later",
+      "component": "Button",
+      "label": "Later",
+      "variant": "quiet",
+      "action": {
+       "event": {
+        "name": "local"
+       }
+      }
+     },
+     {
+      "id": "ask",
+      "component": "Button",
+      "label": "Ask for a route",
+      "icon": "search",
+      "variant": "primary",
+      "action": {
+       "event": {
+        "name": "ask",
+        "context": {
+         "text": "Find me a route for the trip",
+         "how": {
+          "@path": "/how"
+         }
+        }
+       }
+      }
+     }
+    ],
+    "dataModel": {
+     "how": [
+      "train"
+     ],
+     "note": "",
+     "leave": "2026-11-20T07:12",
+     "count": 3
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-more",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "proposal",
+       "info",
+       "when",
+       "ago",
+       "icons_title",
+       "icons",
+       "image"
+      ]
+     },
+     {
+      "id": "proposal",
+      "component": "Proposal",
+      "proposalId": "rule:7"
+     },
+     {
+      "id": "info",
+      "component": "Alert",
+      "text": "This example's data is made up."
+     },
+     {
+      "id": "when",
+      "component": "Text",
+      "variant": "caption",
+      "text": {
+       "@call": "formatDate",
+       "args": {
+        "value": {
+         "@path": "/updated"
+        },
+        "format": "EEEE d MMMM"
+       }
+      }
+     },
+     {
+      "id": "ago",
+      "component": "Text",
+      "variant": "caption",
+      "text": {
+       "@call": "formatRelative",
+       "args": {
+        "value": {
+         "@path": "/updated"
+        }
+       }
+      }
+     },
+     {
+      "id": "icons_title",
+      "component": "Text",
+      "variant": "subtitle",
+      "text": "Icons"
+     },
+     {
+      "id": "icons",
+      "component": "Row",
+      "children": [
+       "i_alert",
+       "i_arrowDown",
+       "i_arrowUp",
+       "i_calendar",
+       "i_chart",
+       "i_check",
+       "i_clock",
+       "i_close",
+       "i_cloud",
+       "i_document",
+       "i_error",
+       "i_event",
+       "i_folder",
+       "i_home",
+       "i_info",
+       "i_link",
+       "i_lock",
+       "i_mail",
+       "i_message",
+       "i_money",
+       "i_note",
+       "i_person",
+       "i_phone",
+       "i_place",
+       "i_refresh",
+       "i_search",
+       "i_server",
+       "i_settings",
+       "i_star",
+       "i_task",
+       "i_trendDown",
+       "i_trendUp",
+       "i_warning"
+      ]
+     },
+     {
+      "id": "i_alert",
+      "component": "Icon",
+      "name": "alert"
+     },
+     {
+      "id": "i_arrowDown",
+      "component": "Icon",
+      "name": "arrowDown"
+     },
+     {
+      "id": "i_arrowUp",
+      "component": "Icon",
+      "name": "arrowUp"
+     },
+     {
+      "id": "i_calendar",
+      "component": "Icon",
+      "name": "calendar"
+     },
+     {
+      "id": "i_chart",
+      "component": "Icon",
+      "name": "chart"
+     },
+     {
+      "id": "i_check",
+      "component": "Icon",
+      "name": "check"
+     },
+     {
+      "id": "i_clock",
+      "component": "Icon",
+      "name": "clock"
+     },
+     {
+      "id": "i_close",
+      "component": "Icon",
+      "name": "close"
+     },
+     {
+      "id": "i_cloud",
+      "component": "Icon",
+      "name": "cloud"
+     },
+     {
+      "id": "i_document",
+      "component": "Icon",
+      "name": "document"
+     },
+     {
+      "id": "i_error",
+      "component": "Icon",
+      "name": "error"
+     },
+     {
+      "id": "i_event",
+      "component": "Icon",
+      "name": "event"
+     },
+     {
+      "id": "i_folder",
+      "component": "Icon",
+      "name": "folder"
+     },
+     {
+      "id": "i_home",
+      "component": "Icon",
+      "name": "home"
+     },
+     {
+      "id": "i_info",
+      "component": "Icon",
+      "name": "info"
+     },
+     {
+      "id": "i_link",
+      "component": "Icon",
+      "name": "link"
+     },
+     {
+      "id": "i_lock",
+      "component": "Icon",
+      "name": "lock"
+     },
+     {
+      "id": "i_mail",
+      "component": "Icon",
+      "name": "mail"
+     },
+     {
+      "id": "i_message",
+      "component": "Icon",
+      "name": "message"
+     },
+     {
+      "id": "i_money",
+      "component": "Icon",
+      "name": "money"
+     },
+     {
+      "id": "i_note",
+      "component": "Icon",
+      "name": "note"
+     },
+     {
+      "id": "i_person",
+      "component": "Icon",
+      "name": "person"
+     },
+     {
+      "id": "i_phone",
+      "component": "Icon",
+      "name": "phone"
+     },
+     {
+      "id": "i_place",
+      "component": "Icon",
+      "name": "place"
+     },
+     {
+      "id": "i_refresh",
+      "component": "Icon",
+      "name": "refresh"
+     },
+     {
+      "id": "i_search",
+      "component": "Icon",
+      "name": "search"
+     },
+     {
+      "id": "i_server",
+      "component": "Icon",
+      "name": "server"
+     },
+     {
+      "id": "i_settings",
+      "component": "Icon",
+      "name": "settings"
+     },
+     {
+      "id": "i_star",
+      "component": "Icon",
+      "name": "star"
+     },
+     {
+      "id": "i_task",
+      "component": "Icon",
+      "name": "task"
+     },
+     {
+      "id": "i_trendDown",
+      "component": "Icon",
+      "name": "trendDown"
+     },
+     {
+      "id": "i_trendUp",
+      "component": "Icon",
+      "name": "trendUp"
+     },
+     {
+      "id": "i_warning",
+      "component": "Icon",
+      "name": "warning"
+     },
+     {
+      "id": "image",
+      "component": "Image",
+      "url": "https://example.org/map.png",
+      "alt": "Map of the area"
+     }
+    ],
+    "dataModel": {
+     "updated": "2026-11-12T08:00:00+01:00"
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-pending",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Placeholder",
+      "text": "Preparing a summary of the invoices…"
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { createAdapter } from "./a2ui/adapter";
-import { SAMPLE_SURFACE, surfaceFixtures } from "./a2ui/fixtures";
+import { SAMPLE_SURFACE, galleryFixtures, gallerySurfaces, sampleProposals, surfaceFixtures } from "./a2ui/fixtures";
+import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import * as data from "./data";
 import { place, type Placed } from "./engine";
@@ -94,15 +95,18 @@ export function Espace({ boot }: { boot: data.Boot }) {
 
   // The A2UI surfaces, beside the composition by ref until it goes (#424).
   // eriphe-core does not send them yet (#419): on the sample, made-up ones
-  // show what the path does.
-  const [surfaces] = useState(createAdapter);
+  // show what the path does; with ?gallery, every component of the catalog.
+  const [surfaces] = useState(() => createAdapter(lang));
+  const proposals = useMemo(() => (snap?.sample ? sampleProposals(lang) : coreProposals), [snap?.sample, lang]);
   useEffect(() => {
     if (!snap?.sample) return;
-    surfaces.applyMessages(surfaceFixtures(lang));
+    const gallery = new URLSearchParams(location.search).has("gallery");
+    surfaces.applyMessages(gallery ? galleryFixtures(lang) : surfaceFixtures(lang));
     const off = surfaces.onAction(() => say(t("espace.sent.sample")));
     return () => {
       off();
-      surfaces.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: SAMPLE_SURFACE } }]);
+      const ids = gallery ? gallerySurfaces(lang) : [SAMPLE_SURFACE];
+      surfaces.applyMessages(ids.map((surfaceId) => ({ version: "1.0" as const, deleteSurface: { surfaceId } })));
     };
   }, [snap?.sample, surfaces, lang]);
 
@@ -261,7 +265,9 @@ export function Espace({ boot }: { boot: data.Boot }) {
           </div>
 
           <div className="surfaces">
-            <Surfaces adapter={surfaces} />
+            <ProposalsContext.Provider value={proposals}>
+              <Surfaces adapter={surfaces} />
+            </ProposalsContext.Provider>
           </div>
 
           <main className="canvas" aria-label={t("espace.canvas")}>

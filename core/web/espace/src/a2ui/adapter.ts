@@ -1,4 +1,5 @@
 import { MessageProcessor, type ActionPayload, type ComponentApi, type SurfaceModel } from "@a2ui/web_core/v1_0";
+import type { Lang } from "../i18n";
 import { catalog } from "./catalog";
 
 // The adapter between eriphe-core and the A2UI engine (@a2ui/web_core): the
@@ -88,7 +89,9 @@ function listeners<T>() {
   };
 }
 
-export function createAdapter(): Adapter {
+// createAdapter makes the adapter for the user's language: the catalog's
+// functions write numbers and dates in it.
+export function createAdapter(lang: Lang = "fr"): Adapter {
   const actions = listeners<ActionMessage>();
   const errors = listeners<ErrorMessage>();
   const changes = listeners<void>();
@@ -112,7 +115,7 @@ export function createAdapter(): Adapter {
   };
 
   let current = ""; // the surface of the message being applied
-  const processor = new MessageProcessor([catalog()], (a) => actions.emit(toAction(a)), {
+  const processor = new MessageProcessor([catalog(lang)], (a) => actions.emit(toAction(a)), {
     version: "1.0",
     reportErrorsOnly: true,
     errorHandler: (e) => report(toError(e.error as Reported, current)),

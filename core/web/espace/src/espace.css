@@ -233,7 +233,231 @@ button, input, select { font: inherit; }
 .a2-button-primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .a2-button-quiet { border-color: transparent; text-decoration: underline; }
 
+/* The catalog's components (a2ui/catalog.tsx). A surface is paper on the
+   dark field: ink on paper, the same type scale as the modules (12 caption,
+   13 meta, 14 body, 15 subtitle, 17 title), 8px steps. Colour says a state
+   (good, late, waiting) or a series, never decoration. */
+.a2-surface { color-scheme: light; display: flex; flex-direction: column; gap: 10px; }
+.a2-surface :focus-visible { outline-color: var(--ink); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.a2-icon { flex: none; width: 1.1em; height: 1.1em; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.a2-row > .a2-icon { width: 20px; height: 20px; color: var(--ink-soft); }
+.a2-button { display: inline-flex; align-items: center; gap: 6px; }
+.a2-button:disabled { opacity: 0.5; cursor: default; }
+.a2-surface .a2-text-title { margin: 0; }
+.a2-surface .a2-text-subtitle { margin: 2px 0 0; font-size: 13px; font-weight: 600; color: var(--ink-soft); letter-spacing: 0.01em; }
+
+/* Card: the tile's own frame when it is the root, a quiet box inside. */
+.a2-card { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.a2-card-title { margin: 0; font-weight: 650; font-size: 17px; line-height: 1.25; letter-spacing: -0.01em; }
+.a2-card .a2-card { padding: 10px 12px; border: 1px solid #1a1f2717; border-radius: 12px; background: #ffffff8c; }
+.a2-card .a2-card .a2-card-title { font-size: 15px; }
+.a2-card-body { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.a2-divider { width: 100%; margin: 2px 0; border: 0; border-top: 1px solid #1a1f2717; }
+
+/* Tabs */
+.a2-tablist { display: flex; gap: 2px; border-bottom: 1px solid #1a1f2717; overflow-x: auto; scrollbar-width: none; }
+.a2-tab { padding: 6px 10px; border: 0; background: none; color: var(--ink-soft); font-size: 13px; font-weight: 500; cursor: pointer; border-radius: 8px 8px 0 0; white-space: nowrap; }
+.a2-tab:hover { color: var(--ink); }
+.a2-tab[aria-selected="true"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
+.a2-tabpanel { padding-top: 10px; min-width: 0; }
+
+/* Markdown */
+.a2-markdown { font-size: 14px; line-height: 1.5; }
+.a2-markdown > :first-child { margin-top: 0; }
+.a2-markdown > :last-child { margin-bottom: 0; }
+.a2-markdown p, .a2-markdown ul, .a2-markdown ol, .a2-markdown blockquote { margin: 0 0 8px; }
+.a2-markdown h3, .a2-markdown h4, .a2-markdown h5, .a2-markdown h6 { margin: 10px 0 4px; font-size: 15px; font-weight: 650; }
+.a2-markdown h4, .a2-markdown h5, .a2-markdown h6 { font-size: 14px; }
+.a2-markdown ul, .a2-markdown ol { padding-left: 1.3em; }
+.a2-markdown li + li { margin-top: 2px; }
+.a2-markdown a { color: #2b5a94; text-underline-offset: 2px; }
+.a2-markdown code { padding: 0 4px; border-radius: 4px; background: #1a1f270f; font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.a2-markdown blockquote { padding-left: 10px; border-left: 3px solid #1a1f2726; color: var(--ink-soft); }
+
+/* Image: only through eriphe-core; otherwise, what it shows in words. */
+.a2-image { display: block; max-width: 100%; border-radius: 10px; }
+.a2-fit-contain { max-height: 240px; object-fit: contain; }
+.a2-fit-cover { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.a2-image-off { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px dashed #1a1f2733; border-radius: 10px; font-size: 13px; color: var(--ink-soft); }
+
+/* Fields: what the user enters goes to the surface's data. */
+.a2-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.a2-field-label { padding: 0; font-size: 12px; font-weight: 500; color: var(--ink-soft); }
+.a2-input { width: 100%; padding: 7px 10px; border: 1px solid #1a1f2733; border-radius: 10px; background: #fff; color: var(--ink); font-size: 14px; }
+.a2-input:focus { border-color: var(--decision); outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--decision) 35%, transparent); }
+textarea.a2-input { resize: vertical; min-height: 4.5em; }
+.a2-choice { min-width: 0; margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; }
+.a2-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.a2-option { position: relative; display: inline-flex; }
+.a2-option input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.a2-option span { padding: 5px 12px; border: 1px solid #1a1f2733; border-radius: 999px; font-size: 13px; background: #fff; transition: background 0.15s, color 0.15s; }
+.a2-option:hover span { border-color: var(--ink-soft); }
+.a2-option input:checked + span { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.a2-option input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* Metric */
+.a2-metric { flex: 1 1 96px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.a2-metric-label { margin: 0; font-size: 12px; font-weight: 500; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-metric-value { margin: 0; font-size: 26px; font-weight: 650; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.a2-metric-unit { font-size: 14px; font-weight: 500; color: var(--ink-soft); letter-spacing: 0; }
+.a2-delta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.a2-delta-good { color: #2f6e4f; }
+.a2-delta-bad { color: var(--late); }
+.a2-delta-flat { color: var(--ink-soft); }
+.a2-delta-label { font-weight: 400; color: var(--ink-soft); }
+
+/* Chart: one axis, a recessive grid, series told by colour and legend. */
+.a2-chart { margin: 0; min-width: 0; }
+.a2-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.a2-grid line { stroke: #1a1f2714; stroke-width: 1; }
+.a2-grid line.a2-zero { stroke: #1a1f2740; }
+.a2-grid text { font-size: 10.5px; fill: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.a2-s0 { color: #3b6ea8; } .a2-s1 { color: #c06a1f; } .a2-s2 { color: #16906f; } .a2-s3 { color: #9a4f9e; } .a2-sx { color: #7b828c; }
+.a2-line { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.a2-dot { fill: currentColor; stroke: var(--paper); stroke-width: 1.5; }
+.a2-hit { fill: transparent; }
+.a2-hit:hover { fill: currentColor; fill-opacity: 0.15; }
+.a2-bar { fill: currentColor; }
+.a2-bar:hover { fill-opacity: 0.8; }
+.a2-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 4px; font-size: 12px; color: var(--ink-soft); }
+.a2-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.a2-swatch { width: 12px; height: 3px; border-radius: 2px; background: currentColor; }
+.a2-legend-unit { margin-left: auto; }
+
+/* Table */
+.a2-table-wrap { min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.a2-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.a2-table th { padding: 4px 8px 6px; text-align: left; font-size: 12px; font-weight: 500; color: var(--ink-soft); border-bottom: 1px solid #1a1f2726; white-space: nowrap; }
+.a2-table td { padding: 6px 8px; border-bottom: 1px solid #1a1f2710; vertical-align: top; }
+.a2-table tr:last-child td { border-bottom: 0; }
+.a2-table th:first-child, .a2-table td:first-child { padding-left: 0; }
+.a2-table .a2-col-number { text-align: right; font-variant-numeric: tabular-nums; }
+.a2-table .a2-col-date { white-space: nowrap; color: var(--ink-soft); }
+
+/* Timeline: a line through the steps, each dot says its state. */
+.a2-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.a2-step { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; padding-bottom: 12px; font-size: 14px; }
+.a2-step:last-child { padding-bottom: 0; }
+.a2-step::before { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 2px; background: #1a1f2717; }
+.a2-step:last-child::before { display: none; }
+.a2-step-done::before { background: #3f6b57; }
+.a2-step-dot { position: relative; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; border: 2px solid #1a1f2740; background: var(--paper); color: #fff; }
+.a2-step-dot .a2-icon { width: 11px; height: 11px; stroke-width: 3; }
+.a2-step-done .a2-step-dot { background: #3f6b57; border-color: #3f6b57; }
+.a2-step-current .a2-step-dot { border-color: var(--decision); box-shadow: inset 0 0 0 3px var(--paper); background: var(--decision); }
+.a2-step-failed .a2-step-dot { background: var(--late); border-color: var(--late); }
+.a2-step-body { min-width: 0; padding-top: 0; }
+.a2-step-label { line-height: 18px; }
+.a2-step-pending .a2-step-label { color: var(--ink-soft); }
+.a2-step-current .a2-step-label { font-weight: 600; }
+.a2-step-failed .a2-step-label { color: var(--late); font-weight: 600; }
+.a2-step-date { font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.a2-step-detail { display: block; font-size: 13px; color: var(--ink-soft); }
+
+/* Message: short (the excerpt), full (the body, opened in place). */
+.a2-message { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; min-width: 0; }
+.a2-avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 650; color: var(--ink); background: color-mix(in oklab, var(--decision) 35%, var(--paper)); }
+.a2-message-main { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.a2-message-head { margin: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 13px; }
+.a2-message-from { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-message-date { flex: none; font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.a2-message-subject { margin: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-message-open .a2-message-subject { white-space: normal; font-weight: 600; }
+.a2-message-excerpt { margin: 0; font-size: 13px; color: var(--ink-soft); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.a2-message-body { margin: 4px 0 0; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.a2-more { align-self: flex-start; margin-top: 2px; padding: 0; border: 0; background: none; color: #2b5a94; font-size: 12px; font-weight: 500; cursor: pointer; }
+.a2-more:hover { text-decoration: underline; }
+
+/* Day: half-hour rows; an event starts at a row (.a2-r-N), spans rows
+   (.a2-span-N) and takes a lane (.a2-lane-N) when events overlap. */
+.a2-day { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.a2-day-label { margin: 0; font-size: 13px; font-weight: 500; color: var(--ink-soft); }
+.a2-day-label::first-letter { text-transform: uppercase; }
+.a2-day-allday { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.a2-day-grid {
+  display: grid; grid-auto-rows: 20px; column-gap: 4px; min-width: 0;
+  background: repeating-linear-gradient(to bottom, #1a1f2714 0 1px, transparent 1px 40px);
+}
+.a2-lanes-1 { grid-template-columns: 2.6em minmax(0, 1fr); }
+.a2-lanes-2 { grid-template-columns: 2.6em repeat(2, minmax(0, 1fr)); }
+.a2-lanes-3 { grid-template-columns: 2.6em repeat(3, minmax(0, 1fr)); }
+.a2-hour { grid-column: 1; grid-row-end: span 2; padding-top: 2px; font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.a2-lane-0 { grid-column: 2; } .a2-lane-1 { grid-column: 3; } .a2-lane-2 { grid-column: 4; } .a2-lane-all { grid-column: 2 / -1; }
+.a2-r-0 { grid-row-start: 1; } .a2-r-1 { grid-row-start: 2; } .a2-r-2 { grid-row-start: 3; } .a2-r-3 { grid-row-start: 4; } .a2-r-4 { grid-row-start: 5; } .a2-r-5 { grid-row-start: 6; }
+.a2-r-6 { grid-row-start: 7; } .a2-r-7 { grid-row-start: 8; } .a2-r-8 { grid-row-start: 9; } .a2-r-9 { grid-row-start: 10; } .a2-r-10 { grid-row-start: 11; } .a2-r-11 { grid-row-start: 12; }
+.a2-r-12 { grid-row-start: 13; } .a2-r-13 { grid-row-start: 14; } .a2-r-14 { grid-row-start: 15; } .a2-r-15 { grid-row-start: 16; } .a2-r-16 { grid-row-start: 17; } .a2-r-17 { grid-row-start: 18; }
+.a2-r-18 { grid-row-start: 19; } .a2-r-19 { grid-row-start: 20; } .a2-r-20 { grid-row-start: 21; } .a2-r-21 { grid-row-start: 22; } .a2-r-22 { grid-row-start: 23; } .a2-r-23 { grid-row-start: 24; }
+.a2-r-24 { grid-row-start: 25; } .a2-r-25 { grid-row-start: 26; } .a2-r-26 { grid-row-start: 27; } .a2-r-27 { grid-row-start: 28; } .a2-r-28 { grid-row-start: 29; } .a2-r-29 { grid-row-start: 30; }
+.a2-r-30 { grid-row-start: 31; } .a2-r-31 { grid-row-start: 32; } .a2-r-32 { grid-row-start: 33; } .a2-r-33 { grid-row-start: 34; } .a2-r-34 { grid-row-start: 35; } .a2-r-35 { grid-row-start: 36; }
+.a2-r-36 { grid-row-start: 37; } .a2-r-37 { grid-row-start: 38; } .a2-r-38 { grid-row-start: 39; } .a2-r-39 { grid-row-start: 40; } .a2-r-40 { grid-row-start: 41; } .a2-r-41 { grid-row-start: 42; }
+.a2-r-42 { grid-row-start: 43; } .a2-r-43 { grid-row-start: 44; } .a2-r-44 { grid-row-start: 45; } .a2-r-45 { grid-row-start: 46; } .a2-r-46 { grid-row-start: 47; } .a2-r-47 { grid-row-start: 48; }
+.a2-span-1 { grid-row-end: span 1; } .a2-span-2 { grid-row-end: span 2; } .a2-span-3 { grid-row-end: span 3; } .a2-span-4 { grid-row-end: span 4; } .a2-span-5 { grid-row-end: span 5; } .a2-span-6 { grid-row-end: span 6; }
+.a2-span-7 { grid-row-end: span 7; } .a2-span-8 { grid-row-end: span 8; } .a2-span-9 { grid-row-end: span 9; } .a2-span-10 { grid-row-end: span 10; } .a2-span-11 { grid-row-end: span 11; } .a2-span-12 { grid-row-end: span 12; }
+.a2-span-13 { grid-row-end: span 13; } .a2-span-14 { grid-row-end: span 14; } .a2-span-15 { grid-row-end: span 15; } .a2-span-16 { grid-row-end: span 16; } .a2-span-17 { grid-row-end: span 17; } .a2-span-18 { grid-row-end: span 18; }
+.a2-span-19 { grid-row-end: span 19; } .a2-span-20 { grid-row-end: span 20; } .a2-span-21 { grid-row-end: span 21; } .a2-span-22 { grid-row-end: span 22; } .a2-span-23 { grid-row-end: span 23; } .a2-span-24 { grid-row-end: span 24; }
+.a2-span-25 { grid-row-end: span 25; } .a2-span-26 { grid-row-end: span 26; } .a2-span-27 { grid-row-end: span 27; } .a2-span-28 { grid-row-end: span 28; } .a2-span-29 { grid-row-end: span 29; } .a2-span-30 { grid-row-end: span 30; }
+.a2-span-31 { grid-row-end: span 31; } .a2-span-32 { grid-row-end: span 32; } .a2-span-33 { grid-row-end: span 33; } .a2-span-34 { grid-row-end: span 34; } .a2-span-35 { grid-row-end: span 35; } .a2-span-36 { grid-row-end: span 36; }
+.a2-span-37 { grid-row-end: span 37; } .a2-span-38 { grid-row-end: span 38; } .a2-span-39 { grid-row-end: span 39; } .a2-span-40 { grid-row-end: span 40; } .a2-span-41 { grid-row-end: span 41; } .a2-span-42 { grid-row-end: span 42; }
+.a2-span-43 { grid-row-end: span 43; } .a2-span-44 { grid-row-end: span 44; } .a2-span-45 { grid-row-end: span 45; } .a2-span-46 { grid-row-end: span 46; } .a2-span-47 { grid-row-end: span 47; } .a2-span-48 { grid-row-end: span 48; }
+.a2-ev {
+  min-width: 0; margin: 1px 0; padding: 2px 8px; overflow: hidden;
+  display: flex; flex-direction: column; border-radius: 7px; font-size: 12px; line-height: 1.3;
+  background: color-mix(in oklab, var(--decision) 22%, #fff); box-shadow: inset 3px 0 0 var(--decision);
+}
+.a2-ev-short { flex-direction: row; align-items: baseline; gap: 6px; container-type: inline-size; }
+@container (max-width: 150px) { .a2-ev-short .a2-ev-time { display: none; } }
+.a2-ev-short .a2-ev-title { flex: 0 1 auto; min-width: 0; }
+.a2-ev-allday { padding: 3px 10px; border-radius: 999px; flex-direction: row; gap: 6px; box-shadow: none; }
+.a2-ev-time { flex: none; font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.a2-ev-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-ev-place { color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-ev-overlap { background: color-mix(in oklab, var(--urgent) 22%, #fff); box-shadow: inset 3px 0 0 var(--late); }
+
+/* Proposal: what Eriphe proposes, and the user's yes or no. */
+.a2-proposal { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 1.5px var(--decision); }
+.a2-proposal-decided { background: transparent; box-shadow: inset 0 0 0 1px #1a1f2726; }
+.a2-proposal-loading { min-height: 64px; justify-content: center; }
+.a2-proposal-kicker { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #3f5f8f; }
+.a2-proposal-decided .a2-proposal-kicker { color: var(--ink-soft); }
+.a2-proposal-text { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; }
+.a2-proposal-why, .a2-proposal-taint { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.a2-proposal-taint { color: var(--late); }
+.a2-proposal-fields { margin: 4px 0 0; display: grid; gap: 2px; font-size: 13px; }
+.a2-proposal-fields div { display: grid; grid-template-columns: minmax(80px, auto) 1fr; gap: 8px; }
+.a2-proposal-fields dt { color: var(--ink-soft); }
+.a2-proposal-fields dd { margin: 0; }
+.a2-proposal-actions { display: flex; gap: 8px; margin-top: 8px; }
+.a2-proposal-failed { margin: 4px 0 0; font-size: 12px; color: var(--late); }
+
+/* Alert */
+.a2-alert { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; }
+.a2-alert > .a2-icon { width: 18px; height: 18px; margin-top: 1px; }
+.a2-alert-title { margin: 0; font-weight: 650; }
+.a2-alert-text { margin: 0; }
+.a2-alert-info { background: color-mix(in oklab, var(--decision) 18%, #fff); }
+.a2-alert-info > .a2-icon { color: #3f5f8f; }
+.a2-alert-success { background: color-mix(in oklab, var(--calm) 28%, #fff); }
+.a2-alert-success > .a2-icon { color: #2f6e4f; }
+.a2-alert-warning { background: color-mix(in oklab, var(--urgent) 28%, #fff); }
+.a2-alert-warning > .a2-icon { color: #8a5a10; }
+.a2-alert-error { background: color-mix(in oklab, var(--late) 18%, #fff); box-shadow: inset 3px 0 0 var(--late); }
+.a2-alert-error > .a2-icon { color: var(--late); }
+
+/* Placeholder: in preparation, a slow shimmer. */
+.a2-placeholder { display: flex; flex-direction: column; gap: 8px; padding: 2px 0; }
+.a2-placeholder-text { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.a2-shimmer {
+  display: block; height: 10px; border-radius: 6px;
+  background: linear-gradient(90deg, #1a1f270d 0%, #1a1f271f 40%, #1a1f270d 80%) 0 0 / 250% 100%;
+  animation: a2-shimmer 1.6s ease-in-out infinite;
+}
+.a2-shimmer-short { width: 60%; }
+@keyframes a2-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+
 @media (prefers-reduced-motion: reduce) {
   .espace { transition: none; }
   .option { transition: none; }
+  .a2-shimmer { animation: none; }
+  .a2-option span { transition: none; }
 }
