@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { createAdapter } from "./a2ui/adapter";
-import { SAMPLE_SURFACE, galleryFixtures, gallerySurfaces, sampleProposals, surfaceFixtures } from "./a2ui/fixtures";
+import { SAMPLE_SURFACE, galleryFixtures, gallerySurfaces, sampleLayout, sampleProposals, surfaceFixtures } from "./a2ui/fixtures";
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import * as data from "./data";
 import { place, type Placed } from "./engine";
+import { Grid } from "./Grid";
 import { useWords } from "./i18n";
-import type { Composition, Obj, Ref } from "./types";
+import type { Composition, Layout, Obj, Ref } from "./types";
 import { View, YesNo, lineOf, sourceOf, titleOf, type Act } from "./views";
 
 const EMPTY: Composition = { mode: "side", eriphe: "", items: [] };
@@ -85,7 +86,6 @@ export function Espace({ boot }: { boot: data.Boot }) {
 
   const fp = focus ? placed.find((p) => p.focus) : undefined;
   const focusSay = fp ? fp.say ?? `${t("espace.say.lead", titleOf(t, lang, fp.obj))}${fp.why ? ` ${fp.why}.` : ""}` : null;
-  const text = useTyped(failed ? t("espace.error") : !snap ? "" : said ?? focusSay ?? comp.eriphe);
 
   const say = (m: string) => {
     setToast(m);
@@ -93,23 +93,45 @@ export function Espace({ boot }: { boot: data.Boot }) {
   };
   const live = !!snap && !snap.sample && boot.live;
 
-  // The A2UI surfaces, beside the composition by ref until it goes (#424):
-  // streamed by eriphe-core; with none behind (the dev server), made-up
-  // ones show what the path does; with ?gallery, every component of the
-  // catalog.
+  // The A2UI surfaces and their layout, streamed by eriphe-core, which
+  // decides where each goes (workspace_layout.go); with none behind (the
+  // dev server), a made-up one shows what the path does; with ?gallery,
+  // every component of the catalog, one under the other.
   const [surfaces] = useState(() => createAdapter(lang));
+  const [layout, setLayout] = useState<Layout | null>(null);
+  const [gallery] = useState(() => new URLSearchParams(location.search).has("gallery"));
   const proposals = useMemo(() => (snap?.sample ? sampleProposals(lang) : coreProposals), [snap?.sample, lang]);
   useEffect(() => {
-    const gallery = new URLSearchParams(location.search).has("gallery");
-    if (boot.live && !gallery) return data.stream(boot, surfaces);
+    if (boot.live && !gallery) return data.stream(boot, surfaces, setLayout);
     surfaces.applyMessages(gallery ? galleryFixtures(lang) : surfaceFixtures(lang));
+    if (!gallery) setLayout(sampleLayout(lang));
     const off = surfaces.onAction(() => say(t("espace.sent.sample")));
     return () => {
       off();
       const ids = gallery ? gallerySurfaces(lang) : [SAMPLE_SURFACE];
       surfaces.applyMessages(ids.map((surfaceId) => ({ version: "1.0" as const, deleteSurface: { surfaceId } })));
     };
-  }, [boot, surfaces, lang]);
+  }, [boot, surfaces, lang, gallery]);
+
+  // The surfaces are the workspace once there are any: the per-kind canvas
+  // below stays only for the composition by ref, until it goes (#424).
+  const pool = useSyncExternalStore(surfaces.subscribe, surfaces.surfaces);
+  const onSurfaces = !gallery && !!layout && (pool.length > 0 || layout.items.length + layout.chips.length > 0);
+  const sfocus = onSurfaces ? layout?.focus ?? null : null;
+  const sfocusTitle = sfocus ? layout?.items.find((i) => i.id === sfocus)?.title ?? sfocus : null;
+  const openSurface = (id: string) => {
+    setSaid(null);
+    if (boot.live) data.place("open", id).catch(() => false);
+    else setLayout((l) => l && { ...l, focus: id });
+  };
+  const backSurface = () => {
+    if (!sfocus) return;
+    if (boot.live) data.place("back", sfocus).catch(() => false);
+    else setLayout((l) => l && { ...l, focus: undefined });
+  };
+  const nothing = !onSurfaces && placed.length === 0 && shownChips.length === 0;
+  const line = onSurfaces ? layout!.eriphe : comp.eriphe;
+  const text = useTyped(failed ? t("espace.error") : !snap ? "" : said ?? focusSay ?? line);
 
   // What the user opens, and what left the screen unopened, are gestures
   // eriphe-core keeps for memory's extraction: no counter here.
@@ -179,7 +201,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
   // moins », « lance une recherche là-dessus ».
   const send = async (msg: string, done: string) => {
     if (!live) return say(t("espace.sent.sample"));
-    say((await data.send(msg, focus).catch(() => false)) ? done : t("espace.error"));
+    say((await data.send(msg, sfocus ? "surface:" + sfocus : focus).catch(() => false)) ? done : t("espace.error"));
   };
 
   const act: Act = {
@@ -197,6 +219,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
       if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement).tagName)) return;
       if (e.key === "Escape") {
         if (tour) stopTour();
+        else if (sfocus) backSurface();
         else open(null);
       }
       if (tour && e.key === "ArrowRight") step(1);
@@ -216,9 +239,9 @@ export function Espace({ boot }: { boot: data.Boot }) {
   };
 
   const fo = focus ? store.get(focus) : undefined;
-  const hint = fo ? t("espace.input.about", titleOf(t, lang, fo)) : t("espace.input");
-  const mode = focus ? "side" : comp.mode;
-  const ambient = comp.ambient ?? "calm";
+  const hint = sfocusTitle ? t("espace.input.about", sfocusTitle) : fo ? t("espace.input.about", titleOf(t, lang, fo)) : t("espace.input");
+  const mode = focus || onSurfaces ? "side" : comp.mode;
+  const ambient = (onSurfaces ? layout!.ambient : comp.ambient) ?? "calm";
 
   return (
     <MotionConfig reducedMotion="user">
@@ -226,7 +249,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
         <aside className="eriphe-panel" aria-live="polite">
           <p className="eriphe-name">{boot.name}</p>
           <div className="eriphe-text">{text && <p>{text}</p>}</div>
-          {snap && !snap.sample && placed.length === 0 && shownChips.length === 0 && <p className="eriphe-sample quiet">{t("espace.empty")}</p>}
+          {snap && !snap.sample && nothing && <p className="eriphe-sample quiet">{t("espace.empty")}</p>}
           {snap?.sample && <p className="eriphe-sample">{t("espace.sample")}</p>}
           <div className="eriphe-actions">
             {tour ? (
@@ -236,6 +259,8 @@ export function Espace({ boot }: { boot: data.Boot }) {
                 </button>
                 <button className="btn ghost" onClick={stopTour}>{t("espace.stop")}</button>
               </>
+            ) : sfocus ? (
+              <button className="btn ghost" onClick={backSurface}>{t("espace.back")}</button>
             ) : focus ? (
               <button className="btn ghost" onClick={() => open(null)}>{t("espace.back")}</button>
             ) : null}
@@ -250,54 +275,62 @@ export function Espace({ boot }: { boot: data.Boot }) {
         </aside>
 
         <div className="stage">
-          <div className="chips" role="list" aria-label={t("espace.chips")}>
-            <AnimatePresence>
-              {shownChips.map((c) => (
-                <motion.div key={c.obj.ref} layout role="listitem" className={`chip from-${c.from}`}
-                  initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={spring}>
-                  <button className="chip-open" onClick={() => open(c.obj.ref)}>
-                    <span className="chip-text">{lineOf(c.obj)}</span>
-                    <span className="chip-from">{[sourceOf(c.obj), t(c.from === "overflow" ? "espace.chip.overflow" : "espace.chip.composition")].filter(Boolean).join(", ")}</span>
-                  </button>
-                  {c.obj.card?.state === "pending" && <YesNo ref_={c.obj.ref} act={act} />}
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
+          <ProposalsContext.Provider value={proposals}>
+            {onSurfaces ? (
+              <Grid adapter={surfaces} layout={layout!} onOpen={openSurface} />
+            ) : (
+              <>
+              <div className="chips" role="list" aria-label={t("espace.chips")}>
+                <AnimatePresence>
+                  {shownChips.map((c) => (
+                    <motion.div key={c.obj.ref} layout role="listitem" className={`chip from-${c.from}`}
+                      initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={spring}>
+                      <button className="chip-open" onClick={() => open(c.obj.ref)}>
+                        <span className="chip-text">{lineOf(c.obj)}</span>
+                        <span className="chip-from">{[sourceOf(c.obj), t(c.from === "overflow" ? "espace.chip.overflow" : "espace.chip.composition")].filter(Boolean).join(", ")}</span>
+                      </button>
+                      {c.obj.card?.state === "pending" && <YesNo ref_={c.obj.ref} act={act} />}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
 
-          <div className="surfaces">
-            <ProposalsContext.Provider value={proposals}>
-              <Surfaces adapter={surfaces} />
-            </ProposalsContext.Provider>
-          </div>
+                {gallery && (
+                  <div className="surfaces">
+                    <Surfaces adapter={surfaces} />
+                  </div>
+                )}
 
-          <main className="canvas" aria-label={t("espace.canvas")}>
-            <LayoutGroup>
-              {/* Not mode="popLayout": it injects a <style> element, which the CSP refuses.
-                  A module leaving keeps its grid cells while it fades, so nothing jumps. */}
-              <AnimatePresence>
-                {placed.map((p) => (
-                  <motion.article
-                    key={p.obj.ref}
-                    layout
-                    transition={spring}
-                    initial={{ opacity: 0, scale: 0.94 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.92 }}
-                    className={`mod size-${p.size} at-c${p.col} at-r${p.row} w-${p.w} h-${p.h} type-${p.obj.kind}${p.focus ? " focus" : ""}${p.related ? " related" : ""}`}
-                    onClick={(e) => {
-                      if (!p.focus && !(e.target as HTMLElement).closest("button,input,select,a")) open(p.obj.ref);
-                    }}
-                  >
-                    <div className="mod-body">
-                      <View o={p.obj} size={p.size} full={p.focus} all={all} act={act} />
-                    </div>
-                    {p.size !== "s" && <p className="why">{p.why || (p.focus ? t("espace.opened") : p.related ? t("espace.related") : "")}</p>}
-                  </motion.article>
-                ))}
-              </AnimatePresence>
-            </LayoutGroup>
-          </main>
+              <main className="canvas" aria-label={t("espace.canvas")}>
+                <LayoutGroup>
+                  {/* Not mode="popLayout": it injects a <style> element, which the CSP refuses.
+                      A module leaving keeps its grid cells while it fades, so nothing jumps. */}
+                  <AnimatePresence>
+                    {placed.map((p) => (
+                      <motion.article
+                        key={p.obj.ref}
+                        layout
+                        transition={spring}
+                        initial={{ opacity: 0, scale: 0.94 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.92 }}
+                        className={`mod size-${p.size} at-c${p.col} at-r${p.row} w-${p.w} h-${p.h} type-${p.obj.kind}${p.focus ? " focus" : ""}${p.related ? " related" : ""}`}
+                        onClick={(e) => {
+                          if (!p.focus && !(e.target as HTMLElement).closest("button,input,select,a")) open(p.obj.ref);
+                        }}
+                      >
+                        <div className="mod-body">
+                          <View o={p.obj} size={p.size} full={p.focus} all={all} act={act} />
+                        </div>
+                        {p.size !== "s" && <p className="why">{p.why || (p.focus ? t("espace.opened") : p.related ? t("espace.related") : "")}</p>}
+                      </motion.article>
+                    ))}
+                  </AnimatePresence>
+                </LayoutGroup>
+              </main>
+              </>
+            )}
+          </ProposalsContext.Provider>
         </div>
 
         <AnimatePresence>

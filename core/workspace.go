@@ -211,9 +211,10 @@ func gestureSegment(gs []gesture, user string) segment {
 func aboutKey(seq int64) string { return fmt.Sprintf("about_msg:%d", seq) }
 
 // noteAbout keeps the ref a message of the user's was written about (the
-// module open on the workspace); a ref that does not parse is not kept.
+// module or the surface open on the workspace, surface:<id>); a ref that
+// does not parse is not kept.
 func (c *core) noteAbout(seq int64, ref string) {
-	if _, err := parseRef(ref); err == nil {
+	if gestureRef(ref) {
 		c.store.set(aboutKey(seq), strings.TrimSpace(ref))
 	}
 }

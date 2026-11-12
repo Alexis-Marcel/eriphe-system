@@ -37,7 +37,7 @@ const NodeView = memo(function NodeView({ node }: { node: Node }) {
 
 // The root of one surface: the engine's resolver, made when React subscribes
 // and disposed when it stops, turns the surface into a tree of nodes.
-function SurfaceView({ surface }: { surface: Surface }) {
+export function SurfaceView({ surface }: { surface: Surface }) {
   const box = useMemo(() => ({ resolver: undefined as NodeResolver | undefined }), [surface]);
   const subscribe = useCallback(
     (onChange: () => void) => {
@@ -59,8 +59,9 @@ function SurfaceView({ surface }: { surface: Surface }) {
   return root ? <NodeView node={root} /> : null;
 }
 
-// Surfaces renders every surface of the adapter, each in its section; where
-// they go on the workspace is the page's (#422).
+// Surfaces renders every surface of the adapter, each in its section, one
+// under the other: the gallery (?gallery). The workspace lays them out on
+// its grid, where eriphe-core says (Grid.tsx).
 export function Surfaces({ adapter }: { adapter: Adapter }) {
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   return surfaces.map((s) => (
