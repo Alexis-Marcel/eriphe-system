@@ -21,3 +21,4 @@ __pycache__/
 /servers/files/files
 # Local worktrees of coding assistants
 /.claude/worktrees/
+/core/web/espace/node_modules/
