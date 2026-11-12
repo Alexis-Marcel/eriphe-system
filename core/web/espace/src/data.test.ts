@@ -133,4 +133,15 @@ describe("the surfaces' stream", () => {
     expect(posts[1].body).toMatchObject({ version: "1.0", error: { surfaceId: "ghost" } });
     stop();
   });
+
+  it("sends a Proposal's yes or no as an answer action on its surface", async () => {
+    expect(await data.answerProposal({ surfaceId: "s1", componentId: "p", ref: "rule:7", yes: false })).toBe(true);
+    expect(posts).toHaveLength(1);
+    expect(posts[0].url).toBe("/api/espace/action");
+    expect(posts[0].headers["X-CSRF-Token"]).toBe("tok");
+    expect(posts[0].body).toMatchObject({
+      version: "1.0",
+      action: { name: "answer", surfaceId: "s1", sourceComponentId: "p", context: { proposal: "rule:7", answer: "no" } },
+    });
+  });
 });

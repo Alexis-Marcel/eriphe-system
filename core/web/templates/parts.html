@@ -37,7 +37,7 @@
 {{end}}{{else if eq .Role "error"}}{{template "brain-error" .}}
 {{else if .Hidden}}
 {{else if eq .Role "user"}}
-<div class="msg msg-user" id="m{{.Seq}}">{{if .Attachments}}<div class="msg-body">{{template "attachments" .Attachments}}{{if .Text}}<div class="bubble">{{md .Text}}</div>{{end}}</div>{{else}}<div class="bubble">{{md .Text}}</div>{{end}}<time datetime="{{iso .Time}}">{{if .Via}}<span class="via" title="{{t "chat.via"}}">{{.Via}} · </span>{{end}}{{clock .Time}}</time></div>
+<div class="msg msg-user" id="m{{.Seq}}">{{if .Attachments}}<div class="msg-body">{{template "attachments" .Attachments}}{{if .Text}}<div class="bubble">{{md .Text}}</div>{{end}}</div>{{else}}<div class="bubble">{{md .Text}}</div>{{end}}<time datetime="{{iso .Time}}">{{if .FromWorkspace}}<span class="via">{{t "chat.via.workspace"}} · </span>{{else if .Via}}<span class="via" title="{{t "chat.via"}}">{{.Via}} · </span>{{end}}{{clock .Time}}</time></div>
 {{else}}
 <div class="msg msg-brain" id="m{{.Seq}}"><span class="avatar" aria-hidden="true">{{template "logo"}}</span><div class="msg-body"><span class="sr-only">{{t "chat.eriphe"}} :</span><div class="bubble">{{md .Text}}</div>{{template "msg-why" .Why}}{{template "cards" .Cards}}<time datetime="{{iso .Time}}">{{clock .Time}}</time></div></div>
 {{end}}{{end}}

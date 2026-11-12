@@ -19,15 +19,17 @@ import type { Composition, Layout, Obj, Ref } from "./types";
 //   "layout" events where each surface is on the grid, which code decides
 //   (workspace_layout.go). One stream per page, shared;
 // - POST /api/espace/action and /api/espace/error: what the user did on a
-//   surface, and what went wrong rendering one, as A2UI v1.0 messages; the
-//   page's own "open" (a tile or a chip) and "back" place a surface first
-//   on the layout, and give the layout back;
+//   surface, and what went wrong rendering one, as A2UI v1.0 messages. An
+//   action is ask (a Button's request to Eriphe), answer (a Proposal's yes
+//   or no) or local (open, back, expand, tab), checked by eriphe-core
+//   (surface_actions.go); the page's own "open" (a tile or a chip) and
+//   "back" place a surface first on the layout, and give the layout back;
 // - POST /messages: what the user writes, with the ref of the module open
 //   (about), so Eriphe knows what « ça » is;
 // - POST /api/espace/gesture: what the user opened, or what left the screen
 //   unopened, which memory's extraction reads (workspace.go);
 // - GET /api/proposals/{ref}: a proposal a surface shows (the catalog's
-//   Proposal), and the card whose POST /cards/{id}/yes|no answers it.
+//   Proposal), answered by an "answer" action (answerProposal).
 // No control of the page keeps a rule or a preference: the user says it to
 // Eriphe, who remembers it.
 // A request without a session gets 401: the page goes to the sign-in. Only
@@ -287,9 +289,28 @@ export async function proposal(ref: string): Promise<ProposalView | null> {
   return getJSON<ProposalView>(`/api/proposals/${encodeURIComponent(ref)}`);
 }
 
-// answerCard says yes or no to the card of a proposal.
-export async function answerCard(card: number, yes: boolean): Promise<boolean> {
-  return post(`/cards/${card}/${yes ? "yes" : "no"}`, new URLSearchParams());
+// answerProposal says yes or no to the proposal a Proposal component
+// shows, as an A2UI "answer" action (POST /api/espace/action): eriphe-core
+// binds it to that one proposal, checks the surface shows it and that it
+// still waits, and decides it as its card's Oui or Non would.
+export function answerProposal(a: Answer): Promise<boolean> {
+  return action(answerMessage(a));
+}
+
+// What a Proposal component answers: the proposal it shows, where.
+export type Answer = { surfaceId: string; componentId: string; ref: string; yes: boolean };
+
+export function answerMessage(a: Answer): ActionMessage {
+  return {
+    version: "1.0",
+    action: {
+      name: "answer",
+      surfaceId: a.surfaceId,
+      sourceComponentId: a.componentId,
+      timestamp: new Date().toISOString(),
+      context: { proposal: a.ref, answer: a.yes ? "yes" : "no" },
+    },
+  };
 }
 
 // send writes to the brain, in the conversation; about is the ref of the

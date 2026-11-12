@@ -10,7 +10,7 @@ Une surface est une tuile de l'espace de travail : un titre, et dedans des compo
 - Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day).
 - Une surface dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.
 - Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et la surface reste à jour.
-- Un bouton ne fait qu'une action : demander quelque chose à Eriphe ou agir dans la page ; il n'écrit jamais dans un outil.
+- Un bouton ne fait qu'une action, d'une liste fermée ; il n'écrit jamais dans un outil. `ask` demande quelque chose à Eriphe avec tes propres mots : `{"event": {"name": "ask", "context": {"text": "Relance la sauvegarde"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code y ajoute la surface et le bouton, et Eriphe le reçoit comme un message de l'utilisateur. Les noms locaux `open`, `expand` et `tab` sont les gestes de la page, sans contexte : un bouton n'en a presque jamais besoin. Une proposition se montre avec un composant Proposal, qui seul envoie le oui ou le non (`answer`) ; jamais un bouton. Tout autre nom est refusé.
 - N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.
 
 ## Exemple : des mails, liés aux données
@@ -79,7 +79,7 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
 - **Day** : Une journée et ses événements, dans l'ordre des heures.
   date* texte (Le jour, AAAA-MM-JJ) · events* [{title* texte fixe · start* texte fixe (Date et heure ISO 8601, ou la date seule pour toute la journée) · allDay booléen fixe · end texte fixe · place texte fixe}, …] ou liaison
   Exemple : `{"id": "demain", "component": "Day", "date": "2026-11-13", "events": [{"end": "2026-11-13T10:00:00+01:00", "place": "Centre", "start": "2026-11-13T09:30:00+01:00", "title": "Dentiste"}]}`
-- **Proposal** : Une proposition d'Eriphe qui attend un oui ou un non ; le code lie la réponse à cette proposition.
+- **Proposal** : Une proposition d'Eriphe qui attend un oui ou un non ; ses boutons Oui et Non envoient `answer`, que le code lie à cette proposition. Sur une surface au contenu extérieur, elle se répond dans la conversation.
   proposalId* texte (L'identifiant de la proposition)
 - **Alert** : Un avertissement qui doit se voir.
   text* texte · level info|success|warning|error · title texte

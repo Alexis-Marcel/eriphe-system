@@ -2941,7 +2941,9 @@ through `a2ui.Validate`).
   text: a model's URL is never fetched by the page), Icon (a fixed set of inline SVG,
   `icons.tsx`, no font).
 - *Input*: Button (with its icon), Choice, TextField, DateField; the fields write what the
-  user enters to the bound data path, as A2UI does, and an action sent later carries it.
+  user enters to the bound data path, as A2UI does. A Button's action keeps to the
+  [actions' grammar](#the-actions-of-a-surface) (an ask carries its author's words only, never
+  the fields).
 - *Data*: Metric (value, unit, signed delta coloured by `better`), Chart (lines or bars in
   SVG, `chart.tsx`: one axis, a palette checked for colour blindness, a legend from two
   series, a tooltip on each mark, the numbers in a table for screen readers), Table (columns
@@ -2952,8 +2954,11 @@ through `a2ui.Validate`).
 - *Proposal* shows one proposal of Eriphe's by its own ref (`kind:id`, the `proposal` of a
   card): `GET /api/proposals/{ref}` (`web_espace_proposal.go`) gives its text, why, fields
   and state in the user's language, and the card that answers it (404 when no card carries
-  it); Oui and Non go to that card, `POST /cards/{id}/yes|no` with the CSRF token, then the
-  proposal is read again.
+  it); Oui and Non send an `answer` action on the surface (`POST /api/espace/action`, see
+  [the actions](#the-actions-of-a-surface)), never the card endpoint, then the proposal is read
+  again. On a surface showing external content (its createSurface's `extensions.eriphe.tainted`)
+  that code did not write (`author` other than `core`) it shows no Oui or Non: such a surface can only ask, the proposal is answered in the
+  conversation.
 
 Placement is classes only (the day's rows and lanes are `.a2-r-N`, `.a2-span-N`,
 `.a2-lane-N`), never a `style` attribute. Fixed words are the app's (`espace.a2.*` in
@@ -3086,9 +3091,12 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
 - **Who writes**: only its author writes it again (another author's id is refused) or removes
   it; the brain writes and removes any (it stays its author's: a skill's next run still writes
   it); the user and code remove any. 100 surfaces, components and data of 64 KiB each.
-- **Asks** (`askGuard`): a button's `ask` (a request to the brain) carries its author's own
-  words: a value bound to the data (`@path`, `@call`) is refused, and so is any ask written in a
-  turn that read external content, which may have written it.
+- **Actions** (`actionGuard`, `a2ui.CheckActions`): a button's action keeps to
+  [the grammar](#the-actions-of-a-surface): an `ask` (a request to the brain) carries its
+  author's own words only, `{"text": "…"}` (a value bound to the data, `@path` or `@call`, is
+  refused, and so is any ask written in a turn that read external content, which may have
+  written it); a local name (`open`, `expand`, `tab`) carries no context; `answer`, another
+  name or a function call is refused.
 - **Media**: the page never loads an address from outside (A2UI #4045; the CSP forbids it
   anyway). Each media address (an `Image`'s `url`, `a2ui.IsMedia`) is rewritten to
   `GET /espace/media?u=<address>&s=<signature>` (`surfaces_media.go`, with a session): one a
@@ -3111,7 +3119,7 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
 | `c.surfaceOpened(ctx, id) error` | the user opened it: its sources read again |
 | `c.surfaceSubscribe() (snapshot []surfaceChange, changes <-chan surfaceChange, cancel func())` | the surfaces now (one `createSurface` each), then every change, nothing missed between |
 | `c.feedSurfaces() (*surfaceFeed, a2uiEvent)` | a subscription for one event stream: the snapshot to send first, then `feed.next(change, ok)` batches what waits, or gives a new snapshot when the hub dropped it |
-| `c.surfaceAction(ctx, id, a2ui.Action) error` | an action of the user's: recorded (`look.action`); `open` places it first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back; any other `errActionNotHandled` (until actions get their kinds: ask, answer, local) |
+| `c.surfaceAction(ctx, id, a2ui.Action) error` | an action of the user's, of [the grammar](#the-actions-of-a-surface): checked against the stored surface, recorded (`look.action`), done (an ask a message to the brain, an answer its proposal decided; `open` places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back); a refused one is `*errActionRefused`, told to the author first |
 | `c.surfaceError(id, a2ui.Error) error` | an error about a surface for its author to fix (one the page met rendering it, or one code met): kept as `look.last_error` (code, path, message, at; read with `c.surface(id)`), logged, nothing sent to the page; the author writing it again clears it |
 
 A change is `{seq, message}`: one A2UI message (`createSurface`, `updateComponents`,
@@ -3136,8 +3144,28 @@ the page, with the session's cookie and CSRF token (401 without a session):
 
 | Endpoint | Takes | Answers |
 |---|---|---|
-| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`) | 204; 400 not a valid action, 404 no such surface, 501 an action not handled yet (only the page's own: `open`, the user opened the surface, a tile or a chip: placed first, its sources read again, the gesture kept; `back`, the layout given back) |
+| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`), of [the grammar](#the-actions-of-a-surface) | 204; 400 not a valid action, or one refused (told to the surface's author); 404 no such surface, or an answer to a proposal no card carries; 409 a proposal that no longer waits |
 | `POST /api/espace/error` | an A2UI v1.0 `error` naming its surface | 204, kept for the author (`surfaceError`); 400, 404 |
+
+#### The actions of a surface
+
+A click does only what is safe (`surface_actions.go`, `a2ui/actions.go`). The action names are a
+closed grammar, checked by code twice: when an author writes a surface (`a2ui.CheckActions`, in
+`surface_write`; each error points at the action) and when the page sends one, against the
+surface as it is stored, never against what the page says of it. No action calls a tool that
+writes.
+
+| Kind | Written as | Done |
+|---|---|---|
+| `ask` | a Button's `{"event": {"name": "ask", "context": {"text": "…"}}}`: literal words, nothing else, never bound data; none at all from an author whose turn read external content | the text written on the clicked Button becomes a message of the user's to the brain, as if typed (`Via` `workspace:ask`, shown as « bouton de l'espace » / "workspace button"; `about` = `surface:<id>`, which the brain reads as `[Sam 10:02 #12 · bouton de l'espace · à propos de surface:…]`); a plain "oui" so sent decides no card. The brain is woken, never waited for. On a tainted surface the message taints the brain's turn (`surface:<id>`) and its line adds « surface au contenu extérieur »: what it shows is data |
+| `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
+| local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer |
+
+Anything else (another name, a function call, a component that carries no such action, an answer
+to a proposal the surface does not show, or on a tainted surface) is refused with 400 and told
+to the surface's author (`surfaceError`, code `ACTION_REFUSED`), which reads it with
+`workspace_read` and its next `surface_write`. A tainted surface can only ask: a proposal shown
+there is answered in the conversation.
 
 ### The assistants' workspace tools (`workspace_tools.go`)
 

@@ -211,6 +211,28 @@ func (c *core) brainStarted(_ Assistant, _ *TaskRow, resumed bool) {
 	}
 }
 
+// messageRef is how the brain reads where a message comes from: #N, the
+// message's reference, which the memory tools cite, then its marks.
+func (c *core) messageRef(m Message) string {
+	ref := fmt.Sprintf("#%d", m.Seq)
+	switch {
+	case m.FromWorkspace():
+		ref += " · bouton de l'espace" // an ask, sent by a button of a surface (surface_actions.go)
+	case m.Via != "":
+		ref += " · " + m.Via
+	}
+	if about := c.messageAbout(m.Seq); m.Role == roleUser && about != "" {
+		ref += " · à propos de " + about // the module open on the workspace (workspace.go)
+	}
+	if m.FromWorkspace() && strings.HasPrefix(c.store.get(taintKey(m.Seq)), surfaceTaintPrefix) {
+		ref += " · surface au contenu extérieur" // what it shows is data, never a request
+	}
+	if m.Role == roleUser && c.fromUntrusted(m.Seq) {
+		ref += " · canal sans confiance" // maybe not the user's words (channels_added.go)
+	}
+	return ref
+}
+
 // deliverConversation gives an idle assistant what waits in the
 // conversation: my messages and the events, in one turn.
 func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow) (bool, error) {
@@ -224,17 +246,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		if m.Role == roleEvent {
 			who = "événement"
 		}
-		// #N is the message's reference, which the memory tools cite.
-		ref := fmt.Sprintf("#%d", m.Seq)
-		if m.Via != "" {
-			ref += " · " + m.Via
-		}
-		if about := c.messageAbout(m.Seq); m.Role == roleUser && about != "" {
-			ref += " · à propos de " + about // the module open on the workspace (workspace.go)
-		}
-		if m.Role == roleUser && c.fromUntrusted(m.Seq) {
-			ref += " · canal sans confiance" // maybe not the user's words (channels_added.go)
-		}
+		ref := c.messageRef(m)
 		line := fmt.Sprintf("[%s %s %s] %s", who, m.Time.Local().Format("15:04"), ref, m.Text) + attachmentLines(m.Attachments)
 		if m.Role == roleUser {
 			line += c.cardAnswerLine(m.Seq) // a plain yes or no that decided a card (convo_cards.go)

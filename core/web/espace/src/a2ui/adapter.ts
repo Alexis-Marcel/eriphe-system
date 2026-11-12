@@ -10,7 +10,7 @@ import { catalog } from "./catalog";
 
 // What eriphe-core sends: A2UI v1.0 agent-to-renderer messages.
 export type Message = { version: "1.0" } & (
-  | { createSurface: { surfaceId: string; catalogId: string; components?: unknown[]; dataModel?: unknown; sendDataModel?: boolean } }
+  | { createSurface: { surfaceId: string; catalogId: string; components?: unknown[]; dataModel?: unknown; sendDataModel?: boolean; metadata?: unknown } }
   | { updateComponents: { surfaceId: string; components: unknown[] } }
   | { updateDataModel: { surfaceId: string; path?: string; value?: unknown } }
   | { deleteSurface: { surfaceId: string } }

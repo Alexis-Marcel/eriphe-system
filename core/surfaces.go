@@ -336,7 +336,7 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 	if errs := a2ui.ValidateSurface(a2ui.Surface{ID: in.ID, Components: in.Components, DataModel: rawComposed}); len(errs) > 0 {
 		return surface{}, errs, nil
 	}
-	if errs := askGuard(in.ID, in.Components, len(in.Tainted) > 0); len(errs) > 0 {
+	if errs := actionGuard(in.ID, in.Components, len(in.Tainted) > 0); len(errs) > 0 {
 		return surface{}, errs, nil
 	}
 	// The author's own surface only (the brain writes any, which stays its
