@@ -400,3 +400,51 @@ func TestStartSessionTool(t *testing.T) {
 		t.Errorf("a step of a proposed session was judged: %v", out)
 	}
 }
+
+// What a session asks out of a brain turn shows at once: the plan of a
+// session a skill opened, the approval step, the start card of a step
+// added since the plan; what the brain opens in its turn goes with its
+// message. A session's card goes to the channels whatever its message did.
+func TestSessionCardsOutsideTurn(t *testing.T) {
+	c, s := sessionCore(t) // opened by the brain
+	if plan := sessionCard(t, c, askPlan); plan.Seq != 0 {
+		t.Fatalf("the brain's plan card shown before its message: %+v", plan)
+	}
+	brainSays(c, "Je te propose une session pour trouver le nom.")
+	ctx := context.Background()
+	c.decideCard(ctx, sessionCard(t, c, askPlan).ID, true, "web")
+	if !blocksATask(cardSession) {
+		t.Error("a session's card does not go to the channels")
+	}
+
+	st := stepOf(t, c, s, "ok")
+	steps, _ := c.steps(s.ID)
+	if err := c.startStep(ctx, s, st, steps); err != nil {
+		t.Fatal(err)
+	}
+	shownAtOnce(t, c, sessionCard(t, c, askApproval), weightBlocksATask)
+
+	if _, err := c.amendSession(ctx, s.ID, amendIn{Add: []stepSpec{{Key: "x", Title: "Extra", Prompt: "more",
+		Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/x"}}}}}, "more work", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	if x := stepOf(t, c, s, "x"); !c.heldTask(x.Task) {
+		t.Fatalf("the added step is not held: %+v", x)
+	}
+	start, ok := startCard(t, c)
+	if !ok {
+		t.Fatal("no start card")
+	}
+	shownAtOnce(t, c, start, weightBlocksATask)
+
+	c2 := startCore(t)
+	s2, err := c2.openSession(sessionIn{Title: "Fix login", Goal: "Fix the login.", Steps: []stepSpec{{Key: "fix", Title: "Fix", Prompt: "Fix it."}}}, nil, "skill:prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := sessionCard(t, c2, askPlan)
+	shownAtOnce(t, c2, plan, weightBlocksATask)
+	if msgs, _ := c2.store.messagesAfter(plan.Seq-1, 1); !strings.Contains(msgs[0].Text, s2.Title) {
+		t.Errorf("message %q", msgs[0].Text)
+	}
+}
