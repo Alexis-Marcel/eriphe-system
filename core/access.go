@@ -385,7 +385,11 @@ var tokenScopes = map[string]scopeSet{
 		write: []string{"account:read", "posts:read", "posts:write", "ideas:read", "ideas:write", "insights:read",
 			"engagements:read", "engagements:write"}},
 	"metricool": {read: []string{"mcp:read"}, write: []string{"mcp:read", "mcp:write"}},
-	"airtable":  {byName: true}, "beehiiv": {byName: true}, "calendly": {byName: true}, "canva": {byName: true}, "dropbox": {byName: true},
+	// Generation spends the account's credits: not a read.
+	"elevenlabs": {read: []string{"convai_read", "speech_history_read", "ads_read"},
+		write: []string{"convai_read", "convai_write", "text_to_speech", "speech_history_read", "flows",
+			"image_video_generation", "voice_generation", "ads_read", "ads_write"}},
+	"airtable": {byName: true}, "beehiiv": {byName: true}, "calendly": {byName: true}, "canva": {byName: true}, "dropbox": {byName: true},
 	"evernote": {byName: true}, "gamma": {byName: true}, "jam": {byName: true}, "mem": {byName: true},
 	"mercury": {byName: true}, "miro": {byName: true}, "netlify": {byName: true}, "raindrop": {byName: true},
 	"ramp": {byName: true}, "readwise": {byName: true}, "sentry": {byName: true}, "supabase": {byName: true},

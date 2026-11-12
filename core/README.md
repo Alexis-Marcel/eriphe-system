@@ -1052,7 +1052,10 @@ file:
   "account_grids": {"sam@example.org": {"grid": {"send": "approval"}, "exceptions": {"move": "never"}}}}
 ```
 
-`exceptions` replace a tool's category value, Never included; `account_grids` is one
+`exceptions` replace a tool's category value, Never included. A name with a `*` is a pattern
+(`"agents_*": "never"`) for the tools it matches that have no exception of their own, the longest
+first; a preset can start a new tool with some (ElevenLabs leaves its voice agent tools,
+`agents_*`, at Never). `account_grids` is one
 grid per account, in the place of `account_access`, and a server's exceptions hold for its accounts.
 Once one account has an access of its own,
 the others are written down with the one they had: the server's no longer speaks for them.

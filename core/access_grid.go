@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"path"
 	"slices"
 	"strings"
 
@@ -80,8 +81,34 @@ func checkExceptions(exceptions map[string]string) error {
 		if !slices.Contains(gridValues, v) {
 			return fmt.Errorf("exception %s must be free, approval or never", tool)
 		}
+		if _, err := path.Match(tool, ""); err != nil {
+			return fmt.Errorf("exception %s: %w", tool, err)
+		}
 	}
 	return nil
+}
+
+// exceptionFor is a tool's exception: the one of its name, else the one of
+// the longest pattern that matches it ("agents_*": a family of tools a
+// preset leaves out, presets.go).
+func exceptionFor(exceptions map[string]string, tool string) (string, bool) {
+	if v, ok := exceptions[tool]; ok {
+		return v, true
+	}
+	return patternFor(exceptions, tool)
+}
+
+// patternFor is the value of the longest pattern that matches a tool.
+func patternFor(exceptions map[string]string, tool string) (string, bool) {
+	value, best := "", ""
+	for p, v := range exceptions {
+		if strings.Contains(p, "*") && len(p) > len(best) {
+			if ok, _ := path.Match(p, tool); ok {
+				value, best = v, p
+			}
+		}
+	}
+	return value, best != ""
 }
 
 // checkAccess refuses a grid or an exception that means nothing.
@@ -169,7 +196,7 @@ func (a serverAccess) of(t *mcp.Tool) (category, value string) {
 	category = toolCategory(t)
 	value = a.grid.value(category)
 	if t != nil {
-		if v, ok := a.exceptions[t.Name]; ok && (!a.ceiling || category == catRead) {
+		if v, ok := exceptionFor(a.exceptions, t.Name); ok && (!a.ceiling || category == catRead) {
 			value = v
 		}
 	}

@@ -31,6 +31,10 @@ type toolPreset struct {
 	Paid      bool // a paid plan of the service is needed
 	Beta      bool // the service's server is in beta
 	ReadsOnly bool // the service only reads
+	// Never are patterns of tool names (access_grid.go) a new tool of this
+	// preset has at Never: tools the service serves that are for another
+	// use, left out of what Eriphe sees until the user lets them in.
+	Never []string
 	// A preset of Form "connection" is an account signed in at Provider
 	// (a signInProviders name) for its Tools (toolKinds; none: all the
 	// provider serves): its tile leads to the connect page.

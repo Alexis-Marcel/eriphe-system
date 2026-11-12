@@ -44,7 +44,8 @@ type Server struct {
 	// place of access; a tool's category is what its annotations say
 	// (toolCategory).
 	Grid *accessGrid `json:"grid,omitempty"`
-	// Exceptions give one tool, by its name, its own value.
+	// Exceptions give one tool, by its name, its own value; a name with a
+	// * is a pattern, for the tools it matches that have none of their own.
 	Exceptions map[string]string `json:"exceptions,omitempty"`
 	// AccountGrids is a grid per account, in the place of account_access.
 	AccountGrids map[string]accountGrid `json:"account_grids,omitempty"`

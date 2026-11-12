@@ -609,6 +609,12 @@ func readToolForm(r *http.Request) toolForm {
 // is the entry being edited, whose secret references stay unless replaced.
 func (f toolForm) server(r *http.Request, old *Server) (Server, credentials, error) {
 	s := Server{Use: f.Use}.withLevel(f.Access)
+	if old == nil && len(f.Preset.Never) > 0 {
+		s.Exceptions = map[string]string{}
+		for _, p := range f.Preset.Never {
+			s.Exceptions[p] = gridNever
+		}
+	}
 	if old != nil {
 		s.Exceptions = old.Exceptions
 		if old.level() == f.Access { // the form shows a level: the grid behind it stays
