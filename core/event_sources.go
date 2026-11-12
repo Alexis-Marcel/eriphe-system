@@ -28,6 +28,7 @@ const (
 // queue's breakpoints and caps (attention.go), and the purge.
 func (c *core) runEvents(ctx context.Context) {
 	c.subscribeEvents(c.attentionOnEvent)
+	c.subscribeEvents(c.surfaceEventHeard) // surface_authors.go
 	tick := time.NewTicker(eventsTickEvery)
 	defer tick.Stop()
 	var purged time.Time
@@ -35,6 +36,7 @@ func (c *core) runEvents(ctx context.Context) {
 		now := c.notifyTime()
 		c.tickReturned(now)
 		c.attentionBreak(breakCap, now)
+		c.attendOffers() // proposals waiting to be offered, for the composer (surface_authors.go)
 		if now.Sub(purged) >= eventsPurgeEvery {
 			c.purgeEvents(now)
 			purged = now

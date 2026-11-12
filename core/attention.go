@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,12 @@ import (
 // notification held for the brief (notify.go) is an item alert:<id>, the
 // same a skill's message becomes (runSignal): it waits for the return
 // only, whose release tells it as the brief and clears its hold.
+//
+// A proposal waiting to be offered (memory, an intention…) is an item of
+// weight 1 or 2 from sourceOffer (attendOffers, surface_authors.go): the
+// composer may show it; no breakpoint delivers it and the brain's turn does
+// not list it, offerCards offers it as before. An item may be about a
+// surface (surface:<id>): it leaves the queue with its surface.
 //
 // Nothing waits on a held item: the brain reads the open items in its turn
 // (attentionBlock), the held ones marked so, and answers as usual. The
@@ -258,6 +265,12 @@ func (c *core) attentionWhere(where string, args ...any) []attentionItem {
 			}
 			it.tainted = it.tainted || p.Tainted != ""
 		}
+		if id, ok := strings.CutPrefix(it.Ref, refSurface+":"); ok {
+			if _, err := c.surface(id); err != nil {
+				c.attentionDone(it.Ref) // its surface is gone
+				continue
+			}
+		}
 		out = append(out, it)
 	}
 	return out
@@ -274,12 +287,14 @@ func (c *core) attentionWhere(where string, args ...any) []attentionItem {
 func (c *core) attentionBreak(at string, now time.Time) int {
 	attentionMu.Lock()
 	defer attentionMu.Unlock()
-	where, args := `delivered = 0 AND NOT `+heldForBrief, []any{}
+	// A proposal waiting to be offered is offered by offerCards, never by
+	// a breakpoint (surface_authors.go).
+	where, args := `delivered = 0 AND `+attentionNotOffered+` AND NOT `+heldForBrief, []any{}
 	switch at {
 	case breakCap:
 		where, args = where+` AND due > 0 AND due <= ?`, []any{now.Unix()}
 	case breakReturn:
-		where = `(delivered = 0 OR ` + heldForBrief + `)`
+		where = `((delivered = 0 AND ` + attentionNotOffered + `) OR ` + heldForBrief + `)`
 	}
 	where += ` ORDER BY weight DESC, time ASC`
 	items := c.attentionWhere(where, args...)
@@ -359,7 +374,8 @@ func (c *core) attentionOnEvent(e journalEvent) {
 // attentionBlock lists the open items for the brain's turn: what waits for
 // the user, shown already or held for a breakpoint; "" when nothing does.
 func (c *core) attentionBlock() string {
-	items := c.attentionOpen()
+	// What waits to be offered is not listed: offerCards offers it.
+	items := slices.DeleteFunc(c.attentionOpen(), func(it attentionItem) bool { return it.Source == sourceOffer })
 	if len(items) == 0 {
 		return ""
 	}

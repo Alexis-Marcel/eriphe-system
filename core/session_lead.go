@@ -34,7 +34,7 @@ const (
 	finalStep         = "final-check"
 	finalChecks       = 2 // final checks a session may ask before its lead reports
 
-	leadStartPrompt = "Tu viens de démarrer. Lis la session avec `session` : tu seras réveillé à chaque étape. Réponds seulement « [rien] »."
+	leadStartPrompt = "Tu viens de démarrer. Lis la session avec `session`, écris sa surface dans l'espace (`surface_write`) : tu seras réveillé à chaque étape. Puis réponds seulement « [rien] »."
 )
 
 const sessionInboxSchema = `CREATE TABLE IF NOT EXISTS session_inbox (
@@ -179,6 +179,9 @@ func (c *core) deliverLead(ctx context.Context, a Assistant, t *TaskRow) (bool, 
 		})
 	}
 	text := nowLine(c.notifyTime()) + "\n\n" + strings.Join(texts, "\n\n")
+	if nudge := c.leadSurfaceNudge(id); nudge != "" {
+		text += "\n\n" + nudge // surface_authors.go
+	}
 	if _, err := c.answer(ctx, t.ID, "", text, nil, byPolicy); err != nil {
 		return false, err
 	}
