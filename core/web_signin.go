@@ -401,7 +401,7 @@ func (w *web) decide(r *http.Request, s *session, si *signin) (v verdict, via st
 // refuse answers a visitor who may not enter: the address of the settings,
 // or a page that says the workspace is private.
 func (w *web) refuse(rw http.ResponseWriter, r *http.Request, si *signin) {
-	if r.URL.Path == "/events" {
+	if answersStatus(r) {
 		http.Error(rw, "unauthorized", http.StatusUnauthorized)
 		return
 	}
