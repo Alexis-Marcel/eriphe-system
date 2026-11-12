@@ -1793,7 +1793,8 @@ Each local tool eriphe-core launches and configures with several accounts has a 
 (`tool_cards.go`): its kind, the catalog name it is made under, its image, its preset (words and
 icon), whether it runs the image of eriphe-core's version, whether each account has its own
 level, whether two accounts of one name are one, whether its configuration holds the scopes
-granted, what it needs at each provider (`SignIns`) and where it keeps its places (`Places`).
+granted, what it needs at each provider (`SignIns`), where it keeps its places (`Places`) and
+the workspace's objects it reads, each by a read-only tool (`Objects`: `mail:`, `agenda:`, `event:`).
 core reads the cards: a server is matched to its card by its image, and nothing else in core names
 an image of Eriphe's tools (`TestNoToolImageInLogic`), a card or a kind by name, or GitHub
 (`TestNoToolInLogic`): only the catalog's data and GitHub's own files (the app, its page, and git and
@@ -2526,6 +2527,43 @@ with 20 failures, and never count as the local network (below). The installers p
 on IPv4 only, so that clients keep their own address. At most two
 argon2 hashes are computed at once. Changing the password ends the other sessions.
 The bearer-token API is unchanged for the CLI and the nodes.
+
+### Objects by ref (`objects.go`)
+
+Every object the workspace shows is named by a ref, `kind:id`, and read on demand from its
+source: a composition carries refs, never copies. One parser reads them:
+
+| Ref | Object | Source |
+|---|---|---|
+| `mail:<id>` | a message (headers, body, attachments listed) | the mail server's `read_message`, a peek: never marked read |
+| `agenda:<YYYY-MM-DD>` | the user's day, its events | the calendar server's `list_events {"from": D, "days": 1}` |
+| `event:<id>` | an event | the calendar server's `get_event` |
+| `session:<id>` | a work session and its steps | the store |
+| `card:<id>` | a card of the conversation and what it proposes | the store, its proposal read now |
+| `task:<id>` | a task | the store |
+| `project:<name>` | a project: its progress card | the memory (`progress`, subject `project:<name>`) |
+| `alert:<id>` | none yet: answers 501 | |
+
+Mail and calendar are read by the tool their card names (`Objects` in `tool_cards.go`), from the
+workspace's server of that tool, as the brain would: the
+tool must be one of the brain's, read-only by its own annotation and a free read in the user's
+grid, else the read is refused (403) before any call; a read gets 5 s. The JSON of each kind is
+its Go type (`Object`, with one of `mail`, `agenda`, `event`, `session`, `card`, `task`,
+`project`); the front follows it. `related` lists the refs an object relates to, computed: a
+dated object (a message, an event, an intention due) and the agenda of that day, in the user's
+zone; a card and what its proposal comes from (the task a memory was drawn from, the task a start
+would run, the session that asks); a day and its events; a session and its steps' tasks; a task
+and its session.
+
+The workspace's session reads them (the cookie; a request without one gets 401, never the login
+page):
+
+- `GET /api/objects/{ref}`: one object; `404` for a ref that does not parse or names nothing,
+  `403` for a read the guards refuse, `502` with a short reason when its server fails or does
+  not answer in time, `501` for a kind without a source yet. An error is `{"error", "status"}`.
+- `POST /api/objects` with `{"refs": [...]}` (at most 50, the CSRF token in `X-CSRF-Token`):
+  `{"objects": [{"ref", "object"} or {"ref", "error", "status"}]}`, in the order asked, each
+  read on its own, 8 at once.
 
 ### Signing in
 

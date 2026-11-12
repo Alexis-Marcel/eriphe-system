@@ -262,14 +262,32 @@ func (c *core) object(ctx context.Context, ref string) (*Object, error) {
 	return nil, errObjectUnsupported
 }
 
-// readService calls a read of a service's workspace server, as the brain
-// would: only one of its tools, read-only, and free in the user's grid.
-func (c *core) readService(ctx context.Context, svc toolCard, tool string, args map[string]any) (any, error) {
-	st, ok := c.serviceServer(svc)
-	if !ok {
-		return nil, objectRefused{fmt.Sprintf("no %s is connected", svc.ID)}
+// readObject reads an object through the tool whose card reads its kind,
+// on the workspace's server of that tool, as the brain would: only one of
+// its tools, read-only, and free in the user's grid.
+func (c *core) readObject(ctx context.Context, r objectRef) (any, error) {
+	var card toolCard
+	var how objectRead
+	for _, t := range toolCards {
+		for _, o := range t.Objects {
+			if o.Ref == r.Kind {
+				card, how = t, o
+			}
+		}
 	}
-	if why := c.sourceWhy(monitorSpec{Server: st.Name, Tool: tool, Args: args}); why != "" {
+	if how.Tool == "" {
+		return nil, errObjectUnsupported
+	}
+	st, ok := c.serviceServer(card)
+	if !ok {
+		return nil, objectRefused{fmt.Sprintf("no %s is connected", card.ID)}
+	}
+	args := map[string]any{how.Arg: r.ID}
+	for k, v := range how.Args {
+		args[k] = v
+	}
+	tool := how.Tool
+	if why := c.readWhy(st.Name, tool, args); why != "" {
 		return nil, objectRefused{why}
 	}
 	u := c.pool.get(st.Name)
@@ -298,6 +316,19 @@ func (c *core) readService(ctx context.Context, svc toolCard, tool string, args 
 	return resultValue(res), nil
 }
 
+// readWhy is why the workspace may not call a server's tool by itself, ""
+// if it may: the same rule as a monitor's (sourceWhy), one of the brain's
+// tools, read-only by its own annotation, and a free read in the user's grid.
+func (c *core) readWhy(server, tool string, args map[string]any) string {
+	if !grantAllows(c.brainGrant(), server, tool) {
+		return fmt.Sprintf("%s.%s is not one of the brain's tools", server, tool)
+	}
+	if name := claudeToolName(server, tool); !c.pool.readOnly(name) || !c.freeCall(name, args) {
+		return fmt.Sprintf("%s.%s is not a free read in the user's grid", server, tool)
+	}
+	return ""
+}
+
 // decodeValue turns a tool's result into one of our types.
 func decodeValue(v any, into any) error {
 	raw, err := json.Marshal(v)
@@ -311,7 +342,7 @@ func decodeValue(v any, into any) error {
 }
 
 func (c *core) mailObject(ctx context.Context, r objectRef) (*Object, error) {
-	v, err := c.readService(ctx, mailService, "read_message", map[string]any{"id": r.ID})
+	v, err := c.readObject(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +361,7 @@ func (c *core) mailObject(ctx context.Context, r objectRef) (*Object, error) {
 }
 
 func (c *core) agendaObject(ctx context.Context, r objectRef) (*Object, error) {
-	v, err := c.readService(ctx, calendarService, "list_events", map[string]any{"from": r.ID, "days": 1})
+	v, err := c.readObject(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +384,7 @@ func (c *core) agendaObject(ctx context.Context, r objectRef) (*Object, error) {
 }
 
 func (c *core) eventObject(ctx context.Context, r objectRef) (*Object, error) {
-	v, err := c.readService(ctx, calendarService, "get_event", map[string]any{"id": r.ID})
+	v, err := c.readObject(ctx, r)
 	if err != nil {
 		return nil, err
 	}
