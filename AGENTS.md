@@ -28,6 +28,7 @@ describes). You do not need to build anything: the installers download released 
 | `ha/` | the Home Assistant integration (Python) |
 | `deploy/` | an example Docker Compose deployment |
 | `docs/` | guides for users |
+| `site/` | what GitHub Pages publishes: Eriphe's OAuth client document (`site/oauth/client.json`) |
 | `.github/` | CI, image builds, release scripts ([RELEASING.md](RELEASING.md)) |
 
 Each component's README is its reference: read it before changing the component, and update it
