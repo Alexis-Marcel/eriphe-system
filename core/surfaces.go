@@ -71,9 +71,11 @@ const (
 	surfaceSourcesMax  = 8
 	surfaceTitleMax    = 120
 	surfaceWhyMax      = 500
-	surfaceJSONMax     = 64 << 10  // components, composed data
-	surfaceValueMax    = 256 << 10 // a source's result
-	surfaceTimeout     = 20 * time.Second
+	surfaceJSONMax     = 64 << 10         // components, composed data
+	surfaceValueMax    = 256 << 10        // a source's result
+	surfaceTimeout     = 10 * time.Second // a read, well under the tick
+	surfacesTickEvery  = 15 * time.Second
+	surfaceReaders     = 4 // refreshes reading at once
 	surfaceEveryDef    = 5 // minutes, when a surface has sources
 	surfaceUntilDef    = 24 * time.Hour
 	surfaceUntilMax    = 90 * 24 * time.Hour
@@ -208,6 +210,14 @@ type surfaceHub struct {
 	subs map[chan surfaceChange]struct{}
 
 	reading sync.Map // surface id → a refresh in progress
+
+	// The refresh worker (runSurfaces): due holds the surfaces whose
+	// scheduled refresh is queued or running, slots bounds the refreshes
+	// reading at once, refreshing counts those not over (tests wait on it).
+	due        sync.Map
+	slotsOnce  sync.Once
+	slots      chan struct{}
+	refreshing sync.WaitGroup
 
 	keyOnce sync.Once
 	key     []byte // signs the media addresses (surfaces_media.go)
@@ -899,9 +909,24 @@ func isIndex(t string) bool {
 
 // A surface's life: refresh and removal.
 
-// tickSurfaces runs on the monitors' loop: it removes the surfaces whose
-// lifetime ended, reads again the sources whose interval came, and keeps
-// the resources followed.
+// runSurfaces is the surfaces' loop, apart from the monitors': a slow
+// source never delays a monitor's look.
+func (c *core) runSurfaces(ctx context.Context) {
+	tick := time.NewTicker(surfacesTickEvery)
+	defer tick.Stop()
+	for {
+		c.tickSurfaces(ctx, c.notifyTime())
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
+}
+
+// tickSurfaces removes the surfaces whose lifetime ended, hands the
+// sources whose interval came to the refresh worker, and keeps the
+// resources followed. It never waits for a read.
 func (c *core) tickSurfaces(ctx context.Context, now time.Time) {
 	all, err := c.surfaces()
 	if err != nil {
@@ -914,10 +939,33 @@ func (c *core) tickSurfaces(ctx context.Context, now time.Time) {
 			continue
 		}
 		if s.Refresh.Every > 0 && len(s.Sources) > 0 && !s.NextAt.After(now) {
-			c.refreshSurface(ctx, s.ID, nil, now)
+			if _, queued := c.surf.due.LoadOrStore(s.ID, true); queued {
+				continue // still waiting for a slot, or reading
+			}
+			c.refreshLater(ctx, s.ID, nil, now, func() { c.surf.due.Delete(s.ID) })
 		}
 	}
 	c.followSurfaceResources()
+}
+
+// refreshLater runs refreshSurface on the worker: in its own goroutine,
+// once one of surfaceReaders slots is free. done runs after it.
+func (c *core) refreshLater(ctx context.Context, id string, only []string, now time.Time, done func()) {
+	c.surf.slotsOnce.Do(func() { c.surf.slots = make(chan struct{}, surfaceReaders) })
+	c.surf.refreshing.Add(1)
+	go func() {
+		defer c.surf.refreshing.Done()
+		if done != nil {
+			defer done()
+		}
+		select {
+		case c.surf.slots <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		defer func() { <-c.surf.slots }()
+		c.refreshSurface(ctx, id, only, now)
+	}()
 }
 
 // surfaceEnded tells whether a surface's lifetime is over.
@@ -1006,7 +1054,7 @@ func (c *core) surfaceResourceUpdated(server, uri string) {
 			}
 		}
 		if len(only) > 0 {
-			go c.refreshSurface(context.Background(), s.ID, only, time.Now())
+			c.refreshLater(context.Background(), s.ID, only, time.Now(), nil)
 		}
 	}
 }
