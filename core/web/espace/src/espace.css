@@ -75,10 +75,12 @@ button, input, select { font: inherit; }
 .eriphe-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font-size: 13px; }
 .eriphe-links a, .eriphe-links .linkish { color: color-mix(in oklab, var(--paper) 75%, transparent); }
 
-/* The stage: chips at the top, the canvas below, on one screen */
-.stage { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; }
-.chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: thin; }
-.chips:empty { display: none; }
+/* The stage: chips at the top, then the surfaces, the canvas below, on one screen */
+.stage { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+.chips { grid-row: 1; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: thin; }
+.chips:empty, .surfaces:empty { display: none; }
+.chips, .surfaces { margin-bottom: 12px; }
+.canvas { grid-row: 3; }
 .chip {
   flex: 0 0 auto; display: flex; align-items: center; gap: 10px; max-width: 360px;
   padding: 8px 12px; border-radius: 14px; background: var(--paper); color: var(--ink);
@@ -199,9 +201,37 @@ button, input, select { font: inherit; }
   .espace, .espace.wide { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); padding: 12px; gap: 12px; }
   .eriphe-panel { padding: 14px; max-height: 40vh; }
   .canvas { display: flex; flex-direction: column; overflow: auto; }
+  .surfaces { flex-direction: column; }
+  .a2-surface { flex: none; overflow: visible; }
   .canvas .mod { flex: none; min-height: 64px; }
   .canvas .mod-body { flex: none; overflow: visible; }
 }
+
+/* A2UI surfaces (a2ui/): what an author wrote, with the catalog's components.
+   Where they go on the workspace is the composer's (#422); until then they
+   sit in a row above the canvas. Classes only, as everywhere here. */
+.surfaces { grid-row: 2; display: flex; gap: 12px; max-height: 40vh; overflow: auto; scrollbar-width: thin; }
+.a2-surface {
+  flex: 0 1 360px; min-width: 240px; min-height: 0; overflow: auto; scrollbar-width: thin;
+  padding: 14px 16px; border-radius: 16px; background: var(--paper); color: var(--ink);
+}
+.a2-column, .a2-row { display: flex; gap: 8px; min-width: 0; }
+.a2-column { flex-direction: column; }
+.a2-row { flex-direction: row; flex-wrap: wrap; }
+.a2-justify-start { justify-content: flex-start; } .a2-justify-center { justify-content: center; }
+.a2-justify-end { justify-content: flex-end; } .a2-justify-spaceBetween { justify-content: space-between; }
+.a2-align-start { align-items: flex-start; } .a2-align-center { align-items: center; }
+.a2-align-end { align-items: flex-end; } .a2-align-stretch { align-items: stretch; }
+.a2-text { margin: 0; font-size: 14px; }
+.a2-text-title { font-weight: 650; font-size: 17px; line-height: 1.25; letter-spacing: -0.01em; }
+.a2-text-subtitle { font-weight: 600; font-size: 15px; }
+.a2-text-caption, .a2-empty { font-size: 12px; color: var(--ink-soft); }
+.a2-empty { margin: 0; }
+.a2-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.a2-list-horizontal { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+.a2-list-vertical > li + li { padding-top: 4px; border-top: 1px solid #1a1f2714; }
+.a2-button-primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.a2-button-quiet { border-color: transparent; text-decoration: underline; }
 
 @media (prefers-reduced-motion: reduce) {
   .espace { transition: none; }

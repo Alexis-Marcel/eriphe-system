@@ -2817,13 +2817,35 @@ queue is served (404), or on the dev server, the page shows made-up data in the 
 (`web/espace/src/fixtures.ts`) and says it is an example. `web/espace/src/data.ts` is the one
 place that talks to eriphe-core; card answers go to `POST /cards/{id}/yes|no`.
 
-**Building.** The app is React, Vite and Motion. Its built files are committed under
+**A2UI surfaces** (`web/espace/src/a2ui/`, epic #415). Beside the composition by ref, the page
+renders [A2UI v1.0](https://github.com/a2ui-project/a2ui) surfaces with the workspace catalog's
+components, ours, written in React. The engine is the official one: `@a2ui/web_core` keeps each
+surface (components upserted by id, the data model, JSON Pointer bindings, child-list templates,
+actions, validation) and `@a2ui/react`'s `createComponentImplementation` gives each component its
+props, resolved and kept fresh. The tree is walked by the page (`Surfaces.tsx`), not by
+`@a2ui/react`'s `A2uiSurface`, which wraps every component in a custom element whose style it sets,
+and the library's basic catalog (Lit custom elements) is never imported: the DOM is our markup,
+with classes only. `adapter.ts` is all the rest of the page knows: `applyMessages(msgs)` feeds it
+the messages core sends (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`);
+`onAction(cb)` and `onError(cb)` hand back A2UI v1.0 `action` and `error` messages, ready to send.
+`catalog.tsx` names the catalog once (`CATALOG`: its id and where core serves it). Until core
+streams surfaces (#419), the dev server shows a made-up one (`a2ui/fixtures.ts`).
+
+**Upgrading `@a2ui/*`.** The packages are pinned to an exact version (`package.json`, no `^`) and
+change often, with breaking changes in minor versions. Bump them only on purpose, in a pull request
+of their own: read their CHANGELOG from the pinned version up, bump `@a2ui/react` and
+`@a2ui/web_core` together, run `npm test` (the surface tests check rendering, data updates,
+templates, actions, errors, and that no `style` attribute, `<style>` element, adopted stylesheet or
+custom element appears), rebuild, and open the built page under the workspace's CSP to check the
+console for violations.
+
+**Building.** The app is React, Vite, Motion and the A2UI engine. Its built files are committed under
 `web/static/espace/` and embedded with the other static files, so `go build` needs no Node:
 
 ```sh
 cd core/web/espace
 npm ci
-npm test            # the layout engine's tests (vitest)
+npm test            # the layout engine's and the A2UI surfaces' tests (vitest)
 npm run build       # type checks, then writes ../static/espace/espace.js and espace.css
 npm run dev         # http://localhost:5300, on the fixtures, no eriphe-core needed
 ```

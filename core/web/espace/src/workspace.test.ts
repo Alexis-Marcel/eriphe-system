@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+// (The page imports the A2UI renderer, which needs a DOM to load.)
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as data from "./data";
 import { leftUnopened, tourOf } from "./Espace";
