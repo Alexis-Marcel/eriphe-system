@@ -137,6 +137,16 @@ func TestComposerSignals(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("%d events after a new version and the repeat", len(got))
 	}
+	// Missing in other words, again and again: three an hour at most.
+	got = nil
+	for i := range 5 {
+		c.signalComposer(composerSignal{Missing: []string{"Autre chose " + string(rune('a'+i))}}, s)
+	}
+	if len(got) != 2 { // one of the hour was told above
+		t.Fatalf("%d missing in an hour", len(got))
+	}
+	s.Now = s.Now.Add(2 * time.Hour)
+
 	// Nothing external read: not external.
 	got = nil
 	s.Pool[0].Tainted = false

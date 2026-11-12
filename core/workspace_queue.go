@@ -24,7 +24,9 @@ import (
 //     an alert) is an Alert with what Eriphe would say of it, else its why.
 //
 // Its weight is the item's (queueSurfaceWeight: 4 and 5 are urgent, placed
-// first by code), its why the item's. It lives while the item is open:
+// first by code), its why the item's (a Proposal shows its own). A card
+// whose proposal the Proposal cannot show is an Alert too. It lives while
+// the item is open (the user removing it takes the item out):
 // syncQueueSurfaces makes the surfaces again from the queue whenever it
 // changes (attend and attentionDone kick it) and every queueSyncEvery, so a
 // card decided elsewhere leaves too. Its words are in the workspace's
@@ -82,16 +84,9 @@ func (c *core) queueSurface(it attentionItem, lang string) (surfaceIn, bool) {
 		in.Tainted = []string{"attention"}
 	}
 	var comp map[string]any
-	if raw, ok := strings.CutPrefix(it.Ref, "card:"); ok {
-		id, _ := strconv.ParseInt(raw, 10, 64)
-		x, err := c.card(id)
-		if err != nil {
-			return in, false
-		}
-		if _, _, ok := parseProposalRef(x.Ref); !ok {
-			return in, false
-		}
-		in.Title = tr(lang, "card.kind."+x.Kind)
+	if x, ok := c.queuedProposal(it.Ref); ok {
+		// The Proposal shows its text and why, in the user's language.
+		in.Title, in.Why = tr(lang, "card.kind."+x.Kind), ""
 		comp = map[string]any{"id": "root", "component": "Proposal", "proposalId": x.Ref}
 	} else {
 		level, title := "info", "espace.queue.note"
@@ -114,6 +109,33 @@ func (c *core) queueSurface(it attentionItem, lang string) (surfaceIn, bool) {
 	in.Title = truncate(oneLine(in.Title), queueTitleMax)
 	in.Components, _ = json.Marshal([]any{comp})
 	return in, true
+}
+
+// queuedProposal is the card of a card's item, when it carries a proposal
+// the Proposal component can show; any other card is an Alert.
+func (c *core) queuedProposal(ref string) (convoCard, bool) {
+	raw, ok := strings.CutPrefix(ref, "card:")
+	if !ok {
+		return convoCard{}, false
+	}
+	id, _ := strconv.ParseInt(raw, 10, 64)
+	x, err := c.card(id)
+	if err != nil {
+		return convoCard{}, false
+	}
+	_, _, ok = parseProposalRef(x.Ref)
+	return x, ok
+}
+
+// queueSurfaceDismissed is the user removing a queue's surface (Settings →
+// Surfaces): its item leaves the queue, or code would write it again. A
+// card stays to be answered in the conversation.
+func (c *core) queueSurfaceDismissed(id string) {
+	for _, it := range c.attentionOpen() {
+		if queueSurfaceID(it.Ref) == id {
+			c.attentionDone(it.Ref)
+		}
+	}
 }
 
 // syncQueueSurfaces makes the queue's surfaces what the queue is: one per
@@ -205,8 +227,10 @@ func (c *core) runWorkspace(ctx context.Context) {
 	tick := time.NewTicker(queueSyncEvery)
 	defer tick.Stop()
 	for {
-		c.syncQueueSurfaces()
-		c.relayout()
+		c.syncQueueSurfaces() // writes and removals lay out again themselves
+		if c.layoutFocused() {
+			c.relayout() // the surface opened may no longer be recent
+		}
 		select {
 		case <-ctx.Done():
 			return

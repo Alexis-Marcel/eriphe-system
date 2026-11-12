@@ -2676,8 +2676,8 @@ strip above the grid when it is folded.
 **The composer chooses, code places.** The composer chooses from the pool what is shown now, in
 which order and how big (a *choice*); code lays that choice out (`layoutOf`, pure, no model) at
 once and again whenever the pool changes (`relayout`, called by every write and removal of a
-surface): the surface the user opened first (at l at least, for 15 minutes or until they go
-back), then the urgent ones (weight 80 and up: the queue's 4 and 5), then the choice in its order,
+surface): the urgent ones first (weight 80 and up: the queue's 4 and 5), then the surface the user
+opened (at l at least, for 15 minutes or until they go back), then the choice in its order,
 then the surfaces written since the choice, by weight. Each tile goes at the first place where it
 fits, top left first; one that fits nowhere shrinks a size, then is folded; with room left, a
 surface of weight 40 or more grows a size (never into xl) if nothing else shrinks for it; tiles
@@ -2714,7 +2714,9 @@ opened in (`workspace_lang`, set by `/espace/boot`). It lives while its item is 
 `syncQueueSurfaces` makes the queue's surfaces again whenever the queue changes (`attend` and
 `attentionDone` kick `runWorkspace`, never inline) and every 2 s, writing only what changed and
 removing what left. Code's surfaces are outside the pool's cap (100), and no assistant writes or
-removes them, the brain neither.
+removes them, the brain neither; the user removing one (Settings → Surfaces) takes its item out of
+the queue (a card stays to be answered in the conversation). A card whose proposal the `Proposal`
+cannot show is an `Alert` too. An item other than a card leaves the queue only that way for now.
 
 The **composer** is a persistent assistant of role `composer`, like the brain and the session
 leads: one warm task on a node, each choice a turn (`deliverComposer` gives it the snapshot,
@@ -2853,13 +2855,15 @@ A page next to the conversation, which stays, where what Eriphe composes is laid
 **The surfaces, where core says** (`web/espace/src/Grid.tsx`). The page draws each surface where
 the event stream's `layout` puts it ([the layout](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)):
 a tile at its cells, by class (`.at-cN .at-rN .w-N .h-N .size-*`), its title over it and its why
-under it, Motion moving a tile that changed place and CSS fading a new one in; the folded
+under it, Motion moving a tile that changed place and CSS fading a new one in (fill `backwards`,
+so the animation never holds a transform Motion sets); the folded
 surfaces as chips in the strip above, and a surface the layout does not name yet (it comes right
 after) there too. Eriphe's line is the layout's. A click on a tile or a chip sends the page's own
 action `open` (`POST /api/espace/action`): core places the surface first and keeps the gesture
 (`surface:<id>`); Retour or Escape sends `back`. A message written while a surface is open
 carries `surface:<id>` as its `about`. With no surface at all, the page shows the old per-kind
-canvas below, until it goes (#424).
+canvas below, until it goes (#424); its walkthrough and its `ignored` gestures work only there, and
+what `workspace_show` puts in front is seen only there.
 
 **The old canvas** (`web/espace/src/engine.ts`, `views.tsx`): each module of the composition by
 ref takes an area by its weight (xl 30 cells, l 12, m 6, s 3; one xl at most). What does not fit
@@ -3086,7 +3090,7 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
 | Call | Does |
 |---|---|
 | `c.surfaceWrite(author, surfaceIn) (surface, []a2ui.ValidationError, error)` | writes a new surface (`ID` empty or free) or the author's own again; validation errors for the A2UI and the bindings, an error for the rest (a refused source, a field) |
-| `c.surfaceRemove(id, by) error` | by its author, the brain, `surfaceByUser` or `surfaceByLifetime` |
+| `c.surfaceRemove(id, by) error` | by its author, the brain (not code's: the queue's), `surfaceByUser` (a queue's surface: its item leaves the queue too) or `surfaceByLifetime` |
 | `c.surfaces() ([]surface, error)`, `c.surface(id) (surface, error)` | all (heaviest, then latest first), one (`errNoSurface`) |
 | `c.surfaceOpened(ctx, id) error` | the user opened it: its sources read again |
 | `c.surfaceSubscribe() (snapshot []surfaceChange, changes <-chan surfaceChange, cancel func())` | the surfaces now (one `createSurface` each), then every change, nothing missed between |

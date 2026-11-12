@@ -68,7 +68,7 @@ func nextLayout(t *testing.T, ch <-chan workspaceLayout, ok func(workspaceLayout
 
 // The workspace's stream sends the layout after the surfaces, and again at
 // once when it changes; opening a surface (a tile or a chip) places it
-// first and keeps the gesture; back gives the layout back.
+// first after the urgent and keeps the gesture; back gives the layout back.
 func TestWebLayout(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
@@ -93,7 +93,9 @@ func TestWebLayout(t *testing.T) {
 	if code, body := postJSON(tw, "/api/espace/action", actionBody("open", "first"), csrf); code != http.StatusNoContent {
 		t.Fatalf("open: %d %s", code, body)
 	}
-	nextLayout(t, layouts, func(l workspaceLayout) bool { return l.Focus == "first" && l.Items[0].ID == "first" })
+	nextLayout(t, layouts, func(l workspaceLayout) bool {
+		return l.Focus == "first" && l.Items[0].ID == "q-alert-3" && l.Items[1].ID == "first" && l.Items[1].Size == sizeL
+	})
 	gs, _ := tw.c.gestures(time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
 	if len(gs) != 1 || gs[0].Ref != "surface:first" || gs[0].What != gestureOpened || gs[0].Title != "Titre first" {
 		t.Fatalf("gestures %+v", gs)
@@ -102,6 +104,16 @@ func TestWebLayout(t *testing.T) {
 		t.Fatalf("back: %d", code)
 	}
 	nextLayout(t, layouts, func(l workspaceLayout) bool { return l.Focus == "" && l.Items[0].ID == "q-alert-3" })
+
+	// The user removes the alert's surface (Settings → Surfaces): its item leaves the queue.
+	if err := tw.c.surfaceRemove("q-alert-3", surfaceByUser); err != nil {
+		t.Fatal(err)
+	}
+	tw.c.syncQueueSurfaces()
+	if attentionOf(tw.c, "alert:3") != nil {
+		t.Fatal("the item stayed")
+	}
+	nextLayout(t, layouts, func(l workspaceLayout) bool { return len(l.Items) == 1 && l.Items[0].ID == "first" })
 }
 
 // The workspace's language is the one it was opened in: the queue's

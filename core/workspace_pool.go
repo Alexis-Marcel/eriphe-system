@@ -20,7 +20,7 @@ import (
 //
 //   - surface.missing: what the composer says is missing for the moment
 //     ("tomorrow's agenda"), payload {text}; told once per text in
-//     signalRepeat.
+//     signalRepeat, missingPerHour an hour at most.
 //   - surface.stale: a surface whose data is too old for the moment, or in
 //     error; key and payload id, payload author and title; told once per
 //     version of the surface (its updated time).
@@ -44,6 +44,7 @@ const (
 	gesturesInTurn   = 10
 	gesturesWindow   = 2 * time.Hour
 	signalRepeat     = 6 * time.Hour
+	missingPerHour   = 3 // surface.missing told in an hour at most, whatever their words
 )
 
 // poolEntry is one surface as the composer reads it.
@@ -326,11 +327,18 @@ func (c *core) signalComposer(sig composerSignal, s poolSnapshot) {
 	if st.missingSent == nil {
 		st.missingSent, st.staleSent = map[string]time.Time{}, map[string]time.Time{}
 	}
+	recent := 0
+	for _, at := range st.missingSent {
+		if s.Now.Sub(at) < time.Hour {
+			recent++
+		}
+	}
 	for _, m := range sig.Missing {
 		key := strings.ToLower(m)
-		if at, ok := st.missingSent[key]; ok && s.Now.Sub(at) < signalRepeat {
+		if at, ok := st.missingSent[key]; (ok && s.Now.Sub(at) < signalRepeat) || recent >= missingPerHour {
 			continue
 		}
+		recent++
 		st.missingSent[key] = s.Now
 		events = append(events, journalEvent{Kind: evSurfaceMissing, Source: sourceComposer, At: s.Now,
 			Payload: map[string]any{"text": m}, External: external})
@@ -360,12 +368,21 @@ func (c *core) signalComposer(sig composerSignal, s poolSnapshot) {
 	}
 }
 
-// poolStamp is what of the pool a choice depends on.
+// poolStamp is what of the pool a choice depends on: its surfaces' ids,
+// weights, titles and whys (not their data: read every 2 s).
 func (c *core) poolStamp() string {
 	var b strings.Builder
-	all, _ := c.surfaces()
-	for _, s := range all {
-		fmt.Fprintf(&b, "%s\x00%d\x00%s\x00%s\n", s.ID, s.Weight, s.Title, s.Why)
+	rows, err := c.store.db.Query(`SELECT id, weight, title, why FROM surfaces ORDER BY id`)
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, title, why string
+		var w int
+		if rows.Scan(&id, &w, &title, &why) == nil {
+			fmt.Fprintf(&b, "%s\x00%d\x00%s\x00%s\n", id, w, title, why)
+		}
 	}
 	return b.String()
 }

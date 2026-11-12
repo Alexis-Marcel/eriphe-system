@@ -442,6 +442,9 @@ func (c *core) surfaceRemove(id, by string) error {
 	c.sendSurface(a2ui.Message{Version: a2ui.Version, DeleteSurface: &a2ui.DeleteSurface{SurfaceID: id}})
 	c.surf.mu.Unlock()
 	log.Printf("surface %s removed by %s", id, by)
+	if s.Author == surfaceAuthorCore && by == surfaceByUser {
+		c.queueSurfaceDismissed(id) // its item leaves the queue too (workspace_queue.go)
+	}
 	c.followSurfaceResources()
 	c.relayout()
 	return nil

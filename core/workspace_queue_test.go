@@ -45,6 +45,14 @@ func TestQueueSurfaces(t *testing.T) {
 		!strings.Contains(string(alert.Components), `"level":"error"`) {
 		t.Fatalf("alert surface %+v %s", alert, alert.Components)
 	}
+	// A card whose proposal the Proposal cannot show is an Alert.
+	c.store.db.Exec(`INSERT INTO attention (ref, weight, why, source, time) VALUES ('card:999999', 4, 'Une présence à suivre', 'brain', ?)`, time.Now().Unix())
+	if in, ok := c.queueSurface(attentionItem{Ref: "card:999999", Weight: 4, Why: "Une présence à suivre"}, "fr"); !ok ||
+		!strings.Contains(string(in.Components), `"component":"Alert"`) || in.Title != "Attend ta réponse" {
+		t.Fatalf("a card without a proposal: %+v %s", in, in.Components)
+	}
+	c.attentionDone("card:999999")
+
 	// A ref whose id a surface's may not hold gets a hashed one.
 	mailID := queueSurfaceID("mail:INBOX/9")
 	if !surfaceIDRe.MatchString(mailID) || !strings.HasPrefix(mailID, "q-mail-") {

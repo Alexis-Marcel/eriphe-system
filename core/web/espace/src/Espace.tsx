@@ -138,14 +138,14 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const opened = useRef(new Set<Ref>());
   const front = useRef<Ref[]>([]);
   useEffect(() => {
-    if (!live || !snap) return;
+    if (!live || !snap || onSurfaces) return; // the old canvas's only: a surface's opening is its open action
     for (const ref of leftUnopened(front.current, snap.comp, opened.current)) {
       const o = snap.store.get(ref);
       data.gesture("ignored", ref, o?.title ?? "").catch(() => false);
     }
     // Only what was in front while the page was seen counts.
     front.current = document.visibilityState === "visible" ? snap.comp.items.map((i) => i.ref) : [];
-  }, [snap, live]);
+  }, [snap, live, onSurfaces]);
 
   // open focuses a module; byUser says the user did (not a walkthrough).
   const open = (ref: Ref | null, byUser = true) => {
@@ -166,6 +166,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
     open(go[0], false);
   };
   onWalk.current = async (w) => {
+    if (onSurfaces) return; // a walkthrough goes through the old canvas's modules, hidden behind the surfaces
     const refs = w.refs ?? [];
     if (!refs.length) return startTour(tourOf(placed), () => true);
     const missing = refs.filter((r) => !store.has(r));

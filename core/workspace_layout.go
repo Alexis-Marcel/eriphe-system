@@ -17,9 +17,9 @@ import (
 // The composer (composer.go) chooses from the pool of surfaces what is shown
 // now and how big (a workspaceChoice). Code lays that choice out (layoutOf)
 // at once, never waiting for a model, and lays out again whenever the pool
-// changes (relayout): a surface the user opened comes first, then the
-// urgent ones (weight 80 and up: the queue's 4 and 5, what a task waits on
-// or what interrupts), then the composer's choice in its order, then the
+// changes (relayout): the urgent ones first (weight 80 and up: the queue's
+// 4 and 5, what a task waits on or what interrupts), then a surface the
+// user opened, then the composer's choice in its order, then the
 // surfaces it has not seen yet, by weight. Each is put at the first place
 // where it fits, top left first; one that fits nowhere shrinks a size, then
 // is folded. What the choice left out is folded too: nothing in the pool
@@ -177,14 +177,14 @@ func layoutOf(pool []surface, ch workspaceChoice, focus string) workspaceLayout 
 		w.why = truncate(oneLine(w.why), layoutWhyMax)
 		wants = append(wants, w)
 	}
+	for _, s := range pool {
+		if s.Weight >= weightUrgent && s.ID != focus {
+			add(s, false)
+		}
+	}
 	if s, ok := byID[focus]; ok {
 		add(s, true)
 		l.Focus = focus
-	}
-	for _, s := range pool {
-		if s.Weight >= weightUrgent {
-			add(s, false)
-		}
 	}
 	for _, it := range ch.Items {
 		if s, ok := byID[it.ID]; ok {
@@ -422,6 +422,14 @@ func (c *core) focusSurface(id string, now time.Time) {
 	st.focus, st.focusAt = id, now
 	st.mu.Unlock()
 	c.relayout()
+}
+
+// layoutFocused tells whether the last layout has a surface opened.
+func (c *core) layoutFocused() bool {
+	st := &c.layout
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.last.Focus != ""
 }
 
 // workspaceFocus is the surface opened, "" when none is.
