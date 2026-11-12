@@ -15,7 +15,8 @@
 <h3 id="{{.ID}}-title">{{template "i-chat"}}{{tf "bot.title" .Label}}</h3>
 <p class="small muted">{{tf "bot.lead" .Label}}</p>
 <p class="notice">{{t (printf "%s.privacy" .ID)}}</p>
-{{if not .VaultOpen}}<p class="small muted">{{t "bot.err.vault"}}</p>
+{{if .Setup}}{{.Setup}}
+{{else if and (not .VaultOpen) (not .Service)}}<p class="small muted">{{t "bot.err.vault"}}</p>
 {{else if not .Set}}
 <p class="small">{{t (printf "%s.how" .ID)}}</p>
 <form class="stack-form" hx-post="/channels/{{.ID}}/token" hx-target="#{{.ID}}-panel" hx-disabled-elt="find button">
@@ -43,11 +44,15 @@
 {{end}}
 {{if .Ignored}}<p class="small muted">{{tf "bot.ignored" .Ignored}}</p>{{end}}
 <p class="small muted">{{t "bot.approvals"}}</p>
+{{if .Service}}
+<div class="actions"><button class="btn btn-danger-ghost sm" type="button" hx-post="/channels/{{.ID}}/remove" hx-target="#{{.ID}}-panel" hx-confirm="{{t (printf "%s.removeconfirm" .ID)}}">{{t (printf "%s.remove" .ID)}}</button></div>
+{{else}}
 <details class="rule-edit"><summary class="small">{{t "bot.change"}}</summary>
 <form class="stack-form" hx-post="/channels/{{.ID}}/token" hx-target="#{{.ID}}-panel" hx-disabled-elt="find button">
   <label class="field"><span>{{t "bot.token"}}</span><input type="password" name="token" autocomplete="off" required maxlength="120"></label>
   <div class="actions"><button class="btn btn-soft sm" type="submit">{{t "bot.token.save"}}</button>
   <button class="btn btn-danger-ghost sm" type="button" hx-post="/channels/{{.ID}}/remove" hx-target="#{{.ID}}-panel" hx-confirm="{{t "bot.removeconfirm"}}">{{t "bot.remove"}}</button></div>
 </form></details>
+{{end}}
 {{end}}
 {{end}}

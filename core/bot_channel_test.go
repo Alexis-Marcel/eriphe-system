@@ -287,9 +287,19 @@ func (e *fakeRetry) retryAfter() time.Duration { return e.wait }
 // Nothing outside a transport's own files names its channel by its id (a
 // key, a route, a class, a file): the rest goes through the channel
 // registry and the bot channel. The service's name in prose ("Discord" in
-// the gallery's list of apps) is not the channel.
+// the gallery's list of apps) is not the channel; nor is an id that is
+// also a word ("signal", as the routing's signals), but as a key, a route
+// or a file.
 func TestBotChannelsNamedByTheirFilesOnly(t *testing.T) {
-	own := map[string][]string{"telegram": {"telegram.go", "web_text_telegram.go"},
+	words := map[string]bool{"signal": true}
+	names := func(id, text string) bool {
+		if !words[id] {
+			return strings.Contains(text, id)
+		}
+		q := regexp.QuoteMeta(id)
+		return regexp.MustCompile(`["/]` + q + `\b|\b` + q + `["_-]|\b` + q + `\.(go|html|how|privacy)\b|kind\.` + q + `\b`).MatchString(text)
+	}
+	own := map[string][]string{"telegram": {"telegram.go", "web_text_telegram.go"}, "signal": {"signal.go", "web_text_signal.go"},
 		"discord": {"discord.go", "web_text_discord.go"}}
 	files, _ := filepath.Glob("*.go")
 	tmpl, _ := filepath.Glob("web/templates/*.html")
@@ -303,7 +313,7 @@ func TestBotChannelsNamedByTheirFilesOnly(t *testing.T) {
 		}
 		text := string(raw)
 		for id, mine := range own {
-			if !slices.Contains(mine, file) && strings.Contains(text, id) {
+			if !slices.Contains(mine, file) && names(id, text) {
 				t.Errorf("%s names %s: only %v may", file, id, mine)
 			}
 		}
