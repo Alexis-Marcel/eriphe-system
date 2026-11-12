@@ -3,7 +3,7 @@ import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } 
 import * as data from "./data";
 import { keysOf, place } from "./engine";
 import { useWords } from "./i18n";
-import type { Composition, Obj, Ref, Rule } from "./types";
+import type { Composition, Obj, Ref } from "./types";
 import { View, YesNo, lineOf, sourceOf, titleOf, type Act } from "./views";
 
 const EMPTY: Composition = { mode: "side", eriphe: "", items: [] };
@@ -37,7 +37,6 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const [said, setSaid] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [menu, setMenu] = useState<Ref | null>(null);
-  const [rules, setRules] = useState<Rule[]>(data.loadRules);
   const [tour, setTour] = useState<{ refs: Ref[]; i: number } | null>(null);
   const [wide, setWide] = useState(false);
 
@@ -46,7 +45,6 @@ export function Espace({ boot }: { boot: data.Boot }) {
   }, [boot]);
   useEffect(reload, [reload]);
   useEffect(() => (snap && !snap.sample ? data.follow(reload) : undefined), [snap?.sample, reload]);
-  useEffect(() => data.saveRules(rules), [rules]);
 
   const store = useMemo(() => {
     const m = new Map<Ref, Obj>();
@@ -57,8 +55,8 @@ export function Espace({ boot }: { boot: data.Boot }) {
 
   const comp = snap?.comp ?? EMPTY;
   const { placed, chips } = useMemo(
-    () => place(comp, store, rules, focus),
-    [comp, store, rules, focus],
+    () => place(comp, store, focus),
+    [comp, store, focus],
   );
   const shownChips = chips.filter((c) => !(c.obj.card && c.obj.card.state !== "pending"));
 
@@ -122,10 +120,14 @@ export function Espace({ boot }: { boot: data.Boot }) {
     setMenu(null);
     send(t("espace.ask.message", titleOf(t, lang, o), q), t("espace.ask.sent"));
   };
-  const remember = (key: string, label: string, delta: number, remark?: string) => {
-    setRules((rs) => [...rs, { id: crypto.randomUUID(), key, delta, remark, at: new Date().toISOString() }]);
+  // A remark becomes a rule eriphe-core keeps and applies to the queue
+  // (attention_rules.go); the event stream then says to read again.
+  const remember = async (key: string, label: string, delta: number, remark?: string) => {
     setMenu(null);
+    if (snap?.sample || !boot.live) return say(t("espace.sent.sample"));
+    if (!(await data.addRule({ key, delta, label, remark }).catch(() => null))) return say(t("espace.error"));
     say(delta > 0 ? t("espace.rule.more", label) : delta <= -5 ? t("espace.rule.never", label) : delta < 0 ? t("espace.rule.less", label) : t("espace.rule.remark"));
+    reload();
   };
 
   useEffect(() => {
@@ -229,7 +231,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
                       onClick={(e) => { e.stopPropagation(); setMenu(menu === p.obj.ref ? null : p.obj.ref); }}>
                       ⋯
                     </button>
-                    {menu === p.obj.ref && <Menu o={p.obj} onAsk={ask} onRule={remember} />}
+                    {menu === p.obj.ref && <Menu o={p.obj} source={p.source} onAsk={ask} onRule={remember} />}
                   </motion.article>
                 ))}
               </AnimatePresence>
@@ -249,16 +251,20 @@ export function Espace({ boot }: { boot: data.Boot }) {
   );
 }
 
-// The label of what a rule applies to.
-function keyLabel(t: ReturnType<typeof useWords>["t"], key: string): string {
-  const [kind, arg] = key.split(/:(.*)/s);
-  if (arg) return t("espace.key.mail.domain", arg);
-  return t(`espace.key.${kind}`);
+// The label of what a rule applies to, from its key (kind, or
+// kind:attribute=value).
+export function keyLabel(t: ReturnType<typeof useWords>["t"], key: string): string {
+  const [kind, rest] = key.split(/:(.*)/s);
+  if (!rest) return t(`espace.key.${kind}`);
+  const [attr, value] = rest.split(/=(.*)/s);
+  if (kind === "mail" && attr === "from") return t("espace.key.mail.domain", value);
+  if (attr === "source") return t("espace.key.source", t(`espace.key.${kind}`), value);
+  return t("espace.key.attr", t(`espace.key.${kind}`), value);
 }
 
-function Menu({ o, onAsk, onRule }: { o: Obj; onAsk: (o: Obj, q: string) => void; onRule: (key: string, label: string, delta: number, remark?: string) => void }) {
+function Menu({ o, source, onAsk, onRule }: { o: Obj; source?: string; onAsk: (o: Obj, q: string) => void; onRule: (key: string, label: string, delta: number, remark?: string) => void }) {
   const { t } = useWords();
-  const keys = keysOf(o);
+  const keys = keysOf(o, source);
   const [k, setK] = useState(0);
   const [q, setQ] = useState("");
   const [remark, setRemark] = useState("");

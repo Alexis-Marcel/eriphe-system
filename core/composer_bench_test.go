@@ -28,7 +28,8 @@ type composerCase struct {
 	Moment      string         `json:"moment"`
 	AwayMinutes int            `json:"away_minutes"`
 	Remark      string         `json:"remark"`
-	Rules       []string       `json:"rules"`
+	Rules       []string       `json:"rules"`     // in words only: what code cannot apply (a schedule, a wish)
+	RuleKeys    []showRuleIn   `json:"rule_keys"` // in force: code applies them to the queue first (attention_rules.go)
 	Items       []composerItem `json:"items"`
 	Expect      composerExpect `json:"expect"`
 	// Answer is a composition that meets Expect, as the composer would
@@ -45,6 +46,11 @@ type composerItem struct {
 	Title      string `json:"title"`
 	Why        string `json:"why"`
 	Say        string `json:"say"`
+	// Source is who raised it (skill:backup), Attrs what its object says
+	// that a rule may match (from: the sender's address): rule_keys
+	// read them.
+	Source string            `json:"source"`
+	Attrs  map[string]string `json:"attrs"`
 }
 
 // composerExpect is what a good composition of a case does.
@@ -82,7 +88,8 @@ func loadComposerCases(t *testing.T) []composerCase {
 }
 
 // snapshot is the case as production builds it (compositionSnapshot):
-// the queue's items with their kind and title, the moment and the rules.
+// the queue's items with their kind and title, the user's rules applied to
+// them by code first (weighByRules), the moment and the rules in words.
 func (x composerCase) snapshot(t *testing.T) compositionSnapshot {
 	t.Helper()
 	now, err := time.ParseInLocation("2006-01-02 15:04", x.Now, mustZone(t, composerBenchZone))
@@ -90,14 +97,38 @@ func (x composerCase) snapshot(t *testing.T) compositionSnapshot {
 		t.Fatalf("%s: now: %v", x.file, err)
 	}
 	s := compositionSnapshot{Moment: x.Moment, Remark: x.Remark, Away: time.Duration(x.AwayMinutes) * time.Minute,
-		Rules: x.Rules, Now: now}
+		Rules: slices.Clone(x.Rules), Now: now}
+	var rules []attentionRule
+	for _, in := range x.RuleKeys {
+		in, err := in.clean()
+		if err != nil {
+			t.Fatalf("%s: rule %q: %v", x.file, in.Key, err)
+		}
+		r := attentionRule{Key: in.Key, Delta: in.Delta, Label: in.Label, Remark: in.Remark}
+		rules = append(rules, r)
+		s.Rules = append(s.Rules, ruleSentence(r))
+	}
+	items := make([]attentionItem, 0, len(x.Items))
+	attrs := make([]ruleAttrs, 0, len(x.Items))
+	titles := map[string]string{}
 	for _, it := range x.Items {
 		kind, _, _ := strings.Cut(it.Ref, ":")
-		s.Items = append(s.Items, snapshotItem{
-			attentionItem: attentionItem{Ref: it.Ref, Weight: it.Weight, Why: it.Why, Say: it.Say, Source: "bench",
-				Time: now.Add(-time.Duration(it.AgeMinutes) * time.Minute)},
-			Kind: kind, Title: it.Title,
-		})
+		items = append(items, attentionItem{Ref: it.Ref, Weight: it.Weight, Why: it.Why, Say: it.Say, Source: cmpOr(it.Source, "bench"),
+			Time: now.Add(-time.Duration(it.AgeMinutes) * time.Minute)})
+		a := ruleAttrs{Kind: kind, Attrs: map[string][]string{"source": sourceValues(it.Source)}}
+		for k, v := range it.Attrs {
+			if k == "from" {
+				a.Attrs[k] = senderValues(v)
+			} else {
+				a.Attrs[k] = []string{strings.ToLower(v)}
+			}
+		}
+		attrs = append(attrs, a)
+		titles[it.Ref] = it.Title
+	}
+	for _, it := range weighByRules(items, attrs, rules) {
+		kind, _, _ := strings.Cut(it.Ref, ":")
+		s.Items = append(s.Items, snapshotItem{attentionItem: it, Kind: kind, Title: titles[it.Ref]})
 	}
 	return s
 }
@@ -182,8 +213,9 @@ func (s composerScore) String() string {
 }
 
 // scoreComposition scores the composer's raw answer and the composition
-// code made of it. Hidden is judged on what the answer chose: code adds
-// what it left out as chips, until the rules filter the queue first.
+// code made of it. Hidden is judged on what the answer chose and on what
+// code shows (modules and chips): a rule in force takes it out of the
+// queue before the composer, words alone leave it to the composer.
 func scoreComposition(x composerCase, s compositionSnapshot, raw string, comp composition) composerScore {
 	var sc composerScore
 	var out composerOutput
@@ -197,6 +229,11 @@ func scoreComposition(x composerCase, s compositionSnapshot, raw string, comp co
 		if _, ok := s.item(r); !ok {
 			sc.Invented = append(sc.Invented, r)
 		}
+		if slices.Contains(x.Expect.Hidden, r) && !slices.Contains(sc.ShownHidden, r) {
+			sc.ShownHidden = append(sc.ShownHidden, r)
+		}
+	}
+	for _, r := range append(itemRefs(comp.Items), comp.Chips...) {
 		if slices.Contains(x.Expect.Hidden, r) && !slices.Contains(sc.ShownHidden, r) {
 			sc.ShownHidden = append(sc.ShownHidden, r)
 		}
@@ -242,18 +279,31 @@ func TestComposerBenchCases(t *testing.T) {
 			ids[x.ID], moments[x.Moment] = true, true
 			s := x.snapshot(t)
 
-			// The turn the composer reads names every ref, and only those.
+			// The turn the composer reads names every ref left after the
+			// rules, and only those.
 			turn := composerTurn(s)
-			allowed := make([]string, 0, len(x.Items))
-			for _, it := range x.Items {
+			allowed := make([]string, 0, len(s.Items))
+			for _, it := range s.Items {
 				allowed = append(allowed, it.Ref)
 			}
 			if !strings.Contains(turn, "Refs permises : "+strings.Join(allowed, ", ")+"\n") {
 				t.Errorf("turn without its refs:\n%s", turn)
 			}
-			for _, r := range x.Rules {
-				if !strings.Contains(turn, "- "+r) {
+			for _, r := range s.Rules {
+				if !strings.Contains(turn, "- "+packQuote(r)) {
 					t.Errorf("turn without the rule %q", r)
+				}
+			}
+			// A rule in force hides by code: what it hides never reaches
+			// the composer, whatever it answers.
+			if len(x.RuleKeys) > 0 {
+				for _, r := range x.Expect.Hidden {
+					if _, ok := s.item(r); ok {
+						t.Errorf("%s is hidden by a rule but still in the snapshot", r)
+					}
+				}
+				if fb := fallbackComposition(s); len(scoreComposition(x, s, "", fb).ShownHidden) > 0 {
+					t.Errorf("the fallback shows a hidden ref: %s %v", refsOf(fb.Items), fb.Chips)
 				}
 			}
 
@@ -267,8 +317,8 @@ func TestComposerBenchCases(t *testing.T) {
 				t.Errorf("answer: %s", sc)
 			}
 			// Nothing of the queue goes unseen.
-			if n := len(comp.Items) + len(comp.Chips); n != min(len(x.Items), compositionItemsMax+compositionChipsMax) {
-				t.Errorf("answer shows %d of %d", n, len(x.Items))
+			if n := len(comp.Items) + len(comp.Chips); n != min(len(s.Items), compositionItemsMax+compositionChipsMax) {
+				t.Errorf("answer shows %d of %d", n, len(s.Items))
 			}
 
 			// Invented refs are cleaned: the same composition, and the

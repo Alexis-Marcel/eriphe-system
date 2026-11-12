@@ -11,7 +11,9 @@ import type { Composition, Obj, Ref, Rule } from "./types";
 // - POST /api/objects (web_objects.go): the objects behind the refs, and
 //   the ones they relate to;
 // - /events: the event stream, whose "attention" and "composition" events
-//   say when to read again.
+//   say when to read again;
+// - POST /api/rules (attention_rules.go): a remark of the ⋯ menu, made a
+//   rule that eriphe-core applies to the queue before the composition.
 // A request without a session gets 401: the page goes to the sign-in. Only
 // when neither the composition nor the attention queue is there (404), or
 // with no eriphe-core behind (the dev server), it shows made-up data
@@ -66,7 +68,7 @@ async function composition(): Promise<Composition | null> {
   if (comp) return comp;
   const att = await getJSON<Attention>("/api/attention");
   if (!att) return null;
-  return { mode: "side", eriphe: "", items: (att.items ?? []).map(({ ref, weight, why, say }) => ({ ref, weight, why, say })) };
+  return { mode: "side", eriphe: "", items: (att.items ?? []).map(({ ref, weight, why, say, source }) => ({ ref, weight, why, say, source })) };
 }
 
 // One entry per ref asked, in order: the object, or why it could not be read.
@@ -142,19 +144,16 @@ export async function send(text: string): Promise<boolean> {
   return post("/messages", new URLSearchParams({ text }));
 }
 
-// The user's remarks (the ⋯ menu): kept in this browser and applied by the
-// layout engine until eriphe-core turns them into rules (#388).
-const RULES = "eriphe.espace.rules";
-
-export function loadRules(): Rule[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(RULES) ?? "[]");
-    return Array.isArray(raw) ? raw : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveRules(rules: Rule[]) {
-  localStorage.setItem(RULES, JSON.stringify(rules));
+// addRule makes a rule of a remark of the ⋯ menu (POST /api/rules):
+// eriphe-core keeps it and applies it to the queue, and the event stream
+// says when to read again. The rule, or null when it was refused.
+export async function addRule(rule: Pick<Rule, "key" | "delta" | "label" | "remark">): Promise<Rule | null> {
+  const r = await fetch("/api/rules", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { ...json, "Content-Type": "application/json", "X-CSRF-Token": csrf },
+    body: JSON.stringify(rule),
+  });
+  signedOut(r);
+  return r.ok ? ((await r.json()) as Rule) : null;
 }

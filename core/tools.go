@@ -186,6 +186,7 @@ func newMCPServer(c *core) *mcp.Server {
 	registerSkillWriteTool(s, c)  // write_skill (skill_write.go)
 	registerSkillRunsTool(s, c)   // skill_runs (skill_report.go)
 	registerMonitorTools(s, c)    // write_monitor, monitors (monitors.go)
+	registerRuleTool(s, c)        // write_rule (attention_rules.go)
 	registerNotifyTools(s, c)     // notify, notifications, rule
 	registerSinceTools(s, c)      // since
 	registerSessionTools(s, c)    // session_tools.go

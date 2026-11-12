@@ -339,6 +339,7 @@ The ways back follow the pages, never the browser's history. */}}
   <div class="nav-group" role="group" aria-labelledby="sg-space">
     <h2 class="nav-group-title" id="sg-space">{{t "settings.g.space"}}</h2>
     <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.accountnav"}}</span>{{template "chev"}}</a>
+    <a href="/settings/display" {{if eq .Tab "display"}}aria-current="page"{{end}}>{{template "i-eye"}}<span>{{t "display.title"}}</span>{{template "chev"}}</a>
     <a href="/settings/journal" {{if eq .Tab "journal"}}aria-current="page"{{end}}>{{template "i-history"}}<span>{{t "settings.journal"}}</span>{{template "chev"}}</a>
     <a href="/settings/approve" {{if eq .Tab "approve"}}aria-current="page"{{end}}>{{template "i-shield"}}<span>{{t "activity.approve"}}</span>{{if .Waiting}}<span class="nav-count">{{.Waiting}}</span>{{end}}{{template "chev"}}</a>
   </div>

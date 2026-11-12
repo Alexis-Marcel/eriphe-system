@@ -211,14 +211,16 @@ func (c *core) attendNote(n *notification) {
 	c.store.db.Exec(`UPDATE attention SET delivered = 0 WHERE ref = ? AND weight < ?`, noteItemRef(n.ID), weightBlocksATask)
 }
 
-// attentionOpen is the queue as it stands, the heaviest and latest first.
+// attentionOpen is the queue as it stands, held or delivered, the
+// heaviest and latest first, with the user's rules applied.
 func (c *core) attentionOpen() []attentionItem {
 	return c.attentionWhere(`1 ORDER BY weight DESC, time DESC`)
 }
 
-// attentionWhere reads the items that still need the user. A card's item
-// whose card no longer waits (decided on a page, in words, or gone) leaves
-// the queue here.
+// attentionWhere reads the items that still need the user, with the
+// user's rules applied (attention_rules.go): their weights moved, those at
+// 0 or below left out, held or delivered. A card's item whose card no
+// longer waits (decided on a page, in words, or gone) leaves the queue here.
 func (c *core) attentionWhere(where string, args ...any) []attentionItem {
 	rows, err := c.store.db.Query(`SELECT ref, weight, why, say, source, time, tainted, delivered,
 		CASE WHEN `+heldForBrief+` THEN 0 ELSE due END FROM attention WHERE `+where, args...)
@@ -257,7 +259,7 @@ func (c *core) attentionWhere(where string, args ...any) []attentionItem {
 		}
 		out = append(out, it)
 	}
-	return out
+	return c.applyRules(out)
 }
 
 // attentionBreak is a breakpoint: what the queue holds is delivered, the
