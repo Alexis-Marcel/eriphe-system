@@ -3059,7 +3059,7 @@ Any assistant writes the workspace with four tools; the **author is the caller**
 |---|---|
 | `surface_write` | create or update a surface: `id` (empty: a new one), `title`, `components`, `data`, `sources`, `refresh {every}`, `lifetime {until \| while \| kept}`, `weight`, `why`. Its description carries a compact summary of the catalog (its components and functions, from `a2ui.Eriphe()`); a wrong surface comes back as A2UI's errors, each with its path, nothing written. Answers `id`, `author`, `waiting` (sources still reading), `failed`, `previous_error` (the last error found on it, which this write clears) |
 | `surface_remove` | remove one of the caller's surfaces |
-| `workspace_read` | each surface (id, title, author, sources, lifetime, weight, why, last update, `waiting`; for the caller's own, `failed` and the last `error`), the user's gestures of the last hour (what, ref, time) and what the brain put in front. A title or why written in a tainted turn is quoted to its author only |
+| `workspace_read` | each surface (id, title, author, sources, lifetime, weight, why, last update, `waiting`, the user's `last_action` on it; for the caller's own, `failed` and the last `error`), the user's gestures of the last hour (what, ref, time) and what the brain put in front. A title or why written in a tainted turn is never quoted |
 | `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand |
 
 - **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint. A

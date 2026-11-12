@@ -365,6 +365,12 @@ type surfaceSeen struct {
 	Waiting  []string          `json:"waiting,omitempty"`
 	Failed   map[string]string `json:"failed,omitempty"`
 	Error    string            `json:"error,omitempty"`
+	Action   *actionSeen       `json:"last_action,omitempty"` // the user's last action on it (open…)
+}
+
+type actionSeen struct {
+	Name string `json:"name"`
+	At   string `json:"at"`
 }
 
 type gestureSeen struct {
@@ -374,7 +380,7 @@ type gestureSeen struct {
 }
 
 // toolWorkspaceRead is workspace_read. What an author wrote after reading
-// external content (its title, its why) is not quoted to another.
+// external content (its title, its why) is not quoted.
 func (c *core) toolWorkspaceRead(who surfaceCaller) map[string]any {
 	now := time.Now()
 	loc := c.conf().location
@@ -384,11 +390,19 @@ func (c *core) toolWorkspaceRead(who surfaceCaller) map[string]any {
 	all, _ := c.surfaces()
 	seen := []surfaceSeen{}
 	for _, s := range all {
-		yours := mayChange(who.author, s.Author) && (who.only == "" || who.only == s.ID)
+		yours := mayChange(who.author, s.Author)
+		if who.only != "" {
+			yours = s.ID == who.only // the brain's delegate: that one
+		}
 		v := surfaceSeen{ID: s.ID, Author: s.Author, Yours: yours, Lifetime: lifetimeText(s.Lifetime, loc), Weight: s.Weight,
 			Updated: s.Updated.In(loc).Format("2006-01-02 15:04"), Tainted: s.Tainted != "", Waiting: surfaceWaiting(s)}
-		if len(s.Look.AuthorTaint) == 0 || s.Author == who.author {
+		// Written in a turn that read external content: not quoted, not
+		// even to its author, whose next turn may be clean.
+		if len(s.Look.AuthorTaint) == 0 {
 			v.Title, v.Why = s.Title, s.Why
+		}
+		if a := s.Look.Action; a != nil {
+			v.Action = &actionSeen{Name: a.Name, At: time.Unix(a.At, 0).In(loc).Format("2006-01-02 15:04")}
 		}
 		for ptr, src := range s.Sources {
 			v.Sources = append(v.Sources, ptr+" ← "+src.String())
