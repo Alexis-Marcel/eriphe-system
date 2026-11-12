@@ -861,6 +861,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .mark-calendly { background: #006bff; }
 .mark-canva { background: #00c4cc; }
 .mark-cloudflare { background: #f38020; }
+.mark-elevenlabs { background: #000000; }
 .mark-dropbox { background: #0061ff; }
 .mark-evernote { background: #00a82d; }
 .mark-hootsuite, .mark-hootsuite-inbox { background: #ff4c46; }

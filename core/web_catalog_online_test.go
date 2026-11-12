@@ -91,6 +91,9 @@ func TestOnlineCatalog(t *testing.T) {
 			"engagements:read", "engagements:write", "snippets:read", "snippets:write", "channels:write"},
 			"[account:read posts:read ideas:read insights:read engagements:read]"},
 		{"metricool", []string{"mcp:read", "mcp:write"}, "[mcp:read]"},
+		// Advertised on 2026-11-12.
+		{"elevenlabs", []string{"convai_read", "convai_write", "text_to_speech", "speech_history_read", "flows",
+			"image_video_generation", "voice_generation", "ads_read", "ads_write"}, "[convai_read speech_history_read ads_read]"},
 		{"beehiiv", []string{"read", "write", "openid", "email"}, "[read openid email]"},
 		{"huggingface", []string{"openid", "profile", "read-mcp", "read-repos", "jobs", "contribute-repos", "inference-api"},
 			"[openid profile read-mcp read-repos]"},

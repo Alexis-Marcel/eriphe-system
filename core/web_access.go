@@ -130,7 +130,8 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 		var tools []*mcp.Tool
 		v.Status, _, tools = u.snapshot()
 		for _, t := range tools {
-			v.Tools = append(v.Tools, toolException{t.Name, toolCategory(t), access.exceptions[t.Name]})
+			value, _ := exceptionFor(access.exceptions, t.Name)
+			v.Tools = append(v.Tools, toolException{t.Name, toolCategory(t), value})
 		}
 	}
 	for name, value := range own { // a tool not listed now keeps its line: its exception can go
@@ -203,7 +204,9 @@ func formGrid(r *http.Request, v toolAccess) (accessGrid, error) {
 // formExceptions reads the exceptions a page posted. Only the tools it
 // showed change: a page drawn while the server was reconnecting has none.
 // On an account, what its server says stays out of its own exceptions; to
-// follow its category instead, it needs that value of its own.
+// follow its category instead, it needs that value of its own. A pattern's
+// value is held the same way: a tool it covers takes one of its own only
+// when it is set to another.
 func formExceptions(r *http.Request, g accessGrid, v toolAccess) map[string]string {
 	exceptions := map[string]string{}
 	maps.Copy(exceptions, v.Own)
@@ -214,13 +217,22 @@ func formExceptions(r *http.Request, g accessGrid, v toolAccess) map[string]stri
 		}
 		delete(exceptions, t.Name)
 		value := r.PostForm.Get(key)
-		if held, ok := v.Inherited[t.Name]; ok {
-			if value == held {
-				continue
+		_, covered := patternFor(v.Own, t.Name)
+		if !covered {
+			_, covered = patternFor(v.Inherited, t.Name)
+		}
+		held, ok := v.Inherited[t.Name]
+		if _, own := v.Own[t.Name]; !own && !ok {
+			held, ok = exceptionFor(v.Own, t.Name)
+			if !ok {
+				held, ok = patternFor(v.Inherited, t.Name)
 			}
-			if value == "" && t.Category != "" {
-				value = g.value(t.Category)
-			}
+		}
+		if ok && value == held {
+			continue
+		}
+		if value == "" && t.Category != "" && (ok || covered) {
+			value = g.value(t.Category)
 		}
 		if value != "" {
 			exceptions[t.Name] = value
