@@ -48,6 +48,7 @@ describe("workspace", () => {
     const handlers: Record<string, (e: MessageEvent) => void> = {};
     class FakeSource {
       addEventListener(name: string, fn: (e: MessageEvent) => void) { handlers[name] = fn; }
+      removeEventListener() {}
       close() {}
     }
     vi.stubGlobal("EventSource", FakeSource);

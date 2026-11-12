@@ -2835,8 +2835,10 @@ the messages core sends (`createSurface`, `updateComponents`, `updateDataModel`,
 `catalog.tsx` names the catalog once (`CATALOG`: its id and where core serves it, `/espace/catalog/v1.json`)
 and implements all 23 of its components, each with exactly the catalog's properties;
 `catalog.test.ts` checks both ways against `a2ui/catalog_v1.json` (every component, its
-properties and their allowed values, the icon names, the four functions). Until core
-streams surfaces (#419), the dev server shows a made-up one (`a2ui/fixtures.ts`), or with
+properties and their allowed values, the icon names, the four functions). eriphe-core streams
+the surfaces (`data.stream`: the event stream's `a2ui` events, applied through the adapter; the
+adapter's actions and errors posted back, see "The page and the surfaces" below). With no core
+behind, the dev server shows a made-up one (`a2ui/fixtures.ts`), or with
 `?gallery` the gallery (`a2ui/gallery.json`: surfaces using every component, in French and
 English, which the component tests render and a Go test, `TestEspaceGalleryIsValid`, runs
 through `a2ui.Validate`).
@@ -3007,9 +3009,9 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
   `nosniff`, a sandbox CSP and 10 minutes of private cache.
 - Table `surfaces` (id, title, author, components, sources, data, data_at, refresh, lifetime,
-  weight, why, tainted, look: its sources' last reads, next_at, created, updated).
+  weight, why, tainted, look: its sources' last reads, the user's last action and the last error for its author, next_at, created, updated).
 
-**Go API** (for the workspace's stream, #419, and the assistants' tools, #421):
+**Go API** (for the workspace's stream and the assistants' tools, #421):
 
 | Call | Does |
 |---|---|
@@ -3018,6 +3020,9 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
 | `c.surfaces() ([]surface, error)`, `c.surface(id) (surface, error)` | all (heaviest, then latest first), one (`errNoSurface`) |
 | `c.surfaceOpened(ctx, id) error` | the user opened it: its sources read again |
 | `c.surfaceSubscribe() (snapshot []surfaceChange, changes <-chan surfaceChange, cancel func())` | the surfaces now (one `createSurface` each), then every change, nothing missed between |
+| `c.feedSurfaces() (*surfaceFeed, a2uiEvent)` | a subscription for one event stream: the snapshot to send first, then `feed.next(change, ok)` batches what waits, or gives a new snapshot when the hub dropped it |
+| `c.surfaceAction(ctx, id, a2ui.Action) error` | an action of the user's: recorded (`look.action`); `open` reads its sources again in the background; any other `errActionNotHandled` (until actions get their kinds: ask, answer, local) |
+| `c.surfaceError(id, a2ui.Error) error` | an error about a surface for its author to fix (one the page met rendering it, or one code met): kept as `look.last_error` (code, path, message, at; read with `c.surface(id)`), logged, nothing sent to the page; the author writing it again clears it |
 
 A change is `{seq, message}`: one A2UI message (`createSurface`, `updateComponents`,
 `updateDataModel`, `deleteSurface`), `seq` growing by one in the order they are sent (from 0 at
@@ -3027,6 +3032,19 @@ components and its whole data, or, when a component went away or its title, weig
 changed, `deleteSurface` then `createSurface`. `createSurface` carries the catalog's id and, in
 `metadata.extensions.eriphe`, `title`, `author`, `weight`, `why`, `tainted` (true when external)
 and `updated`.
+
+**The page and the surfaces** (`surfaces_stream.go`). `GET /events?a2ui=1` (the workspace asks
+for it; the conversation does not) adds `a2ui` events to the event stream, whose data is
+`{"seq": N, "reset": true, "messages": [<A2UI v1.0 message>, …]}`: the messages in order, `seq`
+the last one's. The first event of a connection is a snapshot (`reset`, one `createSurface` per
+surface, possibly none): the page drops the surfaces it has and applies it. So is one after the
+stream fell 256 changes behind, transparently. The SSE `id` stays the conversation's. Back from
+the page, with the session's cookie and CSRF token (401 without a session):
+
+| Endpoint | Takes | Answers |
+|---|---|---|
+| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`) | 204; 400 not a valid action, 404 no such surface, 501 an action not handled yet (only `open`, reserved, the user opened the surface) |
+| `POST /api/espace/error` | an A2UI v1.0 `error` naming its surface | 204, kept for the author (`surfaceError`); 400, 404 |
 
 ### Signing in
 

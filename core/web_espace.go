@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -24,6 +26,75 @@ func (w *web) espaceRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /espace/media", w.auth(w.handleMedia)) // surfaces_media.go
 	mux.Handle("POST /api/espace/gesture", http.MaxBytesHandler(w.auth(w.handleGesture), 4<<10))
 	mux.Handle("GET /api/proposals/{ref}", w.auth(w.handleProposal)) // web_espace_proposal.go
+	mux.Handle("POST /api/espace/action", http.MaxBytesHandler(w.auth(w.handleSurfaceAction), 64<<10))
+	mux.Handle("POST /api/espace/error", http.MaxBytesHandler(w.auth(w.handleSurfaceError), 16<<10))
+}
+
+// readEvent reads an A2UI renderer-to-agent message the page sends about a
+// surface, checked against the protocol's schema. It answers 400 itself.
+func readEvent(rw http.ResponseWriter, r *http.Request) (a2ui.Event, bool) {
+	var ev a2ui.Event
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "too large"})
+		return ev, false
+	}
+	if errs := a2ui.Eriphe().ValidateEvent(raw); len(errs) > 0 {
+		writeJSON(rw, http.StatusBadRequest, map[string]any{"error": "not an A2UI v1.0 message", "errors": errs})
+		return ev, false
+	}
+	if json.Unmarshal(raw, &ev) != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "not an A2UI v1.0 message"})
+		return ev, false
+	}
+	return ev, true
+}
+
+// handleSurfaceAction is POST /api/espace/action: an A2UI action the user
+// took on a surface (surfaceAction). 204; 400 for anything but a valid
+// action, 404 for a surface there is not, 501 for an action not handled.
+func (w *web) handleSurfaceAction(rw http.ResponseWriter, r *http.Request, _ *session) {
+	ev, ok := readEvent(rw, r)
+	if !ok {
+		return
+	}
+	if ev.Action == nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "an action, not an error"})
+		return
+	}
+	switch err := w.c.surfaceAction(r.Context(), ev.Action.SurfaceID, *ev.Action); {
+	case errors.Is(err, errNoSurface):
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": err.Error()})
+	case errors.Is(err, errActionNotHandled):
+		writeJSON(rw, http.StatusNotImplemented, map[string]string{"error": err.Error()})
+	case err != nil:
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	default:
+		rw.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleSurfaceError is POST /api/espace/error: an error the page met
+// rendering a surface, for its author (surfaceError). 204; 400 for
+// anything but a valid error about a surface, 404 for a surface there is
+// not.
+func (w *web) handleSurfaceError(rw http.ResponseWriter, r *http.Request, _ *session) {
+	ev, ok := readEvent(rw, r)
+	if !ok {
+		return
+	}
+	if ev.Error == nil || ev.Error.SurfaceID == "" {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "an error about a surface"})
+		return
+	}
+	switch err := w.c.surfaceError(ev.Error.SurfaceID, *ev.Error); {
+	case errors.Is(err, errNoSurface):
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": err.Error()})
+	case err != nil:
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	default:
+		rw.WriteHeader(http.StatusNoContent)
+	}
 }
 
 // gestureIn is a gesture of the user's on the workspace (workspace.go).

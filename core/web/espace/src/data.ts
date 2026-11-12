@@ -1,3 +1,4 @@
+import type { ActionMessage, Adapter, ErrorMessage, Message } from "./a2ui/adapter";
 import { fixtures } from "./fixtures";
 import type { Lang } from "./i18n";
 import strings from "./strings.json";
@@ -12,7 +13,12 @@ import type { Composition, Obj, Ref } from "./types";
 //   the ones they relate to;
 // - /events: the event stream, whose "attention" and "composition" events
 //   say when to read again, and "walkthrough" when Eriphe walks the user
-//   through objects (workspace_walkthrough, workspace.go);
+//   through objects (workspace_walkthrough, workspace.go); asked with
+//   a2ui=1, its "a2ui" events carry the surfaces' A2UI messages, in order,
+//   a snapshot that resets the page first (surfaces_stream.go). One stream
+//   per page, shared;
+// - POST /api/espace/action and /api/espace/error: what the user did on a
+//   surface, and what went wrong rendering one, as A2UI v1.0 messages;
 // - POST /messages: what the user writes, with the ref of the module open
 //   (about), so Eriphe knows what « ça » is;
 // - POST /api/espace/gesture: what the user opened, or what left the screen
@@ -125,25 +131,111 @@ export type Walk = { id: number; refs: Ref[] | null };
 // follow calls back when eriphe-core says the attention or the composition
 // changed, once a burst is over, and when Eriphe starts a walkthrough.
 export function follow(onChange: () => void, onWalk: (w: Walk) => void = () => {}): () => void {
-  const es = new EventSource("/events");
   let timer = 0;
   const later = () => {
     clearTimeout(timer);
     timer = window.setTimeout(onChange, 400);
   };
-  es.addEventListener("attention", later);
-  es.addEventListener("composition", later);
-  es.addEventListener("walkthrough", (e) => {
-    try {
-      onWalk(JSON.parse((e as MessageEvent).data) as Walk);
-    } catch {
-      /* not a walkthrough */
-    }
-  });
+  const offs = [
+    listen("attention", later),
+    listen("composition", later),
+    listen("walkthrough", (e) => {
+      try {
+        onWalk(JSON.parse(e.data) as Walk);
+      } catch {
+        /* not a walkthrough */
+      }
+    }),
+  ];
   return () => {
     clearTimeout(timer);
-    es.close();
+    for (const off of offs) off();
   };
+}
+
+// The event stream, one per page, open while something listens. It asks
+// for the surfaces once something listens to them; listening to them
+// opens it again, so the listener gets the snapshot that starts them.
+type Handler = (e: MessageEvent) => void;
+const handlers = new Map<string, Set<Handler>>();
+let source: EventSource | null = null;
+
+function open() {
+  source?.close();
+  source = new EventSource(handlers.has("a2ui") ? "/events?a2ui=1" : "/events");
+  for (const [type, set] of handlers) for (const h of set) source.addEventListener(type, h as EventListener);
+}
+
+function listen(type: string, h: Handler): () => void {
+  if (!handlers.has(type)) handlers.set(type, new Set());
+  handlers.get(type)!.add(h);
+  if (!source || type === "a2ui") open();
+  else source.addEventListener(type, h as EventListener);
+  return () => {
+    const set = handlers.get(type);
+    if (!set?.delete(h)) return;
+    if (set.size === 0) handlers.delete(type);
+    source?.removeEventListener(type, h as EventListener);
+    if (handlers.size === 0) {
+      source?.close();
+      source = null;
+    }
+  };
+}
+
+// The data of an "a2ui" event (a2uiEvent in surfaces_stream.go): the A2UI
+// messages of the surfaces' changes, in order; seq is the last one's.
+// reset: the surfaces the page has are dropped first.
+export type SurfaceEvent = { seq: number; reset?: boolean; messages: Message[] };
+
+// stream feeds the adapter the surfaces eriphe-core sends, and sends back
+// what the user did on them and what went wrong rendering them.
+export function stream(b: Boot, adapter: Adapter): () => void {
+  csrf = b.csrf;
+  let seq = -1;
+  const off = listen("a2ui", (e) => {
+    let ev: SurfaceEvent;
+    try {
+      ev = JSON.parse(e.data) as SurfaceEvent;
+    } catch {
+      return; /* not an a2ui event */
+    }
+    if (ev.reset) {
+      adapter.applyMessages(adapter.surfaces().map((s): Message => ({ version: "1.0", deleteSurface: { surfaceId: s.id } })));
+    } else if (ev.seq <= seq) {
+      return; // already applied
+    }
+    seq = ev.seq;
+    adapter.applyMessages(ev.messages ?? []);
+  });
+  const offAction = adapter.onAction((m) => void action(m).catch(() => false));
+  const offError = adapter.onError((m) => void renderError(m).catch(() => false));
+  return () => {
+    off();
+    offAction();
+    offError();
+  };
+}
+
+async function postJSON(path: string, body: unknown): Promise<boolean> {
+  const r = await fetch(path, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { ...json, "Content-Type": "application/json", "X-CSRF-Token": csrf },
+    body: JSON.stringify(body),
+  });
+  signedOut(r);
+  return r.ok;
+}
+
+// action sends what the user did on a surface (an A2UI action).
+export function action(m: ActionMessage): Promise<boolean> {
+  return postJSON("/api/espace/action", m);
+}
+
+// renderError sends what went wrong rendering a surface, for its author.
+export function renderError(m: ErrorMessage): Promise<boolean> {
+  return postJSON("/api/espace/error", m);
 }
 
 async function post(path: string, body: URLSearchParams): Promise<boolean> {
@@ -191,13 +283,6 @@ export async function send(text: string, about?: Ref | null): Promise<boolean> {
 
 // gesture tells eriphe-core what the user did: opened a module, or let one
 // leave the screen unopened. Nothing waits on it.
-export async function gesture(what: "opened" | "ignored", ref: Ref, title: string): Promise<boolean> {
-  const r = await fetch("/api/espace/gesture", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { ...json, "Content-Type": "application/json", "X-CSRF-Token": csrf },
-    body: JSON.stringify({ what, ref, title }),
-  });
-  signedOut(r);
-  return r.ok;
+export function gesture(what: "opened" | "ignored", ref: Ref, title: string): Promise<boolean> {
+  return postJSON("/api/espace/gesture", { what, ref, title });
 }

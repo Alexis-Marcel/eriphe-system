@@ -49,7 +49,8 @@ import (
 // pending or running (while), or its author gone (kept).
 //
 // Every change goes out as A2UI messages, numbered in order, to whoever
-// subscribed (surfaceSubscribe): the workspace's event stream (#419).
+// subscribed (surfaceSubscribe): the workspace's event stream
+// (surfaces_stream.go).
 
 const surfacesSchema = `CREATE TABLE IF NOT EXISTS surfaces (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, author TEXT NOT NULL,
@@ -173,6 +174,10 @@ type surfaceLook struct {
 	AuthorTaint []string               `json:"author_taint,omitempty"`
 	Read        int64                  `json:"read,omitempty"` // the last read of all its sources, unix
 	Sources     map[string]sourceState `json:"sources,omitempty"`
+	// What came back about it (surfaces_stream.go): the user's last
+	// action on it, the last error for its author to fix.
+	Action    *surfaceActed     `json:"action,omitempty"`
+	LastError *surfaceLastError `json:"last_error,omitempty"`
 }
 
 // sourceState is a source's last read: when, and why it failed or waits.
@@ -940,8 +945,8 @@ func (c *core) authorLive(author string) bool {
 }
 
 // surfaceOpened reads a surface's sources again because the user opened
-// it, unless they were read moments ago. The workspace's action endpoint
-// calls it (#419).
+// it, unless they were read moments ago. The page's action "open" calls it
+// (surfaceAction).
 func (c *core) surfaceOpened(ctx context.Context, id string) error {
 	s, err := c.surface(id)
 	if err != nil {

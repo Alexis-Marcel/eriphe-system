@@ -6,7 +6,7 @@ import { catalog } from "./catalog";
 // rest of the page knows only this. It feeds the engine the messages core
 // sends (createSurface, updateComponents, updateDataModel, deleteSurface)
 // and hands back, as A2UI v1.0 messages ready to send, what the user did
-// (action) and what went wrong (error). The transport is data.ts's (#419).
+// (action) and what went wrong (error). The transport is data.ts's (stream).
 
 // What eriphe-core sends: A2UI v1.0 agent-to-renderer messages.
 export type Message = { version: "1.0" } & (
