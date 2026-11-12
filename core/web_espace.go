@@ -21,6 +21,7 @@ func (w *web) espaceRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /espace", w.auth(w.handleEspace))
 	mux.Handle("GET /espace/boot", w.auth(w.handleEspaceBoot))
 	mux.Handle("GET /espace/catalog/v1.json", w.auth(w.handleEspaceCatalog))
+	mux.Handle("GET /espace/media", w.auth(w.handleMedia)) // surfaces_media.go
 	mux.Handle("POST /api/espace/gesture", http.MaxBytesHandler(w.auth(w.handleGesture), 4<<10))
 }
 

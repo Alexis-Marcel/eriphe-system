@@ -2914,6 +2914,76 @@ tests (`a2ui/testdata/conformance`, with their notice), as their runner runs the
 To move to a newer A2UI release, copy its `specification/v1_0/json` and test cases over these
 and update the commit in the two `NOTICE` files.
 
+### Surfaces and their sources (`surfaces.go`)
+
+A surface is one tile of the workspace, stored with its **author** (`brain`, `skill:<name>`,
+`lead:<session>`, `task:<id>`): a title, A2UI components, data, **sources**, a refresh, a
+**lifetime**, a weight (1 to 100, 50 by default) and a why. A model writes it; code keeps its
+data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
+author declares, so a tool linked tomorrow is a source with no code (`TestNoToolInSurfaces` holds
+the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider or host name;
+`TestSurfaceFromAnyTool` serves a live surface from a fake server nobody wrote for).
+
+- **Sources**: a JSON pointer of the data model (not the root, none inside another) →
+  `{"tool": "server/tool", "args": {…}}` or `{"resource": "server", "uri": "…"}`. Code runs it as
+  a monitor runs its look (`sourceWhy`, `readSource` in `monitors.go`): a tool must be one of the
+  brain's, read-only by its own annotation and a free read in the user's grid (with its
+  arguments); a resource must be listed by its server. Checked when written and before every
+  read (refused, it waits with why, nothing called). 20 s per read, 256 KiB per result, 8 sources.
+  The result is put at the pointer as it came (structured content, else text read as JSON),
+  never understood. A server not trusted taints the surface (`tainted`: its sources, and the
+  author's turn taint it is written with).
+- **Live binding check**: each path the components bind (`a2ui.Catalog.BoundPaths`: absolute,
+  `*` for each item of a template's list) must exist: under a source, in its first result or in
+  its tool's `outputSchema`; elsewhere, in the composed data. A source that could not be read and
+  has no schema, or an empty list, cannot tell: not checked. Otherwise the author gets an A2UI
+  validation error at the binding (`/components/1/value/@path`), with the fields that are there.
+- **Two ways to fill it**: live (sources, read again by code) or composed once (`data`, the values
+  the author wrote, dated by `data_at`); both at once is allowed.
+- **Refresh, never by a model**: on a resource's update (the pool subscribes to the resources
+  surfaces read, `resources/subscribe`, again after each reconnection; `pool_follow.go`), every
+  `refresh.every` minutes (1 to 1440; 5 by default with sources) on the monitors' loop
+  (`runMonitors` → `tickSurfaces`), and when the user opens it (`surfaceOpened`, not within 30 s
+  of the last read). One refresh of a surface at a time; one asked meanwhile runs right after, and
+  a read whose source was replaced meanwhile is dropped. Only a source whose value changed goes
+  out, as `updateDataModel` at its pointer; a taint that appears or goes sends the surface again.
+- **Lifetime**, one of: `until` a date (90 days at most), `while` a ref is pending or running
+  (`task:<id>` not over nor idle, `session:<id>` not ended, `card:<id>` waiting), or `kept` while
+  its author is there (a skill that exists, a lead's session not ended, a task running; the brain
+  always). None given: until a day later. Code removes an ended one on the monitors' loop.
+- **Who writes**: only its author writes it again (another author's id is refused) or removes
+  it; the user and code remove any. 100 surfaces, components and data of 64 KiB each.
+- **Media**: the page never loads an address from outside (A2UI #4045; the CSP forbids it
+  anyway). Each media address (an `Image`'s `url`, `a2ui.IsMedia`) is rewritten to
+  `GET /espace/media?u=<address>&s=<signature>` (`surfaces_media.go`, with a session): one a
+  source gave, and one the author wrote unless its turn was tainted (a model that read something
+  from outside could carry it out in an address: dropped); anything but http(s) is dropped. The
+  endpoint serves only an address eriphe-core signed (a key per process), fetches it on a public
+  address only (the accesses' dialer: never its own network, the LAN or the cloud's metadata),
+  without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
+  `nosniff`, a sandbox CSP and 10 minutes of private cache.
+- Table `surfaces` (id, title, author, components, sources, data, data_at, refresh, lifetime,
+  weight, why, tainted, look: its sources' last reads, next_at, created, updated).
+
+**Go API** (for the workspace's stream, #419, and the assistants' tools, #421):
+
+| Call | Does |
+|---|---|
+| `c.surfaceWrite(author, surfaceIn) (surface, []a2ui.ValidationError, error)` | writes a new surface (`ID` empty or free) or the author's own again; validation errors for the A2UI and the bindings, an error for the rest (a refused source, a field) |
+| `c.surfaceRemove(id, by) error` | by its author, `surfaceByUser` or `surfaceByLifetime` |
+| `c.surfaces() ([]surface, error)`, `c.surface(id) (surface, error)` | all (heaviest, then latest first), one (`errNoSurface`) |
+| `c.surfaceOpened(ctx, id) error` | the user opened it: its sources read again |
+| `c.surfaceSubscribe() (snapshot []surfaceChange, changes <-chan surfaceChange, cancel func())` | the surfaces now (one `createSurface` each), then every change, nothing missed between |
+
+A change is `{seq, message}`: one A2UI message (`createSurface`, `updateComponents`,
+`updateDataModel`, `deleteSurface`), `seq` growing by one in the order they are sent (from 0 at
+each start of eriphe-core: a page that reconnects starts from a snapshot). A subscriber 256
+changes behind has its channel closed: it subscribes again. A surface written again sends its
+components and its whole data, or, when a component went away or its title, weight, why or taint
+changed, `deleteSurface` then `createSurface`. `createSurface` carries the catalog's id and, in
+`metadata.extensions.eriphe`, `title`, `author`, `weight`, `why`, `tainted` (true when external)
+and `updated`.
+
 ### Signing in
 
 The workspace has one owner; how they sign in is set in Settings → Access → Web workspace → Connexion, or in

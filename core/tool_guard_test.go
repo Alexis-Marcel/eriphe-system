@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -93,5 +94,115 @@ func f(p string) bool { return p == "github" || len(mailService.ID) > 0 }
 	hits := toolHits(t, file)
 	if len(hits) != 2 || !strings.Contains(hits[0], `"github"`) || !strings.Contains(hits[1], "mailService") {
 		t.Fatalf("hits %v", hits)
+	}
+}
+
+// workspaceFiles are the workspace's surfaces and what they stand on: no
+// tool or server is known there, so a tool linked tomorrow is a source
+// with no code (#415).
+var workspaceFiles = []string{"surfaces.go", "surfaces_media.go", "pool_follow.go", "a2ui/*.go"}
+
+// toolWords are the names a tool goes by in eriphe-core's own data, taken
+// from the data so a preset added is guarded too: words, the names of
+// Eriphe's own presets, cards and sign-in providers, which no identifier
+// or string may hold; names, those of the gallery's presets (everyday
+// words, buffer or make) and their hosts, which no string may be.
+func toolWords() (words, names map[string]bool) {
+	words, names = map[string]bool{}, map[string]bool{}
+	norm := regexp.MustCompile(`[^a-z0-9]+`)
+	add := func(s string) {
+		for _, w := range identWords(s) {
+			words[w] = true
+		}
+		if s != "" {
+			names[norm.ReplaceAllString(strings.ToLower(s), "")] = true
+		}
+	}
+	for _, p := range toolPresets {
+		if p.Category != "" {
+			names[norm.ReplaceAllString(strings.ToLower(p.ID), "")] = true
+			if u, err := url.Parse(p.URL); err == nil && u.Hostname() != "" {
+				names[u.Hostname()] = true
+			}
+			continue
+		}
+		if p.ID == "remote" || p.ID == "local" {
+			continue // the forms of a tool of one's own, not a tool
+		}
+		add(p.ID)
+		add(p.Name)
+	}
+	for _, c := range toolCards {
+		add(c.ID)
+		add(c.Base)
+		add(c.Preset)
+	}
+	for name := range signInProviders {
+		add(name)
+	}
+	return words, names
+}
+
+// identWords splits an identifier or a string into lowercase words, at
+// case changes and anything not a letter or a digit.
+func identWords(s string) []string {
+	s = regexp.MustCompile(`([a-z0-9])([A-Z])`).ReplaceAllString(s, "$1 $2")
+	return regexp.MustCompile(`[a-z0-9]+`).FindAllString(strings.ToLower(s), -1)
+}
+
+// The workspace's surfaces name no tool, server or provider, in code or
+// strings (comments aside): what a source reads is the author's data.
+func TestNoToolInSurfaces(t *testing.T) {
+	words, names := toolWords()
+	if !words["mail"] || !names["github"] || !names["buffer"] || len(words) < 5 {
+		t.Fatalf("words %v, names %v", words, names)
+	}
+	for _, pattern := range workspaceFiles {
+		files, _ := filepath.Glob(pattern)
+		if len(files) == 0 {
+			t.Fatalf("no file %s", pattern)
+		}
+		for _, f := range files {
+			if strings.HasSuffix(f, "_test.go") {
+				continue
+			}
+			src, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, f, src, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ast.Inspect(file, func(n ast.Node) bool {
+				var s string
+				switch x := n.(type) {
+				case *ast.ImportSpec:
+					return false
+				case *ast.Ident:
+					s = x.Name
+				case *ast.BasicLit:
+					s = x.Value
+					lit := strings.ToLower(strings.Trim(s, "`\""))
+					if names[regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(lit, "")] {
+						t.Errorf("%s names a tool: %s", fset.Position(n.Pos()), s)
+					}
+					for host := range names {
+						if strings.Contains(host, ".") && strings.Contains(lit, host) {
+							t.Errorf("%s names a tool's host: %s", fset.Position(n.Pos()), s)
+						}
+					}
+				default:
+					return true
+				}
+				for _, w := range identWords(s) {
+					if words[w] {
+						t.Errorf("%s names a tool: %q in %s", fset.Position(n.Pos()), w, s)
+					}
+				}
+				return true
+			})
+		}
 	}
 }
