@@ -97,7 +97,7 @@ func parseEnd(s string) (time.Time, error) {
 type rememberIn struct {
 	Text       string   `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact (not as an instruction)"`
 	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, commitment, lesson, decision (a choice and its reason), progress (the current state of a project or goal: done, under way, blocked, left) or situation (where the user is or what they do for a while, with valid_to: « en vacances à Lyon jusqu'à dimanche »)"`
-	Subject    string   `json:"subject,omitempty" jsonschema:"owner, person:<slug>, client:<slug>, project:<name>, home, or a short free subject"`
+	Subject    string   `json:"subject,omitempty" jsonschema:"owner, person:<slug>, client:<slug>, project:<name>, home, workspace (how the user wants the composed workspace: a preference), or a short free subject"`
 	Links      []string `json:"links,omitempty" jsonschema:"where the details are: vault wikilinks or paths, URLs without tokens; never copy the vault"`
 	ValidFrom  string   `json:"valid_from,omitempty" jsonschema:"when it became true, YYYY-MM-DD; now by default"`
 	ValidTo    string   `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD (the whole day) or YYYY-MM-DDTHH:MM; required for a situation"`
@@ -299,7 +299,9 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 		}
 		return out, err
 	}
-	if h := rememberRedirect(strings.TrimSpace(in.Kind), in.Text); h != "" && !in.AboutConversation {
+	// How the user wants the workspace is a preference the composer reads,
+	// whatever its words (workspace.go).
+	if h := rememberRedirect(strings.TrimSpace(in.Kind), in.Text); h != "" && !in.AboutConversation && normalizeSubject(in.Subject) != workspaceSubject {
 		return nil, errors.New("not remembered: " + h)
 	}
 	x := &Memory{Kind: strings.TrimSpace(in.Kind), Subject: in.Subject, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes,

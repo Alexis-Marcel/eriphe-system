@@ -16,7 +16,8 @@ import (
 // conversation), "cards" (cards that changed), "attention" (the
 // attention queue, JSON: attention.go) and "composition" (the workspace's
 // composition, JSON: composer.go), each sent only when it differs from the
-// last one. Every
+// last one, and "walkthrough" (a walkthrough the brain asked for, JSON:
+// workspace.go), once. Every
 // event carries the last message's seq as its id, so a reconnecting
 // browser picks up where it left.
 func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -44,6 +45,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 
 	var lastTasks, lastPending, lastDraft, lastAttention, lastComposition string
 	lastCards := map[int64]string{}
+	walkSeen := w.c.walkSeenAt(time.Now())
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	quiet, panelsAt, woken := time.Now(), time.Time{}, true
@@ -119,6 +121,13 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 					writeEvent(rw, "composition", after, string(raw))
 					lastComposition, sent = string(raw), true
 				}
+			}
+		}
+		// A walkthrough the brain asked for (workspace_walkthrough), once.
+		if wk := w.c.lastWalk(); wk.ID > walkSeen {
+			if raw, err := json.Marshal(wk); err == nil {
+				writeEvent(rw, "walkthrough", after, string(raw))
+				walkSeen, sent = wk.ID, true
 			}
 		}
 		// A notification routed to this tab, in front of the user (route_send.go).

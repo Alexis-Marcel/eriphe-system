@@ -64,7 +64,6 @@ type core struct {
 	obs         observations           // the machines' locked, idle, do not disturb, in memory only (observe.go)
 	events      eventBus               // the event journal's subscribers (event_journal.go)
 	skillRuns   skillRunner            // the triggered skills (skill_runs.go)
-	ruleCache   ruleAttrCache          // the objects' attributes the user's rules match (attention_rules.go)
 	out         channelOut             // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
 	composer    composerState          // the workspace's composition (composer.go)
