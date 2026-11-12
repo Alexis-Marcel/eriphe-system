@@ -285,6 +285,10 @@ type runRequest struct {
 	// something (contract.go); none for a search or a read.
 	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something: objective (required), constraints, checks, evidence, verify, budget; leave it out for a search or a read. Approval is never part of it: the policy decides"`
 
+	// Surface: the task fills this surface of the workspace, a placeholder
+	// the brain wrote at once (workspace_tools.go).
+	Surface string `json:"surface,omitempty" jsonschema:"the id of a surface you wrote as a placeholder, for this task to fill: it is lent the workspace and writes that surface only"`
+
 	// Tools is an assistant's grant, never a brain's call.
 	Tools []string `json:"-"`
 

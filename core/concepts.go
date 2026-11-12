@@ -26,6 +26,7 @@ var concepts = []concept{
 	{"monitor", "write_monitor, monitors", "know that something changed in a tool that does not tell by itself (Grafana's alerts, a status page): eriphe-core calls it at an interval, without a model, and writes an event a skill reacts to; never a time skill that calls the tool"},
 	{"rule", "rule", "what to do with notifications about a topic (now, brief, never, even at night, which lines), and the quiet hours"},
 	{"workspace", "workspace_show, workspace_walkthrough", "the composed workspace: put objects in front now, walk the user through them; how the user wants it in general (what in front, what less, what never) is a preference memory with subject workspace, which its composer reads"},
+	{"surface", "surface_write, surface_remove, workspace_read, catalog_read", "show the user something on their workspace when they ask to see it: a surface (a tile) live from any tool you read freely (sources), or composed by a task (a placeholder at once, run_task with surface); what they want to see every morning is a skill that keeps its surface; components are shapes, never tool names"},
 	{"setting", "setting", "how the user is told in general: device order, lines off, daily cap, time zone, a channel's detail, an urgent skill said aloud"},
 	{"where", "where_now", "where a notification would reach the user now: lines, devices, the room a voice channel says they are in"},
 	{"notify", "notify, notifications", "say something on your own, now or for the brief, under a known topic ref"},
@@ -34,7 +35,7 @@ var concepts = []concept{
 	{"session", "start_session, session_status, settle_step, amend_session", "work of several steps toward one goal (a plan, steps in parallel, checkpoints for the user), not only code"},
 }
 
-const conceptMapEN = "memory, intention, skill, monitor, rule, workspace, setting, where, notify, since, task, session"
+const conceptMapEN = "memory, intention, skill, monitor, rule, workspace, surface, setting, where, notify, since, task, session"
 
 var conceptLinesEN = func() string {
 	var b strings.Builder

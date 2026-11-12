@@ -147,6 +147,11 @@ type surfaceIn struct {
 	// Tainted is why what the author wrote may come from outside: the
 	// turn's taint (turnTaint) of the assistant that writes it.
 	Tainted []string `json:"-"`
+	// wait caps the sources' first read (0: each its whole timeout). A
+	// source still reading then is accepted waiting, read on in the
+	// background, and its bindings checked when it comes
+	// (workspace_tools.go: an author's turn is never held long).
+	wait time.Duration
 }
 
 // surface is one stored surface.
@@ -323,14 +328,18 @@ func (c *core) surfaceWrite(author string, in surfaceIn) (surface, []a2ui.Valida
 	if errs := a2ui.ValidateSurface(a2ui.Surface{ID: in.ID, Components: in.Components, DataModel: rawComposed}); len(errs) > 0 {
 		return surface{}, errs, nil
 	}
-	// The author's own surface only; the id of another's is taken.
-	if old, err := c.surface(in.ID); err == nil && old.Author != author {
+	if errs := askGuard(in.ID, in.Components, len(in.Tainted) > 0); len(errs) > 0 {
+		return surface{}, errs, nil
+	}
+	// The author's own surface only (the brain writes any, which stays its
+	// author's); the id of another's is taken.
+	if old, err := c.surface(in.ID); err == nil && !mayChange(author, old.Author) {
 		return surface{}, nil, fmt.Errorf("the surface %s is %s's: write another id", in.ID, old.Author)
 	}
 
-	// Its sources, read once (no lock held: a tool may be slow).
-	ctx := context.Background()
-	reads := c.readSources(ctx, in.Sources, nil)
+	// Its sources, read once (no lock held: a tool may be slow); those
+	// still reading after in.wait go on in the background.
+	reads, late := c.readSourcesWithin(in.Sources, in.wait)
 	data, err := mergeSources(composed, in.Sources, reads)
 	if err != nil {
 		return surface{}, nil, err
@@ -358,7 +367,7 @@ func (c *core) surfaceWrite(author string, in surfaceIn) (surface, []a2ui.Valida
 	c.surf.mu.Lock()
 	old, err := c.surface(in.ID)
 	switch {
-	case err == nil && old.Author != author:
+	case err == nil && !mayChange(author, old.Author):
 		c.surf.mu.Unlock()
 		return surface{}, nil, fmt.Errorf("the surface %s is %s's: write another id", in.ID, old.Author)
 	case errors.Is(err, errNoSurface):
@@ -391,7 +400,16 @@ func (c *core) surfaceWrite(author string, in surfaceIn) (surface, []a2ui.Valida
 	}
 	c.surf.mu.Unlock()
 	c.followSurfaceResources()
+	if err == nil && late != nil {
+		go c.surfaceLateReads(s, late)
+	}
 	return s, nil, err
+}
+
+// mayChange tells whether an author may write or remove a surface of
+// owner's: its own; the brain any.
+func mayChange(author, owner string) bool {
+	return author == owner || author == surfaceAuthorBrain
 }
 
 // surfaceRemove removes a surface: by its author, the user (surfaceByUser)
@@ -403,7 +421,7 @@ func (c *core) surfaceRemove(id, by string) error {
 		c.surf.mu.Unlock()
 		return err
 	}
-	if by != s.Author && by != surfaceByUser && by != surfaceByLifetime {
+	if !mayChange(by, s.Author) && by != surfaceByUser && by != surfaceByLifetime {
 		c.surf.mu.Unlock()
 		return fmt.Errorf("the surface %s is %s's", id, s.Author)
 	}
@@ -1026,12 +1044,15 @@ func (c *core) refreshOnce(ctx context.Context, id string, only []string, now ti
 	if err != nil {
 		return
 	}
-	readFrom := s.Sources
-	reads := c.readSources(ctx, s.Sources, only)
+	c.applyReads(id, s.Sources, c.readSources(ctx, s.Sources, only), only, now)
+}
 
+// applyReads puts what the sources readFrom gave (those at only, if given)
+// in the surface as it is now, and sends the paths whose value changed.
+func (c *core) applyReads(id string, readFrom map[string]surfaceSource, reads map[string]sourceRead, only []string, now time.Time) {
 	c.surf.mu.Lock()
 	defer c.surf.mu.Unlock()
-	s, err = c.surface(id) // it may have changed meanwhile
+	s, err := c.surface(id) // it may have changed meanwhile
 	if err != nil {
 		return
 	}

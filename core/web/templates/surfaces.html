@@ -1,0 +1,26 @@
+{{/* Settings → Surfaces (web_surfaces.go). */}}
+{{define "i-surface"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5"/><rect x="13" y="3.5" width="7.5" height="4.5" rx="1.5"/><rect x="13" y="10" width="7.5" height="10.5" rx="1.5"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="1.5"/></svg>{{end}}
+
+{{define "surfaces"}}
+<header class="page-head"><h2>{{t "settings.surfaces"}}</h2><p>{{t "surfaces.lead"}}</p></header>
+{{if .Data}}
+<ul class="grid">
+{{range .Data}}
+  <li class="tile surface" id="surface-{{.ID}}">
+    <div class="tile-head">
+      {{if .Waiting}}<span class="tag tag-warn">{{t "surfaces.waiting"}}</span>{{end}}
+      {{if .Tainted}}<span class="tag" title="{{t "surfaces.taintedhint"}}">{{t "surfaces.tainted"}}</span>{{end}}
+    </div>
+    <h3 class="tile-title">{{template "i-surface"}}<span>{{.Title}}</span></h3>
+    <p class="small">{{tf "surfaces.author" .Author}}</p>
+    <p class="muted small">{{if .Sources}}{{tf "surfaces.sources" (join .Sources ", ")}}{{else}}{{t "surfaces.composed"}}{{end}}</p>
+    <p class="muted small">{{tf "surfaces.updated" .Updated}}{{with .Lifetime}} · {{.}}{{end}}</p>
+    {{with .Error}}<p class="notice small" role="status">{{tf "surfaces.error" .}}</p>{{end}}
+    <div class="form-actions">
+      <button class="btn btn-ghost sm" hx-post="/settings/surfaces/{{.ID}}/remove" hx-confirm="{{tf "surfaces.removeconfirm" .Title}}">{{t "surfaces.remove"}}</button>
+    </div>
+  </li>
+{{end}}
+</ul>
+{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-surface"}}</span><p>{{t "surfaces.none"}}</p></div>{{end}}
+{{end}}
