@@ -68,6 +68,7 @@ type core struct {
 	out         channelOut             // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
 	composer    composerState          // the workspace's composition (composer.go)
+	surf        surfaceHub             // the surfaces' changes and their subscribers (surfaces.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)
 	// minters are the providers whose connections core mints tokens for,
@@ -116,6 +117,7 @@ func newCore(cfg *Config, store *Store) *core {
 	c.pool.connToken = c.connectionToken // a tool on a connection that mints its tokens
 	c.pool.connRefused = c.connectionRefused
 	c.pool.authHold = c.connectionHold // an account to connect again (connections.go)
+	c.pool.resourceUpdated = c.surfaceResourceUpdated
 	// Local servers are services, reached on their node.
 	c.pool.dialLocal = func(ctx context.Context, name string, _ json.RawMessage) (mcp.Transport, error) {
 		return c.dialService(ctx, name)

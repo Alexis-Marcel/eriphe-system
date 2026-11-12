@@ -50,6 +50,9 @@ type pool struct {
 	// again (a connection its provider refused, connections.go): why, and where the
 	// user does it; "" when it does not wait.
 	authHold func(name string) (why, where string)
+	// resourceUpdated is told when a server says one of the resources
+	// followed changed (pool_follow.go); it must return fast.
+	resourceUpdated func(server, uri string)
 
 	mu      sync.Mutex
 	ctx     context.Context // set by run; servers added later start in it
@@ -69,6 +72,7 @@ type upstream struct {
 	session   *mcp.ClientSession
 	tools     []*mcp.Tool
 	resources []string  // its resources' URIs, which a monitor may read (monitors.go)
+	followed  []string  // the resources whose updates eriphe-core wants (pool_follow.go)
 	needsAuth string    // why the server wants an authorization, set by the OAuth gate
 	flow      *authFlow // a `eriphe connect` in progress
 	// The OAuth client typed in the form of a pending server, in memory
@@ -329,6 +333,11 @@ func (u *upstream) open(ctx context.Context) (*mcp.ClientSession, error) {
 		ResourceListChangedHandler: func(context.Context, *mcp.ResourceListChangedRequest) {
 			go u.refreshResources()
 		},
+		ResourceUpdatedHandler: func(_ context.Context, r *mcp.ResourceUpdatedNotificationRequest) {
+			if r != nil && r.Params != nil {
+				u.updated(r.Params.URI)
+			}
+		},
 	})
 	sess, err := client.Connect(ctx, tr, nil)
 	if err != nil {
@@ -343,6 +352,7 @@ func (u *upstream) open(ctx context.Context) (*mcp.ClientSession, error) {
 	u.session, u.tools, u.resources, u.status, u.err = sess, tools, nil, statusReady, ""
 	u.mu.Unlock()
 	go u.refreshResources()
+	go u.resubscribe()
 	return sess, nil
 }
 

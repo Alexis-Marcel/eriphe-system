@@ -257,7 +257,7 @@ func (c *core) monitorWhy(s monitorSpec) string {
 
 // sourceWhy is why eriphe-core may not look at a monitor's source by
 // itself, "" if it may: a free read of the brain's, or a resource the
-// server lists.
+// server lists. A surface's source is held to the same (surfaces.go).
 func (c *core) sourceWhy(s monitorSpec) string {
 	u := c.pool.get(s.Server)
 	if _, ok := c.conf().Servers[s.Server]; !ok || u == nil {
@@ -287,7 +287,9 @@ func (c *core) runMonitors(ctx context.Context) {
 	tick := time.NewTicker(monitorsTickEvery)
 	defer tick.Stop()
 	for {
-		c.tickMonitors(ctx, c.notifyTime())
+		now := c.notifyTime()
+		c.tickMonitors(ctx, now)
+		c.tickSurfaces(ctx, now) // their sources' intervals and lifetimes (surfaces.go)
 		select {
 		case <-ctx.Done():
 			return
@@ -370,18 +372,31 @@ func (c *core) noteLook(m *monitor, st *monitorLook, err error) bool {
 // callMonitor calls the tool, or reads the resource, and extracts what the
 // monitor compares.
 func (c *core) callMonitor(ctx context.Context, s monitorSpec) (any, error) {
+	v, err := c.readSource(ctx, s, monitorTimeout)
+	if err != nil {
+		return nil, err
+	}
+	return extract(v, s.Path)
+}
+
+// readSource is a read of eriphe-core's own, outside any task: the spec's
+// tool called with its arguments, or its resource read, within timeout.
+// Its result is data (resultValue, resourceValue), never understood.
+// Monitors and the workspace's surfaces (surfaces.go) read through it,
+// once sourceWhy let them.
+func (c *core) readSource(ctx context.Context, s monitorSpec, timeout time.Duration) (any, error) {
 	u := c.pool.get(s.Server)
 	if u == nil {
 		return nil, errors.New("server gone")
 	}
-	ctx, cancel := context.WithTimeout(ctx, monitorTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if s.Resource != "" {
 		res, err := u.read(ctx, s.Resource)
 		if err != nil {
 			return nil, err
 		}
-		return extract(resourceValue(res), s.Path)
+		return resourceValue(res), nil
 	}
 	var args json.RawMessage
 	if s.Args != nil {
@@ -398,7 +413,7 @@ func (c *core) callMonitor(ctx context.Context, s monitorSpec) (any, error) {
 		}
 		return nil, errors.New(text)
 	}
-	return extract(resultValue(res), s.Path)
+	return resultValue(res), nil
 }
 
 // lookChanged compares the value with the last one; true when a change
