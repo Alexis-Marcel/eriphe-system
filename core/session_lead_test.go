@@ -26,7 +26,7 @@ func TestSessionLead(t *testing.T) {
 	if !strings.Contains(leadInstructions(c, a, ""), "Find a name for the shop.") {
 		t.Error("the lead does not know its goal")
 	}
-	if got := leadToolNames(t, c, a); !slices.Equal(got, []string{"amend_session", "end_session", "report", "session", "settle_step"}) {
+	if got := leadToolNames(t, c, a); !slices.Equal(got, []string{"amend_session", "catalog_read", "end_session", "report", "session", "settle_step", "surface_remove", "surface_write", "workspace_read"}) {
 		t.Errorf("lead tools %v", got)
 	}
 

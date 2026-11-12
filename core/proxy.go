@@ -75,6 +75,11 @@ func (c *core) taskMCPHandler() http.Handler {
 			return
 		}
 		grant := c.taskGrant(t)
+		if server == workspaceServer && slices.Contains(grantServers(grant), server) {
+			// A server Eriphe provides, lent like any (workspace_tools.go).
+			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskWorkspaceServer(t, grant))))
+			return
+		}
 		if !slices.Contains(grantServers(grant), server) || c.pool.get(server) == nil {
 			http.Error(w, "this task has no access to "+server, http.StatusForbidden)
 			return
@@ -214,7 +219,7 @@ func (c *core) actingGrant(grant []string) []string {
 func (c *core) specServers(t *TaskRow) []string {
 	var out []string
 	for _, s := range grantServers(c.taskGrant(t)) {
-		if _, ok := c.conf().Servers[s]; ok {
+		if _, ok := c.conf().Servers[s]; ok || providedServer(s) {
 			out = append(out, s)
 		}
 	}

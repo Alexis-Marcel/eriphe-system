@@ -229,6 +229,7 @@ func (c *core) queueLead(s Session, text string, taint []string) {
 func registerLeadTools(c *core, s *mcp.Server, a Assistant) {
 	id := leadSession(a)
 	by := "lead"
+	c.registerLeadSurfaceTools(s, a) // its session's surfaces (workspace_tools.go)
 	tool(s, "session", "Your session as it is now: its goal, done_when, state, budget and time spent, each step (status, task, evidence, output, your last note) and the recent log.",
 		func(ctx context.Context, _ struct{}) (sessionView, error) { return c.sessionView(id, 30) })
 	tool(s, "settle_step", "Judge a step that reported its work or stopped, on its evidence: accept, retry (at most 2 per step; say what to fix) or reject. A step whose checks failed cannot be accepted.",

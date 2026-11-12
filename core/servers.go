@@ -115,7 +115,7 @@ func (s Server) authKind() string {
 var serverName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
 
 // reserved are the names of the MCP servers a task already has.
-var reserved = []string{"eriphe-core", "eriphe-node", taskMemServer}
+var reserved = []string{"eriphe-core", "eriphe-node", taskMemServer, workspaceServer}
 
 func (c *Config) checkServers() error {
 	for name, s := range c.Servers {
@@ -206,7 +206,7 @@ func (c *Config) checkGrant(grant []string) ([]string, error) {
 	for _, g := range grant {
 		g = strings.TrimSpace(g)
 		server, _, _ := strings.Cut(g, ".")
-		if _, ok := c.Servers[server]; !ok {
+		if _, ok := c.Servers[server]; !ok && !providedServer(server) {
 			return nil, fmt.Errorf("unknown server %q (see list_tools)", server)
 		}
 		if err := checkGrantEntry(g); err != nil {

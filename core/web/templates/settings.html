@@ -9,6 +9,7 @@
     {{else if eq .Tab "folders"}}{{template "folders" .}}
     {{else if eq .Tab "skills"}}{{if eq .View "skill"}}{{template "skill-page" .}}{{else}}{{template "skills" .}}{{end}}
     {{else if eq .Tab "monitors"}}{{if eq .View "monitor"}}{{template "monitor-page" .}}{{else}}{{template "monitors" .}}{{end}}
+    {{else if eq .Tab "surfaces"}}{{template "surfaces" .}}
     {{else if eq .Tab "access"}}{{template "access-page" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
     {{else if eq .Tab "learned"}}{{template "learned-page" .}}
