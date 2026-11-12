@@ -27,6 +27,7 @@ type core struct {
 	token string      // eriphe-core's own API token; the brain gets one derived from it, at self_url (assistantToken)
 	self  *mcp.Server // eriphe-core's own MCP server, also relayed to the brain by its node
 	pool  *pool       // the catalog's upstream sessions
+	cimd  cimdCache   // which servers take Eriphe's published client only (cimd.go)
 
 	started time.Time // when this eriphe-core started (the brain waits for the catalog, brain.go)
 

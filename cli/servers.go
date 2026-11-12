@@ -34,6 +34,10 @@ type Server struct {
 	ToolCount   int    `json:"tool_count"`
 }
 
+// defaultCallbackPort is the port of the loopback redirect in Eriphe's
+// published OAuth client document (site/oauth/client.json).
+const defaultCallbackPort = "8976"
+
 // Servers lists the tool catalog.
 func (c *Client) Servers(ctx context.Context) ([]Server, error) {
 	var out []Server
@@ -163,8 +167,9 @@ func connect(ctx context.Context, c *Client, w io.Writer, name string, open func
 		return fmt.Errorf("%s does not use OAuth (%s): nothing to connect", name, srv.Auth)
 	}
 	// The port of the registered redirect if there is one: the client is
-	// registered for it. Otherwise any free port.
-	addr := "127.0.0.1:0"
+	// registered for it. Otherwise Eriphe's published client's, 8976 (a
+	// server that takes only that client needs it), or any free port.
+	addr := "127.0.0.1:" + defaultCallbackPort
 	if u, err := url.Parse(srv.RedirectURI); err == nil && u.Port() != "" {
 		addr = "127.0.0.1:" + u.Port()
 	}

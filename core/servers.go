@@ -77,7 +77,9 @@ type ServerAuth struct {
 
 // OAuthConfig configures the authorization code flow of the MCP
 // authorization spec. Without a client, eriphe-core uses a Client ID
-// Metadata Document if given and supported, else registers itself (DCR).
+// Metadata Document if given and supported, else registers itself (DCR),
+// else, when the server takes neither, signs in with Eriphe's published
+// client (cimd.go).
 type OAuthConfig struct {
 	Scopes           []string `json:"scopes,omitempty"`              // empty: what the server advertises
 	ClientIDFile     string   `json:"client_id_file,omitempty"`      // a pre-registered client

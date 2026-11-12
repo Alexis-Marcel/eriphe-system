@@ -906,12 +906,13 @@ func (w *web) handleSaveTool(rw http.ResponseWriter, r *http.Request, s *session
 	// OAuth: saving and signing in are one action. The entry stays pending
 	// until the service authorizes Eriphe (pending.go). Only an edit of a
 	// server already on OAuth may be saved as is; a client that only knows a
-	// loopback redirect keeps the save-then-paste way.
+	// loopback redirect keeps the save-then-paste way, and so does a server
+	// that takes Eriphe's published client only (cimd.go).
 	// A new level its credential cannot serve signs in again, for a token
 	// of that level.
 	plainSave := r.PostFormValue("connect") == "" && old != nil && old.authKind() == "oauth" &&
 		!slices.Contains(w.reauthLevels(name, *old), srv.level())
-	if srv.authKind() == "oauth" && srv.Auth.OAuth.RedirectURI == "" && !plainSave {
+	if srv.authKind() == "oauth" && srv.Auth.OAuth.RedirectURI == "" && !plainSave && !w.c.usesBuiltinClient(r.Context(), name, srv, creds) {
 		w.connectTool(rw, r, s, f, mode, name, srv, creds, fail)
 		return
 	}
