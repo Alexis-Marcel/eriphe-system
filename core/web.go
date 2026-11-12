@@ -255,6 +255,7 @@ func (w *web) routes() http.Handler {
 	w.activityRoutes(mux)   // web_activity.go
 	w.sessionRoutes(mux)    // web_sessions.go
 	w.cardRoutes(mux)       // web_convo_cards.go
+	w.espaceRoutes(mux)     // web_espace.go
 	for _, routes := range providerRoutes {
 		routes(w, mux)
 	}

@@ -898,7 +898,7 @@ func trimURL(u string) (string, string) {
 // workspacePages are the pages a message may link to inside the workspace,
 // e.g. [Connecter un appareil](/settings/devices#connect): they open in the
 // same tab. Anything else that is not http(s) stays plain text.
-var workspacePages = []string{"/settings", "/memory", "/tasks/", "/welcome"}
+var workspacePages = []string{"/settings", "/memory", "/tasks/", "/welcome", "/espace"}
 
 func link(u, text string) string {
 	if strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") && !strings.Contains(u, "\\") {

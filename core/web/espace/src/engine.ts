@@ -28,6 +28,8 @@ export type Placed = {
   size: Size;
   col: number;
   row: number;
+  w: number; // in cells: the size's, or wider when the cells to its right were left empty
+  h: number;
   weight: number;
   why: string;
   say?: string;
@@ -134,6 +136,16 @@ export function pack(sizes: Size[]): ({ size: Size; col: number; row: number } |
   });
 }
 
+// widen stretches modules to the right over columns nobody uses on their
+// rows, so the sizes' widths (6, 4, 3) leave no empty strip at the edge.
+function widen(placed: Placed[]) {
+  const used = (col: number, row: number, h: number, self: Placed) =>
+    placed.some((p) => p !== self && col >= p.col && col < p.col + p.w && row < p.row + p.h && p.row < row + h);
+  for (const p of placed) {
+    while (p.col + p.w < COLS && !used(p.col + p.w, p.row, p.h, p)) p.w++;
+  }
+}
+
 type Want = { obj: Obj; weight: number; why: string; say?: string; focus: boolean; related: boolean; chip: boolean };
 
 // place lays a composition out. The composer gives weights; the user's rules
@@ -209,7 +221,8 @@ export function place(comp: Composition, store: Map<Ref, Obj>, rules: Rule[] = [
       chips.push({ obj: w.obj, why: w.why, from: "overflow" });
       return;
     }
-    placed.push({ obj: w.obj, size: s.size, col: s.col, row: s.row, weight: w.weight, why: w.why, say: w.say, focus: w.focus, related: w.related });
+    placed.push({ obj: w.obj, size: s.size, col: s.col, row: s.row, ...DIMS[s.size], weight: w.weight, why: w.why, say: w.say, focus: w.focus, related: w.related });
   });
+  widen(placed);
   return { placed, chips };
 }

@@ -12,7 +12,9 @@ const comp = (items: Item[], chips?: Ref[]): Composition => ({ mode: "side", eri
 function checkNoOverflow(l: Layout) {
   const cells = new Set<string>();
   for (const p of l.placed) {
-    const { w, h } = DIMS[p.size];
+    const { w, h } = p;
+    expect(w).toBeGreaterThanOrEqual(DIMS[p.size].w);
+    expect(h).toBe(DIMS[p.size].h);
     expect(p.col).toBeGreaterThanOrEqual(0);
     expect(p.row).toBeGreaterThanOrEqual(0);
     expect(p.col + w).toBeLessThanOrEqual(COLS);
