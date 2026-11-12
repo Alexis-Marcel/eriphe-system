@@ -11,6 +11,7 @@
     {{else if eq .Tab "monitors"}}{{if eq .View "monitor"}}{{template "monitor-page" .}}{{else}}{{template "monitors" .}}{{end}}
     {{else if eq .Tab "access"}}{{template "access-page" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
+    {{else if eq .Tab "display"}}{{template "display" .}}
     {{else if eq .Tab "learned"}}{{template "learned-page" .}}
     {{else if eq .Tab "journal"}}{{template "journal-page" .}}
     {{else if eq .Tab "approve"}}{{template "approve-page" .}}

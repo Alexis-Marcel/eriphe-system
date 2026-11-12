@@ -1,7 +1,8 @@
 // The generic model of the workspace: objects (what exists, named by a ref
 // and read from their source by eriphe-core: objects.go, GET/POST
 // /api/objects), a composition (what Eriphe asks to show, by ref, #386) and
-// rules (what the user said, which code applies, #388). No type knows any
+// rules (what the user said, which eriphe-core applies: attention_rules.go,
+// /api/rules). No type knows any
 // situation: "a mail and a conflict in the agenda" is never written; it comes
 // from the relations between objects.
 //
@@ -57,8 +58,9 @@ export type Obj = {
 
 // An item of a composition: the object it is about, its weight (1 to 5:
 // 5 interrupts, 1 is background), a short why, and what Eriphe says when
-// it is opened or presented.
-export type Item = { ref: Ref; weight: number; why: string; say?: string };
+// it is opened or presented. source is who raised it, when the attention
+// queue says (skill:backup): a rule may name it.
+export type Item = { ref: Ref; weight: number; why: string; say?: string; source?: string };
 
 // A composition, as the composer gives it (#386).
 export type Composition = {
@@ -69,6 +71,8 @@ export type Composition = {
   chips?: Ref[];
 };
 
-// A rule comes from a remark or a gesture (the ⋯ menu). key is what it
-// applies to: a sender's domain, a kind of object.
-export type Rule = { id: string; key: string; delta: number; remark?: string; at: string };
+// A rule comes from a remark or a gesture (the ⋯ menu), kept and applied by
+// eriphe-core (attention_rules.go) before the composition: key is what it
+// applies to (mail, mail:from=example.org, alert:source=backup), delta how
+// much it moves the weight (-5: never).
+export type Rule = { id: number; key: string; delta: number; label: string; remark?: string; at: string };

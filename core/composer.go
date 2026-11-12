@@ -332,17 +332,6 @@ func (c *core) queueStamp() string {
 	return b.String()
 }
 
-// lastUserMessage is the user's last message, from a channel trusted.
-func (c *core) lastUserMessage() (int, string) {
-	var seq int
-	var text string
-	c.store.db.QueryRow(`SELECT seq, text FROM messages WHERE role = ? ORDER BY seq DESC LIMIT 1`, roleUser).Scan(&seq, &text)
-	if seq > 0 && c.fromUntrusted(seq) {
-		text = ""
-	}
-	return seq, text
-}
-
 // composeMoment is the moment of a composition now: the user's return
 // when they have been away long enough, a change otherwise.
 func (c *core) composeMoment() string {
@@ -353,14 +342,14 @@ func (c *core) composeMoment() string {
 }
 
 // runComposer composes when it should, one composition at a time: once a
-// burst of queue changes settles, when the user writes, and once ahead of
+// burst of queue changes settles, when the user makes a rule, and once ahead of
 // their return while they are away.
 func (c *core) runComposer(ctx context.Context) {
 	tick := time.NewTicker(composerPoll)
 	defer tick.Stop()
 	d := debouncer{wait: composerDebounce, maxWait: composerDebounceMax}
 	stamp := c.queueStamp()
-	userSeq, _ := c.lastUserMessage()
+	ruleSeen, _ := c.lastRule()
 	checked := time.Time{}
 	if c.lastComposition() == nil {
 		c.recompose(momentChange, "")
@@ -376,11 +365,13 @@ func (c *core) runComposer(ctx context.Context) {
 			stamp = s
 			d.changed(now)
 		}
-		if seq, text := c.lastUserMessage(); seq > userSeq {
-			userSeq = seq
-			if text != "" {
+		// A remark: a rule the user just made (the workspace's ⋯ menu, a
+		// write_rule card approved), not any message of theirs.
+		if rs, words := c.lastRule(); rs != ruleSeen {
+			ruleSeen = rs
+			if words != "" {
 				d = debouncer{wait: d.wait, maxWait: d.maxWait}
-				c.recompose(momentRemark, text)
+				c.recompose(momentRemark, words)
 				continue
 			}
 		}

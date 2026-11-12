@@ -36,7 +36,7 @@ const (
 const (
 	momentChange  = "change"  // the queue changed while the user is here
 	momentArrival = "arrival" // the user is away: what to show on their return
-	momentRemark  = "remark"  // the user said something
+	momentRemark  = "remark"  // the user made a rule (attention_rules.go)
 	momentStart   = "start"   // eriphe-core started
 )
 
@@ -80,10 +80,10 @@ type compositionSnapshot struct {
 }
 
 // composerRules are the user's rules the composer reads with each
-// snapshot, one sentence each: the seam where the remarks turned into
-// rules (#388) come in. Code applies them to the queue before the
-// composer; the composer reads them to place what is left. None yet.
-var composerRules = func(c *core) []string { return nil }
+// snapshot, one sentence each (attention_rules.go). Code applies them to
+// the queue before the composer; the composer reads them to place what is
+// left.
+var composerRules = func(c *core) []string { return c.rulesContext() }
 
 func (s compositionSnapshot) item(ref string) (snapshotItem, bool) {
 	i := slices.IndexFunc(s.Items, func(it snapshotItem) bool { return it.Ref == ref })

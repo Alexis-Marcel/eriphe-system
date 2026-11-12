@@ -1,7 +1,8 @@
-import type { Composition, Item, Obj, Ref, Rule } from "./types";
+import type { Composition, Item, Obj, Ref } from "./types";
 
 // The layout engine, in code and without words: it takes a composition
-// (refs and weights), the objects, the user's rules and the focus, and
+// (refs and weights; eriphe-core applied the user's rules already), the
+// objects and the focus, and
 // says where each module goes on a fixed grid, and what is left as a chip.
 // The page never scrolls: what does not fit shrinks, then becomes a chip.
 
@@ -33,6 +34,7 @@ export type Placed = {
   weight: number;
   why: string;
   say?: string;
+  source?: string; // who raised it, when the queue says
   focus: boolean; // what the user opened
   related: boolean; // what relates to the focus
 };
@@ -42,19 +44,22 @@ export type Chip = { obj: Obj; why: string; from: "composition" | "overflow" };
 
 export type Layout = { placed: Placed[]; chips: Chip[] };
 
-// What a rule applies to, from the narrowest key to the widest.
-export function keysOf(o: Obj): string[] {
-  if (o.kind === "mail" && o.mail) {
-    const domain = o.mail.from.match(/@([^\s>]+)/)?.[1]?.toLowerCase().replace(/>$/, "");
-    return domain ? [`mail:${domain}`, "mail"] : ["mail"];
-  }
-  return [o.kind];
-}
-
-// The weight a rule adds to an object: "more" is +1, "less" -1, "never" -5.
-export function ruleDelta(o: Obj, rules: Rule[]): number {
-  const keys = keysOf(o);
-  return rules.filter((r) => keys.includes(r.key)).reduce((s, r) => s + r.delta, 0);
+// What a rule may apply to, from the narrowest key to the widest, in
+// eriphe-core's key grammar (attention_rules.go): kind:attribute=value, then
+// the kind. source is who raised the item: a skill's (skill:backup) gives a key.
+export function keysOf(o: Obj, source?: string): string[] {
+  const keys: string[] = [];
+  const add = (attr: string, value?: string) => {
+    const v = value?.trim().toLowerCase();
+    if (v) keys.push(`${o.kind}:${attr}=${v}`);
+  };
+  if (o.mail) add("from", o.mail.from.match(/@([^\s>]+)/)?.[1]?.replace(/>$/, ""));
+  if (o.card) add("kind", o.card.kind);
+  if (o.task) add("agent", o.task.agent);
+  if (o.session) add("lead", o.session.lead);
+  if (o.event) add("calendar", o.event.calendar);
+  if (o.kind !== "group") add("source", source?.match(/^skill:(.+)$/)?.[1]); // a skill's items
+  return [...keys, o.kind];
 }
 
 // Relations: what eriphe-core says an object relates to (its related refs:
@@ -115,13 +120,14 @@ function widen(placed: Placed[]) {
   }
 }
 
-type Want = { obj: Obj; weight: number; why: string; say?: string; focus: boolean; related: boolean; chip: boolean };
+type Want = { obj: Obj; weight: number; why: string; say?: string; source?: string; focus: boolean; related: boolean; chip: boolean };
 
-// place lays a composition out. The composer gives weights; the user's rules
-// move them; a focus takes the centre and pulls its relations next to it.
+// place lays a composition out. The composer gives weights (the user's rules
+// moved them already, in eriphe-core); a focus takes the centre and pulls its
+// relations next to it.
 // One xl at most; weight 0 is not shown; a ref the composer invented is
 // dropped here, by code.
-export function place(comp: Composition, store: Map<Ref, Obj>, rules: Rule[] = [], focus: Ref | null = null, extra: Item[] = []): Layout {
+export function place(comp: Composition, store: Map<Ref, Obj>, focus: Ref | null = null, extra: Item[] = []): Layout {
   const items = [...comp.items, ...extra.filter((e) => !comp.items.some((i) => i.ref === e.ref))];
   const chipRefs = (comp.chips ?? []).filter((r) => store.has(r));
   const present = new Set([...items.map((i) => i.ref), ...chipRefs]);
@@ -137,11 +143,11 @@ export function place(comp: Composition, store: Map<Ref, Obj>, rules: Rule[] = [
     const obj = store.get(i.ref);
     if (!obj || seen.has(i.ref)) continue;
     seen.add(i.ref);
-    let weight = Math.max(0, Math.min(5, Math.round(i.weight) + ruleDelta(obj, rules)));
+    let weight = Math.max(0, Math.min(5, Math.round(i.weight)));
     const isRel = rel.includes(i.ref);
     if (i.ref === focus) weight = 6;
     else if (focused && weight > 0) weight = isRel ? 3 : Math.min(weight, 2);
-    wants.push({ obj, weight, why: i.why, say: i.say, focus: i.ref === focus, related: isRel, chip: false });
+    wants.push({ obj, weight, why: i.why, say: i.say, source: i.source, focus: i.ref === focus, related: isRel, chip: false });
   }
   for (const r of chipRefs) {
     if (seen.has(r)) continue;
@@ -190,7 +196,7 @@ export function place(comp: Composition, store: Map<Ref, Obj>, rules: Rule[] = [
       chips.push({ obj: w.obj, why: w.why, from: "overflow" });
       return;
     }
-    placed.push({ obj: w.obj, size: s.size, col: s.col, row: s.row, ...DIMS[s.size], weight: w.weight, why: w.why, say: w.say, focus: w.focus, related: w.related });
+    placed.push({ obj: w.obj, size: s.size, col: s.col, row: s.row, ...DIMS[s.size], weight: w.weight, why: w.why, say: w.say, source: w.source, focus: w.focus, related: w.related });
   });
   widen(placed);
   return { placed, chips };
