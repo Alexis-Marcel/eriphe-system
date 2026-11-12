@@ -43,7 +43,7 @@ import (
 //
 // Code refreshes the sources, never a model: on a resource's update (the
 // server tells, pool_follow.go), every N minutes (1 to 1440, on the
-// monitors' loop), and when the user opens the surface (surfaceOpened).
+// surfaces' own loop, runSurfaces), and when the user opens the surface (surfaceOpened).
 // Only a path whose value changed goes out (updateDataModel). Code removes
 // a surface when its lifetime ends: a date (until), a ref no longer
 // pending or running (while), or its author gone (kept).
@@ -71,12 +71,13 @@ const (
 	surfaceSourcesMax  = 8
 	surfaceTitleMax    = 120
 	surfaceWhyMax      = 500
-	surfaceJSONMax     = 64 << 10         // components, composed data
-	surfaceValueMax    = 256 << 10        // a source's result
-	surfaceTimeout     = 10 * time.Second // a read, well under the tick
+	surfaceJSONMax     = 64 << 10  // components, composed data
+	surfaceValueMax    = 256 << 10 // a source's result
+	surfaceTimeout     = 20 * time.Second
 	surfacesTickEvery  = 15 * time.Second
-	surfaceReaders     = 4 // refreshes reading at once
-	surfaceEveryDef    = 5 // minutes, when a surface has sources
+	surfaceReaders     = 4               // refreshes reading at once
+	surfaceRefreshCap  = 8 * time.Second // a scheduled refresh's reads, well under the tick
+	surfaceEveryDef    = 5               // minutes, when a surface has sources
 	surfaceUntilDef    = 24 * time.Hour
 	surfaceUntilMax    = 90 * 24 * time.Hour
 	surfaceOpenFresh   = 30 * time.Second // opened again sooner: no new read
@@ -942,29 +943,28 @@ func (c *core) tickSurfaces(ctx context.Context, now time.Time) {
 			if _, queued := c.surf.due.LoadOrStore(s.ID, true); queued {
 				continue // still waiting for a slot, or reading
 			}
-			c.refreshLater(ctx, s.ID, nil, now, func() { c.surf.due.Delete(s.ID) })
+			c.refreshLater(ctx, s.ID, now, func() { c.surf.due.Delete(s.ID) })
 		}
 	}
 	c.followSurfaceResources()
 }
 
-// refreshLater runs refreshSurface on the worker: in its own goroutine,
-// once one of surfaceReaders slots is free. done runs after it.
-func (c *core) refreshLater(ctx context.Context, id string, only []string, now time.Time, done func()) {
+// refreshLater runs a scheduled refreshSurface on the worker: in its own
+// goroutine, once one of surfaceReaders slots is free, its reads cut at
+// surfaceRefreshCap. done runs after it.
+func (c *core) refreshLater(ctx context.Context, id string, now time.Time, done func()) {
 	c.surf.slotsOnce.Do(func() { c.surf.slots = make(chan struct{}, surfaceReaders) })
 	c.surf.refreshing.Add(1)
 	go func() {
 		defer c.surf.refreshing.Done()
-		if done != nil {
-			defer done()
-		}
+		defer done()
 		select {
 		case c.surf.slots <- struct{}{}:
 		case <-ctx.Done():
 			return
 		}
 		defer func() { <-c.surf.slots }()
-		c.refreshSurface(ctx, id, only, now)
+		c.refreshWithin(ctx, id, nil, now, surfaceRefreshCap)
 	}()
 }
 
@@ -1053,8 +1053,8 @@ func (c *core) surfaceResourceUpdated(server, uri string) {
 				only = append(only, ptr)
 			}
 		}
-		if len(only) > 0 {
-			c.refreshLater(context.Background(), s.ID, only, time.Now(), nil)
+		if len(only) > 0 { // one at a time a surface: one asked meanwhile returns at once
+			go c.refreshSurface(context.Background(), s.ID, only, time.Now())
 		}
 	}
 }
@@ -1089,15 +1089,30 @@ func (c *core) followSurfaceResources() {
 // time: one asked meanwhile runs once the current one is over (all its
 // sources), so an update told during a read is not lost.
 func (c *core) refreshSurface(ctx context.Context, id string, only []string, now time.Time) {
+	c.refreshWithin(ctx, id, only, now, 0)
+}
+
+// refreshWithin is refreshSurface with each pass's reads cut at limit (0:
+// each read's own surfaceTimeout only).
+func (c *core) refreshWithin(ctx context.Context, id string, only []string, now time.Time, limit time.Duration) {
 	again := new(atomic.Bool)
 	if v, busy := c.surf.reading.LoadOrStore(id, again); busy {
 		v.(*atomic.Bool).Store(true)
 		return
 	}
 	defer c.surf.reading.Delete(id)
-	c.refreshOnce(ctx, id, only, now)
+	pass := func(only []string, now time.Time) {
+		ctx := ctx
+		if limit > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, limit)
+			defer cancel()
+		}
+		c.refreshOnce(ctx, id, only, now)
+	}
+	pass(only, now)
 	for again.Swap(false) {
-		c.refreshOnce(ctx, id, nil, time.Now())
+		pass(nil, time.Now())
 	}
 }
 
