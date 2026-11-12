@@ -1,0 +1,502 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:eriphe:a2ui:workspace:v1",
+  "protocolVersion": "1.0",
+  "title": "Eriphe workspace catalog",
+  "description": "The shapes a surface of Eriphe's workspace is made of. Shapes only: no component belongs to a tool.",
+  "catalogId": "urn:eriphe:a2ui:workspace:v1",
+  "instructions": "Une surface est une tuile de l'espace de travail : un titre, et dedans des composants de ce catalogue. Elle s'écrit comme une liste plate de composants ; chacun a un `id` unique (lettres, chiffres et `_`, ni tiret ni chiffre au début), un `component` (un nom ci-dessous) et ses propriétés. Un seul composant a l'id `root` : la racine. Un composant désigne ses enfants par leur id (`child`, `children`, `tabs`), jamais en les écrivant dedans.\n\n**Valeurs.** Une propriété de type texte, nombre, booléen ou valeur prend un littéral (`\"Bonjour\"`, `42`), une liaison vers les données de la surface `{\"@path\": \"/ventes/total\"}` (un pointeur JSON) ou un appel de fonction `{\"@call\": \"formatNumber\", \"args\": {\"value\": {\"@path\": \"/total\"}}}`. Une propriété marquée « ou liaison » prend une liste littérale ou une liaison vers une liste de même forme.\n\n**Listes répétées.** `children` prend une liste d'ids `[\"a\", \"b\"]` ou un modèle `{\"path\": \"/mails\", \"componentId\": \"ligne\"}` qui répète le composant `ligne` pour chaque élément de `/mails`. Dans ce modèle et ses enfants, un chemin sans `/` au début (`{\"@path\": \"sujet\"}`) se lit dans l'élément ; un chemin qui commence par `/` se lit depuis la racine des données.\n\n**Règles.**\n- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day).\n- Une surface dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.\n- Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et la surface reste à jour.\n- Un bouton ne fait qu'une action : demander quelque chose à Eriphe ou agir dans la page ; il n'écrit jamais dans un outil.\n- N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.\n\n## Exemple : des mails, liés aux données\n```json\n[\n  {\"id\": \"root\", \"component\": \"Card\", \"title\": \"Mails à traiter\", \"child\": \"mails\"},\n  {\"id\": \"mails\", \"component\": \"List\", \"children\": {\"path\": \"/messages\", \"componentId\": \"mail\"}, \"emptyText\": \"Rien à traiter\"},\n  {\"id\": \"mail\", \"component\": \"Message\", \"from\": {\"@path\": \"from\"}, \"date\": {\"@path\": \"date\"}, \"subject\": {\"@path\": \"subject\"}, \"excerpt\": {\"@path\": \"snippet\"}}\n]\n```\nDonnées : `{\"messages\": [{\"from\": \"Sam\", \"date\": \"2026-11-12T08:10:00Z\", \"subject\": \"Devis\", \"snippet\": \"Voici le devis…\"}]}`\n\n## Exemple : des chiffres composés une fois\n```json\n[\n  {\"id\": \"root\", \"component\": \"Row\", \"children\": [\"cpu\", \"disque\"]},\n  {\"id\": \"cpu\", \"component\": \"Metric\", \"label\": \"Processeur\", \"value\": 37, \"unit\": \"%\", \"delta\": -5, \"better\": \"down\"},\n  {\"id\": \"disque\", \"component\": \"Metric\", \"label\": \"Disque libre\", \"value\": 1.2, \"unit\": \"To\"}\n]\n```",
+  "components": {
+    "Text": {
+      "type": "object",
+      "description": "Un texte court.",
+      "properties": {
+        "component": {"const": "Text"},
+        "text": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "variant": {"type": "string", "enum": ["title", "subtitle", "body", "caption"], "default": "body", "description": "Son style ; body par défaut."}
+      },
+      "required": ["component", "text"]
+    },
+    "Markdown": {
+      "type": "object",
+      "description": "Un texte plus long en Markdown simple (titres, listes, gras, liens), sans HTML ni image.",
+      "properties": {
+        "component": {"const": "Markdown"},
+        "text": {"$ref": "common_types.json#/$defs/DynamicString"}
+      },
+      "required": ["component", "text"]
+    },
+    "Image": {
+      "type": "object",
+      "description": "Une image.",
+      "properties": {
+        "component": {"const": "Image"},
+        "url": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Son adresse."},
+        "alt": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Ce qu'elle montre, en quelques mots."},
+        "fit": {"type": "string", "enum": ["contain", "cover"], "default": "contain"}
+      },
+      "required": ["component", "url"]
+    },
+    "Icon": {
+      "type": "object",
+      "description": "Une icône.",
+      "properties": {
+        "component": {"const": "Icon"},
+        "name": {"$ref": "#/$defs/IconName"}
+      },
+      "required": ["component", "name"]
+    },
+    "Row": {
+      "type": "object",
+      "description": "Des enfants côte à côte.",
+      "properties": {
+        "component": {"const": "Row"},
+        "children": {"$ref": "common_types.json#/$defs/ChildList"},
+        "justify": {"$ref": "#/$defs/Justify"},
+        "align": {"$ref": "#/$defs/Align"}
+      },
+      "required": ["component", "children"]
+    },
+    "Column": {
+      "type": "object",
+      "description": "Des enfants l'un sous l'autre.",
+      "properties": {
+        "component": {"const": "Column"},
+        "children": {"$ref": "common_types.json#/$defs/ChildList"},
+        "justify": {"$ref": "#/$defs/Justify"},
+        "align": {"$ref": "#/$defs/Align"}
+      },
+      "required": ["component", "children"]
+    },
+    "List": {
+      "type": "object",
+      "description": "Une liste d'éléments semblables, souvent répétés depuis les données par un modèle.",
+      "properties": {
+        "component": {"const": "List"},
+        "children": {"$ref": "common_types.json#/$defs/ChildList"},
+        "direction": {"type": "string", "enum": ["vertical", "horizontal"], "default": "vertical"},
+        "emptyText": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Ce qui s'affiche quand la liste est vide."}
+      },
+      "required": ["component", "children"]
+    },
+    "Card": {
+      "type": "object",
+      "description": "Un cadre autour d'un enfant, avec un titre.",
+      "properties": {
+        "component": {"const": "Card"},
+        "title": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "child": {"$ref": "common_types.json#/$defs/Child"}
+      },
+      "required": ["component", "child"]
+    },
+    "Tabs": {
+      "type": "object",
+      "description": "Des onglets, un enfant par onglet.",
+      "properties": {
+        "component": {"const": "Tabs"},
+        "tabs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {"$ref": "common_types.json#/$defs/DynamicString"},
+              "child": {"$ref": "common_types.json#/$defs/Child"}
+            },
+            "required": ["title", "child"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["component", "tabs"]
+    },
+    "Divider": {
+      "type": "object",
+      "description": "Un trait qui sépare.",
+      "properties": {
+        "component": {"const": "Divider"}
+      },
+      "required": ["component"]
+    },
+    "Button": {
+      "type": "object",
+      "description": "Un bouton qui déclenche une action.",
+      "properties": {
+        "component": {"const": "Button"},
+        "label": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "icon": {"$ref": "#/$defs/IconName"},
+        "variant": {"type": "string", "enum": ["primary", "default", "quiet"], "default": "default"},
+        "action": {"$ref": "common_types.json#/$defs/Action"}
+      },
+      "required": ["component", "label", "action"],
+      "examples": [
+        {"id": "relancer", "component": "Button", "label": "Relancer la sauvegarde", "action": {"event": {"name": "ask", "context": {"text": "Relance la sauvegarde de cette nuit"}}}}
+      ]
+    },
+    "Choice": {
+      "type": "object",
+      "description": "Un choix parmi des options, rangé dans les données de la surface.",
+      "properties": {
+        "component": {"const": "Choice"},
+        "label": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {"$ref": "common_types.json#/$defs/DynamicString"},
+              "value": {"type": "string"}
+            },
+            "required": ["label", "value"],
+            "additionalProperties": false
+          }
+        },
+        "value": {"$ref": "common_types.json#/$defs/DynamicStringList", "description": "Les valeurs choisies : une liaison vers une liste de textes."},
+        "multiple": {"type": "boolean", "default": false, "description": "Plusieurs choix possibles."}
+      },
+      "required": ["component", "options", "value"]
+    },
+    "TextField": {
+      "type": "object",
+      "description": "Un champ de saisie, rangé dans les données de la surface.",
+      "properties": {
+        "component": {"const": "TextField"},
+        "label": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "value": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Une liaison vers le texte saisi."},
+        "placeholder": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "multiline": {"type": "boolean", "default": false}
+      },
+      "required": ["component", "value"]
+    },
+    "DateField": {
+      "type": "object",
+      "description": "Un champ de date ou d'heure, rangé dans les données de la surface.",
+      "properties": {
+        "component": {"const": "DateField"},
+        "label": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "value": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Une liaison vers la date ISO 8601."},
+        "mode": {"type": "string", "enum": ["date", "time", "dateTime"], "default": "date"}
+      },
+      "required": ["component", "value"]
+    },
+    "Metric": {
+      "type": "object",
+      "description": "Un chiffre clé et son évolution.",
+      "properties": {
+        "component": {"const": "Metric"},
+        "label": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "value": {"$ref": "#/$defs/TextOrNumber"},
+        "unit": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "delta": {"$ref": "common_types.json#/$defs/DynamicNumber", "description": "L'écart signé depuis la dernière fois."},
+        "deltaLabel": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Depuis quand, en quelques mots (« depuis hier »)."},
+        "better": {"type": "string", "enum": ["up", "down"], "default": "up", "description": "Le sens qui est une bonne nouvelle."}
+      },
+      "required": ["component", "label", "value"]
+    },
+    "Chart": {
+      "type": "object",
+      "description": "Une ou plusieurs séries en courbes ou en barres.",
+      "properties": {
+        "component": {"const": "Chart"},
+        "kind": {"type": "string", "enum": ["line", "bar"]},
+        "series": {
+          "oneOf": [
+            {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Series"}},
+            {"$ref": "common_types.json#/$defs/DataBinding"}
+          ]
+        },
+        "unit": {"$ref": "common_types.json#/$defs/DynamicString", "description": "L'unité des valeurs."}
+      },
+      "required": ["component", "kind", "series"],
+      "examples": [
+        {"id": "conso", "component": "Chart", "kind": "bar", "unit": "kWh", "series": [{"name": "Maison", "points": [{"x": "lun.", "y": 12.5}, {"x": "mar.", "y": 9.8}]}]}
+      ]
+    },
+    "Table": {
+      "type": "object",
+      "description": "Des lignes en colonnes.",
+      "properties": {
+        "component": {"const": "Table"},
+        "columns": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/TableColumn"}},
+        "rows": {
+          "description": "Une ligne est un objet ; chaque colonne lit le champ de sa clé.",
+          "oneOf": [
+            {"type": "array", "items": {"type": "object"}},
+            {"$ref": "common_types.json#/$defs/DataBinding"}
+          ]
+        },
+        "emptyText": {"$ref": "common_types.json#/$defs/DynamicString"}
+      },
+      "required": ["component", "columns", "rows"],
+      "examples": [
+        {"id": "tickets", "component": "Table", "columns": [{"key": "title", "label": "Ticket"}, {"key": "age", "label": "Âge", "kind": "number"}], "rows": {"@path": "/issues"}}
+      ]
+    },
+    "Timeline": {
+      "type": "object",
+      "description": "Des étapes dans l'ordre, chacune avec son état.",
+      "properties": {
+        "component": {"const": "Timeline"},
+        "items": {
+          "oneOf": [
+            {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/TimelineItem"}},
+            {"$ref": "common_types.json#/$defs/DataBinding"}
+          ]
+        }
+      },
+      "required": ["component", "items"],
+      "examples": [
+        {"id": "deploiement", "component": "Timeline", "items": [{"label": "Construire", "state": "done"}, {"label": "Tester", "state": "current"}, {"label": "Publier", "state": "pending"}]}
+      ]
+    },
+    "Message": {
+      "type": "object",
+      "description": "Un message : un mail, un message d'une messagerie, une note reçue.",
+      "properties": {
+        "component": {"const": "Message"},
+        "from": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "date": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Date ISO 8601."},
+        "subject": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "excerpt": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Le début, en une ou deux lignes."},
+        "body": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Le texte entier, quand il compte."}
+      },
+      "required": ["component", "from"]
+    },
+    "Day": {
+      "type": "object",
+      "description": "Une journée et ses événements, dans l'ordre des heures.",
+      "properties": {
+        "component": {"const": "Day"},
+        "date": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Le jour, AAAA-MM-JJ."},
+        "events": {
+          "oneOf": [
+            {"type": "array", "items": {"$ref": "#/$defs/DayEvent"}},
+            {"$ref": "common_types.json#/$defs/DataBinding"}
+          ]
+        }
+      },
+      "required": ["component", "date", "events"],
+      "examples": [
+        {"id": "demain", "component": "Day", "date": "2026-11-13", "events": [{"title": "Dentiste", "start": "2026-11-13T09:30:00+01:00", "end": "2026-11-13T10:00:00+01:00", "place": "Centre"}]}
+      ]
+    },
+    "Proposal": {
+      "type": "object",
+      "description": "Une proposition d'Eriphe qui attend un oui ou un non ; le code lie la réponse à cette proposition.",
+      "properties": {
+        "component": {"const": "Proposal"},
+        "proposalId": {"$ref": "common_types.json#/$defs/DynamicString", "description": "L'identifiant de la proposition."}
+      },
+      "required": ["component", "proposalId"]
+    },
+    "Alert": {
+      "type": "object",
+      "description": "Un avertissement qui doit se voir.",
+      "properties": {
+        "component": {"const": "Alert"},
+        "level": {"type": "string", "enum": ["info", "success", "warning", "error"], "default": "info"},
+        "title": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "text": {"$ref": "common_types.json#/$defs/DynamicString"}
+      },
+      "required": ["component", "text"]
+    },
+    "Placeholder": {
+      "type": "object",
+      "description": "Une place réservée pendant que la surface se prépare.",
+      "properties": {
+        "component": {"const": "Placeholder"},
+        "text": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Ce qui se prépare (« En préparation » par défaut)."}
+      },
+      "required": ["component"]
+    }
+  },
+  "functions": {
+    "formatString": {
+      "type": "object",
+      "description": "Un texte où `${/chemin}` (ou `${chemin}` dans un modèle) est remplacé par la donnée.",
+      "returnType": "string",
+      "properties": {
+        "@call": {"const": "formatString"},
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {"$ref": "common_types.json#/$defs/DynamicString"}
+          },
+          "required": ["value"],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": ["@call", "args"]
+    },
+    "formatNumber": {
+      "type": "object",
+      "description": "Un nombre écrit à la française.",
+      "returnType": "string",
+      "properties": {
+        "@call": {"const": "formatNumber"},
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {"$ref": "common_types.json#/$defs/DynamicNumber"},
+            "decimals": {"$ref": "common_types.json#/$defs/DynamicNumber", "description": "Le nombre de décimales."}
+          },
+          "required": ["value"],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": ["@call", "args"]
+    },
+    "formatDate": {
+      "type": "object",
+      "description": "Une date ISO 8601 écrite selon un motif Unicode (« EEEE d MMMM », « HH:mm »).",
+      "returnType": "string",
+      "properties": {
+        "@call": {"const": "formatDate"},
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {"$ref": "common_types.json#/$defs/DynamicValue"},
+            "format": {"$ref": "common_types.json#/$defs/DynamicString"}
+          },
+          "required": ["value", "format"],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": ["@call", "args"]
+    },
+    "formatRelative": {
+      "type": "object",
+      "description": "Une date ISO 8601 dite par rapport à maintenant (« il y a 2 h », « demain »).",
+      "returnType": "string",
+      "properties": {
+        "@call": {"const": "formatRelative"},
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {"$ref": "common_types.json#/$defs/DynamicValue"}
+          },
+          "required": ["value"],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": ["@call", "args"]
+    }
+  },
+  "$defs": {
+    "anyComponent": {
+      "oneOf": [
+        {"$ref": "#/components/Text"},
+        {"$ref": "#/components/Markdown"},
+        {"$ref": "#/components/Image"},
+        {"$ref": "#/components/Icon"},
+        {"$ref": "#/components/Row"},
+        {"$ref": "#/components/Column"},
+        {"$ref": "#/components/List"},
+        {"$ref": "#/components/Card"},
+        {"$ref": "#/components/Tabs"},
+        {"$ref": "#/components/Divider"},
+        {"$ref": "#/components/Button"},
+        {"$ref": "#/components/Choice"},
+        {"$ref": "#/components/TextField"},
+        {"$ref": "#/components/DateField"},
+        {"$ref": "#/components/Metric"},
+        {"$ref": "#/components/Chart"},
+        {"$ref": "#/components/Table"},
+        {"$ref": "#/components/Timeline"},
+        {"$ref": "#/components/Message"},
+        {"$ref": "#/components/Day"},
+        {"$ref": "#/components/Proposal"},
+        {"$ref": "#/components/Alert"},
+        {"$ref": "#/components/Placeholder"}
+      ],
+      "discriminator": {"propertyName": "component"}
+    },
+    "anyFunction": {
+      "oneOf": [
+        {"$ref": "#/functions/formatString"},
+        {"$ref": "#/functions/formatNumber"},
+        {"$ref": "#/functions/formatDate"},
+        {"$ref": "#/functions/formatRelative"}
+      ]
+    },
+    "Justify": {
+      "type": "string",
+      "enum": ["start", "center", "end", "spaceBetween"],
+      "default": "start"
+    },
+    "Align": {
+      "type": "string",
+      "enum": ["start", "center", "end", "stretch"],
+      "default": "stretch"
+    },
+    "TextOrNumber": {
+      "anyOf": [
+        {"$ref": "common_types.json#/$defs/DynamicString"},
+        {"$ref": "common_types.json#/$defs/DynamicNumber"}
+      ]
+    },
+    "IconName": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["alert", "arrowDown", "arrowUp", "calendar", "chart", "check", "clock", "close", "cloud", "document", "error", "event", "folder", "home", "info", "link", "lock", "mail", "message", "money", "note", "person", "phone", "place", "refresh", "search", "server", "settings", "star", "task", "trendDown", "trendUp", "warning"]
+        },
+        {"$ref": "common_types.json#/$defs/DataBinding"}
+      ]
+    },
+    "Series": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {"type": ["string", "number"], "description": "Une date ISO 8601, un nombre ou une étiquette."},
+              "y": {"type": "number"}
+            },
+            "required": ["x", "y"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["name", "points"],
+      "additionalProperties": false
+    },
+    "TableColumn": {
+      "type": "object",
+      "properties": {
+        "key": {"type": "string", "description": "Le champ de la ligne à montrer."},
+        "label": {"type": "string"},
+        "kind": {"type": "string", "enum": ["text", "number", "date"], "default": "text"}
+      },
+      "required": ["key", "label"],
+      "additionalProperties": false
+    },
+    "TimelineItem": {
+      "type": "object",
+      "properties": {
+        "label": {"type": "string"},
+        "state": {"type": "string", "enum": ["done", "current", "pending", "failed"]},
+        "date": {"type": "string", "description": "Date ISO 8601."},
+        "detail": {"type": "string"}
+      },
+      "required": ["label", "state"],
+      "additionalProperties": false
+    },
+    "DayEvent": {
+      "type": "object",
+      "properties": {
+        "title": {"type": "string"},
+        "start": {"type": "string", "description": "Date et heure ISO 8601, ou la date seule pour toute la journée."},
+        "end": {"type": "string"},
+        "place": {"type": "string"},
+        "allDay": {"type": "boolean"}
+      },
+      "required": ["title", "start"],
+      "additionalProperties": false
+    }
+  }
+}
