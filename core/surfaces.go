@@ -84,6 +84,7 @@ const (
 	surfaceByUser      = "user"
 	surfaceByLifetime  = "lifetime"
 	surfaceAuthorBrain = "brain"
+	surfaceAuthorCore  = "core" // code itself: the attention queue's surfaces (workspace_queue.go), never an assistant
 )
 
 var (
@@ -277,6 +278,13 @@ func (c *core) surfaceWrite(author string, in surfaceIn) (surface, []a2ui.Valida
 	if !surfaceAuthorRe.MatchString(author) {
 		return surface{}, nil, fmt.Errorf("author %q: brain, skill:<name>, lead:<session>, task:<id>", author)
 	}
+	return c.writeSurface(author, in)
+}
+
+// writeSurface is surfaceWrite for any author, code's own (surfaceAuthorCore)
+// too: its surfaces do not count in surfacesMax, so a full pool never
+// refuses what the queue needs to show.
+func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.ValidationError, error) {
 	in.ID = strings.TrimSpace(in.ID)
 	if in.ID == "" {
 		in.ID = newSurfaceID()
@@ -372,8 +380,8 @@ func (c *core) surfaceWrite(author string, in surfaceIn) (surface, []a2ui.Valida
 		return surface{}, nil, fmt.Errorf("the surface %s is %s's: write another id", in.ID, old.Author)
 	case errors.Is(err, errNoSurface):
 		var n int
-		c.store.db.QueryRow(`SELECT COUNT(*) FROM surfaces`).Scan(&n)
-		if n >= surfacesMax {
+		c.store.db.QueryRow(`SELECT COUNT(*) FROM surfaces WHERE author != ?`, surfaceAuthorCore).Scan(&n)
+		if n >= surfacesMax && author != surfaceAuthorCore {
 			c.surf.mu.Unlock()
 			return surface{}, nil, fmt.Errorf("%d surfaces at most: remove one first", surfacesMax)
 		}
@@ -403,13 +411,15 @@ func (c *core) surfaceWrite(author string, in surfaceIn) (surface, []a2ui.Valida
 	if err == nil && late != nil {
 		go c.surfaceLateReads(s, late)
 	}
+	c.relayout()
 	return s, nil, err
 }
 
 // mayChange tells whether an author may write or remove a surface of
-// owner's: its own; the brain any.
+// owner's: its own; the brain any but code's (the attention queue's, kept
+// by code while its item is open: workspace_queue.go).
 func mayChange(author, owner string) bool {
-	return author == owner || author == surfaceAuthorBrain
+	return author == owner || (author == surfaceAuthorBrain && owner != surfaceAuthorCore)
 }
 
 // surfaceRemove removes a surface: by its author, the user (surfaceByUser)
@@ -432,7 +442,11 @@ func (c *core) surfaceRemove(id, by string) error {
 	c.sendSurface(a2ui.Message{Version: a2ui.Version, DeleteSurface: &a2ui.DeleteSurface{SurfaceID: id}})
 	c.surf.mu.Unlock()
 	log.Printf("surface %s removed by %s", id, by)
+	if s.Author == surfaceAuthorCore && by == surfaceByUser {
+		c.queueSurfaceDismissed(id) // its item leaves the queue too (workspace_queue.go)
+	}
 	c.followSurfaceResources()
+	c.relayout()
 	return nil
 }
 
@@ -953,7 +967,7 @@ func (c *core) refLive(ref string) bool {
 func (c *core) authorLive(author string) bool {
 	kind, id, _ := strings.Cut(author, ":")
 	switch kind {
-	case surfaceAuthorBrain:
+	case surfaceAuthorBrain, surfaceAuthorCore:
 		return true
 	case "skill":
 		_, err := c.store.skill(id)

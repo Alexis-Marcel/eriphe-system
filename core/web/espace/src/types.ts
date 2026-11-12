@@ -59,6 +59,25 @@ export type Obj = {
 // it is opened or presented.
 export type Item = { ref: Ref; weight: number; why: string; say?: string };
 
+// The layout of the surfaces, owned by eriphe-core (workspaceLayout in
+// workspace_layout.go): the event stream's "layout". A tile is a surface at
+// its place on the 12 × 8 grid (col and row from 0, w and h in cells); a
+// chip, a surface folded in the strip above it.
+export type TileSize = "s" | "m" | "l" | "xl";
+export type Tile = { id: string; title: string; size: TileSize; col: number; row: number; w: number; h: number; why?: string };
+export type FoldedChip = { id: string; title: string; why?: string };
+export type Layout = {
+  eriphe: string;
+  by: string;
+  ambient: "calm" | "decision" | "urgent";
+  focus?: string;
+  items: Tile[];
+  chips: FoldedChip[];
+  moment?: string;
+  at?: string;
+  missing?: string[];
+};
+
 // A composition, as the composer gives it (#386).
 export type Composition = {
   mode: "center" | "side";

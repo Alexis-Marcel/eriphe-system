@@ -16,6 +16,10 @@ func init() {
 var espaceStrings = map[string]map[string]string{
 	"fr": {
 		"espace.empty":            "Rien ne t'attend pour l'instant.",
+		"espace.queue.urgent":     "Urgent",
+		"espace.queue.waits":      "Attend ta réponse",
+		"espace.queue.note":       "À voir",
+		"espace.chip.open":        "Ouvrir %s",
 		"espace.allday":           "toute la journée",
 		"espace.mail.attachments": "%d pièce(s) jointe(s)",
 		"espace.task":             "Tâche",
@@ -112,6 +116,10 @@ var espaceStrings = map[string]map[string]string{
 		"espace.a2.level.error":       "Erreur",
 	},
 	"en": {
+		"espace.queue.urgent":     "Urgent",
+		"espace.queue.waits":      "Waiting for you",
+		"espace.queue.note":       "To see",
+		"espace.chip.open":        "Open %s",
 		"espace.empty":            "Nothing waits for you right now.",
 		"espace.allday":           "all day",
 		"espace.mail.attachments": "%d attachment(s)",

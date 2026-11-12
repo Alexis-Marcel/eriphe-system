@@ -19,7 +19,10 @@ import (
 // last one, and "walkthrough" (a walkthrough the brain asked for, JSON:
 // workspace.go), once. Asked with a2ui=1 (the workspace, /espace), it also
 // sends "a2ui": the surfaces' A2UI messages in order (JSON, a2uiEvent in
-// surfaces_stream.go), a snapshot that resets the page first. Every
+// surfaces_stream.go), a snapshot that resets the page first, and
+// "layout": where each surface is on the grid (JSON, workspaceLayout in
+// workspace_layout.go), sent after the "a2ui" event of the surfaces it
+// names and whenever it changes. Every
 // event carries the last message's seq as its id, so a reconnecting
 // browser picks up where it left; its surfaces start again from a
 // snapshot.
@@ -55,11 +58,23 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		}
 		surfaces = feed.changes // a new subscription after a reset
 	}
+	// The layout of the surfaces, after them: sent when it changed.
+	var layoutChanged <-chan struct{} // nil when not asked: never ready
+	lastLayout := ""
+	sendLayout := func() {
+		l, ch := w.c.watchLayout()
+		layoutChanged = ch
+		if raw, err := json.Marshal(l); err == nil && string(raw) != lastLayout {
+			writeEvent(rw, "layout", after, string(raw))
+			lastLayout = string(raw)
+		}
+	}
 	if r.URL.Query().Get("a2ui") == "1" {
 		var first a2uiEvent
 		feed, first = w.c.feedSurfaces()
 		defer feed.close()
 		sendSurfaces(first)
+		sendLayout()
 		flusher.Flush()
 	}
 
@@ -174,6 +189,11 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		case <-drafted:
 		case ch, ok := <-surfaces:
 			sendSurfaces(feed.next(ch, ok))
+			sendLayout()
+			flusher.Flush()
+			quiet = time.Now()
+		case <-layoutChanged:
+			sendLayout()
 			flusher.Flush()
 			quiet = time.Now()
 		}

@@ -2432,7 +2432,8 @@ per object: a ref (`card:<id>`, `session:<id>`, `mail:<id>`…), a weight from 1
 say, its source (`brain`, `task:<id>`, `session:<id>`, `skill:<name>`) and its time. Items about the
 same ref merge (the highest weight, the latest why). A card enters it when it is made, weighted by
 its kind (one a task or a session waits on: 4; any other proposal: 3), and leaves it once decided
-or gone. Assistants feed it with their [attention signals](#attention-signals-attention_signalgo);
+or gone. Each open item is a surface of the workspace, written by code while it is open
+([the queue as surfaces](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)). Assistants feed it with their [attention signals](#attention-signals-attention_signalgo);
 an item drawn from external content stays marked so, and the brain reads it as data. What the
 user wants shown more, less or never is not applied to the queue: it is a
 [preference in memory](#preferences-gestures-and-the-brains-tools-workspacego) the composer
@@ -2665,74 +2666,129 @@ page):
   `{"objects": [{"ref", "object"} or {"ref", "error", "status"}]}`, in the order asked, each
   read on its own, 8 at once.
 
-### The composer (`composer.go`, `composition.go`)
+### The layout and the composer (`workspace_layout.go`, `workspace_pool.go`, `composer.go`)
 
-A **composition** says what the workspace shows, by ref: which items of the attention queue are
-modules and how big, why, which wait as chips, and Eriphe's line over them. It is served at once,
-always the last one kept (in memory and in the store, so a restart serves it too):
+The workspace is one dynamic page of [surfaces](#surfaces-and-their-sources-surfacesgo). Where each
+is shown is **eriphe-core's**: a fixed grid of 12 × 8 cells that never scrolls, each surface a
+tile of one of four sizes (s 3 × 1, m 3 × 2, l 4 × 3, xl 6 × 5; one xl at most) or a chip in the
+strip above the grid when it is folded.
+
+**The composer chooses, code places.** The composer chooses from the pool what is shown now, in
+which order and how big (a *choice*); code lays that choice out (`layoutOf`, pure, no model) at
+once and again whenever the pool changes (`relayout`, called by every write and removal of a
+surface): the urgent ones first (weight 80 and up: the queue's 4 and 5), then the surface the user
+opened (at l at least, for 15 minutes or until they go back), then the choice in its order,
+then the surfaces written since the choice, by weight. Each tile goes at the first place where it
+fits, top left first; one that fits nowhere shrinks a size, then is folded; with room left, a
+surface of weight 40 or more grows a size (never into xl) if nothing else shrinks for it; tiles
+stretch over the empty columns on their rows. What the choice left out is folded too: nothing in
+the pool goes unseen while the strip has room (12 chips). Without a choice, or when the composer
+is off, slow or wrong, the choice is code's (`fallbackChoice`): everything by weight, the
+heaviest first. A new urgent surface is in front within milliseconds, never waiting for a model.
+
+**The layout** is sent to the workspace as the event stream's `layout` event (with `a2ui=1`),
+after the `a2ui` event of the surfaces it names and whenever it changes, and kept in kv
+(`workspace_layout`; the choice in `workspace_choice`, so a restart lays it out at once):
 
 ```json
-{"mode": "side", "ambient": "decision", "eriphe": "Le plan attend ton feu vert.",
- "items": [{"ref": "session:3", "weight": 4, "why": "Plan à valider", "say": "…"}],
- "chips": ["mail:7"], "moment": "change", "at": "2026-11-12T09:00:00Z", "by": "composer"}
+{"eriphe": "Le paiement attend ton accord.", "by": "composer", "ambient": "urgent",
+ "focus": "week", "moment": "change", "at": "2026-11-12T09:00:00Z",
+ "items": [{"id": "q-card-12", "title": "Accès à un outil", "size": "xl",
+            "col": 0, "row": 0, "w": 6, "h": 5, "why": "Attend ton accord"}],
+ "chips": [{"id": "news", "title": "Nouvelles", "why": "Rien de pressé"}]}
 ```
 
-`mode` is `side` (modules in front) or `center` (nothing to show, Eriphe in the middle);
-`ambient` is `urgent` with a weight 5, `decision` with a 4, `calm` otherwise; `say` is the queue's
-own, never the model's; `by` is `composer` or `fallback`. `GET /api/composition` (the workspace's
-session; without one, 401) and the event stream's `composition` event, sent when it changes.
+`col` and `row` count from 0, `w` and `h` in cells; `ambient` is `urgent` with a tile of weight 90
+or more, `decision` with one of 80, `calm` otherwise; `by` is `composer` or `fallback`; `eriphe` is
+the composer's line, empty when code chose.
+
+**The attention queue as surfaces** (`workspace_queue.go`). Each open item of the
+[attention queue](#workspace-web) is a surface written by code (author `core`), with no code per
+kind of item: a card is a `Proposal` bound to its proposal (`kind:id`, read and answered through
+`GET /api/proposals/{ref}`), titled by its kind; any other item (a skill's message, a notification
+held for the brief, an alert) is an `Alert` with what Eriphe would say of it (else its why),
+titled « Urgent », « Attend ta réponse » or « À voir » by its weight. Its id is `q-<kind>-<id>`
+(a hash of the ref when its id cannot be a surface's), its weight the item's × 20 (`queueSurfaceWeight`),
+its why the item's, its taint the item's; its words follow the language the workspace was last
+opened in (`workspace_lang`, set by `/espace/boot`). It lives while its item is open:
+`syncQueueSurfaces` makes the queue's surfaces again whenever the queue changes (`attend` and
+`attentionDone` kick `runWorkspace`, never inline) and every 2 s, writing only what changed and
+removing what left. Code's surfaces are outside the pool's cap (100), and no assistant writes or
+removes them, the brain neither; the user removing one (Settings → Surfaces) takes its item out of
+the queue (a card stays to be answered in the conversation). A card whose proposal the `Proposal`
+cannot show is an `Alert` too. An item other than a card leaves the queue only that way for now.
 
 The **composer** is a persistent assistant of role `composer`, like the brain and the session
-leads: one warm task on a node, each composition a turn (`deliverComposer` gives it the
-snapshot, `relayComposer` hands its answer back at the turn's end). It has no power, no MCP server
-and none of its harness's tools (Claude Code's `--tools ""`), thinks at low effort
-(`CLAUDE_CODE_EFFORT_LEVEL=low`, from its role's `Effort` and the harness card's `EffortEnv`), and
-starts a fresh session with each task (`Fresh`), its task stopping after 30 turns: each turn
-carries all it needs. Its instructions are `composer-prompt.md` (French).
+leads: one warm task on a node, each choice a turn (`deliverComposer` gives it the snapshot,
+`relayComposer` hands its answer back at the turn's end). It has no power, no MCP server and none
+of its harness's tools (Claude Code's `--tools ""`), thinks at low effort
+(`CLAUDE_CODE_EFFORT_LEVEL=low`), and starts a fresh session with each task (`Fresh`), its task
+stopping after 30 turns: each turn carries all it needs. Its instructions are
+`composer-prompt.md` (French). It never writes content.
 
-A turn holds the moment (a change, the user's return after an absence, a new workspace
-preference, objects the brain put in front), the screen's capacity (6 modules, 8 chips), the
-user's [preferences](#preferences-gestures-and-the-brains-tools-workspacego) from memory
-(`workspacePreferences`, one sentence each), the refs that must be modules first (`workspace_show`), the queue (ref, kind, weight, age, the object's title read within 2 s, the why), quoted
-as data, and the list of refs it may use. It answers a lean JSON object (refs, weight, a why of 60
-characters at most, Eriphe's line of 140): in the study, about 3.5 s a composition with Sonnet,
-against 8–36 s with prose per item; Haiku invented refs. The worker is not given a JSON schema:
-Claude Code's `--json-schema` is fixed for a whole session, while the refs allowed change with
-each turn; the prompt names them, and code checks (`checkComposition`): a ref not in the snapshot
-is dropped, a weight clamped to 1–5, the texts cut, at most 6 items and 8 chips, and what the
-composer left out waits as a chip. Its `hidden` (refs a preference of the user's excludes) are
-left out, neither module nor chip, except a card (it waits for the user's answer), a weight 5
-and what the brain put in front, which wait as chips. The refs the brain put in front are
-modules, first, whatever the answer (`requireFront`). An answer that is not JSON, or keeps (or
-hides) nothing of a queue that has items, is invalid.
+A turn (`composerTurn`, from `poolSnapshot`) holds the moment (the time; the user's arrival after
+an absence, or their work and what changed: the pool or the queue, a new workspace preference,
+objects the brain put in front), the user's language (Eriphe's line and the whys are written in
+it), the surface they opened and the conversation's topic (their last message, as data), the
+screen, their [preferences](#preferences-gestures-and-the-brains-tools-workspacego) from memory,
+their recent gestures (2 hours, 10 at most), the queue (each item with the surface showing it,
+held or not), and the pool: each surface's id, title, author, weight, why, age, the age of its
+data (its last write or read) and its last error, quoted as data, marked when external; then the
+ids it may use. There is no tool-agnostic "next event" yet: what the day holds comes through the
+surfaces that show it. It answers a lean JSON object:
 
-**Fallback**: when the composer is off, has no task ready, takes more than 10 s or answers
-something invalid, code composes by weight (then the latest first): what the brain put in front
-first, then the 6 heaviest as modules, the rest as chips. It reads no preference. A late answer
-is dropped. Nothing waits on the composer: it runs on its own goroutine (`runComposer`), the brain
-reads the queue itself.
+```json
+{"eriphe": "Le paiement attend ton accord.", "items": [{"id": "q-card-12", "size": "l", "why": "Attend ton accord"}],
+ "missing": ["l'agenda de demain"], "stale": ["week"]}
+```
 
-**When**: the queue is read every 2 s; a change composes once the burst settles (3 s after the
-last change, 15 s at most after the first). A workspace preference entering memory (or changed)
-composes at once, as a remark, with its words (`workspacePrefStamp`); one leaving it composes
-again; a message of the user's does not. `workspace_show` composes at once (moment `show`), and
-again when what it put in front expires. While the user has been away 20 minutes
-or more (`awaySince`), the next composition is for their return, and one is made ahead of it.
+Code checks it (`checkChoice`): an id not in the pool is dropped, an unknown size is the
+surface's by weight, the texts are cut (a why of 60 characters, the line of 140), 8 items, 3
+missing and 5 stale at most. No item is a choice (a quiet moment: all is folded, the urgent and
+the new placed all the same); an answer that is not JSON, or whose items are all unknown, is
+invalid, and code chooses by weight. A late answer is dropped. Nothing waits on the composer: it
+runs on its own goroutine (`runComposer`), the brain reads the queue itself.
+
+**Its signals are events.** `missing` and `stale` go to the [journal](#events) (source
+`composer`), where a skill reacts to them with `when` and the brain reads them through `since`:
+
+- `surface.missing`, payload `{text}`: what is missing for the moment; told once per text in
+  6 hours;
+- `surface.stale`, key and payload `id`, payload `author` and `title`: a surface whose data is too
+  old for the moment, or in error; told once per version of the surface. `when: surface.stale
+  id=week` or `author=skill:arrival`.
+
+Both are external when the pool or the queue held content from outside.
+
+**When**: the pool and the queue are read every 2 s; a change chooses once the burst settles (3 s
+after the last change, 15 s at most after the first). A workspace preference entering memory (or
+changed) chooses at once, as a remark, with its words (`workspacePrefStamp`); one leaving it
+chooses again; a message of the user's does not. `workspace_show` chooses at once (moment
+`show`). While the user has been away 20 minutes or more (`awaySince`), the next choice is for
+their return, and one is made ahead of it.
+
+**The old canvas's composition** (`composition.go`): until the per-kind canvas goes (#424), code
+still writes a composition by ref for it, by weight (`fallbackComposition`, with what
+`workspace_show` put in front first), served by `GET /api/composition` and the event stream's
+`composition`. The page shows that canvas only when there is no surface at all.
 
 **Settings → Agents → Workspace composer**: on or off, and its agent (a Sonnet one by default,
-else the default agent). Off by default; off, nothing is sent to a model.
+else the default agent). Off by default; off, nothing is sent to a model, and code lays out by
+weight.
 
 **Bench** (`testdata/composer/`): invented moments of a fictional user (an arrival after a night,
-a busy noon, a new « never » preference, several sessions running, a quiet evening,
-a mail that tries to order the composer), each with its queue and what a good composition does:
-`front` (must be modules), `back` (must not be modules, chips are fine), `hidden` (must be
-neither module nor chip: the composer hides them), `mode`, and `fallback_front` (whether the
-order by weight already puts `front` in front). A case's `preferences` are the user's preference
-memories, as sentences, as the composer reads them. `composer_bench_test.go` runs in CI with no
-model: every case is valid, its turn names its refs and its preferences, its reference `answer`
-passes `checkComposition` and meets the case, invented refs are cleaned, and the fallback does
-what `fallback_front` says. `composer_live_test.go` runs the cases on a real model when a
-model or the prompt changes:
+a busy noon, a new « never » preference, several sessions running, a quiet evening, a mail that
+tries to order the composer), each with its queue and what a good choice does, by ref: `front`
+(must be tiles), `back` (must not be tiles, chips are fine), `hidden` (must not be chosen nor
+tiles), and `fallback_front` (whether the layout by weight already puts `front` in front). Each
+item is an open item and the surface showing it (`q-<kind>-<id>`), its title the object's; the
+reference `answer` is in the composer's format. `composer_bench_test.go` runs in CI with no
+model: every case is valid, its turn names its ids and its preferences, its answer passes
+`checkChoice` and, laid out by `layoutOf`, meets the case, invented ids are cleaned, and the
+layout by weight does what `fallback_front` says. The composer can no longer hide a surface
+(what it leaves out is folded): whether a preference may hide one, and cases about surfaces
+written by authors, move to the surfaces' bench (#431). `composer_live_test.go` runs the cases on
+a real model when a model or the prompt changes:
 
 ```sh
 cd core
@@ -2744,10 +2800,9 @@ ERIPHE_LIVE_COMPOSER=1 go test -run TestComposerLive -v .
 It needs no node: it calls the local Claude Code CLI (`claude -p`, signed in) with the composer's
 instructions appended to the system prompt, the same turn text as production (`composerTurn`), no
 tool, low effort and no session kept, and reports per case and in all the latency (mean, max; it
-includes the CLI's start), the cost, invalid answers, invented refs, agreement with the case and
-stability (the mean Jaccard of the modules' refs between runs). It fails only when the CLI does;
-compare its numbers before switching the composer's model. A run of every case once with Sonnet
-costs about $0.05.
+includes the CLI's start), the cost, invalid answers, invented ids, agreement with the case and
+stability (the mean Jaccard of the tiles' ids between runs). It fails only when the CLI does;
+compare its numbers before switching the composer's model.
 
 ### Preferences, gestures and the brain's tools (`workspace.go`)
 
@@ -2795,11 +2850,25 @@ database opens, with their `showrule` cards: `displayRulesGone`), their API, pag
 ### The composed workspace (`/espace`)
 
 A page next to the conversation, which stays, where what Eriphe composes is laid out
-(`web_espace.go`, the app in `web/espace`). It never scrolls: a fixed grid of 12 × 8 cells where
-each module takes an area by its weight (xl 30 cells, l 12, m 6, s 3; one xl at most). What does
-not fit shrinks, then becomes a chip at the top, with its source; with room left, what weighs 3 or
-more grows one step, never into xl. A ref that names no object is dropped. The layout engine
-(`web/espace/src/engine.ts`) is pure code, with its tests beside it.
+(`web_espace.go`, the app in `web/espace`). It never scrolls: a fixed grid of 12 × 8 cells.
+
+**The surfaces, where core says** (`web/espace/src/Grid.tsx`). The page draws each surface where
+the event stream's `layout` puts it ([the layout](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)):
+a tile at its cells, by class (`.at-cN .at-rN .w-N .h-N .size-*`), its title over it and its why
+under it, Motion moving a tile that changed place and CSS fading a new one in (fill `backwards`,
+so the animation never holds a transform Motion sets); the folded
+surfaces as chips in the strip above, and a surface the layout does not name yet (it comes right
+after) there too. Eriphe's line is the layout's. A click on a tile or a chip sends the page's own
+action `open` (`POST /api/espace/action`): core places the surface first and keeps the gesture
+(`surface:<id>`); Retour or Escape sends `back`. A message written while a surface is open
+carries `surface:<id>` as its `about`. With no surface at all, the page shows the old per-kind
+canvas below, until it goes (#424); its walkthrough and its `ignored` gestures work only there, and
+what `workspace_show` puts in front is seen only there.
+
+**The old canvas** (`web/espace/src/engine.ts`, `views.tsx`): each module of the composition by
+ref takes an area by its weight (xl 30 cells, l 12, m 6, s 3; one xl at most). What does not fit
+shrinks, then becomes a chip at the top, with its source; with room left, what weighs 3 or more
+grows one step, never into xl. A ref that names no object is dropped.
 
 A click on a module opens it in focus, in the centre, with the objects related to it beside it
 (an object's `related` refs, what names it in its own, a group's members), and Eriphe comments in
@@ -3021,12 +3090,12 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
 | Call | Does |
 |---|---|
 | `c.surfaceWrite(author, surfaceIn) (surface, []a2ui.ValidationError, error)` | writes a new surface (`ID` empty or free) or the author's own again; validation errors for the A2UI and the bindings, an error for the rest (a refused source, a field) |
-| `c.surfaceRemove(id, by) error` | by its author, the brain, `surfaceByUser` or `surfaceByLifetime` |
+| `c.surfaceRemove(id, by) error` | by its author, the brain (not code's: the queue's), `surfaceByUser` (a queue's surface: its item leaves the queue too) or `surfaceByLifetime` |
 | `c.surfaces() ([]surface, error)`, `c.surface(id) (surface, error)` | all (heaviest, then latest first), one (`errNoSurface`) |
 | `c.surfaceOpened(ctx, id) error` | the user opened it: its sources read again |
 | `c.surfaceSubscribe() (snapshot []surfaceChange, changes <-chan surfaceChange, cancel func())` | the surfaces now (one `createSurface` each), then every change, nothing missed between |
 | `c.feedSurfaces() (*surfaceFeed, a2uiEvent)` | a subscription for one event stream: the snapshot to send first, then `feed.next(change, ok)` batches what waits, or gives a new snapshot when the hub dropped it |
-| `c.surfaceAction(ctx, id, a2ui.Action) error` | an action of the user's: recorded (`look.action`); `open` reads its sources again in the background; any other `errActionNotHandled` (until actions get their kinds: ask, answer, local) |
+| `c.surfaceAction(ctx, id, a2ui.Action) error` | an action of the user's: recorded (`look.action`); `open` places it first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back; any other `errActionNotHandled` (until actions get their kinds: ask, answer, local) |
 | `c.surfaceError(id, a2ui.Error) error` | an error about a surface for its author to fix (one the page met rendering it, or one code met): kept as `look.last_error` (code, path, message, at; read with `c.surface(id)`), logged, nothing sent to the page; the author writing it again clears it |
 
 A change is `{seq, message}`: one A2UI message (`createSurface`, `updateComponents`,
@@ -3043,12 +3112,15 @@ for it; the conversation does not) adds `a2ui` events to the event stream, whose
 `{"seq": N, "reset": true, "messages": [<A2UI v1.0 message>, …]}`: the messages in order, `seq`
 the last one's. The first event of a connection is a snapshot (`reset`, one `createSurface` per
 surface, possibly none): the page drops the surfaces it has and applies it. So is one after the
-stream fell 256 changes behind, transparently. The SSE `id` stays the conversation's. Back from
+stream fell 256 changes behind, transparently. A `layout` event follows the first `a2ui` event
+and each later one, and is sent at once whenever the layout changes (`watchLayout`), only when it
+differs from the last sent: where each surface is
+([the layout](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)). The SSE `id` stays the conversation's. Back from
 the page, with the session's cookie and CSRF token (401 without a session):
 
 | Endpoint | Takes | Answers |
 |---|---|---|
-| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`) | 204; 400 not a valid action, 404 no such surface, 501 an action not handled yet (only `open`, reserved, the user opened the surface) |
+| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`) | 204; 400 not a valid action, 404 no such surface, 501 an action not handled yet (only the page's own: `open`, the user opened the surface, a tile or a chip: placed first, its sources read again, the gesture kept; `back`, the layout given back) |
 | `POST /api/espace/error` | an A2UI v1.0 `error` naming its surface | 204, kept for the author (`surfaceError`); 400, 404 |
 
 ### The assistants' workspace tools (`workspace_tools.go`)

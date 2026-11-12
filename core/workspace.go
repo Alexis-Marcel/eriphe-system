@@ -81,18 +81,14 @@ func init() {
 
 // workspacePreferences are the user's preferences the composer reads with a
 // snapshot: those about the workspace, the latest first, then the few
-// others the queue's words recall. Active and current ones only: a
+// others the words of what is on it (titles, whys) recall. Active and current ones only: a
 // proposed preference waits for the user.
-func (c *core) workspacePreferences(items []snapshotItem) []string {
+func (c *core) workspacePreferences(words []string) []string {
 	if c.mem == nil {
 		return nil
 	}
 	xs, _ := c.mem.list(`kind = ? AND subject = ? AND status = ? AND (valid_to IS NULL OR valid_to > ?)`,
 		[]any{kindPreference, workspaceSubject, memActive, c.mem.now().Unix()}, `updated_at DESC, id DESC`, workspacePrefsMax)
-	var words []string
-	for _, it := range items {
-		words = append(words, it.Title, it.Why)
-	}
 	if q := strings.TrimSpace(strings.Join(words, " ")); q != "" {
 		more, _ := c.mem.recall(recallQuery{Query: q, Kinds: []string{kindPreference}, Limit: workspaceRecallMax})
 		xs = append(xs, more...)
@@ -144,7 +140,7 @@ func (c *core) noteGesture(what, ref, title string, now time.Time) error {
 	if what != gestureOpened && what != gestureIgnored {
 		return errGesture
 	}
-	if _, err := parseRef(ref); err != nil {
+	if !gestureRef(ref) {
 		return errGesture
 	}
 	var n int
@@ -157,6 +153,16 @@ func (c *core) noteGesture(what, ref, title string, now time.Time) error {
 	_, err := c.store.db.Exec(`INSERT INTO workspace_log (time, what, ref, title) VALUES (?, ?, ?, ?)`,
 		now.Unix(), what, ref, truncate(oneLine(title), gestureTitle))
 	return err
+}
+
+// gestureRef tells whether a gesture is about something the workspace
+// shows: an object's ref, or a surface (surface:<id>).
+func gestureRef(ref string) bool {
+	if id, ok := strings.CutPrefix(ref, "surface:"); ok {
+		return surfaceIDRe.MatchString(id)
+	}
+	_, err := parseRef(ref)
+	return err == nil
 }
 
 // gestures are the gestures between from and to, the oldest first.
@@ -205,9 +211,10 @@ func gestureSegment(gs []gesture, user string) segment {
 func aboutKey(seq int64) string { return fmt.Sprintf("about_msg:%d", seq) }
 
 // noteAbout keeps the ref a message of the user's was written about (the
-// module open on the workspace); a ref that does not parse is not kept.
+// module or the surface open on the workspace, surface:<id>); a ref that
+// does not parse is not kept.
 func (c *core) noteAbout(seq int64, ref string) {
-	if _, err := parseRef(ref); err == nil {
+	if gestureRef(ref) {
 		c.store.set(aboutKey(seq), strings.TrimSpace(ref))
 	}
 }

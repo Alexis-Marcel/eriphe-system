@@ -90,7 +90,7 @@ func TestNoRulesLeft(t *testing.T) {
 }
 
 // The composer's turn lists the user's workspace preferences from memory,
-// and the others the queue's words recall; a proposed one waits.
+// and the others the surfaces' words recall; a proposed one waits.
 func TestComposerReadsWorkspacePreferences(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	mustAdd(t, c.mem, &Memory{Kind: kindPreference, Subject: workspaceSubject, Text: "Sam veut toujours voir devant une sauvegarde qui échoue."})
@@ -99,7 +99,8 @@ func TestComposerReadsWorkspacePreferences(t *testing.T) {
 	mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: workspaceSubject, Text: "Sam a un grand écran."})
 	c.attend(attentionItem{Ref: "mail:7", Weight: 2, Why: "Lettre d'information de news.example.org", Source: "skill:mail"})
 
-	s := c.compositionSnapshot(momentChange, "", false)
+	c.syncQueueSurfaces()
+	s := c.poolSnapshot(momentChange, "")
 	if len(s.Preferences) != 2 || s.Preferences[0] != "Sam veut toujours voir devant une sauvegarde qui échoue." ||
 		s.Preferences[1] != "Sam ne lit jamais les lettres d'information." {
 		t.Fatalf("preferences %q", s.Preferences)
@@ -144,8 +145,8 @@ func TestRememberWorkspacePreference(t *testing.T) {
 }
 
 // workspace_show puts objects in front at once: every snapshot holds them,
-// queued or not, and every composition shows them as modules first, the
-// composer's as the fallback's; none gives the front back.
+// queued or not, and the old canvas's composition shows them as modules
+// first; the composer is told; none gives the front back.
 func TestWorkspaceShow(t *testing.T) {
 	c := startCore(t)
 	for i, w := range []int{4, 4, 3, 3, 3, 2, 2} {
@@ -178,12 +179,7 @@ func TestWorkspaceShow(t *testing.T) {
 	if len(fb.Items) != compositionItemsMax || fb.Items[0].Ref != "mail:INBOX/9" || fb.Items[1].Ref != "session:7" || fb.Items[1].Weight != weightBlocksATask {
 		t.Fatalf("fallback %s", refsOf(fb.Items))
 	}
-	// The composer left them as chips: code puts them in front all the same.
-	comp, _, err := checkComposition(`{"mode":"side","eriphe":"","items":[{"ref":"session:1","weight":4,"why":"x"}],"chips":["mail:INBOX/9","session:7"]}`, s)
-	if err != nil || refsOf(comp.Items)[:len("mail:INBOX/9/4,session:7/4")] != "mail:INBOX/9/4,session:7/4" || slices.Contains(comp.Chips, "session:7") {
-		t.Fatalf("composer %s %v %v", refsOf(comp.Items), comp.Chips, err)
-	}
-	if turn := composerTurn(s); !strings.Contains(turn, "Devant, en modules, d'abord : mail:INBOX/9, session:7") {
+	if turn := composerTurn(c.poolSnapshot(momentShow, show.Why)); !strings.Contains(turn, "on met des objets devant pour lui : « Le notaire attend »") {
 		t.Errorf("turn:\n%s", turn)
 	}
 	// Gone after its time, or when the brain gives the front back.
@@ -194,26 +190,6 @@ func TestWorkspaceShow(t *testing.T) {
 	call(map[string]any{"refs": []string{}})
 	if sh, _ := c.shown(time.Now()); sh != nil {
 		t.Fatal("still shown after an empty call")
-	}
-}
-
-// The composer hides what a preference excludes, but never a card, a
-// weight 5 nor what the brain put in front.
-func TestCompositionHidden(t *testing.T) {
-	s := snapshotOf(
-		attentionItem{Ref: "mail:1", Weight: 2, Why: "lettre"},
-		attentionItem{Ref: "card:2", Weight: 3, Why: "à approuver"},
-		attentionItem{Ref: "alert:3", Weight: 5, Why: "panne"},
-		attentionItem{Ref: "mail:4", Weight: 3, Why: "compta"},
-	)
-	comp, _, err := checkComposition(`{"mode":"side","eriphe":"","items":[{"ref":"mail:4","weight":3,"why":"x"}],"hidden":["mail:1","card:2","alert:3"]}`, s)
-	if err != nil || refsOf(comp.Items) != "mail:4/3" || strings.Join(comp.Chips, ",") != "alert:3,card:2" {
-		t.Fatalf("%s %v %v", refsOf(comp.Items), comp.Chips, err)
-	}
-	// Hiding all that is hidden is a composition, not an error.
-	one := snapshotOf(attentionItem{Ref: "mail:1", Weight: 2})
-	if comp, _, err := checkComposition(`{"mode":"center","eriphe":"Rien.","items":[],"chips":[],"hidden":["mail:1"]}`, one); err != nil || len(comp.Items)+len(comp.Chips) != 0 {
-		t.Fatalf("all hidden: %+v %v", comp, err)
 	}
 }
 

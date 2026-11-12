@@ -3,21 +3,18 @@ package main
 import (
 	"cmp"
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
 )
 
-// A composition is what the workspace shows, by ref: which objects of the
-// attention queue are modules, how big (their weight), why, which wait as
-// chips, and what Eriphe says over them. The composer (composer.go) writes
-// it from a snapshot of the queue; code checks every ref against that
-// snapshot, clamps the weights and caps the counts, and composes by weight
-// itself when the composer is off, slow or wrong. A composition carries
-// refs, never copies: the workspace reads the objects (objects.go).
+// A composition is what the old workspace canvas shows, by ref: which
+// objects of the attention queue are modules, how big (their weight), why,
+// and which wait as chips. Since #422 code alone makes it, by weight
+// (fallbackComposition), with what the brain put in front (workspace_show):
+// the composer chooses among surfaces instead (workspace_pool.go). It goes
+// with the per-kind canvas in #424. A composition carries refs, never
+// copies: the canvas reads the objects (objects.go).
 
 const (
 	compositionItemsMax = 6   // modules the screen holds (a 12×8 grid)
@@ -122,7 +119,7 @@ func (c *core) compositionSnapshot(moment, remark string, titles bool) compositi
 		}
 	}
 	if !titles {
-		s.Preferences = c.workspacePreferences(s.Items)
+		s.Preferences = c.workspacePreferences(snapshotWords(s.Items))
 		return s
 	}
 	if len(refs) > objectsMax {
@@ -135,8 +132,17 @@ func (c *core) compositionSnapshot(moment, remark string, titles bool) compositi
 			s.Items[i].Title = o.Object.Title
 		}
 	}
-	s.Preferences = c.workspacePreferences(s.Items)
+	s.Preferences = c.workspacePreferences(snapshotWords(s.Items))
 	return s
+}
+
+// snapshotWords are the titles and whys of a snapshot's items.
+func snapshotWords(items []snapshotItem) []string {
+	var words []string
+	for _, it := range items {
+		words = append(words, it.Title, it.Why)
+	}
+	return words
 }
 
 // fallbackComposition composes by weight: the heaviest first as modules,
@@ -156,79 +162,6 @@ func fallbackComposition(s compositionSnapshot) composition {
 		}
 	}
 	return settle(comp, s)
-}
-
-// composerOutput is what the composer answers.
-type composerOutput struct {
-	Mode   string `json:"mode"`
-	Eriphe string `json:"eriphe"`
-	Items  []struct {
-		Ref    string `json:"ref"`
-		Weight int    `json:"weight"`
-		Why    string `json:"why"`
-	} `json:"items"`
-	Chips  []string `json:"chips"`
-	Hidden []string `json:"hidden"` // left out on the user's preference
-}
-
-var errNoComposition = errors.New("no usable composition")
-
-// checkComposition reads what the composer answered against the snapshot:
-// a ref it does not hold is dropped, a weight clamped to 1–5, the texts cut
-// to their length, the items and chips capped. What it hides on the user's
-// preference is left out, but never a card (it waits for the user's
-// answer), a weight 5 nor what the brain put in front. An answer that is
-// not JSON, or that keeps nothing of a queue that has items, is an error:
-// the fallback composes instead. dropped counts the refs left out.
-func checkComposition(raw string, s compositionSnapshot) (comp composition, dropped int, err error) {
-	var out composerOutput
-	if err := json.Unmarshal([]byte(jsonObject(raw)), &out); err != nil {
-		return composition{}, 0, fmt.Errorf("not a composition: %w", err)
-	}
-	comp = composition{Mode: out.Mode, Eriphe: truncate(oneLine(out.Eriphe), compositionSayMax), Moment: s.Moment, At: s.Now, By: composedBy,
-		Items: []compositionItem{}, Chips: []string{}}
-	seen := map[string]bool{}
-	for _, x := range out.Items {
-		it, ok := s.item(strings.TrimSpace(x.Ref))
-		if !ok || seen[it.Ref] || len(comp.Items) == compositionItemsMax {
-			dropped++
-			continue
-		}
-		seen[it.Ref] = true
-		comp.Items = append(comp.Items, compositionItem{Ref: it.Ref, Weight: min(max(x.Weight, 1), 5),
-			Why: truncate(oneLine(x.Why), compositionWhyMax), Say: it.Say})
-	}
-	for _, ref := range out.Chips {
-		it, ok := s.item(strings.TrimSpace(ref))
-		if !ok || seen[it.Ref] || len(comp.Chips) == compositionChipsMax {
-			dropped++
-			continue
-		}
-		seen[it.Ref] = true
-		comp.Chips = append(comp.Chips, it.Ref)
-	}
-	hidden := 0
-	for _, ref := range out.Hidden {
-		it, ok := s.item(strings.TrimSpace(ref))
-		if !ok || seen[it.Ref] || it.Kind == refCard || it.Weight >= 5 || slices.Contains(s.Required, it.Ref) {
-			continue
-		}
-		seen[it.Ref] = true
-		hidden++
-	}
-	if len(s.Items) > 0 && len(comp.Items)+len(comp.Chips)+hidden == 0 {
-		return composition{}, dropped, errNoComposition
-	}
-	// Nothing of the queue goes unseen: what the composer left out waits as
-	// a chip, the heaviest first, while there is room.
-	rest := slices.Clone(s.Items)
-	slices.SortStableFunc(rest, func(a, b snapshotItem) int { return cmp.Compare(b.Weight, a.Weight) })
-	for _, it := range rest {
-		if !seen[it.Ref] && len(comp.Chips) < compositionChipsMax {
-			comp.Chips = append(comp.Chips, it.Ref)
-		}
-	}
-	return settle(comp, s), dropped, nil
 }
 
 // settle gives a composition what the brain put in front, as modules

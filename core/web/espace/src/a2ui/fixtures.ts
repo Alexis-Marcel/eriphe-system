@@ -1,4 +1,5 @@
 import type { Lang } from "../i18n";
+import type { Layout } from "../types";
 import type { Message } from "./adapter";
 import { CATALOG } from "./catalog";
 import gallery from "./gallery.json";
@@ -53,6 +54,18 @@ export function surfaceFixtures(lang: Lang): Message[] {
       },
     },
   ];
+}
+
+// sampleLayout is where eriphe-core would lay the made-up surface out: the
+// layout the event stream's "layout" carries (workspace_layout.go).
+export function sampleLayout(lang: Lang): Layout {
+  return {
+    eriphe: "",
+    by: "fallback",
+    ambient: "calm",
+    items: [{ id: SAMPLE_SURFACE, title: words[lang].title, size: "l", col: 0, row: 0, w: 12, h: 3 }],
+    chips: [],
+  };
 }
 
 // The gallery: surfaces that use every component of the catalog, for the

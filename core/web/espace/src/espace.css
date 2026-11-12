@@ -131,6 +131,13 @@ button, input, select { font: inherit; }
 .type-choice:not(.size-s) { box-shadow: 0 0 0 2px var(--decision); }
 .type-card { border-top: 4px solid var(--glow); }
 
+/* A surface's tile: its title over it; it enters by CSS, Motion moves it */
+.tile { animation: tile-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; } /* not forwards: Motion moves it after */
+.tile-title { margin: 0 0 6px; padding-right: 30px; font-size: 13px; font-weight: 600; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.size-s .tile-title { margin-bottom: 2px; font-size: 12px; }
+@keyframes tile-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tile { animation: none; } }
+
 .mod-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; overflow: auto; scrollbar-width: thin; }
 .size-s .mod-body { gap: 0; overflow: hidden; }
 .mod-kicker { margin: 0; padding-right: 30px; font-size: 13px; font-weight: 500; color: var(--ink-soft); }

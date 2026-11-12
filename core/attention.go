@@ -151,6 +151,7 @@ func (c *core) attend(it attentionItem) {
 			due = CASE WHEN due = 0 THEN excluded.due WHEN excluded.due = 0 THEN due ELSE MIN(due, excluded.due) END`,
 		it.Ref, it.Weight, truncate(oneLine(it.Why), attentionWhyMax), truncate(oneLine(it.Say), attentionWhyMax), it.Source, it.Time.Unix(),
 		boolInt(it.tainted), delivered, due)
+	c.kickWorkspace() // its surface (workspace_queue.go)
 }
 
 // attentionCap is the longest an item of this weight is held; 0 for no
@@ -165,6 +166,7 @@ func attentionCap(weight int) time.Duration {
 // attentionDone takes an item out: the user answered it, or it is gone.
 func (c *core) attentionDone(ref string) {
 	c.store.db.Exec(`DELETE FROM attention WHERE ref = ?`, ref)
+	c.kickWorkspace()
 }
 
 func cardItemRef(id int64) string { return "card:" + strconv.FormatInt(id, 10) }

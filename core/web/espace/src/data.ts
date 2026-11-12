@@ -2,7 +2,7 @@ import type { ActionMessage, Adapter, ErrorMessage, Message } from "./a2ui/adapt
 import { fixtures } from "./fixtures";
 import type { Lang } from "./i18n";
 import strings from "./strings.json";
-import type { Composition, Obj, Ref } from "./types";
+import type { Composition, Layout, Obj, Ref } from "./types";
 
 // The data layer: the one place that talks to eriphe-core. The page reads
 // - /espace/boot: its words, the CSRF token, the assistant's name;
@@ -15,10 +15,13 @@ import type { Composition, Obj, Ref } from "./types";
 //   say when to read again, and "walkthrough" when Eriphe walks the user
 //   through objects (workspace_walkthrough, workspace.go); asked with
 //   a2ui=1, its "a2ui" events carry the surfaces' A2UI messages, in order,
-//   a snapshot that resets the page first (surfaces_stream.go). One stream
-//   per page, shared;
+//   a snapshot that resets the page first (surfaces_stream.go), and its
+//   "layout" events where each surface is on the grid, which code decides
+//   (workspace_layout.go). One stream per page, shared;
 // - POST /api/espace/action and /api/espace/error: what the user did on a
-//   surface, and what went wrong rendering one, as A2UI v1.0 messages;
+//   surface, and what went wrong rendering one, as A2UI v1.0 messages; the
+//   page's own "open" (a tile or a chip) and "back" place a surface first
+//   on the layout, and give the layout back;
 // - POST /messages: what the user writes, with the ref of the module open
 //   (about), so Eriphe knows what « ça » is;
 // - POST /api/espace/gesture: what the user opened, or what left the screen
@@ -188,11 +191,20 @@ function listen(type: string, h: Handler): () => void {
 // reset: the surfaces the page has are dropped first.
 export type SurfaceEvent = { seq: number; reset?: boolean; messages: Message[] };
 
-// stream feeds the adapter the surfaces eriphe-core sends, and sends back
-// what the user did on them and what went wrong rendering them.
-export function stream(b: Boot, adapter: Adapter): () => void {
+// stream feeds the adapter the surfaces eriphe-core sends, and onLayout
+// where they go; it sends back what the user did on them and what went
+// wrong rendering them.
+export function stream(b: Boot, adapter: Adapter, onLayout: (l: Layout) => void = () => {}): () => void {
   csrf = b.csrf;
   let seq = -1;
+  // Listened to first: the stream opens with the surfaces, the layout right after.
+  const offLayout = listen("layout", (e) => {
+    try {
+      onLayout(JSON.parse(e.data) as Layout);
+    } catch {
+      /* not a layout */
+    }
+  });
   const off = listen("a2ui", (e) => {
     let ev: SurfaceEvent;
     try {
@@ -212,6 +224,7 @@ export function stream(b: Boot, adapter: Adapter): () => void {
   const offError = adapter.onError((m) => void renderError(m).catch(() => false));
   return () => {
     off();
+    offLayout();
     offAction();
     offError();
   };
@@ -231,6 +244,12 @@ async function postJSON(path: string, body: unknown): Promise<boolean> {
 // action sends what the user did on a surface (an A2UI action).
 export function action(m: ActionMessage): Promise<boolean> {
   return postJSON("/api/espace/action", m);
+}
+
+// place says the user opened a surface (a tile or a folded chip): code
+// places it first. back gives the layout back.
+export function place(what: "open" | "back", surfaceId: string): Promise<boolean> {
+  return action({ version: "1.0", action: { name: what, surfaceId, sourceComponentId: "root", timestamp: new Date().toISOString(), context: {} } });
 }
 
 // renderError sends what went wrong rendering a surface, for its author.

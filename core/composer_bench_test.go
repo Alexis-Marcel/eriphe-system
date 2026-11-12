@@ -12,12 +12,18 @@ import (
 )
 
 // The composer's bench (testdata/composer): invented moments of a
-// fictional user, Sam, each with what a good composition must do. This
-// test runs in CI with no model: every case is valid, its reference
-// answer passes checkComposition and meets its expectations, invented
-// refs are cleaned, and the fallback's order by weight is measured
-// against "in front". composer_live_test.go runs the same cases on a real
-// model.
+// fictional user, Sam, each with what a good choice must do. This test
+// runs in CI with no model: every case is valid, its reference answer
+// passes checkChoice and, laid out by code, meets its expectations,
+// invented ids are cleaned, and the layout by weight is measured against
+// "in front". composer_live_test.go runs the same cases on a real model.
+//
+// Since #422 the composer chooses among surfaces: each item of a case is
+// an open item of the queue and the surface showing it (queueSurfaceID),
+// its title the object's. The composer can no longer hide a surface: what
+// it leaves out waits folded, so "hidden" means "not chosen"; whether a
+// preference may hide a surface, and the cases about surfaces written by
+// authors rather than the queue, move to the surfaces' bench (#431).
 
 const composerBenchZone = "Europe/Paris"
 
@@ -33,8 +39,7 @@ type composerCase struct {
 	Preferences []string       `json:"preferences"`
 	Items       []composerItem `json:"items"`
 	Expect      composerExpect `json:"expect"`
-	// Answer is a composition that meets Expect, as the composer would
-	// write it.
+	// Answer is a choice that meets Expect, as the composer would write it.
 	Answer json.RawMessage `json:"answer"`
 
 	file string
@@ -49,15 +54,14 @@ type composerItem struct {
 	Say        string `json:"say"`
 }
 
-// composerExpect is what a good composition of a case does.
+// composerExpect is what a good choice of a case does, by the items' refs.
 type composerExpect struct {
-	Front  []string `json:"front"`  // must be modules
-	Back   []string `json:"back"`   // must not be modules (chips are fine)
-	Hidden []string `json:"hidden"` // must be neither module nor chip: the user's preferences exclude them
-	Mode   string   `json:"mode"`   // side or center, "" for either
-	// FallbackFront says whether the fallback's order by weight puts every
-	// Front ref among its modules: false records a case where only the
-	// composer can (a failure the user wants in front, with a low weight).
+	Front  []string `json:"front"`  // must be tiles
+	Back   []string `json:"back"`   // must not be tiles (chips are fine)
+	Hidden []string `json:"hidden"` // must not be chosen nor tiles: the user's preferences exclude them
+	// FallbackFront says whether the layout by weight puts every Front ref
+	// among its tiles: false records a case where only the composer can (a
+	// failure the user wants in front, with a low weight).
 	FallbackFront bool `json:"fallback_front"`
 }
 
@@ -83,26 +87,50 @@ func loadComposerCases(t *testing.T) []composerCase {
 	return cases
 }
 
-// snapshot is the case as production builds it (compositionSnapshot):
-// the queue's items with their kind and title, the moment and the user's
+// benchSurface is a case's item as a surface of the pool.
+func benchSurface(it composerItem, now time.Time) surface {
+	at := now.Add(-time.Duration(it.AgeMinutes) * time.Minute)
+	return surface{ID: queueSurfaceID(it.Ref), Title: it.Title, Author: surfaceAuthorCore, Weight: queueSurfaceWeight(it.Weight),
+		Why: it.Why, Created: at, Updated: at}
+}
+
+// pool is the case's pool, as layoutOf takes it.
+func (x composerCase) pool(now time.Time) []surface {
+	var out []surface
+	for _, it := range x.Items {
+		out = append(out, benchSurface(it, now))
+	}
+	return out
+}
+
+// snapshot is the case as production builds it (poolSnapshot): the pool,
+// the queue with the surface of each item, the moment and the user's
 // preferences from memory.
-func (x composerCase) snapshot(t *testing.T) compositionSnapshot {
+func (x composerCase) snapshot(t *testing.T) poolSnapshot {
 	t.Helper()
 	now, err := time.ParseInLocation("2006-01-02 15:04", x.Now, mustZone(t, composerBenchZone))
 	if err != nil {
 		t.Fatalf("%s: now: %v", x.file, err)
 	}
-	s := compositionSnapshot{Moment: x.Moment, Remark: x.Remark, Away: time.Duration(x.AwayMinutes) * time.Minute,
+	s := poolSnapshot{Moment: x.Moment, Remark: x.Remark, Away: time.Duration(x.AwayMinutes) * time.Minute, Lang: "fr",
 		Preferences: slices.Clone(x.Preferences), Now: now}
 	for _, it := range x.Items {
-		kind, _, _ := strings.Cut(it.Ref, ":")
-		s.Items = append(s.Items, snapshotItem{
-			attentionItem: attentionItem{Ref: it.Ref, Weight: it.Weight, Why: it.Why, Say: it.Say, Source: "bench",
-				Time: now.Add(-time.Duration(it.AgeMinutes) * time.Minute)},
-			Kind: kind, Title: it.Title,
-		})
+		sf := benchSurface(it, now)
+		s.Pool = append(s.Pool, entryOf(sf))
+		s.Queue = append(s.Queue, poolQueued{attentionItem: attentionItem{Ref: it.Ref, Weight: it.Weight, Why: it.Why, Say: it.Say,
+			Source: "bench", Time: sf.Created}, Surface: sf.ID})
 	}
+	slices.SortStableFunc(s.Pool, func(a, b poolEntry) int { return b.Weight - a.Weight })
 	return s
+}
+
+// surfaceIDsOf are the surfaces of refs.
+func surfaceIDsOf(refs []string) []string {
+	out := make([]string, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, queueSurfaceID(r))
+	}
+	return out
 }
 
 // check says what is wrong with the case itself, "" when it is valid.
@@ -116,8 +144,6 @@ func (x composerCase) check() string {
 		return "an arrival without away_minutes"
 	case x.Moment == momentRemark && x.Remark == "":
 		return "a remark without its words"
-	case x.Expect.Mode != "" && x.Expect.Mode != modeSide && x.Expect.Mode != modeCenter:
-		return "unknown mode " + x.Expect.Mode
 	case len(x.Answer) == 0:
 		return "no answer"
 	}
@@ -146,23 +172,22 @@ func (x composerCase) check() string {
 			seen[r] = list
 		}
 	}
-	if len(x.Expect.Front) > compositionItemsMax {
+	if len(x.Expect.Front) > choiceItemsMax {
 		return "more in front than the screen holds"
 	}
 	return ""
 }
 
-// composerScore is how a composition does against its case.
+// composerScore is how a choice does against its case.
 type composerScore struct {
-	Invented    []string // refs the answer names that the queue does not hold
-	MissFront   []string // front refs that are not modules
-	FrontBack   []string // back refs shown as modules
-	ShownHidden []string // hidden refs the answer chose (as module or chip)
-	BadMode     bool
+	Invented    []string // ids the answer names that the pool does not hold
+	MissFront   []string // front surfaces that are not tiles
+	FrontBack   []string // back or hidden surfaces shown as tiles
+	ShownHidden []string // hidden surfaces the answer chose
 }
 
 func (s composerScore) agrees() bool {
-	return len(s.MissFront)+len(s.FrontBack)+len(s.ShownHidden) == 0 && !s.BadMode
+	return len(s.MissFront)+len(s.FrontBack)+len(s.ShownHidden) == 0
 }
 
 func (s composerScore) String() string {
@@ -172,65 +197,56 @@ func (s composerScore) String() string {
 	var b []string
 	for _, p := range []struct {
 		what string
-		refs []string
-	}{{"invented", s.Invented}, {"not in front", s.MissFront}, {"in front, should wait", s.FrontBack}, {"shown, should be hidden", s.ShownHidden}} {
-		if len(p.refs) > 0 {
-			b = append(b, p.what+" "+strings.Join(p.refs, ","))
+		ids  []string
+	}{{"invented", s.Invented}, {"not in front", s.MissFront}, {"in front, should wait", s.FrontBack}, {"chosen, should be left out", s.ShownHidden}} {
+		if len(p.ids) > 0 {
+			b = append(b, p.what+" "+strings.Join(p.ids, ","))
 		}
-	}
-	if s.BadMode {
-		b = append(b, "wrong mode")
 	}
 	return strings.Join(b, "; ")
 }
 
-// scoreComposition scores the composer's raw answer and the composition
-// code made of it. Hidden is judged on what the answer chose and on what
-// code shows (modules and chips): the composer hides what a preference
-// excludes (its "hidden"), or code would show it as a chip.
-func scoreComposition(x composerCase, s compositionSnapshot, raw string, comp composition) composerScore {
+// scoreChoice scores the composer's raw answer and the layout code made of
+// its choice.
+func scoreChoice(x composerCase, s poolSnapshot, raw string, l workspaceLayout) composerScore {
 	var sc composerScore
 	var out composerOutput
 	json.Unmarshal([]byte(jsonObject(raw)), &out)
-	chosen := slices.Clone(out.Chips)
+	hidden := surfaceIDsOf(x.Expect.Hidden)
 	for _, it := range out.Items {
-		chosen = append(chosen, it.Ref)
-	}
-	for _, r := range chosen {
-		r = strings.TrimSpace(r)
-		if _, ok := s.item(r); !ok {
-			sc.Invented = append(sc.Invented, r)
+		id := strings.TrimSpace(it.ID)
+		if _, ok := s.entry(id); !ok {
+			sc.Invented = append(sc.Invented, id)
 		}
-		if slices.Contains(x.Expect.Hidden, r) && !slices.Contains(sc.ShownHidden, r) {
-			sc.ShownHidden = append(sc.ShownHidden, r)
+		if slices.Contains(hidden, id) && !slices.Contains(sc.ShownHidden, id) {
+			sc.ShownHidden = append(sc.ShownHidden, id)
 		}
 	}
-	for _, r := range append(itemRefs(comp.Items), comp.Chips...) {
-		if slices.Contains(x.Expect.Hidden, r) && !slices.Contains(sc.ShownHidden, r) {
-			sc.ShownHidden = append(sc.ShownHidden, r)
+	for _, id := range out.Stale {
+		if _, ok := s.entry(strings.TrimSpace(id)); !ok {
+			sc.Invented = append(sc.Invented, id)
 		}
 	}
-	modules := itemRefs(comp.Items)
-	for _, r := range x.Expect.Front {
-		if !slices.Contains(modules, r) {
-			sc.MissFront = append(sc.MissFront, r)
+	tiles := tileIDs(l)
+	for _, id := range surfaceIDsOf(x.Expect.Front) {
+		if !slices.Contains(tiles, id) {
+			sc.MissFront = append(sc.MissFront, id)
 		}
 	}
-	for _, r := range append(slices.Clone(x.Expect.Back), x.Expect.Hidden...) {
-		if slices.Contains(modules, r) {
-			sc.FrontBack = append(sc.FrontBack, r)
+	for _, id := range append(surfaceIDsOf(x.Expect.Back), hidden...) {
+		if slices.Contains(tiles, id) {
+			sc.FrontBack = append(sc.FrontBack, id)
 		}
 	}
-	sc.BadMode = x.Expect.Mode != "" && comp.Mode != x.Expect.Mode
 	return sc
 }
 
-func itemRefs(items []compositionItem) []string {
-	refs := make([]string, 0, len(items))
-	for _, it := range items {
-		refs = append(refs, it.Ref)
+func tileIDs(l workspaceLayout) []string {
+	out := make([]string, 0, len(l.Items))
+	for _, t := range l.Items {
+		out = append(out, t.ID)
 	}
-	return refs
+	return out
 }
 
 func TestComposerBenchCases(t *testing.T) {
@@ -238,28 +254,29 @@ func TestComposerBenchCases(t *testing.T) {
 	if len(cases) < 5 {
 		t.Fatalf("%d cases, want 5 at least", len(cases))
 	}
-	ids := map[string]bool{}
+	seenIDs := map[string]bool{}
 	moments := map[string]bool{}
 	for _, x := range cases {
 		t.Run(x.ID, func(t *testing.T) {
 			if bad := x.check(); bad != "" {
 				t.Fatalf("%s: %s", x.file, bad)
 			}
-			if ids[x.ID] {
+			if seenIDs[x.ID] {
 				t.Fatalf("%s: id %s twice", x.file, x.ID)
 			}
-			ids[x.ID], moments[x.Moment] = true, true
+			seenIDs[x.ID], moments[x.Moment] = true, true
 			s := x.snapshot(t)
+			pool := x.pool(s.Now)
 
-			// The turn the composer reads names every ref, and only those,
+			// The turn the composer reads names every id, and only those,
 			// and the user's preferences.
 			turn := composerTurn(s)
-			allowed := make([]string, 0, len(s.Items))
-			for _, it := range s.Items {
-				allowed = append(allowed, it.Ref)
+			allowed := make([]string, 0, len(s.Pool))
+			for _, e := range s.Pool {
+				allowed = append(allowed, e.ID)
 			}
-			if !strings.Contains(turn, "Refs permises : "+strings.Join(allowed, ", ")+"\n") {
-				t.Errorf("turn without its refs:\n%s", turn)
+			if !strings.Contains(turn, "Ids permis : "+strings.Join(allowed, ", ")+"\n") {
+				t.Errorf("turn without its ids:\n%s", turn)
 			}
 			for _, p := range s.Preferences {
 				if !strings.Contains(turn, "- "+packQuote(p)) {
@@ -270,47 +287,53 @@ func TestComposerBenchCases(t *testing.T) {
 				t.Errorf("%s: hidden refs with no preference to hide them", x.file)
 			}
 
-			// The reference answer passes as it is and meets the case.
+			// The reference answer passes as it is and, laid out, meets the case.
 			raw := string(x.Answer)
-			comp, dropped, err := checkComposition(raw, s)
-			if err != nil || dropped != 0 || comp.By != composedBy {
-				t.Fatalf("answer: %v, %d dropped, by %s", err, dropped, comp.By)
+			ch, sig, dropped, err := checkChoice(raw, s)
+			if err != nil || dropped != 0 || ch.By != composedBy {
+				t.Fatalf("answer: %v, %d dropped, by %s", err, dropped, ch.By)
 			}
-			if sc := scoreComposition(x, s, raw, comp); !sc.agrees() || len(sc.Invented) > 0 {
+			l := layoutOf(pool, ch, "")
+			if sc := scoreChoice(x, s, raw, l); !sc.agrees() || len(sc.Invented) > 0 {
 				t.Errorf("answer: %s", sc)
 			}
-			// Nothing of the queue goes unseen but what a preference hides.
-			if n := len(comp.Items) + len(comp.Chips); n != min(len(s.Items)-len(x.Expect.Hidden), compositionItemsMax+compositionChipsMax) {
-				t.Errorf("answer shows %d of %d", n, len(s.Items))
+			// Nothing of the pool goes unseen: a tile or a chip.
+			if n := len(l.Items) + len(l.Chips); n != min(len(pool), len(l.Items)+layoutChipsMax) {
+				t.Errorf("layout shows %d of %d", n, len(pool))
 			}
 
-			// Invented refs are cleaned: the same composition, and the
-			// score counts them.
+			// Invented ids are cleaned: the same choice, and the score
+			// counts them.
 			var out map[string]any
 			json.Unmarshal(x.Answer, &out)
 			items, _ := out["items"].([]any)
-			out["items"] = append([]any{map[string]any{"ref": "mail:invented-1", "weight": 5, "why": "inventé"}}, items...)
-			chips, _ := out["chips"].([]any)
-			out["chips"] = append(chips, "card:c-999")
+			out["items"] = append([]any{map[string]any{"id": "s-invented-1", "size": "xl", "why": "inventé"}}, items...)
+			stale, _ := out["stale"].([]any)
+			out["stale"] = append(stale, "s-invented-2")
 			bad, _ := json.Marshal(out)
-			cleaned, dropped, err := checkComposition(string(bad), s)
-			if err != nil || dropped != 2 || refsOf(cleaned.Items) != refsOf(comp.Items) || !slices.Equal(cleaned.Chips, comp.Chips) {
-				t.Errorf("invented refs: %v, %d dropped, %s vs %s", err, dropped, refsOf(cleaned.Items), refsOf(comp.Items))
+			cleaned, badSig, dropped, err := checkChoice(string(bad), s)
+			if len(ch.Items) == 0 {
+				// Choosing nothing is a choice; only invented ids are not.
+				if err == nil {
+					t.Error("an answer of invented ids accepted")
+				}
+			} else if err != nil || dropped != 2 || !slices.Equal(cleaned.Items, ch.Items) || !slices.Equal(badSig.Stale, sig.Stale) {
+				t.Errorf("invented ids: %v, %d dropped, %v vs %v", err, dropped, cleaned.Items, ch.Items)
 			}
-			if sc := scoreComposition(x, s, string(bad), cleaned); len(sc.Invented) != 2 {
+			if sc := scoreChoice(x, s, string(bad), l); len(sc.Invented) != 2 {
 				t.Errorf("invented counted %v", sc.Invented)
 			}
-			// Only invented refs: invalid when the queue holds something.
-			if _, _, err := checkComposition(`{"mode":"side","eriphe":"","items":[{"ref":"mail:invented-1","weight":3,"why":"x"}],"chips":["card:c-999"]}`, s); err == nil {
-				t.Error("an answer of invented refs accepted")
+			// Only invented ids: invalid when the pool holds something.
+			if _, _, _, err := checkChoice(`{"eriphe":"","items":[{"id":"s-invented-1","size":"m","why":"x"}]}`, s); err == nil {
+				t.Error("an answer of invented ids accepted")
 			}
 
-			// The fallback, by weight, puts the front refs in front exactly
+			// The layout by weight puts the front surfaces in front exactly
 			// where the case says it can.
-			fb := fallbackComposition(s)
-			miss := scoreComposition(x, s, "", fb).MissFront
+			fb := layoutOf(pool, fallbackChoice(x.Moment, s.Now), "")
+			miss := scoreChoice(x, s, "", fb).MissFront
 			if (len(miss) == 0) != x.Expect.FallbackFront {
-				t.Errorf("fallback %s: front missed %v, fallback_front %v", refsOf(fb.Items), miss, x.Expect.FallbackFront)
+				t.Errorf("fallback %v: front missed %v, fallback_front %v", tileIDs(fb), miss, x.Expect.FallbackFront)
 			}
 		})
 	}
