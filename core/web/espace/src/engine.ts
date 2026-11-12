@@ -1,4 +1,4 @@
-import type { Composition, Ev, Item, Obj, Ref, Rule } from "./types";
+import type { Composition, Item, Obj, Ref, Rule } from "./types";
 
 // The layout engine, in code and without words: it takes a composition
 // (refs and weights), the objects, the user's rules and the focus, and
@@ -44,16 +44,11 @@ export type Layout = { placed: Placed[]; chips: Chip[] };
 
 // What a rule applies to, from the narrowest key to the widest.
 export function keysOf(o: Obj): string[] {
-  switch (o.type) {
-    case "mail": {
-      const domain = o.from.match(/@([^\s>]+)/)?.[1]?.toLowerCase();
-      return domain ? [`mail:${domain}`, "mail"] : ["mail"];
-    }
-    case "alert":
-      return [`alert:${o.monitor}`, "alert"];
-    default:
-      return [o.type];
+  if (o.kind === "mail" && o.mail) {
+    const domain = o.mail.from.match(/@([^\s>]+)/)?.[1]?.toLowerCase().replace(/>$/, "");
+    return domain ? [`mail:${domain}`, "mail"] : ["mail"];
   }
+  return [o.kind];
 }
 
 // The weight a rule adds to an object: "more" is +1, "less" -1, "never" -5.
@@ -62,54 +57,28 @@ export function ruleDelta(o: Obj, rules: Rule[]): number {
   return rules.filter((r) => keys.includes(r.key)).reduce((s, r) => s + r.delta, 0);
 }
 
-// The dates an object is about.
-export function datesOf(o: Obj): string[] {
-  switch (o.type) {
-    case "card":
-      return o.input.start ? [o.input.start.slice(0, 10)] : [];
-    case "event":
-      return [o.start.slice(0, 10)];
-    case "agenda":
-      return [o.date];
-    default:
-      return [];
-  }
-}
-
-// Relations, computed, never declared by the composition: what points to
-// an object, and the agenda of the days it is about.
+// Relations: what eriphe-core says an object relates to (its related refs:
+// the agenda of its day, what a card's proposal comes from…), what says it
+// relates to the object, and a group's members.
 export function related(focus: Obj, all: Obj[]): Ref[] {
-  const out = new Set<Ref>();
-  for (const o of all) {
-    if (o.ref === focus.ref) continue;
-    if (o.type === "card" && o.about === focus.ref) out.add(o.ref);
-    if (focus.type === "card" && focus.about === o.ref) out.add(o.ref);
-    if (o.type === "choice" && o.session === focus.ref) out.add(o.ref);
-    if (focus.type === "choice" && focus.session === o.ref) out.add(o.ref);
-    if (focus.type === "group" && focus.refs.includes(o.ref)) out.add(o.ref);
-  }
-  const dates = new Set([focus, ...all.filter((o) => out.has(o.ref))].flatMap(datesOf));
-  for (const o of all) if (o.type === "agenda" && dates.has(o.date)) out.add(o.ref);
+  const out = new Set<Ref>(focus.related ?? []);
+  for (const r of focus.group?.refs ?? []) out.add(r);
+  for (const o of all) if (o.related?.includes(focus.ref)) out.add(o.ref);
   out.delete(focus.ref);
   return [...out];
 }
 
-// The proposals (cards) that land on a day, and whether they overlap what
-// is already there: an agenda shows them as ghosts.
-export function ghostsFor(date: string, all: Obj[]): { ev: Ev; ref: Ref; state: string; conflict: boolean }[] {
-  const day = all.find((o): o is Extract<Obj, { type: "agenda" }> => o.type === "agenda" && o.date === date);
-  const out = [];
-  for (const o of all) {
-    if (o.type !== "card" || !o.input.start || o.input.start.slice(0, 10) !== date) continue;
-    const ev: Ev = {
-      start: o.input.start.slice(11, 16),
-      end: o.input.end?.slice(11, 16),
-      title: o.input.title ?? o.text,
-      where: o.input.location,
-    };
-    const conflict = !!day?.events.some((e) => e.start < (ev.end ?? ev.start) && ev.start < (e.end ?? e.start));
-    out.push({ ev, ref: o.ref, state: o.state, conflict });
-  }
+// The events of a day that overlap another one, by index.
+export function overlapping(events: { start: string; end: string; all_day?: boolean }[]): Set<number> {
+  const out = new Set<number>();
+  events.forEach((a, i) =>
+    events.forEach((b, j) => {
+      if (i < j && !a.all_day && !b.all_day && a.start < b.end && b.start < a.end) {
+        out.add(i);
+        out.add(j);
+      }
+    }),
+  );
   return out;
 }
 
@@ -159,7 +128,7 @@ export function place(comp: Composition, store: Map<Ref, Obj>, rules: Rule[] = [
   const focused = focus ? store.get(focus) : undefined;
   // A focus pulls in what relates to it among what is there, and its agenda.
   const rel = focused
-    ? related(focused, [...store.values()]).filter((r) => present.has(r) || store.get(r)?.type === "agenda")
+    ? related(focused, [...store.values()]).filter((r) => present.has(r) || store.get(r)?.kind === "agenda")
     : [];
 
   const wants: Want[] = [];

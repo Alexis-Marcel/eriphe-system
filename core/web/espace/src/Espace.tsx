@@ -33,8 +33,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const [snap, setSnap] = useState<data.Snapshot | null>(null);
   const [failed, setFailed] = useState(false);
   const [focus, setFocus] = useState<Ref | null>(null);
-  const [patch, setPatch] = useState<Record<Ref, Partial<Obj>>>({});
-  const [gone, setGone] = useState<Set<Ref>>(new Set());
+  const [decided, setDecided] = useState<Record<Ref, string>>({}); // cards answered here
   const [said, setSaid] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [menu, setMenu] = useState<Ref | null>(null);
@@ -51,17 +50,17 @@ export function Espace({ boot }: { boot: data.Boot }) {
 
   const store = useMemo(() => {
     const m = new Map<Ref, Obj>();
-    for (const [ref, o] of snap?.store ?? []) m.set(ref, { ...o, ...patch[ref] } as Obj);
+    for (const [ref, o] of snap?.store ?? []) m.set(ref, o.card && decided[ref] ? { ...o, card: { ...o.card, state: decided[ref] } } : o);
     return m;
-  }, [snap, patch]);
+  }, [snap, decided]);
   const all = useMemo(() => [...store.values()], [store]);
 
   const comp = snap?.comp ?? EMPTY;
   const { placed, chips } = useMemo(
-    () => place({ ...comp, items: comp.items.filter((i) => !gone.has(i.ref)), chips: comp.chips?.filter((r) => !gone.has(r)) }, store, rules, focus),
-    [comp, store, rules, focus, gone],
+    () => place(comp, store, rules, focus),
+    [comp, store, rules, focus],
   );
-  const shownChips = chips.filter((c) => !(c.obj.type === "card" && c.obj.state !== "pending"));
+  const shownChips = chips.filter((c) => !(c.obj.card && c.obj.card.state !== "pending"));
 
   const fp = focus ? placed.find((p) => p.focus) : undefined;
   const focusSay = fp ? fp.say ?? `${t("espace.say.lead", titleOf(t, lang, fp.obj))}${fp.why ? ` ${fp.why}.` : ""}` : null;
@@ -112,17 +111,8 @@ export function Espace({ boot }: { boot: data.Boot }) {
     open,
     answer: async (ref, yes) => {
       if (!snap?.sample && !(await data.answer(ref, yes).catch(() => false))) return say(t("espace.error"));
-      setPatch((p) => ({ ...p, [ref]: { ...p[ref], state: yes ? "yes" : "no" } as Partial<Obj> }));
+      setDecided((d) => ({ ...d, [ref]: yes ? "approved" : "rejected" }));
       say(t(yes ? "espace.card.did.yes" : "espace.card.did.no"));
-    },
-    pick: (ref, option) => {
-      // A session's choice is answered in the conversation until #384 gives it its own way.
-      const c = store.get(ref);
-      if (c?.type === "choice" && !snap?.sample) send(`${c.question} ${option}`, t("espace.sent"));
-      setPatch((p) => ({ ...p, [ref]: { ...p[ref], picked: option } as Partial<Obj> }));
-      setGone((g) => new Set(g).add(ref));
-      open(null);
-      setSaid(t("espace.choice.picked", option));
     },
     ask: (msg) => send(msg, t("espace.ask.sent")),
   };
@@ -172,6 +162,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
         <aside className="eriphe-panel" aria-live="polite">
           <p className="eriphe-name">{boot.name}</p>
           <div className="eriphe-text">{text && <p>{text}</p>}</div>
+          {snap && !snap.sample && placed.length === 0 && shownChips.length === 0 && <p className="eriphe-sample quiet">{t("espace.empty")}</p>}
           {snap?.sample && <p className="eriphe-sample">{t("espace.sample")}</p>}
           <div className="eriphe-actions">
             {tour ? (
@@ -202,11 +193,11 @@ export function Espace({ boot }: { boot: data.Boot }) {
               {shownChips.map((c) => (
                 <motion.div key={c.obj.ref} layout role="listitem" className={`chip from-${c.from}`}
                   initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={spring}>
-                  <button className="chip-open" onClick={() => open(c.obj.type === "card" && c.obj.about && store.has(c.obj.about) ? c.obj.about : c.obj.ref)}>
-                    <span className="chip-text">{lineOf(t, c.obj)}</span>
+                  <button className="chip-open" onClick={() => open(c.obj.ref)}>
+                    <span className="chip-text">{lineOf(c.obj)}</span>
                     <span className="chip-from">{[sourceOf(c.obj), t(c.from === "overflow" ? "espace.chip.overflow" : "espace.chip.composition")].filter(Boolean).join(", ")}</span>
                   </button>
-                  {c.obj.type === "card" && c.obj.state === "pending" && <YesNo ref_={c.obj.ref} act={act} />}
+                  {c.obj.card?.state === "pending" && <YesNo ref_={c.obj.ref} act={act} />}
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -225,7 +216,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
                     initial={{ opacity: 0, scale: 0.94 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.92 }}
-                    className={`mod size-${p.size} at-c${p.col} at-r${p.row} w-${p.w} h-${p.h} type-${p.obj.type}${p.focus ? " focus" : ""}${p.related ? " related" : ""}`}
+                    className={`mod size-${p.size} at-c${p.col} at-r${p.row} w-${p.w} h-${p.h} type-${p.obj.kind}${p.focus ? " focus" : ""}${p.related ? " related" : ""}`}
                     onClick={(e) => {
                       if (p.size === "s" && !p.focus && !(e.target as HTMLElement).closest("button,input,select,a")) open(p.obj.ref);
                     }}
@@ -261,7 +252,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
 // The label of what a rule applies to.
 function keyLabel(t: ReturnType<typeof useWords>["t"], key: string): string {
   const [kind, arg] = key.split(/:(.*)/s);
-  if (arg) return t(`espace.key.${kind}.${kind === "mail" ? "domain" : "monitor"}`, arg);
+  if (arg) return t("espace.key.mail.domain", arg);
   return t(`espace.key.${kind}`);
 }
 

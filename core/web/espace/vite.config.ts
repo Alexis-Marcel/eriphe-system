@@ -34,5 +34,5 @@ export default defineConfig({
   },
   server: { port: 5300, strictPort: true },
   preview: { port: 5301, strictPort: true, headers: { "Content-Security-Policy": csp } },
-  test: { environment: "node", include: ["src/**/*.test.ts"] },
+  test: { environment: "node", include: ["src/**/*.test.ts", "src/**/*.test.tsx"] },
 });

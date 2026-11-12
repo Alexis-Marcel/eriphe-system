@@ -179,6 +179,15 @@ button, input, select { font: inherit; }
 .tl.done .step-dot { background: #3f6b57; border-color: #3f6b57; }
 .tl.running { color: var(--ink); font-weight: 600; }
 .tl.running .step-dot { border-color: var(--decision); background: var(--decision); }
+.tl.failed { color: var(--late); }
+.tl.failed .step-dot { border-color: var(--late); }
+.fields { margin: 6px 0 0; display: grid; gap: 2px; font-size: 13px; }
+.fields div { display: grid; grid-template-columns: minmax(80px, auto) 1fr; gap: 8px; }
+.fields dt { color: var(--ink-soft); }
+.fields dd { margin: 0; }
+.excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+.mail-body { white-space: pre-wrap; }
+.eriphe-sample.quiet { background: color-mix(in oklab, var(--paper) 10%, transparent); color: var(--paper); }
 .tl em { display: block; font-style: normal; font-weight: 400; color: var(--ink-soft); }
 
 .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin-top: 8px; }

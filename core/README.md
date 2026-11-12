@@ -2576,18 +2576,23 @@ more grows one step, never into xl. A ref that names no object is dropped. The l
 (`web/espace/src/engine.ts`) is pure code, with its tests beside it.
 
 A click on a module opens it in focus, in the centre, with the objects related to it beside it
-(the mail a proposal comes from, the agenda of its day), and Eriphe comments in one line. Each
+(an object's `related` refs, what names it in its own, a group's members), and Eriphe comments in
+one line. Each
 module's ⋯ menu asks Eriphe about it (a message in the conversation) or keeps a remark: more,
 less, never, or a sentence; until remarks become rules (#388), they stay in the browser and the
 engine applies them. Everything arrives at once; « Présente-moi » (the button, or typed) walks
 through the modules one by one. The chat is a narrow column, wider on demand, and a message
-written there goes to the conversation. Views are generic, one per type of object (mail, agenda
-day, event, card, session, choice, alert, project, group), each with a short and a full form.
+written there goes to the conversation. Views are generic, one per kind of [object](#objects-by-ref-objectsgo)
+(mail, agenda day, event, card, session, task, project, and the composition's groups), each with a
+short and a full form; a kind without a view shows its title.
 
-Data: `/api/composition` (#386), else the attention queue `/api/attention` (#382) laid out by
-weight, the objects from `/api/objects` (#384), read again on the event stream's `attention` and
-`composition` events. Until these exist, the page shows made-up data (`web/espace/src/fixtures.ts`)
-and says it is an example. `web/espace/src/data.ts` is the one place that talks to eriphe-core.
+Data: `/api/composition` (#386), else the attention queue `/api/attention` laid out by weight;
+the objects, and those they relate to, from `POST /api/objects` (50 refs a request; a ref that
+cannot be read is left out); read again on the event stream's `attention` and `composition`
+events. A 401 sends the page to the sign-in. Only when neither the composition nor the attention
+queue is served (404), or on the dev server, the page shows made-up data in the same shape
+(`web/espace/src/fixtures.ts`) and says it is an example. `web/espace/src/data.ts` is the one
+place that talks to eriphe-core; card answers go to `POST /cards/{id}/yes|no`.
 
 **Building.** The app is React, Vite and Motion. Its built files are committed under
 `web/static/espace/` and embedded with the other static files, so `go build` needs no Node:

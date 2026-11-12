@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { COLS, DIMS, ROWS, pack, place, related, type Layout } from "./engine";
+import { COLS, DIMS, ROWS, keysOf, overlapping, pack, place, related, type Layout } from "./engine";
 import type { Composition, Item, Obj, Ref, Rule } from "./types";
 
-const mail = (id: string, from = "Sam <sam@example.org>"): Obj => ({
-  ref: `mail:${id}`, type: "mail", from, subject: `Subject ${id}`, at: "2026-11-12T09:00", excerpt: "…",
+const mail = (id: string, from = "Sam <sam@example.org>", related?: Ref[]): Obj => ({
+  ref: `mail:${id}`, kind: "mail", title: `Subject ${id}`, related,
+  mail: { id, account: "", folder: "INBOX", from, subject: `Subject ${id}`, date: "2026-11-12T09:00:00Z", unread: true, body: "…" },
 });
 const storeOf = (...objs: Obj[]) => new Map<Ref, Obj>(objs.map((o) => [o.ref, o]));
 const comp = (items: Item[], chips?: Ref[]): Composition => ({ mode: "side", eriphe: "", items, chips });
@@ -106,10 +107,11 @@ describe("place", () => {
   });
 
   it("puts the focus in xl and pulls its relations in", () => {
-    const m = mail("a");
-    const card: Obj = { ref: "card:1", type: "card", text: "Add to the agenda", tool: "calendar.create_event",
-      input: { start: "2026-11-19T15:00", end: "2026-11-19T16:00", title: "Visit" }, about: m.ref, since: "2026-11-12T09:00", state: "pending" };
-    const day: Obj = { ref: "agenda:2026-11-19", type: "agenda", date: "2026-11-19", events: [] };
+    // The card says it relates to the day; the mail says it relates to the card.
+    const card: Obj = { ref: "card:1", kind: "card", title: "Add to the agenda", related: ["agenda:2026-11-19"],
+      card: { id: 1, kind: "intention", state: "pending", text: "Add to the agenda", created: "", proposal: "intention:4" } };
+    const m = mail("a", undefined, [card.ref]);
+    const day: Obj = { ref: "agenda:2026-11-19", kind: "agenda", title: "2026-11-19", agenda: { date: "2026-11-19", events: [] } };
     const other = mail("b");
     const store = storeOf(m, card, day, other);
     expect(related(card, [...store.values()]).sort()).toEqual([day.ref, m.ref].sort());
@@ -121,5 +123,20 @@ describe("place", () => {
     expect(by[other.ref].size).toBe("s");
     expect(l.chips).toHaveLength(0);
     checkNoOverflow(l);
+  });
+});
+
+describe("relations and keys", () => {
+  it("keys a mail by its sender's domain", () => {
+    expect(keysOf(mail("a", "News <news@example.net>"))).toEqual(["mail:example.net", "mail"]);
+    expect(keysOf({ ref: "task:t1", kind: "task", title: "" })).toEqual(["task"]);
+  });
+  it("finds a group's members", () => {
+    const a = mail("a"), g: Obj = { ref: "group:1", kind: "group", title: "", group: { refs: [a.ref] } };
+    expect(related(g, [a, g])).toEqual([a.ref]);
+  });
+  it("finds events that overlap", () => {
+    const ev = (start: string, end: string) => ({ start, end });
+    expect([...overlapping([ev("10:00", "11:00"), ev("15:00", "16:00"), ev("15:30", "16:30")])]).toEqual([1, 2]);
   });
 });
