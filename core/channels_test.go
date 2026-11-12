@@ -30,7 +30,7 @@ func TestChannelKinds(t *testing.T) {
 			t.Errorf("%s: a channel a note is broadcast on carries its text", k.ID)
 		}
 	}
-	if got := sendChannels(); !slices.Equal(got, []string{chanPush, dcChannel, tgChannel}) { // the bot channels by their files' order
+	if got := sendChannels(); !slices.Equal(got, []string{chanPush, dcChannel, sgChannel, tgChannel}) { // the bot channels by their files' order
 		t.Errorf("send channels: %v", got)
 	}
 	if ws, _ := channelKindOf(chanWorkspace); ws.Speaker != speakerUser || ws.out() {

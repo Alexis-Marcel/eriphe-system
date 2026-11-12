@@ -3121,6 +3121,7 @@ brain's tools and prompt, the cards and Settings → Access go through the regis
 | `push` | notifies | | the notification's text |
 | `telegram` (an adapter) | both | the user's account, verified with a code | the notification's text, with buttons |
 | `discord` (an adapter) | both | the user's account, verified with a code | the notification's text, with buttons |
+| `signal` (an adapter) | both | the user's account, verified with a code | the notification's text, with a legend its reactions answer |
 
 Trust has two levels: trusted (the user's session, their verified account, an app the user said
 they trust), whose words are the user's and whose buttons answer every card, a task's permission
@@ -3202,6 +3203,41 @@ components (100-character `custom_id`); a tap is answered by its interaction's c
 needs no bot token: the message updated without its buttons once decided, else an ephemeral note.
 A 429's `retry_after` is followed. Direct messages with a bot are not end-to-end encrypted, and
 Settings says so.
+
+**Signal** (`signal.go`), the third. Signal has no bots, so Eriphe gets an account of its own, with a
+number of its own (a landline works: Signal verifies it by a voice call).
+[eriphe-signal](../servers/signal/README.md) holds that account. It is the channel's own service
+(`botSpec.Service`, [Services](#services-local-mcp-servers)), named `channel-signal`, and runs
+while Signal is on, outside the catalog: in no list of tools, under no access level, reached by the
+channel alone through its `serviceClient`. The service is one of Eriphe's own images, which runs
+eriphe-core's version, on an amd64 node only (its signal-cli is x86_64 only), with a volume for the
+account's keys. It is wanted while `signal_service` is on. That is read from the store, so a
+reconciliation before the channel starts keeps it. When its node reports it running, the channel
+listens again at once.
+
+There is no token: the number registered stands for it (`botSpec.Account`). Until then, the page's
+setup (`botSpec.Setup`) takes its place:
+
+1. Turn Signal on.
+2. The number, and SMS or call.
+3. Signal's captcha, when it asks for one: solved on `signalcaptchas.org`, its `signalcaptcha://`
+   link pasted.
+4. The code, with the number's PIN if it has one, and a new PIN to lock it.
+
+Then the linking is the bot channels' own; the page links to `signal.me/#p/<number>`.
+
+Listening is one `receive` per round, a long poll of up to 50 s from the last `seq` seen; a message
+in a group is not the user's chat. Out: `send` (2,000 characters).
+
+Signal has no buttons. A message with buttons ends with a legend that gives each an emoji by
+position (`👍 Oui · 👎 Non`, `⏳` third). A reaction with that emoji to that message is the tap
+(skin tones aside). The emojis of the last 50 such messages are kept by their timestamp
+(`signal_buttons`), and dropped once decided. A tap is answered with a short message.
+
+Removing the channel unregisters the number, deletes its data in the service, then turns the
+service off. Messages are end-to-end encrypted up to the service, which keeps them and the
+account's keys on the node, and Settings says so. Untested against a real account: the tests fake
+the service.
 
 **Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
 A pure function, `route(note, signals, settings, tried)`, picks one device at a time from signals

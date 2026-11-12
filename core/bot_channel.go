@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"regexp"
@@ -67,6 +68,21 @@ type botSpec struct {
 	TextMax, DataMax int
 	Token            *regexp.Regexp // what a bot's token looks like
 	Placeholder      string         // the token field's example
+	// Handle shows the bot's name, "@name" when nil.
+	Handle func(bot string) string
+	// Service is a container the channel runs while it is on: its own
+	// service (service_owners.go), channel-<id>, outside the catalog,
+	// reached by its transport through b.svc.
+	Service *RunSpec
+	// A channel whose account is not a bot's token: Account is what
+	// stands for the token (the account set up, "" before), and Setup the
+	// page's part that sets it up, in the place of the token's field, with
+	// its Routes (under /channels/<id>/); Removed undoes it, when the
+	// channel is removed. Token is then nil.
+	Account func(b *botChannel) string
+	Setup   func(b *botChannel, lang string) template.HTML
+	Routes  func(w *web, mux *http.ServeMux, h func(botHandler) http.Handler)
+	Removed func(b *botChannel)
 	// OpenLink is a link that opens the bot with the code typed, "" when
 	// the service has none.
 	OpenLink func(bot, code string) string
@@ -129,6 +145,9 @@ var botSpecs = map[string]botSpec{}
 func registerBot(s botSpec) {
 	botSpecs[s.ID] = s
 	id := s.ID
+	if s.Service != nil {
+		registerBotService(s)
+	}
 	registerChannel(channelKind{ID: id, Label: s.Label, Dir: dirBoth, Speaker: speakerAccount, Carries: carryText,
 		Line: true, Page: "/settings/access/" + id,
 		ready: func(c *core) bool { return c.bot(id).linked() },
@@ -153,6 +172,42 @@ func registerBot(s botSpec) {
 	})
 }
 
+// registerBotService makes the channel the owner of its service: wanted
+// while the channel is on (its state in the store, read without the
+// channel, which starts after the services), told when it runs.
+func registerBotService(s botSpec) {
+	name := channelServiceName(s.ID)
+	registerServiceOwner(serviceOwner{Name: "channel:" + s.ID,
+		Owns: func(n string) bool { return n == name },
+		Specs: func(c *core) (map[string]RunSpec, error) {
+			if c.store.get(s.ID+"_service") != "on" {
+				return nil, nil
+			}
+			return map[string]RunSpec{name: *s.Service}, nil
+		},
+		Running: func(c *core, _ string) {
+			if b := c.bot(s.ID); b != nil && b.token() != "" {
+				b.restart() // at once, not after its backoff
+			}
+		}})
+}
+
+// serviceOn tells whether the channel's service is wanted.
+func (b *botChannel) serviceOn() bool { return b.get("service") == "on" }
+
+// setService turns the channel's service on or off.
+func (b *botChannel) setService(on bool) error {
+	v := ""
+	if on {
+		v = "on"
+	}
+	b.set("service", v)
+	if !on && b.svc != nil {
+		b.svc.close()
+	}
+	return b.c.reconcileServices()
+}
+
 // bot is that bot channel's state; nil when it does not run.
 func (c *core) bot(id string) *botChannel {
 	c.botsMu.Lock()
@@ -174,7 +229,8 @@ type botChannel struct {
 	spec    botSpec
 	c       *core
 	tr      botTransport
-	base    func() string // the workspace's address, for links; "" when none is known
+	svc     *serviceClient // its service's, when it has one (botSpec.Service)
+	base    func() string  // the workspace's address, for links; "" when none is known
 	sleep   func(ctx context.Context, d time.Duration) bool
 	pending sync.WaitGroup // messages on their way (tests wait for them)
 
@@ -194,6 +250,9 @@ func newBotChannel(c *core, id string) *botChannel {
 		panic("no bot channel " + id)
 	}
 	b := &botChannel{spec: s, c: c, base: func() string { return "" }, sleep: sleepCtx}
+	if s.Service != nil {
+		b.svc = c.newServiceClient(channelServiceName(id))
+	}
 	b.tr = s.New(b)
 	return b
 }
@@ -233,6 +292,9 @@ func (b *botChannel) forget(names ...string) {
 func (b *botChannel) linked() bool { return b != nil && b.get("user") != "" && b.get("chat") != "" }
 
 func (b *botChannel) token() string {
+	if b.spec.Account != nil {
+		return b.spec.Account(b)
+	}
 	v := currentVault()
 	if v == nil {
 		return ""
@@ -274,7 +336,7 @@ func scrub(err error, token string) error {
 // vault. A new bot is a new chat: the link is made again.
 func (b *botChannel) setToken(ctx context.Context, token string) error {
 	token = strings.TrimSpace(token)
-	if !b.spec.Token.MatchString(token) {
+	if b.spec.Token == nil || !b.spec.Token.MatchString(token) {
 		return errors.New("not a bot token")
 	}
 	v := currentVault()
@@ -303,6 +365,9 @@ func (b *botChannel) setToken(ctx context.Context, token string) error {
 // removeToken stops the channel and forgets the bot and the link.
 func (b *botChannel) removeToken() {
 	b.stop()
+	if b.spec.Removed != nil {
+		b.spec.Removed(b)
+	}
 	if v := currentVault(); v != nil {
 		v.remove(b.secret())
 	}

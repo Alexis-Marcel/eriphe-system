@@ -252,7 +252,7 @@ func TestSettingAppliedOrProposed(t *testing.T) {
 	if _, err := c.brainSetting(settingIn{Name: setOrder, Value: "phone", Why: "Demandé.", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)
 	}
-	if got := c.routeSettings().Order; strings.Join(got, ",") != "phone,inapp,computer,voice,discord,telegram" {
+	if got := c.routeSettings().Order; strings.Join(got, ",") != "phone,inapp,computer,voice,discord,signal,telegram" {
 		t.Fatalf("order %v", got)
 	}
 }
