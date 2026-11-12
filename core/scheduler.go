@@ -15,6 +15,7 @@ type placement struct {
 	Needs   []string // labels required
 	Prefers []string // soft: cpu, memory, or a label
 	Image   string   // worker image; the node's default if empty
+	Arch    string   // a service whose image runs on this architecture only (amd64); none: any
 	// Bound: the task has the user's folders. Hosts are then the only
 	// nodes that fit, those holding each of them up to date now
 	// (folderHosts, folder_copies.go); Holders those holding them at all,
@@ -33,6 +34,9 @@ func (p placement) String() string {
 	if p.Service {
 		s = "MCP services"
 	}
+	if p.Arch != "" {
+		s += " on " + p.Arch
+	}
 	if len(p.Needs) > 0 {
 		s += " with " + strings.Join(p.Needs, ", ")
 	}
@@ -48,6 +52,7 @@ func (p placement) String() string {
 // nodeInfo is what a node reports about itself (GET /v1/node).
 type nodeInfo struct {
 	CPUs     int      `json:"cpus"`
+	Arch     string   `json:"arch"` // amd64 or arm64
 	Memory   int64    `json:"memory_bytes"`
 	Image    string   `json:"image"` // its default worker image
 	Images   []string `json:"images"`

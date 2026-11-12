@@ -413,6 +413,9 @@ func (p placement) fits(n NodeRow) bool {
 	if p.Service && !info.Services || !p.Service && !slices.Contains(info.Runtimes, p.Runtime) {
 		return false
 	}
+	if p.Arch != "" && info.Arch != p.Arch {
+		return false
+	}
 	for _, l := range p.Needs {
 		if !slices.Contains(info.Labels, l) {
 			return false

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,18 +19,21 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Local MCP servers run as long-lived containers on a node, like a
+// Services: MCP servers run as long-lived containers on a node, like a
 // Kubernetes Deployment of one replica behind a Service: eriphe-core keeps
 // what each should be (its spec, its node), the node keeps its container
 // running and serves it as a streamable HTTP MCP endpoint through the
-// tunnel, and eriphe-core reaches it there (dialService).
+// tunnel, and eriphe-core reaches it there (dialService). Who wants them is
+// not this module's business: its owners say (service_owners.go), the
+// catalog for its local servers (catalog_services.go), a channel for its
+// own.
 //
 //	GET  /v1/node/assignments              the node's tasks, and its services
 //	POST /v1/node/services/{name}/report   state, restarts, last error
 //	node: /v1/services/{name}/mcp          the service's MCP endpoint
 
-// RunSpec is how a local MCP server runs: the `run` variant of a catalog
-// server. Its secrets stay in files, read when its node fetches it.
+// RunSpec is how a service runs (a catalog server's `run`, a channel's
+// own). Its secrets stay in files, read when its node fetches it.
 type RunSpec struct {
 	Image     string `json:"image"`
 	Transport string `json:"transport"`      // stdio (the node holds its stdin and stdout) or http
@@ -41,14 +43,20 @@ type RunSpec struct {
 	Args []string            `json:"args,omitempty"`
 	Env  map[string]EnvValue `json:"env,omitempty"`
 
-	Node    string   `json:"node,omitempty"`    // pin it to a node; empty lets the scheduler choose
-	Needs   []string `json:"needs,omitempty"`   // node labels required
+	Node  string   `json:"node,omitempty"`  // pin it to a node; empty lets the scheduler choose
+	Needs []string `json:"needs,omitempty"` // node labels required
+	// Arch: its image runs on this architecture only (amd64); none: any.
+	Arch    string   `json:"arch,omitempty"`
 	Prefers []string `json:"prefers,omitempty"` // cpu, memory or a node label
 
 	Volume   bool   `json:"volume,omitempty"`   // a persistent /data, kept on its node
 	User     string `json:"user,omitempty"`     // uid:gid, 1000:1000 by default; never root
 	Writable bool   `json:"writable,omitempty"` // a writable root filesystem (read-only by default)
 	Egress   *bool  `json:"egress,omitempty"`   // reach the network; true by default
+
+	// Own: one of Eriphe's own images, which runs the version of
+	// eriphe-core (pinnedImage); its owner says so, never a configuration.
+	Own bool `json:"-"`
 }
 
 // EnvValue is a literal, or a secret read from a file: "x" or {"file": "/secrets/x"}.
@@ -126,6 +134,9 @@ func (s RunSpec) normalize() (RunSpec, error) {
 	if s.Node != "" && !nodeName.MatchString(s.Node) {
 		return s, fmt.Errorf("bad node %q", s.Node)
 	}
+	if s.Arch != "" && s.Arch != "amd64" && s.Arch != "arm64" {
+		return s, fmt.Errorf("arch is amd64 or arm64, not %q", s.Arch)
+	}
 	for _, l := range append(append([]string{}, s.Needs...), s.Prefers...) {
 		if l == "" || strings.ContainsAny(l, " ,") {
 			return s, fmt.Errorf("bad label %q", l)
@@ -148,24 +159,6 @@ func (s RunSpec) normalize() (RunSpec, error) {
 	return s, nil
 }
 
-// localServers reads the run specs of the catalog's local servers.
-func (c *Config) localServers() (map[string]RunSpec, error) {
-	specs := map[string]RunSpec{}
-	for name, s := range c.Servers {
-		if !s.local() {
-			continue
-		}
-		var spec RunSpec
-		dec := json.NewDecoder(bytes.NewReader(s.Run))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&spec); err != nil {
-			return nil, fmt.Errorf("server %s: run: %w", name, err)
-		}
-		specs[name] = spec
-	}
-	return checkServices(specs)
-}
-
 // checkServices validates run specs, by service name.
 func checkServices(specs map[string]RunSpec) (map[string]RunSpec, error) {
 	out := map[string]RunSpec{}
@@ -177,28 +170,25 @@ func checkServices(specs map[string]RunSpec) (map[string]RunSpec, error) {
 		if err != nil {
 			return nil, fmt.Errorf("service %s: %w", name, err)
 		}
-		n.Image = pinnedImage(n.Image, version)
+		if n.Own {
+			n.Image, n.Own = pinnedImage(n.Image, version), false
+		}
 		out[name] = n
 	}
 	return out, nil
 }
 
-// Eriphe's own tools (the mail, the calendar, the files) read the
-// configuration eriphe-core writes them, which changes with it: they run
-// the image of eriphe-core's version, not whatever image a machine pulled
-// once (a node pulls an image it does not have, never a newer one). A new
-// version of eriphe-core changes their specs, so their nodes run the new
-// image. The images are published under the same tags as eriphe-core's
-// (.github/workflows/ci.yml): 0.79.0 for a release, sha-<commit> for a
-// build of main. A development build ("dev") and an image named with its
-// tag or digest are left as they are.
-// ownImage tells one of Eriphe's own images, by its card.
-func ownImage(image string) bool {
-	return slices.ContainsFunc(toolCards, func(c toolCard) bool { return c.OwnVersion && c.Image == image })
-}
-
+// Eriphe's own images (RunSpec.Own: the mail's, the calendar's, a
+// channel's) read what eriphe-core writes them, which changes with it:
+// they run the image of eriphe-core's version, not whatever image a
+// machine pulled once (a node pulls an image it does not have, never a
+// newer one). A new version of eriphe-core changes their specs, so their
+// nodes run the new image. The images are published under the same tags
+// as eriphe-core's (.github/workflows/ci.yml): 0.79.0 for a release,
+// sha-<commit> for a build of main. A development build ("dev") and an
+// image named with its tag or digest are left as they are.
 func pinnedImage(image, version string) string {
-	if !ownImage(image) {
+	if strings.Contains(image, "@") || strings.LastIndexByte(image, ':') > strings.LastIndexByte(image, '/') {
 		return image
 	}
 	switch _, sha, dev := strings.Cut(version, "-dev+"); {
@@ -210,29 +200,6 @@ func pinnedImage(image, version string) string {
 	return image + ":" + version
 }
 
-// ownToolVersion is the version one of Eriphe's own tools must be, the
-// one of eriphe-core; "" for another server, or a development build.
-func ownToolVersion(s Server) string {
-	if !s.local() || version == "" || version == "dev" {
-		return ""
-	}
-	spec, err := decodeRun(s.Run)
-	if err != nil {
-		return ""
-	}
-	image := spec.Image
-	if i := strings.LastIndexByte(image, ':'); i > strings.LastIndexByte(image, '/') {
-		image = image[:i]
-	}
-	if !ownImage(image) {
-		return ""
-	}
-	return version
-}
-
-// behind tells a tool that said its version, and not the one it must be.
-func behind(got, want string) bool { return got != "" && got != "dev" && got != want }
-
 func (s RunSpec) hash() string {
 	raw, _ := json.Marshal(s)
 	h := sha256.Sum256(raw)
@@ -240,7 +207,7 @@ func (s RunSpec) hash() string {
 }
 
 func (s RunSpec) placement() placement {
-	return placement{Service: true, Needs: s.Needs, Prefers: s.Prefers, Image: s.Image}
+	return placement{Service: true, Needs: s.Needs, Prefers: s.Prefers, Image: s.Image, Arch: s.Arch}
 }
 
 // lendService reads a service's environment, secrets included, for its
@@ -272,8 +239,8 @@ const serviceMoveAfter = 3
 // registerServices makes specs the desired services: new ones are placed,
 // changed ones restart (on another node if theirs no longer fits), and
 // those left out are removed, their containers stopped by their node. A
-// service's volume stays on its node. The catalog calls it with its local
-// servers (the run entries of its configuration) at start.
+// service's volume stays on its node. specs are every service, every
+// owner's: reconcileServices gathers them.
 func (c *core) registerServices(specs map[string]RunSpec) error {
 	specs, err := checkServices(specs)
 	if err != nil {
@@ -528,7 +495,7 @@ func (c *core) handleServiceReport(w http.ResponseWriter, r *http.Request) {
 	c.store.updateService(s.Name, map[string]any{"state": in.State, "restarts": in.Restarts,
 		"error": tail(in.Error, 2000)})
 	if in.State == stateRunning && s.State != stateRunning {
-		c.wakeUpstream(s.Name)
+		c.serviceRunning(s.Name)
 	}
 	if in.State == stateFailed && in.Restarts >= serviceMoveAfter && movable(s.Spec) {
 		go c.moveFailed(s.Name, node, in.Restarts)
@@ -598,29 +565,8 @@ func (c *core) serviceEndpoint(name string) (*http.Client, string, error) {
 	return n.stream, "http://node/v1/services/" + name + "/mcp", nil
 }
 
-// wakeUpstream tells the catalog's pool that a local server it waits for
-// is up, rather than letting it wait for its backoff. A live session stays.
-func (c *core) wakeUpstream(name string) {
-	if c.pool == nil {
-		return
-	}
-	u := c.pool.get(name)
-	if u == nil {
-		return
-	}
-	u.mu.Lock()
-	idle := u.session == nil
-	u.mu.Unlock()
-	if idle {
-		select {
-		case u.wake <- struct{}{}:
-		default:
-		}
-	}
-}
-
-// dialService opens an MCP transport to a running local server, for the
-// catalog's pool (its dialLocal).
+// dialService opens an MCP transport to a running service: for the
+// catalog's pool (its dialLocal), and for a serviceClient.
 func (c *core) dialService(_ context.Context, name string) (mcp.Transport, error) {
 	client, url, err := c.serviceEndpoint(name)
 	if err != nil {

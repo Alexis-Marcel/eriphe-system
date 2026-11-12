@@ -163,3 +163,21 @@ func TestPendingTaskWaitsForNode(t *testing.T) {
 		t.Fatalf("a stopped task was placed: %+v", got)
 	}
 }
+
+// A service whose image runs on one architecture goes to a node of it.
+func TestScheduleArch(t *testing.T) {
+	nodes := []NodeRow{
+		{Name: "mac", Online: true, Info: json.RawMessage(`{"services":true,"arch":"arm64"}`)},
+		{Name: "nas", Online: true, Info: json.RawMessage(`{"services":true,"arch":"amd64"}`)},
+	}
+	active := func(string) (int, error) { return 0, nil }
+	if got, err := schedule(nodes, "", placement{Service: true, Arch: "amd64"}, active); err != nil || got != "nas" {
+		t.Fatalf("amd64: %q %v", got, err)
+	}
+	if got, err := schedule(nodes, "mac", placement{Service: true, Arch: "amd64"}, active); err == nil {
+		t.Fatalf("pinned to an arm64 node: %q", got)
+	}
+	if _, err := (RunSpec{Image: "x", Transport: transportStdio, Arch: "riscv"}).normalize(); err == nil {
+		t.Fatal("an unknown arch")
+	}
+}

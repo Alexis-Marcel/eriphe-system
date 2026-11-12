@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -397,8 +400,7 @@ func TestPinnedImage(t *testing.T) {
 		{mailService.Image, "dev", mailService.Image},
 		{mailService.Image, "", mailService.Image},
 		{mailService.Image + ":0.70.0", "0.79.0", mailService.Image + ":0.70.0"}, // named with its tag: kept
-		{"mcp/time", "0.79.0", "mcp/time"},
-		{"ghcr.io/alexis-marcel/eriphe-base", "0.79.0", "ghcr.io/alexis-marcel/eriphe-base"},
+		{mailService.Image + "@sha256:abc", "0.79.0", mailService.Image + "@sha256:abc"},
 	} {
 		if got := pinnedImage(c.image, c.version); got != c.want {
 			t.Errorf("pinnedImage(%s, %s) = %s, want %s", c.image, c.version, got, c.want)
@@ -412,7 +414,7 @@ func TestOwnServicesFollowTheVersion(t *testing.T) {
 	was := version
 	t.Cleanup(func() { version = was })
 	c, store := newServiceCore(t)
-	specs := map[string]RunSpec{"mail": {Image: mailService.Image, Transport: "stdio"}, "time": {Image: "mcp/time", Transport: "stdio"}}
+	specs := map[string]RunSpec{"mail": {Image: mailService.Image, Transport: "stdio", Own: true}, "time": {Image: "mcp/time", Transport: "stdio"}}
 	version = "0.78.0"
 	if err := c.registerServices(specs); err != nil {
 		t.Fatal(err)
@@ -430,5 +432,158 @@ func TestOwnServicesFollowTheVersion(t *testing.T) {
 	timeAfter, _ := store.service("time")
 	if after.Spec.Image != mailService.Image+":0.79.0" || after.Hash == mail.Hash || timeAfter.Hash != timeSvc.Hash {
 		t.Fatalf("after the update: %s %s→%s, time %s→%s", after.Spec.Image, mail.Hash, after.Hash, timeSvc.Hash, timeAfter.Hash)
+	}
+}
+
+// The catalog says which of its servers are Eriphe's own, by their cards:
+// those follow the version, the others keep their image.
+func TestCatalogOwnImages(t *testing.T) {
+	was := version
+	t.Cleanup(func() { version = was })
+	version = "0.79.0"
+	cfg := &Config{Servers: map[string]Server{
+		"mail": {Use: "mail", Run: marshalRun(RunSpec{Image: mailService.Image, Transport: "stdio"})},
+		"time": {Use: "time", Run: marshalRun(RunSpec{Image: "mcp/time", Transport: "stdio"})},
+		"base": {Use: "base", Run: marshalRun(RunSpec{Image: "ghcr.io/alexis-marcel/eriphe-base", Transport: "stdio"})},
+	}}
+	specs, err := cfg.localServers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if specs["mail"].Image != mailService.Image+":0.79.0" || specs["time"].Image != "mcp/time" ||
+		specs["base"].Image != "ghcr.io/alexis-marcel/eriphe-base" {
+		t.Fatalf("images %v", specs)
+	}
+	bad := &Config{Servers: map[string]Server{"channel-x": {Use: "x", Run: marshalRun(RunSpec{Image: "mcp/time", Transport: "stdio"})}}}
+	if err := bad.checkServers(); err == nil {
+		t.Fatal("a catalog server took a channel's service's name")
+	}
+}
+
+// A second owner's services live beside the catalog's: a reconciliation
+// keeps both, whoever starts it, from the first one on; a name that is not
+// an owner's own is left out; an owner that cannot say keeps what it has;
+// the owner hears that its service runs.
+func TestServiceOwners(t *testing.T) {
+	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{TimeZone: "Europe/Paris", Servers: map[string]Server{"time": {Use: "time", Run: marshalRun(RunSpec{Image: "mcp/time", Transport: "stdio"})}}}
+	if cfg.runSpecs, err = cfg.localServers(); err != nil {
+		t.Fatal(err)
+	}
+	c := newCore(cfg, store)
+	var mu sync.Mutex
+	want := map[string]RunSpec{"channel-test": {Image: "example.org/chat", Transport: "stdio", Volume: true}}
+	var failing bool
+	var running []string
+	before := len(serviceOwners)
+	registerServiceOwner(serviceOwner{Name: "channel:test",
+		Owns: func(name string) bool { return name == "channel-test" },
+		Specs: func(*core) (map[string]RunSpec, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			if failing {
+				return nil, errors.New("cannot say")
+			}
+			out := map[string]RunSpec{"time": {Image: "mcp/other", Transport: "stdio"}} // not its own
+			for k, v := range want {
+				out[k] = v
+			}
+			return out, nil
+		},
+		Running: func(_ *core, name string) { mu.Lock(); running = append(running, name); mu.Unlock() }})
+	t.Cleanup(func() { serviceOwners = serviceOwners[:before] })
+
+	if err := c.reconcileServices(); err != nil {
+		t.Fatal(err)
+	}
+	names := func() []string {
+		rows, _ := store.services()
+		var out []string
+		for _, r := range rows {
+			out = append(out, r.Name+"="+r.Spec.Image)
+		}
+		sort.Strings(out)
+		return out
+	}
+	if got := strings.Join(names(), " "); got != "channel-test=example.org/chat time=mcp/time" {
+		t.Fatalf("services %s", got)
+	}
+
+	mu.Lock()
+	failing = true
+	mu.Unlock()
+	if err := c.reconcileServices(); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(names(), " "); got != "channel-test=example.org/chat time=mcp/time" {
+		t.Fatalf("an owner that cannot say lost its service: %s", got)
+	}
+
+	mu.Lock()
+	failing, want = false, nil
+	mu.Unlock()
+	if err := c.reconcileServices(); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(names(), " "); got != "time=mcp/time" {
+		t.Fatalf("after the owner let go: %s", got)
+	}
+
+	c.serviceRunning("channel-test")
+	mu.Lock()
+	defer mu.Unlock()
+	if len(running) != 1 || running[0] != "channel-test" {
+		t.Fatalf("running %v", running)
+	}
+}
+
+// A serviceClient opens its session at the first call, keeps it, and opens
+// a new one after the session failed.
+func TestServiceClient(t *testing.T) {
+	dials := 0
+	var mu sync.Mutex
+	var last *mcp.ServerSession
+	srv := mcp.NewServer(&mcp.Implementation{Name: "svc"}, nil)
+	mcp.AddTool(srv, &mcp.Tool{Name: "echo"}, func(_ context.Context, _ *mcp.CallToolRequest, in map[string]any) (*mcp.CallToolResult, map[string]any, error) {
+		if in["fail"] == true {
+			return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "refused"}}}, nil, nil
+		}
+		return nil, map[string]any{"said": in["say"]}, nil
+	})
+	sc := &serviceClient{name: "channel-test", dial: func(context.Context, string) (mcp.Transport, error) {
+		ct, st := mcp.NewInMemoryTransports()
+		ss, err := srv.Connect(context.Background(), st, nil)
+		mu.Lock()
+		dials++
+		last = ss
+		mu.Unlock()
+		return ct, err
+	}}
+	t.Cleanup(sc.close)
+	ctx := context.Background()
+	var out struct{ Said string }
+	for _, say := range []string{"a", "b"} {
+		if err := sc.call(ctx, "echo", map[string]any{"say": say}, &out); err != nil || out.Said != say {
+			t.Fatalf("%v %+v", err, out)
+		}
+	}
+	if err := sc.call(ctx, "echo", map[string]any{"fail": true}, nil); err == nil || err.Error() != "refused" {
+		t.Fatalf("a tool's error: %v", err)
+	}
+	mu.Lock()
+	n, ss := dials, last
+	mu.Unlock()
+	if n != 1 {
+		t.Fatalf("%d sessions, want one", n)
+	}
+	ss.Close() // the service went away
+	if err := sc.call(ctx, "echo", map[string]any{"say": "c"}, &out); err == nil {
+		t.Fatal("a call on a closed session")
+	}
+	if err := sc.call(ctx, "echo", map[string]any{"say": "d"}, &out); err != nil || out.Said != "d" {
+		t.Fatalf("after the session failed: %v %+v", err, out)
 	}
 }

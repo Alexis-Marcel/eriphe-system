@@ -2005,14 +2005,30 @@ gone. `cloud.google_client_file` and `cloud.bounce_url` still load and are ignor
 the log at start (`legacyCloud`); a Drive connected through the shared app keeps its token for as
 long as that app's client exists.
 
-## Local MCP servers (services)
+## Services (local MCP servers)
 
-A local MCP server runs as a long-lived container on a node, like a Kubernetes Deployment of one
-replica behind a Service: eriphe-core keeps what it should be and where, the node keeps its
+A service is an MCP server run as a long-lived container on a node, like a Kubernetes Deployment of
+one replica behind a Service: eriphe-core keeps what it should be and where, the node keeps its
 container running, and eriphe-core reaches it as a streamable HTTP MCP endpoint through the node's
-tunnel. It is a catalog server with `run` (a `RunSpec`, `services.go`) instead of `url` and `auth`;
-the pool reaches it through `dialService`, and grants, the policy and the per-task proxy treat it
-like any other server:
+tunnel. The services are a module of their own (`services.go`, `service_owners.go`,
+`service_client.go`), which knows nothing of tools or channels: its **owners** say which services
+they want.
+
+- **The catalog** (`catalog_services.go`) wants its local servers: a catalog server with `run` (a
+  `RunSpec`) instead of `url` and `auth` is the service of its name. The pool reaches it through
+  `dialService`, and grants, the policy and the per-task proxy treat it like any other server.
+- **A channel** that needs a container of its own wants it while it is on, named
+  `channel-<id>`: not in the catalog, so in no list of tools and under no access level, reached by
+  the channel alone with a `serviceClient`. No catalog server takes a `channel-` name.
+
+`reconcileServices` asks every owner for the services it wants now, and makes their union the
+desired services. No owner can drop another's, and none has to be asked first: at start, a
+channel's service is not dropped because the catalog was read before the channel. A name is one
+owner's (its `Owns`): a name an owner does not own is left out, and the log says so. An owner
+that cannot say what it wants keeps what it has. When a node reports a service `running`, its owner
+is told (`Running`): the pool wakes the server's upstream, and a channel its own listening.
+
+A catalog server with `run`:
 
 ```json
 "servers": {
@@ -2033,6 +2049,7 @@ with the defaults. Not every image does: `mcp/time` keeps its Python interpreter
 | `args` | arguments after the image's entrypoint |
 | `env` | `"NAME": "literal"` or `"NAME": {"file": "/secrets/x"}` (or `{"file": "vault:<name>"}`): the secret is read when the node fetches the service, sent to it, never stored or logged |
 | `node`, `needs`, `prefers` | as for agents: pin a node, require labels, prefer `cpu`, `memory` or a label |
+| `arch` | `amd64` or `arm64`: an image built for one architecture only runs on a node of it (the node's `arch` in `GET /v1/node`) |
 | `volume` | a persistent `/data`, kept on its node in `<root>/services/<name>` |
 | `user` | `uid:gid` in numbers, `1000:1000` by default; never root |
 | `writable` | a writable root filesystem (read-only by default) |
@@ -2060,11 +2077,20 @@ as another kind of `env` value resolved in `lendService`.
 
 `c.dialService(ctx, name)` returns an `mcp.Transport` (a `StreamableClientTransport` to
 `http://node/v1/services/{name}/mcp` over the node's tunnel, with no timeout): the pool's
-`dialLocal`. When a node reports a service `running`, its upstream is woken instead of waiting
-for its backoff. It fails, with the reason, if the service is not
-placed, not `running`, or its node not connected; `serviceEndpoint` gives the `*http.Client` and
-URL instead. `registerServices(map[string]RunSpec)` sets the desired services; eriphe-core calls it
-at start with the catalog's `run` entries (unknown `run` fields are refused).
+`dialLocal`, and a `serviceClient`'s. It fails, with the reason, if the service is not placed, not
+`running`, or its node not connected; `serviceEndpoint` gives the `*http.Client` and URL instead.
+A `serviceClient` (`c.newServiceClient(name)`) is a session to one service for an owner that calls
+it itself. The session opens at the first call and is kept, and a new one opens after a call
+whose session failed. Its `call` decodes a tool's structured answer and turns a tool's error into
+an error. `registerServices(map[string]RunSpec)` sets the desired services, every owner's.
+`reconcileServices` gathers them, at start and whenever an owner's change. Unknown `run` fields
+are refused.
+
+Eriphe's own images (the mail's, the calendar's, a channel's) run eriphe-core's version.
+`RunSpec.Own` says so. It is set by the owner, never by a configuration: the catalog sets it from
+its tool cards, and a channel for its own image. `pinnedImage` then tags the image with the
+version (`0.79.0`, or `sha-<commit>` for a build of main). An image named with its tag or digest,
+or a development build, is left as it is.
 
 ### Mail and calendar: one server per service
 
