@@ -98,20 +98,17 @@ func TestConformanceSuites(t *testing.T) {
 				if (err == nil) != want {
 					t.Errorf("%s: valid=%v, want %v\n%v", tc.Description, err == nil, want, err)
 				}
-				// What the schema refuses, the validator refuses, with errors.
-				if !want {
-					var errs []ValidationError
-					switch s.Schema {
-					case "", "agent_to_renderer.json":
-						errs = c.Validate(tc.Data)
-					case "renderer_to_agent.json":
+				// What the schema refuses, the validator refuses, with
+				// errors that are A2UI errors themselves.
+				if !want && (s.Schema == "" || s.Schema == "agent_to_renderer.json" || s.Schema == "renderer_to_agent.json") {
+					errs := c.Validate(tc.Data)
+					if s.Schema == "renderer_to_agent.json" {
 						errs = c.ValidateEvent(tc.Data)
-					default:
-						errs = []ValidationError{{}}
 					}
 					if len(errs) == 0 {
 						t.Errorf("%s: Validate found nothing", tc.Description)
 					}
+					assertA2UIErrors(t, errs)
 				}
 				total++
 			}

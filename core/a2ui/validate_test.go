@@ -149,6 +149,7 @@ func TestInvalidSurfaces(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			errs := ValidateSurface(tc.s)
+			assertA2UIErrors(t, errs)
 			for _, e := range errs {
 				if e.Code == tc.code && e.Path == tc.path && strings.Contains(e.Message, tc.words) && e.SurfaceID == tc.s.ID {
 					return
@@ -214,6 +215,7 @@ func TestValidateMessages(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			errs := Validate([]byte(tc.raw))
+			assertA2UIErrors(t, errs)
 			for _, e := range errs {
 				if e.Path == tc.path && strings.Contains(e.Message, tc.words) {
 					return
@@ -288,6 +290,45 @@ func TestValidationErrorIsAnA2UIError(t *testing.T) {
 	}
 	if s := errs[0].Error(); !strings.Contains(s, "/components/0/text") {
 		t.Errorf("Error(): %s", s)
+	}
+}
+
+// assertA2UIErrors checks that each error, sent back as a renderer's error
+// message, is one A2UI accepts.
+func assertA2UIErrors(t *testing.T, errs []ValidationError) {
+	t.Helper()
+	for _, e := range errs {
+		raw, err := json.Marshal(e.Event())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := Eriphe().ValidateEvent(raw); len(got) > 0 {
+			t.Errorf("%s is not an A2UI error message: %v", raw, got)
+		}
+	}
+}
+
+// An error at the root of what was given, with no surface, still has its
+// path and surface fields; another error keeps a surface or a function
+// call, not both.
+func TestErrorShapes(t *testing.T) {
+	errs := Validate([]byte(`{"version":"1.0"}`))
+	if len(errs) != 1 || errs[0].Path != "" || errs[0].SurfaceID != "" {
+		t.Fatal(errs)
+	}
+	assertA2UIErrors(t, errs)
+	raw, _ := json.Marshal(errs[0].Event())
+	if !strings.Contains(string(raw), `"surfaceId":"","path":""`) {
+		t.Errorf("%s", raw)
+	}
+	for _, e := range []Error{
+		{Code: "INVALID_FUNCTION_CALL", Message: "x", FunctionCallID: "c1"},
+		{Code: "INTEGRITY_ERROR", Message: "x", SurfaceID: "s1"},
+	} {
+		raw, _ := json.Marshal(Event{Version: Version, Error: &e})
+		if got := Eriphe().ValidateEvent(raw); len(got) > 0 {
+			t.Errorf("%s: %v", raw, got)
+		}
 	}
 }
 

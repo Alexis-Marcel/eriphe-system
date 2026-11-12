@@ -7,6 +7,7 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY *.go *-prompt.md ./
 COPY web ./web
+COPY a2ui ./a2ui
 
 # The target's binary and the Mac's are separate stages, built at the same time.
 FROM src AS build

@@ -1,2 +1,4 @@
 # The workspace page's sources (web/espace): its built files are in web/static.
 web/espace
+# The A2UI package's test fixtures.
+a2ui/testdata

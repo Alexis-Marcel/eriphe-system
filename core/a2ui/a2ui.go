@@ -201,6 +201,18 @@ type Error struct {
 	FunctionCallID string `json:"functionCallId,omitempty"`
 }
 
+// MarshalJSON writes a validation error with its path and surface always
+// (the schema requires them, "" at the root), any other error with what it
+// has: a surface or a function call, not both.
+func (e Error) MarshalJSON() ([]byte, error) {
+	type plain Error
+	switch e.Code {
+	case CodeValidationFailed, CodeUnallowedParent, CodeUnallowedChild:
+		return json.Marshal(ValidationError{Code: e.Code, SurfaceID: e.SurfaceID, Path: e.Path, Message: e.Message})
+	}
+	return json.Marshal(plain(e))
+}
+
 // The codes of a validation error.
 const (
 	CodeValidationFailed = "VALIDATION_FAILED"
