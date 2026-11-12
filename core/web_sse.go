@@ -17,9 +17,12 @@ import (
 // attention queue, JSON: attention.go) and "composition" (the workspace's
 // composition, JSON: composer.go), each sent only when it differs from the
 // last one, and "walkthrough" (a walkthrough the brain asked for, JSON:
-// workspace.go), once. Every
+// workspace.go), once. Asked with a2ui=1 (the workspace, /espace), it also
+// sends "a2ui": the surfaces' A2UI messages in order (JSON, a2uiEvent in
+// surfaces_stream.go), a snapshot that resets the page first. Every
 // event carries the last message's seq as its id, so a reconnecting
-// browser picks up where it left.
+// browser picks up where it left; its surfaces start again from a
+// snapshot.
 func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) {
 	flusher, ok := rw.(http.Flusher)
 	if !ok {
@@ -42,6 +45,23 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 	rw.WriteHeader(http.StatusOK)
 	fmt.Fprint(rw, "retry: 3000\n\n")
 	flusher.Flush()
+
+	// The surfaces, for the workspace: a snapshot, then their changes.
+	var feed *surfaceFeed
+	var surfaces <-chan surfaceChange // nil when not asked: never ready
+	sendSurfaces := func(ev a2uiEvent) {
+		if raw, err := json.Marshal(ev); err == nil {
+			writeEvent(rw, "a2ui", after, string(raw))
+		}
+		surfaces = feed.changes // a new subscription after a reset
+	}
+	if r.URL.Query().Get("a2ui") == "1" {
+		var first a2uiEvent
+		feed, first = w.c.feedSurfaces()
+		defer feed.close()
+		sendSurfaces(first)
+		flusher.Flush()
+	}
 
 	var lastTasks, lastPending, lastDraft, lastAttention, lastComposition string
 	lastCards := map[int64]string{}
@@ -152,6 +172,10 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		case <-w.waker():
 			woken = true // the next round refreshes the panels
 		case <-drafted:
+		case ch, ok := <-surfaces:
+			sendSurfaces(feed.next(ch, ok))
+			flusher.Flush()
+			quiet = time.Now()
 		}
 	}
 }

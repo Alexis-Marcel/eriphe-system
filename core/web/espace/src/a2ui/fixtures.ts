@@ -5,7 +5,7 @@ import gallery from "./gallery.json";
 import type { Proposals, ProposalView } from "./proposals";
 
 // Made-up A2UI messages, in the shape eriphe-core sends, for the dev server
-// and the tests until core streams surfaces (#419). No real name, address or
+// and the tests, when no eriphe-core is behind. No real name, address or
 // tool in them.
 
 const words = {

@@ -93,14 +93,15 @@ export function Espace({ boot }: { boot: data.Boot }) {
   };
   const live = !!snap && !snap.sample && boot.live;
 
-  // The A2UI surfaces, beside the composition by ref until it goes (#424).
-  // eriphe-core does not send them yet (#419): on the sample, made-up ones
-  // show what the path does; with ?gallery, every component of the catalog.
+  // The A2UI surfaces, beside the composition by ref until it goes (#424):
+  // streamed by eriphe-core; with none behind (the dev server), made-up
+  // ones show what the path does; with ?gallery, every component of the
+  // catalog.
   const [surfaces] = useState(() => createAdapter(lang));
   const proposals = useMemo(() => (snap?.sample ? sampleProposals(lang) : coreProposals), [snap?.sample, lang]);
   useEffect(() => {
-    if (!snap?.sample) return;
     const gallery = new URLSearchParams(location.search).has("gallery");
+    if (boot.live && !gallery) return data.stream(boot, surfaces);
     surfaces.applyMessages(gallery ? galleryFixtures(lang) : surfaceFixtures(lang));
     const off = surfaces.onAction(() => say(t("espace.sent.sample")));
     return () => {
@@ -108,7 +109,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
       const ids = gallery ? gallerySurfaces(lang) : [SAMPLE_SURFACE];
       surfaces.applyMessages(ids.map((surfaceId) => ({ version: "1.0" as const, deleteSurface: { surfaceId } })));
     };
-  }, [snap?.sample, surfaces, lang]);
+  }, [boot, surfaces, lang]);
 
   // What the user opens, and what left the screen unopened, are gestures
   // eriphe-core keeps for memory's extraction: no counter here.
