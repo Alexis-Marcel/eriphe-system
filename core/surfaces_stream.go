@@ -134,7 +134,8 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 // surfaceError keeps an error about a surface on it, for its author
 // (Look.LastError), and logs it: one the page met rendering it
 // (POST /api/espace/error), or one code met with it. It sends nothing to
-// the page.
+// the page. It takes c.surf.mu: never call it with the lock held (as in
+// refreshOnce); note the error, then call it once the lock is released.
 func (c *core) surfaceError(id string, e a2ui.Error) error {
 	r := surfaceLastError{Code: truncate(e.Code, 64), Path: truncate(e.Path, 200),
 		Message: truncate(oneLine(e.Message), surfaceErrorMax), At: time.Now().Unix()}

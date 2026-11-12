@@ -3009,7 +3009,7 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
   `nosniff`, a sandbox CSP and 10 minutes of private cache.
 - Table `surfaces` (id, title, author, components, sources, data, data_at, refresh, lifetime,
-  weight, why, tainted, look: its sources' last reads, next_at, created, updated).
+  weight, why, tainted, look: its sources' last reads, the user's last action and the last error for its author, next_at, created, updated).
 
 **Go API** (for the workspace's stream and the assistants' tools, #421):
 

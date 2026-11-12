@@ -174,8 +174,8 @@ type surfaceLook struct {
 	AuthorTaint []string               `json:"author_taint,omitempty"`
 	Read        int64                  `json:"read,omitempty"` // the last read of all its sources, unix
 	Sources     map[string]sourceState `json:"sources,omitempty"`
-	// What the page sent back (surfaces_stream.go): the user's last
-	// action on it, the last error rendering it.
+	// What came back about it (surfaces_stream.go): the user's last
+	// action on it, the last error for its author to fix.
 	Action    *surfaceActed     `json:"action,omitempty"`
 	LastError *surfaceLastError `json:"last_error,omitempty"`
 }
