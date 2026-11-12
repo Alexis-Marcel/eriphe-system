@@ -220,7 +220,8 @@ func (c *core) attentionOpen() []attentionItem {
 // whose card no longer waits (decided on a page, in words, or gone) leaves
 // the queue here.
 func (c *core) attentionWhere(where string, args ...any) []attentionItem {
-	rows, err := c.store.db.Query(`SELECT ref, weight, why, say, source, time, tainted, delivered, due FROM attention WHERE `+where, args...)
+	rows, err := c.store.db.Query(`SELECT ref, weight, why, say, source, time, tainted, delivered,
+		CASE WHEN `+heldForBrief+` THEN 0 ELSE due END FROM attention WHERE `+where, args...)
 	if err != nil {
 		return nil
 	}

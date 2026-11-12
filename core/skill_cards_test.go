@@ -231,7 +231,9 @@ func TestSkillRunCallsCardHeldForBrief(t *testing.T) {
 		t.Fatalf("card %+v, item %+v: not held", x, it)
 	}
 	ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill)
-	if it := attentionOf(c, noteItemRef(ns[0].ID)); it == nil || !it.Held || it.Weight != weightHeldNote {
+	// Its message is one item, alert:<id>: weighed by its [brief], held
+	// for the return with no cap of time.
+	if it := attentionOf(c, noteItemRef(ns[0].ID)); it == nil || !it.Held || it.Weight != weightRunBrief || !it.Due.IsZero() {
 		t.Fatalf("notification item %+v", it)
 	}
 	// The brain's answer to a message of Sam's: the card comes.
@@ -244,6 +246,9 @@ func TestSkillRunCallsCardHeldForBrief(t *testing.T) {
 	msgs, _ := c.store.messagesAfter(x.Seq-1, 1)
 	if msgs[0].Role != roleBrain || strings.Contains(msgs[0].Text, "5xx") || !strings.Contains(msgs[0].Text, "prod") {
 		t.Errorf("message %q", msgs[0].Text)
+	}
+	if c.attentionBreak(breakCap, time.Now().Add(5*time.Hour)) != 0 || !attentionOf(c, noteItemRef(ns[0].ID)).Held {
+		t.Fatal("the cap told the brief")
 	}
 	// Sam's return: the brief tells the notification.
 	if c.attentionBreak(breakReturn, *now) != 1 {

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -96,6 +98,34 @@ func TestAttentionWeightByKind(t *testing.T) {
 	}
 	if attentionOf(c, cardItemRef(x.ID)) != nil || c.attentionBlock() != "" {
 		t.Error("a card decided on its page stays in the queue")
+	}
+}
+
+// A queue made by v0.156.0 (no tainted, delivered nor due) gets its
+// columns when the database opens, twice as once; its items, delivered as
+// they entered then, stay delivered.
+func TestAttentionUpgradeFromV0156(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "core.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE attention (ref TEXT PRIMARY KEY, weight INTEGER NOT NULL, why TEXT NOT NULL DEFAULT '',
+		say TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', time INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	db.Exec(`INSERT INTO attention (ref, weight, why, source, time) VALUES ('mail:1', 3, 'a bill', 'skill:mail', 1000)`)
+	db.Close()
+	for range 2 {
+		s, err := openStore(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var delivered, due, tainted int64
+		if err := s.db.QueryRow(`SELECT delivered, due, tainted FROM attention WHERE ref = 'mail:1'`).Scan(&delivered, &due, &tainted); err != nil || delivered != 1000 {
+			t.Fatalf("delivered %d, due %d, tainted %d: %v", delivered, due, tainted, err)
+		}
+		s.db.Close()
 	}
 }
 
@@ -230,7 +260,7 @@ func TestAttentionReturnTellsTheBrief(t *testing.T) {
 	if n, _ = c.notificationByID(n.ID); n.Held || n.Msg != msgs[0].Seq {
 		t.Errorf("notification %+v", n)
 	}
-	if attentionOf(c, noteItemRef(n.ID)) != nil || c.store.get(lastBriefKey) != strconv.FormatInt(now.Unix(), 10) {
+	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || it.Held || c.store.get(lastBriefKey) != strconv.FormatInt(now.Unix(), 10) {
 		t.Error("the brief is not kept as given")
 	}
 	// « Pas maintenant » holds it again for the next brief.
@@ -239,6 +269,31 @@ func TestAttentionReturnTellsTheBrief(t *testing.T) {
 	}
 	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || !it.Held {
 		t.Errorf("not held again: %+v", it)
+	}
+}
+
+// A skill's plain message in the quiet hours: its item (weight 4) is in
+// the queue at once, its push kept back; the brief tells it on return.
+func TestAttentionQuietMessageToldAtTheBrief(t *testing.T) {
+	c, _, now := pollCore(t)
+	*now = at(t, "2026-11-04", "23:30")
+	n, err := c.notify(&notification{Text: "Le site est revenu.", Why: "Skill « prod »", Ref: "skill:prod", Source: notifyFromSkill},
+		notifyItem{Level: levelNow, Ref: "skill:prod"})
+	if err != nil || !n.Held || n.Reason != reasonQuiet {
+		t.Fatalf("%+v %v", n, err)
+	}
+	c.attend(runSignal(n.ID, n.Text, false, levelNow, "skill:prod", false))
+	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || it.Held || it.Weight != weightRunNow {
+		t.Fatalf("item %+v", it)
+	}
+	if c.attentionBreak(breakAnswer, *now) != 0 {
+		t.Fatal("told before the return")
+	}
+	if c.attentionBreak(breakReturn, *now) != 1 {
+		t.Fatal("not told at the brief")
+	}
+	if n, _ = c.notificationByID(n.ID); n.Held {
+		t.Error("still held for the brief")
 	}
 }
 
