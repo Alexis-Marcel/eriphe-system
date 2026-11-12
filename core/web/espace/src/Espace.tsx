@@ -6,7 +6,7 @@ import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import * as data from "./data";
 import { place, type Placed } from "./engine";
-import { Grid } from "./Grid";
+import { DIMS, Grid, type Spot } from "./Grid";
 import { useWords } from "./i18n";
 import type { Composition, Layout, Obj, Ref } from "./types";
 import { View, YesNo, lineOf, sourceOf, titleOf, type Act } from "./views";
@@ -33,6 +33,33 @@ export function tourOf(placed: Placed[]): Ref[] {
 export function leftUnopened(before: Ref[], comp: Composition, opened: Set<Ref>): Ref[] {
   const now = new Set([...comp.items.map((i) => i.ref), ...(comp.chips ?? [])]);
   return before.filter((r) => !now.has(r) && !opened.has(r));
+}
+
+// leftGrid is what was a tile and no longer is (folded or gone), neither
+// opened nor closed by the user: on the surfaces' grid, ignored.
+export function leftGrid(before: string[], now: Layout, opened: Set<string>, closed: Set<string>): string[] {
+  const tiles = new Set(now.items.map((i) => i.id));
+  return before.filter((id) => !tiles.has(id) && !opened.has(id) && !closed.has(id));
+}
+
+// placedAt is a layout with a tile the user moved or resized at its new
+// place, at once; eriphe-core's next layout places the others around it.
+export function placedAt(l: Layout, id: string, to: Spot): Layout {
+  const d = DIMS[to.size];
+  return { ...l, items: l.items.map((i) => (i.id === id ? { ...i, ...to, w: d.w, h: d.h, pinned: true } : i)) };
+}
+
+// closedIn is a layout with a surface the user closed folded last, at once.
+export function closedIn(l: Layout, id: string): Layout {
+  const tile = l.items.find((i) => i.id === id);
+  const chip = l.chips.find((c) => c.id === id);
+  const title = tile?.title ?? chip?.title ?? id;
+  return {
+    ...l,
+    focus: l.focus === id ? undefined : l.focus,
+    items: l.items.filter((i) => i.id !== id),
+    chips: [...l.chips.filter((c) => c.id !== id), { id, title, closed: true }],
+  };
 }
 
 function useTyped(text: string) {
@@ -121,9 +148,34 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const sfocusTitle = sfocus ? layout?.items.find((i) => i.id === sfocus)?.title ?? sfocus : null;
   const openSurface = (id: string) => {
     setSaid(null);
+    sopened.current.add(id);
+    sclosed.current.delete(id);
     if (boot.live) data.place("open", id).catch(() => false);
     else setLayout((l) => l && { ...l, focus: id });
   };
+  // The user arranges the grid: shown at once, kept by eriphe-core for the
+  // session (workspace_gestures.go).
+  const closeSurface = (id: string) => {
+    sclosed.current.add(id);
+    setLayout((l) => l && closedIn(l, id));
+    if (boot.live) data.gesture("closed", "surface:" + id, "").catch(() => false);
+  };
+  const placeSurface = (id: string, what: "moved" | "resized", to: Spot) => {
+    setLayout((l) => l && placedAt(l, id, to));
+    if (boot.live) data.gesture(what, "surface:" + id, "", to).catch(() => false);
+  };
+  // A tile that left the grid unopened, while the page was seen, is
+  // ignored: a gesture for the composer and memory.
+  const sopened = useRef(new Set<string>());
+  const sclosed = useRef(new Set<string>());
+  const stiles = useRef<string[]>([]);
+  useEffect(() => {
+    if (!live || !onSurfaces || !layout) return;
+    for (const id of leftGrid(stiles.current, layout, sopened.current, sclosed.current)) {
+      data.gesture("ignored", "surface:" + id, "").catch(() => false);
+    }
+    stiles.current = document.visibilityState === "visible" ? layout.items.map((i) => i.id) : [];
+  }, [layout, live, onSurfaces]);
   const backSurface = () => {
     if (!sfocus) return;
     if (boot.live) data.place("back", sfocus).catch(() => false);
@@ -278,7 +330,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
         <div className="stage">
           <ProposalsContext.Provider value={proposals}>
             {onSurfaces ? (
-              <Grid adapter={surfaces} layout={layout!} onOpen={openSurface} />
+              <Grid adapter={surfaces} layout={layout!} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} />
             ) : (
               <>
               <div className="chips" role="list" aria-label={t("espace.chips")}>

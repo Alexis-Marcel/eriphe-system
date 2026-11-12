@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAdapter, type Adapter, type Message } from "./a2ui/adapter";
 import { CATALOG } from "./a2ui/catalog";
-import { Grid } from "./Grid";
+import { Grid, type Spot } from "./Grid";
 import type { Layout } from "./types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -80,6 +80,80 @@ describe("the grid of surfaces", () => {
     await act(async () => tile("week")!.click());
     expect(opened).toEqual(["news", "pay"]);
     expect(tile("week")?.classList.contains("focus")).toBe(true);
+  });
+
+  it("closes a tile with its cross, without opening it", async () => {
+    const closed: string[] = [];
+    await act(async () => root.render(<Grid adapter={adapter} layout={layout} onOpen={(id) => opened.push(id)} onClose={(id) => closed.push(id)} />));
+    const cross = tile("week")!.querySelector<HTMLButtonElement>("button.tile-close")!;
+    expect(cross.getAttribute("aria-label")).toBe("espace.tile.close");
+    await act(async () => cross.click());
+    expect(closed).toEqual(["week"]);
+    expect(opened).toEqual([]);
+  });
+
+  it("shows a closed surface as a chip marked closed", async () => {
+    await render({ ...layout, chips: [...layout.chips, { id: "late", title: "Sans place", closed: true }] });
+    const chip = el.querySelector<HTMLElement>('.chip[data-surface="late"]')!;
+    expect(chip.classList.contains("closed")).toBe(true);
+    expect(chip.querySelector(".chip-from")?.textContent).toBe("espace.chip.closed");
+  });
+
+  const placing = async () => {
+    const placed: [string, string, Spot][] = [];
+    await act(async () => root.render(<Grid adapter={adapter} layout={layout} onOpen={(id) => opened.push(id)} onPlace={(id, what, to) => placed.push([id, what, to])} />));
+    return placed;
+  };
+  const key = (b: HTMLElement, k: string) => act(async () => { b.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })); });
+
+  it("moves a tile with the arrow keys on its grip, kept on the grid", async () => {
+    const placed = await placing();
+    const grip = tile("week")!.querySelector<HTMLButtonElement>("button.tile-move")!;
+    await key(grip, "ArrowDown");
+    await key(grip, "ArrowRight"); // week is m (3 wide) at col 6: col 7 fits, as 9 does
+    await key(grip, "ArrowUp"); // row 0: nowhere to go
+    await key(grip, "Enter");
+    expect(placed).toEqual([
+      ["week", "moved", { size: "m", col: 6, row: 1 }],
+      ["week", "moved", { size: "m", col: 7, row: 0 }],
+    ]);
+    expect(opened).toEqual([]);
+  });
+
+  it("changes a tile's size with its button: a click, + and −", async () => {
+    const placed = await placing();
+    const size = tile("pay")!.querySelector<HTMLButtonElement>("button.tile-size")!;
+    await act(async () => size.click()); // xl wraps to s
+    await key(size, "-"); // xl to l
+    await key(size, "+"); // xl is the biggest
+    expect(placed).toEqual([
+      ["pay", "resized", { size: "s", col: 0, row: 0 }],
+      ["pay", "resized", { size: "l", col: 0, row: 0 }],
+    ]);
+    const week = tile("week")!.querySelector<HTMLButtonElement>("button.tile-size")!;
+    await key(week, "ArrowUp"); // m to l at col 6, row 0
+    expect(placed[2]).toEqual(["week", "resized", { size: "l", col: 6, row: 0 }]);
+    expect(opened).toEqual([]);
+  });
+
+  it("drags a tile by its grip to a cell, a ghost showing where, by class only", async () => {
+    const placed = await placing();
+    const canvas = el.querySelector<HTMLElement>("main.canvas")!;
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1200, height: 800, right: 1200, bottom: 800, x: 0, y: 0, toJSON() {} });
+    const grip = tile("week")!.querySelector<HTMLButtonElement>("button.tile-move")!;
+    // Cells are 100 × 100: grabbed in cell (8, 0), week's top left is (6, 0).
+    await act(async () => { grip.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 850, clientY: 50 })); });
+    await act(async () => { window.dispatchEvent(new MouseEvent("pointermove", { clientX: 450, clientY: 450 })); });
+    const ghost = el.querySelector<HTMLElement>(".tile-ghost")!;
+    expect(ghost.className).toBe("tile-ghost at-c2 at-r4 w-3 h-2");
+    expect(tile("week")!.classList.contains("dragging")).toBe(true);
+    expect(document.querySelectorAll("[style]")).toHaveLength(0);
+    await act(async () => { window.dispatchEvent(new MouseEvent("pointermove", { clientX: 1190, clientY: 790 })); });
+    expect(el.querySelector(".tile-ghost")!.className).toBe("tile-ghost at-c9 at-r6 w-3 h-2");
+    await act(async () => { window.dispatchEvent(new MouseEvent("pointerup", {})); });
+    expect(el.querySelector(".tile-ghost")).toBeNull();
+    expect(placed).toEqual([["week", "moved", { size: "m", col: 9, row: 6 }]]);
+    expect(opened).toEqual([]);
   });
 
   it("moves a tile when the layout changes", async () => {

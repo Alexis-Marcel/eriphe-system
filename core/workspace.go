@@ -23,9 +23,11 @@ import (
 //     with every snapshot (workspacePreferences), and composes again when
 //     one enters memory (workspacePrefStamp).
 //   - What the user does on it feeds memory, implicitly: a module opened, a
-//     module that left the screen unopened, are gestures (workspace_log)
-//     the extraction reads as one segment of the day's transcript. No
-//     counter and no score: the extraction infers, the user approves.
+//     module that left the screen unopened, a tile closed, moved or resized,
+//     a message written about it, are gestures (workspace_log) the
+//     extraction reads as one segment of the day's transcript. No counter
+//     and no score: the extraction infers, the user approves. What they do
+//     to the layout holds for their session (workspace_gestures.go).
 //   - A message written while a module is open carries its ref
 //     (messageAbout): « montre-m'en moins » is said to Eriphe in words.
 //   - The brain has two tools: workspace_show puts objects in front at once
@@ -46,7 +48,12 @@ const (
 
 	gestureOpened  = "opened"  // the user opened a module (a focus)
 	gestureIgnored = "ignored" // a module left the screen without being opened
+	gestureClosed  = "closed"  // the user closed a tile: not shown again this session (workspace_gestures.go)
+	gestureMoved   = "moved"   // the user moved a tile: pinned there this session
+	gestureResized = "resized" // the user changed a tile's size: pinned at it this session
+	gestureAbout   = "about"   // the user wrote a message with it open
 	gestureRepeat  = 10 * time.Minute
+	gestureSteps   = time.Minute // moves or resizes of the same tile this close, one after the other, are one
 	gestureKeep    = 30 * 24 * time.Hour
 	gestureTitle   = 120
 )
@@ -66,7 +73,7 @@ func displayRulesGone(db *sql.DB) error {
 const workspaceLogSchema = `CREATE TABLE IF NOT EXISTS workspace_log (
 	id    INTEGER PRIMARY KEY AUTOINCREMENT,
 	time  INTEGER NOT NULL,
-	what  TEXT NOT NULL,             -- opened, ignored
+	what  TEXT NOT NULL,             -- opened, ignored, closed, moved, resized, about
 	ref   TEXT NOT NULL,
 	title TEXT NOT NULL DEFAULT ''   -- the object's title, as the page showed it (external)
 );
@@ -132,22 +139,52 @@ type gesture struct {
 	Title string
 }
 
-var errGesture = errors.New("a gesture is opened or ignored, with a ref")
+// gestureKinds are the gestures kept, and how the extraction (English)
+// and the composer and the brain (French) read each.
+var gestureKinds = map[string]struct{ en, fr string }{
+	gestureOpened:  {"opened", "ouvert"},
+	gestureIgnored: {"left unopened (it was shown, then left the screen)", "laissé sans l'ouvrir"},
+	gestureClosed:  {"closed (not to be shown again until the next session)", "fermé"},
+	gestureMoved:   {"moved (placed it elsewhere)", "déplacé"},
+	gestureResized: {"resized", "redimensionné"},
+	gestureAbout:   {"wrote a message about", "écrit à propos de"},
+}
 
-// noteGesture keeps a gesture, once per ref and kind of gesture in
-// gestureRepeat; those older than gestureKeep go.
+var errGesture = errors.New("a gesture is opened, ignored, closed, moved, resized or about, with a ref")
+
+// noteGesture keeps a gesture; opened, ignored and about once per ref in
+// gestureRepeat; each close counts, and each move or resize but those that
+// go on the one just before (gestureSteps); those older than gestureKeep
+// go. A surface's title is the one core has, and only when its
+// author wrote it in a clean turn: never the page's.
 func (c *core) noteGesture(what, ref, title string, now time.Time) error {
-	if what != gestureOpened && what != gestureIgnored {
+	if _, ok := gestureKinds[what]; !ok {
 		return errGesture
 	}
 	if !gestureRef(ref) {
 		return errGesture
 	}
-	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM workspace_log WHERE ref = ? AND what = ? AND time > ?`,
-		ref, what, now.Add(-gestureRepeat).Unix()).Scan(&n)
-	if n > 0 {
-		return nil
+	if id, ok := strings.CutPrefix(ref, "surface:"); ok {
+		title = c.surfaceCleanTitle(id)
+	}
+	if what == gestureOpened || what == gestureIgnored || what == gestureAbout {
+		var n int
+		c.store.db.QueryRow(`SELECT COUNT(*) FROM workspace_log WHERE ref = ? AND what = ? AND time > ?`,
+			ref, what, now.Add(-gestureRepeat).Unix()).Scan(&n)
+		if n > 0 {
+			return nil
+		}
+	}
+	if what == gestureMoved || what == gestureResized {
+		// One move in steps (the arrow keys, a click a size) is one gesture.
+		var id int64
+		var last, lastRef string
+		c.store.db.QueryRow(`SELECT id, what, ref FROM workspace_log WHERE time > ? ORDER BY id DESC LIMIT 1`,
+			now.Add(-gestureSteps).Unix()).Scan(&id, &last, &lastRef)
+		if id > 0 && last == what && lastRef == ref {
+			_, err := c.store.db.Exec(`UPDATE workspace_log SET time = ? WHERE id = ?`, now.Unix(), id)
+			return err
+		}
 	}
 	c.store.db.Exec(`DELETE FROM workspace_log WHERE time < ?`, now.Add(-gestureKeep).Unix())
 	_, err := c.store.db.Exec(`INSERT INTO workspace_log (time, what, ref, title) VALUES (?, ?, ?, ?)`,
@@ -193,9 +230,9 @@ func gestureSegment(gs []gesture, user string) segment {
 	var b strings.Builder
 	fmt.Fprintf(&b, "What %s did on the composed workspace (gestures, not words; the titles are the objects', external):", user)
 	for _, g := range gs {
-		what := "opened"
-		if g.What == gestureIgnored {
-			what = "left unopened (it was shown, then left the screen)"
+		what := g.What
+		if k, ok := gestureKinds[g.What]; ok {
+			what = k.en
 		}
 		fmt.Fprintf(&b, "\n- %s %s %s", g.Time.Local().Format("15:04"), what, g.Ref)
 		if g.Title != "" {
@@ -211,11 +248,13 @@ func gestureSegment(gs []gesture, user string) segment {
 func aboutKey(seq int64) string { return fmt.Sprintf("about_msg:%d", seq) }
 
 // noteAbout keeps the ref a message of the user's was written about (the
-// module or the surface open on the workspace, surface:<id>); a ref that
-// does not parse is not kept.
+// module or the surface open on the workspace, surface:<id>), and the
+// gesture; a ref that does not parse is not kept.
 func (c *core) noteAbout(seq int64, ref string) {
+	ref = strings.TrimSpace(ref)
 	if gestureRef(ref) {
-		c.store.set(aboutKey(seq), strings.TrimSpace(ref))
+		c.store.set(aboutKey(seq), ref)
+		c.noteGesture(gestureAbout, ref, "", time.Now())
 	}
 }
 

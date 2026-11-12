@@ -107,21 +107,23 @@ type workspaceLayout struct {
 // layoutTile is one surface on the grid: col and row from 0, w and h in
 // cells (the size's, or wider over columns left empty on its rows).
 type layoutTile struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Size  string `json:"size"`
-	Col   int    `json:"col"`
-	Row   int    `json:"row"`
-	W     int    `json:"w"`
-	H     int    `json:"h"`
-	Why   string `json:"why,omitempty"`
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Size   string `json:"size"`
+	Col    int    `json:"col"`
+	Row    int    `json:"row"`
+	W      int    `json:"w"`
+	H      int    `json:"h"`
+	Why    string `json:"why,omitempty"`
+	Pinned bool   `json:"pinned,omitempty"` // placed by the user, or by the brain at their request, this session
 }
 
 // layoutChip is a folded surface.
 type layoutChip struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Why   string `json:"why,omitempty"`
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Why    string `json:"why,omitempty"`
+	Closed bool   `json:"closed,omitempty"` // the user closed it this session
 }
 
 // layoutWant is a surface asked on the grid, at a size.
@@ -130,12 +132,32 @@ type layoutWant struct {
 	size  string
 	why   string
 	focus bool
+	pin   *tilePin
 }
 
 // layoutOf lays a choice out over the pool, with the surface the user
 // opened ("" for none). It is pure: no model, no store.
 func layoutOf(pool []surface, ch workspaceChoice, focus string) workspaceLayout {
-	pool = slices.Clone(pool)
+	return layoutWith(pool, ch, focus, userPlacement{})
+}
+
+// layoutWith lays a choice out with the user's placement of the session
+// (workspace_gestures.go): what they closed is folded last, marked closed,
+// and never opened; what they placed (or the brain placed at their
+// request) comes first, at its place when it has one, at its size, and
+// keeps both: no growing, no widening. Then the order of layoutOf.
+func layoutWith(pool []surface, ch workspaceChoice, focus string, pl userPlacement) workspaceLayout {
+	var closed []surface
+	pool = slices.DeleteFunc(slices.Clone(pool), func(s surface) bool {
+		if _, ok := pl.Closed[s.ID]; ok {
+			closed = append(closed, s)
+			return true
+		}
+		return false
+	})
+	if _, ok := pl.Closed[focus]; ok {
+		focus = ""
+	}
 	slices.SortStableFunc(pool, func(a, b surface) int {
 		return cmp.Or(cmp.Compare(b.Weight, a.Weight), b.Updated.Compare(a.Updated), cmp.Compare(a.ID, b.ID))
 	})
@@ -171,11 +193,21 @@ func layoutOf(pool []surface, ch workspaceChoice, focus string) workspaceLayout 
 			}
 			w.why = cmp.Or(it.Why, w.why)
 		}
-		if focus && sizeRank[w.size] < sizeRank[sizeL] {
+		if p, ok := pl.Pins[s.ID]; ok {
+			w.pin = &p
+			if _, known := tileDims[p.Size]; known {
+				w.size = p.Size
+			}
+		} else if focus && sizeRank[w.size] < sizeRank[sizeL] {
 			w.size = sizeL
 		}
 		w.why = truncate(oneLine(w.why), layoutWhyMax)
 		wants = append(wants, w)
+	}
+	for _, id := range pl.order() {
+		if s, ok := byID[id]; ok {
+			add(s, id == focus)
+		}
 	}
 	for _, s := range pool {
 		if s.Weight >= weightUrgent && s.ID != focus {
@@ -197,7 +229,7 @@ func layoutOf(pool []surface, ch workspaceChoice, focus string) workspaceLayout 
 		}
 	}
 
-	// One xl at most: the first.
+	// One xl at most: the first (one the user placed comes first).
 	xl := false
 	for i := range wants {
 		if wants[i].size == sizeXL {
@@ -208,15 +240,19 @@ func layoutOf(pool []surface, ch workspaceChoice, focus string) workspaceLayout 
 		}
 	}
 	sizes := make([]string, len(wants))
+	at := make([]*[2]int, len(wants))
 	for i, w := range wants {
 		sizes[i] = w.size
+		if w.pin != nil && w.pin.Placed {
+			at[i] = &[2]int{w.pin.Col, w.pin.Row}
+		}
 	}
-	spots := packTiles(sizes)
+	spots := packTilesAt(sizes, at)
 	// Room left: what matters grows a size, the first first, never into xl
 	// (xl is for what is urgent or asked so), and only if nothing else
-	// shrinks or folds for it.
+	// shrinks or folds for it. What the user placed keeps its size.
 	for i, w := range wants {
-		if spots[i] == nil || w.s.Weight < weightGrow {
+		if spots[i] == nil || w.s.Weight < weightGrow || w.pin != nil {
 			continue
 		}
 		up := biggerSize[spots[i].size]
@@ -231,7 +267,7 @@ func layoutOf(pool []surface, ch workspaceChoice, focus string) workspaceLayout 
 			}
 		}
 		trial[i] = up
-		if next := packTiles(trial); keeps(spots, next, trial) {
+		if next := packTilesAt(trial, at); keeps(spots, next, trial) {
 			spots = next
 		}
 	}
@@ -244,9 +280,12 @@ func layoutOf(pool []surface, ch workspaceChoice, focus string) workspaceLayout 
 			continue
 		}
 		d := tileDims[s.size]
-		l.Items = append(l.Items, layoutTile{ID: w.s.ID, Title: w.s.Title, Size: s.size, Col: s.col, Row: s.row, W: d[0], H: d[1], Why: w.why})
+		l.Items = append(l.Items, layoutTile{ID: w.s.ID, Title: w.s.Title, Size: s.size, Col: s.col, Row: s.row, W: d[0], H: d[1], Why: w.why, Pinned: w.pin != nil})
 	}
 	widenTiles(l.Items)
+	if l.Focus != "" && !slices.ContainsFunc(l.Items, func(t layoutTile) bool { return t.ID == l.Focus }) {
+		l.Focus = "" // folded: what the user placed fills the grid
+	}
 	for _, w := range folded {
 		l.Chips = append(l.Chips, layoutChip{ID: w.s.ID, Title: w.s.Title, Why: w.why})
 	}
@@ -254,6 +293,9 @@ func layoutOf(pool []surface, ch workspaceChoice, focus string) workspaceLayout 
 		if !added[s.ID] {
 			l.Chips = append(l.Chips, layoutChip{ID: s.ID, Title: s.Title, Why: truncate(oneLine(s.Why), layoutWhyMax)})
 		}
+	}
+	for _, s := range closed {
+		l.Chips = append(l.Chips, layoutChip{ID: s.ID, Title: s.Title, Closed: true})
 	}
 	if len(l.Chips) > layoutChipsMax {
 		l.Chips = l.Chips[:layoutChipsMax]
@@ -288,9 +330,17 @@ type tileSpot struct {
 
 // packTiles puts each tile, in order, at the first place where it fits, top
 // left first; one that fits nowhere shrinks, then is left out (nil).
-func packTiles(sizes []string) []*tileSpot {
+func packTiles(sizes []string) []*tileSpot { return packTilesAt(sizes, nil) }
+
+// packTilesAt is packTiles with places asked: a tile with one (at[i]: col,
+// row) goes there first, at its size, when it is on the grid and free;
+// else it is packed with the others, in order.
+func packTilesAt(sizes []string, at []*[2]int) []*tileSpot {
 	var grid [layoutRows][layoutCols]bool
 	free := func(col, row, w, h int) bool {
+		if col < 0 || row < 0 || col+w > layoutCols || row+h > layoutRows {
+			return false
+		}
 		for r := row; r < row+h; r++ {
 			for c := col; c < col+w; c++ {
 				if grid[r][c] {
@@ -300,8 +350,27 @@ func packTiles(sizes []string) []*tileSpot {
 		}
 		return true
 	}
+	take := func(col, row, w, h int) {
+		for r := row; r < row+h; r++ {
+			for c := col; c < col+w; c++ {
+				grid[r][c] = true
+			}
+		}
+	}
 	out := make([]*tileSpot, len(sizes))
 	for i, want := range sizes {
+		if i >= len(at) || at[i] == nil {
+			continue
+		}
+		if d, ok := tileDims[want]; ok && free(at[i][0], at[i][1], d[0], d[1]) {
+			take(at[i][0], at[i][1], d[0], d[1])
+			out[i] = &tileSpot{size: want, col: at[i][0], row: at[i][1]}
+		}
+	}
+	for i, want := range sizes {
+		if out[i] != nil {
+			continue
+		}
 	sizes:
 		for size := want; size != ""; size = smallerSize[size] {
 			d := tileDims[size]
@@ -310,11 +379,7 @@ func packTiles(sizes []string) []*tileSpot {
 					if !free(col, row, d[0], d[1]) {
 						continue
 					}
-					for r := row; r < row+d[1]; r++ {
-						for c := col; c < col+d[0]; c++ {
-							grid[r][c] = true
-						}
-					}
+					take(col, row, d[0], d[1])
 					out[i] = &tileSpot{size: size, col: col, row: row}
 					break sizes
 				}
@@ -325,7 +390,8 @@ func packTiles(sizes []string) []*tileSpot {
 }
 
 // widenTiles stretches tiles to the right over columns nobody uses on their
-// rows, so the sizes' widths leave no empty strip at the edge.
+// rows, so the sizes' widths leave no empty strip at the edge; a tile the
+// user placed keeps its size.
 func widenTiles(tiles []layoutTile) {
 	used := func(col, row, h, self int) bool {
 		for i, t := range tiles {
@@ -336,7 +402,7 @@ func widenTiles(tiles []layoutTile) {
 		return false
 	}
 	for i := range tiles {
-		for tiles[i].Col+tiles[i].W < layoutCols && !used(tiles[i].Col+tiles[i].W, tiles[i].Row, tiles[i].H, i) {
+		for !tiles[i].Pinned && tiles[i].Col+tiles[i].W < layoutCols && !used(tiles[i].Col+tiles[i].W, tiles[i].Row, tiles[i].H, i) {
 			tiles[i].W++
 		}
 	}
@@ -364,6 +430,10 @@ type layoutState struct {
 
 	missingSent map[string]time.Time // surface.missing told, by text
 	staleSent   map[string]time.Time // surface.stale told, by id: the surface's version it was told for
+
+	user       userPlacement   // what the user closed and placed this session (workspace_gestures.go)
+	userLoaded bool            // user was read from the store
+	read       map[string]bool // queue surfaces the user opened: their item ends once they leave it
 }
 
 // workspaceChoiceNow is the choice laid out: the last kept, or by weight.
@@ -421,6 +491,9 @@ func (c *core) focusSurface(id string, now time.Time) {
 	st.mu.Lock()
 	st.focus, st.focusAt = id, now
 	st.mu.Unlock()
+	if id != "" {
+		c.openedOnWorkspace(id, now) // no longer closed; a queue item read (workspace_gestures.go)
+	}
 	c.relayout()
 }
 
@@ -446,15 +519,17 @@ func (c *core) workspaceFocus(now time.Time) string {
 // relayout lays the pool out again, with the choice kept: at once, no
 // model. Those waiting for the layout are told when it changed.
 func (c *core) relayout() workspaceLayout {
-	focus := c.workspaceFocus(time.Now())
+	now := time.Now()
+	focus := c.workspaceFocus(now)
 	pool, err := c.surfaces()
+	start := c.workspaceSessionStart(now)
 	st := &c.layout
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if err != nil {
 		return st.last
 	}
-	l := layoutOf(pool, c.choiceLocked(), focus)
+	l := layoutWith(pool, c.choiceLocked(), focus, c.placementLocked(start))
 	raw, _ := json.Marshal(l)
 	if string(raw) != st.raw {
 		st.last, st.raw = l, string(raw)

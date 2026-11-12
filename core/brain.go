@@ -263,6 +263,10 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 	if open := c.attentionBlock(); open != "" {
 		parts = append(parts, open)
 	}
+	// The workspace as the user sees it, and what they did on it (workspace_gestures.go).
+	if ws := c.workspaceBlock(time.Now()); ws != "" {
+		parts = append(parts, ws)
+	}
 	profile, hash := c.profileForDelivery()
 	if profile != "" {
 		parts = append([]string{profile}, parts...)

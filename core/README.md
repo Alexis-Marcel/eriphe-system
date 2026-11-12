@@ -2732,7 +2732,12 @@ opened in (`workspace_lang`, set by `/espace/boot`). It lives while its item is 
 removing what left. Code's surfaces are outside the pool's cap (100), and no assistant writes or
 removes them, the brain neither; the user removing one (Settings → Surfaces) takes its item out of
 the queue (a card stays to be answered in the conversation). A card whose proposal the `Proposal`
-cannot show is an `Alert` too. An item other than a card leaves the queue only that way for now.
+cannot show is an `Alert` too. The user closing a queue's surface on the page ends its item the same
+way, but a card's: a card waits for its answer (it may not be in the conversation yet), its surface
+closed for the session only. An item other than a card also ends on its own once the user has seen
+it: a day after it was delivered (or raised again), or once they opened its surface and left it (went back, opened another, or the 15 minutes
+of the focus passed; `queueSweep`, on `runWorkspace`'s tick). A card stays until it is decided; an
+item still held (for a breakpoint or the brief) has not been delivered.
 
 The **composer** is a persistent assistant of role `composer`, like the brain and the session
 leads: one warm task on a node, each choice a turn (`deliverComposer` gives it the snapshot,
@@ -2779,7 +2784,9 @@ Both are external when the pool or the queue held content from outside.
 **When**: the pool and the queue are read every 2 s; a change chooses once the burst settles (3 s
 after the last change, 15 s at most after the first). A workspace preference entering memory (or
 changed) chooses at once, as a remark, with its words (`workspacePrefStamp`); one leaving it
-chooses again; a message of the user's does not. `workspace_show` chooses at once (moment
+chooses again; a message of the user's does not. A gesture of the user's on the page (any but
+`ignored`, which the layout itself often causes) is a change like the pool's: the composer chooses
+again once the burst settles (`gestureStamp`). `workspace_show` chooses at once (moment
 `show`). While the user has been away 20 minutes or more (`awaySince`), the next choice is for
 their return, and one is made ahead of it.
 
@@ -2836,14 +2843,55 @@ tools.
   reads the active, current ones (12 at most, the latest first) and the few other preferences
   the queue's titles and whys recall (`workspacePreferences`), and composes at once when one
   enters memory, changes or leaves it (`workspacePrefStamp`). A proposed preference is not read.
-- **Gestures feed memory, implicitly.** The page tells eriphe-core what the user opens
-  (`opened`) and what was in front then left the composition without being opened while the page
-  was visible (`ignored`): `POST /api/espace/gesture` with `{what, ref, title}` (204; 400 for
-  another gesture or a ref that does not parse; the workspace's session, CSRF in
-  `X-CSRF-Token`). Kept in `workspace_log`, once per ref and gesture in 10 minutes, 30 days at
-  most. The extraction reads a window's gestures as one segment of its transcript
-  (`from="workspace"`, ref `workspace:<id>`, trust external: the titles are the objects'); only
-  a repeated pattern may give an inferred preference. No counter, no score in code.
+- **Gestures** (`workspace.go`, `workspace_gestures.go`). The page tells eriphe-core what the user
+  does: `opened` (a tile or a chip opened: the page's own action `open`), `ignored` (a tile in
+  front while the page was visible that left the grid, folded or gone, without being opened),
+  `closed`, `moved` and `resized` (a tile's three small buttons), and `about` (a message written
+  with a surface open). `POST /api/espace/gesture` with `{what, ref, title}`, and for `moved` and
+  `resized` the tile's new `size`, `col` and `row` (204; 400 for another gesture, a ref that does
+  not parse, or a place off the grid; 404 for a surface there is not; the workspace's session,
+  CSRF in `X-CSRF-Token`); `closed`, `moved` and `resized` are about a surface
+  (`surface:<id>`). Kept in `workspace_log`: `opened`, `ignored` and `about` once per ref in
+  10 minutes, every close, and every move or resize but one that goes on the one just before
+  (the same tile, within a minute: the arrow keys); 30 days at most. A surface's title is core's, never
+  the page's, and only when its author wrote it in a clean turn. Each gesture but `ignored`
+  makes the composer choose again (debounced), its turn listing the last ten; the extraction
+  reads a window's gestures as one segment of its transcript (`from="workspace"`, ref
+  `workspace:<id>`, trust external: the titles are the objects'); only a repeated pattern may
+  give an inferred preference. No counter, no score in code.
+- **The session's placement** (`workspace_gestures.go`). What the user closed is not shown again
+  in the session: folded last in the chip strip, marked `closed`, whatever the composer chooses
+  (its turn says so); opening its chip shows it again. What they moved or resized is pinned
+  there, at that size: laid out first (the latest wins a place two want), never grown or
+  widened; the others are laid out around it (`layoutWith`). A **session** lasts while the user
+  is active (their messages, a conversation tab in front, their answers to notifications, their
+  gestures on the workspace) with no gap of more than an hour, within one activity day (from
+  05:00: a night's work after midnight is the same day); past it, the placement goes and the
+  composer places everything again (`sessionStartIn`). Kept in kv (`workspace_placement`): a
+  restart keeps it.
+- **The brain sees the workspace.** Each of its turns carries the workspace as the page shows it
+  (`workspaceBlock`, French, a few lines; nothing when the workspace is empty):
+
+  ```
+  [l'espace de Sam, tel que sa page le montre (grille de 12 × 8, colonne et ligne depuis 0 ; …) :
+  - agenda « Agenda du jour » · xl en 0,0 · ouverte
+  - q-card-12 · l en 6,0
+  - notes « Notes » · m en 9,6 · placée pour la session
+  replié : news « Nouvelles », veille
+  fermé par lui pour la session (ne le remets pas devant sans qu'il le demande) : meteo
+  ses gestes : 10:02 ouvert agenda ; 10:03 fermé meteo ; 10:05 déplacé notes ; 10:06 écrit à propos de agenda]
+  ```
+
+  A title is quoted only when its author wrote it in a clean turn; a gesture only by its ref (an
+  object's title may be a mail's subject). `workspace_read` has the detail, the page included
+  (`screen`: each tile's id, size, col, row and `pinned`; `open`, `folded`, `closed`).
+- **`workspace_arrange`** (`items`: 8 at most, each `{id, size, col, row}`, size s, m, l or xl,
+  one xl at most, col and row both or neither; `reset`): the brain arranges the workspace as the
+  user asks (« mets l'agenda en grand »), as the user's own placement for the session: a
+  surface with a place goes there, one without in the order given, top left first. An id that
+  is no surface's, a size or a place off the grid is refused by name; a surface the user closed
+  and the brain places is shown again. `reset` drops the session's placements first (closed
+  surfaces stay closed). It answers where each went (`{id, size, col, row}`, or `folded`).
 - **A message about what is open.** A message written on `/espace` while a module is open
   carries its ref (`POST /messages` with `about`; kept as `about_msg:<seq>` when it parses): the
   brain reads it as `[Sam 10:02 #12 · à propos de mail:…]`, the extraction as
@@ -2877,9 +2925,14 @@ surfaces as chips in the strip above, and a surface the layout does not name yet
 after) there too. Eriphe's line is the layout's. A click on a tile or a chip sends the page's own
 action `open` (`POST /api/espace/action`): core places the surface first and keeps the gesture
 (`surface:<id>`); Retour or Escape sends `back`. A message written while a surface is open
-carries `surface:<id>` as its `about`. With no surface at all, the page shows the old per-kind
-canvas below, until it goes (#424); its walkthrough and its `ignored` gestures work only there, and
-what `workspace_show` puts in front is seen only there.
+carries `surface:<id>` as its `about`. Each tile has three small buttons in its corner
+(real buttons, reachable by keyboard): the grip moves it (dragged to a cell, a dashed ghost placed
+by class showing where, or with the arrow keys), the size button changes its size (a click goes
+up, from xl back to s; + or − and the arrow keys), the cross closes it for the session. The page
+shows the change at once and sends the gesture; core's next layout places the others around it.
+A tile that leaves the grid unopened while the page is visible is sent as `ignored`. With no
+surface at all, the page shows the old per-kind canvas below, until it goes (#424); its
+walkthrough works only there, and what `workspace_show` puts in front is seen only there.
 
 **The old canvas** (`web/espace/src/engine.ts`, `views.tsx`): each module of the composition by
 ref takes an area by its weight (xl 30 cells, l 12, m 6, s 3; one xl at most). What does not fit
@@ -3209,7 +3262,7 @@ Any assistant writes the workspace with four tools; the **author is the caller**
 |---|---|
 | `surface_write` | create or update a surface: `id` (empty: a new one), `title`, `components`, `data`, `sources`, `refresh {every}`, `lifetime {until \| while \| kept}`, `weight`, `why`. Its description carries a compact summary of the catalog (its components and functions, from `a2ui.Eriphe()`); a wrong surface comes back as A2UI's errors, each with its path, nothing written. Answers `id`, `author`, `waiting` (sources still reading), `failed`, `previous_error` (the last error found on it, which this write clears) |
 | `surface_remove` | remove one of the caller's surfaces |
-| `workspace_read` | each surface (id, title, author, sources, lifetime, weight, why, last update, `waiting`, the user's `last_action` on it; for the caller's own, `failed` and the last `error`), the user's gestures of the last hour (what, ref, time), what the brain put in front, and the proposals that wait (`ref` for a Proposal's `proposalId`, text, `when`; at most 20). A title or why written in a tainted turn, and the text of a proposal drawn from external content, are never quoted |
+| `workspace_read` | each surface (id, title, author, sources, lifetime, weight, why, last update, `waiting`, the user's `last_action` on it; for the caller's own, `failed` and the last `error`), the user's gestures of the last hour (what, ref, time), what the brain put in front, the page (`screen`: each tile's id, size, col, row, `pinned`; `open`, `folded`, `closed`) and the proposals that wait (`ref` for a Proposal's `proposalId`, text, `when`; at most 20). A title or why written in a tainted turn, and the text of a proposal drawn from external content, are never quoted |
 | `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand |
 
 - **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint. A
