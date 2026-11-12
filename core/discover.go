@@ -21,7 +21,7 @@ import (
 
 const (
 	reachOpen        = "open"        // answers without an account
-	reachOAuth       = "oauth"       // OAuth with dynamic client registration: Connect works
+	reachOAuth       = "oauth"       // OAuth with dynamic registration, or Eriphe's published client: Connect works
 	reachApp         = "app"         // OAuth, but a client must be made at the vendor
 	reachToken       = "token"       // wants a credential without saying how: a key or a token
 	reachRefused     = "refused"     // 403
@@ -147,8 +147,11 @@ func discover(ctx context.Context, client *http.Client, raw string) (discovery, 
 		d.Read = set.read
 	}
 	d.Reach = reachApp
-	if d.DCR && (!d.Secret || secretMethod(methods) != "") {
+	switch {
+	case d.DCR && (!d.Secret || secretMethod(methods) != ""):
 		d.Reach = reachOAuth
+	case !d.DCR && d.CIMD && !d.Secret:
+		d.Reach = reachOAuth // with Eriphe's published client (cimd.go)
 	}
 	return d, nil
 }

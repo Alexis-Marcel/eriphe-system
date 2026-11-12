@@ -395,6 +395,9 @@ func (c *core) listServers(only string, withTools bool) []serverInfo {
 			if reg := c.store.oauthClient(name); info.RedirectURI == "" && reg != nil && loopbackRedirect(reg.RedirectURI) {
 				info.RedirectURI = reg.RedirectURI
 			}
+			if info.RedirectURI == "" && c.signedInWithBuiltinClient(name) {
+				info.RedirectURI = builtinRedirect
+			}
 		}
 		if u := c.pool.get(name); u != nil {
 			status, errText, tools := u.snapshot()

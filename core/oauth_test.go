@@ -47,6 +47,20 @@ type fakeAS struct {
 	omitMethod bool
 	regMethods []string // token_endpoint_auth_method of each registration
 	tokenAuth  string   // how the last token request authenticated: post, basic or none
+	// Client ID Metadata Documents: cimd advertises them besides dynamic
+	// registration (Linear, Notion); cimdOnly offers nothing else
+	// (ElevenLabs), and its client is Eriphe's published one.
+	cimd, cimdOnly bool
+}
+
+// clientID is the client the authorization and token requests must name.
+func (f *fakeAS) clientID() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.cimdOnly {
+		return builtinClientID
+	}
+	return "client-1"
 }
 
 func (f *fakeAS) resourceScopes() []string {
@@ -89,13 +103,26 @@ func newFakeAS(t *testing.T) *fakeAS {
 			"scopes_supported": f.resourceScopes()})
 	})
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]any{"issuer": f.srv.URL, "authorization_endpoint": f.srv.URL + "/authorize",
+		meta := map[string]any{"issuer": f.srv.URL, "authorization_endpoint": f.srv.URL + "/authorize",
 			"token_endpoint": f.srv.URL + "/token", "registration_endpoint": f.srv.URL + "/register",
 			"response_types_supported": []string{"code"}, "grant_types_supported": []string{"authorization_code", "refresh_token"},
 			"code_challenge_methods_supported": []string{"S256"}, "token_endpoint_auth_methods_supported": f.authMethods(),
-			"scopes_supported": []string{"read", "offline_access"}})
+			"scopes_supported": []string{"read", "offline_access"}}
+		f.mu.Lock()
+		if f.cimd || f.cimdOnly {
+			meta["client_id_metadata_document_supported"] = true
+		}
+		if f.cimdOnly {
+			delete(meta, "registration_endpoint")
+		}
+		f.mu.Unlock()
+		writeJSON(w, 200, meta)
 	})
 	mux.HandleFunc("POST /register", func(w http.ResponseWriter, r *http.Request) {
+		if f.clientID() != "client-1" {
+			http.NotFound(w, r)
+			return
+		}
 		var in map[string]any
 		json.NewDecoder(r.Body).Decode(&in)
 		f.mu.Lock()
@@ -122,6 +149,7 @@ func newFakeAS(t *testing.T) *fakeAS {
 	})
 	mux.HandleFunc("POST /token", func(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
+		client := f.clientID()
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		id, secret, basic := r.BasicAuth()
@@ -143,7 +171,7 @@ func newFakeAS(t *testing.T) *fakeAS {
 		case "authorization_code":
 			sum := sha256.Sum256([]byte(r.Form.Get("code_verifier")))
 			if r.Form.Get("code") != f.code || f.code == "" || base64.RawURLEncoding.EncodeToString(sum[:]) != f.challenge ||
-				r.Form.Get("resource") != f.srv.URL+"/mcp" || r.Form.Get("client_id") != "client-1" {
+				r.Form.Get("resource") != f.srv.URL+"/mcp" || r.Form.Get("client_id") != client {
 				writeJSON(w, 400, map[string]string{"error": "invalid_grant"})
 				return
 			}
@@ -176,7 +204,7 @@ func (f *fakeAS) authorize(authURL string) (code, state string) {
 		f.t.Fatal(err)
 	}
 	q := u.Query()
-	if q.Get("code_challenge_method") != "S256" || q.Get("resource") != f.srv.URL+"/mcp" || q.Get("client_id") != "client-1" ||
+	if q.Get("code_challenge_method") != "S256" || q.Get("resource") != f.srv.URL+"/mcp" || q.Get("client_id") != f.clientID() ||
 		!strings.Contains(q.Get("scope"), "read") {
 		f.t.Fatalf("authorization URL = %s", authURL)
 	}

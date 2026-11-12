@@ -467,7 +467,8 @@ protected resource metadata, authorization server metadata, a client (a Client I
 Document if `client_metadata_url` is given and supported, else a pre-registered client
 `client_id_file`/`client_secret_file`, else dynamic registration, as a public client, or with
 `client_secret_post`/`client_secret_basic` and the secret it gets when the server takes no public
-client or refuses one), PKCE, the `resource`
+client or refuses one, else, when the server offers no dynamic registration but takes Client ID
+Metadata Documents, Eriphe's published client: see below), PKCE, the `resource`
 parameter, the `iss` check, refresh tokens (`offline_access` when advertised), and step-up on
 `insufficient_scope`. `scopes` replaces what the server advertises. A pre-registered client is
 registered at the provider with a loopback redirect, given as `redirect_uri`
@@ -484,6 +485,20 @@ a CLI flow. The result page sends the browser back to the tools, where the sessi
 again. A server whose pre-registered client only knows a loopback `redirect_uri` keeps the paste
 step.
 
+**Eriphe's published client.** Some servers take a client only through a Client ID Metadata
+Document (CIMD): no dynamic registration, no app to make at the vendor's (ElevenLabs). For them,
+eriphe-core signs in with the document the project publishes on GitHub Pages,
+[`site/oauth/client.json`](../site/oauth/client.json): its URL is the `client_id`, and its one
+redirect is `http://127.0.0.1:8976/callback`. It describes no installation, so the service never
+learns where an Eriphe runs. It is used only when the server's authorization server advertises
+`client_id_metadata_document_supported` and no `registration_endpoint`, and the tool has no client
+of its own (`client_id_file`, `client_metadata_url`, `redirect_uri`, a client typed in the form, or
+a registration kept from before); what the server offers is read once and remembered ten minutes.
+From the workspace, such a tool is saved first, then Connect takes the paste step: the browser ends
+on the loopback page, which does not load, and its address is pasted back. From a terminal,
+`eriphe connect` listens on port 8976 and catches it; the API refuses another port for such a
+server.
+
 From a terminal, connecting is the CLI's:
 
 ```sh
@@ -491,7 +506,8 @@ eriphe connect notion
 ```
 
 It listens on `http://127.0.0.1:<port>/callback` (a loopback redirect, which OAuth 2.1 allows for
-native apps: the port of the registered client if there is one, else a free one), asks
+native apps: the port of the registered client if there is one, else 8976, the port of Eriphe's
+published client, else a free one), asks
 eriphe-core for a flow, opens the authorization URL (or prints it, `-no-browser`), receives the
 redirect and hands the code and state over. If the browser is on another machine, paste the URL it
 ended on (the page will not load: that is expected). Until connected, the server is `needs_auth`

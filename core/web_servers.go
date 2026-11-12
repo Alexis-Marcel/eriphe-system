@@ -15,8 +15,9 @@ import (
 // browser to the vendor's authorization page, which redirects back to the
 // workspace's own /oauth/callback (web_catalog.go). A server whose
 // pre-registered client only knows a loopback redirect (redirect_uri in
-// the configuration) takes the CLI's way instead: the browser lands on a
-// page of 127.0.0.1 that does not load, and its address is pasted back.
+// the configuration), or a server that takes Eriphe's published client only
+// (cimd.go), takes the CLI's way instead: the browser lands on a page of
+// 127.0.0.1 that does not load, and its address is pasted back.
 
 type serverView struct {
 	serverInfo
@@ -73,9 +74,12 @@ func (w *web) handleServerConnect(rw http.ResponseWriter, r *http.Request, s *se
 		return
 	}
 	redirect, binding := w.callbackURL(r), ""
-	if o := oauthOf(srv); o != nil && o.RedirectURI != "" {
+	switch o := oauthOf(srv); {
+	case o != nil && o.RedirectURI != "":
 		redirect = o.RedirectURI // the paste step
-	} else {
+	case w.c.usesBuiltinClient(r.Context(), name, srv, nil):
+		redirect = builtinRedirect // the paste step too
+	default:
 		if !w.atAddress(rw, r) {
 			return
 		}

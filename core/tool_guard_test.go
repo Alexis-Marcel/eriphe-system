@@ -62,8 +62,8 @@ func toolHits(t *testing.T, file string) []string {
 		case *ast.Ident:
 			s = x.Name
 		case *ast.BasicLit:
-			if strings.Contains(x.Value, "github.com/Alexis-Marcel/eriphe-system") {
-				return true // Eriphe's own home
+			if strings.Contains(x.Value, "github.com/Alexis-Marcel/eriphe-system") || strings.Contains(x.Value, "alexis-marcel.github.io/eriphe-system") {
+				return true // Eriphe's own home, and its pages (its OAuth client, cimd.go)
 			}
 			s = x.Value
 		default:

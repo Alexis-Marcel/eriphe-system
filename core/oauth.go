@@ -174,6 +174,7 @@ type authFlow struct {
 	id       string
 	redirect string
 	binding  string // workspace flows: hash of the browser's flow cookie
+	cimd     string // Eriphe's published client (cimd.go), when the flow signs in with it
 
 	mu       sync.Mutex
 	granted  string          // what the scopes asked allow (access.go), once known
@@ -338,8 +339,8 @@ func (p *pool) oauthHandler(u *upstream) (*oauthGate, error) {
 		flow.mu.Unlock()
 		return scopes
 	}
-	if o.ClientMetadata != "" {
-		hcfg.ClientIDMetadataDocumentConfig = &auth.ClientIDMetadataDocumentConfig{URL: o.ClientMetadata}
+	if meta := cmp.Or(o.ClientMetadata, flow.cimd); meta != "" {
+		hcfg.ClientIDMetadataDocumentConfig = &auth.ClientIDMetadataDocumentConfig{URL: meta}
 	}
 	switch reg := p.store.oauthClient(u.name); {
 	case o.ClientIDFile != "" || u.clientID != "":
@@ -556,7 +557,9 @@ func (c *core) handleServerConnect(w http.ResponseWriter, r *http.Request) {
 
 // startConnect starts an authorization of an OAuth server, redirected to
 // redirect: it returns the URL to open, or none if the server connected
-// without one. binding ties a workspace flow to its browser.
+// without one. binding ties a workspace flow to its browser. A server that
+// takes Eriphe's published client only (cimd.go) is connected with it, on
+// its loopback redirect: the address is pasted back, not bound.
 func (c *core) startConnect(ctx context.Context, name, redirect, binding string) (*authFlow, string, error) {
 	u := c.pool.get(name)
 	if u == nil {
@@ -568,8 +571,17 @@ func (c *core) startConnect(ctx context.Context, name, redirect, binding string)
 	if want := u.srv.Auth.OAuth.RedirectURI; want != "" && redirect != want {
 		return nil, "", &catalogError{http.StatusBadRequest, "", "", errors.New("this server's client is registered for " + want)}
 	}
+	cimd := ""
+	if c.usesBuiltinClient(ctx, name, u.srv, nil) {
+		if redirect != builtinRedirect {
+			return nil, "", &catalogError{http.StatusBadRequest, "", "", errors.New("this server takes Eriphe's published client only, " +
+				"whose redirect is " + builtinRedirect + ": connect from that port")}
+		}
+		cimd, binding = builtinClientID, ""
+	}
 	f := newAuthFlow(redirect)
 	f.binding = binding
+	f.cimd = cimd
 	u.mu.Lock()
 	old := u.flow
 	u.flow = f
