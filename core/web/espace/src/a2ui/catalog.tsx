@@ -600,11 +600,12 @@ const Day = createComponentImplementation(
 );
 
 // Proposal shows one proposal of Eriphe's, read from eriphe-core by its ref
-// (kind:id); its Oui and Non answer that proposal and no other, through its
-// card, as in the conversation.
+// (kind:id); its Oui and Non send an "answer" action naming this surface,
+// this component and that proposal: eriphe-core decides it only if the
+// surface shows it and it still waits, as its card in the conversation.
 const Proposal = createComponentImplementation(
   { name: "Proposal", schema: z.object({ proposalId: CommonSchemas.DynamicString }) },
-  ({ props }) => {
+  ({ props, context }) => {
     const { t } = useWords();
     const src = useProposals();
     const ref = str(props.proposalId);
@@ -626,7 +627,8 @@ const Proposal = createComponentImplementation(
       if (!p || busy) return;
       setBusy(true);
       setFailed(false);
-      const ok = await src.answer(p.card, yes).catch(() => false);
+      const surfaceId = context.dataContext.surface?.id ?? "";
+      const ok = await src.answer({ surfaceId, componentId: context.componentModel.id, ref: p.ref, yes }).catch(() => false);
       if (!ok) setFailed(true);
       const again = await src.read(ref).catch(() => null);
       setP(again ?? { ...p, state: ok ? (yes ? "approved" : "rejected") : p.state });

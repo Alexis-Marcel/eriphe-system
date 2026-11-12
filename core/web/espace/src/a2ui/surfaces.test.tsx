@@ -116,8 +116,9 @@ describe("A2UI surfaces", () => {
       name: "ask",
       surfaceId: "sample-today",
       sourceComponentId: "ask",
-      context: { text: "Résume ma journée en trois lignes" },
     });
+    // An ask carries its author's words, and nothing else: core adds the rest.
+    expect(got[0].action.context).toEqual({ text: "Résume ma journée en trois lignes" });
     expect(Date.parse(got[0].action.timestamp)).not.toBeNaN();
   });
 

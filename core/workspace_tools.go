@@ -108,7 +108,7 @@ func surfaceWriteHelp() string {
 		"Call catalog_read once for the properties and examples before your first surface. " +
 		"A wrong surface comes back as A2UI errors with their path: fix it and write it again. " +
 		"A source slow to answer leaves the surface waiting, filled when it comes; a binding it does not give is told to you then (workspace_read, and your next surface_write). " +
-		"A button asks the brain (action {event: {name: ask, context: {text}}}) with your own words only."
+		"A button's action is ask (action {event: {name: ask, context: {text}}}: a request to the brain in your own words only, never bound data) or a local name (open, expand, tab); nothing else. A proposal is answered through a Proposal component, never a button."
 }
 
 // registerSurfaceTools adds the workspace's tools to an MCP server, those
@@ -448,66 +448,25 @@ func lifetimeText(l surfaceLifetime, loc *time.Location) string {
 	return ""
 }
 
-// askGuard keeps an ask (a button's request to the brain) to its author's
-// own words: never a value bound to data, which a source fills from
-// outside, and none at all from an author whose turn read external
-// content, which may have written it (#415).
-func askGuard(id string, comps json.RawMessage, tainted bool) []a2ui.ValidationError {
-	var list []any
-	if json.Unmarshal(comps, &list) != nil {
-		return nil
+// actionGuard keeps a surface's actions to the grammar (a2ui.CheckActions:
+// ask with its author's own words, or a local name) and, from an author
+// whose turn read external content, which may have written it, allows no
+// ask at all (#415, #425).
+func actionGuard(id string, comps json.RawMessage, tainted bool) []a2ui.ValidationError {
+	errs := a2ui.CheckActions(id, comps)
+	if !tainted {
+		return errs
 	}
-	var errs []a2ui.ValidationError
-	var walk func(v any, path string)
-	walk = func(v any, path string) {
-		switch x := v.(type) {
-		case map[string]any:
-			if ev, ok := x["event"].(map[string]any); ok && ev["name"] == "ask" {
-				at := path + "/event"
-				switch {
-				case tainted:
-					errs = append(errs, a2ui.ValidationError{Code: a2ui.CodeValidationFailed, SurfaceID: id, Path: at,
-						Message: "an ask written after reading external content could carry it to the brain as a request: leave the button out"})
-				case bindsData(ev):
-					errs = append(errs, a2ui.ValidationError{Code: a2ui.CodeValidationFailed, SurfaceID: id, Path: at,
-						Message: "an ask carries your own words only: literal text, never a value bound to the data"})
-				}
-			}
-			for k, next := range x {
-				walk(next, path+"/"+strings.ReplaceAll(strings.ReplaceAll(k, "~", "~0"), "/", "~1"))
-			}
-		case []any:
-			for i, next := range x {
-				walk(next, path+"/"+strconv.Itoa(i))
-			}
+	var list []map[string]any
+	json.Unmarshal(comps, &list)
+	for i, comp := range list {
+		a, _ := comp["action"].(map[string]any)
+		if ev, ok := a["event"].(map[string]any); ok && ev["name"] == a2ui.ActionAsk {
+			errs = append(errs, a2ui.ValidationError{Code: a2ui.CodeValidationFailed, SurfaceID: id,
+				Path:    "/components/" + strconv.Itoa(i) + "/action/event",
+				Message: "an ask written after reading external content could carry it to the brain as a request: leave the button out"})
 		}
 	}
-	walk(list, "/components")
-	sort.Slice(errs, func(i, j int) bool { return errs[i].Path < errs[j].Path })
+	sort.SliceStable(errs, func(i, j int) bool { return errs[i].Path < errs[j].Path })
 	return errs
-}
-
-// bindsData tells whether a value holds a binding or a function call.
-func bindsData(v any) bool {
-	switch x := v.(type) {
-	case map[string]any:
-		if _, ok := x["@path"]; ok {
-			return true
-		}
-		if _, ok := x["@call"]; ok {
-			return true
-		}
-		for _, next := range x {
-			if bindsData(next) {
-				return true
-			}
-		}
-	case []any:
-		for _, next := range x {
-			if bindsData(next) {
-				return true
-			}
-		}
-	}
-	return false
 }

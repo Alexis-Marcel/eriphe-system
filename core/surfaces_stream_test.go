@@ -247,8 +247,9 @@ func actionBody(name, surface string) string {
 }
 
 // POST /api/espace/action takes an A2UI action of the session's, checked:
-// "open" reads the surface's sources again; the others are not handled
-// yet. Each is recorded on the surface.
+// "open" reads the surface's sources again; a name outside the grammar is
+// refused (surface_actions_test.go for each kind). An action done is
+// recorded on the surface.
 func TestSurfaceActionEndpoint(t *testing.T) {
 	c, l := surfaceCore(t)
 	tw := newTestWebFor(t, c)
@@ -270,13 +271,14 @@ func TestSurfaceActionEndpoint(t *testing.T) {
 		{"an error", `{"version":"1.0","error":{"code":"X","surfaceId":"` + s.ID + `","message":"m"}}`, csrf, http.StatusBadRequest},
 		{"other version", strings.Replace(actionBody("open", s.ID), `"1.0"`, `"0.9"`, 1), csrf, http.StatusBadRequest},
 		{"no surface", actionBody("open", "s-none"), csrf, http.StatusNotFound},
-		{"not handled yet", actionBody("summarize", s.ID), csrf, http.StatusNotImplemented},
+		{"outside the grammar", actionBody("summarize", s.ID), csrf, http.StatusBadRequest},
+		{"local", actionBody("expand", s.ID), csrf, http.StatusNoContent},
 	} {
 		if code, body := postJSON(tw, "/api/espace/action", tc.body, tc.csrf); code != tc.want {
 			t.Errorf("%s: %d %s, want %d", tc.name, code, body, tc.want)
 		}
 	}
-	if got, _ := c.surface(s.ID); got.Look.Action == nil || got.Look.Action.Name != "summarize" || got.Look.Action.Component != "root" {
+	if got, _ := c.surface(s.ID); got.Look.Action == nil || got.Look.Action.Name != "expand" || got.Look.Action.Component != "root" {
 		t.Fatalf("not recorded: %+v", got.Look.Action)
 	}
 

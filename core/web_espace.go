@@ -51,8 +51,11 @@ func readEvent(rw http.ResponseWriter, r *http.Request) (a2ui.Event, bool) {
 }
 
 // handleSurfaceAction is POST /api/espace/action: an A2UI action the user
-// took on a surface (surfaceAction). 204; 400 for anything but a valid
-// action, 404 for a surface there is not, 501 for an action not handled.
+// took on a surface (surfaceAction, surface_actions.go). 204; 400 for
+// anything but a valid action, and for one the grammar or the surface
+// refuses (reported to its author); 404 for a surface there is not, or an
+// answer to a proposal no card carries; 409 for a proposal that no longer
+// waits.
 func (w *web) handleSurfaceAction(rw http.ResponseWriter, r *http.Request, _ *session) {
 	ev, ok := readEvent(rw, r)
 	if !ok {
@@ -62,14 +65,20 @@ func (w *web) handleSurfaceAction(rw http.ResponseWriter, r *http.Request, _ *se
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "an action, not an error"})
 		return
 	}
+	var refused *errActionRefused
 	switch err := w.c.surfaceAction(r.Context(), ev.Action.SurfaceID, *ev.Action); {
-	case errors.Is(err, errNoSurface):
+	case errors.As(err, &refused):
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	case errors.Is(err, errNoSurface), errors.Is(err, errNoCard):
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": err.Error()})
-	case errors.Is(err, errActionNotHandled):
-		writeJSON(rw, http.StatusNotImplemented, map[string]string{"error": err.Error()})
+	case errors.Is(err, errCardDecided):
+		writeJSON(rw, http.StatusConflict, map[string]string{"error": err.Error()})
 	case err != nil:
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	default:
+		if a2ui.ActionKind(ev.Action.Name) != a2ui.KindLocal {
+			w.notify() // the conversation shows the ask, or the card decided
+		}
 		rw.WriteHeader(http.StatusNoContent)
 	}
 }

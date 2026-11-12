@@ -90,8 +90,8 @@ export function sampleProposals(lang: Lang): Proposals {
   const states = new Map<string, string>();
   return {
     read: async (ref) => (ref === view.ref ? { ...view, state: states.get(ref) ?? view.state } : null),
-    answer: async (card, yes) => {
-      if (card !== view.card) return false;
+    answer: async ({ ref, yes }) => {
+      if (ref !== view.ref) return false;
       states.set(view.ref, yes ? "approved" : "rejected");
       return true;
     },

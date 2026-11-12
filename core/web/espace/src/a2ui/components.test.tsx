@@ -8,7 +8,7 @@ import { createAdapter, type ActionMessage, type Adapter, type ErrorMessage, typ
 import { CATALOG } from "./catalog";
 import { galleryFixtures, sampleProposals } from "./fixtures";
 import { safeHref } from "./markdown";
-import { ProposalsContext, type Proposals } from "./proposals";
+import { ProposalsContext, type Answer, type Proposals } from "./proposals";
 import { Surfaces } from "./Surfaces";
 
 // Every component of the catalog, rendered from the gallery's data
@@ -23,7 +23,7 @@ let root: Root;
 let adapter: Adapter;
 let errors: ErrorMessage[];
 let actions: ActionMessage[];
-let answers: [number, boolean][];
+let answers: Answer[];
 
 // The page's words in a language, as /espace/boot gives them.
 const words = (lang: Lang) => ({ t: makeT(strings[lang]), lang });
@@ -32,9 +32,9 @@ async function mount(lang: Lang, msgs: Message[] = galleryFixtures(lang), propos
   const sample = sampleProposals(lang);
   const src = proposals ?? {
     read: sample.read,
-    answer: async (card: number, yes: boolean) => {
-      answers.push([card, yes]);
-      return sample.answer(card, yes);
+    answer: async (a: Answer) => {
+      answers.push(a);
+      return sample.answer(a);
     },
   };
   adapter = createAdapter(lang);
@@ -215,9 +215,10 @@ describe("the catalog's components", () => {
     // The data changes: the fields show it.
     await act(async () => adapter.applyMessages([{ version: "1.0", updateDataModel: { surfaceId: "gallery-trip", path: "/note", value: "Autre" } }]));
     expect(($(".a2-field input[type=text]") as HTMLInputElement).value).toBe("Autre");
-    // The action carries what was chosen.
+    // The ask carries its author's words only, never the fields.
     await click($$("button.a2-button").find((b) => b.textContent?.includes("itinéraire"))!);
-    expect(actions.at(-1)?.action).toMatchObject({ name: "ask", context: { text: "Trouve-moi un itinéraire pour le voyage", how: ["car"] } });
+    expect(actions.at(-1)?.action).toMatchObject({ name: "ask", sourceComponentId: "ask", surfaceId: "gallery-trip" });
+    expect(actions.at(-1)?.action.context).toEqual({ text: "Trouve-moi un itinéraire pour le voyage" });
   });
 
   it("let a choice take several values when asked", async () => {
@@ -323,7 +324,7 @@ describe("the catalog's components", () => {
     expect(text(".a2-proposal-text")).toBe("Ne plus te prévenir des factures avant le brief ?");
     expect(text(".a2-proposal-why")).toBe("Tu n'as ouvert aucune des cinq dernières.");
     await click($$(".a2-proposal-actions button")[0]);
-    expect(answers).toEqual([[7, true]]);
+    expect(answers).toEqual([{ surfaceId: "gallery-more", componentId: "proposal", ref: "rule:7", yes: true }]);
     expect($(".a2-proposal-actions")).toBeNull();
     expect(text(".a2-proposal-kicker")).toBe("Validé");
   });

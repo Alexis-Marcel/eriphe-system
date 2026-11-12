@@ -34,6 +34,16 @@ func TestEspaceGalleryIsValid(t *testing.T) {
 		for _, e := range a2ui.Validate(msgs) {
 			t.Errorf("%s: %+v", lang, e)
 		}
+		// Its actions keep to the grammar an author writes (#425).
+		var created []struct {
+			CreateSurface a2ui.Surface `json:"createSurface"`
+		}
+		json.Unmarshal(msgs, &created)
+		for _, s := range created {
+			for _, e := range a2ui.CheckActions(s.CreateSurface.ID, s.CreateSurface.Components) {
+				t.Errorf("%s: %+v", lang, e)
+			}
+		}
 		// Every component of the catalog is in it.
 		var surfaces []struct {
 			CreateSurface struct {

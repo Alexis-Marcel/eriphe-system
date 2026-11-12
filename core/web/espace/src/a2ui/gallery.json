@@ -511,7 +511,7 @@
       "variant": "quiet",
       "action": {
        "event": {
-        "name": "local"
+        "name": "expand"
        }
       }
      },
@@ -525,10 +525,7 @@
        "event": {
         "name": "ask",
         "context": {
-         "text": "Trouve-moi un itinéraire pour le voyage",
-         "how": {
-          "@path": "/how"
-         }
+         "text": "Trouve-moi un itinéraire pour le voyage"
         }
        }
       }
@@ -1349,7 +1346,7 @@
       "variant": "quiet",
       "action": {
        "event": {
-        "name": "local"
+        "name": "expand"
        }
       }
      },
@@ -1363,10 +1360,7 @@
        "event": {
         "name": "ask",
         "context": {
-         "text": "Find me a route for the trip",
-         "how": {
-          "@path": "/how"
-         }
+         "text": "Find me a route for the trip"
         }
        }
       }
