@@ -110,7 +110,7 @@ func main() {
 	flag.StringVar(&o.root, "root", envOr("ERIPHE_ROOT", "data"), "directory for the node's state and task profiles (env ERIPHE_ROOT)")
 	flag.StringVar(&o.hostRoot, "host-root", "", "the -root directory as the Docker daemon sees it (default: same path)")
 	flag.StringVar(&o.image, "image", "ghcr.io/alexis-marcel/eriphe-base:"+imageTag(version), "default worker image, the one tasks start from (the agent is injected)")
-	flag.StringVar(&o.agentImage, "agent-image", envOr("ERIPHE_AGENT_IMAGE", "ghcr.io/alexis-marcel/eriphe-agent-{agent}:"+imageTag(version)), "image of each agent injected into tasks, {agent} for claude, codex or opencode (env ERIPHE_AGENT_IMAGE)")
+	flag.StringVar(&o.agentImage, "agent-image", envOr("ERIPHE_AGENT_IMAGE", "ghcr.io/alexis-marcel/eriphe-agent-{agent}:"+imageTag(version)), "image of each agent injected into tasks, {agent} for claude, codex, opencode or vibe (env ERIPHE_AGENT_IMAGE)")
 	flag.StringVar(&o.taskBin, "task-bin", envOr("ERIPHE_TASK_BIN", "/usr/local/share/eriphe/task-bin"), "the node's programs for tasks: linux-<arch>/ in it is copied into every task's /opt/eriphe/bin (env ERIPHE_TASK_BIN)")
 	flag.StringVar(&o.network, "network", "", "Docker network for services with egress, shared with this node (empty: Docker's default bridge)")
 	flag.StringVar(&o.taskNetwork, "task-network", "eriphe-tasks", "Docker network for task containers, apart from eriphe-core and the services (created if missing)")

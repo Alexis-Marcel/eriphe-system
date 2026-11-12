@@ -257,6 +257,8 @@ jobs:
             context: worker/agents/codex
           - image: eriphe-agent-opencode
             context: worker/agents/opencode
+          - image: eriphe-agent-vibe
+            context: worker/agents/vibe
     permissions:
       contents: read
       packages: write
@@ -386,6 +388,7 @@ jobs:
           - image: eriphe-agent-claude
           - image: eriphe-agent-codex
           - image: eriphe-agent-opencode
+          - image: eriphe-agent-vibe
           - image: eriphe-mail
           - image: eriphe-calendar
           - image: eriphe-files

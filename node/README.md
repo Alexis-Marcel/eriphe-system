@@ -297,7 +297,7 @@ A probe for another system is a `sessionProbe`.
 | `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `folders` (the shared folders: `{id, name, access, missing, problem, program}`, never a path; see Folders it cannot use), `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine), `syncthing` (its Syncthing's `device_id`, see Copies) |
 | `GET /v1/shares` | the folders shared on this machine: `{folders: [{id, name, access, missing, problem, program}]}`, never a path (see Shares) |
 | `DELETE /v1/shares/{id}` | take a folder off the list (eriphe-core may restrict, never add); the tasks holding it are stopped |
-| `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, agent_env?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex` or `acp` (with `command`) |
+| `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, agent_env?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex`, `vibe` or `acp` (with `command`) |
 | `GET /v1/tasks`, `GET /v1/tasks/{id}` | state, agent session, pending permissions |
 | `GET /v1/tasks/{id}/events?after=N&wait=S` | events after N, long polling |
 | `POST /v1/tasks/{id}/messages` | next user turn `{text}` (when the agent is idle) |
@@ -515,7 +515,7 @@ node's image ships it for both Linux architectures in
 A task's `runtime` is the agent program the node drives in its container (`runtime.go`). All
 write the same events (`text`, `tool_use`, `permission`, `permission_answer`, `turn_end`, `state`, `diff`, `check`, `retry`, `check_stop`,
 `work`, `error`, `restart`), and all send every permission request to eriphe-core through the task's
-inbox. The node injects the agent of `claude-code`, `opencode` and `codex` into any image (see
+inbox. The node injects the agent of `claude-code`, `opencode`, `codex` and `vibe` into any image (see
 [Agents](#agents)), so `GET /v1/node` reports these and `acp` once its engine answers.
 
 - `claude-code` (`runtime_claude.go`): `claude -p` in stream-json mode. Permission requests go
@@ -531,6 +531,8 @@ inbox. The node injects the agent of `claude-code`, `opencode` and `codex` into 
   Client Protocol (JSON-RPC 2.0 on stdin and stdout), for models reached with an API key
   (OpenAI, Google, Mistral, OpenRouter, Anthropic). The ACP client is generic; only the command
   line and the configuration are OpenCode's.
+- `vibe` (`runtime_acp.go`, `runtime_vibe.go`): Mistral Vibe's `vibe-acp`, driven over ACP like
+  OpenCode, for a Mistral plan or API key. See [Mistral Vibe](#mistral-vibe).
 - `acp` (`runtime_acp.go`): any other ACP agent (Goose, Qwen Code…), started by the spec's
   `command`, one argument per item, run as is by the entrypoint's `exec`: never through a shell
   (a shell or `env` as the program is refused, as is a relative path or a line break). Its
@@ -572,7 +574,10 @@ Tool names and inputs are those of Claude Code, so eriphe-core's policy reads th
 is named after OpenCode's tool (`bash` → `Bash`, `edit`/`patch` → `Edit`, `write` → `Write`,
 `read` → `Read`, `webfetch` → `WebFetch`, `websearch`, `glob`, `grep`, `list`, `task`…), or else
 its ACP kind (`execute` → `Bash`, `edit`/`delete`/`move` → `Edit`, `read` → `Read`, `search` →
-`Grep`, `fetch` → `WebFetch`). The input is the agent's raw input plus `command`, `file_path` or
+`Grep`, `fetch` → `WebFetch`). An agent that gives the tool's own name in the call's
+`_meta.tool_name` (Mistral Vibe, whose title is a summary such as `Run: ls`) is named after that
+instead (`read_file` → `Read`, `write_file` → `Write`, `web_fetch` → `WebFetch`, `web_search` →
+`WebSearch`). The input is the agent's raw input plus `command`, `file_path` or
 `url` (from the raw input, the call's location or its title).
 
 The MCP servers are the ones Claude Code gets (`runtime_mcp.go`): the spec's `mcp_servers` (the
@@ -580,7 +585,8 @@ brain's `eriphe-core`; a `${NAME}` in a URL or header is read from the task's en
 catalog servers at `<callback>/mcp/<name>` with the task's secret as bearer, but for the node's
 `eriphe_node` (`approve`), which only Claude Code's `--permission-prompt-tool` needs. They go as
 ACP's `McpServerHttp` (`{"type":"http","name","url","headers":[{"name","value"}]}`), so only to
-an agent that announces `mcpCapabilities.http`: otherwise the task fails. An MCP tool that
+an agent that announces `mcpCapabilities.http`, or that the node knows takes them (Vibe, which
+does not announce it): otherwise the task fails. An MCP tool that
 OpenCode names `<server>_<tool>` is reported and asked for as `mcp__<server>__<tool>`; OpenCode
 asks for one without its input, which is taken from the tool call that runs it.
 
@@ -591,6 +597,20 @@ meanwhile).
 If the agent reports which model its session runs (a `model` config option) and it is not the
 task's, the task fails: OpenCode falls back on another model when the one asked for is not
 available.
+
+### Mistral Vibe
+
+`/opt/eriphe/vibe/vibe-acp`, by its path: Vibe's Linux release is a PyInstaller directory, not one
+binary (worker/README.md). The node configures it through its `VIBE_*` variables, which win over
+its files and its remote experiments: `VIBE_ACTIVE_MODEL` (the task's `model`, an alias of Vibe's
+such as `mistral-medium-3.5`; none, Vibe's default), `VIBE_DEFAULT_AGENT=ask` and
+`VIBE_ENABLE_AUTO_APPROVE=false` (every tool call asked through ACP; Vibe's default mode edits
+files without asking), `VIBE_ENABLE_CONNECTORS=false` (the Mistral account's connectors would be
+tools eriphe-core does not see), telemetry, update checks, auto-update and notifications off, and
+`VIBE_HOME=/profile/vibe`, so a restarted task loads its own session. The key comes from the
+agent's provider in `MISTRAL_API_KEY`. The task's folder is never in Vibe's trusted folders, so a
+repository's `.vibe/` settings, `AGENTS.md` and skills are not read. No system prompt over ACP:
+eriphe-core puts the instructions before the prompt, and Vibe cannot be the brain.
 
 ### OpenCode
 
@@ -717,6 +737,7 @@ from the repository they work in (`skills.go`). Two rules hold for every runtime
 | `claude-code` | `--disable-slash-commands` (no skill, no `Skill` tool), and `disableSkillShellExecution` in the managed settings |
 | `opencode` | `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` (`.claude/skills` and `.agents/skills`, the repository's and the home's); `.opencode/skills` are off with the project's configuration (`OPENCODE_DISABLE_PROJECT_CONFIG`); the brain also gets `permission.skill: deny` |
 | `codex` | `-c skills.include_instructions=false`: no skill catalog in the model's context |
+| `vibe` | the task's folder is never trusted: Vibe reads no skill of the repository's |
 | `acp` | nothing: a custom agent's own |
 
 **The user's skills** (approved in eriphe-core, Settings → Skills) come as the spec's `skills`,
@@ -731,7 +752,7 @@ cannot be fetched or does not match its hash is left out.
 | `claude-code` | `--add-dir /run/eriphe/skills` (not in a task where skills are off) |
 | `opencode` | `skills.paths: ["/run/eriphe/skills/.claude/skills"]`, which `OPENCODE_DISABLE_EXTERNAL_SKILLS` leaves alone |
 | `codex` | the command links `$CODEX_HOME/skills/eriphe` to that folder (a user skills folder of Codex's) |
-| `acp`, and the others where skills are off | eriphe-core lists them in the task's instructions |
+| `vibe`, `acp`, and the others where skills are off | eriphe-core lists them in the task's instructions |
 
 ## Task containers
 
@@ -778,8 +799,9 @@ XFS quotas), like `/work` before it.
 ## Agents
 
 The agent is not in the task's image: the node injects it (`inject.go`). Each agent is an image of
-its own (`ghcr.io/alexis-marcel/eriphe-agent-claude`, `-codex`, `-opencode`, see
-worker/README.md) holding only its binary at `/opt/eriphe/bin/<agent>`. The node:
+its own (`ghcr.io/alexis-marcel/eriphe-agent-claude`, `-codex`, `-opencode`, `-vibe`, see
+worker/README.md) holding only its binary at `/opt/eriphe/bin/<agent>` (Vibe: its directory at
+`/opt/eriphe/vibe`). The node:
 
 1. reads the image's manifest for `linux/<its arch>` from the registry itself (an anonymous token
    when the registry asks for one; `registry.go`), not through Docker: it works the same behind
@@ -794,7 +816,7 @@ worker/README.md) holding only its binary at `/opt/eriphe/bin/<agent>`. The node
    in `PATH` (the base image has it there already);
 4. removes the older versions no running task uses.
 
-`-agent-image` names the images, `{agent}` for `claude`, `codex` or `opencode` (default
+`-agent-image` names the images, `{agent}` for `claude`, `codex`, `opencode` or `vibe` (default
 `ghcr.io/alexis-marcel/eriphe-agent-{agent}:<tag>`, env `ERIPHE_AGENT_IMAGE`); the tag, and the
 default `-image`'s, are the node's own build: its version for a release, `sha-<commit>` for a
 build of `main`, `latest` for a build by hand. Empty, no agent is injected (the image must have

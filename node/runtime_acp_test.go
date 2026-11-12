@@ -29,6 +29,7 @@ type fakeAgent struct {
 	outcomes []map[string]any                 // answers to request_permission
 	unknown  *rpcError                        // answer to a request the client does not offer
 	mcpHTTP  bool                             // it takes MCP servers over HTTP
+	client   acpRuntime                       // the node's side: a bare ACP client unless set
 	script   func(f *fakeAgent, m rpcMessage) // a turn of its own, instead of the usual one
 }
 
@@ -41,7 +42,7 @@ func startFake(t *testing.T, task *Task, first string, loadSession bool, opts ..
 		o(f)
 	}
 	go f.serve()
-	s := acpRuntime{}.attach(task, clientOut).(*acpSession)
+	s := f.client.attach(task, clientOut).(*acpSession)
 	done := make(chan error, 1)
 	go func() {
 		done <- s.run(first, agentOut)

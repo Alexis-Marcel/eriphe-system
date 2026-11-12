@@ -29,6 +29,9 @@ type acpRuntime struct {
 	args func(t *Task) []string
 	// setup adds what this agent needs to the program's environment.
 	setup func(t *Task) map[string]string
+	// httpMCP: the agent takes MCP servers over HTTP even though its
+	// initialize does not say so (mcpCapabilities.http).
+	httpMCP bool
 }
 
 func (r acpRuntime) command(n *node, t *Task) ([]string, map[string]string) {
@@ -84,7 +87,7 @@ func (r acpRuntime) attach(t *Task, stdin io.WriteCloser) session {
 	t.mu.Lock()
 	servers, err := t.mcp, t.mcpErr
 	t.mu.Unlock()
-	return &acpSession{t: t, out: stdin, cwd: workDir(t), ctx: ctx, cancel: cancel, servers: servers, serversErr: err,
+	return &acpSession{t: t, out: stdin, cwd: workDir(t), ctx: ctx, cancel: cancel, servers: servers, serversErr: err, httpMCP: r.httpMCP,
 		calls: map[int64]chan rpcReply{}, tools: map[string]string{}, inputs: map[string]map[string]any{},
 		emitted: map[string]bool{}, busy: true}
 }
@@ -119,6 +122,7 @@ type acpSession struct {
 	cancel     context.CancelFunc
 	servers    []mcpServer // the task's MCP servers
 	serversErr error
+	httpMCP    bool // takes them over HTTP whatever its initialize says
 
 	wmu sync.Mutex
 	out io.WriteCloser
@@ -257,7 +261,7 @@ func (s *acpSession) begin(first string) {
 	}
 	var servers []any
 	if err == nil {
-		servers, err = acpServers(s.servers, init.AgentCapabilities.McpCapabilities.HTTP)
+		servers, err = acpServers(s.servers, init.AgentCapabilities.McpCapabilities.HTTP || s.httpMCP)
 	}
 	if err != nil {
 		s.fail(err)
@@ -476,6 +480,20 @@ type acpToolCall struct {
 	Locations  []struct {
 		Path string `json:"path"`
 	} `json:"locations"`
+	// Meta.ToolName is the tool's own name, where the title is a summary
+	// of the call ("Run: ls"): Mistral Vibe gives it.
+	Meta struct {
+		ToolName string `json:"tool_name"`
+	} `json:"_meta"`
+}
+
+// label is what names the call's tool: its own name if the agent gives
+// it, else its title.
+func (tc acpToolCall) label() string {
+	if tc.Meta.ToolName != "" {
+		return tc.Meta.ToolName
+	}
+	return tc.Title
 }
 
 // update reads one session/update: the agent's message, streamed in chunks,
@@ -527,7 +545,7 @@ func (s *acpSession) update(params json.RawMessage) {
 		s.mu.Lock()
 		name, known := s.tools[tc.ToolCallID]
 		if !known {
-			name = s.toolName(tc.Title, tc.Kind)
+			name = s.toolName(tc.label(), tc.Kind)
 			s.tools[tc.ToolCallID] = name
 		}
 		if len(tc.RawInput) > 0 {
@@ -590,7 +608,7 @@ func (s *acpSession) serve(m rpcMessage) {
 	name, ok := s.tools[tc.ToolCallID]
 	s.mu.Unlock()
 	if !ok {
-		name = s.toolName(tc.Title, tc.Kind)
+		name = s.toolName(tc.label(), tc.Kind)
 	}
 	a := s.t.decide(s.ctx, name, acpInput(name, tc))
 	outcome := map[string]any{"outcome": "cancelled"}
@@ -625,6 +643,7 @@ var acpTools = map[string]string{
 	"write": "Write", "read": "Read",
 	"webfetch": "WebFetch", "websearch": "WebSearch",
 	"glob": "Glob", "grep": "Grep", "list": "LS",
+	"read_file": "Read", "write_file": "Write", "web_fetch": "WebFetch", "web_search": "WebSearch", // Mistral Vibe's
 	"todowrite": "TodoWrite", "todoread": "TodoRead", "task": "Task",
 }
 

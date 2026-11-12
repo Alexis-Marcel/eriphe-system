@@ -103,10 +103,11 @@ to reach them; its kind says which runtimes can use it and in which variable its
 |---|---|---|
 | `claude-subscription` | `claude-code` | `CLAUDE_CODE_OAUTH_TOKEN` |
 | `chatgpt-subscription` | `codex` | `ERIPHE_CODEX_AUTH` (an `auth.json`, see [ChatGPT subscription](#chatgpt-subscription)) |
+| `mistral-subscription` | `vibe`, `opencode` | `MISTRAL_API_KEY` (a key made in Vibe's settings: a Mistral plan's monthly usage is shared by Vibe, Le Chat and the API) |
 | `anthropic-api` | `claude-code`, `opencode` | `ANTHROPIC_API_KEY` |
 | `openai-api` | `opencode` | `OPENAI_API_KEY` |
 | `google-api` | `opencode` | `GOOGLE_GENERATIVE_AI_API_KEY` |
-| `mistral-api` | `opencode` | `MISTRAL_API_KEY` |
+| `mistral-api` | `opencode`, `vibe` | `MISTRAL_API_KEY` |
 | `openrouter-api` | `opencode` | `OPENROUTER_API_KEY` |
 | `openai-compatible` | `opencode` | `SELFHOSTED_API_KEY`, optional (see [Self-hosted model server](#self-hosted-model-server)) |
 | `custom-api` | `acp` | the provider's own `env` (for example `DASHSCOPE_API_KEY`); not a system variable |
@@ -114,7 +115,8 @@ to reach them; its kind says which runtimes can use it and in which variable its
 The `opencode` runtime (OpenCode driven over ACP, see `node/README.md`) reaches any of these with
 an API key; its `model` is OpenCode's `provider/model`, and the provider must be the agent's
 (`openai/…` for `openai-api`, `google/…`, `mistral/…`, `openrouter/…`, `anthropic/…`), which the
-configuration checks. `acp` is any other ACP agent (Goose, Qwen Code…): the agent gives its `command`, one argument per item (`["goose", "acp"]`), run as is in the worker
+configuration checks. `vibe` is Mistral Vibe, Mistral's own program, driven over ACP too; its
+`model` is one of Vibe's aliases (`mistral-medium-3.5`), or none for Vibe's default. `acp` is any other ACP agent (Goose, Qwen Code…): the agent gives its `command`, one argument per item (`["goose", "acp"]`), run as is in the worker
 image or the agent's `image`, never through a shell; it takes no `model`. An
 **agent** is what the brain picks for a task: a runtime, a provider, a model, an optional image, the
 node labels it needs (`needs`, for example `gpu`), what it would rather have (`prefers`: `cpu`, `memory`,
@@ -2488,13 +2490,13 @@ section lists what the vault holds and what each secret belongs to, with replace
 and the configuration's secret files to import. Settings → Agents shows the agents (model, account,
 whether a machine can run them now), the agents worth creating with the accounts (one click), the
 default agent and the brain's, and the AI accounts (providers). Adding an account starts from a
-card per kind, subscriptions first (Claude, ChatGPT), then API keys, then a self-hosted model
+card per kind, subscriptions first (Claude, ChatGPT, Mistral), then API keys, then a self-hosted model
 server (on a device or at an address, an optional key, and its models, detected and ticked), each with who pays, its
 limits, its models and the steps to get its credential; "Test the key" lists the provider's models
 once with the key typed (OpenRouter also tells the credit left; a Claude subscription token is
 only checked for its shape, as Anthropic allows it in Claude Code only; a key pasted in the wrong
 card is caught), and the usual agents of the kind are created with it (Opus, Sonnet, Haiku for
-Claude; GPT models for ChatGPT; two well-known models for each API key). A key is tried again when
+Claude; GPT models for ChatGPT; Mistral Medium on Vibe for Mistral; two well-known models for each API key). A key is tried again when
 it is saved, in Settings as in the first-run wizard: one the provider refuses is not saved, and
 the form stays with "Clé refusée"; one that could not be checked (the provider unreachable or in
 error) is kept, with a warning, and the account and its agents show "Non vérifiée" with the reason
