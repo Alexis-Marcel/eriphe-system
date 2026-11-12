@@ -28,7 +28,8 @@ const attentionSchema = `CREATE TABLE IF NOT EXISTS attention (
 	why    TEXT NOT NULL DEFAULT '',
 	say    TEXT NOT NULL DEFAULT '',
 	source TEXT NOT NULL DEFAULT '',
-	time   INTEGER NOT NULL
+	time   INTEGER NOT NULL,
+	tainted INTEGER NOT NULL DEFAULT 0
 );`
 
 func init() { extraSchema = append(extraSchema, attentionSchema) }
@@ -49,7 +50,7 @@ type attentionItem struct {
 	Source string    `json:"source"`
 	Time   time.Time `json:"time"`
 
-	tainted bool // drawn from external content: the brain reads it as data
+	tainted bool // drawn from external content (its card's, its signal's): the brain reads it as data
 }
 
 // attend puts an item in the queue, merged with the one about the same ref.
@@ -58,10 +59,11 @@ func (c *core) attend(it attentionItem) {
 	if it.Time.IsZero() {
 		it.Time = time.Now()
 	}
-	c.store.db.Exec(`INSERT INTO attention (ref, weight, why, say, source, time) VALUES (?, ?, ?, ?, ?, ?)
+	c.store.db.Exec(`INSERT INTO attention (ref, weight, why, say, source, time, tainted) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET weight = MAX(weight, excluded.weight), why = excluded.why,
-			say = CASE WHEN excluded.say != '' THEN excluded.say ELSE say END, source = excluded.source, time = excluded.time`,
-		it.Ref, it.Weight, truncate(oneLine(it.Why), attentionWhyMax), truncate(oneLine(it.Say), attentionWhyMax), it.Source, it.Time.Unix())
+			say = CASE WHEN excluded.say != '' THEN excluded.say ELSE say END, source = excluded.source, time = excluded.time,
+			tainted = MAX(tainted, excluded.tainted)`,
+		it.Ref, it.Weight, truncate(oneLine(it.Why), attentionWhyMax), truncate(oneLine(it.Say), attentionWhyMax), it.Source, it.Time.Unix(), boolInt(it.tainted))
 }
 
 // attentionDone takes an item out: the user answered it, or it is gone.
@@ -95,7 +97,7 @@ func (c *core) attendCard(x convoCard, p proposal, source string) {
 // A card's item whose card no longer waits (decided on a page, in words,
 // or gone) leaves it here.
 func (c *core) attentionOpen() []attentionItem {
-	rows, err := c.store.db.Query(`SELECT ref, weight, why, say, source, time FROM attention ORDER BY weight DESC, time DESC`)
+	rows, err := c.store.db.Query(`SELECT ref, weight, why, say, source, time, tainted FROM attention ORDER BY weight DESC, time DESC`)
 	if err != nil {
 		return nil
 	}
@@ -103,7 +105,7 @@ func (c *core) attentionOpen() []attentionItem {
 	for rows.Next() {
 		var it attentionItem
 		var at int64
-		if rows.Scan(&it.Ref, &it.Weight, &it.Why, &it.Say, &it.Source, &at) == nil {
+		if rows.Scan(&it.Ref, &it.Weight, &it.Why, &it.Say, &it.Source, &at, &it.tainted) == nil {
 			it.Time = time.Unix(at, 0)
 			items = append(items, it)
 		}
@@ -123,7 +125,7 @@ func (c *core) attentionOpen() []attentionItem {
 				c.attentionDone(it.Ref)
 				continue
 			}
-			it.tainted = p.Tainted != ""
+			it.tainted = it.tainted || p.Tainted != ""
 		}
 		out = append(out, it)
 	}

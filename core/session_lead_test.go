@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -131,5 +133,48 @@ func TestFinalCheck(t *testing.T) {
 	}
 	if _, err := c.finishSession(ctx, s.ID, "again", "lead"); err == nil || !strings.Contains(err.Error(), "report") {
 		t.Errorf("a third check: %v", err)
+	}
+}
+
+// A lead's report may carry an attention block: its good refs land in the
+// attention queue under the lead's name, the bad ones are dropped and said.
+func TestLeadReportAttention(t *testing.T) {
+	c, s := sessionCore(t)
+	ctx := context.Background()
+	c.decideCard(ctx, sessionCard(t, c, askPlan).ID, true, "web")
+	s, _ = c.session(s.ID)
+	a := c.conf().Assistants[s.Lead]
+	ct, st := mcp.NewInMemoryTransports()
+	if _, err := c.assistantServer(a, nil).Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	ref := fmt.Sprintf("session:%d", s.ID)
+	res, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: "report", Arguments: map[string]any{
+		"text": "Le plan a besoin d'un choix de Sam sur le nom.",
+		"attention": []map[string]any{
+			{"refs": []string{ref, "shop:1"}, "weight": 4, "why": "un choix de nom attend Sam", "say": "Ta session attend ton choix."},
+			{"refs": []string{"task:t-1"}, "weight": 9, "why": "too heavy"},
+		},
+	}})
+	if err != nil || res.IsError {
+		t.Fatalf("report: %v %+v", err, res)
+	}
+	it := attentionOf(c, ref)
+	if it == nil || it.Weight != 4 || it.Source != "assistant:"+s.Lead || it.Say != "Ta session attend ton choix." {
+		t.Fatalf("item %+v in %+v", it, c.attentionOpen())
+	}
+	if attentionOf(c, "shop:1") != nil || attentionOf(c, "task:t-1") != nil {
+		t.Errorf("a bad ref or weight was kept: %+v", c.attentionOpen())
+	}
+	if raw, _ := json.Marshal(res.StructuredContent); !strings.Contains(string(raw), "dropped") {
+		t.Errorf("the lead is not told what was dropped: %s", raw)
+	}
+	if !strings.Contains(lastEvent(t, c), "choix de Sam") {
+		t.Errorf("the brain did not get the report: %q", lastEvent(t, c))
 	}
 }
