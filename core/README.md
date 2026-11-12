@@ -2828,7 +2828,7 @@ and the library's basic catalog (Lit custom elements) is never imported: the DOM
 with classes only. `adapter.ts` is all the rest of the page knows: `applyMessages(msgs)` feeds it
 the messages core sends (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`);
 `onAction(cb)` and `onError(cb)` hand back A2UI v1.0 `action` and `error` messages, ready to send.
-`catalog.tsx` names the catalog once (`CATALOG`: its id and where core serves it). Until core
+`catalog.tsx` names the catalog once (`CATALOG`: its id and where core serves it, `/espace/catalog/v1.json`); `catalog.test.ts` checks that every component the page implements is in `a2ui/catalog_v1.json`, with the properties it declares. Until core
 streams surfaces (#419), the dev server shows a made-up one (`a2ui/fixtures.ts`).
 
 **Upgrading `@a2ui/*`.** The packages are pinned to an exact version (`package.json`, no `^`) and

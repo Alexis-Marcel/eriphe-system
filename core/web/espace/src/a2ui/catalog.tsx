@@ -14,7 +14,7 @@ import { z } from "zod";
 // surface's createSurface gives, and where eriphe-core serves its document.
 export const CATALOG = {
   id: "urn:eriphe:a2ui:workspace:v1",
-  url: "/espace/a2ui/catalog/v1.json",
+  url: "/espace/catalog/v1.json",
 } as const;
 
 const Justify = z.enum(["start", "center", "end", "spaceBetween"]).optional();
