@@ -25,10 +25,11 @@ import (
 const (
 	surfaceEventMax   = 512 // messages in one a2ui event
 	surfaceActionOpen = "open"
-	surfaceErrorMax   = 500 // characters of an error kept
+	surfaceActionBack = "back" // the user went back from what they opened: the layout is the composer's again
+	surfaceErrorMax   = 500    // characters of an error kept
 )
 
-var errActionNotHandled = errors.New("this action is not handled yet: only open is")
+var errActionNotHandled = errors.New("this action is not handled yet: only open and back are")
 
 // a2uiEvent is the data of the event stream's "a2ui" event. Seq is the
 // seq of the last change in it (of the snapshot, for a reset). Reset says
@@ -111,8 +112,9 @@ type surfaceLastError struct {
 
 // surfaceAction is an action the user took on a surface: recorded on it,
 // then done. The reserved local action "open" (the user opened the
-// surface) reads its sources again, in the background: the page does not
-// wait. Any other is errActionNotHandled, until actions are given their
+// surface, a tile or a folded chip) places it first on the layout, keeps
+// the gesture, and reads its sources again, in the background: the page
+// does not wait. Any other is errActionNotHandled, until actions are given their
 // kinds (ask, answer, local).
 func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) error {
 	now := time.Now()
@@ -124,7 +126,18 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 	}
 	switch a.Name {
 	case surfaceActionOpen:
+		// Code places what the user opened first (workspace_layout.go),
+		// and keeps the gesture for the composer and memory.
+		c.focusSurface(id, now)
+		if s, err := c.surface(id); err == nil {
+			c.noteGesture(gestureOpened, "surface:"+id, s.Title, now)
+		}
 		go c.surfaceOpened(context.WithoutCancel(ctx), id)
+		return nil
+	case surfaceActionBack:
+		if c.workspaceFocus(now) == id {
+			c.focusSurface("", now)
+		}
 		return nil
 	default:
 		return errActionNotHandled

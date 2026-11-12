@@ -12,18 +12,13 @@
     {"ref": "task:t-77", "weight": 1, "age_minutes": 55, "title": "Résumé des notes de lecture", "why": "Finie sans erreur"},
     {"ref": "project:atelier", "weight": 2, "age_minutes": 90, "title": "Atelier", "why": "Une revue de code demandée"}
   ],
-  "expect": {
-    "front": ["agenda:2026-11-12", "card:c-90"],
-    "back": ["task:t-77"],
-    "mode": "side",
-    "fallback_front": true
-  },
-  "answer": {"mode": "side", "eriphe": "Réunion budget dans 20 min : les chiffres sont arrivés. Le paiement du graphiste attend ton accord.",
+  "expect": {"front": ["agenda:2026-11-12", "card:c-90"], "back": ["task:t-77"], "fallback_front": true},
+  "answer": {"eriphe": "Réunion budget dans 20 min : les chiffres sont arrivés. Le paiement du graphiste attend ton accord.",
     "items": [
-      {"ref": "agenda:2026-11-12", "weight": 4, "why": "Réunion budget dans 20 min"},
-      {"ref": "card:c-90", "weight": 4, "why": "Paiement à approuver"},
-      {"ref": "mail:m-201", "weight": 3, "why": "À lire avant la réunion"},
-      {"ref": "session:s-50", "weight": 2, "why": "Avance seule"}
+      {"id": "q-agenda-2026-11-12", "size": "l", "why": "Réunion budget dans 20 min"},
+      {"id": "q-card-c-90", "size": "l", "why": "Paiement à approuver"},
+      {"id": "q-mail-m-201", "size": "m", "why": "À lire avant la réunion"},
+      {"id": "q-session-s-50", "size": "m", "why": "Avance seule"}
     ],
-    "chips": ["mail:m-202", "project:atelier", "task:t-77"]}
+    "missing": [], "stale": []}
 }

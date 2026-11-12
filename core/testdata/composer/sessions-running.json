@@ -14,19 +14,14 @@
     {"ref": "project:atelier", "weight": 2, "age_minutes": 75, "title": "Atelier", "why": "Une version prévue vendredi"},
     {"ref": "mail:m-401", "weight": 2, "age_minutes": 20, "title": "Retour sur la maquette", "why": "Un client répond sur la maquette du site"}
   ],
-  "expect": {
-    "front": ["session:s-70", "card:c-95"],
-    "back": ["project:atelier"],
-    "mode": "side",
-    "fallback_front": true
-  },
-  "answer": {"mode": "side", "eriphe": "Deux sessions t'attendent : un choix pour l'export PDF et un accès pour le site. La compilation du site a échoué.",
+  "expect": {"front": ["session:s-70", "card:c-95"], "back": ["project:atelier"], "fallback_front": true},
+  "answer": {"eriphe": "Deux sessions t'attendent : un choix pour l'export PDF et un accès pour le site. La compilation du site a échoué.",
     "items": [
-      {"ref": "session:s-70", "weight": 4, "why": "Un choix de bibliothèque à faire"},
-      {"ref": "card:c-95", "weight": 4, "why": "Débloque la mise à jour du site"},
-      {"ref": "task:t-80", "weight": 3, "why": "Dépendance introuvable"},
-      {"ref": "session:s-71", "weight": 2, "why": "Tests en cours"},
-      {"ref": "session:s-73", "weight": 2, "why": "En pause, attend l'accès"}
+      {"id": "q-session-s-70", "size": "l", "why": "Un choix de bibliothèque à faire"},
+      {"id": "q-card-c-95", "size": "l", "why": "Débloque la mise à jour du site"},
+      {"id": "q-task-t-80", "size": "m", "why": "Dépendance introuvable"},
+      {"id": "q-session-s-71", "size": "m", "why": "Tests en cours"},
+      {"id": "q-session-s-73", "size": "m", "why": "En pause, attend l'accès"}
     ],
-    "chips": ["session:s-72", "mail:m-401", "project:site", "project:atelier"]}
+    "missing": [], "stale": []}
 }

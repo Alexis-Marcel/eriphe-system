@@ -17,14 +17,14 @@ func (w *web) handleComposition(rw http.ResponseWriter, r *http.Request, _ *sess
 type composerView struct {
 	On      bool
 	Agent   string
-	Plain   string      // how it is doing: available, replying, stopped or noai
-	Choices []agentView // the agents that can run it, its own selected
-	Last    *composition
+	Plain   string           // how it is doing: available, replying, stopped or noai
+	Choices []agentView      // the agents that can run it, its own selected
+	Last    *workspaceChoice // the last choice kept, by the composer or by weight
 }
 
 func (w *web) composerData(v agentsPage) composerView {
 	m := w.c.conf()
-	cv := composerView{Plain: "stopped", Last: w.c.lastComposition()}
+	cv := composerView{Plain: "stopped", Last: w.c.lastChoice()}
 	a, ok := m.Assistants[composerAssistant]
 	if ok {
 		cv.On, cv.Agent = !a.Disabled, a.Agent

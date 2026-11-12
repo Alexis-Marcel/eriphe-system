@@ -24,8 +24,8 @@ import (
 // ERIPHE_LIVE_COMPOSER_MODEL picks the model (sonnet by default),
 // ERIPHE_LIVE_COMPOSER_CLI the command (claude by default). It reports,
 // per case and in all: latency (mean, max), cost, invalid answers,
-// invented refs, agreement with the case's expectations and stability
-// (the mean Jaccard of the modules' refs between runs). It fails only when
+// invented ids, agreement with the case's expectations and stability
+// (the mean Jaccard of the tiles' ids between runs). It fails only when
 // the CLI does; the numbers are for reading.
 
 type composerLiveRun struct {
@@ -78,14 +78,15 @@ func TestComposerLive(t *testing.T) {
 				t.Fatalf("%s run %d: %v", x.ID, i+1, err)
 			}
 			r := composerLiveRun{latency: time.Since(start), cost: res.Cost}
-			comp, _, err := checkComposition(res.Result, s)
+			ch, _, _, err := checkChoice(res.Result, s)
 			if err != nil {
 				r.invalid = true
-				comp = fallbackComposition(s)
+				ch = fallbackChoice(x.Moment, s.Now)
 				t.Logf("%s run %d: invalid answer (%v): %.200q", x.ID, i+1, err, res.Result)
 			}
-			r.score = scoreComposition(x, s, res.Result, comp)
-			r.invented, r.agrees, r.modules = len(r.score.Invented), !r.invalid && r.score.agrees(), itemRefs(comp.Items)
+			l := layoutOf(x.pool(s.Now), ch, "")
+			r.score = scoreChoice(x, s, res.Result, l)
+			r.invented, r.agrees, r.modules = len(r.score.Invented), !r.invalid && r.score.agrees(), tileIDs(l)
 			t.Logf("%s run %d: %s, $%.4f, modules %v: %s", x.ID, i+1, r.latency.Round(100*time.Millisecond), r.cost, r.modules, r.score)
 			got = append(got, r)
 		}
@@ -159,7 +160,7 @@ func summarizeLive(runs []composerLiveRun) string {
 		}
 	}
 	n := max(len(runs), 1)
-	return fmt.Sprintf("latency mean %s max %s, cost $%.4f (mean $%.4f), invalid %d, invented refs %d, agreement %d/%d",
+	return fmt.Sprintf("latency mean %s max %s, cost $%.4f (mean $%.4f), invalid %d, invented ids %d, agreement %d/%d",
 		(total / time.Duration(n)).Round(100*time.Millisecond), longest.Round(100*time.Millisecond), cost, cost/float64(n),
 		invalid, invented, agree, len(runs))
 }
