@@ -599,10 +599,22 @@ const Day = createComponentImplementation(
   },
 );
 
+// onlyAsks tells whether a surface shows external content (createSurface's
+// metadata, extensions.eriphe.tainted) and was written by a model: it can
+// only ask. Code's own (author "core", the attention queue's) shows a
+// proposal as its card does, with the proposal's own taint.
+type Meta = { metadata?: { extensions?: { eriphe?: { tainted?: boolean; author?: string } } } };
+const onlyAsks = (s: unknown) => {
+  const m = (s as Meta | undefined)?.metadata?.extensions?.eriphe;
+  return Boolean(m?.tainted) && m?.author !== "core";
+};
+
 // Proposal shows one proposal of Eriphe's, read from eriphe-core by its ref
 // (kind:id); its Oui and Non send an "answer" action naming this surface,
 // this component and that proposal: eriphe-core decides it only if the
-// surface shows it and it still waits, as its card in the conversation.
+// surface shows it and it still waits, as its card in the conversation. A
+// surface showing external content can only ask: there, no Oui or Non, the
+// proposal is answered in the conversation.
 const Proposal = createComponentImplementation(
   { name: "Proposal", schema: z.object({ proposalId: CommonSchemas.DynamicString }) },
   ({ props, context }) => {
@@ -637,6 +649,7 @@ const Proposal = createComponentImplementation(
     if (p === undefined) return <div className="a2-proposal a2-proposal-loading" aria-busy="true"><span className="a2-shimmer" aria-hidden="true" /></div>;
     if (p === null) return <p className="a2-empty">{t("espace.a2.proposal.none")}</p>;
     const pending = p.state === "pending";
+    const elsewhere = onlyAsks(context.dataContext.surface);
     return (
       <section className={`a2-proposal a2-proposal-${pending ? "pending" : "decided"}`} aria-label={t("espace.a2.proposal")}>
         <p className="a2-proposal-kicker">
@@ -656,7 +669,8 @@ const Proposal = createComponentImplementation(
             ))}
           </dl>
         )}
-        {pending && (
+        {pending && elsewhere && <p className="a2-proposal-why a2-proposal-inchat">{t("espace.a2.proposal.inchat")}</p>}
+        {pending && !elsewhere && (
           <div className="a2-proposal-actions">
             <button type="button" className="btn a2-button a2-button-primary" disabled={busy} onClick={() => answer(true)}>
               {t("espace.a2.yes")}

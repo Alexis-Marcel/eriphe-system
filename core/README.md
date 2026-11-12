@@ -2956,7 +2956,9 @@ through `a2ui.Validate`).
   and state in the user's language, and the card that answers it (404 when no card carries
   it); Oui and Non send an `answer` action on the surface (`POST /api/espace/action`, see
   [the actions](#the-actions-of-a-surface)), never the card endpoint, then the proposal is read
-  again.
+  again. On a surface showing external content (its createSurface's `extensions.eriphe.tainted`)
+  that code did not write (`author` other than `core`) it shows no Oui or Non: such a surface can only ask, the proposal is answered in the
+  conversation.
 
 Placement is classes only (the day's rows and lanes are `.a2-r-N`, `.a2-span-N`,
 `.a2-lane-N`), never a `style` attribute. Fixed words are the app's (`espace.a2.*` in
@@ -3157,7 +3159,7 @@ writes.
 |---|---|---|
 | `ask` | a Button's `{"event": {"name": "ask", "context": {"text": "…"}}}`: literal words, nothing else, never bound data; none at all from an author whose turn read external content | the text written on the clicked Button becomes a message of the user's to the brain, as if typed (`Via` `workspace:ask`, shown as « bouton de l'espace » / "workspace button"; `about` = `surface:<id>`, which the brain reads as `[Sam 10:02 #12 · bouton de l'espace · à propos de surface:…]`); a plain "oui" so sent decides no card. The brain is woken, never waited for. On a tainted surface the message taints the brain's turn (`surface:<id>`) and its line adds « surface au contenu extérieur »: what it shows is data |
 | `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
-| local | `open`, `back`, `expand`, `tab`, with no context | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer |
+| local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer |
 
 Anything else (another name, a function call, a component that carries no such action, an answer
 to a proposal the surface does not show, or on a tainted surface) is refused with 400 and told

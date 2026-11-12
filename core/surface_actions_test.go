@@ -297,3 +297,50 @@ func TestSurfaceActionGrammarOnWrite(t *testing.T) {
 		}
 	}
 }
+
+// The attention queue's surfaces, written by code (#422), answer their
+// card's proposal: a Proposal bound to it; even tainted, as the card in
+// the conversation, since code laid it out and the Proposal shows the
+// proposal's own taint.
+func TestSurfaceActionAnswerQueue(t *testing.T) {
+	tw, csrf := newMemoryWeb(t)
+	c := tw.c
+	r := proposedRule(t, c, "facture", "")
+	other := proposedRule(t, c, "banque", "")
+	brainSays(c, "Je ne te préviens plus des factures avant le brief ?")
+	x := cardOf(t, c, cardRule, r.ID)
+	c.syncQueueSurfaces()
+	id := queueSurfaceID(cardItemRef(x.ID))
+	if s, err := c.surface(id); err != nil || s.Author != surfaceAuthorCore {
+		t.Fatalf("queue surface %s: %+v %v", id, s, err)
+	}
+	answer := func(surface, ref, yes string) string {
+		return actionOn("answer", surface, "root", `{"proposal":"`+ref+`","answer":"`+yes+`"}`)
+	}
+	if code, body := postJSON(tw, "/api/espace/action", answer(id, proposalRef(cardRule, other.ID), "yes"), csrf); code != http.StatusBadRequest {
+		t.Fatalf("another proposal: %d %s", code, body)
+	}
+	if code, body := postJSON(tw, "/api/espace/action", answer(id, x.Ref, "yes"), csrf); code != http.StatusNoContent {
+		t.Fatalf("yes: %d %s", code, body)
+	}
+	if x := cardOf(t, c, cardRule, r.ID); x.State != cardApproved || x.By != "workspace" {
+		t.Fatalf("card %+v", x)
+	}
+
+	// Tainted, code's own still answers.
+	y := cardOf(t, c, cardRule, other.ID)
+	_, errs, err := c.writeSurface(surfaceAuthorCore, surfaceIn{ID: "q-card-test", Title: "Règle", Tainted: []string{"attention"},
+		Components: json.RawMessage(`[{"id":"root","component":"Proposal","proposalId":"` + y.Ref + `"}]`), Lifetime: surfaceLifetime{Kept: true}})
+	if err != nil || len(errs) > 0 {
+		t.Fatal(err, errs)
+	}
+	if s, _ := c.surface("q-card-test"); s.Tainted == "" {
+		t.Fatal("not tainted")
+	}
+	if code, body := postJSON(tw, "/api/espace/action", answer("q-card-test", y.Ref, "no"), csrf); code != http.StatusNoContent {
+		t.Fatalf("tainted queue surface: %d %s", code, body)
+	}
+	if y := cardOf(t, c, cardRule, other.ID); y.State != cardRejected {
+		t.Fatalf("card %+v", y)
+	}
+}

@@ -343,6 +343,28 @@ describe("the catalog's components", () => {
     expect($(".a2-proposal-actions")).not.toBeNull();
   });
 
+  it("leave a proposal on a surface showing external content to the conversation", async () => {
+    const view = { ref: "rule:9", card: 9, state: "pending", text: "Ranger les mails ?" };
+    const sent: Answer[] = [];
+    const comps = [{ id: "root", component: "Proposal", proposalId: "rule:9" }];
+    const metadata = { extensions: { eriphe: { title: "Mails", tainted: true } } };
+    await mount("fr", [{ version: "1.0", createSurface: { surfaceId: "t", catalogId: CATALOG.id, components: comps, dataModel: {}, metadata } }], {
+      read: async () => view,
+      answer: async (a) => (sent.push(a), true),
+    });
+    await act(async () => {});
+    expect(text(".a2-proposal-text")).toBe("Ranger les mails ?");
+    expect($(".a2-proposal-actions")).toBeNull();
+    expect(text(".a2-proposal-inchat")).toBe("Cette surface montre un contenu extérieur : réponds-y dans la conversation.");
+    expect(sent).toEqual([]);
+    // Code's own surface (the attention queue's): Oui and Non, as the card.
+    await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: "t" } }]));
+    const core = { extensions: { eriphe: { ...metadata.extensions.eriphe, author: "core" } } };
+    await act(async () => adapter.applyMessages([{ version: "1.0", createSurface: { surfaceId: "t", catalogId: CATALOG.id, components: comps, dataModel: {}, metadata: core } }]));
+    await act(async () => {});
+    expect($(".a2-proposal-actions")).not.toBeNull();
+  });
+
   it("render Markdown as text, never as HTML", async () => {
     await mount("en", one([
       {

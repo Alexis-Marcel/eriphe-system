@@ -108,7 +108,7 @@ func surfaceWriteHelp() string {
 		"Call catalog_read once for the properties and examples before your first surface. " +
 		"A wrong surface comes back as A2UI errors with their path: fix it and write it again. " +
 		"A source slow to answer leaves the surface waiting, filled when it comes; a binding it does not give is told to you then (workspace_read, and your next surface_write). " +
-		"A button's action is ask (action {event: {name: ask, context: {text}}}: a request to the brain in your own words only, never bound data) or a local name (open, expand, tab); nothing else. A proposal is answered through a Proposal component, never a button."
+		"A button asks the brain (action {event: {name: ask, context: {text}}}) in your own words only, never bound data; the other names are the page's own (open, expand, tab), anything else is refused. A proposal is answered through a Proposal component, never a button."
 }
 
 // registerSurfaceTools adds the workspace's tools to an MCP server, those
