@@ -888,7 +888,9 @@ An assistant (a skill's run, a session lead) says what deserves the user's atten
 ```
 
 `refs` name the objects it is about, `<kind>:<id>` with a kind among `mail`, `agenda`
-(`YYYY-MM-DD`), `event`, `session`, `card`, `task`, `project` and `alert`; only the form is checked, by `parseRef` (`objects.go`).
+(`YYYY-MM-DD`), `event`, `session`, `card`, `task`, `project`, `alert` and `surface` (a surface of
+the workspace, by its id); only the form is checked, by `parseRef` (`objects.go`). An item about a
+surface is shown by that surface (no `q-` surface of its own) and leaves the queue with it.
 `weight` is 5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1 background; `why` is
 cut to 80 characters, `say` is optional. One block alone, or refs given as one string, are read as
 a list. A ref of another form, a weight outside 1 to 5 (or not whole), an entry that is not an
@@ -944,7 +946,13 @@ accepted.
 **The session lead** is born when the user approves the plan (`lead-<id>`, « Chef de session N ») and
 goes when the session ends. Its trigger `session:<id>` wakes it with what happened to its steps
 (`session_inbox`), one turn at a time; its own tools are `session`, `settle_step`,
-`amend_session`, `end_session` and `report`. It never talks to the user nor starts a task. The
+`amend_session`, `end_session`, `report` and the [workspace's tools](#the-assistants-workspace-tools-workspace_toolsgo).
+It keeps **its session's surface** (`lead-prompt.md`): one surface, as `lead:<id>`, with the plan,
+the steps as a `Timeline`, a pending choice with its pros and cons, its proposals, rewritten by its
+id when a step changes. What it writes without a lifetime follows its session (`while:
+session:<id>`); each wake reminds it while it has none (`leadSurfaceNudge`), a `surface.stale`
+about it reaches it in its inbox, and the session's end removes it at once
+(`dropSessionSurfaces`, with every surface kept `while` the session). It never talks to the user nor starts a task. The
 brain no longer judges a session that has a lead: it passes the user's words with `tell_lead`, and
 hears the lead's reports, the choices to ask, the budget's card and the end. A report may carry an
 [attention signal](#attention-signals-attention_signalgo) (`attention`, the same block as a skill's
@@ -1424,6 +1432,10 @@ version, read with its diff.
   permissions are the user's, as any task's.
 - **One run open per skill and key**: the key's new events wait, and when its turn ends, its task
   gets them as a message instead of a second task.
+- **A skill lent the workspace** (`tools: [eriphe-workspace]`) also runs on a `surface.stale`
+  about a surface it wrote, whatever its `when`, a time trigger too (a time trigger cannot name an
+  event); once per 30 minutes a surface. Its card and Settings → Skills say so
+  ([who keeps which surface](#the-assistants-workspace-tools-workspace_toolsgo)).
 - **Time triggers** run at their times, in the user's zone; a trigger seen for the first time (or
   approved again) waits for its next time; times missed while eriphe-core was down make one run.
 - **Its calls the user must approve never hold it** (`skill_cards.go`): as the brain's, each is
@@ -2437,7 +2449,11 @@ or gone. Each open item is a surface of the workspace, written by code while it 
 an item drawn from external content stays marked so, and the brain reads it as data. What the
 user wants shown more, less or never is not applied to the queue: it is a
 [preference in memory](#preferences-gestures-and-the-brains-tools-workspacego) the composer
-follows. A
+follows. A proposal waiting to be offered (a memory, an intention, a rule…: a queued card,
+`attendOffers` each minute on the journal's timer) enters it as `card:<id>` at weight 1 (2 for an
+intention) from the source `offer`, so the composer may show it; no breakpoint delivers it and the
+brain's turn does not list it: `offerCards` offers it in the conversation as before, and once under
+the brain's message its item is the card's as any other (weight 3, delivered). A
 notification held for the brief (a skill's `[brief]`, the quiet hours, the daily cap, a tainted
 turn, « pas maintenant ») enters it as `alert:<id>` with weight 2, the item a skill's message
 becomes too. Weight 4 and 5 are delivered as they enter: nothing a running task or session
@@ -3161,6 +3177,27 @@ Any assistant writes the workspace with four tools; the **author is the caller**
 - **Settings → Surfaces** (`/settings/surfaces`, `web_surfaces.go`): every surface with its title,
   author, sources, lifetime, last update, waiting and external tags, its last error; the user
   removes any.
+
+**Who keeps which surface** (`surface_authors.go`, #423). Nothing is recurring by default.
+
+- **A session's lead** keeps its session's surface while the session lives (see
+  [the session lead](#work-sessions-sessionsgo-session_enginego)).
+- **A skill** writes its surface on its trigger: `tools: [eriphe-workspace]` in its front matter
+  lends it the workspace, its runs write as `skill:<name>` (the same surface each run, by its id,
+  `lifetime: kept` while the skill exists), and its run's prompt says so (`skillCanText`). It reacts
+  to the composer's events with `when` like any event (`when: surface.stale id=<its surface>`), and
+  a `surface.stale` about a surface it wrote runs it whatever its `when`, a skill at fixed times
+  too (`queueSkillEvent`; its run gets the event, keyed by the surface; its card says so). An
+  author (a skill, a lead) is woken by a `surface.stale` once per 30 minutes a surface
+  (`staleWake`), so a rewrite the composer still finds stale does not loop.
+- **The brain** writes what the user asks; asked for something that comes back (« chaque matin »),
+  it writes a skill with `tools: [eriphe-workspace]` (`write_skill` accepts the servers Eriphe
+  provides) that maintains the surface. A `surface.missing` reaches it as an event of the
+  conversation (« [espace] Il manque … »), once an hour for the same text, its turn tainted when the
+  event is external: it writes the surface, a skill, or nothing.
+- **The events**: `surface.stale` (key and payload `id`: a surface out of date) and
+  `surface.missing` (payload `text`: what the composer would show and nothing does), emitted by the
+  composer; code reads their form, never their meaning.
 
 ### Signing in
 

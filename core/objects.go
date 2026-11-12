@@ -25,6 +25,7 @@ const (
 	refTask    = "task"    // task:<id>
 	refProject = "project" // project:<name>, its progress card in the memory
 	refAlert   = "alert"   // alert:<id>: no source yet
+	refSurface = "surface" // surface:<id>, a surface of the workspace (surfaces.go)
 )
 
 // objectTimeout keeps a read of a server from holding the workspace.
@@ -83,6 +84,10 @@ func parseRef(s string) (objectRef, error) {
 	case refSession, refCard:
 		if n, err := strconv.ParseInt(id, 10, 64); err != nil || n <= 0 {
 			return r, errBadRef{"a " + kind + " is a number"}
+		}
+	case refSurface:
+		if !surfaceIDRe.MatchString(id) {
+			return r, errBadRef{"a surface is its id"}
 		}
 	case refMail, refEvent, refTask, refProject, refAlert:
 	default:

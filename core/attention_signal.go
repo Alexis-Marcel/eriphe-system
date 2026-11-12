@@ -19,7 +19,7 @@ import (
 // attentionSignal is one block: the objects it is about, how much they
 // matter, why, and what Eriphe could say of them.
 type attentionSignal struct {
-	Refs   []string `json:"refs" jsonschema:"the objects it is about: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, session:<id>, card:<id>, task:<id>, project:<name> or alert:<id>"`
+	Refs   []string `json:"refs" jsonschema:"the objects it is about: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, session:<id>, card:<id>, task:<id>, project:<name>, alert:<id> or surface:<id> (a surface of the workspace)"`
 	Weight int      `json:"weight" jsonschema:"5 interrupts the user, 4 needs the user now, 3 matters today, 2 a glance, 1 background"`
 	Why    string   `json:"why" jsonschema:"why it deserves attention, in French, at most 80 characters"`
 	Say    string   `json:"say,omitempty" jsonschema:"what Eriphe could tell the user of it, in French, one sentence; optional"`
@@ -37,7 +37,7 @@ const (
 // the receipt's own instruction (receiptInstruction).
 const attentionInstruction = "When something deserves the user's attention, add to the receipt an \"attention\" list, one entry per thing: " +
 	`"attention": [{"refs": ["mail:<id>"], "weight": 3, "why": "at most 80 characters, in French", "say": "optional: what Eriphe could tell the user, one sentence in French"}]` + ". " +
-	"refs name the objects it is about, each in one of these forms: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, session:<id>, card:<id>, task:<id>, project:<name>, alert:<id>. " +
+	"refs name the objects it is about, each in one of these forms: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, session:<id>, card:<id>, task:<id>, project:<name>, alert:<id>, surface:<id> (a surface of the workspace). " +
 	"weight: 5 interrupts the user, 4 needs the user now, 3 matters today, 2 is a glance, 1 is background. " +
 	"Leave it out when nothing does. A ref of another form, or a weight outside 1 to 5, is dropped."
 

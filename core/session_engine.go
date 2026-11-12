@@ -591,7 +591,8 @@ func (c *core) closeLocked(s Session, state, summary string) {
 	}
 	c.setSession(s.ID, fields)
 	c.closeAsks(s.ID)
-	c.dropLead(s) // session_lead.go
+	c.dropLead(s)               // session_lead.go
+	c.dropSessionSurfaces(s.ID) // surface_authors.go
 	c.emitLogged(journalEvent{Kind: evSessionEnded, Key: fmt.Sprintf("session:%d", s.ID), Source: "session",
 		Payload: map[string]any{"session": s.ID, "state": state}})
 }

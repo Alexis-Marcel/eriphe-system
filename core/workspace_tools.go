@@ -85,7 +85,7 @@ type surfaceWriteIn struct {
 	Data       map[string]any           `json:"data,omitempty" jsonschema:"composed values the components bind (@path), written by you; dated"`
 	Sources    map[string]surfaceSource `json:"sources,omitempty" jsonschema:"live data: JSON pointer in the data (/mails) → {tool: server/tool, args} (a free read of yours) or {resource: server, uri}; code reads them again, never you"`
 	Refresh    surfaceRefresh           `json:"refresh,omitzero" jsonschema:"every: minutes between two reads of the sources (1 to 1440, 5 by default)"`
-	Lifetime   surfaceLifetimeIn        `json:"lifetime,omitzero" jsonschema:"one of until, while, kept; none: a day"`
+	Lifetime   surfaceLifetimeIn        `json:"lifetime,omitzero" jsonschema:"one of until, while, kept; none: a day (a session's lead: while its session)"`
 	Weight     int                      `json:"weight,omitempty" jsonschema:"how much it matters, 1 to 100, 50 by default"`
 	Why        string                   `json:"why,omitempty" jsonschema:"why it is there, one sentence in the user's language"`
 }
@@ -261,6 +261,9 @@ func (c *core) toolSurfaceWrite(who surfaceCaller, in surfaceWriteIn) (map[strin
 	sin, err := in.surfaceIn(loc)
 	if err != nil {
 		return nil, err
+	}
+	if session, ok := strings.CutPrefix(author, "lead:"); ok && sin.Lifetime == (surfaceLifetime{}) {
+		sin.Lifetime.While = "session:" + session // a lead's surface follows its session
 	}
 	sin.Tainted, sin.wait = who.taint(), surfaceReadCap
 	previous := ""
