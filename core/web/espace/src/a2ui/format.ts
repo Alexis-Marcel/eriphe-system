@@ -38,8 +38,12 @@ export function num(v: unknown): number | undefined {
 
 const fmt = (lang: Lang, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale(lang), { ...o, timeZone: "UTC" });
 
-// A time of day: "09:30", as both languages write it on a dashboard.
-export const time = (lang: Lang, w: Wall) => fmt(lang, { hour: "2-digit", minute: "2-digit", hour12: false }).format(w.at);
+// A time of day as the page writes it (i18n.ts, clock): "09 h 30" in
+// French, "09:30" in English; compact, "09:30" in both (a chart's axis).
+export function time(lang: Lang, w: Wall, compact = false): string {
+  const hm = fmt(lang, { hour: "2-digit", minute: "2-digit", hour12: false }).format(w.at);
+  return lang === "fr" && !compact ? hm.replace(":", " h ") : hm;
+}
 
 // A day: "jeudi 12 novembre".
 export const day = (lang: Lang, w: Wall) => fmt(lang, { weekday: "long", day: "numeric", month: "long" }).format(w.at);

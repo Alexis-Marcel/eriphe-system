@@ -108,7 +108,7 @@
        "text": "Bonjour,\n\nVoici le devis revu, avec la pose comprise. Le délai reste de trois semaines.\n\nDis-moi si ça te va,\nSam"
       },
       {
-       "from": "École Jules-Verne <info@example.org>",
+       "from": "L'école <info@example.org>",
        "date": "2026-11-11T17:40:00+01:00",
        "subject": "Sortie du 20 novembre",
        "snippet": "Merci de rendre l'autorisation signée avant vendredi."
@@ -946,7 +946,7 @@
        "text": "Hello,\n\nHere is the revised quote, fitting included. The lead time is still three weeks.\n\nTell me if it works for you,\nSam"
       },
       {
-       "from": "Jules Verne School <info@example.org>",
+       "from": "The school <info@example.org>",
        "date": "2026-11-11T17:40:00+01:00",
        "subject": "Outing on 20 November",
        "snippet": "Please return the signed form before Friday."

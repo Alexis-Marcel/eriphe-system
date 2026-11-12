@@ -162,7 +162,7 @@ for (const lang of ["fr", "en"] as const) {
       expect(captions).toContain(fr ? "jeudi 12 novembre" : "Thursday 12 November");
       expect(captions).toContain(fr ? "il y a 3 heures" : "3 hours ago");
       // A message of today says its time, an older one its date.
-      expect($$(".a2-message-date").map((n) => n.textContent)).toEqual(fr ? ["08:10", "11 nov., 17:40"] : ["08:10", "11 Nov, 17:40"]);
+      expect($$(".a2-message-date").map((n) => n.textContent)).toEqual(fr ? ["08 h 10", "11 nov., 17 h 40"] : ["08:10", "11 Nov, 17:40"]);
       expect(text(".a2-image-off")).toBe(fr ? "Plan du quartier" : "Map of the area");
     });
 
@@ -241,7 +241,7 @@ describe("the catalog's components", () => {
     expect(text(".a2-message-body")).toContain("The lead time is still three weeks.");
     expect(document.getElementById(more.getAttribute("aria-controls")!)).toBe($(".a2-message-body"));
     // A sender is its name; a message without a body has no button.
-    expect($$(".a2-message-from").map((n) => n.textContent)).toEqual(["Sam", "Jules Verne School"]);
+    expect($$(".a2-message-from").map((n) => n.textContent)).toEqual(["Sam", "The school"]);
     expect($$(".a2-more")).toHaveLength(1);
   });
 
@@ -257,10 +257,30 @@ describe("the catalog's components", () => {
     expect(evs[3].className).not.toMatch(/overlap/);
     expect($(".a2-day-grid").className).toContain("a2-lanes-2");
     expect(evs[1].querySelector(".sr-only")?.textContent).toBe("chevauche un autre événement");
-    expect(text(".a2-ev-time")).toBe("09:00–09:30");
+    expect(text(".a2-ev-time")).toBe("09 h 00–09 h 30");
     expect(text(".a2-day-grid .a2-ev-title")).toBe("Point d'équipe");
     expect(text(".a2-day-allday")).toBe("Anniversaire de Sam");
     expect($$(".a2-hour").map((h) => h.textContent)).toEqual(["09", "10", "11", "12", "13", "14"]);
+  });
+
+  it("show only the day's own events", async () => {
+    await mount("en", one([
+      {
+        id: "root",
+        component: "Day",
+        date: "2026-11-12",
+        events: [
+          { title: "Today", start: "2026-11-12", allDay: true },
+          { title: "Tomorrow", start: "2026-11-13", allDay: true },
+          { title: "Yesterday at 9", start: "2026-11-11T09:00:00", end: "2026-11-11T10:00:00" },
+          { title: "Night", start: "2026-11-11T22:00:00", end: "2026-11-12T01:00:00" },
+          { title: "Trip", start: "2026-11-10", end: "2026-11-14", allDay: true },
+        ],
+      },
+    ]));
+    expect($$(".a2-day-allday .a2-ev-title").map((n) => n.textContent)).toEqual(["Today", "Trip"]);
+    expect($$(".a2-day-grid .a2-ev-title").map((n) => n.textContent)).toEqual(["Night"]);
+    expect($(".a2-day-grid .a2-ev").className).toMatch(/a2-r-0 a2-span-2/);
   });
 
   it("colour a change by whether it is good news", async () => {

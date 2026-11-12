@@ -69,7 +69,7 @@ export function Chart({ kind, series, unit, lang, label }: { kind: "line" | "bar
   const oneDay = xs.every((x) => typeof x === "string" && wall(x)?.time && x.slice(0, 10) === String(xs[0]).slice(0, 10));
   const xLabel = (x: string | number) => {
     const w = typeof x === "string" ? wall(x) : null;
-    return w ? (oneDay ? time(lang, w) : shortDate(lang, w)) : typeof x === "number" ? number(lang, x) : x;
+    return w ? (oneDay ? time(lang, w, true) : shortDate(lang, w)) : typeof x === "number" ? number(lang, x) : x;
   };
   const yLabel = (v: number) => number(lang, v);
   const sep = lang === "fr" ? "\u202f: " : ": ";

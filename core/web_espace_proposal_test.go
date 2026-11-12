@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -38,6 +39,10 @@ func TestEspaceProposal(t *testing.T) {
 	}
 	if _, v = read(); v.State != cardApproved {
 		t.Errorf("after yes: %+v", v)
+	}
+	// As the page asks (encodeURIComponent): the colon escaped.
+	if code, body, _ := tw.do("GET", "/api/proposals/"+strings.ReplaceAll(ref, ":", "%3A"), nil, nil); code != 200 || !strings.Contains(body, `"state":"approved"`) {
+		t.Errorf("GET with %%3A: %d %s", code, body)
 	}
 
 	for _, bad := range []string{"rule:999999", "nothing:1", "rule:x"} {

@@ -30,15 +30,15 @@ export function place(events: DayEvent[], date: string): { timed: Placed[]; allD
   for (const ev of events) {
     const s = wall(ev.start);
     if (!s) continue;
-    if (ev.allDay || !s.time) {
-      allDay.push(ev);
-      continue;
-    }
     // An event of another day is not this day's; one across midnight
     // shows its part of it.
     const e = wall(ev.end);
     const startDay = ev.start.slice(0, 10), endDay = e ? ev.end!.slice(0, 10) : startDay;
     if (startDay > date || endDay < date) continue;
+    if (ev.allDay || !s.time) {
+      allDay.push(ev);
+      continue;
+    }
     const start = startDay === date ? minutesOf(s) : 0;
     let end = !e ? start + SLOT : endDay === date ? minutesOf(e) : 24 * 60;
     if (end <= start) end = start + SLOT;
