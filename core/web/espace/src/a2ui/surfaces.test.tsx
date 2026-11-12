@@ -44,6 +44,19 @@ const surface = (components: unknown[], dataModel: unknown = {}): Message => ({
   createSurface: { surfaceId: "s1", catalogId: CATALOG.id, components, dataModel },
 });
 
+// An error message as A2UI v1.0's renderer_to_agent.json allows it: a
+// validation error has exactly code, surfaceId, path and message; another
+// has code and message, and a surfaceId.
+function fitsProtocol(m: ErrorMessage): boolean {
+  if (Object.keys(m).sort().join() !== "error,version" || m.version !== "1.0") return false;
+  const e = m.error as Record<string, unknown>;
+  const all = (ks: string[]) => ks.every((k) => typeof e[k] === "string" && e[k] !== "");
+  if (["VALIDATION_FAILED", "UNALLOWED_PARENT", "UNALLOWED_CHILD"].includes(String(e.code))) {
+    return Object.keys(e).sort().join() === "code,message,path,surfaceId" && all(["code", "message", "path", "surfaceId"]);
+  }
+  return all(["code", "message", "surfaceId"]) && !("functionCallId" in e);
+}
+
 describe("A2UI surfaces", () => {
   it("render from messages", async () => {
     await apply([
@@ -111,15 +124,20 @@ describe("A2UI surfaces", () => {
   it("report what it refuses as an error, and keep the rest", async () => {
     await apply([
       surface([{ id: "root", component: "Shiny", text: "?" }]),
-      { version: "1.0", createSurface: { surfaceId: "s2", catalogId: "urn:example:other", components: [] } },
+      { version: "1.0", createSurface: { surfaceId: "s2", catalogId: CATALOG.id, components: [] } },
+      { version: "1.0", createSurface: { surfaceId: "s3", catalogId: "urn:example:other", components: [{ id: "root", component: "Text", text: "?" }] } },
+      { version: "1.0", updateDataModel: { surfaceId: "nowhere", path: "/a", value: 1 } },
       ...surfaceFixtures("en"),
     ]);
-    expect(errors.length).toBeGreaterThan(0);
-    for (const e of errors) {
-      expect(e.version).toBe("1.0");
-      expect(e.error.code).toBeTruthy();
-      expect(e.error.message).toBeTruthy();
-    }
+    // One error per message refused, each told once (a component of an
+    // unknown type is found when the surface renders, after the others).
+    expect(errors.map((e) => [e.error.surfaceId, e.error.code])).toEqual([
+      ["s2", "VALIDATION_FAILED"],
+      ["s3", "CATALOG_NOT_FOUND"],
+      ["nowhere", "INTEGRITY_ERROR"],
+      ["s1", "UNKNOWN_COMPONENT_TYPE"],
+    ]);
+    for (const e of errors) expect(fitsProtocol(e), JSON.stringify(e)).toBe(true);
     expect(el.querySelector('[data-surface="sample-today"] .a2-list')).not.toBeNull();
   });
 

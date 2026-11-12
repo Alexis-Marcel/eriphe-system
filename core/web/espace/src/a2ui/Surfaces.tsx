@@ -16,11 +16,18 @@ import type { Adapter, Surface } from "./adapter";
 type Node = ComponentNode<ReactCatalogComponent>;
 
 const NodeView = memo(function NodeView({ node }: { node: Node }) {
-  // A child the engine could not resolve is reported through the surface's
-  // errors (the adapter's onError); nothing shows in its place.
+  // A child id the engine did not resolve (a property the catalog does not
+  // mark as a child) shows nothing, and is reported through the surface's
+  // errors (the adapter's onError, which tells it once).
   const build: NodeBuildChild = useCallback(
-    (child) => (isComponentNode(child) ? <NodeView key={child.id} node={child as Node} /> : null),
-    [],
+    (child, basePath) => {
+      if (isComponentNode(child)) return <NodeView key={child.id} node={child as Node} />;
+      const surface = node.context?.dataContext.surface;
+      const message = `Unresolved child reference '${child}' at '${basePath ?? node.dataPath}'.`;
+      queueMicrotask(() => void surface?.dispatchError({ code: "UNRESOLVED_CHILD_REFERENCE", message }));
+      return null;
+    },
+    [node],
   );
   const impl = node.impl as ReactComponentImplementation | undefined;
   if (node.isPlaceholder || node.disposed || !node.context || !impl?.view) return null;

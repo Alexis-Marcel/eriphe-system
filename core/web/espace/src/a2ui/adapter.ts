@@ -25,10 +25,40 @@ export type Action = {
   userMessage?: string;
 };
 export type ActionMessage = { version: "1.0"; action: Action };
+
+// An error, in one of the two shapes A2UI v1.0 allows (renderer_to_agent.json):
+// a validation error names its surface and the path at fault; any other
+// names its surface.
 export type ErrorMessage = {
   version: "1.0";
-  error: { code: string; message: string; surfaceId?: string; path?: string; [k: string]: unknown };
+  error: { code: string; message: string; surfaceId: string; path?: string };
 };
+
+const VALIDATION = new Set(["VALIDATION_FAILED", "UNALLOWED_PARENT", "UNALLOWED_CHILD"]);
+
+type Reported = { code?: unknown; message?: unknown; surfaceId?: unknown; path?: unknown };
+
+const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+
+// toError keeps of what the engine reports only what the protocol allows;
+// surfaceId is the surface of the message being applied, for an error that
+// names none.
+export function toError(e: Reported, surfaceId: string): ErrorMessage {
+  const code = str(e.code) ?? "RENDER_FAILED";
+  const message = str(e.message) ?? code;
+  const sid = str(e.surfaceId) ?? surfaceId;
+  if (VALIDATION.has(code)) return { version: "1.0", error: { code, surfaceId: sid, path: str(e.path) ?? "/", message } };
+  return { version: "1.0", error: { code, message, surfaceId: sid } };
+}
+
+// The surface a message is about: its one key names it.
+function surfaceOf(m: unknown): string {
+  for (const v of m && typeof m === "object" ? Object.values(m) : []) {
+    const id = v && typeof v === "object" ? str((v as { surfaceId?: unknown }).surfaceId) : undefined;
+    if (id) return id;
+  }
+  return "";
+}
 
 export type Surface = SurfaceModel<ComponentApi>;
 
@@ -67,19 +97,29 @@ export function createAdapter(): Adapter {
     const { name, surfaceId, sourceComponentId, timestamp, context, userMessage } = a;
     return { version: "1.0", action: { name, surfaceId, sourceComponentId, timestamp, context, ...(userMessage ? { userMessage } : {}) } };
   };
-  const toError = (e: { code: string; message: string; surfaceId?: string; path?: string }): ErrorMessage => ({
-    version: "1.0",
-    error: { ...e, code: e.code, message: e.message },
-  });
 
+  // An error is told once while its cause lasts: each render of a surface
+  // resolves it anew, and may report the same one again. A message to the
+  // surface may end the cause: what follows it counts anew.
+  const told = new Map<string, Set<string>>();
+  const report = (e: ErrorMessage) => {
+    const key = [e.error.code, e.error.path ?? "", e.error.message].join("\n");
+    const seen = told.get(e.error.surfaceId) ?? new Set<string>();
+    told.set(e.error.surfaceId, seen);
+    if (seen.has(key)) return;
+    seen.add(key);
+    errors.emit(e);
+  };
+
+  let current = ""; // the surface of the message being applied
   const processor = new MessageProcessor([catalog()], (a) => actions.emit(toAction(a)), {
     version: "1.0",
     reportErrorsOnly: true,
-    errorHandler: (e) => errors.emit(toError(e.error as ErrorMessage["error"])),
+    errorHandler: (e) => report(toError(e.error as Reported, current)),
   });
 
-  // A surface's own errors (a function that fails, a child that names no
-  // component) come from the surface, not from processing.
+  // A surface's own errors (a component of a type the catalog does not
+  // have, a function that fails) come from the surface, not from processing.
   const subs = new Map<string, { unsubscribe(): void }>();
   let list: Surface[] = [];
   const sync = () => {
@@ -87,7 +127,7 @@ export function createAdapter(): Adapter {
     changes.emit();
   };
   const created = processor.onSurfaceCreated((s) => {
-    subs.set(s.id, s.onError.subscribe((e) => errors.emit(toError({ ...e, surfaceId: e.surfaceId ?? s.id }))));
+    subs.set(s.id, s.onError.subscribe((e) => report(toError(e, s.id))));
     sync();
   });
   const deleted = processor.onSurfaceDeleted((id) => {
@@ -101,12 +141,15 @@ export function createAdapter(): Adapter {
       // One at a time: a message the engine refuses does not take the
       // others with it.
       for (const m of Array.isArray(msgs) ? msgs : [msgs]) {
+        current = surfaceOf(m);
+        told.delete(current);
         try {
-          processor.processMessages(m as Message as never);
+          processor.processMessages(m as never);
         } catch (e) {
-          errors.emit(toError({ code: "INVALID_MESSAGE", message: e instanceof Error ? e.message : String(e) }));
+          report(toError({ code: "VALIDATION_FAILED", message: e instanceof Error ? e.message : String(e) }, current));
         }
       }
+      current = "";
     },
     onAction: actions.add,
     onError: errors.add,

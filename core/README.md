@@ -2834,7 +2834,8 @@ streams surfaces (#419), the dev server shows a made-up one (`a2ui/fixtures.ts`)
 **Upgrading `@a2ui/*`.** The packages are pinned to an exact version (`package.json`, no `^`) and
 change often, with breaking changes in minor versions. Bump them only on purpose, in a pull request
 of their own: read their CHANGELOG from the pinned version up, bump `@a2ui/react` and
-`@a2ui/web_core` together, run `npm test` (the surface tests check rendering, data updates,
+`@a2ui/web_core` together, diff `A2uiSurface` and `NodeContent` in the new `@a2ui/react` against the
+old (`Surfaces.tsx` mirrors them: `NodeResolver`, `ComponentNode`, an implementation's `view`), run `npm test` (the surface tests check rendering, data updates,
 templates, actions, errors, and that no `style` attribute, `<style>` element, adopted stylesheet or
 custom element appears), rebuild, and open the built page under the workspace's CSP to check the
 console for violations.
