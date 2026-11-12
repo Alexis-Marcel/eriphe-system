@@ -66,7 +66,7 @@ func (c *core) openSession(in sessionIn, taint []string, by string) (Session, er
 		return Session{}, err
 	}
 	c.logSession(id, by, fmt.Sprintf("Session ouverte : %s (%d étapes, budget %d min).", in.Goal, len(in.Steps), in.Budget))
-	if _, err := c.ask(id, askPlan, "", "", nil); err != nil {
+	if _, err := c.ask(id, askPlan, "", "", nil, by); err != nil {
 		return Session{}, err
 	}
 	return c.session(id)
@@ -179,7 +179,7 @@ func (c *core) startStep(ctx context.Context, s Session, st Step, steps []Step) 
 	now := time.Now().Unix()
 	switch st.Kind {
 	case stepApproval:
-		if _, err := c.ask(s.ID, askApproval, st.Key, "", nil); err != nil {
+		if _, err := c.ask(s.ID, askApproval, st.Key, "", nil, "engine"); err != nil {
 			return err
 		}
 		c.logSession(s.ID, "engine", fmt.Sprintf("L'étape « %s » attend la réponse de %s sur une carte.", st.Title, c.conf().User))
@@ -484,7 +484,7 @@ func (c *core) amendSession(ctx context.Context, id int64, in amendIn, why, by s
 		return "", err
 	}
 	if s.Amends >= planAmends {
-		if _, err := c.ask(id, askAmend, "", why, in); err != nil {
+		if _, err := c.ask(id, askAmend, "", why, in, by); err != nil {
 			return "", err
 		}
 		c.logSession(id, by, "Changement du plan demandé à "+c.conf().User+" : "+why)
@@ -659,7 +659,7 @@ func budgetMore(s Session) int { return max(30, s.Budget/2) }
 // more time; the steps running finish.
 func (c *core) holdForBudget(s Session) {
 	c.pauseLocked(s, heldBudget)
-	c.ask(s.ID, askBudget, "", "", map[string]int{"minutes": budgetMore(s)})
+	c.ask(s.ID, askBudget, "", "", map[string]int{"minutes": budgetMore(s)}, "engine")
 	c.logSession(s.ID, "engine", fmt.Sprintf("Budget de %d min atteint : session en pause, %s est interrogé sur une carte.", s.Budget, c.conf().User))
 	text := fmt.Sprintf("Le budget de %d min est atteint : rien de nouveau ne démarre, les étapes en cours finissent. Une carte demande à %s s'il donne %d min de plus.",
 		s.Budget, c.conf().User, budgetMore(s))

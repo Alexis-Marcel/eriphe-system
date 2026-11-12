@@ -244,6 +244,10 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 			parts = append(parts, offer)
 		}
 	}
+	// What waits for the user already, as the workspace shows it (attention.go).
+	if open := c.attentionBlock(); open != "" {
+		parts = append(parts, open)
+	}
 	profile, hash := c.profileForDelivery()
 	if profile != "" {
 		parts = append([]string{profile}, parts...)

@@ -443,6 +443,40 @@ func (c *core) cardProposed(kind string, id int64) {
 		ON CONFLICT (ref) DO UPDATE SET turn = 1 WHERE seq = 0`, proposalRef(kind, id), kind, p.Text("fr"), time.Now().Unix())
 }
 
+// cardNow shows the card of a proposal made outside a brain turn at once:
+// no message of the brain's will carry it, so it gets its own, text, in
+// the conversation (as the brain's, written by eriphe-core), and enters
+// the attention queue (attention.go). source is who made it (task:<id>,
+// session:<id>, skill:<name>). A card already shown and still waiting is
+// not shown twice. The brain is not woken: it reads the open items at its
+// next turn, and nothing it does waits on the card.
+func (c *core) cardNow(kind string, id int64, text, source string) {
+	p := c.proposalOf(kind, id)
+	if !p.Pending {
+		return
+	}
+	ref := proposalRef(kind, id)
+	var shown int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM convo_cards WHERE ref = ? AND seq > 0 AND state = ?`, ref, cardPending).Scan(&shown)
+	if shown > 0 {
+		return
+	}
+	seq, err := c.store.addMessage(roleBrain, text, true)
+	if err != nil {
+		log.Printf("cards: %s: %v", ref, err)
+		return
+	}
+	now := time.Now().Unix()
+	c.cardAgain(p)
+	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, seq, text, created, attached) VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT (ref) DO UPDATE SET seq = excluded.seq, turn = 0, attached = excluded.attached WHERE seq = 0`,
+		ref, kind, seq, p.Text("fr"), now, now)
+	if x, err := c.cardsWhere(`ref = ?`, ref); err == nil && len(x) == 1 {
+		c.attendCard(x[0], p, source)
+	}
+	c.bump()
+}
+
 // cardAgain: the same proposal waits again after its card was decided (a
 // change of a skill or a monitor already approved). It gets a new card:
 // the decided one stays under its message as it was, its ref set aside
@@ -470,8 +504,15 @@ func (c *core) attachTurnCards(seq int) {
 		return
 	}
 	c.claimBlockingCards()
+	xs, _ := c.cardsWhere(`seq = 0 AND turn = 1 AND kind != ?`, cardDigest)
 	c.store.db.Exec(`UPDATE convo_cards SET seq = ?, turn = 0, attached = ? WHERE seq = 0 AND turn = 1`, seq, time.Now().Unix())
 	c.brainSeqOfTurn = seq
+	for _, x := range xs {
+		x.Seq = seq
+		if x, p := c.liveCard(x); x.State == cardPending {
+			c.attendCard(x, p, byBrain)
+		}
+	}
 }
 
 // claimBlockingCards takes the cards back from the queue that stop a task:
@@ -561,6 +602,7 @@ func (c *core) decideCard(ctx context.Context, id int64, approve bool, by string
 	if approve {
 		x.State = cardApproved
 	}
+	c.attentionDone(cardItemRef(x.ID))
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ?`, x.State, x.Decided.Unix(), by, id)
 	log.Printf("cards: %s %s by %s", x.Ref, x.State, by)
 	return x, nil

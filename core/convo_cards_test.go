@@ -174,7 +174,7 @@ func TestBlockingCardSurvivesASilentTurn(t *testing.T) {
 		t.Helper()
 		waitingTask(c, id)
 		c.store.updateTask(id, map[string]any{"state": statePending, "desired": desiredHeld})
-		if err := c.holdTask(&TaskRow{ID: id}, []startNeed{{Server: "nas", Category: "use"}}, nil); err != nil {
+		if err := c.holdTask(&TaskRow{ID: id}, []startNeed{{Server: "nas", Category: "use"}}, nil, true); err != nil {
 			t.Fatal(err)
 		}
 		var start int64

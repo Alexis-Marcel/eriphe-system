@@ -372,16 +372,10 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 		return 0
 	}
 	id, _ := res.LastInsertId()
-	c.cardProposed(cardAccess, id)
 	// The question itself: what notifies the user of a question notifies them of this one.
 	// The card says what: the message does not say it twice.
-	seq, err := c.store.addMessage(roleBrain, fmt.Sprintf(tr("fr", "access.ask.message"), a.Need.Target()), true)
-	if err != nil {
-		return id
-	}
-	c.store.db.Exec(`UPDATE convo_cards SET seq = ?, turn = 0, attached = ? WHERE ref = ?`, seq, time.Now().Unix(), proposalRef(cardAccess, id))
+	c.cardNow(cardAccess, id, fmt.Sprintf(tr("fr", "access.ask.message"), a.Need.Target()), "task:"+a.TaskID)
 	log.Printf("access: card %d for task %s: %s", id, a.TaskID, a.Need.Category)
-	c.bump()
 	return id
 }
 

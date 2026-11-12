@@ -241,7 +241,7 @@ func (w *web) auth(h authed) http.Handler {
 			redirect(rw, r, "/setup")
 			return
 		case toLogin:
-			if r.URL.Path == "/events" {
+			if r.URL.Path == "/events" || strings.HasPrefix(r.URL.Path, "/api/") {
 				http.Error(rw, "unauthorized", http.StatusUnauthorized)
 				return
 			}

@@ -78,7 +78,7 @@ func launchWrite(t *testing.T, c *core) *TaskRow {
 
 func launchWriteAs(t *testing.T, c *core, clean bool) *TaskRow {
 	t.Helper()
-	task, err := c.runTask(context.Background(), runRequest{Prompt: "fix the menu", askStart: true, cleanStart: clean, Resources: []ResourceRef{
+	task, err := c.runTask(context.Background(), runRequest{Prompt: "fix the menu", askStart: true, byBrain: true, cleanStart: clean, Resources: []ResourceRef{
 		{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/x"}}})
 	if err != nil {
 		t.Fatal(err)

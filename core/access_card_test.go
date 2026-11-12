@@ -293,7 +293,7 @@ func TestBlockingCardsGoToTelegram(t *testing.T) {
 	c.newAccessAsk(accessQuestion{TaskID: "t-1", Permission: "p-1", Need: accessNeed{"mail", catChange, ""}})
 	seq, _ := c.store.addMessage(roleBrain, "Je lance la tâche.", true)
 	c.store.updateTask("t-1", map[string]any{"state": statePending, "desired": desiredHeld})
-	if err := c.holdTask(&TaskRow{ID: "t-1"}, []startNeed{{Server: "mail", Category: catSend}}, nil); err != nil {
+	if err := c.holdTask(&TaskRow{ID: "t-1"}, []startNeed{{Server: "mail", Category: catSend}}, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	c.attachTurnCards(int(seq))
@@ -335,7 +335,7 @@ func TestLaunchAsksWhatIsLent(t *testing.T) {
 	}
 	waitingTask(c, "t-1")
 	c.store.updateTask("t-1", map[string]any{"state": statePending, "desired": desiredHeld})
-	if err := c.holdTask(&TaskRow{ID: "t-1"}, needs, nil); err != nil {
+	if err := c.holdTask(&TaskRow{ID: "t-1"}, needs, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.decideTaskStart(1, true); err != nil {
