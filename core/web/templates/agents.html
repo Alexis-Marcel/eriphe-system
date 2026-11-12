@@ -185,6 +185,24 @@
   {{else}}<p class="muted">{{t "agents.defaultnone"}}</p>{{end}}
 </section>
 
+<section class="panel" id="composer" aria-labelledby="composer-title">
+  <div class="tile-head">
+    <h3 id="composer-title">{{template "i-bot"}}{{t "composer.title"}}</h3>
+    {{if .Composer.On}}{{template "plain-status" .Composer.Plain}}{{end}}
+  </div>
+  <p class="muted">{{t "composer.lead"}}</p>
+  {{if .Composer.Choices}}
+  <form class="assistant-form" hx-post="/settings/composer" hx-disabled-elt="find button[type=submit]">
+    <label class="check"><input type="checkbox" name="on" value="1" {{if .Composer.On}}checked{{end}}><span><b>{{t "composer.on"}}</b><small>{{t "composer.onhint"}}</small></span></label>
+    <label class="field"><span>{{t "assistants.agent"}}</span>
+      <select name="agent">{{range .Composer.Choices}}<option value="{{.Name}}" {{if .Brain}}selected{{end}}>{{.Name}} · {{.ModelLabel}}</option>{{end}}</select>
+      <small class="muted">{{t "composer.agenthint"}}</small></label>
+    <div class="form-actions"><button class="btn btn-soft" type="submit">{{t "form.save"}}</button></div>
+  </form>
+  {{else}}<p class="muted">{{t "composer.noagent"}}</p>{{end}}
+  {{with .Composer.Last}}<p class="muted small">{{if eq .By "composer"}}{{t "composer.lastby"}}{{else}}{{t "composer.lastfallback"}}{{end}} {{ago .At}}</p>{{end}}
+</section>
+
 {{if or .BrainCard .Helpers}}
 <section class="panel" aria-labelledby="asst-title">
   <h3 id="asst-title">{{template "i-bot"}}{{t "assistants.title"}}</h3>

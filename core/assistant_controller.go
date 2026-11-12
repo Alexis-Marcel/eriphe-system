@@ -50,6 +50,12 @@ type assistantRole struct {
 	// --tools); empty keeps them all.
 	HarnessTools []string
 	NoWebSearch  string // told in its instructions when its harness cannot search the web
+	// Effort is how hard its agent thinks (Claude Code's effort level: low,
+	// medium, high); empty leaves the agent's own.
+	Effort string
+	// Fresh: each of its tasks starts a new session, never resuming the
+	// last one: each of its turns carries all it needs.
+	Fresh bool
 
 	// Hooks; nil does nothing.
 	instructions func(c *core, a Assistant, prompt string) string     // completes its standing prompt
@@ -457,7 +463,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	// carries the thread over instead (brain_context.go).
 	_, agent, _ := c.conf().agent(a.Agent)
 	st := c.assistantStatus(a.Name)
-	if resume && st.Session != "" && st.SessionRuntime == agent.Runtime {
+	if resume && !r.Fresh && st.Session != "" && st.SessionRuntime == agent.Runtime {
 		extra.Resume = st.Session
 	}
 	first := r.StartPrompt
@@ -664,6 +670,9 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 		spec.AgentEnv = map[string]string{}
 	}
 	spec.AgentEnv["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+	if v := harnessOf(t.Runtime).EffortEnv; r.Effort != "" && v != "" {
+		spec.AgentEnv[v] = r.Effort
+	}
 	// Its free reads, as the catalog lists them now: allowed in advance,
 	// they never wait for a permission. The node reads them when it starts.
 	if r.FreeReads {

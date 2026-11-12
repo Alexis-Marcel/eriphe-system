@@ -172,7 +172,8 @@ func (w *web) routes() http.Handler {
 
 	mux.Handle("GET /{$}", w.auth(w.handleHome))
 	mux.Handle("GET /events", w.auth(w.handleEvents))
-	mux.Handle("GET /api/attention", w.auth(w.handleAttention)) // web_sse.go
+	mux.Handle("GET /api/attention", w.auth(w.handleAttention))     // web_sse.go
+	mux.Handle("GET /api/composition", w.auth(w.handleComposition)) // web_composition.go
 	// A message carries its attachments: the body may hold them all, and a little more.
 	mux.Handle("POST /messages", http.MaxBytesHandler(w.auth(w.handleSend), maxAttachments*maxAttachmentSize+1<<20))
 	mux.Handle("GET /attachments/{id}", w.auth(w.handleAttachment))

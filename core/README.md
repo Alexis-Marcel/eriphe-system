@@ -2598,6 +2598,56 @@ page):
   `{"objects": [{"ref", "object"} or {"ref", "error", "status"}]}`, in the order asked, each
   read on its own, 8 at once.
 
+### The composer (`composer.go`, `composition.go`)
+
+A **composition** says what the workspace shows, by ref: which items of the attention queue are
+modules and how big, why, which wait as chips, and Eriphe's line over them. It is served at once,
+always the last one kept (in memory and in the store, so a restart serves it too):
+
+```json
+{"mode": "side", "ambient": "decision", "eriphe": "Le plan attend ton feu vert.",
+ "items": [{"ref": "session:3", "weight": 4, "why": "Plan à valider", "say": "…"}],
+ "chips": ["mail:7"], "moment": "change", "at": "2026-11-12T09:00:00Z", "by": "composer"}
+```
+
+`mode` is `side` (modules in front) or `center` (nothing to show, Eriphe in the middle);
+`ambient` is `urgent` with a weight 5, `decision` with a 4, `calm` otherwise; `say` is the queue's
+own, never the model's; `by` is `composer` or `fallback`. `GET /api/composition` (the workspace's
+session; without one, 401) and the event stream's `composition` event, sent when it changes.
+
+The **composer** is a persistent assistant of role `composer`, like the brain and the session
+leads: one warm task on a node, each composition a turn (`deliverComposer` gives it the
+snapshot, `relayComposer` hands its answer back at the turn's end). It has no power, no MCP server
+and none of its harness's tools (Claude Code's `--tools ""`), thinks at low effort
+(`CLAUDE_CODE_EFFORT_LEVEL=low`, from its role's `Effort` and the harness card's `EffortEnv`), and
+starts a fresh session with each task (`Fresh`), its task stopping after 30 turns: each turn
+carries all it needs. Its instructions are `composer-prompt.md` (French).
+
+A turn holds the moment (a change, the user's return after an absence, a remark), the screen's
+capacity (6 modules, 8 chips), the user's rules (`composerRules`, the seam for #388, empty
+for now), the queue (ref, kind, weight, age, the object's title read within 2 s, the why), quoted
+as data, and the list of refs it may use. It answers a lean JSON object (refs, weight, a why of 60
+characters at most, Eriphe's line of 140): in the study, about 3.5 s a composition with Sonnet,
+against 8–36 s with prose per item; Haiku invented refs. The worker is not given a JSON schema:
+Claude Code's `--json-schema` is fixed for a whole session, while the refs allowed change with
+each turn; the prompt names them, and code checks (`checkComposition`): a ref not in the snapshot
+is dropped, a weight clamped to 1–5, the texts cut, at most 6 items and 8 chips, and what the
+composer left out waits as a chip. An answer that is not JSON, or keeps nothing of a queue that
+has items, is invalid.
+
+**Fallback**: when the composer is off, has no task ready, takes more than 10 s or answers
+something invalid, code composes by weight (then the latest first): the 6 heaviest as modules,
+the rest as chips. A late answer is dropped. Nothing waits on the composer: it runs on its own
+goroutine (`runComposer`), the brain reads the queue itself.
+
+**When**: the queue is read every 2 s; a change composes once the burst settles (3 s after the
+last change, 15 s at most after the first). A message from the user (not from an untrusted
+channel) composes at once, as a remark with their words. While the user has been away 20 minutes
+or more (`awaySince`), the next composition is for their return, and one is made ahead of it.
+
+**Settings → Agents → Workspace composer**: on or off, and its agent (a Sonnet one by default,
+else the default agent). Off by default; off, nothing is sent to a model.
+
 ### The composed workspace (`/espace`)
 
 A page next to the conversation, which stays, where what Eriphe composes is laid out
