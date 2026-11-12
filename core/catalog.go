@@ -571,7 +571,7 @@ func (c *core) applyCatalog(m *Config) {
 	if c.pool != nil {
 		c.pool.sync(m.Servers)
 	}
-	if err := c.registerServices(m.runSpecs); err != nil {
+	if err := c.reconcileServices(); err != nil {
 		log.Printf("catalog: services: %v", err)
 	}
 	c.placePending()

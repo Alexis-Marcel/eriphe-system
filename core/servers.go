@@ -119,6 +119,9 @@ func (c *Config) checkServers() error {
 		if !serverName.MatchString(name) || slices.Contains(reserved, name) {
 			return fmt.Errorf("server %q: a name of lowercase letters, digits and dashes (not %s)", name, strings.Join(reserved, ", "))
 		}
+		if isChannelService(name) {
+			return fmt.Errorf("server %q: %s… names a channel's service, not a tool", name, channelServicePrefix)
+		}
 		if s.Use == "" {
 			return fmt.Errorf("server %s: use is required (what it is for, for the brain)", name)
 		}

@@ -82,7 +82,7 @@ func main() {
 	} else {
 		c.mem.owner = func() string { return c.conf().User }
 	}
-	if err := c.registerServices(c.conf().runSpecs); err != nil {
+	if err := c.reconcileServices(); err != nil {
 		log.Fatalf("services: %v", err)
 	}
 	c.run(context.Background())
