@@ -13,9 +13,10 @@ import (
 // Events of ready-made HTML: "message" (new messages, to append), "draft"
 // (the brain's message being written, empty once it has landed), "tasks"
 // (the side panel), "pending" (the requests at the end of the
-// conversation), "cards" (cards that changed) and "attention" (the
-// attention queue, JSON: attention.go), each sent only when it differs
-// from the last one. Every
+// conversation), "cards" (cards that changed), "attention" (the
+// attention queue, JSON: attention.go) and "composition" (the workspace's
+// composition, JSON: composer.go), each sent only when it differs from the
+// last one. Every
 // event carries the last message's seq as its id, so a reconnecting
 // browser picks up where it left.
 func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -41,7 +42,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 	fmt.Fprint(rw, "retry: 3000\n\n")
 	flusher.Flush()
 
-	var lastTasks, lastPending, lastDraft, lastAttention string
+	var lastTasks, lastPending, lastDraft, lastAttention, lastComposition string
 	lastCards := map[int64]string{}
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
@@ -111,6 +112,13 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			if raw, err := json.Marshal(w.attentionSnapshot()); err == nil && string(raw) != lastAttention {
 				writeEvent(rw, "attention", after, string(raw))
 				lastAttention, sent = string(raw), true
+			}
+			// The composition, once there is one (composer.go).
+			if comp := w.c.lastComposition(); comp != nil {
+				if raw, err := json.Marshal(comp); err == nil && string(raw) != lastComposition {
+					writeEvent(rw, "composition", after, string(raw))
+					lastComposition, sent = string(raw), true
+				}
 			}
 		}
 		// A notification routed to this tab, in front of the user (route_send.go).

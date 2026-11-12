@@ -66,6 +66,7 @@ type core struct {
 	skillRuns   skillRunner            // the triggered skills (skill_runs.go)
 	out         channelOut             // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
+	composer    composerState          // the workspace's composition (composer.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)
 	// minters are the providers whose connections core mints tokens for,

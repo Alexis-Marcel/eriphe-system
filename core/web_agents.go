@@ -32,6 +32,7 @@ func (w *web) agentRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /settings/default-agent", w.auth(w.handleDefaultAgent))
 	mux.Handle("POST /settings/brain-agent", w.auth(w.handleBrainAgent))
 	mux.Handle("POST /settings/assistants/{name}", w.auth(w.handleSaveAssistant)) // web_assistants.go
+	mux.Handle("POST /settings/composer", w.auth(w.handleComposer))               // web_composition.go
 	mux.Handle("GET /settings/providers/new", w.auth(w.handleNewProvider))
 	mux.Handle("POST /settings/providers", w.auth(w.handleSaveProvider))
 	mux.Handle("POST /settings/provider-test", w.auth(w.handleTestProvider))
@@ -105,6 +106,7 @@ type agentsPage struct {
 	BrainChoices  []agentView     // the agents that can be the brain
 	BrainCard     *assistantCard  // the brain, at the top; nil without one
 	Helpers       []assistantCard // its assistants
+	Composer      composerView    // the workspace's composer (web_composition.go)
 	AgentCount    int             // the agents it may give a task to (list_agents)
 	Flash         string
 	Warn          string // the account just saved has a key that did not pass its test
@@ -138,6 +140,7 @@ func (w *web) agentsData(r *http.Request) agentsPage {
 	}
 	v.Flash, v.Warn = w.agentsFlash(r.URL.Query(), lang, m, v.Brain, healths)
 	v.BrainCard, v.Helpers = w.brainCards(r, v)
+	v.Composer = w.composerData(v)
 	v.AgentCount = len(m.Agents)
 	return v
 }
@@ -221,6 +224,8 @@ func (w *web) agentsFlash(q url.Values, lang string, m *Config, brain string, he
 		flash = tr(lang, "agents.brainsaved")
 	case q.Get("brain") != "":
 		flash = fmt.Sprintf(tr(lang, "agents.brainset"), brain)
+	case q.Get("composer") != "":
+		flash = tr(lang, "composer.saved")
 	case q.Get("assistant") != "" && m.Assistants[q.Get("assistant")].Name != "":
 		flash = fmt.Sprintf(tr(lang, "assistants.saved"), q.Get("assistant"))
 	}
