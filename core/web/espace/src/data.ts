@@ -1,7 +1,7 @@
 import { fixtures } from "./fixtures";
 import type { Lang } from "./i18n";
 import strings from "./strings.json";
-import type { Composition, Obj, Ref, Rule } from "./types";
+import type { Composition, Obj, Ref } from "./types";
 
 // The data layer: the one place that talks to eriphe-core. The page reads
 // - /espace/boot: its words, the CSRF token, the assistant's name;
@@ -11,9 +11,14 @@ import type { Composition, Obj, Ref, Rule } from "./types";
 // - POST /api/objects (web_objects.go): the objects behind the refs, and
 //   the ones they relate to;
 // - /events: the event stream, whose "attention" and "composition" events
-//   say when to read again;
-// - POST /api/rules (attention_rules.go): a remark of the ⋯ menu, made a
-//   rule that eriphe-core applies to the queue before the composition.
+//   say when to read again, and "walkthrough" when Eriphe walks the user
+//   through objects (workspace_walkthrough, workspace.go);
+// - POST /messages: what the user writes, with the ref of the module open
+//   (about), so Eriphe knows what « ça » is;
+// - POST /api/espace/gesture: what the user opened, or what left the screen
+//   unopened, which memory's extraction reads (workspace.go).
+// No control of the page keeps a rule or a preference: the user says it to
+// Eriphe, who remembers it.
 // A request without a session gets 401: the page goes to the sign-in. Only
 // when neither the composition nor the attention queue is there (404), or
 // with no eriphe-core behind (the dev server), it shows made-up data
@@ -68,7 +73,7 @@ async function composition(): Promise<Composition | null> {
   if (comp) return comp;
   const att = await getJSON<Attention>("/api/attention");
   if (!att) return null;
-  return { mode: "side", eriphe: "", items: (att.items ?? []).map(({ ref, weight, why, say, source }) => ({ ref, weight, why, say, source })) };
+  return { mode: "side", eriphe: "", items: (att.items ?? []).map(({ ref, weight, why, say }) => ({ ref, weight, why, say })) };
 }
 
 // One entry per ref asked, in order: the object, or why it could not be read.
@@ -93,14 +98,16 @@ async function objects(refs: Ref[]): Promise<Obj[]> {
 
 let csrf = "";
 
-export async function load(b: Boot): Promise<Snapshot> {
+// load reads the composition and its objects; extra are refs to read too
+// (a walkthrough's, when they are not on the screen).
+export async function load(b: Boot, extra: Ref[] = []): Promise<Snapshot> {
   csrf = b.csrf;
   const comp = b.live ? await composition() : null;
   if (!comp) {
     const f = fixtures(b.lang);
     return { comp: f.comp, store: new Map(f.objects.map((o) => [o.ref, o])), sample: true };
   }
-  const refs = [...new Set([...comp.items.map((i) => i.ref), ...(comp.chips ?? [])])];
+  const refs = [...new Set([...comp.items.map((i) => i.ref), ...(comp.chips ?? []), ...extra])];
   const store = new Map<Ref, Obj>();
   for (const o of await objects(refs)) store.set(o.ref, o);
   // What they relate to, one level down, so a focus can bring it beside.
@@ -109,9 +116,13 @@ export async function load(b: Boot): Promise<Snapshot> {
   return { comp, store, sample: false };
 }
 
+// A walkthrough Eriphe asked for (workspace_walkthrough): its refs, in
+// order; none for what the page shows.
+export type Walk = { id: number; refs: Ref[] | null };
+
 // follow calls back when eriphe-core says the attention or the composition
-// changed, once a burst is over.
-export function follow(onChange: () => void): () => void {
+// changed, once a burst is over, and when Eriphe starts a walkthrough.
+export function follow(onChange: () => void, onWalk: (w: Walk) => void = () => {}): () => void {
   const es = new EventSource("/events");
   let timer = 0;
   const later = () => {
@@ -120,6 +131,13 @@ export function follow(onChange: () => void): () => void {
   };
   es.addEventListener("attention", later);
   es.addEventListener("composition", later);
+  es.addEventListener("walkthrough", (e) => {
+    try {
+      onWalk(JSON.parse((e as MessageEvent).data) as Walk);
+    } catch {
+      /* not a walkthrough */
+    }
+  });
   return () => {
     clearTimeout(timer);
     es.close();
@@ -139,21 +157,23 @@ export async function answer(ref: Ref, yes: boolean): Promise<boolean> {
   return post(`/cards/${id}/${yes ? "yes" : "no"}`, new URLSearchParams());
 }
 
-// send writes to the brain, in the conversation.
-export async function send(text: string): Promise<boolean> {
-  return post("/messages", new URLSearchParams({ text }));
+// send writes to the brain, in the conversation; about is the ref of the
+// module open while it was written.
+export async function send(text: string, about?: Ref | null): Promise<boolean> {
+  const body = new URLSearchParams({ text });
+  if (about) body.set("about", about);
+  return post("/messages", body);
 }
 
-// addRule makes a rule of a remark of the ⋯ menu (POST /api/rules):
-// eriphe-core keeps it and applies it to the queue, and the event stream
-// says when to read again. The rule, or null when it was refused.
-export async function addRule(rule: Pick<Rule, "key" | "delta" | "label" | "remark">): Promise<Rule | null> {
-  const r = await fetch("/api/rules", {
+// gesture tells eriphe-core what the user did: opened a module, or let one
+// leave the screen unopened. Nothing waits on it.
+export async function gesture(what: "opened" | "ignored", ref: Ref, title: string): Promise<boolean> {
+  const r = await fetch("/api/espace/gesture", {
     method: "POST",
     credentials: "same-origin",
     headers: { ...json, "Content-Type": "application/json", "X-CSRF-Token": csrf },
-    body: JSON.stringify(rule),
+    body: JSON.stringify({ what, ref, title }),
   });
   signedOut(r);
-  return r.ok ? ((await r.json()) as Rule) : null;
+  return r.ok;
 }

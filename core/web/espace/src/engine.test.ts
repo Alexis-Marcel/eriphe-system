@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COLS, DIMS, ROWS, keysOf, overlapping, pack, place, related, type Layout } from "./engine";
+import { COLS, DIMS, ROWS, overlapping, pack, place, related, type Layout } from "./engine";
 import type { Composition, Item, Obj, Ref } from "./types";
 
 const mail = (id: string, from = "Sam <sam@example.org>", related?: Ref[]): Obj => ({
@@ -97,15 +97,10 @@ describe("place", () => {
     expect(l.chips).toEqual([{ obj: b, why: "", from: "composition" }]);
   });
 
-  it("leaves the user's rules to eriphe-core: the weights it gives are kept", () => {
+  it("keeps the weights the composition gives: 0 is not shown", () => {
     const a = mail("a"), b = mail("b", "News <news@example.net>");
     const l = place(comp([{ ref: a.ref, weight: 3, why: "" }, { ref: b.ref, weight: 0, why: "never" }]), storeOf(a, b));
     expect(l.placed.map((p) => p.obj.ref)).toEqual([a.ref]);
-  });
-
-  it("keeps who raised an item, for the keys of the ⋯ menu", () => {
-    const a = mail("a");
-    expect(place(comp([{ ref: a.ref, weight: 3, why: "", source: "skill:mail" }]), storeOf(a)).placed[0].source).toBe("skill:mail");
   });
 
   it("puts the focus in xl and pulls its relations in", () => {
@@ -128,16 +123,7 @@ describe("place", () => {
   });
 });
 
-describe("relations and keys", () => {
-  it("keys an object in eriphe-core's grammar, the narrowest first", () => {
-    expect(keysOf(mail("a", "News <news@Example.net>"))).toEqual(["mail:from=example.net", "mail"]);
-    expect(keysOf(mail("a", "News <news@example.net>"), "skill:mail")).toEqual(["mail:from=example.net", "mail:source=mail", "mail"]);
-    expect(keysOf({ ref: "alert:1", kind: "alert", title: "" }, "skill:backup")).toEqual(["alert:source=backup", "alert"]);
-    expect(keysOf({ ref: "alert:1", kind: "alert", title: "" }, "brain")).toEqual(["alert"]);
-    expect(keysOf({ ref: "task:t1", kind: "task", title: "" })).toEqual(["task"]);
-    const card: Obj = { ref: "card:1", kind: "card", title: "", card: { id: 1, kind: "memory", state: "pending", text: "", created: "", proposal: "memory:1" } };
-    expect(keysOf(card)).toEqual(["card:kind=memory", "card"]);
-  });
+describe("relations", () => {
   it("finds a group's members", () => {
     const a = mail("a"), g: Obj = { ref: "group:1", kind: "group", title: "", group: { refs: [a.ref] } };
     expect(related(g, [a, g])).toEqual([a.ref]);

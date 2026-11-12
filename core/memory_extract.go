@@ -73,9 +73,6 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 		switch role {
 		case roleUser:
 			s.Who, s.Trust = "owner", trustOwner
-			if about := c.messageAbout(seq); about != "" {
-				s.Text += "\n[written about " + about + ", open on the workspace]" // workspace.go
-			}
 		case roleBrain:
 			s.Who, s.Trust = "brain", trustFirstParty
 		default:
@@ -86,6 +83,10 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 	}
 	rows.Close()
 	for i, s := range out {
+		// Written with a module open on the workspace (workspace.go).
+		if about := c.messageAbout(seqOf(s.Ref)); s.Who == "owner" && about != "" {
+			out[i].Text += "\n[written about " + about + ", open on the workspace]"
+		}
 		// Written in a tainted turn, the brain's words may repeat what it read.
 		if s.Who == "brain" && c.store.get(taintKey(seqOf(s.Ref))) != "" {
 			out[i].Trust = trustExternal

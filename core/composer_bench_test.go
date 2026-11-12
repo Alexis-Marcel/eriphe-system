@@ -22,12 +22,12 @@ import (
 const composerBenchZone = "Europe/Paris"
 
 type composerCase struct {
-	ID          string         `json:"id"`
-	What        string         `json:"what"`
-	Now         string         `json:"now"` // 2006-01-02 15:04, in composerBenchZone
-	Moment      string         `json:"moment"`
-	AwayMinutes int            `json:"away_minutes"`
-	Remark      string         `json:"remark"`
+	ID          string `json:"id"`
+	What        string `json:"what"`
+	Now         string `json:"now"` // 2006-01-02 15:04, in composerBenchZone
+	Moment      string `json:"moment"`
+	AwayMinutes int    `json:"away_minutes"`
+	Remark      string `json:"remark"`
 	// Preferences are the user's preference memories about the workspace,
 	// as sentences, the way the composer reads them (workspacePreferences).
 	Preferences []string       `json:"preferences"`

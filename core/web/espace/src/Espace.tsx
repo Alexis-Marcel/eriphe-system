@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
 import * as data from "./data";
-import { keysOf, place } from "./engine";
+import { place, type Placed } from "./engine";
 import { useWords } from "./i18n";
 import type { Composition, Obj, Ref } from "./types";
 import { View, YesNo, lineOf, sourceOf, titleOf, type Act } from "./views";
@@ -10,8 +10,25 @@ const EMPTY: Composition = { mode: "side", eriphe: "", items: [] };
 
 const spring = { type: "spring", stiffness: 260, damping: 30 } as const;
 
-// What the user types to be walked through, in either language.
-const PRESENT = /pr[ée]sente|d[ée]roule|walk me|present/i;
+// The page has no control that keeps a rule or a preference: a module is
+// opened by a click, and what the user wants of it is said to Eriphe in
+// words, with the open module's ref (data.send). The walkthrough is
+// something the user asks Eriphe for (workspace_walkthrough). The one fixed
+// control is a card's Oui / Non.
+
+// tourOf is what a walkthrough goes through when Eriphe names nothing: the
+// modules on the screen that matter, the most important first.
+export function tourOf(placed: Placed[]): Ref[] {
+  return placed.filter((p) => p.weight >= 2 || p.size !== "s").map((p) => p.obj.ref);
+}
+
+// leftUnopened is what was in front and has left the composition (neither
+// module nor chip now) without the user opening it: a gesture memory's
+// extraction may read.
+export function leftUnopened(before: Ref[], comp: Composition, opened: Set<Ref>): Ref[] {
+  const now = new Set([...comp.items.map((i) => i.ref), ...(comp.chips ?? [])]);
+  return before.filter((r) => !now.has(r) && !opened.has(r));
+}
 
 function useTyped(text: string) {
   const reduced = useReducedMotion();
@@ -36,7 +53,6 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const [decided, setDecided] = useState<Record<Ref, string>>({}); // cards answered here
   const [said, setSaid] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [menu, setMenu] = useState<Ref | null>(null);
   const [tour, setTour] = useState<{ refs: Ref[]; i: number } | null>(null);
   const [wide, setWide] = useState(false);
 
@@ -44,7 +60,10 @@ export function Espace({ boot }: { boot: data.Boot }) {
     data.load(boot).then((s) => { setSnap(s); setFailed(false); }, () => setFailed(true));
   }, [boot]);
   useEffect(reload, [reload]);
-  useEffect(() => (snap && !snap.sample ? data.follow(reload) : undefined), [snap?.sample, reload]);
+  // A walkthrough Eriphe starts reaches the page on the event stream; the
+  // handler is the latest render's.
+  const onWalk = useRef<(w: data.Walk) => void>(() => {});
+  useEffect(() => (snap && !snap.sample ? data.follow(reload, (w) => onWalk.current(w)) : undefined), [snap?.sample, reload]);
 
   const store = useMemo(() => {
     const m = new Map<Ref, Obj>();
@@ -68,19 +87,53 @@ export function Espace({ boot }: { boot: data.Boot }) {
     setToast(m);
     setTimeout(() => setToast((x) => (x === m ? null : x)), 2600);
   };
-  const open = (ref: Ref | null) => {
+  const live = !!snap && !snap.sample && boot.live;
+
+  // What the user opens, and what left the screen unopened, are gestures
+  // eriphe-core keeps for memory's extraction: no counter here.
+  const opened = useRef(new Set<Ref>());
+  const front = useRef<Ref[]>([]);
+  useEffect(() => {
+    if (!live || !snap) return;
+    for (const ref of leftUnopened(front.current, snap.comp, opened.current)) {
+      const o = snap.store.get(ref);
+      data.gesture("ignored", ref, o?.title ?? "").catch(() => false);
+    }
+    // Only what was in front while the page was seen counts.
+    front.current = document.visibilityState === "visible" ? snap.comp.items.map((i) => i.ref) : [];
+  }, [snap, live]);
+
+  // open focuses a module; byUser says the user did (not a walkthrough).
+  const open = (ref: Ref | null, byUser = true) => {
     setFocus(ref);
-    setMenu(null);
     setSaid(null);
+    if (ref && byUser && live && !opened.current.has(ref)) {
+      opened.current.add(ref);
+      data.gesture("opened", ref, store.get(ref)?.title ?? "").catch(() => false);
+    }
   };
 
-  // « Présente-moi »: Eriphe walks through what is on the screen, the most
-  // important first, one module at a time.
-  const present = () => {
-    const refs = placed.filter((p) => p.weight >= 2 || p.size !== "s").map((p) => p.obj.ref);
-    if (!refs.length) return;
-    setTour({ refs, i: 0 });
-    open(refs[0]);
+  // A walkthrough: Eriphe goes through refs one module at a time, as the
+  // user asked it (workspace_walkthrough).
+  const startTour = (refs: Ref[], has: (r: Ref) => boolean) => {
+    const go = refs.filter(has);
+    if (!go.length) return;
+    setTour({ refs: go, i: 0 });
+    open(go[0], false);
+  };
+  onWalk.current = async (w) => {
+    const refs = w.refs ?? [];
+    if (!refs.length) return startTour(tourOf(placed), () => true);
+    const missing = refs.filter((r) => !store.has(r));
+    let has = (r: Ref) => store.has(r);
+    if (missing.length) {
+      const s = await data.load(boot, missing).catch(() => null);
+      if (s) {
+        setSnap(s);
+        has = (r) => s.store.has(r);
+      }
+    }
+    startTour(refs, has);
   };
   const step = (d: number) => {
     if (!tour) return;
@@ -93,16 +146,18 @@ export function Espace({ boot }: { boot: data.Boot }) {
       return;
     }
     setTour({ ...tour, i });
-    open(tour.refs[i]);
+    open(tour.refs[i], false);
   };
   const stopTour = () => {
     setTour(null);
     open(null);
   };
 
+  // A message goes to Eriphe with the module open, if any: « montre-m'en
+  // moins », « lance une recherche là-dessus ».
   const send = async (msg: string, done: string) => {
-    if (snap?.sample || !boot.live) return say(t("espace.sent.sample"));
-    say((await data.send(msg).catch(() => false)) ? done : t("espace.error"));
+    if (!live) return say(t("espace.sent.sample"));
+    say((await data.send(msg, focus).catch(() => false)) ? done : t("espace.error"));
   };
 
   const act: Act = {
@@ -115,26 +170,10 @@ export function Espace({ boot }: { boot: data.Boot }) {
     ask: (msg) => send(msg, t("espace.ask.sent")),
   };
 
-  // The ⋯ menu: ask Eriphe about the object, or a remark that becomes a rule.
-  const ask = (o: Obj, q: string) => {
-    setMenu(null);
-    send(t("espace.ask.message", titleOf(t, lang, o), q), t("espace.ask.sent"));
-  };
-  // A remark becomes a rule eriphe-core keeps and applies to the queue
-  // (attention_rules.go); the event stream then says to read again.
-  const remember = async (key: string, label: string, delta: number, remark?: string) => {
-    setMenu(null);
-    if (snap?.sample || !boot.live) return say(t("espace.sent.sample"));
-    if (!(await data.addRule({ key, delta, label, remark }).catch(() => null))) return say(t("espace.error"));
-    say(delta > 0 ? t("espace.rule.more", label) : delta <= -5 ? t("espace.rule.never", label) : delta < 0 ? t("espace.rule.less", label) : t("espace.rule.remark"));
-    reload();
-  };
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement).tagName)) return;
       if (e.key === "Escape") {
-        setMenu(null);
         if (tour) stopTour();
         else open(null);
       }
@@ -151,10 +190,11 @@ export function Espace({ boot }: { boot: data.Boot }) {
     const v = input.value.trim();
     if (!v) return;
     input.value = "";
-    if (PRESENT.test(v)) return present();
     send(v, t("espace.sent"));
   };
 
+  const fo = focus ? store.get(focus) : undefined;
+  const hint = fo ? t("espace.input.about", titleOf(t, lang, fo)) : t("espace.input");
   const mode = focus ? "side" : comp.mode;
   const ambient = comp.ambient ?? "calm";
 
@@ -176,12 +216,10 @@ export function Espace({ boot }: { boot: data.Boot }) {
               </>
             ) : focus ? (
               <button className="btn ghost" onClick={() => open(null)}>{t("espace.back")}</button>
-            ) : placed.length > 1 ? (
-              <button className="btn ghost" onClick={present}>{t("espace.present")}</button>
             ) : null}
           </div>
           <form className="eriphe-input" onSubmit={onSubmit}>
-            <input name="text" autoComplete="off" placeholder={t("espace.input")} aria-label={t("espace.input")} />
+            <input name="text" autoComplete="off" placeholder={hint} aria-label={hint} />
           </form>
           <div className="eriphe-links">
             <a href="/">{t("espace.convo")}</a>
@@ -220,18 +258,13 @@ export function Espace({ boot }: { boot: data.Boot }) {
                     exit={{ opacity: 0, scale: 0.92 }}
                     className={`mod size-${p.size} at-c${p.col} at-r${p.row} w-${p.w} h-${p.h} type-${p.obj.kind}${p.focus ? " focus" : ""}${p.related ? " related" : ""}`}
                     onClick={(e) => {
-                      if (p.size === "s" && !p.focus && !(e.target as HTMLElement).closest("button,input,select,a")) open(p.obj.ref);
+                      if (!p.focus && !(e.target as HTMLElement).closest("button,input,select,a")) open(p.obj.ref);
                     }}
                   >
                     <div className="mod-body">
                       <View o={p.obj} size={p.size} full={p.focus} all={all} act={act} />
                     </div>
                     {p.size !== "s" && <p className="why">{p.why || (p.focus ? t("espace.opened") : p.related ? t("espace.related") : "")}</p>}
-                    <button className="more" aria-label={t("espace.menu")} aria-expanded={menu === p.obj.ref}
-                      onClick={(e) => { e.stopPropagation(); setMenu(menu === p.obj.ref ? null : p.obj.ref); }}>
-                      ⋯
-                    </button>
-                    {menu === p.obj.ref && <Menu o={p.obj} source={p.source} onAsk={ask} onRule={remember} />}
                   </motion.article>
                 ))}
               </AnimatePresence>
@@ -251,43 +284,3 @@ export function Espace({ boot }: { boot: data.Boot }) {
   );
 }
 
-// The label of what a rule applies to, from its key (kind, or
-// kind:attribute=value).
-export function keyLabel(t: ReturnType<typeof useWords>["t"], key: string): string {
-  const [kind, rest] = key.split(/:(.*)/s);
-  if (!rest) return t(`espace.key.${kind}`);
-  const [attr, value] = rest.split(/=(.*)/s);
-  if (kind === "mail" && attr === "from") return t("espace.key.mail.domain", value);
-  if (attr === "source") return t("espace.key.source", t(`espace.key.${kind}`), value);
-  return t("espace.key.attr", t(`espace.key.${kind}`), value);
-}
-
-function Menu({ o, source, onAsk, onRule }: { o: Obj; source?: string; onAsk: (o: Obj, q: string) => void; onRule: (key: string, label: string, delta: number, remark?: string) => void }) {
-  const { t } = useWords();
-  const keys = keysOf(o, source);
-  const [k, setK] = useState(0);
-  const [q, setQ] = useState("");
-  const [remark, setRemark] = useState("");
-  const key = keys[k];
-  const label = keyLabel(t, key);
-  return (
-    <div className="menu" onClick={(e) => e.stopPropagation()}>
-      <form onSubmit={(e) => { e.preventDefault(); if (q.trim()) onAsk(o, q.trim()); }}>
-        <input name="ask" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("espace.menu.ask")} aria-label={t("espace.menu.ask")} />
-      </form>
-      {keys.length > 1 && (
-        <select name="scope" value={k} onChange={(e) => setK(Number(e.target.value))} aria-label={t("espace.menu")}>
-          {keys.map((x, i) => <option key={x} value={i}>{t("espace.menu.scope", keyLabel(t, x))}</option>)}
-        </select>
-      )}
-      <div className="menu-row">
-        <button className="btn" onClick={() => onRule(key, label, 1)}>{t("espace.menu.more")}</button>
-        <button className="btn" onClick={() => onRule(key, label, -1)}>{t("espace.menu.less")}</button>
-        <button className="btn" onClick={() => onRule(key, label, -5)}>{t("espace.menu.never")}</button>
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); if (remark.trim()) onRule(key, label, 0, remark.trim()); }}>
-        <input name="remark" value={remark} onChange={(e) => setRemark(e.target.value)} placeholder={t("espace.menu.remark")} aria-label={t("espace.menu.remark")} />
-      </form>
-    </div>
-  );
-}
