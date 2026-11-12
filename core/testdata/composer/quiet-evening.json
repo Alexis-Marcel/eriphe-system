@@ -1,0 +1,15 @@
+{
+  "id": "quiet-evening",
+  "what": "Une soirée calme : presque rien dans la file, Eriphe au milieu.",
+  "now": "2026-11-12 21:05",
+  "moment": "change",
+  "items": [
+    {"ref": "project:patrimoine", "weight": 1, "age_minutes": 40, "title": "Patrimoine", "why": "Le relevé du mois est rangé"}
+  ],
+  "expect": {
+    "back": ["project:patrimoine"],
+    "mode": "center",
+    "fallback_front": true
+  },
+  "answer": {"mode": "center", "eriphe": "Rien ne presse ce soir. Le relevé du mois est rangé.", "items": [], "chips": ["project:patrimoine"]}
+}

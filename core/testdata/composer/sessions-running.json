@@ -1,0 +1,32 @@
+{
+  "id": "sessions-running",
+  "what": "Plusieurs sessions tournent sur plusieurs projets : une attend un choix, une demande un accès, une compilation a échoué, le reste avance seul.",
+  "now": "2026-11-12 15:30",
+  "moment": "change",
+  "items": [
+    {"ref": "session:s-70", "weight": 4, "age_minutes": 8, "title": "Atelier : export PDF", "why": "Attend ton choix entre deux bibliothèques"},
+    {"ref": "session:s-71", "weight": 3, "age_minutes": 3, "title": "Site : formulaire de contact", "why": "Tests en cours, étape 3 sur 5"},
+    {"ref": "session:s-72", "weight": 2, "age_minutes": 15, "title": "Patrimoine : import des relevés", "why": "Lecture du code, étape 1 sur 4"},
+    {"ref": "session:s-73", "weight": 3, "age_minutes": 6, "title": "Site : mise à jour des dépendances", "why": "En pause, attend l'accès en écriture au dépôt"},
+    {"ref": "card:c-95", "weight": 4, "age_minutes": 6, "title": "Écrire dans le dépôt site", "why": "La session s-73 demande l'accès en écriture", "say": "La mise à jour du site a besoin d'écrire dans le dépôt."},
+    {"ref": "task:t-80", "weight": 3, "age_minutes": 2, "title": "Compilation du site", "why": "Échec : une dépendance introuvable"},
+    {"ref": "project:site", "weight": 2, "age_minutes": 60, "title": "Site", "why": "Trois sessions ouvertes cette semaine"},
+    {"ref": "project:atelier", "weight": 2, "age_minutes": 75, "title": "Atelier", "why": "Une version prévue vendredi"},
+    {"ref": "mail:m-401", "weight": 2, "age_minutes": 20, "title": "Retour sur la maquette", "why": "Un client répond sur la maquette du site"}
+  ],
+  "expect": {
+    "front": ["session:s-70", "card:c-95"],
+    "back": ["project:atelier"],
+    "mode": "side",
+    "fallback_front": true
+  },
+  "answer": {"mode": "side", "eriphe": "Deux sessions t'attendent : un choix pour l'export PDF et un accès pour le site. La compilation du site a échoué.",
+    "items": [
+      {"ref": "session:s-70", "weight": 4, "why": "Un choix de bibliothèque à faire"},
+      {"ref": "card:c-95", "weight": 4, "why": "Débloque la mise à jour du site"},
+      {"ref": "task:t-80", "weight": 3, "why": "Dépendance introuvable"},
+      {"ref": "session:s-71", "weight": 2, "why": "Tests en cours"},
+      {"ref": "session:s-73", "weight": 2, "why": "En pause, attend l'accès"}
+    ],
+    "chips": ["session:s-72", "mail:m-401", "project:site", "project:atelier"]}
+}
