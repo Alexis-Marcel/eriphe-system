@@ -228,6 +228,12 @@ func (w *web) sameOrigin(r *http.Request) bool {
 	return true
 }
 
+// answersStatus tells a request a script makes, the stream of events or
+// the JSON API: refused with a status, never sent to a page.
+func answersStatus(r *http.Request) bool {
+	return r.URL.Path == "/events" || strings.HasPrefix(r.URL.Path, "/api/")
+}
+
 type authed func(http.ResponseWriter, *http.Request, *session)
 
 // auth lets only the owner in, as the sign-in mode says (web_signin.go),
@@ -238,10 +244,14 @@ func (w *web) auth(h authed) http.Handler {
 		s := w.session(r)
 		switch v, via := w.decide(r, s, si); v {
 		case toSetup:
+			if answersStatus(r) {
+				http.Error(rw, "unauthorized", http.StatusUnauthorized)
+				return
+			}
 			redirect(rw, r, "/setup")
 			return
 		case toLogin:
-			if r.URL.Path == "/events" || strings.HasPrefix(r.URL.Path, "/api/") {
+			if answersStatus(r) {
 				http.Error(rw, "unauthorized", http.StatusUnauthorized)
 				return
 			}
