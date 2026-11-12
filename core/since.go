@@ -49,7 +49,7 @@ const (
 	feedTextMax    = 160
 	feedDefault    = 50
 	feedMax        = 200
-	lastBriefKey   = "last_brief" // when the last brief was given, unix; a brief watch writes it (watch_tick.go)
+	lastBriefKey   = "last_brief" // when the last brief was given, unix; the release on return writes it (attention.go)
 	sinceAway      = "away"
 	sinceLastBrief = "last_brief"
 	taintSince     = "since.external"

@@ -450,6 +450,10 @@ func (c *core) cardProposed(kind string, id int64) {
 // session:<id>, skill:<name>). A card already shown and still waiting is
 // not shown twice. The brain is not woken: it reads the open items at its
 // next turn, and nothing it does waits on the card.
+//
+// Only a card a task or a session waits on (weight 4) is shown at once; any
+// other is held by the queue, with text, for the next breakpoint
+// (attentionBreak), which shows it under the message it delivers.
 func (c *core) cardNow(kind string, id int64, text, source string) {
 	p := c.proposalOf(kind, id)
 	if !p.Pending {
@@ -461,18 +465,28 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 	if shown > 0 {
 		return
 	}
+	now := time.Now().Unix()
+	if cardWeight(kind) < weightBlocksATask {
+		c.cardAgain(p)
+		c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)
+			ON CONFLICT (ref) DO UPDATE SET turn = 0 WHERE seq = 0`, ref, kind, p.Text("fr"), now)
+		if x, err := c.cardsWhere(`ref = ?`, ref); err == nil && len(x) == 1 {
+			c.attendCard(x[0], p, text, source)
+		}
+		c.bump()
+		return
+	}
 	seq, err := c.store.addMessage(roleBrain, text, true)
 	if err != nil {
 		log.Printf("cards: %s: %v", ref, err)
 		return
 	}
-	now := time.Now().Unix()
 	c.cardAgain(p)
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, seq, text, created, attached) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET seq = excluded.seq, turn = 0, attached = excluded.attached WHERE seq = 0`,
 		ref, kind, seq, p.Text("fr"), now, now)
 	if x, err := c.cardsWhere(`ref = ?`, ref); err == nil && len(x) == 1 {
-		c.attendCard(x[0], p, source)
+		c.attendCard(x[0], p, text, source)
 	}
 	c.bump()
 }
@@ -510,7 +524,7 @@ func (c *core) attachTurnCards(seq int) {
 	for _, x := range xs {
 		x.Seq = seq
 		if x, p := c.liveCard(x); x.State == cardPending {
-			c.attendCard(x, p, byBrain)
+			c.attendCard(x, p, "", byBrain)
 		}
 	}
 }

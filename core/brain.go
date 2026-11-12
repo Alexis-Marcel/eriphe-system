@@ -415,7 +415,8 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 			}
 		}
 		if e.Type == "turn_end" {
-			c.cardsTurnEnded() // what it proposed after its last message
+			c.cardsTurnEnded()                  // what it proposed after its last message
+			c.attentionAnswered(c.notifyTime()) // its answer to the user done: a breakpoint (attention.go)
 		}
 		if e.Type == "turn_end" && failed != "" {
 			c.brainFailed(failed, "turn")
