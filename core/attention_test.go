@@ -2,6 +2,7 @@ package main
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -95,5 +96,168 @@ func TestAttentionWeightByKind(t *testing.T) {
 	}
 	if attentionOf(c, cardItemRef(x.ID)) != nil || c.attentionBlock() != "" {
 		t.Error("a card decided on its page stays in the queue")
+	}
+}
+
+func brainMessages(t *testing.T, c *core) []Message {
+	t.Helper()
+	msgs, err := c.store.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE role = ? ORDER BY seq`, roleBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return msgs
+}
+
+// Below weight 4, an item is held until a breakpoint, which delivers what
+// is held in one message, the heaviest first; weight 4 and 5 are delivered
+// as they enter. A breakpoint with nothing held does nothing.
+func TestAttentionHeldUntilBreakpoint(t *testing.T) {
+	c, _, now := pollCore(t)
+	c.attend(attentionItem{Ref: "mail:1", Weight: 1, Why: "a newsletter", Say: "Une lettre d'information.", Source: "skill:mail", Time: *now})
+	c.attend(attentionItem{Ref: "mail:2", Weight: 3, Why: "a bill due today", Say: "Ta facture est due aujourd'hui.", Source: "skill:mail", Time: *now})
+	c.attend(attentionItem{Ref: "agenda:2026-11-04", Weight: 2, Why: "a quiet day", Say: "Journée calme.", Source: "skill:agenda", Time: *now})
+	c.attend(attentionItem{Ref: "session:3", Weight: 4, Why: "the plan waits", Source: "session:3", Time: *now})
+	c.attend(attentionItem{Ref: "site:down", Weight: 5, Why: "the site is down", Source: "skill:prod", Time: *now})
+	for ref, held := range map[string]bool{"mail:1": true, "mail:2": true, "agenda:2026-11-04": true, "session:3": false, "site:down": false} {
+		if it := attentionOf(c, ref); it == nil || it.Held != held {
+			t.Errorf("%s: %+v, want held %v", ref, it, held)
+		}
+	}
+	if it := attentionOf(c, "mail:2"); !it.Due.Equal(now.Add(attentionCap3).Truncate(time.Second)) {
+		t.Errorf("a weight 3 item's cap: %v", it.Due)
+	}
+	if it := attentionOf(c, "mail:1"); !it.Due.IsZero() {
+		t.Errorf("a weight 1 item waits for a breakpoint, no time: %v", it.Due)
+	}
+	if b := c.attentionBlock(); !strings.Contains(b, "mail:2 (poids 3, skill:mail) : a bill due today (retenu") {
+		t.Errorf("the brain does not read the held item as held: %q", b)
+	}
+	if len(brainMessages(t, c)) != 0 {
+		t.Fatal("a held item was said")
+	}
+	if n := c.attentionBreak(breakAnswer, *now); n != 3 {
+		t.Fatalf("delivered %d", n)
+	}
+	msgs := brainMessages(t, c)
+	if len(msgs) != 1 {
+		t.Fatalf("messages %+v", msgs)
+	}
+	bill, day, letter := strings.Index(msgs[0].Text, "facture"), strings.Index(msgs[0].Text, "calme"), strings.Index(msgs[0].Text, "lettre")
+	if !strings.HasPrefix(msgs[0].Text, tr("fr", "attention.release")) || bill < 0 || !(bill < day && day < letter) {
+		t.Errorf("not in weight order: %q", msgs[0].Text)
+	}
+	for _, it := range c.attentionOpen() {
+		if it.Held {
+			t.Errorf("still held: %+v", it)
+		}
+	}
+	if n := c.attentionBreak(breakReturn, *now); n != 0 || len(brainMessages(t, c)) != 1 {
+		t.Error("a breakpoint with nothing held said something")
+	}
+	// A delivered item merged with a new one stays delivered.
+	c.attend(attentionItem{Ref: "mail:2", Weight: 2, Why: "the bill, again", Source: "skill:mail", Time: *now})
+	if it := attentionOf(c, "mail:2"); it.Held || it.Weight != 3 {
+		t.Errorf("merged %+v", it)
+	}
+}
+
+// Nothing waits past its cap: a weight 3 item goes two hours after it
+// entered, breakpoint or not; a lighter one waits for a breakpoint.
+func TestAttentionCap(t *testing.T) {
+	c, _, now := pollCore(t)
+	c.attend(attentionItem{Ref: "mail:old", Weight: 3, Why: "a bill", Say: "Ta facture.", Source: "skill:mail", Time: now.Add(-3 * time.Hour)})
+	c.attend(attentionItem{Ref: "mail:new", Weight: 3, Why: "a parcel", Say: "Ton colis.", Source: "skill:mail", Time: now.Add(-time.Hour)})
+	c.attend(attentionItem{Ref: "mail:glance", Weight: 2, Why: "a newsletter", Source: "skill:mail", Time: now.Add(-10 * time.Hour)})
+	if n := c.attentionBreak(breakCap, *now); n != 1 {
+		t.Fatalf("delivered %d at the cap", n)
+	}
+	if msgs := brainMessages(t, c); len(msgs) != 1 || msgs[0].Text != "Ta facture." {
+		t.Errorf("messages %+v", msgs)
+	}
+	if !attentionOf(c, "mail:new").Held || !attentionOf(c, "mail:glance").Held || attentionOf(c, "mail:old").Held {
+		t.Errorf("queue %+v", c.attentionOpen())
+	}
+	if n := c.attentionBreak(breakCap, now.Add(time.Hour)); n != 1 || !attentionOf(c, "mail:glance").Held {
+		t.Errorf("the second cap delivered %d", n)
+	}
+}
+
+// The end of the brain's answer to a user message is a breakpoint, once:
+// a turn that answers no new message (a wake) is not.
+func TestAttentionAnswerBreakpoint(t *testing.T) {
+	c, _, now := pollCore(t)
+	c.attend(attentionItem{Ref: "mail:1", Weight: 3, Why: "a bill", Say: "Ta facture.", Source: "skill:mail", Time: *now})
+	ownerSays(c, "Salut")
+	brainSays(c, "Salut Sam.")
+	c.attentionAnswered(*now)
+	if msgs := brainMessages(t, c); len(msgs) != 2 || msgs[1].Text != "Ta facture." {
+		t.Fatalf("messages %+v", msgs)
+	}
+	c.attend(attentionItem{Ref: "mail:2", Weight: 3, Why: "a parcel", Say: "Ton colis.", Source: "skill:mail", Time: *now})
+	c.attentionAnswered(*now) // a wake's turn
+	if !attentionOf(c, "mail:2").Held {
+		t.Error("a turn that answered no new message was a breakpoint")
+	}
+}
+
+// A notification held for the brief waits in the queue for the user's
+// return, not for another breakpoint; the return tells it, as the brief.
+func TestAttentionReturnTellsTheBrief(t *testing.T) {
+	c, _, now := pollCore(t)
+	c.subscribeEvents(c.attentionOnEvent)
+	n, err := c.notify(&notification{Text: "La prod a redémarré cette nuit.", Why: "Skill « prod »", Ref: "skill:prod", Source: notifyFromSkill},
+		notifyItem{Level: levelBrief, Ref: "skill:prod"})
+	if err != nil || !n.Held {
+		t.Fatalf("%+v %v", n, err)
+	}
+	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || !it.Held || it.Weight != weightHeldNote || it.Source != "skill:prod" {
+		t.Fatalf("item %+v", it)
+	}
+	if c.attentionBreak(breakAnswer, *now) != 0 || c.attentionBreak(breakSession, *now) != 0 {
+		t.Fatal("the brief was told before the return")
+	}
+	say := func(when time.Time) {
+		seq := ownerSays(c, "salut")
+		c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, when.Unix(), seq)
+	}
+	say(now.Add(-5 * time.Hour))
+	say(now.Add(-2 * time.Minute))
+	c.tickReturned(*now)
+	msgs := brainMessages(t, c)
+	if len(msgs) != 1 || !strings.HasPrefix(msgs[0].Text, tr("fr", "attention.brief")) || !strings.Contains(msgs[0].Text, "redémarré") {
+		t.Fatalf("brief %+v", msgs)
+	}
+	if n, _ = c.notificationByID(n.ID); n.Held || n.Msg != msgs[0].Seq {
+		t.Errorf("notification %+v", n)
+	}
+	if attentionOf(c, noteItemRef(n.ID)) != nil || c.store.get(lastBriefKey) != strconv.FormatInt(now.Unix(), 10) {
+		t.Error("the brief is not kept as given")
+	}
+	// « Pas maintenant » holds it again for the next brief.
+	if _, err := c.notificationFeedback(n.ID, "later"); err != nil {
+		t.Fatal(err)
+	}
+	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || !it.Held {
+		t.Errorf("not held again: %+v", it)
+	}
+}
+
+// A session's end is a breakpoint while the user is there; away, what is
+// held waits for their return.
+func TestAttentionSessionEndBreakpoint(t *testing.T) {
+	c, _, now := pollCore(t)
+	c.subscribeEvents(c.attentionOnEvent)
+	seq := ownerSays(c, "Lance la session")
+	c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, now.Add(-3*time.Hour).Unix(), seq)
+	c.attend(attentionItem{Ref: "mail:1", Weight: 2, Why: "a newsletter", Say: "Une lettre.", Source: "skill:mail", Time: *now})
+	c.emitLogged(journalEvent{Kind: evSessionEnded, Key: "session:1", Source: "session"})
+	if !attentionOf(c, "mail:1").Held {
+		t.Fatal("released while the user is away")
+	}
+	seq = ownerSays(c, "Me revoilà")
+	c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, now.Add(-time.Minute).Unix(), seq)
+	c.emitLogged(journalEvent{Kind: evSessionEnded, Key: "session:2", Source: "session"})
+	if attentionOf(c, "mail:1").Held {
+		t.Fatal("not released at the session's end")
 	}
 }

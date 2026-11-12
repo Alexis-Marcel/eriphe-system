@@ -209,8 +209,9 @@ func TestSkillRunUrgent(t *testing.T) {
 	}
 }
 
-// A run whose message is held for the brief still shows its calls' card at
-// once, under a message that says only the card, not the notification.
+// A run whose message is held for the brief has its calls' card held for
+// the next breakpoint, where it comes under a message that says only the
+// card; the notification waits for the user's return, the brief.
 func TestSkillRunCallsCardHeldForBrief(t *testing.T) {
 	c, now := skillCore(t)
 	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ntools: [monitor]\n---\nEnquête.\n")
@@ -226,9 +227,30 @@ func TestSkillRunCallsCardHeldForBrief(t *testing.T) {
 		t.Fatalf("notifications %+v", ns)
 	}
 	x := cardOf(t, c, cardRunCalls, r.ID)
-	shownAtOnce(t, c, x, weightProposal)
+	if it := attentionOf(c, cardItemRef(x.ID)); x.Seq != 0 || it == nil || !it.Held || it.Weight != weightProposal || it.Source != "skill:prod" {
+		t.Fatalf("card %+v, item %+v: not held", x, it)
+	}
+	ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill)
+	if it := attentionOf(c, noteItemRef(ns[0].ID)); it == nil || !it.Held || it.Weight != weightHeldNote {
+		t.Fatalf("notification item %+v", it)
+	}
+	// The brain's answer to a message of Sam's: the card comes.
+	ownerSays(c, "Quoi de neuf ?")
+	c.attentionAnswered(*now)
+	x = cardOf(t, c, cardRunCalls, r.ID)
+	if it := attentionOf(c, cardItemRef(x.ID)); x.Seq <= 0 || it == nil || it.Held {
+		t.Fatalf("card %+v, item %+v: not shown", x, it)
+	}
 	msgs, _ := c.store.messagesAfter(x.Seq-1, 1)
-	if strings.Contains(msgs[0].Text, "5xx") || !strings.Contains(msgs[0].Text, "prod") {
+	if msgs[0].Role != roleBrain || strings.Contains(msgs[0].Text, "5xx") || !strings.Contains(msgs[0].Text, "prod") {
 		t.Errorf("message %q", msgs[0].Text)
+	}
+	// Sam's return: the brief tells the notification.
+	if c.attentionBreak(breakReturn, *now) != 1 {
+		t.Fatal("the brief is not told")
+	}
+	last, _ := c.store.messagesAfter(x.Seq, 5)
+	if len(last) != 1 || !strings.Contains(last[0].Text, "5xx") {
+		t.Errorf("brief %+v", last)
 	}
 }

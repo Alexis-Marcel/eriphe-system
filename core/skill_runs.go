@@ -579,9 +579,9 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 		c.attend(runSignal(out["id"], text, urgent, level, source, tainted))
 	}
 	if calls > 0 && (err != nil || out["outcome"] != levelNow) {
-		// Its message is held for the brief, or not sent: the card is
-		// shown now, with a message of its own that does not tell the
-		// notification.
+		// Its message is held for the brief, or not sent: the card comes
+		// at the next breakpoint (attention.go), with a message of its own
+		// that does not tell the notification; the brief tells it.
 		c.cardNow(cardRunCalls, r.ID, fmt.Sprintf(tr("fr", "card.runcalls"), r.Skill, calls), "skill:"+r.Skill)
 	}
 }
