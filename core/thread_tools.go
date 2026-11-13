@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -93,8 +95,52 @@ func (c *core) threadView(id int64, lines int) (threadView, error) {
 	return v, nil
 }
 
+// sameSubject is why a thread opened on a subject that had one is that
+// one again: a matter has one thread.
+const sameSubject = "même sujet"
+
+// openThreadOnce opens a thread for the brain, one per matter: a light
+// one needs its subject, and a subject that has a thread already gives
+// that thread back (reopened light if it ended) rather than a second one;
+// again says so. A led one on the subject of an active thread is refused:
+// that thread's plan changes instead.
+func (c *core) openThreadOnce(in threadIn, taint []string) (s Thread, again string, err error) {
+	led := strings.EqualFold(strings.TrimSpace(in.Mode), modeLed) || (strings.TrimSpace(in.Mode) == "" && len(in.Steps) > 0)
+	subject := strings.TrimSpace(in.Subject)
+	if subject == "" {
+		if !led {
+			return s, "", errors.New("subject is needed: the ref of the matter, to find its thread again (pr:owner/repo#12, project:site, brand:name)")
+		}
+		s, err = c.openThread(in, taint, byBrain)
+		return s, "", err
+	}
+	found, err := c.findThreads(subject, "", true, 1) // active first, then the latest
+	if err != nil {
+		return s, "", err
+	}
+	if len(found) == 0 {
+		s, err = c.openThread(in, taint, byBrain)
+		return s, "", err
+	}
+	old := found[0]
+	switch {
+	case led && old.active():
+		return s, "", fmt.Errorf("thread %d « %s » follows %s already: change its plan (add_step, amend_thread) rather than open another", old.ID, old.Title, old.Subject)
+	case led:
+		s, err = c.openThread(in, taint, byBrain)
+		return s, "", err
+	case old.active():
+		return old, fmt.Sprintf("Not a new thread: thread %d « %s » follows this subject already, and it is the one to go on with (its steps: read_thread).", old.ID, old.Title), nil
+	}
+	s, err = c.reopenThread(old.ID, sameSubject, byBrain)
+	if err != nil {
+		return s, "", err
+	}
+	return s, fmt.Sprintf("Not a new thread: thread %d « %s » followed this subject and had ended; it is reopened, light, with its history (read_thread).", s.ID, s.Title), nil
+}
+
 func registerThreadTools(s *mcp.Server, c *core) {
-	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). Look for one first with find_thread: a matter has one thread. Light by default (no steps): it opens at once, with no card and no budget, and you hold it. Led (with steps): long autonomous work of several steps toward the goal, not only code; give done_when (what must be true at the end), a budget of minutes, and the plan: steps with a key, a title, a kind (task, call, user, choice, approval, check, deadline: as add_step's) and the keys of the steps they come after. Independent steps run in parallel, never two writing the same repository branch or folder; each task step is given the outputs of the steps it comes after. "+threadNote+" For one task alone, use run_task.",
+	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). A matter has one thread: give its subject (required for a light one); a subject that has a thread already gives that thread back, reopened if it ended, instead of a second one. Light by default (no steps): it opens at once, with no card and no budget, and you hold it. Led (with steps): long autonomous work of several steps toward the goal, not only code; give done_when (what must be true at the end), a budget of minutes, and the plan: steps with a key, a title, a kind (task, call, user, choice, approval, check, deadline: as add_step's) and the keys of the steps they come after. Independent steps run in parallel, never two writing the same repository branch or folder; each task step is given the outputs of the steps it comes after. "+threadNote+" For one task alone, use run_task.",
 		func(ctx context.Context, in threadIn) (map[string]any, error) {
 			for _, st := range in.Steps {
 				if st.Kind == "" || st.runsTask() {
@@ -103,18 +149,21 @@ func registerThreadTools(s *mcp.Server, c *core) {
 					}
 				}
 			}
-			s, err := c.openThread(in, c.turnTaint(), byBrain)
+			s, again, err := c.openThreadOnce(in, c.turnTaint())
 			if err != nil {
 				return nil, err
 			}
 			c.turnThread(s.ID) // what the turn raises next is the thread's (thread_turn.go)
+			if again != "" {
+				return map[string]any{"thread": s, "note": again}, nil
+			}
 			if !s.led() {
 				return map[string]any{"thread": s, "note": "Open. Close it with close_thread only once its goal is reached."}, nil
 			}
 			return map[string]any{"thread": s, "note": "Only proposed: " + threadNote + " Never say it started before the user approves."}, nil
 		})
 
-	tool(s, "find_thread", "Find threads: by the subject they follow (its ref) or by words; without either, the open and waiting ones. Ended ones are listed too (done, dropped), to reopen one when its subject comes back.",
+	tool(s, "find_thread", "Find threads: by words of their title, goal, subject or summary (when you do not know the subject's ref), or by the subject they follow; without either, the open and waiting ones. Ended ones are listed too (done, dropped), to reopen one when its subject comes back.",
 		func(ctx context.Context, in findThreadIn) (map[string]any, error) {
 			ss, err := c.findThreads(in.Subject, in.Text, in.All, 30)
 			return map[string]any{"threads": ss}, err

@@ -370,8 +370,8 @@ func TestBrainPromptThreads(t *testing.T) {
 	}
 	section := prompt[start:end]
 	for _, want := range []string{
-		"**Quand en ouvrir un.**", "`find_thread` par son sujet d'abord", "reste du texte, sans thread",
-		"une étape `call` de fusion", "une étape `user`", "propose seulement le `check`",
+		"**Quand en ouvrir un.**", "`open_thread` avec son sujet", "reste du texte, sans thread",
+		"une étape `call` de fusion", "une étape `user`", "seulement le `check`, rien d'autre", "devient une étape `task` de ce thread", "`thread` `none`",
 		"`workspace_focus` avec `thread-<id>`", "**sans** `workspace_focus`",
 		"aucune question de toi-même", "`[rien]`", "son **but** est atteint",
 		"se range seul dans sa chronologie", "Sa réponse sur une de ces cartes",

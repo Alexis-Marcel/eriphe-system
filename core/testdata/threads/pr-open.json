@@ -1,6 +1,6 @@
 {
   "id": "pr-open",
-  "what": "Où en est une PR pas encore fusionnée, demandé depuis l'espace : un thread léger ouvert (après l'avoir cherché) avec un sujet, sa surface au centre avec la partie du cerveau, une étape de fusion dont la carte est le oui, une ligne de réponse ; la fusion faite, l'étape de Sam (il déploie lui-même) puis la vérification, sans clore.",
+  "what": "Où en est une PR pas encore fusionnée, demandé depuis l'espace : un thread léger ouvert avec son sujet (le code rend celui du sujet s'il en a un), sa surface au centre avec la partie du cerveau, une étape de fusion dont la carte est le oui, une ligne de réponse ; la fusion faite, l'étape de Sam (il déploie lui-même) puis la vérification, sans clore.",
   "lang": "fr",
   "memory": [
     "Sam déploie lui-même la supervision après une fusion (« make deploy » sur son serveur).",
@@ -30,7 +30,6 @@
   "expect": {"subject": ["42"], "merge": "mcp__forge__merge"},
   "answer": {
     "calls": [
-      {"tool": "find_thread", "args": {"subject": "pr:sam/supervision#42"}},
       {"tool": "open_thread", "args": {"title": "PR 42 · règles d'alerte", "goal": "Les règles d'alerte de latence sont fusionnées, déployées et actives.", "subject": "pr:sam/supervision#42"}},
       {"tool": "surface_write", "args": {"id": "thread-7", "title": "PR 42 · règles d'alerte",
         "data": {"etat": "Ouverte, prête à fusionner",

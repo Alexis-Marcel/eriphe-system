@@ -917,8 +917,11 @@ A thread has a title, a goal (its real outcome), a **subject** (a ref to find it
 `dropped`), a summary, and its times. Its **mode** is one of two:
 
 - **Light** (the default, without steps): held by the brain. `open_thread` opens it at once, with no
-  card and no budget; `find_thread` finds it again by its subject (the same ref, any case) or by
-  words of its title, goal, subject or summary, the ended ones included; `close_thread` closes it
+  card and no budget, and needs its subject. **One thread a subject** (`openThreadOnce`): a subject
+  that has a thread already (the same ref, any case) gives that thread back instead of a second one,
+  reopened light (why « même sujet ») if it ended, and the result says so; a led open on the subject
+  of an active thread is refused, naming it. `find_thread` finds threads by words of their title,
+  goal, subject or summary, or by their subject, the ended ones included; `close_thread` closes it
   only on its goal, with how it was reached as its summary (`done`); `stop_thread` drops it;
   `reopen_thread` opens it again, light, when its subject comes back, its steps and log kept.
 - **Led** (with steps): long autonomous work of several steps toward the goal, not only code: an
@@ -981,10 +984,18 @@ are that thread's and show in its timeline; while one waits, the thread's surfac
 moves the thread (`linkedCardMoved`). How a call kept on a linked card went (run on a yes, or
 refused) comes back as that thread's event (`callToBrain`: `[thread N « title »] …`, marked
 `thread_msg:<seq>`), so the turn that reads it is about the thread. A new delivery
-(or a heartbeat) starts about no thread; a thread tool on an id that is no thread changes nothing. The prompt
+(or a heartbeat) starts about no thread; a thread tool on an id that is no thread changes nothing.
+`run_task` in a turn about a light, active thread (`taskOfThread`) is a `task` step of that thread
+(the same prompt, title, agent, resources and contract; key `task`, `task-2`…), so the thread's
+surface follows it and its end comes back as the thread's event; its result gives the thread, the
+step and its task. What `run_task` refuses of the task itself (no prompt, an agent or a resource
+that is none) is refused before any step is born; a task that still cannot start leaves its step
+blocked and the call refused. It stays a task of its own with `thread: none`, a `surface` to fill or a `node`
+named, in a turn about no thread or about one led or ended, or when the thread cannot take one more
+step. The prompt
 (`brain-prompt.md`, « Les threads ») says when the brain opens or resumes a thread (a question about
-a matter, a request of more than one step, an alert worth following: `find_thread` by subject
-first), how its steps grow from what is found, when its surface `thread-<id>` takes the stage
+a matter, a request of more than one step, an alert worth following: `open_thread` with its
+subject), how its steps grow from what is found, when its surface `thread-<id>` takes the stage
 (« where does it stand », from the workspace: `workspace_focus`) and when it opens on the side
 (« launch », « while I… »), and that a wake turn updates the thread without asking the user.
 
