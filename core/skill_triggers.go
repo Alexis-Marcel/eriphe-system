@@ -17,6 +17,9 @@ import (
 //	when: monitor.received key=getout        with filters: the event's key, or a payload field
 //	when: monitor.failed, monitor.recovered key=getout-prod   several kinds, the same filters
 //	when: time weekdays 08:00                at times of day (rule_schedule.go's schedules)
+//	when: time daily 06:00; user.returned away_minutes>=180
+//	                                         both: a schedule, then by ; events (and their filters)
+//	when: user.returned away_minutes>=180    a payload number compared: >= or <=
 //	every: 15m                               batch: at most one task per period, with every event since
 //	model: haiku                             the agent its tasks run with (Settings → Agents)
 //	tools: [mail, calendar]                  the catalog servers its tasks are lent
@@ -44,7 +47,9 @@ type skillTrigger struct {
 	Kind     string            // an event kind (the first), or whenTime
 	Kinds    []string          // every event kind it runs on
 	Filters  map[string]string // key=…, or a payload field=value
-	Schedule *recurrence       // for whenTime
+	Bounds   []filterBound     // a payload number compared: field>=n, field<=n
+	Schedule *recurrence       // its times, alone (whenTime) or besides its events
+	At       string            // the schedule as written, without time
 	When     string            // as written
 	Every    time.Duration     // 0: at once
 	Model    string
@@ -53,10 +58,34 @@ type skillTrigger struct {
 	Urgent   string // the fixed text of an urgent run (skill_cards.go)
 }
 
+// filterBound is a filter on a number of the event's payload.
+type filterBound struct {
+	Field string
+	Min   bool // >=; <= otherwise
+	N     float64
+}
+
 var (
 	skillEveryRe  = regexp.MustCompile(`^(\d{1,4})\s*(m|min|h|d|j)$`)
 	filterFieldRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,30}$`)
+	boundRe       = regexp.MustCompile(`^([a-z][a-z0-9_]{0,30})(>=|<=)(-?\d{1,9}(?:\.\d{1,6})?)$`)
 )
+
+// splitWhen cuts a when into its schedule and its events: "time …; kinds
+// filters". A when that is not both, as a schedule holding ; is, stays whole.
+func splitWhen(when string) (at, events string) {
+	first, rest, ok := strings.Cut(when, ";")
+	first, rest = strings.TrimSpace(first), strings.TrimSpace(rest)
+	if !ok || strings.Contains(rest, ";") {
+		return "", when
+	}
+	words := strings.Fields(first)
+	next := strings.Fields(rest)
+	if len(words) == 0 || words[0] != whenTime || len(next) == 0 || next[0] == whenTime || !strings.Contains(next[0], ".") {
+		return "", when
+	}
+	return strings.TrimSpace(strings.TrimPrefix(first, whenTime)), rest
+}
 
 // parseSkillTrigger reads a manifest's trigger keys; nil when it has none.
 // The keys other than when need it: a skill without when runs only when
@@ -71,7 +100,15 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 		return nil, nil
 	}
 	st := &skillTrigger{When: m.When, Model: strings.TrimSpace(m.Model)}
-	words := strings.Fields(m.When)
+	at, events := splitWhen(m.When)
+	if at != "" {
+		r, err := parseSchedule(at)
+		if err != nil {
+			return nil, skillErr("skills.err.when", m.When)
+		}
+		st.Schedule, st.At = &r, at
+	}
+	words := strings.Fields(events)
 	if words[0] != whenTime {
 		// The event kinds come first, by commas or spaces, then the filters.
 		var kinds []string
@@ -96,11 +133,16 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 		if err != nil {
 			return nil, skillErr("skills.err.when", m.When)
 		}
-		st.Schedule = &r
+		st.Schedule, st.At = &r, strings.Join(words[1:], " ")
 	case slices.ContainsFunc(st.Kinds, func(k string) bool { return !eventKindRe.MatchString(k) || k == whenTime }):
 		return nil, skillErr("skills.err.when", m.When)
 	default:
 		for _, w := range words[1:] {
+			if b := boundRe.FindStringSubmatch(w); b != nil {
+				n, _ := strconv.ParseFloat(b[3], 64)
+				st.Bounds = append(st.Bounds, filterBound{Field: b[1], Min: b[2] == ">=", N: n})
+				continue
+			}
 			k, v, ok := strings.Cut(w, "=")
 			if !ok || !filterFieldRe.MatchString(k) || v == "" {
 				return nil, skillErr("skills.err.when", m.When)
@@ -193,16 +235,28 @@ func (st *skillTrigger) matches(e journalEvent) bool {
 			return false
 		}
 	}
+	for _, b := range st.Bounds {
+		v, ok := e.Payload[b.Field]
+		if !ok {
+			return false
+		}
+		n, err := strconv.ParseFloat(fmt.Sprint(v), 64)
+		if err != nil || (b.Min && n < b.N) || (!b.Min && n > b.N) {
+			return false
+		}
+	}
 	return true
 }
 
 // Text says the trigger in words, for the skill's page and its card.
 func (st *skillTrigger) Text(lang string) string {
 	var parts []string
-	if st.Kind == whenTime {
-		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.time"), strings.TrimSpace(strings.TrimPrefix(st.When, whenTime))))
-	} else {
-		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.event"), st.When))
+	if st.Schedule != nil {
+		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.time"), st.At))
+	}
+	if st.Kind != whenTime {
+		_, events := splitWhen(st.When)
+		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.event"), events))
 	}
 	if st.Every > 0 {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.every"), span(st.Every)))

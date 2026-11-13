@@ -129,6 +129,7 @@ func (c *core) skillManifestOf(sha string) (skillManifest, bool) {
 // runSkills is the triggered skills' loop.
 func (c *core) runSkills(ctx context.Context) {
 	c.skillRuns.kick = make(chan struct{}, 1)
+	c.installDefaultSkills() // default_skills.go
 	c.subscribeEvents(c.queueSkillEvent)
 	tick := time.NewTicker(skillsTickEvery)
 	defer tick.Stop()
@@ -197,8 +198,8 @@ func (c *core) skillQueue(skill string) ([]queuedEvent, error) {
 // tickSkills starts the runs that are due.
 func (c *core) tickSkills(ctx context.Context, now time.Time) {
 	for _, sk := range c.triggeredSkills() {
-		if sk.Trigger.Kind == whenTime {
-			c.tickTimeSkill(ctx, sk, now) // its queue holds its surfaces' surface.stale only
+		if sk.Trigger.Schedule != nil {
+			c.tickTimeSkill(ctx, sk, now) // a time trigger's queue holds its surfaces' surface.stale only
 		}
 		q, err := c.skillQueue(sk.Name)
 		if err != nil || len(q) == 0 {
@@ -421,8 +422,7 @@ func skillRunPrompt(sk triggeredSkill, events []journalEvent, now time.Time) str
 		b.WriteString(strings.TrimSpace(s) + "\n\n")
 	}
 	if len(events) == 0 {
-		fmt.Fprintf(&b, "[déclenchement : horaire « %s », %s]\n", strings.TrimSpace(strings.TrimPrefix(sk.Trigger.When, whenTime)),
-			now.Format("2006-01-02 15:04"))
+		fmt.Fprintf(&b, "[déclenchement : horaire « %s », %s]\n", sk.Trigger.At, now.Format("2006-01-02 15:04"))
 		return b.String()
 	}
 	b.WriteString(eventsText(events))
