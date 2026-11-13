@@ -3383,6 +3383,18 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   address only (the accesses' dialer: never its own network, the LAN or the cloud's metadata),
   without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
   `nosniff`, a sandbox CSP and 10 minutes of private cache.
+- **Captured pages** (`surfaces_capture.go`, #470): most sites refuse being framed, so a task lent
+  `eriphe-workspace` shows a page as an image. `eriphe-capture <url> <surface>` (worker/base)
+  captures it in the task's container and posts the PNG to its node (`ERIPHE_MEDIA_URL`, task
+  secret), which relays it to `POST /v1/node/tasks/{id}/media?surface=<id>` (node secret).
+  eriphe-core checks the task (on that node, running, its grant covering `surface_write`) and the
+  surface (its delegated one only, else one it may write), sniffs a PNG or a JPEG only, 5 MiB at
+  most, 10 per surface, keeps it under `surface-media/<random id>` (table `surface_media`) and
+  answers `{src: "media:med_…"}`; the bytes never go through a model. The task writes `src` as an
+  `Image`'s `url`, with the page's address as a `Link`; `surfaceView` signs it like any media address, even on a tainted surface (it
+  carries nothing out), but only on the surface it was given for, and `/espace/media` reads it
+  from disk with the same headers. The page's CSP is unchanged. It goes with its surface
+  (`surfaceRemove`), and one its surface no longer shows goes after an hour (`tickSurfaces`).
 - Table `surfaces` (id, title, author, components, sources, data, data_at, refresh, lifetime,
   weight, why, tainted, look: its sources' last reads, the user's last action and the last error for its author, next_at, created, updated).
 

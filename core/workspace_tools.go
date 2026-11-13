@@ -110,6 +110,7 @@ func surfaceWriteHelp() string {
 		"Fill it live (sources: code reads a tool or a resource again and keeps the data fresh, no model) or composed (data you wrote). " +
 		"Call catalog_read once for the properties and examples before your first surface. " +
 		"A wrong surface comes back as A2UI errors with their path: fix it and write it again. " +
+		"An image is never loaded from outside: a web page that cannot be shown otherwise (most sites refuse being framed) is captured by a task, never for a sign-in or a private page: run eriphe-capture <url> <surface id> in its container, then write the src it prints (media:…) as an Image's url on that surface (it is shown there only), with a Link to the page's address beside it. " +
 		"A source slow to answer leaves the surface waiting, filled when it comes; a binding it does not give is told to you then (workspace_read, and your next surface_write). " +
 		"A button asks the brain (action {event: {name: ask, context: {text}}}) in your own words only, never bound data; the other names are the page's own (open, expand, tab), anything else is refused. A proposal is answered through a Proposal component (proposalId: a ref workspace_read lists), never a button."
 }

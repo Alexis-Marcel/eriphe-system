@@ -130,6 +130,7 @@ func main() {
 	mux.Handle("POST /v1/node/tasks/{id}/ssh", c.taskSSHHandler())              // lent_ssh.go
 	mux.Handle("GET /v1/node/tasks/{id}/ssh/connect", c.taskSSHTunnelHandler()) // lent_ssh.go
 	mux.HandleFunc("GET /v1/node/tasks/{id}/skills/{sha}", c.handleTaskSkill)   // skills_tasks.go
+	mux.HandleFunc("POST /v1/node/tasks/{id}/media", c.handleTaskMedia)         // surfaces_capture.go
 	mux.HandleFunc("POST /v1/node/services/{name}/report", c.handleServiceReport)
 	mux.HandleFunc("POST /v1/node/certificate", c.handleNodeCertificate)
 	mux.HandleFunc("GET /v1/node/sync/{peer}", c.handleNodeSync) // sync_relay.go

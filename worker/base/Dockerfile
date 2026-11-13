@@ -16,6 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && npm uninstall -g corepack && rm -rf /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY --from=uv /uv /uvx /usr/local/bin/
 
+# eriphe-capture: a web page as an image for a surface of the workspace.
+# The script only: the headless browser it drives (Debian's
+# chromium-headless-shell, about 290 MB unpacked) is installed on first use,
+# through apt and /cache, for the tasks that capture a page.
+COPY --chmod=755 eriphe-capture /usr/local/bin/eriphe-capture
+
 # apt for a task: as root without capabilities (no sandbox user to switch
 # to), its downloads and lists in /cache, kept for the next task. The Debian
 # image's docker-clean would delete them after each install.
