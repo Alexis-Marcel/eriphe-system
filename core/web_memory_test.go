@@ -150,15 +150,6 @@ func TestMemoryActions(t *testing.T) {
 	if code, body, _ = tw.do("GET", "/memory/"+id(x)+"/history", nil, nil); code != 200 || !strings.Contains(body, "Modifié") || !strings.Contains(body, "<del>") {
 		t.Fatalf("history: %d %s", code, body)
 	}
-	// A commitment.
-	cm := mustAdd(t, m, &Memory{Kind: kindCommitment, Text: "Appeler le garage"})
-	tw.post("/memory/"+id(cm)+"/state", url.Values{"state": {"done"}}, csrf)
-	if got, _ := m.memory(cm.ID); got.State != stateDone {
-		t.Fatal("not done")
-	}
-	if code, _, _ = tw.post("/memory/"+id(x)+"/state", url.Values{"state": {"done"}}, csrf); code != http.StatusBadRequest {
-		t.Fatalf("state of a fact: %d", code)
-	}
 	// Approve and reject proposals.
 	old := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Le colis arrive mardi"})
 	p1 := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Le colis arrive jeudi", Status: memProposed, Supersedes: old.ID, SourceKind: srcExtraction, Trust: trustExternal})

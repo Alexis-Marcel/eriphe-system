@@ -69,7 +69,6 @@ const (
 	kindFact       = "fact"
 	kindPerson     = "person"
 	kindEpisode    = "episode"
-	kindCommitment = "commitment"
 	kindLesson     = "lesson"
 	// Durable state compiled from the raw history: a choice and its reason,
 	// and the current card of a project or goal (one per subject, each
@@ -81,7 +80,7 @@ const (
 	kindSituation = "situation"
 )
 
-var memoryKinds = []string{kindProfile, kindPreference, kindFact, kindPerson, kindEpisode, kindCommitment, kindLesson, kindDecision, kindProgress, kindSituation}
+var memoryKinds = []string{kindProfile, kindPreference, kindFact, kindPerson, kindEpisode, kindLesson, kindDecision, kindProgress, kindSituation}
 
 // States of a progress card.
 const (
@@ -126,10 +125,6 @@ const (
 	srcExtraction = "extraction"
 	srcTask       = "task"
 	srcImport     = "import"
-
-	stateOpen    = "open"
-	stateDone    = "done"
-	stateDropped = "dropped"
 )
 
 const (
@@ -444,13 +439,6 @@ func (m *memStore) normalize(x *Memory) error {
 		}
 		if x.ValidTo.IsZero() || !x.ValidTo.After(x.ValidFrom) {
 			return errors.New("a situation needs valid_to, its end, after valid_from")
-		}
-	case kindCommitment:
-		if x.State == "" {
-			x.State = stateOpen
-		}
-		if !containsStr([]string{stateOpen, stateDone, stateDropped}, x.State) {
-			return errors.New("state must be open, done or dropped")
 		}
 	case kindProgress:
 		if x.State == "" {
@@ -1228,9 +1216,9 @@ func (m *memStore) profile() ([]*Memory, error) {
 
 // aboutOwner is what the assistant knows about the user: the profile (its
 // pinned memories) and the other current memories about them (subject
-// owner), the pinned ones first. Episodes and commitments are not.
+// owner), the pinned ones first. Episodes are not.
 func (m *memStore) aboutOwner() ([]*Memory, error) {
-	return m.list(`status = 'active' AND (valid_to IS NULL OR valid_to > ?) AND kind NOT IN ('episode', 'commitment')
+	return m.list(`status = 'active' AND (valid_to IS NULL OR valid_to > ?) AND kind != 'episode'
 		AND (pinned = 1 OR subject = 'owner')`, []any{m.now().Unix()},
 		`pinned DESC, CASE kind WHEN 'profile' THEN 0 WHEN 'preference' THEN 1 WHEN 'lesson' THEN 2 ELSE 3 END, id`, 100)
 }

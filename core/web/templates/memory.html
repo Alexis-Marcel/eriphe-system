@@ -73,7 +73,6 @@
     <label class="field"><span>{{t "mem.kind"}}</span><select name="kind">{{range .Kinds}}<option value="{{.}}" {{if eq . "fact"}}selected{{end}}>{{t (printf "kind.%s" .)}}</option>{{end}}</select></label>
     <label class="field"><span>{{t "mem.subject"}}</span><input type="text" name="subject" maxlength="100" placeholder="{{t "mem.subjectph"}}" class="mono" spellcheck="false" autocomplete="off"></label>
     <label class="field"><span>{{t "mem.links"}}</span><textarea name="links" rows="1" placeholder="{{t "mem.linksph"}}" class="mono"></textarea></label>
-    <label class="field"><span>{{t "mem.due"}}</span><input type="date" name="due"></label>
     <div class="mem-form-end span2">
       <label class="check"><input type="checkbox" name="pin" value="1"><span>{{t "mem.pinit"}}</span></label>
       <button class="btn btn-primary" type="submit">{{t "mem.save"}}</button>

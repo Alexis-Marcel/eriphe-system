@@ -77,7 +77,7 @@ func rememberRedirect(kind, text string) string {
 		if notifyPrefRe().MatchString(text) {
 			return hintRuleNotMemory + " Only if it is about how you behave in the conversation, not about notifications, call remember again with about_conversation."
 		}
-	case "reminder", "intention", "promise", "waiting_for", "todo":
+	case "reminder", "intention", "promise", "commitment", "waiting_for", "todo":
 		return hintIntentionNotMemory
 	case kindRule, "quiet", "setting":
 		return hintRuleNotMemory

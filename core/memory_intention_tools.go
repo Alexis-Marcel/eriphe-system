@@ -118,7 +118,7 @@ func (c *core) brainIntend(in intendIn) (map[string]any, error) {
 	if c.mem == nil {
 		return nil, errMemoryOff
 	}
-	if k := strings.TrimSpace(in.Kind); k == "" || k == intentReminder || k == kindCommitment {
+	if k := strings.TrimSpace(in.Kind); k == "" || k == intentReminder || k == intentCommitment {
 		if h := intendHint(in.Text); h != "" {
 			return nil, errors.New("not recorded: " + h)
 		}
@@ -132,7 +132,7 @@ func (c *core) brainIntend(in intendIn) (map[string]any, error) {
 		return nil, err
 	}
 	scan := scanMemoryText(x.Text, x.Owner, x.OwedTo, x.Subject, x.Cue)
-	d, err := c.decideBrainWrite(kindCommitment, in.SourceRef, scan)
+	d, err := c.decideBrainWrite(intentCommitment, in.SourceRef, scan)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (c *core) brainUpdateIntention(in updateIntentionIn) (map[string]any, error
 	if old.State == intentProposed {
 		return nil, fmt.Errorf("intention %d is proposed: only %s approves or rejects it, in the workspace", in.ID, c.conf().User)
 	}
-	d, err := c.decideBrainWrite(kindCommitment, in.SourceRef, scanMemoryText(in.Text, in.Reason))
+	d, err := c.decideBrainWrite(intentCommitment, in.SourceRef, scanMemoryText(in.Text, in.Reason))
 	if err != nil {
 		return nil, err
 	}
