@@ -461,6 +461,7 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 		return
 	}
 	ref := proposalRef(kind, id)
+	c.cardRaisedFor(source, ref) // a thread's: in its timeline (thread_steps.go)
 	var shown int
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM convo_cards WHERE ref = ? AND seq > 0 AND state = ?`, ref, cardPending).Scan(&shown)
 	if shown > 0 {

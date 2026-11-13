@@ -87,6 +87,9 @@ CREATE TABLE IF NOT EXISTS thread_steps (
 	note     TEXT NOT NULL DEFAULT '',
 	started  INTEGER NOT NULL DEFAULT 0,
 	ended    INTEGER NOT NULL DEFAULT 0,
+	card     TEXT NOT NULL DEFAULT '',    -- a call step's card: its proposal ref (access:<id>)
+	due      INTEGER NOT NULL DEFAULT 0,  -- a deadline step's date
+	tainted  TEXT NOT NULL DEFAULT '',    -- why its output may carry what someone else wrote
 	PRIMARY KEY (thread, key)
 );
 CREATE INDEX IF NOT EXISTS thread_steps_task ON thread_steps (task);
@@ -112,7 +115,7 @@ CREATE INDEX IF NOT EXISTS thread_log_thread ON thread_log (thread, id);`
 
 func init() {
 	extraSchema = append(extraSchema, threadsSchema)
-	schemaFixes = append(schemaFixes, sessionsToThreads)
+	schemaFixes = append(schemaFixes, sessionsToThreads, threadStepColumns) // in this order (thread_steps.go)
 }
 
 // A thread's modes.
@@ -158,6 +161,10 @@ const (
 	stepTask     = "task"     // an agent works on it, in a task
 	stepChoice   = "choice"   // the user picks one of its options
 	stepApproval = "approval" // the user says yes or no, on a card
+	stepCall     = "call"     // a tool call: its access card is its yes, then its run is followed (thread_steps.go)
+	stepUser     = "user"     // what only the user does: they say « C'est fait », or the holder sees it done
+	stepCheck    = "check"    // a task or a read call that verifies: its outcome settles it
+	stepDeadline = "deadline" // a date, or a linked intention: when due, the thread wakes
 
 	stepWaiting  = "waiting"  // for the steps it comes after, or its turn to write
 	stepRunning  = "running"  // its task works, or its question waits for the user
@@ -241,16 +248,21 @@ func (s Thread) Look() string {
 
 // stepSpec is what a step is, as planned.
 type stepSpec struct {
-	Key       string        `json:"key" jsonschema:"a short id for the step, unique in the thread: plan, api, review"`
-	Title     string        `json:"title" jsonschema:"what the user reads for this step, in a few words in their language"`
-	Kind      string        `json:"kind,omitempty" jsonschema:"task (an agent works on it, the default), choice (the user picks one of options) or approval (the user says yes or no on a card)"`
-	After     []string      `json:"after,omitempty" jsonschema:"the keys of the steps it needs accepted first; their outputs are passed to it"`
-	Prompt    string        `json:"prompt,omitempty" jsonschema:"task: what the agent must do, self-contained; the thread's goal and the outputs of the steps it comes after are added"`
-	Agent     string        `json:"agent,omitempty" jsonschema:"task: agent from list_agents; empty for the default one"`
-	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"task: what it is lent, as run_task's resources"`
-	Contract  *taskContract `json:"contract,omitempty" jsonschema:"task: as run_task's contract; its checks are the step's evidence"`
-	Question  string        `json:"question,omitempty" jsonschema:"choice or approval: what the user is asked"`
-	Options   []string      `json:"options,omitempty" jsonschema:"choice: what the user picks from, 2 to 6"`
+	Key       string         `json:"key" jsonschema:"a short id for the step, unique in the thread: plan, api, review"`
+	Title     string         `json:"title" jsonschema:"what the user reads for this step, in a few words in their language"`
+	Kind      string         `json:"kind,omitempty" jsonschema:"task (an agent works on it, the default), call (a tool call: its card is the user's yes, then its run is followed), user (what only the user does: they answer it is done), choice (the user picks one of options), approval (the user says yes or no on a card), check (a task or a read call that verifies: its outcome settles it) or deadline (a date: the thread wakes when it comes)"`
+	After     []string       `json:"after,omitempty" jsonschema:"the keys of the steps it needs accepted first; their outputs are passed to it"`
+	Prompt    string         `json:"prompt,omitempty" jsonschema:"task: what the agent must do, self-contained; the thread's goal and the outputs of the steps it comes after are added"`
+	Agent     string         `json:"agent,omitempty" jsonschema:"task: agent from list_agents; empty for the default one"`
+	Resources []ResourceRef  `json:"resources,omitempty" jsonschema:"task: what it is lent, as run_task's resources"`
+	Contract  *taskContract  `json:"contract,omitempty" jsonschema:"task: as run_task's contract; its checks are the step's evidence"`
+	Question  string         `json:"question,omitempty" jsonschema:"choice or approval: what the user is asked; user: what only the user does, in their language"`
+	Options   []string       `json:"options,omitempty" jsonschema:"choice: what the user picks from, 2 to 6"`
+	Tool      string         `json:"tool,omitempty" jsonschema:"call, or a check that reads: the tool to call, one of yours, by its full name"`
+	Input     map[string]any `json:"input,omitempty" jsonschema:"call or check: the tool's input, exactly as it takes it"`
+	Expect    string         `json:"expect,omitempty" jsonschema:"check by a call: words its result must contain for the check to hold; without, its running is enough"`
+	Due       string         `json:"due,omitempty" jsonschema:"deadline: its date, YYYY-MM-DD or YYYY-MM-DDTHH:MM (local time)"`
+	Intention int64          `json:"intention,omitempty" jsonschema:"deadline: the intention it follows (link_thread links one): due when it is"`
 }
 
 // Step is a step of a thread, as the store keeps it.
@@ -268,6 +280,9 @@ type Step struct {
 	Note     string   `json:"note,omitempty"`   // the lead's last word on it
 	Started  int64    `json:"started,omitempty"`
 	Ended    int64    `json:"ended,omitempty"`
+	Card     string   `json:"card,omitempty"`    // a call step's card: its proposal ref
+	DueAt    int64    `json:"due_at,omitempty"`  // a deadline step's date
+	Tainted  string   `json:"tainted,omitempty"` // why its output may carry what someone else wrote
 	scopes   []string // what it writes
 }
 
@@ -310,47 +325,8 @@ func (s *stepSpec) normalize() error {
 	if s.Kind == "" {
 		s.Kind = stepTask
 	}
-	switch s.Kind {
-	case stepTask:
-		if strings.TrimSpace(s.Prompt) == "" {
-			return fmt.Errorf("step %s: a task step needs its prompt", s.Key)
-		}
-		if s.Question != "" || len(s.Options) > 0 {
-			return fmt.Errorf("step %s: a task step takes no question nor options", s.Key)
-		}
-		if s.Contract != nil {
-			if err := s.Contract.normalize(); err != nil {
-				return fmt.Errorf("step %s: %w", s.Key, err)
-			}
-		}
-		rs, err := normalizeResources(runRequest{Resources: s.Resources})
-		if err != nil {
-			return fmt.Errorf("step %s: %w", s.Key, err)
-		}
-		s.Resources = rs
-	case stepChoice, stepApproval:
-		s.Question = strings.TrimSpace(s.Question)
-		if s.Question == "" {
-			return fmt.Errorf("step %s: a %s step needs its question", s.Key, s.Kind)
-		}
-		if s.Prompt != "" || s.Agent != "" || len(s.Resources) > 0 || s.Contract != nil {
-			return fmt.Errorf("step %s: a %s step runs no task: no prompt, agent, resources nor contract", s.Key, s.Kind)
-		}
-		var opts []string
-		for _, o := range s.Options {
-			if o = oneLine(o); o != "" && !slices.Contains(opts, o) {
-				opts = append(opts, truncate(o, 80))
-			}
-		}
-		s.Options = opts
-		if s.Kind == stepChoice && (len(opts) < 2 || len(opts) > 6) {
-			return fmt.Errorf("step %s: a choice gives 2 to 6 options", s.Key)
-		}
-		if s.Kind == stepApproval && len(opts) > 0 {
-			return fmt.Errorf("step %s: an approval is yes or no: no options", s.Key)
-		}
-	default:
-		return fmt.Errorf("step %s: kind %q: task, choice or approval", s.Key, s.Kind)
+	if err := s.normalizeKind(); err != nil {
+		return err
 	}
 	var after []string
 	for _, a := range s.After {
@@ -504,13 +480,13 @@ func (c *core) findThreads(subject, text string, all bool, limit int) ([]Thread,
 	return c.threadsWhere(strings.Join(conds, ` AND `)+` ORDER BY state NOT IN ('open', 'waiting'), id DESC LIMIT ?`, append(args, limit)...)
 }
 
-const stepCols = `thread, key, n, title, kind, after, spec, status, planned, task, tries, failed, evidence, output, note, started, ended`
+const stepCols = `thread, key, n, title, kind, after, spec, status, planned, task, tries, failed, evidence, output, note, started, ended, card, due, tainted`
 
 func scanStep(row interface{ Scan(...any) error }) (Step, error) {
 	var s Step
 	var after, spec string
 	err := row.Scan(&s.Thread, &s.Key, &s.N, &s.Title, &s.Kind, &after, &spec, &s.Status, &s.Planned, &s.Task, &s.Tries, &s.Failed,
-		&s.Evidence, &s.Output, &s.Note, &s.Started, &s.Ended)
+		&s.Evidence, &s.Output, &s.Note, &s.Started, &s.Ended, &s.Card, &s.DueAt, &s.Tainted)
 	if err != nil {
 		return s, err
 	}
@@ -563,11 +539,12 @@ func (c *core) insertSteps(thread int64, specs []stepSpec, planned bool) error {
 	for _, sp := range specs {
 		n++
 		raw, _ := json.Marshal(sp)
-		if _, err := c.store.db.Exec(`INSERT INTO thread_steps (thread, key, n, title, kind, after, spec, status, planned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			thread, sp.Key, n, sp.Title, sp.Kind, strings.Join(sp.After, ","), string(raw), stepWaiting, planned); err != nil {
+		if _, err := c.store.db.Exec(`INSERT INTO thread_steps (thread, key, n, title, kind, after, spec, status, planned, due) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			thread, sp.Key, n, sp.Title, sp.Kind, strings.Join(sp.After, ","), string(raw), stepWaiting, planned, sp.dueAt()); err != nil {
 			return err
 		}
 	}
+	c.threadMoved(thread)
 	return nil
 }
 
@@ -581,6 +558,7 @@ func (c *core) setStep(thread int64, key string, fields map[string]any) error {
 	}
 	args = append(args, thread, key)
 	_, err := c.store.db.Exec(`UPDATE thread_steps SET `+strings.Join(sets, ", ")+` WHERE thread = ? AND key = ?`, args...)
+	c.threadMoved(thread)
 	return err
 }
 
@@ -598,6 +576,7 @@ func (c *core) setThread(id int64, fields map[string]any) error {
 	}
 	args = append(args, id)
 	_, err := c.store.db.Exec(`UPDATE threads SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...)
+	c.threadMoved(id)
 	return err
 }
 
@@ -610,6 +589,7 @@ type ThreadLine struct {
 
 func (c *core) logThread(id int64, who, text string) {
 	c.store.db.Exec(`INSERT INTO thread_log (thread, at, who, text) VALUES (?, ?, ?, ?)`, id, time.Now().Unix(), who, truncate(text, 600))
+	c.threadMoved(id)
 }
 
 // threadLog is its last n lines, oldest first.

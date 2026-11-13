@@ -72,6 +72,7 @@ type core struct {
 	layout      layoutState            // where the surfaces are on the workspace (workspace_layout.go)
 	front       frontTurn              // whether the brain's turn answers the user in the workspace (workspace_front.go)
 	props       proposalFeed           // the proposals that moved, for the workspace (surface_proposals.go)
+	threadsFeed threadFeed             // the threads that moved, for their surfaces (thread_steps.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)
 	// minters are the providers whose connections core mints tokens for,
@@ -175,7 +176,7 @@ func (c *core) checkNodes(ctx context.Context) {
 	c.autoUpdates(time.Now())
 	c.replaceStranded()               // placement.go
 	c.harnessTick(time.Now())         // retries due, time budgets (task_retry.go)
-	c.threadsTick(time.Now())         // the led threads' engine (thread_engine.go)
+	c.threadsTick(time.Now())         // the threads' engine (thread_engine.go)
 	c.placeServices()                 // also when no node answers: a node gone too long loses its services
 	c.connectionTick(ctx, time.Now()) // the connections' tokens, now and then (connections.go)
 }

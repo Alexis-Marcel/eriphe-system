@@ -54,6 +54,17 @@ type tellLeadIn struct {
 	Text   string `json:"text" jsonschema:"what the user said or wants, in French"`
 }
 
+type addStepIn struct {
+	Thread int64    `json:"thread_id"`
+	Step   stepSpec `json:"step" jsonschema:"the step: key, title, kind, the keys it comes after, and what its kind needs"`
+}
+
+type linkThreadIn struct {
+	Thread  int64  `json:"thread_id"`
+	Ref     string `json:"ref,omitempty" jsonschema:"what to link: intention:<id>, or a card's ref (kind:id)"`
+	Summary string `json:"summary,omitempty" jsonschema:"where the thread stands, for the user, in their language: from its subject's progress memory and its steps"`
+}
+
 type findThreadIn struct {
 	Subject string `json:"subject,omitempty" jsonschema:"the ref of the matter, as given at its opening: project:site, pr:owner/repo#12"`
 	Text    string `json:"text,omitempty" jsonschema:"words of its title, goal, subject or summary"`
@@ -83,10 +94,10 @@ func (c *core) threadView(id int64, lines int) (threadView, error) {
 }
 
 func registerThreadTools(s *mcp.Server, c *core) {
-	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). Look for one first with find_thread: a matter has one thread. Light by default (no steps): it opens at once, with no card and no budget, and you hold it. Led (with steps): long autonomous work of several steps toward the goal, not only code; give done_when (what must be true at the end), a budget of minutes, and the plan: steps with a key, a title, a kind (task, choice, approval) and the keys of the steps they come after. Independent steps run in parallel, never two writing the same repository branch or folder; each task step is given the outputs of the steps it comes after. "+threadNote+" For one task alone, use run_task.",
+	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). Look for one first with find_thread: a matter has one thread. Light by default (no steps): it opens at once, with no card and no budget, and you hold it. Led (with steps): long autonomous work of several steps toward the goal, not only code; give done_when (what must be true at the end), a budget of minutes, and the plan: steps with a key, a title, a kind (task, call, user, choice, approval, check, deadline: as add_step's) and the keys of the steps they come after. Independent steps run in parallel, never two writing the same repository branch or folder; each task step is given the outputs of the steps it comes after. "+threadNote+" For one task alone, use run_task.",
 		func(ctx context.Context, in threadIn) (map[string]any, error) {
 			for _, st := range in.Steps {
-				if st.Kind == "" || st.Kind == stepTask {
+				if st.Kind == "" || st.runsTask() {
 					if err := c.taintedResources(runRequest{Resources: st.Resources}); err != nil {
 						return nil, err
 					}
@@ -113,6 +124,9 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			v, err := c.threadView(in.Thread, 20)
 			if err == nil {
 				for _, st := range v.Steps {
+					if st.Tainted != "" {
+						c.turn.taint(st.Tainted) // a call's result, an external intention
+					}
 					if st.Task == "" {
 						continue
 					}
@@ -124,18 +138,34 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return v, err
 		})
 
-	tool(s, "settle_step", "Judge a step of a thread that reported its work or stopped, on its evidence: accept, retry (at most 2 per step; say what to fix) or reject. A report is only a claim: a step whose checks failed cannot be accepted. Accepting lets the steps after it start.",
+	tool(s, "settle_step", "Settle a step of a thread you hold. A task that reported its work or stopped, on its evidence: accept, retry (at most 2 per step; say what to fix) or reject; a report is only a claim: a step whose checks failed cannot be accepted. A user step you see done: accept, with what shows it in note. A deadline no longer to wait for: accept or reject. A call, a check, a choice or an approval settle themselves. Accepting lets the steps after it start.",
 		func(ctx context.Context, in settleIn) (Step, error) {
-			if err := c.leadOnly(in.Thread); err != nil {
+			if err := c.holderOnly(in.Thread); err != nil {
 				return Step{}, err
 			}
 			return c.settleStep(ctx, in.Thread, in.Step, in.Verdict, in.Note, in.Output, "brain")
 		})
 
+	tool(s, "add_step", "Add a step to a light thread you hold, as what you find shows it is needed: its steps are born as it goes. It starts at once once the steps it comes after are accepted. Kinds: task (an agent works on it; it asks its start card if it is lent what needs a yes), call (one of your tools with its input: what changes something asks its card, the step's yes, and its run is followed; a read your policy leaves free runs at once), user (what only the user does, in question: they answer « C'est fait »), choice (ask them, record with choose_step), approval (a yes or no card), check (a task or a read call that verifies, with expect: its outcome settles it), deadline (a date in due: the thread wakes then). Each change of a step you did not make reaches you as an event [thread N « title »]. A led thread's plan changes with amend_thread.",
+		func(ctx context.Context, in addStepIn) (Step, error) {
+			if in.Step.Kind == "" || in.Step.runsTask() {
+				if err := c.taintedResources(runRequest{Resources: in.Step.Resources}); err != nil {
+					return Step{}, err
+				}
+			}
+			return c.addStep(ctx, in.Thread, in.Step, c.turnTaint(), "brain")
+		})
+
+	tool(s, "link_thread", "Join to a thread what relates to it: an intention (ref intention:<id>) becomes a deadline step, due when it is; a card (its ref, kind:id) shows in its timeline. And/or set its summary: where it stands, from its subject's progress memory and its steps.",
+		func(ctx context.Context, in linkThreadIn) (map[string]any, error) {
+			note, err := c.linkThread(ctx, in.Thread, in.Ref, in.Summary, "brain")
+			return map[string]any{"note": note}, err
+		})
+
 	tool(s, "amend_thread", "Change a thread's plan: add steps (as open_thread's), drop steps that have not started. Twice without asking; past that the user is asked on a card. A step added asks its own start card, unless the user approved the change.",
 		func(ctx context.Context, in amendThreadIn) (map[string]any, error) {
 			for _, st := range in.Add {
-				if st.Kind == "" || st.Kind == stepTask {
+				if st.Kind == "" || st.runsTask() {
 					if err := c.taintedResources(runRequest{Resources: st.Resources}); err != nil {
 						return nil, err
 					}

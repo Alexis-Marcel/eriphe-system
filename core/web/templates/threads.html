@@ -80,7 +80,7 @@
   <div><dt>{{t "threads.steps"}}</dt><dd>{{tf "threads.progress" (index .Counts "accepted") .Total}}</dd></div>{{end}}
 </dl>
 
-{{if or .Asks .Choices}}
+{{if or .Asks .Choices .Users}}
 <section class="thread-waits" aria-labelledby="thread-waits-t">
   <h2 id="thread-waits-t">{{t "threads.waits.title"}}</h2>
   {{if .Asks}}<div class="pcards">{{range .Asks}}{{template "card" .}}{{end}}</div>{{end}}
@@ -91,6 +91,16 @@
     <form class="choice-opts" hx-post="/threads/{{$.ID}}/choose" hx-target="#thread-live" hx-swap="innerHTML" hx-disabled-elt="find button">
       <input type="hidden" name="step" value="{{.Key}}">
       {{range .Options}}<button class="btn btn-soft sm" type="submit" name="option" value="{{.}}">{{.}}</button>{{end}}
+    </form>
+  </article>
+  {{end}}
+  {{range .Users}}
+  <article class="thread-choice">
+    <h3>{{.Title}}</h3>
+    <p>{{.Question}}</p>
+    <form class="choice-opts" hx-post="/threads/{{$.ID}}/done" hx-target="#thread-live" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="step" value="{{.Key}}">
+      <button class="btn btn-primary sm" type="submit">{{t "threads.done"}}</button>
     </form>
   </article>
   {{end}}
@@ -134,7 +144,7 @@
   </div>
   <p class="step-meta">
     {{if eq .Kind "task"}}<span>{{template "i-bot"}}{{if .Agent}}{{.Agent}}{{else}}{{t "threads.agent.default"}}{{end}}</span>{{range .Resources}}{{if eq .Kind "repo"}}<span class="mono">{{template "i-branch"}}{{.Ref}}{{if .Branch}}@{{.Branch}}{{end}}</span>{{else if eq .Kind "folder"}}<span>{{template "i-folder"}}{{.Ref}}</span>{{end}}{{end}}
-    {{else if eq .Kind "choice"}}<span>{{t "step.kind.choice"}}</span>{{else}}<span>{{t "step.kind.approval"}}</span>{{end}}
+    {{else}}<span>{{t (printf "step.kind.%s" .Kind)}}</span>{{if .Due}}<span class="mono">{{.Due}}</span>{{end}}{{end}}
     {{if .Tries}}<span>{{tf "threads.try" .Tries}}</span>{{end}}
     {{if .TaskLink}}<a href="{{.TaskLink}}" hx-get="{{.TaskLink}}" hx-target="#drawer" hx-swap="innerHTML">{{t "threads.task.open"}}</a>{{end}}
   </p>

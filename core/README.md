@@ -941,6 +941,43 @@ claim), `verified` (its checks passed), `accepted`, `rejected`, `blocked` (its t
 stopped), `dropped`. A step whose checks failed, or whose receipt claims what they deny, cannot be
 accepted.
 
+**Steps of every kind** (`thread_steps.go`): besides `task`, `choice` and `approval`, a step may be:
+
+- `call`: one of the brain's catalog tools with its input (`tool`, `input`). It passes the same
+  gate as the brain's own call (`callGate`: a catalog tool lent to the brain, the policy with the
+  thread's taint). A read the policy leaves free runs at once, without a card; anything else that
+  may run asks its **access card**, which is the step's yes (`thread_steps.card`, source
+  `thread:<id>`). On the yes the call runs (`runCallStep`, the card's proposal showing it running,
+  then done or failed, as `setCallState`) and the step settles: `accepted`, or `blocked` with why;
+  on a no it is `rejected`. The brain hears it from its thread, not as the card's usual event.
+- `user`: what only the user does (`question`). The user answers « C'est fait »
+  (`POST /threads/{id}/done` with `step`, their session and CSRF token; `userStepDone`), or the
+  holder settles it from evidence (`settle_step` accept, with what shows it in `note`).
+- `check`: a task (`prompt`, read-only resources) or a read call (`tool`, and `expect`: words its
+  result must contain). Its outcome settles it: a task's receipt `done` with no failed check, or the
+  call run and its result as expected; otherwise `rejected`. The holder gives no verdict.
+- `deadline`: a date (`due`) or a linked intention (`intention`). The engine's pass (and the
+  intentions' minute, when one becomes due) settles it when the date comes or the intention is due
+  or done (`accepted`), or cancelled (`rejected`); the steps after it then start.
+
+A **light** thread takes its steps from the brain (`add_step`), each born as the matter goes and
+started once the steps it comes `after` are accepted; a task step asks its own start card when it is
+lent what needs a yes. The brain settles them (`settle_step`). `link_thread` joins what relates:
+`intention:<id>` becomes a deadline step (`intention-<id>`), a card's ref shows in the thread's
+timeline (`thread_cards`, with every card raised with the source `thread:<id>`), and `summary`
+sets where it stands, from the subject's progress memory. **A step's change wakes its holder**,
+when someone else made it (the user, a card, the clock, a task): the lead through `thread_inbox`,
+or the brain by an event `[thread N « title »] étape « … » (key, kind) → status`, which does not
+block it. What a tool said, or an intention drawn from external content, taints the step
+(`thread_steps.tainted`), the event that carries it, and `read_thread`. A thread that ends drops
+what still waits or runs in it: its tasks stop, its step cards are withdrawn (`callStepGone`).
+
+For the thread's surface: `threadTimeline(id)` reads the thread with each step's kind, status,
+times, card ref and state (and an approved call's run state), whether it is tainted, the cards
+linked to it and the log; `threadMoved(id)` fires on every change (a step, the thread, its log, a
+linked card), and `watchThreads(after)` returns the threads that moved since and a channel closed
+at the next move, as `watchProposals` does.
+
 - **The plan card** (card kind `thread`) is the user's approval of the steps as planned: they start
   without asking again, their resources granted as on a clean start. A step added
   later asks its own start card.
@@ -955,11 +992,11 @@ accepted.
 - Each step's end reaches the lead as an event `[thread N « title »]`, instead of the task's own;
   a thread complete or stuck is told once. `find_thread` and `read_thread` read them;
   `stop_thread` stops the tasks and withdraws the cards. The engine's pass runs every 15 seconds
-  with the nodes' check, over the led threads only: budgets, and steps whose task ended while
-  eriphe-core was down.
+  with the nodes' check, over the active threads: deadlines, a led thread's budget, and steps
+  whose task ended while eriphe-core was down.
 - The end of any thread is the journal's `thread.ended` (key `thread:<id>`, its state).
 - Tables: `threads`, `thread_steps`, `thread_asks` (what a thread asks, one card each),
-  `thread_log`.
+  `thread_log`, `thread_cards` (the cards linked to a thread).
 - **From sessions** (`threads_migrate.go`): a database of an eriphe-core that had work sessions
   moves once, as it opens: the tables and their `session` columns renamed, every session a led
   thread (its old state kept as its phase), and the refs rewritten where they are kept (cards,

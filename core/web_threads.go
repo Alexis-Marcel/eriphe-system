@@ -53,6 +53,7 @@ type threadPage struct {
 	Stages   []stageView // by the steps they come after: the first can start at once
 	Asks     []cardView  // its cards that wait for the user
 	Choices  []stepView  // its choices that wait for the user
+	Users    []stepView  // what only the user does: « C'est fait »
 	LeadName string      // its lead's name, when it has one
 	LeadBusy bool        // its lead works on a turn
 	Minutes  int         // the time it ran
@@ -145,6 +146,17 @@ func (w *web) threadPage(id int64, lang string) (threadPage, error) {
 		if st.Kind == stepChoice && st.Status == stepRunning && v.Thread.active() {
 			p.Choices = append(p.Choices, stepView{Step: st})
 		}
+		if st.Kind == stepUser && st.Status == stepRunning && v.Thread.active() {
+			p.Users = append(p.Users, stepView{Step: st})
+		}
+		if st.Card != "" && st.Status == stepRunning {
+			xs, _ := w.c.cardsWhere(`ref = ?`, st.Card)
+			for _, x := range xs {
+				if cv := w.cardView(x, lang); cv.State == cardPending {
+					p.Asks = append(p.Asks, cv) // a call step's yes
+				}
+			}
+		}
 	}
 	if w.c.hasLead(v.Thread) {
 		a := w.c.conf().Assistants[v.Lead]
@@ -210,7 +222,7 @@ func (w *web) threadRows(activeOnly bool, n int) []threadRow {
 			if st.Status == stepAccepted {
 				x.Done++
 			}
-			if st.Kind == stepChoice && st.Status == stepRunning {
+			if (st.Kind == stepChoice || st.Kind == stepUser || st.Card != "") && st.Status == stepRunning {
 				x.Waits = true
 			}
 		}
@@ -296,7 +308,8 @@ func (w *web) handleThreadEvents(rw http.ResponseWriter, r *http.Request, s *ses
 }
 
 // handleThreadAction is the user's: pause, resume (more time, if the
-// budget paused it), stop, a choice, a word to the lead.
+// budget paused it), stop, a choice, « C'est fait » on a user step, a
+// word to the lead.
 func (w *web) handleThreadAction(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
 	id, ok := threadID(r)
@@ -316,6 +329,9 @@ func (w *web) handleThreadAction(rw http.ResponseWriter, r *http.Request, s *ses
 	case "choose":
 		_, err = w.c.chooseStep(r.Context(), id, r.PostFormValue("step"), r.PostFormValue("option"), "user")
 		msg = "threads.did.choose"
+	case "done": // « C'est fait » on a user step (thread_steps.go)
+		_, err = w.c.userStepDone(r.Context(), id, r.PostFormValue("step"), "user")
+		msg = "threads.did.done"
 	case "lead":
 		err, msg = w.c.tellLeadFromUser(id, r.PostFormValue("text")), "threads.did.lead"
 	default:
