@@ -116,6 +116,30 @@ func TestConceptBench(t *testing.T) {
 	}
 }
 
+// What comes back on a schedule is sent to a timed skill, and the
+// schedules the hint shows are ones write_skill takes.
+func TestScheduleHintNamesTimedSkill(t *testing.T) {
+	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
+	seq := ownerSays(c, "Tous les matins, donne-moi la météo")
+	for name, call := range map[string]benchCall{
+		"intend":   intendCall("Tous les matins, donner la météo", "reminder", ""),
+		"remember": rememberCall("routine", "Donner la météo chaque matin"),
+	} {
+		_, err := call(c, seq)
+		if err == nil || !strings.Contains(err.Error(), "write_skill") || !strings.Contains(err.Error(), "when: time") {
+			t.Errorf("%s: got %v, want a hint naming write_skill with when: time", name, err)
+		}
+	}
+	for _, when := range []string{"time daily 07:00", "time weekdays 08:00"} {
+		if !strings.Contains(hintSkillNotIntend, when) {
+			t.Errorf("the hint does not show %q", when)
+		}
+		if st, err := parseSkillTrigger(skillManifest{When: when}); err != nil || st == nil || st.Schedule == nil {
+			t.Errorf("write_skill refuses the hint's %q: %v", when, err)
+		}
+	}
+}
+
 // The map is the same everywhere: every concept and tool is in the MCP
 // instructions and in the prompt's « Tes concepts ».
 func TestConceptMapGiven(t *testing.T) {
