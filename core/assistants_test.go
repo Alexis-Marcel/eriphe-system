@@ -406,20 +406,27 @@ func TestReadOnlyField(t *testing.T) {
 func TestAssistantAccountKeyRestart(t *testing.T) {
 	c := brainCore(t, &BrainConfig{})
 	ctx := context.Background()
-	c.tendAssistants(ctx, "tok")
+	// Only the key may restart it here: a catalog server that reconnects or
+	// lists its tools again in between moves the tools' hash, a restart of
+	// its own. With none kept, the controller keeps the new one instead.
+	tend := func() {
+		c.updateAssistant(brainAssistant, func(st *AssistantStatus) { st.ToolsHash = "" })
+		c.tendAssistants(ctx, "tok")
+	}
+	tend()
 	id := brainStatus(c.core).Task
 	if brainStatus(c.core).AccountStamp == "" {
 		t.Fatal("no stamp of the account's key at start")
 	}
 	c.store.updateTask(id, map[string]any{"state": stateIdle})
-	if c.tendAssistants(ctx, "tok"); c.store.get("brain_stopped:"+id) != "" {
+	if tend(); c.store.get("brain_stopped:"+id) != "" {
 		t.Fatal("restarted with the same key")
 	}
 	secret := c.conf().Providers[c.conf().Agents["sonnet"].Provider].Secret
 	if err := os.WriteFile(secret, []byte("sk-ant-oat01-new"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if c.tendAssistants(ctx, "tok"); c.store.get("brain_stopped:"+id) == "" {
+	if tend(); c.store.get("brain_stopped:"+id) == "" {
 		t.Fatal("not restarted on a new key")
 	}
 }
