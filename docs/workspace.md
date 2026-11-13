@@ -64,6 +64,12 @@ that need an answer, projects with their deadline and next task, accounts if a t
 linked. Nothing useful for one of these, no tile: three right tiles are better than eight empty
 ones.
 
+Your shared folders are read too: if you keep notes or projects in one (tell Eriphe which, it
+remembers), the arrival skill reads them under the folder's rights, and a tile can show a note
+live: it is read again on its own schedule, and at once when Eriphe changes it. Reading a folder
+whose Lire is free asks nothing; a change Eriphe makes there follows its Modifier: on approval, a
+card shows you the file and what changes before anything is written.
+
 If a tile could be better with a tool the skill is not allowed to read, it adds a small "prepare
 more" tile with a button. The button asks Eriphe to propose a new version of the skill with that
 tool; you say yes or no on its card.

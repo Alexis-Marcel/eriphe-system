@@ -2180,7 +2180,8 @@ node keeps the list and reports each folder's `name`, `access` (its level, `read
 older node's `drop` reads as `read`, its `manage` as `write`), `copyable` (the user allows copies on their other machines, for the
 synchronisation to come) and `id` (`folders` in `GET /v1/node`), never its path. eriphe-core reads
 that list, and may only restrict it: take a folder off, turn its copies off, and set what Eriphe
-may do there (its rights, below). It cannot add a folder, share one to write, nor look into a machine. A name shared by two machines is told
+may do there (its rights, below). It cannot add a folder, share one to write, nor look into a machine
+outside the folders shared (a shared folder's files are read through its tool, below). A name shared by two machines is told
 apart as `Name (machine)`.
 
 **Two sources, one list.** A folder is on a machine (here) or a tool's place (a Google Drive
@@ -2192,6 +2193,55 @@ server reads and enforces itself, and is lent as `{kind: place}` (its tool whole
 `folders`, which refuses it with that hint. A tool's places are set on its account's page
 (Settings → Tools → an account), to which their tile in Settings → Dossiers links; "Ne plus
 partager" there stops sharing a machine's folder.
+
+### A folder is a tool (`folder_tools.go`)
+
+A machine's folder is also a tool like any other: `eriphe-folders`, a server Eriphe provides in
+eriphe-core's own process, kept in the pool beside the catalog's servers (`pool.provide`, an
+in-memory session), so every path a catalog call takes applies to it unchanged:
+
+| Tool | Case | What |
+|---|---|---|
+| `list_folders` | read, always free | the machine's folders: name, online, access, rights |
+| `list_files` | read | a folder or a subfolder: path, size, modification time; folders first, 500 at most |
+| `search_files` | read | names and text (text files up to 1 MB, without case), 50 matches at most |
+| `read_file` | read | a text as is (fenced for a model; `text` in its structured result), an image as image content (5 MB at most) |
+| `write_file` | change | a new text file (subfolders made as needed); never overwrites |
+| `update_file` | change | replaces a file's whole text; answers a short diff |
+| `move_file` | change | renames or moves inside the same folder; never overwrites |
+| `delete_file` | change | a file (or an empty folder), kept on its machine |
+
+- **Rights, call by call.** A call names its `folder`; the policy decides it like any catalog call
+  (`pool.facts`): its reads are the folder's Lire, its writes Modifier (folder_values.go). Lire free
+  asks nothing; On approval is a card; Never is refused (Modifier is Never on a folder shared
+  read-only); a free write on a tainted turn or an unclean start asks, as for any tool. A call
+  naming no folder takes the strictest of all, so a read is allowed in advance to the brain only
+  when every folder's Lire is free. The folder is the call's account (`callAccount`): a task's yes
+  for one folder is not another's, and lending the tool to a task asks at its start for the
+  folders On approval (`folderToolNeeds`).
+- **The card shows the change.** A change's card reads the file on its node when it is made: the
+  file, and for `update_file` its diff instead of the new content (`folderCardContext`); for a
+  delete its size and time. Nothing runs before the yes; the yes runs exactly that call.
+- **Where it runs.** Every call goes to the node holding the folder (`POST /v1/shares/{id}/files`,
+  node/README.md), which holds it to the folder: relative paths only, nothing hidden, sensitive or
+  made private on the way, no symlink, never a host path in what it answers; a snapshot of the
+  folder before a write (one an hour for these writes) and the previous version of a file changed
+  or deleted kept in its data. A read goes to a machine keeping a copy up to date when the
+  folder's own is away; a write only to its own machine. A Mac whose folders are opened by the
+  container engine's explorer answers `lend_only`: a read then goes to an up-to-date copy if there
+  is one; otherwise, and for a write, the folder is lent to a task there. A write waits 90 s at
+  most (its first in an hour takes the snapshot); a write whose caller gave up meanwhile is not
+  made.
+- **Taint.** The user's folders are theirs (`trustsServer`): what they say is data, never
+  instructions, but reading them does not taint a turn or a task by itself.
+- **Who has it.** The brain, by default, once a folder is shared (`assistantGrant` lends it every
+  lent tool); a skill through its `tools` (the arrival skill has it); a task as
+  `{kind: tool, ref: eriphe-folders}`. Lending the folder itself to a task stays for heavy work.
+- **Surfaces.** Its reads are read-only by their annotations: `sources_read` lists them and a
+  surface may read a file live (`{tool: eriphe-folders/read_file, args: {folder, path}}`, bound
+  to `/…/text`). The nodes reach a folder through short-lived helpers too, which cannot watch it:
+  such a surface is read again on its own schedule, and at once after a write through these
+  tools (`refreshFolderSurfaces`).
 
 ### Places
 

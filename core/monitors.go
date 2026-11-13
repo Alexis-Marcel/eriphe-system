@@ -260,7 +260,7 @@ func (c *core) monitorWhy(s monitorSpec) string {
 // server lists. A surface's source is held to the same (surfaces.go).
 func (c *core) sourceWhy(s monitorSpec) string {
 	u := c.pool.get(s.Server)
-	if _, ok := c.conf().Servers[s.Server]; !ok || u == nil {
+	if !slices.Contains(c.catalogNames(), s.Server) || u == nil {
 		return fmt.Sprintf("%s is not a server of the catalog", s.Server)
 	}
 	if s.Resource != "" {

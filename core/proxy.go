@@ -116,7 +116,7 @@ type catalogTool struct{ server, tool string }
 // lists them now: the brain sees them all, and the grid decides each call.
 func (c *core) lentTools() []catalogTool {
 	var out []catalogTool
-	for name := range c.conf().Servers {
+	for _, name := range c.catalogNames() {
 		u := c.pool.get(name)
 		if u == nil {
 			continue

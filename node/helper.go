@@ -36,6 +36,8 @@ import (
 //   - handback: what a task wrote as root given back to the folders'
 //     owners (handBackDir);
 //   - probe: whether each folder opens, and may be written to (access.go).
+//   - files: an operation on a folder's files, the folder mounted
+//     read-only unless it writes (folder_files.go).
 //
 // The helper answers one JSON object on its stdout. -folder-helper (env
 // ERIPHE_FOLDER_HELPER) is the node's own image, the one the proxy allows
@@ -55,6 +57,9 @@ type helperReq struct {
 	// what it copies; restore: the snapshot's files.
 	Dst   string `json:"dst,omitempty"`
 	Limit int64  `json:"limit,omitempty"`
+	// files: an operation in the folder (folder_files.go), Dst the place its
+	// previous versions are kept.
+	Files *filesReq `json:"files,omitempty"`
 }
 
 // helperResp is a helper's answer.
@@ -67,12 +72,16 @@ type helperResp struct {
 	Method  string       `json:"method,omitempty"`
 	Copied  int64        `json:"copied,omitempty"`
 	Notes   []accessNote `json:"notes,omitempty"` // probe, in Folders' order
+	Files   *filesResp   `json:"files,omitempty"` // files
 }
 
 func (r *helperResp) err() error {
 	switch {
 	case r.Refused != nil:
-		r.Refused.status = map[string]int{"not_found": 404, "invalid_path": 400, "unavailable": 503}[r.Refused.Code]
+		r.Refused.status = map[string]int{"not_found": 404, "invalid_path": 400, "unavailable": 503,
+			// files (folder_files.go)
+			"invalid": 400, "not_dir": 400, "not_file": 400, "not_text": 400, "exists": 409, "changed": 409, "not_empty": 409,
+			"too_large": 413, "error": 500}[r.Refused.Code]
 		if r.Refused.status == 0 {
 			r.Refused.status = 403
 		}
@@ -250,7 +259,7 @@ func (n *node) probeLoop(every time.Duration) {
 func runFolderHelper(in io.Reader, out io.Writer) int {
 	var req helperReq
 	resp := &helperResp{}
-	if err := json.NewDecoder(io.LimitReader(in, 1<<20)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(in, 4<<20)).Decode(&req); err != nil {
 		resp.Error = "bad request: " + err.Error()
 	} else {
 		resp = doHelper(req)
@@ -317,6 +326,20 @@ func doHelper(req helperReq) *helperResp {
 			if _, err := handBackDir(d); err != nil {
 				log.Printf("handback in %s: %v", d, err)
 			}
+		}
+	case "files":
+		f, err := check()
+		if err == nil && filepath.Clean(f.real) != filepath.Clean(req.Folder) {
+			err = shareErr(403, "moved", "this folder leads elsewhere since it was shared: share it again")
+		}
+		if err == nil && req.Files == nil {
+			err = shareErr(400, "invalid", "no operation")
+		}
+		if err != nil {
+			return fail(err)
+		}
+		if resp.Files, err = filesDo(f.real, req.Dst, *req.Files); err != nil {
+			return fail(err)
 		}
 	case "probe":
 		for i, p := range req.Folders {

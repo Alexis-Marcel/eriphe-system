@@ -116,7 +116,7 @@ func arrivalSkill(t *testing.T) skillManifest {
 // same name is left alone.
 func TestDefaultSkillInstalledOnce(t *testing.T) {
 	m := arrivalSkill(t)
-	if m.Name != "arrivee" || m.Trigger == nil || m.Trigger.Schedule == nil || len(m.Trigger.Tools) != 1 || m.Trigger.Tools[0] != workspaceServer {
+	if m.Name != "arrivee" || m.Trigger == nil || m.Trigger.Schedule == nil || strings.Join(m.Trigger.Tools, ",") != workspaceServer+","+foldersServer {
 		t.Fatalf("manifest %+v", m.Trigger)
 	}
 	c, _ := skillCore(t)
@@ -187,7 +187,7 @@ func TestArrivalSkillTriggers(t *testing.T) {
 		t.Fatalf("morning runs %+v", rs)
 	}
 	task, _ := c.store.task(rs[0].Task)
-	if task.Tools != workspaceServer || !strings.Contains(task.Prompt, "horaire « daily 06:00 »") ||
+	if task.Tools != foldersServer+","+workspaceServer || !strings.Contains(task.Prompt, "horaire « daily 06:00 »") ||
 		!strings.Contains(task.Prompt, "sources_read") || !strings.Contains(task.Prompt, "Placeholder") {
 		t.Fatalf("task %q %s", task.Tools, task.Prompt)
 	}

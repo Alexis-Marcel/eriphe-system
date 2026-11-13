@@ -55,7 +55,7 @@ const (
 var (
 	// providedServers are the servers Eriphe provides itself, lent as the
 	// catalog's are, by name or name.tool.
-	providedServers = []string{workspaceServer}
+	providedServers = []string{workspaceServer, foldersServer}
 	// workspaceTools are its tools, in order.
 	workspaceTools = []string{"surface_write", "surface_remove", "workspace_read", "catalog_read", "sources_read"}
 	// surfaceReadCap is how long a surface_write waits for its sources.

@@ -50,6 +50,9 @@ func (c *core) trustedServers() map[string]bool {
 
 // trustsServer tells whether what server returns is the user's own.
 func (c *core) trustsServer(server string) bool {
+	if server == foldersServer {
+		return true // the user's own folders (folder_tools.go)
+	}
 	var n int
 	return server != "" && c.store.db.QueryRow(`SELECT COUNT(*) FROM tool_trust WHERE server = ? AND trusted = 1`, server).Scan(&n) == nil && n > 0
 }

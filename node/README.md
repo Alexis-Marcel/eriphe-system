@@ -297,6 +297,7 @@ A probe for another system is a `sessionProbe`.
 | `GET /v1/node` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `folders` (the shared folders: `{id, name, access, missing, problem, program}`, never a path; see Folders it cannot use), `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine), `syncthing` (its Syncthing's `device_id`, see Copies) |
 | `GET /v1/shares` | the folders shared on this machine: `{folders: [{id, name, access, missing, problem, program}]}`, never a path (see Shares) |
 | `DELETE /v1/shares/{id}` | take a folder off the list (eriphe-core may restrict, never add); the tasks holding it are stopped |
+| `POST /v1/shares/{id}/files` | the files of a shared folder (or, with `copy`, of the copy kept here), held to the folder: `{op: list\|search\|read\|write\|update\|move\|delete, path, to?, query?, content?, expect?, copy?}`; see Files of a folder |
 | `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, agent_env?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex`, `vibe` or `acp` (with `command`) |
 | `GET /v1/tasks`, `GET /v1/tasks/{id}` | state, agent session, pending permissions |
 | `GET /v1/tasks/{id}/events?after=N&wait=S` | events after N, long polling |
@@ -1249,8 +1250,9 @@ it), `prepare` (a folder lent to a task, checked again, and its group for `--gro
 straight into the snapshot's new folder in the node's data: nothing goes through the node, and a
 clone where the filesystem has one), `restore` (the folder emptied and the snapshot copied back,
 after a snapshot of it as it was), `handback` (what was written as root given back to the
-folders' owners, at each turn's end) and `probe` (whether each folder opens and may be written to, every
-5 minutes and when the copies need it: what `GET /v1/shares` reports as `missing`). `ERIPHE_SHARE_COMMAND`, set on the node's container, makes a user's own
+folders' owners, at each turn's end), `probe` (whether each folder opens and may be written to, every
+5 minutes and when the copies need it: what `GET /v1/shares` reports as `missing`) and `files` (an
+operation on a folder's files, see Files of a folder). `ERIPHE_SHARE_COMMAND`, set on the node's container, makes a user's own
 `eriphe-node share add` print the launcher's command instead; `list`, `remove`, `snapshots` and
 `restore` work as before.
 
@@ -1338,6 +1340,37 @@ window), maps the folder under `/mnt/eriphe/home` and runs `wsl -d <distro> -u r
 eriphe-share add --read|--write --copyable[=false]` in the distribution (the launcher's
 `eriphe share add`, which gives the engine that folder, then the node's `share add`). Writes through such a mount follow its own owner mapping (virtiofs, 9p,
 DrvFs), not the setgid rule above.
+
+### Files of a folder
+
+A folder is a tool like any other (core/README.md, A folder is a tool): eriphe-core lists, searches
+and reads the files of a folder shared here, and writes, replaces, moves and deletes them, through
+`POST /v1/shares/{id}/files` (`folder_files.go`). eriphe-core holds each call to the folder's
+rights (its policy and cards); the node holds it to the folder:
+
+- the folder is the one in the list now, under the path it was shared with (all of Shares' checks
+  again), at its level now: a write needs it shared `write`; a copy kept here (`copy`, its
+  Syncthing id) is only read;
+- a path is relative to the folder: no `..`, nothing hidden or sensitive on the way, no folder
+  holding `.eriphe-private`, no symlink followed (listings and searches skip them all), and an
+  `os.Root` keeps every open inside the folder besides;
+- an answer never holds a path of this machine: paths relative to the folder, and errors in its own
+  words (`not_found`, `exists`, `invalid_path`, `sensitive`, `symlink`, `changed`, `too_large`…);
+- limits: 500 entries a listing, 50 matches a search (text files up to 1 MB, 5000 files looked
+  at), a text read or written up to 1 MB (UTF-8), an image read up to 5 MB;
+- `write` makes a new file only, `move` never overwrites, `update` refuses a file changed since its
+  `expect` hash, `delete` takes a file or an empty folder;
+- before a write, a snapshot of the folder (Snapshots), at most one an hour for these writes
+  (`eriphe-core files` in `share snapshots`); and the previous version of a file replaced or
+  deleted is kept in the node's data (`trash/<id>/<time>/<path>`, `-snapshot-days`), never in the
+  folder. Each write and refusal goes to `shares.log`. A file made gets the owner of its folder,
+  where the node may.
+
+With the one-container install, a helper does it (`files`), the folder alone mounted, read-only
+unless the call writes, with the place its previous versions go. A Mac with Apple's container never
+reads a shared place itself: it answers `lend_only` (409) for its own folders (eriphe-core then reads an up-to-date copy
+elsewhere, if any), and such a folder is lent to a task; a copy kept here is still read. A write
+whose caller is gone once its snapshot is taken is not made.
 
 ## Copies (Syncthing)
 

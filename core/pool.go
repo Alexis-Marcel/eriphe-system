@@ -80,6 +80,47 @@ type upstream struct {
 	clientID, clientSecret string
 	wake                   chan struct{}
 	cancel                 context.CancelFunc // stops its controller, once running
+	// provided: a server Eriphe provides itself, in this process, kept
+	// whatever the catalog says (provide).
+	provided *providedUpstream
+}
+
+// providedUpstream is a server Eriphe provides in this process, reached
+// like any catalog server (folder_tools.go): its MCP server, and what
+// the policy knows of each call, which its own rights decide.
+type providedUpstream struct {
+	server func() *mcp.Server
+	facts  func(t *mcp.Tool, input map[string]any) catalogFacts
+	// offered tells whether it has anything to offer now: lent to the
+	// brain and read for surfaces only then.
+	offered func() bool
+}
+
+// provide adds a server Eriphe provides, which the catalog never removes.
+func (p *pool) provide(name string, srv Server, pu *providedUpstream) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if old := p.ups[name]; old != nil {
+		old.stop()
+	}
+	u := &upstream{p: p, name: name, srv: srv, status: statusConnecting, wake: make(chan struct{}, 1), provided: pu}
+	p.ups[name] = u
+	p.start(u)
+}
+
+// providedNames are the servers Eriphe provides in the pool that offer
+// something now.
+func (p *pool) providedNames() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var out []string
+	for name, u := range p.ups {
+		if u.provided != nil && (u.provided.offered == nil || u.provided.offered()) {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func newPool(store *Store, servers map[string]Server) *pool {
@@ -146,7 +187,7 @@ func (p *pool) sync(servers map[string]Server) {
 	defer p.mu.Unlock()
 	for name, u := range p.ups {
 		s, ok := servers[name]
-		if ok && sameServer(s, u.srv) {
+		if (ok && sameServer(s, u.srv)) || u.provided != nil {
 			continue
 		}
 		u.stop()
@@ -321,8 +362,15 @@ func (u *upstream) connect(ctx context.Context) error {
 
 // open connects and lists the tools; the server is ready once it has them.
 func (u *upstream) open(ctx context.Context) (*mcp.ClientSession, error) {
-	tr, err := u.p.dial(ctx, u)
-	if err != nil {
+	var tr mcp.Transport
+	var err error
+	if u.provided != nil {
+		ct, st := mcp.NewInMemoryTransports()
+		if _, err := u.provided.server().Connect(context.WithoutCancel(ctx), st, nil); err != nil {
+			return nil, err
+		}
+		tr = ct
+	} else if tr, err = u.p.dial(ctx, u); err != nil {
 		return nil, err
 	}
 	client := mcp.NewClient(&mcp.Implementation{Name: "eriphe-core", Version: version}, &mcp.ClientOptions{

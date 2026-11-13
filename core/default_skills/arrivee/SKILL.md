@@ -2,7 +2,7 @@
 name: arrivee
 description: Prépare l'espace pour l'arrivée, le matin et au retour après une longue absence, avec les outils reliés, quels qu'ils soient.
 when: time daily 06:00; user.returned away_minutes>=180
-tools: [eriphe-workspace]
+tools: [eriphe-workspace, eriphe-folders]
 ---
 
 Tu prépares l'espace de travail pour que, en l'ouvrant, on voie sa journée tout de suite, sans rien demander. Tu tournes le matin, avant son arrivée, et à son retour après une absence de trois heures ou plus. Tu ne connais aucun outil d'avance : tu travailles avec ceux qui sont reliés, quels qu'ils soient.
@@ -13,6 +13,7 @@ Tu prépares l'espace de travail pour que, en l'ouvrant, on voie sa journée tou
 - `sources_read` : les lectures que le code peut faire pour une surface (outil, lecture libre ou non) ; demande un outil par son nom pour ses arguments et la forme de son résultat. Tu n'as pas besoin qu'on te les prête : le code les lit lui-même, selon les droits que l'utilisateur a donnés.
 - `catalog_read` : les composants (formes) d'une surface. Lis-le avant ta première surface.
 - `surface_write`, `surface_remove` : tes surfaces, et seulement les tiennes.
+- Les dossiers de l'utilisateur, s'il en a partagé : tu les lis toi-même (les lister, y chercher, lire une note), selon les droits qu'il leur a donnés. Tu n'y écris rien.
 - Les autres outils que ce skill a dans ses `tools`, s'il y en a : ceux-là, tu peux les lire toi-même pour composer un résumé.
 
 ## Comment faire
@@ -24,10 +25,11 @@ Tu prépares l'espace de travail pour que, en l'ouvrant, on voie sa journée tou
    - les rendez-vous du jour ;
    - les messages reçus qui demandent une réponse ou une action, pas tous les messages ;
    - les projets en cours, avec leur échéance et leur prochaine tâche ;
+   - ses notes et ses projets, quand un dossier les tient (sa mémoire ou ta consigne te dit lequel) : la note d'un projet en cours, son échéance, sa prochaine tâche ;
    - le patrimoine ou les comptes, seulement si un outil pour ça est relié ;
    - ce qui l'attend : les sessions de travail en cours et ce qui demande sa réponse. Leurs auteurs tiennent déjà leurs propres surfaces : ne les recopie pas, résume-les au plus en une ligne.
    Rien d'utile pour une chose : pas de surface. Mieux vaut trois surfaces justes que huit vides.
-5. Une donnée qui change dans la journée (les rendez-vous, les messages non lus, un solde) se lit **en direct** : déclare-la en `sources` avec une lecture de `sources_read`, liée aux composants ; le code la relit seul, sans toi. Si l'outil ne donne pas la forme de son résultat, lie ce que tu attends : l'erreur de `surface_write` nomme les champs présents, corrige et réécris. Écris le bouton de l'étape suivante avant cela : après avoir vu un résultat, un bouton n'est plus permis. Un résumé, un tri, ce qui demande de comprendre se **compose** : tu lis, tu écris les valeurs toi-même, datées.
+5. Une donnée qui change dans la journée (les rendez-vous, les messages non lus, un solde) se lit **en direct** : déclare-la en `sources` avec une lecture de `sources_read`, liée aux composants ; le code la relit seul, sans toi. Si l'outil ne donne pas la forme de son résultat, lie ce que tu attends : l'erreur de `surface_write` nomme les champs présents, corrige et réécris. Écris le bouton de l'étape suivante avant cela : après avoir vu un résultat, un bouton n'est plus permis. Une note qu'il suit se lit en direct elle aussi : une lecture de son dossier en `sources`, reliée à la surface. Un résumé, un tri, ce qui demande de comprendre se **compose** : tu lis, tu écris les valeurs toi-même, datées.
 6. Durée de vie : jusqu'à la fin de la journée, `lifetime.until` = aujourd'hui à 23:59 (`AAAA-MM-JJT23:59`, la date du déclenchement).
 7. Les titres et les textes disent ce qu'on voit (« Aujourd'hui », « À répondre », « Projets »), jamais le nom d'un outil ou d'un service. Un `why` d'une phrase. Écris-les dans la langue de l'utilisateur, celle que ta consigne te donne (« in the user's language »), quelle que soit celle de ce skill : en anglais, « Today », « To answer », « Projects ».
 
