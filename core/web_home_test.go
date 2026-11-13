@@ -192,8 +192,10 @@ func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 	if _, err := tw.c.store.addMessage(roleUser, "le dernier", true); err != nil {
 		t.Fatal(err)
 	}
-	events := func(query string) string {
-		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	// events reads the stream until it carries until, and a moment more for
+	// what should not follow.
+	events := func(query, until string) string {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events"+query, nil)
 		resp, err := tw.hc.Do(req)
@@ -206,14 +208,17 @@ func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 		sc.Buffer(nil, 1<<20)
 		for sc.Scan() {
 			b.WriteString(sc.Text() + "\n")
+			if strings.Contains(sc.Text(), until) {
+				time.AfterFunc(200*time.Millisecond, cancel)
+			}
 		}
 		return b.String()
 	}
-	if got := events("?a2ui=1"); strings.Contains(got, "un message passé") || !strings.Contains(got, "event: a2ui") ||
+	if got := events("?a2ui=1", `"text":"le dernier"`); strings.Contains(got, "un message passé") || !strings.Contains(got, "event: a2ui") ||
 		strings.Contains(got, "event: message") || !strings.Contains(got, `"text":"le dernier"`) {
 		t.Errorf("the workspace's stream:\n%s", got)
 	}
-	if got := events(""); !strings.Contains(got, "un message passé") {
+	if got := events("", "le dernier"); !strings.Contains(got, "un message passé") {
 		t.Error("the conversation's stream lost its messages")
 	}
 }

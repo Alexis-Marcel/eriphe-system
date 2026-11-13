@@ -118,34 +118,6 @@ func accountsLevel(levels map[string]string) string {
 	return accessReads
 }
 
-// accountLevel is the level of the account a call names, if the server
-// has a level for it; ok is false when the call names none of them.
-func (s Server) accountLevel(input map[string]any) (level string, ok bool) {
-	named, _ := input["account"].(string)
-	named = strings.TrimSpace(named)
-	if named == "" {
-		return "", false
-	}
-	for a, l := range s.AccountAccess {
-		if strings.EqualFold(a, named) {
-			return l, true
-		}
-	}
-	return "", false
-}
-
-// mixed tells whether the accounts of a server have different levels.
-func (s Server) mixed() bool {
-	first := ""
-	for _, l := range s.AccountAccess {
-		if first != "" && l != first {
-			return true
-		}
-		first = l
-	}
-	return false
-}
-
 // catalogFacts is what the policy knows of a catalog tool.
 type catalogFacts struct {
 	category string // read, change, delete or send (access_grid.go)
@@ -259,16 +231,6 @@ func (s *Store) forgetActions(server string) {
 // forgetAccountActions drops what was allowed for an account removed.
 func (s *Store) forgetAccountActions(server, account string) {
 	s.db.Exec(`DELETE FROM remembered_actions WHERE server = ? AND account = ? COLLATE NOCASE`, server, account)
-}
-
-// moveActions gives a server's allowed actions to another, for one of its
-// accounts: the servers of one account each merged into one (accounts.go).
-func (s *Store) moveActions(from, to, account string) {
-	for _, a := range s.allowedActions(from) {
-		_, tool, _ := splitToolName(a.Tool)
-		s.allowAction(to, claudeToolName(to, tool), cmpOr(a.Account, account))
-	}
-	s.forgetActions(from)
 }
 
 // allowedRules are the allowed actions as rules of the policy.

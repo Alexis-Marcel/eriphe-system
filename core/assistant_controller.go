@@ -20,7 +20,7 @@ import (
 // The assistant controller: one loop keeps every assistant's task as its
 // spec says. An enabled assistant has exactly one task running; one that
 // fails is started again after a wait, resuming its session while that
-// works; a change of its agent, instructions or tools restarts it once its
+// works and stays cheap (its role's ResumeTokens and ResumeIdle); a change of its agent, instructions or tools restarts it once its
 // turn is over; a disabled or removed one has its task stopped. What an
 // assistant is comes from its role's card, what wakes it from its
 // triggers' cards: the controller never asks for a name.
@@ -56,6 +56,17 @@ type assistantRole struct {
 	// Fresh: each of its tasks starts a new session, never resuming the
 	// last one: each of its turns carries all it needs.
 	Fresh bool
+	// ResumeTokens and ResumeIdle bound the session a new task resumes:
+	// past either (its last turn's context per call, the time since that
+	// turn ended) the task starts a fresh session instead, its role's
+	// first turn carrying the thread over. Each resumed call reads the
+	// whole history, and a cache older than an hour is written again in
+	// full. Zero: no bound.
+	// ResumeIdleFloor: a session under it is resumed even after the pause,
+	// its cache cheap to write again and its detail more than the pack's.
+	ResumeTokens    int64
+	ResumeIdle      time.Duration
+	ResumeIdleFloor int64
 
 	// Hooks; nil does nothing.
 	instructions func(c *core, a Assistant, prompt string) string     // completes its standing prompt
@@ -464,7 +475,11 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	_, agent, _ := c.conf().agent(a.Agent)
 	st := c.assistantStatus(a.Name)
 	if resume && !r.Fresh && st.Session != "" && st.SessionRuntime == agent.Runtime {
-		extra.Resume = st.Session
+		if why := c.sessionWorn(r, st.Session); why != "" {
+			log.Printf("%s: session %s not resumed (%s): a fresh one starts", c.assistantLog(a), st.Session, why)
+		} else {
+			extra.Resume = st.Session
+		}
 	}
 	first := r.StartPrompt
 	if r.firstPrompt != nil {
@@ -496,6 +511,25 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	})
 	log.Printf("%s: started task %s on %s (resume=%v)", c.assistantLog(a), t.ID, orStr(t.Node, "no node yet"), extra.Resume != "")
 	return nil
+}
+
+// sessionWorn says why a session is not worth resuming under its role's
+// bounds, from its last turn (whichever task ran it); "" to resume it.
+func (c *core) sessionWorn(r assistantRole, session string) string {
+	if r.ResumeTokens == 0 && r.ResumeIdle == 0 {
+		return ""
+	}
+	at, tokens, ok := c.store.lastSessionTurn(session)
+	if !ok {
+		return "" // no turn measured: nothing to go by
+	}
+	if r.ResumeTokens > 0 && tokens > r.ResumeTokens {
+		return fmt.Sprintf("~%dk tokens per call", tokens/1000)
+	}
+	if idle := time.Since(at); r.ResumeIdle > 0 && idle > r.ResumeIdle && tokens > r.ResumeIdleFloor {
+		return fmt.Sprintf("last turn %s ago", idle.Round(time.Minute))
+	}
+	return ""
 }
 
 // A resume can also fall through on the node, which then opens a new

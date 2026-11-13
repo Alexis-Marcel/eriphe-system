@@ -16,7 +16,7 @@ import (
 // botHandler is a bot channel's route.
 type botHandler func(*botChannel, http.ResponseWriter, *http.Request, *session)
 
-func botRoutes(w *web, mux *http.ServeMux, id string) {
+func botRoutes(w *web, mux *webMux, id string) {
 	h := func(f botHandler) http.Handler {
 		return w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
 			b := w.c.bot(id)

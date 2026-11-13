@@ -19,22 +19,45 @@ const statsDays = 30
 // taskUsage is what a task's turns used, as their harness reported it.
 type taskUsage struct {
 	Tokens  int64   // input, output and cache writes (tokensUsed)
-	CostUSD float64 // where the harness gives a cost
+	CostUSD float64 // from the tokens, where the model's price is known (task_cost.go)
 	Known   bool    // a turn reported its usage
 }
 
-// usageOf sums a task's usage.
+// usageOf sums a task's usage, its cost from its tokens at its model's
+// price: the turns' cost_usd is not summed, as Claude Code's is the
+// session's total so far, carried over a resumed session.
 func (s *Store) usageOf(id string) taskUsage {
 	var u taskUsage
+	var t turnTokens
 	var known int
-	s.db.QueryRow(`SELECT COALESCE(SUM(COALESCE(json_extract(data, '$.usage.input_tokens'), 0)
-		+ COALESCE(json_extract(data, '$.usage.output_tokens'), 0)
-		+ COALESCE(json_extract(data, '$.usage.cache_write_tokens'), 0)), 0),
-		COALESCE(SUM(COALESCE(json_extract(data, '$.cost_usd'), 0)), 0),
-		COUNT(json_extract(data, '$.usage'))
-		FROM events WHERE task_id = ? AND type = 'turn_end'`, id).Scan(&u.Tokens, &u.CostUSD, &known)
+	var model string
+	s.db.QueryRow(`SELECT `+tokenSums+`, COUNT(json_extract(e.data, '$.usage')),
+		COALESCE((SELECT model FROM tasks WHERE id = ?), '')
+		FROM events e WHERE e.task_id = ? AND e.type = 'turn_end'`, id, id).Scan(&t.In, &t.Out, &t.CacheRead, &t.CacheWrite, &known, &model)
 	u.Known = known > 0
+	u.Tokens = t.In + t.Out + t.CacheWrite
+	if p, ok := priceOf(model); ok {
+		u.CostUSD = t.cost(p)
+	}
 	return u
+}
+
+// lastSessionTurn is when a harness session's last turn ended and its
+// context then, per call: the node's context_tokens (Claude Code's last
+// call), or else the turn's input, cache reads and writes, a sum over its
+// calls that only errs high.
+func (s *Store) lastSessionTurn(session string) (at time.Time, tokens int64, ok bool) {
+	var when int64
+	err := s.db.QueryRow(`SELECT e.time, COALESCE(json_extract(e.data, '$.usage.context_tokens'),
+		COALESCE(json_extract(e.data, '$.usage.input_tokens'), 0)
+		+ COALESCE(json_extract(e.data, '$.usage.cache_read_tokens'), 0)
+		+ COALESCE(json_extract(e.data, '$.usage.cache_write_tokens'), 0))
+		FROM events e JOIN tasks t ON t.id = e.task_id
+		WHERE t.session_id = ? AND e.type = 'turn_end' ORDER BY e.time DESC, e.seq DESC LIMIT 1`, session).Scan(&when, &tokens)
+	if err != nil {
+		return time.Time{}, 0, false
+	}
+	return time.Unix(when, 0), tokens, true
 }
 
 // taskStats are the measures over the last statsDays.
@@ -55,6 +78,9 @@ type taskStats struct {
 	Minutes     float64
 	Failures    []classCount // by class, the most first
 	FailedTasks int          // tasks with at least one failure
+	// What all the tasks cost over the last spendDays, by day and role.
+	Spend      []daySpend
+	SpendRoles []string
 }
 
 type classCount struct {
@@ -198,5 +224,6 @@ func (s *Store) stats(since time.Time) taskStats {
 		}
 		return st.Failures[i].Class < st.Failures[j].Class
 	})
+	st.Spend, st.SpendRoles = s.spend(time.Now().AddDate(0, 0, -spendDays))
 	return st
 }

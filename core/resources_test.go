@@ -281,10 +281,3 @@ func TestRunTaskSchema(t *testing.T) {
 	}
 	t.Fatal("no run_task")
 }
-
-// decisionOf is the decision recorded for a task's permission.
-func decisionOf(c *core, task, pid string) string {
-	var d string
-	c.store.db.QueryRow(`SELECT decision FROM decisions WHERE task_id = ? AND permission_id = ?`, task, pid).Scan(&d)
-	return d
-}

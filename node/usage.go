@@ -7,6 +7,15 @@ package main
 // (thread/tokenUsage/updated, the turn's share of the thread's total);
 // OpenCode and other ACP agents nothing yet.
 
+// callContext is the prompt size of one API call, from a Claude Code
+// assistant message's usage: its input, cache reads and cache writes. The
+// last of a turn's is the session's size, which the turn's usage (a sum
+// over its calls) is not: eriphe-core reads it as "context_tokens".
+func callContext(msg map[string]any) int64 {
+	u, _ := msg["usage"].(map[string]any)
+	return num(u["input_tokens"]) + num(u["cache_read_input_tokens"]) + num(u["cache_creation_input_tokens"])
+}
+
 // claudeUsage reads the usage of a Claude Code result.
 func claudeUsage(ev map[string]any, data map[string]any) {
 	if u, ok := ev["usage"].(map[string]any); ok {

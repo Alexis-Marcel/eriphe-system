@@ -30,17 +30,6 @@ func editBrain(c *core, f func(*Assistant)) {
 	c.snap.Store(&m)
 }
 
-// setAssistant adds an assistant to the current snapshot.
-func setAssistant(c *core, a Assistant) {
-	m := *c.conf()
-	m.Assistants = maps.Clone(m.Assistants)
-	if m.Assistants == nil {
-		m.Assistants = map[string]Assistant{}
-	}
-	m.Assistants[a.Name] = a
-	c.snap.Store(&m)
-}
-
 // brainStatus is the brain's status; setBrainStatus changes it.
 func brainStatus(c *core) AssistantStatus { return c.assistantStatus(brainAssistant) }
 

@@ -161,7 +161,7 @@ func (w *web) entryPage(r *http.Request) entryPage {
 	return v
 }
 
-func (w *web) accessRoutes(mux *http.ServeMux) {
+func (w *web) accessRoutes(mux *webMux) {
 	mux.Handle("GET /settings/access", w.auth(w.handleAccess))
 	mux.Handle("GET /settings/access/new", w.auth(w.handleAccessCatalog))
 	mux.Handle("GET /settings/access/new/{kind}", w.auth(w.handleAccessNew))

@@ -15,7 +15,7 @@ import (
 // a phone or a computer, and which node is on which computer; and the
 // last decisions, planned next to sent.
 
-func (w *web) whereRoutes(mux *http.ServeMux) {
+func (w *web) whereRoutes(mux *webMux) {
 	mux.Handle("POST /where/mode", w.auth(w.handleWhereMode))
 	mux.Handle("POST /where/line", w.auth(w.handleWhereLine))
 	mux.Handle("POST /where/delay", w.auth(w.handleWhereDelay))

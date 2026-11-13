@@ -52,7 +52,7 @@ func placeCount(lang string, n int) string {
 	return fmt.Sprintf(tr(lang, "places.count"), n)
 }
 
-func (w *web) placeRoutes(mux *http.ServeMux) {
+func (w *web) placeRoutes(mux *webMux) {
 	mux.Handle("GET /settings/tools/{name}/tree", w.auth(w.handleTree))
 	mux.Handle("GET /settings/tools/{name}/tree/grid", w.auth(w.handleTreeGrid))
 	mux.Handle("POST /settings/tools/{name}/tree/case", w.auth(w.handleTreeCase))

@@ -600,7 +600,7 @@ func (c *core) arrangeWorkspace(in workspaceArrangeIn, now time.Time) ([]map[str
 }
 
 func registerWorkspaceArrange(s *mcp.Server, c *core) {
-	tool(s, "workspace_arrange", "Arrange the user's workspace as they ask (« mets l'agenda en grand », « mets ça en haut à droite », « remets tout comme avant »): each surface at a size, at a place on the 12 × 8 grid or in the order given, as if the user had placed it; it holds for their session (until they are away more than an hour, or the next day). Ids are those of the workspace part of your turn. Only on the user's request: what the workspace shows on its own is the composer's.",
+	tool(s, "workspace_arrange", "Arrange the user's workspace as they ask (« mets le résumé en grand », « mets ça en haut à droite », « remets tout comme avant »): each surface at a size, at a place on the 12 × 8 grid or in the order given, as if the user had placed it; it holds for their session (until they are away more than an hour, or the next day). Ids are those of the workspace part of your turn. Only on the user's request: what the workspace shows on its own is the composer's.",
 		func(ctx context.Context, in workspaceArrangeIn) (map[string]any, error) {
 			placed, err := c.arrangeWorkspace(in, time.Now())
 			if err != nil {

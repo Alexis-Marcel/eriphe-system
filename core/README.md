@@ -840,9 +840,13 @@ it with the stop, even a stop of its own when the work was kept.
 ### Usage and measures (`task_stats.go`)
 
 A turn's `turn_end` carries its `usage` (`input_tokens`, `output_tokens`, `cache_read_tokens`,
-`cache_write_tokens`) and `cost_usd` where the harness reports them (Claude Code both, Codex its
-tokens, OpenCode and other ACP agents nothing yet). A task's drawer shows its tokens (cache reads
-aside) and cost. The side panel of tasks shows a few measures over the last 30 days of finished
+`cache_write_tokens`, and Claude Code's `context_tokens`: its last call's prompt, the session's size)
+and `cost_usd` where the harness reports them (Claude Code both, Codex its
+tokens, OpenCode and other ACP agents nothing yet). Claude Code's `cost_usd` is the session's total
+so far (carried over a resumed session), so it is never summed: a cost comes from the tokens at the
+task's model list price (`task_cost.go`: Opus, Sonnet and Haiku, found in the model's name; another
+model has no known cost). The amounts are list-price equivalents, quota with a subscription. A
+task's drawer shows its tokens (cache reads aside) and cost. The side panel of tasks shows a few measures over the last 30 days of finished
 worker tasks, read from what eriphe-core keeps (no service of their own):
 
 - **accepted**: the last receipt says `done`, no check failed, no unsupported claim;
@@ -850,7 +854,9 @@ worker tasks, read from what eriphe-core keeps (no service of their own):
 - **unsupported claims**: receipts that said more than eriphe-core saw (done with a failed check, a
   change the diff does not have), and how many `done` receipts claim verifications no check covered;
 - **cost per accepted task**: tokens, dollars where known, and minutes;
-- **failures by class** (see Retries and budgets).
+- **failures by class** (see Retries and budgets);
+- **cost by role**: what every task (workers, the brain, the assistants) cost each of the last 7
+  days, by its kind.
 
 ### Receipts (`receipt.go`)
 
@@ -1899,10 +1905,18 @@ It gets one turn per event: my messages (`POST /v1/messages {text}`) and what ha
 resume that keeps failing is dropped for a fresh session.
 
 eriphe-core, not the harness, holds the thread: the harness session (`--resume`) is only a cache.
-A fresh session (the first one, a dropped resume, a resume the node could not do, another harness)
-gets a context pack in its first turn, never in its system prompt: what waits for a decision, the
+Each resumed call reads the whole history, and a cache left for over an hour is written again in
+full: a new brain task resumes its session only while its last turn's context was under 150,000
+tokens per call and, above 60,000 tokens, that turn ended less than 55 minutes ago
+(`brainResumeTokens`, `brainResumeIdle`, `brainResumeIdleFloor`; the role card's `ResumeTokens`,
+`ResumeIdle` and `ResumeIdleFloor`): a smaller session costs little to write again and holds more
+than the pack. The measure is the session's
+last `turn_end`, whichever task ran it: its `usage.context_tokens` (the node's, Claude Code's last
+call), or else the turn's input, cache reads and writes. Past either bound, the task starts a fresh
+session. A fresh session (the first one, a dropped resume, a session past its bounds, a resume the
+node could not do, another harness) gets a context pack in its first turn, never in its system prompt: what waits for a decision, the
 tasks under way, the intentions under way (the due ones first), the last day's episodes, and the last
-messages between the user and the brain, the newest kept, within about 8,000 tokens (`brain_context.go`). It is quoted
+messages between the user and the brain, the newest kept, within about 16,000 tokens (`brain_context.go`). It is quoted
 data; events are left out, since they carry what tasks said. eriphe-core logs its size.
 
 ## API accesses the user adds (Home Assistant, shortcuts, scripts)
@@ -4432,10 +4446,10 @@ are never shown back nor logged.
 
 Eriphe's own memory, separate from the vault, in `memory.db` next to the database (SQLite, full
 text search with FTS5, accents ignored). It points at the vault (`links`) rather than copying it.
-A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `commitment`,
-`lesson`, `decision`, `progress`, `situation`), a subject (`owner`, `person:<slug>`, `client:<slug>`,
+A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `lesson`,
+`decision`, `progress`, `situation`; what is owed is an intention, never a memory), a subject (`owner`, `person:<slug>`, `client:<slug>`,
 `project:<name>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
-what is temporary; `occurred_at` for an episode; `due_at` and `state` for a commitment), where it
+what is temporary; `occurred_at` for an episode; `state` for a progress card), where it
 comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`), a trust level (`owner`,
 `first_party`, `external`), and for what the extraction derived a `basis`: `stated` (said in so
 many words), `inferred` (deduced) or `ambiguous`, with a matching confidence (0.9, 0.7, 0.3). A
@@ -4487,7 +4501,8 @@ is still due; never periodically. An intention drawn from external content stays
 the user approves it; approved, it may remind, never act: the wake turn that reads it is tainted
 (`intention.external`), and so is a turn whose `intentions` tool returns one. The Memory page lists
 them (Intentions) with done, snooze (an hour, tomorrow 9:00), cancel and reopen; proposed ones are
-approved or rejected in À valider (a card in the conversation). A `commitment` written becomes an intention.
+approved or rejected in À valider (a card in the conversation). `remember` refuses
+what is owed (`commitment`, `promise`, `reminder`…) with a hint to `intend`.
 An assistant whose spec lists its `triggers` gets the clock only if `clock` is among them.
 
 **Search.** The full-text index holds each memory's text, subject, `keywords` (other words to find
@@ -4529,7 +4544,7 @@ as its own conclusion.
 
 **What it knows about the user.** The Memory page opens on "Ce que Jarvis sait de toi" (the
 assistant's name): the profile and the other current memories about the user (subject `owner`,
-episodes and commitments aside), the pinned ones first and marked, with the cards' usual actions,
+episodes aside), the pinned ones first and marked, with the cards' usual actions,
 and the button that does the [first-run interview](#workspace-web) again. The list below leaves them out
 (each memory shows once); a search or a filter finds them there too.
 

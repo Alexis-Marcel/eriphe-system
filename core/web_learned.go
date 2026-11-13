@@ -15,7 +15,7 @@ import (
 // here too, beside its card in the conversation. A skill shows its name and
 // version only; a memory, its text, which the scanner keeps free of secrets.
 
-func (w *web) learnedRoutes(mux *http.ServeMux) {
+func (w *web) learnedRoutes(mux *webMux) {
 	mux.Handle("GET /settings/learned", w.auth(w.handleLearned))
 	mux.Handle("POST /settings/learned/{id}/undo", w.auth(w.handleLearnedUndo))
 	mux.Handle("POST /settings/learned/{id}/keep", w.auth(w.handleLearnedKeep))

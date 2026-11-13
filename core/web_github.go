@@ -32,7 +32,7 @@ import (
 
 func init() { providerRoutes = append(providerRoutes, (*web).githubRoutes) }
 
-func (w *web) githubRoutes(mux *http.ServeMux) {
+func (w *web) githubRoutes(mux *webMux) {
 	mux.Handle("GET /settings/github", w.auth(w.handleGitHub))
 	mux.Handle("POST /settings/github/create", w.auth(w.handleGitHubCreate))
 	mux.Handle("POST /settings/github/tool", w.auth(w.handleGitHubTool))

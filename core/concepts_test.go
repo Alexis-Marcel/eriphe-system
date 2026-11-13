@@ -83,6 +83,11 @@ var conceptBench = []benchRow{
 			return c.brainIntend(intendIn{Text: "Rendre le rapport à Lina", Kind: intentPromise, OwedTo: "person:lina", DueAt: "2026-11-06", SourceRef: ref(seq)})
 		},
 		rememberCall("promise", "Doit rendre le rapport à Lina vendredi"), "intend"},
+	{"Rappelle-moi vendredi que je t'ai promis le compte rendu", "intention",
+		func(c *core, seq int) (map[string]any, error) {
+			return c.brainIntend(intendIn{Text: "Envoyer le compte rendu", Kind: intentCommitment, DueAt: "2026-11-06", SourceRef: ref(seq)})
+		},
+		rememberCall("commitment", "Doit envoyer le compte rendu vendredi"), "intend"},
 }
 
 func TestConceptBench(t *testing.T) {
@@ -113,6 +118,30 @@ func TestConceptBench(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// What comes back on a schedule is sent to a timed skill, and the
+// schedules the hint shows are ones write_skill takes.
+func TestScheduleHintNamesTimedSkill(t *testing.T) {
+	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
+	seq := ownerSays(c, "Tous les matins, donne-moi la météo")
+	for name, call := range map[string]benchCall{
+		"intend":   intendCall("Tous les matins, donner la météo", "reminder", ""),
+		"remember": rememberCall("routine", "Donner la météo chaque matin"),
+	} {
+		_, err := call(c, seq)
+		if err == nil || !strings.Contains(err.Error(), "write_skill") || !strings.Contains(err.Error(), "when: time") {
+			t.Errorf("%s: got %v, want a hint naming write_skill with when: time", name, err)
+		}
+	}
+	for _, when := range []string{"time daily 07:00", "time weekdays 08:00"} {
+		if !strings.Contains(hintSkillNotIntend, when) {
+			t.Errorf("the hint does not show %q", when)
+		}
+		if st, err := parseSkillTrigger(skillManifest{When: when}); err != nil || st == nil || st.Schedule == nil {
+			t.Errorf("write_skill refuses the hint's %q: %v", when, err)
+		}
 	}
 }
 

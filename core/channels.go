@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -91,7 +90,7 @@ type channelKind struct {
 	card  func(c *core, x convoCard, p proposal)
 	// Its own part of the workspace: its routes, what it starts, and its
 	// row in Settings → Access once set up.
-	routes func(w *web, mux *http.ServeMux)
+	routes func(w *web, mux *webMux)
 	start  func(w *web)
 	entry  func(w *web) (entryRow, bool)
 }
@@ -109,16 +108,6 @@ func lineChannels() []channelKind {
 		}
 	}
 	return out
-}
-
-// channelByVia is the channel the user wrote a message from, by its mark.
-func channelByVia(via string) (channelKind, bool) {
-	for _, k := range channelKinds {
-		if k.Label != "" && k.Label == via && k.reply != nil {
-			return k, true
-		}
-	}
-	return channelKind{}, false
 }
 
 func (k channelKind) in() bool  { return k.Dir&dirIn != 0 }

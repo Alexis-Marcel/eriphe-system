@@ -59,12 +59,8 @@ var notifyPrefRe = sync.OnceValue(func() *regexp.Regexp {
 // recurringRe: something that comes back on a schedule.
 var recurringRe = regexp.MustCompile(`(?i)(tou(s|tes) les (jours|matins|soirs|semaines|mois|lundis|mardis|mercredis|jeudis|vendredis|samedis|dimanches|week-?ends|\d+ ?(h|heures|minutes|jours))|chaque (jour|matin|soir|semaine|mois|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week-?end)|every (day|morning|evening|week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d+ ?(h|hours|minutes|days))|\bdaily\b|\bweekly\b|quotidien|hebdomadaire)`)
 
-// oneOffRe: a schedule that names one moment, not a recurrence.
-var oneOffRe = regexp.MustCompile(`(?i)(\d{4}-\d{2}-\d{2}|\b\d{1,2}/\d{1,2}\b|demain|aujourd'?hui|ce soir|tomorrow|today|tonight|\bonce\b|une fois|dans \d+|\bin \d+|\ble \d{1,2}\b|\bon the \d)`)
-
 const (
-	hintIntendNotWatch = "A rule comes back on a schedule; a one-off time is an intention: intend (kind reminder, remind_at YYYY-MM-DDTHH:MM)."
-	hintWatchNotIntend = "What comes back on a schedule is a rule: an intention fires once. Use rule (kind event, when horaire, schedule like daily 07:00 or monday 09:00) when the user asks for it."
+	hintSkillNotIntend = "What comes back on a schedule is a skill: an intention fires once. Use write_skill with when: time and a schedule (time daily 07:00, time weekdays 08:00) when the user asks for it."
 	hintRuleNotMemory  = "How, when or where the user is told is enforced by code, so it is not a memory: write it as a rule (rule: a topic, or the quiet hours) or a setting (setting: device order, lines off, daily cap, time zone, a channel's detail). recall shows the rules with the memories."
 
 	hintIntentionNotMemory = "What is owed or to do is an intention, with its date: intend (reminder, commitment, promise or waiting_for)."
@@ -77,12 +73,12 @@ func rememberRedirect(kind, text string) string {
 		if notifyPrefRe().MatchString(text) {
 			return hintRuleNotMemory + " Only if it is about how you behave in the conversation, not about notifications, call remember again with about_conversation."
 		}
-	case "reminder", "intention", "promise", "waiting_for", "todo":
+	case "reminder", "intention", "promise", "commitment", "waiting_for", "todo":
 		return hintIntentionNotMemory
 	case kindRule, "quiet", "setting":
 		return hintRuleNotMemory
 	case "watch", "routine", "schedule":
-		return hintWatchNotIntend
+		return hintSkillNotIntend
 	}
 	return ""
 }
@@ -90,15 +86,7 @@ func rememberRedirect(kind, text string) string {
 // intendHint is why an intention belongs elsewhere, or "".
 func intendHint(text string) string {
 	if recurringRe.MatchString(text) {
-		return hintWatchNotIntend
-	}
-	return ""
-}
-
-// watchScheduleHint is why a schedule belongs to an intention, or "".
-func watchScheduleHint(schedule string) string {
-	if oneOffRe.MatchString(schedule) {
-		return hintIntendNotWatch
+		return hintSkillNotIntend
 	}
 	return ""
 }

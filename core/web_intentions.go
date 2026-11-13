@@ -21,7 +21,7 @@ func (w *web) intentCard(x *Intention) intentCard {
 	return intentCard{Intention: x, Now: now, Overdue: x.Overdue(now)}
 }
 
-func (w *web) intentionRoutes(mux *http.ServeMux) {
+func (w *web) intentionRoutes(mux *webMux) {
 	mux.Handle("POST /memory/intention/{id}/{action}", w.auth(w.handleIntention))
 }
 

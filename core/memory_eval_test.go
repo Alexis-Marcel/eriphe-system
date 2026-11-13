@@ -502,9 +502,6 @@ func TestMemoryEvalProspective(t *testing.T) {
 	}
 }
 
-// interruptPolicy says, for a labelled situation, now, brief or none.
-type interruptPolicy func(evalInterrupt) string
-
 // neverInterrupts is Eriphe today: it speaks only when spoken to.
 func neverInterrupts(evalInterrupt) string { return "none" }
 
