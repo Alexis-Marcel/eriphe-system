@@ -3136,7 +3136,16 @@ through `a2ui.Validate`).
   http(s) or mailto, `rel="noopener noreferrer"`, in a new tab on the user's click), Image
   (loaded only from `/espace/media?…`, the proxy of core; any other address shows its alt
   text: a model's URL is never fetched by the page), Icon (a fixed set of inline SVG,
-  `icons.tsx`, no font).
+  `icons.tsx`, no font), Link (a page outside, opened in a new tab on the user's click only,
+  `rel="noopener noreferrer"`, `referrerpolicy="no-referrer"`; its host shows beside the label,
+  the whole address when it has none or the surface shows external content; an address the
+  page's own parse does not take as http(s) with a host and no credentials shows as text: see
+  [links](#surfaces-in-a2ui-a2ui)), Code (`code.tsx`: text as it is in a
+  fixed-width font, an optional language label; `mode: "diff"` reads a unified diff, its
+  files' headers, hunks, added, removed and kept lines each a class, a hunk's counts telling a
+  removed `-- x` line from a header. One block per line: a tile wraps long lines, draws 60 at
+  most with how many more, and hides its last lines whole; open, every line, and the block
+  scrolls sideways).
 - *Input*: Button (with its icon), Choice, TextField, DateField; the fields write what the
   user enters to the bound data path, as A2UI does. A Button's action keeps to the
   [actions' grammar](#the-actions-of-a-surface) (an ask carries its author's words only, never
@@ -3215,7 +3224,7 @@ template) or computed by a function (`{"@call": "formatDate", "args": {…}}`). 
 
 - **The catalog** (`a2ui/catalog_v1.json`, id `urn:eriphe:a2ui:workspace:v1`): a JSON Schema
   2020-12 document by A2UI's catalog rules. Shapes only, never tools: Text, Markdown, Image,
-  Icon, Row, Column, List, Card, Tabs, Divider, Button, Choice, TextField, DateField, Metric,
+  Icon, Link, Code, Row, Column, List, Card, Tabs, Divider, Button, Choice, TextField, DateField, Metric,
   Chart, Table, Timeline, Message, Day, Proposal, Alert, Placeholder; and the functions
   formatString, formatNumber, formatDate, formatRelative. A property that carries data takes a
   binding (Metric's `value`, Chart's `series`, Table's `rows`, Day's `events`…). Its descriptions
@@ -3305,6 +3314,16 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   refused, and so is any ask written in a turn that read external content, which may have
   written it); a local name (`open`, `expand`, `tab`) carries no context; `answer`, another
   name or a function call is refused.
+- **Links** (`a2ui/links.go`): a Link's address is never built, so that it cannot carry out
+  what its author read (A2UI #4045): `url` is a literal or a binding (`@path`), never a function
+  call (the schema has no such form: no `formatString`). A literal must be http(s) with a host,
+  no user or password, no space, control character or backslash, 2 KiB at most
+  (`a2ui.CheckLinks`, `a2ui.LinkURLOK`); a binding must hold such an address as a whole, in a
+  source (a page's address a tool gives) or in the author's data (checked like a literal, in
+  `checkBindings`); and every bound value goes to the page as it is or as `""`, no link
+  (`surfaceView`: a source may later give anything). A tainted surface may show links: unlike
+  an image, nothing leaves without the user's click, and the page then shows the whole address,
+  not only its host. Markdown links can still be built with `formatString`: not covered here.
 - **Media**: the page never loads an address from outside (A2UI #4045; the CSP forbids it
   anyway). Each media address (an `Image`'s `url`, `a2ui.IsMedia`) is rewritten to
   `GET /espace/media?u=<address>&s=<signature>` (`surfaces_media.go`, with a session): one a

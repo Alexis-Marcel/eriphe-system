@@ -4,6 +4,7 @@ import { Catalog, CommonSchemas } from "@a2ui/web_core/v1_0";
 import { z } from "zod";
 import { useWords, type Lang } from "../i18n";
 import { Chart as ChartView, cleanSeries } from "./chart";
+import { Code as CodeView } from "./code";
 import { Day as DayView, cleanEvents, type Ghost } from "./day";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
@@ -227,6 +228,64 @@ const Image = createComponentImplementation(
 );
 
 const Icon = createComponentImplementation({ name: "Icon", schema: z.object({ name: IconName }) }, ({ props }) => <IconView name={props.name} />);
+
+// linkTo is the address a Link may open, parsed once: http(s), a host, no
+// user or password, nothing a reader could misread; null otherwise.
+// eriphe-core checked it (a2ui.LinkURLOK); the page checks again, and both
+// the href and the host it shows come from this one parse.
+export function linkTo(raw: string): URL | null {
+  if (!raw || raw.length > 2048 || /[\s\\\u0000-\u001f\u007f-\u009f]/.test(raw)) return null;
+  try {
+    const u = new URL(raw);
+    if ((u.protocol !== "http:" && u.protocol !== "https:") || u.username || u.password || !u.hostname) return null;
+    return u;
+  } catch {
+    return null;
+  }
+}
+
+// A Link opens a page outside, in a new tab, on the user's click only:
+// nothing goes with it (no opener, no referrer). Its address shows in
+// clear: its host beside the label, or the whole address when there is no
+// label or when the surface shows external content (a model that read it
+// could have written the address: the user sees all of it before a click).
+// Its url is never computed (core/a2ui/links.go): a literal or a binding.
+const Link = createComponentImplementation(
+  {
+    name: "Link",
+    schema: z.object({
+      url: z.union([z.string(), CommonSchemas.DataBinding]),
+      label: CommonSchemas.DynamicString.optional(),
+    }),
+  },
+  ({ props, context }) => {
+    const { t } = useWords();
+    const label = str(props.label);
+    const u = linkTo(str(props.url));
+    if (!u) return <span className="a2-link a2-link-off" title={t("espace.a2.link.off")}>{label || t("espace.a2.link.off")}</span>;
+    const whole = !label || external(context.dataContext.surface);
+    return (
+      <a className="a2-link" href={u.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" title={u.href}>
+        <IconView name="link" />
+        {label && <span className="a2-link-label">{label}</span>}
+        <span className="a2-link-host">{whole ? u.href : u.host}</span>
+        <span className="sr-only"> {t("espace.a2.newtab")}</span>
+      </a>
+    );
+  },
+);
+
+const Code = createComponentImplementation(
+  {
+    name: "Code",
+    schema: z.object({
+      text: CommonSchemas.DynamicString,
+      language: z.string().optional(),
+      mode: z.enum(["code", "diff"]).optional(),
+    }),
+  },
+  ({ props }) => <CodeView text={str(props.text)} language={props.language ?? ""} mode={props.mode ?? "code"} />,
+);
 
 // --- Input --------------------------------------------------------------
 
@@ -642,6 +701,8 @@ const onlyAsks = (s: unknown) => {
   const m = (s as Meta | undefined)?.metadata?.extensions?.eriphe;
   return Boolean(m?.tainted) && m?.author !== "core";
 };
+// external tells whether a surface shows external content, whoever wrote it.
+const external = (s: unknown) => Boolean((s as Meta | undefined)?.metadata?.extensions?.eriphe?.tainted);
 
 // KEEPS are the kinds of proposals that only ask whether to keep something
 // (a memory, a reminder): yes runs nothing. Their header asks it and their
@@ -820,6 +881,8 @@ export const components: ReactComponentImplementation[] = [
   Markdown,
   Image,
   Icon,
+  Link,
+  Code,
   box("row"),
   box("column"),
   List,

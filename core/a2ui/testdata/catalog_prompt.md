@@ -7,10 +7,12 @@ Une surface est une tuile de l'espace de travail : un titre, et dedans des compo
 **Listes répétées.** `children` prend une liste d'ids `["a", "b"]` ou un modèle `{"path": "/mails", "componentId": "ligne"}` qui répète le composant `ligne` pour chaque élément de `/mails`. Dans ce modèle et ses enfants, un chemin sans `/` au début (`{"@path": "sujet"}`) se lit dans l'élément ; un chemin qui commence par `/` se lit depuis la racine des données.
 
 **Règles.**
-- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day).
+- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day ; un lien vers une page : Link ; du code ou un diff : Code).
 - Une surface dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.
 - Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et la surface reste à jour.
 - Un bouton ne fait qu'une action, d'une liste fermée ; il n'écrit jamais dans un outil. `ask` demande quelque chose à Eriphe avec tes propres mots : `{"event": {"name": "ask", "context": {"text": "Relance la sauvegarde"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code y ajoute la surface et le bouton, et Eriphe le reçoit comme un message de l'utilisateur. Les noms locaux `open`, `expand` et `tab` sont les gestes de la page, sans contexte : un bouton n'en a presque jamais besoin. Une proposition se montre avec un composant Proposal, qui seul envoie le oui ou le non (`answer`) ; jamais un bouton. Tout autre nom est refusé.
+- Un Link montre son adresse en clair et ne s'ouvre que si l'utilisateur clique. Son `url` est une adresse http(s) écrite telle quelle, ou une liaison vers un champ que l'outil rend déjà comme une adresse (`{"@path": "url"}` dans un modèle) ; jamais une adresse construite à partir des données : pas de formatString, rien d'ajouté à la requête, pas d'identifiant ni de mot de passe dans l'adresse. Une adresse qui ne suit pas cette règle est refusée, ou n'est pas montrée.
+- Du code se montre avec Code, tel quel ; un diff unifié avec `"mode": "diff"`. Pour relire des modifications : leur description (Markdown), le diff (Code), les vérifications (Timeline) et un Link « Ouvrir dans … » vers leur page, pour aller plus loin là où elles sont.
 - N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.
 
 ## Exemple : des mails, liés aux données
@@ -43,6 +45,12 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
   url* texte (Son adresse) · alt texte (Ce qu'elle montre, en quelques mots) · fit contain|cover
 - **Icon** : Une icône.
   name* alert|arrowDown|arrowUp|calendar|chart|check|clock|close|cloud|document|error|event|folder|home|info|link|lock|mail|message|money|note|person|phone|place|refresh|search|server|settings|star|task|trendDown|trendUp|warning ou liaison
+- **Link** : Un lien vers une page web, son adresse montrée en clair ; il s'ouvre dans un nouvel onglet quand l'utilisateur clique, jamais de lui-même.
+  url* texte fixe ou liaison (L'adresse http(s), écrite telle quelle, ou une liaison vers un champ qui est déjà une adresse ; jamais construite) · label texte (Ce que le lien ouvre, en quelques mots ; son hôte se voit à côté)
+  Exemple : `{"id": "ouvrir", "component": "Link", "label": "Ouvrir la page du projet", "url": "https://example.org/projets/terrasse"}`
+- **Code** : Du code ou un texte à chasse fixe, tel quel ; en mode diff, un diff unifié : ses fichiers, ses blocs @@, ses lignes ajoutées et retirées.
+  text* texte (Le code, ou le diff unifié entier) · language texte fixe (Le langage, montré en étiquette (« go », « json »)) · mode code|diff (diff pour un diff unifié ; code par défaut)
+  Exemple : `{"id": "modif", "component": "Code", "mode": "diff", "text": {"@path": "/diff"}}`
 - **Row** : Des enfants côte à côte.
   children* enfants ([ids] ou modèle {path, componentId}) · align start|center|end|stretch · justify start|center|end|spaceBetween
 - **Column** : Des enfants l'un sous l'autre.

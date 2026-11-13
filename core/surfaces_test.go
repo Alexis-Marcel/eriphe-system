@@ -549,6 +549,64 @@ func TestSurfaceLifetime(t *testing.T) {
 	}
 }
 
+// A Link's address is never built (A2UI #4045): a literal http(s) address,
+// or a field that is one as a whole, in a source or the author's data; a
+// tainted author may still show one (it opens on the user's click only,
+// shown in clear). What a source gives later that is not an address goes
+// to the page as "": no link.
+func TestSurfaceLinks(t *testing.T) {
+	c, l := surfaceCore(t)
+	l.set(func(l *fakeLedger) {
+		l.accounts = []ledgerAccount{{Name: "a", Photo: "https://example.org/a"}, {Name: "b", Photo: "https://example.org/b?tab=1"}}
+	})
+	comps := json.RawMessage(`[
+		{"id":"root","component":"Column","children":["list","home","more"]},
+		{"id":"list","component":"List","children":{"path":"/ledger/accounts","componentId":"open"}},
+		{"id":"open","component":"Link","label":{"@path":"name"},"url":{"@path":"photo"}},
+		{"id":"home","component":"Link","url":"https://example.org/projets"},
+		{"id":"more","component":"Link","label":"Plus","url":{"@path":"/more"}}]`)
+	s, errs, err := c.surfaceWrite("brain", surfaceIn{Title: "x", Components: comps, Sources: balances,
+		Data: json.RawMessage(`{"more":"https://example.org/plus"}`), Tainted: []string{"mail.read"}})
+	if err != nil || len(errs) > 0 {
+		t.Fatal(err, errs)
+	}
+	view := c.surfaceView(s)
+	if u, _ := getPointer(view.data, "/ledger/accounts/1/photo"); u != "https://example.org/b?tab=1" {
+		t.Fatalf("a source's address: %v", u)
+	}
+	raw, _ := json.Marshal(view.components)
+	if !strings.Contains(string(raw), `"url":"https://example.org/projets"`) || strings.Contains(string(raw), "/espace/media") {
+		t.Fatalf("the author's address is sent as it is: %s", raw)
+	}
+
+	refused := func(name, comps, data, path, words string) {
+		t.Helper()
+		_, errs, err := c.surfaceWrite("brain", surfaceIn{Title: "x", Components: json.RawMessage(comps), Sources: balances, Data: json.RawMessage(data)})
+		if err != nil || len(errs) == 0 || errs[0].Path != path || !strings.Contains(errs[0].Message, words) {
+			t.Errorf("%s: %v %v", name, err, errs)
+		}
+	}
+	refused("a script", `[{"id":"root","component":"Link","url":"javascript:alert(1)"}]`, ``, "/components/0/url", "http(s)")
+	refused("a password", `[{"id":"root","component":"Link","url":"https://sam:secret@example.org/"}]`, ``, "/components/0/url", "no user or password")
+	refused("built by formatString", `[{"id":"root","component":"Link","url":{"@call":"formatString","args":{"value":"https://example.org/?q=${/ledger/total}"}}}]`,
+		``, "/components/0/url", "")
+	refused("a field that is not an address", `[{"id":"root","component":"List","children":{"path":"/ledger/accounts","componentId":"open"}},
+		{"id":"open","component":"Link","url":{"@path":"name"}}]`, ``, "/components/1/url/@path", "already an http(s) address")
+	refused("the author's data, not an address", `[{"id":"root","component":"Link","url":{"@path":"/more"}}]`,
+		`{"more":"ftp://example.org/a"}`, "/components/0/url/@path", "already an http(s) address")
+
+	// A source gives something else later: no link, the rest as it was.
+	s.Data, _ = json.Marshal(map[string]any{"ledger": map[string]any{"accounts": []any{
+		map[string]any{"name": "a", "photo": "javascript:alert(1)"}, map[string]any{"name": "b", "photo": "https://example.org/b"}}},
+		"more": "https://sam:secret@example.org/"})
+	view = c.surfaceView(s)
+	for ptr, want := range map[string]string{"/ledger/accounts/0/photo": "", "/ledger/accounts/1/photo": "https://example.org/b", "/more": "", "/ledger/accounts/0/name": "a"} {
+		if got, _ := getPointer(view.data, ptr); got != want {
+			t.Errorf("%s: %v, want %q", ptr, got, want)
+		}
+	}
+}
+
 // Media addresses go through eriphe-core: from a source, rewritten to the
 // endpoint; written by a tainted author, dropped; anything but http(s),
 // dropped. The endpoint serves only what it signed, an image or a video,

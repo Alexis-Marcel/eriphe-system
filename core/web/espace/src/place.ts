@@ -178,7 +178,7 @@ export function needRows(tilePx: number, bodyPx: number, contentPx: number, cell
 // FOLDABLE are the blocks a tile with too little room hides, the last
 // first, so that what it shows is whole: never a sentence cut in two.
 export const FOLDABLE =
-  "li, tr, .a2-column > *, .a2-card-body > *, .a2-markdown > *, .a2-tabpanel > *, .a2-proposal-why, .a2-proposal-fields, .a2-message-excerpt, .a2-chart, .a2-legend, .a2-day-allday";
+  "li, tr, .a2-column > *, .a2-card-body > *, .a2-markdown > *, .a2-tabpanel > *, .a2-proposal-why, .a2-proposal-fields, .a2-message-excerpt, .a2-chart, .a2-legend, .a2-day-allday, .a2-code-line, .a2-code-rest";
 
 // foldOut hides (class fit-out) the content's last blocks until it holds
 // in room px, the first block always kept; it tells whether it hid any.
