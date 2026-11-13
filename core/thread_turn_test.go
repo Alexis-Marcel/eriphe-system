@@ -262,6 +262,11 @@ func TestStepTaintHandedOn(t *testing.T) {
 			t.Fatal(err)
 		}
 		search := stepOf(t, c, s, "search")
+		// A card its task raises is the thread's too.
+		id := c.newAccessAsk(accessQuestion{TaskID: search.Task, Permission: "p-1", Need: accessNeed{"github", catChange, ""}})
+		if refs := timelineCards(t, c, s.ID); !strings.Contains(refs, proposalRef(cardAccess, id)) {
+			t.Errorf("the step task's card is not the thread's: %q", refs)
+		}
 		c.taskRead(search.Task, "web")
 		reports(t, c, search, receiptOf("Found three.", "found"))
 		if _, err := c.settleStep(ctx, s.ID, "search", verdictAccept, "", "Three names.", "brain"); err != nil {
