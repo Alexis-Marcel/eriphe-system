@@ -164,6 +164,9 @@ func (c *core) taskOfThread(ctx context.Context, in runTaskIn) (map[string]any, 
 	if err := c.taintedResources(in.runRequest); err != nil { // resources.go
 		return nil, false, err
 	}
+	if err := c.checkTaskRequest(in.runRequest); err != nil {
+		return nil, false, err // refused as run_task refuses it, with no step born
+	}
 	title := in.Title
 	if title == "" {
 		title = (&TaskRow{Prompt: in.Prompt}).label()
@@ -175,8 +178,35 @@ func (c *core) taskOfThread(ctx context.Context, in runTaskIn) (map[string]any, 
 		log.Printf("run_task: not a step of thread %d: %v", id, err)
 		return nil, false, nil
 	}
+	if st.Status == stepBlocked { // its task could not start: the thread shows why
+		return nil, true, fmt.Errorf("the task could not start (step %s of thread %d, blocked): %s", st.Key, s.ID, st.Note)
+	}
 	return map[string]any{"thread": s.ID, "step": st.Key, "task": st.Task, "status": st.Status,
 		"note": fmt.Sprintf("A task step of thread %d « %s »: the thread follows it, and its end reaches you as the thread's event; settle it with settle_step.", s.ID, s.Title)}, true, nil
+}
+
+// checkTaskRequest refuses before any step what startTask would refuse of
+// the task itself: no prompt, a contract or an agent that is none, what it
+// is lent that cannot be.
+func (c *core) checkTaskRequest(r runRequest) error {
+	if strings.TrimSpace(r.Prompt) == "" {
+		return errors.New("prompt is required")
+	}
+	if _, _, err := c.conf().agent(r.Agent); err != nil {
+		return err
+	}
+	lent, err := c.resolveRequest(r) // resources.go
+	if err != nil {
+		return err
+	}
+	if r.Contract != nil {
+		k := *r.Contract
+		if err := k.normalize(); err != nil { // contract.go
+			return err
+		}
+		return k.checkLent(lent.Repo != nil, folderNames(lent.Folders))
+	}
+	return nil
 }
 
 // freeStepKey is a key no step of the thread has: task, task-2…

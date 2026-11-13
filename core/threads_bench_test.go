@@ -913,7 +913,7 @@ func threadTurn(x threadCase, c *core, r *threadRun, event string) string {
 			}
 		}
 	}
-	// The threads are not listed: finding one is the brain's first call.
+	// The threads are not listed: open_thread on a subject gives back its own.
 	if f := c.currentLayout().Focus; f != "" {
 		title := ""
 		if s, err := c.surface(f); err == nil {

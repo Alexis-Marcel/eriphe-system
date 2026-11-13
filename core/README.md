@@ -988,7 +988,9 @@ refused) comes back as that thread's event (`callToBrain`: `[thread N « title �
 `run_task` in a turn about a light, active thread (`taskOfThread`) is a `task` step of that thread
 (the same prompt, title, agent, resources and contract; key `task`, `task-2`…), so the thread's
 surface follows it and its end comes back as the thread's event; its result gives the thread, the
-step and its task. It stays a task of its own with `thread: none`, a `surface` to fill or a `node`
+step and its task. What `run_task` refuses of the task itself (no prompt, an agent or a resource
+that is none) is refused before any step is born; a task that still cannot start leaves its step
+blocked and the call refused. It stays a task of its own with `thread: none`, a `surface` to fill or a `node`
 named, in a turn about no thread or about one led or ended, or when the thread cannot take one more
 step. The prompt
 (`brain-prompt.md`, « Les threads ») says when the brain opens or resumes a thread (a question about

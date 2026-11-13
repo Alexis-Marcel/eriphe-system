@@ -86,7 +86,7 @@ func TestOpenThreadSubjectRules(t *testing.T) {
 // run_task in a turn about a light thread is a task step of it; thread
 // none keeps it a task of its own, and so does a turn about no thread.
 func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
-	c, _ := threadCore(t)
+	c, led := threadCore(t)
 	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque Velora", "goal": "Sam sait si le nom est libre.", "subject": "brand:velora"})
 	if isErr {
 		t.Fatalf("open: %v", out)
@@ -122,6 +122,29 @@ func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
 	if _, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "x", "thread": "7"}); !isErr {
 		t.Error("a thread other than none taken")
 	}
+	// What run_task refuses of the task is refused as before, no step born.
+	for name, bad := range map[string]map[string]any{
+		"an agent that is none": {"prompt": "Corrige.", "agent": "nobody"},
+		"a folder that is none": {"prompt": "Corrige.", "resources": []any{map[string]any{"kind": "folder", "ref": "nowhere", "access": "read"}}},
+	} {
+		if _, isErr := callBrainTool(t, c, "run_task", bad); !isErr {
+			t.Errorf("%s: taken", name)
+		}
+	}
+	// A surface to fill: a task of its own, never a step.
+	callBrainTool(t, c, "run_task", map[string]any{"prompt": "Résume les mails.", "surface": "mails"})
+	if steps, _ := c.steps(th.ID); len(steps) != 2 {
+		t.Errorf("%d steps after a refused task and a surface's", len(steps))
+	}
+	// A turn about a led thread: a task of its own.
+	c.turn.about(led.ID)
+	if out, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Résume la veille."}); isErr || out["id"] == nil {
+		t.Fatalf("led thread: %v", out)
+	}
+	if steps, _ := c.steps(led.ID); len(steps) != 4 {
+		t.Errorf("the led thread has %d steps", len(steps))
+	}
+	c.turn.about(th.ID)
 	// A turn about no thread: a task of its own.
 	c.turn.about(0)
 	if out, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Résume l'agenda."}); isErr || out["id"] == nil {
