@@ -182,6 +182,35 @@ func TestBrainFreeWriteNeedsThePolicy(t *testing.T) {
 	}
 }
 
+// A Free read of the open web (openWorldHint not false) is not allowed in
+// advance: on a tainted turn it is the user's, as WebFetch is, and the
+// proxy calls it only on a ticket.
+func TestBrainOpenWorldReadFollowsTheTurn(t *testing.T) {
+	c := newMailCore(t, accessFree)
+	fetch := "mcp__mail__fetch_page"
+	if slices.Contains(c.brainFreeReads(), fetch) {
+		t.Error("an open-web read is allowed in advance")
+	}
+	if c.freeAhead(fetch, nil) {
+		t.Error("an open-web read skips the policy")
+	}
+	if got, why := c.decideBrainCall(fetch, nil, nil); got != decideAllow {
+		t.Errorf("clean: %q (%s)", got, why)
+	}
+	c.turn.taint("mail.search_messages")
+	if got, why := c.decideBrainCall(fetch, nil, nil); got != decideAsk || why != uncleanReason {
+		t.Errorf("tainted: %q (%s)", got, why)
+	}
+	if got, _ := c.decideBrainCall("mcp__mail__search_messages", nil, nil); got != decideAllow {
+		t.Errorf("tainted: a closed read = %q", got)
+	}
+	f := c.pool.facts(fetch, nil)
+	f.unclean, f.granted = true, true
+	if got, _ := decideWith(fetch, nil, f, nil); got != decideAllow {
+		t.Errorf("granted: %q", got)
+	}
+}
+
 // A task: the rule is read at launch, and holds whatever it reads since.
 func TestTaskFreeWriteFollowsItsStart(t *testing.T) {
 	c := newMailCore(t, accessFree)

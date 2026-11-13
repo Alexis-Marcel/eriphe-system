@@ -512,3 +512,23 @@ func TestDrawerShowsGrants(t *testing.T) {
 		t.Errorf("no grant in the drawer: %s", body)
 	}
 }
+
+// A read of the open web on a tainted turn: a card, the brain told and
+// not held, and a yes runs that call.
+func TestBrainOpenWorldReadCard(t *testing.T) {
+	c := newMailCore(t, accessFree)
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.turn.taint("mail.search_messages")
+	in := map[string]any{}
+	if got, why := c.decideBrainCall("mcp__mail__fetch_page", in, nil); got != decideAsk || !accessReason(why) {
+		t.Fatalf("tainted: %q (%s)", got, why)
+	}
+	brainCalls(t, c, "p-1", "mcp__mail__fetch_page", in)
+	if told, allow := answeredAllow(t, c, "b-1", "p-1"); !told || allow {
+		t.Fatalf("the brain is held: told %v, allow %v", told, allow)
+	}
+	if _, err := c.decideCard(context.Background(), accessCard(t, c, "fetch").ID, true, "web"); err != nil {
+		t.Fatal(err)
+	}
+	waitEvent(t, c, "est exécutée")
+}

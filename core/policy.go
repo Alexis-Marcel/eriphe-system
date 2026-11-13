@@ -167,7 +167,7 @@ func decideWith(tool string, input map[string]any, f catalogFacts, remembered []
 		}
 		return decideAsk, approvalReason
 	case gridFree:
-		if f.unclean && !f.read && !f.granted {
+		if f.unclean && (!f.read || f.openWorld) && !f.granted {
 			return decideAsk, uncleanReason
 		}
 		return decideAllow, why

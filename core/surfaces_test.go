@@ -51,7 +51,7 @@ func newFakeLedger() *fakeLedger {
 		SubscribeHandler:   func(context.Context, *mcp.SubscribeRequest) error { return nil },
 		UnsubscribeHandler: func(context.Context, *mcp.UnsubscribeRequest) error { return nil },
 	})
-	mcp.AddTool(s, &mcp.Tool{Name: "balances", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+	mcp.AddTool(s, &mcp.Tool{Name: "balances", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}},
 		func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, ledgerOut, error) {
 			l.mu.Lock()
 			defer l.mu.Unlock()

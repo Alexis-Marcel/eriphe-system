@@ -1223,8 +1223,10 @@ holds; a hard guarantee is set in the grid. One guard stays, against prompt inje
 turn every Free above Read counts as On approval, for the brain until the user's next message
 starts a clean turn, for a task if it was started on one (or by the brain alone, or was lent the
 tool held back). A task started cleanly keeps its Free writes even after reading external content.
-Only the brain's Free reads are allowed in advance and called without a ticket; its writes go
-through the policy, so the turn's taint is always seen.
+A read of the open web (a read tool whose `openWorldHint` is not `false`, such as a fetch or a web
+search) counts as above Read here, as `WebFetch` does: on a tainted turn it waits for the user.
+Only the brain's Free reads of closed sources are allowed in advance and called without a ticket;
+its writes and its reads of the open web go through the policy, so the turn's taint is always seen.
 
 ### The approval card
 
@@ -1853,10 +1855,12 @@ unless `always_load`. Of its harness's own tools the brain keeps only the web an
 `--tools`); the rest (Agent, Bash, Edit, Read…) it never needs.
 
 **It reads by itself.** The brain is lent, with no configuration, every tool of the catalog that is
-not [Never](#access-grid), through its proxy like any task. Its Free reads are allowed in advance
+not [Never](#access-grid), through its proxy like any task. Its Free reads of closed sources
+(not of the open web: `openWorldHint` false) are allowed in advance
 in its assignment (`allowed_tools`) and called without a ticket: no permission round trip, a
 decision on record all the same. Everything else goes through the policy: a Free write is allowed
-on a clean turn and asked on a [card](#the-approval-card) on a tainted one, On approval is a card
+on a clean turn and asked on a [card](#the-approval-card) on a tainted one, and so is a Free read
+of the open web; On approval is a card
 per call. A read named by a
 policy rule of the configuration is not free: it goes through the policy with its input. The list
 is computed when its node fetches the task, so a tool or server added later reaches the brain at

@@ -32,6 +32,7 @@ func newMailCore(t *testing.T, access string) *core {
 		{Name: "move", Annotations: &mcp.ToolAnnotations{OpenWorldHint: &no, DestructiveHint: &no}},
 		{Name: "send", Annotations: &mcp.ToolAnnotations{OpenWorldHint: &yes}},
 		{Name: "unannotated"},
+		{Name: "fetch_page", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, // reads the open web
 	} {
 		mcp.AddTool(srv, tl, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
 			return nil, map[string]any{}, nil
@@ -50,6 +51,9 @@ func newMailCore(t *testing.T, access string) *core {
 	waitStatus(t, c.pool.get("mail"), statusReady)
 	return c
 }
+
+// closedWorld marks a fake read that does not reach the open web.
+var closedWorld = func() *bool { b := false; return &b }()
 
 // ask makes a worker's task request each tool once, and returns what the
 // policy did: allowed, the user's, or left to the brain.
