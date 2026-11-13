@@ -7,6 +7,19 @@
 // or the answer to its presence.
 const eripheTab = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
+// eripheLocalURL tells whether a url is a path of this site, as localURL
+// does in the workspace (espace/src/presence.ts): no backslash, tab or
+// newline a browser would read as "//", and this origin once resolved.
+function eripheLocalURL(url) {
+  "use strict";
+  if (typeof url !== "string" || !url.startsWith("/") || url.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(url)) return false;
+  try {
+    return new URL(url, location.origin).origin === location.origin;
+  } catch (_) {
+    return false;
+  }
+}
+
 // A notification routed to this tab: a banner in the page, no system
 // notification. Its link opens it, which is also what "seen" means.
 function eripheInApp(notes) {
@@ -21,7 +34,7 @@ function eripheInApp(notes) {
     const text = document.createElement("span");
     text.textContent = (n.body && (n.body[lang] || n.body.fr)) || "";
     el.appendChild(text);
-    if (n.url && n.url.startsWith("/") && !n.url.startsWith("//")) {
+    if (eripheLocalURL(n.url)) {
       const a = document.createElement("a");
       a.href = n.url;
       a.textContent = box.dataset.open || (lang === "en" ? "Open" : "Voir");
