@@ -374,7 +374,7 @@ func TestBrainPromptThreads(t *testing.T) {
 		"une étape `call` de fusion", "une étape `user`", "propose seulement le `check`",
 		"`workspace_focus` avec `thread-<id>`", "**sans** `workspace_focus`",
 		"aucune question de toi-même", "`[rien]`", "son **but** est atteint",
-		"se range seul dans sa chronologie",
+		"se range seul dans sa chronologie", "Sa réponse sur une de ces cartes",
 	} {
 		if !strings.Contains(section, want) {
 			t.Errorf("« Les threads » lacks %q", want)
@@ -433,6 +433,28 @@ func TestThreadCardsLeaveTheQueue(t *testing.T) {
 		if e.it.Ref == cardItem(merge) && e.surface != threadSurfaceID(pr.ID) {
 			t.Errorf("the composer reads the card on %q", e.surface)
 		}
+	}
+
+	// A tainted thread's surface does not answer its cards in place: the
+	// queue keeps the answerable tile.
+	bad, err := c.openThread(threadIn{Title: "Mail", Goal: "Merge what the mail asks."}, []string{"mail:7"}, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.addStep(context.Background(), bad.ID, stepSpec{Key: "merge", Title: "Merge", Kind: stepCall, Tool: mergeTool, Input: map[string]any{"number": 13}}, nil, "brain"); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := c.step(bad.ID, "merge")
+	xs, _ = c.cardsWhere(`ref = ?`, st.Card)
+	if len(xs) != 1 {
+		t.Fatalf("the tainted step's card: %+v", st)
+	}
+	c.syncQueueSurfaces()
+	if _, ok := surfaceByID(t, c, queueSurfaceID(cardItem(xs[0]))); !ok {
+		t.Error("a tainted thread's card left the queue")
+	}
+	if s, _, _ := threadSurfaceOf(t, c, bad.ID); s.Weight != threadWeightYours {
+		t.Errorf("the tainted thread's surface weighs %d", s.Weight)
 	}
 
 	// The thread stopped: the card still waits, back in the queue.

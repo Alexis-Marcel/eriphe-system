@@ -2996,7 +2996,8 @@ alert), or a proposal that takes place today (its time, `proposalSpans`, never a
 card alone is a `Proposal` titled by its subject, an `Alert` by its weight (« Urgent »,
 « Attend ta réponse »). A card an active thread's surface shows (a step's, one linked to it, the
 thread's own: `threadShownCards`) is answered there and in no surface of the queue, even of weight
-4; the thread's surface takes its weight (× 20, at least 70). Only one of weight 5, or that takes
+4; the thread's surface takes its weight (× 20, at least 70). A tainted thread's surface does not
+answer its cards in place: they stay in the queue too. Only one of weight 5, or that takes
 place today, keeps a surface of its own too; once the thread ended, a card still waiting comes back
 to the queue (`threadMoved` kicks it). The group ids stay the same while they live, so the composer and the
 brain's workspace block keep naming them; the composer's queue lists each item with the surface

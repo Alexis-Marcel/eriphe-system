@@ -259,10 +259,15 @@ func threadCardsWaiting(steps []threadSurfaceStep, asks []int64, linked []string
 	return out
 }
 
+// threadAnswers tells whether a thread's surface answers its cards in
+// place: not when the thread is tainted (its Proposals send the user to
+// the conversation, and the queue keeps the answerable tile).
+func threadAnswers(s Thread) bool { return s.Tainted == "" }
+
 // threadShownCards are the cards waiting for the user that an active
-// thread's surface shows, by ref, with the thread (the newest, should two
-// show one): answered there, they leave the attention queue's surfaces
-// (queuePlace, workspace_queue.go).
+// thread's surface shows and answers, by ref, with the thread (the newest,
+// should two show one): answered there, they leave the attention queue's
+// surfaces (queuePlace, workspace_queue.go).
 func (c *core) threadShownCards() map[string]int64 {
 	out := map[string]int64{}
 	ss, err := c.threadsWhere(activeThreads + ` ORDER BY id DESC LIMIT 50`)
@@ -270,6 +275,9 @@ func (c *core) threadShownCards() map[string]int64 {
 		return out
 	}
 	for _, s := range ss {
+		if !threadAnswers(s) {
+			continue
+		}
 		all, err := c.steps(s.ID)
 		if err != nil {
 			continue
@@ -361,9 +369,13 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		yours = yours || st.Waits
 	}
 	if yours && s.active() {
-		// Its cards leave the attention queue for it: it takes their weight.
+		// Its cards leave the attention queue for it when it answers them
+		// (threadShownCards): it takes their weight.
 		in.Weight = threadWeightYours
 		for _, ref := range threadCardsWaiting(steps, asks, linked) {
+			if !threadAnswers(s) {
+				break
+			}
 			kind, _, _ := parseProposalRef(ref)
 			in.Weight = max(in.Weight, queueSurfaceWeight(cardWeight(kind)))
 		}
@@ -470,7 +482,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 			in.codeTaint = append(in.codeTaint, "step:"+st.Key)
 		}
 	}
-	in.answers = s.Tainted == ""
+	in.answers = threadAnswers(s)
 	in.summary = threadLine(s, steps, asks, lang)
 	in.composed = true
 	return in, true
