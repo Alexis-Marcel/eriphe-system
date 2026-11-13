@@ -9,11 +9,11 @@ import (
 )
 
 // Relations are found from what surfaces declare, never from a tool's
-// name: the same source, the same ref they live with (a lead's session, a
-// task of that session), a day and what is dated on it, the same server.
+// name: the same source, the same ref they live with (a lead's thread, a
+// task of that thread), a day and what is dated on it, the same server.
 func TestSurfaceRelations(t *testing.T) {
 	list := map[string]surfaceSource{"/rows": {Tool: "ledger/rows", Args: map[string]any{"since": "week", "n": 5}}}
-	focus := surface{ID: "rows", Author: "lead:7", Sources: list, Lifetime: surfaceLifetime{While: "session:7"},
+	focus := surface{ID: "rows", Author: "lead:7", Sources: list, Lifetime: surfaceLifetime{While: "thread:7"},
 		Data:       json.RawMessage(`{"next":{"due":"2026-11-13T09:30:00+01:00"}}`),
 		Components: json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)}
 	pool := []surface{
@@ -21,32 +21,32 @@ func TestSurfaceRelations(t *testing.T) {
 		{ID: "same", Author: "brain", Weight: 20, Sources: map[string]surfaceSource{"/r": {Tool: "ledger/rows", Args: map[string]any{"n": 5, "since": "week"}}}},
 		{ID: "server", Author: "brain", Weight: 90, Sources: map[string]surfaceSource{"/b": {Tool: "ledger/balances"}}},
 		{ID: "task", Author: "task:t-1", Weight: 50},
-		{ID: "lead-other", Author: "brain", Lifetime: surfaceLifetime{While: "session:7"}, Weight: 60},
+		{ID: "lead-other", Author: "brain", Lifetime: surfaceLifetime{While: "thread:7"}, Weight: 60},
 		{ID: "day", Author: "skill:morning", Weight: 50, Components: json.RawMessage(`[{"id":"d","component":"Day","date":{"@path":"/day"},"events":[]}]`),
 			Data: json.RawMessage(`{"day":"2026-11-13"}`)},
 		{ID: "other-day", Author: "brain", Components: json.RawMessage(`[{"id":"d","component":"Day","date":"2026-11-20","events":[]}]`)},
 		{ID: "resource", Author: "brain", Sources: map[string]surfaceSource{"/x": {Resource: "notes", URI: "notes://today"}}},
 		{ID: "unrelated", Author: "brain", Weight: 100},
 	}
-	sessionOf := func(task string) int64 {
+	threadOf := func(task string) int64 {
 		if task == "t-1" {
 			return 7
 		}
 		return 0
 	}
-	got := surfaceRelations(focus, pool, sessionOf)
+	got := surfaceRelations(focus, pool, threadOf)
 	var b strings.Builder
 	for _, r := range got {
 		b.WriteString(r.ID + ":" + r.words() + " ")
 	}
-	want := "same:même source lead-other:même session task:même session day:son jour server:même outil "
+	want := "same:même source lead-other:même thread task:même thread day:son jour server:même outil "
 	if b.String() != want {
 		t.Fatalf("relations\n got %s\nwant %s", b.String(), want)
 	}
 
 	// The reverse: a day open relates what is dated on it.
 	dated := surface{ID: "dated", Author: "brain", Data: json.RawMessage(`{"items":[{"at":"2026-11-13"}]}`)}
-	if got := surfaceRelations(pool[5], append(pool, dated), sessionOf); len(got) != 2 || got[0].ID != "dated" || got[1].ID != "rows" || got[0].words() != "un élément de ce jour" {
+	if got := surfaceRelations(pool[5], append(pool, dated), threadOf); len(got) != 2 || got[0].ID != "dated" || got[1].ID != "rows" || got[0].words() != "un élément de ce jour" {
 		t.Fatalf("a day's relations: %+v", got)
 	}
 	// A resource is a source too; nothing relates to what reads nothing alike.
@@ -54,7 +54,7 @@ func TestSurfaceRelations(t *testing.T) {
 	if got := surfaceRelations(pool[7], []surface{pool[7], alike, pool[8]}, nil); len(got) != 1 || got[0].ID != "alike" || got[0].Kind != relSource {
 		t.Fatalf("a resource's relations: %+v", got)
 	}
-	if got := surfaceRelations(pool[8], pool, sessionOf); len(got) != 0 {
+	if got := surfaceRelations(pool[8], pool, threadOf); len(got) != 0 {
 		t.Fatalf("the brain's own surfaces relate by author: %+v", got)
 	}
 }

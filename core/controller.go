@@ -175,7 +175,7 @@ func (c *core) checkNodes(ctx context.Context) {
 	c.autoUpdates(time.Now())
 	c.replaceStranded()               // placement.go
 	c.harnessTick(time.Now())         // retries due, time budgets (task_retry.go)
-	c.sessionsTick(time.Now())        // the work sessions' engine (session_engine.go)
+	c.threadsTick(time.Now())         // the led threads' engine (thread_engine.go)
 	c.placeServices()                 // also when no node answers: a node gone too long loses its services
 	c.connectionTick(ctx, time.Now()) // the connections' tokens, now and then (connections.go)
 }

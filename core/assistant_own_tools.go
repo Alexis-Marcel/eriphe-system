@@ -10,7 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// An assistant's own tools (the session lead's): its own MCP server, under
+// An assistant's own tools (the thread lead's): its own MCP server, under
 // eriphe-core's name, built as its powers say and relayed by its node like
 // the brain's: it holds no token.
 const (

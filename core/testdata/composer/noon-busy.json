@@ -1,6 +1,6 @@
 {
   "id": "noon-busy",
-  "what": "Midi chargé : une réunion dans 20 minutes, un paiement à approuver, des mails, une session qui travaille et une tâche finie.",
+  "what": "Midi chargé : une réunion dans 20 minutes, un paiement à approuver, des mails, un thread qui avance et une tâche finie.",
   "now": "2026-11-12 12:10",
   "moment": "change",
   "items": [
@@ -8,7 +8,7 @@
     {"ref": "card:c-90", "weight": 4, "age_minutes": 12, "title": "Payer la facture F-2026-118", "why": "Le paiement de 240 € attend ton accord", "say": "La facture du graphiste attend ton accord."},
     {"ref": "mail:m-201", "weight": 3, "age_minutes": 25, "title": "Budget 2027 : chiffres à jour", "why": "Les chiffres pour la réunion de 12 h 30"},
     {"ref": "mail:m-202", "weight": 2, "age_minutes": 40, "title": "Photos du week-end", "why": "Un ami partage un album"},
-    {"ref": "session:s-50", "weight": 3, "age_minutes": 30, "title": "Migration de la base de l'atelier", "why": "Étape 2 sur 4 en cours"},
+    {"ref": "thread:s-50", "weight": 3, "age_minutes": 30, "title": "Migration de la base de l'atelier", "why": "Étape 2 sur 4 en cours"},
     {"ref": "task:t-77", "weight": 1, "age_minutes": 55, "title": "Résumé des notes de lecture", "why": "Finie sans erreur"},
     {"ref": "project:atelier", "weight": 2, "age_minutes": 90, "title": "Atelier", "why": "Une revue de code demandée"}
   ],
@@ -18,7 +18,7 @@
       {"id": "q-agenda-2026-11-12", "size": "l", "why": "Réunion budget dans 20 min"},
       {"id": "q-card-c-90", "size": "l", "why": "Paiement à approuver"},
       {"id": "q-mail-m-201", "size": "m", "why": "À lire avant la réunion"},
-      {"id": "q-session-s-50", "size": "m", "why": "Avance seule"}
+      {"id": "q-thread-s-50", "size": "m", "why": "Avance seule"}
     ],
     "missing": [], "stale": []}
 }

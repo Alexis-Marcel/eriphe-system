@@ -9,7 +9,7 @@ import (
 
 // A plan holds together: keys unique, what a step comes after exists, no
 // cycle, and each kind with what it needs.
-func TestSessionPlanChecked(t *testing.T) {
+func TestThreadPlanChecked(t *testing.T) {
 	task := func(key string, after ...string) stepSpec {
 		return stepSpec{Key: key, Title: "Step " + key, Prompt: "do " + key, After: after}
 	}
@@ -33,12 +33,12 @@ func TestSessionPlanChecked(t *testing.T) {
 	}
 }
 
-// sessionCore is a core with a node, and a session of three steps: two in
+// threadCore is a core with a node, and a thread of three steps: two in
 // parallel, then a review the user approves.
-func sessionCore(t *testing.T) (*core, Session) {
+func threadCore(t *testing.T) (*core, Thread) {
 	t.Helper()
 	c := startCore(t)
-	s, err := c.openSession(sessionIn{Title: "Brand name", Goal: "Find a name for the shop.", DoneWhen: "Sam picked a name that is free",
+	s, err := c.openThread(threadIn{Title: "Brand name", Goal: "Find a name for the shop.", DoneWhen: "Sam picked a name that is free",
 		Steps: []stepSpec{
 			{Key: "names", Title: "Find names", Prompt: "Propose ten names."},
 			{Key: "market", Title: "Study the market", Prompt: "List the shops nearby."},
@@ -51,13 +51,13 @@ func sessionCore(t *testing.T) (*core, Session) {
 	return c, s
 }
 
-// sessionCard is the card a session asks, of a kind.
-func sessionCard(t *testing.T, c *core, kind string) convoCard {
+// threadCard is the card a thread asks, of a kind.
+func threadCard(t *testing.T, c *core, kind string) convoCard {
 	t.Helper()
-	xs, _ := c.cardsWhere(`kind = ? ORDER BY id`, cardSession)
+	xs, _ := c.cardsWhere(`kind = ? ORDER BY id`, cardThread)
 	for _, x := range xs {
 		_, id, _ := parseProposalRef(x.Ref)
-		if a, err := c.sessionAsk(id); err == nil && a.Kind == kind && x.State == cardPending {
+		if a, err := c.threadAsk(id); err == nil && a.Kind == kind && x.State == cardPending {
 			return x
 		}
 	}
@@ -65,7 +65,7 @@ func sessionCard(t *testing.T, c *core, kind string) convoCard {
 	return convoCard{}
 }
 
-func stepOf(t *testing.T, c *core, s Session, key string) Step {
+func stepOf(t *testing.T, c *core, s Thread, key string) Step {
 	t.Helper()
 	st, err := c.step(s.ID, key)
 	if err != nil {
@@ -90,16 +90,16 @@ func reports(t *testing.T, c *core, st Step, text string, extra ...EventRow) {
 	c.notifyBrain(st.Task, stateIdle)
 }
 
-// told is the last thing the session's lead was told: its own lead's
+// told is the last thing the thread's lead was told: its own lead's
 // inbox, or the brain's events.
-func told(t *testing.T, c *core, s Session) string {
+func told(t *testing.T, c *core, s Thread) string {
 	t.Helper()
-	s, _ = c.session(s.ID)
+	s, _ = c.thread(s.ID)
 	if !c.hasLead(s) {
 		return lastEvent(t, c)
 	}
 	var text string
-	c.store.db.QueryRow(`SELECT text FROM session_inbox WHERE session = ? ORDER BY id DESC LIMIT 1`, s.ID).Scan(&text)
+	c.store.db.QueryRow(`SELECT text FROM thread_inbox WHERE thread = ? ORDER BY id DESC LIMIT 1`, s.ID).Scan(&text)
 	return text
 }
 
@@ -110,13 +110,13 @@ func receiptOf(text, summary string) string {
 // The plan waits for the user's card; then the engine runs the steps in
 // order, in parallel when it may, passes each its predecessors' outputs,
 // asks the approval on a card, and tells the lead when all is accepted.
-func TestSessionRuns(t *testing.T) {
-	c, s := sessionCore(t)
+func TestThreadRuns(t *testing.T) {
+	c, s := threadCore(t)
 	ctx := context.Background()
 	if st := stepOf(t, c, s, "names"); st.Status != stepWaiting || st.Task != "" {
 		t.Fatalf("a step started before the plan was approved: %+v", st)
 	}
-	plan := sessionCard(t, c, askPlan)
+	plan := threadCard(t, c, askPlan)
 	_, p := c.liveCard(plan)
 	if len(p.Fields) != 4 || !strings.Contains(p.Text("fr"), "Brand name") {
 		t.Errorf("plan card %q %+v", p.Text("fr"), p.Fields)
@@ -165,12 +165,12 @@ func TestSessionRuns(t *testing.T) {
 	if _, err := c.settleStep(ctx, s.ID, "check", verdictAccept, "", "", "brain"); err != nil {
 		t.Fatal(err)
 	}
-	ok := sessionCard(t, c, askApproval)
+	ok := threadCard(t, c, askApproval)
 	if _, p := c.liveCard(ok); !strings.Contains(p.Text("fr"), "Keep the first free name?") {
 		t.Errorf("approval card %q", p.Text("fr"))
 	}
-	if _, err := c.finishSession(ctx, s.ID, "done", "lead"); err == nil {
-		t.Error("a session closed with a step waiting for the user")
+	if _, err := c.finishThread(ctx, s.ID, "done", "lead"); err == nil {
+		t.Error("a thread closd with a step waiting for the user")
 	}
 	if _, err := c.decideCard(ctx, ok.ID, true, "web"); err != nil {
 		t.Fatal(err)
@@ -178,31 +178,31 @@ func TestSessionRuns(t *testing.T) {
 	if msg := told(t, c, s); !strings.Contains(msg, "Toutes les étapes sont acceptées") {
 		t.Errorf("the lead heard %q", msg)
 	}
-	if _, err := c.finishSession(ctx, s.ID, "Lumen it is.", "lead"); err != nil {
+	if _, err := c.finishThread(ctx, s.ID, "Lumen it is.", "lead"); err != nil {
 		t.Fatal(err)
 	}
 	final := stepOf(t, c, s, finalStep)
 	if final.Status != stepRunning || final.Task == "" {
 		t.Fatalf("no final check: %+v", final)
 	}
-	if s, _ = c.session(s.ID); s.State != sessRunning {
+	if s, _ = c.thread(s.ID); s.Phase != phaseRunning || s.State != threadOpen || s.Mode != modeLed {
 		t.Fatalf("closed before the objective was checked: %s", s.State)
 	}
 	reports(t, c, final, receiptOf("Lumen is picked and free.", "objective met"))
-	if s, _ = c.session(s.ID); s.State != sessDone || s.Summary != "Lumen it is." {
-		t.Errorf("session %+v", s)
+	if s, _ = c.thread(s.ID); s.Phase != phaseDone || s.State != threadDone || s.Summary != "Lumen it is." {
+		t.Errorf("thread %+v", s)
 	}
-	if msg := lastEvent(t, c); !strings.Contains(msg, "Session close") || !strings.Contains(msg, "Lumen it is.") {
+	if msg := lastEvent(t, c); !strings.Contains(msg, "Thread clos") || !strings.Contains(msg, "Lumen it is.") {
 		t.Errorf("the brain heard %q", msg)
 	}
 }
 
 // A report is only a claim: a step whose checks failed cannot be accepted;
 // it is retried, twice at most.
-func TestSessionChecksHold(t *testing.T) {
-	c, s := sessionCore(t)
+func TestThreadChecksHold(t *testing.T) {
+	c, s := threadCore(t)
 	ctx := context.Background()
-	c.decideCard(ctx, sessionCard(t, c, askPlan).ID, true, "web")
+	c.decideCard(ctx, threadCard(t, c, askPlan).ID, true, "web")
 	names := stepOf(t, c, s, "names")
 	reports(t, c, names, receiptOf("Done.", "names"), ev(0, "check", map[string]any{"name": "list", "ok": false, "run": "test -s names.txt", "exit_code": 1}))
 	st := stepOf(t, c, s, "names")
@@ -241,15 +241,15 @@ func TestSessionChecksHold(t *testing.T) {
 	reports(t, c, stepOf(t, c, s, "market"), receiptOf("Shops.", "market"))
 	c.settleStep(ctx, s.ID, "market", verdictAccept, "", "", "brain")
 	if msg := told(t, c, s); !strings.Contains(msg, "Plus rien ne peut avancer") || !strings.Contains(msg, "names") {
-		t.Errorf("a stuck session was not told: %q", msg)
+		t.Errorf("a stuck thread was not told: %q", msg)
 	}
 }
 
 // Two steps writing the same branch never run at once.
-func TestSessionOneWriterPerScope(t *testing.T) {
+func TestThreadOneWriterPerScope(t *testing.T) {
 	c := startCore(t)
 	repo := []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/x"}}
-	s, err := c.openSession(sessionIn{Title: "Rebuild", Goal: "Rebuild the photos service.", Steps: []stepSpec{
+	s, err := c.openThread(threadIn{Title: "Rebuild", Goal: "Rebuild the photos service.", Steps: []stepSpec{
 		{Key: "api", Title: "API", Prompt: "Write the API.", Resources: repo},
 		{Key: "ui", Title: "UI", Prompt: "Write the UI.", Resources: repo},
 		{Key: "docs", Title: "Docs", Prompt: "Write the docs.", Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/docs"}}},
@@ -258,7 +258,7 @@ func TestSessionOneWriterPerScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	c.decideCard(ctx, sessionCard(t, c, askPlan).ID, true, "web")
+	c.decideCard(ctx, threadCard(t, c, askPlan).ID, true, "web")
 	api, ui, docs := stepOf(t, c, s, "api"), stepOf(t, c, s, "ui"), stepOf(t, c, s, "docs")
 	if api.Status != stepRunning || ui.Status != stepWaiting || docs.Status != stepRunning {
 		t.Fatalf("api %s, ui %s, docs %s: one writer per branch", api.Status, ui.Status, docs.Status)
@@ -273,17 +273,17 @@ func TestSessionOneWriterPerScope(t *testing.T) {
 	}
 }
 
-// Past its budget a session pauses and asks the user for more time; the
+// Past its budget a thread pauses and asks the user for more time; the
 // plan changes twice without asking, then on a card; a step added asks its
 // own start card.
-func TestSessionLimits(t *testing.T) {
-	c, s := sessionCore(t)
+func TestThreadLimits(t *testing.T) {
+	c, s := threadCore(t)
 	ctx := context.Background()
-	c.decideCard(ctx, sessionCard(t, c, askPlan).ID, true, "web")
+	c.decideCard(ctx, threadCard(t, c, askPlan).ID, true, "web")
 
 	for i := range planAmends {
 		key := string(rune('x' + i))
-		if _, err := c.amendSession(ctx, s.ID, amendIn{Add: []stepSpec{{Key: key, Title: "Extra " + key, Prompt: "more",
+		if _, err := c.amendThread(ctx, s.ID, amendIn{Add: []stepSpec{{Key: key, Title: "Extra " + key, Prompt: "more",
 			Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/" + key}}}}}, "more work", "brain"); err != nil {
 			t.Fatal(err)
 		}
@@ -295,46 +295,46 @@ func TestSessionLimits(t *testing.T) {
 	if !c.heldTask(x.Task) {
 		t.Error("an added step that writes started without its card")
 	}
-	note, err := c.amendSession(ctx, s.ID, amendIn{Drop: []string{"ok"}}, "no need", "brain")
+	note, err := c.amendThread(ctx, s.ID, amendIn{Drop: []string{"ok"}}, "no need", "brain")
 	if err != nil || !strings.Contains(note, "card") {
 		t.Fatalf("a third change: %q %v", note, err)
 	}
 	if st := stepOf(t, c, s, "ok"); st.Status != stepWaiting {
 		t.Fatalf("dropped before the user said yes: %s", st.Status)
 	}
-	c.decideCard(ctx, sessionCard(t, c, askAmend).ID, true, "web")
+	c.decideCard(ctx, threadCard(t, c, askAmend).ID, true, "web")
 	if st := stepOf(t, c, s, "ok"); st.Status != stepDropped {
 		t.Errorf("dropped after the user's yes: %s", st.Status)
 	}
 
 	// Its time runs out.
-	c.setSession(s.ID, map[string]any{"since": time.Now().Add(-2 * time.Hour).Unix()})
-	c.sessionsTick(time.Now())
-	if s, _ = c.session(s.ID); s.State != sessPaused || s.Held != heldBudget {
+	c.setThread(s.ID, map[string]any{"since": time.Now().Add(-2 * time.Hour).Unix()})
+	c.threadsTick(time.Now())
+	if s, _ = c.thread(s.ID); s.Phase != phasePaused || s.State != threadWaiting || s.Held != heldBudget {
 		t.Fatalf("past its budget: %+v", s)
 	}
-	if err := c.resumeSession(ctx, s.ID, "brain"); err == nil {
+	if err := c.resumeThread(ctx, s.ID, "brain"); err == nil {
 		t.Error("the brain gave itself more time")
 	}
-	c.decideCard(ctx, sessionCard(t, c, askBudget).ID, true, "web")
-	if s, _ = c.session(s.ID); s.State != sessRunning || s.Budget != 120+budgetMore(Session{Budget: defaultBudget}) {
+	c.decideCard(ctx, threadCard(t, c, askBudget).ID, true, "web")
+	if s, _ = c.thread(s.ID); s.Phase != phaseRunning || s.Budget != 120+budgetMore(Thread{Budget: defaultBudget}) {
 		t.Errorf("after more time: %+v", s)
 	}
 }
 
 // A choice is the user's, recorded in the turn of their answer; stopping a
-// session stops its tasks and withdraws its cards.
-func TestSessionChoiceAndStop(t *testing.T) {
+// thread stops its tasks and withdraws its cards.
+func TestThreadChoiceAndStop(t *testing.T) {
 	c := startCore(t)
 	ctx := context.Background()
-	s, err := c.openSession(sessionIn{Title: "Video", Goal: "Make a short video.", Steps: []stepSpec{
+	s, err := c.openThread(threadIn{Title: "Video", Goal: "Make a short video.", Steps: []stepSpec{
 		{Key: "style", Title: "Style", Kind: stepChoice, Question: "Which style?", Options: []string{"Calm", "Fast"}},
 		{Key: "cut", Title: "Cut", Prompt: "Cut the video.", After: []string{"style"}},
 	}}, nil, "brain")
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.decideCard(ctx, sessionCard(t, c, askPlan).ID, true, "web")
+	c.decideCard(ctx, threadCard(t, c, askPlan).ID, true, "web")
 	if msg := lastEvent(t, c); !strings.Contains(msg, "Which style?") || !strings.Contains(msg, "choose_step") {
 		t.Errorf("the lead heard %q", msg)
 	}
@@ -348,7 +348,7 @@ func TestSessionChoiceAndStop(t *testing.T) {
 	if task, _ := c.store.task(cut.Task); task == nil || !strings.Contains(task.Prompt, "Fast") {
 		t.Fatalf("cut was not given the choice: %+v", cut)
 	}
-	if err := c.stopSession(ctx, s.ID, "brain"); err != nil {
+	if err := c.stopThread(ctx, s.ID, "brain"); err != nil {
 		t.Fatal(err)
 	}
 	if task, _ := c.store.task(cut.Task); task.State != stateStopped {
@@ -362,15 +362,15 @@ func TestSessionChoiceAndStop(t *testing.T) {
 	before := lastEvent(t, c)
 	c.notifyBrain(cut.Task, stateStopped)
 	if lastEvent(t, c) != before {
-		t.Errorf("a stopped session's task told its end: %q", lastEvent(t, c))
+		t.Errorf("a stopped thread's task told its end: %q", lastEvent(t, c))
 	}
 }
 
-// The plan the user declines closes the session; the brain hears it.
-func TestSessionDeclined(t *testing.T) {
-	c, s := sessionCore(t)
-	c.decideCard(context.Background(), sessionCard(t, c, askPlan).ID, false, "web")
-	if s, _ = c.session(s.ID); s.State != sessDeclined {
+// The plan the user declines closes the thread; the brain hears it.
+func TestThreadDeclined(t *testing.T) {
+	c, s := threadCore(t)
+	c.decideCard(context.Background(), threadCard(t, c, askPlan).ID, false, "web")
+	if s, _ = c.thread(s.ID); s.Phase != phaseDeclined || s.State != threadDropped {
 		t.Errorf("state %s", s.State)
 	}
 	if st := stepOf(t, c, s, "names"); st.Task != "" {
@@ -378,43 +378,43 @@ func TestSessionDeclined(t *testing.T) {
 	}
 }
 
-// The brain opens a session through its tool, as JSON: only proposed,
+// The brain opens a led thread through its tool, as JSON: only proposed,
 // with its plan card, until the user approves.
-func TestStartSessionTool(t *testing.T) {
+func TestOpenLedThreadTool(t *testing.T) {
 	c := startCore(t)
-	out, isErr := callBrainTool(t, c, "start_session", map[string]any{
+	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{
 		"title": "Brand name", "goal": "Find a name for the shop.", "budget_minutes": 30,
 		"steps": []any{
 			map[string]any{"key": "names", "title": "Find names", "prompt": "Propose ten names."},
 			map[string]any{"key": "pick", "title": "Pick one", "kind": "choice", "question": "Which one?", "options": []any{"Lumen", "Rivet"}, "after": []any{"names"}},
 		}})
 	if isErr || !strings.Contains(out["note"].(string), "Only proposed") {
-		t.Fatalf("start_session: %v", out)
+		t.Fatalf("open_thread: %v", out)
 	}
-	ss, _ := c.sessions(true, 10)
-	if len(ss) != 1 || ss[0].State != sessProposed || ss[0].Budget != 30 {
-		t.Fatalf("sessions %+v", ss)
+	ss, _ := c.threads(true, 10)
+	if len(ss) != 1 || ss[0].Phase != phaseProposed || ss[0].State != threadWaiting || ss[0].Mode != modeLed || ss[0].Budget != 30 {
+		t.Fatalf("threads %+v", ss)
 	}
-	sessionCard(t, c, askPlan)
-	if out, isErr := callBrainTool(t, c, "settle_step", map[string]any{"session_id": ss[0].ID, "step": "names", "verdict": "accept"}); !isErr {
-		t.Errorf("a step of a proposed session was judged: %v", out)
+	threadCard(t, c, askPlan)
+	if out, isErr := callBrainTool(t, c, "settle_step", map[string]any{"thread_id": ss[0].ID, "step": "names", "verdict": "accept"}); !isErr {
+		t.Errorf("a step of a proposed thread was judged: %v", out)
 	}
 }
 
-// What a session asks out of a brain turn shows at once: the plan of a
-// session a skill opened, the approval step, the start card of a step
+// What a thread asks out of a brain turn shows at once: the plan of a
+// thread a skill opened, the approval step, the start card of a step
 // added since the plan; what the brain opens in its turn goes with its
-// message. A session's card goes to the channels whatever its message did.
-func TestSessionCardsOutsideTurn(t *testing.T) {
-	c, s := sessionCore(t) // opened by the brain
-	if plan := sessionCard(t, c, askPlan); plan.Seq != 0 {
+// message. A thread's card goes to the channels whatever its message did.
+func TestThreadCardsOutsideTurn(t *testing.T) {
+	c, s := threadCore(t) // opened by the brain
+	if plan := threadCard(t, c, askPlan); plan.Seq != 0 {
 		t.Fatalf("the brain's plan card shown before its message: %+v", plan)
 	}
-	brainSays(c, "Je te propose une session pour trouver le nom.")
+	brainSays(c, "Je te propose un thread pour trouver le nom.")
 	ctx := context.Background()
-	c.decideCard(ctx, sessionCard(t, c, askPlan).ID, true, "web")
-	if !blocksATask(cardSession) {
-		t.Error("a session's card does not go to the channels")
+	c.decideCard(ctx, threadCard(t, c, askPlan).ID, true, "web")
+	if !blocksATask(cardThread) {
+		t.Error("a thread's card does not go to the channels")
 	}
 
 	st := stepOf(t, c, s, "ok")
@@ -422,9 +422,9 @@ func TestSessionCardsOutsideTurn(t *testing.T) {
 	if err := c.startStep(ctx, s, st, steps); err != nil {
 		t.Fatal(err)
 	}
-	shownAtOnce(t, c, sessionCard(t, c, askApproval), weightBlocksATask)
+	shownAtOnce(t, c, threadCard(t, c, askApproval), weightBlocksATask)
 
-	if _, err := c.amendSession(ctx, s.ID, amendIn{Add: []stepSpec{{Key: "x", Title: "Extra", Prompt: "more",
+	if _, err := c.amendThread(ctx, s.ID, amendIn{Add: []stepSpec{{Key: "x", Title: "Extra", Prompt: "more",
 		Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessWrite, Branch: "eriphe/x"}}}}}, "more work", "lead"); err != nil {
 		t.Fatal(err)
 	}
@@ -438,11 +438,11 @@ func TestSessionCardsOutsideTurn(t *testing.T) {
 	shownAtOnce(t, c, start, weightBlocksATask)
 
 	c2 := startCore(t)
-	s2, err := c2.openSession(sessionIn{Title: "Fix login", Goal: "Fix the login.", Steps: []stepSpec{{Key: "fix", Title: "Fix", Prompt: "Fix it."}}}, nil, "skill:prod")
+	s2, err := c2.openThread(threadIn{Title: "Fix login", Goal: "Fix the login.", Steps: []stepSpec{{Key: "fix", Title: "Fix", Prompt: "Fix it."}}}, nil, "skill:prod")
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan := sessionCard(t, c2, askPlan)
+	plan := threadCard(t, c2, askPlan)
 	shownAtOnce(t, c2, plan, weightBlocksATask)
 	if msgs, _ := c2.store.messagesAfter(plan.Seq-1, 1); !strings.Contains(msgs[0].Text, s2.Title) {
 		t.Errorf("message %q", msgs[0].Text)

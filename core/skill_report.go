@@ -11,7 +11,7 @@ import (
 
 // What a triggered skill did (skill_runs.go), for its page in Settings →
 // Skills and for the brain's skill_runs: each run with its events, its
-// task, the session it opened, its kept calls and what the user answered,
+// task, the thread it opened, its kept calls and what the user answered,
 // whether it told the user, and its cost where the harness gave one; and
 // the totals over 30 days.
 
@@ -34,7 +34,7 @@ type runView struct {
 	State    string         `json:"state"`
 	Events   []runEventView `json:"events"`
 	Task     string         `json:"task,omitempty"`
-	Session  int64          `json:"session,omitempty"`
+	Thread   int64          `json:"thread,omitempty"`
 	Note     string         `json:"note,omitempty"`
 	Calls    int            `json:"calls,omitempty"`    // actions it proposed on its card
 	Asks     []runAskView   `json:"-"`                  // each, for its page: answered one by one
@@ -104,7 +104,7 @@ func (c *core) skillReport(name string, limit int, now time.Time) ([]runView, sk
 // runViewOf reads a run; full adds its events and whether it told.
 func (c *core) runViewOf(r *skillRun, full bool) runView {
 	v := runView{ID: r.ID, At: r.Created, Ended: r.Ended, State: r.State, Task: r.Task, Note: r.Note, External: r.External}
-	c.store.db.QueryRow(`SELECT session FROM skill_runs WHERE id = ?`, r.ID).Scan(&v.Session)
+	c.store.db.QueryRow(`SELECT thread FROM skill_runs WHERE id = ?`, r.ID).Scan(&v.Thread)
 	for _, a := range c.runAsks(r.ID) {
 		v.Calls++
 		if full {
@@ -166,7 +166,7 @@ type skillRunsIn struct {
 }
 
 func registerSkillRunsTool(s *mcp.Server, c *core) {
-	tool(s, "skill_runs", "What the user's triggered skills did: per skill, its last runs (when, state: running, done, silent, failed or refused; the events' kinds and keys, not their text; its task, the session it opened, the actions it proposed and the user's answer, whether it told the user, its cost) and its totals over 30 days. Read it before changing a skill, or when the user asks what one did.",
+	tool(s, "skill_runs", "What the user's triggered skills did: per skill, its last runs (when, state: running, done, silent, failed or refused; the events' kinds and keys, not their text; its task, the thread it opened, the actions it proposed and the user's answer, whether it told the user, its cost) and its totals over 30 days. Read it before changing a skill, or when the user asks what one did.",
 		func(ctx context.Context, in skillRunsIn) (map[string]any, error) {
 			return c.brainSkillRuns(in), nil
 		})

@@ -55,13 +55,13 @@ func TestAttentionMergeByRef(t *testing.T) {
 	at := time.Now().Add(-time.Minute)
 	c.attend(attentionItem{Ref: "mail:1", Weight: 4, Why: "a bill due today", Say: "Ta facture est due.", Source: "skill:mail", Time: at})
 	c.attend(attentionItem{Ref: "mail:1", Weight: 2, Why: "the bill, paid?", Source: "skill:mail"})
-	c.attend(attentionItem{Ref: "session:3", Weight: 9, Why: "the plan waits", Source: "session:3"})
+	c.attend(attentionItem{Ref: "thread:3", Weight: 9, Why: "the plan waits", Source: "thread:3"})
 	c.attend(attentionItem{Ref: "agenda:2026-11-12", Weight: 1, Why: "a quiet day", Source: "skill:brief"})
 	items := c.attentionOpen()
 	if len(items) != 3 {
 		t.Fatalf("items %+v", items)
 	}
-	if items[0].Ref != "session:3" || items[0].Weight != 5 {
+	if items[0].Ref != "thread:3" || items[0].Weight != 5 {
 		t.Errorf("a weight is 1 to 5, the heaviest first: %+v", items[0])
 	}
 	m := attentionOf(c, "mail:1")
@@ -75,9 +75,9 @@ func TestAttentionMergeByRef(t *testing.T) {
 }
 
 // A card enters the queue with a weight by its kind: one a task or a
-// session waits on, 4; any other proposal, 3. Decided, it leaves.
+// thread waits on, 4; any other proposal, 3. Decided, it leaves.
 func TestAttentionWeightByKind(t *testing.T) {
-	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardSession: 4, cardRule: 3, cardMemory: 3, cardRunCalls: 3} {
+	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardThread: 4, cardRule: 3, cardMemory: 3, cardRunCalls: 3} {
 		if got := cardWeight(kind); got != want {
 			t.Errorf("%s: weight %d, want %d", kind, got, want)
 		}
@@ -147,9 +147,9 @@ func TestAttentionHeldUntilBreakpoint(t *testing.T) {
 	c.attend(attentionItem{Ref: "mail:1", Weight: 1, Why: "a newsletter", Say: "Une lettre d'information.", Source: "skill:mail", Time: *now})
 	c.attend(attentionItem{Ref: "mail:2", Weight: 3, Why: "a bill due today", Say: "Ta facture est due aujourd'hui.", Source: "skill:mail", Time: *now})
 	c.attend(attentionItem{Ref: "agenda:2026-11-04", Weight: 2, Why: "a quiet day", Say: "Journée calme.", Source: "skill:agenda", Time: *now})
-	c.attend(attentionItem{Ref: "session:3", Weight: 4, Why: "the plan waits", Source: "session:3", Time: *now})
+	c.attend(attentionItem{Ref: "thread:3", Weight: 4, Why: "the plan waits", Source: "thread:3", Time: *now})
 	c.attend(attentionItem{Ref: "site:down", Weight: 5, Why: "the site is down", Source: "skill:prod", Time: *now})
-	for ref, held := range map[string]bool{"mail:1": true, "mail:2": true, "agenda:2026-11-04": true, "session:3": false, "site:down": false} {
+	for ref, held := range map[string]bool{"mail:1": true, "mail:2": true, "agenda:2026-11-04": true, "thread:3": false, "site:down": false} {
 		if it := attentionOf(c, ref); it == nil || it.Held != held {
 			t.Errorf("%s: %+v, want held %v", ref, it, held)
 		}
@@ -244,7 +244,7 @@ func TestAttentionReturnTellsTheBrief(t *testing.T) {
 	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || !it.Held || it.Weight != weightHeldNote || it.Source != "skill:prod" {
 		t.Fatalf("item %+v", it)
 	}
-	if c.attentionBreak(breakAnswer, *now) != 0 || c.attentionBreak(breakSession, *now) != 0 {
+	if c.attentionBreak(breakAnswer, *now) != 0 || c.attentionBreak(breakThread, *now) != 0 {
 		t.Fatal("the brief was told before the return")
 	}
 	say := func(when time.Time) {
@@ -298,23 +298,23 @@ func TestAttentionQuietMessageToldAtTheBrief(t *testing.T) {
 	}
 }
 
-// A session's end is a breakpoint while the user is there; away, what is
+// A thread's end is a breakpoint while the user is there; away, what is
 // held waits for their return.
-func TestAttentionSessionEndBreakpoint(t *testing.T) {
+func TestAttentionThreadEndBreakpoint(t *testing.T) {
 	c, _, now := pollCore(t)
 	c.subscribeEvents(c.attentionOnEvent)
-	seq := ownerSays(c, "Lance la session")
+	seq := ownerSays(c, "Lance le thread")
 	c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, now.Add(-3*time.Hour).Unix(), seq)
 	c.attend(attentionItem{Ref: "mail:1", Weight: 2, Why: "a newsletter", Say: "Une lettre.", Source: "skill:mail", Time: *now})
-	c.emitLogged(journalEvent{Kind: evSessionEnded, Key: "session:1", Source: "session"})
+	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: "thread:1", Source: "thread"})
 	if !attentionOf(c, "mail:1").Held {
 		t.Fatal("released while the user is away")
 	}
 	seq = ownerSays(c, "Me revoilà")
 	c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, now.Add(-time.Minute).Unix(), seq)
-	c.emitLogged(journalEvent{Kind: evSessionEnded, Key: "session:2", Source: "session"})
+	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: "thread:2", Source: "thread"})
 	if attentionOf(c, "mail:1").Held {
-		t.Fatal("not released at the session's end")
+		t.Fatal("not released at the thread's end")
 	}
 }
 
@@ -325,7 +325,7 @@ func TestParseRef(t *testing.T) {
 		{"mail:a:b:c", refMail, "a:b:c"},
 		{"agenda:2026-11-12", refAgenda, "2026-11-12"},
 		{"event:ev-1@example.org", refEvent, "ev-1@example.org"},
-		{"session:3", refSession, "3"},
+		{"thread:3", refThread, "3"},
 		{"card:12", refCard, "12"},
 		{"task:t-abc", refTask, "t-abc"},
 		{"project:portfolio", refProject, "portfolio"},
@@ -339,7 +339,7 @@ func TestParseRef(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"", "mail", "mail:", "note:1", "agenda:12/11/2026", "agenda:2026-13-01",
-		"session:x", "session:0", "card:-1", "surface:Not An Id", "task:" + strings.Repeat("x", 1001)} {
+		"thread:x", "thread:0", "card:-1", "surface:Not An Id", "task:" + strings.Repeat("x", 1001)} {
 		var e errBadRef
 		if _, err := parseRef(bad); !errors.As(err, &e) {
 			t.Errorf("%q parsed: %v", bad, err)

@@ -452,7 +452,7 @@ a task are tainted once they read what comes neither from the user nor from Erip
   started on a tainted turn, when it called a tool not trusted (seen by the proxy, which every
   catalog call crosses, and in its events), when it read the web, or when its events cannot be
   read. The event of its turn's end then says so and taints the turn that reads it
-  (`task:<id>`), as `task_status` and a session's report of it do; a task that read only the
+  (`task:<id>`), as `task_status` and a thread's report of it do; a task that read only the
   user's own and trusted tools does not. A closed value (a choice, a number, a date, a count of
   rows) never taints, whoever wrote it (assistant state).
 - **The limit: a task's shell traffic is not read.** What a program fetches with `curl`, a package
@@ -879,7 +879,7 @@ finished task's receipt instead of its last message (still external).
 
 ### Attention signals (`attention_signal.go`)
 
-An assistant (a skill's run, a session lead) says what deserves the user's attention with an
+An assistant (a skill's run, a thread's lead) says what deserves the user's attention with an
 **attention signal**, a structured block rather than a prefix in its prose: in a skill's receipt
 (`attentionInstruction`, after `receiptInstruction` in `skillVoice`) or in a lead's `report`:
 
@@ -888,7 +888,7 @@ An assistant (a skill's run, a session lead) says what deserves the user's atten
 ```
 
 `refs` name the objects it is about, `<kind>:<id>` with a kind among `mail`, `agenda`
-(`YYYY-MM-DD`), `event`, `session`, `card`, `task`, `project`, `alert` and `surface` (a surface of
+(`YYYY-MM-DD`), `event`, `thread`, `card`, `task`, `project`, `alert` and `surface` (a surface of
 the workspace, by its id); only the form is checked, by `parseRef`. An item about a
 surface is shown by that surface (no `q-` surface of its own) and leaves the queue with it.
 `weight` is 5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1 background; `why` is
@@ -896,7 +896,7 @@ cut to 80 characters, `say` is optional. One block alone, or refs given as one s
 a list. A ref of another form, a weight outside 1 to 5 (or not whole), an entry that is not an
 object are dropped and logged, never fatal; the rest of the receipt stands. Each ref of a kept
 signal enters the [attention queue](#workspace-web) (`c.attend`) with its source (`skill:<name>`,
-`assistant:<name>`), marked as drawn from external content when the run or the session read some:
+`assistant:<name>`), marked as drawn from external content when the run or the thread read some:
 the brain reads it as data.
 
 A skill whose receipt has no block keeps working through its prefix: its message, once told, enters
@@ -905,16 +905,32 @@ message, 3 for `[brief]`; `[rien]` and a notification a rule says never to are n
 over the prefix (which still decides the notification), and a silent run's block still enters the
 queue. A worker's receipt carries no signal.
 
-### Work sessions (`sessions.go`, `session_engine.go`)
+### Threads (`threads.go`, `thread_engine.go`)
 
-A **session** is work of several steps toward one goal: rebuild a service, find a brand name, make
-a video, not only code. An assistant has no end; a session has one (a goal, a plan, checkpoints);
-a task is one step.
+A **thread** is one matter followed to its real goal: a pull request until it is merged and
+deployed, an appointment, a brand name to find, a service to rebuild. An assistant has no end; a
+thread has one (its goal); a task is one step. It replaced the work session (#464): one object for
+every matter.
+
+A thread has a title, a goal (its real outcome), a **subject** (a ref to find it again:
+`project:site`, `pr:owner/repo#12`, `event:<id>`), a **state** (`open`, `waiting`, `done`,
+`dropped`), a summary, and its times. Its **mode** is one of two:
+
+- **Light** (the default, without steps): held by the brain. `open_thread` opens it at once, with no
+  card and no budget; `find_thread` finds it again by its subject (the same ref, any case) or by
+  words of its title, goal, subject or summary, the ended ones included; `close_thread` closes it
+  only on its goal, with how it was reached as its summary (`done`); `stop_thread` drops it;
+  `reopen_thread` opens it again, light, when its subject comes back, its steps and log kept.
+- **Led** (with steps): long autonomous work of several steps toward the goal, not only code: an
+  approved plan, a lead, a budget. Its engine's **phase** (`proposed`, `running`, `paused`, `done`,
+  `stopped`, `declined`) moves its state (`stateOf`: running is open, proposed and paused are
+  waiting, stopped and declined are dropped). A led thread that ended reopens light: its lead went
+  with its end.
 
 | Who | Does |
 |---|---|
-| Brain | opens the session with the user (`start_session`: title, goal, `done_when`, budget, steps), the only voice |
-| Lead | a temporary assistant (role `lead`, `session_lead.go`): judges each step on its evidence (`settle_step`: accept, retry, reject), amends the plan (`amend_session`), closes it (`end_session`), reports to the brain. The brain when no agent can run one |
+| Brain | opens the thread with the user (`open_thread`: title, goal, subject; led: `done_when`, budget, steps), the only voice |
+| Lead | a led thread's temporary assistant (role `lead`, `thread_lead.go`): judges each step on its evidence (`settle_step`: accept, retry, reject), amends the plan (`amend_thread`), closes it (`close_thread`), reports to the brain. The brain when no agent can run one |
 | Engine (code, no model) | starts each step once those it comes `after` are accepted, in parallel, passes them their outputs, asks the cards, holds the limits |
 | User | approves the plan, answers the choices and approvals, gives more time |
 
@@ -925,57 +941,72 @@ claim), `verified` (its checks passed), `accepted`, `rejected`, `blocked` (its t
 stopped), `dropped`. A step whose checks failed, or whose receipt claims what they deny, cannot be
 accepted.
 
-- **The plan card** (card kind `session`) is the user's approval of the steps as planned: they start
+- **The plan card** (card kind `thread`) is the user's approval of the steps as planned: they start
   without asking again, their resources granted as on a clean start. A step added
   later asks its own start card.
 - **One writer per scope**: two steps writing the same repository branch or folder never run at
   once; the second waits.
-- **Handoff**: a task step's prompt gets the session's goal, `done_when` and the outputs of the
+- **Handoff**: a task step's prompt gets the thread's goal, `done_when` and the outputs of the
   steps it comes after (the agent's last message, or what the lead gave on accepting).
 - **Limits held by the code**: 2 retries per step (a retry answers the idle task with what to fix,
   or starts a new one), 2 plan changes without asking (then a card), a budget of running time (60
-  minutes by default; past it the session pauses, the running steps finish, and a card offers more
+  minutes by default; past it the thread pauses, the running steps finish, and a card offers more
   time). The brain never gives itself more time.
-- Each step's end reaches the lead as an event `[session N « title »]`, instead of the task's own;
-  a session complete or stuck is told once. `sessions` and `session_status` read them;
-  `stop_session` stops the tasks and withdraws the cards. The engine's pass runs every 15 seconds
-  with the nodes' check: budgets, and steps whose task ended while eriphe-core was down.
-- Tables: `sessions`, `session_steps`, `session_asks` (what a session asks, one card each),
-  `session_log`.
+- Each step's end reaches the lead as an event `[thread N « title »]`, instead of the task's own;
+  a thread complete or stuck is told once. `find_thread` and `read_thread` read them;
+  `stop_thread` stops the tasks and withdraws the cards. The engine's pass runs every 15 seconds
+  with the nodes' check, over the led threads only: budgets, and steps whose task ended while
+  eriphe-core was down.
+- The end of any thread is the journal's `thread.ended` (key `thread:<id>`, its state).
+- Tables: `threads`, `thread_steps`, `thread_asks` (what a thread asks, one card each),
+  `thread_log`.
+- **From sessions** (`threads_migrate.go`): a database of an eriphe-core that had work sessions
+  moves once, as it opens: the tables and their `session` columns renamed, every session a led
+  thread (its old state kept as its phase), and the refs rewritten where they are kept (cards,
+  attention items, notifications, the journal, surfaces' lifetime and components, kv values, skill
+  runs, a running lead's trigger and name). A skill that still says session (`skill_threads.go`,
+  when the skills start) is rewritten in those words only, in its `SKILL.md`: `start-session` in
+  `can` becomes `open-thread`, `session.ended` in `when` becomes `thread.ended`, a ```` ```session ````
+  fence ```` ```thread ````. The new bundle takes the approved (and the pending) version's place: the
+  same capability under its new name, so the user's approval stands. The version replaced is kept,
+  and the change is a learning entry (« renommé : session → thread ») the user can undo. A default
+  skill's rewritten version is recorded among its shipped ones (`default_skill_sha:<name>`), right
+  after the version it replaces, so a later release still sees it unchanged and updates it.
 
-**The session lead** is born when the user approves the plan (`lead-<id>`, « Chef de session N ») and
-goes when the session ends. Its trigger `session:<id>` wakes it with what happened to its steps
-(`session_inbox`), one turn at a time; its own tools are `session`, `settle_step`,
-`amend_session`, `end_session`, `report` and the [workspace's tools](#the-assistants-workspace-tools-workspace_toolsgo).
-It keeps **its session's surface** (`lead-prompt.md`): one surface, as `lead:<id>`, with the plan,
+**The thread's lead** is born when the user approves the plan (`lead-<id>`, « Chef du thread N »)
+and goes when the thread ends. Its trigger `thread:<id>` wakes it with what happened to its steps
+(`thread_inbox`), one turn at a time; its own tools are `thread`, `settle_step`,
+`amend_thread`, `close_thread`, `report` and the [workspace's tools](#the-assistants-workspace-tools-workspace_toolsgo).
+It keeps **its thread's surface** (`lead-prompt.md`): one surface, as `lead:<id>`, with the plan,
 the steps as a `Timeline`, a pending choice with its pros and cons, its proposals, rewritten by its
-id when a step changes. What it writes without a lifetime follows its session (`while:
-session:<id>`); each wake reminds it while it has none (`leadSurfaceNudge`), a `surface.stale`
-about it reaches it in its inbox, and the session's end removes it at once
-(`dropSessionSurfaces`, with every surface kept `while` the session). It never talks to the user nor starts a task. The
-brain no longer judges a session that has a lead: it passes the user's words with `tell_lead`, and
+id when a step changes. What it writes without a lifetime follows its thread (`while:
+thread:<id>`); each wake reminds it while it has none (`leadSurfaceNudge`), a `surface.stale`
+about it reaches it in its inbox, and the thread's end removes it at once
+(`dropThreadSurfaces`, with every surface kept `while` the thread). It never talks to the user nor starts a task. The
+brain no longer judges a thread that has a lead: it passes the user's words with `tell_lead`, and
 hears the lead's reports, the choices to ask, the budget's card and the end. A report may carry an
 [attention signal](#attention-signals-attention_signalgo) (`attention`, the same block as a skill's
 receipt): its items enter the attention queue with the source `assistant:lead-<id>`, and the tool's
 result lists what was `dropped`.
 
-**The final objective check**: `end_session` on a session with a `done_when` adds a last step,
+**The final objective check**: `close_thread` on a led thread with a `done_when` adds a last step,
 `final-check`, a fresh agent lent read-only what the steps wrote (their repository branches and
 folders) and given the goal and what each step produced; only its receipt with status `done` and no
-failed check closes the session. Otherwise the lead hears what is missing; after 2 checks that fail,
+failed check closes the thread. Otherwise the lead hears what is missing; after 2 checks that fail,
 the decision goes back to the user through the brain.
 
-**The work interface** (`web_sessions.go`, `sessions.html`, `sessions.css`, `sessions.js`):
-`/sessions` lists them; `/sessions/{id}` shows one, kept live by its own event stream
-(`/sessions/{id}/events`, event `session`, the page's live part re-rendered on each change). From top
-to bottom: its state, goal and actions (pause, resume, stop); its facts (`done_when`, time against the
-budget, its lead, steps accepted); **what waits for the user** (the plan card, start cards, choices
+**The work interface** (`web_threads.go`, `threads.html`, `threads.css`, `threads.js`):
+`/threads` lists them; `/threads/{id}` shows one, kept live by its own event stream
+(`/threads/{id}/events`, event `thread`, the page's live part re-rendered on each change). From top
+to bottom: where it stands (a led thread's phase, a light one's state), its goal and actions
+(pause, resume, stop); its facts (`done_when`, its subject; led: time against the budget, its
+lead, steps accepted); **what waits for the user** (the plan card, start cards, choices
 as buttons); the summary once done; the plan as stages on a rail (a step stands one stage after the
 deepest step it needs, those of one stage run together, the final check last); the log. Each step
 wears a mark for how far its evidence goes: a ring for what the agent claims, a check inside for what
 the checks verified, filled once the lead accepted, a red cross for a failed check or a rejection.
-Under the live part, a line to the lead (`POST /sessions/{id}/lead`) is queued on its inbox as the
-user's words. The tasks panel of the conversation shows the sessions in progress first.
+Under the live part, a line to the lead (`POST /threads/{id}/lead`) is queued on its inbox as the
+user's words. The tasks panel of the conversation shows the threads open first.
 
 ## Permission policy
 
@@ -1096,8 +1127,8 @@ adds its title and the start of its description, read with the tool itself when 
 3. **at the first call** of a category not granted yet; the calls that wait on it are answered with it.
 
 A card at the first call or on release has a message of its own, the question, which notifies as
-any question does; so has a start's card when the brain did not launch the task (a session's step).
-These cards, a start's and a work session's go to
+any question does; so has a start's card when the brain did not launch the task (a thread's step).
+These cards, a start's and a led thread's go to
 the channels the user writes from as well (Telegram), whatever the messages around them did,
 answered from the linked account only ("Alerts only" sends none): that account is the user, a
 trusted channel, so its buttons answer as the workspace's. A task's raw permission (a rule's `ask`,
@@ -1412,7 +1443,7 @@ turn is not tainted. Its front matter:
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
-| `can` | what its tasks may start: `start-session`, a work session |
+| `can` | what its tasks may start: `open-thread`, a led thread |
 | `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run asks |
 
 The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
@@ -1444,14 +1475,14 @@ version, read with its diff.
   skill proposes N actions » when it said `[rien]`, or when its message is held for the brief or
   not sent, held by the attention queue for the next breakpoint): each action with its parameters. The yes runs
   them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
-- **A work session**: with `can: [start-session]`, the run is told it may end its last message with
-  a fenced ` ```session ` block holding `start_session`'s JSON. eriphe-core opens it (`by`
+- **A led thread**: with `can: [open-thread]`, the run is told it may end its last message with
+  a fenced ` ```thread ` block holding `open_thread`'s JSON. eriphe-core opens it (`by`
   `skill:<name>`, tainted as the run). Its plan starts at once when every step only reads, writes
   on a branch of its repository or calls catalog tools, each call still under the grid: the
   skill's approval stands for it. A folder lent beyond read, a credential, a file, or a write
-  without a branch: the plan waits for its card. While the session is open, it is the run's: the
+  without a branch: the plan waits for its card. While the thread is open, it is the run's: the
   events of its key go to its lead (`tellLead`), not to a new run. Merging and deploying stay the
-  user's, on the session's cards. Without `can`, the block is ignored and the note says why.
+  user's, on the thread's cards. Without `can`, the block is ignored and the note says why.
 - **Urgent**: with `urgent: <text>`, a last message that starts with `[urgent]` sends that fixed
   text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the run
   read enters it: a tainted run cannot write what wakes the user.
@@ -1464,7 +1495,7 @@ version, read with its diff.
 A triggered skill's page lists its runs over 30 days, the latest first:
 - when it ran, and its state (running, done, nothing to say, failed, not started);
 - its events (kind, key, a few words of their subject);
-- its task and the session it opened;
+- its task and the thread it opened;
 - its last message;
 - the actions it proposed, each answered there on its own (`POST
   /settings/skills/<name>/calls/<ask>/approve|reject`: a yes runs it as kept);
@@ -1516,7 +1547,7 @@ what it can.
   same ids (the morning and return runs overlap: update, never add), `sources_read` and
   `catalog_read`; write a `Placeholder` for each surface at once, then fill them; decide what is
   worth a surface (the day's appointments, the messages that need an answer, the projects with
-  their deadline and next task, wealth when a tool for it is linked, the sessions and what waits
+  their deadline and next task, wealth when a tool for it is linked, the threads and what waits
   for the user, without copying the surfaces their authors keep); live sources for what changes
   during the day, composed values for digests; `lifetime.until` the end of the day; with nothing
   linked, one surface saying what it could show; it changes nothing outside the workspace and ends
@@ -1554,7 +1585,7 @@ the rest dropped.
 |---|---|---|---|
 | `monitor.changed`, `monitor.new`, `monitor.crossed`, `monitor.failed`, `monitor.recovered`, `monitor.received` | a [monitor](#monitors) (`monitor.received`: an incoming address was called, `status` from the body's top-level `status` when it is a short word: `firing`, `resolved`) | the monitor's name | unless its server is trusted |
 | `task.ended` | a worker task's end | the task | no |
-| `session.ended` | a work session's end | `session:<id>` | no |
+| `thread.ended` | a thread's end | `thread:<id>` | no |
 | `user.returned` | the user's first activity after an absence of an hour or more; payload `left`, `back`, `away_minutes` | | no |
 
 ### Monitors
@@ -1630,15 +1661,15 @@ item, so a skill follows the mail with `when: monitor.new key=mails`.
 
 The test case: `getout-prod` calls Grafana's alert rules every 2 minutes with `path`
 `data.rules[state=firing].name`; a skill `when: monitor.changed key=getout-prod` investigates and
-opens a work session. Nothing runs a model while nothing fires, and nothing reaches Eriphe from
+opens a led thread. Nothing runs a model while nothing fires, and nothing reaches Eriphe from
 outside: the call goes out from eriphe-core to the tool.
 
 ## Assistants
 
 An assistant is a long-lived agent that owns one task, as a Kubernetes Deployment owns its Pod.
 Two are built in, and there are no others: **the brain** (`eriphe`, role `brain`: the only voice
-and the only orchestrator, see [The brain](#the-brain)) and each work session's **lead** (role
-`lead`, see the sessions). What used to be a specialist assistant (role `assistant`, with a typed
+and the only orchestrator, see [The brain](#the-brain)) and each led thread's **lead** (role
+`lead`, see the threads). What used to be a specialist assistant (role `assistant`, with a typed
 state, views, lent facts and a team page) is a [triggered skill](#triggered-skills) now: a task in
 the background, started by an event or a time, that tells the user with its last message.
 
@@ -2520,20 +2551,20 @@ at the brief and the return point, never in the quiet hours, at night (22:00–0
 source says do not disturb, in a Focus or while busy; the brain says it in a sentence and the
 cards come with its message. A card that stops a task is not one of these: if its turn wrote
 nothing (a turn that failed), it goes with the brain's next message, whatever the hour. A card made
-outside a brain turn (the start of a task the brain did not launch, such as a session's step; what
-a session asks: its plan when a skill opened it, an approval step, a change of plan or more time;
+outside a brain turn (the start of a task the brain did not launch, such as a thread's step; what
+a thread asks: its plan when a skill opened it, an approval step, a change of plan or more time;
 a skill run's calls when its message is held for the brief or not sent; an access asked at a
 task's call) comes under a message of its own written by eriphe-core as the brain's (`cardNow`),
-with no message of the user's needed: at once when a task or a session waits on it, otherwise at
+with no message of the user's needed: at once when a task or a thread waits on it, otherwise at
 the attention queue's next breakpoint (below); the brain is not woken for it, and nothing it does
 waits on it.
 
 **Attention queue** (`attention.go`). What needs the user is kept by code in one queue, one item
-per object: a ref (`card:<id>`, `session:<id>`, `mail:<id>`…), a weight from 1 to 5 (5 interrupts,
+per object: a ref (`card:<id>`, `thread:<id>`, `mail:<id>`…), a weight from 1 to 5 (5 interrupts,
 4 needs the user now, 3 matters today, 2 is a glance, 1 is background), a short why, an optional
-say, its source (`brain`, `task:<id>`, `session:<id>`, `skill:<name>`) and its time. Items about the
+say, its source (`brain`, `task:<id>`, `thread:<id>`, `skill:<name>`) and its time. Items about the
 same ref merge (the highest weight, the latest why). A card enters it when it is made, weighted by
-its kind (one a task or a session waits on: 4; any other proposal: 3), and leaves it once decided
+its kind (one a task or a thread waits on: 4; any other proposal: 3), and leaves it once decided
 or gone. Each open item is a surface of the workspace, written by code while it is open
 ([the queue as surfaces](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)). Assistants feed it with their [attention signals](#attention-signals-attention_signalgo);
 an item drawn from external content stays marked so, and the brain reads it as data. What the
@@ -2546,10 +2577,10 @@ brain's turn does not list it: `offerCards` offers it in the conversation as bef
 the brain's message its item is the card's as any other (weight 3, delivered). A
 notification held for the brief (a skill's `[brief]`, the quiet hours, the daily cap, a tainted
 turn, « pas maintenant ») enters it as `alert:<id>` with weight 2, the item a skill's message
-becomes too. Weight 4 and 5 are delivered as they enter: nothing a running task or session
+becomes too. Weight 4 and 5 are delivered as they enter: nothing a running task or thread
 waits on is ever delayed. The rest is held for a **breakpoint**, where an interruption costs the
 user least (Iqbal & Bailey, OASIS): the end of the brain's answer to a user message, the user's
-return after an absence (`user.returned`), and the end of a work session while the user is there
+return after an absence (`user.returned`), and the end of a thread while the user is there
 (away, it waits for the return). A breakpoint delivers what is held in one message of its own
 written by eriphe-core as the brain's, the heaviest first, its cards under it; with nothing held,
 nothing happens. A notification held for the brief waits for the return only: that release is the
@@ -2698,10 +2729,10 @@ settings or a channel's link code; before any, `web.lang`, else French. The fixe
 workspace queue's surfaces, the bot channels' messages), and so do the models' lines: a skill run's
 and a task's final message, a task's surface (`skillVoice`, `workerVoice`, `delegateSurfaceText`
 name it), the composer's turn, and a `[langue de l'utilisateur : …]` line at the head of each turn of
-the brain, the assistants and a session's lead, for their notifications, cards, surfaces and
+the brain, the assistants and a thread's lead, for their notifications, cards, surfaces and
 summaries (the brain answers a message in the language it is written in). The fields of the tools
 the user reads (`notify`'s text and why, a rule's or a setting's why, an intention, attention's why
-and say, a session's summary) ask for "the user's language". What only the models read (their
+and say, a thread's summary) ask for "the user's language". What only the models read (their
 prompts, packets, receipts, reports) stays in French, and so does the memory, whose index stems
 French.
 | `session_days` | how long a login lasts, 30 by default (a week without use ends it sooner) |
@@ -2795,7 +2826,7 @@ with nothing related, the rest fills the room left by weight).
 What relates is found by code from what every surface declares, never from a tool's name
 (`surfaceRelations`, 6 at most, the closest first): the same source (a tool with the same
 arguments, or the same resource), the same ref it lives with (its `while`, or what its author
-stands for: a lead its session, a task itself and the session it is a step of, a skill itself),
+stands for: a lead its thread, a task itself and the thread it is a step of, a skill itself),
 a day (a `Day` component on a date the open surface carries, or the reverse), then the same
 server. The composer's turn lists them with how they relate. Two choices are kept: the base one,
 made with nothing open (`workspace_choice`), and the one around the focus, in memory, for that
@@ -2825,7 +2856,7 @@ asks nothing.
 
 **An answer on stage.** When the user asks from the workspace about a thing (« où en est la PR
 … ? »), the brain answers with a surface (the subject as title, its state, the points to see,
-what is next, the pending proposal embedded; the session's own surface when the thing has one)
+what is next, the pending proposal embedded; the thread's own surface when the thing has one)
 and puts it on stage with `workspace_focus`, then replies in one line. The tool is the brain's
 only, allowed in the turn that answers a message of the user's sent from the workspace (typed in
 its input, `· depuis l'espace`, or a button's ask), never on events alone, once per turn; it is
@@ -2875,7 +2906,7 @@ and left it (went back, opened another, or the 15 minutes of the focus passed; `
 `runWorkspace`'s tick), only the items it showed when opened. A card stays until it is decided; an
 item still held (for a breakpoint or the brief) has not been delivered.
 
-The **composer** is a persistent assistant of role `composer`, like the brain and the session
+The **composer** is a persistent assistant of role `composer`, like the brain and the thread
 leads: one warm task on a node, each choice a turn (`deliverComposer` gives it the snapshot,
 `relayComposer` hands its answer back at the turn's end). It has no power, no MCP server and none
 of its harness's tools (Claude Code's `--tools ""`), thinks at low effort
@@ -2931,7 +2962,7 @@ else the default agent). Off by default; off, nothing is sent to a model, and co
 weight.
 
 **Bench** (`testdata/composer/`): invented moments of a fictional user (an arrival after a night,
-a busy noon, a new « never » preference, several sessions running, a quiet evening, a mail that
+a busy noon, a new « never » preference, several threads running, a quiet evening, a mail that
 tries to order the composer, surfaces written by authors at an arrival, a preference that hides
 one of them), each with its pool and what a good choice does, by ref: `front` (must be tiles),
 `back` (must not be tiles, chips are fine), `hidden` (must not be chosen: the composer leaves it
@@ -3326,7 +3357,7 @@ and update the commit in the two `NOTICE` files.
 ### Surfaces and their sources (`surfaces.go`)
 
 A surface is one tile of the workspace, stored with its **author** (`brain`, `skill:<name>`,
-`lead:<session>`, `task:<id>`, or `core` for [the attention queue's](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo);
+`lead:<thread>`, `task:<id>`, or `core` for [the attention queue's](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo);
 a task the brain [delegated a surface to](#the-assistants-workspace-tools-workspace_toolsgo) fills
 the brain's): a title, A2UI components, data, **sources**, a refresh, a
 **lifetime**, a weight (1 to 100, 50 by default) and a why. A model writes it; code keeps its
@@ -3362,8 +3393,8 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   most, each pass within 8 s (`refreshLater`, `surfaceReaders`, `surfaceRefreshCap`). Only a
   source whose value changed goes out, as `updateDataModel` at its pointer; a taint that appears or goes sends the surface again.
 - **Lifetime**, one of: `until` a date (90 days at most), `while` a ref is pending or running
-  (`task:<id>` not over nor idle, `session:<id>` not ended, `card:<id>` waiting), or `kept` while
-  its author is there (a skill that exists, a lead's session not ended, a task running; the brain
+  (`task:<id>` not over nor idle, `thread:<id>` not ended, `card:<id>` waiting), or `kept` while
+  its author is there (a skill that exists, a lead's thread not ended, a task running; the brain
   always). None given: until a day later. Code removes an ended one on the surfaces' loop.
 - **Who writes**: only its author writes it again (another author's id is refused) or removes
   it; the brain writes and removes any (it stays its author's: a skill's next run still writes
@@ -3514,7 +3545,7 @@ Any assistant writes the workspace with five tools; the **author is the caller**
 | `sources_read` | what code may read for a surface (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: a run lent only the workspace learns which sources it may declare, and code reads them under the access policy (`sourceWhy`). Without a shape, the author binds what it expects and `surface_write`'s error names the fields the result has. With nothing linked, it says so |
 
 - **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint. A
-  session's lead, on its own tools (`registerLeadTools`), as `lead:<session>`. A task or a skill's
+  thread's lead, on its own tools (`registerLeadTools`), as `lead:<thread>`. A task or a skill's
   run through **`eriphe-workspace`, a server Eriphe provides**: lent like any catalog server
   (`{kind: tool, ref: eriphe-workspace}` or `eriphe-workspace.<tool>` in `run_task`'s resources,
   `eriphe-workspace` in a skill's `tools`), checked by `checkGrant`, listed by `list_tools` under
@@ -3594,8 +3625,8 @@ Sonnet). It fails only when the CLI does.
 
 **Who keeps which surface** (`surface_authors.go`, #423). Nothing is recurring by default.
 
-- **A session's lead** keeps its session's surface while the session lives (see
-  [the session lead](#work-sessions-sessionsgo-session_enginego)).
+- **A thread's lead** keeps its thread's surface while the thread lives (see
+  [the thread's lead](#threads-threadsgo-thread_enginego)).
 - **A skill** writes its surface on its trigger: `tools: [eriphe-workspace]` in its front matter
   lends it the workspace, its runs write as `skill:<name>` (the same surface each run, by its id,
   `lifetime: kept` while the skill exists), and its run's prompt says so (`skillCanText`). It reacts

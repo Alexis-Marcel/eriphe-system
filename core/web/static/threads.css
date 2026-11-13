@@ -1,40 +1,40 @@
-/* The work sessions (sessions.html). One idea carries the page: how far
+/* The work threads (threads.html). One idea carries the page: how far
    each step's evidence goes. A ring is a claim, a check inside it is what
    the checks saw, a filled mark is the lead's acceptance. The plan reads
    left to right as stages on a rail; what runs together stands together.
    Everything else stays quiet, in the workspace's own tokens. */
 
-.sess-wrap { max-width: 1180px; margin: 0 auto; padding: 20px 28px 64px; display: grid; gap: 22px; }
+.thread-wrap { max-width: 1180px; margin: 0 auto; padding: 20px 28px 64px; display: grid; gap: 22px; }
 
 /* The list. */
-.sess-index-head { display: grid; gap: 6px; }
-.sess-index-head h1 { font-size: 1.5rem; }
-.sess-index-head p { color: var(--muted); max-width: 62ch; }
-.sess-rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
-.sess-rows li { border-bottom: 1px solid var(--border); }
-.sess-row { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 6px; color: inherit; border-radius: var(--radius-sm); }
-.sess-row:hover { text-decoration: none; background: var(--surface-2); }
-.sess-row .chip { justify-self: start; }
-.sess-row-main { display: grid; gap: 2px; min-width: 0; }
-.sess-row-main b { font-weight: 600; }
-.sess-row-end { display: grid; justify-items: end; gap: 4px; }
-.sess-empty { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 48px 16px; max-width: 34rem; margin: 0 auto; }
+.thread-index-head { display: grid; gap: 6px; }
+.thread-index-head h1 { font-size: 1.5rem; }
+.thread-index-head p { color: var(--muted); max-width: 62ch; }
+.thread-rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.thread-rows li { border-bottom: 1px solid var(--border); }
+.thread-row { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 6px; color: inherit; border-radius: var(--radius-sm); }
+.thread-row:hover { text-decoration: none; background: var(--surface-2); }
+.thread-row .chip { justify-self: start; }
+.thread-row-main { display: grid; gap: 2px; min-width: 0; }
+.thread-row-main b { font-weight: 600; }
+.thread-row-end { display: grid; justify-items: end; gap: 4px; }
+.thread-empty { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 48px 16px; max-width: 34rem; margin: 0 auto; }
 
-/* A session's head. */
-.sess-live { display: grid; gap: 22px; }
-.sess-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: start; }
-.sess-head-main { display: grid; gap: 8px; justify-items: start; }
-.sess-head h1 { font-size: 1.6rem; letter-spacing: -.02em; }
-.sess-goal { color: var(--muted); max-width: 66ch; font-size: 1.02rem; }
-.sess-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* A thread's head. */
+.thread-live { display: grid; gap: 22px; }
+.thread-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: start; }
+.thread-head-main { display: grid; gap: 8px; justify-items: start; }
+.thread-head h1 { font-size: 1.6rem; letter-spacing: -.02em; }
+.thread-goal { color: var(--muted); max-width: 66ch; font-size: 1.02rem; }
+.thread-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
-.sess-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0; margin: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
-.sess-facts > div { padding: 12px 16px; display: grid; gap: 4px; align-content: start; }
-.sess-facts > div + div { border-left: 1px solid var(--border); }
-.sess-facts .fact-done { grid-column: span 2; }
-.sess-facts dt { font-size: .78rem; color: var(--faint); font-weight: 600; }
-.sess-facts dd { margin: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.sess-facts meter { width: 96px; height: 8px; }
+.thread-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0; margin: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.thread-facts > div { padding: 12px 16px; display: grid; gap: 4px; align-content: start; }
+.thread-facts > div + div { border-left: 1px solid var(--border); }
+.thread-facts .fact-done { grid-column: span 2; }
+.thread-facts dt { font-size: .78rem; color: var(--faint); font-weight: 600; }
+.thread-facts dd { margin: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.thread-facts meter { width: 96px; height: 8px; }
 meter { appearance: none; border-radius: 4px; background: var(--surface-3); }
 meter::-webkit-meter-bar { background: var(--surface-3); border: 0; border-radius: 4px; height: 8px; }
 meter::-webkit-meter-optimum-value { background: var(--run); border-radius: 4px; }
@@ -43,20 +43,20 @@ meter::-webkit-meter-even-less-good-value { background: var(--danger); border-ra
 meter::-moz-meter-bar { background: var(--run); border-radius: 4px; }
 
 /* What waits for the user: the one tinted block of the page. */
-.sess-waits { display: grid; gap: 12px; padding: 16px 18px 18px; border-radius: var(--radius); background: var(--accent-soft); }
-.sess-waits h2 { font-size: 1rem; color: var(--accent-text); }
-.sess-waits .pcards { max-width: 40rem; margin: 0; }
-.sess-choice { display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); max-width: 40rem; }
-.sess-choice h3 { font-size: .95rem; }
+.thread-waits { display: grid; gap: 12px; padding: 16px 18px 18px; border-radius: var(--radius); background: var(--accent-soft); }
+.thread-waits h2 { font-size: 1rem; color: var(--accent-text); }
+.thread-waits .pcards { max-width: 40rem; margin: 0; }
+.thread-choice { display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); max-width: 40rem; }
+.thread-choice h3 { font-size: .95rem; }
 .choice-opts { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.sess-summary { display: grid; gap: 8px; padding: 16px 18px; border-radius: var(--radius); border: 1px solid var(--border); border-left: 3px solid var(--ok); }
-.sess-summary h2 { font-size: 1rem; }
+.thread-summary { display: grid; gap: 8px; padding: 16px 18px; border-radius: var(--radius); border: 1px solid var(--border); border-left: 3px solid var(--ok); }
+.thread-summary h2 { font-size: 1rem; }
 
 /* The plan and the log. */
-.sess-grid { display: grid; gap: 32px; }
-.sess-plan, .sess-log { display: grid; gap: 14px; min-width: 0; }
-.sess-plan > h2, .sess-log > h2 { font-size: 1rem; }
+.thread-grid { display: grid; gap: 32px; }
+.thread-plan, .thread-log { display: grid; gap: 14px; min-width: 0; }
+.thread-plan > h2, .thread-log > h2 { font-size: 1rem; }
 
 /* Stages on a rail: each stage a column, its number on the line. */
 .stages { list-style: none; margin: 0; padding: 0 2px 6px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: 18px; overflow-x: auto; scroll-snap-type: x proximity; }
@@ -105,40 +105,40 @@ meter::-moz-meter-bar { background: var(--run); border-radius: 4px; }
 .proof-legend .proof .i { width: 9px; height: 9px; }
 
 /* The log: who did what, in order. */
-.sess-log { max-width: 52rem; }
-.sess-log ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; max-height: 26rem; overflow: auto; }
-.sess-log li { display: grid; grid-template-columns: 3rem 4.5rem minmax(0, 1fr); column-gap: 12px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--border); font-size: .84rem; }
-.sess-log time { color: var(--faint); font-variant-numeric: tabular-nums; }
-.sess-log b { font-size: .76rem; font-weight: 600; color: var(--muted); }
-.sess-log .log-user b { color: var(--accent-text); }
-.sess-log .log-lead b { color: var(--idle); }
-.sess-log span { overflow-wrap: anywhere; }
+.thread-log { max-width: 52rem; }
+.thread-log ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; max-height: 26rem; overflow: auto; }
+.thread-log li { display: grid; grid-template-columns: 3rem 4.5rem minmax(0, 1fr); column-gap: 12px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--border); font-size: .84rem; }
+.thread-log time { color: var(--faint); font-variant-numeric: tabular-nums; }
+.thread-log b { font-size: .76rem; font-weight: 600; color: var(--muted); }
+.thread-log .log-user b { color: var(--accent-text); }
+.thread-log .log-lead b { color: var(--idle); }
+.thread-log span { overflow-wrap: anywhere; }
 
 /* A word to the lead. */
-.sess-say { display: grid; gap: 6px; max-width: 46rem; padding-top: 18px; border-top: 1px solid var(--border); }
-.sess-say label { font-weight: 600; font-size: .92rem; }
-.sess-say-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
-.sess-say textarea { width: 100%; resize: vertical; min-height: 2.8rem; font: inherit; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
-.sess-say textarea:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 1px; }
+.thread-say { display: grid; gap: 6px; max-width: 46rem; padding-top: 18px; border-top: 1px solid var(--border); }
+.thread-say label { font-weight: 600; font-size: .92rem; }
+.thread-say-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.thread-say textarea { width: 100%; resize: vertical; min-height: 2.8rem; font: inherit; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
+.thread-say textarea:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 1px; }
 
 /* On a phone the stages stack, the rail turns down the left side. */
 @media (max-width: 680px) {
-  .sess-wrap { padding: 14px 16px 48px; gap: 18px; }
-  .sess-head { grid-template-columns: 1fr; }
-  .sess-actions { justify-content: flex-start; }
-  .sess-head h1 { font-size: 1.35rem; }
-  .sess-facts .fact-done { grid-column: auto; }
-  .sess-facts > div + div { border-left: 0; border-top: 1px solid var(--border); }
+  .thread-wrap { padding: 14px 16px 48px; gap: 18px; }
+  .thread-head { grid-template-columns: 1fr; }
+  .thread-actions { justify-content: flex-start; }
+  .thread-head h1 { font-size: 1.35rem; }
+  .thread-facts .fact-done { grid-column: auto; }
+  .thread-facts > div + div { border-left: 0; border-top: 1px solid var(--border); }
   .stages { grid-auto-flow: row; grid-auto-columns: auto; overflow: visible; gap: 14px; padding-left: 14px; border-left: 2px solid var(--border); }
   .stage-n { padding-bottom: 0; margin-left: -20px; }
   .stage-n::before { margin-right: 4px; }
   .stage-n::after { display: none; }
-  .sess-row { grid-template-columns: 1fr; gap: 8px; }
-  .sess-log li { grid-template-columns: 3rem minmax(0, 1fr); }
-  .sess-log span { grid-column: 2; }
-  .sess-row-end { justify-items: start; grid-auto-flow: column; justify-content: start; align-items: center; gap: 12px; }
+  .thread-row { grid-template-columns: 1fr; gap: 8px; }
+  .thread-log li { grid-template-columns: 3rem minmax(0, 1fr); }
+  .thread-log span { grid-column: 2; }
+  .thread-row-end { justify-items: start; grid-auto-flow: column; justify-content: start; align-items: center; gap: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sess-strip i.st-running, .st-running .proof-none, .chip-sess-running .pulse { animation: none; }
+  .thread-strip i.st-running, .st-running .proof-none, .chip-thread-running .pulse { animation: none; }
 }

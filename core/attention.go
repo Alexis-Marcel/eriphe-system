@@ -12,18 +12,18 @@ import (
 )
 
 // The attention queue: what needs the user, kept by code, one item per
-// object (its ref: card:<id>, session:<id>, mail:<id>…). An item has a
+// object (its ref: card:<id>, thread:<id>, mail:<id>…). An item has a
 // weight, 1 to 5 (5 interrupts, 4 needs the user now, 3 matters today, 2 is
 // a glance, 1 is background), a short why, an optional say (what Eriphe
 // would say of it), its source (who raised it) and its time. Items about
 // the same ref merge: the highest weight, the latest why.
 //
 // An item of weight 4 or 5 is delivered as it enters: 5 interrupts, and 4
-// is what a running task or session waits on (blocksATask), never delayed.
+// is what a running task or thread waits on (blocksATask), never delayed.
 // The rest is held for a breakpoint (attentionBreak), where an interruption
 // costs the user least (Iqbal & Bailey, OASIS): the end of the brain's
 // answer to a user message, the user's return after an absence
-// (user.returned), the end of a work session while the user is there. A
+// (user.returned), the end of a thread while the user is there. A
 // breakpoint delivers what is held in one message of its own, the heaviest
 // first; the one on return is the brief. Nothing waits past its cap: a
 // weight 3 item two hours, a lighter one the next breakpoint (the next
@@ -97,17 +97,17 @@ func attentionColumns(db *sql.DB) error {
 const (
 	attentionWhyMax   = 300
 	attentionInBrain  = 10 // the open items a brain's turn lists, the heaviest first
-	weightBlocksATask = 4  // a card a task or a session waits on
+	weightBlocksATask = 4  // a card a task or a thread waits on
 	weightProposal    = 3  // any other card
 	weightHeldNote    = 2  // a notification held for the brief
 
 	attentionCap3 = 2 * time.Hour // the longest a weight 3 item is held
 
 	// The breakpoints.
-	breakAnswer  = "answer"  // the brain's answer to a user message is done
-	breakReturn  = "return"  // the user is back after an absence: the brief
-	breakSession = "session" // a work session ended, the user there
-	breakCap     = "cap"     // held items reached their cap
+	breakAnswer = "answer" // the brain's answer to a user message is done
+	breakReturn = "return" // the user is back after an absence: the brief
+	breakThread = "thread" // a thread ended, the user there
+	breakCap    = "cap"    // held items reached their cap
 
 	attentionAnsweredKey = "attention_answered" // the last user message whose answer was a breakpoint
 )
@@ -357,15 +357,15 @@ func (c *core) attentionAnswered(now time.Time) {
 }
 
 // attentionOnEvent listens to the journal for the other breakpoints: the
-// user's return (the brief), and a session's end while the user is there
+// user's return (the brief), and a thread's end while the user is there
 // (away, what is held waits for their return).
 func (c *core) attentionOnEvent(e journalEvent) {
 	switch e.Kind {
 	case evUserReturned:
 		c.attentionBreak(breakReturn, c.notifyTime())
-	case evSessionEnded:
+	case evThreadEnded:
 		if s, err := c.userState(); err == nil && !s.Away {
-			c.attentionBreak(breakSession, s.Now)
+			c.attentionBreak(breakThread, s.Now)
 		}
 	}
 }

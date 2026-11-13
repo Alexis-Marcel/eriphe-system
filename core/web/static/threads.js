@@ -1,5 +1,5 @@
-// A work session's page: its live part follows the session's own event
-// stream (web_sessions.go). What the user unfolded stays unfolded.
+// A work thread's page: its live part follows the thread's own event
+// stream (web_threads.go). What the user unfolded stays unfolded.
 (function () {
   "use strict";
 
@@ -12,10 +12,10 @@
   }
 
   function connect() {
-    const box = document.querySelector("[data-session-live]");
+    const box = document.querySelector("[data-thread-live]");
     if (!box || !window.EventSource) return;
-    const es = new EventSource(box.dataset.sessionLive);
-    es.addEventListener("session", (e) => swap(box, e.data));
+    const es = new EventSource(box.dataset.threadLive);
+    es.addEventListener("thread", (e) => swap(box, e.data));
     es.onerror = () => {
       if (es.readyState === EventSource.CLOSED) setTimeout(connect, 5000);
     };

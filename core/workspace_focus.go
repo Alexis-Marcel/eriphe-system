@@ -25,7 +25,7 @@ import (
 //   - Relations are found by code, from what every surface declares, never
 //     from a tool's name (surfaceRelations): the same source, the same
 //     server, the same ref it lives while or its author stands for (a
-//     session, its lead and its steps' tasks, a task, a skill), the same
+//     thread, its lead and its steps' tasks, a task, a skill), the same
 //     proposal shown in a Proposal (the queue's tile of it), a day: a Day
 //     component on a date the focused surface carries, or the reverse.
 //   - Two choices are kept: the base one, composed with nothing open
@@ -50,7 +50,7 @@ const (
 
 	relSource  = "source"  // reads the same thing
 	relServer  = "server"  // reads from the same server
-	relRef     = "ref"     // lives with the same session, task, card or skill
+	relRef     = "ref"     // lives with the same thread, task, card or skill
 	relDay     = "day"     // the day of a date it carries
 	relDayItem = "dayitem" // carries a date of the day it shows
 )
@@ -67,7 +67,7 @@ var relationWords = map[string]string{
 }
 
 // refKindWords name what two surfaces share by its ref's kind.
-var refKindWords = map[string]string{"session": "session", "task": "tâche", "card": "proposition", "proposal": "proposition", "skill": "compétence"}
+var refKindWords = map[string]string{"thread": "thread", "task": "tâche", "card": "proposition", "proposal": "proposition", "skill": "compétence"}
 
 // focusRelation is a surface related to the one open, and how.
 type focusRelation struct {
@@ -90,10 +90,10 @@ var relationRank = map[string]int{relSource: 0, relRef: 1, relDay: 2, relDayItem
 // surfaceRelations are the surfaces of the pool related to the focused
 // one, the closest first (then the heaviest), relationsMax at most. It
 // reads only what surfaces declare: sources, lifetime, author, components
-// and data. sessionOf is the session a task is a step of, 0 for none.
-func surfaceRelations(focus surface, pool []surface, sessionOf func(task string) int64) []focusRelation {
+// and data. threadOf is the thread a task is a step of, 0 for none.
+func surfaceRelations(focus surface, pool []surface, threadOf func(task string) int64) []focusRelation {
 	fsrc, fsrv := sourceKeys(focus)
-	frefs := liveRefs(focus, sessionOf)
+	frefs := liveRefs(focus, threadOf)
 	fdates, fdays := datesOf(focus), daysOf(focus)
 	var out []focusRelation
 	weight := map[string]int{}
@@ -107,8 +107,8 @@ func surfaceRelations(focus surface, pool []surface, sessionOf func(task string)
 		switch {
 		case overlap(fsrc, src) != "":
 			r.Kind = relSource
-		case overlap(frefs, liveRefs(s, sessionOf)) != "":
-			r.Kind, r.Ref = relRef, overlap(frefs, liveRefs(s, sessionOf))
+		case overlap(frefs, liveRefs(s, threadOf)) != "":
+			r.Kind, r.Ref = relRef, overlap(frefs, liveRefs(s, threadOf))
 		case overlap(fdates, daysOf(s)) != "":
 			r.Kind = relDay
 		case overlap(fdays, datesOf(s)) != "":
@@ -162,23 +162,23 @@ func sourceKeys(s surface) (sources, servers map[string]bool) {
 }
 
 // liveRefs are the refs a surface lives with: the one its lifetime waits on
-// and the one its author stands for (a lead its session, a task itself and
-// the session it is a step of, a skill itself). The brain and code stand
+// and the one its author stands for (a lead its thread, a task itself and
+// the thread it is a step of, a skill itself). The brain and code stand
 // for no one in particular.
-func liveRefs(s surface, sessionOf func(task string) int64) map[string]bool {
+func liveRefs(s surface, threadOf func(task string) int64) map[string]bool {
 	out := map[string]bool{}
 	add := func(ref string) {
 		kind, id, _ := strings.Cut(ref, ":")
 		switch kind {
-		case "session", "card", "skill":
+		case "thread", "card", "skill":
 			out[ref] = true
 		case "lead":
-			out["session:"+id] = true
+			out["thread:"+id] = true
 		case "task":
 			out[ref] = true
-			if sessionOf != nil {
-				if n := sessionOf(id); n > 0 {
-					out["session:"+strconv.FormatInt(n, 10)] = true
+			if threadOf != nil {
+				if n := threadOf(id); n > 0 {
+					out["thread:"+strconv.FormatInt(n, 10)] = true
 				}
 			}
 		}
@@ -302,7 +302,7 @@ func (c *core) focusRelations(id string, pool []surface) []focusRelation {
 		return nil
 	}
 	return surfaceRelations(pool[i], pool, func(task string) int64 {
-		n, _ := c.sessionOfTask(task) // web_sessions.go
+		n, _ := c.threadOfTask(task) // web_threads.go
 		return n
 	})
 }

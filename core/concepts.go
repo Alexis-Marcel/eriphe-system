@@ -32,10 +32,10 @@ var concepts = []concept{
 	{"notify", "notify, notifications", "say something on your own, now or for the brief, under a known topic ref"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
 	{"task", "run_task", "long or heavy work, by an agent on a machine"},
-	{"session", "start_session, session_status, settle_step, amend_session", "work of several steps toward one goal (a plan, steps in parallel, checkpoints for the user), not only code"},
+	{"thread", "open_thread, find_thread, read_thread, close_thread, reopen_thread", "one matter followed to its real goal (a pull request, an appointment, a brand name to find): opened light at once, found again by its subject, closed only on its goal; led (a plan the user approves, steps in parallel, a lead, a budget) for long autonomous work of several steps"},
 }
 
-const conceptMapEN = "memory, intention, skill, monitor, rule, workspace, surface, setting, where, notify, since, task, session"
+const conceptMapEN = "memory, intention, skill, monitor, rule, workspace, surface, setting, where, notify, since, task, thread"
 
 var conceptLinesEN = func() string {
 	var b strings.Builder

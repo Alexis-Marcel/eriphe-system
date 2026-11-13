@@ -559,9 +559,9 @@ func TestDefaultSkillUpdateAsksOnACard(t *testing.T) {
 	}
 	// A provided server goes without a yes; a can or a script does not.
 	old := &skillVersion{Manifest: skillManifest{Trigger: &skillTrigger{Tools: []string{workspaceServer}}}}
-	next := &skillVersion{Manifest: skillManifest{Trigger: &skillTrigger{Tools: []string{workspaceServer, foldersServer}, Can: []string{canSession}}},
+	next := &skillVersion{Manifest: skillManifest{Trigger: &skillTrigger{Tools: []string{workspaceServer, foldersServer}, Can: []string{canThread}}},
 		Files: []skillFile{{Path: "run.sh", Data: []byte("#!/bin/sh\n")}}}
-	if got := strings.Join(askedMore(old, next), ","); got != "can: start-session,run.sh" {
+	if got := strings.Join(askedMore(old, next), ","); got != "can: open-thread,run.sh" {
 		t.Fatalf("asked more: %q", got)
 	}
 }

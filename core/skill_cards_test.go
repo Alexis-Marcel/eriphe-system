@@ -121,37 +121,37 @@ func TestSkillRunCallsSilent(t *testing.T) {
 	}
 }
 
-const sessionBlock = "Erreur 500 sur /api/login depuis la 2.0.1, je lance une session.\n```session\n" +
+const threadBlock = "Erreur 500 sur /api/login depuis la 2.0.1, je lance un thread.\n```thread\n" +
 	`{"title": "Corriger le login de GetOut", "goal": "Trouver et corriger l'erreur 500 du login", "steps": [{"key": "fix", "title": "Corriger", "prompt": "Trouve la cause et propose un correctif."}]}` +
 	"\n```\n"
 
-// With can: [start-session], a session block opens a session; a plan that
+// With can: [open-thread], a thread block opens a thread; a plan that
 // only reads starts at once; the events of its key go to its lead.
-func TestSkillRunOpensSession(t *testing.T) {
+func TestSkillRunOpensThread(t *testing.T) {
 	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ncan: [start-session]\n---\nEnquête.\n")
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ncan: [open-thread]\n---\nEnquête.\n")
 	r := startedRun(t, c, now, "prod")
 	task, _ := c.store.task(r.Task)
-	if !strings.Contains(task.Prompt, "```session") {
-		t.Fatalf("the run is not told it may open a session:\n%s", task.Prompt)
+	if !strings.Contains(task.Prompt, "```thread") {
+		t.Fatalf("the run is not told it may open a thread:\n%s", task.Prompt)
 	}
-	r = endTurn(t, c, r.Task, sessionBlock)
+	r = endTurn(t, c, r.Task, threadBlock)
 	if !strings.Contains(r.Note, "opened and started") || strings.Contains(r.Note, "```") {
 		t.Fatalf("note %q", r.Note)
 	}
-	s, ok := c.liveSession(r)
-	if !ok || s.State != sessRunning {
-		t.Fatalf("session %+v", s)
+	s, ok := c.liveThread(r)
+	if !ok || s.Phase != phaseRunning {
+		t.Fatalf("thread %+v", s)
 	}
 	ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill)
-	if len(ns) != 1 || strings.Contains(ns[0].Text, "session") && strings.Contains(ns[0].Text, "{") {
+	if len(ns) != 1 || strings.Contains(ns[0].Text, "thread") && strings.Contains(ns[0].Text, "{") {
 		t.Fatalf("notifications %+v", ns)
 	}
-	// Another alert of its key: no new run, its session's lead is told.
+	// Another alert of its key: no new run, its thread's lead is told.
 	c.emit(journalEvent{Kind: evMonitorReceived, Key: "getout", Source: "alert:1", External: true, At: now.Add(time.Minute)})
 	c.tickSkills(context.Background(), now.Add(time.Minute))
 	if rs := runsOfSkill(t, c, "prod"); len(rs) != 1 {
-		t.Fatalf("a new run while its session is open: %+v", rs)
+		t.Fatalf("a new run while its thread is open: %+v", rs)
 	}
 	if q, _ := c.skillQueue("prod"); len(q) != 0 {
 		t.Fatalf("the event still waits: %+v", q)
@@ -159,8 +159,8 @@ func TestSkillRunOpensSession(t *testing.T) {
 }
 
 // A plan that writes outside a branch waits for its card; without can, no
-// session opens.
-func TestSkillRunSessionLimits(t *testing.T) {
+// thread opens.
+func TestSkillRunThreadLimits(t *testing.T) {
 	if safePlan([]stepSpec{{Resources: []ResourceRef{{Kind: "repo", Access: "write"}}}}) ||
 		safePlan([]stepSpec{{Resources: []ResourceRef{{Kind: "folder", Access: "write"}}}}) ||
 		safePlan([]stepSpec{{Resources: []ResourceRef{{Kind: "credential"}}}}) ||
@@ -171,15 +171,27 @@ func TestSkillRunSessionLimits(t *testing.T) {
 	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\n---\nEnquête.\n")
 	r := startedRun(t, c, now, "prod")
 	task, _ := c.store.task(r.Task)
-	if strings.Contains(task.Prompt, "```session") {
-		t.Fatal("told of sessions without can")
+	if strings.Contains(task.Prompt, "```thread") {
+		t.Fatal("told of threads without can")
 	}
-	r = endTurn(t, c, r.Task, sessionBlock)
+	r = endTurn(t, c, r.Task, threadBlock)
 	if !strings.Contains(r.Note, "may not open one") {
 		t.Fatalf("note %q", r.Note)
 	}
-	if _, ok := c.liveSession(r); ok {
-		t.Fatal("a session opened")
+	if _, ok := c.liveThread(r); ok {
+		t.Fatal("a thread opened")
+	}
+
+	// A block without steps opens nothing: a skill's thread is led.
+	c, now = skillCore(t)
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ncan: [open-thread]\n---\nEnquête.\n")
+	r = startedRun(t, c, now, "prod")
+	r = endTurn(t, c, r.Task, "Je suis.\n```thread\n"+`{"title": "Suivre la prod", "goal": "La prod tient."}`+"\n```\n")
+	if !strings.Contains(r.Note, "could not open") {
+		t.Fatalf("note %q", r.Note)
+	}
+	if ss, _ := c.threads(false, 10); len(ss) != 0 {
+		t.Fatalf("threads %+v", ss)
 	}
 }
 

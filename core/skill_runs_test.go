@@ -14,7 +14,7 @@ func TestSkillTriggerParse(t *testing.T) {
 	}
 	for _, ok := range []string{
 		"", "when: monitor.new\n", "when: monitor.received key=getout\nevery: 15m\n",
-		"when: time weekdays 08:00\nmodel: small\n", "when: monitor.new\ntools: [mail, calendar]\ncan: [start-session]\n",
+		"when: time weekdays 08:00\nmodel: small\n", "when: monitor.new\ntools: [mail, calendar]\ncan: [open-thread]\n",
 		"when: monitor.received key=maison status=couche\nevery: 1d\n",
 		"when: monitor.failed, monitor.recovered key=getout-prod\n", "when: monitor.failed,monitor.recovered\n",
 	} {
@@ -32,13 +32,13 @@ func TestSkillTriggerParse(t *testing.T) {
 			t.Errorf("%q accepted", bad)
 		}
 	}
-	m, _ := parseSkillMD(front("when: monitor.received key=getout\nevery: 15m\ntools: [monitor]\ncan: [start-session]\n"))
+	m, _ := parseSkillMD(front("when: monitor.received key=getout\nevery: 15m\ntools: [monitor]\ncan: [open-thread]\n"))
 	tr := m.Trigger
 	if !tr.matches(journalEvent{Kind: evMonitorReceived, Key: "GetOut"}) || tr.matches(journalEvent{Kind: evMonitorReceived, Key: "other"}) ||
 		tr.matches(journalEvent{Kind: "monitor.new", Key: "getout"}) {
 		t.Fatal("matches")
 	}
-	if s := tr.Text("fr"); !strings.Contains(s, "monitor.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "session") {
+	if s := tr.Text("fr"); !strings.Contains(s, "monitor.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "thread") {
 		t.Fatalf("text %q", s)
 	}
 	// Several kinds share the filters; the run says each event's kind.

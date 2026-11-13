@@ -49,10 +49,10 @@ type permView struct {
 }
 
 type tasksData struct {
-	Sessions []sessionRow // the work sessions running, above the tasks (web_sessions.go)
-	Active   []taskCard
-	Done     []taskCard
-	Stats    *taskStats // how reliable they were lately; nil before any ended
+	Threads []threadRow // the threads open, above the tasks (web_threads.go)
+	Active  []taskCard
+	Done    []taskCard
+	Stats   *taskStats // how reliable they were lately; nil before any ended
 }
 
 // taskCard is a task as the side panel shows it.
@@ -162,7 +162,7 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 	}
 	// What needs me first, then what works, then what waits.
 	sort.SliceStable(out.Active, func(i, j int) bool { return cardRank(out.Active[i]) < cardRank(out.Active[j]) })
-	out.Sessions = w.sessionRows(true, 6)
+	out.Threads = w.threadRows(true, 6)
 	if st := w.c.store.stats(time.Now().AddDate(0, 0, -statsDays)); st.Finished > 0 {
 		out.Stats = &st // task_stats.go
 	}

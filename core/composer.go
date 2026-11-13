@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// The composer: a persistent assistant, like the brain and the session
+// The composer: a persistent assistant, like the brain and the thread
 // leads (one warm task on a node, each request a turn), that chooses from
 // the pool of surfaces what the workspace shows now and how big
 // (workspace_pool.go: its input and its answer). It has no tool and no

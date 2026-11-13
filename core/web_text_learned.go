@@ -19,6 +19,7 @@ var learnedReasonKeys = map[string]string{
 	"approved":          "learned.reason.approved",
 	"deleted":           "learned.reason.deleted",
 	"restored":          "learned.reason.restored",
+	skillRenamedReason:  "learned.reason.renamed",
 }
 
 var learnedStrings = map[string]map[string]string{
@@ -57,6 +58,7 @@ var learnedStrings = map[string]map[string]string{
 		"learned.reason.approved":         "approuvé",
 		"learned.reason.deleted":          "supprimé",
 		"learned.reason.restored":         "restauré",
+		"learned.reason.renamed":          "renommé : session → thread",
 		"learned.confirm":                 "Annuler ce changement ?",
 		"learned.undo":                    "Annuler",
 		"learned.keep":                    "Garder",
@@ -113,6 +115,7 @@ var learnedStrings = map[string]map[string]string{
 		"learned.reason.approved":         "approved",
 		"learned.reason.deleted":          "deleted",
 		"learned.reason.restored":         "restored",
+		"learned.reason.renamed":          "renamed: session → thread",
 		"learned.confirm":                 "Undo this change?",
 		"learned.undo":                    "Undo",
 		"learned.keep":                    "Keep",

@@ -45,7 +45,7 @@ func userLangEN(lang string) string {
 }
 
 // langLine is the user's language as a model with a long session reads it
-// at the head of each turn (the brain, the assistants, a session's lead):
+// at the head of each turn (the brain, the assistants, a thread's lead):
 // the language can change between two turns.
 func langLine(lang string) string {
 	return "[langue de l'utilisateur : écris " + userLangFR(lang) + ", tout ce qu'il lit (notifications, surfaces, cartes, résumés)]"

@@ -10,7 +10,7 @@ import (
 
 // A task's taint: the one taint rule (tool_trust.go) applied to a worker
 // task. A task is tainted, and what it returns taints the brain's turn that
-// reads it (the event of its turn's end, task_status, a session's step), when:
+// reads it (the event of its turn's end, task_status, a thread's step), when:
 //
 //   - it was started on a tainted turn (taskTaintKey): its prompt may carry
 //     what someone else wrote;
