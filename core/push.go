@@ -415,7 +415,7 @@ func (c *core) pushTaskEnded(id, state string) {
 
 func taskEndedNote(t *TaskRow, state string) pushNote {
 	title := taskTitle(t)
-	n := pushNote{URL: "/?task=" + url.QueryEscape(t.ID), Tag: "task-" + t.ID, Topic: "task-" + t.ID}
+	n := pushNote{URL: convoPath + "?task=" + url.QueryEscape(t.ID), Tag: "task-" + t.ID, Topic: "task-" + t.ID}
 	if state == stateIdle {
 		n.Body = map[string]string{"fr": "Tâche finie : " + title, "en": "Task done: " + title}
 	} else {

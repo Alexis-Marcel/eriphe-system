@@ -254,7 +254,78 @@ func (w *web) pending(perms []permView) pendingData {
 	return pendingData{Perms: perms, Brain: w.brainState()}
 }
 
+// convoPath is the conversation's address. The home page, /, is the
+// workspace (web_espace.go); the conversation stays here, for what it
+// shows best (the whole exchange, the tasks, the permissions) and as the
+// fallback when the workspace cannot load.
+const convoPath = "/conversation"
+
+// convoAt is an address in the conversation: a message (m12), a
+// permission (perm-…).
+func convoAt(hash string) string { return convoPath + "#" + hash }
+
+// The home page, per browser: the workspace, unless this browser chose the
+// conversation (Réglages → Mon espace, or the workspace's fallback when it
+// could not load).
+const (
+	homeCookie = "home"
+	homeConvo  = "conversation"
+	homeEspace = "espace"
+)
+
+// homeIsConvo tells whether this browser chose the conversation as its
+// home page.
+func homeIsConvo(r *http.Request) bool {
+	c, err := r.Cookie(homeCookie)
+	return err == nil && c.Value == homeConvo
+}
+
+// homeConvoNow tells whether / opens the conversation rather than the
+// workspace: for a browser that chose it, and while no AI composes the
+// workspace (no brain, or its wizard left for later), which the
+// conversation says, with the way to set one up.
+func (w *web) homeConvoNow(r *http.Request) bool {
+	b := w.c.conf().brain()
+	return homeIsConvo(r) || b == nil || b.Agent == ""
+}
+
+// handleHome is GET /: the wizard while the brain has no agent, then the
+// workspace, or the conversation (homeConvoNow).
 func (w *web) handleHome(rw http.ResponseWriter, r *http.Request, s *session) {
+	if w.homeConvoNow(r) {
+		w.handleConvo(rw, r, s)
+		return
+	}
+	w.c.firstRun() // first_run.go: once, after the wizard
+	w.handleEspace(rw, r, s)
+}
+
+// handleHomeChoice is POST /settings/home: this browser's home page, the
+// workspace (espace) or the conversation. From the settings (htmx) the
+// page reloads; from the workspace's fallback (a plain form) it goes home.
+func (w *web) handleHomeChoice(rw http.ResponseWriter, r *http.Request, _ *session) {
+	c := &http.Cookie{Name: homeCookie, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
+	switch r.PostFormValue("home") {
+	case homeConvo:
+		c.Value, c.MaxAge = homeConvo, 400*24*3600
+	case homeEspace:
+		c.MaxAge = -1
+	default:
+		http.Error(rw, "espace or conversation", http.StatusBadRequest)
+		return
+	}
+	http.SetCookie(rw, c)
+	if r.Header.Get("HX-Request") != "" {
+		rw.Header().Set("HX-Refresh", "true")
+		rw.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(rw, r, "/", http.StatusSeeOther)
+}
+
+// handleConvo is GET /conversation: the conversation, whatever the home
+// page.
+func (w *web) handleConvo(rw http.ResponseWriter, r *http.Request, s *session) {
 	if w.needsWelcome() {
 		http.Redirect(rw, r, "/welcome", http.StatusSeeOther)
 		return
@@ -810,11 +881,12 @@ func (s *Store) decisions(offset, limit int) ([]decisionRow, error) {
 // secrets. The workspace's address and its sign-in are on Access → Web
 // workspace (web_access_list.go).
 type accountPage struct {
-	Secrets secretsView
+	Secrets   secretsView
+	HomeConvo bool // this browser opens the conversation first
 }
 
 func (w *web) handleAccount(rw http.ResponseWriter, r *http.Request, s *session) {
-	v := accountPage{Secrets: w.secrets("", false)}
+	v := accountPage{Secrets: w.secrets("", false), HomeConvo: homeIsConvo(r)}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.account", Nav: "settings", Tab: "account", Data: v})
 }
 

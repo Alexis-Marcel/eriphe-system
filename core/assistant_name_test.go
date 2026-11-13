@@ -174,7 +174,7 @@ func TestWebAssistantName(t *testing.T) {
 	if _, _, h := tw.post("/settings/assistants/eriphe", url.Values{"display_name": {"<b>"}}, csrf); h.Get("HX-Redirect") != "" {
 		t.Fatal("a bad name saved")
 	}
-	_, body, _ := tw.do("GET", "/", nil, nil)
+	_, body, _ := tw.do("GET", convoPath, nil, nil)
 	for _, want := range []string{"Écris à Jarvis…", "<title>Conversation · Jarvis</title>", `content="Jarvis"`, "<span>Jarvis</span>"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("conversation lacks %q: %s", want, truncate(body, 400))
@@ -188,7 +188,7 @@ func TestWebAssistantName(t *testing.T) {
 		t.Fatalf("manifest: %d %s", code, raw)
 	}
 	tw.do("POST", "/lang", url.Values{"csrf": {csrf}, "lang": {"en"}}, nil)
-	if _, body, _ = tw.do("GET", "/", nil, nil); !strings.Contains(body, "Write to Jarvis…") {
+	if _, body, _ = tw.do("GET", convoPath, nil, nil); !strings.Contains(body, "Write to Jarvis…") {
 		t.Fatalf("conversation in English: %s", truncate(body, 400))
 	}
 }

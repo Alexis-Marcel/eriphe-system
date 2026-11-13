@@ -50,7 +50,10 @@ built-in instructions are in French.
 
 ## What works today
 
-- **Conversation** in the web workspace (`https://<address>:8443`), with attachments, and from the
+- **A composed workspace** as the home page (`https://<address>:8443`): Eriphe lays out what matters
+  now (the day, the mails, what waits for you) from your tools, and you shape it by talking; one
+  column on a phone.
+- **Conversation** at `/conversation`, one click from the workspace, with attachments, and from the
   terminal (`eriphe`).
 - **Memory**: people, facts, preferences and a nightly journal, kept by eriphe-core in SQLite and
   recalled by the brain; what it learns from outside content is only proposed until you approve it.

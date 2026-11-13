@@ -433,6 +433,14 @@ is shown again. . is a joinWait. */}}
     <button type="submit" name="lang" value="en" {{if eq .Lang "en"}}aria-pressed="true"{{else}}aria-pressed="false"{{end}}>English</button>
   </form>
 </section>
+<section class="panel" aria-labelledby="home-title">
+  <h3 id="home-title">{{t "account.home"}}</h3>
+  <p class="muted small">{{t "account.home.lead"}}</p>
+  <form hx-post="/settings/home" class="segmented" role="group" aria-labelledby="home-title">
+    <button type="submit" name="home" value="espace" aria-pressed="{{if .Data.HomeConvo}}false{{else}}true{{end}}">{{t "account.home.espace"}}</button>
+    <button type="submit" name="home" value="conversation" aria-pressed="{{if .Data.HomeConvo}}true{{else}}false{{end}}">{{t "account.home.convo"}}</button>
+  </form>
+</section>
 <section class="panel" aria-labelledby="pw-title">
   <h3 id="pw-title">{{t "account.password"}}</h3>
   <form class="stack-form" hx-post="/settings/password" hx-target="#password-result" data-reset>

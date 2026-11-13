@@ -122,7 +122,7 @@ func TestUploadAttachments(t *testing.T) {
 	}
 
 	// The conversation shows them, and opens them.
-	_, page, _ := tw.do("GET", "/", nil, nil)
+	_, page, _ := tw.do("GET", convoPath, nil, nil)
 	if !strings.Contains(page, `src="/attachments/`+a.ID+`"`) || !strings.Contains(page, "notes.md") {
 		t.Fatal("the conversation does not show the attachments")
 	}

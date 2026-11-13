@@ -345,7 +345,7 @@ func TestConversationHidesNotes(t *testing.T) {
 	} {
 		tw.c.store.addMessage(roleEvent, text, false)
 	}
-	_, body, _ := tw.do("GET", "/", nil, nil)
+	_, body, _ := tw.do("GET", convoPath, nil, nil)
 	for _, bad := range []string{"Catalogue", "list_agents", "est maintenant", "fini son tour", "permission_id"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("the conversation shows %q", bad)

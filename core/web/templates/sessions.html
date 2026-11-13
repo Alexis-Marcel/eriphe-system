@@ -7,7 +7,7 @@
 
 {{define "sessions-index"}}
 <div class="sess-wrap">
-  <a class="back" href="/">{{template "i-back"}}{{t "sessions.back"}}</a>
+  <a class="back" href="/conversation">{{template "i-back"}}{{t "sessions.back"}}</a>
   <header class="sess-index-head">
     <h1>{{t "sessions.title"}}</h1>
     <p>{{t "sessions.lead"}}</p>
@@ -17,7 +17,7 @@
     <span class="empty-art" aria-hidden="true">{{template "i-tasks"}}</span>
     <p><b>{{t "sessions.none"}}</b></p>
     <p class="muted">{{t "sessions.none.how"}}</p>
-    <a class="btn btn-primary sm" href="/">{{t "sessions.none.go"}}</a>
+    <a class="btn btn-primary sm" href="/conversation">{{t "sessions.none.go"}}</a>
   </div>{{end}}
 </div>
 {{end}}

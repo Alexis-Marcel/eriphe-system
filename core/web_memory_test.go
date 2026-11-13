@@ -34,7 +34,7 @@ func TestMemoryPageRenders(t *testing.T) {
 		"/memory":                  {"Mémoire", "Hélène, la sœur de Sam &lt;script&gt;", "Sam est développeur", `aria-current="page"`, "/memory/export.jsonl"},
 		"/memory?q=helene":         {"Hélène"},
 		"/memory?kind=person":      {"Hélène"},
-		"/settings/approve":        {"Le colis arrive jeudi", "Approuver", "ressemble à une consigne", "/#m" + strconv.Itoa(int(seq)), "Régler la facture du fournisseur", "/memory/intention/2/approve"},
+		"/settings/approve":        {"Le colis arrive jeudi", "Approuver", "ressemble à une consigne", "/conversation#m" + strconv.Itoa(int(seq)), "Régler la facture du fournisseur", "/memory/intention/2/approve"},
 		"/memory?view=journal":     {"Aujourd&#39;hui", "Journée calme", "Extraire aujourd&#39;hui"},
 		"/memory?view=commitments": {"Payer le loyer", "En retard", "Régler la facture", "Demain", "tiré d&#39;un contenu extérieur"},
 		"/memory?view=profile":     {"Sam est développeur", "/ 2500"},

@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAdapter, type Adapter, type Message } from "./a2ui/adapter";
 import { CATALOG } from "./a2ui/catalog";
-import { Grid, type Spot } from "./Grid";
+import { Grid, stacked, type Spot } from "./Grid";
 import type { Layout } from "./types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -172,5 +172,62 @@ describe("the grid of surfaces", () => {
     await render({ ...layout, items: [{ ...layout.items[1], size: "xl", col: 0, row: 0, w: 12, h: 5 }], chips: [{ id: "pay", title: "Paiement" }] });
     expect(tile("week")?.className).toContain("size-xl at-c0 at-r0 w-12 h-5");
     expect([...el.querySelectorAll<HTMLElement>(".chip")].map((c) => c.dataset.surface)).toEqual(["pay", "news", "late"]);
+  });
+});
+
+// On a phone: one column, in the composer's order, the chips after; a
+// surface open has the screen to itself.
+describe("the workspace on a phone", () => {
+  const phone = (l: Layout) => act(async () => root.render(<Grid adapter={adapter} layout={l} narrow onOpen={(id) => opened.push(id)} />));
+  // The composer's order is the items', not their place: week comes first
+  // though it is on the right.
+  const ordered: Layout = { ...layout, items: [layout.items[1], layout.items[0]] };
+
+  it("stacks the tiles in the composer's order, the chips last", () => {
+    const s = stacked(ordered, new Set(["pay", "week", "news", "late"]));
+    expect(s.tiles.map((t) => t.id)).toEqual(["week", "pay"]);
+    expect(s.chips.map((c) => c.id)).toEqual(["news", "late"]);
+    expect(s.full).toBe(false);
+  });
+
+  it("draws one column, then the chips, with no grid tools", async () => {
+    await phone(ordered);
+    const canvas = el.querySelector<HTMLElement>("main.canvas")!;
+    expect(canvas.classList.contains("column")).toBe(true);
+    expect([...canvas.querySelectorAll<HTMLElement>("article")].map((a) => a.dataset.surface)).toEqual(["week", "pay"]);
+    // The chips come after the tiles in the page.
+    const strip = el.querySelector<HTMLElement>(".chips")!;
+    expect(strip.classList.contains("stacked")).toBe(true);
+    expect(canvas.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect([...strip.querySelectorAll<HTMLElement>(".chip")].map((c) => c.dataset.surface)).toEqual(["news", "late"]);
+    // No move nor size on a column; the cross stays.
+    expect(el.querySelector("button.tile-move")).toBeNull();
+    expect(el.querySelector("button.tile-size")).toBeNull();
+    expect(tile("pay")!.querySelector("button.tile-close")).not.toBeNull();
+    expect(document.querySelectorAll("[style]")).toHaveLength(0);
+    await act(async () => tile("pay")!.click());
+    expect(opened).toEqual(["pay"]);
+  });
+
+  it("gives the screen to the surface open, alone", async () => {
+    const focus: Layout = { ...ordered, focus: "pay", items: [layout.items[0], { ...layout.items[1], related: true }] };
+    expect(stacked(focus, new Set(["pay", "week", "news"]))).toMatchObject({ tiles: [{ id: "pay" }], chips: [], full: true });
+    await phone(focus);
+    expect(el.querySelector<HTMLElement>("main.canvas")!.className).toBe("canvas column full");
+    expect([...el.querySelectorAll<HTMLElement>("article")].map((a) => a.dataset.surface)).toEqual(["pay"]);
+    expect(tile("pay")!.classList.contains("focus")).toBe(true);
+    expect(el.querySelectorAll(".chips .chip")).toHaveLength(0);
+    // Back on the overview: the column again.
+    await phone(ordered);
+    expect([...el.querySelectorAll<HTMLElement>("article")].map((a) => a.dataset.surface)).toEqual(["week", "pay"]);
+  });
+
+  it("keeps the wide grid's order and tools off a phone", async () => {
+    await render(ordered);
+    const strip = el.querySelector<HTMLElement>(".chips")!;
+    const canvas = el.querySelector<HTMLElement>("main.canvas")!;
+    expect(canvas.classList.contains("column")).toBe(false);
+    expect(strip.compareDocumentPosition(canvas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(el.querySelector("button.tile-move")).not.toBeNull();
   });
 });

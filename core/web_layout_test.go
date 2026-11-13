@@ -46,8 +46,8 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 			href = "/memory"
 		}
 		for _, want := range []string{`<header class="topbar">`, `<a class="brand" href="/"`,
-			`id="tasks-btn" href="/#tasks-panel"`, `id="tasks-badge"`, `<a class="head-btn" href="/settings" aria-label="Réglages" title="Réglages" aria-current="page">`,
-			`<nav class="settings-nav"`, `<a class="back to-chat" href="/">`, `<a href="` + href + `" aria-current="page">`} {
+			`id="tasks-btn" href="/conversation#tasks-panel"`, `id="tasks-badge"`, `<a class="head-btn" href="/settings" aria-label="Réglages" title="Réglages" aria-current="page">`,
+			`<nav class="settings-nav"`, `<a class="back to-chat" href="/conversation">`, `<a href="` + href + `" aria-current="page">`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("GET %s lacks %q", tc.path, want)
 			}
@@ -161,7 +161,7 @@ func TestSettingsNavGroups(t *testing.T) {
 func TestHomeHeader(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	_, body, _ := tw.do("GET", "/", nil, nil)
+	_, body, _ := tw.do("GET", convoPath, nil, nil)
 	for _, want := range []string{`<a class="brand" href="/"`, `id="tasks-btn" href="#tasks-panel" aria-controls="tasks-panel"`,
 		`<b class="badge" id="tasks-badge" hidden></b>`, `<a class="head-btn" href="/settings" aria-label="Réglages"`,
 		`<aside class="side" id="tasks-panel"`, `data-tasks-close`} {

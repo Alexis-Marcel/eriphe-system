@@ -288,7 +288,7 @@ func TestPushSubscriptionChecked(t *testing.T) {
 func TestPushNotes(t *testing.T) {
 	task := &TaskRow{ID: "t-1", Prompt: "Publish the package\nwith the tests"}
 	done := taskEndedNote(task, stateIdle)
-	if done.Body["fr"] != "Tâche finie : Publish the package" || done.Body["en"] != "Task done: Publish the package" || done.URL != "/?task=t-1" {
+	if done.Body["fr"] != "Tâche finie : Publish the package" || done.Body["en"] != "Task done: Publish the package" || done.URL != "/conversation?task=t-1" {
 		t.Fatalf("done: %+v", done)
 	}
 	failed := taskEndedNote(task, stateFailed)
@@ -356,7 +356,7 @@ func TestPushWaiting(t *testing.T) {
 	tw.w.pushWaiting() // the first look starts from the messages already there
 	c.push.pending.Wait()
 	got := b.received()
-	if len(got) != 1 || got[0].URL != "/#perm-t-perm-p-1" || !strings.Contains(got[0].Body, "attend ta réponse : Bash npm publish") {
+	if len(got) != 1 || got[0].URL != "/conversation#perm-t-perm-p-1" || !strings.Contains(got[0].Body, "attend ta réponse : Bash npm publish") {
 		t.Fatalf("received %+v", got)
 	}
 	c.store.addMessage(roleBrain, "C'est prêt.\n\nJe publie la version 1.4 ?", true)
@@ -365,7 +365,7 @@ func TestPushWaiting(t *testing.T) {
 	tw.w.pushWaiting()
 	c.push.pending.Wait()
 	got = b.received()
-	if len(got) != 2 || !strings.HasSuffix(got[1].Body, "attend ta réponse : Je publie la version 1.4 ?") || !strings.HasPrefix(got[1].URL, "/#m") {
+	if len(got) != 2 || !strings.HasSuffix(got[1].Body, "attend ta réponse : Je publie la version 1.4 ?") || !strings.HasPrefix(got[1].URL, "/conversation#m") {
 		t.Fatalf("received %+v", got)
 	}
 }

@@ -1,12 +1,15 @@
-{{/* The composed workspace's shell (web_espace.go): no inline script or
-style; the app (web/espace, built into static/espace) reads its words and
-the CSRF token from /espace/boot. */}}
+{{/* The composed workspace's shell (web_espace.go), Eriphe's home page:
+no inline script or style; the app (web/espace, built into static/espace)
+reads its words and the CSRF token from /espace/boot. Until it draws, the
+shell shows a word, then, if it never does (no JavaScript, a script that
+does not load, a boot that fails), the way to the conversation: by CSS
+after a while (.espace-fallback), at once when the app gives up (.failed). */}}
 {{define "espace"}}<!doctype html>
 <html lang="{{.Lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>{{t "nav.espace"}} · {{name}}</title>
+<title>{{name}}</title>
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#121a26">
 <meta name="csrf-token" content="{{.CSRF}}">
@@ -15,9 +18,21 @@ the CSRF token from /espace/boot. */}}
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/espace/espace.css?v={{.Version}}">
 <script type="module" src="/static/espace/espace.js?v={{.Version}}"></script>
+<noscript><meta http-equiv="refresh" content="0; url=/conversation"></noscript>
 </head>
 <body>
-<div id="root" data-boot="/espace/boot"><p class="espace-loading">{{t "espace.loading"}}</p></div>
-<noscript><p class="espace-loading"><a href="/">{{t "espace.convo"}}</a></p></noscript>
+<div id="root" data-boot="/espace/boot"><div class="espace-loading">
+  <p class="espace-wait">{{t "espace.loading"}}</p>
+  <div class="espace-fallback">
+    <p>{{t "espace.fallback"}}</p>
+    <p><a href="/conversation">{{t "espace.convo"}}</a></p>
+    <form method="post" action="/settings/home">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="home" value="conversation">
+      <button type="submit" class="linkish">{{t "espace.home.convo"}}</button>
+    </form>
+  </div>
+</div></div>
+<noscript><p class="espace-loading"><a href="/conversation">{{t "espace.convo"}}</a></p></noscript>
 </body>
 </html>{{end}}

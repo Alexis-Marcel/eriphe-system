@@ -834,9 +834,9 @@ func (c *core) channelCardConfirm(seq int, lang string) (convoCard, string) {
 // came through a channel not trusted waits for their yes: the code's words,
 // never the card's.
 func channelCardNote(x convoCard) pushNote {
-	url := "/"
+	url := convoPath
 	if x.Seq > 0 {
-		url = fmt.Sprintf("/#m%d", x.Seq)
+		url = convoAt(fmt.Sprintf("m%d", x.Seq))
 	}
 	n := waitingNote(tr("fr", "card.channel.note"), url, fmt.Sprintf("voice-card-%d", x.ID))
 	n.Body["en"] = assistantName() + " is waiting for your answer: " + tr("en", "card.channel.note")

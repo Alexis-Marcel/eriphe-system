@@ -975,7 +975,7 @@ deepest step it needs, those of one stage run together, the final check last); t
 wears a mark for how far its evidence goes: a ring for what the agent claims, a check inside for what
 the checks verified, filled once the lead accepted, a red cross for a failed check or a rejection.
 Under the live part, a line to the lead (`POST /sessions/{id}/lead`) is queued on its inbox as the
-user's words. The tasks panel of the home page shows the sessions in progress first.
+user's words. The tasks panel of the conversation shows the sessions in progress first.
 
 ## Permission policy
 
@@ -2933,10 +2933,43 @@ the first workspace's composition by ref and its views by kind of object (#424):
 `composition`, and the gestures and `about_msg` that named an object rather than a surface, go
 when an older database opens (`refCompositionGone`).
 
-### The composed workspace (`/espace`)
+### The composed workspace, the home page (`/`)
 
-A page next to the conversation, which stays, where what Eriphe composes is laid out
-(`web_espace.go`, the app in `web/espace`). It never scrolls: a fixed grid of 12 × 8 cells.
+Eriphe's home page: where what Eriphe composes is laid out (`web_espace.go`, the app in
+`web/espace`). On a wide screen it never scrolls: a fixed grid of 12 × 8 cells. On a phone the page
+scrolls (see below).
+
+**The routes** (`web_pages.go`). `GET /` opens the workspace, the wizard before it while the brain
+has no agent (`needsWelcome`). It opens the conversation instead (`homeConvoNow`) while no AI
+composes the workspace (no brain, or its wizard left for later: the conversation says so, with the
+way to set one up), and for a browser that chose it: `POST /settings/home` with `home`
+`conversation` or `espace` (Réglages → Mon espace → Page d'accueil, htmx, which reloads the page;
+or the workspace's fallback, a plain form, which goes back to `/`) keeps the choice in an
+`HttpOnly` cookie (`home`) for 400 days. The conversation stays at `GET /conversation` (`convoPath`)
+whatever the home page; `GET /espace` always opens the workspace. What points into the
+conversation names it: a message (`/conversation#m12`, `convoAt`), a permission
+(`/conversation#perm-…`), a task's drawer (`/conversation?task=…`, a task's address opened as a
+page), in push notes, channels' links, the journal and the evidence; what means home (the brand,
+closing the settings, the wizard's end, the sign-in) stays `/`. The workspace's stream
+(`/events?a2ui=1`) starts after the conversation's last message: it does not carry them.
+
+**The fallback.** The conversation is where the user lands when the workspace cannot open. The
+shell (`templates/espace.html`) has no JavaScript of its own: without JavaScript a `<noscript>`
+refresh sends the page to `/conversation`; under `#root`, until the app draws, a word, and the way
+to the conversation (a link, and the form that makes it this browser's home page), revealed by CSS
+after 8 s (`.espace-fallback`) for a script that never loads or runs. The app shows it at once
+(`.failed`) when its boot fails (`main.tsx`: a boot it cannot read is an error, never made-up data);
+an error while it draws shows the same (`FailSafe`, `Fallback.tsx`). An event stream down for more
+than 20 s (`streamDown`, `STREAM_GRACE`; the browser opens it again by itself, the page itself once
+it closed for good, after checking the session) shows a line with the link to the conversation;
+the workspace stays as it was.
+
+**On a phone** (`.narrow`, the width of `NARROW` in `Grid.tsx`, 900 px, `useNarrow`): one
+column and the page scrolls: Eriphe's column first, then the surfaces one under the other in the
+composer's order (the layout's `items`, never their place on the grid), then the chips
+(`stacked`). A tile keeps only its cross: no move nor size on a column. A surface open takes the
+whole screen (`.focused`, `.canvas.full`), alone, under a bar with Retour and the line to write to
+Eriphe about it.
 
 **The surfaces, where core says** (`web/espace/src/Grid.tsx`). The page draws each surface where
 the event stream's `layout` puts it ([the layout](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)):
@@ -2954,8 +2987,8 @@ up, from xl back to s; + or − and the arrow keys), the cross closes it for the
 shows the change at once and sends the gesture; core's next layout places the others around it.
 A tile that leaves the grid unopened while the page is visible is sent as `ignored`. With no
 surface at all, Eriphe says so in the column (`espace.empty`): never an empty grid without a word.
-The chat is a narrow column, wider on demand, and a message written there goes to the
-conversation; there is no menu and no button that keeps a rule: what the user wants of a surface
+The chat is a narrow column, wider on demand, with a link to the conversation, and a message
+written there goes to the conversation; there is no menu and no button that keeps a rule: what the user wants of a surface
 is said to Eriphe.
 
 A 401 sends the page to the sign-in. `web/espace/src/data.ts` is the one place that talks to

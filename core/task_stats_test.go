@@ -75,7 +75,7 @@ func TestStatsOnPanel(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	statsFixture(t, tw.c)
-	_, body, _ := tw.do("GET", "/", nil, nil)
+	_, body, _ := tw.do("GET", convoPath, nil, nil)
 	for _, want := range []string{"Fiabilité des tâches · 30 jours", "Acceptées", "50 %", "2/4", "Du premier coup", "1/4",
 		"Affirmations non étayées", "1 sans contrôle", "0,20 $", "2 k jetons", "contrôle 2", "compte 1", "passagers 1"} {
 		if !strings.Contains(body, want) {
