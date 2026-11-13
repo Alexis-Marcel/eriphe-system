@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestShareFlag(t *testing.T) {
@@ -308,14 +307,11 @@ func TestRevoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	n.compareShared(known)
+	n.stops.Wait()
 	stopped := func(t *Task) bool {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		return t.stopping
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for !stopped(holder) && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
 	}
 	if !stopped(holder) || stopped(other) {
 		t.Fatalf("holder stopped %v, other %v", stopped(holder), stopped(other))

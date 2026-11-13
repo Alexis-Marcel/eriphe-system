@@ -475,6 +475,13 @@ func (n *node) stopContainer(t *Task) {
 	}
 }
 
+// stopLater stops a task without holding who asks: stopContainer, on its
+// own. n.stops counts those under way, for who must know they are over
+// (a test, before its folders go).
+func (n *node) stopLater(t *Task) {
+	n.stops.Go(func() { n.stopContainer(t) })
+}
+
 func tail(s string, n int) string {
 	if len(s) > n {
 		return s[len(s)-n:]

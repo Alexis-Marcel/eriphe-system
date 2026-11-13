@@ -31,7 +31,11 @@ const agentRun = `d=$(dirname "$0")
 func lifecycleNode(t *testing.T, run string) (n *node, dir string) {
 	docker, dir := fakeDocker(t, run)
 	root := filepath.Join(dir, "root")
-	return newNode(options{root: root, hostRoot: root, docker: docker, image: "worker", taskNetwork: "eriphe-tasks"}), dir
+	n = newNode(options{root: root, hostRoot: root, docker: docker, image: "worker", taskNetwork: "eriphe-tasks"})
+	// A stop goes on once its task is stopped (its container, the work it
+	// keeps): over before the test's folders go, or it writes in them.
+	t.Cleanup(n.stops.Wait)
+	return n, dir
 }
 
 func eventTypes(t *Task) []string {
@@ -87,7 +91,9 @@ func TestTaskLifecycle(t *testing.T) {
 	if task.Image != "worker" || task.Spec.Image != "worker" {
 		t.Errorf("image %q, want the node's default", task.Image)
 	}
-	waitFor(t, func() bool { return task.state() == stateIdle })
+	// Idle and the end of its turn looked at: a message handed before waits
+	// for the next report, which no one makes here.
+	waitFor(t, func() bool { return settled(task) })
 	if s := readSaved(t, n, "t-1"); s.Restarts != 0 {
 		t.Errorf("saved %+v", s)
 	}
@@ -230,6 +236,7 @@ func TestReconcileStopped(t *testing.T) {
 	a.Desired = "stopped"
 	n.reconcile([]assignment{a})
 	waitFor(t, func() bool { return task.state() == stateStopped })
+	n.stops.Wait() // stopped once its agent ended; its container is stopped after
 	if !slices.Contains(fileLines(filepath.Join(dir, "calls")), "stop -t 10 eriphe-task-t-1") {
 		t.Errorf("calls %v", fileLines(filepath.Join(dir, "calls")))
 	}

@@ -161,7 +161,7 @@ func (n *node) reconcile(list []assignment) {
 			n.removeDir(a.ID)
 			n.adopt(&Task{ID: a.ID, State: stateStopped, perms: map[string]*permission{}})
 		case a.Desired == "stopped" && !finished(t.state()):
-			go n.stopContainer(t)
+			n.stopLater(t)
 		}
 		if t := n.get(a.ID); t != nil {
 			t.mu.Lock()
@@ -182,7 +182,7 @@ func (n *node) reconcile(list []assignment) {
 	n.mu.Unlock()
 	for _, t := range gone {
 		if !finished(t.state()) {
-			go n.stopContainer(t)
+			n.stopLater(t)
 			continue
 		}
 		n.mu.Lock()
@@ -379,7 +379,7 @@ func (n *node) report(c *coreClient, t *Task) {
 	err := c.do(ctx, http.MethodPost, "/v1/node/tasks/"+t.ID+"/report", r, nil)
 	if errors.Is(err, errUnknownTask) {
 		// eriphe-core forgot it: nothing to keep.
-		go n.stopContainer(t)
+		n.stopLater(t)
 		return
 	}
 	if err != nil {

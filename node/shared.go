@@ -505,7 +505,7 @@ func (n *node) stopHolding(match func(TaskFolder) bool, reason, message string) 
 		}
 		auditShare(n.opt.root, map[string]any{"event": "stop", "task": t.ID, "reason": reason})
 		t.emit("folder_revoked", map[string]any{"message": message})
-		go n.stopContainer(t)
+		n.stopLater(t)
 	}
 }
 
