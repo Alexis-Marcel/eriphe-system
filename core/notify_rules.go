@@ -99,8 +99,17 @@ const (
 var (
 	ruleOutcomes = []string{levelNow, levelBrief, levelNever}
 	ruleDays     = []string{daysAll, daysWeekdays, daysWeekend}
-	ruleRefRe    = regexp.MustCompile(`^[a-z0-9][a-z0-9._@/-]*(:[a-z0-9._@/-]+)*$`)
 )
+
+// ruleMatch is what a topic rule matches: a subject's key (subject.go),
+// or a record's ref as written (skill:<name>); "" if neither.
+func ruleMatch(s string) string {
+	if r, ok := recordRef(s); ok {
+		return r
+	}
+	key, _ := subjectKey(s)
+	return key
+}
 
 // notifyRule is one rule.
 type notifyRule struct {
@@ -160,9 +169,9 @@ func quietLength(from, to int) int { return ((to-from)%1440 + 1440) % 1440 }
 func (r *notifyRule) check() error {
 	switch r.Kind {
 	case ruleTopic:
-		r.Match = canonRef(r.Match)
-		if r.Match == "" || len(r.Match) > 80 || !ruleRefRe.MatchString(r.Match) {
-			return errors.New("match is a ref like project:getout, person:lina or source:mail")
+		r.Match = ruleMatch(r.Match)
+		if r.Match == "" || len(r.Match) > 80 {
+			return errors.New("match is a subject like project:getout, person:lina or topic:facture")
 		}
 		if !containsStr(ruleOutcomes, r.Outcome) {
 			return errors.New("outcome is now, brief or never")
@@ -274,7 +283,7 @@ func (c *core) addNotifyRule(r notifyRule) (notifyRule, error) {
 			if rows.Scan(&id, &raw) != nil || json.Unmarshal([]byte(raw), &sp) != nil || sp.Kind != r.Kind || sp.Days != r.Days {
 				continue
 			}
-			if sp.Match == r.Match || r.Kind == ruleTopic && canonRef(sp.Match) == r.Match {
+			if sp.Match == r.Match || r.Kind == ruleTopic && ruleMatch(sp.Match) == r.Match {
 				old = append(old, id)
 			}
 		}
@@ -338,10 +347,10 @@ func (c *core) deleteNotifyRule(id int64) error {
 // topicRule is the active topic rule for a ref: the longest match, a
 // match being the ref itself or one of its leading parts (project:getout
 // for project:getout:prod).
-// Both sides are compared in their canonical form (topics.go), so a rule
-// written before the vocabulary (factures) still matches (facture).
+// Both sides are compared as keys (subject.go), so a rule written as
+// factures matches the key topic:facture.
 func topicRule(rules []notifyRule, ref string) *notifyRule {
-	ref = canonRef(ref)
+	ref = ruleMatch(ref)
 	if ref == "" {
 		return nil
 	}
@@ -350,11 +359,11 @@ func topicRule(rules []notifyRule, ref string) *notifyRule {
 		if r.Kind != ruleTopic || r.State != ruleActive {
 			continue
 		}
-		match := canonRef(r.Match)
+		match := ruleMatch(r.Match)
 		if match == "" || ref != match && !strings.HasPrefix(ref, match+":") {
 			continue
 		}
-		if best == nil || len(match) > len(canonRef(best.Match)) {
+		if best == nil || len(match) > len(ruleMatch(best.Match)) {
 			best = &rules[i]
 		}
 	}

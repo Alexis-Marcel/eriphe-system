@@ -288,7 +288,7 @@ func ruleText(r notifyRule, lang string) string {
 	if r.Kind == ruleQuiet {
 		return fmt.Sprintf(tr(lang, "rule.quietline"), tr(lang, "rule.days."+r.Days), r.Window())
 	}
-	s := r.Match + " → " + tr(lang, "rule.out."+r.Outcome)
+	s := subjectLabel(r.Match) + " → " + tr(lang, "rule.out."+r.Outcome)
 	if r.Night {
 		s += " · " + tr(lang, "rule.night")
 	}

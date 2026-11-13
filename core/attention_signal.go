@@ -21,7 +21,7 @@ import (
 // attentionSignal is one block: the objects it is about, how much they
 // matter, why, and what Eriphe could say of them.
 type attentionSignal struct {
-	Refs   []string `json:"refs" jsonschema:"the objects it is about: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, thread:<id>, card:<id>, task:<id>, project:<name>, alert:<id> or surface:<id> (a surface of the workspace)"`
+	Refs   []string `json:"refs" jsonschema:"the objects it is about: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, thread:<id>, card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a subject kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…)"`
 	Weight int      `json:"weight" jsonschema:"5 interrupts the user, 4 needs the user now, 3 matters today, 2 a glance, 1 background"`
 	Why    string   `json:"why" jsonschema:"why it deserves attention, in the user's language, at most 80 characters"`
 	Say    string   `json:"say,omitempty" jsonschema:"what Eriphe could tell the user of it, in the user's language, one sentence; optional"`
@@ -39,20 +39,18 @@ const (
 // the receipt's own instruction (receiptInstruction).
 const attentionInstruction = "When something deserves the user's attention, add to the receipt an \"attention\" list, one entry per thing: " +
 	`"attention": [{"refs": ["mail:<id>"], "weight": 3, "why": "at most 80 characters, in the user's language", "say": "optional: what Eriphe could tell the user, one sentence in the user's language"}]` + ". " +
-	"refs name the objects it is about, each in one of these forms: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, thread:<id>, card:<id>, task:<id>, project:<name>, alert:<id>, surface:<id> (a surface of the workspace). " +
+	"refs name the objects it is about, each in one of these forms: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, thread:<id>, card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a subject kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
 	"weight: 5 interrupts the user, 4 needs the user now, 3 matters today, 2 is a glance, 1 is background. " +
 	"Leave it out when nothing does. A ref of another form, or a weight outside 1 to 5, is dropped."
 
-// The kinds of refs an attention item may be about: kind:id.
+// The kinds of records an attention item may be about: kind:id. It may be
+// about a subject too (subject.go): mail:<message id>, event:<event id>,
+// project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…, the id as written.
 const (
-	refMail    = "mail"    // mail:<message id>, as the mail server gives it
 	refAgenda  = "agenda"  // agenda:<YYYY-MM-DD>, the user's day
-	refEvent   = "event"   // event:<event id>, as the calendar server gives it
 	refThread  = "thread"  // thread:<id>
 	refCard    = "card"    // card:<id>, a card of the conversation
 	refTask    = "task"    // task:<id>
-	refProject = "project" // project:<name>
-	refAlert   = "alert"   // alert:<id>, a notification held for the brief
 	refSurface = "surface" // surface:<id>, a surface of the workspace (surfaces.go)
 )
 
@@ -69,8 +67,9 @@ type errBadRef struct{ why string }
 
 func (e errBadRef) Error() string { return "bad ref: " + e.why }
 
-// parseRef reads a ref: a known kind, a colon, an id. An agenda's id is a
-// date, a thread's and a card's a number, a surface's its id.
+// parseRef reads a ref: a record's or a subject's kind (subject.go), a
+// colon, an id. An agenda's id is a date, a thread's and a card's a
+// number, a surface's its id; a subject's id is kept as written.
 func parseRef(s string) (itemRef, error) {
 	kind, id, ok := strings.Cut(strings.TrimSpace(s), ":")
 	if !ok || id == "" {
@@ -90,8 +89,11 @@ func parseRef(s string) (itemRef, error) {
 		if !surfaceIDRe.MatchString(id) {
 			return r, errBadRef{"a surface is its id"}
 		}
-	case refMail, refEvent, refTask, refProject, refAlert:
+	case refTask:
 	default:
+		if isSubjectKind(kind) {
+			break
+		}
 		return r, errBadRef{"no kind " + strconv.Quote(kind)}
 	}
 	if len(id) > 1000 {

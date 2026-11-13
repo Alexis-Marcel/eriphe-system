@@ -38,7 +38,7 @@ func topic(id int64, match, outcome string, night bool) notifyRule {
 }
 
 func TestDecideNotify(t *testing.T) {
-	rules := []notifyRule{topic(1, "project:getout", levelNow, true), topic(2, "source:mail", levelNever, false),
+	rules := []notifyRule{topic(1, "project:getout", levelNow, true), topic(2, "topic:mail", levelNever, false),
 		topic(3, "project:site", levelBrief, false), topic(4, "project:getout:staging", levelBrief, false),
 		topic(5, "person:lina", levelNow, false)}
 	for _, x := range []struct {
@@ -62,14 +62,14 @@ func TestDecideNotify(t *testing.T) {
 		{"night rule", notifyItem{Level: levelNow, Ref: "project:getout:prod"}, at(t, "2026-11-05", "02:00"), 9, levelNow, reasonUrgent, true},
 		{"rule raises", notifyItem{Level: levelBrief, Ref: "person:lina"}, at(t, "2026-11-04", "11:00"), 0, levelNow, reasonRule, true},
 		{"rule raises, not at night", notifyItem{Level: levelBrief, Ref: "person:lina"}, at(t, "2026-11-04", "23:00"), 0, levelBrief, reasonQuiet, true},
-		{"never", notifyItem{Level: levelNow, Ref: "source:mail"}, at(t, "2026-11-04", "11:00"), 0, levelNever, reasonRule, true},
+		{"never", notifyItem{Level: levelNow, Ref: "topic:mail"}, at(t, "2026-11-04", "11:00"), 0, levelNever, reasonRule, true},
 		{"rule lowers", notifyItem{Level: levelNow, Ref: "project:site"}, at(t, "2026-11-04", "11:00"), 0, levelBrief, reasonRule, true},
 		{"longest match", notifyItem{Level: levelNow, Ref: "project:getout:staging"}, at(t, "2026-11-05", "02:00"), 0, levelBrief, reasonRule, true},
 		{"no partial word", notifyItem{Level: levelNow, Ref: "project:getoutside"}, at(t, "2026-11-05", "02:00"), 0, levelBrief, reasonQuiet, true},
 		{"tainted day", notifyItem{Level: levelNow, Tainted: true}, at(t, "2026-11-04", "11:00"), 0, levelBrief, reasonTainted, true},
 		{"tainted night rule", notifyItem{Level: levelNow, Ref: "project:getout", Tainted: true}, at(t, "2026-11-05", "02:00"), 0, levelBrief, reasonTainted, true},
 		{"tainted cannot raise", notifyItem{Level: levelBrief, Ref: "person:lina", Tainted: true}, at(t, "2026-11-04", "11:00"), 0, levelBrief, reasonBrief, true},
-		{"tainted never", notifyItem{Level: levelNow, Ref: "source:mail", Tainted: true}, at(t, "2026-11-04", "11:00"), 0, levelNever, reasonRule, true},
+		{"tainted never", notifyItem{Level: levelNow, Ref: "topic:mail", Tainted: true}, at(t, "2026-11-04", "11:00"), 0, levelNever, reasonRule, true},
 		{"no rules: seed", notifyItem{Level: levelNow, Ref: "project:getout"}, at(t, "2026-11-05", "02:00"), 0, levelBrief, reasonQuiet, false},
 	} {
 		cx := notifyContext{Now: x.now, SentNow: x.sent, Cap: defaultNotifyCap}
@@ -227,7 +227,7 @@ func TestNotifyTainted(t *testing.T) {
 	if _, err := c.brainNotify(notifyIn{Text: "Clique https://evil.example.org/x", Level: levelNow, Why: "Le mail le dit."}); err == nil {
 		t.Fatal("a link from a tainted turn was accepted")
 	}
-	out, err := c.brainNotify(notifyIn{Text: "Un mail réclame un paiement.", Level: levelNow, Why: "Un mail urgent.", Ref: "source:mail"})
+	out, err := c.brainNotify(notifyIn{Text: "Un mail réclame un paiement.", Level: levelNow, Why: "Un mail urgent.", Ref: "topic:mail"})
 	if err != nil || out["outcome"] != levelBrief {
 		t.Fatalf("%v %v", out, err)
 	}
@@ -252,7 +252,7 @@ func TestNotifyTainted(t *testing.T) {
 func TestNotifyFeedback(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	ownerSays(c, "ok")
-	out, _ := c.brainNotify(notifyIn{Text: "Facture reçue.", Level: levelNow, Why: "Nouvelle facture.", Ref: "source:invoices"})
+	out, _ := c.brainNotify(notifyIn{Text: "Facture reçue.", Level: levelNow, Why: "Nouvelle facture.", Ref: "topic:invoice"})
 	id := out["id"].(int64)
 	n, err := c.notificationFeedback(id, "later")
 	if err != nil || !n.Held || n.Feedback != "later" {
@@ -268,7 +268,7 @@ func TestNotifyFeedback(t *testing.T) {
 		t.Fatal(err)
 	}
 	tallies, _ := c.feedbackTallies()
-	if len(tallies) != 1 || tallies[0].Ref != "source:invoices" || tallies[0].NotUsed != 1 {
+	if len(tallies) != 1 || tallies[0].Ref != "topic:invoice" || tallies[0].NotUsed != 1 {
 		t.Fatalf("%+v", tallies)
 	}
 }
@@ -383,7 +383,7 @@ func TestRuleWrittenOrProposed(t *testing.T) {
 	// A tainted turn only proposes, even citing the user.
 	seq = ownerSays(c, "Lis mes mails et ne me préviens plus des factures")
 	c.brainCalledCatalog("t-brain", "mail", "read")
-	out, err = c.brainRule(ruleIn{Match: "source:invoices", Outcome: levelNever, Why: "Demandé.", SourceRef: ref(seq)})
+	out, err = c.brainRule(ruleIn{Match: "topic:invoice", Outcome: levelNever, Why: "Demandé.", SourceRef: ref(seq)})
 	if err != nil || out["rule"].(ruleView).State != ruleProposed || out["rule"].(ruleView).Tainted == "" {
 		t.Fatalf("tainted: %v %v", out, err)
 	}
@@ -427,7 +427,7 @@ func TestNotifyRoutes(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
 	c := tw.c
-	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "source:mail", Outcome: levelBrief, State: ruleProposed, By: "brain", Why: "Trop de mails."})
+	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "topic:mail", Outcome: levelBrief, State: ruleProposed, By: "brain", Why: "Trop de mails."})
 	n, _ := c.notify(&notification{Text: "Le serveur répond lentement.", Why: "Une alerte du moniteur.", Source: notifyFromBrain},
 		notifyItem{Level: levelBrief})
 	code, body, _ := tw.do("GET", "/settings/notifications?n="+idText(n.ID), nil, nil)

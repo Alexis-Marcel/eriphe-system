@@ -130,6 +130,18 @@ func defaultRemind(due time.Time) time.Time {
 // dayDeadline tells a deadline given as a day (kept as its last minute).
 func dayDeadline(t time.Time) bool { return t.Hour() == 23 && t.Minute() == 59 }
 
+// intentAssistant is the owner of what Eriphe owes: not a subject.
+const intentAssistant = "assistant"
+
+// intentionParty is who owes or is owed: the assistant, or a subject's
+// key (owner, person:<slug>…).
+func intentionParty(s string) (string, error) {
+	if strings.EqualFold(strings.TrimSpace(s), intentAssistant) {
+		return intentAssistant, nil
+	}
+	return subjectKey(s)
+}
+
 // normalizeIntention checks an intention and fills what follows from it.
 func normalizeIntention(x *Intention, now time.Time) error {
 	x.Text = strings.TrimSpace(x.Text)
@@ -146,14 +158,22 @@ func normalizeIntention(x *Intention, now time.Time) error {
 	if n := utf8.RuneCountInString(x.Text); n > intentTextMax {
 		return fmt.Errorf("text is %d characters, at most %d", n, intentTextMax)
 	}
-	x.Owner = normalizeSubject(x.Owner)
+	var err error
+	if x.Owner, err = intentionParty(x.Owner); err != nil {
+		return fmt.Errorf("owner: %w", err)
+	}
 	if x.Owner == "" {
-		x.Owner = "owner"
+		x.Owner = subjOwner
 		if x.Kind == intentCommitment {
-			x.Owner = "assistant"
+			x.Owner = intentAssistant
 		}
 	}
-	x.OwedTo, x.Subject = normalizeSubject(x.OwedTo), normalizeSubject(x.Subject)
+	if x.OwedTo, err = intentionParty(x.OwedTo); err != nil {
+		return fmt.Errorf("owed_to: %w", err)
+	}
+	if x.Subject, err = subjectKey(x.Subject); err != nil {
+		return fmt.Errorf("subject: %w", err)
+	}
 	x.Cue = strings.Join(strings.Fields(x.Cue), " ")
 	if x.Trigger == "" {
 		switch {

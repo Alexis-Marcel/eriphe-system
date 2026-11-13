@@ -131,7 +131,6 @@ const (
 	profileBudget    = 2500 // characters of pinned memories, the profile
 	memoryTextMax    = 2000
 	episodeTextMax   = 4000
-	subjectMax       = 100
 	keywordsMax      = 200
 	linksMax         = 10
 	linkMax          = 300
@@ -185,9 +184,10 @@ type memStore struct {
 }
 
 // memorySchemaVersion is the schema memory.db is at; meta.schema_version
-// says it. A new file is made at it; a file at another is refused, never
+// says it. A new file is made at it; a file at 5 is brought to it (its
+// subjects keyed, subject_rewrite.go); a file at another is refused, never
 // changed.
-const memorySchemaVersion = 5
+const memorySchemaVersion = 6
 
 // memorySchema is memory.db's own tables; the intentions' and the
 // lessons' are with them (intentionsSchema, learningSchema).
@@ -210,7 +210,6 @@ const memorySchema = `CREATE TABLE memories (
 	  basis TEXT NOT NULL DEFAULT '');
 	CREATE INDEX memories_status_kind ON memories (status, kind);
 	CREATE INDEX memories_subject ON memories (subject);
-	CREATE INDEX memories_due ON memories (due_at) WHERE kind = 'commitment';
 	CREATE VIRTUAL TABLE memories_fts USING fts5(text, subject, keywords, stems, content='memories', content_rowid='id',
 	  tokenize='unicode61 remove_diacritics 2');
 	CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
@@ -272,6 +271,8 @@ func (m *memStore) migrate() error {
 	switch version {
 	case memorySchemaVersion:
 		return nil
+	case 5:
+		return m.migrate5()
 	case 0:
 	default:
 		return fmt.Errorf("memory.db is at schema %d, this eriphe-core reads %d", version, memorySchemaVersion)
@@ -287,6 +288,28 @@ func (m *memStore) migrate() error {
 		}
 	}
 	if _, err := tx.Exec(`INSERT INTO meta (key, value) VALUES ('schema_version', ?)`, fmt.Sprint(memorySchemaVersion)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// migrate5 brings a memory.db at schema 5 to 6: the subjects as keys, the
+// index of the old commitment kind and the facts tables gone.
+func (m *memStore) migrate5() error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{`DROP INDEX IF EXISTS memories_due`, `DROP TABLE IF EXISTS facts`, `DROP TABLE IF EXISTS facts_log`} {
+		if _, err := tx.Exec(q); err != nil {
+			return err
+		}
+	}
+	if err := rekeyMemory(tx); err != nil {
+		return fmt.Errorf("memory.db subject keys: %w", err)
+	}
+	if _, err := tx.Exec(`UPDATE meta SET value = ? WHERE key = 'schema_version'`, fmt.Sprint(memorySchemaVersion)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -385,7 +408,11 @@ func (m *memStore) log(q querier, id int64, who, op string, before, after *Memor
 // dates. The trust rules come before it (memory_trust.go).
 func (m *memStore) normalize(x *Memory) error {
 	x.Text = strings.TrimSpace(x.Text)
-	x.Subject = normalizeSubject(x.Subject)
+	subject, err := subjectKey(x.Subject)
+	if err != nil {
+		return fmt.Errorf("subject: %w", err)
+	}
+	x.Subject = subject
 	if !containsStr(memoryKinds, x.Kind) {
 		return fmt.Errorf("kind must be one of %s", strings.Join(memoryKinds, ", "))
 	}
@@ -398,9 +425,6 @@ func (m *memStore) normalize(x *Memory) error {
 	}
 	if n := utf8.RuneCountInString(x.Text); n > limit {
 		return fmt.Errorf("text is %d characters, at most %d: keep one memory per thing", n, limit)
-	}
-	if utf8.RuneCountInString(x.Subject) > subjectMax {
-		return fmt.Errorf("subject is longer than %d characters", subjectMax)
 	}
 	x.Keywords = strings.Join(strings.Fields(x.Keywords), " ")
 	if utf8.RuneCountInString(x.Keywords) > keywordsMax {
@@ -464,16 +488,6 @@ func (m *memStore) normalize(x *Memory) error {
 		x.Status = memActive
 	}
 	return nil
-}
-
-// normalizeSubject keeps subjects comparable: lower case, no spaces around
-// the colon of person:paul, single spaces.
-func normalizeSubject(s string) string {
-	s = strings.ToLower(strings.Join(strings.Fields(s), " "))
-	if k, v, ok := strings.Cut(s, ":"); ok {
-		s = strings.TrimSpace(k) + ":" + strings.ReplaceAll(strings.TrimSpace(v), " ", "-")
-	}
-	return s
 }
 
 func containsStr(list []string, s string) bool {
@@ -976,10 +990,12 @@ func (m *memStore) recall(q recallQuery) ([]*Memory, error) {
 			args = append(args, k)
 		}
 	}
-	if s := normalizeSubject(q.Subject); s != "" {
-		if strings.HasSuffix(s, ":") || strings.HasSuffix(s, "*") {
+	if s, prefix, err := subjectFilter(q.Subject); err != nil {
+		return nil, err
+	} else if s != "" {
+		if prefix {
 			where = append(where, `m.subject LIKE ? ESCAPE '\'`)
-			args = append(args, likeEscape(strings.TrimSuffix(s, "*"))+"%")
+			args = append(args, likeEscape(s)+"%")
 		} else {
 			where = append(where, `m.subject = ?`)
 			args = append(args, s)

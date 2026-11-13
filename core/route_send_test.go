@@ -79,7 +79,7 @@ func TestRouteSeenStops(t *testing.T) {
 	c, b, _, _ := routeCore(t, now)
 	c.store.set(routeModeKey, routeOn)
 	ownerSays(c, "ok")
-	out, _ := c.brainNotify(notifyIn{Text: "Facture reçue.", Level: levelNow, Why: "Nouvelle facture.", Ref: "source:invoices"})
+	out, _ := c.brainNotify(notifyIn{Text: "Facture reçue.", Level: levelNow, Why: "Nouvelle facture.", Ref: "topic:invoice"})
 	c.push.pending.Wait()
 	if _, err := c.notificationFeedback(out["id"].(int64), "up"); err != nil {
 		t.Fatal(err)
