@@ -564,17 +564,17 @@ func TestWebEventsStream(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
 		t.Fatalf("content type %q", ct)
 	}
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		tw.c.store.addMessage(roleBrain, "a new **answer**", true)
-		tw.w.notify()
-	}()
 	sc := bufio.NewScanner(resp.Body)
 	event, sawTasks := "", false
 	for sc.Scan() {
 		line := sc.Text()
 		if v, ok := strings.CutPrefix(line, "event: "); ok {
 			event = v
+			if v == "tasks" && !sawTasks {
+				// The stream is under way, its panels sent: the answer comes.
+				tw.c.store.addMessage(roleBrain, "a new **answer**", true)
+				tw.w.notify()
+			}
 			sawTasks = sawTasks || v == "tasks"
 		}
 		if event == "message" && strings.HasPrefix(line, "data: ") {
@@ -605,11 +605,10 @@ func TestWebAttention(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		tw.c.store.insertTask(&TaskRow{ID: "t-held", Kind: "worker", Title: "Fix the menu", State: statePending, Desired: desiredHeld})
-		tw.c.holdTask(&TaskRow{ID: "t-held", Title: "Fix the menu"}, []startNeed{{Server: "nas", Category: "use"}}, nil, false)
-	}()
+	// The stream reads the messages after the one it was given: no wait
+	// for it to be under way.
+	tw.c.store.insertTask(&TaskRow{ID: "t-held", Kind: "worker", Title: "Fix the menu", State: statePending, Desired: desiredHeld})
+	tw.c.holdTask(&TaskRow{ID: "t-held", Title: "Fix the menu"}, []startNeed{{Server: "nas", Category: "use"}}, nil, false)
 	sc := bufio.NewScanner(resp.Body)
 	event, sawText, sawCard := "", false, false
 	for sc.Scan() {

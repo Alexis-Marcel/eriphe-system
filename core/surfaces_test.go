@@ -425,6 +425,9 @@ func TestSurfaceRefreshTriggers(t *testing.T) {
 		t.Fatal(err, errs)
 	}
 	waitFor(t, func() bool { u := c.pool.get("ledger"); u.mu.Lock(); defer u.mu.Unlock(); return len(u.followed) == 1 })
+	// The first read may finish late, in the background (surfaceLateReads):
+	// subscribe once it is stored, so its update is not taken for the next.
+	waitFor(t, func() bool { s, _ := c.surface(s.ID); return strings.Contains(string(s.Data), `"first"`) })
 	_, ch, cancel := c.surfaceSubscribe()
 	defer cancel()
 	l.set(func(l *fakeLedger) { l.latest = "second" })
