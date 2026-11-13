@@ -596,6 +596,11 @@
 
 {{/* A tool's page: its grid, its credential, its allowed actions. . is a toolAccess. */}}
 {{define "tool-access"}}<div class="stack" id="access-{{.Key}}">
+{{with .Held}}<section class="panel stack" role="alert">
+  <header><h3>{{t "pins.title"}}</h3><p class="muted small">{{t "pins.lead"}}</p></header>
+  <ul class="stack">{{range .}}<li><span class="mono">{{.Name}}</span> <small class="muted">{{t (printf "grid.cat.%s" .Category)}}</small>{{with .Description}}<br><small>{{.}}</small>{{end}}</li>{{end}}</ul>
+  <div class="actions"><button class="btn btn-primary" type="button" hx-post="/settings/tools/{{$.Name}}/approve">{{t "pins.approve"}}</button></div>
+</section>{{end}}
 {{with .Tree}}{{template "place-tree" .}}{{end}}
 <form class="panel stack" hx-post="/settings/tools/{{.Name}}/access{{.Query}}" hx-target="#access-{{.Key}}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}

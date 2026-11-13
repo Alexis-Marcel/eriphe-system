@@ -715,6 +715,7 @@ func (c *core) deleteServer(name string) error {
 	return c.commit(d, change{forget: []string{name},
 		persist: func() error {
 			c.store.forgetActions(name)
+			c.store.forgetPins(name)                     // a new tool of this name is pinned anew (tool_pins.go)
 			c.setServerTrust(name, false, trustByRemove) // a new tool of this name starts untrusted (tool_trust.go)
 			return c.store.deleteCatalog(kindServer, name)
 		},
