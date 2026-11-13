@@ -2433,18 +2433,19 @@ answers 409 with the reason.
 
 ## Workspace (`web`)
 
-Eriphe's own interface, served by eriphe-core on its own HTTPS listener: the conversation with
-Eriphe in the middle, its tasks on the side as live cards (machine, agent, repository and branch,
+Eriphe's own interface, served by eriphe-core on its own HTTPS listener. Its home page is the
+[composed workspace](#the-composed-workspace-the-home-page-) (`/`); the conversation, at
+`/conversation`, has Eriphe in the middle, its tasks on the side as live cards (machine, agent, repository and branch,
 state, the pull request or document the agent mentioned), the permissions waiting for an answer
 inline in the conversation (Yes / No, with an optional reason for the agent), and the settings. The assistant manages: what the brain can set itself
 (a notification rule, a memory, an intention) is asked of it in the conversation, and its pages show
 the state, say why, and undo, with a line saying how to ask rather than a form.
-The conversation is the one main screen; the header has three buttons, Espace composé (the
-[composed workspace](#the-composed-workspace-espace)), Tâches (a badge counts the
+The conversation's header has three buttons, Espace composé (the
+[composed workspace](#the-composed-workspace-the-home-page-), also behind Eriphe's name), Tâches (a badge counts the
 running tasks, and turns urgent when one waits for the user) and Réglages. On a wide screen Tâches
 hides or shows the side panel; on a phone it opens the tasks as a sheet over the conversation
 (closed by its button, Escape or the browser's back), and from any other page it comes back to
-the conversation on its tasks (`/#tasks-panel`).
+the conversation on its tasks (`/conversation#tasks-panel`).
 
 **Conversation first** (`convo_cards.go`, `web_convo_cards.go`, `templates/convo.html`). What waits
 for the user's approval is asked where they talk to the assistant: every proposal (a memory, an

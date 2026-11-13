@@ -187,7 +187,7 @@ button, input, select { font: inherit; }
 }
 .espace.narrow, .espace.narrow.wide {
   height: auto; min-height: 100dvh; overflow: visible;
-  grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; padding: 12px; gap: 12px;
+  grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; align-content: start; padding: 12px; gap: 12px;
 }
 .narrow .eriphe-panel { padding: 14px; max-height: none; overflow: visible; }
 .narrow .stage { display: flex; flex-direction: column; gap: 12px; }
