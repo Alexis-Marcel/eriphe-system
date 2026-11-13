@@ -22,7 +22,9 @@ type proposalView struct {
 	Why     string      `json:"why,omitempty"`
 	Tainted bool        `json:"tainted,omitempty"`
 	Fields  []cardField `json:"fields,omitempty"`
-	When    []spanView  `json:"when,omitempty"` // when it takes place, if it has a time
+	When    []spanView  `json:"when,omitempty"`    // when it takes place, if it has a time
+	Exec    string      `json:"exec,omitempty"`    // approved, its call: running, done or failed (access_card.go)
+	ExecWhy string      `json:"execWhy,omitempty"` // failed: notkept, gone, notallowed or error
 	Created time.Time   `json:"created"`
 }
 
@@ -33,6 +35,9 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 		v.Text = t
 	}
 	v.Fields = p.FieldsIn(lang)
+	if p.Kind == cardAccess && x.State == cardApproved {
+		v.Exec, v.ExecWhy = w.c.callState(p.ID)
+	}
 	if x.State == cardPending {
 		for _, s := range w.c.proposalSpans(p.Kind, p.ID, w.c.userZone()) {
 			v.When = append(v.When, s.view())

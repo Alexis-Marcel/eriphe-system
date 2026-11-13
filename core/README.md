@@ -2721,7 +2721,9 @@ after the `a2ui` event of the surfaces it names and whenever it changes, and kep
 `col` and `row` count from 0, `w` and `h` in cells; `ambient` is `urgent` with a tile of weight 90
 or more, `decision` with one of 80, `calm` otherwise; `by` is `composer` or `fallback`; `eriphe` is
 the composer's line, empty when code chose. With a surface open, a tile related to it has
-`"related": true` and `say` is the brain's line about it, once it wrote one.
+`"related": true` and `say` is the brain's line about it, once it wrote one; `focusBy` is
+`brain` when Eriphe put it on stage (below), and `previous` names the surface that was on stage
+just before it.
 
 **Focus** (`workspace_focus.go`): one workspace, and opening a surface does what a separate
 dashboard would. The open action places it first at once (above); once the focus settles (0.8 s
@@ -2743,6 +2745,13 @@ was open). A choice made for a focus that ended while the composer thought is dr
 surface is not a gesture that recomposes (`gestureStamp`): the focus is; nor are the tiles a
 focus folds or gives back gestures `ignored` on the page.
 
+**The stage** (`workspace_front.go`, #458): the workspace is one dashboard with a stage, the
+surface open in the center, large, and around it smaller tiles. Opening another tile puts it on
+stage; the one that was there stays next to it, reduced (m at most, never grown), live, never
+folded for the others (`layoutStage`; the layout's `previous`, the composer's turn « Au centre
+juste avant », the brain's « au centre juste avant »): nothing goes back, the user clicks it to
+swap again. Back (or Escape) ends the stage and lays the base out, as above, with no previous.
+
 The brain is asked once per focus, never waited for: an event of the conversation (`[espace] Sam
 vient d'ouvrir surface:<id> …`, about `surface:<id>`), with the surfaces related to it and how and
 what it shows (its data, else its components, 2000 characters, as data), the titles quoted only
@@ -2752,6 +2761,21 @@ The first message of the brain's turn that read it, with no message of the user'
 is its line: marked about the surface, kept off the channels and the phone, and shown as the
 layout's `say` while that focus lasts. Back before the brain read the request withdraws it, and
 asks nothing.
+
+**An answer on stage.** When the user asks from the workspace about a thing (« où en est la PR
+… ? »), the brain answers with a surface (the subject as title, its state, the points to see,
+what is next, the pending proposal embedded; the session's own surface when the thing has one)
+and puts it on stage with `workspace_focus`, then replies in one line. The tool is the brain's
+only, allowed in the turn that answers a message of the user's sent from the workspace (typed in
+its input, `· depuis l'espace`, or a button's ask), never on events alone, once per turn; it is
+display-only (it writes nothing, sends nothing, the next click takes the stage back), so a tainted
+turn may use it too: the surface keeps its taint and its Proposal the rules below. The layout
+says `focusBy: brain`, the composer's turn « l'assistant vient de mettre une surface au centre
+pour répondre à sa question », the brain's next turn « au centre, mise par toi »; the brain is not
+asked for a line about its own surface (a request still waiting about the surface it replaced
+is withdrawn). A surface whose Proposal shows a proposal relates to the queue's tile showing the
+same proposal (alone or in its group) (`proposal:<ref>`, « même proposition »), so a tainted answer, whose Proposal can only
+say « answer it in the conversation », gets the answerable tile next to it.
 
 **The attention queue as surfaces** (`workspace_queue.go`). The open items of the
 [attention queue](#workspace-web) are shown by surfaces written by code (author `core`), grouped
@@ -2939,9 +2963,17 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   is no surface's, a size or a place off the grid is refused by name; a surface the user closed
   and the brain places is shown again. `reset` drops the session's placements first (closed
   surfaces stay closed). It answers where each went (`{id, size, col, row}`, or `folded`).
+- **`workspace_focus`** (`id`): puts a surface on stage, as if the user had opened it
+  ([an answer on stage](#workspace-web)). Refused outside the turn that answers a message the user
+  sent from the workspace, for a second surface in the same turn, and for an id that is no
+  surface's; it answers `in front` (with `previous` when another was on stage) or `already in front`.
+- **A message from the workspace.** A message typed in the workspace's input is marked
+  (`POST /messages` with `from` `workspace`, kept as `from_workspace:<seq>`), even with no surface
+  open: the brain reads it as `[Sam 10:02 #12 · depuis l'espace]`, its cue to answer a question
+  about a thing on stage.
 - **A message about what is open.** A message written on `/espace` while a surface is open
   carries it (`POST /messages` with `about` `surface:<id>`; kept as `about_msg:<seq>` when it names
-  a surface): the brain reads it as `[Sam 10:02 #12 · à propos de surface:…]`, the extraction as
+  a surface): the brain reads it as `[Sam 10:02 #12 · depuis l'espace · à propos de surface:…]`, the extraction as
   `[written about surface:<id>, open on the workspace]`. « Montre-m'en moins », « lance une
   recherche là-dessus » are said in words.
 The display rules of #402 are gone: their table (`attention_rules`, dropped when an older
@@ -3089,7 +3121,10 @@ through `a2ui.Validate`).
   [the actions](#the-actions-of-a-surface)), never the card endpoint, then the proposal is read
   again, as it is whenever the stream says it moved (answered anywhere). On a surface showing external content (its createSurface's `extensions.eriphe.tainted`)
   that code did not write (`author` other than `core`) it shows no Oui or Non: such a surface can only ask, the proposal is answered in the
-  conversation.
+  conversation. Once approved, a held call's proposal shows what it is doing (`exec`: `running`,
+  then `done` or `failed` with `execWhy` `notkept`, `gone`, `notallowed` or `error`, a reason of
+  Eriphe's, never the tool's words; kept as `call_state:<id>`, the proposal moved at each step):
+  « Validé · en cours… », « Validé · fait », « Validé · échec » and why.
 
 Placement is classes only (the day's rows and lanes are `.a2-r-N`, `.a2-span-N`,
 `.a2-lane-N`), never a `style` attribute. Fixed words are the app's (`espace.a2.*` in

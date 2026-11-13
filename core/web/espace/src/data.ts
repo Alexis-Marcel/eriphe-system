@@ -297,6 +297,10 @@ export type ProposalView = {
   // When it takes place, if it has a time: times with the user's offset, a
   // date for a whole day.
   when?: Span[];
+  // Approved, its call: running, then done or failed (execWhy: notkept,
+  // gone, notallowed or error).
+  exec?: "running" | "done" | "failed";
+  execWhy?: string;
 };
 
 export type Span = { start: string; end?: string; allDay?: boolean };
@@ -355,10 +359,11 @@ export function answerMessage(a: Answer): ActionMessage {
   };
 }
 
-// send writes to the brain, in the conversation; about is the surface open
-// while it was written (surface:<id>).
+// send writes to the brain, in the conversation, marked as typed in the
+// workspace (so Eriphe may answer with a surface on stage); about is the
+// surface open while it was written (surface:<id>).
 export async function send(text: string, about?: string | null): Promise<boolean> {
-  const body = new URLSearchParams({ text });
+  const body = new URLSearchParams({ text, from: "workspace" });
   if (about) body.set("about", about);
   return post("/messages", body);
 }

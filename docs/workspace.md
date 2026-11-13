@@ -154,13 +154,22 @@ fresh, with your preferences.
 
 ## Focus on one thing
 
-Click a tile or a chip to **open** it. The workspace recomposes around it: the tile large, what
-relates to it around, the rest folded. What relates is found from what the tiles show, never from a tool's name: the same source,
+The workspace has a **center**: one tile large, the others smaller around it. Click a tile or a
+chip to **open** it: it takes the center and the workspace recomposes around it, what relates to
+it around, the rest folded. The tile that was in the center stays next to it, smaller and still
+live (a merge you approved there keeps showing its progress); click it to swap them again. What relates is found from what the tiles show, never from a tool's name: the same source,
 the same work session or skill, the same day. Opening a tile also reads its data again. Eriphe may add one line above about what matters
 there, or say nothing.
 
 **Back to the overview** (or Escape) restores the workspace as it was. The focus also ends by
 itself after 15 minutes.
+
+**Ask where something stands.** Type a question about a thing in the workspace's field ("Where is
+the pull request for the alerts? Is it merged?", "How is the move going?"): Eriphe answers with a
+tile in the center, the subject as its title, where it stands, what was checked, what comes next,
+and the proposal waiting for you right there (a merge to approve, say), and a one-line reply.
+It does not take the center from a tile you are reading unless you asked about something else;
+then that tile stays next to it. A simple question ("what time is my train?") stays a short answer.
 
 ## Buttons and proposals
 
@@ -171,6 +180,8 @@ itself after 15 minutes.
   reply to send, a new skill), it shows as a card with **Yes** and **No**, in the conversation and,
   where it fits, in the tile it concerns. A proposed appointment shows on the day's tile as a
   ghost marked **Proposed**, with what it overlaps. Answering in one place answers everywhere.
+  After your yes, a proposal that runs a call shows it: **Approved · running…**, then **done**
+  or **failed** with why.
 - **Content from outside cannot act.** A tile that shows content from outside (a mail, a web
   page, a message from someone else) is treated as data: it carries no button written after that
   content was read, and a proposal shown there has no Yes / No but says "answer it in the

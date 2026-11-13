@@ -70,6 +70,7 @@ type core struct {
 	composer    composerState          // the workspace's composition (composer.go)
 	surf        surfaceHub             // the surfaces' changes and their subscribers (surfaces.go)
 	layout      layoutState            // where the surfaces are on the workspace (workspace_layout.go)
+	front       frontTurn              // whether the brain's turn answers the user in the workspace (workspace_front.go)
 	props       proposalFeed           // the proposals that moved, for the workspace (surface_proposals.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)
