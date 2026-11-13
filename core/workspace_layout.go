@@ -83,6 +83,9 @@ type workspaceChoice struct {
 	By     string       `json:"by"` // composer or fallback
 	Moment string       `json:"moment,omitempty"`
 	At     time.Time    `json:"at"`
+	// Related, for a choice around a focus: the surfaces code found related
+	// to it (workspace_focus.go), marked on the page.
+	Related []string `json:"related,omitempty"`
 }
 
 type choiceItem struct {
@@ -97,6 +100,7 @@ type workspaceLayout struct {
 	By      string       `json:"by"`                // composer or fallback
 	Ambient string       `json:"ambient"`           // calm, decision or urgent: by the heaviest tile
 	Focus   string       `json:"focus,omitempty"`   // the surface the user opened
+	Say     string       `json:"say,omitempty"`     // the brain's line about it (workspace_focus.go)
 	Items   []layoutTile `json:"items"`             // the tiles, each at its place on the grid
 	Chips   []layoutChip `json:"chips"`             // the folded surfaces, in order
 	Moment  string       `json:"moment,omitempty"`  // the choice's moment
@@ -107,15 +111,16 @@ type workspaceLayout struct {
 // layoutTile is one surface on the grid: col and row from 0, w and h in
 // cells (the size's, or wider over columns left empty on its rows).
 type layoutTile struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Size   string `json:"size"`
-	Col    int    `json:"col"`
-	Row    int    `json:"row"`
-	W      int    `json:"w"`
-	H      int    `json:"h"`
-	Why    string `json:"why,omitempty"`
-	Pinned bool   `json:"pinned,omitempty"` // placed by the user, or by the brain at their request, this session
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Size    string `json:"size"`
+	Col     int    `json:"col"`
+	Row     int    `json:"row"`
+	W       int    `json:"w"`
+	H       int    `json:"h"`
+	Why     string `json:"why,omitempty"`
+	Pinned  bool   `json:"pinned,omitempty"`  // placed by the user, or by the brain at their request, this session
+	Related bool   `json:"related,omitempty"` // related to the surface open (workspace_focus.go)
 }
 
 // layoutChip is a folded surface.
@@ -247,6 +252,12 @@ func layoutWith(pool []surface, ch workspaceChoice, focus string, pl userPlaceme
 			at[i] = &[2]int{w.pin.Col, w.pin.Row}
 		}
 	}
+	related := map[string]bool{}
+	if l.Focus != "" {
+		for _, id := range ch.Related {
+			related[id] = id != l.Focus
+		}
+	}
 	spots := packTilesAt(sizes, at)
 	// Room left: what matters grows a size, the first first, never into xl
 	// (xl is for what is urgent or asked so), and only if nothing else
@@ -280,7 +291,7 @@ func layoutWith(pool []surface, ch workspaceChoice, focus string, pl userPlaceme
 			continue
 		}
 		d := tileDims[s.size]
-		l.Items = append(l.Items, layoutTile{ID: w.s.ID, Title: w.s.Title, Size: s.size, Col: s.col, Row: s.row, W: d[0], H: d[1], Why: w.why, Pinned: w.pin != nil})
+		l.Items = append(l.Items, layoutTile{ID: w.s.ID, Title: w.s.Title, Size: s.size, Col: s.col, Row: s.row, W: d[0], H: d[1], Why: w.why, Pinned: w.pin != nil, Related: related[w.s.ID]})
 	}
 	widenTiles(l.Items)
 	if l.Focus != "" && !slices.ContainsFunc(l.Items, func(t layoutTile) bool { return t.ID == l.Focus }) {
@@ -417,16 +428,18 @@ func fallbackChoice(moment string, now time.Time) workspaceChoice {
 // layoutState is what eriphe-core keeps of the layout: the choice it lays
 // out, the surface opened, the last layout and who waits for the next.
 type layoutState struct {
-	mu      sync.Mutex
-	choice  *workspaceChoice
-	loaded  bool
-	focus   string
-	focusAt time.Time
-	last    workspaceLayout
-	raw     string
-	changed chan struct{} // closed when the layout changes
-	kick    chan struct{} // the queue changed: its surfaces are made again (workspace_queue.go)
-	syncMu  sync.Mutex    // one sync of the queue's surfaces at a time
+	mu         sync.Mutex
+	choice     *workspaceChoice
+	loaded     bool
+	focus      string
+	focusAt    time.Time  // when it was last opened: it lasts focusFor from then
+	focusSince time.Time  // when it began: opened again, it is the same focus
+	f          focusState // the choice around it, the base to go back to, the brain's line (workspace_focus.go)
+	last       workspaceLayout
+	raw        string
+	changed    chan struct{} // closed when the layout changes
+	kick       chan struct{} // the queue changed: its surfaces are made again (workspace_queue.go)
+	syncMu     sync.Mutex    // one sync of the queue's surfaces at a time
 
 	missingSent map[string]time.Time // surface.missing told, by text
 	staleSent   map[string]time.Time // surface.stale told, by id: the surface's version it was told for
@@ -485,11 +498,24 @@ func (c *core) keepChoice(ch workspaceChoice) workspaceLayout {
 }
 
 // focusSurface is the surface the user opened: code places it first, for
-// focusFor or until another is opened.
+// focusFor or until another is opened; the workspace is then composed
+// around it (workspace_focus.go). "" ends the focus: the layout before it
+// comes back.
 func (c *core) focusSurface(id string, now time.Time) {
 	st := &c.layout
 	st.mu.Lock()
+	was := st.focus
+	if was != "" && now.Sub(st.focusAt) > focusFor {
+		was = ""
+	}
 	st.focus, st.focusAt = id, now
+	if id != was {
+		st.focusSince = now
+		if id == "" {
+			st.focusSince = time.Time{}
+		}
+		c.focusChangedLocked(was)
+	}
 	st.mu.Unlock()
 	if id != "" {
 		c.openedOnWorkspace(id, now) // no longer closed; a queue item read (workspace_gestures.go)
@@ -529,7 +555,10 @@ func (c *core) relayout() workspaceLayout {
 	if err != nil {
 		return st.last
 	}
-	l := layoutWith(pool, c.choiceLocked(), focus, c.placementLocked(start))
+	l := layoutWith(pool, c.layoutChoiceLocked(focus, pool), focus, c.placementLocked(start))
+	if l.Focus != "" && st.f.sayFor == focusKey(l.Focus, st.focusSince) {
+		l.Say = st.f.say
+	}
 	raw, _ := json.Marshal(l)
 	if string(raw) != st.raw {
 		st.last, st.raw = l, string(raw)

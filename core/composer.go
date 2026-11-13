@@ -216,6 +216,9 @@ func (c *core) recompose(moment, remark string) workspaceChoice {
 	c.syncQueueSurfaces() // the queue as it is now, in the pool
 	s := c.poolSnapshot(moment, remark)
 	ch := fallbackChoice(moment, s.Now)
+	if s.Focus != "" {
+		ch = focusFallback(s) // workspace_focus.go
+	}
 	if len(s.Pool) > 0 && c.composerReady() {
 		start := time.Now()
 		raw, err := c.askComposer(composerTurn(s))
@@ -237,6 +240,18 @@ func (c *core) recompose(moment, remark string) workspaceChoice {
 		} else {
 			log.Printf("composer: chose in %s", time.Since(start).Round(100*time.Millisecond))
 		}
+	}
+	if s.Focus != "" {
+		// Around what the user opened: kept for that focus only, the base
+		// left as it was, to go back to (workspace_focus.go).
+		ch.Related = relatedIDs(s.Related)
+		if moment != momentFocus {
+			c.markBaseStale()
+		}
+		if !c.keepFocusChoice(s.Focus, s.FocusSince, ch) {
+			log.Printf("composer: the focus changed meanwhile: choice dropped")
+		}
+		return ch
 	}
 	c.keepChoice(ch)
 	return ch
@@ -271,6 +286,9 @@ func (c *core) runComposer(ctx context.Context) {
 	stamp := c.queueStamp() + c.poolStamp() + c.gestureStamp()
 	prefSeen, prefChanged, _ := c.workspacePrefStamp()
 	checked := time.Time{}
+	focusKick := c.focusKicked()
+	var settle *time.Timer // a focus that changed settles first (focusSettle)
+	var settled <-chan time.Time
 	if c.lastChoice() == nil {
 		c.recompose(momentChange, "")
 	}
@@ -279,8 +297,26 @@ func (c *core) runComposer(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
+		case <-focusKick:
+			if settle == nil {
+				settle = time.NewTimer(focusSettle)
+			} else {
+				settle.Reset(focusSettle)
+			}
+			settled = settle.C
+			continue
+		case <-settled:
+			settled = nil
+			if c.settleFocus(time.Now()) {
+				d.changed(time.Now()) // back, and the base's reason changed meanwhile
+			}
+			continue
 		}
 		now := time.Now()
+		// The focus ended with no one telling: its time passed, or its surface went.
+		if settled == nil && c.focusLapsed(now) && c.settleFocus(now) {
+			d.changed(now)
+		}
 		if s := c.queueStamp() + c.poolStamp() + c.gestureStamp(); s != stamp { // a gesture of the user's: at once, debounced
 			stamp = s
 			d.changed(now)

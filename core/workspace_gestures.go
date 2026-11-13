@@ -17,8 +17,9 @@ import (
 //
 //   - Gestures (workspace.go's workspace_log): opened, ignored, closed,
 //     moved, resized, about (a message written with it open). Each one but
-//     ignored makes the composer choose again, once the burst settles
-//     (gestureStamp); the extraction reads them all.
+//     ignored and opened makes the composer choose again, once the burst
+//     settles (gestureStamp); opened is a focus, composed around
+//     (workspace_focus.go); the extraction reads them all.
 //   - The session's placement: what the user closed is not shown again
 //     (folded last, marked closed) and what they moved or resized is
 //     pinned there, at that size, for the session. A session lasts while
@@ -360,12 +361,13 @@ func fitsGrid(size string, col, row int) bool {
 	return ok && col >= 0 && row >= 0 && col+d[0] <= layoutCols && row+d[1] <= layoutRows
 }
 
-// gestureStamp changes with each gesture but ignored: the composer chooses
-// again (runComposer). An ignored gesture is the layout's own doing often
-// (a tile the composer folded): it would loop.
+// gestureStamp changes with each gesture but ignored and opened: the
+// composer chooses again (runComposer). An ignored gesture is the layout's
+// own doing often (a tile the composer folded): it would loop. An opening
+// is a focus, composed around once it settles (workspace_focus.go).
 func (c *core) gestureStamp() string {
 	var id int64
-	c.store.db.QueryRow(`SELECT COALESCE(MAX(id), 0) FROM workspace_log WHERE what != ?`, gestureIgnored).Scan(&id)
+	c.store.db.QueryRow(`SELECT COALESCE(MAX(id), 0) FROM workspace_log WHERE what NOT IN (?, ?)`, gestureIgnored, gestureOpened).Scan(&id)
 	return fmt.Sprintf("g%d", id)
 }
 

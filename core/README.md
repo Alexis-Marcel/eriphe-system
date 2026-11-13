@@ -2705,7 +2705,38 @@ after the `a2ui` event of the surfaces it names and whenever it changes, and kep
 
 `col` and `row` count from 0, `w` and `h` in cells; `ambient` is `urgent` with a tile of weight 90
 or more, `decision` with one of 80, `calm` otherwise; `by` is `composer` or `fallback`; `eriphe` is
-the composer's line, empty when code chose.
+the composer's line, empty when code chose. With a surface open, a tile related to it has
+`"related": true` and `say` is the brain's line about it, once it wrote one.
+
+**Focus** (`workspace_focus.go`): one workspace, and opening a surface does what a separate
+dashboard would. The open action places it first at once (above); once the focus settles (0.8 s
+with no other opening, so a quick run of clicks is composed once, around the last), the composer
+chooses around it (moment `focus`): it large, what relates to it around, the rest folded; with the
+composer off, code does the same by closeness (`focusFallback`: it xl, the related at m at most;
+with nothing related, the rest fills the room left by weight).
+What relates is found by code from what every surface declares, never from a tool's name
+(`surfaceRelations`, 6 at most, the closest first): the same source (a tool with the same
+arguments, or the same resource), the same ref it lives with (its `while`, or what its author
+stands for: a lead its session, a task itself and the session it is a step of, a skill itself),
+a day (a `Day` component on a date the open surface carries, or the reverse), then the same
+server. The composer's turn lists them with how they relate. Two choices are kept: the base one,
+made with nothing open (`workspace_choice`), and the one around the focus, in memory, for that
+focus only (opening the same surface again is the same focus). Back, closing it, its removal or
+its 15 minutes passing lay the base out again at once, with no model; it is composed again only
+when the pool or the queue changed meanwhile (or a choice was made for another reason while it
+was open). A choice made for a focus that ended while the composer thought is dropped. Opening a
+surface is not a gesture that recomposes (`gestureStamp`): the focus is; nor are the tiles a
+focus folds or gives back gestures `ignored` on the page.
+
+The brain is asked once per focus, never waited for: an event of the conversation (`[espace] Sam
+vient d'ouvrir surface:<id> …`, about `surface:<id>`), with the surfaces related to it and how and
+what it shows (its data, else its components, 2000 characters, as data), the titles quoted only
+when their author wrote them in a clean turn, asking for one line or `[rien]`; a
+surface with external content (its sources or its author's turn) taints the turn that reads it.
+The first message of the brain's turn that read it, with no message of the user's in that turn,
+is its line: marked about the surface, kept off the channels and the phone, and shown as the
+layout's `say` while that focus lasts. Back before the brain read the request withdraws it, and
+asks nothing.
 
 **The attention queue as surfaces** (`workspace_queue.go`). Each open item of the
 [attention queue](#workspace-web) is a surface written by code (author `core`), with no code per
@@ -2774,8 +2805,9 @@ Both are external when the pool or the queue held content from outside.
 after the last change, 15 s at most after the first). A workspace preference entering memory (or
 changed) chooses at once, as a remark, with its words (`workspacePrefStamp`); one leaving it
 chooses again; a message of the user's does not. A gesture of the user's on the page (any but
-`ignored`, which the layout itself often causes) is a change like the pool's: the composer chooses
-again once the burst settles (`gestureStamp`). While the user has been away 20 minutes or more (`awaySince`), the next choice is for
+`ignored`, which the layout itself often causes, and `opened`, a focus) is a change like the
+pool's: the composer chooses again once the burst settles (`gestureStamp`); while a surface is
+open, it chooses around it. While the user has been away 20 minutes or more (`awaySince`), the next choice is for
 their return, and one is made ahead of it.
 
 **Settings → Agents → Workspace composer**: on or off, and its agent (a Sonnet one by default,

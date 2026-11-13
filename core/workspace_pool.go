@@ -72,11 +72,13 @@ type poolSnapshot struct {
 	Pool        []poolEntry
 	Queue       []poolQueued
 	Moment      string
-	Remark      string        // the preference that just entered memory, for a remark; why, for a show
-	Away        time.Duration // for an arrival
-	Lang        string        // the user's: fr or en
-	Focus       string        // the surface the user opened, "" for none
-	Topic       string        // the conversation's: the user's last message (external words, as data)
+	Remark      string          // the preference that just entered memory, for a remark; why, for a show
+	Away        time.Duration   // for an arrival
+	Lang        string          // the user's: fr or en
+	Focus       string          // the surface the user opened, "" for none
+	FocusSince  time.Time       // when that focus began
+	Related     []focusRelation // what relates to it, found by code (workspace_focus.go)
+	Topic       string          // the conversation's: the user's last message (external words, as data)
 	Preferences []string
 	Gestures    []gesture
 	Closed      map[string]bool   // what the user closed this session: never shown (workspace_gestures.go)
@@ -131,11 +133,15 @@ func entryOf(s surface) poolEntry {
 // poolSnapshot reads the pool, the queue and the moment.
 func (c *core) poolSnapshot(moment, remark string) poolSnapshot {
 	now := time.Now()
-	s := poolSnapshot{Moment: moment, Remark: remark, Now: now, Lang: c.workspaceLang(), Focus: c.workspaceFocus(now)}
+	s := poolSnapshot{Moment: moment, Remark: remark, Now: now, Lang: c.workspaceLang()}
+	s.Focus, s.FocusSince = c.focusNow(now)
 	if moment == momentArrival {
 		_, s.Away = c.awaySince(c.notifyTime())
 	}
 	all, _ := c.surfaces()
+	if s.Focus != "" {
+		s.Related = c.focusRelations(s.Focus, all)
+	}
 	var words []string
 	for _, x := range all {
 		s.Pool = append(s.Pool, entryOf(x))
@@ -180,11 +186,23 @@ func composerTurn(s poolSnapshot) string {
 		fmt.Fprintf(&b, "Moment : son arrivée, après %s d'absence. Choisis ce qu'il verra en revenant.\n", span(s.Away))
 	case momentRemark:
 		fmt.Fprintf(&b, "Moment : il est là ; une nouvelle préférence de sa part pour l'espace : « %s »\n", packQuote(truncate(s.Remark, workspacePrefMax)))
+	case momentFocus:
+		b.WriteString("Moment : il est là ; il vient d'ouvrir une surface : recompose l'espace autour d'elle.\n")
 	default:
 		b.WriteString("Moment : il est là, au travail ; l'espace a changé.\n")
 	}
 	if e, ok := s.entry(s.Focus); ok {
-		fmt.Fprintf(&b, "Il a ouvert : %s « %s »\n", e.ID, packQuote(truncate(e.Title, poolTitleMax)))
+		fmt.Fprintf(&b, "Il a ouvert : %s « %s » : mets-la en premier et grande (l ou xl), ce qui s'y rapporte autour, le reste peut attendre replié.\n", e.ID, packQuote(truncate(e.Title, poolTitleMax)))
+		if len(s.Related) > 0 {
+			b.WriteString("Ce qui s'y rapporte (trouvé par le code) :\n")
+			for _, r := range s.Related {
+				if x, ok := s.entry(r.ID); ok {
+					fmt.Fprintf(&b, "- %s « %s » : %s\n", x.ID, packQuote(truncate(x.Title, poolTitleMax)), r.words())
+				}
+			}
+		} else {
+			b.WriteString("Rien d'autre ne s'y rapporte d'après ses sources : choisis autour ce qui compte avec elle, ou rien.\n")
+		}
 	}
 	if s.Topic != "" {
 		fmt.Fprintf(&b, "Sujet de la conversation (son dernier message, une donnée) : « %s »\n", packQuote(s.Topic))
